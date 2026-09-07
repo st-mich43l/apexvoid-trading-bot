@@ -156,35 +156,30 @@ public static class StopTrailPlanner
     }
     else
     {
-      // TP2 has no target two behind it yet - trail to TP1 instead of the
-      // usual "two behind" step (2026-08 R:R dig: TP2 previously moved the
-      // stop nowhere at all, leaving the remaining position flat at
-      // breakeven all the way through to TP3 - the single biggest driver of
-      // wins scratching near zero instead of banking real progress).
-      var trailTargetOrdinal = completedTargetOrdinal == 2
-        ? 1
-        : completedTargetOrdinal - 2;
-      // Prefer absolute TargetPrices (manual / owner ladders) so trail
-      // matches the booked TP levels rather than fill±pips from TargetsPips
-      // (slippage made trail ≠ owner TP after TP4 on manual #8 2026-08-11).
-      var absolute = AbsoluteTargetPrice(state, trailTargetOrdinal);
-      if (absolute is decimal absolutePrice)
+      // Trail to the immediately preceding target (2026-09 owner-reported:
+      // the ladder grew from 2 rungs to 4 - 0.5R/1R/2R/3R - and this used to
+      // step "two behind" instead of one. That was only ever equivalent to
+      // "previous target" for the old 2-rung ladder (TP2's "two behind"
+      // didn't exist, so it special-cased to TP1, i.e. one behind, same as
+      // this). On the new 4-rung ladder "two behind" skips a whole real,
+      // already-realized level - TP3 trailed all the way back to TP1,
+      // leaving TP2's entire booked gain unprotected instead of TP2's own
+      // level.
+      //
+      // Walk backward from "one behind" rather than assuming that ordinal
+      // exists: an adaptive/compressed plan can own a non-contiguous
+      // ordinal subset (e.g. a Mid leg owning only TP3/TP4), so the nearest
+      // *resolvable* preceding ordinal is the correct target, not
+      // necessarily ordinal - 1 itself. This reproduces the original TP2
+      // case unchanged and falls back to the old "two behind" result
+      // whenever "one behind" isn't a real rung in this plan.
+      var resolved = ResolveTrailTarget(state, completedTargetOrdinal, pipSize);
+      if (resolved is not (int trailTargetOrdinal, decimal resolvedPrice))
       {
-        desired = absolutePrice;
-        label = $"TP{trailTargetOrdinal}";
+        return null;
       }
-      else
-      {
-        var offsetPips = TargetPips(state, trailTargetOrdinal);
-        if (offsetPips is null)
-        {
-          return null;
-        }
-        desired = state.Direction == TradeDirection.Buy
-          ? state.EntryPrice + offsetPips.Value * pipSize
-          : state.EntryPrice - offsetPips.Value * pipSize;
-        label = $"TP{trailTargetOrdinal}";
-      }
+      desired = resolvedPrice;
+      label = $"TP{trailTargetOrdinal}";
     }
     desired = decimal.Round(desired, symbol.Digits, MidpointRounding.AwayFromZero);
     if (
@@ -195,6 +190,38 @@ public static class StopTrailPlanner
       return null;
     }
     return new StopTrailMove(desired, label, bufferPrice);
+  }
+
+  /// <summary>
+  /// Nearest preceding ordinal this plan can actually resolve a stop from
+  /// (absolute TargetPrice, else fill±TargetsPips), walking backward from
+  /// completedTargetOrdinal - 1 down to 1. A non-contiguous adaptive leg
+  /// (e.g. Mid owning only TP3/TP4) can't resolve the immediate predecessor,
+  /// so this keeps stepping back until one resolves instead of failing
+  /// outright.
+  /// </summary>
+  private static (int Ordinal, decimal Price)? ResolveTrailTarget(
+    AutoTradePositionState state,
+    int completedTargetOrdinal,
+    decimal pipSize
+  )
+  {
+    for (var candidate = completedTargetOrdinal - 1; candidate >= 1; candidate--)
+    {
+      var absolute = AbsoluteTargetPrice(state, candidate);
+      if (absolute is decimal absolutePrice)
+      {
+        return (candidate, absolutePrice);
+      }
+      var offsetPips = TargetPips(state, candidate);
+      if (offsetPips is int pips)
+      {
+        return (candidate, state.Direction == TradeDirection.Buy
+          ? state.EntryPrice + pips * pipSize
+          : state.EntryPrice - pips * pipSize);
+      }
+    }
+    return null;
   }
 
   public static decimal ProtectedBreakevenStop(

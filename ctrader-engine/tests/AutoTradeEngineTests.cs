@@ -86,11 +86,14 @@ public sealed partial class AutoTradeEngineTests
         .Where(item => item.Type == "take_profit")
         .Select(item => Assert.IsType<int>(item.TargetPips))
     );
+    // TP3 now trails to TP2 (4006.2) instead of a no-op landing back on
+    // TP1, and TP4 advances to TP3 (4009.2) instead of TP2 - each rung
+    // trails to the one immediately preceding it.
     Assert.Equal(
-      new decimal[] { 3993.7m, 4000.26m, 4003.2m, 4006.2m },
+      new decimal[] { 3993.7m, 4000.26m, 4003.2m, 4006.2m, 4009.2m },
       client.StopAmendments.Select(item => item.StopLoss)
     );
-    Assert.Equal(3, store.Events.Count(item => item.Type == "stop_moved"));
+    Assert.Equal(4, store.Events.Count(item => item.Type == "stop_moved"));
     Assert.Empty(store.Positions);
 
     cts.Cancel();
@@ -1080,9 +1083,10 @@ public sealed partial class AutoTradeEngineTests
     Assert.Equal(3, client.Closes.Count);
     // The group-wide TP1 protection attempt is the injected failure. The
     // booking leg then applies its own TP1 trail, so the engine must recover
-    // to protected BE before continuing to TP1 on the next target.
+    // to protected BE before continuing to TP1 on the next target. TP3 then
+    // trails to TP2 (one behind) instead of a TP1 no-op.
     Assert.Equal(
-      new decimal[] { 3993.7m, 4000.26m, 4003.2m },
+      new decimal[] { 3993.7m, 4000.26m, 4003.2m, 4006.2m },
       client.StopAmendments.Select(item => item.StopLoss)
     );
     var error = Assert.Single(store.Events, item => item.Type == "error");
@@ -3901,7 +3905,7 @@ public sealed partial class AutoTradeEngineTests
   [Theory]
   [InlineData("BUY")]
   [InlineData("SELL")]
-  public async Task ManualAlgoShallowOnlyFillTrailsToEntryAtTp2ThenTp1AtTp3(
+  public async Task ManualAlgoShallowOnlyFillTrailsToEntryAtTp2ThenTp2AtTp3(
     string direction
   )
   {
@@ -3987,7 +3991,11 @@ public sealed partial class AutoTradeEngineTests
     await HitAsync(ownerTargets[2]);
     var runner = Assert.Single(store.Positions.Values);
     Assert.Equal(100, runner.RemainingVolume);
-    Assert.Equal(ownerTargets[0], runner.CurrentStopLoss);
+    // TP3 trails to TP2 (the immediately preceding rung, resolved via the
+    // full owner ladder's absolute TargetPrices), not TP1 - the ladder grew
+    // from 2 to 5 owner levels and "two behind" would skip TP2's entire
+    // already-realized gain.
+    Assert.Equal(ownerTargets[1], runner.CurrentStopLoss);
     Assert.Equal(5, runner.TargetOrdinals![runner.NextTargetIndex]);
 
     // TP4 is intentionally absent from the shallow leg's broker plan. It is
@@ -4001,7 +4009,8 @@ public sealed partial class AutoTradeEngineTests
     );
     Assert.Equal(0, reachedTp4.Volume);
     Assert.Contains("no broker volume booked", reachedTp4.Message);
-    Assert.Equal(ownerTargets[1], runner.CurrentStopLoss);
+    // TP4 trails to TP3 (one behind), not TP2.
+    Assert.Equal(ownerTargets[2], runner.CurrentStopLoss);
     Assert.Contains(4, runner.ReachedTargetOrdinals!);
     Assert.Equal(new long[] { 300, 200, 100 }, client.Closes
       .Select(close => close.Volume));
@@ -4093,7 +4102,8 @@ public sealed partial class AutoTradeEngineTests
       cts.Token
     );
     Assert.Equal(2, client.StopAmendments.Count);
-    Assert.Equal((91, ownerTargets[0]), client.StopAmendments[^1]);
+    // TP3 trails to TP2 (one behind), not TP1.
+    Assert.Equal((91, ownerTargets[1]), client.StopAmendments[^1]);
     Assert.Equal(100, store.Positions[91].RemainingVolume);
 
     cts.Cancel();
@@ -4191,10 +4201,10 @@ public sealed partial class AutoTradeEngineTests
     var runner = Assert.Single(store.Positions.Values);
     Assert.Equal(105, runner.RemainingVolume);
     Assert.Contains(4, runner.ReachedTargetOrdinals!);
-    // Trail after TP4 steps back two levels, same rule a real TP4 booking
-    // would use.
-    Assert.Equal(ownerTargets[1], runner.CurrentStopLoss);
-    Assert.Equal((92, ownerTargets[1]), Assert.Single(client.StopAmendments));
+    // Trail after TP4 steps back to TP3 (one level), same rule a real TP4
+    // booking would use.
+    Assert.Equal(ownerTargets[2], runner.CurrentStopLoss);
+    Assert.Equal((92, ownerTargets[2]), Assert.Single(client.StopAmendments));
 
     // Price then reaches TP5 - the full 105 remainder closes for real.
     client.CloseExecutionPriceToReturn = ownerTargets[4];
