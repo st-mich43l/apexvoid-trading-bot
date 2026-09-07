@@ -12,6 +12,25 @@ dated section after deployment.
 
 ## Unreleased
 
+### Changed
+- Manual `/algo` TP levels are now a bot-calculated R-multiple ladder
+  (0.5R / 1R / 2R / 3R, four levels) instead of owner-typed prices or the
+  pip-default ladder — owner-reported: hand-picked levels made some trades
+  read as scalps. Any explicit `tp` the owner still types in algo mode is
+  ignored; non-algo (`notify`) signals are unaffected. FX pairs' own
+  `/algo` shorthand is a separate code path and is unaffected.
+- Auto XAU (`xau_fixed_2r_v1`) now targets the same 0.5R/1R/2R/3R ladder as
+  manual (`reward_risk` 2.0 → 3.0, `close_ratios` 0.5/0.5 → 0.4/0.2/0.2/0.2,
+  `breakeven_after_r` 1.0 → 0.5 to follow the new, closer first target) and
+  raises its structure `stop_envelope.min_pips` floor 25 → 50 (`max_pips`
+  100 unchanged) — the old 25-pip floor let non-scalping structural setups
+  take scalp-sized stops on an instrument that stop-hunts routinely; the
+  owner's own manual XAU trades already run 60-100 pip stops through the
+  same structure and hold. FX packs are unaffected; the per-policy
+  `FIXED_RR_REQUIRED_TARGETING` uniformity check that previously forced
+  every `fixed_rr` instrument onto one shared targeting shape is now keyed
+  per policy so XAU can diverge from FX deliberately.
+
 ### Fixed
 - Auto-algo root card Redis identity keys (`forming_message_key` /
   `telegram_root_message_key` / `forming_status_key`, and the canonical

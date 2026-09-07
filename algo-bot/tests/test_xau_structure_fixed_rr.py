@@ -21,10 +21,10 @@ pytestmark = pytest.mark.no_database
 
 def test_technique_fixed_rr_targeting_skips_m1_scalp():
   cfg = _load_production_example().config
-  assert fixed_reward_risk("XAU", cfg) == 2.0
+  assert fixed_reward_risk("XAU", cfg) == 3.0
   key = technique_fixed_rr_targeting("XAU", "Key Level Reaction", cfg)
   assert key is not None
-  assert float(key.reward_risk) == 2.0
+  assert float(key.reward_risk) == 3.0
   assert technique_fixed_rr_targeting("XAU", "Impulse Pullback Scalp", cfg) is None
   assert technique_fixed_rr_targeting("XAU", "Impulse Pullback Scalp", cfg) is None
   assert technique_fixed_rr_targeting("EURUSD", "Key Level Reaction", cfg) is not None
@@ -61,15 +61,19 @@ def test_xau_key_level_expands_fixed_rr_targets_from_stop():
     float(value)
     for value in evaluation.measured.get("planned_target_r_multiples")
   ]
-  assert multiples == [1.0, 2.0]
+  assert multiples == [0.5, 1.0, 2.0, 3.0]
   stop_pips = float(evaluation.measured["planned_final_stop_pips"])
   targets = [float(value) for value in evaluation.measured["planned_target_pips"]]
-  assert len(targets) == 2
-  assert targets[0] == pytest.approx(stop_pips * 1.0, rel=0.02)
-  assert targets[1] == pytest.approx(stop_pips * 2.0, rel=0.02)
-  assert evaluation.measured["breakeven_after_r"] == pytest.approx(1.0)
+  assert len(targets) == 4
+  assert targets[0] == pytest.approx(stop_pips * 0.5, rel=0.02)
+  assert targets[1] == pytest.approx(stop_pips * 1.0, rel=0.02)
+  assert targets[2] == pytest.approx(stop_pips * 2.0, rel=0.02)
+  assert targets[3] == pytest.approx(stop_pips * 3.0, rel=0.02)
+  assert evaluation.measured["breakeven_after_r"] == pytest.approx(0.5)
   assert evaluation.measured["target_room_fallback_used"] is False
-  assert evaluation.measured["planned_target_close_ratios"] == ["0.5", "0.5"]
+  assert evaluation.measured["planned_target_close_ratios"] == (
+    ["0.4", "0.2", "0.2", "0.2"]
+  )
 
 
 def test_xau_scalp_match_does_not_expand_technique_fixed_rr_ladder():
