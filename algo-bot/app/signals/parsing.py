@@ -307,34 +307,20 @@ def _parse_manual(text: str) -> Optional[dict]:
       else rr_entry + DEFAULT_SL_PIPS * pip
     )
   risk = abs(rr_entry - sl)
-  if algo_count:
-    # 2026-09 (owner-reported): manual /algo TP levels are now bot-
-    # calculated R multiples, not owner-typed prices or the pip-default
-    # ladder below - hand-picked levels made some trades read as scalps.
-    # Overrides any explicit tp the owner still types; see
-    # InstrumentManualConfig.target_r_multiples.
-    r_multiples = (
-      runtime_config.for_instrument(symbol).manual.target_r_multiples
-      or MANUAL_ALGO_DEFAULT_TARGET_R_MULTIPLES
-    )
-    tps = [
-      rr_entry + r_mult * risk if action == 'BUY' else rr_entry - r_mult * risk
-      for r_mult in r_multiples
-    ]
-  elif (tp_raw or '').strip():
-    tps = [
-      (
-        _expand_tp(float(v), rr_entry, action)
-        if symbol == "XAU"
-        else float(v)
-      )
-      for v in tp_raw.strip().split('/') if v.strip()
-    ]
-  else:
-    tps = [
-      rr_entry + pips * pip if action == 'BUY' else rr_entry - pips * pip
-      for pips in DEFAULT_TP_PIPS
-    ]
+  # 2026-09 (owner-reported): manual TP levels are now bot-calculated R
+  # multiples, not owner-typed prices or the pip-default ladder - hand-
+  # picked levels made some trades read as scalps. Applies to every manual
+  # signal, algo or notify alike - not just auto-executed ones - and
+  # overrides any explicit tp the owner still types; see
+  # InstrumentManualConfig.target_r_multiples.
+  r_multiples = (
+    runtime_config.for_instrument(symbol).manual.target_r_multiples
+    or MANUAL_ALGO_DEFAULT_TARGET_R_MULTIPLES
+  )
+  tps = [
+    rr_entry + r_mult * risk if action == 'BUY' else rr_entry - r_mult * risk
+    for r_mult in r_multiples
+  ]
   if not tps:
     return None
   return {

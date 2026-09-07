@@ -92,13 +92,20 @@ def test_short_form_explicit_tp_is_ignored_in_algo_mode():
 
 def test_full_form_signal_with_both_sl_and_tp_defaults_key_level():
   # Setup is always key-level unless the command tags something else —
-  # SL/TP being present does not leave it untagged.
+  # SL/TP being present does not leave it untagged. The R ladder applies
+  # to every manual signal, algo or notify alike (owner: "non /algo must
+  # work as the same") - explicit typed tp is ignored here exactly as it
+  # is in algo mode, and execution_mode stays notify since there's no
+  # /algo suffix.
   parsed = _parse_manual("gold sell 4100-4105 / sl 4110 / tp 95/90/80")
 
   assert parsed is not None
   assert parsed["setup_type"] == DEFAULT_SETUP_TYPE
   assert parsed["sl"] == pytest.approx(4110.0)
-  assert parsed["tps"] == [4095.0, 4090.0, 4080.0]
+  risk = 4110.0 - 4100.0
+  assert parsed["tps"] == [
+    pytest.approx(4100.0 - r * risk) for r in _R_MULTIPLES
+  ]
   assert parsed["execution_mode"] == "notify"
 
 
