@@ -4762,6 +4762,40 @@ def _resolve_match_confluence_claim_id(
   )
 
 
+def _fixed_rr_adaptive_room_pips(
+  *,
+  fixed_rr_target: bool,
+  has_opposing_entry: bool,
+  target_room_measured: dict[str, Any],
+) -> float | None:
+  """Room (pips) available to the fixed_rr adaptive-ladder fallback check.
+
+  2026-09 (owner-reported): weak_opposing_level_ignored only covers the
+  contained/zero-room hard-block branches in structural_target_room - a
+  "zone" tier opposing entry with positive-but-small raw room never sets
+  that flag (structural_target_room itself never trims a ladder for
+  positive room), so it was still reaching here and capping the fixed_rr
+  adaptive room fallback even after zone joined the weak-tier exception
+  there. Only "major" is a real enough wall to cap this room fallback -
+  anything else (zone, level, unknown) means "no constraining barrier" for
+  this purpose, same as no opposing entry at all.
+  """
+  if not fixed_rr_target or not has_opposing_entry:
+    return None
+  if target_room_measured.get("weak_opposing_level_ignored"):
+    return None
+  opposing_tier = str(target_room_measured.get("opposing_tier") or "").casefold()
+  if opposing_tier != "major":
+    return None
+  raw_room = target_room_measured.get("usable_room_pips")
+  if raw_room is None:
+    return None
+  try:
+    return max(0.0, float(raw_room))
+  except (TypeError, ValueError):
+    return None
+
+
 async def _publish_trade_plan_v8(
   client: Any,
   symbol: str,
@@ -6122,19 +6156,12 @@ async def _publish_trade_plan_v8(
   # policy gates against the fresh policy evaluation for the plan-time match.
   side_aware_quote = _executable_spot_price(spot, match_for_plan.direction)
   fixed_rr_target = instrument_geometry.fixed_reward_risk(symbol) is not None
-  fixed_rr_room: float | None = None
   target_room_measured = dict(target_room.measured or {})
-  if (
-    fixed_rr_target
-    and target_room.opposing_entry is not None
-    and not target_room_measured.get("weak_opposing_level_ignored")
-  ):
-    raw_room = target_room_measured.get("usable_room_pips")
-    if raw_room is not None:
-      try:
-        fixed_rr_room = max(0.0, float(raw_room))
-      except (TypeError, ValueError):
-        fixed_rr_room = None
+  fixed_rr_room = _fixed_rr_adaptive_room_pips(
+    fixed_rr_target=fixed_rr_target,
+    has_opposing_entry=target_room.opposing_entry is not None,
+    target_room_measured=target_room_measured,
+  )
   fixed_rr_metrics: list[tuple[str, str, dict[str, str]]] = []
   gate_policy = evaluate_execution_policy(
     match_for_plan,
