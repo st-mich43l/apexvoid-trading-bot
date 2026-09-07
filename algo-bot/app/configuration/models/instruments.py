@@ -30,9 +30,12 @@ REGISTERED_INSTRUMENT_POLICIES = frozenset({
   XAU_CURRENT_V1_POLICY,
 })
 
-# Policies that must carry the uniform fixed_rr targeting contract.
-# fx_fixed_2r_frontload_v1 previously differed only by GBPJPY 40/25/35 —
-# uniformity replaces that front-load deliberately.
+# Policies that must carry a fixed, policy-specific fixed_rr targeting
+# contract - every instrument declaring a given policy shares that policy's
+# exact shape, so no instrument can silently drift from what its policy name
+# claims. fx_fixed_2r_frontload_v1 previously differed only by GBPJPY
+# 40/25/35 — uniformity (within the FX policies) replaces that front-load
+# deliberately.
 FIXED_RR_POLICIES = frozenset({
   FX_FIXED_2R_V1_POLICY,
   FX_FIXED_2R_FRONTLOAD_V1_POLICY,
@@ -53,10 +56,10 @@ class InstrumentTargetMode(StrEnum):
   FIXED_RR = "fixed_rr"
 
 
-# Uniform autonomous R:R ladder. Every fixed_rr instrument books 50% at 1R
-# and 50% at 2R, with the runner moving to breakeven once TP1 fills. The
-# 2R→1R room fallback is decided per trade in execution_policy.
-FIXED_RR_REQUIRED_TARGETING = {
+# Uniform FX autonomous R:R ladder. Every FX fixed_rr instrument books 50%
+# at 1R and 50% at 2R, with the runner moving to breakeven once TP1 fills.
+# The 2R→1R room fallback is decided per trade in execution_policy.
+_FX_FIXED_2R_TARGETING = {
   "mode": InstrumentTargetMode.FIXED_RR,
   "reward_risk": 2.0,
   "target_r_multiples": (1.0, 2.0),
@@ -65,6 +68,27 @@ FIXED_RR_REQUIRED_TARGETING = {
   "trail_after_r": None,
   "trail_to_r": None,
   "entry_clips": 2,
+}
+
+# 2026-09 (owner-reported): auto XAU runs the same 4-level R ladder as
+# manual /algo (see InstrumentManualConfig.target_r_multiples) instead of
+# the FX policies' shared 1R/2R shape - deliberately diverges from
+# _FX_FIXED_2R_TARGETING now that exactly one policy needs to.
+_XAU_FIXED_2R_TARGETING = {
+  "mode": InstrumentTargetMode.FIXED_RR,
+  "reward_risk": 3.0,
+  "target_r_multiples": (0.5, 1.0, 2.0, 3.0),
+  "close_ratios": (0.4, 0.2, 0.2, 0.2),
+  "breakeven_after_r": 0.5,
+  "trail_after_r": None,
+  "trail_to_r": None,
+  "entry_clips": 2,
+}
+
+FIXED_RR_REQUIRED_TARGETING = {
+  FX_FIXED_2R_V1_POLICY: _FX_FIXED_2R_TARGETING,
+  FX_FIXED_2R_FRONTLOAD_V1_POLICY: _FX_FIXED_2R_TARGETING,
+  XAU_FIXED_2R_V1_POLICY: _XAU_FIXED_2R_TARGETING,
 }
 
 
@@ -105,6 +129,16 @@ class InstrumentManualConfig(FrozenConfigModel):
   # to any owner-supplied TP count: one TP closes 100%; otherwise TP1 gets
   # this fraction and the remainder is split deterministically.
   tp1_close_fraction: float | None = Field(default=None, gt=0, lt=1)
+  # 2026-09: manual /algo TP levels are now bot-calculated R multiples, not
+  # owner-typed/pip-default prices (owner-reported: hand-picked levels made
+  # some trades read as scalps). parsing._parse_manual uses this ladder for
+  # every algo-mode signal, overriding any explicit tp the owner still
+  # types. Empty (the default, matching target_close_ratios' own
+  # convention) means "use parsing's built-in 0.5R/1R/2R/3R fallback" -
+  # kept empty rather than schema-defaulted so an instrument that never
+  # reads this field (FX's own /algo shorthand uses targeting's ladder
+  # instead, deliberately) does not carry a misleading non-empty value.
+  target_r_multiples: tuple[float, ...] = ()
 
   @model_validator(mode="after")
   def validate_manual_profile(self) -> InstrumentManualConfig:
@@ -130,6 +164,14 @@ class InstrumentManualConfig(FrozenConfigModel):
     if ratios and self.tp1_close_fraction is not None:
       raise ValueError(
         "manual target_close_ratios and tp1_close_fraction are mutually exclusive"
+      )
+    levels = tuple(float(value) for value in self.target_r_multiples)
+    if levels and (
+      any(not math.isfinite(value) or value <= 0 for value in levels)
+      or tuple(sorted(set(levels))) != levels
+    ):
+      raise ValueError(
+        "manual.target_r_multiples must be positive and strictly increasing"
       )
     return self
 
@@ -516,7 +558,7 @@ class InstrumentConfig(FrozenConfigModel):
         "non-disabled instruments require contract configuration"
       )
     if self.policy in FIXED_RR_POLICIES:
-      required = FIXED_RR_REQUIRED_TARGETING
+      required = FIXED_RR_REQUIRED_TARGETING[self.policy]
       checks = (
         ("mode", self.targeting.mode, required["mode"]),
         ("reward_risk", self.targeting.reward_risk, required["reward_risk"]),

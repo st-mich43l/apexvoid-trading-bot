@@ -338,7 +338,12 @@ instrument_packs:
     stop_envelope:
       # Structure-first band replacing global reaction 40–60. Calibrate max
       # from live Key Level stop distances (pack leaf only).
-      min_pips: 25
+      # 2026-09 (owner-reported): 25p let some non-scalping structural
+      # setups take scalp-sized stops on an instrument that stop-hunts
+      # routinely - raised the floor to 50p; max stays 100p (owner's own
+      # manual XAU trades already run 60-100p stops through this
+      # structure and hold).
+      min_pips: 50
       max_pips: 100
       sl_distance: 10.0
     activation:
@@ -358,14 +363,28 @@ instrument_packs:
       fvg_entry_max_width_price: 5.0
     targeting:
       mode: fixed_rr
-      reward_risk: 2.0
+      # 2026-09 (owner-reported): auto XAU now runs the same 4-level R
+      # ladder as manual /algo (0.5R/1R/2R/3R) instead of a bare 1R/2R -
+      # reward_risk must equal the final target_r_multiple (validated).
+      # close_ratios mirrors manual's 40% first / 20% each remaining
+      # (manual expresses this via tp1_close_fraction; auto's schema
+      # requires an explicit matching-length array).
+      reward_risk: 3.0
       target_r_multiples:
+      - 0.5
       - 1.0
       - 2.0
+      - 3.0
       close_ratios:
-      - 0.5
-      - 0.5
-      breakeven_after_r: 1.0
+      - 0.4
+      - 0.2
+      - 0.2
+      - 0.2
+      # Was 1.0 (BE after the old first/only-1R target). The new first
+      # target is 0.5R, so BE now follows it instead - leaving the stop
+      # at full risk between 0.5R and 1R would give back the newly
+      # booked partial with no protection.
+      breakeven_after_r: 0.5
       entry_clips: 2
     manual:
       enabled: true
