@@ -4762,11 +4762,62 @@ def _resolve_match_confluence_claim_id(
   )
 
 
+# 2026-09 (owner-reported): a swing distance shorter than this many ATRs is
+# too close to be a credible "the technique expects real room" signal - it
+# reads as noise (a minor recent wiggle), not a structural read worth
+# trusting over a real major wall. Tunable; this is a judgment call with no
+# empirical calibration behind it yet.
+_TECHNIQUE_SWING_ROOM_MIN_ATR_MULTIPLE = 2.0
+
+
+def _technique_swing_room_pips(
+  *,
+  planned_entry_price: float | None,
+  structural_swing: float | None,
+  pip_size: float | None,
+  atr: float | None,
+) -> float | None:
+  """Room (pips) implied by the technique's own structural_swing reference.
+
+  structural_swing is the swing point the technique itself measured its
+  reaction from - already-computed technique math, not an external Market
+  Map lookup. A swing distance that clears a real ATR-scale move is a
+  credible "this technique's own read expects the space" signal; a swing
+  sitting only fractions of an ATR away is likely noise, not structure.
+  """
+  if (
+    planned_entry_price is None
+    or structural_swing is None
+    or pip_size is None
+    or atr is None
+  ):
+    return None
+  try:
+    entry = float(planned_entry_price)
+    swing = float(structural_swing)
+    pip = float(pip_size)
+    atr_value = float(atr)
+  except (TypeError, ValueError):
+    return None
+  if not all(math.isfinite(value) for value in (entry, swing, pip, atr_value)):
+    return None
+  if pip <= 0:
+    return None
+  swing_distance_price = abs(entry - swing)
+  if swing_distance_price < _TECHNIQUE_SWING_ROOM_MIN_ATR_MULTIPLE * max(0.0, atr_value):
+    return None
+  return swing_distance_price / pip
+
+
 def _fixed_rr_adaptive_room_pips(
   *,
   fixed_rr_target: bool,
   has_opposing_entry: bool,
   target_room_measured: dict[str, Any],
+  planned_entry_price: float | None = None,
+  structural_swing: float | None = None,
+  pip_size: float | None = None,
+  atr: float | None = None,
 ) -> float | None:
   """Room (pips) available to the fixed_rr adaptive-ladder fallback check.
 
@@ -4779,21 +4830,39 @@ def _fixed_rr_adaptive_room_pips(
   there. Only "major" is a real enough wall to cap this room fallback -
   anything else (zone, level, unknown) means "no constraining barrier" for
   this purpose, same as no opposing entry at all.
+
+  On top of that: owner - "the room logic must depend on technique zone
+  instead of decide opposing low/high". A credible technique_swing_room (see
+  _technique_swing_room_pips) can only ever widen room past what a major
+  wall alone would allow, never narrow it - if there's no major wall to
+  begin with, room is already unconstrained (None) and a swing number would
+  only make things stricter, which is never the intent here.
   """
-  if not fixed_rr_target or not has_opposing_entry:
+  if not fixed_rr_target:
     return None
-  if target_room_measured.get("weak_opposing_level_ignored"):
+  technique_room = _technique_swing_room_pips(
+    planned_entry_price=planned_entry_price,
+    structural_swing=structural_swing,
+    pip_size=pip_size,
+    atr=atr,
+  )
+  wall_room: float | None = None
+  if (
+    has_opposing_entry
+    and not target_room_measured.get("weak_opposing_level_ignored")
+    and str(target_room_measured.get("opposing_tier") or "").casefold() == "major"
+  ):
+    raw_room = target_room_measured.get("usable_room_pips")
+    if raw_room is not None:
+      try:
+        wall_room = max(0.0, float(raw_room))
+      except (TypeError, ValueError):
+        wall_room = None
+  if wall_room is None:
     return None
-  opposing_tier = str(target_room_measured.get("opposing_tier") or "").casefold()
-  if opposing_tier != "major":
-    return None
-  raw_room = target_room_measured.get("usable_room_pips")
-  if raw_room is None:
-    return None
-  try:
-    return max(0.0, float(raw_room))
-  except (TypeError, ValueError):
-    return None
+  if technique_room is None:
+    return wall_room
+  return max(wall_room, technique_room)
 
 
 async def _publish_trade_plan_v8(
@@ -6161,6 +6230,10 @@ async def _publish_trade_plan_v8(
     fixed_rr_target=fixed_rr_target,
     has_opposing_entry=target_room.opposing_entry is not None,
     target_room_measured=target_room_measured,
+    planned_entry_price=room_planned,
+    structural_swing=match_for_plan.structure_swing,
+    pip_size=float(units.pip_size(symbol)),
+    atr=float(match_for_plan.atr),
   )
   fixed_rr_metrics: list[tuple[str, str, dict[str, str]]] = []
   gate_policy = evaluate_execution_policy(
