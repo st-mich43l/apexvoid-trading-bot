@@ -38,6 +38,19 @@ dated section after deployment.
   per policy so XAU can diverge from FX deliberately.
 
 ### Fixed
+- Manual `/algo` stop trail stepped "two rungs behind" the just-booked
+  target instead of one — owner-reported: an XAU BUY fully filled 3 legs
+  of the ladder (TP1/TP2/TP3, up to +202 pips peak) but the stop only
+  moved to TP1's price, leaving the entire TP2-to-TP3 gain unprotected.
+  "Two behind" was only ever equivalent to "one behind" on the old 2-rung
+  (1R/2R) ladder — TP2 has no rung two behind it, so that case was already
+  special-cased to trail to TP1 (one behind). The ladder grew to 4 rungs
+  (0.5R/1R/2R/3R) without updating the general step, so TP3 trailed all
+  the way back to TP1 (skipping TP2 entirely) and TP4 trailed to TP2
+  (skipping TP3). Now walks backward from the immediately preceding rung,
+  falling further back only when that rung isn't resolvable for the
+  specific leg (an adaptive/compressed plan can own a non-contiguous
+  ordinal subset) — every rung now trails to the one right before it.
 - `tp_booked`/`position_closed` events computed "Achieved: Npips" from the
   planned target price instead of the real close execution price, while
   the "Fill:" price shown right next to it on the same line was always the
