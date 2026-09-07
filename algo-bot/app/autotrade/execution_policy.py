@@ -1431,8 +1431,18 @@ def classify_tier(
 def risk_multiplier_for_tier(tier: str, cfg: Any | None = None, *, post_impulse: bool = False, one_sided: bool = False, range_scalp: bool = False) -> float:
   """Resolve volume multiplier for equity-table sizing.
 
-  Owner 2026-08-06:
-  - Scalp (HFS / Range Edge / Box) books **2×** equity-table lots.
+  Owner 2026-09-07: scalp books the same flat equity-table lot as any
+  other trade, full stop. The prior 1.5x scalp multiplier here predates
+  PR #486 (2026-09-04), which switched scalp's default sizing_mode from
+  the old risk-percent-of-stop-distance formula to equity_table - under
+  that OLD "risk" mode the C# executor's RiskLots never read
+  RiskMultiplier at all, so this multiplier was already inert for
+  sizing and only shrank the stop envelope to hold dollar risk constant
+  against an inflated position that, by the time of PR #486, no longer
+  existed. Once sizing_mode flipped to equity_table, EquityTableLots DOES
+  read RiskMultiplier, so the same stale 1.5x silently started actually
+  inflating every scalp position 1.5x above table lots again - exactly
+  what PR #486's own commit message said it had eliminated.
   - Reaction / swing books **full** equity-table lots on every quality
     tier (A/B/C). Tier stars remain card/telemetry only — live Trend
     Pullback ⭐⭐ was half-sizing to 0.05 on a $887 → 0.10 table because
@@ -1444,10 +1454,7 @@ def risk_multiplier_for_tier(tier: str, cfg: Any | None = None, *, post_impulse:
     cfg = _default_runtime_cfg()
   sizing = cfg.risk.sizing
   if range_scalp:
-    scalp_mult = float(sizing.range_max_risk_multiplier)
-    if not math.isfinite(scalp_mult) or scalp_mult <= 0:
-      scalp_mult = 2.0
-    return scalp_mult
+    return 1.0
   # Equity-table reaction: ignore tier A/B/C shrink.
   _ = tier
   mult = 1.0
