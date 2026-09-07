@@ -104,17 +104,23 @@ public sealed class StopTrailPlannerTests
   // the position flat at breakeven from TP1 all the way through to TP3 -
   // the dominant driver of real manual XAU trades scratching near zero
   // instead of banking real progress (58 closed trades: median win 36
-  // pips). TP2 now trails to TP1's own level, same as TP3 already did
-  // (TP3's own "two behind" step still lands on TP1 too, so it's a no-op
-  // once TP2 has already moved there - TP4 is what advances the trail
-  // again, to TP2's level).
+  // pips). TP2 now trails to TP1's own level.
+  //
+  // 2026-09 owner-reported: the ladder grew from 2 rungs to 4
+  // (0.5R/1R/2R/3R), and the trail step used to be "two behind" instead of
+  // "one behind" - only ever equivalent for the old 2-rung ladder. On the
+  // new 4-rung ladder that skipped a whole real, already-realized level:
+  // TP3 trailed all the way back to TP1 (a no-op once TP2 had already
+  // moved there) instead of advancing to TP2, and TP4 trailed to TP2
+  // instead of TP3. Every rung now advances the trail by exactly one step.
   [Theory]
-  [InlineData(TradeDirection.Buy, 4000.26, 4003.2, 4006.2)]
-  [InlineData(TradeDirection.Sell, 4000.14, 3997.2, 3994.2)]
-  public void Tp2TrailsToTp1ThenTp4AdvancesToTp2(
+  [InlineData(TradeDirection.Buy, 4000.26, 4003.2, 4006.2, 4009.2)]
+  [InlineData(TradeDirection.Sell, 4000.14, 3997.2, 3994.2, 3991.2)]
+  public void EachTargetTrailsToThePrecedingTargetsLevel(
     TradeDirection direction,
     double afterTp1,
     double afterTp2,
+    double afterTp3,
     double afterTp4
   )
   {
@@ -134,15 +140,18 @@ public sealed class StopTrailPlannerTests
     Assert.Equal("TP1", tp2.Label);
     state = state with { CurrentStopLoss = tp2.StopLoss };
 
-    // TP3's own "ordinal - 2" step also lands on TP1 - already there, so
-    // this is a genuine no-op, not a missed trail.
-    Assert.Null(StopTrailPlanner.Plan(state, 2, Symbol, 0.1m, 6));
+    var tp3 = Assert.IsType<StopTrailMove>(
+      StopTrailPlanner.Plan(state, 2, Symbol, 0.1m, 6)
+    );
+    Assert.Equal(Convert.ToDecimal(afterTp3), tp3.StopLoss);
+    Assert.Equal("TP2", tp3.Label);
+    state = state with { CurrentStopLoss = tp3.StopLoss };
 
     var tp4 = Assert.IsType<StopTrailMove>(
       StopTrailPlanner.Plan(state, 3, Symbol, 0.1m, 6)
     );
     Assert.Equal(Convert.ToDecimal(afterTp4), tp4.StopLoss);
-    Assert.Equal("TP2", tp4.Label);
+    Assert.Equal("TP3", tp4.Label);
     Assert.Null(StopTrailPlanner.Plan(state, 4, Symbol, 0.1m, 6));
   }
 
@@ -150,7 +159,8 @@ public sealed class StopTrailPlannerTests
   public void AbsoluteTargetPricesDriveTrailNotFillRelativePips()
   {
     // Manual ladders book absolute TargetPrices; trail after TP4 must lock
-    // to Absolute TP2, not Entry±TargetsPips (fill slippage desync).
+    // to Absolute TP3 (the preceding rung), not Entry±TargetsPips (fill
+    // slippage desync).
     var state = State(TradeDirection.Sell, 4401.10m, 4408.10m) with
     {
       TargetsPips = [30, 60, 100, 130, 200],
@@ -162,16 +172,16 @@ public sealed class StopTrailPlannerTests
     var afterTp4 = Assert.IsType<StopTrailMove>(
       StopTrailPlanner.Plan(state, 3, Symbol, 0.1m, 6)
     );
-    Assert.Equal(4395.0m, afterTp4.StopLoss);
-    Assert.Equal("TP2", afterTp4.Label);
+    Assert.Equal(4391.0m, afterTp4.StopLoss);
+    Assert.Equal("TP3", afterTp4.Label);
   }
 
   [Fact]
   public void MidLegFullGroupLadderTrailsByOrdinalNotLocalIndex()
   {
     // Manual Mid owns TP3/TP4 only, but TargetPrices is the full owner
-    // ladder. After Mid books TP3, trail must lock to group TP1 (ordinal 1
-    // → prices[0]), not prices[localIndex] which would be TP1 by accident
+    // ladder. After Mid books TP3, trail must lock to group TP2 (ordinal 2
+    // → prices[1]), not prices[localIndex] which would be TP1 by accident
     // for index 0 and wrong for any later ordinal lookup.
     var state = State(TradeDirection.Buy, 4441.5m, 4437.0m) with
     {
@@ -184,8 +194,8 @@ public sealed class StopTrailPlannerTests
     var afterTp3 = Assert.IsType<StopTrailMove>(
       StopTrailPlanner.Plan(state, 0, Symbol, 0.1m, 6)
     );
-    Assert.Equal(4446.0m, afterTp3.StopLoss);
-    Assert.Equal("TP1", afterTp3.Label);
+    Assert.Equal(4449.0m, afterTp3.StopLoss);
+    Assert.Equal("TP2", afterTp3.Label);
   }
 
   [Theory]
