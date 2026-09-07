@@ -1461,6 +1461,7 @@ async def ensure_forming_card_targets(
       resolved_match,
       symbol=card_symbol,
       target_prices=prices or None,
+      stop_price=await published_plan_stop_price(client, setup_id),
     )
   if not target_lines:
     return False
@@ -1728,16 +1729,47 @@ def _format_math_line(match: StrategyMatch) -> str | None:
   return " · ".join(parts)
 
 
+def _risk_pips(
+  stop_price: float | None,
+  *,
+  reference: float | None,
+  symbol: str,
+) -> float | None:
+  """Unsigned entry-to-stop distance in pips, for R-multiple display."""
+  if stop_price is None or reference is None:
+    return None
+  try:
+    pip = float(pip_for(symbol))
+    stop = float(stop_price)
+    ref = float(reference)
+  except (KeyError, TypeError, ValueError):
+    return None
+  if pip <= 0 or not (math.isfinite(stop) and math.isfinite(ref)):
+    return None
+  distance = abs(ref - stop) / pip
+  return distance if distance > 0 else None
+
+
+def _format_r_multiple(offset_pips: float, risk_pips: float) -> str:
+  r_multiple = offset_pips / risk_pips
+  text = f"{r_multiple:.1f}".rstrip("0").rstrip(".")
+  return f"+{text or '0'}R"
+
+
 def _trade_area_target_lines(
   match: StrategyMatch,
   *,
   symbol: str,
   target_prices: tuple[float, ...] | None = None,
+  stop_price: float | None = None,
 ) -> list[str]:
   """One bullet per TP level, for the initial root-card render.
 
   A ladder crammed onto a single ' · '-joined line is hard to scan past
-  two or three targets - each TPn gets its own line here instead.
+  two or three targets - each TPn gets its own line here instead. Shown
+  as an R-multiple (risk unit), not a raw pip count -- a bare "+21" reads
+  as meaningless without the stop distance next to it, while "+1.0R" is
+  legible on its own regardless of instrument or stop width.
   """
   prices: list[float] = []
   for raw in target_prices or ():
@@ -1761,6 +1793,7 @@ def _trade_area_target_lines(
     lines: list[str] = []
     reference = _target_reference_price(match)
     direction = str(match.direction or "").upper()
+    risk_pips = _risk_pips(stop_price, reference=reference, symbol=symbol)
     for index, price in enumerate(prices):
       label = f"TP{index + 1}"
       price_text = _price_text(price, symbol=symbol)
@@ -1771,7 +1804,12 @@ def _trade_area_target_lines(
           direction=direction,
           symbol=symbol,
         )
-        lines.append(f"• <b>{label}:</b> <b>{price_text} (+{offset})</b>")
+        suffix = (
+          _format_r_multiple(offset, risk_pips)
+          if risk_pips is not None
+          else f"+{offset}"
+        )
+        lines.append(f"• <b>{label}:</b> <b>{price_text} ({suffix})</b>")
       elif index < len(pips):
         lines.append(f"• <b>{label}:</b> <b>{price_text} (+{pips[index]})</b>")
       else:
@@ -1867,7 +1905,7 @@ def format_plan_published_root_card(
     lines.append("• <b>Stop:</b> <b>SL</b>")
 
   lines.extend(_trade_area_target_lines(
-    match, symbol=symbol, target_prices=target_prices,
+    match, symbol=symbol, target_prices=target_prices, stop_price=stop_price,
   ))
 
   lines.extend(["", "🧭 <b>Context</b>"])
