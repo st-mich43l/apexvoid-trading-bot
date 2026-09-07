@@ -12,6 +12,19 @@ dated section after deployment.
 
 ## Unreleased
 
+### Fixed
+- Scalp volume silently re-inflated to 1.5× table lots despite PR #486's
+  "scalp books the same flat equity-table lot as any other trade" fix.
+  `risk_multiplier_for_tier`'s scalp branch still returned
+  `range_max_risk_multiplier` (1.5) - inert under the OLD `risk` sizing
+  mode (the C# executor's `RiskLots` path never read `RiskMultiplier`
+  at all), but PR #486 switched scalp's default sizing_mode to
+  `equity_table`, whose `EquityTableLots` path DOES read it -
+  `tableLots × 1.5`. Now returns `1.0` unconditionally, matching every
+  other equity-table-sized trade; the paired stop-envelope shrink that
+  existed only to hold dollar risk flat against the inflated volume is
+  now correctly a no-op too.
+
 ### Removed
 - Stopped the automatic Market Map owner Telegram digest
   (`market_map_scan_loop`, previously spawned unconditionally at

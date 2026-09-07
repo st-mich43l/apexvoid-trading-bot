@@ -627,11 +627,14 @@ def test_scalp_room_synced_stop_allows_thin_targets():
   assert scalp.allowed
   assert scalp.measured["stop_bounds_source"] == "scalp_room"
   assert scalp.measured["desired_stop_pips"] == 15
-  # Scalp tiers book 2x the equity-table volume at the same equity band
-  # (range_max_risk_multiplier=2.0 here); the pip envelope is halved to
-  # match so dollar risk (lots x stop_distance) stays flat, not doubled.
-  assert scalp.measured["sizing_risk_multiplier"] == 2.0
-  assert scalp.measured["planned_stop_pips"] == "7.0"
+  # Owner 2026-09-07: scalp books the same flat equity-table lot as any
+  # other trade now (PR #486's equity_table sizing_mode default), so no
+  # multiplier applies here any more and the pip envelope is never
+  # shrunk - the prior 2x-multiplier/halved-envelope pairing was a
+  # leftover from the old risk-percent sizing formula.
+  assert scalp.measured["match_risk_multiplier"] == 1.0
+  assert scalp.measured["effective_risk_multiplier"] == 1.0
+  assert scalp.measured["planned_stop_pips"] == "15.0"
 
 
 def test_scalp_with_fitted_target_skips_opposing_zone_stop_reject():

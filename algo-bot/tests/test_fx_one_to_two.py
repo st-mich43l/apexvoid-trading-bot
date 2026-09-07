@@ -373,7 +373,9 @@ def test_fx_auto_reaction_books_pack_volume_multiplier():
 
   Live 2026-08-21: GBPJPY Key Level filled 0.12 lots (raw equity table)
   while pack ``manual.risk_multiplier`` / ``fx_volume_multiplier`` promised
-  1.5×. Scalp stays on range_max (2.0) without stacking the pack scale.
+  1.5×. Scalp books the same flat equity-table lot as any other trade
+  (owner 2026-09-07, PR #486's equity_table sizing_mode default) without
+  stacking the pack scale on top.
   """
   from tests.test_execution_pipeline_integrity import _policy_match
 
@@ -419,10 +421,10 @@ def test_fx_auto_reaction_books_pack_volume_multiplier():
     pip_size=0.0001,
     cfg=cfg,
   )
-  # May reject on room/geometry; scalps use the standalone 1.5× multiplier.
+  # May reject on room/geometry; scalp never carries a standalone multiplier.
   if scalp.allowed:
     assert scalp.measured["instrument_volume_multiplier"] == pytest.approx(1.0)
-    assert scalp.measured["effective_risk_multiplier"] == pytest.approx(1.5)
+    assert scalp.measured["effective_risk_multiplier"] == pytest.approx(1.0)
 
 
 def test_fx_fixed_rr_builds_one_r_two_r_with_breakeven():
