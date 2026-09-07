@@ -1627,32 +1627,27 @@ def test_defended_level_guard_noop_when_unconfigured(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_incident_replay_buy_at_4116_25_is_vetoed_by_two_guards(monkeypatch):
+async def test_incident_replay_buy_at_4116_25_is_vetoed_by_the_containment_guard(
+  monkeypatch,
+):
   """Replays the 23 Jul 2026 incident numbers directly: a SELL resistance
-  band tested 8x at 4,116-4,127, and a Market Map that simultaneously
-  publishes BUY 4,112-4,122 and SELL 4,116-4,127 (overlapping 4,116-4,122).
-  Both the containment veto and the overlap veto must independently fire.
+  band tested 8x at 4,116-4,127 contains the 4,116.25 entry. The
+  overlapping-zone conflict guard this incident originally motivated is
+  superseded by _resolve_overlap_thesis's reaction-lookback thesis check
+  (see test_has_overlapping_zones_detects_map_self_contradiction for that
+  guard's own coverage); the containment veto below is unaffected.
   """
   entry_reference = 4116.25
   supply = [Zone(4116.0, 4127.0, "supply", touches=8)]
-  market_map = _market_map([
-    _map_entry("sell", 4116.0, 4127.0),
-    _map_entry("buy", 4112.0, 4122.0),
-  ])
 
   barrier_reason = worker._opposing_barrier_reason(
     "BUY", entry_reference, 1.2, supply, [], 0.5,
-  )
-  overlap_reason = worker._overlapping_zone_conflict_reason(
-    entry_reference, market_map,
   )
 
   assert barrier_reason is not None
   assert worker._opposing_barrier_condition(barrier_reason) == (
     "entry_inside_opposing_zone"
   )
-  assert overlap_reason is not None
-  assert "demand" in overlap_reason and "supply" in overlap_reason
 
 
 # --- Fix 3: post-stop-out cooldown ------------------------------------------
@@ -1775,42 +1770,24 @@ async def test_publish_candidate_during_active_cooldown_is_telemetry_only(monkey
 
 # --- Fix 4: overlapping opposing-zone veto ----------------------------------
 
-def test_overlapping_zone_conflict_reason_vetoes_entry_inside_both():
-  market_map = _market_map([
-    _map_entry("sell", 4116.0, 4127.0),
-    _map_entry("buy", 4112.0, 4122.0),
-  ])
-
-  reason = worker._overlapping_zone_conflict_reason(4118.0, market_map)
-
-  assert reason is not None
-  assert "demand" in reason and "supply" in reason
-
-
-def test_overlapping_zone_conflict_reason_allows_entry_in_demand_only():
-  market_map = _market_map([
-    _map_entry("sell", 4116.0, 4127.0),
-    _map_entry("buy", 4112.0, 4122.0),
-  ])
-
-  reason = worker._overlapping_zone_conflict_reason(4113.0, market_map)
-
-  assert reason is None
-
-
 def test_has_overlapping_zones_detects_map_self_contradiction():
-  overlapping = _market_map([
-    _map_entry("sell", 4116.0, 4127.0),
-    _map_entry("buy", 4112.0, 4122.0),
-  ])
-  disjoint = _market_map([
-    _map_entry("sell", 4130.0, 4140.0),
-    _map_entry("buy", 4100.0, 4110.0),
-  ])
+  # Replaces the retired _overlapping_zone_conflict_reason's own dedicated
+  # tests too (2026-09, Market Map purge stage 4): both guards read the same
+  # technique-native zone scan now, and _resolve_overlap_thesis (not this
+  # simple containment check) is the live per-candidate overlap veto.
+  overlapping = [
+    Zone(4116.0, 4127.0, "supply"),
+    Zone(4112.0, 4122.0, "demand"),
+  ]
+  disjoint = [
+    Zone(4130.0, 4140.0, "supply"),
+    Zone(4100.0, 4110.0, "demand"),
+  ]
 
   assert worker._has_overlapping_zones(overlapping) is True
   assert worker._has_overlapping_zones(disjoint) is False
   assert worker._has_overlapping_zones(None) is False
+  assert worker._has_overlapping_zones([]) is False
 
 
 @pytest.mark.asyncio

@@ -22,7 +22,6 @@ from unittest.mock import AsyncMock
 import pandas as pd
 import pytest
 
-from app.analysis.market_map import MapEntry, MarketMap
 from app.analysis.types import Zone
 from app.analysis.execution_eligibility import (
   EXECUTION_ELIGIBILITY_VERSION,
@@ -277,19 +276,6 @@ def _buy_retest_bar(timestamp: int) -> pd.DataFrame:
   )
 
 
-def _market_map(*entries: MapEntry) -> MarketMap:
-  return MarketMap(
-    entries=list(entries),
-    price=4089.0,
-    eq=None,
-    box_low=None,
-    box_high=None,
-    bias="up",
-    bias_tf="H1",
-    actionable_entries=list(entries),
-  )
-
-
 def _intent_for_match(match: StrategyMatch) -> ExecutionIntent:
   return ExecutionIntent(
     intent_id=match.match_id,
@@ -509,17 +495,7 @@ async def test_published_setup_reconciles_on_replay_without_re_publishing():
     "XAU",
     spot,
     match,
-    market_map=_market_map(MapEntry(
-      "buy",
-      4037.0,
-      4041.0,
-      4037,
-      4041,
-      "major",
-      ["demand"],
-      20.0,
-      contains_price=True,
-    )),
+    htf_zones=[Zone(bottom=4037.0, top=4041.0, side="demand", score=20.0)],
   )
 
   assert replay_plan_id == plan_id
@@ -1118,17 +1094,6 @@ async def test_range_edge_scalp_publishes_inside_opposing_structure():
   )
   # BUY entry sits inside opposing supply — reaction would hard-reject;
   # Range Edge Scalp must still publish (native room already selected 20p).
-  market_map = _market_map(MapEntry(
-    "sell",
-    4089.2,
-    4095.0,
-    4089,
-    4095,
-    "major",
-    ["supply"],
-    13.0,
-  ))
-
   plan_id = await worker._publish_trade_plan_v8(
     client,
     "XAU",
@@ -1139,7 +1104,7 @@ async def test_range_edge_scalp_publishes_inside_opposing_structure():
     # wick would exceed the new smaller cap and fail on an unrelated wick
     # check. This is still a real wick-rejection bar, just sized to fit.
     frames={"M1": _m1_trigger_bar(wick_depth=1.2)},
-    market_map=market_map,
+    htf_zones=[Zone(bottom=4089.2, top=4095.0, side="supply", score=13.0)],
   )
 
   assert plan_id is not None
@@ -1185,24 +1150,13 @@ async def test_scalp_m1_publishes_inside_opposing_structure():
     bid=4088.9,
     ask=4089.1,
   )
-  market_map = _market_map(MapEntry(
-    "sell",
-    4089.2,
-    4095.0,
-    4089,
-    4095,
-    "major",
-    ["supply"],
-    13.0,
-  ))
-
   plan_id = await worker._publish_trade_plan_v8(
     client,
     "XAU",
     spot,
     match,
     frames={"M1": _m1_trigger_bar(wick_depth=0.2)},
-    market_map=market_map,
+    htf_zones=[Zone(bottom=4089.2, top=4095.0, side="supply", score=13.0)],
   )
   assert plan_id is not None
   plan = await read_trade_plan(client, plan_id)
@@ -1220,9 +1174,8 @@ async def test_final_gate_keeps_configured_ladder_with_opposing_structure():
   configured partial ladder into a solo TP before publish.
 
   2026-09: the room check now reads htf_zones (scanner/detector-native),
-  not Market Map -- htf_zones= is what actually drives room_entries since
-  the Stage 3 migration; market_map= is passed too only because it still
-  feeds the unrelated confluence-claim/overlap-thesis checks.
+  not Market Map -- market_map= is no longer a _publish_trade_plan_v8
+  parameter at all (Stage 4 of the purge).
   """
   client = redis_state.get_client()
   match = _match(
@@ -1239,16 +1192,6 @@ async def test_final_gate_keeps_configured_ladder_with_opposing_structure():
     bid=4088.9,
     ask=4089.1,
   )
-  market_map = _market_map(MapEntry(
-    "sell",
-    4096.0,
-    4098.0,
-    4096,
-    4098,
-    "zone",
-    ["supply"],
-    10.0,
-  ))
   htf_zones = [Zone(bottom=4096.0, top=4098.0, side="supply", score=10.0)]
 
   plan_id = await worker._publish_trade_plan_v8(
@@ -1257,7 +1200,6 @@ async def test_final_gate_keeps_configured_ladder_with_opposing_structure():
     spot,
     match,
     frames={"M1": _m1_trigger_bar()},
-    market_map=market_map,
     htf_zones=htf_zones,
   )
 
