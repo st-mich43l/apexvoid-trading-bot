@@ -16,9 +16,15 @@ dated section after deployment.
 - Auto-algo root card TP lines now show an R-multiple ("+1R", "+1.5R")
   instead of a raw pip count ("+21") — a bare pip figure reads as
   meaningless without the stop distance next to it, especially now that
-  XAU's ladder is no longer uniformly 1R/2R across levels. Falls back to
-  the previous pip-count display when a stop price isn't resolvable yet
-  (e.g. an early forming-card render).
+  XAU's ladder is no longer uniformly 1R/2R across levels. Read straight
+  from the instrument's own configured `target_r_multiples` rather than
+  derived from the card's own stop/entry-zone prices — those don't share
+  a basis (the stop is anchored to structure; the displayed entry-zone
+  edge is only a reward-side planning reference), so a price-derived
+  ratio could land far from the real R (live 2026-09-07: a GBPJPY SELL
+  showed "+10R"/"+15.6R" for what was actually a uniform 1R/2R trade).
+  Falls back to the previous pip-count display for non-fixed_rr matches
+  or an unresolvable symbol.
 - Manual `/algo` TP levels are now a bot-calculated R-multiple ladder
   (0.5R / 1R / 2R / 3R, four levels) instead of owner-typed prices or the
   pip-default ladder — owner-reported: hand-picked levels made some trades
