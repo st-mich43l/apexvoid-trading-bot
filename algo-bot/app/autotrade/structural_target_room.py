@@ -24,6 +24,15 @@ class StructuralTargetRoomDecision:
   effective_target_pips: float | None = None
 
 
+# 2026-09 (owner-reported): "zone" tier now gets the same weak-opposing
+# treatment "level" already had. A geometrically-nearest zone (e.g. a minor
+# reclaimed breakout-retest demand pocket sitting a few pips into a key-level
+# SELL's path) was hard-blocking or room-starving setups whose own technique
+# read the move as continuing well past it - only "major" tier is a real
+# enough wall to hard-block on or to cap the fixed_rr adaptive room fallback.
+_WEAK_OPPOSING_TIERS = frozenset({"level", "zone"})
+
+
 def _overlap(
   first_low: float,
   first_high: float,
@@ -584,10 +593,11 @@ def evaluate_structural_target_room(
       if planned_in_overlap
       else "opposing_entry_contained"
     )
-    # Weak map "level" bands are often stacked noise next to a real zone —
-    # they silenced HFS/technique analysis while discretionary charts still
-    # had a trade. Major/zone containment stays a hard structural reject.
-    if tier.casefold() == "level":
+    # Weak map "level"/"zone" bands are often stacked noise, or minor
+    # reclaimed structure a real technique setup is expected to trade
+    # through, next to the real move. Major containment stays a hard
+    # structural reject.
+    if tier.casefold() in _WEAK_OPPOSING_TIERS:
       measured["weak_opposing_level_ignored"] = True
       measured["weak_opposing_level_reason"] = reason
       log.debug(
@@ -619,7 +629,7 @@ def evaluate_structural_target_room(
       if tier.casefold() == "major"
       else "opposing_barrier_no_target"
     )
-    if tier.casefold() == "level":
+    if tier.casefold() in _WEAK_OPPOSING_TIERS:
       measured["weak_opposing_level_ignored"] = True
       measured["weak_opposing_level_reason"] = reason
       log.debug(
