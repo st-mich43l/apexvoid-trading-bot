@@ -662,6 +662,59 @@ def test_xau_technique_uses_the_owner_requested_r_ladder():
   assert eurusd.targeting.breakeven_after_r == 1.0
 
 
+def test_root_card_r_multiples_use_the_configured_ladder_not_card_prices(
+  monkeypatch,
+):
+  # Live 2026-09-07: a GBPJPY SELL (iFVG) root card showed "+10R"/"+15.6R"
+  # for what was actually a uniform 1R/2R fixed_rr trade. The card's stop
+  # is anchored to structure while the displayed entry-zone edge is only a
+  # reward-side planning reference -- the two don't share a basis, so
+  # deriving R from (target - zone edge) / (stop - zone edge) landed far
+  # from the real ratio. The root card must read target_r_multiples
+  # straight from the instrument's own fixed_rr config instead.
+  from app.autotrade import setup_card
+  from app.core import instrument_geometry
+
+  cfg = _load_production_example().config
+  monkeypatch.setattr(instrument_geometry, "runtime_config", cfg)
+
+  gbpjpy_match = replace(
+    _fx_match("GBPJPY"),
+    strategy="iFVG",
+    direction="SELL",
+    entry_low=209.132,
+    entry_high=209.337,
+    key_level=209.337,
+  )
+  # A stop close to the zone edge and far targets -- exactly the shape
+  # that made the old price-derived formula produce "+10R"/"+15.6R".
+  text = setup_card.format_plan_published_root_card(
+    gbpjpy_match,
+    stop_price=209.369,
+    target_prices=(209.013, 208.835),
+  )
+  assert "(+1R)</b>" in text
+  assert "(+2R)</b>" in text
+
+  xau_match = replace(
+    _fx_match("XAU"),
+    strategy="Key Level Reaction",
+    direction="SELL",
+    entry_low=4383.0,
+    entry_high=4388.0,
+    key_level=4388.0,
+  )
+  xau_text = setup_card.format_plan_published_root_card(
+    xau_match,
+    stop_price=4396.0,
+    target_prices=(4380.0, 4376.0, 4368.0, 4360.0),
+  )
+  assert "• <b>TP1:</b> <b>4,380.00 (+0.5R)</b>" in xau_text
+  assert "• <b>TP2:</b> <b>4,376.00 (+1R)</b>" in xau_text
+  assert "• <b>TP3:</b> <b>4,368.00 (+2R)</b>" in xau_text
+  assert "• <b>TP4:</b> <b>4,360.00 (+3R)</b>" in xau_text
+
+
 def test_xau_gets_a_smaller_opposing_barrier_buffer_than_fx():
   # XAU's ATR is dollar-denominated; the FX-tuned 0.5x multiple buffers
   # away 40-115+ pips of real opposing-structure room on XAU (measured in
