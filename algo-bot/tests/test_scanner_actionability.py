@@ -473,10 +473,50 @@ def test_partial_overlap_trims_the_zone_instead_of_killing_the_whole_setup():
   assert trimmed.target_cap_pips == pytest.approx(70.0)
 
 
-def test_full_overlap_still_rejects_nothing_left_to_trim_into():
-  """A candidate zone entirely consumed by an opposing zone has no clean
-  portion to trim into. Planned entry inside the opposing structure is a
-  hard structural conflict when the actionability gate is on.
+def test_full_overlap_by_a_major_still_rejects_nothing_left_to_trim_into():
+  """A candidate zone entirely consumed by an opposing MAJOR has no clean
+  portion to trim into. Planned entry inside a major opposing structure is
+  a hard structural conflict when the actionability gate is on.
+  """
+  buy = _result(
+    "BUY",
+    4106.5,
+    4107.5,
+    quality=3,
+    current_price=4107.0,
+  )
+  market_map = _map(
+    _entry("sell", 4100.0, 4112.0, tier="major"),
+    price=4107.0,
+  )
+
+  resolution = resolve_actionability(
+    symbol="XAU",
+    observed_results=[buy],
+    market_map=market_map,
+    context=SimpleNamespace(htf_bias="down"),
+    atr=2.0,
+    pip_size=0.1,
+    cfg=_cfg(),
+  )
+
+  assert resolution.actionable == ()
+  assert len(resolution.gated) == 1
+  decision = resolution.gated[0][1]
+  assert decision.reason_code in {
+    "opposing_entry_contained",
+    "opposing_entry_overlap",
+  }
+  assert decision.hard_block is True
+  assert decision.allowed is False
+
+
+def test_full_overlap_by_a_weak_zone_does_not_hard_reject():
+  """2026-09 (owner-reported): a "zone" tier opposing entry now gets the
+  same weak-opposing treatment "level" already had - only a "major" is a
+  real enough wall to hard-block full containment/overlap on. A minor
+  reclaimed zone consuming the whole candidate band must not hard-kill a
+  setup whose own technique reads the move continuing through it.
   """
   buy = _result(
     "BUY",
@@ -500,15 +540,8 @@ def test_full_overlap_still_rejects_nothing_left_to_trim_into():
     cfg=_cfg(),
   )
 
-  assert resolution.actionable == ()
-  assert len(resolution.gated) == 1
-  decision = resolution.gated[0][1]
-  assert decision.reason_code in {
-    "opposing_entry_contained",
-    "opposing_entry_overlap",
-  }
-  assert decision.hard_block is True
-  assert decision.allowed is False
+  assert len(resolution.actionable) == 1
+  assert resolution.gated == ()
 
 
 def test_room_below_the_ladder_keeps_configured_ladder():
@@ -1442,6 +1475,62 @@ def test_weak_map_level_containment_does_not_hard_block():
   assert decision.allowed is True
   assert decision.hard_block is False
   assert decision.measured.get("weak_opposing_level_ignored") is True
+
+
+def test_weak_map_zone_containment_does_not_hard_block():
+  """2026-09 (owner-reported): 'zone' tier now gets the same treatment as
+  'level' - only 'major' is a real enough wall to hard-block containment on.
+  """
+  candidate_low = 4102.0
+  candidate_high = 4105.0
+  opposing = _entry("buy", 4098.0, 4100.5, tier="zone")
+  decision = evaluate_structural_target_room(
+    direction="SELL",
+    planned_entry_price=4100.0,
+    candidate_entry_low=candidate_low,
+    candidate_entry_high=candidate_high,
+    configured_target_pips=(30, 60, 90),
+    actionable_entries=(opposing,),
+    atr=4.0,
+    pip_size=0.1,
+    barrier_buffer_atr=0.5,
+    execution_cost_pips=1.0,
+  )
+  assert decision.allowed is True
+  assert decision.hard_block is False
+  assert decision.measured.get("weak_opposing_level_ignored") is True
+
+
+def test_weak_map_zone_zero_raw_room_does_not_hard_block():
+  """Same exception, the other hard-block branch: raw_room <= 0 (planned
+  entry already past the opposing zone's near edge, not contained). Mirrors
+  test_raw_room_zero_major_hard_gates's geometry exactly, tier=zone instead
+  of major.
+  """
+  buy = _result(
+    "BUY",
+    4054.0,
+    4057.0,
+    quality=3,
+    current_price=4056.0,
+  )
+  market_map = _map(
+    _entry("sell", 4046.0, 4055.0, tier="zone"),
+    price=4056.0,
+  )
+
+  resolution = resolve_actionability(
+    symbol="XAU",
+    observed_results=[buy],
+    market_map=market_map,
+    context=SimpleNamespace(htf_bias="down"),
+    atr=2.0,
+    pip_size=0.1,
+    cfg=_cfg(),
+  )
+
+  assert len(resolution.actionable) == 1
+  assert resolution.gated == ()
 
 
 def test_v8_shared_boundary_buy_glued_supply_does_not_block():
