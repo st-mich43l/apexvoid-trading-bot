@@ -13,6 +13,17 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Auto-algo root card Redis identity keys (`forming_message_key` /
+  `telegram_root_message_key` / `forming_status_key`, and the canonical
+  `analysis:setup:{setup_id}` record) had a 24h TTL floor that re-anchors
+  from the last write, not from activation — a position that fills and
+  then sees no further event for over a day (a normal weekend: fill
+  Friday, market closed until Sunday night) had its mapping silently
+  expire while still open. The next real event then found no card,
+  posted a duplicate instead of threading onto the original, and
+  orphaned the original permanently — confirmed live on a USDJPY
+  position that crossed a weekend. Floors raised to 30 days on both
+  sides.
 - Trade-stats session breakdown (Asia/London/NY) now classifies each trade's
   hour in UTC instead of `delivery.presentation.seq_reset_tz`
   (Asia/Ho_Chi_Minh, UTC+7). `asia_start`/`london_start`/`ny_start` (22/7/13)
