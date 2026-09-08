@@ -3403,9 +3403,13 @@ public sealed class AutoTradeEngine(
   }
 
   /// <summary>
-  /// Three entry-leg prices spanning the owner's zone: Shallow (near edge,
-  /// most likely to fill), Mid (midpoint), Deep (far edge, best price,
-  /// least likely to fill).
+  /// Two entry-leg prices spanning the owner's zone: Shallow (near edge,
+  /// most likely to fill) and Deep (far edge, best price, least likely to
+  /// fill). Owner 2026-09-08: dropped the former Mid leg down to a plain
+  /// 2-leg 80/20 ladder (<see cref="ManualEntryLegRatios"/>) - a separate
+  /// fixed-size risk leg near the stop (<see cref="ManualAlgoRiskLegPrice"/>)
+  /// replaces Mid's old role instead of splitting the same sized volume
+  /// three ways.
   ///
   /// A real typed range (zone.Low != zone.High) is used directly - Shallow
   /// is whichever edge is closer to a profitable fill (High for BUY, Low
@@ -3414,10 +3418,10 @@ public sealed class AutoTradeEngine(
   /// A degenerate/single-price zone (zone.Low == zone.High, e.g. the owner
   /// typed one number twice) has no real span to split, so Deep is derived
   /// as the midpoint between the typed price and the stop loss - confirmed
-  /// against a live example (BUY 4390, SL 4384 -> Deep 4387, Mid 4388.5).
-  /// This never places a leg past the halfway point to the stop.
+  /// against a live example (BUY 4390, SL 4384 -> Deep 4387). This never
+  /// places a leg past the halfway point to the stop.
   /// </summary>
-  private static (decimal Shallow, decimal Mid, decimal Deep) ManualEntryLegPrices(
+  private static (decimal Shallow, decimal Deep) ManualEntryLegPrices(
     TradeCandidateZone zone,
     TradeDirection direction,
     decimal manualStopLoss,
@@ -3436,13 +3440,46 @@ public sealed class AutoTradeEngine(
       shallow = zone.Low;
       deep = shallow + (manualStopLoss - shallow) / 2m;
     }
-    var mid = shallow + (deep - shallow) / 2m;
     return (
       decimal.Round(shallow, symbol.Digits, MidpointRounding.AwayFromZero),
-      decimal.Round(mid, symbol.Digits, MidpointRounding.AwayFromZero),
       decimal.Round(deep, symbol.Digits, MidpointRounding.AwayFromZero)
     );
   }
+
+  // Owner 2026-09-08: additional risk leg beyond the 80/20 ladder, resting
+  // ManualAlgoRiskLegPipsFromStop pips away from the stop on the entry
+  // side - a deliberate "trade off" spot: if price nearly invalidates the
+  // setup before reversing, this leg still catches a much deeper (better)
+  // fill than Shallow/Deep ever would; if it keeps going instead, the
+  // small fixed size caps the extra loss. Equity-tiered (live account
+  // equity, not balance, per owner instruction), not lot-scaled from the
+  // main ladder's own sizing - a large account books the same small
+  // fixed size here as a smaller one above the floor.
+  private const decimal ManualAlgoRiskLegLotsDefault = 0.05m;
+  private const decimal ManualAlgoRiskLegLotsBelowEquityFloor = 0.02m;
+  private const decimal ManualAlgoRiskLegEquityFloor = 1_000m;
+  private const decimal ManualAlgoRiskLegPipsFromStop = 10m;
+
+  private static decimal ManualAlgoRiskLegPrice(
+    TradeDirection direction,
+    decimal manualStopLoss,
+    decimal pipSize,
+    SymbolInfo symbol
+  ) => decimal.Round(
+    direction == TradeDirection.Buy
+      ? manualStopLoss + ManualAlgoRiskLegPipsFromStop * pipSize
+      : manualStopLoss - ManualAlgoRiskLegPipsFromStop * pipSize,
+    symbol.Digits,
+    MidpointRounding.AwayFromZero
+  );
+
+  private static long ManualAlgoRiskLegVolume(decimal equity, SymbolInfo symbol) =>
+    VolumePlanner.VolumeForLots(
+      equity < ManualAlgoRiskLegEquityFloor
+        ? ManualAlgoRiskLegLotsBelowEquityFloor
+        : ManualAlgoRiskLegLotsDefault,
+      symbol
+    );
 
   // Owner /algo instructions have their own execution route. Autonomous
   // selection, zone, regime, bias and scale-in policy must never alter them.
@@ -3475,7 +3512,8 @@ public sealed class AutoTradeEngine(
     var targetPrices = candidate.ManualTakeProfits!;
     // Validate against Shallow (the worst-case/most-likely-to-fill entry) -
     // if targets are profitable and correctly ordered relative to the worst
-    // entry, they are automatically profitable relative to Mid/Deep too.
+    // entry, they are automatically profitable relative to the deeper legs
+    // (Deep, risk) too.
     var priceValidation = ValidateManualPrices(
       candidate,
       direction,
@@ -3535,14 +3573,16 @@ public sealed class AutoTradeEngine(
     {
       return await RejectAsync(candidate, exception.Message, cancellationToken);
     }
-    // Split the sized total across three entry legs (2026-08 R:R redesign):
-    // Shallow 70% / Mid 20% / Deep 10%. SplitEntryVolume already collapses
-    // to a single slice when the total can't support three broker-minimum
-    // legs, but a slice that individually clears MinVolume can still be too
-    // small for BuildTargetPlan's own "at least two broker-valid exits"
-    // requirement (a small deep 10% leg, in particular) - fail closed to
-    // the original single-leg-at-Shallow behavior rather than losing the
-    // candidate to an unhandled exception.
+    // Split the sized total across the 2-leg ladder (2026-08 R:R redesign,
+    // 2026-09-08 simplified to 2 legs): Shallow 80% / Deep 20%.
+    // SplitEntryVolume already collapses to a single slice when the total
+    // can't support two broker-minimum legs, but a slice that individually
+    // clears MinVolume can still be too small for BuildTargetPlan's own
+    // "at least two broker-valid exits" requirement - fail closed to the
+    // original single-leg-at-Shallow behavior rather than losing the
+    // candidate to an unhandled exception. The fixed-size risk leg is
+    // added on top either way (see below), independent of whether this
+    // ladder itself qualifies for two legs.
     IReadOnlyList<long> legVolumes;
     IReadOnlyList<decimal> legEntryPrices;
     TargetVolumePlan[] legTargetPlans;
@@ -3568,6 +3608,22 @@ public sealed class AutoTradeEngine(
     }
     else
     {
+      // Owner 2026-09-08: a third, fixed-size risk leg rests close to the
+      // stop (10 pips away, on the entry side) - not a share of
+      // sizing.Volume, so account size never grows it. If price nearly
+      // invalidates the setup before reversing, this leg still catches a
+      // much deeper (better) fill; if it keeps going the small fixed size
+      // caps the extra loss to roughly one lot's worth of pips. If the
+      // whole ladder fills, it is simply the deepest/last leg and rides
+      // as the runner like any other - ManualAlgoAllocateTargetPlansAcrossLegs's
+      // existing shallow-first booking already treats it that way with no
+      // special-casing needed. Equity-tiered (not lot-scaled) per owner
+      // instruction: below $1k equity 0.02 lots, otherwise 0.05.
+      var riskLegPrice = ManualAlgoRiskLegPrice(
+        direction, manualStopLoss, pipSize, symbol
+      );
+      var riskLegVolume = ManualAlgoRiskLegVolume(account.Equity, symbol);
+      var riskLegStopPlan = ManualStop(candidate, direction, riskLegPrice, symbol);
       try
       {
         var splitVolumes = VolumePlanner.SplitEntryVolume(
@@ -3575,44 +3631,43 @@ public sealed class AutoTradeEngine(
         );
         var splitPrices = splitVolumes.Count == 1
           ? new[] { legPrices.Shallow }
-          : new[] { legPrices.Shallow, legPrices.Mid, legPrices.Deep };
-        // Owner-reported live 2026-08-19: Mid/Deep legs need their own stop
+          : new[] { legPrices.Shallow, legPrices.Deep };
+        // Owner-reported live 2026-08-19: Deep legs need their own stop
         // plan from their own entry so the broker stop resolves to the one
         // owner-declared absolute price (relative SL is fill-anchored).
-        var splitStopPlans = new StructureStopPlan[splitVolumes.Count];
+        var allVolumes = new List<long>(splitVolumes) { riskLegVolume };
+        var allPrices = new List<decimal>(splitPrices) { riskLegPrice };
+        var splitStopPlans = new StructureStopPlan[allVolumes.Count];
         var splitTargetPlans = ManualAlgoAllocateTargetPlansAcrossLegs(
-          splitVolumes,
+          allVolumes,
           symbol,
           targetsPips,
           targetWeights
         );
-        for (var index = 0; index < splitVolumes.Count; index++)
+        for (var index = 0; index < allVolumes.Count; index++)
         {
-          splitStopPlans[index] = splitPrices[index] == legPrices.Shallow
+          splitStopPlans[index] = allPrices[index] == legPrices.Shallow
             ? manualStopPlan
-            : ManualStop(candidate, direction, splitPrices[index], symbol);
+            : allPrices[index] == riskLegPrice
+              ? riskLegStopPlan
+              : ManualStop(candidate, direction, allPrices[index], symbol);
         }
-        legVolumes = splitVolumes;
-        legEntryPrices = splitPrices;
+        legVolumes = allVolumes;
+        legEntryPrices = allPrices;
         legTargetPlans = splitTargetPlans;
         legStopPlans = splitStopPlans;
       }
       catch (VolumePlanningException)
       {
-        var fallbackTargetPlan = sizing.TargetPlan;
-        if (sizing.Lots > ManualAlgoFirstLegThresholdLots)
-        {
-          var fixedFirstLeg = VolumePlanner.VolumeForLots(
-            ManualAlgoFirstLegLots, symbol
-          );
-          fallbackTargetPlan = VolumePlanner.FixFirstLegVolume(
-            fallbackTargetPlan, sizing.Volume, fixedFirstLeg, symbol
-          );
-        }
-        legVolumes = [sizing.Volume];
-        legEntryPrices = [legPrices.Shallow];
-        legTargetPlans = [fallbackTargetPlan];
-        legStopPlans = [manualStopPlan];
+        var allVolumes = new List<long> { sizing.Volume, riskLegVolume };
+        var allPrices = new List<decimal> { legPrices.Shallow, riskLegPrice };
+        var allTargetPlans = ManualAlgoAllocateTargetPlansAcrossLegs(
+          allVolumes, symbol, targetsPips, targetWeights
+        );
+        legVolumes = allVolumes;
+        legEntryPrices = allPrices;
+        legTargetPlans = allTargetPlans;
+        legStopPlans = [manualStopPlan, riskLegStopPlan];
       }
     }
     var legCount = legVolumes.Count;
@@ -3676,6 +3731,16 @@ public sealed class AutoTradeEngine(
     {
       throw new CandidateLeaseLostException(candidate.CandidateId);
     }
+    // Owner 2026-09-08: sum each leg's OWN lots x its OWN stop distance,
+    // not sizing.Lots x manualStopPlan.StopPips alone - the risk leg's
+    // volume and stop distance both differ from the main 80/20 ladder's,
+    // so the group's true total risk must add its contribution in too.
+    // Reduces to the exact prior formula when every leg shares one stop
+    // distance (the ManualSingleEntry case, or before the risk leg
+    // existed).
+    var groupWorstCase = -legVolumes.Zip(
+      legStopPlans, (volume, stopPlan) => volume / (decimal)symbol.LotSize * stopPlan.StopPips
+    ).Sum() * pipValuePerLot;
     var orderIds = new List<long>(legCount);
     for (var index = 0; index < legCount; index++)
     {
@@ -3737,14 +3802,13 @@ public sealed class AutoTradeEngine(
         price: legEntryPrices[index],
         groupId: groupId,
         trancheIndex: legIndex,
-        groupWorstCase: -sizing.Lots * manualStopPlan.StopPips
-          * pipValuePerLot,
+        groupWorstCase: groupWorstCase,
         riskBudget: sizing.Budget,
         hadAdds: false,
         setup: candidate.Setup,
-        // All three clips belong to one owner intent, sized from Shallow.
-        // Reporting each Mid/Deep distance here made one XAU setup look
-        // like three different risk contracts (for example 60p/45p/30p).
+        // All clips belong to one owner intent, sized from Shallow.
+        // Reporting each deeper leg's own distance here made one XAU setup
+        // look like several different risk contracts (for example 60p/45p/10p).
         stopPips: manualStopPlan.StopPips,
         targetsPips: legTargetPlans[index].TargetsPips,
         stream: "algo_manual",
@@ -9752,25 +9816,33 @@ public sealed class AutoTradeEngine(
   // 2026-08 R:R dig: manual /algo positions were a single entry, so a real
   // win typically only banked TP1 on 20% before the remaining 80% gave back
   // to breakeven on a pullback (58 closed XAU trades: median win 36 pips vs
-  // median loss the full -60 stop). Splitting into 3 legs across the
-  // owner's zone improves the realized average entry instead of touching
-  // exits: shallow (near edge, most likely to actually fill) carries the
-  // most size, deep (far edge, best price, least likely to fill) the least.
+  // median loss the full -60 stop). Splitting across the owner's zone
+  // improves the realized average entry instead of touching exits: shallow
+  // (near edge, most likely to actually fill) carries the most size, deep
+  // (far edge, best price, least likely to fill) the least.
   //
   // 2026-08-21 owner-reported: too many trades only ever filled the shallow
-  // clip - mid/deep's more favorable price often never got reached at all,
-  // so the original 50/30/20 split left 50% of the intended risk unfilled
-  // on those trades. Reweighted shallow-heavy to 70/20/10 so the size
-  // that's actually most likely to see a fill captures more of the
-  // intended position, while mid/deep still ride for the better average
-  // entry on the trades where price does come back for them.
+  // clip - the deeper leg's more favorable price often never got reached
+  // at all, so an even split left much of the intended risk unfilled on
+  // those trades. Shallow-heavy weighting means the size that's actually
+  // most likely to see a fill captures more of the intended position,
+  // while the deep leg still rides for the better average entry on the
+  // trades where price does come back for it.
+  //
+  // 2026-09-08 owner: simplified the former 3-leg 70/20/10 (shallow/mid/
+  // deep) ladder down to a plain 2-leg 80/20 ladder like the auto algo's
+  // own zone-scale entries - see ManualAlgoRiskLegPrice/
+  // ManualAlgoRiskLegVolume for the separate fixed-size risk leg that
+  // replaces mid's old role near the stop instead of splitting the same
+  // sized volume three ways.
   //
   // Exit policy (2026-08 ladder PM): book the group TP ladder shallow-first
   // so a shallow-only fill still owns the nearby targets. One broker-valid
   // shallow slice is reserved for the final owner target so cancelling
-  // unfilled Mid/Deep orders after TP1 does not silently remove the runner.
+  // unfilled deeper-leg orders after TP1 does not silently remove the
+  // runner.
   private static readonly IReadOnlyList<decimal> ManualEntryLegRatios =
-    [0.7m, 0.2m, 0.1m];
+    [0.8m, 0.2m];
 
   private static TargetVolumePlan ManualAlgoBuildGroupTargetPlan(
     long totalVolume,
@@ -9796,17 +9868,22 @@ public sealed class AutoTradeEngine(
   }
 
   /// <summary>
-  /// Distribute the group TP book across entry legs shallow → mid → deep.
-  /// Owner-reported 2026-08-19: deep-first booking assigned the group's
+  /// Distribute the group TP book across entry legs shallow-to-deep, in
+  /// the order the caller passes them (Shallow, Deep, then the fixed-size
+  /// risk leg nearest the stop - see ManualAlgoRiskLegPrice). Owner-
+  /// reported 2026-08-19: deep-first booking assigned the group's
   /// earliest/closest TP ordinals to the deepest (least-likely-to-fill,
-  /// smallest) leg - when deep (and often mid) never filled at all (price
+  /// smallest) leg - when the deeper leg(s) never filled at all (price
   /// never reached their more favorable entry), no order ever existed to
   /// hit TP1/TP2, so those ordinals silently never appeared on the channel
   /// even though shallow itself had already booked real profit under a
   /// later ordinal's label. Shallow is the most-likely-to-fill, largest
-  /// leg (70% of size) and should own the close, early targets it can
-  /// reliably reach; deep - the smallest leg, only filling on a genuinely
-  /// favorable move - rides as the runner toward the final target instead.
+  /// leg (80% of the main ladder) and should own the close, early targets
+  /// it can reliably reach; each deeper leg - filling only on a genuinely
+  /// favorable move - rides further out instead, with whichever leg is
+  /// deepest (ordinarily the risk leg, once it exists) riding as the
+  /// runner toward the final target if the whole group fills - it is not
+  /// treated specially, just naturally last in this walk.
   /// </summary>
   private static TargetVolumePlan[] ManualAlgoAllocateTargetPlansAcrossLegs(
     IReadOnlyList<long> legVolumes,
@@ -9837,7 +9914,7 @@ public sealed class AutoTradeEngine(
       var need = groupPlan.Slices[sliceIndex];
       var pips = groupPlan.TargetsPips[sliceIndex];
       var ordinal = groupPlan.TargetOrdinals[sliceIndex];
-      // Legs are ordered shallow/mid/deep — walk shallow-first.
+      // Legs are ordered shallow-to-deep — walk shallow-first.
       for (var leg = 0; leg < remaining.Length && need > 0; leg++)
       {
         if (remaining[leg] <= 0)

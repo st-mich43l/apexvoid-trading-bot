@@ -13,6 +13,24 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
+- Manual `/algo` entries simplified from a 3-leg 70/20/10 Shallow/Mid/Deep
+  ladder to a plain 2-leg 80/20 ladder (Shallow/Deep), matching the auto
+  algo's own zone-scale entry shape. A separate, fixed-size risk leg
+  (0.05 lots, or 0.02 below $1k live equity) now rests 10 pips from the
+  stop, on the entry side — not a share of the sized ladder volume, so
+  account size never grows it. If price nearly invalidates the setup
+  before reversing, this leg still catches a much deeper/better fill
+  than Shallow or Deep ever would; if it keeps going instead, the small
+  fixed size caps the extra loss to roughly the cost of that one leg.
+  If the whole group fills, the risk leg is simply the deepest/last leg
+  and rides as the runner toward the final target like any other — the
+  existing shallow-first target-booking walk
+  (`ManualAlgoAllocateTargetPlansAcrossLegs`) already treats it that way
+  with no special-casing needed. `GroupWorstCase` (the group's
+  advertised max-loss risk figure) now sums each leg's own lots × its
+  own distance to the shared stop instead of assuming every leg shares
+  one flat stop distance, since the risk leg's distance is deliberately
+  much smaller than the main ladder's.
 - Technique strategies (FVG/OB/IFVG/CRT/supply_demand — "structural
   source: technique" on the card) no longer force a single-leg market
   fill regardless of their declared policy. Owner-reported: a wide
