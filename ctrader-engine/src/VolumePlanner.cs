@@ -538,6 +538,53 @@ public static class VolumePlanner
     return raw;
   }
 
+  /// <summary>
+  /// Sequentially allocate a step-aligned close volume, draining the
+  /// shallowest leg (index 0) completely before any volume comes off a
+  /// deeper sibling. Owner 2026-09-08: pro-rata closing (see
+  /// AllocateProRataStepped) kept every leg's remaining volume in its
+  /// original ratio after each TP, so the group's weighted fill price
+  /// stayed skewed toward the shallow (larger, worse-price) leg even
+  /// after several targets booked - mirrors manual algo's own ladder,
+  /// where the shallow leg's TP1 fully consumes it and only the deeper,
+  /// better-priced leg is left to compute BE/trail from. Callers must
+  /// pass ``remaining`` in shallow-to-deep leg order (index 0 = the
+  /// declared entry.legs[0]/L1 - the market/nearest-price leg by
+  /// convention).
+  /// </summary>
+  public static long[] AllocateShallowFirstStepped(
+    long[] remaining,
+    long closeVolume,
+    SymbolInfo symbol
+  )
+  {
+    var total = remaining.Sum();
+    if (total <= 0 || closeVolume <= 0)
+    {
+      return new long[remaining.Length];
+    }
+    closeVolume = Math.Min(closeVolume, total);
+    var step = Math.Max(1L, symbol.StepVolume);
+    if (closeVolume % step != 0)
+    {
+      closeVolume = closeVolume / step * step;
+    }
+    if (closeVolume <= 0)
+    {
+      return new long[remaining.Length];
+    }
+    var allocations = new long[remaining.Length];
+    var left = closeVolume;
+    for (var i = 0; i < remaining.Length && left > 0; i++)
+    {
+      var take = Math.Min(remaining[i], left);
+      take = take / step * step;
+      allocations[i] = take;
+      left -= take;
+    }
+    return allocations;
+  }
+
   private static long MinimumStepsPerClose(SymbolInfo symbol) => Math.Max(
     1,
     (symbol.MinVolume + symbol.StepVolume - 1) / symbol.StepVolume

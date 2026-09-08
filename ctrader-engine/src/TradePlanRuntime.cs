@@ -2740,7 +2740,13 @@ public sealed class TradePlanRuntime(
           await PersistStateAsync(state, cancellationToken);
           continue;
         }
-        var allocations = VolumePlanner.AllocateProRataStepped(
+        // Owner 2026-09-08: shallow-first, not pro-rata - openLegs preserves
+        // plan.Entry.Legs declaration order (L1/market/shallow first), so
+        // draining index 0 before any deeper sibling matches manual algo's
+        // own ladder and lets the remaining-weighted-fill BE reference above
+        // actually reach the deeper leg's own (better) price once shallow
+        // empties, instead of staying pinned near it target after target.
+        var allocations = VolumePlanner.AllocateShallowFirstStepped(
           openLegs.Select(leg => leg.RemainingVolume).ToArray(),
           closeVolume,
           symbol
@@ -2915,8 +2921,22 @@ public sealed class TradePlanRuntime(
             && leg.RemainingVolume > 0
           )
           .ToArray();
+        // Owner 2026-09-08: GroupWeightedFillPrice is the WHOLE position's
+        // original blend (e.g. 80% shallow / 20% deep) and never changes as
+        // legs close, so BE after the shallow-dominated leg closes on TP1
+        // still moved every remaining leg's stop to a price skewed toward
+        // the shallow entry - the manual-algo ladder's equivalent moment
+        // (PlanGroupEconomicBreakeven, AutoTradeEngine.cs) already weights
+        // only the legs still actually open. Recompute the same way here:
+        // once a leg closes, it drops out of the reference, so the deeper
+        // still-open leg's own (better) fill dominates instead.
+        var remainingWeightedFill = openLegs.Length > 0
+          && openLegs.All(leg => leg.FillPrice is not null)
+          ? openLegs.Sum(leg => leg.FillPrice!.Value * leg.RemainingVolume)
+            / openLegs.Sum(leg => leg.RemainingVolume)
+          : beFill;
         var be = TradePlanExecutionEngine.CalculateBreakEven(
-          plan, beFill, state.CurrentStop, symbol
+          plan, remainingWeightedFill, state.CurrentStop, symbol
         );
         if (be.Improved && openLegs.Length > 0)
         {
