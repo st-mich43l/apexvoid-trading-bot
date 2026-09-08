@@ -57,7 +57,17 @@ public sealed record TradePlanAnalysis(
   int? ConfluenceV1 = null,
   int? ConfluenceV2 = null,
   double? ConfluenceV2Raw = null,
-  string? ConfluenceScoringVersion = null
+  string? ConfluenceScoringVersion = null,
+  // 2026-09 (owner: "collect data 2 weeks to see if order that has good
+  // math quality can process well than other or not") - descriptive
+  // detection-time telemetry (fib retracement ratio hit, momentum
+  // velocity/acceleration, dealing-range premium/discount position),
+  // never a gate. Republished onto AutoTradeEvent (Models.cs) so
+  // Postgres can correlate it with the eventual fill/outcome.
+  double? MathFibRatio = null,
+  double? MathVelocity = null,
+  double? MathAcceleration = null,
+  double? MathPd = null
 );
 
 public sealed record TradePlanSourceStructure(

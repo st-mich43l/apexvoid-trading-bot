@@ -492,6 +492,10 @@ def build_trade_plan_from_strategy_match(
     confluence_v2=match.confluence_v2,
     confluence_v2_raw=match.confluence_v2_raw,
     confluence_scoring_version=match.confluence_scoring_version,
+    math_fib_ratio=match.math_fib_ratio,
+    math_velocity=match.math_velocity,
+    math_acceleration=match.math_acceleration,
+    math_pd=match.math_pd,
   )
 
   source_structure = TradePlanSourceStructure(
