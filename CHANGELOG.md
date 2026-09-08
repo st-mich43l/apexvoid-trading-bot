@@ -12,6 +12,21 @@ dated section after deployment.
 
 ## Unreleased
 
+### Added
+- Detection-time "math" telemetry (fib retracement ratio, momentum
+  velocity/acceleration, dealing-range premium/discount position — the
+  same values the root card's Math section already shows) now flows
+  through to Postgres for auto algo (V8) trades. Owner: "collect data 2
+  weeks to see if order that has good math quality can process well
+  than other or not." These fields existed on `StrategyMatch`/the root
+  card already but were dropped before reaching `TradePlan` - added to
+  `TradePlanAnalysis` (Python) and the matching `TradePlan.Analysis`/
+  `AutoTradeEvent` records (C#, `PublishEventCoreAsync` already
+  republishes `ConfluenceV1`/etc. the same way), then to
+  `auto_trade_fills` (4 new nullable columns, `store.py`). Joinable
+  against `auto_trade_results.result_pips` via `group_id` once enough
+  trades have accumulated. Purely descriptive — never a gate.
+
 ### Changed
 - Dropped the "Reaction" suffix from the 3 live strategy names that still
   had it: "Key Level Reaction" → "Key Level", "Session Level Reaction" →

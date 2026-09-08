@@ -326,6 +326,20 @@ async def init_db() -> None:
       "ADD COLUMN IF NOT EXISTS confluence_v2_raw DOUBLE PRECISION",
       "ALTER TABLE auto_trade_fills "
       "ADD COLUMN IF NOT EXISTS confluence_scoring_version TEXT",
+      # 2026-09 (owner: "collect data 2 weeks to see if order that has
+      # good math quality can process well than other or not") -
+      # detection-time math telemetry (fib retracement ratio, momentum
+      # velocity/acceleration, dealing-range premium/discount position),
+      # recorded at fill time for later correlation against
+      # auto_trade_results.result_pips via group_id.
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS math_fib_ratio DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS math_velocity DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS math_acceleration DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS math_pd DOUBLE PRECISION",
     ):
       await db.execute(stmt)
     await db.execute(
@@ -1213,9 +1227,11 @@ async def _ensure_fill_from_close_event(event: dict, group_id: str) -> None:
         position_id, group_id, trade_key, trade_stream, symbol,
         setup_type, setup_type_raw, direction, entry_price, stop_pips, volume, filled_at,
         confluence_v1, confluence_v2, confluence_v2_raw,
-        confluence_scoring_version
+        confluence_scoring_version,
+        math_fib_ratio, math_velocity, math_acceleration, math_pd
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
+        $17, $18, $19, $20
       )
       ON CONFLICT (position_id) DO NOTHING
       """,
@@ -1225,6 +1241,8 @@ async def _ensure_fill_from_close_event(event: dict, group_id: str) -> None:
       event.get("volume"), int(event.get("timestamp") or time.time()),
       event.get("confluence_v1"), event.get("confluence_v2"),
       event.get("confluence_v2_raw"), event.get("confluence_scoring_version"),
+      event.get("math_fib_ratio"), event.get("math_velocity"),
+      event.get("math_acceleration"), event.get("math_pd"),
     )
 
 
@@ -1264,9 +1282,11 @@ async def _record_auto_trade_fill(event: dict) -> None:
         position_id, group_id, trade_key, trade_stream, symbol,
         setup_type, setup_type_raw, direction, entry_price, stop_pips, volume, filled_at,
         confluence_v1, confluence_v2, confluence_v2_raw,
-        confluence_scoring_version
+        confluence_scoring_version,
+        math_fib_ratio, math_velocity, math_acceleration, math_pd
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
+        $17, $18, $19, $20
       )
       ON CONFLICT (position_id) DO UPDATE SET
         group_id = excluded.group_id,
@@ -1284,7 +1304,11 @@ async def _record_auto_trade_fill(event: dict) -> None:
         confluence_v1 = COALESCE(excluded.confluence_v1, auto_trade_fills.confluence_v1),
         confluence_v2 = COALESCE(excluded.confluence_v2, auto_trade_fills.confluence_v2),
         confluence_v2_raw = COALESCE(excluded.confluence_v2_raw, auto_trade_fills.confluence_v2_raw),
-        confluence_scoring_version = COALESCE(excluded.confluence_scoring_version, auto_trade_fills.confluence_scoring_version)
+        confluence_scoring_version = COALESCE(excluded.confluence_scoring_version, auto_trade_fills.confluence_scoring_version),
+        math_fib_ratio = COALESCE(excluded.math_fib_ratio, auto_trade_fills.math_fib_ratio),
+        math_velocity = COALESCE(excluded.math_velocity, auto_trade_fills.math_velocity),
+        math_acceleration = COALESCE(excluded.math_acceleration, auto_trade_fills.math_acceleration),
+        math_pd = COALESCE(excluded.math_pd, auto_trade_fills.math_pd)
       WHERE auto_trade_fills.correction_source IS NULL
       """,
       int(position_id), group_id, trade_key, stream,
@@ -1293,6 +1317,8 @@ async def _record_auto_trade_fill(event: dict) -> None:
       event.get("volume"), int(event.get("timestamp") or time.time()),
       event.get("confluence_v1"), event.get("confluence_v2"),
       event.get("confluence_v2_raw"), event.get("confluence_scoring_version"),
+      event.get("math_fib_ratio"), event.get("math_velocity"),
+      event.get("math_acceleration"), event.get("math_pd"),
     )
 
 

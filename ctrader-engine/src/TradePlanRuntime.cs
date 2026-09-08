@@ -1667,7 +1667,11 @@ public sealed class TradePlanRuntime(
         ConfluenceV1: plan.Analysis.ConfluenceV1,
         ConfluenceV2: plan.Analysis.ConfluenceV2,
         ConfluenceV2Raw: plan.Analysis.ConfluenceV2Raw,
-        ConfluenceScoringVersion: plan.Analysis.ConfluenceScoringVersion
+        ConfluenceScoringVersion: plan.Analysis.ConfluenceScoringVersion,
+        MathFibRatio: plan.Analysis.MathFibRatio,
+        MathVelocity: plan.Analysis.MathVelocity,
+        MathAcceleration: plan.Analysis.MathAcceleration,
+        MathPd: plan.Analysis.MathPd
       ),
       cancellationToken
     );

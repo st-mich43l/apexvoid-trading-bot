@@ -184,6 +184,120 @@ public sealed class TradePlanRuntimeTests
   }
 
   [Fact]
+  public async Task OrderFilledEventCarriesMathTelemetryForOutcomeCorrelation()
+  {
+    // Owner 2026-09-08: "collect data 2 weeks to see if order that has
+    // good math quality can process well than other or not" - detection-
+    // time math telemetry (fib ratio, momentum velocity/acceleration,
+    // dealing-range premium/discount) must reach the published
+    // order_filled event so Postgres (auto_trade_fills) can later
+    // correlate it against the eventual outcome.
+    const string planJson = """
+    {
+      "version": 8,
+      "plan_id": "v8:plan-math-telemetry",
+      "thesis_id": "thesis-1",
+      "setup_id": "setup-1",
+      "symbol": "XAU",
+      "created_at": 1719999600,
+      "expires_at": 2000000000,
+      "analysis": {
+        "strategy": "Trend Pullback",
+        "strategy_family": "trend_pullback",
+        "direction": "BUY",
+        "context_timeframes": ["M15"],
+        "formation_timeframe": "H1",
+        "confirmation_timeframe": "M15",
+        "formation_bar_ts": 1719999000,
+        "confirmation_bar_ts": 1719999600,
+        "score": 3.0,
+        "confluence": 3,
+        "bias": "up",
+        "regime": "trend",
+        "reasons": ["htf_uptrend"],
+        "tags": [],
+        "math_fib_ratio": 0.618,
+        "math_velocity": 0.42,
+        "math_acceleration": 0.15,
+        "math_pd": 0.35
+      },
+      "source_structure": {
+        "structure_id": "zone-xau-4088-4090",
+        "kind": "demand",
+        "timeframe": "H1",
+        "low": "4088.10",
+        "high": "4090.00",
+        "invalidation_price": "4081.80"
+      },
+      "entry": {
+        "type": "market_watch",
+        "expires_at": 2000000000,
+        "zone_low": "4088.10",
+        "zone_high": "4090.00",
+        "activation": "quote_inside_zone",
+        "price_side": "ask",
+        "max_spread_ticks": 8,
+        "max_slippage_ticks": 10,
+        "legs": []
+      },
+      "stop": {
+        "type": "absolute",
+        "price": "4082.50",
+        "source": "structure",
+        "structure_id": "zone-xau-4088-4090",
+        "reason": "protective stop plan"
+      },
+      "targets": [
+        {"target_id": "TP1", "type": "absolute", "price": "4096.00", "close_ratio": "0.5"},
+        {"target_id": "TP2", "type": "absolute", "price": "4104.00", "close_ratio": "0.5"}
+      ],
+      "risk": {
+        "risk_percent": "1.0",
+        "risk_multiplier": "1.0",
+        "max_volume": 100000,
+        "max_group_risk_percent": "2.0"
+      },
+      "sizing": {
+        "mode": "equity_table",
+        "table_version": "owner_equity_v1",
+        "entry_distribution": "single",
+        "leg_ratios": []
+      },
+      "management": {
+        "be_after_target_id": "TP1",
+        "be_buffer_ticks": 6,
+        "never_worsen_stop": true
+      },
+      "execution_policy": {
+        "allow_market": true,
+        "allow_limit": false,
+        "allow_partial_fill": true,
+        "cancel_on_expiry": true
+      },
+      "provenance": {
+        "analysis_engine_version": "",
+        "market_map_id": "",
+        "config_fingerprint": ""
+      }
+    }
+    """;
+    var store = new FakeTradePlanStore();
+    store.EnqueuePlan(planJson);
+    var client = new FakeTradePlanTradingClient();
+    var runtime = new TradePlanRuntime(Options(), store, () => DateTimeOffset.UtcNow, _ => { });
+
+    await runtime.PollAsync(
+      client, Symbol, new SpotPrice("XAU", 4089.05m, 4089.10m, 1), CancellationToken.None
+    );
+
+    var filled = Assert.Single(store.Events, e => e.Type == "order_filled");
+    Assert.Equal(0.618, filled.MathFibRatio);
+    Assert.Equal(0.42, filled.MathVelocity);
+    Assert.Equal(0.15, filled.MathAcceleration);
+    Assert.Equal(0.35, filled.MathPd);
+  }
+
+  [Fact]
   public async Task ManualBrokerCloseFinalizesPlanWithSignedPips()
   {
     var store = new FakeTradePlanStore();
