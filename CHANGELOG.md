@@ -13,6 +13,25 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
+- Technique strategies (FVG/OB/IFVG/CRT/supply_demand — "structural
+  source: technique" on the card) no longer force a single-leg market
+  fill regardless of their declared policy. Owner-reported: a wide
+  demand-zone iFVG BUY filled at market near the top of its own 50-pip
+  zone instead of scaling into it, producing a much wider effective
+  stop than the zone's own low edge would have given. The single-leg-
+  market restriction was a 2026-08-26 workaround for a GROUP RECOVERY
+  REQUIRED false-positive (an SL'd leg's deal lookup returning Unknown
+  while a sibling leg was still open) that `TradePlanRuntime`'s
+  `ClassifyCloseReason`/`ExitBeyondProtectiveStop` has since fixed
+  generally, not entry-type-specific — technique strategies now fall
+  through to their own configured policy (limit + zone_scale for
+  FVG/OB/IFVG/CRT/supply_demand), DCA-ing into the zone at
+  progressively better prices when the zone is wide enough to qualify,
+  falling back to a single `market_watch` entry (broker-side zone
+  revalidation, not a blind immediate fill) when it isn't. Scalp
+  strategies keep their own single-leg-market-only restriction
+  unchanged — that one is about execution simplicity, not the fixed
+  recovery bug.
 - Auto algo (TradePlan V8) TP1 now closes the shallow (worse-priced) leg
   of a multi-leg entry completely before touching a deeper (better-
   priced) leg, instead of closing both pro-rata. Owner-reported: "when
