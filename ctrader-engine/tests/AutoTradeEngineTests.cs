@@ -2639,8 +2639,9 @@ public sealed partial class AutoTradeEngineTests
     // 2026-08 R:R redesign, confirmed directly against the owner's own
     // worked example: BUY 4390 (typed as a single price, so entryLow ==
     // entryHigh - no real zone to split) with SL 4384 -> Deep 4387 (exactly
-    // the midpoint between the typed entry and the stop), Mid 4388.5
-    // (midpoint of Shallow and Deep).
+    // the midpoint between the typed entry and the stop). 2026-09-08: the
+    // former Mid leg is gone (2-leg 80/20 ladder); the third order is now
+    // the fixed-size risk leg 10 pips from the stop (4384 + 1.0 = 4385.0).
     using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
     var store = new FakeAutoTradeStore(ManualCandidateJson(
       direction: "BUY",
@@ -2665,7 +2666,7 @@ public sealed partial class AutoTradeEngineTests
 
     Assert.Equal(3, client.LimitOrders.Count);
     Assert.Equal(
-      new[] { 4390.0m, 4388.5m, 4387.0m },
+      new[] { 4390.0m, 4387.0m, 4385.0m },
       client.LimitOrders.Select(order => order.LimitPrice)
     );
 
@@ -2695,14 +2696,17 @@ public sealed partial class AutoTradeEngineTests
 
     Assert.Equal(3, client.LimitOrders.Count);
     Assert.DoesNotContain(store.Events, item => item.Type == "rejected");
+    // 2026-09-08: 2-leg 80/20 ladder (Shallow, Deep) plus the fixed-size
+    // risk leg 10 pips from the stop (4002.0 - 1.0 = 4001.0, between Deep
+    // and the stop - deeper/closer to invalidation than Deep itself).
     Assert.Equal(
-      new[] { 3999.5m, 4000.0m, 4000.5m },
+      new[] { 3999.5m, 4000.5m, 4001.0m },
       client.LimitOrders.Select(order => order.LimitPrice)
     );
-    // SELL shallow/mid/deep vs absolute SL 4002.0 — each leg's relative
+    // SELL shallow/deep/risk vs absolute SL 4002.0 — each leg's relative
     // distance must resolve to that one Shallow-derived absolute price.
     Assert.Equal(
-      new long[] { 250_000, 200_000, 150_000 },
+      new long[] { 250_000, 150_000, 100_000 },
       client.LimitOrders.Select(order => order.RelativeStopLoss).ToArray()
     );
     Assert.True(client.LimitOrders.Sum(order => order.Volume) > 0);
@@ -2716,8 +2720,10 @@ public sealed partial class AutoTradeEngineTests
   public async Task ManualAlgoBuyLegsShareAbsoluteStopFromShallowEntry()
   {
     // Owner: "buy 4353-50 SL for all orders must be 4347" / live #104-105.
-    // Shallow is zone.High; Mid/Deep relative distances differ but every
+    // Shallow is zone.High; Deep/risk relative distances differ but every
     // RelativeStopLoss must resolve to the same absolute VIP stop.
+    // 2026-09-08: 2-leg 80/20 ladder (Shallow 4353, Deep 4350) plus the
+    // fixed-size risk leg 10 pips from the stop (4347 + 1.0 = 4348.0).
     using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
     var store = new FakeAutoTradeStore(ManualCandidateJson(
       direction: "BUY",
@@ -2738,11 +2744,11 @@ public sealed partial class AutoTradeEngineTests
 
     Assert.Equal(3, client.LimitOrders.Count);
     Assert.Equal(
-      new[] { 4353.0m, 4351.5m, 4350.0m },
+      new[] { 4353.0m, 4350.0m, 4348.0m },
       client.LimitOrders.Select(order => order.LimitPrice)
     );
     Assert.Equal(
-      new long[] { 600_000, 450_000, 300_000 },
+      new long[] { 600_000, 300_000, 100_000 },
       client.LimitOrders.Select(order => order.RelativeStopLoss).ToArray()
     );
     foreach (var order in client.LimitOrders)
@@ -3289,10 +3295,12 @@ public sealed partial class AutoTradeEngineTests
     var totalVolume = client.LimitOrders.Sum(order => order.Volume);
     Assert.True(client.LimitOrders[0].Volume > client.LimitOrders[1].Volume);
     Assert.True(client.LimitOrders[1].Volume > client.LimitOrders[2].Volume);
-    Assert.All(placed, item => Assert.Equal(
-      -(totalVolume / (decimal)Symbol.LotSize) * 60m * 10m,
-      item.GroupWorstCase
-    ));
+    // 2026-09-08: each leg's OWN lots x its OWN distance to the shared
+    // absolute stop, not one flat 60p assumed for all three - Shallow is
+    // genuinely 60p from the stop (0.24 lots), Deep 30p (0.06 lots), the
+    // risk leg only 10p (0.05 lots): -(0.24*60 + 0.06*30 + 0.05*10) * 10
+    // = -167.00.
+    Assert.All(placed, item => Assert.Equal(-167.00m, item.GroupWorstCase));
     foreach (var order in client.LimitOrders)
     {
       var distance = order.RelativeStopLoss / 100_000m;
@@ -3456,7 +3464,10 @@ public sealed partial class AutoTradeEngineTests
 
     Assert.DoesNotContain(store.Events, item => item.Type == "rejected");
     Assert.Equal(3, client.LimitOrders.Count);
-    Assert.Equal(3_000L, client.LimitOrders.Sum(order => order.Volume));
+    // 2026-09-08: 3_000 from the 80/20 ladder (unchanged sizing) plus the
+    // fixed-size risk leg (equity 2_000 here, at/above the $1k floor, so
+    // the default 0.05 lots = 500 units).
+    Assert.Equal(3_500L, client.LimitOrders.Sum(order => order.Volume));
     Assert.Contains(store.Events, item => item.Type == "manual_limit_placed");
 
     cts.Cancel();
@@ -3947,16 +3958,20 @@ public sealed partial class AutoTradeEngineTests
     );
     var run = engine.RunSessionAsync(client, Symbol, cts.Token);
     await store.Ordered.Task.WaitAsync(TimeSpan.FromSeconds(2));
-    Assert.Equal(new long[] { 700, 200, 100 }, client.PendingOrders
+    // 2026-09-08: 2-leg 80/20 ladder (800/200 of the 1_000-unit sizing)
+    // plus the fixed-size risk leg (equity 1_000 is at, not below, the
+    // $1k floor, so the default 0.05 lots = 500 units).
+    Assert.Equal(new long[] { 800, 200, 500 }, client.PendingOrders
       .Select(order => order.Volume));
 
     client.FillPendingOrder(client.PendingOrders[0].OrderId);
     now = now.AddSeconds(16);
     await WaitForEventAsync(store, "manual_opened");
     var shallowState = Assert.Single(store.Positions.Values);
-    Assert.Equal(new long[] { 300, 200, 100, 100 }, shallowState.Slices);
-    Assert.Equal(new[] { 30, 60, 100, 200 }, shallowState.TargetsPips);
-    Assert.Equal(new[] { 1, 2, 3, 5 }, shallowState.TargetOrdinals);
+    // 2026-09-08: shallow is now 800 units (was 700) and there are 3 legs
+    // sharing the group's target ladder instead of 2/3, so the shallow-
+    // first walk hands off to Deep/the risk leg at different points.
+    Assert.Equal(new long[] { 500, 200, 100 }, shallowState.Slices);
 
     async Task HitAsync(decimal target)
     {
@@ -4012,12 +4027,15 @@ public sealed partial class AutoTradeEngineTests
     // TP4 trails to TP3 (one behind), not TP2.
     Assert.Equal(ownerTargets[2], runner.CurrentStopLoss);
     Assert.Contains(4, runner.ReachedTargetOrdinals!);
-    Assert.Equal(new long[] { 300, 200, 100 }, client.Closes
+    // 2026-09-08: shallow's 3rd (final) slice now maps straight to ordinal
+    // 5 (see shallowState.Slices above) - only TP1/TP2 have booked shallow
+    // volume by TP4.
+    Assert.Equal(new long[] { 500, 200 }, client.Closes
       .Select(close => close.Volume));
 
     await HitAsync(ownerTargets[4]);
     Assert.Empty(store.Positions);
-    Assert.Equal(new long[] { 300, 200, 100, 100 }, client.Closes
+    Assert.Equal(new long[] { 500, 200, 100 }, client.Closes
       .Select(close => close.Volume));
 
     cts.Cancel();
