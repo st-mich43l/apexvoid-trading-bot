@@ -51,7 +51,7 @@ async def test_fill_setup_canonicalizes_primary_setup_key(monkeypatch):
   (_query, args), unresolved = await _persist_fill(
     monkeypatch, {"setup": "key-level"},
   )
-  assert args[5:7] == ("Key Level Reaction", None)
+  assert args[5:7] == ("Key Level", None)
   assert unresolved == []
 
 
@@ -60,7 +60,7 @@ async def test_fill_setup_uses_strategy_fallback(monkeypatch):
   (_query, args), unresolved = await _persist_fill(
     monkeypatch, {"strategy": "key-level"},
   )
-  assert args[5:7] == ("Key Level Reaction", None)
+  assert args[5:7] == ("Key Level", None)
   assert unresolved == []
 
 
@@ -85,9 +85,9 @@ async def test_unmapped_fill_setup_preserves_raw_and_is_observed(monkeypatch):
 @pytest.mark.asyncio
 async def test_scale_in_fill_keeps_parent_setup_suffix(monkeypatch):
   (_query, args), unresolved = await _persist_fill(
-    monkeypatch, {"setup": "Key Level Reaction · add_momentum"},
+    monkeypatch, {"setup": "Key Level · add_momentum"},
   )
-  assert args[5:7] == ("Key Level Reaction · add_momentum", None)
+  assert args[5:7] == ("Key Level · add_momentum", None)
   assert unresolved == []
 
 

@@ -22,12 +22,12 @@ pytestmark = pytest.mark.no_database
 def test_technique_fixed_rr_targeting_skips_m1_scalp():
   cfg = _load_production_example().config
   assert fixed_reward_risk("XAU", cfg) == 3.0
-  key = technique_fixed_rr_targeting("XAU", "Key Level Reaction", cfg)
+  key = technique_fixed_rr_targeting("XAU", "Key Level", cfg)
   assert key is not None
   assert float(key.reward_risk) == 3.0
   assert technique_fixed_rr_targeting("XAU", "Impulse Pullback Scalp", cfg) is None
   assert technique_fixed_rr_targeting("XAU", "Impulse Pullback Scalp", cfg) is None
-  assert technique_fixed_rr_targeting("EURUSD", "Key Level Reaction", cfg) is not None
+  assert technique_fixed_rr_targeting("EURUSD", "Key Level", cfg) is not None
   assert technique_fixed_rr_targeting("EURUSD", "Range Sweep Scalp", cfg) is None
 
 
@@ -41,7 +41,7 @@ def test_xau_still_hosts_m1_scalping_with_technique_fixed_rr():
 def test_xau_key_level_expands_fixed_rr_targets_from_stop():
   cfg = _load_production_example().config
   match = _policy_match(
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     family="reaction",
     strategy_mode="with_trend",
     symbol="XAU",

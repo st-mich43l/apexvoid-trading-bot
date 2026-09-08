@@ -73,14 +73,14 @@ def _result(
     reasons=["fixture reaction"],
     mode="counter_bias" if direction == "BUY" else "with_bias",
     structural_source=(
-      "key_level" if setup == "Key Level Reaction" else "supply_demand"
+      "key_level" if setup == "Key Level" else "supply_demand"
     ),
     structural_id=structural_id or f"{direction}:{low}:{high}",
     structural_low=low,
     structural_high=high,
     structural_timeframe="M5",
     structural_kind=(
-      "round" if setup == "Key Level Reaction" else side
+      "round" if setup == "Key Level" else side
     ),
     key_level_role=role,
     planned_entry_price=(
@@ -192,7 +192,7 @@ def test_buy_under_overlapping_sell_major_hard_blocks_below_cost_room(
     "BUY",
     4041.67,
     4046.73,
-    setup="Key Level Reaction",
+    setup="Key Level",
     quality=3,
     current_price=4045.95,
   )
@@ -262,7 +262,7 @@ def test_scalp_keeps_ladder_when_room_fits_swing_hard_blocks_when_below_cost():
     "BUY",
     4044.50,
     4045.00,
-    setup="Key Level Reaction",
+    setup="Key Level",
     current_price=4045.0,
   )
   swing_resolution = resolve_actionability(
@@ -666,7 +666,7 @@ def test_near_barrier_below_cost_hard_blocks_instead_of_tiny_or_full_ladder():
 
 
 def test_fe023_trendline_sell_into_demand_hard_blocks_below_cost_room():
-  """Live 2026-08-06 08:30 UTC: Trendline Reaction SELL fe023dd8 published
+  """Live 2026-08-06 08:30 UTC: Trendline SELL fe023dd8 published
   with opposing demand high 4267.8, planned entry 4268.24, usable_room=0,
   effective_target=200 via opposing_barrier_room_below_cost_ignored.
   Below-cost room must hard-kill.
@@ -1094,7 +1094,7 @@ def test_role_ambiguity_is_telemetry_only_never_a_hard_block():
     "BUY",
     99.5,
     100.5,
-    setup="Key Level Reaction",
+    setup="Key Level",
     role=ROLE_AMBIGUOUS,
   )
 
@@ -1201,7 +1201,7 @@ def test_soft_geometry_remains_mode_aware():
 def test_structural_target_room_keeps_full_ladder_when_barrier_near():
   """Owner 2026-08-06: never invent floor(usable_room) as a solo TP.
 
-  Live Trendline Reaction published TP1=4255.49 close_ratio=1.0 (~9 pips)
+  Live Trendline published TP1=4255.49 close_ratio=1.0 (~9 pips)
   because the barrier path used to shrink fitted_targets to a tiny cap.
   Reaction/swing setups keep the configured partial ladder unchanged.
   """
@@ -1635,7 +1635,7 @@ def test_v8_resolve_actionability_allows_glued_sell_wall():
     4396.20,
     quality=3,
     current_price=4393.50,
-    setup="Key Level Reaction",
+    setup="Key Level",
   )
   market_map = _map(
     _entry("buy", 4388.0, 4393.55, tier="zone"),
@@ -2035,7 +2035,7 @@ async def test_live_incident_never_reaches_lifecycle_card_or_strategy_match(
     "BUY",
     4041.67,
     4046.73,
-    setup="Key Level Reaction",
+    setup="Key Level",
     quality=3,
     current_price=4045.95,
   )

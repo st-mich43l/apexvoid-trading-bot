@@ -174,7 +174,7 @@ def test_key_level_reaction_is_not_forced_onto_scalp_grid():
     zone_high=4005.0,
     atr=4.0,
     zone_fill_enabled=True,
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     strategy_family="key_level",
   )
   assert plan.route == "market"

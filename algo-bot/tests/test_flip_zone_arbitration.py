@@ -131,7 +131,7 @@ def test_supply_flip_rejects_intact_resistance_where_key_level_sell_owns_it(
   key_level = detectors.key_level_reaction(ctx)
   assert key_level is not None
   assert key_level.direction == "SELL"
-  # The role belongs to Key Level Reaction, not an unbroken supply flip.
+  # The role belongs to Key Level, not an unbroken supply flip.
   assert detectors._flip_role_agrees(ROLE_RESISTANCE, "SELL") is False
 
 
@@ -259,7 +259,7 @@ def _match(
     atr=2.0,
     structure_swing=low,
     targets_pips=(30, 60),
-    structural_source=("key_level" if strategy == "Key Level Reaction" else "flip_zone"),
+    structural_source=("key_level" if strategy == "Key Level" else "flip_zone"),
     structural_zone_low=low,
     structural_zone_high=high,
   )
@@ -268,7 +268,7 @@ def _match(
 def test_same_bar_overlapping_flip_is_superseded_by_key_level():
   from app.analysis.scanner import _arbitrate_flip_zone_matches
 
-  key = _match("Key Level Reaction", low=100.0, high=104.0, match_id="key")
+  key = _match("Key Level", low=100.0, high=104.0, match_id="key")
   flip = _match("Flip Zone", low=101.0, high=103.0, match_id="flip")
 
   kept, events = _arbitrate_flip_zone_matches(

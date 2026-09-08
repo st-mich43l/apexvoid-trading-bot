@@ -24,26 +24,26 @@ pytestmark = pytest.mark.no_database
 
 def test_reaction_family_contains_exactly_three_strategies():
   assert REACTION_STRATEGIES == frozenset({
-    "Key Level Reaction",
-    "Session Level Reaction",
-    "Trendline Reaction",
+    "Key Level",
+    "Session Level",
+    "Trendline",
   })
   assert len(REACTION_STRATEGIES) == 3
 
 
 def test_key_level_reaction_is_reaction():
-  assert is_reaction_strategy("Key Level Reaction")
-  assert canonical_family("Key Level Reaction") == CANONICAL_FAMILY_REACTION
+  assert is_reaction_strategy("Key Level")
+  assert canonical_family("Key Level") == CANONICAL_FAMILY_REACTION
 
 
 def test_session_level_reaction_is_reaction():
-  assert is_reaction_strategy("Session Level Reaction")
-  assert canonical_family("Session Level Reaction") == CANONICAL_FAMILY_REACTION
+  assert is_reaction_strategy("Session Level")
+  assert canonical_family("Session Level") == CANONICAL_FAMILY_REACTION
 
 
 def test_trendline_reaction_is_reaction():
-  assert is_reaction_strategy("Trendline Reaction")
-  assert canonical_family("Trendline Reaction") == CANONICAL_FAMILY_REACTION
+  assert is_reaction_strategy("Trendline")
+  assert canonical_family("Trendline") == CANONICAL_FAMILY_REACTION
 
 
 def test_demand_zone_is_not_reaction():
@@ -94,7 +94,7 @@ def test_range_strategies_bypass_opposing_structure_gates():
     assert not bypasses_opposing_structure_gates(name, full_take_profit_pips=0)
     assert canonical_family(name) == CANONICAL_FAMILY_RANGE
   assert not bypasses_opposing_structure_gates(
-    "Key Level Reaction", full_take_profit_pips=15,
+    "Key Level", full_take_profit_pips=15,
   )
   assert not bypasses_opposing_structure_gates(
     "Zone Reaction", full_take_profit_pips=15,
@@ -181,4 +181,4 @@ def test_technique_and_confluence_are_zone_not_reaction():
     assert not is_reaction_strategy(name)
     assert canonical_family(name) == CANONICAL_FAMILY_ZONE
   assert not is_technique_or_confluence("Zone Reaction")
-  assert not is_technique_or_confluence("Key Level Reaction")
+  assert not is_technique_or_confluence("Key Level")

@@ -418,7 +418,7 @@ def test_key_level_support_buy_and_resistance_sell():
     _ctx(buy_df, bias="down", levels=[support]),
   )
   assert buy is not None
-  assert buy.setup == "Key Level Reaction"
+  assert buy.setup == "Key Level"
   assert buy.direction == "BUY"
   assert buy.structural_source == "key_level"
   assert buy.key_level_role == "support"
@@ -524,7 +524,7 @@ def test_session_level_pdl_buy_and_pdh_sell():
     _ctx(buy_df, bias="range", session_levels=[pdl]),
   )
   assert buy is not None
-  assert buy.setup == "Session Level Reaction"
+  assert buy.setup == "Session Level"
   assert buy.direction == "BUY"
   assert buy.structural_kind == "PDL"
 
@@ -549,7 +549,7 @@ def test_trendline_unbroken_support_and_resistance():
     _ctx(buy_df, bias="up", trendlines=[support]),
   )
   assert buy is not None
-  assert buy.setup == "Trendline Reaction"
+  assert buy.setup == "Trendline"
   assert buy.direction == "BUY"
 
   sell_df = _sell_rejection_df()
@@ -730,13 +730,13 @@ def test_engulfing_never_overrides_a_stronger_confirmation():
 
 
 def test_strategy_family_and_stable_thesis_identity():
-  assert strategy_family("Key Level Reaction") == "key_level"
+  assert strategy_family("Key Level") == "key_level"
   assert strategy_family("Zone Reaction") == "supply_demand"
   assert strategy_family("Flip Zone") == "supply_demand"
   assert strategy_family("Demand Zone Reaction") == "supply_demand"
   assert strategy_family("Supply Zone Reaction") == "supply_demand"
-  assert strategy_family("Session Level Reaction") == "session_level"
-  assert strategy_family("Trendline Reaction") == "trendline"
+  assert strategy_family("Session Level") == "session_level"
+  assert strategy_family("Trendline") == "trendline"
   assert strategy_family("Mapped Zone Reaction") == "mapped_zone_reaction"
 
   first = structural_thesis_id(
@@ -876,7 +876,7 @@ def test_independent_sources_remain_separate():
   demand = _match(match_id="d", structural_zone_id="demand-1", zone_id="demand-1")
   key = _match(
     match_id="k",
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     family="key_level",
     structural_source="key_level",
     structural_zone_id="key-1",
@@ -893,7 +893,7 @@ def test_independent_sources_remain_separate():
 def test_overlapping_key_levels_same_confirmation_are_one_thesis():
   first = _match(
     match_id="dac0ac35aaaa",
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     family="key_level",
     structural_source="key_level",
     structural_zone_id="47519286aaaa",
@@ -906,7 +906,7 @@ def test_overlapping_key_levels_same_confirmation_are_one_thesis():
   )
   second = _match(
     match_id="ca1c22e73aaa",
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     family="key_level",
     structural_source="key_level",
     structural_zone_id="90824b10aaaa",
@@ -924,13 +924,13 @@ def test_overlapping_key_levels_same_confirmation_are_one_thesis():
 
 def test_structural_setups_constant():
   assert STRUCTURAL_SETUPS == {
-    "Key Level Reaction",
+    "Key Level",
     "Zone Reaction",
     "Flip Zone",
     "Demand Zone Reaction",
     "Supply Zone Reaction",
-    "Session Level Reaction",
-    "Trendline Reaction",
+    "Session Level",
+    "Trendline",
     "Supply Demand",
     "Order Block",
     "FVG",

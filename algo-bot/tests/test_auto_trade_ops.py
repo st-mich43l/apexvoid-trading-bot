@@ -315,7 +315,7 @@ def test_fx_delivery_uses_symbol_pips_and_price_digits(monkeypatch):
     "type": "strategy_route",
     "symbol": "EURUSD",
     "status": "candidate_published",
-    "strategy": "Key Level Reaction",
+    "strategy": "Key Level",
     "direction": "BUY",
     "measured": {
       "planned_execution_route": "market",
@@ -415,7 +415,7 @@ def test_strategy_route_plan_published_shows_executor_fields():
   text = delivery.render_auto_trade_event({
     "type": "strategy_route",
     "status": "candidate_published",
-    "strategy": "Key Level Reaction",
+    "strategy": "Key Level",
     "direction": "BUY",
     "measured": {
       "planned_execution_route": "market",
@@ -697,7 +697,7 @@ async def test_order_filled_replies_using_v8_plan_id_without_head_fill(monkeypat
       "text": "\n".join([
         "🔎 <b>XAU M5 · SETUP FORMING</b>",
         "🟢 <b>PLAN PUBLISHED</b> · TradePlan V8 sent to executor",
-        "🟢 <b>BUY · Key Level Reaction</b>",
+        "🟢 <b>BUY · Key Level</b>",
       ]),
     }),
     ex=60,
@@ -813,7 +813,7 @@ async def test_tp_booked_does_not_overwrite_forming_card_head(monkeypatch):
   head = "\n".join([
     "🔎 <b>XAU M5 · SETUP FORMING</b>",
     "🟢 <b>PLAN PUBLISHED</b> · TradePlan V8 sent to executor",
-    "🔴 <b>SELL · Key Level Reaction</b>",
+    "🔴 <b>SELL · Key Level</b>",
   ])
   await client.set(
     delivery._forming_message_key(setup_id),
@@ -873,7 +873,7 @@ async def test_order_filled_stores_manage_keys_and_second_fill_replaces(monkeypa
       "text": "\n".join([
         "🔎 <b>XAU M5 · SETUP FORMING</b>",
         "🟢 <b>PLAN PUBLISHED</b>",
-        "🟢 <b>BUY · Key Level Reaction</b>",
+        "🟢 <b>BUY · Key Level</b>",
       ]),
     }),
     ex=60,
@@ -950,7 +950,7 @@ async def test_tp_booked_replaces_manage_reply_accumulates_lines(monkeypatch):
       "text": "\n".join([
         "🔎 <b>XAU M5 · SETUP FORMING</b>",
         "✅ <b>ORDER FILLED</b> · L1 filled",
-        "🟢 <b>BUY · Key Level Reaction</b>",
+        "🟢 <b>BUY · Key Level</b>",
       ]),
     }),
     ex=60,
@@ -1020,7 +1020,7 @@ async def test_sl_moved_be_updates_manage_reply_not_head(monkeypatch):
   head = "\n".join([
     "🔎 <b>XAU M5 · SETUP FORMING</b>",
     "🟢 <b>PLAN PUBLISHED</b> · TradePlan V8 sent to executor",
-    "🟢 <b>BUY · Key Level Reaction</b>",
+    "🟢 <b>BUY · Key Level</b>",
     "📍 <b>Trade area</b>",
     "• <b>Stop:</b> <b>4,020.00</b>",
   ])
@@ -1086,7 +1086,7 @@ async def test_sl_moved_trail_updates_manage_reply_not_head(monkeypatch):
   head = "\n".join([
     "🔎 <b>XAU M5 · SETUP FORMING</b>",
     "🟢 <b>PLAN PUBLISHED</b> · TradePlan V8 sent to executor",
-    "🟢 <b>BUY · Key Level Reaction</b>",
+    "🟢 <b>BUY · Key Level</b>",
     "📍 <b>Trade area</b>",
     "• <b>Stop:</b> <b>4,034.99</b>",
   ])
@@ -2194,7 +2194,7 @@ async def test_v8_order_filled_and_position_closed_feed_trade_stats():
     "group_id": "v8:17ab03ca932a19b11d374d2ae9de8f30",
     "candidate_id": "v8:17ab03ca932a19b11d374d2ae9de8f30",
     "direction": "BUY",
-    "setup": "Key Level Reaction",
+    "setup": "Key Level",
     "symbol": "XAU",
     "price": 4060.85,
     "stop_loss": 4056.55,
@@ -2238,7 +2238,7 @@ async def test_archived_tp_wins_over_group_realized_pips_when_both_present():
     "group_id": "v8:archived-vs-net",
     "candidate_id": "v8:archived-vs-net",
     "direction": "BUY",
-    "setup": "Key Level Reaction",
+    "setup": "Key Level",
     "symbol": "XAU",
     "price": 4270.0,
     "stop_loss": 4267.0,
@@ -2341,7 +2341,7 @@ async def test_status_includes_compact_profile_regime_groups_and_route(monkeypat
     "auto_trade:last_gate:XAU",
     json.dumps({
       "state": "candidate",
-      "selected_strategy": "Key Level Reaction",
+      "selected_strategy": "Key Level",
       "selected_timeframe": "M5",
       "direction": "SELL",
       "regime": "chop",
@@ -2361,7 +2361,7 @@ async def test_status_includes_compact_profile_regime_groups_and_route(monkeypat
   await client.set(
     "auto_trade:last_route_outcome:XAU",
     json.dumps({
-      "strategy": "Key Level Reaction",
+      "strategy": "Key Level",
       "status": "blocked",
       "reason_code": "opposing_barrier",
     }),
@@ -2380,7 +2380,7 @@ async def test_status_includes_compact_profile_regime_groups_and_route(monkeypat
   assert "demo trading · <b>running</b> · demo_eval" in text
   assert "groups <b>2</b>" in text
   assert "Regime <b>chop</b>" in text
-  assert "Route: Key Level Reaction · blocked · opposing_barrier" in text
+  assert "Route: Key Level · blocked · opposing_barrier" in text
   assert len(text) < 900
   assert "auto trader" not in text.lower()
 
@@ -2791,7 +2791,7 @@ async def test_status_includes_today_algo_scorecard(monkeypatch):
     "candidate_id": "v8:status-score-win",
     "stream": "algo_auto",
     "direction": "BUY",
-    "setup": "Key Level Reaction",
+    "setup": "Key Level",
     "symbol": "XAU",
     "price": 4050.0,
     "stop_loss": 4045.0,

@@ -483,7 +483,7 @@ def test_strict_technique_pd_rejects_m5_only_range():
     m5_range_high=RANGE_HIGH,
   )
   decision = evaluate_entry_location(
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     direction="BUY",
     context=ctx,
     cfg=cfg,

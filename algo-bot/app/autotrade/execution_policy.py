@@ -429,7 +429,7 @@ _STRATEGY_FAMILY = {
   "Mapped Zone Reaction": FAMILY_MAPPED_ZONE_REACTION,
   "Liquidity Sweep": FAMILY_LIQUIDITY_REVERSAL,
   "Snap-Back": FAMILY_LIQUIDITY_REVERSAL,
-  "Key Level Reaction": FAMILY_KEY_LEVEL,
+  "Key Level": FAMILY_KEY_LEVEL,
   "Zone Reaction": FAMILY_SUPPLY_DEMAND,
   "Flip Zone": FAMILY_SUPPLY_DEMAND,
   "Supply Demand": FAMILY_SUPPLY_DEMAND,
@@ -441,8 +441,8 @@ _STRATEGY_FAMILY = {
   # Legacy display names (kept for open plans / historical events):
   "Demand Zone Reaction": FAMILY_SUPPLY_DEMAND,
   "Supply Zone Reaction": FAMILY_SUPPLY_DEMAND,
-  "Session Level Reaction": FAMILY_SESSION_LEVEL,
-  "Trendline Reaction": FAMILY_TRENDLINE,
+  "Session Level": FAMILY_SESSION_LEVEL,
+  "Trendline": FAMILY_TRENDLINE,
 }
 
 

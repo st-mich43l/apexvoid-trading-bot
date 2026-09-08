@@ -377,7 +377,7 @@ def test_market_route_publishes_the_quote_as_planned_entry():
 
 @pytest.mark.parametrize(
   "strategy",
-  ["Key Level Reaction", "Trendline Reaction"],
+  ["Key Level", "Trendline"],
 )
 def test_reaction_family_falls_back_to_a_concrete_market_route_when_narrow(
   strategy,

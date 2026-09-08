@@ -91,7 +91,7 @@ async def client():
     await redis.aclose()
 
 
-def _match(*, strategy: str = "Key Level Reaction") -> StrategyMatch:
+def _match(*, strategy: str = "Key Level") -> StrategyMatch:
   return StrategyMatch(
     version=1,
     match_id="setup-1",
@@ -128,7 +128,7 @@ def _result(
   *,
   low: float = 4113.0,
   high: float = 4116.0,
-  setup="Key Level Reaction",
+  setup="Key Level",
   structural_source: str = "key_level",
 ):
   return SimpleNamespace(
@@ -461,7 +461,7 @@ async def test_enforce_reaction_waits_for_m1_without_persisting(
       "actionability.entry_location.mode": "shadow",
     },
   )
-  result = _result(setup="Key Level Reaction")
+  result = _result(setup="Key Level")
   ctx = SimpleNamespace(
     indicators={"M5": SimpleNamespace(atr=pd.Series([4.0]))},
   )
@@ -521,7 +521,7 @@ async def test_enforce_reaction_activates_with_fresh_m1_once(
       "actionability.entry_location.mode": "shadow",
     },
   )
-  result = _result(setup="Key Level Reaction")
+  result = _result(setup="Key Level")
   ctx = SimpleNamespace(
     indicators={"M5": SimpleNamespace(atr=pd.Series([4.0]))},
   )

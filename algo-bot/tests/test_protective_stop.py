@@ -321,7 +321,7 @@ def test_reaction_family_room_synced_stop_tracks_primary_tp():
   # reaction envelope (live: floor-20 + TP-30 produced a 30-pip SL).
   thin = evaluate_execution_policy(
     _policy_subject(
-      strategy="Key Level Reaction",
+      strategy="Key Level",
       targets_pips=(25,),
       structure_swing=4099.9,
     ),
@@ -331,7 +331,7 @@ def test_reaction_family_room_synced_stop_tracks_primary_tp():
   )
   mid = evaluate_execution_policy(
     _policy_subject(
-      strategy="Session Level Reaction",
+      strategy="Session Level",
       targets_pips=(50,),
       structure_swing=4099.9,
     ),
@@ -341,7 +341,7 @@ def test_reaction_family_room_synced_stop_tracks_primary_tp():
   )
   capped = evaluate_execution_policy(
     _policy_subject(
-      strategy="Trendline Reaction",
+      strategy="Trendline",
       targets_pips=(90,),
       structure_swing=4099.9,
     ),
@@ -391,7 +391,7 @@ def test_reaction_room_stop_missing_tp_falls_back_to_legacy_envelope():
     auto_trade_reaction_room_stop_floor_pips=20,
   )
   minimum, maximum, measured = stop_bounds_for_reaction_room(
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     primary_tp_pips=None,
     pip_size=0.1,
     cfg=cfg,
@@ -435,7 +435,7 @@ def test_scalp_stop_bounds_use_scalp_envelope_not_reaction_40_60():
   assert uses_scalp_room_stop("Breakout Retest Scalp") is True
   assert uses_scalp_room_stop("Range Sweep Scalp") is True
   assert uses_scalp_room_stop("Breakout Retest Scalp") is True
-  assert uses_scalp_room_stop("Key Level Reaction") is False
+  assert uses_scalp_room_stop("Key Level") is False
 
   cfg = SimpleNamespace(
     execution=SimpleNamespace(
@@ -514,19 +514,19 @@ def test_stop_bounds_for_reaction_room_pins_and_caps():
     cfg=cfg,
   )[2]["stop_bounds_source"] == "strategy_default"
   assert stop_bounds_for_reaction_room(
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     primary_tp_pips=18,
     pip_size=0.1,
     cfg=cfg,
   )[:2] == (40, 60)  # owner floor 40, hard cap stays 60 (not collapsed)
   assert stop_bounds_for_reaction_room(
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     primary_tp_pips=30,
     pip_size=0.1,
     cfg=cfg,
   )[:2] == (40, 60)  # TP-30 must not produce a 30-pip SL
   assert stop_bounds_for_reaction_room(
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     primary_tp_pips=90,
     pip_size=0.1,
     cfg=cfg,
@@ -553,7 +553,7 @@ def test_stop_bounds_for_reaction_room_keeps_band_for_group_stop():
     auto_trade_reaction_room_stop_floor_pips=20,
   )
   minimum, maximum, measured = stop_bounds_for_reaction_room(
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     primary_tp_pips=90,
     pip_size=0.1,
     cfg=cfg,
@@ -563,7 +563,7 @@ def test_stop_bounds_for_reaction_room_keeps_band_for_group_stop():
   assert measured["stop_bounds_for_group_stop"] is True
   # Single-leg (default) at the same inputs is unaffected -- still (60, 60).
   assert stop_bounds_for_reaction_room(
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     primary_tp_pips=90,
     pip_size=0.1,
     cfg=cfg,
@@ -724,7 +724,7 @@ def test_group_structural_stop_beyond_max_clamps_to_envelope():
   # Owner directive 2026-08-06: do not fail-closed when structural/clearance
   # distance exceeds the max envelope. Clamp to max (same as single-leg
   # structure-stop path) so a ready plan still publishes. Live incident
-  # lost a Key Level Reaction BUY to a 0.02-pip post-floor overshoot.
+  # lost a Key Level BUY to a 0.02-pip post-floor overshoot.
   plan = plan_group_protective_stop(
     direction="SELL",
     entry_zone_low="4097.07",

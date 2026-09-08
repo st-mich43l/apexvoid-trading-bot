@@ -254,7 +254,7 @@ def test_activated_header_stays_intact_on_terminal_status():
   """Close must not paint TERMINAL on the autotrade root card."""
   activated = "\n".join([
     "✅ <b>POSITION ACTIVATED · XAU M5</b>",
-    "🔴 <b>SELL · Key Level Reaction</b> · ⭐⭐",
+    "🔴 <b>SELL · Key Level</b> · ⭐⭐",
     "• <b>Price now:</b> <b>4,396.18</b> <i>(live)</i>",
   ])
   text = setup_card.apply_forming_card_status(
@@ -263,7 +263,7 @@ def test_activated_header_stays_intact_on_terminal_status():
   lines = text.splitlines()
   assert lines[0] == "✅ <b>POSITION ACTIVATED · XAU M5</b>"
   assert "TERMINAL" not in text
-  assert "SELL · Key Level Reaction" in text
+  assert "SELL · Key Level" in text
   assert "(live)" not in text
 
 
@@ -271,7 +271,7 @@ def test_forming_card_matches_strategy_detects_stale_body():
   text = "\n".join([
     "🔎 <b>XAU M5 · SETUP FORMING</b>",
     "🟢 <b>PLAN PUBLISHED</b>",
-    "🔴 <b>SELL · Key Level Reaction</b> · ⭐⭐",
+    "🔴 <b>SELL · Key Level</b> · ⭐⭐",
   ])
   match = SimpleNamespace(
     direction="BUY",
@@ -280,7 +280,7 @@ def test_forming_card_matches_strategy_detects_stale_body():
   assert setup_card.forming_card_matches_strategy(text, match) is False
   match_ok = SimpleNamespace(
     direction="SELL",
-    strategy="Key Level Reaction",
+    strategy="Key Level",
   )
   assert setup_card.forming_card_matches_strategy(text, match_ok) is True
 
@@ -299,7 +299,7 @@ def test_event_recovery_root_card_is_activated_on_fill():
 def test_parse_forming_card_symbol_from_position_activated_header():
   text = "\n".join([
     "✅ <b>POSITION ACTIVATED · GBPUSD M5</b>",
-    "🟢 <b>BUY · Key Level Reaction</b>",
+    "🟢 <b>BUY · Key Level</b>",
   ])
   assert setup_card.parse_forming_card_symbol(text) == "GBPUSD"
 
@@ -314,7 +314,7 @@ async def test_edit_forming_card_stop_uses_fx_digits_after_activation(monkeypatc
   await _confirmed_setup(client, setup_id)
   original = "\n".join([
     "✅ <b>POSITION ACTIVATED · GBPUSD M5</b>",
-    "🟢 <b>BUY · Key Level Reaction</b>",
+    "🟢 <b>BUY · Key Level</b>",
     "• <b>Stop:</b> <b>SL</b>",
   ])
   await setup_card.save_forming_card(
@@ -449,7 +449,7 @@ async def test_position_activated_rewrites_the_stale_setup_forming_head():
   original = "\n".join([
     "🔎 <b>XAU M5 · SETUP FORMING</b>",
     "​",
-    "🔴 <b>SELL · Key Level Reaction</b> · ⭐⭐",
+    "🔴 <b>SELL · Key Level</b> · ⭐⭐",
   ])
   await setup_card.save_forming_card(
     client,
@@ -481,7 +481,7 @@ async def test_position_activated_rewrites_the_stale_setup_forming_head():
   # (an invisible-character-only line) but Telegram still renders that
   # at full line-height, showing a stray empty line under the header -
   # so the slot line is removed outright instead of blanked.
-  assert lines[1] == "🔴 <b>SELL · Key Level Reaction</b> · ⭐⭐"
+  assert lines[1] == "🔴 <b>SELL · Key Level</b> · ⭐⭐"
   assert text.count("ORDER ACTIVATED") == 1
   assert "SETUP FORMING" not in text
 
@@ -500,7 +500,7 @@ async def test_second_fill_event_does_not_double_the_activated_header():
   original = "\n".join([
     "🔎 <b>XAU M5 · SETUP FORMING</b>",
     "​",
-    "🔴 <b>SELL · Trendline Reaction</b> · ⭐⭐",
+    "🔴 <b>SELL · Trendline</b> · ⭐⭐",
   ])
   await setup_card.save_forming_card(
     client,
@@ -547,7 +547,7 @@ async def test_second_post_fill_status_replaces_not_stacks():
   original = "\n".join([
     "🔎 <b>XAU M5 · SETUP FORMING</b>",
     "​",
-    "🔴 <b>SELL · Trendline Reaction</b> · ⭐⭐",
+    "🔴 <b>SELL · Trendline</b> · ⭐⭐",
   ])
   await setup_card.save_forming_card(
     client,
@@ -586,7 +586,7 @@ async def test_second_post_fill_status_replaces_not_stacks():
   final_lines = edited[-1][2].splitlines()
   assert final_lines[0] == "✅ <b>ORDER ACTIVATED · XAU M5</b>"
   assert final_lines[1] == "🎯 <b>TP1 HIT</b>"
-  assert final_lines[2] == "🔴 <b>SELL · Trendline Reaction</b> · ⭐⭐"
+  assert final_lines[2] == "🔴 <b>SELL · Trendline</b> · ⭐⭐"
   assert len(final_lines) == 3, "TP status must replace SL line, not stack"
 
 
@@ -686,7 +686,7 @@ async def test_kill_setup_card_leaves_root_body_intact(caplog):
   client = redis_state.get_client()
   original = "\n".join([
     "✅ <b>POSITION ACTIVATED · XAU M5</b>",
-    "🔴 <b>SELL · Key Level Reaction</b> · ⭐⭐",
+    "🔴 <b>SELL · Key Level</b> · ⭐⭐",
     "• <b>Price now:</b> <b>4,396.18</b> <i>(live)</i>",
   ])
   await setup_card.save_forming_card(
@@ -724,7 +724,7 @@ async def test_kill_setup_card_noop_edit_when_already_intact():
   client = redis_state.get_client()
   original = "\n".join([
     "✅ <b>POSITION ACTIVATED · XAU M5</b>",
-    "🔴 <b>SELL · Key Level Reaction</b>",
+    "🔴 <b>SELL · Key Level</b>",
   ])
   await setup_card.save_forming_card(
     client, "setup-not-mod-kill", chat_id=123, message_id=7777,
@@ -914,7 +914,7 @@ async def test_identical_status_edit_is_a_local_successful_noop():
   text = "\n".join([
     "🔎 <b>XAU M5 · SETUP FORMING</b>",
     status,
-    "🔴 <b>SELL · Trendline Reaction</b>",
+    "🔴 <b>SELL · Trendline</b>",
   ])
   await setup_card.save_forming_card(
     client,
@@ -956,7 +956,7 @@ async def test_not_modified_status_edit_is_treated_as_success():
     text="\n".join([
       "🔎 <b>XAU M5 · SETUP FORMING</b>",
       "🟡 <b>QUEUED</b> · worker acknowledgement pending",
-      "🔴 <b>SELL · Trendline Reaction</b>",
+      "🔴 <b>SELL · Trendline</b>",
     ]),
   )
 
@@ -990,7 +990,7 @@ async def test_card_status_is_monotonic_after_plan_publication():
     text="\n".join([
       "🔎 <b>XAU M5 · SETUP FORMING</b>",
       "🟡 <b>QUEUED</b> · worker acknowledgement pending",
-      "🔴 <b>SELL · Trendline Reaction</b>",
+      "🔴 <b>SELL · Trendline</b>",
     ]),
   )
 
@@ -1086,7 +1086,7 @@ def _strategy_match_for_card(setup_id: str = "setup-publish-card") -> object:
     event_ts="2026-07-31T13:03:00+00:00",
     issued_at=1_785_502_980,
     expires_at=1_785_503_400,
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     strategy_mode="with_bias",
     bias_relationship="with_bias",
     direction="BUY",
@@ -1544,7 +1544,7 @@ async def test_ensure_plan_published_root_card_edits_existing_status_only():
   original = "\n".join([
     "🔎 <b>XAU M5 · SETUP FORMING</b>",
     "🟡 <b>QUEUED</b> · worker acknowledgement pending",
-    "🟢 <b>BUY · Key Level Reaction</b>",
+    "🟢 <b>BUY · Key Level</b>",
   ])
   await setup_card.save_forming_card(
     client, setup_id, chat_id=123, message_id=777, text=original,
@@ -1592,7 +1592,7 @@ async def test_ensure_plan_published_root_card_rewrites_mismatched_strategy_body
   original = "\n".join([
     "🔎 <b>XAU M5 · SETUP FORMING</b>",
     "🟡 <b>QUEUED</b> · worker acknowledgement pending",
-    "🔴 <b>SELL · Key Level Reaction</b>",
+    "🔴 <b>SELL · Key Level</b>",
   ])
   await setup_card.save_forming_card(
     client, setup_id, chat_id=123, message_id=888, text=original,
@@ -1616,5 +1616,5 @@ async def test_ensure_plan_published_root_card_rewrites_mismatched_strategy_body
   assert edited
   card = await setup_card.load_forming_card(client, setup_id)
   assert card is not None
-  assert "🟢 <b>BUY · Key Level Reaction</b>" in card["text"]
+  assert "🟢 <b>BUY · Key Level</b>" in card["text"]
   assert "PLAN PUBLISHED" not in card["text"]

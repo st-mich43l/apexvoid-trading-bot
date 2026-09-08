@@ -177,7 +177,7 @@ def test_case_08_previous_episode_trigger_consumed():
 
 @pytest.mark.parametrize(
   "strategy",
-  ["Key Level Reaction", "Range Edge Scalp"],
+  ["Key Level", "Range Edge Scalp"],
 )
 def test_case_09_grade_a_and_b_require_trigger_when_enforce(strategy):
   decision = _activate(strategy=strategy, trigger=None)
@@ -267,7 +267,7 @@ def test_case_15_shadow_allows_with_would_block():
 
 def test_m5_authoritative_in_zone_allows_without_m1():
   decision = _activate(
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     trigger=None,
     quote_inside=True,
     m5_authoritative=True,
@@ -281,7 +281,7 @@ def test_m5_authoritative_in_zone_allows_without_m1():
 
 def test_m5_fallback_off_blocks_without_m1_even_when_authoritative():
   decision = _activate(
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     trigger=None,
     quote_inside=True,
     m5_authoritative=True,
@@ -293,7 +293,7 @@ def test_m5_fallback_off_blocks_without_m1_even_when_authoritative():
 
 def test_m5_authoritative_outside_zone_still_blocked():
   decision = _activate(
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     trigger=None,
     quote_inside=False,
     m5_authoritative=True,
@@ -306,7 +306,7 @@ def test_m5_authoritative_outside_zone_still_blocked():
 def test_m5_quote_inside_fresh_requires_recent_confirmation():
   fresh_ts = NOW - 300
   decision = _activate(
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     trigger=None,
     quote_inside=True,
     m5_authoritative=True,
@@ -318,7 +318,7 @@ def test_m5_quote_inside_fresh_requires_recent_confirmation():
 
   stale_ts = NOW - 7 * 300
   stale = _activate(
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     trigger=None,
     quote_inside=True,
     m5_authoritative=True,
@@ -329,7 +329,7 @@ def test_m5_quote_inside_fresh_requires_recent_confirmation():
   assert stale.reason_code == "reaction_trigger_missing"
 
   missing = _activate(
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     trigger=None,
     quote_inside=True,
     m5_authoritative=True,
@@ -342,7 +342,7 @@ def test_m5_quote_inside_fresh_requires_recent_confirmation():
 
 def test_m5_authoritative_false_without_m1_still_missing():
   decision = _activate(
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     trigger=None,
     quote_inside=True,
     m5_authoritative=False,
@@ -354,7 +354,7 @@ def test_m5_authoritative_false_without_m1_still_missing():
 
 def test_m1_preferred_over_m5_bridge():
   decision = _activate(
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     trigger=_trigger(pattern="wick_rejection", direction="BUY"),
     quote_inside=True,
     m5_authoritative=True,
@@ -448,7 +448,7 @@ def test_m5_authoritative_blocked_under_technique_enforce():
     ),
   )
   decision = evaluate_entry_activation(
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     direction="BUY",
     zone_entered_at=ZONE_ENTERED,
     quote_inside=True,
@@ -471,7 +471,7 @@ def test_reaction_softens_sweep_body_when_instrument_flag_is_false():
     ),
   )
   decision = evaluate_entry_activation(
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     direction="BUY",
     zone_entered_at=ZONE_ENTERED,
     quote_inside=True,
@@ -515,7 +515,7 @@ def test_impulse_against_blocks_sell_into_expanding_highs():
     ),
   )
   decision = evaluate_entry_activation(
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     direction="SELL",
     zone_entered_at=ZONE_ENTERED,
     quote_inside=True,
@@ -592,7 +592,7 @@ def test_key_sell_rejects_distal_quote():
     ),
   )
   decision = evaluate_entry_activation(
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     direction="SELL",
     zone_entered_at=ZONE_ENTERED,
     quote_inside=True,
@@ -609,7 +609,7 @@ def test_key_sell_rejects_distal_quote():
   assert decision.reason_code == "sell_not_proximal"
 
   proximal = evaluate_entry_activation(
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     direction="SELL",
     zone_entered_at=ZONE_ENTERED,
     quote_inside=True,
@@ -638,7 +638,7 @@ def test_key_buy_blocked_into_expanding_bid():
     {"h": 4381.0, "l": 4377.0, "c": 4380.0},
   ]
   decision = evaluate_entry_activation(
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     direction="BUY",
     zone_entered_at=ZONE_ENTERED,
     quote_inside=True,
@@ -676,7 +676,7 @@ async def test_activation_blocked_metrics_emitted_once(reason_code: str):
   await emit_activation_gate_metrics(
     client,
     symbol="XAU",
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     direction="BUY",
     decision=decision,
     allowed=False,
@@ -705,7 +705,7 @@ async def test_activation_allowed_metrics_emitted_once():
   await emit_activation_gate_metrics(
     client,
     symbol="XAU",
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     direction="BUY",
     decision=decision,
     allowed=True,
@@ -736,7 +736,7 @@ async def test_m5_fallback_allowed_metrics_include_m1_fail_reason():
   await emit_activation_gate_metrics(
     client,
     symbol="XAU",
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     direction="BUY",
     decision=decision,
     allowed=True,
@@ -751,6 +751,6 @@ async def test_m5_fallback_allowed_metrics_include_m1_fail_reason():
   assert int(
     await client.hget(
       dim_key,
-      "direction=BUY:m1_fail_reason=reaction_trigger_missing:strategy=Key Level Reaction",
+      "direction=BUY:m1_fail_reason=reaction_trigger_missing:strategy=Key Level",
     ) or 0
   ) == 1

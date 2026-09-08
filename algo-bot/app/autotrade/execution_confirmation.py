@@ -42,9 +42,9 @@ M5_AUTHORITATIVE = "m5_authoritative"
 M1_RETEST = "m1_retest"
 
 _REACTION_STRATEGIES = frozenset({
-  "Key Level Reaction",
-  "Session Level Reaction",
-  "Trendline Reaction",
+  "Key Level",
+  "Session Level",
+  "Trendline",
   "Mapped Zone Reaction",
   "Liquidity Sweep",
   "Snap-Back",
