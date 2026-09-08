@@ -462,7 +462,7 @@ def evaluate_structural_target_room(
   Hard-blocks only on structural impossibility: planned entry contained in
   the opposing structure, or raw geometric room <= 0.
 
-  Live 2026-08-06 Trendline Reaction BUY published a single absolute TP at
+  Live 2026-08-06 Trendline BUY published a single absolute TP at
   4255.49 with close_ratio=1.0 (~9 pips from fill) because this function
   used to replace the owner ladder with ``floor(usable_room)``. That is
   scalping theatre. Owner directive: reaction/swing setups always keep the

@@ -63,7 +63,7 @@ def reaction_require_killzone(
     True if section is None
     else bool(getattr(section, "reaction_require_killzone", True))
   )
-  if str(strategy or "") == "Key Level Reaction":
+  if str(strategy or "") == "Key Level":
     key = getattr(
       getattr(getattr(cfg, "strategies", None), "reaction", None),
       "key_level",
@@ -87,7 +87,7 @@ def reaction_require_publish_window(cfg: Any | None) -> bool:
 
 
 def key_level_min_grade(cfg: Any | None) -> str:
-  """Minimum ZoneWatch grade for Key Level Reaction (``A`` or ``B``)."""
+  """Minimum ZoneWatch grade for Key Level (``A`` or ``B``)."""
   key = getattr(
     getattr(getattr(cfg, "strategies", None), "reaction", None),
     "key_level",

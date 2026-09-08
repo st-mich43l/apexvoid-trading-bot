@@ -1605,7 +1605,7 @@ async def _sync_strategy_match_cutover(
         symbol, tf, result.setup, result.direction, grade, zone_id,
       )
       continue
-    if str(result.setup) == "Key Level Reaction":
+    if str(result.setup) == "Key Level":
       from app.autotrade.killzone import key_level_min_grade
 
       inst = instrument_geometry.instrument_runtime(symbol)

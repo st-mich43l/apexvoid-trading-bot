@@ -13,6 +13,18 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
+- Dropped the "Reaction" suffix from the 3 live strategy names that still
+  had it: "Key Level Reaction" → "Key Level", "Session Level Reaction" →
+  "Session Level", "Trendline Reaction" → "Trendline"
+  (`app/autotrade/strategy_names.py`, the shared naming contract every
+  detector/card/config comparison reads from). The old names remain
+  resolvable as aliases (`resolve_strategy("Key Level Reaction")` still
+  works) so historical Redis/Postgres records and anything still typing
+  the old form keep working. Retired legacy names ("Demand Zone
+  Reaction", "Zone Reaction", "Mapped Zone Reaction", etc. — kept only
+  to parse old records, emitted by no current detector) and the
+  "_reaction" suffix on internal detector IDs / config environment
+  variables (a separate, unrelated naming scheme) are untouched.
 - Manual `/algo` entries simplified from a 3-leg 70/20/10 Shallow/Mid/Deep
   ladder to a plain 2-leg 80/20 ladder (Shallow/Deep), matching the auto
   algo's own zone-scale entry shape. A separate, fixed-size risk leg

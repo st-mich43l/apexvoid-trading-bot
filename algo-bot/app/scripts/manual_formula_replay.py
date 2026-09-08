@@ -212,7 +212,7 @@ def _nearest_zone(zones: list[Any], price: float, side: str | None) -> Any | Non
 
 
 def _run_detector(strategy: str, direction: str, ctx: Any) -> DetectionResult | None:
-  if strategy == "Key Level Reaction":
+  if strategy == "Key Level":
     return key_level_reaction(ctx)
   if strategy == "Flip Zone":
     return (

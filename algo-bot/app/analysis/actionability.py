@@ -370,7 +370,7 @@ def _key_level_role(
   context: Any,
   cfg: Any,
 ) -> str | None:
-  if result.setup != "Key Level Reaction":
+  if result.setup != "Key Level":
     return None
   if result.key_level_role:
     return result.key_level_role
@@ -640,7 +640,7 @@ def resolve_actionability(
     role = _key_level_role(result, context, cfg)
     if role == ROLE_AMBIGUOUS:
       # P0 zone/M1 simplification: this used to hard-block every ambiguous-
-      # role Key Level Reaction outright. key_level_reaction() (detectors.py)
+      # role Key Level outright. key_level_reaction() (detectors.py)
       # no longer emits a genuinely-undecided result for an ambiguous role -
       # it deterministically resolves to exactly one direction (price
       # below/above the level, or whichever single side actually confirms a
@@ -678,7 +678,7 @@ def resolve_actionability(
     ):
       decision = _decision(
         "key_level_role_direction_mismatch",
-        "Key Level Reaction direction conflicts with the classified role",
+        "Key Level direction conflicts with the classified role",
         {
           "key_level_role": role,
           "direction": result.direction.upper(),

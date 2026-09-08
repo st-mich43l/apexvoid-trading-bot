@@ -49,7 +49,7 @@ def _name(
 
 
 # Canonical display constants used by detector and UI publishers.
-KEY_LEVEL_REACTION = "Key Level Reaction"
+KEY_LEVEL = "Key Level"
 CONFLUENCE_ZONE = "Confluence Zone"
 SUPPLY_DEMAND = "Supply Demand"
 ORDER_BLOCK = "Order Block"
@@ -59,8 +59,8 @@ CRT = "CRT"
 DEMAND_ZONE_REACTION = "Demand Zone Reaction"
 SUPPLY_ZONE_REACTION = "Supply Zone Reaction"
 FLIP_ZONE = "Flip Zone"
-SESSION_LEVEL_REACTION = "Session Level Reaction"
-TRENDLINE_REACTION = "Trendline Reaction"
+SESSION_LEVEL = "Session Level"
+TRENDLINE = "Trendline"
 RANGE_EDGE_SCALP = "Range Edge Scalp"
 BOX_BREAKOUT = "Box Breakout"
 BREAK_AND_RETEST = "Break & Retest"
@@ -86,7 +86,7 @@ GOLDEN_FIBO = "Golden Fibo"
 
 
 STRATEGY_NAMES: tuple[StrategyName, ...] = (
-  _name(KEY_LEVEL_REACTION, CANONICAL_FAMILY_REACTION, "key_level_reaction", aliases=("key-level", "key level")),
+  _name(KEY_LEVEL, CANONICAL_FAMILY_REACTION, "key_level_reaction", aliases=("key-level", "key level reaction")),
   _name(CONFLUENCE_ZONE, CANONICAL_FAMILY_ZONE, "confluence_zone_reaction", aliases=("confluence", "confulence")),
   _name(SUPPLY_DEMAND, CANONICAL_FAMILY_ZONE, "supply_demand_technique_reaction", aliases=("supply demand reaction", "supply", "demand")),
   _name(ORDER_BLOCK, CANONICAL_FAMILY_ZONE, "order_block_technique_reaction", aliases=("order block reaction", "ob")),
@@ -96,8 +96,8 @@ STRATEGY_NAMES: tuple[StrategyName, ...] = (
   _name(DEMAND_ZONE_REACTION, CANONICAL_FAMILY_ZONE, retired=True),
   _name(SUPPLY_ZONE_REACTION, CANONICAL_FAMILY_ZONE, retired=True),
   _name(FLIP_ZONE, CANONICAL_FAMILY_ZONE, "flip_demand_zone_reaction", aliases=("flip-zone",)),
-  _name(SESSION_LEVEL_REACTION, CANONICAL_FAMILY_REACTION, "session_level_reaction", aliases=("session level", "session-level")),
-  _name(TRENDLINE_REACTION, CANONICAL_FAMILY_REACTION, "trendline_reaction", aliases=("trendline",)),
+  _name(SESSION_LEVEL, CANONICAL_FAMILY_REACTION, "session_level_reaction", aliases=("session-level", "session level reaction")),
+  _name(TRENDLINE, CANONICAL_FAMILY_REACTION, "trendline_reaction", aliases=("trendline reaction",)),
   _name(RANGE_EDGE_SCALP, CANONICAL_FAMILY_RANGE, "range_edge_scalp"),
   _name(BOX_BREAKOUT, CANONICAL_FAMILY_BREAKOUT_RETEST, "box_breakout"),
   _name(BREAK_AND_RETEST, CANONICAL_FAMILY_BREAKOUT_RETEST, "break_retest"),
