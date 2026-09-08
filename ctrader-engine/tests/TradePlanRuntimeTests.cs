@@ -446,6 +446,159 @@ public sealed class TradePlanRuntimeTests
   }
 
   [Fact]
+  public async Task Tp1ClosesShallowLegFirstAndBreakEvenUsesTheDeeperLegsOwnFill()
+  {
+    // Owner 2026-09-08: "when it hit TP1, it should trail to the deeper
+    // entry price like the manual algo, not trail to the shallow entry
+    // quickly". Pro-rata TP closing kept both legs' remaining volume in
+    // their original 80/20 ratio after every target, so the group's
+    // weighted-fill BE reference stayed skewed toward L1 (shallow,
+    // market, worse price) even once TP1 booked. Shallow-first closing
+    // drains L1 completely before touching L2 (deep, limit, better
+    // price) - once L1 is gone, the BE reference recomputed from
+    // currently-open legs is just L2's own fill.
+    const string planJson = """
+    {
+      "version": 8,
+      "plan_id": "v8:plan-shallow-first",
+      "thesis_id": "thesis-1",
+      "setup_id": "setup-1",
+      "symbol": "XAU",
+      "created_at": 1719999600,
+      "expires_at": 2000000000,
+      "analysis": {
+        "strategy": "Trend Pullback",
+        "strategy_family": "trend_pullback",
+        "direction": "BUY",
+        "context_timeframes": ["M15"],
+        "formation_timeframe": "H1",
+        "confirmation_timeframe": "M15",
+        "formation_bar_ts": 1719999000,
+        "confirmation_bar_ts": 1719999600,
+        "score": 3.0,
+        "confluence": 3,
+        "bias": "up",
+        "regime": "trend",
+        "reasons": ["htf_uptrend"],
+        "tags": []
+      },
+      "source_structure": {
+        "structure_id": "demand:M15:4085.00:4089.50:1719990000",
+        "kind": "demand",
+        "timeframe": "M15",
+        "low": "4085.00",
+        "high": "4089.50",
+        "invalidation_price": "4082.50"
+      },
+      "entry": {
+        "type": "market_with_limit_scale",
+        "zone_low": "4085.00",
+        "zone_high": "4089.50",
+        "expires_at": 2000000000,
+        "legs": [
+          {"leg_id": "L1", "price": "4089.10", "volume_ratio": "0.80", "order_type": "market"},
+          {"leg_id": "L2", "price": "4085.00", "volume_ratio": "0.20", "order_type": "limit"}
+        ]
+      },
+      "stop": {
+        "type": "absolute",
+        "price": "4082.50",
+        "source": "m5_structure",
+        "structure_id": "demand:M15:4085.00:4089.50:1719990000",
+        "reason": "below distal"
+      },
+      "targets": [
+        {"target_id": "TP1", "type": "absolute", "price": "4096.00", "close_ratio": "0.85"},
+        {"target_id": "TP2", "type": "absolute", "price": "4104.00", "close_ratio": "0.15"}
+      ],
+      "risk": {
+        "risk_percent": "1.0",
+        "risk_multiplier": "1.0",
+        "max_volume": 100000,
+        "max_group_risk_percent": "2.0"
+      },
+      "sizing": {
+        "mode": "equity_table",
+        "table_version": "owner_equity_v1",
+        "entry_distribution": "zone_scale",
+        "leg_ratios": ["0.80", "0.20"]
+      },
+      "management": {
+        "be_after_target_id": "TP1",
+        "be_buffer_ticks": 3,
+        "never_worsen_stop": true
+      },
+      "execution_policy": {
+        "allow_market": true,
+        "allow_limit": true,
+        "allow_partial_fill": true,
+        "cancel_on_expiry": true
+      },
+      "provenance": {
+        "analysis_engine_version": "",
+        "market_map_id": "",
+        "config_fingerprint": ""
+      }
+    }
+    """;
+    var store = new FakeTradePlanStore();
+    store.EnqueuePlan(planJson);
+    var client = new FakeTradePlanTradingClient
+    {
+      AccountEquity = 1_300m,
+      AccountBalance = 1_300m,
+    };
+    var runtime = new TradePlanRuntime(
+      Options(), store, () => DateTimeOffset.UtcNow, _ => { }
+    );
+
+    await runtime.PollAsync(
+      client, Symbol, new SpotPrice("XAU", 4089.00m, 4089.10m, 1), CancellationToken.None
+    );
+    var open = Assert.Single(runtime.TrackedStates);
+    var l2Order = Assert.Single(open.Legs!, leg => leg.LegId == "L2").BrokerOrderId!.Value;
+    client.FillPendingOrder(l2Order, fillPrice: 4085.00m);
+
+    await runtime.PollAsync(
+      client, Symbol, new SpotPrice("XAU", 4085.00m, 4085.10m, 2), CancellationToken.None
+    );
+    var filled = Assert.Single(runtime.TrackedStates);
+    var l1Before = Assert.Single(filled.Legs!, leg => leg.LegId == "L1");
+    var l2Before = Assert.Single(filled.Legs!, leg => leg.LegId == "L2");
+    Assert.NotNull(l1Before.BrokerPositionId);
+    Assert.NotNull(l2Before.BrokerPositionId);
+    var l1RemainingBeforeTp1 = l1Before.RemainingVolume;
+    var l2RemainingBeforeTp1 = l2Before.RemainingVolume;
+    var l2Fill = l2Before.FillPrice!.Value;
+
+    // Price reaches TP1 (4096.00).
+    await runtime.PollAsync(
+      client, Symbol, new SpotPrice("XAU", 4096.50m, 4096.55m, 3), CancellationToken.None
+    );
+
+    var afterTp1 = Assert.Single(runtime.TrackedStates);
+    Assert.True(afterTp1.BreakEvenApplied);
+    var l1After = Assert.Single(afterTp1.Legs!, leg => leg.LegId == "L1");
+    var l2After = Assert.Single(afterTp1.Legs!, leg => leg.LegId == "L2");
+
+    // TP1's 85% share exceeds L1's own ~83% of the position, so shallow-
+    // first closing drains L1 completely (any overflow into L2 rounds
+    // away below one broker step here) - proving L1 is fully gone is
+    // what actually matters: it means only L2 is left to compute BE from.
+    Assert.Equal(0, l1After.RemainingVolume);
+    Assert.True(l2After.RemainingVolume > 0, "L2 should still be open after TP1");
+
+    // BE stop is L2's own (deeper, better) fill + buffer, not a blend
+    // dragged toward L1's shallower fill.
+    var expectedStop = decimal.Round(
+      l2Fill + Options().BreakEvenBufferTicks * 0.01m, 2, MidpointRounding.AwayFromZero
+    );
+    Assert.Single(
+      client.StopAmendments, item => item.StopLoss == expectedStop
+    );
+  }
+
+  [Fact]
   public async Task DeferredTpTouchThenStopOutDoesNotArchiveTp()
   {
     // Production 2026-08-24: XAU BUY 4636.98, stop 4631.04. TP1 was
