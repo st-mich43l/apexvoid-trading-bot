@@ -207,19 +207,23 @@ def _fx_match(symbol: str = "EURUSD") -> StrategyMatch:
 
 
 @pytest.mark.parametrize("direction", ["BUY", "SELL"])
-def test_fx_technique_route_is_single_leg_market(direction: str):
+def test_fx_technique_route_uses_its_declared_zone_scale_policy(direction: str):
+  # Owner 2026-09-08 (bad technique entries): technique strategies no
+  # longer share scalp's single-leg-market-only short-circuit - see
+  # test_technique_fvg_uses_its_declared_zone_scale_policy
+  # (test_scalp_micro_grid.py) for the full incident/fix history.
   from app.autotrade.execution_route import (
-    ROUTE_MARKET,
+    ROUTE_ZONE_SPLIT,
     resolve_execution_route_plan,
   )
 
   plan = resolve_execution_route_plan(
     direction=direction,
-    order_type_preference="market",
-    entry_distribution="single",
-    executable_quote=1.1002,
+    order_type_preference="limit",
+    entry_distribution="zone_scale",
+    executable_quote=1.1005,
     zone_low=1.1000,
-    zone_high=1.1004,
+    zone_high=1.1010,
     atr=0.0008,
     zone_fill_enabled=True,
     digits=5,
@@ -228,14 +232,20 @@ def test_fx_technique_route_is_single_leg_market(direction: str):
     entry_clips=2,
   )
   assert plan.valid is True
-  assert plan.route == ROUTE_MARKET
-  assert plan.planned_leg_entry_prices == ()
-  assert plan.planned_leg_volume_ratios == ()
-  assert plan.immediate_market is True
-  assert plan.routing_reason == "technique: single-leg market (no micro-grid)"
+  assert plan.route == ROUTE_ZONE_SPLIT
+  assert len(plan.planned_leg_entry_prices) == 2
 
 
-def test_fx_auto_plan_books_single_leg_market_for_fvg():
+def test_fx_auto_plan_falls_back_to_market_watch_when_fvg_zone_too_narrow_to_split():
+  # Owner 2026-09-08 (bad technique entries): FVG's own declared policy is
+  # limit + zone_scale (FAMILY_SUPPLY_DEMAND), not a forced single-leg
+  # market - _fx_match()'s zone here is just too narrow relative to ATR to
+  # qualify for a 2-leg split, so it falls back to a single entry same as
+  # any other limit-preference strategy would. That fallback now goes
+  # through market_watch's broker-side zone revalidation instead of firing
+  # an unconditional immediate market order (see
+  # test_technique_fvg_uses_its_declared_zone_scale_policy for the wide-
+  # zone case that now gets the real zone_scale ladder).
   cfg = _load_production_example().config
   match = replace(_fx_match(), strategy="FVG", family="zone")
   evaluation = evaluate_execution_policy(
@@ -263,7 +273,7 @@ def test_fx_auto_plan_books_single_leg_market_for_fvg():
     max_volume=100_000_000,
     approved_measured=evaluation.measured,
   )
-  assert plan.entry.type == "market"
+  assert plan.entry.type == "market_watch"
   assert plan.entry.legs == ()
 
 

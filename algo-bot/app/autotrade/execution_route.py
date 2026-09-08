@@ -16,7 +16,6 @@ from app.autotrade.strategy_taxonomy import (
   is_breakout_retest_scalp_strategy,
   is_reaction_strategy,
   is_scalp_strategy,
-  is_technique_or_confluence,
 )
 
 # Legacy/default micro-grid size; production instruments may override it.
@@ -307,7 +306,7 @@ def resolve_execution_route_plan(
   if is_scalp_strategy(
     str(strategy or ""),
     family=strategy_family,
-  ) or is_technique_or_confluence(str(strategy or "")):
+  ):
     retest_only = is_breakout_retest_scalp_strategy(str(strategy or ""))
     if retest_only and geometry != "inside":
       return ExecutionRoutePlan(
@@ -327,17 +326,23 @@ def resolve_execution_route_plan(
       (side == "SELL" and geometry == "below")
       or (side == "BUY" and geometry == "above")
     )
-    # Scalp + technique (FVG/OB/IFVG/…): single-leg market only. Multi-leg
-    # scale-in caused false GROUP RECOVERY REQUIRED on demo when L1 SL'd
-    # and deal lookup missed (2026-08-26 v8:a80bf164…). Full size on one fill.
+    # Scalp: single-leg market only (no micro-grid) - fast, simple
+    # execution matters more than entry-price optimality for a scalp.
+    # 2026-09-08 (owner-reported bad technique entries): technique
+    # strategies (FVG/OB/IFVG/CRT/supply_demand/…) used to share this
+    # single-leg-market restriction too, forcing every technique setup to
+    # fill immediately at whatever price confirmation landed on rather
+    # than using their own declared zone_scale/limit policy - a 2026-08-26
+    # workaround for a GROUP RECOVERY REQUIRED false-positive
+    # (v8:a80bf164…, an SL'd leg's deal lookup returning Unknown while a
+    # sibling leg was still open) that TradePlanRuntime.ClassifyCloseReason/
+    # ExitBeyondProtectiveStop has since fixed generally (ctrader-engine,
+    # not entry-type-specific) - technique strategies now fall through to
+    # their own policy below instead.
     reason = (
       "scalp chase: full market (micro-grid would rest into abandoned zone)"
       if chase_away
-      else (
-        "scalp: single-leg market (no micro-grid)"
-        if is_scalp_strategy(str(strategy or ""), family=strategy_family)
-        else "technique: single-leg market (no micro-grid)"
-      )
+      else "scalp: single-leg market (no micro-grid)"
     )
     return ExecutionRoutePlan(
       ROUTE_MARKET,
