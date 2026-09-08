@@ -12,6 +12,21 @@ dated section after deployment.
 
 ## Unreleased
 
+### Changed
+- Auto algo (TradePlan V8) TP1 now closes the shallow (worse-priced) leg
+  of a multi-leg entry completely before touching a deeper (better-
+  priced) leg, instead of closing both pro-rata. Owner-reported: "when
+  it hit TP1, it should trail to the deeper entry price like the manual
+  algo, not trail to the shallow entry quickly." Pro-rata closing kept
+  both legs' remaining volume in their original ratio after every
+  target, so the group's weighted-fill breakeven reference stayed
+  skewed toward the shallow leg even once TP1 booked. The breakeven
+  reference is now recomputed from only the legs still actually open at
+  that moment (`VolumePlanner.AllocateShallowFirstStepped`,
+  `TradePlanRuntime.cs`) - once the shallow leg empties, the deeper
+  leg's own better fill dominates, mirroring manual algo's
+  `PlanGroupEconomicBreakeven`.
+
 ### Fixed
 - Scalp volume silently re-inflated to 1.5× table lots despite PR #486's
   "scalp books the same flat equity-table lot as any other trade" fix.
