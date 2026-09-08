@@ -245,7 +245,7 @@ def test_key_level_reaction_emits_market_with_limit_scale():
     auto_trade_reaction_scale_invalid_policy="single_market",
   )
   match = _match(
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     family="key_level",
     structural_kind="key_level",
     entry_low=4088.10,

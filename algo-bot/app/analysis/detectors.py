@@ -82,11 +82,11 @@ from app.autotrade.strategy_names import (
   BOX_BREAKOUT,
   FADE_SCALP,
   FLIP_ZONE,
-  KEY_LEVEL_REACTION,
+  KEY_LEVEL,
   MOMENTUM_RIDE,
   SNAP_BACK,
-  SESSION_LEVEL_REACTION,
-  TRENDLINE_REACTION,
+  SESSION_LEVEL,
+  TRENDLINE,
   ZONE_REACTION,
 )
 
@@ -2874,7 +2874,7 @@ def key_level_reaction(ctx: DetectionContext) -> DetectionResult | None:
       )
       candidate = _structural_finish(
         ctx,
-        setup=KEY_LEVEL_REACTION,
+        setup=KEY_LEVEL,
         direction=direction,
         level=level_price,
         zone=zone,
@@ -3132,7 +3132,7 @@ def session_level_reaction(ctx: DetectionContext) -> DetectionResult | None:
     )
     candidate = _structural_finish(
       ctx,
-      setup=SESSION_LEVEL_REACTION,
+      setup=SESSION_LEVEL,
       direction=direction,
       level=session.price,
       zone=zone,
@@ -3227,7 +3227,7 @@ def trendline_reaction(ctx: DetectionContext) -> DetectionResult | None:
     )
     candidate = _structural_finish(
       ctx,
-      setup=TRENDLINE_REACTION,
+      setup=TRENDLINE,
       direction=direction,
       level=line_price,
       zone=zone,

@@ -98,7 +98,7 @@ def test_tp_booked_event_renders_without_crashing():
   text = delivery.render_auto_trade_event({
     "type": "tp_booked",
     "message": "TP COMPLETED TP1 closed L1=320 L2=120 remaining=660 (2/2)",
-    "setup": "Key Level Reaction",
+    "setup": "Key Level",
     "price": 4054.86,
     "target_pips": 60,
   })
@@ -108,7 +108,7 @@ def test_tp_booked_event_renders_without_crashing():
   assert "TP1" in text
   assert "4054.86" in text
   assert "+60.0 pips" in text
-  assert "Key Level Reaction" not in text
+  assert "Key Level" not in text
   assert "🧭" not in text
   assert "Closed" not in text
   assert "Remaining" not in text
@@ -142,7 +142,7 @@ def test_sl_moved_event_renders_without_crashing():
   text = delivery.render_auto_trade_event({
     "type": "sl_moved",
     "message": "GROUP SL MOVED TO BE 4089.10 (2/2)",
-    "setup": "Key Level Reaction",
+    "setup": "Key Level",
   })
 
   assert text is not None
@@ -150,7 +150,7 @@ def test_sl_moved_event_renders_without_crashing():
   assert "Break-even" in text
   assert "4089.10" in text
   assert "🔐" in text or "🛡" in text
-  assert "Key Level Reaction" not in text
+  assert "Key Level" not in text
   assert "🧭" not in text
 
 
@@ -158,14 +158,14 @@ def test_sl_moved_trail_renders_trail_kind():
   text = delivery.render_auto_trade_event({
     "type": "sl_moved",
     "message": "SL MOVED to 4070.31 (trail TP1)",
-    "setup": "Key Level Reaction",
+    "setup": "Key Level",
   })
 
   assert text is not None
   assert "Trail" in text
   assert "4070.31" in text
   assert "trail TP1" in text
-  assert "Key Level Reaction" not in text
+  assert "Key Level" not in text
   assert "🧭" not in text
 
 

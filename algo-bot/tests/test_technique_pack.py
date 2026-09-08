@@ -165,11 +165,11 @@ def test_key_level_can_raise_killzone_without_global_reaction_gate():
   cfg = _technique_cfg()
   cfg.execution.technique.reaction_require_killzone = False
   assert reaction_require_killzone(cfg, strategy="Demand Zone") is False
-  assert reaction_require_killzone(cfg, strategy="Key Level Reaction") is False
+  assert reaction_require_killzone(cfg, strategy="Key Level") is False
 
   cfg.strategies.reaction.key_level.require_killzone = True
   assert reaction_require_killzone(cfg, strategy="Demand Zone") is False
-  assert reaction_require_killzone(cfg, strategy="Key Level Reaction") is True
+  assert reaction_require_killzone(cfg, strategy="Key Level") is True
 
   cfg.strategies.reaction.key_level.min_grade = "A"
   assert key_level_min_grade(cfg) == "A"
@@ -192,7 +192,7 @@ def test_activation_blocks_pin_bar_under_technique():
     "pin_bar", "BUY", 4080.0, now - 60, "pin only",
   )
   decision = evaluate_entry_activation(
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     direction="BUY",
     zone_entered_at=now - 120,
     quote_inside=True,
@@ -212,7 +212,7 @@ def test_activation_allows_sweep_reclaim_under_technique():
     "sweep_reclaim", "BUY", 4080.0, now - 60, "sweep",
   )
   decision = evaluate_entry_activation(
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     direction="BUY",
     zone_entered_at=now - 120,
     quote_inside=True,
@@ -284,7 +284,7 @@ def test_entry_location_blocks_buy_premium_sell_discount():
     m15_range_high=4100.0,
   )
   buy = evaluate_entry_location(
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     direction="BUY",
     context=buy_ctx,
     cfg=cfg,
@@ -299,7 +299,7 @@ def test_entry_location_blocks_buy_premium_sell_discount():
     m15_range_high=4100.0,
   )
   sell = evaluate_entry_location(
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     direction="SELL",
     context=sell_ctx,
     cfg=cfg,

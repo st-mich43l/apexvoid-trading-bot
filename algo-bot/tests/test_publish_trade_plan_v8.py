@@ -217,7 +217,7 @@ def _reaction_match(**overrides) -> StrategyMatch:
     event_ts=str(now - 60),
     issued_at=now - 60,
     expires_at=now + 900,
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     strategy_mode="with_bias",
     direction="SELL",
     key_level=4040.23,
@@ -544,7 +544,7 @@ async def test_confirmed_trendline_sell_below_zone_waits_for_fresh_retest():
   match = _reaction_match(
     match_id="incident-a-trendline",
     thesis_id="incident-a-thesis",
-    strategy="Trendline Reaction",
+    strategy="Trendline",
     family="trendline",
     reaction_type="rejection_choch",
     key_level=4044.98,
@@ -584,7 +584,7 @@ async def test_outside_reaction_routes_to_waiting_retest_via_v8(
   match = _reaction_match(
     match_id="incident-a-preflight",
     thesis_id="incident-a-preflight-thesis",
-    strategy="Trendline Reaction",
+    strategy="Trendline",
     family="trendline",
     reaction_type="rejection_choch",
     entry_low=4043.80,
@@ -744,7 +744,7 @@ async def test_retest_episode_finds_fresh_m1_and_publishes_in_same_cycle():
   match = _reaction_match(
     match_id="incident-a-retest",
     thesis_id="incident-a-retest-thesis",
-    strategy="Trendline Reaction",
+    strategy="Trendline",
     family="trendline",
     reaction_type="rejection_choch",
     key_level=4044.98,
@@ -875,7 +875,7 @@ async def test_reaction_expiry_is_terminal_while_waiting_retest():
   match = _reaction_match(
     match_id="expiry-waiting-retest",
     thesis_id="expiry-waiting-retest-thesis",
-    strategy="Trendline Reaction",
+    strategy="Trendline",
     family="trendline",
     reaction_type="rejection_choch",
     entry_low=4043.80,
@@ -978,7 +978,7 @@ async def test_far_waits_then_executes_only_on_zone_reentry_without_m1():
   match = _reaction_match(
     match_id="trigger-left-zone",
     thesis_id="trigger-left-zone-thesis",
-    strategy="Trendline Reaction",
+    strategy="Trendline",
     family="trendline",
     reaction_type="rejection_choch",
     key_level=4044.98,

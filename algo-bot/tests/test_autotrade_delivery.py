@@ -242,36 +242,36 @@ def test_compact_route_line_never_shows_a_preflight_pass_through_code():
   # "preflight_allowed", which then sits there as the displayed "why" on
   # every later status check even though it explains nothing (it means
   # "passed", not "here's what happened"). Confirmed live: a card reading
-  # "Key Level Reaction · waiting · preflight allowed" told the owner
+  # "Key Level · waiting · preflight allowed" told the owner
   # nothing about why nothing had executed yet.
   line = _compact_route_line({
-    "strategy": "Key Level Reaction",
+    "strategy": "Key Level",
     "status": "waiting",
     "preflight_reason_code": "preflight_allowed",
   })
 
-  assert line == "Key Level Reaction · waiting"
+  assert line == "Key Level · waiting"
 
 
 def test_compact_route_line_still_shows_a_genuine_rejection_reason():
   line = _compact_route_line({
-    "strategy": "Key Level Reaction",
+    "strategy": "Key Level",
     "status": "blocked",
     "reason_code": "opposing_entry_contained",
   })
 
-  assert line == "Key Level Reaction · blocked · opposing_entry_contained"
+  assert line == "Key Level · blocked · opposing_entry_contained"
 
 
 def test_compact_route_line_prefers_reason_code_over_stale_preflight_code():
   line = _compact_route_line({
-    "strategy": "Key Level Reaction",
+    "strategy": "Key Level",
     "status": "blocked",
     "reason_code": "policy_reward_risk_insufficient",
     "preflight_reason_code": "preflight_allowed",
   })
 
-  assert line == "Key Level Reaction · blocked · policy_reward_risk_insufficient"
+  assert line == "Key Level · blocked · policy_reward_risk_insufficient"
 
 
 @pytest.mark.asyncio
@@ -288,7 +288,7 @@ async def test_mark_forming_card_position_activated_rewrites_head_and_stop(
   original = "\n".join([
     "🔎 <b>XAU M5 · SETUP FORMING</b>",
     "​",
-    "🟢 <b>BUY · Key Level Reaction</b> · ⭐⭐",
+    "🟢 <b>BUY · Key Level</b> · ⭐⭐",
     "",
     "📍 <b>Trade area</b>",
     "• <b>Entry zone:</b> <b>3399.00–3401.00</b>",

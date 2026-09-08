@@ -82,7 +82,7 @@ def normalize_setup_type(raw: str | None) -> str | None:
   text = str(raw).strip()
   if not text:
     return None
-  # Scale-in tags: "Key Level Reaction · add_momentum"
+  # Scale-in tags: "Key Level · add_momentum"
   base = text.split("·", 1)[0].strip()
   resolved = resolve_strategy(base)
   if resolved is not None:

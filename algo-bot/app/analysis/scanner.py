@@ -446,9 +446,9 @@ def _arbitrate_flip_zone_matches(
   *,
   overlap_threshold: float,
 ) -> tuple[list[StrategyMatch], list[dict[str, str]]]:
-  """Keep Key Level Reaction over a same-bar overlapping Flip Zone."""
+  """Keep Key Level over a same-bar overlapping Flip Zone."""
   key_levels = [
-    item for item in matches if item.strategy == "Key Level Reaction"
+    item for item in matches if item.strategy == "Key Level"
   ]
   kept: list[StrategyMatch] = []
   events: list[dict[str, str]] = []
@@ -3183,7 +3183,7 @@ async def _handle_event(
       await increment_metric(client, reason, symbol=symbol)
   for result in detected:
     metric_name = {
-      "Key Level Reaction": "key_level_reaction_detected",
+      "Key Level": "key_level_reaction_detected",
       "Zone Reaction": "zone_reaction_detected",
       "Flip Zone": "flip_zone_reaction_detected",
       "Demand Zone Reaction": "demand_zone_reaction_detected",
@@ -3194,8 +3194,8 @@ async def _handle_event(
       "iFVG": "technique_ifvg_detected",
       "CRT": "technique_crt_detected",
       "Confluence Zone": "confluence_zone_detected",
-      "Session Level Reaction": "session_level_reaction_detected",
-      "Trendline Reaction": "trendline_reaction_detected",
+      "Session Level": "session_level_reaction_detected",
+      "Trendline": "trendline_reaction_detected",
     }.get(result.setup)
     if metric_name:
       await increment_metric(client, metric_name, symbol=symbol)

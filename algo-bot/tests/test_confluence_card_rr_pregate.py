@@ -150,7 +150,7 @@ async def test_one_card_and_one_setup_per_merged_zone(monkeypatch):
     confluence=4,
   )
   key = _result(
-    setup="Key Level Reaction",
+    setup="Key Level",
     direction="SELL",
     low=4101.8,
     high=4102.4,
@@ -233,7 +233,7 @@ def test_six_price_same_side_cluster_merges_before_ambiguity_gate(monkeypatch):
   ctx = _ctx(price=4103.0, atr=2.0)
   raw = [
     _result(
-      setup="Key Level Reaction", direction="SELL",
+      setup="Key Level", direction="SELL",
       low=4100.0, high=4101.5, structural_id="key-six",
       source="key_level", kind="resistance", confluence=5,
     ),
@@ -293,7 +293,7 @@ async def test_distinct_same_side_zones_still_form_two_cards(monkeypatch):
       source="supply_demand", kind="demand",
     ),
     _result(
-      setup="Key Level Reaction", direction="BUY",
+      setup="Key Level", direction="BUY",
       low=4099.8, high=4100.4, structural_id="key-a",
       source="key_level", kind="support",
     ),
@@ -303,7 +303,7 @@ async def test_distinct_same_side_zones_still_form_two_cards(monkeypatch):
       source="supply_demand", kind="demand",
     ),
     _result(
-      setup="Key Level Reaction", direction="BUY",
+      setup="Key Level", direction="BUY",
       low=4110.8, high=4111.4, structural_id="key-b",
       source="key_level", kind="support",
     ),

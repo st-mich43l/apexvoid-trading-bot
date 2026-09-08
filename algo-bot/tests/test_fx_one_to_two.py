@@ -350,21 +350,21 @@ def test_fx_reaction_stop_envelopes_diverge_while_gold_uses_structure_band():
 
   cfg = _load_production_example().config
   eurusd_min, eurusd_max, eurusd_measured = stop_bounds_for_reaction_room(
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     primary_tp_pips=50,
     pip_size=0.0001,
     cfg=cfg,
     symbol="EURUSD",
   )
   gbpjpy_min, gbpjpy_max, gbpjpy_measured = stop_bounds_for_reaction_room(
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     primary_tp_pips=50,
     pip_size=0.01,
     cfg=cfg,
     symbol="GBPJPY",
   )
   gold_min, gold_max, gold_measured = stop_bounds_for_reaction_room(
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     primary_tp_pips=90,
     pip_size=0.1,
     cfg=cfg,
@@ -710,7 +710,7 @@ def test_root_card_r_multiples_use_the_configured_ladder_not_card_prices(
 
   xau_match = replace(
     _fx_match("XAU"),
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     direction="SELL",
     entry_low=4383.0,
     entry_high=4388.0,

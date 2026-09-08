@@ -34,7 +34,7 @@ def _key_level_result(
   structural_id: str = "kl-narrow",
 ) -> DetectionResult:
   return DetectionResult(
-    setup="Key Level Reaction",
+    setup="Key Level",
     direction=direction,
     key_level=(low + high) / 2,
     entry_zone=Zone(low, high, "demand" if direction == "BUY" else "supply"),

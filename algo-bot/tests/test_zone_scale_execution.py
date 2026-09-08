@@ -48,7 +48,7 @@ def _cfg(**overrides):
 
 def _policy_match(**overrides):
   values = {
-    "strategy": "Key Level Reaction",
+    "strategy": "Key Level",
     "direction": "SELL",
     "entry_low": 4035.0,
     "entry_high": 4036.5,
@@ -69,9 +69,9 @@ def _policy_match(**overrides):
 @pytest.mark.parametrize(
   "strategy",
   [
-    "Key Level Reaction",
-    "Session Level Reaction",
-    "Trendline Reaction",
+    "Key Level",
+    "Session Level",
+    "Trendline",
   ],
 )
 def test_key_session_trendline_use_market_with_limit_scale(strategy):
@@ -119,9 +119,9 @@ def test_all_reaction_families_use_the_zone_scale_ladder():
   ):
     test_demand_supply_keep_zone_scale_limit_ladder(strategy)
   for strategy in (
-    "Key Level Reaction",
-    "Session Level Reaction",
-    "Trendline Reaction",
+    "Key Level",
+    "Session Level",
+    "Trendline",
   ):
     test_key_session_trendline_use_market_with_limit_scale(strategy)
 
@@ -195,7 +195,7 @@ def test_buy_zone_already_inside_anchors_first_leg_at_current_price():
 def test_key_session_trendline_outside_zone_keeps_limit_ladder():
   # Approaching from outside must not fire L1 market; resting DCA ladder.
   evaluation = evaluate_execution_policy(
-    _policy_match(strategy="Key Level Reaction", direction="SELL"),
+    _policy_match(strategy="Key Level", direction="SELL"),
     spot_price=4034.5,
     executable_quote=4034.5,
     regime="range",

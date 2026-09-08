@@ -42,7 +42,7 @@ def test_entry_position_clamped_while_raw_is_not():
 
 def _row(**overrides):
   base = {
-    "strategy": "Key Level Reaction",
+    "strategy": "Key Level",
     "direction": "BUY",
     "result_pips": 10.0,
     "win": True,
@@ -113,7 +113,7 @@ def test_scorecard_nulls_rates_under_min_n_but_keeps_expectancy():
 def _detection(direction: str, lo: float, hi: float) -> DetectionResult:
   side = "demand" if direction == "BUY" else "supply"
   return DetectionResult(
-    setup="Key Level Reaction",
+    setup="Key Level",
     direction=direction,
     key_level=(lo + hi) / 2.0,
     entry_zone=Zone(lo, hi, side, source="level", score=0.0),

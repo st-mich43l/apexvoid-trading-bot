@@ -212,8 +212,8 @@ def test_manual_entry_card_shows_canonical_setup_and_confluence():
   vip = broadcast.render_entry(signal, "vip")
   public = broadcast.render_entry(signal, "public")
 
-  assert "🏷 Setup:  <b>Key Level Reaction</b>  ⭐⭐" in vip
-  assert "🏷 Setup:  <b>Key Level Reaction</b>  ⭐⭐" in public
+  assert "🏷 Setup:  <b>Key Level</b>  ⭐⭐" in vip
+  assert "🏷 Setup:  <b>Key Level</b>  ⭐⭐" in public
   assert "#7" not in public
 
 

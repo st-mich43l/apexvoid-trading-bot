@@ -263,7 +263,7 @@ def test_mad_gate_strategy_for_setup_maps_technique_names():
   assert mad_gate_strategy_for_setup("Liquidity Sweep") == (
     "liquidity_sweep_reversal"
   )
-  assert mad_gate_strategy_for_setup("Key Level Reaction") == (
+  assert mad_gate_strategy_for_setup("Key Level") == (
     "structural_reaction"
   )
   assert mad_gate_strategy_for_setup("Order Block") == "structural_reaction"
@@ -388,7 +388,7 @@ async def test_evaluate_technique_mad_gate_blocks_key_level_on_expand(client):
   allowed, reason, measured = await evaluate_technique_mad_gate(
     client,
     symbol="GBPJPY",
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     cfg=cfg,
     family="reaction",
   )

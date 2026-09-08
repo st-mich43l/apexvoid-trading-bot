@@ -37,7 +37,7 @@ def _match(**overrides) -> StrategyMatch:
     event_ts=str(now - 60),
     issued_at=now - 60,
     expires_at=now + 600,
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     strategy_mode="with_bias",
     direction="SELL",
     key_level=4040.23,
