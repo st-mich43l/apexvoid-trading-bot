@@ -514,7 +514,16 @@ public sealed record AutoTradeEvent(
   int? ConfluenceV1 = null,
   int? ConfluenceV2 = null,
   double? ConfluenceV2Raw = null,
-  string? ConfluenceScoringVersion = null
+  string? ConfluenceScoringVersion = null,
+  // 2026-09 (owner: "collect data 2 weeks to see if order that has good
+  // math quality can process well than other or not") - republished
+  // from plan.Analysis.MathFibRatio etc. (TradePlan.cs) so Postgres
+  // (auto_trade_fills, store.py) can correlate detection-time math
+  // telemetry with the eventual fill/outcome.
+  double? MathFibRatio = null,
+  double? MathVelocity = null,
+  double? MathAcceleration = null,
+  double? MathPd = null
 );
 
 public sealed record AutoTradeGroupPlan(

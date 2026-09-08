@@ -95,6 +95,17 @@ class TradePlanAnalysis:
   confluence_v2: int | None = None
   confluence_v2_raw: float | None = None
   confluence_scoring_version: str | None = None
+  # 2026-09 (owner: "collect data 2 weeks to see if order that has good
+  # math quality can process well than other or not") - carried from
+  # StrategyMatch (already populated at detection time, see
+  # detectors.py/scanner.py) through to the plan so worker.py can persist
+  # them alongside the eventual fill/outcome in Postgres
+  # (auto_trade_fills/auto_trade_results) for later correlation. Purely
+  # descriptive telemetry, never a gate.
+  math_fib_ratio: float | None = None
+  math_velocity: float | None = None
+  math_acceleration: float | None = None
+  math_pd: float | None = None
 
   def to_dict(self) -> dict:
     return {
@@ -116,6 +127,10 @@ class TradePlanAnalysis:
       "confluence_v2": self.confluence_v2,
       "confluence_v2_raw": self.confluence_v2_raw,
       "confluence_scoring_version": self.confluence_scoring_version,
+      "math_fib_ratio": self.math_fib_ratio,
+      "math_velocity": self.math_velocity,
+      "math_acceleration": self.math_acceleration,
+      "math_pd": self.math_pd,
     }
 
   @classmethod
@@ -150,6 +165,22 @@ class TradePlanAnalysis:
       confluence_scoring_version=(
         None if data.get("confluence_scoring_version") is None
         else str(data["confluence_scoring_version"])
+      ),
+      math_fib_ratio=(
+        None if data.get("math_fib_ratio") is None
+        else float(data["math_fib_ratio"])
+      ),
+      math_velocity=(
+        None if data.get("math_velocity") is None
+        else float(data["math_velocity"])
+      ),
+      math_acceleration=(
+        None if data.get("math_acceleration") is None
+        else float(data["math_acceleration"])
+      ),
+      math_pd=(
+        None if data.get("math_pd") is None
+        else float(data["math_pd"])
       ),
     )
 
