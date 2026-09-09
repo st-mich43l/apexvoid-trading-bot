@@ -3404,16 +3404,19 @@ public sealed class AutoTradeEngine(
 
   /// <summary>
   /// Two entry-leg prices spanning the owner's zone: Shallow (near edge,
-  /// most likely to fill) and Deep (far edge, best price, least likely to
-  /// fill). Owner 2026-09-08: dropped the former Mid leg down to a plain
-  /// 2-leg 80/20 ladder (<see cref="ManualEntryLegRatios"/>) - a separate
+  /// most likely to fill) and Deep (best price, least likely to fill).
+  /// Owner 2026-09-08: dropped the former Mid leg down to a plain 2-leg
+  /// 80/20 ladder (<see cref="ManualEntryLegRatios"/>) - a separate
   /// fixed-size risk leg near the stop (<see cref="ManualAlgoRiskLegPrice"/>)
   /// replaces Mid's old role instead of splitting the same sized volume
   /// three ways.
   ///
-  /// A real typed range (zone.Low != zone.High) is used directly - Shallow
-  /// is whichever edge is closer to a profitable fill (High for BUY, Low
-  /// for SELL), Deep the opposite edge.
+  /// Owner 2026-09-09: Deep must not rest at the zone's far edge - that's
+  /// the single least-likely-to-fill price in the whole typed range. A real
+  /// typed range (zone.Low != zone.High) places Deep at the zone's own
+  /// midpoint instead, keeping it inside the typed range while still
+  /// meaningfully deeper than Shallow (the near edge, High for BUY, Low for
+  /// SELL, unchanged).
   ///
   /// A degenerate/single-price zone (zone.Low == zone.High, e.g. the owner
   /// typed one number twice) has no real span to split, so Deep is derived
@@ -3433,7 +3436,7 @@ public sealed class AutoTradeEngine(
     if (zone.Low != zone.High)
     {
       shallow = direction == TradeDirection.Buy ? zone.High : zone.Low;
-      deep = direction == TradeDirection.Buy ? zone.Low : zone.High;
+      deep = (zone.Low + zone.High) / 2m;
     }
     else
     {
