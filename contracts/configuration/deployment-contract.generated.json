@@ -278,6 +278,7 @@
       "execution.technique.reaction_require_publish_window",
       "execution.technique.require_sweep_body",
       "execution.technique.scalp_require_killzone",
+      "execution.technique.selective_session_min_confluence",
       "execution.technique.strict_premium_discount",
       "execution.technique.strict_premium_discount_archetypes",
       "execution.trend.hard_entry_drift_pips",
@@ -549,7 +550,7 @@
     "XAU_ZONE_PREFERRED_MAX_WIDTH_PRICE": "instruments.XAU.analysis.zones.preferred_maximum_width_price",
     "XAU_ZONE_PREFERRED_MIN_WIDTH_PRICE": "instruments.XAU.analysis.zones.preferred_minimum_width_price"
   },
-  "fingerprint": "734a6325ae3bf9c41917fe74dcd4cee5b357a81b89162fe645a02b3948a94140",
+  "fingerprint": "75ffa663045c27a852d99023853af401981c2058c53c583369b9129a9accdb9d",
   "instrument_schema": {
     "active_projection_symbol": "XAU",
     "optional": [

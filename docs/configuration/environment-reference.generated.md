@@ -2,8 +2,8 @@
 
 > Generated from the canonical configuration catalog (`app.configuration.environment_contract`). Do not edit manually.
 
-- Contract fingerprint: `734a6325ae3bf9c41917fe74dcd4cee5b357a81b89162fe645a02b3948a94140`
-- Environment-bound fields: `512`
+- Contract fingerprint: `75ffa663045c27a852d99023853af401981c2058c53c583369b9129a9accdb9d`
+- Environment-bound fields: `513`
 - Deprecated aliases: `21`
 
 Secret values are never emitted; secret defaults render as `<redacted>`.
@@ -199,6 +199,7 @@ Secret values are never emitted; secret defaults render as `<redacted>`.
 | `AUTO_TRADE_TECHNIQUE_REQUIRE_SWEEP_BODY` | `execution.technique.require_sweep_body` | `bool` | no | no | — | `True` |
 | `AUTO_TRADE_TECHNIQUE_SCALP_REQUIRE_KILLZONE` | `execution.technique.scalp_require_killzone` | `bool` | no | no | — | `True` |
 | `AUTO_TRADE_TECHNIQUE_SD_ENABLED` | `strategies.technique.sd.enabled` | `bool` | no | no | — | `True` |
+| `AUTO_TRADE_TECHNIQUE_SELECTIVE_SESSION_MIN_CONFLUENCE` | `execution.technique.selective_session_min_confluence` | `int` | no | no | — | `0` |
 | `AUTO_TRADE_TECHNIQUE_STRICT_PREMIUM_DISCOUNT` | `execution.technique.strict_premium_discount` | `bool` | no | no | — | `True` |
 | `AUTO_TRADE_TELEGRAM_DELETE_ROOT_ON_TERMINAL` | `delivery.telegram.delete_root_on_terminal` | `bool` | no | no | — | `False` |
 | `AUTO_TRADE_TELEGRAM_SINGLE_ROOT_CARD` | `delivery.telegram.single_root_card` | `bool` | no | no | — | `True` |

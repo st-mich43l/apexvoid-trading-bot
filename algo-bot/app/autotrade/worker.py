@@ -4723,10 +4723,12 @@ async def _publish_trade_plan_v8(
   # Technique pack: pair reaction windows for non-scalp; HFS killzone for scalps.
   from app.autotrade.killzone import (
     confirmation_is_sweep_body,
+    evaluate_instrument_session_quality,
     evaluate_killzone_gate,
     evaluate_reaction_publish_window,
     reaction_require_killzone,
     reaction_require_publish_window,
+    session_quality_minimum_confluence,
     technique_enforce,
     technique_require_sweep_body,
   )
@@ -4734,16 +4736,42 @@ async def _publish_trade_plan_v8(
   inst = instrument_geometry.instrument_runtime(symbol)
   tech = getattr(inst.execution, "technique", None)
   enforce_pack = technique_enforce(inst)
+  spot_ts = int(getattr(spot, "ts", 0) or int(datetime.now(timezone.utc).timestamp()))
+  session_quality = evaluate_instrument_session_quality(ts=spot_ts, cfg=inst)
+  selective_minimum = session_quality_minimum_confluence(inst, session_quality)
+  if selective_minimum and match.confluence < selective_minimum:
+    log.info(
+      "v8 publish blocked selective session quality symbol=%s match_id=%s "
+      "confluence=%s required=%s utc_hour=%s windows=%s",
+      symbol,
+      match.match_id,
+      match.confluence,
+      selective_minimum,
+      session_quality.utc_hour,
+      session_quality.measured["reaction_publish_windows"],
+    )
+    await _record_v8_build_rejected(
+      client,
+      symbol,
+      match,
+      "selective_session_low_confluence",
+      "session quality is selective; strategy confluence is below its floor",
+      {
+        "confluence": match.confluence,
+        "minimum_confluence": selective_minimum,
+        **session_quality.measured,
+      },
+    )
+    return None
   candidate_is_scalp = is_scalp_strategy(
     str(getattr(match, "strategy", "") or ""),
     family=str(getattr(match, "strategy_family", "") or getattr(match, "family", "") or "")
     or None,
     strategy_mode=str(getattr(match, "strategy_mode", "") or "") or None,
   )
-  spot_ts = int(getattr(spot, "ts", 0) or int(datetime.now(timezone.utc).timestamp()))
   if candidate_is_scalp:
-    # Optional clock sterilizer (prod off). Discovery permits are structure/
-    # technique driven; weak volume/momentum is rejected by analysis.
+    # Optional global HFS clock sterilizer (prod off). Pair session quality is
+    # assessed above, but it is deliberately not a time-of-day hard gate.
     require_kz = False if tech is None else bool(
       getattr(tech, "scalp_require_killzone", False),
     )
@@ -8711,5 +8739,4 @@ async def _recover_unfinished_strategy_matches(
           "strategy_match_ready_pending_recovered",
           symbol=symbol,
         )
-
 

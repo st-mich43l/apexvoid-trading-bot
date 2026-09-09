@@ -132,8 +132,8 @@
     "zone_reconcile_mode": "shadow",
     "zone_scale_undersized_policy": "single_entry"
   },
-  "contract_fingerprint": "734a6325ae3bf9c41917fe74dcd4cee5b357a81b89162fe645a02b3948a94140",
-  "effective_configuration_fingerprint": "f89b719da5c1bfa59e82331c1590111326d9c27641a61df7bb8e40e4071f9410",
+  "contract_fingerprint": "75ffa663045c27a852d99023853af401981c2058c53c583369b9129a9accdb9d",
+  "effective_configuration_fingerprint": "4196a2fddbb27f2e9c55143e1a249cb2fb7f9106b9a0fe0a3449a8dd6894878a",
   "feed": {
     "backfill_bars": 1500,
     "bar_quality_lookback": 6,
@@ -534,6 +534,7 @@
           "reaction_require_publish_window": false,
           "require_sweep_body": false,
           "scalp_require_killzone": false,
+          "selective_session_min_confluence": 3,
           "strict_premium_discount": true,
           "strict_premium_discount_archetypes": "reversal,range_reversion"
         },
@@ -804,6 +805,12 @@
             "secret": false,
             "source_kind": "instrument_override",
             "source_name": "instruments.EURUSD.execution_pack"
+          },
+          {
+            "path": "execution.technique.selective_session_min_confluence",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.EURUSD.overrides"
           },
           {
             "path": "execution.trend.stop_max_pips",
@@ -1482,11 +1489,12 @@
           "london_window_hours": 3,
           "mad_hard_gate_enabled": false,
           "ny_window_hours": 3,
-          "reaction_publish_windows": "0-11",
+          "reaction_publish_windows": "7-11",
           "reaction_require_killzone": false,
           "reaction_require_publish_window": false,
           "require_sweep_body": false,
           "scalp_require_killzone": false,
+          "selective_session_min_confluence": 3,
           "strict_premium_discount": true,
           "strict_premium_discount_archetypes": "reversal,range_reversion"
         },
@@ -1771,6 +1779,12 @@
             "source_name": "instruments.GBPJPY.execution_pack"
           },
           {
+            "path": "execution.technique.selective_session_min_confluence",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.GBPJPY.overrides"
+          },
+          {
             "path": "execution.trend.stop_max_pips",
             "secret": false,
             "source_kind": "instrument_override",
@@ -1790,12 +1804,6 @@
           },
           {
             "path": "strategies.reaction.key_level.require_explicit_role",
-            "secret": false,
-            "source_kind": "instrument_override",
-            "source_name": "instruments.GBPJPY.overrides"
-          },
-          {
-            "path": "strategies.reaction.key_level.require_killzone",
             "secret": false,
             "source_kind": "instrument_override",
             "source_name": "instruments.GBPJPY.overrides"
@@ -1944,7 +1952,7 @@
             "min_sell_zone_score": "0",
             "require_explicit_role": true,
             "require_htf_alignment": false,
-            "require_killzone": true
+            "require_killzone": false
           },
           "liquidity_reversal": {
             "enabled": true
@@ -2470,6 +2478,7 @@
           "reaction_require_publish_window": false,
           "require_sweep_body": false,
           "scalp_require_killzone": false,
+          "selective_session_min_confluence": 3,
           "strict_premium_discount": true,
           "strict_premium_discount_archetypes": "reversal,range_reversion"
         },
@@ -2740,6 +2749,12 @@
             "secret": false,
             "source_kind": "instrument_override",
             "source_name": "instruments.GBPUSD.execution_pack"
+          },
+          {
+            "path": "execution.technique.selective_session_min_confluence",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.GBPUSD.overrides"
           },
           {
             "path": "execution.trend.stop_max_pips",
@@ -3418,11 +3433,12 @@
           "london_window_hours": 3,
           "mad_hard_gate_enabled": false,
           "ny_window_hours": 3,
-          "reaction_publish_windows": "0-11,13-16",
+          "reaction_publish_windows": "0-7,13-16",
           "reaction_require_killzone": false,
           "reaction_require_publish_window": false,
           "require_sweep_body": false,
           "scalp_require_killzone": false,
+          "selective_session_min_confluence": 3,
           "strict_premium_discount": true,
           "strict_premium_discount_archetypes": "reversal,range_reversion"
         },
@@ -3693,6 +3709,12 @@
             "secret": false,
             "source_kind": "instrument_override",
             "source_name": "instruments.USDJPY.execution_pack"
+          },
+          {
+            "path": "execution.technique.selective_session_min_confluence",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.USDJPY.overrides"
           },
           {
             "path": "execution.trend.stop_max_pips",
@@ -4392,6 +4414,7 @@
           "reaction_require_publish_window": false,
           "require_sweep_body": false,
           "scalp_require_killzone": false,
+          "selective_session_min_confluence": 0,
           "strict_premium_discount": true,
           "strict_premium_discount_archetypes": "reversal,range_reversion"
         },
@@ -5220,6 +5243,7 @@
           "reaction_require_publish_window": false,
           "require_sweep_body": false,
           "scalp_require_killzone": false,
+          "selective_session_min_confluence": 3,
           "strict_premium_discount": true,
           "strict_premium_discount_archetypes": "reversal,range_reversion"
         },
@@ -5483,6 +5507,12 @@
             "secret": false,
             "source_kind": "instrument_override",
             "source_name": "instruments.EURUSD.execution_pack"
+          },
+          {
+            "path": "execution.technique.selective_session_min_confluence",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.EURUSD.overrides"
           },
           {
             "path": "execution.trend.stop_max_pips",
@@ -6031,11 +6061,12 @@
           "london_window_hours": 3,
           "mad_hard_gate_enabled": false,
           "ny_window_hours": 3,
-          "reaction_publish_windows": "0-11",
+          "reaction_publish_windows": "7-11",
           "reaction_require_killzone": false,
           "reaction_require_publish_window": false,
           "require_sweep_body": false,
           "scalp_require_killzone": false,
+          "selective_session_min_confluence": 3,
           "strict_premium_discount": true,
           "strict_premium_discount_archetypes": "reversal,range_reversion"
         },
@@ -6313,6 +6344,12 @@
             "source_name": "instruments.GBPJPY.execution_pack"
           },
           {
+            "path": "execution.technique.selective_session_min_confluence",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.GBPJPY.overrides"
+          },
+          {
             "path": "execution.trend.stop_max_pips",
             "secret": false,
             "source_kind": "instrument_override",
@@ -6332,12 +6369,6 @@
           },
           {
             "path": "strategies.reaction.key_level.require_explicit_role",
-            "secret": false,
-            "source_kind": "instrument_override",
-            "source_name": "instruments.GBPJPY.overrides"
-          },
-          {
-            "path": "strategies.reaction.key_level.require_killzone",
             "secret": false,
             "source_kind": "instrument_override",
             "source_name": "instruments.GBPJPY.overrides"
@@ -6485,7 +6516,7 @@
             "min_sell_zone_score": "0",
             "require_explicit_role": true,
             "require_htf_alignment": false,
-            "require_killzone": true
+            "require_killzone": false
           },
           "liquidity_reversal": {
             "enabled": true
@@ -6882,6 +6913,7 @@
           "reaction_require_publish_window": false,
           "require_sweep_body": false,
           "scalp_require_killzone": false,
+          "selective_session_min_confluence": 3,
           "strict_premium_discount": true,
           "strict_premium_discount_archetypes": "reversal,range_reversion"
         },
@@ -7145,6 +7177,12 @@
             "secret": false,
             "source_kind": "instrument_override",
             "source_name": "instruments.GBPUSD.execution_pack"
+          },
+          {
+            "path": "execution.technique.selective_session_min_confluence",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.GBPUSD.overrides"
           },
           {
             "path": "execution.trend.stop_max_pips",
@@ -7693,11 +7731,12 @@
           "london_window_hours": 3,
           "mad_hard_gate_enabled": false,
           "ny_window_hours": 3,
-          "reaction_publish_windows": "0-11,13-16",
+          "reaction_publish_windows": "0-7,13-16",
           "reaction_require_killzone": false,
           "reaction_require_publish_window": false,
           "require_sweep_body": false,
           "scalp_require_killzone": false,
+          "selective_session_min_confluence": 3,
           "strict_premium_discount": true,
           "strict_premium_discount_archetypes": "reversal,range_reversion"
         },
@@ -7961,6 +8000,12 @@
             "secret": false,
             "source_kind": "instrument_override",
             "source_name": "instruments.USDJPY.execution_pack"
+          },
+          {
+            "path": "execution.technique.selective_session_min_confluence",
+            "secret": false,
+            "source_kind": "instrument_override",
+            "source_name": "instruments.USDJPY.overrides"
           },
           {
             "path": "execution.trend.stop_max_pips",
@@ -8526,6 +8571,7 @@
           "reaction_require_publish_window": false,
           "require_sweep_body": false,
           "scalp_require_killzone": false,
+          "selective_session_min_confluence": 0,
           "strict_premium_discount": true,
           "strict_premium_discount_archetypes": "reversal,range_reversion"
         },

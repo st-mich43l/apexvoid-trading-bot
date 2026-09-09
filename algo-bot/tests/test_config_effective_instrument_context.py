@@ -136,7 +136,9 @@ def test_production_yaml_fx_live_executable_units():
   loaded = _load_production_example()
   cfg = loaded.config
   eurusd = cfg.for_instrument("EURUSD")
+  gbpusd = cfg.for_instrument("GBPUSD")
   gbpjpy = cfg.for_instrument("GBPJPY")
+  usdjpy = cfg.for_instrument("USDJPY")
   xau = cfg.for_instrument("XAU")
   assert eurusd.identity.rollout is InstrumentRollout.LIVE
   assert gbpjpy.identity.rollout is InstrumentRollout.LIVE
@@ -224,7 +226,13 @@ def test_production_yaml_fx_live_executable_units():
   assert int(eurusd.execution.entry.max_spread_pips) == 1
   assert int(gbpjpy.execution.entry.max_spread_pips) == 3
   assert eurusd.execution.technique.reaction_publish_windows == "7-11,13-16"
-  assert gbpjpy.execution.technique.reaction_publish_windows == "0-11"
+  assert gbpusd.execution.technique.reaction_publish_windows == "7-11,13-16"
+  assert gbpjpy.execution.technique.reaction_publish_windows == "7-11"
+  assert usdjpy.execution.technique.reaction_publish_windows == "0-7,13-16"
+  for instrument in (eurusd, gbpusd, gbpjpy, usdjpy):
+    assert instrument.execution.technique.reaction_require_publish_window is False
+    assert instrument.execution.technique.scalp_require_killzone is False
+    assert instrument.execution.technique.selective_session_min_confluence == 3
   assert eurusd.execution.technique.require_sweep_body is False
   assert gbpjpy.execution.technique.require_sweep_body is False
   assert int(eurusd.execution.activation.reaction_trigger_maximum_age_bars) == 3
@@ -238,28 +246,30 @@ def test_production_yaml_fx_live_executable_units():
   assert cfg.instrument_for_broker_symbol("EURUSD").identity.canonical_symbol == "EURUSD"
   assert cfg.instrument_for_broker_symbol("GBPJPY").identity.canonical_symbol == "GBPJPY"
   assert cfg.instruments.root["EURUSD"].reaction_session == "london_ny"
-  assert cfg.instruments.root["GBPJPY"].reaction_session == "tokyo_london"
-  assert cfg.instruments.root["USDJPY"].reaction_session == "tokyo_london_ny"
-  assert cfg.instruments.root["EURUSD"].overrides == {}
+  assert cfg.instruments.root["GBPJPY"].reaction_session == "london"
+  assert cfg.instruments.root["USDJPY"].reaction_session == "tokyo_ny"
+  assert cfg.instruments.root["EURUSD"].overrides == {
+    "execution.technique.selective_session_min_confluence": 3,
+  }
   # XAU's ATR is dollar-denominated, so the FX-tuned barrier_buffer_atr
   # (0.5) buffers away 40-115+ pips of real opposing-structure room -- an
   # escape-hatch override, same shape as GBPJPY/USDJPY below.
   assert cfg.instruments.root["XAU"].overrides == {
     "actionability.target_room.barrier_buffer_atr": 0.15,
   }
-  # GBPJPY/USDJPY each keep exactly one escape-hatch override for a leaf no
-  # pack composes: GBPJPY's event-cluster news guard, USDJPY's defended-
-  # level guard. Neither duplicates anything the packs already expand.
+  # The FX session quality floor is explicit instrument ownership. GBPJPY retains
+  # its event-cluster quality guard, and USDJPY its directional defended level.
   assert cfg.instruments.root["GBPJPY"].overrides == {
     "actionability.gates.event_cluster_guard_enabled": True,
     "analysis.levels.minimum_key_touches": 3,
     "strategies.reaction.key_level.require_explicit_role": True,
-    "strategies.reaction.key_level.require_killzone": True,
     "strategies.reaction.key_level.min_grade": "A",
+    "execution.technique.selective_session_min_confluence": 3,
   }
   assert set(cfg.instruments.root["USDJPY"].overrides) == {
     "risk.exposure.defended_levels",
     "risk.exposure.defended_level_buffer_price",
+    "execution.technique.selective_session_min_confluence",
   }
   assert cfg.instruments.root["EURUSD"].price_scale is not None
   assert cfg.instruments.root["GBPJPY"].price_scale is not None
