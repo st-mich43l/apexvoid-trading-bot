@@ -152,8 +152,8 @@ public sealed class EquityZoneLadderGroupE2ETests
     Assert.Single(client.MarketOrders);
     Assert.Single(client.LimitOrders);
     Assert.Equal(800, client.MarketOrders[0].Volume);
-    Assert.Equal(300, client.LimitOrders[0].Volume);
-    Assert.Equal(1_100, client.MarketOrders[0].Volume + client.LimitOrders[0].Volume);
+    Assert.Equal(400, client.LimitOrders[0].Volume);
+    Assert.Equal(1_200, client.MarketOrders[0].Volume + client.LimitOrders[0].Volume);
 
     var afterL1 = Assert.Single(runtime.TrackedStates);
     Assert.Equal(TradePlanRuntimeStage.PartiallyOpen, afterL1.Stage);
@@ -173,7 +173,7 @@ public sealed class EquityZoneLadderGroupE2ETests
     Assert.Equal(TradePlanRuntimeStage.FullyOpen, full.Stage);
     Assert.Equal(TradePlanGroupStages.FullyOpen, full.GroupStage);
     Assert.Equal(2, full.Legs!.Count(leg => leg.BrokerPositionId is not null));
-    Assert.Equal(1_100, full.TotalFilledVolume);
+    Assert.Equal(1_200, full.TotalFilledVolume);
     Assert.Equal(
       2,
       full.Legs!.Select(leg => leg.BrokerPositionId).Distinct().Count()
@@ -191,21 +191,20 @@ public sealed class EquityZoneLadderGroupE2ETests
     var l1Fill = Assert.Single(full.Legs!, leg => leg.LegId == "L1").FillPrice!.Value;
     var l2Fill = Assert.Single(full.Legs!, leg => leg.LegId == "L2").FillPrice!.Value;
     var expectedWeighted =
-      (l1Fill * 800m + l2Fill * 300m) / 1_100m;
+      (l1Fill * 800m + l2Fill * 400m) / 1_200m;
     Assert.Equal(expectedWeighted, full.GroupWeightedFillPrice);
 
-    // 8: TP1 closes pro-rata across both (40% of 1100 = 440 → step-snapped
-    // to 400 as L1 300 + L2 100; 320/120 are not multiples of StepVolume 100)
+    // 8: TP1 closes pro-rata (40% of 1200 = 480, step-snapped)
     await runtime.PollAsync(
       client, Symbol, new SpotPrice("XAU", 4089.90m, 4090.00m, 2), CancellationToken.None
     );
-    Assert.Equal(2, client.Closes.Count);
+    Assert.Single(client.Closes);
     Assert.Equal(400, client.Closes.Sum(item => item.Volume));
     Assert.Contains(
       store.Events,
       item => item.Type == "tp_booked"
         && item.Message.Contains("TP COMPLETED")
-        && item.TargetPips == 92
+        && item.TargetPips == 93
     );
     // L2 already filled before TP1, so no pending cancel is required.
     Assert.Empty(client.PendingOrders);
@@ -235,7 +234,7 @@ public sealed class EquityZoneLadderGroupE2ETests
       store.Events,
       item => item.Type == "position_closed"
         && item.Message.Contains("highest TP archived", StringComparison.OrdinalIgnoreCase)
-        && item.TargetPips == 92
+        && item.TargetPips == 93
     );
     Assert.Contains(
       store.Events,
