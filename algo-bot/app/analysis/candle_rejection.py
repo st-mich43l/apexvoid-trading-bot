@@ -14,8 +14,12 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.analysis.candle_geometry import CandleGeometry, atr_quality, clamp01, fraction_quality
-from app.analysis.structural_reaction_support import band_touched
 from app.scalping.math_features import safe_div
+
+# band_touched is imported lazily inside evaluate_rejection() below, not at
+# module level: structural_reaction_support.py now also imports from
+# candle_evidence.py (which imports this module), so a module-level import
+# here would create a circular import at package load time.
 
 # Provisional defaults (§29/§48) — carried forward from the pre-existing
 # hardcoded constants in m1_trigger.py where an equivalent concept already
@@ -238,6 +242,7 @@ def evaluate_rejection(
 
   zone_touch = True
   if zone_low is not None and zone_high is not None:
+    from app.analysis.structural_reaction_support import band_touched
     zone_touch = band_touched(
       {"low": geo.low, "high": geo.high}, float(zone_low), float(zone_high),
     )
