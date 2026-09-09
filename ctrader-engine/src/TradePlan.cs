@@ -67,7 +67,11 @@ public sealed record TradePlanAnalysis(
   double? MathFibRatio = null,
   double? MathVelocity = null,
   double? MathAcceleration = null,
-  double? MathPd = null
+  double? MathPd = null,
+  // v2 (2026-09) redefined MathAcceleration as a true per-bar second
+  // derivative (was a bare velocity delta) - distinguishes legacy (null/1)
+  // from v2 rows so replay/analysis never silently mixes the populations.
+  int? MathFeatureVersion = null
 );
 
 public sealed record TradePlanSourceStructure(

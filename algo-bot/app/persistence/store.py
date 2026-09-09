@@ -340,6 +340,12 @@ async def init_db() -> None:
       "ADD COLUMN IF NOT EXISTS math_acceleration DOUBLE PRECISION",
       "ALTER TABLE auto_trade_fills "
       "ADD COLUMN IF NOT EXISTS math_pd DOUBLE PRECISION",
+      # v2 (2026-09) redefined math_acceleration as a true per-bar second
+      # derivative (was a bare velocity delta) - this distinguishes legacy
+      # (NULL/1) rows from v2 rows so replay/analysis never silently mixes
+      # the two populations.
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS math_feature_version SMALLINT",
     ):
       await db.execute(stmt)
     await db.execute(
@@ -1228,10 +1234,11 @@ async def _ensure_fill_from_close_event(event: dict, group_id: str) -> None:
         setup_type, setup_type_raw, direction, entry_price, stop_pips, volume, filled_at,
         confluence_v1, confluence_v2, confluence_v2_raw,
         confluence_scoring_version,
-        math_fib_ratio, math_velocity, math_acceleration, math_pd
+        math_fib_ratio, math_velocity, math_acceleration, math_pd,
+        math_feature_version
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
-        $17, $18, $19, $20
+        $17, $18, $19, $20, $21
       )
       ON CONFLICT (position_id) DO NOTHING
       """,
@@ -1243,6 +1250,7 @@ async def _ensure_fill_from_close_event(event: dict, group_id: str) -> None:
       event.get("confluence_v2_raw"), event.get("confluence_scoring_version"),
       event.get("math_fib_ratio"), event.get("math_velocity"),
       event.get("math_acceleration"), event.get("math_pd"),
+      event.get("math_feature_version"),
     )
 
 
@@ -1283,10 +1291,11 @@ async def _record_auto_trade_fill(event: dict) -> None:
         setup_type, setup_type_raw, direction, entry_price, stop_pips, volume, filled_at,
         confluence_v1, confluence_v2, confluence_v2_raw,
         confluence_scoring_version,
-        math_fib_ratio, math_velocity, math_acceleration, math_pd
+        math_fib_ratio, math_velocity, math_acceleration, math_pd,
+        math_feature_version
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
-        $17, $18, $19, $20
+        $17, $18, $19, $20, $21
       )
       ON CONFLICT (position_id) DO UPDATE SET
         group_id = excluded.group_id,
@@ -1308,7 +1317,8 @@ async def _record_auto_trade_fill(event: dict) -> None:
         math_fib_ratio = COALESCE(excluded.math_fib_ratio, auto_trade_fills.math_fib_ratio),
         math_velocity = COALESCE(excluded.math_velocity, auto_trade_fills.math_velocity),
         math_acceleration = COALESCE(excluded.math_acceleration, auto_trade_fills.math_acceleration),
-        math_pd = COALESCE(excluded.math_pd, auto_trade_fills.math_pd)
+        math_pd = COALESCE(excluded.math_pd, auto_trade_fills.math_pd),
+        math_feature_version = COALESCE(excluded.math_feature_version, auto_trade_fills.math_feature_version)
       WHERE auto_trade_fills.correction_source IS NULL
       """,
       int(position_id), group_id, trade_key, stream,
@@ -1319,6 +1329,7 @@ async def _record_auto_trade_fill(event: dict) -> None:
       event.get("confluence_v2_raw"), event.get("confluence_scoring_version"),
       event.get("math_fib_ratio"), event.get("math_velocity"),
       event.get("math_acceleration"), event.get("math_pd"),
+      event.get("math_feature_version"),
     )
 
 

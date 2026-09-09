@@ -496,6 +496,7 @@ def build_trade_plan_from_strategy_match(
     math_velocity=match.math_velocity,
     math_acceleration=match.math_acceleration,
     math_pd=match.math_pd,
+    math_feature_version=match.math_feature_version,
   )
 
   source_structure = TradePlanSourceStructure(

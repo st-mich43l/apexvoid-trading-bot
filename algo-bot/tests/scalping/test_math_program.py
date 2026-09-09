@@ -154,7 +154,11 @@ def test_impulse_pullback_rejects_chase_at_extreme():
     continuation_trigger=True,
   )
   assert blocked.hard_block
-  assert blocked.reason_code in {"retracement_outside_band", "chasing_extreme"}
+  # retracement ~0.02 is caught by the dedicated chase-at-extreme check,
+  # which now runs before the generic band check regardless of
+  # retracement_min - previously always shadowed by retracement_outside_band
+  # under the default retracement_min=0.25, making this branch dead code.
+  assert blocked.reason_code == "chasing_extreme"
 
   ok = evaluate_impulse_pullback_continuation(
     direction="BUY",
@@ -167,6 +171,27 @@ def test_impulse_pullback_rejects_chase_at_extreme():
     continuation_trigger=True,
   )
   assert ok.allowed
+
+
+def test_impulse_pullback_measures_original_leg_not_current_retraced_price():
+  """2026-09 owner spec: origin 4500, extreme 4512, current 4506, ATR 10 ->
+  impulse 1.2 ATR, retracement 0.5. Must not be rejected as a 0.6 ATR impulse
+  (the bug: measuring |current-origin|/ATR instead of |extreme-origin|/ATR).
+  """
+  result = evaluate_impulse_pullback_continuation(
+    direction="BUY",
+    price=4506.0,
+    atr=10.0,
+    impulse_origin=4500.0,
+    impulse_extreme=4512.0,
+    barrier=4530.0,
+    target_min_price=1.0,
+    continuation_trigger=True,
+  )
+  assert result.features["impulse_atr"] == pytest.approx(1.2)
+  assert result.features["retracement"] == pytest.approx(0.5)
+  assert result.allowed
+  assert result.reason_code == "impulse_pullback_continuation_ok"
 
 
 def test_range_edge_dead_zone():

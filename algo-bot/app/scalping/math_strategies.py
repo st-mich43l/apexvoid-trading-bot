@@ -208,6 +208,14 @@ def evaluate_impulse_pullback_continuation(
     )
 
   retr = features.retracement
+  # Reject chase at the extreme (r ≈ 0) before the general band check so this
+  # specific failure mode always surfaces its own reason code - a fixed 0.05
+  # floor, independent of whatever retracement_min a caller configures, so it
+  # isn't silently shadowed by retracement_outside_band whenever
+  # retracement_min >= 0.05 (the production default is 0.25).
+  if retr is not None and retr <= 0.05:
+    return _block("impulse_pullback_continuation", "chasing_extreme", features, retracement=retr)
+
   if retr is None or not (retracement_min < retr < retracement_max):
     return _block(
       "impulse_pullback_continuation",
@@ -216,10 +224,6 @@ def evaluate_impulse_pullback_continuation(
       retracement=retr,
       band=(retracement_min, retracement_max),
     )
-
-  # Reject chase at the extreme (r ≈ 0).
-  if retr <= 0.05:
-    return _block("impulse_pullback_continuation", "chasing_extreme", features, retracement=retr)
 
   if not continuation_trigger:
     return _block("impulse_pullback_continuation", "waiting_continuation_trigger", features)

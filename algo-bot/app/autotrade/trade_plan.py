@@ -106,6 +106,7 @@ class TradePlanAnalysis:
   math_velocity: float | None = None
   math_acceleration: float | None = None
   math_pd: float | None = None
+  math_feature_version: int | None = None
 
   def to_dict(self) -> dict:
     return {
@@ -131,6 +132,7 @@ class TradePlanAnalysis:
       "math_velocity": self.math_velocity,
       "math_acceleration": self.math_acceleration,
       "math_pd": self.math_pd,
+      "math_feature_version": self.math_feature_version,
     }
 
   @classmethod
@@ -181,6 +183,10 @@ class TradePlanAnalysis:
       math_pd=(
         None if data.get("math_pd") is None
         else float(data["math_pd"])
+      ),
+      math_feature_version=(
+        None if data.get("math_feature_version") is None
+        else int(data["math_feature_version"])
       ),
     )
 

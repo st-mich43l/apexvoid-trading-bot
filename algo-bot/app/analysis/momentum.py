@@ -8,6 +8,13 @@ import pandas as pd
 
 from app.analysis.math_utils import atr_at, atr_series, body_fraction
 
+# v1 persisted `acceleration = v[t] - v[t-n]` (a velocity DELTA, not a true
+# per-bar acceleration). v2 (2026-09) divides by n for an actual second
+# derivative. Telemetry consumers must check `math_feature_version` before
+# comparing accelerations across the v1/v2 boundary - the two are not the
+# same unit and must never be silently mixed in replay/analysis.
+MATH_FEATURE_VERSION = 2
+
 
 @dataclass(frozen=True)
 class MomentumState:
@@ -53,7 +60,7 @@ def momentum_state(
   bull_threshold: float = 0.15,
   bear_threshold: float = -0.15,
 ) -> MomentumState:
-  """Discrete price derivatives: v = ΔC/(n·ATR), a = Δv."""
+  """Discrete price derivatives: v = ΔC/(n·ATR), a = Δv/n (per-bar, v2)."""
   n = max(1, int(lookback))
   if df is None or len(df) < 2:
     return MomentumState("neutral", 0.0, 0.0, n)
@@ -65,7 +72,7 @@ def momentum_state(
   a = 0.0
   if prev_idx >= n:
     v_prev = _velocity_at(closes, atr, prev_idx, n)
-    a = v - v_prev
+    a = (v - v_prev) / float(n)
   if v >= float(bull_threshold):
     state = "bull"
   elif v <= float(bear_threshold):
