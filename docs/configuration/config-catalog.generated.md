@@ -3,9 +3,9 @@
 > Generated from the typed `ApexVoidConfig` Catalog V2 schema. Do not edit manually.
 
 - Catalog version: `2`
-- Contract fingerprint: `feda5109b7e3af5cd6b2e23912b9bcfff4867d0e2aa0ea6d7666946f9e5d7d8b`
-- Document fingerprint: `5409121ab9af62e7cb15a0bf79b803531b6eb3e9e27fa814b5696e84162b6cea`
-- Items: `587`
+- Contract fingerprint: `011443c7d9892456006e5667e0553e2854e2a511855e774acac32531c8ff5b43`
+- Document fingerprint: `0b4d091a0e6ed5c11e4575e0ed793e0b376b8fd1dc1236ff5c9fe4a4322860ad`
+- Items: `620`
 - Runtime status: canonical-only; `app.core.config.runtime_config` is authoritative
 
 ## actionability
@@ -67,6 +67,39 @@
 | `analysis.breakout.accept_bars` | `BREAKOUT_ACCEPT_BARS` | `int` | `bars` | `configurable` | `2` |
 | `analysis.breakout.buffer_atr` | `BREAKOUT_BUFFER_ATR` | `float` | `atr` | `configurable` | `0.1` |
 | `analysis.breakout.max_age_bars` | `BREAKOUT_MAX_AGE_BARS` | `int` | `bars` | `configurable` | `6` |
+| `analysis.candle_confirmation.displacement.body.minimum_atr` | `—` | `float` | `atr` | `algorithm_constant` | `0.3` |
+| `analysis.candle_confirmation.displacement.body_dominance.minimum` | `—` | `float` | `fraction` | `algorithm_constant` | `0.55` |
+| `analysis.candle_confirmation.displacement.close_beyond_level.enabled` | `—` | `bool` | `boolean` | `algorithm_constant` | `true` |
+| `analysis.candle_confirmation.displacement.engulfing.enabled` | `—` | `bool` | `boolean` | `algorithm_constant` | `true` |
+| `analysis.candle_confirmation.displacement.engulfing.minimum_range_atr` | `—` | `float` | `atr` | `algorithm_constant` | `0.5` |
+| `analysis.candle_confirmation.displacement.range.minimum_atr` | `—` | `float` | `atr` | `algorithm_constant` | `0.4` |
+| `analysis.candle_confirmation.displacement.strong_close.buy_minimum_location` | `—` | `float` | `fraction` | `algorithm_constant` | `0.7` |
+| `analysis.candle_confirmation.displacement.strong_close.sell_maximum_location` | `—` | `float` | `fraction` | `algorithm_constant` | `0.3` |
+| `analysis.candle_confirmation.enabled` | `—` | `bool` | `boolean` | `algorithm_constant` | `true` |
+| `analysis.candle_confirmation.rejection.body.maximum_fraction` | `—` | `float` | `fraction` | `algorithm_constant` | `0.45` |
+| `analysis.candle_confirmation.rejection.close.buy_minimum_location` | `—` | `float` | `fraction` | `algorithm_constant` | `0.65` |
+| `analysis.candle_confirmation.rejection.close.sell_maximum_location` | `—` | `float` | `fraction` | `algorithm_constant` | `0.35` |
+| `analysis.candle_confirmation.rejection.reclaim.enabled` | `—` | `bool` | `boolean` | `algorithm_constant` | `true` |
+| `analysis.candle_confirmation.rejection.sweep.enabled` | `—` | `bool` | `boolean` | `algorithm_constant` | `true` |
+| `analysis.candle_confirmation.rejection.sweep.minimum_penetration_atr` | `—` | `float` | `atr` | `algorithm_constant` | `0.05` |
+| `analysis.candle_confirmation.rejection.wick.minimum_fraction` | `—` | `float` | `fraction` | `algorithm_constant` | `0.3` |
+| `analysis.candle_confirmation.rejection.wick.strong_fraction` | `—` | `float` | `fraction` | `algorithm_constant` | `0.55` |
+| `analysis.candle_confirmation.rejection.wick_to_body.minimum_ratio` | `—` | `float` | `ratio` | `algorithm_constant` | `1.5` |
+| `analysis.candle_confirmation.sequences.compression_break.breakout_body_minimum_atr` | `—` | `float` | `atr` | `algorithm_constant` | `0.3` |
+| `analysis.candle_confirmation.sequences.compression_break.maximum_average_body_fraction` | `—` | `float` | `fraction` | `algorithm_constant` | `0.35` |
+| `analysis.candle_confirmation.sequences.compression_break.maximum_bars` | `—` | `int` | `count` | `algorithm_constant` | `4` |
+| `analysis.candle_confirmation.sequences.compression_break.maximum_total_range_atr` | `—` | `float` | `atr` | `algorithm_constant` | `0.8` |
+| `analysis.candle_confirmation.sequences.compression_break.minimum_bars` | `—` | `int` | `count` | `algorithm_constant` | `2` |
+| `analysis.candle_confirmation.sequences.indecision.doji_body_fraction` | `—` | `float` | `fraction` | `algorithm_constant` | `0.1` |
+| `analysis.candle_confirmation.sequences.morning_evening_star.first_body_minimum_atr` | `—` | `float` | `atr` | `algorithm_constant` | `0.3` |
+| `analysis.candle_confirmation.sequences.morning_evening_star.middle_body_maximum_fraction` | `—` | `float` | `fraction` | `algorithm_constant` | `0.3` |
+| `analysis.candle_confirmation.sequences.morning_evening_star.recovery_minimum_ratio` | `—` | `float` | `ratio` | `algorithm_constant` | `0.5` |
+| `analysis.candle_confirmation.sequences.morning_evening_star.third_body_minimum_atr` | `—` | `float` | `atr` | `algorithm_constant` | `0.25` |
+| `analysis.candle_confirmation.synergy.maximum_bonus` | `—` | `float` | `score` | `algorithm_constant` | `0.12` |
+| `analysis.candle_confirmation.synergy.rejection_plus_displacement` | `—` | `float` | `score` | `algorithm_constant` | `0.08` |
+| `analysis.candle_confirmation.synergy.sequence_plus_displacement` | `—` | `float` | `score` | `algorithm_constant` | `0.06` |
+| `analysis.candle_confirmation.synergy.sweep_plus_reclaim` | `—` | `float` | `score` | `algorithm_constant` | `0.1` |
+| `analysis.candle_confirmation.version` | `—` | `int` | `count` | `algorithm_constant` | `2` |
 | `analysis.confluence.scoring_version` | `CONFLUENCE_SCORING_VERSION` | `str` | `enum` | `configurable` | `"v1"` |
 | `analysis.confluence.v2_mad_score_weight` | `CONFLUENCE_V2_MAD_WEIGHT` | `float` | `score` | `configurable` | `2.0` |
 | `analysis.confluence.v2_star_three_ratio` | `CONFLUENCE_V2_STAR_THREE_RATIO` | `float` | `ratio` | `configurable` | `0.585` |

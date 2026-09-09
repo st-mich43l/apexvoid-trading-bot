@@ -2,7 +2,7 @@
 
 > Generated from the canonical configuration catalog (`app.configuration.environment_contract`). Do not edit manually.
 
-- Contract fingerprint: `feda5109b7e3af5cd6b2e23912b9bcfff4867d0e2aa0ea6d7666946f9e5d7d8b`
+- Contract fingerprint: `011443c7d9892456006e5667e0553e2854e2a511855e774acac32531c8ff5b43`
 - Environment-bound fields: `520`
 - Deprecated aliases: `21`
 
