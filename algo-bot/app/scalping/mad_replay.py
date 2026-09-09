@@ -19,7 +19,14 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Sequence
 
-from app.analysis.mad_phase import PHASE_UNCLEAR, PHASES, mad_hard_gate
+from app.analysis.mad_phase import (
+  MAD_VERSION,
+  PHASE_UNCLEAR,
+  PHASES,
+  MadPhaseSnapshot,
+  compute_mad_affinity,
+  mad_hard_gate,
+)
 from app.scalping.replay import aggregate_report, calibration_report, split_dataset
 from app.scalping.replay_lab import LabEvent, load_lab_events, replay_lab_event
 
@@ -44,19 +51,37 @@ _STRATEGY_FOR_GATE: dict[str, str] = {
 }
 
 
-def resolve_event_mad_phase(event: LabEvent) -> str:
-  """Read stamped phase only — do not re-classify Asia box offline."""
+def resolve_event_mad_snapshot(event: LabEvent) -> MadPhaseSnapshot | None:
+  """Read a stamped MAD v2 snapshot only — never re-classify Asia box offline.
+
+  Fixtures carry the full ``MadPhaseSnapshot.to_dict()`` payload under
+  ``measured.mad``. Older fixtures that only stamped a bare
+  ``measured.mad.phase``/``measured.mad_phase`` string still resolve to a
+  phase-only snapshot (no direction/confidence — v1-shaped, mad_version
+  absent, so replay never silently credits v2 evidence a v1 fixture never
+  captured).
+  """
   measured = dict(event.measured or {})
   mad = measured.get("mad")
-  if isinstance(mad, dict) and mad.get("phase") is not None:
-    phase = str(mad.get("phase") or "").casefold()
-  elif measured.get("mad_phase") is not None:
-    phase = str(measured.get("mad_phase") or "").casefold()
-  else:
-    phase = PHASE_UNCLEAR
-  if phase not in PHASES:
-    return PHASE_UNCLEAR
-  return phase
+  if isinstance(mad, dict) and mad:
+    snapshot = MadPhaseSnapshot.from_dict(mad)
+    if snapshot.phase in PHASES:
+      return snapshot
+  legacy_phase = measured.get("mad_phase")
+  if legacy_phase is not None:
+    phase = str(legacy_phase or "").casefold()
+    if phase in PHASES:
+      return MadPhaseSnapshot(
+        phase=phase, asia=None, range_quality_atr=None, price_vs_asia=None,
+        sweep_side=None, reclaim=False, reason_code="",
+      )
+  return None
+
+
+def resolve_event_mad_phase(event: LabEvent) -> str:
+  """Read stamped phase only — do not re-classify Asia box offline."""
+  snapshot = resolve_event_mad_snapshot(event)
+  return snapshot.phase if snapshot is not None else PHASE_UNCLEAR
 
 
 def gate_strategy_key(strategy: str) -> str:
@@ -64,19 +89,72 @@ def gate_strategy_key(strategy: str) -> str:
   return _STRATEGY_FOR_GATE.get(key, key)
 
 
+def _affinity_bucket(snapshot: MadPhaseSnapshot | None, direction_score: float) -> str:
+  """aligned / neutral / opposed (§9/§18) — never derived from confidence or
+  strategy_score, only from whether the phase's own directional read agrees
+  with the candidate's direction."""
+  if snapshot is None or snapshot.phase == PHASE_UNCLEAR:
+    return "neutral"
+  directional = snapshot.manipulation_direction or snapshot.expansion_direction
+  if directional is None:
+    return "neutral"
+  return "aligned" if direction_score >= 1.0 else "opposed"
+
+
+def _confidence_bucket(confidence: float) -> str:
+  if confidence >= 0.66:
+    return "high"
+  if confidence >= 0.33:
+    return "medium"
+  return "low"
+
+
 def replay_lab_event_with_mad(event: LabEvent) -> dict[str, Any]:
-  """Paper replay row + MAD-1 would_gate counterfactual fields."""
+  """Paper replay row + MAD-1 would_gate counterfactual fields, plus MAD v2
+  continuous affinity/confidence and their aligned/neutral/opposed and
+  low/medium/high buckets (§9/§10/§18)."""
   row = replay_lab_event(event)
-  phase = resolve_event_mad_phase(event)
+  snapshot = resolve_event_mad_snapshot(event)
+  phase = snapshot.phase if snapshot is not None else PHASE_UNCLEAR
   preview = mad_hard_gate(phase=phase, strategy=gate_strategy_key(event.strategy))
   baseline_traded = row.get("outcome") not in {None, "blocked"}
   would_block = bool(preview.would_block)
+
+  affinity = (
+    compute_mad_affinity(
+      snapshot, direction=event.direction,
+      strategy=gate_strategy_key(event.strategy),
+    )
+    if snapshot is not None
+    else None
+  )
   row.update({
     "mad_phase": phase,
     "mad_would_block": would_block,
     "mad_gate_reason": preview.reason_code,
     "mad_kept": bool(baseline_traded and not would_block),
     "mad_filtered": bool(baseline_traded and would_block),
+    "mad_version": snapshot.mad_version if snapshot is not None else None,
+    "mad_confidence": snapshot.confidence if snapshot is not None else 0.0,
+    "mad_direction": (
+      (snapshot.manipulation_direction or snapshot.expansion_direction)
+      if snapshot is not None else None
+    ),
+    "mad_affinity": affinity.final if affinity is not None else 0.0,
+    "mad_affinity_bucket": _affinity_bucket(
+      snapshot, affinity.direction_score if affinity is not None else 0.0,
+    ),
+    "mad_confidence_bucket": _confidence_bucket(
+      snapshot.confidence if snapshot is not None else 0.0,
+    ),
+    "stop_pips": (
+      abs(event.price - event.stop_price) / event.pip_size
+      if event.stop_price is not None and event.pip_size > 0 else None
+    ),
+    "target_pips": (
+      abs(event.target_price - event.price) / event.pip_size
+      if event.target_price is not None and event.pip_size > 0 else None
+    ),
   })
   return row
 
@@ -148,6 +226,94 @@ def phase_session_strategy_table(
   return table
 
 
+def _median(values: Sequence[float]) -> float:
+  ordered = sorted(values)
+  n = len(ordered)
+  if n == 0:
+    return 0.0
+  mid = n // 2
+  return ordered[mid] if n % 2 else (ordered[mid - 1] + ordered[mid]) / 2.0
+
+
+def _extended_metrics(rows: Sequence[dict[str, Any]]) -> dict[str, Any]:
+  """§18 full metric set — trade count, win rate, avg/median R, expectancy
+  R, profit factor, MAE, MFE, avg stop, avg target — merging the fields
+  aggregate_report already computes with the ones it doesn't (median R,
+  avg stop/target pips) rather than recomputing win_rate/profit_factor a
+  second way (§20)."""
+  agg = aggregate_report(rows)
+  net_r = [float(r.get("net_r") or 0.0) for r in rows]
+  stops = [float(r["stop_pips"]) for r in rows if r.get("stop_pips") is not None]
+  targets = [float(r["target_pips"]) for r in rows if r.get("target_pips") is not None]
+  return {
+    "trade_count": int(agg.get("count") or 0),
+    "win_rate": float(agg.get("win_rate") or 0.0),
+    "avg_r": float(agg.get("expectancy_r") or 0.0),
+    "median_r": _median(net_r),
+    "expectancy_r": float(agg.get("expectancy_r") or 0.0),
+    "profit_factor": float(agg.get("profit_factor") or 0.0),
+    "avg_mae_pips": float(agg.get("avg_mae_pips") or 0.0),
+    "avg_mfe_pips": float(agg.get("avg_mfe_pips") or 0.0),
+    "avg_stop_pips": (sum(stops) / len(stops)) if stops else None,
+    "avg_target_pips": (sum(targets) / len(targets)) if targets else None,
+  }
+
+
+def mad_affinity_confidence_table(
+  rows: Sequence[dict[str, Any]],
+) -> list[dict[str, Any]]:
+  """§18: full metric set per (symbol, strategy, direction, session, phase,
+  affinity_bucket, confidence_bucket) cell, baseline-traded rows only —
+  the richer replacement for phase_session_strategy_table's phase-only
+  bucketing, directional and confidence-aware.
+  """
+  def _key(row: dict[str, Any]) -> tuple[str, str, str, str, str, str, str]:
+    return (
+      str(row.get("symbol") or "unknown"),
+      str(row.get("archetype") or "unknown"),
+      str(row.get("direction") or "unknown"),
+      str(row.get("session") or "unknown"),
+      str(row.get("mad_phase") or PHASE_UNCLEAR),
+      str(row.get("mad_affinity_bucket") or "neutral"),
+      str(row.get("mad_confidence_bucket") or "low"),
+    )
+
+  traded = [r for r in rows if r.get("outcome") not in {None, "blocked"}]
+  groups: dict[tuple[str, str, str, str, str, str, str], list[dict[str, Any]]] = (
+    defaultdict(list)
+  )
+  for row in traded:
+    groups[_key(row)].append(row)
+
+  table: list[dict[str, Any]] = []
+  for (symbol, strategy, direction, session, phase, affinity_bucket, confidence_bucket), bucket in (
+    sorted(groups.items())
+  ):
+    table.append({
+      "symbol": symbol,
+      "strategy": strategy,
+      "direction": direction,
+      "session": session,
+      "phase": phase,
+      "affinity_bucket": affinity_bucket,
+      "confidence_bucket": confidence_bucket,
+      **_extended_metrics(bucket),
+    })
+  return table
+
+
+def mad_alignment_comparison(rows: Sequence[dict[str, Any]]) -> dict[str, Any]:
+  """§9/§18: MAD-aligned vs MAD-neutral vs MAD-opposed, baseline-traded rows
+  only. Never promoted on win rate alone — expectancy_r and profit_factor
+  travel alongside it in the same cell."""
+  traded = [r for r in rows if r.get("outcome") not in {None, "blocked"}]
+  out: dict[str, Any] = {}
+  for bucket in ("aligned", "neutral", "opposed"):
+    bucket_rows = [r for r in traded if r.get("mad_affinity_bucket") == bucket]
+    out[bucket] = _extended_metrics(bucket_rows)
+  return out
+
+
 def strategy_baselines(rows: Sequence[dict[str, Any]]) -> dict[str, Any]:
   """Range Sweep / Impulse baselines vs MAD-kept (research canvas MAD-2)."""
   def _family(name: str) -> str:
@@ -196,10 +362,20 @@ def mad_expectancy_report(rows: Sequence[dict[str, Any]]) -> dict[str, Any]:
       "mad_kept": aggregate_report(kept_split),
       "mad_filtered_n": sum(1 for r in baseline if r.get("mad_would_block")),
       "by_phase_session_strategy": phase_session_strategy_table(split_rows),
+      "by_affinity_confidence": mad_affinity_confidence_table(split_rows),
+      "alignment_comparison": mad_alignment_comparison(split_rows),
     }
+
+  # §16/§19 — legacy (v1, mad_version absent/1) and v2-scored populations
+  # must never be silently mixed. Report the split so a reviewer can see it.
+  version_counts: dict[str, int] = defaultdict(int)
+  for row in rows:
+    version_counts[str(row.get("mad_version") or "legacy")] += 1
 
   return {
     "version": "mad-2",
+    "mad_code_version": MAD_VERSION,
+    "mad_version_population": dict(sorted(version_counts.items())),
     "discipline": {
       "mode": "observe_only_counterfactual",
       "rule": "never_tune_thresholds_on_holdout",
@@ -226,6 +402,10 @@ def mad_expectancy_report(rows: Sequence[dict[str, Any]]) -> dict[str, Any]:
     },
     "strategy_baselines": strategy_baselines(rows),
     "by_phase_session_strategy": phase_session_strategy_table(rows),
+    # §9/§18: directional aligned/neutral/opposed comparison — never
+    # promoted on win rate alone (expectancy_r/profit_factor sit alongside).
+    "alignment_comparison": mad_alignment_comparison(rows),
+    "by_affinity_confidence": mad_affinity_confidence_table(rows),
     "calibration_baseline_traded": calibration_report(traded),
     "splits": {
       "development": _split_mad(splits["development"]),
@@ -263,6 +443,8 @@ def main(argv: list[str] | None = None) -> int:
         "timestamp", "session", "archetype", "direction", "symbol",
         "outcome", "net_r", "mad_phase", "mad_would_block", "mad_gate_reason",
         "mad_kept", "mad_filtered", "gate_allowed", "gate_reason",
+        "mad_version", "mad_confidence", "mad_affinity", "mad_direction",
+        "mad_affinity_bucket", "mad_confidence_bucket",
       )
     })
   payload["events"] = slim_events

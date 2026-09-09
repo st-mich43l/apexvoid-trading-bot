@@ -108,7 +108,7 @@
     "zone_scale_undersized_policy"
   ],
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "75ffa663045c27a852d99023853af401981c2058c53c583369b9129a9accdb9d",
+  "configuration_contract_fingerprint_sha256": "feda5109b7e3af5cd6b2e23912b9bcfff4867d0e2aa0ea6d7666946f9e5d7d8b",
   "deprecated_compatibility_projections": [
     "feed",
     "auto_trade"
@@ -154,6 +154,6 @@
     "manifest_version",
     "profile"
   ],
-  "source_fingerprint_sha256": "75ffa663045c27a852d99023853af401981c2058c53c583369b9129a9accdb9d",
+  "source_fingerprint_sha256": "feda5109b7e3af5cd6b2e23912b9bcfff4867d0e2aa0ea6d7666946f9e5d7d8b",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

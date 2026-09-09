@@ -1,20 +1,20 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "75ffa663045c27a852d99023853af401981c2058c53c583369b9129a9accdb9d",
-  "configuration_document_fingerprint_sha256": "3296adc1b16a8f22afe0ca7d4e3fedf1b81ad736e89621144d0a338452233849",
+  "configuration_contract_fingerprint_sha256": "feda5109b7e3af5cd6b2e23912b9bcfff4867d0e2aa0ea6d7666946f9e5d7d8b",
+  "configuration_document_fingerprint_sha256": "5409121ab9af62e7cb15a0bf79b803531b6eb3e9e27fa814b5696e84162b6cea",
   "counts": {
     "algorithm_constants": 57,
-    "configurable": 513,
+    "configurable": 520,
     "known_conflicts": 30,
     "owners": {
       "ctrader": 49,
-      "python": 435,
+      "python": 442,
       "shared": 96
     },
     "protocol_constants": 10,
     "secrets": 9,
     "shared": 96,
-    "total_items": 580
+    "total_items": 587
   },
   "items": [
     {
@@ -8781,6 +8781,279 @@
       "type": "int",
       "unit": "milliseconds",
       "validation_summary": "EnvironmentResolver.Int + AutoTradeOptions.Validate"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_MAD_ACCUM_MAXIMUM_RQ",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "gt": 0
+      },
+      "default": 6.0,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 6.0
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Maximum sealed Asia range-quality (width/ATR) MAD still accepts as accumulation rather than an already-too-wide box. Matches the pre-v2 default.",
+      "display_id": "config:execution.mad.accum.maximum_rq",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "execution.mad.accum.maximum_rq",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "analysis_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "ratio",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_MAD_ACCUM_MINIMUM_RQ",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "gt": 0
+      },
+      "default": 0.8,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 0.8
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Minimum sealed Asia range-quality (width/ATR) MAD accepts as a genuine, contained accumulation box. Matches the pre-v2 default.",
+      "display_id": "config:execution.mad.accum.minimum_rq",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "execution.mad.accum.minimum_rq",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "analysis_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "ratio",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_MAD_EXPAND_ACCEPT_CLOSES",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 1
+      },
+      "default": 2,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 2
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Consecutive closes required beyond the sealed Asia edge (alongside break_atr) before MAD credits an accepted breakout. Provisional — no replay evidence yet, see §29.",
+      "display_id": "config:execution.mad.expand.accept_closes",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "execution.mad.expand.accept_closes",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "analysis_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "int",
+      "unit": "count",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_MAD_EXPAND_BREAK_ATR",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "gt": 0
+      },
+      "default": 0.35,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 0.35
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Minimum accepted-break distance beyond the sealed Asia edge (ATR) before MAD credits directional expansion. Matches the pre-v2 default (owner-observed prod behavior); provisional otherwise.",
+      "display_id": "config:execution.mad.expand.break_atr",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "execution.mad.expand.break_atr",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "analysis_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "atr",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_MAD_EXPAND_DISPLACEMENT_ATR",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "gt": 0
+      },
+      "default": 1.25,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 1.25
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Causal |close_t - close_t-k| / ATR strong-displacement threshold that alone credits expansion even without N accepted closes. Matches the pre-v2 impulse threshold value; provisional otherwise.",
+      "display_id": "config:execution.mad.expand.displacement_atr",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "execution.mad.expand.displacement_atr",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "analysis_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "atr",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_MAD_MANIP_MIN_PENETRATION_ATR",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "gt": 0
+      },
+      "default": 0.05,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 0.05
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Reference sweep-penetration depth (ATR) used to scale MANIP confidence — never a phase-classification gate (a negligible poke still IS a sweep+reclaim, just low confidence). Provisional, §29.",
+      "display_id": "config:execution.mad.manip.min_penetration_atr",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "execution.mad.manip.min_penetration_atr",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "analysis_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "atr",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_MAD_MANIP_MIN_RECLAIM_ATR",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "gt": 0
+      },
+      "default": 0.05,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 0.05
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Reference reclaim-depth (ATR) used to scale MANIP confidence — never a phase-classification gate. Provisional, §29.",
+      "display_id": "config:execution.mad.manip.min_reclaim_atr",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "execution.mad.manip.min_reclaim_atr",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "analysis_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "atr",
+      "validation_summary": "Pydantic required/type coercion only"
     },
     {
       "algorithm_constant": false,
@@ -21808,6 +22081,6 @@
       "validation_summary": "Pydantic required/type coercion only"
     }
   ],
-  "source_fingerprint_sha256": "75ffa663045c27a852d99023853af401981c2058c53c583369b9129a9accdb9d",
+  "source_fingerprint_sha256": "feda5109b7e3af5cd6b2e23912b9bcfff4867d0e2aa0ea6d7666946f9e5d7d8b",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

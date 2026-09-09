@@ -340,8 +340,13 @@ def build_feature_vector(
     mom = momentum_atr(close, close_k, atr_v)
 
   impulse = None
-  if close is not None and impulse_origin is not None and atr_v > 0:
-    impulse = impulse_atr(close, impulse_origin, atr_v)
+  if impulse_origin is not None and atr_v > 0:
+    # Impulse magnitude is the ORIGINAL leg (extreme - origin), never the
+    # current retraced price - a deep pullback must not under-report how
+    # large the impulse leg actually was.
+    impulse_end = impulse_extreme if impulse_extreme is not None else close
+    if impulse_end is not None:
+      impulse = impulse_atr(impulse_end, impulse_origin, atr_v)
 
   retr = None
   if (

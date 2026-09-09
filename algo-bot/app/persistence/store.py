@@ -340,6 +340,42 @@ async def init_db() -> None:
       "ADD COLUMN IF NOT EXISTS math_acceleration DOUBLE PRECISION",
       "ALTER TABLE auto_trade_fills "
       "ADD COLUMN IF NOT EXISTS math_pd DOUBLE PRECISION",
+      # v2 (2026-09) redefined math_acceleration as a true per-bar second
+      # derivative (was a bare velocity delta) - this distinguishes legacy
+      # (NULL/1) rows from v2 rows so replay/analysis never silently mixes
+      # the two populations.
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS math_feature_version SMALLINT",
+      # MAD v2 context telemetry (descriptive only, never a gate) - see
+      # app/analysis/mad_phase.py MadPhaseSnapshot/MadAffinityScore.
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS mad_version SMALLINT",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS mad_phase TEXT",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS mad_confidence DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS mad_affinity DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS mad_direction TEXT",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS mad_sweep_side TEXT",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS mad_reclaim BOOLEAN",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS mad_range_quality_atr DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS mad_break_distance_atr DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS mad_displacement_atr DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS mad_acceptance_closes SMALLINT",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS mad_sweep_penetration_atr DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS mad_reclaim_depth_atr DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS mad_reason_code TEXT",
     ):
       await db.execute(stmt)
     await db.execute(
@@ -1228,10 +1264,16 @@ async def _ensure_fill_from_close_event(event: dict, group_id: str) -> None:
         setup_type, setup_type_raw, direction, entry_price, stop_pips, volume, filled_at,
         confluence_v1, confluence_v2, confluence_v2_raw,
         confluence_scoring_version,
-        math_fib_ratio, math_velocity, math_acceleration, math_pd
+        math_fib_ratio, math_velocity, math_acceleration, math_pd,
+        math_feature_version,
+        mad_version, mad_phase, mad_confidence, mad_affinity, mad_direction,
+        mad_sweep_side, mad_reclaim, mad_range_quality_atr,
+        mad_break_distance_atr, mad_displacement_atr, mad_acceptance_closes,
+        mad_sweep_penetration_atr, mad_reclaim_depth_atr, mad_reason_code
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
-        $17, $18, $19, $20
+        $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30,
+        $31, $32, $33, $34, $35
       )
       ON CONFLICT (position_id) DO NOTHING
       """,
@@ -1243,6 +1285,14 @@ async def _ensure_fill_from_close_event(event: dict, group_id: str) -> None:
       event.get("confluence_v2_raw"), event.get("confluence_scoring_version"),
       event.get("math_fib_ratio"), event.get("math_velocity"),
       event.get("math_acceleration"), event.get("math_pd"),
+      event.get("math_feature_version"),
+      event.get("mad_version"), event.get("mad_phase"),
+      event.get("mad_confidence"), event.get("mad_affinity"),
+      event.get("mad_direction"), event.get("mad_sweep_side"),
+      event.get("mad_reclaim"), event.get("mad_range_quality_atr"),
+      event.get("mad_break_distance_atr"), event.get("mad_displacement_atr"),
+      event.get("mad_acceptance_closes"), event.get("mad_sweep_penetration_atr"),
+      event.get("mad_reclaim_depth_atr"), event.get("mad_reason_code"),
     )
 
 
@@ -1283,10 +1333,16 @@ async def _record_auto_trade_fill(event: dict) -> None:
         setup_type, setup_type_raw, direction, entry_price, stop_pips, volume, filled_at,
         confluence_v1, confluence_v2, confluence_v2_raw,
         confluence_scoring_version,
-        math_fib_ratio, math_velocity, math_acceleration, math_pd
+        math_fib_ratio, math_velocity, math_acceleration, math_pd,
+        math_feature_version,
+        mad_version, mad_phase, mad_confidence, mad_affinity, mad_direction,
+        mad_sweep_side, mad_reclaim, mad_range_quality_atr,
+        mad_break_distance_atr, mad_displacement_atr, mad_acceptance_closes,
+        mad_sweep_penetration_atr, mad_reclaim_depth_atr, mad_reason_code
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
-        $17, $18, $19, $20
+        $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30,
+        $31, $32, $33, $34, $35
       )
       ON CONFLICT (position_id) DO UPDATE SET
         group_id = excluded.group_id,
@@ -1308,7 +1364,22 @@ async def _record_auto_trade_fill(event: dict) -> None:
         math_fib_ratio = COALESCE(excluded.math_fib_ratio, auto_trade_fills.math_fib_ratio),
         math_velocity = COALESCE(excluded.math_velocity, auto_trade_fills.math_velocity),
         math_acceleration = COALESCE(excluded.math_acceleration, auto_trade_fills.math_acceleration),
-        math_pd = COALESCE(excluded.math_pd, auto_trade_fills.math_pd)
+        math_pd = COALESCE(excluded.math_pd, auto_trade_fills.math_pd),
+        math_feature_version = COALESCE(excluded.math_feature_version, auto_trade_fills.math_feature_version),
+        mad_version = COALESCE(excluded.mad_version, auto_trade_fills.mad_version),
+        mad_phase = COALESCE(excluded.mad_phase, auto_trade_fills.mad_phase),
+        mad_confidence = COALESCE(excluded.mad_confidence, auto_trade_fills.mad_confidence),
+        mad_affinity = COALESCE(excluded.mad_affinity, auto_trade_fills.mad_affinity),
+        mad_direction = COALESCE(excluded.mad_direction, auto_trade_fills.mad_direction),
+        mad_sweep_side = COALESCE(excluded.mad_sweep_side, auto_trade_fills.mad_sweep_side),
+        mad_reclaim = COALESCE(excluded.mad_reclaim, auto_trade_fills.mad_reclaim),
+        mad_range_quality_atr = COALESCE(excluded.mad_range_quality_atr, auto_trade_fills.mad_range_quality_atr),
+        mad_break_distance_atr = COALESCE(excluded.mad_break_distance_atr, auto_trade_fills.mad_break_distance_atr),
+        mad_displacement_atr = COALESCE(excluded.mad_displacement_atr, auto_trade_fills.mad_displacement_atr),
+        mad_acceptance_closes = COALESCE(excluded.mad_acceptance_closes, auto_trade_fills.mad_acceptance_closes),
+        mad_sweep_penetration_atr = COALESCE(excluded.mad_sweep_penetration_atr, auto_trade_fills.mad_sweep_penetration_atr),
+        mad_reclaim_depth_atr = COALESCE(excluded.mad_reclaim_depth_atr, auto_trade_fills.mad_reclaim_depth_atr),
+        mad_reason_code = COALESCE(excluded.mad_reason_code, auto_trade_fills.mad_reason_code)
       WHERE auto_trade_fills.correction_source IS NULL
       """,
       int(position_id), group_id, trade_key, stream,
@@ -1319,6 +1390,14 @@ async def _record_auto_trade_fill(event: dict) -> None:
       event.get("confluence_v2_raw"), event.get("confluence_scoring_version"),
       event.get("math_fib_ratio"), event.get("math_velocity"),
       event.get("math_acceleration"), event.get("math_pd"),
+      event.get("math_feature_version"),
+      event.get("mad_version"), event.get("mad_phase"),
+      event.get("mad_confidence"), event.get("mad_affinity"),
+      event.get("mad_direction"), event.get("mad_sweep_side"),
+      event.get("mad_reclaim"), event.get("mad_range_quality_atr"),
+      event.get("mad_break_distance_atr"), event.get("mad_displacement_atr"),
+      event.get("mad_acceptance_closes"), event.get("mad_sweep_penetration_atr"),
+      event.get("mad_reclaim_depth_atr"), event.get("mad_reason_code"),
     )
 
 
