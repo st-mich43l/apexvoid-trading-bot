@@ -1671,7 +1671,8 @@ public sealed class TradePlanRuntime(
         MathFibRatio: plan.Analysis.MathFibRatio,
         MathVelocity: plan.Analysis.MathVelocity,
         MathAcceleration: plan.Analysis.MathAcceleration,
-        MathPd: plan.Analysis.MathPd
+        MathPd: plan.Analysis.MathPd,
+        MathFeatureVersion: plan.Analysis.MathFeatureVersion
       ),
       cancellationToken
     );

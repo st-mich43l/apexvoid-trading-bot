@@ -109,6 +109,7 @@ class StrategyMatch:
   math_velocity: float | None = None
   math_acceleration: float | None = None
   math_pd: float | None = None
+  math_feature_version: int | None = None
   # Shadow confluence telemetry. ``confluence`` remains the selected gate.
   confluence_v1: int | None = None
   confluence_v2: int | None = None
@@ -323,6 +324,10 @@ class StrategyMatch:
         math_pd=(
           None if payload.get("math_pd") is None
           else float(payload["math_pd"])
+        ),
+        math_feature_version=(
+          None if payload.get("math_feature_version") is None
+          else int(payload["math_feature_version"])
         ),
         confluence_v1=(
           None if payload.get("confluence_v1") is None
