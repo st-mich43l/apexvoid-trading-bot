@@ -204,6 +204,13 @@
       "execution.entry.max_spread_pips",
       "execution.entry.maximum_chase_distance_pips",
       "execution.entry.poll_ms",
+      "execution.mad.accum.maximum_rq",
+      "execution.mad.accum.minimum_rq",
+      "execution.mad.expand.accept_closes",
+      "execution.mad.expand.break_atr",
+      "execution.mad.expand.displacement_atr",
+      "execution.mad.manip.min_penetration_atr",
+      "execution.mad.manip.min_reclaim_atr",
       "execution.mapped_zone.counter_bias_min_score",
       "execution.mapped_zone.execute_distance_atr",
       "execution.mapped_zone.execute_tolerance_atr",
@@ -550,7 +557,7 @@
     "XAU_ZONE_PREFERRED_MAX_WIDTH_PRICE": "instruments.XAU.analysis.zones.preferred_maximum_width_price",
     "XAU_ZONE_PREFERRED_MIN_WIDTH_PRICE": "instruments.XAU.analysis.zones.preferred_minimum_width_price"
   },
-  "fingerprint": "75ffa663045c27a852d99023853af401981c2058c53c583369b9129a9accdb9d",
+  "fingerprint": "feda5109b7e3af5cd6b2e23912b9bcfff4867d0e2aa0ea6d7666946f9e5d7d8b",
   "instrument_schema": {
     "active_projection_symbol": "XAU",
     "optional": [

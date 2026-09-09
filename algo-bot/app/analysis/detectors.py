@@ -1503,15 +1503,29 @@ def _finish(
   )
   if include_score_reasons:
     full_reasons = _merge_score_reasons(full_reasons, zone)
+  # v1 stays fully MAD-blind (§8) — no discrete star can be added by a MAD
+  # phase match. MAD only enters continuously, and only into v2, below.
   confluence_v1 = _confluence_from_zone(zone, factors, ctx.settings)
-  # MAD is entry quality + structure analysis only — soft confluence nudge,
-  # never a hard block on trade-plan publish / activation.
   mad_family = _mad_family_for_setup(setup, mode)
-  from app.analysis.mad_phase import PHASE_UNCLEAR, mad_soft_bonus
+  from app.analysis.mad_phase import (
+    PHASE_UNCLEAR,
+    MadPhaseSnapshot,
+    compute_mad_affinity,
+    mad_gate_strategy_for_setup,
+  )
 
-  mad_bonus = mad_soft_bonus(phase=ctx.mad_phase, family=mad_family)
-  if mad_bonus >= 0.1:
-    confluence_v1 += 1
+  mad_snapshot = MadPhaseSnapshot.from_dict(ctx.mad) if ctx.mad else None
+  mad_gate_strategy = mad_gate_strategy_for_setup(
+    setup, family=mad_family, strategy_mode=mode,
+  )
+  mad_affinity = (
+    compute_mad_affinity(mad_snapshot, direction=direction, strategy=mad_gate_strategy)
+    if mad_snapshot is not None
+    else None
+  )
+  # affinity.final is already 0..1 and 0 whenever direction/strategy disagree
+  # with the phase's own evidence (§9) — never a bypass for poor structure.
+  mad_bonus = mad_affinity.final if mad_affinity is not None else 0.0
   confluence_v2_raw = _confluence_v2_score(
     zone, factors, ctx.settings, mad_bonus,
   )
