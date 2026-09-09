@@ -13,6 +13,7 @@ import pandas as pd
 
 from app.analysis.engine import AnalysisContext, AnalysisSettings, Regime, analyze
 from app.analysis.indicators import atr as atr_indicator
+from app.analysis.momentum import MATH_FEATURE_VERSION
 from app.analysis.key_level_role import (
   ROLE_AMBIGUOUS,
   ROLE_BROKEN_RESISTANCE,
@@ -689,6 +690,7 @@ class DetectionResult:
   math_velocity: float | None = None
   math_acceleration: float | None = None
   math_pd: float | None = None
+  math_feature_version: int | None = None
   # Shadow confluence outputs. ``confluence`` remains the selected gate.
   confluence_v1: int | None = None
   confluence_v2: int | None = None
@@ -1567,6 +1569,7 @@ def _finish(
       None if mom is None else float(getattr(mom, "acceleration", 0.0))
     ),
     math_pd=math_pd,
+    math_feature_version=(None if mom is None else MATH_FEATURE_VERSION),
     confluence_v1=confluence_v1,
     confluence_v2=confluence_v2,
     confluence_v2_raw=confluence_v2_raw,

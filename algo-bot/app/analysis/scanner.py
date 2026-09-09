@@ -700,6 +700,7 @@ def _build_one_strategy_match(
     math_velocity=getattr(result, "math_velocity", None),
     math_acceleration=getattr(result, "math_acceleration", None),
     math_pd=getattr(result, "math_pd", None),
+    math_feature_version=getattr(result, "math_feature_version", None),
     confluence_v1=getattr(result, "confluence_v1", None),
     confluence_v2=getattr(result, "confluence_v2", None),
     confluence_v2_raw=getattr(result, "confluence_v2_raw", None),
