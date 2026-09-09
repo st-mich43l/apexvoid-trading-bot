@@ -879,12 +879,11 @@ _TRACKED_UPDATE_KINDS = {"close", "tp_reached", "sl"}
 def _achieved_rr(sig: dict, net_pips: int) -> str | None:
   """Realized R for a just-closed signal.
 
-  A multi-leg manual /algo group fills shallow/mid/deep clips at different
-  prices - ``net_pips`` (legs_achieved_pips) already reports whichever
-  leg's own booking reached the deepest/furthest, so the risk denominator
-  must be measured from that SAME leg's own entry, not the advertised
-  zone. legs_achieved_entry_price returns exactly that (None for an older
-  signal with no per-leg entry_price recorded), in which case this falls
+  A multi-leg manual /algo group fills shallow/deep clips at different
+  prices - the risk denominator must be measured from the DEEPEST leg's
+  own entry (see legs_achieved_entry_price), not the peak-pips leg and not
+  the advertised zone. legs_achieved_entry_price returns None for an older
+  signal with no per-leg entry_price recorded, in which case this falls
   back to reports.py's ``_round_lines`` convention: risk against the stop
   as originally placed (a trailed/BE stop must not shrink the
   denominator), entry at the zone midpoint.
@@ -892,7 +891,9 @@ def _achieved_rr(sig: dict, net_pips: int) -> str | None:
   original_sl = sig.get("original_sl")
   if original_sl is None:
     original_sl = sig["sl"]
-  entry = pips_format.legs_achieved_entry_price(sig.get("legs") or [])
+  entry = pips_format.legs_achieved_entry_price(
+    sig.get("legs") or [], sig["action"],
+  )
   if entry is None:
     entry_end = sig.get("entry_end")
     if entry_end is None:

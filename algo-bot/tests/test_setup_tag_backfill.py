@@ -91,9 +91,10 @@ def test_setup_suffix_guards_leave_trade_fields_intact(suffix, expected_setup):
   assert parsed["entry"] == pytest.approx(4100)
   assert parsed["entry_end"] == pytest.approx(4105)
   assert parsed["sl"] == pytest.approx(4110)
-  # R ladder applies regardless of /algo - see MANUAL_ALGO_DEFAULT_TARGET_R_MULTIPLES.
+  # Explicit typed tp is always respected - see MANUAL_ALGO_DEFAULT_TARGET_R_MULTIPLES,
+  # which only applies as the default when no tp is typed.
   assert parsed["tps"] == [
-    pytest.approx(4095), pytest.approx(4090), pytest.approx(4080), pytest.approx(4070),
+    pytest.approx(4095), pytest.approx(4090), pytest.approx(4080),
   ]
 
 
