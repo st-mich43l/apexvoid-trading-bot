@@ -466,32 +466,6 @@ def market_map_from_payload(payload: str) -> MarketMap:
   )
 
 
-def map_materially_changed(
-  previous: MarketMap | None,
-  current: MarketMap,
-  minimum: float,
-) -> bool:
-  if previous is None:
-    return True
-  old = _entry_groups(previous.entries)
-  new = _entry_groups(current.entries)
-  if set(old) != set(new):
-    return True
-  threshold = max(0.0, float(minimum))
-  for key in old:
-    old_bands = sorted(old[key])
-    new_bands = sorted(new[key])
-    if len(old_bands) != len(new_bands):
-      return True
-    for first, second in zip(old_bands, new_bands):
-      if (
-        abs(first[0] - second[0]) >= threshold
-        or abs(first[1] - second[1]) >= threshold
-      ):
-        return True
-  return _rails_materially_changed(previous.rails, current.rails, threshold)
-
-
 def _zone_entry(
   zone,
   tf: str,
@@ -1486,63 +1460,6 @@ def _format_number(
   price_digits: int | None = None,
 ) -> str:
   return format_price(symbol, value, grouped=True, digits=price_digits)
-
-
-def _entry_groups(entries: list[MapEntry]) -> dict[tuple, list[tuple[float, float]]]:
-  """Group entries the same way ``map_materially_changed`` decides whether
-  to resend the card - by the tags that actually reach the rendered text
-  (``_compact_tags``, the same selection ``_render_side`` uses), not the
-  full internal tag list.
-
-  ``entry.tags`` can carry low-priority, price-tick-volatile tags (e.g.
-  "price inside", the lowest _tag_priority) that flip on/off as live price
-  crosses a zone edge but rank below MAP_TAG_LIMIT and never actually
-  appear on the card. Grouping by the full tag tuple made the owner-DM
-  scan loop treat that invisible flip as a materially changed map -
-  deleting and resending an outwardly identical card every scan tick.
-  """
-  groups: dict[tuple, list[tuple[float, float]]] = {}
-  for entry in entries:
-    key = (
-      entry.side,
-      entry.tier,
-      tuple(_compact_tags(entry.tags, MAP_TAG_LIMIT)),
-    )
-    groups.setdefault(key, []).append((entry.lo, entry.hi))
-  return groups
-
-
-def _rails_materially_changed(
-  previous: list[ScalpRail],
-  current: list[ScalpRail],
-  minimum: float,
-) -> bool:
-  """Same rendered-tags principle as ``_entry_groups``: ``_render_rails``
-  only ever shows the top RAIL_TAG_LIMIT tags (``_compact_rail_tags``), so
-  comparing the full raw tag list here can false-positive on a low-priority
-  tag toggling out of sight and resend an outwardly identical card.
-  """
-  old = sorted(previous, key=lambda rail: (rail.direction, rail.price, rail.label))
-  new = sorted(current, key=lambda rail: (rail.direction, rail.price, rail.label))
-  if len(old) != len(new):
-    return True
-  for first, second in zip(old, new):
-    if (
-      first.direction != second.direction
-      or tuple(
-        tag.casefold()
-        for tag in _compact_rail_tags(first.tags, RAIL_TAG_LIMIT)
-      )
-      != tuple(
-        tag.casefold()
-        for tag in _compact_rail_tags(second.tags, RAIL_TAG_LIMIT)
-      )
-    ):
-      return True
-    difference = abs(first.price - second.price)
-    if (minimum > 0 and difference >= minimum) or (minimum == 0 and difference > 0):
-      return True
-  return False
 
 
 def _optional_float(value) -> float | None:

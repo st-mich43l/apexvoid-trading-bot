@@ -150,7 +150,6 @@ from app.autotrade.strategy_match_ready import (
   ensure_ready_group,
   load_canonical_match,
   ready_consumer_name,
-  save_ready_consumer_health,
   save_ready_snapshot,
 )
 from app.analysis.m1_trigger import (
@@ -1754,8 +1753,7 @@ def _counter_bias_barrier_between(
   levels: list[Level],
 ) -> tuple[float, str] | None:
   """Nearest structural barrier strictly between ``entry_reference`` and
-  ``target``, as (near_edge_price, description). Shared by
-  ``_counter_bias_target_barrier_reason`` (existence check) and
+  ``target``, as (near_edge_price, description). Used by
   ``_adapt_counter_bias_target`` (Fix 7 - anchor the target to the barrier
   instead of only rejecting).
   """
@@ -1802,33 +1800,6 @@ def _counter_bias_barrier_between(
   _, low, high, kind = min(ahead, key=lambda item: item[0])
   near_edge = low if direction == "BUY" else high
   return near_edge, f"{kind} {low:.5f}-{high:.5f}"
-
-
-def _counter_bias_target_barrier_reason(
-  match: StrategyMatch,
-  entry_reference: float,
-  zones: list[Zone],
-  levels: list[Level],
-) -> str | None:
-  """Reject a counter-bias mean-reversion route obstructed before box EQ."""
-  if "counter_bias" not in match.tags or match.target_price is None:
-    return None
-  target = float(match.target_price)
-  if (
-    match.direction == "BUY" and target <= entry_reference
-    or match.direction == "SELL" and target >= entry_reference
-  ):
-    return (
-      f"counter-bias target {target:.5f} is not ahead of "
-      f"{match.direction} entry {entry_reference:.5f}"
-    )
-  barrier = _counter_bias_barrier_between(
-    match.direction, entry_reference, target, zones, levels,
-  )
-  if barrier is None:
-    return None
-  _, description = barrier
-  return f"counter-bias target blocked before EQ {target:.5f} by {description}"
 
 
 _MIN_COUNTER_BIAS_TARGET_PIPS = 15
@@ -8895,101 +8866,3 @@ async def _recover_unfinished_strategy_matches(
         )
 
 
-_READY_CONSUMER_BASE_BACKOFF_SECONDS = 1.0
-_READY_CONSUMER_MAX_BACKOFF_SECONDS = 30.0
-
-
-async def strategy_match_ready_loop() -> None:
-  """Durably wake the worker when Scanner confirms an executable match.
-
-  P0-11: ensure_ready_group and the startup reconciliation used to run
-  with no retry boundary around them - a transient Redis error at process
-  start (a connection blip during a rolling deploy) permanently killed
-  this fire-and-forget task for the rest of the process's life, since
-  nothing supervises it. The whole body now lives inside a bounded-backoff
-  supervisor loop, and health is persisted at every state change so
-  /auto_status can tell "the consumer is down" apart from "genuinely
-  nothing to do right now."
-  """
-  if not runtime_config.runtime.auto_trade.enabled:
-    return
-  client = redis_state.get_client()
-  source = RedisOHLCSource(client)
-  consumer = ready_consumer_name()
-  retry_count = 0
-
-  while True:
-    await save_ready_consumer_health(
-      client, state="starting", consumer=consumer, retry_count=retry_count,
-    )
-    try:
-      await ensure_ready_group(client)
-      try:
-        await _recover_unfinished_strategy_matches(client)
-      except Exception:
-        log.exception("strategy-match ready startup reconciliation failed")
-      await save_ready_consumer_health(
-        client, state="ready", consumer=consumer, retry_count=0,
-      )
-      log.info(
-        "ApexVoid Algo consuming durable strategy matches stream=%s group=%s",
-        READY_STREAM,
-        READY_GROUP,
-      )
-      retry_count = 0
-      while True:
-        try:
-          consumed = await _consume_strategy_match_ready_once(
-            client=client,
-            source=source,
-            consumer=consumer,
-            block_ms=5_000,
-            recover_pending=True,
-          )
-          if consumed:
-            await save_ready_consumer_health(
-              client, state="ready", consumer=consumer,
-              last_success_at=int(datetime.now(timezone.utc).timestamp()),
-              retry_count=0,
-            )
-          else:
-            continue
-        except Exception as exc:
-          log.exception(
-            "strategy-match ready event failed; left pending for retry",
-          )
-          await increment_metric(client, "strategy_match_ready_failed")
-          # A single event's processing failure is retried in place (it
-          # stays pending in the consumer group), not fatal to the
-          # consumer itself - degraded, matching P0-11/P1-6's fatal-vs-
-          # degraded distinction for transient per-event failures.
-          await save_ready_consumer_health(
-            client, state="degraded_retrying", consumer=consumer,
-            retry_count=retry_count, last_error=str(exc)[:500],
-          )
-    except asyncio.CancelledError:
-      raise
-    except Exception as exc:
-      retry_count += 1
-      backoff = min(
-        _READY_CONSUMER_MAX_BACKOFF_SECONDS,
-        _READY_CONSUMER_BASE_BACKOFF_SECONDS * (2 ** min(retry_count, 5)),
-      )
-      log.exception(
-        "strategy-match ready consumer setup failed, retrying in %.1fs "
-        "(attempt %d)",
-        backoff, retry_count,
-      )
-      await save_ready_consumer_health(
-        client, state="degraded_retrying", consumer=consumer,
-        retry_count=retry_count, last_error=str(exc)[:500],
-      )
-      await asyncio.sleep(backoff)
-
-
-async def auto_scalp_loop() -> None:
-  """Deprecated: closed bars are owned by bar_event_dispatcher_loop."""
-  if not runtime_config.runtime.auto_trade.enabled:
-    log.info("ApexVoid Algo gate disabled: AUTO_TRADE_ENABLED=false")
-    return
-  log.info("auto_scalp_loop idle; bar_event_dispatcher_loop owns bars:new")

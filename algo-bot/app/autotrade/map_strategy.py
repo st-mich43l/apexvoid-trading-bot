@@ -20,7 +20,7 @@ from typing import Any
 
 import pandas as pd
 
-from app.analysis.market_map import MapEntry, MarketMap, market_map_from_payload
+from app.analysis.market_map import MapEntry, MarketMap
 
 
 MARKET_MAP_KEY_PREFIX = "auto_trade:market_map"
@@ -155,13 +155,3 @@ def market_map_key(symbol: str) -> str:
 
 def market_map_display_key(symbol: str) -> str:
   return f"{MARKET_MAP_DISPLAY_KEY_PREFIX}:{symbol.upper()}"
-
-
-def decode_market_map(raw: object) -> MarketMap | None:
-  if raw is None:
-    return None
-  text = raw.decode() if isinstance(raw, bytes) else str(raw)
-  try:
-    return market_map_from_payload(text)
-  except (KeyError, TypeError, ValueError):
-    return None
