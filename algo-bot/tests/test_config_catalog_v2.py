@@ -44,13 +44,17 @@ pytestmark = pytest.mark.no_database
 
 
 BASELINE = {
-  "entries": 580,
-  "configurable": 513,
+  # 2026-09 MAD v2: +7 new leaf fields (execution.mad.expand.break_atr,
+  # .displacement_atr, .accept_closes, execution.mad.manip.min_penetration_atr,
+  # .min_reclaim_atr, execution.mad.accum.minimum_rq, .maximum_rq), all
+  # ConfigOwner.PYTHON, none deprecated-alias'd.
+  "entries": 587,
+  "configurable": 520,
   "protocol": 10,
   "algorithm": 57,
-  "owners": {"python": 435, "shared": 96, "ctrader": 49},
-  "projection": 531,
-  "env": 513,
+  "owners": {"python": 442, "shared": 96, "ctrader": 49},
+  "projection": 538,
+  "env": 520,
   "deprecated_aliases": 21,
 }
 

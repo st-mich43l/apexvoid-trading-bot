@@ -67,7 +67,28 @@ public sealed record TradePlanAnalysis(
   double? MathFibRatio = null,
   double? MathVelocity = null,
   double? MathAcceleration = null,
-  double? MathPd = null
+  double? MathPd = null,
+  // v2 (2026-09) redefined MathAcceleration as a true per-bar second
+  // derivative (was a bare velocity delta) - distinguishes legacy (null/1)
+  // from v2 rows so replay/analysis never silently mixes the populations.
+  int? MathFeatureVersion = null,
+  // MAD v2 context telemetry - descriptive only, never a gate. Republished
+  // onto AutoTradeEvent (Models.cs) the same way as the Math* fields above.
+  // See algo-bot/app/analysis/mad_phase.py MadPhaseSnapshot/MadAffinityScore.
+  int? MadVersion = null,
+  string? MadPhase = null,
+  double? MadConfidence = null,
+  double? MadAffinity = null,
+  string? MadDirection = null,
+  string? MadSweepSide = null,
+  bool? MadReclaim = null,
+  double? MadRangeQualityAtr = null,
+  double? MadBreakDistanceAtr = null,
+  double? MadDisplacementAtr = null,
+  int? MadAcceptanceCloses = null,
+  double? MadSweepPenetrationAtr = null,
+  double? MadReclaimDepthAtr = null,
+  string? MadReasonCode = null
 );
 
 public sealed record TradePlanSourceStructure(

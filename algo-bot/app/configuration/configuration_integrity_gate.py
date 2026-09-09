@@ -32,13 +32,14 @@ from app.configuration.source_types import ConfigurationSourceBundle
 
 
 BASELINE = {
-  "catalog_entry_count": 580,
-  "configurable_count": 513,
+  # 2026-09 MAD v2: +7 new leaf fields under execution.mad.{expand,manip,accum}.
+  "catalog_entry_count": 587,
+  "configurable_count": 520,
   "protocol_constant_count": 10,
   "algorithm_constant_count": 57,
-  "python_projection_count": 531,
+  "python_projection_count": 538,
   "ctrader_only_count": 49,
-  "environment_entry_count": 513,
+  "environment_entry_count": 520,
   "deprecated_alias_count": 21,
   "shared_count": 96,
 }

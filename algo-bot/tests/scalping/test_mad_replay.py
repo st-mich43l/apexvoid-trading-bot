@@ -175,3 +175,100 @@ def test_mad_expectancy_report_empty_safe():
   report = mad_expectancy_report([])
   assert report["summary"]["n_events"] == 0
   assert report["by_phase_session_strategy"] == []
+  assert report["by_affinity_confidence"] == []
+  assert report["alignment_comparison"]["aligned"]["trade_count"] == 0
+
+
+def _manip_snapshot(*, sweep_side: str, confidence: float) -> dict:
+  return {
+    "phase": "manip",
+    "range_quality_atr": None,
+    "price_vs_asia": "above" if sweep_side == "high" else "below",
+    "sweep_side": sweep_side,
+    "reclaim": True,
+    "reason_code": "asia_sweep_reclaim",
+    "measured": {},
+    "asia": None,
+    "manipulation_direction": "SELL" if sweep_side == "high" else "BUY",
+    "expansion_direction": None,
+    "confidence": confidence,
+    "mad_version": 2,
+  }
+
+
+def test_v2_affinity_bucket_aligned_vs_opposed():
+  # High-sweep manipulation is SELL-aligned. A SELL trade sees it aligned;
+  # a BUY trade (wrong direction for this manipulation) sees it opposed.
+  aligned_event = LabEvent.from_dict({
+    "timestamp": 30,
+    "direction": "SELL",
+    "price": 4050.5,
+    "atr": 5.0,
+    "range_low": 4048.0,
+    "range_high": 4060.0,
+    "strategy": "liquidity_sweep_reversal",
+    "liquidity_level": 4050.0,
+    "barrier": 4040.0,
+    "bar": {"open": 4050.2, "high": 4051.0, "low": 4049.5, "close": 4050.6},
+    "target_min_price": 1.0,
+    "measured": {"mad": _manip_snapshot(sweep_side="high", confidence=0.9)},
+    "bars_after": [],
+  })
+  opposed_event = LabEvent.from_dict({
+    "timestamp": 31,
+    "direction": "BUY",
+    "price": 4050.5,
+    "atr": 5.0,
+    "range_low": 4048.0,
+    "range_high": 4060.0,
+    "strategy": "liquidity_sweep_reversal",
+    "liquidity_level": 4050.0,
+    "barrier": 4060.0,
+    "bar": {"open": 4050.2, "high": 4051.0, "low": 4049.5, "close": 4050.6},
+    "target_min_price": 1.0,
+    "measured": {"mad": _manip_snapshot(sweep_side="high", confidence=0.9)},
+    "bars_after": [],
+  })
+  aligned_row = replay_lab_event_with_mad(aligned_event)
+  opposed_row = replay_lab_event_with_mad(opposed_event)
+  assert aligned_row["mad_affinity_bucket"] == "aligned"
+  assert aligned_row["mad_affinity"] > 0.0
+  assert opposed_row["mad_affinity_bucket"] == "opposed"
+  assert opposed_row["mad_affinity"] == 0.0
+  assert aligned_row["mad_confidence_bucket"] == "high"
+
+
+def test_v2_confidence_bucket_scales_low_to_high():
+  low_event = LabEvent.from_dict({
+    "timestamp": 40,
+    "direction": "SELL",
+    "price": 4050.5,
+    "atr": 5.0,
+    "range_low": 4048.0,
+    "range_high": 4060.0,
+    "strategy": "liquidity_sweep_reversal",
+    "liquidity_level": 4050.0,
+    "bar": {"open": 4050.2, "high": 4051.0, "low": 4049.5, "close": 4050.6},
+    "measured": {"mad": _manip_snapshot(sweep_side="high", confidence=0.1)},
+    "bars_after": [],
+  })
+  row = replay_lab_event_with_mad(low_event)
+  assert row["mad_confidence_bucket"] == "low"
+
+
+def test_alignment_comparison_and_affinity_confidence_table_from_fixture():
+  report = replay_mad_fixture(FIXTURE)
+  comparison = report["alignment_comparison"]
+  assert set(comparison) == {"aligned", "neutral", "opposed"}
+  for bucket_metrics in comparison.values():
+    assert "trade_count" in bucket_metrics
+    assert "expectancy_r" in bucket_metrics
+    assert "profit_factor" in bucket_metrics
+    assert "median_r" in bucket_metrics
+  # Legacy fixture rows only stamp a bare phase (no direction) -> neutral.
+  assert comparison["neutral"]["trade_count"] >= 1
+  table = report["by_affinity_confidence"]
+  assert isinstance(table, list)
+  for row in table:
+    assert row["affinity_bucket"] in {"aligned", "neutral", "opposed"}
+    assert row["confidence_bucket"] in {"low", "medium", "high"}

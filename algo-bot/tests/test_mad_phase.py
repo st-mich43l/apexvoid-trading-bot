@@ -148,6 +148,14 @@ def test_classify_expand_on_accepted_break():
     day_key="2026-08-25", high=3410.0, low=3400.0,
     sealed=True, sealed_at=1, bar_count=10,
   )
+  # v2 (§4): accepted break requires N consecutive closes beyond the sealed
+  # edge, not just break_distance_atr alone — two prior closes above 3410
+  # plus the current 3413.0 close satisfy the default accept_closes=2.
+  ohlc = _m5([
+    (_ts(2026, 8, 25, 7, 0), 3409.5, 3411.5, 3409.0, 3411.0),
+    (_ts(2026, 8, 25, 7, 5), 3411.0, 3412.5, 3410.8, 3412.0),
+    (_ts(2026, 8, 25, 7, 10), 3412.0, 3413.5, 3411.0, 3413.0),
+  ])
   snap = classify_mad_phase(
     price=3413.0,  # 0.6 ATR beyond high
     atr=5.0,
@@ -157,8 +165,11 @@ def test_classify_expand_on_accepted_break():
     bar_high=3413.5,
     bar_low=3411.0,
     bar_close=3413.0,
+    ohlc=ohlc,
   )
   assert snap.phase == PHASE_EXPAND
+  assert snap.expansion_direction == "BUY"
+  assert snap.measured["accepted_closes"] >= 2
 
 
 def test_evaluate_mad_for_cycle_unclear_without_bars():
@@ -340,3 +351,217 @@ async def test_save_mad_phase_persists_enriched_payload(client):
   loaded = await load_mad_phase(client, "GBPUSD")
   assert loaded is not None
   assert loaded.phase == PHASE_ACCUM
+
+
+# --- v2: directional manipulation (§3) ---------------------------------
+
+_ASIA_MANIP = AsiaRangeSeal(
+  day_key="2026-08-25", high=3410.0, low=3400.0,
+  sealed=True, sealed_at=1, bar_count=10,
+)
+
+
+def _high_sweep_reclaim_snap():
+  from app.analysis.mad_phase import classify_mad_phase
+  return classify_mad_phase(
+    price=3408.0, atr=5.0, session="london", asia=_ASIA_MANIP,
+    m5_structure="range",
+    bar_high=3412.0, bar_low=3407.0, bar_close=3408.0,
+  )
+
+
+def _low_sweep_reclaim_snap():
+  from app.analysis.mad_phase import classify_mad_phase
+  return classify_mad_phase(
+    price=3402.0, atr=5.0, session="london", asia=_ASIA_MANIP,
+    m5_structure="range",
+    bar_high=3403.0, bar_low=3398.0, bar_close=3402.0,
+  )
+
+
+def test_high_sweep_reclaim_is_sell_aligned_not_buy():
+  from app.analysis.mad_phase import compute_mad_affinity
+
+  snap = _high_sweep_reclaim_snap()
+  assert snap.phase == PHASE_MANIP
+  assert snap.manipulation_direction == "SELL"
+
+  sell = compute_mad_affinity(snap, direction="SELL", strategy="structural_reaction")
+  buy = compute_mad_affinity(snap, direction="BUY", strategy="structural_reaction")
+  assert sell.direction_score == 1.0
+  assert sell.final > 0.0
+  assert buy.direction_score == 0.0
+  assert buy.final == 0.0
+
+
+def test_low_sweep_reclaim_is_buy_aligned_not_sell():
+  from app.analysis.mad_phase import compute_mad_affinity
+
+  snap = _low_sweep_reclaim_snap()
+  assert snap.phase == PHASE_MANIP
+  assert snap.manipulation_direction == "BUY"
+
+  buy = compute_mad_affinity(snap, direction="BUY", strategy="structural_reaction")
+  sell = compute_mad_affinity(snap, direction="SELL", strategy="structural_reaction")
+  assert buy.direction_score == 1.0
+  assert buy.final > 0.0
+  assert sell.direction_score == 0.0
+  assert sell.final == 0.0
+
+
+# --- v2: manipulation confidence scales with penetration/reclaim depth (§10/§12) ---
+
+def test_tiny_sweep_penetration_yields_low_manip_confidence():
+  from app.analysis.mad_phase import classify_mad_phase
+
+  snap = classify_mad_phase(
+    price=3409.95, atr=5.0, session="london", asia=_ASIA_MANIP,
+    m5_structure="range",
+    # ~0.06 ATR penetration (just past the sweep-detection tolerance band),
+    # ~0.01 ATR reclaim depth — a negligible edge poke.
+    bar_high=3410.3, bar_low=3405.0, bar_close=3409.95,
+  )
+  assert snap.phase == PHASE_MANIP
+  assert snap.confidence < 0.25
+
+
+def test_strong_sweep_penetration_and_deep_reclaim_yield_higher_confidence():
+  from app.analysis.mad_phase import classify_mad_phase
+
+  tiny = classify_mad_phase(
+    price=3409.95, atr=5.0, session="london", asia=_ASIA_MANIP,
+    m5_structure="range",
+    bar_high=3410.05, bar_low=3405.0, bar_close=3409.95,
+  )
+  strong = classify_mad_phase(
+    price=3407.5, atr=5.0, session="london", asia=_ASIA_MANIP,
+    m5_structure="range",
+    # 0.5 ATR penetration, 0.5 ATR reclaim depth — a real raid + rejection.
+    bar_high=3412.5, bar_low=3405.0, bar_close=3407.5,
+  )
+  assert strong.phase == PHASE_MANIP
+  assert strong.confidence > 0.7
+  assert strong.confidence > tiny.confidence
+
+
+# --- v2: double sweep gets no arbitrary direction (§11) ------------------
+
+def test_double_sweep_is_unclear_not_a_directional_call():
+  from app.analysis.mad_phase import classify_mad_phase, detect_asia_sweep_reclaim
+
+  side, reclaim = detect_asia_sweep_reclaim(3415.0, 3395.0, 3405.0, _ASIA_MANIP)
+  assert side == "both"
+  assert reclaim is False
+
+  snap = classify_mad_phase(
+    price=3405.0, atr=5.0, session="london", asia=_ASIA_MANIP,
+    m5_structure="range",
+    bar_high=3415.0, bar_low=3395.0, bar_close=3405.0,
+  )
+  assert snap.phase == PHASE_UNCLEAR
+  assert snap.reason_code == "asia_double_sweep"
+  assert snap.manipulation_direction is None
+
+
+# --- v2: expansion evidence, not midpoint distance (§4/§5) ---------------
+
+def test_inside_asia_far_from_midpoint_is_not_expand():
+  from app.analysis.mad_phase import classify_mad_phase
+
+  # Wide box (RQ=10, outside the accum band too) so this isolates the
+  # midpoint-distance-must-not-trigger-EXPAND behavior specifically.
+  asia = AsiaRangeSeal(
+    day_key="2026-08-25", high=3450.0, low=3400.0,
+    sealed=True, sealed_at=1, bar_count=10,
+  )
+  # price is still INSIDE the box, but its distance from the Asia midpoint
+  # (3425) is 3.0 ATR — well past the old (removed) 1.25 ATR trigger.
+  snap = classify_mad_phase(
+    price=3410.0, atr=5.0, session="london", asia=asia,
+    m5_structure="range",
+    midpoint_distance_atr=3.0,
+  )
+  assert snap.price_vs_asia == "inside"
+  assert snap.phase != PHASE_EXPAND
+
+
+def test_expand_sell_on_accepted_break_below_sealed_asia():
+  from app.analysis.mad_phase import classify_mad_phase
+
+  asia = AsiaRangeSeal(
+    day_key="2026-08-25", high=3410.0, low=3400.0,
+    sealed=True, sealed_at=1, bar_count=10,
+  )
+  ohlc = _m5([
+    (_ts(2026, 8, 25, 7, 0), 3400.5, 3401.0, 3398.5, 3399.0),
+    (_ts(2026, 8, 25, 7, 5), 3399.0, 3399.5, 3397.0, 3398.0),
+    (_ts(2026, 8, 25, 7, 10), 3398.0, 3398.5, 3397.0, 3398.0),
+  ])
+  snap = classify_mad_phase(
+    price=3398.0,  # 0.4 ATR below low
+    atr=5.0,
+    session="london",
+    asia=asia,
+    m5_structure="bearish",
+    bar_high=3399.0,
+    bar_low=3397.0,
+    bar_close=3398.0,
+    ohlc=ohlc,
+  )
+  assert snap.phase == PHASE_EXPAND
+  assert snap.expansion_direction == "SELL"
+
+
+def test_wick_beyond_edge_with_close_back_inside_is_manipulation_not_expansion():
+  from app.analysis.mad_phase import classify_mad_phase
+
+  asia = AsiaRangeSeal(
+    day_key="2026-08-25", high=3410.0, low=3400.0,
+    sealed=True, sealed_at=1, bar_count=10,
+  )
+  snap = classify_mad_phase(
+    price=3409.0, atr=5.0, session="london", asia=asia,
+    m5_structure="range",
+    bar_high=3413.0,  # wick beyond the sealed high
+    bar_low=3407.0,
+    bar_close=3409.0,  # close back inside
+  )
+  assert snap.phase == PHASE_MANIP
+  assert snap.phase != PHASE_EXPAND
+  assert snap.sweep_side == "high"
+  assert snap.reclaim is True
+
+
+# --- v2: fail closed on a stale Asia seal (§7) ----------------------------
+
+def test_stale_asia_seal_with_missing_current_bars_is_unclear():
+  from app.analysis.mad_phase import classify_mad_phase
+
+  stale = AsiaRangeSeal(
+    day_key="2026-08-24", high=3410.0, low=3400.0,
+    sealed=True, sealed_at=1, bar_count=10,
+  )
+  now = _ts(2026, 8, 26, 3)  # a different Asia trading day than the seal
+  snap = classify_mad_phase(
+    price=3405.0, atr=5.0, session="asia", asia=stale,
+    m5_structure="range",
+    now=now,
+  )
+  assert snap.phase == PHASE_UNCLEAR
+  assert snap.reason_code == "asia_range_stale_or_missing"
+
+
+def test_same_day_seal_is_not_treated_as_stale():
+  from app.analysis.mad_phase import asia_day_key, classify_mad_phase
+
+  now = _ts(2026, 8, 26, 3)
+  seal = AsiaRangeSeal(
+    day_key=asia_day_key(now), high=3410.0, low=3400.0,
+    sealed=False, sealed_at=None, bar_count=10,
+  )
+  snap = classify_mad_phase(
+    price=3405.0, atr=5.0, session="asia", asia=seal,
+    m5_structure="range",
+    now=now,
+  )
+  assert snap.reason_code != "asia_range_stale_or_missing"

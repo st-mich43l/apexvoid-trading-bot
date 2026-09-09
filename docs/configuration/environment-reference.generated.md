@@ -2,8 +2,8 @@
 
 > Generated from the canonical configuration catalog (`app.configuration.environment_contract`). Do not edit manually.
 
-- Contract fingerprint: `75ffa663045c27a852d99023853af401981c2058c53c583369b9129a9accdb9d`
-- Environment-bound fields: `513`
+- Contract fingerprint: `feda5109b7e3af5cd6b2e23912b9bcfff4867d0e2aa0ea6d7666946f9e5d7d8b`
+- Environment-bound fields: `520`
 - Deprecated aliases: `21`
 
 Secret values are never emitted; secret defaults render as `<redacted>`.
@@ -81,6 +81,13 @@ Secret values are never emitted; secret defaults render as `<redacted>`.
 | `AUTO_TRADE_KEY_LEVEL_REQUIRE_KILLZONE` | `strategies.reaction.key_level.require_killzone` | `bool` | no | no | — | `False` |
 | `AUTO_TRADE_LABEL` | `execution.policy.label` | `string` | no | no | — | `apexvoid-auto` |
 | `AUTO_TRADE_LIQUIDITY_REVERSAL_ENABLED` | `strategies.reaction.liquidity_reversal.enabled` | `bool` | no | yes | — | `True` |
+| `AUTO_TRADE_MAD_ACCUM_MAXIMUM_RQ` | `execution.mad.accum.maximum_rq` | `float` | no | no | — | `6.0` |
+| `AUTO_TRADE_MAD_ACCUM_MINIMUM_RQ` | `execution.mad.accum.minimum_rq` | `float` | no | no | — | `0.8` |
+| `AUTO_TRADE_MAD_EXPAND_ACCEPT_CLOSES` | `execution.mad.expand.accept_closes` | `int` | no | no | — | `2` |
+| `AUTO_TRADE_MAD_EXPAND_BREAK_ATR` | `execution.mad.expand.break_atr` | `float` | no | no | — | `0.35` |
+| `AUTO_TRADE_MAD_EXPAND_DISPLACEMENT_ATR` | `execution.mad.expand.displacement_atr` | `float` | no | no | — | `1.25` |
+| `AUTO_TRADE_MAD_MANIP_MIN_PENETRATION_ATR` | `execution.mad.manip.min_penetration_atr` | `float` | no | no | — | `0.05` |
+| `AUTO_TRADE_MAD_MANIP_MIN_RECLAIM_ATR` | `execution.mad.manip.min_reclaim_atr` | `float` | no | no | — | `0.05` |
 | `AUTO_TRADE_MAPPED_ZONE_ENABLED` | `strategies.mapped_zone.enabled` | `bool` | no | yes | `AUTO_TRADE_MARKET_MAP_STRATEGY_ENABLED` | `True` |
 | `AUTO_TRADE_MAP_COUNTER_BIAS_ENABLED` | `strategies.mapped_zone.counter_bias_enabled` | `bool` | no | no | — | `True` |
 | `AUTO_TRADE_MAP_COUNTER_BIAS_MIN_CONFLUENCE` | `actionability.counter_bias.map_counter_bias_min_confluence` | `int` | no | no | — | `2` |

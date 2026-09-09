@@ -523,7 +523,24 @@ public sealed record AutoTradeEvent(
   double? MathFibRatio = null,
   double? MathVelocity = null,
   double? MathAcceleration = null,
-  double? MathPd = null
+  double? MathPd = null,
+  int? MathFeatureVersion = null,
+  // MAD v2 context telemetry - republished from plan.Analysis.MadPhase etc.
+  // (TradePlan.cs), same pattern as the Math* fields above.
+  int? MadVersion = null,
+  string? MadPhase = null,
+  double? MadConfidence = null,
+  double? MadAffinity = null,
+  string? MadDirection = null,
+  string? MadSweepSide = null,
+  bool? MadReclaim = null,
+  double? MadRangeQualityAtr = null,
+  double? MadBreakDistanceAtr = null,
+  double? MadDisplacementAtr = null,
+  int? MadAcceptanceCloses = null,
+  double? MadSweepPenetrationAtr = null,
+  double? MadReclaimDepthAtr = null,
+  string? MadReasonCode = null
 );
 
 public sealed record AutoTradeGroupPlan(

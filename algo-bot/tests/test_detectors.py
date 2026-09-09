@@ -1024,3 +1024,71 @@ def test_technique_reaction_covers_instance_with_band_builder_overlap():
   ):
     supply_demand_technique_reaction(ctx)
   assert seen == [0.3]
+
+
+def test_mad_cannot_add_a_discrete_star_to_v1_confluence():
+  """§8: MAD must not blindly create a whole star. Old v1 bug:
+  ``if mad_bonus >= 0.1: confluence_v1 += 1`` — direction-blind, so even a
+  MANIP snapshot pointing the WRONG way for this BUY setup would have
+  bumped a 2-star Break & Retest to 3 stars. confluence_v1 must be
+  identical whether or not a strong, confident MAD phase is attached.
+  """
+  baseline_ctx = _break_retest_ctx()
+  baseline = detectors.break_retest(baseline_ctx)
+  assert baseline is not None
+  assert baseline.direction == "BUY"
+
+  mad_snapshot = {
+    "phase": "manip",
+    "range_quality_atr": None,
+    "price_vs_asia": "above",
+    "sweep_side": "high",
+    "reclaim": True,
+    "reason_code": "asia_sweep_reclaim",
+    "measured": {},
+    "asia": None,
+    # High-sweep manipulation is SELL-aligned — the opposite of this BUY
+    # setup — yet the v1 bug applied its bonus regardless of direction.
+    "manipulation_direction": "SELL",
+    "expansion_direction": None,
+    "confidence": 0.95,
+    "mad_version": 2,
+  }
+  mad_ctx = replace(baseline_ctx, mad_phase="manip", mad=mad_snapshot)
+  with_mad = detectors.break_retest(mad_ctx)
+  assert with_mad is not None
+  assert with_mad.confluence_v1 == baseline.confluence_v1
+  assert with_mad.confluence_v1 == 2
+
+  # A perfectly direction/strategy-aligned MANIP snapshot must still leave
+  # v1 untouched — v1 is fully MAD-blind by design, not merely direction-gated.
+  aligned_snapshot = dict(mad_snapshot, manipulation_direction="BUY")
+  aligned_ctx = replace(baseline_ctx, mad_phase="manip", mad=aligned_snapshot)
+  aligned = detectors.break_retest(aligned_ctx)
+  assert aligned is not None
+  assert aligned.confluence_v1 == baseline.confluence_v1
+
+
+def test_mad_never_pushes_confluence_v2_past_three_stars():
+  """§8/§24: MAD's v2 contribution is bounded and additive to an already
+  0..3-capped star scale — a maximal, perfectly-aligned affinity must never
+  produce a 4th star."""
+  ctx = _break_retest_ctx()
+  mad_snapshot = {
+    "phase": "manip",
+    "range_quality_atr": None,
+    "price_vs_asia": "above",
+    "sweep_side": "high",
+    "reclaim": True,
+    "reason_code": "asia_sweep_reclaim",
+    "measured": {},
+    "asia": None,
+    "manipulation_direction": "BUY",
+    "expansion_direction": None,
+    "confidence": 1.0,
+    "mad_version": 2,
+  }
+  result = detectors.break_retest(replace(ctx, mad_phase="manip", mad=mad_snapshot))
+  assert result is not None
+  assert result.confluence_v2 <= 3
+  assert result.confluence_v1 <= 3
