@@ -870,49 +870,6 @@ def volume_weighted_reference_entry(
   return weighted / total
 
 
-def resolve_entry_leg_lots(
-  total_lots: Any,
-  ratios: Any,
-  *,
-  step_lots: Any = Decimal("0.01"),
-) -> tuple[Decimal, ...]:
-  """Mirror C# ``VolumePlanner.SplitEntryVolume`` in lot space.
-
-  AwayFromZero 2dp round on the first N-1 legs, remainder on the last — so
-  0.11 at 70/30 resolves to 0.08 + 0.03 (weights 8/11, 3/11).
-  """
-  total = decimal_value(total_lots, "total_lots")
-  step = decimal_value(step_lots, "step_lots")
-  ratio_values = [decimal_value(ratio, "leg_ratio") for ratio in ratios]
-  if total <= 0 or step <= 0 or not ratio_values:
-    raise ProtectiveStopError("entry lot split inputs are invalid")
-  if any(ratio <= 0 for ratio in ratio_values):
-    raise ProtectiveStopError("entry ratios must all be positive")
-  ratio_sum = sum(ratio_values)
-  if abs(ratio_sum - Decimal("1")) > Decimal("0.0001"):
-    raise ProtectiveStopError("entry ratios must sum to 1.0")
-  if len(ratio_values) == 1:
-    return (total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP),)
-
-  lot_quantum = Decimal("0.01")
-  slices: list[Decimal] = []
-  allocated = Decimal("0")
-  for ratio in ratio_values[:-1]:
-    # C#: Round(totalLots * ratio, 2, AwayFromZero); with step 0.01 that
-    # lot-cent value is already broker-step aligned.
-    ideal = (total * ratio).quantize(lot_quantum, rounding=ROUND_HALF_UP)
-    slices.append(ideal)
-    allocated += ideal
-  slices.append(total - allocated)
-  if any(slice_lots < step for slice_lots in slices):
-    raise ProtectiveStopError(
-      "resolved entry legs fall below broker step",
-    )
-  if sum(slices) != total:
-    raise ProtectiveStopError("resolved entry legs do not sum to total lots")
-  return tuple(slices)
-
-
 def plan_group_protective_stop(
   *,
   direction: str,

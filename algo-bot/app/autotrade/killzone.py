@@ -217,13 +217,6 @@ def classify_killzone(
   )
 
 
-def is_killzone_utc(
-  hour: int,
-  cfg: Any | None = None,
-) -> bool:
-  return classify_killzone(hour=hour, cfg=cfg).allowed
-
-
 def evaluate_killzone_gate(
   *,
   ts: int | float | None = None,

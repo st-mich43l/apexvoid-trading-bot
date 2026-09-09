@@ -1460,34 +1460,6 @@ def _planned_stop_price(
   return None
 
 
-def _copy_draft(
-  symbol: str,
-  result: DetectionResult,
-  execution_match: StrategyMatch | None = None,
-) -> str | None:
-  """Build an editable one-line command; include planned SL when known."""
-  live = {item.upper() for item in runtime_config.live_instruments()}
-  if symbol.upper() not in live:
-    return None
-  setup = re.sub(r"[^a-z0-9]+", "-", result.setup.lower()).strip("-")
-  grade = "*" * max(1, min(3, int(result.confluence)))
-  entry = (
-    f"{_price_text(result.entry_zone.low, symbol)}-"
-    f"{_price_text(result.entry_zone.high, symbol)}"
-  )
-  planned_stop = _planned_stop_price(result, execution_match)
-  sl_text = (
-    _price_text(planned_stop, symbol)
-    if planned_stop is not None
-    else "SL"
-  )
-
-  return (
-    f"gold {result.direction.lower()} entry zone ({entry}) "
-    f"/ sl {sl_text} / tp TP1/TP2/TP3 / setup {setup} {grade}"
-  )
-
-
 def _format_detection(
   symbol: str,
   tf: str,
