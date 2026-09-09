@@ -372,17 +372,6 @@ def parameter_sweep(
   return results
 
 
-def default_sweep_grids() -> dict[str, list[float]]:
-  return {
-    "retracement_min": [0.20, 0.25, 0.30, 0.35],
-    "retracement_max": [0.55, 0.60, 0.65, 0.70, 0.75],
-    "buy_max_position": [0.15, 0.20, 0.25, 0.30],
-    "sell_min_position": [0.70, 0.75, 0.80, 0.85],
-    "min_impulse_atr": [0.5, 0.75, 1.0, 1.25, 1.5],
-    "max_location_buy": [0.30, 0.35, 0.40, 0.45],
-  }
-
-
 def _opt_float(value: Any) -> float | None:
   if value is None:
     return None

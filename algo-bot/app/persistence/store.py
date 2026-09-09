@@ -1764,26 +1764,6 @@ async def store_manual_signal(
   }
 
 
-async def set_manual_signal_channel_id(row_id: int, channel_message_id: int) -> None:
-  """Back-fill the channel_message_id for an already-inserted manual signal."""
-  async with _connect() as db:
-    async with db.transaction():
-      await db.execute(
-        "UPDATE manual_signals SET channel_message_id = $1 WHERE id = $2",
-        channel_message_id, row_id,
-      )
-      await db.execute(
-        """
-        INSERT INTO signal_posts (signal_id, channel_id, message_id, tier)
-        VALUES ($1, $2, $3, 'vip')
-        ON CONFLICT (signal_id, channel_id) DO UPDATE SET
-          message_id = excluded.message_id,
-          tier = 'vip'
-        """,
-        row_id, runtime_config.delivery.telegram.telegram_channel_id, channel_message_id,
-      )
-
-
 async def insert_signal_post(
   signal_id: int,
   channel_id: int,
@@ -2149,18 +2129,6 @@ async def undo_last_close_leg(row_id: int) -> dict | None:
       "remaining": remaining,
       "previous_status": row["status"],
     }
-
-
-async def get_manual_signal_any_by_channel_id(
-  channel_message_id: int,
-) -> dict | None:
-  """Return a signal by channel message id, regardless of lifecycle state."""
-  async with _connect() as db:
-    row = await db.fetchrow(
-      "SELECT * FROM manual_signals WHERE channel_message_id = $1",
-      channel_message_id,
-    )
-  return _decode_signal(row) if row else None
 
 
 def signal_root(signal: dict) -> int:
@@ -2586,17 +2554,6 @@ async def get_signal_by_execution_intent_id(intent_token: str) -> dict | None:
   return _decode_signal(row) if row else None
 
 
-async def get_manual_signal_by_channel_id(channel_message_id: int) -> dict | None:
-  """Look up an open manual signal by its Telegram channel message_id."""
-  async with _connect() as db:
-    row = await db.fetchrow(
-      "SELECT * FROM manual_signals "
-      "WHERE channel_message_id = $1 AND status = 'open'",
-      channel_message_id,
-    )
-    return dict(row) if row else None
-
-
 async def close_manual_signal(row_id: int, result_pips: int) -> dict | None:
   """Mark a signal as closed and record the pip result.
 
@@ -2627,27 +2584,6 @@ async def close_manual_signal(row_id: int, result_pips: int) -> dict | None:
     symbol=str(row["symbol"] or "XAU"),
   )
   return dict(row)
-
-
-async def cancel_manual_signal_by_channel_id(channel_message_id: int) -> dict | None:
-  """Cancel an open signal identified by the Telegram channel message_id."""
-  async with _connect() as db:
-    async with db.transaction():
-      row = await db.fetchrow(
-        "SELECT * FROM manual_signals "
-        "WHERE channel_message_id = $1 AND status = 'open' "
-        "FOR UPDATE",
-        channel_message_id,
-      )
-      if row is None:
-        return None
-      row = dict(row)
-      await db.execute(
-        "UPDATE manual_signals SET status = 'cancelled', closed_at = $1 "
-        "WHERE id = $2",
-        int(time.time()), row["id"],
-      )
-    return row
 
 
 async def cancel_manual_signal(row_id: int) -> dict | None:

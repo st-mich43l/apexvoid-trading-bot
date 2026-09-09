@@ -32,11 +32,6 @@ def _build_symbols_map() -> dict[str, dict[str, float | int]]:
   return mapping
 
 
-def symbols_map() -> dict[str, dict[str, float | int]]:
-  """Return pip/digits metadata for every enabled instrument."""
-  return _build_symbols_map()
-
-
 def __getattr__(name: str):
   if name == "SYMBOLS":
     return _build_symbols_map()
@@ -106,13 +101,6 @@ def digits_for(symbol: str) -> int:
 def pip_value_per_lot(symbol: str) -> float:
   try:
     return float(runtime_config.for_instrument(symbol).units.pip_value_per_lot)
-  except EffectiveInstrumentError as exc:
-    raise KeyError(str(exc)) from None
-
-
-def contract_units_for(symbol: str) -> float:
-  try:
-    return float(runtime_config.for_instrument(symbol).units.contract_units_per_lot)
   except EffectiveInstrumentError as exc:
     raise KeyError(str(exc)) from None
 

@@ -58,7 +58,6 @@ RANGE_STATE_PROVISIONAL = "provisional_range"
 RANGE_STATE_CONFIRMED = "confirmed_range"
 RANGE_STATE_POST_IMPULSE = "post_impulse_range"
 RANGE_STATE_BROKEN = "broken_range"
-BARRIER_GRADES = ("A", "B", "C", "invalid")
 
 
 @dataclass(frozen=True)
@@ -802,16 +801,6 @@ def _fallback_barrier(
     fallback=True,
     tested=touches >= 2,
   )
-
-
-def _best_range(
-  barriers: list[ScalpBarrier],
-  price: float,
-  atr: float,
-  cfg,
-) -> ScalpRange | None:
-  scalp_range, _ = _best_range_with_state(barriers, price, atr, cfg, None, None)
-  return scalp_range
 
 
 def _best_range_with_state(

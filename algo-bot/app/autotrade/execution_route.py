@@ -12,7 +12,6 @@ from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
 
 from app.autotrade.strategy_taxonomy import (
-  REACTION_STRATEGIES,
   is_breakout_retest_scalp_strategy,
   is_reaction_strategy,
   is_scalp_strategy,
@@ -28,7 +27,6 @@ ROUTE_MARKET_WITH_LIMIT_SCALE = "market_with_limit_scale"
 ROUTE_EITHER = "either"
 
 # Key Level / Session / Trendline only — Demand/Supply keep zone_scale → limit_ladder.
-REACTION_MARKET_SCALE_STRATEGIES = REACTION_STRATEGIES
 REACTION_MARKET_SCALE_FAMILIES = frozenset({
   "key_level",
   "session_level",
@@ -157,15 +155,6 @@ def scalp_micro_grid_legs(
     step = (far - start) / (count - 1)
     raw = [start + (step * index) for index in range(count)]
   return _unique_prices([_round_price(price, digits) for price in raw])
-
-
-def _equal_clip_ratios(count: int) -> tuple[float, ...]:
-  if count <= 0:
-    return ()
-  base = round(1.0 / count, 6)
-  ratios = [base] * count
-  ratios[-1] = round(1.0 - base * (count - 1), 6)
-  return tuple(ratios)
 
 
 def resolve_execution_route_plan(

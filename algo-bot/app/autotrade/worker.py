@@ -175,7 +175,6 @@ from app.autotrade.trade_plan_stream import (
 from app.autotrade.route_outcome import record_route_outcome, route_outcome_key
 from app.autotrade.setup_card import save_forming_card_status, edit_forming_card_stop
 from app.autotrade.reaction_identity import (
-  THESIS_CLAIM_ACQUIRE_LUA,
   ACTIVE_THESIS_STATES,
   advance_thesis_rearm_on_bar,
   dump_claim,
@@ -2513,60 +2512,6 @@ async def _load_thesis_claim(client: Any, thesis_id: str | None) -> dict[str, An
 
 async def _save_thesis_claim(client: Any, thesis_id: str, payload: dict[str, Any]) -> None:
   await client.set(thesis_claim_key(thesis_id), dump_claim(payload))
-
-
-async def _acquire_thesis_claim(client: Any, payload_json: str, thesis_id: str) -> bool:
-  key = thesis_claim_key(thesis_id)
-  try:
-    result = await client.eval(
-      THESIS_CLAIM_ACQUIRE_LUA,
-      1,
-      key,
-      payload_json,
-    )
-    return int(result or 0) == 1
-  except Exception:
-    log.exception("thesis claim lua acquire failed; using conditional SET")
-  existing = parse_thesis_claim(await client.get(key))
-  if existing is None:
-    return bool(await client.set(key, payload_json, nx=True))
-  state = str(existing.get("state") or "").casefold()
-  rearm = bool(existing.get("rearm_ready"))
-  if state == "rearm_ready" or (
-    state in {"closed", "cancelled", "rejected", "expired"} and rearm
-  ):
-    await client.set(key, payload_json)
-    return True
-  if state in {"cancelled", "rejected", "expired"}:
-    await client.set(key, payload_json)
-    return True
-  return False
-
-
-async def _mark_reaction_claim_terminal(
-  client: Any,
-  *,
-  reaction_id: str | None,
-  state: str,
-  thesis_id: str | None = None,
-) -> None:
-  if reaction_id:
-    key = reaction_claim_key(reaction_id)
-    existing = parse_reaction_claim(await client.get(key))
-    if existing is not None:
-      existing["state"] = state
-      await client.set(key, dump_claim(existing))
-  if thesis_id and _thesis_lock_enabled():
-    claim = await _load_thesis_claim(client, thesis_id)
-    if claim is None:
-      return
-    claim["state"] = state
-    if state in {"cancelled", "rejected", "expired"}:
-      claim["terminal_at"] = int(datetime.now(timezone.utc).timestamp())
-      # Rejected/cancelled before a live managed group may recycle.
-      if state in {"cancelled", "rejected", "expired"}:
-        claim["rearm_ready"] = True
-    await _save_thesis_claim(client, thesis_id, claim)
 
 
 async def _mark_thesis_terminal_waiting_exit(
@@ -7476,26 +7421,6 @@ async def _strategy_publication_result(
   )
 
 
-async def _group_is_active(
-  client: Any,
-  symbol: str,
-  group_id: str | None,
-) -> bool:
-  if not group_id:
-    return False
-  raw = await client.get(f"auto_trade:executor_snapshot:{symbol.upper()}")
-  if not raw:
-    return False
-  try:
-    snapshot = json.loads(
-      raw.decode() if isinstance(raw, bytes) else str(raw)
-    )
-  except (TypeError, ValueError, json.JSONDecodeError):
-    return False
-  tokens = {str(item) for item in snapshot.get("group_ids") or []}
-  return group_id in tokens or group_id[:10] in tokens
-
-
 def _normalize_trade_direction(value: object) -> str | None:
   if value is None:
     return None
@@ -7765,7 +7690,6 @@ async def _handle_event(
     now=int(datetime.now(timezone.utc).timestamp()),
     range_enabled=bool(runtime_config.strategies.range_reversion.enabled),
   )
-  box_selected = box_eligibility.eligible
   if box_eligibility.eligible:
     await increment_metric(client, "range_box_eligible", symbol=symbol)
   else:

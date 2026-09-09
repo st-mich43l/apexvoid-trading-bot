@@ -422,15 +422,3 @@ def select_primary(
       item.direction,
     ),
   )
-
-
-def zones_contradict(left: StrategyMatch, right: StrategyMatch, atr: float) -> bool:
-  if left.direction == right.direction:
-    return False
-  del atr
-  return _zone_overlap_ratio(
-    left.entry_low,
-    left.entry_high,
-    right.entry_low,
-    right.entry_high,
-  ) >= 0.5

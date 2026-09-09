@@ -852,13 +852,6 @@ def collect_technique_instances(
   return instances, rejects
 
 
-def instances_for_technique(
-  instances: Sequence[TechniqueInstance],
-  technique: str,
-) -> list[TechniqueInstance]:
-  return [item for item in instances if item.technique == technique]
-
-
 def technique_display_tags(tags: Iterable[str]) -> str:
   parts = [TECHNIQUE_SHORT.get(str(tag), str(tag).upper()) for tag in sorted(set(tags))]
   return "+".join(parts)

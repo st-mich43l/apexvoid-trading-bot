@@ -777,21 +777,6 @@ def _indicator_set(df: pd.DataFrame, length: int = 14) -> IndicatorSet:
   return IndicatorSet(atr=atr_indicator(df, length))
 
 
-def _structure_set(df: pd.DataFrame) -> StructureSet:
-  ctx = analyze({"_": df})
-  if "_" in ctx.per_tf:
-    return _structure_sets_from_analysis(ctx.per_tf)["_"]
-  items = swings(df, 2, 2)
-  return StructureSet(
-    swings=items,
-    bias=market_structure(items),
-    levels=key_levels(df),
-    equal_levels=equal_highs_lows(df),
-    fvg_zones=fvg(df),
-    order_blocks=order_blocks(df),
-  )
-
-
 def _structure_sets_from_analysis(items) -> dict[str, StructureSet]:
   result = {}
   for name, item in items.items():
@@ -847,16 +832,6 @@ def _exec(ctx: DetectionContext) -> tuple[pd.DataFrame, IndicatorSet, StructureS
   )
 
 
-def _uses_counter_bias_direction(ctx: DetectionContext) -> bool:
-  if not ctx.settings.allow_counter_trend:
-    return False
-  local_bias = ctx.structures[ctx.tf].bias
-  if local_bias not in {"up", "down"}:
-    return False
-  htf_bias = (ctx.htf_bias or "").casefold()
-  if htf_bias not in {"up", "down"}:
-    return False
-  return local_bias != htf_bias
 
 
 def _direction(ctx: DetectionContext) -> str | None:
@@ -1003,13 +978,6 @@ def _candidate_zones(st: StructureSet, direction: str) -> list[Zone]:
     seen.add(key)
     zones.append(zone)
   return zones
-
-
-def _last_touches_zone(df: pd.DataFrame, zone: Zone) -> bool:
-  if df.empty:
-    return False
-  row = df.iloc[-1]
-  return float(row["low"]) <= zone.high and float(row["high"]) >= zone.low
 
 
 def _best_valid_zone(
@@ -2431,21 +2399,6 @@ def _pseudo_level_zone(
     source=source,
     score=0.0,
     score_reasons=[reason],
-  )
-
-
-def _recent_choch(
-  st: StructureSet,
-  direction: str,
-  bar_count: int,
-  settings: DetectorSettings,
-) -> bool:
-  lookback = max(1, settings.sweep_react_bars)
-  earliest = max(0, bar_count - lookback - 1)
-  wanted = "up" if direction == "BUY" else "down"
-  return any(
-    item.kind == "CHoCH" and item.direction == wanted and item.index >= earliest
-    for item in st.breaks
   )
 
 

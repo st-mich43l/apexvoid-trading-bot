@@ -242,14 +242,6 @@ def _group_stats(label: str, rows: list[dict]) -> dict:
   }
 
 
-def _group_line(group: dict) -> str:
-  return (
-    f"{escape(group['label'])}: {group['trades']} · "
-    f"{group['wins']}W/{group['losses']}L · "
-    f"{_signed(group['net'], 'p')} · {group['win_rate']:.0f}%"
-  )
-
-
 def _stats_title(period: str) -> str:
   words = period.strip().split()
   if not words:
@@ -570,14 +562,6 @@ def _stream_book_lines(stats: dict) -> list[str]:
       _metric_line("📦", "Trades", str(combined.get("trades") or 0)),
     ])
   return lines or ["└─ —"]
-
-
-def _stream_lines(by_stream: dict[str, dict]) -> list[str]:
-  """Compact stream summary for callers that still pass by_stream only."""
-  return _stream_book_lines({
-    "by_stream": by_stream,
-    "by_setup_by_stream": {},
-  })
 
 
 def partition_rows_by_symbol(rows: list[dict]) -> dict[str, list[dict]]:

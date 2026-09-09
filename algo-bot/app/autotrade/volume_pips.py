@@ -69,16 +69,6 @@ def trade_net_pips(
   return round_pips(pip_volume / float(initial_filled_volume))
 
 
-def accumulate_pip_volume(
-  existing_pip_volume: float,
-  leg_pips_value: float,
-  actual_closed_volume: float,
-) -> float:
-  return float(existing_pip_volume) + float(leg_pips_value) * float(
-    actual_closed_volume
-  )
-
-
 def remaining_after_close(
   initial_filled_volume: float,
   closed_volumes: Iterable[float],
