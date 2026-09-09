@@ -107,6 +107,21 @@ class TradePlanAnalysis:
   math_acceleration: float | None = None
   math_pd: float | None = None
   math_feature_version: int | None = None
+  # MAD v2 context telemetry (§17) — descriptive only, never a gate.
+  mad_version: int | None = None
+  mad_phase: str | None = None
+  mad_confidence: float | None = None
+  mad_affinity: float | None = None
+  mad_direction: str | None = None
+  mad_sweep_side: str | None = None
+  mad_reclaim: bool | None = None
+  mad_range_quality_atr: float | None = None
+  mad_break_distance_atr: float | None = None
+  mad_displacement_atr: float | None = None
+  mad_acceptance_closes: int | None = None
+  mad_sweep_penetration_atr: float | None = None
+  mad_reclaim_depth_atr: float | None = None
+  mad_reason_code: str | None = None
 
   def to_dict(self) -> dict:
     return {
@@ -133,6 +148,20 @@ class TradePlanAnalysis:
       "math_acceleration": self.math_acceleration,
       "math_pd": self.math_pd,
       "math_feature_version": self.math_feature_version,
+      "mad_version": self.mad_version,
+      "mad_phase": self.mad_phase,
+      "mad_confidence": self.mad_confidence,
+      "mad_affinity": self.mad_affinity,
+      "mad_direction": self.mad_direction,
+      "mad_sweep_side": self.mad_sweep_side,
+      "mad_reclaim": self.mad_reclaim,
+      "mad_range_quality_atr": self.mad_range_quality_atr,
+      "mad_break_distance_atr": self.mad_break_distance_atr,
+      "mad_displacement_atr": self.mad_displacement_atr,
+      "mad_acceptance_closes": self.mad_acceptance_closes,
+      "mad_sweep_penetration_atr": self.mad_sweep_penetration_atr,
+      "mad_reclaim_depth_atr": self.mad_reclaim_depth_atr,
+      "mad_reason_code": self.mad_reason_code,
     }
 
   @classmethod
@@ -187,6 +216,60 @@ class TradePlanAnalysis:
       math_feature_version=(
         None if data.get("math_feature_version") is None
         else int(data["math_feature_version"])
+      ),
+      mad_version=(
+        None if data.get("mad_version") is None else int(data["mad_version"])
+      ),
+      mad_phase=(
+        None if data.get("mad_phase") is None else str(data["mad_phase"])
+      ),
+      mad_confidence=(
+        None if data.get("mad_confidence") is None
+        else float(data["mad_confidence"])
+      ),
+      mad_affinity=(
+        None if data.get("mad_affinity") is None
+        else float(data["mad_affinity"])
+      ),
+      mad_direction=(
+        None if data.get("mad_direction") is None
+        else str(data["mad_direction"])
+      ),
+      mad_sweep_side=(
+        None if data.get("mad_sweep_side") is None
+        else str(data["mad_sweep_side"])
+      ),
+      mad_reclaim=(
+        None if data.get("mad_reclaim") is None
+        else bool(data["mad_reclaim"])
+      ),
+      mad_range_quality_atr=(
+        None if data.get("mad_range_quality_atr") is None
+        else float(data["mad_range_quality_atr"])
+      ),
+      mad_break_distance_atr=(
+        None if data.get("mad_break_distance_atr") is None
+        else float(data["mad_break_distance_atr"])
+      ),
+      mad_displacement_atr=(
+        None if data.get("mad_displacement_atr") is None
+        else float(data["mad_displacement_atr"])
+      ),
+      mad_acceptance_closes=(
+        None if data.get("mad_acceptance_closes") is None
+        else int(data["mad_acceptance_closes"])
+      ),
+      mad_sweep_penetration_atr=(
+        None if data.get("mad_sweep_penetration_atr") is None
+        else float(data["mad_sweep_penetration_atr"])
+      ),
+      mad_reclaim_depth_atr=(
+        None if data.get("mad_reclaim_depth_atr") is None
+        else float(data["mad_reclaim_depth_atr"])
+      ),
+      mad_reason_code=(
+        None if data.get("mad_reason_code") is None
+        else str(data["mad_reason_code"])
       ),
     )
 

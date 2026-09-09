@@ -497,6 +497,20 @@ def build_trade_plan_from_strategy_match(
     math_acceleration=match.math_acceleration,
     math_pd=match.math_pd,
     math_feature_version=match.math_feature_version,
+    mad_version=match.mad_version,
+    mad_phase=match.mad_phase,
+    mad_confidence=match.mad_confidence,
+    mad_affinity=match.mad_affinity,
+    mad_direction=match.mad_direction,
+    mad_sweep_side=match.mad_sweep_side,
+    mad_reclaim=match.mad_reclaim,
+    mad_range_quality_atr=match.mad_range_quality_atr,
+    mad_break_distance_atr=match.mad_break_distance_atr,
+    mad_displacement_atr=match.mad_displacement_atr,
+    mad_acceptance_closes=match.mad_acceptance_closes,
+    mad_sweep_penetration_atr=match.mad_sweep_penetration_atr,
+    mad_reclaim_depth_atr=match.mad_reclaim_depth_atr,
+    mad_reason_code=match.mad_reason_code,
   )
 
   source_structure = TradePlanSourceStructure(

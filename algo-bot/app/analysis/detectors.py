@@ -7,7 +7,7 @@ import logging
 import math
 from collections import Counter
 from types import SimpleNamespace
-from typing import Callable, Protocol
+from typing import Any, Callable, Protocol
 
 import pandas as pd
 
@@ -691,6 +691,23 @@ class DetectionResult:
   math_acceleration: float | None = None
   math_pd: float | None = None
   math_feature_version: int | None = None
+  # MAD v2 context telemetry (§17) — descriptive only, never a gate. See
+  # app/analysis/mad_phase.py MadPhaseSnapshot/MadAffinityScore for the
+  # authoritative field semantics.
+  mad_version: int | None = None
+  mad_phase: str | None = None
+  mad_confidence: float | None = None
+  mad_affinity: float | None = None
+  mad_direction: str | None = None
+  mad_sweep_side: str | None = None
+  mad_reclaim: bool | None = None
+  mad_range_quality_atr: float | None = None
+  mad_break_distance_atr: float | None = None
+  mad_displacement_atr: float | None = None
+  mad_acceptance_closes: int | None = None
+  mad_sweep_penetration_atr: float | None = None
+  mad_reclaim_depth_atr: float | None = None
+  mad_reason_code: str | None = None
   # Shadow confluence outputs. ``confluence`` remains the selected gate.
   confluence_v1: int | None = None
   confluence_v2: int | None = None
@@ -1528,6 +1545,27 @@ def _finish(
   # affinity.final is already 0..1 and 0 whenever direction/strategy disagree
   # with the phase's own evidence (§9) — never a bypass for poor structure.
   mad_bonus = mad_affinity.final if mad_affinity is not None else 0.0
+  mad_telemetry: dict[str, Any] = {}
+  if mad_snapshot is not None:
+    measured = mad_snapshot.measured
+    mad_telemetry = {
+      "mad_version": mad_snapshot.mad_version,
+      "mad_phase": mad_snapshot.phase,
+      "mad_confidence": mad_snapshot.confidence,
+      "mad_affinity": mad_affinity.final if mad_affinity is not None else None,
+      "mad_direction": (
+        mad_snapshot.manipulation_direction or mad_snapshot.expansion_direction
+      ),
+      "mad_sweep_side": mad_snapshot.sweep_side,
+      "mad_reclaim": mad_snapshot.reclaim,
+      "mad_range_quality_atr": mad_snapshot.range_quality_atr,
+      "mad_break_distance_atr": measured.get("break_distance_atr"),
+      "mad_displacement_atr": measured.get("displacement_atr"),
+      "mad_acceptance_closes": measured.get("accepted_closes"),
+      "mad_sweep_penetration_atr": measured.get("sweep_penetration_atr"),
+      "mad_reclaim_depth_atr": measured.get("reclaim_depth_atr"),
+      "mad_reason_code": mad_snapshot.reason_code,
+    }
   confluence_v2_raw = _confluence_v2_score(
     zone, factors, ctx.settings, mad_bonus,
   )
@@ -1584,6 +1622,20 @@ def _finish(
     ),
     math_pd=math_pd,
     math_feature_version=(None if mom is None else MATH_FEATURE_VERSION),
+    mad_version=mad_telemetry.get("mad_version"),
+    mad_phase=mad_telemetry.get("mad_phase"),
+    mad_confidence=mad_telemetry.get("mad_confidence"),
+    mad_affinity=mad_telemetry.get("mad_affinity"),
+    mad_direction=mad_telemetry.get("mad_direction"),
+    mad_sweep_side=mad_telemetry.get("mad_sweep_side"),
+    mad_reclaim=mad_telemetry.get("mad_reclaim"),
+    mad_range_quality_atr=mad_telemetry.get("mad_range_quality_atr"),
+    mad_break_distance_atr=mad_telemetry.get("mad_break_distance_atr"),
+    mad_displacement_atr=mad_telemetry.get("mad_displacement_atr"),
+    mad_acceptance_closes=mad_telemetry.get("mad_acceptance_closes"),
+    mad_sweep_penetration_atr=mad_telemetry.get("mad_sweep_penetration_atr"),
+    mad_reclaim_depth_atr=mad_telemetry.get("mad_reclaim_depth_atr"),
+    mad_reason_code=mad_telemetry.get("mad_reason_code"),
     confluence_v1=confluence_v1,
     confluence_v2=confluence_v2,
     confluence_v2_raw=confluence_v2_raw,
