@@ -1672,7 +1672,21 @@ public sealed class TradePlanRuntime(
         MathVelocity: plan.Analysis.MathVelocity,
         MathAcceleration: plan.Analysis.MathAcceleration,
         MathPd: plan.Analysis.MathPd,
-        MathFeatureVersion: plan.Analysis.MathFeatureVersion
+        MathFeatureVersion: plan.Analysis.MathFeatureVersion,
+        MadVersion: plan.Analysis.MadVersion,
+        MadPhase: plan.Analysis.MadPhase,
+        MadConfidence: plan.Analysis.MadConfidence,
+        MadAffinity: plan.Analysis.MadAffinity,
+        MadDirection: plan.Analysis.MadDirection,
+        MadSweepSide: plan.Analysis.MadSweepSide,
+        MadReclaim: plan.Analysis.MadReclaim,
+        MadRangeQualityAtr: plan.Analysis.MadRangeQualityAtr,
+        MadBreakDistanceAtr: plan.Analysis.MadBreakDistanceAtr,
+        MadDisplacementAtr: plan.Analysis.MadDisplacementAtr,
+        MadAcceptanceCloses: plan.Analysis.MadAcceptanceCloses,
+        MadSweepPenetrationAtr: plan.Analysis.MadSweepPenetrationAtr,
+        MadReclaimDepthAtr: plan.Analysis.MadReclaimDepthAtr,
+        MadReasonCode: plan.Analysis.MadReasonCode
       ),
       cancellationToken
     );
