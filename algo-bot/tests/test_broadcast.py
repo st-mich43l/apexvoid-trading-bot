@@ -374,6 +374,7 @@ def test_achieved_rr_matches_reports_realized_r_convention():
   # Entry 2000-2002 (midpoint 2001), original_sl 1990 - risk = 110 pips.
   # +220 pips achieved is exactly 2R.
   sig = {
+    "action": "BUY",
     "entry": 2000.0,
     "entry_end": 2002.0,
     "sl": 1994.0,
@@ -389,6 +390,7 @@ def test_achieved_rr_uses_original_sl_not_a_trailed_stop():
   # sl has since trailed to break-even (2001) - risk must stay pinned to
   # original_sl, or a trailed stop would inflate R toward infinity.
   sig = {
+    "action": "BUY",
     "entry": 2000.0,
     "entry_end": 2002.0,
     "sl": 2001.0,
@@ -400,36 +402,50 @@ def test_achieved_rr_uses_original_sl_not_a_trailed_stop():
 
 
 def test_achieved_rr_falls_back_to_sl_when_original_sl_missing():
-  sig = {"entry": 2000.0, "entry_end": 2002.0, "sl": 1990.0, "symbol": "XAU"}
+  sig = {
+    "action": "BUY",
+    "entry": 2000.0, "entry_end": 2002.0, "sl": 1990.0, "symbol": "XAU",
+  }
 
   assert trade_ops._achieved_rr(sig, 220) == "+2.0R"
 
 
 def test_achieved_rr_none_when_risk_is_zero():
-  sig = {"entry": 2000.0, "entry_end": 2002.0, "sl": 2001.0, "symbol": "XAU"}
+  sig = {
+    "action": "SELL",
+    "entry": 2000.0, "entry_end": 2002.0, "sl": 2001.0, "symbol": "XAU",
+  }
 
   assert trade_ops._achieved_rr(sig, 0) is None
 
 
-def test_achieved_rr_prefers_the_deep_legs_own_entry_over_the_zone():
-  # Zone 4100-4105 (midpoint 4102.5) would give a materially different,
-  # wrong risk (7.5 price = 75 pips) if used - the deep leg that actually
-  # achieved this signal's peak pips (120) filled at 4098.0, well outside
-  # the advertised zone. Risk must be measured from THAT leg's own entry:
-  # |4098.0 - 4110.0| = 12.0 price = 120 pips -> 120/120 = 1.0R exactly.
+def test_achieved_rr_uses_the_deepest_legs_own_entry_not_the_peak_pips_leg():
+  # 2026-09 (owner-reported): "for pips archived, it must calculate from
+  # the deepest entry as well" - risk must be measured from the DEEPEST
+  # leg's own entry, not whichever leg happened to report the most pips.
+  # SELL zone 4100-4105: shallow=4100 (near edge, most likely to fill),
+  # deep=4105 (far edge, best sell price) per AutoTradeEngine.cs's
+  # ManualEntryLegPrices. Shallow books a big win (150p, the peak);
+  # deep gets stopped at BE (0p) after price reverses following the
+  # shallow win - a realistic "BE trails to deeper entry" outcome.
+  # Zone midpoint (4102.5) and the old peak-pips-tied lookup (4100, the
+  # SHALLOW leg) would both give the wrong, smaller risk. Correct: risk
+  # from the deep leg's own 4105 entry: |4105-4110| = 5.0 price = 50 pips
+  # -> 150/50 = 3.0R.
   sig = {
+    "action": "SELL",
     "entry": 4100.0,
     "entry_end": 4105.0,
     "sl": 4106.0,
     "original_sl": 4110.0,
     "symbol": "XAU",
     "legs": [
-      {"frac": 0.5, "pips": 30, "entry_price": 4101.0},
-      {"frac": 0.5, "pips": 120, "entry_price": 4098.0},
+      {"frac": 0.8, "pips": 150, "entry_price": 4100.0},
+      {"frac": 0.2, "pips": 0, "entry_price": 4105.0},
     ],
   }
 
-  assert trade_ops._achieved_rr(sig, 120) == "+1.0R"
+  assert trade_ops._achieved_rr(sig, 150) == "+3.0R"
 
 
 def test_achieved_rr_falls_back_to_zone_when_no_leg_carries_entry_price():
@@ -437,6 +453,7 @@ def test_achieved_rr_falls_back_to_zone_when_no_leg_carries_entry_price():
   # fall back to the zone-midpoint convention rather than silently using
   # an absent value.
   sig = {
+    "action": "BUY",
     "entry": 2000.0,
     "entry_end": 2002.0,
     "sl": 1994.0,

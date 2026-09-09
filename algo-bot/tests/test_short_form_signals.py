@@ -76,36 +76,30 @@ def test_short_form_explicit_setup_tag_overrides_default():
   assert parsed["sl"] == pytest.approx(4072.0)
 
 
-def test_short_form_explicit_tp_is_ignored_in_algo_mode():
-  # algo mode always uses the bot-calculated R ladder now, even when the
-  # owner still types explicit tp values - same result as no tp at all.
+def test_short_form_explicit_tp_is_respected_in_algo_mode():
+  # 2026-09 (owner-reported): "when I specify any parameter it must follow
+  # my command" - the R ladder is only the bot's DEFAULT for when the owner
+  # doesn't type tp; explicit tp is always followed exactly, same as sl.
   parsed = _parse_manual("xau buy 4078-75 / tp 88/98 / algo")
 
   assert parsed is not None
   assert parsed["sl"] == pytest.approx(4072.0)
   assert parsed["setup_type"] == DEFAULT_SETUP_TYPE
-  risk = 4078.0 - 4072.0
-  assert parsed["tps"] == [
-    pytest.approx(4078.0 + r * risk) for r in _R_MULTIPLES
-  ]
+  assert parsed["tps"] == [pytest.approx(4088.0), pytest.approx(4098.0)]
 
 
 def test_full_form_signal_with_both_sl_and_tp_defaults_key_level():
   # Setup is always key-level unless the command tags something else —
-  # SL/TP being present does not leave it untagged. The R ladder applies
-  # to every manual signal, algo or notify alike (owner: "non /algo must
-  # work as the same") - explicit typed tp is ignored here exactly as it
-  # is in algo mode, and execution_mode stays notify since there's no
-  # /algo suffix.
+  # SL/TP being present does not leave it untagged. Explicit typed tp is
+  # always respected (owner: "when I specify any parameter it must follow
+  # my command"), and execution_mode stays notify since there's no /algo
+  # suffix.
   parsed = _parse_manual("gold sell 4100-4105 / sl 4110 / tp 95/90/80")
 
   assert parsed is not None
   assert parsed["setup_type"] == DEFAULT_SETUP_TYPE
   assert parsed["sl"] == pytest.approx(4110.0)
-  risk = 4110.0 - 4100.0
-  assert parsed["tps"] == [
-    pytest.approx(4100.0 - r * risk) for r in _R_MULTIPLES
-  ]
+  assert parsed["tps"] == [4095.0, 4090.0, 4080.0]
   assert parsed["execution_mode"] == "notify"
 
 
@@ -198,12 +192,9 @@ def test_configured_non_xau_zone_ladder_accepts_explicit_contract(monkeypatch):
   assert parsed["entry"] == pytest.approx(31.80)
   assert parsed["entry_end"] == pytest.approx(32.10)
   assert parsed["sl"] == pytest.approx(31.50)
-  # algo mode ignores the owner-typed tp too - bot-calculated R ladder from
-  # entry (32.10) and this stop (31.50), risk 0.60.
-  risk = 32.10 - 31.50
-  assert parsed["tps"] == [
-    pytest.approx(32.10 + r * risk) for r in _R_MULTIPLES
-  ]
+  # Explicit typed tp is always respected (non-XAU symbols take it literally
+  # - no _expand_tp shorthand outside XAU).
+  assert parsed["tps"] == [pytest.approx(32.80), pytest.approx(33.50)]
 
 
 def test_configured_non_xau_zone_ladder_requires_explicit_sl_and_tp(monkeypatch):

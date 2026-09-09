@@ -63,11 +63,10 @@ def test_scanner_copy_draft_becomes_valid_manual_signal_after_filling_risk():
   assert parsed["entry"] == pytest.approx(4104.13)
   assert parsed["entry_end"] == pytest.approx(4107.96)
   assert parsed["sl"] == pytest.approx(4112)
-  # R ladder applies regardless of /algo - the filled-in TP1/TP2/TP3 draft
-  # text is ignored just like any other owner-typed tp.
-  risk = 4112 - 4104.13
+  # Explicit typed tp (the filled-in TP1/TP2/TP3 draft text) is respected
+  # exactly - values >=100 pass through _expand_tp unchanged.
   assert parsed["tps"] == [
-    pytest.approx(4104.13 - r * risk) for r in (0.5, 1.0, 2.0, 3.0)
+    pytest.approx(4100.0), pytest.approx(4095.0), pytest.approx(4090.0),
   ]
   assert parsed["setup_type"] == "fade-scalp"
   assert parsed["confluence"] == 3

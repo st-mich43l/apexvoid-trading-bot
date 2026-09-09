@@ -93,20 +93,33 @@ def legs_net_pips(legs: list[dict]) -> int:
   return legs_achieved_pips(legs)
 
 
-def legs_achieved_entry_price(legs: list[dict]) -> float | None:
-  """Entry price of the leg legs_achieved_pips selected (same peak-or-final
-  rule) — the risk-calc companion to it. A multi-leg manual /algo group
-  fills each clip at its own price, so realized R must be measured against
-  the SAME leg whose pips are being reported, not the advertised entry
-  zone. None when no leg carries its own entry_price (older events).
+def legs_achieved_entry_price(legs: list[dict], action: str) -> float | None:
+  """Entry price of the DEEPEST-filled leg — the risk-calc denominator.
+
+  2026-09 (owner-reported): "for pips archived, it must calculate from the
+  deepest entry as well" - this used to reuse legs_achieved_pips's peak-pips
+  leg as a proxy for "the deep leg," on the assumption that whichever leg
+  ran furthest before closing was the deep one. That assumption doesn't
+  hold: a shallow leg can run further before closing than the deep leg
+  does before an early BE stop, so "peak pips" and "deepest entry" are not
+  the same leg in general.
+
+  A multi-leg manual /algo group fills clips at different prices (see
+  AutoTradeEngine.cs's ManualEntryLegPrices: deep is whichever edge is the
+  more favorable fill - lower for BUY, higher for SELL). Realized R must be
+  measured against the deepest fill specifically, by entry price, since
+  that's the leg carrying the group's real risk furthest - independent of
+  which leg happened to report the most pips. None when no leg carries its
+  own entry_price (older events).
   """
-  if not legs:
+  candidates = [
+    float(leg["entry_price"])
+    for leg in legs
+    if leg.get("entry_price") is not None
+  ]
+  if not candidates:
     return None
-  values = [int(leg["pips"]) for leg in legs]
-  peak = max(values)
-  index = values.index(peak) if peak > 0 else len(values) - 1
-  entry_price = legs[index].get("entry_price")
-  return float(entry_price) if entry_price is not None else None
+  return min(candidates) if action == "BUY" else max(candidates)
 
 
 def wing_icons(pips: int) -> str:
