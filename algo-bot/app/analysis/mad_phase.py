@@ -274,14 +274,6 @@ def compute_mad_features(snap: MadPhaseSnapshot) -> MadFeatureScores:
   )
 
 
-def technique_mad_hard_gate_enabled(cfg: Any | None) -> bool:
-  """Reserved research flag — must stay false in prod (no live activation block)."""
-  tech = getattr(getattr(cfg, "execution", None), "technique", None)
-  if tech is None:
-    return False
-  return bool(getattr(tech, "mad_hard_gate_enabled", False))
-
-
 def mad_gate_strategy_for_setup(
   setup: str,
   *,
@@ -360,42 +352,6 @@ def mad_gate_strategy_for_setup(
     return "impulse_pullback_continuation"
 
   return None
-
-
-async def evaluate_technique_mad_gate(
-  client: Any,
-  *,
-  symbol: str,
-  strategy: str,
-  cfg: Any | None,
-  family: str | None = None,
-  strategy_mode: str | None = None,
-) -> tuple[bool, str, dict[str, Any]]:
-  """Research helper: phase × strategy preview. Not wired into activation."""
-  from app.autotrade.killzone import technique_enforce
-
-  if not technique_mad_hard_gate_enabled(cfg):
-    return True, "mad_gate_disabled", {}
-  if not technique_enforce(cfg):
-    return True, "technique_pack_off", {}
-  gate_key = mad_gate_strategy_for_setup(
-    strategy,
-    family=family,
-    strategy_mode=strategy_mode,
-  )
-  if gate_key is None:
-    return True, "mad_gate_not_applicable", {}
-  snap = await load_mad_phase(client, symbol)
-  phase = snap.phase if snap else None
-  preview = mad_hard_gate(phase=phase, strategy=gate_key)
-  measured = {
-    "mad_phase": phase,
-    "mad_gate_strategy": gate_key,
-    "mad_gate": preview.to_dict(),
-  }
-  if preview.would_block:
-    return False, preview.reason_code, measured
-  return True, preview.reason_code, measured
 
 
 def mad_hard_gate(*, phase: str | None, strategy: str) -> MadGatePreview:

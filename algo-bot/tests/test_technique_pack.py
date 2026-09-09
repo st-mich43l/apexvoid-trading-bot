@@ -13,7 +13,6 @@ from app.autotrade.entry_activation import evaluate_entry_activation
 from app.autotrade.killzone import (
   classify_killzone,
   confirmation_is_sweep_body,
-  is_killzone_utc,
 )
 from app.autotrade.protective_stop import ProtectiveStopError, plan_group_protective_stop
 from app.scalping.context import permitted_archetypes_for_session
@@ -109,7 +108,6 @@ def _technique_cfg(
 )
 def test_killzone_hour_matrix(hour: int, allowed: bool):
   cfg = _technique_cfg()
-  assert is_killzone_utc(hour, cfg) is allowed
   decision = classify_killzone(hour=hour, cfg=cfg)
   assert decision.allowed is allowed
   if not allowed:

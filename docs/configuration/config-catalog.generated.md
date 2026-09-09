@@ -3,9 +3,9 @@
 > Generated from the typed `ApexVoidConfig` Catalog V2 schema. Do not edit manually.
 
 - Catalog version: `2`
-- Contract fingerprint: `734a6325ae3bf9c41917fe74dcd4cee5b357a81b89162fe645a02b3948a94140`
-- Document fingerprint: `48e0a1bdb0f67e739df9ccd87c27ddd45a0166400f5a4ce352b4a5b2e62274cf`
-- Items: `579`
+- Contract fingerprint: `75ffa663045c27a852d99023853af401981c2058c53c583369b9129a9accdb9d`
+- Document fingerprint: `3296adc1b16a8f22afe0ca7d4e3fedf1b81ad736e89621144d0a338452233849`
+- Items: `580`
 - Runtime status: canonical-only; `app.core.config.runtime_config` is authoritative
 
 ## actionability
@@ -348,6 +348,7 @@
 | `execution.technique.reaction_require_publish_window` | `AUTO_TRADE_TECHNIQUE_REACTION_REQUIRE_PUBLISH_WINDOW` | `bool` | `boolean` | `configurable` | `true` |
 | `execution.technique.require_sweep_body` | `AUTO_TRADE_TECHNIQUE_REQUIRE_SWEEP_BODY` | `bool` | `boolean` | `configurable` | `true` |
 | `execution.technique.scalp_require_killzone` | `AUTO_TRADE_TECHNIQUE_SCALP_REQUIRE_KILLZONE` | `bool` | `boolean` | `configurable` | `true` |
+| `execution.technique.selective_session_min_confluence` | `AUTO_TRADE_TECHNIQUE_SELECTIVE_SESSION_MIN_CONFLUENCE` | `int` | `count` | `configurable` | `0` |
 | `execution.technique.strict_premium_discount` | `AUTO_TRADE_TECHNIQUE_STRICT_PREMIUM_DISCOUNT` | `bool` | `boolean` | `configurable` | `true` |
 | `execution.technique.strict_premium_discount_archetypes` | `AUTO_TRADE_STRICT_PD_ARCHETYPES` | `str` | `string` | `configurable` | `"reversal,range_reversion"` |
 | `execution.trend.hard_entry_drift_pips` | `AUTO_TRADE_TREND_HARD_ENTRY_DRIFT_PIPS` | `float` | `pips` | `configurable` | `30.0` |

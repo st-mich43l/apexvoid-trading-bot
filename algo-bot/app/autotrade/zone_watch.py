@@ -25,9 +25,6 @@ PUBLISHED_LOCKED = "published_locked"
 CONSUMED = "consumed"
 INVALIDATED = "invalidated"
 EXPIRED = "expired"
-# Backward-compat alias: pre-v3 code/tests used EXHAUSTED for terminal
-# structural exhaustion. Mission names that state EXPIRED.
-EXHAUSTED = EXPIRED
 
 ZONE_WATCH_STATES = (
   DISCOVERED,

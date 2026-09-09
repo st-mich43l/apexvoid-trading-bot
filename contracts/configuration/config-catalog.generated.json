@@ -1,20 +1,20 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "734a6325ae3bf9c41917fe74dcd4cee5b357a81b89162fe645a02b3948a94140",
-  "configuration_document_fingerprint_sha256": "48e0a1bdb0f67e739df9ccd87c27ddd45a0166400f5a4ce352b4a5b2e62274cf",
+  "configuration_contract_fingerprint_sha256": "75ffa663045c27a852d99023853af401981c2058c53c583369b9129a9accdb9d",
+  "configuration_document_fingerprint_sha256": "3296adc1b16a8f22afe0ca7d4e3fedf1b81ad736e89621144d0a338452233849",
   "counts": {
     "algorithm_constants": 57,
-    "configurable": 512,
+    "configurable": 513,
     "known_conflicts": 30,
     "owners": {
       "ctrader": 49,
-      "python": 434,
+      "python": 435,
       "shared": 96
     },
     "protocol_constants": 10,
     "secrets": 9,
     "shared": 96,
-    "total_items": 579
+    "total_items": 580
   },
   "items": [
     {
@@ -11672,6 +11672,46 @@
     {
       "algorithm_constant": false,
       "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_TECHNIQUE_SELECTIVE_SESSION_MIN_CONFLUENCE",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 0,
+        "le": 3
+      },
+      "default": 0,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 0
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Minimum confluence required when an instrument is outside its focused session window (session quality=1/selective). Zero disables this quality policy; it never creates a time-of-day hard gate.",
+      "display_id": "config:execution.technique.selective_session_min_confluence",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "execution.technique.selective_session_min_confluence",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "int",
+      "unit": "count",
+      "validation_summary": "Pydantic integer bounds"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
       "canonical_env": "AUTO_TRADE_TECHNIQUE_STRICT_PREMIUM_DISCOUNT",
       "catalog_version": 2,
       "configurable": true,
@@ -21768,6 +21808,6 @@
       "validation_summary": "Pydantic required/type coercion only"
     }
   ],
-  "source_fingerprint_sha256": "734a6325ae3bf9c41917fe74dcd4cee5b357a81b89162fe645a02b3948a94140",
+  "source_fingerprint_sha256": "75ffa663045c27a852d99023853af401981c2058c53c583369b9129a9accdb9d",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

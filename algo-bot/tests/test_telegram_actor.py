@@ -37,7 +37,8 @@ async def test_actor_runs_higher_priority_before_price_jobs():
     )
     await started.wait()
     price_task = asyncio.create_task(
-      actor.submit(price, priority=actor.PRIORITY_PRICE, droppable=True)
+      # Lowest priority: below PRIORITY_CARD, runs after PRIORITY_LIFECYCLE.
+      actor.submit(price, priority=actor.PRIORITY_CARD + 1, droppable=True)
     )
     fill_task = asyncio.create_task(
       actor.submit(fill, priority=actor.PRIORITY_LIFECYCLE)
@@ -62,7 +63,7 @@ async def test_droppable_jobs_skip_while_flood_paused():
   try:
     actor.note_flood(30)
     result = await actor.submit(
-      price, priority=actor.PRIORITY_PRICE, droppable=True,
+      price, priority=actor.PRIORITY_CARD + 1, droppable=True,
     )
     assert result is None
     assert ran == []

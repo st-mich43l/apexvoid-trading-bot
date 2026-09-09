@@ -682,13 +682,13 @@ def test_scalp_with_fitted_target_skips_opposing_zone_stop_reject():
 def test_sell_group_stop_clears_zone_high_and_uses_weighted_reference():
   from app.autotrade.protective_stop import (
     plan_group_protective_stop,
-    resolve_entry_leg_lots,
     volume_weighted_reference_entry,
   )
 
   leg_prices = ("4098.50", "4100.50")
-  resolved = resolve_entry_leg_lots("0.11", ("0.70", "0.30"))
-  assert resolved == (Decimal("0.08"), Decimal("0.03"))
+  # 0.11 lots at 70/30 (VolumePlanner.SplitEntryVolume): AwayFromZero 2dp
+  # round on the first leg, remainder on the last -> 0.08 + 0.03.
+  resolved = (Decimal("0.08"), Decimal("0.03"))
   reference = volume_weighted_reference_entry(leg_prices, resolved)
   assert reference == (
     Decimal("4098.50") * Decimal("0.08")

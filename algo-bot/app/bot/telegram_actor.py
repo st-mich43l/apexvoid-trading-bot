@@ -21,7 +21,6 @@ log = logging.getLogger(__name__)
 PRIORITY_LIFECYCLE = 0
 PRIORITY_MANAGE = 1
 PRIORITY_CARD = 2
-PRIORITY_PRICE = 3
 
 T = TypeVar("T")
 

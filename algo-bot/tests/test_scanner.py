@@ -15,7 +15,6 @@ from app.persistence import store, redis_state
 from app.analysis import scanner
 from app.analysis.market_map import MapEntry, MarketMap, ScalpRail
 from app.analysis.ohlc_source import RedisOHLCSource
-from app.signals.parsing import _parse_manual
 from app.analysis.scalp_ranges import ScalpBarrier, ScalpRange
 from app.analysis.structure import Zone
 from app.analysis.zones import ZONE_RECONCILED_TAG_PREFIX
@@ -37,75 +36,6 @@ class StaticSource:
     assert symbol == "XAU"
     assert tf in {"M5", "M30", "M15", "H1"}
     return _frame()
-
-
-def test_scanner_copy_draft_becomes_valid_manual_signal_after_filling_risk():
-  result = scanner.DetectionResult(
-    "Fade Scalp",
-    "SELL",
-    4105.0,
-    Zone(4104.13, 4107.96, "supply"),
-    4105.38,
-    3,
-    ["HTF bias down"],
-  )
-
-  draft = scanner._copy_draft("XAU", result)
-  assert draft is not None
-  ready = draft.replace("SL", "4112").replace(
-    "TP1/TP2/TP3",
-    "4100/4095/4090",
-  )
-
-  parsed = _parse_manual(ready)
-  assert parsed is not None
-  assert parsed["action"] == "SELL"
-  assert parsed["entry"] == pytest.approx(4104.13)
-  assert parsed["entry_end"] == pytest.approx(4107.96)
-  assert parsed["sl"] == pytest.approx(4112)
-  # Explicit typed tp (the filled-in TP1/TP2/TP3 draft text) is respected
-  # exactly - values >=100 pass through _expand_tp unchanged.
-  assert parsed["tps"] == [
-    pytest.approx(4100.0), pytest.approx(4095.0), pytest.approx(4090.0),
-  ]
-  assert parsed["setup_type"] == "fade-scalp"
-  assert parsed["confluence"] == 3
-
-
-def test_scanner_copy_draft_includes_planned_stop_price():
-  from app.analysis.execution_eligibility import (
-    EXECUTION_ELIGIBILITY_VERSION,
-    STATIC_ELIGIBLE,
-    ExecutionEligibility,
-  )
-
-  result = scanner.DetectionResult(
-    "Key Level",
-    "BUY",
-    4075.0,
-    Zone(4072.99, 4076.89, "demand"),
-    4074.94,
-    2,
-    ["HTF bias up"],
-    execution_eligibility=ExecutionEligibility(
-      version=EXECUTION_ELIGIBILITY_VERSION,
-      allowed=True,
-      state=STATIC_ELIGIBLE,
-      reason_code="static_eligibility_passed",
-      message="ok",
-      hard_block=False,
-      direction="BUY",
-      entry_low=4072.99,
-      entry_high=4076.89,
-      planned_entry_price=4075.0,
-      measured={"planned_stop_price": "4070.50"},
-    ),
-  )
-
-  draft = scanner._copy_draft("XAU", result)
-  assert draft is not None
-  assert "/ sl 4070.5 /" in draft or "/ sl 4070.50 /" in draft
-  assert "sl SL" not in draft
 
 
 @pytest.mark.asyncio

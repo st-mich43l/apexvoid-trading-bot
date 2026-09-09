@@ -1,7 +1,7 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "734a6325ae3bf9c41917fe74dcd4cee5b357a81b89162fe645a02b3948a94140",
-  "count": 512,
+  "configuration_contract_fingerprint_sha256": "75ffa663045c27a852d99023853af401981c2058c53c583369b9129a9accdb9d",
+  "count": 513,
   "deprecated_alias_count": 21,
   "entries": [
     {
@@ -3048,6 +3048,22 @@
       "shared_with_ctrader": false,
       "type": "bool",
       "unit": "boolean"
+    },
+    {
+      "canonical_env": "AUTO_TRADE_TECHNIQUE_SELECTIVE_SESSION_MIN_CONFLUENCE",
+      "default": 0,
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Minimum confluence required when an instrument is outside its focused session window (session quality=1/selective). Zero disables this quality policy; it never creates a time-of-day hard gate.",
+      "display_id": "config:execution.technique.selective_session_min_confluence",
+      "owner": "python",
+      "path": "execution.technique.selective_session_min_confluence",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "int",
+      "unit": "count"
     },
     {
       "canonical_env": "AUTO_TRADE_TECHNIQUE_STRICT_PREMIUM_DISCOUNT",
@@ -8250,6 +8266,6 @@
   ],
   "secret_count": 9,
   "shared_with_ctrader_count": 87,
-  "source_fingerprint_sha256": "734a6325ae3bf9c41917fe74dcd4cee5b357a81b89162fe645a02b3948a94140",
+  "source_fingerprint_sha256": "75ffa663045c27a852d99023853af401981c2058c53c583369b9129a9accdb9d",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

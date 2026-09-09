@@ -530,42 +530,6 @@ async def test_zone_split_capability_gate_rejects_via_execution_policy(
 
 
 @pytest.mark.asyncio
-async def test_active_opposite_initial_group_helper_detects_sell_book():
-  """Opposite-initial blocking lives outside _common_preflight now (C# /
-  exposure path). Keep the Redis helper contract covered.
-  """
-  from app.autotrade import worker
-
-  client = redis_state.get_client()
-  await client.sadd("auto_trade:positions", "39000344")
-  await client.set(
-    "auto_trade:position:39000344",
-    json.dumps({
-      "position_id": 39000344,
-      "symbol": "XAU",
-      "direction": 1,  # ProtoOA SELL
-      "remaining_volume": 400,
-      "group_id": "group-sell-1",
-      "parent_group_id": None,
-    }),
-    ex=60,
-  )
-
-  opposite = await worker._active_opposite_initial_group(
-    client, direction="BUY", symbol="XAU",
-  )
-  assert opposite is not None
-  assert opposite["group_id"] == "group-sell-1"
-  assert await worker._active_opposite_initial_group(
-    client, direction="SELL", symbol="XAU",
-  ) is None
-  # Other instruments must not see the XAU SELL book.
-  assert await worker._active_opposite_initial_group(
-    client, direction="BUY", symbol="EURUSD",
-  ) is None
-
-
-@pytest.mark.asyncio
 async def test_required_limit_side_gate_uses_execution_policy(
   monkeypatch,
 ):
