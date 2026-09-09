@@ -161,6 +161,154 @@ class ExecutionActivationConfig(FrozenConfigModel):
     def normalize_m5_authoritative_fallback(cls, value):
         return value.strip().lower() if isinstance(value, str) else value
 
+class ExecutionMadExpandConfig(FrozenConfigModel):
+    """MAD v2 expansion evidence thresholds (app/analysis/mad_phase.py)."""
+
+    break_atr: float = config_field(
+      0.35,
+      canonical_env='AUTO_TRADE_MAD_EXPAND_BREAK_ATR',
+      owner=ConfigOwner.PYTHON,
+      reload=ReloadPolicy.NEW_SETUP_ONLY,
+      runtime_reload=ReloadPolicy.RESTART,
+      unit=ConfigUnit.ATR,
+      risk=RiskClassification.ANALYSIS_BEHAVIOR,
+      description=(
+        'Minimum accepted-break distance beyond the sealed Asia edge (ATR) '
+        'before MAD credits directional expansion. Matches the pre-v2 '
+        'default (owner-observed prod behavior); provisional otherwise.'
+      ),
+      default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 0.35),),
+      validation_summary='Pydantic required/type coercion only',
+      gt=0,
+    )
+    displacement_atr: float = config_field(
+      1.25,
+      canonical_env='AUTO_TRADE_MAD_EXPAND_DISPLACEMENT_ATR',
+      owner=ConfigOwner.PYTHON,
+      reload=ReloadPolicy.NEW_SETUP_ONLY,
+      runtime_reload=ReloadPolicy.RESTART,
+      unit=ConfigUnit.ATR,
+      risk=RiskClassification.ANALYSIS_BEHAVIOR,
+      description=(
+        'Causal |close_t - close_t-k| / ATR strong-displacement threshold '
+        'that alone credits expansion even without N accepted closes. '
+        'Matches the pre-v2 impulse threshold value; provisional otherwise.'
+      ),
+      default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 1.25),),
+      validation_summary='Pydantic required/type coercion only',
+      gt=0,
+    )
+    accept_closes: int = config_field(
+      2,
+      canonical_env='AUTO_TRADE_MAD_EXPAND_ACCEPT_CLOSES',
+      owner=ConfigOwner.PYTHON,
+      reload=ReloadPolicy.NEW_SETUP_ONLY,
+      runtime_reload=ReloadPolicy.RESTART,
+      unit=ConfigUnit.COUNT,
+      risk=RiskClassification.ANALYSIS_BEHAVIOR,
+      description=(
+        'Consecutive closes required beyond the sealed Asia edge (alongside '
+        'break_atr) before MAD credits an accepted breakout. Provisional — '
+        'no replay evidence yet, see §29.'
+      ),
+      default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 2),),
+      validation_summary='Pydantic required/type coercion only',
+      ge=1,
+    )
+
+class ExecutionMadManipConfig(FrozenConfigModel):
+    """MAD v2 manipulation-quality thresholds (app/analysis/mad_phase.py)."""
+
+    min_penetration_atr: float = config_field(
+      0.05,
+      canonical_env='AUTO_TRADE_MAD_MANIP_MIN_PENETRATION_ATR',
+      owner=ConfigOwner.PYTHON,
+      reload=ReloadPolicy.NEW_SETUP_ONLY,
+      runtime_reload=ReloadPolicy.RESTART,
+      unit=ConfigUnit.ATR,
+      risk=RiskClassification.ANALYSIS_BEHAVIOR,
+      description=(
+        'Reference sweep-penetration depth (ATR) used to scale MANIP '
+        'confidence — never a phase-classification gate (a negligible poke '
+        'still IS a sweep+reclaim, just low confidence). Provisional, §29.'
+      ),
+      default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 0.05),),
+      validation_summary='Pydantic required/type coercion only',
+      gt=0,
+    )
+    min_reclaim_atr: float = config_field(
+      0.05,
+      canonical_env='AUTO_TRADE_MAD_MANIP_MIN_RECLAIM_ATR',
+      owner=ConfigOwner.PYTHON,
+      reload=ReloadPolicy.NEW_SETUP_ONLY,
+      runtime_reload=ReloadPolicy.RESTART,
+      unit=ConfigUnit.ATR,
+      risk=RiskClassification.ANALYSIS_BEHAVIOR,
+      description=(
+        'Reference reclaim-depth (ATR) used to scale MANIP confidence — '
+        'never a phase-classification gate. Provisional, §29.'
+      ),
+      default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 0.05),),
+      validation_summary='Pydantic required/type coercion only',
+      gt=0,
+    )
+
+class ExecutionMadAccumConfig(FrozenConfigModel):
+    """MAD v2 accumulation range-quality band (app/analysis/mad_phase.py)."""
+
+    minimum_rq: float = config_field(
+      0.8,
+      canonical_env='AUTO_TRADE_MAD_ACCUM_MINIMUM_RQ',
+      owner=ConfigOwner.PYTHON,
+      reload=ReloadPolicy.NEW_SETUP_ONLY,
+      runtime_reload=ReloadPolicy.RESTART,
+      unit=ConfigUnit.RATIO,
+      risk=RiskClassification.ANALYSIS_BEHAVIOR,
+      description=(
+        'Minimum sealed Asia range-quality (width/ATR) MAD accepts as a '
+        'genuine, contained accumulation box. Matches the pre-v2 default.'
+      ),
+      default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 0.8),),
+      validation_summary='Pydantic required/type coercion only',
+      gt=0,
+    )
+    maximum_rq: float = config_field(
+      6.0,
+      canonical_env='AUTO_TRADE_MAD_ACCUM_MAXIMUM_RQ',
+      owner=ConfigOwner.PYTHON,
+      reload=ReloadPolicy.NEW_SETUP_ONLY,
+      runtime_reload=ReloadPolicy.RESTART,
+      unit=ConfigUnit.RATIO,
+      risk=RiskClassification.ANALYSIS_BEHAVIOR,
+      description=(
+        'Maximum sealed Asia range-quality (width/ATR) MAD still accepts as '
+        'accumulation rather than an already-too-wide box. Matches the '
+        'pre-v2 default.'
+      ),
+      default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 6.0),),
+      validation_summary='Pydantic required/type coercion only',
+      gt=0,
+    )
+
+    @model_validator(mode='after')
+    def validate_rq_band(self):
+        if self.minimum_rq >= self.maximum_rq:
+            raise ValueError('mad.accum.minimum_rq must be below mad.accum.maximum_rq')
+        return self
+
+class ExecutionMadConfig(FrozenConfigModel):
+    """MAD v2 (Manipulation/Accumulation/Distribution) tuning (§20 — a small,
+    interpretable set; execution.technique.mad_hard_gate_enabled remains the
+    separate, unrelated hard-gate kill switch). The MAD -> confluence-v2
+    contribution cap is NOT duplicated here — it already lives in
+    app/analysis/detectors.py (DetectorSettings.confluence_v2_mad_score_weight
+    / _mad_score_weight), which self-normalizes against the v2 score range
+    and already measures within the §24 target (<=5-10%) at its default."""
+
+    expand: ExecutionMadExpandConfig = Field(default_factory=ExecutionMadExpandConfig)
+    manip: ExecutionMadManipConfig = Field(default_factory=ExecutionMadManipConfig)
+    accum: ExecutionMadAccumConfig = Field(default_factory=ExecutionMadAccumConfig)
+
 class ExecutionTechniqueConfig(FrozenConfigModel):
     """Prod technique pack (2026-08-10): killzone + sweep/body + strict PD + SL hard-cap."""
 
@@ -357,6 +505,7 @@ class ExecutionConfig(FrozenConfigModel):
     activation: ExecutionActivationConfig = Field(default_factory=ExecutionActivationConfig)
     broker_recovery: ExecutionBrokerRecoveryConfig = Field(default_factory=ExecutionBrokerRecoveryConfig)
     entry: ExecutionEntryConfig = Field(default_factory=ExecutionEntryConfig)
+    mad: ExecutionMadConfig = Field(default_factory=ExecutionMadConfig)
     mapped_zone: ExecutionMappedZoneConfig = Field(default_factory=ExecutionMappedZoneConfig)
     policy: ExecutionPolicyConfig = Field(default_factory=ExecutionPolicyConfig)
     range: ExecutionRangeConfig = Field(default_factory=ExecutionRangeConfig)

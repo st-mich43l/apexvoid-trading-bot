@@ -3,9 +3,9 @@
 > Generated from the typed `ApexVoidConfig` Catalog V2 schema. Do not edit manually.
 
 - Catalog version: `2`
-- Contract fingerprint: `75ffa663045c27a852d99023853af401981c2058c53c583369b9129a9accdb9d`
-- Document fingerprint: `3296adc1b16a8f22afe0ca7d4e3fedf1b81ad736e89621144d0a338452233849`
-- Items: `580`
+- Contract fingerprint: `feda5109b7e3af5cd6b2e23912b9bcfff4867d0e2aa0ea6d7666946f9e5d7d8b`
+- Document fingerprint: `5409121ab9af62e7cb15a0bf79b803531b6eb3e9e27fa814b5696e84162b6cea`
+- Items: `587`
 - Runtime status: canonical-only; `app.core.config.runtime_config` is authoritative
 
 ## actionability
@@ -274,6 +274,13 @@
 | `execution.entry.max_spread_pips` | `AUTO_TRADE_MAX_SPREAD_PIPS` | `int` | `pips` | `configurable` | `5` |
 | `execution.entry.maximum_chase_distance_pips` | `AUTO_TRADE_MAX_ENTRY_DISTANCE_PIPS` | `float` | `pips` | `configurable` | `40.0` |
 | `execution.entry.poll_ms` | `AUTO_TRADE_POLL_MS` | `int` | `milliseconds` | `configurable` | `250` |
+| `execution.mad.accum.maximum_rq` | `AUTO_TRADE_MAD_ACCUM_MAXIMUM_RQ` | `float` | `ratio` | `configurable` | `6.0` |
+| `execution.mad.accum.minimum_rq` | `AUTO_TRADE_MAD_ACCUM_MINIMUM_RQ` | `float` | `ratio` | `configurable` | `0.8` |
+| `execution.mad.expand.accept_closes` | `AUTO_TRADE_MAD_EXPAND_ACCEPT_CLOSES` | `int` | `count` | `configurable` | `2` |
+| `execution.mad.expand.break_atr` | `AUTO_TRADE_MAD_EXPAND_BREAK_ATR` | `float` | `atr` | `configurable` | `0.35` |
+| `execution.mad.expand.displacement_atr` | `AUTO_TRADE_MAD_EXPAND_DISPLACEMENT_ATR` | `float` | `atr` | `configurable` | `1.25` |
+| `execution.mad.manip.min_penetration_atr` | `AUTO_TRADE_MAD_MANIP_MIN_PENETRATION_ATR` | `float` | `atr` | `configurable` | `0.05` |
+| `execution.mad.manip.min_reclaim_atr` | `AUTO_TRADE_MAD_MANIP_MIN_RECLAIM_ATR` | `float` | `atr` | `configurable` | `0.05` |
 | `execution.mapped_zone.counter_bias_min_score` | `AUTO_TRADE_MAP_COUNTER_BIAS_MIN_SCORE` | `float` | `score` | `configurable` | `6.0` |
 | `execution.mapped_zone.execute_distance_atr` | `AUTO_TRADE_MAP_EXECUTE_DISTANCE_ATR` | `float` | `atr` | `configurable` | `1.5` |
 | `execution.mapped_zone.execute_tolerance_atr` | `AUTO_TRADE_MAP_EXECUTE_TOLERANCE_ATR` | `float` | `atr` | `configurable` | `0.15` |

@@ -132,8 +132,8 @@
     "zone_reconcile_mode": "shadow",
     "zone_scale_undersized_policy": "single_entry"
   },
-  "contract_fingerprint": "75ffa663045c27a852d99023853af401981c2058c53c583369b9129a9accdb9d",
-  "effective_configuration_fingerprint": "4196a2fddbb27f2e9c55143e1a249cb2fb7f9106b9a0fe0a3449a8dd6894878a",
+  "contract_fingerprint": "feda5109b7e3af5cd6b2e23912b9bcfff4867d0e2aa0ea6d7666946f9e5d7d8b",
+  "effective_configuration_fingerprint": "3fa06278115605cffc4d46b36c935a3822f99309c3bece40803730895fc0d831",
   "feed": {
     "backfill_bars": 1500,
     "bar_quality_lookback": 6,
@@ -430,6 +430,21 @@
           "max_spread_pips": 1,
           "maximum_chase_distance_pips": "40",
           "poll_ms": 250
+        },
+        "mad": {
+          "accum": {
+            "maximum_rq": "6",
+            "minimum_rq": "0.8"
+          },
+          "expand": {
+            "accept_closes": 2,
+            "break_atr": "0.35",
+            "displacement_atr": "1.25"
+          },
+          "manip": {
+            "min_penetration_atr": "0.05",
+            "min_reclaim_atr": "0.05"
+          }
         },
         "mapped_zone": {
           "counter_bias_min_score": "6",
@@ -1390,6 +1405,21 @@
           "max_spread_pips": 3,
           "maximum_chase_distance_pips": "40",
           "poll_ms": 250
+        },
+        "mad": {
+          "accum": {
+            "maximum_rq": "6",
+            "minimum_rq": "0.8"
+          },
+          "expand": {
+            "accept_closes": 2,
+            "break_atr": "0.35",
+            "displacement_atr": "1.25"
+          },
+          "manip": {
+            "min_penetration_atr": "0.05",
+            "min_reclaim_atr": "0.05"
+          }
         },
         "mapped_zone": {
           "counter_bias_min_score": "6",
@@ -2375,6 +2405,21 @@
           "maximum_chase_distance_pips": "40",
           "poll_ms": 250
         },
+        "mad": {
+          "accum": {
+            "maximum_rq": "6",
+            "minimum_rq": "0.8"
+          },
+          "expand": {
+            "accept_closes": 2,
+            "break_atr": "0.35",
+            "displacement_atr": "1.25"
+          },
+          "manip": {
+            "min_penetration_atr": "0.05",
+            "min_reclaim_atr": "0.05"
+          }
+        },
         "mapped_zone": {
           "counter_bias_min_score": "6",
           "execute_distance_atr": "1.5",
@@ -3334,6 +3379,21 @@
           "max_spread_pips": 1,
           "maximum_chase_distance_pips": "40",
           "poll_ms": 250
+        },
+        "mad": {
+          "accum": {
+            "maximum_rq": "6",
+            "minimum_rq": "0.8"
+          },
+          "expand": {
+            "accept_closes": 2,
+            "break_atr": "0.35",
+            "displacement_atr": "1.25"
+          },
+          "manip": {
+            "min_penetration_atr": "0.05",
+            "min_reclaim_atr": "0.05"
+          }
         },
         "mapped_zone": {
           "counter_bias_min_score": "6",
@@ -4311,6 +4371,21 @@
           "maximum_chase_distance_pips": "40",
           "poll_ms": 250
         },
+        "mad": {
+          "accum": {
+            "maximum_rq": "6",
+            "minimum_rq": "0.8"
+          },
+          "expand": {
+            "accept_closes": 2,
+            "break_atr": "0.35",
+            "displacement_atr": "1.25"
+          },
+          "manip": {
+            "min_penetration_atr": "0.05",
+            "min_reclaim_atr": "0.05"
+          }
+        },
         "mapped_zone": {
           "counter_bias_min_score": "6",
           "execute_distance_atr": "1.5",
@@ -5140,6 +5215,21 @@
           "maximum_chase_distance_pips": "40",
           "poll_ms": 250
         },
+        "mad": {
+          "accum": {
+            "maximum_rq": "6",
+            "minimum_rq": "0.8"
+          },
+          "expand": {
+            "accept_closes": 2,
+            "break_atr": "0.35",
+            "displacement_atr": "1.25"
+          },
+          "manip": {
+            "min_penetration_atr": "0.05",
+            "min_reclaim_atr": "0.05"
+          }
+        },
         "mapped_zone": {
           "counter_bias_min_score": "6",
           "execute_distance_atr": "1.5",
@@ -5962,6 +6052,21 @@
           "max_spread_pips": 3,
           "maximum_chase_distance_pips": "40",
           "poll_ms": 250
+        },
+        "mad": {
+          "accum": {
+            "maximum_rq": "6",
+            "minimum_rq": "0.8"
+          },
+          "expand": {
+            "accept_closes": 2,
+            "break_atr": "0.35",
+            "displacement_atr": "1.25"
+          },
+          "manip": {
+            "min_penetration_atr": "0.05",
+            "min_reclaim_atr": "0.05"
+          }
         },
         "mapped_zone": {
           "counter_bias_min_score": "6",
@@ -6810,6 +6915,21 @@
           "maximum_chase_distance_pips": "40",
           "poll_ms": 250
         },
+        "mad": {
+          "accum": {
+            "maximum_rq": "6",
+            "minimum_rq": "0.8"
+          },
+          "expand": {
+            "accept_closes": 2,
+            "break_atr": "0.35",
+            "displacement_atr": "1.25"
+          },
+          "manip": {
+            "min_penetration_atr": "0.05",
+            "min_reclaim_atr": "0.05"
+          }
+        },
         "mapped_zone": {
           "counter_bias_min_score": "6",
           "execute_distance_atr": "1.5",
@@ -7632,6 +7752,21 @@
           "max_spread_pips": 1,
           "maximum_chase_distance_pips": "40",
           "poll_ms": 250
+        },
+        "mad": {
+          "accum": {
+            "maximum_rq": "6",
+            "minimum_rq": "0.8"
+          },
+          "expand": {
+            "accept_closes": 2,
+            "break_atr": "0.35",
+            "displacement_atr": "1.25"
+          },
+          "manip": {
+            "min_penetration_atr": "0.05",
+            "min_reclaim_atr": "0.05"
+          }
         },
         "mapped_zone": {
           "counter_bias_min_score": "6",
@@ -8467,6 +8602,21 @@
           "max_spread_pips": 5,
           "maximum_chase_distance_pips": "40",
           "poll_ms": 250
+        },
+        "mad": {
+          "accum": {
+            "maximum_rq": "6",
+            "minimum_rq": "0.8"
+          },
+          "expand": {
+            "accept_closes": 2,
+            "break_atr": "0.35",
+            "displacement_atr": "1.25"
+          },
+          "manip": {
+            "min_penetration_atr": "0.05",
+            "min_reclaim_atr": "0.05"
+          }
         },
         "mapped_zone": {
           "counter_bias_min_score": "6",
