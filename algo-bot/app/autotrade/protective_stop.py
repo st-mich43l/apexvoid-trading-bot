@@ -112,9 +112,6 @@ class FinalProtectiveStopPlan:
     return fields
 
 
-ProtectiveStopPlan = FinalProtectiveStopPlan
-
-
 def decimal_value(value: Any, name: str) -> Decimal:
   try:
     result = Decimal(str(value))

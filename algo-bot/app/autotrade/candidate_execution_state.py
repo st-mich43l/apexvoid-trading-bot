@@ -100,11 +100,6 @@ class CandidateExecutionRecord:
   def requires_recovery(self) -> bool:
     return self.state in RECOVERY_REQUIRED_STATES
 
-  @property
-  def has_exact_identity(self) -> bool:
-    return bool(self.candidate_id) and bool(self.stream_event_id)
-
-
 def _coerce_optional_str(value: Any) -> str | None:
   if value is None:
     return None

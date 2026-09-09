@@ -181,25 +181,8 @@ PREFERENCE_TELEMETRY_REASONS = frozenset({
   "entry_inside_ambiguous_zone",
 })
 
-# True structural conflicts — must hard-block publication.
-HARD_STRUCTURAL_TARGET_ROOM_REASONS = frozenset({
-  "opposing_entry_contained",
-  "opposing_entry_overlap",
-  "opposing_major_no_room",
-  "opposing_barrier_no_target",
-  "opposing_barrier_room_below_cost",
-  "entry_inside_opposing_zone",
-  "invalid_target_room_geometry",
-  "execution_cost_insufficient_room",
-})
-
-
 def is_preference_telemetry(reason_code: str | None) -> bool:
   return str(reason_code or "").strip() in PREFERENCE_TELEMETRY_REASONS
-
-
-def is_hard_structural_target_room(reason_code: str | None) -> bool:
-  return str(reason_code or "").strip() in HARD_STRUCTURAL_TARGET_ROOM_REASONS
 
 
 @dataclass(frozen=True)

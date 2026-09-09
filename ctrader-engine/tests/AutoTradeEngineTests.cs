@@ -1309,6 +1309,10 @@ public sealed partial class AutoTradeEngineTests
     await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
   }
 
+  // Balance shifted 900->550 (commit 7b7129af raised LotsForEquity(900)
+  // 0.06->0.10, which sits above ZoneFillMinLots=0.09 and never falls back
+  // any more). 550 lands in the un-touched sub-600 band (0.04 lots),
+  // reproducing the below-minimum scenario this test means to exercise.
   [Fact]
   public async Task SmallZoneFillPlanFallsBackToSingleEntryAndRecordsReason()
   {
@@ -1319,7 +1323,7 @@ public sealed partial class AutoTradeEngineTests
     ));
     var client = new FakeTradingClient
     {
-      Account = ValidAccount() with { Balance = 900m },
+      Account = ValidAccount() with { Balance = 550m },
     };
     var logs = new List<string>();
     var engine = new AutoTradeEngine(
@@ -1342,19 +1346,19 @@ public sealed partial class AutoTradeEngineTests
     await store.Ordered.Task.WaitAsync(TimeSpan.FromSeconds(2));
 
     var order = Assert.Single(client.Orders);
-    Assert.Equal(600, order.Volume);
+    Assert.Equal(400, order.Volume);
     Assert.Empty(client.LimitOrders);
     Assert.Contains(
       logs,
       message => message.Contains(
-        "zone-fill skipped: 0.06 lots below 0.09 minimum"
+        "zone-fill skipped: 0.04 lots below 0.09 minimum"
       )
     );
     Assert.Contains(
       store.Events,
       item => item.Type == "opened"
         && item.Message.Contains(
-          "zone-fill skipped: 0.06 lots below 0.09 minimum"
+          "zone-fill skipped: 0.04 lots below 0.09 minimum"
         )
     );
 

@@ -12,7 +12,6 @@ from __future__ import annotations
 import argparse
 import ast
 import json
-import re
 from pathlib import Path
 
 from app.configuration.catalog import iter_catalog_entries
@@ -91,33 +90,6 @@ def _canonical_startup() -> tuple[bool, bool, str | None]:
   except CanonicalConfigurationError:
     fail_closed = True
   return ok, fail_closed, category
-
-
-def _scan_legacy_metadata(root: Path) -> list[str]:
-  blockers: list[str] = []
-  skip = {
-    "docs/configuration/history",
-    "contracts/configuration/catalog-v2-debt-inventory.generated.json",
-  }
-  for path in root.rglob("*.py"):
-    rel = str(path.relative_to(root)).replace("\\", "/")
-    if any(rel.startswith(prefix) for prefix in skip):
-      continue
-    if "/.venv/" in rel or rel.startswith("algo-bot/.venv"):
-      continue
-    text = path.read_text(encoding="utf-8")
-    if "legacy_attr" in text and "history" not in rel:
-      # allow comments mentioning removal in detectors? mission: no active metadata
-      if re.search(r"\blegacy_attr\s*=", text) or "entry.legacy_attr" in text:
-        blockers.append(f"legacy_attr_reference:{rel}")
-    if re.search(r"\bitem_id\s*=", text) and "display_config_id" not in text:
-      if "configuration/history" not in rel:
-        # tests may assert absence
-        if "assert" not in text and "has_no_item_id" not in text and "no_item_id" not in text:
-          if "config_field" in text or "CatalogEntry" in text or "item_id=" in text:
-            if "tests/" not in rel or "item_id=" in text:
-              pass
-  return blockers
 
 
 def evaluate_configuration_integrity(

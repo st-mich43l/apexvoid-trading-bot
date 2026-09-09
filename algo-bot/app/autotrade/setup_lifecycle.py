@@ -84,11 +84,6 @@ _LEGACY_PRE_PLAN_STATES = frozenset({
   ARMED_WAITING_TRIGGER,
 })
 
-# Analysis-only states: a setup here has never produced a TradePlan and
-# never directly causes execution. Mirrors the ADR's split between the
-# analysis/watchlist flow and the confirmed execution-plan flow.
-ANALYSIS_ONLY_STATES = frozenset({DISCOVERED, WATCHING, TOUCHED, FORMING})
-
 TERMINAL_STATES = frozenset({CANCELLED, INVALIDATED, EXPIRED, CONSUMED})
 
 # CONFIRMED publishes directly to PLAN_BUILT. Legacy pre-plan nodes may
@@ -177,10 +172,6 @@ def setup_key(setup_id: str) -> str:
 
 def active_thesis_key(symbol: str, thesis_id: str) -> str:
   return f"analysis:active_thesis:{symbol}:{thesis_id}"
-
-
-def watchlist_key() -> str:
-  return "analysis:watchlist"
 
 
 def setup_expiry_index_key() -> str:

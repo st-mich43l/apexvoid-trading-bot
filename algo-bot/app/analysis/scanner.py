@@ -2188,26 +2188,6 @@ def _structure_card_gate(
   return None
 
 
-def _conflict_record(
-  stronger: DetectionResult,
-  weaker: DetectionResult,
-  outcome: str,
-) -> dict[str, Any]:
-  return {
-    "outcome": outcome,  # "stronger_kept" | "both_dropped"
-    "a": {
-      "setup": stronger.setup,
-      "direction": stronger.direction,
-      "confluence": stronger.confluence,
-    },
-    "b": {
-      "setup": weaker.setup,
-      "direction": weaker.direction,
-      "confluence": weaker.confluence,
-    },
-  }
-
-
 def _suppress_overlaps(
   results: list[DetectionResult],
 ) -> tuple[list[DetectionResult], list[dict[str, Any]]]:

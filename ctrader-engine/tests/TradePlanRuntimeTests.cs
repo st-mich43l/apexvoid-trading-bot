@@ -1704,7 +1704,7 @@ public sealed class TradePlanRuntimeTests
     Assert.Equal(800, market.Volume); // 0.08 lots at equity 1300
     var limit = Assert.Single(client.LimitOrders);
     Assert.Equal(4085.00m, limit.LimitPrice);
-    Assert.Equal(300, limit.Volume); // 0.03 lots
+    Assert.Equal(400, limit.Volume); // 0.04 lots (LotsForEquity(1300)=0.12 total)
     var state = Assert.Single(runtime.TrackedStates);
     Assert.Equal(TradePlanRuntimeStage.PartiallyOpen, state.Stage);
     Assert.DoesNotContain(store.Events, e => e.Type == "plan_armed");

@@ -407,29 +407,6 @@ async def _load_quote(client: Any, symbol: str) -> tuple[float, float, int] | No
   return bid, ask, ts
 
 
-def _quote_evidence(
-  record: ZoneWatch,
-  quote: tuple[float, float, int],
-):
-  from app.autotrade import units
-
-  bid, ask, _ts = quote
-  pip = units.pip_size(record.symbol)
-  tolerance = max(
-    0.0,
-    float(runtime_config.execution.entry.contract_tolerance_pips) * pip,
-  )
-  return executable_quote_in_zone(
-    record.direction,
-    bid,
-    ask,
-    record.low,
-    record.high,
-    tolerance,
-    pip_size=pip,
-  )
-
-
 def _technique_chase_pips() -> float:
   """Chase budget for technique / confluence ZoneWatch activation."""
   try:

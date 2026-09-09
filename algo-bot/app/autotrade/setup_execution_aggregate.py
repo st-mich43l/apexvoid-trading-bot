@@ -25,23 +25,6 @@ def v8_plan_id(setup_id: str) -> str:
   return f"v8:{setup_id}"
 
 
-def plan_id_candidates(setup_id: str) -> tuple[str, ...]:
-  """Return the v8 plan id for a setup (v8: prefix only)."""
-  sid = str(setup_id or "")
-  if sid.startswith("v8:"):
-    return (sid,)
-  return (f"v8:{sid}",)
-
-
-def strip_plan_prefix(value: str | None) -> str | None:
-  if value is None:
-    return None
-  text = str(value)
-  if text.startswith("v8:"):
-    return text[3:]
-  return text
-
-
 @dataclass(frozen=True)
 class SetupExecutionAggregate:
   setup_id: str

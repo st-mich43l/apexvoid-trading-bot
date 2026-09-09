@@ -80,16 +80,6 @@ def _metric_line(
   return line
 
 
-def _best_worst_line(icon: str, label: str, row: dict) -> str:
-  seq = row.get("daily_seq") or row.get("signal_id") or "?"
-  return _metric_line(
-    icon,
-    label,
-    _signed(row["value"]),
-    f"· #{seq} {_setup_label(row.get('setup_type'))}",
-  )
-
-
 def _branch_lines(groups: list[dict], kind: str) -> list[str]:
   if not groups:
     return ["└─ —"]

@@ -2456,7 +2456,6 @@ async def _deliver_auto_trade_event(
     return False
   position_id = event.get("position_id")
   match_id = _event_match_id(event)
-  root_edited = False
   reply_to, reason = await _resolve_reply_message_id(client, event, profile)
   if reply_to is None and (
     event_type in _FORMING_REPLY_TYPES

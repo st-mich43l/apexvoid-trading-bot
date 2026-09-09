@@ -16,9 +16,6 @@ ROLE_BROKEN_RESISTANCE = "broken_resistance"
 @dataclass(frozen=True)
 class KeyLevelRoleDecision:
   role: str
-  accepted_above: int
-  accepted_below: int
-  required_closes: int
 
 
 def _accepted_count(closes: list[float], predicate) -> int:
@@ -75,4 +72,4 @@ def classify_key_level_role(
     role = ROLE_BROKEN_SUPPORT
   else:
     role = ROLE_AMBIGUOUS
-  return KeyLevelRoleDecision(role, above, below, required)
+  return KeyLevelRoleDecision(role)

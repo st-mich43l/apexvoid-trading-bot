@@ -321,12 +321,6 @@ def _detect_impulse(
     return detect_impulse_pullback(m1_df, direction=direction)
 
 
-def _technique_require_sweep_body(cfg: Any) -> bool:
-  from app.autotrade.killzone import technique_require_sweep_body
-
-  return technique_require_sweep_body(cfg)
-
-
 def _enabled(cfg: Any, name: str) -> bool:
   """Archetype enable flags are fail-closed when missing (not default-on)."""
   root = _scalping_cfg(cfg)

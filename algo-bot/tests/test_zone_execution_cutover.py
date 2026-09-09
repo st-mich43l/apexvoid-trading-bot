@@ -680,16 +680,6 @@ async def test_enforce_location_blocks_buy_after_premium_rally(
     "_load_quote",
     AsyncMock(return_value=(4079.5, 4080.5, now_ts)),
   )
-  # Force zone presence "inside" even though dealing range says premium.
-  monkeypatch.setattr(
-    cutover,
-    "_quote_evidence",
-    lambda record, quote: SimpleNamespace(
-      inside=True,
-      executable_quote=quote[1],
-      side="ask",
-    ),
-  )
   monkeypatch.setattr(
     cutover,
     "_m1_trigger_for_zone",
@@ -818,15 +808,6 @@ async def test_prod_replay_null_match_range_no_longer_context_missing(
     cutover,
     "_load_quote",
     AsyncMock(return_value=(4231.01, 4231.10, now_ts)),
-  )
-  monkeypatch.setattr(
-    cutover,
-    "_quote_evidence",
-    lambda record, quote: SimpleNamespace(
-      inside=True,
-      executable_quote=quote[0],
-      side="bid",
-    ),
   )
   # No M1 yet — location must still evaluate with dealing ranges (not missing).
   monkeypatch.setattr(
