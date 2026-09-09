@@ -162,17 +162,6 @@ async def _alert_owner_component_fatal(
     log.exception("fatal owner alert failed component=%s", component)
 
 
-async def load_component_health(component: str) -> dict | None:
-  raw = await get_client().get(component_health_key(component))
-  if not raw:
-    return None
-  try:
-    payload = json.loads(raw)
-  except (TypeError, ValueError, json.JSONDecodeError):
-    return None
-  return payload if isinstance(payload, dict) else None
-
-
 async def list_fatal_components() -> list[dict]:
   """Return component health payloads currently marked fatal."""
   client = get_client()

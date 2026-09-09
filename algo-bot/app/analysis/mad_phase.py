@@ -134,7 +134,6 @@ REACTION_MAD_FAMILIES = frozenset({
   "structural_reaction",
   "liquidity_sweep_reversal",
 })
-RANGE_SCALP_PHASES = frozenset({PHASE_ACCUM})
 EXPANSION_PHASES = frozenset({PHASE_EXPAND, PHASE_MANIP})
 
 

@@ -418,13 +418,9 @@ class ThesisRearmDecision:
   state: str
   reason_code: str
   outside_bar_count: int
-  required_outside_bars: int
   exit_distance_atr: float
-  required_exit_atr: float
-  previous_confirmation_ts: str
   new_touch_ts: str
   new_confirmation_ts: str
-  claim_updates: dict[str, Any] | None = None
 
 
 def evaluate_thesis_rearm_for_publish(
@@ -467,10 +463,7 @@ def evaluate_thesis_rearm_for_publish(
       state,
       "active_thesis_group",
       outside_count,
-      required_bars,
       distance,
-      required_atr,
-      previous_confirm,
       new_touch_ts,
       new_confirmation_ts,
     )
@@ -481,10 +474,7 @@ def evaluate_thesis_rearm_for_publish(
       state,
       "thesis_waiting_rearm",
       outside_count,
-      required_bars,
       distance,
-      required_atr,
-      previous_confirm,
       new_touch_ts,
       new_confirmation_ts,
     )
@@ -495,10 +485,7 @@ def evaluate_thesis_rearm_for_publish(
       state or "unknown",
       "thesis_not_rearm_ready",
       outside_count,
-      required_bars,
       distance,
-      required_atr,
-      previous_confirm,
       new_touch_ts,
       new_confirmation_ts,
     )
@@ -509,10 +496,7 @@ def evaluate_thesis_rearm_for_publish(
       state,
       "missing_reaction_timestamps",
       outside_count,
-      required_bars,
       distance,
-      required_atr,
-      previous_confirm,
       new_touch_ts,
       new_confirmation_ts,
     )
@@ -522,10 +506,7 @@ def evaluate_thesis_rearm_for_publish(
       state,
       "reaction_not_newer",
       outside_count,
-      required_bars,
       distance,
-      required_atr,
-      previous_confirm,
       new_touch_ts,
       new_confirmation_ts,
     )
@@ -540,10 +521,7 @@ def evaluate_thesis_rearm_for_publish(
         state,
         "thesis_waiting_rearm",
         outside_count,
-        required_bars,
         distance,
-        required_atr,
-        previous_confirm,
         new_touch_ts,
         new_confirmation_ts,
       )
@@ -553,10 +531,7 @@ def evaluate_thesis_rearm_for_publish(
     "rearm_ready",
     "rearm_allowed",
     outside_count,
-    required_bars,
     distance,
-    required_atr,
-    previous_confirm,
     new_touch_ts,
     new_confirmation_ts,
   )
@@ -665,39 +640,3 @@ def advance_thesis_rearm_on_bar(
     metric = "mapped_thesis_rearm_ready"
 
   return updated, metric
-
-
-# Lua: acquire thesis claim only when absent or rearm_ready/reusable.
-THESIS_CLAIM_ACQUIRE_LUA = """
-local key = KEYS[1]
-local payload = ARGV[1]
-local existing = redis.call('GET', key)
-if not existing then
-  redis.call('SET', key, payload)
-  return 1
-end
-local ok, claim = pcall(cjson.decode, existing)
-if not ok or type(claim) ~= 'table' then
-  return 0
-end
-local state = string.lower(tostring(claim['state'] or ''))
-local rearm = claim['rearm_ready'] == true or claim['rearm_ready'] == 1
-if state == 'rearm_ready' or ((state == 'closed' or state == 'cancelled'
-    or state == 'rejected' or state == 'expired') and rearm) then
-  redis.call('SET', key, payload)
-  return 1
-end
-if state == 'cancelled' or state == 'rejected' or state == 'expired' then
-  -- Never-filled / rejected paths may recycle without a full exit cycle.
-  if claim['terminal_at'] ~= nil and (claim['group_id'] == nil or claim['group_id'] == '') then
-    redis.call('SET', key, payload)
-    return 1
-  end
-  if claim['filled'] ~= true and (state == 'cancelled' or state == 'rejected'
-      or state == 'expired') and claim['outside_bar_count'] == nil then
-    redis.call('SET', key, payload)
-    return 1
-  end
-end
-return 0
-"""

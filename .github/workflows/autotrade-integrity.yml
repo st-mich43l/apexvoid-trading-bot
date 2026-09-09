@@ -112,10 +112,7 @@ jobs:
         env:
           REAL_REDIS_URL: redis://127.0.0.1:6379/15
         run: |
-          # Exclude leftover scale-in volume fixtures (80/20 lot table), not
-          # the live V8 TradePlan runtime.
           dotnet test tests/CTraderFeed.Tests.csproj --nologo \
-            --filter "FullyQualifiedName!~ScaleInPlannerTests&FullyQualifiedName!~EquityZoneLadderGroupLifecycleMatchesAcceptance&FullyQualifiedName!~CalculateVolumeSlicesForMarketWithLimitScaleMatchEquity1300&FullyQualifiedName!~CalculateVolumeSlicesForALimitLadderAreProportionalToLegVolumeRatio&FullyQualifiedName!~MarketWithLimitScaleSubmitsL1MarketAndL2LimitOnFirstPoll&FullyQualifiedName!~SmallZoneFillPlanFallsBackToSingleEntryAndRecordsReason" \
             --logger "trx;LogFileName=csharp-results.trx" \
             --results-directory TestResults
 

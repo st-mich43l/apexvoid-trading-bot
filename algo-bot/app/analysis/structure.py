@@ -165,19 +165,6 @@ def liquidity_sweep(df: pd.DataFrame, level: float | Level) -> str | None:
   return None
 
 
-def is_break(df: pd.DataFrame, level: float | Level) -> str | None:
-  if len(df) < 2:
-    return None
-  price = level.price if isinstance(level, Level) else float(level)
-  prev_close = float(df["close"].iloc[-2])
-  close = float(df["close"].iloc[-1])
-  if prev_close <= price < close:
-    return "up"
-  if prev_close >= price > close:
-    return "down"
-  return None
-
-
 def _last_consecutive_break_index(
   closes: list[float],
   price: float,

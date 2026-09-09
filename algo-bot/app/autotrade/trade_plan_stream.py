@@ -39,16 +39,8 @@ def plan_key(plan_id: str) -> str:
   return f"execution:plan:{plan_id}"
 
 
-def plan_owner_key(plan_id: str) -> str:
-  return f"execution:plan_owner:{plan_id}"
-
-
 def plan_state_key(plan_id: str) -> str:
   return f"execution:plan_state:{plan_id}"
-
-
-def plan_event_key(plan_id: str) -> str:
-  return f"execution:plan_event:{plan_id}"
 
 
 def plan_dedup_key(plan_id: str) -> str:

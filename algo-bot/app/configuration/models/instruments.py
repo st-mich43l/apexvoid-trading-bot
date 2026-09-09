@@ -861,44 +861,7 @@ class InstrumentsConfig(FrozenConfigModel):
       )
     )
 
-  def as_mapping(self) -> Mapping[str, InstrumentConfig]:
-    return dict(self.root)
-
-
 EMPTY_INSTRUMENTS = InstrumentsConfig()
-
-
-def default_xau_instrument() -> InstrumentConfig:
-  """Schema-default XAU instrument matching current flat leaf defaults."""
-  return InstrumentConfig(
-    enabled=True,
-    canonical_symbol="XAU",
-    broker_symbol="XAU",
-    aliases=("XAUUSD",),
-    timeframes=["H1", "M15", "M5", "M1"],
-    policy=XAU_CURRENT_V1_POLICY,
-    contract=InstrumentContractConfig(
-      pip_size=0.1,
-      contract_units_per_lot=100.0,
-      price_digits=2,
-    ),
-    market_data=InstrumentMarketDataConfig(
-      lookbacks=InstrumentLookbacksConfig(
-        h1_bars=400,
-        m15_bars=250,
-        m5_bars=150,
-        m1_bars=150,
-      ),
-    ),
-    analysis=InstrumentAnalysisConfig(
-      zones=InstrumentZoneWidthConfig(
-        minimum_width_price=3.0,
-        preferred_minimum_width_price=3.0,
-        preferred_maximum_width_price=6.0,
-        major_maximum_width_price=10.0,
-      ),
-    ),
-  )
 
 
 # Paths projected from instruments.XAU into existing flat leaves.

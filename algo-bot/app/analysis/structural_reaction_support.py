@@ -256,13 +256,6 @@ def band_touched(row: pd.Series, low: float, high: float) -> bool:
   return float(row["low"]) <= high + _EPS and float(row["high"]) >= low - _EPS
 
 
-def level_band_touched(row: pd.Series, price: float, band: float) -> bool:
-  return (
-    float(row["low"]) <= price + max(0.0, band) + _EPS
-    and float(row["high"]) >= price - max(0.0, band) - _EPS
-  )
-
-
 def wick_rejection_on_bar(row: pd.Series, direction: str) -> bool:
   open_ = float(row["open"])
   high = float(row["high"])

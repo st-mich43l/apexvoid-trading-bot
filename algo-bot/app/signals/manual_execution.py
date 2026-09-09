@@ -1147,26 +1147,6 @@ async def _process_event_entries(
   return cursor
 
 
-async def _process_event_entries_inline(
-  client,
-  entries,
-  *,
-  cursor: str,
-  positions: dict[int, int],
-) -> str:
-  """Direct handler path used by unit tests (bypasses per-symbol queues)."""
-  for entry_id, fields in entries:
-    try:
-      event = json.loads(fields["payload"])
-    except (KeyError, TypeError, json.JSONDecodeError) as exc:
-      log.warning("Invalid auto-trade event %s: %s", entry_id, exc)
-    else:
-      await _handle_event(client, event, positions)
-    cursor = entry_id
-    await client.set(_EVENT_CURSOR_KEY, cursor)
-  return cursor
-
-
 async def reconcile_events_loop() -> None:
   if not runtime_config.manual_algo.runtime.enabled:
     return
