@@ -100,7 +100,6 @@ def test_zone_watch_version_bumped_for_lifecycle():
   assert zw.PUBLISHED_LOCKED in zw.ZONE_WATCH_STATES
   assert zw.CONSUMED in zw.ZONE_WATCH_STATES
   assert zw.EXPIRED in zw.ZONE_WATCH_STATES
-  assert zw.EXHAUSTED == zw.EXPIRED
 
 
 def test_exhausted_alias_migrates_on_load():

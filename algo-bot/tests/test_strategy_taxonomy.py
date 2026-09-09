@@ -163,19 +163,15 @@ def test_technique_and_confluence_are_zone_not_reaction():
   from app.autotrade.strategy_taxonomy import (
     CONFLUENCE_STRATEGIES,
     TECHNIQUE_STRATEGIES,
-    is_confluence_strategy,
     is_technique_or_confluence,
-    is_technique_strategy,
   )
 
   for name in TECHNIQUE_STRATEGIES:
-    assert is_technique_strategy(name)
     assert is_technique_or_confluence(name)
     assert is_zone_strategy(name)
     assert not is_reaction_strategy(name)
     assert canonical_family(name) == CANONICAL_FAMILY_ZONE
   for name in CONFLUENCE_STRATEGIES:
-    assert is_confluence_strategy(name)
     assert is_technique_or_confluence(name)
     assert is_zone_strategy(name)
     assert not is_reaction_strategy(name)

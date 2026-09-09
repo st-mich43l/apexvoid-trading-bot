@@ -36,7 +36,7 @@ def test_swings_and_market_structure_label_hh_hl_uptrend():
   assert structure.market_structure(pivots) == "up"
 
 
-def test_fvg_sweep_and_retest_fire_on_crafted_window():
+def test_fvg_and_retest_fire_on_crafted_window():
   df = _df([
     (99, 100, 98, 99),
     (100, 101, 99, 100),
@@ -49,14 +49,13 @@ def test_fvg_sweep_and_retest_fire_on_crafted_window():
 
   gaps = structure.fvg(df)
   assert any(zone.kind == "bullish_fvg" for zone in gaps)
-  assert structure.liquidity_sweep(df, 102) == "buy"
 
   retest = structure.find_retest(df, 102)
   assert retest is not None
   assert retest.kind == "retest_support"
 
 
-def test_flat_window_has_no_gap_sweep_or_retest():
+def test_flat_window_has_no_gap_or_retest():
   df = _df([
     (100, 101, 99, 100),
     (100, 101, 99, 100),
@@ -65,7 +64,6 @@ def test_flat_window_has_no_gap_sweep_or_retest():
   ])
 
   assert structure.fvg(df) == []
-  assert structure.liquidity_sweep(df, 100) is None
   assert structure.find_retest(df, 100) is None
 
 

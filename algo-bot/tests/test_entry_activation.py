@@ -12,7 +12,6 @@ from app.autotrade.entry_activation import (
   evaluate_entry_activation,
   apply_trigger_to_match,
   activation_archetype,
-  ACTIVATION_BLOCK_REASON_CODES,
   EntryActivationDecision,
   emit_activation_gate_metrics,
 )
@@ -657,7 +656,32 @@ def test_key_buy_blocked_into_expanding_bid():
 
 @pytest.mark.parametrize(
   "reason_code",
-  sorted(ACTIVATION_BLOCK_REASON_CODES),
+  sorted({
+    "zone_decisively_broken",
+    "entry_location_context_missing",
+    "entry_location_htf_range_missing",
+    "buy_in_premium",
+    "sell_in_discount",
+    "buy_at_range_extreme",
+    "sell_at_range_extreme",
+    "range_entry_near_equilibrium",
+    "range_buy_not_at_discount_edge",
+    "range_sell_not_at_premium_edge",
+    "quote_outside_zone",
+    "reaction_trigger_missing",
+    "reaction_trigger_before_zone_touch",
+    "reaction_trigger_stale",
+    "reaction_trigger_wrong_direction",
+    "confirmation_requires_sweep_body",
+    "demand_requires_sweep_reclaim",
+    "sell_not_proximal",
+    "key_buy_into_impulse",
+    "impulse_against_block",
+    "breakout_retest_evidence_missing",
+    "trend_pullback_evidence_missing",
+    "momentum_continuation_evidence_missing",
+    "momentum_cannot_reuse_reversal_trigger",
+  }),
 )
 @pytest.mark.asyncio
 async def test_activation_blocked_metrics_emitted_once(reason_code: str):
