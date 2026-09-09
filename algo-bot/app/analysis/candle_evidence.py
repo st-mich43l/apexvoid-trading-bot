@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from app.analysis.candle_displacement import DisplacementEvidence, evaluate_displacement
-from app.analysis.candle_geometry import candle_geometry_from_bar
+from app.analysis.candle_geometry import CandleGeometry, candle_geometry_from_bar
 from app.analysis.candle_rejection import RejectionEvidence, evaluate_rejection
 from app.analysis.candle_sequences import (
   IndecisionEvidence,
@@ -116,6 +116,11 @@ class CandleEvidence:
 
   primary_pattern: str | None
   all_patterns: tuple[str, ...] = field(default_factory=tuple)
+  # The evaluated (last, currently-closing) bar's raw geometry — carried
+  # for telemetry (§28's candle_body_fraction/candle_upper_wick_fraction/
+  # etc.) so those readings never need re-deriving from a specific family
+  # that may or may not have fired.
+  geometry: CandleGeometry | None = None
 
   def to_dict(self) -> dict[str, Any]:
     return {
@@ -255,4 +260,5 @@ def evaluate_all_candle_evidence(
     final_score=final_score,
     primary_pattern=primary,
     all_patterns=all_patterns,
+    geometry=current,
   )
