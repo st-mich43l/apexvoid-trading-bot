@@ -23,10 +23,6 @@ OptionClassification = Literal[
 ]
 
 
-class OptionFieldSpec(dict):
-  """Typed mapping helper (path keys kept as plain dict for JSON gen)."""
-
-
 # property → (classification, canonical_env|None, catalog_path|None, notes)
 FEED_OPTIONS_CLASSIFICATION: dict[str, tuple[OptionClassification, str | None, str | None]] = {
   'AccessToken': ('secret_environment', 'CTRADER_ACCESS_TOKEN', 'bootstrap.ctrader.credentials.access_token'),

@@ -1,7 +1,6 @@
 import csv
 import io
 import logging
-import math
 from datetime import datetime, timezone
 
 import aiohttp
@@ -10,38 +9,7 @@ from app.core.config import runtime_config
 
 log = logging.getLogger(__name__)
 
-_PRICE_URL = "https://api.tiingo.com/tiingo/fx/top"
 _BARS_URL = "https://api.tiingo.com/tiingo/fx/xauusd/prices"
-
-
-async def get_xau_price(session: aiohttp.ClientSession) -> float | None:
-  """Fetch the current XAU/USD price, returning None on any feed failure."""
-  try:
-    timeout = aiohttp.ClientTimeout(total=10)
-    async with session.get(
-      _PRICE_URL,
-      params={"tickers": "xauusd"},
-      headers={"Authorization": f"Token {runtime_config.market_data.tiingo.api_key}"},
-      timeout=timeout,
-    ) as response:
-      if response.status == 429:
-        log.warning("Tiingo rate limit reached; skipping watcher tick")
-        return None
-      response.raise_for_status()
-      body = await response.json()
-      quote = body[0]
-      raw = quote.get("midPrice")
-      if raw is None:
-        bid, ask = quote.get("bidPrice"), quote.get("askPrice")
-        raw = (bid + ask) / 2
-      price = float(raw)
-      if not math.isfinite(price):
-        raise ValueError("non-finite price")
-      return price
-  except Exception as exc:
-    # Exception messages may contain the request URL; keep them out of logs.
-    log.warning("Could not fetch XAU/USD price (%s)", type(exc).__name__)
-    return None
 
 
 async def get_xau_bars(

@@ -528,25 +528,6 @@ def _position_activated_header(line: str) -> str | None:
   )
 
 
-def _terminal_header(line: str) -> str | None:
-  stripped = line.strip()
-  if stripped.startswith("❌") and "TERMINAL" in stripped:
-    return None
-  activated = _ACTIVATED_HEADER_RE.match(stripped)
-  if activated is not None:
-    return (
-      f"❌ <b>TERMINAL · {activated.group('symbol')} "
-      f"{activated.group('tf')}</b>"
-    )
-  match = _CARD_HEADER_RE.match(stripped)
-  if match is None:
-    return None
-  return (
-    f"❌ <b>TERMINAL · {match.group('symbol')} "
-    f"{match.group('tf')}</b>"
-  )
-
-
 def _strip_live_price_marker(text: str) -> str:
   """Terminal cards are closed — drop the live price cue."""
   return _LIVE_PRICE_MARKER_RE.sub("", text)

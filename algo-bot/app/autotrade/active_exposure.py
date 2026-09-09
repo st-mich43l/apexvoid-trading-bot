@@ -143,12 +143,6 @@ def normalize_symbol(value: object) -> str | None:
   return _SYMBOL_ALIASES.get(text, text)
 
 
-def same_instrument(left: object, right: object) -> bool:
-  a = normalize_symbol(left)
-  b = normalize_symbol(right)
-  return a is not None and a == b
-
-
 def normalize_direction(value: object) -> str | None:
   if value is None:
     return None

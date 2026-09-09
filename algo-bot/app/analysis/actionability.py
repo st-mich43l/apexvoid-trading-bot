@@ -53,7 +53,6 @@ class ActionabilityResolution:
   gated: tuple[tuple[DetectionResult, ActionabilityDecision], ...]
   decisions: tuple[tuple[DetectionResult, ActionabilityDecision], ...]
   conflicts: tuple[dict[str, Any], ...]
-  entry_locations: tuple[tuple[DetectionResult, EntryLocationDecision], ...] = ()
   demoted_hard: tuple[tuple[DetectionResult, ActionabilityDecision], ...] = ()
 
 
@@ -738,14 +737,11 @@ def resolve_actionability(
   # Discovery-time entry-location is a separate decision domain. Soft
   # telemetry only — never demote scanner actionable observations here.
   # Activation-time recheck in zone_execution_cutover is authoritative.
-  entry_location_pairs: list[tuple[DetectionResult, EntryLocationDecision]] = []
   for index, location in _evaluate_discovery_entry_locations(
     observed=observed,
     context=context,
     cfg=cfg,
   ):
-    result = observed[index]
-    entry_location_pairs.append((result, location))
     demoted_decisions.setdefault(index, []).append(
       ActionabilityDecision(
         allowed=True if not location.hard_block else location.allowed,
@@ -774,7 +770,6 @@ def resolve_actionability(
       for decision in demoted_decisions[index]
     ),
     tuple(conflicts),
-    tuple(entry_location_pairs),
     tuple(demoted_hard),
   )
 
