@@ -523,7 +523,8 @@ public sealed record AutoTradeEvent(
   double? MathFibRatio = null,
   double? MathVelocity = null,
   double? MathAcceleration = null,
-  double? MathPd = null
+  double? MathPd = null,
+  int? MathFeatureVersion = null
 );
 
 public sealed record AutoTradeGroupPlan(
