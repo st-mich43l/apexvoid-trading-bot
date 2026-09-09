@@ -3346,7 +3346,6 @@ async def _publish_strategy_match(
   spot: AutoTradeSpot | None,
   match: StrategyMatch,
   *,
-  consume_redis_match: bool = True,
   match_source: str = "scanner_strategy_match",
   htf_zones: list[Zone] | None = None,
   htf_levels: list[Level] | None = None,

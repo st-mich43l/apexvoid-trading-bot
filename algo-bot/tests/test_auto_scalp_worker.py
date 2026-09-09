@@ -1275,7 +1275,6 @@ async def test_counter_bias_target_barrier_adapts_before_eq(monkeypatch):
     "XAU",
     worker.AutoTradeSpot(4072.88, now, True),
     match,
-    consume_redis_match=False,
     match_source="market_map_strategy",
     htf_zones=[barrier],
   )
@@ -1323,7 +1322,6 @@ async def test_counter_bias_tag_reaches_candidate_setup_and_stats_label(
     "XAU",
     worker.AutoTradeSpot(4072.88, now, True),
     match,
-    consume_redis_match=False,
     match_source="market_map_strategy",
   )
 
