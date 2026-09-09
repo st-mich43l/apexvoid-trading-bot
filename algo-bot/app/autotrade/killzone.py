@@ -27,6 +27,64 @@ class KillzoneDecision:
   measured: dict[str, Any]
 
 
+@dataclass(frozen=True)
+class SessionQuality:
+  """Pair-native session context: focused (2) or selective (1), never a clock veto."""
+
+  score: int
+  label: str
+  utc_hour: int
+  measured: dict[str, Any]
+
+
+def selective_session_min_confluence(cfg: Any | None) -> int:
+  """Return the quality-1 confluence floor; zero keeps the policy disabled."""
+  section = getattr(getattr(cfg, "execution", None), "technique", None)
+  try:
+    return max(0, min(3, int(
+      getattr(section, "selective_session_min_confluence", 0) or 0,
+    )))
+  except (TypeError, ValueError):
+    return 0
+
+
+def evaluate_instrument_session_quality(
+  *,
+  ts: int | float | None = None,
+  hour: int | None = None,
+  cfg: Any | None = None,
+) -> SessionQuality:
+  """Score an instrument's current session without treating time as a veto."""
+  if hour is None:
+    if ts is None:
+      hour = datetime.now(timezone.utc).hour
+    else:
+      hour = datetime.fromtimestamp(int(ts), tz=timezone.utc).hour
+  hour = int(hour) % 24
+  windows = parse_reaction_publish_windows(cfg)
+  focused = hour_in_reaction_publish_windows(hour, cfg)
+  score = 2 if focused else 1
+  return SessionQuality(
+    score=score,
+    label="good" if focused else "selective",
+    utc_hour=hour,
+    measured={
+      "utc_hour": hour,
+      "session_quality_score": score,
+      "session_quality_label": "good" if focused else "selective",
+      "reaction_publish_windows": list(windows),
+    },
+  )
+
+
+def session_quality_minimum_confluence(
+  cfg: Any | None,
+  quality: SessionQuality,
+) -> int:
+  """Apply an optional stronger confluence floor only to selective sessions."""
+  return selective_session_min_confluence(cfg) if quality.score == 1 else 0
+
+
 def technique_enforce(cfg: Any | None) -> bool:
   section = getattr(getattr(cfg, "execution", None), "technique", None)
   if section is None:
@@ -284,17 +342,12 @@ def evaluate_reaction_publish_window(
   cfg: Any | None = None,
   require: bool = True,
 ) -> KillzoneDecision:
-  """Non-scalp reaction hours (not the HFS killzone / late-NY clock)."""
-  if hour is None:
-    if ts is None:
-      hour = datetime.now(timezone.utc).hour
-    else:
-      hour = datetime.fromtimestamp(int(ts), tz=timezone.utc).hour
-  hour = int(hour) % 24
-  windows = parse_reaction_publish_windows(cfg)
-  inside = hour_in_reaction_publish_windows(hour, cfg)
+  """Instrument-declared publish hours, independent of the HFS clock."""
+  quality = evaluate_instrument_session_quality(ts=ts, hour=hour, cfg=cfg)
+  windows = tuple(quality.measured["reaction_publish_windows"])
+  inside = quality.score == 2
   measured = {
-    "utc_hour": hour,
+    **quality.measured,
     "reaction_publish_windows": list(windows),
     "require": require,
     "technique_enforce": technique_enforce(cfg),
@@ -308,7 +361,7 @@ def evaluate_reaction_publish_window(
         else "outside_reaction_publish_window_not_enforced"
       ),
       killzone_name=KILLZONE_NONE,
-      utc_hour=hour,
+      utc_hour=quality.utc_hour,
       measured={**measured, "would_block": not inside},
     )
   if inside:
@@ -316,14 +369,14 @@ def evaluate_reaction_publish_window(
       allowed=True,
       reason_code="reaction_publish_window",
       killzone_name=KILLZONE_NONE,
-      utc_hour=hour,
+      utc_hour=quality.utc_hour,
       measured=measured,
     )
   return KillzoneDecision(
     allowed=False,
     reason_code="outside_reaction_publish_window",
     killzone_name=KILLZONE_NONE,
-    utc_hour=hour,
+    utc_hour=quality.utc_hour,
     measured=measured,
   )
 

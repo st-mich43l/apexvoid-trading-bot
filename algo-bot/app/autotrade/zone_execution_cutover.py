@@ -668,15 +668,48 @@ async def _prepare_activation(
   now = quote[2]
   from app.autotrade.killzone import (
     evaluate_killzone_gate,
+    evaluate_instrument_session_quality,
     evaluate_reaction_publish_window,
     reaction_require_killzone,
     reaction_require_publish_window,
+    session_quality_minimum_confluence,
     technique_enforce,
   )
 
   inst = instrument_geometry.instrument_runtime(record.symbol)
   tech = getattr(inst.execution, "technique", None)
   enforce_pack = technique_enforce(inst)
+  session_quality = evaluate_instrument_session_quality(ts=now, cfg=inst)
+  selective_minimum = session_quality_minimum_confluence(inst, session_quality)
+  if selective_minimum and match.confluence < selective_minimum:
+    log_at_most(
+      log,
+      f"session-quality:{record.symbol}:{record.zone_id}",
+      "entry activation blocked selective session quality symbol=%s zone_id=%s "
+      "confluence=%s required=%s utc_hour=%s windows=%s",
+      record.symbol,
+      record.zone_id,
+      match.confluence,
+      selective_minimum,
+      session_quality.utc_hour,
+      session_quality.measured["reaction_publish_windows"],
+    )
+    await _record_policy_telemetry(
+      client,
+      symbol=record.symbol,
+      kind="activation",
+      reason_code="selective_session_low_confluence",
+      payload={
+        "symbol": record.symbol,
+        "zone_id": record.zone_id,
+        "strategy": match.strategy,
+        "direction": record.direction,
+        "confluence": match.confluence,
+        "minimum_confluence": selective_minimum,
+        **session_quality.measured,
+      },
+    )
+    return None
   candidate_is_scalp = is_scalp_strategy(
     str(getattr(match, "strategy", "") or ""),
     family=str(getattr(match, "strategy_family", "") or getattr(match, "family", "") or "")
@@ -684,7 +717,8 @@ async def _prepare_activation(
     strategy_mode=str(getattr(match, "strategy_mode", "") or "") or None,
   )
   if candidate_is_scalp:
-    # Optional clock sterilizer (prod off). Structure/technique decide entries.
+    # Optional global HFS clock sterilizer (prod off). Pair session quality is
+    # assessed above, but it is deliberately not a time-of-day hard gate.
     require_kz = False if tech is None else bool(
       getattr(tech, "scalp_require_killzone", False)
     )

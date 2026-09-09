@@ -282,6 +282,24 @@ class ExecutionTechniqueConfig(FrozenConfigModel):
       default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, '7-11,13-16'),),
       validation_summary='Pydantic required/type coercion only',
     )
+    selective_session_min_confluence: int = config_field(
+      0,
+      canonical_env='AUTO_TRADE_TECHNIQUE_SELECTIVE_SESSION_MIN_CONFLUENCE',
+      owner=ConfigOwner.PYTHON,
+      reload=ReloadPolicy.NEW_SETUP_ONLY,
+      runtime_reload=ReloadPolicy.RESTART,
+      unit=ConfigUnit.COUNT,
+      risk=RiskClassification.STRATEGY_BEHAVIOR,
+      description=(
+        'Minimum confluence required when an instrument is outside its focused '
+        'session window (session quality=1/selective). Zero disables this '
+        'quality policy; it never creates a time-of-day hard gate.'
+      ),
+      default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 0),),
+      validation_summary='Pydantic integer bounds',
+      ge=0,
+      le=3,
+    )
     strict_premium_discount: bool = config_field(
       True,
       canonical_env='AUTO_TRADE_TECHNIQUE_STRICT_PREMIUM_DISCOUNT',

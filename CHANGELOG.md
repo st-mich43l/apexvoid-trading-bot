@@ -28,6 +28,11 @@ dated section after deployment.
   trades have accumulated. Purely descriptive — never a gate.
 
 ### Changed
+- FX sessions are now pair-native quality context, never time-of-day hard
+  gates: EURUSD/GBPUSD focus London+NY, GBPJPY focuses London, and USDJPY
+  focuses Tokyo+NY. Focus hours score 2 (good); all other hours score 1
+  (selective), where these FX pairs require three-confluence strategy evidence.
+  XAU keeps the policy disabled. Mirrored in Ansible deployment config.
 - Dropped the "Reaction" suffix from the 3 live strategy names that still
   had it: "Key Level Reaction" → "Key Level", "Session Level Reaction" →
   "Session Level", "Trendline Reaction" → "Trendline"

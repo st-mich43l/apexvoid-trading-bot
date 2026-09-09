@@ -1,20 +1,20 @@
 {
   "algorithm_constant_count": 57,
   "architecture_version": 1,
-  "catalog_entry_count": 579,
+  "catalog_entry_count": 580,
   "catalog_version": 2,
-  "configurable_count": 512,
-  "configuration_contract_fingerprint_sha256": "734a6325ae3bf9c41917fe74dcd4cee5b357a81b89162fe645a02b3948a94140",
-  "configuration_document_fingerprint_sha256": "48e0a1bdb0f67e739df9ccd87c27ddd45a0166400f5a4ce352b4a5b2e62274cf",
-  "contract_fingerprint": "734a6325ae3bf9c41917fe74dcd4cee5b357a81b89162fe645a02b3948a94140",
+  "configurable_count": 513,
+  "configuration_contract_fingerprint_sha256": "75ffa663045c27a852d99023853af401981c2058c53c583369b9129a9accdb9d",
+  "configuration_document_fingerprint_sha256": "3296adc1b16a8f22afe0ca7d4e3fedf1b81ad736e89621144d0a338452233849",
+  "contract_fingerprint": "75ffa663045c27a852d99023853af401981c2058c53c583369b9129a9accdb9d",
   "ctrader_only_count": 49,
   "deprecated_alias_count": 21,
-  "document_fingerprint": "48e0a1bdb0f67e739df9ccd87c27ddd45a0166400f5a4ce352b4a5b2e62274cf",
-  "environment_entry_count": 512,
+  "document_fingerprint": "3296adc1b16a8f22afe0ca7d4e3fedf1b81ad736e89621144d0a338452233849",
+  "environment_entry_count": 513,
   "integrity_status": "CONFIGURATION_INTEGRITY_OK",
   "owner_counts": {
     "ctrader": 49,
-    "python": 434,
+    "python": 435,
     "shared": 96
   },
   "profile_names": [
@@ -22,7 +22,7 @@
     "demo_eval"
   ],
   "protocol_constant_count": 10,
-  "python_projection_count": 530,
+  "python_projection_count": 531,
   "runtime_authority_count": 1,
   "runtime_root": "PythonRuntimeConfig",
   "secret_count": 9,

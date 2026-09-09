@@ -115,6 +115,9 @@ execution:
     # Scalp: structure + technique decide; do not sterilize by UTC killzone.
     # Weak volume/momentum hours are rejected by analysis, not the clock.
     scalp_require_killzone: false
+    # Pair focus is quality context, never a clock hard gate. FX overrides set
+    # 3 so selective (score 1) hours need a three-confluence strategy.
+    selective_session_min_confluence: 0
     require_sweep_body: false
     strict_premium_discount: true
     # Strict PD only for reversal + range_reversion archetypes (not continuation).
@@ -454,6 +457,9 @@ instruments:
     rollout: live
     broker_symbol: EURUSD
     canonical_symbol: EURUSD
+    # EUR/USD earns its cleanest liquidity at the London and NY opens.
+    overrides:
+      execution.technique.selective_session_min_confluence: 3
     # London/NY major: tight spread and 10-18 pip stop. Prefer the pack's 2R
     # ladder, with a 1R full-close fallback when opposing room is constrained.
   GBPUSD:
@@ -474,14 +480,18 @@ instruments:
         preferred_minimum_width_price: 0.001
     broker_symbol: GBPUSD
     canonical_symbol: GBPUSD
+    # Cable follows the same London/NY execution clock as EURUSD.
+    overrides:
+      execution.technique.selective_session_min_confluence: 3
     # London/NY major, same active-session profile as EURUSD (unlike
-    # GBPJPY's Tokyo/London-only or USDJPY's Tokyo/London/NY) - Cable's
+    # London-only GBPJPY or Tokyo/NY USDJPY) - Cable's
     # wider typical range earns a wider envelope than EURUSD's 10-18,
     # short of GBPJPY's 15-30. Standard fx_fixed_2r_v1 25/25/50 ladder
     # (inherited from the pack, not repeated here): no documented
     # fast-move-then-hard-reversal pattern here to justify GBPJPY's
     # frontload, and no defended-level/event-cluster incident on record
-    # for this pair yet either - overrides intentionally omitted.
+    # for this pair yet either; only the execution-session overrides above
+    # are needed.
     stop_envelope:
       min_pips: 12
       max_pips: 22
@@ -518,18 +528,19 @@ instruments:
     # ("volatility clusters"). Widen the news guard around either event
     # instead of the flat 30m single-event window every pair gets.
     # Dig 2026-08-25: Key Level was 0/4 (−118 pips). Keep the family live;
-    # raise quality (kz + explicit role + grade A + 3 touches) instead of
+    # raise quality (explicit role + grade A + 3 touches) instead of
     # disabling the family. Do not HTF-veto counter-bias.
     overrides:
       actionability.gates.event_cluster_guard_enabled: true
       analysis.levels.minimum_key_touches: 3
       strategies.reaction.key_level.require_explicit_role: true
-      strategies.reaction.key_level.require_killzone: true
       strategies.reaction.key_level.min_grade: A
+      execution.technique.selective_session_min_confluence: 3
     # Policy name retained for registry continuity. Close-ratio front-load
     # retired: uniform 1R/2R 50/50 + breakeven_after_r=1.0 across fixed_rr.
     policy: fx_fixed_2r_frontload_v1
-    reaction_session: tokyo_london
+    # Sterling's primary session is London; Tokyo/NY are deliberately quiet.
+    reaction_session: london
     stop_envelope:
       min_pips: 15
       max_pips: 30
@@ -574,12 +585,11 @@ instruments:
     overrides:
       risk.exposure.defended_levels: '160'
       risk.exposure.defended_level_buffer_price: 0.30
+      execution.technique.selective_session_min_confluence: 3
     policy: fx_fixed_2r_v1
     # Major pair, tight like EURUSD (not a volatile cross like GBPJPY).
-    # Tokyo (JPY driver, Japanese open→London) + London + NY (USD driver)
-    # — USDJPY is liquid across all three, unlike GBPJPY's Tokyo/London-
-    # only, no-NY window.
-    reaction_session: tokyo_london_ny
+    # Tokyo (JPY driver) + NY (USD driver); London is intentionally excluded.
+    reaction_session: tokyo_ny
     stop_envelope:
       min_pips: 10
       max_pips: 18
