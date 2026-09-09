@@ -193,3 +193,4 @@ def strategy_for_detector(detector_id: str) -> StrategyName | None:
     (entry for entry in STRATEGY_NAMES if entry.detector_id == detector_id),
     None,
   )
+

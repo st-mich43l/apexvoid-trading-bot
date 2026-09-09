@@ -153,18 +153,6 @@ def flip_zones(df: pd.DataFrame) -> list[Zone]:
   ]
 
 
-def liquidity_sweep(df: pd.DataFrame, level: float | Level) -> str | None:
-  if df.empty:
-    return None
-  price = level.price if isinstance(level, Level) else float(level)
-  row = df.iloc[-1]
-  if float(row["high"]) > price and float(row["close"]) < price:
-    return "sell"
-  if float(row["low"]) < price and float(row["close"]) > price:
-    return "buy"
-  return None
-
-
 def _last_consecutive_break_index(
   closes: list[float],
   price: float,
