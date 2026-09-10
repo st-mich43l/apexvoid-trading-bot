@@ -1254,6 +1254,53 @@ public sealed partial class AutoTradeEngineTests
   }
 
   [Fact]
+  public async Task ShallowLegTakeProfitReportsPipsFromTheGroupsDeepestFill()
+  {
+    // Owner-reported 2026-09-10 (real XAU BUY, signal 300): a manual /algo
+    // group's shallow leg (entry 4008.0, worse price) hit its own TP1
+    // (4011.0) while the group's deep leg (entry 4006.25, already filled,
+    // still open) sat untouched. The channel card reported the shallow
+    // leg's own entry-to-target distance (+30 pips) - correct for that one
+    // clip in isolation, but the owner reads the whole zone as one trade
+    // and expects the group's single best (deepest) fill as the reference,
+    // not whichever tranche happens to be booking this specific event.
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    var store = new FakeAutoTradeStore(CandidateJson());
+    var client = new FakeTradingClient();
+    client.SeedPosition(new TradingPosition(
+      91, 7, TradeDirection.Buy, 1000, 4008.0m, 4002.0m,
+      "apexvoid-auto", "av3|manual300shal|manual300|1|1000|1000|30|1|1000"
+    ));
+    client.SeedPosition(new TradingPosition(
+      92, 7, TradeDirection.Buy, 200, 4006.25m, 4002.0m,
+      "apexvoid-auto", "av3|manual300deep|manual300|2|200|200|120|1|1000"
+    ));
+    client.CloseExecutionPriceToReturn = 4011.5m;
+    var engine = new AutoTradeEngine(Options(), store, () => Now, _ => { });
+    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
+    await WaitForEventAsync(store, "ready");
+
+    // Bid crosses the shallow leg's own TP1 (4011.0) but stays far below
+    // the deep leg's own target (4006.25 + 12.0 = 4018.25) - only the
+    // shallow leg's take_profit fires.
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 4011.5m, 4011.7m, Now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+
+    var takeProfit = Assert.Single(
+      store.Events, item => item.Type == "take_profit"
+    );
+    Assert.Equal(91, takeProfit.PositionId);
+    // Deepest group fill (4006.25), not this leg's own entry (4008.0).
+    Assert.Equal(4006.25m, takeProfit.LegEntryPrice);
+    Assert.Equal(52.5m, takeProfit.LegRealizedPips);
+
+    cts.Cancel();
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+  }
+
+  [Fact]
   public async Task WideZonePlacesTwoLimitsAndExpiresUnfilledMidpointLeg()
   {
     using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
@@ -6773,6 +6820,75 @@ public sealed partial class AutoTradeEngineTests
     Assert.Equal("SELL", reconciled.Direction);
     Assert.Equal("orphaned_group_plan_reconciled", reconciled.ReasonCode);
     Assert.False(store.Values.ContainsKey("auto_trade:group_plan:manual:900"));
+
+    cts.Cancel();
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+  }
+
+  [Fact]
+  public async Task ReconcilesOrphanedGroupPlanUsingTheDeepestLegEntryNotTheFirstIterated()
+  {
+    // Owner-reported 2026-09-10 (signal 300, real XAU BUY): a manual /algo
+    // group's shallow leg (worse entry) and deep leg (better entry) can
+    // both fill and close during a restart gap. The reconciled group_result
+    // must report the group's single most favorable (deepest) fill as
+    // LegEntryPrice, not simply whichever leg's closing deal the broker
+    // history happened to return first - the shallow leg is seeded first
+    // here specifically to prove the old "first deal wins" behavior no
+    // longer applies.
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    var store = new FakeAutoTradeStore(CandidateJson());
+    const long shallowPositionId = 555_101;
+    const long deepPositionId = 555_102;
+    var client = new FakeTradingClient();
+    client.HistoricalOrders.Add(new HistoricalOrderMatch(
+      "av-orphan-shallow", Filled: true, shallowPositionId, Symbol.SymbolId, ExecutedVolume: 1000
+    ));
+    client.HistoricalOrders.Add(new HistoricalOrderMatch(
+      "av-orphan-deep", Filled: true, deepPositionId, Symbol.SymbolId, ExecutedVolume: 200
+    ));
+    // Shallow leg: entry 4008.0, closed at TP1 (4011.0) - listed FIRST so a
+    // regression back to "first deal wins" would surface as 4008.0 below.
+    client.ClosingDealsByPosition[shallowPositionId] =
+    [
+      new ClosingDeal(
+        EntryPrice: 4008.0m, ExitPrice: 4011.0m, ClosedVolume: 1000, ExecutionTimestamp: 900_000
+      ),
+    ];
+    // Deep leg: a materially better entry (4006.25), closed later/deeper.
+    client.ClosingDealsByPosition[deepPositionId] =
+    [
+      new ClosingDeal(
+        EntryPrice: 4006.25m, ExitPrice: 4020.0m, ClosedVolume: 200, ExecutionTimestamp: 900_500
+      ),
+    ];
+    await store.SaveGroupPlanAsync(
+      new AutoTradeGroupPlan(
+        CandidateId: "manual:300:0",
+        GroupId: "manual:300",
+        MatchId: null,
+        StrategyFamily: "manual",
+        RangeId: null,
+        Setup: "Confluence Zone",
+        Direction: "BUY",
+        CreatedAt: 900,
+        ClientOrderIds: ["av-orphan-shallow", "av-orphan-deep"],
+        SubmittedAt: 900
+      ),
+      TimeSpan.FromDays(1),
+      cts.Token
+    );
+
+    var engine = new AutoTradeEngine(Options(), store, () => Now, _ => { });
+    engine.BindInstrumentSymbols([Symbol]);
+    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
+    await WaitForEventAsync(store, "group_result");
+
+    var reconciled = Assert.Single(
+      store.Events, item => item.Type == "group_result" && item.GroupId == "manual:300"
+    );
+    Assert.Equal(4006.25m, reconciled.LegEntryPrice);
+    Assert.Equal("BUY", reconciled.Direction);
 
     cts.Cancel();
     await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);

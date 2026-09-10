@@ -483,10 +483,13 @@ public sealed record AutoTradeEvent(
   decimal? EntryLow = null,
   decimal? EntryHigh = null,
   decimal? LegRealizedPips = null,
-  // The specific leg's own EntryPrice behind LegRealizedPips - a multi-leg
-  // manual /algo group's shallow/mid/deep clips each fill at their own
-  // price, and the Python-side realized-R calc must measure risk from
-  // whichever leg's pips it is reporting, not the advertised entry zone.
+  // The group's DEEPEST fill price behind LegRealizedPips (see
+  // AutoTradeEngine.GroupDeepestEntryPrice) - a multi-leg manual /algo
+  // group's shallow/mid/deep clips each fill at their own price, but both
+  // the channel pips card and the Python-side realized-R calc must measure
+  // against the group's single best (deepest) fill, not whichever specific
+  // tranche happens to be booking this event, and not the advertised entry
+  // zone either.
   decimal? LegEntryPrice = null,
   long? GroupInitialVolume = null,
   long? LotSize = null,
