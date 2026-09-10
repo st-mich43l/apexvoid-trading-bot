@@ -376,6 +376,56 @@ async def init_db() -> None:
       "ADD COLUMN IF NOT EXISTS mad_reclaim_depth_atr DOUBLE PRECISION",
       "ALTER TABLE auto_trade_fills "
       "ADD COLUMN IF NOT EXISTS mad_reason_code TEXT",
+      # Candle Confirmation V2 context telemetry (descriptive only, never
+      # a gate) - see app/analysis/candle_evidence.py CandleEvidence.
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS candle_version SMALLINT",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS candle_primary_pattern TEXT",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS candle_patterns TEXT",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS candle_final_score DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS candle_base_score DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS candle_synergy_bonus DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS candle_rejection_score DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS candle_displacement_score DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS candle_sequence_score DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS candle_body_fraction DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS candle_upper_wick_fraction DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS candle_lower_wick_fraction DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS candle_close_location DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS candle_body_atr DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS candle_range_atr DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS candle_sweep BOOLEAN",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS candle_sweep_penetration_atr DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS candle_reclaim BOOLEAN",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS candle_reclaim_depth_atr DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS candle_engulfing BOOLEAN",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS candle_doji BOOLEAN",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS candle_compression_score DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS candle_sequence_name TEXT",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS candle_sequence_bars SMALLINT",
     ):
       await db.execute(stmt)
     await db.execute(
@@ -1269,11 +1319,21 @@ async def _ensure_fill_from_close_event(event: dict, group_id: str) -> None:
         mad_version, mad_phase, mad_confidence, mad_affinity, mad_direction,
         mad_sweep_side, mad_reclaim, mad_range_quality_atr,
         mad_break_distance_atr, mad_displacement_atr, mad_acceptance_closes,
-        mad_sweep_penetration_atr, mad_reclaim_depth_atr, mad_reason_code
+        mad_sweep_penetration_atr, mad_reclaim_depth_atr, mad_reason_code,
+        candle_version, candle_primary_pattern, candle_patterns,
+        candle_final_score, candle_base_score, candle_synergy_bonus,
+        candle_rejection_score, candle_displacement_score, candle_sequence_score,
+        candle_body_fraction, candle_upper_wick_fraction, candle_lower_wick_fraction,
+        candle_close_location, candle_body_atr, candle_range_atr,
+        candle_sweep, candle_sweep_penetration_atr, candle_reclaim,
+        candle_reclaim_depth_atr, candle_engulfing, candle_doji,
+        candle_compression_score, candle_sequence_name, candle_sequence_bars
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
         $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30,
-        $31, $32, $33, $34, $35
+        $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44,
+        $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57, $58,
+        $59
       )
       ON CONFLICT (position_id) DO NOTHING
       """,
@@ -1293,6 +1353,22 @@ async def _ensure_fill_from_close_event(event: dict, group_id: str) -> None:
       event.get("mad_break_distance_atr"), event.get("mad_displacement_atr"),
       event.get("mad_acceptance_closes"), event.get("mad_sweep_penetration_atr"),
       event.get("mad_reclaim_depth_atr"), event.get("mad_reason_code"),
+      event.get("candle_version"), event.get("candle_primary_pattern"),
+      event.get("candle_patterns"),
+      event.get("candle_final_score"), event.get("candle_base_score"),
+      event.get("candle_synergy_bonus"),
+      event.get("candle_rejection_score"), event.get("candle_displacement_score"),
+      event.get("candle_sequence_score"),
+      event.get("candle_body_fraction"), event.get("candle_upper_wick_fraction"),
+      event.get("candle_lower_wick_fraction"),
+      event.get("candle_close_location"), event.get("candle_body_atr"),
+      event.get("candle_range_atr"),
+      event.get("candle_sweep"), event.get("candle_sweep_penetration_atr"),
+      event.get("candle_reclaim"),
+      event.get("candle_reclaim_depth_atr"), event.get("candle_engulfing"),
+      event.get("candle_doji"),
+      event.get("candle_compression_score"), event.get("candle_sequence_name"),
+      event.get("candle_sequence_bars"),
     )
 
 
@@ -1338,11 +1414,21 @@ async def _record_auto_trade_fill(event: dict) -> None:
         mad_version, mad_phase, mad_confidence, mad_affinity, mad_direction,
         mad_sweep_side, mad_reclaim, mad_range_quality_atr,
         mad_break_distance_atr, mad_displacement_atr, mad_acceptance_closes,
-        mad_sweep_penetration_atr, mad_reclaim_depth_atr, mad_reason_code
+        mad_sweep_penetration_atr, mad_reclaim_depth_atr, mad_reason_code,
+        candle_version, candle_primary_pattern, candle_patterns,
+        candle_final_score, candle_base_score, candle_synergy_bonus,
+        candle_rejection_score, candle_displacement_score, candle_sequence_score,
+        candle_body_fraction, candle_upper_wick_fraction, candle_lower_wick_fraction,
+        candle_close_location, candle_body_atr, candle_range_atr,
+        candle_sweep, candle_sweep_penetration_atr, candle_reclaim,
+        candle_reclaim_depth_atr, candle_engulfing, candle_doji,
+        candle_compression_score, candle_sequence_name, candle_sequence_bars
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
         $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30,
-        $31, $32, $33, $34, $35
+        $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44,
+        $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57, $58,
+        $59
       )
       ON CONFLICT (position_id) DO UPDATE SET
         group_id = excluded.group_id,
@@ -1379,7 +1465,31 @@ async def _record_auto_trade_fill(event: dict) -> None:
         mad_acceptance_closes = COALESCE(excluded.mad_acceptance_closes, auto_trade_fills.mad_acceptance_closes),
         mad_sweep_penetration_atr = COALESCE(excluded.mad_sweep_penetration_atr, auto_trade_fills.mad_sweep_penetration_atr),
         mad_reclaim_depth_atr = COALESCE(excluded.mad_reclaim_depth_atr, auto_trade_fills.mad_reclaim_depth_atr),
-        mad_reason_code = COALESCE(excluded.mad_reason_code, auto_trade_fills.mad_reason_code)
+        mad_reason_code = COALESCE(excluded.mad_reason_code, auto_trade_fills.mad_reason_code),
+        candle_version = COALESCE(excluded.candle_version, auto_trade_fills.candle_version),
+        candle_primary_pattern = COALESCE(excluded.candle_primary_pattern, auto_trade_fills.candle_primary_pattern),
+        candle_patterns = COALESCE(excluded.candle_patterns, auto_trade_fills.candle_patterns),
+        candle_final_score = COALESCE(excluded.candle_final_score, auto_trade_fills.candle_final_score),
+        candle_base_score = COALESCE(excluded.candle_base_score, auto_trade_fills.candle_base_score),
+        candle_synergy_bonus = COALESCE(excluded.candle_synergy_bonus, auto_trade_fills.candle_synergy_bonus),
+        candle_rejection_score = COALESCE(excluded.candle_rejection_score, auto_trade_fills.candle_rejection_score),
+        candle_displacement_score = COALESCE(excluded.candle_displacement_score, auto_trade_fills.candle_displacement_score),
+        candle_sequence_score = COALESCE(excluded.candle_sequence_score, auto_trade_fills.candle_sequence_score),
+        candle_body_fraction = COALESCE(excluded.candle_body_fraction, auto_trade_fills.candle_body_fraction),
+        candle_upper_wick_fraction = COALESCE(excluded.candle_upper_wick_fraction, auto_trade_fills.candle_upper_wick_fraction),
+        candle_lower_wick_fraction = COALESCE(excluded.candle_lower_wick_fraction, auto_trade_fills.candle_lower_wick_fraction),
+        candle_close_location = COALESCE(excluded.candle_close_location, auto_trade_fills.candle_close_location),
+        candle_body_atr = COALESCE(excluded.candle_body_atr, auto_trade_fills.candle_body_atr),
+        candle_range_atr = COALESCE(excluded.candle_range_atr, auto_trade_fills.candle_range_atr),
+        candle_sweep = COALESCE(excluded.candle_sweep, auto_trade_fills.candle_sweep),
+        candle_sweep_penetration_atr = COALESCE(excluded.candle_sweep_penetration_atr, auto_trade_fills.candle_sweep_penetration_atr),
+        candle_reclaim = COALESCE(excluded.candle_reclaim, auto_trade_fills.candle_reclaim),
+        candle_reclaim_depth_atr = COALESCE(excluded.candle_reclaim_depth_atr, auto_trade_fills.candle_reclaim_depth_atr),
+        candle_engulfing = COALESCE(excluded.candle_engulfing, auto_trade_fills.candle_engulfing),
+        candle_doji = COALESCE(excluded.candle_doji, auto_trade_fills.candle_doji),
+        candle_compression_score = COALESCE(excluded.candle_compression_score, auto_trade_fills.candle_compression_score),
+        candle_sequence_name = COALESCE(excluded.candle_sequence_name, auto_trade_fills.candle_sequence_name),
+        candle_sequence_bars = COALESCE(excluded.candle_sequence_bars, auto_trade_fills.candle_sequence_bars)
       WHERE auto_trade_fills.correction_source IS NULL
       """,
       int(position_id), group_id, trade_key, stream,
@@ -1398,6 +1508,22 @@ async def _record_auto_trade_fill(event: dict) -> None:
       event.get("mad_break_distance_atr"), event.get("mad_displacement_atr"),
       event.get("mad_acceptance_closes"), event.get("mad_sweep_penetration_atr"),
       event.get("mad_reclaim_depth_atr"), event.get("mad_reason_code"),
+      event.get("candle_version"), event.get("candle_primary_pattern"),
+      event.get("candle_patterns"),
+      event.get("candle_final_score"), event.get("candle_base_score"),
+      event.get("candle_synergy_bonus"),
+      event.get("candle_rejection_score"), event.get("candle_displacement_score"),
+      event.get("candle_sequence_score"),
+      event.get("candle_body_fraction"), event.get("candle_upper_wick_fraction"),
+      event.get("candle_lower_wick_fraction"),
+      event.get("candle_close_location"), event.get("candle_body_atr"),
+      event.get("candle_range_atr"),
+      event.get("candle_sweep"), event.get("candle_sweep_penetration_atr"),
+      event.get("candle_reclaim"),
+      event.get("candle_reclaim_depth_atr"), event.get("candle_engulfing"),
+      event.get("candle_doji"),
+      event.get("candle_compression_score"), event.get("candle_sequence_name"),
+      event.get("candle_sequence_bars"),
     )
 
 
