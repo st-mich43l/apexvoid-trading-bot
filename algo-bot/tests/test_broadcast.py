@@ -485,6 +485,52 @@ def test_achieved_rr_falls_back_to_zone_when_no_leg_carries_entry_price():
   assert trade_ops._achieved_rr(sig, 220) == "+2.0R"
 
 
+def test_achieved_rr_prefers_broker_fill_over_a_single_legs_bad_entry():
+  # Live 2026-09-10 (signal #293): a single-leg SELL closed -57 pips but
+  # showed -5.8R, not the correct ~-0.7R. AutoTradeEngine.cs's restart-gap
+  # orphan reconciliation (InvestigateOrphanedGroupPlanAsync) sets a leg's
+  # entry_price from broker deal-history reconstruction, which can disagree
+  # with the normal live-confirmed broker_fill_price. A single-leg trade's
+  # own entry can never legitimately differ from broker_fill_price, so a
+  # mismatch there is the signature of that less-reliable path - trust the
+  # live fill. |4390.16-4398| = 7.84 price = 78.4 pips -> -57/78.4 = -0.7R.
+  sig = {
+    "action": "SELL",
+    "entry": 4390.0,
+    "entry_end": 4395.0,
+    "sl": 4398.0,
+    "original_sl": 4398.0,
+    "symbol": "XAU",
+    "broker_fill_price": 4390.16,
+    "legs": [{"frac": 1.0, "pips": -57, "entry_price": 4397.02}],
+  }
+
+  assert trade_ops._achieved_rr(sig, -57) == "-0.7R"
+
+
+def test_achieved_rr_keeps_deepest_leg_for_genuine_multi_leg_trades():
+  # The broker_fill_price override above must not swallow the legitimate
+  # multi-leg deepest-entry convention: broker_fill_price is deliberately
+  # the group's SHALLOWEST (worst-case) leg there, not the deep leg this
+  # calc needs - see test_achieved_rr_uses_the_deepest_legs_own_entry_not_
+  # the_peak_pips_leg above. Only a single-leg mismatch is now overridden.
+  sig = {
+    "action": "SELL",
+    "entry": 4100.0,
+    "entry_end": 4105.0,
+    "sl": 4106.0,
+    "original_sl": 4110.0,
+    "symbol": "XAU",
+    "broker_fill_price": 4100.0,
+    "legs": [
+      {"frac": 0.8, "pips": 150, "entry_price": 4100.0},
+      {"frac": 0.2, "pips": 0, "entry_price": 4105.0},
+    ],
+  }
+
+  assert trade_ops._achieved_rr(sig, 150) == "+3.0R"
+
+
 def test_final_close_with_tp_number_labels_which_target_closed_it(monkeypatch):
   install_runtime_overrides(monkeypatch, legacy_overrides={"public_show_pips": True})
   result = {

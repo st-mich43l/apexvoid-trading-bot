@@ -884,16 +884,40 @@ def _achieved_rr(sig: dict, net_pips: int) -> str | None:
   own entry (see legs_achieved_entry_price), not the peak-pips leg and not
   the advertised zone. legs_achieved_entry_price returns None for an older
   signal with no per-leg entry_price recorded, in which case this falls
-  back to reports.py's ``_round_lines`` convention: risk against the stop
-  as originally placed (a trailed/BE stop must not shrink the
-  denominator), entry at the zone midpoint.
+  back to the live-confirmed broker_fill_price when known, then to
+  reports.py's ``_round_lines`` convention: risk against the stop as
+  originally placed (a trailed/BE stop must not shrink the denominator),
+  entry at the zone midpoint.
+
+  Live 2026-09-10 (signal #293): a single-leg SELL's stored leg entry_price
+  (4397.02, near the SL) disagreed with its own broker_fill_price (4390.16)
+  and produced -5.8R instead of the real ~-0.7R. AutoTradeEngine.cs sets a
+  leg's entry_price from TWO very different sources: the normal live fill-
+  adoption event (reliable - matches broker_fill_price exactly), or its
+  restart-gap orphan-reconciliation path (InvestigateOrphanedGroupPlanAsync
+  - a rough reconstruction from broker deal history, used only when the
+  engine restarted mid-position). A single-leg trade's own entry can never
+  legitimately differ from broker_fill_price, so a mismatch there is the
+  signature of the less-reliable reconciliation path - trust the live fill
+  instead. Multi-leg trades keep legs_achieved_entry_price's deepest-fill
+  pick unchanged: broker_fill_price is deliberately the group's SHALLOWEST
+  (worst-case) leg there, not the deep leg this calc needs.
   """
   original_sl = sig.get("original_sl")
   if original_sl is None:
     original_sl = sig["sl"]
-  entry = pips_format.legs_achieved_entry_price(
-    sig.get("legs") or [], sig["action"],
-  )
+  legs = sig.get("legs") or []
+  broker_fill = sig.get("broker_fill_price")
+  entry = pips_format.legs_achieved_entry_price(legs, sig["action"])
+  if (
+    len(legs) <= 1
+    and entry is not None
+    and broker_fill is not None
+    and abs(float(broker_fill) - entry) > 1e-9
+  ):
+    entry = float(broker_fill)
+  if entry is None:
+    entry = float(broker_fill) if broker_fill is not None else None
   if entry is None:
     entry_end = sig.get("entry_end")
     if entry_end is None:
