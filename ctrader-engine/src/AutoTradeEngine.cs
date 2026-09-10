@@ -107,7 +107,6 @@ public sealed class AutoTradeEngine(
   {
     Market,
     SingleLimit,
-    ZoneSplit,
     ManualLimit,
   }
 
@@ -2133,16 +2132,6 @@ public sealed class AutoTradeEngine(
       date,
       cancellationToken
     ),
-    ExecutionRoute.ZoneSplit => await ProcessZoneFillAsync(
-      candidate,
-      account,
-      direction,
-      expectedEntry,
-      route.PlannedEntryPrice,
-      stopPlan,
-      date,
-      cancellationToken
-    ),
     _ => await ProcessSingleInitialAsync(
       candidate,
       account,
@@ -2194,27 +2183,24 @@ public sealed class AutoTradeEngine(
           null
         );
     }
+    // zone_split entry-distribution (the V6 zone-fill ladder) was removed
+    // entirely - any candidate still declaring it is rejected outright
+    // rather than silently downgraded to a route it never asked for.
+    if (distribution == "zone_split")
+    {
+      return new ExecutionRouteResolution(
+        ExecutionRoute.Market,
+        executableEntry,
+        null,
+        "execution policy requires unavailable zone_split limit capability"
+      );
+    }
     var geometry = ClassifyEntryGeometry(
       candidate.EntryZone,
       direction,
       executableEntry
     );
-    var splitQualified = (
-      options.ZoneFillEnabled
-      && candidate.Atr is decimal limitAtr
-      && ZoneFillPlanner.Qualifies(
-        candidate.EntryZone,
-        limitAtr,
-        options.ZoneFillMinAtr
-      )
-    );
-    if (
-      preference == "limit"
-      && (
-        distribution == "single"
-        || (distribution == "either" && !splitQualified)
-      )
-    )
+    if (preference == "limit" && distribution is "single" or "either")
     {
       var limitPrice = SelectValidSideProximal(
         candidate.EntryZone,
@@ -2236,58 +2222,6 @@ public sealed class AutoTradeEngine(
           null,
           "required single limit is not on the valid broker side"
         );
-    }
-    if (distribution == "zone_split" && !splitQualified)
-    {
-      return new ExecutionRouteResolution(
-        ExecutionRoute.ZoneSplit,
-        executableEntry,
-        null,
-        "execution policy requires unavailable zone_split limit capability"
-      );
-    }
-    if (
-      !IsBoxRangeScalp(candidate)
-      && distribution != "single"
-      && (!IsStrategyMatchCandidate(candidate) || preference == "limit"
-        || distribution == "zone_split")
-      && splitQualified
-    )
-    {
-      var proximal = SelectValidSideProximal(
-        candidate.EntryZone,
-        direction,
-        executableEntry,
-        geometry,
-        options.InsideZoneMarketEntryEnabled
-      );
-      if (proximal is decimal reference)
-      {
-        return new ExecutionRouteResolution(
-          ExecutionRoute.ZoneSplit,
-          reference,
-          "execution policy: zone split",
-          null
-        );
-      }
-      if (!options.ZoneFillFallbackEnabled)
-      {
-        return new ExecutionRouteResolution(
-          ExecutionRoute.ZoneSplit,
-          executableEntry,
-          null,
-          "zone-fill proximal edge is not on the valid limit-order side"
-        );
-      }
-      // Deterministic fallback to a single market entry. The stop contract is
-      // then validated at the executable quote, so a limit-priced contract
-      // fails route validation instead of silently trading a different entry.
-      return new ExecutionRouteResolution(
-        ExecutionRoute.Market,
-        executableEntry,
-        $"zone-fill geometry invalid; single-entry fallback ({geometry})",
-        null
-      );
     }
     return new ExecutionRouteResolution(
       ExecutionRoute.Market,
@@ -2434,38 +2368,6 @@ public sealed class AutoTradeEngine(
         return "final_stop_leg_entry_mismatch";
       }
     }
-    if (declaredRoute == PlannedExecutionRoute.ZoneSplit)
-    {
-      var legs = candidate.PlannedLegEntryPrices;
-      if (legs is null || legs.Count == 0)
-      {
-        await store.IncrementMetricAsync(
-          candidate.Symbol,
-          "final_stop_leg_entries_missing",
-          cancellationToken
-        );
-        return "final_stop_leg_entries_missing";
-      }
-      if (legs.Count != 2)
-      {
-        await store.IncrementMetricAsync(
-          candidate.Symbol,
-          "final_stop_leg_entry_count_mismatch",
-          cancellationToken
-        );
-        return "final_stop_leg_entry_count_mismatch";
-      }
-      // Reference entry is the proximal leg; it must match the planned entry.
-      if (Math.Abs(legs[0] - plannedEntry) > tick)
-      {
-        await store.IncrementMetricAsync(
-          candidate.Symbol,
-          "final_stop_leg_entry_mismatch",
-          cancellationToken
-        );
-        return "final_stop_leg_entry_mismatch";
-      }
-    }
     return null;
   }
 
@@ -2509,7 +2411,13 @@ public sealed class AutoTradeEngine(
   {
     PlannedExecutionRoute.Market => resolved == ExecutionRoute.Market,
     PlannedExecutionRoute.SingleLimit => resolved == ExecutionRoute.SingleLimit,
-    PlannedExecutionRoute.ZoneSplit => resolved == ExecutionRoute.ZoneSplit,
+    // zone_split (the V6 zone-fill ladder) was removed entirely - no
+    // resolved route can ever satisfy a candidate that still declares it.
+    // Kept parseable (rather than removed from PlannedExecutionRoute) only
+    // so an old/replayed candidate fails with the specific
+    // final_stop_entry_route_mismatch reason instead of the less precise
+    // final_stop_entry_route_invalid.
+    PlannedExecutionRoute.ZoneSplit => false,
     PlannedExecutionRoute.Either => true,
     _ => false,
   };
@@ -2834,400 +2742,6 @@ public sealed class AutoTradeEngine(
     return true;
   }
 
-  // `referenceEntry` is the route-resolved zone-fill reference entry and
-  // `zoneStopPlan` was already validated against it.
-  private async Task<bool> ProcessZoneFillAsync(
-    TradeCandidate candidate,
-    TradingAccountSnapshot account,
-    TradeDirection direction,
-    decimal expectedEntry,
-    decimal referenceEntry,
-    StructureStopPlan zoneStopPlan,
-    DateOnly date,
-    CancellationToken cancellationToken
-  )
-  {
-    var symbol = RequireSymbol();
-    var geometry = ClassifyEntryGeometry(
-      candidate.EntryZone,
-      direction,
-      expectedEntry
-    );
-    var proximal = (decimal?)referenceEntry;
-    InitialSizingResult sizing;
-    var zoneTargets = UsesCandidateTargetPlan(candidate)
-      ? candidate.TargetsPips!
-      : options.TargetsPips;
-    var zoneWeights = UsesCandidateTargetPlan(candidate)
-      ? EqualWeights(zoneTargets.Count)
-      : options.TargetWeights;
-    try
-    {
-      sizing = VolumePlanner.SizeInitial(
-        account.Balance,
-        EffectiveInitialRiskPercent(candidate),
-        options.SizingMode,
-        zoneStopPlan.StopPips,
-        options.PipValuePerLot,
-        symbol,
-        zoneTargets,
-        zoneWeights
-      );
-    }
-    catch (VolumePlanningException exception)
-    {
-      return await RejectAsync(candidate, exception.Message, cancellationToken);
-    }
-    if (sizing.Lots < options.ZoneFillMinLots)
-    {
-      var reason = $"zone-fill skipped: {sizing.Lots:0.00} lots below "
-        + $"{options.ZoneFillMinLots:0.00} minimum";
-      _log($"auto-trade {reason}");
-      return await FallBackToSingleEntryAsync(
-        candidate,
-        account,
-        direction,
-        expectedEntry,
-        symbol,
-        date,
-        reason,
-        cancellationToken
-      );
-    }
-    var validLimitSide = direction == TradeDirection.Buy
-      ? proximal.Value <= expectedEntry
-      : proximal.Value >= expectedEntry;
-    if (!validLimitSide)
-    {
-      if (!options.ZoneFillFallbackEnabled)
-      {
-        return await RejectAsync(
-          candidate,
-          "zone-fill proximal edge is not on the valid limit-order side",
-          cancellationToken
-        );
-      }
-      var fallbackReason =
-        "zone-fill geometry invalid; single-entry fallback"
-        + $" ({geometry})";
-      _log($"auto-trade {fallbackReason}");
-      return await FallBackToSingleEntryAsync(
-        candidate,
-        account,
-        direction,
-        expectedEntry,
-        symbol,
-        date,
-        fallbackReason,
-        cancellationToken
-      );
-    }
-    var fillZone = SliceValidSideZone(
-      candidate.EntryZone,
-      direction,
-      expectedEntry,
-      proximal.Value
-    );
-    ZoneFillPlan plan;
-    try
-    {
-      // Every leg shares the one approved absolute stop.
-      var stopLoss = decimal.Round(
-        zoneStopPlan.StopLoss,
-        symbol.Digits,
-        MidpointRounding.AwayFromZero
-      );
-      plan = ZoneFillPlanner.Build(
-        direction,
-        fillZone,
-        stopLoss,
-        sizing.Volume,
-        symbol,
-        zoneTargets,
-        zoneWeights
-      );
-    }
-    catch (VolumePlanningException exception)
-    {
-      return await RejectAsync(candidate, exception.Message, cancellationToken);
-    }
-    if (candidate.PlannedLegEntryPrices is { Count: > 0 } declaredLegs)
-    {
-      var tick = SymbolTick(symbol);
-      if (declaredLegs.Count != plan.Legs.Count)
-      {
-        await store.IncrementMetricAsync(
-          candidate.Symbol,
-          "final_stop_leg_entry_count_mismatch",
-          cancellationToken
-        );
-        return await RejectAsync(
-          candidate,
-          "final_stop_leg_entry_count_mismatch",
-          cancellationToken
-        );
-      }
-      for (var index = 0; index < plan.Legs.Count; index++)
-      {
-        if (Math.Abs(declaredLegs[index] - plan.Legs[index].LimitPrice) > tick)
-        {
-          await store.IncrementMetricAsync(
-            candidate.Symbol,
-            "final_stop_leg_entry_mismatch",
-            cancellationToken
-          );
-          return await RejectAsync(
-            candidate,
-            "final_stop_leg_entry_mismatch",
-            cancellationToken
-          );
-        }
-      }
-    }
-    var groupId = CandidateGroupId(candidate);
-    var barTs = candidate.BarTs ?? candidate.CreatedAt;
-    if (options.DryRun)
-    {
-      return await CompleteDryRunAsync(
-        candidate,
-        $"zone fill · {sizing.Lots:N2} lots across {plan.Legs.Count} limits · "
-          + $"SL {plan.StopLoss:N2} · {sizing.BindingTerm} · route={geometry}",
-        sizing.Volume,
-        proximal.Value,
-        cancellationToken
-      );
-    }
-    if (await store.IsPausedAsync(cancellationToken))
-    {
-      return await RejectAsync(candidate, "executor paused", cancellationToken);
-    }
-    await ReconcileAsync(cancellationToken);
-    if (!CanOpenNewGroup(direction))
-    {
-      return await RejectAsync(
-        candidate,
-        "XAU exposure policy changed before zone-fill orders",
-        cancellationToken
-      );
-    }
-    var placed = new List<long>();
-    await PublishAsync(
-      "order_planned",
-      $"zone fill {candidate.Direction} planned across {plan.Legs.Count} limits",
-      cancellationToken,
-      candidate.CandidateId,
-      volume: sizing.Volume,
-      groupId: groupId,
-      setup: candidate.Setup,
-      direction: candidate.Direction,
-      matchId: candidate.MatchId,
-      rangeId: candidate.RangeId,
-      strategyFamily: candidate.StrategyFamily,
-      riskMultiplier: candidate.RiskMultiplier,
-      targetModel: candidate.TargetModel,
-      entryDistribution: candidate.EntryDistribution
-    );
-    await PublishAsync(
-      "order_submitted",
-      $"zone fill {candidate.Direction} submitted to broker",
-      cancellationToken,
-      candidate.CandidateId,
-      volume: sizing.Volume,
-      groupId: groupId,
-      setup: candidate.Setup,
-      direction: candidate.Direction,
-      matchId: candidate.MatchId,
-      rangeId: candidate.RangeId,
-      strategyFamily: candidate.StrategyFamily,
-      riskMultiplier: candidate.RiskMultiplier,
-      targetModel: candidate.TargetModel,
-      entryDistribution: candidate.EntryDistribution
-    );
-    await store.IncrementMetricAsync(
-      candidate.Symbol,
-      "order_submitted",
-      cancellationToken
-    );
-    // The plan persists the route this executor actually resolved and the
-    // exact per-leg client order IDs it is about to submit - never the
-    // declared candidate route (which may be `either`).
-    await SaveGroupPlanAsync(
-      candidate,
-      groupId,
-      cancellationToken,
-      streamEventId: _activeLease?.StreamEventId,
-      route: "zone_split",
-      clientOrderIds: plan.Legs
-        .Select(leg => $"{ClientOrderId(candidate.CandidateId)}-z{leg.Leg}")
-        .ToArray()
-    );
-    if (!await EnsureBrokerLeaseAsync(cancellationToken))
-    {
-      // The group plan stays: a successor or recovery run needs it to map
-      // deterministic client order IDs back to this candidate.
-      throw new CandidateLeaseLostException(candidate.CandidateId);
-    }
-    var legClientOrderId = ClientOrderId(candidate.CandidateId);
-    using var brokerCts = CreateBrokerCancellation(cancellationToken);
-    try
-    {
-      foreach (var leg in plan.Legs)
-      {
-        // Ownership is proven before every leg, not once before the loop: a
-        // multi-leg placement can easily outlive a single lease window.
-        if (!await StillOwnsCandidateAsync(cancellationToken))
-        {
-          if (placed.Count == 0)
-          {
-            throw new CandidateLeaseLostException(candidate.CandidateId);
-          }
-          // Legs are already live and belong to this candidate, but ownership
-          // is gone: reconciliation must decide, not this executor.
-          throw ClassifyBrokerUncertainty(
-            candidate,
-            $"{legClientOrderId}-z{leg.Leg}",
-            new CandidateLeaseLostException(candidate.CandidateId)
-          );
-        }
-        var distance = Math.Abs(leg.LimitPrice - plan.StopLoss);
-        var comment = BuildZoneComment(
-          candidate.CandidateId,
-          groupId,
-          leg,
-          barTs
-        );
-        legClientOrderId = $"{ClientOrderId(candidate.CandidateId)}-z{leg.Leg}";
-        var orderId = await RequireClient().PlaceLimitOrderAsync(
-          new LimitOrderRequest(
-            symbol.SymbolId,
-            direction,
-            leg.Volume,
-            leg.LimitPrice,
-            decimal.ToInt64(distance * 100_000m),
-            options.Label,
-            comment,
-            legClientOrderId
-          ),
-          brokerCts.Token
-        );
-        placed.Add(orderId);
-      }
-    }
-    catch (Exception exception)
-      when (exception is not BrokerOutcomeUnknownException
-        and not CandidateLeaseLostException
-        && (exception is not OperationCanceledException || BrokerOwnershipCancelled()))
-    {
-      // A failed leg does not prove the request never arrived, so rollback is
-      // restricted to order IDs the broker confirmed and the group plan is
-      // retained for reconciliation either way.
-      await RollbackZoneFillAsync(
-        candidate.CandidateId,
-        placed,
-        cancellationToken
-      );
-      throw ClassifyBrokerUncertainty(candidate, legClientOrderId, exception);
-    }
-    await CompleteActiveCandidateAsync(
-      $"ordered:{string.Join(',', placed)}",
-      cancellationToken
-    );
-    await PublishAsync(
-      "order_accepted",
-      $"broker accepted {placed.Count} zone-fill limit order(s)",
-      cancellationToken,
-      candidate.CandidateId,
-      volume: sizing.Volume,
-      groupId: groupId,
-      setup: candidate.Setup,
-      direction: candidate.Direction,
-      matchId: candidate.MatchId,
-      rangeId: candidate.RangeId,
-      strategyFamily: candidate.StrategyFamily,
-      pendingOrderIds: placed
-    );
-    await store.IncrementDailyTradeCountAsync(date, cancellationToken);
-    await PublishAsync(
-      "zone_planned",
-      $"zone fill · {sizing.Lots:N2} lots · limits "
-        + string.Join(" / ", plan.Legs.Select(leg =>
-          $"{leg.LimitPrice:N2} ({leg.Volume / (decimal)symbol.LotSize:N2})"
-        ))
-        + $" · SL {plan.StopLoss:N2} · midpoint TTL "
-        + $"{options.ZoneFillTtlBars} bars · {sizing.BindingTerm} · route={geometry}",
-      cancellationToken,
-      candidate.CandidateId,
-      volume: sizing.Volume,
-      price: proximal.Value,
-      groupId: groupId,
-      trancheIndex: 1,
-      groupWorstCase: -sizing.Lots * zoneStopPlan.StopPips
-        * options.PipValuePerLot,
-      riskBudget: sizing.Budget,
-      hadAdds: false,
-      setup: candidate.Setup,
-      direction: candidate.Direction,
-      matchId: candidate.MatchId,
-      rangeId: candidate.RangeId,
-      strategyFamily: candidate.StrategyFamily,
-      pendingOrderIds: placed
-    );
-    await ReconcileAsync(cancellationToken);
-    return true;
-  }
-
-  // A late zone-fill fallback changes the route to a single market entry, so
-  // the stop contract is revalidated at the new planned entry instead of
-  // reusing a plan priced against the abandoned limit geometry.
-  private async Task<bool> FallBackToSingleEntryAsync(
-    TradeCandidate candidate,
-    TradingAccountSnapshot account,
-    TradeDirection direction,
-    decimal expectedEntry,
-    SymbolInfo symbol,
-    DateOnly date,
-    string routingReason,
-    CancellationToken cancellationToken
-  )
-  {
-    StructureStopPlan fallbackStopPlan;
-    try
-    {
-      fallbackStopPlan = StructureStop(
-        candidate,
-        direction,
-        expectedEntry,
-        symbol,
-        ExecutionRoute.Market
-      );
-    }
-    catch (VolumePlanningException exception)
-    {
-      await store.IncrementMetricAsync(
-        candidate.Symbol,
-        "final_stop_entry_route_mismatch",
-        cancellationToken
-      );
-      return await RejectAsync(candidate, exception.Message, cancellationToken);
-    }
-    await ObserveMarketStopContractRecomputeAsync(
-      candidate,
-      ExecutionRoute.Market,
-      expectedEntry,
-      cancellationToken
-    );
-    return await ProcessSingleInitialAsync(
-      candidate,
-      account,
-      direction,
-      expectedEntry,
-      fallbackStopPlan,
-      date,
-      routingReason,
-      cancellationToken
-    );
-  }
-
   private static string ClassifyEntryGeometry(
     TradeCandidateZone zone,
     TradeDirection direction,
@@ -3307,102 +2821,6 @@ public sealed class AutoTradeEngine(
   }
 
   // Removed erroneous static options hook.
-
-  private static TradeCandidateZone SliceValidSideZone(
-    TradeCandidateZone zone,
-    TradeDirection direction,
-    decimal expectedEntry,
-    decimal proximal
-  )
-  {
-    if (direction == TradeDirection.Buy)
-    {
-      var high = Math.Min(zone.High, expectedEntry);
-      var low = Math.Min(zone.Low, high);
-      if (high <= low)
-      {
-        return new TradeCandidateZone(proximal, proximal);
-      }
-      return new TradeCandidateZone(low, high);
-    }
-    var sellLow = Math.Max(zone.Low, expectedEntry);
-    var sellHigh = Math.Max(zone.High, sellLow);
-    if (sellHigh <= sellLow)
-    {
-      return new TradeCandidateZone(proximal, proximal);
-    }
-    return new TradeCandidateZone(sellLow, sellHigh);
-  }
-
-  // Rollback is a broker mutation and therefore fenced: a stale executor must
-  // never cancel orders a successor or adopter now owns. Only order IDs the
-  // broker confirmed are cancelled - never a speculative ID whose acceptance
-  // was never acknowledged.
-  private async Task RollbackZoneFillAsync(
-    string candidateId,
-    IReadOnlyList<long> placedOrderIds,
-    CancellationToken cancellationToken
-  )
-  {
-    if (!await StillOwnsCandidateAsync(cancellationToken))
-    {
-      await store.IncrementMetricAsync(
-        CandidateSymbolHint(),
-        "executor_stale_release_blocked",
-        cancellationToken
-      );
-      _log(
-        $"auto-trade zone-fill rollback skipped for {Short(candidateId)}: "
-        + "lease no longer owned"
-      );
-      return;
-    }
-    var client = RequireClient();
-    foreach (var orderId in placedOrderIds)
-    {
-      try
-      {
-        await client.CancelPendingOrderAsync(orderId, cancellationToken);
-      }
-      catch (Exception exception) when (exception is not OperationCanceledException)
-      {
-        // Cancellation is unverified, so the leg may still be live. Leave the
-        // candidate recovery-required rather than reporting a clean rollback.
-        _log($"auto-trade zone-fill rollback cancel failed order={orderId}: "
-          + exception.Message);
-        throw new BrokerOutcomeUnknownException(
-          candidateId,
-          orderId.ToString(CultureInfo.InvariantCulture),
-          exception
-        );
-      }
-    }
-    var positions = await client.ReconcilePositionsAsync(cancellationToken);
-    foreach (var position in positions.Where(position => (
-      position.SymbolId == RequireSymbol().SymbolId
-      && position.Label == options.Label
-      && position.Comment.Contains(
-        CandidateToken(candidateId),
-        StringComparison.Ordinal
-      )
-    )))
-    {
-      try
-      {
-        await client.ClosePositionAsync(
-          position.PositionId,
-          position.Volume,
-          cancellationToken
-        );
-      }
-      catch (Exception exception) when (exception is not OperationCanceledException)
-      {
-        _log($"auto-trade zone-fill rollback close failed position="
-          + $"{position.PositionId}: {exception.Message}");
-        throw;
-      }
-    }
-  }
 
   /// <summary>
   /// Two entry-leg prices spanning the owner's zone: Shallow (near edge,
@@ -4779,7 +4197,7 @@ public sealed class AutoTradeEngine(
   }
 
   private static bool EntryIsResting(ExecutionRoute route) =>
-    route is ExecutionRoute.SingleLimit or ExecutionRoute.ZoneSplit;
+    route is ExecutionRoute.SingleLimit;
 
   internal static (string Metric, string Reason)? FinalStopSideRejection(
     TradeDirection direction,
@@ -6684,46 +6102,6 @@ public sealed class AutoTradeEngine(
     _allSymbolPendingOrders = snapshot.PendingOrders
       .Where(order => order.SymbolId == symbol.SymbolId)
       .ToArray();
-    foreach (var order in _allSymbolPendingOrders.ToArray())
-    {
-      var zone = ParseZoneComment(order.Comment);
-      if (
-        order.Label != options.Label
-        || zone is null
-        || zone.Value.Leg != 2
-        || _clock().ToUnixTimeSeconds() - zone.Value.BarTs
-          < options.ZoneFillTtlBars * 60L
-      )
-      {
-        continue;
-      }
-      await client.CancelPendingOrderAsync(order.OrderId, cancellationToken);
-      _allSymbolPendingOrders = _allSymbolPendingOrders
-        .Where(item => item.OrderId != order.OrderId)
-        .ToArray();
-      var plan = await LoadGroupPlanAsync(zone.Value.GroupId, cancellationToken);
-      await PublishAsync(
-        "zone_expired",
-        $"zone midpoint limit {order.OrderId} cancelled after "
-          + $"{options.ZoneFillTtlBars} bars; filled volume keeps its "
-          + "proportional ladder",
-        cancellationToken,
-        candidateId: plan?.CandidateId,
-        groupId: zone.Value.GroupId,
-        trancheIndex: 1,
-        hadAdds: false,
-        setup: plan?.Setup,
-        direction: plan?.Direction,
-        matchId: plan?.MatchId,
-        rangeId: plan?.RangeId,
-        strategyFamily: plan?.StrategyFamily,
-        pendingOrderIds: PendingOrderIdsForGroup(zone.Value.GroupId)
-      );
-      await MaybeDeleteGroupPlanAsync(
-        zone.Value.GroupId,
-        cancellationToken
-      );
-    }
     foreach (var order in _allSymbolPendingOrders.ToArray())
     {
       var manual = ParseManualExpiry(order.Comment);

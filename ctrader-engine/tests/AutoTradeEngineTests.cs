@@ -1301,119 +1301,6 @@ public sealed partial class AutoTradeEngineTests
   }
 
   [Fact]
-  public async Task WideZonePlacesTwoLimitsAndExpiresUnfilledMidpointLeg()
-  {
-    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-    var now = Now;
-    var store = new FakeAutoTradeStore(CandidateJson(
-      entryLow: 3999m,
-      entryHigh: 4000.5m
-    ));
-    var client = new FakeTradingClient();
-    var engine = new AutoTradeEngine(
-      Options() with { ZoneFillEnabled = true, SizingMode = "table" },
-      store,
-      () => now,
-      _ => { }
-    );
-    await engine.ObserveSpotAsync(
-      new SpotPrice("XAU", 4000.4m, 4000.6m, 1_000),
-      cts.Token
-    );
-    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
-    await WaitForEventAsync(store, "zone_planned");
-
-    Assert.Equal(2, client.LimitOrders.Count);
-    Assert.Equal(
-      new[] { 4000.5m, 3999.75m },
-      client.LimitOrders.Select(order => order.LimitPrice)
-    );
-    Assert.Equal(
-      new long[] { 800, 700 },
-      client.LimitOrders.Select(order => order.Volume)
-    );
-    Assert.Equal(1_500, client.LimitOrders.Sum(order => order.Volume));
-    Assert.All(client.LimitOrders, order => Assert.StartsWith("avz|", order.Comment));
-    Assert.Contains(
-      store.Events,
-      item => item.Type == "zone_planned"
-        && item.Message.Contains("sizing=table lots=0.15")
-    );
-
-    client.FillPendingOrder(client.PendingOrders[0].OrderId);
-    now = Now.AddMinutes(3);
-    await WaitForEventAsync(store, "zone_expired");
-
-    Assert.Single(client.CancelledOrders);
-    Assert.Empty(client.PendingOrders);
-    await WaitUntilAsync(() => store.Positions.Count == 1);
-    var filled = Assert.Single(store.Positions.Values);
-    Assert.Equal(1, filled.ZoneLeg);
-    Assert.Equal(800, filled.InitialVolume);
-    Assert.Equal(5, filled.TargetsPips.Count);
-
-    cts.Cancel();
-    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
-  }
-
-  // Balance shifted 900->550 (commit 7b7129af raised LotsForEquity(900)
-  // 0.06->0.10, which sits above ZoneFillMinLots=0.09 and never falls back
-  // any more). 550 lands in the un-touched sub-600 band (0.04 lots),
-  // reproducing the below-minimum scenario this test means to exercise.
-  [Fact]
-  public async Task SmallZoneFillPlanFallsBackToSingleEntryAndRecordsReason()
-  {
-    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-    var store = new FakeAutoTradeStore(CandidateJson(
-      entryLow: 3999m,
-      entryHigh: 4000.5m
-    ));
-    var client = new FakeTradingClient
-    {
-      Account = ValidAccount() with { Balance = 550m },
-    };
-    var logs = new List<string>();
-    var engine = new AutoTradeEngine(
-      Options() with
-      {
-        ZoneFillEnabled = true,
-        ZoneFillMinLots = 0.09m,
-        SizingMode = "table",
-      },
-      store,
-      () => Now,
-      logs.Add
-    );
-    await engine.ObserveSpotAsync(
-      new SpotPrice("XAU", 4000.4m, 4000.6m, 1_000),
-      cts.Token
-    );
-
-    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
-    await store.Ordered.Task.WaitAsync(TimeSpan.FromSeconds(2));
-
-    var order = Assert.Single(client.Orders);
-    Assert.Equal(400, order.Volume);
-    Assert.Empty(client.LimitOrders);
-    Assert.Contains(
-      logs,
-      message => message.Contains(
-        "zone-fill skipped: 0.04 lots below 0.09 minimum"
-      )
-    );
-    Assert.Contains(
-      store.Events,
-      item => item.Type == "opened"
-        && item.Message.Contains(
-          "zone-fill skipped: 0.04 lots below 0.09 minimum"
-        )
-    );
-
-    cts.Cancel();
-    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
-  }
-
-  [Fact]
   public async Task StrategyPolicyLimitRequiresZoneFillCapability()
   {
     using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
@@ -1443,38 +1330,6 @@ public sealed partial class AutoTradeEngineTests
     );
     Assert.Empty(client.Orders);
     Assert.Empty(client.LimitOrders);
-
-    cts.Cancel();
-    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
-  }
-
-  [Fact]
-  public async Task StrategyPolicyLimitUsesZoneFillWhenCapable()
-  {
-    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-    var store = new FakeAutoTradeStore(StrategyMatchCandidateJson(
-      orderTypePreference: "limit",
-      entryDistribution: "zone_split",
-      entryLow: 3999.0m,
-      entryHigh: 4000.5m
-    ));
-    var client = new FakeTradingClient();
-    var engine = new AutoTradeEngine(
-      Options() with { ZoneFillEnabled = true, SizingMode = "table" },
-      store,
-      () => Now,
-      _ => { }
-    );
-    await engine.ObserveSpotAsync(
-      new SpotPrice("XAU", 4000.4m, 4000.6m, 1_000),
-      cts.Token
-    );
-
-    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
-    await WaitForEventAsync(store, "zone_planned");
-
-    Assert.Equal(2, client.LimitOrders.Count);
-    Assert.Empty(client.Orders);
 
     cts.Cancel();
     await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
@@ -1691,56 +1546,6 @@ public sealed partial class AutoTradeEngineTests
   }
 
   [Fact]
-  public async Task PartialZoneFillFailureKeepsGroupPlanUntilBrokerAbsenceIsConfirmed()
-  {
-    // A failed leg does not prove the request never reached the broker, so the
-    // candidate becomes recovery-required and the group plan survives: it is
-    // the only map from deterministic client order IDs back to this candidate.
-    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-    var store = new FakeAutoTradeStore(StrategyMatchCandidateJson(
-      orderTypePreference: "limit",
-      entryDistribution: "zone_split",
-      entryLow: 3999.0m,
-      entryHigh: 4000.5m
-    ));
-    var client = new FakeTradingClient { FailLimitOrderCall = 2 };
-    var engine = new AutoTradeEngine(
-      Options() with { ZoneFillEnabled = true, SizingMode = "table" },
-      store,
-      () => Now,
-      _ => { }
-    );
-    await engine.ObserveSpotAsync(
-      new SpotPrice("XAU", 4000.4m, 4000.6m, 1_000), cts.Token
-    );
-
-    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
-    await WaitForEventAsync(store, "broker_outcome_unknown");
-
-    // Rollback is evidence-based: only the leg the broker confirmed is
-    // cancelled, never the ambiguous one.
-    Assert.Single(client.CancelledOrders);
-    Assert.Contains(
-      store.Values.Keys,
-      key => key.StartsWith("auto_trade:group_plan:")
-    );
-    Assert.Equal(
-      CandidateExecutionStates.BrokerOutcomeUnknown,
-      store.CandidateState(new string('s', 64))
-    );
-    Assert.DoesNotContain(store.Events, item => item.Type == "rejected");
-
-    // Recovery proves the broker holds nothing for the candidate, which is the
-    // only point at which the plan may be dropped and a retry becomes safe.
-    await WaitUntilAsync(() => client.LimitOrders.Count == 3);
-    Assert.Contains("broker_outcome_confirmed_absent", store.Metrics);
-    Assert.Contains("candidate_retry_reclaimed", store.Metrics);
-
-    cts.Cancel();
-    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
-  }
-
-  [Fact]
   public async Task RequiredMarketOrderNeverRoutesThroughZoneFill()
   {
     using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
@@ -1838,61 +1643,6 @@ public sealed partial class AutoTradeEngineTests
 
     Assert.NotNull(candidate);
     Assert.Equal(0.375m, candidate.RiskMultiplier);
-  }
-
-  [Fact]
-  public async Task PriceInsideSellZoneFallsBackToSingleEntryInsteadOfRejectingProximalSide()
-  {
-    // Production incident: Breakout Continuation SELL with price inside
-    // entry zone 4024.37-4027.45 (~4025.59). Classic proximal=zone.Low sits
-    // below bid and previously hard-rejected with
-    // "zone-fill proximal edge is not on the valid limit-order side".
-    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-    var store = new FakeAutoTradeStore(CandidateJson(
-      direction: "SELL",
-      entryLow: 4024.37m,
-      entryHigh: 4027.45m,
-      setup: "Auto Range Scalp",
-      mode: "auto_range_scalp",
-      structureSwing: 4027.45m
-    ));
-    var client = new FakeTradingClient();
-    var logs = new List<string>();
-    var engine = new AutoTradeEngine(
-      Options() with
-      {
-        ZoneFillEnabled = true,
-        ZoneFillFallbackEnabled = true,
-        InsideZoneMarketEntryEnabled = true,
-      },
-      store,
-      () => Now,
-      logs.Add
-    );
-    await engine.ObserveSpotAsync(
-      new SpotPrice("XAU", 4025.59m, 4025.79m, 1_000),
-      cts.Token
-    );
-
-    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
-    await store.Ordered.Task.WaitAsync(TimeSpan.FromSeconds(2));
-
-    Assert.DoesNotContain(
-      store.Events,
-      item => item.Type == "rejected"
-        && item.Message.Contains(
-          "zone-fill proximal edge is not on the valid limit-order side"
-        )
-    );
-    Assert.Contains(
-      logs,
-      message => message.Contains("single-entry fallback")
-    );
-    Assert.NotEmpty(client.Orders);
-    Assert.Empty(client.LimitOrders);
-
-    cts.Cancel();
-    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
   }
 
   [Fact]
