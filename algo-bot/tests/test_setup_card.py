@@ -1162,6 +1162,31 @@ def test_root_card_scalp_match_shows_real_bias_not_hardcoded_mode():
   assert "Mode:" not in text
 
 
+def test_root_card_shows_candle_confirmation_v2_line_when_present():
+  from dataclasses import replace
+
+  match = replace(
+    _strategy_match_for_card("setup-candle-v2"),
+    candle_version=2,
+    candle_primary_pattern="sweep_reclaim",
+    candle_final_score=0.7657,
+  )
+  text = setup_card.format_plan_published_root_card(match, stop_price=4045.0)
+  assert "🕯 Confirmation: sweep_reclaim · 🔥 Candle Quality: 77%" in text
+  # Detailed metrics never dump onto the public card - only the one line.
+  assert "candle_base_score" not in text
+  assert "wick_fraction" not in text
+
+
+def test_root_card_omits_candle_confirmation_v2_line_when_absent():
+  # Older cached matches / non-M5-structural setups have no candle_*
+  # telemetry at all - the card must render exactly as it did before.
+  match = _strategy_match_for_card("setup-no-candle-v2")
+  text = setup_card.format_plan_published_root_card(match, stop_price=4045.0)
+  assert "Candle Quality" not in text
+  assert "🕯" not in text
+
+
 def test_fx_root_card_uses_instrument_price_digits(monkeypatch):
   """Live 2026-08-21 GBPUSD cards collapsed 1.36447 → 1.36 via hardcoded .2f."""
   from dataclasses import replace
