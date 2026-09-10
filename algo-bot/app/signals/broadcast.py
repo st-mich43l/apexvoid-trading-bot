@@ -11,7 +11,7 @@ from app.persistence.store import (
 from app.signals.pips_format import rr_entry
 from app.signals.fx_manual_algo import uses_entry_price_display
 from app.autotrade.strategy_names import resolve_strategy
-from app.core.symbols import digits_for, channels_for
+from app.core.symbols import digits_for, channels_for, pip_for
 from app.bot.client import delete_message, send_sticker, send_with_retry
 
 log = logging.getLogger(__name__)
@@ -83,9 +83,16 @@ def render_entry(sig: dict, tier: str) -> str:
   setup_line = _setup_line(sig)
   if setup_line:
     lines.append(setup_line)
+  # Live 2026-09-10: "risk" showed the raw price delta unlabeled (e.g.
+  # "risk 8" for XAU, which is $8 = 80 pips at pip_size=0.1) - readers
+  # naturally read a bare number as pips, understating the real risk by
+  # 1/pip_size. Every other pips figure on this bot (loss/win, R-multiple
+  # denominators) already divides by pip_for() - this line was the one
+  # holdout still showing raw price.
+  risk_pips = round(risk / pip_for(symbol)) if pip_for(symbol) > 0 else 0
   lines.append(
     f"🛡 SL:     <b>{_price(sig['sl'], symbol)}</b>  ·  "
-    f"risk <b>{_price(risk, symbol)}</b>"
+    f"risk <b>{risk_pips} pips</b>"
   )
   for index, tp in enumerate(sig.get("tps") or []):
     lines.append(

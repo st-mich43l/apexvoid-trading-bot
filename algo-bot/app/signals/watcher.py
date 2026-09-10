@@ -11,7 +11,7 @@ from app.bot.client import send_scanner_with_retry
 from app.signals.broadcast import fanout_update
 from app.persistence.store import get_open_signals
 from app.bot.keyboards import build_close_kb, build_tp_close_kb
-from app.signals.pips_format import pips_between, sl_result_pips, wing_icons
+from app.signals.pips_format import signed_result_pips, sl_result_pips, wing_icons
 from app.signals.price import get_xau_bars
 from app.analysis.ohlc_source import RedisOHLCSource
 from app.persistence.redis_state import clear_sl_alert, mark_tp_alert
@@ -156,7 +156,7 @@ def _last_tp_floor_pips(sig: dict) -> int:
   tps = sig.get("tps") or []
   if not tps:
     return 0
-  return pips_between(sig, float(tps[-1]))
+  return signed_result_pips(sig, float(tps[-1]))
 
 
 # SELL VIP cards post whole handles (4323.00). Exit is ask, which sits a
@@ -187,7 +187,14 @@ async def _maybe_alert_runner(
     return
 
   touch = bar["high"] if is_buy else bar["low"]
-  pips = pips_between(sig, touch)
+  # Live 2026-09-10: this was pips_between(), measured from the advertised
+  # (worst-case) zone edge - a trade filled at a favorable price inside the
+  # ladder (e.g. a deeper limit leg) reported far fewer "peaked" pips than
+  # it actually gained. signed_result_pips() already does the right thing
+  # for the final close accounting (prefers the real broker fill, falls
+  # back to the zone edge when no fill is known yet) - use the same
+  # convention here so interim progress matches reality.
+  pips = signed_result_pips(sig, touch)
   previous = max(progress.get("runner_pips", 0), _last_tp_floor_pips(sig))
   if pips <= previous:
     return
@@ -285,7 +292,10 @@ async def _evaluate(
     # A candle may open or wick far beyond it, but that overshoot belongs in
     # `ran to`/runner telemetry and must not inflate the booked TP result.
     fill = float(tp)
-    pips = pips_between(sig, fill)
+    # See the RUNNER comment above: use the real fill (when known) instead
+    # of the advertised zone edge, so "TP1 +N pips" matches what actually
+    # happened on this trade, not a worst-case theoretical entry.
+    pips = signed_result_pips(sig, fill)
     key = f"TP{idx + 1}"
     await fanout_update(
       sig,
