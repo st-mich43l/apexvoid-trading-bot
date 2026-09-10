@@ -567,7 +567,31 @@ public sealed record AutoTradeEvent(
   bool? CandleDoji = null,
   double? CandleCompressionScore = null,
   string? CandleSequenceName = null,
-  int? CandleSequenceBars = null
+  int? CandleSequenceBars = null,
+  // Opposing Structure V2 context telemetry - republished from
+  // plan.Analysis.KeyLevelOpposingZoneLow etc. (TradePlan.cs), same
+  // pattern as the Math*/Mad*/Candle* fields above.
+  double? KeyLevelOpposingZoneLow = null,
+  double? KeyLevelOpposingZoneHigh = null,
+  string? KeyLevelOpposingZoneSide = null,
+  bool? OpposingZonePresent = null,
+  string? OpposingZoneSide = null,
+  double? OpposingZoneLow = null,
+  double? OpposingZoneHigh = null,
+  string? OpposingZoneTier = null,
+  double? OpposingZoneScore = null,
+  double? OpposingZoneStrength = null,
+  double? OpposingRawRoomPrice = null,
+  double? OpposingRoomPips = null,
+  double? OpposingRoomAtr = null,
+  double? OpposingRoomR = null,
+  bool? OpposingBeforeTp1 = null,
+  bool? OpposingDisplaced = null,
+  bool? OpposingMitigated = null,
+  double? OpposingRoomPressure = null,
+  double? OpposingRiskScore = null,
+  string? OpposingAction = null,
+  string? OpposingReasonCode = null
 );
 
 public sealed record AutoTradeGroupPlan(
