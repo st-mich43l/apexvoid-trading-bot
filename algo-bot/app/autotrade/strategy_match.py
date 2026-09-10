@@ -156,6 +156,30 @@ class StrategyMatch:
   candle_compression_score: float | None = None
   candle_sequence_name: str | None = None
   candle_sequence_bars: int | None = None
+  # Opposing Structure V2 context telemetry (2026-09 Key Level repair) —
+  # descriptive only, never a gate. See
+  # app/autotrade/structural_target_room.py OpposingStructureEvidence.
+  key_level_opposing_zone_low: float | None = None
+  key_level_opposing_zone_high: float | None = None
+  key_level_opposing_zone_side: str | None = None
+  opposing_zone_present: bool | None = None
+  opposing_zone_side: str | None = None
+  opposing_zone_low: float | None = None
+  opposing_zone_high: float | None = None
+  opposing_zone_tier: str | None = None
+  opposing_zone_score: float | None = None
+  opposing_zone_strength: float | None = None
+  opposing_raw_room_price: float | None = None
+  opposing_room_pips: float | None = None
+  opposing_room_atr: float | None = None
+  opposing_room_r: float | None = None
+  opposing_before_tp1: bool | None = None
+  opposing_displaced: bool | None = None
+  opposing_mitigated: bool | None = None
+  opposing_room_pressure: float | None = None
+  opposing_risk_score: float | None = None
+  opposing_action: str | None = None
+  opposing_reason_code: str | None = None
 
   @property
   def is_range_edge(self) -> bool:
@@ -536,6 +560,90 @@ class StrategyMatch:
         candle_sequence_bars=(
           None if payload.get("candle_sequence_bars") is None
           else int(payload["candle_sequence_bars"])
+        ),
+        key_level_opposing_zone_low=(
+          None if payload.get("key_level_opposing_zone_low") is None
+          else float(payload["key_level_opposing_zone_low"])
+        ),
+        key_level_opposing_zone_high=(
+          None if payload.get("key_level_opposing_zone_high") is None
+          else float(payload["key_level_opposing_zone_high"])
+        ),
+        key_level_opposing_zone_side=(
+          None if payload.get("key_level_opposing_zone_side") is None
+          else str(payload["key_level_opposing_zone_side"])
+        ),
+        opposing_zone_present=(
+          None if payload.get("opposing_zone_present") is None
+          else bool(payload["opposing_zone_present"])
+        ),
+        opposing_zone_side=(
+          None if payload.get("opposing_zone_side") is None
+          else str(payload["opposing_zone_side"])
+        ),
+        opposing_zone_low=(
+          None if payload.get("opposing_zone_low") is None
+          else float(payload["opposing_zone_low"])
+        ),
+        opposing_zone_high=(
+          None if payload.get("opposing_zone_high") is None
+          else float(payload["opposing_zone_high"])
+        ),
+        opposing_zone_tier=(
+          None if payload.get("opposing_zone_tier") is None
+          else str(payload["opposing_zone_tier"])
+        ),
+        opposing_zone_score=(
+          None if payload.get("opposing_zone_score") is None
+          else float(payload["opposing_zone_score"])
+        ),
+        opposing_zone_strength=(
+          None if payload.get("opposing_zone_strength") is None
+          else float(payload["opposing_zone_strength"])
+        ),
+        opposing_raw_room_price=(
+          None if payload.get("opposing_raw_room_price") is None
+          else float(payload["opposing_raw_room_price"])
+        ),
+        opposing_room_pips=(
+          None if payload.get("opposing_room_pips") is None
+          else float(payload["opposing_room_pips"])
+        ),
+        opposing_room_atr=(
+          None if payload.get("opposing_room_atr") is None
+          else float(payload["opposing_room_atr"])
+        ),
+        opposing_room_r=(
+          None if payload.get("opposing_room_r") is None
+          else float(payload["opposing_room_r"])
+        ),
+        opposing_before_tp1=(
+          None if payload.get("opposing_before_tp1") is None
+          else bool(payload["opposing_before_tp1"])
+        ),
+        opposing_displaced=(
+          None if payload.get("opposing_displaced") is None
+          else bool(payload["opposing_displaced"])
+        ),
+        opposing_mitigated=(
+          None if payload.get("opposing_mitigated") is None
+          else bool(payload["opposing_mitigated"])
+        ),
+        opposing_room_pressure=(
+          None if payload.get("opposing_room_pressure") is None
+          else float(payload["opposing_room_pressure"])
+        ),
+        opposing_risk_score=(
+          None if payload.get("opposing_risk_score") is None
+          else float(payload["opposing_risk_score"])
+        ),
+        opposing_action=(
+          None if payload.get("opposing_action") is None
+          else str(payload["opposing_action"])
+        ),
+        opposing_reason_code=(
+          None if payload.get("opposing_reason_code") is None
+          else str(payload["opposing_reason_code"])
         ),
       )
     except (KeyError, TypeError, ValueError, json.JSONDecodeError):
