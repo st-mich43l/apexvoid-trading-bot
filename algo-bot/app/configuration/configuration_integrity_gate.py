@@ -32,17 +32,20 @@ from app.configuration.source_types import ConfigurationSourceBundle
 
 
 BASELINE = {
+  # 2026-09 Opposing Structure V2 (Key Level repair): +9 new leaf fields
+  # under strategies.reaction.key_level.opposing_structure.* (2 real
+  # canonical_env, 7 ALGORITHM_CONSTANT).
   # 2026-09 Candle Confirmation V2: +33 new leaf fields under
   # analysis.candle_confirmation.* (all ConfigOwner.PYTHON,
   # ConfigKind.ALGORITHM_CONSTANT, canonical_env=None, shadow-only).
   # 2026-09 MAD v2: +7 new leaf fields under execution.mad.{expand,manip,accum}.
-  "catalog_entry_count": 620,
-  "configurable_count": 520,
+  "catalog_entry_count": 629,
+  "configurable_count": 522,
   "protocol_constant_count": 10,
-  "algorithm_constant_count": 90,
-  "python_projection_count": 571,
+  "algorithm_constant_count": 97,
+  "python_projection_count": 580,
   "ctrader_only_count": 49,
-  "environment_entry_count": 520,
+  "environment_entry_count": 522,
   "deprecated_alias_count": 21,
   "shared_count": 96,
 }
