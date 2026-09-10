@@ -23,6 +23,101 @@ class AnalysisMeasurementsConfig(FrozenConfigModel):
     tp_min_spacing_atr: float = config_field(0.5, canonical_env='TP_MIN_SPACING_ATR', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEXT_SCANNER_CYCLE, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.ATR, risk=RiskClassification.ANALYSIS_BEHAVIOR, description='Controls  (atr).', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 0.5),), validation_summary='Pydantic required/type coercion only')
 
 
+class AnalysisCandleConfirmationRejectionWickConfig(FrozenConfigModel):
+    minimum_fraction: float = config_field(0.30, canonical_env=None, owner=ConfigOwner.PYTHON, reload=ReloadPolicy.CODE_RELEASE, runtime_reload=ReloadPolicy.CODE_RELEASE, unit=ConfigUnit.FRACTION, risk=RiskClassification.ANALYSIS_BEHAVIOR, kind=ConfigKind.ALGORITHM_CONSTANT, description='Candle Confirmation V2 (shadow-only): directional wick fraction required for a wick_rejection label. Carried forward from the pre-existing m1_trigger.py wick_fraction concept.', validation_summary='none; source constant')
+    strong_fraction: float = config_field(0.55, canonical_env=None, owner=ConfigOwner.PYTHON, reload=ReloadPolicy.CODE_RELEASE, runtime_reload=ReloadPolicy.CODE_RELEASE, unit=ConfigUnit.FRACTION, risk=RiskClassification.ANALYSIS_BEHAVIOR, kind=ConfigKind.ALGORITHM_CONSTANT, description='Candle Confirmation V2 (shadow-only): directional wick fraction at which wick quality saturates to 1.0. Provisional pending replay evidence.', validation_summary='none; source constant')
+
+class AnalysisCandleConfirmationRejectionBodyConfig(FrozenConfigModel):
+    maximum_fraction: float = config_field(0.45, canonical_env=None, owner=ConfigOwner.PYTHON, reload=ReloadPolicy.CODE_RELEASE, runtime_reload=ReloadPolicy.CODE_RELEASE, unit=ConfigUnit.FRACTION, risk=RiskClassification.ANALYSIS_BEHAVIOR, kind=ConfigKind.ALGORITHM_CONSTANT, description='Candle Confirmation V2 (shadow-only): body fraction ceiling used to score rejection body quality. Provisional pending replay evidence.', validation_summary='none; source constant')
+
+class AnalysisCandleConfirmationRejectionCloseConfig(FrozenConfigModel):
+    buy_minimum_location: float = config_field(0.65, canonical_env=None, owner=ConfigOwner.PYTHON, reload=ReloadPolicy.CODE_RELEASE, runtime_reload=ReloadPolicy.CODE_RELEASE, unit=ConfigUnit.FRACTION, risk=RiskClassification.ANALYSIS_BEHAVIOR, kind=ConfigKind.ALGORITHM_CONSTANT, description='Candle Confirmation V2 (shadow-only): minimum close_location for a BUY rejection close to score as strong. Provisional pending replay evidence.', validation_summary='none; source constant')
+    sell_maximum_location: float = config_field(0.35, canonical_env=None, owner=ConfigOwner.PYTHON, reload=ReloadPolicy.CODE_RELEASE, runtime_reload=ReloadPolicy.CODE_RELEASE, unit=ConfigUnit.FRACTION, risk=RiskClassification.ANALYSIS_BEHAVIOR, kind=ConfigKind.ALGORITHM_CONSTANT, description='Candle Confirmation V2 (shadow-only): maximum close_location for a SELL rejection close to score as strong. Provisional pending replay evidence.', validation_summary='none; source constant')
+
+class AnalysisCandleConfirmationRejectionWickToBodyConfig(FrozenConfigModel):
+    minimum_ratio: float = config_field(1.5, canonical_env=None, owner=ConfigOwner.PYTHON, reload=ReloadPolicy.CODE_RELEASE, runtime_reload=ReloadPolicy.CODE_RELEASE, unit=ConfigUnit.RATIO, risk=RiskClassification.ANALYSIS_BEHAVIOR, kind=ConfigKind.ALGORITHM_CONSTANT, description='Candle Confirmation V2 (shadow-only): minimum directional-wick-to-body ratio. Provisional pending replay evidence; not currently read by any evaluator (reserved for future tightening).', validation_summary='none; source constant')
+
+class AnalysisCandleConfirmationRejectionSweepConfig(FrozenConfigModel):
+    enabled: bool = config_field(True, canonical_env=None, owner=ConfigOwner.PYTHON, reload=ReloadPolicy.CODE_RELEASE, runtime_reload=ReloadPolicy.CODE_RELEASE, unit=ConfigUnit.BOOLEAN, risk=RiskClassification.ANALYSIS_BEHAVIOR, kind=ConfigKind.ALGORITHM_CONSTANT, description='Candle Confirmation V2 (shadow-only): whether sweep_penetration_atr is evaluated for the rejection family.', validation_summary='none; source constant')
+    minimum_penetration_atr: float = config_field(0.05, canonical_env=None, owner=ConfigOwner.PYTHON, reload=ReloadPolicy.CODE_RELEASE, runtime_reload=ReloadPolicy.CODE_RELEASE, unit=ConfigUnit.ATR, risk=RiskClassification.ANALYSIS_BEHAVIOR, kind=ConfigKind.ALGORITHM_CONSTANT, description='Candle Confirmation V2 (shadow-only): minimum ATR-normalized level penetration counted as a liquidity sweep. Provisional pending replay evidence.', validation_summary='none; source constant')
+
+class AnalysisCandleConfirmationRejectionReclaimConfig(FrozenConfigModel):
+    enabled: bool = config_field(True, canonical_env=None, owner=ConfigOwner.PYTHON, reload=ReloadPolicy.CODE_RELEASE, runtime_reload=ReloadPolicy.CODE_RELEASE, unit=ConfigUnit.BOOLEAN, risk=RiskClassification.ANALYSIS_BEHAVIOR, kind=ConfigKind.ALGORITHM_CONSTANT, description='Candle Confirmation V2 (shadow-only): whether reclaim_depth_atr is evaluated for the rejection family.', validation_summary='none; source constant')
+
+class AnalysisCandleConfirmationRejectionConfig(FrozenConfigModel):
+    wick: AnalysisCandleConfirmationRejectionWickConfig = Field(default_factory=AnalysisCandleConfirmationRejectionWickConfig)
+    body: AnalysisCandleConfirmationRejectionBodyConfig = Field(default_factory=AnalysisCandleConfirmationRejectionBodyConfig)
+    close: AnalysisCandleConfirmationRejectionCloseConfig = Field(default_factory=AnalysisCandleConfirmationRejectionCloseConfig)
+    wick_to_body: AnalysisCandleConfirmationRejectionWickToBodyConfig = Field(default_factory=AnalysisCandleConfirmationRejectionWickToBodyConfig)
+    sweep: AnalysisCandleConfirmationRejectionSweepConfig = Field(default_factory=AnalysisCandleConfirmationRejectionSweepConfig)
+    reclaim: AnalysisCandleConfirmationRejectionReclaimConfig = Field(default_factory=AnalysisCandleConfirmationRejectionReclaimConfig)
+
+class AnalysisCandleConfirmationDisplacementBodyConfig(FrozenConfigModel):
+    minimum_atr: float = config_field(0.30, canonical_env=None, owner=ConfigOwner.PYTHON, reload=ReloadPolicy.CODE_RELEASE, runtime_reload=ReloadPolicy.CODE_RELEASE, unit=ConfigUnit.ATR, risk=RiskClassification.ANALYSIS_BEHAVIOR, kind=ConfigKind.ALGORITHM_CONSTANT, description='Candle Confirmation V2 (shadow-only): minimum ATR-normalized body for a displacement_candle label. Provisional pending replay evidence.', validation_summary='none; source constant')
+
+class AnalysisCandleConfirmationDisplacementRangeConfig(FrozenConfigModel):
+    minimum_atr: float = config_field(0.40, canonical_env=None, owner=ConfigOwner.PYTHON, reload=ReloadPolicy.CODE_RELEASE, runtime_reload=ReloadPolicy.CODE_RELEASE, unit=ConfigUnit.ATR, risk=RiskClassification.ANALYSIS_BEHAVIOR, kind=ConfigKind.ALGORITHM_CONSTANT, description='Candle Confirmation V2 (shadow-only): minimum ATR-normalized range for a body_close label. Provisional pending replay evidence.', validation_summary='none; source constant')
+
+class AnalysisCandleConfirmationDisplacementBodyDominanceConfig(FrozenConfigModel):
+    minimum: float = config_field(0.55, canonical_env=None, owner=ConfigOwner.PYTHON, reload=ReloadPolicy.CODE_RELEASE, runtime_reload=ReloadPolicy.CODE_RELEASE, unit=ConfigUnit.FRACTION, risk=RiskClassification.ANALYSIS_BEHAVIOR, kind=ConfigKind.ALGORITHM_CONSTANT, description='Candle Confirmation V2 (shadow-only): minimum body_fraction for a displacement_candle label. Provisional pending replay evidence.', validation_summary='none; source constant')
+
+class AnalysisCandleConfirmationDisplacementStrongCloseConfig(FrozenConfigModel):
+    buy_minimum_location: float = config_field(0.70, canonical_env=None, owner=ConfigOwner.PYTHON, reload=ReloadPolicy.CODE_RELEASE, runtime_reload=ReloadPolicy.CODE_RELEASE, unit=ConfigUnit.FRACTION, risk=RiskClassification.ANALYSIS_BEHAVIOR, kind=ConfigKind.ALGORITHM_CONSTANT, description='Candle Confirmation V2 (shadow-only): minimum close_location for a BUY strong_close label. Provisional pending replay evidence.', validation_summary='none; source constant')
+    sell_maximum_location: float = config_field(0.30, canonical_env=None, owner=ConfigOwner.PYTHON, reload=ReloadPolicy.CODE_RELEASE, runtime_reload=ReloadPolicy.CODE_RELEASE, unit=ConfigUnit.FRACTION, risk=RiskClassification.ANALYSIS_BEHAVIOR, kind=ConfigKind.ALGORITHM_CONSTANT, description='Candle Confirmation V2 (shadow-only): maximum close_location for a SELL strong_close label. Provisional pending replay evidence.', validation_summary='none; source constant')
+
+class AnalysisCandleConfirmationDisplacementEngulfingConfig(FrozenConfigModel):
+    enabled: bool = config_field(True, canonical_env=None, owner=ConfigOwner.PYTHON, reload=ReloadPolicy.CODE_RELEASE, runtime_reload=ReloadPolicy.CODE_RELEASE, unit=ConfigUnit.BOOLEAN, risk=RiskClassification.ANALYSIS_BEHAVIOR, kind=ConfigKind.ALGORITHM_CONSTANT, description='Candle Confirmation V2 (shadow-only): whether the engulfing sub-model is evaluated for the displacement family.', validation_summary='none; source constant')
+    minimum_range_atr: float = config_field(0.50, canonical_env=None, owner=ConfigOwner.PYTHON, reload=ReloadPolicy.CODE_RELEASE, runtime_reload=ReloadPolicy.CODE_RELEASE, unit=ConfigUnit.ATR, risk=RiskClassification.ANALYSIS_BEHAVIOR, kind=ConfigKind.ALGORITHM_CONSTANT, description='Candle Confirmation V2 (shadow-only): minimum ATR-normalized range for an engulfing candle. Carried forward from structural_reaction_support.py engulfing_minimum_range_atr.', validation_summary='none; source constant')
+
+class AnalysisCandleConfirmationDisplacementCloseBeyondLevelConfig(FrozenConfigModel):
+    enabled: bool = config_field(True, canonical_env=None, owner=ConfigOwner.PYTHON, reload=ReloadPolicy.CODE_RELEASE, runtime_reload=ReloadPolicy.CODE_RELEASE, unit=ConfigUnit.BOOLEAN, risk=RiskClassification.ANALYSIS_BEHAVIOR, kind=ConfigKind.ALGORITHM_CONSTANT, description='Candle Confirmation V2 (shadow-only): whether the close-beyond-level reclaim check is evaluated for the displacement family.', validation_summary='none; source constant')
+
+class AnalysisCandleConfirmationDisplacementConfig(FrozenConfigModel):
+    body: AnalysisCandleConfirmationDisplacementBodyConfig = Field(default_factory=AnalysisCandleConfirmationDisplacementBodyConfig)
+    range: AnalysisCandleConfirmationDisplacementRangeConfig = Field(default_factory=AnalysisCandleConfirmationDisplacementRangeConfig)
+    body_dominance: AnalysisCandleConfirmationDisplacementBodyDominanceConfig = Field(default_factory=AnalysisCandleConfirmationDisplacementBodyDominanceConfig)
+    strong_close: AnalysisCandleConfirmationDisplacementStrongCloseConfig = Field(default_factory=AnalysisCandleConfirmationDisplacementStrongCloseConfig)
+    engulfing: AnalysisCandleConfirmationDisplacementEngulfingConfig = Field(default_factory=AnalysisCandleConfirmationDisplacementEngulfingConfig)
+    close_beyond_level: AnalysisCandleConfirmationDisplacementCloseBeyondLevelConfig = Field(default_factory=AnalysisCandleConfirmationDisplacementCloseBeyondLevelConfig)
+
+class AnalysisCandleConfirmationSequencesIndecisionConfig(FrozenConfigModel):
+    doji_body_fraction: float = config_field(0.10, canonical_env=None, owner=ConfigOwner.PYTHON, reload=ReloadPolicy.CODE_RELEASE, runtime_reload=ReloadPolicy.CODE_RELEASE, unit=ConfigUnit.FRACTION, risk=RiskClassification.ANALYSIS_BEHAVIOR, kind=ConfigKind.ALGORITHM_CONSTANT, description='Candle Confirmation V2 (shadow-only): body fraction at or below which a bar is a doji. No pre-existing equivalent; provisional pending replay evidence.', validation_summary='none; source constant')
+
+class AnalysisCandleConfirmationSequencesMorningEveningStarConfig(FrozenConfigModel):
+    first_body_minimum_atr: float = config_field(0.30, canonical_env=None, owner=ConfigOwner.PYTHON, reload=ReloadPolicy.CODE_RELEASE, runtime_reload=ReloadPolicy.CODE_RELEASE, unit=ConfigUnit.ATR, risk=RiskClassification.ANALYSIS_BEHAVIOR, kind=ConfigKind.ALGORITHM_CONSTANT, description='Candle Confirmation V2 (shadow-only): minimum ATR-normalized body for the first (pressure) bar of a morning/evening star. No pre-existing equivalent; provisional pending replay evidence.', validation_summary='none; source constant')
+    middle_body_maximum_fraction: float = config_field(0.30, canonical_env=None, owner=ConfigOwner.PYTHON, reload=ReloadPolicy.CODE_RELEASE, runtime_reload=ReloadPolicy.CODE_RELEASE, unit=ConfigUnit.FRACTION, risk=RiskClassification.ANALYSIS_BEHAVIOR, kind=ConfigKind.ALGORITHM_CONSTANT, description='Candle Confirmation V2 (shadow-only): maximum body fraction for the middle (indecision) bar(s) of a sequence. No pre-existing equivalent; provisional pending replay evidence.', validation_summary='none; source constant')
+    recovery_minimum_ratio: float = config_field(0.50, canonical_env=None, owner=ConfigOwner.PYTHON, reload=ReloadPolicy.CODE_RELEASE, runtime_reload=ReloadPolicy.CODE_RELEASE, unit=ConfigUnit.RATIO, risk=RiskClassification.ANALYSIS_BEHAVIOR, kind=ConfigKind.ALGORITHM_CONSTANT, description='Candle Confirmation V2 (shadow-only): minimum recovery ratio of the first bar move for a morning/evening star. No pre-existing equivalent; provisional pending replay evidence.', validation_summary='none; source constant')
+    third_body_minimum_atr: float = config_field(0.25, canonical_env=None, owner=ConfigOwner.PYTHON, reload=ReloadPolicy.CODE_RELEASE, runtime_reload=ReloadPolicy.CODE_RELEASE, unit=ConfigUnit.ATR, risk=RiskClassification.ANALYSIS_BEHAVIOR, kind=ConfigKind.ALGORITHM_CONSTANT, description='Candle Confirmation V2 (shadow-only): minimum ATR-normalized body for the third (recovery) bar. No pre-existing equivalent; provisional pending replay evidence.', validation_summary='none; source constant')
+
+class AnalysisCandleConfirmationSequencesCompressionBreakConfig(FrozenConfigModel):
+    minimum_bars: int = config_field(2, canonical_env=None, owner=ConfigOwner.PYTHON, reload=ReloadPolicy.CODE_RELEASE, runtime_reload=ReloadPolicy.CODE_RELEASE, unit=ConfigUnit.COUNT, risk=RiskClassification.ANALYSIS_BEHAVIOR, kind=ConfigKind.ALGORITHM_CONSTANT, description='Candle Confirmation V2 (shadow-only): minimum compression-bar count before a breakout bar for compression_break. No pre-existing equivalent; provisional pending replay evidence.', validation_summary='none; source constant')
+    maximum_bars: int = config_field(4, canonical_env=None, owner=ConfigOwner.PYTHON, reload=ReloadPolicy.CODE_RELEASE, runtime_reload=ReloadPolicy.CODE_RELEASE, unit=ConfigUnit.COUNT, risk=RiskClassification.ANALYSIS_BEHAVIOR, kind=ConfigKind.ALGORITHM_CONSTANT, description='Candle Confirmation V2 (shadow-only): maximum compression-bar count before a breakout bar for compression_break. No pre-existing equivalent; provisional pending replay evidence.', validation_summary='none; source constant')
+    maximum_total_range_atr: float = config_field(0.80, canonical_env=None, owner=ConfigOwner.PYTHON, reload=ReloadPolicy.CODE_RELEASE, runtime_reload=ReloadPolicy.CODE_RELEASE, unit=ConfigUnit.ATR, risk=RiskClassification.ANALYSIS_BEHAVIOR, kind=ConfigKind.ALGORITHM_CONSTANT, description='Candle Confirmation V2 (shadow-only): maximum ATR-normalized total high-low range across the compression window. No pre-existing equivalent; provisional pending replay evidence.', validation_summary='none; source constant')
+    maximum_average_body_fraction: float = config_field(0.35, canonical_env=None, owner=ConfigOwner.PYTHON, reload=ReloadPolicy.CODE_RELEASE, runtime_reload=ReloadPolicy.CODE_RELEASE, unit=ConfigUnit.FRACTION, risk=RiskClassification.ANALYSIS_BEHAVIOR, kind=ConfigKind.ALGORITHM_CONSTANT, description='Candle Confirmation V2 (shadow-only): maximum average body fraction across the compression window. No pre-existing equivalent; provisional pending replay evidence.', validation_summary='none; source constant')
+    breakout_body_minimum_atr: float = config_field(0.30, canonical_env=None, owner=ConfigOwner.PYTHON, reload=ReloadPolicy.CODE_RELEASE, runtime_reload=ReloadPolicy.CODE_RELEASE, unit=ConfigUnit.ATR, risk=RiskClassification.ANALYSIS_BEHAVIOR, kind=ConfigKind.ALGORITHM_CONSTANT, description='Candle Confirmation V2 (shadow-only): minimum ATR-normalized body for the breakout bar. No pre-existing equivalent; provisional pending replay evidence.', validation_summary='none; source constant')
+
+class AnalysisCandleConfirmationSequencesConfig(FrozenConfigModel):
+    indecision: AnalysisCandleConfirmationSequencesIndecisionConfig = Field(default_factory=AnalysisCandleConfirmationSequencesIndecisionConfig)
+    morning_evening_star: AnalysisCandleConfirmationSequencesMorningEveningStarConfig = Field(default_factory=AnalysisCandleConfirmationSequencesMorningEveningStarConfig)
+    compression_break: AnalysisCandleConfirmationSequencesCompressionBreakConfig = Field(default_factory=AnalysisCandleConfirmationSequencesCompressionBreakConfig)
+
+class AnalysisCandleConfirmationSynergyConfig(FrozenConfigModel):
+    rejection_plus_displacement: float = config_field(0.08, canonical_env=None, owner=ConfigOwner.PYTHON, reload=ReloadPolicy.CODE_RELEASE, runtime_reload=ReloadPolicy.CODE_RELEASE, unit=ConfigUnit.SCORE, risk=RiskClassification.ANALYSIS_BEHAVIOR, kind=ConfigKind.ALGORITHM_CONSTANT, description='Candle Confirmation V2 (shadow-only): bonus added to final_score when rejection AND displacement both fire independently. Provisional pending replay evidence.', validation_summary='none; source constant')
+    sweep_plus_reclaim: float = config_field(0.10, canonical_env=None, owner=ConfigOwner.PYTHON, reload=ReloadPolicy.CODE_RELEASE, runtime_reload=ReloadPolicy.CODE_RELEASE, unit=ConfigUnit.SCORE, risk=RiskClassification.ANALYSIS_BEHAVIOR, kind=ConfigKind.ALGORITHM_CONSTANT, description='Candle Confirmation V2 (shadow-only): bonus added to final_score when a rejection bar both sweeps and reclaims the same level. Provisional pending replay evidence.', validation_summary='none; source constant')
+    sequence_plus_displacement: float = config_field(0.06, canonical_env=None, owner=ConfigOwner.PYTHON, reload=ReloadPolicy.CODE_RELEASE, runtime_reload=ReloadPolicy.CODE_RELEASE, unit=ConfigUnit.SCORE, risk=RiskClassification.ANALYSIS_BEHAVIOR, kind=ConfigKind.ALGORITHM_CONSTANT, description='Candle Confirmation V2 (shadow-only): bonus added to final_score when a multi-bar sequence AND displacement both fire independently. Provisional pending replay evidence.', validation_summary='none; source constant')
+    maximum_bonus: float = config_field(0.12, canonical_env=None, owner=ConfigOwner.PYTHON, reload=ReloadPolicy.CODE_RELEASE, runtime_reload=ReloadPolicy.CODE_RELEASE, unit=ConfigUnit.SCORE, risk=RiskClassification.ANALYSIS_BEHAVIOR, kind=ConfigKind.ALGORITHM_CONSTANT, description='Candle Confirmation V2 (shadow-only): hard cap on the total synergy bonus added to base_score. Provisional pending replay evidence.', validation_summary='none; source constant')
+
+class AnalysisCandleConfirmationConfig(FrozenConfigModel):
+    """Candle Confirmation V2 (§1-§50): additive, shadow-only evidence scoring.
+    Never enters ConfluenceFactors or gates activation in this phase — see
+    evaluate_all_candle_evidence and its Phase-1 rollout discipline."""
+    enabled: bool = config_field(True, canonical_env=None, owner=ConfigOwner.PYTHON, reload=ReloadPolicy.CODE_RELEASE, runtime_reload=ReloadPolicy.CODE_RELEASE, unit=ConfigUnit.BOOLEAN, risk=RiskClassification.ANALYSIS_BEHAVIOR, kind=ConfigKind.ALGORITHM_CONSTANT, description='Candle Confirmation V2 (shadow-only): whether evaluate_all_candle_evidence is computed at all. Does not gate activation either way.', validation_summary='none; source constant')
+    version: int = config_field(2, canonical_env=None, owner=ConfigOwner.PYTHON, reload=ReloadPolicy.CODE_RELEASE, runtime_reload=ReloadPolicy.CODE_RELEASE, unit=ConfigUnit.COUNT, risk=RiskClassification.ANALYSIS_BEHAVIOR, kind=ConfigKind.ALGORITHM_CONSTANT, description='Candle Confirmation model version persisted alongside every candle_* telemetry row (matches CANDLE_CONFIRMATION_VERSION).', validation_summary='none; source constant')
+    rejection: AnalysisCandleConfirmationRejectionConfig = Field(default_factory=AnalysisCandleConfirmationRejectionConfig)
+    displacement: AnalysisCandleConfirmationDisplacementConfig = Field(default_factory=AnalysisCandleConfirmationDisplacementConfig)
+    sequences: AnalysisCandleConfirmationSequencesConfig = Field(default_factory=AnalysisCandleConfirmationSequencesConfig)
+    synergy: AnalysisCandleConfirmationSynergyConfig = Field(default_factory=AnalysisCandleConfirmationSynergyConfig)
+
 class AnalysisConfluenceConfig(FrozenConfigModel):
     """Versioned scoring controls; v2 remains shadow-only by default."""
 
@@ -224,6 +319,7 @@ class AnalysisSwingsConfig(FrozenConfigModel):
 class AnalysisConfig(FrozenConfigModel):
     atr: AnalysisAtrConfig = Field(default_factory=AnalysisAtrConfig)
     breakout: AnalysisBreakoutConfig = Field(default_factory=AnalysisBreakoutConfig)
+    candle_confirmation: AnalysisCandleConfirmationConfig = Field(default_factory=AnalysisCandleConfirmationConfig)
     flip_zone: AnalysisFlipZoneConfig = Field(default_factory=AnalysisFlipZoneConfig)
     confluence: AnalysisConfluenceConfig = Field(default_factory=AnalysisConfluenceConfig)
     detectors: AnalysisDetectorsConfig = Field(default_factory=AnalysisDetectorsConfig)

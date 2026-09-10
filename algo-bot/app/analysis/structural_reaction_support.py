@@ -12,6 +12,7 @@ from typing import Any
 
 import pandas as pd
 
+from app.analysis.candle_evidence import CandleEvidence, evaluate_all_candle_evidence
 from app.analysis.types import Grab, Level, SessionLevel, Zone
 from app.core.symbols import digits_for
 from app.runtime.price_identity import price_token
@@ -63,6 +64,11 @@ class ReactionConfirmation:
   touch_index: int
   confirmation_index: int
   has_choch: bool = False
+  # Candle Confirmation V2 (shadow-only, §3/§21): additive scored evidence
+  # for the SAME confirmation bar this dataclass already committed to
+  # above. Never consulted when deciding confirmation_type - it observes
+  # the winning bar, it never picks it.
+  candle_evidence: CandleEvidence | None = None
 
 
 def bias_relationship(htf_bias: str, direction: str) -> str:
@@ -445,6 +451,22 @@ def evaluate_structural_reaction(
 
     if confirmation is None:
       continue
+
+    # Candle Confirmation V2 (shadow-only, §3/§21): scored on the bar this
+    # loop already chose - never influences which bar/confirmation_type wins.
+    near_level = low if side == "BUY" else high
+    evidence_bars = (
+      [df.iloc[confirm_index - 1], row] if confirm_index > 0 else [row]
+    )
+    candle_evidence = evaluate_all_candle_evidence(
+      evidence_bars,
+      direction=side,
+      atr=atr,
+      level=near_level,
+      zone_low=low,
+      zone_high=high,
+    )
+
     return ReactionConfirmation(
       confirmation_type=confirmation,
       touch_bar_ts=bar_ts(df, touch_index),
@@ -452,5 +474,6 @@ def evaluate_structural_reaction(
       touch_index=touch_index,
       confirmation_index=confirm_index,
       has_choch=confirmation == CONFIRM_REJECTION_CHOCH,
+      candle_evidence=candle_evidence,
     )
   return None

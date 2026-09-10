@@ -130,6 +130,32 @@ class StrategyMatch:
   confluence_v2: int | None = None
   confluence_v2_raw: float | None = None
   confluence_scoring_version: str | None = None
+  # Candle Confirmation V2 context telemetry (§28) — descriptive only,
+  # never a gate. See app/analysis/candle_evidence.py CandleEvidence.
+  candle_version: int | None = None
+  candle_primary_pattern: str | None = None
+  candle_patterns: str | None = None
+  candle_final_score: float | None = None
+  candle_base_score: float | None = None
+  candle_synergy_bonus: float | None = None
+  candle_rejection_score: float | None = None
+  candle_displacement_score: float | None = None
+  candle_sequence_score: float | None = None
+  candle_body_fraction: float | None = None
+  candle_upper_wick_fraction: float | None = None
+  candle_lower_wick_fraction: float | None = None
+  candle_close_location: float | None = None
+  candle_body_atr: float | None = None
+  candle_range_atr: float | None = None
+  candle_sweep: bool | None = None
+  candle_sweep_penetration_atr: float | None = None
+  candle_reclaim: bool | None = None
+  candle_reclaim_depth_atr: float | None = None
+  candle_engulfing: bool | None = None
+  candle_doji: bool | None = None
+  candle_compression_score: float | None = None
+  candle_sequence_name: str | None = None
+  candle_sequence_bars: int | None = None
 
   @property
   def is_range_edge(self) -> bool:
@@ -414,6 +440,102 @@ class StrategyMatch:
         confluence_scoring_version=(
           None if payload.get("confluence_scoring_version") is None
           else str(payload["confluence_scoring_version"])
+        ),
+        candle_version=(
+          None if payload.get("candle_version") is None
+          else int(payload["candle_version"])
+        ),
+        candle_primary_pattern=(
+          None if payload.get("candle_primary_pattern") is None
+          else str(payload["candle_primary_pattern"])
+        ),
+        candle_patterns=(
+          None if payload.get("candle_patterns") is None
+          else str(payload["candle_patterns"])
+        ),
+        candle_final_score=(
+          None if payload.get("candle_final_score") is None
+          else float(payload["candle_final_score"])
+        ),
+        candle_base_score=(
+          None if payload.get("candle_base_score") is None
+          else float(payload["candle_base_score"])
+        ),
+        candle_synergy_bonus=(
+          None if payload.get("candle_synergy_bonus") is None
+          else float(payload["candle_synergy_bonus"])
+        ),
+        candle_rejection_score=(
+          None if payload.get("candle_rejection_score") is None
+          else float(payload["candle_rejection_score"])
+        ),
+        candle_displacement_score=(
+          None if payload.get("candle_displacement_score") is None
+          else float(payload["candle_displacement_score"])
+        ),
+        candle_sequence_score=(
+          None if payload.get("candle_sequence_score") is None
+          else float(payload["candle_sequence_score"])
+        ),
+        candle_body_fraction=(
+          None if payload.get("candle_body_fraction") is None
+          else float(payload["candle_body_fraction"])
+        ),
+        candle_upper_wick_fraction=(
+          None if payload.get("candle_upper_wick_fraction") is None
+          else float(payload["candle_upper_wick_fraction"])
+        ),
+        candle_lower_wick_fraction=(
+          None if payload.get("candle_lower_wick_fraction") is None
+          else float(payload["candle_lower_wick_fraction"])
+        ),
+        candle_close_location=(
+          None if payload.get("candle_close_location") is None
+          else float(payload["candle_close_location"])
+        ),
+        candle_body_atr=(
+          None if payload.get("candle_body_atr") is None
+          else float(payload["candle_body_atr"])
+        ),
+        candle_range_atr=(
+          None if payload.get("candle_range_atr") is None
+          else float(payload["candle_range_atr"])
+        ),
+        candle_sweep=(
+          None if payload.get("candle_sweep") is None
+          else bool(payload["candle_sweep"])
+        ),
+        candle_sweep_penetration_atr=(
+          None if payload.get("candle_sweep_penetration_atr") is None
+          else float(payload["candle_sweep_penetration_atr"])
+        ),
+        candle_reclaim=(
+          None if payload.get("candle_reclaim") is None
+          else bool(payload["candle_reclaim"])
+        ),
+        candle_reclaim_depth_atr=(
+          None if payload.get("candle_reclaim_depth_atr") is None
+          else float(payload["candle_reclaim_depth_atr"])
+        ),
+        candle_engulfing=(
+          None if payload.get("candle_engulfing") is None
+          else bool(payload["candle_engulfing"])
+        ),
+        candle_doji=(
+          None if payload.get("candle_doji") is None
+          else bool(payload["candle_doji"])
+        ),
+        candle_compression_score=(
+          None if payload.get("candle_compression_score") is None
+          else float(payload["candle_compression_score"])
+        ),
+        candle_sequence_name=(
+          None if payload.get("candle_sequence_name") is None
+          else str(payload["candle_sequence_name"])
+        ),
+        candle_sequence_bars=(
+          None if payload.get("candle_sequence_bars") is None
+          else int(payload["candle_sequence_bars"])
         ),
       )
     except (KeyError, TypeError, ValueError, json.JSONDecodeError):

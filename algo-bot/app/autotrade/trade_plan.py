@@ -122,6 +122,32 @@ class TradePlanAnalysis:
   mad_sweep_penetration_atr: float | None = None
   mad_reclaim_depth_atr: float | None = None
   mad_reason_code: str | None = None
+  # Candle Confirmation V2 context telemetry (§28) — descriptive only,
+  # never a gate. See app/analysis/candle_evidence.py CandleEvidence.
+  candle_version: int | None = None
+  candle_primary_pattern: str | None = None
+  candle_patterns: str | None = None
+  candle_final_score: float | None = None
+  candle_base_score: float | None = None
+  candle_synergy_bonus: float | None = None
+  candle_rejection_score: float | None = None
+  candle_displacement_score: float | None = None
+  candle_sequence_score: float | None = None
+  candle_body_fraction: float | None = None
+  candle_upper_wick_fraction: float | None = None
+  candle_lower_wick_fraction: float | None = None
+  candle_close_location: float | None = None
+  candle_body_atr: float | None = None
+  candle_range_atr: float | None = None
+  candle_sweep: bool | None = None
+  candle_sweep_penetration_atr: float | None = None
+  candle_reclaim: bool | None = None
+  candle_reclaim_depth_atr: float | None = None
+  candle_engulfing: bool | None = None
+  candle_doji: bool | None = None
+  candle_compression_score: float | None = None
+  candle_sequence_name: str | None = None
+  candle_sequence_bars: int | None = None
 
   def to_dict(self) -> dict:
     return {
@@ -162,6 +188,30 @@ class TradePlanAnalysis:
       "mad_sweep_penetration_atr": self.mad_sweep_penetration_atr,
       "mad_reclaim_depth_atr": self.mad_reclaim_depth_atr,
       "mad_reason_code": self.mad_reason_code,
+      "candle_version": self.candle_version,
+      "candle_primary_pattern": self.candle_primary_pattern,
+      "candle_patterns": self.candle_patterns,
+      "candle_final_score": self.candle_final_score,
+      "candle_base_score": self.candle_base_score,
+      "candle_synergy_bonus": self.candle_synergy_bonus,
+      "candle_rejection_score": self.candle_rejection_score,
+      "candle_displacement_score": self.candle_displacement_score,
+      "candle_sequence_score": self.candle_sequence_score,
+      "candle_body_fraction": self.candle_body_fraction,
+      "candle_upper_wick_fraction": self.candle_upper_wick_fraction,
+      "candle_lower_wick_fraction": self.candle_lower_wick_fraction,
+      "candle_close_location": self.candle_close_location,
+      "candle_body_atr": self.candle_body_atr,
+      "candle_range_atr": self.candle_range_atr,
+      "candle_sweep": self.candle_sweep,
+      "candle_sweep_penetration_atr": self.candle_sweep_penetration_atr,
+      "candle_reclaim": self.candle_reclaim,
+      "candle_reclaim_depth_atr": self.candle_reclaim_depth_atr,
+      "candle_engulfing": self.candle_engulfing,
+      "candle_doji": self.candle_doji,
+      "candle_compression_score": self.candle_compression_score,
+      "candle_sequence_name": self.candle_sequence_name,
+      "candle_sequence_bars": self.candle_sequence_bars,
     }
 
   @classmethod
@@ -270,6 +320,102 @@ class TradePlanAnalysis:
       mad_reason_code=(
         None if data.get("mad_reason_code") is None
         else str(data["mad_reason_code"])
+      ),
+      candle_version=(
+        None if data.get("candle_version") is None
+        else int(data["candle_version"])
+      ),
+      candle_primary_pattern=(
+        None if data.get("candle_primary_pattern") is None
+        else str(data["candle_primary_pattern"])
+      ),
+      candle_patterns=(
+        None if data.get("candle_patterns") is None
+        else str(data["candle_patterns"])
+      ),
+      candle_final_score=(
+        None if data.get("candle_final_score") is None
+        else float(data["candle_final_score"])
+      ),
+      candle_base_score=(
+        None if data.get("candle_base_score") is None
+        else float(data["candle_base_score"])
+      ),
+      candle_synergy_bonus=(
+        None if data.get("candle_synergy_bonus") is None
+        else float(data["candle_synergy_bonus"])
+      ),
+      candle_rejection_score=(
+        None if data.get("candle_rejection_score") is None
+        else float(data["candle_rejection_score"])
+      ),
+      candle_displacement_score=(
+        None if data.get("candle_displacement_score") is None
+        else float(data["candle_displacement_score"])
+      ),
+      candle_sequence_score=(
+        None if data.get("candle_sequence_score") is None
+        else float(data["candle_sequence_score"])
+      ),
+      candle_body_fraction=(
+        None if data.get("candle_body_fraction") is None
+        else float(data["candle_body_fraction"])
+      ),
+      candle_upper_wick_fraction=(
+        None if data.get("candle_upper_wick_fraction") is None
+        else float(data["candle_upper_wick_fraction"])
+      ),
+      candle_lower_wick_fraction=(
+        None if data.get("candle_lower_wick_fraction") is None
+        else float(data["candle_lower_wick_fraction"])
+      ),
+      candle_close_location=(
+        None if data.get("candle_close_location") is None
+        else float(data["candle_close_location"])
+      ),
+      candle_body_atr=(
+        None if data.get("candle_body_atr") is None
+        else float(data["candle_body_atr"])
+      ),
+      candle_range_atr=(
+        None if data.get("candle_range_atr") is None
+        else float(data["candle_range_atr"])
+      ),
+      candle_sweep=(
+        None if data.get("candle_sweep") is None
+        else bool(data["candle_sweep"])
+      ),
+      candle_sweep_penetration_atr=(
+        None if data.get("candle_sweep_penetration_atr") is None
+        else float(data["candle_sweep_penetration_atr"])
+      ),
+      candle_reclaim=(
+        None if data.get("candle_reclaim") is None
+        else bool(data["candle_reclaim"])
+      ),
+      candle_reclaim_depth_atr=(
+        None if data.get("candle_reclaim_depth_atr") is None
+        else float(data["candle_reclaim_depth_atr"])
+      ),
+      candle_engulfing=(
+        None if data.get("candle_engulfing") is None
+        else bool(data["candle_engulfing"])
+      ),
+      candle_doji=(
+        None if data.get("candle_doji") is None
+        else bool(data["candle_doji"])
+      ),
+      candle_compression_score=(
+        None if data.get("candle_compression_score") is None
+        else float(data["candle_compression_score"])
+      ),
+      candle_sequence_name=(
+        None if data.get("candle_sequence_name") is None
+        else str(data["candle_sequence_name"])
+      ),
+      candle_sequence_bars=(
+        None if data.get("candle_sequence_bars") is None
+        else int(data["candle_sequence_bars"])
       ),
     )
 

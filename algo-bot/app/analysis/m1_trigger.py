@@ -13,11 +13,13 @@ candlestick evidence is evaluated here before publication.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 import pandas as pd
 
+from app.analysis.candle_evidence import CandleEvidence, evaluate_all_candle_evidence
+from app.analysis.candle_geometry import candle_geometry
 from app.autotrade.execution_confirmation import parse_bar_timestamp
 
 
@@ -38,6 +40,11 @@ class M1TriggerResult:
   bar_ts: Any
   message: str
   measured: dict[str, Any] | None = None
+  # Candle Confirmation V2 (shadow-only, §30): additive scored evidence for
+  # the same bar, computed alongside (never in place of) the first-match
+  # `.pattern` decision above. None when no V2 family produced evidence
+  # (e.g. atr wasn't supplied by the caller, or the bar is genuinely dull).
+  evidence: CandleEvidence | None = None
 
 
 @dataclass(frozen=True)
@@ -72,10 +79,16 @@ def _geometry(bar: pd.Series) -> _BarGeometry | None:
   range_ = h - l
   if range_ <= 0:
     return None
-  body = abs(c - o)
-  upper_wick = h - max(o, c)
-  lower_wick = min(o, c) - l
-  return _BarGeometry(o, h, l, c, range_, body, upper_wick, lower_wick)
+  # Shared primitive (§31/§47) — same open/high/low/close/range/body/wick
+  # math as Candle Confirmation V2, so this module's price-space geometry
+  # never drifts from the fraction-space geometry the new evidence
+  # families compute from the same bar.
+  shared = candle_geometry(open_=o, high=h, low=l, close=c)
+  return _BarGeometry(
+    shared.open, shared.high, shared.low, shared.close,
+    shared.range_price, shared.body_price,
+    shared.upper_wick_price, shared.lower_wick_price,
+  )
 
 
 def _intersects_zone(
@@ -331,6 +344,7 @@ def _evaluate_bar(
   key_level: float,
   direction: str,
   cfg: Any,
+  atr: float = 0.0,
 ) -> M1TriggerResult | None:
   geo = _geometry(bar)
   if geo is None or not _intersects_zone(
@@ -340,11 +354,12 @@ def _evaluate_bar(
   ):
     return None
   patterns = enabled_patterns(cfg)
+  result = None
   for pattern in ALL_PATTERNS:
     if pattern not in patterns:
       continue
     detector = _DETECTORS[pattern]
-    result = detector(
+    candidate = detector(
       bar,
       geo,
       prior,
@@ -354,9 +369,27 @@ def _evaluate_bar(
       key_level,
       cfg,
     )
-    if result is not None:
-      return result
-  return None
+    if candidate is not None:
+      result = candidate
+      break
+  if result is None:
+    return None
+
+  # Candle Confirmation V2 (shadow-only, §30): computed on the SAME bar
+  # after the first-match `.pattern` decision above, never influencing it.
+  bars = [prior, bar] if prior is not None else [bar]
+  evidence = evaluate_all_candle_evidence(
+    bars,
+    direction=direction,
+    atr=float(atr or 0.0),
+    level=key_level,
+    zone_low=zone_low,
+    zone_high=zone_high,
+    cfg=cfg,
+  )
+  if evidence is not None:
+    result = replace(result, evidence=evidence)
+  return result
 
 
 def _bar_is_closed(bar: pd.Series) -> bool:
@@ -377,6 +410,7 @@ def evaluate_m1_trigger(
   key_level: float,
   direction: str,
   cfg: Any = None,
+  atr: float = 0.0,
 ) -> M1TriggerResult | None:
   """Evaluate the latest CLOSED M1 bar against every enabled pattern.
 
@@ -385,6 +419,11 @@ def evaluate_m1_trigger(
   the first qualifying pattern's result (patterns are checked in
   `ALL_PATTERNS` order, so `wick_rejection` wins ties over eg. `strong_close`
   on the same bar), or None if no enabled pattern qualifies.
+
+  `atr` (optional) additionally feeds the shadow-only Candle Confirmation
+  V2 evidence attached at `.evidence` (§30) — omitting it simply means the
+  ATR-normalized evidence families have nothing to score, it never changes
+  `.pattern`.
   """
   if m1 is None or m1.empty:
     return None
@@ -408,6 +447,7 @@ def evaluate_m1_trigger(
     key_level=key_level,
     direction=direction,
     cfg=cfg,
+    atr=atr,
   )
 
 
@@ -421,6 +461,7 @@ def evaluate_m1_trigger_window(
   earliest_bar_ts: int,
   after_bar_ts: int | None,
   cfg: Any = None,
+  atr: float = 0.0,
 ) -> M1TriggerResult | None:
   """Return the earliest unprocessed closed trigger in the current episode."""
   if cfg is None:
@@ -460,6 +501,7 @@ def evaluate_m1_trigger_window(
       key_level=key_level,
       direction=side,
       cfg=cfg,
+      atr=atr,
     )
     if result is not None:
       return M1TriggerResult(
@@ -468,6 +510,7 @@ def evaluate_m1_trigger_window(
         wick_extreme=result.wick_extreme,
         bar_ts=bar_ts,
         message=result.message,
+        evidence=result.evidence,
       )
   return None
 
