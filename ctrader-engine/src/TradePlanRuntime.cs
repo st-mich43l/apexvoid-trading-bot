@@ -3966,30 +3966,13 @@ public sealed class TradePlanRuntime(
     SpotPrice quote
   )
   {
-    if (
-      string.Equals(
-        declared.OrderType,
-        TradePlanContract.OrderTypeMarket,
-        StringComparison.OrdinalIgnoreCase
-      )
-    )
-    {
-      return true;
-    }
-    if (
-      string.Equals(
-        declared.OrderType,
-        TradePlanContract.OrderTypeLimit,
-        StringComparison.OrdinalIgnoreCase
-      )
-    )
-    {
-      return false;
-    }
-    // limit_ladder without explicit order_type: marketable-limit detection.
-    return direction == TradeDirection.Buy
-      ? declared.Price >= quote.Ask
-      : declared.Price <= quote.Bid;
+    return TradePlanContract.LegUsesMarketOrder(
+      declared.OrderType,
+      declared.Price,
+      direction == TradeDirection.Buy,
+      quote.Bid,
+      quote.Ask
+    );
   }
 
   private static IReadOnlyList<DeclaredLeg> BuildDeclaredLegs(
