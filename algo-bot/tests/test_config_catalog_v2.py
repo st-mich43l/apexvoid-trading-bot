@@ -44,6 +44,11 @@ pytestmark = pytest.mark.no_database
 
 
 BASELINE = {
+  # 2026-09 Opposing Structure V2 (Key Level repair): +9 new leaf fields
+  # under strategies.reaction.key_level.opposing_structure.* (enabled,
+  # missing_opposing_context_policy real canonical_env; the other 7
+  # ALGORITHM_CONSTANT/canonical_env=None), all ConfigOwner.PYTHON, none
+  # deprecated-alias'd.
   # 2026-09 Candle Confirmation V2: +33 new leaf fields under
   # analysis.candle_confirmation.* (enabled, version, rejection.*,
   # displacement.*, sequences.*, synergy.*), all ConfigOwner.PYTHON,
@@ -53,13 +58,13 @@ BASELINE = {
   # .displacement_atr, .accept_closes, execution.mad.manip.min_penetration_atr,
   # .min_reclaim_atr, execution.mad.accum.minimum_rq, .maximum_rq), all
   # ConfigOwner.PYTHON, none deprecated-alias'd.
-  "entries": 620,
-  "configurable": 520,
+  "entries": 629,
+  "configurable": 522,
   "protocol": 10,
-  "algorithm": 90,
-  "owners": {"python": 475, "shared": 96, "ctrader": 49},
-  "projection": 571,
-  "env": 520,
+  "algorithm": 97,
+  "owners": {"python": 484, "shared": 96, "ctrader": 49},
+  "projection": 580,
+  "env": 522,
   "deprecated_aliases": 21,
 }
 

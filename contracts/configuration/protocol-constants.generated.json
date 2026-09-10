@@ -1,6 +1,6 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "011443c7d9892456006e5667e0553e2854e2a511855e774acac32531c8ff5b43",
+  "configuration_contract_fingerprint_sha256": "8beb64bd5dce37519b85482591e7cbfa658838346655958c3ffff146947d6f25",
   "count": 10,
   "items": [
     {
@@ -114,6 +114,6 @@
       "value": 8
     }
   ],
-  "source_fingerprint_sha256": "011443c7d9892456006e5667e0553e2854e2a511855e774acac32531c8ff5b43",
+  "source_fingerprint_sha256": "8beb64bd5dce37519b85482591e7cbfa658838346655958c3ffff146947d6f25",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

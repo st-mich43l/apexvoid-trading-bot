@@ -132,8 +132,8 @@
     "zone_reconcile_mode": "shadow",
     "zone_scale_undersized_policy": "single_entry"
   },
-  "contract_fingerprint": "011443c7d9892456006e5667e0553e2854e2a511855e774acac32531c8ff5b43",
-  "effective_configuration_fingerprint": "37c394225953c2aee8e9a39a613ef1e26b3cec558041a1f9229cf31a1fdac349",
+  "contract_fingerprint": "8beb64bd5dce37519b85482591e7cbfa658838346655958c3ffff146947d6f25",
+  "effective_configuration_fingerprint": "f91accd88166a2428e2215b88cbf2ccb9bffe975889d8c45e0ccc607527f6fea",
   "feed": {
     "backfill_bars": 1500,
     "bar_quality_lookback": 6,
@@ -981,6 +981,17 @@
             "enabled": true,
             "min_grade": "B",
             "min_sell_zone_score": "0",
+            "opposing_structure": {
+              "caution_room_r": "2",
+              "critical_room_r": "0.5",
+              "enabled": true,
+              "m1_required_below_room_r": "1",
+              "minimum_candle_score_tight_room": "0.7",
+              "missing_opposing_context_policy": "wait",
+              "require_strong_confirmation_below_r": "1",
+              "strength_score_ceiling": "15",
+              "tight_room_r": "1"
+            },
             "require_explicit_role": false,
             "require_htf_alignment": false,
             "require_killzone": false
@@ -1980,6 +1991,17 @@
             "enabled": true,
             "min_grade": "A",
             "min_sell_zone_score": "0",
+            "opposing_structure": {
+              "caution_room_r": "2",
+              "critical_room_r": "0.5",
+              "enabled": true,
+              "m1_required_below_room_r": "1",
+              "minimum_candle_score_tight_room": "0.7",
+              "missing_opposing_context_policy": "wait",
+              "require_strong_confirmation_below_r": "1",
+              "strength_score_ceiling": "15",
+              "tight_room_r": "1"
+            },
             "require_explicit_role": true,
             "require_htf_alignment": false,
             "require_killzone": false
@@ -2955,6 +2977,17 @@
             "enabled": true,
             "min_grade": "B",
             "min_sell_zone_score": "0",
+            "opposing_structure": {
+              "caution_room_r": "2",
+              "critical_room_r": "0.5",
+              "enabled": true,
+              "m1_required_below_room_r": "1",
+              "minimum_candle_score_tight_room": "0.7",
+              "missing_opposing_context_policy": "wait",
+              "require_strong_confirmation_below_r": "1",
+              "strength_score_ceiling": "15",
+              "tight_room_r": "1"
+            },
             "require_explicit_role": false,
             "require_htf_alignment": false,
             "require_killzone": false
@@ -3942,6 +3975,17 @@
             "enabled": true,
             "min_grade": "B",
             "min_sell_zone_score": "0",
+            "opposing_structure": {
+              "caution_room_r": "2",
+              "critical_room_r": "0.5",
+              "enabled": true,
+              "m1_required_below_room_r": "1",
+              "minimum_candle_score_tight_room": "0.7",
+              "missing_opposing_context_policy": "wait",
+              "require_strong_confirmation_below_r": "1",
+              "strength_score_ceiling": "15",
+              "tight_room_r": "1"
+            },
             "require_explicit_role": false,
             "require_htf_alignment": false,
             "require_killzone": false
@@ -4913,6 +4957,17 @@
             "enabled": true,
             "min_grade": "B",
             "min_sell_zone_score": "0",
+            "opposing_structure": {
+              "caution_room_r": "2",
+              "critical_room_r": "0.5",
+              "enabled": true,
+              "m1_required_below_room_r": "1",
+              "minimum_candle_score_tight_room": "0.7",
+              "missing_opposing_context_policy": "wait",
+              "require_strong_confirmation_below_r": "1",
+              "strength_score_ceiling": "15",
+              "tight_room_r": "1"
+            },
             "require_explicit_role": false,
             "require_htf_alignment": false,
             "require_killzone": false
@@ -5757,6 +5812,17 @@
             "enabled": true,
             "min_grade": "B",
             "min_sell_zone_score": "0",
+            "opposing_structure": {
+              "caution_room_r": "2",
+              "critical_room_r": "0.5",
+              "enabled": true,
+              "m1_required_below_room_r": "1",
+              "minimum_candle_score_tight_room": "0.7",
+              "missing_opposing_context_policy": "wait",
+              "require_strong_confirmation_below_r": "1",
+              "strength_score_ceiling": "15",
+              "tight_room_r": "1"
+            },
             "require_explicit_role": false,
             "require_htf_alignment": false,
             "require_killzone": false
@@ -6619,6 +6685,17 @@
             "enabled": true,
             "min_grade": "A",
             "min_sell_zone_score": "0",
+            "opposing_structure": {
+              "caution_room_r": "2",
+              "critical_room_r": "0.5",
+              "enabled": true,
+              "m1_required_below_room_r": "1",
+              "minimum_candle_score_tight_room": "0.7",
+              "missing_opposing_context_policy": "wait",
+              "require_strong_confirmation_below_r": "1",
+              "strength_score_ceiling": "15",
+              "tight_room_r": "1"
+            },
             "require_explicit_role": true,
             "require_htf_alignment": false,
             "require_killzone": false
@@ -7457,6 +7534,17 @@
             "enabled": true,
             "min_grade": "B",
             "min_sell_zone_score": "0",
+            "opposing_structure": {
+              "caution_room_r": "2",
+              "critical_room_r": "0.5",
+              "enabled": true,
+              "m1_required_below_room_r": "1",
+              "minimum_candle_score_tight_room": "0.7",
+              "missing_opposing_context_policy": "wait",
+              "require_strong_confirmation_below_r": "1",
+              "strength_score_ceiling": "15",
+              "tight_room_r": "1"
+            },
             "require_explicit_role": false,
             "require_htf_alignment": false,
             "require_killzone": false
@@ -8307,6 +8395,17 @@
             "enabled": true,
             "min_grade": "B",
             "min_sell_zone_score": "0",
+            "opposing_structure": {
+              "caution_room_r": "2",
+              "critical_room_r": "0.5",
+              "enabled": true,
+              "m1_required_below_room_r": "1",
+              "minimum_candle_score_tight_room": "0.7",
+              "missing_opposing_context_policy": "wait",
+              "require_strong_confirmation_below_r": "1",
+              "strength_score_ceiling": "15",
+              "tight_room_r": "1"
+            },
             "require_explicit_role": false,
             "require_htf_alignment": false,
             "require_killzone": false
@@ -9137,6 +9236,17 @@
             "enabled": true,
             "min_grade": "B",
             "min_sell_zone_score": "0",
+            "opposing_structure": {
+              "caution_room_r": "2",
+              "critical_room_r": "0.5",
+              "enabled": true,
+              "m1_required_below_room_r": "1",
+              "minimum_candle_score_tight_room": "0.7",
+              "missing_opposing_context_policy": "wait",
+              "require_strong_confirmation_below_r": "1",
+              "strength_score_ceiling": "15",
+              "tight_room_r": "1"
+            },
             "require_explicit_role": false,
             "require_htf_alignment": false,
             "require_killzone": false
