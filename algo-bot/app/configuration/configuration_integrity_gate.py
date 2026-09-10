@@ -32,12 +32,15 @@ from app.configuration.source_types import ConfigurationSourceBundle
 
 
 BASELINE = {
+  # 2026-09 Candle Confirmation V2: +33 new leaf fields under
+  # analysis.candle_confirmation.* (all ConfigOwner.PYTHON,
+  # ConfigKind.ALGORITHM_CONSTANT, canonical_env=None, shadow-only).
   # 2026-09 MAD v2: +7 new leaf fields under execution.mad.{expand,manip,accum}.
-  "catalog_entry_count": 587,
+  "catalog_entry_count": 620,
   "configurable_count": 520,
   "protocol_constant_count": 10,
-  "algorithm_constant_count": 57,
-  "python_projection_count": 538,
+  "algorithm_constant_count": 90,
+  "python_projection_count": 571,
   "ctrader_only_count": 49,
   "environment_entry_count": 520,
   "deprecated_alias_count": 21,

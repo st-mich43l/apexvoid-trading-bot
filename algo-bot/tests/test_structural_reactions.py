@@ -938,3 +938,37 @@ def test_structural_setups_constant():
     "CRT",
     "Confluence Zone",
   }
+
+
+# --- Candle Confirmation V2 compatibility (§21/§28) -----------------------
+# candle_evidence flows from ReactionConfirmation through to DetectionResult
+# as shadow telemetry only; confirmation_type is unchanged either way.
+
+
+def test_reaction_confirmation_carries_candle_evidence_for_the_confirmation_bar():
+  buy_df = _buy_rejection_df()
+  confirmation = evaluate_structural_reaction(
+    buy_df, direction="BUY", low=99.0, high=105.0, lookback_bars=3, atr=1.0,
+  )
+  assert confirmation is not None
+  assert confirmation.candle_evidence is not None
+  assert 0.0 <= confirmation.candle_evidence.final_score <= 1.0
+
+
+def test_detection_result_candle_telemetry_matches_confirmation_and_never_changes_it():
+  buy_df = _buy_rejection_df()
+  support = Level(105, "support", touches=3, strength=3)
+  result = detectors.key_level_reaction(_ctx(buy_df, bias="down", levels=[support]))
+  assert result is not None
+  original_confirmation_type = result.confirmation_type
+
+  # Same detection, computed twice - the candle_* telemetry must be
+  # deterministic and must never move confirmation_type.
+  again = detectors.key_level_reaction(_ctx(buy_df, bias="down", levels=[support]))
+  assert again is not None
+  assert again.confirmation_type == original_confirmation_type
+  assert result.candle_version == 2
+  assert result.candle_final_score is not None
+  assert 0.0 <= result.candle_final_score <= 1.0
+  assert result.candle_patterns is not None
+  assert result.candle_primary_pattern in result.candle_patterns.split(",")

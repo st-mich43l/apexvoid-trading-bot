@@ -713,6 +713,34 @@ class DetectionResult:
   confluence_v2: int | None = None
   confluence_v2_raw: float | None = None
   confluence_scoring_version: str | None = None
+  # Candle Confirmation V2 context telemetry (§28) — descriptive only,
+  # never a gate. See app/analysis/candle_evidence.py CandleEvidence for
+  # the authoritative field semantics. Sourced from the M5 structural
+  # confirmation bar (§22) via ReactionConfirmation.candle_evidence.
+  candle_version: int | None = None
+  candle_primary_pattern: str | None = None
+  candle_patterns: str | None = None
+  candle_final_score: float | None = None
+  candle_base_score: float | None = None
+  candle_synergy_bonus: float | None = None
+  candle_rejection_score: float | None = None
+  candle_displacement_score: float | None = None
+  candle_sequence_score: float | None = None
+  candle_body_fraction: float | None = None
+  candle_upper_wick_fraction: float | None = None
+  candle_lower_wick_fraction: float | None = None
+  candle_close_location: float | None = None
+  candle_body_atr: float | None = None
+  candle_range_atr: float | None = None
+  candle_sweep: bool | None = None
+  candle_sweep_penetration_atr: float | None = None
+  candle_reclaim: bool | None = None
+  candle_reclaim_depth_atr: float | None = None
+  candle_engulfing: bool | None = None
+  candle_doji: bool | None = None
+  candle_compression_score: float | None = None
+  candle_sequence_name: str | None = None
+  candle_sequence_bars: int | None = None
 
 
 class SetupDetector(Protocol):
@@ -1453,6 +1481,7 @@ def _finish(
   source_touches: int | None = None,
   source_score: float | None = None,
   bias_relationship: str | None = None,
+  candle_evidence: Any | None = None,
 ) -> DetectionResult | None:
   from app.analysis.technique_geometry import (
     optimize_crt_entry_zone,
@@ -1566,6 +1595,46 @@ def _finish(
       "mad_reclaim_depth_atr": measured.get("reclaim_depth_atr"),
       "mad_reason_code": mad_snapshot.reason_code,
     }
+  candle_telemetry: dict[str, Any] = {}
+  if candle_evidence is not None:
+    rejection = candle_evidence.rejection
+    displacement = candle_evidence.displacement
+    sequence = candle_evidence.sequence
+    indecision = candle_evidence.indecision
+    geometry = candle_evidence.geometry
+    candle_telemetry = {
+      "candle_version": candle_evidence.version,
+      "candle_primary_pattern": candle_evidence.primary_pattern,
+      "candle_patterns": (
+        ",".join(candle_evidence.all_patterns) if candle_evidence.all_patterns else None
+      ),
+      "candle_final_score": candle_evidence.final_score,
+      "candle_base_score": candle_evidence.base_score,
+      "candle_synergy_bonus": candle_evidence.synergy_bonus,
+      "candle_rejection_score": rejection.score if rejection else None,
+      "candle_displacement_score": displacement.score if displacement else None,
+      "candle_sequence_score": sequence.score if sequence else None,
+      "candle_body_fraction": geometry.body_fraction if geometry else None,
+      "candle_upper_wick_fraction": geometry.upper_wick_fraction if geometry else None,
+      "candle_lower_wick_fraction": geometry.lower_wick_fraction if geometry else None,
+      "candle_close_location": geometry.close_location if geometry else None,
+      "candle_body_atr": geometry.body_atr if geometry else None,
+      "candle_range_atr": geometry.range_atr if geometry else None,
+      "candle_sweep": rejection.sweep if rejection else None,
+      "candle_sweep_penetration_atr": rejection.sweep_penetration_atr if rejection else None,
+      "candle_reclaim": (
+        rejection.reclaim if rejection else (displacement.reclaim if displacement else None)
+      ),
+      "candle_reclaim_depth_atr": (
+        rejection.reclaim_depth_atr if rejection and rejection.reclaim
+        else (displacement.reclaim_depth_atr if displacement else None)
+      ),
+      "candle_engulfing": displacement.engulfing if displacement else None,
+      "candle_doji": indecision.doji if indecision else None,
+      "candle_compression_score": indecision.compression_score if indecision else None,
+      "candle_sequence_name": sequence.sequence_name if sequence else None,
+      "candle_sequence_bars": sequence.bars if sequence else None,
+    }
   confluence_v2_raw = _confluence_v2_score(
     zone, factors, ctx.settings, mad_bonus,
   )
@@ -1640,6 +1709,30 @@ def _finish(
     confluence_v2=confluence_v2,
     confluence_v2_raw=confluence_v2_raw,
     confluence_scoring_version=scoring_version,
+    candle_version=candle_telemetry.get("candle_version"),
+    candle_primary_pattern=candle_telemetry.get("candle_primary_pattern"),
+    candle_patterns=candle_telemetry.get("candle_patterns"),
+    candle_final_score=candle_telemetry.get("candle_final_score"),
+    candle_base_score=candle_telemetry.get("candle_base_score"),
+    candle_synergy_bonus=candle_telemetry.get("candle_synergy_bonus"),
+    candle_rejection_score=candle_telemetry.get("candle_rejection_score"),
+    candle_displacement_score=candle_telemetry.get("candle_displacement_score"),
+    candle_sequence_score=candle_telemetry.get("candle_sequence_score"),
+    candle_body_fraction=candle_telemetry.get("candle_body_fraction"),
+    candle_upper_wick_fraction=candle_telemetry.get("candle_upper_wick_fraction"),
+    candle_lower_wick_fraction=candle_telemetry.get("candle_lower_wick_fraction"),
+    candle_close_location=candle_telemetry.get("candle_close_location"),
+    candle_body_atr=candle_telemetry.get("candle_body_atr"),
+    candle_range_atr=candle_telemetry.get("candle_range_atr"),
+    candle_sweep=candle_telemetry.get("candle_sweep"),
+    candle_sweep_penetration_atr=candle_telemetry.get("candle_sweep_penetration_atr"),
+    candle_reclaim=candle_telemetry.get("candle_reclaim"),
+    candle_reclaim_depth_atr=candle_telemetry.get("candle_reclaim_depth_atr"),
+    candle_engulfing=candle_telemetry.get("candle_engulfing"),
+    candle_doji=candle_telemetry.get("candle_doji"),
+    candle_compression_score=candle_telemetry.get("candle_compression_score"),
+    candle_sequence_name=candle_telemetry.get("candle_sequence_name"),
+    candle_sequence_bars=candle_telemetry.get("candle_sequence_bars"),
   )
 
 
@@ -2332,6 +2425,7 @@ def range_edge_scalp(ctx: DetectionContext) -> DetectionResult | None:
       touch_bar_ts=confirmation.touch_bar_ts,
       source_touches=barrier.touches,
       source_score=barrier.score,
+      candle_evidence=getattr(confirmation, "candle_evidence", None),
     )
   return None
 
@@ -2647,6 +2741,7 @@ def _structural_finish(
     source_touches=source_touches,
     source_score=source_score,
     bias_relationship=relationship,
+    candle_evidence=getattr(confirmation, "candle_evidence", None),
   )
 
 

@@ -88,7 +88,35 @@ public sealed record TradePlanAnalysis(
   int? MadAcceptanceCloses = null,
   double? MadSweepPenetrationAtr = null,
   double? MadReclaimDepthAtr = null,
-  string? MadReasonCode = null
+  string? MadReasonCode = null,
+  // Candle Confirmation V2 context telemetry - descriptive only, never a
+  // gate. Republished onto AutoTradeEvent (Models.cs) the same way as the
+  // Math*/Mad* fields above. See algo-bot/app/analysis/candle_evidence.py
+  // CandleEvidence.
+  int? CandleVersion = null,
+  string? CandlePrimaryPattern = null,
+  string? CandlePatterns = null,
+  double? CandleFinalScore = null,
+  double? CandleBaseScore = null,
+  double? CandleSynergyBonus = null,
+  double? CandleRejectionScore = null,
+  double? CandleDisplacementScore = null,
+  double? CandleSequenceScore = null,
+  double? CandleBodyFraction = null,
+  double? CandleUpperWickFraction = null,
+  double? CandleLowerWickFraction = null,
+  double? CandleCloseLocation = null,
+  double? CandleBodyAtr = null,
+  double? CandleRangeAtr = null,
+  bool? CandleSweep = null,
+  double? CandleSweepPenetrationAtr = null,
+  bool? CandleReclaim = null,
+  double? CandleReclaimDepthAtr = null,
+  bool? CandleEngulfing = null,
+  bool? CandleDoji = null,
+  double? CandleCompressionScore = null,
+  string? CandleSequenceName = null,
+  int? CandleSequenceBars = null
 );
 
 public sealed record TradePlanSourceStructure(

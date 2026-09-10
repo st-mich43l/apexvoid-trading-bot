@@ -44,16 +44,21 @@ pytestmark = pytest.mark.no_database
 
 
 BASELINE = {
+  # 2026-09 Candle Confirmation V2: +33 new leaf fields under
+  # analysis.candle_confirmation.* (enabled, version, rejection.*,
+  # displacement.*, sequences.*, synergy.*), all ConfigOwner.PYTHON,
+  # ConfigKind.ALGORITHM_CONSTANT (canonical_env=None, shadow-only, no
+  # new environment surface), none deprecated-alias'd.
   # 2026-09 MAD v2: +7 new leaf fields (execution.mad.expand.break_atr,
   # .displacement_atr, .accept_closes, execution.mad.manip.min_penetration_atr,
   # .min_reclaim_atr, execution.mad.accum.minimum_rq, .maximum_rq), all
   # ConfigOwner.PYTHON, none deprecated-alias'd.
-  "entries": 587,
+  "entries": 620,
   "configurable": 520,
   "protocol": 10,
-  "algorithm": 57,
-  "owners": {"python": 442, "shared": 96, "ctrader": 49},
-  "projection": 538,
+  "algorithm": 90,
+  "owners": {"python": 475, "shared": 96, "ctrader": 49},
+  "projection": 571,
   "env": 520,
   "deprecated_aliases": 21,
 }
