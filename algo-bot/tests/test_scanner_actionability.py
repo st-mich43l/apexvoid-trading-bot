@@ -1580,6 +1580,53 @@ def test_ordinary_zone_zero_raw_room_hard_blocks():
   assert decision.measured["raw_room_price"] < 0
 
 
+def test_opposing_structure_v2_telemetry_flows_onto_the_result():
+  # 2026-09 (Opposing Structure V2 repair, §25): an ordinary "zone" with
+  # genuine room ahead must pass (unchanged Sept-7 behavior) while still
+  # carrying the new continuous strength/room-in-R telemetry - shadow
+  # only, never blocking a setup that already cleared the hard gates.
+  buy = _result(
+    "BUY",
+    4093.95,
+    4101.61,
+    quality=3,
+    current_price=4099.41,
+  )
+  market_map = _map(
+    _entry("sell", 4150.0, 4155.0, tier="zone"),
+    price=4099.41,
+  )
+
+  resolution = resolve_actionability(
+    symbol="XAU",
+    observed_results=[buy],
+    zones=_map_to_zones(market_map),
+    context=SimpleNamespace(htf_bias="down"),
+    atr=2.0,
+    pip_size=0.1,
+    cfg=_cfg(),
+  )
+
+  assert len(resolution.actionable) == 1
+  result = resolution.actionable[0]
+  assert result.opposing_zone_present is True
+  assert result.opposing_zone_side == "sell"
+  assert result.opposing_zone_tier == "zone"
+  assert result.opposing_zone_low == 4150.0
+  assert result.opposing_zone_high == 4155.0
+  assert 0.0 <= result.opposing_zone_strength <= 1.0
+  assert result.opposing_raw_room_price is not None
+  assert result.opposing_raw_room_price > 0
+  # No protective_stop_distance is threaded from the scanner-discovery
+  # actionability call in this stage (documented scope limit) - R-based
+  # fields stay None while raw room still populates.
+  assert result.opposing_room_r is None
+  assert result.opposing_before_tp1 is None
+  assert result.opposing_mitigated is False
+  assert result.opposing_displaced is False
+  assert result.opposing_action in {"CLEAR", "CAUTION", "CONFIRMATION_REQUIRED"}
+
+
 def test_v8_shared_boundary_buy_glued_supply_does_not_block():
   candidate_low = 4100.0
   candidate_high = 4103.0
