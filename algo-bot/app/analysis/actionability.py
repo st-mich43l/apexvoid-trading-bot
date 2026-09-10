@@ -602,6 +602,12 @@ def resolve_actionability(
           None if is_scalp else shared_boundary_state
         ),
         allow_same_wall_overlap=is_technique_or_confluence(result.setup),
+        strength_score_ceiling=float(
+          cfg.strategies.reaction.key_level.opposing_structure.strength_score_ceiling
+        ),
+        caution_room_r=float(
+          cfg.strategies.reaction.key_level.opposing_structure.caution_room_r
+        ),
       )
       measured = {
         **room.measured,
@@ -630,10 +636,35 @@ def resolve_actionability(
           hard_block=False,
         ))
       if room.opposing_entry is not None:
+        # Opposing Structure V2 (§25) — shadow telemetry only, flattened
+        # from the SAME evidence evaluate_structural_target_room already
+        # attached to measured["opposing_evidence"] above (no second
+        # lookup). Absent (None) whenever that key isn't there, e.g. an
+        # older/simplified caller of evaluate_structural_target_room in a
+        # test fixture that doesn't build it.
+        evidence = measured.get("opposing_evidence") or {}
         result = replace(
           result,
           target_cap_pips=room.effective_target_pips,
           target_room_measured=measured,
+          opposing_zone_present=bool(evidence) or None,
+          opposing_zone_side=evidence.get("zone_side"),
+          opposing_zone_low=evidence.get("zone_low"),
+          opposing_zone_high=evidence.get("zone_high"),
+          opposing_zone_tier=evidence.get("tier"),
+          opposing_zone_score=evidence.get("zone_score"),
+          opposing_zone_strength=evidence.get("strength_score"),
+          opposing_raw_room_price=evidence.get("raw_room_price"),
+          opposing_room_pips=evidence.get("raw_room_pips"),
+          opposing_room_atr=evidence.get("room_atr"),
+          opposing_room_r=evidence.get("room_r"),
+          opposing_before_tp1=evidence.get("before_tp1"),
+          opposing_displaced=evidence.get("displaced"),
+          opposing_mitigated=evidence.get("mitigated"),
+          opposing_room_pressure=evidence.get("room_pressure_score"),
+          opposing_risk_score=evidence.get("opposing_risk_score"),
+          opposing_action=evidence.get("action"),
+          opposing_reason_code=evidence.get("reason_code"),
         )
 
     role = _key_level_role(result, context, cfg)

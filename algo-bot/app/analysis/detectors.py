@@ -741,6 +741,45 @@ class DetectionResult:
   candle_compression_score: float | None = None
   candle_sequence_name: str | None = None
   candle_sequence_bars: int | None = None
+  # Key Level direction-resolution opposing zone (§15/16 of the 2026-09
+  # Opposing Structure V2 repair): the SAME zone _opposing_zone_contradicts
+  # (detectors.py) used to widen which direction(s) key_level_reaction even
+  # tries, when it fired. Distinct from the opposing_* room-telemetry
+  # fields below, which come from the nearest barrier ahead of the full
+  # entry at the later actionability/TradePlan stage — different pipeline
+  # stages answering different questions (direction vs. room), not two
+  # disagreeing subsystems. None whenever direction resolution didn't need
+  # to consult an opposing zone (role was explicit, or price was inside
+  # the level's own band).
+  key_level_opposing_zone_low: float | None = None
+  key_level_opposing_zone_high: float | None = None
+  key_level_opposing_zone_side: str | None = None
+  # Opposing Structure V2 (§25) — descriptive only in this phase, never a
+  # gate beyond the existing containment/zero-room hard-block already
+  # applied inside evaluate_structural_target_room itself (unaffected by
+  # any field here). See app/autotrade/structural_target_room.py
+  # OpposingStructureEvidence for the authoritative field semantics.
+  # Populated from target_room_measured["opposing_evidence"] wherever that
+  # dict is already attached to a DetectionResult (app/analysis/
+  # actionability.py resolve_actionability) — no new call site.
+  opposing_zone_present: bool | None = None
+  opposing_zone_side: str | None = None
+  opposing_zone_low: float | None = None
+  opposing_zone_high: float | None = None
+  opposing_zone_tier: str | None = None
+  opposing_zone_score: float | None = None
+  opposing_zone_strength: float | None = None
+  opposing_raw_room_price: float | None = None
+  opposing_room_pips: float | None = None
+  opposing_room_atr: float | None = None
+  opposing_room_r: float | None = None
+  opposing_before_tp1: bool | None = None
+  opposing_displaced: bool | None = None
+  opposing_mitigated: bool | None = None
+  opposing_room_pressure: float | None = None
+  opposing_risk_score: float | None = None
+  opposing_action: str | None = None
+  opposing_reason_code: str | None = None
 
 
 class SetupDetector(Protocol):
@@ -2894,6 +2933,7 @@ def key_level_reaction(ctx: DetectionContext) -> DetectionResult | None:
     react_high = band_high
     contra_direction: str | None = None
     contra_level: float | None = None
+    opposing_zone: Zone | None = None
     if role == ROLE_SUPPORT:
       directions = ("BUY",)
     elif role == ROLE_RESISTANCE:
@@ -2920,6 +2960,7 @@ def key_level_reaction(ctx: DetectionContext) -> DetectionResult | None:
         react_high = max(band_high, opposing.high)
         contra_direction = "SELL"
         contra_level = opposing.high
+        opposing_zone = opposing
       else:
         directions = ("BUY",)
     elif price < band_low:
@@ -2934,6 +2975,7 @@ def key_level_reaction(ctx: DetectionContext) -> DetectionResult | None:
         react_high = max(band_high, opposing.high)
         contra_direction = "BUY"
         contra_level = opposing.low
+        opposing_zone = opposing
       else:
         directions = ("SELL",)
     else:
@@ -3012,7 +3054,19 @@ def key_level_reaction(ctx: DetectionContext) -> DetectionResult | None:
         factors=factors,
       )
       if candidate is not None:
-        candidate = replace(candidate, key_level_role=role)
+        candidate = replace(
+          candidate,
+          key_level_role=role,
+          key_level_opposing_zone_low=(
+            None if opposing_zone is None else float(opposing_zone.low)
+          ),
+          key_level_opposing_zone_high=(
+            None if opposing_zone is None else float(opposing_zone.high)
+          ),
+          key_level_opposing_zone_side=(
+            None if opposing_zone is None else str(opposing_zone.side)
+          ),
+        )
         confirmed_here.append(candidate)
     if len(confirmed_here) != 1:
       # Zero confirmations: nothing to keep. Two confirmations (only
