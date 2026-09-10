@@ -445,8 +445,49 @@ async def test_handle_event_fill_marks_filled_records_broker_fields_and_activate
   assert row["broker_fill_price"] == pytest.approx(4100.5)
   assert row["algo_armed"] is True
   assert row["fill_state"] == "filled"
-  send.assert_awaited_once()
+  # zone-edge estimate was |4100.0 - 4110.0| = 100 pips; the real fill
+  # (4100.5) risks only |4100.5 - 4110.0| = 95 pips, so the entry card gets
+  # reposted with the corrected number on top of the usual "active" reply.
+  assert send.await_count == 2
+  card_texts = [call.args[0] for call in send.await_args_list]
+  assert any("95 pips" in text for text in card_texts)
   truth.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_fill_event_reposts_entry_card_with_real_fill_risk(monkeypatch):
+  """Live 2026-09-10 (signal #309): a BUY zone 4333-4336 against sl 4330
+  advertised "risk 60 pips" (the conservative zone-edge estimate), but the
+  real fill landed at 4335.45 - true risk only 54 pips - and the close line
+  correctly reported -0.7R for a -39 pip loss using the real fill, leaving
+  the pinned card's "60 pips" impossible to reconcile against it. The card
+  must now repost with the real-fill risk once the fill is known.
+  """
+  send = _mock_send(monkeypatch)
+  sid = await _algo_signal(
+    action="BUY", entry=4333.0, entry_end=4336.0, sl=4330.0,
+    tps=[4339.0, 4342.0, 4348.0, 4354.0],
+  )
+  client = redis_state.get_client()
+  positions: dict[int, int] = {}
+
+  event = {
+    "type": "manual_opened",
+    "position_id": 309,
+    "candidate_id": f"manual:{sid}:0",
+    "setup": "Key Level",
+    "stream": "algo_manual",
+    "price": 4335.45,
+    "volume": 600,
+  }
+  await manual_execution._handle_event(client, event, positions)
+
+  row = await store.get_manual_signal(sid)
+  assert row["broker_fill_price"] == pytest.approx(4335.45)
+  assert send.await_count == 2
+  card_texts = [call.args[0] for call in send.await_args_list]
+  assert any("risk <b>54 pips</b>" in text for text in card_texts)
+  assert not any("risk <b>60 pips</b>" in text for text in card_texts)
 
 
 @pytest.mark.asyncio
@@ -539,8 +580,9 @@ async def test_fill_event_owner_dm_is_off_by_default(monkeypatch):
   row = await store.get_manual_signal(sid)
   assert row["execution_status"] == "filled"
   truth.assert_not_awaited()
-  # The real subscriber-facing channel update must still fire unchanged.
-  send.assert_awaited_once()
+  # The real subscriber-facing channel update must still fire unchanged,
+  # alongside the entry-card repost with the real-fill-corrected risk.
+  assert send.await_count == 2
 
 
 @pytest.mark.asyncio

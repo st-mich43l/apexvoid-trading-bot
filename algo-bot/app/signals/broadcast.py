@@ -8,7 +8,7 @@ from app.persistence.store import (
   get_signal_posts,
   insert_signal_post,
 )
-from app.signals.pips_format import rr_entry
+from app.signals.pips_format import actual_entry, rr_entry
 from app.signals.fx_manual_algo import uses_entry_price_display
 from app.autotrade.strategy_names import resolve_strategy
 from app.core.symbols import digits_for, channels_for, pip_for
@@ -58,7 +58,15 @@ def render_entry(sig: dict, tier: str) -> str:
   symbol = sig["symbol"]
   action = sig["action"]
   entry_reference = rr_entry(sig)
-  risk = abs(entry_reference - sig["sl"])
+  # Live 2026-09-10 (signal #309): the SL line quoted "risk 60 pips" off the
+  # conservative pre-fill zone edge, but the real fill landed 0.55 pips
+  # better - the close line correctly used the real fill (trade_ops.
+  # _achieved_rr's own broker_fill_price trust rule) and reported -0.7R for
+  # a -39 pip loss, which a reader can't reconcile against a "60 pips" risk
+  # that was never true. Once a real fill exists, show the risk actually
+  # taken (actual_entry prefers broker_fill_price, else the zone edge)
+  # instead of the pre-fill estimate.
+  risk = abs(actual_entry(sig) - sig["sl"])
   # Live 2026-09-04: editing the pinned card after a stop trail re-ran this
   # with the now-current (near-BE) sl, and R-multiples are TP-distance /
   # risk - as risk shrinks toward zero the ratio blows up into nonsense
