@@ -426,6 +426,51 @@ async def init_db() -> None:
       "ADD COLUMN IF NOT EXISTS candle_sequence_name TEXT",
       "ALTER TABLE auto_trade_fills "
       "ADD COLUMN IF NOT EXISTS candle_sequence_bars SMALLINT",
+      # Opposing Structure V2 context telemetry (descriptive only, never
+      # a gate) - see app/autotrade/structural_target_room.py
+      # OpposingStructureEvidence.
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS key_level_opposing_zone_low DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS key_level_opposing_zone_high DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS key_level_opposing_zone_side TEXT",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS opposing_zone_present BOOLEAN",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS opposing_zone_side TEXT",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS opposing_zone_low DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS opposing_zone_high DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS opposing_zone_tier TEXT",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS opposing_zone_score DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS opposing_zone_strength DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS opposing_raw_room_price DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS opposing_room_pips DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS opposing_room_atr DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS opposing_room_r DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS opposing_before_tp1 BOOLEAN",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS opposing_displaced BOOLEAN",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS opposing_mitigated BOOLEAN",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS opposing_room_pressure DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS opposing_risk_score DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS opposing_action TEXT",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS opposing_reason_code TEXT",
     ):
       await db.execute(stmt)
     await db.execute(
@@ -1327,13 +1372,22 @@ async def _ensure_fill_from_close_event(event: dict, group_id: str) -> None:
         candle_close_location, candle_body_atr, candle_range_atr,
         candle_sweep, candle_sweep_penetration_atr, candle_reclaim,
         candle_reclaim_depth_atr, candle_engulfing, candle_doji,
-        candle_compression_score, candle_sequence_name, candle_sequence_bars
+        candle_compression_score, candle_sequence_name, candle_sequence_bars,
+        key_level_opposing_zone_low, key_level_opposing_zone_high,
+        key_level_opposing_zone_side,
+        opposing_zone_present, opposing_zone_side, opposing_zone_low,
+        opposing_zone_high, opposing_zone_tier, opposing_zone_score,
+        opposing_zone_strength, opposing_raw_room_price, opposing_room_pips,
+        opposing_room_atr, opposing_room_r, opposing_before_tp1,
+        opposing_displaced, opposing_mitigated, opposing_room_pressure,
+        opposing_risk_score, opposing_action, opposing_reason_code
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
         $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30,
         $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44,
         $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57, $58,
-        $59
+        $59, $60, $61, $62, $63, $64, $65, $66, $67, $68, $69, $70, $71, $72,
+        $73, $74, $75, $76, $77, $78, $79, $80
       )
       ON CONFLICT (position_id) DO NOTHING
       """,
@@ -1369,6 +1423,21 @@ async def _ensure_fill_from_close_event(event: dict, group_id: str) -> None:
       event.get("candle_doji"),
       event.get("candle_compression_score"), event.get("candle_sequence_name"),
       event.get("candle_sequence_bars"),
+      event.get("key_level_opposing_zone_low"),
+      event.get("key_level_opposing_zone_high"),
+      event.get("key_level_opposing_zone_side"),
+      event.get("opposing_zone_present"), event.get("opposing_zone_side"),
+      event.get("opposing_zone_low"),
+      event.get("opposing_zone_high"), event.get("opposing_zone_tier"),
+      event.get("opposing_zone_score"),
+      event.get("opposing_zone_strength"), event.get("opposing_raw_room_price"),
+      event.get("opposing_room_pips"),
+      event.get("opposing_room_atr"), event.get("opposing_room_r"),
+      event.get("opposing_before_tp1"),
+      event.get("opposing_displaced"), event.get("opposing_mitigated"),
+      event.get("opposing_room_pressure"),
+      event.get("opposing_risk_score"), event.get("opposing_action"),
+      event.get("opposing_reason_code"),
     )
 
 
@@ -1422,13 +1491,22 @@ async def _record_auto_trade_fill(event: dict) -> None:
         candle_close_location, candle_body_atr, candle_range_atr,
         candle_sweep, candle_sweep_penetration_atr, candle_reclaim,
         candle_reclaim_depth_atr, candle_engulfing, candle_doji,
-        candle_compression_score, candle_sequence_name, candle_sequence_bars
+        candle_compression_score, candle_sequence_name, candle_sequence_bars,
+        key_level_opposing_zone_low, key_level_opposing_zone_high,
+        key_level_opposing_zone_side,
+        opposing_zone_present, opposing_zone_side, opposing_zone_low,
+        opposing_zone_high, opposing_zone_tier, opposing_zone_score,
+        opposing_zone_strength, opposing_raw_room_price, opposing_room_pips,
+        opposing_room_atr, opposing_room_r, opposing_before_tp1,
+        opposing_displaced, opposing_mitigated, opposing_room_pressure,
+        opposing_risk_score, opposing_action, opposing_reason_code
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
         $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30,
         $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44,
         $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57, $58,
-        $59
+        $59, $60, $61, $62, $63, $64, $65, $66, $67, $68, $69, $70, $71, $72,
+        $73, $74, $75, $76, $77, $78, $79, $80
       )
       ON CONFLICT (position_id) DO UPDATE SET
         group_id = excluded.group_id,
@@ -1489,7 +1567,28 @@ async def _record_auto_trade_fill(event: dict) -> None:
         candle_doji = COALESCE(excluded.candle_doji, auto_trade_fills.candle_doji),
         candle_compression_score = COALESCE(excluded.candle_compression_score, auto_trade_fills.candle_compression_score),
         candle_sequence_name = COALESCE(excluded.candle_sequence_name, auto_trade_fills.candle_sequence_name),
-        candle_sequence_bars = COALESCE(excluded.candle_sequence_bars, auto_trade_fills.candle_sequence_bars)
+        candle_sequence_bars = COALESCE(excluded.candle_sequence_bars, auto_trade_fills.candle_sequence_bars),
+        key_level_opposing_zone_low = COALESCE(excluded.key_level_opposing_zone_low, auto_trade_fills.key_level_opposing_zone_low),
+        key_level_opposing_zone_high = COALESCE(excluded.key_level_opposing_zone_high, auto_trade_fills.key_level_opposing_zone_high),
+        key_level_opposing_zone_side = COALESCE(excluded.key_level_opposing_zone_side, auto_trade_fills.key_level_opposing_zone_side),
+        opposing_zone_present = COALESCE(excluded.opposing_zone_present, auto_trade_fills.opposing_zone_present),
+        opposing_zone_side = COALESCE(excluded.opposing_zone_side, auto_trade_fills.opposing_zone_side),
+        opposing_zone_low = COALESCE(excluded.opposing_zone_low, auto_trade_fills.opposing_zone_low),
+        opposing_zone_high = COALESCE(excluded.opposing_zone_high, auto_trade_fills.opposing_zone_high),
+        opposing_zone_tier = COALESCE(excluded.opposing_zone_tier, auto_trade_fills.opposing_zone_tier),
+        opposing_zone_score = COALESCE(excluded.opposing_zone_score, auto_trade_fills.opposing_zone_score),
+        opposing_zone_strength = COALESCE(excluded.opposing_zone_strength, auto_trade_fills.opposing_zone_strength),
+        opposing_raw_room_price = COALESCE(excluded.opposing_raw_room_price, auto_trade_fills.opposing_raw_room_price),
+        opposing_room_pips = COALESCE(excluded.opposing_room_pips, auto_trade_fills.opposing_room_pips),
+        opposing_room_atr = COALESCE(excluded.opposing_room_atr, auto_trade_fills.opposing_room_atr),
+        opposing_room_r = COALESCE(excluded.opposing_room_r, auto_trade_fills.opposing_room_r),
+        opposing_before_tp1 = COALESCE(excluded.opposing_before_tp1, auto_trade_fills.opposing_before_tp1),
+        opposing_displaced = COALESCE(excluded.opposing_displaced, auto_trade_fills.opposing_displaced),
+        opposing_mitigated = COALESCE(excluded.opposing_mitigated, auto_trade_fills.opposing_mitigated),
+        opposing_room_pressure = COALESCE(excluded.opposing_room_pressure, auto_trade_fills.opposing_room_pressure),
+        opposing_risk_score = COALESCE(excluded.opposing_risk_score, auto_trade_fills.opposing_risk_score),
+        opposing_action = COALESCE(excluded.opposing_action, auto_trade_fills.opposing_action),
+        opposing_reason_code = COALESCE(excluded.opposing_reason_code, auto_trade_fills.opposing_reason_code)
       WHERE auto_trade_fills.correction_source IS NULL
       """,
       int(position_id), group_id, trade_key, stream,
@@ -1524,6 +1623,21 @@ async def _record_auto_trade_fill(event: dict) -> None:
       event.get("candle_doji"),
       event.get("candle_compression_score"), event.get("candle_sequence_name"),
       event.get("candle_sequence_bars"),
+      event.get("key_level_opposing_zone_low"),
+      event.get("key_level_opposing_zone_high"),
+      event.get("key_level_opposing_zone_side"),
+      event.get("opposing_zone_present"), event.get("opposing_zone_side"),
+      event.get("opposing_zone_low"),
+      event.get("opposing_zone_high"), event.get("opposing_zone_tier"),
+      event.get("opposing_zone_score"),
+      event.get("opposing_zone_strength"), event.get("opposing_raw_room_price"),
+      event.get("opposing_room_pips"),
+      event.get("opposing_room_atr"), event.get("opposing_room_r"),
+      event.get("opposing_before_tp1"),
+      event.get("opposing_displaced"), event.get("opposing_mitigated"),
+      event.get("opposing_room_pressure"),
+      event.get("opposing_risk_score"), event.get("opposing_action"),
+      event.get("opposing_reason_code"),
     )
 
 
