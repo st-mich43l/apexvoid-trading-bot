@@ -534,12 +534,20 @@ def test_full_overlap_by_a_major_still_rejects_nothing_left_to_trim_into():
   assert decision.allowed is False
 
 
-def test_full_overlap_by_a_weak_zone_does_not_hard_reject():
-  """2026-09 (owner-reported): a "zone" tier opposing entry now gets the
-  same weak-opposing treatment "level" already had - only a "major" is a
-  real enough wall to hard-block full containment/overlap on. A minor
-  reclaimed zone consuming the whole candidate band must not hard-kill a
-  setup whose own technique reads the move continuing through it.
+def test_full_overlap_by_an_ordinary_zone_hard_rejects():
+  """2026-09 (Opposing Structure V2 repair): PR #493 (2026-09-07) widened
+  the weak-opposing treatment from just "level" to {"level", "zone"} -
+  meaning full containment by an ordinary directional "zone" (not just
+  "major") stopped hard-blocking at all. That was too coarse: it silently
+  unblocked entries landing directly inside real, undisplaced, unmitigated
+  supply/demand, not just genuinely minor structure. Production data
+  isolated to the exact PR #493 merge timestamp confirmed the cost (Key
+  Level auto-trades: 68 trades/56% win rate/+628 net pips before, vs 8
+  trades/37.5%/-165 net pips after). An ordinary "zone" is real directional
+  evidence again: full containment/overlap hard-blocks exactly like
+  "major" does. Only a genuinely unsided, non-directional "level" (a
+  round-number/generic reaction level with no real supply/demand behind
+  it) keeps the weak treatment.
   """
   buy = _result(
     "BUY",
@@ -563,8 +571,15 @@ def test_full_overlap_by_a_weak_zone_does_not_hard_reject():
     cfg=_cfg(),
   )
 
-  assert len(resolution.actionable) == 1
-  assert resolution.gated == ()
+  assert resolution.actionable == ()
+  assert len(resolution.gated) == 1
+  decision = resolution.gated[0][1]
+  assert decision.reason_code in {
+    "opposing_entry_contained",
+    "opposing_entry_overlap",
+  }
+  assert decision.hard_block is True
+  assert decision.allowed is False
 
 
 def test_room_below_the_ladder_keeps_configured_ladder():
@@ -1500,9 +1515,12 @@ def test_weak_map_level_containment_does_not_hard_block():
   assert decision.measured.get("weak_opposing_level_ignored") is True
 
 
-def test_weak_map_zone_containment_does_not_hard_block():
-  """2026-09 (owner-reported): 'zone' tier now gets the same treatment as
-  'level' - only 'major' is a real enough wall to hard-block containment on.
+def test_ordinary_zone_containment_hard_blocks():
+  """2026-09 (Opposing Structure V2 repair): an ordinary directional "zone"
+  is real evidence again - containment hard-blocks exactly like "major"
+  does, unlike a genuinely unsided "level" (see
+  test_weak_map_level_containment_does_not_hard_block just above, which
+  correctly stays weak).
   """
   candidate_low = 4102.0
   candidate_high = 4105.0
@@ -1519,16 +1537,19 @@ def test_weak_map_zone_containment_does_not_hard_block():
     barrier_buffer_atr=0.5,
     execution_cost_pips=1.0,
   )
-  assert decision.allowed is True
-  assert decision.hard_block is False
-  assert decision.measured.get("weak_opposing_level_ignored") is True
+  assert decision.allowed is False
+  assert decision.hard_block is True
+  assert decision.reason_code == "opposing_entry_contained"
+  assert decision.measured.get("weak_opposing_level_ignored") is None
 
 
-def test_weak_map_zone_zero_raw_room_does_not_hard_block():
-  """Same exception, the other hard-block branch: raw_room <= 0 (planned
-  entry already past the opposing zone's near edge, not contained). Mirrors
+def test_ordinary_zone_zero_raw_room_hard_blocks():
+  """Same repair, the other hard-block branch: raw_room <= 0 (planned entry
+  already past the opposing zone's near edge, not contained). Mirrors
   test_raw_room_zero_major_hard_gates's geometry exactly, tier=zone instead
-  of major.
+  of major - the reason code differs (opposing_barrier_no_target, not
+  opposing_major_no_room, which is literally gated on tier=="major") but
+  the hard-block outcome is now identical.
   """
   buy = _result(
     "BUY",
@@ -1552,8 +1573,11 @@ def test_weak_map_zone_zero_raw_room_does_not_hard_block():
     cfg=_cfg(),
   )
 
-  assert len(resolution.actionable) == 1
-  assert resolution.gated == ()
+  assert resolution.actionable == ()
+  decision = resolution.gated[0][1]
+  assert decision.reason_code == "opposing_barrier_no_target"
+  assert decision.hard_block is True
+  assert decision.measured["raw_room_price"] < 0
 
 
 def test_v8_shared_boundary_buy_glued_supply_does_not_block():
