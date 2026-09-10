@@ -117,11 +117,72 @@ public static class TradePlanExecutionEngine
       TradePlanContract.EntryTypeSingleLimit =>
         new TradePlanEntryDecision(TradePlanEntryAction.SubmitLimit),
       TradePlanContract.EntryTypeLimitLadder =>
-        new TradePlanEntryDecision(TradePlanEntryAction.SubmitLadder),
+        EvaluateLadder(plan, bid, ask, tickSize),
       TradePlanContract.EntryTypeMarketWithLimitScale =>
-        new TradePlanEntryDecision(TradePlanEntryAction.SubmitLadder),
+        EvaluateLadder(plan, bid, ask, tickSize),
       _ => new TradePlanEntryDecision(TradePlanEntryAction.Wait, "unknown_entry_type"),
     };
+  }
+
+  /// <summary>
+  /// Owner-reported 2026-09-10 (real XAU BUY, Key Level): market_with_limit_
+  /// scale's L1 leg is declared at the live quote when the plan is BUILT
+  /// (Python trade_plan_builder.py, "L1 reference price is the live quote"),
+  /// then submitted as an outright market order whenever TradePlanRuntime
+  /// gets around to it - with no gap check between those two moments. A
+  /// fast M5 break during that gap let the fill land at 4398.39 against a
+  /// published zone topping out at 4397.65. EvaluateMarket already caps
+  /// this exact failure mode for EntryTypeMarket (the 2026-08-24 HFS SELL
+  /// fix below) via MaxSlippageTicks; limit_ladder/market_with_limit_scale
+  /// never got the same cap even though Python already stamps
+  /// max_slippage_ticks onto both. Apply the same cap here to every leg
+  /// that would fire as an immediate market order (explicit order_type, or
+  /// a resting limit already marketable) rather than a resting limit,
+  /// which needs no cap since it cannot chase.
+  /// </summary>
+  private static TradePlanEntryDecision EvaluateLadder(
+    TradePlan plan,
+    decimal bid,
+    decimal ask,
+    decimal tickSize
+  )
+  {
+    if (
+      plan.Entry.Legs is { Count: > 0 } legs
+      && plan.Entry.MaxSlippageTicks is int maxSlippage
+      && maxSlippage >= 0
+      && tickSize > 0m
+    )
+    {
+      var buy = string.Equals(
+        plan.Analysis.Direction,
+        "BUY",
+        StringComparison.OrdinalIgnoreCase
+      );
+      var maxAway = maxSlippage * tickSize;
+      var liveQuote = buy ? ask : bid;
+      foreach (var leg in legs)
+      {
+        var usesMarket = TradePlanContract.LegUsesMarketOrder(
+          leg.OrderType, leg.Price, buy, bid, ask
+        );
+        if (!usesMarket)
+        {
+          continue;
+        }
+        if (
+          (buy && liveQuote > leg.Price + maxAway)
+          || (!buy && liveQuote < leg.Price - maxAway)
+        )
+        {
+          return new TradePlanEntryDecision(
+            TradePlanEntryAction.Wait,
+            "slippage_exceeds_declared_limit"
+          );
+        }
+      }
+    }
+    return new TradePlanEntryDecision(TradePlanEntryAction.SubmitLadder);
   }
 
   private static TradePlanEntryDecision EvaluateMarket(
