@@ -635,6 +635,31 @@ def _opposing_structure_evidence_for_barrier(
   else:
     action, reason_code = "CLEAR", "opposing_room_clear"
 
+  # §47 — one throttled debug line per distinct barrier decision, not a
+  # noisy per-cycle INFO log. Keyed on the barrier's own bounds/action so
+  # a transition (e.g. clear -> tight as price drifts) gets its own key
+  # and isn't swallowed by the throttle window for the prior state.
+  log_at_most(
+    log,
+    f"opp_v2:{direction}:{round(zone_low, 4)}:{round(zone_high, 4)}:{action}",
+    "key_level_opposing_structure direction=%s entry=%s zone=%s-%s "
+    "tier=%s strength=%.3f room_pips=%.2f room_r=%s tp1_r=%s "
+    "before_tp1=%s action=%s reason=%s",
+    direction,
+    round(planned, 6),
+    round(zone_low, 6),
+    round(zone_high, 6),
+    tier,
+    strength,
+    raw_room_pips,
+    None if room_r is None else round(room_r, 4),
+    first_target_r,
+    before_tp1,
+    action,
+    reason_code,
+    level=logging.DEBUG,
+  )
+
   return OpposingStructureEvidence(
     direction=str(direction).upper(),
     zone_low=zone_low,
