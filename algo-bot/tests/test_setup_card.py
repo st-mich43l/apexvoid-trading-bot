@@ -1172,8 +1172,9 @@ def test_root_card_shows_candle_confirmation_v2_line_when_present():
     candle_final_score=0.7657,
   )
   text = setup_card.format_plan_published_root_card(match, stop_price=4045.0)
-  assert "🕯 Confirmation: sweep_reclaim · 🔥 Candle Quality: 77%" in text
-  # Detailed metrics never dump onto the public card - only the one line.
+  # Candle Quality gets its own line, not squeezed onto Confirmation's.
+  assert "🕯 Confirmation: sweep_reclaim\n🔥 Candle Quality: 77%" in text
+  # Detailed metrics never dump onto the public card - only these two lines.
   assert "candle_base_score" not in text
   assert "wick_fraction" not in text
 
