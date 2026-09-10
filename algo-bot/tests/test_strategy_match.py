@@ -106,6 +106,25 @@ def test_strategy_match_contract_round_trips_and_rejects_wrong_version():
   ) is None
 
 
+def test_from_json_normalizes_a_stale_pre_rename_strategy_name():
+  """Redis candidates carry a 7d TTL and can outlive a strategy rename.
+
+  A candidate written before "Key Level Reaction" -> "Key Level" (#507) must
+  still read back as the current canonical name, not the retired one it was
+  saved with.
+  """
+  match, reason, measured = scanner._build_strategy_match(
+    "XAU", "M5", "1784721300", _context(), [_result(setup="Key Level")], now=NOW,
+  )
+  assert match is not None
+  stale_json = match.to_json().replace(
+    '"strategy":"Key Level"', '"strategy":"Key Level Reaction"',
+  )
+  reloaded = StrategyMatch.from_json(stale_json)
+  assert reloaded is not None
+  assert reloaded.strategy == "Key Level"
+
+
 def test_scanner_transports_strongest_strategy_without_regime_routing(
   monkeypatch,
 ):
