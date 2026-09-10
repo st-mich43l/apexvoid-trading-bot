@@ -161,11 +161,31 @@ def test_render_entry_pins_tp_r_multiples_to_original_sl_not_trailed_stop():
   card = broadcast.render_entry(signal, "vip")
 
   assert "SL:     <b>4,420.16</b>" in card
-  assert "risk <b>0.16</b>" in card
-  entry_reference = broadcast.rr_entry(signal)
-  original_risk = abs(entry_reference - 4428.0)
-  for tp in signal["tps"]:
-    assert broadcast._rr(tp, entry_reference, original_risk) in card
+  # risk is displayed in pips (0.16 price / 0.1 pip_size = 1.6, rounds to 2).
+  assert "risk <b>2 pips</b>" in card
+
+
+@pytest.mark.no_database
+def test_render_entry_shows_risk_in_pips_not_raw_price():
+  # Live 2026-09-10: the card showed "risk 8" for an $8.00 XAU stop
+  # distance - readers naturally read a bare number as pips, understating
+  # the real risk by 1/pip_size (10x for XAU's 0.1 pip). Every other pips
+  # figure this bot shows (loss/win, R-multiple denominators) already
+  # divides by pip_for() - this line must match.
+  signal = {
+    "daily_seq": 5,
+    "symbol": "XAU",
+    "action": "BUY",
+    "entry": 4398.0,
+    "entry_end": 4403.0,
+    "sl": 4395.0,
+    "tps": [4408.0],
+  }
+  card = broadcast.render_entry(signal, "vip")
+  # entry_reference (BUY) = entry_end = 4403; risk = 4403-4395 = 8.0 price
+  # = 80 pips, not "risk 8".
+  assert "risk <b>80 pips</b>" in card
+  assert "risk <b>8</b>" not in card
   # The bug this guards: with the live (near-zero) risk instead, TP1 alone
   # would have rendered as roughly 37R - assert that never appears.
   assert "343.8R" not in card
@@ -463,6 +483,52 @@ def test_achieved_rr_falls_back_to_zone_when_no_leg_carries_entry_price():
   }
 
   assert trade_ops._achieved_rr(sig, 220) == "+2.0R"
+
+
+def test_achieved_rr_prefers_broker_fill_over_a_single_legs_bad_entry():
+  # Live 2026-09-10 (signal #293): a single-leg SELL closed -57 pips but
+  # showed -5.8R, not the correct ~-0.7R. AutoTradeEngine.cs's restart-gap
+  # orphan reconciliation (InvestigateOrphanedGroupPlanAsync) sets a leg's
+  # entry_price from broker deal-history reconstruction, which can disagree
+  # with the normal live-confirmed broker_fill_price. A single-leg trade's
+  # own entry can never legitimately differ from broker_fill_price, so a
+  # mismatch there is the signature of that less-reliable path - trust the
+  # live fill. |4390.16-4398| = 7.84 price = 78.4 pips -> -57/78.4 = -0.7R.
+  sig = {
+    "action": "SELL",
+    "entry": 4390.0,
+    "entry_end": 4395.0,
+    "sl": 4398.0,
+    "original_sl": 4398.0,
+    "symbol": "XAU",
+    "broker_fill_price": 4390.16,
+    "legs": [{"frac": 1.0, "pips": -57, "entry_price": 4397.02}],
+  }
+
+  assert trade_ops._achieved_rr(sig, -57) == "-0.7R"
+
+
+def test_achieved_rr_keeps_deepest_leg_for_genuine_multi_leg_trades():
+  # The broker_fill_price override above must not swallow the legitimate
+  # multi-leg deepest-entry convention: broker_fill_price is deliberately
+  # the group's SHALLOWEST (worst-case) leg there, not the deep leg this
+  # calc needs - see test_achieved_rr_uses_the_deepest_legs_own_entry_not_
+  # the_peak_pips_leg above. Only a single-leg mismatch is now overridden.
+  sig = {
+    "action": "SELL",
+    "entry": 4100.0,
+    "entry_end": 4105.0,
+    "sl": 4106.0,
+    "original_sl": 4110.0,
+    "symbol": "XAU",
+    "broker_fill_price": 4100.0,
+    "legs": [
+      {"frac": 0.8, "pips": 150, "entry_price": 4100.0},
+      {"frac": 0.2, "pips": 0, "entry_price": 4105.0},
+    ],
+  }
+
+  assert trade_ops._achieved_rr(sig, 150) == "+3.0R"
 
 
 def test_final_close_with_tp_number_labels_which_target_closed_it(monkeypatch):

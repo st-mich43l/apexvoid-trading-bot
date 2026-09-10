@@ -126,6 +126,28 @@ async def test_tp_hit_notify_and_deduplicated(monkeypatch):
   assert (await redis_state.get_progress(3))["tp"] == 1
 
 
+@pytest.mark.asyncio
+async def test_tp_hit_uses_the_real_fill_not_the_worst_case_zone_edge(monkeypatch):
+  # Live 2026-09-10: a limit-ladder leg filled favorably inside the entry
+  # zone (2000.5, well below the worst-case 2002 edge pips_between() used
+  # to measure from) reported a much smaller "+N pips" than what the
+  # trader's own position actually gained. TP-hit/RUNNER pips must track
+  # the real broker fill when one is known, same as the final close
+  # accounting (signed_result_pips/actual_entry) already does.
+  await redis_state.set_cursor("XAU", "2026-07-08T09:59:00.000Z")
+  sig = _buy_signal(broker_fill_price=2000.5)
+  bar = _bar("2026-07-08T10:00:00.000Z", 2005, 2010, 2004, 2003)
+  fanout = _feed(monkeypatch, sig, [bar])
+
+  await watcher._watcher_tick(object())
+
+  fanout.assert_awaited_once()
+  _, render = fanout.await_args.args
+  # (2010 - 2000.5) / 0.1 = 95 pips from the real fill, not the 80 pips
+  # the worst-case 2002 zone edge would have reported.
+  assert "Profit: <b>+95 pips</b>" in render("vip")
+
+
 @pytest.mark.no_database
 @pytest.mark.asyncio
 async def test_sell_whole_price_tp_hits_on_same_price_handle(monkeypatch):
@@ -703,7 +725,10 @@ def test_card_and_watcher_share_conservative_entry_property():
       assert rr_entry(sig) == reference
       assert pips_between(sig, sl) == round(risk / pip_for("XAU"))
       card = broadcast.render_entry(sig, "vip")
-      assert f"risk <b>{broadcast._price(risk, 'XAU')}</b>" in card
+      # risk is displayed in pips, not raw price, matching every other
+      # pips figure this bot shows (loss/win, R-multiple denominators).
+      expected_risk_pips = round(risk / pip_for("XAU"))
+      assert f"risk <b>{expected_risk_pips} pips</b>" in card
       for tp in tps:
         expected = round(abs(tp - reference) / pip_for("XAU"))
         assert pips_between(sig, tp) == expected
