@@ -32,6 +32,30 @@ public static class TradePlanContract
     EntryTypeLimitLadder,
     EntryTypeMarketWithLimitScale,
   };
+
+  /// <summary>
+  /// Whether a ladder/scale leg fires as an immediate market order rather
+  /// than a resting limit - shared by TradePlanExecutionEngine's pre-submit
+  /// slippage gate and TradePlanRuntime's actual submission so the two
+  /// never disagree. An explicit order_type wins (market_with_limit_scale's
+  /// L1 must be market); otherwise falls back to marketable-limit
+  /// detection (a resting limit already priced through the live quote
+  /// would fill immediately anyway).
+  /// </summary>
+  public static bool LegUsesMarketOrder(
+    string? orderType, decimal legPrice, bool buy, decimal bid, decimal ask
+  )
+  {
+    if (string.Equals(orderType, OrderTypeMarket, StringComparison.OrdinalIgnoreCase))
+    {
+      return true;
+    }
+    if (string.Equals(orderType, OrderTypeLimit, StringComparison.OrdinalIgnoreCase))
+    {
+      return false;
+    }
+    return buy ? legPrice >= ask : legPrice <= bid;
+  }
 }
 
 public sealed class TradePlanContractException : Exception

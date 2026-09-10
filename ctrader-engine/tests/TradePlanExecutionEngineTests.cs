@@ -855,6 +855,118 @@ public sealed class TradePlanExecutionEngineTests
   }
 
   [Fact]
+  public void MarketWithLimitScaleWaitsWhenL1HasSlippedPastTheDeclaredCap()
+  {
+    // Owner-reported 2026-09-10 (real XAU BUY, Key Level): L1's price is
+    // stamped from the live quote at plan-build time, then fires as an
+    // outright market order whenever the engine gets around to submitting
+    // it - with no cap on how far price can have moved in that gap. A fast
+    // M5 break let the fill land 0.74 above the published zone's own high
+    // edge. Mirrors EvaluateMarket's existing MaxSlippageTicks cap (Aug 24
+    // HFS fix) for the route that never got it.
+    var plan = LimitLadderPlan(leg1Ratio: 0.70m, leg2Ratio: 0.30m) with
+    {
+      Entry = new TradePlanEntry(
+        TradePlanContract.EntryTypeMarketWithLimitScale,
+        1_720_003_600,
+        ZoneLow: 4085.00m,
+        ZoneHigh: 4089.50m,
+        MaxSlippageTicks: 10,
+        Legs: new[]
+        {
+          new TradePlanEntryLeg("L1", 4089.10m, 0.70m, "market"),
+          new TradePlanEntryLeg("L2", 4085.00m, 0.30m, "limit"),
+        }
+      ),
+    };
+
+    // Ask has run 0.25 (25 ticks) past L1's declared 4089.10 - well beyond
+    // the 10-tick (0.10) budget.
+    var decision = TradePlanExecutionEngine.EvaluateEntry(
+      plan,
+      bid: 4089.20m,
+      ask: 4089.35m,
+      spreadTicks: 15m,
+      nowUnixSeconds: 1_720_000_100,
+      tickSize: 0.01m
+    );
+
+    Assert.Equal(TradePlanEntryAction.Wait, decision.Action);
+    Assert.Equal("slippage_exceeds_declared_limit", decision.RejectReason);
+  }
+
+  [Fact]
+  public void MarketWithLimitScaleSubmitsWhenL1IsWithinTheSlippageBudget()
+  {
+    var plan = LimitLadderPlan(leg1Ratio: 0.70m, leg2Ratio: 0.30m) with
+    {
+      Entry = new TradePlanEntry(
+        TradePlanContract.EntryTypeMarketWithLimitScale,
+        1_720_003_600,
+        ZoneLow: 4085.00m,
+        ZoneHigh: 4089.50m,
+        MaxSlippageTicks: 10,
+        Legs: new[]
+        {
+          new TradePlanEntryLeg("L1", 4089.10m, 0.70m, "market"),
+          new TradePlanEntryLeg("L2", 4085.00m, 0.30m, "limit"),
+        }
+      ),
+    };
+
+    // Ask only 0.05 (5 ticks) past L1's declared price - inside the budget.
+    var decision = TradePlanExecutionEngine.EvaluateEntry(
+      plan,
+      bid: 4089.00m,
+      ask: 4089.15m,
+      spreadTicks: 15m,
+      nowUnixSeconds: 1_720_000_100,
+      tickSize: 0.01m
+    );
+
+    Assert.True(decision.ShouldSubmit);
+    Assert.Equal(TradePlanEntryAction.SubmitLadder, decision.Action);
+  }
+
+  [Fact]
+  public void LimitLadderSubmitsWhenBothLegsAreStillRestingBelowTheLiveQuote()
+  {
+    // Neither leg is marketable for a BUY (both rest below the live ask),
+    // however far they sit from the current quote - a resting limit can
+    // only ever fill at its own declared price, never chase, so it needs
+    // (and gets) no slippage check regardless of distance.
+    var plan = LimitLadderPlan(
+      legPrice1: 4086.00m, legPrice2: 4085.00m, leg1Ratio: 0.60m, leg2Ratio: 0.40m
+    ) with
+    {
+      Entry = new TradePlanEntry(
+        TradePlanContract.EntryTypeLimitLadder,
+        1_720_003_600,
+        ZoneLow: 4085.00m,
+        ZoneHigh: 4086.00m,
+        MaxSlippageTicks: 10,
+        Legs: new[]
+        {
+          new TradePlanEntryLeg("L1", 4086.00m, 0.60m),
+          new TradePlanEntryLeg("L2", 4085.00m, 0.40m),
+        }
+      ),
+    };
+
+    var decision = TradePlanExecutionEngine.EvaluateEntry(
+      plan,
+      bid: 4089.65m,
+      ask: 4089.80m,
+      spreadTicks: 15m,
+      nowUnixSeconds: 1_720_000_100,
+      tickSize: 0.01m
+    );
+
+    Assert.True(decision.ShouldSubmit);
+    Assert.Equal(TradePlanEntryAction.SubmitLadder, decision.Action);
+  }
+
+  [Fact]
   public void CalculateVolumeSlicesForALimitLadderAreProportionalToLegVolumeRatio()
   {
     var plan = LimitLadderPlan(leg1Ratio: 0.70m, leg2Ratio: 0.30m);

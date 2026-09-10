@@ -213,7 +213,6 @@ public sealed class StopContractParityTests
     {
       "market" => ExecutionRoute.Market,
       "single_limit" => ExecutionRoute.SingleLimit,
-      "zone_split" => ExecutionRoute.ZoneSplit,
       _ => (ExecutionRoute?)null,
     };
 
@@ -224,9 +223,6 @@ public sealed class StopContractParityTests
       Assert.True(
         AutoTradeEngine.RouteInContract(declared, ExecutionRoute.SingleLimit)
       );
-      Assert.True(
-        AutoTradeEngine.RouteInContract(declared, ExecutionRoute.ZoneSplit)
-      );
       return;
     }
 
@@ -235,7 +231,6 @@ public sealed class StopContractParityTests
     {
       ExecutionRoute.Market,
       ExecutionRoute.SingleLimit,
-      ExecutionRoute.ZoneSplit,
     })
     {
       if (other == committed)
