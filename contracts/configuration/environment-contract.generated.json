@@ -1,7 +1,7 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "011443c7d9892456006e5667e0553e2854e2a511855e774acac32531c8ff5b43",
-  "count": 520,
+  "configuration_contract_fingerprint_sha256": "8beb64bd5dce37519b85482591e7cbfa658838346655958c3ffff146947d6f25",
+  "count": 522,
   "deprecated_alias_count": 21,
   "entries": [
     {
@@ -1053,6 +1053,38 @@
       "shared_with_ctrader": false,
       "type": "float",
       "unit": "score"
+    },
+    {
+      "canonical_env": "AUTO_TRADE_KEY_LEVEL_MISSING_OPPOSING_CONTEXT_POLICY",
+      "default": "wait",
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Opposing Structure V2 (Phase 3, not yet enforced): fail-safe policy at activation when required HTF zone context is unavailable/stale. Provisional; not yet read by anything.",
+      "display_id": "config:strategies.reaction.key_level.opposing_structure.missing_opposing_context_policy",
+      "owner": "python",
+      "path": "strategies.reaction.key_level.opposing_structure.missing_opposing_context_policy",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "str",
+      "unit": "enum"
+    },
+    {
+      "canonical_env": "AUTO_TRADE_KEY_LEVEL_OPPOSING_STRUCTURE_ENABLED",
+      "default": true,
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Whether Opposing Structure V2 evidence is computed for Key Level at all. Shadow telemetry only in this phase - does not gate activation either way.",
+      "display_id": "config:strategies.reaction.key_level.opposing_structure.enabled",
+      "owner": "python",
+      "path": "strategies.reaction.key_level.opposing_structure.enabled",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "bool",
+      "unit": "boolean"
     },
     {
       "canonical_env": "AUTO_TRADE_KEY_LEVEL_REACTION_ENABLED",
@@ -8378,6 +8410,6 @@
   ],
   "secret_count": 9,
   "shared_with_ctrader_count": 87,
-  "source_fingerprint_sha256": "011443c7d9892456006e5667e0553e2854e2a511855e774acac32531c8ff5b43",
+  "source_fingerprint_sha256": "8beb64bd5dce37519b85482591e7cbfa658838346655958c3ffff146947d6f25",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

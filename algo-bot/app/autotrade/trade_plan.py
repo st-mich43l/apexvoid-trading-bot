@@ -148,6 +148,30 @@ class TradePlanAnalysis:
   candle_compression_score: float | None = None
   candle_sequence_name: str | None = None
   candle_sequence_bars: int | None = None
+  # Opposing Structure V2 context telemetry (2026-09 Key Level repair) —
+  # descriptive only, never a gate. See
+  # app/autotrade/structural_target_room.py OpposingStructureEvidence.
+  key_level_opposing_zone_low: float | None = None
+  key_level_opposing_zone_high: float | None = None
+  key_level_opposing_zone_side: str | None = None
+  opposing_zone_present: bool | None = None
+  opposing_zone_side: str | None = None
+  opposing_zone_low: float | None = None
+  opposing_zone_high: float | None = None
+  opposing_zone_tier: str | None = None
+  opposing_zone_score: float | None = None
+  opposing_zone_strength: float | None = None
+  opposing_raw_room_price: float | None = None
+  opposing_room_pips: float | None = None
+  opposing_room_atr: float | None = None
+  opposing_room_r: float | None = None
+  opposing_before_tp1: bool | None = None
+  opposing_displaced: bool | None = None
+  opposing_mitigated: bool | None = None
+  opposing_room_pressure: float | None = None
+  opposing_risk_score: float | None = None
+  opposing_action: str | None = None
+  opposing_reason_code: str | None = None
 
   def to_dict(self) -> dict:
     return {
@@ -212,6 +236,27 @@ class TradePlanAnalysis:
       "candle_compression_score": self.candle_compression_score,
       "candle_sequence_name": self.candle_sequence_name,
       "candle_sequence_bars": self.candle_sequence_bars,
+      "key_level_opposing_zone_low": self.key_level_opposing_zone_low,
+      "key_level_opposing_zone_high": self.key_level_opposing_zone_high,
+      "key_level_opposing_zone_side": self.key_level_opposing_zone_side,
+      "opposing_zone_present": self.opposing_zone_present,
+      "opposing_zone_side": self.opposing_zone_side,
+      "opposing_zone_low": self.opposing_zone_low,
+      "opposing_zone_high": self.opposing_zone_high,
+      "opposing_zone_tier": self.opposing_zone_tier,
+      "opposing_zone_score": self.opposing_zone_score,
+      "opposing_zone_strength": self.opposing_zone_strength,
+      "opposing_raw_room_price": self.opposing_raw_room_price,
+      "opposing_room_pips": self.opposing_room_pips,
+      "opposing_room_atr": self.opposing_room_atr,
+      "opposing_room_r": self.opposing_room_r,
+      "opposing_before_tp1": self.opposing_before_tp1,
+      "opposing_displaced": self.opposing_displaced,
+      "opposing_mitigated": self.opposing_mitigated,
+      "opposing_room_pressure": self.opposing_room_pressure,
+      "opposing_risk_score": self.opposing_risk_score,
+      "opposing_action": self.opposing_action,
+      "opposing_reason_code": self.opposing_reason_code,
     }
 
   @classmethod
@@ -416,6 +461,90 @@ class TradePlanAnalysis:
       candle_sequence_bars=(
         None if data.get("candle_sequence_bars") is None
         else int(data["candle_sequence_bars"])
+      ),
+      key_level_opposing_zone_low=(
+        None if data.get("key_level_opposing_zone_low") is None
+        else float(data["key_level_opposing_zone_low"])
+      ),
+      key_level_opposing_zone_high=(
+        None if data.get("key_level_opposing_zone_high") is None
+        else float(data["key_level_opposing_zone_high"])
+      ),
+      key_level_opposing_zone_side=(
+        None if data.get("key_level_opposing_zone_side") is None
+        else str(data["key_level_opposing_zone_side"])
+      ),
+      opposing_zone_present=(
+        None if data.get("opposing_zone_present") is None
+        else bool(data["opposing_zone_present"])
+      ),
+      opposing_zone_side=(
+        None if data.get("opposing_zone_side") is None
+        else str(data["opposing_zone_side"])
+      ),
+      opposing_zone_low=(
+        None if data.get("opposing_zone_low") is None
+        else float(data["opposing_zone_low"])
+      ),
+      opposing_zone_high=(
+        None if data.get("opposing_zone_high") is None
+        else float(data["opposing_zone_high"])
+      ),
+      opposing_zone_tier=(
+        None if data.get("opposing_zone_tier") is None
+        else str(data["opposing_zone_tier"])
+      ),
+      opposing_zone_score=(
+        None if data.get("opposing_zone_score") is None
+        else float(data["opposing_zone_score"])
+      ),
+      opposing_zone_strength=(
+        None if data.get("opposing_zone_strength") is None
+        else float(data["opposing_zone_strength"])
+      ),
+      opposing_raw_room_price=(
+        None if data.get("opposing_raw_room_price") is None
+        else float(data["opposing_raw_room_price"])
+      ),
+      opposing_room_pips=(
+        None if data.get("opposing_room_pips") is None
+        else float(data["opposing_room_pips"])
+      ),
+      opposing_room_atr=(
+        None if data.get("opposing_room_atr") is None
+        else float(data["opposing_room_atr"])
+      ),
+      opposing_room_r=(
+        None if data.get("opposing_room_r") is None
+        else float(data["opposing_room_r"])
+      ),
+      opposing_before_tp1=(
+        None if data.get("opposing_before_tp1") is None
+        else bool(data["opposing_before_tp1"])
+      ),
+      opposing_displaced=(
+        None if data.get("opposing_displaced") is None
+        else bool(data["opposing_displaced"])
+      ),
+      opposing_mitigated=(
+        None if data.get("opposing_mitigated") is None
+        else bool(data["opposing_mitigated"])
+      ),
+      opposing_room_pressure=(
+        None if data.get("opposing_room_pressure") is None
+        else float(data["opposing_room_pressure"])
+      ),
+      opposing_risk_score=(
+        None if data.get("opposing_risk_score") is None
+        else float(data["opposing_risk_score"])
+      ),
+      opposing_action=(
+        None if data.get("opposing_action") is None
+        else str(data["opposing_action"])
+      ),
+      opposing_reason_code=(
+        None if data.get("opposing_reason_code") is None
+        else str(data["opposing_reason_code"])
       ),
     )
 
