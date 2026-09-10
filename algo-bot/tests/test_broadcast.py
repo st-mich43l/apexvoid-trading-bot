@@ -193,6 +193,34 @@ def test_render_entry_shows_risk_in_pips_not_raw_price():
 
 
 @pytest.mark.no_database
+def test_render_entry_uses_real_fill_for_risk_once_known():
+  """Live 2026-09-10 (signal #309): the SL line quoted "risk 60 pips" off
+  the conservative pre-fill zone edge (4336), but the real fill landed at
+  4335.45 - true risk only 54 pips - and the close line correctly reported
+  -0.7R off the real fill, leaving "60 pips" impossible to reconcile
+  against it. Once broker_fill_price is known, the risk line must use it,
+  same fill-trust convention as trade_ops._achieved_rr's close-time R calc.
+  TP R-multiples stay pinned to the zone-edge/original_sl convention -
+  unaffected by this.
+  """
+  signal = {
+    "daily_seq": 4,
+    "symbol": "XAU",
+    "action": "BUY",
+    "entry": 4333.0,
+    "entry_end": 4336.0,
+    "sl": 4330.0,
+    "tps": [4339.0, 4342.0, 4348.0, 4354.0],
+  }
+  assert "risk <b>60 pips</b>" in broadcast.render_entry(signal, "vip")
+
+  signal["broker_fill_price"] = 4335.45
+  card = broadcast.render_entry(signal, "vip")
+  assert "risk <b>54 pips</b>" in card
+  assert "risk <b>60 pips</b>" not in card
+
+
+@pytest.mark.no_database
 def test_render_entry_falls_back_to_current_sl_when_never_trailed():
   """A signal that hasn't trailed yet has no original_sl - must fall back
   to the live sl so a first-post card (sl == the real original) is
