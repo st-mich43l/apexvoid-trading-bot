@@ -38,6 +38,7 @@ from app.persistence.store import (
   set_execution_status,
 )
 from app.signals import pips_format
+from app.signals.broadcast import render_entry, replace_entry_posts
 from app.signals.fx_manual_algo import uses_entry_price_display
 from app.signals.manual_intent import ManualTradeIntent
 
@@ -602,9 +603,19 @@ async def _handle_fill_event(
     log.error("manual_opened event missing fill price for signal %s", sig["id"])
     await set_execution_status(sig["id"], "error", error="fill event missing price")
     return
+  # The pinned entry card's "risk NN pips" line is a pre-fill zone-edge
+  # estimate (app.signals.broadcast.render_entry); once the real fill price
+  # is known, re-post the card so subscribers see the risk actually taken
+  # instead of an estimate that can no longer be reconciled against the
+  # close-time R-multiple (which already trusts the real fill - see
+  # trade_ops._achieved_rr).
+  before_card = render_entry(sig, "vip")
   await set_execution_fill(
     sig["id"], broker_position_id=int(position_id), broker_fill_price=float(price),
   )
+  refreshed_sig = await get_manual_signal(sig["id"])
+  if refreshed_sig is not None and render_entry(refreshed_sig, "vip") != before_card:
+    await replace_entry_posts(refreshed_sig)
   if runtime_config.manual_algo.runtime.owner_execution_dm_enabled:
     await _send_executor_truth(
       "✅ <b>POSITION OPENED</b>\n"
