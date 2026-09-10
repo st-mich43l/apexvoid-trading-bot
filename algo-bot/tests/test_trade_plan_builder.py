@@ -120,6 +120,43 @@ def test_builds_valid_plan_with_real_bias_kind_and_regime():
   assert plan.source_structure.timeframe == "H1"
 
 
+def test_candle_confirmation_v2_telemetry_propagates_to_plan_analysis():
+  # Candle Confirmation V2 (§28): unlike the automatically dataclass-
+  # equal StrategyMatch round-trip, TradePlanAnalysis copies each field
+  # by hand in trade_plan_builder.py - worth a direct check.
+  match = replace(
+    _match(),
+    candle_version=2,
+    candle_primary_pattern="sweep_reclaim",
+    candle_patterns="wick_rejection,sweep_reclaim",
+    candle_final_score=0.77,
+    candle_base_score=0.65,
+    candle_synergy_bonus=0.1,
+    candle_body_fraction=0.33,
+    candle_sweep=True,
+    candle_reclaim=True,
+    candle_doji=False,
+    candle_sequence_bars=None,
+  )
+  plan = _build(match)
+  assert plan.analysis.candle_version == 2
+  assert plan.analysis.candle_primary_pattern == "sweep_reclaim"
+  assert plan.analysis.candle_patterns == "wick_rejection,sweep_reclaim"
+  assert plan.analysis.candle_final_score == pytest.approx(0.77)
+  assert plan.analysis.candle_base_score == pytest.approx(0.65)
+  assert plan.analysis.candle_synergy_bonus == pytest.approx(0.1)
+  assert plan.analysis.candle_body_fraction == pytest.approx(0.33)
+  assert plan.analysis.candle_sweep is True
+  assert plan.analysis.candle_reclaim is True
+  assert plan.analysis.candle_doji is False
+  assert plan.analysis.candle_sequence_bars is None
+
+  # to_dict()/from_dict() round-trip (used for the C# echo and Postgres
+  # persistence chain) must preserve every candle_* value too.
+  restored = type(plan.analysis).from_dict(plan.analysis.to_dict())
+  assert restored == plan.analysis
+
+
 def test_bias_and_kind_are_whatever_was_captured_not_direction_derived():
   # A BUY with a bearish HTF bias and a supply-side structural kind (e.g. a
   # counter-trend fade) must round-trip exactly as captured - the builder
