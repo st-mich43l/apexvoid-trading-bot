@@ -85,6 +85,26 @@ def test_limit_ladder_entry_prices_are_the_leg_prices():
   assert plan.entry.entry_prices() == tuple(leg.price for leg in plan.entry.legs)
 
 
+def test_stale_pre_rename_analysis_strategy_normalizes_on_load():
+  """A plan can be re-read (trailing/BE/TP updates) long after publish.
+
+  A plan published before "Key Level Reaction" -> "Key Level" (#507) must
+  still read back as the current canonical name, not the retired one it
+  was published with.
+  """
+  raw = copy.deepcopy(_valid_plans()["market_watch_buy"])
+  raw["analysis"]["strategy"] = "Key Level Reaction"
+  plan = TradePlan.from_dict(raw)
+  assert plan.analysis.strategy == "Key Level"
+
+
+def test_unrecognized_analysis_strategy_passes_through_unchanged():
+  raw = copy.deepcopy(_valid_plans()["market_watch_buy"])
+  raw["analysis"]["strategy"] = "Totally Unknown Setup"
+  plan = TradePlan.from_dict(raw)
+  assert plan.analysis.strategy == "Totally Unknown Setup"
+
+
 def test_plan_has_no_planned_star_ambiguous_fields():
   # The whole point of TradePlan is that there is exactly one stop and one route,
   # not a family of planned/base/final variants for something else to
