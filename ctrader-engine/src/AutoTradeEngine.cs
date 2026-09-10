@@ -1192,6 +1192,8 @@ public sealed class AutoTradeEngine(
     {
       currentGroup = [state];
     }
+    var deepestEntry = GroupDeepestEntryPrice(currentGroup, state.Direction);
+    var displayLegPips = SignedPipsFromEntry(state, deepestEntry, fill);
     var groupPipVolume = GroupRealizedPipVolume(currentGroup)
       + realizedPips * closeVolume;
     // Sibling legs (e.g. a manual-algo group's other filled entry clips)
@@ -1243,8 +1245,8 @@ public sealed class AutoTradeEngine(
         matchId: state.MatchId,
         rangeId: state.RangeId,
         strategyFamily: state.StrategyFamily,
-        legRealizedPips: realizedPips,
-        legEntryPrice: state.EntryPrice,
+        legRealizedPips: displayLegPips,
+        legEntryPrice: deepestEntry,
         groupInitialVolume: groupInitialVolume,
         lotSize: symbol.LotSize
       );
@@ -1272,8 +1274,8 @@ public sealed class AutoTradeEngine(
       matchId: state.MatchId,
       rangeId: state.RangeId,
       strategyFamily: state.StrategyFamily,
-      legRealizedPips: realizedPips,
-      legEntryPrice: state.EntryPrice,
+      legRealizedPips: displayLegPips,
+      legEntryPrice: deepestEntry,
       groupInitialVolume: groupInitialVolume,
       lotSize: symbol.LotSize
     );
@@ -1298,7 +1300,7 @@ public sealed class AutoTradeEngine(
         direction: DirectionLabel(state.Direction),
         groupInitialVolume: groupInitialVolume,
         lotSize: symbol.LotSize,
-        legEntryPrice: state.EntryPrice
+        legEntryPrice: deepestEntry
       );
       await MaybeDeleteGroupPlanAsync(groupId, cancellationToken);
     }
@@ -5388,6 +5390,23 @@ public sealed class AutoTradeEngine(
     return move / PipSizeForState(state);
   }
 
+  /// <summary>
+  /// Same as <see cref="SignedPips"/> but measured from an explicit entry
+  /// price instead of <c>state.EntryPrice</c> - used for the group-facing
+  /// "leg pips" telemetry, which must be measured from the group's deepest
+  /// fill (see <see cref="GroupDeepestEntryPrice"/>), not this specific
+  /// tranche's own entry.
+  /// </summary>
+  private decimal SignedPipsFromEntry(
+    AutoTradePositionState state, decimal entry, decimal price
+  )
+  {
+    var move = state.Direction == TradeDirection.Buy
+      ? price - entry
+      : entry - price;
+    return move / PipSizeForState(state);
+  }
+
   private decimal? InitialStopPips(AutoTradePositionState state)
   {
     if (state.InitialRiskStopPips is decimal planned && planned > 0m)
@@ -5529,6 +5548,30 @@ public sealed class AutoTradeEngine(
     group.Max(state => state.InitialTrancheVolume),
     group.Where(state => state.TrancheIndex == 1).Sum(state => state.InitialVolume)
   );
+
+  /// <summary>
+  /// Owner-reported 2026-09-10 (signal 300, real XAU BUY): a manual /algo
+  /// group's shallow leg (tranche 1, filled at the zone's worse edge) hit
+  /// TP1 and the channel card reported that leg's own entry-to-target
+  /// distance (+30 pips) - correct for that one tranche in isolation, but
+  /// the group's deep leg (tranche 2) had already filled at a materially
+  /// better price a few price units away, and the owner reads the whole
+  /// zone as one trade. The group-facing "leg pips" telemetry must be
+  /// measured from whichever tranche filled at the single most favorable
+  /// price in the group (lower for BUY, higher for SELL) - not from
+  /// whichever specific tranche happens to be the one booking this event.
+  /// Mirrors the same "deepest fill" rule pips_format.
+  /// legs_achieved_entry_price already applies on the Python side for the
+  /// realized-R denominator.
+  /// </summary>
+  private static decimal GroupDeepestEntryPrice(
+    IReadOnlyList<AutoTradePositionState> group,
+    TradeDirection direction
+  ) => group.Count == 0
+    ? 0m
+    : direction == TradeDirection.Buy
+      ? group.Min(state => state.EntryPrice)
+      : group.Max(state => state.EntryPrice);
 
   private async Task<bool> CompleteDryRunAsync(
     TradeCandidate candidate,
@@ -5882,6 +5925,7 @@ public sealed class AutoTradeEngine(
         var currentGroup = _states.Values
           .Where(item => GroupId(item) == GroupId(state))
           .ToArray();
+        var deepestEntry = GroupDeepestEntryPrice(currentGroup, state.Direction);
         var groupBooked = GroupBookedPnl(currentGroup) + realized;
         var initialBooked = InitialBookedPnl(currentGroup)
           + (state.TrancheIndex == 1 ? realized : 0m);
@@ -5974,8 +6018,8 @@ public sealed class AutoTradeEngine(
           matchId: state.MatchId,
           rangeId: state.RangeId,
           strategyFamily: state.StrategyFamily,
-          legRealizedPips: realizedPips,
-          legEntryPrice: state.EntryPrice,
+          legRealizedPips: SignedPipsFromEntry(state, deepestEntry, fill),
+          legEntryPrice: deepestEntry,
           groupInitialVolume: groupInitialVolume,
           lotSize: symbol.LotSize
         );
@@ -6042,7 +6086,7 @@ public sealed class AutoTradeEngine(
               direction: DirectionLabel(state.Direction),
               groupInitialVolume: groupInitialVolume,
               lotSize: symbol.LotSize,
-              legEntryPrice: state.EntryPrice
+              legEntryPrice: deepestEntry
             );
             await MaybeDeleteGroupPlanAsync(groupId, cancellationToken);
           }
@@ -6923,6 +6967,9 @@ public sealed class AutoTradeEngine(
         var siblingStates = _states.Values
           .Where(item => GroupId(item) == groupId)
           .ToArray();
+        var deepestEntry = GroupDeepestEntryPrice(
+          [state, .. siblingStates], state.Direction
+        );
         if (!closingGroupPipVolumes.TryGetValue(groupId, out var carriedPipVolume))
         {
           // Propagation normally keeps every sibling equal; max is defensive
@@ -6992,9 +7039,9 @@ public sealed class AutoTradeEngine(
           groupInitialVolume: initialVolume,
           remainingVolume: 0,
           legRealizedPips: remainingVolume > 0
-            ? SignedPips(state, exitEstimate)
+            ? SignedPipsFromEntry(state, deepestEntry, exitEstimate)
             : null,
-          legEntryPrice: state.EntryPrice
+          legEntryPrice: deepestEntry
         );
         var trackedGroupStillOpen = trackedGroup.Any(item =>
           !confirmedMissingPositionIds.Contains(item.PositionId)
@@ -7022,7 +7069,7 @@ public sealed class AutoTradeEngine(
             stream: ExecutionStream(state),
             direction: DirectionLabel(state.Direction),
             groupInitialVolume: initialVolume,
-            legEntryPrice: state.EntryPrice
+            legEntryPrice: deepestEntry
           );
           await MaybeDeleteGroupPlanAsync(groupId, cancellationToken);
         }
@@ -8218,7 +8265,7 @@ public sealed class AutoTradeEngine(
     var direction = ParseDirection(plan.Direction);
     var totalPipVolume = 0m;
     var totalVolume = 0L;
-    decimal? firstEntryPrice = null;
+    decimal? deepestEntryPrice = null;
     foreach (var leg in filledLegs)
     {
       var positionId = leg.PositionId!.Value;
@@ -8227,7 +8274,18 @@ public sealed class AutoTradeEngine(
       );
       foreach (var deal in deals)
       {
-        firstEntryPrice ??= deal.EntryPrice;
+        // Deepest fill across every leg (lower for BUY, higher for SELL) -
+        // not simply the first deal iterated, which depends on broker
+        // history ordering and is not necessarily the group's best fill.
+        // Mirrors GroupDeepestEntryPrice's live-path rule.
+        if (
+          deepestEntryPrice is not decimal current
+          || (direction == TradeDirection.Buy && deal.EntryPrice < current)
+          || (direction == TradeDirection.Sell && deal.EntryPrice > current)
+        )
+        {
+          deepestEntryPrice = deal.EntryPrice;
+        }
         var move = direction == TradeDirection.Buy
           ? deal.ExitPrice - deal.EntryPrice
           : deal.EntryPrice - deal.ExitPrice;
@@ -8272,7 +8330,7 @@ public sealed class AutoTradeEngine(
       strategyFamily: plan.StrategyFamily,
       direction: DirectionLabel(direction),
       groupInitialVolume: totalVolume,
-      legEntryPrice: firstEntryPrice,
+      legEntryPrice: deepestEntryPrice,
       reasonCode: "orphaned_group_plan_reconciled",
       symbol: canonical
     );
