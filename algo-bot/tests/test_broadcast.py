@@ -161,11 +161,31 @@ def test_render_entry_pins_tp_r_multiples_to_original_sl_not_trailed_stop():
   card = broadcast.render_entry(signal, "vip")
 
   assert "SL:     <b>4,420.16</b>" in card
-  assert "risk <b>0.16</b>" in card
-  entry_reference = broadcast.rr_entry(signal)
-  original_risk = abs(entry_reference - 4428.0)
-  for tp in signal["tps"]:
-    assert broadcast._rr(tp, entry_reference, original_risk) in card
+  # risk is displayed in pips (0.16 price / 0.1 pip_size = 1.6, rounds to 2).
+  assert "risk <b>2 pips</b>" in card
+
+
+@pytest.mark.no_database
+def test_render_entry_shows_risk_in_pips_not_raw_price():
+  # Live 2026-09-10: the card showed "risk 8" for an $8.00 XAU stop
+  # distance - readers naturally read a bare number as pips, understating
+  # the real risk by 1/pip_size (10x for XAU's 0.1 pip). Every other pips
+  # figure this bot shows (loss/win, R-multiple denominators) already
+  # divides by pip_for() - this line must match.
+  signal = {
+    "daily_seq": 5,
+    "symbol": "XAU",
+    "action": "BUY",
+    "entry": 4398.0,
+    "entry_end": 4403.0,
+    "sl": 4395.0,
+    "tps": [4408.0],
+  }
+  card = broadcast.render_entry(signal, "vip")
+  # entry_reference (BUY) = entry_end = 4403; risk = 4403-4395 = 8.0 price
+  # = 80 pips, not "risk 8".
+  assert "risk <b>80 pips</b>" in card
+  assert "risk <b>8</b>" not in card
   # The bug this guards: with the live (near-zero) risk instead, TP1 alone
   # would have rendered as roughly 37R - assert that never appears.
   assert "343.8R" not in card
