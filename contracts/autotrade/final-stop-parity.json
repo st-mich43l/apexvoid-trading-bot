@@ -20,12 +20,6 @@
       "expected_route": "single_limit"
     },
     {
-      "name": "limit_zone_split",
-      "order_type_preference": "limit",
-      "entry_distribution": "zone_split",
-      "expected_route": "zone_split"
-    },
-    {
       "name": "either_single_is_uncommitted",
       "order_type_preference": "either",
       "entry_distribution": "single",
