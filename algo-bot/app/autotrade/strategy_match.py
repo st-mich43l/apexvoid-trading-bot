@@ -18,6 +18,7 @@ from app.core.symbols import digits_for
 from app.runtime.price_identity import price_token
 from app.analysis.execution_eligibility import ExecutionEligibility
 from app.analysis.structural_reaction_support import structural_thesis_id
+from app.autotrade.strategy_names import resolve_strategy
 from app.autotrade.strategy_taxonomy import is_m1_scalp_match
 
 
@@ -205,6 +206,11 @@ class StrategyMatch:
     text = raw.decode() if isinstance(raw, bytes) else str(raw)
     try:
       payload = json.loads(text)
+      # Redis candidates can outlive a strategy-name rename (7d TTL): a
+      # candidate saved under the pre-rename name must still read back as
+      # the current canonical name, not the stale one it was written with.
+      raw_strategy = str(payload["strategy"])
+      resolved_strategy = resolve_strategy(raw_strategy)
       result = cls(
         version=int(payload["version"]),
         match_id=str(payload["match_id"]),
@@ -213,7 +219,11 @@ class StrategyMatch:
         event_ts=str(payload["event_ts"]),
         issued_at=int(payload["issued_at"]),
         expires_at=int(payload["expires_at"]),
-        strategy=str(payload["strategy"]),
+        strategy=(
+          resolved_strategy.canonical
+          if resolved_strategy is not None
+          else raw_strategy
+        ),
         strategy_mode=str(payload["strategy_mode"]),
         direction=str(payload["direction"]).upper(),
         key_level=float(payload["key_level"]),

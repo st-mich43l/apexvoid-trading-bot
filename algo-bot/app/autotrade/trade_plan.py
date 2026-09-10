@@ -20,6 +20,8 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any, Mapping, Sequence
 
+from app.autotrade.strategy_names import resolve_strategy
+
 TRADE_PLAN_VERSION = 8
 TRADE_PLAN_SUPPORTED_VERSIONS = frozenset({8})
 
@@ -261,8 +263,17 @@ class TradePlanAnalysis:
 
   @classmethod
   def from_dict(cls, data: Mapping[str, Any]) -> "TradePlanAnalysis":
+    # A plan can be re-read (trailing/BE/TP updates) long after it was first
+    # published; a strategy rename must not leave already-published plans
+    # showing the retired name for the rest of their life.
+    raw_strategy = str(_require(data, "strategy"))
+    resolved_strategy = resolve_strategy(raw_strategy)
     return cls(
-      strategy=str(_require(data, "strategy")),
+      strategy=(
+        resolved_strategy.canonical
+        if resolved_strategy is not None
+        else raw_strategy
+      ),
       strategy_family=str(_require(data, "strategy_family")),
       direction=_direction(data),
       context_timeframes=tuple(data.get("context_timeframes") or ()),
