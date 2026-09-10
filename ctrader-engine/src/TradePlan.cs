@@ -116,7 +116,33 @@ public sealed record TradePlanAnalysis(
   bool? CandleDoji = null,
   double? CandleCompressionScore = null,
   string? CandleSequenceName = null,
-  int? CandleSequenceBars = null
+  int? CandleSequenceBars = null,
+  // Opposing Structure V2 context telemetry (2026-09 Key Level repair) -
+  // descriptive only, never a gate. Republished onto AutoTradeEvent
+  // (Models.cs) the same way as the Math*/Mad*/Candle* fields above -
+  // double (not decimal), matching every other field in this record,
+  // including the other price/ATR-scaled ones (CandleBodyAtr etc.).
+  double? KeyLevelOpposingZoneLow = null,
+  double? KeyLevelOpposingZoneHigh = null,
+  string? KeyLevelOpposingZoneSide = null,
+  bool? OpposingZonePresent = null,
+  string? OpposingZoneSide = null,
+  double? OpposingZoneLow = null,
+  double? OpposingZoneHigh = null,
+  string? OpposingZoneTier = null,
+  double? OpposingZoneScore = null,
+  double? OpposingZoneStrength = null,
+  double? OpposingRawRoomPrice = null,
+  double? OpposingRoomPips = null,
+  double? OpposingRoomAtr = null,
+  double? OpposingRoomR = null,
+  bool? OpposingBeforeTp1 = null,
+  bool? OpposingDisplaced = null,
+  bool? OpposingMitigated = null,
+  double? OpposingRoomPressure = null,
+  double? OpposingRiskScore = null,
+  string? OpposingAction = null,
+  string? OpposingReasonCode = null
 );
 
 public sealed record TradePlanSourceStructure(

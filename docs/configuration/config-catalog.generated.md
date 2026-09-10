@@ -3,9 +3,9 @@
 > Generated from the typed `ApexVoidConfig` Catalog V2 schema. Do not edit manually.
 
 - Catalog version: `2`
-- Contract fingerprint: `011443c7d9892456006e5667e0553e2854e2a511855e774acac32531c8ff5b43`
-- Document fingerprint: `0b4d091a0e6ed5c11e4575e0ed793e0b376b8fd1dc1236ff5c9fe4a4322860ad`
-- Items: `620`
+- Contract fingerprint: `8beb64bd5dce37519b85482591e7cbfa658838346655958c3ffff146947d6f25`
+- Document fingerprint: `a9ce9dbefaeeefab0b5c5eec06b185200848de721f7516350e1f5847fcb44044`
+- Items: `629`
 - Runtime status: canonical-only; `app.core.config.runtime_config` is authoritative
 
 ## actionability
@@ -583,6 +583,15 @@
 | `strategies.reaction.key_level.enabled` | `AUTO_TRADE_KEY_LEVEL_REACTION_ENABLED` | `bool` | `boolean` | `configurable` | `true` |
 | `strategies.reaction.key_level.min_grade` | `AUTO_TRADE_KEY_LEVEL_MIN_GRADE` | `str` | `enum` | `configurable` | `"B"` |
 | `strategies.reaction.key_level.min_sell_zone_score` | `AUTO_TRADE_KEY_LEVEL_MIN_SELL_ZONE_SCORE` | `float` | `score` | `configurable` | `0.0` |
+| `strategies.reaction.key_level.opposing_structure.caution_room_r` | `—` | `float` | `ratio` | `algorithm_constant` | `2.0` |
+| `strategies.reaction.key_level.opposing_structure.critical_room_r` | `—` | `float` | `ratio` | `algorithm_constant` | `0.5` |
+| `strategies.reaction.key_level.opposing_structure.enabled` | `AUTO_TRADE_KEY_LEVEL_OPPOSING_STRUCTURE_ENABLED` | `bool` | `boolean` | `configurable` | `true` |
+| `strategies.reaction.key_level.opposing_structure.m1_required_below_room_r` | `—` | `float` | `ratio` | `algorithm_constant` | `1.0` |
+| `strategies.reaction.key_level.opposing_structure.minimum_candle_score_tight_room` | `—` | `float` | `fraction` | `algorithm_constant` | `0.7` |
+| `strategies.reaction.key_level.opposing_structure.missing_opposing_context_policy` | `AUTO_TRADE_KEY_LEVEL_MISSING_OPPOSING_CONTEXT_POLICY` | `str` | `enum` | `configurable` | `"wait"` |
+| `strategies.reaction.key_level.opposing_structure.require_strong_confirmation_below_r` | `—` | `float` | `ratio` | `algorithm_constant` | `1.0` |
+| `strategies.reaction.key_level.opposing_structure.strength_score_ceiling` | `—` | `float` | `score` | `algorithm_constant` | `15.0` |
+| `strategies.reaction.key_level.opposing_structure.tight_room_r` | `—` | `float` | `ratio` | `algorithm_constant` | `1.0` |
 | `strategies.reaction.key_level.require_explicit_role` | `AUTO_TRADE_KEY_LEVEL_REQUIRE_EXPLICIT_ROLE` | `bool` | `boolean` | `configurable` | `false` |
 | `strategies.reaction.key_level.require_htf_alignment` | `AUTO_TRADE_KEY_LEVEL_REQUIRE_HTF_ALIGNMENT` | `bool` | `boolean` | `configurable` | `false` |
 | `strategies.reaction.key_level.require_killzone` | `AUTO_TRADE_KEY_LEVEL_REQUIRE_KILLZONE` | `bool` | `boolean` | `configurable` | `false` |

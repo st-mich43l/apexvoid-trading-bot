@@ -2,8 +2,8 @@
 
 > Generated from the canonical configuration catalog (`app.configuration.environment_contract`). Do not edit manually.
 
-- Contract fingerprint: `011443c7d9892456006e5667e0553e2854e2a511855e774acac32531c8ff5b43`
-- Environment-bound fields: `520`
+- Contract fingerprint: `8beb64bd5dce37519b85482591e7cbfa658838346655958c3ffff146947d6f25`
+- Environment-bound fields: `522`
 - Deprecated aliases: `21`
 
 Secret values are never emitted; secret defaults render as `<redacted>`.
@@ -75,6 +75,8 @@ Secret values are never emitted; secret defaults render as `<redacted>`.
 | `AUTO_TRADE_INSIDE_ZONE_MARKET_ENTRY_ENABLED` | `execution.entry.inside_zone_market_entry_enabled` | `bool` | no | yes | — | `True` |
 | `AUTO_TRADE_KEY_LEVEL_MIN_GRADE` | `strategies.reaction.key_level.min_grade` | `str` | no | no | — | `B` |
 | `AUTO_TRADE_KEY_LEVEL_MIN_SELL_ZONE_SCORE` | `strategies.reaction.key_level.min_sell_zone_score` | `float` | no | no | — | `0.0` |
+| `AUTO_TRADE_KEY_LEVEL_MISSING_OPPOSING_CONTEXT_POLICY` | `strategies.reaction.key_level.opposing_structure.missing_opposing_context_policy` | `str` | no | no | — | `wait` |
+| `AUTO_TRADE_KEY_LEVEL_OPPOSING_STRUCTURE_ENABLED` | `strategies.reaction.key_level.opposing_structure.enabled` | `bool` | no | no | — | `True` |
 | `AUTO_TRADE_KEY_LEVEL_REACTION_ENABLED` | `strategies.reaction.key_level.enabled` | `bool` | no | no | — | `True` |
 | `AUTO_TRADE_KEY_LEVEL_REQUIRE_EXPLICIT_ROLE` | `strategies.reaction.key_level.require_explicit_role` | `bool` | no | no | — | `False` |
 | `AUTO_TRADE_KEY_LEVEL_REQUIRE_HTF_ALIGNMENT` | `strategies.reaction.key_level.require_htf_alignment` | `bool` | no | no | — | `False` |

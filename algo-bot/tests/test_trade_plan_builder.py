@@ -157,6 +157,50 @@ def test_candle_confirmation_v2_telemetry_propagates_to_plan_analysis():
   assert restored == plan.analysis
 
 
+def test_opposing_structure_v2_telemetry_propagates_to_plan_analysis():
+  # Same hand-copied-field concern as Candle Confirmation V2 above -
+  # trade_plan_builder.py copies each opposing_*/key_level_opposing_zone_*
+  # field individually, worth a direct check.
+  match = replace(
+    _match(),
+    key_level_opposing_zone_low=4098.0,
+    key_level_opposing_zone_high=4102.0,
+    key_level_opposing_zone_side="supply",
+    opposing_zone_present=True,
+    opposing_zone_side="sell",
+    opposing_zone_low=4150.0,
+    opposing_zone_high=4155.0,
+    opposing_zone_tier="zone",
+    opposing_zone_score=8.0,
+    opposing_zone_strength=0.53,
+    opposing_raw_room_price=50.0,
+    opposing_room_pips=500.0,
+    opposing_room_atr=25.0,
+    opposing_room_r=None,
+    opposing_before_tp1=None,
+    opposing_displaced=False,
+    opposing_mitigated=False,
+    opposing_room_pressure=None,
+    opposing_risk_score=None,
+    opposing_action="CLEAR",
+    opposing_reason_code="opposing_room_clear",
+  )
+  plan = _build(match)
+  assert plan.analysis.key_level_opposing_zone_low == pytest.approx(4098.0)
+  assert plan.analysis.key_level_opposing_zone_high == pytest.approx(4102.0)
+  assert plan.analysis.key_level_opposing_zone_side == "supply"
+  assert plan.analysis.opposing_zone_present is True
+  assert plan.analysis.opposing_zone_side == "sell"
+  assert plan.analysis.opposing_zone_tier == "zone"
+  assert plan.analysis.opposing_zone_strength == pytest.approx(0.53)
+  assert plan.analysis.opposing_room_r is None
+  assert plan.analysis.opposing_action == "CLEAR"
+  assert plan.analysis.opposing_reason_code == "opposing_room_clear"
+
+  restored = type(plan.analysis).from_dict(plan.analysis.to_dict())
+  assert restored == plan.analysis
+
+
 def test_bias_and_kind_are_whatever_was_captured_not_direction_derived():
   # A BUY with a bearish HTF bias and a supply-side structural kind (e.g. a
   # counter-trend fade) must round-trip exactly as captured - the builder
