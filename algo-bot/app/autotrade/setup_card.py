@@ -1689,8 +1689,8 @@ def forming_card_headline(
   return f"🔎 <b>{escape(str(symbol))} {escape(str(tf))} · {label}</b>"
 
 
-def _format_candle_line(match: StrategyMatch) -> str | None:
-  """Candle Confirmation V2 (§45): one short line, not a detailed block -
+def _format_candle_lines(match: StrategyMatch) -> tuple[str, str] | None:
+  """Candle Confirmation V2 (§45): two short lines, not a detailed block -
   detailed candle_* metrics stay in telemetry only, never on the public
   card. Shadow-only: this never changes what the card already shows above
   (reaction_type/confirmation), it just adds context alongside it."""
@@ -1699,8 +1699,8 @@ def _format_candle_line(match: StrategyMatch) -> str | None:
   if not label or score is None or not math.isfinite(float(score)):
     return None
   return (
-    f"🕯 Confirmation: {escape(str(label))} · "
-    f"🔥 Candle Quality: {float(score):.0%}"
+    f"🕯 Confirmation: {escape(str(label))}",
+    f"🔥 Candle Quality: {float(score):.0%}",
   )
 
 
@@ -1879,9 +1879,9 @@ def format_plan_published_root_card(
     )
   if confirmation:
     lines.append(f"✅ <b>Confirmation:</b> {escape(confirmation)}")
-  candle_line = _format_candle_line(match)
-  if candle_line:
-    lines.append(candle_line)
+  candle_lines = _format_candle_lines(match)
+  if candle_lines:
+    lines.extend(candle_lines)
   if source_tf:
     lines.append(f"⏱ <b>Source TF:</b> {escape(source_tf)}")
 
