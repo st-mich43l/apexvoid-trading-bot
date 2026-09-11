@@ -125,6 +125,19 @@ def supply_demand(df: pd.DataFrame, legs: list[Leg]) -> list[Zone]:
       origin_index=origin,
       created_ts=df.index[origin],
       source="supply_demand",
+      # 2026-09 (owner-reported production incident): without this,
+      # mark_mitigation's scan starts at origin_index+1 == leg.start - the
+      # OWN first bar of the impulsive leg that created this zone, whose
+      # wick almost always still overlaps [bottom, top] since it begins
+      # immediately adjacent to it. That marked essentially every zone
+      # mitigated on its own formation bar, before any genuine retest -
+      # confirmed live at 100% (203/204 sampled zones) across symbols and
+      # timeframes, leaving the opposing-barrier pool empty everywhere.
+      # order_blocks() already avoids this via break_index=bos.index
+      # (scan starts once the break is CONFIRMED); mirror that here with
+      # the leg's own end bar, so mitigation scanning starts only once the
+      # displacement leg has finished moving away, not on its first bar.
+      break_index=leg.end,
     ))
   return zones
 

@@ -685,6 +685,63 @@ def _opposing_structure_evidence_for_barrier(
   )
 
 
+# 2026-09 (owner-reported, restoring PR #494's principle deleted outright
+# by PR #499): a swing distance shorter than this many ATRs is too close
+# to be a credible "the technique expects real room" signal - it reads as
+# noise (a minor recent wiggle), not a structural read worth trusting over
+# a real opposing wall. Mirrors the deleted
+# worker.py::_TECHNIQUE_SWING_ROOM_MIN_ATR_MULTIPLE exactly (tunable, no
+# empirical calibration behind it).
+_TECHNIQUE_SWING_ROOM_MIN_ATR_MULTIPLE = 2.0
+
+
+def widen_room_for_technique_swing(
+  raw_room_price: float,
+  *,
+  direction: str,
+  planned_entry_price: float,
+  structural_swing: float | None,
+  atr: float,
+  barrier_tier: str,
+) -> float:
+  """Restores PR #494's principle (deleted wholesale by PR #499's
+  ``_fixed_rr_adaptive_room_pips``/``_technique_swing_room_pips``) against
+  the current ``StructuralBarrierBook`` instead of Market Map tiers: a
+  technique's own ``structural_swing`` reference can only ever WIDEN the
+  room a major-tier opposing wall would otherwise imply, never narrow it,
+  and only when the swing distance itself clears a credibility floor.
+
+  Never applied to a non-"major" barrier (an ordinary "zone" already hard-
+  blocks on containment/zero-room per PR #517 - there is no wall room to
+  widen past for it in the first place, same as the deleted code only ever
+  widening a *major*-wall room base). Never applied when there is no
+  barrier at all (nothing to widen against). This function never narrows
+  ``raw_room_price`` - the return value is always ``>= raw_room_price``.
+  """
+  if barrier_tier != "major" or structural_swing is None:
+    return raw_room_price
+  try:
+    swing = float(structural_swing)
+    entry = float(planned_entry_price)
+    atr_value = float(atr)
+  except (TypeError, ValueError):
+    return raw_room_price
+  if not all(math.isfinite(value) for value in (swing, entry, atr_value)):
+    return raw_room_price
+  swing_distance = abs(entry - swing)
+  if swing_distance < _TECHNIQUE_SWING_ROOM_MIN_ATR_MULTIPLE * max(0.0, atr_value):
+    return raw_room_price
+  side = str(direction).upper()
+  # A credible swing only widens room in the direction the technique
+  # itself measured it - a swing behind the entry (wrong side) is not a
+  # forward room signal at all.
+  if side == "BUY" and swing <= entry:
+    return raw_room_price
+  if side == "SELL" and swing >= entry:
+    return raw_room_price
+  return max(raw_room_price, swing_distance)
+
+
 def evaluate_opposing_structure_v2(
   *,
   direction: str,
@@ -696,6 +753,7 @@ def evaluate_opposing_structure_v2(
   first_target_r: float | None = None,
   strength_score_ceiling: float = 15.0,
   caution_room_r: float = 2.0,
+  structural_swing: float | None = None,
 ) -> OpposingStructureEvidence | None:
   """Opposing Structure V2: continuous strength + room-in-R evidence for
   the nearest opposing barrier ahead of ``planned_entry_price``, reusing
@@ -716,6 +774,13 @@ def evaluate_opposing_structure_v2(
   to mean anything - when the caller doesn't have one yet, those fields
   stay ``None`` (never a fabricated stop) and only the raw
   price/pips/ATR room is reported.
+
+  ``structural_swing`` (2026-09, restoring PR #494's principle after PR
+  #499 deleted it outright): the technique's own structural swing
+  reference, if any - see ``widen_room_for_technique_swing``. Only ever
+  widens ``raw_room_price`` past what a *major*-tier wall alone implies,
+  never narrows it, and only for genuinely positive room (a
+  containment/zero-room case is never "widened" into looking clear).
   """
   side = str(direction).upper()
   if side not in {"BUY", "SELL"}:
@@ -731,6 +796,15 @@ def evaluate_opposing_structure_v2(
   zone_low = float(getattr(barrier, "lo"))
   zone_high = float(getattr(barrier, "hi"))
   raw_room = zone_low - planned if side == "BUY" else planned - zone_high
+  if raw_room > 0:
+    raw_room = widen_room_for_technique_swing(
+      raw_room,
+      direction=side,
+      planned_entry_price=planned,
+      structural_swing=structural_swing,
+      atr=atr,
+      barrier_tier=str(getattr(barrier, "tier", "") or ""),
+    )
   raw_room_pips = safe_div(raw_room, pip, default=0.0) or 0.0
   room_atr = safe_div(raw_room, atr) if atr > 0 else None
 
