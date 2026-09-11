@@ -14,7 +14,11 @@ from aiogram.types import Message
 from app.signals.chart_analysis import analyse_chart_image
 from app.autotrade.delivery import auto_trade_status_text, set_auto_trade_paused
 from app.autotrade.funnel_diagnostics import auto_trade_funnel_text
-from app.signals.manual_execution import request_close_all
+from app.signals.manual_execution import (
+  list_open_algo_auto_positions,
+  request_close_all,
+  request_close_auto_position,
+)
 from app.core.config import runtime_config
 from app.analysis import scanner
 from app.analysis.market_map_delivery import send_current_market_map
@@ -95,6 +99,7 @@ Daily <code>#N</code> is per symbol.
 <code>/trade_open [SYMBOL]</code>
 <code>/trade_active [SYMBOL] [#id]</code>
 <code>/trade_close [SYMBOL] #id ±pips [%] | be</code>
+<code>/trade_close_auto [position_id]</code> — close one algo_auto position
 <code>/trade_uncclose [SYMBOL] #id</code>
 <code>/trade_tp [SYMBOL] #id TP +pips</code>
 <code>/trade_sl [SYMBOL] #id be|price</code>
@@ -583,6 +588,59 @@ async def handle_trade_close(msg: Message) -> None:
     await msg.answer(render_result(result, symbol, "vip"))
   else:
     await msg.answer(await post_result(result, symbol))
+
+
+@router.message(Command("trade_close_auto"), F.chat.type == "private")
+async def handle_trade_close_auto(msg: Message) -> None:
+  """Close ONE fully-autonomous (algo_auto) broker position immediately.
+
+  Unlike /trade_close, there's no owner-typed signal id to resolve from -
+  an algo_auto trade was never typed by the owner, so it has no
+  manual_signals row/#seq. With no argument, list the open candidates
+  (position_id, symbol, direction, entry) so the owner can pick one; with
+  a position_id argument, close it now on the real broker and let the
+  broker fill compute win/loss (the same POSITION CLOSED card /auto_close_all
+  already produces per-position, via ApplyOwnerCloseAsync).
+  """
+  if not _is_owner(msg):
+    return
+  raw = _command_args(msg).strip()
+  if raw:
+    try:
+      position_id = int(raw.split()[-1])
+    except ValueError:
+      await msg.answer(
+        "Usage: <code>/trade_close_auto</code> to list open positions, "
+        "or <code>/trade_close_auto POSITION_ID</code> to close one."
+      )
+      return
+    open_positions = await list_open_algo_auto_positions()
+    if not any(row["position_id"] == position_id for row in open_positions):
+      await msg.answer(
+        f"⚠️ No open algo_auto position with id {position_id}. "
+        "Send <code>/trade_close_auto</code> to see current ones."
+      )
+      return
+    await request_close_auto_position(position_id)
+    await msg.answer(
+      f"🧹 <b>Close requested</b> — algo_auto position {position_id} "
+      "closing at market. The POSITION CLOSED card follows once the "
+      "broker confirms the fill."
+    )
+    return
+  open_positions = await list_open_algo_auto_positions()
+  if not open_positions:
+    await msg.answer("No open algo_auto (fully-autonomous) positions right now.")
+    return
+  lines = ["<b>Open algo_auto positions</b>"]
+  for row in open_positions:
+    lines.append(
+      f"#{row['position_id']}  {escape(str(row['symbol']))} "
+      f"{escape(str(row['direction'] or '?'))} @ {row['entry_price']}"
+    )
+  lines.append("")
+  lines.append("Close one: <code>/trade_close_auto POSITION_ID</code>")
+  await msg.answer("\n".join(lines))
 
 
 @router.message(Command("trade_tp"), F.chat.type == "private")
