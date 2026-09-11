@@ -2881,7 +2881,7 @@ public sealed class AutoTradeEngine(
   private const decimal ManualAlgoRiskLegLotsDefault = 0.05m;
   private const decimal ManualAlgoRiskLegLotsBelowEquityFloor = 0.02m;
   private const decimal ManualAlgoRiskLegEquityFloor = 1_000m;
-  private const decimal ManualAlgoRiskLegPipsFromStop = 10m;
+  private const decimal ManualAlgoRiskLegPipsFromStop = 15m;
 
   private static decimal ManualAlgoRiskLegPrice(
     TradeDirection direction,

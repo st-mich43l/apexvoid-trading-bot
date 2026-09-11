@@ -2442,7 +2442,7 @@ public sealed partial class AutoTradeEngineTests
     // entryHigh - no real zone to split) with SL 4384 -> Deep 4387 (exactly
     // the midpoint between the typed entry and the stop). 2026-09-08: the
     // former Mid leg is gone (2-leg 80/20 ladder); the third order is now
-    // the fixed-size risk leg 10 pips from the stop (4384 + 1.0 = 4385.0).
+    // the fixed-size risk leg 15 pips from the stop (4384 + 1.5 = 4385.5).
     using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
     var store = new FakeAutoTradeStore(ManualCandidateJson(
       direction: "BUY",
@@ -2467,7 +2467,7 @@ public sealed partial class AutoTradeEngineTests
 
     Assert.Equal(3, client.LimitOrders.Count);
     Assert.Equal(
-      new[] { 4390.0m, 4387.0m, 4385.0m },
+      new[] { 4390.0m, 4387.0m, 4385.5m },
       client.LimitOrders.Select(order => order.LimitPrice)
     );
 
@@ -2498,18 +2498,19 @@ public sealed partial class AutoTradeEngineTests
     Assert.Equal(3, client.LimitOrders.Count);
     Assert.DoesNotContain(store.Events, item => item.Type == "rejected");
     // 2026-09-08: 2-leg 80/20 ladder (Shallow, Deep) plus the fixed-size
-    // risk leg 10 pips from the stop (4002.0 - 1.0 = 4001.0, between Deep
+    // risk leg 15 pips from the stop (4002.0 - 1.5 = 4000.5, between Deep
     // and the stop - deeper/closer to invalidation than Deep itself).
     // 2026-09-09: Deep rests at the zone's own midpoint instead of its far
     // edge (zone 3999.5-4000.5 -> Deep 4000.0).
+    // 2026-09-11: risk leg widened from 10 to 15 pips from the stop.
     Assert.Equal(
-      new[] { 3999.5m, 4000.0m, 4001.0m },
+      new[] { 3999.5m, 4000.0m, 4000.5m },
       client.LimitOrders.Select(order => order.LimitPrice)
     );
     // SELL shallow/deep/risk vs absolute SL 4002.0 — each leg's relative
     // distance must resolve to that one Shallow-derived absolute price.
     Assert.Equal(
-      new long[] { 250_000, 200_000, 100_000 },
+      new long[] { 250_000, 200_000, 150_000 },
       client.LimitOrders.Select(order => order.RelativeStopLoss).ToArray()
     );
     Assert.True(client.LimitOrders.Sum(order => order.Volume) > 0);
@@ -2526,9 +2527,10 @@ public sealed partial class AutoTradeEngineTests
     // Shallow is zone.High; Deep/risk relative distances differ but every
     // RelativeStopLoss must resolve to the same absolute VIP stop.
     // 2026-09-08: 2-leg 80/20 ladder (Shallow 4353, Deep 4350) plus the
-    // fixed-size risk leg 10 pips from the stop (4347 + 1.0 = 4348.0).
+    // fixed-size risk leg 15 pips from the stop (4347 + 1.5 = 4348.5).
     // 2026-09-09: Deep rests at the zone's own midpoint instead of its far
     // edge (zone 4350-4353 -> Deep 4351.5).
+    // 2026-09-11: risk leg widened from 10 to 15 pips from the stop.
     using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
     var store = new FakeAutoTradeStore(ManualCandidateJson(
       direction: "BUY",
@@ -2549,11 +2551,11 @@ public sealed partial class AutoTradeEngineTests
 
     Assert.Equal(3, client.LimitOrders.Count);
     Assert.Equal(
-      new[] { 4353.0m, 4351.5m, 4348.0m },
+      new[] { 4353.0m, 4351.5m, 4348.5m },
       client.LimitOrders.Select(order => order.LimitPrice)
     );
     Assert.Equal(
-      new long[] { 600_000, 450_000, 100_000 },
+      new long[] { 600_000, 450_000, 150_000 },
       client.LimitOrders.Select(order => order.RelativeStopLoss).ToArray()
     );
     foreach (var order in client.LimitOrders)
@@ -3102,12 +3104,14 @@ public sealed partial class AutoTradeEngineTests
     Assert.True(client.LimitOrders[1].Volume > client.LimitOrders[2].Volume);
     // 2026-09-08: each leg's OWN lots x its OWN distance to the shared
     // absolute stop, not one flat 60p assumed for all three - Shallow is
-    // genuinely 60p from the stop (0.24 lots), the risk leg only 10p
+    // genuinely 60p from the stop (0.24 lots), the risk leg only 15p
     // (0.05 lots).
     // 2026-09-09: Deep rests at the zone's own midpoint (4351.5) instead of
     // its far edge, so its distance to the 4347/4356 stop is now 45p, not
-    // 30p (0.06 lots): -(0.24*60 + 0.06*45 + 0.05*10) * 10 = -176.00.
-    Assert.All(placed, item => Assert.Equal(-176.00m, item.GroupWorstCase));
+    // 30p (0.06 lots).
+    // 2026-09-11: risk leg widened from 10 to 15 pips from the stop:
+    // -(0.24*60 + 0.06*45 + 0.05*15) * 10 = -178.50.
+    Assert.All(placed, item => Assert.Equal(-178.50m, item.GroupWorstCase));
     foreach (var order in client.LimitOrders)
     {
       var distance = order.RelativeStopLoss / 100_000m;
