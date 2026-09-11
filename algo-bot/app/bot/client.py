@@ -44,6 +44,7 @@ OWNER_COMMANDS = [
   BotCommand(command="trade_open", description="[SYMBOL] — list open signals"),
   BotCommand(command="trade_active", description="[SYMBOL] [#id]"),
   BotCommand(command="trade_close", description="[SYMBOL] #id ±pips [%] | be"),
+  BotCommand(command="trade_close_auto", description="[position_id] — close one algo_auto position"),
   BotCommand(command="trade_uncclose", description="[SYMBOL] #id"),
   BotCommand(command="trade_tp", description="[SYMBOL] #id TP +pips"),
   BotCommand(command="trade_sl", description="[SYMBOL] #id be|price"),

@@ -909,6 +909,9 @@ public sealed class AutoTradeEngine(
         case "close_all":
           await HandleCloseAllCommandAsync(cancellationToken);
           break;
+        case "close_position":
+          await HandleCloseAutoPositionCommandAsync(command, cancellationToken);
+          break;
         case "move_sl":
           await HandleMoveSlCommandAsync(command, cancellationToken);
           break;
@@ -1097,6 +1100,70 @@ public sealed class AutoTradeEngine(
       volume: execution.ExecutedVolume,
       price: execution.ExecutionPrice,
       remainingVolume: remainingAfter
+    );
+  }
+
+  // Owner single-position control for fully-autonomous positions: before
+  // this, the only broker verb touching an algo_auto position was
+  // /auto_close_all (flattens every open position, manual and autonomous
+  // alike). Scoped to Stream == "algo_auto" only - manual /algo positions
+  // keep going through HandleCloseCommandAsync's own intent_id/group-aware
+  // path so this bare-PositionId command can never bypass /trade_close's
+  // richer partial-close/BE semantics for a signal the owner typed. Uses
+  // eventType "position_closed" (not "manual_closed") so the channel card
+  // renders through delivery.py's existing generic handler the same way
+  // /auto_close_all's own per-position closes already do - "manual_closed"
+  // is manual_execution.py-only and would silently produce no card for a
+  // signal with no manual_signals row.
+  private async Task HandleCloseAutoPositionCommandAsync(
+    ManualTradeCommand command,
+    CancellationToken cancellationToken
+  )
+  {
+    if (command.PositionId is not long positionId)
+    {
+      _log("auto-trade close_position command missing position_id");
+      return;
+    }
+    var client = RequireClient();
+    var state = _states.GetValueOrDefault(positionId)
+      ?? await store.GetPositionAsync(positionId, cancellationToken);
+    if (state is null || state.Stream != "algo_auto")
+    {
+      _log($"auto-trade close_position: position {positionId} is not an open algo_auto position");
+      await PublishAsync(
+        "manual_command_error",
+        $"close_position requested but position {positionId} is not an open algo_auto position",
+        cancellationToken,
+        positionId: positionId
+      );
+      return;
+    }
+    var remaining = (long?)state.RemainingVolume;
+    if (remaining is null || remaining <= 0)
+    {
+      var positions = await client.ReconcilePositionsAsync(cancellationToken);
+      remaining = positions.FirstOrDefault(item => item.PositionId == positionId)?.Volume;
+    }
+    if (remaining is not long remainingVolume || remainingVolume <= 0)
+    {
+      _log($"auto-trade close_position: position {positionId} not found");
+      await PublishAsync(
+        "manual_command_error",
+        $"close_position requested but position {positionId} is not open",
+        cancellationToken,
+        positionId: positionId
+      );
+      return;
+    }
+    var execution = await client.ClosePositionAsync(positionId, remainingVolume, cancellationToken);
+    await ApplyOwnerCloseAsync(
+      state,
+      execution,
+      eventType: "position_closed",
+      message: $"algo_auto position {positionId} closed by owner",
+      candidateId: state.CandidateId,
+      cancellationToken
     );
   }
 
