@@ -411,17 +411,38 @@ def build_stats(
     for record in records
   ]
   rows = _unique_trade_rows(stream_rows)
-  by_stream = {
-    stream: _performance_stats([
-      row for row in stream_rows if row["stream"] == stream
-    ])
+  # A manual /algo signal that gets broker-executed produces two rows with
+  # the same trade_key: one tagged "manual" (pips_log, written the moment
+  # the owner closes it in chat) and one tagged "algo_manual" (the
+  # broker's own authoritative fill/close, ingested independently - see
+  # _unique_trade_rows's own priority ordering, which already treats
+  # "algo_manual" as more authoritative than "manual" for the same
+  # trade_key). Without this exclusion, CHART / SIGNAL and ALGO MANUAL
+  # would each show that trade's pips independently, double-counting it
+  # across the two per-stream books (COMBINED UNIQUE was already correct,
+  # since it goes through _unique_trade_rows). A purely discretionary
+  # manual call that was never armed for broker execution has no
+  # "algo_manual" counterpart and stays in CHART / SIGNAL untouched.
+  algo_manual_trade_keys = {
+    row.get("trade_key")
+    for row in stream_rows
+    if row["stream"] == "algo_manual" and row.get("trade_key")
+  }
+  stream_rows_by_stream = {
+    stream: [
+      row for row in stream_rows
+      if row["stream"] == stream
+      and not (
+        stream == "manual" and row.get("trade_key") in algo_manual_trade_keys
+      )
+    ]
     for stream in _STREAM_ORDER
+  }
+  by_stream = {
+    stream: _performance_stats(group)
+    for stream, group in stream_rows_by_stream.items()
   }
   by_stream["all_unique"] = _performance_stats(rows)
-  stream_rows_by_stream = {
-    stream: [row for row in stream_rows if row["stream"] == stream]
-    for stream in _STREAM_ORDER
-  }
   by_setup_by_stream = {
     stream: _setup_groups_from_rows(group)
     for stream, group in stream_rows_by_stream.items()
