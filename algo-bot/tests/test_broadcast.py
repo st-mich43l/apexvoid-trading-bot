@@ -16,7 +16,7 @@ from app.signals import broadcast, trade_ops
 from app.persistence import store
 from app.core import symbols
 from app.bot import wiring
-from app.signals.pips_format import wing_icons
+from app.signals.pips_format import rr_entry, wing_icons
 
 
 VIP_ID = -100123456789
@@ -200,8 +200,6 @@ def test_render_entry_uses_real_fill_for_risk_once_known():
   -0.7R off the real fill, leaving "60 pips" impossible to reconcile
   against it. Once broker_fill_price is known, the risk line must use it,
   same fill-trust convention as trade_ops._achieved_rr's close-time R calc.
-  TP R-multiples stay pinned to the zone-edge/original_sl convention -
-  unaffected by this.
   """
   signal = {
     "daily_seq": 4,
@@ -221,6 +219,41 @@ def test_render_entry_uses_real_fill_for_risk_once_known():
 
 
 @pytest.mark.no_database
+def test_render_entry_tp_r_multiples_reconcile_with_the_real_fill_risk():
+  """Live 2026-09-11 (signal #329): the SL line already used the real fill
+  for its risk figure (previous test), but the TP lines still used the
+  pre-fill zone edge for their R-multiple - so a filled card showed
+  "risk 51 pips" right next to "TP1 · 0.5R", two numbers computed from two
+  different entries that don't reconcile with each other, the exact
+  "impossible to reconcile" problem the 2026-09-10 fix (above) was written
+  to solve, just moved from the SL line to the TP lines. Once a real fill
+  is known, TP R-multiples must be measured from it too - still pinned to
+  original_sl (never the live-trailing sl, per the 2026-09-04 fix), so an
+  eventual close-line R matches what this card promised.
+  """
+  signal = {
+    "daily_seq": 9,
+    "symbol": "XAU",
+    "action": "SELL",
+    "entry": 4350.0,
+    "entry_end": 4353.0,
+    "sl": 4356.0,
+    "original_sl": 4356.0,
+    "broker_fill_price": 4350.89,
+    "tps": [4347.0, 4344.0, 4338.0, 4332.0],
+  }
+  card = broadcast.render_entry(signal, "vip")
+  assert "risk <b>51 pips</b>" in card
+  # Pre-fix, these rendered pinned to the zone edge (60 pips risk): 0.5R,
+  # 1.0R, 2.0R, 3.0R. Real-fill risk (51.1 pips) moves every one of them.
+  assert "0.5R" not in card
+  assert "TP1:   <b>4,347</b>  ·  <b>0.8R</b>" in card
+  assert "TP2:   <b>4,344</b>  ·  <b>1.3R</b>" in card
+  assert "TP3:   <b>4,338</b>  ·  <b>2.5R</b>" in card
+  assert "TP4:   <b>4,332</b>  ·  <b>3.7R</b>" in card
+
+
+@pytest.mark.no_database
 def test_render_entry_falls_back_to_current_sl_when_never_trailed():
   """A signal that hasn't trailed yet has no original_sl - must fall back
   to the live sl so a first-post card (sl == the real original) is
@@ -237,7 +270,10 @@ def test_render_entry_falls_back_to_current_sl_when_never_trailed():
   }
 
   card = broadcast.render_entry(signal, "vip")
-  entry_reference = broadcast.rr_entry(signal)
+  # No broker fill and no original_sl yet - actual_entry()/original_risk
+  # both fall back to the same pre-fill zone-edge/live-sl values rr_entry
+  # always used, so this still matches render_entry's own computation.
+  entry_reference = rr_entry(signal)
   risk = abs(entry_reference - 4428.0)
 
   assert broadcast._rr(4414.0, entry_reference, risk) in card
