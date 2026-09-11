@@ -490,10 +490,14 @@ def test_analyze_excludes_mitigated_zones_from_reconcile_opposing(monkeypatch):
 
   monkeypatch.setattr(engine_module, "mark_mitigation", _mark_spy)
 
-  # A long oscillation (guarantees zones later get traded through and
-  # marked mitigated) followed by a final decisive breakout leg well
-  # beyond the prior range (guarantees some fresh, still-live zones near
-  # the top that nothing after them re-touches).
+  # A long oscillation (produces zones throughout the 90-110 range) followed
+  # by a decisive breakout leg well beyond the prior range (guarantees some
+  # fresh, still-live zones near the top that nothing after them re-touches)
+  # and then a deliberate pullback all the way back through the oscillation
+  # range - genuinely LEAVING the breakout zone before RETURNING to retest
+  # the earlier zones, so mitigation reflects a real retest rather than the
+  # zone's own formation-leg bar merely overlapping its own band (see
+  # zones.py::supply_demand's break_index fix).
   bars: list[tuple[float, float, float, float]] = []
   price = 100.0
   for i in range(250):
@@ -506,6 +510,10 @@ def test_analyze_excludes_mitigated_zones_from_reconcile_opposing(monkeypatch):
   for _ in range(8):
     close = price + 3.0
     bars.append((price, close + 0.5, price - 0.3, close))
+    price = close
+  for _ in range(20):
+    close = price - 4.0
+    bars.append((price, price + 0.3, close - 0.5, close))
     price = close
   m5 = _df(bars)
 
