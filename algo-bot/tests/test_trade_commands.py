@@ -51,7 +51,7 @@ async def test_scoped_command_menu(monkeypatch):
   assert second.kwargs["scope"].chat_id == 42
   assert {command.command for command in wiring.OWNER_COMMANDS} == {
     "trade",
-    "trade_active", "trade_close", "trade_uncclose", "trade_tp",
+    "trade_active", "trade_close", "trade_close_auto", "trade_uncclose", "trade_tp",
     "trade_sl", "trade_cancel", "trade_delete",
     "trade_modify",
     "trade_reopen", "trade_tag", "trade_untagged", "trade_note", "trade_review",

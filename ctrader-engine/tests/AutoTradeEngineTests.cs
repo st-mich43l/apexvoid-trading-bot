@@ -4542,6 +4542,108 @@ public sealed partial class AutoTradeEngineTests
   }
 
   [Fact]
+  public async Task ClosePositionCommandClosesSingleAlgoAutoPositionUsingBrokerFillNet()
+  {
+    // /trade_close_auto: before this, the only owner control touching an
+    // algo_auto position was /auto_close_all (flattens every open
+    // position). This closes ONE, by its own PositionId, at the real
+    // broker fill - same ApplyOwnerCloseAsync/eventType "position_closed"
+    // pipeline /auto_close_all's own per-position closes already use, so
+    // the channel card renders the same way.
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    var store = new FakeAutoTradeStore(BoxCandidateJson(
+      fullTpPips: 50,
+      timeframe: "M5"
+    ));
+    var client = new FakeTradingClient();
+    var engine = new AutoTradeEngine(
+      Options() with
+      {
+        RangeFlipEnabled = false,
+        RangeTargetsPips = [20, 30, 40, 50, 70],
+      },
+      store,
+      () => Now,
+      _ => { }
+    );
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 4000.0m, 4000.2m, Now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
+    await store.Ordered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+    var state = Assert.Single(store.Positions.Values);
+    var entry = state.EntryPrice;
+    Assert.Equal("algo_auto", state.Stream);
+
+    store.EnqueueCommand(JsonSerializer.Serialize(new
+    {
+      type = "close_position",
+      position_id = state.PositionId,
+    }));
+    await WaitForEventAsync(store, "group_result");
+
+    Assert.Single(client.Closes);
+    Assert.Empty(store.Positions);
+    var closed = Assert.Single(
+      store.Events,
+      item => item.Type == "position_closed"
+    );
+    Assert.Equal(4013.2m, closed.Price);
+    Assert.Contains("closed by owner", closed.Message);
+    var expectedPips = (4013.2m - entry) / 0.1m;
+    Assert.Equal(expectedPips, closed.GroupRealizedPips);
+    Assert.Contains(
+      store.Events,
+      item => item.Type == "group_result" && item.GroupRealizedPips == expectedPips
+    );
+
+    cts.Cancel();
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+  }
+
+  [Fact]
+  public async Task ClosePositionCommandRefusesNonAutoStreamPositions()
+  {
+    // Manual /algo positions must keep going through /trade_close's own
+    // intent_id/group-aware path (HandleCloseCommandAsync) - a bare
+    // PositionId close_position command must never bypass its richer
+    // partial-close/BE semantics for a signal the owner typed.
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    var now = Now;
+    var store = new FakeAutoTradeStore(ManualCandidateJson(manualStopLoss: 4006.0m));
+    var client = new FakeTradingClient();
+    var engine = new AutoTradeEngine(Options(), store, () => now, _ => { });
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 3990.0m, 3990.2m, now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
+    await store.Ordered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+    var positionId = await OpenManualAlgoPositionAsync(
+      store, client, () => now, value => now = value, cts.Token
+    );
+
+    store.EnqueueCommand(JsonSerializer.Serialize(new
+    {
+      type = "close_position",
+      position_id = positionId,
+    }));
+    await WaitForEventAsync(store, "manual_command_error");
+
+    Assert.Empty(client.Closes);
+    Assert.Contains(store.Positions.Values, item => item.PositionId == positionId);
+    var error = Assert.Single(
+      store.Events,
+      item => item.Type == "manual_command_error"
+    );
+    Assert.Contains("not an open algo_auto position", error.Message);
+
+    cts.Cancel();
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+  }
+
+  [Fact]
   public async Task ManualCommandCloseSupportsPartialFraction()
   {
     using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
