@@ -41,6 +41,7 @@ from app.signals import pips_format
 from app.signals.broadcast import render_entry, replace_entry_posts
 from app.signals.fx_manual_algo import uses_entry_price_display
 from app.signals.manual_intent import ManualTradeIntent
+from app.autotrade.active_exposure import _mget_or_get, normalize_direction, normalize_symbol
 
 log = logging.getLogger(__name__)
 
@@ -1239,6 +1240,73 @@ async def request_close(
     "intent_id": intent_id,
     "frac": frac,
   })
+
+
+async def list_open_algo_auto_positions(symbol: str | None = None) -> list[dict]:
+  """Open, fully-autonomous (Stream == "algo_auto") broker positions.
+
+  /trade_close_auto has no owner-typed signal id to resolve from (unlike
+  /trade_close's manual_signals lookup) - the owner picks a broker
+  position_id directly, so this surfaces the live candidates from the same
+  auto_trade:positions/auto_trade:position:{id} snapshots
+  app.autotrade.active_exposure already reads for exposure gating, filtered
+  to algo_auto only (manual /algo positions keep using /trade_close).
+  """
+  client = redis_state.get_client()
+  raw_ids = await client.smembers("auto_trade:positions")
+  if not raw_ids:
+    return []
+  position_ids: list[int] = []
+  for raw_id in raw_ids:
+    token = raw_id.decode() if isinstance(raw_id, bytes) else str(raw_id)
+    try:
+      position_ids.append(int(token))
+    except (TypeError, ValueError):
+      continue
+  if not position_ids:
+    return []
+  raw_positions = await _mget_or_get(
+    client,
+    [f"auto_trade:position:{position_id}" for position_id in position_ids],
+  )
+  wanted = normalize_symbol(symbol) if symbol else None
+  out: list[dict] = []
+  for position_id, raw in zip(position_ids, raw_positions, strict=False):
+    if not raw:
+      continue
+    try:
+      payload = json.loads(raw.decode() if isinstance(raw, bytes) else str(raw))
+    except (TypeError, ValueError, json.JSONDecodeError):
+      continue
+    if not isinstance(payload, dict) or payload.get("stream") != "algo_auto":
+      continue
+    remaining = payload.get("remaining_volume")
+    if remaining is None or float(remaining) <= 0:
+      continue
+    row_symbol = normalize_symbol(payload.get("symbol"))
+    if wanted is not None and row_symbol != wanted:
+      continue
+    out.append({
+      "position_id": position_id,
+      "symbol": row_symbol,
+      "direction": normalize_direction(payload.get("direction")),
+      "entry_price": payload.get("entry_price"),
+      "remaining_volume": remaining,
+      "setup": payload.get("setup"),
+    })
+  return out
+
+
+async def request_close_auto_position(position_id: int) -> None:
+  """/trade_close_auto: close ONE fully-autonomous (algo_auto) broker
+  position immediately, by its own position_id - before this, the only
+  owner control for an algo_auto position was /auto_close_all (flattens
+  every open position). AutoTradeEngine.cs's HandleCloseAutoPositionCommandAsync
+  refuses anything whose Stream isn't "algo_auto", so this can never be
+  used to bypass /trade_close's own intent_id/group-aware path for a
+  manual /algo signal.
+  """
+  await _xadd_command({"type": "close_position", "position_id": position_id})
 
 
 async def request_move_sl(signal_id: int, position_id: int, price: float) -> None:

@@ -1751,3 +1751,72 @@ async def test_request_move_sl_xadds_move_sl_command(monkeypatch):
   entries = await client.xrange("manual_trade:cmd3")
   payload = json.loads(entries[0][1]["payload"])
   assert payload == {"type": "move_sl", "position_id": 555, "price": 4108.5}
+
+
+@pytest.mark.asyncio
+async def test_request_close_auto_position_xadds_close_position_command(monkeypatch):
+  install_runtime_overrides(monkeypatch, legacy_overrides={"manual_trade_command_stream": "manual_trade:cmd4",})
+  client = redis_state.get_client()
+
+  await manual_execution.request_close_auto_position(777)
+
+  entries = await client.xrange("manual_trade:cmd4")
+  payload = json.loads(entries[0][1]["payload"])
+  assert payload == {"type": "close_position", "position_id": 777}
+
+
+# ---------------------------------------------------------------------------
+# list_open_algo_auto_positions
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_list_open_algo_auto_positions_filters_stream_symbol_and_remaining():
+  # Only the genuinely open algo_auto XAU position should survive: the
+  # algo_manual one belongs to /trade_close instead, the GBPJPY one is a
+  # different instrument, and the zero-remaining one is already flat.
+  client = redis_state.get_client()
+  await client.sadd(
+    "auto_trade:positions", "101", "102", "103", "104",
+  )
+  await client.set("auto_trade:position:101", json.dumps({
+    "position_id": 101, "symbol": "XAU", "direction": 0,
+    "entry_price": 4350.0, "remaining_volume": 500, "stream": "algo_auto",
+    "setup": "key-level",
+  }))
+  await client.set("auto_trade:position:102", json.dumps({
+    "position_id": 102, "symbol": "XAU", "direction": 1,
+    "entry_price": 4360.0, "remaining_volume": 300, "stream": "algo_manual",
+  }))
+  await client.set("auto_trade:position:103", json.dumps({
+    "position_id": 103, "symbol": "GBPJPY", "direction": 0,
+    "entry_price": 215.0, "remaining_volume": 400, "stream": "algo_auto",
+  }))
+  await client.set("auto_trade:position:104", json.dumps({
+    "position_id": 104, "symbol": "XAU", "direction": 1,
+    "entry_price": 4370.0, "remaining_volume": 0, "stream": "algo_auto",
+  }))
+
+  rows = await manual_execution.list_open_algo_auto_positions("XAU")
+
+  assert [row["position_id"] for row in rows] == [101]
+  assert rows[0]["direction"] == "BUY"
+  assert rows[0]["entry_price"] == 4350.0
+  assert rows[0]["remaining_volume"] == 500
+
+
+@pytest.mark.asyncio
+async def test_list_open_algo_auto_positions_no_symbol_returns_all_symbols():
+  client = redis_state.get_client()
+  await client.sadd("auto_trade:positions", "201", "202")
+  await client.set("auto_trade:position:201", json.dumps({
+    "position_id": 201, "symbol": "XAU", "direction": 0,
+    "entry_price": 4350.0, "remaining_volume": 500, "stream": "algo_auto",
+  }))
+  await client.set("auto_trade:position:202", json.dumps({
+    "position_id": 202, "symbol": "GBPJPY", "direction": 1,
+    "entry_price": 215.0, "remaining_volume": 200, "stream": "algo_auto",
+  }))
+
+  rows = await manual_execution.list_open_algo_auto_positions()
+
+  assert sorted(row["position_id"] for row in rows) == [201, 202]
