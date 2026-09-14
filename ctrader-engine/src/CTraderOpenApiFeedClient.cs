@@ -780,7 +780,14 @@ public sealed class CTraderOpenApiFeedClient : ICTraderFeedClient, ICTraderTrade
   // Kept well under options.RequestTimeout (default 30s) — see the
   // FetchDealsByPositionIdAsync comment above for why this specific lookup
   // must not hold the shared request lock as long as a live order call.
-  internal static readonly TimeSpan DealListLookupTimeout = TimeSpan.FromMilliseconds(500);
+  // Live 2026-09-14: at 500ms this lookup was timing out 100% of the time
+  // in production (every manual/algo close logged "Timed out after 0s" -
+  // that's 500ms rounding down in the N0 log format), forcing every close
+  // through the full CloseHistoryRetrySeconds/CloseHistoryMaxWaitSeconds
+  // fallback wait (~60-70s) before Telegram ever got notified. 2s gives the
+  // broker's real round-trip time a fair chance while staying an order of
+  // magnitude under the 30s that caused the original blocking incident.
+  internal static readonly TimeSpan DealListLookupTimeout = TimeSpan.FromMilliseconds(2000);
 
   internal static bool IsIncorrectBoundaries(Exception exception)
   {
