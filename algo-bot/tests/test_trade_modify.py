@@ -1,5 +1,6 @@
 """ /trade_modify — pending-only level rewrite + new channel cards. """
 
+import time
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -285,6 +286,15 @@ async def test_manual_cancelled_pending_modify_rearms_and_replaces(monkeypatch):
   assert await redis_state.get_client().get(
     f"manual_trade:pending_modify:{intent}",
   ) is None
+  # Owner-reported 2026-09: the re-armed intent kept the ORIGINAL signal's
+  # ts (here, the fixture's deliberately ancient ts=1) instead of
+  # stamping "now" - AutoTradeEngine.cs rejects any candidate whose
+  # CreatedAt is older than CandidateMaxAgeSeconds (default 420s) as
+  # "stale candidate", so a /trade_modify long after the original signal
+  # was typed silently never reached the broker. The re-armed intent's
+  # created_at must be fresh, not the signal's ts=1.
+  rearmed_intent = publish.await_args.args[0]
+  assert rearmed_intent.created_at > time.time() - 30
 
 
 @pytest.mark.asyncio

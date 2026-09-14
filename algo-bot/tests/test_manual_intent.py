@@ -77,6 +77,28 @@ def test_build_intent_respects_revision():
   assert intent.revision == 3
 
 
+def test_build_intent_defaults_created_at_to_signal_ts():
+  # Correct for the very first arm, built moments after the signal itself
+  # is created (fallback.py::_arm_algo_intent) - the only caller that
+  # relies on this default.
+  intent = build_intent(_signal(ts=1_800_000_000))
+
+  assert intent.created_at == 1_800_000_000
+
+
+def test_build_intent_created_at_override_ignores_stale_signal_ts():
+  # Owner-reported 2026-09: /trade_modify re-arming a bumped revision with
+  # the ORIGINAL signal.ts (typed long before the modify) produced a
+  # candidate AutoTradeEngine.cs rejected outright as "stale candidate" -
+  # no broker fill, no owner-visible error beyond that bare reject reason.
+  # A re-arm must be able to stamp "now" instead.
+  intent = build_intent(
+    _signal(ts=1_800_000_000), revision=1, created_at=1_800_050_000,
+  )
+
+  assert intent.created_at == 1_800_050_000
+
+
 def test_build_intent_handles_missing_optional_setup_metadata():
   signal = _signal()
   del signal["setup_type"]
