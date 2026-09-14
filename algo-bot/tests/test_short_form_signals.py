@@ -7,6 +7,7 @@ from app.signals.parsing import (
   DEFAULT_SETUP_TYPE,
   DEFAULT_SL_PIPS,
   DEFAULT_TP_PIPS,
+  MANUAL_ALGO_DEFAULT_TARGET_R_MULTIPLES,
   _parse_manual,
 )
 
@@ -17,22 +18,22 @@ PIP = pip_for("XAU")
 
 
 # 2026-09 (owner-reported): manual /algo TP levels are now a bot-calculated
-# 0.5R/1R/2R/3R ladder, not the pip-default DEFAULT_TP_PIPS ladder below (and
+# R-multiple ladder, not the pip-default DEFAULT_TP_PIPS ladder below (and
 # not whatever the owner types as tp - see MANUAL_ALGO_DEFAULT_TARGET_R_MULTIPLES).
-_R_MULTIPLES = (0.5, 1.0, 2.0, 3.0)
+_R_MULTIPLES = MANUAL_ALGO_DEFAULT_TARGET_R_MULTIPLES
 
 
 def test_owner_short_form_example_auto_fills_sl_tp_and_setup():
-  # Owner's own example: "xau buy 4078-75 / algo" -> sl always 60 pips,
-  # that is 4072 (entry_high 4078 - 6.0).
+  # Owner's own example: "xau buy 4078-75 / algo" -> sl always 50 pips,
+  # that is 4073 (entry_high 4078 - 5.0).
   parsed = _parse_manual("xau buy 4078-75 / algo")
 
   assert parsed is not None
   assert parsed["action"] == "BUY"
   assert parsed["entry"] == pytest.approx(4075.0)
   assert parsed["entry_end"] == pytest.approx(4078.0)
-  assert parsed["sl"] == pytest.approx(4072.0)
-  risk = 4078.0 - 4072.0
+  assert parsed["sl"] == pytest.approx(4073.0)
+  risk = 4078.0 - 4073.0
   assert parsed["tps"] == [
     pytest.approx(4078.0 + r * risk) for r in _R_MULTIPLES
   ]
@@ -42,7 +43,7 @@ def test_owner_short_form_example_auto_fills_sl_tp_and_setup():
 
 def test_owner_manual_sl_example_keeps_explicit_stop():
   # Owner's own example: "xau buy 4078-75 / sl 4070 / algo" must follow the
-  # owner's stop price exactly, not the 60-pip default - the R ladder is
+  # owner's stop price exactly, not the 50-pip default - the R ladder is
   # measured from that exact stop.
   parsed = _parse_manual("xau buy 4078-75 / sl 4070 / algo")
 
@@ -73,7 +74,7 @@ def test_short_form_explicit_setup_tag_overrides_default():
 
   assert parsed is not None
   assert parsed["setup_type"] == "trend-pullback"
-  assert parsed["sl"] == pytest.approx(4072.0)
+  assert parsed["sl"] == pytest.approx(4073.0)
 
 
 def test_short_form_explicit_tp_is_respected_in_algo_mode():
@@ -83,7 +84,7 @@ def test_short_form_explicit_tp_is_respected_in_algo_mode():
   parsed = _parse_manual("xau buy 4078-75 / tp 88/98 / algo")
 
   assert parsed is not None
-  assert parsed["sl"] == pytest.approx(4072.0)
+  assert parsed["sl"] == pytest.approx(4073.0)
   assert parsed["setup_type"] == DEFAULT_SETUP_TYPE
   assert parsed["tps"] == [pytest.approx(4088.0), pytest.approx(4098.0)]
 
@@ -124,7 +125,7 @@ def test_explicit_setup_overrides_default():
 
   assert parsed is not None
   assert parsed["action"] == "BUY"
-  assert parsed["sl"] == pytest.approx(4072.0)
+  assert parsed["sl"] == pytest.approx(4073.0)
 
 
 def test_gbpjpy_frontload_weights_from_manual_profile(monkeypatch):
@@ -159,7 +160,7 @@ def test_short_form_without_algo_suffix_still_auto_fills():
 
   assert parsed is not None
   assert parsed["execution_mode"] == "notify"
-  assert parsed["sl"] == pytest.approx(4072.0)
+  assert parsed["sl"] == pytest.approx(4073.0)
   assert parsed["setup_type"] == DEFAULT_SETUP_TYPE
 
 
