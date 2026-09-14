@@ -397,6 +397,7 @@ def resolve_actionability(
   atr: float,
   pip_size: float,
   cfg: Any | None = None,
+  opposing_entries: tuple[ZoneOpposingEntry, ...] | None = None,
 ) -> ActionabilityResolution:
   """Resolve semantic, cross-side, and opposing-room hard geometry.
 
@@ -405,13 +406,26 @@ def resolve_actionability(
   own technique-native HTF supply/demand scan (2026-09, Market Map purge
   stage 4 - "these technique calculate swing right? so we can migrate to
   scanner, detector and clean"), not Market Map.
+
+  ``opposing_entries`` (2026-09, Key Level structural repair Phase 2), when
+  given, is used directly instead of deriving entries from ``zones`` via
+  ``zone_opposing_entries`` - the caller has already built a multi-timeframe,
+  merged, cross-side-reconciled pool (``StructuralBarrierBook``) and tiered
+  it the same way ``zone_opposing_entries`` would, so re-deriving from raw
+  ``zones`` here would silently discard that work. ``zones`` stays required
+  either way (still read directly above for the missing-context telemetry
+  check) so this is additive, not a breaking signature change.
   """
   if cfg is None:
     from app.core.config import runtime_config
     cfg = runtime_config
   observed = tuple(observed_results)
-  entries = zone_opposing_entries(
-    zones, major_score=float(cfg.analysis.market_map.major_score),
+  entries = (
+    tuple(opposing_entries)
+    if opposing_entries is not None
+    else zone_opposing_entries(
+      zones, major_score=float(cfg.analysis.market_map.major_score),
+    )
   )
   gated: dict[int, ActionabilityDecision] = {}
   decisions: dict[int, list[ActionabilityDecision]] = {}
@@ -639,15 +653,17 @@ def resolve_actionability(
         # Opposing Structure V2 (§25) — shadow telemetry only, flattened
         # from the SAME evidence evaluate_structural_target_room already
         # attached to measured["opposing_evidence"] above (no second
-        # lookup). Absent (None) whenever that key isn't there, e.g. an
-        # older/simplified caller of evaluate_structural_target_room in a
-        # test fixture that doesn't build it.
+        # lookup). Absent (empty dict) only for an older/simplified caller
+        # of evaluate_structural_target_room in a test fixture that
+        # doesn't build it - OpposingStructureEvidence.to_dict() itself
+        # never returns an empty dict in production, so opposing_zone_
+        # present is a real True/False here, never a silent None.
         evidence = measured.get("opposing_evidence") or {}
         result = replace(
           result,
           target_cap_pips=room.effective_target_pips,
           target_room_measured=measured,
-          opposing_zone_present=bool(evidence) or None,
+          opposing_zone_present=bool(evidence),
           opposing_zone_side=evidence.get("zone_side"),
           opposing_zone_low=evidence.get("zone_low"),
           opposing_zone_high=evidence.get("zone_high"),
@@ -665,6 +681,24 @@ def resolve_actionability(
           opposing_risk_score=evidence.get("opposing_risk_score"),
           opposing_action=evidence.get("action"),
           opposing_reason_code=evidence.get("reason_code"),
+        )
+      else:
+        # 2026-09 (Key Level structural repair Phase 2, telemetry fix): the
+        # room check genuinely ran and found no opposing barrier at all -
+        # a real, meaningful outcome distinct from "never evaluated"
+        # (this whole block only runs when ``targets`` was non-empty in
+        # the first place). Previously this branch left every opposing_*
+        # field - including opposing_zone_present - at its dataclass
+        # default (None), indistinguishable from a result that never
+        # reached this check, making it impossible to tell live whether
+        # the opposing-structure gate was running at all. Confirmed via
+        # production query: 9/10 Key Level fills since PR #523 deployed
+        # were NULL, 0 were ever False.
+        result = replace(
+          result,
+          target_cap_pips=room.effective_target_pips,
+          target_room_measured=measured,
+          opposing_zone_present=False,
         )
 
     role = _key_level_role(result, context, cfg)

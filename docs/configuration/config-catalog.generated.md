@@ -3,9 +3,9 @@
 > Generated from the typed `ApexVoidConfig` Catalog V2 schema. Do not edit manually.
 
 - Catalog version: `2`
-- Contract fingerprint: `8beb64bd5dce37519b85482591e7cbfa658838346655958c3ffff146947d6f25`
-- Document fingerprint: `a9ce9dbefaeeefab0b5c5eec06b185200848de721f7516350e1f5847fcb44044`
-- Items: `629`
+- Contract fingerprint: `81e7fc53bd9090daeb136039e73650ffd744a295605a6f22389aa3323b4cf1b8`
+- Document fingerprint: `5118aa2a3751194a88bec6a0cfe3b15a92db24f8c557449a55e6593a26c07860`
+- Items: `630`
 - Runtime status: canonical-only; `app.core.config.runtime_config` is authoritative
 
 ## actionability
@@ -56,6 +56,7 @@
 | `actionability.target_room.minimum_capped_target_pips` | `AUTO_TRADE_MIN_CAPPED_TARGET_PIPS` | `float` | `pips` | `configurable` | `15.0` |
 | `actionability.target_room.scalp_barrier_buffer_atr` | `AUTO_TRADE_SCALP_OPPOSING_BARRIER_ATR` | `float` | `atr` | `configurable` | `0.15` |
 | `actionability.target_room.scalp_minimum_capped_target_pips` | `AUTO_TRADE_SCALP_MIN_CAPPED_TARGET_PIPS` | `float` | `pips` | `configurable` | `8.0` |
+| `actionability.target_room.structural_barrier_book_enabled` | `AUTO_TRADE_STRUCTURAL_BARRIER_BOOK_ENABLED` | `bool` | `boolean` | `configurable` | `true` |
 | `actionability.zone_reconciliation.enabled` | `AUTO_TRADE_ZONE_RECONCILE_ENABLED` | `bool` | `boolean` | `configurable` | `true` |
 | `actionability.zone_reconciliation.mode` | `AUTO_TRADE_ZONE_RECONCILE_MODE` | `str` | `enum` | `configurable` | `"enforce"` |
 

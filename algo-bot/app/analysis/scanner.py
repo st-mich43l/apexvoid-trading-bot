@@ -96,7 +96,14 @@ from app.autotrade.setup_lifecycle import (
 )
 from app.autotrade.setup_card import kill_setup_card
 from app.autotrade import worker as autotrade_worker
-from app.autotrade.structural_target_room import zone_meets_execution_width
+from app.autotrade.structural_barriers import (
+  build_structural_barrier_book,
+  to_opposing_entries,
+)
+from app.autotrade.structural_target_room import (
+  ZoneOpposingEntry,
+  zone_meets_execution_width,
+)
 
 _PRE_CONFIRMED_CHAIN = (DISCOVERED, WATCHING, TOUCHED, FORMING, CONFIRMED)
 from app.autotrade.lifecycle import emit_lifecycle, increment_metric
@@ -249,6 +256,35 @@ def _htf_opposing_zones(analysis: Any, *, symbol: str) -> list[Zone] | None:
       max_width_pips=float(policy.execution_zone_max_width_pips),
     )
   ]
+
+
+def _structural_barrier_opposing_entries(
+  analysis: Any, *, symbol: str,
+) -> tuple[ZoneOpposingEntry, ...] | None:
+  """Multi-timeframe (M5/M15/H1), merged, cross-side-reconciled opposing-
+  structure pool for resolve_actionability's opposing-room check (2026-09,
+  Key Level structural repair Phase 2) - replaces the single-timeframe
+  (M15-only) ``_htf_opposing_zones`` read above with
+  ``StructuralBarrierBook``, restoring the two structural-pool operations
+  (same-side merge, cross-side reconciliation) the 2026-09-07 Market Map
+  purge dropped when it replaced ``MarketMap.actionable_entries`` with an
+  unreconciled M15-only zone read. Gated by
+  ``actionability.target_room.structural_barrier_book_enabled`` - see
+  ``_htf_opposing_zones`` for the pre-wiring fallback this reverts to when
+  disabled.
+  """
+  per_tf = getattr(analysis, "per_tf", None) or {}
+  if not per_tf:
+    return None
+  policy = runtime_config.execution.policy
+  barriers = build_structural_barrier_book(
+    per_tf,
+    major_score=float(runtime_config.analysis.market_map.major_score),
+    pip_size=_pip_size(symbol),
+    max_width_atr=float(policy.execution_zone_max_width_atr),
+    max_width_pips=float(policy.execution_zone_max_width_pips),
+  )
+  return to_opposing_entries(barriers)
 
 
 def _level_bucket(symbol: str, level: float, bucket_pips: int) -> str:
@@ -3243,6 +3279,9 @@ async def _handle_event(
     )
     for result in observed_results
   ]
+  structural_barrier_book_enabled = bool(
+    runtime_config.actionability.target_room.structural_barrier_book_enabled
+  )
   actionability = resolve_actionability(
     symbol=symbol,
     observed_results=observed_results,
@@ -3251,6 +3290,11 @@ async def _handle_event(
     atr=invalidation_atr,
     pip_size=_pip_size(symbol),
     cfg=None,
+    opposing_entries=(
+      _structural_barrier_opposing_entries(analysis, symbol=symbol)
+      if structural_barrier_book_enabled
+      else None
+    ),
   )
   actionable_results = list(actionability.actionable)
   actionability_decisions = list(actionability.decisions)
