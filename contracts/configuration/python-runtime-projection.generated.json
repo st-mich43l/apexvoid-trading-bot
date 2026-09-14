@@ -1,6 +1,6 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "8beb64bd5dce37519b85482591e7cbfa658838346655958c3ffff146947d6f25",
+  "configuration_contract_fingerprint_sha256": "81e7fc53bd9090daeb136039e73650ffd744a295605a6f22389aa3323b4cf1b8",
   "excluded_ctrader_only_count": 49,
   "excluded_paths": [
     "bootstrap.ctrader.connection.host",
@@ -53,7 +53,7 @@
     "risk.sizing.add_require_risk_free",
     "risk.sizing.risk_pct"
   ],
-  "included_leaf_count": 580,
+  "included_leaf_count": 581,
   "included_paths": [
     "actionability.contested_corridor.gap_atr",
     "actionability.counter_bias.allowed",
@@ -99,6 +99,7 @@
     "actionability.target_room.minimum_capped_target_pips",
     "actionability.target_room.scalp_barrier_buffer_atr",
     "actionability.target_room.scalp_minimum_capped_target_pips",
+    "actionability.target_room.structural_barrier_book_enabled",
     "actionability.zone_reconciliation.enabled",
     "actionability.zone_reconciliation.mode",
     "analysis.atr.length",
@@ -639,6 +640,6 @@
   "included_secret_count": 6,
   "included_shared_field_count": 96,
   "projection_model": "app.configuration.models.python_runtime.PythonRuntimeConfig",
-  "source_fingerprint_sha256": "8beb64bd5dce37519b85482591e7cbfa658838346655958c3ffff146947d6f25",
+  "source_fingerprint_sha256": "81e7fc53bd9090daeb136039e73650ffd744a295605a6f22389aa3323b4cf1b8",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

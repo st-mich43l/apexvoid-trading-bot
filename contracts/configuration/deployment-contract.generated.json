@@ -57,6 +57,7 @@
       "actionability.target_room.minimum_capped_target_pips",
       "actionability.target_room.scalp_barrier_buffer_atr",
       "actionability.target_room.scalp_minimum_capped_target_pips",
+      "actionability.target_room.structural_barrier_book_enabled",
       "actionability.zone_reconciliation.enabled",
       "actionability.zone_reconciliation.mode",
       "analysis.atr.length",
@@ -559,7 +560,7 @@
     "XAU_ZONE_PREFERRED_MAX_WIDTH_PRICE": "instruments.XAU.analysis.zones.preferred_maximum_width_price",
     "XAU_ZONE_PREFERRED_MIN_WIDTH_PRICE": "instruments.XAU.analysis.zones.preferred_minimum_width_price"
   },
-  "fingerprint": "8beb64bd5dce37519b85482591e7cbfa658838346655958c3ffff146947d6f25",
+  "fingerprint": "81e7fc53bd9090daeb136039e73650ffd744a295605a6f22389aa3323b4cf1b8",
   "instrument_schema": {
     "active_projection_symbol": "XAU",
     "optional": [

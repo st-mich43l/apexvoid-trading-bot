@@ -1,20 +1,20 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "8beb64bd5dce37519b85482591e7cbfa658838346655958c3ffff146947d6f25",
-  "configuration_document_fingerprint_sha256": "a9ce9dbefaeeefab0b5c5eec06b185200848de721f7516350e1f5847fcb44044",
+  "configuration_contract_fingerprint_sha256": "81e7fc53bd9090daeb136039e73650ffd744a295605a6f22389aa3323b4cf1b8",
+  "configuration_document_fingerprint_sha256": "5118aa2a3751194a88bec6a0cfe3b15a92db24f8c557449a55e6593a26c07860",
   "counts": {
     "algorithm_constants": 97,
-    "configurable": 522,
+    "configurable": 523,
     "known_conflicts": 30,
     "owners": {
       "ctrader": 49,
-      "python": 484,
+      "python": 485,
       "shared": 96
     },
     "protocol_constants": 10,
     "secrets": 9,
     "shared": 96,
-    "total_items": 629
+    "total_items": 630
   },
   "items": [
     {
@@ -1713,6 +1713,43 @@
       "terminal_deprecation_reason": null,
       "type": "float",
       "unit": "pips",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_STRUCTURAL_BARRIER_BOOK_ENABLED",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {},
+      "default": true,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": true
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Sources the opposing-structure pool (scanner actionability gate and TradePlan room check) from the multi-timeframe, merged, cross-side-reconciled structural barrier book instead of a single-timeframe zone read, and feeds the fixed-RR ladder a real opposing-wall room cap. Disable to fall back to the single-timeframe read with no room cap.",
+      "display_id": "config:actionability.target_room.structural_barrier_book_enabled",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "actionability.target_room.structural_barrier_book_enabled",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "execution_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "bool",
+      "unit": "boolean",
       "validation_summary": "Pydantic required/type coercion only"
     },
     {
@@ -23441,6 +23478,6 @@
       "validation_summary": "Pydantic required/type coercion only"
     }
   ],
-  "source_fingerprint_sha256": "8beb64bd5dce37519b85482591e7cbfa658838346655958c3ffff146947d6f25",
+  "source_fingerprint_sha256": "81e7fc53bd9090daeb136039e73650ffd744a295605a6f22389aa3323b4cf1b8",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }
