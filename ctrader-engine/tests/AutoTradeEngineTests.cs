@@ -1301,6 +1301,60 @@ public sealed partial class AutoTradeEngineTests
   }
 
   [Fact]
+  public async Task GroupDeepestFillExcludesTheManualRiskLegFromDisplayPips()
+  {
+    // Owner-reported 2026-09-14 (real XAU SELL, signal 341): the manual/algo
+    // risk leg (ManualAlgoRiskLegPrice) sits deliberately ~15 pips from the
+    // shared stop as a small trade-off leg - not a genuinely favorable
+    // fill. Because it's numerically closest to the stop side, the naive
+    // "most favorable fill in the group" Min/Max in GroupDeepestEntryPrice
+    // picked IT as the group's deepest entry instead of the real ladder's
+    // deep leg, corrupting the reported pips. Shared stop 4356.0: shallow
+    // 4350.0 (tranche 1), deep 4353.0 (tranche 2, genuinely the group's
+    // best real fill), risk leg 4354.5 (tranche 3, stop - 15p) - numerically
+    // the highest/"most favorable" of the three for a SELL, but must be
+    // excluded from the reference pick.
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    var store = new FakeAutoTradeStore(CandidateJson());
+    var client = new FakeTradingClient();
+    client.SeedPosition(new TradingPosition(
+      91, 7, TradeDirection.Sell, 1000, 4350.0m, 4356.0m,
+      "apexvoid-auto", "avm|manual341-1|manual341|1000|1000|30|1|1000|0|1|3"
+    ));
+    client.SeedPosition(new TradingPosition(
+      92, 7, TradeDirection.Sell, 200, 4353.0m, 4356.0m,
+      "apexvoid-auto", "avm|manual341-2|manual341|200|200|120|1|1000|0|2|3"
+    ));
+    client.SeedPosition(new TradingPosition(
+      93, 7, TradeDirection.Sell, 50, 4354.5m, 4356.0m,
+      "apexvoid-auto", "avm|manual341-3|manual341|50|50|500|1|1000|0|3|3"
+    ));
+    client.CloseExecutionPriceToReturn = 4346.8m;
+    var engine = new AutoTradeEngine(Options(), store, () => Now, _ => { });
+    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
+    await WaitForEventAsync(store, "ready");
+
+    // Shallow's own TP1 (4350.0 - 30p = 4347.0) fires; deep's own TP1
+    // (4353.0 - 120p = 4341.0) and the risk leg's (far away) stay untouched.
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 4346.8m, 4347.0m, Now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+
+    var takeProfit = Assert.Single(
+      store.Events, item => item.Type == "take_profit"
+    );
+    Assert.Equal(91, takeProfit.PositionId);
+    // Deep leg's real fill (4353.0), not the risk leg's near-stop price
+    // (4354.5) despite it being the numerically "highest" SELL entry.
+    Assert.Equal(4353.0m, takeProfit.LegEntryPrice);
+    Assert.Equal(62.0m, takeProfit.LegRealizedPips);
+
+    cts.Cancel();
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+  }
+
+  [Fact]
   public async Task StrategyPolicyLimitRequiresZoneFillCapability()
   {
     using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
