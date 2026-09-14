@@ -45,6 +45,18 @@ dated section after deployment.
   `False`, collapsing "no opposing zone found" and "never evaluated"
   into the same NULL - confirmed live, 9/10 Key Level fills since PR
   #523 deployed were NULL).
+- `StructuralBarrierBook` also restores `_attach_confluence`'s one
+  effect that ever reached a trading decision: a barrier overlapping a
+  same-side key level, session level, or unbroken trendline now gets its
+  score bumped to the stronger of the two (never its tier - traced
+  through the old code and confirmed a level/trendline can never itself
+  promote a real zone's tier). That score only matters as a tie-break in
+  cross-side reconciliation. Investigated restoring the old round-number/
+  revisit/swept backfill (`_fill_side`) too, but traced it to a
+  display-only code path in the old `market_map.py` (fed the Telegram
+  card's shown zones, never `MarketMap.actionable_entries`, the field
+  the room-check gate actually reads) - not implemented, since there was
+  nothing here that ever affected a trading decision.
 - FX sessions are now pair-native quality context, never time-of-day hard
   gates: EURUSD/GBPUSD focus London+NY, GBPJPY focuses London, and USDJPY
   focuses Tokyo+NY. Focus hours score 2 (good); all other hours score 1

@@ -23,9 +23,10 @@ must never import ``market_map``, ``map_strategy``, ``MarketMap``,
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Mapping, Sequence
 
+from app.analysis.trendlines import value_at
 from app.analysis.types import Zone
 from app.autotrade.structural_target_room import (
   ZoneOpposingEntry,
@@ -43,6 +44,12 @@ _CROSS_SIDE_OVERLAP_RATIO = 0.5
 _CROSS_SIDE_MAX_DROP_FRACTION = 0.34
 
 _TIER_RANK = {"level": 1, "zone": 2, "major": 3}
+
+# Session-level band width, price units = this * ATR. Mirrors market_map.py's
+# own SESSION_BAND_ATR constant exactly (duplicated, not imported - this
+# module must never import market_map, see the dependency test).
+_SESSION_BAND_ATR = 0.1
+_MAJOR_SESSION_LEVELS = {"PDH", "PDL", "PWH", "PWL"}
 
 
 @dataclass(frozen=True)
@@ -218,6 +225,100 @@ def _resolve_cross_side_overlaps(
   return [barrier for index, barrier in enumerate(barriers) if index not in drop]
 
 
+def _confluence_candidates(
+  per_tf: Mapping[str, Any],
+  *,
+  timeframes: tuple[str, ...],
+  major_score: float,
+  proximal_band_atr: float,
+) -> list[tuple[str, float, float, float]]:
+  """(side, low, high, score) reference bands from key levels, session
+  levels, and unbroken trendlines — mirrors the reference pools
+  market_map.py's ``build_map()`` fed into ``_attach_confluence``
+  (``key_levels()``/session levels/``trendline_candidates``). A candidate
+  here can never become an independent barrier — every one of these is
+  ``_level_entry``'s default ``tier="level"`` in the old code, and
+  ``_is_structural_actionable`` never accepted "level" tier — so this only
+  ever boosts an already-real barrier's score, restoring
+  ``_attach_confluence``'s one effect that actually reached a trading
+  decision (see structural repair Phase 2/3 notes on
+  ``build_structural_barrier_book``).
+
+  Deliberately price-position-agnostic: old market_map.py sided a level by
+  comparing it to a live price snapshot at map-build time. Here a
+  candidate is offered to both sides and only survives via genuine band
+  overlap against an already-correctly-sided barrier below, which makes a
+  live price parameter unnecessary — a level far on the wrong side of a
+  barrier simply never overlaps it.
+  """
+  out: list[tuple[str, float, float, float]] = []
+  for tf in timeframes:
+    analysis = per_tf.get(tf)
+    if analysis is None:
+      continue
+    atr = _timeframe_atr(analysis)
+    if atr <= 0:
+      continue
+    band = max(0.0, proximal_band_atr) * atr
+    for level in getattr(analysis, "key_levels", None) or ():
+      value = float(level.price)
+      score = float(getattr(level, "strength", None) or getattr(level, "touches", 1))
+      out.append(("buy", value - band, value + band, score))
+      out.append(("sell", value - band, value + band, score))
+    session_band = _SESSION_BAND_ATR * atr
+    for session in getattr(analysis, "session_levels", None) or ():
+      value = float(session.price)
+      score = (
+        major_score if str(session.name) in _MAJOR_SESSION_LEVELS else 4.0
+      )
+      out.append(("buy", value - session_band, value + session_band, score))
+      out.append(("sell", value - session_band, value + session_band, score))
+    df = getattr(analysis, "df", None)
+    current_bar = max(0, len(df) - 1) if df is not None else 0
+    for line in getattr(analysis, "trendlines", None) or ():
+      if line.broken:
+        continue
+      side = (
+        "buy" if line.kind == "support"
+        else "sell" if line.kind == "resistance"
+        else None
+      )
+      if side is None:
+        continue
+      value = value_at(line, current_bar)
+      out.append((side, value - band, value + band, float(line.touches)))
+  return out
+
+
+def _apply_confluence_boost(
+  barriers: list[StructuralBarrier],
+  candidates: list[tuple[str, float, float, float]],
+) -> list[StructuralBarrier]:
+  """Port of market_map.py's ``_attach_confluence`` — but only its one
+  effect that ever reached a trading decision: a barrier overlapping a
+  same-side reference (key level, session level, or trendline) gets its
+  score bumped to the stronger of the two. Tier is deliberately never
+  touched — ``_attach_confluence``'s own ``max(tier)`` could never promote
+  a real zone's tier past itself either, since every reference is always
+  the weakest ("level") tier rank in the old code (see
+  ``_confluence_candidates``), so reproducing that isn't a simplification,
+  it's the actual old behavior.
+  """
+  boosted: list[StructuralBarrier] = []
+  for barrier in barriers:
+    best_score = barrier.score
+    for side, low, high, score in candidates:
+      if side != barrier.side or score <= best_score:
+        continue
+      if _bands_overlap(barrier.low, barrier.high, low, high):
+        best_score = score
+    boosted.append(
+      barrier if best_score == barrier.score
+      else replace(barrier, score=best_score)
+    )
+  return boosted
+
+
 def build_structural_barrier_book(
   per_tf: Mapping[str, Any],
   *,
@@ -226,6 +327,7 @@ def build_structural_barrier_book(
   max_width_atr: float,
   max_width_pips: float,
   timeframes: tuple[str, ...] = DEFAULT_STRUCTURAL_TIMEFRAMES,
+  proximal_band_atr: float = 0.5,
 ) -> tuple[StructuralBarrier, ...]:
   """The canonical, Market-Map-independent opposing-structure pool.
 
@@ -234,9 +336,14 @@ def build_structural_barrier_book(
   ``engine.py::_apply_mtf_zone_scores``), tiers each zone the same way
   ``market_map.py``'s ``build_map()`` always did (``_zone_tier``,
   unchanged — reused directly from ``structural_target_room.py``, not
-  re-derived a third time), then applies the two structural-pool
-  operations the purge dropped: same-side merging (``_merge_same_side``)
-  and cross-side reconciliation (``_resolve_cross_side_overlaps``).
+  re-derived a third time), then applies the structural-pool operations
+  the purge dropped: same-side merging (``_merge_same_side``), a
+  confluence score boost from overlapping key levels/session levels/
+  trendlines (``_apply_confluence_boost`` — ``_attach_confluence``'s one
+  effect that ever reached a trading decision, see that function's
+  docstring), and cross-side reconciliation (``_resolve_cross_side_
+  overlaps``, run last so the boosted score is what its tie-break sees,
+  matching old ``build_map``'s own ordering).
 
   This is the single shared source every consumer (scanner actionability,
   Key Level direction resolution, worker/TradePlan room evaluation,
@@ -261,7 +368,14 @@ def build_structural_barrier_book(
       max_width_pips=max_width_pips,
     ))
   merged = _merge_same_side(pooled)
-  return tuple(_resolve_cross_side_overlaps(merged))
+  candidates = _confluence_candidates(
+    per_tf,
+    timeframes=timeframes,
+    major_score=major_score,
+    proximal_band_atr=proximal_band_atr,
+  )
+  boosted = _apply_confluence_boost(merged, candidates)
+  return tuple(_resolve_cross_side_overlaps(boosted))
 
 
 def to_opposing_entries(
