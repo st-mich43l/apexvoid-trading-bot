@@ -5035,6 +5035,33 @@ public sealed class AutoTradeEngine(
   );
 
   /// <summary>
+  /// Owner-reported 2026-09-14 (signal 341, real XAU SELL): the manual/algo
+  /// risk leg (see <see cref="ManualAlgoRiskLegPrice"/>) sits deliberately
+  /// close to the shared stop - a small, fixed-size trade-off leg, not a
+  /// genuinely favorable fill. Naive Min/Max below picked it as the
+  /// group's "deepest" entry purely because it is numerically closest to
+  /// the stop side, corrupting the group-facing pips/loss telemetry
+  /// (signal 341's reported entry landed ~1.5 pips off the stop - the risk
+  /// leg's price - instead of the main ladder's real entry). Excluded from
+  /// this selection whenever another leg is available to stand in for it.
+  /// </summary>
+  private bool IsManualRiskLeg(AutoTradePositionState state)
+  {
+    // ExecutionStream, not the raw Stream field directly - restart-recovery
+    // reconstructed states can leave Stream at its "algo_auto" record
+    // default and only carry Setup, same as every other Stream check here.
+    if (
+      ExecutionStream(state) != "algo_manual"
+      || state.InitialStopLoss is not decimal stop
+    )
+    {
+      return false;
+    }
+    var distancePips = Math.Abs(state.EntryPrice - stop) / PipSizeForState(state);
+    return Math.Abs(distancePips - ManualAlgoRiskLegPipsFromStop) <= 3m;
+  }
+
+  /// <summary>
   /// Owner-reported 2026-09-10 (signal 300, real XAU BUY): a manual /algo
   /// group's shallow leg (tranche 1, filled at the zone's worse edge) hit
   /// TP1 and the channel card reported that leg's own entry-to-target
@@ -5047,16 +5074,29 @@ public sealed class AutoTradeEngine(
   /// whichever specific tranche happens to be the one booking this event.
   /// Mirrors the same "deepest fill" rule pips_format.
   /// legs_achieved_entry_price already applies on the Python side for the
-  /// realized-R denominator.
+  /// realized-R denominator. The manual/algo risk leg is excluded from this
+  /// pool (see IsManualRiskLeg) unless it's the only leg left.
   /// </summary>
-  private static decimal GroupDeepestEntryPrice(
+  private decimal GroupDeepestEntryPrice(
     IReadOnlyList<AutoTradePositionState> group,
     TradeDirection direction
-  ) => group.Count == 0
-    ? 0m
-    : direction == TradeDirection.Buy
-      ? group.Min(state => state.EntryPrice)
-      : group.Max(state => state.EntryPrice);
+  )
+  {
+    if (group.Count == 0)
+    {
+      return 0m;
+    }
+    var candidates = group.Count > 1
+      ? group.Where(state => !IsManualRiskLeg(state)).ToArray()
+      : group;
+    if (candidates.Count == 0)
+    {
+      candidates = group;
+    }
+    return direction == TradeDirection.Buy
+      ? candidates.Min(state => state.EntryPrice)
+      : candidates.Max(state => state.EntryPrice);
+  }
 
   private async Task<bool> CompleteDryRunAsync(
     TradeCandidate candidate,
