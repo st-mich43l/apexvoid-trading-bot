@@ -1404,6 +1404,18 @@ def _structural_barrier_entries(
   entries for the TradePlan-time room/containment recheck (2026-09, Key
   Level structural repair Phase 2) - the ``_zone_opposing_entries(htf_zones)``
   single-timeframe (M15-only) call this replaces at the call site below.
+
+  ``_structural_barrier_zone_book`` only computes zones from raw frames
+  (displacement -> supply_demand -> mark_mitigation) - unlike scanner.py's
+  ``analysis.per_tf`` (a full ``TimeframeAnalysis``), it carries no
+  key_levels/session_levels/trendlines, so ``build_structural_barrier_book``'s
+  confluence-score boost is a documented no-op here (``getattr`` fallbacks
+  to empty, never an error) - this path only ever gets the zone pooling/
+  merge/reconciliation, not the confluence boost. Acceptable: this is the
+  secondary TradePlan-time recheck ("a final stale-context safety check,
+  not a second strategy planner"), not the primary actionability gate
+  (scanner.py's ``_structural_barrier_opposing_entries``), which does get
+  the full boost from real per-timeframe analysis.
   """
   if cfg is None:
     cfg = _default_runtime_cfg()
@@ -1417,6 +1429,7 @@ def _structural_barrier_entries(
     pip_size=units.pip_size(symbol),
     max_width_atr=float(policy.execution_zone_max_width_atr),
     max_width_pips=float(policy.execution_zone_max_width_pips),
+    proximal_band_atr=float(cfg.actionability.gates.proximal_band_atr),
   )
   return to_opposing_entries(barriers)
 
