@@ -28,6 +28,23 @@ dated section after deployment.
   trades have accumulated. Purely descriptive — never a gate.
 
 ### Changed
+- Key Level structural repair Phase 2: the scanner's primary actionability
+  gate and the TradePlan-time room/containment recheck now source their
+  opposing-structure pool from `StructuralBarrierBook` (multi-timeframe
+  M5/M15/H1, same-side merged, cross-side reconciled) instead of an
+  unreconciled single-timeframe (M15-only) zone read - restores the two
+  pooling operations the 2026-09-07 Market Map purge dropped, for every
+  strategy, not just Key Level. The fixed-RR ladder (XAU/FX technique
+  trades) also gets a real opposing-wall room cap again - deleted
+  outright by PR #499, after which every call site passed
+  `available_target_room_pips=None`. Gated by a new
+  `actionability.target_room.structural_barrier_book_enabled` flag
+  (default on) that reverts both to exactly pre-wiring behavior if
+  disabled - no redeploy needed to roll back. Also fixes a telemetry bug
+  (`opposing_zone_present` could only ever be `True`/`None`, never
+  `False`, collapsing "no opposing zone found" and "never evaluated"
+  into the same NULL - confirmed live, 9/10 Key Level fills since PR
+  #523 deployed were NULL).
 - FX sessions are now pair-native quality context, never time-of-day hard
   gates: EURUSD/GBPUSD focus London+NY, GBPJPY focuses London, and USDJPY
   focuses Tokyo+NY. Focus hours score 2 (good); all other hours score 1

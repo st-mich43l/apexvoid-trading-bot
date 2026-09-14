@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timezone
 from decimal import Decimal
+from types import SimpleNamespace
 import asyncio
 import hashlib
 import json
@@ -80,6 +81,11 @@ from app.autotrade.strategy_taxonomy import (
   is_scalp_strategy,
   is_technique_or_confluence,
   match_bypasses_opposing_structure,
+)
+from app.autotrade.structural_barriers import (
+  DEFAULT_STRUCTURAL_TIMEFRAMES,
+  build_structural_barrier_book,
+  to_opposing_entries,
 )
 from app.autotrade.structural_target_room import (
   ZoneOpposingEntry,
@@ -1346,6 +1352,73 @@ def _htf_levels(
     max(0.0, float(instrument_geometry.round_step(symbol))),
     max(1, int(cfg.analysis.levels.minimum_key_touches)),
   )
+
+
+def _structural_barrier_zone_book(
+  frames: dict[str, Any],
+  cfg: Any | None = None,
+  *,
+  symbol: str = "XAU",
+) -> dict[str, Any]:
+  """Per-timeframe zones+ATR for ``build_structural_barrier_book``, computed
+  directly from ``frames`` the same way ``_htf_zones`` computes its own
+  single-timeframe (M15) read (displacement -> supply_demand ->
+  mark_mitigation), generalized across ``DEFAULT_STRUCTURAL_TIMEFRAMES``
+  (M5/M15/H1 - the same set ``frames`` is normally loaded with, see
+  ``CONTEXT_TIMEFRAMES``). Deliberately stops at ``mark_mitigation``, not
+  ``_htf_zones``'s further ``classify_execution_zone`` grade filter -
+  ``build_structural_barrier_book``/``_barriers_from_timeframe`` already
+  apply their own side/mitigation/width filtering, and this must define
+  the SAME barrier pool scanner.py's ``_structural_barrier_opposing_entries``
+  builds from ``analysis.per_tf``, not a stricter one.
+  """
+  if cfg is None:
+    cfg = _default_runtime_cfg()
+  atr_length = max(2, int(cfg.analysis.atr.length))
+  per_tf: dict[str, Any] = {}
+  for tf in DEFAULT_STRUCTURAL_TIMEFRAMES:
+    tf_frame = frames.get(tf)
+    if tf_frame is None or tf_frame.empty:
+      continue
+    atr_values = atr_series(tf_frame, atr_length)
+    legs = displacement(
+      tf_frame,
+      atr_values,
+      max(0.1, float(cfg.analysis.displacement.atr_mult)),
+      max(0.0, float(cfg.analysis.momentum.body_frac)),
+    )
+    if not legs:
+      continue
+    zones = mark_mitigation(supply_demand(tf_frame, legs), tf_frame)
+    per_tf[tf] = SimpleNamespace(zones=zones, atr=atr_values)
+  return per_tf
+
+
+def _structural_barrier_entries(
+  frames: dict[str, Any],
+  cfg: Any | None = None,
+  *,
+  symbol: str = "XAU",
+) -> tuple[ZoneOpposingEntry, ...]:
+  """Multi-timeframe, merged, cross-side-reconciled opposing-structure
+  entries for the TradePlan-time room/containment recheck (2026-09, Key
+  Level structural repair Phase 2) - the ``_zone_opposing_entries(htf_zones)``
+  single-timeframe (M15-only) call this replaces at the call site below.
+  """
+  if cfg is None:
+    cfg = _default_runtime_cfg()
+  per_tf = _structural_barrier_zone_book(frames, cfg, symbol=symbol)
+  if not per_tf:
+    return ()
+  policy = cfg.execution.policy
+  barriers = build_structural_barrier_book(
+    per_tf,
+    major_score=float(cfg.analysis.market_map.major_score),
+    pip_size=units.pip_size(symbol),
+    max_width_atr=float(policy.execution_zone_max_width_atr),
+    max_width_pips=float(policy.execution_zone_max_width_pips),
+  )
+  return to_opposing_entries(barriers)
 
 
 # _ZoneOpposingEntry/_zone_opposing_entries moved to structural_target_room.py
@@ -5568,14 +5641,32 @@ async def _publish_trade_plan_v8(
       match,
       expires_at=min(int(match.expires_at), trigger_expiry),
     )
-  room_entries = (
-    ()
-    if (
-      not htf_zones
-      or match_bypasses_opposing_structure(execution_match)
-    )
-    else _zone_opposing_entries(htf_zones)
+  structural_barrier_book_enabled = bool(
+    runtime_config.actionability.target_room.structural_barrier_book_enabled
   )
+  if match_bypasses_opposing_structure(execution_match):
+    room_entries: tuple[Any, ...] = ()
+  else:
+    room_entries = ()
+    if structural_barrier_book_enabled and frames:
+      # 2026-09 (Key Level structural repair Phase 2): multi-timeframe,
+      # merged, cross-side-reconciled pool instead of the single-timeframe
+      # (M15-only) _zone_opposing_entries(htf_zones) read below - restores
+      # the same-side merge/cross-side reconciliation the 2026-09-07
+      # Market Map purge dropped.
+      room_entries = _structural_barrier_entries(
+        frames, runtime_config, symbol=symbol,
+      )
+    if not room_entries and htf_zones:
+      # Falls back to the caller's own htf_zones whenever the barrier
+      # book comes up empty - the flag is off, frames lacks full M5/M15/H1
+      # coverage (a caller/test that only loaded M1, or a live gap on one
+      # timeframe), or genuinely no barrier was found on any pooled
+      # timeframe. htf_zones is already computed from the SAME frames by
+      # this function's own caller in production, so this never discards
+      # real opposing-structure awareness the caller explicitly provided -
+      # it only ever adds to what the M15-only read alone would see.
+      room_entries = _zone_opposing_entries(htf_zones)
   displacement_lookback = max(
     0, int(runtime_config.execution.policy.displacement_override_lookback_bars),
   )
@@ -6016,6 +6107,29 @@ async def _publish_trade_plan_v8(
   side_aware_quote = _executable_spot_price(spot, match_for_plan.direction)
   fixed_rr_target = instrument_geometry.fixed_reward_risk(symbol) is not None
   fixed_rr_metrics: list[tuple[str, str, dict[str, str]]] = []
+  # 2026-09 (Key Level structural repair Phase 2): restores a real opposing-
+  # wall room cap on the fixed_rr ladder - deleted outright by PR #499
+  # ("we work on technique zone not calculate opposing zone blindly"),
+  # after which this call always passed available_target_room_pips=None
+  # (confirmed by grep: zero production callers passed a real value since).
+  # target_room (computed above against this same match_for_plan -
+  # match_for_plan = execution_match, never reassigned since) already
+  # measures room against the identical StructuralBarrierBook-derived
+  # opposing entries feeding the room/containment check just above; reusing
+  # its "room_pips" here avoids a second, possibly-divergent room lookup.
+  # None when no opposing barrier was found (evaluate_execution_policy's
+  # own "available_room is not None" guard already treats that as
+  # unconstrained, matching today's behavior) or when the flag is off.
+  fixed_rr_room_pips = (
+    target_room.measured.get("room_pips")
+    if structural_barrier_book_enabled
+    else None
+  )
+  available_target_room_pips = (
+    float(fixed_rr_room_pips)
+    if fixed_rr_room_pips is not None and math.isfinite(float(fixed_rr_room_pips))
+    else None
+  )
   gate_policy = evaluate_execution_policy(
     match_for_plan,
     spot_price=spot.price,
@@ -6023,11 +6137,7 @@ async def _publish_trade_plan_v8(
     regime=None if regime is None else regime.state,
     pip_size=units.pip_size(symbol),
     cfg=None,
-    # No external room cap on the fixed_rr ladder (2026-09 owner: "we work
-    # on technique zone not calculate opposing zone blindly"). The ladder
-    # is sized entirely from the technique's own configured R-multiples;
-    # nothing here re-derives a ceiling from Market Map or any other
-    # opposing-structure scan.
+    available_target_room_pips=available_target_room_pips,
     metric_sink=_collect_fixed_rr_metric_sink(fixed_rr_metrics),
     **opposing_kwargs,
   )

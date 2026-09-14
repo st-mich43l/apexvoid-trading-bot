@@ -85,6 +85,22 @@
       "api": "os.environ.get",
       "classification": "UNKNOWN_BLOCKER",
       "env_name": "DATABASE_URL",
+      "file": "algo-bot/app/scripts/auto_strategy_baseline.py",
+      "line": 90
+    },
+    {
+      "allowed": false,
+      "api": "os.environ.get",
+      "classification": "UNKNOWN_BLOCKER",
+      "env_name": "POSTGRES_DSN",
+      "file": "algo-bot/app/scripts/auto_strategy_baseline.py",
+      "line": 90
+    },
+    {
+      "allowed": false,
+      "api": "os.environ.get",
+      "classification": "UNKNOWN_BLOCKER",
+      "env_name": "DATABASE_URL",
       "file": "algo-bot/app/scripts/backfill_manual_algo_charts.py",
       "line": 60
     },
@@ -119,9 +135,9 @@
     "DEPLOYMENT_OBSERVABILITY_ALLOWED": 3,
     "EARLY_BOOT_ALLOWED": 2,
     "SCRIPT_TOOL_ALLOWED": 3,
-    "UNKNOWN_BLOCKER": 4
+    "UNKNOWN_BLOCKER": 6
   },
   "direct_production_env_forbidden": 0,
-  "total_access_sites": 14,
-  "unknown_blockers": 4
+  "total_access_sites": 16,
+  "unknown_blockers": 6
 }
