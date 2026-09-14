@@ -445,23 +445,25 @@ async def test_handle_event_fill_marks_filled_records_broker_fields_and_activate
   assert row["broker_fill_price"] == pytest.approx(4100.5)
   assert row["algo_armed"] is True
   assert row["fill_state"] == "filled"
-  # zone-edge estimate was |4100.0 - 4110.0| = 100 pips; the real fill
-  # (4100.5) risks only |4100.5 - 4110.0| = 95 pips, so the entry card gets
-  # reposted with the corrected number on top of the usual "active" reply.
-  assert send.await_count == 2
-  card_texts = [call.args[0] for call in send.await_args_list]
-  assert any("95 pips" in text for text in card_texts)
+  # Owner 2026-09-14: the entry card must never repost off a real fill - a
+  # real fill only records broker_fill_price/broker_position_id and sends
+  # the usual "active" reply, nothing else.
+  assert send.await_count == 1
   truth.assert_awaited_once()
 
 
 @pytest.mark.asyncio
-async def test_fill_event_reposts_entry_card_with_real_fill_risk(monkeypatch):
-  """Live 2026-09-10 (signal #309): a BUY zone 4333-4336 against sl 4330
-  advertised "risk 60 pips" (the conservative zone-edge estimate), but the
-  real fill landed at 4335.45 - true risk only 54 pips - and the close line
-  correctly reported -0.7R for a -39 pip loss using the real fill, leaving
-  the pinned card's "60 pips" impossible to reconcile against it. The card
-  must now repost with the real-fill risk once the fill is known.
+async def test_fill_event_never_reposts_entry_card_even_when_fill_differs_from_zone_edge(
+  monkeypatch,
+):
+  """Owner 2026-09-14: 2026-09-10/09-11 briefly made a real fill repost the
+  pinned entry card with the real-fill risk (a BUY zone 4333-4336 against
+  sl 4330 advertised "risk 60 pips"; a fill at 4335.45 would recompute to
+  54 pips) - the owner rejected this, since it deletes/reposts an
+  already-published channel message on every fill. The card is a plan, not
+  a live fill ticker: it must stay exactly as first posted regardless of
+  where the broker actually filled; only the close-time R-multiple
+  (trade_ops._achieved_rr) is allowed to use the real fill.
   """
   send = _mock_send(monkeypatch)
   sid = await _algo_signal(
@@ -484,10 +486,8 @@ async def test_fill_event_reposts_entry_card_with_real_fill_risk(monkeypatch):
 
   row = await store.get_manual_signal(sid)
   assert row["broker_fill_price"] == pytest.approx(4335.45)
-  assert send.await_count == 2
-  card_texts = [call.args[0] for call in send.await_args_list]
-  assert any("risk <b>54 pips</b>" in text for text in card_texts)
-  assert not any("risk <b>60 pips</b>" in text for text in card_texts)
+  # Only the "active" reply is sent - no card repost.
+  assert send.await_count == 1
 
 
 @pytest.mark.asyncio
@@ -580,9 +580,9 @@ async def test_fill_event_owner_dm_is_off_by_default(monkeypatch):
   row = await store.get_manual_signal(sid)
   assert row["execution_status"] == "filled"
   truth.assert_not_awaited()
-  # The real subscriber-facing channel update must still fire unchanged,
-  # alongside the entry-card repost with the real-fill-corrected risk.
-  assert send.await_count == 2
+  # The real subscriber-facing channel update must still fire unchanged;
+  # the entry card itself is never reposted on a fill.
+  assert send.await_count == 1
 
 
 @pytest.mark.asyncio
