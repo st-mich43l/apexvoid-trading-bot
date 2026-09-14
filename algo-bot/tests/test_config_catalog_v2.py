@@ -58,13 +58,16 @@ BASELINE = {
   # .displacement_atr, .accept_closes, execution.mad.manip.min_penetration_atr,
   # .min_reclaim_atr, execution.mad.accum.minimum_rq, .maximum_rq), all
   # ConfigOwner.PYTHON, none deprecated-alias'd.
-  "entries": 629,
-  "configurable": 522,
+  # 2026-09 Key Level structural repair Phase 2: +1 new leaf field
+  # (actionability.target_room.structural_barrier_book_enabled), real
+  # canonical_env, ConfigOwner.PYTHON, not deprecated-alias'd.
+  "entries": 630,
+  "configurable": 523,
   "protocol": 10,
   "algorithm": 97,
-  "owners": {"python": 484, "shared": 96, "ctrader": 49},
-  "projection": 580,
-  "env": 522,
+  "owners": {"python": 485, "shared": 96, "ctrader": 49},
+  "projection": 581,
+  "env": 523,
   "deprecated_aliases": 21,
 }
 

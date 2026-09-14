@@ -2,8 +2,8 @@
 
 > Generated from the canonical configuration catalog (`app.configuration.environment_contract`). Do not edit manually.
 
-- Contract fingerprint: `8beb64bd5dce37519b85482591e7cbfa658838346655958c3ffff146947d6f25`
-- Environment-bound fields: `522`
+- Contract fingerprint: `81e7fc53bd9090daeb136039e73650ffd744a295605a6f22389aa3323b4cf1b8`
+- Environment-bound fields: `523`
 - Deprecated aliases: `21`
 
 Secret values are never emitted; secret defaults render as `<redacted>`.
@@ -181,6 +181,7 @@ Secret values are never emitted; secret defaults render as `<redacted>`.
 | `AUTO_TRADE_STRATEGY_MATCH_MAX_AGE_SECONDS` | `lifecycle.strategy_match.maximum_age_seconds` | `int` | no | no | `AUTO_TRADE_FORMING_MAX_AGE_SECONDS` | `420` |
 | `AUTO_TRADE_STREAM_MAXLEN` | `contract.streams.candidate_maximum_length` | `int` | no | no | — | `1000` |
 | `AUTO_TRADE_STRICT_PD_ARCHETYPES` | `execution.technique.strict_premium_discount_archetypes` | `str` | no | no | — | `reversal,range_reversion` |
+| `AUTO_TRADE_STRUCTURAL_BARRIER_BOOK_ENABLED` | `actionability.target_room.structural_barrier_book_enabled` | `bool` | no | no | — | `True` |
 | `AUTO_TRADE_STRUCTURAL_GUARD_MODE` | `actionability.structural_guard.guard_mode` | `str` | no | yes | — | `balanced` |
 | `AUTO_TRADE_STRUCTURAL_REACTION_LOOKBACK_BARS` | `execution.policy.structural_reaction_lookback_bars` | `int` | no | no | — | `3` |
 | `AUTO_TRADE_SUPPLY_REACTION_ENABLED` | `strategies.reaction.supply.enabled` | `bool` | no | no | — | `True` |
