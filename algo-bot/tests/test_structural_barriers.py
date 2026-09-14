@@ -21,9 +21,12 @@ import pandas as pd
 import pytest
 
 from app.analysis.market_map import _merge_display_entries, _resolve_cross_side_overlaps
-from app.analysis.types import Zone
+from app.analysis.trendlines import Trendline
+from app.analysis.types import Level, SessionLevel, Zone
 from app.autotrade.structural_barriers import (
   StructuralBarrier,
+  _apply_confluence_boost,
+  _confluence_candidates,
   build_structural_barrier_book,
   to_opposing_entries,
 )
@@ -215,3 +218,175 @@ def test_cross_side_reconciliation_matches_market_map_on_identical_geometry():
   )
 
   assert new_sides == old_sides == ["sell"]
+
+
+# ---------------------------------------------------------------------------
+# Confluence score boost (restores market_map.py::_attach_confluence's one
+# effect that ever reached a trading decision - see _apply_confluence_boost's
+# docstring for why tier is never touched).
+# ---------------------------------------------------------------------------
+
+def _key_level(price: float, strength: float) -> Level:
+  return Level(price=price, strength=strength)
+
+
+def _session_level(name: str, price: float) -> SessionLevel:
+  return SessionLevel(name=name, price=price, ts=pd.Timestamp.now("UTC"), swept=False)
+
+
+def _flat_trendline(kind: str, value: float, touches: float = 4.0) -> Trendline:
+  # slope=0 makes value_at() return `intercept` regardless of bar index,
+  # so no df/bar-index fixture is needed to pin the line's current value.
+  return Trendline(
+    kind=kind, point_idx=(0, 1), slope=0.0, intercept=value,
+    touches=touches, broken=False, break_index=None,
+  )
+
+
+def test_confluence_boost_raises_score_never_tier():
+  per_tf = {"M15": SimpleNamespace(
+    zones=[_demand(4494.0, 4497.0, score=5.0)],
+    atr=pd.Series([1.0]),
+    key_levels=[_key_level(4495.5, strength=20.0)],
+  )}
+  book = build_structural_barrier_book(
+    per_tf, major_score=12.0, pip_size=0.1, max_width_atr=5.0, max_width_pips=100.0,
+  )
+  assert len(book) == 1
+  barrier = book[0]
+  assert barrier.score == 20.0
+  assert barrier.tier == "zone"  # never promoted by confluence
+
+
+def test_confluence_candidate_never_becomes_a_standalone_barrier():
+  per_tf = {"M15": SimpleNamespace(
+    zones=[],
+    atr=pd.Series([1.0]),
+    key_levels=[_key_level(4495.5, strength=99.0)],
+  )}
+  book = build_structural_barrier_book(
+    per_tf, major_score=12.0, pip_size=0.1, max_width_atr=5.0, max_width_pips=100.0,
+  )
+  assert book == ()
+  assert to_opposing_entries(book) == ()
+
+
+def test_confluence_boost_never_lowers_a_stronger_barriers_score():
+  per_tf = {"M15": SimpleNamespace(
+    zones=[_demand(4494.0, 4497.0, score=15.0)],
+    atr=pd.Series([1.0]),
+    key_levels=[_key_level(4495.5, strength=5.0)],
+  )}
+  book = build_structural_barrier_book(
+    per_tf, major_score=12.0, pip_size=0.1, max_width_atr=5.0, max_width_pips=100.0,
+  )
+  assert book[0].score == 15.0
+
+
+def test_confluence_candidates_include_key_levels_session_levels_and_trendlines():
+  per_tf = {"M15": SimpleNamespace(
+    atr=pd.Series([2.0]),
+    key_levels=[_key_level(4500.0, strength=7.0)],
+    session_levels=[
+      _session_level("PDH", 4510.0),
+      _session_level("LondonOpen", 4520.0),
+    ],
+    trendlines=[
+      _flat_trendline("support", 4490.0, touches=6.0),
+      _flat_trendline("resistance", 4530.0, touches=3.0),
+      Trendline(
+        kind="support", point_idx=(0, 1), slope=0.0, intercept=4480.0,
+        touches=2.0, broken=True, break_index=5,
+      ),
+    ],
+  )}
+
+  candidates = _confluence_candidates(
+    per_tf, timeframes=("M15",), major_score=12.0, proximal_band_atr=0.5,
+  )
+
+  # Key level offers both sides (price-position-agnostic, see docstring).
+  assert ("buy", 4500.0 - 1.0, 4500.0 + 1.0, 7.0) in candidates
+  assert ("sell", 4500.0 - 1.0, 4500.0 + 1.0, 7.0) in candidates
+  # PDH is a major session level -> scored at major_score, not the flat 4.0.
+  assert any(
+    c[3] == 12.0 and abs(c[1] - (4510.0 - 0.2)) < 1e-9 for c in candidates
+  )
+  # A non-major session level gets the flat score.
+  assert any(c[3] == 4.0 for c in candidates)
+  # Trendlines are sided by their own kind, not price position.
+  assert ("buy", 4490.0 - 1.0, 4490.0 + 1.0, 6.0) in candidates
+  assert ("sell", 4530.0 - 1.0, 4530.0 + 1.0, 3.0) in candidates
+  # The broken trendline must never appear.
+  assert not any(c[3] == 2.0 for c in candidates)
+
+
+def test_apply_confluence_boost_matches_side_and_overlap():
+  barriers = [
+    StructuralBarrier("buy", 4494.0, 4497.0, "zone", 5.0, 0, False, ("M15",)),
+    StructuralBarrier("sell", 4494.0, 4497.0, "zone", 5.0, 0, False, ("M15",)),
+  ]
+  # Overlaps both bands geometrically, but is only offered as a "buy" side
+  # candidate - the sell barrier must stay untouched.
+  candidates = [("buy", 4495.0, 4496.0, 25.0)]
+
+  boosted = _apply_confluence_boost(barriers, candidates)
+
+  by_side = {barrier.side: barrier for barrier in boosted}
+  assert by_side["buy"].score == 25.0
+  assert by_side["sell"].score == 5.0
+
+
+def test_confluence_boost_flips_cross_side_reconciliation_tie_break():
+  # Two overlapping opposing zones, same tier, near-equal score - without
+  # a boost the reconciliation tie-break keeps whichever key sorts first
+  # (>=); with a confluence-boosted score the OTHER (now strictly weaker)
+  # side must be the one dropped instead. Padded with unrelated,
+  # non-conflicting barriers so the one real drop stays under the 34%
+  # fail-open circuit breaker (a 2-entry pool makes a single drop look
+  # like a runaway cascade and correctly no-op instead).
+  padding = [
+    _demand(4470.0, 4472.0, score=6.0),
+    _demand(4460.0, 4462.0, score=6.0),
+    _supply(4520.0, 4522.0, score=6.0),
+    _supply(4530.0, 4532.0, score=6.0),
+  ]
+  per_tf_unboosted = {"M15": SimpleNamespace(
+    zones=[
+      _demand(4494.0, 4497.0, score=10.0),
+      _supply(4495.0, 4498.0, score=10.0),
+      *padding,
+    ],
+    atr=pd.Series([1.0]),
+  )}
+  unboosted = build_structural_barrier_book(
+    per_tf_unboosted,
+    major_score=12.0, pip_size=0.1, max_width_atr=5.0, max_width_pips=100.0,
+  )
+  contested_unboosted = [b for b in unboosted if b.low in (4494.0, 4495.0)]
+  assert len(contested_unboosted) == 1
+  # Equal-score tie-break keeps the first-seen side (>= in
+  # _resolve_cross_side_overlaps) - confirm the baseline before flipping it.
+  assert contested_unboosted[0].side == "buy"
+
+  per_tf_boosted = {"M15": SimpleNamespace(
+    zones=[
+      _demand(4494.0, 4497.0, score=10.0),
+      _supply(4495.0, 4498.0, score=10.0),
+      *padding,
+    ],
+    atr=pd.Series([1.0]),
+    # Positioned so its default 0.5*atr band (4497.1-4498.1) overlaps only
+    # the sell zone [4495, 4498] and not the buy zone [4494, 4497] -
+    # otherwise the level would offer the same boost to both contested
+    # sides symmetrically and the tie would never actually flip.
+    key_levels=[_key_level(4497.6, strength=30.0)],
+  )}
+  boosted = build_structural_barrier_book(
+    per_tf_boosted,
+    major_score=12.0, pip_size=0.1, max_width_atr=5.0, max_width_pips=100.0,
+  )
+  contested_boosted = [b for b in boosted if b.low in (4494.0, 4495.0)]
+  assert len(contested_boosted) == 1
+  assert contested_boosted[0].side == "sell"
+  assert contested_boosted[0].score == 30.0

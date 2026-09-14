@@ -283,6 +283,7 @@ def _structural_barrier_opposing_entries(
     pip_size=_pip_size(symbol),
     max_width_atr=float(policy.execution_zone_max_width_atr),
     max_width_pips=float(policy.execution_zone_max_width_pips),
+    proximal_band_atr=float(runtime_config.actionability.gates.proximal_band_atr),
   )
   return to_opposing_entries(barriers)
 
