@@ -8,7 +8,7 @@ from app.persistence.store import (
   get_signal_posts,
   insert_signal_post,
 )
-from app.signals.pips_format import actual_entry
+from app.signals.pips_format import rr_entry
 from app.signals.fx_manual_algo import uses_entry_price_display
 from app.autotrade.strategy_names import resolve_strategy
 from app.core.symbols import digits_for, channels_for, pip_for
@@ -57,15 +57,15 @@ def _setup_line(sig: dict) -> str | None:
 def render_entry(sig: dict, tier: str) -> str:
   symbol = sig["symbol"]
   action = sig["action"]
-  # Live 2026-09-10 (signal #309): the SL line quoted "risk 60 pips" off the
-  # conservative pre-fill zone edge, but the real fill landed 0.55 pips
-  # better - the close line correctly used the real fill (trade_ops.
-  # _achieved_rr's own broker_fill_price trust rule) and reported -0.7R for
-  # a -39 pip loss, which a reader can't reconcile against a "60 pips" risk
-  # that was never true. Once a real fill exists, show the risk actually
-  # taken (actual_entry prefers broker_fill_price, else the zone edge)
-  # instead of the pre-fill estimate.
-  risk = abs(actual_entry(sig) - sig["sl"])
+  # Owner 2026-09-14: the entry card is a plan, not a live fill ticker - it
+  # must never be edited/reposted just because broker_fill_price showed up
+  # (2026-09-10/09-11 briefly switched this to actual_entry(), which made
+  # _handle_manual_opened's before/after render diff and silently
+  # delete+repost the already-published channel message on every fill).
+  # Real accuracy belongs at close time only (trade_ops._achieved_rr
+  # already measures against the real fill/deepest leg there) - this card
+  # always uses the advertised zone edge, fill or no fill.
+  risk = abs(rr_entry(sig) - sig["sl"])
   # Live 2026-09-04: editing the pinned card after a stop trail re-ran this
   # with the now-current (near-BE) sl, and R-multiples are TP-distance /
   # risk - as risk shrinks toward zero the ratio blows up into nonsense
@@ -76,19 +76,7 @@ def render_entry(sig: dict, tier: str) -> str:
   original_sl = sig.get("original_sl")
   if original_sl is None:
     original_sl = sig["sl"]
-  # Live 2026-09-11 (signal #329): the SL line above already switched to
-  # actual_entry() (the real fill) for the 2026-09-10 fix below, but this
-  # line kept using entry_reference (the pre-fill zone edge) - so a filled
-  # card could show "risk 51 pips" right next to "TP1 · 0.5R", two numbers
-  # computed from two different entries that don't reconcile with each
-  # other, the exact same "impossible to reconcile" problem the 2026-09-10
-  # fix was written to solve, just moved from the SL line to the TP lines.
-  # Once a real fill exists, TP R-multiples must be measured from it too -
-  # still pinned to original_sl (never the live-trailing sl, per the fix
-  # above), so they stay stable, but now the SAME entry actual_entry()/
-  # _achieved_rr already use, so a hit target's eventual close-line R
-  # matches what this card promised instead of silently drifting.
-  original_risk = abs(actual_entry(sig) - original_sl)
+  original_risk = abs(rr_entry(sig) - original_sl)
   seq = f"  #{sig['daily_seq']}" if tier == "vip" else ""
   action_icon = "📈" if action == "BUY" else "📉"
   lines = [
@@ -116,7 +104,7 @@ def render_entry(sig: dict, tier: str) -> str:
   for index, tp in enumerate(sig.get("tps") or []):
     lines.append(
       f"💰 TP{index + 1}:   <b>{_price(tp, symbol)}</b>  ·  "
-      f"<b>{_rr(tp, actual_entry(sig), original_risk)}</b>"
+      f"<b>{_rr(tp, rr_entry(sig), original_risk)}</b>"
     )
   if sig.get("guard_text"):
     lines.extend(["", sig["guard_text"]])

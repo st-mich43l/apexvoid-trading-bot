@@ -193,13 +193,15 @@ def test_render_entry_shows_risk_in_pips_not_raw_price():
 
 
 @pytest.mark.no_database
-def test_render_entry_uses_real_fill_for_risk_once_known():
-  """Live 2026-09-10 (signal #309): the SL line quoted "risk 60 pips" off
-  the conservative pre-fill zone edge (4336), but the real fill landed at
-  4335.45 - true risk only 54 pips - and the close line correctly reported
-  -0.7R off the real fill, leaving "60 pips" impossible to reconcile
-  against it. Once broker_fill_price is known, the risk line must use it,
-  same fill-trust convention as trade_ops._achieved_rr's close-time R calc.
+def test_render_entry_ignores_broker_fill_and_keeps_zone_edge_risk():
+  """Owner 2026-09-14: 2026-09-10 briefly made the risk line prefer
+  broker_fill_price once known (signal #309: zone edge said "risk 60
+  pips", a fill at 4335.45 would recompute to 54) - the owner rejected
+  this, since it means the pinned card's numbers change out from under
+  readers after it's already posted. The card is a plan, not a live fill
+  ticker: it must always show the advertised zone-edge risk, fill or no
+  fill. Real accuracy belongs at close time only
+  (trade_ops._achieved_rr).
   """
   signal = {
     "daily_seq": 4,
@@ -214,22 +216,19 @@ def test_render_entry_uses_real_fill_for_risk_once_known():
 
   signal["broker_fill_price"] = 4335.45
   card = broadcast.render_entry(signal, "vip")
-  assert "risk <b>54 pips</b>" in card
-  assert "risk <b>60 pips</b>" not in card
+  assert "risk <b>60 pips</b>" in card
+  assert "risk <b>54 pips</b>" not in card
 
 
 @pytest.mark.no_database
-def test_render_entry_tp_r_multiples_reconcile_with_the_real_fill_risk():
-  """Live 2026-09-11 (signal #329): the SL line already used the real fill
-  for its risk figure (previous test), but the TP lines still used the
-  pre-fill zone edge for their R-multiple - so a filled card showed
-  "risk 51 pips" right next to "TP1 · 0.5R", two numbers computed from two
-  different entries that don't reconcile with each other, the exact
-  "impossible to reconcile" problem the 2026-09-10 fix (above) was written
-  to solve, just moved from the SL line to the TP lines. Once a real fill
-  is known, TP R-multiples must be measured from it too - still pinned to
-  original_sl (never the live-trailing sl, per the 2026-09-04 fix), so an
-  eventual close-line R matches what this card promised.
+def test_render_entry_tp_r_multiples_ignore_broker_fill_too():
+  """Owner 2026-09-14: same "the card is a plan, not a live fill ticker"
+  rule applies to the TP R-multiples (a brief 2026-09-11 fix had made
+  these prefer broker_fill_price too, for the same reason the risk line
+  briefly did in the previous test) - they must stay pinned to the
+  advertised zone edge and original_sl (never the live-trailing sl, per
+  the 2026-09-04 fix above) regardless of where the broker actually
+  filled.
   """
   signal = {
     "daily_seq": 9,
@@ -243,14 +242,11 @@ def test_render_entry_tp_r_multiples_reconcile_with_the_real_fill_risk():
     "tps": [4347.0, 4344.0, 4338.0, 4332.0],
   }
   card = broadcast.render_entry(signal, "vip")
-  assert "risk <b>51 pips</b>" in card
-  # Pre-fix, these rendered pinned to the zone edge (60 pips risk): 0.5R,
-  # 1.0R, 2.0R, 3.0R. Real-fill risk (51.1 pips) moves every one of them.
-  assert "0.5R" not in card
-  assert "TP1:   <b>4,347</b>  ·  <b>0.8R</b>" in card
-  assert "TP2:   <b>4,344</b>  ·  <b>1.3R</b>" in card
-  assert "TP3:   <b>4,338</b>  ·  <b>2.5R</b>" in card
-  assert "TP4:   <b>4,332</b>  ·  <b>3.7R</b>" in card
+  assert "risk <b>60 pips</b>" in card
+  assert "TP1:   <b>4,347</b>  ·  <b>0.5R</b>" in card
+  assert "TP2:   <b>4,344</b>  ·  <b>1.0R</b>" in card
+  assert "TP3:   <b>4,338</b>  ·  <b>2.0R</b>" in card
+  assert "TP4:   <b>4,332</b>  ·  <b>3.0R</b>" in card
 
 
 @pytest.mark.no_database
@@ -270,9 +266,8 @@ def test_render_entry_falls_back_to_current_sl_when_never_trailed():
   }
 
   card = broadcast.render_entry(signal, "vip")
-  # No broker fill and no original_sl yet - actual_entry()/original_risk
-  # both fall back to the same pre-fill zone-edge/live-sl values rr_entry
-  # always used, so this still matches render_entry's own computation.
+  # No original_sl yet - original_risk falls back to the live sl, same
+  # zone-edge entry render_entry always uses.
   entry_reference = rr_entry(signal)
   risk = abs(entry_reference - 4428.0)
 
