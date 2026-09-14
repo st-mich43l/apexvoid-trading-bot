@@ -21,13 +21,15 @@ _PIPS_RE = re.compile(r'([+-])\s*(\d+)\s*pips?', re.IGNORECASE)
 # one (and is not /scalp). Explicit ``/setup foo`` or ``/scalp`` wins, while
 # an explicit one-to-three-star suffix overrides the confidence default.
 # SL/TP presence does not gate either default.
-DEFAULT_SL_PIPS = 60
+DEFAULT_SL_PIPS = 50
 DEFAULT_TP_PIPS = (30, 60, 100, 130, 200)
 DEFAULT_SETUP_TYPE = "key-level"
 DEFAULT_CONFLUENCE = 2
+# 2026-09-14 (owner): manual /algo position management default - risk 50
+# pips (DEFAULT_SL_PIPS above), TP1 at 1R (=50 pips), runner out to 4R.
 # 2026-09 (owner-reported): manual /algo TP levels for an instrument with no
 # explicit InstrumentManualConfig.target_r_multiples override.
-MANUAL_ALGO_DEFAULT_TARGET_R_MULTIPLES = (0.5, 1.0, 2.0, 3.0)
+MANUAL_ALGO_DEFAULT_TARGET_R_MULTIPLES = (1.0, 2.0, 3.0, 4.0)
 
 # Manual signal template (DM to bot), sl/tp each optional:
 #   gold sell entry zone (4100-4105)
