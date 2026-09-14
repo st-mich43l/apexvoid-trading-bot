@@ -412,12 +412,22 @@ async def _finish_modify(
 
 
 async def _rearm_algo_after_modify(signal: dict) -> dict | None:
-  """Publish a bumped ManualTradeIntent for the updated pending levels."""
+  """Publish a bumped ManualTradeIntent for the updated pending levels.
+
+  Owner-reported 2026-09: a /trade_modify on a BUY order came back "stale
+  candidate" with no broker fill. build_intent()'s created_at defaults to
+  the original signal's ts (correct for the very first arm, built
+  moments after signal creation) - reused unchanged here, a re-arm typed
+  well after the signal's original creation carries an already-stale
+  created_at straight into the candidate payload, and
+  AutoTradeEngine.cs rejects it before ever placing the order. A re-arm
+  must always stamp "now", not the original creation time.
+  """
   from app.persistence.store import set_execution_intent, set_execution_status
   from app.signals.manual_intent import build_intent, publish_intent
 
   revision = int(signal.get("execution_revision") or 0) + 1
-  intent = build_intent(signal, revision=revision)
+  intent = build_intent(signal, revision=revision, created_at=int(time.time()))
   try:
     await set_execution_intent(
       signal["id"],
