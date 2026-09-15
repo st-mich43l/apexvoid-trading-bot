@@ -3401,6 +3401,96 @@ public sealed partial class AutoTradeEngineTests
   }
 
   [Fact]
+  public async Task TerminalAchievedPipsRemeasuresFromTheDeepestEntryNotTheSharedTarget()
+  {
+    // Owner-reported 2026-09-15 (real XAU SELL example): every leg in a
+    // manual/algo group shares the SAME fixed TargetsPips (computed once
+    // from Shallow's own distance in ProcessManualAlgoAsync), so a deep or
+    // risk leg riding the exact same move to the exact same TP4 price
+    // used to report Shallow's smaller advertised distance instead of its
+    // own real capture. Zone 4300-4303, TP4 at 4280 (200p from Shallow's
+    // 4300) - Deep (4301.5) is genuinely 215p from that same price, and
+    // the risk leg (4303.5, 15p from the 4305 stop) is genuinely 235p.
+    // Both legs ride to TP4 together - a genuine archived target makes the
+    // risk leg's own (most favorable) price the group's deepest reference.
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    const string groupId = "manual-win";
+    const decimal ownerStop = 4305m;
+    const decimal tp4 = 4280m;
+    var targetsPips = new[] { 50, 100, 150, 200 };
+    var targetPrices = new decimal[] { 4295m, 4290m, 4285m, 4280m };
+    var risk = new AutoTradePositionState(
+      CandidateId: "manual:win:0",
+      PositionId: 201,
+      SymbolId: Symbol.SymbolId,
+      Direction: TradeDirection.Sell,
+      EntryPrice: 4303.5m,
+      InitialVolume: 500,
+      RemainingVolume: 500,
+      Slices: [500],
+      TargetsPips: targetsPips,
+      NextTargetIndex: 4,
+      OpenedAt: Now.ToUnixTimeSeconds(),
+      CurrentStopLoss: ownerStop,
+      TargetOrdinals: [1, 2, 3, 4],
+      GroupId: groupId,
+      TrancheIndex: 3,
+      GroupTrancheCount: 3,
+      InitialStopLoss: ownerStop,
+      GroupInitialVolume: 1100,
+      Setup: "Manual Algo",
+      Stream: "algo_manual",
+      StrategyFamily: "manual",
+      Symbol: "XAU",
+      InitialRiskStopPips: 50m,
+      TargetPrices: targetPrices
+    );
+    var deep = risk with {
+      PositionId = 202,
+      EntryPrice = 4301.5m,
+      InitialVolume = 600,
+      RemainingVolume = 600,
+      Slices = [600],
+      TrancheIndex = 2,
+    };
+    var store = new FakeAutoTradeStore(CandidateJson());
+    // Insertion order (not PositionId) drives iteration here - Deep
+    // inserted last so the old per-leg Math.Max(achieved, SignedPips(state,
+    // exit)) fallback would have coincidentally self-corrected to Deep's
+    // own 215p (whichever leg is processed last "wins" under the old
+    // code), not Risk's genuinely deepest 235p.
+    store.Positions[risk.PositionId] = risk;
+    store.Positions[deep.PositionId] = deep;
+    var client = new FakeTradingClient
+    {
+      PositionCloseReasonToReturn = PositionCloseReason.StopLossOrTakeProfit,
+      PositionCloseExecutionPriceToReturn = tp4,
+    };
+    var engine = new AutoTradeEngine(
+      Options() with { PositionMissingConfirmations = 1 },
+      store,
+      () => Now,
+      _ => { }
+    );
+
+    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
+    await WaitUntilAsync(() =>
+      store.Events.Count(item => item.Type == "position_closed") == 2
+    );
+    await WaitForEventAsync(store, "group_result");
+
+    var result = Assert.Single(store.Events, item => item.Type == "group_result");
+    Assert.Equal(235m, result.GroupRealizedPips);
+    Assert.All(
+      store.Events.Where(item => item.Type == "position_closed"),
+      item => Assert.Equal(235m, item.LegRealizedPips)
+    );
+
+    cts.Cancel();
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+  }
+
+  [Fact]
   public async Task SimultaneousGroupCloseSeedsFromCanonicalTrackedSibling()
   {
     // A crash can leave one durable sibling with a newer booked aggregate
