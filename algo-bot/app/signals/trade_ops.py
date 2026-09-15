@@ -906,12 +906,26 @@ def _achieved_rr(sig: dict, net_pips: int) -> str | None:
   adoption event (reliable - matches broker_fill_price exactly), or its
   restart-gap orphan-reconciliation path (InvestigateOrphanedGroupPlanAsync
   - a rough reconstruction from broker deal history, used only when the
-  engine restarted mid-position). A single-leg trade's own entry can never
-  legitimately differ from broker_fill_price, so a mismatch there is the
-  signature of the less-reliable reconciliation path - trust the live fill
-  instead. Multi-leg trades keep legs_achieved_entry_price's deepest-fill
-  pick unchanged: broker_fill_price is deliberately the group's SHALLOWEST
-  (worst-case) leg there, not the deep leg this calc needs.
+  engine restarted mid-position). That reconciliation artifact always lands
+  outside the advertised entry zone (it tracks toward the SL, same as the
+  manual/algo risk leg does) - trust the live fill only when the stored
+  entry sits outside the zone.
+
+  Live 2026-09-15 (signal #358): a genuine 3-leg group's finalize_manual_
+  group close only ever appends ONE legs record for the whole group (see
+  store.finalize_manual_group), so a real multi-leg close's terminal SL
+  event looks IDENTICAL to the single-leg #293 case by leg count alone -
+  the len(legs) <= 1 gate is still correct (a genuine multi-record trade,
+  e.g. an earlier booked TP plus this terminal record, must keep
+  legs_achieved_entry_price's pick unconditionally - see
+  test_realized_rr_uses_the_booking_legs_own_entry_price), but "any
+  mismatch vs broker_fill" inside that gate was too broad: it also
+  clobbered a now-correctly-computed deep-leg entry (GroupDeepestEntryPrice
+  on the C# side already excludes the risk leg - see AutoTradeEngine.cs)
+  right back to broker_fill_price, which deliberately holds the group's
+  SHALLOWEST leg, not the deep leg this calc needs. Refined to "outside the
+  advertised zone" instead: shallow/deep always fill inside it; only a
+  corrupted or risk-leg-tainted single-record entry lands outside.
   """
   original_sl = sig.get("original_sl")
   if original_sl is None:
@@ -919,11 +933,14 @@ def _achieved_rr(sig: dict, net_pips: int) -> str | None:
   legs = sig.get("legs") or []
   broker_fill = sig.get("broker_fill_price")
   entry = pips_format.legs_achieved_entry_price(legs, sig["action"])
+  zone_edges = (float(sig["entry"]), float(sig.get("entry_end") or sig["entry"]))
+  zone_low, zone_high = min(zone_edges), max(zone_edges)
+  zone_buffer = pip_for(sig.get("symbol", "XAU"))
   if (
     len(legs) <= 1
     and entry is not None
     and broker_fill is not None
-    and abs(float(broker_fill) - entry) > 1e-9
+    and not (zone_low - zone_buffer <= entry <= zone_high + zone_buffer)
   ):
     entry = float(broker_fill)
   if entry is None:
