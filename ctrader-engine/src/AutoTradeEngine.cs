@@ -6502,11 +6502,10 @@ public sealed class AutoTradeEngine(
         // trackedGroup (above) is the frozen, complete group from this
         // pass's own snapshot and already includes state itself - immune to
         // the same-pass shrinkage siblingStates has.
+        var includeRiskLeg = AchievedTargetPips(state) is decimal achievedForDeepest
+          && achievedForDeepest > 0;
         var deepestEntry = GroupDeepestEntryPrice(
-          trackedGroup,
-          state.Direction,
-          includeRiskLeg: AchievedTargetPips(state) is decimal achievedForDeepest
-            && achievedForDeepest > 0
+          trackedGroup, state.Direction, includeRiskLeg
         );
         if (!closingGroupPipVolumes.TryGetValue(groupId, out var carriedPipVolume))
         {
@@ -6518,20 +6517,39 @@ public sealed class AutoTradeEngine(
             ? GroupRealizedPipVolume(trackedGroup)
             : state.GroupRealizedPipVolume;
         }
-        var pipVolume = carriedPipVolume
-          + SignedPips(state, exitEstimate) * remainingVolume;
+        // Owner 2026-09-15: the risk leg's own pips only ever count toward
+        // the reported group result on a genuine archived-TP event
+        // (includeRiskLeg above) - a pure SL/loss close must read as if the
+        // risk leg were never part of the group at all, same principle as
+        // GroupDeepestEntryPrice/GroupWorstCase already apply. Skipping its
+        // own contribution here (rather than after the fact) keeps every
+        // sibling's synced GroupRealizedPipVolume correct regardless of
+        // which leg in the group happens to close first.
+        var pipVolume = carriedPipVolume + (
+          !includeRiskLeg && IsManualRiskLeg(state)
+            ? 0m
+            : SignedPips(state, exitEstimate) * remainingVolume
+        );
         closingGroupPipVolumes[groupId] = pipVolume;
         await SyncGroupRealizedPipVolumeAsync(siblingStates, pipVolume, cancellationToken);
         // Total on the close card is the highest target reached (e.g. TP2
         // = 60), not the volume-weighted blend that dilutes booked TPs
         // with a later BE residual. Fall back to weighted only when no
         // target was booked yet (pure SL / full one-shot close).
+        // The weighting denominator excludes the risk leg's own volume too
+        // (same includeRiskLeg gate) - otherwise its pips-free contribution
+        // above would still dilute the ladder's own result toward zero.
+        var ladderInitialVolume = includeRiskLeg
+          ? initialVolume
+          : trackedGroup
+            .Where(item => !IsManualRiskLeg(item))
+            .Sum(item => item.InitialVolume);
         var terminalGroupPips = TerminalAchievedPips(
           state,
           exitEstimate,
           remainingVolume,
           pipVolume,
-          initialVolume
+          ladderInitialVolume > 0 ? ladderInitialVolume : initialVolume
         );
         var pipText = terminalGroupPips.ToString("0.0", CultureInfo.InvariantCulture);
         var resultPhrase = terminalGroupPips > 0m

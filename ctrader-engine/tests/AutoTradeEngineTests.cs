@@ -3263,11 +3263,19 @@ public sealed partial class AutoTradeEngineTests
       store.Events.Where(item => item.Type == "manual_opened"),
       item => Assert.Equal(60m, item.StopPips)
     );
-    var expectedActualGroupPips = states.Sum(state => (
+    // 2026-09-15 (owner): the risk leg's own pips only count toward the
+    // reported group result on a genuine archived-TP event - a pure SL
+    // close (this test) reads as if the risk leg (tranche 3) were never
+    // part of the group, same principle as GroupDeepestEntryPrice/
+    // GroupWorstCase already apply. Both the pip-volume sum and its
+    // weighting denominator exclude it.
+    var ladderStates = states.Where(state => state.TrancheIndex != 3).ToArray();
+    var ladderVolume = ladderStates.Sum(state => state.RemainingVolume);
+    var expectedActualGroupPips = ladderStates.Sum(state => (
       isBuy
         ? ownerStop - state.EntryPrice
         : state.EntryPrice - ownerStop
-    ) / 0.1m * state.RemainingVolume) / totalVolume;
+    ) / 0.1m * state.RemainingVolume) / ladderVolume;
 
     foreach (var state in states)
     {
