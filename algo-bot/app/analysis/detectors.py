@@ -643,7 +643,7 @@ class DetectionContext:
   trigger_ts: str | None = None
   regime: Regime | None = None
   analysis: AnalysisContext | None = None
-  # Shared MAD phase (Asia accum/manip/expand) — technique + HFS.
+  # Shared MAD phase (Asia accum/manip/expand) — technique + scalping.
   mad_phase: str | None = None
   mad: dict[str, object] | None = None
   metric_sink: Callable[[str, str, dict[str, str]], None] | None = None

@@ -22,7 +22,7 @@ class ScalpRiskState:
   day_key: str = ""
   session_key: str = ""
   measured: dict[str, Any] = field(default_factory=dict)
-  # One id per HFS group — clip fills must not each increment concurrent.
+  # One id per scalping group — clip fills must not each increment concurrent.
   open_group_ids: list[str] = field(default_factory=list)
 
   def to_json(self) -> str:
@@ -59,8 +59,8 @@ def risk_key(symbol: str) -> str:
 
 def risk_fraction(cfg: Any) -> float:
   """Constant fraction — never scales with losses or inactivity."""
-  hfs = getattr(getattr(cfg, "strategies", None), "scalping", None)
-  risk = getattr(hfs, "risk", None)
+  scalp_cfg = getattr(getattr(cfg, "strategies", None), "scalping", None)
+  risk = getattr(scalp_cfg, "risk", None)
   try:
     return float(getattr(risk, "risk_fraction_per_trade", 0.10) or 0.10)
   except (TypeError, ValueError):
@@ -74,8 +74,8 @@ def evaluate_risk(
   session: str,
   now: int,
 ) -> ScalpDecision:
-  hfs = getattr(getattr(cfg, "strategies", None), "scalping", None)
-  risk = getattr(hfs, "risk", None)
+  scalp_cfg = getattr(getattr(cfg, "strategies", None), "scalping", None)
+  risk = getattr(scalp_cfg, "risk", None)
   measured = {
     "daily_trades": state.daily_trades,
     "session_trades": state.session_trades,
@@ -189,7 +189,7 @@ def reconcile_open_positions(
   state: ScalpRiskState,
   live_ids: set[str] | None,
 ) -> ScalpRiskState:
-  """Drop ghost HFS concurrent when the broker/plan book no longer has them.
+  """Drop ghost scalping concurrent when the broker/plan book no longer has them.
 
   Live 2026-08-14: five-clip ``order_filled`` events each incremented
   ``open_positions`` while one ``position_closed`` decremented once, then
@@ -269,7 +269,7 @@ def record_scalp_outcome(
   group_id: str | None = None,
   r_multiple: float | None = None,
 ) -> RecordScalpOutcomeResult:
-  """Update HFS risk counters from a fill or close. No martingale.
+  """Update scalping risk counters from a fill or close. No martingale.
 
   When ``closed`` and neither a positive ``stop_pips`` nor an explicit
   ``r_multiple`` is provided, open-position bookkeeping still runs but R is

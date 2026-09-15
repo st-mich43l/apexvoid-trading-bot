@@ -143,7 +143,7 @@ def _build_entry(
   max_slippage_ticks: int,
 ) -> TradePlanEntry:
   if route == "market":
-    # HFS activation explicitly permits a trade-direction chase inside its
+    # Scalping activation explicitly permits a trade-direction chase inside its
     # pip budget. Re-arming that already-confirmed decision as market_watch
     # against the abandoned structural zone made winning scalp plans wait
     # for a retrace and expire. The route planner marks only that case as a

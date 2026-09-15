@@ -849,7 +849,7 @@ async def post_or_edit_forming_card(
   required for the terminal-during-send branch to actually remove the
   message rather than merely neutralizing it via edit).
 
-  Concurrent first-create callers (prod HFS double-send race) contend on a
+  Concurrent first-create callers (prod scalping double-send race) contend on a
   short Redis SET NX lock so only one Telegram root is posted for a setup_id.
 
   Returns the card's message_id, or None if the setup is already terminal
