@@ -673,6 +673,10 @@ class DetectionResult:
   source_touches: int | None = None
   source_score: float | None = None
   bias_relationship: str | None = None
+  # The real liquidity extreme (Grab.pool.level) behind a genuine,
+  # non-induced CONFIRM_SWEEP_RECLAIM. Feeds plan_protective_stop's
+  # sweep_extreme wick-stop widening; None for every other confirmation.
+  sweep_extreme_price: float | None = None
   # Detection/card identity after same-side structural members are merged.
   # Additive so direct detector tests and non-structural setups keep their
   # existing construction and behavior.
@@ -1521,6 +1525,7 @@ def _finish(
   source_score: float | None = None,
   bias_relationship: str | None = None,
   candle_evidence: Any | None = None,
+  sweep_extreme_price: float | None = None,
 ) -> DetectionResult | None:
   from app.analysis.technique_geometry import (
     optimize_crt_entry_zone,
@@ -1721,6 +1726,7 @@ def _finish(
     source_touches=source_touches,
     source_score=source_score,
     bias_relationship=relationship,
+    sweep_extreme_price=sweep_extreme_price,
     math_fib_ratio=(None if fib_hit is None else float(fib_hit.ratio)),
     math_velocity=(
       None if mom is None else float(getattr(mom, "velocity", 0.0))
@@ -2756,6 +2762,12 @@ def _structural_finish(
     confirmation.confirmation_type,
     f"bias {relationship}",
   ]
+  grab = getattr(confirmation, "grab", None)
+  sweep_extreme_price = (
+    float(grab.pool.level)
+    if grab is not None and grab.grade in {"A", "B"} and not grab.inducement
+    else None
+  )
   return _finish(
     ctx,
     setup,
@@ -2781,6 +2793,7 @@ def _structural_finish(
     source_score=source_score,
     bias_relationship=relationship,
     candle_evidence=getattr(confirmation, "candle_evidence", None),
+    sweep_extreme_price=sweep_extreme_price,
   )
 
 

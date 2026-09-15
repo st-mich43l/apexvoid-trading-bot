@@ -894,12 +894,14 @@ def evaluate_execution_policy(
     sweep_extreme = (
       trigger_wick_extreme
       if trigger_wick_extreme is not None
-      else getattr(
+      else getattr(match, "sweep_extreme_price", None)
+    )
+    if sweep_extreme is None:
+      sweep_extreme = getattr(
         match,
         "sweep_low" if direction == "BUY" else "sweep_high",
         None,
       )
-    )
     zone_low = (
       opposing_zone_low
       if opposing_zone_low is not None

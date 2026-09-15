@@ -183,6 +183,10 @@ class StrategyMatch:
   opposing_before_tp1: bool | None = None
   opposing_displaced: bool | None = None
   opposing_mitigated: bool | None = None
+  # Real liquidity extreme (Grab.pool.level) behind a genuine, non-induced
+  # sweep-reclaim confirmation. Feeds execution_policy's sweep_extreme
+  # wick-stop widening. None when there was no such sweep.
+  sweep_extreme_price: float | None = None
   opposing_room_pressure: float | None = None
   opposing_risk_score: float | None = None
   opposing_action: str | None = None
@@ -663,6 +667,10 @@ class StrategyMatch:
         opposing_reason_code=(
           None if payload.get("opposing_reason_code") is None
           else str(payload["opposing_reason_code"])
+        ),
+        sweep_extreme_price=(
+          None if payload.get("sweep_extreme_price") is None
+          else float(payload["sweep_extreme_price"])
         ),
       )
     except (KeyError, TypeError, ValueError, json.JSONDecodeError):
