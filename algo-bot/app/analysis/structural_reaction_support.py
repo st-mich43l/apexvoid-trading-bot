@@ -69,6 +69,9 @@ class ReactionConfirmation:
   # above. Never consulted when deciding confirmation_type - it observes
   # the winning bar, it never picks it.
   candle_evidence: CandleEvidence | None = None
+  # The Grab that produced CONFIRM_SWEEP_RECLAIM, if that's what won.
+  # None for every other confirmation_type.
+  grab: Grab | None = None
 
 
 def bias_relationship(htf_bias: str, direction: str) -> str:
@@ -475,5 +478,6 @@ def evaluate_structural_reaction(
       confirmation_index=confirm_index,
       has_choch=confirmation == CONFIRM_REJECTION_CHOCH,
       candle_evidence=candle_evidence,
+      grab=grab if confirmation == CONFIRM_SWEEP_RECLAIM else None,
     )
   return None

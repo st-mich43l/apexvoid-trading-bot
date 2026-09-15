@@ -28,6 +28,16 @@ dated section after deployment.
   trades have accumulated. Purely descriptive — never a gate.
 
 ### Changed
+- Structural reactions (Key Level, Zone Reaction, Trendline, Session
+  Level) now feed a real liquidity extreme into protective stop
+  planning: a genuine, non-induced grade A/B sweep-reclaim
+  (`CONFIRM_SWEEP_RECLAIM`) sets `sweep_extreme_price` on the match,
+  which `evaluate_execution_policy` now falls back to when there's no
+  M1 trigger wick - widening the stop past the real liquidity extreme
+  instead of just the zone edge (never narrower; fails closed via the
+  existing `stop_exceeds_envelope_after_wick` guard). Also stops scoring
+  an induced (stop-hunt-bait) grade-A grab the same as a genuine one -
+  `Grab.inducement` was computed and never read before this.
 - Key Level structural repair Phase 2: the scanner's primary actionability
   gate and the TradePlan-time room/containment recheck now source their
   opposing-structure pool from `StructuralBarrierBook` (multi-timeframe

@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import datetime, timezone
 from app.core.config import runtime_config
 from tests.configuration.canonical_fixtures import install_runtime_overrides, leaf
@@ -98,6 +99,19 @@ def test_strategy_match_contract_round_trips_and_rejects_wrong_version():
   assert measured.get("matches", 1) >= 1
   assert StrategyMatch.from_json(match.to_json()) == match
   assert StrategyMatch.from_json("not-json") is None
+
+
+def test_sweep_extreme_price_copies_through_and_round_trips():
+  match, reason, _ = scanner._build_strategy_match(
+    "XAU", "M5", "1784721300", _context(),
+    [replace(_result(), sweep_extreme_price=4112.55)],
+    now=NOW,
+  )
+
+  assert match is not None
+  assert reason is None
+  assert match.sweep_extreme_price == pytest.approx(4112.55)
+  assert StrategyMatch.from_json(match.to_json()) == match
   assert StrategyMatch.from_json(
     match.to_json().replace(
       f'"version":{STRATEGY_MATCH_VERSION}',
