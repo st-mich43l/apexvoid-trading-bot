@@ -54,6 +54,12 @@ secrets/bootstrap in `.env`. `config-compiler` emits a
 Details: [docs/configuration/](docs/configuration/configuration-architecture.md)
 and [docs/runtime/multi-symbol-routing.md](docs/runtime/multi-symbol-routing.md).
 
+**Production deploys never read this repo's `config/trading-bot.yml` directly**
+— the Ansible pipeline (`ansible-library`) renders it from a hand-maintained
+mirror variable that must be updated in the *same* change or every deploy
+breaks (`config-compiler` fails Pydantic validation and the stack never
+starts). See [docs/deployment.md § Production Ansible](docs/deployment.md#production-ansible).
+
 ---
 
 ## What it does

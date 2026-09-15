@@ -135,6 +135,21 @@ docker compose logs ctrader-engine
 - Config / pydantic validation errors — required secrets missing from `.env`
   (`TELEGRAM_BOT_TOKEN`, `POSTGRES_PASSWORD`, `CTRADER_*`, …) or invalid
   `config/trading-bot.yml`.
+- **Production only, deploy "succeeded" in CI but the bot is down**:
+  `config-compiler` exits 1 with a Pydantic error on a field that looks
+  correct in this repo's `config/trading-bot.yml` (e.g. `... must be 4.0,
+  got 3.0`). The host's config isn't read from this repo — it's rendered
+  from a hand-maintained mirror in `ansible-library`
+  (`inventory/group_vars/all/apexvoid_trading_bot_config.yml`) that a recent
+  config change forgot to update. Confirm with
+  `docker logs apexvoid-config-compiler` (full traceback) and
+  `docker exec apexvoid-config-compiler cat /config/trading-bot.yml` (or the
+  host path directly) against this repo's value; fix the mirror in
+  `ansible-library`, merge, then re-run the deploy (or `docker compose up -d
+  --force-recreate` once the host file is corrected) — see
+  [deployment.md § Production Ansible](deployment.md#production-ansible).
+  Since `ctrader-engine`/`bot` both wait on `config-compiler`'s exit code,
+  this is a full outage, not a degraded start.
 - Manifest verify failure — `config-compiler` did not write
   `/runtime/resolved-runtime.json`; fix YAML and recreate.
 - Postgres / Redis unhealthy — wait for healthchecks; check
