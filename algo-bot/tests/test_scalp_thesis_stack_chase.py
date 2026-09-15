@@ -1,9 +1,9 @@
 """Regressions for Aug 20 HFS gold dig: thesis leak, stack SELL targets, chase.
 
 1. Same-direction stack must collapse multi-leg routes to single_limit so
-   validate() does not check short HFS targets against the full zone.
+   validate() does not check short scalping targets against the full zone.
 2. TradePlanError from validate becomes TradePlanBuildRejected (claim release).
-3. HFS chase quotes are execution-eligible in V8 (not waiting_retest).
+3. Scalping chase quotes are execution-eligible in V8 (not waiting_retest).
 """
 
 from __future__ import annotations
@@ -71,7 +71,7 @@ def test_same_direction_stack_collapses_market_scale_to_single_limit():
   assert out["same_direction_stack"] is True
 
 
-def test_hfs_sell_same_direction_stack_builds_valid_single_limit_plan():
+def test_scalp_sell_same_direction_stack_builds_valid_single_limit_plan():
   """Live 2026-08-20 XAU 49ffb74: stack → market_watch → TradePlanError.
 
   Short targets from the proximal planned entry sat above zone_low when
@@ -80,7 +80,7 @@ def test_hfs_sell_same_direction_stack_builds_valid_single_limit_plan():
   """
   match = StrategyMatch(
     version=STRATEGY_MATCH_VERSION,
-    match_id="hfs-stack-sell",
+    match_id="scalp-stack-sell",
     symbol="XAU",
     source_tf="M1",
     event_ts="1787210000",
@@ -100,7 +100,7 @@ def test_hfs_sell_same_direction_stack_builds_valid_single_limit_plan():
     targets_pips=(12, 24),
     tier="A",
     family="scalp",
-    structural_zone_id="zone-hfs-sell",
+    structural_zone_id="zone-scalp-sell",
     structural_zone_low=4497.0,
     structural_zone_high=4500.0,
     structural_kind="supply",
@@ -119,9 +119,9 @@ def test_hfs_sell_same_direction_stack_builds_valid_single_limit_plan():
   }
   plan = build_trade_plan_from_strategy_match(
     match,
-    plan_id="plan-hfs-stack",
-    setup_id="setup-hfs-stack",
-    thesis_id="thesis-hfs-stack",
+    plan_id="plan-scalp-stack",
+    setup_id="setup-scalp-stack",
+    thesis_id="thesis-scalp-stack",
     pip_size=Decimal("0.1"),
     spot_price=4498.5,
     executable_quote=4498.5,
@@ -194,7 +194,7 @@ def test_validate_trade_plan_error_becomes_build_rejected():
   assert "SELL targets" in excinfo.value.message
 
 
-def test_hfs_chase_builds_immediate_market_plan_incident_replay():
+def test_scalp_chase_builds_immediate_market_plan_incident_replay():
   """Aug 24: a valid BUY chase hit both TPs while market_watch expired.
 
   Python had already admitted 4631.89 as an in-budget chase past the old
@@ -308,12 +308,12 @@ async def test_publish_releases_thesis_when_build_raises_trade_plan_error(
 
 
 @pytest.mark.asyncio
-async def test_hfs_chase_quote_is_not_parked_as_waiting_retest():
+async def test_scalp_chase_quote_is_not_parked_as_waiting_retest():
   """Activation allows chase; V8 must treat chase as executable.
 
   Assert we do not persist ``waiting_retest_entry_zone`` for an in-budget
   chase quote. Publish may still fail later on stop/envelope geometry; the
-  contract under test is chase eligibility, not a full HFS fill.
+  contract under test is chase eligibility, not a full scalp fill.
   """
   from app.autotrade.execution_confirmation import (
     WAITING_RETEST,
@@ -322,8 +322,8 @@ async def test_hfs_chase_quote_is_not_parked_as_waiting_retest():
 
   client = redis_state.get_client()
   match = _match(
-    match_id="match-hfs-chase",
-    thesis_id="thesis-hfs-chase",
+    match_id="match-scalp-chase",
+    thesis_id="thesis-scalp-chase",
     strategy="Range Sweep Scalp",
     strategy_mode="scalp_m1",
     direction="SELL",

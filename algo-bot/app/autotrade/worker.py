@@ -4806,7 +4806,7 @@ async def _publish_trade_plan_v8(
     )
     return None
 
-  # Technique pack: pair reaction windows for non-scalp; HFS killzone for scalps.
+  # Technique pack: pair reaction windows for non-scalp; scalping killzone for scalps.
   from app.autotrade.killzone import (
     confirmation_is_sweep_body,
     evaluate_instrument_session_quality,
@@ -4856,7 +4856,7 @@ async def _publish_trade_plan_v8(
     strategy_mode=str(getattr(match, "strategy_mode", "") or "") or None,
   )
   if candidate_is_scalp:
-    # Optional global HFS clock sterilizer (prod off). Pair session quality is
+    # Optional global scalping clock sterilizer (prod off). Pair session quality is
     # assessed above, but it is deliberately not a time-of-day hard gate.
     require_kz = False if tech is None else bool(
       getattr(tech, "scalp_require_killzone", False),
@@ -5013,7 +5013,7 @@ async def _publish_trade_plan_v8(
     ),
     pip_size=pip_size,
   )
-  # HFS / range-scalp activation already allows trade-direction chase within
+  # Scalping / range-scalp activation already allows trade-direction chase within
   # maximum_chase_pips. V8 used to require quote-inside only
   # (execution_eligible = evidence.inside), so chase activations were parked
   # as waiting_retest_entry_zone until price returned — by then envelope /
@@ -5944,7 +5944,7 @@ async def _publish_trade_plan_v8(
   # HTF veto: reject when the nearest opposing HTF zone is still untested and
   # ahead of the executable quote (defect 4: a short taken below untested
   # supply). Preflight used to enforce this; TradePlan owns it now. Scalps with
-  # fitted native room skip HTF opposing — range/HFS room is the gate.
+  # fitted native room skip HTF opposing — range/scalping room is the gate.
   if (
     runtime_config.actionability.gates.htf_veto_enabled
     and not match_bypasses_opposing_structure(match_for_plan)
@@ -6062,7 +6062,7 @@ async def _publish_trade_plan_v8(
     same_direction_size_fraction=float(
       runtime_config.risk.position_limits.same_direction_stack_size_fraction
     ),
-    # Active opposite position must not block HFS / Range Edge when native
+    # Active opposite position must not block scalping / Range Edge when native
     # min room already fitted (owner 2026-08-06).
     ignore_opposing_active=scalp_ignores_opposing_active,
     # Non-scalp may same-dir stack at 60% only after every open plan has
@@ -6229,7 +6229,7 @@ async def _publish_trade_plan_v8(
     )
     return None
   try:
-    # Native XAU HFS 1:2: after TP1 books (50%), move SL to BE for the
+    # Native XAU scalping 1:2: after TP1 books (50%), move SL to BE for the
     # runner — same contract as other multi-target plans. C# runtime only
     # applies BE when HighestBookedTargetIndex advances (actual broker
     # close), so deferred/touch-only TP1 cannot arm BE. 1:1 single-exit
@@ -6339,7 +6339,7 @@ async def _publish_trade_plan_v8(
   except Exception as exc:
     # Live 2026-08-20: uncaught exception after claim_active_thesis left
     # analysis:active_thesis:XAU:1681edb5 orphaned for ~24h and blocked
-    # later HFS with thesis_already_owned. Always release on unexpected fail.
+    # later scalping with thesis_already_owned. Always release on unexpected fail.
     await _release_claims()
     log.exception(
       "v8 plan publish failed after thesis claim symbol=%s setup_id=%s "
@@ -6484,11 +6484,11 @@ async def _publish_trade_plan_v8(
     from aiogram.exceptions import TelegramRetryAfter
 
     # ensure (not just edit): a plan can reach this point without ever
-    # having a root card -- HFS's own synchronous publish attempt is only
+    # having a root card -- scalping's own synchronous publish attempt is only
     # one of the ways a plan gets published here. The same match, once
     # persisted to strategy_matches, is also independently discovered and
     # published by this cycle's own arbitration on a later pass in the
-    # same tick, bypassing publish_hfs_live() (and its card-ensure)
+    # same tick, bypassing publish_scalp_live() (and its card-ensure)
     # entirely. Live 2026-08-06: an HFS fill with zero Telegram card,
     # confirmed to have published via exactly this second path (own
     # publish_hfs_live call logged status=remained_watching; this

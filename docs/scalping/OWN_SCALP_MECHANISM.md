@@ -19,7 +19,7 @@ MAD soft-favor (`accum`) applies **only** to technique **Range Edge Scalp**.
 MAD must not rank or gate the scalp lane ([MAD.md](MAD.md)).
 
 Product language is **scalp** (`family=scalp`, `strategy_mode=scalp_m1`).
-Legacy `HFS *` / config `HFS_*` / Redis `scalp:*` keys remain for compatibility.
+Legacy `HFS *` name aliases (`strategy_names.py`) / Redis `scalp:*` keys remain for compatibility.
 
 ## Forced dual timeframe
 

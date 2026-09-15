@@ -7,7 +7,7 @@ Default policy is **disabled**. Do not enable until shadow + paper holdout are g
 | Field | Default | Meaning |
 |-------|---------|---------|
 | `strategy` | `liquidity_sweep_reversal` | Single strategy only |
-| `risk_fraction` | `0.05` | Half of typical HFS 0.10 |
+| `risk_fraction` | `0.05` | Half of typical scalping 0.10 |
 | `maximum_session_trades` | 6 | Caps vs live 12 |
 | `maximum_daily_trades` | 12 | Caps vs live 30 |
 | `enabled` | `false` | Must flip explicitly |
@@ -27,6 +27,6 @@ Default policy is **disabled**. Do not enable until shadow + paper holdout are g
 
 | Mode | Behaviour |
 |------|-----------|
-| `shadow` | Existing HFS discover + math sidecar; no broker |
+| `shadow` | Existing scalping discover + math sidecar; no broker |
 | `paper` | Paper outcomes via `replay.evaluate_paper_outcome` |
-| `live` | Current HFS live path; math sidecar records observe-only (`scalp:last_math_shadow:*`); ControlledLivePolicy stays off until explicit enable |
+| `live` | Current scalping live path; math sidecar records observe-only (`scalp:last_math_shadow:*`); ControlledLivePolicy stays off until explicit enable |

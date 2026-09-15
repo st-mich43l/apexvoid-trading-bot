@@ -32,9 +32,9 @@ def _scalping_cfg(cfg: Any) -> Any:
   return getattr(strategies, "scalping", None)
 
 
-def _enforce_location_cfg(hfs: Any) -> SimpleNamespace:
+def _enforce_location_cfg(scalp_cfg: Any) -> SimpleNamespace:
   """Scalp subsystem always evaluates location in enforce mode."""
-  loc = getattr(hfs, "location", None)
+  loc = getattr(scalp_cfg, "location", None)
   return SimpleNamespace(
     actionability=SimpleNamespace(
       entry_location=SimpleNamespace(
@@ -88,7 +88,7 @@ def evaluate_scalp_activation(
   cfg: Any,
   expected_slippage_pips: float = 1.0,
 ) -> ScalpDecision:
-  hfs = _scalping_cfg(cfg)
+  scalp_cfg = _scalping_cfg(cfg)
   measured: dict[str, Any] = {
     "opportunity_id": opportunity.opportunity_id,
     "archetype": opportunity.archetype,
@@ -98,20 +98,20 @@ def evaluate_scalp_activation(
   if not is_scalping_symbol(opportunity.symbol, cfg):
     return ScalpDecision(False, True, "scalp_symbol_not_enabled", 0.0, measured)
 
-  # Quote freshness (60s hard cap inside HFS)
+  # Quote freshness (60s hard cap inside scalping)
   if int(now) - int(quote_ts) > 60:
     return ScalpDecision(False, True, "scalp_quote_stale", 0.0, measured)
 
   spread_pips = abs(float(quote_ask) - float(quote_bid)) / max(pip_size, 1e-9)
   measured["spread_pips"] = spread_pips
-  max_spread = float(getattr(getattr(hfs, "policy", None), "maximum_spread_pips", 5.0) or 5.0)
+  max_spread = float(getattr(getattr(scalp_cfg, "policy", None), "maximum_spread_pips", 5.0) or 5.0)
   if spread_pips > max_spread:
     return ScalpDecision(False, True, "scalp_spread_too_wide", 0.0, measured)
 
   executable = float(quote_ask) if opportunity.direction == "BUY" else float(quote_bid)
   measured["executable_quote"] = executable
 
-  act = getattr(hfs, "activation", None)
+  act = getattr(scalp_cfg, "activation", None)
   max_age = int(getattr(act, "trigger_maximum_age_bars", 2) or 2)
   age_bars = (int(now) - int(opportunity.trigger_bar_ts)) / 60.0
   if age_bars > max_age:
@@ -174,7 +174,7 @@ def evaluate_scalp_activation(
   htf = str(context.htf_bias or "unknown").casefold()
   measured["htf_bias"] = htf
 
-  # Location — enforce inside HFS
+  # Location — enforce inside scalping
   loc_ctx = build_entry_location_context(
     execution_price=executable,
     direction=opportunity.direction,
@@ -194,7 +194,7 @@ def evaluate_scalp_activation(
     strategy=_strategy_name(opportunity),
     direction=opportunity.direction,
     context=loc_ctx,
-    cfg=_enforce_location_cfg(hfs),
+    cfg=_enforce_location_cfg(scalp_cfg),
     breakout_evidence=evidence,
   )
   measured["location_reason"] = location.reason_code
@@ -211,13 +211,13 @@ def evaluate_scalp_activation(
   gross = float(opportunity.expected_target_pips)
   net = gross - spread_pips - float(expected_slippage_pips)
   measured["net_target_pips"] = net
-  min_net = float(getattr(getattr(hfs, "target", None), "minimum_net_target_pips", 15.0) or 15.0)
+  min_net = float(getattr(getattr(scalp_cfg, "target", None), "minimum_net_target_pips", 15.0) or 15.0)
   if net < min_net:
     return ScalpDecision(False, True, "scalp_net_target_insufficient", 0.0, measured)
   stop = float(opportunity.expected_stop_pips)
   net_rr = net / stop if stop > 0 else 0.0
   measured["net_reward_risk"] = net_rr
-  min_rr = float(getattr(getattr(hfs, "policy", None), "minimum_reward_risk", 1.10) or 1.10)
+  min_rr = float(getattr(getattr(scalp_cfg, "policy", None), "minimum_reward_risk", 1.10) or 1.10)
   measured["minimum_reward_risk"] = min_rr
   if net_rr < min_rr:
     # Preference telemetry only once min-net room is already satisfied.

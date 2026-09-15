@@ -717,14 +717,14 @@ async def _prepare_activation(
     strategy_mode=str(getattr(match, "strategy_mode", "") or "") or None,
   )
   if candidate_is_scalp:
-    # Optional global HFS clock sterilizer (prod off). Pair session quality is
+    # Optional global scalping clock sterilizer (prod off). Pair session quality is
     # assessed above, but it is deliberately not a time-of-day hard gate.
     require_kz = False if tech is None else bool(
       getattr(tech, "scalp_require_killzone", False)
     )
     from app.scalping.context import classify_session
 
-    hfs_session = classify_session(int(now), inst)
+    scalp_session = classify_session(int(now), inst)
     kz = evaluate_killzone_gate(
       ts=now,
       cfg=inst,
@@ -741,7 +741,7 @@ async def _prepare_activation(
         kz.utc_hour,
         kz.killzone_name,
         kz.reason_code,
-        hfs_session,
+        scalp_session,
       )
       await _record_policy_telemetry(
         client,
@@ -1812,7 +1812,7 @@ def _eval_skip_outside_price(symbol: str) -> float:
   """Furthest outside distance that could still be executable.
 
   Reaction zones need inside (chase=0); range scalp may chase up to the
-  configured HFS maximum. Anything beyond that cannot activate — skip the
+  configured scalping maximum. Anything beyond that cannot activate — skip the
   Redis presence write storm that was starving Telegram on prod.
   """
   from app.autotrade import units

@@ -76,7 +76,7 @@ def test_market_watch_entry_prices_are_the_zone_edges():
 
 
 def test_market_entry_price_is_the_admitted_quote_reference():
-  plan = TradePlan.from_dict(_valid_plans()["market_buy_hfs_chase"])
+  plan = TradePlan.from_dict(_valid_plans()["market_buy_scalp_chase"])
   assert plan.entry.entry_prices() == (plan.entry.order_price,)
 
 

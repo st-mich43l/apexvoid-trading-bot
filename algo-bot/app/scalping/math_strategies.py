@@ -7,7 +7,7 @@ These evaluators do **not** publish trades. They encode the Phase 5 models:
 3. Range Edge Mean Reversion
 4. Breakout Retest Continuation (observe-only)
 
-Live HFS discovery remains in ``strategies.py`` until shadow/paper promote.
+Live scalping discovery remains in ``strategies.py`` until shadow/paper promote.
 """
 
 from __future__ import annotations

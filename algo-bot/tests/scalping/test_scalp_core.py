@@ -49,7 +49,7 @@ pytestmark = pytest.mark.no_database
 
 
 def _cfg(**overrides):
-  hfs = SimpleNamespace(
+  scalp_cfg = SimpleNamespace(
     mode="shadow",
     archetypes=SimpleNamespace(
       range_sweep_enabled=True,
@@ -109,9 +109,9 @@ def _cfg(**overrides):
     ),
   )
   for key, value in overrides.items():
-    setattr(hfs, key, value)
+    setattr(scalp_cfg, key, value)
   return SimpleNamespace(
-    strategies=SimpleNamespace(scalping=hfs),
+    strategies=SimpleNamespace(scalping=scalp_cfg),
     market_data=SimpleNamespace(
       sessions=SimpleNamespace(
         asia_start=22, london_start=7, ny_start=13, daily_rollover_utc_hour=21,

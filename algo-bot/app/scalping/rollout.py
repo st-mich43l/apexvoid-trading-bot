@@ -1,6 +1,6 @@
 """Shadow / paper / controlled-live rollout helpers for math scalper.
 
-Modes already exist on HFS config (`off|shadow|paper|live`). These helpers
+Modes already exist on scalping config (`off|shadow|paper|live`). These helpers
 evaluate the mathematical strategy layer without replacing live discovery
 until promotion criteria pass.
 """
@@ -179,7 +179,7 @@ def evaluate_math_shadow(
     "policy": asdict(live_policy),
     "survivor_count": len(survivors),
   }
-  # MAD gates are not stamped on HFS shadow — MAD does not drive scalping.
+  # MAD gates are not stamped on scalping shadow — MAD does not drive scalping.
 
   return ShadowEvaluation(
     mode=mode,
@@ -207,7 +207,7 @@ def annotate_range_sweep_math_gate(
   slippage: float = 0.0,
   buffer: float = 0.0,
 ) -> ScalpOpportunity:
-  """Stamp Liquidity Sweep math gates onto HFS range_sweep (shadow-comparable).
+  """Stamp Liquidity Sweep math gates onto scalping range_sweep (shadow-comparable).
 
   Does not change allow/block for live publish — recorded under
   ``measured.math_liquidity_sweep`` for density / disagreement review.

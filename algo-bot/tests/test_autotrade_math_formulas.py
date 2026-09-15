@@ -105,7 +105,7 @@ def test_confluence_fib_touch_weight():
   assert boosted >= base
 
 
-def test_hfs_impulse_preferred_defaults_are_fib_band():
+def test_scalp_impulse_preferred_defaults_are_fib_band():
   import inspect
 
   sig = inspect.signature(detect_impulse_pullback)

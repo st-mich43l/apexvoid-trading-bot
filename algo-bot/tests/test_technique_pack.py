@@ -37,7 +37,7 @@ def _technique_cfg(
   enforce: bool = True,
   require_sweep: bool = True,
   strict_pd: bool = True,
-  hfs_kz: bool = True,
+  scalp_kz: bool = True,
 ):
   return SimpleNamespace(
     market_data=SimpleNamespace(
@@ -55,7 +55,7 @@ def _technique_cfg(
         london_window_hours=3,
         ny_window_hours=3,
         reaction_require_killzone=True,
-        scalp_require_killzone=hfs_kz,
+        scalp_require_killzone=scalp_kz,
         require_sweep_body=require_sweep,
         strict_premium_discount=strict_pd,
       ),
@@ -114,7 +114,7 @@ def test_killzone_hour_matrix(hour: int, allowed: bool):
     assert decision.reason_code == "outside_killzone"
 
 
-def test_hfs_permitted_archetypes_are_structure_not_clock():
+def test_scalp_permitted_archetypes_are_structure_not_clock():
   """Enabled archetypes print in every session; analysis rejects weak hours."""
   cfg = _technique_cfg()
   for session, hour in (
@@ -130,7 +130,7 @@ def test_hfs_permitted_archetypes_are_structure_not_clock():
     assert permitted_archetypes_for_session(session, hour=hour, cfg=cfg) == _SCALP_ALL
 
 
-def test_hfs_session_fallback_without_clock():
+def test_scalp_session_fallback_without_clock():
   cfg = _technique_cfg()
   assert permitted_archetypes_for_session("asia", cfg=cfg) == _SCALP_ALL
   assert permitted_archetypes_for_session("london", cfg=cfg) == _SCALP_ALL

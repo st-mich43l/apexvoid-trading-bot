@@ -16,7 +16,7 @@ postgres + redis  →  config-compiler  →  ctrader-engine  →  bot
 | `redis` | `redis:7-alpine` — bars, watches, plans, token mirror |
 | `config-compiler` | algo-bot one-shot — validate YAML + emit manifest (exit 0) |
 | `ctrader-engine` | .NET feed + TradePlan V8 executor |
-| `bot` | Python Telegram + scanner + ZoneWatch + HFS |
+| `bot` | Python Telegram + scanner + ZoneWatch + scalping |
 
 Production cTrader authority (set on the engine; do not flip casually):
 
@@ -179,7 +179,7 @@ has the exact signature.
 ### Non-secret YAML
 
 Edit [`config/trading-bot.yml`](../config/trading-bot.yml) for instruments,
-technique pack, activation, HFS mode, etc. After changes:
+technique pack, activation, scalping mode, etc. After changes:
 
 ```bash
 docker compose up -d --force-recreate config-compiler ctrader-engine bot
@@ -195,7 +195,7 @@ execution:
     include_late_ny: true
     reaction_require_killzone: false
     reaction_require_publish_window: false
-    hfs_require_killzone: false
+    scalp_require_killzone: false
     require_sweep_body: false
     strict_premium_discount: true
   activation:
@@ -224,7 +224,7 @@ Expected:
 |---|---|
 | `config-compiler` | Exited **0**; wrote `/runtime/resolved-runtime.json` |
 | `ctrader-engine` | Healthy after backfill (~2 min start period); bars for live symbols |
-| `bot` | Up; Telegram polling + scanner / ZoneWatch / HFS loops |
+| `bot` | Up; Telegram polling + scanner / ZoneWatch / scalping loops |
 | Redis | `bars:XAU:M5` (and FX keys) receiving closes |
 | Host logs | `logs/algo-bot/algo-bot.log`, `logs/ctrader-engine/ctrader-engine.log` |
 
@@ -264,7 +264,7 @@ Optional:
 Technique / ZoneWatch smoke (after auto-trade is on):
 
 - ZoneWatches retain across spot wicks; invalidate on closed-bar break
-- HFS discovery permits follow enabled archetypes in every session; optional `hfs_require_killzone` only blocks publish/activation when explicitly on
+- Scalping discovery permits follow enabled archetypes in every session; optional `scalp_require_killzone` only blocks publish/activation when explicitly on
 - Stops past furthest envelope log `stop_exceeds_envelope_furthest_leg`
 
 ---

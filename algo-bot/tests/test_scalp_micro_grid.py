@@ -37,7 +37,7 @@ def test_sell_grid_steps_up_from_quote_to_distal():
   assert legs == tuple(sorted(legs))
 
 
-def test_hfs_route_is_single_leg_market_not_micro_grid():
+def test_scalp_route_is_single_leg_market_not_micro_grid():
   plan = resolve_execution_route_plan(
     direction="BUY",
     order_type_preference="market",
@@ -66,7 +66,7 @@ def test_hfs_route_is_single_leg_market_not_micro_grid():
     ("SELL", 4001.0),
   ],
 )
-def test_xau_hfs_auto_route_is_single_leg_market(
+def test_xau_scalp_auto_route_is_single_leg_market(
   direction: str,
   quote: float,
 ):
@@ -96,7 +96,7 @@ def test_xau_hfs_auto_route_is_single_leg_market(
   assert plan.routing_reason == "scalp: single-leg market (no micro-grid)"
 
 
-def test_hfs_chase_sell_books_full_market_not_five_legs_into_abandoned_zone():
+def test_scalp_chase_sell_books_full_market_not_five_legs_into_abandoned_zone():
   """Live 2026-08-21: quote below supply, five equal clips → only L1 rode TP."""
   plan = resolve_execution_route_plan(
     direction="SELL",
@@ -119,7 +119,7 @@ def test_hfs_chase_sell_books_full_market_not_five_legs_into_abandoned_zone():
   assert plan.immediate_market is True
 
 
-def test_hfs_chase_buy_books_full_market_not_micro_grid():
+def test_scalp_chase_buy_books_full_market_not_micro_grid():
   plan = resolve_execution_route_plan(
     direction="BUY",
     order_type_preference="market",

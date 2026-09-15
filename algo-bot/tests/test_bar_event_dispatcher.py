@@ -125,7 +125,7 @@ async def test_dispatch_runs_isolated_handlers(monkeypatch):
   scanner = AsyncMock()
   worker = AsyncMock()
   zone = AsyncMock()
-  hfs = AsyncMock()
+  scalp_handler = AsyncMock()
   monkeypatch.setattr(
     "app.analysis.scanner._handle_event", scanner, raising=False,
   )
@@ -138,7 +138,7 @@ async def test_dispatch_runs_isolated_handlers(monkeypatch):
     raising=False,
   )
   monkeypatch.setattr(
-    "app.scalping.runtime.handle_closed_bar", hfs, raising=False,
+    "app.scalping.runtime.handle_closed_bar", scalp_handler, raising=False,
   )
 
   client = SimpleNamespace()
@@ -153,7 +153,7 @@ async def test_dispatch_runs_isolated_handlers(monkeypatch):
   scanner.assert_awaited_once()
   worker.assert_awaited_once()
   zone.assert_awaited_once()
-  hfs.assert_awaited_once()
+  scalp_handler.assert_awaited_once()
   assert zone.await_args.args[0] is client
   assert zone.await_args.kwargs["source"] is source
 
@@ -166,7 +166,7 @@ async def test_dispatch_keeps_later_handlers_if_scanner_raises(monkeypatch):
 
   worker = AsyncMock()
   zone = AsyncMock()
-  hfs = AsyncMock()
+  scalp_handler = AsyncMock()
   monkeypatch.setattr("app.analysis.scanner._handle_event", boom, raising=False)
   monkeypatch.setattr(
     "app.autotrade.worker._handle_event", worker, raising=False,
@@ -177,7 +177,7 @@ async def test_dispatch_keeps_later_handlers_if_scanner_raises(monkeypatch):
     raising=False,
   )
   monkeypatch.setattr(
-    "app.scalping.runtime.handle_closed_bar", hfs, raising=False,
+    "app.scalping.runtime.handle_closed_bar", scalp_handler, raising=False,
   )
 
   ran = await dispatcher.dispatch_closed_bar(
@@ -188,7 +188,7 @@ async def test_dispatch_keeps_later_handlers_if_scanner_raises(monkeypatch):
 
   assert ran == ["zone_watch", "scalp", "worker"]
   worker.assert_awaited_once()
-  hfs.assert_awaited_once()
+  scalp_handler.assert_awaited_once()
   zone.assert_awaited_once()
 
 
@@ -198,7 +198,7 @@ async def test_m5_bar_skips_zone_watch(monkeypatch):
   scanner = AsyncMock()
   worker = AsyncMock()
   zone = AsyncMock()
-  hfs = AsyncMock()
+  scalp_handler = AsyncMock()
   monkeypatch.setattr("app.analysis.scanner._handle_event", scanner, raising=False)
   monkeypatch.setattr("app.autotrade.worker._handle_event", worker, raising=False)
   monkeypatch.setattr(
@@ -206,7 +206,7 @@ async def test_m5_bar_skips_zone_watch(monkeypatch):
     zone,
     raising=False,
   )
-  monkeypatch.setattr("app.scalping.runtime.handle_closed_bar", hfs, raising=False)
+  monkeypatch.setattr("app.scalping.runtime.handle_closed_bar", scalp_handler, raising=False)
 
   ran = await dispatcher.dispatch_closed_bar(
     "XAU:M5:1700000000",
@@ -227,7 +227,7 @@ async def test_dispatch_m1_skips_htf_prefetch_and_clears_cache(monkeypatch):
   async def zone(*args, **kwargs):
     order.append("zone_watch")
 
-  async def hfs(*args, **kwargs):
+  async def scalp_handler(*args, **kwargs):
     order.append("scalp")
 
   source = SimpleNamespace(
@@ -239,7 +239,7 @@ async def test_dispatch_m1_skips_htf_prefetch_and_clears_cache(monkeypatch):
     zone,
     raising=False,
   )
-  monkeypatch.setattr("app.scalping.runtime.handle_closed_bar", hfs, raising=False)
+  monkeypatch.setattr("app.scalping.runtime.handle_closed_bar", scalp_handler, raising=False)
   monkeypatch.setattr("app.analysis.scanner._handle_event", AsyncMock(), raising=False)
   monkeypatch.setattr("app.autotrade.worker._handle_event", AsyncMock(), raising=False)
   monkeypatch.setattr(dispatcher, "prefetch_closed_bar_windows", prefetch)
@@ -256,7 +256,7 @@ async def test_dispatch_m1_skips_htf_prefetch_and_clears_cache(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_dispatch_m5_prefetches_before_hfs(monkeypatch):
+async def test_dispatch_m5_prefetches_before_scalp(monkeypatch):
   _enable_handlers(monkeypatch)
   order: list[str] = []
 
@@ -264,7 +264,7 @@ async def test_dispatch_m5_prefetches_before_hfs(monkeypatch):
     order.append("prefetch")
     assert kwargs.get("closed_tf") == "M5"
 
-  async def hfs(*args, **kwargs):
+  async def scalp_handler(*args, **kwargs):
     order.append("scalp")
 
   source = SimpleNamespace(
@@ -276,7 +276,7 @@ async def test_dispatch_m5_prefetches_before_hfs(monkeypatch):
     AsyncMock(),
     raising=False,
   )
-  monkeypatch.setattr("app.scalping.runtime.handle_closed_bar", hfs, raising=False)
+  monkeypatch.setattr("app.scalping.runtime.handle_closed_bar", scalp_handler, raising=False)
   monkeypatch.setattr("app.analysis.scanner._handle_event", AsyncMock(), raising=False)
   monkeypatch.setattr("app.autotrade.worker._handle_event", AsyncMock(), raising=False)
   monkeypatch.setattr(dispatcher, "prefetch_closed_bar_windows", prefetch)

@@ -300,7 +300,7 @@ def test_fx_targeting_is_explicit_configuration_not_symbol_detection():
   assert fixed_reward_risk("XAUUSD", cfg) == 4.0
 
 
-def test_hfs_fixed_rr_prefers_two_r_then_falls_back_to_one_r():
+def test_scalp_fixed_rr_prefers_two_r_then_falls_back_to_one_r():
   cfg = _load_production_example().config
   # Room fits 1R (15) but not preferred 2R (30): FX takes exactly 1R.
   gold = _select_target(
@@ -329,7 +329,7 @@ def test_hfs_fixed_rr_prefers_two_r_then_falls_back_to_one_r():
   assert fx[1] == 15.0
 
 
-def test_hfs_fixed_rr_takes_two_r_when_room_fits():
+def test_scalp_fixed_rr_takes_two_r_when_room_fits():
   cfg = _load_production_example().config
   target = _select_target(
     direction="SELL",
