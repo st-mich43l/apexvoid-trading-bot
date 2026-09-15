@@ -173,7 +173,23 @@ public static class StopTrailPlanner
       // necessarily ordinal - 1 itself. This reproduces the original TP2
       // case unchanged and falls back to the old "two behind" result
       // whenever "one behind" isn't a real rung in this plan.
-      var resolved = ResolveTrailTarget(state, completedTargetOrdinal, pipSize);
+      //
+      // Owner 2026-09-15: at the SECOND-TO-LAST rung in the ladder (TP3 of
+      // 4, TP4 of 5, ...) trail two behind instead of one - deliberately
+      // reintroducing the "two behind" gap the note above once removed,
+      // but scoped ONLY to this specific rung so the runner keeps more
+      // room right before its final target. Every earlier rung still
+      // trails one behind exactly as before. On a short ladder (e.g. 3
+      // rungs) the second-to-last rung is TP2, which has no real "two
+      // behind" target (no TP0) - ResolveTrailTarget's own walk-off-the-
+      // front returns null there, so fall back to the normal one-behind
+      // result instead of leaving the stop untouched.
+      var totalRungs = state.TargetPrices?.Count ?? state.TargetsPips.Count;
+      var isSecondToLastRung = completedTargetOrdinal == totalRungs - 1;
+      var resolved = isSecondToLastRung
+        ? ResolveTrailTarget(state, completedTargetOrdinal - 1, pipSize)
+          ?? ResolveTrailTarget(state, completedTargetOrdinal, pipSize)
+        : ResolveTrailTarget(state, completedTargetOrdinal, pipSize);
       if (resolved is not (int trailTargetOrdinal, decimal resolvedPrice))
       {
         return null;
