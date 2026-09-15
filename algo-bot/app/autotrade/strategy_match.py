@@ -51,6 +51,12 @@ class StrategyMatch:
   range_low: float | None = None
   range_high: float | None = None
   full_take_profit_pips: int | None = None
+  # M1 scalp only: the authoritative R-multiple for each targets_pips
+  # entry, computed from the SAME stop distance the ladder itself was
+  # built from (app.scalping.publish._scalp_target_ladder) - never
+  # re-derived from displayed card prices, which use an unrelated zone
+  # edge as their pip-offset reference. Empty for every non-scalp match.
+  scalp_target_r_multiples: tuple[float, ...] = ()
   tags: tuple[str, ...] = ()
   target_price: float | None = None
   tier: str = "A"
@@ -249,6 +255,9 @@ class StrategyMatch:
         full_take_profit_pips=(
           None if payload.get("full_take_profit_pips") is None
           else int(payload["full_take_profit_pips"])
+        ),
+        scalp_target_r_multiples=tuple(
+          float(item) for item in payload.get("scalp_target_r_multiples", [])
         ),
         tags=tuple(str(item) for item in payload.get("tags", [])),
         target_price=(

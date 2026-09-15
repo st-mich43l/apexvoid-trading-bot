@@ -11,6 +11,7 @@ from typing import Any, Callable
 from app.autotrade.execution_route import SCALP_MICRO_CLIPS, resolve_execution_route_plan
 from app.autotrade.protective_stop import (
   ProtectiveStopError,
+  approximate_structural_stop_price,
   opposing_zone_context_from_values,
   opposing_zone_context_measured,
   plan_group_protective_stop,
@@ -688,6 +689,24 @@ def evaluate_execution_policy(
   zone_scaling = execution.zone_scaling
   execution_entry = execution.entry
   reaction_execution = execution.reaction
+  # 2026-09-15 (owner-reported, XAU only): pick the entry within the
+  # detected zone/room so entry-to-stop risk lands near stop_min_pips
+  # (the same floor the stop envelope already enforces), instead of a
+  # pure zone-edge pick with zero risk awareness. Uses the real
+  # structural stop - independent of which entry within the zone ends up
+  # chosen - computed here, before route resolution picks an entry.
+  structural_stop_for_entry: float | None = None
+  risk_targeted_entry_pips: float | None = None
+  if symbol == "XAU" and bool(reaction_execution.risk_targeted_entry_enabled):
+    structure_swing_value = getattr(match, "structure_swing", None)
+    if structure_swing_value is not None and atr > 0:
+      structural_stop_for_entry = approximate_structural_stop_price(
+        direction=direction,
+        structure_swing=float(structure_swing_value),
+        atr=atr,
+        structure_buffer_atr=float(execution.scaling.add.stop_buffer_atr),
+      )
+      risk_targeted_entry_pips = float(reaction_execution.stop_min_pips)
   route_plan = resolve_execution_route_plan(
     direction=direction,
     order_type_preference=policy.order_type_preference,
@@ -696,6 +715,9 @@ def evaluate_execution_policy(
     zone_low=low,
     zone_high=high,
     atr=atr,
+    structural_stop=structural_stop_for_entry,
+    target_risk_pips=risk_targeted_entry_pips,
+    pip_size=pip,
     zone_fill_enabled=bool(zone_scaling.fill_enabled),
     zone_fill_min_atr=float(zone_scaling.fill_min_atr or 0.5),
     inside_zone_market_entry_enabled=bool(

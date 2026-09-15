@@ -70,16 +70,19 @@ _FX_FIXED_2R_TARGETING = {
   "entry_clips": 2,
 }
 
-# 2026-09 (owner-reported): auto XAU runs the same 4-level R ladder as
-# manual /algo (see InstrumentManualConfig.target_r_multiples) instead of
-# the FX policies' shared 1R/2R shape - deliberately diverges from
-# _FX_FIXED_2R_TARGETING now that exactly one policy needs to.
+# 2026-09-15 (owner-reported): auto XAU runs the same 1R/2R/3R/4R ladder as
+# manual /algo's default (see parsing.MANUAL_ALGO_DEFAULT_TARGET_R_MULTIPLES)
+# instead of the FX policies' shared 1R/2R shape - deliberately diverges from
+# _FX_FIXED_2R_TARGETING now that exactly one policy needs to. Paired with
+# the entry-targeted risk band (execution_route.risk_targeted_entry_price,
+# XAU only) that forces the risk this ladder measures R against into
+# [50, 60] pips instead of whatever the raw structural stop happened to be.
 _XAU_FIXED_2R_TARGETING = {
   "mode": InstrumentTargetMode.FIXED_RR,
-  "reward_risk": 3.0,
-  "target_r_multiples": (0.5, 1.0, 2.0, 3.0),
+  "reward_risk": 4.0,
+  "target_r_multiples": (1.0, 2.0, 3.0, 4.0),
   "close_ratios": (0.4, 0.2, 0.2, 0.2),
-  "breakeven_after_r": 0.5,
+  "breakeven_after_r": 1.0,
   "trail_after_r": None,
   "trail_to_r": None,
   "entry_clips": 2,

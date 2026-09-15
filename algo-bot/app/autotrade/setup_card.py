@@ -1738,6 +1738,13 @@ def _configured_target_r_multiples(
   2026-09-07: a GBPJPY SELL showed "+10R"/"+15.6R" for what was actually a
   uniform 1R/2R fixed_rr trade). The instrument's configured
   target_r_multiples is the one place this is unambiguous.
+
+  M1 scalp strategies are never on the instrument's fixed_rr ladder (their
+  own 1R/2R book is separate - see technique_fixed_rr_targeting), so this
+  falls back to scalp_target_r_multiples: the R each targets_pips entry
+  actually is, computed by app.scalping.publish from the SAME stop
+  distance the ladder itself was built from - same "authoritative source,
+  never re-derived from card prices" principle as the fixed_rr branch.
   """
   from app.configuration.effective_instrument import EffectiveInstrumentError
   from app.core.instrument_geometry import technique_fixed_rr_targeting
@@ -1749,7 +1756,10 @@ def _configured_target_r_multiples(
     # pip display rather than failing the whole card render over it.
     return None
   if targeting is None:
-    return None
+    scalp_multiples = tuple(
+      float(value) for value in (match.scalp_target_r_multiples or ())
+    )
+    return scalp_multiples or None
   multiples = tuple(
     float(value) for value in (targeting.target_r_multiples or ())
   )

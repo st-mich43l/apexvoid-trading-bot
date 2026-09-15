@@ -248,6 +248,7 @@
       "execution.range.room_stop_floor_pips",
       "execution.range.tp_buffer_pips",
       "execution.reaction.market_fraction",
+      "execution.reaction.risk_targeted_entry_enabled",
       "execution.reaction.room_stop_min_rr",
       "execution.reaction.scale_fraction",
       "execution.reaction.scale_invalid_policy",
@@ -560,7 +561,7 @@
     "XAU_ZONE_PREFERRED_MAX_WIDTH_PRICE": "instruments.XAU.analysis.zones.preferred_maximum_width_price",
     "XAU_ZONE_PREFERRED_MIN_WIDTH_PRICE": "instruments.XAU.analysis.zones.preferred_minimum_width_price"
   },
-  "fingerprint": "81e7fc53bd9090daeb136039e73650ffd744a295605a6f22389aa3323b4cf1b8",
+  "fingerprint": "b20e4f455a8a4905284ee4808defd57593d90d4cdb7739ad251b54413efd6987",
   "instrument_schema": {
     "active_projection_symbol": "XAU",
     "optional": [
