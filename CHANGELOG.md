@@ -28,6 +28,20 @@ dated section after deployment.
   trades have accumulated. Purely descriptive — never a gate.
 
 ### Changed
+- XAU auto algo now runs the same risk/target shape as manual /algo. Entry
+  price selection (`execution_route.risk_targeted_entry_price`, XAU only,
+  behind `execution.reaction.risk_targeted_entry_enabled`, default on) picks
+  the entry within the detected zone/room so entry-to-stop risk lands near
+  the 50 pip floor, instead of a pure zone-edge/midpoint pick with zero risk
+  awareness — best-effort when the zone's own span can't reach the target.
+  The stop envelope cap (`xau_fixed_2r_v1` pack `stop_envelope.max_pips`)
+  drops from 100 to 60, so structural stops now clamp to the same
+  `[50, 60]` band manual /algo defaults to. The auto XAU fixed-RR target
+  ladder (`xau_fixed_2r_v1` `targeting`) changes from `0.5R/1R/2R/3R` to
+  manual /algo's own default `1R/2R/3R/4R`
+  (`parsing.MANUAL_ALGO_DEFAULT_TARGET_R_MULTIPLES`), `reward_risk` 3.0→4.0,
+  breakeven now follows 1R instead of 0.5R; close ratios stay
+  `40/20/20/20`. FX (`fx_fixed_2r_v1`) is untouched.
 - Manual /algo leg ladder: split the group's two risk-facing figures apart
   again. `GroupWorstCase` (the advertised SL risk shown when legs are
   placed) now sums only the original 2-leg Shallow/Deep ladder's own
