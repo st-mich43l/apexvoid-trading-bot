@@ -4956,6 +4956,30 @@ public sealed class AutoTradeEngine(
     return state.TargetsPips[index];
   }
 
+  // Owner-reported 2026-09-15 (real XAU SELL example): AchievedTargetPips
+  // returns TargetsPips[index], the SAME fixed shallow-relative pip count
+  // every leg in the group shares (all legs' TargetsPips are computed once
+  // from Shallow's own distance in ProcessManualAlgoAsync) - a deep or risk
+  // leg that rode the exact same move to the exact same target price
+  // therefore reported the shallow leg's smaller distance, undercounting
+  // its own real capture (e.g. TP4 at 200p from Shallow measured only 200p
+  // for a Deep leg that actually captured 215p from its own, better entry).
+  // Re-measured from the group's real deepest entry (deepestEntry, already
+  // includeRiskLeg-aware) to the achieved target's own absolute price
+  // (TargetPrice) instead of the stored fixed distance.
+  private decimal? AchievedTargetPipsFromEntry(
+    AutoTradePositionState state, decimal entry
+  )
+  {
+    if (state.NextTargetIndex <= 0 || state.TargetsPips.Count == 0)
+    {
+      return null;
+    }
+    var index = Math.Min(state.NextTargetIndex, state.TargetsPips.Count) - 1;
+    var targetPrice = TargetPrice(state, state.TargetsPips[index], index);
+    return SignedPipsFromEntry(state, entry, targetPrice);
+  }
+
   // Close-card / group_result total: prefer the highest target reached over
   // a volume-weighted blend that mixes booked TPs with a later BE residual.
   // If the final exit itself printed higher than that target (manual/trail
@@ -4965,11 +4989,15 @@ public sealed class AutoTradeEngine(
     decimal exitEstimate,
     long remainingVolume,
     decimal pipVolume,
-    long initialVolume
+    long initialVolume,
+    decimal deepestEntry
   )
   {
     var weighted = WeightedPips(pipVolume, initialVolume);
-    if (AchievedTargetPips(state) is not decimal achieved || achieved <= 0)
+    if (
+      AchievedTargetPipsFromEntry(state, deepestEntry) is not decimal achieved
+      || achieved <= 0
+    )
     {
       return weighted;
     }
@@ -4977,7 +5005,7 @@ public sealed class AutoTradeEngine(
     {
       return achieved;
     }
-    return Math.Max(achieved, SignedPips(state, exitEstimate));
+    return Math.Max(achieved, SignedPipsFromEntry(state, deepestEntry, exitEstimate));
   }
 
   // True when the exit sits on the protective stop (initial or trailed)
@@ -6549,7 +6577,8 @@ public sealed class AutoTradeEngine(
           exitEstimate,
           remainingVolume,
           pipVolume,
-          ladderInitialVolume > 0 ? ladderInitialVolume : initialVolume
+          ladderInitialVolume > 0 ? ladderInitialVolume : initialVolume,
+          deepestEntry
         );
         var pipText = terminalGroupPips.ToString("0.0", CultureInfo.InvariantCulture);
         var resultPhrase = terminalGroupPips > 0m
