@@ -3,9 +3,9 @@
 > Generated from the typed `ApexVoidConfig` Catalog V2 schema. Do not edit manually.
 
 - Catalog version: `2`
-- Contract fingerprint: `81e7fc53bd9090daeb136039e73650ffd744a295605a6f22389aa3323b4cf1b8`
-- Document fingerprint: `5118aa2a3751194a88bec6a0cfe3b15a92db24f8c557449a55e6593a26c07860`
-- Items: `630`
+- Contract fingerprint: `b20e4f455a8a4905284ee4808defd57593d90d4cdb7739ad251b54413efd6987`
+- Document fingerprint: `21750e115eaf1da5797b257e755830e331a66c7a3f56ccc0ac5f0de025c3f217`
+- Items: `631`
 - Runtime status: canonical-only; `app.core.config.runtime_config` is authoritative
 
 ## actionability
@@ -351,6 +351,7 @@
 | `execution.range.room_stop_floor_pips` | `AUTO_TRADE_RANGE_ROOM_STOP_FLOOR_PIPS` | `int` | `pips` | `configurable` | `15` |
 | `execution.range.tp_buffer_pips` | `AUTO_TRADE_RANGE_TP_BUFFER_PIPS` | `float` | `pips` | `configurable` | `3.0` |
 | `execution.reaction.market_fraction` | `AUTO_TRADE_REACTION_MARKET_FRACTION` | `float` | `fraction` | `configurable` | `0.8` |
+| `execution.reaction.risk_targeted_entry_enabled` | `AUTO_TRADE_REACTION_RISK_TARGETED_ENTRY_ENABLED` | `bool` | `boolean` | `configurable` | `true` |
 | `execution.reaction.room_stop_min_rr` | `AUTO_TRADE_REACTION_ROOM_STOP_MIN_RR` | `float` | `multiplier` | `configurable` | `1.0` |
 | `execution.reaction.scale_fraction` | `AUTO_TRADE_REACTION_SCALE_FRACTION` | `float` | `fraction` | `configurable` | `0.2` |
 | `execution.reaction.scale_invalid_policy` | `AUTO_TRADE_REACTION_SCALE_INVALID_POLICY` | `str` | `enum` | `configurable` | `"single_market"` |

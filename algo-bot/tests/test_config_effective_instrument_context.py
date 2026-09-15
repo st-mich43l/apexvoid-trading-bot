@@ -128,7 +128,7 @@ def test_production_yaml_xau_effective_parity():
   assert cfg.live_instruments() == ("EURUSD", "GBPJPY", "GBPUSD", "USDJPY", "XAU")
   assert cfg.instrument_for_broker_symbol("xauusd").identity.canonical_symbol == "XAU"
   assert int(effective.execution.reaction.stop_min_pips) == 50
-  assert int(effective.execution.reaction.stop_max_pips) == 100
+  assert int(effective.execution.reaction.stop_max_pips) == 60
   assert effective.targeting.mode is InstrumentTargetMode.FIXED_RR
 
 
@@ -181,16 +181,16 @@ def test_production_yaml_fx_live_executable_units():
   assert gbpjpy.targeting.entry_clips == 2
   assert xau.targeting.mode is InstrumentTargetMode.FIXED_RR
   # XAU deliberately diverges from the FX policies' shared 1R/2R shape onto
-  # the same 4-level R ladder as manual /algo (0.5R/1R/2R/3R).
-  assert xau.targeting.reward_risk == 3.0
-  assert xau.targeting.target_r_multiples == (0.5, 1.0, 2.0, 3.0)
+  # manual /algo's own default 4-level R ladder (1R/2R/3R/4R).
+  assert xau.targeting.reward_risk == 4.0
+  assert xau.targeting.target_r_multiples == (1.0, 2.0, 3.0, 4.0)
   assert xau.targeting.close_ratios == (0.4, 0.2, 0.2, 0.2)
-  assert xau.targeting.breakeven_after_r == 0.5
+  assert xau.targeting.breakeven_after_r == 1.0
   assert xau.targeting.trail_after_r is None
   assert xau.targeting.trail_to_r is None
   assert xau.targeting.entry_clips == 2
   assert int(xau.execution.reaction.stop_min_pips) == 50
-  assert int(xau.execution.reaction.stop_max_pips) == 100
+  assert int(xau.execution.reaction.stop_max_pips) == 60
   assert float(xau.execution.stops.sl_distance) == 10.0
   # Scalp RR floor must stay 1.10 — pack must not overwrite with technique 2.0.
   assert float(xau.strategies.scalping.policy.minimum_reward_risk) == 1.10

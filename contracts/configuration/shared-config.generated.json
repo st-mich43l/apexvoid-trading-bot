@@ -1,6 +1,6 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "81e7fc53bd9090daeb136039e73650ffd744a295605a6f22389aa3323b4cf1b8",
+  "configuration_contract_fingerprint_sha256": "b20e4f455a8a4905284ee4808defd57593d90d4cdb7739ad251b54413efd6987",
   "count": 96,
   "items": [
     {
@@ -2995,6 +2995,6 @@
       "path": "strategies.mapped_zone.enabled"
     }
   ],
-  "source_fingerprint_sha256": "81e7fc53bd9090daeb136039e73650ffd744a295605a6f22389aa3323b4cf1b8",
+  "source_fingerprint_sha256": "b20e4f455a8a4905284ee4808defd57593d90d4cdb7739ad251b54413efd6987",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

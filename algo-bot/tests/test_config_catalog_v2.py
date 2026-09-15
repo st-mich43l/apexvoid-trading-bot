@@ -61,13 +61,16 @@ BASELINE = {
   # 2026-09 Key Level structural repair Phase 2: +1 new leaf field
   # (actionability.target_room.structural_barrier_book_enabled), real
   # canonical_env, ConfigOwner.PYTHON, not deprecated-alias'd.
-  "entries": 630,
-  "configurable": 523,
+  # 2026-09-15 XAU auto algo risk-band rework: +1 new leaf field
+  # (execution.reaction.risk_targeted_entry_enabled), real canonical_env,
+  # ConfigOwner.PYTHON, not deprecated-alias'd.
+  "entries": 631,
+  "configurable": 524,
   "protocol": 10,
   "algorithm": 97,
-  "owners": {"python": 485, "shared": 96, "ctrader": 49},
-  "projection": 581,
-  "env": 523,
+  "owners": {"python": 486, "shared": 96, "ctrader": 49},
+  "projection": 582,
+  "env": 524,
   "deprecated_aliases": 21,
 }
 
