@@ -1258,7 +1258,12 @@ public sealed class AutoTradeEngine(
     {
       currentGroup = [state];
     }
-    var deepestEntry = GroupDeepestEntryPrice(currentGroup, state.Direction);
+    // An owner-initiated close (/trade_close, /auto_close_all,
+    // /trade_close_auto) is not itself a take-profit event - risk leg
+    // excluded, same as any other risk-facing figure.
+    var deepestEntry = GroupDeepestEntryPrice(
+      currentGroup, state.Direction, includeRiskLeg: false
+    );
     var displayLegPips = SignedPipsFromEntry(state, deepestEntry, fill);
     var groupPipVolume = GroupRealizedPipVolume(currentGroup)
       + realizedPips * closeVolume;
@@ -5044,6 +5049,32 @@ public sealed class AutoTradeEngine(
   );
 
   /// <summary>
+  /// Owner-reported 2026-09-14 (signal 341, real XAU SELL): the manual/algo
+  /// risk leg (see <see cref="ManualAlgoRiskLegPrice"/>) sits deliberately
+  /// close to the shared stop - a small, fixed-size trade-off leg, not a
+  /// genuinely favorable fill. Naive Min/Max below picked it as the
+  /// group's "deepest" entry purely because it is numerically closest to
+  /// the stop side, corrupting the group-facing pips/loss telemetry
+  /// (signal 341's reported entry landed ~1.5 pips off the stop - the risk
+  /// leg's price - instead of the main ladder's real entry).
+  /// </summary>
+  private bool IsManualRiskLeg(AutoTradePositionState state)
+  {
+    // ExecutionStream, not the raw Stream field directly - restart-recovery
+    // reconstructed states can leave Stream at its "algo_auto" record
+    // default and only carry Setup, same as every other Stream check here.
+    if (
+      ExecutionStream(state) != "algo_manual"
+      || state.InitialStopLoss is not decimal stop
+    )
+    {
+      return false;
+    }
+    var distancePips = Math.Abs(state.EntryPrice - stop) / PipSizeForState(state);
+    return Math.Abs(distancePips - ManualAlgoRiskLegPipsFromStop) <= 3m;
+  }
+
+  /// <summary>
   /// Owner-reported 2026-09-10 (signal 300, real XAU BUY): a manual /algo
   /// group's shallow leg (tranche 1, filled at the zone's worse edge) hit
   /// TP1 and the channel card reported that leg's own entry-to-target
@@ -5057,28 +5088,35 @@ public sealed class AutoTradeEngine(
   /// price in the group (lower for BUY, higher for SELL) - not from
   /// whichever specific tranche happens to be the one booking this event.
   ///
-  /// Owner 2026-09-14 (signal 341) briefly excluded the fixed-size risk leg
-  /// (see <see cref="ManualAlgoRiskLegPrice"/>) from this pool, since it
-  /// sits deliberately close to the shared stop and isn't a genuinely
-  /// favorable fill. Owner 2026-09-15: reversed - the archived pip/R result
-  /// must reflect the true deepest fill actually reached, risk leg
-  /// included; a separate, dedicated figure (GroupWorstCase, the group's
-  /// advertised SL risk) now excludes the risk leg's contribution instead
-  /// (see ProcessManualAlgoAsync) so that headline risk figure still
-  /// describes only the original group ladder.
+  /// Owner 2026-09-15: the fixed-size risk leg only belongs in that pool
+  /// when this is a genuine take-profit / archived-TP-level event
+  /// (<paramref name="includeRiskLeg"/> true) - it is NOT part of the
+  /// "original" group ladder, so it must never be involved in a risk
+  /// calculation (a plain owner-initiated close, or a terminal event where
+  /// no target was actually achieved). GroupWorstCase (the group's
+  /// advertised SL risk, see ProcessManualAlgoAsync) already excludes it
+  /// unconditionally for the same reason.
   /// </summary>
   private decimal GroupDeepestEntryPrice(
     IReadOnlyList<AutoTradePositionState> group,
-    TradeDirection direction
+    TradeDirection direction,
+    bool includeRiskLeg
   )
   {
     if (group.Count == 0)
     {
       return 0m;
     }
+    var candidates = includeRiskLeg || group.Count <= 1
+      ? group
+      : group.Where(state => !IsManualRiskLeg(state)).ToArray();
+    if (candidates.Count == 0)
+    {
+      candidates = group;
+    }
     return direction == TradeDirection.Buy
-      ? group.Min(state => state.EntryPrice)
-      : group.Max(state => state.EntryPrice);
+      ? candidates.Min(state => state.EntryPrice)
+      : candidates.Max(state => state.EntryPrice);
   }
 
   private async Task<bool> CompleteDryRunAsync(
@@ -5433,7 +5471,11 @@ public sealed class AutoTradeEngine(
         var currentGroup = _states.Values
           .Where(item => GroupId(item) == GroupId(state))
           .ToArray();
-        var deepestEntry = GroupDeepestEntryPrice(currentGroup, state.Direction);
+        // A genuine take-profit event - the archived TP level, risk leg
+        // included.
+        var deepestEntry = GroupDeepestEntryPrice(
+          currentGroup, state.Direction, includeRiskLeg: true
+        );
         var groupBooked = GroupBookedPnl(currentGroup) + realized;
         var initialBooked = InitialBookedPnl(currentGroup)
           + (state.TrancheIndex == 1 ? realized : 0m);
@@ -6435,8 +6477,15 @@ public sealed class AutoTradeEngine(
         var siblingStates = _states.Values
           .Where(item => GroupId(item) == groupId)
           .ToArray();
+        // Same win/loss read TerminalAchievedPips uses just below: only a
+        // genuinely achieved target makes this an archived-TP-level event
+        // eligible to include the risk leg - a pure SL/unconfirmed
+        // disappearance is a risk calculation and must exclude it.
         var deepestEntry = GroupDeepestEntryPrice(
-          [state, .. siblingStates], state.Direction
+          [state, .. siblingStates],
+          state.Direction,
+          includeRiskLeg: AchievedTargetPips(state) is decimal achievedForDeepest
+            && achievedForDeepest > 0
         );
         if (!closingGroupPipVolumes.TryGetValue(groupId, out var carriedPipVolume))
         {

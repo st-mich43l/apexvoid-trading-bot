@@ -1303,19 +1303,22 @@ public sealed partial class AutoTradeEngineTests
   [Fact]
   public async Task GroupDeepestFillIncludesTheManualRiskLegForArchivedPips()
   {
-    // Owner-reported 2026-09-14 (real XAU SELL, signal 341) briefly
-    // excluded the manual/algo risk leg (ManualAlgoRiskLegPrice, sitting
-    // deliberately ~15 pips from the shared stop) from
-    // GroupDeepestEntryPrice's Min/Max, since it isn't a genuinely
-    // favorable fill. Owner 2026-09-15 reversed that: the archived pip/R
-    // result (pips_format.legs_achieved_entry_price on the Python side)
-    // must reflect the true deepest fill reached, risk leg included - a
-    // separate figure (GroupWorstCase, the advertised SL risk) now excludes
-    // the risk leg's contribution instead, so that headline risk figure
-    // stays scoped to the original group ladder. Shared stop 4356.0:
-    // shallow 4350.0 (tranche 1), deep 4353.0 (tranche 2), risk leg 4354.5
-    // (tranche 3, stop - 15p) - numerically the highest/"most favorable" of
-    // the three for a SELL, and now correctly selected as the deepest fill.
+    // Owner-reported 2026-09-14 (real XAU SELL, signal 341) excluded the
+    // manual/algo risk leg (ManualAlgoRiskLegPrice, sitting deliberately
+    // ~15 pips from the shared stop) from GroupDeepestEntryPrice's
+    // Min/Max, since it isn't a genuinely favorable fill. Owner 2026-09-15
+    // narrowed that to risk-facing contexts only: a genuine take-profit
+    // event (this test) is "TP archived level" and the risk leg belongs in
+    // the pool - the archived pip/R result
+    // (pips_format.legs_achieved_entry_price on the Python side) must
+    // reflect the true deepest fill actually reached. A risk calculation
+    // (GroupWorstCase, or any close where no target was achieved - see
+    // GroupDeepestFillExcludesTheManualRiskLegOnAPureStopLossClose) still
+    // excludes it, scoped to the original group ladder only. Shared stop
+    // 4356.0: shallow 4350.0 (tranche 1), deep 4353.0 (tranche 2), risk leg
+    // 4354.5 (tranche 3, stop - 15p) - numerically the highest/"most
+    // favorable" of the three for a SELL, and correctly selected here
+    // since a real TP just fired.
     using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
     var store = new FakeAutoTradeStore(CandidateJson());
     var client = new FakeTradingClient();
@@ -1348,10 +1351,73 @@ public sealed partial class AutoTradeEngineTests
     );
     Assert.Equal(91, takeProfit.PositionId);
     // Risk leg's own price (4354.5) - the numerically deepest/"most
-    // favorable" SELL entry in the group - is now the archived reference,
-    // not the main ladder's deep leg (4353.0).
+    // favorable" SELL entry in the group - is now the archived reference
+    // for this genuine take-profit event, not the main ladder's deep leg
+    // (4353.0). See GroupDeepestFillExcludesTheManualRiskLegOnAPureStopLossClose
+    // for the opposite (no target achieved) case, where it stays excluded.
     Assert.Equal(4354.5m, takeProfit.LegEntryPrice);
     Assert.Equal(77.0m, takeProfit.LegRealizedPips);
+
+    cts.Cancel();
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+  }
+
+  [Fact]
+  public async Task GroupDeepestFillExcludesTheManualRiskLegOnAPureStopLossClose()
+  {
+    // Owner 2026-09-15: the risk leg only belongs in the archived deepest-
+    // fill reference for a genuine take-profit / TP-archived-level event
+    // (see GroupDeepestFillIncludesTheManualRiskLegForArchivedPips above).
+    // It is not part of the "original" group ladder, so a risk calculation
+    // - including a leg closing with no target ever achieved, the pure
+    // SL case - must exclude it, same as GroupWorstCase already does.
+    // Shared stop 4356.0: shallow 4350.0 (tranche 1, closing here with
+    // no TP booked), deep 4353.0 (tranche 2, still open), risk leg 4354.5
+    // (tranche 3, still open) - the correct SELL reference is deep
+    // (4353.0), not the risk leg despite it being numerically "deeper".
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    var now = Now;
+    const decimal ownerStop = 4356.0m;
+    var store = new FakeAutoTradeStore(CandidateJson());
+    var client = new FakeTradingClient
+    {
+      PositionCloseReasonToReturn = PositionCloseReason.StopLossOrTakeProfit,
+      PositionCloseExecutionPriceToReturn = ownerStop,
+    };
+    // All three genuinely open at the broker first (adopted from their own
+    // avm comments, same as the take-profit test above), so a normal
+    // reconcile pass tracks every sibling into _states before shallow
+    // disappears - otherwise deep/the risk leg would not yet be loaded as
+    // siblings when shallow's own disappearance is confirmed.
+    client.SeedPosition(new TradingPosition(
+      91, 7, TradeDirection.Sell, 500, 4350.0m, ownerStop,
+      "apexvoid-auto", "avm|manual342-1|manual342|500|500|30|1|1000|0|1|3"
+    ));
+    client.SeedPosition(new TradingPosition(
+      92, 7, TradeDirection.Sell, 300, 4353.0m, ownerStop,
+      "apexvoid-auto", "avm|manual342-2|manual342|300|300|30|1|1000|0|2|3"
+    ));
+    client.SeedPosition(new TradingPosition(
+      93, 7, TradeDirection.Sell, 200, 4354.5m, ownerStop,
+      "apexvoid-auto", "avm|manual342-3|manual342|200|200|30|1|1000|0|3|3"
+    ));
+    var engine = new AutoTradeEngine(
+      Options() with { PositionMissingConfirmations = 1 },
+      store,
+      () => now,
+      _ => { }
+    );
+
+    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
+    await WaitForEventAsync(store, "ready");
+    client.RemovePosition(91);
+    now = now.AddSeconds(16);
+
+    await WaitForEventAsync(store, "position_closed");
+
+    var closed = Assert.Single(store.Events, item => item.Type == "position_closed");
+    Assert.Equal(91, closed.PositionId);
+    Assert.Equal(4353.0m, closed.LegEntryPrice);
 
     cts.Cancel();
     await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
