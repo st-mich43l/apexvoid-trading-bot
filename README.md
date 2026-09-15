@@ -165,7 +165,7 @@ apexvoid-trading-bot/
 │   ├── configuration/      # catalog + manifest authority
 │   ├── scalping/           # HFS lane
 │   ├── audits/             # point-in-time capability/behavior audits
-│   └── history/            # superseded designs, migration records
+│   └── history/            # finished P0 plans, regression write-ups, one-shot migrations
 ├── contracts/              # shared JSON schemas
 │   ├── autotrade/          # TradePlan V8, …
 │   └── configuration/      # catalog / env / manifest contracts
@@ -180,14 +180,14 @@ apexvoid-trading-bot/
     └── app/
         ├── main.py         # composition root (cutover + loops)
         ├── configuration/  # catalog, YAML loader, runtime manifest
-        ├── core/           # runtime_config, symbols, logging
+        ├── core/           # runtime_config, symbols, instrument geometry, logging
         ├── persistence/    # Postgres store + Redis client
         ├── bot/            # aiogram wiring + handlers
-        ├── signals/        # manual /algo, charts, calendar, recap
-        ├── analysis/       # detectors, techniques, scanner, map
-        ├── autotrade/      # ZoneWatch cutover, TradePlan V8, delivery
+        ├── signals/        # manual /algo, broadcast, charts, calendar, recap
+        ├── analysis/       # detectors, techniques, scanner, zones
+        ├── autotrade/      # execution policy, stops/targets, TradePlan V8, ZoneWatch
         ├── scalping/       # HFS M1 lane
-        ├── runtime/        # multi-symbol routing helpers
+        ├── runtime/        # instrument config/registry, price format, rollout gates
         └── scripts/        # one-off/backfill ops scripts (not imported by the app)
 ```
 
