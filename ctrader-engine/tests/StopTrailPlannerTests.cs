@@ -112,16 +112,23 @@ public sealed class StopTrailPlannerTests
   // new 4-rung ladder that skipped a whole real, already-realized level:
   // TP3 trailed all the way back to TP1 (a no-op once TP2 had already
   // moved there) instead of advancing to TP2, and TP4 trailed to TP2
-  // instead of TP3. Every rung now advances the trail by exactly one step.
+  // instead of TP3. Every rung advanced the trail by exactly one step.
+  //
+  // 2026-09-15 owner: reintroduced "two behind" but ONLY for the
+  // second-to-last rung (TP4 of this 5-rung ladder) - the runner keeps
+  // more room right before its final target. TP2 and TP3 still each trail
+  // one behind exactly as above; TP4's own "two behind" destination
+  // (TP2's level) is the SAME level TP3 already moved to one step earlier,
+  // so the sequential TP4 call here is correctly a no-op (Plan returns
+  // null - nothing to move, already there), not a further advance.
   [Theory]
-  [InlineData(TradeDirection.Buy, 4000.26, 4003.2, 4006.2, 4009.2)]
-  [InlineData(TradeDirection.Sell, 4000.14, 3997.2, 3994.2, 3991.2)]
-  public void EachTargetTrailsToThePrecedingTargetsLevel(
+  [InlineData(TradeDirection.Buy, 4000.26, 4003.2, 4006.2)]
+  [InlineData(TradeDirection.Sell, 4000.14, 3997.2, 3994.2)]
+  public void EachTargetTrailsToThePrecedingTargetsLevelExceptTheSecondToLast(
     TradeDirection direction,
     double afterTp1,
     double afterTp2,
-    double afterTp3,
-    double afterTp4
+    double afterTp3
   )
   {
     var state = State(direction);
@@ -147,20 +154,42 @@ public sealed class StopTrailPlannerTests
     Assert.Equal("TP2", tp3.Label);
     state = state with { CurrentStopLoss = tp3.StopLoss };
 
-    var tp4 = Assert.IsType<StopTrailMove>(
-      StopTrailPlanner.Plan(state, 3, Symbol, 0.1m, 6)
-    );
-    Assert.Equal(Convert.ToDecimal(afterTp4), tp4.StopLoss);
-    Assert.Equal("TP3", tp4.Label);
+    // TP4 (ordinal 4 of 5) is the second-to-last rung: two behind is TP2,
+    // the level TP3 just moved to - no further move needed.
+    Assert.Null(StopTrailPlanner.Plan(state, 3, Symbol, 0.1m, 6));
     Assert.Null(StopTrailPlanner.Plan(state, 4, Symbol, 0.1m, 6));
+  }
+
+  [Fact]
+  public void SecondToLastRungTrailsTwoBehindWhenNotAlreadyThere()
+  {
+    // Owner-reported 2026-09-15 (real XAU BUY #10, live money): a 4-rung
+    // manual ladder (0.5R/1R/2R/3R... now 1R/2R/3R/4R) must trail to TP1
+    // (two behind), not TP2 (one behind), once TP3 - the second-to-last
+    // rung - books. Isolated call (no prior TP1/TP2 trail applied to
+    // state), so this exercises the actual "two behind" resolution, not
+    // the sequential no-op case above.
+    var state = State(TradeDirection.Buy) with
+    {
+      TargetsPips = [50, 100, 150, 200],
+      TargetOrdinals = [1, 2, 3, 4],
+      TargetPrices = [4283.0m, 4288.0m, 4293.0m, 4298.0m],
+      CurrentStopLoss = 4273.0m,
+    };
+
+    var afterTp3 = Assert.IsType<StopTrailMove>(
+      StopTrailPlanner.Plan(state, 2, Symbol, 0.1m, 6)
+    );
+    Assert.Equal(4283.0m, afterTp3.StopLoss);
+    Assert.Equal("TP1", afterTp3.Label);
   }
 
   [Fact]
   public void AbsoluteTargetPricesDriveTrailNotFillRelativePips()
   {
-    // Manual ladders book absolute TargetPrices; trail after TP4 must lock
-    // to Absolute TP3 (the preceding rung), not Entry±TargetsPips (fill
-    // slippage desync).
+    // Manual ladders book absolute TargetPrices; trail after TP4 (the
+    // second-to-last rung of this 5-rung ladder) must lock to Absolute
+    // TP2 (two behind), not Entry±TargetsPips (fill slippage desync).
     var state = State(TradeDirection.Sell, 4401.10m, 4408.10m) with
     {
       TargetsPips = [30, 60, 100, 130, 200],
@@ -172,8 +201,8 @@ public sealed class StopTrailPlannerTests
     var afterTp4 = Assert.IsType<StopTrailMove>(
       StopTrailPlanner.Plan(state, 3, Symbol, 0.1m, 6)
     );
-    Assert.Equal(4391.0m, afterTp4.StopLoss);
-    Assert.Equal("TP3", afterTp4.Label);
+    Assert.Equal(4395.0m, afterTp4.StopLoss);
+    Assert.Equal("TP2", afterTp4.Label);
   }
 
   [Fact]
