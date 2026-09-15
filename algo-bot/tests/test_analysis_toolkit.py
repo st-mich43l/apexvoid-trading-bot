@@ -859,7 +859,11 @@ def test_regime_keeps_expanded_breakout_as_trend():
   assert result.reasons == ["range expanded or broke edge"]
 
 
-def test_liquidity_grab_grade_a_and_inducement_score_bonus():
+def test_liquidity_grab_grade_a_but_induced_gets_no_score_bonus():
+  # An induced (stop-hunt-bait) pool sitting right against opposing
+  # structure must not earn the same "sweep A" score boost as a genuine
+  # sweep, even when the sweep itself grades A - see _has_grade_a_grab's
+  # inducement exclusion.
   df = _df([
     (102, 103, 101, 102),
     (100, 103, 99, 102),
@@ -884,6 +888,37 @@ def test_liquidity_grab_grade_a_and_inducement_score_bonus():
   assert grabs[0].grade == "A"
   assert grabs[0].displacement is True
   assert grabs[0].inducement is True
+
+  scored = score_zones([zone], [], [pool], round_step=0, grabs=grabs)[0]
+  assert "sweep A" not in scored.score_reasons
+
+
+def test_liquidity_grab_grade_a_genuine_gets_score_bonus():
+  # Same setup but the pool is far from opposing structure - not induced -
+  # so the genuine grade-A sweep still earns its score boost.
+  df = _df([
+    (102, 103, 101, 102),
+    (100, 103, 99, 102),
+    (102, 104, 101, 103),
+    (103, 107, 102, 106),
+  ])
+  atr = pd.Series([1.0] * len(df), index=df.index)
+  pool = Pool("sell", 100.0, 0.1, 2)
+  zone = Zone(99.5, 101.0, "demand", source="supply_demand")
+  grabs = liquidity_grabs(
+    df,
+    [pool],
+    [Leg(2, 3, "up", 5.0)],
+    [],
+    atr,
+    sweep_body_frac=0.5,
+    sweep_react_bars=3,
+    inducement_band_atr=0.3,
+  )
+
+  assert len(grabs) == 1
+  assert grabs[0].grade == "A"
+  assert grabs[0].inducement is False
 
   scored = score_zones([zone], [], [pool], round_step=0, grabs=grabs)[0]
   assert "sweep A" in scored.score_reasons

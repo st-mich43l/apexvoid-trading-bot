@@ -466,6 +466,32 @@ def test_retest_trigger_wick_drives_stop_rr_and_confirmation_provenance():
   assert plan.provenance.zone_episode_id == "episode-1"
 
 
+def test_match_sweep_extreme_price_widens_stop_like_trigger_wick():
+  # A genuine liquidity sweep behind a structural reaction
+  # (StrategyMatch.sweep_extreme_price, set by detectors._structural_finish
+  # for a non-induced grade A/B CONFIRM_SWEEP_RECLAIM) must drive the same
+  # wick-stop widening as an M1 trigger_wick_extreme - it's the same
+  # execution_policy.py fallback chain, just sourced differently. No
+  # explicit trigger_wick_extreme param this time.
+  via_trigger = _build(
+    _match(structure_swing=4085.0, targets=(140, 250)),
+    trigger_wick_extreme=4083.5,
+  )
+  via_match_field = _build(
+    replace(
+      _match(structure_swing=4085.0, targets=(140, 250)),
+      sweep_extreme_price=4083.5,
+    ),
+  )
+
+  assert via_match_field.stop.price == via_trigger.stop.price
+  # trade_plan_builder's own "m1_trigger_wick" label only applies when the
+  # explicit param was used; sourced from the match field it surfaces the
+  # underlying protective_stop telemetry value instead.
+  assert via_trigger.stop.source == "m1_trigger_wick"
+  assert via_match_field.stop.source == "wick"
+
+
 def test_final_reward_risk_preference_keeps_builder_plan():
   plan = _build(
     _match(structure_swing=4085.0, targets=(60,)),

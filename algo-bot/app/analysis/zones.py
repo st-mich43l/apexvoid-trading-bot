@@ -825,7 +825,7 @@ def _has_grade_a_grab(
   pip_size: float = 0.1,
 ) -> bool:
   for grab in grabs:
-    if grab.grade != "A":
+    if grab.grade != "A" or grab.inducement:
       continue
     if zone.side == "demand" and grab.direction == "bull":
       if _pool_points_into_zone(zone, grab.pool, pip_size):

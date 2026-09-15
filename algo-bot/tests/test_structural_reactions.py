@@ -13,6 +13,7 @@ from app.analysis.technique_geometry import TECHNIQUE_SD, TechniqueInstance
 from app.analysis.technique_detectors import supply_demand_technique_reaction
 from app.analysis.structural_reaction_support import (
   STRUCTURAL_SETUPS,
+  ReactionConfirmation,
   engulfing_on_bar,
   evaluate_structural_reaction,
   structural_thesis_id,
@@ -953,6 +954,84 @@ def test_reaction_confirmation_carries_candle_evidence_for_the_confirmation_bar(
   assert confirmation is not None
   assert confirmation.candle_evidence is not None
   assert 0.0 <= confirmation.candle_evidence.final_score <= 1.0
+
+
+def test_reaction_confirmation_carries_grab_only_for_sweep_reclaim():
+  buy_df = _buy_rejection_df()
+  grab = Grab(Pool("sell", 100.5, 0.1, 2), 4, "bull", buy_df.index[4], "A")
+
+  with_grab = evaluate_structural_reaction(
+    buy_df, direction="BUY", low=99.0, high=105.0, lookback_bars=3, atr=1.0,
+    grabs=[grab],
+  )
+  assert with_grab is not None
+  assert with_grab.confirmation_type == "sweep_reclaim"
+  assert with_grab.grab is grab
+
+  without_grab = evaluate_structural_reaction(
+    buy_df, direction="BUY", low=99.0, high=105.0, lookback_bars=3, atr=1.0,
+  )
+  assert without_grab is not None
+  assert without_grab.confirmation_type != "sweep_reclaim"
+  assert without_grab.grab is None
+
+
+def test_structural_finish_sets_sweep_extreme_price_only_for_genuine_grade_a_b_sweep():
+  # _structural_finish must expose the real liquidity extreme (Grab.pool.
+  # level) behind a genuine sweep-reclaim confirmation, so
+  # execution_policy can widen the stop beyond it - but never for an
+  # induced (stop-hunt-bait) grab, and never for a non-sweep confirmation.
+  from app.analysis.structural_reaction_support import CONFIRM_STRONG_RECLAIM
+
+  buy_df = _buy_rejection_df()
+  ctx = replace(
+    _ctx(buy_df, bias="down"),
+    settings=replace(detectors.DetectorSettings(), confluence_floor=0),
+  )
+  zone = Zone(99.5, 100.5, "demand", source="supply_demand")
+  common = dict(
+    ctx=ctx, setup="Key Level", direction="BUY", level=100.0, zone=zone,
+    price=100.6, atr=1.0, reasons=[], structural_source="key_level",
+    structural_id="sid", structural_low=99.5, structural_high=100.5,
+    structural_kind="key_level",
+  )
+
+  genuine_grab = Grab(Pool("sell", 100.5, 0.1, 2), 4, "bull", buy_df.index[4], "A")
+  genuine = detectors._structural_finish(
+    confirmation=ReactionConfirmation(
+      confirmation_type="sweep_reclaim",
+      touch_bar_ts="t", confirmation_bar_ts="c",
+      touch_index=3, confirmation_index=4, grab=genuine_grab,
+    ),
+    **common,
+  )
+  assert genuine is not None
+  assert genuine.sweep_extreme_price == pytest.approx(100.5)
+
+  induced_grab = Grab(
+    Pool("sell", 100.5, 0.1, 2), 4, "bull", buy_df.index[4], "A", inducement=True,
+  )
+  induced = detectors._structural_finish(
+    confirmation=ReactionConfirmation(
+      confirmation_type="sweep_reclaim",
+      touch_bar_ts="t", confirmation_bar_ts="c",
+      touch_index=3, confirmation_index=4, grab=induced_grab,
+    ),
+    **common,
+  )
+  assert induced is not None
+  assert induced.sweep_extreme_price is None
+
+  non_sweep = detectors._structural_finish(
+    confirmation=ReactionConfirmation(
+      confirmation_type=CONFIRM_STRONG_RECLAIM,
+      touch_bar_ts="t", confirmation_bar_ts="c",
+      touch_index=3, confirmation_index=4, grab=None,
+    ),
+    **common,
+  )
+  assert non_sweep is not None
+  assert non_sweep.sweep_extreme_price is None
 
 
 def test_detection_result_candle_telemetry_matches_confirmation_and_never_changes_it():

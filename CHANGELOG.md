@@ -28,6 +28,16 @@ dated section after deployment.
   trades have accumulated. Purely descriptive — never a gate.
 
 ### Changed
+- Structural reactions (Key Level, Zone Reaction, Trendline, Session
+  Level) now feed a real liquidity extreme into protective stop
+  planning: a genuine, non-induced grade A/B sweep-reclaim
+  (`CONFIRM_SWEEP_RECLAIM`) sets `sweep_extreme_price` on the match,
+  which `evaluate_execution_policy` now falls back to when there's no
+  M1 trigger wick - widening the stop past the real liquidity extreme
+  instead of just the zone edge (never narrower; fails closed via the
+  existing `stop_exceeds_envelope_after_wick` guard). Also stops scoring
+  an induced (stop-hunt-bait) grade-A grab the same as a genuine one -
+  `Grab.inducement` was computed and never read before this.
 - XAU auto algo now runs the same risk/target shape as manual /algo. Entry
   price selection (`execution_route.risk_targeted_entry_price`, XAU only,
   behind `execution.reaction.risk_targeted_entry_enabled`, default on) picks
