@@ -40,7 +40,7 @@ M5 ScalpContextSnapshot (immutable, Redis-pinned)
         ↓
 M1 microstructure + archetypes
         ↓
-EntryLocation (enforce inside HFS) + activation + cost + risk
+EntryLocation (enforce inside scalp zone) + activation + cost + risk
         ↓
 shadow / paper / live ScalpSignal → TradePlan V8 (live mode)
         ↓

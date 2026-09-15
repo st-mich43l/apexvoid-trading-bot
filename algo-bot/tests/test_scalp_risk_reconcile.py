@@ -1,4 +1,4 @@
-"""HFS concurrent ledger: one group, not one clip; ghost book unsticks."""
+"""Scalping concurrent ledger: one group, not one clip; ghost book unsticks."""
 
 from __future__ import annotations
 
@@ -42,7 +42,7 @@ def _cfg():
 
 def test_five_clip_fills_count_as_one_concurrent_group():
   state = ScalpRiskState()
-  gid = "v8:hfs-grid"
+  gid = "v8:scalp-grid"
   for _ in range(5):
     state = record_scalp_outcome(
       state, result_pips=0.0, stop_pips=20.0, now=1, opened=True, group_id=gid,

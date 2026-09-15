@@ -39,7 +39,7 @@ pytestmark = pytest.mark.no_database
 
 
 def _cfg(**overrides):
-  hfs = SimpleNamespace(
+  scalp_cfg = SimpleNamespace(
     mode="shadow",
     archetypes=SimpleNamespace(
       range_sweep_enabled=True,
@@ -84,8 +84,8 @@ def _cfg(**overrides):
     risk=SimpleNamespace(mode="shadow", risk_fraction_per_trade=0.10),
   )
   for key, value in overrides.items():
-    setattr(hfs, key, value)
-  return SimpleNamespace(strategies=SimpleNamespace(scalping=hfs))
+    setattr(scalp_cfg, key, value)
+  return SimpleNamespace(strategies=SimpleNamespace(scalping=scalp_cfg))
 
 
 def _assert_worst_fill_stop(opp: ScalpOpportunity, *, pip_size: float = 0.1) -> None:

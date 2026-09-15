@@ -918,7 +918,7 @@ def evaluate_execution_policy(
       else getattr(match, "opposing_zone_id", None)
       or getattr(match, "zone_id", None)
     )
-    # Scalp (Range / HFS) with fitted target room ignores HTF opposing stop
+    # Scalp (Range Edge) with fitted target room ignores HTF opposing stop
     # push/reject; native room is the gate. Envelope still applies.
     if match_bypasses_opposing_structure(match):
       zone_low = zone_high = zone_id = None

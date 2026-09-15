@@ -884,9 +884,9 @@ public sealed class TradePlanRuntimeTests
     );
 
     store.EnqueuePlan(PlanJson(
-      planId: "v8:hfs-stack",
-      thesisId: "thesis-hfs",
-      setupId: "setup-hfs",
+      planId: "v8:scalp-stack",
+      thesisId: "thesis-scalp",
+      setupId: "setup-scalp",
       strategy: "Range Sweep Scalp",
       strategyFamily: "scalp"
     ));
@@ -895,7 +895,7 @@ public sealed class TradePlanRuntimeTests
     );
 
     Assert.Equal(2, runtime.TrackedStates.Count);
-    Assert.Equal("received", store.Value("execution:plan_state:v8:hfs-stack"));
+    Assert.Equal("received", store.Value("execution:plan_state:v8:scalp-stack"));
   }
 
   [Fact]
@@ -1142,8 +1142,8 @@ public sealed class TradePlanRuntimeTests
   {
     var store = new FakeTradePlanStore();
     store.EnqueuePlan(PlanJson(
-      planId: "v8:hfs-market-chase",
-      setupId: "hfs-market-chase",
+      planId: "v8:scalp-market-chase",
+      setupId: "scalp-market-chase",
       direction: "BUY",
       zoneLow: 4629.134892857143m,
       zoneHigh: 4630.110214285714m,
@@ -1200,8 +1200,8 @@ public sealed class TradePlanRuntimeTests
   {
     var store = new FakeTradePlanStore();
     store.EnqueuePlan(PlanJson(
-      planId: "v8:hfs-chase-through-tp",
-      setupId: "hfs-chase-through-tp",
+      planId: "v8:scalp-chase-through-tp",
+      setupId: "scalp-chase-through-tp",
       direction: "SELL",
       zoneLow: 4669.177214285714m,
       zoneHigh: 4670.411392857143m,
@@ -1259,8 +1259,8 @@ public sealed class TradePlanRuntimeTests
     // skip the target instead of closing half as "TP COMPLETED".
     var store = new FakeTradePlanStore();
     store.EnqueuePlan(PlanJson(
-      planId: "v8:hfs-fake-tp",
-      setupId: "hfs-fake-tp",
+      planId: "v8:scalp-fake-tp",
+      setupId: "scalp-fake-tp",
       direction: "SELL",
       zoneLow: 4669.18m,
       zoneHigh: 4670.41m,

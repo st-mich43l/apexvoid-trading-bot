@@ -229,17 +229,17 @@ class MadPhaseSnapshot:
 
 
 def asia_range_key(symbol: str) -> str:
-  """Shared Asia box — technique lane + HFS."""
+  """Shared Asia box — technique lane + scalping."""
   return f"mad:asia_range:{str(symbol).upper()}"
 
 
 def mad_phase_key(symbol: str) -> str:
-  """Shared phase snapshot — technique lane + HFS."""
+  """Shared phase snapshot — technique lane + scalping."""
   return f"mad:phase:{str(symbol).upper()}"
 
 
 def mad_last_key(symbol: str) -> str:
-  """Legacy HFS-only alias; prefer ``mad_phase_key``."""
+  """Legacy scalping-only alias; prefer ``mad_phase_key``."""
   return f"scalp:last_mad:{str(symbol).upper()}"
 
 
@@ -307,7 +307,7 @@ class MadGatePreview:
     return {"would_block": self.would_block, "reason_code": self.reason_code}
 
 
-# Math shadow + technique/HFS families evaluated for ``would_gate`` stamps.
+# Math shadow + technique/scalping families evaluated for ``would_gate`` stamps.
 SHADOW_GATE_STRATEGIES: tuple[str, ...] = (
   "structural_reaction",
   "liquidity_sweep_reversal",
@@ -1244,7 +1244,7 @@ async def save_mad_phase(
   ttl = max(3600, int(ttl_seconds))
   pipe = client.pipeline(transaction=False)
   pipe.set(mad_phase_key(symbol), payload, ex=ttl)
-  # Keep HFS telemetry key in sync for existing dig scripts.
+  # Keep scalping telemetry key in sync for existing dig scripts.
   pipe.set(mad_last_key(symbol), payload, ex=ttl)
   await pipe.execute()
 
@@ -1282,7 +1282,7 @@ async def refresh_mad_for_symbol(
   source: str = "m5",
   atr_long: float | None = None,
 ) -> MadPhaseSnapshot:
-  """Update shared Asia seal + phase for technique and HFS lanes."""
+  """Update shared Asia seal + phase for technique and scalping lanes."""
   prior = await load_asia_range_seal(client, symbol)
   seal, phase = evaluate_mad_for_cycle(
     previous=prior,

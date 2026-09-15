@@ -272,7 +272,7 @@ async def process_m1_bar(
   # codebase - _ensure_context right above already offloads its own heavy
   # call via asyncio.to_thread, but these two ran inline on the shared
   # event loop that also runs Telegram polling. Fires on every M1 bar
-  # close for every HFS-enabled symbol (once a minute, all symbols'
+  # close for every scalping-enabled symbol (once a minute, all symbols'
   # bars closing in sync) - a real, frequent blocking cost.
   micro = await asyncio.to_thread(
     build_micro_structure,
@@ -378,19 +378,19 @@ async def process_m1_bar(
     from app.autotrade.active_exposure import load_active_exposures
 
     # Per-symbol book only — a live GBPJPY plan must not inflate EURUSD
-    # HFS concurrent / ghost-reconcile (live 2026-08-17 cross-symbol lock).
+    # Scalping concurrent / ghost-reconcile (live 2026-08-17 cross-symbol lock).
     live = live_exposure_ids(
       await load_active_exposures(client, symbol=symbol)
     )
   except Exception:
-    log.exception("hfs live exposure reconcile failed symbol=%s", symbol)
+    log.exception("scalp live exposure reconcile failed symbol=%s", symbol)
     live = set()
   risk_state = reconcile_open_positions(risk_state, live)
   await save_risk(client, symbol, risk_state)
   risk = evaluate_risk(risk_state, cfg, session=context.session, now=now)
 
   # Shared MAD clock for Redis / Range Edge technique only — never used to
-  # rank or gate HFS opportunities (owner 2026-08-26).
+  # rank or gate scalping opportunities (owner 2026-08-26).
   mad_payload: dict[str, Any] | None = None
   if mode in {"shadow", "paper", "live"}:
     try:
@@ -422,7 +422,7 @@ async def process_m1_bar(
     except Exception:
       log.exception("mad phase evaluation failed symbol=%s", symbol)
 
-  # Drop stale armed/discovered HFS contexts so scalp:active cannot pile up.
+  # Drop stale armed/discovered scalping contexts so scalp:active cannot pile up.
   try:
     from app.scalping.lifecycle import prune_stale_active
 
@@ -497,7 +497,7 @@ async def process_m1_bar(
         once_key=f"discover:{opportunity.opportunity_id}:{bar_ts}",
       )
     except Exception:
-      log.exception("hfs discover funnel bump failed")
+      log.exception("scalp discover funnel bump failed")
     existing = await load_lifecycle(client, symbol, opportunity.opportunity_id)
     if existing is None:
       record = ScalpLifecycleRecord(
@@ -590,7 +590,7 @@ async def process_m1_bar(
         once_key=f"activate:{opportunity.opportunity_id}:{bar_ts}",
       )
     except Exception:
-      log.exception("hfs activation funnel bump failed")
+      log.exception("scalp activation funnel bump failed")
     signal = ScalpSignal(
       signal_id=deterministic_id("signal", opportunity.opportunity_id, bar_ts),
       opportunity_id=opportunity.opportunity_id,
@@ -690,7 +690,7 @@ async def process_m1_bar(
                 once_key=f"publish:{opportunity.opportunity_id}",
               )
             except Exception:
-              log.exception("hfs publish funnel bump failed")
+              log.exception("scalp publish funnel bump failed")
             result["allowed"].append({
               "opportunity_id": opportunity.opportunity_id,
               "archetype": opportunity.archetype,
@@ -857,7 +857,7 @@ async def handle_closed_bar(
   client: Any,
   source: RedisOHLCSource,
 ) -> None:
-  """HFS handler for one closed-bar event (M5 context refresh, M1 cycle)."""
+  """Scalping handler for one closed-bar event (M5 context refresh, M1 cycle)."""
   if _mode() == "off":
     return
   parsed = _parse_bar_event(data)
@@ -912,5 +912,5 @@ async def scalp_m1_event_loop() -> None:
     log.info("M1 scalping disabled: strategies.scalping.mode=off")
     return
   log.info(
-    "scalp_m1_event_loop idle; bar_event_dispatcher_loop owns live HFS symbols"
+    "scalp_m1_event_loop idle; bar_event_dispatcher_loop owns live scalping symbols"
   )

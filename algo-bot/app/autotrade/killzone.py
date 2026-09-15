@@ -342,7 +342,7 @@ def evaluate_reaction_publish_window(
   cfg: Any | None = None,
   require: bool = True,
 ) -> KillzoneDecision:
-  """Instrument-declared publish hours, independent of the HFS clock."""
+  """Instrument-declared publish hours, independent of the scalping clock."""
   quality = evaluate_instrument_session_quality(ts=ts, hour=hour, cfg=cfg)
   windows = tuple(quality.measured["reaction_publish_windows"])
   inside = quality.score == 2

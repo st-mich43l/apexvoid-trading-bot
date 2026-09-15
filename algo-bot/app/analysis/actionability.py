@@ -581,8 +581,8 @@ def resolve_actionability(
           planned_entry=room_planned,
         )
       result = _trim_zone_against_overlapping_barrier(result, room_entries)
-      # Range/HFS scalp: detector already required native min room (EQ /
-      # select_range_target / HFS fitted TP). HTF opposing barriers must not
+      # Range/scalp: detector already required native min room (EQ /
+      # select_range_target / scalp fitted TP). HTF opposing barriers must not
       # hard-kill discovery — same rule as worker opposing bypass when
       # fitted room exists. Reaction/zone still evaluate the map.
       is_scalp = is_scalp_strategy(result.setup)

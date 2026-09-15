@@ -331,11 +331,11 @@ async def test_nonreaction_setup_publishes_with_optional_m1_stop_anchor():
 async def test_publish_ensures_root_card_regardless_of_which_path_called_it(
   monkeypatch,
 ):
-  # Regression: HFS's own publish attempt logging status=remained_watching
+  # Regression: scalping's own publish attempt logging status=remained_watching
   # does not mean the plan stays unpublished -- this cycle's own
   # arbitration independently re-discovers the same persisted match and
   # can publish it moments later on a completely separate call path that
-  # never touches HFS's own wrapper. Live 2026-08-06: a real fill with no
+  # never touches scalping's own wrapper. Live 2026-08-06: a real fill with no
   # root card, confirmed via prod logs to have published on exactly that
   # second path. ensure_plan_published_root_card() must run from inside
   # _publish_trade_plan_v8 itself -- the one function every publish route
@@ -663,7 +663,7 @@ async def test_inside_authoritative_reaction_admits_and_publishes(
   assert (await load_setup(client, match.match_id)).state == PLAN_PUBLISHED
 
 
-def _hfs_eligibility(match: StrategyMatch) -> ExecutionEligibility:
+def _scalp_eligibility(match: StrategyMatch) -> ExecutionEligibility:
   return ExecutionEligibility(
     version=EXECUTION_ELIGIBILITY_VERSION,
     allowed=True,
@@ -680,7 +680,7 @@ def _hfs_eligibility(match: StrategyMatch) -> ExecutionEligibility:
 
 
 @pytest.mark.asyncio
-async def test_hfs_match_without_eligibility_is_admission_rejected(monkeypatch):
+async def test_scalp_match_without_eligibility_is_admission_rejected(monkeypatch):
   # Reproduces the production incident: every HFS opportunity (strategy_mode
   # "hfs_scalp", routed through the generic source="scanner_strategy_match"
   # intent branch, exempted only for "mapped_zone_reaction") was built with
@@ -689,8 +689,8 @@ async def test_hfs_match_without_eligibility_is_admission_rejected(monkeypatch):
   # 2026-08-06 died to exactly this before ever reaching a stop/target check.
   client = redis_state.get_client()
   match = _reaction_match(
-    match_id="hfs-preflight-missing",
-    thesis_id="hfs-preflight-missing-thesis",
+    match_id="scalp-preflight-missing",
+    thesis_id="scalp-preflight-missing-thesis",
     strategy="Impulse Pullback Scalp",
     strategy_mode="scalp_m1",
     execution_eligibility=None,
@@ -713,15 +713,15 @@ async def test_hfs_match_without_eligibility_is_admission_rejected(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_hfs_match_with_eligibility_is_admitted(monkeypatch):
+async def test_scalp_match_with_eligibility_is_admitted(monkeypatch):
   client = redis_state.get_client()
   match = _reaction_match(
-    match_id="hfs-preflight-eligible",
-    thesis_id="hfs-preflight-eligible-thesis",
+    match_id="scalp-preflight-eligible",
+    thesis_id="scalp-preflight-eligible-thesis",
     strategy="Impulse Pullback Scalp",
     strategy_mode="scalp_m1",
   )
-  match = replace(match, execution_eligibility=_hfs_eligibility(match))
+  match = replace(match, execution_eligibility=_scalp_eligibility(match))
   await _confirm_setup(client, match)
   spot = worker.AutoTradeSpot(
     price=4038.51, ts=int(time.time()), fresh=True, bid=4038.41, ask=4038.61,
@@ -1122,8 +1122,8 @@ async def test_scalp_m1_publishes_inside_opposing_structure():
   """M1 scalp with fitted native room must ignore HTF opposing containment."""
   client = redis_state.get_client()
   match = _match(
-    match_id="match-v8-hfs-opposing",
-    thesis_id="thesis-v8-hfs-opposing",
+    match_id="match-v8-scalp-opposing",
+    thesis_id="thesis-v8-scalp-opposing",
     strategy="Range Sweep Scalp",
     strategy_mode="scalp_m1",
     direction="BUY",
@@ -1136,7 +1136,7 @@ async def test_scalp_m1_publishes_inside_opposing_structure():
     current_price=4089.0,
     targets_pips=(20,),
     full_take_profit_pips=20,
-    # HFS room-synced envelope is ~15–20p. A 4070 swing + deep wick fails
+    # Scalping room-synced envelope is ~15–20p. A 4070 swing + deep wick fails
     # stop_exceeds_envelope_* and reds every PR CI on an unrelated stop
     # check (master already red 2026-08-26). Keep swing/wick inside the
     # envelope so this smoke only asserts opposing-structure bypass.

@@ -271,7 +271,7 @@ async def _emit_funnel_complete(client, event: dict) -> None:
       "result_pips": event.get("result_pips"),
     },
   )
-  # Keep HFS risk streak / R counters alive (was never wired before).
+  # Keep scalping risk streak / R counters alive (was never wired before).
   if funnel_bucket(strategy, family=event.get("strategy_family")) != BUCKET_SCALP:
     return
   symbol = str(event.get("symbol") or "XAU")
@@ -374,7 +374,7 @@ async def _emit_funnel_complete(client, event: dict) -> None:
       if result.skipped_no_stop:
         await incr(client, symbol, "risk_accrual_skipped_no_stop")
         log.warning(
-          "hfs risk accrual skipped: no stop_pips group_id=%s stop_pips=%s",
+          "scalp risk accrual skipped: no stop_pips group_id=%s stop_pips=%s",
           group_id,
           stop_pips,
         )
@@ -382,7 +382,7 @@ async def _emit_funnel_complete(client, event: dict) -> None:
     ledger_delta = result.accrued_r
   except Exception:
     log.exception(
-      "hfs risk state update failed symbol=%s group_id=%s stop_pips=%s",
+      "scalp risk state update failed symbol=%s group_id=%s stop_pips=%s",
       symbol,
       group_id,
       stop_pips,

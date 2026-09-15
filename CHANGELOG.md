@@ -28,6 +28,19 @@ dated section after deployment.
   trades have accumulated. Purely descriptive — never a gate.
 
 ### Changed
+- Retired the "HFS" product name in favor of "scalping" everywhere it was
+  still live naming: docs prose, Python identifiers/log fields/test names,
+  C# identifiers/test fixture ids, and the shared `market_buy_hfs_chase`
+  TradePlan V8 contract fixture (renamed to `market_buy_scalp_chase` in
+  `contracts/autotrade/trade-plan-v8.json` and both the Python and C#
+  contract tests that reference it by name). The M1 scalping feature
+  itself is unchanged and still fully live - this is a naming-only sweep.
+  Left untouched on purpose: legacy `"HFS ..."` display-name aliases in
+  `strategy_names.py` and matching strategy-key aliases in
+  `mad_phase.py`/`mad_replay.py`/`replay_lab.py` (real historic data may
+  still carry the old label), and comments/docstrings citing a specific
+  past incident by the name it had at the time (e.g. "Aug 20 HFS gold
+  dig", "2026-08-06 HFS fill") - CHANGELOG history is likewise untouched.
 - Structural reactions (Key Level, Zone Reaction, Trendline, Session
   Level) now feed a real liquidity extreme into protective stop
   planning: a genuine, non-induced grade A/B sweep-reclaim

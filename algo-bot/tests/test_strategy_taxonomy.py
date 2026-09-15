@@ -118,7 +118,7 @@ def test_m1_scalp_strategies_bypass_opposing_when_room_fits():
     assert bypasses_opposing_structure_gates(name)
     assert bypasses_opposing_structure_gates(name, full_take_profit_pips=20)
     assert canonical_family(name) == CANONICAL_FAMILY_SCALP
-  assert not is_m1_scalp_strategy("HFS Custom Archetype")
+  assert not is_m1_scalp_strategy("Scalp Custom Archetype")
   assert bypasses_opposing_structure_gates(
     "Range Sweep Scalp",
     full_take_profit_pips=15,

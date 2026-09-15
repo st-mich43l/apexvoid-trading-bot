@@ -2972,7 +2972,7 @@ async def _load_market_context_for_symbol(
   )
   ctx = _attach_price_context(ctx, spot, trigger, frames[exec_tf])
   # Shared MAD phase for technique detectors. Soft use: accumulation →
-  # Range Edge Scalp only. Never drives HFS ranking/gates.
+  # Range Edge Scalp only. Never drives scalping ranking/gates.
   try:
     from app.analysis.mad_phase import refresh_mad_for_symbol
     from app.scalping.context import classify_session
