@@ -26,7 +26,7 @@ Anthropic, cTrader Open API). No public HTTP or inbound webhooks.
 │ config-compiler  │                        │ algo-bot (Python)   │
 │ → resolved JSON  │                        │ Telegram · scanner  │
 └──────────────────┘                        │ ZoneWatch → publish │
-┌──────────────────┐                        │ manual /algo + HFS  │
+┌──────────────────┐                        │ manual /algo + scalp│
 │ PostgreSQL       │ ◀───────────────────── └──────────┬──────────┘
 │ signals · stats  │                                    │ long-poll
 └──────────────────┘                                    ▼
@@ -46,7 +46,7 @@ separate journals and publish paths:
 |------|-------------|------|------|
 | **Manual /algo** | Owner DM | Parse → VIP/public → broker (optional) | `algo_manual` (+ OHLC chart snapshots for later XAU fitting) |
 | **Autonomous reaction** | Scanner + ZoneWatch | Detectors → watch → activate → TradePlan V8 | `algo_auto` |
-| **HFS scalping** | M1 lane | Closed M1 + immutable M5 context | Separate HFS publishers (not technique ZoneWatch) |
+| **Scalping** | M1 lane | Closed M1 + immutable M5 context | Separate scalping publishers (not technique ZoneWatch) |
 
 **Config authority:** non-secret tuning in [`config/trading-bot.yml`](config/trading-bot.yml);
 secrets/bootstrap in `.env`. `config-compiler` emits a
@@ -87,9 +87,9 @@ offline XAU formula work later. Command surface:
 See [docs/technique-zonewatch-publish.md](docs/technique-zonewatch-publish.md)
 and [docs/adr-trade-plan-v8-cutover.md](docs/adr-trade-plan-v8-cutover.md).
 
-### High-frequency M1 scalping
+### M1 scalping
 
-Shadow/paper/live HFS on closed M1 with immutable M5 context. Own publishers
+Shadow/paper/live scalping on closed M1 with immutable M5 context. Own publishers
 and funnel counters — not the technique ZoneWatch path.
 [docs/scalping/README.md](docs/scalping/README.md).
 
@@ -117,7 +117,7 @@ Index: [docs/README.md](docs/README.md).
 | [Multi-symbol routing](docs/runtime/multi-symbol-routing.md) | Live instruments, policies, packs |
 | [Technique / ZoneWatch](docs/technique-zonewatch-publish.md) | Techniques, confluence, activation |
 | [Bot commands](docs/bot-commands.md) | Manual posting and lifecycle |
-| [Scalping](docs/scalping/README.md) | HFS M1 lane |
+| [Scalping](docs/scalping/README.md) | M1 scalping lane |
 | [Configuration](docs/configuration/configuration-architecture.md) | Catalog, YAML, manifest |
 | [Deployment](docs/deployment.md) · [Operations](docs/operations.md) | Host → stack; logs, backups |
 | [Redis contract](docs/redis-contract.md) | Bars / plans / events boundary |
@@ -145,7 +145,7 @@ Expected shape:
 
 - `config-compiler` exits 0 after writing `/runtime/resolved-runtime.json`
 - `ctrader-engine` heartbeats and writes `bars:{SYMBOL}:*`
-- `bot` starts Telegram polling plus scanner / ZoneWatch / HFS loops
+- `bot` starts Telegram polling plus scanner / ZoneWatch / scalping loops
 
 Owner DM `active` should reply (empty book is fine). Demo auto-trade runbook:
 [docs/demo-eval-autotrade.md](docs/demo-eval-autotrade.md).
@@ -163,7 +163,7 @@ apexvoid-trading-bot/
 ├── docs/                   # architecture, runtime, config, ops, ADRs
 │   ├── runtime/            # multi-symbol routing
 │   ├── configuration/      # catalog + manifest authority
-│   ├── scalping/           # HFS lane
+│   ├── scalping/           # scalping lane
 │   ├── audits/             # point-in-time capability/behavior audits
 │   └── history/            # finished P0 plans, regression write-ups, one-shot migrations
 ├── contracts/              # shared JSON schemas
@@ -186,7 +186,7 @@ apexvoid-trading-bot/
         ├── signals/        # manual /algo, broadcast, charts, calendar, recap
         ├── analysis/       # detectors, techniques, scanner, zones
         ├── autotrade/      # execution policy, stops/targets, TradePlan V8, ZoneWatch
-        ├── scalping/       # HFS M1 lane
+        ├── scalping/       # M1 scalping lane
         ├── runtime/        # instrument config/registry, price format, rollout gates
         └── scripts/        # one-off/backfill ops scripts (not imported by the app)
 ```
