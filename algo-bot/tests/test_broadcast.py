@@ -590,6 +590,53 @@ def test_achieved_rr_keeps_deepest_leg_for_genuine_multi_leg_trades():
   assert trade_ops._achieved_rr(sig, 150) == "+3.0R"
 
 
+def test_achieved_rr_keeps_deepest_leg_for_a_single_combined_group_close_record():
+  # Live 2026-09-15 (signal #358, real XAU SELL): finalize_manual_group
+  # appends exactly ONE legs record for a whole multi-leg group close (see
+  # store.finalize_manual_group) - a real 3-leg group's terminal SL close
+  # looks IDENTICAL to a genuine single-leg trade by leg count alone. The
+  # old len(legs) <= 1 trigger clobbered the now-correctly-computed deep
+  # leg's entry (GroupDeepestEntryPrice excludes the risk leg on the C#
+  # side) right back to broker_fill_price, which deliberately holds the
+  # group's SHALLOWEST leg, not the deep leg this calc needs. SELL zone
+  # 4278-4281, deep leg entry 4279.2 (inside the zone, correctly excluding
+  # the risk leg's ~4281.5) must NOT be overridden just because only one
+  # legs record exists. |4279.2-4283| = 3.8 price = 38 pips -> -38/38 = -1.0R.
+  sig = {
+    "action": "SELL",
+    "entry": 4278.0,
+    "entry_end": 4281.0,
+    "sl": 4283.0,
+    "original_sl": 4283.0,
+    "symbol": "XAU",
+    "broker_fill_price": 4278.03,
+    "legs": [{"frac": 1.0, "pips": -38, "entry_price": 4279.2}],
+  }
+
+  assert trade_ops._achieved_rr(sig, -38) == "-1.0R"
+
+
+def test_achieved_rr_still_overrides_a_risk_leg_tainted_single_record():
+  # The fix above must not swallow the real remaining bug: the manual/algo
+  # risk leg's own price sits outside the advertised zone (near the shared
+  # stop, same as signal #293's reconciliation artifact) - a single
+  # combined record referencing it (a pre-fix engine, or a genuine
+  # single-position anomaly) must still fall back to broker_fill_price.
+  sig = {
+    "action": "SELL",
+    "entry": 4278.0,
+    "entry_end": 4281.0,
+    "sl": 4283.0,
+    "original_sl": 4283.0,
+    "symbol": "XAU",
+    "broker_fill_price": 4278.03,
+    "legs": [{"frac": 1.0, "pips": -38, "entry_price": 4281.57}],
+  }
+
+  # |4278.03-4283| = 4.97 price = 49.7 pips -> -38/49.7 = -0.8R.
+  assert trade_ops._achieved_rr(sig, -38) == "-0.8R"
+
+
 def test_final_close_with_tp_number_labels_which_target_closed_it(monkeypatch):
   install_runtime_overrides(monkeypatch, legacy_overrides={"public_show_pips": True})
   result = {
