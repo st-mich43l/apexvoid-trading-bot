@@ -147,7 +147,34 @@ the compose service names (`postgres`, `redis`).
 
 Vault renders `secrets/trading-bot.env` and the Jinja compose file. Do not
 hand-edit the rendered compose on the VPS; change inventory/vault and
-re-deploy. Keep `config/trading-bot.yml` on the host in sync with the release.
+re-deploy.
+
+**`config/trading-bot.yml` on the host is rendered from a mirror, not read
+from this repo.** The deploy pipeline (`ansible-library`'s `deploy_image`
+role, "Render trading-bot CONFIG_FILE YAML" task) writes the host's
+`config/trading-bot.yml` verbatim from the Ansible variable
+`apexvoid_trading_bot_config.yml`
+(`inventory/group_vars/all/apexvoid_trading_bot_config.yml` in
+`ansible-library`) — it never checks out or reads this repo's own
+`config/trading-bot.yml` at deploy time. That variable is a **hand-maintained
+copy** of this file, kept in sync manually.
+
+Any PR that changes `config/trading-bot.yml` — new instrument fields, changed
+policy values, a new `config_field` with a value that must differ from its
+schema default — must update `apexvoid_trading_bot_config.yml` in
+`ansible-library` in the same change (or a fast follow-up, merged and
+deployed before/with this repo's change). Missing this does not fail the
+build or the PR's own CI: it fails **every subsequent deploy**, silently,
+until someone notices — `config-compiler` runs Pydantic validation against
+the stale mirror on every container start, and a value mismatch (e.g. a
+cross-field validator like "targeting.reward_risk must equal the final
+target_r_multiple") makes it exit 1. Since `ctrader-engine` and `bot` both
+`depends_on: config-compiler: condition: service_completed_successfully`,
+that one exit code takes down the whole bot — not a partial/degraded start,
+a full outage until the mirror is fixed and the stack is recreated. See
+`docker compose logs config-compiler` first if a deploy "succeeds" in CI but
+the bot doesn't come up — [operations.md § Troubleshooting](operations.md#troubleshooting)
+has the exact signature.
 
 ### Non-secret YAML
 

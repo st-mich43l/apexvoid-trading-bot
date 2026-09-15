@@ -54,6 +54,12 @@ secrets/bootstrap in `.env`. `config-compiler` emits a
 Details: [docs/configuration/](docs/configuration/configuration-architecture.md)
 and [docs/runtime/multi-symbol-routing.md](docs/runtime/multi-symbol-routing.md).
 
+**Production deploys never read this repo's `config/trading-bot.yml` directly**
+— the Ansible pipeline (`ansible-library`) renders it from a hand-maintained
+mirror variable that must be updated in the *same* change or every deploy
+breaks (`config-compiler` fails Pydantic validation and the stack never
+starts). See [docs/deployment.md § Production Ansible](docs/deployment.md#production-ansible).
+
 ---
 
 ## What it does
@@ -150,36 +156,39 @@ Owner DM `active` should reply (empty book is fine). Demo auto-trade runbook:
 
 ```text
 apexvoid-trading-bot/
-├── docker-compose.yml            # postgres, redis, config-compiler, engine, bot
-├── config/trading-bot.yml        # non-secret Python / shared instrument tuning
-├── .env.example                  # secrets + bootstrap
-├── deployment-template/          # host deploy scaffolding
-├── docs/                         # architecture, runtime, config, ops, ADRs
-│   ├── runtime/                  # multi-symbol routing
-│   ├── configuration/            # catalog + manifest authority
-│   └── scalping/                 # HFS lane
-├── contracts/                    # shared JSON schemas
-│   ├── autotrade/                # TradePlan V8, …
-│   └── configuration/            # catalog / env / manifest contracts
-├── ctrader-engine/                # .NET feed + TradePlan executor
+├── docker-compose.yml      # postgres, redis, config-compiler, engine, bot
+├── config/trading-bot.yml  # non-secret Python / shared instrument tuning
+├── .env.example            # secrets + bootstrap
+├── deployment-template/    # host deploy scaffolding (docker-compose.yml.j2)
+├── docs/                   # architecture, runtime, config, ops, ADRs
+│   ├── runtime/            # multi-symbol routing
+│   ├── configuration/      # catalog + manifest authority
+│   ├── scalping/           # HFS lane
+│   ├── audits/             # point-in-time capability/behavior audits
+│   └── history/            # finished P0 plans, regression write-ups, one-shot migrations
+├── contracts/              # shared JSON schemas
+│   ├── autotrade/          # TradePlan V8, …
+│   └── configuration/      # catalog / env / manifest contracts
+├── ctrader-engine/         # .NET feed + TradePlan executor
 │   ├── src/
 │   └── tests/
-└── algo-bot/                     # Python application
+└── algo-bot/               # Python application
     ├── Dockerfile
     ├── requirements.txt
+    ├── pytest.ini
     ├── tests/
-    ├── scripts/
     └── app/
-        ├── main.py               # composition root (cutover + loops)
-        ├── configuration/        # catalog, YAML loader, runtime manifest
-        ├── core/                 # runtime_config, symbols, logging
-        ├── persistence/          # Postgres store + Redis client
-        ├── bot/                  # aiogram wiring + handlers
-        ├── signals/              # manual /algo, charts, calendar, recap
-        ├── analysis/             # detectors, techniques, scanner, map
-        ├── autotrade/            # ZoneWatch cutover, TradePlan V8, delivery
-        ├── scalping/             # HFS M1 lane
-        └── runtime/              # multi-symbol routing helpers
+        ├── main.py         # composition root (cutover + loops)
+        ├── configuration/  # catalog, YAML loader, runtime manifest
+        ├── core/           # runtime_config, symbols, instrument geometry, logging
+        ├── persistence/    # Postgres store + Redis client
+        ├── bot/            # aiogram wiring + handlers
+        ├── signals/        # manual /algo, broadcast, charts, calendar, recap
+        ├── analysis/       # detectors, techniques, scanner, zones
+        ├── autotrade/      # execution policy, stops/targets, TradePlan V8, ZoneWatch
+        ├── scalping/       # HFS M1 lane
+        ├── runtime/        # instrument config/registry, price format, rollout gates
+        └── scripts/        # one-off/backfill ops scripts (not imported by the app)
 ```
 
 ---
