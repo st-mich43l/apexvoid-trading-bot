@@ -86,14 +86,15 @@ public sealed partial class AutoTradeEngineTests
         .Where(item => item.Type == "take_profit")
         .Select(item => Assert.IsType<int>(item.TargetPips))
     );
-    // TP3 now trails to TP2 (4006.2) instead of a no-op landing back on
-    // TP1, and TP4 advances to TP3 (4009.2) instead of TP2 - each rung
-    // trails to the one immediately preceding it.
+    // TP3 trails to TP2 (4006.2). TP4 (ordinal 4 of this 5-rung ladder) is
+    // the second-to-last rung, so it trails two behind to TP2 (4003.2) -
+    // the same level TP3 already moved to one step earlier - a no-op, not
+    // a 5th amendment.
     Assert.Equal(
-      new decimal[] { 3993.7m, 4000.26m, 4003.2m, 4006.2m, 4009.2m },
+      new decimal[] { 3993.7m, 4000.26m, 4003.2m, 4006.2m },
       client.StopAmendments.Select(item => item.StopLoss)
     );
-    Assert.Equal(4, store.Events.Count(item => item.Type == "stop_moved"));
+    Assert.Equal(3, store.Events.Count(item => item.Type == "stop_moved"));
     Assert.Empty(store.Positions);
 
     cts.Cancel();
@@ -4153,8 +4154,11 @@ public sealed partial class AutoTradeEngineTests
     );
     Assert.Equal(0, reachedTp4.Volume);
     Assert.Contains("no broker volume booked", reachedTp4.Message);
-    // TP4 trails to TP3 (one behind), not TP2.
-    Assert.Equal(ownerTargets[2], runner.CurrentStopLoss);
+    // Owner 2026-09-15: TP4 is the second-to-last rung of this 5-level
+    // ladder, so it now trails two behind (TP2), not one behind (TP3) -
+    // the same level TP3's own step already moved to, so this is a no-op
+    // (stop stays exactly where it was).
+    Assert.Equal(ownerTargets[1], runner.CurrentStopLoss);
     Assert.Contains(4, runner.ReachedTargetOrdinals!);
     // 2026-09-08: shallow's 3rd (final) slice now maps straight to ordinal
     // 5 (see shallowState.Slices above) - only TP1/TP2 have booked shallow
@@ -4348,10 +4352,11 @@ public sealed partial class AutoTradeEngineTests
     var runner = Assert.Single(store.Positions.Values);
     Assert.Equal(105, runner.RemainingVolume);
     Assert.Contains(4, runner.ReachedTargetOrdinals!);
-    // Trail after TP4 steps back to TP3 (one level), same rule a real TP4
-    // booking would use.
-    Assert.Equal(ownerTargets[2], runner.CurrentStopLoss);
-    Assert.Equal((92, ownerTargets[2]), Assert.Single(client.StopAmendments));
+    // Owner 2026-09-15: TP4 is the second-to-last rung of this 5-level
+    // ladder, so trail steps back two levels to TP2, not one to TP3 - same
+    // rule a real TP4 booking would use.
+    Assert.Equal(ownerTargets[1], runner.CurrentStopLoss);
+    Assert.Equal((92, ownerTargets[1]), Assert.Single(client.StopAmendments));
 
     // Price then reaches TP5 - the full 105 remainder closes for real.
     client.CloseExecutionPriceToReturn = ownerTargets[4];
