@@ -3222,15 +3222,24 @@ public sealed class AutoTradeEngine(
       throw new CandidateLeaseLostException(candidate.CandidateId);
     }
     // Owner 2026-09-08: sum each leg's OWN lots x its OWN stop distance,
-    // not sizing.Lots x manualStopPlan.StopPips alone - the risk leg's
-    // volume and stop distance both differ from the main 80/20 ladder's,
-    // so the group's true total risk must add its contribution in too.
-    // Reduces to the exact prior formula when every leg shares one stop
-    // distance (the ManualSingleEntry case, or before the risk leg
-    // existed).
+    // not sizing.Lots x manualStopPlan.StopPips alone - Deep's distance to
+    // the shared absolute stop differs from Shallow's, so the group's true
+    // total risk must add its contribution in too. Reduces to the exact
+    // prior formula when every leg shares one stop distance (the
+    // ManualSingleEntry case).
+    //
+    // Owner 2026-09-15: the advertised SL risk figure must describe the
+    // original group ladder (Shallow/Deep) the owner actually typed, not
+    // the fixed-size risk/trade-off leg (ManualAlgoRiskLegPrice) tacked on
+    // deliberately close to the stop - that leg's own short stop distance
+    // would otherwise understate the group's real headline risk. The risk
+    // leg is always appended last when present (see the ladder-build
+    // branch above); excluded here by skipping the trailing leg whenever
+    // this is not the single-entry case.
+    var riskLeggedGroupCount = candidate.ManualSingleEntry ? legCount : legCount - 1;
     var groupWorstCase = -legVolumes.Zip(
       legStopPlans, (volume, stopPlan) => volume / (decimal)symbol.LotSize * stopPlan.StopPips
-    ).Sum() * pipValuePerLot;
+    ).Take(riskLeggedGroupCount).Sum() * pipValuePerLot;
     var orderIds = new List<long>(legCount);
     for (var index = 0; index < legCount; index++)
     {
@@ -5035,47 +5044,28 @@ public sealed class AutoTradeEngine(
   );
 
   /// <summary>
-  /// Owner-reported 2026-09-14 (signal 341, real XAU SELL): the manual/algo
-  /// risk leg (see <see cref="ManualAlgoRiskLegPrice"/>) sits deliberately
-  /// close to the shared stop - a small, fixed-size trade-off leg, not a
-  /// genuinely favorable fill. Naive Min/Max below picked it as the
-  /// group's "deepest" entry purely because it is numerically closest to
-  /// the stop side, corrupting the group-facing pips/loss telemetry
-  /// (signal 341's reported entry landed ~1.5 pips off the stop - the risk
-  /// leg's price - instead of the main ladder's real entry). Excluded from
-  /// this selection whenever another leg is available to stand in for it.
-  /// </summary>
-  private bool IsManualRiskLeg(AutoTradePositionState state)
-  {
-    // ExecutionStream, not the raw Stream field directly - restart-recovery
-    // reconstructed states can leave Stream at its "algo_auto" record
-    // default and only carry Setup, same as every other Stream check here.
-    if (
-      ExecutionStream(state) != "algo_manual"
-      || state.InitialStopLoss is not decimal stop
-    )
-    {
-      return false;
-    }
-    var distancePips = Math.Abs(state.EntryPrice - stop) / PipSizeForState(state);
-    return Math.Abs(distancePips - ManualAlgoRiskLegPipsFromStop) <= 3m;
-  }
-
-  /// <summary>
   /// Owner-reported 2026-09-10 (signal 300, real XAU BUY): a manual /algo
   /// group's shallow leg (tranche 1, filled at the zone's worse edge) hit
   /// TP1 and the channel card reported that leg's own entry-to-target
   /// distance (+30 pips) - correct for that one tranche in isolation, but
   /// the group's deep leg (tranche 2) had already filled at a materially
   /// better price a few price units away, and the owner reads the whole
-  /// zone as one trade. The group-facing "leg pips" telemetry must be
+  /// zone as one trade. The group-facing "leg pips" telemetry (and the
+  /// archived pips/R record it feeds - pips_format.legs_achieved_entry_price
+  /// on the Python side reads the same published entry price) must be
   /// measured from whichever tranche filled at the single most favorable
   /// price in the group (lower for BUY, higher for SELL) - not from
   /// whichever specific tranche happens to be the one booking this event.
-  /// Mirrors the same "deepest fill" rule pips_format.
-  /// legs_achieved_entry_price already applies on the Python side for the
-  /// realized-R denominator. The manual/algo risk leg is excluded from this
-  /// pool (see IsManualRiskLeg) unless it's the only leg left.
+  ///
+  /// Owner 2026-09-14 (signal 341) briefly excluded the fixed-size risk leg
+  /// (see <see cref="ManualAlgoRiskLegPrice"/>) from this pool, since it
+  /// sits deliberately close to the shared stop and isn't a genuinely
+  /// favorable fill. Owner 2026-09-15: reversed - the archived pip/R result
+  /// must reflect the true deepest fill actually reached, risk leg
+  /// included; a separate, dedicated figure (GroupWorstCase, the group's
+  /// advertised SL risk) now excludes the risk leg's contribution instead
+  /// (see ProcessManualAlgoAsync) so that headline risk figure still
+  /// describes only the original group ladder.
   /// </summary>
   private decimal GroupDeepestEntryPrice(
     IReadOnlyList<AutoTradePositionState> group,
@@ -5086,16 +5076,9 @@ public sealed class AutoTradeEngine(
     {
       return 0m;
     }
-    var candidates = group.Count > 1
-      ? group.Where(state => !IsManualRiskLeg(state)).ToArray()
-      : group;
-    if (candidates.Count == 0)
-    {
-      candidates = group;
-    }
     return direction == TradeDirection.Buy
-      ? candidates.Min(state => state.EntryPrice)
-      : candidates.Max(state => state.EntryPrice);
+      ? group.Min(state => state.EntryPrice)
+      : group.Max(state => state.EntryPrice);
   }
 
   private async Task<bool> CompleteDryRunAsync(

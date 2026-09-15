@@ -1301,19 +1301,21 @@ public sealed partial class AutoTradeEngineTests
   }
 
   [Fact]
-  public async Task GroupDeepestFillExcludesTheManualRiskLegFromDisplayPips()
+  public async Task GroupDeepestFillIncludesTheManualRiskLegForArchivedPips()
   {
-    // Owner-reported 2026-09-14 (real XAU SELL, signal 341): the manual/algo
-    // risk leg (ManualAlgoRiskLegPrice) sits deliberately ~15 pips from the
-    // shared stop as a small trade-off leg - not a genuinely favorable
-    // fill. Because it's numerically closest to the stop side, the naive
-    // "most favorable fill in the group" Min/Max in GroupDeepestEntryPrice
-    // picked IT as the group's deepest entry instead of the real ladder's
-    // deep leg, corrupting the reported pips. Shared stop 4356.0: shallow
-    // 4350.0 (tranche 1), deep 4353.0 (tranche 2, genuinely the group's
-    // best real fill), risk leg 4354.5 (tranche 3, stop - 15p) - numerically
-    // the highest/"most favorable" of the three for a SELL, but must be
-    // excluded from the reference pick.
+    // Owner-reported 2026-09-14 (real XAU SELL, signal 341) briefly
+    // excluded the manual/algo risk leg (ManualAlgoRiskLegPrice, sitting
+    // deliberately ~15 pips from the shared stop) from
+    // GroupDeepestEntryPrice's Min/Max, since it isn't a genuinely
+    // favorable fill. Owner 2026-09-15 reversed that: the archived pip/R
+    // result (pips_format.legs_achieved_entry_price on the Python side)
+    // must reflect the true deepest fill reached, risk leg included - a
+    // separate figure (GroupWorstCase, the advertised SL risk) now excludes
+    // the risk leg's contribution instead, so that headline risk figure
+    // stays scoped to the original group ladder. Shared stop 4356.0:
+    // shallow 4350.0 (tranche 1), deep 4353.0 (tranche 2), risk leg 4354.5
+    // (tranche 3, stop - 15p) - numerically the highest/"most favorable" of
+    // the three for a SELL, and now correctly selected as the deepest fill.
     using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
     var store = new FakeAutoTradeStore(CandidateJson());
     var client = new FakeTradingClient();
@@ -1345,10 +1347,11 @@ public sealed partial class AutoTradeEngineTests
       store.Events, item => item.Type == "take_profit"
     );
     Assert.Equal(91, takeProfit.PositionId);
-    // Deep leg's real fill (4353.0), not the risk leg's near-stop price
-    // (4354.5) despite it being the numerically "highest" SELL entry.
-    Assert.Equal(4353.0m, takeProfit.LegEntryPrice);
-    Assert.Equal(62.0m, takeProfit.LegRealizedPips);
+    // Risk leg's own price (4354.5) - the numerically deepest/"most
+    // favorable" SELL entry in the group - is now the archived reference,
+    // not the main ladder's deep leg (4353.0).
+    Assert.Equal(4354.5m, takeProfit.LegEntryPrice);
+    Assert.Equal(77.0m, takeProfit.LegRealizedPips);
 
     cts.Cancel();
     await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
@@ -3163,9 +3166,11 @@ public sealed partial class AutoTradeEngineTests
     // 2026-09-09: Deep rests at the zone's own midpoint (4351.5) instead of
     // its far edge, so its distance to the 4347/4356 stop is now 45p, not
     // 30p (0.06 lots).
-    // 2026-09-11: risk leg widened from 10 to 15 pips from the stop:
-    // -(0.24*60 + 0.06*45 + 0.05*15) * 10 = -178.50.
-    Assert.All(placed, item => Assert.Equal(-178.50m, item.GroupWorstCase));
+    // 2026-09-15: SL risk (GroupWorstCase, the advertised max-loss figure)
+    // now describes only the original group ladder - Shallow and Deep -
+    // never the fixed-size risk/trade-off leg, so its own 0.05 lots x 15p
+    // no longer contributes: -(0.24*60 + 0.06*45) * 10 = -171.00.
+    Assert.All(placed, item => Assert.Equal(-171.00m, item.GroupWorstCase));
     foreach (var order in client.LimitOrders)
     {
       var distance = order.RelativeStopLoss / 100_000m;
