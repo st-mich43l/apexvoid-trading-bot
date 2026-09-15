@@ -132,8 +132,8 @@
     "zone_reconcile_mode": "shadow",
     "zone_scale_undersized_policy": "single_entry"
   },
-  "contract_fingerprint": "81e7fc53bd9090daeb136039e73650ffd744a295605a6f22389aa3323b4cf1b8",
-  "effective_configuration_fingerprint": "b8380e56dd22fa520cbc9500d5b48e0189c582f0d1bcb01b59b10a59f8af4d2a",
+  "contract_fingerprint": "b20e4f455a8a4905284ee4808defd57593d90d4cdb7739ad251b54413efd6987",
+  "effective_configuration_fingerprint": "b3bbd27058d5e56e3a14aaf2168391113b507fbad6be08f45368dda1e9fc5d1e",
   "feed": {
     "backfill_bars": 1500,
     "bar_quality_lookback": 6,
@@ -490,6 +490,7 @@
         },
         "reaction": {
           "market_fraction": "0.8",
+          "risk_targeted_entry_enabled": true,
           "room_stop_min_rr": "2",
           "scale_fraction": "0.2",
           "scale_invalid_policy": "single_market",
@@ -1477,6 +1478,7 @@
         },
         "reaction": {
           "market_fraction": "0.8",
+          "risk_targeted_entry_enabled": true,
           "room_stop_min_rr": "2",
           "scale_fraction": "0.2",
           "scale_invalid_policy": "single_market",
@@ -2488,6 +2490,7 @@
         },
         "reaction": {
           "market_fraction": "0.8",
+          "risk_targeted_entry_enabled": true,
           "room_stop_min_rr": "2",
           "scale_fraction": "0.2",
           "scale_invalid_policy": "single_market",
@@ -3475,6 +3478,7 @@
         },
         "reaction": {
           "market_fraction": "0.8",
+          "risk_targeted_entry_enabled": true,
           "room_stop_min_rr": "2",
           "scale_fraction": "0.2",
           "scale_invalid_policy": "single_market",
@@ -4471,18 +4475,19 @@
           "hard_entry_drift_pips": "20",
           "max_entry_drift_atr": "1",
           "min_entry_drift_pips": "10",
-          "min_rr": "3",
-          "min_target_pips": 150,
+          "min_rr": "4",
+          "min_target_pips": 200,
           "room_stop_floor_pips": 50,
           "tp_buffer_pips": "3"
         },
         "reaction": {
           "market_fraction": "0.8",
-          "room_stop_min_rr": "3",
+          "risk_targeted_entry_enabled": true,
+          "room_stop_min_rr": "4",
           "scale_fraction": "0.2",
           "scale_invalid_policy": "single_market",
           "scale_step_atr": "0.5",
-          "stop_max_pips": 100,
+          "stop_max_pips": 60,
           "stop_min_pips": 50
         },
         "regime": {
@@ -4546,7 +4551,7 @@
           "hard_entry_drift_pips": "30",
           "max_entry_drift_atr": "1.5",
           "min_entry_drift_pips": "15",
-          "stop_max_pips": 100
+          "stop_max_pips": 60
         },
         "zone_scaling": {
           "fill_enabled": true,
@@ -5139,7 +5144,7 @@
         }
       },
       "targeting": {
-        "breakeven_after_r": "0.5",
+        "breakeven_after_r": "1",
         "close_ratios": [
           "0.4",
           "0.2",
@@ -5148,12 +5153,12 @@
         ],
         "entry_clips": 2,
         "mode": "fixed_rr",
-        "reward_risk": "3",
+        "reward_risk": "4",
         "target_r_multiples": [
-          "0.5",
           "1",
           "2",
-          "3"
+          "3",
+          "4"
         ],
         "trail_after_r": null,
         "trail_to_r": null
@@ -5334,6 +5339,7 @@
         },
         "reaction": {
           "market_fraction": "0.8",
+          "risk_targeted_entry_enabled": true,
           "room_stop_min_rr": "2",
           "scale_fraction": "0.2",
           "scale_invalid_policy": "single_market",
@@ -6184,6 +6190,7 @@
         },
         "reaction": {
           "market_fraction": "0.8",
+          "risk_targeted_entry_enabled": true,
           "room_stop_min_rr": "2",
           "scale_fraction": "0.2",
           "scale_invalid_policy": "single_market",
@@ -7058,6 +7065,7 @@
         },
         "reaction": {
           "market_fraction": "0.8",
+          "risk_targeted_entry_enabled": true,
           "room_stop_min_rr": "2",
           "scale_fraction": "0.2",
           "scale_invalid_policy": "single_market",
@@ -7908,6 +7916,7 @@
         },
         "reaction": {
           "market_fraction": "0.8",
+          "risk_targeted_entry_enabled": true,
           "room_stop_min_rr": "2",
           "scale_fraction": "0.2",
           "scale_invalid_policy": "single_market",
@@ -8763,18 +8772,19 @@
           "hard_entry_drift_pips": "20",
           "max_entry_drift_atr": "1",
           "min_entry_drift_pips": "10",
-          "min_rr": "3",
-          "min_target_pips": 150,
+          "min_rr": "4",
+          "min_target_pips": 200,
           "room_stop_floor_pips": 50,
           "tp_buffer_pips": "3"
         },
         "reaction": {
           "market_fraction": "0.8",
-          "room_stop_min_rr": "3",
+          "risk_targeted_entry_enabled": true,
+          "room_stop_min_rr": "4",
           "scale_fraction": "0.2",
           "scale_invalid_policy": "single_market",
           "scale_step_atr": "0.5",
-          "stop_max_pips": 100,
+          "stop_max_pips": 60,
           "stop_min_pips": 50
         },
         "regime": {
@@ -8838,7 +8848,7 @@
           "hard_entry_drift_pips": "30",
           "max_entry_drift_atr": "1.5",
           "min_entry_drift_pips": "15",
-          "stop_max_pips": 100
+          "stop_max_pips": 60
         },
         "zone_scaling": {
           "fill_enabled": true,
@@ -9423,7 +9433,7 @@
         }
       },
       "targeting": {
-        "breakeven_after_r": "0.5",
+        "breakeven_after_r": "1",
         "close_ratios": [
           "0.4",
           "0.2",
@@ -9432,12 +9442,12 @@
         ],
         "entry_clips": 2,
         "mode": "fixed_rr",
-        "reward_risk": "3",
+        "reward_risk": "4",
         "target_r_multiples": [
-          "0.5",
           "1",
           "2",
-          "3"
+          "3",
+          "4"
         ],
         "trail_after_r": null,
         "trail_to_r": null

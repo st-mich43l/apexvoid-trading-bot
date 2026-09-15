@@ -213,6 +213,29 @@ def opposing_zone_context_from_values(
   )
 
 
+def approximate_structural_stop_price(
+  *,
+  direction: str,
+  structure_swing: float,
+  atr: float,
+  structure_buffer_atr: float,
+) -> float:
+  """Float mirror of ``_plan_base_stop``'s raw structural stop (structure
+  minus/plus the ATR buffer, before any wick/opposing-zone push).
+
+  For entry-selection logic that needs the real stop *before* the exact
+  Decimal stop contract is built (see
+  ``execution_route.risk_targeted_entry_price``) - never itself the final
+  stop price; ``plan_protective_stop`` remains authoritative for that.
+  """
+  side = str(direction).upper()
+  return (
+    float(structure_swing) - float(structure_buffer_atr) * float(atr)
+    if side == "BUY"
+    else float(structure_swing) + float(structure_buffer_atr) * float(atr)
+  )
+
+
 def _plan_base_stop(
   *,
   direction: str,

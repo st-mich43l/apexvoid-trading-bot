@@ -73,6 +73,48 @@ def _round_price(value: float, digits: int) -> float:
   )
 
 
+def risk_targeted_entry_price(
+  *,
+  direction: str,
+  structural_stop: float,
+  zone_low: float,
+  zone_high: float,
+  target_risk_pips: float,
+  pip_size: float,
+  digits: int,
+) -> float:
+  """Entry price within ``[zone_low, zone_high]`` closest to a real
+  ``target_risk_pips`` distance from the actual structural stop.
+
+  2026-09-15 (owner-reported, XAU only): entry price used to come purely
+  from zone geometry (the near edge / midpoint), with zero awareness of
+  the risk distance that entry would produce against the real structural
+  stop - the stop envelope (``execution.reaction.stop_min_pips``/
+  ``stop_max_pips``) only ever clamped the STOP afterward. This picks the
+  entry instead, so risk lands near the target up front. ``structural_stop``
+  must be the real stop (mirrors ``_plan_base_stop``'s raw structural
+  stop - structure_swing offset by the ATR buffer, before any wick/
+  opposing-zone push), independent of which entry within the zone is
+  chosen.
+
+  Best-effort: when the zone's own span can't reach ``target_risk_pips``
+  from the stop (too tight or too wide), returns whichever zone edge gets
+  closest instead of rejecting - the caller's own stop envelope remains
+  the final backstop.
+  """
+  side = str(direction).upper()
+  low = min(zone_low, zone_high)
+  high = max(zone_low, zone_high)
+  target_distance = float(target_risk_pips) * float(pip_size)
+  desired = (
+    structural_stop + target_distance
+    if side == "BUY"
+    else structural_stop - target_distance
+  )
+  clamped = min(max(desired, low), high)
+  return _round_price(clamped, digits)
+
+
 def zone_split_qualifies(
   *,
   zone_low: float,
@@ -182,8 +224,19 @@ def resolve_execution_route_plan(
   strategy: str | None = None,
   strategy_family: str | None = None,
   entry_clips: int = SCALP_MICRO_CLIPS,
+  structural_stop: float | None = None,
+  target_risk_pips: float | None = None,
+  pip_size: float | None = None,
 ) -> ExecutionRoutePlan:
-  """Resolve a concrete route mirroring AutoTradeEngine.ResolveExecutionRoute."""
+  """Resolve a concrete route mirroring AutoTradeEngine.ResolveExecutionRoute.
+
+  ``structural_stop``/``target_risk_pips``/``pip_size`` are optional and,
+  when all three are given, replace the anchor entry (``proximal`` below)
+  with ``risk_targeted_entry_price`` - see that function's docstring. Any
+  one missing keeps today's pure zone-geometry anchor unchanged; this is
+  how a caller (XAU only, behind a rollback flag) opts in without every
+  other instrument's routing changing.
+  """
   preference = (order_type_preference or "").strip().lower()
   distribution = (entry_distribution or "").strip().lower()
   side = direction.strip().upper()
@@ -198,6 +251,20 @@ def resolve_execution_route_plan(
     zone_fill_min_atr=zone_fill_min_atr,
   )
   proximal = high if side == "BUY" else low
+  if (
+    structural_stop is not None
+    and target_risk_pips is not None
+    and pip_size is not None
+  ):
+    proximal = risk_targeted_entry_price(
+      direction=side,
+      structural_stop=float(structural_stop),
+      zone_low=low,
+      zone_high=high,
+      target_risk_pips=float(target_risk_pips),
+      pip_size=float(pip_size),
+      digits=digits,
+    )
   midpoint = _round_price((low + high) / 2.0, digits)
   first_leg_fraction = min(1.0, max(0.0, scale_first_leg_fraction))
   leg_ratios = (first_leg_fraction, round(1.0 - first_leg_fraction, 6))
