@@ -28,6 +28,18 @@ dated section after deployment.
   trades have accumulated. Purely descriptive — never a gate.
 
 ### Changed
+- The scalp root/forming card now shows an R level for every TP
+  (`StrategyMatch.scalp_target_r_multiples`, new field) instead of a bare
+  pip offset — `technique_fixed_rr_targeting` always returns `None` for
+  M1 scalp strategies by design (scalp keeps its own 1R/2R book,
+  independent of the instrument's fixed_rr ladder), so the root card's
+  R-display logic previously had nothing to fall back to. Computed by
+  `app.scalping.publish._scalp_target_r_multiples` as
+  `targets_pips[i] / stop_pips`, using the exact same stop distance the
+  ladder itself was built from — never re-derived from the card's own
+  displayed prices (a zone edge is a cosmetic pip-offset reference only,
+  a different basis, per the docstring precedent from the 2026-09-07
+  GBPJPY "+10R" bug).
 - Manual /algo leg ladder: split the group's two risk-facing figures apart
   again. `GroupWorstCase` (the advertised SL risk shown when legs are
   placed) now sums only the original 2-leg Shallow/Deep ladder's own

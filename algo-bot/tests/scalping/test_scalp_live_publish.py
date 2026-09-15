@@ -90,6 +90,9 @@ def test_build_scalp_strategy_match_is_valid():
   assert match.direction == "BUY"
   assert match.full_take_profit_pips == 25
   assert match.targets_pips == (15, 25)
+  # 2026-09-15 (owner-reported): the root card must show R, not just raw
+  # pips, for scalp too - each entry is targets_pips[i] / stop (15).
+  assert match.scalp_target_r_multiples == (1.0, 1.67)
   # invalidation_price is the source of truth for structure_swing.
   assert match.structure_swing == pytest.approx(3999.5)
   assert match.structure_swing == pytest.approx(_opp().invalidation_price)
@@ -97,6 +100,28 @@ def test_build_scalp_strategy_match_is_valid():
   assert match.strategy_mode == "scalp_m1"
   assert _identity_ok(match)
   assert _valid_match(match)
+
+
+def test_scalp_root_card_shows_r_multiples_not_bare_pips():
+  # Owner-reported 2026-09-15: the scalp root/forming card showed a bare
+  # "+65" pip offset instead of an R level, unlike every fixed_rr
+  # strategy's card. technique_fixed_rr_targeting always returns None for
+  # M1 scalp strategies by design (scalp keeps its own book) - the card
+  # must fall back to scalp_target_r_multiples, not to raw pips.
+  from app.autotrade.setup_card import format_plan_published_root_card
+
+  match = build_scalp_strategy_match(
+    _opp(), _ctx(), bar_ts=120, quote_bid=4001.0, quote_ask=4002.0,
+  )
+  text = format_plan_published_root_card(
+    match,
+    stop_price=match.structure_swing,
+    target_prices=(4003.0, 4003.5),
+  )
+  assert "(+1R)</b>" in text
+  assert "(+1.7R)</b>" in text
+  assert "+65" not in text
+  assert " pips" not in text
 
 
 def test_build_scalp_strategy_match_computes_real_bias_relationship():
@@ -165,6 +190,7 @@ def test_build_scalp_1to2_publishes_half_at_one_r():
   )
   assert match.targets_pips == (15, 30)
   assert match.full_take_profit_pips == 30
+  assert match.scalp_target_r_multiples == (1.0, 2.0)
   assert _valid_match(match)
 
 
@@ -216,6 +242,7 @@ def test_build_scalp_1to1_stays_single_full_exit():
   # Discovery stop=15 / target=15 → single 1R exit; plan books 100% there.
   assert match.targets_pips == (15,)
   assert match.full_take_profit_pips == 15
+  assert match.scalp_target_r_multiples == (1.0,)
   assert _valid_match(match)
 
 
