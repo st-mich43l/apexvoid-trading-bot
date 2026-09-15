@@ -28,6 +28,23 @@ dated section after deployment.
   trades have accumulated. Purely descriptive — never a gate.
 
 ### Changed
+- Manual /algo leg ladder: split the group's two risk-facing figures apart
+  again. `GroupWorstCase` (the advertised SL risk shown when legs are
+  placed) now sums only the original 2-leg Shallow/Deep ladder's own
+  volume × stop distance, excluding the fixed-size risk/trade-off leg
+  (`ManualAlgoRiskLegPrice`) entirely — that leg's deliberately short
+  distance to the shared stop was understating nothing before, but the
+  owner wants the headline risk figure to describe only the ladder they
+  actually typed. `GroupDeepestEntryPrice` (the archived pips/R
+  denominator, read by `pips_format.legs_achieved_entry_price` on the
+  Python side) now only includes the risk leg for a genuine take-profit /
+  "TP archived level" event — the archived result there must reflect the
+  real deepest fill reached, risk leg included. Every risk calculation
+  (`GroupWorstCase`, and any close where no target was actually achieved —
+  an owner-initiated `/trade_close`/`/auto_close_all`, or a plain SL
+  stop-out) keeps the risk leg excluded, scoped to the original ladder
+  only. Refines the 2026-09-14 (signal 341) exclusion rather than a flat
+  reversal of it.
 - Key Level structural repair Phase 2: the scanner's primary actionability
   gate and the TradePlan-time room/containment recheck now source their
   opposing-structure pool from `StructuralBarrierBook` (multi-timeframe
