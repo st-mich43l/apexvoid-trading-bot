@@ -3798,7 +3798,16 @@ public sealed class AutoTradeEngine(
       RangeExitPrice: IsBoxRangeScalp(candidate) && targetPlan.TargetsPips.Count < 2
         ? BoxExitPrice(candidate, direction)
         : null,
-      Stream: "algo_auto",
+      // Owner-reported 2026-09-15 (signal 358): this hardcoded "algo_auto"
+      // regardless of candidate source, so every live-filled manual/algo
+      // leg's own AutoTradePositionState.Stream read "algo_auto" - never
+      // "algo_manual". GroupDeepestEntryPrice's IsManualRiskLeg check
+      // (ExecutionStream(state) == "algo_manual") never engaged for a real
+      // fill as a result, only for restart-recovery-reconstructed states
+      // (ParseManualComment sets Stream explicitly) - so the manual risk
+      // leg kept winning the group's "deepest fill" reference in
+      // production exactly as before that fix.
+      Stream: IsManualAlgoCandidate(candidate) ? "algo_manual" : "algo_auto",
       MatchId: candidate.MatchId,
       StrategyFamily: string.IsNullOrWhiteSpace(candidate.StrategyFamily)
         ? StrategyFamilyFromSetup(candidate.Setup)
@@ -6481,8 +6490,20 @@ public sealed class AutoTradeEngine(
         // genuinely achieved target makes this an archived-TP-level event
         // eligible to include the risk leg - a pure SL/unconfirmed
         // disappearance is a risk calculation and must exclude it.
+        //
+        // Owner-reported 2026-09-15 (signal 358, real XAU SELL): this used
+        // [state, .. siblingStates] - siblingStates queried from the LIVE
+        // _states dict, which this same loop has already shrunk by the time
+        // a group's later legs are processed (_states.Remove(stale) below
+        // runs per leg, in order, within one pass). Whichever leg happens to
+        // be processed LAST therefore found no siblings left and fell back
+        // to its own entry - exactly the risk leg's own price when it was
+        // last, reintroducing the bug this whole exclusion exists to fix.
+        // trackedGroup (above) is the frozen, complete group from this
+        // pass's own snapshot and already includes state itself - immune to
+        // the same-pass shrinkage siblingStates has.
         var deepestEntry = GroupDeepestEntryPrice(
-          [state, .. siblingStates],
+          trackedGroup,
           state.Direction,
           includeRiskLeg: AchievedTargetPips(state) is decimal achievedForDeepest
             && achievedForDeepest > 0
