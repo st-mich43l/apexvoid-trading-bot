@@ -3297,6 +3297,101 @@ public sealed partial class AutoTradeEngineTests
     await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
   }
 
+  [Theory]
+  [InlineData("BUY")]
+  [InlineData("SELL")]
+  public async Task ManualAlgoGroupCloseLegEntryPriceExcludesTheRiskLegOnTheLiveFillPath(
+    string direction
+  )
+  {
+    // Owner-reported 2026-09-15 (signal 358, real XAU SELL): GroupDeepestEntryPrice's
+    // IsManualRiskLeg check (ExecutionStream(state) == "algo_manual") never actually
+    // engaged for a genuinely live-filled manual/algo leg, because the shared
+    // live-fill AutoTradePositionState construction hardcoded Stream: "algo_auto"
+    // regardless of candidate source - only a restart-recovery-reconstructed state
+    // (ParseManualComment) ever carried "algo_manual". The risk leg kept winning
+    // the group's "deepest fill" reference on every real production close, exactly
+    // as it did before the GroupDeepestEntryPrice fix - this test drives the real
+    // live order-fill path (not SeedPosition/restart-recovery) so it would have
+    // caught that gap.
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+    var now = Now;
+    var isBuy = direction == "BUY";
+    const decimal entryLow = 4350.0m;
+    const decimal entryHigh = 4353.0m;
+    var ownerStop = isBuy ? 4347.0m : 4356.0m;
+    var ownerTargets = isBuy
+      ? new[] { 4356.0m, 4359.0m, 4362.0m }
+      : new[] { 4347.0m, 4344.0m, 4341.0m };
+    var store = new FakeAutoTradeStore(ManualCandidateJson(
+      direction: direction,
+      candidateId: $"manual:legentry:{direction.ToLowerInvariant()}",
+      entryLow: entryLow,
+      entryHigh: entryHigh,
+      manualStopLoss: ownerStop,
+      manualTakeProfits: ownerTargets,
+      manualSingleEntry: false
+    ));
+    var client = new FakeTradingClient
+    {
+      Account = ValidAccount() with { Balance = 50_000m, Equity = 50_000m },
+      PositionCloseReasonToReturn = PositionCloseReason.StopLossOrTakeProfit,
+      PositionCloseExecutionPriceToReturn = ownerStop,
+    };
+    var engine = new AutoTradeEngine(Options(), store, () => now, _ => { });
+    await engine.ObserveSpotAsync(
+      new SpotPrice(
+        "XAU",
+        isBuy ? 4360.0m : 4340.0m,
+        isBuy ? 4360.2m : 4340.2m,
+        now.ToUnixTimeSeconds()
+      ),
+      cts.Token
+    );
+
+    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
+    await store.Ordered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+    foreach (var pending in client.PendingOrders.ToArray())
+    {
+      client.FillPendingOrder(pending.OrderId);
+    }
+    now = now.AddSeconds(16);
+    await WaitUntilAsync(() =>
+      store.Events.Count(item => item.Type == "manual_opened") == 3
+    );
+    await Task.Delay(50, cts.Token);
+    var states = store.Positions.Values.OrderBy(state => state.TrancheIndex).ToArray();
+    Assert.Equal(3, states.Length);
+    // The bug this test locks in: a genuinely live-filled leg's own Stream
+    // must read "algo_manual", not the record's "algo_auto" default.
+    Assert.All(states, state => Assert.Equal("algo_manual", state.Stream));
+    // states[0]=Shallow, states[1]=Deep, states[2]=the risk leg (tranche order).
+    var nonRiskEntries = new[] { states[0].EntryPrice, states[1].EntryPrice };
+    var expectedDeepestEntry = isBuy ? nonRiskEntries.Min() : nonRiskEntries.Max();
+    Assert.NotEqual(expectedDeepestEntry, states[2].EntryPrice);
+
+    foreach (var state in states)
+    {
+      client.RemovePosition(state.PositionId);
+    }
+    now = now.AddSeconds(16);
+    await WaitUntilAsync(() =>
+      store.MetricsSnapshot().Contains("position_missing_snapshot_suspected")
+    );
+    await Task.Delay(50, cts.Token);
+    now = now.AddSeconds(16);
+    await WaitForEventAsync(store, "group_result");
+
+    Assert.All(
+      store.Events.Where(item => item.Type == "position_closed"),
+      item => Assert.Equal(expectedDeepestEntry, item.LegEntryPrice)
+    );
+
+    cts.Cancel();
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+  }
+
   [Fact]
   public async Task SimultaneousGroupCloseSeedsFromCanonicalTrackedSibling()
   {
