@@ -244,7 +244,7 @@ async def _maybe_log_funnel_snapshot(
 
   log.info(
     "reaction funnel snapshot symbol=%s trigger_bucket=%s reaction=%s "
-    "scalp=%s hfs_impulse=%s",
+    "scalp=%s scalp_impulse=%s",
     sym,
     bucket,
     json.dumps(_decode(reaction), sort_keys=True),

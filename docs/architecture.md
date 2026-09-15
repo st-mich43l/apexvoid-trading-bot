@@ -10,7 +10,7 @@ ApexVoid is a **multi-service multi-symbol** trading stack on one Docker host:
 | `redis` | Closed OHLC bars, ZoneWatch state, TradePlans, executor events |
 | `config-compiler` | One-shot: validate YAML + emit `ResolvedRuntimeManifest` |
 | `ctrader-engine` | cTrader Open API feed + TradePlan V8 execution |
-| `bot` (`algo-bot`) | Telegram, scanner, ZoneWatch activation, plan publish, HFS |
+| `bot` (`algo-bot`) | Telegram, scanner, ZoneWatch activation, plan publish, scalping |
 
 ```text
 ┌──────────────────────────── single host (Docker) ───────────────────────────┐
@@ -38,7 +38,7 @@ No inbound application ports. Only SSH to the host is required.
 
 | Loop | Purpose |
 |---|---|
-| `bar_event_dispatcher_loop` | One `bars:new` subscriber: ZoneWatch M1 + HFS, then scanner + worker |
+| `bar_event_dispatcher_loop` | One `bars:new` subscriber: ZoneWatch M1 + scalping, then scanner + worker |
 | `zone_watch_execution_loop` | Spot-driven re-eval → activate → direct publish |
 | `forming_price_track_loop` | Live edits on forming Telegram cards |
 | `setup_expiry_sweeper_loop` | Age out stale setups / watches |

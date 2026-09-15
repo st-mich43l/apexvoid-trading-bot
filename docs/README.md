@@ -19,7 +19,7 @@ phase ledgers live under [`history/`](history/) and
 |---|---|
 | [bot-commands.md](bot-commands.md) | Manual `/trade`, `/algo`, lifecycle, pips |
 | [technique-zonewatch-publish.md](technique-zonewatch-publish.md) | Techniques → ZoneWatch → TradePlan V8 |
-| [scalping/README.md](scalping/README.md) | HFS M1 lane |
+| [scalping/README.md](scalping/README.md) | M1 scalping lane |
 | [demo-eval-autotrade.md](demo-eval-autotrade.md) | Demo auto-trade runbook |
 
 ## Contracts and integrity

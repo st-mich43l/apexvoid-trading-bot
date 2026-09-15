@@ -31,7 +31,7 @@ from app.scalping.replay import aggregate_report, calibration_report, split_data
 from app.scalping.replay_lab import LabEvent, load_lab_events, replay_lab_event
 
 
-# Map lab / HFS archetype aliases onto mad_hard_gate strategy keys.
+# Map lab / scalping archetype aliases onto mad_hard_gate strategy keys.
 _STRATEGY_FOR_GATE: dict[str, str] = {
   "liquidity_sweep_reversal": "liquidity_sweep_reversal",
   "range_sweep": "range_sweep",

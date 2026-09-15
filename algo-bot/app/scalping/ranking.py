@@ -3,7 +3,7 @@
 Uses the unified mathematical score when score_inputs / feature vector are
 present; falls back to the legacy pip-heuristic score otherwise.
 
-MAD is not applied here — owner rule: MAD does not drive HFS/scalping.
+MAD is not applied here — owner rule: MAD does not drive scalping.
 Accumulation soft favor lives only on technique Range Edge Scalp.
 """
 
