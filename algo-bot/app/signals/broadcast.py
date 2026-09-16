@@ -4,6 +4,7 @@ import logging
 from html import escape
 from typing import Callable
 
+from app.core.config import runtime_config
 from app.persistence.store import (
   get_signal_posts,
   insert_signal_post,
@@ -180,6 +181,27 @@ async def broadcast_entry(
     for post in await get_signal_posts(sig["id"])
   }
   posts = []
+  if sig.get("personal_trade"):
+    # Owner /1r trade: DM the owner instead of the VIP/public channel.
+    # tier stays "vip" (not a new tier) so render_entry/post_result keep
+    # the daily #seq line, full pip detail, and the inline Close button
+    # exactly as today - only the destination chat id changes.
+    owner_id = runtime_config.delivery.telegram.telegram_owner_id
+    if owner_id and int(owner_id) not in delivered:
+      text = (
+        render_fn("vip") if render_fn else render_entry(sig, "vip")
+      )
+      sent = await _send_message(text, int(owner_id))
+      await insert_signal_post(sig["id"], int(owner_id), sent.message_id, "vip")
+      posts.append({
+        "signal_id": sig["id"],
+        "channel_id": int(owner_id),
+        "message_id": sent.message_id,
+        "tier": "vip",
+      })
+      if sticker:
+        await _send_sticker(sticker, int(owner_id), sent.message_id)
+    return posts
   for target in channels_for(
     sig["symbol"],
     sig.get("visibility", "both"),

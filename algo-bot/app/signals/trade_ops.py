@@ -627,6 +627,9 @@ async def do_reopen(ctx: dict) -> dict:
     # the parent's execution mode, it does not need the owner to re-suffix
     # / algo by hand.
     execution_mode=source.get("execution_mode", "notify"),
+    # A /1r round reopens as /1r too - same reasoning as execution_mode
+    # above, the owner does not re-type the suffix for a re-entry.
+    personal_trade=bool(source.get("personal_trade", False)),
   )
   return {
     "action": "reopen",

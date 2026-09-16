@@ -37,6 +37,9 @@ def manual_signal_usage() -> str:
     "<code>/trade xau buy 4078-75 / algo</code> — entry zone\n\n"
     "<code>/trade eurusd buy 1.15007 / algo</code> — fixed-R/R entry\n"
     "<code>/trade gbpjpy sell 216.168 / sl 216.50 / algo</code>\n\n"
+    "<code>/trade xau buy 4078-75 / 1r</code> — personal trade: full volume\n"
+    "at one entry, one TP at 1R, arms execution on its own, root card + all\n"
+    "updates DM'd to you instead of the channel.\n\n"
     "The legacy forms without <code>/trade</code> still work.\n"
     "TP: absolute prices or XAU last 2 digits. Any count.\n\n"
     "Commands: <code>/help</code>"
@@ -57,7 +60,10 @@ def _manual_signal_confirmation(
   daily_seq: int,
   algo_note: str | None = None,
 ) -> str:
-  base = f"✅ Sent to channel (#{daily_seq})"
+  base = (
+    f"✅ Sent to you (#{daily_seq})" if sig.get("personal_trade")
+    else f"✅ Sent to channel (#{daily_seq})"
+  )
   setup = sig.get("setup_type")
   if not setup:
     text = (
@@ -157,6 +163,7 @@ async def submit_manual_signal(msg: Message, text: str) -> bool:
     symbol=sig.get("symbol", "XAU"),
     visibility=sig["visibility"],
     execution_mode=sig["execution_mode"],
+    personal_trade=sig.get("personal_trade", False),
   )
   guard_text = None
   if event:
