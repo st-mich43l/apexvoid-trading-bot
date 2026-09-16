@@ -190,6 +190,7 @@
       "delivery.scanner_cards.maximum_cards",
       "delivery.scanner_cards.top_n",
       "delivery.telegram.delete_root_on_terminal",
+      "delivery.telegram.owner_dm_daily_wipe_enabled",
       "delivery.telegram.public_show_pips",
       "delivery.telegram.signal_public_channel_id",
       "delivery.telegram.single_root_card",
@@ -561,7 +562,7 @@
     "XAU_ZONE_PREFERRED_MAX_WIDTH_PRICE": "instruments.XAU.analysis.zones.preferred_maximum_width_price",
     "XAU_ZONE_PREFERRED_MIN_WIDTH_PRICE": "instruments.XAU.analysis.zones.preferred_minimum_width_price"
   },
-  "fingerprint": "b20e4f455a8a4905284ee4808defd57593d90d4cdb7739ad251b54413efd6987",
+  "fingerprint": "e74c3337032dcbddb9ff36dc04ec4b7accf55381dfc063cdc8ef0123e5915a68",
   "instrument_schema": {
     "active_projection_symbol": "XAU",
     "optional": [

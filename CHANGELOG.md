@@ -43,6 +43,21 @@ dated section after deployment.
   itself sent). New `manual_signals.personal_trade` column and
   `ManualTradeIntent.single_entry_override` field; no C# changes (the
   single-entry/single-TP execution path already existed for FX).
+- Opt-in end-of-day wipe of the ApexVoid bot's own DM with the owner
+  (`DELIVERY_OWNER_DM_DAILY_WIPE_ENABLED`, default off): at each local
+  trade-day rollover, deletes every message sent since the previous wipe
+  in that DM — both the bot's own sends and the owner's own typed
+  commands. Scope is only the ApexVoid bot's DM; the scanner/algo bot's
+  own DM (autonomous root cards, `/1r` cards) is untouched. New
+  `app/bot/owner_dm_journal.py`: a `bot.session` request middleware
+  journals every outgoing message (the single choke point every
+  Telegram API call the bot makes passes through, since `msg.answer(...)`
+  and `send_with_retry` share no other call site), a `dp.message` outer
+  middleware journals the owner's own incoming messages, and a new
+  `owner_dm_daily_wipe_loop` (registered like the other daily loops in
+  `main.py`) sweeps and clears the just-completed day's journal at each
+  local midnight. New `delivery.telegram.owner_dm_daily_wipe_enabled`
+  config field.
 
 ### Changed
 - Retired the "HFS" product name in favor of "scalping" everywhere it was
