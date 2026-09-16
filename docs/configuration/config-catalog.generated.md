@@ -3,9 +3,9 @@
 > Generated from the typed `ApexVoidConfig` Catalog V2 schema. Do not edit manually.
 
 - Catalog version: `2`
-- Contract fingerprint: `2417bd82abb436ce6f5b5018c5a61a504fec8e01c3a4aaea0fb7742fe312fd10`
-- Document fingerprint: `36ccfb251c34d61e0a9262d6a5538e9cd939cc5f4c5e935170daa42c5e0a93b5`
-- Items: `653`
+- Contract fingerprint: `0f3ef7f77bc5106170de4429c7aa724b5d83d9a87c0152fc8e074660167fe071`
+- Document fingerprint: `b9afabb3ce1fe33a60ebb62cfb7a002902de386d73f0bb4b34b2aa6fb8a47bdf`
+- Items: `654`
 - Runtime status: canonical-only; `app.core.config.runtime_config` is authoritative
 
 ## actionability
@@ -359,6 +359,7 @@
 | `execution.reaction.scale_step_atr` | `AUTO_TRADE_REACTION_SCALE_STEP_ATR` | `float` | `atr` | `configurable` | `0.1` |
 | `execution.reaction.stop_max_pips` | `AUTO_TRADE_REACTION_STOP_MAX_PIPS` | `int` | `pips` | `configurable` | `60` |
 | `execution.reaction.stop_min_pips` | `AUTO_TRADE_REACTION_STOP_MIN_PIPS` | `int` | `pips` | `configurable` | `40` |
+| `execution.reaction_risk_leg.enabled` | `AUTO_TRADE_REACTION_RISK_LEG_ENABLED` | `bool` | `boolean` | `configurable` | `true` |
 | `execution.regime.direction_enabled` | `AUTO_TRADE_REGIME_DIRECTION_ENABLED` | `bool` | `boolean` | `configurable` | `false` |
 | `execution.regime.direction_lookback` | `AUTO_TRADE_REGIME_DIRECTION_LOOKBACK` | `int` | `bars` | `configurable` | `120` |
 | `execution.regime.min_directional_swings` | `AUTO_TRADE_REGIME_MIN_DIRECTIONAL_SWINGS` | `int` | `count` | `configurable` | `3` |

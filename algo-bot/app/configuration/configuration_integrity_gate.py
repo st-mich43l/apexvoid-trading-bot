@@ -48,13 +48,16 @@ BASELINE = {
   # 2026-09-16 Breakout Retest V2 rebuild: +21 new leaf fields under
   # strategies.scalping.breakout.* (all real canonical_env, all
   # ConfigOwner.PYTHON).
-  "catalog_entry_count": 653,
-  "configurable_count": 546,
+  # 2026-09-16 Reaction risk leg (Manual-Algo parity): +1
+  # (execution.reaction_risk_leg.enabled), real canonical_env,
+  # ConfigOwner.CTRADER (pure C#-side TradePlanRuntime mechanism).
+  "catalog_entry_count": 654,
+  "configurable_count": 547,
   "protocol_constant_count": 10,
   "algorithm_constant_count": 97,
   "python_projection_count": 604,
-  "ctrader_only_count": 49,
-  "environment_entry_count": 546,
+  "ctrader_only_count": 50,
+  "environment_entry_count": 547,
   "deprecated_alias_count": 21,
   "shared_count": 96,
 }

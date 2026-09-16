@@ -2,8 +2,8 @@
 
 > Generated from the canonical configuration catalog (`app.configuration.environment_contract`). Do not edit manually.
 
-- Contract fingerprint: `2417bd82abb436ce6f5b5018c5a61a504fec8e01c3a4aaea0fb7742fe312fd10`
-- Environment-bound fields: `546`
+- Contract fingerprint: `0f3ef7f77bc5106170de4429c7aa724b5d83d9a87c0152fc8e074660167fe071`
+- Environment-bound fields: `547`
 - Deprecated aliases: `21`
 
 Secret values are never emitted; secret defaults render as `<redacted>`.
@@ -150,6 +150,7 @@ Secret values are never emitted; secret defaults render as `<redacted>`.
 | `AUTO_TRADE_RANGE_TWO_SIDED_ENABLED` | `strategies.range_reversion.two_sided_enabled` | `bool` | no | yes | — | `False` |
 | `AUTO_TRADE_REACTION_ENABLED` | `strategies.reaction.enabled` | `bool` | no | yes | — | `True` |
 | `AUTO_TRADE_REACTION_MARKET_FRACTION` | `execution.reaction.market_fraction` | `float` | no | yes | — | `0.8` |
+| `AUTO_TRADE_REACTION_RISK_LEG_ENABLED` | `execution.reaction_risk_leg.enabled` | `bool` | no | no | — | `True` |
 | `AUTO_TRADE_REACTION_RISK_TARGETED_ENTRY_ENABLED` | `execution.reaction.risk_targeted_entry_enabled` | `bool` | no | no | — | `True` |
 | `AUTO_TRADE_REACTION_ROOM_STOP_FLOOR_PIPS` | `execution.stops.reaction.room_floor_pips` | `int` | no | no | — | `40` |
 | `AUTO_TRADE_REACTION_ROOM_STOP_MIN_RR` | `execution.reaction.room_stop_min_rr` | `float` | no | no | — | `1.0` |

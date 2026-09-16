@@ -162,6 +162,7 @@ public sealed record ResolvedAutoTradeProjection(
   [property: JsonPropertyName("unfilled_leg_after_tp_policy")]
     string UnfilledLegAfterTpPolicy,
   [property: JsonPropertyName("reaction_market_fraction")] string ReactionMarketFraction,
+  [property: JsonPropertyName("reaction_risk_leg_enabled")] bool ReactionRiskLegEnabled,
   [property: JsonPropertyName("reaction_scale_fraction")] string ReactionScaleFraction,
   [property: JsonPropertyName("reaction_scale_enabled")] bool ReactionScaleEnabled,
   [property: JsonPropertyName("reaction_scale_invalid_policy")]

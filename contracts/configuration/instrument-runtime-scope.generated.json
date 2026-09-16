@@ -297,6 +297,10 @@
       "scope": "instrument"
     },
     {
+      "property": "ReactionRiskLegEnabled",
+      "scope": "instrument"
+    },
+    {
       "property": "ReactionScaleEnabled",
       "scope": "instrument"
     },
@@ -438,13 +442,13 @@
     }
   ],
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "2417bd82abb436ce6f5b5018c5a61a504fec8e01c3a4aaea0fb7742fe312fd10",
+  "configuration_contract_fingerprint_sha256": "0f3ef7f77bc5106170de4429c7aa724b5d83d9a87c0152fc8e074660167fe071",
   "counts": {
     "account": 24,
     "bootstrap": 4,
     "deprecated_compatibility": 2,
     "derived": 2,
-    "instrument": 96,
+    "instrument": 97,
     "secret": 3,
     "unclassified": 0
   },
@@ -539,7 +543,7 @@
     }
   ],
   "manifest_version": 2,
-  "source_fingerprint_sha256": "2417bd82abb436ce6f5b5018c5a61a504fec8e01c3a4aaea0fb7742fe312fd10",
+  "source_fingerprint_sha256": "0f3ef7f77bc5106170de4429c7aa724b5d83d9a87c0152fc8e074660167fe071",
   "source_model": "app.configuration.models.root.ApexVoidConfig",
   "unclassified_properties": []
 }
