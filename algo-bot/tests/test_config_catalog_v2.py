@@ -77,13 +77,21 @@ BASELINE = {
   # enable_liquidity_level, m1_swing_min_age_bars, m1_swing_max_age_bars,
   # m1_swing_min_spacing_atr, m5_structure_min_touches), all real
   # canonical_env, all ConfigOwner.PYTHON, none deprecated-alias'd.
-  "entries": 653,
-  "configurable": 546,
+  # 2026-09-16 Reaction risk leg (Manual-Algo parity): +1 new leaf field
+  # (execution.reaction_risk_leg.enabled), real canonical_env
+  # (AUTO_TRADE_REACTION_RISK_LEG_ENABLED), ConfigOwner.CTRADER (pure
+  # C#-side TradePlanRuntime mechanism, no Python behavior reads it), not
+  # deprecated-alias'd. Lives on its own leaf-only sibling model rather
+  # than inline on ExecutionReactionConfig because that class carries
+  # model/field validators, which the python_runtime projection refuses
+  # to auto-filter for a mixed-owner model.
+  "entries": 654,
+  "configurable": 547,
   "protocol": 10,
   "algorithm": 97,
-  "owners": {"python": 508, "shared": 96, "ctrader": 49},
+  "owners": {"python": 508, "shared": 96, "ctrader": 50},
   "projection": 604,
-  "env": 546,
+  "env": 547,
   "deprecated_aliases": 21,
 }
 

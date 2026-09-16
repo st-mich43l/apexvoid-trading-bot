@@ -79,6 +79,7 @@
     "range_two_sided_enabled": true,
     "reaction_enabled": true,
     "reaction_market_fraction": "0.8",
+    "reaction_risk_leg_enabled": true,
     "reaction_scale_enabled": true,
     "reaction_scale_fraction": "0.2",
     "reaction_scale_invalid_policy": "single_market",
@@ -132,8 +133,8 @@
     "zone_reconcile_mode": "shadow",
     "zone_scale_undersized_policy": "single_entry"
   },
-  "contract_fingerprint": "2417bd82abb436ce6f5b5018c5a61a504fec8e01c3a4aaea0fb7742fe312fd10",
-  "effective_configuration_fingerprint": "84a4f86db05407c678118e96b017bb6b0b87afb20ea1abfdcd5a5265d5902ee8",
+  "contract_fingerprint": "0f3ef7f77bc5106170de4429c7aa724b5d83d9a87c0152fc8e074660167fe071",
+  "effective_configuration_fingerprint": "9d0a5142594d82aa6780e6ee0c009dfb0972abf0184b91ff585fed654664a4ca",
   "feed": {
     "backfill_bars": 1500,
     "bar_quality_lookback": 6,
@@ -366,6 +367,7 @@
         "range_two_sided_enabled": true,
         "reaction_enabled": true,
         "reaction_market_fraction": "0.8",
+        "reaction_risk_leg_enabled": true,
         "reaction_scale_enabled": true,
         "reaction_scale_fraction": "0.2",
         "reaction_scale_invalid_policy": "single_market",
@@ -497,6 +499,9 @@
           "scale_step_atr": "0.5",
           "stop_max_pips": 18,
           "stop_min_pips": 10
+        },
+        "reaction_risk_leg": {
+          "enabled": true
         },
         "regime": {
           "direction_enabled": false,
@@ -1375,6 +1380,7 @@
         "range_two_sided_enabled": true,
         "reaction_enabled": true,
         "reaction_market_fraction": "0.8",
+        "reaction_risk_leg_enabled": true,
         "reaction_scale_enabled": true,
         "reaction_scale_fraction": "0.2",
         "reaction_scale_invalid_policy": "single_market",
@@ -1506,6 +1512,9 @@
           "scale_step_atr": "0.5",
           "stop_max_pips": 30,
           "stop_min_pips": 15
+        },
+        "reaction_risk_leg": {
+          "enabled": true
         },
         "regime": {
           "direction_enabled": false,
@@ -2408,6 +2417,7 @@
         "range_two_sided_enabled": true,
         "reaction_enabled": true,
         "reaction_market_fraction": "0.8",
+        "reaction_risk_leg_enabled": true,
         "reaction_scale_enabled": true,
         "reaction_scale_fraction": "0.2",
         "reaction_scale_invalid_policy": "single_market",
@@ -2539,6 +2549,9 @@
           "scale_step_atr": "0.5",
           "stop_max_pips": 22,
           "stop_min_pips": 12
+        },
+        "reaction_risk_leg": {
+          "enabled": true
         },
         "regime": {
           "direction_enabled": false,
@@ -3417,6 +3430,7 @@
         "range_two_sided_enabled": true,
         "reaction_enabled": true,
         "reaction_market_fraction": "0.8",
+        "reaction_risk_leg_enabled": true,
         "reaction_scale_enabled": true,
         "reaction_scale_fraction": "0.2",
         "reaction_scale_invalid_policy": "single_market",
@@ -3548,6 +3562,9 @@
           "scale_step_atr": "0.5",
           "stop_max_pips": 18,
           "stop_min_pips": 10
+        },
+        "reaction_risk_leg": {
+          "enabled": true
         },
         "regime": {
           "direction_enabled": false,
@@ -4438,6 +4455,7 @@
         "range_two_sided_enabled": true,
         "reaction_enabled": true,
         "reaction_market_fraction": "0.8",
+        "reaction_risk_leg_enabled": true,
         "reaction_scale_enabled": true,
         "reaction_scale_fraction": "0.2",
         "reaction_scale_invalid_policy": "single_market",
@@ -4573,6 +4591,9 @@
           "scale_step_atr": "0.5",
           "stop_max_pips": 60,
           "stop_min_pips": 50
+        },
+        "reaction_risk_leg": {
+          "enabled": true
         },
         "regime": {
           "direction_enabled": false,
@@ -5452,6 +5473,9 @@
           "stop_max_pips": 18,
           "stop_min_pips": 10
         },
+        "reaction_risk_leg": {
+          "enabled": true
+        },
         "regime": {
           "direction_enabled": false,
           "direction_lookback": 120,
@@ -6323,6 +6347,9 @@
           "scale_step_atr": "0.5",
           "stop_max_pips": 30,
           "stop_min_pips": 15
+        },
+        "reaction_risk_leg": {
+          "enabled": true
         },
         "regime": {
           "direction_enabled": false,
@@ -7220,6 +7247,9 @@
           "stop_max_pips": 22,
           "stop_min_pips": 12
         },
+        "reaction_risk_leg": {
+          "enabled": true
+        },
         "regime": {
           "direction_enabled": false,
           "direction_lookback": 120,
@@ -8091,6 +8121,9 @@
           "scale_step_atr": "0.5",
           "stop_max_pips": 18,
           "stop_min_pips": 10
+        },
+        "reaction_risk_leg": {
+          "enabled": true
         },
         "regime": {
           "direction_enabled": false,
@@ -8975,6 +9008,9 @@
           "scale_step_atr": "0.5",
           "stop_max_pips": 60,
           "stop_min_pips": 50
+        },
+        "reaction_risk_leg": {
+          "enabled": true
         },
         "regime": {
           "direction_enabled": false,
