@@ -1,6 +1,6 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "d6f6e79714362d5fc41eaf665d49230892a47fe407eda4efe217a6b332d6b72c",
+  "configuration_contract_fingerprint_sha256": "2417bd82abb436ce6f5b5018c5a61a504fec8e01c3a4aaea0fb7742fe312fd10",
   "count": 546,
   "deprecated_alias_count": 21,
   "entries": [
@@ -2354,10 +2354,10 @@
     },
     {
       "canonical_env": "AUTO_TRADE_REACTION_SCALE_STEP_ATR",
-      "default": 0.5,
+      "default": 0.1,
       "deprecated": false,
       "deprecated_aliases": [],
-      "description": "Controls  (atr).",
+      "description": "Owner 2026-09-16: lowered from 0.5 - at 0.5x ATR the 2nd leg sat far enough from the 1st that the furthest-leg stop distance routinely exceeded the reaction stop envelope (observed 75-79 pips vs a 60 cap on live XAU Key Level candidates), silently killing good setups on both sides. 0.1x ATR keeps real second-leg separation while leaving headroom under the envelope across normal-to-elevated ATR.",
       "display_id": "config:execution.reaction.scale_step_atr",
       "owner": "shared",
       "path": "execution.reaction.scale_step_atr",
@@ -3877,10 +3877,10 @@
     },
     {
       "canonical_env": "AUTO_TRADE_ZONE_SCALE_STEP_ATR",
-      "default": 0.5,
+      "default": 0.1,
       "deprecated": false,
       "deprecated_aliases": [],
-      "description": "Controls  (atr).",
+      "description": "Owner 2026-09-16: lowered from 0.5 - at 0.5x ATR the 2nd leg sat far enough from the 1st that the furthest-leg stop distance routinely exceeded the reaction stop envelope (observed 75-79 pips vs a 60 cap on live XAU Key Level candidates), silently killing good setups on both sides. 0.1x ATR keeps real second-leg separation while leaving headroom under the envelope across normal-to-elevated ATR.",
       "display_id": "config:execution.zone_scaling.scale_step_atr",
       "owner": "python",
       "path": "execution.zone_scaling.scale_step_atr",
@@ -8794,6 +8794,6 @@
   ],
   "secret_count": 9,
   "shared_with_ctrader_count": 87,
-  "source_fingerprint_sha256": "d6f6e79714362d5fc41eaf665d49230892a47fe407eda4efe217a6b332d6b72c",
+  "source_fingerprint_sha256": "2417bd82abb436ce6f5b5018c5a61a504fec8e01c3a4aaea0fb7742fe312fd10",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }
