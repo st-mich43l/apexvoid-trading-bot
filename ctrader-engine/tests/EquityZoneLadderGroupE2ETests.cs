@@ -36,7 +36,12 @@ public sealed class EquityZoneLadderGroupE2ETests
     PipSize: 0.1m,
     PipValuePerLot: 10m,
     ContractSize: 100m,
-    UnfilledLegAfterTpPolicy: "cancel"
+    UnfilledLegAfterTpPolicy: "cancel",
+    // Off by default here: this file's tests assert exact leg
+    // counts/order-type wiring for the pre-existing L1/L2 ladder and were
+    // not written with the 2026-09-16 risk leg in mind. See
+    // TradePlanRiskLegTests.cs for the risk leg's own coverage.
+    ReactionRiskLegEnabled: false
   );
 
   // Key Level Reaction SELL, zone 4097.07-4101.03, 70/30 equity_table.
