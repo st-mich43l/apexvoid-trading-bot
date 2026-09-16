@@ -35,7 +35,12 @@ public sealed class TradePlanRuntimeTests
     CandidateStream: "auto_trade:candidates",
     EventStream: "auto_trade:events",
     Label: "apexvoid-auto",
-    ContractMode: contractMode
+    ContractMode: contractMode,
+    // Off by default here: most of this file's tests assert exact leg
+    // counts/client-order-ids/volumes for the plan's own declared ladder
+    // and were not written with the 2026-09-16 risk leg in mind. See
+    // TradePlanRiskLegTests.cs for the risk leg's own coverage.
+    ReactionRiskLegEnabled: false
   );
 
   private static string PlanJson(
@@ -3483,6 +3488,260 @@ public sealed class TradePlanRuntimeTests
       directory = directory.Parent;
     }
     throw new FileNotFoundException("Python TradePlan V8 fixture not found");
+  }
+
+  // ==========================================================================
+  // Reaction risk leg (owner-directed 2026-09-16) - same spirit as Manual
+  // Algo's own trade-off leg (ManualAlgoRiskLegPrice/Volume in
+  // AutoTradeEngine.cs) but a pure TradePlanRuntime addition: Python never
+  // plans or knows about this leg, exactly like it never knew about Manual
+  // Algo's. Every other test in this file uses Options() with the risk leg
+  // off (see that helper's comment) so this is the only place it's on.
+  // ==========================================================================
+
+  private static string MarketWithLimitScaleRiskLegPlanJson(
+    string direction = "BUY",
+    decimal stopPrice = 4079.00m,
+    decimal targetPrice = 4097.00m
+  ) => $$"""
+  {
+    "version": 8,
+    "plan_id": "v8:plan-mwls-risk",
+    "thesis_id": "thesis-1",
+    "setup_id": "setup-1",
+    "symbol": "XAU",
+    "created_at": 1719999600,
+    "expires_at": 2000000000,
+    "analysis": {
+      "strategy": "Key Level Reaction",
+      "strategy_family": "key_level",
+      "direction": "{{direction}}",
+      "context_timeframes": ["M15"],
+      "formation_timeframe": "M15",
+      "confirmation_timeframe": "M5",
+      "formation_bar_ts": 1719999000,
+      "confirmation_bar_ts": 1719999600,
+      "score": 0.65,
+      "confluence": 2,
+      "bias": "up",
+      "regime": "range",
+      "reasons": [],
+      "tags": []
+    },
+    "source_structure": {
+      "structure_id": "key:M15:4085.00:4089.50:1719990000",
+      "kind": "key_level",
+      "timeframe": "M15",
+      "low": "4085.00",
+      "high": "4089.50",
+      "invalidation_price": "{{stopPrice}}"
+    },
+    "entry": {
+      "type": "market_with_limit_scale",
+      "zone_low": "4085.00",
+      "zone_high": "4089.50",
+      "expires_at": 2000000000,
+      "legs": [
+        {"leg_id": "L1", "price": "4089.10", "volume_ratio": "0.70", "order_type": "market"},
+        {"leg_id": "L2", "price": "4085.00", "volume_ratio": "0.30", "order_type": "limit"}
+      ]
+    },
+    "stop": {
+      "type": "absolute",
+      "price": "{{stopPrice}}",
+      "source": "structural_invalidation",
+      "structure_id": "key:M15:4085.00:4089.50:1719990000",
+      "reason": "below distal edge"
+    },
+    "targets": [
+      {"target_id": "TP1", "type": "absolute", "price": "{{targetPrice}}", "close_ratio": "1.0"}
+    ],
+    "risk": {
+      "risk_percent": "1.0",
+      "risk_multiplier": "1.0",
+      "max_volume": 100000,
+      "max_group_risk_percent": "2.0"
+    },
+    "sizing": {
+      "mode": "equity_table",
+      "table_version": "owner_equity_v1",
+      "entry_distribution": "zone_scale",
+      "leg_ratios": ["0.70", "0.30"]
+    },
+    "management": {
+      "be_after_target_id": null,
+      "be_buffer_ticks": 6,
+      "never_worsen_stop": true
+    },
+    "execution_policy": {
+      "allow_market": true,
+      "allow_limit": true,
+      "allow_partial_fill": true,
+      "cancel_on_expiry": true
+    },
+    "provenance": {
+      "analysis_engine_version": "",
+      "market_map_id": "",
+      "config_fingerprint": ""
+    }
+  }
+  """;
+
+  [Fact]
+  public async Task MarketWithLimitScaleGetsAThirdRiskLegRestingNearTheStop()
+  {
+    var store = new FakeTradePlanStore();
+    store.EnqueuePlan(MarketWithLimitScaleRiskLegPlanJson());
+    var client = new FakeTradePlanTradingClient { AccountEquity = 1_300m, AccountBalance = 1_300m };
+    var runtime = new TradePlanRuntime(
+      Options() with { ReactionRiskLegEnabled = true }, store, () => DateTimeOffset.UtcNow, _ => { }
+    );
+
+    await runtime.PollAsync(
+      client, Symbol, new SpotPrice("XAU", 4089.00m, 4089.10m, 1), CancellationToken.None
+    );
+
+    Assert.Single(client.MarketOrders);
+    Assert.Equal(2, client.LimitOrders.Count);
+    var risk = Assert.Single(client.LimitOrders, o => o.ClientOrderId.EndsWith(":RISK"));
+    // stop 4079.00 + 15 pips * 0.1 pip size = 4080.50 (BUY: entry side of stop).
+    Assert.Equal(4080.50m, risk.LimitPrice);
+    // $1,300 equity clears the $1,000 floor -> the default 0.05 lots (500 @ 10k lot size).
+    Assert.Equal(500, risk.Volume);
+    Assert.Equal(TradeDirection.Buy, risk.Direction);
+  }
+
+  [Fact]
+  public async Task RiskLegPriceMirrorsForSell()
+  {
+    var store = new FakeTradePlanStore();
+    store.EnqueuePlan(
+      MarketWithLimitScaleRiskLegPlanJson(
+        direction: "SELL", stopPrice: 4095.00m, targetPrice: 4077.00m
+      )
+    );
+    var client = new FakeTradePlanTradingClient { AccountEquity = 1_300m, AccountBalance = 1_300m };
+    var runtime = new TradePlanRuntime(
+      Options() with { ReactionRiskLegEnabled = true }, store, () => DateTimeOffset.UtcNow, _ => { }
+    );
+
+    await runtime.PollAsync(
+      client, Symbol, new SpotPrice("XAU", 4089.00m, 4089.10m, 1), CancellationToken.None
+    );
+
+    var risk = Assert.Single(client.LimitOrders, o => o.ClientOrderId.EndsWith(":RISK"));
+    // stop 4095.00 - 15 pips * 0.1 = 4093.50 (SELL: entry side of stop).
+    Assert.Equal(4093.50m, risk.LimitPrice);
+    Assert.Equal(TradeDirection.Sell, risk.Direction);
+  }
+
+  [Fact]
+  public async Task RiskLegVolumeDropsBelowTheThousandDollarEquityFloor()
+  {
+    var store = new FakeTradePlanStore();
+    store.EnqueuePlan(MarketWithLimitScaleRiskLegPlanJson());
+    var client = new FakeTradePlanTradingClient { AccountEquity = 800m, AccountBalance = 800m };
+    var runtime = new TradePlanRuntime(
+      Options() with { ReactionRiskLegEnabled = true }, store, () => DateTimeOffset.UtcNow, _ => { }
+    );
+
+    await runtime.PollAsync(
+      client, Symbol, new SpotPrice("XAU", 4089.00m, 4089.10m, 1), CancellationToken.None
+    );
+
+    var risk = Assert.Single(client.LimitOrders, o => o.ClientOrderId.EndsWith(":RISK"));
+    // Below the $1,000 floor -> 0.02 lots (200 @ 10k lot size), independent
+    // of whatever the main ladder's own equity-table sizing produced.
+    Assert.Equal(200, risk.Volume);
+  }
+
+  [Fact]
+  public async Task SingleLegEntriesNeverGetARiskLeg()
+  {
+    var store = new FakeTradePlanStore();
+    store.EnqueuePlan(PlanJson());
+    var client = new FakeTradePlanTradingClient { AccountEquity = 1_300m, AccountBalance = 1_300m };
+    var runtime = new TradePlanRuntime(
+      Options() with { ReactionRiskLegEnabled = true }, store, () => DateTimeOffset.UtcNow, _ => { }
+    );
+
+    await runtime.PollAsync(
+      client, Symbol, new SpotPrice("XAU", 4089.05m, 4089.10m, 1), CancellationToken.None
+    );
+
+    Assert.DoesNotContain(client.LimitOrders, o => o.ClientOrderId.EndsWith(":RISK"));
+    Assert.DoesNotContain(client.MarketOrders, o => o.ClientOrderId.EndsWith(":RISK"));
+  }
+
+  [Fact]
+  public async Task RiskLegIsNotResubmittedOnASecondPoll()
+  {
+    var store = new FakeTradePlanStore();
+    store.EnqueuePlan(MarketWithLimitScaleRiskLegPlanJson());
+    var client = new FakeTradePlanTradingClient { AccountEquity = 1_300m, AccountBalance = 1_300m };
+    var runtime = new TradePlanRuntime(
+      Options() with { ReactionRiskLegEnabled = true }, store, () => DateTimeOffset.UtcNow, _ => { }
+    );
+
+    await runtime.PollAsync(
+      client, Symbol, new SpotPrice("XAU", 4089.00m, 4089.10m, 1), CancellationToken.None
+    );
+    Assert.Equal(1, client.LimitOrders.Count(o => o.ClientOrderId.EndsWith(":RISK")));
+
+    // A later poll (e.g. after a restart reloads the same persisted state)
+    // must not place a second RISK order for the same plan.
+    await runtime.PollAsync(
+      client, Symbol, new SpotPrice("XAU", 4088.50m, 4088.60m, 2), CancellationToken.None
+    );
+    Assert.Equal(1, client.LimitOrders.Count(o => o.ClientOrderId.EndsWith(":RISK")));
+  }
+
+  [Fact]
+  public void WeightedFillPriceExcludesTheRiskLegWhenOthersAreFilled()
+  {
+    var legs = new[]
+    {
+      new TradePlanLegRuntimeState(
+        LegId: "L1", IntendedPrice: 4089.10m, DeclaredRatio: 0.70m,
+        IntendedVolume: 700, IntendedLots: 0.07m, ClientOrderId: "v8:p:L1",
+        FillPrice: 4089.10m, FilledVolume: 700
+      ),
+      new TradePlanLegRuntimeState(
+        LegId: "L2", IntendedPrice: 4085.00m, DeclaredRatio: 0.30m,
+        IntendedVolume: 300, IntendedLots: 0.03m, ClientOrderId: "v8:p:L2",
+        FillPrice: 4085.00m, FilledVolume: 300
+      ),
+      // Filled far deeper than either real leg - if included, this would
+      // drag the reference price down and understate a real loss (or
+      // overstate a real win) on every close that isn't a genuine TP
+      // archive.
+      new TradePlanLegRuntimeState(
+        LegId: "RISK", IntendedPrice: 4080.50m, DeclaredRatio: 0m,
+        IntendedVolume: 500, IntendedLots: 0.05m, ClientOrderId: "v8:p:RISK",
+        FillPrice: 4080.50m, FilledVolume: 500
+      ),
+    };
+
+    var withRiskLeg = TradePlanJson.WeightedFillPrice(legs);
+    var withoutRiskLeg = TradePlanJson.WeightedFillPrice(
+      legs.Where(leg => !TradePlanRuntime.IsReactionRiskLeg(leg.LegId)).ToArray()
+    );
+
+    // (4089.10*700 + 4085.00*300) / 1000 = 4087.87
+    Assert.Equal(4087.87m, withoutRiskLeg);
+    // Sanity: including the deep risk-leg fill genuinely pulls the average
+    // down, proving the exclusion above is not a no-op.
+    Assert.True(withRiskLeg < withoutRiskLeg);
+  }
+
+  [Fact]
+  public void IsReactionRiskLegOnlyMatchesTheExactReservedLegId()
+  {
+    Assert.True(TradePlanRuntime.IsReactionRiskLeg("RISK"));
+    Assert.False(TradePlanRuntime.IsReactionRiskLeg("L1"));
+    Assert.False(TradePlanRuntime.IsReactionRiskLeg("L2"));
+    Assert.False(TradePlanRuntime.IsReactionRiskLeg("risk"));
+    Assert.False(TradePlanRuntime.IsReactionRiskLeg(""));
   }
 
   private sealed class FakeTradePlanTradingClient : ICTraderTradeClient

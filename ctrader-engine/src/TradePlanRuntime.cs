@@ -2184,6 +2184,29 @@ public sealed class TradePlanRuntime(
         },
       ];
     }
+    if (
+      options.ReactionRiskLegEnabled
+      && (plan.Entry.Legs?.Count ?? 0) > 1
+      && plan.Entry.Type
+        is TradePlanContract.EntryTypeLimitLadder
+        or TradePlanContract.EntryTypeMarketWithLimitScale
+    )
+    {
+      var riskLegVolume = ReactionRiskLegVolume(equity.Equity, symbol);
+      declaredLegs =
+      [
+        .. declaredLegs,
+        new DeclaredLeg(
+          ReactionRiskLegId,
+          ReactionRiskLegPrice(direction, absoluteStop, units.PipSize, symbol),
+          0m, // fixed equity-tiered size, not a share of the plan's own
+              // equity-table volume - see ReactionRiskLegVolume.
+          riskLegVolume,
+          riskLegVolume / (decimal)symbol.LotSize,
+          TradePlanContract.OrderTypeLimit
+        ),
+      ];
+    }
 
     var runtimeLegs = new List<TradePlanLegRuntimeState>(state.Legs ?? []);
     EnsurePlannedLegs(runtimeLegs, declaredLegs, plan);
@@ -3975,6 +3998,55 @@ public sealed class TradePlanRuntime(
     );
   }
 
+  // Owner 2026-09-16: reaction-family "trade-off" risk leg - same spirit as
+  // Manual Algo's own (ManualAlgoRiskLegPrice/Volume in AutoTradeEngine.cs)
+  // but computed independently here, since TradePlan v8 is a fully
+  // separate execution path Manual Algo never touches. Resting
+  // deliberately close to the stop: if price nearly invalidates the setup
+  // before reversing, this leg still catches a much deeper (better) fill
+  // than L1/L2 ever would; if price keeps going instead, the small fixed
+  // size caps the extra loss. Equity-tiered off live account equity, not
+  // scaled from the plan's own equity-table sizing - a large account books
+  // the same small fixed size here as a smaller one above the floor,
+  // exactly like Manual Algo's. Purely a C# addition: Python never plans
+  // or knows about this leg, exactly like it never knew about Manual
+  // Algo's - see options.ReactionRiskLegEnabled for the kill switch.
+  private const string ReactionRiskLegId = "RISK";
+  private const decimal ReactionRiskLegLotsDefault = 0.05m;
+  private const decimal ReactionRiskLegLotsBelowEquityFloor = 0.02m;
+  private const decimal ReactionRiskLegEquityFloor = 1_000m;
+  private const decimal ReactionRiskLegPipsFromStop = 15m;
+
+  private static decimal ReactionRiskLegPrice(
+    TradeDirection direction,
+    decimal stopPrice,
+    decimal pipSize,
+    SymbolInfo symbol
+  ) => decimal.Round(
+    direction == TradeDirection.Buy
+      ? stopPrice + ReactionRiskLegPipsFromStop * pipSize
+      : stopPrice - ReactionRiskLegPipsFromStop * pipSize,
+    symbol.Digits,
+    MidpointRounding.AwayFromZero
+  );
+
+  private static long ReactionRiskLegVolume(decimal equity, SymbolInfo symbol) =>
+    VolumePlanner.VolumeForLots(
+      equity < ReactionRiskLegEquityFloor
+        ? ReactionRiskLegLotsBelowEquityFloor
+        : ReactionRiskLegLotsDefault,
+      symbol
+    );
+
+  /// <summary>
+  /// True for the leg <see cref="ReactionRiskLegId"/> injected above - used
+  /// wherever a group's realized/loss pips must exclude this leg's own
+  /// contribution unless a genuine TP was actually archived, mirroring
+  /// AutoTradeEngine's IsManualRiskLeg/includeRiskLeg for Manual Algo.
+  /// </summary>
+  public static bool IsReactionRiskLeg(string legId) =>
+    string.Equals(legId, ReactionRiskLegId, StringComparison.Ordinal);
+
   private static IReadOnlyList<DeclaredLeg> BuildDeclaredLegs(
     TradePlan plan,
     TradePlanVolumePlan volumePlan,
@@ -4167,7 +4239,16 @@ public sealed class TradePlanRuntime(
     decimal exitPrice
   )
   {
-    var weightedFill = state.GroupWeightedFillPrice ?? state.EntryFillPrice;
+    // Owner-directed 2026-09-16 (matching the Manual Algo risk-leg decision
+    // in AutoTradeEngine.cs): this is only ever reached when no TP was
+    // archived (see the sole call site's `highestTp is null` guard), so the
+    // risk leg's own real fill must NOT drag the loss-pips reference toward
+    // its own deliberately-deeper price - it only counts when archived as
+    // part of a genuine TP win, which takes the other code path entirely.
+    var referenceLegs = (state.Legs ?? [])
+      .Where(leg => !IsReactionRiskLeg(leg.LegId))
+      .ToArray();
+    var weightedFill = TradePlanJson.WeightedFillPrice(referenceLegs) ?? state.EntryFillPrice;
     var pipSize = PipSizeFor(plan.Symbol);
     if (
       pipSize <= 0
