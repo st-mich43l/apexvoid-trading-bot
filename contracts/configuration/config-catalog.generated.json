@@ -1,20 +1,20 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "e74c3337032dcbddb9ff36dc04ec4b7accf55381dfc063cdc8ef0123e5915a68",
-  "configuration_document_fingerprint_sha256": "80091dedf34351f19f8874d14b6078b097d1ea607277bfb640c52fc1fea9e59d",
+  "configuration_contract_fingerprint_sha256": "d6f6e79714362d5fc41eaf665d49230892a47fe407eda4efe217a6b332d6b72c",
+  "configuration_document_fingerprint_sha256": "e97e98888a09907dee330b3f36ea9bf277e6469ad14820ec631b431a06bf3e09",
   "counts": {
     "algorithm_constants": 97,
-    "configurable": 525,
+    "configurable": 546,
     "known_conflicts": 30,
     "owners": {
       "ctrader": 49,
-      "python": 487,
+      "python": 508,
       "shared": 96
     },
     "protocol_constants": 10,
     "secrets": 9,
     "shared": 96,
-    "total_items": 632
+    "total_items": 653
   },
   "items": [
     {
@@ -20738,6 +20738,84 @@
     {
       "algorithm_constant": false,
       "allowed_values": [],
+      "canonical_env": "SCALPING_BREAKOUT_ACCEPTANCE_BARS",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 1
+      },
+      "default": 1,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 1
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Bars immediately after the break evaluated for acceptance.",
+      "display_id": "config:strategies.scalping.breakout.acceptance_bars",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.breakout.acceptance_bars",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "int",
+      "unit": "bars",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_BREAKOUT_ACCEPTANCE_REQUIRED_CLOSES",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 1
+      },
+      "default": 1,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 1
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Of the acceptance_bars window, how many closes must remain beyond the level.",
+      "display_id": "config:strategies.scalping.breakout.acceptance_required_closes",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.breakout.acceptance_required_closes",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "int",
+      "unit": "count",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
       "canonical_env": "SCALPING_BREAKOUT_BOX_MAX_ATR",
       "catalog_version": 2,
       "configurable": true,
@@ -20777,6 +20855,432 @@
     {
       "algorithm_constant": false,
       "allowed_values": [],
+      "canonical_env": "SCALPING_BREAKOUT_CROSS_TOLERANCE_ATR",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 0
+      },
+      "default": 0.0,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 0.0
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "How far below/above the level the prior close may sit and still count as the pre-break bar.",
+      "display_id": "config:strategies.scalping.breakout.breakout_cross_tolerance_atr",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.breakout.breakout_cross_tolerance_atr",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "atr",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_BREAKOUT_MARGIN_ATR",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 0
+      },
+      "default": 0.0,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 0.0
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Minimum close displacement beyond the level for a true crossing (V2 is_true_level_cross).",
+      "display_id": "config:strategies.scalping.breakout.breakout_margin_atr",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.breakout.breakout_margin_atr",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "atr",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_BREAKOUT_SPREAD_MULTIPLIER",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 0
+      },
+      "default": 1.5,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 1.5
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Spread multiple folded into the breakout margin floor alongside the ATR component.",
+      "display_id": "config:strategies.scalping.breakout.breakout_spread_multiplier",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.breakout.breakout_spread_multiplier",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "multiplier",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [
+        "reclaim_close",
+        "retest_high_break"
+      ],
+      "canonical_env": "SCALPING_BREAKOUT_CONFIRMATION_MODE",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "pattern": "^(reclaim_close|retest_high_break)$"
+      },
+      "default": "reclaim_close",
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": "reclaim_close"
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Mandatory retest-confirmation rule: reclaim_close (role-flip close only) or retest_high_break (also requires the next bar to break the retest bar high/low).",
+      "display_id": "config:strategies.scalping.breakout.confirmation_mode",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.breakout.confirmation_mode",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "str",
+      "unit": "enum",
+      "validation_summary": "Pydantic type coercion + field validator"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_BREAKOUT_ENABLE_LIQUIDITY_LEVEL",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {},
+      "default": true,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": true
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Consider EQH/EQL liquidity-level candidates (from MicroStructure.equal_highs/equal_lows).",
+      "display_id": "config:strategies.scalping.breakout.enable_liquidity_level",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.breakout.enable_liquidity_level",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "bool",
+      "unit": "boolean",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_BREAKOUT_ENABLE_STRUCTURE_FLIP_M1",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {},
+      "default": true,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": true
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Consider M1 swing-high/low candidate levels, not only the compression box.",
+      "display_id": "config:strategies.scalping.breakout.enable_structure_flip_m1",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.breakout.enable_structure_flip_m1",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "bool",
+      "unit": "boolean",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_BREAKOUT_ENABLE_STRUCTURE_FLIP_M5",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {},
+      "default": true,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": true
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Consider M5 structural key-level candidates (from ScalpContextSnapshot.key_levels).",
+      "display_id": "config:strategies.scalping.breakout.enable_structure_flip_m5",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.breakout.enable_structure_flip_m5",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "bool",
+      "unit": "boolean",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_BREAKOUT_M1_SWING_MAX_AGE_BARS",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 1
+      },
+      "default": 240,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 240
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Maximum age of an M1 swing before it is considered stale as a breakout candidate level.",
+      "display_id": "config:strategies.scalping.breakout.m1_swing_max_age_bars",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.breakout.m1_swing_max_age_bars",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "int",
+      "unit": "bars",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_BREAKOUT_M1_SWING_MIN_AGE_BARS",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 0
+      },
+      "default": 3,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 3
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Minimum age of an M1 swing before it is offered as a breakout candidate level.",
+      "display_id": "config:strategies.scalping.breakout.m1_swing_min_age_bars",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.breakout.m1_swing_min_age_bars",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "int",
+      "unit": "bars",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_BREAKOUT_M1_SWING_MIN_SPACING_ATR",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 0
+      },
+      "default": 0.3,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 0.3
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Minimum spacing between kept M1 swing candidates so one pivot cluster does not produce redundant levels.",
+      "display_id": "config:strategies.scalping.breakout.m1_swing_min_spacing_atr",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.breakout.m1_swing_min_spacing_atr",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "atr",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_BREAKOUT_M5_STRUCTURE_MIN_TOUCHES",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 1
+      },
+      "default": 2,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 2
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Minimum touches an M5 key level needs before it is offered as a breakout candidate level.",
+      "display_id": "config:strategies.scalping.breakout.m5_structure_min_touches",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.breakout.m5_structure_min_touches",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "int",
+      "unit": "count",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
       "canonical_env": "SCALPING_BREAKOUT_MAX_BOX_BARS",
       "catalog_version": 2,
       "configurable": true,
@@ -20811,6 +21315,162 @@
       "terminal_deprecation_reason": null,
       "type": "int",
       "unit": "bars",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_BREAKOUT_MAX_BREAK_DELAY_BARS",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 1
+      },
+      "default": null,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": null
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Bars after a candidate level source within which a break must occur; unset = no cap beyond the source-index binding.",
+      "display_id": "config:strategies.scalping.breakout.max_break_delay_bars",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.breakout.max_break_delay_bars",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "Optional[int]",
+      "unit": "bars",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_BREAKOUT_MAX_RETEST_DELAY_BARS",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 1
+      },
+      "default": 20,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 20
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Bars after the break beyond which an unretested episode expires (retest_too_late).",
+      "display_id": "config:strategies.scalping.breakout.max_retest_delay_bars",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.breakout.max_retest_delay_bars",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "int",
+      "unit": "bars",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_BREAKOUT_MAX_RETEST_PENETRATION_ATR",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 0
+      },
+      "default": 0.3,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 0.3
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Maximum wick penetration through the level before a retest is rejected as too deep.",
+      "display_id": "config:strategies.scalping.breakout.max_retest_penetration_atr",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.breakout.max_retest_penetration_atr",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "atr",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_BREAKOUT_MAX_RETEST_PENETRATION_MAD",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 0
+      },
+      "default": null,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": null
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Optional MAD-normalized penetration cap alongside the ATR one; unset = ATR cap only.",
+      "display_id": "config:strategies.scalping.breakout.max_retest_penetration_mad",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.breakout.max_retest_penetration_mad",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "Optional[float]",
+      "unit": "ratio",
       "validation_summary": "Pydantic required/type coercion only"
     },
     {
@@ -20894,6 +21554,85 @@
     {
       "algorithm_constant": false,
       "allowed_values": [],
+      "canonical_env": "SCALPING_BREAKOUT_MIN_QUALITY_SCORE",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 0,
+        "le": 100
+      },
+      "default": 0.0,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 0.0
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Minimum 0-100 quality score required to arm; 0 = non-blocking until empirically tuned from replay/production telemetry.",
+      "display_id": "config:strategies.scalping.breakout.min_quality_score",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.breakout.min_quality_score",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "score",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_BREAKOUT_MIN_RETEST_DELAY_BARS",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 0
+      },
+      "default": 0,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 0
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Bars after the break before a retest is even considered.",
+      "display_id": "config:strategies.scalping.breakout.min_retest_delay_bars",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.breakout.min_retest_delay_bars",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "int",
+      "unit": "bars",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
       "canonical_env": "SCALPING_BREAKOUT_MIN_TOUCHES_PER_SIDE",
       "catalog_version": 2,
       "configurable": true,
@@ -20965,6 +21704,45 @@
       "terminal_deprecation_reason": null,
       "type": "bool",
       "unit": "boolean",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_BREAKOUT_RETEST_FRONT_RUN_ATR",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 0
+      },
+      "default": 0.0,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 0.0
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "How far short of the level a retest wick may stop and still count as an interaction.",
+      "display_id": "config:strategies.scalping.breakout.retest_front_run_atr",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.breakout.retest_front_run_atr",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "atr",
       "validation_summary": "Pydantic required/type coercion only"
     },
     {
@@ -21043,6 +21821,43 @@
       "terminal_deprecation_reason": null,
       "type": "float",
       "unit": "atr",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCALPING_BREAKOUT_V2_ENABLED",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {},
+      "default": true,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": true
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Use the generalized multi-source Breakout Retest engine covering compression, M1/M5 structure, and liquidity levels.",
+      "display_id": "config:strategies.scalping.breakout.v2_enabled",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "strategies.scalping.breakout.v2_enabled",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "strategy_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "bool",
+      "unit": "boolean",
       "validation_summary": "Pydantic required/type coercion only"
     },
     {
@@ -23552,6 +24367,6 @@
       "validation_summary": "Pydantic required/type coercion only"
     }
   ],
-  "source_fingerprint_sha256": "e74c3337032dcbddb9ff36dc04ec4b7accf55381dfc063cdc8ef0123e5915a68",
+  "source_fingerprint_sha256": "d6f6e79714362d5fc41eaf665d49230892a47fe407eda4efe217a6b332d6b72c",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

@@ -45,13 +45,16 @@ BASELINE = {
   # (execution.reaction.risk_targeted_entry_enabled).
   # 2026-09-16 Owner DM daily wipe: +1
   # (delivery.telegram.owner_dm_daily_wipe_enabled).
-  "catalog_entry_count": 632,
-  "configurable_count": 525,
+  # 2026-09-16 Breakout Retest V2 rebuild: +21 new leaf fields under
+  # strategies.scalping.breakout.* (all real canonical_env, all
+  # ConfigOwner.PYTHON).
+  "catalog_entry_count": 653,
+  "configurable_count": 546,
   "protocol_constant_count": 10,
   "algorithm_constant_count": 97,
-  "python_projection_count": 583,
+  "python_projection_count": 604,
   "ctrader_only_count": 49,
-  "environment_entry_count": 525,
+  "environment_entry_count": 546,
   "deprecated_alias_count": 21,
   "shared_count": 96,
 }

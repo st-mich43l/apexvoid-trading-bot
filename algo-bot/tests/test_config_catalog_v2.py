@@ -67,13 +67,23 @@ BASELINE = {
   # 2026-09-16 Owner DM daily wipe: +1 new leaf field
   # (delivery.telegram.owner_dm_daily_wipe_enabled), real canonical_env,
   # ConfigOwner.PYTHON, not deprecated-alias'd.
-  "entries": 632,
-  "configurable": 525,
+  # 2026-09-16 Breakout Retest V2 rebuild: +21 new leaf fields under
+  # strategies.scalping.breakout.* (v2_enabled, breakout_cross_tolerance_atr,
+  # breakout_margin_atr, breakout_spread_multiplier, max_break_delay_bars,
+  # acceptance_bars, acceptance_required_closes, min_retest_delay_bars,
+  # max_retest_delay_bars, retest_front_run_atr, max_retest_penetration_atr,
+  # max_retest_penetration_mad, confirmation_mode, min_quality_score,
+  # enable_structure_flip_m1, enable_structure_flip_m5,
+  # enable_liquidity_level, m1_swing_min_age_bars, m1_swing_max_age_bars,
+  # m1_swing_min_spacing_atr, m5_structure_min_touches), all real
+  # canonical_env, all ConfigOwner.PYTHON, none deprecated-alias'd.
+  "entries": 653,
+  "configurable": 546,
   "protocol": 10,
   "algorithm": 97,
-  "owners": {"python": 487, "shared": 96, "ctrader": 49},
-  "projection": 583,
-  "env": 525,
+  "owners": {"python": 508, "shared": 96, "ctrader": 49},
+  "projection": 604,
+  "env": 546,
   "deprecated_aliases": 21,
 }
 
