@@ -3,9 +3,9 @@
 > Generated from the typed `ApexVoidConfig` Catalog V2 schema. Do not edit manually.
 
 - Catalog version: `2`
-- Contract fingerprint: `e74c3337032dcbddb9ff36dc04ec4b7accf55381dfc063cdc8ef0123e5915a68`
-- Document fingerprint: `80091dedf34351f19f8874d14b6078b097d1ea607277bfb640c52fc1fea9e59d`
-- Items: `632`
+- Contract fingerprint: `d6f6e79714362d5fc41eaf665d49230892a47fe407eda4efe217a6b332d6b72c`
+- Document fingerprint: `e97e98888a09907dee330b3f36ea9bf277e6469ad14820ec631b431a06bf3e09`
+- Items: `653`
 - Runtime status: canonical-only; `app.core.config.runtime_config` is authoritative
 
 ## actionability
@@ -626,14 +626,35 @@
 | `strategies.scalping.archetypes.pullback_corrective_ratio` | `SCALPING_PULLBACK_CORRECTIVE_RATIO` | `float` | `fraction` | `configurable` | `0.7` |
 | `strategies.scalping.archetypes.pullback_extreme_confirm_bars` | `SCALPING_PULLBACK_EXTREME_CONFIRM_BARS` | `int` | `bars` | `configurable` | `2` |
 | `strategies.scalping.archetypes.range_sweep_enabled` | `SCALPING_RANGE_SWEEP_ENABLED` | `bool` | `boolean` | `configurable` | `true` |
+| `strategies.scalping.breakout.acceptance_bars` | `SCALPING_BREAKOUT_ACCEPTANCE_BARS` | `int` | `bars` | `configurable` | `1` |
+| `strategies.scalping.breakout.acceptance_required_closes` | `SCALPING_BREAKOUT_ACCEPTANCE_REQUIRED_CLOSES` | `int` | `count` | `configurable` | `1` |
 | `strategies.scalping.breakout.box_max_atr` | `SCALPING_BREAKOUT_BOX_MAX_ATR` | `float` | `atr` | `configurable` | `1.5` |
+| `strategies.scalping.breakout.breakout_cross_tolerance_atr` | `SCALPING_BREAKOUT_CROSS_TOLERANCE_ATR` | `float` | `atr` | `configurable` | `0.0` |
+| `strategies.scalping.breakout.breakout_margin_atr` | `SCALPING_BREAKOUT_MARGIN_ATR` | `float` | `atr` | `configurable` | `0.0` |
+| `strategies.scalping.breakout.breakout_spread_multiplier` | `SCALPING_BREAKOUT_SPREAD_MULTIPLIER` | `float` | `multiplier` | `configurable` | `1.5` |
+| `strategies.scalping.breakout.confirmation_mode` | `SCALPING_BREAKOUT_CONFIRMATION_MODE` | `str` | `enum` | `configurable` | `"reclaim_close"` |
+| `strategies.scalping.breakout.enable_liquidity_level` | `SCALPING_BREAKOUT_ENABLE_LIQUIDITY_LEVEL` | `bool` | `boolean` | `configurable` | `true` |
+| `strategies.scalping.breakout.enable_structure_flip_m1` | `SCALPING_BREAKOUT_ENABLE_STRUCTURE_FLIP_M1` | `bool` | `boolean` | `configurable` | `true` |
+| `strategies.scalping.breakout.enable_structure_flip_m5` | `SCALPING_BREAKOUT_ENABLE_STRUCTURE_FLIP_M5` | `bool` | `boolean` | `configurable` | `true` |
+| `strategies.scalping.breakout.m1_swing_max_age_bars` | `SCALPING_BREAKOUT_M1_SWING_MAX_AGE_BARS` | `int` | `bars` | `configurable` | `240` |
+| `strategies.scalping.breakout.m1_swing_min_age_bars` | `SCALPING_BREAKOUT_M1_SWING_MIN_AGE_BARS` | `int` | `bars` | `configurable` | `3` |
+| `strategies.scalping.breakout.m1_swing_min_spacing_atr` | `SCALPING_BREAKOUT_M1_SWING_MIN_SPACING_ATR` | `float` | `atr` | `configurable` | `0.3` |
+| `strategies.scalping.breakout.m5_structure_min_touches` | `SCALPING_BREAKOUT_M5_STRUCTURE_MIN_TOUCHES` | `int` | `count` | `configurable` | `2` |
 | `strategies.scalping.breakout.max_box_bars` | `SCALPING_BREAKOUT_MAX_BOX_BARS` | `int` | `bars` | `configurable` | `20` |
+| `strategies.scalping.breakout.max_break_delay_bars` | `SCALPING_BREAKOUT_MAX_BREAK_DELAY_BARS` | `Optional[int]` | `bars` | `configurable` | `null` |
+| `strategies.scalping.breakout.max_retest_delay_bars` | `SCALPING_BREAKOUT_MAX_RETEST_DELAY_BARS` | `int` | `bars` | `configurable` | `20` |
+| `strategies.scalping.breakout.max_retest_penetration_atr` | `SCALPING_BREAKOUT_MAX_RETEST_PENETRATION_ATR` | `float` | `atr` | `configurable` | `0.3` |
+| `strategies.scalping.breakout.max_retest_penetration_mad` | `SCALPING_BREAKOUT_MAX_RETEST_PENETRATION_MAD` | `Optional[float]` | `ratio` | `configurable` | `null` |
 | `strategies.scalping.breakout.min_box_bars` | `SCALPING_BREAKOUT_MIN_BOX_BARS` | `int` | `bars` | `configurable` | `8` |
 | `strategies.scalping.breakout.min_break_atr` | `SCALPING_BREAKOUT_MIN_BREAK_ATR` | `float` | `atr` | `configurable` | `0.25` |
+| `strategies.scalping.breakout.min_quality_score` | `SCALPING_BREAKOUT_MIN_QUALITY_SCORE` | `float` | `score` | `configurable` | `0.0` |
+| `strategies.scalping.breakout.min_retest_delay_bars` | `SCALPING_BREAKOUT_MIN_RETEST_DELAY_BARS` | `int` | `bars` | `configurable` | `0` |
 | `strategies.scalping.breakout.min_touches_per_side` | `SCALPING_BREAKOUT_MIN_TOUCHES_PER_SIDE` | `int` | `count` | `configurable` | `2` |
 | `strategies.scalping.breakout.require_retest_rejection` | `SCALPING_BREAKOUT_REQUIRE_RETEST_REJECTION` | `bool` | `boolean` | `configurable` | `true` |
+| `strategies.scalping.breakout.retest_front_run_atr` | `SCALPING_BREAKOUT_RETEST_FRONT_RUN_ATR` | `float` | `atr` | `configurable` | `0.0` |
 | `strategies.scalping.breakout.retest_lookback_bars` | `SCALPING_BREAKOUT_RETEST_LOOKBACK_BARS` | `int` | `bars` | `configurable` | `5` |
 | `strategies.scalping.breakout.touch_tol_atr` | `SCALPING_BREAKOUT_TOUCH_TOL_ATR` | `float` | `atr` | `configurable` | `0.2` |
+| `strategies.scalping.breakout.v2_enabled` | `SCALPING_BREAKOUT_V2_ENABLED` | `bool` | `boolean` | `configurable` | `true` |
 | `strategies.scalping.context.current_context_ttl_seconds` | `SCALPING_CURRENT_CONTEXT_TTL_SECONDS` | `int` | `seconds` | `configurable` | `3600` |
 | `strategies.scalping.context.historic_context_ttl_seconds` | `SCALPING_HISTORIC_CONTEXT_TTL_SECONDS` | `int` | `seconds` | `configurable` | `86400` |
 | `strategies.scalping.context.m1_lookback_bars` | `SCALPING_M1_LOOKBACK_BARS` | `int` | `bars` | `configurable` | `60` |

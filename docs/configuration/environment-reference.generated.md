@@ -2,8 +2,8 @@
 
 > Generated from the canonical configuration catalog (`app.configuration.environment_contract`). Do not edit manually.
 
-- Contract fingerprint: `e74c3337032dcbddb9ff36dc04ec4b7accf55381dfc063cdc8ef0123e5915a68`
-- Environment-bound fields: `525`
+- Contract fingerprint: `d6f6e79714362d5fc41eaf665d49230892a47fe407eda4efe217a6b332d6b72c`
+- Environment-bound fields: `546`
 - Deprecated aliases: `21`
 
 Secret values are never emitted; secret defaults render as `<redacted>`.
@@ -398,15 +398,36 @@ Secret values are never emitted; secret defaults render as `<redacted>`.
 | `REACTION_MAX_ATR` | `analysis.reactions.max_atr` | `float` | no | no | — | `0.5` |
 | `REDIS_URL` | `bootstrap.redis.url` | `str` | no | yes | — | `redis://redis:6379/0` |
 | `ROUND_STEP` | `analysis.levels.round_step` | `float` | no | no | — | `5.0` |
+| `SCALPING_BREAKOUT_ACCEPTANCE_BARS` | `strategies.scalping.breakout.acceptance_bars` | `int` | no | no | — | `1` |
+| `SCALPING_BREAKOUT_ACCEPTANCE_REQUIRED_CLOSES` | `strategies.scalping.breakout.acceptance_required_closes` | `int` | no | no | — | `1` |
 | `SCALPING_BREAKOUT_BOX_MAX_ATR` | `strategies.scalping.breakout.box_max_atr` | `float` | no | no | — | `1.5` |
+| `SCALPING_BREAKOUT_CONFIRMATION_MODE` | `strategies.scalping.breakout.confirmation_mode` | `str` | no | no | — | `reclaim_close` |
+| `SCALPING_BREAKOUT_CROSS_TOLERANCE_ATR` | `strategies.scalping.breakout.breakout_cross_tolerance_atr` | `float` | no | no | — | `0.0` |
+| `SCALPING_BREAKOUT_ENABLE_LIQUIDITY_LEVEL` | `strategies.scalping.breakout.enable_liquidity_level` | `bool` | no | no | — | `True` |
+| `SCALPING_BREAKOUT_ENABLE_STRUCTURE_FLIP_M1` | `strategies.scalping.breakout.enable_structure_flip_m1` | `bool` | no | no | — | `True` |
+| `SCALPING_BREAKOUT_ENABLE_STRUCTURE_FLIP_M5` | `strategies.scalping.breakout.enable_structure_flip_m5` | `bool` | no | no | — | `True` |
+| `SCALPING_BREAKOUT_M1_SWING_MAX_AGE_BARS` | `strategies.scalping.breakout.m1_swing_max_age_bars` | `int` | no | no | — | `240` |
+| `SCALPING_BREAKOUT_M1_SWING_MIN_AGE_BARS` | `strategies.scalping.breakout.m1_swing_min_age_bars` | `int` | no | no | — | `3` |
+| `SCALPING_BREAKOUT_M1_SWING_MIN_SPACING_ATR` | `strategies.scalping.breakout.m1_swing_min_spacing_atr` | `float` | no | no | — | `0.3` |
+| `SCALPING_BREAKOUT_M5_STRUCTURE_MIN_TOUCHES` | `strategies.scalping.breakout.m5_structure_min_touches` | `int` | no | no | — | `2` |
+| `SCALPING_BREAKOUT_MARGIN_ATR` | `strategies.scalping.breakout.breakout_margin_atr` | `float` | no | no | — | `0.0` |
 | `SCALPING_BREAKOUT_MAX_BOX_BARS` | `strategies.scalping.breakout.max_box_bars` | `int` | no | no | — | `20` |
+| `SCALPING_BREAKOUT_MAX_BREAK_DELAY_BARS` | `strategies.scalping.breakout.max_break_delay_bars` | `Optional[int]` | no | no | — | `None` |
+| `SCALPING_BREAKOUT_MAX_RETEST_DELAY_BARS` | `strategies.scalping.breakout.max_retest_delay_bars` | `int` | no | no | — | `20` |
+| `SCALPING_BREAKOUT_MAX_RETEST_PENETRATION_ATR` | `strategies.scalping.breakout.max_retest_penetration_atr` | `float` | no | no | — | `0.3` |
+| `SCALPING_BREAKOUT_MAX_RETEST_PENETRATION_MAD` | `strategies.scalping.breakout.max_retest_penetration_mad` | `Optional[float]` | no | no | — | `None` |
 | `SCALPING_BREAKOUT_MIN_BOX_BARS` | `strategies.scalping.breakout.min_box_bars` | `int` | no | no | — | `8` |
 | `SCALPING_BREAKOUT_MIN_BREAK_ATR` | `strategies.scalping.breakout.min_break_atr` | `float` | no | no | — | `0.25` |
+| `SCALPING_BREAKOUT_MIN_QUALITY_SCORE` | `strategies.scalping.breakout.min_quality_score` | `float` | no | no | — | `0.0` |
+| `SCALPING_BREAKOUT_MIN_RETEST_DELAY_BARS` | `strategies.scalping.breakout.min_retest_delay_bars` | `int` | no | no | — | `0` |
 | `SCALPING_BREAKOUT_MIN_TOUCHES_PER_SIDE` | `strategies.scalping.breakout.min_touches_per_side` | `int` | no | no | — | `2` |
 | `SCALPING_BREAKOUT_REQUIRE_RETEST_REJECTION` | `strategies.scalping.breakout.require_retest_rejection` | `bool` | no | no | — | `True` |
 | `SCALPING_BREAKOUT_RETEST_ENABLED` | `strategies.scalping.archetypes.breakout_retest_enabled` | `bool` | no | no | — | `True` |
+| `SCALPING_BREAKOUT_RETEST_FRONT_RUN_ATR` | `strategies.scalping.breakout.retest_front_run_atr` | `float` | no | no | — | `0.0` |
 | `SCALPING_BREAKOUT_RETEST_LOOKBACK_BARS` | `strategies.scalping.breakout.retest_lookback_bars` | `int` | no | no | — | `5` |
+| `SCALPING_BREAKOUT_SPREAD_MULTIPLIER` | `strategies.scalping.breakout.breakout_spread_multiplier` | `float` | no | no | — | `1.5` |
 | `SCALPING_BREAKOUT_TOUCH_TOL_ATR` | `strategies.scalping.breakout.touch_tol_atr` | `float` | no | no | — | `0.2` |
+| `SCALPING_BREAKOUT_V2_ENABLED` | `strategies.scalping.breakout.v2_enabled` | `bool` | no | no | — | `True` |
 | `SCALPING_COOLDOWN_AFTER_LOSS_MINUTES` | `strategies.scalping.risk.cooldown_after_loss_minutes` | `int` | no | no | — | `5` |
 | `SCALPING_CURRENT_CONTEXT_TTL_SECONDS` | `strategies.scalping.context.current_context_ttl_seconds` | `int` | no | no | — | `3600` |
 | `SCALPING_DAILY_LOSS_LIMIT_R` | `strategies.scalping.risk.daily_loss_limit_r` | `float` | no | no | — | `3.0` |
