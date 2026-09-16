@@ -173,7 +173,10 @@ execution:
     room_stop_min_rr: 1.0
     scale_fraction: 0.2
     scale_invalid_policy: single_market
-    scale_step_atr: 0.5
+    # 2026-09-16: keep the file override aligned with the schema default.
+    # A 0.5x ATR second leg pushed the furthest stop beyond XAU's 60-pip
+    # envelope; 0.1x ATR retains a real scale while leaving stop headroom.
+    scale_step_atr: 0.1
     stop_max_pips: 60
     stop_min_pips: 40
   scaling:
@@ -211,7 +214,8 @@ execution:
     fill_enabled: true
     fill_fallback_enabled: true
     first_leg_fraction: 0.8
-    scale_step_atr: 0.5
+    # Same XAU reaction-ladder incident as execution.reaction above.
+    scale_step_atr: 0.1
     scale_undersized_policy: single_entry
 instrument_packs:
   fx_usd_major_v1:
