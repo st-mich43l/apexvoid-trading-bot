@@ -92,6 +92,7 @@ delivery:
   scanner_cards:
     top_n: 3
   telegram:
+    owner_dm_daily_wipe_enabled: true
     public_show_pips: true
     # Example local VIP channel id (production uses ansible / env secrets).
     telegram_channel_id: '-100123456789'
