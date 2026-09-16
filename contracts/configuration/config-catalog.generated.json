@@ -1,20 +1,20 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "b20e4f455a8a4905284ee4808defd57593d90d4cdb7739ad251b54413efd6987",
-  "configuration_document_fingerprint_sha256": "21750e115eaf1da5797b257e755830e331a66c7a3f56ccc0ac5f0de025c3f217",
+  "configuration_contract_fingerprint_sha256": "e74c3337032dcbddb9ff36dc04ec4b7accf55381dfc063cdc8ef0123e5915a68",
+  "configuration_document_fingerprint_sha256": "80091dedf34351f19f8874d14b6078b097d1ea607277bfb640c52fc1fea9e59d",
   "counts": {
     "algorithm_constants": 97,
-    "configurable": 524,
+    "configurable": 525,
     "known_conflicts": 30,
     "owners": {
       "ctrader": 49,
-      "python": 486,
+      "python": 487,
       "shared": 96
     },
     "protocol_constants": 10,
     "secrets": 9,
     "shared": 96,
-    "total_items": 631
+    "total_items": 632
   },
   "items": [
     {
@@ -9197,6 +9197,43 @@
       "mismatch_policy": "not_reported",
       "owner": "python",
       "path": "delivery.telegram.delete_root_on_terminal",
+      "protocol_constant": false,
+      "reload_policy": "immediate",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "delivery",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "bool",
+      "unit": "boolean",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "DELIVERY_OWNER_DM_DAILY_WIPE_ENABLED",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {},
+      "default": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": false
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Delete every message in the ApexVoid bot DM with the owner at each local trade-day rollover, both bot sends and owner messages; opt-in, irreversible.",
+      "display_id": "config:delivery.telegram.owner_dm_daily_wipe_enabled",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "delivery.telegram.owner_dm_daily_wipe_enabled",
       "protocol_constant": false,
       "reload_policy": "immediate",
       "replacement_path": null,
@@ -23515,6 +23552,6 @@
       "validation_summary": "Pydantic required/type coercion only"
     }
   ],
-  "source_fingerprint_sha256": "b20e4f455a8a4905284ee4808defd57593d90d4cdb7739ad251b54413efd6987",
+  "source_fingerprint_sha256": "e74c3337032dcbddb9ff36dc04ec4b7accf55381dfc063cdc8ef0123e5915a68",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

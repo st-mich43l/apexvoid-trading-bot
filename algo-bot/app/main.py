@@ -18,6 +18,7 @@ from app.persistence.store import init_db, close_pool
 from app.signals.watcher import watcher_loop
 from app.signals.calendar import calendar_sync_loop
 from app.signals.weekly_report import weekly_report_loop
+from app.bot.owner_dm_journal import owner_dm_daily_wipe_loop
 from app.analysis.bar_event_dispatcher import bar_event_dispatcher_loop
 from app.autotrade.delivery import auto_trade_events_loop
 from app.autotrade.stats_ingestion import (
@@ -140,6 +141,7 @@ async def main() -> None:
   _spawn_supervised("watcher_loop", watcher_loop)
   _spawn_supervised("calendar_sync_loop", calendar_sync_loop)
   _spawn_supervised("weekly_report_loop", weekly_report_loop)
+  _spawn_supervised("owner_dm_daily_wipe_loop", owner_dm_daily_wipe_loop)
   _spawn_supervised("bar_event_dispatcher_loop", bar_event_dispatcher_loop)
   _spawn_supervised("zone_watch_execution_loop", zone_watch_execution_loop)
   # strategy_match_ready_loop removed from production startup: ZoneWatch →
