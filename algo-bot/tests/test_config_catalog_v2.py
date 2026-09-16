@@ -64,13 +64,16 @@ BASELINE = {
   # 2026-09-15 XAU auto algo risk-band rework: +1 new leaf field
   # (execution.reaction.risk_targeted_entry_enabled), real canonical_env,
   # ConfigOwner.PYTHON, not deprecated-alias'd.
-  "entries": 631,
-  "configurable": 524,
+  # 2026-09-16 Owner DM daily wipe: +1 new leaf field
+  # (delivery.telegram.owner_dm_daily_wipe_enabled), real canonical_env,
+  # ConfigOwner.PYTHON, not deprecated-alias'd.
+  "entries": 632,
+  "configurable": 525,
   "protocol": 10,
   "algorithm": 97,
-  "owners": {"python": 486, "shared": 96, "ctrader": 49},
-  "projection": 582,
-  "env": 524,
+  "owners": {"python": 487, "shared": 96, "ctrader": 49},
+  "projection": 583,
+  "env": 525,
   "deprecated_aliases": 21,
 }
 

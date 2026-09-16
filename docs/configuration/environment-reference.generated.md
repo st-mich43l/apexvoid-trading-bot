@@ -2,8 +2,8 @@
 
 > Generated from the canonical configuration catalog (`app.configuration.environment_contract`). Do not edit manually.
 
-- Contract fingerprint: `b20e4f455a8a4905284ee4808defd57593d90d4cdb7739ad251b54413efd6987`
-- Environment-bound fields: `524`
+- Contract fingerprint: `e74c3337032dcbddb9ff36dc04ec4b7accf55381dfc063cdc8ef0123e5915a68`
+- Environment-bound fields: `525`
 - Deprecated aliases: `21`
 
 Secret values are never emitted; secret defaults render as `<redacted>`.
@@ -293,6 +293,7 @@ Secret values are never emitted; secret defaults render as `<redacted>`.
 | `DAILY_ROLLOVER_UTC_HOUR` | `market_data.sessions.daily_rollover_utc_hour` | `int` | no | no | — | `21` |
 | `DATABASE_URL` | `bootstrap.postgres.url` | `str` | yes | no | `POSTGRES_DSN` | `<redacted>` |
 | `DELIVERY_DELETE_ON_TERMINAL` | `delivery.lifecycle.delete_on_terminal` | `bool` | no | no | — | `True` |
+| `DELIVERY_OWNER_DM_DAILY_WIPE_ENABLED` | `delivery.telegram.owner_dm_daily_wipe_enabled` | `bool` | no | no | — | `False` |
 | `DELIVERY_THREAD_LIFECYCLE` | `delivery.lifecycle.thread_lifecycle` | `bool` | no | no | — | `True` |
 | `DISPLACEMENT_ATR_MULT` | `analysis.displacement.atr_mult` | `float` | no | no | — | `1.5` |
 | `ENTRY_ACTIVATION_M5_AUTHORITATIVE_FALLBACK` | `execution.activation.m5_authoritative_fallback` | `str` | no | no | — | `off` |

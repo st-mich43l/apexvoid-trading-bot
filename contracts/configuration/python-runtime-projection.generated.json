@@ -1,6 +1,6 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "b20e4f455a8a4905284ee4808defd57593d90d4cdb7739ad251b54413efd6987",
+  "configuration_contract_fingerprint_sha256": "e74c3337032dcbddb9ff36dc04ec4b7accf55381dfc063cdc8ef0123e5915a68",
   "excluded_ctrader_only_count": 49,
   "excluded_paths": [
     "bootstrap.ctrader.connection.host",
@@ -53,7 +53,7 @@
     "risk.sizing.add_require_risk_free",
     "risk.sizing.risk_pct"
   ],
-  "included_leaf_count": 582,
+  "included_leaf_count": 583,
   "included_paths": [
     "actionability.contested_corridor.gap_atr",
     "actionability.counter_bias.allowed",
@@ -296,6 +296,7 @@
     "delivery.scanner_cards.maximum_cards",
     "delivery.scanner_cards.top_n",
     "delivery.telegram.delete_root_on_terminal",
+    "delivery.telegram.owner_dm_daily_wipe_enabled",
     "delivery.telegram.photo_debounce_seconds",
     "delivery.telegram.public_show_pips",
     "delivery.telegram.scanner_telegram_bot_token",
@@ -641,6 +642,6 @@
   "included_secret_count": 6,
   "included_shared_field_count": 96,
   "projection_model": "app.configuration.models.python_runtime.PythonRuntimeConfig",
-  "source_fingerprint_sha256": "b20e4f455a8a4905284ee4808defd57593d90d4cdb7739ad251b54413efd6987",
+  "source_fingerprint_sha256": "e74c3337032dcbddb9ff36dc04ec4b7accf55381dfc063cdc8ef0123e5915a68",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }
