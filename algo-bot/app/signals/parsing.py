@@ -53,6 +53,7 @@ SETUP_RESERVED_WORDS = frozenset({
   "scalp-nhanh",
   "quick-scalp",
   "algo",
+  "1r",
   "sl",
   "tp",
   "entry",
@@ -76,6 +77,15 @@ _SCALP_SUFFIX_RE = re.compile(
 # they compose with each other — stripped independently, order-agnostic.
 _ALGO_SUFFIX_RE = re.compile(
   r'(?i)\s*/\s*algo(?=\s*(?:/|$))'
+)
+# Owner opt-in for a personal (not-for-the-channel) trade: full account
+# volume at one entry, one TP at exactly 1R, root card + every lifecycle
+# update DM'd to the owner instead of posted to the VIP/public channel.
+# Implies /algo (arms broker execution on its own — owner-confirmed
+# 2026-09-16) and overrides any explicit tp the owner also typed, since
+# typing /1r is itself the explicit instruction for the exit.
+_ONE_R_SUFFIX_RE = re.compile(
+  r'(?i)\s*/\s*1r(?=\s*(?:/|$))'
 )
 _ACTIVE_RE = re.compile(r'(?i)^\s*active(?:\s+#?(\d+))?\s*$')
 _CLOSE_RE = re.compile(
@@ -225,6 +235,7 @@ def _parse_manual(text: str) -> Optional[dict]:
   )
   raw, scalp_count = _SCALP_SUFFIX_RE.subn("", raw)
   raw, algo_count = _ALGO_SUFFIX_RE.subn("", raw)
+  raw, one_r_count = _ONE_R_SUFFIX_RE.subn("", raw)
   setup_type = None
   confluence = DEFAULT_CONFLUENCE
   setup_match = _SETUP_SUFFIX_RE.search(raw)
@@ -250,8 +261,16 @@ def _parse_manual(text: str) -> Optional[dict]:
     fx = {
       **fx,
       "visibility": "vip" if vip_count else fx.get("visibility", "both"),
-      "execution_mode": "algo" if algo_count else "notify",
+      "execution_mode": "algo" if (algo_count or one_r_count) else "notify",
+      "personal_trade": bool(one_r_count),
     }
+    if one_r_count:
+      one_r_price = (
+        fx["rr_entry"] + fx["risk"] if fx["action"] == "BUY"
+        else fx["rr_entry"] - fx["risk"]
+      )
+      fx["tps"] = [one_r_price]
+      fx["target_weights"] = [100]
     if setup_type is not None:
       fx["setup_type"] = setup_type
       fx["confluence"] = confluence
@@ -298,6 +317,10 @@ def _parse_manual(text: str) -> Optional[dict]:
     )
     entry_low, entry_high = sorted((entry_anchor, entry_other))
   rr_entry = entry_low if action == 'SELL' else entry_high
+  if one_r_count:
+    # Personal 1R trade: collapse any typed zone to the conservative edge
+    # already used for R sizing — full volume at one price, not a ladder.
+    entry_low = entry_high = rr_entry
   pip = pip_for(symbol)
   if setup_type is None and not scalp_count:
     setup_type = DEFAULT_SETUP_TYPE
@@ -309,7 +332,11 @@ def _parse_manual(text: str) -> Optional[dict]:
       else rr_entry + DEFAULT_SL_PIPS * pip
     )
   risk = abs(rr_entry - sl)
-  if (tp_raw or '').strip():
+  if one_r_count:
+    # /1r is itself the explicit exit instruction — it wins over both an
+    # explicit tp the owner also typed and the default R-multiple ladder.
+    tps = [rr_entry + risk if action == 'BUY' else rr_entry - risk]
+  elif (tp_raw or '').strip():
     # 2026-09 (owner-reported): "when I specify any parameter it must
     # follow my command" - explicit sl already worked this way; explicit
     # tp must too. The R ladder below is only the bot's DEFAULT for when
@@ -350,7 +377,8 @@ def _parse_manual(text: str) -> Optional[dict]:
     'setup_type': setup_type,
     'confluence': confluence,
     'visibility': 'vip' if vip_count else 'both',
-    'execution_mode': 'algo' if algo_count else 'notify',
+    'execution_mode': 'algo' if (algo_count or one_r_count) else 'notify',
+    'personal_trade': bool(one_r_count),
   }
 
 

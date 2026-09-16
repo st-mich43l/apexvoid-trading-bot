@@ -449,7 +449,9 @@ def _intent_to_candidate_payload(intent: ManualTradeIntent) -> dict:
     "targets_pips": targets_pips,
     "manual_take_profits": list(intent.tps),
     "manual_target_weights": target_weights,
-    "manual_single_entry": manual.entry_mode.value == "single",
+    "manual_single_entry": (
+      manual.entry_mode.value == "single" or intent.single_entry_override
+    ),
     "risk_multiplier": float(manual.risk_multiplier),
     "group_id": intent.intent_id,
     "strategy_family": "manual",

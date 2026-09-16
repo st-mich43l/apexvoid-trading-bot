@@ -36,6 +36,10 @@ class ManualTradeIntent:
   setup_type: str | None
   confluence: int | None
   execution_mode: str         # "algo" (this contract only exists for algo-mode signals)
+  # Owner opt-in via `/1r`: force a single full-volume entry regardless of
+  # the instrument's configured entry_mode (see
+  # manual_execution._intent_to_candidate_payload).
+  single_entry_override: bool = False
 
 
 def _end_of_trade_day(trade_date: str | None) -> int:
@@ -92,6 +96,7 @@ def build_intent(
     setup_type=signal.get("setup_type"),
     confluence=signal.get("confluence"),
     execution_mode="algo",
+    single_entry_override=bool(signal.get("personal_trade", False)),
   )
 
 

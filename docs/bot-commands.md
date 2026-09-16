@@ -98,6 +98,7 @@ gold sell 4100-4105 / sl 4110 / tp 95/90/80 / scalp
 gold sell 4100-4105 / sl 4110 / tp 95/90/80 / scalp nhanh
 gold sell 4100-4105 / sl 4110 / tp 95/90/80 / vip
 gold sell 4100-4105 / sl 4110 / tp 95/90/80 / setup ob-retest ***
+gold sell 4100-4105 / sl 4110 / 1r
 ```
 
 | Option | Effect |
@@ -105,6 +106,7 @@ gold sell 4100-4105 / sl 4110 / tp 95/90/80 / setup ob-retest ***
 | `/ scalp`, `/ scalp nhanh`, `/ quick scalp` | Marks the trade internally as `scalp` for review/stats and displays it on the channel card. |
 | `/ vip` | Publishes the signal and later lifecycle updates to VIP only. |
 | `/ setup <name> [*|**|***]` | Sets the setup type shown on the channel card and its optional confidence grade. New manual signals default to `**`; provide `*`, `**`, or `***` to override it. Known aliases render as their canonical strategy name (for example `key-level` becomes `Key Level Reaction`). If used with `/ scalp`, explicit `/ setup` wins. |
+| `/ 1r` | Personal trade, not for the channel. Collapses any typed entry zone to its conservative edge and enters full volume at that one price; overrides any explicit `tp` with a single target at exactly 1R. Arms broker execution on its own — `/ algo` is not needed. The root card and every later lifecycle update (fills, TP, close, SL moves) go to your own DM instead of the VIP/public channel. |
 
 ### Channel Output
 
