@@ -913,3 +913,90 @@ def test_1r_suffix_is_standalone_and_arms_execution_without_algo():
   assert parsed["personal_trade"] is True
   assert parsed["execution_mode"] == "algo"
   assert len(parsed["tps"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_broadcast_entry_personal_trade_uses_scanner_bot_root_card_sender(
+  tmp_path,
+  monkeypatch,
+  dual_channels,
+):
+  # The root card for a /1r trade must go out via the scanner/algo bot
+  # (same identity every other algo-armed root card uses), never the main
+  # ApexVoid bot - the main bot stays the command-management surface only.
+  install_runtime_overrides(
+    monkeypatch, legacy_overrides={"telegram_owner_id": OWNER_ID},
+  )
+  signal = await _personal_signal(tmp_path, monkeypatch)
+  root_card_sender = AsyncMock(return_value=SimpleNamespace(message_id=555))
+  main_bot_sender = AsyncMock(
+    return_value=SimpleNamespace(message_id=999),
+  )
+  monkeypatch.setattr(
+    broadcast, "send_scanner_root_card_with_retry", root_card_sender,
+  )
+  monkeypatch.setattr(broadcast, "send_with_retry", main_bot_sender)
+
+  await broadcast.broadcast_entry(signal)
+
+  root_card_sender.assert_awaited_once()
+  assert root_card_sender.await_args.kwargs["chat_id"] == OWNER_ID
+  main_bot_sender.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_fanout_update_on_personal_trade_uses_scanner_bot_sender(
+  tmp_path,
+  monkeypatch,
+  dual_channels,
+):
+  # Every lifecycle reply on a /1r trade must reply through the same bot
+  # that sent the root card - reply_to_message_id is only valid inside the
+  # sending bot's own chat history with that peer.
+  install_runtime_overrides(
+    monkeypatch, legacy_overrides={"telegram_owner_id": OWNER_ID},
+  )
+  signal = await _personal_signal(tmp_path, monkeypatch)
+  monkeypatch.setattr(
+    broadcast, "send_scanner_root_card_with_retry",
+    AsyncMock(return_value=SimpleNamespace(message_id=555)),
+  )
+  await broadcast.broadcast_entry(signal)
+  scanner_sender = AsyncMock(return_value=SimpleNamespace(message_id=556))
+  main_bot_sender = AsyncMock(
+    return_value=SimpleNamespace(message_id=999),
+  )
+  monkeypatch.setattr(broadcast, "send_scanner_with_retry", scanner_sender)
+  monkeypatch.setattr(broadcast, "send_with_retry", main_bot_sender)
+
+  await broadcast.fanout_update(signal, lambda tier: f"{tier} update")
+
+  scanner_sender.assert_awaited_once()
+  assert scanner_sender.await_args.kwargs["chat_id"] == OWNER_ID
+  main_bot_sender.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_replace_entry_posts_deletes_personal_trade_via_scanner_bot(
+  tmp_path,
+  monkeypatch,
+  dual_channels,
+):
+  install_runtime_overrides(
+    monkeypatch, legacy_overrides={"telegram_owner_id": OWNER_ID},
+  )
+  signal = await _personal_signal(tmp_path, monkeypatch)
+  monkeypatch.setattr(
+    broadcast, "send_scanner_root_card_with_retry",
+    AsyncMock(return_value=SimpleNamespace(message_id=555)),
+  )
+  await broadcast.broadcast_entry(signal)
+  scanner_delete = AsyncMock()
+  main_delete = AsyncMock()
+  monkeypatch.setattr(broadcast, "delete_scanner_message", scanner_delete)
+  monkeypatch.setattr(broadcast, "delete_message", main_delete)
+
+  await broadcast.replace_entry_posts(signal)
+
+  scanner_delete.assert_awaited_once_with(OWNER_ID, 555)
+  main_delete.assert_not_awaited()
