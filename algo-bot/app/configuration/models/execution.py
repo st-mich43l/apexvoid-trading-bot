@@ -134,6 +134,9 @@ class ExecutionReactionConfig(FrozenConfigModel):
             raise ValueError('reaction market and scale fractions must sum to 1.0')
         return self
 
+class ExecutionReactionRiskLegConfig(FrozenConfigModel):
+    enabled: bool = config_field(True, canonical_env='AUTO_TRADE_REACTION_RISK_LEG_ENABLED', owner=ConfigOwner.CTRADER, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.BOOLEAN, risk=RiskClassification.EXECUTION_SAFETY, description='Owner 2026-09-16: kill switch for the Manual-Algo-style fixed risk leg (15 pips beyond the stop, equity-tiered lots) TradePlanRuntime adds to every scaled reaction entry (market_with_limit_scale/limit_ladder). Pure C#-side mechanism - this flag only gates whether the leg is injected.', default_contexts=(ContextDefault(DefaultContext.CTRADER_FROM_ENVIRONMENT, True),), validation_summary='EnvironmentResolver.Bool + AutoTradeOptions.Validate')
+
 class ExecutionRegimeConfig(FrozenConfigModel):
     direction_enabled: bool = config_field(False, canonical_env='AUTO_TRADE_REGIME_DIRECTION_ENABLED', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.BOOLEAN, risk=RiskClassification.EXECUTION_SAFETY, description='Controls .', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, False),), validation_summary='Pydantic required/type coercion only')
     direction_lookback: int = config_field(120, canonical_env='AUTO_TRADE_REGIME_DIRECTION_LOOKBACK', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.BARS, risk=RiskClassification.EXECUTION_SAFETY, description='Controls  (bars).', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 120),), validation_summary='Pydantic required/type coercion only')
@@ -511,6 +514,7 @@ class ExecutionConfig(FrozenConfigModel):
     policy: ExecutionPolicyConfig = Field(default_factory=ExecutionPolicyConfig)
     range: ExecutionRangeConfig = Field(default_factory=ExecutionRangeConfig)
     reaction: ExecutionReactionConfig = Field(default_factory=ExecutionReactionConfig)
+    reaction_risk_leg: ExecutionReactionRiskLegConfig = Field(default_factory=ExecutionReactionRiskLegConfig)
     regime: ExecutionRegimeConfig = Field(default_factory=ExecutionRegimeConfig)
     scaling: ExecutionScalingConfig = Field(default_factory=ExecutionScalingConfig)
     stops: ExecutionStopsConfig = Field(default_factory=ExecutionStopsConfig)

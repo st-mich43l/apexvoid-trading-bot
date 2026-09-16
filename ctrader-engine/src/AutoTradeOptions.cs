@@ -736,6 +736,7 @@ public sealed record AutoTradeOptions(
         t.ReactionScaleStepAtr,
         "auto_trade.reaction_scale_step_atr"
       ),
+      ReactionRiskLegEnabled = t.ReactionRiskLegEnabled,
     };
   }
 
