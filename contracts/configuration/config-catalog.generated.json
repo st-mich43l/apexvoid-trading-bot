@@ -1,7 +1,7 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "d6f6e79714362d5fc41eaf665d49230892a47fe407eda4efe217a6b332d6b72c",
-  "configuration_document_fingerprint_sha256": "e97e98888a09907dee330b3f36ea9bf277e6469ad14820ec631b431a06bf3e09",
+  "configuration_contract_fingerprint_sha256": "2417bd82abb436ce6f5b5018c5a61a504fec8e01c3a4aaea0fb7742fe312fd10",
+  "configuration_document_fingerprint_sha256": "36ccfb251c34d61e0a9262d6a5538e9cd939cc5f4c5e935170daa42c5e0a93b5",
   "counts": {
     "algorithm_constants": 97,
     "configurable": 546,
@@ -11746,20 +11746,20 @@
       "catalog_version": 2,
       "configurable": true,
       "constraints": {},
-      "default": 0.5,
+      "default": 0.1,
       "default_contexts": [
         {
           "context": "python_schema",
-          "value": 0.5
+          "value": 0.1
         },
         {
           "context": "ctrader_from_environment",
-          "value": 0.5
+          "value": 0.1
         }
       ],
       "deprecated": false,
       "deprecated_aliases": [],
-      "description": "Controls  (atr).",
+      "description": "Owner 2026-09-16: lowered from 0.5 - at 0.5x ATR the 2nd leg sat far enough from the 1st that the furthest-leg stop distance routinely exceeded the reaction stop envelope (observed 75-79 pips vs a 60 cap on live XAU Key Level candidates), silently killing good setups on both sides. 0.1x ATR keeps real second-leg separation while leaving headroom under the envelope across normal-to-elevated ATR.",
       "display_id": "config:execution.reaction.scale_step_atr",
       "evidence_notes": [],
       "introduced_in": "config-catalog-v2",
@@ -13579,16 +13579,16 @@
       "catalog_version": 2,
       "configurable": true,
       "constraints": {},
-      "default": 0.5,
+      "default": 0.1,
       "default_contexts": [
         {
           "context": "python_schema",
-          "value": 0.5
+          "value": 0.1
         }
       ],
       "deprecated": false,
       "deprecated_aliases": [],
-      "description": "Controls  (atr).",
+      "description": "Owner 2026-09-16: lowered from 0.5 - at 0.5x ATR the 2nd leg sat far enough from the 1st that the furthest-leg stop distance routinely exceeded the reaction stop envelope (observed 75-79 pips vs a 60 cap on live XAU Key Level candidates), silently killing good setups on both sides. 0.1x ATR keeps real second-leg separation while leaving headroom under the envelope across normal-to-elevated ATR.",
       "display_id": "config:execution.zone_scaling.scale_step_atr",
       "evidence_notes": [],
       "introduced_in": "config-catalog-v2",
@@ -24367,6 +24367,6 @@
       "validation_summary": "Pydantic required/type coercion only"
     }
   ],
-  "source_fingerprint_sha256": "d6f6e79714362d5fc41eaf665d49230892a47fe407eda4efe217a6b332d6b72c",
+  "source_fingerprint_sha256": "2417bd82abb436ce6f5b5018c5a61a504fec8e01c3a4aaea0fb7742fe312fd10",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

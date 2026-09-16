@@ -3,8 +3,8 @@
 > Generated from the typed `ApexVoidConfig` Catalog V2 schema. Do not edit manually.
 
 - Catalog version: `2`
-- Contract fingerprint: `d6f6e79714362d5fc41eaf665d49230892a47fe407eda4efe217a6b332d6b72c`
-- Document fingerprint: `e97e98888a09907dee330b3f36ea9bf277e6469ad14820ec631b431a06bf3e09`
+- Contract fingerprint: `2417bd82abb436ce6f5b5018c5a61a504fec8e01c3a4aaea0fb7742fe312fd10`
+- Document fingerprint: `36ccfb251c34d61e0a9262d6a5538e9cd939cc5f4c5e935170daa42c5e0a93b5`
 - Items: `653`
 - Runtime status: canonical-only; `app.core.config.runtime_config` is authoritative
 
@@ -356,7 +356,7 @@
 | `execution.reaction.room_stop_min_rr` | `AUTO_TRADE_REACTION_ROOM_STOP_MIN_RR` | `float` | `multiplier` | `configurable` | `1.0` |
 | `execution.reaction.scale_fraction` | `AUTO_TRADE_REACTION_SCALE_FRACTION` | `float` | `fraction` | `configurable` | `0.2` |
 | `execution.reaction.scale_invalid_policy` | `AUTO_TRADE_REACTION_SCALE_INVALID_POLICY` | `str` | `enum` | `configurable` | `"single_market"` |
-| `execution.reaction.scale_step_atr` | `AUTO_TRADE_REACTION_SCALE_STEP_ATR` | `float` | `atr` | `configurable` | `0.5` |
+| `execution.reaction.scale_step_atr` | `AUTO_TRADE_REACTION_SCALE_STEP_ATR` | `float` | `atr` | `configurable` | `0.1` |
 | `execution.reaction.stop_max_pips` | `AUTO_TRADE_REACTION_STOP_MAX_PIPS` | `int` | `pips` | `configurable` | `60` |
 | `execution.reaction.stop_min_pips` | `AUTO_TRADE_REACTION_STOP_MIN_PIPS` | `int` | `pips` | `configurable` | `40` |
 | `execution.regime.direction_enabled` | `AUTO_TRADE_REGIME_DIRECTION_ENABLED` | `bool` | `boolean` | `configurable` | `false` |
@@ -403,7 +403,7 @@
 | `execution.zone_scaling.fill_min_atr` | `AUTO_TRADE_ZONE_FILL_MIN_ATR` | `float` | `atr` | `configurable` | `0.5` |
 | `execution.zone_scaling.fill_min_lots` | `AUTO_TRADE_ZONE_FILL_MIN_LOTS` | `decimal` | `lots` | `configurable` | `"0.09"` |
 | `execution.zone_scaling.first_leg_fraction` | `AUTO_TRADE_ZONE_SCALE_FIRST_LEG_FRACTION` | `float` | `fraction` | `configurable` | `0.8` |
-| `execution.zone_scaling.scale_step_atr` | `AUTO_TRADE_ZONE_SCALE_STEP_ATR` | `float` | `atr` | `configurable` | `0.5` |
+| `execution.zone_scaling.scale_step_atr` | `AUTO_TRADE_ZONE_SCALE_STEP_ATR` | `float` | `atr` | `configurable` | `0.1` |
 | `execution.zone_scaling.scale_undersized_policy` | `AUTO_TRADE_ZONE_SCALE_UNDERSIZED_POLICY` | `str` | `enum` | `configurable` | `"single_entry"` |
 
 ## lifecycle

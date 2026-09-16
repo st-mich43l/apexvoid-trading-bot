@@ -1,6 +1,6 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "d6f6e79714362d5fc41eaf665d49230892a47fe407eda4efe217a6b332d6b72c",
+  "configuration_contract_fingerprint_sha256": "2417bd82abb436ce6f5b5018c5a61a504fec8e01c3a4aaea0fb7742fe312fd10",
   "count": 96,
   "items": [
     {
@@ -1411,17 +1411,17 @@
       "canonical_env": "AUTO_TRADE_REACTION_SCALE_STEP_ATR",
       "configurable": true,
       "ctrader_constructor_default": null,
-      "ctrader_from_environment_default": 0.5,
+      "ctrader_from_environment_default": 0.1,
       "ctrader_type": "decimal",
       "default_conflict": false,
       "default_contexts": [
         {
           "context": "python_schema",
-          "value": 0.5
+          "value": 0.1
         },
         {
           "context": "ctrader_from_environment",
-          "value": 0.5
+          "value": 0.1
         }
       ],
       "deprecated_aliases": [],
@@ -1431,7 +1431,7 @@
       "known_conflict": false,
       "mismatch_policy": "not_reported",
       "path": "execution.reaction.scale_step_atr",
-      "python_schema_default": 0.5,
+      "python_schema_default": 0.1,
       "python_type": "float",
       "secret": false,
       "unit": "atr",
@@ -2995,6 +2995,6 @@
       "path": "strategies.mapped_zone.enabled"
     }
   ],
-  "source_fingerprint_sha256": "d6f6e79714362d5fc41eaf665d49230892a47fe407eda4efe217a6b332d6b72c",
+  "source_fingerprint_sha256": "2417bd82abb436ce6f5b5018c5a61a504fec8e01c3a4aaea0fb7742fe312fd10",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

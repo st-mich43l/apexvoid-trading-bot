@@ -142,7 +142,13 @@ public sealed record AutoTradeOptions(
   decimal ReactionScaleFraction = 0.20m,
   bool ReactionScaleEnabled = true,
   string ReactionScaleInvalidPolicy = "single_market",
-  decimal ReactionScaleStepAtr = 0.50m
+  // Owner 2026-09-16: lowered from 0.50 to match the Python-side default -
+  // at 0.5x ATR the far leg's stop distance routinely exceeded the reaction
+  // stop envelope (75-79 vs a 60-pip cap on live XAU candidates). Not
+  // currently consumed for any leg-spacing math on this side (Python plans
+  // leg prices; this engine executes them) - kept in sync for the
+  // documented cross-service default, not because anything here reads it.
+  decimal ReactionScaleStepAtr = 0.10m
 )
 {
   // Shared target-selection contract (app/autotrade/range_targets.py on the
@@ -508,7 +514,7 @@ public sealed record AutoTradeOptions(
       "AUTO_TRADE_REACTION_SCALE_INVALID_POLICY", "single_market"
     ).Trim().ToLowerInvariant(),
     ReactionScaleStepAtr: resolver.Decimal(
-      "AUTO_TRADE_REACTION_SCALE_STEP_ATR", 0.50m
+      "AUTO_TRADE_REACTION_SCALE_STEP_ATR", 0.10m
     )
   );
   var deprecated = resolver.DeprecatedVariables.ToList();
