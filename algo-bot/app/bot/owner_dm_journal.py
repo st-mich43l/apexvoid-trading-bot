@@ -143,17 +143,27 @@ async def owner_dm_session_middleware(make_request, bot, method):
   """``bot.session`` request middleware - journals every outgoing message.
 
   Registered on the main ``bot`` only (never ``scanner_bot``). Runs for
-  every Telegram API call the bot makes; ``chat_id``/a ``message_id`` on
-  the result are both attribute lookups that simply miss (``getattr``
-  default) for methods that carry neither (e.g. ``DeleteMessage``,
-  ``AnswerCallbackQuery``), so this is a no-op for anything that is not a
-  message send.
+  every Telegram API call the bot makes.
+
+  ``make_request`` here is ``BaseSession.make_request`` itself (or an
+  earlier-registered middleware wrapping it), which already returns the
+  *unwrapped* Telegram result, not a ``Response`` envelope -
+  ``AiohttpSession.make_request`` ends with ``return
+  cast(TelegramType, response.result)``. So ``response`` is directly a
+  ``Message`` for an ordinary send, a bare ``bool`` for e.g.
+  ``DeleteMessage``/``AnswerCallbackQuery`` (no ``message_id`` - a no-op
+  via ``getattr``'s default), or a ``list[Message]`` for
+  ``SendMediaGroup`` (each item journaled so the whole album gets swept,
+  not just silently dropped).
   """
   response = await make_request(bot, method)
   try:
     chat_id = getattr(method, "chat_id", None)
-    message_id = getattr(response.result, "message_id", None)
-    await record_message_id(chat_id, message_id)
+    items = response if isinstance(response, list) else [response]
+    for item in items:
+      message_id = getattr(item, "message_id", None)
+      if message_id is not None:
+        await record_message_id(chat_id, message_id)
   except Exception:
     log.exception("owner DM journal middleware failed")
   return response

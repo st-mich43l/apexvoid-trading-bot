@@ -117,7 +117,11 @@ async def test_sweep_owner_dm_empty_journal_deletes_nothing(monkeypatch):
 async def test_session_middleware_journals_message_sends_to_owner(monkeypatch):
   _enable(monkeypatch)
   method = SimpleNamespace(chat_id=OWNER_ID)
-  response = SimpleNamespace(result=SimpleNamespace(message_id=42))
+  # make_request already returns the unwrapped Telegram result (a Message
+  # for an ordinary send) - AiohttpSession.make_request itself ends with
+  # ``return cast(TelegramType, response.result)``, so there is no
+  # ``.result`` left to unwrap here.
+  response = SimpleNamespace(message_id=42)
 
   async def make_request(bot, method):
     return response
@@ -132,14 +136,37 @@ async def test_session_middleware_journals_message_sends_to_owner(monkeypatch):
   assert await client.smembers(key) == {"42"}
 
 
+async def test_session_middleware_journals_every_item_of_a_media_group(monkeypatch):
+  # SendMediaGroup's unwrapped result is list[Message] - every item must be
+  # journaled so the whole album gets swept, not silently dropped.
+  _enable(monkeypatch)
+  method = SimpleNamespace(chat_id=OWNER_ID)
+  response = [
+    SimpleNamespace(message_id=42), SimpleNamespace(message_id=43),
+  ]
+
+  async def make_request(bot, method):
+    return response
+
+  result = await owner_dm_journal.owner_dm_session_middleware(
+    make_request, bot=None, method=method,
+  )
+
+  assert result is response
+  client = redis_state.get_client()
+  key = owner_dm_journal._journal_key(owner_dm_journal._current_trade_date())
+  assert await client.smembers(key) == {"42", "43"}
+
+
 async def test_session_middleware_ignores_methods_without_chat_id_or_message_id(
   monkeypatch,
 ):
   _enable(monkeypatch)
   # DeleteMessage-shaped: has chat_id, but its own boolean result carries no
-  # message_id - must not journal anything.
+  # message_id - must not journal anything, and must not crash on a bare
+  # bool having no attributes at all.
   method = SimpleNamespace(chat_id=OWNER_ID)
-  response = SimpleNamespace(result=True)
+  response = True
 
   async def make_request(bot, method):
     return response
@@ -156,7 +183,7 @@ async def test_session_middleware_ignores_methods_without_chat_id_or_message_id(
 async def test_session_middleware_ignores_other_chats(monkeypatch):
   _enable(monkeypatch)
   method = SimpleNamespace(chat_id=-100123456789)  # a VIP channel post
-  response = SimpleNamespace(result=SimpleNamespace(message_id=42))
+  response = SimpleNamespace(message_id=42)
 
   async def make_request(bot, method):
     return response
@@ -174,7 +201,7 @@ async def test_session_middleware_always_returns_the_response(monkeypatch):
   # Even a failure in journaling must never break the actual Telegram send.
   _enable(monkeypatch)
   method = SimpleNamespace(chat_id=OWNER_ID)
-  response = SimpleNamespace(result=SimpleNamespace(message_id="not-an-int"))
+  response = SimpleNamespace(message_id="not-an-int")
 
   async def make_request(bot, method):
     return response
