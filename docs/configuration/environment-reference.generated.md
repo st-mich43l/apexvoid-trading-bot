@@ -2,7 +2,7 @@
 
 > Generated from the canonical configuration catalog (`app.configuration.environment_contract`). Do not edit manually.
 
-- Contract fingerprint: `d6f6e79714362d5fc41eaf665d49230892a47fe407eda4efe217a6b332d6b72c`
+- Contract fingerprint: `2417bd82abb436ce6f5b5018c5a61a504fec8e01c3a4aaea0fb7742fe312fd10`
 - Environment-bound fields: `546`
 - Deprecated aliases: `21`
 
@@ -156,7 +156,7 @@ Secret values are never emitted; secret defaults render as `<redacted>`.
 | `AUTO_TRADE_REACTION_SCALE_ENABLED` | `strategies.reaction.scale_enabled` | `bool` | no | yes | — | `False` |
 | `AUTO_TRADE_REACTION_SCALE_FRACTION` | `execution.reaction.scale_fraction` | `float` | no | yes | — | `0.2` |
 | `AUTO_TRADE_REACTION_SCALE_INVALID_POLICY` | `execution.reaction.scale_invalid_policy` | `str` | no | yes | — | `single_market` |
-| `AUTO_TRADE_REACTION_SCALE_STEP_ATR` | `execution.reaction.scale_step_atr` | `float` | no | yes | — | `0.5` |
+| `AUTO_TRADE_REACTION_SCALE_STEP_ATR` | `execution.reaction.scale_step_atr` | `float` | no | yes | — | `0.1` |
 | `AUTO_TRADE_REACTION_STOP_MAX_PIPS` | `execution.reaction.stop_max_pips` | `int` | no | no | — | `60` |
 | `AUTO_TRADE_REACTION_STOP_MIN_PIPS` | `execution.reaction.stop_min_pips` | `int` | no | no | — | `40` |
 | `AUTO_TRADE_REGIME_DIRECTION_ENABLED` | `execution.regime.direction_enabled` | `bool` | no | no | — | `False` |
@@ -250,7 +250,7 @@ Secret values are never emitted; secret defaults render as `<redacted>`.
 | `AUTO_TRADE_ZONE_RECONCILE_ENABLED` | `actionability.zone_reconciliation.enabled` | `bool` | no | no | — | `True` |
 | `AUTO_TRADE_ZONE_RECONCILE_MODE` | `actionability.zone_reconciliation.mode` | `str` | no | yes | — | `enforce` |
 | `AUTO_TRADE_ZONE_SCALE_FIRST_LEG_FRACTION` | `execution.zone_scaling.first_leg_fraction` | `float` | no | no | — | `0.8` |
-| `AUTO_TRADE_ZONE_SCALE_STEP_ATR` | `execution.zone_scaling.scale_step_atr` | `float` | no | no | — | `0.5` |
+| `AUTO_TRADE_ZONE_SCALE_STEP_ATR` | `execution.zone_scaling.scale_step_atr` | `float` | no | no | — | `0.1` |
 | `AUTO_TRADE_ZONE_SCALE_UNDERSIZED_POLICY` | `execution.zone_scaling.scale_undersized_policy` | `str` | no | yes | — | `single_entry` |
 | `BARS_CHANNEL` | `market_data.ctrader_feed.bars_channel` | `string` | no | yes | — | `bars:new` |
 | `BARS_WINDOW_MAX` | `market_data.ctrader_feed.bars_window_max` | `int` | no | no | — | `1500` |

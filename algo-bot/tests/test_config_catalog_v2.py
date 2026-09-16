@@ -352,8 +352,18 @@ _INTENTIONAL_POST_V1_DEFAULT_CHANGES = {
   "execution.entry.poll_ms",
   "execution.reaction.market_fraction",
   "execution.reaction.scale_fraction",
+  # 2026-09-16: 0.5 -> 0.1. At 0.5x ATR the reaction zone_scale/
+  # market_with_limit_scale 2nd leg sat far enough from the 1st that the
+  # furthest-leg stop distance routinely exceeded the reaction stop
+  # envelope (observed 75-79 pips vs a 60-pip cap on live XAU Key Level
+  # candidates), silently killing good setups regardless of confluence,
+  # bias, or opposing-zone clearance.
+  "execution.reaction.scale_step_atr",
   "execution.stops.reaction.room_floor_pips",
   "execution.zone_scaling.first_leg_fraction",
+  # 2026-09-16: 0.5 -> 0.1, same incident as execution.reaction.scale_step_atr
+  # above (this is the zone_split ladder's own leg-2-spacing knob).
+  "execution.zone_scaling.scale_step_atr",
   "risk.tiers.b_multiplier",
   # The range risk cap was reduced to the current conservative value after
   # the v1 parity snapshot was frozen.
