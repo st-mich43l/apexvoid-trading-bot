@@ -83,7 +83,7 @@
     "reaction_scale_enabled": true,
     "reaction_scale_fraction": "0.2",
     "reaction_scale_invalid_policy": "single_market",
-    "reaction_scale_step_atr": "0.5",
+    "reaction_scale_step_atr": "0.1",
     "require_demo_account": true,
     "require_demo_only_token": false,
     "require_flat_for_range": true,
@@ -134,7 +134,7 @@
     "zone_scale_undersized_policy": "single_entry"
   },
   "contract_fingerprint": "0f3ef7f77bc5106170de4429c7aa724b5d83d9a87c0152fc8e074660167fe071",
-  "effective_configuration_fingerprint": "9d0a5142594d82aa6780e6ee0c009dfb0972abf0184b91ff585fed654664a4ca",
+  "effective_configuration_fingerprint": "ece1de4176ae122a6d4df7938f0214b08c80dba795bc4552e4214cf2f1141a19",
   "feed": {
     "backfill_bars": 1500,
     "bar_quality_lookback": 6,
@@ -371,7 +371,7 @@
         "reaction_scale_enabled": true,
         "reaction_scale_fraction": "0.2",
         "reaction_scale_invalid_policy": "single_market",
-        "reaction_scale_step_atr": "0.5",
+        "reaction_scale_step_atr": "0.1",
         "require_demo_account": true,
         "require_demo_only_token": false,
         "require_flat_for_range": true,
@@ -496,7 +496,7 @@
           "room_stop_min_rr": "2",
           "scale_fraction": "0.2",
           "scale_invalid_policy": "single_market",
-          "scale_step_atr": "0.5",
+          "scale_step_atr": "0.1",
           "stop_max_pips": 18,
           "stop_min_pips": 10
         },
@@ -572,7 +572,7 @@
           "fill_min_atr": "0.5",
           "fill_min_lots": "0.09",
           "first_leg_fraction": "0.8",
-          "scale_step_atr": "0.5",
+          "scale_step_atr": "0.1",
           "scale_undersized_policy": "single_entry"
         }
       },
@@ -1384,7 +1384,7 @@
         "reaction_scale_enabled": true,
         "reaction_scale_fraction": "0.2",
         "reaction_scale_invalid_policy": "single_market",
-        "reaction_scale_step_atr": "0.5",
+        "reaction_scale_step_atr": "0.1",
         "require_demo_account": true,
         "require_demo_only_token": false,
         "require_flat_for_range": true,
@@ -1509,7 +1509,7 @@
           "room_stop_min_rr": "2",
           "scale_fraction": "0.2",
           "scale_invalid_policy": "single_market",
-          "scale_step_atr": "0.5",
+          "scale_step_atr": "0.1",
           "stop_max_pips": 30,
           "stop_min_pips": 15
         },
@@ -1585,7 +1585,7 @@
           "fill_min_atr": "0.5",
           "fill_min_lots": "0.09",
           "first_leg_fraction": "0.8",
-          "scale_step_atr": "0.5",
+          "scale_step_atr": "0.1",
           "scale_undersized_policy": "single_entry"
         }
       },
@@ -2421,7 +2421,7 @@
         "reaction_scale_enabled": true,
         "reaction_scale_fraction": "0.2",
         "reaction_scale_invalid_policy": "single_market",
-        "reaction_scale_step_atr": "0.5",
+        "reaction_scale_step_atr": "0.1",
         "require_demo_account": true,
         "require_demo_only_token": false,
         "require_flat_for_range": true,
@@ -2546,7 +2546,7 @@
           "room_stop_min_rr": "2",
           "scale_fraction": "0.2",
           "scale_invalid_policy": "single_market",
-          "scale_step_atr": "0.5",
+          "scale_step_atr": "0.1",
           "stop_max_pips": 22,
           "stop_min_pips": 12
         },
@@ -2622,7 +2622,7 @@
           "fill_min_atr": "0.5",
           "fill_min_lots": "0.09",
           "first_leg_fraction": "0.8",
-          "scale_step_atr": "0.5",
+          "scale_step_atr": "0.1",
           "scale_undersized_policy": "single_entry"
         }
       },
@@ -3434,7 +3434,7 @@
         "reaction_scale_enabled": true,
         "reaction_scale_fraction": "0.2",
         "reaction_scale_invalid_policy": "single_market",
-        "reaction_scale_step_atr": "0.5",
+        "reaction_scale_step_atr": "0.1",
         "require_demo_account": true,
         "require_demo_only_token": false,
         "require_flat_for_range": true,
@@ -3559,7 +3559,7 @@
           "room_stop_min_rr": "2",
           "scale_fraction": "0.2",
           "scale_invalid_policy": "single_market",
-          "scale_step_atr": "0.5",
+          "scale_step_atr": "0.1",
           "stop_max_pips": 18,
           "stop_min_pips": 10
         },
@@ -3635,7 +3635,7 @@
           "fill_min_atr": "0.5",
           "fill_min_lots": "0.09",
           "first_leg_fraction": "0.8",
-          "scale_step_atr": "0.5",
+          "scale_step_atr": "0.1",
           "scale_undersized_policy": "single_entry"
         }
       },
@@ -4459,7 +4459,7 @@
         "reaction_scale_enabled": true,
         "reaction_scale_fraction": "0.2",
         "reaction_scale_invalid_policy": "single_market",
-        "reaction_scale_step_atr": "0.5",
+        "reaction_scale_step_atr": "0.1",
         "require_demo_account": true,
         "require_demo_only_token": false,
         "require_flat_for_range": true,
@@ -4588,7 +4588,7 @@
           "room_stop_min_rr": "4",
           "scale_fraction": "0.2",
           "scale_invalid_policy": "single_market",
-          "scale_step_atr": "0.5",
+          "scale_step_atr": "0.1",
           "stop_max_pips": 60,
           "stop_min_pips": 50
         },
@@ -4664,7 +4664,7 @@
           "fill_min_atr": "0.5",
           "fill_min_lots": "0.09",
           "first_leg_fraction": "0.8",
-          "scale_step_atr": "0.5",
+          "scale_step_atr": "0.1",
           "scale_undersized_policy": "single_entry"
         }
       },
@@ -5469,7 +5469,7 @@
           "room_stop_min_rr": "2",
           "scale_fraction": "0.2",
           "scale_invalid_policy": "single_market",
-          "scale_step_atr": "0.5",
+          "scale_step_atr": "0.1",
           "stop_max_pips": 18,
           "stop_min_pips": 10
         },
@@ -5545,7 +5545,7 @@
           "fill_min_atr": "0.5",
           "fill_min_lots": "0.09",
           "first_leg_fraction": "0.8",
-          "scale_step_atr": "0.5",
+          "scale_step_atr": "0.1",
           "scale_undersized_policy": "single_entry"
         }
       },
@@ -6344,7 +6344,7 @@
           "room_stop_min_rr": "2",
           "scale_fraction": "0.2",
           "scale_invalid_policy": "single_market",
-          "scale_step_atr": "0.5",
+          "scale_step_atr": "0.1",
           "stop_max_pips": 30,
           "stop_min_pips": 15
         },
@@ -6420,7 +6420,7 @@
           "fill_min_atr": "0.5",
           "fill_min_lots": "0.09",
           "first_leg_fraction": "0.8",
-          "scale_step_atr": "0.5",
+          "scale_step_atr": "0.1",
           "scale_undersized_policy": "single_entry"
         }
       },
@@ -7243,7 +7243,7 @@
           "room_stop_min_rr": "2",
           "scale_fraction": "0.2",
           "scale_invalid_policy": "single_market",
-          "scale_step_atr": "0.5",
+          "scale_step_atr": "0.1",
           "stop_max_pips": 22,
           "stop_min_pips": 12
         },
@@ -7319,7 +7319,7 @@
           "fill_min_atr": "0.5",
           "fill_min_lots": "0.09",
           "first_leg_fraction": "0.8",
-          "scale_step_atr": "0.5",
+          "scale_step_atr": "0.1",
           "scale_undersized_policy": "single_entry"
         }
       },
@@ -8118,7 +8118,7 @@
           "room_stop_min_rr": "2",
           "scale_fraction": "0.2",
           "scale_invalid_policy": "single_market",
-          "scale_step_atr": "0.5",
+          "scale_step_atr": "0.1",
           "stop_max_pips": 18,
           "stop_min_pips": 10
         },
@@ -8194,7 +8194,7 @@
           "fill_min_atr": "0.5",
           "fill_min_lots": "0.09",
           "first_leg_fraction": "0.8",
-          "scale_step_atr": "0.5",
+          "scale_step_atr": "0.1",
           "scale_undersized_policy": "single_entry"
         }
       },
@@ -9005,7 +9005,7 @@
           "room_stop_min_rr": "4",
           "scale_fraction": "0.2",
           "scale_invalid_policy": "single_market",
-          "scale_step_atr": "0.5",
+          "scale_step_atr": "0.1",
           "stop_max_pips": 60,
           "stop_min_pips": 50
         },
@@ -9081,7 +9081,7 @@
           "fill_min_atr": "0.5",
           "fill_min_lots": "0.09",
           "first_leg_fraction": "0.8",
-          "scale_step_atr": "0.5",
+          "scale_step_atr": "0.1",
           "scale_undersized_policy": "single_entry"
         }
       },
