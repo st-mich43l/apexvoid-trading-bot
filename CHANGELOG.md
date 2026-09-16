@@ -58,6 +58,12 @@ dated section after deployment.
   `main.py`) sweeps and clears the just-completed day's journal at each
   local midnight. New `delivery.telegram.owner_dm_daily_wipe_enabled`
   config field.
+- Turned the owner DM daily wipe above on for production: `config/trading-bot.yml`
+  now sets `delivery.telegram.owner_dm_daily_wipe_enabled: true` (owner
+  request). The Python schema default stays `false` as a safe fallback;
+  this is a plain config value change, synced to `ansible-library`'s
+  `apexvoid_trading_bot_config.yml` mirror in the same change per this
+  repo's mirror-sync requirement (`docs/deployment.md § Production Ansible`).
 
 ### Changed
 - Retired the "HFS" product name in favor of "scalping" everywhere it was
