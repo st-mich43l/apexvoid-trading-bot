@@ -13,7 +13,14 @@ from app.signals.pips_format import rr_entry
 from app.signals.fx_manual_algo import uses_entry_price_display
 from app.autotrade.strategy_names import resolve_strategy
 from app.core.symbols import digits_for, channels_for, pip_for
-from app.bot.client import delete_message, send_sticker, send_with_retry
+from app.bot.client import (
+  delete_message,
+  delete_scanner_message,
+  send_scanner_root_card_with_retry,
+  send_scanner_with_retry,
+  send_sticker,
+  send_with_retry,
+)
 
 log = logging.getLogger(__name__)
 
@@ -117,8 +124,11 @@ async def _send_message(
   channel_id: int,
   reply_to: int | None = None,
   reply_markup=None,
+  *,
+  sender=None,
 ):
-  return await send_with_retry(
+  send = sender or send_with_retry
+  return await send(
     text,
     reply_to=reply_to,
     chat_id=channel_id,
@@ -134,15 +144,19 @@ async def _send_sticker(
   return await send_sticker(sticker, channel_id, reply_to)
 
 
-async def delete_posts(posts: list[dict]) -> None:
+async def delete_posts(posts: list[dict], *, personal: bool = False) -> None:
   """Remove already-delivered channel messages for a hard-deleted signal.
 
   Best-effort: a post may already be gone or older than Telegram's 48h delete
   window, so per-message failures are swallowed rather than aborting the rest.
+  ``personal=True`` deletes via the scanner/algo bot instead of the main
+  bot - a bot can only delete messages it itself sent, and a /1r trade's
+  posts were sent by the scanner bot (see broadcast_entry).
   """
+  deleter = delete_scanner_message if personal else delete_message
   for post in posts:
     try:
-      await delete_message(post["channel_id"], post["message_id"])
+      await deleter(post["channel_id"], post["message_id"])
     except Exception:
       log.warning(
         "could not delete post %s/%s",
@@ -165,7 +179,7 @@ async def replace_entry_posts(
   signal_id = int(sig["id"])
   old_posts = await get_signal_posts(signal_id)
   if old_posts:
-    await delete_posts(old_posts)
+    await delete_posts(old_posts, personal=bool(sig.get("personal_trade")))
   await clear_signal_posts(signal_id)
   return await broadcast_entry(sig, render_fn=render_fn, sticker=sticker)
 
@@ -182,16 +196,21 @@ async def broadcast_entry(
   }
   posts = []
   if sig.get("personal_trade"):
-    # Owner /1r trade: DM the owner instead of the VIP/public channel.
-    # tier stays "vip" (not a new tier) so render_entry/post_result keep
-    # the daily #seq line, full pip detail, and the inline Close button
-    # exactly as today - only the destination chat id changes.
+    # Owner /1r trade: DM the owner instead of the VIP/public channel, via
+    # the scanner/algo bot (same identity every other algo-armed root card
+    # goes out through) rather than the main ApexVoid bot - the main bot
+    # stays the command-management surface only. tier stays "vip" (not a
+    # new tier) so render_entry/post_result keep the daily #seq line, full
+    # pip detail, and the inline Close button exactly as today - only the
+    # sending bot and destination chat id change.
     owner_id = runtime_config.delivery.telegram.telegram_owner_id
     if owner_id and int(owner_id) not in delivered:
       text = (
         render_fn("vip") if render_fn else render_entry(sig, "vip")
       )
-      sent = await _send_message(text, int(owner_id))
+      sent = await _send_message(
+        text, int(owner_id), sender=send_scanner_root_card_with_retry,
+      )
       await insert_signal_post(sig["id"], int(owner_id), sent.message_id, "vip")
       posts.append({
         "signal_id": sig["id"],
@@ -247,6 +266,11 @@ async def fanout_update(
   ``broadcast_entry`` (not the raw Telegram messages) so callers can persist
   what was just sent without re-deriving channel/tier from the reply.
   """
+  # A /1r post's root message was sent by the scanner/algo bot (see
+  # broadcast_entry) - replies to it must come from the same bot, since a
+  # reply_to_message_id is only valid within the sending bot's own chat
+  # history with that peer.
+  sender = send_scanner_with_retry if sig.get("personal_trade") else None
   sent_posts = []
   for post in await get_signal_posts(sig["id"]):
     text = render_fn(post["tier"])
@@ -257,6 +281,7 @@ async def fanout_update(
       int(post["channel_id"]),
       int(post["message_id"]),
       reply_markup=markup_fn(post["tier"]) if markup_fn else None,
+      sender=sender,
     )
     sent_posts.append({
       "signal_id": sig["id"],
