@@ -122,6 +122,27 @@ Because there is no HTTP health endpoint, monitor liveness by either:
               curl -fsS --retry 3 https://hc-ping.com/<uuid> > /dev/null
   ```
 
+## Owner DM daily wipe
+
+Opt-in (`DELIVERY_OWNER_DM_DAILY_WIPE_ENABLED`, default off): at each local
+trade-day rollover (same `SEQ_RESET_TZ` midnight boundary as the daily
+`#seq` reset), the **ApexVoid bot** deletes every message in its own
+private DM with the owner sent since the previous wipe — both the bot's
+own sends and the owner's own typed commands. Irreversible; enable only
+once satisfied with the behavior.
+
+Scope is deliberately narrow: only the ApexVoid bot's own DM. The
+scanner/algo bot's DM (autonomous root cards, and the owner's `/1r`
+personal-trade root card + its lifecycle) is a **separate** Telegram
+conversation and is never touched — that is the actual trade record.
+
+Mechanism: every outgoing message the ApexVoid bot sends and every
+incoming message the owner sends it are journaled in Redis for the current
+trade date; at rollover the just-completed day's journal is swept
+(best-effort per message — an already-gone message does not block the
+rest) and cleared. A missed sweep (restart, Redis hiccup) self-expires
+after 3 days rather than accumulating forever.
+
 ## Troubleshooting
 
 ### Container is not starting

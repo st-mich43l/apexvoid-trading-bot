@@ -3,9 +3,9 @@
 > Generated from the typed `ApexVoidConfig` Catalog V2 schema. Do not edit manually.
 
 - Catalog version: `2`
-- Contract fingerprint: `b20e4f455a8a4905284ee4808defd57593d90d4cdb7739ad251b54413efd6987`
-- Document fingerprint: `21750e115eaf1da5797b257e755830e331a66c7a3f56ccc0ac5f0de025c3f217`
-- Items: `631`
+- Contract fingerprint: `e74c3337032dcbddb9ff36dc04ec4b7accf55381dfc063cdc8ef0123e5915a68`
+- Document fingerprint: `80091dedf34351f19f8874d14b6078b097d1ea607277bfb640c52fc1fea9e59d`
+- Items: `632`
 - Runtime status: canonical-only; `app.core.config.runtime_config` is authoritative
 
 ## actionability
@@ -286,6 +286,7 @@
 | `delivery.scanner_cards.maximum_cards` | `SCANNER_CARD_TOP_N` | `int` | `count` | `configurable` | `2` |
 | `delivery.scanner_cards.top_n` | `SCANNER_TOP_N` | `int` | `count` | `configurable` | `3` |
 | `delivery.telegram.delete_root_on_terminal` | `AUTO_TRADE_TELEGRAM_DELETE_ROOT_ON_TERMINAL` | `bool` | `boolean` | `configurable` | `false` |
+| `delivery.telegram.owner_dm_daily_wipe_enabled` | `DELIVERY_OWNER_DM_DAILY_WIPE_ENABLED` | `bool` | `boolean` | `configurable` | `false` |
 | `delivery.telegram.photo_debounce_seconds` | `—` | `float` | `seconds` | `algorithm_constant` | `2.0` |
 | `delivery.telegram.public_show_pips` | `SIGNAL_PUBLIC_SHOW_PIPS` | `bool` | `boolean` | `configurable` | `true` |
 | `delivery.telegram.scanner_telegram_bot_token` | `SCANNER_TELEGRAM_BOT_TOKEN` | `Optional[str]` | `string` | `configurable` | `"<redacted>"` |

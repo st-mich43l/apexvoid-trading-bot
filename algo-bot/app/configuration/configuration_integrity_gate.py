@@ -39,13 +39,19 @@ BASELINE = {
   # analysis.candle_confirmation.* (all ConfigOwner.PYTHON,
   # ConfigKind.ALGORITHM_CONSTANT, canonical_env=None, shadow-only).
   # 2026-09 MAD v2: +7 new leaf fields under execution.mad.{expand,manip,accum}.
-  "catalog_entry_count": 629,
-  "configurable_count": 522,
+  # 2026-09 Key Level structural repair Phase 2: +1
+  # (actionability.target_room.structural_barrier_book_enabled).
+  # 2026-09-15 XAU auto algo risk-band rework: +1
+  # (execution.reaction.risk_targeted_entry_enabled).
+  # 2026-09-16 Owner DM daily wipe: +1
+  # (delivery.telegram.owner_dm_daily_wipe_enabled).
+  "catalog_entry_count": 632,
+  "configurable_count": 525,
   "protocol_constant_count": 10,
   "algorithm_constant_count": 97,
-  "python_projection_count": 580,
+  "python_projection_count": 583,
   "ctrader_only_count": 49,
-  "environment_entry_count": 522,
+  "environment_entry_count": 525,
   "deprecated_alias_count": 21,
   "shared_count": 96,
 }

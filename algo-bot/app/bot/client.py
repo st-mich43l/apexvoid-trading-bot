@@ -16,6 +16,7 @@ from aiogram.types import (
   Message,
 )
 
+from app.bot.owner_dm_journal import owner_dm_session_middleware
 from app.bot.telegram_actor import (
   PRIORITY_CARD,
   PRIORITY_LIFECYCLE,
@@ -29,6 +30,9 @@ bot = Bot(
   token=runtime_config.bootstrap.telegram.bot_token,
   default=DefaultBotProperties(parse_mode=ParseMode.HTML),
 )
+# Owner end-of-day DM wipe (opt-in, see owner_dm_journal) journals every
+# outgoing message here - main `bot` only, never `scanner_bot`.
+bot.session.middleware(owner_dm_session_middleware)
 scanner_bot = Bot(
   token=(
     runtime_config.delivery.telegram.scanner_telegram_bot_token
