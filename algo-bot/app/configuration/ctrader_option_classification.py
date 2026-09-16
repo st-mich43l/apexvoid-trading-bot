@@ -124,6 +124,7 @@ AUTO_TRADE_OPTIONS_CLASSIFICATION: dict[str, tuple[OptionClassification, str | N
   'RangeTwoSidedEnabled': ('manifest', 'AUTO_TRADE_RANGE_TWO_SIDED_ENABLED', 'strategies.range_reversion.two_sided_enabled'),
   'ReactionEnabled': ('manifest', 'AUTO_TRADE_REACTION_ENABLED', 'strategies.reaction.enabled'),
   'ReactionMarketFraction': ('manifest', 'AUTO_TRADE_REACTION_MARKET_FRACTION', 'execution.reaction.market_fraction'),
+  'ReactionRiskLegEnabled': ('manifest', 'AUTO_TRADE_REACTION_RISK_LEG_ENABLED', 'execution.reaction_risk_leg.enabled'),
   'ReactionScaleEnabled': ('manifest', 'AUTO_TRADE_REACTION_SCALE_ENABLED', 'strategies.reaction.scale_enabled'),
   'ReactionScaleFraction': ('manifest', 'AUTO_TRADE_REACTION_SCALE_FRACTION', 'execution.reaction.scale_fraction'),
   'ReactionScaleInvalidPolicy': ('manifest', 'AUTO_TRADE_REACTION_SCALE_INVALID_POLICY', 'execution.reaction.scale_invalid_policy'),

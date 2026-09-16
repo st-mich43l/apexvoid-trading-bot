@@ -1,7 +1,7 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "2417bd82abb436ce6f5b5018c5a61a504fec8e01c3a4aaea0fb7742fe312fd10",
-  "excluded_ctrader_only_count": 49,
+  "configuration_contract_fingerprint_sha256": "0f3ef7f77bc5106170de4429c7aa724b5d83d9a87c0152fc8e074660167fe071",
+  "excluded_ctrader_only_count": 50,
   "excluded_paths": [
     "bootstrap.ctrader.connection.host",
     "bootstrap.ctrader.connection.port",
@@ -23,6 +23,7 @@
     "execution.policy.label",
     "execution.policy.pip_value_per_lot",
     "execution.policy.require_demo_only_token",
+    "execution.reaction_risk_leg.enabled",
     "execution.scaling.add.level_buffer_atr",
     "execution.scaling.add.pullback_enabled",
     "execution.scaling.add.pullback_max_retrace",
@@ -663,6 +664,6 @@
   "included_secret_count": 6,
   "included_shared_field_count": 96,
   "projection_model": "app.configuration.models.python_runtime.PythonRuntimeConfig",
-  "source_fingerprint_sha256": "2417bd82abb436ce6f5b5018c5a61a504fec8e01c3a4aaea0fb7742fe312fd10",
+  "source_fingerprint_sha256": "0f3ef7f77bc5106170de4429c7aa724b5d83d9a87c0152fc8e074660167fe071",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

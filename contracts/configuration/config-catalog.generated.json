@@ -1,20 +1,20 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "2417bd82abb436ce6f5b5018c5a61a504fec8e01c3a4aaea0fb7742fe312fd10",
-  "configuration_document_fingerprint_sha256": "36ccfb251c34d61e0a9262d6a5538e9cd939cc5f4c5e935170daa42c5e0a93b5",
+  "configuration_contract_fingerprint_sha256": "0f3ef7f77bc5106170de4429c7aa724b5d83d9a87c0152fc8e074660167fe071",
+  "configuration_document_fingerprint_sha256": "b9afabb3ce1fe33a60ebb62cfb7a002902de386d73f0bb4b34b2aa6fb8a47bdf",
   "counts": {
     "algorithm_constants": 97,
-    "configurable": 546,
+    "configurable": 547,
     "known_conflicts": 30,
     "owners": {
-      "ctrader": 49,
+      "ctrader": 50,
       "python": 508,
       "shared": 96
     },
     "protocol_constants": 10,
     "secrets": 9,
     "shared": 96,
-    "total_items": 653
+    "total_items": 654
   },
   "items": [
     {
@@ -11853,6 +11853,43 @@
       "type": "int",
       "unit": "pips",
       "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "AUTO_TRADE_REACTION_RISK_LEG_ENABLED",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {},
+      "default": true,
+      "default_contexts": [
+        {
+          "context": "ctrader_from_environment",
+          "value": true
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Owner 2026-09-16: kill switch for the Manual-Algo-style fixed risk leg (15 pips beyond the stop, equity-tiered lots) TradePlanRuntime adds to every scaled reaction entry (market_with_limit_scale/limit_ladder). Pure C#-side mechanism - this flag only gates whether the leg is injected.",
+      "display_id": "config:execution.reaction_risk_leg.enabled",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "ctrader",
+      "path": "execution.reaction_risk_leg.enabled",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "execution_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "bool",
+      "unit": "boolean",
+      "validation_summary": "EnvironmentResolver.Bool + AutoTradeOptions.Validate"
     },
     {
       "algorithm_constant": false,
@@ -24367,6 +24404,6 @@
       "validation_summary": "Pydantic required/type coercion only"
     }
   ],
-  "source_fingerprint_sha256": "2417bd82abb436ce6f5b5018c5a61a504fec8e01c3a4aaea0fb7742fe312fd10",
+  "source_fingerprint_sha256": "0f3ef7f77bc5106170de4429c7aa724b5d83d9a87c0152fc8e074660167fe071",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }
