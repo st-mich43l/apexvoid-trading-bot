@@ -167,6 +167,21 @@ def test_xau_manual_tp1_fraction_adapts_to_any_tp_count(
   assert payload["risk_multiplier"] == 1.0
 
 
+@pytest.mark.no_database
+def test_intent_single_entry_override_forces_single_entry_on_zone_ladder_xau():
+  # Baseline (no override): XAU is configured zone_ladder, so the default
+  # path (test above / test_intent_to_candidate_payload_sell_uses_entry_low_
+  # reference_edge) already asserts manual_single_entry is False. The owner
+  # /1r suffix must force it True regardless, without touching the
+  # instrument's own configured entry_mode.
+  payload = manual_execution._intent_to_candidate_payload(
+    _intent(tps=(4095.0,), single_entry_override=True)
+  )
+
+  assert payload["manual_single_entry"] is True
+  assert payload["manual_target_weights"] == [100]
+
+
 # ---------------------------------------------------------------------------
 # bridge_intents_loop / _process_intent_entries
 # ---------------------------------------------------------------------------

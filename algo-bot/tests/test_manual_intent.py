@@ -51,6 +51,18 @@ def test_build_intent_maps_fields_and_formats_intent_id():
   assert intent.execution_mode == "algo"
 
 
+def test_build_intent_defaults_single_entry_override_false():
+  intent = build_intent(_signal())
+
+  assert intent.single_entry_override is False
+
+
+def test_build_intent_reads_personal_trade_flag_from_signal():
+  intent = build_intent(_signal(personal_trade=True))
+
+  assert intent.single_entry_override is True
+
+
 def test_build_intent_expires_at_end_of_trade_day_local_tz():
   intent = build_intent(_signal(trade_date="2024-03-01"))
 
@@ -137,6 +149,7 @@ async def test_publish_intent_xadds_full_payload_to_configured_stream(monkeypatc
     "setup_type": "golden-fib",
     "confluence": 2,
     "execution_mode": "algo",
+    "single_entry_override": False,
   }
 
 

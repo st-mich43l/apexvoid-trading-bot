@@ -203,6 +203,14 @@ async def init_db() -> None:
       "ADD COLUMN IF NOT EXISTS execution_revision INTEGER NOT NULL DEFAULT 0"
     )
     await db.execute(
+      # Owner opt-in via the `/1r` suffix: full volume at one entry, one TP
+      # at 1R, root card + every lifecycle update DM'd to the owner instead
+      # of posted to the VIP/public channel. Orthogonal to `visibility`
+      # (which channel(s)) — this replaces the channel entirely with a DM.
+      "ALTER TABLE manual_signals "
+      "ADD COLUMN IF NOT EXISTS personal_trade BOOLEAN NOT NULL DEFAULT FALSE"
+    )
+    await db.execute(
       # Broker-side position id once filled. Internal only — never rendered
       # to Telegram.
       "ALTER TABLE manual_signals "
@@ -2025,6 +2033,7 @@ async def store_manual_signal(
   symbol: str = "XAU",
   visibility: str = "both",
   execution_mode: str = "notify",
+  personal_trade: bool = False,
 ) -> dict:
   """Insert a manual signal and return its primary and daily display ids.
 
@@ -2033,6 +2042,9 @@ async def store_manual_signal(
       today. ``'algo'`` additionally arms broker-side execution (handled by
       the caller — this function only persists the flag, it does not branch
       on it).
+    personal_trade: owner opt-in via ``/1r`` — the root card and every
+      lifecycle update go to the owner's DM instead of the VIP/public
+      channel (handled by the caller — see ``broadcast.broadcast_entry``).
 
   Returns:
     A dict containing the primary key ``id`` and today's ``daily_seq``.
@@ -2061,13 +2073,15 @@ async def store_manual_signal(
         INSERT INTO manual_signals
           (ts, action, entry, entry_end, sl, original_sl, tps, order_type,
            channel_message_id, daily_seq, trade_date, parent_id,
-           setup_type, confluence, symbol, visibility, execution_mode)
-        VALUES ($1, $2, $3, $4, $5, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+           setup_type, confluence, symbol, visibility, execution_mode,
+           personal_trade)
+        VALUES ($1, $2, $3, $4, $5, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
         RETURNING id
         """,
         ts, action, entry, entry_end, sl, json.dumps(tps), "zone",
         channel_message_id, daily_seq, trade_date, parent_id,
         setup_type, confluence, symbol, visibility, execution_mode,
+        personal_trade,
       )
   await _safe_snapshot_manual_chart(
     signal_id=int(new_id),
