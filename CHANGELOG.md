@@ -32,10 +32,15 @@ dated section after deployment.
   price, overrides any explicit `tp` with one target at exactly 1R, and
   arms broker execution on its own (`/ algo` not required). The root card
   and every later lifecycle update (fills, TP, close, SL moves) are DM'd
-  to the owner instead of posted to the VIP/public channel — same
-  `signal_posts` fan-out mechanism, just addressed at the owner's chat id
-  with `tier="vip"` so the daily `#seq` and inline Close button still
-  work. New `manual_signals.personal_trade` column and
+  to the owner instead of posted to the VIP/public channel, sent via the
+  scanner/algo bot identity (the same one every other algo-armed root
+  card already goes out through) rather than the main ApexVoid bot — the
+  main bot's manual `/trade` handling stays command-management only
+  (parse, persist, ack). Same `signal_posts` fan-out mechanism as the
+  channel path, just addressed at the owner's chat id with `tier="vip"`
+  so the daily `#seq` and inline Close button still work; deletes route
+  through the matching bot too (a bot can only delete/edit messages it
+  itself sent). New `manual_signals.personal_trade` column and
   `ManualTradeIntent.single_entry_override` field; no C# changes (the
   single-entry/single-TP execution path already existed for FX).
 

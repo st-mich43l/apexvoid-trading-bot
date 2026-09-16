@@ -366,7 +366,9 @@ async def _execute_delete(sid: int) -> dict:
     return {"action": "delete", "ok": False, "error": "not_found"}
   if result.get("error") == "has_rounds":
     return {"action": "delete", "ok": False, "error": "has_rounds"}
-  await delete_posts(result.get("posts") or [])
+  await delete_posts(
+    result.get("posts") or [], personal=bool(result.get("personal_trade")),
+  )
   return {
     "action": "delete",
     "ok": True,
@@ -1013,7 +1015,7 @@ async def post_result(result: dict, symbol: str) -> str:
   if is_final_close:
     updates = await get_signal_updates(signal_id)
     if updates:
-      await delete_posts(updates)
+      await delete_posts(updates, personal=bool(sig.get("personal_trade")))
   markup_fn = None
   if result["action"] == "tp":
     # Same owner-only Close button the watcher attaches to auto TP alerts.
