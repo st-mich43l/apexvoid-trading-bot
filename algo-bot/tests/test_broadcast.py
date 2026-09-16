@@ -831,3 +831,85 @@ def test_entry_vip_flag_is_standalone_and_defaults_both():
   scalp = wiring._parse_manual(base + " / scalp / vip")
   assert scalp["visibility"] == "vip"
   assert scalp["setup_type"] == "scalp"
+
+
+OWNER_ID = 555000111
+
+
+async def _personal_signal(tmp_path, monkeypatch):
+  await store.init_db()
+  record = await store.store_manual_signal(
+    1,
+    "BUY",
+    2000.0,
+    2000.0,
+    1990.0,
+    [2010.0],
+    symbol="XAU",
+    personal_trade=True,
+  )
+  return await store.get_manual_signal(record["id"])
+
+
+@pytest.mark.asyncio
+async def test_broadcast_entry_personal_trade_dms_owner_not_channel(
+  tmp_path,
+  monkeypatch,
+  dual_channels,
+):
+  install_runtime_overrides(
+    monkeypatch, legacy_overrides={"telegram_owner_id": OWNER_ID},
+  )
+  signal = await _personal_signal(tmp_path, monkeypatch)
+  send = AsyncMock(return_value=SimpleNamespace(message_id=555))
+  monkeypatch.setattr(broadcast, "_send_message", send)
+
+  posts = await broadcast.broadcast_entry(signal)
+
+  send.assert_awaited_once()
+  assert send.await_args.args[1] == OWNER_ID
+  assert posts == [{
+    "signal_id": signal["id"],
+    "channel_id": OWNER_ID,
+    "message_id": 555,
+    "tier": "vip",
+  }]
+  stored = await store.get_signal_posts(signal["id"])
+  assert [(p["channel_id"], p["tier"]) for p in stored] == [(OWNER_ID, "vip")]
+  # Never touched the VIP/public channel ids.
+  assert VIP_ID not in {call.args[1] for call in send.await_args_list}
+  assert PUBLIC_ID not in {call.args[1] for call in send.await_args_list}
+
+
+@pytest.mark.asyncio
+async def test_fanout_update_on_personal_trade_replies_to_owner_dm(
+  tmp_path,
+  monkeypatch,
+  dual_channels,
+):
+  install_runtime_overrides(
+    monkeypatch, legacy_overrides={"telegram_owner_id": OWNER_ID},
+  )
+  signal = await _personal_signal(tmp_path, monkeypatch)
+  monkeypatch.setattr(
+    broadcast, "_send_message",
+    AsyncMock(return_value=SimpleNamespace(message_id=555)),
+  )
+  await broadcast.broadcast_entry(signal)
+  reply = AsyncMock(return_value=SimpleNamespace(message_id=556))
+  monkeypatch.setattr(broadcast, "_send_message", reply)
+
+  await broadcast.fanout_update(signal, lambda tier: f"{tier} update")
+
+  reply.assert_awaited_once()
+  assert reply.await_args.args[1] == OWNER_ID
+
+
+def test_1r_suffix_is_standalone_and_arms_execution_without_algo():
+  base = "gold sell 4100-4105 / sl 4110"
+
+  assert wiring._parse_manual(base)["personal_trade"] is False
+  parsed = wiring._parse_manual(base + " / 1r")
+  assert parsed["personal_trade"] is True
+  assert parsed["execution_mode"] == "algo"
+  assert len(parsed["tps"]) == 1

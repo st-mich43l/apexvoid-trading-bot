@@ -26,6 +26,18 @@ dated section after deployment.
   `auto_trade_fills` (4 new nullable columns, `store.py`). Joinable
   against `auto_trade_results.result_pips` via `group_id` once enough
   trades have accumulated. Purely descriptive — never a gate.
+- New manual `/algo` suffix `/ 1r` for owner-personal trades that aren't
+  for the channel: collapses any typed entry zone to the conservative
+  edge already used for R sizing and books full volume at that single
+  price, overrides any explicit `tp` with one target at exactly 1R, and
+  arms broker execution on its own (`/ algo` not required). The root card
+  and every later lifecycle update (fills, TP, close, SL moves) are DM'd
+  to the owner instead of posted to the VIP/public channel — same
+  `signal_posts` fan-out mechanism, just addressed at the owner's chat id
+  with `tier="vip"` so the daily `#seq` and inline Close button still
+  work. New `manual_signals.personal_trade` column and
+  `ManualTradeIntent.single_entry_override` field; no C# changes (the
+  single-entry/single-TP execution path already existed for FX).
 
 ### Changed
 - Retired the "HFS" product name in favor of "scalping" everywhere it was
