@@ -1,7 +1,7 @@
 {
   "catalog_version": 2,
   "configuration_contract_fingerprint_sha256": "5e889b64542bd3bdb7f684f7c4706b6c09d946c94f01321694d07f7bad837cb8",
-  "configuration_document_fingerprint_sha256": "d932374dacc3d89b2cbcc3dbb2e595e1d82d8fcf468a96646a3ab8cf7f482bd9",
+  "configuration_document_fingerprint_sha256": "ceeac5fedb8a4568797e993b43a8e6f63cb6ba52f32774b0060d0b60202a8a83",
   "counts": {
     "algorithm_constants": 97,
     "configurable": 562,
@@ -9786,7 +9786,7 @@
       ],
       "deprecated": false,
       "deprecated_aliases": [],
-      "description": "Delete every message in the ApexVoid bot DM with the owner at each local trade-day rollover, both bot sends and owner messages; opt-in, irreversible.",
+      "description": "Delete the ApexVoid bot's own messages in the owner DM at each local trade-day rollover; the owner's own typed messages are never touched. Opt-in, irreversible.",
       "display_id": "config:delivery.telegram.owner_dm_daily_wipe_enabled",
       "evidence_notes": [],
       "introduced_in": "config-catalog-v2",
