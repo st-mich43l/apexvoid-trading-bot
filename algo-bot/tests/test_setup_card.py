@@ -753,7 +753,6 @@ async def test_kill_setup_card_noop_edit_when_already_intact():
 
 @pytest.mark.asyncio
 async def test_kill_setup_card_deletes_when_forced(monkeypatch):
-  """Legacy delete path remains reachable only via explicit monkeypatch."""
   client = redis_state.get_client()
   monkeypatch.setattr(setup_card, "should_delete_root_on_terminal", lambda: True)
   await setup_card.save_forming_card(client, "setup-4", chat_id=123, message_id=5555)
@@ -867,8 +866,8 @@ async def test_delete_on_terminal_disabled_retains_root_intact(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_delete_root_flag_true_still_retains(monkeypatch):
-  """Config delete flags are ignored — reject/expire leave body intact."""
+async def test_delete_root_flag_true_deletes_on_terminal(monkeypatch):
+  """delete_root_on_terminal=True makes reject/expire delete the root card."""
   client = redis_state.get_client()
   await setup_card.save_forming_card(
     client, "setup-del", chat_id=123, message_id=3333,
@@ -879,20 +878,18 @@ async def test_delete_root_flag_true_still_retains(monkeypatch):
   calls = []
 
   async def delete_fn(chat_id, message_id):
-    calls.append("delete")
+    calls.append(("delete", chat_id, message_id))
 
   async def edit_fn(chat_id, message_id, text):
-    calls.append("edit")
+    calls.append(("edit", chat_id, message_id))
 
   await setup_card.kill_setup_card(
     client, "setup-del", reason_code="expired",
     delete_fn=delete_fn, edit_fn=edit_fn,
   )
-  assert calls == []
-  assert await setup_card.load_telegram_root_message_id(client, "setup-del") == 3333
-  card = await setup_card.load_forming_card(client, "setup-del")
-  assert card is not None
-  assert "TERMINAL" not in card["text"]
+  assert calls == [("delete", 123, 3333)]
+  assert await setup_card.load_telegram_root_message_id(client, "setup-del") is None
+  assert await setup_card.load_forming_card(client, "setup-del") is None
 
 
 @pytest.mark.asyncio
