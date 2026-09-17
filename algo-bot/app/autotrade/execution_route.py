@@ -211,6 +211,7 @@ def resolve_execution_route_plan(
   zone_fill_enabled: bool = False,
   zone_fill_min_atr: float = 0.5,
   inside_zone_market_entry_enabled: bool = True,
+  single_entry_market_inside: bool = False,
   zone_fill_fallback_enabled: bool = True,
   digits: int = 2,
   allow_either: bool = False,
@@ -442,6 +443,23 @@ def resolve_execution_route_plan(
     )
 
   if preference == "limit":
+    # FX's single-best-entry contract is intentionally not a marketable
+    # limit at the quote. A true market route fills once against the current
+    # bid/ask and cannot leave a second entry leg behind. Outside the zone,
+    # the single-limit branch below still waits at the proximal boundary.
+    if (
+      distribution == "single"
+      and single_entry_market_inside
+      and geometry == "inside"
+    ):
+      return ExecutionRoutePlan(
+        ROUTE_MARKET,
+        _round_price(quote, digits),
+        (),
+        geometry,
+        "execution policy: single best in-zone market",
+        True,
+      )
     # Only force market_with_limit_scale once price is already inside the
     # zone. Outside approaches keep the resting limit / DCA ladder path.
     if reaction_scale_ok and geometry == "inside":
