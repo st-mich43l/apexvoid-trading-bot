@@ -178,6 +178,11 @@ def test_production_yaml_fx_live_executable_units():
   assert eurusd.targeting.trail_to_r is None
   assert gbpjpy.targeting.trail_to_r is None
   assert eurusd.targeting.entry_clips == 2
+  assert eurusd.auto_entry.mode.value == "single_best"
+  assert gbpusd.auto_entry.mode.value == "single_best"
+  assert gbpjpy.auto_entry.mode.value == "single_best"
+  assert usdjpy.auto_entry.mode.value == "single_best"
+  assert xau.auto_entry.mode.value == "scale"
   assert gbpjpy.targeting.entry_clips == 2
   assert xau.targeting.mode is InstrumentTargetMode.FIXED_RR
   # XAU deliberately diverges from the FX policies' shared 1R/2R shape onto

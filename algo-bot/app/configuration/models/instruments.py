@@ -56,6 +56,24 @@ class InstrumentTargetMode(StrEnum):
   FIXED_RR = "fixed_rr"
 
 
+class InstrumentAutoEntryMode(StrEnum):
+  """Autonomous entry shape owned by an instrument pack."""
+
+  SCALE = "scale"
+  SINGLE_BEST = "single_best"
+
+
+class InstrumentAutoEntryConfig(FrozenConfigModel):
+  """Execution entry distribution for autonomous plans only.
+
+  ``scale`` preserves the multi-leg reaction/zone routes used by XAU.
+  ``single_best`` uses one market fill once price is inside the approved
+  zone, or one proximal resting limit while price approaches it.
+  """
+
+  mode: InstrumentAutoEntryMode = InstrumentAutoEntryMode.SCALE
+
+
 # Uniform FX autonomous R:R ladder. Every FX fixed_rr instrument books 50%
 # at 1R and 50% at 2R, with the runner moving to breakeven once TP1 fills.
 # The 2R→1R room fallback is decided per trade in execution_policy.
@@ -195,8 +213,8 @@ class InstrumentTargetingConfig(FrozenConfigModel):
   # Move the runner's stop to the group weighted entry once this R multiple is
   # booked. Mutually exclusive with the R-trail.
   breakeven_after_r: float | None = Field(default=None, gt=0)
-  # Instrument-owned DCA clip count for autonomous technique/scalp entries.
-  # Production XAU and FX packs use shallow + deep clips.
+  # Maximum DCA clip count for autonomous routes configured to scale. It is
+  # ignored by an instrument's ``auto_entry: single_best`` contract.
   entry_clips: int = Field(default=5, ge=2, le=5)
 
   @model_validator(mode="after")
@@ -444,6 +462,9 @@ class InstrumentConfig(FrozenConfigModel):
   contract: InstrumentContractConfig | None = None
   targeting: InstrumentTargetingConfig = Field(
     default_factory=InstrumentTargetingConfig,
+  )
+  auto_entry: InstrumentAutoEntryConfig = Field(
+    default_factory=InstrumentAutoEntryConfig,
   )
   # ``None`` preserves enough information to apply the narrow compatibility
   # defaults in ``resolve_manual_profile``. New declarations should state the

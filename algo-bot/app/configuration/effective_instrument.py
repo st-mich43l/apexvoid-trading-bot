@@ -19,6 +19,7 @@ from app.configuration.models.base import FrozenConfigModel
 from app.configuration.models.instruments import (
   CTRADER_VOLUME_HUNDREDTHS,
   REGISTERED_INSTRUMENT_POLICIES,
+  InstrumentAutoEntryConfig,
   InstrumentConfig,
   InstrumentLookbacksConfig,
   InstrumentManualConfig,
@@ -134,6 +135,7 @@ class EffectiveInstrumentConfig(FrozenConfigModel):
   identity: InstrumentIdentityConfig
   units: InstrumentUnitsConfig
   targeting: InstrumentTargetingConfig
+  auto_entry: InstrumentAutoEntryConfig
   manual: InstrumentManualConfig
   market_data: EffectiveInstrumentMarketDataConfig
   analysis: EffectiveInstrumentAnalysisConfig
@@ -570,6 +572,7 @@ def build_effective_instrument(
     identity=identity,
     units=units,
     targeting=instrument.targeting,
+    auto_entry=instrument.auto_entry,
     manual=manual,
     market_data=EffectiveInstrumentMarketDataConfig(
       lookbacks=lookbacks,

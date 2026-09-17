@@ -236,18 +236,18 @@ def test_fx_technique_route_uses_its_declared_zone_scale_policy(direction: str):
   assert len(plan.planned_leg_entry_prices) == 2
 
 
-def test_fx_auto_plan_falls_back_to_market_watch_when_fvg_zone_too_narrow_to_split():
-  # Owner 2026-09-08 (bad technique entries): FVG's own declared policy is
-  # limit + zone_scale (FAMILY_SUPPLY_DEMAND), not a forced single-leg
-  # market - _fx_match()'s zone here is just too narrow relative to ATR to
-  # qualify for a 2-leg split, so it falls back to a single entry same as
-  # any other limit-preference strategy would. That fallback now goes
-  # through market_watch's broker-side zone revalidation instead of firing
-  # an unconditional immediate market order (see
-  # test_technique_fvg_uses_its_declared_zone_scale_policy for the wide-
-  # zone case that now gets the real zone_scale ladder).
+def test_fx_auto_plan_uses_single_market_watch_entry():
+  # FX's pack overrides a technique policy's zone_scale declaration: one
+  # best in-zone market fill, no shallow/deep ladder, even when the zone
+  # would otherwise qualify for scaling.
   cfg = _load_production_example().config
-  match = replace(_fx_match(), strategy="FVG", family="zone")
+  match = replace(
+    _fx_match(),
+    strategy="FVG",
+    family="zone",
+    entry_high=1.1010,
+    structural_zone_high=1.1010,
+  )
   evaluation = evaluate_execution_policy(
     match,
     spot_price=match.current_price,
@@ -257,6 +257,8 @@ def test_fx_auto_plan_falls_back_to_market_watch_when_fvg_zone_too_narrow_to_spl
     cfg=cfg,
   )
   assert evaluation.allowed is True
+  assert evaluation.measured["auto_entry_mode"] == "single_best"
+  assert evaluation.measured["entry_distribution"] == "single"
   assert evaluation.measured["planned_execution_route"] == "market"
   assert evaluation.measured.get("planned_leg_volume_ratios") in (None, [], ())
 
@@ -275,6 +277,44 @@ def test_fx_auto_plan_falls_back_to_market_watch_when_fvg_zone_too_narrow_to_spl
   )
   assert plan.entry.type == "market_watch"
   assert plan.entry.legs == ()
+
+
+@pytest.mark.parametrize(
+  ("direction", "quote", "expected_route", "expected_price"),
+  [
+    ("BUY", 1.1005, "market", 1.1005),
+    ("SELL", 1.1005, "market", 1.1005),
+    ("BUY", 1.1015, "single_limit", 1.1010),
+    ("SELL", 1.0995, "single_limit", 1.1000),
+  ],
+)
+def test_fx_single_best_entry_has_one_or_zero_declared_legs(
+  direction: str,
+  quote: float,
+  expected_route: str,
+  expected_price: float,
+):
+  from app.autotrade.execution_route import resolve_execution_route_plan
+
+  route = resolve_execution_route_plan(
+    direction=direction,
+    order_type_preference="limit",
+    entry_distribution="single",
+    executable_quote=quote,
+    zone_low=1.1000,
+    zone_high=1.1010,
+    atr=0.0008,
+    zone_fill_enabled=True,
+    digits=5,
+    single_entry_market_inside=True,
+  )
+
+  assert route.valid is True
+  assert route.route == expected_route
+  assert route.planned_entry_price == expected_price
+  assert route.planned_leg_entry_prices in ((), (expected_price,))
+  assert len(route.planned_leg_entry_prices) <= 1
+  assert route.planned_leg_volume_ratios == ()
 
 
 def test_fx_targeting_is_explicit_configuration_not_symbol_detection():
