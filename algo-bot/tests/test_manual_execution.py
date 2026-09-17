@@ -1458,7 +1458,7 @@ async def test_handle_take_profit_uses_the_booking_legs_own_pips(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_handle_event_position_closing_pings_vip_without_touching_state(
+async def test_handle_event_position_closing_pings_without_touching_state(
   monkeypatch,
 ):
   """Owner 2026-09-17: the real position_closed event can arrive several
@@ -1488,6 +1488,33 @@ async def test_handle_event_position_closing_pings_vip_without_touching_state(
   after = await store.get_manual_signal(sid)
   assert after == before
   assert 555 in positions
+
+
+@pytest.mark.asyncio
+async def test_handle_event_position_closing_pings_every_tier_the_signal_has(
+  monkeypatch,
+):
+  """The real close event (trade_ops.post_result's _render) replies to every
+  persisted post regardless of tier, not just VIP. position_closing must
+  match that, not silently ping VIP-only for a signal that's also public.
+  """
+  send = _mock_send(monkeypatch)
+  sid = await _algo_signal()  # _algo_signal already posts the VIP root
+  await store.insert_signal_post(sid, -100987654322, 9800 + sid, "public")
+  await store.set_execution_fill(sid, broker_position_id=555, broker_fill_price=4100.0)
+  client = redis_state.get_client()
+  positions = {555: sid}
+
+  event = {
+    "type": "position_closing",
+    "position_id": 555,
+    "candidate_id": f"manual:{sid}:0",
+  }
+  await manual_execution._handle_event(client, event, positions)
+
+  assert send.await_count == 2
+  texts = [call.args[0] for call in send.await_args_list]
+  assert all("confirming" in text.lower() for text in texts)
 
 
 @pytest.mark.asyncio

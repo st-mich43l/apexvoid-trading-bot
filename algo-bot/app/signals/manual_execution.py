@@ -805,7 +805,10 @@ async def _handle_position_closing(event: dict, signal_id: int) -> None:
   Deliberately state-free: no ``_execute_close``, no row/pips bookkeeping,
   no dedup key. ``_handle_position_closed``/``_handle_manual_closed`` still
   own the real close entirely once it arrives moments later; this only
-  pings the same VIP thread so the owner sees something happen immediately.
+  pings every persisted post the signal actually has (VIP and public
+  alike - same tiers the real close event fans out to via
+  ``trade_ops.post_result``'s ``_render``, not VIP-only) so the owner sees
+  something happen immediately.
   """
   from app.signals.broadcast import fanout_update
 
@@ -814,10 +817,7 @@ async def _handle_position_closing(event: dict, signal_id: int) -> None:
     return
   await fanout_update(
     sig,
-    lambda tier: (
-      "⏳ Position closed at broker — confirming exit price..."
-      if tier == "vip" else None
-    ),
+    lambda tier: "⏳ Position closed at broker — confirming exit price...",
   )
 
 
