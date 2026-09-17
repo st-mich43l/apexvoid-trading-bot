@@ -794,6 +794,33 @@ async def _handle_tp_reached(event: dict, signal_id: int) -> None:
   await trade_ops.post_result(result, sig.get("symbol", "XAU"))
 
 
+async def _handle_position_closing(event: dict, signal_id: int) -> None:
+  """Owner 2026-09-17: a heads-up the instant AutoTradeEngine.cs confirms a
+  leg is gone from the broker, well before ``position_closed`` arrives.
+  Between those two events the engine still has to run its best-effort
+  close-reason + exit-price lookup (windowed ProtoOADealListByPositionIdReq,
+  up to a few seconds) - previously the owner saw nothing at all until that
+  resolved, which read as the bot being slow to react to a stop-out.
+
+  Deliberately state-free: no ``_execute_close``, no row/pips bookkeeping,
+  no dedup key. ``_handle_position_closed``/``_handle_manual_closed`` still
+  own the real close entirely once it arrives moments later; this only
+  pings the same VIP thread so the owner sees something happen immediately.
+  """
+  from app.signals.broadcast import fanout_update
+
+  sig = await get_manual_signal(signal_id)
+  if sig is None:
+    return
+  await fanout_update(
+    sig,
+    lambda tier: (
+      "⏳ Position closed at broker — confirming exit price..."
+      if tier == "vip" else None
+    ),
+  )
+
+
 async def _handle_position_closed(event: dict, signal_id: int) -> None:
   """A broker-detected close (stop loss, or an unconfirmed disappearance)
   for ONE entry leg. A manual /algo signal's entry can be several
@@ -1119,6 +1146,8 @@ async def _handle_event(
     await _handle_take_profit(event, signal_id)
   elif event_type == "manual_tp_reached":
     await _handle_tp_reached(event, signal_id)
+  elif event_type == "position_closing":
+    await _handle_position_closing(event, signal_id)
   elif event_type == "position_closed":
     await _handle_position_closed(event, signal_id)
     if not (event.get("remaining_volume") or 0) > 0:
