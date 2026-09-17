@@ -18,6 +18,7 @@ from tests.configuration.canonical_fixtures import execution_cfg
 
 from app.autotrade.execution_policy import evaluate_execution_policy
 from app.autotrade.execution_route import (
+  ROUTE_MARKET_WITH_LIMIT_SCALE,
   ROUTE_SINGLE_LIMIT,
   resolve_execution_route_plan,
   risk_targeted_entry_price,
@@ -106,6 +107,38 @@ def test_resolve_route_plan_uses_risk_targeted_entry_when_provided():
   )
   assert plan.route == ROUTE_SINGLE_LIMIT
   assert plan.planned_entry_price == pytest.approx(4091.0)
+
+
+def test_resolve_route_plan_uses_risk_targeted_entry_when_inside_zone():
+  # ENTRY_LOGIC_REVIEW_2026-09-17.md / reproduced live 2026-09-17 (XAU Key
+  # Level SELL v8:9768e2b1...): market_with_limit_scale silently discarded
+  # the risk-targeted entry for leg 2 once the quote was already inside the
+  # zone, re-anchoring both legs to the live quote instead. Quote here
+  # (4093.0) sits inside [4090, 4095] - the exact geometry that was broken.
+  plan = resolve_execution_route_plan(
+    direction="BUY",
+    order_type_preference="limit",
+    entry_distribution="zone_scale",
+    executable_quote=4093.0,
+    zone_low=4090.0,
+    zone_high=4095.0,
+    atr=1.0,
+    digits=2,
+    zone_fill_enabled=True,
+    zone_fill_min_atr=0.5,
+    reaction_scale_enabled=True,
+    reaction_scale_step_atr=0.5,
+    strategy="Key Level",
+    structural_stop=4086.0,
+    target_risk_pips=50.0,
+    pip_size=0.1,
+  )
+  assert plan.route == ROUTE_MARKET_WITH_LIMIT_SCALE
+  # L1 stays the live quote (market, immediately fillable).
+  assert plan.planned_entry_price == pytest.approx(4093.0)
+  # L2 steps from the risk-targeted price (4091.0), not the quote -
+  # max(zone_low, 4091.0 - 0.5*ATR) = 4090.5.
+  assert plan.planned_leg_entry_prices == pytest.approx((4093.0, 4090.5))
 
 
 def test_resolve_route_plan_keeps_zone_edge_when_risk_targeting_omitted():
