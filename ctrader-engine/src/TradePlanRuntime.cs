@@ -2186,6 +2186,11 @@ public sealed class TradePlanRuntime(
     }
     if (
       options.ReactionRiskLegEnabled
+      // Owner 2026-09-17: XAU only. The fixed 0.05/0.02 lot sizing was
+      // tuned against XAU's pip value; applying it unchanged to FX pairs
+      // is a materially different risk (reproduced live on a USDJPY CRT
+      // trade that got a RISK leg it should never have had).
+      && string.Equals(plan.Symbol, "XAU", StringComparison.OrdinalIgnoreCase)
       && (plan.Entry.Legs?.Count ?? 0) > 1
       && plan.Entry.Type
         is TradePlanContract.EntryTypeLimitLadder
@@ -2989,10 +2994,19 @@ public sealed class TradePlanRuntime(
       var beAfterIndex = plan.Management.BeAfterTargetId is null
         ? -1
         : IndexOfTarget(plan, plan.Management.BeAfterTargetId);
+      // ENTRY_LOGIC_REVIEW_2026-09-17: the RISK leg's own fill must not
+      // skew the BE reference toward its deliberately-worse price, same
+      // exclusion SignedExitPips already applies to the loss-pips
+      // reference - so beFill is computed off non-RISK legs only.
+      var beReferenceLegs = (state.Legs ?? [])
+        .Where(leg => !IsReactionRiskLeg(leg.LegId))
+        .ToArray();
+      var beFillPrice = TradePlanJson.WeightedFillPrice(beReferenceLegs)
+        ?? state.EntryFillPrice;
       if (
         !state.BreakEvenApplied
         && beAfterIndex >= 0
-        && fillPrice is decimal beFill
+        && beFillPrice is decimal beFill
         // Require a real booked TP at/after BeAfterTargetId. Advancing
         // NextTargetIndex on deferred undersized shares must not move BE.
         && state.HighestBookedTargetIndex >= beAfterIndex
@@ -3017,10 +3031,16 @@ public sealed class TradePlanRuntime(
         // only the legs still actually open. Recompute the same way here:
         // once a leg closes, it drops out of the reference, so the deeper
         // still-open leg's own (better) fill dominates instead.
-        var remainingWeightedFill = openLegs.Length > 0
-          && openLegs.All(leg => leg.FillPrice is not null)
-          ? openLegs.Sum(leg => leg.FillPrice!.Value * leg.RemainingVolume)
-            / openLegs.Sum(leg => leg.RemainingVolume)
+        // The RISK leg is excluded from this reference too (same reasoning
+        // as beFillPrice above), but stays in `openLegs` below so its own
+        // stop still gets amended to BE like every other open leg.
+        var remainingReferenceLegs = openLegs
+          .Where(leg => !IsReactionRiskLeg(leg.LegId))
+          .ToArray();
+        var remainingWeightedFill = remainingReferenceLegs.Length > 0
+          && remainingReferenceLegs.All(leg => leg.FillPrice is not null)
+          ? remainingReferenceLegs.Sum(leg => leg.FillPrice!.Value * leg.RemainingVolume)
+            / remainingReferenceLegs.Sum(leg => leg.RemainingVolume)
           : beFill;
         var be = TradePlanExecutionEngine.CalculateBreakEven(
           plan, remainingWeightedFill, state.CurrentStop, symbol
