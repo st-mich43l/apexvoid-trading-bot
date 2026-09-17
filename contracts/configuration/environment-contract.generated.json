@@ -4591,7 +4591,7 @@
       "default": false,
       "deprecated": false,
       "deprecated_aliases": [],
-      "description": "Delete every message in the ApexVoid bot DM with the owner at each local trade-day rollover, both bot sends and owner messages; opt-in, irreversible.",
+      "description": "Delete the ApexVoid bot's own messages in the owner DM at each local trade-day rollover; the owner's own typed messages are never touched. Opt-in, irreversible.",
       "display_id": "config:delivery.telegram.owner_dm_daily_wipe_enabled",
       "owner": "python",
       "path": "delivery.telegram.owner_dm_daily_wipe_enabled",

@@ -402,13 +402,15 @@ def telegram_root_message_key(setup_id: str) -> str:
 
 
 def should_delete_root_on_terminal() -> bool:
-  """Reject/expire/invalidate retain the root card body (never delete).
+  """Whether reject/expire/invalidate should delete the root card.
 
-  Single-root mode used to allow delete; that orphaned reply threads.
-  Close/reject now also leave the SETUP/ACTIVATED body intact — no
-  TERMINAL rewrite on the root (see kill_setup_card).
+  Owner 2026-09-17: single-root mode used to always delete here, which
+  orphaned reply threads, so this was hardcoded to retain-only on
+  2026-08-17. Re-enabled behind delivery.telegram.delete_root_on_terminal
+  (owner's explicit choice, accepting the reply-thread tradeoff) instead
+  of leaving it permanently off.
   """
-  return False
+  return runtime_config.delivery.telegram.delete_root_on_terminal
 
 
 def forming_status_key(setup_id: str) -> str:
@@ -1522,7 +1524,6 @@ async def kill_setup_card(
     )
     return
 
-  # Legacy delete path retained for tests that force-delete via monkeypatch.
   terminal = _terminal_card_text(reason_code, existing_text)
   try:
     await delete_fn(card["chat_id"], card["message_id"])
