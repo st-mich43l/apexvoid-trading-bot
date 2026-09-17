@@ -10049,6 +10049,29 @@ public sealed class AutoTradeEngine(
   // {barTs}|{expiresAt} - single-leg manual-algo equivalent of av3/avz.
   // expiresAt is an absolute unix timestamp (0 = never expires), unlike
   // zone-fill's bars*60s TTL formula.
+  private static string BuildManualBasePart(
+    string candidateId,
+    string groupId,
+    long volume,
+    IReadOnlyList<long> slices,
+    IReadOnlyList<int> targets,
+    IReadOnlyList<int> ordinals,
+    long barTs,
+    long expiresAt
+  ) =>
+    string.Join(
+      '|',
+      "avm",
+      CandidateToken(candidateId),
+      GroupToken(groupId),
+      volume.ToString(CultureInfo.InvariantCulture),
+      string.Join(',', slices),
+      string.Join(',', targets),
+      string.Join(',', ordinals),
+      barTs.ToString(CultureInfo.InvariantCulture),
+      expiresAt.ToString(CultureInfo.InvariantCulture)
+    );
+
   private static string BuildManualComment(
     string candidateId,
     string groupId,
@@ -10062,17 +10085,8 @@ public sealed class AutoTradeEngine(
     int legCount
   )
   {
-    var basePart = string.Join(
-      '|',
-      "avm",
-      CandidateToken(candidateId),
-      GroupToken(groupId),
-      volume.ToString(CultureInfo.InvariantCulture),
-      string.Join(',', slices),
-      string.Join(',', targets),
-      string.Join(',', ordinals),
-      barTs.ToString(CultureInfo.InvariantCulture),
-      expiresAt.ToString(CultureInfo.InvariantCulture)
+    var basePart = BuildManualBasePart(
+      candidateId, groupId, volume, slices, targets, ordinals, barTs, expiresAt
     );
     var comment = string.Join(
       '|',
@@ -10093,6 +10107,32 @@ public sealed class AutoTradeEngine(
     if (basePart.Length <= 100)
     {
       return basePart;
+    }
+    // Owner-reported 2026-09-17: a 5-level TP ladder left even the 9-part
+    // base over 100 chars, so BuildManualComment threw and the candidate
+    // was lost entirely - the retry that followed landed outside the
+    // staleness window, so the owner saw an opaque "stale candidate"
+    // reject with no fill and no obvious connection to the real cause.
+    // Drop the farthest (highest-ordinal) target first - it's the TP the
+    // position is least likely to ever reach - and keep dropping until the
+    // base fits or only one target is left. A fill with a shorter ladder
+    // is always a better outcome than losing the trade outright.
+    var trimmedSlices = slices;
+    var trimmedTargets = targets;
+    var trimmedOrdinals = ordinals;
+    while (trimmedTargets.Count > 1)
+    {
+      trimmedSlices = trimmedSlices.Take(trimmedSlices.Count - 1).ToArray();
+      trimmedTargets = trimmedTargets.Take(trimmedTargets.Count - 1).ToArray();
+      trimmedOrdinals = trimmedOrdinals.Take(trimmedOrdinals.Count - 1).ToArray();
+      var trimmedBasePart = BuildManualBasePart(
+        candidateId, groupId, volume, trimmedSlices, trimmedTargets, trimmedOrdinals,
+        barTs, expiresAt
+      );
+      if (trimmedBasePart.Length <= 100)
+      {
+        return trimmedBasePart;
+      }
     }
     throw new VolumePlanningException(
       $"manual algo comment is {basePart.Length} chars; cTrader maximum is 100"

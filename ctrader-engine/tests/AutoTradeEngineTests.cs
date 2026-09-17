@@ -3105,6 +3105,67 @@ public sealed partial class AutoTradeEngineTests
   }
 
   [Fact]
+  public async Task ManualAlgoWithASixTargetLadderTrimsTargetsInsteadOfRejecting()
+  {
+    // Live 2026-09-17 (candidates manual:384:0, manual:386:0, manual:387:0):
+    // a wider owner ladder left even the 9-part avm base over 100 chars -
+    // "manual algo comment is 101 chars" - past the point dropping
+    // legIndex/legCount alone (the 2026-08-19 fix above) can rescue. Each
+    // candidate failed outright and was then rejected as stale on retry,
+    // with no fill and no owner-visible link to the real cause. Rather
+    // than lose the trade, BuildManualComment must now drop the farthest
+    // (highest-ordinal, least-urgent) target - and keep dropping - until
+    // the base fits.
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    var store = new FakeAutoTradeStore(ManualCandidateJson(
+      direction: "SELL",
+      candidateId: "manual:387:0",
+      entryLow: 3999.5m,
+      entryHigh: 4000.5m,
+      manualStopLoss: 4006.0m,
+      targetsPips: new[] { 30, 60, 100, 130, 200, 260 },
+      manualTakeProfits: new[]
+      {
+        3999.5m - 3.0m, 3999.5m - 6.0m, 3999.5m - 10.0m,
+        3999.5m - 13.0m, 3999.5m - 20.0m, 3999.5m - 26.0m,
+      },
+      expiresAt: 1_787_126_400,
+      barTs: 1_787_106_159
+    ));
+    var client = new FakeTradingClient
+    {
+      Account = ValidAccount() with { Balance = 50_000m, Equity = 50_000m },
+    };
+    var engine = new AutoTradeEngine(Options(), store, () => Now, _ => { });
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 3990.0m, 3990.2m, Now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+
+    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
+    await store.Ordered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+    Assert.DoesNotContain(store.Events, item => item.Type == "rejected");
+    Assert.NotEmpty(client.LimitOrders);
+    foreach (var order in client.LimitOrders)
+    {
+      Assert.StartsWith("avm|", order.Comment);
+      Assert.True(
+        order.Comment.Length <= 100,
+        $"comment is {order.Comment.Length} chars: {order.Comment}"
+      );
+      var targetCount = order.Comment.Split('|')[5].Split(',').Length;
+      Assert.True(
+        targetCount < 6,
+        $"expected at least one target trimmed from the original 6, got {targetCount}"
+      );
+    }
+
+    cts.Cancel();
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+  }
+
+  [Fact]
   public async Task ManualRestartRestoresTrancheCountFromPlanWhenCommentHasNoLegSuffix()
   {
     // cTrader persists the compact 9-part form when |legIndex|legCount would
