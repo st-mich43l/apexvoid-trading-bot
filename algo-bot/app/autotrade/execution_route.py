@@ -329,10 +329,16 @@ def resolve_execution_route_plan(
         "execution policy requires unavailable market_with_limit_scale",
       )
     # Confirmed in-zone (or zone-scale reaction selected): L1 market at live
-    # quote, L2 resting limit one step deeper into the zone.
-    l2_anchor = scale_entry_anchor if geometry == "inside" else proximal
+    # quote, L2 resting limit one step deeper into the zone. L2 always
+    # anchors off `proximal` (the risk-targeted price for XAU, or the
+    # zone's own far/better edge otherwise) - never the quote-collapsed
+    # `scale_entry_anchor`, which exists only to keep L1 fillable once
+    # price is already inside the zone. Owner-reported 2026-09:
+    # market_with_limit_scale was silently discarding a correctly-computed
+    # risk-targeted/zone-edge price for L2, clustering both legs at the
+    # live quote instead - see ENTRY_LOGIC_REVIEW_2026-09-17.md.
     legs = _scale_ladder_legs(
-      side=side, low=low, high=high, proximal=l2_anchor,
+      side=side, low=low, high=high, proximal=proximal,
       atr=atr, scale_step_atr=reaction_step, digits=digits,
     )
     # L1 reference price is the live quote (not a limit); L2 is deeper limit.
@@ -465,10 +471,21 @@ def resolve_execution_route_plan(
           "execution policy requires unavailable zone_split limit capability",
         )
       if distribution == "zone_scale":
+        # Leg 2's step-basis is `proximal` (the risk-targeted/zone-edge
+        # price), not the quote-collapsed `scale_entry_anchor` - passing
+        # the quote here (the pre-fix behavior) both discards the better
+        # price AND, once geometry is "inside", can hand leg 2 a step
+        # computed from the wrong side of the market. Leg 1 stays
+        # `scale_entry_anchor` deliberately - it must remain a valid,
+        # likely-marketable resting price once price is already inside the
+        # zone (see the comment above `scale_entry_anchor`'s definition);
+        # `_scale_ladder_legs`'s own first return value (== its `proximal`
+        # argument verbatim) is not reused for that reason.
         legs = _scale_ladder_legs(
-          side=side, low=low, high=high, proximal=scale_entry_anchor,
+          side=side, low=low, high=high, proximal=proximal,
           atr=atr, scale_step_atr=scale_step_atr, digits=digits,
         )
+        legs = (_round_price(scale_entry_anchor, digits), legs[1])
         return ExecutionRoutePlan(
           ROUTE_ZONE_SPLIT,
           legs[0],
@@ -522,10 +539,13 @@ def resolve_execution_route_plan(
       return scaled
   if split_ok and distribution in {"zone_split", "zone_scale", "either", ""}:
     if distribution == "zone_scale":
+      # Same fix as the two zone_scale branches above: leg 2 steps from
+      # `proximal`, leg 1 stays the quote-safe `scale_entry_anchor`.
       legs = _scale_ladder_legs(
-        side=side, low=low, high=high, proximal=scale_entry_anchor, atr=atr,
+        side=side, low=low, high=high, proximal=proximal, atr=atr,
         scale_step_atr=scale_step_atr, digits=digits,
       )
+      legs = (_round_price(scale_entry_anchor, digits), legs[1])
       return ExecutionRoutePlan(
         ROUTE_ZONE_SPLIT,
         legs[0],

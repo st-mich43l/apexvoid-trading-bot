@@ -230,6 +230,22 @@ dated section after deployment.
   `PlanGroupEconomicBreakeven`.
 
 ### Fixed
+- `execution_route.py`'s zone-scale routing (`market_with_limit_scale` for
+  Key Level/Session Level/Trendline, and the classic zone_scale ladder for
+  Demand/Supply/CRT/FVG/iFVG/OB) was silently discarding the already-
+  computed better entry price for the second/deeper leg — the XAU
+  risk-targeted price, or the zone's own structural near edge for every
+  other instrument — and re-anchoring it to the live quote instead,
+  whenever price was already inside the zone at confirmation (the normal
+  case for a reaction/technique zone). Since the group stop is fixed
+  regardless of entry price, entry price was the only lever controlling
+  risk on these trades. Reproduced live 2026-09-17 on both XAU (Key Level
+  SELL, `v8:9768e2b1…`) and USDJPY (CRT SELL, `v8:4faf9fb1…`, stopped out
+  −10p; an entry near the zone's own better edge would have cost ~3p for
+  the identical wrong call). The first leg keeps tracking the live quote
+  (still needs to be immediately fillable); only the second/deeper leg
+  now anchors off the true structural price. See
+  `ENTRY_LOGIC_REVIEW_2026-09-17.md`.
 - Scalp volume silently re-inflated to 1.5× table lots despite PR #486's
   "scalp books the same flat equity-table lot as any other trade" fix.
   `risk_multiplier_for_tier`'s scalp branch still returned
