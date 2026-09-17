@@ -556,6 +556,7 @@ def build_trade_plan_from_strategy_match(
     opposing_risk_score=match.opposing_risk_score,
     opposing_action=match.opposing_action,
     opposing_reason_code=match.opposing_reason_code,
+    trendline_v2=match.trendline_v2,
   )
 
   source_structure = TradePlanSourceStructure(

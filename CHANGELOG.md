@@ -13,6 +13,10 @@ dated section after deployment.
 ## Unreleased
 
 ### Added
+- Trendline V2: immutable causal A/B anchors, independent forward reaction
+  validation, slope/penetration/violation telemetry, and explicit line
+  lifecycle (`tentative`, `confirmed`, `degraded`, `broken`, `exhausted`).
+  The evidence follows scanner matches into TradePlan V8 for replay.
 - Detection-time "math" telemetry (fib retracement ratio, momentum
   velocity/acceleration, dealing-range premium/discount position — the
   same values the root card's Math section already shows) now flows
@@ -66,6 +70,11 @@ dated section after deployment.
   repo's mirror-sync requirement (`docs/deployment.md § Production Ansible`).
 
 ### Changed
+- Trendline's ATR band is now an M5 interaction area, never an automatic
+  entry zone. A V2 reclaim must receive a fresh post-interaction M1 trigger;
+  chop requires stronger independent validation and HTF alignment rather than
+  globally disabling the strategy. `analysis.trendlines.version` provides a
+  reversible V1/V2 rollout, with optional V1 metrics-only shadow evaluation.
 - FX autonomous execution now uses one best entry: a single market fill when
   price is inside the approved zone, or one proximal resting limit while it
   approaches. EURUSD, GBPUSD, GBPJPY, and USDJPY no longer emit an XAU-style
@@ -234,6 +243,10 @@ dated section after deployment.
   `PlanGroupEconomicBreakeven`.
 
 ### Fixed
+- Trendline no longer refits an A-C line and retroactively counts B as a
+  confirming touch. A close-through invalidates the line, while reclaimed
+  wick probes are measured separately instead of being treated as equivalent
+  failures.
 - The reaction RISK leg (PR #554) is now gated to XAU only. Its fixed
   0.05/0.02-lot sizing was tuned against XAU's own pip value; applying
   the same fixed lots to an FX pair is a materially different risk —

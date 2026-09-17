@@ -14,6 +14,11 @@ class Swing:
   price: float
   label: str = ""
   ts: pd.Timestamp | None = None
+  # A fractal pivot is only knowable after the right-hand fractal bars have
+  # closed.  Keeping that availability point makes causal consumers (notably
+  # Trendline V2) unable to accidentally use a pivot before it existed.
+  confirmed_index: int | None = None
+  confirmed_ts: pd.Timestamp | None = None
 
 
 @dataclass(frozen=True)

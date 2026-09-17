@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace ApexVoid.CTraderFeed;
@@ -166,7 +167,11 @@ public sealed record TradePlanAnalysis(
   double? OpposingRoomPressure = null,
   double? OpposingRiskScore = null,
   string? OpposingAction = null,
-  string? OpposingReasonCode = null
+  string? OpposingReasonCode = null,
+  // Full causal Trendline V2 evidence is kept as an opaque JSON object.  The
+  // executor must not reinterpret scanner geometry, but retaining it makes a
+  // V8 plan replayable after it crosses the Python/C# boundary.
+  JsonElement? TrendlineV2 = null
 );
 
 public sealed record TradePlanSourceStructure(
