@@ -682,6 +682,13 @@ def evaluate_execution_policy(
     if policy.order_type_preference == "limit" and zone_width_atr >= 0.5
     else "single"
   )
+  auto_entry_mode = str(
+    getattr(getattr(instrument_cfg, "auto_entry", None), "mode", "scale")
+    or "scale"
+  ).strip().lower()
+  single_best_entry = auto_entry_mode == "single_best"
+  if single_best_entry:
+    entry_distribution = "single"
   quote = float(
     spot_price if executable_quote is None else executable_quote
   )
@@ -723,6 +730,7 @@ def evaluate_execution_policy(
     inside_zone_market_entry_enabled=bool(
       execution_entry.inside_zone_market_entry_enabled
     ),
+    single_entry_market_inside=single_best_entry,
     zone_fill_fallback_enabled=bool(zone_scaling.fill_fallback_enabled),
     digits=digits,
     allow_either=False,
@@ -1071,6 +1079,7 @@ def evaluate_execution_policy(
     "stamped_risk_multiplier": stamped_risk_multiplier,
     "instrument_volume_multiplier": instrument_volume_multiplier,
     "effective_risk_multiplier": effective_risk_multiplier,
+    "auto_entry_mode": auto_entry_mode,
     "order_type_preference": policy.order_type_preference,
     "entry_distribution": entry_distribution,
     "planned_execution_route": planned_route,

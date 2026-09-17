@@ -220,6 +220,9 @@ execution:
 instrument_packs:
   fx_usd_major_v1:
     policy: fx_fixed_2r_v1
+    # FX is one precise entry, never XAU's shallow/deep scale-in ladder.
+    auto_entry:
+      mode: single_best
     reaction_session: london_ny
     stop_envelope:
       min_pips: 10
@@ -291,6 +294,9 @@ instrument_packs:
   # those would hide, not remove, real divergence. Every JPY-cross instrument
   # must declare those as its own overrides.
   fx_jpy_cross_v1:
+    # FX is one precise entry, never XAU's shallow/deep scale-in ladder.
+    auto_entry:
+      mode: single_best
     activation:
       # Fresh M1 confirmation remains mandatory; sweep/body is preferred.
       require_sweep_body: false
@@ -342,6 +348,9 @@ instrument_packs:
   # this pack as FX-style "no scalp".
   xau_fixed_2r_v1:
     policy: xau_fixed_2r_v1
+    # Gold retains the separately tuned scale-in and optional XAU-only risk leg.
+    auto_entry:
+      mode: scale
     reaction_session: tokyo_london_ny
     stop_envelope:
       # Structure-first band replacing global reaction 40–60. Calibrate max

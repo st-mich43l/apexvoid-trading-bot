@@ -66,6 +66,10 @@ dated section after deployment.
   repo's mirror-sync requirement (`docs/deployment.md § Production Ansible`).
 
 ### Changed
+- FX autonomous execution now uses one best entry: a single market fill when
+  price is inside the approved zone, or one proximal resting limit while it
+  approaches. EURUSD, GBPUSD, GBPJPY, and USDJPY no longer emit an XAU-style
+  shallow/deep entry ladder; the optional reaction RISK leg remains XAU-only.
 - Retired the "HFS" product name in favor of "scalping" everywhere it was
   still live naming: docs prose, Python identifiers/log fields/test names,
   C# identifiers/test fixture ids, and the shared `market_buy_hfs_chase`
