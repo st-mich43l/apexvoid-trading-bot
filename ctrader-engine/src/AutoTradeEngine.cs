@@ -6389,6 +6389,34 @@ public sealed class AutoTradeEngine(
           }
           closingGroupInitialVolumes[groupId] = initialVolume;
         }
+        // Owner 2026-09-17: the close-reason + exit-price lookup just below
+        // can add several more seconds (windowed ProtoOADealListByPositionIdReq,
+        // capped at DealListLookupTimeout, with a retry) before the real
+        // "position_closed" event fires - previously the owner saw nothing
+        // at all in that window, which read as the bot being slow to react
+        // to a stop-out. Fire once, right when absence is first confirmed
+        // (not on a later price-pending retry of this same position, which
+        // re-enters this block on every subsequent reconcile pass) - gated
+        // on the PRE-increment confirmation count so it can only be true on
+        // the single pass that just crossed the threshold. Deliberately
+        // unmapped in AutoTradeLifecycle.TransitionForEvent (falls through
+        // to the null/telemetry-only case), so this never mutates candidate
+        // lifecycle state - "position_closed" still owns that transition
+        // entirely once it fires moments later.
+        if ((missing?.Confirmations ?? 0) < options.PositionMissingConfirmations)
+        {
+          await PublishAsync(
+            "position_closing",
+            "position confirmed closed at broker, resolving exit details",
+            cancellationToken,
+            state.CandidateId,
+            stale,
+            groupId: groupId,
+            setup: state.Setup,
+            stream: ExecutionStream(state),
+            direction: DirectionLabel(state.Direction)
+          );
+        }
         // Best-effort: was this the broker-attached SL/TP order, or a
         // manual/external order (almost certainly the owner closing it
         // directly on the platform)? Also recovers the closing deal's real
