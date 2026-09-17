@@ -3,9 +3,9 @@
 > Generated from the typed `ApexVoidConfig` Catalog V2 schema. Do not edit manually.
 
 - Catalog version: `2`
-- Contract fingerprint: `5e889b64542bd3bdb7f684f7c4706b6c09d946c94f01321694d07f7bad837cb8`
-- Document fingerprint: `ceeac5fedb8a4568797e993b43a8e6f63cb6ba52f32774b0060d0b60202a8a83`
-- Items: `669`
+- Contract fingerprint: `a4acd550c6e36e7bbdf7fe6dbae6439043a97d752b34a60f52a8193150ffb0d4`
+- Document fingerprint: `2753cc6f0ac668d6c2ba6614828f18208d956863419853191b1ed7cfafd37ea3`
+- Items: `672`
 - Runtime status: canonical-only; `app.core.config.runtime_config` is authoritative
 
 ## actionability
@@ -195,6 +195,9 @@
 | `analysis.triggers.m1.patterns` | `M1_TRIGGER_PATTERNS` | `str` | `string` | `configurable` | `"wick_rejection,body_close,strong_close,pin_bar,engulfing,hammer"` |
 | `analysis.triggers.m1.strong_close_pct` | `M1_TRIGGER_STRONG_CLOSE_PCT` | `float` | `percent` | `configurable` | `0.2` |
 | `analysis.triggers.m1.wick_fraction` | `M1_TRIGGER_WICK_FRACTION` | `float` | `fraction` | `configurable` | `0.5` |
+| `analysis.zone_relevance.immediate_atr` | `ANALYSIS_ZONE_RELEVANCE_IMMEDIATE_ATR` | `float` | `atr` | `configurable` | `0.25` |
+| `analysis.zone_relevance.nearby_atr` | `ANALYSIS_ZONE_RELEVANCE_NEARBY_ATR` | `float` | `atr` | `configurable` | `1.25` |
+| `analysis.zone_relevance.remote_atr` | `ANALYSIS_ZONE_RELEVANCE_REMOTE_ATR` | `float` | `atr` | `configurable` | `3.0` |
 | `analysis.zones.alert_ttl` | `ZONE_ALERT_TTL` | `int` | `seconds` | `configurable` | `14400` |
 | `analysis.zones.confluence.merge_gap_price` | `ZONE_MERGE_GAP` | `float` | `price` | `configurable` | `1.0` |
 | `analysis.zones.confluence.technique_bonus_score` | `CONFLUENCE_TECHNIQUE_BONUS_SCORE` | `float` | `score` | `configurable` | `2.5` |

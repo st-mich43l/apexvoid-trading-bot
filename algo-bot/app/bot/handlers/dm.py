@@ -14,6 +14,7 @@ from aiogram.types import Message
 from app.signals.chart_analysis import analyse_chart_image
 from app.autotrade.delivery import auto_trade_status_text, set_auto_trade_paused
 from app.autotrade.funnel_diagnostics import auto_trade_funnel_text
+from app.autotrade.setups_report import current_market_setups_text
 from app.signals.manual_execution import (
   list_open_algo_auto_positions,
   request_close_all,
@@ -113,6 +114,7 @@ Daily <code>#N</code> is per symbol.
 <code>/trade_review [SYMBOL] #id</code>
 <code>/trade_map [SYMBOL]</code>
 <code>/algo_status</code>
+<code>/algo_setups [SYMBOL]</code> — current actionable setups vs structural memory
 <code>/scan_report [SYMBOL] [hours]</code>
 <code>/algo_pause</code>
 <code>/algo_resume</code>
@@ -262,6 +264,28 @@ async def handle_algo_funnel(msg: Message) -> None:
     await msg.answer(
       "⚠️ <b>Algo funnel unavailable</b>\n"
       "Could not read Redis metrics — check bot logs."
+    )
+    return
+  if len(text) > 4000:
+    text = text[:3990] + "\n… (truncated)"
+  await msg.answer(text)
+
+
+@router.message(Command("algo_setups", "setups"), F.chat.type == "private")
+async def handle_algo_setups(msg: Message) -> None:
+  if not _is_owner(msg):
+    return
+  raw = _command_args(msg).strip()
+  symbol = raw.split()[0].upper() if raw else (
+    runtime_config.market_data.scanner.symbols.split(",")[0].strip().upper()
+  )
+  try:
+    text = await current_market_setups_text(symbol)
+  except Exception:
+    log.exception("algo_setups failed symbol=%s", symbol)
+    await msg.answer(
+      "⚠️ <b>Setups unavailable</b>\n"
+      "Could not build the current market snapshot — check bot logs."
     )
     return
   if len(text) > 4000:

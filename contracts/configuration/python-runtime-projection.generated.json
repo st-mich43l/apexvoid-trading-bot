@@ -1,6 +1,6 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "5e889b64542bd3bdb7f684f7c4706b6c09d946c94f01321694d07f7bad837cb8",
+  "configuration_contract_fingerprint_sha256": "a4acd550c6e36e7bbdf7fe6dbae6439043a97d752b34a60f52a8193150ffb0d4",
   "excluded_ctrader_only_count": 50,
   "excluded_paths": [
     "bootstrap.ctrader.connection.host",
@@ -54,7 +54,7 @@
     "risk.sizing.add_require_risk_free",
     "risk.sizing.risk_pct"
   ],
-  "included_leaf_count": 619,
+  "included_leaf_count": 622,
   "included_paths": [
     "actionability.contested_corridor.gap_atr",
     "actionability.counter_bias.allowed",
@@ -234,6 +234,9 @@
     "analysis.triggers.m1.patterns",
     "analysis.triggers.m1.strong_close_pct",
     "analysis.triggers.m1.wick_fraction",
+    "analysis.zone_relevance.immediate_atr",
+    "analysis.zone_relevance.nearby_atr",
+    "analysis.zone_relevance.remote_atr",
     "analysis.zones.alert_ttl",
     "analysis.zones.confluence.merge_gap_price",
     "analysis.zones.confluence.technique_bonus_score",
@@ -679,6 +682,6 @@
   "included_secret_count": 6,
   "included_shared_field_count": 96,
   "projection_model": "app.configuration.models.python_runtime.PythonRuntimeConfig",
-  "source_fingerprint_sha256": "5e889b64542bd3bdb7f684f7c4706b6c09d946c94f01321694d07f7bad837cb8",
+  "source_fingerprint_sha256": "a4acd550c6e36e7bbdf7fe6dbae6439043a97d752b34a60f52a8193150ffb0d4",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }
