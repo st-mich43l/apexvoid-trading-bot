@@ -718,6 +718,164 @@ public sealed class TradePlanRuntimeTests
   }
 
   [Fact]
+  public async Task BreakEvenAfterTp1ExcludesTheRiskLegsOwnFillWhenItsAllThatsLeftOpen()
+  {
+    // ENTRY_LOGIC_REVIEW_2026-09-17: shallow-first TP1 closing drains L1
+    // then L2 before touching the RISK leg (it sits last in declaration
+    // order), so once TP1 books, RISK can be the ONLY leg still open. Prior
+    // to this fix the BE reference recomputed from open legs would then be
+    // RISK's own fill alone (4080.50 - worse than even the original entry),
+    // instead of falling back to the L1/L2 blend the way it should once no
+    // non-RISK leg remains open.
+    const string planJson = """
+    {
+      "version": 8,
+      "plan_id": "v8:plan-mwls-risk-be",
+      "thesis_id": "thesis-1",
+      "setup_id": "setup-1",
+      "symbol": "XAU",
+      "created_at": 1719999600,
+      "expires_at": 2000000000,
+      "analysis": {
+        "strategy": "Key Level Reaction",
+        "strategy_family": "key_level",
+        "direction": "BUY",
+        "context_timeframes": ["M15"],
+        "formation_timeframe": "M15",
+        "confirmation_timeframe": "M5",
+        "formation_bar_ts": 1719999000,
+        "confirmation_bar_ts": 1719999600,
+        "score": 0.65,
+        "confluence": 2,
+        "bias": "up",
+        "regime": "range",
+        "reasons": [],
+        "tags": []
+      },
+      "source_structure": {
+        "structure_id": "key:M15:4085.00:4089.50:1719990000",
+        "kind": "key_level",
+        "timeframe": "M15",
+        "low": "4085.00",
+        "high": "4089.50",
+        "invalidation_price": "4079.00"
+      },
+      "entry": {
+        "type": "market_with_limit_scale",
+        "zone_low": "4085.00",
+        "zone_high": "4089.50",
+        "expires_at": 2000000000,
+        "legs": [
+          {"leg_id": "L1", "price": "4089.10", "volume_ratio": "0.80", "order_type": "market"},
+          {"leg_id": "L2", "price": "4085.00", "volume_ratio": "0.20", "order_type": "limit"}
+        ]
+      },
+      "stop": {
+        "type": "absolute",
+        "price": "4079.00",
+        "source": "structural_invalidation",
+        "structure_id": "key:M15:4085.00:4089.50:1719990000",
+        "reason": "below distal edge"
+      },
+      "targets": [
+        {"target_id": "TP1", "type": "absolute", "price": "4096.00", "close_ratio": "0.85"},
+        {"target_id": "TP2", "type": "absolute", "price": "4104.00", "close_ratio": "0.15"}
+      ],
+      "risk": {
+        "risk_percent": "1.0",
+        "risk_multiplier": "1.0",
+        "max_volume": 100000,
+        "max_group_risk_percent": "2.0"
+      },
+      "sizing": {
+        "mode": "equity_table",
+        "table_version": "owner_equity_v1",
+        "entry_distribution": "zone_scale",
+        "leg_ratios": ["0.80", "0.20"]
+      },
+      "management": {
+        "be_after_target_id": "TP1",
+        "be_buffer_ticks": 3,
+        "never_worsen_stop": true
+      },
+      "execution_policy": {
+        "allow_market": true,
+        "allow_limit": true,
+        "allow_partial_fill": true,
+        "cancel_on_expiry": true
+      },
+      "provenance": {
+        "analysis_engine_version": "",
+        "market_map_id": "",
+        "config_fingerprint": ""
+      }
+    }
+    """;
+    var store = new FakeTradePlanStore();
+    store.EnqueuePlan(planJson);
+    var client = new FakeTradePlanTradingClient
+    {
+      AccountEquity = 1_300m,
+      AccountBalance = 1_300m,
+    };
+    var runtime = new TradePlanRuntime(
+      Options() with { ReactionRiskLegEnabled = true }, store, () => DateTimeOffset.UtcNow, _ => { }
+    );
+
+    await runtime.PollAsync(
+      client, Symbol, new SpotPrice("XAU", 4089.00m, 4089.10m, 1), CancellationToken.None
+    );
+    var open = Assert.Single(runtime.TrackedStates);
+    var l1Before = Assert.Single(open.Legs!, leg => leg.LegId == "L1");
+    var l1Fill = l1Before.FillPrice!.Value;
+    var l1Volume = l1Before.FilledVolume;
+    var l2Order = Assert.Single(open.Legs!, leg => leg.LegId == "L2").BrokerOrderId!.Value;
+    var riskOrder = Assert.Single(open.Legs!, leg => leg.LegId == "RISK").BrokerOrderId!.Value;
+    client.FillPendingOrder(l2Order, fillPrice: 4085.00m);
+    client.FillPendingOrder(riskOrder, fillPrice: 4080.50m);
+
+    await runtime.PollAsync(
+      client, Symbol, new SpotPrice("XAU", 4085.00m, 4085.10m, 2), CancellationToken.None
+    );
+    var filled = Assert.Single(runtime.TrackedStates);
+    var l2Before = Assert.Single(filled.Legs!, leg => leg.LegId == "L2");
+    var l2Fill = l2Before.FillPrice!.Value;
+    var l2Volume = l2Before.FilledVolume;
+    Assert.NotNull(Assert.Single(filled.Legs!, leg => leg.LegId == "RISK").BrokerPositionId);
+
+    // Price reaches TP1 (4096.00). Shallow-first drains L1 then L2 fully
+    // before touching the RISK leg (declaration order: L1, L2, RISK) -
+    // leaving only the RISK leg open afterwards.
+    await runtime.PollAsync(
+      client, Symbol, new SpotPrice("XAU", 4096.50m, 4096.55m, 3), CancellationToken.None
+    );
+
+    var afterTp1 = Assert.Single(runtime.TrackedStates);
+    Assert.True(afterTp1.BreakEvenApplied);
+    var l1After = Assert.Single(afterTp1.Legs!, leg => leg.LegId == "L1");
+    var l2After = Assert.Single(afterTp1.Legs!, leg => leg.LegId == "L2");
+    var riskAfter = Assert.Single(afterTp1.Legs!, leg => leg.LegId == "RISK");
+    Assert.Equal(0, l1After.RemainingVolume);
+    Assert.Equal(0, l2After.RemainingVolume);
+    Assert.True(riskAfter.RemainingVolume > 0, "RISK leg should still be open after TP1");
+
+    // BE stop is the L1/L2 blend (no non-RISK leg is left open, so it falls
+    // back to the full-plan reference, which itself excludes RISK) - never
+    // the RISK leg's own deeper fill, even though RISK is the only leg
+    // `openLegs` still finds open.
+    var expectedStop = decimal.Round(
+      (l1Fill * l1Volume + l2Fill * l2Volume) / (decimal)(l1Volume + l2Volume)
+        + Options().BreakEvenBufferTicks * 0.01m,
+      2,
+      MidpointRounding.AwayFromZero
+    );
+    Assert.Single(client.StopAmendments, item => item.StopLoss == expectedStop);
+    Assert.DoesNotContain(
+      client.StopAmendments, item => item.StopLoss == 4080.53m
+    );
+  }
+
+  [Fact]
   public async Task DeferredTpTouchThenStopOutDoesNotArchiveTp()
   {
     // Production 2026-08-24: XAU BUY 4636.98, stop 4631.04. TP1 was
@@ -3502,14 +3660,15 @@ public sealed class TradePlanRuntimeTests
   private static string MarketWithLimitScaleRiskLegPlanJson(
     string direction = "BUY",
     decimal stopPrice = 4079.00m,
-    decimal targetPrice = 4097.00m
+    decimal targetPrice = 4097.00m,
+    string symbol = "XAU"
   ) => $$"""
   {
     "version": 8,
     "plan_id": "v8:plan-mwls-risk",
     "thesis_id": "thesis-1",
     "setup_id": "setup-1",
-    "symbol": "XAU",
+    "symbol": "{{symbol}}",
     "created_at": 1719999600,
     "expires_at": 2000000000,
     "analysis": {
@@ -3694,6 +3853,32 @@ public sealed class TradePlanRuntimeTests
       client, Symbol, new SpotPrice("XAU", 4088.50m, 4088.60m, 2), CancellationToken.None
     );
     Assert.Equal(1, client.LimitOrders.Count(o => o.ClientOrderId.EndsWith(":RISK")));
+  }
+
+  [Fact]
+  public async Task RiskLegIsNeverInjectedForNonXauSymbolsEvenWhenEnabled()
+  {
+    // Owner 2026-09-17: fixed 0.05/0.02 lot sizing was tuned against XAU's
+    // own pip value - a USDJPY CRT trade this morning got a RISK leg it
+    // should never have had (reproduced against production), so the gate
+    // must be XAU-only regardless of ReactionRiskLegEnabled/entry shape.
+    var fxSymbol = new SymbolInfo(
+      "USDJPY", "USDJPY", 10, Digits: 3, PipPosition: 2,
+      MinVolume: 1_000, StepVolume: 1_000, MaxVolume: 100_000, LotSize: 100_000
+    );
+    var store = new FakeTradePlanStore();
+    store.EnqueuePlan(MarketWithLimitScaleRiskLegPlanJson(symbol: "USDJPY"));
+    var client = new FakeTradePlanTradingClient { AccountEquity = 1_300m, AccountBalance = 1_300m };
+    var runtime = new TradePlanRuntime(
+      Options() with { ReactionRiskLegEnabled = true }, store, () => DateTimeOffset.UtcNow, _ => { }
+    );
+
+    await runtime.PollAsync(
+      client, fxSymbol, new SpotPrice("USDJPY", 4089.00m, 4089.10m, 1), CancellationToken.None
+    );
+
+    Assert.DoesNotContain(client.LimitOrders, o => o.ClientOrderId.EndsWith(":RISK"));
+    Assert.DoesNotContain(client.MarketOrders, o => o.ClientOrderId.EndsWith(":RISK"));
   }
 
   [Fact]

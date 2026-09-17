@@ -80,13 +80,23 @@ public static class TradePlanOwnership
 
   /// <summary>
   /// Maps "L1"/"l1" and legacy 0-based indices ("0"→L1, "1"→L2) to canonical
-  /// L{n} ids. Returns null when the token is not a recognisable leg id.
+  /// L{n} ids, and the reserved "RISK" reaction-leg id to itself. Returns
+  /// null when the token is not a recognisable leg id.
   /// </summary>
   public static string? TryNormalizeLegId(string? token)
   {
     if (string.IsNullOrWhiteSpace(token))
     {
       return null;
+    }
+    // ENTRY_LOGIC_REVIEW_2026-09-17: without this, a filled RISK leg's
+    // position can never be adopted here (comment/ClientOrderId both carry
+    // the literal "RISK" token) - the leg stays "Pending" forever and the
+    // orphan-pending-order path below eventually mislabels a real, broker-
+    // protected fill as "Cancelled".
+    if (string.Equals(token, "RISK", StringComparison.OrdinalIgnoreCase))
+    {
+      return "RISK";
     }
     if (
       token.Length >= 2
