@@ -1458,6 +1458,39 @@ async def test_handle_take_profit_uses_the_booking_legs_own_pips(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_handle_event_position_closing_pings_vip_without_touching_state(
+  monkeypatch,
+):
+  """Owner 2026-09-17: the real position_closed event can arrive several
+  seconds after AutoTradeEngine.cs confirms a leg gone from the broker (its
+  own best-effort close-reason + exit-price lookup) - position_closing
+  fires immediately so the owner sees something happen right away. It must
+  never touch execution/row state - _handle_position_closed (or
+  _handle_manual_closed) still owns the real close entirely when it
+  arrives moments later.
+  """
+  send = _mock_send(monkeypatch)
+  sid = await _algo_signal()
+  await store.set_execution_fill(sid, broker_position_id=555, broker_fill_price=4100.0)
+  client = redis_state.get_client()
+  positions = {555: sid}
+  before = await store.get_manual_signal(sid)
+
+  event = {
+    "type": "position_closing",
+    "position_id": 555,
+    "candidate_id": f"manual:{sid}:0",
+  }
+  await manual_execution._handle_event(client, event, positions)
+
+  send.assert_awaited_once()
+  assert "confirming" in send.call_args.args[0].lower()
+  after = await store.get_manual_signal(sid)
+  assert after == before
+  assert 555 in positions
+
+
+@pytest.mark.asyncio
 async def test_handle_event_position_closed_without_price_marks_error_not_silent(
   monkeypatch,
 ):

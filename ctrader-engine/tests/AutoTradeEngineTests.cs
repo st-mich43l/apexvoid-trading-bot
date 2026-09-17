@@ -5220,6 +5220,56 @@ public sealed partial class AutoTradeEngineTests
   }
 
   [Fact]
+  public async Task PositionClosingFiresOnceRightWhenAbsenceIsConfirmedNotBefore()
+  {
+    // Owner 2026-09-17: the close-reason + exit-price lookup that runs
+    // between absence-confirmation and the real "position_closed" event can
+    // add several more seconds - the owner previously saw nothing at all in
+    // that window. "position_closing" must fire the instant absence is
+    // confirmed (not on the earlier "suspected" pass, and not again on any
+    // later price-pending retry of the same position), always before the
+    // real "position_closed" event for the same close.
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    var now = Now;
+    var store = new FakeAutoTradeStore(CandidateJson());
+    var client = new FakeTradingClient();
+    var engine = new AutoTradeEngine(Options(), store, () => now, _ => { });
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 4000.0m, 4000.2m, now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
+    await store.Ordered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+    var positionId = client.StopAmendments.Single().PositionId;
+
+    client.RemovePosition(positionId);
+    now = Now.AddSeconds(16);
+    await WaitUntilAsync(() =>
+      store.MetricsSnapshot().Contains("position_missing_snapshot_suspected")
+    );
+
+    // First (suspected, not yet confirmed) pass: no provisional ping yet.
+    Assert.DoesNotContain(store.Events, item => item.Type == "position_closing");
+
+    await Task.Delay(50, cts.Token);
+    now = now.AddSeconds(16);
+    await WaitForEventAsync(store, "position_closed");
+
+    var closing = Assert.Single(store.Events, item => item.Type == "position_closing");
+    var closed = Assert.Single(store.Events, item => item.Type == "position_closed");
+    var eventsInOrder = store.Events.ToList();
+    Assert.True(
+      eventsInOrder.IndexOf(closing) < eventsInOrder.IndexOf(closed),
+      "position_closing must be published before position_closed"
+    );
+    Assert.Equal(closed.CandidateId, closing.CandidateId);
+    Assert.Equal(closed.GroupId, closing.GroupId);
+
+    cts.Cancel();
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+  }
+
+  [Fact]
   public async Task MissingPositionSnapshotClearsWhenPositionReappearsBeforeConfirmation()
   {
     using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
