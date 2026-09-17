@@ -173,13 +173,33 @@ def trendline_structural_id(
   timeframe: str,
   line: Any,
 ) -> str:
-  anchors = ",".join(str(int(idx)) for idx in getattr(line, "point_idx", ()))
+  version = str(getattr(line, "version", "v1"))
+  if version == "v1":
+    anchors = ",".join(str(int(idx)) for idx in getattr(line, "point_idx", ()))
+    return structural_hash(
+      symbol.upper(),
+      timeframe.upper(),
+      "trendline",
+      getattr(line, "kind", ""),
+      anchors,
+      f"{float(getattr(line, 'slope', 0.0)):.8f}",
+      _price_id(symbol, getattr(line, "intercept", 0.0)),
+    )
+  anchor_indexes = getattr(line, "anchor_idx", ()) or getattr(line, "point_idx", ())
+  validation_indexes = tuple(
+    int(getattr(item, "bar_index", -1))
+    for item in getattr(line, "validation_touches", ())
+  )
+  anchors = ",".join(str(int(idx)) for idx in anchor_indexes)
+  validations = ",".join(str(index) for index in validation_indexes)
   return structural_hash(
     symbol.upper(),
     timeframe.upper(),
     "trendline",
+    version,
     getattr(line, "kind", ""),
     anchors,
+    validations,
     f"{float(getattr(line, 'slope', 0.0)):.8f}",
     _price_id(symbol, getattr(line, "intercept", 0.0)),
   )

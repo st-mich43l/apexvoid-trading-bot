@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 import math
 from numbers import Integral
 
@@ -44,6 +44,87 @@ class Trendline:
   bars_since_last_touch: int = 0
   span_bars: int = 0
   exhausted: bool = False
+  # V2 fields are additive so persisted V1 lines and direct tests still
+  # deserialize.  ``point_idx``/``touches`` remain the legacy view; V2 callers
+  # must use the explicit anchor/forward-validation counts below.
+  version: str = "v1"
+  state: str = "confirmed"
+  anchor_idx: tuple[int, ...] = ()
+  anchor_prices: tuple[float, ...] = ()
+  anchor_timestamps: tuple[str | None, ...] = ()
+  anchor_confirmed_idx: tuple[int, ...] = ()
+  anchor_confirmed_timestamps: tuple[str | None, ...] = ()
+  validation_touches: tuple["TrendlineValidationTouch", ...] = ()
+  anchor_count: int = 0
+  validation_touch_count: int = 0
+  total_touch_count: int = 0
+  slope_atr_per_bar: float = 0.0
+  anchor_fit_error_atr: float = 0.0
+  mean_validation_error_atr: float | None = None
+  median_validation_error_atr: float | None = None
+  max_validation_error_atr: float | None = None
+  touch_spacing_bars: tuple[int, ...] = ()
+  wick_violations: int = 0
+  close_violations: int = 0
+  max_penetration_price: float = 0.0
+  max_penetration_atr: float = 0.0
+  latest_penetration_price: float = 0.0
+  latest_penetration_atr: float = 0.0
+  bars_since_violation: int | None = None
+  violation_reclaimed: bool = False
+  violation_index: int | None = None
+  consecutive_violations: int = 0
+
+  def to_telemetry(self) -> dict[str, object]:
+    """JSON-safe structural evidence carried into a V8 trade plan."""
+    payload = asdict(self)
+    payload["validation_touches"] = [
+      touch.to_dict() for touch in self.validation_touches
+    ]
+    return payload
+
+
+@dataclass(frozen=True)
+class TrendlineValidationTouch:
+  bar_index: int
+  timestamp: str | None
+  projected_line_price: float
+  actual_extreme: float
+  touch_error_price: float
+  touch_error_atr: float
+  penetration_price: float
+  penetration_atr: float
+  close_distance_from_line: float
+  close_distance_atr: float
+  favorable_excursion_price: float
+  favorable_excursion_atr: float
+  adverse_excursion_price: float
+  adverse_excursion_atr: float
+  reaction_bars: int
+  reclaimed: bool
+  rejection_strength: float
+  structure_confirmed: bool
+  approach_direction_valid: bool
+
+  def to_dict(self) -> dict[str, object]:
+    return asdict(self)
+
+
+@dataclass(frozen=True)
+class TrendlineInteraction:
+  state: str
+  line_price: float
+  band_low: float
+  band_high: float
+  approach_direction_valid: bool
+  pre_touch_distance_atr: float
+  approach_bars: int
+  interaction_index: int | None
+  interaction_ts: str | None
+  rejection_reason: str | None = None
+
+  def to_dict(self) -> dict[str, object]:
+    return asdict(self)
 
 
 def trendlines(
@@ -62,6 +143,48 @@ def trendlines(
     from app.core.config import runtime_config
     cfg = runtime_config
   tl_cfg = cfg.analysis.trendlines
+  if str(getattr(tl_cfg, "version", "v1")).casefold() == "v2":
+    # V2 owns executable discovery.  An optional V1 pass is metrics-only so
+    # rollout comparison cannot revive the legacy entry contract.
+    from app.analysis.trendline_v2 import build_causal_trendlines
+
+    causal_lines = build_causal_trendlines(
+      swings,
+      df,
+      atr,
+      tl_cfg,
+      symbol=symbol,
+      timeframe=timeframe,
+      metric_sink=metric_sink,
+    )
+    if bool(getattr(tl_cfg, "shadow_v1", False)):
+      legacy_lines = _trendlines_v1(swings, df, atr, tl_cfg)
+      if metric_sink is not None:
+        for line in legacy_lines:
+          metric_sink(
+            "trendline_v1_shadow_eligible",
+            symbol,
+            {
+              "tf": timeframe,
+              "kind": line.kind,
+              "broken": str(line.broken).lower(),
+            },
+          )
+    return causal_lines
+  return _trendlines_v1(swings, df, atr, tl_cfg, symbol=symbol,
+                        timeframe=timeframe, metric_sink=metric_sink)
+
+
+def _trendlines_v1(
+  swings: list[Swing],
+  df: pd.DataFrame,
+  atr: pd.Series | float,
+  tl_cfg,
+  *,
+  symbol: str = "",
+  timeframe: str = "",
+  metric_sink: MetricSink | None = None,
+) -> list[Trendline]:
   atr_value = atr_scalar(atr)
   touch_tolerance = (
     max(0.0, float(getattr(tl_cfg, "tolerance_atr", TL_TOL_ATR))) * atr_value

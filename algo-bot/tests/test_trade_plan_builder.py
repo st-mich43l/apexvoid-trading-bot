@@ -157,6 +157,25 @@ def test_candle_confirmation_v2_telemetry_propagates_to_plan_analysis():
   assert restored == plan.analysis
 
 
+def test_trendline_v2_evidence_propagates_to_plan_analysis():
+  evidence = {
+    "version": "v2",
+    "state": "confirmed",
+    "anchor_idx": [10, 20],
+    "validation_touch_count": 1,
+    "interaction_started_at": "2026-09-17T02:42:00+00:00",
+    "micro_confirmation_type": "strong_close",
+  }
+  plan = _build(replace(
+    _match(strategy="Trendline", family="trendline"),
+    trendline_v2=evidence,
+  ))
+
+  assert plan.analysis.trendline_v2 == evidence
+  restored = type(plan.analysis).from_dict(plan.analysis.to_dict())
+  assert restored.trendline_v2 == evidence
+
+
 def test_opposing_structure_v2_telemetry_propagates_to_plan_analysis():
   # Same hand-copied-field concern as Candle Confirmation V2 above -
   # trade_plan_builder.py copies each opposing_*/key_level_opposing_zone_*
@@ -502,5 +521,4 @@ def test_final_reward_risk_preference_keeps_builder_plan():
   )
   assert plan.management is not None
   assert plan.stop.source == "m1_trigger_wick"
-
 

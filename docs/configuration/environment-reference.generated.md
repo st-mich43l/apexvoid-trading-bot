@@ -2,8 +2,8 @@
 
 > Generated from the canonical configuration catalog (`app.configuration.environment_contract`). Do not edit manually.
 
-- Contract fingerprint: `0f3ef7f77bc5106170de4429c7aa724b5d83d9a87c0152fc8e074660167fe071`
-- Environment-bound fields: `547`
+- Contract fingerprint: `5e889b64542bd3bdb7f684f7c4706b6c09d946c94f01321694d07f7bad837cb8`
+- Environment-bound fields: `562`
 - Deprecated aliases: `21`
 
 Secret values are never emitted; secret defaults render as `<redacted>`.
@@ -515,17 +515,32 @@ Secret values are never emitted; secret defaults render as `<redacted>`.
 | `TELEGRAM_BOT_TOKEN` | `bootstrap.telegram.bot_token` | `str` | yes | no | — | `<redacted>` |
 | `TELEGRAM_OWNER_ID` | `delivery.telegram.telegram_owner_id` | `Optional[int]` | no | no | — | `None` |
 | `TIINGO_API_KEY` | `market_data.tiingo.api_key` | `Optional[str]` | yes | no | — | `<redacted>` |
+| `TL_APPROACH_MIN_DISTANCE_ATR` | `analysis.trendlines.approach_min_distance_atr` | `float` | no | no | — | `0.1` |
+| `TL_CHOP_MIN_VALIDATION_TOUCHES` | `analysis.trendlines.chop_minimum_validation_touches` | `int` | no | no | — | `2` |
+| `TL_CHOP_REQUIRE_HTF_ALIGNED` | `analysis.trendlines.chop_require_htf_aligned` | `bool` | no | no | — | `True` |
+| `TL_CLOSE_VIOLATION_ATR` | `analysis.trendlines.close_violation_atr` | `float` | no | no | — | `0.15` |
+| `TL_EXHAUSTION_VALIDATION_TOUCHES` | `analysis.trendlines.exhaustion_validation_touches` | `int` | no | no | — | `4` |
+| `TL_INTERACTION_BAND_ATR` | `analysis.trendlines.interaction_band_atr` | `float` | no | no | — | `0.2` |
+| `TL_INVALIDATION_PENETRATION_ATR` | `analysis.trendlines.invalidation_penetration_atr` | `float` | no | no | — | `0.5` |
 | `TL_MAX_BARS_SINCE_TOUCH` | `analysis.trendlines.maximum_bars_since_last_touch` | `int` | no | no | — | `30` |
 | `TL_MAX_FIT_ERROR_ATR` | `analysis.trendlines.maximum_fit_error_atr` | `float` | no | no | — | `0.15` |
 | `TL_MAX_SLOPE_ATR` | `analysis.trendlines.maximum_slope_atr` | `float` | no | no | — | `0.15` |
 | `TL_MAX_TOUCHES` | `analysis.trendlines.maximum_touches` | `int` | no | no | — | `4` |
 | `TL_MAX_VIOLATIONS` | `analysis.trendlines.maximum_violations` | `int` | no | no | — | `2` |
+| `TL_MAX_WICK_VIOLATIONS` | `analysis.trendlines.maximum_wick_violations` | `int` | no | no | — | `2` |
 | `TL_MIN_SLOPE_ATR` | `analysis.trendlines.minimum_slope_atr` | `float` | no | no | — | `0.02` |
 | `TL_MIN_SPAN_BARS` | `analysis.trendlines.minimum_span_bars` | `int` | no | no | — | `20` |
 | `TL_MIN_TOUCHES` | `analysis.trendlines.minimum_touches` | `int` | no | no | — | `3` |
 | `TL_MIN_TOUCH_SPACING` | `analysis.trendlines.minimum_touch_spacing_bars` | `int` | no | no | — | `3` |
+| `TL_MIN_VALIDATION_FAVORABLE_EXCURSION_ATR` | `analysis.trendlines.minimum_validation_favorable_excursion_atr` | `float` | no | no | — | `0.1` |
+| `TL_MIN_VALIDATION_TOUCHES` | `analysis.trendlines.minimum_validation_touches` | `int` | no | no | — | `1` |
+| `TL_MIN_VALIDATION_TOUCH_SPACING` | `analysis.trendlines.minimum_validation_touch_spacing_bars` | `int` | no | no | — | `5` |
 | `TL_PIERCE_TOL_ATR` | `analysis.trendlines.pierce_tolerance_atr` | `float` | no | no | — | `0.5` |
+| `TL_SHADOW_V1` | `analysis.trendlines.shadow_v1` | `bool` | no | no | — | `False` |
 | `TL_TOL_ATR` | `analysis.trendlines.tolerance_atr` | `float` | no | no | — | `0.3` |
+| `TL_VALIDATION_REACTION_BARS` | `analysis.trendlines.validation_reaction_bars` | `int` | no | no | — | `2` |
+| `TL_VALIDATION_TOUCH_TOL_ATR` | `analysis.trendlines.validation_touch_tolerance_atr` | `float` | no | no | — | `0.3` |
+| `TL_VERSION` | `analysis.trendlines.version` | `str` | no | no | — | `v1` |
 | `TP_MIN_SPACING_ATR` | `analysis.measurements.tp_min_spacing_atr` | `float` | no | no | — | `0.5` |
 | `TRACK_INTERVAL` | `market_data.watcher.interval_seconds` | `int` | no | no | — | `30` |
 | `TREND_ALLOW_CHASE` | `strategies.trend.allow_chase` | `bool` | no | no | — | `False` |

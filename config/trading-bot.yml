@@ -47,6 +47,24 @@ actionability:
     enabled: true
     mode: shadow
 analysis:
+  trendlines:
+    # V2 keeps A/B anchors immutable, requires a later causal validation, and
+    # turns this band into an interaction watch rather than an automatic fill.
+    version: v2
+    shadow_v1: true
+    validation_touch_tolerance_atr: 0.30
+    interaction_band_atr: 0.20
+    invalidation_penetration_atr: 0.50
+    close_violation_atr: 0.15
+    approach_min_distance_atr: 0.10
+    minimum_validation_touches: 1
+    minimum_validation_touch_spacing_bars: 5
+    validation_reaction_bars: 2
+    minimum_validation_favorable_excursion_atr: 0.10
+    maximum_wick_violations: 2
+    exhaustion_validation_touches: 4
+    chop_minimum_validation_touches: 2
+    chop_require_htf_aligned: true
   triggers:
     m1:
       # Prefer body/strong close for technique pack allowlist; wick-only is

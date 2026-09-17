@@ -39,6 +39,7 @@ from app.analysis.structure import (
   swings,
 )
 from app.analysis.trendlines import Trendline, value_at
+from app.analysis.trendline_v2 import evaluate_live_interaction
 from app.analysis.execution_eligibility import ExecutionEligibility
 from app.analysis.structural_reaction_support import (
   CONFIRM_ENGULFING,
@@ -216,6 +217,14 @@ class DetectorSettings:
   tl_max_bars_since_last_touch: int = 30
   tl_max_fit_error_atr: float = 0.15
   tl_max_violations: int = 2
+  tl_version: str = "v1"
+  tl_shadow_v1: bool = False
+  tl_interaction_band_atr: float = 0.20
+  tl_close_violation_atr: float = 0.15
+  tl_approach_min_distance_atr: float = 0.10
+  tl_min_validation_touches: int = 1
+  tl_chop_min_validation_touches: int = 2
+  tl_chop_require_htf_aligned: bool = True
   coil_contract: float = 0.8
   breakout_buffer_atr: float = 0.1
   breakout_accept_bars: int = 2
@@ -350,6 +359,14 @@ class DetectorSettings:
       tl_max_bars_since_last_touch=self.tl_max_bars_since_last_touch,
       tl_max_fit_error_atr=self.tl_max_fit_error_atr,
       tl_max_violations=self.tl_max_violations,
+      tl_version=self.tl_version,
+      tl_shadow_v1=self.tl_shadow_v1,
+      tl_interaction_band_atr=self.tl_interaction_band_atr,
+      tl_close_violation_atr=self.tl_close_violation_atr,
+      tl_approach_min_distance_atr=self.tl_approach_min_distance_atr,
+      tl_min_validation_touches=self.tl_min_validation_touches,
+      tl_chop_min_validation_touches=self.tl_chop_min_validation_touches,
+      tl_chop_require_htf_aligned=self.tl_chop_require_htf_aligned,
       coil_contract=self.coil_contract,
       breakout_buffer_atr=self.breakout_buffer_atr,
       breakout_accept_bars=self.breakout_accept_bars,
@@ -534,6 +551,26 @@ def detector_settings_from(config: object | None = None) -> DetectorSettings:
       getattr(analysis.trendlines, "maximum_fit_error_atr", 0.15)
     ),
     tl_max_violations=int(getattr(analysis.trendlines, "maximum_violations", 2)),
+    tl_version=str(getattr(analysis.trendlines, "version", "v1")),
+    tl_shadow_v1=bool(getattr(analysis.trendlines, "shadow_v1", False)),
+    tl_interaction_band_atr=float(
+      getattr(analysis.trendlines, "interaction_band_atr", 0.20)
+    ),
+    tl_close_violation_atr=float(
+      getattr(analysis.trendlines, "close_violation_atr", 0.15)
+    ),
+    tl_approach_min_distance_atr=float(
+      getattr(analysis.trendlines, "approach_min_distance_atr", 0.10)
+    ),
+    tl_min_validation_touches=int(
+      getattr(analysis.trendlines, "minimum_validation_touches", 1)
+    ),
+    tl_chop_min_validation_touches=int(
+      getattr(analysis.trendlines, "chop_minimum_validation_touches", 2)
+    ),
+    tl_chop_require_htf_aligned=bool(
+      getattr(analysis.trendlines, "chop_require_htf_aligned", True)
+    ),
     coil_contract=analysis.measurements.coil_contract,
     breakout_buffer_atr=analysis.breakout.buffer_atr,
     breakout_accept_bars=analysis.breakout.accept_bars,
@@ -677,6 +714,9 @@ class DetectionResult:
   # non-induced CONFIRM_SWEEP_RECLAIM. Feeds plan_protective_stop's
   # sweep_extreme wick-stop widening; None for every other confirmation.
   sweep_extreme_price: float | None = None
+  # Causal Trendline V2 evidence, deliberately JSON-shaped because it is
+  # persisted through StrategyMatch and TradePlan for production replay.
+  trendline_v2: dict[str, object] | None = None
   # Detection/card identity after same-side structural members are merged.
   # Additive so direct detector tests and non-structural setups keep their
   # existing construction and behavior.
@@ -1526,6 +1566,7 @@ def _finish(
   bias_relationship: str | None = None,
   candle_evidence: Any | None = None,
   sweep_extreme_price: float | None = None,
+  trendline_v2: dict[str, object] | None = None,
 ) -> DetectionResult | None:
   from app.analysis.technique_geometry import (
     optimize_crt_entry_zone,
@@ -1727,6 +1768,7 @@ def _finish(
     source_score=source_score,
     bias_relationship=relationship,
     sweep_extreme_price=sweep_extreme_price,
+    trendline_v2=trendline_v2,
     math_fib_ratio=(None if fib_hit is None else float(fib_hit.ratio)),
     math_velocity=(
       None if mom is None else float(getattr(mom, "velocity", 0.0))
@@ -2754,6 +2796,7 @@ def _structural_finish(
   source_touches: int | None = None,
   source_score: float | None = None,
   factors: ConfluenceFactors | None = None,
+  trendline_v2: dict[str, object] | None = None,
 ) -> DetectionResult | None:
   relationship = resolve_bias_relationship(ctx.htf_bias, direction)
   full_reasons = [
@@ -2794,6 +2837,7 @@ def _structural_finish(
     bias_relationship=relationship,
     candle_evidence=getattr(confirmation, "candle_evidence", None),
     sweep_extreme_price=sweep_extreme_price,
+    trendline_v2=trendline_v2,
   )
 
 
@@ -3340,6 +3384,13 @@ def session_level_reaction(ctx: DetectionContext) -> DetectionResult | None:
 
 
 def trendline_reaction(ctx: DetectionContext) -> DetectionResult | None:
+  """Dispatch the reversible V1/V2 Trendline strategy contract."""
+  if str(ctx.settings.tl_version).casefold() == "v2":
+    return _trendline_reaction_v2(ctx)
+  return _trendline_reaction_v1(ctx)
+
+
+def _trendline_reaction_v1(ctx: DetectionContext) -> DetectionResult | None:
   if not ctx.settings.trendline_reaction_enabled:
     return None
   df, ind, st = _exec(ctx)
@@ -3432,6 +3483,170 @@ def trendline_reaction(ctx: DetectionContext) -> DetectionResult | None:
     ):
       best = candidate
   return best
+
+
+def _trendline_reaction_v2(ctx: DetectionContext) -> DetectionResult | None:
+  """Gate V2 Trendline execution on causal health and a fresh M5 reclaim.
+
+  The M5 reclaim creates a watchable interaction area only.  The worker's
+  Trendline-specific confirmation policy subsequently requires an M1 trigger
+  after this interaction before it can publish an executable plan.
+  """
+  if not ctx.settings.trendline_reaction_enabled:
+    return None
+  df, ind, st = _exec(ctx)
+  if len(df) < 3:
+    return None
+  price = _current_price(ctx, df)
+  atr = _atr(ind)
+  band = max(_EPS, ctx.settings.tl_interaction_band_atr * max(0.0, atr))
+  stale_limit = ctx.settings.trendline_maximum_bars_since_last_touch
+  if stale_limit is None:
+    stale_limit = ctx.settings.tl_max_bars_since_last_touch
+  lookback = max(1, int(ctx.settings.structural_reaction_lookback_bars))
+  best: DetectionResult | None = None
+  for line in sorted(
+    (item for item in st.trendlines if item.version == "v2"),
+    key=lambda item: abs(value_at(item, len(df) - 1) - price),
+  ):
+    direction = "BUY" if line.kind == "support" else "SELL"
+    if line.kind not in {"support", "resistance"}:
+      continue
+    htf_aligned = ctx.htf_bias == _bias_for_direction(direction)
+    rejection = _trendline_v2_structural_rejection(
+      ctx,
+      line,
+      direction=direction,
+      htf_aligned=htf_aligned,
+      stale_limit=int(stale_limit),
+    )
+    if rejection is not None:
+      _emit_trendline_metric(ctx, f"trendline_v2_rejected_{rejection}")
+      continue
+    interaction = evaluate_live_interaction(line, df, atr, SimpleNamespace(
+      interaction_band_atr=ctx.settings.tl_interaction_band_atr,
+      close_violation_atr=ctx.settings.tl_close_violation_atr,
+      approach_min_distance_atr=ctx.settings.tl_approach_min_distance_atr,
+    ))
+    if interaction.state.startswith("FAILED"):
+      _emit_trendline_metric(ctx, f"trendline_v2_rejected_{interaction.rejection_reason}")
+      continue
+    if not interaction.state.startswith("RECLAIMED"):
+      _emit_trendline_metric(ctx, "trendline_v2_rejected_testing_without_reaction")
+      continue
+    line_price = interaction.line_price
+    conf = evaluate_structural_reaction(
+      df,
+      direction=direction,
+      low=interaction.band_low,
+      high=interaction.band_high,
+      lookback_bars=lookback,
+      grabs=[],
+      has_choch=_recent_choch_flag(st, direction, len(df), ctx.settings, lookback),
+      atr=atr,
+      engulfing_minimum_range_atr=ctx.settings.engulfing_minimum_range_atr,
+    )
+    if conf is None:
+      _emit_trendline_metric(ctx, "trendline_v2_rejected_testing_without_reaction")
+      continue
+    zone = _pseudo_level_zone(
+      line_price,
+      band,
+      direction,
+      f"TL V2 {line.kind} forward×{line.validation_touch_count}",
+      source="trendline",
+    )
+    if not _entry_valid_for_settings(zone, price, atr, direction, ctx.settings):
+      _emit_trendline_metric(ctx, "trendline_v2_rejected_entry_outside_interaction")
+      continue
+    telemetry = line.to_telemetry()
+    telemetry.update({
+      "observed_regime": str(getattr(ctx.regime, "kind", "") or "unknown"),
+      "htf_alignment": htf_aligned,
+      "interaction": interaction.to_dict(),
+      "interaction_line_price": interaction.line_price,
+      "interaction_band_low": interaction.band_low,
+      "interaction_band_high": interaction.band_high,
+      "interaction_started_at": interaction.interaction_ts,
+      "touch_at": interaction.interaction_ts,
+      "reaction_at": conf.touch_bar_ts,
+      "reclaim_at": conf.confirmation_bar_ts,
+      "confirmation_at": None,
+      "reaction_type": conf.confirmation_type,
+      "reaction_strength": getattr(conf, "candle_evidence", None).final_score
+      if getattr(conf, "candle_evidence", None) is not None else None,
+      "micro_confirmation_required": True,
+      "micro_confirmation_type": None,
+      "entry_reason": "causal_confirmed_m5_reclaim_waiting_fresh_m1",
+      "rejection_reason": None,
+      "v1_shadow_enabled": ctx.settings.tl_shadow_v1,
+    })
+    factors = _reaction_factors(
+      conf,
+      htf_aligned=htf_aligned,
+      touches=line.total_touch_count,
+      session_context=ctx.session_ok,
+    )
+    candidate = _structural_finish(
+      ctx,
+      setup=TRENDLINE,
+      direction=direction,
+      level=line_price,
+      zone=zone,
+      price=price,
+      atr=atr,
+      reasons=[
+        f"TL V2 {line.kind}",
+        f"forward validations {line.validation_touch_count}",
+        f"state {line.state}",
+      ],
+      structural_source="trendline",
+      structural_id=trendline_structural_id(ctx.symbol, ctx.tf, line),
+      structural_low=interaction.band_low,
+      structural_high=interaction.band_high,
+      structural_kind=line.kind,
+      confirmation=conf,
+      source_touches=line.total_touch_count,
+      factors=factors,
+      trendline_v2=telemetry,
+    )
+    if candidate is not None and (
+      best is None or candidate.confluence > best.confluence
+    ):
+      best = candidate
+  return best
+
+
+def _trendline_v2_structural_rejection(
+  ctx: DetectionContext,
+  line: Trendline,
+  *,
+  direction: str,
+  htf_aligned: bool,
+  stale_limit: int,
+) -> str | None:
+  if line.state == "tentative" or (
+    line.validation_touch_count < ctx.settings.tl_min_validation_touches
+  ):
+    return "insufficient_forward_validation"
+  if line.state == "broken" or line.broken:
+    return "close_violation"
+  if line.state == "degraded":
+    return "line_degraded"
+  if line.state == "exhausted" or (
+    ctx.settings.trendline_reject_exhausted and line.exhausted
+  ):
+    return "exhausted_line"
+  if line.bars_since_last_touch > stale_limit:
+    return "stale_trendline"
+  if ctx.settings.trendline_require_htf_aligned and not htf_aligned:
+    return "htf_context_insufficient"
+  if str(getattr(ctx.regime, "kind", "")).casefold() == "chop":
+    if line.validation_touch_count < ctx.settings.tl_chop_min_validation_touches:
+      return "regime_quality_insufficient"
+    if ctx.settings.tl_chop_require_htf_aligned and not htf_aligned:
+      return "htf_context_insufficient"
+  return None
 
 
 def _emit_trendline_metric(ctx: DetectionContext, name: str) -> None:
