@@ -54,13 +54,16 @@ BASELINE = {
   # 2026-09-17 Trendline V2: +15 configurable Python fields for causal
   # construction, independent validation, interaction, health, and
   # chop/HTF quality; no C#-owned configuration fields.
-  "catalog_entry_count": 669,
-  "configurable_count": 562,
+  # 2026-09-17 Zone market-relevance engine: +3 new leaf fields under
+  # analysis.zone_relevance.* (immediate_atr, nearby_atr, remote_atr), all
+  # real canonical_env, all ConfigOwner.PYTHON.
+  "catalog_entry_count": 672,
+  "configurable_count": 565,
   "protocol_constant_count": 10,
   "algorithm_constant_count": 97,
-  "python_projection_count": 619,
+  "python_projection_count": 622,
   "ctrader_only_count": 50,
-  "environment_entry_count": 562,
+  "environment_entry_count": 565,
   "deprecated_alias_count": 21,
   "shared_count": 96,
 }
