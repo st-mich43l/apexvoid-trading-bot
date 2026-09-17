@@ -331,6 +331,28 @@ class AnalysisSwingsConfig(FrozenConfigModel):
     fractal_size: int = config_field(2, canonical_env='SWING_FRACTAL_N', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEXT_SCANNER_CYCLE, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.BARS, risk=RiskClassification.ANALYSIS_BEHAVIOR, description='Controls  (bars).', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 2),), validation_summary='Pydantic required/type coercion only')
     zigzag: AnalysisSwingsZigzagConfig = Field(default_factory=AnalysisSwingsZigzagConfig)
 
+class AnalysisZoneRelevanceConfig(FrozenConfigModel):
+    """Owner 2026-09-17: zone_watch's active index only ever checked grade
+    and lifecycle state - a structurally valid zone could sit 40-80 price
+    points from current XAU price for 9-12h+ and still list as "active".
+    These ATR-normalized bands classify how relevant a still-valid zone is
+    to CURRENT price, independent of its lifecycle state - a zone can be
+    structurally valid and market-dormant at the same time. Recomputed
+    fresh from current price/ATR on every read; never persisted or used to
+    invalidate/expire a zone, so a dormant zone can always reactivate once
+    price returns within range.
+    """
+
+    immediate_atr: float = config_field(0.25, canonical_env='ANALYSIS_ZONE_RELEVANCE_IMMEDIATE_ATR', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEXT_SCANNER_CYCLE, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.ATR, risk=RiskClassification.ANALYSIS_BEHAVIOR, description='Distance (in ATR) inside which a zone counts as IMMEDIATE relevance - effectively at/overlapping current price.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 0.25),), validation_summary='Pydantic required/type coercion only; model validator ordering', gt=0.0)
+    nearby_atr: float = config_field(1.25, canonical_env='ANALYSIS_ZONE_RELEVANCE_NEARBY_ATR', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEXT_SCANNER_CYCLE, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.ATR, risk=RiskClassification.ANALYSIS_BEHAVIOR, description='Distance (in ATR) inside which a zone counts as NEARBY relevance - a plausible near-term retest target.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 1.25),), validation_summary='Pydantic required/type coercion only; model validator ordering', gt=0.0)
+    remote_atr: float = config_field(3.0, canonical_env='ANALYSIS_ZONE_RELEVANCE_REMOTE_ATR', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEXT_SCANNER_CYCLE, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.ATR, risk=RiskClassification.ANALYSIS_BEHAVIOR, description='Distance (in ATR) inside which a zone counts as REMOTE relevance (still plausible); beyond this a zone is DORMANT - structurally valid memory, not a current setup.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 3.0),), validation_summary='Pydantic required/type coercion only; model validator ordering', gt=0.0)
+
+    @model_validator(mode='after')
+    def validate_band_ordering(self):
+        if not self.immediate_atr < self.nearby_atr < self.remote_atr:
+            raise ValueError('immediate_atr < nearby_atr < remote_atr must hold')
+        return self
+
 class AnalysisConfig(FrozenConfigModel):
     atr: AnalysisAtrConfig = Field(default_factory=AnalysisAtrConfig)
     breakout: AnalysisBreakoutConfig = Field(default_factory=AnalysisBreakoutConfig)
@@ -352,4 +374,5 @@ class AnalysisConfig(FrozenConfigModel):
     techniques: AnalysisTechniquesConfig = Field(default_factory=AnalysisTechniquesConfig)
     trendlines: AnalysisTrendlinesConfig = Field(default_factory=AnalysisTrendlinesConfig)
     triggers: AnalysisTriggersConfig = Field(default_factory=AnalysisTriggersConfig)
+    zone_relevance: AnalysisZoneRelevanceConfig = Field(default_factory=AnalysisZoneRelevanceConfig)
     zones: AnalysisZonesConfig = Field(default_factory=AnalysisZonesConfig)

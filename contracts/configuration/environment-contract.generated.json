@@ -1,7 +1,7 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "5e889b64542bd3bdb7f684f7c4706b6c09d946c94f01321694d07f7bad837cb8",
-  "count": 562,
+  "configuration_contract_fingerprint_sha256": "a4acd550c6e36e7bbdf7fe6dbae6439043a97d752b34a60f52a8193150ffb0d4",
+  "count": 565,
   "deprecated_alias_count": 21,
   "entries": [
     {
@@ -35,6 +35,54 @@
       "shared_with_ctrader": false,
       "type": "bool",
       "unit": "boolean"
+    },
+    {
+      "canonical_env": "ANALYSIS_ZONE_RELEVANCE_IMMEDIATE_ATR",
+      "default": 0.25,
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Distance (in ATR) inside which a zone counts as IMMEDIATE relevance - effectively at/overlapping current price.",
+      "display_id": "config:analysis.zone_relevance.immediate_atr",
+      "owner": "python",
+      "path": "analysis.zone_relevance.immediate_atr",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "float",
+      "unit": "atr"
+    },
+    {
+      "canonical_env": "ANALYSIS_ZONE_RELEVANCE_NEARBY_ATR",
+      "default": 1.25,
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Distance (in ATR) inside which a zone counts as NEARBY relevance - a plausible near-term retest target.",
+      "display_id": "config:analysis.zone_relevance.nearby_atr",
+      "owner": "python",
+      "path": "analysis.zone_relevance.nearby_atr",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "float",
+      "unit": "atr"
+    },
+    {
+      "canonical_env": "ANALYSIS_ZONE_RELEVANCE_REMOTE_ATR",
+      "default": 3.0,
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Distance (in ATR) inside which a zone counts as REMOTE relevance (still plausible); beyond this a zone is DORMANT - structurally valid memory, not a current setup.",
+      "display_id": "config:analysis.zone_relevance.remote_atr",
+      "owner": "python",
+      "path": "analysis.zone_relevance.remote_atr",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "float",
+      "unit": "atr"
     },
     {
       "canonical_env": "ANTHROPIC_API_KEY",
@@ -9050,6 +9098,6 @@
   ],
   "secret_count": 9,
   "shared_with_ctrader_count": 87,
-  "source_fingerprint_sha256": "5e889b64542bd3bdb7f684f7c4706b6c09d946c94f01321694d07f7bad837cb8",
+  "source_fingerprint_sha256": "a4acd550c6e36e7bbdf7fe6dbae6439043a97d752b34a60f52a8193150ffb0d4",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

@@ -149,6 +149,9 @@
       "analysis.triggers.m1.patterns",
       "analysis.triggers.m1.strong_close_pct",
       "analysis.triggers.m1.wick_fraction",
+      "analysis.zone_relevance.immediate_atr",
+      "analysis.zone_relevance.nearby_atr",
+      "analysis.zone_relevance.remote_atr",
       "analysis.zones.alert_ttl",
       "analysis.zones.confluence.merge_gap_price",
       "analysis.zones.confluence.technique_bonus_score",
@@ -599,7 +602,7 @@
     "XAU_ZONE_PREFERRED_MAX_WIDTH_PRICE": "instruments.XAU.analysis.zones.preferred_maximum_width_price",
     "XAU_ZONE_PREFERRED_MIN_WIDTH_PRICE": "instruments.XAU.analysis.zones.preferred_minimum_width_price"
   },
-  "fingerprint": "5e889b64542bd3bdb7f684f7c4706b6c09d946c94f01321694d07f7bad837cb8",
+  "fingerprint": "a4acd550c6e36e7bbdf7fe6dbae6439043a97d752b34a60f52a8193150ffb0d4",
   "instrument_schema": {
     "active_projection_symbol": "XAU",
     "optional": [

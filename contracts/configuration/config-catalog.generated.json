@@ -1,20 +1,20 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "5e889b64542bd3bdb7f684f7c4706b6c09d946c94f01321694d07f7bad837cb8",
-  "configuration_document_fingerprint_sha256": "ceeac5fedb8a4568797e993b43a8e6f63cb6ba52f32774b0060d0b60202a8a83",
+  "configuration_contract_fingerprint_sha256": "a4acd550c6e36e7bbdf7fe6dbae6439043a97d752b34a60f52a8193150ffb0d4",
+  "configuration_document_fingerprint_sha256": "2753cc6f0ac668d6c2ba6614828f18208d956863419853191b1ed7cfafd37ea3",
   "counts": {
     "algorithm_constants": 97,
-    "configurable": 562,
+    "configurable": 565,
     "known_conflicts": 30,
     "owners": {
       "ctrader": 50,
-      "python": 523,
+      "python": 526,
       "shared": 96
     },
     "protocol_constants": 10,
     "secrets": 9,
     "shared": 96,
-    "total_items": 669
+    "total_items": 672
   },
   "items": [
     {
@@ -6487,6 +6487,123 @@
       "type": "float",
       "unit": "fraction",
       "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "ANALYSIS_ZONE_RELEVANCE_IMMEDIATE_ATR",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "gt": 0.0
+      },
+      "default": 0.25,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 0.25
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Distance (in ATR) inside which a zone counts as IMMEDIATE relevance - effectively at/overlapping current price.",
+      "display_id": "config:analysis.zone_relevance.immediate_atr",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "analysis.zone_relevance.immediate_atr",
+      "protocol_constant": false,
+      "reload_policy": "next_scanner_cycle",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "analysis_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "atr",
+      "validation_summary": "Pydantic required/type coercion only; model validator ordering"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "ANALYSIS_ZONE_RELEVANCE_NEARBY_ATR",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "gt": 0.0
+      },
+      "default": 1.25,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 1.25
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Distance (in ATR) inside which a zone counts as NEARBY relevance - a plausible near-term retest target.",
+      "display_id": "config:analysis.zone_relevance.nearby_atr",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "analysis.zone_relevance.nearby_atr",
+      "protocol_constant": false,
+      "reload_policy": "next_scanner_cycle",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "analysis_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "atr",
+      "validation_summary": "Pydantic required/type coercion only; model validator ordering"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "ANALYSIS_ZONE_RELEVANCE_REMOTE_ATR",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "gt": 0.0
+      },
+      "default": 3.0,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 3.0
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Distance (in ATR) inside which a zone counts as REMOTE relevance (still plausible); beyond this a zone is DORMANT - structurally valid memory, not a current setup.",
+      "display_id": "config:analysis.zone_relevance.remote_atr",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "analysis.zone_relevance.remote_atr",
+      "protocol_constant": false,
+      "reload_policy": "next_scanner_cycle",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "analysis_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "atr",
+      "validation_summary": "Pydantic required/type coercion only; model validator ordering"
     },
     {
       "algorithm_constant": false,
@@ -24964,6 +25081,6 @@
       "validation_summary": "Pydantic required/type coercion only"
     }
   ],
-  "source_fingerprint_sha256": "5e889b64542bd3bdb7f684f7c4706b6c09d946c94f01321694d07f7bad837cb8",
+  "source_fingerprint_sha256": "a4acd550c6e36e7bbdf7fe6dbae6439043a97d752b34a60f52a8193150ffb0d4",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

@@ -68,9 +68,9 @@ from app.autotrade.strategy_taxonomy import (
 from app.core import instrument_geometry
 from app.core.log_throttle import log_at_most
 from app.runtime.instrument_config import instrument_runtime_view
+from app.autotrade import zone_relevance
 from app.autotrade.zone_watch import (
   DISCOVERED,
-  EXPIRED,
   GRADE_A,
   GRADE_B,
   INVALIDATED,
@@ -1827,10 +1827,50 @@ def _eval_skip_outside_price(symbol: str) -> float:
   return max(tolerance, chase) + max(pip * 5.0, 0.5)
 
 
+async def _current_atr_by_source_timeframe(
+  source: RedisOHLCSource | None,
+  symbol: str,
+  timeframes: set[str],
+) -> dict[str, float]:
+  """Current ATR per distinct ZoneWatch.source_timeframe present in this
+  pass, for market-relevance distance normalization. Shares the same
+  closed-bar cache `source` already uses elsewhere in this dispatch pass,
+  so this adds at most one extra window fetch per distinct timeframe
+  (typically just M1/M5), not one per zone.
+  """
+  if source is None:
+    return {}
+  from app.analysis.math_utils import atr_scalar, atr_series
+
+  length = int(runtime_config.analysis.atr.length)
+  result: dict[str, float] = {}
+  for tf in timeframes:
+    if not tf:
+      continue
+    try:
+      df = await source.window(symbol, tf, length + 5)
+      if df.empty:
+        continue
+      result[tf] = atr_scalar(atr_series(df, length))
+    except Exception:
+      log.exception(
+        "failed computing relevance atr symbol=%s tf=%s", symbol, tf,
+      )
+  return result
+
+
 # Prod dig 2026-08-12: 118/137 watches were >12h old and far from market,
-# re-evaluated every 2s. Expire those so the active index stays near price.
-_ZONE_STALE_AGE_SECONDS = 12 * 3600
-_ZONE_STALE_OUTSIDE_PRICE = 25.0
+# re-evaluated every 2s. Originally fixed by expiring those - but EXPIRED
+# is a terminal ZoneWatch state (_TRANSITIONS[EXPIRED] == frozenset()), so
+# that destroyed the zone's ability to ever reactivate if price came back,
+# and used a flat, non-ATR-normalized 25.0-price-point threshold ANDed
+# with a 12h floor (owner 2026-09-17: a zone 80 points away but only
+# 9-11h old survived indefinitely under that AND). Replaced with the
+# non-destructive DORMANT relevance classification (app.autotrade.
+# zone_relevance) below: dormant zones are cheaply skipped from full
+# evaluation here (same perf benefit as the original fix) without ever
+# mutating their lifecycle state, so they stay free to reactivate the
+# instant price returns within relevance_nearby_atr.
 _SPOT_ZONE_BANDS: dict[str, list[tuple[float, float]]] = {}
 _SPOT_IN_ZONE_EVALUATED: dict[str, bool] = {}
 SPOT_MIN_INTERVAL_S = 3.0
@@ -1876,7 +1916,9 @@ async def evaluate_active_zone_watches(
   bid, ask, _ts = quote
   mid = (bid + ask) / 2.0
   skip_outside = _eval_skip_outside_price(symbol)
-  now = _now()
+  atr_by_tf = await _current_atr_by_source_timeframe(
+    source, symbol, {record.source_timeframe for record in records},
+  )
   # Near-first so an executable zone is tried before far junk.
   ranked = sorted(
     records,
@@ -1886,26 +1928,14 @@ async def evaluate_active_zone_watches(
     if index and index % 8 == 0:
       await asyncio.sleep(0)
     outside = _outside_distance(record, mid)
-    age_s = now - int(record.discovered_at or now)
-    if (
-      outside >= _ZONE_STALE_OUTSIDE_PRICE
-      and age_s >= _ZONE_STALE_AGE_SECONDS
-      and record.state not in TERMINAL_ZONE_WATCH_STATES | LOCKED_ZONE_WATCH_STATES
-    ):
-      try:
-        await transition_zone_watch(
-          client,
-          record.zone_id,
-          EXPIRED,
-          reason_code="stale_far_from_market",
-        )
-      except Exception:
-        log.exception(
-          "failed expiring stale zone_id=%s outside=%.2f age_s=%s",
-          record.zone_id,
-          outside,
-          age_s,
-        )
+    relevance = zone_relevance.classify_zone_relevance(
+      record, mid, atr_by_tf.get(record.source_timeframe),
+    )
+    if relevance.relevance == zone_relevance.DORMANT:
+      # Non-destructive: skip full evaluation this pass without touching
+      # the record's lifecycle state (see the module comment above this
+      # function's constants - a DORMANT zone must stay free to reactivate
+      # the instant price returns, unlike the old EXPIRED-transition fix).
       continue
     if outside > skip_outside:
       continue
