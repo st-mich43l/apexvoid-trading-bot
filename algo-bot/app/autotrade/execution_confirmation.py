@@ -297,6 +297,29 @@ def _m5_confirmation_bar_ts(match: Any) -> Any:
 def confirmation_policy_for(match: Any) -> ConfirmationPolicy:
   strategy = str(getattr(match, "strategy", "") or "")
   family = str(getattr(match, "family", "") or "").casefold()
+  trendline_v2 = getattr(match, "trendline_v2", None)
+  if (
+    strategy == "Trendline"
+    and isinstance(trendline_v2, dict)
+    and str(trendline_v2.get("version", "")).casefold() == "v2"
+  ):
+    # M5 establishes a causally healthy dynamic level and its current
+    # reclaim.  It is never itself enough to execute: a post-interaction,
+    # closed M1 trigger must own the entry episode.
+    return ConfirmationPolicy(
+      m5_authoritative=False,
+      m1_required_on_retest=True,
+      allow_same_cycle_publish=False,
+      require_quote_inside_zone=True,
+      # V2 owns a distinct causal contract: its M5 reclaim establishes
+      # context, while a fresh closed M1 trigger owns execution.  Keeping it
+      # out of the legacy reaction family prevents callers from treating it
+      # as M5-authoritative.
+      reaction_family=False,
+      zone_family=False,
+      metadata_valid=True,
+      reason_code="trendline_v2_fresh_m1_required",
+    )
   if _is_m1_scalp_confirmation_match(match):
     # M1 scalp activation already ran closed-bar M1 gates before publish.
     # Without a scalp confirmation policy the worker classified family=scalp

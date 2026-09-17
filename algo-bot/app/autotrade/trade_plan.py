@@ -174,6 +174,7 @@ class TradePlanAnalysis:
   opposing_risk_score: float | None = None
   opposing_action: str | None = None
   opposing_reason_code: str | None = None
+  trendline_v2: dict[str, Any] | None = None
 
   def to_dict(self) -> dict:
     return {
@@ -259,6 +260,7 @@ class TradePlanAnalysis:
       "opposing_risk_score": self.opposing_risk_score,
       "opposing_action": self.opposing_action,
       "opposing_reason_code": self.opposing_reason_code,
+      "trendline_v2": self.trendline_v2,
     }
 
   @classmethod
@@ -556,6 +558,10 @@ class TradePlanAnalysis:
       opposing_reason_code=(
         None if data.get("opposing_reason_code") is None
         else str(data["opposing_reason_code"])
+      ),
+      trendline_v2=(
+        dict(data["trendline_v2"])
+        if isinstance(data.get("trendline_v2"), Mapping) else None
       ),
     )
 

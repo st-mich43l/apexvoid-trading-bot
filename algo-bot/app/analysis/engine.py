@@ -95,6 +95,21 @@ def _nested_cfg_from_analysis_settings(settings: AnalysisSettings) -> Any:
         "maximum_bars_since_last_touch": settings.tl_max_bars_since_last_touch,
         "maximum_fit_error_atr": settings.tl_max_fit_error_atr,
         "maximum_violations": settings.tl_max_violations,
+        "version": settings.tl_version,
+        "shadow_v1": settings.tl_shadow_v1,
+        "validation_touch_tolerance_atr": settings.tl_validation_touch_tolerance_atr,
+        "interaction_band_atr": settings.tl_interaction_band_atr,
+        "invalidation_penetration_atr": settings.tl_invalidation_penetration_atr,
+        "close_violation_atr": settings.tl_close_violation_atr,
+        "approach_min_distance_atr": settings.tl_approach_min_distance_atr,
+        "minimum_validation_touches": settings.tl_min_validation_touches,
+        "minimum_validation_touch_spacing_bars": settings.tl_min_validation_touch_spacing_bars,
+        "validation_reaction_bars": settings.tl_validation_reaction_bars,
+        "minimum_validation_favorable_excursion_atr": settings.tl_min_validation_favorable_excursion_atr,
+        "maximum_wick_violations": settings.tl_max_wick_violations,
+        "exhaustion_validation_touches": settings.tl_exhaustion_validation_touches,
+        "chop_minimum_validation_touches": settings.tl_chop_min_validation_touches,
+        "chop_require_htf_aligned": settings.tl_chop_require_htf_aligned,
       },
       "breakout": {
         "buffer_atr": settings.breakout_buffer_atr,
@@ -188,6 +203,21 @@ class AnalysisSettings:
   tl_max_bars_since_last_touch: int = 30
   tl_max_fit_error_atr: float = 0.15
   tl_max_violations: int = 2
+  tl_version: str = "v1"
+  tl_shadow_v1: bool = False
+  tl_validation_touch_tolerance_atr: float = 0.30
+  tl_interaction_band_atr: float = 0.20
+  tl_invalidation_penetration_atr: float = 0.50
+  tl_close_violation_atr: float = 0.15
+  tl_approach_min_distance_atr: float = 0.10
+  tl_min_validation_touches: int = 1
+  tl_min_validation_touch_spacing_bars: int = 5
+  tl_validation_reaction_bars: int = 2
+  tl_min_validation_favorable_excursion_atr: float = 0.10
+  tl_max_wick_violations: int = 2
+  tl_exhaustion_validation_touches: int = 4
+  tl_chop_min_validation_touches: int = 2
+  tl_chop_require_htf_aligned: bool = True
   coil_contract: float = 0.8
   breakout_buffer_atr: float = 0.1
   breakout_accept_bars: int = 2

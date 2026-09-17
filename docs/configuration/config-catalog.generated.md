@@ -3,9 +3,9 @@
 > Generated from the typed `ApexVoidConfig` Catalog V2 schema. Do not edit manually.
 
 - Catalog version: `2`
-- Contract fingerprint: `0f3ef7f77bc5106170de4429c7aa724b5d83d9a87c0152fc8e074660167fe071`
-- Document fingerprint: `b9afabb3ce1fe33a60ebb62cfb7a002902de386d73f0bb4b34b2aa6fb8a47bdf`
-- Items: `654`
+- Contract fingerprint: `5e889b64542bd3bdb7f684f7c4706b6c09d946c94f01321694d07f7bad837cb8`
+- Document fingerprint: `d932374dacc3d89b2cbcc3dbb2e595e1d82d8fcf468a96646a3ab8cf7f482bd9`
+- Items: `669`
 - Runtime status: canonical-only; `app.core.config.runtime_config` is authoritative
 
 ## actionability
@@ -164,19 +164,34 @@
 | `analysis.swings.zigzag.atr_mult` | `ZIGZAG_ATR_MULT` | `float` | `atr` | `configurable` | `1.0` |
 | `analysis.swings.zigzag.pct` | `ZIGZAG_PCT` | `float` | `percent` | `configurable` | `0.0` |
 | `analysis.techniques.validation_enabled` | `TECHNIQUE_VALIDATION_ENABLED` | `bool` | `boolean` | `configurable` | `true` |
+| `analysis.trendlines.approach_min_distance_atr` | `TL_APPROACH_MIN_DISTANCE_ATR` | `float` | `atr` | `configurable` | `0.1` |
+| `analysis.trendlines.chop_minimum_validation_touches` | `TL_CHOP_MIN_VALIDATION_TOUCHES` | `int` | `count` | `configurable` | `2` |
+| `analysis.trendlines.chop_require_htf_aligned` | `TL_CHOP_REQUIRE_HTF_ALIGNED` | `bool` | `boolean` | `configurable` | `true` |
+| `analysis.trendlines.close_violation_atr` | `TL_CLOSE_VIOLATION_ATR` | `float` | `atr` | `configurable` | `0.15` |
 | `analysis.trendlines.dedup_slope_percent` | `—` | `float` | `percent` | `algorithm_constant` | `0.2` |
 | `analysis.trendlines.dedup_value_atr` | `—` | `float` | `atr` | `algorithm_constant` | `0.5` |
+| `analysis.trendlines.exhaustion_validation_touches` | `TL_EXHAUSTION_VALIDATION_TOUCHES` | `int` | `count` | `configurable` | `4` |
+| `analysis.trendlines.interaction_band_atr` | `TL_INTERACTION_BAND_ATR` | `float` | `atr` | `configurable` | `0.2` |
+| `analysis.trendlines.invalidation_penetration_atr` | `TL_INVALIDATION_PENETRATION_ATR` | `float` | `atr` | `configurable` | `0.5` |
 | `analysis.trendlines.maximum_bars_since_last_touch` | `TL_MAX_BARS_SINCE_TOUCH` | `int` | `count` | `configurable` | `30` |
 | `analysis.trendlines.maximum_fit_error_atr` | `TL_MAX_FIT_ERROR_ATR` | `float` | `atr` | `configurable` | `0.15` |
 | `analysis.trendlines.maximum_slope_atr` | `TL_MAX_SLOPE_ATR` | `float` | `atr` | `configurable` | `0.15` |
 | `analysis.trendlines.maximum_touches` | `TL_MAX_TOUCHES` | `int` | `count` | `configurable` | `4` |
 | `analysis.trendlines.maximum_violations` | `TL_MAX_VIOLATIONS` | `int` | `count` | `configurable` | `2` |
+| `analysis.trendlines.maximum_wick_violations` | `TL_MAX_WICK_VIOLATIONS` | `int` | `count` | `configurable` | `2` |
 | `analysis.trendlines.minimum_slope_atr` | `TL_MIN_SLOPE_ATR` | `float` | `atr` | `configurable` | `0.02` |
 | `analysis.trendlines.minimum_span_bars` | `TL_MIN_SPAN_BARS` | `int` | `count` | `configurable` | `20` |
 | `analysis.trendlines.minimum_touch_spacing_bars` | `TL_MIN_TOUCH_SPACING` | `int` | `count` | `configurable` | `3` |
 | `analysis.trendlines.minimum_touches` | `TL_MIN_TOUCHES` | `int` | `count` | `configurable` | `3` |
+| `analysis.trendlines.minimum_validation_favorable_excursion_atr` | `TL_MIN_VALIDATION_FAVORABLE_EXCURSION_ATR` | `float` | `atr` | `configurable` | `0.1` |
+| `analysis.trendlines.minimum_validation_touch_spacing_bars` | `TL_MIN_VALIDATION_TOUCH_SPACING` | `int` | `bars` | `configurable` | `5` |
+| `analysis.trendlines.minimum_validation_touches` | `TL_MIN_VALIDATION_TOUCHES` | `int` | `count` | `configurable` | `1` |
 | `analysis.trendlines.pierce_tolerance_atr` | `TL_PIERCE_TOL_ATR` | `float` | `atr` | `configurable` | `0.5` |
+| `analysis.trendlines.shadow_v1` | `TL_SHADOW_V1` | `bool` | `boolean` | `configurable` | `false` |
 | `analysis.trendlines.tolerance_atr` | `TL_TOL_ATR` | `float` | `atr` | `configurable` | `0.3` |
+| `analysis.trendlines.validation_reaction_bars` | `TL_VALIDATION_REACTION_BARS` | `int` | `bars` | `configurable` | `2` |
+| `analysis.trendlines.validation_touch_tolerance_atr` | `TL_VALIDATION_TOUCH_TOL_ATR` | `float` | `atr` | `configurable` | `0.3` |
+| `analysis.trendlines.version` | `TL_VERSION` | `str` | `enum` | `configurable` | `"v1"` |
 | `analysis.triggers.m1.patterns` | `M1_TRIGGER_PATTERNS` | `str` | `string` | `configurable` | `"wick_rejection,body_close,strong_close,pin_bar,engulfing,hammer"` |
 | `analysis.triggers.m1.strong_close_pct` | `M1_TRIGGER_STRONG_CLOSE_PCT` | `float` | `percent` | `configurable` | `0.2` |
 | `analysis.triggers.m1.wick_fraction` | `M1_TRIGGER_WICK_FRACTION` | `float` | `fraction` | `configurable` | `0.5` |
