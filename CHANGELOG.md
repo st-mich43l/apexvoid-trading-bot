@@ -230,6 +230,25 @@ dated section after deployment.
   `PlanGroupEconomicBreakeven`.
 
 ### Fixed
+- The reaction RISK leg (PR #554) is now gated to XAU only. Its fixed
+  0.05/0.02-lot sizing was tuned against XAU's own pip value; applying
+  the same fixed lots to an FX pair is a materially different risk —
+  reproduced live on a USDJPY CRT trade this morning that got a RISK
+  leg it should never have had. Also fixed the break-even trigger
+  (`ManageOpenPositionsAsync`) still reading the raw, unfiltered
+  `GroupWeightedFillPrice`/open-legs blend when deciding the BE stop —
+  if the RISK leg's own fill is the only leg still open once earlier
+  targets book (shallow-first TP closing drains it last), the BE
+  reference now falls back to the non-RISK blend instead of the RISK
+  leg's own deliberately-worse fill, mirroring the exclusion
+  `SignedExitPips` already applies to the loss-pips reference.
+  Uncovered along the way: `TradePlanOwnership.TryNormalizeLegId` never
+  recognized the literal `"RISK"` leg token, so a filled RISK leg's
+  broker position could never actually be adopted by
+  `ReconcileSubmittedLegsAsync` — the leg stayed `Pending` forever and
+  the orphan-pending-order path would eventually mislabel a real,
+  broker-protected fill as `Cancelled`. Fixed by recognizing `"RISK"` as
+  a valid leg id there too.
 - Scalp volume silently re-inflated to 1.5× table lots despite PR #486's
   "scalp books the same flat equity-table lot as any other trade" fix.
   `risk_multiplier_for_tier`'s scalp branch still returned
