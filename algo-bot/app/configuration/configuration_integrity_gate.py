@@ -51,13 +51,16 @@ BASELINE = {
   # 2026-09-16 Reaction risk leg (Manual-Algo parity): +1
   # (execution.reaction_risk_leg.enabled), real canonical_env,
   # ConfigOwner.CTRADER (pure C#-side TradePlanRuntime mechanism).
-  "catalog_entry_count": 654,
-  "configurable_count": 547,
+  # 2026-09-17 Trendline V2: +15 configurable Python fields for causal
+  # construction, independent validation, interaction, health, and
+  # chop/HTF quality; no C#-owned configuration fields.
+  "catalog_entry_count": 669,
+  "configurable_count": 562,
   "protocol_constant_count": 10,
   "algorithm_constant_count": 97,
-  "python_projection_count": 604,
+  "python_projection_count": 619,
   "ctrader_only_count": 50,
-  "environment_entry_count": 547,
+  "environment_entry_count": 562,
   "deprecated_alias_count": 21,
   "shared_count": 96,
 }

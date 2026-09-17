@@ -5381,7 +5381,11 @@ async def _publish_trade_plan_v8(
         match,
         execution_state,
         reason_code="waiting_m1_retest",
-        message="retest entered execution distance; checking optional M1",
+        message=(
+          "retest entered execution distance; waiting for fresh M1"
+          if policy.m1_required_on_retest
+          else "retest entered execution distance; checking optional M1"
+        ),
         evidence=evidence,
         metric="zone_episode_started",
       )
@@ -5419,6 +5423,32 @@ async def _publish_trade_plan_v8(
         after_bar_ts=execution_state.last_evaluated_m1_ts,
       )
       if trigger is None:
+        if policy.m1_required_on_retest:
+          execution_state = new_state(
+            setup_id,
+            IN_ZONE_WAITING_M1,
+            now=now_ts,
+            episode_id=execution_state.episode_id,
+            zone_entered_at=execution_state.zone_entered_at,
+            last_inside_at=quote_ts,
+            last_evaluated_m1_ts=(
+              latest_evaluated
+              if latest_evaluated is not None
+              else execution_state.last_evaluated_m1_ts
+            ),
+          )
+          await _persist_v8_confirmation_phase(
+            client,
+            symbol,
+            match,
+            execution_state,
+            reason_code="micro_confirmation_missing",
+            message="Trendline V2 interaction is waiting for a fresh M1 reclaim",
+            evidence=evidence,
+            metric="trendline_v2_m1_missing",
+            status="checking",
+          )
+          return None
         confirmation_source = M5_AUTHORITATIVE
         trigger = ExecutionConfirmation(
           source=confirmation_source,
@@ -5493,6 +5523,27 @@ async def _publish_trade_plan_v8(
           evidence=evidence,
           metric="reaction_stale_m1_ignored",
         )
+        if policy.m1_required_on_retest:
+          await _persist_v8_confirmation_phase(
+            client,
+            symbol,
+            match,
+            new_state(
+              setup_id,
+              IN_ZONE_WAITING_M1 if execution_eligible else WAITING_RETEST,
+              now=now_ts,
+              episode_id=execution_state.episode_id,
+              zone_entered_at=execution_state.zone_entered_at,
+              zone_exited_at=None if execution_eligible else quote_ts,
+              last_inside_at=execution_state.last_inside_at,
+              last_evaluated_m1_ts=trigger_bar_ts,
+            ),
+            reason_code="micro_confirmation_stale",
+            message="stale Trendline V2 M1 trigger ignored; waiting for a new one",
+            evidence=evidence,
+            metric="trendline_v2_m1_stale",
+          )
+          return None
         confirmation_source = M5_AUTHORITATIVE
         trigger = ExecutionConfirmation(
           source=confirmation_source,
@@ -5577,7 +5628,7 @@ async def _publish_trade_plan_v8(
   if confirmation is None:
     # M1 pattern is preference telemetry. Zone presence alone authorizes
     # publication for every family once the entry contract is satisfied.
-    if not execution_eligible:
+    if not execution_eligible or policy.m1_required_on_retest:
       return None
     episode_id = deterministic_episode_id(
       setup_id,
@@ -5644,6 +5695,19 @@ async def _publish_trade_plan_v8(
 
   entry_reference = _executable_spot_price(spot, match.direction)
   execution_match = match
+  if (
+    isinstance(getattr(match, "trendline_v2", None), dict)
+    and str(match.trendline_v2.get("version", "")).casefold() == "v2"
+    and confirmation is not None
+    and confirmation.source == M1_RETEST
+  ):
+    trendline_telemetry = dict(match.trendline_v2)
+    trendline_telemetry.update({
+      "micro_confirmation_type": confirmation.pattern,
+      "confirmation_at": int(confirmation.bar_ts),
+      "entry_reason": "causal_confirmed_m5_reclaim_fresh_m1",
+    })
+    execution_match = replace(match, trendline_v2=trendline_telemetry)
   if policy.m5_authoritative_contract and confirmation.source == M1_RETEST:
     validity_bars = max(
       1,
@@ -8862,4 +8926,3 @@ async def _recover_unfinished_strategy_matches(
           "strategy_match_ready_pending_recovered",
           symbol=symbol,
         )
-

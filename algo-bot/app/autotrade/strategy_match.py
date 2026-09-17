@@ -191,6 +191,7 @@ class StrategyMatch:
   opposing_risk_score: float | None = None
   opposing_action: str | None = None
   opposing_reason_code: str | None = None
+  trendline_v2: dict[str, object] | None = None
 
   @property
   def is_range_edge(self) -> bool:
@@ -671,6 +672,10 @@ class StrategyMatch:
         sweep_extreme_price=(
           None if payload.get("sweep_extreme_price") is None
           else float(payload["sweep_extreme_price"])
+        ),
+        trendline_v2=(
+          dict(payload["trendline_v2"])
+          if isinstance(payload.get("trendline_v2"), dict) else None
         ),
       )
     except (KeyError, TypeError, ValueError, json.JSONDecodeError):

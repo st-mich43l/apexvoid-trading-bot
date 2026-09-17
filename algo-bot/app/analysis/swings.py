@@ -40,10 +40,26 @@ def _fractal_candidates(
     ts = df.index[i]
     max_high = float(window["high"].max())
     if high == max_high and all(float(df.iloc[j]["high"]) < high for j in range(i - n, i)):
-      candidates.append(Swing(i, "high", high, ts=ts))
+      confirmed_index = i + n
+      candidates.append(Swing(
+        i,
+        "high",
+        high,
+        ts=ts,
+        confirmed_index=confirmed_index,
+        confirmed_ts=df.index[confirmed_index],
+      ))
     min_low = float(window["low"].min())
     if low == min_low and all(float(df.iloc[j]["low"]) > low for j in range(i - n, i)):
-      candidates.append(Swing(i, "low", low, ts=ts))
+      confirmed_index = i + n
+      candidates.append(Swing(
+        i,
+        "low",
+        low,
+        ts=ts,
+        confirmed_index=confirmed_index,
+        confirmed_ts=df.index[confirmed_index],
+      ))
   return sorted(candidates, key=lambda item: (int(item.index), item.kind))
 
 
@@ -89,5 +105,13 @@ def _label(swings: list[Swing]) -> list[Swing]:
     else:
       label = "HL" if last_low is None or swing.price > last_low else "LL"
       last_low = swing.price
-    result.append(Swing(swing.index, swing.kind, swing.price, label, swing.ts))
+    result.append(Swing(
+      swing.index,
+      swing.kind,
+      swing.price,
+      label,
+      swing.ts,
+      swing.confirmed_index,
+      swing.confirmed_ts,
+    ))
   return result

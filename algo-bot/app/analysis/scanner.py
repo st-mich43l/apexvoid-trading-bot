@@ -804,6 +804,7 @@ def _build_one_strategy_match(
     opposing_action=getattr(result, "opposing_action", None),
     opposing_reason_code=getattr(result, "opposing_reason_code", None),
     sweep_extreme_price=getattr(result, "sweep_extreme_price", None),
+    trendline_v2=getattr(result, "trendline_v2", None),
   )
   return match, None, {}
 
