@@ -2,8 +2,8 @@
 
 > Generated from the canonical configuration catalog (`app.configuration.environment_contract`). Do not edit manually.
 
-- Contract fingerprint: `5e889b64542bd3bdb7f684f7c4706b6c09d946c94f01321694d07f7bad837cb8`
-- Environment-bound fields: `562`
+- Contract fingerprint: `a4acd550c6e36e7bbdf7fe6dbae6439043a97d752b34a60f52a8193150ffb0d4`
+- Environment-bound fields: `565`
 - Deprecated aliases: `21`
 
 Secret values are never emitted; secret defaults render as `<redacted>`.
@@ -12,6 +12,9 @@ Secret values are never emitted; secret defaults render as `<redacted>`.
 |---|---|---|---|---|---|---|
 | `ALERT_OVERLAP_SUPPRESS` | `analysis.measurements.alert_overlap_suppress` | `float` | no | no | — | `0.5` |
 | `ALLOW_COUNTER_TREND` | `strategies.counter_trend.allow_counter_trend` | `bool` | no | no | — | `True` |
+| `ANALYSIS_ZONE_RELEVANCE_IMMEDIATE_ATR` | `analysis.zone_relevance.immediate_atr` | `float` | no | no | — | `0.25` |
+| `ANALYSIS_ZONE_RELEVANCE_NEARBY_ATR` | `analysis.zone_relevance.nearby_atr` | `float` | no | no | — | `1.25` |
+| `ANALYSIS_ZONE_RELEVANCE_REMOTE_ATR` | `analysis.zone_relevance.remote_atr` | `float` | no | no | — | `3.0` |
 | `ANTHROPIC_API_KEY` | `delivery.presentation.anthropic_api_key` | `Optional[str]` | yes | no | — | `<redacted>` |
 | `ATR_LENGTH` | `analysis.atr.length` | `int` | no | no | — | `14` |
 | `AUTO_BOOK_BARE_PIPS` | `delivery.presentation.auto_book_bare_pips` | `bool` | no | no | — | `False` |

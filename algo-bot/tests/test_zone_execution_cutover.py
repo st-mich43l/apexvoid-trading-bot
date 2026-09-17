@@ -4,6 +4,7 @@ from tests.configuration.canonical_fixtures import install_runtime_overrides, le
 
 import asyncio
 import os
+import time
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -287,6 +288,52 @@ async def test_rediscovery_refreshes_metadata_without_resetting_touch(client):
   assert refreshed.last_confirmed_at == 300
   assert refreshed.low == pytest.approx(4112.9)
   assert refreshed.score == pytest.approx(14.0)
+
+
+@pytest.mark.asyncio
+async def test_dormant_zone_is_skipped_not_expired(client):
+  """Owner 2026-09-17: a structurally valid zone far from current price
+  must be skipped from full evaluation (perf) but never transitioned to a
+  terminal state - EXPIRED is a dead end (_TRANSITIONS[EXPIRED] ==
+  frozenset()), so destroying it would permanently block reactivation if
+  price ever returns within relevance_nearby_atr. Replaces the old
+  destructive stale_far_from_market expiry.
+  """
+  record, _ = await zw.discover_zone_watch(
+    client,
+    zone_id="zone-far",
+    symbol="XAU",
+    direction="BUY",
+    low=4280.0,
+    high=4285.0,
+    source_timeframe="M5",
+    structural_sources=("key_level",),
+    confluence_tags=("key_level",),
+    grade=zw.GRADE_A,
+    now=100,
+  )
+  await zw.transition_zone_watch(client, record.zone_id, zw.WATCHING_RETEST)
+  now = int(time.time())
+  await client.set(
+    "price:XAU:spot",
+    f'{{"bid": 4360.0, "ask": 4360.5, "ts": {now}}}',
+  )
+  for index in range(30):
+    close = 4358.0 + (index % 3)
+    payload = (
+      f'{{"t": {index}, "o": {close}, "h": {close + 1}, '
+      f'"l": {close - 1}, "c": {close}, "v": 1}}'
+    )
+    await client.zadd("bars:XAU:M5", {payload: index})
+
+  matched = await cutover.evaluate_active_zone_watches(
+    client, symbol="XAU", event_ts=str(now),
+  )
+
+  assert matched is None
+  reloaded = await zw.load_zone_watch(client, record.zone_id)
+  assert reloaded is not None
+  assert reloaded.state == zw.WATCHING_RETEST
 
 
 @pytest.mark.asyncio
