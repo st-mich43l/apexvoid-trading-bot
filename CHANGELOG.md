@@ -12,6 +12,13 @@ dated section after deployment.
 
 ## Unreleased
 
+### Fixed
+
+- Let a fresh, M5-confirmed Key Level or Reaction setup activate while price
+  remains inside its entry zone. This avoids rejecting brief valid retests
+  solely because no new M1 candle had time to close; non-authoritative setups
+  still require their normal M1 confirmation.
+
 ### Added
 - Trendline V2: immutable causal A/B anchors, independent forward reaction
   validation, slope/penetration/violation telemetry, and explicit line

@@ -150,9 +150,13 @@ execution:
     # MAD is entry quality / structure analysis only — never block activation.
     mad_hard_gate_enabled: false
   activation:
-    # Enforce with entry_location: wait for M1 reaction + honor location blocks.
+    # Enforce entry location while permitting a fresh M5-confirmed Key Level
+    # or Reaction setup to execute inside its zone. Non-authoritative setups
+    # still require their normal M1 confirmation.
     # Ansible: apexvoid_trading_bot_config.execution.activation
     mode: enforce
+    m5_authoritative_fallback: quote_inside_fresh
+    m5_confirmation_maximum_age_bars: 6
     reaction_trigger_maximum_age_bars: 2
   broker_recovery:
     absence_confirmations: 2
