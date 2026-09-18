@@ -754,7 +754,8 @@ strategies:
       # structural; every strategy clips tradeable entry to this band.
       entry_max_width_price: 5.0
   scalping:
-    # Live M1 scalping: publish TradePlan when activation + risk pass.
+    # M1-event-driven scalping: M5 owns setup structure; closed M1 owns
+    # execution confirmation. Publish TradePlan when activation + risk pass.
     # Requires runtime.auto_trade.enabled=true. XAU hosts M1 scalping even
     # when technique uses structure fixed_rr; FX fixed_rr books stay excluded
     # in app.scalping.context._scalping_symbols.
@@ -762,8 +763,8 @@ strategies:
     archetypes:
       range_sweep_enabled: true
       impulse_pullback_enabled: true
-      # Hard gate: impulse pullback only during London UTC session (07–13).
-      impulse_pullback_allowed_sessions: london
+      # Soft preference for scoring only. No session timezone hard gate.
+      impulse_pullback_allowed_sessions: all
       pullback_extreme_confirm_bars: 2
       impulse_displacement_atr_multiple: 4.0
       impulse_body_dominance: 0.5
@@ -813,7 +814,8 @@ strategies:
       cooldown_after_loss_minutes: 5
       daily_loss_limit_r: 3.0
       session_loss_limit_r: 2.0
-    # ApexVoid Breakout Retest — M1 compression box (not M5 24-bar envelope).
+    # ApexVoid Breakout Retest — M5 compression/structure setup with M1
+    # confirmation. Each archetype owns its own detector and quality score.
     # See docs/scalping/OWN_BREAKOUT_TECHNIQUE.md
     breakout:
       box_max_atr: 1.5

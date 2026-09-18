@@ -12,6 +12,7 @@ log = logging.getLogger(__name__)
 
 from app.scalping.microstructure import (
   candidate_from_compression_box,
+  confirm_m1_execution,
   detect_breakout_retest,
   detect_impulse_pullback,
   detect_sweep_reclaim,
@@ -22,7 +23,7 @@ from app.scalping.microstructure import (
   m5_structure_flip_candidates,
   structure_flip_candidates,
 )
-from app.scalping.context import is_impulse_pullback_session_allowed
+from app.scalping.context import scalp_session_quality
 from app.analysis.key_level_role import classify_key_level_role
 from app.scalping.models import (
   ARCHETYPE_BREAKOUT_RETEST,
@@ -36,6 +37,8 @@ from app.scalping.models import (
   ScalpContextSnapshot,
   ScalpOpportunity,
   MicroStructure,
+  SCALP_CONFIRMATION_TIMEFRAME,
+  SCALP_SETUP_TIMEFRAME,
   STRATEGY_DISPLAY,
   deterministic_id,
 )
@@ -339,6 +342,27 @@ def _enabled(cfg: Any, name: str) -> bool:
   return bool(getattr(arch, attr, False))
 
 
+def _setup_inputs(
+  m1_df: pd.DataFrame,
+  *,
+  m5_df: pd.DataFrame | None,
+  m5_micro: MicroStructure | None,
+  m1_micro: MicroStructure | None,
+) -> tuple[pd.DataFrame, MicroStructure | None, bool]:
+  """Resolve the explicit setup/confirmation roles.
+
+  The fallback keeps direct unit-test and replay callers source-compatible;
+  live runtime always supplies M5 setup data and therefore cannot silently
+  use M1 structure.
+  """
+  use_m5 = m5_df is not None and not m5_df.empty
+  return (
+    m5_df if use_m5 else m1_df,
+    m5_micro if use_m5 else m1_micro,
+    use_m5,
+  )
+
+
 def discover_range_sweep(
   context: ScalpContextSnapshot,
   micro: MicroStructure,
@@ -349,6 +373,8 @@ def discover_range_sweep(
   now: int,
   spread_pips: float = 0.0,
   idle_reasons: list[str] | None = None,
+  m5_df: pd.DataFrame | None = None,
+  m5_micro: MicroStructure | None = None,
 ) -> list[ScalpOpportunity]:
   if not _enabled(cfg, "range_sweep"):
     return []
@@ -453,7 +479,11 @@ def discover_range_sweep(
               expires_at=int(now) + 15 * 60,
               episode_id=source,
               source_identity=source,
-              measured={"strategy": STRATEGY_DISPLAY[ARCHETYPE_RANGE_SWEEP]},
+              measured={
+                "strategy": STRATEGY_DISPLAY[ARCHETYPE_RANGE_SWEEP],
+                "setup_timeframe": SCALP_SETUP_TIMEFRAME,
+                "confirmation_timeframe": SCALP_CONFIRMATION_TIMEFRAME,
+              },
             ))
 
   sell_ev = detect_sweep_reclaim(
@@ -531,7 +561,11 @@ def discover_range_sweep(
               expires_at=int(now) + 15 * 60,
               episode_id=source,
               source_identity=source,
-              measured={"strategy": STRATEGY_DISPLAY[ARCHETYPE_RANGE_SWEEP]},
+              measured={
+                "strategy": STRATEGY_DISPLAY[ARCHETYPE_RANGE_SWEEP],
+                "setup_timeframe": SCALP_SETUP_TIMEFRAME,
+                "confirmation_timeframe": SCALP_CONFIRMATION_TIMEFRAME,
+              },
             ))
   return out
 
@@ -546,13 +580,16 @@ def discover_impulse_pullback(
   now: int,
   spread_pips: float = 0.0,
   idle_reasons: list[str] | None = None,
+  m5_df: pd.DataFrame | None = None,
+  m5_micro: MicroStructure | None = None,
 ) -> list[ScalpOpportunity]:
   if not _enabled(cfg, "impulse_pullback"):
     return []
   if ARCHETYPE_IMPULSE_PULLBACK not in context.permitted_archetypes:
     return []
-  if not is_impulse_pullback_session_allowed(context.session, cfg):
-    return []
+  setup_df, _setup_micro, using_m5_setup = _setup_inputs(
+    m1_df, m5_df=m5_df, m5_micro=m5_micro, m1_micro=micro,
+  )
 
   loc = getattr(_scalping_cfg(cfg), "location", None)
   buy_max = _parse_float(loc, "pullback_buy_maximum_position", 0.60)
@@ -570,7 +607,7 @@ def discover_impulse_pullback(
       continue
     arch = getattr(_scalping_cfg(cfg), "archetypes", None)
     ev = _detect_impulse(
-      m1_df,
+      setup_df,
       direction=direction,
       confirm_bars=int(
         getattr(arch, "pullback_extreme_confirm_bars", 2) or 2
@@ -585,9 +622,13 @@ def discover_impulse_pullback(
       continue
     entry = float(ev["close"])
     m1_atr = max(float(context.m1_atr or 0.0), pip_size * 3.0)
+    structure_atr = max(
+      float(context.atr if using_m5_setup else context.m1_atr or 0.0),
+      pip_size * 3.0,
+    )
     impulse_len = float(ev.get("impulse_len") or 0.0)
     body_dominance = float(ev.get("body_dominance") or 0.0)
-    displacement_multiple = impulse_len / m1_atr if m1_atr > 0 else 0.0
+    displacement_multiple = impulse_len / structure_atr if structure_atr > 0 else 0.0
     if displacement_multiple < _parse_float(
       arch, "impulse_displacement_atr_multiple", 4.0,
     ) or body_dominance < _parse_float(
@@ -620,6 +661,19 @@ def discover_impulse_pullback(
         f"{ARCHETYPE_IMPULSE_PULLBACK}:{reference.get('reason')}"
       )
       continue
+    confirmation = None
+    if using_m5_setup:
+      confirmation = confirm_m1_execution(
+        m1_df,
+        direction=direction,
+        level=float(reference["level"]),
+        tolerance=buffer,
+        lookback_bars=2,
+      )
+      if confirmation is None:
+        reasons.append(f"{ARCHETYPE_IMPULSE_PULLBACK}:m1_confirmation_missing")
+        continue
+      entry = float(confirmation["close"])
     key_level_role = _impulse_level_role(
       context, reference, direction=direction, cfg=cfg,
     )
@@ -706,7 +760,7 @@ def discover_impulse_pullback(
       zone_high=zone_high,
       key_level=key_level,
       trigger_type=str(ev["pattern"]),
-      trigger_bar_ts=int(ev["bar_ts"]),
+      trigger_bar_ts=int(confirmation["bar_ts"] if confirmation else ev["bar_ts"]),
       trigger_price=entry,
       invalidation_price=invalidation,
       expected_target_price=target_price,
@@ -738,6 +792,13 @@ def discover_impulse_pullback(
         "level_distance_pips": reference["distance"] / pip_size,
         "m1_atr": m1_atr,
         "session": context.session,
+        "session_quality": scalp_session_quality(
+          ARCHETYPE_IMPULSE_PULLBACK, context.session, cfg,
+        ),
+        "setup_timeframe": (
+          SCALP_SETUP_TIMEFRAME if using_m5_setup else SCALP_CONFIRMATION_TIMEFRAME
+        ),
+        "confirmation_timeframe": SCALP_CONFIRMATION_TIMEFRAME,
         "htf_bias": context.htf_bias,
         "bias_alignment": (
           "aligned"
@@ -955,6 +1016,8 @@ def discover_breakout_retest(
   now: int,
   spread_pips: float = 0.0,
   idle_reasons: list[str] | None = None,
+  m5_df: pd.DataFrame | None = None,
+  m5_micro: MicroStructure | None = None,
 ) -> list[ScalpOpportunity]:
   if not _enabled(cfg, "breakout_retest"):
     return []
@@ -962,9 +1025,12 @@ def discover_breakout_retest(
     return []
 
   atr = float(context.atr or 0.0)
+  setup_df, setup_micro, using_m5_setup = _setup_inputs(
+    m1_df, m5_df=m5_df, m5_micro=m5_micro, m1_micro=micro,
+  )
   knobs = _breakout_knobs(cfg, atr=atr, pip_size=pip_size, spread_pips=spread_pips)
   box = find_compression_box(
-    m1_df,
+    setup_df,
     atr=atr,
     min_box_bars=knobs["min_box_bars"],
     max_box_bars=knobs["max_box_bars"],
@@ -987,14 +1053,14 @@ def discover_breakout_retest(
   retest_lookback = knobs["retest_lookback_bars"]
   out: list[ScalpOpportunity] = []
   reasons = idle_reasons if idle_reasons is not None else []
-  mad = m1_mad_volatility(m1_df, lookback=14, min_floor=0.0) if knobs["v2_enabled"] else 0.0
-  current_index = len(m1_df) - 1
+  mad = m1_mad_volatility(setup_df, lookback=14, min_floor=0.0) if knobs["v2_enabled"] else 0.0
+  current_index = len(setup_df) - 1
 
   for direction in ("BUY", "SELL"):
     best: dict[str, Any] | None = None
 
     box_ev = detect_breakout_retest(
-      m1_df,
+      setup_df,
       direction=direction,
       box_high=high,
       box_low=low,
@@ -1011,7 +1077,9 @@ def discover_breakout_retest(
         "pattern": str(box_ev["pattern"]),
         "subtype": BR_SUBTYPE_RANGE_BREAK,
         "source": BR_SOURCE_COMPRESSION_BOX,
-        "timeframe": "M1",
+        "timeframe": (
+          SCALP_SETUP_TIMEFRAME if using_m5_setup else SCALP_CONFIRMATION_TIMEFRAME
+        ),
         "accepted_break": bool(box_ev.get("accepted_break")),
         "correct_key_level_role": bool(box_ev.get("correct_key_level_role")),
         "retest_of_broken_level": bool(box_ev.get("retest_of_broken_level")),
@@ -1031,9 +1099,13 @@ def discover_breakout_retest(
 
     if knobs["v2_enabled"]:
       candidates: list[BreakoutLevelCandidate] = []
-      if micro is not None and knobs["enable_structure_flip_m1"]:
+      if setup_micro is not None and (
+        knobs["enable_structure_flip_m5"] if using_m5_setup
+        else knobs["enable_structure_flip_m1"]
+      ):
         candidates.extend(structure_flip_candidates(
-          micro, side=direction, current_index=current_index, timeframe="M1",
+          setup_micro, side=direction, current_index=current_index,
+          timeframe=SCALP_SETUP_TIMEFRAME if using_m5_setup else SCALP_CONFIRMATION_TIMEFRAME,
           min_age_bars=knobs["m1_swing_min_age_bars"],
           max_age_bars=knobs["m1_swing_max_age_bars"],
           atr=atr, min_level_spacing_atr=knobs["m1_swing_min_spacing_atr"],
@@ -1042,15 +1114,19 @@ def discover_breakout_retest(
       if knobs["enable_structure_flip_m5"] and context_key_levels:
         candidates.extend(m5_structure_flip_candidates(
           context_key_levels, side=direction,
-          current_price=float(m1_df["close"].iloc[-1]),
+          current_price=float(setup_df["close"].iloc[-1]),
           min_touches=knobs["m5_structure_min_touches"],
         ))
-      if micro is not None and knobs["enable_liquidity_level"]:
-        candidates.extend(liquidity_level_candidates(micro, side=direction, timeframe="M1"))
+      if setup_micro is not None and knobs["enable_liquidity_level"]:
+        candidates.extend(liquidity_level_candidates(
+          setup_micro,
+          side=direction,
+          timeframe=SCALP_SETUP_TIMEFRAME if using_m5_setup else SCALP_CONFIRMATION_TIMEFRAME,
+        ))
 
       for candidate in candidates:
         result = evaluate_breakout_retest_episode(
-          m1_df, candidate, atr=atr, mad=mad,
+          setup_df, candidate, atr=atr, mad=mad,
           cross_tolerance=knobs["cross_tolerance"],
           breakout_margin=knobs["breakout_margin"],
           max_break_delay_bars=knobs["max_break_delay_bars"],
@@ -1095,6 +1171,21 @@ def discover_breakout_retest(
       if best is not None:
         reasons.append(f"{ARCHETYPE_BREAKOUT_RETEST}:below_min_quality_score")
       continue
+
+    confirmation = None
+    if using_m5_setup:
+      confirmation = confirm_m1_execution(
+        m1_df,
+        direction=direction,
+        level=float(best["level"]),
+        tolerance=buffer,
+        lookback_bars=2,
+      )
+      if confirmation is None:
+        reasons.append(f"{ARCHETYPE_BREAKOUT_RETEST}:m1_confirmation_missing")
+        continue
+      best["entry"] = float(confirmation["close"])
+      best["bar_ts"] = int(confirmation["bar_ts"])
 
     entry = best["entry"]
     level = best["level"]
@@ -1173,7 +1264,18 @@ def discover_breakout_retest(
         "target_room_beyond_breakout": bool(room_ok),
         "break_displacement": best.get("break_displacement"),
         "state": "armed",
+        "setup_timeframe": (
+          SCALP_SETUP_TIMEFRAME if using_m5_setup else SCALP_CONFIRMATION_TIMEFRAME
+        ),
+        "confirmation_timeframe": SCALP_CONFIRMATION_TIMEFRAME,
       },
+      "session_quality": scalp_session_quality(
+        ARCHETYPE_BREAKOUT_RETEST, getattr(context, "session", "unknown"), cfg,
+      ),
+      "setup_timeframe": (
+        SCALP_SETUP_TIMEFRAME if using_m5_setup else SCALP_CONFIRMATION_TIMEFRAME
+      ),
+      "confirmation_timeframe": SCALP_CONFIRMATION_TIMEFRAME,
       "v2": {
         "subtype": best["subtype"],
         "break_source": best["source"],
@@ -1229,6 +1331,8 @@ def discover_all(
   now: int,
   spread_pips: float = 0.0,
   idle_reasons: list[str] | None = None,
+  m5_df: pd.DataFrame | None = None,
+  m5_micro: MicroStructure | None = None,
 ) -> list[ScalpOpportunity]:
   found: list[ScalpOpportunity] = []
   reasons = idle_reasons if idle_reasons is not None else []
@@ -1236,18 +1340,21 @@ def discover_all(
     discover_range_sweep(
       context, micro, m1_df, cfg, pip_size=pip_size, now=now,
       spread_pips=spread_pips, idle_reasons=reasons,
+      m5_df=m5_df, m5_micro=m5_micro,
     )
   )
   found.extend(
     discover_impulse_pullback(
       context, micro, m1_df, cfg, pip_size=pip_size, now=now,
       spread_pips=spread_pips, idle_reasons=reasons,
+      m5_df=m5_df, m5_micro=m5_micro,
     )
   )
   found.extend(
     discover_breakout_retest(
       context, micro, m1_df, cfg, pip_size=pip_size, now=now,
       spread_pips=spread_pips, idle_reasons=reasons,
+      m5_df=m5_df, m5_micro=m5_micro,
     )
   )
   # Deduplicate by opportunity_id
@@ -1261,6 +1368,7 @@ def idle_discovery_reasons(
   cfg: Any,
   *,
   pip_size: float,
+  m5_df: pd.DataFrame | None = None,
 ) -> list[str]:
   """Explain an empty discover_all cycle for last_cycle telemetry."""
   reasons: list[str] = []
@@ -1298,12 +1406,12 @@ def idle_discovery_reasons(
         if sell_ev is not None and pos is not None and pos < sell_min:
           reasons.append("range_sweep:sell_location_blocked")
   if ARCHETYPE_IMPULSE_PULLBACK in context.permitted_archetypes and _enabled(cfg, "impulse_pullback"):
-    if not is_impulse_pullback_session_allowed(context.session, cfg):
-      reasons.append(f"impulse_pullback:outside_allowed_session:{context.session}")
-    else:
-      reasons.append("impulse_pullback:not_matched")
+    reasons.append("impulse_pullback:not_matched")
   if ARCHETYPE_BREAKOUT_RETEST in context.permitted_archetypes and _enabled(cfg, "breakout_retest"):
-    code = diagnose_breakout_reject(context, m1_df, cfg, pip_size=pip_size)
+    code = diagnose_breakout_reject(
+      context, m1_df if m5_df is None or m5_df.empty else m5_df,
+      cfg, pip_size=pip_size,
+    )
     if code and code != "armed":
       reasons.append(f"breakout_retest:{code}")
     elif code == "armed":
