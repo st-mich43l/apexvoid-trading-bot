@@ -118,6 +118,10 @@ def test_builds_valid_plan_with_real_bias_kind_and_regime():
   assert plan.source_structure.kind == "demand"
   assert plan.source_structure.structure_id == "zone-xau-4088-4090"
   assert plan.source_structure.timeframe == "H1"
+  # Auto lots must be derived later from the declared entry/stop geometry,
+  # never from the legacy equity-to-flat-lot table.
+  assert plan.sizing.mode == "risk"
+  assert plan.risk.risk_percent == Decimal("1.0")
 
 
 def test_candle_confirmation_v2_telemetry_propagates_to_plan_analysis():
@@ -521,4 +525,3 @@ def test_final_reward_risk_preference_keeps_builder_plan():
   )
   assert plan.management is not None
   assert plan.stop.source == "m1_trigger_wick"
-

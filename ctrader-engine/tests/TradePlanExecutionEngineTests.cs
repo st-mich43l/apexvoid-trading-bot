@@ -593,8 +593,8 @@ public sealed class TradePlanExecutionEngineTests
   }
 
   [Theory]
-  [InlineData(12.0, 800L)]
-  [InlineData(28.57, 300L)]
+  [InlineData(12.0, 1200L)]
+  [InlineData(28.57, 500L)]
   public void CalculateVolumeRiskModeSizesFromDeclaredStop(
     decimal stopPips,
     long expectedVolume
@@ -604,8 +604,9 @@ public sealed class TradePlanExecutionEngineTests
       RiskSizedScalpPlan(stopPips), Account(2_000m), 0.1m, 10m, Symbol
     );
 
-    // 0.5% of $2,000 is a $10 budget. Broker-step rounding floors the
-    // resulting 0.0833 / 0.0350 lots to 0.08 / 0.03.
+    // The plan's 0.5% risk budget and its explicit 1.5x multiplier yield
+    // $15. Broker-step rounding floors the resulting 0.1250 / 0.0525 lots
+    // to 0.12 / 0.05.
     Assert.Equal(expectedVolume, result.TotalVolume);
   }
 
@@ -623,7 +624,7 @@ public sealed class TradePlanExecutionEngineTests
     var moneyRisk = lots * stopPips * 10m;
 
     // Step rounding may leave up to one 0.01-lot step of unused budget.
-    Assert.InRange(moneyRisk, 8.5m, 10m);
+    Assert.InRange(moneyRisk, 13.5m, 15m);
   }
 
   [Fact]

@@ -496,7 +496,7 @@ _DEFAULT_POLICIES: dict[str, ExecutionPolicy] = {
     "market", ("trend", "breakout", "unknown"),
   ),
   FAMILY_LIQUIDITY_REVERSAL: ExecutionPolicy(
-    FAMILY_LIQUIDITY_REVERSAL, 2, 0.45, 10.0, 1.5, 0.55, 1.15, 0.75,
+    FAMILY_LIQUIDITY_REVERSAL, 2, 0.45, 10.0, 1.5, 0.55, 1.15, 1.0,
     "market", ("chop", "range", "trend", "unknown"),
   ),
   FAMILY_MAPPED_ZONE_REACTION: ExecutionPolicy(
