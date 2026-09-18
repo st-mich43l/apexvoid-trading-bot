@@ -243,17 +243,6 @@ dated section after deployment.
   `PlanGroupEconomicBreakeven`.
 
 ### Fixed
-- The provisional "⏳ Position closed at broker — confirming exit price..."
-  ping (PR #563) no longer spams the channel 2-3 times for one close.
-  Owner-reported: a manual /algo signal's legs share one stop-loss and
-  commonly all disappear from the broker in the same reconcile pass, so
-  AutoTradeEngine.cs's one-`position_closing`-event-per-leg design (correct
-  on its own) hit a handler with no per-signal dedup, re-broadcasting the
-  identical placeholder once per leg. Added a Redis-backed
-  `position_closing_already_pinged`/`mark_position_closing_pinged` guard
-  (`app/persistence/redis_state.py`) keyed on signal_id, mirroring the
-  existing `tp_ordinal_already_booked` per-signal dedup pattern, so only
-  the first leg's event actually posts.
 - Trendline no longer refits an A-C line and retroactively counts B as a
   confirming touch. A close-through invalidates the line, while reclaimed
   wick probes are measured separately instead of being treated as equivalent
@@ -306,6 +295,19 @@ dated section after deployment.
   now correctly a no-op too.
 
 ### Removed
+- The provisional "⏳ Position closed at broker — confirming exit price..."
+  ping (PR #563, shipped the day before) — owner-reported it spammed the
+  VIP channel 2-3 times for a single close, since a manual /algo signal's
+  legs share one stop-loss and commonly all disappear from the broker in
+  the same `AutoTradeEngine.cs` reconcile pass (one `position_closing`
+  event per leg, all resolving to the same signal). A per-signal dedup
+  guard fixed the spam, but the owner's call once shown it working was to
+  drop the ping entirely rather than send it even once — `manual_execution.py`
+  no longer handles `position_closing` at all; it falls through to the
+  same silent no-op path as any other event type this loop doesn't
+  recognize. `AutoTradeEngine.cs` still publishes the event (harmless,
+  never mapped to any lifecycle state) in case a different notification
+  shape is wanted later.
 - Stopped the automatic Market Map owner Telegram digest
   (`market_map_scan_loop`, previously spawned unconditionally at
   startup) — owner-reported it was still sending after the trading-
