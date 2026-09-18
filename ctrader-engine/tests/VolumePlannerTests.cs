@@ -97,6 +97,24 @@ public sealed class VolumePlannerTests
     );
   }
 
+  [Theory]
+  [InlineData(2_000, 0.15)]
+  [InlineData(2_500, 0.18)]
+  [InlineData(2_999.99, 0.20)]
+  [InlineData(3_000, 0.20)]
+  [InlineData(4_000, 0.25)]
+  [InlineData(5_000, 0.30)]
+  public void FxEquitySizingSmoothsTheThreeThousandBoundary(
+    double equity,
+    double expectedLots
+  )
+  {
+    Assert.Equal(
+      Convert.ToDecimal(expectedLots),
+      VolumePlanner.LotsForEquity(Convert.ToDecimal(equity), useFxEquitySizing: true)
+    );
+  }
+
   [Fact]
   public void RoundsEquityTableToOneCentLotStep()
   {

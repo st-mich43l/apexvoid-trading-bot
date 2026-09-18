@@ -2562,7 +2562,8 @@ public sealed class AutoTradeEngine(
         options.PipValuePerLot,
         RequireSymbol(),
         targetPips,
-        targetWeights
+        targetWeights,
+        useFxEquitySizing: VolumePlanner.IsFxInstrument(RequireSymbol())
       );
     }
     catch (VolumePlanningException exception) when (rangeBoxScaleOut)
@@ -2586,7 +2587,8 @@ public sealed class AutoTradeEngine(
           options.PipValuePerLot,
           RequireSymbol(),
           targetPips,
-          targetWeights
+          targetWeights,
+          useFxEquitySizing: VolumePlanner.IsFxInstrument(RequireSymbol())
         );
       }
       catch (VolumePlanningException fallbackException)
@@ -2706,7 +2708,8 @@ public sealed class AutoTradeEngine(
         options.PipValuePerLot,
         symbol,
         targets,
-        weights
+        weights,
+        useFxEquitySizing: VolumePlanner.IsFxInstrument(symbol)
       );
     }
     catch (VolumePlanningException exception)
@@ -3068,7 +3071,8 @@ public sealed class AutoTradeEngine(
         pipValuePerLot,
         symbol,
         targetsPips,
-        targetWeights
+        targetWeights,
+        useFxEquitySizing: VolumePlanner.IsFxInstrument(symbol)
       );
     }
     catch (VolumePlanningException exception)

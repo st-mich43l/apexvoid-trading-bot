@@ -16,6 +16,18 @@ public sealed class TradePlanExecutionEngineTests
     LotSize: 10_000
   );
 
+  private static readonly SymbolInfo EurUsdSymbol = new(
+    "EURUSD",
+    "EURUSD",
+    8,
+    Digits: 5,
+    PipPosition: 4,
+    MinVolume: 10_000,
+    StepVolume: 10_000,
+    MaxVolume: 100_000_000,
+    LotSize: 10_000_000
+  );
+
   private static TradePlan MarketWatchPlan(
     string direction = "BUY",
     decimal zoneLow = 4088.10m,
@@ -492,6 +504,26 @@ public sealed class TradePlanExecutionEngineTests
     // LotsForEquity(2500)=0.15 → ×2 = 0.30 lots → 3000 volume units.
     Assert.Equal(3_000, result.TotalVolume);
     Assert.Empty(result.Slices);
+  }
+
+  [Fact]
+  public void CalculateVolumeSmoothsFxLotsAcrossThreeThousandEquity()
+  {
+    var plan = MarketWatchPlan() with
+    {
+      Symbol = "EURUSD",
+      Risk = new TradePlanRisk(1.0m, 1.5m, 100_000_000, 2.0m),
+    };
+
+    var beforeBoundary = TradePlanExecutionEngine.CalculateVolume(
+      plan, Account(2_999.99m), 0.0001m, 10m, EurUsdSymbol
+    );
+    var atBoundary = TradePlanExecutionEngine.CalculateVolume(
+      plan, Account(3_000m), 0.0001m, 10m, EurUsdSymbol
+    );
+
+    Assert.Equal(3_000_000, beforeBoundary.TotalVolume); // 0.20 x 1.5 = 0.30
+    Assert.Equal(3_000_000, atBoundary.TotalVolume);
   }
 
   [Fact]
