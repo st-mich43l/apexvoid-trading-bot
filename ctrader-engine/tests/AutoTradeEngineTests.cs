@@ -4104,6 +4104,132 @@ public sealed partial class AutoTradeEngineTests
     await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
   }
 
+  [Fact]
+  public async Task ManualAlgoTp3TrailsEveryRemainingLegEvenOnesWithNoRealBookingThere()
+  {
+    // Owner-reported live 2026-09-18 (manual signal 393): TP1/TP2 already
+    // move every remaining group leg's stop via the dedicated shared-BE /
+    // shallow-entry sweeps regardless of which leg actually books real
+    // broker volume there. TP3+ has no such sweep - only the leg whose OWN
+    // booking reaches it gets MoveStopAfterTargetAsync, so a leg that never
+    // itself owns a TP1-3 slice (the deepest leg of a shallow-first ladder)
+    // needs NotifySkippedManualTargetsAsync's catch-up to trail ITS OWN
+    // stop there instead. Previously that catch-up was gated by whether
+    // some OTHER leg still tracked in memory "owned" the ordinal - which
+    // both wrongly suppressed a non-booking leg's own trail while siblings
+    // were alive, and (once a sibling closed) fired a stale, misleading,
+    // NOW-price-only duplicate notification. This proves every surviving
+    // leg gets trailed to the TP3 level, with no second "reached" message
+    // for the ordinal a sibling already booked for real.
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+    var now = Now;
+    var store = new FakeAutoTradeStore(ManualCandidateJson(
+      direction: "SELL",
+      candidateId: "manual:tp3-trail:0",
+      entryLow: 3999.5m,
+      entryHigh: 4000.5m,
+      manualStopLoss: 4006.0m,
+      targetsPips: new[] { 30, 60, 90, 130 },
+      manualTakeProfits: new[] { 3996.5m, 3993.5m, 3990.5m, 3986.5m },
+      manualTargetWeights: new[] { 25, 25, 25, 25 },
+      expiresAt: 1_787_126_400,
+      barTs: 1_787_106_159,
+      manualSingleEntry: false
+    ));
+    var client = new FakeTradingClient
+    {
+      Account = ValidAccount() with { Balance = 50_000m, Equity = 50_000m },
+      CloseExecutionPriceToReturn = 3996.4m,
+    };
+    var engine = new AutoTradeEngine(Options(), store, () => now, _ => { });
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 3990.0m, 3990.2m, now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
+    await store.Ordered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+    foreach (var pending in client.PendingOrders.ToArray())
+    {
+      client.FillPendingOrder(pending.OrderId);
+    }
+    now = Now.AddSeconds(16);
+    await WaitUntilAsync(() =>
+      store.Events.Count(item => item.Type == "manual_opened") == 3
+    );
+    Assert.Equal(3, store.Positions.Count);
+
+    client.CloseExecutionPriceToReturn = 3996.4m;
+    now = now.AddSeconds(30);
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 3996.4m, 3996.45m, now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+    await WaitUntilAsync(() => store.Events.Any(item =>
+      item.Type == "take_profit" && item.TargetPips == 30
+    ));
+
+    client.CloseExecutionPriceToReturn = 3993.4m;
+    now = now.AddSeconds(30);
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 3993.4m, 3993.45m, now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+    await WaitUntilAsync(() => store.Events.Any(item =>
+      item.Type == "take_profit" && item.TargetPips == 60
+    ));
+
+    client.CloseExecutionPriceToReturn = 3990.4m;
+    now = now.AddSeconds(30);
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 3990.4m, 3990.45m, now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+    await WaitUntilAsync(() => store.Events.Any(item =>
+      item.Type == "take_profit" && item.TargetPips == 90
+    ));
+    // Give any surviving leg's own catch-up a chance to run on a
+    // following spot tick at the same price.
+    now = now.AddSeconds(2);
+    await engine.ObserveSpotAsync(
+      new SpotPrice("XAU", 3990.4m, 3990.45m, now.ToUnixTimeSeconds()),
+      cts.Token
+    );
+    await Task.Delay(TimeSpan.FromMilliseconds(200));
+
+    // Every leg is still open (TP4/130p never fired) - in particular the
+    // deepest leg, which owns only the final ordinal (4) and never itself
+    // books real volume at TP1-3. Before this fix it stayed stuck at TP2's
+    // shallow-entry stop (3,999.50) since nothing else moves a leg's own
+    // stop past ordinal 2 for a leg that doesn't book there itself. It
+    // must now show the same TP3-trail stop as its siblings, and must
+    // have independently confirmed (caught up on) every earlier ordinal
+    // it doesn't itself own.
+    Assert.Equal(3, store.Positions.Count);
+    var deepestLeg = Assert.Single(
+      store.Positions.Values, state => state.TargetOrdinals!.Count == 1
+    );
+    Assert.Equal(new[] { 4 }, deepestLeg.TargetOrdinals);
+    Assert.Equal(new[] { 1, 2, 3 }, deepestLeg.ReachedTargetOrdinals);
+    Assert.All(
+      store.Positions.Values,
+      state => Assert.True(
+        state.CurrentStopLoss <= 3996.5m,
+        $"position {state.PositionId} stop {state.CurrentStopLoss} was not "
+          + "trailed to the TP3 level (or better) shared by its siblings"
+      )
+    );
+    // The deepest leg's own catch-up must never re-post a message for an
+    // ordinal a sibling already booked for real - only the real TP1-3
+    // events (one per booking leg) may exist on the channel.
+    Assert.DoesNotContain(
+      store.Events,
+      item => item.Type == "manual_tp_reached"
+    );
+
+    cts.Cancel();
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+  }
+
   [Theory]
   [InlineData("BUY")]
   [InlineData("SELL")]

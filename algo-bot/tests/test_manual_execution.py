@@ -1458,63 +1458,37 @@ async def test_handle_take_profit_uses_the_booking_legs_own_pips(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_handle_event_position_closing_pings_without_touching_state(
-  monkeypatch,
-):
-  """Owner 2026-09-17: the real position_closed event can arrive several
-  seconds after AutoTradeEngine.cs confirms a leg gone from the broker (its
-  own best-effort close-reason + exit-price lookup) - position_closing
-  fires immediately so the owner sees something happen right away. It must
-  never touch execution/row state - _handle_position_closed (or
-  _handle_manual_closed) still owns the real close entirely when it
-  arrives moments later.
+async def test_handle_event_position_closing_sends_nothing(monkeypatch):
+  """Owner-reported 2026-09-18: the provisional "confirming exit price..."
+  ping (added 2026-09-17) spammed the VIP channel 2-3 times for one close,
+  since a manual /algo signal's legs share one stop-loss and commonly all
+  disappear from the broker in the same AutoTradeEngine.cs reconcile pass
+  - one position_closing event per leg, all resolving to the same
+  signal_id. Owner's call once shown the dedup fix: don't send this ping
+  at all, not even once. AutoTradeEngine.cs still publishes the event
+  (harmless - nothing on this side maps it to any lifecycle state); this
+  loop now silently ignores it, same as any other informational event
+  type it doesn't recognize.
   """
   send = _mock_send(monkeypatch)
   sid = await _algo_signal()
   await store.set_execution_fill(sid, broker_position_id=555, broker_fill_price=4100.0)
   client = redis_state.get_client()
-  positions = {555: sid}
+  positions = {555: sid, 556: sid, 557: sid}
   before = await store.get_manual_signal(sid)
 
-  event = {
-    "type": "position_closing",
-    "position_id": 555,
-    "candidate_id": f"manual:{sid}:0",
-  }
-  await manual_execution._handle_event(client, event, positions)
+  for position_id in (555, 556, 557):
+    event = {
+      "type": "position_closing",
+      "position_id": position_id,
+      "candidate_id": f"manual:{sid}:0",
+    }
+    await manual_execution._handle_event(client, event, positions)
 
-  send.assert_awaited_once()
-  assert "confirming" in send.call_args.args[0].lower()
+  send.assert_not_awaited()
   after = await store.get_manual_signal(sid)
   assert after == before
-  assert 555 in positions
-
-
-@pytest.mark.asyncio
-async def test_handle_event_position_closing_pings_every_tier_the_signal_has(
-  monkeypatch,
-):
-  """The real close event (trade_ops.post_result's _render) replies to every
-  persisted post regardless of tier, not just VIP. position_closing must
-  match that, not silently ping VIP-only for a signal that's also public.
-  """
-  send = _mock_send(monkeypatch)
-  sid = await _algo_signal()  # _algo_signal already posts the VIP root
-  await store.insert_signal_post(sid, -100987654322, 9800 + sid, "public")
-  await store.set_execution_fill(sid, broker_position_id=555, broker_fill_price=4100.0)
-  client = redis_state.get_client()
-  positions = {555: sid}
-
-  event = {
-    "type": "position_closing",
-    "position_id": 555,
-    "candidate_id": f"manual:{sid}:0",
-  }
-  await manual_execution._handle_event(client, event, positions)
-
-  assert send.await_count == 2
-  texts = [call.args[0] for call in send.await_args_list]
-  assert all("confirming" in text.lower() for text in texts)
+  assert positions == {555: sid, 556: sid, 557: sid}
 
 
 @pytest.mark.asyncio
