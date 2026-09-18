@@ -690,8 +690,16 @@ def build_trade_plan_from_strategy_match(
     getattr(scalp_risk, "risk_percent_per_trade", 0.5) or 0.5
   ))
   scalp_sizing_mode = str(getattr(scalp_risk, "sizing_mode", "risk") or "risk")
+  auto_sizing = getattr(getattr(cfg_resolved, "risk", None), "sizing", None)
+  auto_risk_percent = Decimal(str(
+    getattr(auto_sizing, "risk_pct", 1.0) or 1.0
+  ))
+  auto_sizing_mode = str(getattr(auto_sizing, "mode", "risk") or "risk")
   risk = TradePlanRisk(
-    risk_percent=scalp_risk_percent if is_scalp_plan else Decimal("1.0"),
+    # Account value supplies only this fixed-dollar-risk budget. The C#
+    # executor derives volume from the plan's worst allowed entry and its
+    # absolute stop; it must never select a flat equity-table lot here.
+    risk_percent=scalp_risk_percent if is_scalp_plan else auto_risk_percent,
     risk_multiplier=Decimal(str(measured.get(
       "effective_risk_multiplier", match.risk_multiplier,
     ))),
@@ -715,14 +723,9 @@ def build_trade_plan_from_strategy_match(
     leg_ratios = (first_leg_fraction, remainder)
   entry_distribution = str(measured.get("entry_distribution") or "zone_scale")
   sizing = TradePlanSizing(
-    # Owner 2026-09-04: scalp now defaults to the same equity_table lot as
-    # any other trade (SCALPING_SIZING_MODE=equity_table) instead of the
-    # smaller risk-percent-of-stop-distance formula the "risk" mode still
-    # supports for anyone who wants it back. The one-position scalp cap
-    # (maximum_concurrent_positions) is load-bearing either way - it's what
-    # keeps total scalp exposure bounded now that a single scalp position
-    # carries normal-trade-sized risk instead of a fraction of it.
-    mode=scalp_sizing_mode if is_scalp_plan else "equity_table",
+    # Every execution lane uses entry-to-stop risk sizing. Scalp retains its
+    # own smaller configured risk budget; non-scalp uses risk.sizing.risk_pct.
+    mode=scalp_sizing_mode if is_scalp_plan else auto_sizing_mode,
     table_version="owner_equity_v1",
     entry_distribution=entry_distribution,
     leg_ratios=leg_ratios,

@@ -736,7 +736,12 @@ risk:
     add_require_risk_free: false
     add_risk_fraction: 0.5
     equity_table_version: owner_equity_v1
-    mode: equity_table
+    # Size every auto entry from its declared worst-fill-to-stop distance.
+    # Account value defines the fixed 1% dollar budget; it never selects a
+    # flat lot size. This keeps two trades with different invalidation prices
+    # from carrying the same volume and materially different loss exposure.
+    mode: risk
+    risk_pct: 1.0
     one_sided_range_risk_multiplier: 0.5
     post_impulse_risk_multiplier: 0.5
     range_max_risk_multiplier: 1.5
@@ -810,7 +815,9 @@ strategies:
       mode: live
       risk_fraction_per_trade: 0.10
       risk_percent_per_trade: 0.5
-      sizing_mode: equity_table
+      # Scalp risk is likewise derived from entry/stop geometry; its smaller
+      # 0.5% budget is declared immediately above.
+      sizing_mode: risk
       maximum_concurrent_positions: 1
       maximum_session_trades: 12
       maximum_daily_trades: 30
