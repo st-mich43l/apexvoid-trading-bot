@@ -348,7 +348,10 @@ public static class TradePlanExecutionEngine
     {
       throw new TradePlanContractException("sizing_contract_missing");
     }
-    var tableLots = VolumePlanner.LotsForEquity(equity.Equity);
+    var tableLots = VolumePlanner.LotsForEquity(
+      equity.Equity,
+      VolumePlanner.IsFxInstrument(symbol)
+    );
     if (tableLots <= 0)
     {
       throw new TradePlanContractException(
