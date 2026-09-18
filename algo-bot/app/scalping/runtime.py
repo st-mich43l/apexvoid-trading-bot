@@ -1,4 +1,4 @@
-"""Shadow/paper M1 scalping event loop."""
+"""M1-event-driven scalping loop with M5 setup and M1 confirmation."""
 
 from __future__ import annotations
 
@@ -237,8 +237,13 @@ async def process_m1_bar(
   now = int(bar_ts)
 
   t_ctx = time.perf_counter()
+  # Refresh the structural snapshot at every M5 boundary. The event loop is
+  # still M1-driven, but retaining a previous snapshot for the full freshness
+  # TTL would make the new M5 setup role lag by several candles.
+  refresh_m5_boundary = int(bar_ts) % (5 * 60) == 0
   context, analysis_labels_ms, scalp_structure_ms = await _ensure_context(
     client, source, symbol=symbol, now=now, cfg=cfg,
+    force=refresh_m5_boundary,
   )
   context_ms = (time.perf_counter() - t_ctx) * 1000.0
   if context is None:
@@ -266,6 +271,10 @@ async def process_m1_bar(
   lookback = int(getattr(ctx_cfg, "m1_lookback_bars", 60) or 60)
   t_micro = time.perf_counter()
   m1 = await source.window(symbol, "M1", lookback)
+  # The loop remains M1-event driven for timely execution, but M5 owns all
+  # structural setup detection. M1 is passed to strategies only as the
+  # closed-bar confirmation frame.
+  m5 = await source.window(symbol, "M5", 120)
   pip = _pip_size(symbol, cfg)
   # build_micro_structure/discover_all are pandas/CPU-heavy, same as
   # build_context/build_map/build_scalp_context_snapshot elsewhere in this
@@ -287,6 +296,18 @@ async def process_m1_bar(
     ),
   )
   micro_ms = (time.perf_counter() - t_micro) * 1000.0
+  m5_micro = await asyncio.to_thread(
+    build_micro_structure,
+    m5,
+    equal_tol=0.5 * pip,
+    price_digits=int(
+      getattr(
+        getattr(cfg, "units", None),
+        "price_digits",
+        pip_price_digits(pip),
+      )
+    ),
+  ) if m5 is not None and not m5.empty else None
 
   # Live outcome instrumentation: accrue MFE/MAE from this M1 bar for every
   # open scalp position (continues after TP1 / BE until full close).
@@ -321,9 +342,11 @@ async def process_m1_bar(
     now=now,
     spread_pips=max(0.0, (float(ask) - float(bid)) / pip),
     idle_reasons=discovery_idle,
+    m5_df=m5,
+    m5_micro=m5_micro,
   )
   idle_reasons = (
-    idle_discovery_reasons(context, m1, cfg, pip_size=pip)
+    idle_discovery_reasons(context, m1, cfg, pip_size=pip, m5_df=m5)
     if not opportunities
     else []
   )
@@ -362,7 +385,8 @@ async def process_m1_bar(
   # Per-reason breakout telemetry every cycle (quiet archetype diagnosis).
   try:
     breakout_reason = diagnose_breakout_reject(
-      context, m1, cfg, pip_size=pip,
+      context, m5 if m5 is not None and not m5.empty else m1,
+      cfg, pip_size=pip,
     )
     if breakout_reason:
       await incr(client, symbol, f"breakout:{breakout_reason}")

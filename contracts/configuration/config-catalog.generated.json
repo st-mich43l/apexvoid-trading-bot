@@ -1,7 +1,7 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "a4acd550c6e36e7bbdf7fe6dbae6439043a97d752b34a60f52a8193150ffb0d4",
-  "configuration_document_fingerprint_sha256": "2753cc6f0ac668d6c2ba6614828f18208d956863419853191b1ed7cfafd37ea3",
+  "configuration_contract_fingerprint_sha256": "45773d05333f26c42039b249e69a657804373105c69b6206849a4a2f77fab720",
+  "configuration_document_fingerprint_sha256": "efc9a29f077cd658463f0ce6f9e0678f3e4d4f5f5282e54fa64ec75fa912bce0",
   "counts": {
     "algorithm_constants": 97,
     "configurable": 565,
@@ -21121,7 +21121,7 @@
       ],
       "deprecated": false,
       "deprecated_aliases": [],
-      "description": "Max closed M1 bars since trigger.",
+      "description": "Max closed M1 confirmation bars since trigger.",
       "display_id": "config:strategies.scalping.activation.trigger_maximum_age_bars",
       "evidence_notes": [],
       "introduced_in": "config-catalog-v2",
@@ -21266,16 +21266,16 @@
       "catalog_version": 2,
       "configurable": true,
       "constraints": {},
-      "default": "london",
+      "default": "all",
       "default_contexts": [
         {
           "context": "python_schema",
-          "value": "london"
+          "value": "all"
         }
       ],
       "deprecated": false,
       "deprecated_aliases": [],
-      "description": "Comma-separated UTC session names (classify_session) allowed for impulse pullback. Empty or \"all\" disables the gate.",
+      "description": "Comma-separated UTC session preference for impulse pullback scoring. Empty or \"all\" removes the preference; it never hard-blocks a structurally valid setup.",
       "display_id": "config:strategies.scalping.archetypes.impulse_pullback_allowed_sessions",
       "evidence_notes": [],
       "introduced_in": "config-catalog-v2",
@@ -21545,7 +21545,7 @@
       ],
       "deprecated": false,
       "deprecated_aliases": [],
-      "description": "Max M1 compression box width in ATR for Breakout Retest.",
+      "description": "Max M5 compression box width in ATR for Breakout Retest.",
       "display_id": "config:strategies.scalping.breakout.box_max_atr",
       "evidence_notes": [],
       "introduced_in": "config-catalog-v2",
@@ -22010,7 +22010,7 @@
       ],
       "deprecated": false,
       "deprecated_aliases": [],
-      "description": "Maximum M1 bars in the compression box.",
+      "description": "Maximum M5 bars in the compression box.",
       "display_id": "config:strategies.scalping.breakout.max_box_bars",
       "evidence_notes": [],
       "introduced_in": "config-catalog-v2",
@@ -22205,7 +22205,7 @@
       ],
       "deprecated": false,
       "deprecated_aliases": [],
-      "description": "Minimum M1 bars in the compression box.",
+      "description": "Minimum M5 bars in the compression box.",
       "display_id": "config:strategies.scalping.breakout.min_box_bars",
       "evidence_notes": [],
       "introduced_in": "config-catalog-v2",
@@ -25081,6 +25081,6 @@
       "validation_summary": "Pydantic required/type coercion only"
     }
   ],
-  "source_fingerprint_sha256": "a4acd550c6e36e7bbdf7fe6dbae6439043a97d752b34a60f52a8193150ffb0d4",
+  "source_fingerprint_sha256": "45773d05333f26c42039b249e69a657804373105c69b6206849a4a2f77fab720",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

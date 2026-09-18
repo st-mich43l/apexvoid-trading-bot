@@ -1,4 +1,4 @@
-"""Closed-bar M1 microstructure for scalping."""
+"""Closed-bar microstructure used by M5 setup and M1 confirmation."""
 
 from __future__ import annotations
 
@@ -186,6 +186,54 @@ def detect_sweep_reclaim(
       "extreme": high,
       "close": close,
       "edge": edge,
+    }
+  return None
+
+
+def confirm_m1_execution(
+  df: pd.DataFrame,
+  *,
+  direction: str,
+  level: float | None = None,
+  tolerance: float = 0.0,
+  lookback_bars: int = 2,
+) -> dict[str, Any] | None:
+  """Return the newest closed M1 confirmation for an M5 setup.
+
+  M1 is deliberately a confirmation frame here, never a source of structure.
+  A confirmation must close directionally and, when a level is supplied,
+  interact with that level before reclaiming it. This keeps a stale M5 setup
+  from becoming an entry merely because the latest M1 candle has momentum.
+  """
+  if df is None or df.empty:
+    return None
+  side = str(direction).upper()
+  tol = max(0.0, float(tolerance))
+  window = max(1, min(int(lookback_bars or 1), len(df)))
+  for offset in range(1, window + 1):
+    bar = df.iloc[-offset]
+    open_ = float(bar["open"])
+    high = float(bar["high"])
+    low = float(bar["low"])
+    close = float(bar["close"])
+    if side == "BUY":
+      directional = close > open_
+      interacted = level is None or (low <= float(level) + tol and close > float(level))
+    else:
+      directional = close < open_
+      interacted = level is None or (high >= float(level) - tol and close < float(level))
+    if not directional or not interacted:
+      continue
+    return {
+      "pattern": "m1_confirmation",
+      "direction": side,
+      "bar_ts": _ts(df.index[-offset]),
+      "open": open_,
+      "high": high,
+      "low": low,
+      "close": close,
+      "level": level,
+      "bars_ago": offset - 1,
     }
   return None
 
@@ -384,7 +432,7 @@ def find_compression_box(
   min_touches_per_side: int = 2,
   touch_tol_atr: float = 0.20,
 ) -> dict[str, Any] | None:
-  """Locate a recent M1 compression window (tight range + multi-touch).
+  """Locate a recent setup-timeframe compression window (tight range + multi-touch).
 
   Used only by Breakout Retest — Range Sweep keeps ``active_range_*``.
   Prefers the most recent valid window that still leaves at least one bar
