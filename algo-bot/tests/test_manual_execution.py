@@ -1518,6 +1518,32 @@ async def test_handle_event_position_closing_pings_every_tier_the_signal_has(
 
 
 @pytest.mark.asyncio
+async def test_handle_event_position_closing_dedups_sibling_legs(monkeypatch):
+  """Owner-reported 2026-09-18: a shared owner stop-loss took out all 3
+  legs of a manual /algo ladder in the same AutoTradeEngine.cs reconcile
+  pass - each leg fired its own position_closing event, and the VIP
+  channel got the same "confirming exit price..." ping 3 times in a row
+  for one close. Only the first leg's event may actually post.
+  """
+  send = _mock_send(monkeypatch)
+  sid = await _algo_signal()
+  await store.set_execution_fill(sid, broker_position_id=555, broker_fill_price=4100.0)
+  client = redis_state.get_client()
+  positions = {555: sid, 556: sid, 557: sid}
+
+  for position_id in (555, 556, 557):
+    event = {
+      "type": "position_closing",
+      "position_id": position_id,
+      "candidate_id": f"manual:{sid}:0",
+    }
+    await manual_execution._handle_event(client, event, positions)
+
+  send.assert_awaited_once()
+  assert "confirming" in send.call_args.args[0].lower()
+
+
+@pytest.mark.asyncio
 async def test_handle_event_position_closed_without_price_marks_error_not_silent(
   monkeypatch,
 ):

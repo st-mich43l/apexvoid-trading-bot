@@ -243,6 +243,17 @@ dated section after deployment.
   `PlanGroupEconomicBreakeven`.
 
 ### Fixed
+- The provisional "⏳ Position closed at broker — confirming exit price..."
+  ping (PR #563) no longer spams the channel 2-3 times for one close.
+  Owner-reported: a manual /algo signal's legs share one stop-loss and
+  commonly all disappear from the broker in the same reconcile pass, so
+  AutoTradeEngine.cs's one-`position_closing`-event-per-leg design (correct
+  on its own) hit a handler with no per-signal dedup, re-broadcasting the
+  identical placeholder once per leg. Added a Redis-backed
+  `position_closing_already_pinged`/`mark_position_closing_pinged` guard
+  (`app/persistence/redis_state.py`) keyed on signal_id, mirroring the
+  existing `tp_ordinal_already_booked` per-signal dedup pattern, so only
+  the first leg's event actually posts.
 - Trendline no longer refits an A-C line and retroactively counts B as a
   confirming touch. A close-through invalidates the line, while reclaimed
   wick probes are measured separately instead of being treated as equivalent

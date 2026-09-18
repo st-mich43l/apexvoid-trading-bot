@@ -802,19 +802,30 @@ async def _handle_position_closing(event: dict, signal_id: int) -> None:
   up to a few seconds) - previously the owner saw nothing at all until that
   resolved, which read as the bot being slow to react to a stop-out.
 
-  Deliberately state-free: no ``_execute_close``, no row/pips bookkeeping,
-  no dedup key. ``_handle_position_closed``/``_handle_manual_closed`` still
-  own the real close entirely once it arrives moments later; this only
-  pings every persisted post the signal actually has (VIP and public
+  State-free for the real close bookkeeping - no ``_execute_close``, no
+  row/pips update. ``_handle_position_closed``/``_handle_manual_closed``
+  still own the real close entirely once it arrives moments later; this
+  only pings every persisted post the signal actually has (VIP and public
   alike - same tiers the real close event fans out to via
   ``trade_ops.post_result``'s ``_render``, not VIP-only) so the owner sees
   something happen immediately.
+
+  Owner-reported 2026-09-18: a signal can be several entry legs sharing
+  one stop-loss, and they commonly all disappear from the broker in the
+  SAME reconcile pass - AutoTradeEngine.cs fires one ``position_closing``
+  event per leg, all resolving to this same signal_id, so this handler
+  runs 2-3 times for a single close without a per-signal dedup guard.
+  ``position_closing_already_pinged``/``mark_position_closing_pinged``
+  make sure only the first leg's event actually posts.
   """
   from app.signals.broadcast import fanout_update
 
+  if await redis_state.position_closing_already_pinged(signal_id):
+    return
   sig = await get_manual_signal(signal_id)
   if sig is None:
     return
+  await redis_state.mark_position_closing_pinged(signal_id)
   await fanout_update(
     sig,
     lambda tier: "⏳ Position closed at broker — confirming exit price...",
