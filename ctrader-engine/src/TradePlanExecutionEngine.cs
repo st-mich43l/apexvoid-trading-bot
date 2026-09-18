@@ -348,34 +348,28 @@ public static class TradePlanExecutionEngine
     {
       throw new TradePlanContractException("sizing_contract_missing");
     }
-    decimal tableLots = 0m;
-    decimal sizedLots;
-    switch (plan.Sizing.Mode)
+    var tableLots = VolumePlanner.LotsForEquity(
+      equity.Equity,
+      VolumePlanner.IsFxInstrument(symbol)
+    );
+    if (tableLots <= 0)
     {
-      case "equity_table":
-        tableLots = VolumePlanner.LotsForEquity(
-          equity.Equity,
-          VolumePlanner.IsFxInstrument(symbol)
-        );
-        if (tableLots <= 0)
-        {
-          throw new TradePlanContractException(
-            $"equity {equity.Equity:N2} is below the $200 equity sizing floor"
-          );
-        }
-        sizedLots = EquityTableLots(plan, equity.Equity, tableLots);
-        break;
-      // Risk sizing relies only on the plan's declared worst executable entry,
-      // absolute stop, broker-observed account value, and pip value. It never
-      // falls back to an equity lot table or recomputes the structural stop.
-      case "risk":
-        sizedLots = RiskLots(plan, equity.Equity, pipSize, pipValuePerLot);
-        break;
-      default:
-        throw new TradePlanContractException(
-          $"unsupported sizing mode '{plan.Sizing.Mode}'"
-        );
+      throw new TradePlanContractException(
+        $"equity {equity.Equity:N2} is below the $200 equity sizing floor"
+      );
     }
+    var sizedLots = plan.Sizing.Mode switch
+    {
+      "equity_table" => EquityTableLots(plan, equity.Equity, tableLots),
+      // Scalp risk mode intentionally relies only on the plan's declared
+      // entry/stop geometry plus broker-observed equity and pip value. It
+      // must not recompute a structural stop. Per-trade sizing assumes the
+      // scalp lane remains capped at one concurrent position.
+      "risk" => RiskLots(plan, equity.Equity, pipSize, pipValuePerLot),
+      _ => throw new TradePlanContractException(
+        $"unsupported sizing mode '{plan.Sizing.Mode}'"
+      ),
+    };
     var maxVolumeLots = symbol.LotSize > 0
       ? (decimal)plan.Risk.MaxVolume / symbol.LotSize
       : 0m;
@@ -497,12 +491,7 @@ public static class TradePlanExecutionEngine
     {
       throw new TradePlanContractException("risk_sizing_stop_pips_must_be_positive");
     }
-    var riskMultiplier = plan.Risk.RiskMultiplier;
-    if (riskMultiplier <= 0m)
-    {
-      throw new TradePlanContractException("risk_multiplier_must_be_positive");
-    }
-    var budget = equity * plan.Risk.RiskPercent * riskMultiplier / 100m;
+    var budget = equity * plan.Risk.RiskPercent / 100m;
     return budget / (stopPips * pipValuePerLot);
   }
 

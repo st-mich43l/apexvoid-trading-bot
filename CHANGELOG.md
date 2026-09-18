@@ -14,12 +14,10 @@ dated section after deployment.
 
 ### Fixed
 
-- Auto sizing is now derived from the declared worst executable entry and
-  protective stop, not a flat equity-to-lot table. Non-scalp plans use the
-  configured 1% budget, scalps keep their configured 0.5% budget, and the
-  broker floors only to its valid volume step. Removed Snap-Back's hidden
-  0.75 volume reduction; quality/risk controls now affect the risk budget
-  while every lot calculation remains entry/stop based.
+- Restore equity-table sizing: non-scalp strategies use their own full lot
+  level, while scalp uses the configured 1.5x volume-only multiplier. Snap-Back
+  no longer applies its hidden 0.75 reduction, and the scalp multiplier no
+  longer changes structural stop geometry.
 - Let a fresh, M5-confirmed Key Level or Reaction setup activate while price
   remains inside its entry zone. This avoids rejecting brief valid retests
   solely because no new M1 candle had time to close; non-authoritative setups

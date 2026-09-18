@@ -806,12 +806,9 @@ def evaluate_execution_policy(
   stop_plan_error_measured: dict[str, Any] = {}
   stop_bounds_measured: dict[str, Any] = {}
   opposing_zone = None
-  # Scalp tiers book sizing_risk_multiplier x the equity-table lots at the
-  # same equity band (owner 2026-08-06). Left alone, stop geometry computed
-  # below stays at the 1x envelope while volume doubles -- dollar risk
-  # (lots x stop_distance) doubles with it. Shrink the pip envelope by the
-  # same multiplier here so a 2x-volume scalp risks the same dollars as a
-  # 1x reaction trade, not double.
+  # Scalp sizing is a configured volume-only 1.5x equity-table boost. Its
+  # protective stop remains structural; volume must not reshape the entry or
+  # invalidation geometry.
   range_scalp = is_scalp_strategy(
     str(getattr(match, "strategy", "") or ""),
     family=str(getattr(match, "family", "") or strategy_family(
@@ -870,17 +867,6 @@ def evaluate_execution_policy(
       for_group_stop=use_group_stop,
       symbol=symbol,
     )
-    if sizing_risk_multiplier > 1.0:
-      stop_bounds_measured = {
-        **stop_bounds_measured,
-        "stop_bounds_pre_sizing_min_pips": minimum_stop_pips,
-        "stop_bounds_pre_sizing_max_pips": maximum_stop_pips,
-        "sizing_risk_multiplier": sizing_risk_multiplier,
-      }
-      minimum_stop_pips = max(1, int(minimum_stop_pips / sizing_risk_multiplier))
-      maximum_stop_pips = max(
-        minimum_stop_pips, int(maximum_stop_pips / sizing_risk_multiplier),
-      )
     if (
       is_reaction_strategy(strategy_name)
       or is_zone_strategy(strategy_name)
@@ -1025,12 +1011,11 @@ def evaluate_execution_policy(
   stamped_risk_multiplier = float(
     1.0 if raw_risk_multiplier is None else raw_risk_multiplier
   )
-  # range_scalp / match_risk_multiplier already resolved above (needed
-  # early to shrink the stop envelope for the same 2x-volume scalp tiers).
+  # range_scalp / match_risk_multiplier already resolved above. Scalp's
+  # multiplier is volume-only and must never reshape its structural stop.
   # FX pack volume (manual.risk_multiplier=1.5) applies to autonomous
   # fixed_rr *reaction* only — never fold it into sizing_risk_multiplier
-  # or the stop envelope would shrink the way scalp 2x does. Scalp already
-  # books range_max (2.0 → engine clamps to 1.5 below $2k); do not stack.
+  # with the scalp multiplier. Scalp already books range_max; do not stack.
   instrument_volume_multiplier = 1.0
   if (
     not range_scalp
@@ -1447,18 +1432,8 @@ def classify_tier(
 def risk_multiplier_for_tier(tier: str, cfg: Any | None = None, *, post_impulse: bool = False, one_sided: bool = False, range_scalp: bool = False) -> float:
   """Resolve volume multiplier for equity-table sizing.
 
-  Owner 2026-09-07: scalp books the same flat equity-table lot as any
-  other trade, full stop. The prior 1.5x scalp multiplier here predates
-  PR #486 (2026-09-04), which switched scalp's default sizing_mode from
-  the old risk-percent-of-stop-distance formula to equity_table - under
-  that OLD "risk" mode the C# executor's RiskLots never read
-  RiskMultiplier at all, so this multiplier was already inert for
-  sizing and only shrank the stop envelope to hold dollar risk constant
-  against an inflated position that, by the time of PR #486, no longer
-  existed. Once sizing_mode flipped to equity_table, EquityTableLots DOES
-  read RiskMultiplier, so the same stale 1.5x silently started actually
-  inflating every scalp position 1.5x above table lots again - exactly
-  what PR #486's own commit message said it had eliminated.
+  Owner 2026-09-18: non-scalp reaction/swing books its own full
+  equity-table level; scalp books the configured 1.5x volume-only boost.
   - Reaction / swing books **full** equity-table lots on every quality
     tier (A/B/C). Tier stars remain card/telemetry only — live Trend
     Pullback ⭐⭐ was half-sizing to 0.05 on a $887 → 0.10 table because
@@ -1470,7 +1445,8 @@ def risk_multiplier_for_tier(tier: str, cfg: Any | None = None, *, post_impulse:
     cfg = _default_runtime_cfg()
   sizing = cfg.risk.sizing
   if range_scalp:
-    return 1.0
+    scalp = float(sizing.range_max_risk_multiplier)
+    return scalp if math.isfinite(scalp) and scalp > 0 else 1.5
   # Equity-table reaction: ignore tier A/B/C shrink.
   _ = tier
   mult = 1.0
