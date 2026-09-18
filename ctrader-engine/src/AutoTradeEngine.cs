@@ -43,6 +43,27 @@ public sealed class AutoTradeEngine(
   private const string ManualCommandStream = "manual_trade:commands";
   private readonly SemaphoreSlim _gate = new(1, 1);
   private readonly Dictionary<long, AutoTradePositionState> _states = [];
+  // Owner-reported live 2026-09-18 (manual signal 393): ProcessTargetsAsync
+  // used to rebuild each group's "which ordinals does some leg already own"
+  // set fresh from _states.Values every poll. That set is what stops a
+  // leg's own NotifySkippedManualTargetsAsync catch-up check from
+  // re-notifying an ordinal a sibling already handles for real - but once
+  // that sibling fully closes and leaves _states, the ordinal it owned
+  // silently disappears from the aggregate too. A leg that never itself
+  // got broker volume for TP1-TP3 (the deepest leg of a shallow-first
+  // ladder) then sat unevaluated for almost an hour - the "someone owns
+  // this ordinal" skip kept firing for ordinals it didn't itself hold,
+  // right up until its siblings closed, at which point a single, late,
+  // NOW-price-only catch-up check fired for whichever ordinals still read
+  // as reached at that instant, permanently missing the rest and never
+  // trailing its stop past "shallow entry". Accumulate ordinal ownership
+  // per group monotonically instead of recomputing it from whoever is
+  // still live - a sibling leaving _states must never make the group
+  // forget an ordinal it already owned. Does not survive an engine
+  // restart (in-memory only, like _states itself); a resumed group's
+  // still-open legs recover a self-consistent (if temporarily narrower)
+  // view the same way this bug's fresh-recompute path already did before.
+  private readonly Dictionary<string, HashSet<int>> _groupTargetOrdinalsSeen = [];
   private readonly Dictionary<string, StructuralRouteIdentity> _routeIdentityByCandidate = [];
   // Multi-instrument: PublishAsync must stamp the candidate's own symbol,
   // not RequireSymbolOrDefault() (session XAU). Otherwise FX manual /algo
@@ -5282,15 +5303,22 @@ public sealed class AutoTradeEngine(
     {
       return;
     }
-    var selectedOrdinalsByGroup = _states.Values
-      .Where(item => item.SymbolId == symbol.SymbolId)
-      .GroupBy(GroupId)
-      .ToDictionary(
-        group => group.Key,
-        group => (IReadOnlySet<int>)group
-          .SelectMany(item => item.TargetOrdinals ?? [])
-          .ToHashSet()
-      );
+    foreach (
+      var group in _states.Values
+        .Where(item => item.SymbolId == symbol.SymbolId)
+        .GroupBy(GroupId)
+    )
+    {
+      if (!_groupTargetOrdinalsSeen.TryGetValue(group.Key, out var seen))
+      {
+        seen = [];
+        _groupTargetOrdinalsSeen[group.Key] = seen;
+      }
+      foreach (var ordinal in group.SelectMany(item => item.TargetOrdinals ?? []))
+      {
+        seen.Add(ordinal);
+      }
+    }
     foreach (var original in _states.Values.ToArray())
     {
       if (original.SymbolId != symbol.SymbolId)
@@ -5300,7 +5328,7 @@ public sealed class AutoTradeEngine(
       var state = _states.GetValueOrDefault(original.PositionId, original);
       if (state.Stream == "algo_manual")
       {
-        selectedOrdinalsByGroup.TryGetValue(
+        _groupTargetOrdinalsSeen.TryGetValue(
           GroupId(state), out var groupSelectedOrdinals
         );
         state = await NotifySkippedManualTargetsAsync(
@@ -5388,6 +5416,8 @@ public sealed class AutoTradeEngine(
               target,
               targetPips,
               symbol,
+              true,
+              true,
               cancellationToken
             );
           }
@@ -5738,7 +5768,7 @@ public sealed class AutoTradeEngine(
 
   private async Task<AutoTradePositionState> NotifySkippedManualTargetsAsync(
     AutoTradePositionState state,
-    IReadOnlySet<int>? groupSelectedOrdinals,
+    IReadOnlySet<int>? groupOwnedOrdinals,
     SpotPrice spot,
     SymbolInfo symbol,
     CancellationToken cancellationToken
@@ -5756,20 +5786,28 @@ public sealed class AutoTradeEngine(
     {
       return state;
     }
-    var selectedForGroup = groupSelectedOrdinals is { Count: > 0 }
-      ? groupSelectedOrdinals
-      : (IReadOnlySet<int>)selectedOrdinals.ToHashSet();
-    var finalSelectedOrdinal = selectedForGroup.Max();
-    if (finalSelectedOrdinal <= 1)
+    // Owner-reported live 2026-09-18 (manual signal 393): this used to
+    // bound the loop and gate evaluation by whether some OTHER leg in the
+    // group already owns an ordinal ("selectedForGroup") - meaning a leg
+    // with no real booking at TP1-3 (the deepest/leftover leg of a
+    // shallow-first ladder) never independently confirmed price actually
+    // reached those levels, and so never trailed ITS OWN stop past
+    // whatever the last ordinal it does own picked up. Sibling ownership
+    // only matters for whether a SECOND, duplicate Telegram message needs
+    // suppressing (see notifyPublicly below) - it must never gate whether
+    // this leg's own protective stop keeps advancing. Bound and gate
+    // purely on this leg's OWN target ordinals instead.
+    var finalOwnOrdinal = selectedOrdinals.Max();
+    if (finalOwnOrdinal <= 1)
     {
       return state;
     }
     var reached = (state.ReachedTargetOrdinals ?? []).ToHashSet();
     var exitQuote = state.Direction == TradeDirection.Buy ? spot.Bid : spot.Ask;
-    for (var ordinal = 1; ordinal < finalSelectedOrdinal; ordinal++)
+    for (var ordinal = 1; ordinal < finalOwnOrdinal; ordinal++)
     {
       if (
-        selectedForGroup.Contains(ordinal)
+        selectedOrdinals.Contains(ordinal)
         || reached.Contains(ordinal)
         || ordinal > targetPrices.Count
       )
@@ -5788,12 +5826,31 @@ public sealed class AutoTradeEngine(
         0,
         MidpointRounding.AwayFromZero
       ));
+      // A sibling that durably owns this ordinal already sent the real
+      // "TPn +Xp closed volume Y" message for it - this leg still needs
+      // its own stop trailed to match, it just must not post a second,
+      // redundant "no broker volume booked" ping for the same ordinal.
+      var notifyPublicly = groupOwnedOrdinals is null
+        || !groupOwnedOrdinals.Contains(ordinal);
+      // Ordinals 1 and 2 already move every currently-live group member's
+      // stop the instant ANY leg reaches them (ProtectRemainingGroupStops
+      // AtBreakEvenAsync / ProtectRemainingManualGroupStopsAtShallowEntry
+      // Async, both re-scan _states fresh, not just the booking leg) - the
+      // one gap that mechanism doesn't cover is a leg that closes before
+      // this catch-up runs. Trailing again here with this leg's own
+      // per-ordinal level would fight that shared stop instead. Ordinal 3+
+      // has no such group-wide sweep - MoveStopAfterTargetAsync only ever
+      // moves the booking leg's own stop - so this leg's own trail here is
+      // the only thing that will ever protect it there.
+      var trailOwnStop = ordinal > 2;
       state = await NotifyManualTargetReachedAsync(
         state,
         ordinal,
         target,
         targetPips,
         symbol,
+        notifyPublicly,
+        trailOwnStop,
         cancellationToken
       );
       reached.Add(ordinal);
@@ -5807,6 +5864,8 @@ public sealed class AutoTradeEngine(
     decimal target,
     int targetPips,
     SymbolInfo symbol,
+    bool notifyPublicly,
+    bool trailOwnStop,
     CancellationToken cancellationToken
   )
   {
@@ -5818,37 +5877,43 @@ public sealed class AutoTradeEngine(
     reached.Add(ordinal);
     state = state with { ReachedTargetOrdinals = reached.Order().ToArray() };
     _states[state.PositionId] = state;
-    await PublishAsync(
-      "manual_tp_reached",
-      $"TP{ordinal} reached at {target:N2} · no broker volume booked",
-      cancellationToken,
-      state.CandidateId,
-      state.PositionId,
-      targetPips,
-      volume: 0,
-      price: target,
-      groupId: GroupId(state),
-      trancheIndex: state.TrancheIndex,
-      setup: state.Setup,
-      regime: state.Regime,
-      confluence: state.Confluence,
-      stopPips: InitialStopPips(state),
-      targetsPips: state.TargetsPips,
-      stream: ExecutionStream(state),
-      direction: DirectionLabel(state.Direction),
-      remainingVolume: state.RemainingVolume,
-      matchId: state.MatchId,
-      rangeId: state.RangeId,
-      strategyFamily: state.StrategyFamily,
-      legRealizedPips: SignedPips(state, target),
-      groupInitialVolume: GroupInitialVolume([state]),
-      lotSize: symbol.LotSize,
-      targetPrices: state.TargetPrices,
-      reasonCode: "target_reached_not_booked_volume_floor"
-    );
-    state = await MoveStopAfterTargetOrdinalAsync(
-      state, ordinal, symbol, cancellationToken
-    );
+    if (notifyPublicly)
+    {
+      await PublishAsync(
+        "manual_tp_reached",
+        $"TP{ordinal} reached at {target:N2} · no broker volume booked",
+        cancellationToken,
+        state.CandidateId,
+        state.PositionId,
+        targetPips,
+        volume: 0,
+        price: target,
+        groupId: GroupId(state),
+        trancheIndex: state.TrancheIndex,
+        setup: state.Setup,
+        regime: state.Regime,
+        confluence: state.Confluence,
+        stopPips: InitialStopPips(state),
+        targetsPips: state.TargetsPips,
+        stream: ExecutionStream(state),
+        direction: DirectionLabel(state.Direction),
+        remainingVolume: state.RemainingVolume,
+        matchId: state.MatchId,
+        rangeId: state.RangeId,
+        strategyFamily: state.StrategyFamily,
+        legRealizedPips: SignedPips(state, target),
+        groupInitialVolume: GroupInitialVolume([state]),
+        lotSize: symbol.LotSize,
+        targetPrices: state.TargetPrices,
+        reasonCode: "target_reached_not_booked_volume_floor"
+      );
+    }
+    if (trailOwnStop)
+    {
+      state = await MoveStopAfterTargetOrdinalAsync(
+        state, ordinal, symbol, cancellationToken
+      );
+    }
     await store.SavePositionAsync(state, cancellationToken);
     return state;
   }

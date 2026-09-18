@@ -243,6 +243,31 @@ dated section after deployment.
   `PlanGroupEconomicBreakeven`.
 
 ### Fixed
+- A manual /algo ladder's deepest leg (owning only the final target ordinal
+  in a shallow-first split - e.g. the fixed-size risk leg) could sit
+  unmanaged for the rest of its life once price passed TP3+. Owner-reported
+  live 2026-09-18 (XAU SELL 4360-63, signal 393): the leg's stop never
+  moved past TP2's shared "shallow entry" level even though price reached
+  TP3, and `AutoTradeEngine.cs`'s `NotifySkippedManualTargetsAsync` catch-up
+  - meant exactly for legs that don't own an ordinal - was gated by whether
+  some OTHER *currently-tracked* sibling owned that ordinal, recomputed
+  fresh from `_states` every poll. Two compounding bugs: (1) that gate
+  wrongly suppressed the leg's own catch-up trail even while siblings were
+  still alive and genuinely owned the ordinal for real (TP1/TP2 have
+  dedicated group-wide stop sweeps that cover every leg regardless of
+  ownership; TP3+ has no such sweep, only this catch-up), and (2) once a
+  sibling closed and left `_states`, the ordinals it owned silently
+  vanished from the aggregate, producing a stale, misleading, one-shot,
+  NOW-price-only catch-up that could only catch whichever ordinal still
+  happened to read "reached" at that instant - permanently missing the
+  rest. Fixed by bounding/gating the catch-up on the leg's own target
+  ordinals (so it always evaluates and trails every ordinal it doesn't
+  itself own, immediately as price reaches it) and separately tracking
+  ordinal ownership in a monotonic per-group accumulator
+  (`_groupTargetOrdinalsSeen`) that survives a sibling leaving `_states`,
+  used only to suppress a duplicate Telegram message for an ordinal a
+  sibling already booked for real - never to suppress the stop trail
+  itself.
 - Trendline no longer refits an A-C line and retroactively counts B as a
   confirming touch. A close-through invalidates the line, while reclaimed
   wick probes are measured separately instead of being treated as equivalent
