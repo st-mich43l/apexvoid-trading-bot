@@ -764,7 +764,7 @@ strategies:
       range_sweep_enabled: true
       impulse_pullback_enabled: true
       # Soft preference for scoring only. No session timezone hard gate.
-      impulse_pullback_allowed_sessions: london
+      impulse_pullback_allowed_sessions: all
       pullback_extreme_confirm_bars: 2
       impulse_displacement_atr_multiple: 4.0
       impulse_body_dominance: 0.5

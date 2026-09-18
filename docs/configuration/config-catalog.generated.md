@@ -3,8 +3,8 @@
 > Generated from the typed `ApexVoidConfig` Catalog V2 schema. Do not edit manually.
 
 - Catalog version: `2`
-- Contract fingerprint: `a4acd550c6e36e7bbdf7fe6dbae6439043a97d752b34a60f52a8193150ffb0d4`
-- Document fingerprint: `b32c8a2322b780a54a9e66ebe60feb9e21b8de0bb45d8dd612584e6a7eeedaf7`
+- Contract fingerprint: `45773d05333f26c42039b249e69a657804373105c69b6206849a4a2f77fab720`
+- Document fingerprint: `efc9a29f077cd658463f0ce6f9e0678f3e4d4f5f5282e54fa64ec75fa912bce0`
 - Items: `672`
 - Runtime status: canonical-only; `app.core.config.runtime_config` is authoritative
 
@@ -640,7 +640,7 @@
 | `strategies.scalping.archetypes.breakout_retest_enabled` | `SCALPING_BREAKOUT_RETEST_ENABLED` | `bool` | `boolean` | `configurable` | `true` |
 | `strategies.scalping.archetypes.impulse_body_dominance` | `SCALPING_IMPULSE_BODY_DOMINANCE` | `float` | `fraction` | `configurable` | `0.5` |
 | `strategies.scalping.archetypes.impulse_displacement_atr_multiple` | `SCALPING_IMPULSE_DISPLACEMENT_ATR_MULTIPLE` | `float` | `atr` | `configurable` | `4.0` |
-| `strategies.scalping.archetypes.impulse_pullback_allowed_sessions` | `SCALPING_IMPULSE_PULLBACK_ALLOWED_SESSIONS` | `str` | `string` | `configurable` | `"london"` |
+| `strategies.scalping.archetypes.impulse_pullback_allowed_sessions` | `SCALPING_IMPULSE_PULLBACK_ALLOWED_SESSIONS` | `str` | `string` | `configurable` | `"all"` |
 | `strategies.scalping.archetypes.impulse_pullback_enabled` | `SCALPING_IMPULSE_PULLBACK_ENABLED` | `bool` | `boolean` | `configurable` | `true` |
 | `strategies.scalping.archetypes.pullback_corrective_ratio` | `SCALPING_PULLBACK_CORRECTIVE_RATIO` | `float` | `fraction` | `configurable` | `0.7` |
 | `strategies.scalping.archetypes.pullback_extreme_confirm_bars` | `SCALPING_PULLBACK_EXTREME_CONFIRM_BARS` | `int` | `bars` | `configurable` | `2` |

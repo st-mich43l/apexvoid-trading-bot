@@ -2157,6 +2157,14 @@ def test_impulse_pullback_session_is_a_soft_quality_preference(monkeypatch):
   assert not is_impulse_pullback_session_allowed("asia", _cfg())
 
 
+def test_impulse_pullback_all_session_preference_is_unrestricted():
+  cfg = _cfg()
+  cfg.strategies.scalping.archetypes.impulse_pullback_allowed_sessions = "all"
+
+  assert is_impulse_pullback_session_allowed("asia", cfg)
+  assert is_impulse_pullback_session_allowed("london", cfg)
+
+
 def test_m1_confirmation_is_directional_and_level_aware():
   idx = pd.date_range("2026-09-18 10:00", periods=3, freq="1min", tz="UTC")
   df = pd.DataFrame(

@@ -70,6 +70,8 @@ dated section after deployment.
   repo's mirror-sync requirement (`docs/deployment.md § Production Ansible`).
 
 ### Changed
+- Set the default impulse-pullback session preference to `all`; session time
+  no longer reduces quality or restricts discovery for this archetype.
 - Scalping structure is now explicitly `M5 setup -> M1 confirmation` while
   the runtime remains M1-event-driven. Range Sweep, Impulse Pullback, and
   Breakout Retest keep independent detectors and geometry; session windows
