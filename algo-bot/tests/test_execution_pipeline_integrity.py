@@ -195,7 +195,7 @@ def test_execution_policy_keeps_fill_relative_room_from_planned_entry():
   assert evaluation.measured["effective_risk_multiplier"] == 1.0
 
 
-def test_execution_policy_applies_family_risk_multiplier():
+def test_execution_policy_ignores_stale_non_scalp_risk_stamp():
   evaluation = evaluate_execution_policy(
     _policy_match(
       strategy="Liquidity Sweep",
@@ -209,7 +209,7 @@ def test_execution_policy_applies_family_risk_multiplier():
   )
 
   assert evaluation.allowed
-  assert evaluation.measured["effective_risk_multiplier"] == 0.375
+  assert evaluation.measured["effective_risk_multiplier"] == 1.0
 
 
 def test_execution_policy_rejects_zero_risk_multiplier():
