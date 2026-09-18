@@ -1,6 +1,6 @@
 # Own scalp mechanism (research-first)
 
-ApexVoid’s scalping identity is **M1 micro + M5 context**, scored from an
+ApexVoid’s scalping identity is **M5 structure + M1 confirmation**, scored from an
 ATR-normalized feature vector. This document is the mechanism design.
 **Hard gates are deferred** until live/shadow performance tables justify them.
 
@@ -12,21 +12,22 @@ Live allow/block remains the existing heuristic path
 
 | Lane | Owns | Does not own |
 | --- | --- | --- |
-| **Scalp** | M1 microstructure archetypes on M5 `ScalpContextSnapshot` | ZoneWatch technique publish |
+| **Scalp** | Independent M5 setup detectors with closed M1 confirmation | ZoneWatch technique publish |
 | **Analysis technique** | Supply Demand / OB / FVG / iFVG / CRT / Range Edge / Fade | M1 scalp archetypes |
 
 MAD soft-favor (`accum`) applies **only** to technique **Range Edge Scalp**.
 MAD must not rank or gate the scalp lane ([MAD.md](MAD.md)).
 
-Product language is **scalp** (`family=scalp`, `strategy_mode=scalp_m1`).
+Product language is **scalp** (`family=scalp`, legacy `strategy_mode=scalp_m1`;
+the execution contract is M5 setup + M1 confirmation).
 Legacy `HFS *` name aliases (`strategy_names.py`) / Redis `scalp:*` keys remain for compatibility.
 
-## Forced dual timeframe
+## Explicit dual timeframe
 
 ```text
-M5 ScalpContextSnapshot  (immutable, Redis-pinned via unified_context)
+M5 structure/setup       (range, impulse, breakout/retest, key levels)
         +
-M1 microstructure        (swings, sweep/reclaim, impulse, breakout, ignition)
+M1 confirmation          (closed-bar reclaim, rejection, continuation)
         ↓
 discover_all → research stamps (features + math counterfactual)
         ↓
@@ -35,9 +36,10 @@ activation / ranking / publish   ← unchanged authority
 performance join (archetype × session × math_agree × outcome)
 ```
 
-Session/killzone clocks do **not** empty `permitted_archetypes`
-(structure/technique decide; see #425). Weak volume is an analysis reject,
-not a sterilized permit set.
+Session/killzone clocks do **not** empty `permitted_archetypes` or hard-block
+an opportunity. A configured session is a soft quality preference only; weak
+M5 structure or missing M1 confirmation is rejected by that strategy's own
+detector. Strategies do not share gates or mutate one another's geometry.
 
 ## State vector \(X_t\)
 

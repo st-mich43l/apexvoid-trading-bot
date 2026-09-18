@@ -1,4 +1,4 @@
-"""Typed contracts for the M1 scalping engine."""
+"""Typed contracts for the M5-structure/M1-confirmation scalping engine."""
 
 from __future__ import annotations
 
@@ -22,7 +22,14 @@ ARCHETYPE_RANGE_SWEEP = "range_sweep"
 ARCHETYPE_IMPULSE_PULLBACK = "impulse_pullback"
 ARCHETYPE_BREAKOUT_RETEST = "breakout_retest"
 
-# Canonical display names for M1 scalping archetypes.
+# Timeframe ownership is explicit: strategies discover structure on M5 and
+# use the closed M1 bar only as the execution confirmation. Keeping these as
+# constants prevents a future strategy from quietly reverting to M1 setup
+# detection when the runtime remains M1-event driven.
+SCALP_SETUP_TIMEFRAME = "M5"
+SCALP_CONFIRMATION_TIMEFRAME = "M1"
+
+# Canonical display names for the independent M5/M1 scalping archetypes.
 STRATEGY_DISPLAY = {
   ARCHETYPE_RANGE_SWEEP: RANGE_SWEEP_SCALP,
   ARCHETYPE_IMPULSE_PULLBACK: IMPULSE_PULLBACK_SCALP,

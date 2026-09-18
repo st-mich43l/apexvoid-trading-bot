@@ -18,6 +18,7 @@ from app.scalping.context import (
 from app.scalping.lifecycle import transition
 from app.scalping.microstructure import (
   candidate_from_compression_box,
+  confirm_m1_execution,
   detect_breakout_retest,
   detect_impulse_pullback,
   detect_sweep_reclaim,
@@ -2038,7 +2039,7 @@ def test_range_sweep_allows_macro_displacement_against_direction(monkeypatch):
   assert found[0].direction == "SELL"
 
 
-def test_impulse_pullback_hard_gates_outside_london_session(monkeypatch):
+def test_impulse_pullback_session_is_a_soft_quality_preference(monkeypatch):
   from app.scalping.strategies import discover_impulse_pullback, idle_discovery_reasons
 
   match = {
@@ -2103,9 +2104,23 @@ def test_impulse_pullback_hard_gates_outside_london_session(monkeypatch):
   )
 
   asia_ctx = ScalpContextSnapshot(**base, session="asia")
-  assert discover_impulse_pullback(asia_ctx, None, m1, _cfg(), pip_size=0.1, now=1_780_003_600) == []
+  asia_found = discover_impulse_pullback(
+    asia_ctx, None, m1, _cfg(), pip_size=0.1, now=1_780_003_600,
+  )
+  assert len(asia_found) == 1
+  assert asia_found[0].measured["session_quality"] < 1.0
+  match["impulse_len"] = 20.0
+  m5_setup = m1.iloc[::5].copy()
+  m5_reasons: list[str] = []
+  m5_found = discover_impulse_pullback(
+    asia_ctx, None, m1, _cfg(), pip_size=0.1, now=1_780_003_600,
+    m5_df=m5_setup, idle_reasons=m5_reasons,
+  )
+  assert len(m5_found) == 1, m5_reasons
+  assert m5_found[0].measured["setup_timeframe"] == "M5"
+  assert m5_found[0].measured["confirmation_timeframe"] == "M1"
   reasons = idle_discovery_reasons(asia_ctx, m1, _cfg(), pip_size=0.1)
-  assert "impulse_pullback:outside_allowed_session:asia" in reasons
+  assert "impulse_pullback:not_matched" in reasons
 
   london_ctx = ScalpContextSnapshot(**base, session="london")
   found = discover_impulse_pullback(london_ctx, None, m1, _cfg(), pip_size=0.1, now=1_780_003_600)
@@ -2123,8 +2138,8 @@ def test_impulse_pullback_hard_gates_outside_london_session(monkeypatch):
     pip_size=0.1,
     cfg=_cfg(),
   )
-  assert not asia_activation.allowed
-  assert asia_activation.reason_code == "scalp_impulse_outside_allowed_session"
+  assert asia_activation.allowed
+  assert asia_activation.measured["session_quality"] < 1.0
 
   london_activation = evaluate_scalp_activation(
     opp,
@@ -2140,6 +2155,28 @@ def test_impulse_pullback_hard_gates_outside_london_session(monkeypatch):
 
   assert is_impulse_pullback_session_allowed("london", _cfg())
   assert not is_impulse_pullback_session_allowed("asia", _cfg())
+
+
+def test_m1_confirmation_is_directional_and_level_aware():
+  idx = pd.date_range("2026-09-18 10:00", periods=3, freq="1min", tz="UTC")
+  df = pd.DataFrame(
+    {
+      "open": [4000.0, 4000.2, 4000.4],
+      "high": [4000.4, 4000.6, 4001.0],
+      "low": [3999.8, 4000.0, 4000.3],
+      "close": [4000.2, 4000.4, 4000.8],
+    },
+    index=idx,
+  )
+  confirmation = confirm_m1_execution(
+    df, direction="BUY", level=4000.5, tolerance=0.3, lookback_bars=2,
+  )
+  assert confirmation is not None
+  assert confirmation["bar_ts"] == int(idx[-1].timestamp())
+  assert confirmation["close"] == pytest.approx(4000.8)
+  assert confirm_m1_execution(
+    df, direction="SELL", level=4000.5, tolerance=0.3, lookback_bars=2,
+  ) is None
 
 
 def _assert_scalp_stop_invariant(opp: ScalpOpportunity, *, pip_size: float = 0.1) -> None:

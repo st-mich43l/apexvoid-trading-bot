@@ -5,11 +5,11 @@
   "catalog_version": 2,
   "configurable_count": 565,
   "configuration_contract_fingerprint_sha256": "a4acd550c6e36e7bbdf7fe6dbae6439043a97d752b34a60f52a8193150ffb0d4",
-  "configuration_document_fingerprint_sha256": "2753cc6f0ac668d6c2ba6614828f18208d956863419853191b1ed7cfafd37ea3",
+  "configuration_document_fingerprint_sha256": "b32c8a2322b780a54a9e66ebe60feb9e21b8de0bb45d8dd612584e6a7eeedaf7",
   "contract_fingerprint": "a4acd550c6e36e7bbdf7fe6dbae6439043a97d752b34a60f52a8193150ffb0d4",
   "ctrader_only_count": 50,
   "deprecated_alias_count": 21,
-  "document_fingerprint": "2753cc6f0ac668d6c2ba6614828f18208d956863419853191b1ed7cfafd37ea3",
+  "document_fingerprint": "b32c8a2322b780a54a9e66ebe60feb9e21b8de0bb45d8dd612584e6a7eeedaf7",
   "environment_entry_count": 565,
   "integrity_status": "CONFIGURATION_INTEGRITY_OK",
   "owner_counts": {

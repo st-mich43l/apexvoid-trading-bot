@@ -15,7 +15,7 @@ from app.autotrade.execution_confirmation import (
   scalp_effective_chase_pips,
   scalp_zone_access,
 )
-from app.scalping.context import is_scalping_symbol, is_impulse_pullback_session_allowed
+from app.scalping.context import is_scalping_symbol, scalp_session_quality
 from app.scalping.models import (
   ARCHETYPE_BREAKOUT_RETEST,
   ARCHETYPE_IMPULSE_PULLBACK,
@@ -160,15 +160,12 @@ def evaluate_scalp_activation(
   else:
     measured["chase_entry"] = False
 
-  if opportunity.archetype == ARCHETYPE_IMPULSE_PULLBACK:
-    if not is_impulse_pullback_session_allowed(context.session, cfg):
-      return ScalpDecision(
-        False,
-        True,
-        "scalp_impulse_outside_allowed_session",
-        0.0,
-        {**measured, "session": context.session},
-      )
+  # Session is a soft quality input only. A structurally valid M5 setup with
+  # a valid M1 confirmation remains eligible outside the preferred window.
+  measured["session"] = context.session
+  measured["session_quality"] = scalp_session_quality(
+    opportunity.archetype, context.session, cfg,
+  )
 
   # HTF bias is observed for telemetry — not an activation gate.
   htf = str(context.htf_bias or "unknown").casefold()

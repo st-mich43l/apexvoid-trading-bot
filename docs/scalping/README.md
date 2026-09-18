@@ -38,7 +38,7 @@ H1/M15 refresh on closed bars
         ↓
 M5 ScalpContextSnapshot (immutable, Redis-pinned)
         ↓
-M1 microstructure + archetypes
+M5 setup structure + closed M1 confirmation archetypes
         ↓
 EntryLocation (enforce inside scalp zone) + activation + cost + risk
         ↓
@@ -69,7 +69,7 @@ Structure/technique decide permits (not killzone clock). See
 
 1. `range_sweep` — micro range edge false-break sweep/reclaim
 2. `impulse_pullback` — join displacement after pullback
-3. `breakout_retest` — M1 compression box → displacement break → rejection retest → hold ([OWN_BREAKOUT_TECHNIQUE.md](OWN_BREAKOUT_TECHNIQUE.md))
+3. `breakout_retest` — M5 compression/structure → displacement break → M1 rejection retest → hold ([OWN_BREAKOUT_TECHNIQUE.md](OWN_BREAKOUT_TECHNIQUE.md))
 
 ## Promotion criteria (shadow → paper)
 
