@@ -386,6 +386,26 @@ async def mark_tp_ordinal_reached(row_id: int, ordinal: int) -> None:
   await client.expire(key, _PROGRESS_TTL)
 
 
+def _position_closing_pinged_key(row_id: int) -> str:
+  return f"manual_signal:position_closing_pinged:{row_id}"
+
+
+async def position_closing_already_pinged(row_id: int) -> bool:
+  """True once the provisional "confirming exit price..." ping already
+  went out for this signal. A multi-leg manual /algo signal's siblings can
+  all disappear from the broker in the same reconcile pass (one shared
+  owner stop-loss hit), each firing its own per-leg ``position_closing``
+  event - without this, every leg re-broadcasts the identical placeholder.
+  """
+  return bool(await _get_client().exists(_position_closing_pinged_key(row_id)))
+
+
+async def mark_position_closing_pinged(row_id: int) -> None:
+  client = _get_client()
+  key = _position_closing_pinged_key(row_id)
+  await client.set(key, 1, ex=_PROGRESS_TTL)
+
+
 async def set_runner_pips(row_id: int, pips: int) -> None:
   """Advance the best post-TP profit alert (monotonic in pips)."""
   client = _get_client()
