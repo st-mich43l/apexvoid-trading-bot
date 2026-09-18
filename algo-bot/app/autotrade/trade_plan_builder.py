@@ -715,13 +715,8 @@ def build_trade_plan_from_strategy_match(
     leg_ratios = (first_leg_fraction, remainder)
   entry_distribution = str(measured.get("entry_distribution") or "zone_scale")
   sizing = TradePlanSizing(
-    # Owner 2026-09-04: scalp now defaults to the same equity_table lot as
-    # any other trade (SCALPING_SIZING_MODE=equity_table) instead of the
-    # smaller risk-percent-of-stop-distance formula the "risk" mode still
-    # supports for anyone who wants it back. The one-position scalp cap
-    # (maximum_concurrent_positions) is load-bearing either way - it's what
-    # keeps total scalp exposure bounded now that a single scalp position
-    # carries normal-trade-sized risk instead of a fraction of it.
+    # Owner 2026-09-18: non-scalp stays at its own full equity-table level.
+    # Scalp keeps its configured equity-table volume multiplier.
     mode=scalp_sizing_mode if is_scalp_plan else "equity_table",
     table_version="owner_equity_v1",
     entry_distribution=entry_distribution,

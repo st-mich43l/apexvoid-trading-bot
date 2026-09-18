@@ -521,4 +521,3 @@ def test_final_reward_risk_preference_keeps_builder_plan():
   )
   assert plan.management is not None
   assert plan.stop.source == "m1_trigger_wick"
-
