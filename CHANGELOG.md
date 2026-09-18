@@ -70,6 +70,10 @@ dated section after deployment.
   repo's mirror-sync requirement (`docs/deployment.md § Production Ansible`).
 
 ### Changed
+- FX equity-table sizing now ramps from 0.15 base lots at $2k to 0.20 at
+  $3k and then to 0.30 at $5k. With the FX fixed-RR 1.5x multiplier, this
+  removes the prior $3k jump from 0.23 to 0.38 lots; it is now 0.30 on both
+  sides of that boundary. XAU and all FX stop envelopes are unchanged.
 - Set the default impulse-pullback session preference to `all`; session time
   no longer reduces quality or restricts discovery for this archetype.
 - Scalping structure is now explicitly `M5 setup -> M1 confirmation` while
