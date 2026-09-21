@@ -1246,6 +1246,12 @@ def test_match_planned_stop_hard_error_reads_measured_even_when_allowed():
   "stop_exceeds_max_envelope",
   "v8_stop_exceeds_max_envelope",
   "v8_stop_exceeds_envelope_furthest_leg",
+  "entry_inside_opposing_zone",
+  "v8_entry_inside_opposing_zone",
+  "entry_inside_ambiguous_zone",
+  "entry_inside_opposing_level",
+  "opposing_barrier",
+  "v8_opposing_barrier",
 ])
 def test_stop_distance_errors_never_kill_a_zone(code):
   """Owner 2026-09-21: a tier-A with-bias Key Level SELL seen with price on the
@@ -1486,7 +1492,7 @@ async def test_prepare_activation_waits_out_a_stop_distance_cooldown_without_ter
   )
   terminalize = AsyncMock()
   monkeypatch.setattr(cutover, "_terminalize_zone_watch", terminalize)
-  client = SimpleNamespace(get=AsyncMock(return_value=b"1"))
+  client = SimpleNamespace(get=AsyncMock(return_value=b"setup-cool"))
 
   prepared = await cutover._prepare_activation(
     client,
@@ -1499,3 +1505,28 @@ async def test_prepare_activation_waits_out_a_stop_distance_cooldown_without_ter
   assert prepared is None
   client.get.assert_awaited_once_with(cutover.stop_cooldown_key("zone-cool"))
   terminalize.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_soft_reject_cooldown_is_bound_to_the_match_not_the_clock():
+  """The retired match must not retry into 'lifecycle already terminal' (which
+  is a hard reject and would kill the zone); a fresh candidate must proceed."""
+  client = SimpleNamespace(get=AsyncMock(return_value=b"match-A"))
+
+  assert await cutover._soft_reject_cooldown_active(client, "z", "match-A") is True
+  assert await cutover._soft_reject_cooldown_active(client, "z", "match-B") is False
+  client.get.assert_awaited_with(cutover.stop_cooldown_key("z"))
+
+  empty = SimpleNamespace(get=AsyncMock(return_value=None))
+  assert await cutover._soft_reject_cooldown_active(empty, "z", "match-A") is False
+
+
+@pytest.mark.parametrize("code", [
+  "structure_invalidated",
+  "zone_decisively_broken",
+  "v8_same_direction_active_before_tp2",
+  "v8_fixed_rr_room_insufficient",
+  "invalidated",
+])
+def test_other_publish_rejects_keep_their_existing_behaviour(code):
+  assert not cutover._is_price_dependent_reject(code)
