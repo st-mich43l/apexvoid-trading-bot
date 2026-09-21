@@ -13,6 +13,17 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Opposing-barrier walls now exclude zones price has already accepted through.
+  `_htf_zones` fed EVERY width-eligible M15 supply/demand zone to the TradePlan
+  barrier guard, stamping touches but never checking that price had since
+  closed through and stayed beyond it. Owner-reported 2026-09-21: a BUY was
+  vetoed `v8_entry_inside_opposing_zone` ("entry 4355.58 inside supply
+  4348.54-4356.44") - a Sep-17 zone touched 14 times that price had spent two
+  days above; 3 of the 5 walls near price at that moment were dead. The wall
+  list now uses the same hold-based validity as the technique layer
+  (`not_invalidated`: tolerance, sweep-and-reclaim forgiveness, episode
+  budget), so the two never disagree about whether a zone is alive. A swept
+  and reclaimed zone stays a wall; touched-but-holding zones stay walls.
 - Supply/Demand, Order Block and FVG technique instances are now built from
   UNMERGED zones, each with its own origin, touch history and break. They were
   built from the map-merge output, whose composite takes the EARLIEST member's
