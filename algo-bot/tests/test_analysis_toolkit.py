@@ -1141,3 +1141,43 @@ def test_analysis_modules_have_no_delivery_or_state_imports():
 
   for module in modules:
     assert forbidden.isdisjoint(vars(module))
+
+
+def test_wick_touch_episodes_counts_rejected_wicks_not_breaks_or_grinds():
+  """Owner 2026-09-21: only fractal swing points counted as level touches,
+  so a wick that poked a level and was rejected never counted.
+  """
+  from app.analysis.levels import wick_touch_episodes
+
+  df = _df([
+    (105, 106, 103, 105),    # away
+    (105, 105.5, 99.5, 104),  # wick into band 99-101 and rejected  -> 1
+    (104, 106, 103, 105),    # away
+    (103, 103.5, 100.5, 101),  # grind inside band...
+    (101, 101.5, 100, 100.5),  # ...consecutive bars -> still 1 episode -> 2
+    (102, 106, 102, 105),    # away
+    (104, 104, 95, 96),      # opens above band, closes through it: a break
+  ])
+
+  assert wick_touch_episodes(df, price=100.0, band=1.0) == 2
+
+
+def test_key_levels_lift_touches_from_wick_episodes_when_bars_given():
+  from app.analysis.levels import key_levels
+
+  df = _df([(105, 106, 103, 105)] * 3 + [
+    (105, 105.5, 99.5, 104),
+    (104, 106, 103, 105),
+    (105, 105.5, 99.8, 104),
+    (104, 106, 103, 105),
+    (105, 105.5, 99.6, 104),
+    (104, 106, 103, 105),
+  ])
+  swings = [Swing(3, "low", 99.5), Swing(5, "low", 99.8)]
+  atr = 2.0
+
+  swing_only = key_levels(swings, atr, 0.5, 0, 2, 2.0)
+  with_wicks = key_levels(swings, atr, 0.5, 0, 2, 2.0, bars=df)
+
+  assert swing_only[0].touches == 2
+  assert with_wicks[0].touches == 3
