@@ -13,6 +13,18 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Premium/discount no longer blocks trades that go WITH the higher-timeframe
+  bias. Owner-reported 2026-09-21: XAU H1 bias was down and the map held a
+  score-23 supply (OB + breaker + FVG, 4344-4356) just above price, but the
+  gate compared price to a stale H1 box (4342-4369) and answered
+  `sell_in_discount` (the top activation blocker, ~45k `activation_blocked`
+  ticks; `buy_in_premium` ~41k). Premium/discount is a counter-trend
+  safeguard, so a reversal / breakout-retest / unknown-archetype entry whose
+  `bias_relationship` is `with_bias` is now continuation and passes the
+  half-range and extreme bands. Counter-bias and neutral entries, and
+  range-reversion / trend-pullback / momentum families, are unchanged. New
+  `actionability.entry_location.with_bias_pd_exempt` (default on) restores the
+  old behaviour when off.
 - Supply/Demand, Order Block and FVG zones stopped being tradeable the moment
   price touched them or closed once through them. Owner-reported 2026-09-21
   (XAU chart: 4340-4352 demand tapped ~12 times in a week and held each time,

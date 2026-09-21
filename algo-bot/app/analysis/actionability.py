@@ -940,6 +940,7 @@ def _evaluate_discovery_entry_locations(
       direction=result.direction,
       context=context_loc,
       cfg=cfg,
+      bias_relationship=result.bias_relationship,
     )
     found.append((index, decision))
   return found

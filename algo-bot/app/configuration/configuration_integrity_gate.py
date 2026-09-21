@@ -61,13 +61,15 @@ BASELINE = {
   # analysis.techniques.* (retest_max_touches, invalidation_tolerance_atr,
   # sweep_reclaim_bars, max_break_episodes), real canonical_env,
   # ConfigOwner.PYTHON.
-  "catalog_entry_count": 676,
-  "configurable_count": 569,
+  # 2026-09-21 With-bias premium/discount exemption: +1
+  # (actionability.entry_location.with_bias_pd_exempt).
+  "catalog_entry_count": 677,
+  "configurable_count": 570,
   "protocol_constant_count": 10,
   "algorithm_constant_count": 97,
-  "python_projection_count": 626,
+  "python_projection_count": 627,
   "ctrader_only_count": 50,
-  "environment_entry_count": 569,
+  "environment_entry_count": 570,
   "deprecated_alias_count": 21,
   "shared_count": 96,
 }

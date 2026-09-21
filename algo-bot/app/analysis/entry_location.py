@@ -265,8 +265,16 @@ def evaluate_entry_location(
   context: EntryLocationContext,
   cfg: Any | None = None,
   breakout_evidence: Mapping[str, Any] | None = None,
+  bias_relationship: str | None = None,
 ) -> EntryLocationDecision:
-  """Pure location eligibility. Shadow never hard-blocks execution."""
+  """Pure location eligibility. Shadow never hard-blocks execution.
+
+  Premium/discount is a counter-trend safeguard. A retest that trades WITH the
+  higher-timeframe bias (SELL a supply retest in a down-trend, BUY a demand
+  retest in an up-trend) is continuation, not a reversal at the wrong half of
+  a range: it is exempt when ``actionability.entry_location.with_bias_pd_exempt``
+  is on. Range-reversion, trend-pullback and momentum keep their own bands.
+  """
   if cfg is None:
     from app.core.config import runtime_config
     cfg = runtime_config
@@ -323,6 +331,33 @@ def evaluate_entry_location(
     return EntryLocationDecision(
       allowed=True,
       reason_code="location_override_accepted_breakout_retest",
+      hard_block=False,
+      archetype=archetype,
+      would_block=False,
+      measured=measured,
+    )
+
+  if (
+    bias_relationship is not None
+    and str(bias_relationship).strip().lower() == "with_bias"
+    and archetype in {
+      ARCHETYPE_REVERSAL,
+      ARCHETYPE_BREAKOUT_RETEST,
+      ARCHETYPE_UNKNOWN,
+    }
+    and bool(
+      getattr(
+        _cfg_section(cfg, "actionability", "entry_location"),
+        "with_bias_pd_exempt",
+        False,
+      ),
+    )
+  ):
+    measured["location_override"] = "with_bias_continuation"
+    measured["bias_relationship"] = "with_bias"
+    return EntryLocationDecision(
+      allowed=True,
+      reason_code="location_with_bias_continuation",
       hard_block=False,
       archetype=archetype,
       would_block=False,
