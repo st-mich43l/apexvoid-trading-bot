@@ -13,6 +13,16 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Auto ladder leg 2 could be a marketable limit that filled at the same price
+  as leg 1. Owner-reported 2026-09-21: XAU Session Level BUY, zone
+  4344.11-4348.65, quote 4346.68 - L1 and L2 both filled at 4346.83. The
+  entry-price fix (#557) anchored leg 2 to the zone's near edge (4348.65); once
+  price is already inside the zone that edge is on the wrong side of the market,
+  so the "deeper" leg landed at 4347.29, ABOVE the quote - a BUY limit above
+  the ask fills instantly. Leg 2 is now the deeper of the structural-edge
+  ladder and the quote-anchored ladder (lower for BUY, higher for SELL), so it
+  never sits closer to the market than the quote ladder would (applies to
+  `market_with_limit_scale` and both `zone_scale` branches).
 - Order Block detection never found reversal order blocks - it had never
   produced a single auto trade. Owner-reported 2026-09-21: XAU M15 demand OB
   at 4337-42 (the last down candle before a +18 impulse) was invisible to the
