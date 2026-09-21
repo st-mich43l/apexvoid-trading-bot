@@ -158,6 +158,43 @@ def _scale_ladder_legs(
   )
 
 
+def _deeper_second_leg(
+  *,
+  side: str,
+  low: float,
+  high: float,
+  proximal: float,
+  anchor: float,
+  atr: float,
+  scale_step_atr: float,
+  digits: int,
+) -> float:
+  """Leg 2 price: the DEEPER of the structural-price ladder and the
+  quote-safe ladder (lower for BUY, higher for SELL).
+
+  Leg 2 anchors off ``proximal`` so it keeps the better structural price
+  (ENTRY_LOGIC_REVIEW_2026-09-17), but once price is already inside the
+  zone that structural edge can sit on the wrong side of the market - a BUY
+  zone whose near edge is above the current quote gives a "deeper" leg
+  ABOVE the quote, i.e. a marketable limit that fills instantly at the same
+  price as leg 1 (owner-reported live 2026-09-21: XAU Session Level BUY,
+  L1 and L2 both filled at 4346.83). Taking the deeper of the two ladders
+  guarantees leg 2 is never closer to the market than the quote-anchored
+  ladder would have put it.
+  """
+  from_proximal = _scale_ladder_legs(
+    side=side, low=low, high=high, proximal=proximal,
+    atr=atr, scale_step_atr=scale_step_atr, digits=digits,
+  )[1]
+  from_anchor = _scale_ladder_legs(
+    side=side, low=low, high=high, proximal=anchor,
+    atr=atr, scale_step_atr=scale_step_atr, digits=digits,
+  )[1]
+  return min(from_proximal, from_anchor) if side == "BUY" else max(
+    from_proximal, from_anchor,
+  )
+
+
 def _unique_prices(prices: list[float]) -> tuple[float, ...]:
   out: list[float] = []
   for price in prices:
@@ -338,13 +375,13 @@ def resolve_execution_route_plan(
     # market_with_limit_scale was silently discarding a correctly-computed
     # risk-targeted/zone-edge price for L2, clustering both legs at the
     # live quote instead - see ENTRY_LOGIC_REVIEW_2026-09-17.md.
-    legs = _scale_ladder_legs(
-      side=side, low=low, high=high, proximal=proximal,
-      atr=atr, scale_step_atr=reaction_step, digits=digits,
-    )
     # L1 reference price is the live quote (not a limit); L2 is deeper limit.
     l1_price = _round_price(quote, digits)
-    l2_price = legs[1]
+    l2_price = _deeper_second_leg(
+      side=side, low=low, high=high, proximal=proximal,
+      anchor=scale_entry_anchor, atr=atr,
+      scale_step_atr=reaction_step, digits=digits,
+    )
     if l1_price == l2_price:
       policy = (reaction_scale_invalid_policy or "single_market").strip().lower()
       if policy == "single_market":
@@ -499,11 +536,14 @@ def resolve_execution_route_plan(
         # zone (see the comment above `scale_entry_anchor`'s definition);
         # `_scale_ladder_legs`'s own first return value (== its `proximal`
         # argument verbatim) is not reused for that reason.
-        legs = _scale_ladder_legs(
-          side=side, low=low, high=high, proximal=proximal,
-          atr=atr, scale_step_atr=scale_step_atr, digits=digits,
+        legs = (
+          _round_price(scale_entry_anchor, digits),
+          _deeper_second_leg(
+            side=side, low=low, high=high, proximal=proximal,
+            anchor=scale_entry_anchor, atr=atr,
+            scale_step_atr=scale_step_atr, digits=digits,
+          ),
         )
-        legs = (_round_price(scale_entry_anchor, digits), legs[1])
         return ExecutionRoutePlan(
           ROUTE_ZONE_SPLIT,
           legs[0],
@@ -559,11 +599,14 @@ def resolve_execution_route_plan(
     if distribution == "zone_scale":
       # Same fix as the two zone_scale branches above: leg 2 steps from
       # `proximal`, leg 1 stays the quote-safe `scale_entry_anchor`.
-      legs = _scale_ladder_legs(
-        side=side, low=low, high=high, proximal=proximal, atr=atr,
-        scale_step_atr=scale_step_atr, digits=digits,
+      legs = (
+        _round_price(scale_entry_anchor, digits),
+        _deeper_second_leg(
+          side=side, low=low, high=high, proximal=proximal,
+          anchor=scale_entry_anchor, atr=atr,
+          scale_step_atr=scale_step_atr, digits=digits,
+        ),
       )
-      legs = (_round_price(scale_entry_anchor, digits), legs[1])
       return ExecutionRoutePlan(
         ROUTE_ZONE_SPLIT,
         legs[0],
