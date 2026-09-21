@@ -19,8 +19,9 @@ dated section after deployment.
   each root at close, and the close reply (threaded to it) was rejected as
   "message to be replied not found" and skipped - nothing was left in the
   channel for trades that really executed. `kill_setup_card` now retains the
-  root for anything that filled (position close passes `retain_root=True`;
-  reject/expire/invalidate infer a fill from the card/status), so root
+  root for anything that filled or filled-and-closed - that is not a terminal
+  setup, its card is left alone (position close passes `retain_root=True`;
+  reject/expire/invalidate infer a fill from the card text/status line), so root
   deletion only applies to setups that never filled. A close reply whose
   root is gone now posts standalone instead of being dropped.
 - Manual /algo runner never trailed after TP1 when the funded economic

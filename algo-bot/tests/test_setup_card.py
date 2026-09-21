@@ -784,6 +784,7 @@ async def test_kill_setup_card_deletes_when_forced(monkeypatch):
   ("order_filled", "✅ ORDER FILLED"),
   ("tp_booked", "🎯 TP BOOKED"),
   ("sl_moved", "🛡 GROUP STOP"),
+  ("terminal", "🏁 POSITION CLOSED"),
 ])
 async def test_kill_setup_card_never_deletes_root_of_a_filled_trade(
   monkeypatch, state, line,
