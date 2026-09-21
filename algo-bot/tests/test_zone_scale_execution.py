@@ -173,10 +173,10 @@ def test_sell_zone_scale_uses_true_proximal_not_quote_when_meaningfully_inside()
   assert measured["planned_execution_route"] == "zone_split"
   # L1 still tracks the quote (kept fillable).
   assert measured["planned_leg_entry_prices"][0] == pytest.approx(4035.7)
-  # L2 steps from the true proximal (4035.0), not the quote (4035.7) -
-  # min(zone_high, 4035.0 + 0.5*ATR) = 4035.5, same value regardless of
-  # exactly where inside the zone the quote sits.
-  assert measured["planned_leg_entry_prices"][1] == pytest.approx(4035.5)
+  # L2 is the deeper of the proximal ladder (4035.0 + 0.5*ATR = 4035.5,
+  # BELOW this SELL quote - a marketable limit) and the quote ladder
+  # (4035.7 + 0.5*ATR = 4036.2): never closer to the market than the quote.
+  assert measured["planned_leg_entry_prices"][1] == pytest.approx(4036.2)
 
 
 def test_sell_zone_already_inside_anchors_first_leg_at_current_price():
@@ -196,7 +196,9 @@ def test_sell_zone_already_inside_anchors_first_leg_at_current_price():
   measured = evaluation.measured
   assert measured["planned_execution_route"] == "market_with_limit_scale"
   assert measured["planned_leg_entry_prices"][0] == pytest.approx(4035.3)
-  assert measured["planned_leg_entry_prices"][1] == pytest.approx(4035.5)
+  # One step above the quote (deeper for a SELL): the proximal ladder
+  # (4035.5) would sit near the quote, the quote ladder (4035.8) is deeper.
+  assert measured["planned_leg_entry_prices"][1] == pytest.approx(4035.8)
 
 
 def test_buy_zone_first_leg_is_proximal_high_at_seventy_percent():
@@ -232,7 +234,8 @@ def test_buy_zone_already_inside_anchors_first_leg_at_current_price():
   measured = evaluation.measured
   assert measured["planned_execution_route"] == "market_with_limit_scale"
   assert measured["planned_leg_entry_prices"][0] == pytest.approx(4036.2)
-  assert measured["planned_leg_entry_prices"][1] == pytest.approx(4036.0)
+  # One step below the quote (deeper for a BUY).
+  assert measured["planned_leg_entry_prices"][1] == pytest.approx(4035.7)
 
 
 def test_key_session_trendline_outside_zone_keeps_limit_ladder():
@@ -318,3 +321,40 @@ def test_market_preference_still_cannot_use_zone_scale():
   )
   assert not plan.valid
   assert plan.route == ROUTE_ZONE_SPLIT
+
+
+@pytest.mark.parametrize("side,quote,zone_low,zone_high", [
+  ("BUY", 4346.68, 4344.11, 4348.65),
+  ("SELL", 4346.68, 4344.11, 4348.65),
+])
+def test_second_leg_is_never_marketable_when_price_is_inside_the_zone(
+  side, quote, zone_low, zone_high,
+):
+  """Owner-reported live 2026-09-21: XAU Session Level BUY, zone
+  4344.11-4348.65, quote 4346.68. Leg 2 anchored off the zone's near edge
+  (4348.65) landed at 4347.29 - ABOVE the quote, a marketable BUY limit that
+  filled instantly at the same price as leg 1. Leg 2 must be strictly deeper
+  (lower for BUY, higher for SELL) than the live quote.
+  """
+  plan = resolve_execution_route_plan(
+    direction=side,
+    order_type_preference="limit",
+    entry_distribution="zone_scale",
+    executable_quote=quote,
+    zone_low=zone_low,
+    zone_high=zone_high,
+    atr=4.5,
+    digits=2,
+    zone_fill_enabled=True,
+    zone_fill_min_atr=0.5,
+    reaction_scale_enabled=True,
+    reaction_scale_step_atr=0.3,
+    strategy="Session Level",
+  )
+
+  first, second = plan.planned_leg_entry_prices
+  assert first == pytest.approx(quote)
+  if side == "BUY":
+    assert second < quote
+  else:
+    assert second > quote
