@@ -2,8 +2,8 @@
 
 > Generated from the canonical configuration catalog (`app.configuration.environment_contract`). Do not edit manually.
 
-- Contract fingerprint: `3f085db7e0dfffb00177e8f53817f90107c0390c238731040448098bb20b51e0`
-- Environment-bound fields: `569`
+- Contract fingerprint: `2284e2c761a3f531c1c24347c4c9bc51c25edd019b8b20f9bae37b5ba67d5e5d`
+- Environment-bound fields: `570`
 - Deprecated aliases: `21`
 
 Secret values are never emitted; secret defaults render as `<redacted>`.
@@ -318,6 +318,7 @@ Secret values are never emitted; secret defaults render as `<redacted>`.
 | `ENTRY_LOCATION_REVERSAL_SELL_MIN_POSITION` | `actionability.entry_location.reversal.sell_minimum_position` | `float` | no | no | — | `0.5` |
 | `ENTRY_LOCATION_TREND_BUY_MAX_POSITION` | `actionability.entry_location.trend_pullback.buy_maximum_position` | `float` | no | no | — | `0.7` |
 | `ENTRY_LOCATION_TREND_SELL_MIN_POSITION` | `actionability.entry_location.trend_pullback.sell_minimum_position` | `float` | no | no | — | `0.3` |
+| `ENTRY_LOCATION_WITH_BIAS_PD_EXEMPT` | `actionability.entry_location.with_bias_pd_exempt` | `bool` | no | no | — | `True` |
 | `EQUAL_TOL_ATR` | `analysis.levels.equal_tol_atr` | `float` | no | no | — | `0.15` |
 | `EQ_BAND` | `analysis.measurements.eq_band` | `float` | no | no | — | `0.1` |
 | `EVENT_GUARD_HOURS` | `market_data.calendar.event_guard_hours` | `float` | no | no | — | `4.0` |

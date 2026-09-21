@@ -133,8 +133,8 @@
     "zone_reconcile_mode": "shadow",
     "zone_scale_undersized_policy": "single_entry"
   },
-  "contract_fingerprint": "3f085db7e0dfffb00177e8f53817f90107c0390c238731040448098bb20b51e0",
-  "effective_configuration_fingerprint": "61de85b54f0a9932d560bca7096636b7eb731015ae74e7ae3b684861117799da",
+  "contract_fingerprint": "2284e2c761a3f531c1c24347c4c9bc51c25edd019b8b20f9bae37b5ba67d5e5d",
+  "effective_configuration_fingerprint": "42ec29e3898e2659acd6c3ec4579e42c7315db152d8ba03f91f9f45d43434001",
   "feed": {
     "backfill_bars": 1500,
     "bar_quality_lookback": 6,
@@ -232,7 +232,8 @@
           "trend_pullback": {
             "buy_maximum_position": "0.7",
             "sell_minimum_position": "0.3"
-          }
+          },
+          "with_bias_pd_exempt": true
         },
         "gates": {
           "edge_proximity_atr": "0.5",
@@ -1245,7 +1246,8 @@
           "trend_pullback": {
             "buy_maximum_position": "0.7",
             "sell_minimum_position": "0.3"
-          }
+          },
+          "with_bias_pd_exempt": true
         },
         "gates": {
           "edge_proximity_atr": "0.5",
@@ -2282,7 +2284,8 @@
           "trend_pullback": {
             "buy_maximum_position": "0.7",
             "sell_minimum_position": "0.3"
-          }
+          },
+          "with_bias_pd_exempt": true
         },
         "gates": {
           "edge_proximity_atr": "0.5",
@@ -3295,7 +3298,8 @@
           "trend_pullback": {
             "buy_maximum_position": "0.7",
             "sell_minimum_position": "0.3"
-          }
+          },
+          "with_bias_pd_exempt": true
         },
         "gates": {
           "edge_proximity_atr": "0.5",
@@ -4320,7 +4324,8 @@
           "trend_pullback": {
             "buy_maximum_position": "0.7",
             "sell_minimum_position": "0.3"
-          }
+          },
+          "with_bias_pd_exempt": true
         },
         "gates": {
           "edge_proximity_atr": "0.5",
@@ -5335,7 +5340,8 @@
           "trend_pullback": {
             "buy_maximum_position": "0.7",
             "sell_minimum_position": "0.3"
-          }
+          },
+          "with_bias_pd_exempt": true
         },
         "gates": {
           "edge_proximity_atr": "0.5",
@@ -6210,7 +6216,8 @@
           "trend_pullback": {
             "buy_maximum_position": "0.7",
             "sell_minimum_position": "0.3"
-          }
+          },
+          "with_bias_pd_exempt": true
         },
         "gates": {
           "edge_proximity_atr": "0.5",
@@ -7109,7 +7116,8 @@
           "trend_pullback": {
             "buy_maximum_position": "0.7",
             "sell_minimum_position": "0.3"
-          }
+          },
+          "with_bias_pd_exempt": true
         },
         "gates": {
           "edge_proximity_atr": "0.5",
@@ -7984,7 +7992,8 @@
           "trend_pullback": {
             "buy_maximum_position": "0.7",
             "sell_minimum_position": "0.3"
-          }
+          },
+          "with_bias_pd_exempt": true
         },
         "gates": {
           "edge_proximity_atr": "0.5",
@@ -8871,7 +8880,8 @@
           "trend_pullback": {
             "buy_maximum_position": "0.7",
             "sell_minimum_position": "0.3"
-          }
+          },
+          "with_bias_pd_exempt": true
         },
         "gates": {
           "edge_proximity_atr": "0.5",

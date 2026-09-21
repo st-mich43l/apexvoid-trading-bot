@@ -3,9 +3,9 @@
 > Generated from the typed `ApexVoidConfig` Catalog V2 schema. Do not edit manually.
 
 - Catalog version: `2`
-- Contract fingerprint: `3f085db7e0dfffb00177e8f53817f90107c0390c238731040448098bb20b51e0`
-- Document fingerprint: `e97622da1d556236e6bb7ce995e0456203ed3f9de0bdd66f41c0ff919e4a7f48`
-- Items: `676`
+- Contract fingerprint: `2284e2c761a3f531c1c24347c4c9bc51c25edd019b8b20f9bae37b5ba67d5e5d`
+- Document fingerprint: `a5cb518f4e31a5cb70f2b8c1b85bb09862f889224286f94bb697367eb968f6f9`
+- Items: `677`
 - Runtime status: canonical-only; `app.core.config.runtime_config` is authoritative
 
 ## actionability
@@ -31,6 +31,7 @@
 | `actionability.entry_location.reversal.sell_minimum_position` | `ENTRY_LOCATION_REVERSAL_SELL_MIN_POSITION` | `float` | `fraction` | `configurable` | `0.5` |
 | `actionability.entry_location.trend_pullback.buy_maximum_position` | `ENTRY_LOCATION_TREND_BUY_MAX_POSITION` | `float` | `fraction` | `configurable` | `0.7` |
 | `actionability.entry_location.trend_pullback.sell_minimum_position` | `ENTRY_LOCATION_TREND_SELL_MIN_POSITION` | `float` | `fraction` | `configurable` | `0.3` |
+| `actionability.entry_location.with_bias_pd_exempt` | `ENTRY_LOCATION_WITH_BIAS_PD_EXEMPT` | `bool` | `boolean` | `configurable` | `true` |
 | `actionability.gates.edge_proximity_atr` | `AUTO_TRADE_EDGE_PROXIMITY_ATR` | `float` | `atr` | `configurable` | `0.5` |
 | `actionability.gates.eq_exclusion_fraction` | `AUTO_TRADE_EQ_EXCLUSION_FRACTION` | `float` | `fraction` | `configurable` | `0.15` |
 | `actionability.gates.event_cluster_guard_enabled` | `AUTO_TRADE_EVENT_CLUSTER_GUARD_ENABLED` | `bool` | `boolean` | `configurable` | `false` |

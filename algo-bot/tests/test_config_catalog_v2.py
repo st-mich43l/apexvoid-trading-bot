@@ -88,13 +88,13 @@ BASELINE = {
   # 2026-09-17 Trendline V2 (+15), zone market-relevance (+3), 2026-09-21
   # technique zone retests (+1: analysis.techniques.retest_max_touches) - all
   # ConfigOwner.PYTHON, real canonical_env, none deprecated-alias'd.
-  "entries": 676,
-  "configurable": 569,
+  "entries": 677,
+  "configurable": 570,
   "protocol": 10,
   "algorithm": 97,
-  "owners": {"python": 530, "shared": 96, "ctrader": 50},
-  "projection": 626,
-  "env": 569,
+  "owners": {"python": 531, "shared": 96, "ctrader": 50},
+  "projection": 627,
+  "env": 570,
   "deprecated_aliases": 21,
 }
 
