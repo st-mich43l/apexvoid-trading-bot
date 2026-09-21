@@ -1492,12 +1492,15 @@ async def test_prepare_activation_waits_out_a_stop_distance_cooldown_without_ter
   )
   terminalize = AsyncMock()
   monkeypatch.setattr(cutover, "_terminalize_zone_watch", terminalize)
-  client = SimpleNamespace(get=AsyncMock(return_value=b"setup-cool"))
+  cooled_match = replace(_match(), match_id="setup-cool")
+  client = SimpleNamespace(
+    get=AsyncMock(return_value=cutover.soft_reject_token(cooled_match).encode()),
+  )
 
   prepared = await cutover._prepare_activation(
     client,
     record=record,
-    match=replace(_match(), match_id="setup-cool"),
+    match=cooled_match,
     quote=(4114.4, 4114.6, 1_785_390_200),
     evidence=SimpleNamespace(executable_quote=4114.4, inside=True),
   )
@@ -1508,17 +1511,24 @@ async def test_prepare_activation_waits_out_a_stop_distance_cooldown_without_ter
 
 
 @pytest.mark.asyncio
-async def test_soft_reject_cooldown_is_bound_to_the_match_not_the_clock():
-  """The retired match must not retry into 'lifecycle already terminal' (which
-  is a hard reject and would kill the zone); a fresh candidate must proceed."""
-  client = SimpleNamespace(get=AsyncMock(return_value=b"match-A"))
+async def test_soft_reject_cooldown_is_bound_to_the_signal_not_the_clock():
+  """match_id is stable per zone+direction for technique/confluence zones, so the
+  cooldown must also carry the confirmation: the retired signal stays skipped,
+  a fresh M5 confirmation on the same match_id proceeds."""
+  old = SimpleNamespace(match_id="match-A", m5_confirmation_bar_ts="2026-09-21T15:35:00+00:00")
+  fresh = SimpleNamespace(match_id="match-A", m5_confirmation_bar_ts="2026-09-21T18:20:00+00:00")
+  other = SimpleNamespace(match_id="match-B", m5_confirmation_bar_ts=old.m5_confirmation_bar_ts)
+  client = SimpleNamespace(
+    get=AsyncMock(return_value=cutover.soft_reject_token(old).encode()),
+  )
 
-  assert await cutover._soft_reject_cooldown_active(client, "z", "match-A") is True
-  assert await cutover._soft_reject_cooldown_active(client, "z", "match-B") is False
+  assert await cutover._soft_reject_cooldown_active(client, "z", old) is True
+  assert await cutover._soft_reject_cooldown_active(client, "z", fresh) is False
+  assert await cutover._soft_reject_cooldown_active(client, "z", other) is False
   client.get.assert_awaited_with(cutover.stop_cooldown_key("z"))
 
   empty = SimpleNamespace(get=AsyncMock(return_value=None))
-  assert await cutover._soft_reject_cooldown_active(empty, "z", "match-A") is False
+  assert await cutover._soft_reject_cooldown_active(empty, "z", old) is False
 
 
 @pytest.mark.parametrize("code", [
@@ -1559,3 +1569,74 @@ def test_only_zone_level_reasons_terminalize_a_zone(reason, expected):
   assert cutover._publish_should_terminalize_zone_watch(
     status=worker.PUBLISH_STATUS_INVALIDATED, reason_code=reason,
   ) is expected
+
+
+def _iso(epoch: int) -> str:
+  from datetime import datetime, timezone
+
+  return datetime.fromtimestamp(epoch, timezone.utc).isoformat()
+
+
+async def _retire_setup(client, setup_id: str, state: str):
+  from app.autotrade import setup_lifecycle as sl
+
+  await sl.create_setup(client, setup_id=setup_id, thesis_id="t", symbol="XAU")
+  await sl.transition_setup(client, setup_id, state, reason_code="test")
+  return await sl.load_setup(client, setup_id)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("state", ["invalidated", "expired"])
+async def test_newer_confirmation_rearms_a_retired_setup(state):
+  from app.autotrade import setup_lifecycle as sl
+  from app.persistence import redis_state
+
+  client = redis_state.get_client()
+  retired = await _retire_setup(client, f"rearm-{state}", state)
+  # confirmation bar OPENS after the terminal time; its close is > cooldown later
+  opened = int(retired.updated_at) + zw.ZONE_REFORM_COOLDOWN_SECONDS + 1
+  match = SimpleNamespace(
+    match_id=retired.setup_id, symbol="XAU", m5_confirmation_bar_ts=_iso(opened),
+  )
+
+  assert await cutover._rearm_retired_setup(client, match) is True
+
+  assert (await sl.load_setup(client, retired.setup_id)).state == sl.DISCOVERED
+
+
+@pytest.mark.asyncio
+async def test_stale_or_missing_confirmation_never_rearms():
+  from app.autotrade import setup_lifecycle as sl
+  from app.persistence import redis_state
+
+  client = redis_state.get_client()
+  retired = await _retire_setup(client, "rearm-stale", "invalidated")
+  terminal_at = int(retired.updated_at)
+  for stamp in (
+    _iso(terminal_at - 3600),                                   # before it died
+    _iso(terminal_at - zw.ZONE_REFORM_COOLDOWN_SECONDS),        # closes at death
+    _iso(terminal_at),                                          # closes inside cooldown
+    None,
+  ):
+    match = SimpleNamespace(match_id=retired.setup_id, symbol="XAU", m5_confirmation_bar_ts=stamp)
+    assert await cutover._rearm_retired_setup(client, match) is False
+  assert (await sl.load_setup(client, retired.setup_id)).state == sl.INVALIDATED
+
+
+@pytest.mark.asyncio
+async def test_consumed_cancelled_and_live_setups_are_never_rearmed():
+  from app.autotrade import setup_lifecycle as sl
+  from app.persistence import redis_state
+
+  client = redis_state.get_client()
+  await sl.create_setup(client, setup_id="live", thesis_id="t", symbol="XAU")
+  cancelled = sl.SetupRecord(
+    setup_id="cancelled", thesis_id="t", symbol="XAU", state=sl.CANCELLED,
+  )
+  await sl._save(client, cancelled)
+  far = int(cancelled.updated_at) + 10_000
+  for setup_id in ("live", "cancelled", "does-not-exist"):
+    match = SimpleNamespace(match_id=setup_id, symbol="XAU", m5_confirmation_bar_ts=_iso(far))
+    assert await cutover._rearm_retired_setup(client, match) is False
+  assert (await sl.load_setup(client, "cancelled")).state == sl.CANCELLED
+  assert (await sl.load_setup(client, "live")).state == sl.DISCOVERED
