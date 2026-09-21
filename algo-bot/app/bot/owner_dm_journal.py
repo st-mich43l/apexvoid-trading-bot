@@ -1,14 +1,10 @@
-"""Owner-opt-in end-of-day wipe of the ApexVoid bot's own outgoing DM.
+"""Owner-opt-in end-of-day wipe of the ApexVoid bot's own DM with the owner.
 
-Scope is deliberately narrow, twice over: only the main ApexVoid ``bot``
-identity's private chat with ``telegram_owner_id`` (see ``app.bot.client``)
-- the scanner/algo bot's own DM (autonomous root cards, and the owner's
-``/1r`` personal-trade root card + its lifecycle) is a separate Telegram
-conversation and is never touched here, that is the actual trade record -
-and, within that chat, only messages the bot itself sent. The owner's own
-typed messages/commands are never journaled or deleted (owner 2026-09-17:
-an earlier version also swept the owner's own incoming messages; that
-deleted commands the owner wanted kept).
+Scope is deliberately narrow: only the main ApexVoid ``bot`` identity's
+private chat with ``telegram_owner_id`` (see ``app.bot.client``). The
+scanner/algo bot's own DM (autonomous root cards, and the owner's ``/1r``
+personal-trade root card + its lifecycle) is a separate Telegram
+conversation and is never touched here — that is the actual trade record.
 
 Telegram's Bot API has no "list chat history" call, so per-message deletion
 is only possible for message ids the bot itself already recorded. Outgoing
@@ -16,7 +12,8 @@ sends reach the owner DM through two different call paths that share no
 single call site (``send_with_retry`` and direct aiogram convenience calls
 like ``msg.answer(...)``), so recording happens at the lowest common layer
 instead: a ``bot.session`` request middleware (every Telegram API call the
-``bot`` object makes funnels through it).
+``bot`` object makes funnels through it) for outgoing messages, and a
+``dp.message`` outer middleware for the owner's own incoming messages.
 
 Gated end-to-end on ``delivery.telegram.owner_dm_daily_wipe_enabled``
 (default off) — this is an irreversible action against the owner's own
@@ -51,8 +48,8 @@ def _journal_key(trade_date: str) -> str:
 
 
 async def record_message_id(chat_id: object, message_id: object) -> None:
-  """Journal one bot-sent message id for today's owner-DM sweep. No-op
-  unless enabled and ``chat_id`` matches the configured owner.
+  """Journal one message id for today's owner-DM sweep. No-op unless enabled
+  and ``chat_id`` matches the configured owner.
   """
   cfg = runtime_config.delivery.telegram
   if not cfg.owner_dm_daily_wipe_enabled:
@@ -170,3 +167,22 @@ async def owner_dm_session_middleware(make_request, bot, method):
   except Exception:
     log.exception("owner DM journal middleware failed")
   return response
+
+
+async def owner_dm_incoming_middleware(handler, event, data):
+  """``dp.message`` outer middleware - journals the owner's own messages."""
+  try:
+    cfg = runtime_config.delivery.telegram
+    chat = getattr(event, "chat", None)
+    from_user = getattr(event, "from_user", None)
+    if (
+      cfg.owner_dm_daily_wipe_enabled
+      and cfg.telegram_owner_id
+      and getattr(chat, "type", None) == "private"
+      and from_user is not None
+      and from_user.id == cfg.telegram_owner_id
+    ):
+      await record_message_id(chat.id, event.message_id)
+  except Exception:
+    log.exception("owner DM incoming journal middleware failed")
+  return await handler(event, data)
