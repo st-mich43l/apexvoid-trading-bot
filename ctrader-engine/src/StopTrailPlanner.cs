@@ -18,6 +18,17 @@ public static class StopTrailPlanner
   /// latter bunches stops around the individual entries and is vulnerable
   /// to an ordinary M1 retest even though TP1 already paid for wider group
   /// protection. Existing/current stops are a hard never-worsen boundary.
+  ///
+  /// <paramref name="plannedDeepestEntry"/> is the ladder's deepest planned
+  /// entry - the far edge of the owner's entry zone, INCLUDING legs that
+  /// never filled and were cancelled after TP1. Owner-reported live
+  /// 2026-09-21 (manual 409, SELL zone 4341-4344): only the shallow leg
+  /// filled, TP1 banked half of it, and the runner's stop went to its own
+  /// entry (BE, 4340.98). Price retested the zone and swept it for ~0 on
+  /// volume that was in profit. The runner stop is now the deepest planned
+  /// entry (4344.50): a normal zone retest no longer stops it out. It is
+  /// still bounded by the economic stop (the group keeps its protected
+  /// buffer) and never loosens a stop already held.
   /// </summary>
   public static StopTrailMove? PlanGroupEconomicBreakeven(
     IReadOnlyList<AutoTradePositionState> remainingStates,
@@ -25,7 +36,8 @@ public static class StopTrailPlanner
     decimal bookedPipVolume,
     SymbolInfo symbol,
     decimal pipSize,
-    int protectedBufferTicks
+    int protectedBufferTicks,
+    decimal? plannedDeepestEntry = null
   )
   {
     if (remainingStates.Count == 0 || groupInitialVolume <= 0)
@@ -63,6 +75,31 @@ public static class StopTrailPlanner
     var desired = direction == TradeDirection.Buy
       ? weightedEntry + unfundedPipVolume * pipSize / remainingVolume
       : weightedEntry - unfundedPipVolume * pipSize / remainingVolume;
+
+    // Give the runner the zone's own depth: stop at the deepest planned
+    // entry, unless the economic stop is already tighter (then the group's
+    // protected buffer wins). Only meaningful when the deepest entry lies on
+    // the losing side of the remaining VWAP; a single-price ladder has no
+    // such room and keeps the protected breakeven below.
+    decimal? deepestApplied = null;
+    if (
+      plannedDeepestEntry is decimal deepestEntry
+      && (
+        direction == TradeDirection.Buy
+          ? deepestEntry < weightedEntry
+          : deepestEntry > weightedEntry
+      )
+    )
+    {
+      var tighter = direction == TradeDirection.Buy
+        ? Math.Max(desired, deepestEntry)
+        : Math.Min(desired, deepestEntry);
+      if (tighter == deepestEntry && tighter != desired)
+      {
+        deepestApplied = deepestEntry;
+      }
+      desired = tighter;
+    }
 
     // Never loosen any live or original owner stop. All remaining ladder
     // clips receive one absolute price, so use the most protective boundary
@@ -117,6 +154,19 @@ public static class StopTrailPlanner
         $"BE+{protectedBufferTicks} ticks",
         protectedBufferPrice
       );
+    }
+    if (
+      deepestApplied is decimal applied
+      && desired == decimal.Round(
+        direction == TradeDirection.Buy
+          ? decimal.Ceiling(applied / tickSize) * tickSize
+          : decimal.Floor(applied / tickSize) * tickSize,
+        symbol.Digits,
+        MidpointRounding.AwayFromZero
+      )
+    )
+    {
+      return new StopTrailMove(desired, "deepest entry");
     }
     return new StopTrailMove(
       desired,
