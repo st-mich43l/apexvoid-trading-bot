@@ -13,6 +13,28 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- A filled trade's root card is no longer deleted. Owner-reported
+  2026-09-21: two XAU scalps filled and closed within minutes; with
+  `delivery.telegram.delete_root_on_terminal` on, `kill_setup_card` deleted
+  each root at close, and the close reply (threaded to it) was rejected as
+  "message to be replied not found" and skipped - nothing was left in the
+  channel for trades that really executed. `kill_setup_card` now retains the
+  root for anything that filled (position close passes `retain_root=True`;
+  reject/expire/invalidate infer a fill from the card/status), so root
+  deletion only applies to setups that never filled. A close reply whose
+  root is gone now posts standalone instead of being dropped.
+- Manual /algo runner never trailed after TP1 when the funded economic
+  breakeven fell below the held stop. Owner-reported 2026-09-21 (manual 407,
+  XAU BUY): one clip filled, TP1 banked half of it, and
+  `StopTrailPlanner.PlanGroupEconomicBreakeven` solved a "funded" stop below
+  entry (4354.04) - worse than the original 4355 stop - so it returned "no
+  move" and the runner sat on its original stop until price swept it at a
+  loss. It now falls back to the remaining volume's own protected breakeven
+  whenever the economic stop cannot improve on the held one (it still never
+  widens a held stop).
+- Owner DM daily wipe deletes the owner's own messages again. The incoming
+  journaling middleware removed 2026-09-17 is restored: the wipe now sweeps
+  the owner's typed messages/commands as well as the bot's own, as intended.
 
 - Restore equity-table sizing: non-scalp strategies use their own full lot
   level, while scalp uses the configured 1.5x volume-only multiplier. Snap-Back

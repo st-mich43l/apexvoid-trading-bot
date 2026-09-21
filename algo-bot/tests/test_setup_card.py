@@ -780,6 +780,61 @@ async def test_kill_setup_card_deletes_when_forced(monkeypatch):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("state,line", [
+  ("order_filled", "✅ ORDER FILLED"),
+  ("tp_booked", "🎯 TP BOOKED"),
+  ("sl_moved", "🛡 GROUP STOP"),
+])
+async def test_kill_setup_card_never_deletes_root_of_a_filled_trade(
+  monkeypatch, state, line,
+):
+  """Owner-reported 2026-09-21: delete_root_on_terminal removed the root of
+  scalps that had already filled, then the close reply (threaded to it) was
+  rejected and skipped - nothing was left in the channel for a real trade.
+  """
+  client = redis_state.get_client()
+  monkeypatch.setattr(setup_card, "should_delete_root_on_terminal", lambda: True)
+  sid = f"setup-filled-{state}"
+  await setup_card.save_forming_card(client, sid, chat_id=123, message_id=7777)
+  await setup_card.save_forming_card_status(client, sid, line, state=state)
+
+  async def delete_fn(chat_id, message_id):
+    raise AssertionError("a filled trade's root card must never be deleted")
+
+  async def edit_fn(chat_id, message_id, text):
+    pass
+
+  await setup_card.kill_setup_card(
+    client, sid, reason_code="position_closed",
+    delete_fn=delete_fn, edit_fn=edit_fn,
+  )
+
+  card = await setup_card.load_forming_card(client, sid)
+  assert card is not None
+  assert card["message_id"] == 7777
+
+
+@pytest.mark.asyncio
+async def test_kill_setup_card_retain_root_flag_overrides_delete_config(monkeypatch):
+  client = redis_state.get_client()
+  monkeypatch.setattr(setup_card, "should_delete_root_on_terminal", lambda: True)
+  await setup_card.save_forming_card(client, "setup-retain", chat_id=123, message_id=8888)
+
+  async def delete_fn(chat_id, message_id):
+    raise AssertionError("retain_root must skip the delete")
+
+  async def edit_fn(chat_id, message_id, text):
+    pass
+
+  await setup_card.kill_setup_card(
+    client, "setup-retain", reason_code="position_closed",
+    delete_fn=delete_fn, edit_fn=edit_fn, retain_root=True,
+  )
+
+  assert await setup_card.load_forming_card(client, "setup-retain") is not None
+
+
+@pytest.mark.asyncio
 async def test_kill_setup_card_falls_back_to_terminal_edit_when_delete_fails(monkeypatch):
   client = redis_state.get_client()
   monkeypatch.setattr(setup_card, "should_delete_root_on_terminal", lambda: True)

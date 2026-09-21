@@ -1145,6 +1145,7 @@ async def _post_manage_reply(
   text: str,
   remember: bool = False,
   require_reply_target: bool = False,
+  standalone_on_bad_reply: bool = False,
 ) -> int | None:
   """Post a manage reply under the root card and persist Redis keys."""
   reply_to, reason = await _resolve_reply_message_id(client, event, "internal")
@@ -1198,14 +1199,24 @@ async def _post_manage_reply(
   try:
     sent = await send(text, reply_to=reply_to, chat_id=chat_id)
   except TelegramBadRequest as error:
-    if reply_to is not None and _is_bad_reply_target(error):
+    if reply_to is None or not _is_bad_reply_target(error):
+      raise
+    if not standalone_on_bad_reply:
       log.info(
         "Auto-trade manage reply rejected for %s: %s; skipping",
         match_id,
         error,
       )
       return None
-    raise
+    # The root card this replies to is gone. Dropping a close result meant
+    # a closed trade could leave nothing at all in the channel
+    # (2026-09-21) - post it standalone instead.
+    log.info(
+      "Auto-trade manage reply rejected for %s: %s; retrying standalone",
+      match_id,
+      error,
+    )
+    sent = await send(text, reply_to=None, chat_id=chat_id)
   message_id = int(sent.message_id)
   await _save_manage_message(client, match_id, message_id=message_id, text=text)
   if remember:
@@ -1353,6 +1364,7 @@ async def _replace_manage_reply(
   old_message_id: int | None,
   remember: bool = False,
   require_reply_target: bool = False,
+  standalone_on_bad_reply: bool = False,
 ) -> int | None:
   """Delete the prior manage notification and reply with updated information.
 
@@ -1369,6 +1381,7 @@ async def _replace_manage_reply(
     text=text,
     remember=remember,
     require_reply_target=require_reply_target,
+    standalone_on_bad_reply=standalone_on_bad_reply,
   )
 
 
@@ -1787,12 +1800,15 @@ async def _deliver_compact_position_closed(
       "",
     ]))
   # Fill may have raced card create; never leave WAITING FILL after close.
+  # The root of a filled trade is never deleted - the close reply below
+  # threads to it.
   await kill_setup_card(
     client,
     match_id,
     reason_code=str(event.get("reason_code") or "position_closed"),
     delete_fn=delete_scanner_message,
     edit_fn=edit_scanner_message_text,
+    retain_root=True,
   )
   if already_closed:
     return True
@@ -1804,6 +1820,7 @@ async def _deliver_compact_position_closed(
     send=send,
     text=new_text,
     old_message_id=manage_id,
+    standalone_on_bad_reply=True,
   )
   return True
 
