@@ -238,6 +238,7 @@ from app.analysis.ohlc_source import RedisOHLCSource, window_for_timeframe
 from app.analysis.math_utils import atr_series
 from app.analysis.types import Level, Zone
 from app.analysis.zones import displacement, mark_mitigation, supply_demand
+from app.analysis.technique_geometry import TechniqueGeometrySettings, not_invalidated
 from app.analysis.levels import key_levels
 from app.analysis.swings import find_swings
 
@@ -1306,6 +1307,21 @@ def _htf_zones(
   zones = supply_demand(htf, legs)
   marked = mark_mitigation(zones, htf)
   pip_size = units.pip_size(symbol)
+  # A wall must still be a wall: a zone price has since ACCEPTED through
+  # (closed well beyond its far edge and stayed) is spent, not an opposing
+  # barrier. Owner-reported 2026-09-21: a BUY was vetoed "inside opposing
+  # supply 4348.5-4356.4" - a Sep-17 zone touched 14 times that price had
+  # been trading far above for two days. Same hold-based rule the technique
+  # layer uses, so the two never disagree about whether a zone is alive.
+  techniques = getattr(getattr(cfg, "analysis", None), "techniques", None)
+  geometry = TechniqueGeometrySettings(
+    pip_size=max(float(pip_size), 1e-12),
+    invalidation_tolerance_atr=float(
+      getattr(techniques, "invalidation_tolerance_atr", 0.5),
+    ),
+    sweep_reclaim_bars=int(getattr(techniques, "sweep_reclaim_bars", 6)),
+    max_break_episodes=int(getattr(techniques, "max_break_episodes", 2)),
+  )
   return [
     zone
     for zone in marked
@@ -1315,6 +1331,15 @@ def _htf_zones(
       pip_size=pip_size,
       cfg=cfg,
     ).execution_grade
+    and not_invalidated(
+      side="buy" if zone.side == "demand" else "sell",
+      low=float(zone.low),
+      high=float(zone.high),
+      df=htf,
+      origin_index=int(zone.origin_index),
+      atr=current_atr,
+      settings=geometry,
+    )
   ]
 
 
