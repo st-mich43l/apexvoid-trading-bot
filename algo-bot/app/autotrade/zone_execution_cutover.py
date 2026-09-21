@@ -286,29 +286,54 @@ def _is_stop_hard_error(code: str | None) -> bool:
   return False
 
 
-# Stop-DISTANCE failures depend on where price sits inside the zone right now,
-# not on the zone itself. Owner-reported 2026-09-21: a with-bias tier-A Key
-# Level SELL (zone 4349.27-4354.73, M5 strong_reclaim confirmed) was first seen
-# with price on the zone's LOW edge, so the market leg was 68 pips from the
-# structural stop (cap 60) - and the zone was INVALIDATED for good, although
-# it plans fine once price is mid-zone. Geometry errors (stop inside the entry
-# zone / opposing zone / not beyond entries) stay terminal; these do not.
-_STOP_SOFT_ENVELOPE_PREFIXES = (
+# Rejects that depend on where price sits RIGHT NOW, not on the zone itself:
+# the stop-distance envelope and "entry inside an opposing zone / barrier
+# ahead". Owner-reported 2026-09-21: a with-bias tier-A Key Level SELL passed
+# activation on its M5 confirmation and was then vetoed once, because the bid
+# sat on the zone's bottom edge inside a live M15 demand shelf (4339.9-4347.6)
+# - and the zone was INVALIDATED for good, although the same setup plans fine
+# once price is out of the overlap. Earlier the same happened for a stop
+# 68 pips away (cap 60) at first sight. Geometry errors (stop inside the entry
+# zone / opposing zone / not beyond entries, stop unavailable) stay terminal.
+_SOFT_REJECT_PREFIXES = (
   "stop_exceeds_envelope",
   "stop_exceeds_max_envelope",
+  "entry_inside_opposing",
+  "entry_inside_ambiguous",
 )
-_STOP_SOFT_COOLDOWN_SECONDS = 60
+_SOFT_REJECT_EXACT = frozenset({"opposing_barrier"})
+# A soft-rejected match is retired for good (its plan lifecycle is terminal),
+# so the cooldown is bound to the match id and lasts until the scanner issues
+# a fresh candidate for the zone - not a wall-clock timer that would let the
+# same dead match retry into "lifecycle already terminal" and kill the zone.
+_SOFT_REJECT_COOLDOWN_SECONDS = 600
 
 
-def _is_stop_envelope_distance_error(code: str | None) -> bool:
+def _is_price_dependent_reject(code: str | None) -> bool:
   text = str(code or "").strip()
   if text.startswith("v8_"):
     text = text[3:]
-  return text.startswith(_STOP_SOFT_ENVELOPE_PREFIXES)
+  return text in _SOFT_REJECT_EXACT or text.startswith(_SOFT_REJECT_PREFIXES)
+
+
+# Backwards-compatible name used by the stop pre-block below.
+_is_stop_envelope_distance_error = _is_price_dependent_reject
 
 
 def stop_cooldown_key(zone_id: str) -> str:
   return f"analysis:zone_stop_cooldown:{zone_id}"
+
+
+async def _soft_reject_cooldown_active(
+  client: Any, zone_id: str, match_id: str | None,
+) -> bool:
+  """True while THIS match (not a fresh candidate) is soft-rejected."""
+  cooled = await client.get(stop_cooldown_key(zone_id))
+  if cooled is None:
+    return False
+  if isinstance(cooled, bytes):
+    cooled = cooled.decode()
+  return str(cooled) == str(match_id)
 
 
 def _match_planned_stop_hard_error(match: StrategyMatch) -> str | None:
@@ -695,8 +720,9 @@ async def _prepare_activation(
 ) -> StrategyMatch | None:
   """Return a stamped match ready to activate, or None while waiting/blocked."""
   now = quote[2]
-  if await client.get(stop_cooldown_key(record.zone_id)) is not None:
-    # A stop-distance reject just happened for this zone; retry shortly.
+  if await _soft_reject_cooldown_active(client, record.zone_id, match.match_id):
+    # This exact match was soft-rejected (price-dependent veto) and is
+    # retired; wait for the scanner to issue a fresh candidate for the zone.
     return None
   from app.autotrade.killzone import (
     evaluate_killzone_gate,
@@ -1457,10 +1483,11 @@ async def _activate_match(
       )
     except Exception:
       log.exception("could not retire non-executable setup=%s", match.match_id)
-  if _is_stop_envelope_distance_error(reject_reason):
-    # Retry once price/entry geometry changes, not every spot tick.
+  if _is_price_dependent_reject(reject_reason):
     await client.set(
-      stop_cooldown_key(record.zone_id), "1", ex=_STOP_SOFT_COOLDOWN_SECONDS,
+      stop_cooldown_key(record.zone_id),
+      str(match.match_id),
+      ex=_SOFT_REJECT_COOLDOWN_SECONDS,
     )
   if _publish_should_terminalize_zone_watch(
     status=result.status,

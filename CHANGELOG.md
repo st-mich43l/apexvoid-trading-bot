@@ -13,6 +13,21 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Price-dependent publish rejects no longer kill a zone, and the retry is
+  bound to the match. Live 2026-09-21: a with-bias tier-A Key Level SELL passed
+  activation on its M5 confirmation (`reaction_m5_authoritative_in_zone`,
+  first real live activation since the M5 parser fix) and was then vetoed
+  `v8_entry_inside_opposing_zone` because the bid (4344.915) sat on the zone's
+  bottom edge inside a live M15 demand shelf (4339.92-4347.56). The zone was
+  INVALIDATED, and 2 s later the retry hit "durable TradePlan lifecycle is
+  already terminal" (`reason=invalidated`), which is a hard reject. The soft
+  set from the stop-distance fix now also covers `entry_inside_opposing_*`,
+  `entry_inside_ambiguous_*` and `opposing_barrier`, and the cooldown is stored
+  as the rejected `match_id` (600 s) instead of a 60 s timer: the retired match
+  waits for a fresh candidate (a new touch/confirmation bar mints a new
+  `match_id`), while a fresh candidate proceeds immediately. The previous
+  60 s timer let the same dead match retry into the hard reject. Geometry
+  errors and all other rejects are unchanged.
 - Two zone-relevance tests could never fail meaningfully. They call
   `evaluate_active_zone_watches` without the OHLC `source` production always
   passes (spot loop and bar dispatcher), so there was no ATR, nothing could be
