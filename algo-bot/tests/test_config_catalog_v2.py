@@ -85,13 +85,16 @@ BASELINE = {
   # than inline on ExecutionReactionConfig because that class carries
   # model/field validators, which the python_runtime projection refuses
   # to auto-filter for a mixed-owner model.
-  "entries": 654,
-  "configurable": 547,
+  # 2026-09-17 Trendline V2 (+15), zone market-relevance (+3), 2026-09-21
+  # technique zone retests (+1: analysis.techniques.retest_max_touches) - all
+  # ConfigOwner.PYTHON, real canonical_env, none deprecated-alias'd.
+  "entries": 676,
+  "configurable": 569,
   "protocol": 10,
   "algorithm": 97,
-  "owners": {"python": 508, "shared": 96, "ctrader": 50},
-  "projection": 604,
-  "env": 547,
+  "owners": {"python": 530, "shared": 96, "ctrader": 50},
+  "projection": 626,
+  "env": 569,
   "deprecated_aliases": 21,
 }
 

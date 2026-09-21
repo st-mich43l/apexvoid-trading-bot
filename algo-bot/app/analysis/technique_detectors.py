@@ -120,7 +120,11 @@ def _publish_technique(
   price = _current_price(ctx, df)
   atr = _atr(ind)
   if instance.measured.get("mitigated"):
-    return None
+    # Touched zones were validated as still holding (never closed through)
+    # when the instance was collected; here only the retest budget remains.
+    retests = int(getattr(ctx.settings, "technique_retest_max_touches", 0))
+    if retests <= 0 or int(instance.measured.get("touches", 0)) > retests:
+      return None
   direction = "BUY" if instance.side == "buy" else "SELL"
   zone = _instance_to_zone(instance)
   structural_low = float(instance.measured.get("structural_low", zone.low))

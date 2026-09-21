@@ -16,9 +16,11 @@ from app.analysis.technique_geometry import (
   collect_technique_instances,
   discover_ifvg_instances,
   epsilon,
+  not_invalidated,
   overlap_ratio,
   proximal_retest,
   validate_technique_instance,
+  zone_is_spent,
 )
 from app.analysis.types import Zone
 
@@ -549,3 +551,107 @@ def test_collect_technique_instances_validation_disabled_skips_filter():
   assert rejects_on == {"proximal_retest": 1}
   assert len(without_validation) == 1
   assert rejects_off == {}
+
+
+# --- zone holds vs zone broken (owner 2026-09-21, XAU 4341-4353 demand) ------
+#
+# One M5 close 3.6 points under the zone (a liquidity sweep just before the
+# week's biggest rally) used to kill it for good, though it then held on
+# three more taps. A break is acceptance beyond the far edge, not a close
+# through it.
+
+
+def _closes(values: list[float]) -> pd.DataFrame:
+  return _df([(v, v + 0.3, v - 0.3, v) for v in values])
+
+
+def _holds(closes: list[float], **overrides) -> bool:
+  settings = TechniqueGeometrySettings(pip_size=0.1, **overrides)
+  return not_invalidated(
+    side="buy", low=100.0, high=110.0, df=_closes(closes),
+    origin_index=0, atr=4.0, settings=settings,
+  )
+
+
+def test_sweep_below_the_zone_and_reclaim_keeps_it_alive():
+  # 96 is 4 below the low (> 0.5 ATR = 2.0 tolerance): a real close-through,
+  # but the very next closes are back above 100 -> a sweep, not a break.
+  assert _holds([105, 96, 101, 104, 106])
+
+
+def test_unreclaimed_close_through_kills_the_zone():
+  assert not _holds([105, 96, 95, 94, 95, 94, 95, 96, 95])
+
+
+def test_shallow_close_inside_the_tolerance_is_not_a_break_at_all():
+  # 99.0 is only 1.0 under the low, inside the 0.5 ATR (2.0) tolerance.
+  assert _holds([105, 99.0, 99.0, 99.0, 99.0, 99.0, 99.0, 99.0, 99.0])
+
+
+def test_a_break_still_in_progress_is_not_tradeable():
+  # Closed through and has not reclaimed yet - do not buy into a zone
+  # price is currently accepted below.
+  assert not _holds([105, 104, 96])
+
+
+def test_zone_swept_more_than_the_episode_budget_is_noise():
+  sweeps = [105, 96, 101, 96, 101, 96, 101, 104]  # three forgiven sweeps
+  assert not _holds(sweeps, max_break_episodes=2)
+  assert _holds(sweeps, max_break_episodes=3)
+
+
+def test_legacy_settings_restore_any_close_through_is_dead():
+  legacy = dict(
+    invalidation_tolerance_atr=0.0, sweep_reclaim_bars=0, max_break_episodes=0,
+  )
+  assert not _holds([105, 96, 101, 104], **legacy)
+
+
+def _spent(*, mitigated=True, touches=8, closes=(105, 106, 107), **overrides) -> bool:
+  settings = TechniqueGeometrySettings(pip_size=0.1, **overrides)
+  return zone_is_spent(
+    mitigated=mitigated, touches=touches, side="buy", low=100.0, high=110.0,
+    df=_closes(list(closes)), origin_index=0, atr=4.0, settings=settings,
+  )
+
+
+def test_untouched_zone_is_never_spent():
+  assert not _spent(mitigated=False, touches=0)
+
+
+def test_touched_zone_that_still_holds_stays_tradeable():
+  # 8 taps (XAU 4341-4353 had 8 by this morning) and never accepted below.
+  assert not _spent(touches=8)
+
+
+def test_touch_cap_is_only_a_sanity_bound():
+  assert _spent(touches=31)
+  assert not _spent(touches=31, retest_max_touches=60)
+
+
+def test_retest_cap_zero_restores_first_touch_consumption():
+  assert _spent(touches=1, retest_max_touches=0)
+
+
+def test_violated_zone_flagged_mitigated_is_still_spent():
+  # breaker_blocks stamps a violated OB mitigated=True, touches=1.
+  assert _spent(touches=1, closes=(105, 96, 95, 94, 95, 94, 95, 96))
+
+
+def test_touched_holding_demand_zone_becomes_an_instance_again():
+  df = _closes([108, 104, 101, 106, 104, 105])
+  zone = Zone(
+    100.0, 110.0, "demand", origin_index=0, created_ts=df.index[0],
+    source="supply_demand", touches=8, mitigated=True, score=14.5,
+  )
+  kwargs = dict(
+    sd_zones=[zone], ob_zones=[], fvg_zones=[], df=df, price=105.0, atr=4.0,
+  )
+  new = TechniqueGeometrySettings(pip_size=0.1, max_zone_atr=4.0)
+  old = TechniqueGeometrySettings(
+    pip_size=0.1, max_zone_atr=4.0, retest_max_touches=0,
+  )
+  kept, _ = collect_technique_instances(settings=new, **kwargs)
+  dropped, _ = collect_technique_instances(settings=old, **kwargs)
+  assert len(kept) == 1
+  assert dropped == []

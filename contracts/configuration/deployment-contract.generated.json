@@ -119,6 +119,10 @@
       "analysis.swings.fractal_size",
       "analysis.swings.zigzag.atr_mult",
       "analysis.swings.zigzag.pct",
+      "analysis.techniques.invalidation_tolerance_atr",
+      "analysis.techniques.max_break_episodes",
+      "analysis.techniques.retest_max_touches",
+      "analysis.techniques.sweep_reclaim_bars",
       "analysis.techniques.validation_enabled",
       "analysis.trendlines.approach_min_distance_atr",
       "analysis.trendlines.chop_minimum_validation_touches",
@@ -602,7 +606,7 @@
     "XAU_ZONE_PREFERRED_MAX_WIDTH_PRICE": "instruments.XAU.analysis.zones.preferred_maximum_width_price",
     "XAU_ZONE_PREFERRED_MIN_WIDTH_PRICE": "instruments.XAU.analysis.zones.preferred_minimum_width_price"
   },
-  "fingerprint": "45773d05333f26c42039b249e69a657804373105c69b6206849a4a2f77fab720",
+  "fingerprint": "3f085db7e0dfffb00177e8f53817f90107c0390c238731040448098bb20b51e0",
   "instrument_schema": {
     "active_projection_symbol": "XAU",
     "optional": [

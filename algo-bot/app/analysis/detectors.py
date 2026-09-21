@@ -284,6 +284,10 @@ class DetectorSettings:
   fvg_max_atr: float = 2.0
   fvg_entry_max_width_price: float = 5.0
   technique_validation_enabled: bool = True
+  technique_retest_max_touches: int = 30
+  technique_invalidation_tolerance_atr: float = 0.5
+  technique_sweep_reclaim_bars: int = 6
+  technique_max_break_episodes: int = 2
   causal_structure: bool = False
   max_cluster_span_multiple: float = 2.0
   # Recovery mission (2026-07-30): these six sources were live around
@@ -396,6 +400,10 @@ class DetectorSettings:
       fvg_entry_max_width_price=self.fvg_entry_max_width_price,
       fvg_max_atr=self.fvg_max_atr,
       technique_validation_enabled=self.technique_validation_enabled,
+      technique_retest_max_touches=self.technique_retest_max_touches,
+      technique_invalidation_tolerance_atr=self.technique_invalidation_tolerance_atr,
+      technique_sweep_reclaim_bars=self.technique_sweep_reclaim_bars,
+      technique_max_break_episodes=self.technique_max_break_episodes,
       causal_structure=self.causal_structure,
       max_cluster_span_multiple=self.max_cluster_span_multiple,
     )
@@ -657,6 +665,10 @@ def detector_settings_from(config: object | None = None) -> DetectorSettings:
       strategies.technique.fvg.entry_max_width_price
     ),
     technique_validation_enabled=bool(analysis.techniques.validation_enabled),
+    technique_retest_max_touches=int(analysis.techniques.retest_max_touches),
+    technique_invalidation_tolerance_atr=float(analysis.techniques.invalidation_tolerance_atr),
+    technique_sweep_reclaim_bars=int(analysis.techniques.sweep_reclaim_bars),
+    technique_max_break_episodes=int(analysis.techniques.max_break_episodes),
     box_breakout_enabled=bool(strategies.selection.box_breakout_enabled),
     break_retest_enabled=bool(strategies.breakout.break_retest_enabled),
     momentum_ride_enabled=bool(strategies.selection.momentum_ride_enabled),

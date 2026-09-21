@@ -2,8 +2,8 @@
 
 > Generated from the canonical configuration catalog (`app.configuration.environment_contract`). Do not edit manually.
 
-- Contract fingerprint: `45773d05333f26c42039b249e69a657804373105c69b6206849a4a2f77fab720`
-- Environment-bound fields: `565`
+- Contract fingerprint: `3f085db7e0dfffb00177e8f53817f90107c0390c238731040448098bb20b51e0`
+- Environment-bound fields: `569`
 - Deprecated aliases: `21`
 
 Secret values are never emitted; secret defaults render as `<redacted>`.
@@ -514,6 +514,10 @@ Secret values are never emitted; secret defaults render as `<redacted>`.
 | `SWEEP_BODY_FRAC` | `analysis.liquidity.sweep.body_frac` | `float` | no | no | — | `0.5` |
 | `SWEEP_REACT_BARS` | `analysis.liquidity.sweep.react_bars` | `int` | no | no | — | `3` |
 | `SWING_FRACTAL_N` | `analysis.swings.fractal_size` | `int` | no | no | — | `2` |
+| `TECHNIQUE_INVALIDATION_TOLERANCE_ATR` | `analysis.techniques.invalidation_tolerance_atr` | `float` | no | no | — | `0.5` |
+| `TECHNIQUE_MAX_BREAK_EPISODES` | `analysis.techniques.max_break_episodes` | `int` | no | no | — | `2` |
+| `TECHNIQUE_RETEST_MAX_TOUCHES` | `analysis.techniques.retest_max_touches` | `int` | no | no | — | `30` |
+| `TECHNIQUE_SWEEP_RECLAIM_BARS` | `analysis.techniques.sweep_reclaim_bars` | `int` | no | no | — | `6` |
 | `TECHNIQUE_VALIDATION_ENABLED` | `analysis.techniques.validation_enabled` | `bool` | no | no | — | `True` |
 | `TELEGRAM_BOT_TOKEN` | `bootstrap.telegram.bot_token` | `str` | yes | no | — | `<redacted>` |
 | `TELEGRAM_OWNER_ID` | `delivery.telegram.telegram_owner_id` | `Optional[int]` | no | no | — | `None` |
