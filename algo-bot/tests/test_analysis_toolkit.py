@@ -547,7 +547,9 @@ def test_analyze_excludes_mitigated_zones_from_reconcile_opposing(monkeypatch):
     [],
   )
 
-  assert len(marked) == 1
+  # First stamp is the merged/map zone set (the one that feeds reconcile);
+  # a second, unmerged pass stamps the per-origin technique zones.
+  assert len(marked) == 2
   full_zone_set = marked[0]
   mitigated_in_full_set = [zone for zone in full_zone_set if zone.mitigated]
   # The fixture must actually exercise both paths, or this test would
