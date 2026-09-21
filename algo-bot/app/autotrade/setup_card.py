@@ -1469,6 +1469,22 @@ def _terminal_card_text(reason_code: str, existing_text: str | None = None) -> s
   return f"🤖 <b>ApexVoid Algo</b>\n{status}"
 
 
+async def _card_was_filled(client, setup_id: str, card_text: str) -> bool:
+  """True once any order for this setup filled (root must never be deleted)."""
+  upper = (card_text or "").upper()
+  if any(token in upper for token in ("ORDER FILLED", "POSITION CLOSED")):
+    return True
+  try:
+    status = await load_forming_card_status_snapshot(client, setup_id)
+  except Exception:
+    log.exception("card fill check status load failed setup_id=%s", setup_id)
+    return False
+  if status is None:
+    return False
+  filled_states = ("order_filled", "sl_moved", "tp_booked")
+  return status.state in filled_states
+
+
 async def kill_setup_card(
   client,
   setup_id: str,
@@ -1476,6 +1492,7 @@ async def kill_setup_card(
   reason_code: str,
   delete_fn: DeleteFn,
   edit_fn: EditFn,
+  retain_root: bool = False,
 ) -> None:
   """Close the forming/root card on reject/invalidate/expire/position close.
 
@@ -1492,7 +1509,15 @@ async def kill_setup_card(
 
   existing_text = str(card.get("text") or "")
   intact = _strip_live_price_marker(existing_text) if existing_text else existing_text
-  if not should_delete_root_on_terminal():
+  # Owner-reported 2026-09-21: with delete_root_on_terminal on, a scalp
+  # that filled and closed within minutes lost its root card AND the close
+  # reply (threaded to the just-deleted root was rejected and skipped), so
+  # a trade that really executed left nothing in the channel. Deleting the
+  # root is only for setups that never filled (rejected/expired/
+  # invalidated/cancelled); a filled trade's root always stays.
+  if retain_root or await _card_was_filled(client, setup_id, existing_text):
+    retain_root = True
+  if retain_root or not should_delete_root_on_terminal():
     if intact and intact != existing_text:
       try:
         await edit_fn(card["chat_id"], card["message_id"], intact)
