@@ -73,6 +73,59 @@ def _fmt_zone(record: ZoneWatch, relevance: "zone_relevance.ZoneRelevance", now:
   )
 
 
+# How far ahead of price a map zone is still worth listing, and how many.
+_MAP_ZONE_MAX_ATR = 8.0
+_MAP_ZONE_LIMIT = 6
+
+
+def _map_zone_distance(entry, price: float) -> float:
+  if price < entry.lo:
+    return entry.lo - price
+  if price > entry.hi:
+    return price - entry.hi
+  return 0.0
+
+
+def map_zone_lines(market_map, price: float, atr: float | None, records) -> list[str]:
+  """The bot's own scored map zones near price, nearest first (display only).
+
+  ZoneWatch only holds a zone once a detector has seen a reaction there, so a
+  fresh supply/demand ahead of price is invisible to the setups list even
+  though the market map already ranks it. This lists those zones and marks
+  which ones ZoneWatch is already tracking.
+  """
+  if market_map is None or not getattr(market_map, "entries", None):
+    return []
+  limit = (atr * _MAP_ZONE_MAX_ATR) if atr and atr > 0 else None
+  rows = []
+  for entry in market_map.entries:
+    if entry.tier != "major":
+      continue
+    distance = _map_zone_distance(entry, price)
+    if limit is not None and distance > limit:
+      continue
+    rows.append((distance, entry))
+  rows.sort(key=lambda row: (row[0], -row[1].score))
+  lines: list[str] = []
+  for distance, entry in rows[:_MAP_ZONE_LIMIT]:
+    side = "SELL" if entry.side == "sell" else "BUY"
+    armed = any(
+      record.direction == side and record.low <= entry.hi and record.high >= entry.lo
+      for record in records
+    )
+    if entry.contains_price or distance <= 0.0:
+      where = "price inside"
+    else:
+      where = f"{distance:.1f} pts" + (f" / {distance / atr:.1f} ATR" if atr and atr > 0 else "")
+    tags = ",".join(entry.tags[:4])
+    state = "tracked in ZoneWatch" if armed else "waiting for M5 reaction"
+    lines.append(
+      f"  {side} {entry.lo:.2f}-{entry.hi:.2f} · {where} · {tags} · "
+      f"score {entry.score:.0f} · {state}"
+    )
+  return lines
+
+
 async def current_market_setups_text(symbol: str = "XAU") -> str:
   sym = str(symbol or "XAU").upper()
   client = redis_state.get_client()
@@ -124,6 +177,20 @@ async def current_market_setups_text(symbol: str = "XAU") -> str:
     lines.append(f"<b>ACTIVE / {coverage.upper()}</b>  ({len(active)})")
     for record, relevance in active:
       lines.append(f"  {_fmt_zone(record, relevance, now)}")
+
+  try:
+    from app.analysis import market_map_delivery
+
+    market_map = await market_map_delivery.get_current_market_map(sym)
+    m5_atr = (await _atr_by_source_timeframe(client, sym, {"M5"})).get("M5")
+    map_lines = map_zone_lines(market_map, mid, m5_atr, records)
+  except Exception:  # noqa: BLE001 - display-only section must never break the report
+    map_lines = []
+  if map_lines:
+    bias = getattr(market_map, "bias", "") or "-"
+    lines.append("")
+    lines.append(f"<b>MARKET MAP ZONES</b>  (bias {bias}, nearest first)")
+    lines.extend(map_lines)
 
   if memory:
     lines.append("")

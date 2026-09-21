@@ -121,6 +121,12 @@ dated section after deployment.
   still require their normal M1 confirmation.
 
 ### Added
+- `/algo_setups` now lists the bot's own scored MARKET MAP ZONES (major tier,
+  within 8 M5 ATR, nearest first, with map bias) and marks whether ZoneWatch is
+  already tracking each one. ZoneWatch only holds a zone once a detector has
+  seen a reaction there, so the report said `coverage: GAP` while the map held
+  a score-23 supply 7 points above price. Display only; nothing here arms or
+  trades a zone, and a map failure never breaks the report.
 - Trendline V2: immutable causal A/B anchors, independent forward reaction
   validation, slope/penetration/violation telemetry, and explicit line
   lifecycle (`tentative`, `confirmed`, `degraded`, `broken`, `exhausted`).
