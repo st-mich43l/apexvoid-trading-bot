@@ -13,6 +13,16 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Key level touches now count wick touches, not only fractal swing points.
+  Owner-reported 2026-09-21. `levels.key_levels` counted a touch only when a
+  confirmed fractal swing sat in the cluster, so a wick that poked a level and
+  was rejected without forming a fractal never counted (live XAU M5: 4369.43
+  had 3 swing touches but 13 wick touches; 4346.18 5 vs 13; 4349.26 5 vs 18).
+  The main analysis now passes the bars in and each level's touches become the
+  number of distinct wick episodes into its band (`levels.wick_touch_episodes`:
+  a bar counts when its range overlaps the band unless it opened on one side
+  and closed beyond the far edge - a break, not a touch; consecutive bars are
+  one episode). It only raises a level's touch count; it never removes a level.
 - Order Block detection never found reversal order blocks - it had never
   produced a single auto trade. Owner-reported 2026-09-21: XAU M15 demand OB
   at 4337-42 (the last down candle before a +18 impulse) was invisible to the
