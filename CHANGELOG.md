@@ -13,6 +13,26 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- The M5-authoritative activation fallback never worked in production. The
+  scanner stores `m5_confirmation_bar_ts` as an ISO string
+  (`2026-09-21T13:25:00+00:00`); activation's `_parse_confirmation_ts` was a
+  bare `int()`, which returns None for it, and `quote_inside_fresh` treats None
+  as "no fresh M5 confirmation". So despite
+  `execution.activation.m5_authoritative_fallback: quote_inside_fresh`, every
+  reaction setup still needed an M1 trigger inside a 2-bar window
+  (`reaction_trigger_missing`, owner 2026-09-21: "why m1? m1 only for
+  execution"). It now accepts ISO / pandas / numeric stamps via
+  `parse_bar_timestamp`, so a setup with an M5 structural confirmation in the
+  last 6 bars can activate while price is inside the zone; M1 stays the entry
+  timing. All earlier guards (impulse-against, location, sweep-reclaim,
+  proximal, opposing barrier) still run first. Existing tests only ever used
+  numeric stamps, which is why this survived.
+- `tests/test_structural_barrier_wiring.py` failed whenever run outside 07-11 /
+  13-16 UTC (default schema enforces the reaction publish window; production
+  config has it off): it now freezes the UTC hour like the publish suite. The
+  CI allowlist (`tests/ci_autotrade_paths.txt`) now includes the activation,
+  entry-location, technique-geometry/origin, wall-liveness, setups-report and
+  barrier-wiring suites, which CI was not running.
 - Opposing-barrier walls now exclude zones price has already accepted through.
   `_htf_zones` fed EVERY width-eligible M15 supply/demand zone to the TradePlan
   barrier guard, stamping touches but never checking that price had since

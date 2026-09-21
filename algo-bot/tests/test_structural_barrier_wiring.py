@@ -189,6 +189,29 @@ def _no_news(monkeypatch):
   monkeypatch.setattr(worker, "event_in_window", AsyncMock(return_value=None))
 
 
+@pytest.fixture(autouse=True)
+def _freeze_publish_window_hour(monkeypatch):
+  """Default schema enforces the reaction publish window; without freezing the
+  UTC hour these tests fail whenever they run outside 07-11 / 13-16 UTC."""
+  from app.autotrade import killzone as kz
+
+  real_gate = kz.evaluate_killzone_gate
+  real_window = kz.evaluate_reaction_publish_window
+
+  monkeypatch.setattr(
+    kz, "evaluate_killzone_gate",
+    lambda *, ts=None, hour=None, cfg=None, require=True: real_gate(
+      ts=None, hour=14, cfg=cfg, require=require,
+    ),
+  )
+  monkeypatch.setattr(
+    kz, "evaluate_reaction_publish_window",
+    lambda *, ts=None, hour=None, cfg=None, require=True: real_window(
+      ts=None, hour=14, cfg=cfg, require=require,
+    ),
+  )
+
+
 @pytest.mark.asyncio
 async def test_htf_zones_still_used_when_frames_lacks_multi_timeframe_coverage(
   monkeypatch,

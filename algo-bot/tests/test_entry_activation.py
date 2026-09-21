@@ -339,6 +339,53 @@ def test_m5_quote_inside_fresh_requires_recent_confirmation():
   assert missing.reason_code == "reaction_trigger_missing"
 
 
+def _iso(epoch: int) -> str:
+  from datetime import datetime, timezone
+
+  return datetime.fromtimestamp(epoch, timezone.utc).isoformat()
+
+
+def test_m5_quote_inside_fresh_accepts_the_iso_stamp_the_scanner_actually_stores():
+  # Prod stores m5_confirmation_bar_ts as "2026-09-21T13:25:00+00:00". A bare
+  # int() parse returned None for it, so the fallback never fired live.
+  fresh = _activate(
+    strategy="Key Level",
+    trigger=None,
+    quote_inside=True,
+    m5_authoritative=True,
+    m5_fallback="quote_inside_fresh",
+    m5_confirmation_bar_ts=_iso(NOW - 300),
+  )
+  assert fresh.allowed is True
+  assert fresh.reason_code == "reaction_m5_authoritative_in_zone"
+  assert fresh.measured["m5_confirmation_age_seconds"] == 300
+
+  stale = _activate(
+    strategy="Key Level",
+    trigger=None,
+    quote_inside=True,
+    m5_authoritative=True,
+    m5_fallback="quote_inside_fresh",
+    m5_confirmation_bar_ts=_iso(NOW - 7 * 300),
+  )
+  assert stale.allowed is False
+  assert stale.reason_code == "reaction_trigger_missing"
+
+
+def test_m5_confirmation_stamp_parses_iso_pandas_numeric_and_garbage():
+  import pandas as pd
+
+  from app.autotrade.entry_activation import _parse_confirmation_ts
+
+  assert _parse_confirmation_ts("2026-09-21T13:25:00+00:00") == 1789997100
+  assert _parse_confirmation_ts("2026-09-21T13:25:00Z") == 1789997100
+  assert _parse_confirmation_ts(pd.Timestamp("2026-09-21 13:25", tz="UTC")) == 1789997100
+  assert _parse_confirmation_ts("1789997100") == 1789997100
+  assert _parse_confirmation_ts(1789997100) == 1789997100
+  assert _parse_confirmation_ts(None) is None
+  assert _parse_confirmation_ts("not-a-time") is None
+
+
 def test_m5_authoritative_false_without_m1_still_missing():
   decision = _activate(
     strategy="Key Level",

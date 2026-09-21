@@ -37,3 +37,10 @@ tests/test_autotrade_units.py
 tests/test_fx_one_to_two.py
 tests/test_instrument_scale_parity.py
 tests/test_import_all_modules.py
+tests/test_entry_activation.py
+tests/test_entry_location.py
+tests/test_technique_geometry.py
+tests/test_technique_zone_origins.py
+tests/test_htf_walls_live_only.py
+tests/test_setups_report.py
+tests/test_structural_barrier_wiring.py
