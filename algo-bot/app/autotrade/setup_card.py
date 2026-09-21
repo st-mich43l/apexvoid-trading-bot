@@ -1469,10 +1469,24 @@ def _terminal_card_text(reason_code: str, existing_text: str | None = None) -> s
   return f"🤖 <b>ApexVoid Algo</b>\n{status}"
 
 
+_FILLED_CARD_TOKENS = (
+  "ORDER ACTIVATED",
+  "POSITION ACTIVATED",
+  "ORDER FILLED",
+  "POSITION CLOSED",
+  "TP BOOKED",
+  "GROUP STOP",
+  "STOP LOSS",
+  "SL HIT",
+  "CLOSED",
+)
+
+
 async def _card_was_filled(client, setup_id: str, card_text: str) -> bool:
-  """True once any order for this setup filled (root must never be deleted)."""
-  upper = (card_text or "").upper()
-  if any(token in upper for token in ("ORDER FILLED", "POSITION CLOSED")):
+  """True once any order for this setup filled - a filled (or filled and
+  closed) trade is not a terminal setup and its root is always left alone.
+  """
+  if any(token in (card_text or "").upper() for token in _FILLED_CARD_TOKENS):
     return True
   try:
     status = await load_forming_card_status_snapshot(client, setup_id)
@@ -1481,8 +1495,11 @@ async def _card_was_filled(client, setup_id: str, card_text: str) -> bool:
     return False
   if status is None:
     return False
-  filled_states = ("order_filled", "sl_moved", "tp_booked")
-  return status.state in filled_states
+  if status.state in ("order_filled", "sl_moved", "tp_booked"):
+    return True
+  return any(
+    token in (status.status_line or "").upper() for token in _FILLED_CARD_TOKENS
+  )
 
 
 async def kill_setup_card(
