@@ -13,6 +13,19 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Manual algo runner stop after TP1 now sits at the ladder's DEEPEST planned
+  entry instead of its own shallow entry. Owner-reported live 2026-09-21
+  (manual 409, XAU SELL zone 4341-4344, SL 4346): only the shallow leg filled
+  (0.08 @ 4341.04); TP1 banked half of it, the unfilled 4342.5 / 4344.5 legs
+  were cancelled, and the runner's stop went to its own entry (BE+6 ticks,
+  4340.98). A normal retest of the zone swept it for ~0 while price kept
+  falling. The group-economic planner fell back to per-clip BE because the
+  funded stop (4346.49) was no tighter than the original 4346. It now records
+  the deepest planned entry (filled legs plus still-pending legs, before they
+  are cancelled) and stops the runner there (4344.50). The economic stop still
+  binds when tighter, an already-tighter held stop is never loosened, and a
+  one-price ladder keeps the protected BE. TP2's shallow-entry trail is
+  unchanged.
 - Premium/discount no longer blocks trades that go WITH the higher-timeframe
   bias. Owner-reported 2026-09-21: XAU H1 bias was down and the map held a
   score-23 supply (OB + breaker + FVG, 4344-4356) just above price, but the

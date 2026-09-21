@@ -403,6 +403,163 @@ public sealed class StopTrailPlannerTests
     );
   }
 
+  [Theory]
+  [InlineData(TradeDirection.Sell, 4341.04, 4346.0, 4344.5, 4344.50)]
+  [InlineData(TradeDirection.Buy, 4341.0, 4336.0, 4338.5, 4338.50)]
+  public void GroupEconomicBreakevenTrailsRunnerToDeepestPlannedEntry(
+    TradeDirection direction,
+    double entry,
+    double original,
+    double deepest,
+    double expectedStop
+  )
+  {
+    // Owner-reported live 2026-09-21 (manual 409, SELL zone 4341-4344): only
+    // the shallow leg filled (0.08 @ 4341.04), TP1 banked half of it and the
+    // unfilled legs (4342.5, 4344.5) were cancelled. The runner's stop went to
+    // its own entry (4340.98) and a normal retest of the zone swept it for
+    // ~0. It must sit at the deepest planned entry instead.
+    var states = new[]
+    {
+      State(direction, Convert.ToDecimal(entry), Convert.ToDecimal(original)) with
+      {
+        PositionId = 41710394,
+        InitialVolume = 800,
+        RemainingVolume = 400,
+        GroupInitialVolume = 800,
+      },
+    };
+
+    var move = Assert.IsType<StopTrailMove>(
+      StopTrailPlanner.PlanGroupEconomicBreakeven(
+        states,
+        groupInitialVolume: 800,
+        bookedPipVolume: 55.7m * 400m,
+        Symbol,
+        pipSize: 0.1m,
+        protectedBufferTicks: 6,
+        plannedDeepestEntry: Convert.ToDecimal(deepest)
+      )
+    );
+
+    Assert.Equal(Convert.ToDecimal(expectedStop), move.StopLoss);
+    Assert.Equal("deepest entry", move.Label);
+    // Room, not BE: the runner stop is on the losing side of its own entry.
+    Assert.True(direction == TradeDirection.Buy
+      ? move.StopLoss < states[0].EntryPrice
+      : move.StopLoss > states[0].EntryPrice);
+  }
+
+  [Fact]
+  public void GroupEconomicBreakevenKeepsEconomicStopWhenItIsTighterThanDeepestEntry()
+  {
+    // Booked profit funds only 4352.98 (see ManualLadderTp1UsesGroupEconomic
+    // Breakeven). A deeper planned entry must not loosen that: the group's
+    // protected buffer wins.
+    var states = new[]
+    {
+      State(TradeDirection.Sell, 4351.5m, 4356.0m) with
+      {
+        PositionId = 92,
+        InitialVolume = 900,
+        RemainingVolume = 900,
+        GroupInitialVolume = 3_000,
+      },
+      State(TradeDirection.Sell, 4353.0m, 4356.0m) with
+      {
+        PositionId = 93,
+        InitialVolume = 600,
+        RemainingVolume = 600,
+        GroupInitialVolume = 3_000,
+      },
+    };
+
+    var move = Assert.IsType<StopTrailMove>(
+      StopTrailPlanner.PlanGroupEconomicBreakeven(
+        states,
+        groupInitialVolume: 3_000,
+        bookedPipVolume: 30m * 500m,
+        Symbol,
+        pipSize: 0.1m,
+        protectedBufferTicks: 6,
+        plannedDeepestEntry: 4355.5m
+      )
+    );
+
+    Assert.Equal(4352.98m, move.StopLoss);
+    Assert.Equal("group BE+6 ticks", move.Label);
+  }
+
+  [Fact]
+  public void GroupEconomicBreakevenDeepestEntryNeverLoosensAHeldStop()
+  {
+    var states = new[]
+    {
+      State(TradeDirection.Sell, 4341.04m, 4344.0m) with
+      {
+        PositionId = 41710394,
+        InitialVolume = 800,
+        RemainingVolume = 400,
+        GroupInitialVolume = 800,
+      },
+    };
+
+    var move = StopTrailPlanner.PlanGroupEconomicBreakeven(
+      states,
+      groupInitialVolume: 800,
+      bookedPipVolume: 55.7m * 400m,
+      Symbol,
+      pipSize: 0.1m,
+      protectedBufferTicks: 6,
+      plannedDeepestEntry: 4344.5m
+    );
+
+    // The held 4344.00 is already tighter than the deepest entry; it is never
+    // moved back out to 4344.50.
+    Assert.True(move is null || move.StopLoss <= 4344.0m);
+  }
+
+  [Theory]
+  [InlineData(TradeDirection.Buy)]
+  [InlineData(TradeDirection.Sell)]
+  public void GroupEconomicBreakevenSinglePriceLadderKeepsProtectedBreakeven(
+    TradeDirection direction
+  )
+  {
+    // No planned entry deeper than the fill (one-price ladder): there is no
+    // zone depth to give, so the protected BE (+buffer) still applies.
+    var isBuy = direction == TradeDirection.Buy;
+    var original = isBuy ? 4355.0m : 4364.0m;
+    var entry = isBuy ? 4359.49m : 4359.51m;
+    var states = new[]
+    {
+      State(direction, entry, original) with
+      {
+        PositionId = 41693612,
+        InitialVolume = 800,
+        RemainingVolume = 400,
+        GroupInitialVolume = 800,
+      },
+    };
+
+    var move = Assert.IsType<StopTrailMove>(
+      StopTrailPlanner.PlanGroupEconomicBreakeven(
+        states,
+        groupInitialVolume: 800,
+        bookedPipVolume: 55.7m * 400m,
+        Symbol,
+        pipSize: 0.1m,
+        protectedBufferTicks: 6,
+        plannedDeepestEntry: entry
+      )
+    );
+
+    Assert.Equal(
+      StopTrailPlanner.ProtectedBreakevenStop(direction, entry, Symbol, 6),
+      move.StopLoss
+    );
+  }
+
   [Fact]
   public void UsesOriginalOrdinalsForAdaptiveTargetPlans()
   {
