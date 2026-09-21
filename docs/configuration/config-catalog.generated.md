@@ -3,9 +3,9 @@
 > Generated from the typed `ApexVoidConfig` Catalog V2 schema. Do not edit manually.
 
 - Catalog version: `2`
-- Contract fingerprint: `45773d05333f26c42039b249e69a657804373105c69b6206849a4a2f77fab720`
-- Document fingerprint: `efc9a29f077cd658463f0ce6f9e0678f3e4d4f5f5282e54fa64ec75fa912bce0`
-- Items: `672`
+- Contract fingerprint: `3f085db7e0dfffb00177e8f53817f90107c0390c238731040448098bb20b51e0`
+- Document fingerprint: `e97622da1d556236e6bb7ce995e0456203ed3f9de0bdd66f41c0ff919e4a7f48`
+- Items: `676`
 - Runtime status: canonical-only; `app.core.config.runtime_config` is authoritative
 
 ## actionability
@@ -163,6 +163,10 @@
 | `analysis.swings.fractal_size` | `SWING_FRACTAL_N` | `int` | `bars` | `configurable` | `2` |
 | `analysis.swings.zigzag.atr_mult` | `ZIGZAG_ATR_MULT` | `float` | `atr` | `configurable` | `1.0` |
 | `analysis.swings.zigzag.pct` | `ZIGZAG_PCT` | `float` | `percent` | `configurable` | `0.0` |
+| `analysis.techniques.invalidation_tolerance_atr` | `TECHNIQUE_INVALIDATION_TOLERANCE_ATR` | `float` | `atr` | `configurable` | `0.5` |
+| `analysis.techniques.max_break_episodes` | `TECHNIQUE_MAX_BREAK_EPISODES` | `int` | `count` | `configurable` | `2` |
+| `analysis.techniques.retest_max_touches` | `TECHNIQUE_RETEST_MAX_TOUCHES` | `int` | `count` | `configurable` | `30` |
+| `analysis.techniques.sweep_reclaim_bars` | `TECHNIQUE_SWEEP_RECLAIM_BARS` | `int` | `bars` | `configurable` | `6` |
 | `analysis.techniques.validation_enabled` | `TECHNIQUE_VALIDATION_ENABLED` | `bool` | `boolean` | `configurable` | `true` |
 | `analysis.trendlines.approach_min_distance_atr` | `TL_APPROACH_MIN_DISTANCE_ATR` | `float` | `atr` | `configurable` | `0.1` |
 | `analysis.trendlines.chop_minimum_validation_touches` | `TL_CHOP_MIN_VALIDATION_TOUCHES` | `int` | `count` | `configurable` | `2` |
