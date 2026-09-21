@@ -95,6 +95,10 @@ public sealed class AutoTradeEngine(
   private SymbolInfo? _symbol;
   private IReadOnlyList<TradingPosition> _allSymbolPositions = [];
   private IReadOnlyList<TradingPendingOrder> _allSymbolPendingOrders = [];
+  // Deepest planned entry per group (filled legs + pending ladder legs),
+  // captured just before unfilled legs are cancelled after TP1 so the runner
+  // stop can use the zone's own depth. See RecordGroupPlannedDeepestEntry.
+  private readonly Dictionary<string, decimal> _groupPlannedDeepestEntry = new();
   private TradingAccountSnapshot? _account;
   private bool _accountSupportsHedging;
   private int _tradePlanConsumerFailures;
@@ -5951,7 +5955,10 @@ public sealed class AutoTradeEngine(
         GroupRealizedPipVolume(remainingStates),
         symbol,
         PipSizeForSymbol(symbol.RedisSymbol),
-        options.BreakEvenBufferTicks
+        options.BreakEvenBufferTicks,
+        _groupPlannedDeepestEntry.TryGetValue(groupId, out var plannedDeepest)
+          ? plannedDeepest
+          : (decimal?)null
       );
       if (move is null)
       {
@@ -7669,6 +7676,42 @@ public sealed class AutoTradeEngine(
       .ToArray();
   }
 
+  /// <summary>
+  /// Remember the ladder's deepest planned entry (the far edge of the owner's
+  /// zone): the deepest of every live filled leg and every still-pending
+  /// ladder leg of the group, excluding the fixed-size risk leg (not part of
+  /// the original ladder). Must run BEFORE the pending legs are cancelled.
+  /// </summary>
+  private void RecordGroupPlannedDeepestEntry(string groupId)
+  {
+    var groupToken = $"|{GroupToken(groupId)}|";
+    var pending = _allSymbolPendingOrders
+      .Where(order =>
+        order.Label == options.Label
+        && order.Comment.Contains(groupToken, StringComparison.Ordinal)
+      )
+      .ToArray();
+    var live = _states.Values
+      .Where(item => GroupId(item) == groupId)
+      .ToArray();
+    var ladder = live.Where(state => !IsManualRiskLeg(state)).ToArray();
+    if (ladder.Length == 0)
+    {
+      ladder = live;
+    }
+    var prices = pending.Select(order => order.LimitPrice)
+      .Concat(ladder.Select(state => state.EntryPrice))
+      .ToArray();
+    if (prices.Length == 0)
+    {
+      return;
+    }
+    var direction = ladder.Length > 0 ? ladder[0].Direction : pending[0].Direction;
+    _groupPlannedDeepestEntry[groupId] = direction == TradeDirection.Buy
+      ? prices.Min()
+      : prices.Max();
+  }
+
   private async Task CancelUnfilledGroupEntryLegsAfterTpAsync(
     string groupId,
     CancellationToken cancellationToken
@@ -7690,6 +7733,7 @@ public sealed class AutoTradeEngine(
     _allSymbolPendingOrders = snapshot.PendingOrders
       .Where(order => order.SymbolId == symbol.SymbolId)
       .ToArray();
+    RecordGroupPlannedDeepestEntry(groupId);
     var orderIds = PendingOrderIdsForGroup(groupId);
     if (orderIds.Count == 0)
     {
@@ -7737,6 +7781,7 @@ public sealed class AutoTradeEngine(
     {
       return;
     }
+    _groupPlannedDeepestEntry.Remove(groupId);
     await DeleteGroupPlanAsync(groupId, cancellationToken);
   }
 
