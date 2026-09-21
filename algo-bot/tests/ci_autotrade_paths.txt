@@ -45,3 +45,4 @@ tests/test_htf_walls_live_only.py
 tests/test_setups_report.py
 tests/test_structural_barrier_wiring.py
 tests/test_zone_watch_reform.py
+tests/test_zone_execution_cutover.py

@@ -13,6 +13,18 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- A stop-DISTANCE failure no longer kills a zone. `stop_exceeds_envelope_*` /
+  `stop_exceeds_max_envelope` depend on where price sits inside the zone at that
+  instant, but the cutover read them from a STATIC eligibility snapshot taken at
+  discovery and INVALIDATED the zone for good (and again at publish time).
+  Live 2026-09-21: a with-bias tier-A Key Level SELL (zone 4349.27-4354.73, M5
+  `strong_reclaim` confirmed, confluence 3) was first seen with price on the
+  zone's low edge, so the market leg was 68 pips from the structural stop (cap
+  60) and the zone died, although it plans fine once price is mid-zone. Distance
+  errors are now soft: activation ignores the stale static value, a publish-time
+  distance reject sets a 60 s per-zone cooldown instead of terminalizing.
+  Geometry errors (`stop_inside_entry_zone`, `stop_inside_opposing_zone`,
+  `stop_not_beyond_planned_entries`, `protective_stop_unavailable`) stay terminal.
 - A dead ZoneWatch zone can now re-form on a NEW reaction. An INVALIDATED or
   EXPIRED zone stayed dead for the full 7-day retention: every later detection
   at the same price bucket was refused

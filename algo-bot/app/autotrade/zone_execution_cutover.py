@@ -286,6 +286,31 @@ def _is_stop_hard_error(code: str | None) -> bool:
   return False
 
 
+# Stop-DISTANCE failures depend on where price sits inside the zone right now,
+# not on the zone itself. Owner-reported 2026-09-21: a with-bias tier-A Key
+# Level SELL (zone 4349.27-4354.73, M5 strong_reclaim confirmed) was first seen
+# with price on the zone's LOW edge, so the market leg was 68 pips from the
+# structural stop (cap 60) - and the zone was INVALIDATED for good, although
+# it plans fine once price is mid-zone. Geometry errors (stop inside the entry
+# zone / opposing zone / not beyond entries) stay terminal; these do not.
+_STOP_SOFT_ENVELOPE_PREFIXES = (
+  "stop_exceeds_envelope",
+  "stop_exceeds_max_envelope",
+)
+_STOP_SOFT_COOLDOWN_SECONDS = 60
+
+
+def _is_stop_envelope_distance_error(code: str | None) -> bool:
+  text = str(code or "").strip()
+  if text.startswith("v8_"):
+    text = text[3:]
+  return text.startswith(_STOP_SOFT_ENVELOPE_PREFIXES)
+
+
+def stop_cooldown_key(zone_id: str) -> str:
+  return f"analysis:zone_stop_cooldown:{zone_id}"
+
+
 def _match_planned_stop_hard_error(match: StrategyMatch) -> str | None:
   """Return a durable stop geometry error already known on the candidate.
 
@@ -302,7 +327,7 @@ def _match_planned_stop_hard_error(match: StrategyMatch) -> str | None:
     getattr(eligibility, "reason_code", None),
   ):
     code = str(raw or "").strip()
-    if _is_stop_hard_error(code):
+    if _is_stop_hard_error(code) and not _is_stop_envelope_distance_error(code):
       return code
   return None
 
@@ -313,6 +338,8 @@ def _publish_should_terminalize_zone_watch(
   reason_code: str | None,
 ) -> bool:
   """True when a failed publish must stop ZoneWatch re-activation thrash."""
+  if _is_stop_envelope_distance_error(reason_code):
+    return False
   if status == "invalidated":
     return True
   return _is_stop_hard_error(reason_code)
@@ -668,6 +695,9 @@ async def _prepare_activation(
 ) -> StrategyMatch | None:
   """Return a stamped match ready to activate, or None while waiting/blocked."""
   now = quote[2]
+  if await client.get(stop_cooldown_key(record.zone_id)) is not None:
+    # A stop-distance reject just happened for this zone; retry shortly.
+    return None
   from app.autotrade.killzone import (
     evaluate_killzone_gate,
     evaluate_instrument_session_quality,
@@ -1427,6 +1457,11 @@ async def _activate_match(
       )
     except Exception:
       log.exception("could not retire non-executable setup=%s", match.match_id)
+  if _is_stop_envelope_distance_error(reject_reason):
+    # Retry once price/entry geometry changes, not every spot tick.
+    await client.set(
+      stop_cooldown_key(record.zone_id), "1", ex=_STOP_SOFT_COOLDOWN_SECONDS,
+    )
   if _publish_should_terminalize_zone_watch(
     status=result.status,
     reason_code=reject_reason,
