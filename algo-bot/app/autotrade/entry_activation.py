@@ -109,12 +109,15 @@ def _m5_max_age_bars(cfg: Any) -> int:
 
 
 def _parse_confirmation_ts(value: Any) -> int | None:
-  if value is None:
-    return None
-  try:
-    return int(value)
-  except (TypeError, ValueError):
-    return None
+  # The scanner stores the M5 confirmation bar as an ISO string
+  # ("2026-09-21T13:25:00+00:00"). A bare int() returned None for every real
+  # candidate, so quote_inside_fresh could never see a fresh M5 confirmation
+  # and the M5-authoritative fallback never fired in production - every
+  # setup needed an M1 trigger inside a 2-bar window (owner 2026-09-21: "why
+  # m1? m1 only for execution"). Accept ISO, pandas and numeric stamps.
+  from app.autotrade.execution_confirmation import parse_bar_timestamp
+
+  return parse_bar_timestamp(value)
 
 
 def _trigger_ts(trigger: M1TriggerResult | None) -> int | None:
