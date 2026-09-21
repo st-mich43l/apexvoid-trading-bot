@@ -81,6 +81,7 @@ from app.autotrade.zone_watch import (
   ZoneWatch,
   discover_zone_watch,
   retire_zone_watch,
+  ZONE_REFORM_COOLDOWN_SECONDS,
   list_active_zone_watches,
   load_zone_watch,
   lock_zone_watch_published,
@@ -324,16 +325,74 @@ def stop_cooldown_key(zone_id: str) -> str:
   return f"analysis:zone_stop_cooldown:{zone_id}"
 
 
+def soft_reject_token(match: Any) -> str:
+  """Identity of one signal: the match plus the confirmation that produced it.
+
+  match_id is stable per zone+direction for technique/confluence zones, so it
+  alone cannot tell a fresh reaction from the retired one.
+  """
+  stamp = (
+    getattr(match, "m5_confirmation_bar_ts", None)
+    or getattr(match, "confirmation_bar_ts", None)
+    or getattr(match, "event_ts", None)
+    or ""
+  )
+  return f"{getattr(match, 'match_id', '')}|{stamp}"
+
+
 async def _soft_reject_cooldown_active(
-  client: Any, zone_id: str, match_id: str | None,
+  client: Any, zone_id: str, match: Any,
 ) -> bool:
-  """True while THIS match (not a fresh candidate) is soft-rejected."""
+  """True while THIS signal (match + confirmation) is soft-rejected."""
   cooled = await client.get(stop_cooldown_key(zone_id))
   if cooled is None:
     return False
   if isinstance(cooled, bytes):
     cooled = cooled.decode()
-  return str(cooled) == str(match_id)
+  return str(cooled) == soft_reject_token(match)
+
+
+async def _rearm_retired_setup(client: Any, match: StrategyMatch) -> bool:
+  """Return an INVALIDATED/EXPIRED setup to DISCOVERED on a NEWER confirmation.
+
+  Technique/confluence matches keep one stable match_id per zone+direction, so
+  once any plan on the zone was rejected its setup stayed INVALIDATED for good
+  and every later signal died at "durable TradePlan lifecycle is already
+  terminal" (live 2026-09-21: a fresh grade-A with-bias Supply Demand SELL,
+  M5-confirmed at 18:20, refused because the same match_id was retired at
+  15:39). ``rearm_setup`` existed as "the only way back" but nothing called
+  it. CONSUMED / CANCELLED stay final - a trade was taken or deliberately
+  cancelled.
+  """
+  from app.autotrade.setup_lifecycle import (
+    EXPIRED as SETUP_EXPIRED,
+    INVALIDATED as SETUP_INVALIDATED,
+    SetupLifecycleError,
+    load_setup,
+    rearm_setup,
+  )
+
+  setup = await load_setup(client, match.match_id)
+  if setup is None or setup.state not in {SETUP_INVALIDATED, SETUP_EXPIRED}:
+    return False
+  confirmed_at = _confirmation_close_epoch(match)
+  if confirmed_at is None or confirmed_at <= (
+    int(setup.updated_at) + ZONE_REFORM_COOLDOWN_SECONDS
+  ):
+    return False
+  try:
+    await rearm_setup(
+      client,
+      match.match_id,
+      rearm_condition="new_m5_confirmation_after_terminal",
+    )
+  except SetupLifecycleError:
+    return False
+  log.info(
+    "setup re-armed on new confirmation symbol=%s match_id=%s was=%s",
+    match.symbol, match.match_id, setup.state,
+  )
+  return True
 
 
 def _match_planned_stop_hard_error(match: StrategyMatch) -> str | None:
@@ -733,7 +792,7 @@ async def _prepare_activation(
 ) -> StrategyMatch | None:
   """Return a stamped match ready to activate, or None while waiting/blocked."""
   now = quote[2]
-  if await _soft_reject_cooldown_active(client, record.zone_id, match.match_id):
+  if await _soft_reject_cooldown_active(client, record.zone_id, match):
     # This exact match was soft-rejected (price-dependent veto) and is
     # retired; wait for the scanner to issue a fresh candidate for the zone.
     return None
@@ -1404,6 +1463,7 @@ async def _activate_match(
     ),
     current_price=float(evidence.executable_quote or match.current_price),
   )
+  await _rearm_retired_setup(client, match)
   match = await _persist_match(client, match)
   result = await _safe_direct_publish(
     client,
@@ -1509,7 +1569,7 @@ async def _activate_match(
     # already terminal").
     await client.set(
       stop_cooldown_key(record.zone_id),
-      str(match.match_id),
+      soft_reject_token(match),
       ex=_SOFT_REJECT_COOLDOWN_SECONDS,
     )
   if terminalize_zone:
