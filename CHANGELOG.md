@@ -13,6 +13,21 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Supply/Demand, Order Block and FVG technique instances are now built from
+  UNMERGED zones, each with its own origin, touch history and break. They were
+  built from the map-merge output, whose composite takes the EARLIEST member's
+  origin, so a fresh zone that overlapped an old one was judged by the old
+  zone's history. Owner-reported 2026-09-21 (XAU): the supply behind the -29 pt
+  drop (origin 13:45, 4349-4357) and the one at the 13:20 top existed in the
+  raw generator but were absorbed into a 06:20 zone that price had accepted
+  above for two hours, so no technique instance ever existed there (every
+  supply near price was rejected `not_invalidated`). Replay of that day now
+  fires `supply_demand` SELL at the 13:25 top and iFVG/FVG SELLs through the
+  drop; before, only Key Level did. The engine keeps the per-origin zones as
+  `TimeframeAnalysis.technique_zones` (scored, incl. the multi-timeframe
+  re-score); hand-built analyses without them fall back to the merged views.
+  The map is unchanged. `mark_mitigation` is now vectorised (same result,
+  verified against the original loop) - analysis build is ~15% faster.
 - Manual algo runner stop after TP1 now sits at the ladder's DEEPEST planned
   entry instead of its own shallow entry. Owner-reported live 2026-09-21
   (manual 409, XAU SELL zone 4341-4344, SL 4346): only the shallow leg filled

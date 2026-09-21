@@ -40,6 +40,7 @@ from app.analysis.technique_geometry import (
 from app.analysis.zones import (
   ZONE_MERGE_OVERLAP,
   ZONE_MIN_WIDTH,
+  as_single_zones,
   breaker_blocks,
   displacement,
   flip_zones,
@@ -305,6 +306,10 @@ class TimeframeAnalysis:
   zone_reconcile_shadow_output: int = 0
   zone_reconcile_trimmed: int = 0
   zone_reconcile_candidate_difference_count: int = 0
+  # Every S/D, OB and FVG zone with its OWN origin/touches/break (map merge
+  # skipped). Feeds collect_technique_instances; empty means "fall back to the
+  # merged views" (hand-built analyses).
+  technique_zones: list[Zone] = field(default_factory=list)
   technique_instances: list[TechniqueInstance] = field(default_factory=list)
   technique_validation_rejects: dict[str, int] = field(default_factory=dict)
 
@@ -432,10 +437,18 @@ def _attach_technique_instances(
   for tf, analysis in per_tf.items():
     exec_atr = atr_scalar(analysis.atr)
     price = float(analysis.df.iloc[-1]["close"]) if not analysis.df.empty else 0.0
+    if analysis.technique_zones:
+      technique_ob, technique_sd, _flip, technique_fvg = _zone_views(
+        analysis.technique_zones,
+      )
+    else:
+      technique_sd = analysis.supply_demand_zones
+      technique_ob = analysis.order_blocks
+      technique_fvg = analysis.fvg_zones
     instances, rejects = collect_technique_instances(
-      sd_zones=analysis.supply_demand_zones,
-      ob_zones=analysis.order_blocks,
-      fvg_zones=analysis.fvg_zones,
+      sd_zones=technique_sd,
+      ob_zones=technique_ob,
+      fvg_zones=technique_fvg,
       df=analysis.df,
       price=price,
       atr=exec_atr,
@@ -552,6 +565,7 @@ def _analyze_tf(
   )
   regime_ = regime(df, atr, swings, structure, range_, settings)
   box_break = accepted_box_break(df, atr, regime_, nested_cfg)
+  unmerged_technique_zones = as_single_zones([*sd_zones, *ob_zones, *fvg_zones])
   zones = merge_zones(
     [*sd_zones, *ob_zones, *flip, *fvg_zones],
     settings.zone_merge_overlap,
@@ -571,6 +585,18 @@ def _analyze_tf(
   )
   zones = score_zones(
     zones,
+    levels,
+    pools,
+    settings.round_step,
+    session_levels=sessions,
+    dealing_range=range_,
+    grabs=grabs,
+    trendlines=diagonal_lines,
+    bar_index=len(df) - 1,
+    pip_size=settings.pip_size,
+  )
+  technique_zones = score_zones(
+    mark_mitigation(unmerged_technique_zones, df, cutoff=max(0, len(df) - 1)),
     levels,
     pools,
     settings.round_step,
@@ -671,6 +697,7 @@ def _analyze_tf(
     flip_zones=flip,
     fvg_zones=fvg_zones,
     zones=zones,
+    technique_zones=technique_zones,
     liquidity_pools=pools,
     liquidity_grabs=grabs,
     momentum=mom.state,
@@ -933,7 +960,24 @@ def _apply_mtf_zone_scores(
         len(item.df) - 1,
         settings.pip_size,
       )
-      item = _with_zone_views(item, zones)
+      technique_zones = (
+        score_zones(
+          item.technique_zones,
+          item.key_levels,
+          item.liquidity_pools,
+          settings.round_step,
+          higher_zones,
+          item.session_levels,
+          item.dealing_range,
+          item.liquidity_grabs,
+          item.trendlines,
+          len(item.df) - 1,
+          settings.pip_size,
+        )
+        if item.technique_zones
+        else item.technique_zones
+      )
+      item = replace(_with_zone_views(item, zones), technique_zones=technique_zones)
       updated[tf] = item
     higher_zones.extend(item.zones)
   return updated

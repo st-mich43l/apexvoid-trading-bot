@@ -305,17 +305,16 @@ def mark_mitigation(
   """
   stamped: list[Zone] = []
   end = len(df) if cutoff is None else max(0, min(cutoff, len(df)))
+  lows = df["low"].to_numpy(dtype=float)
+  highs = df["high"].to_numpy(dtype=float)
   for zone in zones:
-    touches = 0
-    in_touch = False
     start_from = zone.break_index if zone.break_index is not None else zone.origin_index
     start = max(0, start_from + 1)
-    for i in range(start, end):
-      row = df.iloc[i]
-      touched = float(row["low"]) <= zone.top and float(row["high"]) >= zone.bottom
-      if touched and not in_touch:
-        touches += 1
-      in_touch = touched
+    touches = 0
+    if start < end:
+      touched = (lows[start:end] <= zone.top) & (highs[start:end] >= zone.bottom)
+      # A touch is a run of consecutive touching bars: count rising edges.
+      touches = int(touched[0]) + int(((~touched[:-1]) & touched[1:]).sum())
     final_touches = max(touches, zone.touches)
     stamped.append(replace(
       zone,
@@ -323,6 +322,18 @@ def mark_mitigation(
       mitigated=zone.mitigated or final_touches > 0,
     ))
   return stamped
+
+
+def as_single_zones(zones: list[Zone]) -> list[Zone]:
+  """Unmerged zones shaped like merge_zones output (``sources`` populated).
+
+  The technique layer wants every zone with its OWN origin, touch history
+  and break. merge_zones stamps a composite with its earliest member's
+  origin, so a fresh zone that overlaps an old one is judged by the old
+  zone's history (XAU 2026-09-21: the 13:45 supply behind a -29 pt impulse
+  was absorbed into a 06:20 zone that price had since accepted above).
+  """
+  return [replace(zone, sources=_unique_sources([zone])) for zone in zones]
 
 
 def merge_zones(
