@@ -1530,3 +1530,32 @@ async def test_soft_reject_cooldown_is_bound_to_the_match_not_the_clock():
 ])
 def test_other_publish_rejects_keep_their_existing_behaviour(code):
   assert not cutover._is_price_dependent_reject(code)
+
+
+@pytest.mark.parametrize("reason,expected", [
+  # zone-level: the zone itself is dead
+  ("structure_invalidated", True),
+  ("zone_decisively_broken", True),
+  ("stop_inside_entry_zone", True),
+  ("stop_inside_opposing_zone", True),
+  ("stop_not_beyond_planned_entries", True),
+  ("v8_protective_stop_unavailable", True),
+  # match-level: only that match is retired, the zone lives on
+  ("invalidated", False),
+  ("expired", False),
+  ("v8_fixed_rr_room_insufficient", False),
+  ("v8_same_direction_active_before_tp2", False),
+  ("v8_entry_inside_opposing_zone", False),
+  ("entry_inside_opposing_zone", False),
+  ("v8_stop_exceeds_max_envelope", False),
+  ("opposing_barrier", False),
+  ("v8_news_block", False),
+  ("zone_no_longer_executable", False),
+])
+def test_only_zone_level_reasons_terminalize_a_zone(reason, expected):
+  """Owner 2026-09-21: one valid Key Level SELL zone was terminalized three times
+  in an hour by plan rejects that only concern the match (stop distance, entry
+  inside a demand shelf, then the retired match's own 'lifecycle terminal')."""
+  assert cutover._publish_should_terminalize_zone_watch(
+    status=worker.PUBLISH_STATUS_INVALIDATED, reason_code=reason,
+  ) is expected
