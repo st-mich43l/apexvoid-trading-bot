@@ -1340,6 +1340,71 @@ async def test_position_closed_fallback_creates_manage_reply(monkeypatch):
 
 @pytest.mark.asyncio
 @pytest.mark.no_database
+async def test_position_closed_never_deletes_root_and_posts_standalone_if_root_gone(
+  monkeypatch,
+):
+  """Owner-reported 2026-09-21: two XAU scalps filled and closed within
+  minutes; delete_root_on_terminal removed each root at close, the close
+  reply (threaded to it) was rejected and skipped, and the channel was left
+  with nothing for a trade that really executed.
+  """
+  from app.autotrade import setup_card
+
+  client = redis_state.get_client()
+  monkeypatch.setattr(setup_card, "should_delete_root_on_terminal", lambda: True)
+  setup_id = "close-root-gone"
+  await client.set(
+    delivery._forming_message_key(setup_id),
+    json.dumps({
+      "chat_id": 123,
+      "message_id": 7001,
+      "text": "🔎 <b>XAU M5 · SETUP FORMING</b>\n✅ <b>ORDER FILLED</b>",
+    }),
+    ex=60,
+  )
+  deleted = []
+
+  async def fake_delete(chat_id, message_id):
+    deleted.append((chat_id, message_id))
+
+  async def fake_edit(chat_id, message_id, text):
+    pass
+
+  monkeypatch.setattr(delivery, "delete_scanner_message", fake_delete)
+  monkeypatch.setattr(delivery, "edit_scanner_message_text", fake_edit)
+  calls = []
+
+  async def sent(text, **kwargs):
+    calls.append((text, kwargs))
+    if kwargs.get("reply_to") is not None:
+      raise TelegramBadRequest(
+        method=SimpleNamespace(),
+        message="Bad Request: message to be replied not found",
+      )
+    return SimpleNamespace(message_id=9002)
+
+  await delivery._deliver_auto_trade_event(
+    client,
+    {
+      "type": "position_closed",
+      "match_id": setup_id,
+      "message": "PLAN CLOSED · highest TP archived TP1 · @ 4106.00",
+      "price": 4106.0,
+      "target_pips": 30,
+      "position_id": 1,
+    },
+    profile="internal",
+    chat_id=123,
+    send=sent,
+  )
+
+  assert deleted == []
+  assert [c[1]["reply_to"] for c in calls] == [7001, None]
+  assert "POSITION CLOSED" in calls[1][0]
+
+
+@pytest.mark.asyncio
+@pytest.mark.no_database
 async def test_order_filled_skips_standalone_when_reply_rejected(monkeypatch):
   client = redis_state.get_client()
   setup_id = "reply-reject-setup"

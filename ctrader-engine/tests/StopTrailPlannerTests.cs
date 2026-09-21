@@ -318,7 +318,7 @@ public sealed class StopTrailPlannerTests
   [Theory]
   [InlineData(TradeDirection.Buy, 4350.50)]
   [InlineData(TradeDirection.Sell, 4352.50)]
-  public void GroupEconomicBreakevenNeverWidensAnExistingStop(
+  public void GroupEconomicBreakevenNeverWidensAnExistingStopAndTightensToBreakeven(
     TradeDirection direction,
     double protectedStop
   )
@@ -341,7 +341,12 @@ public sealed class StopTrailPlannerTests
       },
     };
 
-    Assert.Null(
+    // Booked profit funds a stop looser than the one already held, so the
+    // economic stop itself never applies. It must never WIDEN the held
+    // stop - but a held stop still short of the remaining volume's own
+    // protected breakeven tightens to it (2026-09-21, manual 407) rather
+    // than being left untouched.
+    var move = Assert.IsType<StopTrailMove>(
       StopTrailPlanner.PlanGroupEconomicBreakeven(
         states,
         groupInitialVolume: 3_000,
@@ -350,6 +355,51 @@ public sealed class StopTrailPlannerTests
         pipSize: 0.1m,
         protectedBufferTicks: 6
       )
+    );
+    Assert.True(direction == TradeDirection.Buy
+      ? move.StopLoss > current
+      : move.StopLoss < current);
+  }
+
+  [Theory]
+  [InlineData(TradeDirection.Buy)]
+  [InlineData(TradeDirection.Sell)]
+  public void GroupEconomicBreakevenFallsBackToProtectedBreakevenWhenTp1FundsAStopWorseThanTheHeldOne(
+    TradeDirection direction
+  )
+  {
+    // Owner-reported live 2026-09-21 (manual 407): one filled clip, TP1
+    // banked half of it. The funded economic stop landed below entry -
+    // worse than the original owner stop - so the planner returned null and
+    // the runner stayed on its original stop until price swept it.
+    var isBuy = direction == TradeDirection.Buy;
+    var original = isBuy ? 4355.0m : 4364.0m;
+    var entry = isBuy ? 4359.49m : 4359.51m;
+    var states = new[]
+    {
+      State(direction, entry, original) with
+      {
+        PositionId = 41693612,
+        InitialVolume = 800,
+        RemainingVolume = 400,
+        GroupInitialVolume = 800,
+      },
+    };
+
+    var move = Assert.IsType<StopTrailMove>(
+      StopTrailPlanner.PlanGroupEconomicBreakeven(
+        states,
+        groupInitialVolume: 800,
+        bookedPipVolume: 55.7m * 400m,
+        Symbol,
+        pipSize: 0.1m,
+        protectedBufferTicks: 6
+      )
+    );
+
+    Assert.Equal(
+      StopTrailPlanner.ProtectedBreakevenStop(direction, entry, Symbol, 6),
+      move.StopLoss
     );
   }
 

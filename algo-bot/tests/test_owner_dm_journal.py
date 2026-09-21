@@ -213,6 +213,72 @@ async def test_session_middleware_always_returns_the_response(monkeypatch):
   assert result is response
 
 
+async def test_incoming_middleware_journals_owner_private_message(monkeypatch):
+  _enable(monkeypatch)
+  event = SimpleNamespace(
+    chat=SimpleNamespace(id=OWNER_ID, type="private"),
+    from_user=SimpleNamespace(id=OWNER_ID),
+    message_id=77,
+  )
+  handler = AsyncMock(return_value="handled")
+
+  result = await owner_dm_journal.owner_dm_incoming_middleware(handler, event, {})
+
+  assert result == "handled"
+  handler.assert_awaited_once_with(event, {})
+  client = redis_state.get_client()
+  key = owner_dm_journal._journal_key(owner_dm_journal._current_trade_date())
+  assert await client.smembers(key) == {"77"}
+
+
+async def test_incoming_middleware_ignores_non_owner_and_non_private(monkeypatch):
+  _enable(monkeypatch)
+  handler = AsyncMock(return_value="handled")
+  channel_event = SimpleNamespace(
+    chat=SimpleNamespace(id=-100123456789, type="channel"),
+    from_user=SimpleNamespace(id=OWNER_ID),
+    message_id=1,
+  )
+  other_user_event = SimpleNamespace(
+    chat=SimpleNamespace(id=999, type="private"),
+    from_user=SimpleNamespace(id=999),
+    message_id=2,
+  )
+
+  await owner_dm_journal.owner_dm_incoming_middleware(handler, channel_event, {})
+  await owner_dm_journal.owner_dm_incoming_middleware(handler, other_user_event, {})
+
+  assert handler.await_count == 2
+  client = redis_state.get_client()
+  key = owner_dm_journal._journal_key(owner_dm_journal._current_trade_date())
+  assert await client.smembers(key) == set()
+
+
+async def test_incoming_middleware_always_calls_handler_even_on_journal_error(
+  monkeypatch,
+):
+  _enable(monkeypatch)
+
+  class _BoomChat:
+    type = "private"
+
+    @property
+    def id(self):
+      raise RuntimeError("boom")
+
+  bad_event = SimpleNamespace(
+    chat=_BoomChat(),
+    from_user=SimpleNamespace(id=OWNER_ID),
+    message_id=1,
+  )
+  handler = AsyncMock(return_value="handled")
+
+  result = await owner_dm_journal.owner_dm_incoming_middleware(handler, bad_event, {})
+
+  assert result == "handled"
+  handler.assert_awaited_once()
+
+
 async def test_loop_returns_immediately_when_disabled(monkeypatch):
   install_runtime_overrides(
     monkeypatch,

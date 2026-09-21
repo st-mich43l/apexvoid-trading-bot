@@ -94,7 +94,29 @@ public static class StopTrailPlanner
       && !MovesTowardProfit(direction, current, desired)
     ))
     {
-      return null;
+      // Owner-reported live 2026-09-21 (manual 407): TP1 banked half the
+      // filled volume, so the funded economic stop landed BELOW the
+      // remaining clips' entry (4354.04) - worse than the original 4355
+      // stop - and the planner returned "no move". The runner then sat on
+      // its original stop, which price swept at a loss on volume that had
+      // been in profit past TP1. When the economic stop cannot improve on
+      // what is already held, fall back to the remaining volume's own
+      // protected breakeven instead of leaving it untouched.
+      var fallback = ProtectedBreakevenStop(
+        direction, weightedEntry, symbol, protectedBufferTicks
+      );
+      if (remainingStates.All(state =>
+        state.CurrentStopLoss is decimal held
+        && !MovesTowardProfit(direction, held, fallback)
+      ))
+      {
+        return null;
+      }
+      return new StopTrailMove(
+        fallback,
+        $"BE+{protectedBufferTicks} ticks",
+        protectedBufferPrice
+      );
     }
     return new StopTrailMove(
       desired,
