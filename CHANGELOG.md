@@ -13,6 +13,15 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Two zone-relevance tests could never fail meaningfully. They call
+  `evaluate_active_zone_watches` without the OHLC `source` production always
+  passes (spot loop and bar dispatcher), so there was no ATR, nothing could be
+  classed "dead", and `..._is_removed_not_expired` failed while
+  `..._within_hysteresis_band_is_kept` passed vacuously. Both now pass a
+  `RedisOHLCSource`, and the "kept" zone sits at 4.6 ATR (the old placement was
+  6.1 ATR, past the 6.0 dead line). They are real-Redis tests that error under
+  the newer pytest installed locally (`FixtureDef.unittest`); CI pins pytest
+  7.4.4, which is how this surfaced once the file joined the CI allowlist.
 - A stop-DISTANCE failure no longer kills a zone. `stop_exceeds_envelope_*` /
   `stop_exceeds_max_envelope` depend on where price sits inside the zone at that
   instant, but the cutover read them from a STATIC eligibility snapshot taken at

@@ -16,6 +16,7 @@ from redis.asyncio import Redis
 from app.autotrade.strategy_match import StrategyMatch
 from app.autotrade import worker
 from app.autotrade import zone_execution_cutover as cutover
+from app.analysis.ohlc_source import RedisOHLCSource
 from app.autotrade import zone_watch as zw
 
 
@@ -334,8 +335,10 @@ async def test_dead_zone_far_beyond_dormant_is_removed_not_expired(client):
   record = await _discover(client, "zone-far", 4280.0, 4285.0)
   now = await _seed_price_and_bars(client)
 
+  # Production always passes the dispatch pass's OHLC source (spot loop and
+  # bar dispatcher); without it there is no ATR and nothing can be "dead".
   matched = await cutover.evaluate_active_zone_watches(
-    client, symbol="XAU", event_ts=str(now),
+    client, symbol="XAU", event_ts=str(now), source=RedisOHLCSource(client),
   )
 
   assert matched is None
@@ -363,12 +366,13 @@ async def test_dormant_zone_within_hysteresis_band_is_kept(client):
   """Between remote_atr and 2x remote_atr a zone is dormant (skipped) but
   kept - price drifting back must not find it deleted.
   """
-  # ATR of the seeded bars is ~2-3; keep the zone ~4-5 ATR away.
-  record = await _discover(client, "zone-mid", 4342.0, 4346.0)
+  # Seeded M5 ATR is 2.33 and price 4360.25; bands are 3.0 (dormant) / 6.0
+  # (dead) ATR. Top edge 4349.5 is 4.6 ATR away: dormant, must be KEPT.
+  record = await _discover(client, "zone-mid", 4346.0, 4349.5)
   now = await _seed_price_and_bars(client)
 
   await cutover.evaluate_active_zone_watches(
-    client, symbol="XAU", event_ts=str(now),
+    client, symbol="XAU", event_ts=str(now), source=RedisOHLCSource(client),
   )
 
   reloaded = await zw.load_zone_watch(client, record.zone_id)
