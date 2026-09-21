@@ -290,16 +290,58 @@ async def test_rediscovery_refreshes_metadata_without_resetting_touch(client):
   assert refreshed.score == pytest.approx(14.0)
 
 
-@pytest.mark.asyncio
-async def test_dormant_zone_is_skipped_not_expired(client):
-  """Owner 2026-09-17: a structurally valid zone far from current price
-  must be skipped from full evaluation (perf) but never transitioned to a
-  terminal state - EXPIRED is a dead end (_TRANSITIONS[EXPIRED] ==
-  frozenset()), so destroying it would permanently block reactivation if
-  price ever returns within relevance_nearby_atr. Replaces the old
-  destructive stale_far_from_market expiry.
-  """
+async def _seed_price_and_bars(client, *, spot=4360.0, base=4358.0):
+  now = int(time.time())
+  await client.set(
+    "price:XAU:spot",
+    f'{{"bid": {spot}, "ask": {spot + 0.5}, "ts": {now}}}',
+  )
+  for index in range(30):
+    close = base + (index % 3)
+    payload = (
+      f'{{"t": {index}, "o": {close}, "h": {close + 1}, '
+      f'"l": {close - 1}, "c": {close}, "v": 1}}'
+    )
+    await client.zadd("bars:XAU:M5", {payload: index})
+  return now
+
+
+async def _discover(client, zone_id, low, high, direction="BUY"):
   record, _ = await zw.discover_zone_watch(
+    client,
+    zone_id=zone_id,
+    symbol="XAU",
+    direction=direction,
+    low=low,
+    high=high,
+    source_timeframe="M5",
+    structural_sources=("key_level",),
+    confluence_tags=("key_level",),
+    grade=zw.GRADE_A,
+    now=100,
+  )
+  await zw.transition_zone_watch(client, record.zone_id, zw.WATCHING_RETEST)
+  return record
+
+
+@pytest.mark.asyncio
+async def test_dead_zone_far_beyond_dormant_is_removed_not_expired(client):
+  """Owner 2026-09-21: a zone 8 ATR from price was still listed. Beyond
+  twice the dormant band a zone is removed from the watchlist (record and
+  indexes) - but by deletion, never an EXPIRED transition, so the same
+  zone can be rediscovered if price ever returns.
+  """
+  record = await _discover(client, "zone-far", 4280.0, 4285.0)
+  now = await _seed_price_and_bars(client)
+
+  matched = await cutover.evaluate_active_zone_watches(
+    client, symbol="XAU", event_ts=str(now),
+  )
+
+  assert matched is None
+  assert await zw.load_zone_watch(client, record.zone_id) is None
+  assert await zw.list_active_zone_watches(client, symbol="XAU") == []
+  rediscovered, created = await zw.discover_zone_watch(
     client,
     zone_id="zone-far",
     symbol="XAU",
@@ -310,27 +352,25 @@ async def test_dormant_zone_is_skipped_not_expired(client):
     structural_sources=("key_level",),
     confluence_tags=("key_level",),
     grade=zw.GRADE_A,
-    now=100,
+    now=200,
   )
-  await zw.transition_zone_watch(client, record.zone_id, zw.WATCHING_RETEST)
-  now = int(time.time())
-  await client.set(
-    "price:XAU:spot",
-    f'{{"bid": 4360.0, "ask": 4360.5, "ts": {now}}}',
-  )
-  for index in range(30):
-    close = 4358.0 + (index % 3)
-    payload = (
-      f'{{"t": {index}, "o": {close}, "h": {close + 1}, '
-      f'"l": {close - 1}, "c": {close}, "v": 1}}'
-    )
-    await client.zadd("bars:XAU:M5", {payload: index})
+  assert created is True
+  assert rediscovered.state != zw.EXPIRED
 
-  matched = await cutover.evaluate_active_zone_watches(
+
+@pytest.mark.asyncio
+async def test_dormant_zone_within_hysteresis_band_is_kept(client):
+  """Between remote_atr and 2x remote_atr a zone is dormant (skipped) but
+  kept - price drifting back must not find it deleted.
+  """
+  # ATR of the seeded bars is ~2-3; keep the zone ~4-5 ATR away.
+  record = await _discover(client, "zone-mid", 4342.0, 4346.0)
+  now = await _seed_price_and_bars(client)
+
+  await cutover.evaluate_active_zone_watches(
     client, symbol="XAU", event_ts=str(now),
   )
 
-  assert matched is None
   reloaded = await zw.load_zone_watch(client, record.zone_id)
   assert reloaded is not None
   assert reloaded.state == zw.WATCHING_RETEST

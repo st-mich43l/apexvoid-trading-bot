@@ -96,6 +96,21 @@ def classify_zone_relevance(
   return ZoneRelevance(relevance, distance_price, distance_atr, relative_position)
 
 
+def is_dead_zone(relevance: ZoneRelevance) -> bool:
+  """True once price is so far from a zone it is dead, not just dormant.
+
+  Dormant (beyond ``remote_atr``) zones are skipped but kept in case price
+  drifts back. Beyond twice that band the zone is removed outright (owner
+  2026-09-21: a BUY zone 34 points - 8 ATR - below a falling market was
+  still listed). The doubled band is hysteresis so price oscillating near
+  the dormant boundary cannot churn zones in and out of existence. Needs a
+  real ATR: without one distance cannot be judged, so nothing is retired.
+  """
+  if relevance.distance_atr is None:
+    return False
+  return relevance.distance_atr > 2.0 * runtime_config.analysis.zone_relevance.remote_atr
+
+
 def partition_by_relevance(
   records: list[ZoneWatch], mid_price: float, atr: float | None,
 ) -> tuple[list[tuple[ZoneWatch, ZoneRelevance]], list[tuple[ZoneWatch, ZoneRelevance]]]:
