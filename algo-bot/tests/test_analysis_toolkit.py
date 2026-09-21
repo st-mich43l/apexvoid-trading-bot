@@ -190,6 +190,28 @@ def test_order_block_created_by_bos_and_later_mitigated():
   assert stamped.touches == 1
 
 
+def test_order_block_kept_when_the_impulse_breaks_structure_as_choch():
+  """A reversal impulse breaks structure as CHoCH, not BOS (owner-reported
+  2026-09-21: XAU M15 demand OB 4337-42 never detected; Order Block had
+  never traded). Its origin candle is still the order block.
+  """
+  df = _df([
+    (104, 105, 99, 100),
+    (100, 101, 98, 99),
+    (99, 112, 99, 111),
+    (111, 113, 108, 112),
+  ])
+  zones = order_blocks(
+    df,
+    [Leg(2, 2, "up", 13)],
+    [Break("CHoCH", "up", 105, 2, df.index[2])],
+  )
+
+  assert len(zones) == 1
+  assert zones[0].side == "demand"
+  assert zones[0].break_kind == "CHoCH"
+
+
 def test_mark_mitigation_respects_asof_cutoff():
   df = _df([
     (100, 104, 99, 103),

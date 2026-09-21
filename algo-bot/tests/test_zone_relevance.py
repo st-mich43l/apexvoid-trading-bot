@@ -160,3 +160,14 @@ def test_age_since_discovery_and_last_touch():
 def test_age_since_last_touch_is_none_when_never_touched():
   zone = _zone(last_touch_at=None)
   assert zr.age_since_last_touch_seconds(zone, now=2_000) is None
+
+
+def test_is_dead_zone_only_beyond_twice_the_dormant_band():
+  zone = _zone(low=4280.0, high=4285.0)
+  # remote band defaults to 3 ATR: dormant past 3, dead past 6.
+  four_atr = zr.classify_zone_relevance(zone, 4285.0 + 4 * 2.0, atr=2.0)
+  eight_atr = zr.classify_zone_relevance(zone, 4285.0 + 8 * 2.0, atr=2.0)
+  assert four_atr.relevance == zr.DORMANT and not zr.is_dead_zone(four_atr)
+  assert zr.is_dead_zone(eight_atr)
+  no_atr = zr.classify_zone_relevance(zone, 4400.0, atr=None)
+  assert not zr.is_dead_zone(no_atr)

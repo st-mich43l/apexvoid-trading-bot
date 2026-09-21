@@ -907,8 +907,15 @@ def _append_leg(
 
 
 def _causing_bos(leg: Leg, breaks: list[Break]) -> Break | None:
+  # Any structure break the impulse caused qualifies its origin candle as an
+  # order block. Owner-reported 2026-09-21: XAU M15 demand OB at 4337-42 (the
+  # last down candle before a +18 impulse) was never detected - and Order
+  # Block had never produced a single auto trade - because this only
+  # accepted "BOS". An impulse that reverses the prevailing trend breaks
+  # structure as a "CHoCH" (structure._break_kind), so every reversal OB - the
+  # most common kind - was thrown away.
   for item in breaks:
-    if item.kind != "BOS" or item.direction != leg.direction:
+    if item.kind not in ("BOS", "CHoCH") or item.direction != leg.direction:
       continue
     if leg.start <= item.index <= leg.end:
       return item

@@ -80,6 +80,7 @@ from app.autotrade.zone_watch import (
   WATCHING_RETEST,
   ZoneWatch,
   discover_zone_watch,
+  retire_zone_watch,
   list_active_zone_watches,
   load_zone_watch,
   lock_zone_watch_published,
@@ -1932,10 +1933,19 @@ async def evaluate_active_zone_watches(
       record, mid, atr_by_tf.get(record.source_timeframe),
     )
     if relevance.relevance == zone_relevance.DORMANT:
-      # Non-destructive: skip full evaluation this pass without touching
-      # the record's lifecycle state (see the module comment above this
-      # function's constants - a DORMANT zone must stay free to reactivate
-      # the instant price returns, unlike the old EXPIRED-transition fix).
+      # Skip full evaluation this pass without touching lifecycle state (a
+      # merely DORMANT zone stays free to reactivate if price drifts back).
+      # Once price is far beyond dormant the zone is dead: remove it from
+      # the watchlist (record deleted, NOT an EXPIRED transition - that is
+      # a dead end that would block rediscovery) instead of listing it.
+      if zone_relevance.is_dead_zone(relevance):
+        if await retire_zone_watch(client, record):
+          log.info(
+            "zone watch retired dead zone symbol=%s zone_id=%s "
+            "direction=%s low=%s high=%s distance_atr=%.1f",
+            symbol, record.zone_id, record.direction, record.low,
+            record.high, relevance.distance_atr or 0.0,
+          )
       continue
     if outside > skip_outside:
       continue
