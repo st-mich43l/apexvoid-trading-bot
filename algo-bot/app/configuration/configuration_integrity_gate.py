@@ -57,13 +57,17 @@ BASELINE = {
   # 2026-09-17 Zone market-relevance engine: +3 new leaf fields under
   # analysis.zone_relevance.* (immediate_atr, nearby_atr, remote_atr), all
   # real canonical_env, all ConfigOwner.PYTHON.
-  "catalog_entry_count": 672,
-  "configurable_count": 565,
+  # 2026-09-21 Technique zone hold-based validity: +4 under
+  # analysis.techniques.* (retest_max_touches, invalidation_tolerance_atr,
+  # sweep_reclaim_bars, max_break_episodes), real canonical_env,
+  # ConfigOwner.PYTHON.
+  "catalog_entry_count": 676,
+  "configurable_count": 569,
   "protocol_constant_count": 10,
   "algorithm_constant_count": 97,
-  "python_projection_count": 622,
+  "python_projection_count": 626,
   "ctrader_only_count": 50,
-  "environment_entry_count": 565,
+  "environment_entry_count": 569,
   "deprecated_alias_count": 21,
   "shared_count": 96,
 }

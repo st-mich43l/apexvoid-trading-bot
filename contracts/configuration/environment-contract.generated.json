@@ -1,7 +1,7 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "45773d05333f26c42039b249e69a657804373105c69b6206849a4a2f77fab720",
-  "count": 565,
+  "configuration_contract_fingerprint_sha256": "3f085db7e0dfffb00177e8f53817f90107c0390c238731040448098bb20b51e0",
+  "count": 569,
   "deprecated_alias_count": 21,
   "entries": [
     {
@@ -8120,6 +8120,70 @@
       "unit": "bars"
     },
     {
+      "canonical_env": "TECHNIQUE_INVALIDATION_TOLERANCE_ATR",
+      "default": 0.5,
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Owner 2026-09-21: a candle close only counts as breaking a supply/demand/OB/FVG zone when it is beyond the far edge by more than this many ATR. Was a fixed 0.05 ATR, so one close 3.6 points under XAU 4341-4353 demand (a liquidity sweep) killed it permanently. 0 restores the old hair-trigger.",
+      "display_id": "config:analysis.techniques.invalidation_tolerance_atr",
+      "owner": "python",
+      "path": "analysis.techniques.invalidation_tolerance_atr",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "float",
+      "unit": "atr"
+    },
+    {
+      "canonical_env": "TECHNIQUE_MAX_BREAK_EPISODES",
+      "default": 2,
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Owner 2026-09-21: forgiven sweeps a zone may absorb before it is treated as noise rather than a level price respects.",
+      "display_id": "config:analysis.techniques.max_break_episodes",
+      "owner": "python",
+      "path": "analysis.techniques.max_break_episodes",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "int",
+      "unit": "count"
+    },
+    {
+      "canonical_env": "TECHNIQUE_RETEST_MAX_TOUCHES",
+      "default": 30,
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Owner 2026-09-21: prior touches a supply/demand/OB/FVG zone may take and still be tradeable, as long as price has never closed through it. Was implicitly 0 (first touch consumed the zone). Sanity cap only - a zone that keeps holding across many touches in a range is still structure. 0 restores first-touch-only.",
+      "display_id": "config:analysis.techniques.retest_max_touches",
+      "owner": "python",
+      "path": "analysis.techniques.retest_max_touches",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "int",
+      "unit": "count"
+    },
+    {
+      "canonical_env": "TECHNIQUE_SWEEP_RECLAIM_BARS",
+      "default": 6,
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Owner 2026-09-21: bars within which a close back on the zone side of its far edge forgives a close-through as a liquidity sweep rather than a break. 0 disables forgiveness.",
+      "display_id": "config:analysis.techniques.sweep_reclaim_bars",
+      "owner": "python",
+      "path": "analysis.techniques.sweep_reclaim_bars",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "int",
+      "unit": "bars"
+    },
+    {
       "canonical_env": "TECHNIQUE_VALIDATION_ENABLED",
       "default": true,
       "deprecated": false,
@@ -9098,6 +9162,6 @@
   ],
   "secret_count": 9,
   "shared_with_ctrader_count": 87,
-  "source_fingerprint_sha256": "45773d05333f26c42039b249e69a657804373105c69b6206849a4a2f77fab720",
+  "source_fingerprint_sha256": "3f085db7e0dfffb00177e8f53817f90107c0390c238731040448098bb20b51e0",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

@@ -1,20 +1,20 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "45773d05333f26c42039b249e69a657804373105c69b6206849a4a2f77fab720",
-  "configuration_document_fingerprint_sha256": "efc9a29f077cd658463f0ce6f9e0678f3e4d4f5f5282e54fa64ec75fa912bce0",
+  "configuration_contract_fingerprint_sha256": "3f085db7e0dfffb00177e8f53817f90107c0390c238731040448098bb20b51e0",
+  "configuration_document_fingerprint_sha256": "e97622da1d556236e6bb7ce995e0456203ed3f9de0bdd66f41c0ff919e4a7f48",
   "counts": {
     "algorithm_constants": 97,
-    "configurable": 565,
+    "configurable": 569,
     "known_conflicts": 30,
     "owners": {
       "ctrader": 50,
-      "python": 526,
+      "python": 530,
       "shared": 96
     },
     "protocol_constants": 10,
     "secrets": 9,
     "shared": 96,
-    "total_items": 672
+    "total_items": 676
   },
   "items": [
     {
@@ -5307,6 +5307,162 @@
       "terminal_deprecation_reason": null,
       "type": "float",
       "unit": "percent",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "TECHNIQUE_INVALIDATION_TOLERANCE_ATR",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 0.0
+      },
+      "default": 0.5,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 0.5
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Owner 2026-09-21: a candle close only counts as breaking a supply/demand/OB/FVG zone when it is beyond the far edge by more than this many ATR. Was a fixed 0.05 ATR, so one close 3.6 points under XAU 4341-4353 demand (a liquidity sweep) killed it permanently. 0 restores the old hair-trigger.",
+      "display_id": "config:analysis.techniques.invalidation_tolerance_atr",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "analysis.techniques.invalidation_tolerance_atr",
+      "protocol_constant": false,
+      "reload_policy": "next_scanner_cycle",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "analysis_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "atr",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "TECHNIQUE_MAX_BREAK_EPISODES",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 0
+      },
+      "default": 2,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 2
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Owner 2026-09-21: forgiven sweeps a zone may absorb before it is treated as noise rather than a level price respects.",
+      "display_id": "config:analysis.techniques.max_break_episodes",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "analysis.techniques.max_break_episodes",
+      "protocol_constant": false,
+      "reload_policy": "next_scanner_cycle",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "analysis_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "int",
+      "unit": "count",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "TECHNIQUE_RETEST_MAX_TOUCHES",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 0
+      },
+      "default": 30,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 30
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Owner 2026-09-21: prior touches a supply/demand/OB/FVG zone may take and still be tradeable, as long as price has never closed through it. Was implicitly 0 (first touch consumed the zone). Sanity cap only - a zone that keeps holding across many touches in a range is still structure. 0 restores first-touch-only.",
+      "display_id": "config:analysis.techniques.retest_max_touches",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "analysis.techniques.retest_max_touches",
+      "protocol_constant": false,
+      "reload_policy": "next_scanner_cycle",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "analysis_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "int",
+      "unit": "count",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "TECHNIQUE_SWEEP_RECLAIM_BARS",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 0
+      },
+      "default": 6,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 6
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Owner 2026-09-21: bars within which a close back on the zone side of its far edge forgives a close-through as a liquidity sweep rather than a break. 0 disables forgiveness.",
+      "display_id": "config:analysis.techniques.sweep_reclaim_bars",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "analysis.techniques.sweep_reclaim_bars",
+      "protocol_constant": false,
+      "reload_policy": "next_scanner_cycle",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "analysis_behavior",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "int",
+      "unit": "bars",
       "validation_summary": "Pydantic required/type coercion only"
     },
     {
@@ -25081,6 +25237,6 @@
       "validation_summary": "Pydantic required/type coercion only"
     }
   ],
-  "source_fingerprint_sha256": "45773d05333f26c42039b249e69a657804373105c69b6206849a4a2f77fab720",
+  "source_fingerprint_sha256": "3f085db7e0dfffb00177e8f53817f90107c0390c238731040448098bb20b51e0",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

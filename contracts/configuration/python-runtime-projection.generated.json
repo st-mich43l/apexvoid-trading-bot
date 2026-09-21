@@ -1,6 +1,6 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "45773d05333f26c42039b249e69a657804373105c69b6206849a4a2f77fab720",
+  "configuration_contract_fingerprint_sha256": "3f085db7e0dfffb00177e8f53817f90107c0390c238731040448098bb20b51e0",
   "excluded_ctrader_only_count": 50,
   "excluded_paths": [
     "bootstrap.ctrader.connection.host",
@@ -54,7 +54,7 @@
     "risk.sizing.add_require_risk_free",
     "risk.sizing.risk_pct"
   ],
-  "included_leaf_count": 622,
+  "included_leaf_count": 626,
   "included_paths": [
     "actionability.contested_corridor.gap_atr",
     "actionability.counter_bias.allowed",
@@ -202,6 +202,10 @@
     "analysis.swings.fractal_size",
     "analysis.swings.zigzag.atr_mult",
     "analysis.swings.zigzag.pct",
+    "analysis.techniques.invalidation_tolerance_atr",
+    "analysis.techniques.max_break_episodes",
+    "analysis.techniques.retest_max_touches",
+    "analysis.techniques.sweep_reclaim_bars",
     "analysis.techniques.validation_enabled",
     "analysis.trendlines.approach_min_distance_atr",
     "analysis.trendlines.chop_minimum_validation_touches",
@@ -682,6 +686,6 @@
   "included_secret_count": 6,
   "included_shared_field_count": 96,
   "projection_model": "app.configuration.models.python_runtime.PythonRuntimeConfig",
-  "source_fingerprint_sha256": "45773d05333f26c42039b249e69a657804373105c69b6206849a4a2f77fab720",
+  "source_fingerprint_sha256": "3f085db7e0dfffb00177e8f53817f90107c0390c238731040448098bb20b51e0",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

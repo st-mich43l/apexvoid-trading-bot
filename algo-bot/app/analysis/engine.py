@@ -247,6 +247,10 @@ class AnalysisSettings:
   fvg_entry_max_width_price: float = 5.0
   fvg_max_atr: float = 2.0
   technique_validation_enabled: bool = True
+  technique_retest_max_touches: int = 30
+  technique_invalidation_tolerance_atr: float = 0.5
+  technique_sweep_reclaim_bars: int = 6
+  technique_max_break_episodes: int = 2
   causal_structure: bool = False
   max_cluster_span_multiple: float = 2.0
 
@@ -419,6 +423,10 @@ def _attach_technique_instances(
     crt_h1_lookback_bars=int(settings.crt_h1_lookback_bars),
     fvg_entry_max_width_price=float(settings.fvg_entry_max_width_price),
     fvg_max_atr=float(settings.fvg_max_atr),
+    retest_max_touches=int(settings.technique_retest_max_touches),
+    invalidation_tolerance_atr=float(settings.technique_invalidation_tolerance_atr),
+    sweep_reclaim_bars=int(settings.technique_sweep_reclaim_bars),
+    max_break_episodes=int(settings.technique_max_break_episodes),
   )
   updated: dict[str, TimeframeAnalysis] = {}
   for tf, analysis in per_tf.items():

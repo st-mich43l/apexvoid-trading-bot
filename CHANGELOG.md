@@ -13,6 +13,30 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Supply/Demand, Order Block and FVG zones stopped being tradeable the moment
+  price touched them or closed once through them. Owner-reported 2026-09-21
+  (XAU chart: 4340-4352 demand tapped ~12 times in a week and held each time,
+  yet the bot never traded it; `technique_sd` fired 26 times and
+  `technique_ob` 18 since metrics began, vs 4190 for Key Level). Two rules
+  were the cause. (1) `Zone.mitigated` means "touched once" and
+  `collect_technique_instances` / `validate_technique_instance` discarded every
+  mitigated zone, so a zone could only trade on its first tap. (2)
+  `not_invalidated` killed a zone permanently on ONE M5 close beyond the far
+  edge by more than 0.05 ATR - live XAU 4341.0-4352.9 demand died on Sep 18
+  03:15 UTC when a candle closed 3.6 points under it (the liquidity sweep
+  before the week's biggest rally) and then held on three further taps.
+  A touched zone now stays tradeable while it still holds: a close only counts
+  as a break when it is beyond the far edge by more than
+  `analysis.techniques.invalidation_tolerance_atr` (0.5 ATR), a close-through
+  is forgiven as a sweep when price returns to the zone side within
+  `sweep_reclaim_bars` (6), a zone swept more than `max_break_episodes` (2)
+  times is treated as noise, and `retest_max_touches` (30) is only a sanity
+  cap. New env: `TECHNIQUE_RETEST_MAX_TOUCHES`,
+  `TECHNIQUE_INVALIDATION_TOLERANCE_ATR`, `TECHNIQUE_SWEEP_RECLAIM_BARS`,
+  `TECHNIQUE_MAX_BREAK_EPISODES`; setting them to 0/0/0/0 restores the old
+  behaviour. Replay on live XAU bars: BUY supply_demand detections now fire at
+  the 09:45 and 11:00 UTC taps of 4340-4352 that produced none before, with
+  roughly one extra detection per ten bars overall (no flood).
 - Key level touches now count wick touches, not only fractal swing points.
   Owner-reported 2026-09-21. `levels.key_levels` counted a touch only when a
   confirmed fractal swing sat in the cluster, so a wick that poked a level and
