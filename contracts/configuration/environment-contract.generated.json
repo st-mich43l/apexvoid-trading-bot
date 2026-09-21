@@ -1,7 +1,7 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "3f085db7e0dfffb00177e8f53817f90107c0390c238731040448098bb20b51e0",
-  "count": 569,
+  "configuration_contract_fingerprint_sha256": "2284e2c761a3f531c1c24347c4c9bc51c25edd019b8b20f9bae37b5ba67d5e5d",
+  "count": 570,
   "deprecated_alias_count": 21,
   "entries": [
     {
@@ -4971,6 +4971,22 @@
       "unit": "fraction"
     },
     {
+      "canonical_env": "ENTRY_LOCATION_WITH_BIAS_PD_EXEMPT",
+      "default": true,
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Exempt reversal, unknown and breakout-retest entries that trade with the higher-timeframe bias from the premium/discount half-range gate; counter-bias and neutral entries stay gated.",
+      "display_id": "config:actionability.entry_location.with_bias_pd_exempt",
+      "owner": "python",
+      "path": "actionability.entry_location.with_bias_pd_exempt",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "bool",
+      "unit": "boolean"
+    },
+    {
       "canonical_env": "EQUAL_TOL_ATR",
       "default": 0.15,
       "deprecated": false,
@@ -9162,6 +9178,6 @@
   ],
   "secret_count": 9,
   "shared_with_ctrader_count": 87,
-  "source_fingerprint_sha256": "3f085db7e0dfffb00177e8f53817f90107c0390c238731040448098bb20b51e0",
+  "source_fingerprint_sha256": "2284e2c761a3f531c1c24347c4c9bc51c25edd019b8b20f9bae37b5ba67d5e5d",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

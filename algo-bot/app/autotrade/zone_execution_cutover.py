@@ -623,6 +623,7 @@ def _location_and_activation_for_record(
     direction=record.direction,
     context=context,
     cfg=inst,
+    bias_relationship=getattr(match, "bias_relationship", None),
   )
   from app.autotrade.execution_confirmation import confirmation_policy_for
 
