@@ -13,6 +13,24 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Order Block detection never found reversal order blocks - it had never
+  produced a single auto trade. Owner-reported 2026-09-21: XAU M15 demand OB
+  at 4337-42 (the last down candle before a +18 impulse) was invisible to the
+  bot. `zones._causing_bos` only accepted a `BOS` as the structure break that
+  qualifies an impulse's origin candle as an order block, but an impulse that
+  reverses the prevailing trend breaks structure as a `CHoCH`
+  (`structure._break_kind`) - so every reversal OB, the most common kind, was
+  discarded. It now accepts BOS or CHoCH. Verified on live production M15/M5
+  bars: the 09-18 03:15 demand OB (4340.8-4344.8 body, 4334.3-4344.9 range on
+  M15; 4336.1-4337.4 on M5) is now detected. Expect Order Block setups to
+  start appearing in the watchlist and, once retested and confirmed, trading.
+- Dead zones are removed from the ZoneWatch watchlist. Zones past the dormant
+  band (`remote_atr`, 3 ATR) were only skipped and stayed listed forever - a
+  BUY zone 8 ATR below a falling XAU market was still on the list. Beyond
+  twice the dormant band (6 ATR) the record and its indexes are now deleted
+  (not an EXPIRED transition, which is a dead end that blocks rediscovery),
+  so the zone can be rediscovered if price returns. The band between 3 and
+  6 ATR stays dormant-but-kept as hysteresis.
 - A filled trade's root card is no longer deleted. Owner-reported
   2026-09-21: two XAU scalps filled and closed within minutes; with
   `delivery.telegram.delete_root_on_terminal` on, `kill_setup_card` deleted
