@@ -487,6 +487,7 @@ def _analyze_tf(
     settings.round_step,
     settings.key_level_min_touches,
     settings.max_cluster_span_multiple,
+    bars=df,
   )
   legs = displacement(
     df,
