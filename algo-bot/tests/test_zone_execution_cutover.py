@@ -1214,13 +1214,13 @@ def test_match_planned_stop_hard_error_reads_measured_even_when_allowed():
   match = replace(
     _match(),
     execution_eligibility=_eligibility_with_stop_error(
-      planned_stop_error="stop_exceeds_envelope_furthest_leg",
+      planned_stop_error="stop_inside_entry_zone",
       allowed=True,
     ),
   )
   assert (
     cutover._match_planned_stop_hard_error(match)
-    == "stop_exceeds_envelope_furthest_leg"
+    == "stop_inside_entry_zone"
   )
   assert cutover._publish_should_terminalize_zone_watch(
     status=worker.PUBLISH_STATUS_INVALIDATED,
@@ -1236,8 +1236,60 @@ def test_match_planned_stop_hard_error_reads_measured_even_when_allowed():
   )
 
 
+@pytest.mark.parametrize("code", [
+  "stop_exceeds_envelope_furthest_leg",
+  "stop_exceeds_envelope_after_wick",
+  "stop_exceeds_max_envelope",
+  "v8_stop_exceeds_max_envelope",
+  "v8_stop_exceeds_envelope_furthest_leg",
+])
+def test_stop_distance_errors_never_kill_a_zone(code):
+  """Owner 2026-09-21: a tier-A with-bias Key Level SELL seen with price on the
+  zone's low edge (market leg 68 pips from the stop, cap 60) was INVALIDATED
+  for good although it plans fine once price is mid-zone."""
+  from dataclasses import replace
+
+  match = replace(
+    _match(),
+    execution_eligibility=_eligibility_with_stop_error(
+      planned_stop_error=code, allowed=True,
+    ),
+  )
+  assert cutover._is_stop_envelope_distance_error(code)
+  assert cutover._match_planned_stop_hard_error(match) is None
+  for status in (
+    worker.PUBLISH_STATUS_INVALIDATED,
+    worker.PUBLISH_STATUS_REJECTED,
+  ):
+    assert not cutover._publish_should_terminalize_zone_watch(
+      status=status, reason_code=code,
+    )
+
+
+@pytest.mark.parametrize("code", [
+  "stop_inside_entry_zone",
+  "stop_inside_opposing_zone",
+  "stop_not_beyond_planned_entries",
+  "protective_stop_unavailable",
+])
+def test_stop_geometry_errors_stay_terminal(code):
+  from dataclasses import replace
+
+  match = replace(
+    _match(),
+    execution_eligibility=_eligibility_with_stop_error(
+      planned_stop_error=code, allowed=True,
+    ),
+  )
+  assert not cutover._is_stop_envelope_distance_error(code)
+  assert cutover._match_planned_stop_hard_error(match) == code
+  assert cutover._publish_should_terminalize_zone_watch(
+    status=worker.PUBLISH_STATUS_REJECTED, reason_code=code,
+  )
+
+
 @pytest.mark.asyncio
-async def test_prepare_activation_preblocks_planned_stop_envelope_error(
+async def test_prepare_activation_preblocks_planned_stop_geometry_error(
   monkeypatch,
 ):
   from dataclasses import replace
@@ -1280,14 +1332,14 @@ async def test_prepare_activation_preblocks_planned_stop_envelope_error(
     confluence_zone_id="zone-stop",
     structural_zone_id="zone-stop",
     execution_eligibility=_eligibility_with_stop_error(
-      planned_stop_error="stop_exceeds_envelope_furthest_leg",
+      planned_stop_error="stop_inside_entry_zone",
     ),
   )
   terminalize = AsyncMock()
   monkeypatch.setattr(cutover, "_terminalize_zone_watch", terminalize)
   monkeypatch.setattr(cutover, "_record_policy_telemetry", AsyncMock())
   prepared = await cutover._prepare_activation(
-    SimpleNamespace(),
+    SimpleNamespace(get=AsyncMock(return_value=None)),
     record=record,
     match=match,
     quote=(4114.4, 4114.6, 1_785_390_200),
@@ -1296,7 +1348,7 @@ async def test_prepare_activation_preblocks_planned_stop_envelope_error(
   assert prepared is None
   terminalize.assert_awaited_once()
   assert terminalize.await_args.kwargs["reason_code"] == (
-    "stop_exceeds_envelope_furthest_leg"
+    "stop_inside_entry_zone"
   )
 
 
@@ -1395,3 +1447,51 @@ async def test_activate_match_terminalizes_zone_on_v8_stop_invalidate(
     "v8_protective_stop_unavailable"
   )
   presence.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_prepare_activation_waits_out_a_stop_distance_cooldown_without_terminalizing(
+  monkeypatch,
+):
+  from dataclasses import replace
+
+  record = zw.ZoneWatch(
+    version=zw.ZONE_WATCH_VERSION,
+    zone_id="zone-cool",
+    symbol="XAU",
+    direction="SELL",
+    low=4113.0,
+    high=4116.0,
+    width=3.0,
+    source_timeframe="M5",
+    structural_sources=("key_level",),
+    confluence_tags=("key_level",),
+    technique_tags=(),
+    grade=zw.GRADE_A,
+    score=1.0,
+    freshness=0,
+    touch_count=0,
+    discovered_at=1_785_390_000,
+    last_confirmed_at=1_785_390_000,
+    last_touch_at=None,
+    invalidation_price=None,
+    state=zw.WATCHING_RETEST,
+    market_map_id="",
+    structure_signature="",
+    updated_at=1_785_390_000,
+  )
+  terminalize = AsyncMock()
+  monkeypatch.setattr(cutover, "_terminalize_zone_watch", terminalize)
+  client = SimpleNamespace(get=AsyncMock(return_value=b"1"))
+
+  prepared = await cutover._prepare_activation(
+    client,
+    record=record,
+    match=replace(_match(), match_id="setup-cool"),
+    quote=(4114.4, 4114.6, 1_785_390_200),
+    evidence=SimpleNamespace(executable_quote=4114.4, inside=True),
+  )
+
+  assert prepared is None
+  client.get.assert_awaited_once_with(cutover.stop_cooldown_key("zone-cool"))
+  terminalize.assert_not_awaited()
