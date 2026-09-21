@@ -13,6 +13,19 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- A retired setup re-arms on a NEWER M5 confirmation. Technique / confluence
+  matches keep one stable `match_id` per zone+direction, so once any plan on
+  that zone was rejected its setup stayed INVALIDATED for good and every later
+  signal there died at "durable TradePlan lifecycle is already terminal".
+  `setup_lifecycle.rearm_setup` was documented as "the only way back" and
+  nothing called it. Live 2026-09-21: a fresh, grade-A, with-bias Supply Demand
+  SELL (M5-confirmed 18:20, activation allowed via the M5 path) was refused
+  because the same `match_id` had been retired at 15:39. The cutover now
+  re-arms an INVALIDATED/EXPIRED setup before publishing when the candidate's
+  M5 confirmation closed more than 5 minutes after the setup died (same rule as
+  ZoneWatch re-formation). CONSUMED / CANCELLED setups never re-arm. The
+  soft-reject cooldown now keys on match + confirmation stamp, since the
+  match_id alone cannot tell a fresh reaction from the retired one.
 - A plan reject retires the MATCH, not the ZONE. The cutover terminalized a
   ZoneWatch on any publish result with `status=invalidated`, and that status is
   returned whenever the match's setup is retired - for every plan-build reject
