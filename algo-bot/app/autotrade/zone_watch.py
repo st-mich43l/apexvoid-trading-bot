@@ -604,6 +604,25 @@ async def discover_zone_watch(
   raise ZoneWatchError(f"zone discovery CAS contention exceeded for {key!r}")
 
 
+async def retire_zone_watch(client: Any, record: ZoneWatch) -> bool:
+  """Drop a dead zone from the watchlist entirely (record + every index).
+
+  Deliberately NOT a terminal-state transition: EXPIRED is a dead end
+  (``_TRANSITIONS[EXPIRED] == frozenset()``), so expiring a zone would
+  permanently block it if price ever returned. Deleting the record instead
+  leaves the zone free to be rediscovered from scratch (same deterministic
+  zone_id) the next time the scanner sees a reaction off that structure.
+  Only ever retires a zone that is still watchable - never a published/
+  locked one that may carry a live plan.
+  """
+  if not _index_wants_record(record):
+    return False
+  await client.srem(ZONE_WATCH_INDEX_KEY, record.zone_id)
+  await client.srem(zone_watch_symbol_index_key(record.symbol), record.zone_id)
+  await client.delete(zone_watch_key(record.zone_id))
+  return True
+
+
 async def transition_zone_watch(
   client: Any,
   zone_id: str,
