@@ -13,6 +13,20 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- A plan reject retires the MATCH, not the ZONE. The cutover terminalized a
+  ZoneWatch on any publish result with `status=invalidated`, and that status is
+  returned whenever the match's setup is retired - for every plan-build reject
+  (fixed-RR room, same-direction active, news, entry inside an opposing zone,
+  stop distance) and for the retired match's own "durable lifecycle already
+  terminal". Live 2026-09-21: one valid, M5-confirmed, with-bias tier-A Key
+  Level SELL zone was terminalized three times in an hour, the last time at
+  17:21 by the retry of a match already retired at 16:55. Only zone-level
+  reasons now terminalize a zone: `structure_invalidated`,
+  `zone_decisively_broken` and the stop-geometry errors. Any other reject with
+  a retired match sets the match-bound cooldown (600 s, cleared by a fresh
+  candidate) and leaves the zone watching. Reasons that are price-dependent
+  (stop distance, entry inside an opposing zone, barrier ahead) are unchanged
+  from the previous fix.
 - Price-dependent publish rejects no longer kill a zone, and the retry is
   bound to the match. Live 2026-09-21: a with-bias tier-A Key Level SELL passed
   activation on its M5 confirmation (`reaction_m5_authoritative_in_zone`,

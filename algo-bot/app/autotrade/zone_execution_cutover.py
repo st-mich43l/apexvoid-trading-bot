@@ -357,17 +357,30 @@ def _match_planned_stop_hard_error(match: StrategyMatch) -> str | None:
   return None
 
 
+# A failed publish retires THAT MATCH (its plan/setup lifecycle goes terminal);
+# it says nothing about the zone. Live 2026-09-21: the same Key Level SELL zone
+# was terminalized three times in one hour - stop distance, entry inside a demand
+# shelf, then "durable lifecycle already terminal" for the match retired by the
+# previous reject - although it was a valid, M5-confirmed, with-bias setup each
+# time. Only zone-level reasons kill a zone: it structurally failed, or its stop
+# geometry can never work. Everything else waits for a fresh candidate.
+_ZONE_LEVEL_TERMINAL_REASONS = frozenset({
+  "structure_invalidated",
+  "zone_decisively_broken",
+})
+
+
 def _publish_should_terminalize_zone_watch(
   *,
   status: str,
   reason_code: str | None,
 ) -> bool:
-  """True when a failed publish must stop ZoneWatch re-activation thrash."""
-  if _is_stop_envelope_distance_error(reason_code):
+  """True only when a failed publish means the ZONE itself is dead."""
+  if _is_price_dependent_reject(reason_code):
     return False
-  if status == "invalidated":
+  if _is_stop_hard_error(reason_code):
     return True
-  return _is_stop_hard_error(reason_code)
+  return status == "invalidated" and str(reason_code or "") in _ZONE_LEVEL_TERMINAL_REASONS
 
 
 async def _terminalize_zone_watch(
@@ -1483,16 +1496,23 @@ async def _activate_match(
       )
     except Exception:
       log.exception("could not retire non-executable setup=%s", match.match_id)
-  if _is_price_dependent_reject(reject_reason):
+  terminalize_zone = _publish_should_terminalize_zone_watch(
+    status=result.status,
+    reason_code=reject_reason,
+  )
+  if not terminalize_zone and (
+    result.status == worker.PUBLISH_STATUS_INVALIDATED
+    or _is_price_dependent_reject(reject_reason)
+  ):
+    # The match is retired; the zone lives on. Skip this exact match until the
+    # scanner issues a fresh candidate (a retry would only hit "lifecycle
+    # already terminal").
     await client.set(
       stop_cooldown_key(record.zone_id),
       str(match.match_id),
       ex=_SOFT_REJECT_COOLDOWN_SECONDS,
     )
-  if _publish_should_terminalize_zone_watch(
-    status=result.status,
-    reason_code=reject_reason,
-  ):
+  if terminalize_zone:
     await _terminalize_zone_watch(
       client,
       record.zone_id,
