@@ -106,3 +106,84 @@ async def test_nearby_zone_appears_as_active():
 async def test_no_spot_price_reports_unavailable_instead_of_guessing():
   text = await current_market_setups_text("EURUSD")
   assert "No live spot price" in text
+
+
+def _map_entry(side, lo, hi, *, score=20.0, tier="major", tags=("OB", "supply"), inside=False):
+  from app.analysis.market_map import MapEntry
+
+  return MapEntry(
+    side=side, lo=lo, hi=hi, label_lo=lo, label_hi=hi, tier=tier,
+    tags=list(tags), score=score, contains_price=inside,
+  )
+
+
+def test_map_zone_lines_list_nearest_major_zones_and_skip_far_or_minor():
+  from types import SimpleNamespace
+
+  from app.autotrade.setups_report import map_zone_lines
+
+  market_map = SimpleNamespace(entries=[
+    _map_entry("sell", 4344.1, 4356.0, score=23.0, tags=("OB", "breaker", "supply", "FVG")),
+    _map_entry("buy", 4298.3, 4304.3, score=10.0, tags=("demand",)),
+    _map_entry("buy", 4290.0, 4298.3, score=10.0, tier="minor"),
+    _map_entry("sell", 4500.0, 4510.0),
+  ])
+  lines = map_zone_lines(market_map, 4336.6, 5.0, [])
+
+  assert lines[0].startswith("  SELL 4344.10-4356.00")
+  assert "7.5 pts / 1.5 ATR" in lines[0]
+  assert "OB,breaker,supply,FVG" in lines[0]
+  assert "waiting for M5 reaction" in lines[0]
+  assert any("4298.30-4304.30" in line for line in lines)
+  assert not any("4290.00" in line for line in lines)  # minor tier
+  assert not any("4500.00" in line for line in lines)  # beyond 8 ATR
+
+
+def test_map_zone_lines_mark_zones_zonewatch_already_tracks():
+  from types import SimpleNamespace
+
+  from app.autotrade.setups_report import map_zone_lines
+
+  market_map = SimpleNamespace(entries=[_map_entry("sell", 4344.0, 4356.0)])
+  tracked = _zone(zone_id="z", direction="SELL", low=4350.0, high=4352.0)
+  other_side = _zone(zone_id="y", direction="BUY", low=4350.0, high=4352.0)
+
+  assert "tracked in ZoneWatch" in map_zone_lines(market_map, 4336.0, 2.0, [tracked])[0]
+  assert "waiting for M5 reaction" in map_zone_lines(market_map, 4336.0, 2.0, [other_side])[0]
+
+
+def test_map_zone_lines_price_inside_and_missing_map():
+  from types import SimpleNamespace
+
+  from app.autotrade.setups_report import map_zone_lines
+
+  inside = SimpleNamespace(entries=[_map_entry("buy", 4330.0, 4340.0, inside=True)])
+  assert "price inside" in map_zone_lines(inside, 4335.0, 2.0, [])[0]
+  assert map_zone_lines(None, 4335.0, 2.0, []) == []
+  assert map_zone_lines(SimpleNamespace(entries=[]), 4335.0, 2.0, []) == []
+
+
+@pytest.mark.asyncio
+async def test_report_includes_map_section_and_survives_map_failure(monkeypatch):
+  from types import SimpleNamespace
+
+  from app.analysis import market_map_delivery
+
+  await _seed_spot("XAU", 4336.0, 4336.5)
+  await _seed_bars("XAU", "M5", [4334.0 + (i % 3) for i in range(30)])
+
+  async def _map(_symbol):
+    return SimpleNamespace(bias="down", entries=[_map_entry("sell", 4344.0, 4356.0)])
+
+  monkeypatch.setattr(market_map_delivery, "get_current_market_map", _map)
+  text = await current_market_setups_text("XAU")
+  assert "MARKET MAP ZONES" in text and "bias down" in text
+  assert "SELL 4344.00-4356.00" in text
+
+  async def _boom(_symbol):
+    raise RuntimeError("map unavailable")
+
+  monkeypatch.setattr(market_map_delivery, "get_current_market_map", _boom)
+  text = await current_market_setups_text("XAU")
+  assert "MARKET MAP ZONES" not in text
+  assert "XAU setups" in text
