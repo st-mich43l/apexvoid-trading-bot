@@ -13,6 +13,19 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- A dead ZoneWatch zone can now re-form on a NEW reaction. An INVALIDATED or
+  EXPIRED zone stayed dead for the full 7-day retention: every later detection
+  at the same price bucket was refused
+  (`zone watch cutover rejected ... reason=zone_watch_locked_or_terminal
+  state=invalidated`, seen live on XAU Key Level SELL while price climbed back
+  to the level, 2026-09-21). Zones now carry `terminal_at`; when a detection's
+  M5 confirmation closes more than 5 minutes after the zone last died or was
+  touched (`discover_zone_watch(confirmed_at=...)`), it is re-created as a
+  fresh DISCOVERED record (touch count and episode reset,
+  `last_rearm_reason=reformed_after_<state>`). A detector that merely re-sees
+  the old structure (no newer confirmation) never revives it, a decisive
+  closed-bar break still re-invalidates it, and CONSUMED (a trade was taken)
+  never re-forms.
 - The M5-authoritative activation fallback never worked in production. The
   scanner stores `m5_confirmation_bar_ts` as an ISO string
   (`2026-09-21T13:25:00+00:00`); activation's `_parse_confirmation_ts` was a

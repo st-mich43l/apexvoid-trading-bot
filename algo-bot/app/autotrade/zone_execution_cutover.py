@@ -1550,6 +1550,24 @@ async def _evaluate_record(
   )
 
 
+_SECONDS_PER_M5_BAR = 300
+
+
+def _confirmation_close_epoch(match: Any) -> int | None:
+  """Close time (epoch s) of the M5 bar that structurally confirmed ``match``.
+
+  Lets ZoneWatch tell a genuinely NEW reaction off a level from a detector
+  merely re-seeing an old, already-invalidated structure.
+  """
+  from app.autotrade.execution_confirmation import parse_bar_timestamp
+
+  opened = parse_bar_timestamp(
+    getattr(match, "m5_confirmation_bar_ts", None)
+    or getattr(match, "confirmation_bar_ts", None),
+  )
+  return None if opened is None else int(opened) + _SECONDS_PER_M5_BAR
+
+
 async def _sync_strategy_match_cutover(
   client: Any,
   symbol: str,
@@ -1663,6 +1681,7 @@ async def _sync_strategy_match_cutover(
         else str(result.execution_eligibility.market_map_id or "")
       ),
       structure_signature=str(getattr(result, "structural_id", None) or zone_id),
+      confirmed_at=_confirmation_close_epoch(match),
     )
     if created and record.state == DISCOVERED:
       record, _ = await transition_zone_watch(
