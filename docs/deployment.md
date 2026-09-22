@@ -12,11 +12,11 @@ postgres + redis + kafka → config-compiler + kafka-init
 |---|---|
 | `postgres` | `postgres:17-alpine` — `signals` DB |
 | `redis` | `redis:7-alpine` — bars, watches, plans, token mirror |
-| `kafka` | `apache/kafka:4.0.0` — single-node KRaft market event bus, internal only |
+| `kafka` | `apache/kafka:4.0.0` — single-node KRaft business-event bus, internal only |
 | `kafka-init` | analysis-engine image — creates and verifies V3 topic contracts |
 | `config-compiler` | algo-bot one-shot — validate YAML + emit manifest (exit 0) |
 | `ctrader-engine` | .NET feed + TradePlan V8 executor |
-| `analysis-engine` | Go closed-bar consumer and analysis runtime; `/health/ready` gates readiness |
+| `analysis-engine` | Go Redis market-data runtime and Kafka event producer; `/health/ready` reflects Redis readiness |
 | `bot` | Python Telegram + scanner + ZoneWatch + scalping |
 
 Production cTrader authority (set on the engine; do not flip casually):
@@ -224,6 +224,8 @@ Expected:
 | Check | Success signal |
 |---|---|
 | `config-compiler` | Exited **0**; wrote `/runtime/resolved-runtime.json` |
+| `kafka-init` | Exited **0**; verified the four business-event topics |
+| `analysis-engine` | Up; `/health/ready` becomes healthy after the first authoritative Redis bar read |
 | `ctrader-engine` | Healthy after backfill (~2 min start period); bars for live symbols |
 | `bot` | Up; Telegram polling + scanner / ZoneWatch / scalping loops |
 | Redis | `bars:XAU:M5` (and FX keys) receiving closes |

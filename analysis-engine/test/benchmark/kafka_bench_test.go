@@ -1,5 +1,5 @@
-// Kafka transport benchmarks (source task §66): JSON envelope encode,
-// JSON envelope decode, bar DTO conversion, opportunity encode. No
+// Kafka transport benchmarks: JSON envelope encode, JSON envelope decode,
+// and opportunity encode. No
 // network — these measure the codec/adapter, not broker throughput
 // (§66: "broker throughput benchmarking can be a separate tool," not
 // this centralized suite).
@@ -15,18 +15,11 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/transport/kafka"
 )
 
-func benchBarPayload() kafka.BarClosedPayload {
-	return kafka.BarClosedPayload{
-		CanonicalSymbol: "XAU", Timeframe: "M5", OpenTime: 1_700_000_000, CloseTime: 1_700_000_300,
-		Open: 2000, High: 2005, Low: 1998, Close: 2003, Volume: 120,
-	}
-}
-
 func benchEnvelope() kafka.Envelope {
-	payload, _ := kafka.Encode(benchBarPayload())
+	payload, _ := kafka.Encode(kafka.OpportunityPayload{ID: "cand-1", Strategy: "breakoutretest", Symbol: "XAU", Direction: "BUY"})
 	return kafka.Envelope{
-		EventID: kafka.NewEventID(), EventType: "market.bar.closed.v1", EventVersion: 1,
-		OccurredAt: 1_700_000_300, ProducedAt: 1_700_000_301, Producer: "ctrader-engine",
+		EventID: kafka.NewEventID(), EventType: "analysis.opportunity.v1", EventVersion: 1,
+		OccurredAt: 1_700_000_300, ProducedAt: 1_700_000_301, Producer: "analysis-engine",
 		CorrelationID: "corr-1", ConfigVersion: 3, ConfigFingerprint: "abc123",
 		Payload: payload,
 	}
@@ -66,16 +59,6 @@ func BenchmarkKafkaEnvelopeDecode(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		var env kafka.Envelope
 		if err := kafka.DecodeStrict(encoded, &env); err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-
-func BenchmarkKafkaBarDTOConversion(b *testing.B) {
-	payload := benchBarPayload()
-	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
-		if _, err := kafka.BarEventFromPayload(payload); err != nil {
 			b.Fatal(err)
 		}
 	}

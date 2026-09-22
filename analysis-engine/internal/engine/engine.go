@@ -66,13 +66,22 @@ func (e *Engine) Register(symbol market.Symbol, settings Settings) error {
 // symbol was never Register-ed — fail closed (source task §58), never
 // silently create a worker with guessed settings on the fly.
 func (e *Engine) Dispatch(event marketdata.BarEvent) (AnalysisSnapshot, error) {
+	snapshot, _, err := e.DispatchWithResult(event)
+	return snapshot, err
+}
+
+// DispatchWithResult routes one closed bar and returns the market-history
+// sequencing outcome as well as the snapshot. Transport runtimes use this
+// to expose duplicate/conflict/out-of-order telemetry without inventing a
+// second Redis-specific deduplication policy.
+func (e *Engine) DispatchWithResult(event marketdata.BarEvent) (AnalysisSnapshot, marketdata.AppendResult, error) {
 	e.mu.RLock()
 	worker, ok := e.workers[event.Symbol]
 	e.mu.RUnlock()
 	if !ok {
-		return AnalysisSnapshot{}, fmt.Errorf("engine: symbol %s is not registered", event.Symbol)
+		return AnalysisSnapshot{}, marketdata.AppendRejectedInvalid, fmt.Errorf("engine: symbol %s is not registered", event.Symbol)
 	}
-	return worker.Apply(event)
+	return worker.ApplyWithResult(event)
 }
 
 // Snapshot returns symbol's current AnalysisSnapshot without applying a

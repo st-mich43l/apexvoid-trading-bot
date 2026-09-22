@@ -37,7 +37,7 @@ analysis-engine/
 │   ├── confluence/        (still scaffolded — compositional evidence combining, doc.go + Score)
 │   ├── state/             (implemented — Analysis Engine V2 task; SymbolState wires History/Structure/Liquidity/Context/Opportunities together)
 │   ├── engine/            (implemented — Analysis Engine V2 task; SymbolWorker, Engine, Settings, AnalysisSnapshot)
-│   ├── transport/         (transport/kafka implemented — Kafka transport task, ADR-004/008/009; transport/redis still scaffolded, untouched)
+│   ├── transport/         (Redis market runtime and Kafka producer implemented — ADR-008/009/010)
 │   ├── visualization/     (implemented — Analysis Engine V2 task; stdlib PNG renderer, consumes AnalysisSnapshot data only)
 │   └── telemetry/         (implemented — Analysis Engine V2 task; Recorder, per-phase timing + counters)
 ├── test/                  (exists — centralized, one subdir per domain; see below)
@@ -46,13 +46,13 @@ analysis-engine/
 └── README.md
 ```
 
-"Scaffolded" (still applies to `zone`, `opportunity`, `strategy`,
-`confluence`, `transport/redis`) means: a real, compiling Go package with
+"Scaffolded" (still applies to `zone`, `opportunity`, `strategy`, and
+`confluence`) means: a real, compiling Go package with
 type declarations and doc comments that establish the package's
 ownership boundary and prove the dependency direction against its
 neighbors — not a strategy or indicator implementation. "Implemented"
-(the rest, as of the Analysis Engine V2 task and, for `transport/kafka`,
-the Kafka transport task) means real, tested, benchmarked logic — see
+(the rest, as of the Analysis Engine V2 task and the Redis/Kafka transport
+correction) means real, tested, benchmarked logic — see
 [`../analysis-engine-v2-migration.md`](../analysis-engine-v2-migration.md)
 for the Analysis Engine V2 capability table and
 [`../transport/kafka.md`](../transport/kafka.md) for the Kafka transport
@@ -100,7 +100,8 @@ support. `liquidity` was promoted to its own rank (above `structure`/
 `transport` originally sat above `engine` (reading the "engine → transport"
 pipeline-diagram arrow as sequence order). But that task's own §1 states
 the actual required **Go import** direction as "engine ↓ transport/kafka"
-— `engine` must import `transport` to wire a real producer/consumer —
+— `engine` must import `transport` to wire a real Redis runtime and Kafka
+producer —
 which is only legal under this graph's own rule if `transport` outranks
 nothing above it and `engine` sits strictly above `transport`. Moving
 `transport` to sit between `strategy/confluence/state` and `engine`

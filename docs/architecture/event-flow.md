@@ -1,86 +1,61 @@
-# Event Flow
+# Event flow
 
-## Current (verified live, this session)
-
-```mermaid
-flowchart LR
-    CT[cTrader] --> CE["ctrader-engine (.NET)"]
-    CE -->|"bars:{SYMBOL}:{TF} ZSET + bars:new pub"| R[(Redis)]
-    R --> AB["algo-bot: app/analysis (in-process)"]
-    AB -->|"ZoneWatch + StrategyMatch"| R
-    AB -->|"TradePlan V8"| R
-    R --> CE
-    CE -->|"execution events"| R
-    R --> AB2["algo-bot: delivery / stats"]
-    AB2 --> TG[Telegram]
-```
-
-Kafka is now the cross-service market-event boundary: cTrader publishes
-`market.bar.closed.v1` after broker acknowledgement, then updates Redis's
-bar cache. `analysis-engine` consumes the event and dispatches it through its
-existing engine path. Redis remains the compatibility/cache surface for the
-legacy bot loop; algo-bot's `app/analysis` is not cut over to opportunity
-consumption in this task.
-
-## Target
+## Market-data plane — live
 
 ```mermaid
 flowchart LR
-    CT[cTrader] --> CE["ctrader-engine (.NET)"]
-    CE -->|"market.bar.closed.v1 / market.tick.v1"| K[(Kafka)]
-    K --> AE["analysis-engine (Go)"]
-    AE -->|"analysis.opportunity.v1 / analysis.opportunity.invalidated.v1"| K
-    K --> AB["algo-bot: analysis_client → auto_algo/manual_algo → risk"]
-    AB -->|"execution.trade-plan.v1"| K
-    K --> CE
-    CE -->|"execution.trade-event.v1"| K
-    K --> AB2["algo-bot: execution → journal/trade_records/telegram"]
+    CT[cTrader] --> CE[ctrader-engine]
+    CE -->|closed OHLC ZSETs, spot, bars:new| R[(Redis)]
+    R --> AE[Analysis Engine]
+    R --> AB[Current Algo Bot]
 ```
 
-The only structural difference from today: `algo-bot`'s in-process
-computation is replaced by consuming `analysis.opportunity.v1` from
-`analysis-engine`, and the transport moves from Redis to Kafka. Everything
-downstream of "algo-bot has an opportunity" is unchanged in shape.
+Redis is the authority for operational market data:
 
-## Kafka topics (§33, frozen)
+- `bars:{SYMBOL}:{TIMEFRAME}` is the closed-bar history.
+- `price:{SYMBOL}:spot` is transient bid/ask.
+- `bars:new` is only a low-latency wake-up signal.
+- Analysis Engine subscribes before bootstrap, reads the authoritative ZSETs,
+  and reconciles periodically, so missed pub/sub messages cannot create a
+  candle gap.
+
+cTrader does not publish market bars or ticks to Kafka. Analysis Engine does
+not consume market bars or ticks from Kafka.
+
+## Trading-event and command plane — staged
+
+```mermaid
+flowchart LR
+    AE[Analysis Engine] -->|future AnalysisOpportunity| K[(Kafka)]
+    K --> AB[future Algo Bot consumer]
+    AB -->|future TradePlan| K
+    K --> CE[cTrader Engine]
+    CE -->|future ExecutionEvent| K
+    K --> AB
+    AB --> PG[(PostgreSQL)]
+```
+
+The explicitly provisioned Kafka topics are:
 
 ```text
-market.bar.closed.v1
-market.tick.v1
-
 analysis.opportunity.v1
 analysis.opportunity.invalidated.v1
-
 execution.trade-plan.v1
 execution.trade-event.v1
 ```
 
-**Forbidden**: a topic per internal calculation (`analysis.atr`,
-`analysis.swing`, `analysis.fvg`, `analysis.bos`, ...). Those stay internal
-to `analysis-engine`'s own `SymbolState` — nothing outside the service ever
-needs a partial computation, only the resulting `AnalysisOpportunity`.
+The Analysis Engine Kafka producer is ready, but no technical strategy produces
+real opportunities yet. Algo Bot's opportunity consumer, TradePlan publisher,
+and cTrader execution consumer/event producer are not implemented. Redis
+streams continue serving the existing execution path until those services are
+migrated deliberately.
 
-The Go side of the first four topics is real — `analysis-engine/internal/transport/kafka` is a working
-producer/consumer/codec, proven against a real broker
-([ADR-008](../adr/008-go-kafka-client.md), [ADR-009](../adr/009-kafka-delivery-semantics.md),
-[`../transport/kafka.md`](../transport/kafka.md)). The cTrader market-bar
-producer and analysis-engine consumer are live in the Compose topology.
-`algo-bot` does not yet consume `analysis.opportunity.v1`, and no strategy is
-currently publishing a real opportunity. `execution.trade-plan.v1` /
-`execution.trade-event.v1` remain entirely unimplemented, explicitly out
-of that task's scope. Schemas for all six event classes (plus the shared
-`contracts/common/event-envelope-v1.schema.json` wrapper) live under
-`contracts/` (see
-[`../adr/007-shared-cross-service-contracts.md`](../adr/007-shared-cross-service-contracts.md)).
+PostgreSQL remains the permanent business history for plans, fills, journal,
+statistics, and audit records. It is not the market-bar bootstrap store.
 
-## Redis role, before and after Kafka cutover (§34)
+## Non-negotiable boundary
 
-Today: Kafka is the durable market-event bus, while Redis still carries the
-legacy bot bus (ZoneWatch, TradePlan, telemetry, execution events) and bar
-cache — see `docs/redis-contract.md` for the full key inventory.
-
-Target, once Kafka is live: Redis narrows to transient/cache/state support
-only — latest quote, latest analysis snapshot, health, dedup, short-lived
-caches, bootstrap candle cache. Redis stops being the primary durable
-cross-service event bus. No date is set for this cutover; it is not part
-of this architecture-definition task's scope.
+Kafka topics are not created for internal calculations such as ATR, swings,
+BOS, liquidity, FVGs, or zones. Those remain inside the symbol state of the
+service that computes them. See [ADR-010](../adr/010-redis-market-data-kafka-events.md)
+for the ownership decision.

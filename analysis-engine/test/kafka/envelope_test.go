@@ -59,8 +59,8 @@ func TestNewEventID_IsTimeSortableAndUnique(t *testing.T) {
 
 func validEnvelope() kafka.Envelope {
 	return kafka.Envelope{
-		EventID: kafka.NewEventID(), EventType: "market.bar.closed.v1", EventVersion: 1,
-		OccurredAt: 1000, ProducedAt: 1001, Producer: "ctrader-engine",
+		EventID: kafka.NewEventID(), EventType: "analysis.opportunity.v1", EventVersion: 1,
+		OccurredAt: 1000, ProducedAt: 1001, Producer: "analysis-engine",
 		CorrelationID: "corr-1", Payload: []byte(`{"a":1}`),
 	}
 }

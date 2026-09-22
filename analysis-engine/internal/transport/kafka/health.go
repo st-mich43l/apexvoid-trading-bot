@@ -13,14 +13,12 @@ import (
 type Health struct {
 	mu sync.RWMutex
 
-	configured      bool
-	connected       bool
-	consumerRunning bool
-	producerReady   bool
-	lastConsumeAt   time.Time
-	lastProduceAt   time.Time
-	lastError       error
-	lastErrorAt     time.Time
+	configured    bool
+	connected     bool
+	producerReady bool
+	lastProduceAt time.Time
+	lastError     error
+	lastErrorAt   time.Time
 }
 
 // NewHealth returns a Health tracker. configured should be
@@ -32,9 +30,7 @@ func NewHealth(configured bool) *Health {
 }
 
 func (h *Health) SetConnected(v bool)       { h.mu.Lock(); h.connected = v; h.mu.Unlock() }
-func (h *Health) SetConsumerRunning(v bool) { h.mu.Lock(); h.consumerRunning = v; h.mu.Unlock() }
 func (h *Health) SetProducerReady(v bool)   { h.mu.Lock(); h.producerReady = v; h.mu.Unlock() }
-func (h *Health) MarkConsumed(at time.Time) { h.mu.Lock(); h.lastConsumeAt = at; h.mu.Unlock() }
 func (h *Health) MarkProduced(at time.Time) { h.mu.Lock(); h.lastProduceAt = at; h.mu.Unlock() }
 
 func (h *Health) MarkError(err error, at time.Time) {
@@ -45,18 +41,15 @@ func (h *Health) MarkError(err error, at time.Time) {
 }
 
 // Snapshot is a point-in-time, read-only copy — source task §36's
-// minimum field set: configured, connected/reachable, consumer running,
-// producer ready, last successful consume, last successful produce,
-// last error.
+// minimum field set: configured, connected/reachable, producer readiness,
+// last successful produce, and last error.
 type Snapshot struct {
-	Configured      bool
-	Connected       bool
-	ConsumerRunning bool
-	ProducerReady   bool
-	LastConsumeAt   time.Time
-	LastProduceAt   time.Time
-	LastError       error
-	LastErrorAt     time.Time
+	Configured    bool
+	Connected     bool
+	ProducerReady bool
+	LastProduceAt time.Time
+	LastError     error
+	LastErrorAt   time.Time
 }
 
 func (h *Health) Snapshot() Snapshot {
@@ -64,21 +57,20 @@ func (h *Health) Snapshot() Snapshot {
 	defer h.mu.RUnlock()
 	return Snapshot{
 		Configured: h.configured, Connected: h.connected,
-		ConsumerRunning: h.consumerRunning, ProducerReady: h.producerReady,
-		LastConsumeAt: h.lastConsumeAt, LastProduceAt: h.lastProduceAt,
-		LastError: h.lastError, LastErrorAt: h.lastErrorAt,
+		ProducerReady: h.producerReady,
+		LastProduceAt: h.lastProduceAt,
+		LastError:     h.lastError, LastErrorAt: h.lastErrorAt,
 	}
 }
 
 // Ready implements the readiness-vs-liveness distinction (source task
 // §68): when Kafka is not configured, readiness never depends on it.
 // When it is, the engine is only ready once transport is actually
-// connected AND at least one side (consumer or producer) the
-// composition root asked for is up — never "ready" merely because the
-// Go process is alive.
+// connected and its producer is ready. The composition root deliberately
+// has no Kafka consumer in this architecture.
 func (s Snapshot) Ready() bool {
 	if !s.Configured {
 		return true
 	}
-	return s.Connected && (s.ConsumerRunning || s.ProducerReady)
+	return s.Connected && s.ProducerReady
 }

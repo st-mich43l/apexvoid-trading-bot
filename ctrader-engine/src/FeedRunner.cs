@@ -1,5 +1,3 @@
-using ApexVoid.CTraderFeed.Transport.Kafka;
-
 namespace ApexVoid.CTraderFeed;
 
 public sealed class FeedRunner(
@@ -12,15 +10,7 @@ public sealed class FeedRunner(
   AutoTradeEngine? autoTrade = null,
   Func<DateTimeOffset>? clock = null,
   Func<TimeSpan, CancellationToken, Task>? delay = null,
-  InstrumentRuntimeRegistry? instrumentRegistry = null,
-  // Optional and LAST (source task §4/§21): every existing call site
-  // (dozens, across ReconnectTests.cs/MultiInstrumentRoutingTests.cs/
-  // RedisBarSinkTests.cs/etc.) uses positional args up through
-  // instrumentRegistry — adding a required parameter anywhere earlier
-  // would break all of them. null means "Kafka disabled" (mirrors the
-  // Go side's own transport.kafka.enabled=false symmetry): FeedRunner
-  // stays fully functional, it just never calls PublishClosedBarAsync.
-  IMarketEventPublisher? marketPublisher = null
+  InstrumentRuntimeRegistry? instrumentRegistry = null
 )
 {
   private bool _startupBackfillPending = true;
@@ -162,7 +152,6 @@ public sealed class FeedRunner(
               );
             }
             quality.Observe(raw.Timeframe, closed);
-            await PublishLiveBarAsync(symbol, raw.Timeframe, closed, cancellationToken);
             await sink.WriteClosedBarAsync(
               symbol.RedisSymbol,
               raw.Timeframe,
@@ -302,7 +291,6 @@ public sealed class FeedRunner(
               cancellationToken
             );
             qualities[symbol.SymbolId].Observe(raw.Timeframe, closed);
-            await PublishLiveBarAsync(symbol, raw.Timeframe, closed, cancellationToken);
             await sink.WriteClosedBarAsync(
               symbol.RedisSymbol,
               raw.Timeframe,
@@ -417,19 +405,6 @@ public sealed class FeedRunner(
     }
   }
 
-  // Explicit write-treatment mode (source task §8: "the code must make it
-  // impossible to accidentally publish 2000 bootstrap bars as live
-  // events" — replaces an ambiguous bare bool at this call site).
-  // Bootstrap: startup full-window historical fill — Redis series only,
-  // NEVER Kafka, NEVER a Redis bars:new notification (source task §7:
-  // "do NOT publish an entire historical window to the live Kafka
-  // topic"). RecoveryCatchUp: bars missed during a feed/session
-  // interruption — Redis series AND Kafka (chronologically) AND a Redis
-  // bars:new notification, since these are event-stream gaps that must
-  // close for every consumer, not only Kafka ones (source task §7: "this
-  // closes gaps in the event stream").
-  private enum BarWriteMode { Bootstrap, RecoveryCatchUp }
-
   private async Task BackfillAsync(
     ICTraderFeedClient client,
     SymbolInfo symbol,
@@ -438,7 +413,12 @@ public sealed class FeedRunner(
     IReadOnlyList<string>? timeframeOverride = null
   )
   {
-    var mode = fullWindow ? BarWriteMode.Bootstrap : BarWriteMode.RecoveryCatchUp;
+    // Startup history establishes the Redis source of truth silently;
+    // reconnect catch-up publishes bars:new one-by-one after each ZSET
+    // write so Redis consumers wake promptly. Analysis correctness never
+    // depends on that pub/sub delivery: it reads the ZSET on every wake-up
+    // and periodically reconciles cursor gaps.
+    var publish = !fullWindow;
     var now = DateTimeOffset.UtcNow;
     var timeframes = timeframeOverride ?? options.Timeframes;
     foreach (var timeframe in timeframes)
@@ -471,10 +451,9 @@ public sealed class FeedRunner(
       {
         LogRawTrendbar("historical", firstRaw);
       }
-      // Chronological order is mandatory for RecoveryCatchUp (source
-      // task §7's own example: "10:05, 10:10, 10:15, 10:20 ... publish
-      // chronologically to Kafka") — rawBars is already
-      // .OrderBy(UtcTimestampInMinutes) below, preserved unchanged.
+      // Chronological order is mandatory for recovery: each ZSET write and
+      // its bars:new notification advance the Redis market-data plane in
+      // causal order.
       foreach (var raw in rawBars.OrderBy(bar => bar.UtcTimestampInMinutes))
       {
         var bar = TrendbarDecoder.Decode(raw, symbol.Digits);
@@ -482,73 +461,17 @@ public sealed class FeedRunner(
         {
           continue;
         }
-        if (mode == BarWriteMode.RecoveryCatchUp && marketPublisher is not null)
-        {
-          // Kafka-first (source task §5): publish before the Redis
-          // write below. A failure here throws and propagates all the
-          // way out of BackfillAsync -> RunOneSessionAsync -> the outer
-          // RunForeverAsync retry loop, which reconnects and retries
-          // this exact backfill window again next session — Redis's
-          // own latest-timestamp checkpoint never advances past a bar
-          // whose Kafka publish failed (source task §40's first case).
-          await marketPublisher.PublishClosedBarAsync(
-            new ClosedBarEvent(
-              symbol.RedisSymbol,
-              symbol.CTraderSymbol,
-              timeframe,
-              bar,
-              CorrelationId: Uuid7.NewId(),
-              IsRecovery: true
-            ),
-            cancellationToken
-          );
-        }
         await sink.WriteClosedBarAsync(
           symbol.RedisSymbol,
           timeframe,
           bar,
           cancellationToken,
-          publish: mode == BarWriteMode.RecoveryCatchUp
+          publish: publish
         );
       }
       Log($"backfill {symbol.RedisSymbol} {timeframe}: wrote {rawBars.Count} raw bars");
     }
     healthFile.Touch();
-  }
-
-  /// <summary>
-  /// Kafka-first live-bar publish (source task §5/§21): publish, THEN
-  /// let the caller write to Redis. A publish failure throws and
-  /// propagates out of the live streaming loop, faulting the session —
-  /// the existing reconnect+incremental-backfill path (BackfillAsync
-  /// above, RecoveryCatchUp mode) then naturally rediscovers and
-  /// republishes the missed bar. No bespoke retry/recovery logic is
-  /// needed here; letting the exception propagate IS the recovery
-  /// mechanism (source task §40/§41: no 2PC, no Kafka transactions —
-  /// Kafka-first + at-least-once + idempotent consumer is simpler and
-  /// sufficient).
-  /// </summary>
-  private async Task PublishLiveBarAsync(
-    SymbolInfo symbol,
-    string timeframe,
-    OhlcBar closed,
-    CancellationToken cancellationToken
-  )
-  {
-    if (marketPublisher is null)
-    {
-      return;
-    }
-    await marketPublisher.PublishClosedBarAsync(
-      new ClosedBarEvent(
-        symbol.RedisSymbol,
-        symbol.CTraderSymbol,
-        timeframe,
-        closed,
-        CorrelationId: Uuid7.NewId()
-      ),
-      cancellationToken
-    );
   }
 
   private static async Task<SymbolInfo> ResolveRuntimeSymbolAsync(

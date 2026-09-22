@@ -58,9 +58,10 @@ flowchart TD
     AB2 --> TG[Telegram]
 ```
 
-The market-event segment of this flow is now live through Kafka:
-`ctrader-engine` publishes closed bars and `analysis-engine` consumes them.
-The **current** production flow still differs downstream because `algo-bot`
+The market-data segment is now live through Redis: `ctrader-engine` writes
+closed bars and spot state, and `analysis-engine` bootstraps/reconciles from
+the Redis bar series. Kafka is reserved for durable business events. The
+**current** production flow still differs downstream because `algo-bot`
 computes technical structure in-process (`app/analysis/*`) rather than
 consuming `analysis.opportunity.v1` — see [`event-flow.md`](event-flow.md)
 for the current vs. target diagram side by side, and
