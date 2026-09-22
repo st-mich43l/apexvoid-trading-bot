@@ -1,0 +1,14 @@
+# Manual/operator workflow behavior — owned exclusively here.
+# Per-instrument manual settings (entry_mode, risk_reference,
+# risk_multiplier, target_close_ratios/tp1_close_fraction) stay nested
+# under each pack/instrument in instruments.yml, unchanged from today —
+# they are genuinely instrument-scoped (a manual XAU trade sizes/enters
+# differently from a manual GBPJPY one), not global manual-algo policy.
+# This file only owns the settings that are not instrument-specific.
+manual_algo:
+  runtime:
+    enabled: true
+    owner_execution_dm_enabled: false
+
+  sizing:
+    fx_volume_multiplier: 1.5

@@ -1,0 +1,44 @@
+# Telegram presentation and user-interaction behavior — owned exclusively
+# here. Bot token remains a secret ENV input (TELEGRAM_BOT_TOKEN). Direct
+# copy of the old trading-bot.yml's `delivery.*` block — see
+# docs/configuration-v3-migration-audit.md §5. `delivery.presentation.
+# seq_reset_tz` is kept here unchanged (it's specifically Telegram
+# sequence-reset scoped); `runtime.yml`'s own `runtime.timezone` mirrors
+# the same current value for the service-wide operational timezone — see
+# that file's comment and the audit's §9 on consolidating the two later.
+#
+# The old file's `delivery.telegram.*` sub-namespace (delete_root_on_
+# terminal, owner_dm_daily_wipe_enabled, public_show_pips, the channel
+# ids) is flattened to this file's top level rather than kept as a nested
+# `telegram.telegram.*` — that stutter would exist only because this file
+# happens to also be named telegram.yml; the value/meaning is unchanged.
+telegram:
+  lifecycle:
+    delete_on_terminal: true
+    thread_lifecycle: true
+
+  presentation:
+    auto_book_bare_pips: false
+    seq_reset_tz: Asia/Ho_Chi_Minh
+
+  reports:
+    weekly:
+      day_of_week: 6
+      enabled: true
+      skip_empty: false
+      utc_hour: 8
+
+  scanner_cards:
+    top_n: 3
+
+  # 2026-09-17: was hardcoded off in code (should_delete_root_on_terminal)
+  # since 2026-08-17 to avoid orphaning reply threads. Owner accepted that
+  # tradeoff to stop terminal setup cards piling up in the channel.
+  delete_root_on_terminal: true
+  owner_dm_daily_wipe_enabled: true
+  public_show_pips: true
+  # Example local VIP channel id (production uses ansible / env secrets;
+  # SIGNAL_VIP_CHANNEL_ID in .env.example is the non-secret ENV override
+  # path for this today).
+  telegram_channel_id: '-100123456789'
+  signal_public_channel_id: '-1004468199035'

@@ -134,7 +134,7 @@
     "zone_scale_undersized_policy": "single_entry"
   },
   "contract_fingerprint": "2284e2c761a3f531c1c24347c4c9bc51c25edd019b8b20f9bae37b5ba67d5e5d",
-  "effective_configuration_fingerprint": "42ec29e3898e2659acd6c3ec4579e42c7315db152d8ba03f91f9f45d43434001",
+  "effective_configuration_fingerprint": "c547d682d9f9dc4fcb3fc6ee080be88b1d276568e207110ecb5f0ca42dceeb09",
   "feed": {
     "backfill_bars": 1500,
     "bar_quality_lookback": 6,
@@ -4770,7 +4770,7 @@
         "target_r_multiples": [],
         "tp1_close_fraction": "0.4"
       },
-      "policy_name": "xau_fixed_2r_v1",
+      "policy_name": "xau_fixed_4r_v1",
       "provenance": {
         "entries": [
           {
@@ -4957,19 +4957,19 @@
             "path": "execution.entry.maximum_chase_distance_pips",
             "secret": false,
             "source_kind": "config_file",
-            "source_name": "xau_fixed_2r_v1"
+            "source_name": "xau_fixed_4r_v1"
           },
           {
             "path": "risk.sizing.mode",
             "secret": false,
             "source_kind": "config_file",
-            "source_name": "xau_fixed_2r_v1"
+            "source_name": "xau_fixed_4r_v1"
           },
           {
             "path": "lifecycle.candidate.execution_maximum_age_seconds",
             "secret": false,
             "source_kind": "config_file",
-            "source_name": "xau_fixed_2r_v1"
+            "source_name": "xau_fixed_4r_v1"
           }
         ]
       },
@@ -9185,7 +9185,7 @@
           "m5_bars": 150
         }
       },
-      "policy_name": "xau_fixed_2r_v1",
+      "policy_name": "xau_fixed_4r_v1",
       "provenance": {
         "entries": [
           {
@@ -9372,19 +9372,19 @@
             "path": "execution.entry.maximum_chase_distance_pips",
             "secret": false,
             "source_kind": "config_file",
-            "source_name": "xau_fixed_2r_v1"
+            "source_name": "xau_fixed_4r_v1"
           },
           {
             "path": "risk.sizing.mode",
             "secret": false,
             "source_kind": "config_file",
-            "source_name": "xau_fixed_2r_v1"
+            "source_name": "xau_fixed_4r_v1"
           },
           {
             "path": "lifecycle.candidate.execution_maximum_age_seconds",
             "secret": false,
             "source_kind": "config_file",
-            "source_name": "xau_fixed_2r_v1"
+            "source_name": "xau_fixed_4r_v1"
           }
         ]
       },
