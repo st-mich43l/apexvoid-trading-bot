@@ -850,11 +850,119 @@ module's own updated README for the corrected Docker invocation).
   update, but nothing yet asserts their two outputs are identical to each
   other in one test run.
 
-## C5–C8 status
+---
 
-Not reached in this update. .NET direct reader (C5, the highest-stakes
-of the three — `ctrader-engine` genuinely executes broker orders today),
-automated cross-language parity (C6), full cutover including actual
-ansible-driven production (C7), and deletion of the config-compiler/
-`ResolvedRuntimeManifest`/legacy Python catalog machinery (C8) remain
-open.
+# Stage C5 update — .NET direct YAML reader, deliberately NOT wired live
+
+## What was built
+
+`ctrader-engine/src/MinimalYamlParser.cs` — a hand-rolled, reflection-
+free recursive-descent parser for the exact YAML subset `config/*.yml`
+actually uses: 2-space block mappings/sequences, scalar types (bare/
+quoted strings, ints, floats, bool, null), comments, and inline flow-
+style lists (`[0.25, 0.25, 0.50]`, confirmed present 4 times across
+`config/instruments.yml`/`config/trading-bot.yml` by grep before writing
+it) — plus flow mappings (`{}`/`{k: v}`), added after the first real test
+run surfaced that `config/environments/production.yml`'s entire content
+*is* a bare `{}` (its own header comment explains why: production's
+`CONSERVATIVE_PROFILE` overlay is intentionally empty). Written by hand
+instead of adding `YamlDotNet` or similar: `CTraderFeed.csproj` publishes
+Native AOT + trimmed + self-contained, and this project has already hit
+one AOT-only failure a normal `dotnet test` run didn't catch — see
+`ResolvedRuntimeManifestLoader`'s own comment on `Deserialize<T>` (the
+reflection-based overload) throwing "Reflection-based serialization has
+been disabled" at runtime, live, the exact class of bug a hand-written
+parser over plain strings/collections has nothing for the trimmer to
+remove.
+
+`ctrader-engine/src/ConfigurationV3.cs` — `ConfigDocument.Resolve`, a
+third independent implementation of §14's include/merge/overlay spec
+(alongside `v3_root.py` and `v3_document.go`), plus `GeometryFor`/
+`LiveInstruments`, mirroring the Go proof-of-pattern's narrow scope
+exactly (four fields: canonical/broker symbol, pip_size, price_digits).
+
+**This module is deliberately NOT wired into the live path.** Unlike
+Python (C3, wired live for local/dev — old code deleted from that path)
+and Go (C4, wired — the old manifest-JSON reader was deleted outright,
+not kept as a fallback), `ConfigurationV3`/`ConfigDocument` are not
+referenced anywhere from `AutoTradeOptions`, `ResolvedRuntimeManifest`,
+`ResolvedRuntimeManifestLoader`, or `ManifestRuntimeFactory` — those still
+read the compiled JSON manifest / environment variables exactly as
+before today. Why, concretely:
+
+- `ResolvedAutoTradeProjection` alone declares over 100 fields feeding
+  real order-execution decisions (stop distances, sizing, scale-in/add
+  policy, spread guards, break-even logic, ...). Python's cutover earned
+  trust with an exact 890/890-leaf parity test against the real Pydantic
+  model through the real resolver pipeline. Reaching that same rigor for
+  this surface in C#, by hand, without a reflection-based deserializer,
+  is a multi-hundred-field mapping exercise in its own right — rushing it
+  to hit a stage count would mean either skipping fields silently or
+  claiming verification this pass doesn't actually have.
+- `ctrader-engine` is the one runtime in the whole migration that
+  executes real broker orders with real money. §41 of
+  `rebuild-configuration-architecture.md` is explicit that safety on this
+  path outranks finishing the stage sequence on schedule.
+
+## Parity proof
+
+`ctrader-engine/tests/ConfigurationV3Tests.cs` (24 tests, `dotnet test`
+via `mcr.microsoft.com/dotnet/sdk:8.0`, whole-repo mount — same Docker
+pattern as the existing C# suite):
+
+- `GeometryFor` matches the same known-correct pip size/digits for all 5
+  live instruments as the Go and Python suites (XAU 0.1/2, EURUSD/GBPUSD
+  0.0001/5, GBPJPY/USDJPY 0.01/3), read from the real
+  `config/apexvoid.yml`/`config/apexvoid.demo-eval.yml` directly (not a
+  copied fixture, matching both other languages' own choice).
+  `LiveInstruments()` returns exactly the 5 live symbols.
+- Include-graph error handling and overlay merge semantics — the same
+  synthetic-fixture cases `v3_document_test.go` exercises (unsupported
+  version, missing/duplicate/escaping include, duplicate top-level
+  ownership, more-than-one environment overlay, scalar-replace + map-
+  extend on overlay) — proven a third time independently in C#.
+- `MinimalYamlParser`-specific tests: nested mappings, block sequences of
+  scalars and of mappings, inline flow sequences (empty and populated),
+  scalar type coercion (string/int/float/bool/null), comment stripping
+  (including a quoted string containing a `#` that must NOT be treated as
+  a comment), and a full, real parse of `config/instruments.yml` (the
+  largest and most structurally varied file in `config/`) asserting
+  specific known-good nested values round-trip correctly.
+
+Full suite: `dotnet test tests/CTraderFeed.Tests.csproj` — 738 passed, 45
+failed (all pre-existing `REAL_REDIS_URL is required for candidate lease
+integration tests` — no Redis in this sandbox, the same 45-failure
+baseline this session established before any Configuration V3 work
+started), 0 new failures. `dotnet build` clean (one pre-existing,
+unrelated nullable-reference warning in `TradePlanExecutionEngine.cs`).
+
+## What Stage C5 does NOT claim
+
+- Not wired to `AutoTradeOptions`/`ResolvedRuntimeManifest`/live order
+  execution — see "What was built" above for the full reasoning. The live
+  broker-order path is completely unchanged by this stage.
+- Only proves the same narrow four-field geometry surface Go's proof-of-
+  pattern proves, not the full instrument/auto-algo/execution/risk
+  surface `ResolvedAutoTradeProjection` actually carries into live
+  trading decisions.
+- Cross-language parity (§38, C6) — an automated check that Python/Go/
+  .NET all produce identical normalized output from one shared fixture —
+  still isn't implemented; all three have now proven parity against the
+  real `config/apexvoid.yml` independently, but nothing yet asserts their
+  three outputs are identical to each other in one test run.
+- `MinimalYamlParser` supports the YAML subset actually present in
+  `config/*.yml` today (confirmed by grep before writing it), not YAML in
+  general — no anchors/aliases, no block scalars (`|`/`>`), no multi-
+  document streams, no flow collections nested more than the parser's
+  depth-tracking was exercised against. Adding any of those to `config/`
+  in the future needs a parser change, not just a new YAML file.
+
+## C6–C8 status
+
+Not reached in this update. Automated cross-language parity (C6), full
+cutover including actual ansible-driven production (C7) — flagged
+explicitly: real production deployment is ansible-driven and outside
+this repo's reach; someone with access to that ansible inventory needs to
+execute the cutover there — and deletion of the config-compiler/
+`ResolvedRuntimeManifest`/legacy Python catalog machinery (C8, which
+depends on C7 actually landing first) remain open.
