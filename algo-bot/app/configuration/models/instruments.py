@@ -15,18 +15,24 @@ SUPPORTED_INSTRUMENT_TIMEFRAMES = frozenset({"H1", "M15", "M5", "M1", "H4", "D1"
 
 # Compatibility policy: inherit global trading domains from the resolved root.
 XAU_CURRENT_V1_POLICY = "xau_current_v1"
-# XAU technique structure fixed_rr (same 2R close split as fx_fixed_2r_v1).
+# XAU technique structure fixed_rr, 1R/2R/3R/4R 40/20/20/20 (see
+# _XAU_FIXED_4R_TARGETING below). Owner-reported 2026-09-22: this policy's
+# own name still said "2r" from before the 2026-09-15 ladder change (owner-
+# reported: auto XAU switched from the earlier 0.5R/1R/2R/3R shape to
+# manual /algo's own 1R/2R/3R/4R default) — renamed to match what it has
+# actually enforced since that date. No behavior change; see
+# _XAU_FIXED_4R_TARGETING, unchanged.
 # M1 scalping stays on its own discovery book — see technique_fixed_rr_targeting.
-XAU_FIXED_2R_V1_POLICY = "xau_fixed_2r_v1"
+XAU_FIXED_4R_V1_POLICY = "xau_fixed_4r_v1"
 FX_FIXED_2R_V1_POLICY = "fx_fixed_2r_v1"
 # Historical name kept for registry continuity. Close-ratio front-load was
 # retired in favor of the uniform 1R/2R 50/50 + breakeven contract shared
-# with fx_fixed_2r_v1 / xau_fixed_2r_v1.
+# with fx_fixed_2r_v1 / xau_fixed_4r_v1.
 FX_FIXED_2R_FRONTLOAD_V1_POLICY = "fx_fixed_2r_frontload_v1"
 REGISTERED_INSTRUMENT_POLICIES = frozenset({
   FX_FIXED_2R_V1_POLICY,
   FX_FIXED_2R_FRONTLOAD_V1_POLICY,
-  XAU_FIXED_2R_V1_POLICY,
+  XAU_FIXED_4R_V1_POLICY,
   XAU_CURRENT_V1_POLICY,
 })
 
@@ -39,7 +45,7 @@ REGISTERED_INSTRUMENT_POLICIES = frozenset({
 FIXED_RR_POLICIES = frozenset({
   FX_FIXED_2R_V1_POLICY,
   FX_FIXED_2R_FRONTLOAD_V1_POLICY,
-  XAU_FIXED_2R_V1_POLICY,
+  XAU_FIXED_4R_V1_POLICY,
 })
 
 
@@ -95,7 +101,7 @@ _FX_FIXED_2R_TARGETING = {
 # the entry-targeted risk band (execution_route.risk_targeted_entry_price,
 # XAU only) that forces the risk this ladder measures R against into
 # [50, 60] pips instead of whatever the raw structural stop happened to be.
-_XAU_FIXED_2R_TARGETING = {
+_XAU_FIXED_4R_TARGETING = {
   "mode": InstrumentTargetMode.FIXED_RR,
   "reward_risk": 4.0,
   "target_r_multiples": (1.0, 2.0, 3.0, 4.0),
@@ -109,7 +115,7 @@ _XAU_FIXED_2R_TARGETING = {
 FIXED_RR_REQUIRED_TARGETING = {
   FX_FIXED_2R_V1_POLICY: _FX_FIXED_2R_TARGETING,
   FX_FIXED_2R_FRONTLOAD_V1_POLICY: _FX_FIXED_2R_TARGETING,
-  XAU_FIXED_2R_V1_POLICY: _XAU_FIXED_2R_TARGETING,
+  XAU_FIXED_4R_V1_POLICY: _XAU_FIXED_4R_TARGETING,
 }
 
 

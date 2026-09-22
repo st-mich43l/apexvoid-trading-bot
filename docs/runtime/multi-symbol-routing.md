@@ -22,9 +22,12 @@ allowed after explicit trading-policy review.
 
 Trading policy is explicit per instrument in `config/trading-bot.yml`:
 
-- XAU uses `xau_fixed_2r_v1` (pack `xau_fixed_2r_v1`): **technique** SL from
-  structure inside a 25–100 pip envelope, TP at 1R/2R with 50/50 closes and
-  breakeven after TP1 (same shape as `fx_fixed_2r_v1`). **M1 scalping** stays on
+- XAU uses `xau_fixed_4r_v1` (pack `xau_fixed_4r_v1`, renamed 2026-09-22
+  from `xau_fixed_2r_v1` — owner-reported: the name had gone stale since
+  the ladder itself moved to 4R on 2026-09-15): **technique** SL from
+  structure inside a 50–60 pip entry-targeted envelope, TP at 1R/2R/3R/4R
+  with 40/20/20/20 closes and breakeven after TP1/1R (diverges from
+  `fx_fixed_2r_v1`'s 1R/2R shape deliberately). **M1 scalping** stays on
   `strategies.scalping` discovery (1:2 / 1:1) via
   `technique_fixed_rr_targeting` — instrument fixed_rr must not expand scalp
   matches. Compatibility policy `xau_current_v1` remains for ladder inheritance

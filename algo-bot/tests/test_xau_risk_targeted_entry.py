@@ -165,7 +165,7 @@ def _cfg(**overrides):
     "auto_trade_inside_zone_market_entry_enabled": True,
     "auto_trade_xau_price_digits": 2,
     # Matches XAU's real production floor (config/trading-bot.yml's
-    # xau_fixed_2r_v1 pack stop_envelope.min_pips) - the target this
+    # xau_fixed_4r_v1 pack stop_envelope.min_pips) - the target this
     # feature aims entries at.
     "execution.reaction.stop_min_pips": 50,
   }

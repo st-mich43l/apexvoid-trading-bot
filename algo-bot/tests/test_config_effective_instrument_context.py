@@ -24,7 +24,7 @@ from app.configuration.models.instruments import (
   InstrumentTargetMode,
   InstrumentsConfig,
   XAU_CURRENT_V1_POLICY,
-  XAU_FIXED_2R_V1_POLICY,
+  XAU_FIXED_4R_V1_POLICY,
   effective_rollout,
   resolve_manual_profile,
 )
@@ -110,7 +110,7 @@ def test_production_yaml_xau_effective_parity():
   cfg = loaded.config
   effective = cfg.for_instrument("XAU")
   assert effective.identity.rollout is InstrumentRollout.LIVE
-  assert effective.policy_name == XAU_FIXED_2R_V1_POLICY
+  assert effective.policy_name == XAU_FIXED_4R_V1_POLICY
   assert "XAUUSD" in effective.identity.aliases
   # Structure fixed_rr pack expands execution/stop/session away from root
   # ladder defaults — parity is identity + units + non-pack domains only.
@@ -162,7 +162,7 @@ def test_production_yaml_fx_live_executable_units():
   # GBPJPY keeps the historical frontload policy name; close-ratio front-load
   # was retired — same uniform 1R/2R 50/50 + BE contract as other fixed_rr.
   assert gbpjpy.policy_name == "fx_fixed_2r_frontload_v1"
-  assert xau.policy_name == XAU_FIXED_2R_V1_POLICY
+  assert xau.policy_name == XAU_FIXED_4R_V1_POLICY
   assert eurusd.targeting.mode is InstrumentTargetMode.FIXED_RR
   assert gbpjpy.targeting.mode is InstrumentTargetMode.FIXED_RR
   assert eurusd.targeting.reward_risk == 2.0
