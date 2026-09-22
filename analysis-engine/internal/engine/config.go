@@ -1,6 +1,9 @@
 package engine
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/config"
@@ -8,6 +11,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/liquidity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/transport/kafka"
 )
 
 // This file is deliberately the ONLY place in analysis-engine that reads
@@ -217,4 +221,115 @@ func getString(doc *config.Document, path string) (string, error) {
 		return "", fmt.Errorf("engine: config %q is not a string (got %T)", path, raw)
 	}
 	return s, nil
+}
+
+func getBool(doc *config.Document, path string) (bool, error) {
+	raw, ok := doc.Get(path)
+	if !ok {
+		return false, fmt.Errorf("engine: missing required config %q", path)
+	}
+	b, ok := raw.(bool)
+	if !ok {
+		return false, fmt.Errorf("engine: config %q is not a boolean (got %T)", path, raw)
+	}
+	return b, nil
+}
+
+// KafkaConfigFromConfig reads transport.kafka.* into kafka.Config — the
+// Kafka transport task's own addition to this file, following the exact
+// same discipline as every function above it (Kafka transport task).
+// internal/transport/kafka itself never reads config.Document; this is
+// the one and only place that translates YAML into kafka.Config.
+func KafkaConfigFromConfig(doc *config.Document) (kafka.Config, error) {
+	enabled, err := getBool(doc, "transport.kafka.enabled")
+	if err != nil {
+		return kafka.Config{}, err
+	}
+	brokersRaw, ok := doc.Get("transport.kafka.brokers")
+	if !ok {
+		return kafka.Config{}, fmt.Errorf("engine: missing required config %q", "transport.kafka.brokers")
+	}
+	brokersList, ok := brokersRaw.([]any)
+	if !ok {
+		return kafka.Config{}, fmt.Errorf("engine: config %q is not a list (got %T)", "transport.kafka.brokers", brokersRaw)
+	}
+	brokers := make([]string, 0, len(brokersList))
+	for i, b := range brokersList {
+		s, ok := b.(string)
+		if !ok {
+			return kafka.Config{}, fmt.Errorf("engine: transport.kafka.brokers[%d] is not a string (got %T)", i, b)
+		}
+		brokers = append(brokers, s)
+	}
+	clientID, err := getString(doc, "transport.kafka.client_id.analysis_engine")
+	if err != nil {
+		return kafka.Config{}, err
+	}
+	consumerGroup, err := getString(doc, "transport.kafka.consumer_groups.analysis_engine")
+	if err != nil {
+		return kafka.Config{}, err
+	}
+	tickEnabled, err := getBool(doc, "transport.kafka.tick_consumption_enabled")
+	if err != nil {
+		return kafka.Config{}, err
+	}
+	marketBarClosed, err := getString(doc, "transport.kafka.topics.market_bar_closed")
+	if err != nil {
+		return kafka.Config{}, err
+	}
+	marketTick, err := getString(doc, "transport.kafka.topics.market_tick")
+	if err != nil {
+		return kafka.Config{}, err
+	}
+	analysisOpportunity, err := getString(doc, "transport.kafka.topics.analysis_opportunity")
+	if err != nil {
+		return kafka.Config{}, err
+	}
+	analysisOpportunityInvalidated, err := getString(doc, "transport.kafka.topics.analysis_opportunity_invalidated")
+	if err != nil {
+		return kafka.Config{}, err
+	}
+
+	cfg := kafka.Config{
+		Enabled: enabled, Brokers: brokers, ClientID: clientID,
+		Topics: kafka.Topics{
+			MarketBarClosed: marketBarClosed, MarketTick: marketTick,
+			AnalysisOpportunity: analysisOpportunity, AnalysisOpportunityInvalidated: analysisOpportunityInvalidated,
+		},
+		ConsumerGroup:          consumerGroup,
+		TickConsumptionEnabled: tickEnabled,
+	}
+	if err := cfg.Validate(); err != nil {
+		return kafka.Config{}, err
+	}
+	return cfg, nil
+}
+
+// ConfigProvenanceFromConfig computes kafka.ConfigProvenance from the
+// resolved document — source task §13: "which exact ApexVoid
+// configuration generated this opportunity?" answered historically.
+// config_version is Configuration V3's own "version: 3" document marker
+// (doc.Get("version"), already required by internal/config.ResolveDocument
+// itself); config_fingerprint is a SHA-256 of the resolved document's own
+// canonical JSON form (Go's encoding/json sorts map[string]any keys
+// alphabetically, so this is deterministic without extra
+// canonicalization work) — a hash, never the configuration content
+// itself, so it can never leak a secret (source task §13: "never
+// include configuration secrets"). Computed once at startup by the
+// composition root, never per event.
+func ConfigProvenanceFromConfig(doc *config.Document) (kafka.ConfigProvenance, error) {
+	versionRaw, ok := doc.Get("version")
+	if !ok {
+		return kafka.ConfigProvenance{}, fmt.Errorf("engine: resolved document missing its own %q marker", "version")
+	}
+	version, ok := versionRaw.(int)
+	if !ok {
+		return kafka.ConfigProvenance{}, fmt.Errorf("engine: %q is not an integer (got %T)", "version", versionRaw)
+	}
+	raw, err := json.Marshal(doc.Raw())
+	if err != nil {
+		return kafka.ConfigProvenance{}, fmt.Errorf("engine: computing config fingerprint: %w", err)
+	}
+	sum := sha256.Sum256(raw)
+	return kafka.ConfigProvenance{Version: version, Fingerprint: hex.EncodeToString(sum[:16])}, nil
 }

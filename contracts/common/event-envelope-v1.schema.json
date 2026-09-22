@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://apexvoid.internal/contracts/common/event-envelope-v1.schema.json",
+  "title": "event-envelope.v1",
+  "description": "The shared cross-service event wrapper every ApexVoid Kafka record carries (ADR-004, ADR-008, docs/transport/kafka.md). Every topic's payload schema (market/bar-closed-v1, market/tick-v1, analysis/opportunity-v1, analysis/opportunity-invalidated-v1, and future ones) describes ONLY the `payload` object's shape — this schema owns the metadata wrapper around it, once, so it is never redefined per-topic (source task §31). A producer/consumer decodes this envelope first, then decodes `payload` against that specific event_type's own schema. Go's implementation: internal/transport/kafka.Envelope (analysis-engine/internal/transport/kafka/envelope.go) — kept in sync with this file by hand until a schema-to-struct generator exists, same discipline as every other contracts/ file (ADR-007).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["event_id", "event_type", "event_version", "occurred_at", "produced_at", "producer", "correlation_id", "payload"],
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "description": "A unique, time-sortable identifier for this specific event instance — UUIDv7 (source task §10). Never used for ordering or deduplication by a consumer: Kafka partition ordering and the payload's own domain identity (e.g. bar identity: symbol+timeframe+close_time) are authoritative for those. This field exists for tracing/log correlation only.",
+      "minLength": 1
+    },
+    "event_type": {
+      "type": "string",
+      "description": "The Kafka topic name this event was published to, and therefore which payload schema `payload` must validate against — e.g. \"market.bar.closed.v1\", \"analysis.opportunity.v1\". Must match the topic's own name exactly (source task §32: topic name and payload contract version stay coherent).",
+      "minLength": 1
+    },
+    "event_version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "The payload contract version, redundant with (and must agree with) the \"vN\" suffix already present in event_type — carried separately so a consumer can branch on it without string-parsing the topic name."
+    },
+    "occurred_at": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Unix SECONDS (source task §9 — this repo's decision, documented in docs/transport/kafka.md's \"Timestamp standard\" section: retained seconds uniformly rather than switching to milliseconds, to avoid a blast-radius rewrite of the already-shipped, already-tested Analysis Engine V2 domain model, which uses Unix-second int64 timestamps throughout). The domain moment this event represents — for market.bar.closed.v1, the bar's own close time; for analysis.opportunity.v1, the moment the opportunity was identified. Never milliseconds; never mixed with produced_at's unit."
+    },
+    "produced_at": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Unix seconds — wall-clock time the producing service actually published this record. May differ from occurred_at (processing latency); produced_at >= occurred_at is expected but not schema-enforced (semantic validation, not structural)."
+    },
+    "producer": {
+      "type": "string",
+      "description": "Which service produced this event — e.g. \"ctrader-engine\", \"analysis-engine\". Free-form but must match an actual known service name; not schema-enumerated here because this schema is shared before every producer exists.",
+      "minLength": 1
+    },
+    "correlation_id": {
+      "type": "string",
+      "description": "End-to-end trace identifier (source task §11), propagated unchanged across an entire derived-event chain: market bar -> analysis opportunity -> TradePlan -> execution event. A root event (nothing caused it) still carries one, generated fresh.",
+      "minLength": 1
+    },
+    "causation_id": {
+      "type": "string",
+      "description": "The event_id of the specific event that directly caused this one (source task §12) — e.g. an analysis.opportunity.v1 event's causation_id is the market.bar.closed.v1 event's own event_id that triggered its detection. Omitted (not present) for a root event with no causing event. Distinct from correlation_id: correlation_id is shared across an entire chain; causation_id points to exactly one immediate parent."
+    },
+    "config_version": {
+      "type": "integer",
+      "description": "Configuration V3 schema version (currently 3) that produced this event's payload, when the payload reflects configured engine behavior (source task §13) — e.g. present on analysis.opportunity.v1 (a Candidate's shape and thresholds depend on config), absent on market.bar.closed.v1 (a raw market fact, not a function of ApexVoid's own configuration). Never a secret value."
+    },
+    "config_fingerprint": {
+      "type": "string",
+      "description": "A content hash of the resolved Configuration V3 document that produced this event, alongside config_version — together they answer \"which exact configuration generated this opportunity?\" historically. Never a secret value; the fingerprint is a hash, not the configuration content itself."
+    },
+    "payload": {
+      "type": "object",
+      "description": "The event-type-specific body — validate against event_type's own payload schema (contracts/market/*, contracts/analysis/*, ...). Left as a generic object here deliberately: this schema's job is the wrapper only, never a combinatorial per-topic copy (source task §31)."
+    }
+  }
+}

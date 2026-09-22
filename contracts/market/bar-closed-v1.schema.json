@@ -2,23 +2,33 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://apexvoid.internal/contracts/market/bar-closed-v1.schema.json",
   "title": "market.bar.closed.v1",
-  "description": "SKELETON, not yet wired into any service (docs/adr/007-shared-cross-service-contracts.md). ctrader-engine publishes this event once a candle closes; analysis-engine consumes it to advance internal/marketdata's rolling history. Fields mirror analysis-engine's internal/market.Candle (Time/Open/High/Low/Close/Volume) plus the Symbol/Timeframe identity every cross-service event needs. Today's live equivalent is the bars:{SYMBOL}:{TF} Redis ZSET entry shape (app/analysis/ohlc_source.py) — this schema is the target Kafka event, not yet adopted.",
+  "description": "Real transport contract (Kafka transport task; promoted from the architecture-freeze skeleton, docs/adr/007-shared-cross-service-contracts.md). ctrader-engine publishes this event once a candle closes (not yet implemented — that is a later task, docs/adr/004); analysis-engine consumes it to advance internal/marketdata's rolling history via internal/transport/kafka's market event adapter (internal/transport/kafka/handler.go). This is the PAYLOAD only — wrapped inside contracts/common/event-envelope-v1.schema.json's `payload` field, never published bare. Today's live equivalent is the bars:{SYMBOL}:{TF} Redis ZSET entry shape (app/analysis/ohlc_source.py, docs/redis-contract.md) — NOTE the deliberate difference: the Redis ZSET scores by bar-OPEN time, but this contract's own dedup/idempotency identity (canonical_symbol + timeframe + close_time, docs/transport/kafka.md's \"Market bar identity\" section) uses close_time instead, per source task §16's explicit instruction — a documented, intentional divergence from the existing Redis convention, not an oversight.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["symbol", "timeframe", "time", "open", "high", "low", "close", "volume"],
+  "required": ["canonical_symbol", "timeframe", "open_time", "close_time", "open", "high", "low", "close", "volume"],
   "properties": {
-    "symbol": {
+    "canonical_symbol": {
       "type": "string",
-      "description": "Canonical instrument identifier, e.g. \"XAU\" — matches market.Symbol / config's instruments.<symbol> key."
+      "description": "Canonical instrument identifier, e.g. \"XAU\" — matches market.Symbol / config's instruments.<symbol> key exactly. This, not broker_symbol, is analysis-engine's state identity (source task §26)."
+    },
+    "broker_symbol": {
+      "type": "string",
+      "description": "The broker/feed's own symbol spelling (e.g. a cTrader-specific suffix), if it differs from canonical_symbol. Pure metadata — analysis logic must never branch on this field. Optional: omitted when the broker symbol and canonical symbol are identical."
     },
     "timeframe": {
       "type": "string",
       "enum": ["M1", "M3", "M5", "M15", "M30", "H1", "H4", "D1"],
       "description": "Matches market.Timeframe exactly — do not add a value here that Timeframe.go's minutesByTimeframe map doesn't also have."
     },
-    "time": {
+    "open_time": {
       "type": "integer",
-      "description": "Unix second timestamp of the bar's close, matching market.Candle.Time's unit exactly (not milliseconds)."
+      "minimum": 0,
+      "description": "Unix SECONDS of the bar's open — matches market.Candle.Time exactly (internal/market/candle.go), which is itself the same convention bars:{SYMBOL}:{TF}'s ZSET score already uses today (docs/redis-contract.md: \"Score is the UTC bar-open epoch seconds\")."
+    },
+    "close_time": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Unix seconds of the bar's close — open_time + timeframe's own minute length * 60, exactly. Not independently stored by internal/market.Candle (which carries only open_time); included here because it is this contract's own bar-identity component (source task §16) and gives semantic validation something concrete to check (open_time + timeframe duration == close_time, docs/transport/kafka.md)."
     },
     "open": { "type": "number" },
     "high": { "type": "number" },
