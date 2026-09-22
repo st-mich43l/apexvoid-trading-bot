@@ -15,10 +15,19 @@ analysis-engine isn't wired to any live decision path yet regardless.
 `ResolvedRuntimeManifest` remains `ctrader-engine`'s live authority,
 because it's the one runtime placing real broker orders and its config
 surface (100+ fields) hasn't yet been verified at Python's field-by-field
-rigor. **Actual ansible-driven production is untouched** — it's outside
-this repository and needs its own `APEXVOID_CONFIG_FILE` update to
-complete that cutover; until then it keeps reading `trading-bot.yml`
-exactly as before. `config-compiler` is also untouched. See
+rigor. Stage C6 adds one automated test per language proving each
+reader reproduces the shared canonical fixture
+(`contracts/configuration/examples/resolved-production-v3.json`)
+independently. **Actual ansible-driven deployment is still on the old
+flat file** — it lives in a separate `ansible-library` repo (reachable,
+not genuinely out of reach, just outside this one) and still renders
+`config/trading-bot.yml`'s exact old shape via `apexvoid_trading_bot_config`
+in `inventory/group_vars/all/apexvoid_trading_bot_config.yml`; only that
+one variable's *values* are kept in sync with this repo (most recently
+the instrument-pack rename, `ansible-library` PR #133, open — not yet
+merged), never its structure — switching it to `APEXVOID_CONFIG_FILE` +
+a V3 root file is Stage C7, not done. `config-compiler` is also
+untouched. See
 [`docs/configuration-v3-migration-audit.md`](configuration-v3-migration-audit.md)
 for the full audit, the staged plan (C0–C8), and exactly what each stage
 does and does not claim. That older, still-live .NET/manifest system is

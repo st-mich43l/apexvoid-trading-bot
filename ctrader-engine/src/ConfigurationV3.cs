@@ -71,6 +71,16 @@ public sealed class ConfigDocument
   }
 
   /// <summary>
+  /// The full resolved document tree. Internal — exposed only for the
+  /// Stage C6 cross-language fixture parity test
+  /// (<c>ConfigurationV3Tests.ResolveDocumentMatchesCanonicalFixture</c>,
+  /// via <c>InternalsVisibleTo("CTraderFeed.Tests")</c>), which is the one
+  /// legitimate reason to compare the whole document rather than reading
+  /// specific paths through <see cref="Get"/>/<see cref="Section"/>.
+  /// </summary>
+  internal IReadOnlyDictionary<string, object?> Raw => _raw;
+
+  /// <summary>
   /// Reads a V3 root file (config/apexvoid.yml-shaped: a <c>version: 3</c>
   /// document with an <c>includes:</c> list) and resolves its include
   /// graph plus environment overlay, exactly mirroring
