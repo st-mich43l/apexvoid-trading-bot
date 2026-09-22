@@ -1,6 +1,10 @@
-package market
+package market_test
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
+)
 
 func TestNewGeometryFailsClosedOnBadInput(t *testing.T) {
 	cases := []struct {
@@ -16,7 +20,7 @@ func TestNewGeometryFailsClosedOnBadInput(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if _, err := NewGeometry(c.symbol, c.symbol, c.pipSize, c.priceDigits); err == nil {
+			if _, err := market.NewGeometry(c.symbol, c.symbol, c.pipSize, c.priceDigits); err == nil {
 				t.Fatalf("expected an error, got none")
 			}
 		})
@@ -24,7 +28,7 @@ func TestNewGeometryFailsClosedOnBadInput(t *testing.T) {
 }
 
 func TestGeometryPipsBetween(t *testing.T) {
-	xau, err := NewGeometry("XAU", "XAUUSD", 0.1, 2)
+	xau, err := market.NewGeometry("XAU", "XAUUSD", 0.1, 2)
 	if err != nil {
 		t.Fatalf("NewGeometry: %v", err)
 	}
@@ -39,7 +43,7 @@ func TestGeometryPipsBetween(t *testing.T) {
 }
 
 func TestGeometryRoundToTick(t *testing.T) {
-	xau, err := NewGeometry("XAU", "XAUUSD", 0.1, 2)
+	xau, err := market.NewGeometry("XAU", "XAUUSD", 0.1, 2)
 	if err != nil {
 		t.Fatalf("NewGeometry: %v", err)
 	}
@@ -51,13 +55,13 @@ func TestGeometryRoundToTick(t *testing.T) {
 }
 
 func TestParseTimeframeUnknownFailsClosed(t *testing.T) {
-	if _, err := ParseTimeframe("M7"); err == nil {
+	if _, err := market.ParseTimeframe("M7"); err == nil {
 		t.Fatal("expected an error for an unrecognized timeframe")
 	}
 }
 
 func TestParseTimeframeKnown(t *testing.T) {
-	tf, err := ParseTimeframe("M5")
+	tf, err := market.ParseTimeframe("M5")
 	if err != nil {
 		t.Fatalf("ParseTimeframe: %v", err)
 	}

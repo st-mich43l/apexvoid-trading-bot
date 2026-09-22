@@ -1,11 +1,15 @@
-package market
+package market_test
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
+)
 
 func TestCandleWindowEvictsOldestPastCapacity(t *testing.T) {
-	w := NewCandleWindow(3)
+	w := market.NewCandleWindow(3)
 	for i := int64(1); i <= 5; i++ {
-		w.Push(Candle{Time: i, Close: float64(i)})
+		w.Push(market.Candle{Time: i, Close: float64(i)})
 	}
 	if w.Len() != 3 {
 		t.Fatalf("Len() = %d, want 3", w.Len())
@@ -27,9 +31,9 @@ func TestCandleWindowEvictsOldestPastCapacity(t *testing.T) {
 }
 
 func TestCandleWindowBelowCapacity(t *testing.T) {
-	w := NewCandleWindow(10)
-	w.Push(Candle{Time: 1})
-	w.Push(Candle{Time: 2})
+	w := market.NewCandleWindow(10)
+	w.Push(market.Candle{Time: 1})
+	w.Push(market.Candle{Time: 2})
 	if w.Len() != 2 {
 		t.Fatalf("Len() = %d, want 2", w.Len())
 	}
@@ -44,8 +48,8 @@ func TestCandleWindowAtPanicsOutOfRange(t *testing.T) {
 			t.Fatal("expected panic on out-of-range At()")
 		}
 	}()
-	w := NewCandleWindow(2)
-	w.Push(Candle{Time: 1})
+	w := market.NewCandleWindow(2)
+	w.Push(market.Candle{Time: 1})
 	_ = w.At(5)
 }
 
@@ -55,5 +59,5 @@ func TestNewCandleWindowPanicsOnNonPositiveCapacity(t *testing.T) {
 			t.Fatal("expected panic on non-positive capacity")
 		}
 	}()
-	NewCandleWindow(0)
+	market.NewCandleWindow(0)
 }

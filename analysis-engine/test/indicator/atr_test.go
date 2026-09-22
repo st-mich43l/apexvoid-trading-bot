@@ -1,8 +1,10 @@
-package indicator
+package indicator_test
 
 import (
 	"math"
 	"testing"
+
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/indicator"
 )
 
 // Hand-derived cases mirroring app/analysis/math_utils.py's own docstring
@@ -29,7 +31,7 @@ func TestAtrAt(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got := AtrAt(c.series, c.index, c.fallback)
+			got := indicator.AtrAt(c.series, c.index, c.fallback)
 			if got != c.want {
 				t.Errorf("got %v want %v", got, c.want)
 			}
@@ -53,7 +55,7 @@ func TestAtrScalar(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got := AtrScalar(c.series, c.fallback)
+			got := indicator.AtrScalar(c.series, c.fallback)
 			if got != c.want {
 				t.Errorf("got %v want %v", got, c.want)
 			}

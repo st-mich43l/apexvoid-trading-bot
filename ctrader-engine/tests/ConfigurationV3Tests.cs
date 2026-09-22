@@ -6,7 +6,7 @@ namespace CTraderFeed.Tests;
 /// <summary>
 /// Tests for the Stage C5 Configuration V3 direct reader
 /// (<c>src/MinimalYamlParser.cs</c> + <c>src/ConfigurationV3.cs</c>).
-/// Mirrors <c>analysis-engine/internal/config/v3_document_test.go</c>
+/// Mirrors <c>analysis-engine/test/config/v3_document_test.go</c>
 /// test-for-test where the assertion is about the shared §14 spec (three
 /// independent implementations proving the same behavior), plus
 /// standalone <see cref="MinimalYamlParser"/> tests for the hand-rolled
