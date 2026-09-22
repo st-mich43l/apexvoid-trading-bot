@@ -12,16 +12,22 @@ Read **`docs/go-analysis-migration-audit.md`** first — the computation
 graph, every duplicate/divergent calculation found in Python so far, and
 why each package boundary here is drawn where it is.
 
-## Status (Stage 1 + partial Stage 2)
+## Status (Stage 1 + partial Stage 2; Configuration V3 Stage C4)
 
 Ported, with golden-master parity tests against real Python output:
 
 - `internal/market` — `Candle`, `CandleWindow` (bounded ring buffer),
   `Timeframe`, `Geometry` (per-instrument pip/digit geometry, fails closed
   on an unknown symbol per the source prompt's §12).
-- `internal/config` — `ResolvedRuntimeManifest` loader (`APEXVOID_RUNTIME_
-  MANIFEST_FILE`, same env var Python's `runtime_manifest_boot.py` reads)
-  and the one place manifest → `market.Geometry` translation happens.
+- `internal/config` — Configuration V3 direct YAML reader (see
+  `docs/configuration-v3-migration-audit.md`'s Stage C4 section):
+  `ResolveDocument` implements the same include/merge/overlay spec (§14)
+  as `algo-bot/app/configuration/v3_root.py` and `config/scripts/
+  resolve_reference.py` — three independent implementations of one spec,
+  proven against the real `config/apexvoid.yml`. `GeometryFor`/
+  `LiveInstruments` replace the old `ResolvedRuntimeManifest`-JSON reader
+  entirely (deleted, not kept as a fallback — the source prompt's own
+  §34: "Do not leave manifest OR yaml mode selection. YAML V3 only.").
 - `internal/indicator` — `TrueRange`, `SimpleATR` (`math_utils.atr_series`
   — simple rolling mean), `WilderATR` (`indicators.atr` — pandas_ta RMA),
   `AtrAt`, `AtrScalar`. **Both ATR formulas are ported side by side,
@@ -31,24 +37,28 @@ Ported, with golden-master parity tests against real Python output:
 
 Not yet started: swings, market structure/breaks, zones/techniques, MAD,
 regime, trendlines, scalp structure, the `SymbolState`/`TimeframeState`
-engine, detectors, Redis wiring. See the audit's §6 for the next slice.
+engine, detectors, Redis wiring. See `docs/go-analysis-migration-audit.md`
+§6 for the next analysis slice.
 
 ## Working on this module
 
 Go is not installed on the host in this environment; everything runs
 through the same `golang:1.23-alpine` Docker image already cached
 locally, mirroring how `ctrader-engine/` is built/tested via the
-`mcr.microsoft.com/dotnet/sdk:8.0` image in this repo:
+`mcr.microsoft.com/dotnet/sdk:8.0` image in this repo. `internal/config`'s
+tests read the real `config/apexvoid.yml` two directories up, so mount
+the **whole repository**, not just `analysis-engine/`:
 
 ```bash
-cd analysis-engine
-docker run --rm -v "$(pwd)":/src -w /src golang:1.23-alpine \
+docker run --rm -v "$(pwd)":/src -w /src/analysis-engine golang:1.23-alpine \
   sh -c "gofmt -l . && go build ./... && go vet ./... && go test ./..."
 
 # race detector needs cgo:
-docker run --rm -v "$(pwd)":/src -w /src golang:1.23-alpine \
+docker run --rm -v "$(pwd)":/src -w /src/analysis-engine golang:1.23-alpine \
   sh -c "apk add --no-cache gcc musl-dev && go test -race ./..."
 ```
+
+(Run from the repository root, not from inside `analysis-engine/`.)
 
 ## Fixtures (`testdata/`)
 
@@ -61,7 +71,10 @@ docker run --rm -v "$(pwd)":/src -w /src golang:1.23-alpine \
   the fixture").
 - `raw_xau_m5_snapshot.jsonl` — the real bar data the ATR fixtures above
   are built from (a `bars:XAU:M5` Redis snapshot, 2026-09-22).
-- `runtime-manifest-example.json` — copy of
-  `contracts/configuration/runtime-manifest-example.generated.json`, used
-  to test the manifest loader against the real, full-size shape instead of
-  a hand-trimmed one.
+
+`internal/config`'s tests have no `testdata/` fixture of their own — they
+read `../../../config/apexvoid.yml` and `.../apexvoid.demo-eval.yml`
+directly (the real files, not a copy), the same choice
+`algo-bot/tests/test_config_v3_parity.py` makes and for the same reason:
+the point is proving parity against what every other language actually
+reads, not a fixture that could quietly drift from it.

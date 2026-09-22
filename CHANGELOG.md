@@ -13,6 +13,127 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
+- Configuration V3 Stage C6: automated cross-language parity. One test
+  per language (`algo-bot/tests/test_config_v3_cross_language_fixture.py`,
+  `analysis-engine/internal/config/v3_fixture_parity_test.go`,
+  `ctrader-engine/tests/ConfigurationV3Tests.cs`'s
+  `ResolveDocumentMatchesCanonicalFixture`) proves that language's real
+  V3 reader (Stage C3/C4/C5) reproduces
+  `contracts/configuration/examples/resolved-production-v3.json` — the
+  canonical fixture `config/scripts/resolve_reference.py` already
+  generates and schema-validates — when resolving the real
+  `config/apexvoid.yml` for production. Not one shared function called
+  three times: four independent implementations of §14 (the reference
+  resolver plus Python/Go/.NET), run against the same input, checked
+  against one shared arbiter. Found and handled a real cross-language
+  comparison gap along the way: Go's `yaml.v3` and the new .NET parser
+  both distinguish `int`/`long` from `float64`/`double` by source syntax
+  (`3` vs `3.0`), but `encoding/json`/`System.Text.Json` always decode a
+  JSON number to the float type — both new tests add an explicit
+  int→float normalization step before comparing (Python needs none;
+  `3 == 3.0` is already `True` there). All three pass; full Go/.NET
+  suites clean; Python's 44 pre-existing `FAILED` names all already in
+  the session's established baseline (0 new failures — this session's
+  sandbox has no reachable Postgres/Redis, so an unfiltered full run
+  shows many more `ERROR`s than that baseline, all infra-unavailability,
+  not caused by this change).
+- Configuration V3 Stage C5 (.NET): `ctrader-engine/src/ConfigurationV3.cs`
+  + `MinimalYamlParser.cs` are a third independent reader for the same
+  §14 include/merge/overlay spec, hand-rolled (no reflection, AOT-safe by
+  construction — `CTraderFeed.csproj` publishes Native AOT/trimmed/self-
+  contained, and this project already hit one AOT-only reflection crash
+  this parser has nothing analogous to trigger). `GeometryFor`/
+  `LiveInstruments` mirror Go's narrow proof-of-pattern scope exactly (4
+  fields). **Deliberately NOT wired into the live path** —
+  `AutoTradeOptions`/`ResolvedRuntimeManifest`/`ManifestRuntimeFactory`
+  are untouched and still drive real broker order execution exactly as
+  before. `ResolvedAutoTradeProjection` alone carries 100+ live fields;
+  reaching Python's 890/890-leaf verification rigor for that surface by
+  hand, without a reflection-based deserializer, is future work, not
+  rushed here — this is the one runtime in the migration placing real
+  orders with real money (§41). 24 new tests
+  (`ctrader-engine/tests/ConfigurationV3Tests.cs`) read the real
+  `config/apexvoid.yml`/`apexvoid.demo-eval.yml` directly, confirm
+  correct pip size/digits for all 5 live instruments, include-graph
+  error handling matching the Go/Python suites, and parser-level
+  coverage of the YAML subset `config/*.yml` actually uses (block
+  mappings/sequences, inline flow lists, and — discovered by the first
+  real test run — bare flow mappings, since `environments/production.yml`
+  is, in its entirety, an intentionally empty `{}`). Full suite: 738
+  passed, 45 pre-existing `REAL_REDIS_URL`-required failures (unchanged
+  baseline), 0 new failures.
+- Configuration V3 Stage C4 (Go): `analysis-engine/internal/config` now
+  reads `config/apexvoid.yml` directly (`gopkg.in/yaml.v3`, a real
+  include/merge/overlay implementation matching §14 — the same spec
+  Python's `v3_root.py` and `config/scripts/resolve_reference.py` already
+  implement). `GeometryFor`/`LiveInstruments` replace the old
+  `ResolvedRuntimeManifest`-JSON reader entirely — `manifest.go`/
+  `geometry.go`/`manifest_test.go`/the manifest-example testdata fixture
+  deleted, not kept as a fallback (no manifest-or-YAML mode selection).
+  13 new tests read the real `config/apexvoid.yml`/`apexvoid.demo-eval.yml`
+  directly and confirm correct pip size/digits for all 5 live instruments
+  plus include-graph error handling. `gofmt`/`go vet`/`go build`/
+  `go test`/`go test -race` all clean. analysis-engine still isn't wired
+  to Redis or any live decision path, so this is the lowest-risk of the
+  three languages' cutovers by construction — confirmed before deleting
+  the old reader.
+- Configuration V3 Stage C3 for Python (see `docs/configuration-v3-migration-audit.md`'s
+  Stage C3 update) — a real, wired cutover, not another shadow layer.
+  `algo-bot/app/configuration/v3_root.py` resolves `config/apexvoid.yml`'s
+  include/overlay chain for real and un-consolidates it back into the
+  exact shape `ApexVoidConfig` already expects; `config_file.py` uses it
+  automatically whenever `APEXVOID_CONFIG_FILE` points at a V3 root
+  document (detected by an `includes:` key), and is a no-op otherwise —
+  inert wherever `APEXVOID_CONFIG_FILE` still points at `trading-bot.yml`,
+  including actual ansible-driven production, which this repo does not
+  control and which is unaffected until that separate deployment config
+  is updated. Proven byte-for-byte identical to the old resolver for
+  production (890/890 leaves, permanent regression test:
+  `tests/test_config_v3_parity.py`). Found and fixed one real bug along
+  the way: the old resolver's CONFIG_FILE layer silently defeated 7 of
+  the `demo_eval` profile's own 48 assignments whenever `trading-bot.yml`
+  also declared an explicit value for that field (which it did for all
+  7) — production/`conservative` is unaffected (empty assignment list,
+  hence the 890/890 exact match), but local/dev's `demo_eval` profile now
+  actually gets the behavior it was always supposed to.
+  `docker-compose.yml`'s `bot` service now points at the new
+  `config/apexvoid.demo-eval.yml` (mounts all of `./config`) instead of
+  `trading-bot.yml`, with `AUTO_TRADE_PROFILE`/
+  `AUTO_TRADE_MAPPED_ZONE_ENABLED`/`AUTO_TRADE_MARKET_MAP_GUARD_ENABLED`/
+  `LOG_DIR`/`LOG_RETENTION_DAYS`/`LOG_FILE_ENABLED`/
+  `APEXVOID_RUNTIME_MANIFEST_FILE` (confirmed zero real consumers in
+  `bot`) removed from its environment. `.env.example` regenerated via the
+  project's own generator (not hand-edited) to contain only
+  `APEXVOID_CONFIG_FILE` and real secrets. `config-compiler`/
+  `ctrader-engine` unchanged — .NET still depends on
+  `ResolvedRuntimeManifest` until Stage C5.
+- Configuration V3 Stage C2 (see `docs/configuration-v3-migration-audit.md`'s
+  Stage C2 update). Cleaned the Stage C1 categorized YAML itself: removed
+  three global price-denominated geometry defaults that were byte-identical
+  to XAU's own instrument-pack values (`analysis.zones.merge_max_width`/
+  `confluence.merge_gap_price`, `auto_algo.risk.exposure.
+  opposing_minimum_separation_price`) after confirming their live Python
+  consumers already resolve per-instrument; removed duplicated symbol/feed
+  lists (`analysis.scanner.symbols`, `analysis.ctrader_feed.*`) that
+  should derive from `instruments.yml`; removed `telegram.presentation.
+  seq_reset_tz` as an independently-set value (now derived from
+  `runtime.timezone` — confirmed the same one operational timezone via a
+  13-call-site grep, not narrowly Telegram-scoped); surfaced 5 previously-
+  hidden Python schema defaults as explicit YAML (unchanged values);
+  converted 9 CSV-string fields to native YAML lists; converted every
+  dotted-key override in `instruments.yml` to nested mappings. Added
+  `contracts/configuration/apexvoid-config-v3.schema.json` (JSON Schema,
+  `additionalProperties: false`) and a reference include/merge/overlay
+  resolver (`config/scripts/resolve_reference.py`) that produces and
+  validates `contracts/configuration/examples/resolved-production-v3.json`.
+  `config/scripts/verify_stage_c2_parity.py` documents and verifies all 26
+  individual divergences from Stage C1; `config/scripts/config_check.py`
+  runs everything as one command. `config/trading-bot.yml` and the
+  generated `ResolvedRuntimeManifest` remain the sole live, unmodified
+  authority — no Python/Go/.NET runtime code changed, nothing here can
+  affect production. Stage C3 onward (direct readers replacing the live
+  path, cross-language parity, cutover, deletion) explicitly deferred —
+  see the audit's "What this update does not do, and why."
 - Renamed the XAU instrument pack/policy from `xau_fixed_2r_v1` to
   `xau_fixed_4r_v1` (owner-directed 2026-09-22: "XAU already trade with
   4R already" — the name had gone stale since the 2026-09-15 change to

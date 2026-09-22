@@ -24,7 +24,6 @@ ENVIRONMENT_REFERENCE_DOC = (
 )
 REQUIRED_SECRET_PLACEHOLDER = "<required-secret>"
 OPTIONAL_SECRET_PLACEHOLDER = "<optional-secret>"
-REQUIRED_CHANNEL_PLACEHOLDER = "<required-channel-id>"
 REQUIRED_IDENTIFIER_PLACEHOLDER = "<required-identifier>"
 
 
@@ -39,7 +38,24 @@ class DeploymentEnvVar:
 # owned by the database service, not the algo-bot configuration catalog.
 # APEXVOID_CONFIG_AUTHORITY was removed in Phase 2I-B: leftover values are
 # unmanaged unknown environment variables and do not alter runtime behavior.
+#
+# Configuration V3 (docs/configuration.md, Stage C3): APEXVOID_CONFIG_FILE
+# is the one non-secret configuration bootstrap ENV variable (rebuild-
+# configuration-architecture.md §12/§31) — every setting it used to sit
+# alongside here (runtime.profile/AUTO_TRADE_PROFILE, strategies.
+# mapped_zone.enabled/AUTO_TRADE_MAPPED_ZONE_ENABLED, actionability.gates.
+# market_map_guard_enabled/AUTO_TRADE_MARKET_MAP_GUARD_ENABLED,
+# bootstrap.logging.*/LOG_DIR etc., bootstrap.redis.url/REDIS_URL,
+# delivery.telegram.telegram_channel_id/SIGNAL_VIP_CHANNEL_ID) now lives
+# in config/*.yml instead and was removed from ENV_EXAMPLE_CATALOG_PATHS
+# below — see docs/configuration-v3-migration-audit.md's Stage C3 section.
 EXTRA_DEPLOYMENT_ENV: tuple[DeploymentEnvVar, ...] = (
+  DeploymentEnvVar(
+    "APEXVOID_CONFIG_FILE",
+    "/config/apexvoid.yml",
+    "V3 root configuration file (see docs/configuration.md). Point at "
+    "config/apexvoid.demo-eval.yml for a demo_eval deployment instead.",
+  ),
   DeploymentEnvVar(
     "POSTGRES_PASSWORD",
     REQUIRED_SECRET_PLACEHOLDER,
@@ -49,17 +65,11 @@ EXTRA_DEPLOYMENT_ENV: tuple[DeploymentEnvVar, ...] = (
 
 
 # Catalog canonical paths that appear in the minimal example, in file order.
+# Non-secret tuning/bootstrap paths that now live in config/*.yml only
+# (Stage C3) are deliberately absent — see EXTRA_DEPLOYMENT_ENV's comment.
 ENV_EXAMPLE_CATALOG_PATHS: tuple[str, ...] = (
   "bootstrap.telegram.bot_token",
-  "delivery.telegram.telegram_channel_id",
   "bootstrap.postgres.url",
-  "bootstrap.redis.url",
-  "runtime.profile",
-  "strategies.mapped_zone.enabled",
-  "actionability.gates.market_map_guard_enabled",
-  "bootstrap.logging.directory",
-  "bootstrap.logging.retention_days",
-  "bootstrap.logging.file_enabled",
   "bootstrap.ctrader.credentials.client_id",
   "bootstrap.ctrader.credentials.client_secret",
   "bootstrap.ctrader.credentials.access_token",
@@ -69,14 +79,7 @@ ENV_EXAMPLE_CATALOG_PATHS: tuple[str, ...] = (
 
 
 # Intentional deployment-example overrides. Keys are canonical paths.
-# Keep this small: profile selection + root-Compose parity pins only.
 ENV_EXAMPLE_VALUE_OVERRIDES: dict[str, str] = {
-  "runtime.profile": "demo_eval",
-  # Root Compose intentionally keeps mapped-zone + market-map guard off even
-  # under demo_eval (direct demo fixture enables them). Preserve that intent.
-  "strategies.mapped_zone.enabled": "false",
-  "actionability.gates.market_map_guard_enabled": "false",
-  "bootstrap.redis.url": "redis://redis:6379/0",
   # Operationally required for local startup even when the catalog marks the
   # field optional (dotenv may supply a compose-default DSN).
   "bootstrap.postgres.url": REQUIRED_SECRET_PLACEHOLDER,
@@ -90,8 +93,6 @@ def _format_value(entry, path: str) -> str:
     if entry.required:
       return REQUIRED_SECRET_PLACEHOLDER
     return OPTIONAL_SECRET_PLACEHOLDER
-  if entry.canonical_env == "SIGNAL_VIP_CHANNEL_ID":
-    return REQUIRED_CHANNEL_PLACEHOLDER
   default = entry.default
   if default in (None, "<required>"):
     if entry.required:

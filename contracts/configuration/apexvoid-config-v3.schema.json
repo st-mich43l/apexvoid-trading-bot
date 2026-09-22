@@ -1,0 +1,3561 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://apexvoid.internal/contracts/configuration/apexvoid-config-v3.schema.json",
+  "title": "ApexVoid Configuration V3",
+  "description": "Schema for the normalized, fully-merged (includes + environment overlay resolved) Configuration V3 document \u2014 NOT a schema for config/apexvoid.yml as a standalone file (that file is just {version, includes}; see rootDocument below for that narrower shape) but for what a loader produces after resolving includes + overlay. See docs/configuration-v3-migration-audit.md and docs/configuration.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "runtime",
+    "transport",
+    "database",
+    "instruments",
+    "instrument_packs",
+    "analysis",
+    "auto_algo",
+    "manual_algo",
+    "execution",
+    "telegram",
+    "journal"
+  ],
+  "properties": {
+    "version": {
+      "const": 3,
+      "description": "\u00a718 \u2014 exactly 3; a loader must refuse any other value, no best-effort forward compatibility."
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "environment": {
+          "type": "string",
+          "description": "\u00a713 \u2014 the selected environment; must match one of config/environments/*.yml (minus the .yml suffix). Not a free string once a loader exists: the loader validates it against the actual overlay files present."
+        },
+        "timezone": {
+          "type": "string"
+        },
+        "logging": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "directory": {
+              "type": "string"
+            },
+            "retention_days": {
+              "type": "integer"
+            },
+            "file_enabled": {
+              "type": "boolean"
+            },
+            "level": {
+              "type": "string",
+              "enum": [
+                "DEBUG",
+                "INFO",
+                "WARNING",
+                "ERROR",
+                "CRITICAL"
+              ]
+            },
+            "file_name": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "algo-bot": {
+                  "type": "string"
+                },
+                "ctrader-engine": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "algo-bot",
+                "ctrader-engine"
+              ]
+            }
+          },
+          "required": [
+            "directory",
+            "file_enabled",
+            "file_name",
+            "level",
+            "retention_days"
+          ]
+        },
+        "broker": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "expected_broker": {
+              "type": "string"
+            },
+            "require_demo": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "expected_broker",
+            "require_demo"
+          ]
+        },
+        "execution_contract": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mode": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "mode"
+          ]
+        }
+      },
+      "required": [
+        "broker",
+        "environment",
+        "execution_contract",
+        "logging",
+        "timezone"
+      ]
+    },
+    "transport": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "redis": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "url": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "url"
+          ]
+        },
+        "redis_streams": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "candidates": {
+              "type": "string"
+            },
+            "events": {
+              "type": "string"
+            },
+            "trade_plans": {
+              "type": "string"
+            },
+            "candidate_maximum_length": {
+              "type": "integer"
+            },
+            "candidate_version": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "candidate_maximum_length",
+            "candidate_version",
+            "candidates",
+            "events",
+            "trade_plans"
+          ]
+        }
+      },
+      "required": [
+        "redis",
+        "redis_streams"
+      ]
+    },
+    "database": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "postgres": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "host": {
+              "type": "string"
+            },
+            "port": {
+              "type": "integer"
+            },
+            "database": {
+              "type": "string"
+            },
+            "username": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "database",
+            "host",
+            "port",
+            "username"
+          ]
+        }
+      },
+      "required": [
+        "postgres"
+      ]
+    },
+    "analysis": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "indicators": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "atr": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "algorithm": {
+                  "type": "string",
+                  "enum": [
+                    "simple",
+                    "wilder"
+                  ]
+                },
+                "length": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "algorithm",
+                "length"
+              ]
+            }
+          },
+          "required": [
+            "atr"
+          ]
+        },
+        "trendlines": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "version": {
+              "type": "string",
+              "enum": [
+                "v1",
+                "v2"
+              ]
+            },
+            "shadow_v1": {
+              "type": "boolean"
+            },
+            "validation_touch_tolerance_atr": {
+              "type": "number"
+            },
+            "interaction_band_atr": {
+              "type": "number"
+            },
+            "invalidation_penetration_atr": {
+              "type": "number"
+            },
+            "close_violation_atr": {
+              "type": "number"
+            },
+            "approach_min_distance_atr": {
+              "type": "number"
+            },
+            "minimum_validation_touches": {
+              "type": "integer"
+            },
+            "minimum_validation_touch_spacing_bars": {
+              "type": "integer"
+            },
+            "validation_reaction_bars": {
+              "type": "integer"
+            },
+            "minimum_validation_favorable_excursion_atr": {
+              "type": "number"
+            },
+            "maximum_wick_violations": {
+              "type": "integer"
+            },
+            "exhaustion_validation_touches": {
+              "type": "integer"
+            },
+            "chop_minimum_validation_touches": {
+              "type": "integer"
+            },
+            "chop_require_htf_aligned": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "approach_min_distance_atr",
+            "chop_minimum_validation_touches",
+            "chop_require_htf_aligned",
+            "close_violation_atr",
+            "exhaustion_validation_touches",
+            "interaction_band_atr",
+            "invalidation_penetration_atr",
+            "maximum_wick_violations",
+            "minimum_validation_favorable_excursion_atr",
+            "minimum_validation_touch_spacing_bars",
+            "minimum_validation_touches",
+            "shadow_v1",
+            "validation_reaction_bars",
+            "validation_touch_tolerance_atr",
+            "version"
+          ]
+        },
+        "triggers": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "m1": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "patterns": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "strong_close_pct": {
+                  "type": "number"
+                },
+                "wick_fraction": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "patterns",
+                "strong_close_pct",
+                "wick_fraction"
+              ]
+            }
+          },
+          "required": [
+            "m1"
+          ]
+        },
+        "techniques": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "validation_enabled": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "validation_enabled"
+          ]
+        },
+        "zones": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "merge_overlap": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "merge_overlap"
+          ]
+        },
+        "measurements": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "max_merged_zone_atr": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "max_merged_zone_atr"
+          ]
+        },
+        "calendar": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "currencies": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "event_guard_hours": {
+              "type": "number"
+            },
+            "feed_nextweek": {
+              "type": "string"
+            },
+            "feed_thisweek": {
+              "type": "string"
+            },
+            "news_brief_hour": {
+              "type": "integer"
+            },
+            "news_guard_block": {
+              "type": "boolean"
+            },
+            "oil_keywords": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "user_agent": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "currencies",
+            "enabled",
+            "event_guard_hours",
+            "feed_nextweek",
+            "feed_thisweek",
+            "news_brief_hour",
+            "news_guard_block",
+            "oil_keywords",
+            "user_agent"
+          ]
+        },
+        "scanner": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "execution_timeframe": {
+              "type": "string"
+            },
+            "htf": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "window": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "execution_timeframe",
+            "htf",
+            "window"
+          ]
+        },
+        "sessions": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "asia_start": {
+              "type": "integer"
+            },
+            "london_start": {
+              "type": "integer"
+            },
+            "ny_start": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "asia_start",
+            "london_start",
+            "ny_start"
+          ]
+        },
+        "spot": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "maximum_age_seconds": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "maximum_age_seconds"
+          ]
+        },
+        "watcher": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "interval_seconds": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "interval_seconds"
+          ]
+        }
+      },
+      "required": [
+        "calendar",
+        "indicators",
+        "measurements",
+        "scanner",
+        "sessions",
+        "spot",
+        "techniques",
+        "trendlines",
+        "triggers",
+        "watcher",
+        "zones"
+      ]
+    },
+    "auto_algo": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "dry_run": {
+          "type": "boolean"
+        },
+        "direct_publish_enabled": {
+          "type": "boolean"
+        },
+        "strategy_match_enabled": {
+          "type": "boolean"
+        },
+        "scanner": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "enabled"
+          ]
+        },
+        "actionability": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "counter_bias": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "allowed": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "allowed"
+              ]
+            },
+            "entry_location": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "mode": {
+                  "type": "string",
+                  "enum": [
+                    "enforce",
+                    "observe",
+                    "off"
+                  ]
+                },
+                "missing_context_policy": {
+                  "type": "string",
+                  "enum": [
+                    "block",
+                    "allow"
+                  ]
+                },
+                "reversal": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "buy_maximum_position": {
+                      "type": "number"
+                    },
+                    "sell_minimum_position": {
+                      "type": "number"
+                    },
+                    "extreme_buy_block_position": {
+                      "type": "number"
+                    },
+                    "extreme_sell_block_position": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "buy_maximum_position",
+                    "extreme_buy_block_position",
+                    "extreme_sell_block_position",
+                    "sell_minimum_position"
+                  ]
+                },
+                "range_reversion": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "buy_maximum_position": {
+                      "type": "number"
+                    },
+                    "sell_minimum_position": {
+                      "type": "number"
+                    },
+                    "equilibrium_exclusion_width": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "buy_maximum_position",
+                    "equilibrium_exclusion_width",
+                    "sell_minimum_position"
+                  ]
+                },
+                "trend_pullback": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "buy_maximum_position": {
+                      "type": "number"
+                    },
+                    "sell_minimum_position": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "buy_maximum_position",
+                    "sell_minimum_position"
+                  ]
+                },
+                "breakout_retest": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "allow_directional_expansion": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "allow_directional_expansion"
+                  ]
+                }
+              },
+              "required": [
+                "breakout_retest",
+                "missing_context_policy",
+                "mode",
+                "range_reversion",
+                "reversal",
+                "trend_pullback"
+              ]
+            },
+            "gates": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "htf_veto_enabled": {
+                  "type": "boolean"
+                },
+                "market_map_guard_enabled": {
+                  "type": "boolean"
+                },
+                "min_confluence": {
+                  "type": "integer"
+                },
+                "news_guard_minutes": {
+                  "type": "integer"
+                },
+                "opposing_barrier_veto_enabled": {
+                  "type": "boolean"
+                },
+                "range_context_disagreement_gate_enabled": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "htf_veto_enabled",
+                "market_map_guard_enabled",
+                "min_confluence",
+                "news_guard_minutes",
+                "opposing_barrier_veto_enabled",
+                "range_context_disagreement_gate_enabled"
+              ]
+            },
+            "key_level_role": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "enabled"
+              ]
+            },
+            "overlapping_zones": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "veto_enabled": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "veto_enabled"
+              ]
+            },
+            "scanner_gates": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "actionability_gate_enabled": {
+                  "type": "boolean"
+                },
+                "zone_width_gate_enabled": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "actionability_gate_enabled",
+                "zone_width_gate_enabled"
+              ]
+            },
+            "structural_guard": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "guard_mode": {
+                  "type": "string",
+                  "enum": [
+                    "observe",
+                    "balanced",
+                    "strict"
+                  ]
+                }
+              },
+              "required": [
+                "guard_mode"
+              ]
+            },
+            "zone_reconciliation": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "mode": {
+                  "type": "string",
+                  "enum": [
+                    "off",
+                    "shadow",
+                    "enforce"
+                  ]
+                }
+              },
+              "required": [
+                "enabled",
+                "mode"
+              ]
+            }
+          },
+          "required": [
+            "counter_bias",
+            "entry_location",
+            "gates",
+            "key_level_role",
+            "overlapping_zones",
+            "scanner_gates",
+            "structural_guard",
+            "zone_reconciliation"
+          ]
+        },
+        "lifecycle": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "candidate": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "execution_maximum_age_seconds": {
+                  "type": "integer"
+                },
+                "storage_ttl_seconds": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "execution_maximum_age_seconds",
+                "storage_ttl_seconds"
+              ]
+            },
+            "mapped_zone": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "reaction_rearm_atr": {
+                  "type": "number"
+                },
+                "reaction_rearm_bars": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "reaction_rearm_atr",
+                "reaction_rearm_bars"
+              ]
+            },
+            "reconciliation": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "absence_recheck_seconds": {
+                  "type": "integer"
+                },
+                "missing_confirmations": {
+                  "type": "integer"
+                },
+                "missing_recheck_seconds": {
+                  "type": "integer"
+                },
+                "recovery_timeout_seconds": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "absence_recheck_seconds",
+                "missing_confirmations",
+                "missing_recheck_seconds",
+                "recovery_timeout_seconds"
+              ]
+            },
+            "scaling": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "cooldown_bars": {
+                  "type": "integer"
+                },
+                "max_age_bars": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "cooldown_bars",
+                "max_age_bars"
+              ]
+            },
+            "zone": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "cooldown_enabled": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "cooldown_enabled"
+              ]
+            }
+          },
+          "required": [
+            "candidate",
+            "mapped_zone",
+            "reconciliation",
+            "scaling",
+            "zone"
+          ]
+        },
+        "risk": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "exposure": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "allow_concurrent_strategies": {
+                  "type": "boolean"
+                },
+                "non_hedged_opposite_policy": {
+                  "type": "string",
+                  "enum": [
+                    "broker_netting",
+                    "close_then_reverse",
+                    "reject"
+                  ]
+                },
+                "allow_hedged_xau": {
+                  "type": "boolean"
+                },
+                "require_flat_for_range": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "allow_concurrent_strategies",
+                "allow_hedged_xau",
+                "non_hedged_opposite_policy",
+                "require_flat_for_range"
+              ]
+            },
+            "position_limits": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "max_tracked_candidates": {
+                  "type": "integer"
+                },
+                "maximum_per_symbol": {
+                  "type": "integer"
+                },
+                "same_direction_stack_size_fraction": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "max_tracked_candidates",
+                "maximum_per_symbol",
+                "same_direction_stack_size_fraction"
+              ]
+            },
+            "sizing": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "add_require_risk_free": {
+                  "type": "boolean"
+                },
+                "add_risk_fraction": {
+                  "type": "number"
+                },
+                "equity_table_version": {
+                  "type": "string"
+                },
+                "mode": {
+                  "type": "string",
+                  "enum": [
+                    "equity_table",
+                    "fixed_lot"
+                  ]
+                },
+                "one_sided_range_risk_multiplier": {
+                  "type": "number"
+                },
+                "post_impulse_risk_multiplier": {
+                  "type": "number"
+                },
+                "range_max_risk_multiplier": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "add_require_risk_free",
+                "add_risk_fraction",
+                "equity_table_version",
+                "mode",
+                "one_sided_range_risk_multiplier",
+                "post_impulse_risk_multiplier",
+                "range_max_risk_multiplier"
+              ]
+            },
+            "tiers": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "a_multiplier": {
+                  "type": "number"
+                },
+                "b_multiplier": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "a_multiplier",
+                "b_multiplier"
+              ]
+            }
+          },
+          "required": [
+            "exposure",
+            "position_limits",
+            "sizing",
+            "tiers"
+          ]
+        },
+        "strategies": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "technique": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "fvg": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "entry_max_width_price": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "entry_max_width_price"
+                  ]
+                }
+              },
+              "required": [
+                "fvg"
+              ]
+            },
+            "scalping": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "mode": {
+                  "type": "string",
+                  "enum": [
+                    "live",
+                    "shadow",
+                    "off"
+                  ]
+                },
+                "archetypes": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "range_sweep_enabled": {
+                      "type": "boolean"
+                    },
+                    "impulse_pullback_enabled": {
+                      "type": "boolean"
+                    },
+                    "impulse_pullback_allowed_sessions": {
+                      "type": "string"
+                    },
+                    "pullback_extreme_confirm_bars": {
+                      "type": "integer"
+                    },
+                    "impulse_displacement_atr_multiple": {
+                      "type": "number"
+                    },
+                    "impulse_body_dominance": {
+                      "type": "number"
+                    },
+                    "pullback_corrective_ratio": {
+                      "type": "number"
+                    },
+                    "breakout_retest_enabled": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "breakout_retest_enabled",
+                    "impulse_body_dominance",
+                    "impulse_displacement_atr_multiple",
+                    "impulse_pullback_allowed_sessions",
+                    "impulse_pullback_enabled",
+                    "pullback_corrective_ratio",
+                    "pullback_extreme_confirm_bars",
+                    "range_sweep_enabled"
+                  ]
+                },
+                "context": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "maximum_m5_age_seconds": {
+                      "type": "integer"
+                    },
+                    "m1_lookback_bars": {
+                      "type": "integer"
+                    },
+                    "current_context_ttl_seconds": {
+                      "type": "integer"
+                    },
+                    "historic_context_ttl_seconds": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "current_context_ttl_seconds",
+                    "historic_context_ttl_seconds",
+                    "m1_lookback_bars",
+                    "maximum_m5_age_seconds"
+                  ]
+                },
+                "location": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "range_buy_maximum_position": {
+                      "type": "number"
+                    },
+                    "range_sell_minimum_position": {
+                      "type": "number"
+                    },
+                    "pullback_buy_maximum_position": {
+                      "type": "number"
+                    },
+                    "pullback_sell_minimum_position": {
+                      "type": "number"
+                    },
+                    "level_proximity_atr_multiple": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "level_proximity_atr_multiple",
+                    "pullback_buy_maximum_position",
+                    "pullback_sell_minimum_position",
+                    "range_buy_maximum_position",
+                    "range_sell_minimum_position"
+                  ]
+                },
+                "activation": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "trigger_maximum_age_bars": {
+                      "type": "integer"
+                    },
+                    "maximum_chase_pips": {
+                      "type": "integer"
+                    },
+                    "maximum_chase_stop_fraction": {
+                      "type": "number"
+                    },
+                    "rearm_distance_atr": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "maximum_chase_pips",
+                    "maximum_chase_stop_fraction",
+                    "rearm_distance_atr",
+                    "trigger_maximum_age_bars"
+                  ]
+                },
+                "target": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "preferred_ladder_pips": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer"
+                      }
+                    },
+                    "minimum_net_target_pips": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "minimum_net_target_pips",
+                    "preferred_ladder_pips"
+                  ]
+                },
+                "stop": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "minimum_pips": {
+                      "type": "integer"
+                    },
+                    "maximum_pips": {
+                      "type": "integer"
+                    },
+                    "buffer_atr": {
+                      "type": "number"
+                    },
+                    "minimum_stop_spread_multiple": {
+                      "type": "number"
+                    },
+                    "buffer_m1_atr_multiple": {
+                      "type": "number"
+                    },
+                    "buffer_minimum_spread_multiple": {
+                      "type": "number"
+                    },
+                    "zone_maximum_atr_multiple": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "buffer_atr",
+                    "buffer_m1_atr_multiple",
+                    "buffer_minimum_spread_multiple",
+                    "maximum_pips",
+                    "minimum_pips",
+                    "minimum_stop_spread_multiple",
+                    "zone_maximum_atr_multiple"
+                  ]
+                },
+                "policy": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "minimum_reward_risk": {
+                      "type": "number"
+                    },
+                    "maximum_opportunities_per_cycle": {
+                      "type": "integer"
+                    },
+                    "maximum_active_opportunities": {
+                      "type": "integer"
+                    },
+                    "maximum_spread_pips": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "maximum_active_opportunities",
+                    "maximum_opportunities_per_cycle",
+                    "maximum_spread_pips",
+                    "minimum_reward_risk"
+                  ]
+                },
+                "risk": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "mode": {
+                      "type": "string",
+                      "enum": [
+                        "live",
+                        "shadow",
+                        "off"
+                      ]
+                    },
+                    "risk_fraction_per_trade": {
+                      "type": "number"
+                    },
+                    "risk_percent_per_trade": {
+                      "type": "number"
+                    },
+                    "sizing_mode": {
+                      "type": "string",
+                      "enum": [
+                        "equity_table",
+                        "fixed_lot"
+                      ]
+                    },
+                    "maximum_concurrent_positions": {
+                      "type": "integer"
+                    },
+                    "maximum_session_trades": {
+                      "type": "integer"
+                    },
+                    "maximum_daily_trades": {
+                      "type": "integer"
+                    },
+                    "maximum_consecutive_losses": {
+                      "type": "integer"
+                    },
+                    "cooldown_after_loss_minutes": {
+                      "type": "integer"
+                    },
+                    "daily_loss_limit_r": {
+                      "type": "number"
+                    },
+                    "session_loss_limit_r": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "cooldown_after_loss_minutes",
+                    "daily_loss_limit_r",
+                    "maximum_concurrent_positions",
+                    "maximum_consecutive_losses",
+                    "maximum_daily_trades",
+                    "maximum_session_trades",
+                    "mode",
+                    "risk_fraction_per_trade",
+                    "risk_percent_per_trade",
+                    "session_loss_limit_r",
+                    "sizing_mode"
+                  ]
+                },
+                "breakout": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "box_max_atr": {
+                      "type": "number"
+                    },
+                    "min_break_atr": {
+                      "type": "number"
+                    },
+                    "min_box_bars": {
+                      "type": "integer"
+                    },
+                    "max_box_bars": {
+                      "type": "integer"
+                    },
+                    "retest_lookback_bars": {
+                      "type": "integer"
+                    },
+                    "require_retest_rejection": {
+                      "type": "boolean"
+                    },
+                    "min_touches_per_side": {
+                      "type": "integer"
+                    },
+                    "touch_tol_atr": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "box_max_atr",
+                    "max_box_bars",
+                    "min_box_bars",
+                    "min_break_atr",
+                    "min_touches_per_side",
+                    "require_retest_rejection",
+                    "retest_lookback_bars",
+                    "touch_tol_atr"
+                  ]
+                }
+              },
+              "required": [
+                "activation",
+                "archetypes",
+                "breakout",
+                "context",
+                "location",
+                "mode",
+                "policy",
+                "risk",
+                "stop",
+                "target"
+              ]
+            },
+            "breakout": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "break_retest_enabled": {
+                  "type": "boolean"
+                },
+                "breakout_enabled": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "break_retest_enabled",
+                "breakout_enabled"
+              ]
+            },
+            "mapped_zone": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "counter_bias_enabled": {
+                  "type": "boolean"
+                },
+                "enabled": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "counter_bias_enabled",
+                "enabled"
+              ]
+            },
+            "matching": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "multiple_matches_enabled": {
+                  "type": "boolean"
+                },
+                "track_all_structural_matches": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "multiple_matches_enabled",
+                "track_all_structural_matches"
+              ]
+            },
+            "range_reversion": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "box_scale_out_enabled": {
+                  "type": "boolean"
+                },
+                "enabled": {
+                  "type": "boolean"
+                },
+                "flip_enabled": {
+                  "type": "boolean"
+                },
+                "range_edge": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "allow_rejection_only": {
+                      "type": "boolean"
+                    },
+                    "break_closes": {
+                      "type": "integer"
+                    },
+                    "cluster_atr": {
+                      "type": "number"
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "entry_tol_atr": {
+                      "type": "number"
+                    },
+                    "lookback": {
+                      "type": "integer"
+                    },
+                    "max_edge_width_atr": {
+                      "type": "number"
+                    },
+                    "max_width_atr": {
+                      "type": "number"
+                    },
+                    "min_inside_closes": {
+                      "type": "integer"
+                    },
+                    "min_room_atr": {
+                      "type": "number"
+                    },
+                    "min_touches": {
+                      "type": "integer"
+                    },
+                    "min_wick_frac": {
+                      "type": "number"
+                    },
+                    "min_wick_rejections": {
+                      "type": "integer"
+                    },
+                    "min_width_atr": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "allow_rejection_only",
+                    "break_closes",
+                    "cluster_atr",
+                    "enabled",
+                    "entry_tol_atr",
+                    "lookback",
+                    "max_edge_width_atr",
+                    "max_width_atr",
+                    "min_inside_closes",
+                    "min_room_atr",
+                    "min_touches",
+                    "min_wick_frac",
+                    "min_wick_rejections",
+                    "min_width_atr"
+                  ]
+                },
+                "two_sided_enabled": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "box_scale_out_enabled",
+                "enabled",
+                "flip_enabled",
+                "range_edge",
+                "two_sided_enabled"
+              ]
+            },
+            "reaction": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "demand": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "enabled"
+                  ]
+                },
+                "enabled": {
+                  "type": "boolean"
+                },
+                "key_level": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "enabled"
+                  ]
+                },
+                "liquidity_reversal": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "enabled"
+                  ]
+                },
+                "scale_enabled": {
+                  "type": "boolean"
+                },
+                "session_level": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "enabled"
+                  ]
+                },
+                "supply": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "enabled"
+                  ]
+                },
+                "trendline": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "reject_exhausted": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "enabled",
+                    "reject_exhausted"
+                  ]
+                }
+              },
+              "required": [
+                "demand",
+                "enabled",
+                "key_level",
+                "liquidity_reversal",
+                "scale_enabled",
+                "session_level",
+                "supply",
+                "trendline"
+              ]
+            },
+            "scalp": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "fade_scalp_enabled": {
+                  "type": "boolean"
+                },
+                "scalp_barrier_fallback_enabled": {
+                  "type": "boolean"
+                },
+                "scalp_barrier_fallback_min_confirmations": {
+                  "type": "integer"
+                },
+                "scalp_post_impulse_range_enabled": {
+                  "type": "boolean"
+                },
+                "scalp_range_provisional_enabled": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "fade_scalp_enabled",
+                "scalp_barrier_fallback_enabled",
+                "scalp_barrier_fallback_min_confirmations",
+                "scalp_post_impulse_range_enabled",
+                "scalp_range_provisional_enabled"
+              ]
+            },
+            "selection": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "box_breakout_enabled": {
+                  "type": "boolean"
+                },
+                "momentum_ride_enabled": {
+                  "type": "boolean"
+                },
+                "retest_enabled": {
+                  "type": "boolean"
+                },
+                "snap_back_enabled": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "box_breakout_enabled",
+                "momentum_ride_enabled",
+                "retest_enabled",
+                "snap_back_enabled"
+              ]
+            },
+            "trend": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "allow_chase": {
+                  "type": "boolean"
+                },
+                "breakout_min_room_pips": {
+                  "type": "integer"
+                },
+                "enabled": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "allow_chase",
+                "breakout_min_room_pips",
+                "enabled"
+              ]
+            }
+          },
+          "required": [
+            "breakout",
+            "mapped_zone",
+            "matching",
+            "range_reversion",
+            "reaction",
+            "scalp",
+            "scalping",
+            "selection",
+            "technique",
+            "trend"
+          ]
+        },
+        "scalping": null
+      },
+      "required": [
+        "actionability",
+        "direct_publish_enabled",
+        "dry_run",
+        "enabled",
+        "lifecycle",
+        "risk",
+        "scanner",
+        "strategies",
+        "strategy_match_enabled"
+      ]
+    },
+    "manual_algo": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "runtime": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "owner_execution_dm_enabled": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "enabled",
+            "owner_execution_dm_enabled"
+          ]
+        },
+        "sizing": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "fx_volume_multiplier": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "fx_volume_multiplier"
+          ]
+        }
+      },
+      "required": [
+        "runtime",
+        "sizing"
+      ]
+    },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "technique": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enforce": {
+              "type": "boolean"
+            },
+            "include_late_ny": {
+              "type": "boolean"
+            },
+            "london_window_hours": {
+              "type": "integer"
+            },
+            "ny_window_hours": {
+              "type": "integer"
+            },
+            "reaction_require_killzone": {
+              "type": "boolean"
+            },
+            "reaction_require_publish_window": {
+              "type": "boolean"
+            },
+            "scalp_require_killzone": {
+              "type": "boolean"
+            },
+            "selective_session_min_confluence": {
+              "type": "integer"
+            },
+            "require_sweep_body": {
+              "type": "boolean"
+            },
+            "strict_premium_discount": {
+              "type": "boolean"
+            },
+            "strict_premium_discount_archetypes": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "mad_hard_gate_enabled": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "enforce",
+            "include_late_ny",
+            "london_window_hours",
+            "mad_hard_gate_enabled",
+            "ny_window_hours",
+            "reaction_require_killzone",
+            "reaction_require_publish_window",
+            "require_sweep_body",
+            "scalp_require_killzone",
+            "selective_session_min_confluence",
+            "strict_premium_discount",
+            "strict_premium_discount_archetypes"
+          ]
+        },
+        "activation": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": [
+                "enforce",
+                "observe",
+                "off"
+              ]
+            },
+            "m5_authoritative_fallback": {
+              "type": "string"
+            },
+            "m5_confirmation_maximum_age_bars": {
+              "type": "integer"
+            },
+            "reaction_trigger_maximum_age_bars": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "m5_authoritative_fallback",
+            "m5_confirmation_maximum_age_bars",
+            "mode",
+            "reaction_trigger_maximum_age_bars"
+          ]
+        },
+        "broker_recovery": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "absence_confirmations": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "absence_confirmations"
+          ]
+        },
+        "entry": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "contract_tolerance_pips": {
+              "type": "number"
+            },
+            "inside_zone_market_entry_enabled": {
+              "type": "boolean"
+            },
+            "max_spread_pips": {
+              "type": "integer"
+            },
+            "maximum_chase_distance_pips": {
+              "type": "number"
+            },
+            "poll_ms": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "contract_tolerance_pips",
+            "inside_zone_market_entry_enabled",
+            "max_spread_pips",
+            "maximum_chase_distance_pips",
+            "poll_ms"
+          ]
+        },
+        "mapped_zone": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "execute_tolerance_atr": {
+              "type": "number"
+            },
+            "execute_tolerance_pips": {
+              "type": "number"
+            },
+            "hard_entry_drift_pips": {
+              "type": "number"
+            },
+            "max_entry_drift_atr": {
+              "type": "number"
+            },
+            "min_entry_drift_pips": {
+              "type": "number"
+            },
+            "reaction_lookback_bars": {
+              "type": "integer"
+            },
+            "thesis_lock_enabled": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "execute_tolerance_atr",
+            "execute_tolerance_pips",
+            "hard_entry_drift_pips",
+            "max_entry_drift_atr",
+            "min_entry_drift_pips",
+            "reaction_lookback_bars",
+            "thesis_lock_enabled"
+          ]
+        },
+        "policy": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "displacement_override_lookback_bars": {
+              "type": "integer"
+            },
+            "execution_zone_max_width_atr": {
+              "type": "number"
+            },
+            "execution_zone_max_width_pips": {
+              "type": "number"
+            },
+            "group_close_allocation": {
+              "type": "string",
+              "enum": [
+                "pro_rata",
+                "priority"
+              ]
+            },
+            "label": {
+              "type": "string"
+            },
+            "max_tranches": {
+              "type": "integer"
+            },
+            "structural_reaction_lookback_bars": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "displacement_override_lookback_bars",
+            "execution_zone_max_width_atr",
+            "execution_zone_max_width_pips",
+            "group_close_allocation",
+            "label",
+            "max_tranches",
+            "structural_reaction_lookback_bars"
+          ]
+        },
+        "range": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "box_move_sl_to_be_after_scale_out": {
+              "type": "boolean"
+            },
+            "box_scale_out_fraction": {
+              "type": "number"
+            },
+            "box_scale_out_threshold_pips": {
+              "type": "integer"
+            },
+            "box_scale_out_trigger_pips": {
+              "type": "integer"
+            },
+            "hard_entry_drift_pips": {
+              "type": "number"
+            },
+            "max_entry_drift_atr": {
+              "type": "number"
+            },
+            "min_entry_drift_pips": {
+              "type": "number"
+            },
+            "min_rr": {
+              "type": "number"
+            },
+            "min_target_pips": {
+              "type": "number"
+            },
+            "room_stop_floor_pips": {
+              "type": "integer"
+            },
+            "tp_buffer_pips": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "box_move_sl_to_be_after_scale_out",
+            "box_scale_out_fraction",
+            "box_scale_out_threshold_pips",
+            "box_scale_out_trigger_pips",
+            "hard_entry_drift_pips",
+            "max_entry_drift_atr",
+            "min_entry_drift_pips",
+            "min_rr",
+            "min_target_pips",
+            "room_stop_floor_pips",
+            "tp_buffer_pips"
+          ]
+        },
+        "reaction": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "market_fraction": {
+              "type": "number"
+            },
+            "room_stop_min_rr": {
+              "type": "number"
+            },
+            "scale_fraction": {
+              "type": "number"
+            },
+            "scale_invalid_policy": {
+              "type": "string",
+              "enum": [
+                "single_market",
+                "reject"
+              ]
+            },
+            "scale_step_atr": {
+              "type": "number"
+            },
+            "stop_max_pips": {
+              "type": "integer"
+            },
+            "stop_min_pips": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "market_fraction",
+            "room_stop_min_rr",
+            "scale_fraction",
+            "scale_invalid_policy",
+            "scale_step_atr",
+            "stop_max_pips",
+            "stop_min_pips"
+          ]
+        },
+        "scaling": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "add": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "level_buffer_atr": {
+                  "type": "number"
+                },
+                "min_stop_pips": {
+                  "type": "integer"
+                },
+                "size_ratio": {
+                  "type": "number"
+                },
+                "stop_buffer_atr": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "level_buffer_atr",
+                "min_stop_pips",
+                "size_ratio",
+                "stop_buffer_atr"
+              ]
+            }
+          },
+          "required": [
+            "add"
+          ]
+        },
+        "stops": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "be_buffer_ticks": {
+              "type": "integer"
+            },
+            "reaction": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "room_floor_pips": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "room_floor_pips"
+              ]
+            },
+            "sl_distance": {
+              "type": "number"
+            },
+            "stop_push_beyond_zone": {
+              "type": "boolean"
+            },
+            "trend": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "minimum_pips": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "minimum_pips"
+              ]
+            },
+            "wick_stop_buffer_atr": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "be_buffer_ticks",
+            "reaction",
+            "sl_distance",
+            "stop_push_beyond_zone",
+            "trend",
+            "wick_stop_buffer_atr"
+          ]
+        },
+        "targeting": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "default_ladder_pips": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              }
+            },
+            "post_fill_target_fallback": {
+              "type": "string",
+              "enum": [
+                "fill_relative",
+                "structural"
+              ]
+            },
+            "range_ladder_pips": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              }
+            },
+            "tp_weights": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "unfilled_leg_after_tp_policy": {
+              "type": "string",
+              "enum": [
+                "cancel",
+                "carry"
+              ]
+            }
+          },
+          "required": [
+            "default_ladder_pips",
+            "post_fill_target_fallback",
+            "range_ladder_pips",
+            "tp_weights",
+            "unfilled_leg_after_tp_policy"
+          ]
+        },
+        "trend": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "hard_entry_drift_pips": {
+              "type": "number"
+            },
+            "max_entry_drift_atr": {
+              "type": "number"
+            },
+            "min_entry_drift_pips": {
+              "type": "number"
+            },
+            "stop_max_pips": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "hard_entry_drift_pips",
+            "max_entry_drift_atr",
+            "min_entry_drift_pips",
+            "stop_max_pips"
+          ]
+        },
+        "zone_scaling": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "fill_enabled": {
+              "type": "boolean"
+            },
+            "fill_fallback_enabled": {
+              "type": "boolean"
+            },
+            "first_leg_fraction": {
+              "type": "number"
+            },
+            "scale_step_atr": {
+              "type": "number"
+            },
+            "scale_undersized_policy": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "fill_enabled",
+            "fill_fallback_enabled",
+            "first_leg_fraction",
+            "scale_step_atr",
+            "scale_undersized_policy"
+          ]
+        }
+      },
+      "required": [
+        "activation",
+        "broker_recovery",
+        "entry",
+        "mapped_zone",
+        "policy",
+        "range",
+        "reaction",
+        "scaling",
+        "stops",
+        "targeting",
+        "technique",
+        "trend",
+        "zone_scaling"
+      ]
+    },
+    "telegram": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "lifecycle": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "delete_on_terminal": {
+              "type": "boolean"
+            },
+            "thread_lifecycle": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "delete_on_terminal",
+            "thread_lifecycle"
+          ]
+        },
+        "presentation": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "auto_book_bare_pips": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "auto_book_bare_pips"
+          ]
+        },
+        "reports": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "weekly": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "day_of_week": {
+                  "type": "integer"
+                },
+                "enabled": {
+                  "type": "boolean"
+                },
+                "skip_empty": {
+                  "type": "boolean"
+                },
+                "utc_hour": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "day_of_week",
+                "enabled",
+                "skip_empty",
+                "utc_hour"
+              ]
+            }
+          },
+          "required": [
+            "weekly"
+          ]
+        },
+        "scanner_cards": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "top_n": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "top_n"
+          ]
+        },
+        "delete_root_on_terminal": {
+          "type": "boolean"
+        },
+        "owner_dm_daily_wipe_enabled": {
+          "type": "boolean"
+        },
+        "public_show_pips": {
+          "type": "boolean"
+        },
+        "telegram_channel_id": {
+          "type": "string"
+        },
+        "signal_public_channel_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "delete_root_on_terminal",
+        "lifecycle",
+        "owner_dm_daily_wipe_enabled",
+        "presentation",
+        "public_show_pips",
+        "reports",
+        "scanner_cards",
+        "signal_public_channel_id",
+        "telegram_channel_id"
+      ]
+    },
+    "journal": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "persist": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "trade_plan": {
+              "type": "boolean"
+            },
+            "analysis_snapshot": {
+              "type": "boolean"
+            },
+            "execution_events": {
+              "type": "boolean"
+            },
+            "math_telemetry": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "analysis_snapshot",
+            "execution_events",
+            "math_telemetry",
+            "trade_plan"
+          ]
+        }
+      },
+      "required": [
+        "enabled",
+        "persist"
+      ]
+    },
+    "instruments": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "pack": {
+            "type": "string"
+          },
+          "rollout": {
+            "type": "string",
+            "enum": [
+              "disabled",
+              "feed_only",
+              "analysis_only",
+              "paper",
+              "live"
+            ]
+          },
+          "broker_symbol": {
+            "type": "string"
+          },
+          "canonical_symbol": {
+            "type": "string"
+          },
+          "aliases": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "policy": {
+            "type": "string"
+          },
+          "reaction_session": {
+            "type": "string"
+          },
+          "stop_envelope": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "min_pips": {
+                "type": "number"
+              },
+              "max_pips": {
+                "type": "number"
+              },
+              "sl_distance": {
+                "type": "number"
+              }
+            }
+          },
+          "activation": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "max_spread_pips": {
+                "type": "number"
+              },
+              "require_sweep_body": {
+                "type": "boolean"
+              },
+              "trigger_maximum_age_bars": {
+                "type": "integer"
+              }
+            }
+          },
+          "price_scale": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "round_step": {
+                "type": "number"
+              },
+              "market_map": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "change_min": {
+                    "type": "number"
+                  },
+                  "fallback_radius_price": {
+                    "type": "number"
+                  },
+                  "scalp_radius_price": {
+                    "type": "number"
+                  }
+                }
+              },
+              "zone_merge_gap_price": {
+                "type": "number"
+              },
+              "zone_merge_max_width": {
+                "type": "number"
+              },
+              "opposing_minimum_separation_price": {
+                "type": "number"
+              },
+              "fvg_entry_max_width_price": {
+                "type": "number"
+              }
+            }
+          },
+          "targeting": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "fixed_rr",
+                  "ladder_pips"
+                ]
+              },
+              "reward_risk": {
+                "type": "number"
+              },
+              "target_r_multiples": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                }
+              },
+              "close_ratios": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                }
+              },
+              "breakeven_after_r": {
+                "type": "number"
+              },
+              "entry_clips": {
+                "type": "integer"
+              }
+            }
+          },
+          "manual": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "algo_enabled": {
+                "type": "boolean"
+              },
+              "entry_mode": {
+                "type": "string",
+                "enum": [
+                  "single",
+                  "zone_ladder"
+                ]
+              },
+              "risk_reference": {
+                "type": "string",
+                "enum": [
+                  "shallow",
+                  "deep"
+                ]
+              },
+              "risk_multiplier": {
+                "type": "number"
+              },
+              "target_close_ratios": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                }
+              },
+              "tp1_close_fraction": {
+                "type": "number"
+              }
+            }
+          },
+          "market_data": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "lookbacks": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "h1_bars": {
+                    "type": "integer"
+                  },
+                  "m15_bars": {
+                    "type": "integer"
+                  },
+                  "m1_bars": {
+                    "type": "integer"
+                  },
+                  "m5_bars": {
+                    "type": "integer"
+                  }
+                }
+              }
+            }
+          },
+          "contract": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "contract_units_per_lot": {
+                "type": "number"
+              },
+              "max_lots": {
+                "type": "number"
+              },
+              "pip_size": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "price_digits": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "volume_units_per_lot": {
+                "type": "integer"
+              },
+              "pip_value_per_lot": {
+                "type": "number"
+              }
+            }
+          },
+          "analysis": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "zones": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "major_maximum_width_price": {
+                    "type": "number"
+                  },
+                  "minimum_width_price": {
+                    "type": "number"
+                  },
+                  "preferred_maximum_width_price": {
+                    "type": "number"
+                  },
+                  "preferred_minimum_width_price": {
+                    "type": "number"
+                  }
+                }
+              }
+            }
+          },
+          "overrides": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "auto_algo": {
+                "type": "object"
+              },
+              "execution": {
+                "type": "object"
+              },
+              "analysis": {
+                "type": "object"
+              },
+              "runtime": {
+                "type": "object"
+              },
+              "telegram": {
+                "type": "object"
+              },
+              "manual_algo": {
+                "type": "object"
+              },
+              "transport": {
+                "type": "object"
+              },
+              "database": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "required": [
+          "rollout",
+          "broker_symbol",
+          "canonical_symbol"
+        ]
+      }
+    },
+    "instrument_packs": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "policy": {
+            "type": "string"
+          },
+          "auto_entry": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "scale",
+                  "single_best"
+                ]
+              }
+            },
+            "required": [
+              "mode"
+            ]
+          },
+          "reaction_session": {
+            "type": "string"
+          },
+          "stop_envelope": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "min_pips": {
+                "type": "number"
+              },
+              "max_pips": {
+                "type": "number"
+              },
+              "sl_distance": {
+                "type": "number"
+              }
+            }
+          },
+          "activation": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "require_sweep_body": {
+                "type": "boolean"
+              },
+              "trigger_maximum_age_bars": {
+                "type": "integer"
+              },
+              "max_spread_pips": {
+                "type": "number"
+              }
+            }
+          },
+          "price_scale": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "round_step": {
+                "type": "number"
+              },
+              "market_map": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "change_min": {
+                    "type": "number"
+                  },
+                  "fallback_radius_price": {
+                    "type": "number"
+                  },
+                  "scalp_radius_price": {
+                    "type": "number"
+                  }
+                }
+              },
+              "zone_merge_gap_price": {
+                "type": "number"
+              },
+              "zone_merge_max_width": {
+                "type": "number"
+              },
+              "opposing_minimum_separation_price": {
+                "type": "number"
+              },
+              "fvg_entry_max_width_price": {
+                "type": "number"
+              }
+            }
+          },
+          "targeting": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "fixed_rr",
+                  "ladder_pips"
+                ]
+              },
+              "reward_risk": {
+                "type": "number"
+              },
+              "target_r_multiples": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                }
+              },
+              "close_ratios": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                }
+              },
+              "breakeven_after_r": {
+                "type": "number"
+              },
+              "entry_clips": {
+                "type": "integer"
+              }
+            }
+          },
+          "manual": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "algo_enabled": {
+                "type": "boolean"
+              },
+              "entry_mode": {
+                "type": "string",
+                "enum": [
+                  "single",
+                  "zone_ladder"
+                ]
+              },
+              "risk_reference": {
+                "type": "string",
+                "enum": [
+                  "shallow",
+                  "deep"
+                ]
+              },
+              "risk_multiplier": {
+                "type": "number"
+              },
+              "target_close_ratios": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                }
+              },
+              "tp1_close_fraction": {
+                "type": "number"
+              }
+            }
+          },
+          "market_data": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "lookbacks": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "h1_bars": {
+                    "type": "integer"
+                  },
+                  "m15_bars": {
+                    "type": "integer"
+                  },
+                  "m1_bars": {
+                    "type": "integer"
+                  },
+                  "m5_bars": {
+                    "type": "integer"
+                  }
+                }
+              }
+            }
+          },
+          "timeframes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "M1",
+                "M3",
+                "M5",
+                "M15",
+                "M30",
+                "H1",
+                "H4",
+                "D1"
+              ]
+            }
+          },
+          "contract": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "contract_units_per_lot": {
+                "type": "number"
+              },
+              "max_lots": {
+                "type": "number"
+              },
+              "pip_size": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "price_digits": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "volume_units_per_lot": {
+                "type": "integer"
+              },
+              "pip_value_per_lot": {
+                "type": "number"
+              }
+            }
+          },
+          "analysis": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "zones": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "major_maximum_width_price": {
+                    "type": "number"
+                  },
+                  "minimum_width_price": {
+                    "type": "number"
+                  },
+                  "preferred_maximum_width_price": {
+                    "type": "number"
+                  },
+                  "preferred_minimum_width_price": {
+                    "type": "number"
+                  }
+                }
+              }
+            }
+          },
+          "overrides": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "auto_algo": {
+                "type": "object"
+              },
+              "execution": {
+                "type": "object"
+              },
+              "analysis": {
+                "type": "object"
+              },
+              "runtime": {
+                "type": "object"
+              },
+              "telegram": {
+                "type": "object"
+              },
+              "manual_algo": {
+                "type": "object"
+              },
+              "transport": {
+                "type": "object"
+              },
+              "database": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "rootDocument": {
+      "description": "config/apexvoid.yml itself, before includes/overlay are resolved.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "includes"
+      ],
+      "properties": {
+        "version": {
+          "const": 3
+        },
+        "includes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "description": "\u00a714 \u2014 paths relative to config/, no absolute escape; a loader must error on a missing/duplicate/cyclic include."
+        }
+      }
+    },
+    "environmentOverlay": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "runtime": {
+          "type": "object"
+        },
+        "transport": {
+          "type": "object"
+        },
+        "database": {
+          "type": "object"
+        },
+        "instruments": {
+          "type": "object"
+        },
+        "instrument_packs": {
+          "type": "object"
+        },
+        "analysis": {
+          "type": "object"
+        },
+        "auto_algo": {
+          "type": "object"
+        },
+        "manual_algo": {
+          "type": "object"
+        },
+        "execution": {
+          "type": "object"
+        },
+        "telegram": {
+          "type": "object"
+        },
+        "journal": {
+          "type": "object"
+        }
+      }
+    },
+    "instrumentPack": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "policy": {
+          "type": "string"
+        },
+        "auto_entry": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": [
+                "scale",
+                "single_best"
+              ]
+            }
+          },
+          "required": [
+            "mode"
+          ]
+        },
+        "reaction_session": {
+          "type": "string"
+        },
+        "stop_envelope": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "min_pips": {
+              "type": "number"
+            },
+            "max_pips": {
+              "type": "number"
+            },
+            "sl_distance": {
+              "type": "number"
+            }
+          }
+        },
+        "activation": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "require_sweep_body": {
+              "type": "boolean"
+            },
+            "trigger_maximum_age_bars": {
+              "type": "integer"
+            },
+            "max_spread_pips": {
+              "type": "number"
+            }
+          }
+        },
+        "price_scale": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "round_step": {
+              "type": "number"
+            },
+            "market_map": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "change_min": {
+                  "type": "number"
+                },
+                "fallback_radius_price": {
+                  "type": "number"
+                },
+                "scalp_radius_price": {
+                  "type": "number"
+                }
+              }
+            },
+            "zone_merge_gap_price": {
+              "type": "number"
+            },
+            "zone_merge_max_width": {
+              "type": "number"
+            },
+            "opposing_minimum_separation_price": {
+              "type": "number"
+            },
+            "fvg_entry_max_width_price": {
+              "type": "number"
+            }
+          }
+        },
+        "targeting": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": [
+                "fixed_rr",
+                "ladder_pips"
+              ]
+            },
+            "reward_risk": {
+              "type": "number"
+            },
+            "target_r_multiples": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
+            },
+            "close_ratios": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
+            },
+            "breakeven_after_r": {
+              "type": "number"
+            },
+            "entry_clips": {
+              "type": "integer"
+            }
+          }
+        },
+        "manual": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "algo_enabled": {
+              "type": "boolean"
+            },
+            "entry_mode": {
+              "type": "string",
+              "enum": [
+                "single",
+                "zone_ladder"
+              ]
+            },
+            "risk_reference": {
+              "type": "string",
+              "enum": [
+                "shallow",
+                "deep"
+              ]
+            },
+            "risk_multiplier": {
+              "type": "number"
+            },
+            "target_close_ratios": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
+            },
+            "tp1_close_fraction": {
+              "type": "number"
+            }
+          }
+        },
+        "market_data": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "lookbacks": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "h1_bars": {
+                  "type": "integer"
+                },
+                "m15_bars": {
+                  "type": "integer"
+                },
+                "m1_bars": {
+                  "type": "integer"
+                },
+                "m5_bars": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "timeframes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "M1",
+              "M3",
+              "M5",
+              "M15",
+              "M30",
+              "H1",
+              "H4",
+              "D1"
+            ]
+          }
+        },
+        "contract": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "contract_units_per_lot": {
+              "type": "number"
+            },
+            "max_lots": {
+              "type": "number"
+            },
+            "pip_size": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "price_digits": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "volume_units_per_lot": {
+              "type": "integer"
+            },
+            "pip_value_per_lot": {
+              "type": "number"
+            }
+          }
+        },
+        "analysis": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "zones": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "major_maximum_width_price": {
+                  "type": "number"
+                },
+                "minimum_width_price": {
+                  "type": "number"
+                },
+                "preferred_maximum_width_price": {
+                  "type": "number"
+                },
+                "preferred_minimum_width_price": {
+                  "type": "number"
+                }
+              }
+            }
+          }
+        },
+        "overrides": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "auto_algo": {
+              "type": "object"
+            },
+            "execution": {
+              "type": "object"
+            },
+            "analysis": {
+              "type": "object"
+            },
+            "runtime": {
+              "type": "object"
+            },
+            "telegram": {
+              "type": "object"
+            },
+            "manual_algo": {
+              "type": "object"
+            },
+            "transport": {
+              "type": "object"
+            },
+            "database": {
+              "type": "object"
+            }
+          }
+        }
+      }
+    },
+    "instrumentDeclaration": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "pack": {
+          "type": "string"
+        },
+        "rollout": {
+          "type": "string",
+          "enum": [
+            "disabled",
+            "feed_only",
+            "analysis_only",
+            "paper",
+            "live"
+          ]
+        },
+        "broker_symbol": {
+          "type": "string"
+        },
+        "canonical_symbol": {
+          "type": "string"
+        },
+        "aliases": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "policy": {
+          "type": "string"
+        },
+        "reaction_session": {
+          "type": "string"
+        },
+        "stop_envelope": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "min_pips": {
+              "type": "number"
+            },
+            "max_pips": {
+              "type": "number"
+            },
+            "sl_distance": {
+              "type": "number"
+            }
+          }
+        },
+        "activation": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "max_spread_pips": {
+              "type": "number"
+            },
+            "require_sweep_body": {
+              "type": "boolean"
+            },
+            "trigger_maximum_age_bars": {
+              "type": "integer"
+            }
+          }
+        },
+        "price_scale": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "round_step": {
+              "type": "number"
+            },
+            "market_map": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "change_min": {
+                  "type": "number"
+                },
+                "fallback_radius_price": {
+                  "type": "number"
+                },
+                "scalp_radius_price": {
+                  "type": "number"
+                }
+              }
+            },
+            "zone_merge_gap_price": {
+              "type": "number"
+            },
+            "zone_merge_max_width": {
+              "type": "number"
+            },
+            "opposing_minimum_separation_price": {
+              "type": "number"
+            },
+            "fvg_entry_max_width_price": {
+              "type": "number"
+            }
+          }
+        },
+        "targeting": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": [
+                "fixed_rr",
+                "ladder_pips"
+              ]
+            },
+            "reward_risk": {
+              "type": "number"
+            },
+            "target_r_multiples": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
+            },
+            "close_ratios": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
+            },
+            "breakeven_after_r": {
+              "type": "number"
+            },
+            "entry_clips": {
+              "type": "integer"
+            }
+          }
+        },
+        "manual": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "algo_enabled": {
+              "type": "boolean"
+            },
+            "entry_mode": {
+              "type": "string",
+              "enum": [
+                "single",
+                "zone_ladder"
+              ]
+            },
+            "risk_reference": {
+              "type": "string",
+              "enum": [
+                "shallow",
+                "deep"
+              ]
+            },
+            "risk_multiplier": {
+              "type": "number"
+            },
+            "target_close_ratios": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
+            },
+            "tp1_close_fraction": {
+              "type": "number"
+            }
+          }
+        },
+        "market_data": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "lookbacks": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "h1_bars": {
+                  "type": "integer"
+                },
+                "m15_bars": {
+                  "type": "integer"
+                },
+                "m1_bars": {
+                  "type": "integer"
+                },
+                "m5_bars": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "contract": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "contract_units_per_lot": {
+              "type": "number"
+            },
+            "max_lots": {
+              "type": "number"
+            },
+            "pip_size": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "price_digits": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "volume_units_per_lot": {
+              "type": "integer"
+            },
+            "pip_value_per_lot": {
+              "type": "number"
+            }
+          }
+        },
+        "analysis": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "zones": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "major_maximum_width_price": {
+                  "type": "number"
+                },
+                "minimum_width_price": {
+                  "type": "number"
+                },
+                "preferred_maximum_width_price": {
+                  "type": "number"
+                },
+                "preferred_minimum_width_price": {
+                  "type": "number"
+                }
+              }
+            }
+          }
+        },
+        "overrides": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "auto_algo": {
+              "type": "object"
+            },
+            "execution": {
+              "type": "object"
+            },
+            "analysis": {
+              "type": "object"
+            },
+            "runtime": {
+              "type": "object"
+            },
+            "telegram": {
+              "type": "object"
+            },
+            "manual_algo": {
+              "type": "object"
+            },
+            "transport": {
+              "type": "object"
+            },
+            "database": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      "required": [
+        "rollout",
+        "broker_symbol",
+        "canonical_symbol"
+      ]
+    }
+  }
+}
