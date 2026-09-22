@@ -1,4 +1,4 @@
-package indicator
+package indicator_test
 
 import (
 	"encoding/json"
@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/indicator"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 )
 
@@ -39,6 +40,10 @@ type fixtureFile struct {
 
 func loadFixtures(t *testing.T) fixtureFile {
 	t.Helper()
+	// test/indicator/ and internal/indicator/ sit at the same depth under
+	// analysis-engine/ (both two path segments below it), so this
+	// relative path is unchanged from when this file lived in
+	// internal/indicator/.
 	path := filepath.Join("..", "..", "testdata", "atr_fixtures.json")
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -105,7 +110,7 @@ func TestTrueRangeMatchesPython(t *testing.T) {
 		c := c
 		t.Run(c.Name, func(t *testing.T) {
 			candles := toCandles(c.Candles)
-			got := TrueRange(candles)
+			got := indicator.TrueRange(candles)
 			assertSeriesEqual(t, "true_range", got, c.TrueRange)
 		})
 	}
@@ -117,7 +122,7 @@ func TestSimpleATRMatchesPython(t *testing.T) {
 		c := c
 		t.Run(c.Name, func(t *testing.T) {
 			candles := toCandles(c.Candles)
-			got := SimpleATR(candles, c.Length)
+			got := indicator.SimpleATR(candles, c.Length)
 			assertSeriesEqual(t, "simple_atr", got, c.SimpleATR)
 		})
 	}
@@ -129,7 +134,7 @@ func TestWilderATRMatchesPython(t *testing.T) {
 		c := c
 		t.Run(c.Name, func(t *testing.T) {
 			candles := toCandles(c.Candles)
-			got, ok := WilderATR(candles, c.Length)
+			got, ok := indicator.WilderATR(candles, c.Length)
 			if c.WilderATR == nil {
 				if ok {
 					t.Fatalf("wilder_atr: expected Python None (insufficient warmup), Go returned a series")

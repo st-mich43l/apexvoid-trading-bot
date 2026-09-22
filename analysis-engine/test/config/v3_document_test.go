@@ -1,10 +1,12 @@
-package config
+package config_test
 
 import (
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/config"
 )
 
 // repoConfigPath points at the real repository config/ directory — two
@@ -13,12 +15,16 @@ import (
 // config/apexvoid.yml directly rather than a copied fixture): the whole
 // point of these tests is proving parity against the real files every
 // other language reads, not a frozen copy that could drift from them.
+//
+// test/config/ and internal/config/ sit at the same depth under
+// analysis-engine/ (both two path segments below it), so this relative
+// path is unchanged from when this file lived in internal/config/.
 func repoConfigPath(parts ...string) string {
 	return filepath.Join(append([]string{"..", "..", "..", "config"}, parts...)...)
 }
 
 func TestResolveDocumentProductionMatchesKnownGeometry(t *testing.T) {
-	doc, err := ResolveDocument(repoConfigPath("apexvoid.yml"))
+	doc, err := config.ResolveDocument(repoConfigPath("apexvoid.yml"))
 	if err != nil {
 		t.Fatalf("ResolveDocument: %v", err)
 	}
@@ -51,7 +57,7 @@ func TestResolveDocumentProductionMatchesKnownGeometry(t *testing.T) {
 }
 
 func TestResolveDocumentUnknownInstrumentFailsClosed(t *testing.T) {
-	doc, err := ResolveDocument(repoConfigPath("apexvoid.yml"))
+	doc, err := config.ResolveDocument(repoConfigPath("apexvoid.yml"))
 	if err != nil {
 		t.Fatalf("ResolveDocument: %v", err)
 	}
@@ -61,7 +67,7 @@ func TestResolveDocumentUnknownInstrumentFailsClosed(t *testing.T) {
 }
 
 func TestLiveInstrumentsMatchesEveryDeclaredLiveSymbol(t *testing.T) {
-	doc, err := ResolveDocument(repoConfigPath("apexvoid.yml"))
+	doc, err := config.ResolveDocument(repoConfigPath("apexvoid.yml"))
 	if err != nil {
 		t.Fatalf("ResolveDocument: %v", err)
 	}
@@ -81,7 +87,7 @@ func TestLiveInstrumentsMatchesEveryDeclaredLiveSymbol(t *testing.T) {
 }
 
 func TestResolveDemoEvalRootUsesDemoEvalOverlay(t *testing.T) {
-	doc, err := ResolveDocument(repoConfigPath("apexvoid.demo-eval.yml"))
+	doc, err := config.ResolveDocument(repoConfigPath("apexvoid.demo-eval.yml"))
 	if err != nil {
 		t.Fatalf("ResolveDocument: %v", err)
 	}
@@ -101,7 +107,7 @@ func TestResolveDemoEvalRootUsesDemoEvalOverlay(t *testing.T) {
 }
 
 func TestResolveDocumentProductionOverlayIsEmpty(t *testing.T) {
-	doc, err := ResolveDocument(repoConfigPath("apexvoid.yml"))
+	doc, err := config.ResolveDocument(repoConfigPath("apexvoid.yml"))
 	if err != nil {
 		t.Fatalf("ResolveDocument: %v", err)
 	}
@@ -121,7 +127,7 @@ func writeFile(t *testing.T, dir, name, content string) {
 func TestResolveDocumentRejectsUnsupportedVersion(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "apexvoid.yml", "version: 2\nincludes: []\n")
-	_, err := ResolveDocument(filepath.Join(dir, "apexvoid.yml"))
+	_, err := config.ResolveDocument(filepath.Join(dir, "apexvoid.yml"))
 	if err == nil || !strings.Contains(err.Error(), "unsupported version") {
 		t.Fatalf("got %v, want an 'unsupported version' error", err)
 	}
@@ -130,7 +136,7 @@ func TestResolveDocumentRejectsUnsupportedVersion(t *testing.T) {
 func TestResolveDocumentRejectsMissingInclude(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "apexvoid.yml", "version: 3\nincludes:\n  - does-not-exist.yml\n")
-	_, err := ResolveDocument(filepath.Join(dir, "apexvoid.yml"))
+	_, err := config.ResolveDocument(filepath.Join(dir, "apexvoid.yml"))
 	if err == nil || !strings.Contains(err.Error(), "missing include") {
 		t.Fatalf("got %v, want a 'missing include' error", err)
 	}
@@ -140,7 +146,7 @@ func TestResolveDocumentRejectsDuplicateInclude(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "a.yml", "foo:\n  bar: 1\n")
 	writeFile(t, dir, "apexvoid.yml", "version: 3\nincludes:\n  - a.yml\n  - a.yml\n")
-	_, err := ResolveDocument(filepath.Join(dir, "apexvoid.yml"))
+	_, err := config.ResolveDocument(filepath.Join(dir, "apexvoid.yml"))
 	if err == nil || !strings.Contains(err.Error(), "duplicate include") {
 		t.Fatalf("got %v, want a 'duplicate include' error", err)
 	}
@@ -149,7 +155,7 @@ func TestResolveDocumentRejectsDuplicateInclude(t *testing.T) {
 func TestResolveDocumentRejectsEscapingInclude(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "apexvoid.yml", "version: 3\nincludes:\n  - ../outside.yml\n")
-	_, err := ResolveDocument(filepath.Join(dir, "apexvoid.yml"))
+	_, err := config.ResolveDocument(filepath.Join(dir, "apexvoid.yml"))
 	if err == nil || !strings.Contains(err.Error(), "escapes") {
 		t.Fatalf("got %v, want an 'escapes' error", err)
 	}
@@ -160,7 +166,7 @@ func TestResolveDocumentRejectsDuplicateBaseOwnership(t *testing.T) {
 	writeFile(t, dir, "a.yml", "foo:\n  bar: 1\n")
 	writeFile(t, dir, "b.yml", "foo:\n  baz: 2\n")
 	writeFile(t, dir, "apexvoid.yml", "version: 3\nincludes:\n  - a.yml\n  - b.yml\n")
-	_, err := ResolveDocument(filepath.Join(dir, "apexvoid.yml"))
+	_, err := config.ResolveDocument(filepath.Join(dir, "apexvoid.yml"))
 	if err == nil || !strings.Contains(err.Error(), "duplicate base ownership") {
 		t.Fatalf("got %v, want a 'duplicate base ownership' error", err)
 	}
@@ -175,7 +181,7 @@ func TestResolveDocumentOverlayReplacesScalarAndExtendsMap(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "environments"), "test.yml", "foo:\n  bar: 99\n")
 	writeFile(t, dir, "apexvoid.yml", "version: 3\nincludes:\n  - a.yml\n  - environments/test.yml\n")
 
-	doc, err := ResolveDocument(filepath.Join(dir, "apexvoid.yml"))
+	doc, err := config.ResolveDocument(filepath.Join(dir, "apexvoid.yml"))
 	if err != nil {
 		t.Fatalf("ResolveDocument: %v", err)
 	}
@@ -194,7 +200,20 @@ func TestResolveDocumentOverlayReplacesScalarAndExtendsMap(t *testing.T) {
 }
 
 func TestSectionFailsClosedOnMissingOrWrongType(t *testing.T) {
-	doc := &Document{raw: stringMap{"scalar": 1}}
+	// Built through the real ResolveDocument entry point rather than a
+	// struct literal: from outside internal/config (this is now a
+	// black-box test), Document's fields aren't reachable, and
+	// constructing the document via a tiny synthetic root file — the same
+	// pattern every other synthetic-fixture test on this page already
+	// uses — is the correct black-box way to get a Document with a known
+	// shape to assert on.
+	dir := t.TempDir()
+	writeFile(t, dir, "a.yml", "scalar: 1\n")
+	writeFile(t, dir, "apexvoid.yml", "version: 3\nincludes:\n  - a.yml\n")
+	doc, err := config.ResolveDocument(filepath.Join(dir, "apexvoid.yml"))
+	if err != nil {
+		t.Fatalf("ResolveDocument: %v", err)
+	}
 	if _, err := doc.Section("does.not.exist"); err == nil {
 		t.Error("expected an error for a missing section")
 	}

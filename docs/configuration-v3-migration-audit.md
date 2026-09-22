@@ -812,7 +812,7 @@ risk of the three languages' cutovers by construction, unlike Python's
 
 ## Parity proof
 
-`internal/config/v3_document_test.go` (13 tests) reads the real
+`test/config/v3_document_test.go` (13 tests) reads the real
 `config/apexvoid.yml`/`config/apexvoid.demo-eval.yml` directly (not a
 copied fixture — deliberately, matching
 `algo-bot/tests/test_config_v3_parity.py`'s own choice, for the same
@@ -975,10 +975,11 @@ environment:
   *before* Stage C3's un-consolidation back to the old flat shape — the
   cross-language contract is the V3 document itself, not Python-specific
   plumbing back to legacy code).
-- Go: `analysis-engine/internal/config/v3_fixture_parity_test.go`,
-  comparing `ResolveDocument`'s internal `raw` field (same-package white-
-  box test, matching the existing `TestSectionFailsClosedOnMissingOrWrongType`
-  pattern) against the fixture parsed via `encoding/json`.
+- Go: `analysis-engine/test/config/v3_fixture_parity_test.go`,
+  comparing a new exported `Document.Raw()` accessor (added specifically
+  for this test — see the later "centralized test layout" note below on
+  why an accessor was needed once these tests moved out of `internal/config`
+  itself) against the fixture parsed via `encoding/json`.
 - .NET: `ConfigurationV3Tests.cs`'s `ResolveDocumentMatchesCanonicalFixture`,
   comparing a new `internal ConfigDocument.Raw` accessor (added
   specifically for this test, gated by the existing
@@ -1053,6 +1054,45 @@ writing any test against it):
   whatever eventually replaces `ResolvedAutoTradeProjection` in .NET —
   which have their own, separate verification (or, for .NET, deliberately
   don't have that verification yet; see Stage C5's own scope notes).
+
+## Go test layout: centralized to test/ by domain
+
+Unrelated to any C-stage on its own, but touches the exact files this
+section references, so recorded here rather than silently: all of
+`analysis-engine`'s Go tests moved from being colocated per-package
+(`internal/config/*_test.go`, `internal/indicator/*_test.go`,
+`internal/market/*_test.go`) to one centralized `test/` tree, one
+subdirectory per domain (`test/config/`, `test/indicator/`,
+`test/market/`), mirroring the same domain boundaries this migration
+itself uses elsewhere.
+
+This is a mechanical, not cosmetic, change in Go specifically: `go test`
+associates a `_test.go` file with whichever package directory it
+physically lives in, so a file moved out of `internal/config/` can no
+longer be a same-package (white-box) test of it — it becomes an external
+`config_test` package that can only see `internal/config`'s exported
+API. Five of the six moved test files already only used exported API and
+needed nothing beyond a package-name/import change. The sixth,
+`v3_fixture_parity_test.go`, read `Document`'s unexported `raw` field
+directly — replaced with a new exported `Document.Raw()` accessor (single
+purpose: expose the whole resolved tree for this one fixture-comparison
+test, documented as such in its own doc comment, not part of the normal
+`Get`/`Section`/`GeometryFor` consumer surface). One more test,
+`TestSectionFailsClosedOnMissingOrWrongType`, constructed a `Document`
+directly via an unexported struct literal (`&Document{raw: ...}`);
+rewritten to build it through `ResolveDocument` against a tiny synthetic
+root file instead, the same pattern every neighboring synthetic-fixture
+test in that file already used — this needed no new export at all, and
+made that one test more consistent with its neighbors as a side effect.
+
+Verified: `gofmt`/`go vet`/`go build`/`go test ./...` clean (including
+`-race`, `CGO_ENABLED=1`), all 28 subtests passing across the three new
+package directories, `internal/config`/`internal/indicator`/`internal/market`
+correctly reporting `[no test files]`. Relative fixture paths
+(`repoConfigPath`'s `../../../config`, `loadFixtures`' `../../testdata`)
+were left unchanged: `test/<domain>/` sits at the same depth under
+`analysis-engine/` as `internal/<domain>/` did, so both resolve to the
+same targets without edits.
 
 ## C7–C8 status
 

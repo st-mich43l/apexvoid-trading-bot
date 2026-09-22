@@ -1,4 +1,4 @@
-package config
+package config_test
 
 // Configuration V3 Stage C6: cross-language parity against the shared
 // canonical fixture (contracts/configuration/examples/resolved-
@@ -6,7 +6,7 @@ package config
 // — a fourth, minimal reference implementation of §14 whose only job is
 // producing this fixture and validating it against the JSON Schema. §38
 // requires every real per-language V3 reader (this package's
-// ResolveDocument, Python's app/configuration/v3_root.py, .NET's
+// config.ResolveDocument, Python's app/configuration/v3_root.py, .NET's
 // ctrader-engine/src/ConfigurationV3.cs) to reproduce this exact document
 // when resolving the real config/apexvoid.yml for the production
 // environment — not that they share code, but that independent
@@ -20,6 +20,8 @@ import (
 	"os"
 	"reflect"
 	"testing"
+
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/config"
 )
 
 func fixturePath() string {
@@ -57,7 +59,7 @@ func normalizeNumbers(node any) any {
 }
 
 func TestResolveDocumentMatchesCanonicalFixture(t *testing.T) {
-	doc, err := ResolveDocument(repoConfigPath("apexvoid.yml"))
+	doc, err := config.ResolveDocument(repoConfigPath("apexvoid.yml"))
 	if err != nil {
 		t.Fatalf("ResolveDocument: %v", err)
 	}
@@ -71,7 +73,7 @@ func TestResolveDocumentMatchesCanonicalFixture(t *testing.T) {
 		t.Fatalf("parsing fixture: %v", err)
 	}
 
-	got := normalizeNumbers(doc.raw)
+	got := normalizeNumbers(doc.Raw())
 	want := normalizeNumbers(fixture)
 
 	if !reflect.DeepEqual(got, want) {
