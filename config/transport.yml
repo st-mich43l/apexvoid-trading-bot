@@ -25,22 +25,29 @@ transport:
     candidate_version: 6
 
   kafka:
-    # Deliberately false in this checked-in config, unlike the source
-    # task's own illustrative `enabled: true` example shape — no Kafka
-    # broker exists in deployment-template/docker-compose.yml.j2 yet
-    # (that cutover is explicitly out of this task's scope, §63), and
-    # analysis-engine's composition root fails closed at startup when
-    # enabled=true but no broker is reachable (§43) — flipping this to
-    # true is real deployment work for the tasks that follow this one
-    # (cTrader -> Kafka, algo-bot -> Kafka, deployment topology), not a
-    # config-only flag flip.
-    enabled: false
+    # Was `false` through the Go-transport-only task (no broker existed
+    # anywhere in deployment). The cTrader -> Kafka -> Analysis Engine
+    # pipeline task is exactly "the tasks that follow" that deferral: a
+    # real Kafka broker now exists in both docker-compose.yml (local)
+    # and deployment-template/docker-compose.yml.j2 (production), with
+    # kafka-init provisioning the required topics before any producer/
+    # consumer starts (source task §31/§36). `production.yml`'s own
+    # overlay is deliberately empty ("run the base config exactly as
+    # declared") — flipping this here, in the base file, not in an
+    # environment overlay, is what keeps that invariant true while still
+    # making Kafka live for both environments.
+    enabled: true
 
     brokers:
       - kafka:9092
 
     client_id:
       analysis_engine: apexvoid-analysis-engine
+      # cTrader → Kafka → Analysis Engine task: ctrader-engine's own
+      # Kafka client_id — read via ConfigurationV3 (never ENV, never
+      # added to ResolvedRuntimeManifest — Kafka transport config comes
+      # from V3 only, source task §14/§15).
+      ctrader_engine: apexvoid-ctrader-engine
 
     topics:
       market_bar_closed: market.bar.closed.v1
@@ -55,3 +62,40 @@ transport:
     # (source task §3/§28) — the Go decoder/contract is ready regardless
     # (contracts/market/tick-v1.schema.json).
     tick_consumption_enabled: false
+
+    # Physical topic provisioning — consumed ONLY by
+    # analysis-engine/cmd/kafka-admin (source task §31), keyed by the
+    # real topic name (not the logical alias above), so the admin tool
+    # never needs to know the alias mapping. Deliberately a SEPARATE
+    # section from `topics` above rather than nesting these fields
+    # inside it (source task §32's own "or an equivalent validated
+    # structure"): `topics.*` is read by every producer/consumer as a
+    # plain string (already shipped, both in Go's
+    # engine.KafkaConfigFromConfig and .NET's KafkaOptions.FromConfig)
+    # — nesting partition/replication settings inside it would force
+    # every existing reader to change shape for a concern only the
+    # admin tool actually has.
+    topic_specs:
+      market.bar.closed.v1:
+        # >5 (today's live instrument count: XAU, EURUSD, GBPUSD,
+        # GBPJPY, USDJPY — config/instruments.yml) so per-symbol key
+        # hashing has room before two symbols collide onto the same
+        # partition, without over-provisioning partitions a single-node
+        # broker gains nothing from (source task §34/§35).
+        partitions: 6
+        replication_factor: 1
+        retention_ms: 604800000 # 7 days — enough to replay a missed consumer restart/redeploy window, not unbounded
+      market.tick.v1:
+        partitions: 6
+        replication_factor: 1
+        retention_ms: 604800000
+      analysis.opportunity.v1:
+        # Lower-frequency than raw bars; 3 is still enough headroom for
+        # the same 5-symbol set without over-provisioning.
+        partitions: 3
+        replication_factor: 1
+        retention_ms: 604800000
+      analysis.opportunity.invalidated.v1:
+        partitions: 3
+        replication_factor: 1
+        retention_ms: 604800000

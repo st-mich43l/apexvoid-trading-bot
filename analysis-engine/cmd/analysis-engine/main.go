@@ -4,7 +4,7 @@
 // when transport.kafka.enabled=true — source task §42: "update
 // cmd/analysis-engine/main.go only as necessary to wire Configuration V3
 // -> Kafka client -> market consumer -> engine event handler." When
-// Kafka is disabled (the checked-in default, config/transport.yml), the
+// Kafka is disabled, the
 // process validates configuration and exits — there is nothing else for
 // it to do yet: no strategy exists to produce opportunities, and no
 // other event source is wired in this task.
@@ -13,9 +13,11 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/config"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/engine"
@@ -93,11 +95,43 @@ func run(configPath string) error {
 	fmt.Fprintf(os.Stderr, "analysis-engine: Kafka consumer started brokers=%v topics=%s,%s consumer_group=%s\n",
 		kafkaCfg.Brokers, kafkaCfg.Topics.MarketBarClosed, kafkaCfg.Topics.MarketTick, kafkaCfg.ConsumerGroup)
 
-	// Run blocks until ctx is cancelled (SIGINT/SIGTERM) or a transient
-	// handler failure stalls past its retry budget (source task §37) —
-	// Run's own deferred client.Close() handles producer-side shutdown;
-	// this composition root does not construct a Producer (nothing
-	// publishes yet — no strategy exists, source task §42's own "do not
-	// fabricate fake strategy output just to demonstrate publishing").
-	return consumer.Run(ctx)
+	server := &http.Server{Addr: ":8080", Handler: healthHandler(health)}
+	serverErr := make(chan error, 1)
+	go func() {
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			serverErr <- err
+		}
+	}()
+	consumerErr := make(chan error, 1)
+	go func() { consumerErr <- consumer.Run(ctx) }()
+	select {
+	case err := <-serverErr:
+		stop()
+		return fmt.Errorf("health server: %w", err)
+	case err := <-consumerErr:
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = server.Shutdown(shutdownCtx)
+		return err
+	case <-ctx.Done():
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = server.Shutdown(shutdownCtx)
+		return <-consumerErr
+	}
+}
+
+func healthHandler(health *kafka.Health) http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/health/live", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	mux.HandleFunc("/health/ready", func(w http.ResponseWriter, _ *http.Request) {
+		if !health.Snapshot().Ready() {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+	return mux
 }

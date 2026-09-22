@@ -9,6 +9,7 @@ on:
     paths:
       - "algo-bot/**"
       - "ctrader-engine/**"
+      - "analysis-engine/**"
       - "config/**"
       - "docs/redis-contract.md"
       - "deployment-template/**"
@@ -34,7 +35,8 @@ jobs:
       images: >-
         [
           {"name": "apexvoid-trading-bot", "context": "algo-bot", "dockerfile": "algo-bot/Dockerfile"},
-          {"name": "apexvoid-ctrader-engine", "context": "ctrader-engine", "dockerfile": "ctrader-engine/Dockerfile"}
+          {"name": "apexvoid-ctrader-engine", "context": "ctrader-engine", "dockerfile": "ctrader-engine/Dockerfile"},
+          {"name": "apexvoid-analysis-engine", "context": "analysis-engine", "dockerfile": "analysis-engine/Dockerfile"}
         ]
     secrets:
       registry-token: ${{ secrets.DOCKERHUB_TOKEN }}

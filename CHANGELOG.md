@@ -13,6 +13,13 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
+- Kafka live pipeline: `ctrader-engine` now publishes acknowledged closed-bar
+  events to the configured V3 topic before persisting the Redis bar, and the
+  Go `analysis-engine` consumes that topic with at-least-once handling. Startup
+  history remains Redis-only; reconnect catch-up is published chronologically.
+  Added the pinned single-node KRaft broker, explicit topic provisioning and
+  drift verification, analysis-engine readiness endpoint, local/production
+  Compose wiring, and the analysis-engine image to deploy CI.
 - `analysis-engine`: centralized Go tests from colocated
   `internal/<pkg>/*_test.go` files into `test/<pkg>/`, one directory per
   domain (`test/config`, `test/indicator`, `test/market`), matching this
