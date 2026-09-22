@@ -1,0 +1,15 @@
+# Non-secret database topology — owned exclusively here. Password/full DSN
+# remain secret ENV inputs (POSTGRES_PASSWORD / DATABASE_URL) — see
+# docs/configuration-v3-migration-audit.md §5/§9: today the whole Postgres
+# connection is one opaque DATABASE_URL secret (no separate non-secret
+# host/port fields exist in the Python model yet). The values below
+# document the real current topology (docker-compose.yml's own `postgres`
+# service name/POSTGRES_DB/POSTGRES_USER defaults) — actually switching
+# runtime code to build its DSN from these plus a bare password secret is
+# a Stage C3 decision, not done here.
+database:
+  postgres:
+    host: postgres
+    port: 5432
+    database: signals
+    username: apexvoid

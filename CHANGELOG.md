@@ -26,6 +26,24 @@ dated section after deployment.
   `AtrScalar`) are ported with golden-master parity tests against real
   Python output. Python remains the authoritative, unmodified reference
   implementation — nothing here changes live behavior.
+- Started the Configuration V3 migration (see
+  `apexvoid-bot-prompts/rebuild-configuration-architecture.md`). Stage C0
+  audit (`docs/configuration-v3-migration-audit.md`) inventories every
+  configuration source across Python/Go/.NET/deployment: 561 non-secret
+  Python catalog fields are ENV-overridable today (precedence:
+  ENV > CONFIG_FILE YAML), 3 (`AUTO_TRADE_PROFILE`,
+  `AUTO_TRADE_MAPPED_ZONE_ENABLED`, `AUTO_TRADE_MARKET_MAP_GUARD_ENABLED`)
+  are actually wired in `docker-compose.yml`/`.env.example` today, and
+  .NET's `ctrader-engine` has a full second, independent ENV-based config
+  system (`AutoTradeOptions.EnvironmentResolver`) kept alive only for
+  parity-checking against the manifest path. Stage C1: `config/trading-bot.yml`
+  (898 lines, single file) split into `config/apexvoid.yml` (root) plus 10
+  categorized files and 2 environment overlays, every one of the 550
+  resulting leaf values mechanically parity-checked against the old file's
+  effective value (`config/scripts/verify_stage_c1_parity.py`, all match).
+  `config/trading-bot.yml` and the generated `ResolvedRuntimeManifest`
+  remain the live, unmodified authority — no runtime reads the new files
+  yet (that's Stage C3/C4/C5); nothing here changes live behavior.
 
 ### Fixed
 - Every executable card carried a "→ Executor owns mechanical entry and

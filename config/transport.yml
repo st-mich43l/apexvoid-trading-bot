@@ -1,0 +1,24 @@
+# Infrastructure messaging/cache configuration — owned exclusively here.
+# See docs/configuration-v3-migration-audit.md §5/§9: no Kafka topics exist
+# anywhere in this codebase today (confirmed by a repo-wide search) — the
+# new architecture's own example `transport.kafka` block is aspirational
+# per its §33 ("ApexVoid MAY move TradePlan transport from Redis to
+# Kafka"). Stage C1 does not fabricate topic/consumer-group names for a
+# transport that doesn't exist yet; add `transport.kafka` here once a real
+# naming decision is made, not before.
+transport:
+  redis:
+    # bootstrap.redis.url's real current default (app/configuration/models/
+    # bootstrap.py) — REDIS_URL in .env.example carries the same value.
+    url: redis://redis:6379/0
+
+  # The Redis stream names / version the system actually uses today
+  # (contract.streams.* / contract.versions.* in the old trading-bot.yml)
+  # — the direct analogue of the new architecture's Kafka `topics:` block,
+  # for the transport actually in use.
+  redis_streams:
+    candidates: auto_trade:candidates
+    events: auto_trade:events
+    trade_plans: execution:trade_plans
+    candidate_maximum_length: 1000
+    candidate_version: 6
