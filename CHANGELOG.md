@@ -12,6 +12,22 @@ dated section after deployment.
 
 ## Unreleased
 
+### Changed
+- Renamed the XAU instrument pack/policy from `xau_fixed_2r_v1` to
+  `xau_fixed_4r_v1` (owner-directed 2026-09-22: "XAU already trade with
+  4R already" — the name had gone stale since the 2026-09-15 change to
+  auto XAU's 1R/2R/3R/4R targeting ladder; the enforced contract itself,
+  `_XAU_FIXED_4R_TARGETING`, is unchanged). Also renamed the two FX packs
+  for a consistent `<instrument-class>_fixed_<R>r_v1` naming template
+  across all three packs (owner-directed: "FX pair keep 2R but naming it
+  better"): `fx_usd_major_v1` → `fx_usd_major_fixed_2r_v1`,
+  `fx_jpy_cross_v1` → `fx_jpy_cross_fixed_2r_v1` — the FX policy shape
+  itself (`fx_fixed_2r_v1`/`fx_fixed_2r_frontload_v1`) was already
+  accurate and is unchanged. Pure rename, no targeting/risk behavior
+  change; `config/trading-bot.yml`, `app/configuration/models/
+  instruments.py`, generated manifest artifacts, and docs updated
+  together.
+
 ### Added
 - Started the Go analysis-engine migration (`analysis-engine/`, see
   `apexvoid-bot-prompts/rebuild-analysis-engine.md`). Stage 0 audit

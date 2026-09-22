@@ -254,7 +254,7 @@ def test_synthetic_audusd_onboarding_inherits_manual_profile_and_symbols(
   """A new FX major is one declaration plus the reusable instrument pack."""
   raw = yaml.safe_load(_CONFIG_FILE.read_text(encoding="utf-8"))
   raw["instruments"]["AUDUSD"] = {
-    "pack": "fx_usd_major_v1",
+    "pack": "fx_usd_major_fixed_2r_v1",
     "rollout": "live",
     "broker_symbol": "AUDUSD",
     "canonical_symbol": "AUDUSD",
