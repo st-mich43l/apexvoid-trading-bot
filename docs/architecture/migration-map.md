@@ -84,14 +84,18 @@ proven) · `no-action` (out of scope / research tooling).
 
 | Current path | Target | Action | When |
 |---|---|---|---|
-| `config/apexvoid.yml` + categorized includes | unchanged, already correct per §6 | keep | Production cutover is an independent track (Stage C7+ of the Configuration V3 audit), not part of this task |
-| `config/trading-bot.yml` | superseded by the above once production cuts over | keep until cutover | not this task |
+| `config/apexvoid.yml` + categorized includes | unchanged, already correct per §6 | keep | now shipped to production for Kafka/cTrader/analysis-engine; remaining algo-bot authority cutover is independent |
+| `config/trading-bot.yml` | legacy manifest compiler input | keep during transition | cTrader execution still uses the manifest path while V3 transport is live |
 | `contracts/configuration/*` | unchanged, already the parity-tested authority | keep | — |
 | `contracts/autotrade/*` | `contracts/execution/*` | superseded once `execution.trade-plan.v1`/`execution.trade-event.v1` schemas exist and are adopted | after Kafka cutover |
 | `app/persistence/{redis_state,store}.py` | `persistence/` (exists, keep) | keep | — |
 | `app/core/*` | split: `market`/`config` concerns → already covered by `analysis-engine`'s Go equivalents; runtime/logging stays `algo-bot/runtime` | reorganize (low priority, small) | Stage 8+ |
 
 ## `ctrader-engine/*` — no migration needed
+
+The first market-event transport slice is now implemented: cTrader publishes
+closed bars to Kafka and analysis-engine consumes them. The remaining
+execution event migration below is intentionally separate.
 
 Reviewed this pass; matches its target boundary already (see
 `service-boundaries.md`). No files moved. The only future change: once

@@ -58,11 +58,12 @@ flowchart TD
     AB2 --> TG[Telegram]
 ```
 
-This is the target flow. The **current** production flow (verified live
-this session) differs in one respect: `algo-bot` still computes technical
-structure in-process (`app/analysis/*`) rather than consuming it from
-`analysis-engine` — see [`event-flow.md`](event-flow.md) for the current vs.
-target diagram side by side, and
+The market-event segment of this flow is now live through Kafka:
+`ctrader-engine` publishes closed bars and `analysis-engine` consumes them.
+The **current** production flow still differs downstream because `algo-bot`
+computes technical structure in-process (`app/analysis/*`) rather than
+consuming `analysis.opportunity.v1` — see [`event-flow.md`](event-flow.md)
+for the current vs. target diagram side by side, and
 [`migration-map.md`](migration-map.md) for the cutover path.
 
 ## Documents in this set
