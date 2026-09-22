@@ -78,6 +78,16 @@ func (w *SymbolWorker) Apply(event marketdata.BarEvent) (AnalysisSnapshot, error
 	case result == marketdata.AppendOutOfOrder:
 		w.telemetry.Count(telemetry.CounterOutOfOrderEvents, symbolLabel, tfLabel, 1)
 		return SnapshotFrom(w.state, w.settings, event.Candle.Time), nil
+	case result == marketdata.AppendConflict:
+		// Correction policy (source task §17, documented in
+		// docs/transport/kafka.md's "Duplicate delivery handling"): the
+		// original, already-analyzed candle is kept — structure/liquidity
+		// already computed from it must never be silently retroactively
+		// rewritten — and the conflict is counted under its own distinct
+		// counter so an operator can see it happened, unlike an ordinary
+		// duplicate which is expected and benign.
+		w.telemetry.Count(telemetry.CounterConflictEvents, symbolLabel, tfLabel, 1)
+		return SnapshotFrom(w.state, w.settings, event.Candle.Time), nil
 	}
 	w.telemetry.Count(telemetry.CounterEventsProcessed, symbolLabel, tfLabel, 1)
 

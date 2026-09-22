@@ -12,6 +12,7 @@ const (
 	AppendOutOfOrder
 	AppendReplaced
 	AppendRejectedInvalid
+	AppendConflict
 )
 
 func (r AppendResult) String() string {
@@ -26,6 +27,8 @@ func (r AppendResult) String() string {
 		return "replaced"
 	case AppendRejectedInvalid:
 		return "rejected_invalid"
+	case AppendConflict:
+		return "conflict"
 	default:
 		return "unknown"
 	}
@@ -88,7 +91,20 @@ func (h *TimeframeHistory) Append(c market.Candle) (AppendResult, error) {
 			h.window.ReplaceLast(c)
 			return AppendReplaced, nil
 		}
-		return AppendDuplicate, nil
+		// At-least-once delivery (Kafka transport, docs/transport/kafka.md's
+		// "Duplicate delivery handling") means the same closed-bar identity
+		// can legitimately arrive twice. Same identity + identical payload
+		// is an ordinary, safe-to-ignore duplicate; same identity + a
+		// DIFFERENT payload is a conflict/correction (source task §17/§54)
+		// and must never be silently folded into the same outcome — a
+		// retroactive, silent OHLC change here would rewrite the bar
+		// underneath structure/liquidity state already computed from the
+		// original values, a causality violation. market.Candle is a plain
+		// comparable struct, so a direct == is an exact-payload check.
+		if c == last {
+			return AppendDuplicate, nil
+		}
+		return AppendConflict, nil
 	default: // c.Time < last.Time
 		return AppendOutOfOrder, nil
 	}
