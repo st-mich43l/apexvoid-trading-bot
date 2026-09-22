@@ -2517,6 +2517,15 @@ public sealed class TradePlanRuntimeTests
     var eventTypes = store.Events.Select(e => e.Type).ToArray();
     Assert.Contains("tp_booked", eventTypes);
     Assert.Contains("sl_moved", eventTypes);
+
+    // Owner-reported 2026-09-22: a live TP1 card with TP2 still pending had
+    // nothing on it to say so - the message's own "(open/total)" tail
+    // counts open ENTRY legs, not targets. HighestBookedTargetIndex/
+    // TargetsTotal now travel on every tp_booked event (not only the
+    // terminal close) so the delivery layer can render "TP1 of 2" instead.
+    var tpBooked = Assert.Single(store.Events, e => e.Type == "tp_booked");
+    Assert.Equal(0, tpBooked.HighestBookedTargetIndex);
+    Assert.Equal(2, tpBooked.TargetsTotal);
   }
 
   [Fact]

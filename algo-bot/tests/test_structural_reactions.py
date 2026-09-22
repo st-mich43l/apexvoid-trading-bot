@@ -296,6 +296,11 @@ def test_supply_demand_technique_reaction_buy():
   assert result.confirmation_type in {
     "wick_rejection", "strong_reclaim", "sweep_reclaim", "rejection_choch",
   }
+  # Owner-reported 2026-09-22 (live card): a bare "SD" reason line with no
+  # other text. technique_display_tags() combines multiple techniques into
+  # one tag for a Confluence Zone band; called with this single technique it
+  # only re-abbreviated what reasons[0] already names in full.
+  assert "SD" not in result.reasons
 
 
 def test_supply_demand_technique_reaction_uses_clipped_entry_when_provided():
