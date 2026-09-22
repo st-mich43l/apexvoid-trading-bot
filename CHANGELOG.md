@@ -13,6 +13,25 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- A `tp_booked` card for a plan with 2+ targets carried nothing to say TP2+
+  was still pending. Owner-reported 2026-09-22 (live GBPJPY card: "TP1 ...
+  Achieved +16.0 pips" with TP2 never mentioned, read as "only one TP").
+  The message's own trailing `(open/total)` counts open ENTRY legs
+  (L1/L2), unrelated to target count, and was gated to terminal-close
+  events only for the fields that could disambiguate it
+  (`HighestBookedTargetIndex`). `TradePlanRuntime` now sends
+  `HighestBookedTargetIndex`/`TargetsTotal` on every `tp_booked` event, and
+  `delivery.py` renders "TP1 (1/2)" from those structured fields (never
+  parsed from message text) on both the rich TP card and the compact
+  manage-reply row.
+- A live Supply Demand card carried a bare "• SD" reason line with nothing
+  else on it. Owner-reported 2026-09-22.
+  `technique_display_tags([instance.technique])` exists to join multiple
+  techniques into one combined tag ("SD+OB") for a Confluence Zone band;
+  called with a single-item list for an ordinary technique reaction it only
+  re-abbreviated what the first reason line already named in full. Dropped
+  the redundant line; the Confluence Zone band's own multi-technique tag
+  usage is unchanged.
 - A retired setup re-arms on a NEWER M5 confirmation. Technique / confluence
   matches keep one stable `match_id` per zone+direction, so once any plan on
   that zone was rejected its setup stayed INVALIDATED for good and every later

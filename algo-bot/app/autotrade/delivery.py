@@ -471,6 +471,36 @@ def _event_float(event: dict, *keys: str) -> float | None:
   return None
 
 
+def _event_int(event: dict, *keys: str) -> int | None:
+  for key in keys:
+    raw = event.get(key)
+    if raw is None:
+      continue
+    try:
+      return int(raw)
+    except (TypeError, ValueError):
+      continue
+  return None
+
+
+def _tp_progress_text(event: dict) -> str | None:
+  """'1/2' target-progress text from the plan's own structured fields
+  (``highest_booked_target_index`` / ``targets_total``), never parsed from
+  the engine message text.
+
+  Owner-reported 2026-09-22: a TP1 card with TP2 still pending read as "TP1
+  was the only target" - there was nothing on the card saying otherwise.
+  Silent for a single-target plan (nothing to disambiguate there).
+  """
+  total = _event_int(event, "targets_total")
+  if total is None or total < 2:
+    return None
+  index = _event_int(event, "highest_booked_target_index")
+  if index is None or index < 0:
+    return None
+  return f"{index + 1}/{total}"
+
+
 def _trade_seq_prefix(event: dict) -> str:
   for key in ("daily_seq", "trade_seq", "seq"):
     raw = event.get(key)
@@ -842,10 +872,12 @@ def _format_tp_booked(event: dict, message: str) -> str | None:
   except Exception:
     price_text = None
 
+  progress = _tp_progress_text(event)
   lines = [
     "🤖 <b>ApexVoid Algo</b>",
     f"🎯 <b>TP COMPLETED</b>"
-    + (f" · <b>{escape(target)}</b>" if target else ""),
+    + (f" · <b>{escape(target)}</b>" if target else "")
+    + (f" ({escape(progress)})" if progress and not plan_closed else ""),
   ]
   if price_text:
     lines.append(f"💰 Fill: <b>{escape(price_text)}</b>")
@@ -1456,7 +1488,11 @@ def _format_tp_compact_line(event: dict, message: str) -> str | None:
       target = highest.group("target").upper()
   if not target:
     return None
-  parts = [f"🎯 {escape(target)}"]
+  progress = _tp_progress_text(event)
+  parts = [
+    f"🎯 {escape(target)}"
+    + (f" ({escape(progress)})" if progress else "")
+  ]
   price = event.get("price")
   try:
     if price is not None:
