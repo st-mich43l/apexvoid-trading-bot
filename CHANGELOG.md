@@ -13,6 +13,30 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
+- Configuration V3 Stage C6: automated cross-language parity. One test
+  per language (`algo-bot/tests/test_config_v3_cross_language_fixture.py`,
+  `analysis-engine/internal/config/v3_fixture_parity_test.go`,
+  `ctrader-engine/tests/ConfigurationV3Tests.cs`'s
+  `ResolveDocumentMatchesCanonicalFixture`) proves that language's real
+  V3 reader (Stage C3/C4/C5) reproduces
+  `contracts/configuration/examples/resolved-production-v3.json` — the
+  canonical fixture `config/scripts/resolve_reference.py` already
+  generates and schema-validates — when resolving the real
+  `config/apexvoid.yml` for production. Not one shared function called
+  three times: four independent implementations of §14 (the reference
+  resolver plus Python/Go/.NET), run against the same input, checked
+  against one shared arbiter. Found and handled a real cross-language
+  comparison gap along the way: Go's `yaml.v3` and the new .NET parser
+  both distinguish `int`/`long` from `float64`/`double` by source syntax
+  (`3` vs `3.0`), but `encoding/json`/`System.Text.Json` always decode a
+  JSON number to the float type — both new tests add an explicit
+  int→float normalization step before comparing (Python needs none;
+  `3 == 3.0` is already `True` there). All three pass; full Go/.NET
+  suites clean; Python's 44 pre-existing `FAILED` names all already in
+  the session's established baseline (0 new failures — this session's
+  sandbox has no reachable Postgres/Redis, so an unfiltered full run
+  shows many more `ERROR`s than that baseline, all infra-unavailability,
+  not caused by this change).
 - Configuration V3 Stage C5 (.NET): `ctrader-engine/src/ConfigurationV3.cs`
   + `MinimalYamlParser.cs` are a third independent reader for the same
   §14 include/merge/overlay spec, hand-rolled (no reflection, AOT-safe by

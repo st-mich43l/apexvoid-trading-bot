@@ -957,12 +957,110 @@ unrelated nullable-reference warning in `TradePlanExecutionEngine.cs`).
   depth-tracking was exercised against. Adding any of those to `config/`
   in the future needs a parser change, not just a new YAML file.
 
-## C6–C8 status
+---
 
-Not reached in this update. Automated cross-language parity (C6), full
-cutover including actual ansible-driven production (C7) — flagged
-explicitly: real production deployment is ansible-driven and outside
-this repo's reach; someone with access to that ansible inventory needs to
-execute the cutover there — and deletion of the config-compiler/
-`ResolvedRuntimeManifest`/legacy Python catalog machinery (C8, which
-depends on C7 actually landing first) remain open.
+# Stage C6 update — automated cross-language parity
+
+## What was built
+
+One test per language, each independently proving that language's real
+V3 reader reproduces `contracts/configuration/examples/resolved-
+production-v3.json` — the canonical fixture `config/scripts/
+resolve_reference.py` generates and validates against the JSON Schema —
+when resolving the real `config/apexvoid.yml` for the production
+environment:
+
+- Python: `algo-bot/tests/test_config_v3_cross_language_fixture.py`,
+  calling `v3_root.resolve_v3_document` directly (the raw V3 shape,
+  *before* Stage C3's un-consolidation back to the old flat shape — the
+  cross-language contract is the V3 document itself, not Python-specific
+  plumbing back to legacy code).
+- Go: `analysis-engine/internal/config/v3_fixture_parity_test.go`,
+  comparing `ResolveDocument`'s internal `raw` field (same-package white-
+  box test, matching the existing `TestSectionFailsClosedOnMissingOrWrongType`
+  pattern) against the fixture parsed via `encoding/json`.
+- .NET: `ConfigurationV3Tests.cs`'s `ResolveDocumentMatchesCanonicalFixture`,
+  comparing a new `internal ConfigDocument.Raw` accessor (added
+  specifically for this test, gated by the existing
+  `InternalsVisibleTo("CTraderFeed.Tests")`) against the fixture parsed
+  via `System.Text.Json` into the same generic tree shape
+  `MinimalYamlParser` already uses.
+
+This is not four languages calling one shared function — it's four
+independent implementations of §14 (the reference resolver, Python, Go,
+.NET), run against the identical real input, asserted to converge on one
+answer. The reference resolver's fixture is the arbiter each of the three
+real readers is checked against, rather than an O(n²) pairwise
+cross-check between every runtime pair.
+
+**A real normalization gap, found and handled, not glossed over:** Go's
+`yaml.v3` and .NET's `MinimalYamlParser` both decode a bare integer
+literal (e.g. `3`) to a distinct `int`/`long` type from a literal with a
+decimal point (e.g. `3.0`, decoded to `float64`/`double`) — but
+`encoding/json`/`System.Text.Json`, unmarshaling a JSON number into a
+generic `any`/`object?` tree, always produce `float64`/`double`
+regardless of whether the source JSON had a decimal point. A naive
+recursive equality check between the resolved document and the fixture
+would spuriously fail on every whole-number float in the config (there
+are several — e.g. `contract.contract_units_per_lot: 100000.0`). Both the
+Go and .NET tests include an explicit `normalizeNumbers`/`NormalizeNumbers`
+step that converts every int-typed leaf to a float before comparing.
+Python needs no equivalent step: `3 == 3.0` is already `True`, so dict
+equality tolerates the same distinction for free — one more small
+instance of the general pattern this whole migration keeps running into,
+where a comparison that's trivial in one language needs an explicit,
+documented normalization step in another.
+
+## Parity proof
+
+All three new tests pass against the real, current `config/apexvoid.yml`
+(the fixture was regenerated and diffed as clean — zero drift — before
+writing any test against it):
+
+- Python: `test_config_v3_cross_language_fixture.py` — 2 passed.
+- Go: `v3_fixture_parity_test.go` — 2 passed;
+  `gofmt`/`go vet`/`go build`/`go test` (whole suite) clean.
+- .NET: `ConfigurationV3Tests.cs` — 26 passed (24 from Stage C5 + 2 new);
+  full suite 740 passed / 45 pre-existing `REAL_REDIS_URL` failures
+  (unchanged baseline), 0 new failures.
+- Python full-suite regression check: the 44 pre-existing `FAILED` test
+  names from a `pytest -m no_database` run are all already present in
+  this session's established master baseline — 0 new failures. (The much
+  larger `ERROR` count seen on an unfiltered full-suite run in this
+  particular sandbox — no `DATABASE_URL`/`REAL_REDIS_URL` configured, no
+  reachable Postgres/Redis — is pre-existing infrastructure
+  unavailability, not something this change caused or could plausibly
+  cause: it adds one self-contained test file and touches no production
+  code.)
+
+## What Stage C6 does NOT claim
+
+- Does not run all three (four, counting the reference resolver) readers
+  in one process and diff them pairwise at runtime — each is proven
+  against the shared fixture independently, in its own language's test
+  suite, which is the standard and sufficient form of this proof (and the
+  one `resolve_reference.py`'s own docstring already described as the
+  fixture's purpose).
+- Only covers the `production` environment (the fixture's only variant
+  committed). `demo_eval` parity is exercised per-language already
+  (Stage C3's 890/890 leaf test, Stage C4/C5's `ResolveDemoEvalRootUsesDemoEvalOverlay`
+  tests) but not against a second, `demo_eval`-specific canonical fixture
+  — none is checked in, and generating one was judged not to add
+  meaningfully beyond what those per-language tests already prove.
+- Proves the *resolution* layer (include/merge/overlay → one document) is
+  identical across languages. It says nothing about the layers built on
+  top of that document — Python's un-consolidation (Stage C3), or
+  whatever eventually replaces `ResolvedAutoTradeProjection` in .NET —
+  which have their own, separate verification (or, for .NET, deliberately
+  don't have that verification yet; see Stage C5's own scope notes).
+
+## C7–C8 status
+
+Not reached in this update. Full cutover including actual ansible-driven
+production (C7) — flagged explicitly: real production deployment is
+ansible-driven and outside this repo's reach; someone with access to
+that ansible inventory needs to execute the cutover there — and deletion
+of the config-compiler/`ResolvedRuntimeManifest`/legacy Python catalog
+machinery (C8, which depends on C7 actually landing first, and on .NET's
+config surface reaching Stage C3-level verification before
+`ResolvedRuntimeManifest` could safely be removed) remain open.
