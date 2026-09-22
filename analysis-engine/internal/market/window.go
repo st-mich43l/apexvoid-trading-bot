@@ -69,6 +69,19 @@ func (w *CandleWindow) Last() Candle {
 	return w.At(w.size - 1)
 }
 
+// ReplaceLast overwrites the newest candle in place, without changing Len()
+// or evicting anything. Added for internal/marketdata.TimeframeHistory's
+// same-timestamp replacement policy (a live-updating forming bar overwrites
+// its own not-yet-closed slot rather than growing the window) — see
+// docs/analysis/market-structure-v2.md's causality section. Panics if the
+// window is empty, same discipline as Last().
+func (w *CandleWindow) ReplaceLast(c Candle) {
+	if w.size == 0 {
+		panic("market: ReplaceLast on an empty CandleWindow")
+	}
+	w.buf[(w.start+w.size-1)%w.capacity] = c
+}
+
 // Snapshot materializes the window as a plain oldest-first slice, the Go
 // analogue of handing a function the full `df`. Allocates; algorithms that
 // need this every bar are exactly the ones §9 flags as later incremental

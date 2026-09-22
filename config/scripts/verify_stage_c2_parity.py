@@ -129,6 +129,37 @@ DIVERGENCES: dict[str, dict] = {
     "kind": "new_surfaced", "expected": 3.0,
     "reason": "§8 — AnalysisMeasurementsConfig.max_merged_zone_atr Python schema default (unchanged value), now explicit.",
   },
+  # analysis.yml — Analysis Engine V2 (docs/analysis/market-structure-v2.md):
+  # genuinely new Go-only leaves, no old trading-bot.yml OR Python-schema-
+  # default precedent at all (unlike merge_overlap/max_merged_zone_atr
+  # above) — analysis-engine's structure/liquidity domains did not exist
+  # before this task. Thresholds are grounded in real, already-shipped
+  # prior art (PRs #574/#578/#579's hold-based zone validity,
+  # technique_geometry.py's epsilon(), zones.py::displacement()'s
+  # k/body_frac) — see each key's own comment in config/analysis.yml.
+  "analysis.yml/analysis.history.depth.M1": {"kind": "new_surfaced", "expected": 2000, "reason": "Analysis Engine V2 §5 — MarketHistory stored depth, no old-config precedent."},
+  "analysis.yml/analysis.history.depth.M5": {"kind": "new_surfaced", "expected": 1000, "reason": "Analysis Engine V2 §5."},
+  "analysis.yml/analysis.history.depth.M15": {"kind": "new_surfaced", "expected": 1000, "reason": "Analysis Engine V2 §5."},
+  "analysis.yml/analysis.history.depth.H1": {"kind": "new_surfaced", "expected": 500, "reason": "Analysis Engine V2 §5."},
+  "analysis.yml/analysis.history.depth.H4": {"kind": "new_surfaced", "expected": 250, "reason": "Analysis Engine V2 §5."},
+  "analysis.yml/analysis.history.depth.D1": {"kind": "new_surfaced", "expected": 150, "reason": "Analysis Engine V2 §5."},
+  "analysis.yml/analysis.structure.version": {"kind": "new_surfaced", "expected": "v2", "reason": "Analysis Engine V2 §67 — versioned algorithm selection."},
+  "analysis.yml/analysis.structure.pivot.left_bars": {"kind": "new_surfaced", "expected": 2, "reason": "Matches Python's common swing_fractal_n=2 default."},
+  "analysis.yml/analysis.structure.pivot.right_bars": {"kind": "new_surfaced", "expected": 2, "reason": "Matches Python's common swing_fractal_n=2 default."},
+  "analysis.yml/analysis.structure.swing.minimum_excursion_atr": {"kind": "new_surfaced", "expected": 0.5, "reason": "No Python precedent — new V2 layer-promotion floor, initial calibration."},
+  "analysis.yml/analysis.structure.swing.promotion.internal_atr": {"kind": "new_surfaced", "expected": 1.0, "reason": "No Python precedent — new V2 layer hierarchy, initial calibration."},
+  "analysis.yml/analysis.structure.swing.promotion.intermediate_atr": {"kind": "new_surfaced", "expected": 2.0, "reason": "No Python precedent — new V2 layer hierarchy, initial calibration."},
+  "analysis.yml/analysis.structure.swing.promotion.major_atr": {"kind": "new_surfaced", "expected": 3.5, "reason": "No Python precedent — new V2 layer hierarchy, initial calibration."},
+  "analysis.yml/analysis.structure.equal_level.tolerance_atr": {"kind": "new_surfaced", "expected": 0.05, "reason": "Matches technique_geometry.py's epsilon() exactly — 0.05 ATR."},
+  "analysis.yml/analysis.structure.break.minimum_penetration_atr": {"kind": "new_surfaced", "expected": 0.5, "reason": "Matches PR #574's invalidation_tolerance_atr exactly."},
+  "analysis.yml/analysis.structure.break.displacement_range_atr": {"kind": "new_surfaced", "expected": 1.5, "reason": "Matches zones.py::displacement()'s k=1.5 exactly."},
+  "analysis.yml/analysis.structure.break.displacement_body_dominance": {"kind": "new_surfaced", "expected": 0.55, "reason": "Matches zones.py::displacement()'s body_frac=0.55 exactly."},
+  "analysis.yml/analysis.structure.break.sweep_reclaim_bars": {"kind": "new_surfaced", "expected": 6, "reason": "Matches PR #574's sweep_reclaim_bars=6 exactly."},
+  "analysis.yml/analysis.structure.break.failed_break_reclaim_bars": {"kind": "new_surfaced", "expected": 3, "reason": "No Python precedent — new V2 break-type distinction, initial calibration."},
+  "analysis.yml/analysis.liquidity.version": {"kind": "new_surfaced", "expected": "v1", "reason": "Analysis Engine V2 §67 — versioned algorithm selection."},
+  "analysis.yml/analysis.liquidity.equal_level_tolerance_atr": {"kind": "new_surfaced", "expected": 0.05, "reason": "Same epsilon as analysis.structure.equal_level.tolerance_atr — one canonical tolerance, not two drifting ones."},
+  "analysis.yml/analysis.liquidity.pool_minimum_touches": {"kind": "new_surfaced", "expected": 2, "reason": "No Python precedent — new V2 liquidity-pool significance floor, initial calibration."},
+  "analysis.yml/analysis.liquidity.sweep_reclaim_bars": {"kind": "new_surfaced", "expected": 6, "reason": "Matches PR #574's sweep_reclaim_bars=6 exactly."},
   # analysis.yml — §10: CSV string -> native list, same content.
   "analysis.yml/analysis.triggers.m1.patterns": {
     "kind": "csv_to_list", "old_path": "analysis.triggers.m1.patterns",
@@ -314,7 +345,18 @@ def verify_unlisted_leaves_still_match_stage_c1() -> None:
   analysis_new = load(CONFIG / "analysis.yml")["analysis"]
   core = {
     k: v for k, v in analysis_new.items()
-    if k not in ("indicators", "calendar", "ctrader_feed", "scanner", "sessions", "spot", "watcher", "measurements", "zones")
+    if k not in (
+      "indicators", "calendar", "ctrader_feed", "scanner", "sessions", "spot",
+      "watcher", "measurements", "zones",
+      # Analysis Engine V2 (docs/analysis/market-structure-v2.md): whole new
+      # top-level sections with no old trading-bot.yml namespace at all —
+      # same treatment as measurements/zones above. Each leaf's value is
+      # still individually pinned and change-detected via its own
+      # new_surfaced DIVERGENCES entry (verify_divergences(), above), so
+      # this exclusion only means "no old path to compare against", not
+      # "unchecked".
+      "history", "structure", "liquidity",
+    )
   }
   c1.compare_subtree(old_flat, "analysis", core, "analysis.yml/analysis")
   for new_key, old_prefix in {
