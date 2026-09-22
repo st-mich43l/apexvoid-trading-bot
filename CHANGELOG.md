@@ -13,6 +13,31 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
+- Configuration V3 Stage C5 (.NET): `ctrader-engine/src/ConfigurationV3.cs`
+  + `MinimalYamlParser.cs` are a third independent reader for the same
+  §14 include/merge/overlay spec, hand-rolled (no reflection, AOT-safe by
+  construction — `CTraderFeed.csproj` publishes Native AOT/trimmed/self-
+  contained, and this project already hit one AOT-only reflection crash
+  this parser has nothing analogous to trigger). `GeometryFor`/
+  `LiveInstruments` mirror Go's narrow proof-of-pattern scope exactly (4
+  fields). **Deliberately NOT wired into the live path** —
+  `AutoTradeOptions`/`ResolvedRuntimeManifest`/`ManifestRuntimeFactory`
+  are untouched and still drive real broker order execution exactly as
+  before. `ResolvedAutoTradeProjection` alone carries 100+ live fields;
+  reaching Python's 890/890-leaf verification rigor for that surface by
+  hand, without a reflection-based deserializer, is future work, not
+  rushed here — this is the one runtime in the migration placing real
+  orders with real money (§41). 24 new tests
+  (`ctrader-engine/tests/ConfigurationV3Tests.cs`) read the real
+  `config/apexvoid.yml`/`apexvoid.demo-eval.yml` directly, confirm
+  correct pip size/digits for all 5 live instruments, include-graph
+  error handling matching the Go/Python suites, and parser-level
+  coverage of the YAML subset `config/*.yml` actually uses (block
+  mappings/sequences, inline flow lists, and — discovered by the first
+  real test run — bare flow mappings, since `environments/production.yml`
+  is, in its entirety, an intentionally empty `{}`). Full suite: 738
+  passed, 45 pre-existing `REAL_REDIS_URL`-required failures (unchanged
+  baseline), 0 new failures.
 - Configuration V3 Stage C4 (Go): `analysis-engine/internal/config` now
   reads `config/apexvoid.yml` directly (`gopkg.in/yaml.v3`, a real
   include/merge/overlay implementation matching §14 — the same spec

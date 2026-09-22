@@ -1,17 +1,26 @@
 # Configuration (V3)
 
-Status: **Stage C3 done for Python, local/dev only.** `algo-bot`'s
-`bot` service (docker-compose.yml) now reads `config/apexvoid.demo-eval.yml`
+Status: **Stage C3 (Python) and C4 (Go) done and wired; Stage C5 (.NET)
+built and tested but deliberately NOT wired live.** `algo-bot`'s `bot`
+service (docker-compose.yml) now reads `config/apexvoid.demo-eval.yml`
 directly and is proven byte-for-byte behavior-equivalent to the old
 `trading-bot.yml` path for production values (890/890 leaves — see the
-audit's Stage C3 section). **Actual ansible-driven production is
-untouched** — it's outside this repository and needs its own
-`APEXVOID_CONFIG_FILE` update to complete that cutover; until then it
-keeps reading `trading-bot.yml` exactly as before. `config-compiler` and
-`ctrader-engine` (.NET) are also untouched — `ResolvedRuntimeManifest`
-remains their live authority until Stage C5. See
+audit's Stage C3 section). `analysis-engine`'s `internal/config` reads
+`config/apexvoid.yml` directly too (Stage C4) — the old
+`ResolvedRuntimeManifest`-JSON reader was deleted outright there, since
+analysis-engine isn't wired to any live decision path yet regardless.
+`ctrader-engine` (.NET) has a proven direct V3 reader as of Stage C5
+(`ConfigurationV3.cs`/`MinimalYamlParser.cs`), but it is intentionally
+**not** wired to `AutoTradeOptions`/`ResolvedRuntimeManifest` —
+`ResolvedRuntimeManifest` remains `ctrader-engine`'s live authority,
+because it's the one runtime placing real broker orders and its config
+surface (100+ fields) hasn't yet been verified at Python's field-by-field
+rigor. **Actual ansible-driven production is untouched** — it's outside
+this repository and needs its own `APEXVOID_CONFIG_FILE` update to
+complete that cutover; until then it keeps reading `trading-bot.yml`
+exactly as before. `config-compiler` is also untouched. See
 [`docs/configuration-v3-migration-audit.md`](configuration-v3-migration-audit.md)
-for the full audit, the staged plan (C0–C8), and exactly what Stage C3
+for the full audit, the staged plan (C0–C8), and exactly what each stage
 does and does not claim. That older, still-live .NET/manifest system is
 documented separately at
 [`docs/configuration/configuration-architecture.md`](configuration/configuration-architecture.md).
