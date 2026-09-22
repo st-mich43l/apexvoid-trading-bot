@@ -21,11 +21,27 @@
       ],
       "user_agent": "apexvoid-trading-bot/1.0 (+contact)"
     },
+    "history": {
+      "depth": {
+        "D1": 150,
+        "H1": 500,
+        "H4": 250,
+        "M1": 2000,
+        "M15": 1000,
+        "M5": 1000
+      }
+    },
     "indicators": {
       "atr": {
         "algorithm": "simple",
         "length": 14
       }
+    },
+    "liquidity": {
+      "equal_level_tolerance_atr": 0.05,
+      "pool_minimum_touches": 2,
+      "sweep_reclaim_bars": 6,
+      "version": "v1"
     },
     "measurements": {
       "max_merged_zone_atr": 3.0
@@ -45,6 +61,31 @@
     },
     "spot": {
       "maximum_age_seconds": 5
+    },
+    "structure": {
+      "break": {
+        "displacement_body_dominance": 0.55,
+        "displacement_range_atr": 1.5,
+        "failed_break_reclaim_bars": 3,
+        "minimum_penetration_atr": 0.5,
+        "sweep_reclaim_bars": 6
+      },
+      "equal_level": {
+        "tolerance_atr": 0.05
+      },
+      "pivot": {
+        "left_bars": 2,
+        "right_bars": 2
+      },
+      "swing": {
+        "minimum_excursion_atr": 0.5,
+        "promotion": {
+          "intermediate_atr": 2.0,
+          "internal_atr": 1.0,
+          "major_atr": 3.5
+        }
+      },
+      "version": "v2"
     },
     "techniques": {
       "validation_enabled": true
