@@ -1,11 +1,18 @@
 # Telegram presentation and user-interaction behavior — owned exclusively
 # here. Bot token remains a secret ENV input (TELEGRAM_BOT_TOKEN). Direct
 # copy of the old trading-bot.yml's `delivery.*` block — see
-# docs/configuration-v3-migration-audit.md §5. `delivery.presentation.
-# seq_reset_tz` is kept here unchanged (it's specifically Telegram
-# sequence-reset scoped); `runtime.yml`'s own `runtime.timezone` mirrors
-# the same current value for the service-wide operational timezone — see
-# that file's comment and the audit's §9 on consolidating the two later.
+# docs/configuration-v3-migration-audit.md §5.
+#
+# §6: presentation.seq_reset_tz REMOVED as an independently-set value — it
+# held the exact same Asia/Ho_Chi_Minh value as runtime.timezone with no
+# code evidence it's meant to diverge (the old comment here claiming it was
+# "specifically Telegram sequence-reset scoped" was speculation, not a
+# confirmed intentional-divergence case per §41 — no consumer reads it as
+# anything other than the service's one operational timezone). DERIVED
+# from runtime.timezone now: a loader must populate this from
+# runtime.timezone, never accept a second value for it. If Telegram ever
+# genuinely needs its own different zone, name it explicitly here as an
+# override, per §6, with a real reason.
 #
 # The old file's `delivery.telegram.*` sub-namespace (delete_root_on_
 # terminal, owner_dm_daily_wipe_enabled, public_show_pips, the channel
@@ -19,7 +26,6 @@ telegram:
 
   presentation:
     auto_book_bare_pips: false
-    seq_reset_tz: Asia/Ho_Chi_Minh
 
   reports:
     weekly:

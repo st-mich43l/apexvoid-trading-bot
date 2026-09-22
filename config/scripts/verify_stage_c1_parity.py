@@ -18,6 +18,18 @@ on PYTHONPATH:
 
     cd algo-bot && PYTHONPATH=. .venv/bin/python \
       ../config/scripts/verify_stage_c1_parity.py
+
+Superseded for day-to-day use by verify_stage_c2_parity.py once Stage C2
+lands: that script re-runs this exact logic (verify_base_files/
+verify_environment_overlays, imported directly, not reimplemented) but
+first excuses the specific, individually-documented divergences Stage C2
+introduced (config/scripts/verify_stage_c2_parity.py's own DIVERGENCES
+table). Running *this* file standalone after Stage C2 will fail with a
+KeyError on analysis.yml's now-removed ctrader_feed/scanner.symbols keys —
+expected, not a regression; it is proving the narrower, no-longer-true
+claim "nothing changed since trading-bot.yml at all". Kept as-is rather
+than updated in place so it stays a legible point-in-time record of what
+Stage C1 alone guaranteed.
 """
 
 from __future__ import annotations
