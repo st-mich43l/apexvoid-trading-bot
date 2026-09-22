@@ -690,6 +690,12 @@ def test_scanner_card_never_claims_ready_before_worker(monkeypatch):
   assert "Algo bot READY" not in ready
   assert "ANALYSIS ONLY" in blocked
   assert "Algo bot BLOCKED" not in blocked
+  # Owner-reported 2026-09-22 (live ORDER ACTIVATED card): this boilerplate
+  # footer survives every later card state (the header gets rewritten,
+  # the body - including this line - does not), so it kept showing up on
+  # filled/activated trades where it says nothing the rest of the card
+  # doesn't already convey. Dropped from every executable card.
+  assert "Executor owns mechanical entry" not in ready
 
 
 def test_scalp_status_reports_active_range_and_touched_edge():

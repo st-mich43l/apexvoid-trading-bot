@@ -1699,8 +1699,6 @@ def _format_detection(
       f"{escape(_zone_text(extra.entry_zone, symbol, grouped=True))} "
       f"{extra_stars}"
     )
-  if executable:
-    lines.append("→ Executor owns mechanical entry and risk enforcement.")
   return "\n".join(lines)
 
 
