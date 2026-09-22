@@ -1,15 +1,19 @@
 # Configuration (V3)
 
-Status: **Stage C2 complete** (categorized YAML cleaned up and parity-
-verified, shared merge spec + JSON Schema + reference resolver built and
-tested; no production runtime reads any of this yet). See
+Status: **Stage C3 done for Python, local/dev only.** `algo-bot`'s
+`bot` service (docker-compose.yml) now reads `config/apexvoid.demo-eval.yml`
+directly and is proven byte-for-byte behavior-equivalent to the old
+`trading-bot.yml` path for production values (890/890 leaves — see the
+audit's Stage C3 section). **Actual ansible-driven production is
+untouched** — it's outside this repository and needs its own
+`APEXVOID_CONFIG_FILE` update to complete that cutover; until then it
+keeps reading `trading-bot.yml` exactly as before. `config-compiler` and
+`ctrader-engine` (.NET) are also untouched — `ResolvedRuntimeManifest`
+remains their live authority until Stage C5. See
 [`docs/configuration-v3-migration-audit.md`](configuration-v3-migration-audit.md)
-for the full audit and the staged plan (C0–C8). Until Stage C3/C4/C5 land,
-**`config/trading-bot.yml` plus the generated `ResolvedRuntimeManifest`
-remain the live authority** — everything below describes the target
-architecture and what's built so far toward it, not what's running in
-production today. That older, still-live system is documented separately
-at
+for the full audit, the staged plan (C0–C8), and exactly what Stage C3
+does and does not claim. That older, still-live .NET/manifest system is
+documented separately at
 [`docs/configuration/configuration-architecture.md`](configuration/configuration-architecture.md).
 
 ## Root file and category files

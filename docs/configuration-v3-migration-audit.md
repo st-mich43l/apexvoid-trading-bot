@@ -603,3 +603,167 @@ than one large one, matching how Stage C1/C2 have gone:
    go-ahead on timing, not folded into a refactor PR.
 6. Stage C8 — deletion, only after C7 has run in production without
    incident for a deliberately chosen soak period.
+
+---
+
+# Stage C3 update — Python direct YAML reader, wired live (local/dev)
+
+Owner-directed 2026-09-22 ("just keep c3 -> c8 don't care about bot" /
+"do it"): proceed through the full cutover rather than stop at another
+shadow layer. This update covers Stage C3 for Python — a real, wired,
+verified cutover, not a parallel unused reader — plus an honest status
+report on C4–C8 (Go, .NET, cross-language parity, and deletion), which
+this update does not reach.
+
+## What was built
+
+`algo-bot/app/configuration/v3_root.py` — two functions:
+
+- `resolve_v3_document(root_path)`: a production implementation of §14's
+  include/merge/overlay spec (the same spec `config/scripts/
+  resolve_reference.py` already proved as a reference implementation —
+  this is its twin, called by the real application instead of a
+  standalone script).
+- `unconsolidate(resolved)`: translates the resolved V3 document back
+  into the *exact* old flat top-level shape (`actionability`/`analysis`/
+  `contract`/`delivery`/`execution`/`instrument_packs`/`instruments`/
+  `lifecycle`/`manual_algo`/`market_data`/`risk`/`runtime`/`strategies`/
+  `bootstrap`) that `ApexVoidConfig` and every existing consumer already
+  expect (`runtime_config.actionability.foo`, `runtime_config.delivery.bar`,
+  ...).
+
+**Un-consolidating instead of rewriting every consumer was the deliberate
+choice.** Rewriting every module that imports `runtime_config` to the new
+category names would touch hundreds of files with no way to verify
+correctness at that scale in one pass. Un-consolidation confines the
+entire cutover to one function, and lets the *existing*, already-tested
+validation pipeline (`config_file.py`'s catalog-path flattening, secret-
+leaf rejection, instrument-pack expansion, live-symbol derivation) run
+completely unchanged — it now just receives its input from a different
+place.
+
+`config_file.py::load_config_file` calls `v3_root.py` only when the file
+it's given `is_v3_root_document()` (has an `includes:` key). A plain
+flat-shape file — the historical `trading-bot.yml` layout — is untouched
+and behaves exactly as before. **This makes the change inert by
+construction wherever `APEXVOID_CONFIG_FILE` still points at
+`trading-bot.yml`** — including actual ansible-driven production, which
+this repository does not control (see §1.4 of the Stage C0 audit above:
+"Production is rendered by ansible from cleartext vars onto the host,"
+outside this repo's tracked files). Shipping this code changes nothing
+there until that separate, out-of-repo deployment config is updated to
+point at `config/apexvoid.yml` — flagged explicitly, not silently
+assumed done.
+
+## Parity proof
+
+`algo-bot/tests/test_config_v3_parity.py` (11 tests, permanent regression
+guard) proves, via the real `load_python_canonical_settings` pipeline
+(not a hand-rolled comparison):
+
+- **Production**: `config/apexvoid.yml` resolves to an `ApexVoidConfig`
+  **byte-for-byte identical** to `config/trading-bot.yml`'s — 890 of 890
+  leaves match exactly (`bootstrap` excluded from the comparison; it's
+  ENV-sourced by both paths identically and never touched by this
+  change). Confirmed instrument config (`InstrumentsConfig`) equal too.
+- Include-graph error handling (missing/duplicate/absolute-escaping
+  include, duplicate base ownership) and environment-overlay merge
+  semantics (scalar replace, map extend) — each behavior individually
+  tested against `v3_root.py` directly, not just the end-to-end path.
+
+**One real, well-evidenced divergence found and fixed along the way**:
+`resolve_config_file_path`'s CONFIG_FILE layer outranks the PROFILE layer
+in the existing resolver's precedence
+(`file_secret < config_file < dotenv < process_environment < init`,
+profile assignments applied *before* all of them —
+`app/configuration/resolver.py`). This means, in the **old** system, for
+any field `trading-bot.yml` itself declares an explicit value for, the
+`demo_eval` profile's own assignment for that same field is silently
+dead — config-file always wins. Confirmed via direct comparison: 7 of
+`DEMO_EVAL_PROFILE`'s 48 assignments
+(`actionability.gates.market_map_guard_enabled`,
+`actionability.gates.opposing_barrier_veto_enabled`,
+`actionability.overlapping_zones.veto_enabled`,
+`delivery.scanner_cards.top_n`, `risk.position_limits.
+max_tracked_candidates`, `risk.position_limits.maximum_per_symbol`,
+`strategies.mapped_zone.enabled`) have never actually taken effect,
+because `trading-bot.yml` explicitly sets a conflicting value for every
+single one of them (verified directly against the file). Configuration
+V3's environment overlay is applied *after* every base category file
+(§14) — there is no second, silently-overriding config-file layer — so
+these 7 fields now genuinely reflect `demo_eval`'s intent. **This affects
+only the `demo_eval` profile** (`CONSERVATIVE_PROFILE`/production has an
+empty assignment list — nothing to be silently defeated — which is
+exactly why the 890/890 production parity check shows zero
+divergence). `runtime.profile` itself is explicitly bridged back to the
+old string names (`"conservative"`/`"demo_eval"`) in `unconsolidate()`,
+since real consumers (`config_health.py`, `lifecycle.py`, `delivery.py`)
+do exact string comparisons against it.
+
+Two more representation-level bridges, both required for the *old*
+Pydantic schema (not rewritten in this pass) to keep validating:
+
+- `_restore_csv_string_types`: several catalog leaves are still typed
+  `str` in `app/configuration/models/*.py` even though Stage C2
+  converted their YAML representation to native lists (§10) — rejoins
+  them to the exact same CSV string on the way back into the old shape,
+  driven by the catalog's own `type` field (not a hardcoded list of the
+  known cases), so a future CSV→list conversion can't silently break
+  startup again without this bridge already knowing about it.
+- The same rejoin applies inside `instruments.*.overrides` /
+  `instrument_packs.*.overrides` (found live: `USDJPY`'s
+  `risk.exposure.defended_levels`, converted to `[160.0]` in Stage C2 —
+  rejoined to `"160"`, matching the old string exactly, not `"160.0"`).
+
+## Wired live (local/dev only)
+
+`docker-compose.yml`'s `bot` service: `APEXVOID_CONFIG_FILE` now points
+at `config/apexvoid.demo-eval.yml` (new — same as `apexvoid.yml` except
+its last include is `environments/demo_eval.yml`, giving §13's "a
+different environment is a different root file, never a runtime ENV
+toggle" its first real instance). `AUTO_TRADE_PROFILE`,
+`AUTO_TRADE_MAPPED_ZONE_ENABLED`, `AUTO_TRADE_MARKET_MAP_GUARD_ENABLED`,
+`LOG_DIR`, `LOG_RETENTION_DAYS`, `LOG_FILE_ENABLED`, and
+`APEXVOID_RUNTIME_MANIFEST_FILE` (confirmed zero real consumers in
+`bot` — only `config-compiler`'s CLI and `ctrader-engine` read the
+manifest) all removed from `bot`'s own environment block; volumes changed
+from mounting only `trading-bot.yml` to mounting all of `./config`.
+`config-compiler` and `ctrader-engine` are **unchanged** — `.NET` still
+depends on `ResolvedRuntimeManifest` until Stage C5, so `trading-bot.yml`
+stays live for that path.
+
+**Consequence, disclosed rather than buried**: local/dev's `bot` now
+actually gets the `demo_eval` behavior it was always supposed to (the 7
+fields above), where it previously silently ran with several of
+`trading-bot.yml`'s own base values instead. `.env.example` regenerated
+via the project's own generator (`python -m app.configuration.generate
+--write`, after editing `env_example_policy.py`'s
+`ENV_EXAMPLE_CATALOG_PATHS`/`EXTRA_DEPLOYMENT_ENV` — not hand-edited) —
+now contains only `APEXVOID_CONFIG_FILE` and real secrets
+(`POSTGRES_PASSWORD`, `TELEGRAM_BOT_TOKEN`, the five `CTRADER_*`
+credentials), matching §31 exactly.
+
+## What Stage C3 does NOT claim
+
+- **Actual ansible-driven production** is untouched and outside this
+  repo's reach, as stated above — someone with access to that deployment
+  needs to point its `APEXVOID_CONFIG_FILE` at `config/apexvoid.yml`
+  (mounting the whole `config/` directory) to complete the real cutover
+  there. Until then, production keeps reading `trading-bot.yml` exactly
+  as before, unaffected by any of this.
+- **Deletion of the old Python config machinery** (`profiles.py`,
+  `source_policy.py`, `sources.py`, `source_types.py`,
+  `python_sources.py`, `environment_aliases.py`, etc.) is Stage C8, not
+  done here — `load_python_canonical_settings`/`load_python_runtime_
+  source_bundle`/the profile/precedence machinery are all still live
+  code paths (this is *additive*: a new branch inside `load_config_file`,
+  not a replacement of the surrounding pipeline) and still required for
+  `trading-bot.yml`-based deployments (ansible production) to keep
+  working during the transition.
+
+## C4–C8 status
+
+Not reached in this update. Go (C4) and .NET (C5) direct readers,
+cross-language parity (C6), the actual full cutover of every runtime
+(C7), and deletion of the config-compiler/`ResolvedRuntimeManifest`/
+legacy machinery (C8) remain open. Continuing in a follow-on update.

@@ -18,6 +18,12 @@ from app.configuration.models.instruments import (
   project_xau_leaf_values,
 )
 from app.configuration.models.root import ApexVoidConfig
+from app.configuration.v3_root import (
+  V3ConfigError,
+  is_v3_root_document,
+  resolve_v3_document,
+  unconsolidate,
+)
 
 
 CONFIG_FILE_ENV = "APEXVOID_CONFIG_FILE"
@@ -174,6 +180,19 @@ def load_config_file(
     loaded = yaml.safe_load(text)
   except yaml.YAMLError as exc:
     raise ConfigFileError(f"malformed YAML: {exc}", path=file_path) from None
+
+  if is_v3_root_document(loaded):
+    # Stage C3 (docs/configuration-v3-migration-audit.md): APEXVOID_CONFIG_FILE
+    # points at config/apexvoid.yml instead of the historical flat
+    # trading-bot.yml layout. Resolve includes + environment overlay for
+    # real, un-consolidate back into the shape every line below this one
+    # already validates/flattens/expands — the categorized YAML becomes
+    # the actual source without touching that existing, tested pipeline.
+    try:
+      resolved = resolve_v3_document(target)
+      loaded = unconsolidate(resolved)
+    except V3ConfigError as exc:
+      raise ConfigFileError(str(exc), path=file_path) from None
 
   if loaded is None:
     return LoadedConfigFile(

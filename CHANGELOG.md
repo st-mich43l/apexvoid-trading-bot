@@ -13,6 +13,36 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
+- Configuration V3 Stage C3 for Python (see `docs/configuration-v3-migration-audit.md`'s
+  Stage C3 update) — a real, wired cutover, not another shadow layer.
+  `algo-bot/app/configuration/v3_root.py` resolves `config/apexvoid.yml`'s
+  include/overlay chain for real and un-consolidates it back into the
+  exact shape `ApexVoidConfig` already expects; `config_file.py` uses it
+  automatically whenever `APEXVOID_CONFIG_FILE` points at a V3 root
+  document (detected by an `includes:` key), and is a no-op otherwise —
+  inert wherever `APEXVOID_CONFIG_FILE` still points at `trading-bot.yml`,
+  including actual ansible-driven production, which this repo does not
+  control and which is unaffected until that separate deployment config
+  is updated. Proven byte-for-byte identical to the old resolver for
+  production (890/890 leaves, permanent regression test:
+  `tests/test_config_v3_parity.py`). Found and fixed one real bug along
+  the way: the old resolver's CONFIG_FILE layer silently defeated 7 of
+  the `demo_eval` profile's own 48 assignments whenever `trading-bot.yml`
+  also declared an explicit value for that field (which it did for all
+  7) — production/`conservative` is unaffected (empty assignment list,
+  hence the 890/890 exact match), but local/dev's `demo_eval` profile now
+  actually gets the behavior it was always supposed to.
+  `docker-compose.yml`'s `bot` service now points at the new
+  `config/apexvoid.demo-eval.yml` (mounts all of `./config`) instead of
+  `trading-bot.yml`, with `AUTO_TRADE_PROFILE`/
+  `AUTO_TRADE_MAPPED_ZONE_ENABLED`/`AUTO_TRADE_MARKET_MAP_GUARD_ENABLED`/
+  `LOG_DIR`/`LOG_RETENTION_DAYS`/`LOG_FILE_ENABLED`/
+  `APEXVOID_RUNTIME_MANIFEST_FILE` (confirmed zero real consumers in
+  `bot`) removed from its environment. `.env.example` regenerated via the
+  project's own generator (not hand-edited) to contain only
+  `APEXVOID_CONFIG_FILE` and real secrets. `config-compiler`/
+  `ctrader-engine` unchanged — .NET still depends on
+  `ResolvedRuntimeManifest` until Stage C5.
 - Configuration V3 Stage C2 (see `docs/configuration-v3-migration-audit.md`'s
   Stage C2 update). Cleaned the Stage C1 categorized YAML itself: removed
   three global price-denominated geometry defaults that were byte-identical
