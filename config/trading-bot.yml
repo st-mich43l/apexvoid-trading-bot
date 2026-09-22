@@ -244,6 +244,11 @@ execution:
     scale_step_atr: 0.1
     scale_undersized_policy: single_entry
 instrument_packs:
+  # Pack keys follow one shared template: <instrument-class>_fixed_<R>r_v1
+  # (owner-directed 2026-09-22: FX keeps its real 2R shape, named
+  # consistently; XAU's name is corrected to 4R, matching what it has
+  # actually traded since the 2026-09-15 ladder change below — its pack
+  # key was still called "2r" from before that change).
   fx_usd_major_fixed_2r_v1:
     policy: fx_fixed_2r_v1
     # FX is one precise entry, never XAU's shallow/deep scale-in ladder.
