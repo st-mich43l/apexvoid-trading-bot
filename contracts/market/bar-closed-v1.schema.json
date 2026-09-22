@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://apexvoid.internal/contracts/market/bar-closed-v1.schema.json",
+  "title": "market.bar.closed.v1",
+  "description": "SKELETON, not yet wired into any service (docs/adr/007-shared-cross-service-contracts.md). ctrader-engine publishes this event once a candle closes; analysis-engine consumes it to advance internal/marketdata's rolling history. Fields mirror analysis-engine's internal/market.Candle (Time/Open/High/Low/Close/Volume) plus the Symbol/Timeframe identity every cross-service event needs. Today's live equivalent is the bars:{SYMBOL}:{TF} Redis ZSET entry shape (app/analysis/ohlc_source.py) — this schema is the target Kafka event, not yet adopted.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["symbol", "timeframe", "time", "open", "high", "low", "close", "volume"],
+  "properties": {
+    "symbol": {
+      "type": "string",
+      "description": "Canonical instrument identifier, e.g. \"XAU\" — matches market.Symbol / config's instruments.<symbol> key."
+    },
+    "timeframe": {
+      "type": "string",
+      "enum": ["M1", "M3", "M5", "M15", "M30", "H1", "H4", "D1"],
+      "description": "Matches market.Timeframe exactly — do not add a value here that Timeframe.go's minutesByTimeframe map doesn't also have."
+    },
+    "time": {
+      "type": "integer",
+      "description": "Unix second timestamp of the bar's close, matching market.Candle.Time's unit exactly (not milliseconds)."
+    },
+    "open": { "type": "number" },
+    "high": { "type": "number" },
+    "low": { "type": "number" },
+    "close": { "type": "number" },
+    "volume": { "type": "number", "minimum": 0 }
+  }
+}
