@@ -118,6 +118,54 @@ def test_tp_booked_event_renders_without_crashing():
   assert "🎯" in text
 
 
+def test_tp_booked_shows_target_progress_from_structured_fields():
+  """Owner-reported 2026-09-22: a live TP1 card with TP2 still pending had
+  nothing on it to say so - it read as "this was the only target". The
+  progress comes from the plan's own structured fields
+  (highest_booked_target_index / targets_total), not the message text.
+  """
+  text = delivery.render_auto_trade_event({
+    "type": "tp_booked",
+    "message": "TP COMPLETED TP1 closed L1=320 remaining=660 (1/1)",
+    "setup": "Confluence Zone",
+    "price": 210.534,
+    "target_pips": 16,
+    "highest_booked_target_index": 0,
+    "targets_total": 2,
+  })
+  assert text is not None
+  assert "(1/2)" in text
+
+
+def test_tp_booked_omits_progress_for_a_single_target_plan():
+  text = delivery.render_auto_trade_event({
+    "type": "tp_booked",
+    "message": "TP COMPLETED TP1 closed L1=320 remaining=0 (1/1)",
+    "setup": "Confluence Zone",
+    "price": 210.534,
+    "target_pips": 16,
+    "highest_booked_target_index": 0,
+    "targets_total": 1,
+  })
+  assert text is not None
+  assert "(1/1)" not in text
+
+
+def test_tp_compact_line_shows_target_progress():
+  line = delivery._format_tp_compact_line(
+    {
+      "price": 4029.98,
+      "target_pips": 41.0,
+      "highest_booked_target_index": 0,
+      "targets_total": 2,
+    },
+    "TP COMPLETED TP1 closed L1 lot=0.02 remaining lot=0.06 (1/2)",
+  )
+  assert line == (
+    "🎯 TP1 (1/2) · 💰 Fill: 4029.98 · ✅ Achieved: +41.0 pips"
+  )
+
+
 def test_clean_message_formats_tp_leg_and_remaining_as_lot():
   cleaned = delivery._clean_message(
     "TP1 COMPLETED TP2 closed L1=100 remaining=700 (1/1)"
