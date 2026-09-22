@@ -216,6 +216,17 @@ func (d *Document) Get(dottedPath string) (any, bool) {
 	return cursor, true
 }
 
+// Raw returns the whole resolved document as an untyped tree
+// (map[string]any/[]any/scalars, exactly what yaml.v3 produces). Exported
+// only for the Stage C6 cross-language fixture-parity test
+// (test/config/v3_fixture_parity_test.go), which needs the complete
+// resolved shape to compare against resolve_reference.py's canonical
+// fixture — not part of the normal consumer surface (use Get/Section for
+// everything else).
+func (d *Document) Raw() stringMap {
+	return d.raw
+}
+
 // Section returns the mapping at dottedPath (e.g. "instruments"), or an
 // error if it's missing or not a mapping — the Go analogue of §9's "a
 // missing required config value fails, zero is never treated as a
