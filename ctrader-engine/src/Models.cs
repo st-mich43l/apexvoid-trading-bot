@@ -511,6 +511,11 @@ public sealed record AutoTradeEvent(
   // Terminal close analytics for fixed_rr journal (Python store.py).
   bool? BreakEvenApplied = null,
   int? HighestBookedTargetIndex = null,
+  // Plan's total declared target count, alongside HighestBookedTargetIndex,
+  // so a mid-trade tp_booked card can say "TP1 of 2" instead of the
+  // open-entry-legs fraction the card text used to carry there (owner
+  // 2026-09-22: read as "this was the only target" when TP2+ were pending).
+  int? TargetsTotal = null,
   decimal? PlannedRewardRisk = null,
   bool? TargetRoomFallbackUsed = null,
   string? ExitPath = null,

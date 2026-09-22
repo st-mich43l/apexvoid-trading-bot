@@ -1618,18 +1618,21 @@ public sealed class TradePlanRuntime(
       }
     }
     bool? breakEvenApplied = null;
-    int? bookedIndex = null;
     decimal? plannedRewardRisk = null;
     bool? targetRoomFallbackUsed = null;
     var isTerminalClose = type is "position_closed" or "group_result";
     if (isTerminalClose)
     {
       breakEvenApplied = runtimeState?.BreakEvenApplied;
-      bookedIndex = highestBookedTargetIndex
-        ?? runtimeState?.HighestBookedTargetIndex;
       plannedRewardRisk = plan.Targets.Count >= 2 ? 2.0m : 1.0m;
       targetRoomFallbackUsed = plan.Targets.Count == 1;
     }
+    // Which target this event concerns (and how many the plan declares) is
+    // relevant on every tp_booked/position_closed report, not only the
+    // final close - a mid-trade TP hit is exactly where the card needs to
+    // say "1 of 2", not just the terminal summary.
+    var bookedIndex = highestBookedTargetIndex
+      ?? runtimeState?.HighestBookedTargetIndex;
     await store.PublishAutoTradeEventAsync(
       options.EventStream,
       new AutoTradeEvent(
@@ -1662,6 +1665,7 @@ public sealed class TradePlanRuntime(
             : null),
         BreakEvenApplied: breakEvenApplied,
         HighestBookedTargetIndex: bookedIndex,
+        TargetsTotal: plan.Targets.Count,
         PlannedRewardRisk: plannedRewardRisk,
         TargetRoomFallbackUsed: targetRoomFallbackUsed,
         ConfluenceV1: plan.Analysis.ConfluenceV1,
@@ -2932,6 +2936,15 @@ public sealed class TradePlanRuntime(
         }
         else
         {
+          // Owner-reported 2026-09-22: this trailing "(open/total)" is
+          // ENTRY-leg bookkeeping (L1/L2 fills), not target progress - but
+          // sitting right after the target id it read as "target N of M",
+          // implying TP1 was the plan's only target even when TP2+ were
+          // still pending. Structured target-progress fields now travel on
+          // the event itself (HighestBookedTargetIndex/TargetsTotal, see
+          // PublishEventCoreAsync) for the delivery layer to render
+          // unambiguously; this text keeps its original, regex-matched
+          // shape (app.autotrade.delivery._TP_BOOKED_RE) unchanged.
           tpMessage =
             $"TP COMPLETED {target.TargetId} closed {string.Join(" ", perLegCloses)} "
             + $"remaining lot={FormatEventLot(remainingAfter, symbol)} "
