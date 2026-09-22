@@ -98,9 +98,13 @@ Derived rollout values appear in effective provenance as
 
 Instruments may reference a named policy. Currently registered:
 
-- `xau_fixed_2r_v1` — XAU technique structure fixed_rr (1R/2R, 50/50, BE at TP1);
-  pack expands stop envelope 25–100 and `tokyo_london_ny` publish windows.
-  M1 scalping on XAU is gated separately (`technique_fixed_rr_targeting`).
+- `xau_fixed_4r_v1` — XAU technique structure fixed_rr (1R/2R/3R/4R,
+  40/20/20/20, BE at TP1/1R); pack expands stop envelope 50–60 pips
+  (entry-targeted) and `tokyo_london_ny` publish windows. Renamed
+  2026-09-22 from `xau_fixed_2r_v1` (owner-reported: the name had gone
+  stale since the 2026-09-15 ladder change to 4R — no targeting-contract
+  change). M1 scalping on XAU is gated separately
+  (`technique_fixed_rr_targeting`).
 - `xau_current_v1` — inherit the current resolved global trading domains
   (strategies, actionability, execution, risk, lifecycle, and shared market
   data / analysis shells) as the XAU ladder compatibility policy

@@ -244,7 +244,12 @@ execution:
     scale_step_atr: 0.1
     scale_undersized_policy: single_entry
 instrument_packs:
-  fx_usd_major_v1:
+  # Pack keys follow one shared template: <instrument-class>_fixed_<R>r_v1
+  # (owner-directed 2026-09-22: FX keeps its real 2R shape, named
+  # consistently; XAU's name is corrected to 4R, matching what it has
+  # actually traded since the 2026-09-15 ladder change below — its pack
+  # key was still called "2r" from before that change).
+  fx_usd_major_fixed_2r_v1:
     policy: fx_fixed_2r_v1
     # FX is one precise entry, never XAU's shallow/deep scale-in ladder.
     auto_entry:
@@ -319,7 +324,7 @@ instrument_packs:
   # risk profile differs enough (see per-pair comments below) that sharing
   # those would hide, not remove, real divergence. Every JPY-cross instrument
   # must declare those as its own overrides.
-  fx_jpy_cross_v1:
+  fx_jpy_cross_fixed_2r_v1:
     # FX is one precise entry, never XAU's shallow/deep scale-in ladder.
     auto_entry:
       mode: single_best
@@ -372,8 +377,8 @@ instrument_packs:
   # XAU technique structure fixed_rr (SL from structure, TP at R multiples).
   # M1 scalping stays on strategies.scalping discovery book — do not treat
   # this pack as FX-style "no scalp".
-  xau_fixed_2r_v1:
-    policy: xau_fixed_2r_v1
+  xau_fixed_4r_v1:
+    policy: xau_fixed_4r_v1
     # Gold retains the separately tuned scale-in and optional XAU-only risk leg.
     auto_entry:
       mode: scale
@@ -495,7 +500,7 @@ instruments:
   # volume_units_per_lot (XAU 10×10_000=100_000; FX 10×10_000_000=100_000_000)
   # — never reuse the gold 100_000 cap on FX.
   EURUSD:
-    pack: fx_usd_major_v1
+    pack: fx_usd_major_fixed_2r_v1
     # Deployment state is always explicit on the symbol. Packs must never
     # make a newly-added instrument broker-live as a side effect.
     rollout: live
@@ -507,7 +512,7 @@ instruments:
     # London/NY major: tight spread and 10-18 pip stop. Prefer the pack's 2R
     # ladder, with a 1R full-close fallback when opposing room is constrained.
   GBPUSD:
-    pack: fx_usd_major_v1
+    pack: fx_usd_major_fixed_2r_v1
     rollout: live
     # 2026-08-19: was a byte-for-byte EURUSD clone (only broker/canonical
     # symbol differed) - geometry below is scaled ~1.3x off EURUSD's own
@@ -551,7 +556,7 @@ instruments:
       opposing_minimum_separation_price: 0.002
       fvg_entry_max_width_price: 0.002
   GBPJPY:
-    pack: fx_jpy_cross_v1
+    pack: fx_jpy_cross_fixed_2r_v1
     rollout: live
     manual:
       target_close_ratios: [0.40, 0.25, 0.35]
@@ -607,7 +612,7 @@ instruments:
       breakeven_after_r: 1.0
       entry_clips: 2
   USDJPY:
-    pack: fx_jpy_cross_v1
+    pack: fx_jpy_cross_fixed_2r_v1
     rollout: live
     analysis:
       zones:
@@ -656,7 +661,7 @@ instruments:
       breakeven_after_r: 1.0
       entry_clips: 2
   XAU:
-    pack: xau_fixed_2r_v1
+    pack: xau_fixed_4r_v1
     rollout: live
     # Technique: structure fixed_rr from pack (1R/2R/3R/4R 40/20/20/20 + BE
     # after 1R, entry-targeted risk band 50-60p). Manual stays zone_ladder.

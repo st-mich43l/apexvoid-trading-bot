@@ -1,0 +1,450 @@
+# Instrument-specific market geometry and rollout — owned exclusively
+# here. Unknown instruments must fail closed; no hardcoded XAU or FX
+# geometry may remain in runtime code once a service reads this file
+# directly (Stage C3+).
+#
+# The pack-inheritance mechanism (instruments.<SYM>.pack: <name>; the pack
+# merges under the instrument; the instrument's own leaves always win on a
+# shared key) is preserved exactly as-is from the old trading-bot.yml —
+# see docs/configuration-v3-migration-audit.md §5/§9: flattening every
+# symbol to its fully-resolved geometry is a legitimate later
+# simplification, not done in this pass, since it would itself be a real
+# design change (losing pack reuse), not a pure file split.
+#
+# Per-instrument `manual.*` leaves (entry_mode, risk_reference,
+# risk_multiplier, target_close_ratios/tp1_close_fraction) stay here too,
+# nested under each pack/instrument — see manual-algo.yml's own header for
+# why they're not duplicated there.
+instrument_packs:
+  fx_usd_major_fixed_2r_v1:
+    policy: fx_fixed_2r_v1
+    # FX is one precise entry, never XAU's shallow/deep scale-in ladder.
+    auto_entry:
+      mode: single_best
+    reaction_session: london_ny
+    stop_envelope:
+      min_pips: 10
+      max_pips: 18
+      sl_distance: 0.0018
+    activation:
+      # Fresh M1 confirmation remains mandatory; sweep/body is preferred.
+      require_sweep_body: false
+      trigger_maximum_age_bars: 3
+      max_spread_pips: 1
+    price_scale:
+      round_step: 0.001
+      market_map:
+        change_min: 0.0001
+        fallback_radius_price: 0.01
+        scalp_radius_price: 0.006
+      zone_merge_gap_price: 0.0005
+      zone_merge_max_width: 0.0015
+      opposing_minimum_separation_price: 0.0015
+      fvg_entry_max_width_price: 0.0015
+    targeting:
+      mode: fixed_rr
+      reward_risk: 2.0
+      target_r_multiples:
+        - 1.0
+        - 2.0
+      close_ratios:
+        - 0.5
+        - 0.5
+      breakeven_after_r: 1.0
+      entry_clips: 2
+    manual:
+      enabled: true
+      algo_enabled: true
+      entry_mode: single
+      risk_reference: shallow
+      risk_multiplier: 1.5
+      target_close_ratios: [0.25, 0.25, 0.50]
+    market_data:
+      lookbacks:
+        h1_bars: 400
+        m15_bars: 250
+        m1_bars: 150
+        m5_bars: 150
+    timeframes:
+      - H1
+      - M15
+      - M5
+      - M1
+    contract:
+      contract_units_per_lot: 100000.0
+      max_lots: 10.0
+      pip_size: 0.0001
+      price_digits: 5
+      volume_units_per_lot: 10000000
+    analysis:
+      zones:
+        major_maximum_width_price: 0.003
+        minimum_width_price: 0.0006
+        preferred_maximum_width_price: 0.0015
+        preferred_minimum_width_price: 0.0008
+
+  # Shared scaffolding for JPY-quoted crosses (GBPJPY, USDJPY): pip
+  # scale/digits, market-map radii, and the parts of targeting that do not
+  # vary by pair. Deliberately omits stop_envelope, policy, reaction_session,
+  # analysis.zones, targeting.close_ratios, contract.pip_value_per_lot, and
+  # the zone_merge_max_width/opposing_minimum_separation_price/
+  # fvg_entry_max_width_price trio - each pair's real volatility/session/
+  # risk profile differs enough (see per-pair comments below) that sharing
+  # those would hide, not remove, real divergence. Every JPY-cross instrument
+  # must declare those as its own overrides.
+  fx_jpy_cross_fixed_2r_v1:
+    # FX is one precise entry, never XAU's shallow/deep scale-in ladder.
+    auto_entry:
+      mode: single_best
+    activation:
+      # Fresh M1 confirmation remains mandatory; sweep/body is preferred.
+      require_sweep_body: false
+      trigger_maximum_age_bars: 3
+    price_scale:
+      round_step: 0.1
+      market_map:
+        change_min: 0.01
+        fallback_radius_price: 1.0
+        scalp_radius_price: 0.6
+      zone_merge_gap_price: 0.05
+    targeting:
+      mode: fixed_rr
+      reward_risk: 2.0
+      target_r_multiples:
+        - 1.0
+        - 2.0
+      close_ratios:
+        - 0.5
+        - 0.5
+      breakeven_after_r: 1.0
+      entry_clips: 2
+    manual:
+      enabled: true
+      algo_enabled: true
+      entry_mode: single
+      risk_reference: shallow
+      risk_multiplier: 1.5
+      target_close_ratios: [0.25, 0.25, 0.50]
+    market_data:
+      lookbacks:
+        h1_bars: 400
+        m15_bars: 250
+        m1_bars: 150
+        m5_bars: 150
+    timeframes:
+      - H1
+      - M15
+      - M5
+      - M1
+    contract:
+      contract_units_per_lot: 100000.0
+      max_lots: 10.0
+      pip_size: 0.01
+      price_digits: 3
+      volume_units_per_lot: 10000000
+
+  # XAU technique structure fixed_rr (SL from structure, TP at R multiples).
+  # M1 scalping stays on strategies.scalping discovery book - do not treat
+  # this pack as FX-style "no scalp".
+  xau_fixed_4r_v1:
+    policy: xau_fixed_4r_v1
+    # Gold retains the separately tuned scale-in and optional XAU-only risk leg.
+    auto_entry:
+      mode: scale
+    reaction_session: tokyo_london_ny
+    stop_envelope:
+      # Structure-first band replacing global reaction 40-60. Calibrate max
+      # from live Key Level stop distances (pack leaf only).
+      # 2026-09 (owner-reported): 25p let some non-scalping structural
+      # setups take scalp-sized stops on an instrument that stop-hunts
+      # routinely - raised the floor to 50p.
+      # 2026-09-15 (owner-reported): lowered max from 100p to 60p, matching
+      # manual /algo's own default risk band - paired with the new
+      # entry-targeted risk selection (execution_route.risk_targeted_entry_price,
+      # XAU only) that picks the entry within the detected zone/room so the
+      # resulting risk lands near 50p in the first place, rather than
+      # relying on this envelope alone to clamp a stop chosen from a
+      # risk-blind entry.
+      min_pips: 50
+      max_pips: 60
+      sl_distance: 10.0
+    activation:
+      require_sweep_body: false
+      trigger_maximum_age_bars: 3
+      max_spread_pips: 5
+    price_scale:
+      # Preserve production gold analysis geometry (schema/global defaults).
+      round_step: 5.0
+      market_map:
+        change_min: 1.0
+        fallback_radius_price: 30.0
+        scalp_radius_price: 15.0
+      zone_merge_gap_price: 1.0
+      zone_merge_max_width: 6.0
+      opposing_minimum_separation_price: 15.0
+      fvg_entry_max_width_price: 5.0
+    targeting:
+      mode: fixed_rr
+      # 2026-09-15 (owner-reported): auto XAU now runs manual /algo's own
+      # default 4-level R ladder exactly (1R/2R/3R/4R,
+      # parsing.MANUAL_ALGO_DEFAULT_TARGET_R_MULTIPLES) instead of the
+      # earlier 0.5R/1R/2R/3R shape - reward_risk must equal the final
+      # target_r_multiple (validated). close_ratios mirrors manual's 40%
+      # first / 20% each remaining (manual expresses this via
+      # tp1_close_fraction; auto's schema requires an explicit
+      # matching-length array).
+      reward_risk: 4.0
+      target_r_multiples:
+        - 1.0
+        - 2.0
+        - 3.0
+        - 4.0
+      close_ratios:
+        - 0.4
+        - 0.2
+        - 0.2
+        - 0.2
+      # BE follows the first (1R) target, matching manual /algo.
+      breakeven_after_r: 1.0
+      entry_clips: 2
+    manual:
+      enabled: true
+      algo_enabled: true
+      entry_mode: zone_ladder
+      risk_reference: shallow
+      risk_multiplier: 1.0
+      tp1_close_fraction: 0.40
+    market_data:
+      lookbacks:
+        h1_bars: 400
+        m15_bars: 250
+        m1_bars: 150
+        m5_bars: 150
+    timeframes:
+      - H1
+      - M15
+      - M5
+      - M1
+    contract:
+      contract_units_per_lot: 100.0
+      max_lots: 10.0
+      pip_size: 0.1
+      price_digits: 2
+      volume_units_per_lot: 10000
+    analysis:
+      zones:
+        major_maximum_width_price: 10.0
+        minimum_width_price: 3.0
+        preferred_maximum_width_price: 6.0
+        preferred_minimum_width_price: 3.0
+    # Dig 2026-09-05: barrier_buffer_atr's global default (0.5) is tuned for
+    # FX, where an ATR multiple is a few pips. XAU's ATR is dollar-denominated
+    # (M5/H1 ATR routinely $2-12+), so 0.5x buffered away 40-115+ pips of
+    # opposing-structure room in production -- comparable to or larger than
+    # XAU's own stop envelope (25-100 pips) -- turning real, tradeable room
+    # into a false zero-room reject before the fixed_rr ladder ever ran.
+    # Owner's manual XAU trades routinely use 60-100 pip stops near the same
+    # structure and still run past it. 0.15 matches the existing
+    # scalp_barrier_buffer_atr precedent's order of magnitude.
+    overrides:
+      actionability.target_room.barrier_buffer_atr: 0.15
+
+instruments:
+  # Add a live FX pair by declaring `pack: <name>` (see `instrument_packs`
+  # above) plus broker_symbol/canonical_symbol and only the leaves that
+  # genuinely differ for this pair - policy, reaction_session, stop_envelope,
+  # analysis.zones, and the price_scale/targeting/contract leaves the pack
+  # does not already cover. `instrument_packs.*` merges under whatever this
+  # block declares (this block always wins on a shared key), so overriding
+  # one nested leaf (e.g. `stop_envelope.min_pips`) does not require
+  # repeating its siblings. Register a session name in
+  # REGISTERED_REACTION_SESSIONS instead of copying hour strings.
+  # `overrides` remains an escape hatch for a single dotted leaf a pack/
+  # instrument shape does not cover (a defended-level guard, a news-cluster
+  # guard) - not a substitute for a real pack default.
+  # Demo live FX. Zone/merge/round/opposing gaps are price units (not XAU
+  # dollars). Pip value is USD per 1.0 lot: EURUSD/GBPUSD derive 10 from
+  # pip_size*contract_units_per_lot; JPY crosses set contract.pip_value_per_lot
+  # explicitly (quote units are not dollars). Equity-table lots still apply;
+  # broker volume uses each symbol's LotSize. Plan max_volume is max_lots x
+  # volume_units_per_lot (XAU 10x10_000=100_000; FX 10x10_000_000=100_000_000)
+  # - never reuse the gold 100_000 cap on FX.
+  EURUSD:
+    pack: fx_usd_major_fixed_2r_v1
+    # Deployment state is always explicit on the symbol. Packs must never
+    # make a newly-added instrument broker-live as a side effect.
+    rollout: live
+    broker_symbol: EURUSD
+    canonical_symbol: EURUSD
+    # EUR/USD earns its cleanest liquidity at the London and NY opens.
+    overrides:
+      execution.technique.selective_session_min_confluence: 3
+    # London/NY major: tight spread and 10-18 pip stop. Prefer the pack's 2R
+    # ladder, with a 1R full-close fallback when opposing room is constrained.
+
+  GBPUSD:
+    pack: fx_usd_major_fixed_2r_v1
+    rollout: live
+    # 2026-08-19: was a byte-for-byte EURUSD clone (only broker/canonical
+    # symbol differed) - geometry below is scaled ~1.3x off EURUSD's own
+    # pack instead, reflecting Cable's real higher volatility (commonly
+    # documented ATR(14) roughly 1.3-1.5x EURUSD's ~70 pips/day, well
+    # short of GBPJPY's own ~180 pips/day cross-pair extreme). No live
+    # broker feed/ATR for this pair yet to compute an exact figure from -
+    # revisit once real GBPUSD price history accumulates on this account.
+    analysis:
+      zones:
+        major_maximum_width_price: 0.004
+        minimum_width_price: 0.0008
+        preferred_maximum_width_price: 0.002
+        preferred_minimum_width_price: 0.001
+    broker_symbol: GBPUSD
+    canonical_symbol: GBPUSD
+    # Cable follows the same London/NY execution clock as EURUSD.
+    overrides:
+      execution.technique.selective_session_min_confluence: 3
+    # London/NY major, same active-session profile as EURUSD (unlike
+    # London-only GBPJPY or Tokyo/NY USDJPY) - Cable's
+    # wider typical range earns a wider envelope than EURUSD's 10-18,
+    # short of GBPJPY's 15-30. Standard fx_fixed_2r_v1 25/25/50 ladder
+    # (inherited from the pack, not repeated here): no documented
+    # fast-move-then-hard-reversal pattern here to justify GBPJPY's
+    # frontload, and no defended-level/event-cluster incident on record
+    # for this pair yet either; only the execution-session overrides above
+    # are needed.
+    stop_envelope:
+      min_pips: 12
+      max_pips: 22
+      sl_distance: 0.0022
+    price_scale:
+      # Scaled with the zone geometry above, not copied from EURUSD.
+      # round_step and market_map.change_min are unchanged from the pack.
+      market_map:
+        fallback_radius_price: 0.013
+        scalp_radius_price: 0.008
+      zone_merge_gap_price: 0.0006
+      zone_merge_max_width: 0.002
+      opposing_minimum_separation_price: 0.002
+      fvg_entry_max_width_price: 0.002
+
+  GBPJPY:
+    pack: fx_jpy_cross_fixed_2r_v1
+    rollout: live
+    manual:
+      target_close_ratios: [0.40, 0.25, 0.35]
+    analysis:
+      zones:
+        major_maximum_width_price: 0.5
+        minimum_width_price: 0.12
+        preferred_maximum_width_price: 0.25
+        preferred_minimum_width_price: 0.12
+    broker_symbol: GBPJPY
+    canonical_symbol: GBPJPY
+    contract:
+      pip_value_per_lot: 7.0
+    # Tokyo/London cross: Japanese open through London morning (0-11 UTC),
+    # no NY dump window. Prefer 2R; constrained clean room may close at 1R.
+    # 2026 dig: ATR(14) ~180 pips/day vs EURUSD's ~70, and BoE+BoJ events
+    # landing within 48h compound volatility instead of adding it
+    # ("volatility clusters"). Widen the news guard around either event
+    # instead of the flat 30m single-event window every pair gets.
+    # Dig 2026-08-25: Key Level was 0/4 (-118 pips). Keep the family live;
+    # raise quality (explicit role + grade A + 3 touches) instead of
+    # disabling the family. Do not HTF-veto counter-bias.
+    overrides:
+      actionability.gates.event_cluster_guard_enabled: true
+      analysis.levels.minimum_key_touches: 3
+      strategies.reaction.key_level.require_explicit_role: true
+      strategies.reaction.key_level.min_grade: A
+      execution.technique.selective_session_min_confluence: 3
+    # Policy name retained for registry continuity. Close-ratio front-load
+    # retired: uniform 1R/2R 50/50 + breakeven_after_r=1.0 across fixed_rr.
+    policy: fx_fixed_2r_frontload_v1
+    # Sterling's primary session is London; Tokyo/NY are deliberately quiet.
+    reaction_session: london
+    stop_envelope:
+      min_pips: 15
+      max_pips: 30
+      sl_distance: 0.30
+    activation:
+      max_spread_pips: 3
+    price_scale:
+      zone_merge_max_width: 0.25
+      opposing_minimum_separation_price: 0.25
+      fvg_entry_max_width_price: 0.25
+    targeting:
+      mode: fixed_rr
+      reward_risk: 2.0
+      target_r_multiples:
+        - 1.0
+        - 2.0
+      close_ratios:
+        - 0.5
+        - 0.5
+      breakeven_after_r: 1.0
+      entry_clips: 2
+
+  USDJPY:
+    pack: fx_jpy_cross_fixed_2r_v1
+    rollout: live
+    analysis:
+      zones:
+        major_maximum_width_price: 0.3
+        minimum_width_price: 0.06
+        preferred_maximum_width_price: 0.15
+        preferred_minimum_width_price: 0.08
+    broker_symbol: USDJPY
+    canonical_symbol: USDJPY
+    contract:
+      # 1000 JPY / ~159.47 USDJPY (spot 2026-08-17) -- same
+      # 1000/rate convention as GBPJPY's pip_value_per_lot. Drifts with the
+      # rate; revisit if USDJPY moves far from this level.
+      pip_value_per_lot: 6.27
+    # 2026 dig: Japan/US intervention when USDJPY breached 160. Guard is
+    # direction-aware (hard-block BUY only) with a 30-pip buffer - the prior
+    # symmetric 100-pip band sterilized every plan at ~159.4 including SELLs
+    # (0 publishes / 110+ activations on 2026-08-25).
+    overrides:
+      risk.exposure.defended_levels: '160'
+      risk.exposure.defended_level_buffer_price: 0.30
+      execution.technique.selective_session_min_confluence: 3
+    policy: fx_fixed_2r_v1
+    # Major pair, tight like EURUSD (not a volatile cross like GBPJPY).
+    # Tokyo (JPY driver) + NY (USD driver); London is intentionally excluded.
+    reaction_session: tokyo_ny
+    stop_envelope:
+      min_pips: 10
+      max_pips: 18
+      sl_distance: 0.18
+    activation:
+      max_spread_pips: 1
+    price_scale:
+      zone_merge_max_width: 0.15
+      opposing_minimum_separation_price: 0.15
+      fvg_entry_max_width_price: 0.15
+    targeting:
+      mode: fixed_rr
+      reward_risk: 2.0
+      target_r_multiples:
+        - 1.0
+        - 2.0
+      close_ratios:
+        - 0.5
+        - 0.5
+      breakeven_after_r: 1.0
+      entry_clips: 2
+
+  XAU:
+    pack: xau_fixed_4r_v1
+    rollout: live
+    # Technique: structure fixed_rr from pack (1R/2R/3R/4R 40/20/20/20 + BE
+    # after 1R, entry-targeted risk band 50-60p). Manual stays zone_ladder.
+    # M1 scalping keeps strategies.scalping discovery book.
+    # Withdrew min_sell_zone_score:10 (PR #449) - nearest-zone gap was ~1pt
+    # on n=26, inverted in 4/8 SELL cells, and the floor sat above most
+    # winning sample z scores. Field stays at default 0 (off); see
+    # docs/history/manual-formula-replay-key-level-floor-withdrawal.md.
+    broker_symbol: XAU
+    canonical_symbol: XAU
+    aliases:
+      - XAUUSD
