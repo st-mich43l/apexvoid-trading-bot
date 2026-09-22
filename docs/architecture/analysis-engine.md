@@ -20,64 +20,79 @@ state, engine, transport, visualization, telemetry).
 analysis-engine/
 ├── cmd/
 │   ├── analysis-engine/main.go     (exists)
-│   ├── replay/main.go              (not yet created)
-│   ├── benchmark/main.go           (not yet created)
+│   ├── replay/main.go              (implemented — Analysis Engine V2 task; drives Engine.Dispatch over real historical bars, optional PNG output)
+│   ├── benchmark/main.go           (not yet created — benchmarks live under test/benchmark/ instead)
 │   └── inspect/main.go             (not yet created)
 ├── internal/
 │   ├── config/          (exists — Configuration V3 direct reader)
-│   ├── market/           (exists — Candle, CandleWindow, Timeframe, Symbol, Geometry)
-│   ├── marketdata/       (scaffolded this task — event normalization/history, doc.go only)
-│   ├── indicator/        (exists — TrueRange, SimpleATR, WilderATR, AtrAt, AtrScalar)
-│   ├── structure/        (scaffolded this task — pivot/swing/structure/break/hierarchy)
-│   ├── liquidity/        (scaffolded this task — pool/equal-high-low/sweep/grab)
-│   ├── zone/             (scaffolded this task — supply/demand/OB/FVG/breaker/flip/mitigation)
-│   ├── context/          (scaffolded this task — MarketContext and its sub-contexts)
-│   ├── opportunity/       (scaffolded this task — Candidate, Evidence, Target, StrategyQuality)
-│   ├── strategy/          (scaffolded this task — Strategy interface; no strategy implementations)
-│   ├── confluence/        (scaffolded this task — compositional evidence combining, doc.go + Score)
-│   ├── state/             (scaffolded this task — SymbolState, wires every Book together)
-│   ├── engine/            (scaffolded this task — orchestration skeleton, AnalysisSnapshot)
-│   ├── transport/         (scaffolded this task — kafka/, redis/, doc.go only, no client libs added)
-│   ├── visualization/     (scaffolded this task — doc.go only)
-│   └── telemetry/         (scaffolded this task — doc.go only)
+│   ├── market/           (exists — Candle, CandleWindow, Timeframe, Symbol, Geometry, Price)
+│   ├── marketdata/       (implemented — Analysis Engine V2 task; BarEvent, validation, TimeframeHistory, MarketHistory, bootstrap)
+│   ├── indicator/        (exists — TrueRange, SimpleATR, WilderATR; extended this task with CanonicalATR dispatch + RollingSimpleATR)
+│   ├── structure/        (implemented — Analysis Engine V2 task; pivot/swing/classifier/displacement/break/event/hierarchy/state)
+│   ├── liquidity/        (implemented — Analysis Engine V2 task; pool/equal-high-low/sweep/reclaim)
+│   ├── zone/             (still scaffolded only — deliberately deferred, see market-structure-v2.md and the migration doc)
+│   ├── context/          (implemented — Analysis Engine V2 task; MarketContext, Build, DeriveBias)
+│   ├── opportunity/       (still scaffolded — value types only, no strategy consumes them yet)
+│   ├── strategy/          (still scaffolded — Strategy interface; no strategy implementations, next task)
+│   ├── confluence/        (still scaffolded — compositional evidence combining, doc.go + Score)
+│   ├── state/             (implemented — Analysis Engine V2 task; SymbolState wires History/Structure/Liquidity/Context/Opportunities together)
+│   ├── engine/            (implemented — Analysis Engine V2 task; SymbolWorker, Engine, Settings, AnalysisSnapshot)
+│   ├── transport/         (still scaffolded — kafka/, redis/, doc.go only, no client libs added; ADR-004)
+│   ├── visualization/     (implemented — Analysis Engine V2 task; stdlib PNG renderer, consumes AnalysisSnapshot data only)
+│   └── telemetry/         (implemented — Analysis Engine V2 task; Recorder, per-phase timing + counters)
 ├── test/                  (exists — centralized, one subdir per domain; see below)
-├── testdata/              (exists — golden-master fixtures)
+├── testdata/              (exists — golden-master fixtures, incl. real XAU M5 production data)
 ├── go.mod / go.sum
 └── README.md
 ```
 
-"Scaffolded this task" means: a real, compiling Go package with type
+"Scaffolded" (still applies to `zone`, `opportunity`, `strategy`,
+`confluence`, `transport`) means: a real, compiling Go package with type
 declarations and doc comments that establish the package's ownership
 boundary and prove the dependency direction against its neighbors — not a
-strategy or indicator implementation. Per the task's own §58 ("avoid empty
-architecture theater"), packages that don't need to prove a new dependency
-edge (`visualization`, `telemetry`, `transport/kafka`, `transport/redis`)
-got a `doc.go` only; packages central to the dependency graph
-(`context`, `opportunity`, `strategy`, `state`) got real, minimal,
-cross-importing types.
+strategy or indicator implementation. "Implemented" (the rest, as of the
+Analysis Engine V2 task) means real, tested, benchmarked logic — see
+[`../analysis-engine-v2-migration.md`](../analysis-engine-v2-migration.md)
+for exactly what each owns and its parity-vs-redesign status against the
+legacy Python it replaces.
 
-## Dependency graph (with one correction)
+## Dependency graph (with two corrections)
 
 ```text
-market
+market / telemetry
   ↓
-indicator / marketdata
+indicator / marketdata / config
   ↓
-structure / liquidity / zone
+structure / zone
+  ↓
+liquidity
   ↓
 context
   ↓
 opportunity            ← pure result/value types only (Candidate, Evidence, Target, StrategyQuality)
   ↓
-strategy / confluence  ← behavior: Strategy.Evaluate(ctx) returns []opportunity.Candidate
+strategy / confluence / state  ← behavior: Strategy.Evaluate(ctx) returns []opportunity.Candidate
   ↓
 engine
   ↓
 transport
 ```
 
-`visualization` and `telemetry` sit outside this chain as leaf consumers:
-they may import any core type; nothing core imports them.
+`visualization` is the sole leaf consumer outside this chain: it may
+import any core type; nothing core imports it.
+
+**Second correction, made during implementation (not the original
+freeze)**: this doc originally placed `structure / liquidity / zone` as
+same-rank siblings and classified `telemetry` as a leaf alongside
+`visualization`. Actually building Analysis Engine V2 broke both
+assumptions — `liquidity.PoolFromSwing` needs `structure.Swing` directly,
+and `engine`/`worker.go` needs to call `telemetry.Recorder.Time` to record
+its own phase timings, which a true "nothing imports this" leaf cannot
+support. `liquidity` was promoted to its own rank (above `structure`/
+`zone`, below `context`), and `telemetry` was moved to rank 0 alongside
+`market`. Full detail and the enforcing test:
+[`dependency-rules.md`](dependency-rules.md)'s own amendment section and
+`analysis-engine/test/architecture/dependency_test.go`.
 
 **Correction to the source task's own §51 ordering, explained**: the source
 task lists `strategy` before `opportunity`, which would forbid strategy
@@ -104,23 +119,30 @@ documented.
 ## Canonical type shapes
 
 These are the shapes this task's own spec writes out explicitly (§19, §21,
-§24, §26–27); they're now real, minimal Go in the repo, not just pseudocode.
-Fields are placeholders sized to compile and prove the graph, not a final
-schema — filling them in with real structure/liquidity/zone data is Stage
-2+ work per the migration map, not this task.
+§24, §26–27). As of the Analysis Engine V2 implementation task,
+`MarketContext`/`SymbolState`/`AnalysisSnapshot` below are real, populated
+with actual structure/liquidity data (not placeholder fields sized only to
+compile) — `opportunity`/`strategy` fields remain placeholders, since no
+strategy exists yet to populate them.
 
 ```go
-// internal/context/market.go
+// internal/context/market.go — real as of Analysis Engine V2
 type MarketContext struct {
     Symbol     market.Symbol
     Timeframes map[market.Timeframe]*TimeframeContext
-    Bias       BiasContext
-    Regime     RegimeContext
-    Liquidity  LiquidityContext
+    Structure  StructureContext   // the primary timeframe's structure.StructureState
+    Liquidity  LiquidityContext   // the primary timeframe's liquidity.LiquidityState
+    Zones      ZoneContext        // placeholder — zones deferred
+    Bias       BiasContext        // DERIVED from Structure via DeriveBias, never computed independently
+    Regime     RegimeContext      // placeholder — not in this task's DoD
     Volatility VolatilityContext
-    Session    SessionContext
+    Session    SessionContext     // placeholder — not in this task's DoD
 }
 ```
+
+`Timeframes` is the multi-timeframe-disagreement-preserving map: each
+timeframe keeps its own `StructureContext`/`LiquidityContext`, never
+flattened into one value (source task §36/§40).
 
 ```go
 // internal/opportunity/candidate.go
@@ -175,29 +197,37 @@ type StrategyQuality struct {
 ```
 
 ```go
-// internal/state/symbol_state.go
+// internal/state/symbol_state.go — real as of Analysis Engine V2
 type SymbolState struct {
     Symbol market.Symbol
 
+    History       *marketdata.MarketHistory // real per-timeframe bounded candle storage
+    Measurements  *MeasurementBook          // canonical ATR series per timeframe
     Structure     *structure.Book
     Liquidity     *liquidity.Book
-    Zones         *zone.Book
     Context       context.MarketContext
     Opportunities *opportunity.Book
 }
 ```
+
+(`Zones *zone.Book` is not yet a field — zones remain deferred; adding it
+is a mechanical follow-up once `internal/zone` is implemented, not an
+architectural change.)
 
 `SymbolState` is the one analytical truth for one symbol (§27). Strategies
 read it (via `context.MarketContext`); they do not rebuild it (§28 — no
 `BreakoutRetest → recalculate ATR → recalculate swings → rebuild zones`).
 
 ```go
-// internal/engine/engine.go
+// internal/engine/snapshot.go — real as of Analysis Engine V2
 type AnalysisSnapshot struct {
     Symbol        market.Symbol
     Time          int64
     Context       context.MarketContext
-    Opportunities []opportunity.Candidate
+    Structure     map[market.Timeframe]structure.StructureState
+    Liquidity     map[market.Timeframe]liquidity.LiquidityState
+    Opportunities []opportunity.Candidate // always empty until a strategy exists
+    Version       SnapshotVersion         // {StructureVersion, LiquidityVersion} — unknown version fails closed at load, never silently assumed
 }
 ```
 
@@ -237,22 +267,29 @@ then Stage 6) get a real package.
 
 ## Market history sizing
 
-Per §12: stored history and calculation window are distinct concepts. The
-target minimums:
+Per §12: stored history and calculation window are distinct concepts.
+Actual, config-driven depths as of Analysis Engine V2
+(`analysis.history.depth` in `config/analysis.yml`, read via
+`engine.HistoryDepthsFromConfig` — never hardcoded in Go):
 
 ```text
-M1   1,000-2,000 candles      M15  750-1,000 candles     H4   200-300 candles
-M5   ~1,000 candles           H1   ~500 candles
+M1   2,000 candles      M15  1,000 candles     H4   250 candles
+M5   1,000 candles      H1     500 candles     D1   150 candles
 ```
 
-`market.CandleWindow` (already implemented) is the bounded ring buffer this
-sizing applies to. A detector's *view* into that window (e.g. "breakout
-detector reads the last 100," "swing structure reads the last 300") is a
-narrower slice taken at read time — no algorithm scans the full stored
-window on every event. This is a sizing target for when `marketdata`'s
-bootstrap/history logic is implemented (Stage 1+ continuation, not this
-task); `CandleWindow.NewCandleWindow(capacity)` already supports an
-arbitrary capacity per caller.
+`marketdata.TimeframeHistory` (wrapping `market.CandleWindow`) is the
+bounded storage this sizing applies to, built via
+`marketdata.NewMarketHistory(symbol, depths, allowReplace)`.
+
+**Known simplification, documented not silent**: true **per-layer**
+differentiated calculation windows (§6's own example: M5 stored=1000,
+micro-lookback=100, internal=250, intermediate=500, major=800) are **not**
+implemented — every timeframe's structure/liquidity pass runs over its
+*full* stored window in one pass, not a narrower per-layer slice. The
+dependency-aware recomputation property below (an M1 close never
+recomputes H1) is still fully true regardless, because it's a
+*cross-timeframe* guarantee, not a within-timeframe one. See
+[`../analysis-engine-v2-migration.md`](../analysis-engine-v2-migration.md).
 
 ## Tick data separation (§13)
 
@@ -266,13 +303,21 @@ consumer exists yet to prove the boundary against).
 
 ## Dependency-aware recomputation (§31) and per-symbol workers (§30)
 
-Not implemented this task — `internal/engine` is a package-level skeleton
-only. Frozen as the target model: one symbol worker owns that symbol's
-mutable state, FIFO per symbol, parallel across symbols, and a closed bar
-on timeframe X only recomputes X's own dependents (§31's table), never
-every timeframe on every event. `internal/engine/dependency_graph.go` and
-`scheduler.go` are proposed-tree entries for when real computation exists
-to schedule.
+Implemented as of Analysis Engine V2: `internal/engine.SymbolWorker` wraps
+one `sync.Mutex`-guarded `state.SymbolState`; `internal/engine.Engine`
+holds a `sync.RWMutex`-guarded `map[Symbol]*SymbolWorker` and dispatches
+concurrently across symbols. Dependency-aware recomputation is achieved by
+construction rather than an explicit dependency-graph/scheduler file: each
+timeframe's structure/liquidity computation reads only that timeframe's
+own `TimeframeHistory`, so a closed M1 bar structurally cannot trigger H1
+recomputation — proven directly in
+`analysis-engine/test/engine/worker_test.go`'s
+`TestEngine_ClosingOneTimeframeNeverRecomputesAnother`, plus two
+concurrency proofs (`TestEngine_ConcurrentDispatchAcrossDifferentSymbolsNeverLosesAnEvent`,
+`TestEngine_ConcurrentDispatchToTheSameSymbolAccountsForEveryEventExactlyOnce`)
+run under `go test -race`. No separate `dependency_graph.go`/`scheduler.go`
+files exist — the guarantee doesn't need one, since it falls out of "each
+timeframe only reads its own history."
 
 ## Testing architecture
 

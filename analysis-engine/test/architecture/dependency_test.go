@@ -24,48 +24,67 @@ const modulePrefix = "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine
 //
 //	market
 //	  -> indicator / marketdata / config
-//	  -> structure / liquidity / zone
-//	  -> context
+//	  -> structure
+//	  -> zone           (independent of liquidity; not yet implemented)
+//	  -> liquidity      (depends on structure: Pool.Layer, Update(swings))
+//	  -> context        (depends on structure AND liquidity)
 //	  -> opportunity
 //	  -> strategy / confluence / state
 //	  -> engine
 //	  -> transport (incl. transport/kafka, transport/redis)
 //
-// visualization and telemetry are leaf consumers: absent from this map,
-// meaning (a) their own imports are never checked (they may depend on
-// anything), and (b) nothing else may import them — enforced separately
-// below, not via rank.
+// liquidity/context's ranks are an amendment made when Analysis Engine V2
+// was implemented (docs/adr's original freeze had structure/liquidity/zone
+// as same-rank siblings) — see docs/architecture/dependency-rules.md's own
+// note on this change, made the same documented, non-silent way as every
+// other correction in this codebase's history.
+//
+// visualization is a leaf consumer: absent from this map, meaning (a) its
+// own imports are never checked (it may depend on anything), and (b)
+// nothing else may import it — enforced separately below, not via rank.
+//
+// telemetry is NOT a leaf, despite the original architecture freeze
+// classifying it as one — that assumption (telemetry is only ever
+// consumed externally, by an operator/dashboard) was wrong the moment
+// engine needed to actually record its own timings (source task §57):
+// the thing being measured must call INTO the recorder. telemetry has
+// zero internal/* imports of its own (confirmed — see
+// internal/telemetry/metrics.go), so it sits at rank 0 alongside market:
+// a foundational, dependency-free utility anything at a higher rank may
+// import, not a top-of-graph consumer. This correction is made the same
+// documented, non-silent way as every other rank amendment in this file.
 var rank = map[string]int{
-	"market": 0,
+	"market":    0,
+	"telemetry": 0,
 
 	"indicator":  1,
 	"marketdata": 1,
 	"config":     1,
 
 	"structure": 2,
-	"liquidity": 2,
 	"zone":      2,
 
-	"context": 3,
+	"liquidity": 3,
 
-	"opportunity": 4,
+	"context": 4,
 
-	"strategy":   5,
-	"confluence": 5,
-	"state":      5,
+	"opportunity": 5,
 
-	"engine": 6,
+	"strategy":   6,
+	"confluence": 6,
+	"state":      6,
 
-	"transport":       7,
-	"transport/kafka": 7,
-	"transport/redis": 7,
+	"engine": 7,
+
+	"transport":       8,
+	"transport/kafka": 8,
+	"transport/redis": 8,
 }
 
 // leaf packages: exempt from having their own imports checked; nothing
 // else may import them.
 var leaf = map[string]bool{
 	"visualization": true,
-	"telemetry":     true,
 }
 
 func TestInternalDependencyDirection(t *testing.T) {

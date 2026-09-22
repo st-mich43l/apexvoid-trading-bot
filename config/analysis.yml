@@ -30,6 +30,76 @@ analysis:
       algorithm: simple
       length: 14
 
+  # Analysis Engine V2 (docs/analysis/market-structure-v2.md). Go-only today
+  # (analysis-engine/internal/marketdata, .../structure, .../liquidity) — no
+  # Python consumer exists for these leaves, unlike every other key in this
+  # file. Depth/thresholds below are grounded in real prior art already
+  # shipped and running in production this session (PRs #574/#578/#579's
+  # hold-based zone validity, technique_geometry.py's epsilon(), and
+  # zones.py::displacement()'s k/body_frac) rather than fresh guesses — see
+  # the spec doc's "Threshold provenance" section for the exact mapping.
+  # Promotion thresholds (structure.swing.promotion.*) have no Python
+  # precedent (the layer hierarchy is a genuine V2 concept) and are an
+  # initial calibration, not empirically tuned — flagged as a research item
+  # in docs/analysis-engine-v2-migration.md, not silently presented as final.
+  history:
+    # Stored history depth per timeframe (source task §5) — NOT the
+    # calculation lookback any one algorithm uses (§6); MarketHistory keeps
+    # this much, structure/liquidity request a narrower window at read time.
+    depth:
+      M1: 2000
+      M5: 1000
+      M15: 1000
+      H1: 500
+      H4: 250
+      D1: 150
+
+  structure:
+    version: v2
+    pivot:
+      # Matches Python's common swing_fractal_n=2 default (swings.py /
+      # structure.py's own find_swings(df, 2, ...) call) — a pivot needs
+      # this many strictly-lesser/greater bars on each side to be a raw
+      # candidate. Causal: a pivot at bar i is only CONFIRMED once
+      # right_bars additional bars have closed (docs/analysis/
+      # market-structure-v2.md's causality section).
+      left_bars: 2
+      right_bars: 2
+    swing:
+      # A confirmed pivot whose excursion (in ATR) is below this floor is
+      # not promoted to a Swing at all — not every fractal is meaningful
+      # (source task §12).
+      minimum_excursion_atr: 0.5
+      promotion:
+        internal_atr: 1.0
+        intermediate_atr: 2.0
+        major_atr: 3.5
+    equal_level:
+      # Matches technique_geometry.py's epsilon() — 0.05 ATR — already the
+      # live, tested "same price level" tolerance for zone/level identity.
+      tolerance_atr: 0.05
+    break:
+      # Matches this session's PR #574 invalidation_tolerance_atr exactly —
+      # the real, live threshold XAU technique zones use today to decide a
+      # close is genuinely beyond a level, not noise.
+      minimum_penetration_atr: 0.5
+      # Matches zones.py::displacement()'s k=1.5 / body_frac=0.55 exactly.
+      displacement_range_atr: 1.5
+      displacement_body_dominance: 0.55
+      # Matches PR #574's sweep_reclaim_bars=6 exactly.
+      sweep_reclaim_bars: 6
+      failed_break_reclaim_bars: 3
+
+  liquidity:
+    version: v1
+    # Same epsilon as structure.equal_level.tolerance_atr — one canonical
+    # "same price level" tolerance across structure and liquidity, not two
+    # independently-drifting ones (the exact class of bug PR #574-580 spent
+    # this session fixing in the Python system).
+    equal_level_tolerance_atr: 0.05
+    pool_minimum_touches: 2
+    sweep_reclaim_bars: 6
+
   trendlines:
     # V2 keeps A/B anchors immutable, requires a later causal validation, and
     # turns this band into an interaction watch rather than an automatic fill.

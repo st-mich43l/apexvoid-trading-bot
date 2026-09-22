@@ -3,17 +3,19 @@
 ## Analysis Engine internal dependency direction
 
 ```text
-market
+market / telemetry
   ↓
-indicator / marketdata
+indicator / marketdata / config
   ↓
-structure / liquidity / zone
+structure / zone
+  ↓
+liquidity
   ↓
 context
   ↓
 opportunity
   ↓
-strategy / confluence
+strategy / confluence / state
   ↓
 engine
   ↓
@@ -29,8 +31,43 @@ zone MUST NOT import strategy
 market MUST NOT import anything under internal/ (it is the floor)
 ```
 
-`visualization` and `telemetry` are leaf consumers outside this chain: they
-may import any core type; nothing core imports them.
+`visualization` is the sole true leaf consumer: it may import any core
+type; nothing core imports it. `telemetry` is **not** a leaf (see the
+amendment below) — it sits at rank 0 alongside `market`.
+
+### Amendment: liquidity/context promoted, telemetry reclassified
+
+Two corrections were made while actually *implementing* Analysis Engine
+V2 (as opposed to the original architecture-freeze task, which only
+scaffolded placeholders), both caught by
+`analysis-engine/test/architecture/dependency_test.go` itself failing
+rather than found by inspection — the same non-silent-correction
+discipline as the strategy/opportunity ordering fix below:
+
+1. **`liquidity` and `context` are no longer same-rank siblings of
+   `structure`/`zone`.** The original freeze treated
+   `structure / liquidity / zone` as one same-rank group. Once liquidity
+   pools were actually built (`internal/liquidity`), they turned out to
+   need `structure.Swing`/`structure.StructureLayer` directly
+   (`PoolFromSwing(s structure.Swing, ...)`, `Pool.Layer`) — a real,
+   necessary import that a same-rank classification forbids. `liquidity`
+   was promoted to its own rank, strictly above `structure`/`zone` and
+   strictly below `context` (which depends on both). The chain is now
+   `structure/zone → liquidity → context`, not three siblings.
+2. **`telemetry` moved from "leaf" to rank 0.** The original freeze
+   classified `telemetry` as a leaf consumer (like `visualization`) on
+   the assumption it would only ever be read by an external
+   operator/dashboard. That assumption broke the moment `internal/engine`
+   needed to actually *call into* `telemetry.Recorder.Time`/`.Count` to
+   record its own phase timings (source task §57) — the thing being
+   measured must import the recorder, which a true leaf (nothing may
+   import it) cannot support. `telemetry` has zero `internal/*` imports
+   of its own, so it sits at rank 0 alongside `market`: a foundational,
+   dependency-free utility any higher rank may import.
+
+Both changes are enforced, not just documented — see the `rank`/`leaf`
+maps and their own inline comments in
+`analysis-engine/test/architecture/dependency_test.go`.
 
 ### The one correction, in full
 

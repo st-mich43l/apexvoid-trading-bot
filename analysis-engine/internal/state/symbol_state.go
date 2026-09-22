@@ -8,24 +8,73 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/context"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/liquidity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/marketdata"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
-	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/zone"
 )
 
-// SymbolState is one symbol's canonical analytical state, per the source
-// task's §27. MarketHistory (per-timeframe CandleWindow) is deliberately
-// not embedded here yet — it belongs to internal/marketdata, which has no
-// implementation to hold a reference to yet (see marketdata/doc.go);
-// adding a placeholder field for it now would prove nothing the other
-// fields don't already prove about the state -> {structure, liquidity,
-// zone, context, opportunity} dependency edges.
+// SymbolState is one symbol's canonical analytical state, per source task
+// §40. Zones is deliberately absent — internal/zone is not implemented
+// this task (see docs/analysis-engine-v2-migration.md); adding a nil-only
+// placeholder field here would prove nothing the other fields don't
+// already prove about the state -> {structure, liquidity, context,
+// opportunity} dependency edges, and source task §58 asks not to
+// scaffold what nothing yet uses.
 type SymbolState struct {
 	Symbol market.Symbol
 
+	History      *marketdata.MarketHistory
+	Measurements *MeasurementBook
+
 	Structure     *structure.Book
 	Liquidity     *liquidity.Book
-	Zones         *zone.Book
 	Context       context.MarketContext
 	Opportunities *opportunity.Book
+}
+
+// NewSymbolState returns an empty SymbolState with History bounded per
+// depths (config/analysis.yml's analysis.history.depth.*, read by
+// internal/engine — state itself has no config dependency) and every
+// other book initialized empty, ready for internal/engine to populate.
+func NewSymbolState(symbol market.Symbol, depths map[market.Timeframe]int, allowReplaceForming bool) (*SymbolState, error) {
+	history, err := marketdata.NewMarketHistory(symbol, depths, allowReplaceForming)
+	if err != nil {
+		return nil, err
+	}
+	return &SymbolState{
+		Symbol:        symbol,
+		History:       history,
+		Measurements:  NewMeasurementBook(),
+		Structure:     structure.NewBook(),
+		Liquidity:     liquidity.NewBook(),
+		Opportunities: &opportunity.Book{},
+	}, nil
+}
+
+// MeasurementBook is Canonical Measurements — the pipeline stage between
+// MarketHistory and Structure V2 (source task §1's own diagram: "Market
+// History -> Canonical Measurements -> Market Structure V2"). Today this
+// is the canonical ATR series per timeframe (indicator.CanonicalATR's
+// output) — the one series structure.Update/liquidity.Update must be
+// given, never a second independently-computed one (source task §27).
+type MeasurementBook struct {
+	ATRByTimeframe map[market.Timeframe][]float64
+}
+
+// NewMeasurementBook returns an empty MeasurementBook.
+func NewMeasurementBook() *MeasurementBook {
+	return &MeasurementBook{ATRByTimeframe: make(map[market.Timeframe][]float64)}
+}
+
+// SetATR stores tf's canonical ATR series, index-aligned with whatever
+// candle slice produced it (the caller's responsibility to keep paired —
+// see internal/engine, which always computes and consumes them together).
+func (m *MeasurementBook) SetATR(tf market.Timeframe, series []float64) {
+	m.ATRByTimeframe[tf] = series
+}
+
+// ATR returns tf's canonical ATR series, or nil if none has been computed
+// yet.
+func (m *MeasurementBook) ATR(tf market.Timeframe) []float64 {
+	return m.ATRByTimeframe[tf]
 }
