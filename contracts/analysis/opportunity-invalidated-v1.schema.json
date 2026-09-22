@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://apexvoid.internal/contracts/analysis/opportunity-invalidated-v1.schema.json",
+  "title": "analysis.opportunity.invalidated.v1",
+  "description": "SKELETON, not yet wired into any service (docs/adr/007-shared-cross-service-contracts.md). Published by analysis-engine when a previously-published opportunity (analysis.opportunity.v1) is no longer valid — its invalidation price traded through, it expired, or the structure it was based on was itself invalidated. algo-bot's analysis_client uses this to retire a Candidate it may have already started evaluating. Deliberately a separate, minimal event rather than re-publishing the full opportunity with a status flag — a consumer that only cares about invalidation should not need the full Candidate shape.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["opportunity_id", "symbol", "reason", "invalidated_at"],
+  "properties": {
+    "opportunity_id": {
+      "type": "string",
+      "description": "Matches the id field of the analysis.opportunity.v1 event being invalidated."
+    },
+    "symbol": { "type": "string" },
+    "reason": {
+      "type": "string",
+      "description": "Machine-readable reason code, same discipline as opportunity-v1's evidence.code — e.g. \"invalidation_price_traded_through\", \"expired\", \"structure_invalidated\"."
+    },
+    "invalidated_at": { "type": "integer", "description": "Unix seconds." }
+  }
+}

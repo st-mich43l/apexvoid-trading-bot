@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://apexvoid.internal/contracts/execution/trade-plan-v1.schema.json",
+  "title": "execution.trade-plan.v1",
+  "description": "SKELETON, not yet wired into any service (docs/adr/007-shared-cross-service-contracts.md). Target Kafka replacement for today's real, live contract: contracts/autotrade/trade-plan-v8.json (TradePlan V8, Redis-transported, built by algo-bot's app/autotrade/trade_plan_builder.py, parsed/executed by ctrader-engine's TradePlanRuntime.cs — that fixture set is NOT superseded by this file yet; it remains the operative contract until Kafka cutover, per ADR-004/ADR-007). Field shape below is a deliberately thinned skeleton of the real V8 plan shape (analysis/source_structure/entry/stop/targets), not a field-for-field copy — the real contract has ~20+ fields per section (target ladders, scale-in legs, opposing-zone context, risk multiplier) that belong in a full port, not an architecture-task skeleton.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["plan_id", "symbol", "direction", "created_at", "expires_at", "entry", "stop", "targets"],
+  "properties": {
+    "plan_id": { "type": "string" },
+    "opportunity_id": {
+      "type": "string",
+      "description": "Traces back to the analysis.opportunity.v1 event this plan was built from — analysis-engine never builds a TradePlan itself (docs/architecture/algo-bot.md's TradePlan-ownership section)."
+    },
+    "symbol": { "type": "string" },
+    "direction": { "type": "string", "enum": ["BUY", "SELL"] },
+    "created_at": { "type": "integer" },
+    "expires_at": { "type": "integer" },
+    "entry": {
+      "type": "object",
+      "description": "Skeleton of trade-plan-v8.json's entry object (type/zone_low/zone_high/activation/legs).",
+      "additionalProperties": true,
+      "required": ["type"],
+      "properties": {
+        "type": { "type": "string", "enum": ["market_watch", "single_limit", "zone_split", "market_with_limit_scale"] }
+      }
+    },
+    "stop": {
+      "type": "object",
+      "description": "Skeleton of trade-plan-v8.json's stop object.",
+      "additionalProperties": true,
+      "required": ["type", "price"],
+      "properties": {
+        "type": { "type": "string" },
+        "price": { "type": "string", "description": "Decimal-as-string, matching V8's own convention (avoids float round-tripping across languages)." }
+      }
+    },
+    "targets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": ["target_id", "price"],
+        "properties": {
+          "target_id": { "type": "string" },
+          "price": { "type": "string" },
+          "close_ratio": { "type": "string" }
+        }
+      }
+    }
+  }
+}

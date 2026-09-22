@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://apexvoid.internal/contracts/analysis/opportunity-v1.schema.json",
+  "title": "analysis.opportunity.v1",
+  "description": "SKELETON, not yet wired into any service (docs/adr/007-shared-cross-service-contracts.md). Published by analysis-engine when a Strategy.Evaluate call produces a Candidate; consumed by algo-bot's target analysis_client package (docs/architecture/algo-bot.md). Field shape mirrors analysis-engine/internal/opportunity.Candidate exactly (docs/architecture/analysis-engine.md) — this schema and that Go struct must be kept in sync by hand until a schema-to-struct generator exists (none does yet). Never contains a lot size, account balance, or risk multiplier — see docs/adr/002-analysis-vs-orchestration-boundary.md: an opportunity is a technical fact, not a trading decision.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "strategy", "symbol", "direction", "entry", "invalidation", "targets", "evidence", "quality", "created_at", "expires_at"],
+  "properties": {
+    "id": { "type": "string" },
+    "strategy": {
+      "type": "string",
+      "description": "opportunity.StrategyID — an architectural slot name (e.g. \"breakoutretest\"), not yet a fixed enum since no strategy is implemented."
+    },
+    "symbol": { "type": "string" },
+    "direction": { "type": "string", "enum": ["BUY", "SELL"] },
+    "entry": {
+      "type": "object",
+      "description": "opportunity.EntryZone — deliberately not internal/zone's richer Zone type; see docs/architecture/analysis-engine.md's naming note.",
+      "additionalProperties": false,
+      "required": ["low", "high"],
+      "properties": {
+        "low": { "type": "number" },
+        "high": { "type": "number" }
+      }
+    },
+    "invalidation": {
+      "type": "object",
+      "description": "market.PriceLevel.",
+      "additionalProperties": false,
+      "required": ["price"],
+      "properties": {
+        "price": { "type": "number" },
+        "label": { "type": "string" }
+      }
+    },
+    "targets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["price"],
+        "properties": {
+          "price": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["price"],
+            "properties": {
+              "price": { "type": "number" },
+              "label": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "description": "Machine-readable facts, per the source task's §25 — e.g. \"major_structure_bearish\", \"m5_bos_down\", \"fvg_present\". Never opaque free text.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code"],
+        "properties": { "code": { "type": "string" } }
+      }
+    },
+    "quality": {
+      "type": "object",
+      "description": "opportunity.StrategyQuality — strategy-specific components, per §26. Never a universal formula.",
+      "additionalProperties": false,
+      "required": ["overall"],
+      "properties": {
+        "overall": { "type": "number" },
+        "components": {
+          "type": "object",
+          "additionalProperties": { "type": "number" }
+        }
+      }
+    },
+    "created_at": { "type": "integer", "description": "Unix seconds." },
+    "expires_at": { "type": "integer", "description": "Unix seconds." }
+  }
+}

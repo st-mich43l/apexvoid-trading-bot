@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://apexvoid.internal/contracts/market/tick-v1.schema.json",
+  "title": "market.tick.v1",
+  "description": "SKELETON, not yet wired into any service (docs/adr/007-shared-cross-service-contracts.md). Per docs/architecture/analysis-engine.md's tick-data-separation section: consumed for spread/velocity/quote-acceleration/micro-rejection/execution-microstructure quality only, never as the primary source for major swing structure, BOS/CHoCH, order blocks, or dealing ranges. No live tick consumer exists yet — this schema has no current production equivalent to mirror (today's spot quotes are the price:{SYMBOL}:spot Redis key, bid/ask only, no tick stream).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["symbol", "time", "bid", "ask"],
+  "properties": {
+    "symbol": { "type": "string" },
+    "time": {
+      "type": "integer",
+      "description": "Unix second (or sub-second — resolution not yet decided; flagged, not resolved, by this skeleton)."
+    },
+    "bid": { "type": "number" },
+    "ask": { "type": "number" }
+  }
+}
