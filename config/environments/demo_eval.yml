@@ -66,15 +66,14 @@ auto_algo:
   risk:
     exposure:
       allow_concurrent_strategies: true
-      # Not present in the base config/auto-algo.yml at all — these two
-      # fields have no base-file value today and only ever appear via this
-      # profile; their "off-profile" default comes from the Python schema
-      # (Pydantic field default), not from any YAML. Flagged, not fixed,
-      # in docs/configuration-v3-migration-audit.md §2 — this is exactly
-      # the "hidden default" pattern §14 of the new architecture wants
-      # eliminated (every field should have an explicit YAML value once a
-      # loader is authoritative, so "missing" fails startup instead of
-      # silently reading a code default).
+      # Stage C2 update: allow_hedged_xau/require_flat_for_range now have
+      # a real base value in config/auto-algo.yml (surfaced from their
+      # Python schema default per §8 — the JSON Schema validator caught
+      # this exact gap: an overlay setting a leaf the base schema didn't
+      # know about). This overlay's own values below genuinely differ
+      # from production's (true/false here vs. false/true in the base) —
+      # that's real, intentional demo_eval behavior, not the same "hidden
+      # default" issue anymore.
       allow_hedged_xau: true
       non_hedged_opposite_policy: broker_netting
       require_flat_for_range: false
@@ -92,11 +91,10 @@ auto_algo:
       multiple_matches_enabled: true
       track_all_structural_matches: true
     range_reversion:
-      # `enabled`/`flip_enabled`/`two_sided_enabled` at this level: the
-      # base config/auto-algo.yml only has `box_scale_out_enabled`,
-      # `flip_enabled`, `range_edge.*`, and `two_sided_enabled` under
-      # strategies.range_reversion — `enabled` itself has no base-file
-      # value either, same schema-default note as risk.exposure above.
+      # `enabled` now has a base value too (Stage C2 — see risk.exposure's
+      # comment above); this overlay's value happens to equal the base
+      # default (true either way), transcribed faithfully rather than
+      # dropped as redundant, same policy as the rest of this file.
       enabled: true
       flip_enabled: true
       two_sided_enabled: true

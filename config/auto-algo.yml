@@ -83,7 +83,23 @@ auto_algo:
     exposure:
       allow_concurrent_strategies: true
       non_hedged_opposite_policy: broker_netting
-      opposing_minimum_separation_price: 15.0
+      # §8/§9: newly surfaced (RiskExposureConfig.allow_hedged_xau /
+      # .require_flat_for_range Python schema defaults, unchanged values)
+      # — previously only reachable via the demo_eval profile override
+      # (which happened to set both to the exact same values as the
+      # default), never a base trading-bot.yml leaf. The schema caught
+      # this: an overlay setting a leaf with no base value is exactly the
+      # gap §8 exists to close.
+      allow_hedged_xau: false
+      require_flat_for_range: true
+      # §7: opposing_minimum_separation_price REMOVED — price-absolute,
+      # already instrument-scoped live via app.core.instrument_geometry.
+      # opposing_minimum_separation_price(symbol) (same reasoning as
+      # analysis.yml's zones.merge_max_width/confluence.merge_gap_price
+      # removal — see that file's comment). Old value here (15.0) was
+      # byte-identical to XAU's own instruments.yml price_scale value;
+      # every live instrument already declares its own, instruments.yml
+      # is the one owner now.
     position_limits:
       max_tracked_candidates: 9
       maximum_per_symbol: 1
@@ -145,7 +161,10 @@ auto_algo:
         maximum_chase_stop_fraction: 0.30
         rearm_distance_atr: 0.25
       target:
-        preferred_ladder_pips: 10,15,20
+        preferred_ladder_pips:
+          - 10
+          - 15
+          - 20
         minimum_net_target_pips: 10
       stop:
         minimum_pips: 12
@@ -195,6 +214,10 @@ auto_algo:
       track_all_structural_matches: true
     range_reversion:
       box_scale_out_enabled: true
+      # §8/§9: newly surfaced (StrategiesRangeReversionConfig.enabled
+      # Python schema default, unchanged value True) — same
+      # only-reachable-via-demo_eval-override gap as risk.exposure above.
+      enabled: true
       flip_enabled: true
       range_edge:
         allow_rejection_only: true

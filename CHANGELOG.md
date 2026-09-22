@@ -13,6 +13,33 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
+- Configuration V3 Stage C2 (see `docs/configuration-v3-migration-audit.md`'s
+  Stage C2 update). Cleaned the Stage C1 categorized YAML itself: removed
+  three global price-denominated geometry defaults that were byte-identical
+  to XAU's own instrument-pack values (`analysis.zones.merge_max_width`/
+  `confluence.merge_gap_price`, `auto_algo.risk.exposure.
+  opposing_minimum_separation_price`) after confirming their live Python
+  consumers already resolve per-instrument; removed duplicated symbol/feed
+  lists (`analysis.scanner.symbols`, `analysis.ctrader_feed.*`) that
+  should derive from `instruments.yml`; removed `telegram.presentation.
+  seq_reset_tz` as an independently-set value (now derived from
+  `runtime.timezone` — confirmed the same one operational timezone via a
+  13-call-site grep, not narrowly Telegram-scoped); surfaced 5 previously-
+  hidden Python schema defaults as explicit YAML (unchanged values);
+  converted 9 CSV-string fields to native YAML lists; converted every
+  dotted-key override in `instruments.yml` to nested mappings. Added
+  `contracts/configuration/apexvoid-config-v3.schema.json` (JSON Schema,
+  `additionalProperties: false`) and a reference include/merge/overlay
+  resolver (`config/scripts/resolve_reference.py`) that produces and
+  validates `contracts/configuration/examples/resolved-production-v3.json`.
+  `config/scripts/verify_stage_c2_parity.py` documents and verifies all 26
+  individual divergences from Stage C1; `config/scripts/config_check.py`
+  runs everything as one command. `config/trading-bot.yml` and the
+  generated `ResolvedRuntimeManifest` remain the sole live, unmodified
+  authority — no Python/Go/.NET runtime code changed, nothing here can
+  affect production. Stage C3 onward (direct readers replacing the live
+  path, cross-language parity, cutover, deletion) explicitly deferred —
+  see the audit's "What this update does not do, and why."
 - Renamed the XAU instrument pack/policy from `xau_fixed_2r_v1` to
   `xau_fixed_4r_v1` (owner-directed 2026-09-22: "XAU already trade with
   4R already" — the name had gone stale since the 2026-09-15 change to

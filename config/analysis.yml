@@ -22,6 +22,9 @@ analysis:
   # still reads the Wilder formula today; making every consumer (detectors,
   # structure, zones, scalping, worker) read this one canonical value is a
   # real code change for a later stage, tracked against this setting.
+  # §23 requires this to become real before cutover, not stay decorative —
+  # see docs/configuration-v3-migration-audit.md's C2 update for the
+  # consumer-by-consumer plan and the required parity coverage.
   indicators:
     atr:
       algorithm: simple
@@ -50,7 +53,13 @@ analysis:
     m1:
       # Prefer body/strong close for technique pack allowlist; wick-only is
       # blocked at activation when execution.technique.require_sweep_body.
-      patterns: body_close,strong_close,engulfing,wick_rejection,pin_bar,hammer
+      patterns:
+        - body_close
+        - strong_close
+        - engulfing
+        - wick_rejection
+        - pin_bar
+        - hammer
       strong_close_pct: 0.2
       wick_fraction: 0.5
 
@@ -58,35 +67,74 @@ analysis:
     # PR-D: filter technique instances via validate_technique_instance predicates.
     validation_enabled: true
 
+  # Dimensionless zone-merge fields consumed live via
+  # app.analysis.detectors._detector_settings(symbol) ->
+  # detector_settings_from(instrument_runtime_view(symbol)) — already
+  # correctly instrument-scoped today, unrelated to the price-absolute
+  # zones.merge_max_width / zones.confluence.merge_gap_price removed below.
+  # §8/§9: newly surfaced explicitly — previously only a Python schema
+  # default (AnalysisZonesConfig.merge_overlap / AnalysisMeasurementsConfig.
+  # max_merged_zone_atr), never a settable trading-bot.yml leaf; value
+  # unchanged (0.5 / 3.0, the real current schema default in both cases).
   zones:
-    confluence:
-      merge_gap_price: 1.0
-    merge_max_width: 6.0
+    merge_overlap: 0.5
+
+  measurements:
+    max_merged_zone_atr: 3.0
+
+  # §7: zones.merge_max_width / zones.confluence.merge_gap_price (price-
+  # absolute, not ATR-relative — see zones.merge_overlap/max_merged_zone_atr
+  # above for those) are REMOVED from here, not just left unused. Investigated
+  # live: app/core/instrument_geometry.py::merge_max_width(symbol)/
+  # merge_gap_price(symbol) already resolve through instrument_runtime_view
+  # (analysis_runtime(symbol)), and every live instrument (instruments.yml,
+  # each pack or instrument override) already declares its own
+  # price_scale.zone_merge_gap_price/zone_merge_max_width — so this was not
+  # live-wrong today, but the old global value here (1.0 / 6.0) was byte-
+  # identical to XAU's own pack number, meaning a new instrument that forgot
+  # to declare these two leaves would have silently inherited XAU's
+  # dollar-scale geometry, exactly the failure mode §7 forbids by
+  # construction. instruments.yml is the one owner now; each pack/instrument
+  # must declare both explicitly (schema should make them required, not
+  # defaulted, once a real loader exists).
 
   # --- market_data.* from the old trading-bot.yml, unchanged values ---
   calendar:
-    currencies: USD,EUR,GBP,JPY
+    currencies:
+      - USD
+      - EUR
+      - GBP
+      - JPY
     enabled: true
     event_guard_hours: 4.0
     feed_nextweek: https://nfs.faireconomy.media/ff_calendar_nextweek.json
     feed_thisweek: https://nfs.faireconomy.media/ff_calendar_thisweek.json
     news_brief_hour: 7
     news_guard_block: false
-    oil_keywords: crude oil inventories,opec,cushing,api weekly crude
+    oil_keywords:
+      - crude oil inventories
+      - opec
+      - cushing
+      - api weekly crude
     user_agent: apexvoid-trading-bot/1.0 (+contact)
 
-  ctrader_feed:
-    symbol: XAUUSD
-    timeframes:
-      - M1
-      - M5
-      - M15
-      - H1
+  # §4/§5: ctrader_feed.symbol/timeframes REMOVED. Feed subscription derives
+  # from instruments.yml: subscribe every instrument with rollout == live,
+  # using its own broker_symbol and timeframes list — never a second,
+  # independent symbol/timeframe list. The single XAUUSD/[M1,M5,M15,H1]
+  # this held is exactly instruments.yml's XAU entry (broker_symbol XAUUSD
+  # via the aliases list, timeframes from its pack) — a real duplicate, not
+  # a distinct concept.
 
   scanner:
     execution_timeframe: M5
-    htf: H1,M15
-    symbols: XAU,EURUSD,GBPUSD,GBPJPY,USDJPY
+    # HTF context set: analysis semantics (which higher timeframes bias is
+    # read from), not a feed subscription list — stays here per §5.
+    htf:
+      - H1
+      - M15
+    # §3: scanner.symbols REMOVED — derives from instruments.yml
+    # (instruments.*.rollout == live), never a second symbol list.
     window: 500
 
   sessions:

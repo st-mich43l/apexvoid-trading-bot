@@ -29,7 +29,9 @@ execution:
     # Strict PD only for reversal + range_reversion archetypes (not continuation).
     # Measured asymmetry in trends: ~93% BUY allowed in downtrend vs ~4% SELL;
     # applying strict PD to momentum/trend_pullback inverts their intended edge.
-    strict_premium_discount_archetypes: reversal,range_reversion
+    strict_premium_discount_archetypes:
+      - reversal
+      - range_reversion
     # MAD is entry quality / structure analysis only — never block activation.
     mad_hard_gate_enabled: false
 
@@ -113,9 +115,20 @@ execution:
     wick_stop_buffer_atr: 0.15
 
   targeting:
-    default_ladder_pips: 30,60,90,120,200
+    default_ladder_pips:
+      - 30
+      - 60
+      - 90
+      - 120
+      - 200
     post_fill_target_fallback: fill_relative
-    range_ladder_pips: 15,20,30,40,50,70
+    range_ladder_pips:
+      - 15
+      - 20
+      - 30
+      - 40
+      - 50
+      - 70
     tp_weights:
       - '20'
       - '20'
