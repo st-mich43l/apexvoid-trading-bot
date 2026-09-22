@@ -767,3 +767,94 @@ Not reached in this update. Go (C4) and .NET (C5) direct readers,
 cross-language parity (C6), the actual full cutover of every runtime
 (C7), and deletion of the config-compiler/`ResolvedRuntimeManifest`/
 legacy machinery (C8) remain open. Continuing in a follow-on update.
+
+---
+
+# Stage C4 update — Go direct YAML reader, old manifest reader deleted
+
+## What was built
+
+`analysis-engine/internal/config/v3_document.go` + `v3_instruments.go` —
+a third, independent implementation of §14's include/merge/overlay spec
+(alongside `algo-bot/app/configuration/v3_root.py` and `config/scripts/
+resolve_reference.py`), using `gopkg.in/yaml.v3` (added as this module's
+first real dependency) to parse into a generic `map[string]any` tree
+rather than per-category Go structs — analysis-engine's only actual
+config consumer today is instrument geometry (`GeometryFor`), the same
+narrow surface the deleted manifest-JSON reader covered, so typed structs
+for the other nine categories are deferred until a real Go consumer needs
+one rather than built speculatively ahead of that need.
+
+`GeometryFor(symbol)` reads `instruments.instruments.<symbol>`, merges
+`instrument_packs.<pack>` underneath it (instrument's own leaves win,
+matching `instrument_packs.py`'s own merge rule and `instruments.yml`'s
+comments on it) via the same `deepMerge` the include/overlay resolution
+already uses, and extracts `contract.pip_size`/`contract.price_digits` —
+fails closed (an error, never a zero value) for an unknown instrument or
+missing/non-numeric geometry, per §9's Go-specific instruction ("config
+structs may use zero values only during deserialization, but validation
+must reject missing required config rather than treating zero as a
+default"). `LiveInstruments()` derives the live symbol list from
+`instruments.*.rollout == live` — §3's single-owner rule, satisfied in Go
+the same way the Python `config_file.py` already satisfies it.
+
+**Deleted, not kept as a fallback** (§34 — "Do not leave manifest OR yaml
+mode selection. YAML V3 only."): `internal/config/manifest.go`,
+`geometry.go`, `manifest_test.go` (the `ResolvedRuntimeManifest`-JSON
+reader from the prior analysis-engine migration slice), and
+`testdata/runtime-manifest-example.json`. Confirmed before deleting:
+analysis-engine was never wired to anything live (no Redis consumer, no
+detector using this geometry for a real decision) — this is the lowest-
+risk of the three languages' cutovers by construction, unlike Python's
+(§C3, which *is* wired to `bot`'s live config now) or .NET's (§C5,
+`ctrader-engine` genuinely executes broker orders off
+`ResolvedRuntimeManifest` today).
+
+## Parity proof
+
+`internal/config/v3_document_test.go` (13 tests) reads the real
+`config/apexvoid.yml`/`config/apexvoid.demo-eval.yml` directly (not a
+copied fixture — deliberately, matching
+`algo-bot/tests/test_config_v3_parity.py`'s own choice, for the same
+reason: proving parity against what every language actually reads, not
+something that could quietly drift from it):
+
+- `GeometryFor` matches the known correct pip size/digits for all 5 live
+  instruments (XAU 0.1/2, EURUSD/GBPUSD 0.0001/5, GBPJPY/USDJPY 0.01/3) —
+  the same values the deleted manifest-JSON reader's own tests asserted
+  in the prior migration slice, now sourced from YAML directly instead of
+  a compiled-JSON intermediate.
+- `LiveInstruments()` returns exactly the 5 live symbols.
+- Include-graph error handling and overlay merge semantics — the same
+  cases `algo-bot`'s Python test suite and `config/scripts/
+  resolve_reference.py` both exercise, now proven a third time
+  independently in Go.
+
+`gofmt`, `go vet`, `go build`, `go test`, `go test -race` all clean
+(`golang:1.23-alpine`, whole-repository mount — `internal/config`'s tests
+need `../../../config/` to resolve to the real repo root; see the
+module's own updated README for the corrected Docker invocation).
+
+## What Stage C4 does NOT claim
+
+- analysis-engine still isn't wired to Redis, detectors, or any live
+  decision path — this cutover only concerns the one piece of config
+  surface that already existed (`Geometry`). The rest of the Go analysis
+  migration (`docs/go-analysis-migration-audit.md`'s own remaining
+  stages: swings, structure, zones, MAD, ...) is unaffected by and
+  unrelated to this Configuration V3 work.
+- Cross-language parity (§38, C6) — proving Go's normalized output
+  matches Python's and (eventually) .NET's for the *same* resolved
+  document — is not implemented as an automated check yet; both proved
+  parity against the real `config/apexvoid.yml` independently in this
+  update, but nothing yet asserts their two outputs are identical to each
+  other in one test run.
+
+## C5–C8 status
+
+Not reached in this update. .NET direct reader (C5, the highest-stakes
+of the three — `ctrader-engine` genuinely executes broker orders today),
+automated cross-language parity (C6), full cutover including actual
+ansible-driven production (C7), and deletion of the config-compiler/
+`ResolvedRuntimeManifest`/legacy Python catalog machinery (C8) remain
+open.

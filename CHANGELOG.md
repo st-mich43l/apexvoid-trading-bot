@@ -13,6 +13,21 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
+- Configuration V3 Stage C4 (Go): `analysis-engine/internal/config` now
+  reads `config/apexvoid.yml` directly (`gopkg.in/yaml.v3`, a real
+  include/merge/overlay implementation matching §14 — the same spec
+  Python's `v3_root.py` and `config/scripts/resolve_reference.py` already
+  implement). `GeometryFor`/`LiveInstruments` replace the old
+  `ResolvedRuntimeManifest`-JSON reader entirely — `manifest.go`/
+  `geometry.go`/`manifest_test.go`/the manifest-example testdata fixture
+  deleted, not kept as a fallback (no manifest-or-YAML mode selection).
+  13 new tests read the real `config/apexvoid.yml`/`apexvoid.demo-eval.yml`
+  directly and confirm correct pip size/digits for all 5 live instruments
+  plus include-graph error handling. `gofmt`/`go vet`/`go build`/
+  `go test`/`go test -race` all clean. analysis-engine still isn't wired
+  to Redis or any live decision path, so this is the lowest-risk of the
+  three languages' cutovers by construction — confirmed before deleting
+  the old reader.
 - Configuration V3 Stage C3 for Python (see `docs/configuration-v3-migration-audit.md`'s
   Stage C3 update) — a real, wired cutover, not another shadow layer.
   `algo-bot/app/configuration/v3_root.py` resolves `config/apexvoid.yml`'s
