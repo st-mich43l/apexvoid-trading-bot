@@ -1,5 +1,25 @@
 # Kafka Transport (analysis-engine)
 
+## Live pipeline status
+
+The first real transport path is now wired end to end:
+
+`ctrader-engine` → `market.bar.closed.v1` → `analysis-engine` → existing
+engine dispatch path.
+
+The cTrader producer awaits the broker acknowledgement before writing the
+same close to Redis. Redis remains the bar cache and legacy compatibility
+surface; Kafka is the durable event bus. Startup full-window history is
+written to Redis without replaying Kafka, while reconnect incremental
+catch-up is published in close-time order. Duplicate delivery remains an
+accepted at-least-once condition and is handled by the consumer/engine path.
+
+`kafka-init` creates the four V3-configured topics and verifies partition,
+replication, and retention settings. It must complete before either the
+producer or analysis engine starts. The analysis engine exposes
+`/health/live` and `/health/ready`; readiness is false until the configured
+Kafka broker is reachable and the consumer loop is running.
+
 Status: implemented (`analysis-engine/internal/transport/kafka`). This
 document must always describe the same behavior the code does — where
 they'd disagree, the code and its tests (`analysis-engine/test/kafka/`,
@@ -114,7 +134,9 @@ has. Recommendation for a real deployment: partition count should be
 chosen to comfortably exceed the number of concurrently-live symbols (5
 today — XAU, EURUSD, GBPUSD, GBPJPY, USDJPY, per `config/instruments.yml`)
 so cross-symbol concurrency isn't artificially bottlenecked; this is
-deployment-topology work, out of this task's scope (source task §63).
+the checked-in deployment contract: market bars/ticks use 6 partitions and
+opportunity topics use 3, all with replication factor 1 for the single-node
+KRaft broker.
 
 ## Delivery semantics: at-least-once + application idempotency
 
@@ -347,17 +369,11 @@ no brokers, an empty broker address, a missing required topic, a missing
 consumer group, duplicate logical topics, or an invalid client ID all
 reject before any client is constructed.
 
-**Checked-in default: `transport.kafka.enabled: false`.** This differs
-from the source task's own illustrative example (`enabled: true`) —
-deliberately: no Kafka broker exists in
-`deployment-template/docker-compose.yml.j2` yet (that cutover is
-explicitly out of this task's scope, §63), and `cmd/analysis-engine`
-fails closed at startup when Kafka is enabled but unreachable (§43) — so
-leaving it `true` in the checked-in production config would break
-`cmd/analysis-engine` for anyone running it against today's actual
-deployment. Flipping it to `true` for real is deployment work for the
-tasks that follow this one (cTrader → Kafka, algo-bot → Kafka,
-deployment topology).
+**Checked-in default: `transport.kafka.enabled: true`.** The local and
+production Compose templates provide the pinned internal KRaft broker;
+`kafka-init` provisions the V3 topic contract before cTrader or
+analysis-engine starts. The engine still fails closed when Kafka is enabled
+but unreachable (§43).
 
 ## Security future-proofing (source task §69)
 

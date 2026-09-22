@@ -21,9 +21,17 @@ type Config struct {
 	ClientID string // transport.kafka.client_id.analysis_engine
 
 	Topics        Topics
+	TopicSpecs    map[string]TopicSpec
 	ConsumerGroup string // transport.kafka.consumer_groups.analysis_engine
 
 	TickConsumptionEnabled bool // transport.kafka.tick_consumption_enabled — source task §3
+}
+
+// TopicSpec is the broker-side contract for one configured topic.
+type TopicSpec struct {
+	Partitions      int32
+	Replication     int16
+	RetentionMillis int64
 }
 
 // Topics names every topic this service reads or writes — never

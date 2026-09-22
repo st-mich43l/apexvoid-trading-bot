@@ -211,6 +211,11 @@ func getInt(doc *config.Document, path string) (int, error) {
 	}
 }
 
+func getInt64(doc *config.Document, path string) (int64, error) {
+	v, err := getInt(doc, path)
+	return int64(v), err
+}
+
 func getString(doc *config.Document, path string) (string, error) {
 	raw, ok := doc.Get(path)
 	if !ok {
@@ -289,6 +294,10 @@ func KafkaConfigFromConfig(doc *config.Document) (kafka.Config, error) {
 	if err != nil {
 		return kafka.Config{}, err
 	}
+	topicSpecs, err := kafkaTopicSpecsFromConfig(doc)
+	if err != nil {
+		return kafka.Config{}, err
+	}
 
 	cfg := kafka.Config{
 		Enabled: enabled, Brokers: brokers, ClientID: clientID,
@@ -296,6 +305,7 @@ func KafkaConfigFromConfig(doc *config.Document) (kafka.Config, error) {
 			MarketBarClosed: marketBarClosed, MarketTick: marketTick,
 			AnalysisOpportunity: analysisOpportunity, AnalysisOpportunityInvalidated: analysisOpportunityInvalidated,
 		},
+		TopicSpecs:             topicSpecs,
 		ConsumerGroup:          consumerGroup,
 		TickConsumptionEnabled: tickEnabled,
 	}
@@ -303,6 +313,55 @@ func KafkaConfigFromConfig(doc *config.Document) (kafka.Config, error) {
 		return kafka.Config{}, err
 	}
 	return cfg, nil
+}
+
+func kafkaTopicSpecsFromConfig(doc *config.Document) (map[string]kafka.TopicSpec, error) {
+	raw, ok := doc.Get("transport.kafka.topic_specs")
+	if !ok {
+		return nil, fmt.Errorf("engine: missing required config %q", "transport.kafka.topic_specs")
+	}
+	entries, ok := raw.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("engine: config %q is not a mapping (got %T)", "transport.kafka.topic_specs", raw)
+	}
+	result := make(map[string]kafka.TopicSpec, len(entries))
+	for name, value := range entries {
+		mapping, ok := value.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("engine: config transport.kafka.topic_specs.%s is not a mapping (got %T)", name, value)
+		}
+		partitions, err := topicSpecInt(mapping, "partitions", name)
+		if err != nil {
+			return nil, err
+		}
+		replication, err := topicSpecInt(mapping, "replication_factor", name)
+		if err != nil {
+			return nil, err
+		}
+		retention, err := topicSpecInt(mapping, "retention_ms", name)
+		if err != nil {
+			return nil, err
+		}
+		result[name] = kafka.TopicSpec{Partitions: int32(partitions), Replication: int16(replication), RetentionMillis: int64(retention)}
+	}
+	return result, nil
+}
+
+func topicSpecInt(mapping map[string]any, key, topic string) (int, error) {
+	value, ok := mapping[key]
+	if !ok {
+		return 0, fmt.Errorf("engine: missing required config transport.kafka.topic_specs.%s.%s", topic, key)
+	}
+	switch typed := value.(type) {
+	case int:
+		return typed, nil
+	case int64:
+		return int(typed), nil
+	case float64:
+		return int(typed), nil
+	default:
+		return 0, fmt.Errorf("engine: config transport.kafka.topic_specs.%s.%s is not an integer (got %T)", topic, key, value)
+	}
 }
 
 // ConfigProvenanceFromConfig computes kafka.ConfigProvenance from the

@@ -4,18 +4,19 @@ Outbound-only Docker Compose stack: **no DNS, TLS cert, reverse proxy, or
 inbound app ports**. SSH to the host is enough.
 
 ```text
-postgres + redis  →  config-compiler  →  ctrader-engine  →  bot
-                         │
-                         └── writes /runtime/resolved-runtime.json
-                             (ResolvedRuntimeManifest V2)
+postgres + redis + kafka → config-compiler + kafka-init
+                         → ctrader-engine + analysis-engine → bot
 ```
 
 | Service | Image / role |
 |---|---|
 | `postgres` | `postgres:17-alpine` — `signals` DB |
 | `redis` | `redis:7-alpine` — bars, watches, plans, token mirror |
+| `kafka` | `apache/kafka:4.0.0` — single-node KRaft market event bus, internal only |
+| `kafka-init` | analysis-engine image — creates and verifies V3 topic contracts |
 | `config-compiler` | algo-bot one-shot — validate YAML + emit manifest (exit 0) |
 | `ctrader-engine` | .NET feed + TradePlan V8 executor |
+| `analysis-engine` | Go closed-bar consumer and analysis runtime; `/health/ready` gates readiness |
 | `bot` | Python Telegram + scanner + ZoneWatch + scalping |
 
 Production cTrader authority (set on the engine; do not flip casually):
@@ -41,7 +42,7 @@ and [runtime/multi-symbol-routing.md](runtime/multi-symbol-routing.md).
 | Compose | [`docker-compose.yml`](../docker-compose.yml) | Rendered from [`deployment-template/docker-compose.yml.j2`](../deployment-template/docker-compose.yml.j2) |
 | Images | `docker compose build` | Pre-built registry tags (`…/apexvoid-trading-bot:<sha>`, `…/apexvoid-ctrader-engine:<sha>`) |
 | Secrets | root `.env` | `secrets/trading-bot.env` (`env_file`) |
-| Config | `config/trading-bot.yml` bind-mount | Same path on host |
+| Config | `config/` V3 tree + legacy manifest file | Ansible ships the non-secret V3 tree and legacy manifest mirror |
 
 Day-2 logs, backups, and troubleshooting: [operations.md](operations.md).
 

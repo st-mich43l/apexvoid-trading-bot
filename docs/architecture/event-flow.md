@@ -15,10 +15,12 @@ flowchart LR
     AB2 --> TG[Telegram]
 ```
 
-Redis is the only cross-service boundary today (`ctrader-engine` "never
-touches Postgres; Redis is the only cross-service boundary,"
-`docs/redis-contract.md`). `algo-bot`'s `app/analysis` computes structure
-in-process — there is no analysis-engine in this loop yet.
+Kafka is now the cross-service market-event boundary: cTrader publishes
+`market.bar.closed.v1` after broker acknowledgement, then updates Redis's
+bar cache. `analysis-engine` consumes the event and dispatches it through its
+existing engine path. Redis remains the compatibility/cache surface for the
+legacy bot loop; algo-bot's `app/analysis` is not cut over to opportunity
+consumption in this task.
 
 ## Target
 
@@ -58,17 +60,13 @@ execution.trade-event.v1
 to `analysis-engine`'s own `SymbolState` — nothing outside the service ever
 needs a partial computation, only the resulting `AnalysisOpportunity`.
 
-**As of the Kafka transport task**: the Go side of the first four topics
-is real — `analysis-engine/internal/transport/kafka` is a working
+The Go side of the first four topics is real — `analysis-engine/internal/transport/kafka` is a working
 producer/consumer/codec, proven against a real broker
 ([ADR-008](../adr/008-go-kafka-client.md), [ADR-009](../adr/009-kafka-delivery-semantics.md),
-[`../transport/kafka.md`](../transport/kafka.md)). This does **not**
-mean live production traffic flows through Kafka yet — `ctrader-engine`
-does not publish `market.bar.closed.v1` (no `.NET` Kafka work has been
-done), `algo-bot` does not consume `analysis.opportunity.v1` (no Python
-Kafka work has been done), and no strategy exists to produce a real
-opportunity from (`internal/transport/kafka.Producer.PublishOpportunity`
-has no caller in production code). `execution.trade-plan.v1` /
+[`../transport/kafka.md`](../transport/kafka.md)). The cTrader market-bar
+producer and analysis-engine consumer are live in the Compose topology.
+`algo-bot` does not yet consume `analysis.opportunity.v1`, and no strategy is
+currently publishing a real opportunity. `execution.trade-plan.v1` /
 `execution.trade-event.v1` remain entirely unimplemented, explicitly out
 of that task's scope. Schemas for all six event classes (plus the shared
 `contracts/common/event-envelope-v1.schema.json` wrapper) live under
@@ -77,9 +75,9 @@ of that task's scope. Schemas for all six event classes (plus the shared
 
 ## Redis role, before and after Kafka cutover (§34)
 
-Today: Redis is the durable cross-service bus (bars, ZoneWatch, TradePlan,
-telemetry, execution events) — see `docs/redis-contract.md` for the full
-key inventory. This does not change until Kafka cutover happens.
+Today: Kafka is the durable market-event bus, while Redis still carries the
+legacy bot bus (ZoneWatch, TradePlan, telemetry, execution events) and bar
+cache — see `docs/redis-contract.md` for the full key inventory.
 
 Target, once Kafka is live: Redis narrows to transient/cache/state support
 only — latest quote, latest analysis snapshot, health, dedup, short-lived

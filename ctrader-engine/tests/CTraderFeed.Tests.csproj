@@ -13,6 +13,15 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+    <!-- xUnit v2 has no native conditional-skip for [Fact]; the Kafka
+         real-broker tests need one so `dotnet test` never requires
+         Docker (source task §51) — unlike CandidateExecutionStoreTests'
+         own established pattern of throwing when REAL_REDIS_URL is
+         unset, which does make plain `dotnet test` fail without Redis.
+         A real skip (not a silent no-op pass) is the correct signal
+         here, matching the Go side's own t.Skip() for the equivalent
+         Kafka tests. -->
+    <PackageReference Include="Xunit.SkippableFact" Version="1.5.85" />
   </ItemGroup>
 
   <ItemGroup>

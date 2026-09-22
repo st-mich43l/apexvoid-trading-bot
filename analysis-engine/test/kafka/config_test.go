@@ -26,8 +26,14 @@ func TestKafkaConfigFromConfig_ResolvesTheRealCheckedInConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("KafkaConfigFromConfig: %v", err)
 	}
-	if cfg.Enabled {
-		t.Error("expected the checked-in production config to have transport.kafka.enabled=false (docs/transport/kafka.md's own documented default — no broker exists in deployment-template yet)")
+	// Flipped true by the cTrader -> Kafka -> Analysis Engine pipeline
+	// task: a real broker now exists in deployment-template/docker-compose.yml.j2
+	// and docker-compose.yml, provisioned by kafka-init before any
+	// producer/consumer starts. See docs/transport/kafka.md's "Kafka
+	// enablement" section — this was `false` through the prior
+	// Go-transport-only task specifically because no broker existed yet.
+	if !cfg.Enabled {
+		t.Error("expected the checked-in production config to have transport.kafka.enabled=true now that a real broker is part of the deployment topology")
 	}
 	if cfg.Topics.MarketBarClosed != "market.bar.closed.v1" {
 		t.Errorf("expected topics.market_bar_closed=market.bar.closed.v1, got %q", cfg.Topics.MarketBarClosed)

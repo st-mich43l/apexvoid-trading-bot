@@ -168,12 +168,13 @@
           "type": "object",
           "additionalProperties": false,
           "required": [
-            "enabled",
             "brokers",
             "client_id",
-            "topics",
             "consumer_groups",
-            "tick_consumption_enabled"
+            "enabled",
+            "tick_consumption_enabled",
+            "topic_specs",
+            "topics"
           ],
           "properties": {
             "enabled": {
@@ -191,10 +192,15 @@
               "type": "object",
               "additionalProperties": false,
               "required": [
-                "analysis_engine"
+                "analysis_engine",
+                "ctrader_engine"
               ],
               "properties": {
                 "analysis_engine": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "ctrader_engine": {
                   "type": "string",
                   "minLength": 1
                 }
@@ -243,6 +249,110 @@
             },
             "tick_consumption_enabled": {
               "type": "boolean"
+            },
+            "topic_specs": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "market.bar.closed.v1",
+                "market.tick.v1",
+                "analysis.opportunity.v1",
+                "analysis.opportunity.invalidated.v1"
+              ],
+              "properties": {
+                "market.bar.closed.v1": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "partitions",
+                    "replication_factor",
+                    "retention_ms"
+                  ],
+                  "properties": {
+                    "partitions": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "replication_factor": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "retention_ms": {
+                      "type": "integer",
+                      "minimum": 1
+                    }
+                  }
+                },
+                "market.tick.v1": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "partitions",
+                    "replication_factor",
+                    "retention_ms"
+                  ],
+                  "properties": {
+                    "partitions": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "replication_factor": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "retention_ms": {
+                      "type": "integer",
+                      "minimum": 1
+                    }
+                  }
+                },
+                "analysis.opportunity.v1": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "partitions",
+                    "replication_factor",
+                    "retention_ms"
+                  ],
+                  "properties": {
+                    "partitions": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "replication_factor": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "retention_ms": {
+                      "type": "integer",
+                      "minimum": 1
+                    }
+                  }
+                },
+                "analysis.opportunity.invalidated.v1": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "partitions",
+                    "replication_factor",
+                    "retention_ms"
+                  ],
+                  "properties": {
+                    "partitions": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "replication_factor": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "retention_ms": {
+                      "type": "integer",
+                      "minimum": 1
+                    }
+                  }
+                }
+              }
             }
           }
         }
