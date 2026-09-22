@@ -1,8 +1,27 @@
 name: apexvoid-trading-bot
 
 # Local/dev compose. Secrets and shared cTrader ENV live in `.env`.
-# Non-secret Python tuning lives in `config/trading-bot.yml` (CONFIG_FILE).
-# Do not duplicate catalog defaults here — schema + profile + YAML win.
+#
+# Configuration V3 (docs/configuration.md): `bot`'s non-secret tuning now
+# comes entirely from config/apexvoid.demo-eval.yml (the categorized
+# config/*.yml files + config/environments/demo_eval.yml, mounted whole
+# below) — not `config/trading-bot.yml`, and not any of the ENV tuning
+# variables this file used to set (AUTO_TRADE_PROFILE/
+# AUTO_TRADE_MAPPED_ZONE_ENABLED/AUTO_TRADE_MARKET_MAP_GUARD_ENABLED/
+# LOG_DIR/LOG_RETENTION_DAYS/LOG_FILE_ENABLED all removed from `bot`'s own
+# environment — see docs/configuration-v3-migration-audit.md's Stage C3
+# section for the parity proof and one real, well-evidenced behavior
+# fix this cutover produces for local/dev specifically: those ENV
+# defaults, and trading-bot.yml's own explicit values, were silently
+# defeating several of the demo_eval profile's own intended overrides
+# (config-file/process-env precedence beating the profile layer) —
+# config/environments/demo_eval.yml is now the one place that intent is
+# expressed, and nothing outranks it anymore.
+#
+# `config-compiler` and `ctrader-engine` are UNCHANGED — .NET still reads
+# ResolvedRuntimeManifest (compiled from config/trading-bot.yml) until
+# Stage C5 gives it a direct YAML reader too; trading-bot.yml therefore
+# remains live for that path only, not read by `bot` anymore.
 
 services:
   postgres:
@@ -104,16 +123,7 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
-      APEXVOID_CONFIG_FILE: /config/trading-bot.yml
-      APEXVOID_RUNTIME_MANIFEST_FILE: /runtime/resolved-runtime.json
-      # Mapped-zone route pinned off for local parity with production demo_eval
-      # ops practice; override in .env / YAML if needed.
-      AUTO_TRADE_PROFILE: ${AUTO_TRADE_PROFILE:-demo_eval}
-      AUTO_TRADE_MAPPED_ZONE_ENABLED: ${AUTO_TRADE_MAPPED_ZONE_ENABLED:-false}
-      AUTO_TRADE_MARKET_MAP_GUARD_ENABLED: ${AUTO_TRADE_MARKET_MAP_GUARD_ENABLED:-${AUTO_TRADE_MAPPED_ZONE_ENABLED:-false}}
-      LOG_DIR: ${LOG_DIR:-/var/log/apexvoid}
-      LOG_RETENTION_DAYS: ${LOG_RETENTION_DAYS:-14}
-      LOG_FILE_ENABLED: ${LOG_FILE_ENABLED:-true}
+      APEXVOID_CONFIG_FILE: /config/apexvoid.demo-eval.yml
     depends_on:
       postgres:
         condition: service_healthy
@@ -124,8 +134,7 @@ services:
       ctrader-engine:
         condition: service_healthy
     volumes:
-      - ./config/trading-bot.yml:/config/trading-bot.yml:ro
-      - runtime-config:/runtime:ro
+      - ./config:/config:ro
       - ./data:/data   # calendar cache (ff_*.json) still persists here
       - ./logs/algo-bot:/var/log/apexvoid
     # No ports exposed — the bot uses outbound Telegram long-polling only.
