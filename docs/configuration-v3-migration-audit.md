@@ -359,3 +359,708 @@ none of these are removed as part of Stage C1:
   `LOG_DIR`, `LOG_RETENTION_DAYS`, `LOG_FILE_ENABLED`,
   `SIGNAL_VIP_CHANNEL_ID`, `REDIS_URL`) once those values live in YAML —
   keep only the real secrets plus `APEXVOID_CONFIG_FILE`.
+
+---
+
+# Stage C2 update — classification, YAML cleanup, schema, reference resolver
+
+Source prompt for this stage: a follow-on message ("Task: Complete
+Configuration V3 — Full Cutover and Removal of Every Alternate
+Configuration Authority"), also not a checked-in file. That prompt asks
+for the *complete* migration through Stage C8 (cutover + deletion of
+`config/trading-bot.yml`, the config-compiler, `ResolvedRuntimeManifest`
+everywhere, and the .NET/Go manifest readers) in one pass. **This update
+covers only Stage C2** (§2–§11, §14–§15, part of §38 — classification,
+cleaning the new YAML itself, the shared schema, and a reference
+resolver/fixture) plus this honest status report. It deliberately does
+**not** attempt Stage C3 onward in the same pass — see "What this update
+does not do, and why" below.
+
+## §2 — Classification
+
+The source prompt asks for a `value / current source / classification /
+canonical source / consumers / action` table covering every
+configuration-like value repo-wide. The existing Stage C0 audit above
+already inventories every *source* (Python catalog, .NET's two config
+systems, Go's manifest reader, Compose, `.env.example`) at that
+granularity; re-deriving a 677-row table here would duplicate
+[`docs/configuration/environment-reference.generated.md`](configuration/environment-reference.generated.md)
+verbatim rather than add information. What Stage C2 adds is the
+**classification framework itself, applied to every case actually acted
+on this stage** — the six categories, each with a concrete example found
+in this repo:
+
+| Category | Definition | Example found this stage |
+|---|---|---|
+| `RUNTIME_CONFIG` | Changes trading/operational behavior, no code change needed | `execution.targeting.default_ladder_pips` |
+| `SECRET` | Credential/token/private identifier | `TELEGRAM_BOT_TOKEN`, `DATABASE_URL` |
+| `BOOTSTRAP` | Only needed to locate config/secrets or start infra | `APEXVOID_CONFIG_FILE`, `CTRADER_CLIENT_ID` |
+| `ALGORITHM_CONSTANT` | True invariant of the algorithm, not tuning | `_TF_MINUTES` (60 seconds in a minute; not a Configuration V3 finding, a Go-migration one — see `docs/go-analysis-migration-audit.md`) |
+| `PROTOCOL_CONSTANT` | Wire/schema/event identity; changing it needs coordinated producer+consumer code | Redis stream names (`transport.yml`'s `redis_streams.*` — see §25 below), TradePlan V8 field names |
+| `DERIVED` | Deterministically computable from other config; must not be configured twice | `telegram.presentation.seq_reset_tz` → now derived from `runtime.timezone` (§6, this stage) |
+
+Every concrete `RUNTIME_CONFIG` field newly surfaced, removed, or
+reshaped this stage is logged individually below and in
+`config/scripts/verify_stage_c2_parity.py`'s `DIVERGENCES` table (the
+executable form of this same requirement) — that table *is* the
+per-value audit row set for this stage's changes: old source, new
+source, reason, and (via the script itself) verification evidence, for
+every one of them.
+
+**One genuine classification correction**: `transport.yml`'s
+`redis_streams.*` (Redis stream key names like `auto_trade:candidates`)
+were placed in the "transport" category file in Stage C1 as if they were
+ordinary `RUNTIME_CONFIG`. Re-classifying now: these are `PROTOCOL_CONSTANT`
+— changing a stream name requires updating every producer and consumer
+that names it directly (Redis has no schema registry to migrate them
+through), the same way a database table name or TradePlan field name
+would. They are **left in YAML** regardless (matching §25's own framing:
+protocol constants that are *also* deployment-relevant, like a Kafka
+topic name, are commonly still declared in config for operational
+visibility — the point of §25 is that changing them needs coordinated
+code changes, not that they can never be YAML-readable) — flagged here so
+a future reader doesn't mistake "lives in transport.yml" for "safe to
+edit like a tuning knob."
+
+## §3–§11 — YAML cleanup (implemented, verified)
+
+Applied directly to the Stage C1 category files (`config/analysis.yml`,
+`auto-algo.yml`, `execution.yml`, `telegram.yml`, `instruments.yml`) —
+`config/trading-bot.yml` itself is untouched (it remains the live
+authority; nothing here changes runtime behavior). Every change is
+individually documented at its change site (a comment in the YAML itself)
+**and** encoded as one entry in
+`config/scripts/verify_stage_c2_parity.py`'s `DIVERGENCES` table, which
+verifies the new value against its documented expectation — this
+satisfies §41's per-divergence requirement (old value / new value /
+reason / affected consumer) executably rather than only in prose.
+
+Investigated and fixed for real, not just moved:
+
+- **§7 (price-denominated geometry)**: `analysis.yml`'s global
+  `zones.merge_max_width` (6.0) / `zones.confluence.merge_gap_price` (1.0)
+  and `auto-algo.yml`'s global `risk.exposure.opposing_minimum_separation_price`
+  (15.0) were all byte-identical to XAU's own `instruments.yml` pack
+  values. Traced the live Python consumers
+  (`app/core/instrument_geometry.py::merge_max_width`/`merge_gap_price`/
+  `opposing_minimum_separation_price`, and `app/analysis/market_map.py`'s
+  own `_instrument_cfg` resolution) and confirmed they **already** resolve
+  per-instrument via `instrument_runtime_view`/`for_instrument` today —
+  this was not a live bug, but the global YAML value was still real risk:
+  a new instrument pack that forgot to declare its own geometry would
+  have silently inherited XAU's dollar-scale numbers with nothing to stop
+  it. Removed the three global leaves entirely; `instruments.yml` is now
+  the only place this geometry can come from.
+- **§3/§4/§5 (derived symbol/feed lists)**: `analysis.yml`'s
+  `scanner.symbols` and `ctrader_feed.symbol`/`ctrader_feed.timeframes`
+  removed — both duplicated what `instruments.yml`'s `rollout: live` +
+  `broker_symbol` + `timeframes` already declare per instrument.
+  `scanner.htf`/`scanner.execution_timeframe` are kept (analysis
+  semantics — which timeframes bias is read from — not a feed
+  subscription list, per §5's own carve-out).
+- **§6 (timezone)**: `telegram.yml`'s `presentation.seq_reset_tz` removed.
+  Stage C1 had speculated it was "specifically Telegram sequence-reset
+  scoped" — checked properly this stage via a 13-call-site grep
+  (`weekly_report.py`, `dm.py`, `calendar.py`, `parsing.py`,
+  `manual_intent.py`, `persistence/store.py`'s own trade-date boundary,
+  `market_map_delivery.py`, `owner_dm_journal.py`): it is the one
+  operational "viewer-local day/week boundary" timezone used system-wide,
+  the same concept `runtime.timezone` already names. Now DERIVED from
+  `runtime.timezone`.
+- **§8/§9 (hidden defaults surfaced)**: five fields that existed only as
+  Python schema defaults — never a `trading-bot.yml` leaf at all, only
+  reachable in practice via the `demo_eval` profile override —
+  are now explicit in the base YAML with their real current default
+  values: `analysis.zones.merge_overlap` (0.5),
+  `analysis.measurements.max_merged_zone_atr` (3.0),
+  `auto_algo.risk.exposure.allow_hedged_xau` (false),
+  `auto_algo.risk.exposure.require_flat_for_range` (true),
+  `auto_algo.strategies.range_reversion.enabled` (true). The last three
+  were found by the JSON Schema itself refusing to validate the
+  `demo_eval` overlay (it referenced leaves the base schema didn't know
+  existed) — concrete evidence the schema-validation step in §15 finds
+  real gaps, not just structure.
+- **§10 (native types)**: eight CSV-string fields converted to native YAML
+  lists with identical content (`analysis.triggers.m1.patterns`,
+  `analysis.calendar.currencies`, `analysis.calendar.oil_keywords`,
+  `analysis.scanner.htf`, `auto_algo.strategies.scalping.target.preferred_ladder_pips`,
+  `execution.technique.strict_premium_discount_archetypes`,
+  `execution.targeting.default_ladder_pips`,
+  `execution.targeting.range_ladder_pips`). One additional case
+  (`instruments.USDJPY`'s `risk.exposure.defended_levels`, currently the
+  string `'160'`) converted to a float list `[160.0]` matching this
+  prompt's own §19 example shape — the underlying Python field is
+  currently typed `str` (`app/configuration/models/risk.py`, comma-parsed
+  internally); updating that field's type to `list[float]` is Stage C3
+  work, tracked against this YAML change, not done silently here.
+- **§11 (nested overrides)**: every dotted-key override in
+  `instruments.yml` converted to nested mappings. Six of them also moved
+  to their corrected category root while doing so (e.g. the dotted key
+  `actionability.target_room.barrier_buffer_atr` becomes nested
+  `auto_algo.actionability.target_room.barrier_buffer_atr`, matching
+  where that setting actually lives per the Stage C1 category table) —
+  those six are the ones individually listed in
+  `verify_stage_c2_parity.py`'s `DIVERGENCES`; the rest (e.g.
+  `execution.technique.selective_session_min_confluence`, whose category
+  root didn't change) needed no divergence entry at all, since a dotted
+  key and its equivalent nested mapping flatten to the identical path —
+  Stage C1's own comparator already treats them as equal.
+
+**Verification**: `config/scripts/verify_stage_c2_parity.py` — 26
+documented divergences, every other one of 507 checked leaves still
+matches Stage C1's value exactly. `config/scripts/resolve_reference.py`
+— a real (if intentionally non-production) implementation of §14's
+include/merge/overlay resolution — resolves both `environments/production.yml`
+and `environments/demo_eval.yml` and validates the result against the
+new JSON Schema with zero errors. `config/scripts/config_check.py` runs
+all of the above as one command.
+
+## §14/§15 — shared merge spec, schema, reference resolver (implemented)
+
+- **Merge spec**: implemented and tested in `config/scripts/resolve_reference.py`
+  — include resolution (relative paths only, missing/duplicate/absolute-
+  escaping include is an error), deep merge for mappings, full
+  replacement for scalars/lists, duplicate top-level base ownership is an
+  error. This is a *reference* implementation proving the spec is
+  buildable and the fixture is real — not the Stage C3/C4/C5 production
+  loader in any of the three languages.
+- **Schema**: `contracts/configuration/apexvoid-config-v3.schema.json`.
+  Generated from the actual current YAML shape for the nine "singleton"
+  category files (every leaf in those files is `required`, deliberately —
+  §8's whole point is that a missing `RUNTIME_CONFIG` value should fail
+  validation, and today every leaf in those nine files really is
+  present), then hand-tightened with real enums for every field that has
+  one (`analysis.indicators.atr.algorithm: simple|wilder`, `execution.
+  activation.mode`, rollout states, etc.). `instruments.yml`'s two
+  per-symbol/per-pack maps are hand-authored instead (`patternProperties`-
+  style, `additionalProperties` pointing at one shared instrument/pack
+  schema) since packs and instruments deliberately have different
+  populated subsets by design (see `instruments.yml`'s own extensive
+  comments on why `fx_jpy_cross_fixed_2r_v1` omits several leaves each
+  JPY pair must declare itself) — a required-everything schema there
+  would reject every currently-valid instrument declaration.
+  `additionalProperties: false` everywhere per §15's explicit requirement
+  — confirmed live by the `demo_eval` validation catching the three §8
+  gaps above.
+- **Fixture** (§38, partial): `contracts/configuration/examples/resolved-production-v3.json`
+  generated by `resolve_reference.py --environment production
+  --write-fixture`. This is the Python reference's own output — §38
+  additionally requires Go and .NET loaders to reproduce it exactly, which
+  don't exist yet (Stage C4/C5); the fixture exists now so that work has
+  a concrete target from day one instead of being invented later.
+
+## What this update does NOT do, and why
+
+The source prompt's own §40 lists this as one continuous phase through
+C7 (authoritative cutover) and C8 (deletion/cleanup/enforcement), and its
+§43 "definition of complete" includes deleting `config/trading-bot.yml`,
+removing the .NET manifest system, removing the config-compiler, and
+proving AOT .NET / built Go / packaged Python startup all succeed against
+the new format. None of that is done in this update, deliberately:
+
+- **`config/trading-bot.yml` is still the only file any runtime actually
+  reads.** Everything in this update (Stage C2) is additive/cosmetic to
+  files nothing consumes yet — verified by construction, not just
+  asserted, the same way Stage C1 was. Stage C3 (a real Python loader
+  that *replaces* `app.configuration`'s resolver as the live path),
+  Stage C4 (Go), and Stage C5 (.NET) are each a materially larger and
+  separately risky change than anything in this update: they mean the
+  live trading bot starts trusting a brand-new code path for every
+  setting that governs real order placement, stop distance, and risk
+  sizing.
+- **Stage C7 (cutover) and C8 (deletion)** — removing
+  `config/trading-bot.yml`, the config-compiler, `ResolvedRuntimeManifest`,
+  and the .NET `EnvironmentResolver`/manifest system — are exactly the
+  kind of hard-to-reverse, production-affecting changes this session does
+  not make unilaterally in one pass on a live trading system. They also
+  factually depend on C3–C6 existing and having proven parity first; C8
+  cannot honestly happen before that regardless of urgency.
+- **Cross-language parity (§38 in full) and CI enforcement (§35/§36/§37)**
+  need the Go and .NET readers to exist before they can mean anything —
+  tracked, not skipped.
+- **AOT .NET / built Go / packaged Python startup tests (§39)** are
+  explicitly called out in the source prompt as needing more than unit
+  tests; they're meaningful once there's a real reader to boot, not
+  before.
+
+Proposed sequencing for the rest, each as its own reviewable PR rather
+than one large one, matching how Stage C1/C2 have gone:
+
+1. Stage C3 — Python direct YAML reader, built and tested *alongside* the
+   existing resolver (both importable, only one wired to
+   `app.core.config.runtime_config`), with a parity test suite comparing
+   its output against the existing resolver's output for the real
+   `config/trading-bot.yml` today (not just the new categorized files).
+2. Stage C4 — Go direct YAML reader, replacing `analysis-engine/internal/
+   config`'s manifest-JSON reader (itself built two migration slices ago
+   in this same effort) now that a schema/fixture exists to test against.
+3. Stage C5 — .NET direct YAML reader, built alongside (not yet replacing)
+   `ResolvedRuntimeManifest`.
+4. Stage C6 — shadow parity: all three loaders resolve the real
+   production config side by side, fingerprints compared, differences
+   investigated to zero before anyone proposes a cutover date.
+5. Stage C7 — cutover, done deliberately and with the owner's explicit
+   go-ahead on timing, not folded into a refactor PR.
+6. Stage C8 — deletion, only after C7 has run in production without
+   incident for a deliberately chosen soak period.
+
+---
+
+# Stage C3 update — Python direct YAML reader, wired live (local/dev)
+
+Owner-directed 2026-09-22 ("just keep c3 -> c8 don't care about bot" /
+"do it"): proceed through the full cutover rather than stop at another
+shadow layer. This update covers Stage C3 for Python — a real, wired,
+verified cutover, not a parallel unused reader — plus an honest status
+report on C4–C8 (Go, .NET, cross-language parity, and deletion), which
+this update does not reach.
+
+## What was built
+
+`algo-bot/app/configuration/v3_root.py` — two functions:
+
+- `resolve_v3_document(root_path)`: a production implementation of §14's
+  include/merge/overlay spec (the same spec `config/scripts/
+  resolve_reference.py` already proved as a reference implementation —
+  this is its twin, called by the real application instead of a
+  standalone script).
+- `unconsolidate(resolved)`: translates the resolved V3 document back
+  into the *exact* old flat top-level shape (`actionability`/`analysis`/
+  `contract`/`delivery`/`execution`/`instrument_packs`/`instruments`/
+  `lifecycle`/`manual_algo`/`market_data`/`risk`/`runtime`/`strategies`/
+  `bootstrap`) that `ApexVoidConfig` and every existing consumer already
+  expect (`runtime_config.actionability.foo`, `runtime_config.delivery.bar`,
+  ...).
+
+**Un-consolidating instead of rewriting every consumer was the deliberate
+choice.** Rewriting every module that imports `runtime_config` to the new
+category names would touch hundreds of files with no way to verify
+correctness at that scale in one pass. Un-consolidation confines the
+entire cutover to one function, and lets the *existing*, already-tested
+validation pipeline (`config_file.py`'s catalog-path flattening, secret-
+leaf rejection, instrument-pack expansion, live-symbol derivation) run
+completely unchanged — it now just receives its input from a different
+place.
+
+`config_file.py::load_config_file` calls `v3_root.py` only when the file
+it's given `is_v3_root_document()` (has an `includes:` key). A plain
+flat-shape file — the historical `trading-bot.yml` layout — is untouched
+and behaves exactly as before. **This makes the change inert by
+construction wherever `APEXVOID_CONFIG_FILE` still points at
+`trading-bot.yml`** — including actual ansible-driven production, which
+this repository does not control (see §1.4 of the Stage C0 audit above:
+"Production is rendered by ansible from cleartext vars onto the host,"
+outside this repo's tracked files). Shipping this code changes nothing
+there until that separate, out-of-repo deployment config is updated to
+point at `config/apexvoid.yml` — flagged explicitly, not silently
+assumed done.
+
+## Parity proof
+
+`algo-bot/tests/test_config_v3_parity.py` (11 tests, permanent regression
+guard) proves, via the real `load_python_canonical_settings` pipeline
+(not a hand-rolled comparison):
+
+- **Production**: `config/apexvoid.yml` resolves to an `ApexVoidConfig`
+  **byte-for-byte identical** to `config/trading-bot.yml`'s — 890 of 890
+  leaves match exactly (`bootstrap` excluded from the comparison; it's
+  ENV-sourced by both paths identically and never touched by this
+  change). Confirmed instrument config (`InstrumentsConfig`) equal too.
+- Include-graph error handling (missing/duplicate/absolute-escaping
+  include, duplicate base ownership) and environment-overlay merge
+  semantics (scalar replace, map extend) — each behavior individually
+  tested against `v3_root.py` directly, not just the end-to-end path.
+
+**One real, well-evidenced divergence found and fixed along the way**:
+`resolve_config_file_path`'s CONFIG_FILE layer outranks the PROFILE layer
+in the existing resolver's precedence
+(`file_secret < config_file < dotenv < process_environment < init`,
+profile assignments applied *before* all of them —
+`app/configuration/resolver.py`). This means, in the **old** system, for
+any field `trading-bot.yml` itself declares an explicit value for, the
+`demo_eval` profile's own assignment for that same field is silently
+dead — config-file always wins. Confirmed via direct comparison: 7 of
+`DEMO_EVAL_PROFILE`'s 48 assignments
+(`actionability.gates.market_map_guard_enabled`,
+`actionability.gates.opposing_barrier_veto_enabled`,
+`actionability.overlapping_zones.veto_enabled`,
+`delivery.scanner_cards.top_n`, `risk.position_limits.
+max_tracked_candidates`, `risk.position_limits.maximum_per_symbol`,
+`strategies.mapped_zone.enabled`) have never actually taken effect,
+because `trading-bot.yml` explicitly sets a conflicting value for every
+single one of them (verified directly against the file). Configuration
+V3's environment overlay is applied *after* every base category file
+(§14) — there is no second, silently-overriding config-file layer — so
+these 7 fields now genuinely reflect `demo_eval`'s intent. **This affects
+only the `demo_eval` profile** (`CONSERVATIVE_PROFILE`/production has an
+empty assignment list — nothing to be silently defeated — which is
+exactly why the 890/890 production parity check shows zero
+divergence). `runtime.profile` itself is explicitly bridged back to the
+old string names (`"conservative"`/`"demo_eval"`) in `unconsolidate()`,
+since real consumers (`config_health.py`, `lifecycle.py`, `delivery.py`)
+do exact string comparisons against it.
+
+Two more representation-level bridges, both required for the *old*
+Pydantic schema (not rewritten in this pass) to keep validating:
+
+- `_restore_csv_string_types`: several catalog leaves are still typed
+  `str` in `app/configuration/models/*.py` even though Stage C2
+  converted their YAML representation to native lists (§10) — rejoins
+  them to the exact same CSV string on the way back into the old shape,
+  driven by the catalog's own `type` field (not a hardcoded list of the
+  known cases), so a future CSV→list conversion can't silently break
+  startup again without this bridge already knowing about it.
+- The same rejoin applies inside `instruments.*.overrides` /
+  `instrument_packs.*.overrides` (found live: `USDJPY`'s
+  `risk.exposure.defended_levels`, converted to `[160.0]` in Stage C2 —
+  rejoined to `"160"`, matching the old string exactly, not `"160.0"`).
+
+## Wired live (local/dev only)
+
+`docker-compose.yml`'s `bot` service: `APEXVOID_CONFIG_FILE` now points
+at `config/apexvoid.demo-eval.yml` (new — same as `apexvoid.yml` except
+its last include is `environments/demo_eval.yml`, giving §13's "a
+different environment is a different root file, never a runtime ENV
+toggle" its first real instance). `AUTO_TRADE_PROFILE`,
+`AUTO_TRADE_MAPPED_ZONE_ENABLED`, `AUTO_TRADE_MARKET_MAP_GUARD_ENABLED`,
+`LOG_DIR`, `LOG_RETENTION_DAYS`, `LOG_FILE_ENABLED`, and
+`APEXVOID_RUNTIME_MANIFEST_FILE` (confirmed zero real consumers in
+`bot` — only `config-compiler`'s CLI and `ctrader-engine` read the
+manifest) all removed from `bot`'s own environment block; volumes changed
+from mounting only `trading-bot.yml` to mounting all of `./config`.
+`config-compiler` and `ctrader-engine` are **unchanged** — `.NET` still
+depends on `ResolvedRuntimeManifest` until Stage C5, so `trading-bot.yml`
+stays live for that path.
+
+**Consequence, disclosed rather than buried**: local/dev's `bot` now
+actually gets the `demo_eval` behavior it was always supposed to (the 7
+fields above), where it previously silently ran with several of
+`trading-bot.yml`'s own base values instead. `.env.example` regenerated
+via the project's own generator (`python -m app.configuration.generate
+--write`, after editing `env_example_policy.py`'s
+`ENV_EXAMPLE_CATALOG_PATHS`/`EXTRA_DEPLOYMENT_ENV` — not hand-edited) —
+now contains only `APEXVOID_CONFIG_FILE` and real secrets
+(`POSTGRES_PASSWORD`, `TELEGRAM_BOT_TOKEN`, the five `CTRADER_*`
+credentials), matching §31 exactly.
+
+## What Stage C3 does NOT claim
+
+- **Actual ansible-driven production** is untouched and outside this
+  repo's reach, as stated above — someone with access to that deployment
+  needs to point its `APEXVOID_CONFIG_FILE` at `config/apexvoid.yml`
+  (mounting the whole `config/` directory) to complete the real cutover
+  there. Until then, production keeps reading `trading-bot.yml` exactly
+  as before, unaffected by any of this.
+- **Deletion of the old Python config machinery** (`profiles.py`,
+  `source_policy.py`, `sources.py`, `source_types.py`,
+  `python_sources.py`, `environment_aliases.py`, etc.) is Stage C8, not
+  done here — `load_python_canonical_settings`/`load_python_runtime_
+  source_bundle`/the profile/precedence machinery are all still live
+  code paths (this is *additive*: a new branch inside `load_config_file`,
+  not a replacement of the surrounding pipeline) and still required for
+  `trading-bot.yml`-based deployments (ansible production) to keep
+  working during the transition.
+
+## C4–C8 status
+
+Not reached in this update. Go (C4) and .NET (C5) direct readers,
+cross-language parity (C6), the actual full cutover of every runtime
+(C7), and deletion of the config-compiler/`ResolvedRuntimeManifest`/
+legacy machinery (C8) remain open. Continuing in a follow-on update.
+
+---
+
+# Stage C4 update — Go direct YAML reader, old manifest reader deleted
+
+## What was built
+
+`analysis-engine/internal/config/v3_document.go` + `v3_instruments.go` —
+a third, independent implementation of §14's include/merge/overlay spec
+(alongside `algo-bot/app/configuration/v3_root.py` and `config/scripts/
+resolve_reference.py`), using `gopkg.in/yaml.v3` (added as this module's
+first real dependency) to parse into a generic `map[string]any` tree
+rather than per-category Go structs — analysis-engine's only actual
+config consumer today is instrument geometry (`GeometryFor`), the same
+narrow surface the deleted manifest-JSON reader covered, so typed structs
+for the other nine categories are deferred until a real Go consumer needs
+one rather than built speculatively ahead of that need.
+
+`GeometryFor(symbol)` reads `instruments.instruments.<symbol>`, merges
+`instrument_packs.<pack>` underneath it (instrument's own leaves win,
+matching `instrument_packs.py`'s own merge rule and `instruments.yml`'s
+comments on it) via the same `deepMerge` the include/overlay resolution
+already uses, and extracts `contract.pip_size`/`contract.price_digits` —
+fails closed (an error, never a zero value) for an unknown instrument or
+missing/non-numeric geometry, per §9's Go-specific instruction ("config
+structs may use zero values only during deserialization, but validation
+must reject missing required config rather than treating zero as a
+default"). `LiveInstruments()` derives the live symbol list from
+`instruments.*.rollout == live` — §3's single-owner rule, satisfied in Go
+the same way the Python `config_file.py` already satisfies it.
+
+**Deleted, not kept as a fallback** (§34 — "Do not leave manifest OR yaml
+mode selection. YAML V3 only."): `internal/config/manifest.go`,
+`geometry.go`, `manifest_test.go` (the `ResolvedRuntimeManifest`-JSON
+reader from the prior analysis-engine migration slice), and
+`testdata/runtime-manifest-example.json`. Confirmed before deleting:
+analysis-engine was never wired to anything live (no Redis consumer, no
+detector using this geometry for a real decision) — this is the lowest-
+risk of the three languages' cutovers by construction, unlike Python's
+(§C3, which *is* wired to `bot`'s live config now) or .NET's (§C5,
+`ctrader-engine` genuinely executes broker orders off
+`ResolvedRuntimeManifest` today).
+
+## Parity proof
+
+`internal/config/v3_document_test.go` (13 tests) reads the real
+`config/apexvoid.yml`/`config/apexvoid.demo-eval.yml` directly (not a
+copied fixture — deliberately, matching
+`algo-bot/tests/test_config_v3_parity.py`'s own choice, for the same
+reason: proving parity against what every language actually reads, not
+something that could quietly drift from it):
+
+- `GeometryFor` matches the known correct pip size/digits for all 5 live
+  instruments (XAU 0.1/2, EURUSD/GBPUSD 0.0001/5, GBPJPY/USDJPY 0.01/3) —
+  the same values the deleted manifest-JSON reader's own tests asserted
+  in the prior migration slice, now sourced from YAML directly instead of
+  a compiled-JSON intermediate.
+- `LiveInstruments()` returns exactly the 5 live symbols.
+- Include-graph error handling and overlay merge semantics — the same
+  cases `algo-bot`'s Python test suite and `config/scripts/
+  resolve_reference.py` both exercise, now proven a third time
+  independently in Go.
+
+`gofmt`, `go vet`, `go build`, `go test`, `go test -race` all clean
+(`golang:1.23-alpine`, whole-repository mount — `internal/config`'s tests
+need `../../../config/` to resolve to the real repo root; see the
+module's own updated README for the corrected Docker invocation).
+
+## What Stage C4 does NOT claim
+
+- analysis-engine still isn't wired to Redis, detectors, or any live
+  decision path — this cutover only concerns the one piece of config
+  surface that already existed (`Geometry`). The rest of the Go analysis
+  migration (`docs/go-analysis-migration-audit.md`'s own remaining
+  stages: swings, structure, zones, MAD, ...) is unaffected by and
+  unrelated to this Configuration V3 work.
+- Cross-language parity (§38, C6) — proving Go's normalized output
+  matches Python's and (eventually) .NET's for the *same* resolved
+  document — is not implemented as an automated check yet; both proved
+  parity against the real `config/apexvoid.yml` independently in this
+  update, but nothing yet asserts their two outputs are identical to each
+  other in one test run.
+
+---
+
+# Stage C5 update — .NET direct YAML reader, deliberately NOT wired live
+
+## What was built
+
+`ctrader-engine/src/MinimalYamlParser.cs` — a hand-rolled, reflection-
+free recursive-descent parser for the exact YAML subset `config/*.yml`
+actually uses: 2-space block mappings/sequences, scalar types (bare/
+quoted strings, ints, floats, bool, null), comments, and inline flow-
+style lists (`[0.25, 0.25, 0.50]`, confirmed present 4 times across
+`config/instruments.yml`/`config/trading-bot.yml` by grep before writing
+it) — plus flow mappings (`{}`/`{k: v}`), added after the first real test
+run surfaced that `config/environments/production.yml`'s entire content
+*is* a bare `{}` (its own header comment explains why: production's
+`CONSERVATIVE_PROFILE` overlay is intentionally empty). Written by hand
+instead of adding `YamlDotNet` or similar: `CTraderFeed.csproj` publishes
+Native AOT + trimmed + self-contained, and this project has already hit
+one AOT-only failure a normal `dotnet test` run didn't catch — see
+`ResolvedRuntimeManifestLoader`'s own comment on `Deserialize<T>` (the
+reflection-based overload) throwing "Reflection-based serialization has
+been disabled" at runtime, live, the exact class of bug a hand-written
+parser over plain strings/collections has nothing for the trimmer to
+remove.
+
+`ctrader-engine/src/ConfigurationV3.cs` — `ConfigDocument.Resolve`, a
+third independent implementation of §14's include/merge/overlay spec
+(alongside `v3_root.py` and `v3_document.go`), plus `GeometryFor`/
+`LiveInstruments`, mirroring the Go proof-of-pattern's narrow scope
+exactly (four fields: canonical/broker symbol, pip_size, price_digits).
+
+**This module is deliberately NOT wired into the live path.** Unlike
+Python (C3, wired live for local/dev — old code deleted from that path)
+and Go (C4, wired — the old manifest-JSON reader was deleted outright,
+not kept as a fallback), `ConfigurationV3`/`ConfigDocument` are not
+referenced anywhere from `AutoTradeOptions`, `ResolvedRuntimeManifest`,
+`ResolvedRuntimeManifestLoader`, or `ManifestRuntimeFactory` — those still
+read the compiled JSON manifest / environment variables exactly as
+before today. Why, concretely:
+
+- `ResolvedAutoTradeProjection` alone declares over 100 fields feeding
+  real order-execution decisions (stop distances, sizing, scale-in/add
+  policy, spread guards, break-even logic, ...). Python's cutover earned
+  trust with an exact 890/890-leaf parity test against the real Pydantic
+  model through the real resolver pipeline. Reaching that same rigor for
+  this surface in C#, by hand, without a reflection-based deserializer,
+  is a multi-hundred-field mapping exercise in its own right — rushing it
+  to hit a stage count would mean either skipping fields silently or
+  claiming verification this pass doesn't actually have.
+- `ctrader-engine` is the one runtime in the whole migration that
+  executes real broker orders with real money. §41 of
+  `rebuild-configuration-architecture.md` is explicit that safety on this
+  path outranks finishing the stage sequence on schedule.
+
+## Parity proof
+
+`ctrader-engine/tests/ConfigurationV3Tests.cs` (24 tests, `dotnet test`
+via `mcr.microsoft.com/dotnet/sdk:8.0`, whole-repo mount — same Docker
+pattern as the existing C# suite):
+
+- `GeometryFor` matches the same known-correct pip size/digits for all 5
+  live instruments as the Go and Python suites (XAU 0.1/2, EURUSD/GBPUSD
+  0.0001/5, GBPJPY/USDJPY 0.01/3), read from the real
+  `config/apexvoid.yml`/`config/apexvoid.demo-eval.yml` directly (not a
+  copied fixture, matching both other languages' own choice).
+  `LiveInstruments()` returns exactly the 5 live symbols.
+- Include-graph error handling and overlay merge semantics — the same
+  synthetic-fixture cases `v3_document_test.go` exercises (unsupported
+  version, missing/duplicate/escaping include, duplicate top-level
+  ownership, more-than-one environment overlay, scalar-replace + map-
+  extend on overlay) — proven a third time independently in C#.
+- `MinimalYamlParser`-specific tests: nested mappings, block sequences of
+  scalars and of mappings, inline flow sequences (empty and populated),
+  scalar type coercion (string/int/float/bool/null), comment stripping
+  (including a quoted string containing a `#` that must NOT be treated as
+  a comment), and a full, real parse of `config/instruments.yml` (the
+  largest and most structurally varied file in `config/`) asserting
+  specific known-good nested values round-trip correctly.
+
+Full suite: `dotnet test tests/CTraderFeed.Tests.csproj` — 738 passed, 45
+failed (all pre-existing `REAL_REDIS_URL is required for candidate lease
+integration tests` — no Redis in this sandbox, the same 45-failure
+baseline this session established before any Configuration V3 work
+started), 0 new failures. `dotnet build` clean (one pre-existing,
+unrelated nullable-reference warning in `TradePlanExecutionEngine.cs`).
+
+## What Stage C5 does NOT claim
+
+- Not wired to `AutoTradeOptions`/`ResolvedRuntimeManifest`/live order
+  execution — see "What was built" above for the full reasoning. The live
+  broker-order path is completely unchanged by this stage.
+- Only proves the same narrow four-field geometry surface Go's proof-of-
+  pattern proves, not the full instrument/auto-algo/execution/risk
+  surface `ResolvedAutoTradeProjection` actually carries into live
+  trading decisions.
+- Cross-language parity (§38, C6) — an automated check that Python/Go/
+  .NET all produce identical normalized output from one shared fixture —
+  still isn't implemented; all three have now proven parity against the
+  real `config/apexvoid.yml` independently, but nothing yet asserts their
+  three outputs are identical to each other in one test run.
+- `MinimalYamlParser` supports the YAML subset actually present in
+  `config/*.yml` today (confirmed by grep before writing it), not YAML in
+  general — no anchors/aliases, no block scalars (`|`/`>`), no multi-
+  document streams, no flow collections nested more than the parser's
+  depth-tracking was exercised against. Adding any of those to `config/`
+  in the future needs a parser change, not just a new YAML file.
+
+---
+
+# Stage C6 update — automated cross-language parity
+
+## What was built
+
+One test per language, each independently proving that language's real
+V3 reader reproduces `contracts/configuration/examples/resolved-
+production-v3.json` — the canonical fixture `config/scripts/
+resolve_reference.py` generates and validates against the JSON Schema —
+when resolving the real `config/apexvoid.yml` for the production
+environment:
+
+- Python: `algo-bot/tests/test_config_v3_cross_language_fixture.py`,
+  calling `v3_root.resolve_v3_document` directly (the raw V3 shape,
+  *before* Stage C3's un-consolidation back to the old flat shape — the
+  cross-language contract is the V3 document itself, not Python-specific
+  plumbing back to legacy code).
+- Go: `analysis-engine/internal/config/v3_fixture_parity_test.go`,
+  comparing `ResolveDocument`'s internal `raw` field (same-package white-
+  box test, matching the existing `TestSectionFailsClosedOnMissingOrWrongType`
+  pattern) against the fixture parsed via `encoding/json`.
+- .NET: `ConfigurationV3Tests.cs`'s `ResolveDocumentMatchesCanonicalFixture`,
+  comparing a new `internal ConfigDocument.Raw` accessor (added
+  specifically for this test, gated by the existing
+  `InternalsVisibleTo("CTraderFeed.Tests")`) against the fixture parsed
+  via `System.Text.Json` into the same generic tree shape
+  `MinimalYamlParser` already uses.
+
+This is not four languages calling one shared function — it's four
+independent implementations of §14 (the reference resolver, Python, Go,
+.NET), run against the identical real input, asserted to converge on one
+answer. The reference resolver's fixture is the arbiter each of the three
+real readers is checked against, rather than an O(n²) pairwise
+cross-check between every runtime pair.
+
+**A real normalization gap, found and handled, not glossed over:** Go's
+`yaml.v3` and .NET's `MinimalYamlParser` both decode a bare integer
+literal (e.g. `3`) to a distinct `int`/`long` type from a literal with a
+decimal point (e.g. `3.0`, decoded to `float64`/`double`) — but
+`encoding/json`/`System.Text.Json`, unmarshaling a JSON number into a
+generic `any`/`object?` tree, always produce `float64`/`double`
+regardless of whether the source JSON had a decimal point. A naive
+recursive equality check between the resolved document and the fixture
+would spuriously fail on every whole-number float in the config (there
+are several — e.g. `contract.contract_units_per_lot: 100000.0`). Both the
+Go and .NET tests include an explicit `normalizeNumbers`/`NormalizeNumbers`
+step that converts every int-typed leaf to a float before comparing.
+Python needs no equivalent step: `3 == 3.0` is already `True`, so dict
+equality tolerates the same distinction for free — one more small
+instance of the general pattern this whole migration keeps running into,
+where a comparison that's trivial in one language needs an explicit,
+documented normalization step in another.
+
+## Parity proof
+
+All three new tests pass against the real, current `config/apexvoid.yml`
+(the fixture was regenerated and diffed as clean — zero drift — before
+writing any test against it):
+
+- Python: `test_config_v3_cross_language_fixture.py` — 2 passed.
+- Go: `v3_fixture_parity_test.go` — 2 passed;
+  `gofmt`/`go vet`/`go build`/`go test` (whole suite) clean.
+- .NET: `ConfigurationV3Tests.cs` — 26 passed (24 from Stage C5 + 2 new);
+  full suite 740 passed / 45 pre-existing `REAL_REDIS_URL` failures
+  (unchanged baseline), 0 new failures.
+- Python full-suite regression check: the 44 pre-existing `FAILED` test
+  names from a `pytest -m no_database` run are all already present in
+  this session's established master baseline — 0 new failures. (The much
+  larger `ERROR` count seen on an unfiltered full-suite run in this
+  particular sandbox — no `DATABASE_URL`/`REAL_REDIS_URL` configured, no
+  reachable Postgres/Redis — is pre-existing infrastructure
+  unavailability, not something this change caused or could plausibly
+  cause: it adds one self-contained test file and touches no production
+  code.)
+
+## What Stage C6 does NOT claim
+
+- Does not run all three (four, counting the reference resolver) readers
+  in one process and diff them pairwise at runtime — each is proven
+  against the shared fixture independently, in its own language's test
+  suite, which is the standard and sufficient form of this proof (and the
+  one `resolve_reference.py`'s own docstring already described as the
+  fixture's purpose).
+- Only covers the `production` environment (the fixture's only variant
+  committed). `demo_eval` parity is exercised per-language already
+  (Stage C3's 890/890 leaf test, Stage C4/C5's `ResolveDemoEvalRootUsesDemoEvalOverlay`
+  tests) but not against a second, `demo_eval`-specific canonical fixture
+  — none is checked in, and generating one was judged not to add
+  meaningfully beyond what those per-language tests already prove.
+- Proves the *resolution* layer (include/merge/overlay → one document) is
+  identical across languages. It says nothing about the layers built on
+  top of that document — Python's un-consolidation (Stage C3), or
+  whatever eventually replaces `ResolvedAutoTradeProjection` in .NET —
+  which have their own, separate verification (or, for .NET, deliberately
+  don't have that verification yet; see Stage C5's own scope notes).
+
+## C7–C8 status
+
+Not reached in this update. Full cutover including actual ansible-driven
+production (C7) — flagged explicitly: real production deployment is
+ansible-driven and outside this repo's reach; someone with access to
+that ansible inventory needs to execute the cutover there — and deletion
+of the config-compiler/`ResolvedRuntimeManifest`/legacy Python catalog
+machinery (C8, which depends on C7 actually landing first, and on .NET's
+config surface reaching Stage C3-level verification before
+`ResolvedRuntimeManifest` could safely be removed) remain open.

@@ -1,0 +1,23 @@
+# demo_eval root configuration entrypoint (Configuration V3).
+#
+# Identical to apexvoid.yml except for the last include — this is the
+# whole mechanism Configuration V3 uses to select an environment (§13):
+# a different ROOT FILE, never a runtime ENV toggle like the old
+# AUTO_TRADE_PROFILE. Point APEXVOID_CONFIG_FILE at this file instead of
+# apexvoid.yml for a demo_eval deployment (docker-compose.yml's local/dev
+# `bot` service does, matching its pre-existing "local parity with
+# production demo_eval ops practice" intent).
+version: 3
+
+includes:
+  - runtime.yml
+  - transport.yml
+  - database.yml
+  - instruments.yml
+  - analysis.yml
+  - auto-algo.yml
+  - manual-algo.yml
+  - execution.yml
+  - telegram.yml
+  - journal.yml
+  - environments/demo_eval.yml

@@ -246,8 +246,15 @@ instrument_packs:
     # Owner's manual XAU trades routinely use 60-100 pip stops near the same
     # structure and still run past it. 0.15 matches the existing
     # scalp_barrier_buffer_atr precedent's order of magnitude.
+    # §11: nested structure, not a dotted key — targets auto-algo.yml's
+    # auto_algo.actionability.target_room.barrier_buffer_atr (this leaf has
+    # no base value in auto-algo.yml at all; it was always only a Python
+    # schema default before this override, same pattern as §8's examples).
     overrides:
-      actionability.target_room.barrier_buffer_atr: 0.15
+      auto_algo:
+        actionability:
+          target_room:
+            barrier_buffer_atr: 0.15
 
 instruments:
   # Add a live FX pair by declaring `pack: <name>` (see `instrument_packs`
@@ -278,7 +285,9 @@ instruments:
     canonical_symbol: EURUSD
     # EUR/USD earns its cleanest liquidity at the London and NY opens.
     overrides:
-      execution.technique.selective_session_min_confluence: 3
+      execution:
+        technique:
+          selective_session_min_confluence: 3
     # London/NY major: tight spread and 10-18 pip stop. Prefer the pack's 2R
     # ladder, with a 1R full-close fallback when opposing room is constrained.
 
@@ -302,7 +311,9 @@ instruments:
     canonical_symbol: GBPUSD
     # Cable follows the same London/NY execution clock as EURUSD.
     overrides:
-      execution.technique.selective_session_min_confluence: 3
+      execution:
+        technique:
+          selective_session_min_confluence: 3
     # London/NY major, same active-session profile as EURUSD (unlike
     # London-only GBPJPY or Tokyo/NY USDJPY) - Cable's
     # wider typical range earns a wider envelope than EURUSD's 10-18,
@@ -351,12 +362,26 @@ instruments:
     # Dig 2026-08-25: Key Level was 0/4 (-118 pips). Keep the family live;
     # raise quality (explicit role + grade A + 3 touches) instead of
     # disabling the family. Do not HTF-veto counter-bias.
+    # §11: nested, not dotted. analysis.levels.minimum_key_touches has no
+    # base value in analysis.yml at all — Python schema default only
+    # before this override (same pattern noted on XAU's target_room
+    # override above).
     overrides:
-      actionability.gates.event_cluster_guard_enabled: true
-      analysis.levels.minimum_key_touches: 3
-      strategies.reaction.key_level.require_explicit_role: true
-      strategies.reaction.key_level.min_grade: A
-      execution.technique.selective_session_min_confluence: 3
+      auto_algo:
+        actionability:
+          gates:
+            event_cluster_guard_enabled: true
+        strategies:
+          reaction:
+            key_level:
+              require_explicit_role: true
+              min_grade: A
+      analysis:
+        levels:
+          minimum_key_touches: 3
+      execution:
+        technique:
+          selective_session_min_confluence: 3
     # Policy name retained for registry continuity. Close-ratio front-load
     # retired: uniform 1R/2R 50/50 + breakeven_after_r=1.0 across fixed_rr.
     policy: fx_fixed_2r_frontload_v1
@@ -404,10 +429,21 @@ instruments:
     # direction-aware (hard-block BUY only) with a 30-pip buffer - the prior
     # symmetric 100-pip band sterilized every plan at ~159.4 including SELLs
     # (0 publishes / 110+ activations on 2026-08-25).
+    # §10/§11: defended_levels as a native float list, not a comma-
+    # compatible string — matches this prompt's own §19 example shape.
+    # The Python field is currently `str` (comma-parsed internally,
+    # app/configuration/models/risk.py); updating it to list[float] is a
+    # C3 schema change tracked against this value, not done silently here.
     overrides:
-      risk.exposure.defended_levels: '160'
-      risk.exposure.defended_level_buffer_price: 0.30
-      execution.technique.selective_session_min_confluence: 3
+      auto_algo:
+        risk:
+          exposure:
+            defended_levels:
+              - 160.0
+            defended_level_buffer_price: 0.30
+      execution:
+        technique:
+          selective_session_min_confluence: 3
     policy: fx_fixed_2r_v1
     # Major pair, tight like EURUSD (not a volatile cross like GBPJPY).
     # Tokyo (JPY driver) + NY (USD driver); London is intentionally excluded.
