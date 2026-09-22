@@ -1052,6 +1052,25 @@
     "telegram_channel_id": "-100123456789"
   },
   "transport": {
+    "kafka": {
+      "brokers": [
+        "kafka:9092"
+      ],
+      "client_id": {
+        "analysis_engine": "apexvoid-analysis-engine"
+      },
+      "consumer_groups": {
+        "analysis_engine": "apexvoid-analysis-engine-v1"
+      },
+      "enabled": false,
+      "tick_consumption_enabled": false,
+      "topics": {
+        "analysis_opportunity": "analysis.opportunity.v1",
+        "analysis_opportunity_invalidated": "analysis.opportunity.invalidated.v1",
+        "market_bar_closed": "market.bar.closed.v1",
+        "market_tick": "market.tick.v1"
+      }
+    },
     "redis": {
       "url": "redis://redis:6379/0"
     },

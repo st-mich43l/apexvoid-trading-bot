@@ -22,7 +22,7 @@ const modulePrefix = "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine
 // rank is this repo's frozen dependency order (lower imports only from a
 // strictly lower rank), per docs/architecture/dependency-rules.md:
 //
-//	market
+//	market / telemetry
 //	  -> indicator / marketdata / config
 //	  -> structure
 //	  -> zone           (independent of liquidity; not yet implemented)
@@ -30,29 +30,32 @@ const modulePrefix = "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine
 //	  -> context        (depends on structure AND liquidity)
 //	  -> opportunity
 //	  -> strategy / confluence / state
-//	  -> engine
 //	  -> transport (incl. transport/kafka, transport/redis)
+//	  -> engine
 //
-// liquidity/context's ranks are an amendment made when Analysis Engine V2
-// was implemented (docs/adr's original freeze had structure/liquidity/zone
-// as same-rank siblings) — see docs/architecture/dependency-rules.md's own
-// note on this change, made the same documented, non-silent way as every
-// other correction in this codebase's history.
+// liquidity/context's ranks and telemetry's leaf->rank-0 reclassification
+// are amendments made when Analysis Engine V2 was implemented — see
+// docs/architecture/dependency-rules.md's own notes on those changes.
 //
-// visualization is a leaf consumer: absent from this map, meaning (a) its
-// own imports are never checked (it may depend on anything), and (b)
-// nothing else may import it — enforced separately below, not via rank.
-//
-// telemetry is NOT a leaf, despite the original architecture freeze
-// classifying it as one — that assumption (telemetry is only ever
-// consumed externally, by an operator/dashboard) was wrong the moment
-// engine needed to actually record its own timings (source task §57):
-// the thing being measured must call INTO the recorder. telemetry has
-// zero internal/* imports of its own (confirmed — see
-// internal/telemetry/metrics.go), so it sits at rank 0 alongside market:
-// a foundational, dependency-free utility anything at a higher rank may
-// import, not a top-of-graph consumer. This correction is made the same
-// documented, non-silent way as every other rank amendment in this file.
+// transport sitting BELOW engine (not above it, as the original
+// architecture freeze had it) is a third amendment, made implementing the
+// Kafka transport task. That task's own §1 states the allowed direction
+// as "engine -> transport/kafka" (engine IMPORTS transport to publish/
+// consume) and explicitly forbids "structure/liquidity/zone/strategy/
+// indicator -> kafka". Under this test's own rule ("a package may only
+// import a strictly lower rank"), engine importing transport requires
+// transport's rank to be LOWER than engine's — the original freeze had
+// transport as the highest rank (8, above engine at 7), which would make
+// that required edge illegal. Placing transport at rank 7 (strictly
+// above strategy/confluence/state at 6, strictly below engine at 8)
+// satisfies both requirements at once with the same plain monotonic rule,
+// no special-cased exception: engine (8) can import transport (7); every
+// package at or below strategy's own rank (6) — including strategy
+// itself — cannot import transport (7), which is exactly source task
+// §1's "strategy -> kafka" forbidden edge, and matches this repo's
+// pre-existing "Strategies must NOT depend on: Kafka · Redis..." rule
+// (docs/architecture/dependency-rules.md's Strategy dependency rule,
+// §52) enforced structurally instead of by a separate carve-out.
 var rank = map[string]int{
 	"market":    0,
 	"telemetry": 0,
@@ -74,11 +77,11 @@ var rank = map[string]int{
 	"confluence": 6,
 	"state":      6,
 
-	"engine": 7,
+	"transport":       7,
+	"transport/kafka": 7,
+	"transport/redis": 7,
 
-	"transport":       8,
-	"transport/kafka": 8,
-	"transport/redis": 8,
+	"engine": 8,
 }
 
 // leaf packages: exempt from having their own imports checked; nothing

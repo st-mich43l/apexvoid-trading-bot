@@ -3,7 +3,14 @@
 ## Status
 Accepted; `contracts/configuration/` already implements this pattern.
 `contracts/market/`, `contracts/analysis/`, `contracts/execution/` created
-this task as skeletons.
+as skeletons by the architecture-freeze task. `contracts/market/`,
+`contracts/analysis/`, and a new `contracts/common/` (the shared event
+envelope, §31 of the Kafka transport task) were promoted to real,
+implemented transport contracts by the Kafka transport task — see
+[ADR-008](008-go-kafka-client.md) and
+[`../transport/kafka.md`](../transport/kafka.md). `contracts/execution/`
+remains a skeleton; execution Kafka is explicitly out of that task's
+scope.
 
 ## Context
 `contracts/configuration/` already proves the pattern this ADR generalizes:

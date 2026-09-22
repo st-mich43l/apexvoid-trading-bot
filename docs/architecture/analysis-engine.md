@@ -37,7 +37,7 @@ analysis-engine/
 │   ├── confluence/        (still scaffolded — compositional evidence combining, doc.go + Score)
 │   ├── state/             (implemented — Analysis Engine V2 task; SymbolState wires History/Structure/Liquidity/Context/Opportunities together)
 │   ├── engine/            (implemented — Analysis Engine V2 task; SymbolWorker, Engine, Settings, AnalysisSnapshot)
-│   ├── transport/         (still scaffolded — kafka/, redis/, doc.go only, no client libs added; ADR-004)
+│   ├── transport/         (transport/kafka implemented — Kafka transport task, ADR-004/008/009; transport/redis still scaffolded, untouched)
 │   ├── visualization/     (implemented — Analysis Engine V2 task; stdlib PNG renderer, consumes AnalysisSnapshot data only)
 │   └── telemetry/         (implemented — Analysis Engine V2 task; Recorder, per-phase timing + counters)
 ├── test/                  (exists — centralized, one subdir per domain; see below)
@@ -47,16 +47,18 @@ analysis-engine/
 ```
 
 "Scaffolded" (still applies to `zone`, `opportunity`, `strategy`,
-`confluence`, `transport`) means: a real, compiling Go package with type
-declarations and doc comments that establish the package's ownership
-boundary and prove the dependency direction against its neighbors — not a
-strategy or indicator implementation. "Implemented" (the rest, as of the
-Analysis Engine V2 task) means real, tested, benchmarked logic — see
+`confluence`, `transport/redis`) means: a real, compiling Go package with
+type declarations and doc comments that establish the package's
+ownership boundary and prove the dependency direction against its
+neighbors — not a strategy or indicator implementation. "Implemented"
+(the rest, as of the Analysis Engine V2 task and, for `transport/kafka`,
+the Kafka transport task) means real, tested, benchmarked logic — see
 [`../analysis-engine-v2-migration.md`](../analysis-engine-v2-migration.md)
-for exactly what each owns and its parity-vs-redesign status against the
-legacy Python it replaces.
+for the Analysis Engine V2 capability table and
+[`../transport/kafka.md`](../transport/kafka.md) for the Kafka transport
+one.
 
-## Dependency graph (with two corrections)
+## Dependency graph (with three corrections)
 
 ```text
 market / telemetry
@@ -73,26 +75,41 @@ opportunity            ← pure result/value types only (Candidate, Evidence, Ta
   ↓
 strategy / confluence / state  ← behavior: Strategy.Evaluate(ctx) returns []opportunity.Candidate
   ↓
-engine
+transport (incl. transport/kafka, transport/redis)
   ↓
-transport
+engine
 ```
 
 `visualization` is the sole leaf consumer outside this chain: it may
 import any core type; nothing core imports it.
 
-**Second correction, made during implementation (not the original
-freeze)**: this doc originally placed `structure / liquidity / zone` as
-same-rank siblings and classified `telemetry` as a leaf alongside
-`visualization`. Actually building Analysis Engine V2 broke both
-assumptions — `liquidity.PoolFromSwing` needs `structure.Swing` directly,
-and `engine`/`worker.go` needs to call `telemetry.Recorder.Time` to record
+**Second correction, made during Analysis Engine V2 implementation**:
+this doc originally placed `structure / liquidity / zone` as same-rank
+siblings and classified `telemetry` as a leaf alongside `visualization`.
+Actually building Analysis Engine V2 broke both assumptions —
+`liquidity.PoolFromSwing` needs `structure.Swing` directly, and
+`engine`/`worker.go` needs to call `telemetry.Recorder.Time` to record
 its own phase timings, which a true "nothing imports this" leaf cannot
 support. `liquidity` was promoted to its own rank (above `structure`/
 `zone`, below `context`), and `telemetry` was moved to rank 0 alongside
 `market`. Full detail and the enforcing test:
 [`dependency-rules.md`](dependency-rules.md)'s own amendment section and
 `analysis-engine/test/architecture/dependency_test.go`.
+
+**Third correction, made implementing the Kafka transport task**:
+`transport` originally sat above `engine` (reading the "engine → transport"
+pipeline-diagram arrow as sequence order). But that task's own §1 states
+the actual required **Go import** direction as "engine ↓ transport/kafka"
+— `engine` must import `transport` to wire a real producer/consumer —
+which is only legal under this graph's own rule if `transport` outranks
+nothing above it and `engine` sits strictly above `transport`. Moving
+`transport` to sit between `strategy/confluence/state` and `engine`
+satisfies that AND keeps `strategy` unable to import `transport` at all
+— exactly that task's own forbidden edge ("strategy → kafka") and this
+doc's pre-existing "Strategies must NOT depend on Kafka/Redis" rule
+(§115 below), now enforced by the rank table itself. Full detail:
+[`dependency-rules.md`](dependency-rules.md)'s own amendment section and
+[ADR-008](../adr/008-go-kafka-client.md).
 
 **Correction to the source task's own §51 ordering, explained**: the source
 task lists `strategy` before `opportunity`, which would forbid strategy

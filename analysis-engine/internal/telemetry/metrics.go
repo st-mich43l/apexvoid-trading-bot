@@ -42,7 +42,23 @@ const (
 	CounterEventsRejected   Counter = "events_rejected"
 	CounterDuplicateEvents  Counter = "duplicate_events"
 	CounterOutOfOrderEvents Counter = "out_of_order_events"
+	// CounterConflictEvents is a same-identity-different-payload bar
+	// (marketdata.AppendConflict) — deliberately distinct from
+	// CounterDuplicateEvents (Kafka transport task §17): a conflict is a
+	// correction/data-quality event an operator should be able to see,
+	// never silently folded into the ordinary/benign duplicate count.
+	CounterConflictEvents Counter = "conflict_events"
 )
+
+// Kafka transport telemetry (kafka_consume_total, kafka_produce_total,
+// consumer lag, etc. — source task §38) is deliberately NOT added to this
+// Recorder: its dimensions are topic/event_type/result, not
+// symbol/timeframe, and forcing them into this Recorder's label shape
+// would either misuse the symbol/timeframe slots for something they
+// don't mean or require widening this type's key for one caller.
+// internal/transport/kafka/metrics.go implements its own small,
+// purpose-built recorder using the identical pattern (sync.Mutex + map,
+// no external library) for exactly that reason.
 
 type key struct {
 	label     string // Phase or Counter, as a string

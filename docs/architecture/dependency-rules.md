@@ -17,9 +17,9 @@ opportunity
   ↓
 strategy / confluence / state
   ↓
-engine
+transport (incl. transport/kafka, transport/redis)
   ↓
-transport
+engine
 ```
 
 Lower layers must not import higher layers:
@@ -68,6 +68,41 @@ discipline as the strategy/opportunity ordering fix below:
 Both changes are enforced, not just documented — see the `rank`/`leaf`
 maps and their own inline comments in
 `analysis-engine/test/architecture/dependency_test.go`.
+
+### Amendment: transport moved below engine, not above it
+
+A third correction, made implementing the Kafka transport task. The
+original freeze placed `transport` as the outermost/highest rank (above
+`engine`), reading the pipeline diagram's `engine → transport` arrow as
+"transport comes after engine in the data-flow sequence." But that
+task's own §1 states the required **Go import direction** explicitly:
+"Allowed direction: engine ↓ transport/kafka" — i.e. `engine` imports
+`transport`, to actually call a producer/consumer. Under this test's
+"a package may only import a strictly lower rank" rule, that import is
+only legal if `transport`'s rank is **lower** than `engine`'s — the
+opposite of the original placement, exactly the same class of
+arrow-direction-vs-import-direction confusion "the one correction, in
+full" below already resolved once for `strategy`/`opportunity`.
+
+`transport` (and `transport/kafka`, `transport/redis`) moved to sit
+strictly **above** `strategy/confluence/state` and strictly **below**
+`engine`. This single move satisfies two requirements from that task at
+once, with no special-cased exception needed:
+
+- `engine` (now the highest rank) can import `transport` — required, so
+  the composition root can wire a Kafka consumer/producer into the
+  engine.
+- `strategy` (and everything at or below its rank — `structure`,
+  `liquidity`, `zone`, `indicator`, `opportunity`) **cannot** import
+  `transport` — which is exactly that task's own forbidden-edges list
+  ("structure → kafka, liquidity → kafka, zone → kafka, strategy → kafka,
+  indicator → kafka") and also matches this doc's own pre-existing
+  Strategy dependency rule below ("Strategies must NOT depend on: Kafka
+  · Redis...") — that rule is now enforced structurally by the rank
+  table itself, not only asserted in prose.
+
+Enforced in `analysis-engine/test/architecture/dependency_test.go`'s
+`rank` map and its own inline comment on this exact reasoning.
 
 ### The one correction, in full
 

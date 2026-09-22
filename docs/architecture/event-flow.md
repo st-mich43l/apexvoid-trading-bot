@@ -58,9 +58,21 @@ execution.trade-event.v1
 to `analysis-engine`'s own `SymbolState` — nothing outside the service ever
 needs a partial computation, only the resulting `AnalysisOpportunity`.
 
-No Kafka broker, topic, or client library exists in this repo as of this
-task. The topic names above are frozen as the target contract surface;
-schemas for the four event classes live under `contracts/` (see
+**As of the Kafka transport task**: the Go side of the first four topics
+is real — `analysis-engine/internal/transport/kafka` is a working
+producer/consumer/codec, proven against a real broker
+([ADR-008](../adr/008-go-kafka-client.md), [ADR-009](../adr/009-kafka-delivery-semantics.md),
+[`../transport/kafka.md`](../transport/kafka.md)). This does **not**
+mean live production traffic flows through Kafka yet — `ctrader-engine`
+does not publish `market.bar.closed.v1` (no `.NET` Kafka work has been
+done), `algo-bot` does not consume `analysis.opportunity.v1` (no Python
+Kafka work has been done), and no strategy exists to produce a real
+opportunity from (`internal/transport/kafka.Producer.PublishOpportunity`
+has no caller in production code). `execution.trade-plan.v1` /
+`execution.trade-event.v1` remain entirely unimplemented, explicitly out
+of that task's scope. Schemas for all six event classes (plus the shared
+`contracts/common/event-envelope-v1.schema.json` wrapper) live under
+`contracts/` (see
 [`../adr/007-shared-cross-service-contracts.md`](../adr/007-shared-cross-service-contracts.md)).
 
 ## Redis role, before and after Kafka cutover (§34)
