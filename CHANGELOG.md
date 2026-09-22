@@ -13,6 +13,12 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Every executable card carried a "→ Executor owns mechanical entry and
+  risk enforcement." footer that said nothing the rest of the card didn't
+  already convey, and survived every later state of the message (SETUP
+  FORMING → QUEUED → ORDER ACTIVATED rewrites only the head line, never the
+  body) - owner-reported 2026-09-22 on a live ORDER ACTIVATED card still
+  carrying it. Dropped from `scanner._format_detection`.
 - A `tp_booked` card for a plan with 2+ targets carried nothing to say TP2+
   was still pending. Owner-reported 2026-09-22 (live GBPJPY card: "TP1 ...
   Achieved +16.0 pips" with TP2 never mentioned, read as "only one TP").
