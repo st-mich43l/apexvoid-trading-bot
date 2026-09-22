@@ -492,15 +492,217 @@
           "required": [
             "interval_seconds"
           ]
+        },
+        "history": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "depth": {
+              "type": "object",
+              "description": "Stored MarketHistory depth per timeframe (candles) \u2014 not any algorithm's calculation lookback.",
+              "additionalProperties": false,
+              "properties": {
+                "M1": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "M5": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "M15": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "H1": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "H4": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "D1": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "required": [
+                "M1",
+                "M5",
+                "M15",
+                "H1",
+                "H4",
+                "D1"
+              ]
+            }
+          },
+          "required": [
+            "depth"
+          ]
+        },
+        "structure": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "version": {
+              "type": "string",
+              "enum": [
+                "v2"
+              ]
+            },
+            "pivot": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "left_bars": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "right_bars": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "required": [
+                "left_bars",
+                "right_bars"
+              ]
+            },
+            "swing": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "minimum_excursion_atr": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "promotion": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "internal_atr": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "intermediate_atr": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "major_atr": {
+                      "type": "number",
+                      "minimum": 0
+                    }
+                  },
+                  "required": [
+                    "internal_atr",
+                    "intermediate_atr",
+                    "major_atr"
+                  ]
+                }
+              },
+              "required": [
+                "minimum_excursion_atr",
+                "promotion"
+              ]
+            },
+            "equal_level": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "tolerance_atr": {
+                  "type": "number",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "tolerance_atr"
+              ]
+            },
+            "break": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "minimum_penetration_atr": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "displacement_range_atr": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "displacement_body_dominance": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "sweep_reclaim_bars": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "failed_break_reclaim_bars": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "required": [
+                "minimum_penetration_atr",
+                "displacement_range_atr",
+                "displacement_body_dominance",
+                "sweep_reclaim_bars",
+                "failed_break_reclaim_bars"
+              ]
+            }
+          },
+          "required": [
+            "version",
+            "pivot",
+            "swing",
+            "equal_level",
+            "break"
+          ]
+        },
+        "liquidity": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "version": {
+              "type": "string",
+              "enum": [
+                "v1"
+              ]
+            },
+            "equal_level_tolerance_atr": {
+              "type": "number",
+              "minimum": 0
+            },
+            "pool_minimum_touches": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "sweep_reclaim_bars": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "required": [
+            "version",
+            "equal_level_tolerance_atr",
+            "pool_minimum_touches",
+            "sweep_reclaim_bars"
+          ]
         }
       },
       "required": [
         "calendar",
+        "history",
         "indicators",
+        "liquidity",
         "measurements",
         "scanner",
         "sessions",
         "spot",
+        "structure",
         "techniques",
         "trendlines",
         "triggers",

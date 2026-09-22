@@ -1,46 +1,93 @@
 // Package engine is runtime orchestration only — it wires
-// internal/state.SymbolState together per symbol and produces
-// AnalysisSnapshot, the one canonical, network-safe analysis result
-// (source task §37). It must not contain indicator formulas or strategy
-// formulas (§29) — those stay in their own packages; engine calls them.
-//
-// Not implemented this task beyond the two types below: per-symbol
-// worker architecture (§30), the dependency-aware recomputation graph
-// (§31), and the scheduler are proposed-tree entries
-// (symbol_worker.go, event_router.go, dependency_graph.go, evaluator.go,
-// scheduler.go) with no real computation to orchestrate yet — see
-// docs/architecture/analysis-engine.md.
+// internal/state.SymbolState together per symbol (via SymbolWorker) and
+// produces AnalysisSnapshot (snapshot.go). It must not contain indicator
+// formulas or strategy formulas (source task §29) — those stay in their
+// own packages; engine calls them. config.go is the one place
+// internal/config becomes reachable by the domain packages this file
+// wires together.
 package engine
 
 import (
-	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/context"
+	"fmt"
+	"sync"
+
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
-	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
-	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/state"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/marketdata"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/telemetry"
 )
 
-// AnalysisSnapshot is the one canonical analysis result model (§37):
-// what visualization, research, journal correlation, debugging, and
-// replay all consume. Internal mutable SymbolState is never exposed
-// directly as this network contract — Snapshot is always taken from it,
-// never the other way around.
-type AnalysisSnapshot struct {
-	Symbol        market.Symbol
-	Time          int64
-	Context       context.MarketContext
-	Opportunities []opportunity.Candidate
-}
-
-// Engine owns one SymbolState per symbol it tracks. Construction/update
-// methods are not implemented this task (see package doc comment) — this
-// type exists so the engine -> state dependency edge in
-// docs/architecture/dependency-rules.md is real and checked by
-// test/architecture/dependency_test.go, not only documented.
+// Engine owns one SymbolWorker per tracked symbol — source task §30:
+// "market events -> event router -> XAU/EURUSD/GBPJPY workers." Dispatch
+// routes an event to its symbol's own worker; different symbols'
+// SymbolWorkers hold independent locks, so concurrent Dispatch calls for
+// different symbols never block each other, while same-symbol calls
+// always serialize through that symbol's own worker (§41).
 type Engine struct {
-	symbols map[market.Symbol]*state.SymbolState
+	mu        sync.RWMutex
+	workers   map[market.Symbol]*SymbolWorker
+	settings  map[market.Symbol]Settings
+	telemetry *telemetry.Recorder
 }
 
-// NewEngine returns an Engine tracking no symbols yet.
-func NewEngine() *Engine {
-	return &Engine{symbols: make(map[market.Symbol]*state.SymbolState)}
+// NewEngine returns an Engine tracking no symbols yet. recorder may be
+// nil (a fresh telemetry.Recorder is created); pass a shared one when the
+// caller wants one Recorder's Snapshot to cover every tracked symbol.
+func NewEngine(recorder *telemetry.Recorder) *Engine {
+	if recorder == nil {
+		recorder = telemetry.NewRecorder()
+	}
+	return &Engine{
+		workers: make(map[market.Symbol]*SymbolWorker), settings: make(map[market.Symbol]Settings),
+		telemetry: recorder,
+	}
 }
+
+// Register adds symbol with its own Settings (a symbol's history depths/
+// structure/liquidity config may differ once per-instrument overrides
+// exist — config/instruments.yml already has this shape for other
+// domains, per-symbol Analysis Engine V2 overrides are not implemented
+// this task, see docs/analysis-engine-v2-migration.md). Registering an
+// already-tracked symbol replaces its worker (and therefore its state) —
+// callers that want to preserve state across a settings change must not
+// call Register a second time.
+func (e *Engine) Register(symbol market.Symbol, settings Settings) error {
+	worker, err := NewSymbolWorker(symbol, settings, e.telemetry)
+	if err != nil {
+		return err
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.workers[symbol] = worker
+	e.settings[symbol] = settings
+	return nil
+}
+
+// Dispatch routes event to its symbol's worker. Returns an error if the
+// symbol was never Register-ed — fail closed (source task §58), never
+// silently create a worker with guessed settings on the fly.
+func (e *Engine) Dispatch(event marketdata.BarEvent) (AnalysisSnapshot, error) {
+	e.mu.RLock()
+	worker, ok := e.workers[event.Symbol]
+	e.mu.RUnlock()
+	if !ok {
+		return AnalysisSnapshot{}, fmt.Errorf("engine: symbol %s is not registered", event.Symbol)
+	}
+	return worker.Apply(event)
+}
+
+// Snapshot returns symbol's current AnalysisSnapshot without applying a
+// new event.
+func (e *Engine) Snapshot(symbol market.Symbol, now int64) (AnalysisSnapshot, error) {
+	e.mu.RLock()
+	worker, ok := e.workers[symbol]
+	e.mu.RUnlock()
+	if !ok {
+		return AnalysisSnapshot{}, fmt.Errorf("engine: symbol %s is not registered", symbol)
+	}
+	return worker.Snapshot(now), nil
+}
+
+// Telemetry exposes the shared Recorder so a caller (cmd/analysis-engine,
+// a future metrics endpoint, or a test) can read it — see
+// telemetry.Recorder.Snapshot.
+func (e *Engine) Telemetry() *telemetry.Recorder { return e.telemetry }
