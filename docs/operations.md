@@ -11,6 +11,7 @@ A weekly sanity pass takes under a minute:
 cd ~/apexvoid-trading-bot
 docker compose ps                          # 'bot' is Up
 docker compose logs --tail=50 bot          # any ERROR lines?
+docker compose logs --tail=50 kafka-init analysis-engine ctrader-engine
 tail -n 50 logs/algo-bot/algo-bot.log      # host-mounted daily log
 df -h /                                     # free space
 free -h                                     # RAM not pinned
@@ -112,7 +113,16 @@ With `restart: unless-stopped`, the container resumes after a reboot.
 
 ## Monitoring
 
-Because there is no HTTP health endpoint, monitor liveness by either:
+The analysis engine has HTTP liveness/readiness endpoints inside the Compose
+network. Check the initializer and engine health state first:
+
+```bash
+docker compose ps kafka kafka-init analysis-engine ctrader-engine
+docker compose logs --tail=100 kafka-init
+docker compose inspect --format '{{.State.Health.Status}}' analysis-engine
+```
+
+The bot itself still has no inbound HTTP endpoint, so monitor its liveness by either:
 
 - Watching for a startup line / absence of crashes in `docker compose logs bot`.
 - A cron heartbeat that pings a dead-man's-switch service (Healthchecks.io)

@@ -59,6 +59,68 @@ services:
     # invalidates the previous token. The host file mirror recovers Redis loss,
     # but destroying both requires manual cTrader Playground re-authorisation.
 
+  kafka:
+    image: apache/kafka:4.0.0
+    container_name: apexvoid-kafka
+    restart: unless-stopped
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      CLUSTER_ID: 4L6g3nShT-eMCtK--X86sw
+    volumes:
+      - kafkadata:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  kafka-init:
+    build: ./analysis-engine
+    image: apexvoid-analysis-engine:latest
+    container_name: apexvoid-kafka-init
+    restart: "no"
+    environment:
+      APEXVOID_CONFIG_FILE: /config/apexvoid.yml
+    entrypoint: ["/app/kafka-admin"]
+    depends_on:
+      kafka:
+        condition: service_healthy
+    volumes:
+      - ./config:/config:ro
+
+  analysis-engine:
+    build: ./analysis-engine
+    image: apexvoid-analysis-engine:latest
+    container_name: apexvoid-analysis-engine
+    restart: unless-stopped
+    environment:
+      APEXVOID_CONFIG_FILE: /config/apexvoid.yml
+    depends_on:
+      kafka:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+    volumes:
+      - ./config:/config:ro
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
   # Startup order:
   #   postgres + redis → config-compiler → ctrader-engine → bot
   # ResolvedRuntimeManifest V2 is authoritative. ENV is secrets + bootstrap only.
@@ -91,6 +153,7 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
+      APEXVOID_CONFIG_FILE: /config/apexvoid.yml
       LOG_DIR: ${LOG_DIR:-/var/log/apexvoid}
       LOG_RETENTION_DAYS: ${LOG_RETENTION_DAYS:-14}
       LOG_FILE_ENABLED: ${LOG_FILE_ENABLED:-true}
@@ -101,9 +164,12 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      kafka:
+        condition: service_healthy
       config-compiler:
         condition: service_completed_successfully
     volumes:
+      - ./config:/config:ro
       - ./data/ctrader-token:/var/lib/apexvoid
       - ./logs/ctrader-engine:/var/log/apexvoid
       - runtime-config:/runtime:ro
@@ -143,3 +209,4 @@ volumes:
   pgdata:
   redisdata:
   runtime-config:
+  kafkadata:

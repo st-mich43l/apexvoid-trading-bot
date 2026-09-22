@@ -1,3 +1,5 @@
+using ApexVoid.CTraderFeed.Transport.Kafka;
+
 namespace ApexVoid.CTraderFeed;
 
 public static class Program
@@ -193,6 +195,12 @@ public static class Program
       );
       return 0;
     }
+    // Kafka transport config comes from Configuration V3 only (source
+    // task §14/§15) — never ENV, never ResolvedRuntimeManifest. This is
+    // additive alongside the manifest-based trading config above, which
+    // stays completely untouched.
+    var marketPublisher = await CreateMarketPublisherAsync(CancellationToken.None);
+
     var runner = new FeedRunner(
       options,
       () => new CTraderOpenApiFeedClient(
@@ -204,7 +212,8 @@ public static class Program
       sink,
       new HealthFile(options.HeartbeatFile),
       autoTrade: autoTrade,
-      instrumentRegistry: instrumentRegistry
+      instrumentRegistry: instrumentRegistry,
+      marketPublisher: marketPublisher
     );
 
     using var cts = new CancellationTokenSource();
@@ -223,6 +232,60 @@ public static class Program
     {
       // Normal SIGINT/SIGTERM shutdown.
     }
+    finally
+    {
+      if (marketPublisher is not null)
+      {
+        // Flush before close (source task §37) — a publish issued just
+        // before shutdown must not be silently dropped.
+        using var flushCts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        try
+        {
+          await marketPublisher.FlushAsync(flushCts.Token);
+        }
+        catch (Exception ex)
+        {
+          Console.Error.WriteLine($"ctrader-feed: Kafka flush on shutdown failed: {ex.GetType().Name}: {ex.Message}");
+        }
+        await marketPublisher.DisposeAsync();
+      }
+    }
     return 0;
+  }
+
+  /// <summary>
+  /// Builds the Kafka publisher from Configuration V3, or returns null
+  /// if Kafka is not configured — a legitimate, non-fatal mode (mirrors
+  /// analysis-engine's own transport.kafka.enabled=false symmetry).
+  /// Fails closed (throws, faulting startup) if
+  /// <c>APEXVOID_CONFIG_FILE</c> IS set but resolving it or reaching a
+  /// configured-and-enabled broker fails — source task §43: "cTrader
+  /// must not advertise full readiness when Kafka publication is
+  /// unavailable" applies at startup too, not only at runtime.
+  /// </summary>
+  private static async Task<KafkaMarketPublisher?> CreateMarketPublisherAsync(CancellationToken cancellationToken)
+  {
+    var configPath = Environment.GetEnvironmentVariable(ConfigurationV3.RootFileEnv);
+    if (string.IsNullOrWhiteSpace(configPath))
+    {
+      Console.Error.WriteLine(
+        $"ctrader-feed: {ConfigurationV3.RootFileEnv} not set — running without Kafka publication."
+      );
+      return null;
+    }
+    var doc = ConfigDocument.Resolve(configPath);
+    var kafkaOptions = KafkaOptions.FromConfig(doc);
+    if (!kafkaOptions.Enabled)
+    {
+      Console.Error.WriteLine("ctrader-feed: transport.kafka.enabled=false — running without Kafka publication.");
+      return null;
+    }
+    var provenance = KafkaConfigProvenance.FromConfig(doc);
+    var publisher = await KafkaMarketPublisher.CreateAsync(kafkaOptions, provenance, metrics: null, health: null, cancellationToken: cancellationToken);
+    Console.Error.WriteLine(
+      $"ctrader-feed: Kafka publisher ready brokers={string.Join(',', kafkaOptions.Brokers)} "
+      + $"topic={kafkaOptions.MarketBarClosedTopic} client_id={kafkaOptions.ClientId}"
+    );
+    return publisher;
   }
 }
