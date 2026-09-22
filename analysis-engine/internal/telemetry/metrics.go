@@ -44,7 +44,7 @@ const (
 	CounterOutOfOrderEvents Counter = "out_of_order_events"
 	// CounterConflictEvents is a same-identity-different-payload bar
 	// (marketdata.AppendConflict) — deliberately distinct from
-	// CounterDuplicateEvents (Kafka transport task §17): a conflict is a
+	// CounterDuplicateEvents: a conflict is a
 	// correction/data-quality event an operator should be able to see,
 	// never silently folded into the ordinary/benign duplicate count.
 	CounterConflictEvents Counter = "conflict_events"

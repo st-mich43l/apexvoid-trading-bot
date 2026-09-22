@@ -1,8 +1,10 @@
-# Redis Bar Contract
+# Redis market-data contract
 
-Redis is the reconstructable market-data cache shared by `ctrader-engine`,
-the Python price-action scanner, and future dashboards. Postgres remains the
-durable trade/accounting store. Market bars do not belong in Postgres.
+Redis is ApexVoid's authoritative **operational market-data plane**, shared by
+`ctrader-engine`, Analysis Engine, the Python price-action scanner, and future
+dashboards. PostgreSQL remains the durable trade/accounting store. Kafka is
+reserved for durable business events and commands, never the bar/tick feed;
+see [ADR-010](adr/010-redis-market-data-kafka-events.md).
 
 ## Series Key
 
@@ -61,8 +63,11 @@ PUBLISH bars:new "XAU:M5:<ts>"
 ```
 
 Removing by score before `ZADD` guarantees exactly one member per timestamp,
-even when backfill overlaps reconnect delivery. `N` is `BARS_WINDOW_MAX`,
-default `1500`.
+even when backfill overlaps reconnect delivery. `N` is `BARS_WINDOW_MAX`.
+Configuration V3 requires up to 2,000 M1 bars, so the current .NET sink's
+global manifest cap is set to **2,000** for every timeframe. The sink does not
+yet expose per-timeframe caps; it intentionally over-retains H4/D1 rather than
+under-retaining the analysis bootstrap window.
 
 ## Read Semantics
 
@@ -95,8 +100,12 @@ Example:
 XAU:M5:4102444800
 ```
 
-The publish is a cadence signal only: "a closed bar arrived, pull the window".
-The ZSET is the material data source.
+The publish is a cadence signal only: "new data may exist; re-read Redis".
+The ZSET is the material data source. Consumers must not treat pub/sub as
+durable. Analysis Engine subscribes before its bootstrap scan, keeps a cursor
+per symbol/timeframe, reads every bar newer than that cursor chronologically,
+and periodically reconciles the ZSET. A missed notification can delay work;
+it cannot create a permanent candle gap.
 
 ## Live Spot Key
 
@@ -114,8 +123,8 @@ bar price when it is absent or stale.
 ## Persistence
 
 Redis is allowed to lose this data on restart. `ctrader-engine` backfills the
-window from cTrader on startup or reconnect. Deep historical backtesting storage
-is a separate future sink, not this Redis contract.
+configured window from cTrader on startup or reconnect. Deep historical
+backtesting storage is a separate future sink, not this Redis contract.
 
 ## Auto-Trade Candidate Stream
 

@@ -299,6 +299,8 @@ instrument_packs:
         m1_bars: 150
         m5_bars: 150
     timeframes:
+    - D1
+    - H4
     - H1
     - M15
     - M5
@@ -364,6 +366,8 @@ instrument_packs:
         m1_bars: 150
         m5_bars: 150
     timeframes:
+    - D1
+    - H4
     - H1
     - M15
     - M5
@@ -452,6 +456,8 @@ instrument_packs:
         m1_bars: 150
         m5_bars: 150
     timeframes:
+    - D1
+    - H4
     - H1
     - M15
     - M5
@@ -715,6 +721,15 @@ market_data:
     - M5
     - M15
     - H1
+    - H4
+    - D1
+    # Analysis Engine V2's deepest configured window is M1=2000. RedisBarSink
+    # must retain at least that many closed bars; the existing .NET sink has
+    # one global cap, so 2000 is deliberately the high-water mark for every
+    # current timeframe until its manifest gains per-timeframe caps.
+    backfill_bars: 2000
+    bars_window_max: 2000
+    bars_channel: bars:new
   scanner:
     execution_timeframe: M5
     htf: H1,M15

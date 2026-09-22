@@ -600,6 +600,8 @@
         ]
       },
       "timeframes": [
+        "D1",
+        "H4",
         "H1",
         "M15",
         "M5",
@@ -684,6 +686,8 @@
         ]
       },
       "timeframes": [
+        "D1",
+        "H4",
         "H1",
         "M15",
         "M5",
@@ -777,6 +781,8 @@
         ]
       },
       "timeframes": [
+        "D1",
+        "H4",
         "H1",
         "M15",
         "M5",
@@ -1057,14 +1063,11 @@
         "kafka:9092"
       ],
       "client_id": {
+        "algo_bot": "apexvoid-algo-bot",
         "analysis_engine": "apexvoid-analysis-engine",
         "ctrader_engine": "apexvoid-ctrader-engine"
       },
-      "consumer_groups": {
-        "analysis_engine": "apexvoid-analysis-engine-v1"
-      },
       "enabled": true,
-      "tick_consumption_enabled": false,
       "topic_specs": {
         "analysis.opportunity.invalidated.v1": {
           "partitions": 3,
@@ -1076,13 +1079,13 @@
           "replication_factor": 1,
           "retention_ms": 604800000
         },
-        "market.bar.closed.v1": {
-          "partitions": 6,
+        "execution.trade-event.v1": {
+          "partitions": 3,
           "replication_factor": 1,
           "retention_ms": 604800000
         },
-        "market.tick.v1": {
-          "partitions": 6,
+        "execution.trade-plan.v1": {
+          "partitions": 3,
           "replication_factor": 1,
           "retention_ms": 604800000
         }
@@ -1090,11 +1093,13 @@
       "topics": {
         "analysis_opportunity": "analysis.opportunity.v1",
         "analysis_opportunity_invalidated": "analysis.opportunity.invalidated.v1",
-        "market_bar_closed": "market.bar.closed.v1",
-        "market_tick": "market.tick.v1"
+        "execution_trade_event": "execution.trade-event.v1",
+        "execution_trade_plan": "execution.trade-plan.v1"
       }
     },
     "redis": {
+      "bars_channel": "bars:new",
+      "reconciliation_interval_seconds": 30,
       "url": "redis://redis:6379/0"
     },
     "redis_streams": {

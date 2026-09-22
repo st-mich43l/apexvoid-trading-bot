@@ -20,11 +20,8 @@ type Config struct {
 	Brokers  []string
 	ClientID string // transport.kafka.client_id.analysis_engine
 
-	Topics        Topics
-	TopicSpecs    map[string]TopicSpec
-	ConsumerGroup string // transport.kafka.consumer_groups.analysis_engine
-
-	TickConsumptionEnabled bool // transport.kafka.tick_consumption_enabled — source task §3
+	Topics     Topics
+	TopicSpecs map[string]TopicSpec
 }
 
 // TopicSpec is the broker-side contract for one configured topic.
@@ -34,12 +31,10 @@ type TopicSpec struct {
 	RetentionMillis int64
 }
 
-// Topics names every topic this service reads or writes — never
-// hardcoded elsewhere in this package's production code (source task
-// §5: "Do NOT hardcode topic names inside Go production code").
+// Topics names the only event topics analysis-engine produces. Execution
+// topics are provisioned by topic_specs for their future owners but are not
+// a dependency of this producer-only service.
 type Topics struct {
-	MarketBarClosed                string
-	MarketTick                     string
 	AnalysisOpportunity            string
 	AnalysisOpportunityInvalidated string
 }
@@ -69,17 +64,12 @@ func (c Config) Validate() error {
 	if err := validateClientID(c.ClientID); err != nil {
 		return err
 	}
-	if strings.TrimSpace(c.ConsumerGroup) == "" {
-		return fmt.Errorf("kafka: transport.kafka.consumer_groups.analysis_engine is required")
-	}
 	topics := map[string]string{
-		"market_bar_closed":                c.Topics.MarketBarClosed,
-		"market_tick":                      c.Topics.MarketTick,
 		"analysis_opportunity":             c.Topics.AnalysisOpportunity,
 		"analysis_opportunity_invalidated": c.Topics.AnalysisOpportunityInvalidated,
 	}
 	seen := make(map[string]string, len(topics))
-	for _, name := range []string{"market_bar_closed", "market_tick", "analysis_opportunity", "analysis_opportunity_invalidated"} {
+	for _, name := range []string{"analysis_opportunity", "analysis_opportunity_invalidated"} {
 		value := topics[name]
 		if strings.TrimSpace(value) == "" {
 			return fmt.Errorf("kafka: transport.kafka.topics.%s is required", name)

@@ -108,6 +108,8 @@ services:
     environment:
       APEXVOID_CONFIG_FILE: /config/apexvoid.yml
     depends_on:
+      redis:
+        condition: service_healthy
       kafka:
         condition: service_healthy
       kafka-init:
@@ -163,8 +165,6 @@ services:
       CTRADER_MANIFEST_PARITY_MODE: off
     depends_on:
       redis:
-        condition: service_healthy
-      kafka:
         condition: service_healthy
       config-compiler:
         condition: service_completed_successfully
