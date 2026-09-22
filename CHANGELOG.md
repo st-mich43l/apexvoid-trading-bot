@@ -12,6 +12,21 @@ dated section after deployment.
 
 ## Unreleased
 
+### Added
+- Started the Go analysis-engine migration (`analysis-engine/`, see
+  `apexvoid-bot-prompts/rebuild-analysis-engine.md`). Stage 0 audit
+  (`docs/go-analysis-migration-audit.md`) traces the Python computation
+  graph and documents every duplicate/divergent calculation found,
+  including a previously-undocumented one: two live ATR formulas
+  (`math_utils.atr_series`'s simple rolling mean vs `indicators.atr`'s
+  pandas_ta Wilder/RMA smoothing) diverge ~6.7% on real XAU M5 data and
+  feed different parts of the same detection pass. Stage 1 (domain types:
+  `Candle`, `CandleWindow`, `Timeframe`, `Geometry`, manifest loader) and
+  the start of Stage 2 (`TrueRange`, both ATR formulas, `AtrAt`/
+  `AtrScalar`) are ported with golden-master parity tests against real
+  Python output. Python remains the authoritative, unmodified reference
+  implementation — nothing here changes live behavior.
+
 ### Fixed
 - Every executable card carried a "→ Executor owns mechanical entry and
   risk enforcement." footer that said nothing the rest of the card didn't
