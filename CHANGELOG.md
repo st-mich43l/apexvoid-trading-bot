@@ -13,6 +13,20 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
+- `analysis-engine`: centralized Go tests from colocated
+  `internal/<pkg>/*_test.go` files into `test/<pkg>/`, one directory per
+  domain (`test/config`, `test/indicator`, `test/market`), matching this
+  migration's own domain-boundary convention. Each moved test became a
+  black-box `<pkg>_test` package against its package's exported API; the
+  one test that read an unexported field (`Document.raw`, in the Stage C6
+  fixture-parity test) now uses a new exported `Document.Raw()` accessor
+  added for exactly that purpose, and the one test that constructed a
+  `Document` via an unexported struct literal was rewritten to build it
+  through `ResolveDocument` instead, matching its neighboring synthetic-
+  fixture tests. No production code path changed. `gofmt`/`go vet`/
+  `go build`/`go test ./... -race` (whole suite) clean, all 28 subtests
+  passing. See `docs/configuration-v3-migration-audit.md`'s "Go test
+  layout" note for the full rationale.
 - Configuration V3 Stage C6: automated cross-language parity. One test
   per language (`algo-bot/tests/test_config_v3_cross_language_fixture.py`,
   `analysis-engine/internal/config/v3_fixture_parity_test.go`,

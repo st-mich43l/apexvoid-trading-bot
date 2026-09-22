@@ -42,10 +42,19 @@ engine, detectors, Redis wiring. See `docs/go-analysis-migration-audit.md`
 
 ## Working on this module
 
+Tests are centralized under `test/`, one subdirectory per package domain
+(`test/config/`, `test/indicator/`, `test/market/`) rather than colocated
+as `internal/<pkg>/*_test.go` — each is a black-box `<pkg>_test` package
+testing its package's exported API only (see
+`docs/configuration-v3-migration-audit.md`'s "Go test layout" note for
+why, and what that meant for the one test that needed unexported access).
+Add new tests there, under the matching domain, not back inside
+`internal/`.
+
 Go is not installed on the host in this environment; everything runs
 through the same `golang:1.23-alpine` Docker image already cached
 locally, mirroring how `ctrader-engine/` is built/tested via the
-`mcr.microsoft.com/dotnet/sdk:8.0` image in this repo. `internal/config`'s
+`mcr.microsoft.com/dotnet/sdk:8.0` image in this repo. `test/config`'s
 tests read the real `config/apexvoid.yml` two directories up, so mount
 the **whole repository**, not just `analysis-engine/`:
 
@@ -72,7 +81,7 @@ docker run --rm -v "$(pwd)":/src -w /src/analysis-engine golang:1.23-alpine \
 - `raw_xau_m5_snapshot.jsonl` — the real bar data the ATR fixtures above
   are built from (a `bars:XAU:M5` Redis snapshot, 2026-09-22).
 
-`internal/config`'s tests have no `testdata/` fixture of their own — they
+`test/config`'s tests have no `testdata/` fixture of their own — they
 read `../../../config/apexvoid.yml` and `.../apexvoid.demo-eval.yml`
 directly (the real files, not a copy), the same choice
 `algo-bot/tests/test_config_v3_parity.py` makes and for the same reason:
