@@ -1,0 +1,101 @@
+# Market-analysis behavior — owned logically by analysis-engine (Go), still
+# readable by every service. Answers "what opportunity exists?", never
+# "should ApexVoid act on it?" (that's auto-algo.yml — see its own header).
+#
+# market_data.* (calendar/session/feed/scanner/spot inputs) is folded in
+# here too: the new architecture's own category list never names a home
+# for it (see docs/configuration-v3-migration-audit.md §9, an open
+# question for the owner) — analysis.yml is the closest fit since these
+# are all analysis *inputs*, not execution or delivery concerns.
+analysis:
+  # Canonical ATR decision (rebuild-configuration-architecture.md §4):
+  # the Go migration audit (docs/go-analysis-migration-audit.md §2.1) found
+  # TWO live ATR formulas today — a simple rolling mean
+  # (app/analysis/math_utils.py::atr_series, used pervasively throughout
+  # the canonical _analyze_tf pipeline) and pandas_ta's Wilder/RMA
+  # smoothing (app/analysis/indicators.py::atr, used only by
+  # detectors.py's IndicatorSet and one worker.py call site) — diverging
+  # ~6.7% on real XAU M5 data. `simple` is both this prompt's own example
+  # value AND the one the prior audit found already pervasive/canonical
+  # in practice, so it is set explicitly here rather than left ambiguous.
+  # This YAML value alone does not yet change runtime behavior — detectors.py
+  # still reads the Wilder formula today; making every consumer (detectors,
+  # structure, zones, scalping, worker) read this one canonical value is a
+  # real code change for a later stage, tracked against this setting.
+  indicators:
+    atr:
+      algorithm: simple
+      length: 14
+
+  trendlines:
+    # V2 keeps A/B anchors immutable, requires a later causal validation, and
+    # turns this band into an interaction watch rather than an automatic fill.
+    version: v2
+    shadow_v1: true
+    validation_touch_tolerance_atr: 0.30
+    interaction_band_atr: 0.20
+    invalidation_penetration_atr: 0.50
+    close_violation_atr: 0.15
+    approach_min_distance_atr: 0.10
+    minimum_validation_touches: 1
+    minimum_validation_touch_spacing_bars: 5
+    validation_reaction_bars: 2
+    minimum_validation_favorable_excursion_atr: 0.10
+    maximum_wick_violations: 2
+    exhaustion_validation_touches: 4
+    chop_minimum_validation_touches: 2
+    chop_require_htf_aligned: true
+
+  triggers:
+    m1:
+      # Prefer body/strong close for technique pack allowlist; wick-only is
+      # blocked at activation when execution.technique.require_sweep_body.
+      patterns: body_close,strong_close,engulfing,wick_rejection,pin_bar,hammer
+      strong_close_pct: 0.2
+      wick_fraction: 0.5
+
+  techniques:
+    # PR-D: filter technique instances via validate_technique_instance predicates.
+    validation_enabled: true
+
+  zones:
+    confluence:
+      merge_gap_price: 1.0
+    merge_max_width: 6.0
+
+  # --- market_data.* from the old trading-bot.yml, unchanged values ---
+  calendar:
+    currencies: USD,EUR,GBP,JPY
+    enabled: true
+    event_guard_hours: 4.0
+    feed_nextweek: https://nfs.faireconomy.media/ff_calendar_nextweek.json
+    feed_thisweek: https://nfs.faireconomy.media/ff_calendar_thisweek.json
+    news_brief_hour: 7
+    news_guard_block: false
+    oil_keywords: crude oil inventories,opec,cushing,api weekly crude
+    user_agent: apexvoid-trading-bot/1.0 (+contact)
+
+  ctrader_feed:
+    symbol: XAUUSD
+    timeframes:
+      - M1
+      - M5
+      - M15
+      - H1
+
+  scanner:
+    execution_timeframe: M5
+    htf: H1,M15
+    symbols: XAU,EURUSD,GBPUSD,GBPJPY,USDJPY
+    window: 500
+
+  sessions:
+    asia_start: 22
+    london_start: 7
+    ny_start: 13
+
+  spot:
+    maximum_age_seconds: 5
+
+  watcher:
+    interval_seconds: 120

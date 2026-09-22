@@ -1,0 +1,120 @@
+# demo_eval environment overlay.
+#
+# Direct transcription of the current app/configuration/profiles.py
+# DEMO_EVAL_PROFILE assignment list (48 dotted-path overrides), converted
+# to the new nested category layout — see
+# docs/configuration-v3-migration-audit.md §9 on why this keeps the
+# "demo_eval" name rather than the new architecture's own development/
+# paper example names: it is a real, currently load-bearing name
+# (AUTO_TRADE_PROFILE=demo_eval in docker-compose.yml/.env.example today),
+# not a placeholder. A few of these values happen to already equal the
+# base file's value (e.g. execution.mapped_zone.hard_entry_drift_pips) —
+# transcribed faithfully anyway rather than silently dropped as
+# "redundant," since this file's job in Stage C1 is exact parity with the
+# profile as it exists today, not a cleanup of it.
+runtime:
+  broker:
+    require_demo: true
+
+telegram:
+  scanner_cards:
+    top_n: 0
+
+execution:
+  mapped_zone:
+    hard_entry_drift_pips: 20.0
+    max_entry_drift_atr: 1.0
+    min_entry_drift_pips: 10.0
+  policy:
+    structural_reaction_lookback_bars: 3
+  range:
+    hard_entry_drift_pips: 20.0
+    max_entry_drift_atr: 1.0
+    min_entry_drift_pips: 10.0
+  trend:
+    hard_entry_drift_pips: 30.0
+    max_entry_drift_atr: 1.5
+    min_entry_drift_pips: 15.0
+  zone_scaling:
+    fill_enabled: true
+
+auto_algo:
+  enabled: true
+  dry_run: false
+  strategy_match_enabled: true
+
+  actionability:
+    counter_bias:
+      allowed: true
+    gates:
+      market_map_guard_enabled: true
+      opposing_barrier_veto_enabled: false
+    overlapping_zones:
+      veto_enabled: false
+    structural_guard:
+      guard_mode: observe
+    zone_reconciliation:
+      mode: shadow
+
+  lifecycle:
+    candidate:
+      execution_maximum_age_seconds: 420
+      storage_ttl_seconds: 604800
+    zone:
+      cooldown_enabled: false
+
+  risk:
+    exposure:
+      allow_concurrent_strategies: true
+      # Not present in the base config/auto-algo.yml at all — these two
+      # fields have no base-file value today and only ever appear via this
+      # profile; their "off-profile" default comes from the Python schema
+      # (Pydantic field default), not from any YAML. Flagged, not fixed,
+      # in docs/configuration-v3-migration-audit.md §2 — this is exactly
+      # the "hidden default" pattern §14 of the new architecture wants
+      # eliminated (every field should have an explicit YAML value once a
+      # loader is authoritative, so "missing" fails startup instead of
+      # silently reading a code default).
+      allow_hedged_xau: true
+      non_hedged_opposite_policy: broker_netting
+      require_flat_for_range: false
+    position_limits:
+      max_tracked_candidates: 0
+      maximum_per_symbol: 0
+
+  strategies:
+    breakout:
+      breakout_enabled: true
+    mapped_zone:
+      counter_bias_enabled: true
+      enabled: true
+    matching:
+      multiple_matches_enabled: true
+      track_all_structural_matches: true
+    range_reversion:
+      # `enabled`/`flip_enabled`/`two_sided_enabled` at this level: the
+      # base config/auto-algo.yml only has `box_scale_out_enabled`,
+      # `flip_enabled`, `range_edge.*`, and `two_sided_enabled` under
+      # strategies.range_reversion — `enabled` itself has no base-file
+      # value either, same schema-default note as risk.exposure above.
+      enabled: true
+      flip_enabled: true
+      two_sided_enabled: true
+    reaction:
+      demand:
+        enabled: true
+      enabled: true
+      key_level:
+        enabled: true
+      liquidity_reversal:
+        enabled: true
+      session_level:
+        enabled: true
+      supply:
+        enabled: true
+      trendline:
+        enabled: true
+    selection:
+      retest_enabled: true
+    trend:
+      enabled: true
