@@ -82,6 +82,11 @@ const (
 	CounterOpportunityPublishEnqueued  Counter = "opportunity_publish_enqueued"
 	CounterOpportunityPublishSucceeded Counter = "opportunity_publish_succeeded"
 	CounterOpportunityPublishFailed    Counter = "opportunity_publish_failed"
+	// CounterOpportunityPublishSuppressed is the S11 shadow-run audit
+	// counter for lifecycle transitions reconstructed from bootstrap/replay
+	// history. They remain in the in-memory OpportunityBook but are never
+	// presented to consumers as a newly observed live opportunity.
+	CounterOpportunityPublishSuppressed Counter = "opportunity_publish_suppressed_non_live"
 )
 
 // Kafka transport telemetry (kafka_consume_total, kafka_produce_total,
