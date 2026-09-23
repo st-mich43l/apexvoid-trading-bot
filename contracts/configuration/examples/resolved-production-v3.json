@@ -93,15 +93,27 @@
         "version": "v2"
       },
       "demand": {
-        "enabled": false,
+        "enabled": true,
+        "expiry_hours": 24.0,
+        "invalidation_buffer_atr": 0.5,
+        "minimum_strength": 0.4,
+        "minimum_target_distance_atr": 1.0,
         "version": "v2"
       },
       "flip_zone": {
-        "enabled": false,
+        "enabled": true,
+        "expiry_hours": 24.0,
+        "invalidation_buffer_atr": 0.5,
+        "minimum_strength": 0.4,
+        "minimum_target_distance_atr": 1.0,
         "version": "v2"
       },
       "fvg": {
-        "enabled": false,
+        "enabled": true,
+        "expiry_hours": 24.0,
+        "invalidation_buffer_atr": 0.5,
+        "minimum_strength": 0.4,
+        "minimum_target_distance_atr": 1.0,
         "version": "v2"
       },
       "ifvg": {
@@ -113,7 +125,13 @@
         "version": "v2"
       },
       "key_level": {
-        "enabled": false,
+        "enabled": true,
+        "expiry_hours": 24.0,
+        "invalidation_buffer_atr": 0.5,
+        "minimum_strength": 0.4,
+        "minimum_target_distance_atr": 1.0,
+        "minimum_touches": 2,
+        "proximity_atr": 1.0,
         "version": "v2"
       },
       "liquidity_sweep": {
@@ -125,7 +143,11 @@
         "version": "v2"
       },
       "order_block": {
-        "enabled": false,
+        "enabled": true,
+        "expiry_hours": 24.0,
+        "invalidation_buffer_atr": 0.5,
+        "minimum_strength": 0.4,
+        "minimum_target_distance_atr": 1.0,
         "version": "v2"
       },
       "range_edge": {
@@ -141,7 +163,11 @@
         "version": "v2"
       },
       "session_level": {
-        "enabled": false,
+        "enabled": true,
+        "expiry_hours": 24.0,
+        "invalidation_buffer_atr": 0.5,
+        "minimum_target_distance_atr": 1.0,
+        "proximity_atr": 1.0,
         "version": "v2"
       },
       "snap_back": {
@@ -149,7 +175,11 @@
         "version": "v2"
       },
       "supply": {
-        "enabled": false,
+        "enabled": true,
+        "expiry_hours": 24.0,
+        "invalidation_buffer_atr": 0.5,
+        "minimum_strength": 0.4,
+        "minimum_target_distance_atr": 1.0,
         "version": "v2"
       },
       "trendline": {
