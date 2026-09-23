@@ -26,7 +26,7 @@ func buildOrderBlockZones(candles []market.Candle, runs []displacementRun, break
 			continue
 		}
 		confirmIndex := indexOfTimeFrom(candles, run.StartIndex, confirming.Time)
-		if confirmIndex < 0 || !qualifyingBreakBody(candles[confirmIndex], cfg.OrderBlockBodyFraction) {
+		if confirmIndex < 0 || !QualifyingBreakBody(candles[confirmIndex], cfg.OrderBlockBodyFraction) {
 			continue
 		}
 		originIdx := lastOppositeCandle(candles, run.StartIndex, run.Direction)
@@ -60,7 +60,13 @@ func buildOrderBlockZones(candles []market.Candle, runs []displacementRun, break
 	return zones
 }
 
-func qualifyingBreakBody(c market.Candle, minimumFraction float64) bool {
+// QualifyingBreakBody reports whether c's body/range ratio clears
+// minimumFraction — technique_geometry.py::validate_technique_instance's
+// OB-only momentum_body_frac gate (cfg.OrderBlockBodyFraction). Exported
+// for test/zone's black-box coverage of this one small primitive check
+// (see ADR-006 — all tests live under test/, never colocated inside this
+// package).
+func QualifyingBreakBody(c market.Candle, minimumFraction float64) bool {
 	if minimumFraction <= 0 {
 		return true
 	}
