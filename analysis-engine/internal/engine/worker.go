@@ -204,10 +204,10 @@ func (w *SymbolWorker) ApplyWithResult(event marketdata.BarEvent) (AnalysisSnaps
 			doneOpp()
 			return AnalysisSnapshot{}, result, obsErr
 		}
-		w.observeTransition(observed, symbolLabel, tfLabel)
+		w.observeTransition(observed, symbolLabel, tfLabel, event.PublishesOpportunity())
 	}
 	for _, expired := range w.state.Opportunities.Expire(event.Candle.Time) {
-		w.observeTransition(expired, symbolLabel, tfLabel)
+		w.observeTransition(expired, symbolLabel, tfLabel, event.PublishesOpportunity())
 	}
 	doneOpp()
 
@@ -226,7 +226,7 @@ func (w *SymbolWorker) ApplyWithResult(event marketdata.BarEvent) (AnalysisSnaps
 // append — see OpportunityPublisher's own doc comment for why the actual
 // network call never happens on this path — and is a no-op on a nil
 // w.publisher (Kafka disabled/absent).
-func (w *SymbolWorker) observeTransition(t opportunity.Transition, symbol, timeframe string) {
+func (w *SymbolWorker) observeTransition(t opportunity.Transition, symbol, timeframe string, publish bool) {
 	switch t.Kind {
 	case opportunity.TransitionCreated:
 		w.telemetry.Count(telemetry.CounterOpportunitiesCreated, symbol, timeframe, 1)
@@ -238,6 +238,10 @@ func (w *SymbolWorker) observeTransition(t opportunity.Transition, symbol, timef
 		w.telemetry.Count(telemetry.CounterOpportunitiesInvalidated, symbol, timeframe, 1)
 	case opportunity.TransitionExpired:
 		w.telemetry.Count(telemetry.CounterOpportunitiesExpired, symbol, timeframe, 1)
+	}
+	if !publish && t.ShouldPublish() {
+		w.telemetry.Count(telemetry.CounterOpportunityPublishSuppressed, symbol, timeframe, 1)
+		return
 	}
 	w.publisher.Enqueue(w.state.Symbol, w.algo, t)
 }
