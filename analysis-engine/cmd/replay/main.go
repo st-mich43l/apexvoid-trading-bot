@@ -19,11 +19,15 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
+	"sort"
+	"strings"
 
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/config"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/engine"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/marketdata"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/visualization"
 )
 
@@ -46,20 +50,30 @@ func main() {
 	symbol := flag.String("symbol", "XAU", "symbol these bars belong to")
 	timeframe := flag.String("timeframe", "M5", "timeframe these bars belong to")
 	pngPath := flag.String("png", "", "optional: write a PNG of the final structure/liquidity read here")
+	setupDir := flag.String("setup-png-dir", "", "optional: directory for setup-focused PNGs, one per selected discovered opportunity")
+	strategyID := flag.String("strategy", "", "optional: only render discovered opportunities from this strategy ID")
+	opportunityID := flag.String("opportunity-id", "", "optional: exact ID or stable ID prefix of one discovered opportunity to render")
+	beforeBars := flag.Int("before-bars", 100, "candles to show before a setup in each setup-focused PNG")
+	afterBars := flag.Int("after-bars", 30, "candles to show after a setup in each setup-focused PNG")
+	maxSetups := flag.Int("max-setups", 0, "maximum selected opportunities to render (0 = all)")
+	verbose := flag.Bool("verbose", false, "print every final live opportunity as well as aggregate counts")
 	flag.Parse()
 
 	if *barsPath == "" || *configPath == "" {
-		fmt.Fprintln(os.Stderr, "usage: replay -bars <file.jsonl> -config <apexvoid.yml> [-symbol XAU] [-timeframe M5] [-png out.png]")
+		fmt.Fprintln(os.Stderr, "usage: replay -bars <file.jsonl> -config <apexvoid.yml> [-symbol XAU] [-timeframe M5] [-png out.png] [-setup-png-dir dir -strategy id|-opportunity-id id-prefix]")
 		os.Exit(2)
 	}
 
-	if err := run(*barsPath, *configPath, market.Symbol(*symbol), market.Timeframe(*timeframe), *pngPath); err != nil {
+	if err := run(*barsPath, *configPath, market.Symbol(*symbol), market.Timeframe(*timeframe), *pngPath, *setupDir, *strategyID, *opportunityID, *beforeBars, *afterBars, *maxSetups, *verbose); err != nil {
 		fmt.Fprintln(os.Stderr, "replay:", err)
 		os.Exit(1)
 	}
 }
 
-func run(barsPath, configPath string, symbol market.Symbol, tf market.Timeframe, pngPath string) error {
+func run(barsPath, configPath string, symbol market.Symbol, tf market.Timeframe, pngPath, setupDir, strategyID, opportunityID string, beforeBars, afterBars, maxSetups int, verbose bool) error {
+	if beforeBars < 0 || afterBars < 0 || maxSetups < 0 {
+		return fmt.Errorf("before-bars, after-bars, and max-setups must be non-negative")
+	}
 	doc, err := config.ResolveDocument(configPath)
 	if err != nil {
 		return fmt.Errorf("loading config: %w", err)
@@ -83,15 +97,23 @@ func run(barsPath, configPath string, symbol market.Symbol, tf market.Timeframe,
 	}
 
 	var snap engine.AnalysisSnapshot
-	accepted, skipped := 0, 0
-	for _, c := range candles {
+	discovered := make([]capturedOpportunity, 0)
+	seen := make(map[string]struct{})
+	accepted := 0
+	for index, c := range candles {
 		result, err := e.Dispatch(marketdata.BarEvent{Symbol: symbol, Timeframe: tf, Candle: c})
 		if err != nil {
 			return fmt.Errorf("dispatching bar at t=%d: %w", c.Time, err)
 		}
 		snap = result
+		for _, candidate := range snap.Opportunities {
+			if _, exists := seen[candidate.ID]; exists {
+				continue
+			}
+			seen[candidate.ID] = struct{}{}
+			discovered = append(discovered, capturedOpportunity{Candidate: candidate, Snapshot: snap, Index: index})
+		}
 		accepted++
-		_ = skipped
 	}
 
 	structState := snap.Structure[tf]
@@ -105,12 +127,16 @@ func run(barsPath, configPath string, symbol market.Symbol, tf market.Timeframe,
 	fmt.Printf("  breaks: %d\n", len(structState.Breaks))
 	fmt.Printf("  liquidity pools: %d\n", len(liqState.Pools))
 	fmt.Printf("  bias: %v (layer=%v)\n", snap.Context.Bias.Direction, snap.Context.Bias.Layer)
-	fmt.Printf("  version: structure=%s liquidity=%s\n", snap.Version.StructureVersion, snap.Version.LiquidityVersion)
+	fmt.Printf("  version: structure=%s liquidity=%s zone=%s\n", snap.Version.StructureVersion, snap.Version.LiquidityVersion, snap.Version.ZoneVersion)
+	fmt.Printf("  discovered opportunities: %d\n", len(discovered))
+	printStrategyCounts("discovered by strategy", discovered)
 	fmt.Printf("  live opportunities (Phase S8): %d\n", len(snap.Opportunities))
-	for _, opp := range snap.Opportunities {
-		fmt.Printf("    - %s %s %s entry=[%.5f,%.5f] invalidation=%.5f quality=%.2f\n",
-			opp.Strategy, opp.Direction, opp.ID[:16], opp.Entry.Low, opp.Entry.High,
-			float64(opp.Invalidation.Price), opp.Quality.Overall)
+	if verbose {
+		for _, opp := range snap.Opportunities {
+			fmt.Printf("    - %s %s %s entry=[%.5f,%.5f] invalidation=%.5f quality=%.2f\n",
+				opp.Strategy, opp.Direction, shortID(opp.ID), opp.Entry.Low, opp.Entry.High,
+				float64(opp.Invalidation.Price), opp.Quality.Overall)
+		}
 	}
 
 	if pngPath != "" {
@@ -119,12 +145,109 @@ func run(barsPath, configPath string, symbol market.Symbol, tf market.Timeframe,
 			return fmt.Errorf("creating %s: %w", pngPath, err)
 		}
 		defer f.Close()
-		if err := visualization.Render(candles, structState, liqState, visualization.DefaultOptions(), f); err != nil {
+		if err := visualization.RenderSnapshot(candles, snap, tf, nil, visualization.DefaultOptions(), f); err != nil {
 			return fmt.Errorf("rendering PNG: %w", err)
 		}
 		fmt.Printf("  wrote %s\n", pngPath)
 	}
+	if setupDir != "" {
+		selected, err := selectOpportunities(discovered, strategyID, opportunityID, maxSetups)
+		if err != nil {
+			return err
+		}
+		if err := os.MkdirAll(setupDir, 0o755); err != nil {
+			return fmt.Errorf("creating setup PNG directory: %w", err)
+		}
+		for _, captured := range selected {
+			start, end := replayWindow(captured.Index, beforeBars, afterBars, len(candles))
+			name := fmt.Sprintf("%s-%s-%d-%s.png", symbol, captured.Candidate.Strategy, captured.Candidate.CreatedAt, shortID(captured.Candidate.ID))
+			path := filepath.Join(setupDir, name)
+			f, err := os.Create(path)
+			if err != nil {
+				return fmt.Errorf("creating setup PNG %s: %w", path, err)
+			}
+			err = visualization.RenderSnapshot(candles[start:end], captured.Snapshot, tf, &captured.Candidate, visualization.DefaultOptions(), f)
+			closeErr := f.Close()
+			if err != nil {
+				return fmt.Errorf("rendering setup PNG %s: %w", path, err)
+			}
+			if closeErr != nil {
+				return fmt.Errorf("closing setup PNG %s: %w", path, closeErr)
+			}
+			fmt.Printf("  wrote setup %s (%s %s at %d, candles=%d:%d)\n", path, captured.Candidate.Strategy, captured.Candidate.ID, captured.Candidate.CreatedAt, start, end)
+		}
+	}
 	return nil
+}
+
+// capturedOpportunity keeps the immutable snapshot from the first observed
+// lifecycle appearance of an opportunity. Setup images may include later
+// candles for review, but their zones, structure, and candidate geometry stay
+// exactly as they were when the technical setup was established.
+type capturedOpportunity struct {
+	Candidate opportunity.Candidate
+	Snapshot  engine.AnalysisSnapshot
+	Index     int
+}
+
+func printStrategyCounts(label string, discovered []capturedOpportunity) {
+	counts := make(map[opportunity.StrategyID]int)
+	for _, captured := range discovered {
+		counts[captured.Candidate.Strategy]++
+	}
+	strategyIDs := make([]string, 0, len(counts))
+	for strategyID := range counts {
+		strategyIDs = append(strategyIDs, string(strategyID))
+	}
+	sort.Strings(strategyIDs)
+
+	parts := make([]string, 0, len(strategyIDs))
+	for _, strategyID := range strategyIDs {
+		parts = append(parts, fmt.Sprintf("%s=%d", strategyID, counts[opportunity.StrategyID(strategyID)]))
+	}
+	fmt.Printf("  %s: %s\n", label, strings.Join(parts, ", "))
+}
+
+func selectOpportunities(discovered []capturedOpportunity, strategyID, opportunityID string, maximum int) ([]capturedOpportunity, error) {
+	if strategyID != "" && opportunityID != "" {
+		return nil, fmt.Errorf("strategy and opportunity-id cannot be used together")
+	}
+	selected := make([]capturedOpportunity, 0)
+	for _, captured := range discovered {
+		if strategyID != "" && string(captured.Candidate.Strategy) != strategyID {
+			continue
+		}
+		if opportunityID != "" && !strings.HasPrefix(captured.Candidate.ID, opportunityID) {
+			continue
+		}
+		selected = append(selected, captured)
+		if maximum > 0 && len(selected) == maximum {
+			break
+		}
+	}
+	if len(selected) == 0 {
+		return nil, fmt.Errorf("no discovered opportunity matched strategy=%q opportunity-id=%q", strategyID, opportunityID)
+	}
+	return selected, nil
+}
+
+func replayWindow(index, before, after, total int) (int, int) {
+	start := index - before
+	if start < 0 {
+		start = 0
+	}
+	end := index + after + 1
+	if end > total {
+		end = total
+	}
+	return start, end
+}
+
+func shortID(id string) string {
+	if len(id) <= 16 {
+		return id
+	}
+	return id[:16]
 }
 
 func readBars(path string) ([]market.Candle, error) {

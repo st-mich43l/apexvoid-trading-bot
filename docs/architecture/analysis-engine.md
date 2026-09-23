@@ -20,7 +20,7 @@ state, engine, transport, visualization, telemetry).
 analysis-engine/
 ├── cmd/
 │   ├── analysis-engine/main.go     (exists)
-│   ├── replay/main.go              (implemented — Analysis Engine V2 task; drives Engine.Dispatch over real historical bars, optional PNG output)
+│   ├── replay/main.go              (implemented — drives Engine.Dispatch over historical bars; final-state and setup-focused snapshot PNG output)
 │   ├── benchmark/main.go           (not yet created — benchmarks live under test/benchmark/ instead)
 │   └── inspect/main.go             (not yet created)
 ├── internal/
@@ -33,12 +33,12 @@ analysis-engine/
 │   ├── zone/             (implemented canonical technical-zone domain — lifecycle and relevance)
 │   ├── context/          (implemented — Analysis Engine V2 task; MarketContext, Build, DeriveBias)
 │   ├── opportunity/       (implemented lifecycle domain — stable identity, dedup, technical terminal transitions)
-│   ├── strategy/          (registry + dependency-aware evaluator implemented; no strategy thesis yet)
+│   ├── strategy/          (registry + dependency-aware evaluator; seven independent S7 theses implemented)
 │   ├── confluence/        (still scaffolded — compositional evidence combining, doc.go + Score)
 │   ├── state/             (implemented — Analysis Engine V2 task; SymbolState wires History/Structure/Liquidity/Context/Opportunities together)
 │   ├── engine/            (implemented — Analysis Engine V2 task; SymbolWorker, Engine, Settings, AnalysisSnapshot)
 │   ├── transport/         (Redis market runtime and Kafka producer implemented — ADR-008/009/010)
-│   ├── visualization/     (implemented — Analysis Engine V2 task; stdlib PNG renderer, consumes AnalysisSnapshot data only)
+│   ├── visualization/     (implemented — stdlib PNG renderer, consumes AnalysisSnapshot data only)
 │   └── telemetry/         (implemented — Analysis Engine V2 task; Recorder, per-phase timing + counters)
 ├── test/                  (exists — centralized, one subdir per domain; see below)
 ├── testdata/              (exists — golden-master fixtures, incl. real XAU M5 production data)
@@ -247,8 +247,9 @@ type AnalysisSnapshot struct {
     Context       context.MarketContext
     Structure     map[market.Timeframe]structure.StructureState
     Liquidity     map[market.Timeframe]liquidity.LiquidityState
+    Zones         map[market.Timeframe]zone.ZoneState
     Opportunities []opportunity.Candidate // created/active lifecycle records only
-    Version       SnapshotVersion         // {StructureVersion, LiquidityVersion} — unknown version fails closed at load, never silently assumed
+    Version       SnapshotVersion         // {StructureVersion, LiquidityVersion, ZoneVersion} — unknown version fails closed at load, never silently assumed
 }
 ```
 
@@ -256,6 +257,13 @@ type AnalysisSnapshot struct {
 — what visualization, research, journal correlation, debugging, and replay
 all consume. Internal mutable `SymbolState` is never exposed directly as a
 contract (§37).
+
+The Phase S10 renderer consumes that snapshot without evaluating a strategy
+or rebuilding facts. Its setup view draws supplied candles, swings, BOS/CHoCH,
+protected levels, liquidity pools, zones, and an optional supplied candidate's
+entry, invalidation, and targets. `cmd/replay -setup-png-dir` writes reviewable
+`<symbol>-<strategy>-<timestamp>-<opportunity-id>.png` images around a
+first-observed setup; it is research tooling, never a live-decision path.
 
 ## Independent strategy architecture (§20–22, frozen)
 

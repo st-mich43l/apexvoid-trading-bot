@@ -327,3 +327,13 @@ preservation, retry-until-success). **Not** re-verified against a real
 Kafka broker this session (none available in this sandbox) — see
 `docs/analysis-engine-v2-migration.md`'s own Phase S9 limitations for the
 full, honest scope of what that does and doesn't prove.
+
+### Phase S10 status
+
+Phase S10 adds a review surface, not a second decision engine. The snapshot
+renderer accepts only the already-computed `AnalysisSnapshot` plus an optional
+candidate, and `cmd/replay -setup-png-dir` captures the snapshot from the
+candidate's first observed lifecycle appearance. The generated image contains
+the supplied market facts and candidate geometry; it never recalculates setup
+validity. The initial real-XAU review is recorded in
+[`20260923-xau-m5-s7-setup-review.md`](20260923-xau-m5-s7-setup-review.md).
