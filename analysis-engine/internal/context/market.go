@@ -4,12 +4,14 @@
 // rebuild zones" is forbidden; "BreakoutRetest -> read
 // SymbolState/MarketContext" is required).
 //
-// Depends on internal/structure and internal/liquidity (both real as of
-// Analysis Engine V2) — context sits above both in
-// docs/architecture/dependency-rules.md's amended rank table.
+// Depends on internal/structure, internal/liquidity, internal/zone, and
+// internal/keylevel (all real as of Analysis Engine V2) — context sits
+// above every one of them in docs/architecture/dependency-rules.md's
+// amended rank table.
 package context
 
 import (
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/keylevel"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/liquidity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
@@ -33,6 +35,7 @@ type MarketContext struct {
 	Structure  StructureContext
 	Liquidity  LiquidityContext
 	Zones      ZoneContext
+	KeyLevel   KeyLevelContext
 	Bias       BiasContext
 	Regime     RegimeContext
 	Volatility VolatilityContext
@@ -46,6 +49,7 @@ type TimeframeContext struct {
 	Structure structure.StructureState
 	Liquidity liquidity.LiquidityState
 	Zones     zone.ZoneState
+	KeyLevel  keylevel.State
 }
 
 // StructureContext is MarketContext's primary-timeframe structural view —
@@ -68,6 +72,12 @@ type LiquidityContext struct {
 type ZoneContext struct {
 	Timeframe market.Timeframe
 	State     zone.ZoneState
+}
+
+// KeyLevelContext mirrors ZoneContext for the key-level domain.
+type KeyLevelContext struct {
+	Timeframe market.Timeframe
+	State     keylevel.State
 }
 
 // BiasContext is DERIVED from Structure — source task §36: "bias should
@@ -114,7 +124,7 @@ func Build(
 	timeframes := make(map[market.Timeframe]*TimeframeContext, len(perTimeframe))
 	for tf, input := range perTimeframe {
 		timeframes[tf] = &TimeframeContext{
-			Timeframe: tf, Structure: input.Structure, Liquidity: input.Liquidity, Zones: input.Zones,
+			Timeframe: tf, Structure: input.Structure, Liquidity: input.Liquidity, Zones: input.Zones, KeyLevel: input.KeyLevel,
 		}
 	}
 
@@ -123,6 +133,7 @@ func Build(
 		ctx.Structure = StructureContext{Timeframe: primary, State: primaryInput.Structure}
 		ctx.Liquidity = LiquidityContext{Timeframe: primary, State: primaryInput.Liquidity}
 		ctx.Zones = ZoneContext{Timeframe: primary, State: primaryInput.Zones}
+		ctx.KeyLevel = KeyLevelContext{Timeframe: primary, State: primaryInput.KeyLevel}
 		ctx.Bias = DeriveBias(primaryInput.Structure)
 		ctx.Volatility = VolatilityContext{ATR: primaryInput.ATR}
 	}
@@ -135,6 +146,7 @@ type TimeframeInput struct {
 	Structure structure.StructureState
 	Liquidity liquidity.LiquidityState
 	Zones     zone.ZoneState
+	KeyLevel  keylevel.State
 	ATR       float64
 }
 

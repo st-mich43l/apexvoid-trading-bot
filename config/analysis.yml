@@ -168,6 +168,20 @@ analysis:
   measurements:
     max_merged_zone_atr: 3.0
 
+  # Phase S4 — internal/keylevel. No old trading-bot.yml OR Python-
+  # schema-default precedent at all (levels.py reads these as plain
+  # function-argument defaults, never a config leaf) — values are those
+  # real function defaults, ported explicitly rather than invented.
+  key_levels:
+    # key_levels()'s level_cluster_atr.
+    cluster_atr: 0.5
+    # key_levels()'s round_step.
+    round_step: 5.0
+    # key_levels()'s min_touches.
+    minimum_touches: 2
+    # key_levels()'s max_cluster_span_multiple.
+    maximum_cluster_span_multiple: 2.0
+
   # §7: zones.merge_max_width / zones.confluence.merge_gap_price (price-
   # absolute, not ATR-relative — see zones.merge_overlap/max_merged_zone_atr
   # above for those) are REMOVED from here, not just left unused. Investigated

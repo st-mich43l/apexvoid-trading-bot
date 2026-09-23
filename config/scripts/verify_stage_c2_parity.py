@@ -174,6 +174,14 @@ DIVERGENCES: dict[str, dict] = {
   "analysis.yml/analysis.flip_zone.accept_bars": {"kind": "new_surfaced", "expected": 2, "reason": "Phase S3 — canonical Flip zone close-acceptance window."},
   "analysis.yml/analysis.flip_zone.band_body_fraction": {"kind": "new_surfaced", "expected": 0.5, "reason": "Phase S3 — canonical Flip zone confirmation body threshold."},
   "analysis.yml/analysis.zones.version": {"kind": "new_surfaced", "expected": "v1", "reason": "Phase S3 — versioned canonical Zone domain contract."},
+  # analysis.yml — Phase S4's third domain (internal/keylevel): no old
+  # trading-bot.yml OR Python-schema-default precedent at all — levels.py
+  # reads these as plain function-argument defaults, never a config leaf
+  # before this phase.
+  "analysis.yml/analysis.key_levels.cluster_atr": {"kind": "new_surfaced", "expected": 0.5, "reason": "Phase S4 — key_levels()'s real level_cluster_atr default."},
+  "analysis.yml/analysis.key_levels.round_step": {"kind": "new_surfaced", "expected": 5.0, "reason": "Phase S4 — key_levels()'s real round_step default."},
+  "analysis.yml/analysis.key_levels.minimum_touches": {"kind": "new_surfaced", "expected": 2, "reason": "Phase S4 — key_levels()'s real min_touches default."},
+  "analysis.yml/analysis.key_levels.maximum_cluster_span_multiple": {"kind": "new_surfaced", "expected": 2.0, "reason": "Phase S4 — key_levels()'s real max_cluster_span_multiple default."},
   # analysis.yml — §10: CSV string -> native list, same content.
   "analysis.yml/analysis.triggers.m1.patterns": {
     "kind": "csv_to_list", "old_path": "analysis.triggers.m1.patterns",
