@@ -44,45 +44,19 @@ func run(configPath string) error {
 		return fmt.Errorf("reading live instruments: %w", err)
 	}
 
-	e := engine.NewEngine(nil)
-	series := make([]redistransport.Series, 0)
-	for _, symbol := range live {
-		settings, err := engine.LoadSettings(doc, primaryTimeframe, false)
-		if err != nil {
-			return fmt.Errorf("loading analysis settings for %s: %w", symbol, err)
-		}
-		canonical := market.Symbol(symbol)
-		if err := e.Register(canonical, settings); err != nil {
-			return fmt.Errorf("registering %s: %w", symbol, err)
-		}
-		for timeframe, depth := range settings.HistoryDepths {
-			series = append(series, redistransport.Series{Symbol: canonical, Timeframe: timeframe, Depth: depth})
-		}
-	}
-	if len(series) == 0 {
-		return fmt.Errorf("no live market series configured")
-	}
-
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	redisCfg, err := engine.RedisConfigFromConfig(doc)
-	if err != nil {
-		return fmt.Errorf("loading Redis transport config: %w", err)
-	}
-	redisHealth := redistransport.NewHealth(true)
-	runtime, err := redistransport.NewRuntime(redisCfg, series, func(ctx context.Context, event marketdata.BarEvent) (marketdata.AppendResult, error) {
-		_, result, err := e.DispatchWithResult(event)
-		return result, err
-	}, redisHealth, redistransport.NewMetrics())
-	if err != nil {
-		return fmt.Errorf("initializing Redis market runtime: %w", err)
-	}
-	defer runtime.Close()
+
+	e := engine.NewEngine(nil)
 
 	// Kafka is a producer capability only. Failure to initialize it is visible
 	// in Kafka health/logs but never prevents Redis from maintaining analysis
-	// state. A future strategy must retain/retry a failed opportunity publish;
-	// it must never silently discard an opportunity.
+	// state. Phase S9: a strategy's opportunity lifecycle transitions are
+	// retained and retried (OpportunityPublisher, off the ingestion hot
+	// path — see its own doc comment) rather than silently discarded;
+	// SetPublisher below must run BEFORE the registration loop, since
+	// Engine.Register reads the current publisher once at worker-
+	// construction time, not on every event.
 	kafkaCfg, err := engine.KafkaConfigFromConfig(doc)
 	if err != nil {
 		return fmt.Errorf("loading Kafka transport config: %w", err)
@@ -106,6 +80,51 @@ func run(configPath string) error {
 			_ = producer.Close(shutdown)
 		}
 	}()
+	// producer is a *kafka.Producer that may be a nil pointer; passing it
+	// directly into NewOpportunityPublisher's interface parameter would
+	// produce a non-nil interface wrapping a nil pointer (the classic Go
+	// "typed nil" trap), defeating NewOpportunityPublisher's own `client
+	// == nil` check. var client stays a genuinely nil interface unless
+	// producer is real.
+	var client engine.OpportunityKafkaClient
+	if producer != nil {
+		client = producer
+	}
+	publisher := engine.NewOpportunityPublisher(client, e.Telemetry())
+	e.SetPublisher(publisher)
+	go publisher.Run(ctx)
+
+	series := make([]redistransport.Series, 0)
+	for _, symbol := range live {
+		settings, err := engine.LoadSettings(doc, primaryTimeframe, false)
+		if err != nil {
+			return fmt.Errorf("loading analysis settings for %s: %w", symbol, err)
+		}
+		canonical := market.Symbol(symbol)
+		if err := e.Register(canonical, settings); err != nil {
+			return fmt.Errorf("registering %s: %w", symbol, err)
+		}
+		for timeframe, depth := range settings.HistoryDepths {
+			series = append(series, redistransport.Series{Symbol: canonical, Timeframe: timeframe, Depth: depth})
+		}
+	}
+	if len(series) == 0 {
+		return fmt.Errorf("no live market series configured")
+	}
+
+	redisCfg, err := engine.RedisConfigFromConfig(doc)
+	if err != nil {
+		return fmt.Errorf("loading Redis transport config: %w", err)
+	}
+	redisHealth := redistransport.NewHealth(true)
+	runtime, err := redistransport.NewRuntime(redisCfg, series, func(ctx context.Context, event marketdata.BarEvent) (marketdata.AppendResult, error) {
+		_, result, err := e.DispatchWithResult(event)
+		return result, err
+	}, redisHealth, redistransport.NewMetrics())
+	if err != nil {
+		return fmt.Errorf("initializing Redis market runtime: %w", err)
+	}
+	defer runtime.Close()
 
 	server := &http.Server{Addr: ":8080", Handler: healthHandler(redisHealth)}
 	serverErr := make(chan error, 1)

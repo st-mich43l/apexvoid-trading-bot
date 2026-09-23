@@ -16,6 +16,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/telemetry"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/transport/kafka"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/trendline"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/zone"
 )
@@ -33,6 +34,8 @@ type SymbolWorker struct {
 	settings  Settings
 	telemetry *telemetry.Recorder
 	registry  *strategy.Registry
+	publisher *OpportunityPublisher // nil = no Kafka opportunity publication (Phase S9)
+	algo      kafka.AlgorithmVersion
 }
 
 // NewSymbolWorker returns a worker for symbol with an empty SymbolState
@@ -47,7 +50,7 @@ type SymbolWorker struct {
 // worker keeps a future per-symbol config override (not implemented
 // today, see Engine.Register's doc comment) trivial to support without
 // restructuring this constructor.
-func NewSymbolWorker(symbol market.Symbol, settings Settings, recorder *telemetry.Recorder) (*SymbolWorker, error) {
+func NewSymbolWorker(symbol market.Symbol, settings Settings, recorder *telemetry.Recorder, publisher *OpportunityPublisher) (*SymbolWorker, error) {
 	ws, err := state.NewSymbolState(symbol, settings.HistoryDepths, settings.AllowReplaceForming)
 	if err != nil {
 		return nil, err
@@ -59,7 +62,8 @@ func NewSymbolWorker(symbol market.Symbol, settings Settings, recorder *telemetr
 	if recorder == nil {
 		recorder = telemetry.NewRecorder()
 	}
-	return &SymbolWorker{state: ws, settings: settings, telemetry: recorder, registry: registry}, nil
+	algo := kafka.AlgorithmVersion{Structure: settings.Structure.Version, Liquidity: settings.Liquidity.Version}
+	return &SymbolWorker{state: ws, settings: settings, telemetry: recorder, registry: registry, publisher: publisher, algo: algo}, nil
 }
 
 // Apply processes one closed-bar event through the full pipeline —
@@ -200,10 +204,10 @@ func (w *SymbolWorker) ApplyWithResult(event marketdata.BarEvent) (AnalysisSnaps
 			doneOpp()
 			return AnalysisSnapshot{}, result, obsErr
 		}
-		w.countTransition(observed, symbolLabel, tfLabel)
+		w.observeTransition(observed, symbolLabel, tfLabel)
 	}
 	for _, expired := range w.state.Opportunities.Expire(event.Candle.Time) {
-		w.countTransition(expired, symbolLabel, tfLabel)
+		w.observeTransition(expired, symbolLabel, tfLabel)
 	}
 	doneOpp()
 
@@ -213,10 +217,16 @@ func (w *SymbolWorker) ApplyWithResult(event marketdata.BarEvent) (AnalysisSnaps
 	return snap, result, nil
 }
 
-// countTransition records one opportunity lifecycle transition under its
-// own counter — TransitionNoop is deliberately uncounted (see
-// telemetry.CounterOpportunitiesCreated's doc comment).
-func (w *SymbolWorker) countTransition(t opportunity.Transition, symbol, timeframe string) {
+// observeTransition records one opportunity lifecycle transition under
+// its own counter (TransitionNoop is deliberately uncounted — see
+// telemetry.CounterOpportunitiesCreated's doc comment) and, for a
+// publishable transition (source task §81: Created/Invalidated/Expired —
+// Transition.ShouldPublish()), hands it to the shared OpportunityPublisher
+// for background Kafka delivery (Phase S9). Enqueue is a fast, lock-only
+// append — see OpportunityPublisher's own doc comment for why the actual
+// network call never happens on this path — and is a no-op on a nil
+// w.publisher (Kafka disabled/absent).
+func (w *SymbolWorker) observeTransition(t opportunity.Transition, symbol, timeframe string) {
 	switch t.Kind {
 	case opportunity.TransitionCreated:
 		w.telemetry.Count(telemetry.CounterOpportunitiesCreated, symbol, timeframe, 1)
@@ -229,6 +239,7 @@ func (w *SymbolWorker) countTransition(t opportunity.Transition, symbol, timefra
 	case opportunity.TransitionExpired:
 		w.telemetry.Count(telemetry.CounterOpportunitiesExpired, symbol, timeframe, 1)
 	}
+	w.publisher.Enqueue(w.state.Symbol, w.algo, t)
 }
 
 // Snapshot returns the current AnalysisSnapshot without applying a new
