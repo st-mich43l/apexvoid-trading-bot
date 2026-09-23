@@ -619,6 +619,30 @@
             "max_merged_zone_atr"
           ]
         },
+        "fibonacci": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "epsilon_atr": {
+              "type": "number"
+            },
+            "deep_discount": {
+              "type": "number"
+            },
+            "deep_premium": {
+              "type": "number"
+            },
+            "eq_half_band": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "epsilon_atr",
+            "deep_discount",
+            "deep_premium",
+            "eq_half_band"
+          ]
+        },
         "calendar": {
           "type": "object",
           "additionalProperties": false,
@@ -942,6 +966,7 @@
       },
       "required": [
         "calendar",
+        "fibonacci",
         "flip_zone",
         "history",
         "indicators",
