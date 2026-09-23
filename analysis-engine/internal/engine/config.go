@@ -8,10 +8,12 @@ import (
 	"time"
 
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/config"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/fib"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/indicator"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/keylevel"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/liquidity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/session"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/transport/kafka"
 	redistransport "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/transport/redis"
@@ -310,6 +312,65 @@ func KeyLevelConfigFromConfig(doc *config.Document) (keylevel.Config, error) {
 		RoundStep:                  roundStep,
 		MinimumTouches:             minimumTouches,
 		MaximumClusterSpanMultiple: maximumClusterSpanMultiple,
+	}, nil
+}
+
+// SessionConfigFromConfig reads analysis.sessions.* into session.Config —
+// Phase S4's first domain. asia/london/ny_start are the same leaves
+// StructureConfigFromConfig's siblings already read for scanner/session
+// display purposes; daily_rollover_utc_hour is the one leaf this phase
+// adds (see config/analysis.yml).
+func SessionConfigFromConfig(doc *config.Document) (session.Config, error) {
+	asiaStart, err := getInt(doc, "analysis.sessions.asia_start")
+	if err != nil {
+		return session.Config{}, err
+	}
+	londonStart, err := getInt(doc, "analysis.sessions.london_start")
+	if err != nil {
+		return session.Config{}, err
+	}
+	nyStart, err := getInt(doc, "analysis.sessions.ny_start")
+	if err != nil {
+		return session.Config{}, err
+	}
+	rolloverHour, err := getInt(doc, "analysis.sessions.daily_rollover_utc_hour")
+	if err != nil {
+		return session.Config{}, err
+	}
+	return session.Config{
+		AsiaStartHour:        asiaStart,
+		LondonStartHour:      londonStart,
+		NYStartHour:          nyStart,
+		DailyRolloverUTCHour: rolloverHour,
+	}, nil
+}
+
+// FibConfigFromConfig reads analysis.fibonacci.* into fib.Config —
+// Phase S4's second domain. No version gate (unlike Zone/Structure):
+// fibonacci.py/dealing_range.py have never had a versioned contract, and
+// neither leaf here changes shape between versions.
+func FibConfigFromConfig(doc *config.Document) (fib.Config, error) {
+	epsilonATR, err := getFloat(doc, "analysis.fibonacci.epsilon_atr")
+	if err != nil {
+		return fib.Config{}, err
+	}
+	deepDiscount, err := getFloat(doc, "analysis.fibonacci.deep_discount")
+	if err != nil {
+		return fib.Config{}, err
+	}
+	deepPremium, err := getFloat(doc, "analysis.fibonacci.deep_premium")
+	if err != nil {
+		return fib.Config{}, err
+	}
+	eqHalfBand, err := getFloat(doc, "analysis.fibonacci.eq_half_band")
+	if err != nil {
+		return fib.Config{}, err
+	}
+	return fib.Config{
+		EpsilonATR:   epsilonATR,
+		DeepDiscount: deepDiscount,
+		DeepPremium:  deepPremium,
+		EqHalfBand:   eqHalfBand,
 	}, nil
 }
 

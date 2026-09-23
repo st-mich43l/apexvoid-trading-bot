@@ -21,6 +21,12 @@
       ],
       "user_agent": "apexvoid-trading-bot/1.0 (+contact)"
     },
+    "fibonacci": {
+      "deep_discount": 0.382,
+      "deep_premium": 0.618,
+      "epsilon_atr": 0.15,
+      "eq_half_band": 0.05
+    },
     "flip_zone": {
       "accept_bars": 2,
       "band_body_fraction": 0.5
@@ -66,6 +72,7 @@
     },
     "sessions": {
       "asia_start": 22,
+      "daily_rollover_utc_hour": 21,
       "london_start": 7,
       "ny_start": 13
     },

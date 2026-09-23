@@ -181,6 +181,22 @@ analysis:
     minimum_touches: 2
     # key_levels()'s max_cluster_span_multiple.
     maximum_cluster_span_multiple: 2.0
+  # Phase S4 — internal/fib. No old trading-bot.yml OR Python-schema-
+  # default precedent at all (fibonacci.py/dealing_range.py read these as
+  # plain function-argument defaults, never a config leaf) — values are
+  # those real function defaults, ported explicitly rather than invented.
+  fibonacci:
+    # nearest_fib()'s epsilon_atr.
+    epsilon_atr: 0.15
+    # fib_zone_label()'s deep_discount/deep_premium position thresholds —
+    # not a coincidence that these equal the 38.2%/61.8% retracement
+    # ratios themselves.
+    deep_discount: 0.382
+    deep_premium: 0.618
+    # dealing_range()'s own eq_band=0.10 default, already halved — see
+    # internal/fib.Config.EqHalfBand's own comment on why it's stored
+    # pre-halved.
+    eq_half_band: 0.05
 
   # §7: zones.merge_max_width / zones.confluence.merge_gap_price (price-
   # absolute, not ATR-relative — see zones.merge_overlap/max_merged_zone_atr
@@ -241,6 +257,10 @@ analysis:
     asia_start: 22
     london_start: 7
     ny_start: 13
+    # Trading-day boundary for PDH/PDL (Phase S4, internal/session) —
+    # session_liquidity.py::_daily_rollover's real Python default, not
+    # invented.
+    daily_rollover_utc_hour: 21
 
   spot:
     maximum_age_seconds: 5
