@@ -1,10 +1,11 @@
-package engine
+package engine_test
 
 import (
 	"path/filepath"
 	"testing"
 
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/config"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/engine"
 )
 
 func TestZoneConfigFromConfigUsesCanonicalPhaseS3Leaves(t *testing.T) {
@@ -14,7 +15,7 @@ func TestZoneConfigFromConfigUsesCanonicalPhaseS3Leaves(t *testing.T) {
 		t.Fatalf("ResolveDocument: %v", err)
 	}
 
-	got, err := ZoneConfigFromConfig(doc)
+	got, err := engine.ZoneConfigFromConfig(doc)
 	if err != nil {
 		t.Fatalf("ZoneConfigFromConfig: %v", err)
 	}
