@@ -704,12 +704,16 @@
             },
             "ny_start": {
               "type": "integer"
+            },
+            "daily_rollover_utc_hour": {
+              "type": "integer"
             }
           },
           "required": [
             "asia_start",
             "london_start",
-            "ny_start"
+            "ny_start",
+            "daily_rollover_utc_hour"
           ]
         },
         "spot": {

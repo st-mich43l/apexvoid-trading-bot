@@ -4,14 +4,16 @@
 // rebuild zones" is forbidden; "BreakoutRetest -> read
 // SymbolState/MarketContext" is required).
 //
-// Depends on internal/structure and internal/liquidity (both real as of
-// Analysis Engine V2) — context sits above both in
-// docs/architecture/dependency-rules.md's amended rank table.
+// Depends on internal/structure, internal/liquidity, internal/zone, and
+// internal/session (all real as of Analysis Engine V2) — context sits
+// above every one of them in docs/architecture/dependency-rules.md's
+// amended rank table.
 package context
 
 import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/liquidity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/session"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/zone"
 )
@@ -46,6 +48,7 @@ type TimeframeContext struct {
 	Structure structure.StructureState
 	Liquidity liquidity.LiquidityState
 	Zones     zone.ZoneState
+	Session   session.State
 }
 
 // StructureContext is MarketContext's primary-timeframe structural view —
@@ -79,14 +82,18 @@ type BiasContext struct {
 	Trend     structure.TrendState
 }
 
-// RegimeContext / VolatilityContext / SessionContext: minimal, honest
-// placeholders. Regime (source task §38) and Session (§39) classification
-// are NOT implemented this task — neither appears in this task's own
-// Definition of Done (§74's 50 items) — and are recorded as not-yet-
-// implemented in docs/analysis-engine-v2-migration.md rather than
-// silently stubbed with fabricated logic. Volatility carries the one real
-// value already available at this layer (the canonical ATR this
-// MarketContext's structure/liquidity passes were built from).
+// RegimeContext / VolatilityContext: minimal, honest placeholders. Regime
+// (source task §38) classification is NOT implemented this task — it
+// does not appear in this task's own Definition of Done (§74's 50
+// items) — and is recorded as not-yet-implemented in
+// docs/analysis-engine-v2-migration.md rather than silently stubbed with
+// fabricated logic. Volatility carries the one real value already
+// available at this layer (the canonical ATR this MarketContext's
+// structure/liquidity passes were built from).
+//
+// SessionContext (source task §39) was the same kind of honest
+// placeholder until Phase S4's session domain — it now carries the real
+// session.State for the primary timeframe (see Build).
 type RegimeContext struct {
 	Kind string // empty until §38 is implemented
 }
@@ -96,7 +103,8 @@ type VolatilityContext struct {
 }
 
 type SessionContext struct {
-	Name string // empty until §39 is implemented
+	Timeframe market.Timeframe
+	State     session.State
 }
 
 // Build assembles a MarketContext from a per-timeframe map of already-
@@ -114,7 +122,7 @@ func Build(
 	timeframes := make(map[market.Timeframe]*TimeframeContext, len(perTimeframe))
 	for tf, input := range perTimeframe {
 		timeframes[tf] = &TimeframeContext{
-			Timeframe: tf, Structure: input.Structure, Liquidity: input.Liquidity, Zones: input.Zones,
+			Timeframe: tf, Structure: input.Structure, Liquidity: input.Liquidity, Zones: input.Zones, Session: input.Session,
 		}
 	}
 
@@ -125,6 +133,7 @@ func Build(
 		ctx.Zones = ZoneContext{Timeframe: primary, State: primaryInput.Zones}
 		ctx.Bias = DeriveBias(primaryInput.Structure)
 		ctx.Volatility = VolatilityContext{ATR: primaryInput.ATR}
+		ctx.Session = SessionContext{Timeframe: primary, State: primaryInput.Session}
 	}
 	return ctx
 }
@@ -135,6 +144,7 @@ type TimeframeInput struct {
 	Structure structure.StructureState
 	Liquidity liquidity.LiquidityState
 	Zones     zone.ZoneState
+	Session   session.State
 	ATR       float64
 }
 
