@@ -430,7 +430,9 @@
           "type": "object",
           "additionalProperties": {
             "type": "object",
-            "additionalProperties": false,
+            "additionalProperties": {
+              "type": ["number", "integer", "string"]
+            },
             "properties": {
               "version": {
                 "type": "string",

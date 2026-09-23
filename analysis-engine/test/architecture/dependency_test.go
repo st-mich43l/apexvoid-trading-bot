@@ -90,6 +90,29 @@ const modulePrefix = "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine
 // swing-pair search needs structure.Swing.Kind/Price directly
 // (dealing_range.py::_bracketing_pair/_last_opposing_pair's own Python
 // shape). fib does not import zone or liquidity, nor do they import it.
+//
+// Every internal/strategy/<name> subpackage (supply, demand, orderblock,
+// fvg, flipzone, keylevel, sessionlevel, and any added later) sits at
+// rank 7 — the SAME rank as transport/transport-kafka/transport-redis —
+// made implementing Phase S7. Each concrete strategy imports the parent
+// internal/strategy package directly (for the Strategy interface and
+// StrategyID type), which only works if a strategy subpackage outranks
+// it; rank 7 is the lowest rank that does. Placing every strategy
+// subpackage at the SAME rank as transport, rather than inventing a new
+// rank number, is deliberate and does double duty with the plain
+// monotonic rule, no special-cased exception needed: (1)
+// apexvoid-bot-prompts/rebuild-strategies.md §93 requires "prevent
+// strategy imports from transport/kafka, transport/redis" — same-rank
+// packages cannot import each other under this test's own rule, so
+// strategy/<name> (7) cannot import transport/kafka (7); (2) that same
+// §93 also requires "one strategy package must not import another
+// strategy package unless a specific architecture decision explicitly
+// permits it" — every strategy subpackage sharing rank 7 makes that
+// forbidden edge structural too, not just a convention. engine (8, the
+// only rank above 7) is the one package permitted to import a strategy
+// subpackage, for Phase S8's factory wiring — not done yet, this task's
+// own scope boundary (Phase S7 builds strategies; Phase S8 wires them
+// into the engine).
 var rank = map[string]int{
 	"market":    0,
 	"telemetry": 0,
@@ -118,6 +141,14 @@ var rank = map[string]int{
 	"transport":       7,
 	"transport/kafka": 7,
 	"transport/redis": 7,
+
+	"strategy/supply":       7,
+	"strategy/demand":       7,
+	"strategy/orderblock":   7,
+	"strategy/fvg":          7,
+	"strategy/flipzone":     7,
+	"strategy/keylevel":     7,
+	"strategy/sessionlevel": 7,
 
 	"engine": 8,
 }
