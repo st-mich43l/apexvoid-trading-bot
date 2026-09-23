@@ -9,7 +9,7 @@ indicator / marketdata / config / session
   ↓
 structure
   ↓
-zone / liquidity
+zone / liquidity / fib
   ↓
 context
   ↓
@@ -146,6 +146,21 @@ promote above in the first place. It joins `indicator`/`marketdata`/
 
 Enforced in `analysis-engine/test/architecture/dependency_test.go`'s
 `rank` map (`"session": 1`) and its own inline comment on this exact
+reasoning.
+
+### Amendment: `fib` joins `zone`/`liquidity` at rank 3
+
+A sixth correction, made implementing Phase S4's second domain
+(`internal/fib` — Fibonacci ladders and the premium/discount dealing
+range, `apexvoid-bot-prompts/rebuild-strategies.md` §23-26). The same
+situation `zone`/`liquidity` already hit: `fib`'s bracketing-swing-pair
+search (`Resolve`/`Update`, porting `dealing_range.py::
+_bracketing_pair`/`_last_opposing_pair`) needs `structure.Swing.Kind`/
+`.Price` directly. `fib` joins `zone`/`liquidity` at rank 3 — mutually
+independent of both (it does not import either, and neither imports it).
+
+Enforced in `analysis-engine/test/architecture/dependency_test.go`'s
+`rank` map (`"fib": 3`) and its own inline comment on this exact
 reasoning.
 
 ### The one correction, in full

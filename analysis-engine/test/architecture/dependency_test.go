@@ -74,6 +74,12 @@ const modulePrefix = "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine
 // reason), session needs only candles and timestamps — its own Python
 // source (session_liquidity.py) never imports swings.py/structure.py
 // either — so it has no reason to sit above structure at all.
+//
+// fib joins zone/liquidity at rank 3 for the identical reason, made
+// implementing Phase S4's second domain: Resolve/Update's bracketing
+// swing-pair search needs structure.Swing.Kind/Price directly
+// (dealing_range.py::_bracketing_pair/_last_opposing_pair's own Python
+// shape). fib does not import zone or liquidity, nor do they import it.
 var rank = map[string]int{
 	"market":    0,
 	"telemetry": 0,
@@ -87,6 +93,7 @@ var rank = map[string]int{
 
 	"zone":      3,
 	"liquidity": 3,
+	"fib":       3,
 
 	"context": 4,
 
