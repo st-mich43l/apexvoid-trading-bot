@@ -35,7 +35,8 @@ and [ADR-004](adr/) for the transport/cutover gating this depends on.
 | Fibonacci ladder, premium/discount dealing range | `app/analysis/fibonacci.py`, `app/analysis/dealing_range.py` | `internal/fib` (`Ladder`, `NearestLevel`, `Resolve`, `Update`) | **Exact parity** — same retracement/extension ratios, same bracketing/opposing swing-pair search, same premium/discount + fine fib-zone thresholds | Shadow only | Not removable |
 | Technical opportunity lifecycle | Legacy candidate/delivery state mixes technical setup validity with execution policy | `internal/opportunity` (`DeterministicID`, `Book`) | **Explicit redesign** — one per-symbol runtime book owns Created → Active → Invalidated/Expired transitions, deduplicates semantic IDs, and permits only strategy-owned technical terminal reasons; it has no account, broker, or Kafka dependency | Phase S8 wired it into the live per-symbol engine loop; real candidates now flow through it against real data (see next two rows) | Legacy authority remains until strategy cutover |
 | Strategy registry / evaluator | Legacy Python family registries and broad scanner passes | `internal/strategy` (`Config`, `Registry`, `Evaluate`) | **Explicit redesign** — the complete semantic V2 catalog is configuration-declared; only enabled concrete implementations instantiate; closed-bar evaluation runs only strategies that require that timeframe and defers until all declared timeframe context exists | Phase S6 done; Phase S8 wired `Registry.Evaluate` into `SymbolWorker.ApplyWithResult` via a new `internal/engine/strategies.go` composition root (the one place a strategy subpackage may be imported, per the architecture rank rule) | Legacy authority remains until strategy cutover |
-| Independent strategy theses (`key_level`, `supply`, `demand`, `order_block`, `fvg`, `flip_zone`, `session_level`) | Various legacy detector functions in `detectors.py` (`docs/analysis/strategy-v2-catalog.md`'s per-row mapping) | `internal/strategy/{keylevel,supply,demand,orderblock,fvg,flipzone,sessionlevel}` | **Explicit redesign** — each strategy is a fully independent Go package (no shared strategy base class; only canonical market-fact primitives — `zone.Relevance`, `structure.Swing`, `liquidity.Pool` — are shared), each with its own `Evaluate`, own quality-scoring reasoning, own config parsing/validation, own spec doc under `docs/analysis/strategies/`, own real tests under `test/strategy/<name>` | Phase S7: 7 of 19 real and `enabled: true`; Phase S8: proven live against real XAU M5 data via `cmd/replay` (147 real opportunities across 4 of the 7 strategies for that dataset) and a real `test/engine` integration test using the same data | Shadow only — Phase S9 (Kafka publication) has not run; a live opportunity reaches `OpportunityBook`/`AnalysisSnapshot.Opportunities` but nothing publishes it anywhere yet |
+| Independent strategy theses (`key_level`, `supply`, `demand`, `order_block`, `fvg`, `flip_zone`, `session_level`) | Various legacy detector functions in `detectors.py` (`docs/analysis/strategy-v2-catalog.md`'s per-row mapping) | `internal/strategy/{keylevel,supply,demand,orderblock,fvg,flipzone,sessionlevel}` | **Explicit redesign** — each strategy is a fully independent Go package (no shared strategy base class; only canonical market-fact primitives — `zone.Relevance`, `structure.Swing`, `liquidity.Pool` — are shared), each with its own `Evaluate`, own quality-scoring reasoning, own config parsing/validation, own spec doc under `docs/analysis/strategies/`, own real tests under `test/strategy/<name>` | Phase S7: 7 of 19 real and `enabled: true`; Phase S8: proven live against real XAU M5 data via `cmd/replay` (147 real opportunities across 4 of the 7 strategies for that dataset); Phase S9: those live opportunities are now published as `analysis.opportunity.v1`/`analysis.opportunity.invalidated.v1` | Shadow only in the sense that no consumer of these topics exists yet in this codebase — but the publish path itself is real and wired, not stubbed |
+| Opportunity Kafka publication | Legacy has no equivalent event stream — trade-plan generation reads Python's own in-process state directly | `internal/engine/publisher.go` (`OpportunityPublisher`), `internal/transport/kafka` (`Producer.PublishOpportunity`/`PublishOpportunityInvalidated`, already built and real-broker-tested in the earlier Kafka transport task) | **New** — Phase S9 (source task §81-84). `SymbolWorker.observeTransition` enqueues every `ShouldPublish()` transition (Created/Invalidated/Expired); a single background goroutine per `Engine` (`OpportunityPublisher.Run`) drains that queue and calls the real Producer, off the ingestion hot path — `cmd/analysis-engine/main.go`'s own stated invariant ("a Kafka outage never becomes a candle-ingestion outage") would otherwise be violated by a synchronous publish inside `SymbolWorker`'s own mutex | Wired in `cmd/analysis-engine/main.go`; proven against a fake `OpportunityKafkaClient` (6 new tests: delivery, both/either payload shape, non-publishable transitions filtered, order preservation, retry-until-success, and the typed-nil-producer trap this wiring itself first hit) — **not** re-verified against a real broker in this session (no broker available in this sandbox); the underlying `Producer.PublishOpportunity`/`PublishOpportunityInvalidated` methods themselves were already real-broker-tested in the earlier Kafka transport task | N/A |
 | Engine ↔ strategy wiring | N/A (no equivalent — the legacy scanner calls detector functions directly, no registry indirection) | `internal/engine/strategies.go` (composition root), `SymbolWorker.ApplyWithResult` (evaluation + lifecycle observation) | **New** — Phase S8. After every closed-bar context rebuild, `Registry.Evaluate` runs against the just-closed timeframe's dependent strategies; every returned `Candidate` is fed through `state.Opportunities.Observe`, then `Expire` applies each strategy's own technical deadline. Two real telemetry phases (`PhaseStrategy`, `PhaseOpportunity`) and five lifecycle-transition counters were added, all a documented amendment to the originally-frozen telemetry list | Working, verified against real data | N/A |
 | Per-symbol event dispatch / worker | `app/analysis/worker.py` (one large sequential pass per symbol per bar, not clearly dependency-scoped) | `internal/engine/worker.go` (`SymbolWorker`), `engine.go` (`Engine`) | **Explicit redesign** — one mutex-guarded worker per symbol, concurrent across symbols, dependency-aware (an M1 close cannot trigger H1 recompute by construction, proven in `test/engine/worker_test.go`) | Shadow only (`cmd/replay` drives it directly; no live feed wired) | Not removable |
 | Scanning / orchestration | `app/analysis/scanner.py` (one large file coordinating detection across all symbols/strategies) | *(deliberately not replicated — source task §60 explicitly forbids "another giant scanner file")* | N/A — architectural non-goal | N/A | N/A |
@@ -78,9 +79,10 @@ and [ADR-004](adr/) for the transport/cutover gating this depends on.
   did not build, or the compositional strategy waiting on its
   non-compositional siblings), not a silent omission; see
   `docs/analysis/strategy-v2-catalog.md`'s "Phase S7 status" for the
-  itemized list. No S7 strategy candidate has reached the engine or Kafka
-  — Phase S8 (engine wiring) and Phase S9 (Kafka publication) are
-  separate, unstarted phases.
+  itemized list. Phase S8 wired evaluation into the live engine loop and
+  Phase S9 wired Kafka publication of the resulting lifecycle events —
+  both now real and proven (see the next several bullets), not
+  unstarted.
 - **Strategy-level config provenance**: each S7 strategy still hardcodes
   its own known-compatible algorithm versions (`structure=v2`,
   `liquidity=v1`, `zone=v1`) and computes its own narrow
@@ -122,6 +124,30 @@ and [ADR-004](adr/) for the transport/cutover gating this depends on.
      — see `docs/analysis/strategies/key_level.md`'s own "Real bug found"
      section for the two other bucketing approaches that were tried and
      empirically rejected (both made the flooding worse, not better).
+- **Phase S9 (Kafka opportunity publication) is real but has real,
+  documented limitations of its own**:
+  - `OpportunityPublisher`'s retry queue is a plain in-memory slice, not
+    a durable outbox — Configuration V3/source task §45 explicitly does
+    not require the Analysis Engine to own a PostgreSQL record for this.
+    A process restart during a Kafka outage loses whatever is still
+    queued, the same in-memory-only limitation `internal/opportunity.Book`
+    itself already has. It retries a failed job indefinitely rather than
+    dropping it (the "must never silently discard an opportunity"
+    contract `cmd/analysis-engine/main.go` already stated before this
+    phase existed), so the tradeoff is unbounded memory growth during an
+    extended outage, not data loss while the process stays up.
+  - Not re-verified against a real Kafka broker in this session — no
+    broker is available in this sandbox. `OpportunityPublisher` is proven
+    against a real, non-mocked `OpportunityKafkaClient` interface
+    implementation (a fake, in `test/engine/publisher_test.go`), and the
+    underlying `Producer.PublishOpportunity`/`PublishOpportunityInvalidated`
+    methods it calls were already real-broker-tested in the earlier
+    Kafka transport task — but the two have not been exercised together
+    end to end against a live broker.
+  - Invalidation transitions still have no real trigger path from any S7
+    strategy (a pre-existing limitation, unchanged by S9): only
+    time-based `Expire` fires today, so `analysis.opportunity.invalidated.v1`
+    in practice currently only ever carries `SETUP_EXPIRED`.
 - **PNG pool-band rendering is not true alpha compositing** —
   `image.RGBA.Set()` overwrites pixels rather than blending, so
   overlapping liquidity pool bands render as solid overwritten

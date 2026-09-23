@@ -293,6 +293,37 @@ evaluation against real data — not a hand-built fixture — found and fixed
 two real bugs in code this session itself wrote: an `opportunity.Book`
 identity-collision false positive, and a `key_level` dedup-identity
 jitter bug (both detailed in `docs/analysis-engine-v2-migration.md`'s
-known-limitations list). Still explicitly NOT done: Phase S9 (Kafka
-publication — a live opportunity reaches `AnalysisSnapshot.Opportunities`
-but is published nowhere).
+known-limitations list).
+
+### Phase S9 status
+
+S9 wired `analysis.opportunity.v1`/`analysis.opportunity.invalidated.v1`
+publication (source task §81-84) — the two topics and payload/envelope
+shapes an earlier Kafka transport task already built and real-broker-
+tested (`internal/transport/kafka.Producer.PublishOpportunity`/
+`PublishOpportunityInvalidated`), but that nothing in this codebase
+called for real until now. A new `OpportunityPublisher`
+(`internal/engine/publisher.go`) decouples the actual Kafka I/O from
+`SymbolWorker`'s own ingestion hot path — `cmd/analysis-engine/main.go`
+already stated the constraint this exists to honor: "a Kafka outage
+never becomes a candle-ingestion outage." Every `Transition.ShouldPublish()`
+result (Created/Invalidated/Expired) is enqueued (a fast, lock-only
+append); one background goroutine per `Engine` drains that queue,
+retrying a failed publish indefinitely rather than dropping it.
+
+Caught its own real bug before it ever shipped: assigning a possibly-nil
+`*kafka.Producer` directly into the publisher's interface parameter would
+have produced Go's classic "typed nil" trap — a non-nil interface wrapping
+a nil pointer, defeating the publisher's own nil check and risking a
+nil-pointer panic the first time Kafka was disabled. Fixed in
+`cmd/analysis-engine/main.go` before merge, with a dedicated regression
+test (`TestOpportunityPublisher_TypedNilProducerTrap`) documenting the
+exact trap as a runnable test, not just a comment.
+
+Proven against a real, non-mocked `OpportunityKafkaClient` interface
+implementation (`test/engine/publisher_test.go`: delivery of both payload
+shapes, non-publishable transitions correctly filtered, publish-order
+preservation, retry-until-success). **Not** re-verified against a real
+Kafka broker this session (none available in this sandbox) — see
+`docs/analysis-engine-v2-migration.md`'s own Phase S9 limitations for the
+full, honest scope of what that does and doesn't prove.
