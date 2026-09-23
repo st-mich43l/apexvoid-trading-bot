@@ -101,7 +101,7 @@ func run(barsPath, configPath string, symbol market.Symbol, tf market.Timeframe,
 	seen := make(map[string]struct{})
 	accepted := 0
 	for index, c := range candles {
-		result, err := e.Dispatch(marketdata.BarEvent{Symbol: symbol, Timeframe: tf, Candle: c})
+		result, err := e.Dispatch(marketdata.BarEvent{Symbol: symbol, Timeframe: tf, Candle: c, Origin: marketdata.EventOriginReplay})
 		if err != nil {
 			return fmt.Errorf("dispatching bar at t=%d: %w", c.Time, err)
 		}

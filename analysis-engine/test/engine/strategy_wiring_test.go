@@ -2,10 +2,12 @@ package engine_test
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/config"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/engine"
@@ -131,5 +133,53 @@ func TestEngine_ReDispatchingTheSameRealSequenceStaysErrorFree(t *testing.T) {
 				t.Fatalf("pass %d: dispatch failed at t=%d: %v", pass, c.Time, err)
 			}
 		}
+	}
+}
+
+// TestEngine_BootstrapBuildsStateWithoutRepublishingHistory is the S11
+// shadow-run guard: restoring retained Redis history must still establish the
+// real technical state, but it must not make years/minutes-old candidates look
+// newly observed to downstream Kafka consumers after every process restart.
+func TestEngine_BootstrapBuildsStateWithoutRepublishingHistory(t *testing.T) {
+	repoRoot := filepath.Join("..", "..", "..")
+	doc, err := config.ResolveDocument(filepath.Join(repoRoot, "config", "apexvoid.yml"))
+	if err != nil {
+		t.Fatalf("resolving config: %v", err)
+	}
+	settings, err := engine.LoadSettings(doc, "M5", false)
+	if err != nil {
+		t.Fatalf("loading settings: %v", err)
+	}
+	client := &fakeKafkaClient{}
+	publisher := engine.NewOpportunityPublisher(client, nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go publisher.Run(ctx)
+
+	e := engine.NewEngine(nil)
+	e.SetPublisher(publisher)
+	if err := e.Register("XAU", settings); err != nil {
+		t.Fatal(err)
+	}
+	var snapshot engine.AnalysisSnapshot
+	for _, candle := range loadRealXAUFixture(t) {
+		snapshot, err = e.Dispatch(marketdata.BarEvent{
+			Symbol: "XAU", Timeframe: "M5", Candle: candle, Origin: marketdata.EventOriginBootstrap,
+		})
+		if err != nil {
+			t.Fatalf("bootstrap dispatch at t=%d: %v", candle.Time, err)
+		}
+	}
+	if len(snapshot.Opportunities) == 0 {
+		t.Fatal("bootstrap must establish real live opportunity state")
+	}
+	// A running publisher would have drained any incorrectly enqueued job by
+	// now. The fixture produces many lifecycle transitions, so this is a
+	// meaningful assertion rather than an empty-input no-op.
+	time.Sleep(50 * time.Millisecond)
+	_, invalidations, calls := client.snapshot()
+	opportunities, _, _ := client.snapshot()
+	if len(opportunities) != 0 || len(invalidations) != 0 || len(calls) != 0 {
+		t.Fatalf("bootstrap must not publish historical lifecycle transitions, got calls=%v", calls)
 	}
 }
