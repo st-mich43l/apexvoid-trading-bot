@@ -424,7 +424,7 @@ def verify_unlisted_leaves_still_match_stage_c1() -> None:
       # new_surfaced DIVERGENCES entry (verify_divergences(), above), so
       # this exclusion only means "no old path to compare against", not
       # "unchecked".
-      "history", "structure", "liquidity",
+      "history", "structure", "liquidity", "strategies",
     )
   }
   c1.compare_subtree(old_flat, "analysis", core, "analysis.yml/analysis")

@@ -30,6 +30,35 @@ analysis:
       algorithm: simple
       length: 14
 
+  # Phase S6: the registry contract for every strategy approved by the
+  # semantic catalog. They are intentionally all disabled until Phase S7
+  # supplies and validates each independent technical thesis. A future
+  # enabled entry without a compiled factory fails analysis-engine startup;
+  # it cannot silently become a no-op.
+  #
+  # `confluence_zone` is the one compositional exception, so this has 19
+  # entries: 18 independent strategies plus Confluence Zone.
+  strategies:
+    key_level: { version: v2, enabled: false }
+    confluence_zone: { version: v2, enabled: false }
+    supply: { version: v2, enabled: false }
+    demand: { version: v2, enabled: false }
+    order_block: { version: v2, enabled: false }
+    fvg: { version: v2, enabled: false }
+    ifvg: { version: v2, enabled: false }
+    crt: { version: v2, enabled: false }
+    flip_zone: { version: v2, enabled: false }
+    session_level: { version: v2, enabled: false }
+    trendline: { version: v2, enabled: false }
+    range_edge: { version: v2, enabled: false }
+    box_breakout: { version: v2, enabled: false }
+    momentum_ride: { version: v2, enabled: false }
+    snap_back: { version: v2, enabled: false }
+    liquidity_sweep: { version: v2, enabled: false }
+    range_sweep: { version: v2, enabled: false }
+    impulse_pullback: { version: v2, enabled: false }
+    scalp_breakout_retest: { version: v2, enabled: false }
+
   # Analysis Engine V2 (docs/analysis/market-structure-v2.md). Go-only today
   # (analysis-engine/internal/marketdata, .../structure, .../liquidity) — no
   # Python consumer exists for these leaves, unlike every other key in this
