@@ -79,6 +79,84 @@
     "spot": {
       "maximum_age_seconds": 5
     },
+    "strategies": {
+      "box_breakout": {
+        "enabled": false,
+        "version": "v2"
+      },
+      "confluence_zone": {
+        "enabled": false,
+        "version": "v2"
+      },
+      "crt": {
+        "enabled": false,
+        "version": "v2"
+      },
+      "demand": {
+        "enabled": false,
+        "version": "v2"
+      },
+      "flip_zone": {
+        "enabled": false,
+        "version": "v2"
+      },
+      "fvg": {
+        "enabled": false,
+        "version": "v2"
+      },
+      "ifvg": {
+        "enabled": false,
+        "version": "v2"
+      },
+      "impulse_pullback": {
+        "enabled": false,
+        "version": "v2"
+      },
+      "key_level": {
+        "enabled": false,
+        "version": "v2"
+      },
+      "liquidity_sweep": {
+        "enabled": false,
+        "version": "v2"
+      },
+      "momentum_ride": {
+        "enabled": false,
+        "version": "v2"
+      },
+      "order_block": {
+        "enabled": false,
+        "version": "v2"
+      },
+      "range_edge": {
+        "enabled": false,
+        "version": "v2"
+      },
+      "range_sweep": {
+        "enabled": false,
+        "version": "v2"
+      },
+      "scalp_breakout_retest": {
+        "enabled": false,
+        "version": "v2"
+      },
+      "session_level": {
+        "enabled": false,
+        "version": "v2"
+      },
+      "snap_back": {
+        "enabled": false,
+        "version": "v2"
+      },
+      "supply": {
+        "enabled": false,
+        "version": "v2"
+      },
+      "trendline": {
+        "enabled": false,
+        "version": "v2"
+      }
+    },
     "structure": {
       "break": {
         "displacement_body_dominance": 0.55,

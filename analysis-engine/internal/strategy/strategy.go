@@ -33,7 +33,7 @@ import (
 type StrategyID = opportunity.StrategyID
 
 // Strategy is the engineering contract every strategy implements, per the
-// source task's §21. Do NOT put generic implementations of entry,
+// source task's §12. Do NOT put generic implementations of entry,
 // confirmation, invalidation, quality scoring, targeting, or expiry into
 // this package or any shared base unless the behavior is genuinely
 // universal (§21) — see ADR-003.

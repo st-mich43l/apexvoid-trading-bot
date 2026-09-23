@@ -33,7 +33,7 @@ analysis-engine/
 │   ├── zone/             (implemented canonical technical-zone domain — lifecycle and relevance)
 │   ├── context/          (implemented — Analysis Engine V2 task; MarketContext, Build, DeriveBias)
 │   ├── opportunity/       (implemented lifecycle domain — stable identity, dedup, technical terminal transitions)
-│   ├── strategy/          (still scaffolded — Strategy interface; no strategy implementations, next task)
+│   ├── strategy/          (registry + dependency-aware evaluator implemented; no strategy thesis yet)
 │   ├── confluence/        (still scaffolded — compositional evidence combining, doc.go + Score)
 │   ├── state/             (implemented — Analysis Engine V2 task; SymbolState wires History/Structure/Liquidity/Context/Opportunities together)
 │   ├── engine/            (implemented — Analysis Engine V2 task; SymbolWorker, Engine, Settings, AnalysisSnapshot)
@@ -140,8 +140,8 @@ These are the shapes this task's own spec writes out explicitly (§19, §21,
 §24, §26–27). As of the Analysis Engine V2 implementation task,
 `MarketContext`/`SymbolState`/`AnalysisSnapshot` below are real, populated
 with actual structure/liquidity data (not placeholder fields sized only to
-compile). Opportunity lifecycle is now implemented, while `strategy` remains
-an interface-only package until S6/S7 provide evaluators and real theses.
+compile). Opportunity lifecycle and the S6 strategy registry/evaluator are now
+implemented. Individual strategy theses remain Phase S7 work.
 
 ```go
 // internal/context/market.go — real as of Analysis Engine V2
@@ -283,8 +283,8 @@ Strategy package slots this task's own §20 names (`breakoutretest`,
 created by this task** — per §58, creating 14 near-empty strategy
 subpackages proves no dependency boundary that the `Strategy` interface
 above doesn't already prove once, so none were scaffolded. Only strategies
-that survive the redesign (next task: the market-structure specification,
-then Stage 6) get a real package.
+that survive the redesign (Phase S7: approved independent strategies) get a
+real package.
 
 ## Market history sizing
 
