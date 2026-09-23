@@ -72,6 +72,19 @@ const modulePrefix = "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine
 // needs structure.Swing.Kind/.Price directly (levels.py::_price_clusters'
 // own Python shape). keylevel does not import zone/liquidity/fib, nor do
 // they import it.
+// session, added at rank 1 alongside indicator/marketdata/config, is a
+// fifth amendment, made implementing Phase S4's first domain. Unlike
+// zone/liquidity (and fib/keylevel/trendline, S4's remaining three
+// domains, landing at rank 3 for the same structure.Swing-dependency
+// reason), session needs only candles and timestamps — its own Python
+// source (session_liquidity.py) never imports swings.py/structure.py
+// either — so it has no reason to sit above structure at all.
+//
+// fib joins zone/liquidity at rank 3 for the identical reason, made
+// implementing Phase S4's second domain: Resolve/Update's bracketing
+// swing-pair search needs structure.Swing.Kind/Price directly
+// (dealing_range.py::_bracketing_pair/_last_opposing_pair's own Python
+// shape). fib does not import zone or liquidity, nor do they import it.
 var rank = map[string]int{
 	"market":    0,
 	"telemetry": 0,
@@ -79,12 +92,14 @@ var rank = map[string]int{
 	"indicator":  1,
 	"marketdata": 1,
 	"config":     1,
+	"session":    1,
 
 	"structure": 2,
 
 	"zone":      3,
 	"liquidity": 3,
 	"keylevel":  3,
+	"fib":       3,
 
 	"context": 4,
 

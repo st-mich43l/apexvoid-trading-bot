@@ -4,11 +4,13 @@ import (
 	"sync"
 
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/context"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/fib"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/indicator"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/keylevel"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/liquidity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/marketdata"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/session"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/state"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/telemetry"
@@ -131,6 +133,15 @@ func (w *SymbolWorker) ApplyWithResult(event marketdata.BarEvent) (AnalysisSnaps
 	keyLevelState := keylevel.Update(candles, atrSeries, structState.Swings, w.settings.KeyLevel)
 	doneKeyLevel()
 	w.state.KeyLevel.Set(event.Timeframe, keyLevelState)
+	doneSession := w.telemetry.Time(telemetry.PhaseSession, symbolLabel, tfLabel)
+	sessionState := session.Update(candles, w.settings.Session)
+	doneSession()
+	w.state.Session.Set(event.Timeframe, sessionState)
+
+	doneFib := w.telemetry.Time(telemetry.PhaseFib, symbolLabel, tfLabel)
+	fibState := fib.Update(candles, structState.Swings, w.settings.Fib)
+	doneFib()
+	w.state.Fib.Set(event.Timeframe, fibState)
 
 	doneCtx := w.telemetry.Time(telemetry.PhaseContext, symbolLabel, tfLabel)
 	w.rebuildContext()
@@ -166,7 +177,12 @@ func (w *SymbolWorker) rebuildContext() {
 		}
 		zoneState, _ := w.state.Zone.Get(tf)
 		keyLevelState, _ := w.state.KeyLevel.Get(tf)
-		perTF[tf] = context.TimeframeInput{Structure: structState, Liquidity: liqState, Zones: zoneState, KeyLevel: keyLevelState, ATR: lastATR}
+		sessionState, _ := w.state.Session.Get(tf)
+		fibState, _ := w.state.Fib.Get(tf)
+		perTF[tf] = context.TimeframeInput{
+			Structure: structState, Liquidity: liqState, Zones: zoneState,
+			KeyLevel: keyLevelState, Session: sessionState, Fib: fibState, ATR: lastATR,
+		}
 	}
 	w.state.Context = context.Build(w.state.Symbol, w.settings.PrimaryTimeframe, perTF)
 }

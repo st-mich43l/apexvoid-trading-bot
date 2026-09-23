@@ -5,11 +5,11 @@
 ```text
 market / telemetry
   ↓
-indicator / marketdata / config
+indicator / marketdata / config / session
   ↓
 structure
   ↓
-zone / liquidity / keylevel
+zone / liquidity / fib / keylevel
   ↓
 context
   ↓
@@ -131,19 +131,48 @@ Enforced in `analysis-engine/test/architecture/dependency_test.go`'s
 `rank` map (`"zone": 3`) and its own inline comment on this exact
 reasoning.
 
+### Amendment: `session` added at rank 1, not alongside `zone`/`liquidity`
+
+A fifth correction, made implementing Phase S4's first domain (the
+`internal/session` package — UTC session windows, PDH/PDL, PWH/PWL).
+Unlike `zone`/`liquidity` (and `fib`/`keylevel`/`trendline`, S4's
+remaining three domains, which land at rank 3 for the same
+`structure.Swing`-dependency reason those two already established),
+`session` needs only candles and timestamps. Its Python source
+(`algo-bot/app/analysis/session_liquidity.py`) never imports
+`swings.py`/`structure.py` either — there is no structure dependency to
+promote above in the first place. It joins `indicator`/`marketdata`/
+`config` at rank 1.
+
+Enforced in `analysis-engine/test/architecture/dependency_test.go`'s
+`rank` map (`"session": 1`) and its own inline comment on this exact
+reasoning.
+
+### Amendment: `fib` joins `zone`/`liquidity` at rank 3
+
+A sixth correction, made implementing Phase S4's second domain
+(`internal/fib` — Fibonacci ladders and the premium/discount dealing
+range, `apexvoid-bot-prompts/rebuild-strategies.md` §23-26). The same
+situation `zone`/`liquidity` already hit: `fib`'s bracketing-swing-pair
+search (`Resolve`/`Update`, porting `dealing_range.py::
+_bracketing_pair`/`_last_opposing_pair`) needs `structure.Swing.Kind`/
+`.Price` directly. `fib` joins `zone`/`liquidity` at rank 3 — mutually
+independent of both (it does not import either, and neither imports it).
+
+Enforced in `analysis-engine/test/architecture/dependency_test.go`'s
+`rank` map (`"fib": 3`) and its own inline comment on this exact
+reasoning.
+
 ### Amendment: `keylevel` joins `zone`/`liquidity` at rank 3
 
-A fifth correction, made implementing Phase S4's third domain
+A seventh correction, made implementing Phase S4's third domain
 (`internal/keylevel` — price-clustered key levels + closed-bar role
 classification, `apexvoid-bot-prompts/rebuild-strategies.md` §23-26). The
 same situation `zone`/`liquidity` already hit: `Cluster`'s
 price-clustering search (porting `levels.py::_price_clusters`/
 `_can_join_cluster`) needs `structure.Swing.Kind`/`.Price` directly.
-`keylevel` joins `zone`/`liquidity` at rank 3 — mutually independent of
-both (it does not import either, and neither imports it). Phase S4's
-second domain, `internal/fib`, makes the identical extension in its own
-PR; expect a small, mechanical merge conflict here where both amendments
-land, same as every other rank-3 addition this phase.
+`keylevel` joins `zone`/`liquidity`/`fib` at rank 3 — mutually independent
+of all three (it does not import them, and they do not import it).
 
 Enforced in `analysis-engine/test/architecture/dependency_test.go`'s
 `rank` map (`"keylevel": 3`) and its own inline comment on this exact

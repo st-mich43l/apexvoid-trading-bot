@@ -182,6 +182,30 @@ DIVERGENCES: dict[str, dict] = {
   "analysis.yml/analysis.key_levels.round_step": {"kind": "new_surfaced", "expected": 5.0, "reason": "Phase S4 — key_levels()'s real round_step default."},
   "analysis.yml/analysis.key_levels.minimum_touches": {"kind": "new_surfaced", "expected": 2, "reason": "Phase S4 — key_levels()'s real min_touches default."},
   "analysis.yml/analysis.key_levels.maximum_cluster_span_multiple": {"kind": "new_surfaced", "expected": 2.0, "reason": "Phase S4 — key_levels()'s real max_cluster_span_multiple default."},
+  # sessions is one of the market_data.*-renamed subtrees (see the
+  # "sessions": "market_data.sessions" mapping below) — a genuinely new
+  # leaf inside it needs BOTH: this entry's own key (the real analysis.yml
+  # path, "analysis.sessions...") for verify_divergences()'s presence/value
+  # check, AND an explicit old_path (the renamed "market_data.sessions..."
+  # string compare_subtree actually passes) so
+  # verify_unlisted_leaves_still_match_stage_c1()'s skip-set recognizes it
+  # too — unlike analysis.zones.*/analysis.techniques.* above, sessions is
+  # not excluded from the old-parity comparison entirely (its three
+  # pre-existing leaves — asia_start/london_start/ny_start — still are
+  # real Stage C1 parity, so only this one new leaf needs the skip).
+  "analysis.yml/analysis.sessions.daily_rollover_utc_hour": {
+    "kind": "new_surfaced", "expected": 21,
+    "old_path": "market_data.sessions.daily_rollover_utc_hour",
+    "reason": "Phase S4 — internal/session's trading-day boundary; matches MarketDataSessionsConfig's own Pydantic schema default (algo-bot/app/configuration/models/market_data.py), not invented.",
+  },
+  # analysis.yml — Phase S4's second domain (internal/fib): no old
+  # trading-bot.yml OR Python-schema-default precedent at all —
+  # fibonacci.py/dealing_range.py read these as plain function-argument
+  # defaults, never a config leaf before this phase.
+  "analysis.yml/analysis.fibonacci.epsilon_atr": {"kind": "new_surfaced", "expected": 0.15, "reason": "Phase S4 — nearest_fib()'s real epsilon_atr default."},
+  "analysis.yml/analysis.fibonacci.deep_discount": {"kind": "new_surfaced", "expected": 0.382, "reason": "Phase S4 — fib_zone_label()'s real deep_discount default."},
+  "analysis.yml/analysis.fibonacci.deep_premium": {"kind": "new_surfaced", "expected": 0.618, "reason": "Phase S4 — fib_zone_label()'s real deep_premium default."},
+  "analysis.yml/analysis.fibonacci.eq_half_band": {"kind": "new_surfaced", "expected": 0.05, "reason": "Phase S4 — dealing_range()'s real eq_band=0.10 default, already halved (see internal/fib.Config.EqHalfBand's own comment)."},
   # analysis.yml — §10: CSV string -> native list, same content.
   "analysis.yml/analysis.triggers.m1.patterns": {
     "kind": "csv_to_list", "old_path": "analysis.triggers.m1.patterns",
