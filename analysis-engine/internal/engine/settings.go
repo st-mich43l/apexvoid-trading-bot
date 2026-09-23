@@ -30,6 +30,18 @@ type Settings struct {
 	HistoryDepths    map[market.Timeframe]int
 	PrimaryTimeframe market.Timeframe
 
+	// ConfigVersion/ConfigFingerprint are the resolved document's own
+	// whole-document provenance (ConfigProvenanceFromConfig — the SAME
+	// value already used for Kafka envelope provenance), computed once
+	// here rather than per event. Phase S8 uses these to overwrite each
+	// Candidate's own Provenance.ConfigVersion/ConfigFingerprint before it
+	// reaches the OpportunityBook, replacing the narrower per-strategy-
+	// parameters placeholder every Phase S7 strategy computes itself (a
+	// strategy has no *config.Document access — see each strategy's own
+	// configFingerprint doc comment for why that placeholder existed).
+	ConfigVersion     int
+	ConfigFingerprint string
+
 	// AllowReplaceForming controls whether the SAME timestamp arriving
 	// twice replaces the retained candle (a live-updating forming bar) or
 	// is reported as a duplicate — see marketdata.NewTimeframeHistory's
@@ -84,10 +96,16 @@ func LoadSettings(doc *config.Document, primary market.Timeframe, allowReplaceFo
 	if err != nil {
 		return Settings{}, err
 	}
+	configProvenance, err := ConfigProvenanceFromConfig(doc)
+	if err != nil {
+		return Settings{}, err
+	}
 	return Settings{
 		ATR: atr, Structure: structureSettings, Liquidity: liquidityConfig, Zone: zoneConfig,
 		Trendline: trendlineConfig, KeyLevel: keyLevelConfig, Session: sessionConfig, Fib: fibConfig, Strategies: strategyConfigs,
 		HistoryDepths: depths, PrimaryTimeframe: primary,
 		AllowReplaceForming: allowReplaceForming,
+		ConfigVersion:       configProvenance.Version,
+		ConfigFingerprint:   configProvenance.Fingerprint,
 	}, nil
 }

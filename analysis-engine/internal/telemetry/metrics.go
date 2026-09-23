@@ -35,6 +35,15 @@ const (
 	PhaseContext    Phase = "context_update_ms"
 	PhaseSnapshot   Phase = "snapshot_ms"
 	PhaseEventTotal Phase = "event_total_ms"
+
+	// PhaseStrategy and PhaseOpportunity are a Phase S8 amendment (Wire
+	// engine strategy evaluation) to this originally-frozen list — the
+	// same "one phase per pipeline step" convention every domain above
+	// already follows. PhaseStrategy times internal/strategy.Registry.
+	// Evaluate; PhaseOpportunity times feeding its resulting Candidates
+	// through internal/opportunity.Book (Observe + Expire).
+	PhaseStrategy    Phase = "strategy_evaluation_ms"
+	PhaseOpportunity Phase = "opportunity_lifecycle_ms"
 )
 
 // Counter names an event-count metric — source task §57's "events
@@ -53,6 +62,16 @@ const (
 	// correction/data-quality event an operator should be able to see,
 	// never silently folded into the ordinary/benign duplicate count.
 	CounterConflictEvents Counter = "conflict_events"
+
+	// Opportunity lifecycle transition counters — a Phase S8 amendment,
+	// one counter per internal/opportunity.TransitionKind an operator can
+	// observe (TransitionNoop is deliberately not counted: it carries no
+	// new information by construction).
+	CounterOpportunitiesCreated     Counter = "opportunities_created"
+	CounterOpportunitiesActivated   Counter = "opportunities_activated"
+	CounterOpportunitiesDuplicate   Counter = "opportunities_duplicate"
+	CounterOpportunitiesInvalidated Counter = "opportunities_invalidated"
+	CounterOpportunitiesExpired     Counter = "opportunities_expired"
 )
 
 // Kafka transport telemetry (kafka_consume_total, kafka_produce_total,

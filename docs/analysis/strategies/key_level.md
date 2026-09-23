@@ -91,3 +91,37 @@ the catalog (row 1) beyond the general primitive/strategy split — the
 level clustering (`levels.py`) was `TECHNIQUE_ONLY` even in the legacy
 audit; this strategy is a genuinely new, explicit tradeability layer on
 top of it.
+
+## Real bug found via Phase S8 replay (dedup identity)
+
+`internal/keylevel` re-clusters from the current swing window on every
+closed bar, so `levelPrice` can differ by a tiny amount between two
+evaluations of what is really the same ongoing level. The original
+`setupKey` used `levelPrice` at raw 6-decimal precision, so that jitter
+produced a new `SetupKey` (and therefore a new deterministic opportunity
+ID) almost every evaluation — running against real XAU M5 data
+(`cmd/replay`) surfaced 147 "live" `key_level` opportunities across a
+300-bar/25-hour window for what was really a much smaller number of
+distinct levels.
+
+The fix buckets `levelPrice` to the nearest multiple of a **fixed
+fraction of price itself** (0.05%, `priceBucketStep` in
+`keylevel.go`) before hashing it into `SetupKey`. Two earlier attempts
+were tried and rejected, each verified empirically via the same replay:
+bucketing at `level.Band` (the cluster's own half-width) and at
+`atr * 0.5` both made the flooding *worse* (147 → 470), because both
+`Band` and `atr` are themselves independently recomputed every closed
+bar — using either as the bucket step let the bucket boundaries drift,
+so even a perfectly unchanged `levelPrice` could land in a different
+bucket. A step derived only from `levelPrice` is self-referential and
+therefore stable across evaluations of the same real level.
+
+This is a real, replay-measured finding, not a hypothetical: the
+opportunity count in this scenario did not change between the original
+(unbucketed) and final (price-relative-bucketed) versions for this
+particular dataset (147 in both), which is itself informative — most of
+the 147 already had bit-identical `levelPrice`, so the crash-class bug
+(described below) was the dominant failure mode this dataset exercised,
+not raw dedup volume. Further dedup-effectiveness tuning against a wider
+dataset is flagged as follow-up research (Phase S10 territory), not
+claimed as fully solved here.

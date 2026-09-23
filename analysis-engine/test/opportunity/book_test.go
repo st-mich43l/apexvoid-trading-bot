@@ -147,6 +147,55 @@ func TestBook_RejectsIdentityCollisionAndProtectsStoredCopies(t *testing.T) {
 	}
 }
 
+// TestBook_ReObservationWithDriftedTechnicalFieldsIsNotAFalseCollision is
+// a direct regression guard for the Phase S8 bug this fixed: a real
+// strategy's Entry/Invalidation/CreatedAt legitimately differ between two
+// evaluations of the SAME still-valid setup (ATR-relative invalidation,
+// touch/swing-anchored creation references), while DeterministicID stays
+// identical because it never hashes those fields. Running real strategy
+// evaluation against real XAU M5 data (cmd/replay) proved the original,
+// stricter sameSemanticOpportunity check rejected this as a false
+// collision on the very first real replay. It must not error, and the
+// STORED record must keep the FIRST-observed content untouched (Observe's
+// own documented freeze-on-create behavior), not silently adopt the
+// drifted values.
+func TestBook_ReObservationWithDriftedTechnicalFieldsIsNotAFalseCollision(t *testing.T) {
+	book := opportunity.NewBook()
+	first := candidate("opp-drift")
+	if _, err := book.Observe(first, 11); err != nil {
+		t.Fatal(err)
+	}
+
+	drifted := first
+	drifted.Entry = opportunity.EntryZone{Low: 2001, High: 2003}                  // ATR moved
+	drifted.Invalidation = market.PriceLevel{Price: 1988, Label: "protected_low"} // ATR moved
+	drifted.CreatedAt, drifted.ExpiresAt = 15, 35                                 // touch/swing reference moved
+	transition, err := book.Observe(drifted, 16)
+	if err != nil {
+		t.Fatalf("expected drifted Entry/Invalidation/CreatedAt to be accepted as the same semantic opportunity, got: %v", err)
+	}
+	if transition.Kind != opportunity.TransitionActivated {
+		t.Fatalf("expected the second observation to Activate, got %v", transition.Kind)
+	}
+
+	record, ok := book.Record(first.ID)
+	if !ok {
+		t.Fatal("missing stored record")
+	}
+	if record.Candidate.Entry != first.Entry || record.Candidate.Invalidation != first.Invalidation || record.Candidate.CreatedAt != first.CreatedAt {
+		t.Errorf("expected the stored record to keep the FIRST-observed content, got %+v", record.Candidate)
+	}
+
+	// A genuine identity collision (a different Direction under the same
+	// ID) must still be rejected — the relaxed check still protects real
+	// collisions, it just no longer treats live technical drift as one.
+	collision := first
+	collision.Direction = market.Sell
+	if _, err := book.Observe(collision, 17); err == nil {
+		t.Fatal("a different Direction under the same ID must still be rejected as a real collision")
+	}
+}
+
 func TestBook_ObservationDoesNotImplicitlyInvalidateAbsentOpportunity(t *testing.T) {
 	book := opportunity.NewBook()
 	first := candidate("opp-first")
