@@ -4,6 +4,7 @@ import (
 	"sync"
 
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/context"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/fib"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/indicator"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/liquidity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
@@ -126,6 +127,11 @@ func (w *SymbolWorker) ApplyWithResult(event marketdata.BarEvent) (AnalysisSnaps
 	doneLiq()
 	w.state.Liquidity.Set(event.Timeframe, liqState)
 
+	doneFib := w.telemetry.Time(telemetry.PhaseFib, symbolLabel, tfLabel)
+	fibState := fib.Update(candles, structState.Swings, w.settings.Fib)
+	doneFib()
+	w.state.Fib.Set(event.Timeframe, fibState)
+
 	doneCtx := w.telemetry.Time(telemetry.PhaseContext, symbolLabel, tfLabel)
 	w.rebuildContext()
 	doneCtx()
@@ -159,7 +165,8 @@ func (w *SymbolWorker) rebuildContext() {
 			lastATR = atrSeries[len(atrSeries)-1]
 		}
 		zoneState, _ := w.state.Zone.Get(tf)
-		perTF[tf] = context.TimeframeInput{Structure: structState, Liquidity: liqState, Zones: zoneState, ATR: lastATR}
+		fibState, _ := w.state.Fib.Get(tf)
+		perTF[tf] = context.TimeframeInput{Structure: structState, Liquidity: liqState, Zones: zoneState, Fib: fibState, ATR: lastATR}
 	}
 	w.state.Context = context.Build(w.state.Symbol, w.settings.PrimaryTimeframe, perTF)
 }

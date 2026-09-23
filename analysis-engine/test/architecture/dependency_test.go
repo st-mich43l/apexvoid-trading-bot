@@ -66,6 +66,12 @@ const modulePrefix = "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine
 // the identical fix: promote above structure. zone and liquidity are
 // mutually independent (neither imports the other), so they share a
 // rank rather than needing a fifth distinct one.
+//
+// fib joins zone/liquidity at rank 3 for the identical reason, made
+// implementing Phase S4's second domain: Resolve/Update's bracketing
+// swing-pair search needs structure.Swing.Kind/Price directly
+// (dealing_range.py::_bracketing_pair/_last_opposing_pair's own Python
+// shape). fib does not import zone or liquidity, nor do they import it.
 var rank = map[string]int{
 	"market":    0,
 	"telemetry": 0,
@@ -78,6 +84,7 @@ var rank = map[string]int{
 
 	"zone":      3,
 	"liquidity": 3,
+	"fib":       3,
 
 	"context": 4,
 

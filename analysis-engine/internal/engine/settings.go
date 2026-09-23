@@ -2,6 +2,7 @@ package engine
 
 import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/config"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/fib"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/liquidity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
@@ -17,6 +18,7 @@ type Settings struct {
 	Structure        structure.Settings
 	Liquidity        liquidity.Config
 	Zone             zone.Config
+	Fib              fib.Config
 	HistoryDepths    map[market.Timeframe]int
 	PrimaryTimeframe market.Timeframe
 
@@ -50,12 +52,16 @@ func LoadSettings(doc *config.Document, primary market.Timeframe, allowReplaceFo
 	if err != nil {
 		return Settings{}, err
 	}
+	fibConfig, err := FibConfigFromConfig(doc)
+	if err != nil {
+		return Settings{}, err
+	}
 	depths, err := HistoryDepthsFromConfig(doc)
 	if err != nil {
 		return Settings{}, err
 	}
 	return Settings{
-		ATR: atr, Structure: structureSettings, Liquidity: liquidityConfig, Zone: zoneConfig,
+		ATR: atr, Structure: structureSettings, Liquidity: liquidityConfig, Zone: zoneConfig, Fib: fibConfig,
 		HistoryDepths: depths, PrimaryTimeframe: primary,
 		AllowReplaceForming: allowReplaceForming,
 	}, nil
