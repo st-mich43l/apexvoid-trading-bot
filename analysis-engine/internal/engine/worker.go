@@ -11,6 +11,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/state"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/telemetry"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/trendline"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/zone"
 )
 
@@ -126,6 +127,11 @@ func (w *SymbolWorker) ApplyWithResult(event marketdata.BarEvent) (AnalysisSnaps
 	doneLiq()
 	w.state.Liquidity.Set(event.Timeframe, liqState)
 
+	doneTrend := w.telemetry.Time(telemetry.PhaseTrendline, symbolLabel, tfLabel)
+	trendState := trendline.Update(candles, atrSeries, structState.Swings, w.settings.Trendline)
+	doneTrend()
+	w.state.Trendline.Set(event.Timeframe, trendState)
+
 	doneCtx := w.telemetry.Time(telemetry.PhaseContext, symbolLabel, tfLabel)
 	w.rebuildContext()
 	doneCtx()
@@ -159,7 +165,8 @@ func (w *SymbolWorker) rebuildContext() {
 			lastATR = atrSeries[len(atrSeries)-1]
 		}
 		zoneState, _ := w.state.Zone.Get(tf)
-		perTF[tf] = context.TimeframeInput{Structure: structState, Liquidity: liqState, Zones: zoneState, ATR: lastATR}
+		trendState, _ := w.state.Trendline.Get(tf)
+		perTF[tf] = context.TimeframeInput{Structure: structState, Liquidity: liqState, Zones: zoneState, Trendline: trendState, ATR: lastATR}
 	}
 	w.state.Context = context.Build(w.state.Symbol, w.settings.PrimaryTimeframe, perTF)
 }
