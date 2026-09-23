@@ -10,8 +10,10 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/liquidity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/marketdata"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/session"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/state"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/telemetry"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/trendline"
@@ -30,19 +32,34 @@ type SymbolWorker struct {
 	state     *state.SymbolState
 	settings  Settings
 	telemetry *telemetry.Recorder
+	registry  *strategy.Registry
 }
 
 // NewSymbolWorker returns a worker for symbol with an empty SymbolState
-// bounded per settings.HistoryDepths.
+// bounded per settings.HistoryDepths. Phase S8: also constructs this
+// symbol's own strategy.Registry from settings.Strategies and this
+// module's fixed strategyFactories composition root (strategies.go) —
+// once, here, not on every Apply, since a Registry's constructed
+// Strategy instances are immutable after New (no per-symbol mutable
+// state lives on them; see e.g. supply.Strategy's own fields), so
+// re-evaluating the same Registry concurrently across events for THIS
+// symbol is safe under Apply's own mutex, and a distinct Registry per
+// worker keeps a future per-symbol config override (not implemented
+// today, see Engine.Register's doc comment) trivial to support without
+// restructuring this constructor.
 func NewSymbolWorker(symbol market.Symbol, settings Settings, recorder *telemetry.Recorder) (*SymbolWorker, error) {
 	ws, err := state.NewSymbolState(symbol, settings.HistoryDepths, settings.AllowReplaceForming)
+	if err != nil {
+		return nil, err
+	}
+	registry, err := strategy.NewRegistry(settings.Strategies, strategyFactories)
 	if err != nil {
 		return nil, err
 	}
 	if recorder == nil {
 		recorder = telemetry.NewRecorder()
 	}
-	return &SymbolWorker{state: ws, settings: settings, telemetry: recorder}, nil
+	return &SymbolWorker{state: ws, settings: settings, telemetry: recorder, registry: registry}, nil
 }
 
 // Apply processes one closed-bar event through the full pipeline —
@@ -152,10 +169,66 @@ func (w *SymbolWorker) ApplyWithResult(event marketdata.BarEvent) (AnalysisSnaps
 	w.rebuildContext()
 	doneCtx()
 
+	// Phase S8: run every enabled strategy that declared event.Timeframe
+	// as a dependency against the just-rebuilt canonical context, then
+	// feed whatever Candidates it returns through this symbol's own
+	// Opportunity lifecycle. A Registry/Book error here is a real
+	// correctness bug (a misbehaving strategy, a lifecycle contract
+	// violation) — never a routine business outcome — so it aborts this
+	// Apply the same way an indicator.CanonicalATR error already does
+	// above, rather than silently swallowing it.
+	doneStrat := w.telemetry.Time(telemetry.PhaseStrategy, symbolLabel, tfLabel)
+	evaluation, evalErr := w.registry.Evaluate(&w.state.Context, event.Timeframe)
+	doneStrat()
+	if evalErr != nil {
+		return AnalysisSnapshot{}, result, evalErr
+	}
+
+	doneOpp := w.telemetry.Time(telemetry.PhaseOpportunity, symbolLabel, tfLabel)
+	for i := range evaluation.Candidates {
+		// Overwrite the strategy's own narrower per-strategy-parameters
+		// placeholder (see e.g. supply.configFingerprint's doc comment)
+		// with the real whole-resolved-document provenance — this is the
+		// enrichment Phase S7's own strategies documented Phase S8 as
+		// expected to perform, now that engine (which alone reaches
+		// *config.Document) is the one applying it.
+		evaluation.Candidates[i].Provenance.ConfigVersion = w.settings.ConfigVersion
+		evaluation.Candidates[i].Provenance.ConfigFingerprint = w.settings.ConfigFingerprint
+		candidate := evaluation.Candidates[i]
+		observed, obsErr := w.state.Opportunities.Observe(candidate, event.Candle.Time)
+		if obsErr != nil {
+			doneOpp()
+			return AnalysisSnapshot{}, result, obsErr
+		}
+		w.countTransition(observed, symbolLabel, tfLabel)
+	}
+	for _, expired := range w.state.Opportunities.Expire(event.Candle.Time) {
+		w.countTransition(expired, symbolLabel, tfLabel)
+	}
+	doneOpp()
+
 	doneSnap := w.telemetry.Time(telemetry.PhaseSnapshot, symbolLabel, tfLabel)
 	snap := SnapshotFrom(w.state, w.settings, event.Candle.Time)
 	doneSnap()
 	return snap, result, nil
+}
+
+// countTransition records one opportunity lifecycle transition under its
+// own counter — TransitionNoop is deliberately uncounted (see
+// telemetry.CounterOpportunitiesCreated's doc comment).
+func (w *SymbolWorker) countTransition(t opportunity.Transition, symbol, timeframe string) {
+	switch t.Kind {
+	case opportunity.TransitionCreated:
+		w.telemetry.Count(telemetry.CounterOpportunitiesCreated, symbol, timeframe, 1)
+	case opportunity.TransitionActivated:
+		w.telemetry.Count(telemetry.CounterOpportunitiesActivated, symbol, timeframe, 1)
+	case opportunity.TransitionDuplicate:
+		w.telemetry.Count(telemetry.CounterOpportunitiesDuplicate, symbol, timeframe, 1)
+	case opportunity.TransitionInvalidated:
+		w.telemetry.Count(telemetry.CounterOpportunitiesInvalidated, symbol, timeframe, 1)
+	case opportunity.TransitionExpired:
+		w.telemetry.Count(telemetry.CounterOpportunitiesExpired, symbol, timeframe, 1)
+	}
 }
 
 // Snapshot returns the current AnalysisSnapshot without applying a new
