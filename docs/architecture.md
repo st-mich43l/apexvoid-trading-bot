@@ -58,8 +58,7 @@ exceptional durable fallback.
 1. Owner DMs a zone entry (`/trade` / `/algo` or legacy free-text).
 2. Parser extracts symbol, side, zone, SL, TPs (2-digit shorthand expanded).
 3. Post to VIP (and public unless VIP-only); insert Postgres lifecycle row.
-4. On `/algo`, optional broker arm; OHLC windows snapshot into
-   `manual_algo_charts` at issued / filled / closed for later XAU fitting.
+4. On `/algo`, optional broker arm.
 5. Later `close` / `cancel` / `/trade_modify` / reply-`cancel` update status
    and channel posts.
 
@@ -102,8 +101,7 @@ filters: [technique-zonewatch-publish.md](technique-zonewatch-publish.md).
 
 ### PostgreSQL (`signals`)
 
-Manual signal lifecycle, pips/results, `manual_algo_charts` (Redis OHLC
-windows around owner `/algo` events), and autonomous stats ingested from
+Manual signal lifecycle, pips/results, and autonomous stats ingested from
 executor events (`auto_trade_fills` / `auto_trade_results`). Schema is owned
 by `algo-bot` `store.init_db()` — see [schema.sql](schema.sql) for a reference
 DDL mirror.
