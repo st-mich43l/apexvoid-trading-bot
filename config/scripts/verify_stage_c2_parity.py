@@ -174,6 +174,16 @@ DIVERGENCES: dict[str, dict] = {
   "analysis.yml/analysis.flip_zone.accept_bars": {"kind": "new_surfaced", "expected": 2, "reason": "Phase S3 — canonical Flip zone close-acceptance window."},
   "analysis.yml/analysis.flip_zone.band_body_fraction": {"kind": "new_surfaced", "expected": 0.5, "reason": "Phase S3 — canonical Flip zone confirmation body threshold."},
   "analysis.yml/analysis.zones.version": {"kind": "new_surfaced", "expected": "v1", "reason": "Phase S3 — versioned canonical Zone domain contract."},
+  # analysis.yml — Phase S4's fourth domain (internal/trendline): these
+  # six existed only as Python getattr() fallback-default names in
+  # trendline_v2.py::_settings, never a real trading-bot.yml OR YAML leaf
+  # before this phase.
+  "analysis.yml/analysis.trendlines.minimum_slope_atr": {"kind": "new_surfaced", "expected": 0.02, "reason": "Phase S4 — _settings()'s real minimum_slope_atr fallback default."},
+  "analysis.yml/analysis.trendlines.maximum_slope_atr": {"kind": "new_surfaced", "expected": 0.15, "reason": "Phase S4 — _settings()'s real maximum_slope_atr fallback default."},
+  "analysis.yml/analysis.trendlines.minimum_touch_spacing_bars": {"kind": "new_surfaced", "expected": 3, "reason": "Phase S4 — _settings()'s real minimum_touch_spacing_bars fallback default."},
+  "analysis.yml/analysis.trendlines.minimum_span_bars": {"kind": "new_surfaced", "expected": 20, "reason": "Phase S4 — _settings()'s real minimum_span_bars fallback default."},
+  "analysis.yml/analysis.trendlines.dedup_value_atr": {"kind": "new_surfaced", "expected": 0.5, "reason": "Phase S4 — _settings()'s real dedup_value_atr fallback default."},
+  "analysis.yml/analysis.trendlines.dedup_slope_percent": {"kind": "new_surfaced", "expected": 0.2, "reason": "Phase S4 — _settings()'s real dedup_slope_percent fallback default."},
   # analysis.yml — Phase S4's third domain (internal/keylevel): no old
   # trading-bot.yml OR Python-schema-default precedent at all — levels.py
   # reads these as plain function-argument defaults, never a config leaf

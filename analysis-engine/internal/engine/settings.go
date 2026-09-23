@@ -8,6 +8,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/session"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/trendline"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/zone"
 )
 
@@ -20,6 +21,7 @@ type Settings struct {
 	Structure        structure.Settings
 	Liquidity        liquidity.Config
 	Zone             zone.Config
+	Trendline        trendline.Config
 	KeyLevel         keylevel.Config
 	Session          session.Config
 	Fib              fib.Config
@@ -56,6 +58,10 @@ func LoadSettings(doc *config.Document, primary market.Timeframe, allowReplaceFo
 	if err != nil {
 		return Settings{}, err
 	}
+	trendlineConfig, err := TrendlineConfigFromConfig(doc)
+	if err != nil {
+		return Settings{}, err
+	}
 	keyLevelConfig, err := KeyLevelConfigFromConfig(doc)
 	if err != nil {
 		return Settings{}, err
@@ -74,7 +80,7 @@ func LoadSettings(doc *config.Document, primary market.Timeframe, allowReplaceFo
 	}
 	return Settings{
 		ATR: atr, Structure: structureSettings, Liquidity: liquidityConfig, Zone: zoneConfig,
-		KeyLevel: keyLevelConfig, Session: sessionConfig, Fib: fibConfig,
+		Trendline: trendlineConfig, KeyLevel: keyLevelConfig, Session: sessionConfig, Fib: fibConfig,
 		HistoryDepths: depths, PrimaryTimeframe: primary,
 		AllowReplaceForming: allowReplaceForming,
 	}, nil

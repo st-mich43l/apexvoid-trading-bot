@@ -14,6 +14,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/state"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/telemetry"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/trendline"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/zone"
 )
 
@@ -129,6 +130,10 @@ func (w *SymbolWorker) ApplyWithResult(event marketdata.BarEvent) (AnalysisSnaps
 	doneLiq()
 	w.state.Liquidity.Set(event.Timeframe, liqState)
 
+	doneTrend := w.telemetry.Time(telemetry.PhaseTrendline, symbolLabel, tfLabel)
+	trendState := trendline.Update(candles, atrSeries, structState.Swings, w.settings.Trendline)
+	doneTrend()
+	w.state.Trendline.Set(event.Timeframe, trendState)
 	doneKeyLevel := w.telemetry.Time(telemetry.PhaseKeyLevel, symbolLabel, tfLabel)
 	keyLevelState := keylevel.Update(candles, atrSeries, structState.Swings, w.settings.KeyLevel)
 	doneKeyLevel()
@@ -176,12 +181,13 @@ func (w *SymbolWorker) rebuildContext() {
 			lastATR = atrSeries[len(atrSeries)-1]
 		}
 		zoneState, _ := w.state.Zone.Get(tf)
+		trendState, _ := w.state.Trendline.Get(tf)
 		keyLevelState, _ := w.state.KeyLevel.Get(tf)
 		sessionState, _ := w.state.Session.Get(tf)
 		fibState, _ := w.state.Fib.Get(tf)
 		perTF[tf] = context.TimeframeInput{
 			Structure: structState, Liquidity: liqState, Zones: zoneState,
-			KeyLevel: keyLevelState, Session: sessionState, Fib: fibState, ATR: lastATR,
+			Trendline: trendState, KeyLevel: keyLevelState, Session: sessionState, Fib: fibState, ATR: lastATR,
 		}
 	}
 	w.state.Context = context.Build(w.state.Symbol, w.settings.PrimaryTimeframe, perTF)
