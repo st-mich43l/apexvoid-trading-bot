@@ -72,6 +72,16 @@ const (
 	CounterOpportunitiesDuplicate   Counter = "opportunities_duplicate"
 	CounterOpportunitiesInvalidated Counter = "opportunities_invalidated"
 	CounterOpportunitiesExpired     Counter = "opportunities_expired"
+
+	// Opportunity Kafka publication counters — a Phase S9 amendment.
+	// Enqueued and (Succeeded + Failed-before-eventual-success) will not
+	// match 1:1 during an outage: OpportunityPublisher retries a failed
+	// job indefinitely rather than dropping it (see its own doc comment),
+	// so one Enqueued job can contribute multiple Failed counts before
+	// its own eventual Succeeded count.
+	CounterOpportunityPublishEnqueued  Counter = "opportunity_publish_enqueued"
+	CounterOpportunityPublishSucceeded Counter = "opportunity_publish_succeeded"
+	CounterOpportunityPublishFailed    Counter = "opportunity_publish_failed"
 )
 
 // Kafka transport telemetry (kafka_consume_total, kafka_produce_total,
