@@ -9,7 +9,7 @@ indicator / marketdata / config
   ↓
 structure
   ↓
-zone / liquidity
+zone / liquidity / keylevel
   ↓
 context
   ↓
@@ -129,6 +129,24 @@ independent (neither imports the other; both only need `structure`).
 
 Enforced in `analysis-engine/test/architecture/dependency_test.go`'s
 `rank` map (`"zone": 3`) and its own inline comment on this exact
+reasoning.
+
+### Amendment: `keylevel` joins `zone`/`liquidity` at rank 3
+
+A fifth correction, made implementing Phase S4's third domain
+(`internal/keylevel` — price-clustered key levels + closed-bar role
+classification, `apexvoid-bot-prompts/rebuild-strategies.md` §23-26). The
+same situation `zone`/`liquidity` already hit: `Cluster`'s
+price-clustering search (porting `levels.py::_price_clusters`/
+`_can_join_cluster`) needs `structure.Swing.Kind`/`.Price` directly.
+`keylevel` joins `zone`/`liquidity` at rank 3 — mutually independent of
+both (it does not import either, and neither imports it). Phase S4's
+second domain, `internal/fib`, makes the identical extension in its own
+PR; expect a small, mechanical merge conflict here where both amendments
+land, same as every other rank-3 addition this phase.
+
+Enforced in `analysis-engine/test/architecture/dependency_test.go`'s
+`rank` map (`"keylevel": 3`) and its own inline comment on this exact
 reasoning.
 
 ### The one correction, in full
