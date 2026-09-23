@@ -30,9 +30,9 @@ analysis-engine/
 │   ├── indicator/        (exists — TrueRange, SimpleATR, WilderATR; extended this task with CanonicalATR dispatch + RollingSimpleATR)
 │   ├── structure/        (implemented — Analysis Engine V2 task; pivot/swing/classifier/displacement/break/event/hierarchy/state)
 │   ├── liquidity/        (implemented — Analysis Engine V2 task; pool/equal-high-low/sweep/reclaim)
-│   ├── zone/             (still scaffolded only — deliberately deferred, see market-structure-v2.md and the migration doc)
+│   ├── zone/             (implemented canonical technical-zone domain — lifecycle and relevance)
 │   ├── context/          (implemented — Analysis Engine V2 task; MarketContext, Build, DeriveBias)
-│   ├── opportunity/       (still scaffolded — value types only, no strategy consumes them yet)
+│   ├── opportunity/       (implemented lifecycle domain — stable identity, dedup, technical terminal transitions)
 │   ├── strategy/          (still scaffolded — Strategy interface; no strategy implementations, next task)
 │   ├── confluence/        (still scaffolded — compositional evidence combining, doc.go + Score)
 │   ├── state/             (implemented — Analysis Engine V2 task; SymbolState wires History/Structure/Liquidity/Context/Opportunities together)
@@ -46,8 +46,8 @@ analysis-engine/
 └── README.md
 ```
 
-"Scaffolded" (still applies to `zone`, `opportunity`, `strategy`, and
-`confluence`) means: a real, compiling Go package with
+"Scaffolded" (still applies to `strategy` and `confluence`) means: a real,
+compiling Go package with
 type declarations and doc comments that establish the package's
 ownership boundary and prove the dependency direction against its
 neighbors — not a strategy or indicator implementation. "Implemented"
@@ -71,7 +71,7 @@ liquidity
   ↓
 context
   ↓
-opportunity            ← pure result/value types only (Candidate, Evidence, Target, StrategyQuality)
+opportunity            ← Candidate identity and technical lifecycle
   ↓
 strategy / confluence / state  ← behavior: Strategy.Evaluate(ctx) returns []opportunity.Candidate
   ↓
@@ -117,10 +117,10 @@ task lists `strategy` before `opportunity`, which would forbid strategy
 from importing opportunity — but its own §21 Go snippet has
 `Strategy.Evaluate` return `[]opportunity.Candidate`, which requires exactly
 that import. Taken literally the two sections contradict each other. This
-is resolved by treating `opportunity` as a pure, behavior-free value-type
-package with **no** dependency on `strategy` (or on `market` beyond basic
-types), placing it below `strategy` in the graph. `strategy` is the only
-one of the two that imports the other. Full reasoning: ADR-003.
+is resolved by treating `opportunity` as a strategy-independent technical
+lifecycle domain with **no** dependency on `strategy`, placing it below
+`strategy` in the graph. `strategy` is the only one of the two that imports
+the other. Full reasoning: ADR-003.
 
 Rules (§51/§52), unchanged from the source task:
 
@@ -140,8 +140,8 @@ These are the shapes this task's own spec writes out explicitly (§19, §21,
 §24, §26–27). As of the Analysis Engine V2 implementation task,
 `MarketContext`/`SymbolState`/`AnalysisSnapshot` below are real, populated
 with actual structure/liquidity data (not placeholder fields sized only to
-compile) — `opportunity`/`strategy` fields remain placeholders, since no
-strategy exists yet to populate them.
+compile). Opportunity lifecycle is now implemented, while `strategy` remains
+an interface-only package until S6/S7 provide evaluators and real theses.
 
 ```go
 // internal/context/market.go — real as of Analysis Engine V2
@@ -167,10 +167,11 @@ flattened into one value (source task §36/§40).
 type StrategyID string
 
 type Candidate struct {
-    ID        string
-    Strategy  StrategyID
-    Symbol    market.Symbol
-    Direction market.Direction
+    ID              string
+    Strategy        StrategyID
+    StrategyVersion string
+    Symbol          market.Symbol
+    Direction       market.Direction
 
     Entry        EntryZone     // deliberately not named "Zone" — see note below
     Invalidation market.PriceLevel
@@ -179,8 +180,9 @@ type Candidate struct {
     Evidence []Evidence
     Quality  StrategyQuality
 
-    CreatedAt int64
-    ExpiresAt int64
+    CreatedAt  int64
+    ExpiresAt  int64   // strategy-owned technical deadline
+    Provenance AnalysisProvenance
 }
 ```
 
@@ -245,7 +247,7 @@ type AnalysisSnapshot struct {
     Context       context.MarketContext
     Structure     map[market.Timeframe]structure.StructureState
     Liquidity     map[market.Timeframe]liquidity.LiquidityState
-    Opportunities []opportunity.Candidate // always empty until a strategy exists
+    Opportunities []opportunity.Candidate // created/active lifecycle records only
     Version       SnapshotVersion         // {StructureVersion, LiquidityVersion} — unknown version fails closed at load, never silently assumed
 }
 ```

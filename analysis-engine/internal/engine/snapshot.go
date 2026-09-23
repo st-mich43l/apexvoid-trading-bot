@@ -62,7 +62,7 @@ func SnapshotFrom(ws *state.SymbolState, settings Settings, now int64) AnalysisS
 	}
 	var opps []opportunity.Candidate
 	if ws.Opportunities != nil {
-		opps = append(opps, ws.Opportunities.Candidates...)
+		opps = ws.Opportunities.Live()
 	}
 	return AnalysisSnapshot{
 		Symbol: ws.Symbol, Time: now, Context: ws.Context,

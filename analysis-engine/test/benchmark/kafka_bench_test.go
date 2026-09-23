@@ -27,7 +27,7 @@ func benchEnvelope() kafka.Envelope {
 
 func benchCandidate() opportunity.Candidate {
 	return opportunity.Candidate{
-		ID: "cand-1", Strategy: "breakoutretest", Symbol: "XAU", Direction: market.Buy,
+		ID: "cand-1", Strategy: "breakoutretest", StrategyVersion: "v1", Symbol: "XAU", Direction: market.Buy,
 		Entry:        opportunity.EntryZone{Low: 2000, High: 2002},
 		Invalidation: market.PriceLevel{Price: 1990, Label: "structural_low"},
 		Targets: []opportunity.Target{
@@ -37,6 +37,7 @@ func benchCandidate() opportunity.Candidate {
 		Evidence:  []opportunity.Evidence{{Code: "m5_bos_up"}, {Code: "liquidity_high_swept"}},
 		Quality:   opportunity.StrategyQuality{Overall: 0.8, Components: map[string]float64{"breakout_quality": 0.9, "retest_quality": 0.7}},
 		CreatedAt: 1000, ExpiresAt: 2000,
+		Provenance: opportunity.AnalysisProvenance{StructureVersion: "v2", LiquidityVersion: "v1", ZoneVersion: "v1", ConfigVersion: 3, ConfigFingerprint: "bench"},
 	}
 }
 
@@ -75,6 +76,27 @@ func BenchmarkKafkaOpportunityEncode(b *testing.B) {
 		// hand-copied near-equivalent.
 		payload := kafka.OpportunityPayloadFromCandidate(candidate, algo)
 		if _, err := kafka.Encode(payload); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// BenchmarkOpportunityBookDuplicate measures the normal live path: a
+// strategy re-observing its still-valid semantic setup must not allocate a
+// second lifecycle record or trigger a second publication.
+func BenchmarkOpportunityBookDuplicate(b *testing.B) {
+	book := opportunity.NewBook()
+	candidate := benchCandidate()
+	if _, err := book.Observe(candidate, 1001); err != nil {
+		b.Fatal(err)
+	}
+	if _, err := book.Observe(candidate, 1002); err != nil {
+		b.Fatal(err)
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, err := book.Observe(candidate, int64(1003+i)); err != nil {
 			b.Fatal(err)
 		}
 	}
