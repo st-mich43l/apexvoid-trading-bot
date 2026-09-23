@@ -619,6 +619,30 @@
             "max_merged_zone_atr"
           ]
         },
+        "key_levels": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "cluster_atr": {
+              "type": "number"
+            },
+            "round_step": {
+              "type": "number"
+            },
+            "minimum_touches": {
+              "type": "integer"
+            },
+            "maximum_cluster_span_multiple": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "cluster_atr",
+            "round_step",
+            "minimum_touches",
+            "maximum_cluster_span_multiple"
+          ]
+        },
         "fibonacci": {
           "type": "object",
           "additionalProperties": false,
@@ -970,6 +994,7 @@
         "flip_zone",
         "history",
         "indicators",
+        "key_levels",
         "liquidity",
         "measurements",
         "scanner",

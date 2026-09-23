@@ -47,6 +47,12 @@
         "length": 14
       }
     },
+    "key_levels": {
+      "cluster_atr": 0.5,
+      "maximum_cluster_span_multiple": 2.0,
+      "minimum_touches": 2,
+      "round_step": 5.0
+    },
     "liquidity": {
       "equal_level_tolerance_atr": 0.05,
       "pool_minimum_touches": 2,
