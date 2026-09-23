@@ -166,7 +166,7 @@ func (r *Runtime) bootstrap(ctx context.Context) error {
 			values[left], values[right] = values[right], values[left]
 		}
 		for _, raw := range values {
-			if err := r.process(ctx, series, raw, false); err != nil {
+			if err := r.process(ctx, series, raw, marketdata.EventOriginBootstrap, false); err != nil {
 				return err
 			}
 		}
@@ -270,7 +270,7 @@ func (r *Runtime) recover(ctx context.Context, series Series) error {
 		return r.readError(series, err)
 	}
 	for _, raw := range values {
-		if err := r.process(ctx, series, raw, true); err != nil {
+		if err := r.process(ctx, series, raw, marketdata.EventOriginLive, true); err != nil {
 			return err
 		}
 	}
@@ -280,7 +280,7 @@ func (r *Runtime) recover(ctx context.Context, series Series) error {
 			return r.readError(series, err)
 		}
 		for _, raw := range values {
-			if err := r.process(ctx, series, raw, true); err != nil {
+			if err := r.process(ctx, series, raw, marketdata.EventOriginLive, true); err != nil {
 				return err
 			}
 		}
@@ -289,11 +289,12 @@ func (r *Runtime) recover(ctx context.Context, series Series) error {
 	return nil
 }
 
-func (r *Runtime) process(ctx context.Context, series Series, raw string, recovered bool) error {
+func (r *Runtime) process(ctx context.Context, series Series, raw string, origin marketdata.EventOrigin, recovered bool) error {
 	event, err := DecodeBar(raw, series)
 	if err != nil {
 		return r.readError(series, err)
 	}
+	event.Origin = origin
 	result, err := r.dispatch(ctx, event)
 	if err != nil {
 		return fmt.Errorf("redis: dispatch %s at %d: %w", series, event.Candle.Time, err)

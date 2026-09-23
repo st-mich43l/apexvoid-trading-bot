@@ -32,9 +32,11 @@ broker authentication · broker order placement · position management
 domain are implemented and contract-tested. `internal/zone` owns per-origin
 Supply/Demand, Order Block, FVG/iFVG, Breaker, and Flip geometry plus
 lifecycle/relevance state; it is wired through `SymbolState`,
-`MarketContext`, and immutable snapshots. Strategy evaluation and the final
-Python technical-authority cutover remain later migration stages; legacy
-detectors are therefore still retained until those stages are complete.
+`MarketContext`, and immutable snapshots. S11 runs those strategy outputs in
+Kafka-only shadow mode: bootstrap/replay reconstruction never publishes a
+historical candidate as a fresh event, and no Algo Bot consumer exists. The
+final Python technical-authority cutover remains gated on observed shadow
+evidence; legacy detectors are therefore still retained.
 
 ## `algo-bot` (Python)
 
