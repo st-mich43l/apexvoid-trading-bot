@@ -158,7 +158,74 @@ Per the spec's own gate (§7: "Do not implement anything before this
 semantic audit is completed... But do NOT stop the task after the audit"):
 this document classifies; it does not create Go packages, does not write
 `docs/analysis/strategies/<name>.md` specs, and does not touch
-`config/analysis.yml`. Those are Phase S2+ (locking the catalog after
-owner review of the four flagged items above) through S7 (implementing
-each approved strategy), each requiring their own plan once this catalog
-is confirmed.
+`config/analysis.yml`. Those are Phase S2+ through S7 (implementing each
+approved strategy), each requiring their own plan once this catalog is
+confirmed.
+
+---
+
+## Phase S2 — Catalog locked
+
+Resolving every item S0 left open (the four marked `*` plus the one
+MERGE candidate), so S3 onward has one unambiguous strategy list to
+build against. No further catalog changes without a deliberate revision
+to this section.
+
+- **#6 iFVG — REBUILD, semantics confirmed.** Read
+  `technique_geometry.py::discover_ifvg_instances` in full (docstring:
+  "T4 — first close through gap flips side"). Locked definition for
+  `docs/analysis/strategies/ifvg.md` (written at S7, not here):
+  inversion trigger is the first candle **close** fully through an
+  existing FVG zone's far bound (below `low` for a demand-side gap,
+  above `high` for a supply-side gap) — that flips the zone's tradeable
+  side (demand→sell, supply→buy). The flip is confirmed only if no
+  second close violates it back through the *original* zone bound from
+  the new trade side before an entry; if one does, the inversion never
+  fires. Entry is the same gap band, clipped to the proximal edge on
+  the new trade side (not the full original gap). This is a real,
+  deterministic, already-implemented thesis — proceeds as `ifvg`.
+- **#7 CRT — REBUILD, locked as independent `CRTStrategy`.** Its H1-candle-
+  range + sweep + reclaim definition (`discover_crt_instances`) is
+  specific enough to stand on its own rather than folding into
+  Confluence Zone or a generic range/liquidity composition.
+- **#15 Break & Retest — MERGE, locked into `TrendlineStrategy`.**
+  Becomes that strategy's break-then-retest sub-thesis (spec §24
+  already scopes "break state, retest state" onto the trendline
+  primitive itself) rather than a separate strategy. Its config leaf
+  (`strategies.breakout.break_retest_enabled`) becomes part of
+  `analysis.strategies.trendline.*`, not its own strategy ID.
+- **#19 Fade Scalp — RENAME, locked as `LiquiditySweepStrategy`.** Its
+  actual thesis (`_level_grab` liquidity grab on an equal-high/equal-low
+  level, graded A/B, then `evaluate_structural_reaction` confirmation
+  with a CHoCH check) already matches spec §27's Liquidity Sweep thesis
+  closely enough that generalizing rather than duplicating is the
+  right call — one strategy, new V2 identity `liquidity_sweep`, not two.
+  Its scalp-scoped config (`strategies.scalp.fade_scalp_enabled` etc.)
+  becomes `analysis.strategies.liquidity_sweep.*`.
+- **#27 Breakout Continuation — MERGE, locked into `MomentumRideStrategy`.**
+  No surviving Python detector, same canonical family as Momentum Ride
+  already in `strategy_names.py`; no evidence of a distinct thesis
+  worth carrying forward separately.
+
+### Final V2 strategy list (18)
+
+`key_level`, `confluence_zone` (compositional), `supply`, `demand`,
+`order_block`, `fvg`, `ifvg`, `crt`, `flip_zone`, `session_level`,
+`trendline` (absorbs Break & Retest), `range_edge`, `box_breakout`,
+`momentum_ride` (absorbs Breakout Continuation), `snap_back`,
+`liquidity_sweep` (renamed from Fade Scalp), `range_sweep`,
+`impulse_pullback`, `scalp_breakout_retest` (kept distinct from
+`box_breakout` per #31's three-way disambiguation).
+
+19 REBUILD candidates from S0 minus 1 (Break & Retest folded into
+Trendline, no longer a separate strategy) = **18 independent V2
+strategies**, per ADR-003's independence rule (no strategy imports
+another; Confluence Zone is the sole compositional exception).
+
+### What S2 still does not do
+
+No Go code, no `docs/analysis/strategies/<name>.md` files (those are
+S7, written alongside each strategy's implementation, not speculatively
+ahead of it), no `config/analysis.yml` changes. S3 (canonical Zone
+domain — `internal/zone`, currently an empty `Book{}`) is the next real
+engineering phase, planned separately.
