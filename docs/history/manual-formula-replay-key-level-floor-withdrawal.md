@@ -1,5 +1,11 @@
 # Manual formula replay — Key Level `min_sell_zone_score: 10` withdrawal
 
+**Historical record — the `manual_formula_replay` harness and its
+`manual_algo_charts` data source were removed** (Analysis Engine V2
+strategy rebuild, Phase S1). Kept because the config decision below is
+still live (the leaf stays at its withdrawn-to default) and the
+statistical reasoning is a real methodological lesson.
+
 PR #449 enabled `strategies.reaction.key_level.min_sell_zone_score: 10.0` on
 XAU from the first `manual_formula_replay` scorecard. That override is
 withdrawn (PR-J). The config leaf remains at default `0.0` (gate off); the

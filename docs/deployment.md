@@ -260,8 +260,7 @@ Expect:
 
 Optional:
 
-- `/trade XAU … / algo` — arms broker path; chart rows land in
-  `manual_algo_charts` after issue/fill/close
+- `/trade XAU … / algo` — arms broker path
 - Chart screenshot DM — Claude analysis if `ANTHROPIC_API_KEY` is set
 
 Technique / ZoneWatch smoke (after auto-trade is on):
