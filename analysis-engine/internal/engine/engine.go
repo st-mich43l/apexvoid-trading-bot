@@ -27,6 +27,7 @@ type Engine struct {
 	workers   map[market.Symbol]*SymbolWorker
 	settings  map[market.Symbol]Settings
 	telemetry *telemetry.Recorder
+	publisher *OpportunityPublisher // nil = no Kafka opportunity publication (Phase S9)
 }
 
 // NewEngine returns an Engine tracking no symbols yet. recorder may be
@@ -51,7 +52,10 @@ func NewEngine(recorder *telemetry.Recorder) *Engine {
 // callers that want to preserve state across a settings change must not
 // call Register a second time.
 func (e *Engine) Register(symbol market.Symbol, settings Settings) error {
-	worker, err := NewSymbolWorker(symbol, settings, e.telemetry)
+	e.mu.RLock()
+	publisher := e.publisher
+	e.mu.RUnlock()
+	worker, err := NewSymbolWorker(symbol, settings, e.telemetry, publisher)
 	if err != nil {
 		return err
 	}
@@ -60,6 +64,17 @@ func (e *Engine) Register(symbol market.Symbol, settings Settings) error {
 	e.workers[symbol] = worker
 	e.settings[symbol] = settings
 	return nil
+}
+
+// SetPublisher wires opportunity Kafka publication (Phase S9) — call
+// before Register-ing any symbol that should publish, since Register
+// reads the current publisher once at worker-construction time, not on
+// every event. pub may be nil (the default) to disable publication
+// entirely, matching OpportunityPublisher's own nil-safe Enqueue/Run.
+func (e *Engine) SetPublisher(pub *OpportunityPublisher) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.publisher = pub
 }
 
 // Dispatch routes event to its symbol's worker. Returns an error if the
