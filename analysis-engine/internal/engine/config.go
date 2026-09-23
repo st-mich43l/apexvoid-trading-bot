@@ -10,6 +10,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/config"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/fib"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/indicator"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/keylevel"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/liquidity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/session"
@@ -283,6 +284,34 @@ func ZoneConfigFromConfig(doc *config.Document) (zone.Config, error) {
 		FlipBandBodyFraction:   flipBandBodyFraction,
 		FlipLevelBandATR:       flipLevelBandATR,
 		OrderBlockBodyFraction: orderBlockBodyFraction,
+	}, nil
+}
+
+// KeyLevelConfigFromConfig reads analysis.key_levels.* into
+// keylevel.Config — Phase S4's third domain. No version gate: levels.py
+// has never had a versioned contract.
+func KeyLevelConfigFromConfig(doc *config.Document) (keylevel.Config, error) {
+	clusterATR, err := getFloat(doc, "analysis.key_levels.cluster_atr")
+	if err != nil {
+		return keylevel.Config{}, err
+	}
+	roundStep, err := getFloat(doc, "analysis.key_levels.round_step")
+	if err != nil {
+		return keylevel.Config{}, err
+	}
+	minimumTouches, err := getInt(doc, "analysis.key_levels.minimum_touches")
+	if err != nil {
+		return keylevel.Config{}, err
+	}
+	maximumClusterSpanMultiple, err := getFloat(doc, "analysis.key_levels.maximum_cluster_span_multiple")
+	if err != nil {
+		return keylevel.Config{}, err
+	}
+	return keylevel.Config{
+		ClusterATR:                 clusterATR,
+		RoundStep:                  roundStep,
+		MinimumTouches:             minimumTouches,
+		MaximumClusterSpanMultiple: maximumClusterSpanMultiple,
 	}, nil
 }
 
