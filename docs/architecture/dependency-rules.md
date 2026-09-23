@@ -90,8 +90,8 @@ strictly **above** `strategy/confluence/state` and strictly **below**
 once, with no special-cased exception needed:
 
 - `engine` (now the highest rank) can import `transport` — required, so
-  the composition root can wire a Kafka consumer/producer into the
-  engine.
+  the composition root can wire the Redis market runtime and Kafka producer
+  into the engine.
 - `strategy` (and everything at or below its rank — `structure`,
   `liquidity`, `zone`, `indicator`, `opportunity`) **cannot** import
   `transport` — which is exactly that task's own forbidden-edges list

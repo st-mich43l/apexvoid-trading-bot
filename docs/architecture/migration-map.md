@@ -91,11 +91,11 @@ proven) · `no-action` (out of scope / research tooling).
 | `app/persistence/{redis_state,store}.py` | `persistence/` (exists, keep) | keep | — |
 | `app/core/*` | split: `market`/`config` concerns → already covered by `analysis-engine`'s Go equivalents; runtime/logging stays `algo-bot/runtime` | reorganize (low priority, small) | Stage 8+ |
 
-## `ctrader-engine/*` — no migration needed
+## `ctrader-engine/*` — market feed remains Redis
 
-The first market-event transport slice is now implemented: cTrader publishes
-closed bars to Kafka and analysis-engine consumes them. The remaining
-execution event migration below is intentionally separate.
+cTrader writes closed bars and spot state to Redis. Analysis Engine consumes
+that Redis market-data plane; cTrader has no Kafka market publisher. The
+remaining execution event migration below is intentionally separate.
 
 Reviewed this pass; matches its target boundary already (see
 `service-boundaries.md`). No files moved. The only future change: once

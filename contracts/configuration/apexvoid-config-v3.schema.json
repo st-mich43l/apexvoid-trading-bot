@@ -130,10 +130,20 @@
           "properties": {
             "url": {
               "type": "string"
+            },
+            "bars_channel": {
+              "type": "string",
+              "minLength": 1
+            },
+            "reconciliation_interval_seconds": {
+              "type": "integer",
+              "minimum": 1
             }
           },
           "required": [
-            "url"
+            "url",
+            "bars_channel",
+            "reconciliation_interval_seconds"
           ]
         },
         "redis_streams": {
@@ -170,9 +180,7 @@
           "required": [
             "brokers",
             "client_id",
-            "consumer_groups",
             "enabled",
-            "tick_consumption_enabled",
             "topic_specs",
             "topics"
           ],
@@ -193,10 +201,15 @@
               "additionalProperties": false,
               "required": [
                 "analysis_engine",
+                "algo_bot",
                 "ctrader_engine"
               ],
               "properties": {
                 "analysis_engine": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "algo_bot": {
                   "type": "string",
                   "minLength": 1
                 },
@@ -210,20 +223,12 @@
               "type": "object",
               "additionalProperties": false,
               "required": [
-                "market_bar_closed",
-                "market_tick",
                 "analysis_opportunity",
-                "analysis_opportunity_invalidated"
+                "analysis_opportunity_invalidated",
+                "execution_trade_plan",
+                "execution_trade_event"
               ],
               "properties": {
-                "market_bar_closed": {
-                  "type": "string",
-                  "minLength": 1
-                },
-                "market_tick": {
-                  "type": "string",
-                  "minLength": 1
-                },
                 "analysis_opportunity": {
                   "type": "string",
                   "minLength": 1
@@ -231,81 +236,27 @@
                 "analysis_opportunity_invalidated": {
                   "type": "string",
                   "minLength": 1
-                }
-              }
-            },
-            "consumer_groups": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": [
-                "analysis_engine"
-              ],
-              "properties": {
-                "analysis_engine": {
+                },
+                "execution_trade_plan": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "execution_trade_event": {
                   "type": "string",
                   "minLength": 1
                 }
               }
             },
-            "tick_consumption_enabled": {
-              "type": "boolean"
-            },
             "topic_specs": {
               "type": "object",
               "additionalProperties": false,
               "required": [
-                "market.bar.closed.v1",
-                "market.tick.v1",
                 "analysis.opportunity.v1",
-                "analysis.opportunity.invalidated.v1"
+                "analysis.opportunity.invalidated.v1",
+                "execution.trade-plan.v1",
+                "execution.trade-event.v1"
               ],
               "properties": {
-                "market.bar.closed.v1": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": [
-                    "partitions",
-                    "replication_factor",
-                    "retention_ms"
-                  ],
-                  "properties": {
-                    "partitions": {
-                      "type": "integer",
-                      "minimum": 1
-                    },
-                    "replication_factor": {
-                      "type": "integer",
-                      "minimum": 1
-                    },
-                    "retention_ms": {
-                      "type": "integer",
-                      "minimum": 1
-                    }
-                  }
-                },
-                "market.tick.v1": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": [
-                    "partitions",
-                    "replication_factor",
-                    "retention_ms"
-                  ],
-                  "properties": {
-                    "partitions": {
-                      "type": "integer",
-                      "minimum": 1
-                    },
-                    "replication_factor": {
-                      "type": "integer",
-                      "minimum": 1
-                    },
-                    "retention_ms": {
-                      "type": "integer",
-                      "minimum": 1
-                    }
-                  }
-                },
                 "analysis.opportunity.v1": {
                   "type": "object",
                   "additionalProperties": false,
@@ -330,6 +281,52 @@
                   }
                 },
                 "analysis.opportunity.invalidated.v1": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "partitions",
+                    "replication_factor",
+                    "retention_ms"
+                  ],
+                  "properties": {
+                    "partitions": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "replication_factor": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "retention_ms": {
+                      "type": "integer",
+                      "minimum": 1
+                    }
+                  }
+                },
+                "execution.trade-plan.v1": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "partitions",
+                    "replication_factor",
+                    "retention_ms"
+                  ],
+                  "properties": {
+                    "partitions": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "replication_factor": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "retention_ms": {
+                      "type": "integer",
+                      "minimum": 1
+                    }
+                  }
+                },
+                "execution.trade-event.v1": {
                   "type": "object",
                   "additionalProperties": false,
                   "required": [

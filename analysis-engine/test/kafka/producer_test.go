@@ -104,7 +104,7 @@ func TestProducer_PublishOpportunityInvalidated_ProducesToItsOwnTopic(t *testing
 	defer producer.Close(ctx)
 
 	payload := kafka.OpportunityInvalidatedPayload{
-		OpportunityID: "cand-1", Symbol: "XAU", ReasonCode: "STRUCTURE_INVALIDATED", InvalidatedAt: 1500,
+		OpportunityID: "cand-1", Symbol: "XAU", Strategy: "breakoutretest", ReasonCode: "STRUCTURE_INVALIDATED", InvalidatedAt: 1500,
 	}
 	if err := producer.PublishOpportunityInvalidated(ctx, "corr-2", "cand-1", "XAU", payload, time.Unix(1500, 0)); err != nil {
 		t.Fatalf("PublishOpportunityInvalidated: %v", err)

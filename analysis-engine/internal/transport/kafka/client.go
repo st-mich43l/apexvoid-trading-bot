@@ -9,10 +9,8 @@ import (
 )
 
 // newClient builds a kgo.Client with cfg's brokers/client ID plus any
-// caller-specific options (consumer-group options for Consumer, none
-// extra for Producer). Centralized here so Producer and Consumer never
-// duplicate broker/client-id wiring (source task §7: avoid one giant
-// kafka.go, but also avoid needless duplication across the split files).
+// caller-specific options. The current producer needs none; keeping this
+// construction in one place prevents broker/client-ID wiring from drifting.
 //
 // Producer durability is left at franz-go's own defaults deliberately
 // (ADR-008: idempotent producer, acks=all) — source task §21's "do not
@@ -31,10 +29,8 @@ func newClient(cfg Config, opts ...kgo.Opt) (*kgo.Client, error) {
 }
 
 // ping proves at least one configured broker is reachable within
-// timeout — source task §43's startup-safety fail-closed check
-// ("consumer startup should fail closed if Kafka is enabled but... no
-// broker reachable within startup policy"). Does not create a topic or
-// otherwise mutate broker state.
+// timeout. It is used only for producer initialization and does not create a
+// topic or otherwise mutate broker state.
 func ping(ctx context.Context, client *kgo.Client, timeout time.Duration) error {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()

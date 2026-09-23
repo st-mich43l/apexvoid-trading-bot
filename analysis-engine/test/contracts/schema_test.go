@@ -54,8 +54,8 @@ func validateGo(t *testing.T, schema *jsonschema.Schema, v any) {
 func TestEventEnvelopeSchema_ValidatesARealGoEnvelope(t *testing.T) {
 	schema := compileSchema(t, repoContractPath("common", "event-envelope-v1.schema.json"))
 	env := kafka.Envelope{
-		EventID: kafka.NewEventID(), EventType: "market.bar.closed.v1", EventVersion: 1,
-		OccurredAt: 1_700_000_300, ProducedAt: 1_700_000_301, Producer: "ctrader-engine",
+		EventID: kafka.NewEventID(), EventType: "analysis.opportunity.v1", EventVersion: 1,
+		OccurredAt: 1_700_000_300, ProducedAt: 1_700_000_301, Producer: "analysis-engine",
 		CorrelationID: "corr-1", CausationID: "cause-1",
 		ConfigVersion: 3, ConfigFingerprint: "abc123",
 		Payload: []byte(`{"a":1}`),
@@ -66,58 +66,13 @@ func TestEventEnvelopeSchema_ValidatesARealGoEnvelope(t *testing.T) {
 func TestEventEnvelopeSchema_RejectsAnEnvelopeMissingARequiredField(t *testing.T) {
 	schema := compileSchema(t, repoContractPath("common", "event-envelope-v1.schema.json"))
 	raw := map[string]any{
-		"event_type": "market.bar.closed.v1", "event_version": 1,
+		"event_type": "analysis.opportunity.v1", "event_version": 1,
 		"occurred_at": 1, "produced_at": 1, "producer": "x", "correlation_id": "y",
 		"payload": map[string]any{},
 		// event_id deliberately omitted
 	}
 	if err := schema.Validate(raw); err == nil {
 		t.Error("expected schema validation to fail for an envelope missing event_id")
-	}
-}
-
-func TestBarClosedSchema_ValidatesARealGoPayload(t *testing.T) {
-	schema := compileSchema(t, repoContractPath("market", "bar-closed-v1.schema.json"))
-	p := kafka.BarClosedPayload{
-		CanonicalSymbol: "XAU", Timeframe: "M5", OpenTime: 1_700_000_000, CloseTime: 1_700_000_300,
-		Open: 2000, High: 2005, Low: 1998, Close: 2003, Volume: 120,
-	}
-	validateGo(t, schema, p)
-}
-
-func TestBarClosedSchema_RejectsAnUnrecognizedTimeframe(t *testing.T) {
-	schema := compileSchema(t, repoContractPath("market", "bar-closed-v1.schema.json"))
-	raw := map[string]any{
-		"canonical_symbol": "XAU", "timeframe": "M2", "open_time": 1, "close_time": 121,
-		"open": 1, "high": 1, "low": 1, "close": 1, "volume": 1,
-	}
-	if err := schema.Validate(raw); err == nil {
-		t.Error("expected schema validation to reject an unrecognized timeframe (M2)")
-	}
-}
-
-func TestBarClosedSchema_RejectsNegativeVolume(t *testing.T) {
-	schema := compileSchema(t, repoContractPath("market", "bar-closed-v1.schema.json"))
-	raw := map[string]any{
-		"canonical_symbol": "XAU", "timeframe": "M5", "open_time": 1, "close_time": 301,
-		"open": 1, "high": 1, "low": 1, "close": 1, "volume": -5,
-	}
-	if err := schema.Validate(raw); err == nil {
-		t.Error("expected schema validation to reject negative volume")
-	}
-}
-
-func TestTickSchema_ValidatesARealGoPayload(t *testing.T) {
-	schema := compileSchema(t, repoContractPath("market", "tick-v1.schema.json"))
-	p := kafka.TickPayload{CanonicalSymbol: "XAU", Time: 1_700_000_000, Bid: 2000.1, Ask: 2000.3}
-	validateGo(t, schema, p)
-}
-
-func TestTickSchema_RejectsNonPositiveBid(t *testing.T) {
-	schema := compileSchema(t, repoContractPath("market", "tick-v1.schema.json"))
-	raw := map[string]any{"canonical_symbol": "XAU", "time": 1, "bid": 0, "ask": 1}
-	if err := schema.Validate(raw); err == nil {
-		t.Error("expected schema validation to reject a non-positive bid")
 	}
 }
 
@@ -139,7 +94,7 @@ func TestOpportunitySchema_ValidatesARealGoPayload(t *testing.T) {
 func TestOpportunityInvalidatedSchema_ValidatesARealGoPayload(t *testing.T) {
 	schema := compileSchema(t, repoContractPath("analysis", "opportunity-invalidated-v1.schema.json"))
 	p := kafka.OpportunityInvalidatedPayload{
-		OpportunityID: "cand-1", Symbol: "XAU", ReasonCode: "STRUCTURE_INVALIDATED", InvalidatedAt: 1500,
+		OpportunityID: "cand-1", Symbol: "XAU", Strategy: "breakoutretest", ReasonCode: "STRUCTURE_INVALIDATED", InvalidatedAt: 1500,
 	}
 	validateGo(t, schema, p)
 }

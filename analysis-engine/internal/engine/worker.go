@@ -56,6 +56,15 @@ func NewSymbolWorker(symbol market.Symbol, settings Settings, recorder *telemetr
 // surfaced via telemetry counters; Apply's return value staying a valid
 // snapshot either way keeps every caller's control flow uniform.
 func (w *SymbolWorker) Apply(event marketdata.BarEvent) (AnalysisSnapshot, error) {
+	snapshot, _, err := w.ApplyWithResult(event)
+	return snapshot, err
+}
+
+// ApplyWithResult is Apply with the MarketHistory append disposition made
+// explicit for a transport runtime. Domain sequencing remains owned by
+// marketdata; callers only observe the result for telemetry and cursor
+// decisions.
+func (w *SymbolWorker) ApplyWithResult(event marketdata.BarEvent) (AnalysisSnapshot, marketdata.AppendResult, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
@@ -71,23 +80,22 @@ func (w *SymbolWorker) Apply(event marketdata.BarEvent) (AnalysisSnapshot, error
 	switch {
 	case err != nil:
 		w.telemetry.Count(telemetry.CounterEventsRejected, symbolLabel, tfLabel, 1)
-		return AnalysisSnapshot{}, err
+		return AnalysisSnapshot{}, result, err
 	case result == marketdata.AppendDuplicate:
 		w.telemetry.Count(telemetry.CounterDuplicateEvents, symbolLabel, tfLabel, 1)
-		return SnapshotFrom(w.state, w.settings, event.Candle.Time), nil
+		return SnapshotFrom(w.state, w.settings, event.Candle.Time), result, nil
 	case result == marketdata.AppendOutOfOrder:
 		w.telemetry.Count(telemetry.CounterOutOfOrderEvents, symbolLabel, tfLabel, 1)
-		return SnapshotFrom(w.state, w.settings, event.Candle.Time), nil
+		return SnapshotFrom(w.state, w.settings, event.Candle.Time), result, nil
 	case result == marketdata.AppendConflict:
-		// Correction policy (source task §17, documented in
-		// docs/transport/kafka.md's "Duplicate delivery handling"): the
+		// Correction policy (documented by ADR-010): the
 		// original, already-analyzed candle is kept — structure/liquidity
 		// already computed from it must never be silently retroactively
 		// rewritten — and the conflict is counted under its own distinct
 		// counter so an operator can see it happened, unlike an ordinary
 		// duplicate which is expected and benign.
 		w.telemetry.Count(telemetry.CounterConflictEvents, symbolLabel, tfLabel, 1)
-		return SnapshotFrom(w.state, w.settings, event.Candle.Time), nil
+		return SnapshotFrom(w.state, w.settings, event.Candle.Time), result, nil
 	}
 	w.telemetry.Count(telemetry.CounterEventsProcessed, symbolLabel, tfLabel, 1)
 
@@ -98,7 +106,7 @@ func (w *SymbolWorker) Apply(event marketdata.BarEvent) (AnalysisSnapshot, error
 	atrSeries, err := indicator.CanonicalATR(candles, w.settings.ATR.Length, w.settings.ATR.Algorithm)
 	doneInd()
 	if err != nil {
-		return AnalysisSnapshot{}, err
+		return AnalysisSnapshot{}, result, err
 	}
 	w.state.Measurements.SetATR(event.Timeframe, atrSeries)
 
@@ -119,7 +127,7 @@ func (w *SymbolWorker) Apply(event marketdata.BarEvent) (AnalysisSnapshot, error
 	doneSnap := w.telemetry.Time(telemetry.PhaseSnapshot, symbolLabel, tfLabel)
 	snap := SnapshotFrom(w.state, w.settings, event.Candle.Time)
 	doneSnap()
-	return snap, nil
+	return snap, result, nil
 }
 
 // Snapshot returns the current AnalysisSnapshot without applying a new

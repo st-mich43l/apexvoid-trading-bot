@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/config"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/indicator"
@@ -12,6 +13,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/transport/kafka"
+	redistransport "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/transport/redis"
 )
 
 // This file is deliberately the ONLY place in analysis-engine that reads
@@ -270,22 +272,6 @@ func KafkaConfigFromConfig(doc *config.Document) (kafka.Config, error) {
 	if err != nil {
 		return kafka.Config{}, err
 	}
-	consumerGroup, err := getString(doc, "transport.kafka.consumer_groups.analysis_engine")
-	if err != nil {
-		return kafka.Config{}, err
-	}
-	tickEnabled, err := getBool(doc, "transport.kafka.tick_consumption_enabled")
-	if err != nil {
-		return kafka.Config{}, err
-	}
-	marketBarClosed, err := getString(doc, "transport.kafka.topics.market_bar_closed")
-	if err != nil {
-		return kafka.Config{}, err
-	}
-	marketTick, err := getString(doc, "transport.kafka.topics.market_tick")
-	if err != nil {
-		return kafka.Config{}, err
-	}
 	analysisOpportunity, err := getString(doc, "transport.kafka.topics.analysis_opportunity")
 	if err != nil {
 		return kafka.Config{}, err
@@ -302,15 +288,34 @@ func KafkaConfigFromConfig(doc *config.Document) (kafka.Config, error) {
 	cfg := kafka.Config{
 		Enabled: enabled, Brokers: brokers, ClientID: clientID,
 		Topics: kafka.Topics{
-			MarketBarClosed: marketBarClosed, MarketTick: marketTick,
 			AnalysisOpportunity: analysisOpportunity, AnalysisOpportunityInvalidated: analysisOpportunityInvalidated,
 		},
-		TopicSpecs:             topicSpecs,
-		ConsumerGroup:          consumerGroup,
-		TickConsumptionEnabled: tickEnabled,
+		TopicSpecs: topicSpecs,
 	}
 	if err := cfg.Validate(); err != nil {
 		return kafka.Config{}, err
+	}
+	return cfg, nil
+}
+
+// RedisConfigFromConfig resolves the market-data transport. Redis owns bars,
+// spot state and catch-up; no domain package reads this topology directly.
+func RedisConfigFromConfig(doc *config.Document) (redistransport.Config, error) {
+	url, err := getString(doc, "transport.redis.url")
+	if err != nil {
+		return redistransport.Config{}, err
+	}
+	channel, err := getString(doc, "transport.redis.bars_channel")
+	if err != nil {
+		return redistransport.Config{}, err
+	}
+	seconds, err := getInt(doc, "transport.redis.reconciliation_interval_seconds")
+	if err != nil {
+		return redistransport.Config{}, err
+	}
+	cfg := redistransport.Config{URL: url, BarsChannel: channel, ReconciliationInterval: time.Duration(seconds) * time.Second}
+	if err := cfg.Validate(); err != nil {
+		return redistransport.Config{}, err
 	}
 	return cfg, nil
 }
