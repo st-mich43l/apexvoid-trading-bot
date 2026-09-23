@@ -34,7 +34,8 @@ and [ADR-004](adr/) for the transport/cutover gating this depends on.
 | Session/PDH-PDL/PWH-PWL levels, sweep detection, active session | `app/analysis/session_liquidity.py` (`session_levels`, `previous_week_levels`; no active-session classifier) | `internal/session` (`Update`, `State`, `Book`) | **Exact parity** on levels/sweep (same window/rollover/week-start rules, same cross-window sweep scan), plus **new**: the active-session (Asia/London/NY) classifier has no Python equivalent — added to finally populate `context.SessionContext`, previously an honest empty placeholder | Shadow only | Not removable |
 | Fibonacci ladder, premium/discount dealing range | `app/analysis/fibonacci.py`, `app/analysis/dealing_range.py` | `internal/fib` (`Ladder`, `NearestLevel`, `Resolve`, `Update`) | **Exact parity** — same retracement/extension ratios, same bracketing/opposing swing-pair search, same premium/discount + fine fib-zone thresholds | Shadow only | Not removable |
 | Technical opportunity lifecycle | Legacy candidate/delivery state mixes technical setup validity with execution policy | `internal/opportunity` (`DeterministicID`, `Book`) | **Explicit redesign** — one per-symbol runtime book owns Created → Active → Invalidated/Expired transitions, deduplicates semantic IDs, and permits only strategy-owned technical terminal reasons; it has no account, broker, or Kafka dependency | Ready for S8 engine wiring; no real candidates yet | Legacy authority remains until strategy cutover |
-| Strategy registry / evaluator | Legacy Python family registries and broad scanner passes | `internal/strategy` (`Config`, `Registry`, `Evaluate`) | **Explicit redesign** — the complete semantic V2 catalog is configuration-declared; only enabled concrete implementations instantiate; closed-bar evaluation runs only strategies that require that timeframe and defers until all declared timeframe context exists | Phase S6 done; all strategies intentionally disabled until their independent S7 theses exist | Legacy authority remains until strategy cutover |
+| Strategy registry / evaluator | Legacy Python family registries and broad scanner passes | `internal/strategy` (`Config`, `Registry`, `Evaluate`) | **Explicit redesign** — the complete semantic V2 catalog is configuration-declared; only enabled concrete implementations instantiate; closed-bar evaluation runs only strategies that require that timeframe and defers until all declared timeframe context exists | Phase S6 done; 7 of 19 catalog entries now have real, enabled S7 implementations (see next row); the remaining 12 stay disabled, no factory | Legacy authority remains until strategy cutover |
+| Independent strategy theses (`key_level`, `supply`, `demand`, `order_block`, `fvg`, `flip_zone`, `session_level`) | Various legacy detector functions in `detectors.py` (`docs/analysis/strategy-v2-catalog.md`'s per-row mapping) | `internal/strategy/{keylevel,supply,demand,orderblock,fvg,flipzone,sessionlevel}` | **Explicit redesign** — each strategy is a fully independent Go package (no shared strategy base class; only canonical market-fact primitives — `zone.Relevance`, `structure.Swing`, `liquidity.Pool` — are shared), each with its own `Evaluate`, own quality-scoring reasoning, own config parsing/validation, own spec doc under `docs/analysis/strategies/`, own real tests under `test/strategy/<name>` | Phase S7 (this task): 7 of 19 real and `enabled: true` in `config/analysis.yml`; remaining 12 deferred, see `strategy-v2-catalog.md`'s "Phase S7 status" for the itemized per-strategy reason | Shadow only — Phase S8 (engine wiring) has not run; no live candidate has ever reached the `OpportunityBook` |
 | Per-symbol event dispatch / worker | `app/analysis/worker.py` (one large sequential pass per symbol per bar, not clearly dependency-scoped) | `internal/engine/worker.go` (`SymbolWorker`), `engine.go` (`Engine`) | **Explicit redesign** — one mutex-guarded worker per symbol, concurrent across symbols, dependency-aware (an M1 close cannot trigger H1 recompute by construction, proven in `test/engine/worker_test.go`) | Shadow only (`cmd/replay` drives it directly; no live feed wired) | Not removable |
 | Scanning / orchestration | `app/analysis/scanner.py` (one large file coordinating detection across all symbols/strategies) | *(deliberately not replicated — source task §60 explicitly forbids "another giant scanner file")* | N/A — architectural non-goal | N/A | N/A |
 | Telemetry (analysis timing) | Ad hoc `time.time()` deltas scattered through `worker.py`/`engine.py`, not uniformly labeled | `internal/telemetry/metrics.go` (`Recorder`) | **New** — no Python equivalent structure; real per-phase timing (`marketdata_update_ms` through `event_total_ms`) added specifically for this task (source task §57) | Shadow only | N/A |
@@ -65,9 +66,28 @@ and [ADR-004](adr/) for the transport/cutover gating this depends on.
   [`analysis/shared-primitives-v2.md`](analysis/shared-primitives-v2.md).
   `context.SessionContext` carries the real `session.State` for the
   primary timeframe rather than the prior empty placeholder.
-- **Per-strategy packages** (Breakout Retest, Liquidity Sweep, etc.) remain
-  entirely unimplemented. The S6 registry is ready, but Phase S7 must provide
-  each independent technical thesis before any catalog entry is enabled.
+- **Per-strategy packages**: 7 of 19 are now implemented and enabled
+  (`key_level`, `supply`, `demand`, `order_block`, `fvg`, `flip_zone`,
+  `session_level` — Phase S7, this task). The remaining 12
+  (`confluence_zone`, `ifvg`, `crt`, `trendline`, `range_edge`,
+  `box_breakout`, `momentum_ride`, `snap_back`, `liquidity_sweep`,
+  `range_sweep`, `impulse_pullback`, `scalp_breakout_retest`) remain
+  entirely unimplemented — each has a specific, individually-documented
+  reason (a contingent spec write-up still needed, a primitive this phase
+  did not build, or the compositional strategy waiting on its
+  non-compositional siblings), not a silent omission; see
+  `docs/analysis/strategy-v2-catalog.md`'s "Phase S7 status" for the
+  itemized list. No S7 strategy candidate has reached the engine or Kafka
+  — Phase S8 (engine wiring) and Phase S9 (Kafka publication) are
+  separate, unstarted phases.
+- **Strategy-level config provenance is a documented S7 bootstrapping
+  placeholder**: each S7 strategy hardcodes its own known-compatible
+  algorithm versions (`structure=v2`, `liquidity=v1`, `zone=v1`,
+  `config=3`) and computes `ConfigFingerprint` from only its OWN
+  `strategy.Config.Parameters` (a strategy has no access to
+  `*config.Document` — it sits below `internal/config`'s rank). Phase S8
+  is expected to enrich/overwrite this with the real whole-resolved-
+  document fingerprint before a Candidate reaches the `OpportunityBook`.
 - **PNG pool-band rendering is not true alpha compositing** —
   `image.RGBA.Set()` overwrites pixels rather than blending, so
   overlapping liquidity pool bands render as solid overwritten

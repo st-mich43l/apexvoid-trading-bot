@@ -230,3 +230,50 @@ Supply, Demand, Order Block, FVG, iFVG, Breaker, and Flip primitives, and
 tracks lifecycle and current relevance independently. Strategy packages and
 their individual specifications remain S7 work; they must consume these
 facts rather than re-deriving zone geometry.
+
+### Phase S7 status
+
+S7 implemented and enabled a first vertical slice of **7 of the 18**
+independent V2 strategies, each a real Go package under
+`analysis-engine/internal/strategy/<name>`, each with its own spec doc
+under `docs/analysis/strategies/`, each config-driven (`config/analysis.yml`)
+and real-tested (`analysis-engine/test/strategy/<name>`):
+
+| # | ID | Package | Status |
+|---|---|---|---|
+| 1 | `key_level` | `strategy/keylevel` | **Implemented, enabled** |
+| 3a | `supply` | `strategy/supply` | **Implemented, enabled** |
+| 3b | `demand` | `strategy/demand` | **Implemented, enabled** |
+| 4 | `order_block` | `strategy/orderblock` | **Implemented, enabled** |
+| 5 | `fvg` | `strategy/fvg` | **Implemented, enabled** |
+| 10 | `flip_zone` | `strategy/flipzone` | **Implemented, enabled** |
+| 11 | `session_level` | `strategy/sessionlevel` | **Implemented, enabled** |
+
+The remaining **12 strategies stay disabled** — no factory exists for
+them yet, so `config/analysis.yml` correctly leaves them
+`enabled: false` (the registry's own fail-closed rule: an enabled ID
+with no factory fails analysis-engine startup rather than silently
+producing no signals):
+
+- `confluence_zone` — the compositional exception; deliberately deferred
+  until its non-compositional siblings (zone/liquidity-anchored
+  strategies) exist to compose over.
+- `ifvg`, `crt` — the catalog itself flags both as REBUILD-but-contingent
+  (rows 6/7): each needs its own precise spec write-up (iFVG's
+  invalidation/inversion-confirmation definition; CRT's owner
+  confirmation) before implementation, not attempted this phase.
+- `trendline` — depends on the `internal/trendline` primitive's own
+  break/retest state tracking already absorbing Break & Retest (#15);
+  not yet built as a strategy package.
+- `range_edge`, `box_breakout`, `momentum_ride`, `snap_back`,
+  `liquidity_sweep`, `range_sweep`, `impulse_pullback`,
+  `scalp_breakout_retest` — all real, distinct REBUILD theses per the
+  catalog, none zone-anchored (they need range/breakout/momentum/scalp
+  primitives this phase did not implement or wire). Deferred to a later
+  phase, not silently dropped.
+
+This is a deliberate, transparent scoping decision, not partial/hidden
+completion — see the S7 PR's own final report for the full reasoning.
+Phase S8 (engine wiring — evaluation invoked from the per-symbol engine
+loop) and Phase S9 (Kafka publication of opportunities) are separate,
+later phases; nothing in S7 touches either.

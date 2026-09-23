@@ -31,24 +31,99 @@ analysis:
       length: 14
 
   # Phase S6: the registry contract for every strategy approved by the
-  # semantic catalog. They are intentionally all disabled until Phase S7
-  # supplies and validates each independent technical thesis. A future
-  # enabled entry without a compiled factory fails analysis-engine startup;
-  # it cannot silently become a no-op.
+  # semantic catalog. A future enabled entry without a compiled factory
+  # fails analysis-engine startup; it cannot silently become a no-op.
   #
   # `confluence_zone` is the one compositional exception, so this has 19
   # entries: 18 independent strategies plus Confluence Zone.
+  #
+  # Phase S7 implemented and enabled the first 7: key_level, session_level,
+  # supply, demand, order_block, fvg, flip_zone. Each strategy owns its own
+  # threshold parsing (internal/strategy/<name>'s own parseConfig) — the
+  # registry itself treats these as opaque raw parameters (source task §51;
+  # docs/analysis/strategy-registry-v2.md's "Configuration contract"). None
+  # of these six parameter names have old-Python-detector precedent — the
+  # legacy monolithic detectors never parametrized per-setup invalidation/
+  # target/expiry this way — so every value below is a genuine initial
+  # calibration, not an empirically-tuned or ported constant. They are
+  # flagged as a research/tuning item in docs/analysis-engine-v2-migration.md,
+  # not silently presented as final:
+  #   minimum_strength/minimum_touches — floors zone.Zone.Strength (or, for
+  #     key_level, keylevel.Level.Touches/Strength) below which a setup is
+  #     not tradeable at all.
+  #   proximity_atr (key_level/session_level only — these primitives carry
+  #     no zone.Relevance equivalent) — how close, in ATR, current price
+  #     must sit to the level for it to be a live setup; 1.0 sits in the
+  #     same ballpark as zone_relevance.nearby_atr (1.25) above, since both
+  #     answer "is this currently close enough to matter."
+  #   invalidation_buffer_atr — matches this file's own existing
+  #     invalidation_tolerance_atr/invalidation_penetration_atr convention
+  #     (0.5) for "how far beyond the setup's edge before a confirmed close
+  #     invalidates it."
+  #   minimum_target_distance_atr — the floor below which a candidate
+  #     liquidity pool is too close to entry to be a meaningful technical
+  #     objective.
+  #   expiry_hours — this strategy's own technical SETUP_EXPIRED window
+  #     (docs/analysis/opportunity-lifecycle-v2.md), distinct from Algo
+  #     Bot's own execution-age policy; 24h is one trading day.
+  # The remaining 12 strategies stay disabled: no factory exists for them
+  # yet (Phase S7's own honest-scoping decision — see the PR that landed
+  # this comment for the full per-strategy deferral reasoning).
   strategies:
-    key_level: { version: v2, enabled: false }
+    key_level:
+      version: v2
+      enabled: true
+      minimum_touches: 2
+      minimum_strength: 0.4
+      proximity_atr: 1.0
+      invalidation_buffer_atr: 0.5
+      minimum_target_distance_atr: 1.0
+      expiry_hours: 24.0
     confluence_zone: { version: v2, enabled: false }
-    supply: { version: v2, enabled: false }
-    demand: { version: v2, enabled: false }
-    order_block: { version: v2, enabled: false }
-    fvg: { version: v2, enabled: false }
+    supply:
+      version: v2
+      enabled: true
+      minimum_strength: 0.4
+      invalidation_buffer_atr: 0.5
+      minimum_target_distance_atr: 1.0
+      expiry_hours: 24.0
+    demand:
+      version: v2
+      enabled: true
+      minimum_strength: 0.4
+      invalidation_buffer_atr: 0.5
+      minimum_target_distance_atr: 1.0
+      expiry_hours: 24.0
+    order_block:
+      version: v2
+      enabled: true
+      minimum_strength: 0.4
+      invalidation_buffer_atr: 0.5
+      minimum_target_distance_atr: 1.0
+      expiry_hours: 24.0
+    fvg:
+      version: v2
+      enabled: true
+      minimum_strength: 0.4
+      invalidation_buffer_atr: 0.5
+      minimum_target_distance_atr: 1.0
+      expiry_hours: 24.0
     ifvg: { version: v2, enabled: false }
     crt: { version: v2, enabled: false }
-    flip_zone: { version: v2, enabled: false }
-    session_level: { version: v2, enabled: false }
+    flip_zone:
+      version: v2
+      enabled: true
+      minimum_strength: 0.4
+      invalidation_buffer_atr: 0.5
+      minimum_target_distance_atr: 1.0
+      expiry_hours: 24.0
+    session_level:
+      version: v2
+      enabled: true
+      proximity_atr: 1.0
+      invalidation_buffer_atr: 0.5
+      minimum_target_distance_atr: 1.0
+      expiry_hours: 24.0
     trendline: { version: v2, enabled: false }
     range_edge: { version: v2, enabled: false }
     box_breakout: { version: v2, enabled: false }
