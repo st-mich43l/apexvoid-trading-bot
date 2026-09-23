@@ -9,7 +9,7 @@ indicator / marketdata / config
   ↓
 structure
   ↓
-zone / liquidity
+zone / liquidity / trendline
   ↓
 context
   ↓
@@ -129,6 +129,22 @@ independent (neither imports the other; both only need `structure`).
 
 Enforced in `analysis-engine/test/architecture/dependency_test.go`'s
 `rank` map (`"zone": 3`) and its own inline comment on this exact
+reasoning.
+
+### Amendment: `trendline` joins `zone`/`liquidity` at rank 3
+
+A fifth correction, made implementing Phase S4's fourth and largest
+domain (`internal/trendline` — causal Trendline V2 construction and its
+live-interaction classifier, `apexvoid-bot-prompts/rebuild-strategies.md`
+§23-26). The same situation `zone`/`liquidity` already hit: `Build`'s
+causal anchor-pair construction (porting `trendline_v2.py`'s own
+`_confirmed_points`) needs `structure.Swing.Kind`/`.Price`/`.Time`/
+`.ConfirmedAt` directly. `trendline` joins `zone`/`liquidity` at rank 3 —
+mutually independent of both (it does not import either, and neither
+imports it).
+
+Enforced in `analysis-engine/test/architecture/dependency_test.go`'s
+`rank` map (`"trendline": 3`) and its own inline comment on this exact
 reasoning.
 
 ### The one correction, in full

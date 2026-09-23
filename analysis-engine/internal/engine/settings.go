@@ -5,6 +5,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/liquidity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/trendline"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/zone"
 )
 
@@ -17,6 +18,7 @@ type Settings struct {
 	Structure        structure.Settings
 	Liquidity        liquidity.Config
 	Zone             zone.Config
+	Trendline        trendline.Config
 	HistoryDepths    map[market.Timeframe]int
 	PrimaryTimeframe market.Timeframe
 
@@ -50,12 +52,16 @@ func LoadSettings(doc *config.Document, primary market.Timeframe, allowReplaceFo
 	if err != nil {
 		return Settings{}, err
 	}
+	trendlineConfig, err := TrendlineConfigFromConfig(doc)
+	if err != nil {
+		return Settings{}, err
+	}
 	depths, err := HistoryDepthsFromConfig(doc)
 	if err != nil {
 		return Settings{}, err
 	}
 	return Settings{
-		ATR: atr, Structure: structureSettings, Liquidity: liquidityConfig, Zone: zoneConfig,
+		ATR: atr, Structure: structureSettings, Liquidity: liquidityConfig, Zone: zoneConfig, Trendline: trendlineConfig,
 		HistoryDepths: depths, PrimaryTimeframe: primary,
 		AllowReplaceForming: allowReplaceForming,
 	}, nil

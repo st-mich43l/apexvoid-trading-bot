@@ -66,6 +66,12 @@ const modulePrefix = "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine
 // the identical fix: promote above structure. zone and liquidity are
 // mutually independent (neither imports the other), so they share a
 // rank rather than needing a fifth distinct one.
+//
+// trendline joins zone/liquidity at rank 3 for the identical reason,
+// made implementing Phase S4's fourth (largest) domain: Build's causal
+// anchor-pair construction needs structure.Swing.Kind/.Price/.Time/
+// .ConfirmedAt directly (trendline_v2.py's own _confirmed_points shape).
+// trendline does not import zone/liquidity, nor do they import it.
 var rank = map[string]int{
 	"market":    0,
 	"telemetry": 0,
@@ -78,6 +84,7 @@ var rank = map[string]int{
 
 	"zone":      3,
 	"liquidity": 3,
+	"trendline": 3,
 
 	"context": 4,
 
