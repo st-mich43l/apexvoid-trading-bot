@@ -1,5 +1,6 @@
 // Package telemetry measures the engine, per source task §57:
-// marketdata/indicator/structure/liquidity/zone/trendline/context/
+// marketdata/indicator/structure/liquidity/zone/session/fib/keylevel/
+// trendline/context/
 // snapshot/event durations, event counts, queue age. Labels are symbol+timeframe+phase
 // only — bounded sets (the live instrument list and the fixed timeframe
 // enum), never a raw candidate ID or price (§57: "do not use unbounded
@@ -28,6 +29,9 @@ const (
 	PhaseLiquidity  Phase = "liquidity_update_ms"
 	PhaseZone       Phase = "zone_update_ms"
 	PhaseTrendline  Phase = "trendline_update_ms"
+	PhaseKeyLevel   Phase = "keylevel_update_ms"
+	PhaseSession    Phase = "session_update_ms"
+	PhaseFib        Phase = "fib_update_ms"
 	PhaseContext    Phase = "context_update_ms"
 	PhaseSnapshot   Phase = "snapshot_ms"
 	PhaseEventTotal Phase = "event_total_ms"

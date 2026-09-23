@@ -2,8 +2,11 @@ package engine
 
 import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/config"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/fib"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/keylevel"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/liquidity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/session"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/trendline"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/zone"
@@ -19,6 +22,9 @@ type Settings struct {
 	Liquidity        liquidity.Config
 	Zone             zone.Config
 	Trendline        trendline.Config
+	KeyLevel         keylevel.Config
+	Session          session.Config
+	Fib              fib.Config
 	HistoryDepths    map[market.Timeframe]int
 	PrimaryTimeframe market.Timeframe
 
@@ -56,12 +62,25 @@ func LoadSettings(doc *config.Document, primary market.Timeframe, allowReplaceFo
 	if err != nil {
 		return Settings{}, err
 	}
+	keyLevelConfig, err := KeyLevelConfigFromConfig(doc)
+	if err != nil {
+		return Settings{}, err
+	}
+	sessionConfig, err := SessionConfigFromConfig(doc)
+	if err != nil {
+		return Settings{}, err
+	}
+	fibConfig, err := FibConfigFromConfig(doc)
+	if err != nil {
+		return Settings{}, err
+	}
 	depths, err := HistoryDepthsFromConfig(doc)
 	if err != nil {
 		return Settings{}, err
 	}
 	return Settings{
-		ATR: atr, Structure: structureSettings, Liquidity: liquidityConfig, Zone: zoneConfig, Trendline: trendlineConfig,
+		ATR: atr, Structure: structureSettings, Liquidity: liquidityConfig, Zone: zoneConfig,
+		Trendline: trendlineConfig, KeyLevel: keyLevelConfig, Session: sessionConfig, Fib: fibConfig,
 		HistoryDepths: depths, PrimaryTimeframe: primary,
 		AllowReplaceForming: allowReplaceForming,
 	}, nil
