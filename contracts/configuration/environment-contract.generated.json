@@ -1,7 +1,7 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "2284e2c761a3f531c1c24347c4c9bc51c25edd019b8b20f9bae37b5ba67d5e5d",
-  "count": 570,
+  "configuration_contract_fingerprint_sha256": "bec01459a04ea8c7b6b931d0edf79ee90ab6d15a2f846eefb1a11e60973557d6",
+  "count": 571,
   "deprecated_alias_count": 21,
   "entries": [
     {
@@ -35,6 +35,22 @@
       "shared_with_ctrader": false,
       "type": "bool",
       "unit": "boolean"
+    },
+    {
+      "canonical_env": "ANALYSIS_ZONES_VERSION",
+      "default": "v1",
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Canonical Analysis Engine zone-domain algorithm version.",
+      "display_id": "config:analysis.zones.version",
+      "owner": "python",
+      "path": "analysis.zones.version",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "str",
+      "unit": "enum"
     },
     {
       "canonical_env": "ANALYSIS_ZONE_RELEVANCE_IMMEDIATE_ATR",
@@ -9178,6 +9194,6 @@
   ],
   "secret_count": 9,
   "shared_with_ctrader_count": 87,
-  "source_fingerprint_sha256": "2284e2c761a3f531c1c24347c4c9bc51c25edd019b8b20f9bae37b5ba67d5e5d",
+  "source_fingerprint_sha256": "bec01459a04ea8c7b6b931d0edf79ee90ab6d15a2f846eefb1a11e60973557d6",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

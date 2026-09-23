@@ -2,8 +2,8 @@
 
 > Generated from the canonical configuration catalog (`app.configuration.environment_contract`). Do not edit manually.
 
-- Contract fingerprint: `2284e2c761a3f531c1c24347c4c9bc51c25edd019b8b20f9bae37b5ba67d5e5d`
-- Environment-bound fields: `570`
+- Contract fingerprint: `bec01459a04ea8c7b6b931d0edf79ee90ab6d15a2f846eefb1a11e60973557d6`
+- Environment-bound fields: `571`
 - Deprecated aliases: `21`
 
 Secret values are never emitted; secret defaults render as `<redacted>`.
@@ -12,6 +12,7 @@ Secret values are never emitted; secret defaults render as `<redacted>`.
 |---|---|---|---|---|---|---|
 | `ALERT_OVERLAP_SUPPRESS` | `analysis.measurements.alert_overlap_suppress` | `float` | no | no | — | `0.5` |
 | `ALLOW_COUNTER_TREND` | `strategies.counter_trend.allow_counter_trend` | `bool` | no | no | — | `True` |
+| `ANALYSIS_ZONES_VERSION` | `analysis.zones.version` | `str` | no | no | — | `v1` |
 | `ANALYSIS_ZONE_RELEVANCE_IMMEDIATE_ATR` | `analysis.zone_relevance.immediate_atr` | `float` | no | no | — | `0.25` |
 | `ANALYSIS_ZONE_RELEVANCE_NEARBY_ATR` | `analysis.zone_relevance.nearby_atr` | `float` | no | no | — | `1.25` |
 | `ANALYSIS_ZONE_RELEVANCE_REMOTE_ATR` | `analysis.zone_relevance.remote_atr` | `float` | no | no | — | `3.0` |

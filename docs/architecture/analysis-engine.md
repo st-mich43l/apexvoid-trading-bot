@@ -150,7 +150,7 @@ type MarketContext struct {
     Timeframes map[market.Timeframe]*TimeframeContext
     Structure  StructureContext   // the primary timeframe's structure.StructureState
     Liquidity  LiquidityContext   // the primary timeframe's liquidity.LiquidityState
-    Zones      ZoneContext        // placeholder — zones deferred
+    Zones      ZoneContext        // primary timeframe's canonical zone state
     Bias       BiasContext        // DERIVED from Structure via DeriveBias, never computed independently
     Regime     RegimeContext      // placeholder — not in this task's DoD
     Volatility VolatilityContext
@@ -222,15 +222,16 @@ type SymbolState struct {
     History       *marketdata.MarketHistory // real per-timeframe bounded candle storage
     Measurements  *MeasurementBook          // canonical ATR series per timeframe
     Structure     *structure.Book
+    Zones         *zone.Book
     Liquidity     *liquidity.Book
     Context       context.MarketContext
     Opportunities *opportunity.Book
 }
 ```
 
-(`Zones *zone.Book` is not yet a field — zones remain deferred; adding it
-is a mechanical follow-up once `internal/zone` is implemented, not an
-architectural change.)
+`internal/zone` is now the canonical Phase S3 domain. It owns technical
+geometry and lifecycle/relevance state; strategies must consume it through
+`SymbolState`/`MarketContext` rather than rebuilding zones.
 
 `SymbolState` is the one analytical truth for one symbol (§27). Strategies
 read it (via `context.MarketContext`); they do not rebuild it (§28 — no

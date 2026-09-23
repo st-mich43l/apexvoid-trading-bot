@@ -7,6 +7,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/state"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/zone"
 )
 
 // SnapshotVersion records which algorithm version produced this snapshot
@@ -15,6 +16,7 @@ import (
 type SnapshotVersion struct {
 	StructureVersion string
 	LiquidityVersion string
+	ZoneVersion      string
 }
 
 // AnalysisSnapshot is the one canonical, immutable analysis result model
@@ -35,6 +37,7 @@ type AnalysisSnapshot struct {
 	// research" use cases).
 	Structure map[market.Timeframe]structure.StructureState
 	Liquidity map[market.Timeframe]liquidity.LiquidityState
+	Zones     map[market.Timeframe]zone.ZoneState
 
 	Opportunities []opportunity.Candidate
 
@@ -53,16 +56,21 @@ func SnapshotFrom(ws *state.SymbolState, settings Settings, now int64) AnalysisS
 	for tf, l := range ws.Liquidity.ByTimeframe {
 		liqByTF[tf] = l
 	}
+	zoneByTF := make(map[market.Timeframe]zone.ZoneState, len(ws.Zone.ByTimeframe))
+	for tf, z := range ws.Zone.ByTimeframe {
+		zoneByTF[tf] = z
+	}
 	var opps []opportunity.Candidate
 	if ws.Opportunities != nil {
 		opps = append(opps, ws.Opportunities.Candidates...)
 	}
 	return AnalysisSnapshot{
 		Symbol: ws.Symbol, Time: now, Context: ws.Context,
-		Structure: structByTF, Liquidity: liqByTF, Opportunities: opps,
+		Structure: structByTF, Liquidity: liqByTF, Zones: zoneByTF, Opportunities: opps,
 		Version: SnapshotVersion{
 			StructureVersion: settings.Structure.Version,
 			LiquidityVersion: settings.Liquidity.Version,
+			ZoneVersion:      settings.Zone.Version,
 		},
 	}
 }

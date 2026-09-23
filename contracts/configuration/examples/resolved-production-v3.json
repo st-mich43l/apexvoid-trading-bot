@@ -21,6 +21,10 @@
       ],
       "user_agent": "apexvoid-trading-bot/1.0 (+contact)"
     },
+    "flip_zone": {
+      "accept_bars": 2,
+      "band_body_fraction": 0.5
+    },
     "history": {
       "depth": {
         "D1": 150,
@@ -88,6 +92,10 @@
       "version": "v2"
     },
     "techniques": {
+      "invalidation_tolerance_atr": 0.5,
+      "max_break_episodes": 2,
+      "retest_max_touches": 30,
+      "sweep_reclaim_bars": 6,
       "validation_enabled": true
     },
     "trendlines": {
@@ -124,8 +132,14 @@
     "watcher": {
       "interval_seconds": 120
     },
+    "zone_relevance": {
+      "immediate_atr": 0.25,
+      "nearby_atr": 1.25,
+      "remote_atr": 3.0
+    },
     "zones": {
-      "merge_overlap": 0.5
+      "merge_overlap": 0.5,
+      "version": "v1"
     }
   },
   "auto_algo": {

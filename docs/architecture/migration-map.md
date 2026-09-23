@@ -19,7 +19,7 @@ proven) · `no-action` (out of scope / research tooling).
 | `internal/market/*` | Candle, CandleWindow, Timeframe, Symbol, Geometry | same | keep | done |
 | `internal/indicator/*` | TrueRange, SimpleATR, WilderATR | same | keep | done |
 | `internal/config/*` | Configuration V3 direct reader | same | keep | done |
-| `internal/{structure,liquidity,zone,context,opportunity,strategy,confluence,state,engine,transport,visualization,telemetry}/*` | (did not exist) | same | scaffolded this task (doc.go + minimal types) | this task |
+| `internal/{structure,liquidity,zone,context,opportunity,strategy,confluence,state,engine,transport,visualization,telemetry}/*` | (did not exist) | same | scaffolded; structure/liquidity/zone/context/state/engine are now real V2 domains | S0–S3 |
 
 ## `algo-bot/app/analysis/*` → `analysis-engine`
 
@@ -30,7 +30,7 @@ proven) · `no-action` (out of scope / research tooling).
 | `swings.py` | Hybrid fractal+zigzag swings, causal mode | `internal/structure` | port | Stage 2 (next) |
 | `structure.py::market_structure`, `structure_breaks` | Bias / BOS/CHoCH — canonical, single-owner | `internal/structure` | port | Stage 2 |
 | `structure.py` (everything else: `swings()`, `key_levels()`, `order_blocks()`, `fvg()`, `flip_zones()`, `entry_zone()`, `find_retest()`, `equal_highs_lows()`) | Duplicate re-derivation of `zones.py` primitives, hardcoded ATR length | — | **delete-after-cutover**, not ported | after Stage 2 proves `TimeframeState` reachable from detector fallback paths |
-| `zones.py` (`displacement`, `supply_demand`, `order_blocks`, `fvg`, `flip_zones`, `breaker_blocks`, `mark_mitigation`, `merge_zones`, `score_zones`, `reconcile_opposing`) | Core zone primitives, mitigation-stamped (hold-based validity as of PR #578/#579 this session) | `internal/zone` | port | Stage 2 |
+| `zones.py` (`displacement`, `supply_demand`, `order_blocks`, `fvg`, `flip_zones`, `breaker_blocks`, `mark_mitigation`, `merge_zones`, `score_zones`, `reconcile_opposing`) | Core zone primitives, mitigation-stamped (hold-based validity as of PR #578/#579 this session) | `internal/zone` | ported as canonical per-origin geometry; merge/reconciliation remains higher-layer strategy work | **Phase S3 done** |
 | `levels.py` (`key_levels`) | Clustering + wick-touch key levels | `internal/structure` | port | Stage 2 |
 | `liquidity.py` (`liquidity_pools`, `liquidity_grabs`) | Liquidity pools/sweeps | `internal/liquidity` | port | Stage 3 |
 | `fibonacci.py` | Fib ladder/nearest | `internal/technique` (or folded into `zone`) | port | Stage 3 |

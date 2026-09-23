@@ -11,15 +11,11 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/marketdata"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/zone"
 )
 
 // SymbolState is one symbol's canonical analytical state, per source task
-// §40. Zones is deliberately absent — internal/zone is not implemented
-// this task (see docs/analysis-engine-v2-migration.md); adding a nil-only
-// placeholder field here would prove nothing the other fields don't
-// already prove about the state -> {structure, liquidity, context,
-// opportunity} dependency edges, and source task §58 asks not to
-// scaffold what nothing yet uses.
+// §40.
 type SymbolState struct {
 	Symbol market.Symbol
 
@@ -27,6 +23,7 @@ type SymbolState struct {
 	Measurements *MeasurementBook
 
 	Structure     *structure.Book
+	Zone          *zone.Book
 	Liquidity     *liquidity.Book
 	Context       context.MarketContext
 	Opportunities *opportunity.Book
@@ -46,6 +43,7 @@ func NewSymbolState(symbol market.Symbol, depths map[market.Timeframe]int, allow
 		History:       history,
 		Measurements:  NewMeasurementBook(),
 		Structure:     structure.NewBook(),
+		Zone:          zone.NewBook(),
 		Liquidity:     liquidity.NewBook(),
 		Opportunities: &opportunity.Book{},
 	}, nil

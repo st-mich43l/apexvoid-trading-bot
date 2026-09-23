@@ -25,9 +25,9 @@ const modulePrefix = "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine
 //	market / telemetry
 //	  -> indicator / marketdata / config
 //	  -> structure
-//	  -> zone           (independent of liquidity; not yet implemented)
+//	  -> zone           (depends on structure: Swing/StructureBreak/DetectDisplacement)
 //	  -> liquidity      (depends on structure: Pool.Layer, Update(swings))
-//	  -> context        (depends on structure AND liquidity)
+//	  -> context        (depends on structure, zone, AND liquidity)
 //	  -> opportunity
 //	  -> strategy / confluence / state
 //	  -> transport (incl. transport/kafka, transport/redis)
@@ -56,6 +56,16 @@ const modulePrefix = "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine
 // pre-existing "Strategies must NOT depend on: Kafka · Redis..." rule
 // (docs/architecture/dependency-rules.md's Strategy dependency rule,
 // §52) enforced structurally instead of by a separate carve-out.
+//
+// zone promoted from rank 2 (same-rank sibling of structure) to rank 3
+// (same-rank sibling of liquidity) is a fourth amendment, made
+// implementing Phase S3 (the canonical Zone domain). Real zone kinds
+// (Order Block, Breaker, Flip Zone, Supply/Demand) need structure.Swing/
+// structure.StructureBreak/structure.DetectDisplacement directly — the
+// identical situation liquidity already hit needing structure.Swing, and
+// the identical fix: promote above structure. zone and liquidity are
+// mutually independent (neither imports the other), so they share a
+// rank rather than needing a fifth distinct one.
 var rank = map[string]int{
 	"market":    0,
 	"telemetry": 0,
@@ -65,8 +75,8 @@ var rank = map[string]int{
 	"config":     1,
 
 	"structure": 2,
-	"zone":      2,
 
+	"zone":      3,
 	"liquidity": 3,
 
 	"context": 4,

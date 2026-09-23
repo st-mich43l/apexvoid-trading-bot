@@ -29,7 +29,7 @@ and [ADR-004](adr/) for the transport/cutover gating this depends on.
 | Multi-timeframe disagreement | `app/analysis/engine.py` (flattens to a single bias value; per-timeframe disagreement is not preserved in the returned object) | `internal/context/market.go` (`MarketContext.Timeframes map`) | **Explicit redesign** — every timeframe's own structure/liquidity read is preserved in the context, not collapsed | Shadow only | Not removable |
 | Regime classification | `app/analysis/regime.py` | *(not built this task — placeholder `RegimeContext{Kind string}` only)* | N/A — deferred | Not started | N/A |
 | Session context | `app/analysis/session_liquidity.py` (session boundary logic only, embedded in liquidity) | *(not built this task — placeholder `SessionContext{Name string}` only)* | N/A — deferred | Not started | N/A |
-| Technical zones (supply/demand, OB, FVG/iFVG, breaker, flip) | `app/analysis/zones.py`, `app/analysis/dealing_range.py` | *(not built — explicitly out of this task's Definition of Done)* | N/A — deferred | Not started | N/A |
+| Technical zones (supply/demand, OB, FVG/iFVG, breaker, flip) | `app/analysis/zones.py`, `app/analysis/dealing_range.py` | `internal/zone` (`Zone`, `Book`, lifecycle/relevance) | **Explicit redesign** — per-origin geometry, hold-based invalidation, separate relevance | Shadow only | Not removable until strategy cutover |
 | Per-symbol event dispatch / worker | `app/analysis/worker.py` (one large sequential pass per symbol per bar, not clearly dependency-scoped) | `internal/engine/worker.go` (`SymbolWorker`), `engine.go` (`Engine`) | **Explicit redesign** — one mutex-guarded worker per symbol, concurrent across symbols, dependency-aware (an M1 close cannot trigger H1 recompute by construction, proven in `test/engine/worker_test.go`) | Shadow only (`cmd/replay` drives it directly; no live feed wired) | Not removable |
 | Scanning / orchestration | `app/analysis/scanner.py` (one large file coordinating detection across all symbols/strategies) | *(deliberately not replicated — source task §60 explicitly forbids "another giant scanner file")* | N/A — architectural non-goal | N/A | N/A |
 | Telemetry (analysis timing) | Ad hoc `time.time()` deltas scattered through `worker.py`/`engine.py`, not uniformly labeled | `internal/telemetry/metrics.go` (`Recorder`) | **New** — no Python equivalent structure; real per-phase timing (`marketdata_update_ms` through `event_total_ms`) added specifically for this task (source task §57) | Shadow only | N/A |
@@ -53,9 +53,9 @@ and [ADR-004](adr/) for the transport/cutover gating this depends on.
   *not* part of the 50-item Definition of Done, so this is a legitimate,
   explicit deferral, not a gap in required scope.
 - **Technical zones** (Supply/Demand, Order Blocks, FVG/iFVG, Breaker,
-  Flip — source task §32) are entirely unimplemented, per the task's own
-  explicit instruction to defer them until Structure V2 is stable, and
-  confirmed absent from the 50-item Definition of Done.
+  Flip) are now implemented in `internal/zone` as Phase S3. Strategy-level
+  entry/quality decisions and higher-layer merging/reconciliation remain
+  deferred to the independent strategy phases.
 - **Per-strategy packages** (Breakout Retest, Liquidity Sweep, etc.) are
   entirely unimplemented — explicitly the *next* task per the source
   spec, gated on this foundation passing review.
