@@ -57,7 +57,7 @@ func NewSymbolState(symbol market.Symbol, depths map[market.Timeframe]int, allow
 		KeyLevel:      keylevel.NewBook(),
 		Session:       session.NewBook(),
 		Fib:           fib.NewBook(),
-		Opportunities: &opportunity.Book{},
+		Opportunities: opportunity.NewBook(),
 	}, nil
 }
 
