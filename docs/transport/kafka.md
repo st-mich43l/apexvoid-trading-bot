@@ -22,8 +22,8 @@ Configuration V3 explicitly provisions only these business topics:
 
 | Topic | Intended producer | Intended consumer | Current status |
 |---|---|---|---|
-| `analysis.opportunity.v1` | Analysis Engine | Algo Bot | Go producer ready; no strategy or Algo Bot consumer yet |
-| `analysis.opportunity.invalidated.v1` | Analysis Engine | Algo Bot | Go producer ready; no strategy or Algo Bot consumer yet |
+| `analysis.opportunity.v1` | Analysis Engine | Algo Bot | Analysis Engine lifecycle publisher is wired; no Algo Bot consumer yet |
+| `analysis.opportunity.invalidated.v1` | Analysis Engine | Algo Bot | Analysis Engine lifecycle publisher is wired; no Algo Bot consumer yet |
 | `execution.trade-plan.v1` | Algo Bot | cTrader Engine | topology only |
 | `execution.trade-event.v1` | cTrader Engine | Algo Bot | topology only |
 
@@ -59,9 +59,10 @@ strategy must persist or retry an opportunity that cannot be acknowledged; it
 must never silently drop it.
 
 The producer is independent from Redis ingestion. A Kafka outage must not
-stop the Analysis Engine from loading bars or advancing technical state. Until
-strategies publish, a broker outage is reported as unavailable producer
-capability only.
+stop the Analysis Engine from loading bars or advancing technical state. The
+engine queues lifecycle transitions off its bar-ingestion path and retries
+publication; see `internal/engine/publisher.go` and the documented in-memory
+queue limitation in `docs/analysis-engine-v2-migration.md`.
 
 ADR-009 defines at-least-once handling for future Kafka consumers. It does
 not make Kafka a source of market candles.
