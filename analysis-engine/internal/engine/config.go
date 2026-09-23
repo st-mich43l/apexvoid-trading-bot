@@ -17,6 +17,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/transport/kafka"
 	redistransport "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/transport/redis"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/trendline"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/zone"
 )
 
@@ -284,6 +285,110 @@ func ZoneConfigFromConfig(doc *config.Document) (zone.Config, error) {
 		FlipBandBodyFraction:   flipBandBodyFraction,
 		FlipLevelBandATR:       flipLevelBandATR,
 		OrderBlockBodyFraction: orderBlockBodyFraction,
+	}, nil
+}
+
+// TrendlineConfigFromConfig reads analysis.trendlines.* into
+// trendline.Config — Phase S4's fourth domain. Fails closed on any
+// version other than "v2": V1 (trendlines.py::_trendlines_v1) is
+// confirmed dead/shadow-metrics-only in production and is not ported
+// (see internal/trendline/doc.go).
+func TrendlineConfigFromConfig(doc *config.Document) (trendline.Config, error) {
+	version, err := getString(doc, "analysis.trendlines.version")
+	if err != nil {
+		return trendline.Config{}, err
+	}
+	if version != "v2" {
+		return trendline.Config{}, fmt.Errorf(
+			"engine: unsupported analysis.trendlines.version %q — only \"v2\" is implemented, fail closed per source task §58/§67", version,
+		)
+	}
+	minimumSlopeATR, err := getFloat(doc, "analysis.trendlines.minimum_slope_atr")
+	if err != nil {
+		return trendline.Config{}, err
+	}
+	maximumSlopeATR, err := getFloat(doc, "analysis.trendlines.maximum_slope_atr")
+	if err != nil {
+		return trendline.Config{}, err
+	}
+	minimumTouchSpacingBars, err := getInt(doc, "analysis.trendlines.minimum_touch_spacing_bars")
+	if err != nil {
+		return trendline.Config{}, err
+	}
+	minimumSpanBars, err := getInt(doc, "analysis.trendlines.minimum_span_bars")
+	if err != nil {
+		return trendline.Config{}, err
+	}
+	minimumValidationTouchSpacingBars, err := getInt(doc, "analysis.trendlines.minimum_validation_touch_spacing_bars")
+	if err != nil {
+		return trendline.Config{}, err
+	}
+	validationTouchToleranceATR, err := getFloat(doc, "analysis.trendlines.validation_touch_tolerance_atr")
+	if err != nil {
+		return trendline.Config{}, err
+	}
+	invalidationPenetrationATR, err := getFloat(doc, "analysis.trendlines.invalidation_penetration_atr")
+	if err != nil {
+		return trendline.Config{}, err
+	}
+	closeViolationATR, err := getFloat(doc, "analysis.trendlines.close_violation_atr")
+	if err != nil {
+		return trendline.Config{}, err
+	}
+	approachMinDistanceATR, err := getFloat(doc, "analysis.trendlines.approach_min_distance_atr")
+	if err != nil {
+		return trendline.Config{}, err
+	}
+	minimumValidationFavorableExcursionATR, err := getFloat(doc, "analysis.trendlines.minimum_validation_favorable_excursion_atr")
+	if err != nil {
+		return trendline.Config{}, err
+	}
+	validationReactionBars, err := getInt(doc, "analysis.trendlines.validation_reaction_bars")
+	if err != nil {
+		return trendline.Config{}, err
+	}
+	minimumValidationTouches, err := getInt(doc, "analysis.trendlines.minimum_validation_touches")
+	if err != nil {
+		return trendline.Config{}, err
+	}
+	exhaustionValidationTouches, err := getInt(doc, "analysis.trendlines.exhaustion_validation_touches")
+	if err != nil {
+		return trendline.Config{}, err
+	}
+	maximumWickViolations, err := getInt(doc, "analysis.trendlines.maximum_wick_violations")
+	if err != nil {
+		return trendline.Config{}, err
+	}
+	dedupValueATR, err := getFloat(doc, "analysis.trendlines.dedup_value_atr")
+	if err != nil {
+		return trendline.Config{}, err
+	}
+	dedupSlopePercent, err := getFloat(doc, "analysis.trendlines.dedup_slope_percent")
+	if err != nil {
+		return trendline.Config{}, err
+	}
+	interactionBandATR, err := getFloat(doc, "analysis.trendlines.interaction_band_atr")
+	if err != nil {
+		return trendline.Config{}, err
+	}
+	return trendline.Config{
+		MinimumSlopeATR:                        minimumSlopeATR,
+		MaximumSlopeATR:                        maximumSlopeATR,
+		MinimumTouchSpacingBars:                minimumTouchSpacingBars,
+		MinimumSpanBars:                        minimumSpanBars,
+		MinimumValidationTouchSpacingBars:      minimumValidationTouchSpacingBars,
+		ValidationTouchToleranceATR:            validationTouchToleranceATR,
+		InvalidationPenetrationATR:             invalidationPenetrationATR,
+		CloseViolationATR:                      closeViolationATR,
+		ApproachMinDistanceATR:                 approachMinDistanceATR,
+		MinimumValidationFavorableExcursionATR: minimumValidationFavorableExcursionATR,
+		ValidationReactionBars:                 validationReactionBars,
+		MinimumValidationTouches:               minimumValidationTouches,
+		ExhaustionValidationTouches:            exhaustionValidationTouches,
+		MaximumWickViolations:                  maximumWickViolations,
+		DedupValueATR:                          dedupValueATR,
+		DedupSlopePercent:                      dedupSlopePercent,
+		InteractionBandATR:                     interactionBandATR,
 	}, nil
 }
 

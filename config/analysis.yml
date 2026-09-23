@@ -118,6 +118,17 @@ analysis:
     exhaustion_validation_touches: 4
     chop_minimum_validation_touches: 2
     chop_require_htf_aligned: true
+    # Phase S4 — internal/trendline. These six existed only as Python
+    # getattr() fallback-default names in trendline_v2.py::_settings
+    # (never a real trading-bot.yml OR YAML leaf before this phase) —
+    # added here at those same real fallback values, closing the gap
+    # rather than inventing new numbers.
+    minimum_slope_atr: 0.02
+    maximum_slope_atr: 0.15
+    minimum_touch_spacing_bars: 3
+    minimum_span_bars: 20
+    dedup_value_atr: 0.5
+    dedup_slope_percent: 0.2
 
   triggers:
     m1:

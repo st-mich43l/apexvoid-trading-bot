@@ -478,6 +478,24 @@
             },
             "chop_require_htf_aligned": {
               "type": "boolean"
+            },
+            "minimum_slope_atr": {
+              "type": "number"
+            },
+            "maximum_slope_atr": {
+              "type": "number"
+            },
+            "minimum_touch_spacing_bars": {
+              "type": "integer"
+            },
+            "minimum_span_bars": {
+              "type": "integer"
+            },
+            "dedup_value_atr": {
+              "type": "number"
+            },
+            "dedup_slope_percent": {
+              "type": "number"
             }
           },
           "required": [
@@ -485,10 +503,16 @@
             "chop_minimum_validation_touches",
             "chop_require_htf_aligned",
             "close_violation_atr",
+            "dedup_slope_percent",
+            "dedup_value_atr",
             "exhaustion_validation_touches",
             "interaction_band_atr",
             "invalidation_penetration_atr",
+            "maximum_slope_atr",
             "maximum_wick_violations",
+            "minimum_span_bars",
+            "minimum_slope_atr",
+            "minimum_touch_spacing_bars",
             "minimum_validation_favorable_excursion_atr",
             "minimum_validation_touch_spacing_bars",
             "minimum_validation_touches",
