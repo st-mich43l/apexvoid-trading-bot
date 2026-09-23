@@ -15,7 +15,7 @@ algo-bot/
 │   ├── transport/          → new: analysis-engine event consumption (Kafka/Redis client wiring)
 │   ├── analysis_client/     → new: consume+validate+deserialize analysis-engine's opportunity events
 │   ├── auto_algo/           → app/autotrade/* reorganized: eligibility, policy, duplicate_guard, exposure, risk_budget, lifecycle, trade_plan_builder, state
-│   ├── manual_algo/         → app/signals/{fx_manual_algo,manual_algo_chart,manual_execution,manual_intent,parsing}.py reorganized
+│   ├── manual_algo/         → app/signals/{fx_manual_algo,manual_execution,manual_intent,parsing}.py reorganized
 │   ├── risk/                → app/autotrade/{active_exposure,arbitration}.py + new account_state/limits/policy
 │   ├── execution/            → app/autotrade/{trade_plan,trade_plan_stream,route_outcome,event_integrity}.py reorganized
 │   ├── telegram/             → app/bot/* reorganized (commands/handlers/formatters/notifications/middleware)

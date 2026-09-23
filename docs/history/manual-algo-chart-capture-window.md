@@ -1,5 +1,14 @@
 # Manual algo chart capture window (PR-K)
 
+**Historical record — the `manual_algo_charts` feature this describes was
+removed** (Analysis Engine V2 strategy rebuild, Phase S1; see
+`docs/analysis-engine-v2-migration.md` and
+`apexvoid-bot-prompts/rebuild-strategies.md` §58–§68). Kept for the
+methodological lesson below (undersized lookback windows silently
+distorting measured structure density, which drove a since-withdrawn
+config tune) — not as usage documentation for a feature that no longer
+exists.
+
 `manual_algo_charts` existed to replay strategy math on owner `/algo` outcomes.
 Until PR-K the snapshotter used a private `_LOOKBACK` table that was a fraction
 of the live scanner window from `market_data.lookbacks` /

@@ -134,12 +134,12 @@
     "zone_scale_undersized_policy": "single_entry"
   },
   "contract_fingerprint": "2284e2c761a3f531c1c24347c4c9bc51c25edd019b8b20f9bae37b5ba67d5e5d",
-  "effective_configuration_fingerprint": "c547d682d9f9dc4fcb3fc6ee080be88b1d276568e207110ecb5f0ca42dceeb09",
+  "effective_configuration_fingerprint": "e3108af8018a2d7b58d4618d50f76c9c6ee6ca2bf753cc9952d532f814e6c423",
   "feed": {
-    "backfill_bars": 1500,
+    "backfill_bars": 2000,
     "bar_quality_lookback": 6,
     "bars_channel": "bars:new",
-    "bars_window_max": 1500,
+    "bars_window_max": 2000,
     "ctrader_symbol": "XAUUSD",
     "expected_broker": "fpmarkets",
     "redis_symbol": "XAU",
@@ -578,10 +578,10 @@
         }
       },
       "feed": {
-        "backfill_bars": 1500,
+        "backfill_bars": 2000,
         "bar_quality_lookback": 6,
         "bars_channel": "bars:new",
-        "bars_window_max": 1500,
+        "bars_window_max": 2000,
         "ctrader_symbol": "EURUSD",
         "expected_broker": "fpmarkets",
         "redis_symbol": "EURUSD",
@@ -1592,10 +1592,10 @@
         }
       },
       "feed": {
-        "backfill_bars": 1500,
+        "backfill_bars": 2000,
         "bar_quality_lookback": 6,
         "bars_channel": "bars:new",
-        "bars_window_max": 1500,
+        "bars_window_max": 2000,
         "ctrader_symbol": "GBPJPY",
         "expected_broker": "fpmarkets",
         "redis_symbol": "GBPJPY",
@@ -2630,10 +2630,10 @@
         }
       },
       "feed": {
-        "backfill_bars": 1500,
+        "backfill_bars": 2000,
         "bar_quality_lookback": 6,
         "bars_channel": "bars:new",
-        "bars_window_max": 1500,
+        "bars_window_max": 2000,
         "ctrader_symbol": "GBPUSD",
         "expected_broker": "fpmarkets",
         "redis_symbol": "GBPUSD",
@@ -3644,10 +3644,10 @@
         }
       },
       "feed": {
-        "backfill_bars": 1500,
+        "backfill_bars": 2000,
         "bar_quality_lookback": 6,
         "bars_channel": "bars:new",
-        "bars_window_max": 1500,
+        "bars_window_max": 2000,
         "ctrader_symbol": "USDJPY",
         "expected_broker": "fpmarkets",
         "redis_symbol": "USDJPY",
@@ -4674,10 +4674,10 @@
         }
       },
       "feed": {
-        "backfill_bars": 1500,
+        "backfill_bars": 2000,
         "bar_quality_lookback": 6,
         "bars_channel": "bars:new",
-        "bars_window_max": 1500,
+        "bars_window_max": 2000,
         "ctrader_symbol": "XAUUSD",
         "expected_broker": "fpmarkets",
         "redis_symbol": "XAU",

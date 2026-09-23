@@ -13,6 +13,53 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
+- Analysis Engine V2 strategy rebuild, Phase S1: removed the obsolete
+  `manual_algo_chart` OHLC-snapshot feature (Redis M1/M5/M15/H1 windows
+  captured around owner `/algo` issue/fill/close events, kept for later
+  formula fitting), per
+  `apexvoid-bot-prompts/rebuild-strategies.md` §58–§68. Deleted
+  `algo-bot/app/signals/manual_algo_chart.py`,
+  `algo-bot/app/scripts/backfill_manual_algo_charts.py`, and
+  `algo-bot/app/scripts/manual_formula_replay.py` (entirely dependent on
+  the table, no rewrite path without it) plus their dedicated test files
+  outright — no stubs, no deprecation wrappers. Removed
+  `manual_algo_charts`'s table/index/column creation and all
+  read/write/delete call sites from `algo-bot/app/persistence/store.py`
+  (`upsert_manual_algo_chart`, `load_manual_algo_charts`/
+  `load_manual_algo_chart_rows`, `_safe_snapshot_manual_chart`, and the
+  5 call sites across `store_manual_signal`/`close_leg`/
+  `finalize_manual_group`/`set_execution_fill`/`close_manual_signal`,
+  plus the hard-delete line in `delete_manual_signal`). Added
+  `algo-bot/app/scripts/drop_manual_algo_charts.py` — a standalone,
+  explicitly-invoked (`--dry-run`/`--apply`) migration that logs the
+  row count before dropping and verifies `to_regclass` returns `NULL`
+  after, since this repo has no migration-file tooling and folding a
+  `DROP TABLE` into `init_db()`'s idempotent startup block would run it
+  on every boot. Verified end to end against a disposable Postgres
+  container (dry-run reports count without dropping; apply drops and
+  confirms; re-running against an already-dropped table is a clean
+  no-op; `init_db()` still runs clean afterward). Updated `docs/schema.sql`
+  and prose references (`docs/deployment.md`, `docs/bot-commands.md`,
+  `docs/architecture.md`, `docs/architecture/algo-bot.md`,
+  `docs/architecture/migration-map.md`); two `docs/history/` records
+  kept with a note marking the feature removed, since their actual
+  content (a lookback-window measurement lesson; a config-tune
+  withdrawal's statistical reasoning) is still relevant. Regenerated
+  `contracts/configuration/environment-usage.generated.json` (drops the
+  two deleted scripts' env-var references) — running the full generator
+  also incidentally caught up `runtime-manifest-example.generated.json`
+  to `config/trading-bot.yml`'s already-current `backfill_bars`/
+  `bars_window_max: 2000` (stale since `fde92eb`, unrelated to this
+  change), fixing 3 pre-existing `pytest` failures
+  (`test_config_catalog_v2.py`, `test_config_runtime_manifest.py`) as a
+  side effect. Full `pytest -m no_database` diffed against a fresh
+  `origin/master` baseline: 0 new failures.
+  **Not touched**: `manual_signals`, `auto_trade_fills`,
+  `auto_trade_results`, `signal_posts`, `pips_log`, TradePlans,
+  execution records, journals — this purge is scoped only to the
+  OHLC-snapshot duplicate feature. The destructive migration itself is
+  not run by this PR — it's a standalone script for the owner to invoke
+  when ready.
 - Kafka live pipeline: `ctrader-engine` now publishes acknowledged closed-bar
   events to the configured V3 topic before persisting the Redis bar, and the
   Go `analysis-engine` consumes that topic with at-least-once handling. Startup

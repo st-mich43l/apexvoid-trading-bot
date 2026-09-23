@@ -135,10 +135,6 @@ After posting, the bot replies to your DM:
 
 Keep the `#id` — you use it with `close`, `cancel`, and `/trade_modify`.
 
-When the signal is armed with `/algo`, the bot also snapshots Redis OHLC
-windows (M1/M5/M15/H1) into `manual_algo_charts` at issued, filled, and
-closed — used later for XAU formula fitting, not for live auto decisions.
-
 ---
 
 ## Signal Lifecycle Commands
@@ -366,7 +362,6 @@ Schema is owned by `algo-bot` `store.init_db()`; see [schema.sql](schema.sql).
 | Table | Role |
 |---|---|
 | `manual_signals` | Owner signal lifecycle (`#id`, fills, `/algo` arm) |
-| `manual_algo_charts` | OHLC snapshots around issued/filled/closed |
 | `signal_posts` | VIP/public message ids |
 | `pips_log` | Channel pips accounting |
 | `auto_trade_fills` / `auto_trade_results` | Autonomous + algo broker ledger |

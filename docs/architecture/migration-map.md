@@ -77,7 +77,7 @@ proven) · `no-action` (out of scope / research tooling).
 | Current path | Target | Action |
 |---|---|---|
 | `bot/*` (Telegram client, handlers, keyboards, owner DM) | `telegram/` | reorganize |
-| `signals/fx_manual_algo.py`, `manual_algo_chart.py`, `manual_execution.py`, `manual_intent.py`, `parsing.py` | `manual_algo/` | reorganize |
+| `signals/fx_manual_algo.py`, `manual_execution.py`, `manual_intent.py`, `parsing.py` | `manual_algo/` | reorganize |
 | `signals/broadcast.py`, `calendar.py`, `chart_analysis.py`, `reports.py`, `weekly_report.py`, `watcher.py`, `trade_ops.py`, `pips_format.py`, `price.py` | `journal/`, `telegram/` per content | reorganize |
 
 ## Configuration, contracts, persistence — unchanged by this task
