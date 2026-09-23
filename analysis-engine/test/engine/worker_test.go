@@ -9,8 +9,23 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/liquidity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/marketdata"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
 )
+
+// allStrategiesDisabled satisfies strategy.NewRegistry's Phase S8
+// validation (every known catalog ID must be present with a version;
+// see internal/engine/worker.go's own NewSymbolWorker) without engaging
+// any real strategy factory — these tests exercise the worker/dispatch
+// mechanics, not strategy evaluation itself (see test/strategy/
+// registry_test.go's own fullConfig for the identical pattern).
+func allStrategiesDisabled() []strategy.Config {
+	configs := make([]strategy.Config, 0, len(strategy.KnownIDs()))
+	for _, id := range strategy.KnownIDs() {
+		configs = append(configs, strategy.Config{ID: id, Version: "v2", Enabled: false})
+	}
+	return configs
+}
 
 func testSettings(depths map[market.Timeframe]int) engine.Settings {
 	return engine.Settings{
@@ -30,6 +45,7 @@ func testSettings(depths map[market.Timeframe]int) engine.Settings {
 		Liquidity: liquidity.Config{
 			Version: "v1", EqualLevelToleranceATR: 0.05, PoolMinimumTouches: 2, SweepReclaimBars: 6,
 		},
+		Strategies:    allStrategiesDisabled(),
 		HistoryDepths: depths, PrimaryTimeframe: "M5", AllowReplaceForming: false,
 	}
 }

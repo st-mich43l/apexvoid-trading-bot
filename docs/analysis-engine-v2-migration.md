@@ -33,9 +33,10 @@ and [ADR-004](adr/) for the transport/cutover gating this depends on.
 | Key level clustering + role | `app/analysis/levels.py`, `app/analysis/key_level_role.py` | `internal/keylevel` (`Cluster`, `Update`, `Role`) | **Exact parity** on clustering/round-levels/wick-touch re-enrichment/dedupe and role classification, with one documented ATR simplification (one canonical scalar ATR throughout, not Python's median-for-clustering vs. per-swing-for-round-levels split) | Shadow only | Not removable |
 | Session/PDH-PDL/PWH-PWL levels, sweep detection, active session | `app/analysis/session_liquidity.py` (`session_levels`, `previous_week_levels`; no active-session classifier) | `internal/session` (`Update`, `State`, `Book`) | **Exact parity** on levels/sweep (same window/rollover/week-start rules, same cross-window sweep scan), plus **new**: the active-session (Asia/London/NY) classifier has no Python equivalent — added to finally populate `context.SessionContext`, previously an honest empty placeholder | Shadow only | Not removable |
 | Fibonacci ladder, premium/discount dealing range | `app/analysis/fibonacci.py`, `app/analysis/dealing_range.py` | `internal/fib` (`Ladder`, `NearestLevel`, `Resolve`, `Update`) | **Exact parity** — same retracement/extension ratios, same bracketing/opposing swing-pair search, same premium/discount + fine fib-zone thresholds | Shadow only | Not removable |
-| Technical opportunity lifecycle | Legacy candidate/delivery state mixes technical setup validity with execution policy | `internal/opportunity` (`DeterministicID`, `Book`) | **Explicit redesign** — one per-symbol runtime book owns Created → Active → Invalidated/Expired transitions, deduplicates semantic IDs, and permits only strategy-owned technical terminal reasons; it has no account, broker, or Kafka dependency | Ready for S8 engine wiring; no real candidates yet | Legacy authority remains until strategy cutover |
-| Strategy registry / evaluator | Legacy Python family registries and broad scanner passes | `internal/strategy` (`Config`, `Registry`, `Evaluate`) | **Explicit redesign** — the complete semantic V2 catalog is configuration-declared; only enabled concrete implementations instantiate; closed-bar evaluation runs only strategies that require that timeframe and defers until all declared timeframe context exists | Phase S6 done; 7 of 19 catalog entries now have real, enabled S7 implementations (see next row); the remaining 12 stay disabled, no factory | Legacy authority remains until strategy cutover |
-| Independent strategy theses (`key_level`, `supply`, `demand`, `order_block`, `fvg`, `flip_zone`, `session_level`) | Various legacy detector functions in `detectors.py` (`docs/analysis/strategy-v2-catalog.md`'s per-row mapping) | `internal/strategy/{keylevel,supply,demand,orderblock,fvg,flipzone,sessionlevel}` | **Explicit redesign** — each strategy is a fully independent Go package (no shared strategy base class; only canonical market-fact primitives — `zone.Relevance`, `structure.Swing`, `liquidity.Pool` — are shared), each with its own `Evaluate`, own quality-scoring reasoning, own config parsing/validation, own spec doc under `docs/analysis/strategies/`, own real tests under `test/strategy/<name>` | Phase S7 (this task): 7 of 19 real and `enabled: true` in `config/analysis.yml`; remaining 12 deferred, see `strategy-v2-catalog.md`'s "Phase S7 status" for the itemized per-strategy reason | Shadow only — Phase S8 (engine wiring) has not run; no live candidate has ever reached the `OpportunityBook` |
+| Technical opportunity lifecycle | Legacy candidate/delivery state mixes technical setup validity with execution policy | `internal/opportunity` (`DeterministicID`, `Book`) | **Explicit redesign** — one per-symbol runtime book owns Created → Active → Invalidated/Expired transitions, deduplicates semantic IDs, and permits only strategy-owned technical terminal reasons; it has no account, broker, or Kafka dependency | Phase S8 wired it into the live per-symbol engine loop; real candidates now flow through it against real data (see next two rows) | Legacy authority remains until strategy cutover |
+| Strategy registry / evaluator | Legacy Python family registries and broad scanner passes | `internal/strategy` (`Config`, `Registry`, `Evaluate`) | **Explicit redesign** — the complete semantic V2 catalog is configuration-declared; only enabled concrete implementations instantiate; closed-bar evaluation runs only strategies that require that timeframe and defers until all declared timeframe context exists | Phase S6 done; Phase S8 wired `Registry.Evaluate` into `SymbolWorker.ApplyWithResult` via a new `internal/engine/strategies.go` composition root (the one place a strategy subpackage may be imported, per the architecture rank rule) | Legacy authority remains until strategy cutover |
+| Independent strategy theses (`key_level`, `supply`, `demand`, `order_block`, `fvg`, `flip_zone`, `session_level`) | Various legacy detector functions in `detectors.py` (`docs/analysis/strategy-v2-catalog.md`'s per-row mapping) | `internal/strategy/{keylevel,supply,demand,orderblock,fvg,flipzone,sessionlevel}` | **Explicit redesign** — each strategy is a fully independent Go package (no shared strategy base class; only canonical market-fact primitives — `zone.Relevance`, `structure.Swing`, `liquidity.Pool` — are shared), each with its own `Evaluate`, own quality-scoring reasoning, own config parsing/validation, own spec doc under `docs/analysis/strategies/`, own real tests under `test/strategy/<name>` | Phase S7: 7 of 19 real and `enabled: true`; Phase S8: proven live against real XAU M5 data via `cmd/replay` (147 real opportunities across 4 of the 7 strategies for that dataset) and a real `test/engine` integration test using the same data | Shadow only — Phase S9 (Kafka publication) has not run; a live opportunity reaches `OpportunityBook`/`AnalysisSnapshot.Opportunities` but nothing publishes it anywhere yet |
+| Engine ↔ strategy wiring | N/A (no equivalent — the legacy scanner calls detector functions directly, no registry indirection) | `internal/engine/strategies.go` (composition root), `SymbolWorker.ApplyWithResult` (evaluation + lifecycle observation) | **New** — Phase S8. After every closed-bar context rebuild, `Registry.Evaluate` runs against the just-closed timeframe's dependent strategies; every returned `Candidate` is fed through `state.Opportunities.Observe`, then `Expire` applies each strategy's own technical deadline. Two real telemetry phases (`PhaseStrategy`, `PhaseOpportunity`) and five lifecycle-transition counters were added, all a documented amendment to the originally-frozen telemetry list | Working, verified against real data | N/A |
 | Per-symbol event dispatch / worker | `app/analysis/worker.py` (one large sequential pass per symbol per bar, not clearly dependency-scoped) | `internal/engine/worker.go` (`SymbolWorker`), `engine.go` (`Engine`) | **Explicit redesign** — one mutex-guarded worker per symbol, concurrent across symbols, dependency-aware (an M1 close cannot trigger H1 recompute by construction, proven in `test/engine/worker_test.go`) | Shadow only (`cmd/replay` drives it directly; no live feed wired) | Not removable |
 | Scanning / orchestration | `app/analysis/scanner.py` (one large file coordinating detection across all symbols/strategies) | *(deliberately not replicated — source task §60 explicitly forbids "another giant scanner file")* | N/A — architectural non-goal | N/A | N/A |
 | Telemetry (analysis timing) | Ad hoc `time.time()` deltas scattered through `worker.py`/`engine.py`, not uniformly labeled | `internal/telemetry/metrics.go` (`Recorder`) | **New** — no Python equivalent structure; real per-phase timing (`marketdata_update_ms` through `event_total_ms`) added specifically for this task (source task §57) | Shadow only | N/A |
@@ -80,14 +81,47 @@ and [ADR-004](adr/) for the transport/cutover gating this depends on.
   itemized list. No S7 strategy candidate has reached the engine or Kafka
   — Phase S8 (engine wiring) and Phase S9 (Kafka publication) are
   separate, unstarted phases.
-- **Strategy-level config provenance is a documented S7 bootstrapping
-  placeholder**: each S7 strategy hardcodes its own known-compatible
-  algorithm versions (`structure=v2`, `liquidity=v1`, `zone=v1`,
-  `config=3`) and computes `ConfigFingerprint` from only its OWN
-  `strategy.Config.Parameters` (a strategy has no access to
-  `*config.Document` — it sits below `internal/config`'s rank). Phase S8
-  is expected to enrich/overwrite this with the real whole-resolved-
-  document fingerprint before a Candidate reaches the `OpportunityBook`.
+- **Strategy-level config provenance**: each S7 strategy still hardcodes
+  its own known-compatible algorithm versions (`structure=v2`,
+  `liquidity=v1`, `zone=v1`) and computes its own narrow
+  `ConfigFingerprint` from only its OWN `strategy.Config.Parameters` (a
+  strategy has no access to `*config.Document` — it sits below
+  `internal/config`'s rank) — this part is unchanged and remains a real,
+  documented limitation. **Phase S8 did the enrichment this doc
+  previously flagged as expected**: `engine.Settings.ConfigVersion`/
+  `ConfigFingerprint` (the SAME whole-resolved-document provenance
+  `ConfigProvenanceFromConfig` already computes for Kafka envelopes) now
+  overwrite `Candidate.Provenance.ConfigVersion`/`ConfigFingerprint` in
+  `SymbolWorker.ApplyWithResult`, right before a Candidate reaches
+  `OpportunityBook.Observe` — so the value actually stored in the Book
+  (and later published by S9) is the real whole-document fingerprint, not
+  the strategy's own narrower placeholder. `StructureVersion`/
+  `LiquidityVersion`/`ZoneVersion` remain each strategy's own
+  hardcoded, version-pinned constants — engine does not overwrite those.
+- **Two real Phase S8 bugs were found and fixed by running real strategy
+  evaluation against real XAU M5 data** (`cmd/replay`, `test/engine`'s new
+  `TestEngine_RealS7StrategiesProduceRealOpportunitiesAgainstRealXAUData`),
+  not caught by any hand-built fixture or unit test beforehand:
+  1. `opportunity.Book`'s identity-collision check originally compared
+     Entry/Invalidation/CreatedAt too, but every Phase S7 strategy's
+     Invalidation is ATR-relative (and several derive CreatedAt from a
+     touch/swing-anchored reference) — both legitimately drift between
+     re-evaluations of the same still-valid setup, so the very first real
+     replay run rejected a real, valid re-observation as a false
+     collision. Fixed by narrowing the check to the four true identity
+     fields (Strategy/Version/Symbol/Direction) that `DeterministicID`
+     itself already hashes together with `SetupKey` — see
+     `docs/analysis/opportunity-lifecycle-v2.md`'s own amendment note.
+  2. `key_level`'s `SetupKey` used its cluster centroid's raw 6-decimal
+     price directly; `internal/keylevel` re-clusters every closed bar, so
+     that price jitters slightly for the same real level, producing a new
+     `SetupKey` (and therefore a "new" opportunity) almost every
+     evaluation — 147 "live" opportunities for one strategy across a
+     300-bar window that likely represented far fewer real levels. Fixed
+     by bucketing the price to a fixed fraction of itself before hashing
+     — see `docs/analysis/strategies/key_level.md`'s own "Real bug found"
+     section for the two other bucketing approaches that were tried and
+     empirically rejected (both made the flooding worse, not better).
 - **PNG pool-band rendering is not true alpha compositing** —
   `image.RGBA.Set()` overwrites pixels rather than blending, so
   overlapping liquidity pool bands render as solid overwritten

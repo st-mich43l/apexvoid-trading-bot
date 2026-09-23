@@ -277,3 +277,22 @@ completion — see the S7 PR's own final report for the full reasoning.
 Phase S8 (engine wiring — evaluation invoked from the per-symbol engine
 loop) and Phase S9 (Kafka publication of opportunities) are separate,
 later phases; nothing in S7 touches either.
+
+### Phase S8 status
+
+S8 wired the 7 S7 strategies' `Registry.Evaluate` into the live
+per-symbol engine loop (`internal/engine/strategies.go`'s composition
+root + `SymbolWorker.ApplyWithResult`), proven end to end against real
+XAU M5 production data (`cmd/replay`, `test/engine`'s
+`TestEngine_RealS7StrategiesProduceRealOpportunitiesAgainstRealXAUData`):
+147 live opportunities from 4 of the 7 strategies for that particular
+300-bar dataset (`session_level`/`fvg`/`flip_zone` never formed a
+qualifying setup in this specific window — not evidence they're broken,
+just that this data didn't happen to produce one). Running real
+evaluation against real data — not a hand-built fixture — found and fixed
+two real bugs in code this session itself wrote: an `opportunity.Book`
+identity-collision false positive, and a `key_level` dedup-identity
+jitter bug (both detailed in `docs/analysis-engine-v2-migration.md`'s
+known-limitations list). Still explicitly NOT done: Phase S9 (Kafka
+publication — a live opportunity reaches `AnalysisSnapshot.Opportunities`
+but is published nowhere).

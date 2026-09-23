@@ -11,9 +11,23 @@ may call `DeterministicID` with its strategy ID/version, symbol, direction,
 and a strategy-owned canonical `SetupKey` such as origin-fact references.
 The setup key must not be an evaluation timestamp or Kafka event ID.
 
-The `Book` rejects a reused ID when its strategy/version, symbol, direction,
-entry geometry, invalidation geometry, or creation time disagree. This keeps
+The `Book` rejects a reused ID when its strategy/version, symbol, or direction
+disagree — a genuine hash collision on the same `Candidate.ID`. This keeps
 an accidental collision from silently overwriting a published thesis.
+
+**Phase S8 amendment**: entry geometry, invalidation geometry, and creation
+time were originally part of this identity-collision check too, but running
+real strategy evaluation against real XAU M5 data (`cmd/replay`) proved that
+wrong: every Phase S7 strategy's invalidation is ATR-relative (and several
+derive `CreatedAt` from a touch/swing-anchored reference), so those fields
+legitimately differ on almost every re-evaluation of the *same* still-valid
+setup — `DeterministicID` already stays identical because it only hashes
+strategy/version/symbol/direction/`SetupKey`, never these fields. The
+over-strict check rejected that as a false collision on the very first
+real replay run. `Observe` already freezes the first-seen `Candidate`'s
+content into the stored `Record` and never overwrites it on a later
+Created/Active/Duplicate observation, so relaxing the check to the four
+true identity fields loses no real collision protection.
 
 ## States and transitions
 
