@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/config"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/fib"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/indicator"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/liquidity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
@@ -281,6 +282,35 @@ func ZoneConfigFromConfig(doc *config.Document) (zone.Config, error) {
 		FlipBandBodyFraction:   flipBandBodyFraction,
 		FlipLevelBandATR:       flipLevelBandATR,
 		OrderBlockBodyFraction: orderBlockBodyFraction,
+	}, nil
+}
+
+// FibConfigFromConfig reads analysis.fibonacci.* into fib.Config —
+// Phase S4's second domain. No version gate (unlike Zone/Structure):
+// fibonacci.py/dealing_range.py have never had a versioned contract, and
+// neither leaf here changes shape between versions.
+func FibConfigFromConfig(doc *config.Document) (fib.Config, error) {
+	epsilonATR, err := getFloat(doc, "analysis.fibonacci.epsilon_atr")
+	if err != nil {
+		return fib.Config{}, err
+	}
+	deepDiscount, err := getFloat(doc, "analysis.fibonacci.deep_discount")
+	if err != nil {
+		return fib.Config{}, err
+	}
+	deepPremium, err := getFloat(doc, "analysis.fibonacci.deep_premium")
+	if err != nil {
+		return fib.Config{}, err
+	}
+	eqHalfBand, err := getFloat(doc, "analysis.fibonacci.eq_half_band")
+	if err != nil {
+		return fib.Config{}, err
+	}
+	return fib.Config{
+		EpsilonATR:   epsilonATR,
+		DeepDiscount: deepDiscount,
+		DeepPremium:  deepPremium,
+		EqHalfBand:   eqHalfBand,
 	}, nil
 }
 

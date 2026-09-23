@@ -174,6 +174,14 @@ DIVERGENCES: dict[str, dict] = {
   "analysis.yml/analysis.flip_zone.accept_bars": {"kind": "new_surfaced", "expected": 2, "reason": "Phase S3 — canonical Flip zone close-acceptance window."},
   "analysis.yml/analysis.flip_zone.band_body_fraction": {"kind": "new_surfaced", "expected": 0.5, "reason": "Phase S3 — canonical Flip zone confirmation body threshold."},
   "analysis.yml/analysis.zones.version": {"kind": "new_surfaced", "expected": "v1", "reason": "Phase S3 — versioned canonical Zone domain contract."},
+  # analysis.yml — Phase S4's second domain (internal/fib): no old
+  # trading-bot.yml OR Python-schema-default precedent at all —
+  # fibonacci.py/dealing_range.py read these as plain function-argument
+  # defaults, never a config leaf before this phase.
+  "analysis.yml/analysis.fibonacci.epsilon_atr": {"kind": "new_surfaced", "expected": 0.15, "reason": "Phase S4 — nearest_fib()'s real epsilon_atr default."},
+  "analysis.yml/analysis.fibonacci.deep_discount": {"kind": "new_surfaced", "expected": 0.382, "reason": "Phase S4 — fib_zone_label()'s real deep_discount default."},
+  "analysis.yml/analysis.fibonacci.deep_premium": {"kind": "new_surfaced", "expected": 0.618, "reason": "Phase S4 — fib_zone_label()'s real deep_premium default."},
+  "analysis.yml/analysis.fibonacci.eq_half_band": {"kind": "new_surfaced", "expected": 0.05, "reason": "Phase S4 — dealing_range()'s real eq_band=0.10 default, already halved (see internal/fib.Config.EqHalfBand's own comment)."},
   # analysis.yml — §10: CSV string -> native list, same content.
   "analysis.yml/analysis.triggers.m1.patterns": {
     "kind": "csv_to_list", "old_path": "analysis.triggers.m1.patterns",
