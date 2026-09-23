@@ -10,19 +10,6 @@ import (
 type Counter string
 
 const (
-	CounterConsumeTotal Counter = "kafka_consume_total"
-	CounterConsumeError Counter = "kafka_consume_error_total"
-	CounterDecodeError  Counter = "kafka_decode_error_total"
-	// CounterDuplicate is reserved for a future TRANSPORT-level duplicate
-	// signal (e.g. a producer-side dedup cache). Today's duplicate
-	// detection happens one layer down, in the domain
-	// (marketdata.AppendDuplicate / AppendConflict, counted by
-	// internal/telemetry.CounterDuplicateEvents /
-	// CounterConflictEvents) — see docs/transport/kafka.md's "Duplicate
-	// delivery handling." Defined here now so a later transport-level
-	// dedup mechanism doesn't need a schema/label-shape change.
-	CounterDuplicate    Counter = "kafka_duplicate_total"
-	CounterHandlerError Counter = "kafka_handler_error_total"
 	CounterProduceTotal Counter = "kafka_produce_total"
 	CounterProduceError Counter = "kafka_produce_error_total"
 )
@@ -31,16 +18,6 @@ const (
 type Phase string
 
 const (
-	// PhaseConsumerLag is recorded as time.Since(record.Timestamp) at
-	// the moment a record is first seen — a real, broker-timestamp-
-	// derived measurement of how far behind "now" this consumer
-	// currently is, not a fabricated placeholder. Offset-based lag
-	// (comparing consumed offset to the partition's high-water mark)
-	// would need an admin-client round trip per sample; this
-	// time-based proxy is computed from data already in hand on every
-	// record and is the more commonly actionable signal operationally.
-	PhaseConsumerLag     Phase = "kafka_consumer_lag"
-	PhaseHandlerDuration Phase = "kafka_handler_duration_ms"
 	PhaseProduceDuration Phase = "kafka_produce_duration_ms"
 )
 

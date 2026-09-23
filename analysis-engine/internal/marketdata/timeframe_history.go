@@ -91,9 +91,8 @@ func (h *TimeframeHistory) Append(c market.Candle) (AppendResult, error) {
 			h.window.ReplaceLast(c)
 			return AppendReplaced, nil
 		}
-		// At-least-once delivery (Kafka transport, docs/transport/kafka.md's
-		// "Duplicate delivery handling") means the same closed-bar identity
-		// can legitimately arrive twice. Same identity + identical payload
+		// Redis recovery and any future replay can legitimately deliver the
+		// same closed-bar identity again. Same identity + identical payload
 		// is an ordinary, safe-to-ignore duplicate; same identity + a
 		// DIFFERENT payload is a conflict/correction (source task §17/§54)
 		// and must never be silently folded into the same outcome — a
@@ -106,6 +105,17 @@ func (h *TimeframeHistory) Append(c market.Candle) (AppendResult, error) {
 		}
 		return AppendConflict, nil
 	default: // c.Time < last.Time
+		// Recovery can legitimately re-read any retained timestamp after a
+		// reconnect or a Redis notification for a corrected score. Preserve
+		// the explicit duplicate/conflict distinction even when that candle
+		// is no longer the newest one; a timestamp absent from the retained
+		// window remains a true out-of-order event.
+		if existing, ok := h.At(c.Time); ok {
+			if existing == c {
+				return AppendDuplicate, nil
+			}
+			return AppendConflict, nil
+		}
 		return AppendOutOfOrder, nil
 	}
 }

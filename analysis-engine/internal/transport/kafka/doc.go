@@ -1,10 +1,9 @@
 // Package kafka implements analysis-engine's real Kafka transport
-// (Kafka transport task; ADR-004, ADR-008, ADR-009,
-// docs/transport/kafka.md). It owns: broker connection, producer,
-// consumer, serialization/deserialization, event metadata (the shared
-// Envelope), record-key selection, consumer-group operation,
-// offset/commit behavior, retry classification, shutdown, health, and
-// transport telemetry.
+// (ADR-008, ADR-009, ADR-010, docs/transport/kafka.md). It owns broker
+// connection, producer, serialization, event metadata (the shared Envelope),
+// opportunity record-key selection, shutdown, health, and transport telemetry.
+// Analysis Engine is deliberately producer-only because Redis owns the
+// market-data plane.
 //
 // It does NOT own: market structure, strategy evaluation, business
 // risk, TradePlan construction, broker execution, or Telegram (source

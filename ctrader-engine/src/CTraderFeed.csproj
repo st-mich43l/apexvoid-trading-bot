@@ -14,21 +14,11 @@
     <PublishTrimmed>true</PublishTrimmed>
     <PublishAot>true</PublishAot>
     <SelfContained>true</SelfContained>
-    <!-- Load-bearing, not stylistic — ADR-010 (docs/adr/010-dotnet-kafka-client.md):
-         Dekaf (the Kafka client) hangs at runtime under the AOT-implied
-         default TrimMode=full; `partial` is the real, evidence-backed fix,
-         still fully self-contained/trimmed/AOT. Removing this line
-         silently reintroduces that hang. -->
-    <TrimMode>partial</TrimMode>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="cTrader.OpenAPI.Net" Version="1.4.4" />
     <PackageReference Include="StackExchange.Redis" Version="3.0.11" />
-    <!-- ADR-010: Dekaf, not Confluent.Kafka — real, documented Native
-         AOT incompatibility evidence for the latter. Pure managed C#,
-         no native library bundled. -->
-    <PackageReference Include="Dekaf" Version="1.14.2" />
   </ItemGroup>
 
   <ItemGroup>
