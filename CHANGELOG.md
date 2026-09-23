@@ -60,6 +60,23 @@ dated section after deployment.
   OHLC-snapshot duplicate feature. The destructive migration itself is
   not run by this PR — it's a standalone script for the owner to invoke
   when ready.
+- Analysis Engine V2 strategy rebuild, Phase S0: added
+  `docs/analysis/strategy-v2-catalog.md`, the required legacy-strategy
+  semantic audit (`apexvoid-bot-prompts/rebuild-strategies.md` §7) that
+  must precede any Go strategy implementation. Classifies all 32
+  `algo-bot/app/autotrade/strategy_names.py` entries plus the
+  `auto_algo.strategies.*` config leaves against the actual live
+  detector registry (`detectors.py`'s `LIVE_DETECTOR_REGISTRY`, not just
+  names) — REBUILD/SPLIT/MERGE/RENAME/TECHNIQUE_ONLY/
+  CONFLUENCE_COMPONENT/RETIRED/HISTORICAL_ALIAS per entry. Flags four
+  judgment calls for owner confirmation before Phase S2 locks the
+  catalog: iFVG's inversion semantics, CRT as independent vs. confluence
+  component, Break & Retest as independent vs. merged into Trendline,
+  and Fade Scalp's relationship to a possible `LiquiditySweepStrategy`
+  identity (its `_level_grab`/structural-reaction logic is the strongest
+  existing candidate for that thesis, found by reading the real
+  detector code rather than assuming from the name). Docs only — no Go
+  or Python code changed in this PR.
 - Kafka live pipeline: `ctrader-engine` now publishes acknowledged closed-bar
   events to the configured V3 topic before persisting the Redis bar, and the
   Go `analysis-engine` consumes that topic with at-least-once handling. Startup
