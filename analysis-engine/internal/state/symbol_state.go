@@ -10,6 +10,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/marketdata"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/session"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/zone"
 )
@@ -25,6 +26,7 @@ type SymbolState struct {
 	Structure     *structure.Book
 	Zone          *zone.Book
 	Liquidity     *liquidity.Book
+	Session       *session.Book
 	Context       context.MarketContext
 	Opportunities *opportunity.Book
 }
@@ -45,6 +47,7 @@ func NewSymbolState(symbol market.Symbol, depths map[market.Timeframe]int, allow
 		Structure:     structure.NewBook(),
 		Zone:          zone.NewBook(),
 		Liquidity:     liquidity.NewBook(),
+		Session:       session.NewBook(),
 		Opportunities: &opportunity.Book{},
 	}, nil
 }

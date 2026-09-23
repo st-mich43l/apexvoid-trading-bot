@@ -11,6 +11,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/indicator"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/liquidity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/session"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/transport/kafka"
 	redistransport "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/transport/redis"
@@ -281,6 +282,36 @@ func ZoneConfigFromConfig(doc *config.Document) (zone.Config, error) {
 		FlipBandBodyFraction:   flipBandBodyFraction,
 		FlipLevelBandATR:       flipLevelBandATR,
 		OrderBlockBodyFraction: orderBlockBodyFraction,
+	}, nil
+}
+
+// SessionConfigFromConfig reads analysis.sessions.* into session.Config —
+// Phase S4's first domain. asia/london/ny_start are the same leaves
+// StructureConfigFromConfig's siblings already read for scanner/session
+// display purposes; daily_rollover_utc_hour is the one leaf this phase
+// adds (see config/analysis.yml).
+func SessionConfigFromConfig(doc *config.Document) (session.Config, error) {
+	asiaStart, err := getInt(doc, "analysis.sessions.asia_start")
+	if err != nil {
+		return session.Config{}, err
+	}
+	londonStart, err := getInt(doc, "analysis.sessions.london_start")
+	if err != nil {
+		return session.Config{}, err
+	}
+	nyStart, err := getInt(doc, "analysis.sessions.ny_start")
+	if err != nil {
+		return session.Config{}, err
+	}
+	rolloverHour, err := getInt(doc, "analysis.sessions.daily_rollover_utc_hour")
+	if err != nil {
+		return session.Config{}, err
+	}
+	return session.Config{
+		AsiaStartHour:        asiaStart,
+		LondonStartHour:      londonStart,
+		NYStartHour:          nyStart,
+		DailyRolloverUTCHour: rolloverHour,
 	}, nil
 }
 

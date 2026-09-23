@@ -5,7 +5,7 @@
 ```text
 market / telemetry
   ↓
-indicator / marketdata / config
+indicator / marketdata / config / session
   ↓
 structure
   ↓
@@ -129,6 +129,23 @@ independent (neither imports the other; both only need `structure`).
 
 Enforced in `analysis-engine/test/architecture/dependency_test.go`'s
 `rank` map (`"zone": 3`) and its own inline comment on this exact
+reasoning.
+
+### Amendment: `session` added at rank 1, not alongside `zone`/`liquidity`
+
+A fifth correction, made implementing Phase S4's first domain (the
+`internal/session` package — UTC session windows, PDH/PDL, PWH/PWL).
+Unlike `zone`/`liquidity` (and `fib`/`keylevel`/`trendline`, S4's
+remaining three domains, which land at rank 3 for the same
+`structure.Swing`-dependency reason those two already established),
+`session` needs only candles and timestamps. Its Python source
+(`algo-bot/app/analysis/session_liquidity.py`) never imports
+`swings.py`/`structure.py` either — there is no structure dependency to
+promote above in the first place. It joins `indicator`/`marketdata`/
+`config` at rank 1.
+
+Enforced in `analysis-engine/test/architecture/dependency_test.go`'s
+`rank` map (`"session": 1`) and its own inline comment on this exact
 reasoning.
 
 ### The one correction, in full

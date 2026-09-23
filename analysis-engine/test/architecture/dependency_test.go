@@ -66,6 +66,14 @@ const modulePrefix = "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine
 // the identical fix: promote above structure. zone and liquidity are
 // mutually independent (neither imports the other), so they share a
 // rank rather than needing a fifth distinct one.
+//
+// session, added at rank 1 alongside indicator/marketdata/config, is a
+// fifth amendment, made implementing Phase S4's first domain. Unlike
+// zone/liquidity (and fib/keylevel/trendline, S4's remaining three
+// domains, landing at rank 3 for the same structure.Swing-dependency
+// reason), session needs only candles and timestamps — its own Python
+// source (session_liquidity.py) never imports swings.py/structure.py
+// either — so it has no reason to sit above structure at all.
 var rank = map[string]int{
 	"market":    0,
 	"telemetry": 0,
@@ -73,6 +81,7 @@ var rank = map[string]int{
 	"indicator":  1,
 	"marketdata": 1,
 	"config":     1,
+	"session":    1,
 
 	"structure": 2,
 

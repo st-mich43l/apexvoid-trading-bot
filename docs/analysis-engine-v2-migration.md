@@ -28,8 +28,8 @@ and [ADR-004](adr/) for the transport/cutover gating this depends on.
 | Market context / bias | `app/analysis/engine.py` (bias computed by a parallel HTF-swing pass, independent of the structure module's own read — the two can and do disagree in production) | `internal/context/market.go` (`Build`, `DeriveBias`) | **Explicit redesign** — bias is now strictly *derived* from the same canonical `StructureState` (Major→Intermediate→Internal→Micro precedence), never computed independently (source task §36 — this was an explicit, named bug class in the legacy system) | Shadow only | Not removable |
 | Multi-timeframe disagreement | `app/analysis/engine.py` (flattens to a single bias value; per-timeframe disagreement is not preserved in the returned object) | `internal/context/market.go` (`MarketContext.Timeframes map`) | **Explicit redesign** — every timeframe's own structure/liquidity read is preserved in the context, not collapsed | Shadow only | Not removable |
 | Regime classification | `app/analysis/regime.py` | *(not built this task — placeholder `RegimeContext{Kind string}` only)* | N/A — deferred | Not started | N/A |
-| Session context | `app/analysis/session_liquidity.py` (session boundary logic only, embedded in liquidity) | *(not built this task — placeholder `SessionContext{Name string}` only)* | N/A — deferred | Not started | N/A |
 | Technical zones (supply/demand, OB, FVG/iFVG, breaker, flip) | `app/analysis/zones.py`, `app/analysis/dealing_range.py` | `internal/zone` (`Zone`, `Book`, lifecycle/relevance) | **Explicit redesign** — per-origin geometry, hold-based invalidation, separate relevance | Shadow only | Not removable until strategy cutover |
+| Session/PDH-PDL/PWH-PWL levels, sweep detection, active session | `app/analysis/session_liquidity.py` (`session_levels`, `previous_week_levels`; no active-session classifier) | `internal/session` (`Update`, `State`, `Book`) | **Exact parity** on levels/sweep (same window/rollover/week-start rules, same cross-window sweep scan), plus **new**: the active-session (Asia/London/NY) classifier has no Python equivalent — added to finally populate `context.SessionContext`, previously an honest empty placeholder | Shadow only | Not removable |
 | Per-symbol event dispatch / worker | `app/analysis/worker.py` (one large sequential pass per symbol per bar, not clearly dependency-scoped) | `internal/engine/worker.go` (`SymbolWorker`), `engine.go` (`Engine`) | **Explicit redesign** — one mutex-guarded worker per symbol, concurrent across symbols, dependency-aware (an M1 close cannot trigger H1 recompute by construction, proven in `test/engine/worker_test.go`) | Shadow only (`cmd/replay` drives it directly; no live feed wired) | Not removable |
 | Scanning / orchestration | `app/analysis/scanner.py` (one large file coordinating detection across all symbols/strategies) | *(deliberately not replicated — source task §60 explicitly forbids "another giant scanner file")* | N/A — architectural non-goal | N/A | N/A |
 | Telemetry (analysis timing) | Ad hoc `time.time()` deltas scattered through `worker.py`/`engine.py`, not uniformly labeled | `internal/telemetry/metrics.go` (`Recorder`) | **New** — no Python equivalent structure; real per-phase timing (`marketdata_update_ms` through `event_total_ms`) added specifically for this task (source task §57) | Shadow only | N/A |
@@ -47,15 +47,19 @@ and [ADR-004](adr/) for the transport/cutover gating this depends on.
   recomputes H1 structure) is still fully proven, because each
   timeframe's computation is self-contained; only the *within-timeframe*
   narrower-lookback optimization is deferred.
-- **Regime and Session context** (source task §38/§39) are left as
-  bare placeholders (`RegimeContext{Kind string}`, `SessionContext{Name
-  string}`) with no real classification logic — confirmed these are
-  *not* part of the 50-item Definition of Done, so this is a legitimate,
-  explicit deferral, not a gap in required scope.
+- **Regime context** (source task §38) is left as a bare placeholder
+  (`RegimeContext{Kind string}`) with no real classification logic —
+  confirmed this is *not* part of the 50-item Definition of Done, so this
+  is a legitimate, explicit deferral, not a gap in required scope.
 - **Technical zones** (Supply/Demand, Order Blocks, FVG/iFVG, Breaker,
   Flip) are now implemented in `internal/zone` as Phase S3. Strategy-level
   entry/quality decisions and higher-layer merging/reconciliation remain
   deferred to the independent strategy phases.
+- **Session context** (source task §39) is now implemented in
+  `internal/session` as Phase S4's first domain — see
+  [`analysis/shared-primitives-v2.md`](analysis/shared-primitives-v2.md).
+  `context.SessionContext` carries the real `session.State` for the
+  primary timeframe rather than the prior empty placeholder.
 - **Per-strategy packages** (Breakout Retest, Liquidity Sweep, etc.) are
   entirely unimplemented — explicitly the *next* task per the source
   spec, gated on this foundation passing review.
