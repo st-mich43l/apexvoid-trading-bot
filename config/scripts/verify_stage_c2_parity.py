@@ -174,6 +174,22 @@ DIVERGENCES: dict[str, dict] = {
   "analysis.yml/analysis.flip_zone.accept_bars": {"kind": "new_surfaced", "expected": 2, "reason": "Phase S3 — canonical Flip zone close-acceptance window."},
   "analysis.yml/analysis.flip_zone.band_body_fraction": {"kind": "new_surfaced", "expected": 0.5, "reason": "Phase S3 — canonical Flip zone confirmation body threshold."},
   "analysis.yml/analysis.zones.version": {"kind": "new_surfaced", "expected": "v1", "reason": "Phase S3 — versioned canonical Zone domain contract."},
+  # sessions is one of the market_data.*-renamed subtrees (see the
+  # "sessions": "market_data.sessions" mapping below) — a genuinely new
+  # leaf inside it needs BOTH: this entry's own key (the real analysis.yml
+  # path, "analysis.sessions...") for verify_divergences()'s presence/value
+  # check, AND an explicit old_path (the renamed "market_data.sessions..."
+  # string compare_subtree actually passes) so
+  # verify_unlisted_leaves_still_match_stage_c1()'s skip-set recognizes it
+  # too — unlike analysis.zones.*/analysis.techniques.* above, sessions is
+  # not excluded from the old-parity comparison entirely (its three
+  # pre-existing leaves — asia_start/london_start/ny_start — still are
+  # real Stage C1 parity, so only this one new leaf needs the skip).
+  "analysis.yml/analysis.sessions.daily_rollover_utc_hour": {
+    "kind": "new_surfaced", "expected": 21,
+    "old_path": "market_data.sessions.daily_rollover_utc_hour",
+    "reason": "Phase S4 — internal/session's trading-day boundary; matches MarketDataSessionsConfig's own Pydantic schema default (algo-bot/app/configuration/models/market_data.py), not invented.",
+  },
   # analysis.yml — §10: CSV string -> native list, same content.
   "analysis.yml/analysis.triggers.m1.patterns": {
     "kind": "csv_to_list", "old_path": "analysis.triggers.m1.patterns",
