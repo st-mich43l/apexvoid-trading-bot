@@ -66,8 +66,6 @@ instrument_packs:
         m1_bars: 150
         m5_bars: 150
     timeframes:
-      - D1
-      - H4
       - H1
       - M15
       - M5
@@ -134,8 +132,6 @@ instrument_packs:
         m1_bars: 150
         m5_bars: 150
     timeframes:
-      - D1
-      - H4
       - H1
       - M15
       - M5
@@ -225,8 +221,6 @@ instrument_packs:
         m1_bars: 150
         m5_bars: 150
     timeframes:
-      - D1
-      - H4
       - H1
       - M15
       - M5
