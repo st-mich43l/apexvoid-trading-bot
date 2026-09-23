@@ -136,6 +136,21 @@ analysis:
   techniques:
     # PR-D: filter technique instances via validate_technique_instance predicates.
     validation_enabled: true
+    # Canonical zone lifecycle inputs shared by the Go zone domain and the
+    # legacy research validator during the migration window.
+    retest_max_touches: 30
+    invalidation_tolerance_atr: 0.5
+    sweep_reclaim_bars: 6
+    max_break_episodes: 2
+
+  zone_relevance:
+    immediate_atr: 0.25
+    nearby_atr: 1.25
+    remote_atr: 3.0
+
+  flip_zone:
+    accept_bars: 2
+    band_body_fraction: 0.5
 
   # Dimensionless zone-merge fields consumed live via
   # app.analysis.detectors._detector_settings(symbol) ->
@@ -147,6 +162,7 @@ analysis:
   # max_merged_zone_atr), never a settable trading-bot.yml leaf; value
   # unchanged (0.5 / 3.0, the real current schema default in both cases).
   zones:
+    version: v1
     merge_overlap: 0.5
 
   measurements:

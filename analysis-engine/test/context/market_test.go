@@ -7,6 +7,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/liquidity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/zone"
 )
 
 func TestDeriveBias_PrefersTheHighestLayerWithADefinitiveTrend(t *testing.T) {
@@ -42,10 +43,12 @@ func TestBuild_PreservesMultiTimeframeDisagreement(t *testing.T) {
 	// Bias only reflects the primary one.
 	h1 := structure.StructureState{Major: structure.LayerState{Trend: structure.TrendBearish}}
 	m5 := structure.StructureState{Major: structure.LayerState{Trend: structure.TrendBullish}}
+	h1Zones := zone.ZoneState{Zones: []zone.Zone{{ID: "h1-demand", Kind: zone.KindDemand}}}
+	m5Zones := zone.ZoneState{Zones: []zone.Zone{{ID: "m5-supply", Kind: zone.KindSupply}}}
 
 	ctx := context.Build("XAU", "M5", map[market.Timeframe]context.TimeframeInput{
-		"H1": {Structure: h1, Liquidity: liquidity.LiquidityState{}, ATR: 3.0},
-		"M5": {Structure: m5, Liquidity: liquidity.LiquidityState{}, ATR: 1.5},
+		"H1": {Structure: h1, Liquidity: liquidity.LiquidityState{}, Zones: h1Zones, ATR: 3.0},
+		"M5": {Structure: m5, Liquidity: liquidity.LiquidityState{}, Zones: m5Zones, ATR: 1.5},
 	})
 
 	if len(ctx.Timeframes) != 2 {
@@ -56,6 +59,9 @@ func TestBuild_PreservesMultiTimeframeDisagreement(t *testing.T) {
 	}
 	if ctx.Timeframes["M5"].Structure.Major.Trend != structure.TrendBullish {
 		t.Error("M5's own bullish read must be preserved, not overwritten")
+	}
+	if ctx.Timeframes["H1"].Zones.Zones[0].ID != "h1-demand" || ctx.Zones.State.Zones[0].ID != "m5-supply" {
+		t.Error("zone reads must preserve each timeframe and expose the primary timeframe")
 	}
 	// Convenience fields reflect the PRIMARY (M5) timeframe only.
 	if ctx.Structure.Timeframe != "M5" || ctx.Structure.State.Major.Trend != structure.TrendBullish {

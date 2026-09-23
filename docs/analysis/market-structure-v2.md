@@ -1,6 +1,7 @@
 # Market Structure V2 — Specification
 
-Status: implemented (`analysis-engine/internal/structure`, `internal/liquidity`).
+Status: implemented (`analysis-engine/internal/structure`,
+`internal/liquidity`, and the canonical Zone V1 domain in `internal/zone`).
 This document and that code must always describe the same behavior (source
 task §65) — where they'd disagree, the code and its tests are the actual
 truth; file an issue against this doc, don't trust the doc over the code.
@@ -10,6 +11,11 @@ task §66's own test: "what exactly makes a CHoCH? which swing must break?
 wick or close? how far? does displacement matter? which layer changed?
 when is the event confirmed?" Every one of those questions has a concrete
 answer here, with the exact Go function that implements it.
+
+Zone geometry is specified separately in [`zone-v2.md`](zone-v2.md).
+Structure supplies the swings, breaks, and displacement evidence that the
+Zone domain consumes; Zone owns the resulting technical bands and their
+lifecycle/relevance state. Neither package imports strategy code.
 
 ## Pivot
 

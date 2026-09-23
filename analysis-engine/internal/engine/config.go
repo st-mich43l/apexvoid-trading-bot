@@ -14,6 +14,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/transport/kafka"
 	redistransport "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/transport/redis"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/zone"
 )
 
 // This file is deliberately the ONLY place in analysis-engine that reads
@@ -180,6 +181,106 @@ func LiquidityConfigFromConfig(doc *config.Document) (liquidity.Config, error) {
 	return liquidity.Config{
 		Version: version, EqualLevelToleranceATR: tolerance,
 		PoolMinimumTouches: minTouches, SweepReclaimBars: sweepReclaimBars,
+	}, nil
+}
+
+// ZoneConfigFromConfig reads the canonical Zone leaves into zone.Config,
+// reusing analysis.structure.break.displacement_range_atr/
+// displacement_body_dominance directly for Displacement — one canonical
+// displacement formula shared with structure, never a second copy (see
+// internal/zone/doc.go).
+func ZoneConfigFromConfig(doc *config.Document) (zone.Config, error) {
+	version, err := getString(doc, "analysis.zones.version")
+	if err != nil {
+		return zone.Config{}, err
+	}
+	if version != "v1" {
+		return zone.Config{}, fmt.Errorf(
+			"engine: unsupported analysis.zones.version %q — only \"v1\" is implemented, fail closed per source task §58/§67", version,
+		)
+	}
+	dispRangeATR, err := getFloat(doc, "analysis.structure.break.displacement_range_atr")
+	if err != nil {
+		return zone.Config{}, err
+	}
+	dispBodyDom, err := getFloat(doc, "analysis.structure.break.displacement_body_dominance")
+	if err != nil {
+		return zone.Config{}, err
+	}
+	invalidationToleranceATR, err := getFloat(doc, "analysis.techniques.invalidation_tolerance_atr")
+	if err != nil {
+		return zone.Config{}, err
+	}
+	sweepReclaimBars, err := getInt(doc, "analysis.techniques.sweep_reclaim_bars")
+	if err != nil {
+		return zone.Config{}, err
+	}
+	maxBreakEpisodes, err := getInt(doc, "analysis.techniques.max_break_episodes")
+	if err != nil {
+		return zone.Config{}, err
+	}
+	retestMaxTouches, err := getInt(doc, "analysis.techniques.retest_max_touches")
+	if err != nil {
+		return zone.Config{}, err
+	}
+	epsilonATR, err := getFloat(doc, "analysis.structure.equal_level.tolerance_atr")
+	if err != nil {
+		return zone.Config{}, err
+	}
+	immediateATR, err := getFloat(doc, "analysis.zone_relevance.immediate_atr")
+	if err != nil {
+		return zone.Config{}, err
+	}
+	nearbyATR, err := getFloat(doc, "analysis.zone_relevance.nearby_atr")
+	if err != nil {
+		return zone.Config{}, err
+	}
+	remoteATR, err := getFloat(doc, "analysis.zone_relevance.remote_atr")
+	if err != nil {
+		return zone.Config{}, err
+	}
+	if !(immediateATR < nearbyATR && nearbyATR < remoteATR) {
+		return zone.Config{}, fmt.Errorf(
+			"engine: analysis.zone_relevance must satisfy immediate_atr < nearby_atr < remote_atr, got %v < %v < %v",
+			immediateATR, nearbyATR, remoteATR,
+		)
+	}
+	flipAcceptBars, err := getInt(doc, "analysis.flip_zone.accept_bars")
+	if err != nil {
+		return zone.Config{}, err
+	}
+	flipBandBodyFraction, err := getFloat(doc, "analysis.flip_zone.band_body_fraction")
+	if err != nil {
+		return zone.Config{}, err
+	}
+	flipLevelBandATR, err := getFloat(doc, "analysis.structure.equal_level.tolerance_atr")
+	if err != nil {
+		return zone.Config{}, err
+	}
+	orderBlockBodyFraction := dispBodyDom
+
+	return zone.Config{
+		Version: version,
+		Displacement: structure.DisplacementConfig{
+			RangeATR:      dispRangeATR,
+			BodyDominance: dispBodyDom,
+		},
+		Lifecycle: zone.LifecycleConfig{
+			InvalidationToleranceATR: invalidationToleranceATR,
+			SweepReclaimBars:         sweepReclaimBars,
+			MaxBreakEpisodes:         maxBreakEpisodes,
+			RetestMaxTouches:         retestMaxTouches,
+			EpsilonATR:               epsilonATR,
+		},
+		Relevance: zone.RelevanceConfig{
+			ImmediateATR: immediateATR,
+			NearbyATR:    nearbyATR,
+			RemoteATR:    remoteATR,
+		},
+		FlipAcceptBars:         flipAcceptBars,
+		FlipBandBodyFraction:   flipBandBodyFraction,
+		FlipLevelBandATR:       flipLevelBandATR,
+		OrderBlockBodyFraction: orderBlockBodyFraction,
 	}, nil
 }
 

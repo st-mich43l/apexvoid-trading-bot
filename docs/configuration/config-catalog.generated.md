@@ -3,9 +3,9 @@
 > Generated from the typed `ApexVoidConfig` Catalog V2 schema. Do not edit manually.
 
 - Catalog version: `2`
-- Contract fingerprint: `2284e2c761a3f531c1c24347c4c9bc51c25edd019b8b20f9bae37b5ba67d5e5d`
-- Document fingerprint: `a5cb518f4e31a5cb70f2b8c1b85bb09862f889224286f94bb697367eb968f6f9`
-- Items: `677`
+- Contract fingerprint: `bec01459a04ea8c7b6b931d0edf79ee90ab6d15a2f846eefb1a11e60973557d6`
+- Document fingerprint: `b020888e776ffb182fc55e837b09e2cb8df8a8aca448561415653a01f09ed058`
+- Items: `678`
 - Runtime status: canonical-only; `app.core.config.runtime_config` is authoritative
 
 ## actionability
@@ -228,6 +228,7 @@
 | `analysis.zones.symbol_contract.minimum_width_price` | `XAU_ZONE_MIN_WIDTH_PRICE` | `float` | `price` | `configurable` | `3.0` |
 | `analysis.zones.symbol_contract.preferred_maximum_width_price` | `XAU_ZONE_PREFERRED_MAX_WIDTH_PRICE` | `float` | `price` | `configurable` | `6.0` |
 | `analysis.zones.symbol_contract.preferred_minimum_width_price` | `XAU_ZONE_PREFERRED_MIN_WIDTH_PRICE` | `float` | `price` | `configurable` | `3.0` |
+| `analysis.zones.version` | `ANALYSIS_ZONES_VERSION` | `str` | `enum` | `configurable` | `"v1"` |
 | `analysis.zones.width` | `ZONE_WIDTH` | `str` | `enum` | `configurable` | `"body"` |
 
 ## bootstrap

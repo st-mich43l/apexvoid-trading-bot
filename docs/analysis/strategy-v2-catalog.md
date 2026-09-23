@@ -222,10 +222,11 @@ Trendline, no longer a separate strategy) = **18 independent V2
 strategies**, per ADR-003's independence rule (no strategy imports
 another; Confluence Zone is the sole compositional exception).
 
-### What S2 still does not do
+### Phase S3 status
 
-No Go code, no `docs/analysis/strategies/<name>.md` files (those are
-S7, written alongside each strategy's implementation, not speculatively
-ahead of it), no `config/analysis.yml` changes. S3 (canonical Zone
-domain — `internal/zone`, currently an empty `Book{}`) is the next real
-engineering phase, planned separately.
+S3 now implements the canonical `internal/zone` domain and wires it into
+`SymbolState`, `MarketContext`, and `AnalysisSnapshot`. The domain detects
+Supply, Demand, Order Block, FVG, iFVG, Breaker, and Flip primitives, and
+tracks lifecycle and current relevance independently. Strategy packages and
+their individual specifications remain S7 work; they must consume these
+facts rather than re-deriving zone geometry.

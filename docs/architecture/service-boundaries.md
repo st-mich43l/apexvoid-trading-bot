@@ -28,14 +28,13 @@ manual operator commands · journal formatting · trade records
 broker authentication · broker order placement · position management
 ```
 
-**Current state**: Stage 1 + partial Stage 2 of `docs/go-analysis-migration-audit.md`.
-`internal/market`, `internal/indicator`, `internal/config` exist and are
-parity-tested. Everything else in this document's target package tree
-(`internal/structure`, `liquidity`, `zone`, `context`, `strategy`,
-`confluence`, `opportunity`, `state`, `engine`, `transport`, `visualization`,
-`telemetry`) is scaffolded by this architecture task as package-level
-skeletons only — see [`analysis-engine.md`](analysis-engine.md). No
-detector/strategy logic has been ported.
+**Current state**: Structure V2, Liquidity V1, and the canonical Zone V1
+domain are implemented and contract-tested. `internal/zone` owns per-origin
+Supply/Demand, Order Block, FVG/iFVG, Breaker, and Flip geometry plus
+lifecycle/relevance state; it is wired through `SymbolState`,
+`MarketContext`, and immutable snapshots. Strategy evaluation and the final
+Python technical-authority cutover remain later migration stages; legacy
+detectors are therefore still retained until those stages are complete.
 
 ## `algo-bot` (Python)
 

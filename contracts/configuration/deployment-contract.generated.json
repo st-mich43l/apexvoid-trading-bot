@@ -167,6 +167,7 @@
       "analysis.zones.symbol_contract.minimum_width_price",
       "analysis.zones.symbol_contract.preferred_maximum_width_price",
       "analysis.zones.symbol_contract.preferred_minimum_width_price",
+      "analysis.zones.version",
       "analysis.zones.width",
       "bootstrap.build.git_sha",
       "bootstrap.build.service_version",
@@ -607,7 +608,7 @@
     "XAU_ZONE_PREFERRED_MAX_WIDTH_PRICE": "instruments.XAU.analysis.zones.preferred_maximum_width_price",
     "XAU_ZONE_PREFERRED_MIN_WIDTH_PRICE": "instruments.XAU.analysis.zones.preferred_minimum_width_price"
   },
-  "fingerprint": "2284e2c761a3f531c1c24347c4c9bc51c25edd019b8b20f9bae37b5ba67d5e5d",
+  "fingerprint": "bec01459a04ea8c7b6b931d0edf79ee90ab6d15a2f846eefb1a11e60973557d6",
   "instrument_schema": {
     "active_projection_symbol": "XAU",
     "optional": [

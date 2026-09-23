@@ -7,9 +7,9 @@ market / telemetry
   ↓
 indicator / marketdata / config
   ↓
-structure / zone
+structure
   ↓
-liquidity
+zone / liquidity
   ↓
 context
   ↓
@@ -28,6 +28,7 @@ Lower layers must not import higher layers:
 indicator MUST NOT import strategy
 structure MUST NOT import opportunity
 zone MUST NOT import strategy
+zone MUST NOT import liquidity (siblings — see the Phase S3 amendment below)
 market MUST NOT import anything under internal/ (it is the floor)
 ```
 
@@ -104,6 +105,32 @@ once, with no special-cased exception needed:
 Enforced in `analysis-engine/test/architecture/dependency_test.go`'s
 `rank` map and its own inline comment on this exact reasoning.
 
+### Amendment: `zone` promoted above `structure`, sibling to `liquidity`
+
+A fourth correction, made implementing Phase S3 (the canonical Zone
+domain, `apexvoid-bot-prompts/rebuild-strategies.md` §14). The original
+freeze (and the first amendment above) kept `zone` same-rank with
+`structure`, on the assumption zone geometry would be self-contained.
+Building the real zone kinds (Order Block, Breaker, Flip Zone,
+Supply/Demand) showed they need `structure.Swing`, `structure.
+StructureBreak`, and `structure.DetectDisplacement` directly — Order
+Block requires a confirming BOS/CHoCH break event; Breaker/Flip need
+break events; Supply/Demand/Order Block need the same displacement
+primitive `structure` already implements (`zones.py`'s legacy
+`k=1.5`/`body_frac=0.55` formula, already ported once into
+`structure.DetectDisplacement` — reimplementing it a second time inside
+`zone` would be exactly the "duplicate structure recompute" violation
+`service-boundaries.md` already flags on the Python side as a problem to
+fix, not repeat in Go). This is the identical situation `liquidity`
+already hit (`PoolFromSwing(s structure.Swing, ...)`) and the identical
+fix: `zone` moves to its own rank strictly above `structure` — landing
+at the same rank as `liquidity` (rank 3), since the two are mutually
+independent (neither imports the other; both only need `structure`).
+
+Enforced in `analysis-engine/test/architecture/dependency_test.go`'s
+`rank` map (`"zone": 3`) and its own inline comment on this exact
+reasoning.
+
 ### The one correction, in full
 
 The source architecture task's §51 lists this order:
@@ -138,7 +165,7 @@ zero behavior and zero dependency on `strategy` — the same role
 one of the two packages that imports the other:
 
 ```text
-market → indicator/marketdata → structure/liquidity/zone → context → opportunity → strategy/confluence → engine → transport
+market → indicator/marketdata → structure → zone/liquidity → context → opportunity → strategy/confluence → engine → transport
 ```
 
 This is the only ordering under which every literal Go snippet in the
