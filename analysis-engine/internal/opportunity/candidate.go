@@ -13,7 +13,14 @@
 // same task's §21, inconsistently) orders it.
 package opportunity
 
-import "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"math"
+
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
+)
 
 // StrategyID identifies which strategy produced a Candidate. Defined here
 // (not in internal/strategy) because both opportunity.Candidate and
@@ -58,12 +65,49 @@ type StrategyQuality struct {
 	Components map[string]float64
 }
 
+// AnalysisProvenance records the analytical versions used to establish a
+// Candidate. Configuration provenance belongs in the Kafka envelope when S9
+// publishes the lifecycle event; it remains here too so replay and a future
+// journal can retain the complete technical fact without importing transport.
+type AnalysisProvenance struct {
+	StructureVersion  string
+	LiquidityVersion  string
+	ZoneVersion       string
+	ConfigVersion     int
+	ConfigFingerprint string
+}
+
+// Identity contains only setup-defining fields a strategy can use to create a
+// deterministic opportunity ID. SetupKey is strategy-owned: it should be a
+// stable canonical fact reference (for example an origin swing/zone pair),
+// never an event ID or a candle's evaluation timestamp.
+type Identity struct {
+	Strategy        StrategyID
+	StrategyVersion string
+	Symbol          market.Symbol
+	Direction       market.Direction
+	SetupKey        string
+}
+
+// DeterministicID returns a stable, opaque opportunity ID for one semantic
+// setup. Kafka event IDs are deliberately not included: the same opportunity
+// can yield one created event and, later, one terminal event.
+func DeterministicID(identity Identity) (string, error) {
+	if identity.Strategy == "" || identity.StrategyVersion == "" || identity.Symbol == "" || !identity.Direction.IsValid() || identity.SetupKey == "" {
+		return "", fmt.Errorf("opportunity: deterministic identity requires strategy, strategy version, symbol, direction, and setup key")
+	}
+	canonical := "opportunity/v1\x00" + string(identity.Strategy) + "\x00" + identity.StrategyVersion + "\x00" + string(identity.Symbol) + "\x00" + string(identity.Direction) + "\x00" + identity.SetupKey
+	sum := sha256.Sum256([]byte(canonical))
+	return "opp_" + hex.EncodeToString(sum[:]), nil
+}
+
 // Candidate is one strategy's technical opportunity, as of the source
 // task's §24.
 type Candidate struct {
-	ID       string
-	Strategy StrategyID
-	Symbol   market.Symbol
+	ID              string
+	Strategy        StrategyID
+	StrategyVersion string
+	Symbol          market.Symbol
 
 	Direction market.Direction
 
@@ -75,5 +119,72 @@ type Candidate struct {
 	Quality  StrategyQuality
 
 	CreatedAt int64
+	// ExpiresAt is strategy-owned technical expiry, not Algo Bot's execution
+	// maximum age. It is an absolute Unix-second deadline.
 	ExpiresAt int64
+
+	Provenance AnalysisProvenance
+}
+
+// Validate verifies the lifecycle-relevant, transport-neutral Candidate
+// contract. Strategy-specific setup rules remain inside the strategy package.
+func (c Candidate) Validate() error {
+	if c.ID == "" {
+		return fmt.Errorf("opportunity: candidate ID is required")
+	}
+	if c.Strategy == "" || c.StrategyVersion == "" {
+		return fmt.Errorf("opportunity: candidate strategy and strategy version are required")
+	}
+	if c.Symbol == "" || !c.Direction.IsValid() {
+		return fmt.Errorf("opportunity: candidate symbol and BUY/SELL direction are required")
+	}
+	if !finite(c.Entry.Low) || !finite(c.Entry.High) || c.Entry.Low > c.Entry.High {
+		return fmt.Errorf("opportunity: entry must be a finite low-to-high range")
+	}
+	if !finite(float64(c.Invalidation.Price)) {
+		return fmt.Errorf("opportunity: invalidation price must be finite")
+	}
+	if len(c.Targets) == 0 || len(c.Evidence) == 0 {
+		return fmt.Errorf("opportunity: at least one technical target and evidence fact are required")
+	}
+	for _, target := range c.Targets {
+		if !finite(float64(target.Price.Price)) {
+			return fmt.Errorf("opportunity: target prices must be finite")
+		}
+	}
+	for _, evidence := range c.Evidence {
+		if evidence.Code == "" {
+			return fmt.Errorf("opportunity: evidence codes must be non-empty")
+		}
+	}
+	if c.CreatedAt < 0 || c.ExpiresAt <= c.CreatedAt {
+		return fmt.Errorf("opportunity: expiry must be after creation")
+	}
+	if !finite(c.Quality.Overall) {
+		return fmt.Errorf("opportunity: quality must be finite")
+	}
+	for name, value := range c.Quality.Components {
+		if name == "" || !finite(value) {
+			return fmt.Errorf("opportunity: quality components need non-empty names and finite values")
+		}
+	}
+	if c.Provenance.StructureVersion == "" || c.Provenance.LiquidityVersion == "" || c.Provenance.ZoneVersion == "" || c.Provenance.ConfigVersion <= 0 || c.Provenance.ConfigFingerprint == "" {
+		return fmt.Errorf("opportunity: complete analytical and configuration provenance is required")
+	}
+	return nil
+}
+
+func finite(v float64) bool { return !math.IsNaN(v) && !math.IsInf(v, 0) }
+
+func cloneCandidate(c Candidate) Candidate {
+	clone := c
+	clone.Targets = append([]Target(nil), c.Targets...)
+	clone.Evidence = append([]Evidence(nil), c.Evidence...)
+	if c.Quality.Components != nil {
+		clone.Quality.Components = make(map[string]float64, len(c.Quality.Components))
+		for name, value := range c.Quality.Components {
+			clone.Quality.Components[name] = value
+		}
+	}
+	return clone
 }
