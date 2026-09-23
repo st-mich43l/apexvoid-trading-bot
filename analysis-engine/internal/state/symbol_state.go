@@ -6,10 +6,13 @@ package state
 
 import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/context"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/fib"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/keylevel"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/liquidity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/marketdata"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/session"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/trendline"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/zone"
@@ -27,6 +30,9 @@ type SymbolState struct {
 	Zone          *zone.Book
 	Liquidity     *liquidity.Book
 	Trendline     *trendline.Book
+	KeyLevel      *keylevel.Book
+	Session       *session.Book
+	Fib           *fib.Book
 	Context       context.MarketContext
 	Opportunities *opportunity.Book
 }
@@ -48,6 +54,9 @@ func NewSymbolState(symbol market.Symbol, depths map[market.Timeframe]int, allow
 		Zone:          zone.NewBook(),
 		Liquidity:     liquidity.NewBook(),
 		Trendline:     trendline.NewBook(),
+		KeyLevel:      keylevel.NewBook(),
+		Session:       session.NewBook(),
+		Fib:           fib.NewBook(),
 		Opportunities: &opportunity.Book{},
 	}, nil
 }

@@ -643,6 +643,54 @@
             "max_merged_zone_atr"
           ]
         },
+        "key_levels": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "cluster_atr": {
+              "type": "number"
+            },
+            "round_step": {
+              "type": "number"
+            },
+            "minimum_touches": {
+              "type": "integer"
+            },
+            "maximum_cluster_span_multiple": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "cluster_atr",
+            "round_step",
+            "minimum_touches",
+            "maximum_cluster_span_multiple"
+          ]
+        },
+        "fibonacci": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "epsilon_atr": {
+              "type": "number"
+            },
+            "deep_discount": {
+              "type": "number"
+            },
+            "deep_premium": {
+              "type": "number"
+            },
+            "eq_half_band": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "epsilon_atr",
+            "deep_discount",
+            "deep_premium",
+            "eq_half_band"
+          ]
+        },
         "calendar": {
           "type": "object",
           "additionalProperties": false,
@@ -728,12 +776,16 @@
             },
             "ny_start": {
               "type": "integer"
+            },
+            "daily_rollover_utc_hour": {
+              "type": "integer"
             }
           },
           "required": [
             "asia_start",
             "london_start",
-            "ny_start"
+            "ny_start",
+            "daily_rollover_utc_hour"
           ]
         },
         "spot": {
@@ -962,9 +1014,11 @@
       },
       "required": [
         "calendar",
+        "fibonacci",
         "flip_zone",
         "history",
         "indicators",
+        "key_levels",
         "liquidity",
         "measurements",
         "scanner",
