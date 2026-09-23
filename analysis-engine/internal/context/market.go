@@ -13,6 +13,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/liquidity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/zone"
 )
 
 // MarketContext is the canonical combined interpretation for one symbol —
@@ -31,7 +32,7 @@ type MarketContext struct {
 
 	Structure  StructureContext
 	Liquidity  LiquidityContext
-	Zones      ZoneContext // placeholder — internal/zone is not implemented this task, see docs/analysis-engine-v2-migration.md
+	Zones      ZoneContext
 	Bias       BiasContext
 	Regime     RegimeContext
 	Volatility VolatilityContext
@@ -44,6 +45,7 @@ type TimeframeContext struct {
 	Timeframe market.Timeframe
 	Structure structure.StructureState
 	Liquidity liquidity.LiquidityState
+	Zones     zone.ZoneState
 }
 
 // StructureContext is MarketContext's primary-timeframe structural view —
@@ -60,11 +62,13 @@ type LiquidityContext struct {
 	State     liquidity.LiquidityState
 }
 
-// ZoneContext is a placeholder — internal/zone (supply/demand/OB/FVG) is
-// explicitly out of scope for this task's Definition of Done (source task
-// §32: "only after Structure V2 is stable"). Not implemented; not
-// silently dropped either — see docs/analysis-engine-v2-migration.md.
-type ZoneContext struct{}
+// ZoneContext is the primary-timeframe convenience view. Timeframes keeps
+// every timeframe's zone state so strategies can preserve disagreement
+// between HTF and execution-timeframe zones.
+type ZoneContext struct {
+	Timeframe market.Timeframe
+	State     zone.ZoneState
+}
 
 // BiasContext is DERIVED from Structure — source task §36: "bias should
 // consume canonical structure... do not write another parallel HTF-bias
@@ -110,7 +114,7 @@ func Build(
 	timeframes := make(map[market.Timeframe]*TimeframeContext, len(perTimeframe))
 	for tf, input := range perTimeframe {
 		timeframes[tf] = &TimeframeContext{
-			Timeframe: tf, Structure: input.Structure, Liquidity: input.Liquidity,
+			Timeframe: tf, Structure: input.Structure, Liquidity: input.Liquidity, Zones: input.Zones,
 		}
 	}
 
@@ -118,6 +122,7 @@ func Build(
 	if primaryInput, ok := perTimeframe[primary]; ok {
 		ctx.Structure = StructureContext{Timeframe: primary, State: primaryInput.Structure}
 		ctx.Liquidity = LiquidityContext{Timeframe: primary, State: primaryInput.Liquidity}
+		ctx.Zones = ZoneContext{Timeframe: primary, State: primaryInput.Zones}
 		ctx.Bias = DeriveBias(primaryInput.Structure)
 		ctx.Volatility = VolatilityContext{ATR: primaryInput.ATR}
 	}
@@ -129,6 +134,7 @@ func Build(
 type TimeframeInput struct {
 	Structure structure.StructureState
 	Liquidity liquidity.LiquidityState
+	Zones     zone.ZoneState
 	ATR       float64
 }
 

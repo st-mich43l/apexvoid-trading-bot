@@ -5,6 +5,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/liquidity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/zone"
 )
 
 // Settings is every config-derived value the engine needs to run a
@@ -15,6 +16,7 @@ type Settings struct {
 	ATR              ATRSettings
 	Structure        structure.Settings
 	Liquidity        liquidity.Config
+	Zone             zone.Config
 	HistoryDepths    map[market.Timeframe]int
 	PrimaryTimeframe market.Timeframe
 
@@ -44,12 +46,16 @@ func LoadSettings(doc *config.Document, primary market.Timeframe, allowReplaceFo
 	if err != nil {
 		return Settings{}, err
 	}
+	zoneConfig, err := ZoneConfigFromConfig(doc)
+	if err != nil {
+		return Settings{}, err
+	}
 	depths, err := HistoryDepthsFromConfig(doc)
 	if err != nil {
 		return Settings{}, err
 	}
 	return Settings{
-		ATR: atr, Structure: structureSettings, Liquidity: liquidityConfig,
+		ATR: atr, Structure: structureSettings, Liquidity: liquidityConfig, Zone: zoneConfig,
 		HistoryDepths: depths, PrimaryTimeframe: primary,
 		AllowReplaceForming: allowReplaceForming,
 	}, nil

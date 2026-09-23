@@ -12,6 +12,12 @@ dated section after deployment.
 
 ## Unreleased
 
+### Added
+- Analysis Engine V2 Phase S3 canonical Zone domain: per-origin
+  Supply/Demand, Order Block, FVG/iFVG, Breaker, and Flip primitives with
+  explicit lifecycle and relevance state, wired into `SymbolState`,
+  `MarketContext`, and immutable analysis snapshots.
+
 ### Changed
 - Analysis Engine V2 strategy rebuild, Phase S1: removed the obsolete
   `manual_algo_chart` OHLC-snapshot feature (Redis M1/M5/M15/H1 windows
