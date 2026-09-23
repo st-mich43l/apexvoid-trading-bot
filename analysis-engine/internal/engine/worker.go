@@ -11,6 +11,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/state"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/telemetry"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/zone"
 )
 
 // SymbolWorker owns one symbol's mutable SymbolState and every update to
@@ -115,6 +116,11 @@ func (w *SymbolWorker) ApplyWithResult(event marketdata.BarEvent) (AnalysisSnaps
 	doneStruct()
 	w.state.Structure.Set(event.Timeframe, structState)
 
+	doneZone := w.telemetry.Time(telemetry.PhaseZone, symbolLabel, tfLabel)
+	zoneState := zone.Update(candles, atrSeries, structState.Swings, structState.Breaks, event.Timeframe, w.settings.Zone)
+	doneZone()
+	w.state.Zone.Set(event.Timeframe, zoneState)
+
 	doneLiq := w.telemetry.Time(telemetry.PhaseLiquidity, symbolLabel, tfLabel)
 	liqState := liquidity.Update(candles, atrSeries, structState.Swings, w.settings.Liquidity)
 	doneLiq()
@@ -152,7 +158,8 @@ func (w *SymbolWorker) rebuildContext() {
 		if len(atrSeries) > 0 {
 			lastATR = atrSeries[len(atrSeries)-1]
 		}
-		perTF[tf] = context.TimeframeInput{Structure: structState, Liquidity: liqState, ATR: lastATR}
+		zoneState, _ := w.state.Zone.Get(tf)
+		perTF[tf] = context.TimeframeInput{Structure: structState, Liquidity: liqState, Zones: zoneState, ATR: lastATR}
 	}
 	w.state.Context = context.Build(w.state.Symbol, w.settings.PrimaryTimeframe, perTF)
 }

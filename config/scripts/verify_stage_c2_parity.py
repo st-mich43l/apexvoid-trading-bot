@@ -160,6 +160,20 @@ DIVERGENCES: dict[str, dict] = {
   "analysis.yml/analysis.liquidity.equal_level_tolerance_atr": {"kind": "new_surfaced", "expected": 0.05, "reason": "Same epsilon as analysis.structure.equal_level.tolerance_atr — one canonical tolerance, not two drifting ones."},
   "analysis.yml/analysis.liquidity.pool_minimum_touches": {"kind": "new_surfaced", "expected": 2, "reason": "No Python precedent — new V2 liquidity-pool significance floor, initial calibration."},
   "analysis.yml/analysis.liquidity.sweep_reclaim_bars": {"kind": "new_surfaced", "expected": 6, "reason": "Matches PR #574's sweep_reclaim_bars=6 exactly."},
+  # analysis.yml — Phase S3 canonical Zone domain. These values were
+  # previously implicit in Python technique/config defaults; they are now
+  # explicit authority for the Go zone lifecycle, relevance, and flip
+  # primitives. They have no trading-bot.yml leaf, so pin them here.
+  "analysis.yml/analysis.techniques.retest_max_touches": {"kind": "new_surfaced", "expected": 30, "reason": "Phase S3 — canonical Zone lifecycle retest budget."},
+  "analysis.yml/analysis.techniques.invalidation_tolerance_atr": {"kind": "new_surfaced", "expected": 0.5, "reason": "Phase S3 — canonical Zone lifecycle invalidation tolerance."},
+  "analysis.yml/analysis.techniques.sweep_reclaim_bars": {"kind": "new_surfaced", "expected": 6, "reason": "Phase S3 — canonical Zone lifecycle sweep reclaim window."},
+  "analysis.yml/analysis.techniques.max_break_episodes": {"kind": "new_surfaced", "expected": 2, "reason": "Phase S3 — canonical Zone lifecycle break episode budget."},
+  "analysis.yml/analysis.zone_relevance.immediate_atr": {"kind": "new_surfaced", "expected": 0.25, "reason": "Phase S3 — canonical Zone relevance classification threshold."},
+  "analysis.yml/analysis.zone_relevance.nearby_atr": {"kind": "new_surfaced", "expected": 1.25, "reason": "Phase S3 — canonical Zone relevance classification threshold."},
+  "analysis.yml/analysis.zone_relevance.remote_atr": {"kind": "new_surfaced", "expected": 3.0, "reason": "Phase S3 — canonical Zone relevance classification threshold."},
+  "analysis.yml/analysis.flip_zone.accept_bars": {"kind": "new_surfaced", "expected": 2, "reason": "Phase S3 — canonical Flip zone close-acceptance window."},
+  "analysis.yml/analysis.flip_zone.band_body_fraction": {"kind": "new_surfaced", "expected": 0.5, "reason": "Phase S3 — canonical Flip zone confirmation body threshold."},
+  "analysis.yml/analysis.zones.version": {"kind": "new_surfaced", "expected": "v1", "reason": "Phase S3 — versioned canonical Zone domain contract."},
   # analysis.yml — §10: CSV string -> native list, same content.
   "analysis.yml/analysis.triggers.m1.patterns": {
     "kind": "csv_to_list", "old_path": "analysis.triggers.m1.patterns",
@@ -310,6 +324,15 @@ def verify_unlisted_leaves_still_match_stage_c1() -> None:
   divergence_old_paths = {
     d["old_path"] for d in DIVERGENCES.values() if d.get("old_path") is not None
   }
+  # A newly surfaced leaf can live inside an otherwise parity-checked
+  # subtree (for example analysis.techniques.*). Its literal path is also
+  # the path Stage C1 would try to compare against, but there is deliberately
+  # no old value to compare. Skip that path here; verify_divergences() above
+  # still pins the new value exactly.
+  divergence_new_surfaced_paths = {
+    key.split("/", 1)[1] for key, d in DIVERGENCES.items()
+    if d.get("kind") == "new_surfaced"
+  }
   # compare_subtree("instrument_packs"/"instruments", ...) flattens the NEW
   # (already-renested) overrides subtree and prefixes it with the OLD
   # section name, producing a hybrid path that is neither the true old path
@@ -326,7 +349,11 @@ def verify_unlisted_leaves_still_match_stage_c1() -> None:
   original_compare = c1.compare
 
   def patched_compare(old_flat, old_path, new_value, label):
-    if old_path in divergence_old_paths or old_path in divergence_new_paths_under_instruments:
+    if (
+      old_path in divergence_old_paths
+      or old_path in divergence_new_surfaced_paths
+      or old_path in divergence_new_paths_under_instruments
+    ):
       return
     original_compare(old_flat, old_path, new_value, label)
 

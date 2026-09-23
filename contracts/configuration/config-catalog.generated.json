@@ -1,20 +1,20 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "2284e2c761a3f531c1c24347c4c9bc51c25edd019b8b20f9bae37b5ba67d5e5d",
-  "configuration_document_fingerprint_sha256": "a5cb518f4e31a5cb70f2b8c1b85bb09862f889224286f94bb697367eb968f6f9",
+  "configuration_contract_fingerprint_sha256": "bec01459a04ea8c7b6b931d0edf79ee90ab6d15a2f846eefb1a11e60973557d6",
+  "configuration_document_fingerprint_sha256": "b020888e776ffb182fc55e837b09e2cb8df8a8aca448561415653a01f09ed058",
   "counts": {
     "algorithm_constants": 97,
-    "configurable": 570,
+    "configurable": 571,
     "known_conflicts": 30,
     "owners": {
       "ctrader": 50,
-      "python": 531,
+      "python": 532,
       "shared": 96
     },
     "protocol_constants": 10,
     "secrets": 9,
     "shared": 96,
-    "total_items": 677
+    "total_items": 678
   },
   "items": [
     {
@@ -7647,6 +7647,47 @@
       "type": "float",
       "unit": "price",
       "validation_summary": "Pydantic type coercion + Settings cross-field model validator"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [
+        "v1"
+      ],
+      "canonical_env": "ANALYSIS_ZONES_VERSION",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "pattern": "^v1$"
+      },
+      "default": "v1",
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": "v1"
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Canonical Analysis Engine zone-domain algorithm version.",
+      "display_id": "config:analysis.zones.version",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "analysis.zones.version",
+      "protocol_constant": false,
+      "reload_policy": "code_release",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "analysis_behavior",
+      "runtime_reload_policy": "code_release",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "str",
+      "unit": "enum",
+      "validation_summary": "Pydantic enum pattern"
     },
     {
       "algorithm_constant": false,
@@ -25274,6 +25315,6 @@
       "validation_summary": "Pydantic required/type coercion only"
     }
   ],
-  "source_fingerprint_sha256": "2284e2c761a3f531c1c24347c4c9bc51c25edd019b8b20f9bae37b5ba67d5e5d",
+  "source_fingerprint_sha256": "bec01459a04ea8c7b6b931d0edf79ee90ab6d15a2f846eefb1a11e60973557d6",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

@@ -530,27 +530,80 @@
             "m1"
           ]
         },
+        "flip_zone": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "accept_bars": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "band_body_fraction": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          },
+          "required": [
+            "accept_bars",
+            "band_body_fraction"
+          ]
+        },
+        "zone_relevance": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "immediate_atr": {
+              "type": "number",
+              "minimum": 0
+            },
+            "nearby_atr": {
+              "type": "number",
+              "minimum": 0
+            },
+            "remote_atr": {
+              "type": "number",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "immediate_atr",
+            "nearby_atr",
+            "remote_atr"
+          ]
+        },
         "techniques": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "validation_enabled": {
-              "type": "boolean"
-            }
+            "validation_enabled": { "type": "boolean" },
+            "retest_max_touches": { "type": "integer", "minimum": 0 },
+            "invalidation_tolerance_atr": { "type": "number", "minimum": 0 },
+            "sweep_reclaim_bars": { "type": "integer", "minimum": 0 },
+            "max_break_episodes": { "type": "integer", "minimum": 0 }
           },
           "required": [
-            "validation_enabled"
+            "validation_enabled",
+            "retest_max_touches",
+            "invalidation_tolerance_atr",
+            "sweep_reclaim_bars",
+            "max_break_episodes"
           ]
         },
         "zones": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
+            "version": {
+              "type": "string",
+              "enum": ["v1"]
+            },
             "merge_overlap": {
               "type": "number"
             }
           },
           "required": [
+            "version",
             "merge_overlap"
           ]
         },
@@ -885,6 +938,7 @@
       },
       "required": [
         "calendar",
+        "flip_zone",
         "history",
         "indicators",
         "liquidity",
@@ -896,6 +950,7 @@
         "techniques",
         "trendlines",
         "triggers",
+        "zone_relevance",
         "watcher",
         "zones"
       ]
