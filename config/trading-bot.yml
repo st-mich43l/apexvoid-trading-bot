@@ -721,8 +721,20 @@ market_data:
     - M5
     - M15
     - H1
-    - H4
-    - D1
+    # H4/D1 deliberately NOT here: ctrader-engine's live trendbar
+    # subscription (TimeframeCodec.ToSeconds/ToProto) only ever supported
+    # M1/M5/M15/M30/H1 — that's the live-push feed's own protocol limit,
+    # not an oversight. fde92eb added H4/D1 here for Analysis Engine V2's
+    # new market-structure code (internal/market/timeframe.go does model
+    # H4/D1), but that broke the live feed outright: every connection
+    # attempt threw ArgumentOutOfRangeException on D1 and reconnected in
+    # a 60s crash loop, so ctrader-engine never went healthy and `bot`
+    # (which depends on it) never started — confirmed live on the
+    # deployed host 2026-09-23, ~35 min after the deploy that introduced
+    # this. Reverted to restore the working feed; giving analysis-engine
+    # real H4/D1 data needs its own path (periodic historical polling or
+    # aggregation from M1-H1, since the live feed can't push those bars),
+    # not a config-only change — that's follow-up work, not done here.
     # Analysis Engine V2's deepest configured window is M1=2000. RedisBarSink
     # must retain at least that many closed bars; the existing .NET sink has
     # one global cap, so 2000 is deliberately the high-water mark for every
