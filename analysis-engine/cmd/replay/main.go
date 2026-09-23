@@ -106,6 +106,12 @@ func run(barsPath, configPath string, symbol market.Symbol, tf market.Timeframe,
 	fmt.Printf("  liquidity pools: %d\n", len(liqState.Pools))
 	fmt.Printf("  bias: %v (layer=%v)\n", snap.Context.Bias.Direction, snap.Context.Bias.Layer)
 	fmt.Printf("  version: structure=%s liquidity=%s\n", snap.Version.StructureVersion, snap.Version.LiquidityVersion)
+	fmt.Printf("  live opportunities (Phase S8): %d\n", len(snap.Opportunities))
+	for _, opp := range snap.Opportunities {
+		fmt.Printf("    - %s %s %s entry=[%.5f,%.5f] invalidation=%.5f quality=%.2f\n",
+			opp.Strategy, opp.Direction, opp.ID[:16], opp.Entry.Low, opp.Entry.High,
+			float64(opp.Invalidation.Price), opp.Quality.Overall)
+	}
 
 	if pngPath != "" {
 		f, err := os.Create(pngPath)
