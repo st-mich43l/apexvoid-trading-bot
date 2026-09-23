@@ -14,6 +14,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/liquidity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/session"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/transport/kafka"
 	redistransport "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/transport/redis"
@@ -477,6 +478,56 @@ func FibConfigFromConfig(doc *config.Document) (fib.Config, error) {
 		DeepPremium:  deepPremium,
 		EqHalfBand:   eqHalfBand,
 	}, nil
+}
+
+// StrategyConfigsFromConfig reads the complete semantic V2 strategy catalog
+// from analysis.strategies. This is intentionally only registry-level
+// configuration: each Phase S7 concrete strategy owns validation of its
+// technical parameters. Unknown and omitted IDs fail at startup so a strategy
+// is never silently enabled, disabled, or defaulted by an incidental YAML
+// typo.
+func StrategyConfigsFromConfig(doc *config.Document) ([]strategy.Config, error) {
+	section, err := doc.Section("analysis.strategies")
+	if err != nil {
+		return nil, err
+	}
+	known := make(map[string]struct{}, len(strategy.KnownIDs()))
+	for _, id := range strategy.KnownIDs() {
+		known[string(id)] = struct{}{}
+	}
+	for name := range section {
+		if _, ok := known[name]; !ok {
+			return nil, fmt.Errorf("engine: unknown configured analysis strategy %q", name)
+		}
+	}
+
+	configs := make([]strategy.Config, 0, len(known))
+	for _, id := range strategy.KnownIDs() {
+		path := "analysis.strategies." + string(id)
+		entry, err := doc.Section(path)
+		if err != nil {
+			return nil, fmt.Errorf("engine: required strategy %q: %w", id, err)
+		}
+		version, err := getString(doc, path+".version")
+		if err != nil {
+			return nil, err
+		}
+		enabled, err := getBool(doc, path+".enabled")
+		if err != nil {
+			return nil, err
+		}
+		parameters := make(map[string]any, len(entry))
+		for key, value := range entry {
+			if key != "version" && key != "enabled" {
+				parameters[key] = value
+			}
+		}
+		configs = append(configs, strategy.Config{ID: id, Version: version, Enabled: enabled, Parameters: parameters})
+	}
+	if err := strategy.ValidateConfigs(configs); err != nil {
+		return nil, fmt.Errorf("engine: invalid analysis strategy configuration: %w", err)
+	}
+	return configs, nil
 }
 
 func getFloat(doc *config.Document, path string) (float64, error) {
