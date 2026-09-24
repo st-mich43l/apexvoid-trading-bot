@@ -170,7 +170,13 @@ func (c Candidate) Validate() error {
 			return fmt.Errorf("opportunity: evidence codes must be non-empty")
 		}
 	}
-	if c.FormedAt < 0 || c.CreatedAt < 0 || c.FormedAt > c.CreatedAt || c.ExpiresAt <= c.CreatedAt {
+	if c.FormedAt < 0 || c.CreatedAt < 0 {
+		return fmt.Errorf("opportunity: formation and creation times must be non-negative")
+	}
+	if c.FormedAt > c.CreatedAt {
+		return fmt.Errorf("opportunity: formation must not follow creation")
+	}
+	if c.ExpiresAt <= c.CreatedAt {
 		return fmt.Errorf("opportunity: expiry must be after creation")
 	}
 	if !finite(c.Quality.Overall) {
