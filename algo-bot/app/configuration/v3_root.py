@@ -379,6 +379,17 @@ def unconsolidate(resolved: dict[str, Any]) -> dict[str, Any]:
 
   # transport.redis_streams -> contract.streams / contract.versions
   transport = resolved.get("transport", {})
+  kafka_cfg = transport.get("kafka")
+  if isinstance(kafka_cfg, dict):
+    kafka_out: dict[str, Any] = {}
+    for key in ("enabled", "brokers", "topics"):
+      if key in kafka_cfg:
+        kafka_out[key] = copy.deepcopy(kafka_cfg[key])
+    client_ids = kafka_cfg.get("client_id")
+    if isinstance(client_ids, dict) and "algo_bot" in client_ids:
+      kafka_out["algo_bot_client_id"] = client_ids["algo_bot"]
+    if kafka_out:
+      out["transport"] = {"kafka": kafka_out}
   streams = transport.get("redis_streams")
   if isinstance(streams, dict):
     contract_streams = {
