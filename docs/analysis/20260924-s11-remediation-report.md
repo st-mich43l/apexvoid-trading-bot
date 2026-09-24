@@ -96,8 +96,9 @@ live policy is enabled by this remediation. S12/S13 are not started.
   `strategy-compare` command smoke tests PASS; non-root outbox write access
   PASS.
 
-Sequential implementation commits are S11A `8fd2dad` and S11B `75d659c`;
-the S11C/tooling/report commit and pull-request URL are recorded in the PR
-delivery record. No clean production Kafka epoch or Python-Go multi-session
-dataset existed during implementation, so their required quantitative reports
-remain explicitly blocked rather than inferred.
+Sequential implementation commits are S11A `8fd2dad`, S11B `75d659c`, and
+S11C tooling/wiring `f2d6669`. Delivery is tracked in
+[PR #616](https://github.com/st-mich43l/apexvoid-trading-bot/pull/616).
+No clean production Kafka epoch or Python-Go multi-session dataset existed
+during implementation, so their required quantitative reports remain
+explicitly blocked rather than inferred.
