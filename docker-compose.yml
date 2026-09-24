@@ -116,6 +116,7 @@ services:
         condition: service_completed_successfully
     volumes:
       - ./config:/config:ro
+      - analysis-engine-state:/var/lib/apexvoid-analysis-engine
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/health/ready"]
       interval: 10s
@@ -210,3 +211,4 @@ volumes:
   redisdata:
   runtime-config:
   kafkadata:
+  analysis-engine-state:

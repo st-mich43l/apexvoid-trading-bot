@@ -619,6 +619,10 @@ func KafkaConfigFromConfig(doc *config.Document) (kafka.Config, error) {
 	if err != nil {
 		return kafka.Config{}, err
 	}
+	outboxPath, err := getString(doc, "transport.kafka.outbox_path")
+	if err != nil {
+		return kafka.Config{}, err
+	}
 	analysisOpportunity, err := getString(doc, "transport.kafka.topics.analysis_opportunity")
 	if err != nil {
 		return kafka.Config{}, err
@@ -633,7 +637,7 @@ func KafkaConfigFromConfig(doc *config.Document) (kafka.Config, error) {
 	}
 
 	cfg := kafka.Config{
-		Enabled: enabled, Brokers: brokers, ClientID: clientID,
+		Enabled: enabled, Brokers: brokers, ClientID: clientID, OutboxPath: outboxPath,
 		Topics: kafka.Topics{
 			AnalysisOpportunity: analysisOpportunity, AnalysisOpportunityInvalidated: analysisOpportunityInvalidated,
 		},
