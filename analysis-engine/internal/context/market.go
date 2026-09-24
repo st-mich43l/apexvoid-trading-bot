@@ -52,6 +52,10 @@ type MarketContext struct {
 // the unit source task §37's multi-timeframe disagreement is built from.
 type TimeframeContext struct {
 	Timeframe market.Timeframe
+	// Candles is the engine-owned, closed-bar-only causal window. Strategies
+	// may inspect price action but must consume canonical structure/zones
+	// alongside it rather than rebuilding those domains.
+	Candles   []market.Candle
 	Structure structure.StructureState
 	Liquidity liquidity.LiquidityState
 	Zones     zone.ZoneState
@@ -151,7 +155,7 @@ func Build(
 	timeframes := make(map[market.Timeframe]*TimeframeContext, len(perTimeframe))
 	for tf, input := range perTimeframe {
 		timeframes[tf] = &TimeframeContext{
-			Timeframe: tf, Structure: input.Structure, Liquidity: input.Liquidity, Zones: input.Zones,
+			Timeframe: tf, Candles: append([]market.Candle(nil), input.Candles...), Structure: input.Structure, Liquidity: input.Liquidity, Zones: input.Zones,
 			Trendline: input.Trendline, KeyLevel: input.KeyLevel, Session: input.Session, Fib: input.Fib,
 		}
 	}
@@ -174,6 +178,7 @@ func Build(
 // TimeframeInput is one timeframe's already-computed analytical output,
 // the input Build combines — never recomputed by context itself.
 type TimeframeInput struct {
+	Candles   []market.Candle
 	Structure structure.StructureState
 	Liquidity liquidity.LiquidityState
 	Zones     zone.ZoneState

@@ -67,7 +67,26 @@ The Book is transport-free and is serialized by the existing per-symbol
 `SymbolWorker`. It retains terminal records for replay/audit and projects only
 Created/Active candidates into `AnalysisSnapshot`.
 
-S6 will evaluate enabled strategies and feed their candidates into the Book.
-S9 will turn the Book's publishable transitions into the existing neutral
-Kafka `analysis.opportunity.v1` and `analysis.opportunity.invalidated.v1`
-events. Strategies themselves never import Kafka or publish directly.
+The engine evaluates enabled strategies and feeds candidates into the Book.
+The publisher keeps transport state separate in a durable JSON outbox. A
+bootstrap/replay creation is marked suppressed; its terminal can never become
+an external orphan. A live creation is persisted as pending before Kafka I/O,
+is retried with one stable event ID, and must be acknowledged before its FIFO
+terminal can publish. Acknowledged creation state, pending jobs, and deferred
+recovery terminals survive container restart on the named state volume.
+
+Delivery is at-least-once. The narrow remaining duplicate case is Kafka
+acknowledgement followed by failure to persist the local acknowledgement; the
+restart retry reuses the same event ID and is therefore auditable/deduplicable.
+Outbox writes use temporary-file fsync, atomic rename, and parent-directory
+fsync. Persistence failures are counted and never block candle ingestion.
+Acknowledged terminal and fully suppressed closed records are compacted from
+the ledger; it therefore retains only live publication state and pending work.
+
+`Candidate.FormedAt` is the underlying primitive's technical formation time.
+`CreatedAt` and the creation envelope's `occurred_at` are the first actionable
+closed-bar observation. `ObservedTimeframe` records that event's timeframe.
+Terminal `occurred_at` is the actual invalidation/expiry time; `produced_at`
+remains wall-clock publication time. These fields are Unix seconds.
+
+Strategies never import Kafka or publish directly.

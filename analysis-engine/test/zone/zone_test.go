@@ -66,6 +66,41 @@ func TestUpdateBuildsFVGWithFreshStateAndIndependentRelevance(t *testing.T) {
 	if found.Relevance != zone.Nearby {
 		t.Errorf("FVG half an ATR away should be nearby, got %s", found.Relevance)
 	}
+	if found.Strength < 0.4 {
+		t.Errorf("objective gap/displacement evidence should clear the configured strategy floor, got %.3f", found.Strength)
+	}
+}
+
+func TestFVGStrengthDecaysWithFillAndDropsToZeroWhenInvalidated(t *testing.T) {
+	formation := []market.Candle{
+		c(1, 100, 101, 99, 100),
+		c(2, 100, 102, 100, 102),
+		c(3, 102, 103, 102, 102.5),
+	}
+	fresh := zone.Update(formation, []float64{1, 1, 1}, nil, nil, "M5", zoneTestConfig())
+	freshStrength := strengthOf(t, fresh, zone.KindFVG, 101, 102)
+	partialBars := append(append([]market.Candle(nil), formation...), c(4, 102.4, 102.5, 101.5, 102.2))
+	partial := zone.Update(partialBars, []float64{1, 1, 1, 1}, nil, nil, "M5", zoneTestConfig())
+	partialStrength := strengthOf(t, partial, zone.KindFVG, 101, 102)
+	if !(partialStrength > 0 && partialStrength < freshStrength) {
+		t.Fatalf("partial fill must decay but preserve strength: fresh=%.3f partial=%.3f", freshStrength, partialStrength)
+	}
+	invalidBars := append(partialBars, c(5, 101.8, 102, 99, 99.5), c(6, 99.5, 100, 98, 99))
+	invalid := zone.Update(invalidBars, []float64{1, 1, 1, 1, 1, 1}, nil, nil, "M5", zoneTestConfig())
+	if got := strengthOf(t, invalid, zone.KindFVG, 101, 102); got != 0 {
+		t.Fatalf("invalidated FVG must have zero usable strength, got %.3f", got)
+	}
+}
+
+func strengthOf(t *testing.T, state zone.ZoneState, kind zone.Kind, low, high float64) float64 {
+	t.Helper()
+	for _, candidate := range state.Zones {
+		if candidate.Kind == kind && float64(candidate.Low) == low && float64(candidate.High) == high {
+			return candidate.Strength
+		}
+	}
+	t.Fatalf("zone %s %.2f-%.2f not found in %+v", kind, low, high, state.Zones)
+	return 0
 }
 
 func TestIFVGRequiresACloseThroughTheGapAndKeepsItsOwnIdentity(t *testing.T) {

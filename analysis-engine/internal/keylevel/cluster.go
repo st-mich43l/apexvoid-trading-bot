@@ -1,6 +1,7 @@
 package keylevel
 
 import (
+	"fmt"
 	"math"
 	"sort"
 
@@ -39,11 +40,13 @@ func Cluster(candles []market.Candle, atr float64, swings []structure.Swing, cfg
 			continue
 		}
 		levels = append(levels, Level{
-			Price:    averagePrice(cluster),
-			Kind:     KindReaction,
-			Touches:  len(cluster),
-			Band:     tolerance,
-			Strength: float64(len(cluster)),
+			ID:         reactionLevelID(cluster),
+			AnchorTime: reactionLevelAnchor(cluster).Time,
+			Price:      averagePrice(cluster),
+			Kind:       KindReaction,
+			Touches:    len(cluster),
+			Band:       tolerance,
+			Strength:   float64(len(cluster)),
 		})
 	}
 	levels = append(levels, roundLevels(swings, atr, cfg.RoundStep, tolerance, cfg.MinimumTouches)...)
@@ -145,7 +148,8 @@ func roundLevels(swings []structure.Swing, atr, roundStep, tolerance float64, mi
 		}
 		if touches >= minTouches {
 			levels = append(levels, Level{
-				Price: market.Price(price), Kind: KindRound, Touches: touches, Band: tolerance, Strength: float64(touches),
+				ID: fmt.Sprintf("round:%.8f", price), AnchorTime: 0, Price: market.Price(price), Kind: KindRound,
+				Touches: touches, Band: tolerance, Strength: float64(touches),
 			})
 		}
 	}
@@ -181,7 +185,9 @@ func dedupe(levels []Level, tolerance float64) []Level {
 			if lvl.Strength > strength {
 				strength = lvl.Strength
 			}
+			id, anchorTime := stableMergedIdentity(prev, lvl)
 			out[n-1] = Level{
+				ID: id, AnchorTime: anchorTime,
 				Price: market.Price((float64(prev.Price) + float64(lvl.Price)) / 2),
 				Kind:  kind, Touches: touches, Band: band, Strength: strength,
 			}
@@ -206,7 +212,38 @@ func withWickTouches(level Level, candles []market.Candle, tolerance float64) Le
 	if float64(episodes) > strength {
 		strength = float64(episodes)
 	}
-	return Level{Price: level.Price, Kind: level.Kind, Touches: episodes, Band: level.Band, Strength: strength}
+	return Level{ID: level.ID, AnchorTime: level.AnchorTime, Price: level.Price, Kind: level.Kind, Touches: episodes, Band: level.Band, Strength: strength}
+}
+
+func reactionLevelID(swings []structure.Swing) string {
+	anchor := reactionLevelAnchor(swings)
+	return "reaction:" + anchor.ID
+}
+
+func reactionLevelAnchor(swings []structure.Swing) structure.Swing {
+	if len(swings) == 0 {
+		return structure.Swing{}
+	}
+	anchor := swings[0]
+	for _, swing := range swings[1:] {
+		if swing.Time < anchor.Time || (swing.Time == anchor.Time && swing.ID < anchor.ID) {
+			anchor = swing
+		}
+	}
+	return anchor
+}
+
+func stableMergedIdentity(a, b Level) (string, int64) {
+	if a.Kind == KindRound {
+		return a.ID, a.AnchorTime
+	}
+	if b.Kind == KindRound {
+		return b.ID, b.AnchorTime
+	}
+	if b.AnchorTime != 0 && (a.AnchorTime == 0 || b.AnchorTime < a.AnchorTime) {
+		return b.ID, b.AnchorTime
+	}
+	return a.ID, a.AnchorTime
 }
 
 // wickTouchEpisodes ports wick_touch_episodes: a bar counts as touching

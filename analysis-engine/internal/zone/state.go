@@ -137,6 +137,7 @@ func Update(candles []market.Candle, atrSeries []float64, swings []structure.Swi
 			lifecycleFrom = touchFrom
 		}
 		zones[i].State = DeriveState(candles, lifecycleFrom, zones[i], touches, currentATR, cfg.Lifecycle)
+		zones[i].Strength = applyLifecycleStrength(zones[i], candles, zones[i].State)
 		zones[i].Relevance = ClassifyRelevance(zones[i], float64(candles[len(candles)-1].Close), currentATR, cfg.Relevance)
 	}
 

@@ -43,6 +43,10 @@ func buildBreakerZones(candles []market.Candle, obZones []Zone, tf market.Timefr
 			flippedSide = Demand
 		}
 		origin := candles[violatedAt]
+		boundary := low
+		if flippedSide == Demand {
+			boundary = high
+		}
 		zones = append(zones, Zone{
 			ID:              fmt.Sprintf("zone:%s:%s:%d", tf, KindBreaker, origin.Time),
 			Kind:            KindBreaker,
@@ -55,6 +59,7 @@ func buildBreakerZones(candles []market.Candle, obZones []Zone, tf market.Timefr
 			DisplacementRef: ob.ID,
 			CreatedAt:       origin.Time,
 			BreakIndex:      violatedAt,
+			Strength:        inversionStrength(ob, origin, boundary, atr),
 		})
 	}
 	return zones

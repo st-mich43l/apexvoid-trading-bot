@@ -7,6 +7,7 @@ type OpportunityPayload struct {
 	ID               string                  `json:"id"`
 	Strategy         string                  `json:"strategy"`
 	Symbol           string                  `json:"symbol"`
+	Timeframe        string                  `json:"timeframe,omitempty"`
 	Direction        string                  `json:"direction"`
 	Entry            EntryZonePayload        `json:"entry"`
 	Invalidation     PriceLevelPayload       `json:"invalidation"`
@@ -14,6 +15,7 @@ type OpportunityPayload struct {
 	Evidence         []EvidencePayload       `json:"evidence"`
 	Quality          QualityPayload          `json:"quality"`
 	AlgorithmVersion AlgorithmVersionPayload `json:"algorithm_version"`
+	FormedAt         int64                   `json:"formed_at"`
 	CreatedAt        int64                   `json:"created_at"`
 	ExpiresAt        int64                   `json:"expires_at"`
 }

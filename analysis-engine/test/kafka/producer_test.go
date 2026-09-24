@@ -27,7 +27,7 @@ func TestProducer_PublishOpportunity_ProducesCorrectTopicKeyEnvelopeAndPayload(t
 	defer producer.Close(ctx)
 
 	algo := kafka.AlgorithmVersion{Structure: "v2", Liquidity: "v1"}
-	if err := producer.PublishOpportunity(ctx, "corr-1", "bar-event-1", testCandidate(), algo, time.Unix(1000, 0)); err != nil {
+	if err := producer.PublishOpportunity(ctx, "event-1", "corr-1", "bar-event-1", testCandidate(), algo, time.Unix(1000, 0)); err != nil {
 		t.Fatalf("PublishOpportunity: %v", err)
 	}
 
@@ -106,7 +106,7 @@ func TestProducer_PublishOpportunityInvalidated_ProducesToItsOwnTopic(t *testing
 	payload := kafka.OpportunityInvalidatedPayload{
 		OpportunityID: "cand-1", Symbol: "XAU", Strategy: "breakoutretest", ReasonCode: "STRUCTURE_INVALIDATED", InvalidatedAt: 1500,
 	}
-	if err := producer.PublishOpportunityInvalidated(ctx, "corr-2", "cand-1", "XAU", payload, time.Unix(1500, 0)); err != nil {
+	if err := producer.PublishOpportunityInvalidated(ctx, "event-2", "corr-2", "cand-1", "XAU", payload, time.Unix(1500, 0)); err != nil {
 		t.Fatalf("PublishOpportunityInvalidated: %v", err)
 	}
 
@@ -142,7 +142,7 @@ func TestProducer_PublishOpportunity_PropagatesContextCancellation(t *testing.T)
 
 	cancelledCtx, cancel := context.WithCancel(context.Background())
 	cancel()
-	err = producer.PublishOpportunity(cancelledCtx, "corr", "", testCandidate(), kafka.AlgorithmVersion{}, time.Unix(1, 0))
+	err = producer.PublishOpportunity(cancelledCtx, "event", "corr", "", testCandidate(), kafka.AlgorithmVersion{}, time.Unix(1, 0))
 	if err == nil {
 		t.Fatal("expected an error when publishing with an already-cancelled context")
 	}
@@ -164,7 +164,7 @@ func TestProducer_PublishOpportunity_PropagatesBrokerDeliveryErrors(t *testing.T
 	}
 	defer producer.Close(ctx)
 
-	err = producer.PublishOpportunity(ctx, "corr", "", testCandidate(), kafka.AlgorithmVersion{}, time.Unix(1, 0))
+	err = producer.PublishOpportunity(ctx, "event", "corr", "", testCandidate(), kafka.AlgorithmVersion{}, time.Unix(1, 0))
 	if err == nil {
 		t.Fatal("expected a delivery error for an invalid topic name, got nil")
 	}

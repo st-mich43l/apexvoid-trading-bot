@@ -14,12 +14,12 @@ func OpportunityPayloadFromCandidate(c opportunity.Candidate, algo AlgorithmVers
 		evidence[i] = EvidencePayload{Code: e.Code}
 	}
 	return OpportunityPayload{
-		ID: c.ID, Strategy: string(c.Strategy), Symbol: string(c.Symbol), Direction: string(c.Direction),
+		ID: c.ID, Strategy: string(c.Strategy), Symbol: string(c.Symbol), Timeframe: string(c.ObservedTimeframe), Direction: string(c.Direction),
 		Entry:        EntryZonePayload{Low: c.Entry.Low, High: c.Entry.High},
 		Invalidation: PriceLevelPayload{Price: float64(c.Invalidation.Price), Label: c.Invalidation.Label},
 		Targets:      targets, Evidence: evidence,
 		Quality:          QualityPayload{Overall: c.Quality.Overall, Components: c.Quality.Components},
 		AlgorithmVersion: AlgorithmVersionPayload{Structure: algo.Structure, Liquidity: algo.Liquidity},
-		CreatedAt:        c.CreatedAt, ExpiresAt: c.ExpiresAt,
+		FormedAt:         c.FormedAt, CreatedAt: c.CreatedAt, ExpiresAt: c.ExpiresAt,
 	}
 }

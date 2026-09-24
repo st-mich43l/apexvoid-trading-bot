@@ -1,6 +1,7 @@
 package keylevel_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/keylevel"
@@ -13,7 +14,7 @@ func keyLevelTestConfig() keylevel.Config {
 }
 
 func kSwing(kind structure.PivotKind, price float64) structure.Swing {
-	return structure.Swing{Kind: kind, Price: market.Price(price)}
+	return structure.Swing{ID: fmt.Sprintf("swing-%.4f-%d", price, kind), Kind: kind, Price: market.Price(price)}
 }
 
 func levelsByKind(levels []keylevel.Level, kind keylevel.Kind) []keylevel.Level {
@@ -204,5 +205,42 @@ func TestUpdateUsesTheLastATRSeriesValue(t *testing.T) {
 	state := keylevel.Update(candles, []float64{1, 1, 10}, swings, keyLevelTestConfig())
 	if len(state.Levels) == 0 {
 		t.Fatal("expected at least one level using the last ATR value (10)")
+	}
+}
+
+func TestReactionLevelIdentitySurvivesGeometryAndATRVariation(t *testing.T) {
+	cfg := keyLevelTestConfig()
+	cfg.RoundStep = 1000
+	base := []structure.Swing{
+		{ID: "anchor", Time: 10, Kind: structure.SwingHigh, Price: 100},
+		{ID: "confirm", Time: 20, Kind: structure.SwingLow, Price: 101},
+	}
+	first := levelsByKind(keylevel.Cluster(nil, 2, base, cfg), keylevel.KindReaction)
+	shifted := append(append([]structure.Swing(nil), base...), structure.Swing{ID: "later", Time: 30, Kind: structure.SwingHigh, Price: 100.4})
+	second := levelsByKind(keylevel.Cluster(nil, 3, shifted, cfg), keylevel.KindReaction)
+	if len(first) != 1 || len(second) != 1 {
+		t.Fatalf("expected one level in both variations, got %v / %v", first, second)
+	}
+	if first[0].ID != second[0].ID || first[0].ID != "reaction:anchor" {
+		t.Fatalf("same anchored level drifted identity: %q / %q", first[0].ID, second[0].ID)
+	}
+	if first[0].Price == second[0].Price && first[0].Band == second[0].Band {
+		t.Fatal("fixture must vary geometry while preserving identity")
+	}
+}
+
+func TestDistinctReactionAnchorsKeepDistinctIdentities(t *testing.T) {
+	cfg := keyLevelTestConfig()
+	cfg.RoundStep = 1000
+	one := levelsByKind(keylevel.Cluster(nil, 2, []structure.Swing{
+		{ID: "one-a", Time: 10, Kind: structure.SwingHigh, Price: 100},
+		{ID: "one-b", Time: 20, Kind: structure.SwingLow, Price: 101},
+	}, cfg), keylevel.KindReaction)
+	two := levelsByKind(keylevel.Cluster(nil, 2, []structure.Swing{
+		{ID: "two-a", Time: 30, Kind: structure.SwingHigh, Price: 103},
+		{ID: "two-b", Time: 40, Kind: structure.SwingLow, Price: 104},
+	}, cfg), keylevel.KindReaction)
+	if len(one) != 1 || len(two) != 1 || one[0].ID == two[0].ID {
+		t.Fatalf("genuinely distinct anchors must not merge identity: %v / %v", one, two)
 	}
 }

@@ -79,9 +79,13 @@ const (
 	// job indefinitely rather than dropping it (see its own doc comment),
 	// so one Enqueued job can contribute multiple Failed counts before
 	// its own eventual Succeeded count.
-	CounterOpportunityPublishEnqueued  Counter = "opportunity_publish_enqueued"
-	CounterOpportunityPublishSucceeded Counter = "opportunity_publish_succeeded"
-	CounterOpportunityPublishFailed    Counter = "opportunity_publish_failed"
+	CounterOpportunityPublishEnqueued     Counter = "opportunity_publish_enqueued"
+	CounterOpportunityPublishAttempted    Counter = "opportunity_publish_attempted"
+	CounterOpportunityPublishSucceeded    Counter = "opportunity_publish_succeeded"
+	CounterOpportunityPublishFailed       Counter = "opportunity_publish_failed"
+	CounterOpportunityPublishRetried      Counter = "opportunity_publish_retried"
+	CounterOpportunityTerminalSuppressed  Counter = "opportunity_terminal_suppressed_unpublished_creation"
+	CounterOpportunityOutboxPersistFailed Counter = "opportunity_outbox_persist_failed"
 	// CounterOpportunityPublishSuppressed is the S11 shadow-run audit
 	// counter for lifecycle transitions reconstructed from bootstrap/replay
 	// history. They remain in the in-memory OpportunityBook but are never
