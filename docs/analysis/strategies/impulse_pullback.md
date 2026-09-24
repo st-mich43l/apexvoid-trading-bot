@@ -4,5 +4,5 @@
 correction within configured retracement bounds and a continuation close.
 Entry is the continuation band, invalidation is behind the pullback extreme and
 target is configured R. Identity anchors the M5 impulse. Too-small impulses,
-shallow/deep corrections and absent continuation reject. Rollout remains
-disabled.
+shallow/deep corrections and absent continuation reject. Enabled for Go shadow
+publication; it does not alter Python live-trading policy.

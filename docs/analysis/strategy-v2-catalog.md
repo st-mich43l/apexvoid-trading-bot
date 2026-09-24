@@ -250,11 +250,10 @@ and real-tested (`analysis-engine/test/strategy/<name>`):
 | 10 | `flip_zone` | `strategy/flipzone` | **Implemented, enabled** |
 | 11 | `session_level` | `strategy/sessionlevel` | **Implemented, enabled** |
 
-The remaining **12 strategies stay disabled** — no factory exists for
-them yet, so `config/analysis.yml` correctly leaves them
-`enabled: false` (the registry's own fail-closed rule: an enabled ID
-with no factory fails analysis-engine startup rather than silently
-producing no signals):
+At S7 completion, the following 12 strategies had no factory and were
+therefore disabled. This is retained as historical rollout rationale; S11
+implemented every one and the complete 19-entry catalog is now enabled for
+the Go production shadow run:
 
 - `confluence_zone` — the compositional exception; deliberately deferred
   until its non-compositional siblings (zone/liquidity-anchored
@@ -350,6 +349,6 @@ missing-context rejection, config rejection, replay identity check and
 opportunity lifecycle check in `test/strategy/s11_catalog_test.go`.
 
 The historical Phase S7 text above explains why those 12 were then absent; it
-is not the current implementation state. Their `enabled: false` setting is
-still intentional rollout control. S11 implementation does not authorize live
-enablement or Go-driven execution.
+is not the current implementation state. All 19 entries are now enabled for
+Go shadow publication. This does not authorize Go-driven execution: no Algo
+Bot Kafka consumer exists until Phase S12.

@@ -186,6 +186,21 @@ func TestS11BreakoutRetestsRejectDeepFailedReentry(t *testing.T) {
 	}
 }
 
+func TestS11IFVGDeduplicatesRepeatedCanonicalZone(t *testing.T) {
+	s, err := ifvg.New(cfg(ifvg.ID, map[string]any{"minimum_strength": .4, "invalidation_buffer_atr": .5, "minimum_target_distance_atr": 1.0, "expiry_hours": 4.0}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	const base = int64(1_700_000_000)
+	z := zone.Zone{ID: "ifvg-duplicate", Kind: zone.KindIFVG, Side: zone.Demand, Low: 99, High: 100, OriginTime: base - 300, Strength: .8, State: zone.StateFresh, Relevance: zone.Immediate}
+	marketCtx := ctx(map[market.Timeframe]*analysiscontext.TimeframeContext{
+		market.M5: {Timeframe: market.M5, Candles: []market.Candle{bar(base, 100, 101, 99, 100)}, Zones: zone.ZoneState{Zones: []zone.Zone{z, z}}, Liquidity: liquidity.LiquidityState{Pools: []liquidity.Pool{{Side: liquidity.LiquidityBuySide, Low: 103, High: 104}}}},
+	})
+	if got := s.Evaluate(marketCtx); len(got) != 1 {
+		t.Fatalf("repeated semantic iFVG must emit one candidate, got %d: %+v", len(got), got)
+	}
+}
+
 func TestS11RangeEdgeTriggerCannotDefineItsOwnRange(t *testing.T) {
 	s, err := rangeedge.New(cfg(rangeedge.ID, map[string]any{"lookback_bars": 5.0, "minimum_rejections": 2.0, "edge_tolerance_atr": .2, "invalidation_buffer_atr": .25, "expiry_hours": 4.0}))
 	if err != nil {

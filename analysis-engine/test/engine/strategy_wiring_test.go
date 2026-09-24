@@ -51,8 +51,8 @@ func loadRealXAUFixture(t *testing.T) []market.Candle {
 	return candles
 }
 
-// TestEngine_RealS7StrategiesProduceRealOpportunitiesAgainstRealXAUData is
-// Phase S8's own end-to-end proof: the exact same real, checked-in
+// TestEngine_RealEnabledStrategiesProduceRealOpportunitiesAgainstRealXAUData
+// is the end-to-end proof for the exact same real, checked-in
 // production config (config/apexvoid.yml) and the exact same real,
 // checked-in XAU M5 production data cmd/replay already uses, dispatched
 // through the real Engine.Dispatch path with NO fakes, NO mocks, and NO
@@ -62,7 +62,7 @@ func loadRealXAUFixture(t *testing.T) []market.Candle {
 // phase: an opportunity.Book identity-collision false positive, and a
 // key_level dedup-identity bug) only ever surfaced against real data, not
 // against small hand-built fixtures.
-func TestEngine_RealS7StrategiesProduceRealOpportunitiesAgainstRealXAUData(t *testing.T) {
+func TestEngine_RealEnabledStrategiesProduceRealOpportunitiesAgainstRealXAUData(t *testing.T) {
 	repoRoot := filepath.Join("..", "..", "..")
 	doc, err := config.ResolveDocument(filepath.Join(repoRoot, "config", "apexvoid.yml"))
 	if err != nil {
@@ -89,7 +89,7 @@ func TestEngine_RealS7StrategiesProduceRealOpportunitiesAgainstRealXAUData(t *te
 	}
 
 	if len(lastSnap.Opportunities) == 0 {
-		t.Fatal("expected at least one live opportunity from real S7 strategies against 300 real XAU M5 bars — got none")
+		t.Fatal("expected at least one opportunity from enabled strategies against 300 real XAU M5 bars — got none")
 	}
 	seenStrategies := map[opportunity.StrategyID]bool{}
 	for _, candidate := range lastSnap.Opportunities {

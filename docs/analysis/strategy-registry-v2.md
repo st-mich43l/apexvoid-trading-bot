@@ -13,7 +13,7 @@ analysis:
   strategies:
     key_level:
       version: v2
-      enabled: false
+      enabled: true
 ```
 
 The complete configured catalog has 19 entries: the 18 independent strategies
@@ -23,10 +23,11 @@ approved ID, missing version, or an enabled ID that has no registered concrete
 factory. There are no generic enable defaults and no legacy strategy-family
 switches.
 
-All 19 approved entries now have concrete factories. The original seven
-production-shadow strategies retain their existing enablement; the 12 S11
-additions remain disabled until replay and multi-session shadow evidence is
-approved. Enabling an unknown or unimplemented ID still fails startup.
+All 19 approved entries now have concrete factories and are enabled for the
+Go production shadow run. Enabling an unknown or unimplemented ID still fails
+startup. This configuration publishes technical opportunities only; it does
+not enable Go-driven trading because the Algo Bot has no Kafka consumer until
+Phase S12.
 
 The concrete catalog is `key_level`, `supply`, `demand`, `order_block`, `fvg`,
 `flip_zone`, `session_level`, `ifvg`, `trendline`, `crt`, `confluence_zone`,
