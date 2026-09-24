@@ -54,6 +54,7 @@ func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Ca
 	}
 	atr := ctx.Volatility.ATR
 	var result []opportunity.Candidate
+	seenCandidates := make(map[string]struct{})
 	for _, z := range tf.Zones.Zones {
 		if z.Kind != zone.KindIFVG || z.Strength < s.minimumStrength ||
 			(z.State != zone.StateFresh && z.State != zone.StateTouched) ||
@@ -80,6 +81,15 @@ func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Ca
 			FormedAt: z.OriginTime, ConfirmedAt: bar.Time, ExpiryHours: s.expiryHours, Fingerprint: s.fingerprint,
 		})
 		if err == nil {
+			if _, duplicate := seenCandidates[candidate.ID]; duplicate {
+				// Canonical zone state can temporarily contain repeated copies
+				// of the same semantic iFVG while its source history converges.
+				// Candidate identity is intentionally based on that canonical
+				// zone ID, so emit it once rather than failing the whole closed
+				// bar evaluation downstream.
+				continue
+			}
+			seenCandidates[candidate.ID] = struct{}{}
 			result = append(result, candidate)
 		}
 	}
