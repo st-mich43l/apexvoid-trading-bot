@@ -1,5 +1,6 @@
 """Complete Canonical Catalog V2 configuration domain. """
 from pydantic import Field
+from pydantic import field_validator
 from pydantic import model_validator
 from app.configuration.metadata import ConfigKind
 from app.configuration.metadata import ConfigOwner
@@ -358,6 +359,29 @@ class AnalysisZoneRelevanceConfig(FrozenConfigModel):
             raise ValueError('immediate_atr < nearby_atr < remote_atr must hold')
         return self
 
+
+class AnalysisTechnicalAuthorityConfig(FrozenConfigModel):
+    """Rollout gate for the Go analysis authority integration (S12)."""
+
+    mode: str = config_field('python', canonical_env=None, owner=ConfigOwner.PYTHON, reload=ReloadPolicy.RESTART, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.ENUM, risk=RiskClassification.EXECUTION_SAFETY, description='Technical-analysis authority. Go can only be consumed in shadow mode until separately approved S12D cutover.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 'python'),), allowed_values=('python', 'go_shadow', 'go'), validation_summary='Go mode fails closed until S12D implements the separately approved cutover.')
+    consumer_enabled: bool = config_field(False, canonical_env=None, owner=ConfigOwner.PYTHON, reload=ReloadPolicy.RESTART, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.BOOLEAN, risk=RiskClassification.EXECUTION_SAFETY, description='Starts the durable Go analysis Kafka consumer. Default false preserves Python-only production behavior.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, False),), validation_summary='go_shadow requires this true; go mode is unavailable.')
+    consumer_group: str = config_field('apexvoid-algo-bot-analysis-opportunity-v1', canonical_env=None, owner=ConfigOwner.PYTHON, reload=ReloadPolicy.RESTART, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.IDENTIFIER, risk=RiskClassification.CROSS_SERVICE_CONTRACT, description='Stable Kafka consumer group for durable Go analysis opportunity lifecycle processing.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 'apexvoid-algo-bot-analysis-opportunity-v1'),), validation_summary='Pydantic required/type coercion only.', min_length=1)
+
+    @field_validator('mode')
+    @classmethod
+    def validate_mode(cls, value):
+        if value not in {'python', 'go_shadow', 'go'}:
+            raise ValueError('mode must be python, go_shadow, or go')
+        return value
+
+    @model_validator(mode='after')
+    def validate_rollout_gate(self):
+        if self.mode == 'go':
+            raise ValueError('analysis.technical_authority.mode=go is unavailable until separately approved S12D cutover')
+        if self.mode == 'go_shadow' and not self.consumer_enabled:
+            raise ValueError('analysis.technical_authority.go_shadow requires consumer_enabled=true')
+        return self
+
 class AnalysisConfig(FrozenConfigModel):
     atr: AnalysisAtrConfig = Field(default_factory=AnalysisAtrConfig)
     breakout: AnalysisBreakoutConfig = Field(default_factory=AnalysisBreakoutConfig)
@@ -377,6 +401,7 @@ class AnalysisConfig(FrozenConfigModel):
     regime: AnalysisRegimeConfig = Field(default_factory=AnalysisRegimeConfig)
     swings: AnalysisSwingsConfig = Field(default_factory=AnalysisSwingsConfig)
     techniques: AnalysisTechniquesConfig = Field(default_factory=AnalysisTechniquesConfig)
+    technical_authority: AnalysisTechnicalAuthorityConfig = Field(default_factory=AnalysisTechnicalAuthorityConfig)
     trendlines: AnalysisTrendlinesConfig = Field(default_factory=AnalysisTrendlinesConfig)
     triggers: AnalysisTriggersConfig = Field(default_factory=AnalysisTriggersConfig)
     zone_relevance: AnalysisZoneRelevanceConfig = Field(default_factory=AnalysisZoneRelevanceConfig)

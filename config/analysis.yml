@@ -8,6 +8,13 @@
 # question for the owner) — analysis.yml is the closest fit since these
 # are all analysis *inputs*, not execution or delivery concerns.
 analysis:
+  # S12A/B foundation is deliberately inactive. S12C enables go_shadow only
+  # after its production shadow evidence is reviewed; `go` remains rejected.
+  technical_authority:
+    mode: python
+    consumer_enabled: false
+    consumer_group: apexvoid-algo-bot-analysis-opportunity-v1
+
   # Canonical ATR decision (rebuild-configuration-architecture.md §4):
   # the Go migration audit (docs/go-analysis-migration-audit.md §2.1) found
   # TWO live ATR formulas today — a simple rolling mean
