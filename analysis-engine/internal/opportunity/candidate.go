@@ -108,6 +108,10 @@ type Candidate struct {
 	Strategy        StrategyID
 	StrategyVersion string
 	Symbol          market.Symbol
+	// ObservedTimeframe is the closed-bar event that first made this setup
+	// actionable. Strategies leave it empty; SymbolWorker assigns it at the
+	// observation boundary so multi-timeframe evaluations remain auditable.
+	ObservedTimeframe market.Timeframe
 
 	Direction market.Direction
 
@@ -118,6 +122,10 @@ type Candidate struct {
 	Evidence []Evidence
 	Quality  StrategyQuality
 
+	// FormedAt is when the underlying technical primitive formed. CreatedAt
+	// is when this opportunity was first actionable and observed by the
+	// strategy engine. They are intentionally distinct event semantics.
+	FormedAt  int64
 	CreatedAt int64
 	// ExpiresAt is strategy-owned technical expiry, not Algo Bot's execution
 	// maximum age. It is an absolute Unix-second deadline.
@@ -138,6 +146,11 @@ func (c Candidate) Validate() error {
 	if c.Symbol == "" || !c.Direction.IsValid() {
 		return fmt.Errorf("opportunity: candidate symbol and BUY/SELL direction are required")
 	}
+	if c.ObservedTimeframe != "" {
+		if _, ok := c.ObservedTimeframe.Minutes(); !ok {
+			return fmt.Errorf("opportunity: observed timeframe is invalid")
+		}
+	}
 	if !finite(c.Entry.Low) || !finite(c.Entry.High) || c.Entry.Low > c.Entry.High {
 		return fmt.Errorf("opportunity: entry must be a finite low-to-high range")
 	}
@@ -157,7 +170,7 @@ func (c Candidate) Validate() error {
 			return fmt.Errorf("opportunity: evidence codes must be non-empty")
 		}
 	}
-	if c.CreatedAt < 0 || c.ExpiresAt <= c.CreatedAt {
+	if c.FormedAt < 0 || c.CreatedAt < 0 || c.FormedAt > c.CreatedAt || c.ExpiresAt <= c.CreatedAt {
 		return fmt.Errorf("opportunity: expiry must be after creation")
 	}
 	if !finite(c.Quality.Overall) {
@@ -172,6 +185,29 @@ func (c Candidate) Validate() error {
 		return fmt.Errorf("opportunity: complete analytical and configuration provenance is required")
 	}
 	return nil
+}
+
+// AtFirstObservation converts a strategy's formation-anchored candidate into
+// an actionable opportunity observed on a closed bar. The strategy-owned TTL
+// is preserved, while the earlier technical timestamp remains available as
+// FormedAt for provenance and audit.
+func AtFirstObservation(candidate Candidate, observedAt int64) (Candidate, error) {
+	if observedAt < 0 {
+		return Candidate{}, fmt.Errorf("opportunity: first observation time must be non-negative")
+	}
+	ttl := candidate.ExpiresAt - candidate.CreatedAt
+	if ttl <= 0 {
+		return Candidate{}, fmt.Errorf("opportunity: strategy expiry window must be positive")
+	}
+	if candidate.FormedAt == 0 {
+		candidate.FormedAt = candidate.CreatedAt
+	}
+	if candidate.FormedAt > observedAt {
+		candidate.FormedAt = observedAt
+	}
+	candidate.CreatedAt = observedAt
+	candidate.ExpiresAt = observedAt + ttl
+	return candidate, candidate.Validate()
 }
 
 func finite(v float64) bool { return !math.IsNaN(v) && !math.IsInf(v, 0) }

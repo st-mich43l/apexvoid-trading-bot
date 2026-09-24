@@ -124,6 +124,9 @@ func (w *SymbolWorker) ApplyWithResult(event marketdata.BarEvent) (AnalysisSnaps
 		return SnapshotFrom(w.state, w.settings, event.Candle.Time), result, nil
 	}
 	w.telemetry.Count(telemetry.CounterEventsProcessed, symbolLabel, tfLabel, 1)
+	if event.PublishesOpportunity() {
+		w.publisher.ResumeLive(w.state.Symbol)
+	}
 
 	tfh := w.state.History.For(event.Timeframe)
 	candles := tfh.Snapshot()
@@ -198,7 +201,12 @@ func (w *SymbolWorker) ApplyWithResult(event marketdata.BarEvent) (AnalysisSnaps
 		// *config.Document) is the one applying it.
 		evaluation.Candidates[i].Provenance.ConfigVersion = w.settings.ConfigVersion
 		evaluation.Candidates[i].Provenance.ConfigFingerprint = w.settings.ConfigFingerprint
-		candidate := evaluation.Candidates[i]
+		candidate, timingErr := opportunity.AtFirstObservation(evaluation.Candidates[i], event.Candle.Time)
+		if timingErr != nil {
+			doneOpp()
+			return AnalysisSnapshot{}, result, timingErr
+		}
+		candidate.ObservedTimeframe = event.Timeframe
 		observed, obsErr := w.state.Opportunities.Observe(candidate, event.Candle.Time)
 		if obsErr != nil {
 			doneOpp()
@@ -239,11 +247,7 @@ func (w *SymbolWorker) observeTransition(t opportunity.Transition, symbol, timef
 	case opportunity.TransitionExpired:
 		w.telemetry.Count(telemetry.CounterOpportunitiesExpired, symbol, timeframe, 1)
 	}
-	if !publish && t.ShouldPublish() {
-		w.telemetry.Count(telemetry.CounterOpportunityPublishSuppressed, symbol, timeframe, 1)
-		return
-	}
-	w.publisher.Enqueue(w.state.Symbol, w.algo, t)
+	w.publisher.Observe(w.state.Symbol, w.algo, t, publish)
 }
 
 // Snapshot returns the current AnalysisSnapshot without applying a new
@@ -274,7 +278,7 @@ func (w *SymbolWorker) rebuildContext() {
 		sessionState, _ := w.state.Session.Get(tf)
 		fibState, _ := w.state.Fib.Get(tf)
 		perTF[tf] = context.TimeframeInput{
-			Structure: structState, Liquidity: liqState, Zones: zoneState,
+			Candles: w.state.History.For(tf).Snapshot(), Structure: structState, Liquidity: liqState, Zones: zoneState,
 			Trendline: trendState, KeyLevel: keyLevelState, Session: sessionState, Fib: fibState, ATR: lastATR,
 		}
 	}

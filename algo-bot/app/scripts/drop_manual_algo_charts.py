@@ -21,16 +21,21 @@ Usage (inside the bot container or with DATABASE_URL pointed at the
 target Postgres):
 
   python -m app.scripts.drop_manual_algo_charts --dry-run
-  python -m app.scripts.drop_manual_algo_charts --apply
+  python -m app.scripts.drop_manual_algo_charts \
+    --apply --archive-file /secure-backup/manual_algo_charts.json
 """
 
 from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
+import json
 import logging
-
-from app.persistence import store
+import os
+from datetime import date, datetime, timezone
+from decimal import Decimal
+from pathlib import Path
 
 log = logging.getLogger("drop_manual_algo_charts")
 
@@ -43,8 +48,60 @@ async def _row_count(db) -> int | None:
   return await db.fetchval("SELECT COUNT(*) FROM manual_algo_charts")
 
 
-async def run(*, apply: bool) -> int:
+def _json_value(value):
+  if isinstance(value, (date, datetime)):
+    return value.isoformat()
+  if isinstance(value, Decimal):
+    return str(value)
+  if isinstance(value, bytes):
+    return {"encoding": "hex", "value": value.hex()}
+  raise TypeError(f"cannot archive database value of type {type(value).__name__}")
+
+
+async def _archive(db, path: Path, expected_count: int) -> str:
+  columns = await db.fetch(
+    """
+    SELECT column_name, data_type, is_nullable
+    FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'manual_algo_charts'
+    ORDER BY ordinal_position
+    """
+  )
+  rows = await db.fetch("SELECT * FROM manual_algo_charts")
+  if len(rows) != expected_count:
+    raise RuntimeError(
+      f"archive count changed during read: expected {expected_count}, got {len(rows)}"
+    )
+  document = {
+    "format": "apexvoid.manual_algo_charts.archive.v1",
+    "archived_at": datetime.now(timezone.utc).isoformat(),
+    "table": "public.manual_algo_charts",
+    "row_count": expected_count,
+    "columns": [dict(column) for column in columns],
+    "rows": [dict(row) for row in rows],
+  }
+  encoded = json.dumps(
+    document, ensure_ascii=True, separators=(",", ":"), default=_json_value,
+  ).encode("utf-8") + b"\n"
+  path.parent.mkdir(parents=True, exist_ok=True)
+  temporary = path.with_name(f".{path.name}.tmp")
+  with temporary.open("xb") as handle:
+    os.chmod(temporary, 0o600)
+    handle.write(encoded)
+    handle.flush()
+    os.fsync(handle.fileno())
+  os.replace(temporary, path)
+  digest = hashlib.sha256(encoded).hexdigest()
+  log.info(
+    "archived %d rows to %s (sha256=%s)", expected_count, path, digest,
+  )
+  return digest
+
+
+async def run(*, apply: bool, archive_file: Path | None = None) -> int:
   """Returns the pre-drop row count (0 if the table didn't exist)."""
+  from app.persistence import store
+
   async with store._connect() as db:  # noqa: SLF001 - same-package internal reuse
     before = await _row_count(db)
     if before is None:
@@ -54,7 +111,16 @@ async def run(*, apply: bool) -> int:
     if not apply:
       log.info("dry-run: not dropping (pass --apply to actually drop)")
       return before
+    if archive_file is None:
+      raise ValueError("--apply requires --archive-file; refusing irreversible drop")
+    if archive_file.exists():
+      raise FileExistsError(
+        f"archive already exists: {archive_file}; choose a new path"
+      )
     async with db.transaction():
+      await db.execute("LOCK TABLE manual_algo_charts IN ACCESS EXCLUSIVE MODE")
+      locked_count = await db.fetchval("SELECT COUNT(*) FROM manual_algo_charts")
+      await _archive(db, archive_file, locked_count)
       await db.execute("DROP TABLE IF EXISTS manual_algo_charts")
     after = await db.fetchval("SELECT to_regclass('public.manual_algo_charts')")
     if after is not None:
@@ -76,8 +142,14 @@ def main(argv: list[str] | None = None) -> int:
   mode.add_argument(
     "--apply", action="store_true", help="actually drop the table",
   )
+  parser.add_argument(
+    "--archive-file", type=Path,
+    help="new JSON archive path; required with --apply",
+  )
   args = parser.parse_args(argv)
-  asyncio.run(run(apply=args.apply))
+  if args.apply and args.archive_file is None:
+    parser.error("--apply requires --archive-file")
+  asyncio.run(run(apply=args.apply, archive_file=args.archive_file))
   return 0
 
 
