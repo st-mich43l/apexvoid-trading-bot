@@ -207,7 +207,7 @@ to this section.
   already in `strategy_names.py`; no evidence of a distinct thesis
   worth carrying forward separately.
 
-### Final V2 strategy list (18)
+### Final V2 strategy registry (19 entries; 18 independent theses)
 
 `key_level`, `confluence_zone` (compositional), `supply`, `demand`,
 `order_block`, `fvg`, `ifvg`, `crt`, `flip_zone`, `session_level`,
@@ -219,8 +219,9 @@ to this section.
 
 19 REBUILD candidates from S0 minus 1 (Break & Retest folded into
 Trendline, no longer a separate strategy) = **18 independent V2
-strategies**, per ADR-003's independence rule (no strategy imports
-another; Confluence Zone is the sole compositional exception).
+strategy theses**, plus `confluence_zone` as the sole approved compositional
+registry entry. The resulting registry therefore contains **19 entries**.
+Per ADR-003, no independent strategy imports another.
 
 ### Phase S3 status
 
