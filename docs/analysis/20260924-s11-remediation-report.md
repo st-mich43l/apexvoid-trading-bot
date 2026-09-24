@@ -77,11 +77,13 @@ does not mutate production data.
 | Gate | State | Evidence / remaining requirement |
 |---|---|---|
 | S11A stabilization | PASS (code/test), production verification pending | full checks plus a fresh clean audit epoch required |
-| S11B 19-strategy coverage | PASS (implementation/test) | 12 remain correctly disabled pending rollout approval |
+| S11B 19-strategy coverage | PASS (implementation/test and production shadow rollout) | all 19 enabled in Analysis Engine; still technical-only |
 | S11C comparison and shadow acceptance | BLOCKED | deploy this build; capture exact offsets across multiple sessions for XAU + non-JPY FX + JPY FX; export same-input Python/Go observations; reconcile audit/comparison; prove no V2 TradePlan/order; obtain explicit owner approval |
 
-No Go opportunity consumer, TradePlan producer, broker order path, or Python
-live policy is enabled by this remediation. S12/S13 are not started.
+At this remediation checkpoint no Go opportunity consumer, TradePlan producer,
+broker order path, or Python live policy was enabled. S12A/B subsequently adds
+an initially disabled, manual-commit lifecycle consumer and shadow-only
+contract-gap recording; it does not alter this execution-safety conclusion.
 
 ## Validation evidence
 
