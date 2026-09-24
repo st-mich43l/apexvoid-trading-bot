@@ -210,26 +210,10 @@ func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate 
 		createdAt := currentReferenceTime(tfCtx.Structure)
 		expiresAt := createdAt + int64(s.cfg.ExpiryHours*3600)
 
-		// setupKey buckets levelPrice at a fixed FRACTION OF PRICE
-		// ITSELF (priceBucketFraction), not of ATR or Band — measured via
-		// cmd/replay against real XAU M5 data (Phase S8), levelPrice for
-		// the SAME real level is already highly stable across consecutive
-		// evaluations (one recurred unchanged across 26 separate closed
-		// bars in that run), but both atr and level.Band are ALSO
-		// independently recomputed every closed bar, so using either as
-		// the bucket STEP let the bucket boundaries themselves drift bar
-		// to bar — that made the flooding this bucketing is meant to fix
-		// WORSE, not better (147 -> 470 live opportunities for a single
-		// strategy over 300 bars), because even a perfectly unchanged
-		// levelPrice could round to a different bucket when the step
-		// itself moved. A step derived only from levelPrice is
-		// self-referential and therefore stable for the same real level.
-		// Without any bucketing at all, jitter changes SetupKey (and
-		// therefore the deterministic opportunity ID) almost every
-		// evaluation, defeating the OpportunityBook's dedup entirely
-		// (docs/analysis/opportunity-lifecycle-v2.md; source task §46:
-		// "must not publish a new Kafka opportunity on every candle").
-		setupKey := fmt.Sprintf("keylevel:%s:%s", bucketPrice(levelPrice, priceBucketStep(levelPrice)), level.Kind.String())
+		// Level.ID is anchored to the canonical structural fact, not to a
+		// moving price/ATR bucket. Direction remains part of DeterministicID,
+		// so a genuine support/resistance role transition is a new setup.
+		setupKey := fmt.Sprintf("keylevel:%s", level.ID)
 		id, err := opportunity.DeterministicID(opportunity.Identity{
 			Strategy: ID, StrategyVersion: Version, Symbol: ctx.Symbol, Direction: direction, SetupKey: setupKey,
 		})
@@ -263,41 +247,6 @@ func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate 
 		candidates = append(candidates, candidate)
 	}
 	return candidates
-}
-
-// priceBucketFraction is setupKey bucketing's own price-relative
-// resolution: 0.05% of price, comfortably finer than any real distinct
-// key level's typical separation at this precision while still absorbing
-// levelPrice's own small residual across-evaluation jitter. Deliberately
-// NOT ATR- or Band-derived — see the call site's doc comment for the
-// real, replay-measured reason.
-const priceBucketFraction = 0.0005
-
-// priceBucketStep returns setupKey bucketing's step for one levelPrice —
-// a fixed fraction of that price itself (never of a live-recomputed
-// value like ATR or Band), floored so a near-zero price never produces a
-// degenerate zero-width bucket.
-func priceBucketStep(levelPrice float64) float64 {
-	step := math.Abs(levelPrice) * priceBucketFraction
-	if step < 0.0001 {
-		step = 0.0001
-	}
-	return step
-}
-
-// bucketPrice rounds price to the nearest multiple of step and formats it
-// at fixed precision, so two prices within half a bucket of each other
-// produce the identical string — see its call site's doc comment for why
-// this matters for setup-key stability. A non-positive step (should not
-// occur — keylevel.Level.Band is always a positive cluster half-width in
-// practice) falls back to a small fixed epsilon rather than dividing by
-// zero.
-func bucketPrice(price, step float64) string {
-	if step <= 0 {
-		step = 0.01
-	}
-	bucketed := math.Round(price/step) * step
-	return fmt.Sprintf("%.6f", bucketed)
 }
 
 // currentPriceProxy derives a "current price" reference from the primary

@@ -2,6 +2,7 @@ package engine_test
 
 import (
 	"context"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -24,11 +25,13 @@ type fakeKafkaClient struct {
 	opportunities       []opportunity.Candidate
 	invalidations       []kafka.OpportunityInvalidatedPayload
 	calls               []string // "created" / "invalidated", in call order
+	eventIDs            []string
 }
 
-func (f *fakeKafkaClient) PublishOpportunity(_ context.Context, _, _ string, candidate opportunity.Candidate, _ kafka.AlgorithmVersion, _ time.Time) error {
+func (f *fakeKafkaClient) PublishOpportunity(_ context.Context, eventID, _, _ string, candidate opportunity.Candidate, _ kafka.AlgorithmVersion, _ time.Time) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.eventIDs = append(f.eventIDs, eventID)
 	if f.failNextOpportunity > 0 {
 		f.failNextOpportunity--
 		return context.DeadlineExceeded
@@ -38,9 +41,10 @@ func (f *fakeKafkaClient) PublishOpportunity(_ context.Context, _, _ string, can
 	return nil
 }
 
-func (f *fakeKafkaClient) PublishOpportunityInvalidated(_ context.Context, _, _ string, _ market.Symbol, payload kafka.OpportunityInvalidatedPayload, _ time.Time) error {
+func (f *fakeKafkaClient) PublishOpportunityInvalidated(_ context.Context, eventID, _, _ string, _ market.Symbol, payload kafka.OpportunityInvalidatedPayload, _ time.Time) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.eventIDs = append(f.eventIDs, eventID)
 	if f.failNextInvalidated > 0 {
 		f.failNextInvalidated--
 		return context.DeadlineExceeded
@@ -56,6 +60,12 @@ func (f *fakeKafkaClient) snapshot() ([]opportunity.Candidate, []kafka.Opportuni
 	return append([]opportunity.Candidate(nil), f.opportunities...),
 		append([]kafka.OpportunityInvalidatedPayload(nil), f.invalidations...),
 		append([]string(nil), f.calls...)
+}
+
+func (f *fakeKafkaClient) IDs() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.eventIDs...)
 }
 
 func fakeCandidate(id string) opportunity.Candidate {
@@ -125,7 +135,11 @@ func TestOpportunityPublisher_PublishesInvalidatedAndExpiredToTheSameInvalidated
 			Terminal: &opportunity.Terminal{Reason: opportunity.ReasonSetupExpired, At: 60},
 		},
 	}
+	// A terminal is externally meaningful only after the matching creation.
+	// Queue the creations first; FIFO guarantees each precedes its terminal.
+	pub.Enqueue("XAU", kafka.AlgorithmVersion{}, opportunity.Transition{Kind: opportunity.TransitionCreated, Record: opportunity.Record{Candidate: invalidated.Record.Candidate}})
 	pub.Enqueue("XAU", kafka.AlgorithmVersion{}, invalidated)
+	pub.Enqueue("XAU", kafka.AlgorithmVersion{}, opportunity.Transition{Kind: opportunity.TransitionCreated, Record: opportunity.Record{Candidate: expired.Record.Candidate}})
 	pub.Enqueue("XAU", kafka.AlgorithmVersion{}, expired)
 
 	waitFor(t, 2*time.Second, func() bool {
@@ -265,4 +279,139 @@ func TestOpportunityPublisher_NilClientProducesANilPublisherThatNeverPanics(t *t
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 	pub.Run(ctx) // must return immediately, not block until ctx expires
+}
+
+func TestOpportunityPublisher_SuppressesTerminalWithoutPublishedCreation(t *testing.T) {
+	client := &fakeKafkaClient{}
+	pub := engine.NewOpportunityPublisher(client, nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go pub.Run(ctx)
+
+	candidate := fakeCandidate("opp-orphan")
+	pub.Observe("XAU", kafka.AlgorithmVersion{}, opportunity.Transition{
+		Kind: opportunity.TransitionCreated, Record: opportunity.Record{Candidate: candidate},
+	}, false)
+	pub.Observe("XAU", kafka.AlgorithmVersion{}, opportunity.Transition{
+		Kind:   opportunity.TransitionExpired,
+		Record: opportunity.Record{Candidate: candidate, Terminal: &opportunity.Terminal{Reason: opportunity.ReasonSetupExpired, At: 100}},
+	}, true)
+
+	time.Sleep(50 * time.Millisecond)
+	opps, terminals, _ := client.snapshot()
+	if len(opps) != 0 || len(terminals) != 0 {
+		t.Fatalf("unpublished creation must suppress its terminal, got creations=%d terminals=%d", len(opps), len(terminals))
+	}
+}
+
+func TestOpportunityPublisher_DurableOutboxRecoversPendingCreation(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "publication-ledger.json")
+	client := &fakeKafkaClient{}
+	first, err := engine.NewDurableOpportunityPublisher(client, nil, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	candidate := fakeCandidate("opp-restart")
+	first.Enqueue("XAU", kafka.AlgorithmVersion{Structure: "v2", Liquidity: "v1"}, opportunity.Transition{
+		Kind: opportunity.TransitionCreated, Record: opportunity.Record{Candidate: candidate},
+	})
+
+	restarted, err := engine.NewDurableOpportunityPublisher(client, nil, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go restarted.Run(ctx)
+	waitFor(t, 2*time.Second, func() bool {
+		opps, _, _ := client.snapshot()
+		return len(opps) == 1
+	})
+
+	restarted.Enqueue("XAU", kafka.AlgorithmVersion{}, opportunity.Transition{
+		Kind:   opportunity.TransitionExpired,
+		Record: opportunity.Record{Candidate: candidate, Terminal: &opportunity.Terminal{Reason: opportunity.ReasonSetupExpired, At: 100}},
+	})
+	waitFor(t, 2*time.Second, func() bool {
+		_, terminals, _ := client.snapshot()
+		return len(terminals) == 1
+	})
+}
+
+func TestOpportunityPublisher_RetryKeepsStableEventIdentityAndOrdering(t *testing.T) {
+	client := &fakeKafkaClient{failNextOpportunity: 1}
+	pub := engine.NewOpportunityPublisher(client, nil)
+	candidate := fakeCandidate("opp-outage")
+	pub.Enqueue("XAU", kafka.AlgorithmVersion{}, opportunity.Transition{
+		Kind: opportunity.TransitionCreated, Record: opportunity.Record{Candidate: candidate},
+	})
+	pub.Enqueue("XAU", kafka.AlgorithmVersion{}, opportunity.Transition{
+		Kind:   opportunity.TransitionInvalidated,
+		Record: opportunity.Record{Candidate: candidate, Terminal: &opportunity.Terminal{Reason: opportunity.ReasonZoneInvalidated, At: 50}},
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go pub.Run(ctx)
+	waitFor(t, 4*time.Second, func() bool {
+		_, terminals, _ := client.snapshot()
+		return len(terminals) == 1
+	})
+	_, _, calls := client.snapshot()
+	if len(calls) != 2 || calls[0] != "created:opp-outage" || calls[1] != "invalidated:opp-outage" {
+		t.Fatalf("creation must precede terminal after outage, got %v", calls)
+	}
+	ids := client.IDs()
+	if len(ids) < 3 || ids[0] != ids[1] {
+		t.Fatalf("retry must reuse one event ID, got %v", ids)
+	}
+}
+
+func TestOpportunityPublisher_RestartAfterCreationAckRecoversPendingTerminal(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "publication-ledger.json")
+	client := &fakeKafkaClient{}
+	candidate := fakeCandidate("opp-acked-before-restart")
+	first, err := engine.NewDurableOpportunityPublisher(client, nil, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first.Enqueue("XAU", kafka.AlgorithmVersion{}, opportunity.Transition{Kind: opportunity.TransitionCreated, Record: opportunity.Record{Candidate: candidate}})
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { first.Run(ctx); close(done) }()
+	waitFor(t, 2*time.Second, func() bool { opps, _, _ := client.snapshot(); return len(opps) == 1 })
+	cancel()
+	<-done
+	first.Enqueue("XAU", kafka.AlgorithmVersion{}, opportunity.Transition{Kind: opportunity.TransitionExpired, Record: opportunity.Record{Candidate: candidate, Terminal: &opportunity.Terminal{Reason: opportunity.ReasonSetupExpired, At: 100}}})
+
+	restarted, err := engine.NewDurableOpportunityPublisher(client, nil, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	restartCtx, restartCancel := context.WithCancel(context.Background())
+	defer restartCancel()
+	go restarted.Run(restartCtx)
+	waitFor(t, 2*time.Second, func() bool { _, terminals, _ := client.snapshot(); return len(terminals) == 1 })
+	opps, terminals, calls := client.snapshot()
+	if len(opps) != 1 || len(terminals) != 1 || len(calls) != 2 || calls[0] != "created:opp-acked-before-restart" || calls[1] != "invalidated:opp-acked-before-restart" {
+		t.Fatalf("restart must recover only the pending terminal after creation ack: calls=%v", calls)
+	}
+}
+
+func TestOpportunityPublisher_DefersRecoveredTerminalUntilLiveResume(t *testing.T) {
+	client := &fakeKafkaClient{}
+	pub := engine.NewOpportunityPublisher(client, nil)
+	candidate := fakeCandidate("opp-recovery-terminal")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go pub.Run(ctx)
+	pub.Observe("XAU", kafka.AlgorithmVersion{}, opportunity.Transition{Kind: opportunity.TransitionCreated, Record: opportunity.Record{Candidate: candidate}}, true)
+	waitFor(t, 2*time.Second, func() bool { opps, _, _ := client.snapshot(); return len(opps) == 1 })
+	pub.Observe("XAU", kafka.AlgorithmVersion{}, opportunity.Transition{Kind: opportunity.TransitionExpired, Record: opportunity.Record{Candidate: candidate, Terminal: &opportunity.Terminal{Reason: opportunity.ReasonSetupExpired, At: 100}}}, false)
+	time.Sleep(50 * time.Millisecond)
+	_, terminals, _ := client.snapshot()
+	if len(terminals) != 0 {
+		t.Fatal("bootstrap/recovery processing must not publish terminal immediately")
+	}
+	pub.ResumeLive("XAU")
+	waitFor(t, 2*time.Second, func() bool { _, got, _ := client.snapshot(); return len(got) == 1 })
 }

@@ -69,6 +69,7 @@ func buildFlipZones(candles []market.Candle, swings []structure.Swing, breaks []
 			StructureRef: swing.ID,
 			CreatedAt:    origin.Time,
 			BreakIndex:   breakIdx,
+			Strength:     flipStrength(candles, breakIdx, cfg.FlipAcceptBars, level, atr),
 		})
 	}
 	return zones

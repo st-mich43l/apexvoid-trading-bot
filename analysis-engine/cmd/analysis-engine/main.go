@@ -90,7 +90,10 @@ func run(configPath string) error {
 	if producer != nil {
 		client = producer
 	}
-	publisher := engine.NewOpportunityPublisher(client, e.Telemetry())
+	publisher, err := engine.NewDurableOpportunityPublisher(client, e.Telemetry(), kafkaCfg.OutboxPath)
+	if err != nil {
+		return fmt.Errorf("opening opportunity publication outbox: %w", err)
+	}
 	e.SetPublisher(publisher)
 	go publisher.Run(ctx)
 

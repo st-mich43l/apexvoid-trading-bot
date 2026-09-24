@@ -33,7 +33,8 @@ func uniqueTopic(base string) string {
 
 func testConfig(t *testing.T, base string) kafka.Config {
 	cfg := kafka.Config{
-		Enabled: true, Brokers: testBrokers(t), ClientID: "apexvoid-analysis-engine-test",
+		OutboxPath: "/tmp/apexvoid-test-outbox.json",
+		Enabled:    true, Brokers: testBrokers(t), ClientID: "apexvoid-analysis-engine-test",
 		Topics: kafka.Topics{AnalysisOpportunity: base + "-opportunity", AnalysisOpportunityInvalidated: base + "-opportunity-invalidated"},
 	}
 	ensureTopics(t, cfg.Brokers, cfg.Topics.AnalysisOpportunity, cfg.Topics.AnalysisOpportunityInvalidated)

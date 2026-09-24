@@ -80,24 +80,24 @@ func NewProducer(ctx context.Context, cfg Config, provenance ConfigProvenance, m
 
 // PublishOpportunity encodes candidate as analysis.opportunity.v1 and
 // publishes it, keyed by symbol (source task §14), synchronously.
-func (p *Producer) PublishOpportunity(ctx context.Context, correlationID, causationID string, candidate opportunity.Candidate, algo AlgorithmVersion, occurredAt time.Time) error {
+func (p *Producer) PublishOpportunity(ctx context.Context, eventID, correlationID, causationID string, candidate opportunity.Candidate, algo AlgorithmVersion, occurredAt time.Time) error {
 	payload := OpportunityPayloadFromCandidate(candidate, algo)
-	return p.publish(ctx, p.cfg.Topics.AnalysisOpportunity, candidate.Symbol, correlationID, causationID, payload, occurredAt)
+	return p.publish(ctx, p.cfg.Topics.AnalysisOpportunity, candidate.Symbol, eventID, correlationID, causationID, payload, occurredAt)
 }
 
 // PublishOpportunityInvalidated encodes payload as
 // analysis.opportunity.invalidated.v1 and publishes it, keyed by symbol.
-func (p *Producer) PublishOpportunityInvalidated(ctx context.Context, correlationID, causationID string, symbol market.Symbol, payload OpportunityInvalidatedPayload, occurredAt time.Time) error {
-	return p.publish(ctx, p.cfg.Topics.AnalysisOpportunityInvalidated, symbol, correlationID, causationID, payload, occurredAt)
+func (p *Producer) PublishOpportunityInvalidated(ctx context.Context, eventID, correlationID, causationID string, symbol market.Symbol, payload OpportunityInvalidatedPayload, occurredAt time.Time) error {
+	return p.publish(ctx, p.cfg.Topics.AnalysisOpportunityInvalidated, symbol, eventID, correlationID, causationID, payload, occurredAt)
 }
 
-func (p *Producer) publish(ctx context.Context, topic string, symbol market.Symbol, correlationID, causationID string, payload any, occurredAt time.Time) error {
+func (p *Producer) publish(ctx context.Context, topic string, symbol market.Symbol, eventID, correlationID, causationID string, payload any, occurredAt time.Time) error {
 	payloadBytes, err := Encode(payload)
 	if err != nil {
 		return fmt.Errorf("kafka: encoding %s payload: %w", topic, err)
 	}
 	env := Envelope{
-		EventID:           NewEventID(),
+		EventID:           eventID,
 		EventType:         topic,
 		EventVersion:      1,
 		OccurredAt:        occurredAt.Unix(),

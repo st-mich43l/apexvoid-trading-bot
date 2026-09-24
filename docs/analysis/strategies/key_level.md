@@ -104,24 +104,13 @@ ID) almost every evaluation — running against real XAU M5 data
 300-bar/25-hour window for what was really a much smaller number of
 distinct levels.
 
-The fix buckets `levelPrice` to the nearest multiple of a **fixed
-fraction of price itself** (0.05%, `priceBucketStep` in
-`keylevel.go`) before hashing it into `SetupKey`. Two earlier attempts
-were tried and rejected, each verified empirically via the same replay:
-bucketing at `level.Band` (the cluster's own half-width) and at
-`atr * 0.5` both made the flooding *worse* (147 → 470), because both
-`Band` and `atr` are themselves independently recomputed every closed
-bar — using either as the bucket step let the bucket boundaries drift,
-so even a perfectly unchanged `levelPrice` could land in a different
-bucket. A step derived only from `levelPrice` is self-referential and
-therefore stable across evaluations of the same real level.
+S11 removed that self-referential bucket. A reaction level now inherits a
+stable ID from its earliest canonical structural swing; a round level is
+anchored to its configured round price. Clustering, wick enrichment and small
+band/price changes preserve that ID. Direction remains part of the opportunity
+identity, so a genuine support/resistance role transition is still distinct.
 
-This is a real, replay-measured finding, not a hypothetical: the
-opportunity count in this scenario did not change between the original
-(unbucketed) and final (price-relative-bucketed) versions for this
-particular dataset (147 in both), which is itself informative — most of
-the 147 already had bit-identical `levelPrice`, so the crash-class bug
-(described below) was the dominant failure mode this dataset exercised,
-not raw dedup volume. Further dedup-effectiveness tuning against a wider
-dataset is flagged as follow-up research (Phase S10 territory), not
-claimed as fully solved here.
+The same real 300-bar XAU M5 replay now discovers 18 `key_level`
+opportunities rather than the prior 147, while deterministic variation tests
+prove that ATR/band jitter preserves identity and distinct anchors remain
+distinct. This is structural identity repair, not an output-count cap.

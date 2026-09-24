@@ -13,12 +13,24 @@ dated section after deployment.
 ## Unreleased
 
 ### Added
+- Phase S11 remediation: durable opportunity publication ledger/outbox with
+  stable retry IDs and creation-before-terminal acknowledgement ordering;
+  bounded no-consumer-group `shadow-audit`; semantic Python-Go comparison
+  harness; causal strength for FVG/iFVG/breaker/flip zones; stable canonical
+  key-level identity; explicit formation/first-observation timestamps and
+  observed timeframe; and concrete factories/tests/specifications for all 12
+  remaining approved V2 strategies. Their prior disabled rollout state is
+  preserved and no Go-driven trading consumer was enabled.
 - Analysis Engine V2 Phase S3 canonical Zone domain: per-origin
   Supply/Demand, Order Block, FVG/iFVG, Breaker, and Flip primitives with
   explicit lifecycle and relevance state, wired into `SymbolState`,
   `MarketContext`, and immutable analysis snapshots.
 
 ### Changed
+- The one-time `manual_algo_charts` cleanup now refuses `--apply` without a
+  new archive path, locks the table, atomically archives schema plus all rows,
+  logs the archive SHA-256, and only then drops the obsolete table. Production
+  execution remains a separate authorized deployment operation.
 - Analysis Engine V2 strategy rebuild, Phase S1: removed the obsolete
   `manual_algo_chart` OHLC-snapshot feature (Redis M1/M5/M15/H1 windows
   captured around owner `/algo` issue/fill/close events, kept for later

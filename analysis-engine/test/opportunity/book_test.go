@@ -238,3 +238,16 @@ func TestBook_RejectsOutOfOrderLifecycleTransitions(t *testing.T) {
 		t.Fatal("out-of-order invalidation must fail")
 	}
 }
+
+func TestAtFirstObservationSeparatesFormationFromActionableCreation(t *testing.T) {
+	c := candidate("opp-timing")
+	c.CreatedAt = 100
+	c.ExpiresAt = 460
+	observed, err := opportunity.AtFirstObservation(c, 300)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if observed.FormedAt != 100 || observed.CreatedAt != 300 || observed.ExpiresAt != 660 {
+		t.Fatalf("unexpected timing migration: %+v", observed)
+	}
+}

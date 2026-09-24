@@ -42,7 +42,7 @@ func TestKafkaConfigFromConfig_UsesOnlyBusinessEventTopics(t *testing.T) {
 }
 
 func validKafkaConfig() kafka.Config {
-	return kafka.Config{Enabled: true, Brokers: []string{"kafka:9092"}, ClientID: "apexvoid-analysis-engine",
+	return kafka.Config{Enabled: true, Brokers: []string{"kafka:9092"}, ClientID: "apexvoid-analysis-engine", OutboxPath: "/tmp/apexvoid-test-outbox.json",
 		Topics: kafka.Topics{AnalysisOpportunity: "analysis.opportunity.v1", AnalysisOpportunityInvalidated: "analysis.opportunity.invalidated.v1"}}
 }
 
