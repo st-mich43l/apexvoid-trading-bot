@@ -58,8 +58,15 @@ func buildFlipZones(candles []market.Candle, swings []structure.Swing, breaks []
 			continue
 		}
 		origin := candles[breakIdx]
+		// A candle can break more than one previously-confirmed swing. The
+		// break candle time alone therefore is not a Flip zone identity: doing
+		// so aliases distinct structural facts into one zone, then makes
+		// FlipZoneStrategy emit duplicate opportunity IDs. The broken swing
+		// and direction are stable structural provenance, so they distinguish
+		// simultaneous flips without introducing price- or ATR-based drift.
+		id := fmt.Sprintf("zone:%s:%s:%d:%s:%s", tf, KindFlip, origin.Time, b.Direction, b.BrokenSwingID)
 		zones = append(zones, Zone{
-			ID:           fmt.Sprintf("zone:%s:%s:%d", tf, KindFlip, origin.Time),
+			ID:           id,
 			Kind:         KindFlip,
 			Side:         side,
 			Low:          market.Price(low),
