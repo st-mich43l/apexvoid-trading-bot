@@ -402,6 +402,24 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "technical_authority": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": ["python", "go_shadow", "go"]
+            },
+            "consumer_enabled": {
+              "type": "boolean"
+            },
+            "consumer_group": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": ["mode", "consumer_enabled", "consumer_group"]
+        },
         "indicators": {
           "type": "object",
           "additionalProperties": false,
@@ -1093,6 +1111,7 @@
         "sessions",
         "spot",
         "strategies",
+        "technical_authority",
         "structure",
         "techniques",
         "trendlines",

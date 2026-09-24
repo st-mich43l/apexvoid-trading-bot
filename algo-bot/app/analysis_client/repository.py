@@ -27,6 +27,11 @@ class PostgresAnalysisOpportunityRepository:
   def _event_json(event: AnalysisEvent) -> str:
     return json.dumps(event.model_dump(mode="json"), separators=(",", ":"), sort_keys=True)
 
+  @staticmethod
+  def _terminal_state(reason_code: str) -> str:
+    """Map only the Go lifecycle's technical setup-expiry reason to expiry."""
+    return "expired" if reason_code.upper() == "SETUP_EXPIRED" else "invalidated"
+
   async def apply(
     self,
     event: AnalysisEvent,
@@ -80,7 +85,7 @@ class PostgresAnalysisOpportunityRepository:
             "SELECT state FROM analysis_opportunities WHERE opportunity_id = $1 FOR UPDATE",
             opportunity_id,
           )
-          terminal_state = "expired" if event.payload.reason_code.upper() == "EXPIRED" else "invalidated"
+          terminal_state = self._terminal_state(event.payload.reason_code)
           if row is None:
             disposition = "unknown_terminal_tombstoned"
             await db.execute(
