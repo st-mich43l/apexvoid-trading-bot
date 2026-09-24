@@ -131,7 +131,7 @@ func Candidate(spec CandidateSpec) (opportunity.Candidate, error) {
 	for i, code := range spec.Evidence {
 		evidence[i] = opportunity.Evidence{Code: code}
 	}
-	return opportunity.Candidate{
+	candidate := opportunity.Candidate{
 		ID: id, Strategy: opportunity.StrategyID(spec.ID), StrategyVersion: spec.Version,
 		Symbol: spec.Symbol, Direction: spec.Direction,
 		Entry:        opportunity.EntryZone{Low: spec.EntryLow, High: spec.EntryHigh},
@@ -144,5 +144,14 @@ func Candidate(spec CandidateSpec) (opportunity.Candidate, error) {
 			StructureVersion: "v2", LiquidityVersion: "v1", ZoneVersion: "v1",
 			ConfigVersion: 3, ConfigFingerprint: spec.Fingerprint,
 		},
-	}, nil
+	}
+	// Timeframes are fed independently. A higher-timeframe formation can be
+	// newer than a lagging lower-timeframe confirmation during reconnect or
+	// historical backfill. Such a cross-timeframe snapshot is not causal, so
+	// suppress it until a later evaluation has aligned bars rather than leaking
+	// an invalid candidate to the registry/publisher.
+	if err := candidate.Validate(); err != nil {
+		return opportunity.Candidate{}, err
+	}
+	return candidate, nil
 }
