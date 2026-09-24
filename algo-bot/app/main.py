@@ -154,6 +154,9 @@ async def main() -> None:
   _spawn_supervised("auto_trade_stats_ingestion_loop", auto_trade_stats_ingestion_loop)
   _spawn_supervised("bridge_intents_loop", bridge_intents_loop)
   _spawn_supervised("reconcile_events_loop", reconcile_events_loop)
+  if runtime_config.analysis.technical_authority.consumer_enabled:
+    from app.analysis_client.consumer import analysis_opportunity_consumer_loop
+    _spawn_supervised("analysis_opportunity_consumer_loop", analysis_opportunity_consumer_loop)
   log.info("DB ready (PostgreSQL)")
   if not runtime_config.delivery.telegram.telegram_owner_id:
     log.warning(

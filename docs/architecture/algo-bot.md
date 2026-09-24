@@ -28,19 +28,11 @@ algo-bot/
 └── tests/                        → tests/ (exists, keep; ~840+ tests, CI allowlist in tests/ci_autotrade_paths.txt)
 ```
 
-**This task does not create these directories.** Per the source task's own
-restraint principle (§58, applied here even though it's written under the
-Go section): `algo-bot` is the live production control plane this
-session traded real (demo) money through, multiple times, today. Moving
-~9.7MB of Python across new package boundaries with no `analysis-engine`
-yet to consume is pure churn with no dependency boundary to prove — there
-is nothing on the other side of `analysis_client/` to import from yet. The
-target tree above is the freeze; the migration map
-([`migration-map.md`](migration-map.md)) records the action and timing.
-Actual file moves happen once `analysis-engine` publishes a real
-`analysis.opportunity.v1` event this package can consume — otherwise
-`analysis_client/` would be an empty package importing nothing, which is
-exactly the "empty architecture theater" the source task warns against.
+S12A now implements the first real `analysis_client/` boundary because
+`analysis-engine` publishes real `analysis.opportunity.v1` lifecycle events.
+It owns strict V1 decoding, a PostgreSQL lifecycle/idempotency ledger, and a
+manual-commit Kafka consumer. The remaining target-tree reorganization is not
+part of that consumer foundation.
 
 ## `analysis_client` (§39)
 
@@ -55,6 +47,21 @@ analysis_client/
 No technical recalculation. If a consumer needs a value `analysis_client`
 doesn't expose, the fix is a new field on the `analysis.opportunity.v1`
 contract, never a local Python recomputation.
+
+### S12 rollout guard
+
+`analysis.technical_authority.mode` defaults to `python` and
+`consumer_enabled` defaults to `false`. The only consumer-enabled mode now
+implemented is `go_shadow`: it durably records Go opportunity lifecycle state
+and a `contract_gap` policy result, but cannot construct, publish, reserve, or
+execute a TradePlan. `go` fails configuration validation until the separately
+approved S12D cutover implementation exists.
+
+Opportunity V1 currently lacks the execution-policy facts required by the
+existing `StrategyMatch` → `TradePlanBuilder` route: current price, ATR,
+confluence, source-structure geometry, execution confirmation, and strategy
+routing. S12 deliberately records that gap rather than recreating detectors in
+Python.
 
 ## Auto Algo flow (§41, frozen)
 

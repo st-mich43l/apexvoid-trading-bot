@@ -69,21 +69,11 @@ and [ADR-004](adr/) for the transport/cutover gating this depends on.
   [`analysis/shared-primitives-v2.md`](analysis/shared-primitives-v2.md).
   `context.SessionContext` carries the real `session.State` for the
   primary timeframe rather than the prior empty placeholder.
-- **Per-strategy packages**: 7 of 19 are now implemented and enabled
-  (`key_level`, `supply`, `demand`, `order_block`, `fvg`, `flip_zone`,
-  `session_level` — Phase S7, this task). The remaining 12
-  (`confluence_zone`, `ifvg`, `crt`, `trendline`, `range_edge`,
-  `box_breakout`, `momentum_ride`, `snap_back`, `liquidity_sweep`,
-  `range_sweep`, `impulse_pullback`, `scalp_breakout_retest`) remain
-  entirely unimplemented — each has a specific, individually-documented
-  reason (a contingent spec write-up still needed, a primitive this phase
-  did not build, or the compositional strategy waiting on its
-  non-compositional siblings), not a silent omission; see
-  `docs/analysis/strategy-v2-catalog.md`'s "Phase S7 status" for the
-  itemized list. Phase S8 wired evaluation into the live engine loop and
-  Phase S9 wired Kafka publication of the resulting lifecycle events —
-  both now real and proven (see the next several bullets), not
-  unstarted.
+- **Per-strategy packages**: all 19 registered strategies are now implemented
+  and enabled in the Analysis Engine's production shadow catalogue. This is
+  technical opportunity production only; it does not grant the Go engine an
+  execution path. S12 adds the receiving boundary in Algo Bot, initially
+  disabled and shadow-only.
 - **Strategy-level config provenance**: each S7 strategy still hardcodes
   its own known-compatible algorithm versions (`structure=v2`,
   `liquidity=v1`, `zone=v1`) and computes its own narrow

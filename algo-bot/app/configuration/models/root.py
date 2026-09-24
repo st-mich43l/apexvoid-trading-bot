@@ -17,12 +17,14 @@ from app.configuration.models.market_data import MarketDataConfig
 from app.configuration.models.risk import RiskConfig
 from app.configuration.models.runtime import RuntimeConfig
 from app.configuration.models.strategies import StrategiesConfig
+from app.configuration.models.transport import TransportConfig
 
 
 class ApexVoidConfig(FrozenConfigModel):
   bootstrap: BootstrapConfig
   runtime: RuntimeConfig = Field(default_factory=RuntimeConfig)
   market_data: MarketDataConfig = Field(default_factory=MarketDataConfig)
+  transport: TransportConfig = Field(default_factory=TransportConfig)
   analysis: AnalysisConfig = Field(default_factory=AnalysisConfig)
   strategies: StrategiesConfig = Field(default_factory=StrategiesConfig)
   actionability: ActionabilityConfig = Field(default_factory=ActionabilityConfig)
