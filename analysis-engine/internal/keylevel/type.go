@@ -22,11 +22,17 @@ func (k Kind) String() string {
 // resistance field here; that is Role's job (role.go), kept deliberately
 // separate per key_level_role.py's own module boundary.
 type Level struct {
-	Price    market.Price
-	Kind     Kind
-	Touches  int
-	Band     float64
-	Strength float64
+	// ID is the stable identity of the underlying level. Reaction levels
+	// anchor to their earliest structural swing; round levels anchor to the
+	// configured round price. Geometry may tighten or widen without changing
+	// this identity.
+	ID         string
+	AnchorTime int64
+	Price      market.Price
+	Kind       Kind
+	Touches    int
+	Band       float64
+	Strength   float64
 }
 
 // Config aggregates every key-level tunable — same "one coherent

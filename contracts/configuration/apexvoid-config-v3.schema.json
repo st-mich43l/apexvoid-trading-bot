@@ -181,6 +181,7 @@
             "brokers",
             "client_id",
             "enabled",
+            "outbox_path",
             "topic_specs",
             "topics"
           ],
@@ -218,6 +219,10 @@
                   "minLength": 1
                 }
               }
+            },
+            "outbox_path": {
+              "type": "string",
+              "minLength": 1
             },
             "topics": {
               "type": "object",

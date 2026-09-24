@@ -17,8 +17,9 @@ import (
 type Config struct {
 	Enabled bool
 
-	Brokers  []string
-	ClientID string // transport.kafka.client_id.analysis_engine
+	Brokers    []string
+	ClientID   string // transport.kafka.client_id.analysis_engine
+	OutboxPath string
 
 	Topics     Topics
 	TopicSpecs map[string]TopicSpec
@@ -63,6 +64,9 @@ func (c Config) Validate() error {
 	}
 	if err := validateClientID(c.ClientID); err != nil {
 		return err
+	}
+	if strings.TrimSpace(c.OutboxPath) == "" {
+		return fmt.Errorf("kafka: transport.kafka.outbox_path is required")
 	}
 	topics := map[string]string{
 		"analysis_opportunity":             c.Topics.AnalysisOpportunity,

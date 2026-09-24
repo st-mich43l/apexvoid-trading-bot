@@ -16,15 +16,15 @@ func buildFVGZones(candles []market.Candle, tf market.Timeframe, atr float64, cf
 		older, cur := candles[i-2], candles[i]
 		switch {
 		case older.High < cur.Low:
-			zones = append(zones, fvgZone(older.High, cur.Low, Demand, cur, tf, i))
+			zones = append(zones, fvgZone(older.High, cur.Low, Demand, cur, tf, i, fvgStrength(candles, i, older.High, cur.Low, atr)))
 		case older.Low > cur.High:
-			zones = append(zones, fvgZone(cur.High, older.Low, Supply, cur, tf, i))
+			zones = append(zones, fvgZone(cur.High, older.Low, Supply, cur, tf, i, fvgStrength(candles, i, cur.High, older.Low, atr)))
 		}
 	}
 	return zones
 }
 
-func fvgZone(low, high float64, side Side, origin market.Candle, tf market.Timeframe, index int) Zone {
+func fvgZone(low, high float64, side Side, origin market.Candle, tf market.Timeframe, index int, strength float64) Zone {
 	return Zone{
 		ID:         fmt.Sprintf("zone:%s:%s:%d", tf, KindFVG, origin.Time),
 		Kind:       KindFVG,
@@ -35,5 +35,6 @@ func fvgZone(low, high float64, side Side, origin market.Candle, tf market.Timef
 		OriginTime: origin.Time,
 		CreatedAt:  origin.Time,
 		BreakIndex: index,
+		Strength:   strength,
 	}
 }

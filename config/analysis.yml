@@ -30,8 +30,8 @@ analysis:
       algorithm: simple
       length: 14
 
-  # Phase S6: the registry contract for every strategy approved by the
-  # semantic catalog. A future enabled entry without a compiled factory
+  # Registry contract for every strategy approved by the semantic catalog.
+  # An enabled entry without a compiled factory
   # fails analysis-engine startup; it cannot silently become a no-op.
   #
   # `confluence_zone` is the one compositional exception, so this has 19
@@ -42,7 +42,7 @@ analysis:
   # threshold parsing (internal/strategy/<name>'s own parseConfig) — the
   # registry itself treats these as opaque raw parameters (source task §51;
   # docs/analysis/strategy-registry-v2.md's "Configuration contract"). None
-  # of these six parameter names have old-Python-detector precedent — the
+  # These parameter names have no old-Python-detector precedent — the
   # legacy monolithic detectors never parametrized per-setup invalidation/
   # target/expiry this way — so every value below is a genuine initial
   # calibration, not an empirically-tuned or ported constant. They are
@@ -66,9 +66,9 @@ analysis:
   #   expiry_hours — this strategy's own technical SETUP_EXPIRED window
   #     (docs/analysis/opportunity-lifecycle-v2.md), distinct from Algo
   #     Bot's own execution-age policy; 24h is one trading day.
-  # The remaining 12 strategies stay disabled: no factory exists for them
-  # yet (Phase S7's own honest-scoping decision — see the PR that landed
-  # this comment for the full per-strategy deferral reasoning).
+  # S11 added concrete factories for the remaining 12. They stay disabled to
+  # preserve rollout state until deterministic replay plus multi-session
+  # production shadow comparison is reviewed and explicitly approved.
   strategies:
     key_level:
       version: v2
@@ -79,7 +79,13 @@ analysis:
       invalidation_buffer_atr: 0.5
       minimum_target_distance_atr: 1.0
       expiry_hours: 24.0
-    confluence_zone: { version: v2, enabled: false }
+    confluence_zone:
+      version: v2
+      enabled: false
+      minimum_facts: 2
+      invalidation_buffer_atr: 0.5
+      minimum_target_distance_atr: 1.0
+      expiry_hours: 12.0
     supply:
       version: v2
       enabled: true
@@ -108,8 +114,19 @@ analysis:
       invalidation_buffer_atr: 0.5
       minimum_target_distance_atr: 1.0
       expiry_hours: 24.0
-    ifvg: { version: v2, enabled: false }
-    crt: { version: v2, enabled: false }
+    ifvg:
+      version: v2
+      enabled: false
+      minimum_strength: 0.4
+      invalidation_buffer_atr: 0.5
+      minimum_target_distance_atr: 1.0
+      expiry_hours: 24.0
+    crt:
+      version: v2
+      enabled: false
+      minimum_h1_range_atr: 1.5
+      invalidation_buffer_atr: 0.25
+      expiry_hours: 8.0
     flip_zone:
       version: v2
       enabled: true
@@ -124,15 +141,78 @@ analysis:
       invalidation_buffer_atr: 0.5
       minimum_target_distance_atr: 1.0
       expiry_hours: 24.0
-    trendline: { version: v2, enabled: false }
-    range_edge: { version: v2, enabled: false }
-    box_breakout: { version: v2, enabled: false }
-    momentum_ride: { version: v2, enabled: false }
-    snap_back: { version: v2, enabled: false }
-    liquidity_sweep: { version: v2, enabled: false }
-    range_sweep: { version: v2, enabled: false }
-    impulse_pullback: { version: v2, enabled: false }
-    scalp_breakout_retest: { version: v2, enabled: false }
+    trendline:
+      version: v2
+      enabled: false
+      minimum_validation_touches: 2
+      invalidation_buffer_atr: 0.25
+      target_r: 2.0
+      expiry_hours: 12.0
+    range_edge:
+      version: v2
+      enabled: false
+      lookback_bars: 24
+      minimum_rejections: 2
+      edge_tolerance_atr: 0.2
+      invalidation_buffer_atr: 0.25
+      expiry_hours: 4.0
+    box_breakout:
+      version: v2
+      enabled: false
+      box_bars: 12
+      maximum_width_atr: 2.0
+      retest_tolerance_atr: 0.2
+      invalidation_buffer_atr: 0.25
+      target_r: 2.0
+      expiry_hours: 8.0
+    momentum_ride:
+      version: v2
+      enabled: false
+      minimum_body_atr: 0.5
+      maximum_overlap_fraction: 0.35
+      invalidation_buffer_atr: 0.25
+      minimum_target_distance_atr: 1.0
+      expiry_hours: 4.0
+    snap_back:
+      version: v2
+      enabled: false
+      extension_atr: 2.0
+      invalidation_buffer_atr: 0.25
+      target_fraction: 0.5
+      expiry_hours: 4.0
+    liquidity_sweep:
+      version: v2
+      enabled: false
+      minimum_rejection_body_atr: 0.3
+      invalidation_buffer_atr: 0.25
+      target_r: 2.0
+      expiry_hours: 8.0
+    range_sweep:
+      version: v2
+      enabled: false
+      range_bars: 24
+      minimum_sweep_atr: 0.1
+      invalidation_buffer_atr: 0.2
+      expiry_hours: 2.0
+    impulse_pullback:
+      version: v2
+      enabled: false
+      minimum_impulse_atr: 1.0
+      minimum_pullback_fraction: 0.25
+      maximum_pullback_fraction: 0.65
+      invalidation_buffer_atr: 0.2
+      target_r: 2.0
+      expiry_hours: 2.0
+    scalp_breakout_retest:
+      version: v2
+      enabled: false
+      m5_box_bars: 12
+      m1_accept_bars: 2
+      maximum_width_atr: 2.0
+      retest_tolerance_atr: 0.15
+      invalidation_buffer_atr: 0.2
+      target_r: 2.0
+      expiry_hours: 2.0
 
   # Analysis Engine V2 (docs/analysis/market-structure-v2.md). Go-only today
   # (analysis-engine/internal/marketdata, .../structure, .../liquidity) — no

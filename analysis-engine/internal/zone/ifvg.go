@@ -62,6 +62,10 @@ func buildIFVGZones(candles []market.Candle, fvgZones []Zone, tf market.Timefram
 			continue
 		}
 		origin := candles[invertIndex]
+		boundary := low
+		if invertedSide == Demand {
+			boundary = high
+		}
 		zones = append(zones, Zone{
 			ID:              fmt.Sprintf("zone:%s:%s:%d", tf, KindIFVG, origin.Time),
 			Kind:            KindIFVG,
@@ -73,6 +77,7 @@ func buildIFVGZones(candles []market.Candle, fvgZones []Zone, tf market.Timefram
 			DisplacementRef: z.ID,
 			CreatedAt:       origin.Time,
 			BreakIndex:      invertIndex,
+			Strength:        inversionStrength(z, origin, boundary, atr),
 		})
 	}
 	return zones

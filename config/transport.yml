@@ -29,6 +29,9 @@ transport:
       analysis_engine: apexvoid-analysis-engine
       algo_bot: apexvoid-algo-bot
       ctrader_engine: apexvoid-ctrader-engine
+    # Durable publication ledger/outbox. This is analysis lifecycle state,
+    # never market data and never an execution queue.
+    outbox_path: /var/lib/apexvoid-analysis-engine/publication-ledger.json
     topics:
       analysis_opportunity: analysis.opportunity.v1
       analysis_opportunity_invalidated: analysis.opportunity.invalidated.v1

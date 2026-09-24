@@ -13,6 +13,7 @@
       "description": "opportunity.StrategyID — an architectural slot name (e.g. \"breakoutretest\"), not yet a fixed enum since no strategy is implemented."
     },
     "symbol": { "type": "string" },
+    "timeframe": { "type": "string", "enum": ["M1", "M3", "M5", "M15", "M30", "H1", "H4", "D1"], "description": "Additive V1 field: closed-bar timeframe that first made the opportunity actionable. Retained pre-S11 events may omit it." },
     "direction": { "type": "string", "enum": ["BUY", "SELL"] },
     "entry": {
       "type": "object",
@@ -86,7 +87,8 @@
         "liquidity": { "type": "string", "description": "e.g. \"v1\" — matches analysis.liquidity.version." }
       }
     },
-    "created_at": { "type": "integer", "description": "Unix seconds." },
+    "formed_at": { "type": "integer", "description": "Unix seconds when the underlying technical primitive formed. Additive V1 field: current producers always emit it; consumers of retained pre-S11 V1 events must fall back to created_at when absent." },
+    "created_at": { "type": "integer", "description": "Unix seconds when the opportunity was first actionable and observed." },
     "expires_at": { "type": "integer", "description": "Unix seconds." }
   }
 }

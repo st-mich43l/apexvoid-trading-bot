@@ -81,15 +81,28 @@
     },
     "strategies": {
       "box_breakout": {
+        "box_bars": 12,
         "enabled": false,
+        "expiry_hours": 8.0,
+        "invalidation_buffer_atr": 0.25,
+        "maximum_width_atr": 2.0,
+        "retest_tolerance_atr": 0.2,
+        "target_r": 2.0,
         "version": "v2"
       },
       "confluence_zone": {
         "enabled": false,
+        "expiry_hours": 12.0,
+        "invalidation_buffer_atr": 0.5,
+        "minimum_facts": 2,
+        "minimum_target_distance_atr": 1.0,
         "version": "v2"
       },
       "crt": {
         "enabled": false,
+        "expiry_hours": 8.0,
+        "invalidation_buffer_atr": 0.25,
+        "minimum_h1_range_atr": 1.5,
         "version": "v2"
       },
       "demand": {
@@ -118,10 +131,20 @@
       },
       "ifvg": {
         "enabled": false,
+        "expiry_hours": 24.0,
+        "invalidation_buffer_atr": 0.5,
+        "minimum_strength": 0.4,
+        "minimum_target_distance_atr": 1.0,
         "version": "v2"
       },
       "impulse_pullback": {
         "enabled": false,
+        "expiry_hours": 2.0,
+        "invalidation_buffer_atr": 0.2,
+        "maximum_pullback_fraction": 0.65,
+        "minimum_impulse_atr": 1.0,
+        "minimum_pullback_fraction": 0.25,
+        "target_r": 2.0,
         "version": "v2"
       },
       "key_level": {
@@ -136,10 +159,19 @@
       },
       "liquidity_sweep": {
         "enabled": false,
+        "expiry_hours": 8.0,
+        "invalidation_buffer_atr": 0.25,
+        "minimum_rejection_body_atr": 0.3,
+        "target_r": 2.0,
         "version": "v2"
       },
       "momentum_ride": {
         "enabled": false,
+        "expiry_hours": 4.0,
+        "invalidation_buffer_atr": 0.25,
+        "maximum_overlap_fraction": 0.35,
+        "minimum_body_atr": 0.5,
+        "minimum_target_distance_atr": 1.0,
         "version": "v2"
       },
       "order_block": {
@@ -151,15 +183,31 @@
         "version": "v2"
       },
       "range_edge": {
+        "edge_tolerance_atr": 0.2,
         "enabled": false,
+        "expiry_hours": 4.0,
+        "invalidation_buffer_atr": 0.25,
+        "lookback_bars": 24,
+        "minimum_rejections": 2,
         "version": "v2"
       },
       "range_sweep": {
         "enabled": false,
+        "expiry_hours": 2.0,
+        "invalidation_buffer_atr": 0.2,
+        "minimum_sweep_atr": 0.1,
+        "range_bars": 24,
         "version": "v2"
       },
       "scalp_breakout_retest": {
         "enabled": false,
+        "expiry_hours": 2.0,
+        "invalidation_buffer_atr": 0.2,
+        "m1_accept_bars": 2,
+        "m5_box_bars": 12,
+        "maximum_width_atr": 2.0,
+        "retest_tolerance_atr": 0.15,
+        "target_r": 2.0,
         "version": "v2"
       },
       "session_level": {
@@ -172,6 +220,10 @@
       },
       "snap_back": {
         "enabled": false,
+        "expiry_hours": 4.0,
+        "extension_atr": 2.0,
+        "invalidation_buffer_atr": 0.25,
+        "target_fraction": 0.5,
         "version": "v2"
       },
       "supply": {
@@ -184,6 +236,10 @@
       },
       "trendline": {
         "enabled": false,
+        "expiry_hours": 12.0,
+        "invalidation_buffer_atr": 0.25,
+        "minimum_validation_touches": 2,
+        "target_r": 2.0,
         "version": "v2"
       }
     },
@@ -1203,6 +1259,7 @@
         "ctrader_engine": "apexvoid-ctrader-engine"
       },
       "enabled": true,
+      "outbox_path": "/var/lib/apexvoid-analysis-engine/publication-ledger.json",
       "topic_specs": {
         "analysis.opportunity.invalidated.v1": {
           "partitions": 3,
