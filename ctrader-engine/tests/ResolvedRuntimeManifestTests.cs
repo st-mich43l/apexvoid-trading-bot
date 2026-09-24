@@ -3,8 +3,41 @@ using Xunit;
 
 namespace CTraderFeed.Tests;
 
-public sealed class ResolvedRuntimeManifestTests
+[Collection(nameof(EnvMutationCollection))]
+public sealed class ResolvedRuntimeManifestTests : IDisposable
 {
+  private readonly Dictionary<string, string?> _environment = new(StringComparer.Ordinal);
+
+  public ResolvedRuntimeManifestTests()
+  {
+    foreach (System.Collections.DictionaryEntry entry in Environment.GetEnvironmentVariables())
+    {
+      var key = entry.Key?.ToString();
+      if (key is not null && (key.StartsWith("AUTO_TRADE_", StringComparison.Ordinal)
+        || key.StartsWith("CTRADER_", StringComparison.Ordinal)))
+      {
+        _environment[key] = Environment.GetEnvironmentVariable(key);
+      }
+    }
+  }
+
+  public void Dispose()
+  {
+    foreach (System.Collections.DictionaryEntry entry in Environment.GetEnvironmentVariables())
+    {
+      var key = entry.Key?.ToString();
+      if (key is not null && (key.StartsWith("AUTO_TRADE_", StringComparison.Ordinal)
+        || key.StartsWith("CTRADER_", StringComparison.Ordinal)) && !_environment.ContainsKey(key))
+      {
+        Environment.SetEnvironmentVariable(key, null);
+      }
+    }
+    foreach (var (key, value) in _environment)
+    {
+      Environment.SetEnvironmentVariable(key, value);
+    }
+  }
+
   private static string FixturePath()
   {
     var root = Path.GetFullPath(
@@ -123,6 +156,10 @@ public sealed class ResolvedRuntimeManifestTests
     var path = FixturePath();
     Assert.True(File.Exists(path), $"missing fixture {path}");
     var manifest = ResolvedRuntimeManifestLoader.Load(path);
+    // These legacy aliases are deliberately conflict-checked in production.
+    // Clear them only inside this isolated aligned-fixture test.
+    Environment.SetEnvironmentVariable("AUTO_TRADE_STRATEGY_BRIDGE_ENABLED", null);
+    Environment.SetEnvironmentVariable("AUTO_TRADE_FORMING_GATE_ENABLED", null);
     Environment.SetEnvironmentVariable("CTRADER_CLIENT_ID", "id");
     Environment.SetEnvironmentVariable("CTRADER_CLIENT_SECRET", "secret");
     Environment.SetEnvironmentVariable("CTRADER_ACCESS_TOKEN", "access");
