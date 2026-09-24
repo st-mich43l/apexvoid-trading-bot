@@ -189,3 +189,47 @@ func TestOrderBlockRequiresConfirmingBreakBodyQuality(t *testing.T) {
 		t.Fatal("a body-dominant confirming candle should qualify an order block")
 	}
 }
+
+func TestFlipZonesKeepDistinctIdentityForMultipleBreaksOnOneCandle(t *testing.T) {
+	candles := []market.Candle{
+		c(1, 99, 100, 98, 99),
+		c(2, 99, 103, 99, 102),
+		c(3, 102, 104, 101, 103),
+	}
+	swings := []structure.Swing{
+		{ID: "M5:high:one", Kind: structure.SwingHigh, Time: 1, Price: 100},
+		{ID: "M5:high:two", Kind: structure.SwingHigh, Time: 1, Price: 101},
+	}
+	breaks := []structure.StructureBreak{
+		{Time: 2, Direction: market.Buy, BrokenSwingID: "M5:high:one"},
+		{Time: 2, Direction: market.Buy, BrokenSwingID: "M5:high:two"},
+	}
+	state := zone.Update(candles, []float64{1, 1, 1}, swings, breaks, market.M5, zoneTestConfig())
+
+	flips := make([]zone.Zone, 0, 2)
+	for _, candidate := range state.Zones {
+		if candidate.Kind == zone.KindFlip {
+			flips = append(flips, candidate)
+		}
+	}
+	if len(flips) != 2 {
+		t.Fatalf("expected two simultaneous Flip zones, got %+v", flips)
+	}
+	if flips[0].ID == flips[1].ID {
+		t.Fatalf("distinct broken swings on one candle must not share a Flip zone ID: %+v", flips)
+	}
+	if flips[0].StructureRef == flips[1].StructureRef {
+		t.Fatalf("fixture must retain the distinct structural sources: %+v", flips)
+	}
+
+	replayed := zone.Update(candles, []float64{1, 1, 1}, swings, breaks, market.M5, zoneTestConfig())
+	var replayIDs []string
+	for _, candidate := range replayed.Zones {
+		if candidate.Kind == zone.KindFlip {
+			replayIDs = append(replayIDs, candidate.ID)
+		}
+	}
+	if len(replayIDs) != 2 || replayIDs[0] != flips[0].ID || replayIDs[1] != flips[1].ID {
+		t.Fatalf("Flip zone IDs must be deterministic across the same replay: got %v want [%s %s]", replayIDs, flips[0].ID, flips[1].ID)
+	}
+}

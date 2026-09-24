@@ -12,6 +12,11 @@ dated section after deployment.
 
 ## Unreleased
 
+### Fixed
+- Analysis Engine no longer aliases multiple Flip zones formed by distinct
+  structural breaks on the same candle to one ID, preventing a fatal duplicate
+  `flip_zone` opportunity during Redis recovery and the resulting restart loop.
+
 ### Added
 - Phase S11 remediation: durable opportunity publication ledger/outbox with
   stable retry IDs and creation-before-terminal acknowledgement ordering;

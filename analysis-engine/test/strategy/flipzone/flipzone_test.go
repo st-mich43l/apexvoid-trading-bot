@@ -185,6 +185,26 @@ func TestFlipZone_SameSetupIsDeterministicAcrossEvaluations(t *testing.T) {
 	}
 }
 
+func TestFlipZone_DistinctCanonicalFlipsProduceDistinctOpportunityIDs(t *testing.T) {
+	s := newStrategy(t, validParams())
+	ctx := baseContext(1.0)
+	ctx.Timeframes[market.M5] = &context.TimeframeContext{
+		Timeframe: market.M5,
+		Zones: zone.ZoneState{Zones: []zone.Zone{
+			flip("zone:M5:flip:100:BUY:M5:high:one", zone.Demand, 2020, 2022, 1),
+			flip("zone:M5:flip:100:BUY:M5:high:two", zone.Demand, 2021, 2023, 1),
+		}},
+		Liquidity: liquidity.LiquidityState{Pools: []liquidity.Pool{{Side: liquidity.LiquidityBuySide, Low: 2031, High: 2032}}},
+	}
+	candidates := s.Evaluate(ctx)
+	if len(candidates) != 2 {
+		t.Fatalf("expected two independent Flip candidates, got %+v", candidates)
+	}
+	if candidates[0].ID == candidates[1].ID {
+		t.Fatalf("distinct canonical Flip zones must not alias to one opportunity ID: %+v", candidates)
+	}
+}
+
 func TestFlipZone_RejectsAMissingRequiredParameter(t *testing.T) {
 	params := validParams()
 	delete(params, "invalidation_buffer_atr")
