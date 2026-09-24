@@ -66,9 +66,10 @@ analysis:
   #   expiry_hours — this strategy's own technical SETUP_EXPIRED window
   #     (docs/analysis/opportunity-lifecycle-v2.md), distinct from Algo
   #     Bot's own execution-age policy; 24h is one trading day.
-  # S11 added concrete factories for the remaining 12. They stay disabled to
-  # preserve rollout state until deterministic replay plus multi-session
-  # production shadow comparison is reviewed and explicitly approved.
+  # S11 completed concrete factories for all 19 registry entries. Every
+  # strategy is enabled for the production shadow run; this emits technical
+  # Kafka opportunities only and cannot place a trade until Phase S12 adds an
+  # explicit Algo Bot consumer.
   strategies:
     key_level:
       version: v2
@@ -81,7 +82,7 @@ analysis:
       expiry_hours: 24.0
     confluence_zone:
       version: v2
-      enabled: false
+      enabled: true
       minimum_facts: 2
       invalidation_buffer_atr: 0.5
       minimum_target_distance_atr: 1.0
@@ -116,14 +117,14 @@ analysis:
       expiry_hours: 24.0
     ifvg:
       version: v2
-      enabled: false
+      enabled: true
       minimum_strength: 0.4
       invalidation_buffer_atr: 0.5
       minimum_target_distance_atr: 1.0
       expiry_hours: 24.0
     crt:
       version: v2
-      enabled: false
+      enabled: true
       minimum_h1_range_atr: 1.5
       invalidation_buffer_atr: 0.25
       expiry_hours: 8.0
@@ -143,14 +144,14 @@ analysis:
       expiry_hours: 24.0
     trendline:
       version: v2
-      enabled: false
+      enabled: true
       minimum_validation_touches: 2
       invalidation_buffer_atr: 0.25
       target_r: 2.0
       expiry_hours: 12.0
     range_edge:
       version: v2
-      enabled: false
+      enabled: true
       lookback_bars: 24
       minimum_rejections: 2
       edge_tolerance_atr: 0.2
@@ -158,7 +159,7 @@ analysis:
       expiry_hours: 4.0
     box_breakout:
       version: v2
-      enabled: false
+      enabled: true
       box_bars: 12
       maximum_width_atr: 2.0
       retest_tolerance_atr: 0.2
@@ -167,7 +168,7 @@ analysis:
       expiry_hours: 8.0
     momentum_ride:
       version: v2
-      enabled: false
+      enabled: true
       minimum_body_atr: 0.5
       maximum_overlap_fraction: 0.35
       invalidation_buffer_atr: 0.25
@@ -175,28 +176,28 @@ analysis:
       expiry_hours: 4.0
     snap_back:
       version: v2
-      enabled: false
+      enabled: true
       extension_atr: 2.0
       invalidation_buffer_atr: 0.25
       target_fraction: 0.5
       expiry_hours: 4.0
     liquidity_sweep:
       version: v2
-      enabled: false
+      enabled: true
       minimum_rejection_body_atr: 0.3
       invalidation_buffer_atr: 0.25
       target_r: 2.0
       expiry_hours: 8.0
     range_sweep:
       version: v2
-      enabled: false
+      enabled: true
       range_bars: 24
       minimum_sweep_atr: 0.1
       invalidation_buffer_atr: 0.2
       expiry_hours: 2.0
     impulse_pullback:
       version: v2
-      enabled: false
+      enabled: true
       minimum_impulse_atr: 1.0
       minimum_pullback_fraction: 0.25
       maximum_pullback_fraction: 0.65
@@ -205,7 +206,7 @@ analysis:
       expiry_hours: 2.0
     scalp_breakout_retest:
       version: v2
-      enabled: false
+      enabled: true
       m5_box_bars: 12
       m1_accept_bars: 2
       maximum_width_atr: 2.0
