@@ -337,3 +337,18 @@ candidate's first observed lifecycle appearance. The generated image contains
 the supplied market facts and candidate geometry; it never recalculates setup
 validity. The initial real-XAU review is recorded in
 [`20260923-xau-m5-s7-setup-review.md`](20260923-xau-m5-s7-setup-review.md).
+
+### Phase S11 remediation status
+
+All 19 approved registry entries now have concrete factories and strategy
+specifications. S11 added `ifvg`, `trendline`, `crt`, `confluence_zone`,
+`range_edge`, `box_breakout`, `momentum_ride`, `snap_back`,
+`liquidity_sweep`, `range_sweep`, `impulse_pullback`, and
+`scalp_breakout_retest`. Each has a deterministic qualifying fixture,
+missing-context rejection, config rejection, replay identity check and
+opportunity lifecycle check in `test/strategy/s11_catalog_test.go`.
+
+The historical Phase S7 text above explains why those 12 were then absent; it
+is not the current implementation state. Their `enabled: false` setting is
+still intentional rollout control. S11 implementation does not authorize live
+enablement or Go-driven execution.

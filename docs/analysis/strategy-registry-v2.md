@@ -1,4 +1,4 @@
-# Strategy Registry V2 (Phase S6)
+# Strategy Registry V2
 
 `analysis-engine/internal/strategy` now owns the behavior-free registry and
 dependency-aware evaluator that sit between canonical `MarketContext` and
@@ -23,10 +23,16 @@ approved ID, missing version, or an enabled ID that has no registered concrete
 factory. There are no generic enable defaults and no legacy strategy-family
 switches.
 
-All entries are deliberately disabled at Phase S6. That is not a production
-feature toggle: no Phase S7 strategy implementation has yet established its
-own technical thesis. Enabling one before its factory lands fails startup
-rather than silently producing no signals.
+All 19 approved entries now have concrete factories. The original seven
+production-shadow strategies retain their existing enablement; the 12 S11
+additions remain disabled until replay and multi-session shadow evidence is
+approved. Enabling an unknown or unimplemented ID still fails startup.
+
+The concrete catalog is `key_level`, `supply`, `demand`, `order_block`, `fvg`,
+`flip_zone`, `session_level`, `ifvg`, `trendline`, `crt`, `confluence_zone`,
+`range_edge`, `box_breakout`, `momentum_ride`, `snap_back`,
+`liquidity_sweep`, `range_sweep`, `impulse_pullback`, and
+`scalp_breakout_retest`.
 
 Each concrete factory receives only its own `strategy.Config` (`id`, `version`,
 `enabled`, and its raw strategy-local parameters). It must parse and validate
