@@ -37,3 +37,36 @@ async def test_unknown_terminal_creates_tombstone_before_late_creation(sql):
   assert outcome.disposition == "late_creation_rejected"
   row = await sql.row("SELECT state, terminal_event_id FROM analysis_opportunities WHERE opportunity_id = 'opp-1'")
   assert dict(row) == {"state": "expired", "terminal_event_id": "evt-terminal-1"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+  ("reason_code", "expected_state"),
+  [
+    ("SETUP_EXPIRED", "expired"),
+    ("STRUCTURE_INVALIDATED", "invalidated"),
+    ("SESSION_EXPIRED", "invalidated"),
+  ],
+)
+async def test_go_terminal_reason_classification_is_exact(sql, reason_code, expected_state):
+  await store.init_db()
+  repository = PostgresAnalysisOpportunityRepository()
+  terminal = parse_analysis_event(
+    InvalidationTopic,
+    json.dumps(_invalidated(event_id=f"evt-{reason_code}", payload={**_invalidated()["payload"], "reason_code": reason_code})),
+  )
+  await repository.apply(terminal, topic=InvalidationTopic, partition=2, offset=1)
+  row = await sql.row("SELECT state FROM analysis_opportunities WHERE opportunity_id = 'opp-1'")
+  assert row["state"] == expected_state
+
+
+@pytest.mark.asyncio
+async def test_duplicate_terminal_after_restart_is_a_noop(sql):
+  await store.init_db()
+  terminal = parse_analysis_event(InvalidationTopic, json.dumps(_invalidated()))
+  first = PostgresAnalysisOpportunityRepository()
+  assert (await first.apply(terminal, topic=InvalidationTopic, partition=3, offset=1)).disposition == "unknown_terminal_tombstoned"
+  # A newly constructed repository models process restart; Kafka redelivery
+  # must still be fenced by the durable event id/partition offset.
+  restarted = PostgresAnalysisOpportunityRepository()
+  assert (await restarted.apply(terminal, topic=InvalidationTopic, partition=3, offset=1)).disposition == "duplicate_delivery"

@@ -39,7 +39,7 @@ def _invalidated(**overrides):
     "event_id": "evt-terminal-1", "event_type": InvalidationTopic,
     "event_version": 1, "occurred_at": 102, "produced_at": 103,
     "producer": "apexvoid-analysis-engine", "correlation_id": "corr-1",
-    "payload": {"opportunity_id": "opp-1", "symbol": "XAU", "strategy": "fvg", "reason_code": "EXPIRED", "invalidated_at": 102},
+    "payload": {"opportunity_id": "opp-1", "symbol": "XAU", "strategy": "fvg", "reason_code": "SETUP_EXPIRED", "invalidated_at": 102},
   }
   event.update(overrides)
   return event
@@ -54,7 +54,7 @@ def test_decodes_creation_and_additive_v1_fields():
 
 def test_decodes_terminal_event():
   event = parse_analysis_event(InvalidationTopic, json.dumps(_invalidated()))
-  assert event.payload.reason_code == "EXPIRED"
+  assert event.payload.reason_code == "SETUP_EXPIRED"
 
 
 @pytest.mark.parametrize(
