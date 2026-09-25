@@ -1518,6 +1518,32 @@ async def _schedule_deferred_manage_reply(
       message_id = int(sent.message_id)
       if on_sent is not None:
         await on_sent(message_id)
+        # Live 2026-09-25: a TP4 notice survived right next to the final
+        # close status - this send was still waiting out a Telegram flood
+        # when position_closed's sweep ran, so it missed this message
+        # entirely and nothing was ever going to delete it. on_sent (fill/
+        # TP/BE only - the close reply itself passes no on_sent) just
+        # tracked it as active; if the trade has since closed, undo that
+        # and delete it now instead of leaving an orphan.
+        if await client.get(_manage_closed_key(match_id)):
+          try:
+            await delete_scanner_message(chat_id, message_id)
+          except Exception:
+            log.info(
+              "deferred_manage_reply_late_cleanup_failed setup_id=%s "
+              "message_id=%s",
+              match_id,
+              message_id,
+              exc_info=True,
+            )
+          await _untrack_active_manage_message(client, match_id, message_id)
+          log.info(
+            "deferred_manage_reply_deleted_after_close setup_id=%s "
+            "message_id=%s",
+            match_id,
+            message_id,
+          )
+          return
       if remember:
         await _remember_trade_message(client, event, "internal", message_id)
       await _mark_forming_card_position_activated(client, match_id)
@@ -1908,8 +1934,18 @@ async def _deliver_compact_position_closed(
   this path also adds the compact TP line when that level wasn't already
   notified. The root card is also resolved here: a fill can race the card
   create, so close must not leave IN ZONE · WAITING FILL on a dead trade.
+
+  Claims _manage_closed_key atomically before doing any of that (not just
+  after posting the final reply): a fill/TP/BE notification still in
+  flight behind a deferred Telegram-flood wait (_schedule_deferred_manage_
+  reply) checks this same key once its send finally completes and deletes
+  itself if the trade closed in the meantime - claiming it this early is
+  what keeps that check from racing the sweep below.
   """
-  if await client.get(_manage_closed_key(match_id)):
+  claimed = await client.set(
+    _manage_closed_key(match_id), "1", ex=_TRADE_MESSAGE_TTL, nx=True,
+  )
+  if not claimed:
     return True
 
   message = str(event.get("message") or "")
@@ -1948,7 +1984,6 @@ async def _deliver_compact_position_closed(
     text=final_text,
     standalone_on_bad_reply=True,
   )
-  await client.set(_manage_closed_key(match_id), "1", ex=_TRADE_MESSAGE_TTL)
   return True
 
 
