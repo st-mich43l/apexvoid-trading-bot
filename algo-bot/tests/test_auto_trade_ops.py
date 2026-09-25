@@ -599,7 +599,7 @@ def test_internal_profile_hides_broker_position_id():
   assert delivery.render_auto_trade_event(_opened_event(), profile="internal") == (
     "🤖 <b>ApexVoid Algo</b>\n"
     "✅ <b>ORDER FILLED</b>\n"
-    "🔴 <b>XAU SELL opened</b>\n"
+    "📉 <b>XAU SELL opened</b>\n"
     "\n"
     "📍 Entry: <b>4,111.26</b>\n"
     "🛡 SL: <b>4,117.76</b> · 65 pips\n"
