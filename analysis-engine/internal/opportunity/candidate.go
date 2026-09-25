@@ -101,6 +101,30 @@ func DeterministicID(identity Identity) (string, error) {
 	return "opp_" + hex.EncodeToString(sum[:]), nil
 }
 
+// TechnicalContext is the engine-owned technical facts an execution policy
+// needs to evaluate a Candidate without re-running any detector or recomputing
+// ATR from raw OHLC (S13B). Strategies never set it: SymbolWorker assigns it at
+// the same observation boundary as ObservedTimeframe, from the exact closed bar
+// that first made the setup actionable, so every value is causal at that bar.
+//
+// It deliberately carries no quote/spread (a live, executable-price concern the
+// policy layer owns), no account fact, and no confluence *score*: strategies'
+// own Evidence and Quality are the confluence facts.
+type TechnicalContext struct {
+	// ATR is the canonical ATR of ObservedTimeframe as of the observed bar.
+	ATR float64
+	// ReferencePrice is the close of that bar. It is a technical reference for
+	// geometry, not an executable price.
+	ReferencePrice float64
+	// ReferenceTime is that bar's open time, Unix seconds.
+	ReferenceTime int64
+	// Bias is the engine's structural bias as of that bar (primary-timeframe
+	// derived, see internal/context.DeriveBias). Absent (zero) when the
+	// engine has no confirmed bias — never a guessed neutral.
+	BiasDirection market.Direction
+	BiasLayer     string
+}
+
 // Candidate is one strategy's technical opportunity, as of the source
 // task's §24.
 type Candidate struct {
@@ -132,6 +156,10 @@ type Candidate struct {
 	ExpiresAt int64
 
 	Provenance AnalysisProvenance
+
+	// Technical is nil until SymbolWorker attaches it; a nil value means the
+	// consumer must treat the policy inputs as unavailable (fail closed).
+	Technical *TechnicalContext
 }
 
 // Validate verifies the lifecycle-relevant, transport-neutral Candidate
@@ -187,6 +215,15 @@ func (c Candidate) Validate() error {
 			return fmt.Errorf("opportunity: quality components need non-empty names and finite values")
 		}
 	}
+	if c.Technical != nil {
+		t := c.Technical
+		if !finite(t.ATR) || t.ATR <= 0 || !finite(t.ReferencePrice) || t.ReferencePrice <= 0 || t.ReferenceTime < 0 {
+			return fmt.Errorf("opportunity: technical context needs finite positive ATR and reference price")
+		}
+		if t.BiasDirection != "" && !t.BiasDirection.IsValid() {
+			return fmt.Errorf("opportunity: technical bias direction must be BUY or SELL when present")
+		}
+	}
 	if c.Provenance.StructureVersion == "" || c.Provenance.LiquidityVersion == "" || c.Provenance.ZoneVersion == "" || c.Provenance.ConfigVersion <= 0 || c.Provenance.ConfigFingerprint == "" {
 		return fmt.Errorf("opportunity: complete analytical and configuration provenance is required")
 	}
@@ -222,6 +259,10 @@ func cloneCandidate(c Candidate) Candidate {
 	clone := c
 	clone.Targets = append([]Target(nil), c.Targets...)
 	clone.Evidence = append([]Evidence(nil), c.Evidence...)
+	if c.Technical != nil {
+		technical := *c.Technical
+		clone.Technical = &technical
+	}
 	if c.Quality.Components != nil {
 		clone.Quality.Components = make(map[string]float64, len(c.Quality.Components))
 		for name, value := range c.Quality.Components {
