@@ -668,13 +668,29 @@ def test_scanner_card_never_claims_ready_before_worker(monkeypatch):
   )
   install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_enabled": True})
 
+  # A real executable setup now renders through the exact same function
+  # the post-publish path uses (format_plan_published_root_card), so it
+  # needs the StrategyMatch attributes that function actually reads.
+  match = SimpleNamespace(
+    direction="BUY",
+    confluence=3,
+    strategy="Range Edge Scalp",
+    current_price=4100.0,
+    entry_low=4099.5,
+    entry_high=4100.5,
+    symbol="XAU",
+    source_tf="M5",
+    targets_pips=(),
+    execution_eligibility=None,
+  )
+
   ready = scanner._format_detection(
     "XAU",
     "M5",
     ctx,
     result,
     ["M30"],
-    execution_match=SimpleNamespace(),
+    execution_match=match,
   )
   blocked = scanner._format_detection(
     "XAU",
@@ -685,7 +701,10 @@ def test_scanner_card_never_claims_ready_before_worker(monkeypatch):
     execution_match=None,
   )
 
-  assert "QUEUED" in ready
+  # The unified card's status line is blank until a real worker
+  # acknowledgement fills it in (apply_forming_card_status) - never a
+  # presumptuous "ready"/"checking" claim made before that happens.
+  assert "QUEUED" not in ready
   assert "CHECKING" not in ready
   assert "Algo bot READY" not in ready
   assert "ANALYSIS ONLY" in blocked
@@ -694,7 +713,7 @@ def test_scanner_card_never_claims_ready_before_worker(monkeypatch):
   # footer survives every later card state (the header gets rewritten,
   # the body - including this line - does not), so it kept showing up on
   # filled/activated trades where it says nothing the rest of the card
-  # doesn't already convey. Dropped from every executable card.
+  # doesn't already convey. The unified card body never included it.
   assert "Executor owns mechanical entry" not in ready
 
 
