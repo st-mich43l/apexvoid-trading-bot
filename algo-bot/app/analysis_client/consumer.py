@@ -25,10 +25,20 @@ log = logging.getLogger(__name__)
 class AnalysisOpportunityConsumer:
   """Applies records durably, then asks the caller to advance the offset."""
 
-  def __init__(self, repository: PostgresAnalysisOpportunityRepository, *, shadow: AnalysisShadowEvaluator | None, mode: str):
+  def __init__(
+    self,
+    repository: PostgresAnalysisOpportunityRepository,
+    *,
+    shadow: AnalysisShadowEvaluator | None,
+    mode: str,
+    policy: Any | None = None,
+  ):
     self._repository = repository
     self._shadow = shadow
     self._mode = mode
+    # Optional Go->policy hook (S13C, mode="go" only). Duck-typed so this
+    # package never imports autotrade or any legacy detector.
+    self._policy = policy
 
   async def process_record(self, record: Any) -> None:
     topic = str(record.topic)
@@ -48,6 +58,15 @@ class AnalysisOpportunityConsumer:
       log.info("Go analysis shadow opportunity=%s disposition=%s outcome=%s", result.opportunity_id, result.disposition, decision.outcome if decision else "disabled")
     else:
       log.info("Go analysis lifecycle opportunity=%s disposition=%s", result.opportunity_id, result.disposition)
+    if self._mode == "go" and self._policy is not None:
+      # Exceptions propagate on purpose: the offset is then NOT committed, the
+      # event is redelivered, and the (idempotent) policy retries. Failing
+      # closed means a missed plan, never a duplicate or a half-authorised one.
+      if isinstance(event, OpportunityEnvelope):
+        outcome = await self._policy.on_creation(event, result)
+      else:
+        outcome = await self._policy.on_terminal(event, result)
+      log.info("Go analysis policy opportunity=%s outcome=%s", result.opportunity_id, outcome)
 
 
 async def analysis_opportunity_consumer_loop() -> None:
@@ -64,7 +83,11 @@ async def analysis_opportunity_consumer_loop() -> None:
     raise RuntimeError("aiokafka is required for the analysis opportunity consumer") from exc
   repository = PostgresAnalysisOpportunityRepository()
   shadow = AnalysisShadowEvaluator(repository) if authority.mode == "go_shadow" else None
-  handler = AnalysisOpportunityConsumer(repository, shadow=shadow, mode=authority.mode)
+  policy = None
+  if authority.mode == "go":
+    from app.autotrade.go_opportunity_policy import GoOpportunityPolicy
+    policy = GoOpportunityPolicy(repository)
+  handler = AnalysisOpportunityConsumer(repository, shadow=shadow, mode=authority.mode, policy=policy)
   consumer = AIOKafkaConsumer(
     OpportunityTopic,
     InvalidationTopic,
