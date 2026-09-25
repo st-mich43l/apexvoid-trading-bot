@@ -52,3 +52,6 @@ tests/test_analysis_opportunity_repository.py
 tests/test_analysis_shadow.py
 tests/test_technical_authority_config.py
 tests/test_s13_analysis_client_boundary.py
+tests/test_analysis_authority_fence.py
+tests/test_analysis_authority_cli.py
+tests/test_worker_authority_fence.py

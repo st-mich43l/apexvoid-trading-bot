@@ -65,3 +65,40 @@ Enable `go_shadow` only in a dedicated configuration/deployment change after:
 Rollback is configuration-only: set `consumer_enabled: false` (or retain
 `mode: python`) and redeploy. Existing ledger rows remain audit evidence;
 there is no execution state to unwind.
+
+## S13B: fenced technical-authority switch (implemented)
+
+Kafka publication is not a cutover. Who may create an executable TradePlan for a
+`(symbol, catalog strategy)` scope is a separate, durable, fenced decision:
+`algo-bot/app/analysis_client/authority.py`.
+
+| Property | Behaviour |
+|---|---|
+| Default | Every scope is Python-owned (no row = epoch 0). Deploying this changes nothing. |
+| Consulted when | Only if `consumer_enabled` is true (or a match is Go-tagged). With the consumer off, Python owns everything and no DB read is made. |
+| Handover | `python → draining → go` and back. While draining **neither** publisher may create a plan; the target takes effect after `drain_until`. Minimum drain is 3× the read-cache TTL, so a process holding a stale read is provably quiet first. |
+| Fencing token | Every handover advances a monotonic `epoch`, compare-and-set on the caller's `expected_epoch` (real Postgres test: 8 concurrent handovers → exactly 1 wins). A Go match carries its accepted epoch and is refused after any later handover, rollback or re-grant. |
+| Go needs acceptance | A grant requires an operator-recorded, unexpired acceptance for the exact symbol/scope/evidence. **Nothing in the code base writes one.** |
+| Rollback | Always allowed, needs no acceptance, works mid-drain; Go stops immediately, Python resumes after the drain. `rollback-all` is the emergency form. |
+| Failure mode | Any fence read failure **denies** publication (two publishers is worse than a skipped plan). |
+| Where enforced | The single executable-plan path: `worker._publish_trade_plan_v8` (the only caller of `publish_trade_plan`). Reconciling an already-published plan is deliberately not fenced; ownership governs creation, never management of existing positions. |
+| Not fenced | Analysis-only Telegram observations, manual trading, position management, retired legacy strategy names (no Go equivalent). |
+
+Operator interface (audited, nothing automatic):
+
+```bash
+python -m app.scripts.analysis_authority status [--symbol XAU]
+python -m app.scripts.analysis_authority accept   --symbol XAU --scope supply --evidence <ref> --approved-by <name>
+python -m app.scripts.analysis_authority grant    --symbol XAU --scope supply --expected-epoch 0 --evidence <ref> --actor <name> --reason <text>
+python -m app.scripts.analysis_authority rollback --symbol XAU --scope supply --expected-epoch <n> --actor <name> --reason <text>
+python -m app.scripts.analysis_authority rollback-all --actor <name> --reason <text>
+```
+
+Every transition is appended to `analysis_authority_transitions`. Rollback is
+therefore both configuration-free (a DB row) and configuration-level
+(`consumer_enabled: false` returns every scope to Python with no DB read).
+
+What this does **not** do: it does not produce Go-owned plans. The Go→TradePlan
+adapter and the technical facts it needs are S13B-3; until then a Go-owned
+scope simply has *no* publisher, which is why no acceptance is ever recorded
+here.
