@@ -30,7 +30,6 @@ _WICK_STRONG_FRACTION = 0.55
 _BODY_MAXIMUM_FRACTION = 0.45
 _CLOSE_BUY_MINIMUM_LOCATION = 0.65
 _CLOSE_SELL_MAXIMUM_LOCATION = 0.35
-_WICK_TO_BODY_MINIMUM_RATIO = 1.5
 _SWEEP_MINIMUM_PENETRATION_ATR = 0.05
 _RECLAIM_MINIMUM_DEPTH_ATR = 0.05
 
@@ -81,25 +80,9 @@ def _close_sell_maximum_location(cfg: Any | None) -> float:
   )
 
 
-def _wick_to_body_minimum_ratio(cfg: Any | None) -> float:
-  section = getattr(_rejection_cfg(cfg), "wick_to_body", None)
-  return float(
-    getattr(section, "minimum_ratio", _WICK_TO_BODY_MINIMUM_RATIO)
-    or _WICK_TO_BODY_MINIMUM_RATIO
-  )
-
-
 def _sweep_enabled(cfg: Any | None) -> bool:
   section = getattr(_rejection_cfg(cfg), "sweep", None)
   return bool(getattr(section, "enabled", True))
-
-
-def _sweep_minimum_penetration_atr(cfg: Any | None) -> float:
-  section = getattr(_rejection_cfg(cfg), "sweep", None)
-  return float(
-    getattr(section, "minimum_penetration_atr", _SWEEP_MINIMUM_PENETRATION_ATR)
-    or _SWEEP_MINIMUM_PENETRATION_ATR
-  )
 
 
 def _reclaim_enabled(cfg: Any | None) -> bool:

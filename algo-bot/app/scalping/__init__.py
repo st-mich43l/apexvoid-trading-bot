@@ -19,12 +19,11 @@ __all__ = [
   "ScalpOpportunity",
   "ScalpScore",
   "process_m1_bar",
-  "scalp_m1_event_loop",
 ]
 
 
 def __getattr__(name: str):
-  if name in {"process_m1_bar", "scalp_m1_event_loop"}:
+  if name == "process_m1_bar":
     from app.scalping import runtime as _runtime
     return getattr(_runtime, name)
   raise AttributeError(name)

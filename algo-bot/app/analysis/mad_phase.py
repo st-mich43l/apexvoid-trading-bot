@@ -1193,40 +1193,6 @@ async def record_asia_range_history_sample(
   await pipe.execute()
 
 
-async def load_asia_range_history(client: Any, symbol: str) -> list[float]:
-  """Recent sealed Asia range widths, most-recent-first."""
-  raw = await client.lrange(asia_range_history_key(symbol), 0, ASIA_RANGE_HISTORY_MAX - 1)
-  widths: list[float] = []
-  for item in raw or ():
-    text = item.decode() if isinstance(item, (bytes, bytearray)) else str(item)
-    try:
-      widths.append(float(text.rsplit(":", 1)[-1]))
-    except (ValueError, IndexError):
-      continue
-  return widths
-
-
-def range_percentile(current_width: float, history: list[float]) -> float | None:
-  """Percentile (0..1) of ``current_width`` within ``history`` (telemetry)."""
-  if not history:
-    return None
-  below_or_equal = sum(1 for width in history if width <= current_width)
-  return below_or_equal / len(history)
-
-
-def range_vs_recent_median(current_width: float, history: list[float]) -> float | None:
-  """``current_width`` / median(``history``) (telemetry, None if no history)."""
-  if not history:
-    return None
-  ordered = sorted(history)
-  n = len(ordered)
-  mid = n // 2
-  median = ordered[mid] if n % 2 else (ordered[mid - 1] + ordered[mid]) / 2.0
-  if median <= 0:
-    return None
-  return float(current_width) / median
-
-
 async def save_mad_phase(
   client: Any,
   symbol: str,
