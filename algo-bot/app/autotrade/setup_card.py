@@ -35,6 +35,12 @@ from app.autotrade.setup_execution_aggregate import (
 )
 from app.autotrade.setup_lifecycle import TERMINAL_STATES, load_setup
 from app.autotrade.strategy_match import StrategyMatch
+from app.autotrade.trade_card import (
+  conservative_entry_reference,
+  format_entry_line,
+  format_sl_line,
+  format_target_line,
+)
 from app.core.config import runtime_config
 from app.core.symbols import digits_for, pip_for
 
@@ -51,6 +57,17 @@ def card_price_digits(symbol: str) -> int:
     return int(digits_for(symbol))
   except KeyError:
     return 2
+
+
+def _card_pip_size(symbol: str) -> float | None:
+  """Same defensive-unknown-symbol floor as card_price_digits, for the SL
+  line's risk-in-pips computation (live 2026-09-07: an unregistered symbol
+  must fall back gracefully, never raise out of card rendering).
+  """
+  try:
+    return float(pip_for(symbol))
+  except KeyError:
+    return None
 
 
 # P0-6: a durable status write (save_forming_card_status/edit_forming_card_status)
@@ -254,24 +271,80 @@ def parse_forming_card_symbol(text: str) -> str | None:
   return symbol
 
 
+_OLD_STOP_LINE_PREFIX = "• <b>Stop:</b>"
+_NEW_STOP_LINE_PREFIX = "🛡 SL:"
+_ENTRY_LINE_RE = re.compile(
+  r"⚡️ Entry (?:Zone|Price):\s*<b>([\d,]+(?:\.\d+)?)"
+  r"(?:\s*-\s*([\d,]+(?:\.\d+)?))?</b>"
+)
+
+
+def _parse_card_entry_reference(text: str) -> float | None:
+  """Recover the conservative entry reference from the card's own already-
+  printed Entry line, so a later Stop edit can show "risk N pips" without
+  every caller needing to thread StrategyMatch through. Direction comes
+  from the direction/strategy body line (line 2) this card's status-slot
+  machinery already keeps at a fixed position.
+  """
+  direction = None
+  low = high = None
+  for line in text.splitlines():
+    stripped = line.strip()
+    body = _BODY_DIRECTION_LINE_RE.match(stripped)
+    if body is not None:
+      direction = body.group(1)
+    entry_match = _ENTRY_LINE_RE.search(stripped)
+    if entry_match is not None:
+      try:
+        low = float(entry_match.group(1).replace(",", ""))
+        high = (
+          float(entry_match.group(2).replace(",", ""))
+          if entry_match.group(2)
+          else None
+        )
+      except ValueError:
+        low = high = None
+  if direction is None or low is None:
+    return None
+  return conservative_entry_reference(direction, low, high)
+
+
 def apply_forming_card_stop(text: str, stop_price: float, *, digits: int = 2) -> str:
-  """Insert or replace the Trade-area Stop line and copy-draft SL value."""
+  """Insert or replace the SL line and copy-draft SL value.
+
+  Recognizes both the current "🛡 SL:" line and the legacy "• <b>Stop:</b>"
+  line it replaced, so a trade whose card was created before this format
+  changed still gets its next stop edit rendered in the current format
+  instead of staying stuck on the old one.
+  """
   if not text or not math.isfinite(stop_price):
     return text
-  stop_text = f"{stop_price:,.{digits}f}"
+  symbol = parse_forming_card_symbol(text)
+  reference = _parse_card_entry_reference(text)
+  pip_size = _card_pip_size(symbol) if symbol else None
+  if symbol and reference is not None and pip_size is not None:
+    stop_line = format_sl_line(
+      symbol, stop_price, reference, digits=digits, pip_size=pip_size,
+    )
+  else:
+    stop_text = f"{stop_price:,.{digits}f}"
+    stop_line = f"🛡 SL:     <b>{stop_text}</b>"
   plain_stop = f"{stop_price:.{digits}f}"
   lines = text.splitlines()
-  stop_line = f"• <b>Stop:</b> <b>{stop_text}</b>"
   has_stop = any(
-    line.strip().startswith("• <b>Stop:</b>") for line in lines
+    line.strip().startswith(_OLD_STOP_LINE_PREFIX)
+    or line.strip().startswith(_NEW_STOP_LINE_PREFIX)
+    for line in lines
   )
   inserted = False
   out: list[str] = []
   for line in lines:
     stripped = line.strip()
-    if stripped.startswith("• <b>Stop:</b>"):
-      # Replace every existing Stop line with one canonical value; skip
-      # duplicates so Trade area never shows Stop twice.
+    if stripped.startswith(_OLD_STOP_LINE_PREFIX) or stripped.startswith(
+      _NEW_STOP_LINE_PREFIX
+    ):
+      # Replace every existing Stop/SL line with one canonical value; skip
+      # duplicates so the card never shows it twice.
       if not inserted:
         out.append(stop_line)
         inserted = True
@@ -280,12 +353,16 @@ def apply_forming_card_stop(text: str, stop_price: float, *, digits: int = 2) ->
     if (
       not has_stop
       and not inserted
-      and stripped.startswith("• <b>Key level:</b>")
+      and (
+        stripped.startswith("⚡️ Entry")
+        or stripped.startswith("• <b>Key level:</b>")
+      )
     ):
       out.append(stop_line)
       inserted = True
   if not inserted:
-    # Fall back: place before Context / Copy draft sections.
+    # Fall back: place before Context / Copy draft sections (legacy card
+    # shapes), else append.
     rebuilt: list[str] = []
     placed = False
     for line in out:
@@ -311,12 +388,13 @@ def apply_forming_card_stop(text: str, stop_price: float, *, digits: int = 2) ->
   )
 
 
-_TP_LINE_RE = re.compile(r"^•\s*<b>TP\d+:</b>", re.IGNORECASE)
+_TP_LINE_RE = re.compile(r"^💰\s*TP\d+:|^•\s*<b>TP\d+:</b>", re.IGNORECASE)
 
 
 def _is_targets_row(stripped: str) -> bool:
-  """A legacy single ' · '-joined Targets line, or one of the newer
-  one-bullet-per-TP lines - either counts as "the Targets block".
+  """A legacy single ' · '-joined Targets line, a legacy one-bullet-per-TP
+  line, or the current "💰 TPn:" line - any of these counts as "the
+  Targets block".
   """
   return (
     stripped.startswith("• <b>Targets:</b>")
@@ -325,21 +403,26 @@ def _is_targets_row(stripped: str) -> bool:
 
 
 def apply_forming_card_targets(text: str, targets_line: str) -> str:
-  """Insert or replace the Trade-area Targets block.
+  """Insert or replace the Targets block ("💰 TPn:" rows).
 
   ``targets_line`` may be a single legacy line or a multi-line ('\\n'
-  joined) one-bullet-per-TP block - either way the WHOLE existing block
+  joined) one-row-per-TP block - either way the WHOLE existing block
   (contiguous Targets/TPn rows, regardless of which shape produced them)
-  is replaced as one unit, never left to accumulate duplicates.
+  is replaced as one unit, never left to accumulate duplicates. Rows are
+  used exactly as given - format_target_line already produces
+  complete, correctly-prefixed lines, unlike the legacy bullet block this
+  replaced.
 
-  Scanner SETUP FORMING cards omit Targets; publish/fill must still surface
-  the plan TP ladder. Place after Stop when present, else after Key level,
-  else before Context.
+  Recognizes both the current "🛡 SL:" line and the legacy
+  "• <b>Stop:</b>"/"• <b>Key level:</b>" lines as insertion anchors, so a
+  trade whose card predates this format still gets its targets placed
+  sensibly.  Scanner SETUP FORMING cards omit Targets; publish/fill must
+  still surface the plan TP ladder.
   """
   if not text or not targets_line:
     return text
   block_lines = [
-    row.strip() if row.strip().startswith("•") else f"• {row.strip()}"
+    row.strip()
     for row in targets_line.strip("\n").splitlines()
     if row.strip()
   ]
@@ -360,7 +443,10 @@ def apply_forming_card_targets(text: str, targets_line: str) -> str:
     if (
       not has_targets
       and not inserted
-      and stripped.startswith("• <b>Stop:</b>")
+      and (
+        stripped.startswith(_NEW_STOP_LINE_PREFIX)
+        or stripped.startswith(_OLD_STOP_LINE_PREFIX)
+      )
     ):
       out.extend(block_lines)
       inserted = True
@@ -1433,10 +1519,13 @@ async def ensure_forming_card_targets(
     or "XAU"
   ).upper()
   if resolved_match is None:
-    # Price-only fallback: TP labels without pip offsets, one per line -
-    # same block shape apply_forming_card_targets replaces/detects below.
+    # Price-only fallback: TP labels without a suffix, one per line - same
+    # block shape apply_forming_card_targets replaces/detects below.
     target_lines = [
-      f"• <b>TP{index + 1}:</b> <b>{_price_text(price, symbol=card_symbol)}</b>"
+      format_target_line(
+        index, card_symbol, price, None,
+        digits=card_price_digits(card_symbol),
+      )
       for index, price in enumerate(prices or ())
     ]
   else:
@@ -1853,11 +1942,8 @@ def _trade_area_target_lines(
     direction = str(match.direction or "").upper()
     r_multiples = _configured_target_r_multiples(match, symbol)
     for index, price in enumerate(prices):
-      label = f"TP{index + 1}"
-      price_text = _price_text(price, symbol=symbol)
       if r_multiples is not None and index < len(r_multiples):
         suffix = _format_r_multiple(r_multiples[index])
-        lines.append(f"• <b>{label}:</b> <b>{price_text} ({suffix})</b>")
       elif reference is not None:
         offset = _target_pip_offset(
           price,
@@ -1865,14 +1951,17 @@ def _trade_area_target_lines(
           direction=direction,
           symbol=symbol,
         )
-        lines.append(f"• <b>{label}:</b> <b>{price_text} (+{offset})</b>")
+        suffix = f"+{offset}"
       elif index < len(pips):
-        lines.append(f"• <b>{label}:</b> <b>{price_text} (+{pips[index]})</b>")
+        suffix = f"+{pips[index]}"
       else:
-        lines.append(f"• <b>{label}:</b> <b>{price_text}</b>")
+        suffix = None
+      lines.append(format_target_line(
+        index, symbol, price, suffix, digits=card_price_digits(symbol),
+      ))
     return lines
   return [
-    f"• <b>TP{index + 1}:</b> <b>+{value} pips</b>"
+    f"💰 TP{index + 1}:   <b>+{value} pips</b>"
     for index, value in enumerate(pips)
   ]
 
@@ -1883,27 +1972,25 @@ def format_plan_published_root_card(
   stop_price: float | None = None,
   target_prices: tuple[float, ...] | None = None,
 ) -> str:
-  """Root card after publish with scanner-style trade/context detail.
+  """Root card after publish, in the shared Manual/Auto Algo card design
+  (Phase S12) below its own headline/status-slot/direction line.
 
-  Includes bias / structure / trade area / context / stop when available on
-  the StrategyMatch. No PLAN PUBLISHED status line — publication is silent on
-  the card head. Trade-area Stop is the published plan stop and is not
-  rewritten on BE / trailing updates.
+  Lines [0..2] (headline, status slot, direction/strategy/stars) are left
+  exactly as every other piece of this card's lifecycle-editing machinery
+  expects (apply_forming_card_status/forming_card_matches_strategy parse
+  them by fixed position/pattern) - only the body below them changes.
+  Scanner-only diagnostics (bias, structural source, confirmation, candle
+  quality, source TF, math line, HTF bias/context reasons) are dropped per
+  spec ("Do not add the old Auto Algo scanner-style sections... to the
+  entry card") - they remain queryable from the persisted StrategyMatch
+  for owner diagnostics, just not rendered here. No PLAN PUBLISHED status
+  line — publication is silent on the card head. Stop is the published
+  plan stop and is not rewritten on BE / trailing updates.
   """
   direction = str(match.direction or "").upper()
   direction_icon = "🟢" if direction == "BUY" else "🔴"
   stars = "⭐" * max(1, min(3, int(match.confluence or 1)))
   setup_label = str(match.strategy or "").strip() or "Setup"
-  mode = str(match.strategy_mode or "").strip()
-  confirmation = str(match.reaction_type or "").strip()
-  source_tf = str(
-    match.structural_timeframe or match.source_tf or ""
-  ).strip().upper()
-  htf_bias = str(match.htf_bias or "").strip()
-  extra_reasons = [
-    reason for reason in (match.reasons or ())
-    if reason and not str(reason).lower().startswith("htf bias")
-  ][:2]
   in_zone = quote_inside_entry_zone(
     match.current_price, match.entry_low, match.entry_high,
   )
@@ -1920,59 +2007,41 @@ def format_plan_published_root_card(
       f"{direction_icon} <b>{escape(direction)} · "
       f"{escape(setup_label)}</b> · {stars}"
     ),
-  ]
-  bias = str(match.bias_relationship or "").strip()
-  if bias == "with_bias":
-    lines.append("🧭 <b>Bias:</b> with bias")
-  elif bias == "counter_bias":
-    lines.append("⚠️ <b>Bias:</b> counter bias")
-  if match.structural_source:
-    lines.append(
-      f"🧱 <b>Structural source:</b> {escape(str(match.structural_source))}"
-    )
-  if confirmation:
-    lines.append(f"✅ <b>Confirmation:</b> {escape(confirmation)}")
-  candle_lines = _format_candle_lines(match)
-  if candle_lines:
-    lines.extend(candle_lines)
-  if source_tf:
-    lines.append(f"⏱ <b>Source TF:</b> {escape(source_tf)}")
-
-  math_line = _format_math_line(match)
-  if math_line:
-    lines.extend(["", "📐 <b>Math</b>", f"• {escape(math_line)}"])
-
-  lines.extend([
     "",
-    "📍 <b>Trade area</b>",
-    (
-      "• <b>Entry zone:</b> "
-      f"<b>{_price_text(match.entry_low, symbol=symbol)}–"
-      f"{_price_text(match.entry_high, symbol=symbol)}</b>"
-    ),
-    (
-      "• <b>Key level:</b> "
-      f"<b>{_price_text(match.key_level, symbol=symbol)}</b>"
-    ),
-  ])
-  if stop_price is not None and math.isfinite(float(stop_price)):
+  ]
+  card_digits = card_price_digits(symbol)
+  if match.entry_low is not None and match.entry_high is not None:
     lines.append(
-      "• <b>Stop:</b> "
-      f"<b>{_price_text(float(stop_price), symbol=symbol)}</b>"
+      format_entry_line(
+        symbol, float(match.entry_low), float(match.entry_high),
+        digits=card_digits,
+      )
     )
+  if stop_price is not None and math.isfinite(float(stop_price)):
+    card_pip_size = _card_pip_size(symbol)
+    if (
+      match.entry_low is not None
+      and match.entry_high is not None
+      and card_pip_size is not None
+    ):
+      reference = conservative_entry_reference(
+        direction, float(match.entry_low), float(match.entry_high),
+      )
+      lines.append(format_sl_line(
+        symbol, float(stop_price), reference,
+        digits=card_digits, pip_size=card_pip_size,
+      ))
+    else:
+      lines.append(
+        f"🛡 SL:     <b>{_price_text(float(stop_price), symbol=symbol)}</b>"
+      )
   else:
-    lines.append("• <b>Stop:</b> <b>SL</b>")
+    lines.append("🛡 SL:     <b>pending</b>")
 
   lines.extend(_trade_area_target_lines(
     match, symbol=symbol, target_prices=target_prices,
   ))
 
-  lines.extend(["", "🧭 <b>Context</b>"])
-  if htf_bias:
-    lines.append(f"• <b>HTF bias:</b> {escape(htf_bias)}")
-  elif mode:
-    lines.append(f"• <b>HTF bias:</b> {escape(mode)}")
-  lines.extend(f"• {escape(str(reason))}" for reason in extra_reasons)
   return "\n".join(lines)
 
 
