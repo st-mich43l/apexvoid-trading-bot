@@ -160,7 +160,9 @@ def test_render_entry_pins_tp_r_multiples_to_original_sl_not_trailed_stop():
 
   card = broadcast.render_entry(signal, "vip")
 
-  assert "SL:     <b>4,420.16</b>" in card
+  # XAU displays whole - the actual 4420.16 sl value still drives the pip
+  # math below unrounded (presentation-only rounding).
+  assert "SL:     <b>4,420</b>" in card
   # risk is displayed in pips (0.16 price / 0.1 pip_size = 1.6, rounds to 2).
   assert "risk <b>2 pips</b>" in card
 

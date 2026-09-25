@@ -1225,9 +1225,10 @@ def test_root_card_shows_target_prices_with_pip_offsets():
     stop_price=4045.0,
     target_prices=(4050.73, 4052.73, 4054.73),
   )
-  assert "💰 TP1:   <b>4,050.73</b>  ·  <b>+20</b>" in text
-  assert "💰 TP2:   <b>4,052.73</b>  ·  <b>+40</b>" in text
-  assert "💰 TP3:   <b>4,054.73</b>  ·  <b>+60</b>" in text
+  # XAU rounds to a whole number for display (4050.73 -> 4,051, etc.).
+  assert "💰 TP1:   <b>4,051</b>  ·  <b>+20</b>" in text
+  assert "💰 TP2:   <b>4,053</b>  ·  <b>+40</b>" in text
+  assert "💰 TP3:   <b>4,055</b>  ·  <b>+60</b>" in text
 
 
 def test_root_card_target_r_multiple_lookup_never_crashes_on_unknown_symbol():

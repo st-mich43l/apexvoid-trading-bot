@@ -3,11 +3,33 @@ from app.autotrade import trade_card
 
 def test_format_price_strips_trailing_zeros_with_thousands_separator():
   assert trade_card.format_price(4341.0, "XAU") == "4,341"
-  assert trade_card.format_price(4341.50, "XAU") == "4,341.5"
 
 
 def test_format_price_falls_back_to_two_digits_for_unknown_symbol():
   assert trade_card.format_price(1.5, "UNKNOWN_SYMBOL") == "1.5"
+
+
+def test_format_price_rounds_xau_to_a_whole_number():
+  # Owner preference: XAU always displays whole - a presentation override,
+  # not a change to the underlying technical/broker price this value came
+  # from. XAU's real production price_digits (2) never applies here.
+  assert trade_card.format_price(4341.73, "XAU") == "4,342"
+  assert trade_card.format_price(4341.2, "XAU") == "4,341"
+
+
+def test_format_price_never_rounds_fx():
+  # This file's ambient config resolves EURUSD to 2 digits, not real FX
+  # precision - the point of this test is only that the XAU whole-number
+  # override doesn't leak onto other symbols.
+  assert trade_card.format_price(1.36447, "EURUSD") == "1.36"
+
+
+def test_format_r_multiple_has_no_plus_sign_and_one_decimal():
+  # Matches the owner's own approved entry-card example ("1.0R"), and
+  # app.signals.broadcast's own R-multiple convention - not the "+1R"
+  # (plus sign, no decimal) a prior Auto-only formatter used.
+  assert trade_card.format_r_multiple(1.0) == "1.0R"
+  assert trade_card.format_r_multiple(2.5) == "2.5R"
 
 
 def test_conservative_entry_reference_buy_uses_upper_edge():
