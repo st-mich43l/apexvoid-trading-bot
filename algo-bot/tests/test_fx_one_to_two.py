@@ -207,19 +207,23 @@ def _fx_match(symbol: str = "EURUSD") -> StrategyMatch:
 
 
 @pytest.mark.parametrize("direction", ["BUY", "SELL"])
-def test_fx_technique_route_is_single_leg_market(direction: str):
+def test_fx_technique_route_uses_its_declared_zone_scale_policy(direction: str):
+  # Owner 2026-09-08 (bad technique entries): technique strategies no
+  # longer share scalp's single-leg-market-only short-circuit - see
+  # test_technique_fvg_uses_its_declared_zone_scale_policy
+  # (test_scalp_micro_grid.py) for the full incident/fix history.
   from app.autotrade.execution_route import (
-    ROUTE_MARKET,
+    ROUTE_ZONE_SPLIT,
     resolve_execution_route_plan,
   )
 
   plan = resolve_execution_route_plan(
     direction=direction,
-    order_type_preference="market",
-    entry_distribution="single",
-    executable_quote=1.1002,
+    order_type_preference="limit",
+    entry_distribution="zone_scale",
+    executable_quote=1.1005,
     zone_low=1.1000,
-    zone_high=1.1004,
+    zone_high=1.1010,
     atr=0.0008,
     zone_fill_enabled=True,
     digits=5,
@@ -228,16 +232,22 @@ def test_fx_technique_route_is_single_leg_market(direction: str):
     entry_clips=2,
   )
   assert plan.valid is True
-  assert plan.route == ROUTE_MARKET
-  assert plan.planned_leg_entry_prices == ()
-  assert plan.planned_leg_volume_ratios == ()
-  assert plan.immediate_market is True
-  assert plan.routing_reason == "technique: single-leg market (no micro-grid)"
+  assert plan.route == ROUTE_ZONE_SPLIT
+  assert len(plan.planned_leg_entry_prices) == 2
 
 
-def test_fx_auto_plan_books_single_leg_market_for_fvg():
+def test_fx_auto_plan_uses_single_market_watch_entry():
+  # FX's pack overrides a technique policy's zone_scale declaration: one
+  # best in-zone market fill, no shallow/deep ladder, even when the zone
+  # would otherwise qualify for scaling.
   cfg = _load_production_example().config
-  match = replace(_fx_match(), strategy="FVG", family="zone")
+  match = replace(
+    _fx_match(),
+    strategy="FVG",
+    family="zone",
+    entry_high=1.1010,
+    structural_zone_high=1.1010,
+  )
   evaluation = evaluate_execution_policy(
     match,
     spot_price=match.current_price,
@@ -247,6 +257,8 @@ def test_fx_auto_plan_books_single_leg_market_for_fvg():
     cfg=cfg,
   )
   assert evaluation.allowed is True
+  assert evaluation.measured["auto_entry_mode"] == "single_best"
+  assert evaluation.measured["entry_distribution"] == "single"
   assert evaluation.measured["planned_execution_route"] == "market"
   assert evaluation.measured.get("planned_leg_volume_ratios") in (None, [], ())
 
@@ -263,8 +275,46 @@ def test_fx_auto_plan_books_single_leg_market_for_fvg():
     max_volume=100_000_000,
     approved_measured=evaluation.measured,
   )
-  assert plan.entry.type == "market"
+  assert plan.entry.type == "market_watch"
   assert plan.entry.legs == ()
+
+
+@pytest.mark.parametrize(
+  ("direction", "quote", "expected_route", "expected_price"),
+  [
+    ("BUY", 1.1005, "market", 1.1005),
+    ("SELL", 1.1005, "market", 1.1005),
+    ("BUY", 1.1015, "single_limit", 1.1010),
+    ("SELL", 1.0995, "single_limit", 1.1000),
+  ],
+)
+def test_fx_single_best_entry_has_one_or_zero_declared_legs(
+  direction: str,
+  quote: float,
+  expected_route: str,
+  expected_price: float,
+):
+  from app.autotrade.execution_route import resolve_execution_route_plan
+
+  route = resolve_execution_route_plan(
+    direction=direction,
+    order_type_preference="limit",
+    entry_distribution="single",
+    executable_quote=quote,
+    zone_low=1.1000,
+    zone_high=1.1010,
+    atr=0.0008,
+    zone_fill_enabled=True,
+    digits=5,
+    single_entry_market_inside=True,
+  )
+
+  assert route.valid is True
+  assert route.route == expected_route
+  assert route.planned_entry_price == expected_price
+  assert route.planned_leg_entry_prices in ((), (expected_price,))
+  assert len(route.planned_leg_entry_prices) <= 1
+  assert route.planned_leg_volume_ratios == ()
 
 
 def test_fx_targeting_is_explicit_configuration_not_symbol_detection():
@@ -284,11 +334,13 @@ def test_fx_targeting_is_explicit_configuration_not_symbol_detection():
     assert effective.targeting.entry_clips == 2
     assert effective.execution.technique.require_sweep_body is False
     assert fixed_reward_risk(symbol, cfg) == 2.0
-  assert fixed_reward_risk("XAU", cfg) == 2.0
-  assert fixed_reward_risk("XAUUSD", cfg) == 2.0
+  # XAU deliberately diverges from the FX policies' shared 1R/2R shape -
+  # see test_xau_technique_uses_the_owner_requested_r_ladder below.
+  assert fixed_reward_risk("XAU", cfg) == 4.0
+  assert fixed_reward_risk("XAUUSD", cfg) == 4.0
 
 
-def test_hfs_fixed_rr_prefers_two_r_then_falls_back_to_one_r():
+def test_scalp_fixed_rr_prefers_two_r_then_falls_back_to_one_r():
   cfg = _load_production_example().config
   # Room fits 1R (15) but not preferred 2R (30): FX takes exactly 1R.
   gold = _select_target(
@@ -317,7 +369,7 @@ def test_hfs_fixed_rr_prefers_two_r_then_falls_back_to_one_r():
   assert fx[1] == 15.0
 
 
-def test_hfs_fixed_rr_takes_two_r_when_room_fits():
+def test_scalp_fixed_rr_takes_two_r_when_room_fits():
   cfg = _load_production_example().config
   target = _select_target(
     direction="SELL",
@@ -338,21 +390,21 @@ def test_fx_reaction_stop_envelopes_diverge_while_gold_uses_structure_band():
 
   cfg = _load_production_example().config
   eurusd_min, eurusd_max, eurusd_measured = stop_bounds_for_reaction_room(
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     primary_tp_pips=50,
     pip_size=0.0001,
     cfg=cfg,
     symbol="EURUSD",
   )
   gbpjpy_min, gbpjpy_max, gbpjpy_measured = stop_bounds_for_reaction_room(
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     primary_tp_pips=50,
     pip_size=0.01,
     cfg=cfg,
     symbol="GBPJPY",
   )
   gold_min, gold_max, gold_measured = stop_bounds_for_reaction_room(
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     primary_tp_pips=90,
     pip_size=0.1,
     cfg=cfg,
@@ -362,7 +414,7 @@ def test_fx_reaction_stop_envelopes_diverge_while_gold_uses_structure_band():
   assert eurusd_measured["fixed_rr_targeting"] is True
   assert (gbpjpy_min, gbpjpy_max) == (15, 30)
   assert gbpjpy_measured["fixed_rr_targeting"] is True
-  assert (gold_min, gold_max) == (25, 100)
+  assert (gold_min, gold_max) == (50, 60)
   assert gold_measured["fixed_rr_targeting"] is True
 
 
@@ -371,7 +423,9 @@ def test_fx_auto_reaction_books_pack_volume_multiplier():
 
   Live 2026-08-21: GBPJPY Key Level filled 0.12 lots (raw equity table)
   while pack ``manual.risk_multiplier`` / ``fx_volume_multiplier`` promised
-  1.5×. Scalp stays on range_max (2.0) without stacking the pack scale.
+  1.5×. Scalp books the same flat equity-table lot as any other trade
+  (owner 2026-09-07, PR #486's equity_table sizing_mode default) without
+  stacking the pack scale on top.
   """
   from tests.test_execution_pipeline_integrity import _policy_match
 
@@ -417,10 +471,11 @@ def test_fx_auto_reaction_books_pack_volume_multiplier():
     pip_size=0.0001,
     cfg=cfg,
   )
-  # May reject on room/geometry; when allowed, pack must not stack onto 2.0.
+  # May reject on room/geometry; scalp uses its standalone 1.5x multiplier
+  # without stacking the FX pack multiplier.
   if scalp.allowed:
     assert scalp.measured["instrument_volume_multiplier"] == pytest.approx(1.0)
-    assert scalp.measured["effective_risk_multiplier"] == pytest.approx(2.0)
+    assert scalp.measured["effective_risk_multiplier"] == pytest.approx(1.5)
 
 
 def test_fx_fixed_rr_builds_one_r_two_r_with_breakeven():
@@ -642,10 +697,86 @@ def test_gbpjpy_sell_uses_uniform_two_r_contract():
   assert plan.management.trail_to_target_id is None
 
 
-def test_xau_technique_shares_uniform_fixed_rr_ladder():
+def test_xau_technique_uses_the_owner_requested_r_ladder():
+  """2026-09-15: XAU deliberately diverges from the FX policies' shared
+  1R/2R shape onto manual /algo's own default 4-level R ladder
+  (1R/2R/3R/4R) - the uniform-across-fixed_rr contract is now per-policy,
+  not global.
+  """
   cfg = _load_production_example().config
   xau = cfg.for_instrument("XAU")
-  assert xau.targeting.target_r_multiples == (1.0, 2.0)
-  assert xau.targeting.close_ratios == (0.5, 0.5)
+  assert xau.targeting.target_r_multiples == (1.0, 2.0, 3.0, 4.0)
+  assert xau.targeting.close_ratios == (0.4, 0.2, 0.2, 0.2)
   assert xau.targeting.breakeven_after_r == 1.0
   assert xau.targeting.trail_after_r is None
+  # FX keeps the old shape unchanged.
+  eurusd = cfg.for_instrument("EURUSD")
+  assert eurusd.targeting.target_r_multiples == (1.0, 2.0)
+  assert eurusd.targeting.close_ratios == (0.5, 0.5)
+  assert eurusd.targeting.breakeven_after_r == 1.0
+
+
+def test_root_card_r_multiples_use_the_configured_ladder_not_card_prices(
+  monkeypatch,
+):
+  # Live 2026-09-07: a GBPJPY SELL (iFVG) root card showed "+10R"/"+15.6R"
+  # for what was actually a uniform 1R/2R fixed_rr trade. The card's stop
+  # is anchored to structure while the displayed entry-zone edge is only a
+  # reward-side planning reference -- the two don't share a basis, so
+  # deriving R from (target - zone edge) / (stop - zone edge) landed far
+  # from the real ratio. The root card must read target_r_multiples
+  # straight from the instrument's own fixed_rr config instead.
+  from app.autotrade import setup_card
+  from app.core import instrument_geometry
+
+  cfg = _load_production_example().config
+  monkeypatch.setattr(instrument_geometry, "runtime_config", cfg)
+
+  gbpjpy_match = replace(
+    _fx_match("GBPJPY"),
+    strategy="iFVG",
+    direction="SELL",
+    entry_low=209.132,
+    entry_high=209.337,
+    key_level=209.337,
+  )
+  # A stop close to the zone edge and far targets -- exactly the shape
+  # that made the old price-derived formula produce "+10R"/"+15.6R".
+  text = setup_card.format_plan_published_root_card(
+    gbpjpy_match,
+    stop_price=209.369,
+    target_prices=(209.013, 208.835),
+  )
+  assert "<b>1.0R</b>" in text
+  assert "<b>2.0R</b>" in text
+
+  xau_match = replace(
+    _fx_match("XAU"),
+    strategy="Key Level",
+    direction="SELL",
+    entry_low=4383.0,
+    entry_high=4388.0,
+    key_level=4388.0,
+  )
+  xau_text = setup_card.format_plan_published_root_card(
+    xau_match,
+    stop_price=4396.0,
+    target_prices=(4380.0, 4376.0, 4368.0, 4360.0),
+  )
+  assert "💰 TP1:   <b>4,380</b>  ·  <b>1.0R</b>" in xau_text
+  assert "💰 TP2:   <b>4,376</b>  ·  <b>2.0R</b>" in xau_text
+  assert "💰 TP3:   <b>4,368</b>  ·  <b>3.0R</b>" in xau_text
+  assert "💰 TP4:   <b>4,360</b>  ·  <b>4.0R</b>" in xau_text
+
+
+def test_xau_gets_a_smaller_opposing_barrier_buffer_than_fx():
+  # XAU's ATR is dollar-denominated; the FX-tuned 0.5x multiple buffers
+  # away 40-115+ pips of real opposing-structure room on XAU (measured in
+  # prod), comparable to or larger than XAU's own 25-100 pip stop
+  # envelope. XAU overrides to 0.15; FX keeps the global 0.5 default.
+  cfg = _load_production_example().config
+  xau = cfg.for_instrument("XAU")
+  eurusd = cfg.for_instrument("EURUSD")
+  assert xau.actionability.target_room.barrier_buffer_atr == pytest.approx(0.15)
+  assert eurusd.actionability.target_room.barrier_buffer_atr == pytest.approx(0.5)
+  assert cfg.actionability.target_room.barrier_buffer_atr == pytest.approx(0.5)

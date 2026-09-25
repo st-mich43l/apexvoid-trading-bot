@@ -185,7 +185,7 @@ def build_liquidity_sweep_events(
 ) -> list[dict[str, Any]]:
   """Emit Liquidity Sweep LabEvent dicts for M1 bars that pierce the PIT range edge.
 
-  No HFS discover required — math gates decide reclaim / location / room.
+  No scalping discover required — math gates decide reclaim / location / room.
   """
   m1f = _ensure_ohlc_frame(m1)
   m5f = _ensure_ohlc_frame(m5)

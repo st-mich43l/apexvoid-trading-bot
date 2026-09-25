@@ -23,6 +23,29 @@ by Telegram, cross only the Redis boundary documented in
   `docker build --build-arg PUBLISH_AOT=false`; that produces a trimmed,
   self-contained, single-file binary instead of Native AOT.
 
+## Configuration V3 (Stage C5 — reader only, not wired live)
+
+`src/MinimalYamlParser.cs` + `src/ConfigurationV3.cs` are a hand-rolled,
+reflection-free direct reader for Configuration V3
+(`config/apexvoid.yml` + categorized includes + one environment overlay,
+see `../docs/configuration-v3-migration-audit.md`'s Stage C5 section) —
+a third independent implementation of the same include/merge/overlay
+spec Python's `v3_root.py` and Go's `v3_document.go` already implement.
+Hand-rolled instead of a `YamlDotNet`-style library on purpose: this
+project publishes Native AOT + trimmed + self-contained, and a
+reflection-based deserializer is exactly the class of thing that breaks
+under AOT trimming (see `ResolvedRuntimeManifestLoader`'s own comment on
+the `Deserialize<T>` crash this project already hit once).
+
+**Not wired into the live path.** `AutoTradeOptions`,
+`ResolvedRuntimeManifest`, and `ManifestRuntimeFactory` are completely
+untouched by this module and still drive real order execution exactly as
+before. This service places real broker orders with real money, and the
+config surface `ResolvedAutoTradeProjection` covers (100+ fields) hasn't
+been verified at the field-by-field rigor the live path deserves — see
+the audit doc for the full reasoning. Tests: `ConfigurationV3Tests.cs`
+(24 tests, included in the `dotnet test` command below).
+
 ## Environment
 
 Required:

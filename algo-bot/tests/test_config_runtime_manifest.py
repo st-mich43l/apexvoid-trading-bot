@@ -107,6 +107,7 @@ def test_manifest_v2_instrument_runtimes_present():
     "risk_reference": "shallow",
     "risk_multiplier": "1",
     "target_close_ratios": [],
+    "target_r_multiples": [],
     "tp1_close_fraction": "0.4",
   }
   assert payload["instrument_runtimes"]["EURUSD"]["manual"] == {
@@ -116,6 +117,7 @@ def test_manifest_v2_instrument_runtimes_present():
     "risk_reference": "shallow",
     "risk_multiplier": "1.5",
     "target_close_ratios": ["0.25", "0.25", "0.5"],
+    "target_r_multiples": [],
     "tp1_close_fraction": None,
   }
 

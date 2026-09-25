@@ -13,6 +13,7 @@ from app.analysis.technique_geometry import TECHNIQUE_SD, TechniqueInstance
 from app.analysis.technique_detectors import supply_demand_technique_reaction
 from app.analysis.structural_reaction_support import (
   STRUCTURAL_SETUPS,
+  ReactionConfirmation,
   engulfing_on_bar,
   evaluate_structural_reaction,
   structural_thesis_id,
@@ -295,6 +296,11 @@ def test_supply_demand_technique_reaction_buy():
   assert result.confirmation_type in {
     "wick_rejection", "strong_reclaim", "sweep_reclaim", "rejection_choch",
   }
+  # Owner-reported 2026-09-22 (live card): a bare "SD" reason line with no
+  # other text. technique_display_tags() combines multiple techniques into
+  # one tag for a Confluence Zone band; called with this single technique it
+  # only re-abbreviated what reasons[0] already names in full.
+  assert "SD" not in result.reasons
 
 
 def test_supply_demand_technique_reaction_uses_clipped_entry_when_provided():
@@ -418,7 +424,7 @@ def test_key_level_support_buy_and_resistance_sell():
     _ctx(buy_df, bias="down", levels=[support]),
   )
   assert buy is not None
-  assert buy.setup == "Key Level Reaction"
+  assert buy.setup == "Key Level"
   assert buy.direction == "BUY"
   assert buy.structural_source == "key_level"
   assert buy.key_level_role == "support"
@@ -524,7 +530,7 @@ def test_session_level_pdl_buy_and_pdh_sell():
     _ctx(buy_df, bias="range", session_levels=[pdl]),
   )
   assert buy is not None
-  assert buy.setup == "Session Level Reaction"
+  assert buy.setup == "Session Level"
   assert buy.direction == "BUY"
   assert buy.structural_kind == "PDL"
 
@@ -549,7 +555,7 @@ def test_trendline_unbroken_support_and_resistance():
     _ctx(buy_df, bias="up", trendlines=[support]),
   )
   assert buy is not None
-  assert buy.setup == "Trendline Reaction"
+  assert buy.setup == "Trendline"
   assert buy.direction == "BUY"
 
   sell_df = _sell_rejection_df()
@@ -730,13 +736,13 @@ def test_engulfing_never_overrides_a_stronger_confirmation():
 
 
 def test_strategy_family_and_stable_thesis_identity():
-  assert strategy_family("Key Level Reaction") == "key_level"
+  assert strategy_family("Key Level") == "key_level"
   assert strategy_family("Zone Reaction") == "supply_demand"
   assert strategy_family("Flip Zone") == "supply_demand"
   assert strategy_family("Demand Zone Reaction") == "supply_demand"
   assert strategy_family("Supply Zone Reaction") == "supply_demand"
-  assert strategy_family("Session Level Reaction") == "session_level"
-  assert strategy_family("Trendline Reaction") == "trendline"
+  assert strategy_family("Session Level") == "session_level"
+  assert strategy_family("Trendline") == "trendline"
   assert strategy_family("Mapped Zone Reaction") == "mapped_zone_reaction"
 
   first = structural_thesis_id(
@@ -876,7 +882,7 @@ def test_independent_sources_remain_separate():
   demand = _match(match_id="d", structural_zone_id="demand-1", zone_id="demand-1")
   key = _match(
     match_id="k",
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     family="key_level",
     structural_source="key_level",
     structural_zone_id="key-1",
@@ -893,7 +899,7 @@ def test_independent_sources_remain_separate():
 def test_overlapping_key_levels_same_confirmation_are_one_thesis():
   first = _match(
     match_id="dac0ac35aaaa",
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     family="key_level",
     structural_source="key_level",
     structural_zone_id="47519286aaaa",
@@ -906,7 +912,7 @@ def test_overlapping_key_levels_same_confirmation_are_one_thesis():
   )
   second = _match(
     match_id="ca1c22e73aaa",
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     family="key_level",
     structural_source="key_level",
     structural_zone_id="90824b10aaaa",
@@ -924,13 +930,13 @@ def test_overlapping_key_levels_same_confirmation_are_one_thesis():
 
 def test_structural_setups_constant():
   assert STRUCTURAL_SETUPS == {
-    "Key Level Reaction",
+    "Key Level",
     "Zone Reaction",
     "Flip Zone",
     "Demand Zone Reaction",
     "Supply Zone Reaction",
-    "Session Level Reaction",
-    "Trendline Reaction",
+    "Session Level",
+    "Trendline",
     "Supply Demand",
     "Order Block",
     "FVG",
@@ -938,3 +944,115 @@ def test_structural_setups_constant():
     "CRT",
     "Confluence Zone",
   }
+
+
+# --- Candle Confirmation V2 compatibility (§21/§28) -----------------------
+# candle_evidence flows from ReactionConfirmation through to DetectionResult
+# as shadow telemetry only; confirmation_type is unchanged either way.
+
+
+def test_reaction_confirmation_carries_candle_evidence_for_the_confirmation_bar():
+  buy_df = _buy_rejection_df()
+  confirmation = evaluate_structural_reaction(
+    buy_df, direction="BUY", low=99.0, high=105.0, lookback_bars=3, atr=1.0,
+  )
+  assert confirmation is not None
+  assert confirmation.candle_evidence is not None
+  assert 0.0 <= confirmation.candle_evidence.final_score <= 1.0
+
+
+def test_reaction_confirmation_carries_grab_only_for_sweep_reclaim():
+  buy_df = _buy_rejection_df()
+  grab = Grab(Pool("sell", 100.5, 0.1, 2), 4, "bull", buy_df.index[4], "A")
+
+  with_grab = evaluate_structural_reaction(
+    buy_df, direction="BUY", low=99.0, high=105.0, lookback_bars=3, atr=1.0,
+    grabs=[grab],
+  )
+  assert with_grab is not None
+  assert with_grab.confirmation_type == "sweep_reclaim"
+  assert with_grab.grab is grab
+
+  without_grab = evaluate_structural_reaction(
+    buy_df, direction="BUY", low=99.0, high=105.0, lookback_bars=3, atr=1.0,
+  )
+  assert without_grab is not None
+  assert without_grab.confirmation_type != "sweep_reclaim"
+  assert without_grab.grab is None
+
+
+def test_structural_finish_sets_sweep_extreme_price_only_for_genuine_grade_a_b_sweep():
+  # _structural_finish must expose the real liquidity extreme (Grab.pool.
+  # level) behind a genuine sweep-reclaim confirmation, so
+  # execution_policy can widen the stop beyond it - but never for an
+  # induced (stop-hunt-bait) grab, and never for a non-sweep confirmation.
+  from app.analysis.structural_reaction_support import CONFIRM_STRONG_RECLAIM
+
+  buy_df = _buy_rejection_df()
+  ctx = replace(
+    _ctx(buy_df, bias="down"),
+    settings=replace(detectors.DetectorSettings(), confluence_floor=0),
+  )
+  zone = Zone(99.5, 100.5, "demand", source="supply_demand")
+  common = dict(
+    ctx=ctx, setup="Key Level", direction="BUY", level=100.0, zone=zone,
+    price=100.6, atr=1.0, reasons=[], structural_source="key_level",
+    structural_id="sid", structural_low=99.5, structural_high=100.5,
+    structural_kind="key_level",
+  )
+
+  genuine_grab = Grab(Pool("sell", 100.5, 0.1, 2), 4, "bull", buy_df.index[4], "A")
+  genuine = detectors._structural_finish(
+    confirmation=ReactionConfirmation(
+      confirmation_type="sweep_reclaim",
+      touch_bar_ts="t", confirmation_bar_ts="c",
+      touch_index=3, confirmation_index=4, grab=genuine_grab,
+    ),
+    **common,
+  )
+  assert genuine is not None
+  assert genuine.sweep_extreme_price == pytest.approx(100.5)
+
+  induced_grab = Grab(
+    Pool("sell", 100.5, 0.1, 2), 4, "bull", buy_df.index[4], "A", inducement=True,
+  )
+  induced = detectors._structural_finish(
+    confirmation=ReactionConfirmation(
+      confirmation_type="sweep_reclaim",
+      touch_bar_ts="t", confirmation_bar_ts="c",
+      touch_index=3, confirmation_index=4, grab=induced_grab,
+    ),
+    **common,
+  )
+  assert induced is not None
+  assert induced.sweep_extreme_price is None
+
+  non_sweep = detectors._structural_finish(
+    confirmation=ReactionConfirmation(
+      confirmation_type=CONFIRM_STRONG_RECLAIM,
+      touch_bar_ts="t", confirmation_bar_ts="c",
+      touch_index=3, confirmation_index=4, grab=None,
+    ),
+    **common,
+  )
+  assert non_sweep is not None
+  assert non_sweep.sweep_extreme_price is None
+
+
+def test_detection_result_candle_telemetry_matches_confirmation_and_never_changes_it():
+  buy_df = _buy_rejection_df()
+  support = Level(105, "support", touches=3, strength=3)
+  result = detectors.key_level_reaction(_ctx(buy_df, bias="down", levels=[support]))
+  assert result is not None
+  original_confirmation_type = result.confirmation_type
+
+  # Same detection, computed twice - the candle_* telemetry must be
+  # deterministic and must never move confirmation_type.
+  again = detectors.key_level_reaction(_ctx(buy_df, bias="down", levels=[support]))
+  assert again is not None
+  assert again.confirmation_type == original_confirmation_type
+  assert result.candle_version == 2
+  assert result.candle_final_score is not None
+  assert 0.0 <= result.candle_final_score <= 1.0
+  assert result.candle_patterns is not None
+  assert result.candle_primary_pattern in result.candle_patterns.split(",")

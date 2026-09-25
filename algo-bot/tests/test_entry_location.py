@@ -30,12 +30,14 @@ def _location_cfg(
   *,
   strict_pd_archetypes: str = "reversal,range_reversion",
   technique_enforce: bool = False,
+  with_bias_pd_exempt: bool = False,
 ):
   cfg = SimpleNamespace(
     actionability=SimpleNamespace(
       entry_location=SimpleNamespace(
         mode=mode,
         missing_context_policy="block",
+        with_bias_pd_exempt=with_bias_pd_exempt,
         reversal=SimpleNamespace(
           buy_maximum_position=0.50,
           sell_minimum_position=0.50,
@@ -483,10 +485,90 @@ def test_strict_technique_pd_rejects_m5_only_range():
     m5_range_high=RANGE_HIGH,
   )
   decision = evaluate_entry_location(
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     direction="BUY",
     context=ctx,
     cfg=cfg,
   )
   assert decision.allowed is False
   assert decision.reason_code == "entry_location_htf_range_missing"
+
+
+def _bias_eval(*, strategy, direction, price, bias, exempt=True, range_kwargs=None):
+  cfg = _location_cfg("enforce", technique_enforce=True, with_bias_pd_exempt=exempt)
+  ranges = {"m15_range_low": RANGE_LOW, "m15_range_high": RANGE_HIGH}
+  ranges.update(range_kwargs or {})
+  ctx = build_entry_location_context(
+    execution_price=price,
+    direction=direction,
+    **ranges,
+  )
+  return evaluate_entry_location(
+    strategy=strategy,
+    direction=direction,
+    context=ctx,
+    cfg=cfg,
+    bias_relationship=bias,
+  )
+
+
+def test_with_bias_sell_in_discount_is_continuation_not_a_violation():
+  # Down-trend supply retest that sits in the lower half of a stale range.
+  decision = _bias_eval(
+    strategy="FVG", direction="SELL", price=_price_for_position(0.25), bias="with_bias",
+  )
+  assert decision.allowed is True
+  assert decision.reason_code == "location_with_bias_continuation"
+  assert decision.measured["location_override"] == "with_bias_continuation"
+
+
+def test_with_bias_buy_in_premium_is_continuation_not_a_violation():
+  decision = _bias_eval(
+    strategy="Zone Reaction", direction="BUY", price=_price_for_position(0.80), bias="with_bias",
+  )
+  assert decision.allowed is True
+  assert decision.reason_code == "location_with_bias_continuation"
+
+
+def test_with_bias_exempt_even_when_range_is_only_m5():
+  decision = _bias_eval(
+    strategy="Key Level",
+    direction="BUY",
+    price=4040.0,
+    bias="with_bias",
+    range_kwargs={"m15_range_low": None, "m15_range_high": None,
+                  "m5_range_low": RANGE_LOW, "m5_range_high": RANGE_HIGH},
+  )
+  assert decision.allowed is True
+
+
+@pytest.mark.parametrize("bias", ["counter_bias", "neutral", None, ""])
+def test_non_with_bias_entries_keep_the_premium_discount_gate(bias):
+  sell = _bias_eval(
+    strategy="FVG", direction="SELL", price=_price_for_position(0.25), bias=bias,
+  )
+  buy = _bias_eval(
+    strategy="FVG", direction="BUY", price=_price_for_position(0.80), bias=bias,
+  )
+  assert sell.allowed is False and sell.reason_code == "sell_in_discount"
+  assert buy.allowed is False and buy.reason_code == "buy_in_premium"
+
+
+def test_with_bias_exemption_is_off_when_config_disabled():
+  decision = _bias_eval(
+    strategy="FVG",
+    direction="SELL",
+    price=_price_for_position(0.25),
+    bias="with_bias",
+    exempt=False,
+  )
+  assert decision.allowed is False
+  assert decision.reason_code == "sell_in_discount"
+
+
+def test_with_bias_exemption_does_not_touch_range_reversion():
+  # Range scalps are mean-reversion inside a box; bias never exempts them.
+  decision = _bias_eval(
+    strategy="Range Edge Scalp", direction="SELL", price=_price_for_position(0.25), bias="with_bias",
+  )
+  assert decision.allowed is False

@@ -10,6 +10,38 @@ from app.signals.reports import build_stats
 
 
 @pytest.mark.asyncio
+async def test_terminal_result_inherits_setup_from_labelled_fill(sql):
+  """Regression for the Aug 6-14 result rows that lost their fill label."""
+  await store.init_db()
+  gid = "v6:terminal-result-setup"
+  await store.record_auto_trade_event({
+    "type": "opened",
+    "timestamp": 10,
+    "position_id": 99000,
+    "group_id": gid,
+    "candidate_id": gid,
+    "stream": "algo_auto",
+    "symbol": "XAU",
+    "setup": "Flip Zone",
+    "direction": "BUY",
+    "price": 4050.0,
+    "stop_loss": 4045.0,
+    "volume": 800,
+  })
+  await store.record_auto_trade_event({
+    "type": "group_result",
+    "timestamp": 20,
+    "position_id": 99000,
+    "group_id": gid,
+    "group_realized_pips": 35.0,
+  })
+
+  assert await sql.val(
+    "SELECT setup_type FROM auto_trade_results WHERE group_id = $1", gid,
+  ) == "Flip Zone"
+
+
+@pytest.mark.asyncio
 async def test_no_tp_archived_without_price_records_stop_distance_loss():
   """Bare 'no TP archived' closes used to vanish from /trade_stats."""
   await store.init_db()
@@ -21,7 +53,7 @@ async def test_no_tp_archived_without_price_records_stop_distance_loss():
     "group_id": gid,
     "candidate_id": gid,
     "direction": "BUY",
-    "setup": "Key Level Reaction",
+    "setup": "Key Level",
     "symbol": "XAU",
     "price": 4050.0,
     "stop_loss": 4045.0,
@@ -55,7 +87,7 @@ async def test_no_tp_archived_parses_losing_pips_from_message():
     "group_id": gid,
     "candidate_id": gid,
     "direction": "SELL",
-    "setup": "Key Level Reaction",
+    "setup": "Key Level",
     "symbol": "XAU",
     "price": 4050.0,
     "stop_loss": 4055.0,
@@ -89,7 +121,7 @@ async def test_highest_tp_then_be_exit_is_not_a_loss():
     "group_id": gid,
     "candidate_id": gid,
     "direction": "BUY",
-    "setup": "Key Level Reaction",
+    "setup": "Key Level",
     "symbol": "XAU",
     "price": 4050.0,
     "stop_loss": 4045.0,
@@ -174,7 +206,7 @@ async def test_startup_backfill_recovers_retained_algo_results(monkeypatch):
     "candidate_id": "v8:stats-recovery",
     "stream": "algo_auto",
     "symbol": "XAU",
-    "setup": "Key Level Reaction",
+    "setup": "Key Level",
     "direction": "BUY",
     "price": 4050.0,
     "stop_loss": 4045.0,
@@ -257,7 +289,7 @@ async def test_close_before_fill_still_records_trade_stats():
     "candidate_id": gid,
     "direction": "BUY",
     "symbol": "XAU",
-    "setup": "Key Level Reaction",
+    "setup": "Key Level",
     "stream": "algo_auto",
     "price": 4045.0,
     "entry_price": 4050.0,
@@ -272,7 +304,7 @@ async def test_close_before_fill_still_records_trade_stats():
     "group_id": gid,
     "candidate_id": gid,
     "direction": "BUY",
-    "setup": "Key Level Reaction",
+    "setup": "Key Level",
     "symbol": "XAU",
     "price": 4050.0,
     "stop_loss": 4045.0,
@@ -351,7 +383,7 @@ async def test_backfill_dumper_two_pass_and_bytes_payload(monkeypatch):
     "candidate_id": "v8:dumper-two-pass",
     "stream": "algo_auto",
     "symbol": "XAU",
-    "setup": "Key Level Reaction",
+    "setup": "Key Level",
     "direction": "SELL",
     "price": 4050.0,
     "stop_loss": 4055.0,
@@ -469,7 +501,7 @@ async def test_two_clip_fills_use_volume_weighted_stop_for_r_multiple():
     "group_id": gid,
     "candidate_id": gid,
     "direction": "BUY",
-    "setup": "Key Level Reaction",
+    "setup": "Key Level",
     "symbol": "XAU",
     "price": 4000.0,
     "stop_loss": 3995.0,
@@ -482,7 +514,7 @@ async def test_two_clip_fills_use_volume_weighted_stop_for_r_multiple():
     "group_id": gid,
     "candidate_id": gid,
     "direction": "BUY",
-    "setup": "Key Level Reaction",
+    "setup": "Key Level",
     "symbol": "XAU",
     "price": 4001.0,
     "stop_loss": 3995.0,

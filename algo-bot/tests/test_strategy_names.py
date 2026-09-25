@@ -24,9 +24,9 @@ pytestmark = pytest.mark.no_database
 PRODUCTION_SETUP_TYPES = (
   "Breakout Retest Scalp", "CRT", "Confluence Zone", "FVG", "Fade Scalp",
   "Flip Zone", "HFS Impulse Pullback", "HFS Momentum Chase",
-  "HFS Range Sweep", "Impulse Pullback Scalp", "Key Level Reaction",
-  "Momentum Chase Scalp", "Range Sweep Scalp", "Session Level Reaction",
-  "Supply Demand", "Trend Pullback", "Trendline Reaction", "Zone Reaction",
+  "HFS Range Sweep", "Impulse Pullback Scalp", "Key Level",
+  "Momentum Chase Scalp", "Range Sweep Scalp", "Session Level",
+  "Supply Demand", "Trend Pullback", "Trendline", "Zone Reaction",
   "breakout-retest", "confluence", "confulence", "demand", "flip-zone",
   "golden-fibo", "iFVG", "key-level", "momentum", "ob", "supply",
 )
@@ -63,7 +63,7 @@ def test_production_setup_type_is_resolvable(raw):
     ("demand", "Supply Demand"),
     ("confluence", "Confluence Zone"),
     ("confulence", "Confluence Zone"),
-    ("key level · add_momentum", "Key Level Reaction · add_momentum"),
+    ("key level · add_momentum", "Key Level · add_momentum"),
     ("HFS Range Sweep", "Range Sweep Scalp"),
     ("HFS Impulse Pullback", "Impulse Pullback Scalp"),
   ],

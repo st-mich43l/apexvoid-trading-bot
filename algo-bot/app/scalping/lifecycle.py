@@ -66,18 +66,6 @@ def transition(
   )
 
 
-def requires_rearm(
-  *,
-  last_zone_mid: float,
-  price: float,
-  atr: float,
-  rearm_distance_atr: float,
-) -> bool:
-  if atr <= 0:
-    return abs(price - last_zone_mid) > 0
-  return abs(price - last_zone_mid) >= float(rearm_distance_atr) * float(atr)
-
-
 def lifecycle_key(symbol: str, opportunity_id: str) -> str:
   return f"scalp:lifecycle:{symbol.upper()}:{opportunity_id}"
 

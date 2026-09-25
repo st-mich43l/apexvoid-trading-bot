@@ -3,7 +3,7 @@
 Uses the unified mathematical score when score_inputs / feature vector are
 present; falls back to the legacy pip-heuristic score otherwise.
 
-MAD is not applied here — owner rule: MAD does not drive HFS/scalping.
+MAD is not applied here — owner rule: MAD does not drive scalping.
 Accumulation soft favor lives only on technique Range Edge Scalp.
 """
 
@@ -38,6 +38,8 @@ def score_opportunity(
       cost=float(math_inputs.get("cost", 0.0)),
       exhaustion=float(math_inputs.get("exhaustion", 0.0)),
     )
+    session_quality = max(0.0, min(1.0, float(decision.measured.get("session_quality", 1.0))))
+    total *= 0.85 + 0.15 * session_quality
     return ScalpScore(
       total=round(total, 4),
       location=round(float(math_inputs.get("location", 0.0)), 4),
@@ -109,6 +111,8 @@ def _legacy_score(
     cost=1.0 - cost,
     exhaustion=0.0,
   )
+  session_quality = max(0.0, min(1.0, float(decision.measured.get("session_quality", 1.0))))
+  total *= 0.85 + 0.15 * session_quality
   return ScalpScore(
     total=round(total, 4),
     location=round(location, 4),
@@ -128,5 +132,34 @@ def rank_opportunities(
 ) -> list[tuple[ScalpOpportunity, ScalpDecision, ScalpScore]]:
   # Hard gate first: never rank blocked setups.
   allowed = [item for item in items if item[1].allowed and not item[1].hard_block]
-  allowed.sort(key=lambda row: row[2].total, reverse=True)
-  return allowed[: max(0, int(maximum))]
+  limit = max(0, int(maximum))
+  if limit <= 0:
+    return []
+
+  # One archetype must not starve the others simply by producing a higher
+  # generic score. Keep the old global ordering for non-scalp test/consumer
+  # records, then use a deterministic round-robin across the three independent
+  # scalp techniques.
+  scalp_archetypes = {"range_sweep", "impulse_pullback", "breakout_retest"}
+  if not any(item[0].archetype in scalp_archetypes for item in allowed):
+    allowed.sort(key=lambda row: row[2].total, reverse=True)
+    return allowed[:limit]
+
+  groups: dict[str, list[tuple[ScalpOpportunity, ScalpDecision, ScalpScore]]] = {}
+  for item in allowed:
+    groups.setdefault(item[0].archetype, []).append(item)
+  for group in groups.values():
+    group.sort(key=lambda row: row[2].total, reverse=True)
+  ranked: list[tuple[ScalpOpportunity, ScalpDecision, ScalpScore]] = []
+  while len(ranked) < limit:
+    progressed = False
+    for archetype in sorted(groups):
+      group = groups[archetype]
+      if group:
+        ranked.append(group.pop(0))
+        progressed = True
+        if len(ranked) >= limit:
+          break
+    if not progressed:
+      break
+  return ranked

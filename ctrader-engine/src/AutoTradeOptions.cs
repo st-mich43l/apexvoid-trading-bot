@@ -142,7 +142,22 @@ public sealed record AutoTradeOptions(
   decimal ReactionScaleFraction = 0.20m,
   bool ReactionScaleEnabled = true,
   string ReactionScaleInvalidPolicy = "single_market",
-  decimal ReactionScaleStepAtr = 0.50m
+  // Owner 2026-09-16: lowered from 0.50 to match the Python-side default -
+  // at 0.5x ATR the far leg's stop distance routinely exceeded the reaction
+  // stop envelope (75-79 vs a 60-pip cap on live XAU candidates). Not
+  // currently consumed for any leg-spacing math on this side (Python plans
+  // leg prices; this engine executes them) - kept in sync for the
+  // documented cross-service default, not because anything here reads it.
+  decimal ReactionScaleStepAtr = 0.10m,
+  // Owner 2026-09-16: same "trade-off" risk leg Manual Algo has always had
+  // (see ManualAlgoRiskLegPrice/Volume in AutoTradeEngine.cs), extended to
+  // every reaction-family TradePlan v8 entry with a real multi-leg ladder
+  // (limit_ladder / market_with_limit_scale). Purely a C# engine addition,
+  // same as Manual Algo's own risk leg - Python never knows this leg
+  // exists, exactly mirroring how manual_intent.py never knew about
+  // Manual Algo's. A kill switch, not a tuning knob - see
+  // TradePlanRuntime.ReactionRiskLeg* for the actual pip/lot constants.
+  bool ReactionRiskLegEnabled = true
 )
 {
   // Shared target-selection contract (app/autotrade/range_targets.py on the
@@ -508,7 +523,10 @@ public sealed record AutoTradeOptions(
       "AUTO_TRADE_REACTION_SCALE_INVALID_POLICY", "single_market"
     ).Trim().ToLowerInvariant(),
     ReactionScaleStepAtr: resolver.Decimal(
-      "AUTO_TRADE_REACTION_SCALE_STEP_ATR", 0.50m
+      "AUTO_TRADE_REACTION_SCALE_STEP_ATR", 0.10m
+    ),
+    ReactionRiskLegEnabled: resolver.Bool(
+      "AUTO_TRADE_REACTION_RISK_LEG_ENABLED", true
     )
   );
   var deprecated = resolver.DeprecatedVariables.ToList();
@@ -718,6 +736,7 @@ public sealed record AutoTradeOptions(
         t.ReactionScaleStepAtr,
         "auto_trade.reaction_scale_step_atr"
       ),
+      ReactionRiskLegEnabled = t.ReactionRiskLegEnabled,
     };
   }
 

@@ -47,9 +47,10 @@ def incident_messages() -> list[tuple[str, str, int]]:
     (" golden-fib **", "golden-fib", 2),
     (" / setup golden-fib 2", "golden-fib", 2),
     (" resistance-zone *", "resistance-zone", 1),
-    (" / golden-fib", "golden-fib", None),
+    (" / golden-fib", "golden-fib", 2),
   ],
 )
+@pytest.mark.no_database
 def test_lenient_setup_suffix_forms(
   suffix,
   setup_type,
@@ -90,9 +91,14 @@ def test_setup_suffix_guards_leave_trade_fields_intact(suffix, expected_setup):
   assert parsed["entry"] == pytest.approx(4100)
   assert parsed["entry_end"] == pytest.approx(4105)
   assert parsed["sl"] == pytest.approx(4110)
-  assert parsed["tps"] == [4095, 4090, 4080]
+  # Explicit typed tp is always respected - see MANUAL_ALGO_DEFAULT_TARGET_R_MULTIPLES,
+  # which only applies as the default when no tp is typed.
+  assert parsed["tps"] == [
+    pytest.approx(4095), pytest.approx(4090), pytest.approx(4080),
+  ]
 
 
+@pytest.mark.no_database
 def test_setup_suffix_interacts_with_vip_and_scalp_options():
   tagged_vip = wiring._parse_manual(
     BASE_SIGNAL + " / setup golden-fib ** / vip"
@@ -105,7 +111,7 @@ def test_setup_suffix_interacts_with_vip_and_scalp_options():
   assert tagged_vip["visibility"] == "vip"
   assert scalp is not None
   assert scalp["setup_type"] == "scalp"
-  assert scalp["confluence"] is None
+  assert scalp["confluence"] == 2
 
 
 def test_algo_suffix_sets_execution_mode():
@@ -138,6 +144,7 @@ def test_algo_suffix_composes_with_vip_and_setup_tag_regardless_of_order():
     assert parsed["confluence"] == 2, text
 
 
+@pytest.mark.no_database
 def test_algo_suffix_composes_with_scalp():
   parsed = wiring._parse_manual(BASE_SIGNAL + " / algo / scalp")
 
@@ -146,12 +153,13 @@ def test_algo_suffix_composes_with_scalp():
   assert parsed["setup_type"] == "scalp"
 
 
+@pytest.mark.no_database
 def test_manual_signal_without_trailing_tag_defaults_key_level():
   parsed = wiring._parse_manual(BASE_SIGNAL)
 
   assert parsed is not None
   assert parsed["setup_type"] == "key-level"
-  assert parsed["confluence"] is None
+  assert parsed["confluence"] == 2
   assert parsed["visibility"] == "both"
   assert parsed["risk"] == pytest.approx(10)
 

@@ -1,6 +1,6 @@
 # ApexVoid Breakout Technique
 
-Own M1 scalp rules for `breakout_retest` (**Breakout Retest Scalp**).
+Own M5 setup and M1 confirmation rules for `breakout_retest` (**Breakout Retest Scalp**).
 Not ZoneWatch technique; not a break-without-retest chase.
 
 ## Why the old path was silent
@@ -25,17 +25,17 @@ no_box → wait_break → wait_retest → armed
 
 | State | Meaning |
 | --- | --- |
-| `no_box` | No M1 compression window (tight range + multi-touch) |
+| `no_box` | No M5 compression window (tight range + multi-touch) |
 | `wait_break` | Box ready; no accepted displacement close beyond it |
 | `wait_retest` | Break accepted; no rejection retest yet |
 | `failed_break` | Close back into / through the opposite side of the box |
 | `armed` | Break + acceptance + rejection retest + hold → discoverable |
 
-## Formulas (M1)
+## Formulas (M5 setup, M1 confirmation)
 
 ### Compression box
 
-Scan recent closed M1 for a window of `min_box_bars`…`max_box_bars` where:
+Scan recent closed M5 for a window of `min_box_bars`…`max_box_bars` where:
 
 \[
 \text{width} = \text{box\_high} - \text{box\_low} \le \text{box\_max\_atr} \cdot \text{ATR}
@@ -90,7 +90,7 @@ Redis: `scalp:metric:{SYMBOL}:breakout:{reason}`
 | `wait_retest` | Break accepted, no rejection retest / hold |
 | `failed_break` | Reclaim / opposite-side close |
 | `armed` | Discoverable this cycle (optional counter) |
-| `disabled` / `not_permitted` | Config / session gate |
+| `disabled` / `not_permitted` | Config gate |
 
 Idle cycle reasons use `breakout_retest:{reason}` for `scalp:last_cycle`.
 

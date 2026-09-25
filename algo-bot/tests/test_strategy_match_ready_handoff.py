@@ -500,7 +500,7 @@ async def test_unfinished_confirmed_match_is_not_requeued_on_ready_stream(
     event_ts=str(now),
     issued_at=now,
     expires_at=now + 600,
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     strategy_mode="with_bias",
     direction="SELL",
     key_level=4100.0,

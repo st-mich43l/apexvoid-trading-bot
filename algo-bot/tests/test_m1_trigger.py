@@ -551,3 +551,62 @@ def test_evaluate_m1_trigger_ignores_open_bar():
     direction="BUY",
     cfg=_cfg("wick_rejection"),
   ) is None
+
+
+# --- Candle Confirmation V2 compatibility (§30) ---------------------------
+# The existing first-match `.pattern` decision is untouched; `.evidence` is
+# a purely additive field that is None unless the caller supplies `atr`.
+
+
+def test_evidence_field_has_no_atr_normalized_data_without_atr():
+  # Fraction-based labels (wick/close-location) don't require ATR, so
+  # `.evidence` can still be populated with atr defaulted to 0 - but every
+  # ATR-normalized reading on it stays None/unset rather than dividing by
+  # a missing ATR.
+  qualifying = _bars([{
+    "open": 4089.5, "high": 4090.5, "low": 4087.0, "close": 4090.3, "volume": 100.0,
+  }])
+  result = evaluate_m1_trigger(
+    qualifying, zone_low=ZONE_LOW, zone_high=ZONE_HIGH, key_level=KEY_LEVEL,
+    direction="BUY", cfg=_cfg("wick_rejection"),
+  )
+  assert result is not None
+  assert result.pattern == "wick_rejection"
+  assert result.evidence is not None
+  assert result.evidence.rejection is not None
+  assert result.evidence.rejection.sweep_penetration_atr is None
+  assert result.evidence.rejection.reclaim_depth_atr is None
+
+
+def test_evidence_field_is_populated_when_atr_supplied_and_never_changes_pattern():
+  qualifying = _bars([{
+    "open": 4089.5, "high": 4090.5, "low": 4087.0, "close": 4090.3, "volume": 100.0,
+  }])
+  result = evaluate_m1_trigger(
+    qualifying, zone_low=ZONE_LOW, zone_high=ZONE_HIGH, key_level=KEY_LEVEL,
+    direction="BUY", cfg=_cfg("wick_rejection"), atr=1.0,
+  )
+  assert result is not None
+  assert result.pattern == "wick_rejection"
+  assert result.evidence is not None
+  assert "wick_rejection" in result.evidence.all_patterns
+  assert 0.0 <= result.evidence.final_score <= 1.0
+
+
+def test_windowed_evaluator_carries_evidence_through():
+  bars = _bars([{
+    "open": 4089.5, "high": 4090.5, "low": 4087.0, "close": 4090.3, "volume": 100.0,
+  }])
+  result = evaluate_m1_trigger_window(
+    bars,
+    zone_low=ZONE_LOW,
+    zone_high=ZONE_HIGH,
+    key_level=KEY_LEVEL,
+    direction="BUY",
+    earliest_bar_ts=int(bars.index[0].value // 1_000_000_000),
+    after_bar_ts=None,
+    cfg=_cfg("wick_rejection"),
+    atr=1.0,
+  )
+  assert result is not None
+  assert result.evidence is not None

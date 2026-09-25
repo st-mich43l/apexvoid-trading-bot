@@ -2,6 +2,7 @@ using ApexVoid.CTraderFeed;
 
 namespace CTraderFeed.Tests;
 
+[Collection(nameof(EnvMutationCollection))]
 public sealed class AutoTradeOptionsTests
 {
   [Fact]

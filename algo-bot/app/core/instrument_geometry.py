@@ -100,6 +100,20 @@ def opposing_minimum_separation_price(symbol: str) -> float:
   )
 
 
+def structural_barrier_buffer_atr(symbol: str) -> float:
+  """Opposing-structure room buffer, in ATR multiples, for this instrument.
+
+  Global default (0.5) is tuned for FX, where an ATR multiple is a few
+  pips. XAU's ATR is dollar-denominated, so the same multiple can buffer
+  away 40-100+ pips -- comparable to or larger than XAU's own stop
+  envelope (25-100 pips) -- turning genuinely tradeable room into a false
+  zero. Instruments override via ``overrides:
+  "actionability.target_room.barrier_buffer_atr"``; unset instruments keep
+  the global default.
+  """
+  return float(_effective(symbol).actionability.target_room.barrier_buffer_atr)
+
+
 def defended_levels(symbol: str) -> tuple[float, ...]:
   """Macro-significant price levels this instrument treats as an elevated
   reversal-risk zone (e.g. a central-bank-defended level). Empty when

@@ -37,7 +37,7 @@ async def test_do_close_non_algo_calls_close_leg_with_unchanged_arguments(monkey
     "sid": rec["id"], "symbol": "XAU", "pips": 50, "frac": None, "reply_to": 7,
   })
 
-  close_leg_mock.assert_awaited_once_with(rec["id"], 50, None)
+  close_leg_mock.assert_awaited_once_with(rec["id"], 50, None, entry_price=None)
   store_pips_mock.assert_awaited_once()
   assert result == {
     "action": "close",

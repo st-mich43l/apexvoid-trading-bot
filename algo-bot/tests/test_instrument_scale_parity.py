@@ -15,7 +15,6 @@ from app.analysis.structure import entry_zone
 from app.analysis.zones import score_zones
 from app.analysis.types import Grab, Pool, Zone
 from app.autotrade.gate import AutoScalpBox, AutoScalpRail, _m1_rail_trigger
-from app.autotrade.map_strategy import _select_reaction
 from app.autotrade.reaction_identity import structural_zone_id
 from app.autotrade.trend import _breakout_direction_and_age
 from app.configuration.python_loader import load_python_canonical_settings

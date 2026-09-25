@@ -32,13 +32,13 @@ def _opp() -> ScalpOpportunity:
     discovered_at=100,
     source_bar_ts=90,
     zone_low=4000.0,
-    zone_high=4005.0,
-    key_level=4002.0,
+    zone_high=4001.0,
+    key_level=4000.5,
     trigger_type="sweep_reclaim",
     trigger_bar_ts=90,
-    trigger_price=4002.0,
-    invalidation_price=4000.5,
-    expected_target_price=4025.0,
+    trigger_price=4000.5,
+    invalidation_price=3999.5,
+    expected_target_price=4003.5,
     expected_target_pips=25.0,
     expected_stop_pips=15.0,
     expected_reward_risk=1.5,
@@ -90,13 +90,69 @@ def test_build_scalp_strategy_match_is_valid():
   assert match.direction == "BUY"
   assert match.full_take_profit_pips == 25
   assert match.targets_pips == (15, 25)
+  # 2026-09-15 (owner-reported): the root card must show R, not just raw
+  # pips, for scalp too - each entry is targets_pips[i] / stop (15).
+  assert match.scalp_target_r_multiples == (1.0, 1.67)
   # invalidation_price is the source of truth for structure_swing.
-  assert match.structure_swing == pytest.approx(4000.5)
+  assert match.structure_swing == pytest.approx(3999.5)
   assert match.structure_swing == pytest.approx(_opp().invalidation_price)
   assert match.family == "scalp"
   assert match.strategy_mode == "scalp_m1"
   assert _identity_ok(match)
   assert _valid_match(match)
+
+
+def test_scalp_root_card_shows_r_multiples_not_bare_pips():
+  # Owner-reported 2026-09-15: the scalp root/forming card showed a bare
+  # "+65" pip offset instead of an R level, unlike every fixed_rr
+  # strategy's card. technique_fixed_rr_targeting always returns None for
+  # M1 scalp strategies by design (scalp keeps its own book) - the card
+  # must fall back to scalp_target_r_multiples, not to raw pips.
+  from app.autotrade.setup_card import format_plan_published_root_card
+
+  match = build_scalp_strategy_match(
+    _opp(), _ctx(), bar_ts=120, quote_bid=4001.0, quote_ask=4002.0,
+  )
+  text = format_plan_published_root_card(
+    match,
+    stop_price=match.structure_swing,
+    target_prices=(4003.0, 4003.5),
+  )
+  assert "<b>1.0R</b>" in text
+  assert "<b>1.7R</b>" in text
+  assert "+65" not in text
+  # Targets must show an R-multiple, never fall back to a bare pip offset -
+  # the SL line's own "risk N pips" is unrelated and expected here.
+  target_lines = [
+    line for line in text.splitlines() if line.startswith("💰 TP")
+  ]
+  assert target_lines
+  assert not any("pips" in line for line in target_lines)
+
+
+def test_build_scalp_strategy_match_computes_real_bias_relationship():
+  """Live 2026-08-25: card display hardcoded strategy_mode='scalp_m1'
+  always rendered as counter-trend regardless of true bias. bias_relationship
+  is now computed from real HTF bias + direction (like structural setups),
+  without touching strategy_mode - other code keys on that literal value
+  for scalp-family classification and trade-plan building.
+  """
+  from dataclasses import replace
+
+  aligned_ctx = replace(_ctx(), htf_bias="up")
+  match = build_scalp_strategy_match(
+    _opp(), aligned_ctx, bar_ts=120, quote_bid=4001.0, quote_ask=4002.0,
+  )
+  assert match.direction == "BUY"
+  assert match.bias_relationship == "with_bias"
+  assert match.strategy_mode == "scalp_m1"
+
+  opposed_ctx = replace(_ctx(), htf_bias="down")
+  match = build_scalp_strategy_match(
+    _opp(), opposed_ctx, bar_ts=120, quote_bid=4001.0, quote_ask=4002.0,
+  )
+  assert match.bias_relationship == "counter_bias"
+  assert match.strategy_mode == "scalp_m1"
 
 
 def test_build_scalp_strategy_match_sell_uses_invalidation_exactly():
@@ -106,21 +162,21 @@ def test_build_scalp_strategy_match_sell_uses_invalidation_exactly():
     _opp(),
     direction="SELL",
     trigger_price=4050.0,
-    invalidation_price=4051.5,
+    invalidation_price=4052.5,
     expected_stop_pips=15.0,
     expected_target_pips=30.0,
     expected_target_price=4047.0,
     expected_reward_risk=2.0,
-    zone_low=4048.0,
-    zone_high=4052.0,
-    key_level=4050.0,
+    zone_low=4050.0,
+    zone_high=4051.0,
+    key_level=4050.5,
   )
   match = build_scalp_strategy_match(
     opp, _ctx(), bar_ts=120, quote_bid=4049.0, quote_ask=4050.0,
   )
   assert match.direction == "SELL"
   assert match.structure_swing == pytest.approx(opp.invalidation_price)
-  assert match.structure_swing == pytest.approx(4051.5)
+  assert match.structure_swing == pytest.approx(4052.5)
 
 
 def test_build_scalp_1to2_publishes_half_at_one_r():
@@ -131,7 +187,7 @@ def test_build_scalp_1to2_publishes_half_at_one_r():
   opp = replace(
     opp,
     expected_target_pips=30.0,
-    expected_target_price=4030.0,
+    expected_target_price=4004.0,
     expected_stop_pips=15.0,
     expected_reward_risk=2.0,
   )
@@ -140,6 +196,7 @@ def test_build_scalp_1to2_publishes_half_at_one_r():
   )
   assert match.targets_pips == (15, 30)
   assert match.full_take_profit_pips == 30
+  assert match.scalp_target_r_multiples == (1.0, 2.0)
   assert _valid_match(match)
 
 
@@ -181,7 +238,7 @@ def test_build_scalp_1to1_stays_single_full_exit():
   opp = replace(
     _opp(),
     expected_target_pips=15.0,
-    expected_target_price=4015.0,
+    expected_target_price=4002.5,
     expected_stop_pips=15.0,
     expected_reward_risk=1.0,
   )
@@ -191,6 +248,7 @@ def test_build_scalp_1to1_stays_single_full_exit():
   # Discovery stop=15 / target=15 → single 1R exit; plan books 100% there.
   assert match.targets_pips == (15,)
   assert match.full_take_profit_pips == 15
+  assert match.scalp_target_r_multiples == (1.0,)
   assert _valid_match(match)
 
 
@@ -204,7 +262,7 @@ def test_build_scalp_1to2_trade_plan_moves_sl_to_be_after_tp1():
   opp = replace(
     _opp(),
     expected_target_pips=30.0,
-    expected_target_price=4030.0,
+    expected_target_price=4004.0,
     expected_stop_pips=15.0,
     expected_reward_risk=2.0,
   )
@@ -228,6 +286,12 @@ def test_build_scalp_1to2_trade_plan_moves_sl_to_be_after_tp1():
     Decimal("0.5"), Decimal("0.5"),
   ]
   assert plan.management.be_after_target_id == "TP1"
+  assert plan.sizing is not None
+  # Owner 2026-09-04: scalp now sizes off the same equity_table lot as any
+  # other trade by default; risk_percent still tracks the configured
+  # per-trade budget even though "risk" mode no longer consumes it.
+  assert plan.sizing.mode == "equity_table"
+  assert plan.risk.risk_percent == Decimal("0.5")
 
 
 def test_build_scalp_1to1_trade_plan_books_full_volume():
@@ -243,7 +307,7 @@ def test_build_scalp_1to1_trade_plan_books_full_volume():
   opp = replace(
     _opp(),
     expected_target_pips=15.0,
-    expected_target_price=4015.0,
+    expected_target_price=4002.5,
     expected_stop_pips=15.0,
     expected_reward_risk=1.0,
   )
@@ -269,6 +333,32 @@ def test_build_scalp_1to1_trade_plan_books_full_volume():
   assert plan.targets[0].target_id == "TP1"
   # Full exit at TP1 — no BE trail contract on a single-target plan.
   assert plan.management.be_after_target_id is None
+
+
+def test_scalping_risk_percent_is_bounded_and_unambiguous():
+  from app.configuration.models.strategies import StrategiesScalpingRiskConfig
+
+  assert StrategiesScalpingRiskConfig().risk_percent_per_trade == 0.5
+  # Owner 2026-09-04: scalp now defaults to the same equity_table lot as
+  # any other trade; "risk" (the risk-percent-of-stop-distance formula)
+  # remains a selectable mode, just no longer the default.
+  assert StrategiesScalpingRiskConfig().sizing_mode == "equity_table"
+  with pytest.raises(ValueError):
+    StrategiesScalpingRiskConfig(risk_percent_per_trade=0.001)
+  with pytest.raises(ValueError):
+    StrategiesScalpingRiskConfig(risk_percent_per_trade=10)
+
+
+def test_scalping_sizing_mode_allows_both_documented_values():
+  from app.configuration.models.strategies import StrategiesScalpingRiskConfig
+
+  assert StrategiesScalpingRiskConfig(sizing_mode="risk").sizing_mode == "risk"
+  assert (
+    StrategiesScalpingRiskConfig(sizing_mode="equity_table").sizing_mode
+    == "equity_table"
+  )
+  with pytest.raises(ValueError):
+    StrategiesScalpingRiskConfig(sizing_mode="turbo")
 
 
 def test_build_scalp_strategy_match_carries_execution_eligibility():

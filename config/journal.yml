@@ -1,0 +1,18 @@
+# Trade journaling/history behavior — owned exclusively here.
+# New category: no section of the old config/trading-bot.yml covered this
+# explicitly (see docs/configuration-v3-migration-audit.md §6). The system
+# already always persists trade plans, analysis context, and execution
+# events (Postgres `auto_trade_results`/`auto_trade_fills`/`pips_log`
+# tables plus the `auto_trade:events` Redis stream) — none of this is
+# currently a configurable on/off switch anywhere in the code. Stage C1
+# records that observed always-on behavior rather than inventing toggles
+# that don't exist yet; wiring these as real switches is a later-stage
+# decision once a runtime reads this file.
+journal:
+  enabled: true
+
+  persist:
+    trade_plan: true
+    analysis_snapshot: true
+    execution_events: true
+    math_telemetry: true

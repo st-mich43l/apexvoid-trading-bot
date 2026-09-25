@@ -207,7 +207,7 @@ public sealed class TradePlanV8ContractTests
   public void MarketEntryPriceIsTheAdmittedQuoteReference()
   {
     var plan = JsonSerializer.Deserialize<TradePlan>(
-      ValidPlan("market_buy_hfs_chase").ToJsonString(),
+      ValidPlan("market_buy_scalp_chase").ToJsonString(),
       ReadOptions
     )!;
 

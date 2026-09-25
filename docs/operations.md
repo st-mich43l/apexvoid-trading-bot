@@ -11,6 +11,7 @@ A weekly sanity pass takes under a minute:
 cd ~/apexvoid-trading-bot
 docker compose ps                          # 'bot' is Up
 docker compose logs --tail=50 bot          # any ERROR lines?
+docker compose logs --tail=50 kafka-init analysis-engine ctrader-engine
 tail -n 50 logs/algo-bot/algo-bot.log      # host-mounted daily log
 df -h /                                     # free space
 free -h                                     # RAM not pinned
@@ -112,7 +113,16 @@ With `restart: unless-stopped`, the container resumes after a reboot.
 
 ## Monitoring
 
-Because there is no HTTP health endpoint, monitor liveness by either:
+The analysis engine has HTTP liveness/readiness endpoints inside the Compose
+network. Check the initializer and engine health state first:
+
+```bash
+docker compose ps kafka kafka-init analysis-engine ctrader-engine
+docker compose logs --tail=100 kafka-init
+docker compose inspect --format '{{.State.Health.Status}}' analysis-engine
+```
+
+The bot itself still has no inbound HTTP endpoint, so monitor its liveness by either:
 
 - Watching for a startup line / absence of crashes in `docker compose logs bot`.
 - A cron heartbeat that pings a dead-man's-switch service (Healthchecks.io)
@@ -121,6 +131,27 @@ Because there is no HTTP health endpoint, monitor liveness by either:
   */5 * * * * docker inspect -f '{{.State.Running}}' xau-bot | grep -q true && \
               curl -fsS --retry 3 https://hc-ping.com/<uuid> > /dev/null
   ```
+
+## Owner DM daily wipe
+
+Opt-in (`DELIVERY_OWNER_DM_DAILY_WIPE_ENABLED`, default off): at each local
+trade-day rollover (same `SEQ_RESET_TZ` midnight boundary as the daily
+`#seq` reset), the **ApexVoid bot** deletes every message in its own
+private DM with the owner sent since the previous wipe — both the bot's
+own sends and the owner's own typed commands. Irreversible; enable only
+once satisfied with the behavior.
+
+Scope is deliberately narrow: only the ApexVoid bot's own DM. The
+scanner/algo bot's DM (autonomous root cards, and the owner's `/1r`
+personal-trade root card + its lifecycle) is a **separate** Telegram
+conversation and is never touched — that is the actual trade record.
+
+Mechanism: every outgoing message the ApexVoid bot sends and every
+incoming message the owner sends it are journaled in Redis for the current
+trade date; at rollover the just-completed day's journal is swept
+(best-effort per message — an already-gone message does not block the
+rest) and cleared. A missed sweep (restart, Redis hiccup) self-expires
+after 3 days rather than accumulating forever.
 
 ## Troubleshooting
 
@@ -135,6 +166,21 @@ docker compose logs ctrader-engine
 - Config / pydantic validation errors — required secrets missing from `.env`
   (`TELEGRAM_BOT_TOKEN`, `POSTGRES_PASSWORD`, `CTRADER_*`, …) or invalid
   `config/trading-bot.yml`.
+- **Production only, deploy "succeeded" in CI but the bot is down**:
+  `config-compiler` exits 1 with a Pydantic error on a field that looks
+  correct in this repo's `config/trading-bot.yml` (e.g. `... must be 4.0,
+  got 3.0`). The host's config isn't read from this repo — it's rendered
+  from a hand-maintained mirror in `ansible-library`
+  (`inventory/group_vars/all/apexvoid_trading_bot_config.yml`) that a recent
+  config change forgot to update. Confirm with
+  `docker logs apexvoid-config-compiler` (full traceback) and
+  `docker exec apexvoid-config-compiler cat /config/trading-bot.yml` (or the
+  host path directly) against this repo's value; fix the mirror in
+  `ansible-library`, merge, then re-run the deploy (or `docker compose up -d
+  --force-recreate` once the host file is corrected) — see
+  [deployment.md § Production Ansible](deployment.md#production-ansible).
+  Since `ctrader-engine`/`bot` both wait on `config-compiler`'s exit code,
+  this is a full outage, not a degraded start.
 - Manifest verify failure — `config-compiler` did not write
   `/runtime/resolved-runtime.json`; fix YAML and recreate.
 - Postgres / Redis unhealthy — wait for healthchecks; check

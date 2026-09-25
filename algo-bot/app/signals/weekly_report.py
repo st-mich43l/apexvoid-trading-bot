@@ -80,16 +80,6 @@ def _metric_line(
   return line
 
 
-def _best_worst_line(icon: str, label: str, row: dict) -> str:
-  seq = row.get("daily_seq") or row.get("signal_id") or "?"
-  return _metric_line(
-    icon,
-    label,
-    _signed(row["value"]),
-    f"· #{seq} {_setup_label(row.get('setup_type'))}",
-  )
-
-
 def _branch_lines(groups: list[dict], kind: str) -> list[str]:
   if not groups:
     return ["└─ —"]
@@ -183,7 +173,10 @@ async def _weekly_report_tick(now: datetime | None = None) -> bool:
     stats = build_stats(
       records,
       await get_all_signals(symbol),
-      runtime_config.delivery.presentation.seq_reset_tz,
+      # asia_start/london_start/ny_start are fixed UTC session-open hours
+      # (22/7/13) -- not seq_reset_tz, which is the viewer-local day/week
+      # boundary and unrelated to global market session classification.
+      "UTC",
       runtime_config.market_data.sessions.asia_start,
       runtime_config.market_data.sessions.london_start,
       runtime_config.market_data.sessions.ny_start,

@@ -16,8 +16,8 @@ pytestmark = pytest.mark.no_database
 
 
 def test_funnel_bucket_splits_scalp_and_reaction():
-  assert funnel_bucket("Key Level Reaction") == BUCKET_REACTION
-  assert funnel_bucket("Trendline Reaction") == BUCKET_REACTION
+  assert funnel_bucket("Key Level") == BUCKET_REACTION
+  assert funnel_bucket("Trendline") == BUCKET_REACTION
   assert funnel_bucket("Impulse Pullback Scalp", family="scalp") == BUCKET_SCALP
   assert funnel_bucket("Impulse Pullback Scalp", family="scalp") == BUCKET_SCALP
   assert funnel_bucket("Range Edge Scalp") == BUCKET_SCALP
@@ -30,7 +30,7 @@ def test_normalize_setup_type_aliases():
   )
 
   assert normalize_setup_type("momentum") == "Momentum Chase Scalp"
-  assert normalize_setup_type("key-level") == "Key Level Reaction"
+  assert normalize_setup_type("key-level") == "Key Level"
   assert normalize_setup_type("impulse pullback · add_momentum") == (
     "Impulse Pullback Scalp · add_momentum"
   )

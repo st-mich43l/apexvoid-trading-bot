@@ -96,6 +96,14 @@ from app.autotrade.setup_lifecycle import (
 )
 from app.autotrade.setup_card import kill_setup_card
 from app.autotrade import worker as autotrade_worker
+from app.autotrade.structural_barriers import (
+  build_structural_barrier_book,
+  to_opposing_entries,
+)
+from app.autotrade.structural_target_room import (
+  ZoneOpposingEntry,
+  zone_meets_execution_width,
+)
 
 _PRE_CONFIRMED_CHAIN = (DISCOVERED, WATCHING, TOUCHED, FORMING, CONFIRMED)
 from app.autotrade.lifecycle import emit_lifecycle, increment_metric
@@ -213,6 +221,71 @@ def _price_text(value: float, symbol: str, *, grouped: bool = False) -> str:
 def _pip_size(symbol: str) -> float:
   # Fail closed — never return 1.0 for an unknown instrument.
   return pip_for(symbol)
+
+
+def _htf_opposing_zones(analysis: Any, *, symbol: str) -> list[Zone] | None:
+  """Technique-native HTF supply/demand zones for resolve_actionability's
+  opposing-room check (2026-09, Market Map purge stage 4 - "these
+  technique calculate swing right? so we can migrate to scanner, detector
+  and clean"). The scanner already computes this per M15 cycle
+  (analysis.per_tf["M15"].zones, mitigation-marked); this only applies the
+  same execution-width gate worker.py's own independent M15 zone scan
+  (_htf_zones) applies, so both opposing-room checks share one definition
+  of a usable wall. Side/mitigation filtering happens downstream in
+  zone_opposing_entries.
+  """
+  per_tf = getattr(analysis, "per_tf", None) or {}
+  htf = per_tf.get(autotrade_worker._HTF_TIMEFRAME)
+  if htf is None:
+    return None
+  atr_values = htf.atr
+  current_atr = (
+    float(atr_values.iloc[-1])
+    if atr_values is not None and not atr_values.empty
+    and math.isfinite(float(atr_values.iloc[-1]))
+    else 0.0
+  )
+  policy = runtime_config.execution.policy
+  return [
+    zone for zone in htf.zones
+    if zone_meets_execution_width(
+      zone,
+      atr=current_atr,
+      pip_size=_pip_size(symbol),
+      max_width_atr=float(policy.execution_zone_max_width_atr),
+      max_width_pips=float(policy.execution_zone_max_width_pips),
+    )
+  ]
+
+
+def _structural_barrier_opposing_entries(
+  analysis: Any, *, symbol: str,
+) -> tuple[ZoneOpposingEntry, ...] | None:
+  """Multi-timeframe (M5/M15/H1), merged, cross-side-reconciled opposing-
+  structure pool for resolve_actionability's opposing-room check (2026-09,
+  Key Level structural repair Phase 2) - replaces the single-timeframe
+  (M15-only) ``_htf_opposing_zones`` read above with
+  ``StructuralBarrierBook``, restoring the two structural-pool operations
+  (same-side merge, cross-side reconciliation) the 2026-09-07 Market Map
+  purge dropped when it replaced ``MarketMap.actionable_entries`` with an
+  unreconciled M15-only zone read. Gated by
+  ``actionability.target_room.structural_barrier_book_enabled`` - see
+  ``_htf_opposing_zones`` for the pre-wiring fallback this reverts to when
+  disabled.
+  """
+  per_tf = getattr(analysis, "per_tf", None) or {}
+  if not per_tf:
+    return None
+  policy = runtime_config.execution.policy
+  barriers = build_structural_barrier_book(
+    per_tf,
+    major_score=float(runtime_config.analysis.market_map.major_score),
+    pip_size=_pip_size(symbol),
+    max_width_atr=float(policy.execution_zone_max_width_atr),
+    max_width_pips=float(policy.execution_zone_max_width_pips),
+    proximal_band_atr=float(runtime_config.actionability.gates.proximal_band_atr),
+  )
+  return to_opposing_entries(barriers)
 
 
 def _level_bucket(symbol: str, level: float, bucket_pips: int) -> str:
@@ -335,6 +408,15 @@ def _build_strategy_match(
     built.append(match)
   if not built:
     return None, last_reason, last_measured
+  built, arbitration_events = _arbitrate_flip_zone_matches(
+    built,
+    overlap_threshold=float(ctx.settings.zone_merge_overlap),
+  )
+  if not built:
+    return None, "all_matches_arbitrated", {
+      "raw": len(results),
+      "arbitration_events": arbitration_events,
+    }
   atr = built[0].atr
   deduped, merge_events = dedupe_matches(built, atr=atr)
   for event in merge_events:
@@ -364,7 +446,72 @@ def _build_strategy_match(
     "matches": len(deduped),
     "raw": len(built),
     "all_matches": deduped,
+    "arbitration_events": arbitration_events,
   }
+
+
+def _match_trigger_bar(match: StrategyMatch) -> str:
+  """Use the scanner event as the authoritative same-bar identity."""
+  return str(match.event_ts or "")
+
+
+def _structural_band_overlap(left: StrategyMatch, right: StrategyMatch) -> float:
+  low = (
+    min(float(left.structural_zone_low), float(right.structural_zone_low))
+  )
+  high = (
+    max(float(left.structural_zone_high), float(right.structural_zone_high))
+  )
+  overlap = min(
+    float(left.structural_zone_high), float(right.structural_zone_high),
+  ) - max(
+    float(left.structural_zone_low), float(right.structural_zone_low),
+  )
+  smaller = min(
+    float(left.structural_zone_high) - float(left.structural_zone_low),
+    float(right.structural_zone_high) - float(right.structural_zone_low),
+  )
+  if overlap <= 0 or high <= low:
+    return 0.0
+  if smaller <= 0:
+    return 1.0
+  return overlap / smaller
+
+
+def _arbitrate_flip_zone_matches(
+  matches: list[StrategyMatch],
+  *,
+  overlap_threshold: float,
+) -> tuple[list[StrategyMatch], list[dict[str, str]]]:
+  """Keep Key Level over a same-bar overlapping Flip Zone."""
+  key_levels = [
+    item for item in matches if item.strategy == "Key Level"
+  ]
+  kept: list[StrategyMatch] = []
+  events: list[dict[str, str]] = []
+  threshold = max(0.0, float(overlap_threshold))
+  for item in matches:
+    if (
+      item.strategy == "Flip Zone"
+      and item.structural_zone_low is not None
+      and item.structural_zone_high is not None
+      and any(
+        level.direction == item.direction
+        and _match_trigger_bar(level) == _match_trigger_bar(item)
+        and level.structural_zone_low is not None
+        and level.structural_zone_high is not None
+        and _structural_band_overlap(level, item) >= threshold
+        for level in key_levels
+      )
+    ):
+      events.append({
+        "match_id": item.match_id,
+        "event": "flip_zone_superseded_by_key_level",
+        "strategy": item.strategy,
+      })
+      continue
+    kept.append(item)
+  return kept, events
 
 
 def _build_one_strategy_match(
@@ -584,17 +731,80 @@ def _build_one_strategy_match(
     structural_timeframe=result.structural_timeframe,
     htf_bias=str(getattr(ctx, "htf_bias", "") or ""),
     regime_kind=str(getattr(getattr(ctx, "regime", None), "kind", "") or ""),
+    bias_relationship=result.bias_relationship or result.mode,
     execution_eligibility=result.execution_eligibility,
     math_fib_ratio=getattr(result, "math_fib_ratio", None),
     math_velocity=getattr(result, "math_velocity", None),
     math_acceleration=getattr(result, "math_acceleration", None),
     math_pd=getattr(result, "math_pd", None),
+    math_feature_version=getattr(result, "math_feature_version", None),
+    mad_version=getattr(result, "mad_version", None),
+    mad_phase=getattr(result, "mad_phase", None),
+    mad_confidence=getattr(result, "mad_confidence", None),
+    mad_affinity=getattr(result, "mad_affinity", None),
+    mad_direction=getattr(result, "mad_direction", None),
+    mad_sweep_side=getattr(result, "mad_sweep_side", None),
+    mad_reclaim=getattr(result, "mad_reclaim", None),
+    mad_range_quality_atr=getattr(result, "mad_range_quality_atr", None),
+    mad_break_distance_atr=getattr(result, "mad_break_distance_atr", None),
+    mad_displacement_atr=getattr(result, "mad_displacement_atr", None),
+    mad_acceptance_closes=getattr(result, "mad_acceptance_closes", None),
+    mad_sweep_penetration_atr=getattr(result, "mad_sweep_penetration_atr", None),
+    mad_reclaim_depth_atr=getattr(result, "mad_reclaim_depth_atr", None),
+    mad_reason_code=getattr(result, "mad_reason_code", None),
     confluence_v1=getattr(result, "confluence_v1", None),
     confluence_v2=getattr(result, "confluence_v2", None),
     confluence_v2_raw=getattr(result, "confluence_v2_raw", None),
     confluence_scoring_version=getattr(
       result, "confluence_scoring_version", None,
     ),
+    candle_version=getattr(result, "candle_version", None),
+    candle_primary_pattern=getattr(result, "candle_primary_pattern", None),
+    candle_patterns=getattr(result, "candle_patterns", None),
+    candle_final_score=getattr(result, "candle_final_score", None),
+    candle_base_score=getattr(result, "candle_base_score", None),
+    candle_synergy_bonus=getattr(result, "candle_synergy_bonus", None),
+    candle_rejection_score=getattr(result, "candle_rejection_score", None),
+    candle_displacement_score=getattr(result, "candle_displacement_score", None),
+    candle_sequence_score=getattr(result, "candle_sequence_score", None),
+    candle_body_fraction=getattr(result, "candle_body_fraction", None),
+    candle_upper_wick_fraction=getattr(result, "candle_upper_wick_fraction", None),
+    candle_lower_wick_fraction=getattr(result, "candle_lower_wick_fraction", None),
+    candle_close_location=getattr(result, "candle_close_location", None),
+    candle_body_atr=getattr(result, "candle_body_atr", None),
+    candle_range_atr=getattr(result, "candle_range_atr", None),
+    candle_sweep=getattr(result, "candle_sweep", None),
+    candle_sweep_penetration_atr=getattr(result, "candle_sweep_penetration_atr", None),
+    candle_reclaim=getattr(result, "candle_reclaim", None),
+    candle_reclaim_depth_atr=getattr(result, "candle_reclaim_depth_atr", None),
+    candle_engulfing=getattr(result, "candle_engulfing", None),
+    candle_doji=getattr(result, "candle_doji", None),
+    candle_compression_score=getattr(result, "candle_compression_score", None),
+    candle_sequence_name=getattr(result, "candle_sequence_name", None),
+    candle_sequence_bars=getattr(result, "candle_sequence_bars", None),
+    key_level_opposing_zone_low=getattr(result, "key_level_opposing_zone_low", None),
+    key_level_opposing_zone_high=getattr(result, "key_level_opposing_zone_high", None),
+    key_level_opposing_zone_side=getattr(result, "key_level_opposing_zone_side", None),
+    opposing_zone_present=getattr(result, "opposing_zone_present", None),
+    opposing_zone_side=getattr(result, "opposing_zone_side", None),
+    opposing_zone_low=getattr(result, "opposing_zone_low", None),
+    opposing_zone_high=getattr(result, "opposing_zone_high", None),
+    opposing_zone_tier=getattr(result, "opposing_zone_tier", None),
+    opposing_zone_score=getattr(result, "opposing_zone_score", None),
+    opposing_zone_strength=getattr(result, "opposing_zone_strength", None),
+    opposing_raw_room_price=getattr(result, "opposing_raw_room_price", None),
+    opposing_room_pips=getattr(result, "opposing_room_pips", None),
+    opposing_room_atr=getattr(result, "opposing_room_atr", None),
+    opposing_room_r=getattr(result, "opposing_room_r", None),
+    opposing_before_tp1=getattr(result, "opposing_before_tp1", None),
+    opposing_displaced=getattr(result, "opposing_displaced", None),
+    opposing_mitigated=getattr(result, "opposing_mitigated", None),
+    opposing_room_pressure=getattr(result, "opposing_room_pressure", None),
+    opposing_risk_score=getattr(result, "opposing_risk_score", None),
+    opposing_action=getattr(result, "opposing_action", None),
+    opposing_reason_code=getattr(result, "opposing_reason_code", None),
+    sweep_extreme_price=getattr(result, "sweep_extreme_price", None),
+    trendline_v2=getattr(result, "trendline_v2", None),
   )
   return match, None, {}
 
@@ -818,6 +1028,24 @@ async def _sync_strategy_match(
     ctx,
     executable_results,
   )
+  arbitration_events = (
+    measured.get("arbitration_events", [])
+    if isinstance(measured, dict) else []
+  )
+  for event in arbitration_events:
+    if event.get("event") == "flip_zone_superseded_by_key_level":
+      await increment_metric(
+        client,
+        "flip_zone_superseded_by_key_level",
+        symbol=symbol,
+      )
+      log.info(
+        "scanner candidate superseded symbol=%s tf=%s match_id=%s "
+        "reason=flip_zone_superseded_by_key_level",
+        symbol,
+        tf,
+        event.get("match_id"),
+      )
   if match is None:
     if not runtime_config.strategies.matching.multiple_matches_enabled:
       await client.delete(key)
@@ -1331,34 +1559,6 @@ def _planned_stop_price(
   return None
 
 
-def _copy_draft(
-  symbol: str,
-  result: DetectionResult,
-  execution_match: StrategyMatch | None = None,
-) -> str | None:
-  """Build an editable one-line command; include planned SL when known."""
-  live = {item.upper() for item in runtime_config.live_instruments()}
-  if symbol.upper() not in live:
-    return None
-  setup = re.sub(r"[^a-z0-9]+", "-", result.setup.lower()).strip("-")
-  grade = "*" * max(1, min(3, int(result.confluence)))
-  entry = (
-    f"{_price_text(result.entry_zone.low, symbol)}-"
-    f"{_price_text(result.entry_zone.high, symbol)}"
-  )
-  planned_stop = _planned_stop_price(result, execution_match)
-  sl_text = (
-    _price_text(planned_stop, symbol)
-    if planned_stop is not None
-    else "SL"
-  )
-
-  return (
-    f"gold {result.direction.lower()} entry zone ({entry}) "
-    f"/ sl {sl_text} / tp TP1/TP2/TP3 / setup {setup} {grade}"
-  )
-
-
 def _format_detection(
   symbol: str,
   tf: str,
@@ -1427,19 +1627,11 @@ def _format_detection(
       f"{escape(result.execution_eligibility.reason_code)} · "
       f"{escape(result.execution_eligibility.message)}"
     )
-  if result.mode == "range_scalp":
-    lines.append("↔️ <b>Mode:</b> RANGE SCALP · two-sided local range")
-  elif result.mode == "counter_bias":
-    lines.append("⚠️ <b>Bias:</b> counter_bias")
-  elif result.mode == "with_bias":
-    lines.append("🧭 <b>Bias:</b> with_bias")
-  elif result.mode == "neutral":
-    lines.append("🧭 <b>Bias:</b> neutral")
-  elif result.mode != "with_trend":
-    label = "reaction scalp" if result.mode == "counter_reaction" else "counter swing"
-    lines.append(
-      f"⚠️ <b>Mode:</b> Counter-trend · {label}"
-    )
+  _bias = str(result.bias_relationship or "").strip()
+  if _bias == "with_bias":
+    lines.append("🧭 <b>Bias:</b> with bias")
+  elif _bias == "counter_bias":
+    lines.append("⚠️ <b>Bias:</b> counter bias")
   if result.structural_source:
     lines.append(
       f"🧱 <b>Structural source:</b> {escape(result.structural_source)}"
@@ -1507,8 +1699,6 @@ def _format_detection(
       f"{escape(_zone_text(extra.entry_zone, symbol, grouped=True))} "
       f"{extra_stars}"
     )
-  if executable:
-    lines.append("→ Executor owns mechanical entry and risk enforcement.")
   return "\n".join(lines)
 
 
@@ -2065,26 +2255,6 @@ def _structure_card_gate(
       return "low_confluence_counter_bias_in_range"
 
   return None
-
-
-def _conflict_record(
-  stronger: DetectionResult,
-  weaker: DetectionResult,
-  outcome: str,
-) -> dict[str, Any]:
-  return {
-    "outcome": outcome,  # "stronger_kept" | "both_dropped"
-    "a": {
-      "setup": stronger.setup,
-      "direction": stronger.direction,
-      "confluence": stronger.confluence,
-    },
-    "b": {
-      "setup": weaker.setup,
-      "direction": weaker.direction,
-      "confluence": weaker.confluence,
-    },
-  }
 
 
 def _suppress_overlaps(
@@ -2801,7 +2971,7 @@ async def _load_market_context_for_symbol(
   )
   ctx = _attach_price_context(ctx, spot, trigger, frames[exec_tf])
   # Shared MAD phase for technique detectors. Soft use: accumulation →
-  # Range Edge Scalp only. Never drives HFS ranking/gates.
+  # Range Edge Scalp only. Never drives scalping ranking/gates.
   try:
     from app.analysis.mad_phase import refresh_mad_for_symbol
     from app.scalping.context import classify_session
@@ -3062,7 +3232,7 @@ async def _handle_event(
       await increment_metric(client, reason, symbol=symbol)
   for result in detected:
     metric_name = {
-      "Key Level Reaction": "key_level_reaction_detected",
+      "Key Level": "key_level_reaction_detected",
       "Zone Reaction": "zone_reaction_detected",
       "Flip Zone": "flip_zone_reaction_detected",
       "Demand Zone Reaction": "demand_zone_reaction_detected",
@@ -3073,8 +3243,8 @@ async def _handle_event(
       "iFVG": "technique_ifvg_detected",
       "CRT": "technique_crt_detected",
       "Confluence Zone": "confluence_zone_detected",
-      "Session Level Reaction": "session_level_reaction_detected",
-      "Trendline Reaction": "trendline_reaction_detected",
+      "Session Level": "session_level_reaction_detected",
+      "Trendline": "trendline_reaction_detected",
     }.get(result.setup)
     if metric_name:
       await increment_metric(client, metric_name, symbol=symbol)
@@ -3110,14 +3280,22 @@ async def _handle_event(
     )
     for result in observed_results
   ]
+  structural_barrier_book_enabled = bool(
+    runtime_config.actionability.target_room.structural_barrier_book_enabled
+  )
   actionability = resolve_actionability(
     symbol=symbol,
     observed_results=observed_results,
-    market_map=current_map,
+    zones=_htf_opposing_zones(analysis, symbol=symbol),
     context=ctx,
     atr=invalidation_atr,
     pip_size=_pip_size(symbol),
     cfg=None,
+    opposing_entries=(
+      _structural_barrier_opposing_entries(analysis, symbol=symbol)
+      if structural_barrier_book_enabled
+      else None
+    ),
   )
   actionable_results = list(actionability.actionable)
   actionability_decisions = list(actionability.decisions)

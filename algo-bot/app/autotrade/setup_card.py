@@ -35,9 +35,15 @@ from app.autotrade.setup_execution_aggregate import (
 )
 from app.autotrade.setup_lifecycle import TERMINAL_STATES, load_setup
 from app.autotrade.strategy_match import StrategyMatch
+from app.autotrade.trade_card import (
+  conservative_entry_reference,
+  format_entry_line,
+  format_r_multiple,
+  format_sl_line,
+  format_target_line,
+)
 from app.core.config import runtime_config
 from app.core.symbols import digits_for, pip_for
-from app.signals.fx_manual_algo import uses_entry_price_display
 
 log = logging.getLogger(__name__)
 
@@ -54,17 +60,16 @@ def card_price_digits(symbol: str) -> int:
     return 2
 
 
-def card_min_price_move(symbol: str) -> float:
-  """Minimum mid move before refreshing live Price now.
-
-  The forming-price loop used ``min_move=0.5`` (fine for XAU, ~5000 pips on
-  EURUSD) so FX root cards never updated after the first render.
+def _card_pip_size(symbol: str) -> float | None:
+  """Same defensive-unknown-symbol floor as card_price_digits, for the SL
+  line's risk-in-pips computation (live 2026-09-07: an unregistered symbol
+  must fall back gracefully, never raise out of card rendering).
   """
   try:
-    pip = float(pip_for(symbol))
+    return float(pip_for(symbol))
   except KeyError:
-    pip = 0.1
-  return max(pip, 1e-9)
+    return None
+
 
 # P0-6: a durable status write (save_forming_card_status/edit_forming_card_status)
 # can arrive before the card itself has been created (the scanner send and the
@@ -85,6 +90,20 @@ _FORMING_CARD_CREATE_POLL_SECONDS = 0.05
 SendFn = Callable[..., Awaitable[Any]]
 EditFn = Callable[[int, int, str], Awaitable[Any]]
 DeleteFn = Callable[[int, int], Awaitable[Any]]
+
+# Floor for the forming/root card's own Redis identity keys
+# (forming_message_key / telegram_root_message_key / forming_status_key) -
+# deliberately independent of the shared candidate storage_ttl_seconds
+# (24h default, used elsewhere for genuinely short-lived candidate/lease
+# records). A card's identity must survive as long as the position it
+# threads for can plausibly stay open with no intervening event - a 24h
+# floor here let a Friday fill's mapping expire over a quiet weekend, so
+# Monday's first real event (order_filled / position_closed) found no
+# card and posted a duplicate instead of threading onto the original
+# (confirmed live on a USDJPY position). See setup_lifecycle.py's matching
+# SETUP_AUDIT_RETENTION_SECONDS - both must stay long enough that neither
+# expires first while the other still holds.
+_FORMING_CARD_MIN_TTL_SECONDS = 30 * 24 * 3600
 
 CARD_STATUS_PRIORITY = {
   "analysis_only": 0,
@@ -116,7 +135,8 @@ if current then
     current_line = tostring(decoded['status_line'] or '')
   else
     current_line = current
-    if string.find(current, 'POSITION ACTIVATED', 1, true)
+    if string.find(current, 'ORDER ACTIVATED', 1, true)
+      or string.find(current, 'POSITION ACTIVATED', 1, true)
       or string.find(current, 'ORDER FILLED', 1, true) then
       current_priority = 150
     elseif string.find(current, 'PLAN EXPIRED', 1, true)
@@ -158,7 +178,11 @@ class FormingCardStatus:
 
 def _infer_status_state(status_line: str) -> str:
   upper = status_line.upper()
-  if "POSITION ACTIVATED" in upper or "ORDER FILLED" in upper:
+  if (
+    "ORDER ACTIVATED" in upper
+    or "POSITION ACTIVATED" in upper
+    or "ORDER FILLED" in upper
+  ):
     return "order_filled"
   if "EXECUTOR ARMED" in upper:
     return "executor_armed"
@@ -190,15 +214,18 @@ def should_stop_forming_price_track(
   *,
   status_state: str | None = None,
 ) -> bool:
-  """Live Price now is only for pre-fill watching — stop once filled/closed.
+  """True once a card is past the pre-fill forming stage.
 
-  Continuous root-card edits after fill compete with ORDER FILLED replies for
-  Telegram rate limits and make the card look 'alive' without the fill reply.
+  The root card no longer live-tracks price at all (removed - it was one
+  more source of Telegram edit-flood competing with ORDER FILLED / status
+  replies for rate limits). This still gates FORMING_ACTIVE_INDEX_KEY
+  membership, kept as a cheap "is this setup still open" signal.
   """
   upper = (text or "").upper()
   if any(
     token in upper
     for token in (
+      "ORDER ACTIVATED",
       "POSITION ACTIVATED",
       "ORDER FILLED",
       "TERMINAL",
@@ -217,33 +244,12 @@ def should_stop_forming_price_track(
   return priority >= CARD_STATUS_PRIORITY["order_filled"]
 
 
-_PRICE_NOW_LINE_RE = re.compile(
-  r"^(\s*•\s*<b>Price now:</b>\s*<b>)([^<]+)(</b>\s*<i>\(live\)</i>\s*)$",
-  re.IGNORECASE,
-)
 _CARD_HEADLINE_SYMBOL_RE = re.compile(
   r"<b>\s*([A-Z0-9]+)\s+[A-Z0-9]+\s*·",
   re.IGNORECASE,
 )
 
 FORMING_ACTIVE_INDEX_KEY = "auto_trade:forming_active"
-
-
-def apply_forming_card_price(text: str, price: float, *, digits: int = 2) -> str:
-  """Replace the Trade-area Price now line when present."""
-  if not text or not math.isfinite(price):
-    return text
-  price_text = f"{price:,.{digits}f}"
-  out: list[str] = []
-  replaced = False
-  for line in text.splitlines():
-    match = _PRICE_NOW_LINE_RE.match(line)
-    if match is not None:
-      out.append(f"{match.group(1)}{price_text}{match.group(3)}")
-      replaced = True
-      continue
-    out.append(line)
-  return "\n".join(out) if replaced else text
 
 
 def parse_forming_card_symbol(text: str) -> str | None:
@@ -261,45 +267,85 @@ def parse_forming_card_symbol(text: str) -> str | None:
   if match is None:
     return None
   symbol = str(match.group(1)).upper()
-  if symbol in {"POSITION", "TERMINAL"}:
+  if symbol in {"ORDER", "POSITION", "TERMINAL"}:
     return None
   return symbol
 
 
-def parse_forming_card_price_now(text: str) -> float | None:
-  if not text:
-    return None
+_OLD_STOP_LINE_PREFIX = "• <b>Stop:</b>"
+_NEW_STOP_LINE_PREFIX = "🛡 SL:"
+_ENTRY_LINE_RE = re.compile(
+  r"⚡️ Entry (?:Zone|Price):\s*<b>([\d,]+(?:\.\d+)?)"
+  r"(?:\s*-\s*([\d,]+(?:\.\d+)?))?</b>"
+)
+
+
+def _parse_card_entry_reference(text: str) -> float | None:
+  """Recover the conservative entry reference from the card's own already-
+  printed Entry line, so a later Stop edit can show "risk N pips" without
+  every caller needing to thread StrategyMatch through. Direction comes
+  from the direction/strategy body line (line 2) this card's status-slot
+  machinery already keeps at a fixed position.
+  """
+  direction = None
+  low = high = None
   for line in text.splitlines():
-    match = _PRICE_NOW_LINE_RE.match(line)
-    if match is None:
-      continue
-    raw = match.group(2).replace(",", "").strip()
-    try:
-      value = float(raw)
-    except ValueError:
-      return None
-    return value if math.isfinite(value) else None
-  return None
+    stripped = line.strip()
+    body = _BODY_DIRECTION_LINE_RE.match(stripped)
+    if body is not None:
+      direction = body.group(1)
+    entry_match = _ENTRY_LINE_RE.search(stripped)
+    if entry_match is not None:
+      try:
+        low = float(entry_match.group(1).replace(",", ""))
+        high = (
+          float(entry_match.group(2).replace(",", ""))
+          if entry_match.group(2)
+          else None
+        )
+      except ValueError:
+        low = high = None
+  if direction is None or low is None:
+    return None
+  return conservative_entry_reference(direction, low, high)
 
 
 def apply_forming_card_stop(text: str, stop_price: float, *, digits: int = 2) -> str:
-  """Insert or replace the Trade-area Stop line and copy-draft SL value."""
+  """Insert or replace the SL line and copy-draft SL value.
+
+  Recognizes both the current "🛡 SL:" line and the legacy "• <b>Stop:</b>"
+  line it replaced, so a trade whose card was created before this format
+  changed still gets its next stop edit rendered in the current format
+  instead of staying stuck on the old one.
+  """
   if not text or not math.isfinite(stop_price):
     return text
-  stop_text = f"{stop_price:,.{digits}f}"
+  symbol = parse_forming_card_symbol(text)
+  reference = _parse_card_entry_reference(text)
+  pip_size = _card_pip_size(symbol) if symbol else None
+  if symbol and reference is not None and pip_size is not None:
+    stop_line = format_sl_line(
+      symbol, stop_price, reference, digits=digits, pip_size=pip_size,
+    )
+  else:
+    stop_text = f"{stop_price:,.{digits}f}"
+    stop_line = f"🛡 SL:     <b>{stop_text}</b>"
   plain_stop = f"{stop_price:.{digits}f}"
   lines = text.splitlines()
-  stop_line = f"• <b>Stop:</b> <b>{stop_text}</b>"
   has_stop = any(
-    line.strip().startswith("• <b>Stop:</b>") for line in lines
+    line.strip().startswith(_OLD_STOP_LINE_PREFIX)
+    or line.strip().startswith(_NEW_STOP_LINE_PREFIX)
+    for line in lines
   )
   inserted = False
   out: list[str] = []
   for line in lines:
     stripped = line.strip()
-    if stripped.startswith("• <b>Stop:</b>"):
-      # Replace every existing Stop line with one canonical value; skip
-      # duplicates so Trade area never shows Stop twice.
+    if stripped.startswith(_OLD_STOP_LINE_PREFIX) or stripped.startswith(
+      _NEW_STOP_LINE_PREFIX
+    ):
+      # Replace every existing Stop/SL line with one canonical value; skip
+      # duplicates so the card never shows it twice.
       if not inserted:
         out.append(stop_line)
         inserted = True
@@ -308,12 +354,16 @@ def apply_forming_card_stop(text: str, stop_price: float, *, digits: int = 2) ->
     if (
       not has_stop
       and not inserted
-      and stripped.startswith("• <b>Key level:</b>")
+      and (
+        stripped.startswith("⚡️ Entry")
+        or stripped.startswith("• <b>Key level:</b>")
+      )
     ):
       out.append(stop_line)
       inserted = True
   if not inserted:
-    # Fall back: place before Context / Copy draft sections.
+    # Fall back: place before Context / Copy draft sections (legacy card
+    # shapes), else append.
     rebuilt: list[str] = []
     placed = False
     for line in out:
@@ -339,39 +389,67 @@ def apply_forming_card_stop(text: str, stop_price: float, *, digits: int = 2) ->
   )
 
 
-def apply_forming_card_targets(text: str, targets_line: str) -> str:
-  """Insert or replace the Trade-area Targets line.
+_TP_LINE_RE = re.compile(r"^💰\s*TP\d+:|^•\s*<b>TP\d+:</b>", re.IGNORECASE)
 
-  Scanner SETUP FORMING cards omit Targets; publish/fill must still surface
-  the plan TP ladder. Place after Stop when present, else after Key level,
-  else before Context.
+
+def _is_targets_row(stripped: str) -> bool:
+  """A legacy single ' · '-joined Targets line, a legacy one-bullet-per-TP
+  line, or the current "💰 TPn:" line - any of these counts as "the
+  Targets block".
+  """
+  return (
+    stripped.startswith("• <b>Targets:</b>")
+    or bool(_TP_LINE_RE.match(stripped))
+  )
+
+
+def apply_forming_card_targets(text: str, targets_line: str) -> str:
+  """Insert or replace the Targets block ("💰 TPn:" rows).
+
+  ``targets_line`` may be a single legacy line or a multi-line ('\\n'
+  joined) one-row-per-TP block - either way the WHOLE existing block
+  (contiguous Targets/TPn rows, regardless of which shape produced them)
+  is replaced as one unit, never left to accumulate duplicates. Rows are
+  used exactly as given - format_target_line already produces
+  complete, correctly-prefixed lines, unlike the legacy bullet block this
+  replaced.
+
+  Recognizes both the current "🛡 SL:" line and the legacy
+  "• <b>Stop:</b>"/"• <b>Key level:</b>" lines as insertion anchors, so a
+  trade whose card predates this format still gets its targets placed
+  sensibly.  Scanner SETUP FORMING cards omit Targets; publish/fill must
+  still surface the plan TP ladder.
   """
   if not text or not targets_line:
     return text
-  line = targets_line.strip()
-  if not line.startswith("•"):
-    line = f"• {line}"
+  block_lines = [
+    row.strip()
+    for row in targets_line.strip("\n").splitlines()
+    if row.strip()
+  ]
+  if not block_lines:
+    return text
   lines = text.splitlines()
-  has_targets = any(
-    stripped.startswith("• <b>Targets:</b>")
-    for stripped in (row.strip() for row in lines)
-  )
+  has_targets = any(_is_targets_row(row.strip()) for row in lines)
   inserted = False
   out: list[str] = []
   for row in lines:
     stripped = row.strip()
-    if stripped.startswith("• <b>Targets:</b>"):
+    if _is_targets_row(stripped):
       if not inserted:
-        out.append(line)
+        out.extend(block_lines)
         inserted = True
       continue
     out.append(row)
     if (
       not has_targets
       and not inserted
-      and stripped.startswith("• <b>Stop:</b>")
+      and (
+        stripped.startswith(_NEW_STOP_LINE_PREFIX)
+        or stripped.startswith(_OLD_STOP_LINE_PREFIX)
+      )
     ):
-      out.append(line)
+      out.extend(block_lines)
       inserted = True
   if not inserted and not has_targets:
     rebuilt: list[str] = []
@@ -380,7 +458,7 @@ def apply_forming_card_targets(text: str, targets_line: str) -> str:
       stripped = row.strip()
       if not placed and stripped.startswith("• <b>Key level:</b>"):
         rebuilt.append(row)
-        rebuilt.append(line)
+        rebuilt.extend(block_lines)
         placed = True
         continue
       if (
@@ -390,10 +468,10 @@ def apply_forming_card_targets(text: str, targets_line: str) -> str:
           or "📋 <b>Copy draft</b>" in row
         )
       ):
-        rebuilt.append(line)
+        rebuilt.extend(block_lines)
         placed = True
       rebuilt.append(row)
-    out = rebuilt if placed else [*out, line]
+    out = rebuilt if placed else [*out, *block_lines]
   return "\n".join(out)
 
 
@@ -411,13 +489,15 @@ def telegram_root_message_key(setup_id: str) -> str:
 
 
 def should_delete_root_on_terminal() -> bool:
-  """Reject/expire/invalidate retain the root card body (never delete).
+  """Whether reject/expire/invalidate should delete the root card.
 
-  Single-root mode used to allow delete; that orphaned reply threads.
-  Close/reject now also leave the SETUP/ACTIVATED body intact — no
-  TERMINAL rewrite on the root (see kill_setup_card).
+  Owner 2026-09-17: single-root mode used to always delete here, which
+  orphaned reply threads, so this was hardcoded to retain-only on
+  2026-08-17. Re-enabled behind delivery.telegram.delete_root_on_terminal
+  (owner's explicit choice, accepting the reply-thread tradeoff) instead
+  of leaving it permanently off.
   """
-  return False
+  return runtime_config.delivery.telegram.delete_root_on_terminal
 
 
 def forming_status_key(setup_id: str) -> str:
@@ -495,9 +575,12 @@ _CARD_HEADER_RE = re.compile(
   r"^\S+\s*<b>(?P<symbol>[A-Za-z0-9]+)\s+(?P<tf>\S+)\s*·\s*[^<]*</b>$"
 )
 # Fill rewrites the headline to this shape; _CARD_HEADER_RE must not parse
-# it (would read symbol=POSITION). Terminal close needs its own extract.
+# it (would read symbol=ORDER/POSITION). Terminal close needs its own
+# extract. Matches both ORDER ACTIVATED (current) and POSITION ACTIVATED
+# (cards already live before the ORDER rename) so an in-flight card from
+# either side of a deploy is still recognized.
 _ACTIVATED_HEADER_RE = re.compile(
-  r"^\S+\s*<b>POSITION ACTIVATED\s*·\s*"
+  r"^\S+\s*<b>(?:ORDER|POSITION) ACTIVATED\s*·\s*"
   r"(?P<symbol>[A-Za-z0-9]+)\s+(?P<tf>\S+)\s*</b>$",
   re.IGNORECASE,
 )
@@ -515,38 +598,21 @@ _BODY_DIRECTION_LINE_RE = re.compile(r"^[🔴🟢📈📉]\s*<b>(BUY|SELL)\b")
 
 def _position_activated_header(line: str) -> str | None:
   stripped = line.strip()
-  if "POSITION ACTIVATED" in stripped:
+  if "ORDER ACTIVATED" in stripped or "POSITION ACTIVATED" in stripped:
     # Already rewritten by an earlier fill event on this same setup (e.g.
     # a multi-leg entry fires order_filled once per leg, then again on
     # "ENTRY GROUP FULLY FILLED"). Re-running _CARD_HEADER_RE against our
-    # own prior output would parse "POSITION ACTIVATED" itself as the
-    # symbol/tf tokens and mangle the header into "POSITION ACTIVATED ·
-    # POSITION ACTIVATED" - confirmed live. Nothing left to rewrite.
+    # own prior output would parse "ORDER ACTIVATED" itself as the
+    # symbol/tf tokens and mangle the header into "ORDER ACTIVATED ·
+    # ORDER ACTIVATED" - confirmed live (with the prior POSITION wording).
+    # Nothing left to rewrite. The POSITION check stays so a card already
+    # live before the ORDER rename is still recognized.
     return None
   match = _CARD_HEADER_RE.match(stripped)
   if match is None:
     return None
   return (
-    f"✅ <b>POSITION ACTIVATED · {match.group('symbol')} "
-    f"{match.group('tf')}</b>"
-  )
-
-
-def _terminal_header(line: str) -> str | None:
-  stripped = line.strip()
-  if stripped.startswith("❌") and "TERMINAL" in stripped:
-    return None
-  activated = _ACTIVATED_HEADER_RE.match(stripped)
-  if activated is not None:
-    return (
-      f"❌ <b>TERMINAL · {activated.group('symbol')} "
-      f"{activated.group('tf')}</b>"
-    )
-  match = _CARD_HEADER_RE.match(stripped)
-  if match is None:
-    return None
-  return (
-    f"❌ <b>TERMINAL · {match.group('symbol')} "
+    f"✅ <b>ORDER ACTIVATED · {match.group('symbol')} "
     f"{match.group('tf')}</b>"
   )
 
@@ -583,12 +649,13 @@ def apply_forming_card_status(text: str, status_line: str) -> str:
   lines = text.splitlines()
   if not lines or not status_line:
     return text
-  # Whether the header ALREADY says POSITION ACTIVATED tells us whether
+  # Whether the header ALREADY says ORDER ACTIVATED tells us whether
   # line[1] is still the reserved status slot or was already folded away
   # by an earlier order_filled call below - it's the only reliable signal
   # since real status text and BUY/SELL body lines can share a leading
-  # emoji (both TRIGGER READY and a BUY line start with 🟢).
-  activated = "POSITION ACTIVATED" in lines[0]
+  # emoji (both TRIGGER READY and a BUY line start with 🟢). The POSITION
+  # check stays so a card already live before the ORDER rename still works.
+  activated = "ORDER ACTIVATED" in lines[0] or "POSITION ACTIVATED" in lines[0]
   inferred = _infer_status_state(status_line)
   if inferred == "order_filled":
     rewritten_header = _position_activated_header(lines[0])
@@ -596,7 +663,7 @@ def apply_forming_card_status(text: str, status_line: str) -> str:
       lines[0] = rewritten_header
     if not activated and len(lines) > 1:
       # First fill event on this setup: the header now already says
-      # POSITION ACTIVATED, so a status line repeating it below is
+      # ORDER ACTIVATED, so a status line repeating it below is
       # redundant. A blank placeholder line was tried before, but
       # Telegram still renders an invisible-character-only line at full
       # line-height, so the card showed a stray empty line under the
@@ -609,7 +676,7 @@ def apply_forming_card_status(text: str, status_line: str) -> str:
     # Owner 2026-08-17: never paint TERMINAL on the autotrade root card.
     # Close / reject / expire outcomes live in threaded reply cards
     # (ORDER FILLED / TP / BE / POSITION CLOSED). Keep SETUP FORMING or
-    # POSITION ACTIVATED body intact for audit; only drop the live price cue.
+    # ORDER ACTIVATED body intact for audit; only drop the live price cue.
     return _strip_live_price_marker(text)
   if activated:
     # Post-fill status updates (SL move, then later a TP hit) must keep
@@ -641,7 +708,8 @@ async def save_forming_card_status(
   state = state or _infer_status_state(status_line)
   priority = CARD_STATUS_PRIORITY.get(state, 0)
   effective_ttl = ttl or max(
-    86400, runtime_config.lifecycle.candidate.storage_ttl_seconds,
+    _FORMING_CARD_MIN_TTL_SECONDS,
+    runtime_config.lifecycle.candidate.storage_ttl_seconds,
   )
   payload = json.dumps(
     {
@@ -773,7 +841,8 @@ async def save_forming_card(
   ttl: int | None = None,
 ) -> None:
   effective_ttl = ttl or max(
-    86400, runtime_config.lifecycle.candidate.storage_ttl_seconds,
+    _FORMING_CARD_MIN_TTL_SECONDS,
+    runtime_config.lifecycle.candidate.storage_ttl_seconds,
   )
   payload = json.dumps(
     {"chat_id": chat_id, "message_id": message_id, "text": text},
@@ -869,7 +938,7 @@ async def post_or_edit_forming_card(
   required for the terminal-during-send branch to actually remove the
   message rather than merely neutralizing it via edit).
 
-  Concurrent first-create callers (prod HFS double-send race) contend on a
+  Concurrent first-create callers (prod scalping double-send race) contend on a
   short Redis SET NX lock so only one Telegram root is posted for a setup_id.
 
   Returns the card's message_id, or None if the setup is already terminal
@@ -1451,224 +1520,26 @@ async def ensure_forming_card_targets(
     or "XAU"
   ).upper()
   if resolved_match is None:
-    # Price-only fallback: TP labels without pip offsets.
-    parts = [
-      f"TP{index + 1} {_price_text(price, symbol=card_symbol)}"
+    # Price-only fallback: TP labels without a suffix, one per line - same
+    # block shape apply_forming_card_targets replaces/detects below.
+    target_lines = [
+      format_target_line(
+        index, card_symbol, price, None,
+        digits=card_price_digits(card_symbol),
+      )
       for index, price in enumerate(prices or ())
     ]
-    if not parts:
-      return False
-    targets_line = f"• <b>Targets:</b> <b>{' · '.join(parts)}</b>"
   else:
-    targets_line = _trade_area_targets_line(
+    target_lines = _trade_area_target_lines(
       resolved_match,
       symbol=card_symbol,
       target_prices=prices or None,
     )
-  if not targets_line:
+  if not target_lines:
     return False
   return await edit_forming_card_targets(
-    client, setup_id, targets_line, edit_fn=edit_fn,
+    client, setup_id, "\n".join(target_lines), edit_fn=edit_fn,
   )
-
-
-async def edit_forming_card_price(
-  client,
-  setup_id: str,
-  price: float,
-  *,
-  digits: int | None = None,
-  edit_fn: EditFn,
-  min_move: float | None = None,
-) -> bool:
-  """Patch the root card Price now line when mid has moved enough."""
-  from aiogram.exceptions import TelegramRetryAfter
-
-  card = await load_forming_card(client, setup_id)
-  if card is None or not card.get("text"):
-    return False
-  if int(card.get("message_id") or 0) <= 0:
-    # In-flight create reservation — never call Telegram with message_id=0.
-    return False
-  text = str(card["text"])
-  symbol = parse_forming_card_symbol(text)
-  resolved_digits = (
-    int(digits)
-    if digits is not None
-    else (card_price_digits(symbol) if symbol else 2)
-  )
-  resolved_min_move = (
-    float(min_move)
-    if min_move is not None
-    else (card_min_price_move(symbol) if symbol else 0.1)
-  )
-  snapshot = await load_forming_card_status_snapshot(client, setup_id)
-  status_state = snapshot.state if snapshot is not None else None
-  if should_stop_forming_price_track(text, status_state=status_state):
-    await client.srem(FORMING_ACTIVE_INDEX_KEY, setup_id)
-    return False
-  current = parse_forming_card_price_now(text)
-  if current is not None and abs(float(price) - current) < resolved_min_move:
-    return False
-  next_text = apply_forming_card_price(
-    text, float(price), digits=resolved_digits,
-  )
-  if next_text == text:
-    return False
-  try:
-    await edit_fn(card["chat_id"], card["message_id"], next_text)
-  except TelegramRetryAfter as exc:
-    # Pause the whole track loop so ORDER FILLED / status replies can send.
-    global _PRICE_TRACK_PAUSE_UNTIL
-    _PRICE_TRACK_PAUSE_UNTIL = time.monotonic() + float(
-      getattr(exc, "retry_after", 5) or 5
-    ) + 1.0
-    log.warning(
-      "forming card price edit rate-limited setup_id=%s retry_after=%s",
-      setup_id,
-      getattr(exc, "retry_after", None),
-    )
-    return False
-  except TelegramBadRequest as exc:
-    if "message is not modified" in str(exc).casefold():
-      await save_forming_card(
-        client,
-        setup_id,
-        chat_id=card["chat_id"],
-        message_id=card["message_id"],
-        text=next_text,
-      )
-      return True
-    log.info(
-      "forming card price edit failed setup_id=%s error=%s",
-      setup_id,
-      exc,
-    )
-    return False
-  await save_forming_card(
-    client,
-    setup_id,
-    chat_id=card["chat_id"],
-    message_id=card["message_id"],
-    text=next_text,
-  )
-  return True
-
-
-_PRICE_TRACK_PAUSE_UNTIL = 0.0
-
-
-async def list_active_forming_setup_ids(client) -> list[str]:
-  members = await client.smembers(FORMING_ACTIVE_INDEX_KEY)
-  out: list[str] = []
-  for raw in members or ():
-    text = raw.decode() if isinstance(raw, bytes) else str(raw)
-    if text:
-      out.append(text)
-  return out
-
-
-async def refresh_forming_card_prices(
-  client,
-  *,
-  edit_fn: EditFn,
-  digits: int | None = None,
-  min_move: float | None = None,
-) -> int:
-  """Best-effort Price now refresh for all indexed forming cards."""
-  updated = 0
-  for setup_id in await list_active_forming_setup_ids(client):
-    card = await load_forming_card(client, setup_id)
-    if card is None or not card.get("text"):
-      await client.srem(FORMING_ACTIVE_INDEX_KEY, setup_id)
-      continue
-    if int(card.get("message_id") or 0) <= 0:
-      await client.srem(FORMING_ACTIVE_INDEX_KEY, setup_id)
-      continue
-    if await is_setup_terminal(client, setup_id):
-      await client.srem(FORMING_ACTIVE_INDEX_KEY, setup_id)
-      continue
-    snapshot = await load_forming_card_status_snapshot(client, setup_id)
-    status_state = snapshot.state if snapshot is not None else None
-    if should_stop_forming_price_track(
-      str(card["text"]), status_state=status_state,
-    ):
-      await client.srem(FORMING_ACTIVE_INDEX_KEY, setup_id)
-      continue
-    symbol = parse_forming_card_symbol(str(card["text"]))
-    if not symbol:
-      continue
-    mid = await _fresh_spot_mid(client, symbol)
-    if mid is None:
-      continue
-    ok = await edit_forming_card_price(
-      client,
-      setup_id,
-      float(mid),
-      digits=(
-        int(digits) if digits is not None else card_price_digits(symbol)
-      ),
-      edit_fn=edit_fn,
-      min_move=(
-        float(min_move)
-        if min_move is not None
-        else card_min_price_move(symbol)
-      ),
-    )
-    if ok:
-      updated += 1
-  return updated
-
-
-async def _fresh_spot_mid(client, symbol: str) -> float | None:
-  raw = await client.get(f"price:{symbol.upper()}:spot")
-  if raw is None:
-    return None
-  text = raw.decode() if isinstance(raw, bytes) else str(raw)
-  try:
-    payload = json.loads(text)
-    bid = float(payload["bid"])
-    ask = float(payload["ask"])
-    ts = int(payload["ts"])
-  except (KeyError, TypeError, ValueError, json.JSONDecodeError):
-    return None
-  mid = (bid + ask) / 2.0
-  if not math.isfinite(mid) or mid <= 0:
-    return None
-  now = int(time.time())
-  max_age = max(1, int(runtime_config.market_data.spot.maximum_age_seconds))
-  if not (0 <= now - ts <= max_age):
-    return None
-  return mid
-
-
-async def forming_price_track_loop() -> None:
-  """Refresh forming-card Price now ~5s until fill/activation, then stop."""
-  import asyncio
-
-  from app.bot.client import edit_scanner_price_now
-  from app.persistence import redis_state
-
-  client = redis_state.get_client()
-  log.info(
-    "forming price track loop started interval_s=5.0 "
-    "min_move=per_instrument_pip"
-  )
-  while True:
-    try:
-      from app.bot.telegram_actor import flood_paused
-
-      pause_for = _PRICE_TRACK_PAUSE_UNTIL - time.monotonic()
-      if pause_for > 0 or flood_paused():
-        await asyncio.sleep(max(pause_for, 1.0) if pause_for > 0 else 1.0)
-        continue
-      await refresh_forming_card_prices(
-        client,
-        edit_fn=edit_scanner_price_now,
-      )
-    except Exception:
-      log.exception("forming price track refresh failed")
-    await asyncio.sleep(5.0)
 
 
 def _terminal_status_line(reason_code: str) -> str:
@@ -1688,6 +1559,39 @@ def _terminal_card_text(reason_code: str, existing_text: str | None = None) -> s
   return f"🤖 <b>ApexVoid Algo</b>\n{status}"
 
 
+_FILLED_CARD_TOKENS = (
+  "ORDER ACTIVATED",
+  "POSITION ACTIVATED",
+  "ORDER FILLED",
+  "POSITION CLOSED",
+  "TP BOOKED",
+  "GROUP STOP",
+  "STOP LOSS",
+  "SL HIT",
+  "CLOSED",
+)
+
+
+async def _card_was_filled(client, setup_id: str, card_text: str) -> bool:
+  """True once any order for this setup filled - a filled (or filled and
+  closed) trade is not a terminal setup and its root is always left alone.
+  """
+  if any(token in (card_text or "").upper() for token in _FILLED_CARD_TOKENS):
+    return True
+  try:
+    status = await load_forming_card_status_snapshot(client, setup_id)
+  except Exception:
+    log.exception("card fill check status load failed setup_id=%s", setup_id)
+    return False
+  if status is None:
+    return False
+  if status.state in ("order_filled", "sl_moved", "tp_booked"):
+    return True
+  return any(
+    token in (status.status_line or "").upper() for token in _FILLED_CARD_TOKENS
+  )
+
+
 async def kill_setup_card(
   client,
   setup_id: str,
@@ -1695,11 +1599,12 @@ async def kill_setup_card(
   reason_code: str,
   delete_fn: DeleteFn,
   edit_fn: EditFn,
+  retain_root: bool = False,
 ) -> None:
   """Close the forming/root card on reject/invalidate/expire/position close.
 
   Default: leave the Telegram root body intact (SETUP FORMING /
-  POSITION ACTIVATED) so Fill/TP/BE/close replies still thread to it.
+  ORDER ACTIVATED) so Fill/TP/BE/close replies still thread to it.
   Never rewrite the root to TERMINAL — that reason lives on the reply
   cards. Delete remains opt-in via should_delete_root_on_terminal().
   """
@@ -1711,7 +1616,15 @@ async def kill_setup_card(
 
   existing_text = str(card.get("text") or "")
   intact = _strip_live_price_marker(existing_text) if existing_text else existing_text
-  if not should_delete_root_on_terminal():
+  # Owner-reported 2026-09-21: with delete_root_on_terminal on, a scalp
+  # that filled and closed within minutes lost its root card AND the close
+  # reply (threaded to the just-deleted root was rejected and skipped), so
+  # a trade that really executed left nothing in the channel. Deleting the
+  # root is only for setups that never filled (rejected/expired/
+  # invalidated/cancelled); a filled trade's root always stays.
+  if retain_root or await _card_was_filled(client, setup_id, existing_text):
+    retain_root = True
+  if retain_root or not should_delete_root_on_terminal():
     if intact and intact != existing_text:
       try:
         await edit_fn(card["chat_id"], card["message_id"], intact)
@@ -1743,7 +1656,6 @@ async def kill_setup_card(
     )
     return
 
-  # Legacy delete path retained for tests that force-delete via monkeypatch.
   terminal = _terminal_card_text(reason_code, existing_text)
   try:
     await delete_fn(card["chat_id"], card["message_id"])
@@ -1910,6 +1822,21 @@ def forming_card_headline(
   return f"🔎 <b>{escape(str(symbol))} {escape(str(tf))} · {label}</b>"
 
 
+def _format_candle_lines(match: StrategyMatch) -> tuple[str, str] | None:
+  """Candle Confirmation V2 (§45): two short lines, not a detailed block -
+  detailed candle_* metrics stay in telemetry only, never on the public
+  card. Shadow-only: this never changes what the card already shows above
+  (reaction_type/confirmation), it just adds context alongside it."""
+  label = getattr(match, "candle_primary_pattern", None)
+  score = getattr(match, "candle_final_score", None)
+  if not label or score is None or not math.isfinite(float(score)):
+    return None
+  return (
+    f"🕯 Confirmation: {escape(str(label))}",
+    f"🔥 Candle Quality: {float(score):.0%}",
+  )
+
+
 def _format_math_line(match: StrategyMatch) -> str | None:
   parts: list[str] = []
   fib = getattr(match, "math_fib_ratio", None)
@@ -1930,13 +1857,63 @@ def _format_math_line(match: StrategyMatch) -> str | None:
   return " · ".join(parts)
 
 
-def _trade_area_targets_line(
+def _configured_target_r_multiples(
+  match: StrategyMatch,
+  symbol: str,
+) -> tuple[float, ...] | None:
+  """The instrument's own fixed_rr ladder R-multiples, if this match is on it.
+
+  Deliberately not derived from the card's own stop/entry-zone prices: the
+  stop is anchored to structure (a hard invalidation level), while the
+  displayed entry-zone edge is a planning reference for the *reward* side
+  only -- the two don't share a basis, so "(target - zone edge) / (stop -
+  zone edge)" can land far from the real R the ladder was built at (live
+  2026-09-07: a GBPJPY SELL showed "+10R"/"+15.6R" for what was actually a
+  uniform 1R/2R fixed_rr trade). The instrument's configured
+  target_r_multiples is the one place this is unambiguous.
+
+  M1 scalp strategies are never on the instrument's fixed_rr ladder (their
+  own 1R/2R book is separate - see technique_fixed_rr_targeting), so this
+  falls back to scalp_target_r_multiples: the R each targets_pips entry
+  actually is, computed by app.scalping.publish from the SAME stop
+  distance the ladder itself was built from - same "authoritative source,
+  never re-derived from card prices" principle as the fixed_rr branch.
+  """
+  from app.configuration.effective_instrument import EffectiveInstrumentError
+  from app.core.instrument_geometry import technique_fixed_rr_targeting
+
+  try:
+    targeting = technique_fixed_rr_targeting(symbol, strategy=match.strategy)
+  except EffectiveInstrumentError:
+    # Symbol isn't (yet) a registered instrument -- fall back to the plain
+    # pip display rather than failing the whole card render over it.
+    return None
+  if targeting is None:
+    scalp_multiples = tuple(
+      float(value) for value in (match.scalp_target_r_multiples or ())
+    )
+    return scalp_multiples or None
+  multiples = tuple(
+    float(value) for value in (targeting.target_r_multiples or ())
+  )
+  return multiples or None
+
+
+def _trade_area_target_lines(
   match: StrategyMatch,
   *,
   symbol: str,
   target_prices: tuple[float, ...] | None = None,
-) -> str | None:
-  """Trade-area Targets line: absolute TP prices when known, else pip ladder."""
+) -> list[str]:
+  """One bullet per TP level, for the initial root-card render.
+
+  A ladder crammed onto a single ' · '-joined line is hard to scan past
+  two or three targets - each TPn gets its own line here instead. Shown
+  as the instrument's configured R-multiple when this match is on the
+  fixed_rr technique ladder -- a bare "+21" reads as meaningless without
+  the stop distance next to it -- falling back to the raw pip offset
+  otherwise.
+  """
   prices: list[float] = []
   for raw in target_prices or ():
     try:
@@ -1956,29 +1933,33 @@ def _trade_area_targets_line(
       pips.append(value)
 
   if prices:
-    parts: list[str] = []
+    lines: list[str] = []
     reference = _target_reference_price(match)
     direction = str(match.direction or "").upper()
+    r_multiples = _configured_target_r_multiples(match, symbol)
     for index, price in enumerate(prices):
-      label = f"TP{index + 1}"
-      price_text = _price_text(price, symbol=symbol)
-      if reference is not None:
+      if r_multiples is not None and index < len(r_multiples):
+        suffix = format_r_multiple(r_multiples[index])
+      elif reference is not None:
         offset = _target_pip_offset(
           price,
           reference=reference,
           direction=direction,
           symbol=symbol,
         )
-        parts.append(f"{label} {price_text} (+{offset})")
+        suffix = f"+{offset}"
       elif index < len(pips):
-        parts.append(f"{label} {price_text} (+{pips[index]})")
+        suffix = f"+{pips[index]}"
       else:
-        parts.append(f"{label} {price_text}")
-    return f"• <b>Targets:</b> <b>{' · '.join(parts)}</b>"
-  if pips:
-    ladder = " / ".join(f"+{value}" for value in pips)
-    return f"• <b>Targets:</b> <b>{ladder} pips</b>"
-  return None
+        suffix = None
+      lines.append(format_target_line(
+        index, symbol, price, suffix, digits=card_price_digits(symbol),
+      ))
+    return lines
+  return [
+    f"💰 TP{index + 1}:   <b>+{value} pips</b>"
+    for index, value in enumerate(pips)
+  ]
 
 
 def format_plan_published_root_card(
@@ -1987,12 +1968,20 @@ def format_plan_published_root_card(
   stop_price: float | None = None,
   target_prices: tuple[float, ...] | None = None,
 ) -> str:
-  """Root card after publish with scanner-style trade/context detail.
+  """Root card after publish, in the shared Manual/Auto Algo card design
+  (Phase S12) below its own headline/status-slot/direction line.
 
-  Includes bias / structure / trade area / context / stop when available on
-  the StrategyMatch. No PLAN PUBLISHED status line — publication is silent on
-  the card head. Trade-area Stop is the published plan stop and is not
-  rewritten on BE / trailing updates.
+  Lines [0..2] (headline, status slot, direction/strategy/stars) are left
+  exactly as every other piece of this card's lifecycle-editing machinery
+  expects (apply_forming_card_status/forming_card_matches_strategy parse
+  them by fixed position/pattern) - only the body below them changes.
+  Scanner-only diagnostics (bias, structural source, confirmation, candle
+  quality, source TF, math line, HTF bias/context reasons) are dropped per
+  spec ("Do not add the old Auto Algo scanner-style sections... to the
+  entry card") - they remain queryable from the persisted StrategyMatch
+  for owner diagnostics, just not rendered here. No PLAN PUBLISHED status
+  line — publication is silent on the card head. Stop is the published
+  plan stop and is not rewritten on BE / trailing updates.
   """
   direction = str(match.direction or "").upper()
   # Matches the manual-channel card's action_icon (app/signals/broadcast.py)
@@ -2001,16 +1990,6 @@ def format_plan_published_root_card(
   direction_icon = "📈" if direction == "BUY" else "📉"
   stars = "⭐" * max(1, min(3, int(match.confluence or 1)))
   setup_label = str(match.strategy or "").strip() or "Setup"
-  mode = str(match.strategy_mode or "").strip()
-  confirmation = str(match.reaction_type or "").strip()
-  source_tf = str(
-    match.structural_timeframe or match.source_tf or ""
-  ).strip().upper()
-  htf_bias = str(match.htf_bias or "").strip()
-  extra_reasons = [
-    reason for reason in (match.reasons or ())
-    if reason and not str(reason).lower().startswith("htf bias")
-  ][:2]
   in_zone = quote_inside_entry_zone(
     match.current_price, match.entry_low, match.entry_high,
   )
@@ -2027,85 +2006,41 @@ def format_plan_published_root_card(
       f"{direction_icon} <b>{escape(direction)} · "
       f"{escape(setup_label)}</b> · {stars}"
     ),
-  ]
-  if mode == "range_scalp":
-    lines.append("↔️ <b>Mode:</b> RANGE SCALP · two-sided local range")
-  elif mode == "counter_bias":
-    lines.append("⚠️ <b>Bias:</b> counter_bias")
-  elif mode in {"with_bias", "neutral"}:
-    lines.append(f"🧭 <b>Bias:</b> {escape(mode)}")
-  elif mode and mode != "with_trend":
-    label = (
-      "reaction scalp" if mode == "counter_reaction" else "counter swing"
-    )
-    lines.append(f"⚠️ <b>Mode:</b> Counter-trend · {label}")
-  if match.structural_source:
-    lines.append(
-      f"🧱 <b>Structural source:</b> {escape(str(match.structural_source))}"
-    )
-  if confirmation:
-    lines.append(f"✅ <b>Confirmation:</b> {escape(confirmation)}")
-  if source_tf:
-    lines.append(f"⏱ <b>Source TF:</b> {escape(source_tf)}")
-
-  math_line = _format_math_line(match)
-  if math_line:
-    lines.extend(["", "📐 <b>Math</b>", f"• {escape(math_line)}"])
-
-  # FX pairs enter at one precise level, not XAU's wider zone - same rule
-  # the manual channel's cards already use (uses_entry_price_display).
-  # The single price shown is the key level itself, so the separate Key
-  # level line below would just repeat it.
-  if uses_entry_price_display(symbol, match.entry_low, match.entry_high):
-    entry_lines = [
-      (
-        "• <b>Entry:</b> "
-        f"<b>{_price_text(match.key_level, symbol=symbol)}</b>"
-      ),
-    ]
-  else:
-    entry_lines = [
-      (
-        "• <b>Entry zone:</b> "
-        f"<b>{_price_text(match.entry_low, symbol=symbol)}–"
-        f"{_price_text(match.entry_high, symbol=symbol)}</b>"
-      ),
-      (
-        "• <b>Key level:</b> "
-        f"<b>{_price_text(match.key_level, symbol=symbol)}</b>"
-      ),
-    ]
-  lines.extend([
     "",
-    "📍 <b>Trade area</b>",
-    (
-      "• <b>Price now:</b> "
-      f"<b>{_price_text(match.current_price, symbol=symbol)}</b> "
-      "<i>(live)</i>"
-    ),
-    *entry_lines,
-  ])
-  if stop_price is not None and math.isfinite(float(stop_price)):
+  ]
+  card_digits = card_price_digits(symbol)
+  if match.entry_low is not None and match.entry_high is not None:
     lines.append(
-      "• <b>Stop:</b> "
-      f"<b>{_price_text(float(stop_price), symbol=symbol)}</b>"
+      format_entry_line(
+        symbol, float(match.entry_low), float(match.entry_high),
+        digits=card_digits,
+      )
     )
+  if stop_price is not None and math.isfinite(float(stop_price)):
+    card_pip_size = _card_pip_size(symbol)
+    if (
+      match.entry_low is not None
+      and match.entry_high is not None
+      and card_pip_size is not None
+    ):
+      reference = conservative_entry_reference(
+        direction, float(match.entry_low), float(match.entry_high),
+      )
+      lines.append(format_sl_line(
+        symbol, float(stop_price), reference,
+        digits=card_digits, pip_size=card_pip_size,
+      ))
+    else:
+      lines.append(
+        f"🛡 SL:     <b>{_price_text(float(stop_price), symbol=symbol)}</b>"
+      )
   else:
-    lines.append("• <b>Stop:</b> <b>SL</b>")
+    lines.append("🛡 SL:     <b>pending</b>")
 
-  targets_line = _trade_area_targets_line(
+  lines.extend(_trade_area_target_lines(
     match, symbol=symbol, target_prices=target_prices,
-  )
-  if targets_line:
-    lines.append(targets_line)
+  ))
 
-  lines.extend(["", "🧭 <b>Context</b>"])
-  if htf_bias:
-    lines.append(f"• <b>HTF bias:</b> {escape(htf_bias)}")
-  elif mode:
-    lines.append(f"• <b>HTF bias:</b> {escape(mode)}")
-  lines.extend(f"• {escape(str(reason))}" for reason in extra_reasons)
-  lines.append("→ Executor owns mechanical entry and risk enforcement.")
   return "\n".join(lines)
 
 
@@ -2222,9 +2157,9 @@ async def ensure_plan_published_root_card(
           else _terminal_status_line("closed")
         )
         replacement = apply_forming_card_status(replacement, status)
-      elif "POSITION ACTIVATED" in upper_head:
+      elif "ORDER ACTIVATED" in upper_head or "POSITION ACTIVATED" in upper_head:
         replacement = apply_forming_card_status(
-          replacement, "✅ <b>POSITION ACTIVATED</b>",
+          replacement, "✅ <b>ORDER ACTIVATED</b>",
         )
       message_id = await post_or_edit_forming_card(
         client,
@@ -2312,6 +2247,7 @@ async def ensure_plan_published_root_card(
 
 def strategy_match_from_trade_plan(plan: Any) -> StrategyMatch:
   """Rebuild a minimal StrategyMatch so root-card formatting can recover."""
+  from app.analysis.structural_reaction_support import bias_relationship
   from app.autotrade.strategy_match import STRATEGY_MATCH_VERSION
 
   analysis = plan.analysis
@@ -2362,6 +2298,9 @@ def strategy_match_from_trade_plan(plan: Any) -> StrategyMatch:
     touch_bar_ts=str(analysis.formation_bar_ts or ""),
     structural_timeframe=str(structure.timeframe or analysis.formation_timeframe or ""),
     htf_bias=str(analysis.bias or ""),
+    bias_relationship=bias_relationship(
+      str(analysis.bias or ""), str(analysis.direction).upper(),
+    ),
   )
 
 
@@ -2433,7 +2372,7 @@ def format_event_recovery_root_card(event: dict) -> str:
     str(event.get("strategy") or event.get("setup") or "Algo").strip() or "Algo"
   )
   # Never paint TERMINAL on a recovered root — close lives on reply cards.
-  head = f"✅ <b>POSITION ACTIVATED · {symbol} {tf}</b>"
+  head = f"✅ <b>ORDER ACTIVATED · {symbol} {tf}</b>"
   icon = "📈" if direction == "BUY" else "📉"
   lines = [head]
   if direction:

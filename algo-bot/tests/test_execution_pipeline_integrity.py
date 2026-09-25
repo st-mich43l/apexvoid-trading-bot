@@ -195,7 +195,7 @@ def test_execution_policy_keeps_fill_relative_room_from_planned_entry():
   assert evaluation.measured["effective_risk_multiplier"] == 1.0
 
 
-def test_execution_policy_applies_family_risk_multiplier():
+def test_execution_policy_ignores_stale_non_scalp_risk_stamp():
   evaluation = evaluate_execution_policy(
     _policy_match(
       strategy="Liquidity Sweep",
@@ -209,7 +209,7 @@ def test_execution_policy_applies_family_risk_multiplier():
   )
 
   assert evaluation.allowed
-  assert evaluation.measured["effective_risk_multiplier"] == 0.375
+  assert evaluation.measured["effective_risk_multiplier"] == 1.0
 
 
 def test_execution_policy_rejects_zero_risk_multiplier():
@@ -377,7 +377,7 @@ def test_market_route_publishes_the_quote_as_planned_entry():
 
 @pytest.mark.parametrize(
   "strategy",
-  ["Key Level Reaction", "Trendline Reaction"],
+  ["Key Level", "Trendline"],
 )
 def test_reaction_family_falls_back_to_a_concrete_market_route_when_narrow(
   strategy,
@@ -527,42 +527,6 @@ async def test_zone_split_capability_gate_rejects_via_execution_policy(
   # gate inside ``_publish_trade_plan_v8``). Behaviour is verified via the TradePlan
   # publish path in ``test_publish_trade_plan_v8.py``.
   assert not leaf(runtime_config, "auto_trade_zone_fill_enabled")
-
-
-@pytest.mark.asyncio
-async def test_active_opposite_initial_group_helper_detects_sell_book():
-  """Opposite-initial blocking lives outside _common_preflight now (C# /
-  exposure path). Keep the Redis helper contract covered.
-  """
-  from app.autotrade import worker
-
-  client = redis_state.get_client()
-  await client.sadd("auto_trade:positions", "39000344")
-  await client.set(
-    "auto_trade:position:39000344",
-    json.dumps({
-      "position_id": 39000344,
-      "symbol": "XAU",
-      "direction": 1,  # ProtoOA SELL
-      "remaining_volume": 400,
-      "group_id": "group-sell-1",
-      "parent_group_id": None,
-    }),
-    ex=60,
-  )
-
-  opposite = await worker._active_opposite_initial_group(
-    client, direction="BUY", symbol="XAU",
-  )
-  assert opposite is not None
-  assert opposite["group_id"] == "group-sell-1"
-  assert await worker._active_opposite_initial_group(
-    client, direction="SELL", symbol="XAU",
-  ) is None
-  # Other instruments must not see the XAU SELL book.
-  assert await worker._active_opposite_initial_group(
-    client, direction="BUY", symbol="EURUSD",
-  ) is None
 
 
 @pytest.mark.asyncio

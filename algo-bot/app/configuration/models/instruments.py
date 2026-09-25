@@ -15,28 +15,37 @@ SUPPORTED_INSTRUMENT_TIMEFRAMES = frozenset({"H1", "M15", "M5", "M1", "H4", "D1"
 
 # Compatibility policy: inherit global trading domains from the resolved root.
 XAU_CURRENT_V1_POLICY = "xau_current_v1"
-# XAU technique structure fixed_rr (same 2R close split as fx_fixed_2r_v1).
+# XAU technique structure fixed_rr, 1R/2R/3R/4R 40/20/20/20 (see
+# _XAU_FIXED_4R_TARGETING below). Owner-reported 2026-09-22: this policy's
+# own name still said "2r" from before the 2026-09-15 ladder change (owner-
+# reported: auto XAU switched from the earlier 0.5R/1R/2R/3R shape to
+# manual /algo's own 1R/2R/3R/4R default) — renamed to match what it has
+# actually enforced since that date. No behavior change; see
+# _XAU_FIXED_4R_TARGETING, unchanged.
 # M1 scalping stays on its own discovery book — see technique_fixed_rr_targeting.
-XAU_FIXED_2R_V1_POLICY = "xau_fixed_2r_v1"
+XAU_FIXED_4R_V1_POLICY = "xau_fixed_4r_v1"
 FX_FIXED_2R_V1_POLICY = "fx_fixed_2r_v1"
 # Historical name kept for registry continuity. Close-ratio front-load was
 # retired in favor of the uniform 1R/2R 50/50 + breakeven contract shared
-# with fx_fixed_2r_v1 / xau_fixed_2r_v1.
+# with fx_fixed_2r_v1 / xau_fixed_4r_v1.
 FX_FIXED_2R_FRONTLOAD_V1_POLICY = "fx_fixed_2r_frontload_v1"
 REGISTERED_INSTRUMENT_POLICIES = frozenset({
   FX_FIXED_2R_V1_POLICY,
   FX_FIXED_2R_FRONTLOAD_V1_POLICY,
-  XAU_FIXED_2R_V1_POLICY,
+  XAU_FIXED_4R_V1_POLICY,
   XAU_CURRENT_V1_POLICY,
 })
 
-# Policies that must carry the uniform fixed_rr targeting contract.
-# fx_fixed_2r_frontload_v1 previously differed only by GBPJPY 40/25/35 —
-# uniformity replaces that front-load deliberately.
+# Policies that must carry a fixed, policy-specific fixed_rr targeting
+# contract - every instrument declaring a given policy shares that policy's
+# exact shape, so no instrument can silently drift from what its policy name
+# claims. fx_fixed_2r_frontload_v1 previously differed only by GBPJPY
+# 40/25/35 — uniformity (within the FX policies) replaces that front-load
+# deliberately.
 FIXED_RR_POLICIES = frozenset({
   FX_FIXED_2R_V1_POLICY,
   FX_FIXED_2R_FRONTLOAD_V1_POLICY,
-  XAU_FIXED_2R_V1_POLICY,
+  XAU_FIXED_4R_V1_POLICY,
 })
 
 
@@ -53,10 +62,28 @@ class InstrumentTargetMode(StrEnum):
   FIXED_RR = "fixed_rr"
 
 
-# Uniform autonomous R:R ladder. Every fixed_rr instrument books 50% at 1R
-# and 50% at 2R, with the runner moving to breakeven once TP1 fills. The
-# 2R→1R room fallback is decided per trade in execution_policy.
-FIXED_RR_REQUIRED_TARGETING = {
+class InstrumentAutoEntryMode(StrEnum):
+  """Autonomous entry shape owned by an instrument pack."""
+
+  SCALE = "scale"
+  SINGLE_BEST = "single_best"
+
+
+class InstrumentAutoEntryConfig(FrozenConfigModel):
+  """Execution entry distribution for autonomous plans only.
+
+  ``scale`` preserves the multi-leg reaction/zone routes used by XAU.
+  ``single_best`` uses one market fill once price is inside the approved
+  zone, or one proximal resting limit while price approaches it.
+  """
+
+  mode: InstrumentAutoEntryMode = InstrumentAutoEntryMode.SCALE
+
+
+# Uniform FX autonomous R:R ladder. Every FX fixed_rr instrument books 50%
+# at 1R and 50% at 2R, with the runner moving to breakeven once TP1 fills.
+# The 2R→1R room fallback is decided per trade in execution_policy.
+_FX_FIXED_2R_TARGETING = {
   "mode": InstrumentTargetMode.FIXED_RR,
   "reward_risk": 2.0,
   "target_r_multiples": (1.0, 2.0),
@@ -65,6 +92,30 @@ FIXED_RR_REQUIRED_TARGETING = {
   "trail_after_r": None,
   "trail_to_r": None,
   "entry_clips": 2,
+}
+
+# 2026-09-15 (owner-reported): auto XAU runs the same 1R/2R/3R/4R ladder as
+# manual /algo's default (see parsing.MANUAL_ALGO_DEFAULT_TARGET_R_MULTIPLES)
+# instead of the FX policies' shared 1R/2R shape - deliberately diverges from
+# _FX_FIXED_2R_TARGETING now that exactly one policy needs to. Paired with
+# the entry-targeted risk band (execution_route.risk_targeted_entry_price,
+# XAU only) that forces the risk this ladder measures R against into
+# [50, 60] pips instead of whatever the raw structural stop happened to be.
+_XAU_FIXED_4R_TARGETING = {
+  "mode": InstrumentTargetMode.FIXED_RR,
+  "reward_risk": 4.0,
+  "target_r_multiples": (1.0, 2.0, 3.0, 4.0),
+  "close_ratios": (0.4, 0.2, 0.2, 0.2),
+  "breakeven_after_r": 1.0,
+  "trail_after_r": None,
+  "trail_to_r": None,
+  "entry_clips": 2,
+}
+
+FIXED_RR_REQUIRED_TARGETING = {
+  FX_FIXED_2R_V1_POLICY: _FX_FIXED_2R_TARGETING,
+  FX_FIXED_2R_FRONTLOAD_V1_POLICY: _FX_FIXED_2R_TARGETING,
+  XAU_FIXED_4R_V1_POLICY: _XAU_FIXED_4R_TARGETING,
 }
 
 
@@ -105,6 +156,16 @@ class InstrumentManualConfig(FrozenConfigModel):
   # to any owner-supplied TP count: one TP closes 100%; otherwise TP1 gets
   # this fraction and the remainder is split deterministically.
   tp1_close_fraction: float | None = Field(default=None, gt=0, lt=1)
+  # 2026-09: manual /algo TP levels are now bot-calculated R multiples, not
+  # owner-typed/pip-default prices (owner-reported: hand-picked levels made
+  # some trades read as scalps). parsing._parse_manual uses this ladder for
+  # every algo-mode signal, overriding any explicit tp the owner still
+  # types. Empty (the default, matching target_close_ratios' own
+  # convention) means "use parsing's built-in 0.5R/1R/2R/3R fallback" -
+  # kept empty rather than schema-defaulted so an instrument that never
+  # reads this field (FX's own /algo shorthand uses targeting's ladder
+  # instead, deliberately) does not carry a misleading non-empty value.
+  target_r_multiples: tuple[float, ...] = ()
 
   @model_validator(mode="after")
   def validate_manual_profile(self) -> InstrumentManualConfig:
@@ -131,6 +192,14 @@ class InstrumentManualConfig(FrozenConfigModel):
       raise ValueError(
         "manual target_close_ratios and tp1_close_fraction are mutually exclusive"
       )
+    levels = tuple(float(value) for value in self.target_r_multiples)
+    if levels and (
+      any(not math.isfinite(value) or value <= 0 for value in levels)
+      or tuple(sorted(set(levels))) != levels
+    ):
+      raise ValueError(
+        "manual.target_r_multiples must be positive and strictly increasing"
+      )
     return self
 
 
@@ -150,8 +219,8 @@ class InstrumentTargetingConfig(FrozenConfigModel):
   # Move the runner's stop to the group weighted entry once this R multiple is
   # booked. Mutually exclusive with the R-trail.
   breakeven_after_r: float | None = Field(default=None, gt=0)
-  # Instrument-owned DCA clip count for autonomous technique/scalp entries.
-  # Production XAU and FX packs use shallow + deep clips.
+  # Maximum DCA clip count for autonomous routes configured to scale. It is
+  # ignored by an instrument's ``auto_entry: single_best`` contract.
   entry_clips: int = Field(default=5, ge=2, le=5)
 
   @model_validator(mode="after")
@@ -301,18 +370,19 @@ class InstrumentAnalysisConfig(FrozenConfigModel):
   zones: InstrumentZoneWidthConfig
 
 
-# Named non-scalp reaction windows. Add a name here when onboarding a pair
+# Named instrument focus windows. Add a name here when onboarding a pair
 # rather than copying hour strings into every instrument block.
 #
-# Tokyo is Japanese open (00:00 UTC / 09:00 JST) through London open, so
-# JPY pairs are not London/NY-only. Prior 0-3 left mid-Tokyo (03–07 UTC,
-# still JST afternoon) dead despite local liquidity.
+# Tokyo is Japanese open (00:00 UTC / 09:00 JST) through 07:00 UTC. Prior
+# 0-3 left mid-Tokyo (03-07 UTC, still JST afternoon) dead despite local
+# liquidity.
 REGISTERED_REACTION_SESSIONS: dict[str, str] = {
+  "london": "7-11",
   "london_ny": "7-11,13-16",
   "tokyo_london": "0-11",
-  # USDJPY dig: liquid across all three home sessions (JPY driver in
-  # Tokyo, USD driver in NY, plus London), unlike GBPJPY's Tokyo/London-
-  # only, no-NY-dump-window profile as a cross pair.
+  # USDJPY has a JPY-led Tokyo window and USD-led NY window. London is not
+  # an independent focus session for this pair, so keep the dead gap explicit.
+  "tokyo_ny": "0-7,13-16",
   "tokyo_london_ny": "0-11,13-16",
 }
 
@@ -398,6 +468,9 @@ class InstrumentConfig(FrozenConfigModel):
   contract: InstrumentContractConfig | None = None
   targeting: InstrumentTargetingConfig = Field(
     default_factory=InstrumentTargetingConfig,
+  )
+  auto_entry: InstrumentAutoEntryConfig = Field(
+    default_factory=InstrumentAutoEntryConfig,
   )
   # ``None`` preserves enough information to apply the narrow compatibility
   # defaults in ``resolve_manual_profile``. New declarations should state the
@@ -516,7 +589,7 @@ class InstrumentConfig(FrozenConfigModel):
         "non-disabled instruments require contract configuration"
       )
     if self.policy in FIXED_RR_POLICIES:
-      required = FIXED_RR_REQUIRED_TARGETING
+      required = FIXED_RR_REQUIRED_TARGETING[self.policy]
       checks = (
         ("mode", self.targeting.mode, required["mode"]),
         ("reward_risk", self.targeting.reward_risk, required["reward_risk"]),
@@ -819,44 +892,7 @@ class InstrumentsConfig(FrozenConfigModel):
       )
     )
 
-  def as_mapping(self) -> Mapping[str, InstrumentConfig]:
-    return dict(self.root)
-
-
 EMPTY_INSTRUMENTS = InstrumentsConfig()
-
-
-def default_xau_instrument() -> InstrumentConfig:
-  """Schema-default XAU instrument matching current flat leaf defaults."""
-  return InstrumentConfig(
-    enabled=True,
-    canonical_symbol="XAU",
-    broker_symbol="XAU",
-    aliases=("XAUUSD",),
-    timeframes=["H1", "M15", "M5", "M1"],
-    policy=XAU_CURRENT_V1_POLICY,
-    contract=InstrumentContractConfig(
-      pip_size=0.1,
-      contract_units_per_lot=100.0,
-      price_digits=2,
-    ),
-    market_data=InstrumentMarketDataConfig(
-      lookbacks=InstrumentLookbacksConfig(
-        h1_bars=400,
-        m15_bars=250,
-        m5_bars=150,
-        m1_bars=150,
-      ),
-    ),
-    analysis=InstrumentAnalysisConfig(
-      zones=InstrumentZoneWidthConfig(
-        minimum_width_price=3.0,
-        preferred_minimum_width_price=3.0,
-        preferred_maximum_width_price=6.0,
-        major_maximum_width_price=10.0,
-      ),
-    ),
-  )
 
 
 # Paths projected from instruments.XAU into existing flat leaves.

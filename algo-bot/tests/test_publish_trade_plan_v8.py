@@ -22,7 +22,7 @@ from unittest.mock import AsyncMock
 import pandas as pd
 import pytest
 
-from app.analysis.market_map import MapEntry, MarketMap
+from app.analysis.types import Zone
 from app.analysis.execution_eligibility import (
   EXECUTION_ELIGIBILITY_VERSION,
   STATIC_ELIGIBLE,
@@ -217,7 +217,7 @@ def _reaction_match(**overrides) -> StrategyMatch:
     event_ts=str(now - 60),
     issued_at=now - 60,
     expires_at=now + 900,
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     strategy_mode="with_bias",
     direction="SELL",
     key_level=4040.23,
@@ -276,19 +276,6 @@ def _buy_retest_bar(timestamp: int) -> pd.DataFrame:
   )
 
 
-def _market_map(*entries: MapEntry) -> MarketMap:
-  return MarketMap(
-    entries=list(entries),
-    price=4089.0,
-    eq=None,
-    box_low=None,
-    box_high=None,
-    bias="up",
-    bias_tf="H1",
-    actionable_entries=list(entries),
-  )
-
-
 def _intent_for_match(match: StrategyMatch) -> ExecutionIntent:
   return ExecutionIntent(
     intent_id=match.match_id,
@@ -344,11 +331,11 @@ async def test_nonreaction_setup_publishes_with_optional_m1_stop_anchor():
 async def test_publish_ensures_root_card_regardless_of_which_path_called_it(
   monkeypatch,
 ):
-  # Regression: HFS's own publish attempt logging status=remained_watching
+  # Regression: scalping's own publish attempt logging status=remained_watching
   # does not mean the plan stays unpublished -- this cycle's own
   # arbitration independently re-discovers the same persisted match and
   # can publish it moments later on a completely separate call path that
-  # never touches HFS's own wrapper. Live 2026-08-06: a real fill with no
+  # never touches scalping's own wrapper. Live 2026-08-06: a real fill with no
   # root card, confirmed via prod logs to have published on exactly that
   # second path. ensure_plan_published_root_card() must run from inside
   # _publish_trade_plan_v8 itself -- the one function every publish route
@@ -508,17 +495,7 @@ async def test_published_setup_reconciles_on_replay_without_re_publishing():
     "XAU",
     spot,
     match,
-    market_map=_market_map(MapEntry(
-      "buy",
-      4037.0,
-      4041.0,
-      4037,
-      4041,
-      "major",
-      ["demand"],
-      20.0,
-      contains_price=True,
-    )),
+    htf_zones=[Zone(bottom=4037.0, top=4041.0, side="demand", score=20.0)],
   )
 
   assert replay_plan_id == plan_id
@@ -567,7 +544,7 @@ async def test_confirmed_trendline_sell_below_zone_waits_for_fresh_retest():
   match = _reaction_match(
     match_id="incident-a-trendline",
     thesis_id="incident-a-thesis",
-    strategy="Trendline Reaction",
+    strategy="Trendline",
     family="trendline",
     reaction_type="rejection_choch",
     key_level=4044.98,
@@ -607,7 +584,7 @@ async def test_outside_reaction_routes_to_waiting_retest_via_v8(
   match = _reaction_match(
     match_id="incident-a-preflight",
     thesis_id="incident-a-preflight-thesis",
-    strategy="Trendline Reaction",
+    strategy="Trendline",
     family="trendline",
     reaction_type="rejection_choch",
     entry_low=4043.80,
@@ -686,7 +663,7 @@ async def test_inside_authoritative_reaction_admits_and_publishes(
   assert (await load_setup(client, match.match_id)).state == PLAN_PUBLISHED
 
 
-def _hfs_eligibility(match: StrategyMatch) -> ExecutionEligibility:
+def _scalp_eligibility(match: StrategyMatch) -> ExecutionEligibility:
   return ExecutionEligibility(
     version=EXECUTION_ELIGIBILITY_VERSION,
     allowed=True,
@@ -703,7 +680,7 @@ def _hfs_eligibility(match: StrategyMatch) -> ExecutionEligibility:
 
 
 @pytest.mark.asyncio
-async def test_hfs_match_without_eligibility_is_admission_rejected(monkeypatch):
+async def test_scalp_match_without_eligibility_is_admission_rejected(monkeypatch):
   # Reproduces the production incident: every HFS opportunity (strategy_mode
   # "hfs_scalp", routed through the generic source="scanner_strategy_match"
   # intent branch, exempted only for "mapped_zone_reaction") was built with
@@ -712,8 +689,8 @@ async def test_hfs_match_without_eligibility_is_admission_rejected(monkeypatch):
   # 2026-08-06 died to exactly this before ever reaching a stop/target check.
   client = redis_state.get_client()
   match = _reaction_match(
-    match_id="hfs-preflight-missing",
-    thesis_id="hfs-preflight-missing-thesis",
+    match_id="scalp-preflight-missing",
+    thesis_id="scalp-preflight-missing-thesis",
     strategy="Impulse Pullback Scalp",
     strategy_mode="scalp_m1",
     execution_eligibility=None,
@@ -736,15 +713,15 @@ async def test_hfs_match_without_eligibility_is_admission_rejected(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_hfs_match_with_eligibility_is_admitted(monkeypatch):
+async def test_scalp_match_with_eligibility_is_admitted(monkeypatch):
   client = redis_state.get_client()
   match = _reaction_match(
-    match_id="hfs-preflight-eligible",
-    thesis_id="hfs-preflight-eligible-thesis",
+    match_id="scalp-preflight-eligible",
+    thesis_id="scalp-preflight-eligible-thesis",
     strategy="Impulse Pullback Scalp",
     strategy_mode="scalp_m1",
   )
-  match = replace(match, execution_eligibility=_hfs_eligibility(match))
+  match = replace(match, execution_eligibility=_scalp_eligibility(match))
   await _confirm_setup(client, match)
   spot = worker.AutoTradeSpot(
     price=4038.51, ts=int(time.time()), fresh=True, bid=4038.41, ask=4038.61,
@@ -767,7 +744,7 @@ async def test_retest_episode_finds_fresh_m1_and_publishes_in_same_cycle():
   match = _reaction_match(
     match_id="incident-a-retest",
     thesis_id="incident-a-retest-thesis",
-    strategy="Trendline Reaction",
+    strategy="Trendline",
     family="trendline",
     reaction_type="rejection_choch",
     key_level=4044.98,
@@ -898,7 +875,7 @@ async def test_reaction_expiry_is_terminal_while_waiting_retest():
   match = _reaction_match(
     match_id="expiry-waiting-retest",
     thesis_id="expiry-waiting-retest-thesis",
-    strategy="Trendline Reaction",
+    strategy="Trendline",
     family="trendline",
     reaction_type="rejection_choch",
     entry_low=4043.80,
@@ -1001,7 +978,7 @@ async def test_far_waits_then_executes_only_on_zone_reentry_without_m1():
   match = _reaction_match(
     match_id="trigger-left-zone",
     thesis_id="trigger-left-zone-thesis",
-    strategy="Trendline Reaction",
+    strategy="Trendline",
     family="trendline",
     reaction_type="rejection_choch",
     key_level=4044.98,
@@ -1117,17 +1094,6 @@ async def test_range_edge_scalp_publishes_inside_opposing_structure():
   )
   # BUY entry sits inside opposing supply — reaction would hard-reject;
   # Range Edge Scalp must still publish (native room already selected 20p).
-  market_map = _market_map(MapEntry(
-    "sell",
-    4089.2,
-    4095.0,
-    4089,
-    4095,
-    "major",
-    ["supply"],
-    13.0,
-  ))
-
   plan_id = await worker._publish_trade_plan_v8(
     client,
     "XAU",
@@ -1138,7 +1104,7 @@ async def test_range_edge_scalp_publishes_inside_opposing_structure():
     # wick would exceed the new smaller cap and fail on an unrelated wick
     # check. This is still a real wick-rejection bar, just sized to fit.
     frames={"M1": _m1_trigger_bar(wick_depth=1.2)},
-    market_map=market_map,
+    htf_zones=[Zone(bottom=4089.2, top=4095.0, side="supply", score=13.0)],
   )
 
   assert plan_id is not None
@@ -1156,8 +1122,8 @@ async def test_scalp_m1_publishes_inside_opposing_structure():
   """M1 scalp with fitted native room must ignore HTF opposing containment."""
   client = redis_state.get_client()
   match = _match(
-    match_id="match-v8-hfs-opposing",
-    thesis_id="thesis-v8-hfs-opposing",
+    match_id="match-v8-scalp-opposing",
+    thesis_id="thesis-v8-scalp-opposing",
     strategy="Range Sweep Scalp",
     strategy_mode="scalp_m1",
     direction="BUY",
@@ -1170,7 +1136,7 @@ async def test_scalp_m1_publishes_inside_opposing_structure():
     current_price=4089.0,
     targets_pips=(20,),
     full_take_profit_pips=20,
-    # HFS room-synced envelope is ~15–20p. A 4070 swing + deep wick fails
+    # Scalping room-synced envelope is ~15–20p. A 4070 swing + deep wick fails
     # stop_exceeds_envelope_* and reds every PR CI on an unrelated stop
     # check (master already red 2026-08-26). Keep swing/wick inside the
     # envelope so this smoke only asserts opposing-structure bypass.
@@ -1184,24 +1150,13 @@ async def test_scalp_m1_publishes_inside_opposing_structure():
     bid=4088.9,
     ask=4089.1,
   )
-  market_map = _market_map(MapEntry(
-    "sell",
-    4089.2,
-    4095.0,
-    4089,
-    4095,
-    "major",
-    ["supply"],
-    13.0,
-  ))
-
   plan_id = await worker._publish_trade_plan_v8(
     client,
     "XAU",
     spot,
     match,
     frames={"M1": _m1_trigger_bar(wick_depth=0.2)},
-    market_map=market_map,
+    htf_zones=[Zone(bottom=4089.2, top=4095.0, side="supply", score=13.0)],
   )
   assert plan_id is not None
   plan = await read_trade_plan(client, plan_id)
@@ -1217,6 +1172,10 @@ async def test_scalp_m1_publishes_inside_opposing_structure():
 async def test_final_gate_keeps_configured_ladder_with_opposing_structure():
   """Owner 2026-08-06: opposing geometry is not a reason to shrink the
   configured partial ladder into a solo TP before publish.
+
+  2026-09: the room check now reads htf_zones (scanner/detector-native),
+  not Market Map -- market_map= is no longer a _publish_trade_plan_v8
+  parameter at all (Stage 4 of the purge).
   """
   client = redis_state.get_client()
   match = _match(
@@ -1233,16 +1192,7 @@ async def test_final_gate_keeps_configured_ladder_with_opposing_structure():
     bid=4088.9,
     ask=4089.1,
   )
-  market_map = _market_map(MapEntry(
-    "sell",
-    4096.0,
-    4098.0,
-    4096,
-    4098,
-    "zone",
-    ["supply"],
-    10.0,
-  ))
+  htf_zones = [Zone(bottom=4096.0, top=4098.0, side="supply", score=10.0)]
 
   plan_id = await worker._publish_trade_plan_v8(
     client,
@@ -1250,7 +1200,7 @@ async def test_final_gate_keeps_configured_ladder_with_opposing_structure():
     spot,
     match,
     frames={"M1": _m1_trigger_bar()},
-    market_map=market_map,
+    htf_zones=htf_zones,
   )
 
   assert plan_id is not None

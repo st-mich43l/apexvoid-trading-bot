@@ -23,7 +23,14 @@ def fib_ladder(
   *,
   include_extensions: bool = True,
 ) -> list[FibLevel]:
-  """Classic retracements from high→low; optional upside extensions past high."""
+  """Classic retracements from high→low; optional upside extensions past high.
+
+  Extensions are anchored at ``low`` (``low + ratio * span``), the conventional
+  low→high total-extension convention: ``ratio=1.0`` reproduces ``high`` itself,
+  ``ratio=1.272``/``1.618`` project 127.2%/161.8% of the original leg beyond
+  ``low``. This is symmetric with retracements, which are anchored at ``high``
+  measuring back down toward ``low``.
+  """
   low_f = float(low)
   high_f = float(high)
   span = high_f - low_f
@@ -35,7 +42,7 @@ def fib_ladder(
   ]
   if include_extensions:
     levels.extend(
-      FibLevel(ratio=e, price=high_f + e * span, kind="extension")
+      FibLevel(ratio=e, price=low_f + e * span, kind="extension")
       for e in EXTENSION_RATIOS
     )
   return levels

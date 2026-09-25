@@ -17,12 +17,19 @@ from app.signals.fx_manual_algo import build_fx_manual_contract, fx_manual_symbo
 # Matches: +100 pips / -50 pips / +1500Pips / -30 PIPS
 _PIPS_RE = re.compile(r'([+-])\s*(\d+)\s*pips?', re.IGNORECASE)
 
-# Setup defaults to key-level whenever the owner does not tag one (and is
-# not /scalp). Explicit ``/setup foo`` or ``/scalp`` wins. SL/TP presence
-# does not gate the setup default.
-DEFAULT_SL_PIPS = 60
+# Setup defaults to key-level and two stars whenever the owner does not tag
+# one (and is not /scalp). Explicit ``/setup foo`` or ``/scalp`` wins, while
+# an explicit one-to-three-star suffix overrides the confidence default.
+# SL/TP presence does not gate either default.
+DEFAULT_SL_PIPS = 50
 DEFAULT_TP_PIPS = (30, 60, 100, 130, 200)
 DEFAULT_SETUP_TYPE = "key-level"
+DEFAULT_CONFLUENCE = 2
+# 2026-09-14 (owner): manual /algo position management default - risk 50
+# pips (DEFAULT_SL_PIPS above), TP1 at 1R (=50 pips), runner out to 4R.
+# 2026-09 (owner-reported): manual /algo TP levels for an instrument with no
+# explicit InstrumentManualConfig.target_r_multiples override.
+MANUAL_ALGO_DEFAULT_TARGET_R_MULTIPLES = (1.0, 2.0, 3.0, 4.0)
 
 # Manual signal template (DM to bot), sl/tp each optional:
 #   gold sell entry zone (4100-4105)
@@ -46,6 +53,7 @@ SETUP_RESERVED_WORDS = frozenset({
   "scalp-nhanh",
   "quick-scalp",
   "algo",
+  "1r",
   "sl",
   "tp",
   "entry",
@@ -69,6 +77,15 @@ _SCALP_SUFFIX_RE = re.compile(
 # they compose with each other — stripped independently, order-agnostic.
 _ALGO_SUFFIX_RE = re.compile(
   r'(?i)\s*/\s*algo(?=\s*(?:/|$))'
+)
+# Owner opt-in for a personal (not-for-the-channel) trade: full account
+# volume at one entry, one TP at exactly 1R, root card + every lifecycle
+# update DM'd to the owner instead of posted to the VIP/public channel.
+# Implies /algo (arms broker execution on its own — owner-confirmed
+# 2026-09-16) and overrides any explicit tp the owner also typed, since
+# typing /1r is itself the explicit instruction for the exit.
+_ONE_R_SUFFIX_RE = re.compile(
+  r'(?i)\s*/\s*1r(?=\s*(?:/|$))'
 )
 _ACTIVE_RE = re.compile(r'(?i)^\s*active(?:\s+#?(\d+))?\s*$')
 _CLOSE_RE = re.compile(
@@ -179,7 +196,7 @@ def _parse_fx_manual(raw: str) -> Optional[dict]:
     "tps": contract["tps"],
     "risk": risk,
     "setup_type": None,
-    "confluence": None,
+    "confluence": DEFAULT_CONFLUENCE,
     "target_weights": contract["target_weights"],
     "manual_single_entry": True,
     "visibility": "both",
@@ -218,8 +235,9 @@ def _parse_manual(text: str) -> Optional[dict]:
   )
   raw, scalp_count = _SCALP_SUFFIX_RE.subn("", raw)
   raw, algo_count = _ALGO_SUFFIX_RE.subn("", raw)
+  raw, one_r_count = _ONE_R_SUFFIX_RE.subn("", raw)
   setup_type = None
-  confluence = None
+  confluence = DEFAULT_CONFLUENCE
   setup_match = _SETUP_SUFFIX_RE.search(raw)
   if (
     setup_match
@@ -243,8 +261,16 @@ def _parse_manual(text: str) -> Optional[dict]:
     fx = {
       **fx,
       "visibility": "vip" if vip_count else fx.get("visibility", "both"),
-      "execution_mode": "algo" if algo_count else "notify",
+      "execution_mode": "algo" if (algo_count or one_r_count) else "notify",
+      "personal_trade": bool(one_r_count),
     }
+    if one_r_count:
+      one_r_price = (
+        fx["rr_entry"] + fx["risk"] if fx["action"] == "BUY"
+        else fx["rr_entry"] - fx["risk"]
+      )
+      fx["tps"] = [one_r_price]
+      fx["target_weights"] = [100]
     if setup_type is not None:
       fx["setup_type"] = setup_type
       fx["confluence"] = confluence
@@ -291,6 +317,10 @@ def _parse_manual(text: str) -> Optional[dict]:
     )
     entry_low, entry_high = sorted((entry_anchor, entry_other))
   rr_entry = entry_low if action == 'SELL' else entry_high
+  if one_r_count:
+    # Personal 1R trade: collapse any typed zone to the conservative edge
+    # already used for R sizing — full volume at one price, not a ladder.
+    entry_low = entry_high = rr_entry
   pip = pip_for(symbol)
   if setup_type is None and not scalp_count:
     setup_type = DEFAULT_SETUP_TYPE
@@ -301,7 +331,17 @@ def _parse_manual(text: str) -> Optional[dict]:
       rr_entry - DEFAULT_SL_PIPS * pip if action == 'BUY'
       else rr_entry + DEFAULT_SL_PIPS * pip
     )
-  if (tp_raw or '').strip():
+  risk = abs(rr_entry - sl)
+  if one_r_count:
+    # /1r is itself the explicit exit instruction — it wins over both an
+    # explicit tp the owner also typed and the default R-multiple ladder.
+    tps = [rr_entry + risk if action == 'BUY' else rr_entry - risk]
+  elif (tp_raw or '').strip():
+    # 2026-09 (owner-reported): "when I specify any parameter it must
+    # follow my command" - explicit sl already worked this way; explicit
+    # tp must too. The R ladder below is only the bot's DEFAULT for when
+    # the owner doesn't type tp at all, never an override of what they did
+    # type.
     tps = [
       (
         _expand_tp(float(v), rr_entry, action)
@@ -311,13 +351,20 @@ def _parse_manual(text: str) -> Optional[dict]:
       for v in tp_raw.strip().split('/') if v.strip()
     ]
   else:
+    # 2026-09 (owner-reported): manual TP levels default to a bot-
+    # calculated R-multiple ladder instead of a flat pip ladder - hand-
+    # picked levels made some trades read as scalps. Only the default when
+    # no tp is typed; see InstrumentManualConfig.target_r_multiples.
+    r_multiples = (
+      runtime_config.for_instrument(symbol).manual.target_r_multiples
+      or MANUAL_ALGO_DEFAULT_TARGET_R_MULTIPLES
+    )
     tps = [
-      rr_entry + pips * pip if action == 'BUY' else rr_entry - pips * pip
-      for pips in DEFAULT_TP_PIPS
+      rr_entry + r_mult * risk if action == 'BUY' else rr_entry - r_mult * risk
+      for r_mult in r_multiples
     ]
   if not tps:
     return None
-  risk = abs(rr_entry - sl)
   return {
     'action': action,
     'symbol': symbol,
@@ -330,7 +377,8 @@ def _parse_manual(text: str) -> Optional[dict]:
     'setup_type': setup_type,
     'confluence': confluence,
     'visibility': 'vip' if vip_count else 'both',
-    'execution_mode': 'algo' if algo_count else 'notify',
+    'execution_mode': 'algo' if (algo_count or one_r_count) else 'notify',
+    'personal_trade': bool(one_r_count),
   }
 
 

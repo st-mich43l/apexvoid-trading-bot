@@ -16,6 +16,18 @@ public sealed class TradePlanExecutionEngineTests
     LotSize: 10_000
   );
 
+  private static readonly SymbolInfo EurUsdSymbol = new(
+    "EURUSD",
+    "EURUSD",
+    8,
+    Digits: 5,
+    PipPosition: 4,
+    MinVolume: 10_000,
+    StepVolume: 10_000,
+    MaxVolume: 100_000_000,
+    LotSize: 10_000_000
+  );
+
   private static TradePlan MarketWatchPlan(
     string direction = "BUY",
     decimal zoneLow = 4088.10m,
@@ -75,6 +87,32 @@ public sealed class TradePlanExecutionEngineTests
       "equity_table", "owner_equity_v1", "single", Array.Empty<decimal>()
     )
   );
+
+  private static TradePlan RiskSizedScalpPlan(
+    decimal stopPips,
+    long maxVolume = 100_000
+  )
+  {
+    const decimal zoneLow = 4_000.00m;
+    const decimal zoneHigh = 4_000.10m;
+    return MarketWatchPlan(
+      direction: "BUY",
+      zoneLow: zoneLow,
+      zoneHigh: zoneHigh,
+      stopPrice: zoneHigh - stopPips * 0.1m,
+      maxVolume: maxVolume
+    ) with
+    {
+      Analysis = new TradePlanAnalysis(
+        "Range Sweep Scalp", "scalp", "BUY",
+        new[] { "M1" }, "M1", "M1", 1, 1, 0.8, 3, "range", "range"
+      ),
+      Risk = new TradePlanRisk(0.5m, 1.5m, maxVolume, 2.0m),
+      Sizing = new TradePlanSizing(
+        "risk", "owner_equity_v1", "single", Array.Empty<decimal>()
+      ),
+    };
+  }
 
   [Fact]
   public void MarketWatchSubmitsWhenAskInsideZone()
@@ -453,8 +491,7 @@ public sealed class TradePlanExecutionEngineTests
   [Fact]
   public void CalculateVolumeScalesEquityTableByRiskMultiplier()
   {
-    // Owner: scalp stamps risk_multiplier=2 → 2× equity-table lots when
-    // equity is at/above $2k. Stop geometry is unchanged; volume only.
+    // A caller-provided multiplier still scales equity-table volume.
     var plan = MarketWatchPlan() with
     {
       Risk = new TradePlanRisk(1.0m, 2.0m, 100_000, 2.0m),
@@ -466,6 +503,43 @@ public sealed class TradePlanExecutionEngineTests
 
     // LotsForEquity(2500)=0.15 → ×2 = 0.30 lots → 3000 volume units.
     Assert.Equal(3_000, result.TotalVolume);
+    Assert.Empty(result.Slices);
+  }
+
+  [Fact]
+  public void CalculateVolumeSmoothsFxLotsAcrossThreeThousandEquity()
+  {
+    var plan = MarketWatchPlan() with
+    {
+      Symbol = "EURUSD",
+      Risk = new TradePlanRisk(1.0m, 1.5m, 100_000_000, 2.0m),
+    };
+
+    var beforeBoundary = TradePlanExecutionEngine.CalculateVolume(
+      plan, Account(2_999.99m), 0.0001m, 10m, EurUsdSymbol
+    );
+    var atBoundary = TradePlanExecutionEngine.CalculateVolume(
+      plan, Account(3_000m), 0.0001m, 10m, EurUsdSymbol
+    );
+
+    Assert.Equal(3_000_000, beforeBoundary.TotalVolume); // 0.20 x 1.5 = 0.30
+    Assert.Equal(3_000_000, atBoundary.TotalVolume);
+  }
+
+  [Fact]
+  public void CalculateVolumeUsesOnePointFiveScalpBoostAtOrAboveTwoThousandEquity()
+  {
+    var plan = MarketWatchPlan() with
+    {
+      Risk = new TradePlanRisk(1.0m, 1.5m, 100_000, 2.0m),
+    };
+
+    var result = TradePlanExecutionEngine.CalculateVolume(
+      plan, Account(2_500m), pipSize: 0.1m, pipValuePerLot: 10m, symbol: Symbol
+    );
+
+    // LotsForEquity(2500)=0.15 → ×1.5 = 0.225, rounded to 0.23 lots.
+    Assert.Equal(2_300, result.TotalVolume);
     Assert.Empty(result.Slices);
   }
 
@@ -516,6 +590,91 @@ public sealed class TradePlanExecutionEngineTests
 
     Assert.Equal(3_000, result.TotalVolume); // LotsForEquity(10000)=0.30
     Assert.Empty(result.Slices);
+  }
+
+  [Theory]
+  [InlineData(12.0, 800L)]
+  [InlineData(28.57, 300L)]
+  public void CalculateVolumeRiskModeSizesFromDeclaredStop(
+    decimal stopPips,
+    long expectedVolume
+  )
+  {
+    var result = TradePlanExecutionEngine.CalculateVolume(
+      RiskSizedScalpPlan(stopPips), Account(2_000m), 0.1m, 10m, Symbol
+    );
+
+    // 0.5% of $2,000 is a $10 budget. Broker-step rounding floors the
+    // resulting 0.0833 / 0.0350 lots to 0.08 / 0.03.
+    Assert.Equal(expectedVolume, result.TotalVolume);
+  }
+
+  [Theory]
+  [InlineData(5.0)]
+  [InlineData(12.0)]
+  [InlineData(20.0)]
+  [InlineData(30.0)]
+  public void CalculateVolumeRiskModeKeepsMoneyRiskConstant(decimal stopPips)
+  {
+    var result = TradePlanExecutionEngine.CalculateVolume(
+      RiskSizedScalpPlan(stopPips), Account(2_000m), 0.1m, 10m, Symbol
+    );
+    var lots = result.TotalVolume / (decimal)Symbol.LotSize;
+    var moneyRisk = lots * stopPips * 10m;
+
+    // Step rounding may leave up to one 0.01-lot step of unused budget.
+    Assert.InRange(moneyRisk, 8.5m, 10m);
+  }
+
+  [Fact]
+  public void CalculateVolumeRiskModeRejectsZeroDeclaredStopDistance()
+  {
+    var error = Assert.Throws<TradePlanContractException>(() =>
+      TradePlanExecutionEngine.CalculateVolume(
+        RiskSizedScalpPlan(0m), Account(2_000m), 0.1m, 10m, Symbol
+      )
+    );
+
+    Assert.Equal("risk_sizing_stop_pips_must_be_positive", error.Message);
+  }
+
+  [Fact]
+  public void CalculateVolumeRiskModeKeepsMaxVolumeAsAHardReject()
+  {
+    var error = Assert.Throws<TradePlanContractException>(() =>
+      TradePlanExecutionEngine.CalculateVolume(
+        RiskSizedScalpPlan(5m, maxVolume: 500), Account(2_000m), 0.1m, 10m, Symbol
+      )
+    );
+
+    Assert.Equal("equity_table_above_broker_maximum", error.Message);
+  }
+
+  [Fact]
+  public void SmallRiskSizedScalpLadderDegradesToOneFullExit()
+  {
+    var plan = RiskSizedScalpPlan(30m) with
+    {
+      Targets = new[]
+      {
+        new TradePlanTarget("TP1", "absolute", 4_003m, 0.5m),
+        new TradePlanTarget("TP2", "absolute", 4_006m, 0.5m),
+      },
+      Management = new TradePlanManagement("TP1", 6, true),
+    };
+    var volume = TradePlanExecutionEngine.CalculateVolume(
+      plan, Account(2_000m), 0.1m, 10m, Symbol
+    );
+
+    var degraded = TradePlanExecutionEngine.DegradeScalpLadderForMinVolume(
+      plan, volume.TotalVolume, Symbol
+    );
+
+    Assert.NotNull(degraded);
+    Assert.Single(degraded.Targets);
+    Assert.Equal("TP2", degraded.Targets[0].TargetId);
+    Assert.Equal(1m, degraded.Targets[0].CloseRatio);
+    Assert.Null(degraded.Management.BeAfterTargetId);
   }
 
   [Fact]
@@ -721,6 +880,118 @@ public sealed class TradePlanExecutionEngineTests
 
     var decision = TradePlanExecutionEngine.EvaluateEntry(
       plan, bid: 4089.0m, ask: 4089.1m, spreadTicks: 1m, nowUnixSeconds: 1_720_000_100
+    );
+
+    Assert.True(decision.ShouldSubmit);
+    Assert.Equal(TradePlanEntryAction.SubmitLadder, decision.Action);
+  }
+
+  [Fact]
+  public void MarketWithLimitScaleWaitsWhenL1HasSlippedPastTheDeclaredCap()
+  {
+    // Owner-reported 2026-09-10 (real XAU BUY, Key Level): L1's price is
+    // stamped from the live quote at plan-build time, then fires as an
+    // outright market order whenever the engine gets around to submitting
+    // it - with no cap on how far price can have moved in that gap. A fast
+    // M5 break let the fill land 0.74 above the published zone's own high
+    // edge. Mirrors EvaluateMarket's existing MaxSlippageTicks cap (Aug 24
+    // HFS fix) for the route that never got it.
+    var plan = LimitLadderPlan(leg1Ratio: 0.70m, leg2Ratio: 0.30m) with
+    {
+      Entry = new TradePlanEntry(
+        TradePlanContract.EntryTypeMarketWithLimitScale,
+        1_720_003_600,
+        ZoneLow: 4085.00m,
+        ZoneHigh: 4089.50m,
+        MaxSlippageTicks: 10,
+        Legs: new[]
+        {
+          new TradePlanEntryLeg("L1", 4089.10m, 0.70m, "market"),
+          new TradePlanEntryLeg("L2", 4085.00m, 0.30m, "limit"),
+        }
+      ),
+    };
+
+    // Ask has run 0.25 (25 ticks) past L1's declared 4089.10 - well beyond
+    // the 10-tick (0.10) budget.
+    var decision = TradePlanExecutionEngine.EvaluateEntry(
+      plan,
+      bid: 4089.20m,
+      ask: 4089.35m,
+      spreadTicks: 15m,
+      nowUnixSeconds: 1_720_000_100,
+      tickSize: 0.01m
+    );
+
+    Assert.Equal(TradePlanEntryAction.Wait, decision.Action);
+    Assert.Equal("slippage_exceeds_declared_limit", decision.RejectReason);
+  }
+
+  [Fact]
+  public void MarketWithLimitScaleSubmitsWhenL1IsWithinTheSlippageBudget()
+  {
+    var plan = LimitLadderPlan(leg1Ratio: 0.70m, leg2Ratio: 0.30m) with
+    {
+      Entry = new TradePlanEntry(
+        TradePlanContract.EntryTypeMarketWithLimitScale,
+        1_720_003_600,
+        ZoneLow: 4085.00m,
+        ZoneHigh: 4089.50m,
+        MaxSlippageTicks: 10,
+        Legs: new[]
+        {
+          new TradePlanEntryLeg("L1", 4089.10m, 0.70m, "market"),
+          new TradePlanEntryLeg("L2", 4085.00m, 0.30m, "limit"),
+        }
+      ),
+    };
+
+    // Ask only 0.05 (5 ticks) past L1's declared price - inside the budget.
+    var decision = TradePlanExecutionEngine.EvaluateEntry(
+      plan,
+      bid: 4089.00m,
+      ask: 4089.15m,
+      spreadTicks: 15m,
+      nowUnixSeconds: 1_720_000_100,
+      tickSize: 0.01m
+    );
+
+    Assert.True(decision.ShouldSubmit);
+    Assert.Equal(TradePlanEntryAction.SubmitLadder, decision.Action);
+  }
+
+  [Fact]
+  public void LimitLadderSubmitsWhenBothLegsAreStillRestingBelowTheLiveQuote()
+  {
+    // Neither leg is marketable for a BUY (both rest below the live ask),
+    // however far they sit from the current quote - a resting limit can
+    // only ever fill at its own declared price, never chase, so it needs
+    // (and gets) no slippage check regardless of distance.
+    var plan = LimitLadderPlan(
+      legPrice1: 4086.00m, legPrice2: 4085.00m, leg1Ratio: 0.60m, leg2Ratio: 0.40m
+    ) with
+    {
+      Entry = new TradePlanEntry(
+        TradePlanContract.EntryTypeLimitLadder,
+        1_720_003_600,
+        ZoneLow: 4085.00m,
+        ZoneHigh: 4086.00m,
+        MaxSlippageTicks: 10,
+        Legs: new[]
+        {
+          new TradePlanEntryLeg("L1", 4086.00m, 0.60m),
+          new TradePlanEntryLeg("L2", 4085.00m, 0.40m),
+        }
+      ),
+    };
+
+    var decision = TradePlanExecutionEngine.EvaluateEntry(
+      plan,
+      bid: 4089.65m,
+      ask: 4089.80m,
+      spreadTicks: 15m,
+      nowUnixSeconds: 1_720_000_100,
+      tickSize: 0.01m
     );
 
     Assert.True(decision.ShouldSubmit);

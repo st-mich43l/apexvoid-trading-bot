@@ -17,21 +17,47 @@ from app.scalping.context import (
 )
 from app.scalping.lifecycle import transition
 from app.scalping.microstructure import (
+  candidate_from_compression_box,
+  confirm_m1_execution,
   detect_breakout_retest,
   detect_impulse_pullback,
   detect_sweep_reclaim,
   build_micro_structure,
+  evaluate_breakout_acceptance,
+  evaluate_breakout_retest_episode,
+  evaluate_retest,
+  evaluate_retest_confirmation,
   find_compression_box,
+  is_true_level_cross,
+  liquidity_level_candidates,
+  m1_mad_volatility,
+  m5_structure_flip_candidates,
   macro_momentum_direction,
+  robust_mad_volatility,
+  structure_flip_candidates,
 )
 from app.scalping.models import (
   ARCHETYPE_BREAKOUT_RETEST,
   ARCHETYPE_IMPULSE_PULLBACK,
   ARCHETYPE_RANGE_SWEEP,
   ARMED,
+  BR_ACCEPTED,
+  BR_ARMED,
+  BR_BREAK_DETECTED,
+  BR_REASON_IMMEDIATE_RECLAIM,
+  BR_REASON_RETEST_TOO_DEEP,
+  BR_REASON_RETEST_TOO_LATE,
+  BR_SOURCE_COMPRESSION_BOX,
+  BR_SOURCE_M1_SWING_HIGH,
+  BR_SUBTYPE_RANGE_BREAK,
+  BR_SUBTYPE_STRUCTURE_FLIP,
+  BR_WATCH_LEVEL,
+  BreakoutLevelCandidate,
   DISCOVERED,
   EXECUTABLE,
   EXPIRED,
+  MicroStructure,
+  MicroSwing,
   MISSED,
   OPPORTUNITY_VERSION,
   ScalpContextSnapshot,
@@ -42,14 +68,14 @@ from app.scalping.models import (
 from app.scalping.ranking import rank_opportunities, score_opportunity
 from app.scalping.replay import aggregate_report, evaluate_paper_outcome
 from app.scalping.risk import ScalpRiskState, evaluate_risk, risk_fraction
-from app.scalping.strategies import discover_range_sweep
+from app.scalping.strategies import _stop_buffer, discover_range_sweep
 
 
 pytestmark = pytest.mark.no_database
 
 
 def _cfg(**overrides):
-  hfs = SimpleNamespace(
+  scalp_cfg = SimpleNamespace(
     mode="shadow",
     archetypes=SimpleNamespace(
       range_sweep_enabled=True,
@@ -109,9 +135,9 @@ def _cfg(**overrides):
     ),
   )
   for key, value in overrides.items():
-    setattr(hfs, key, value)
+    setattr(scalp_cfg, key, value)
   return SimpleNamespace(
-    strategies=SimpleNamespace(scalping=hfs),
+    strategies=SimpleNamespace(scalping=scalp_cfg),
     market_data=SimpleNamespace(
       sessions=SimpleNamespace(
         asia_start=22, london_start=7, ny_start=13, daily_rollover_utc_hour=21,
@@ -508,6 +534,426 @@ def test_find_compression_box_rejects_wide_envelope():
     df, atr=2.0, min_box_bars=8, max_box_bars=12, box_max_atr=1.5, min_touches_per_side=2,
   )
   assert box is None
+
+
+# ============================================================================
+# Breakout Retest V2 — generic engine (owner-directed 2026-09-16 rebuild).
+# TEST 1-13 below map directly to the rebuild spec's mandatory test list.
+# ============================================================================
+
+
+def test_v2_true_buy_breakout_identifies_exact_crossing_candle():
+  """TEST 1 — the real crossing candle is preserved as break_index."""
+  idx = pd.date_range("2026-07-01 10:00", periods=3, freq="1min", tz="UTC")
+  df = pd.DataFrame({
+    "open":  [4324.40, 4324.60, 4325.00],
+    "high":  [4324.60, 4324.80, 4325.40],
+    "low":   [4324.30, 4324.50, 4324.95],
+    "close": [4324.50, 4324.70, 4325.30],
+  }, index=idx)
+  candidate = BreakoutLevelCandidate(
+    level=4324.90, side="BUY", source=BR_SOURCE_M1_SWING_HIGH,
+    subtype=BR_SUBTYPE_STRUCTURE_FLIP, timeframe="M1",
+  )
+  result = evaluate_breakout_retest_episode(df, candidate, atr=1.0)
+  assert result["break_index"] == 2
+  assert result["state"] == BR_BREAK_DETECTED
+
+
+def test_v2_continuation_candle_cannot_overwrite_break_index():
+  """TEST 2 — a later independently-qualifying candle must not replace it."""
+  idx = pd.date_range("2026-07-01 10:00", periods=4, freq="1min", tz="UTC")
+  df = pd.DataFrame({
+    "open":  [4324.50, 4324.60, 4325.40, 4326.30],
+    "high":  [4324.80, 4325.40, 4326.30, 4327.10],
+    "low":   [4324.40, 4324.55, 4325.25, 4326.15],
+    "close": [4324.70, 4325.30, 4326.20, 4327.00],
+  }, index=idx)
+  candidate = BreakoutLevelCandidate(
+    level=4324.90, side="BUY", source=BR_SOURCE_M1_SWING_HIGH,
+    subtype=BR_SUBTYPE_STRUCTURE_FLIP, timeframe="M1",
+  )
+  result = evaluate_breakout_retest_episode(df, candidate, atr=1.0)
+  assert result["break_index"] == 1
+  # Later bars still count as acceptance evidence without redefining the
+  # break candle itself.
+  assert result["accepted"] is True
+
+
+def test_v2_front_run_retest_qualifies_without_exact_touch():
+  """TEST 3 — a retest that front-runs and never reaches the level still qualifies."""
+  idx = pd.date_range("2026-07-01 10:00", periods=2, freq="1min", tz="UTC")
+  df = pd.DataFrame({
+    "open":  [4325.30, 4325.00],
+    "high":  [4325.50, 4325.10],
+    "low":   [4325.10, 4324.96],
+    "close": [4325.40, 4325.05],
+  }, index=idx)
+  retest = evaluate_retest(
+    df, side="BUY", level=4324.90, break_index=0,
+    max_retest_delay_bars=5, retest_front_run_tolerance=0.10,
+    max_retest_penetration=0.0,
+  )
+  assert retest["retest_index"] == 1
+  assert retest["retest_penetration"] == pytest.approx(0.0)
+  assert retest["failure_reason"] is None
+
+
+def test_v2_shallow_penetration_retest_is_valid():
+  """TEST 4 — shallow penetration within the configured band is a valid retest."""
+  idx = pd.date_range("2026-07-01 10:00", periods=2, freq="1min", tz="UTC")
+  df = pd.DataFrame({
+    "open":  [4325.30, 4324.85],
+    "high":  [4325.50, 4325.10],
+    "low":   [4325.10, 4324.75],
+    "close": [4325.40, 4325.05],
+  }, index=idx)
+  retest = evaluate_retest(
+    df, side="BUY", level=4324.90, break_index=0,
+    max_retest_delay_bars=5, retest_front_run_tolerance=0.0,
+    max_retest_penetration=0.20,
+  )
+  assert retest["retest_index"] == 1
+  assert retest["retest_penetration"] == pytest.approx(0.15)
+  assert retest["failure_reason"] is None
+
+
+def test_v2_deep_penetration_retest_is_rejected():
+  """TEST 5 — a retest that penetrates beyond the configured band is invalid."""
+  idx = pd.date_range("2026-07-01 10:00", periods=2, freq="1min", tz="UTC")
+  df = pd.DataFrame({
+    "open":  [4325.30, 4324.50],
+    "high":  [4325.50, 4324.80],
+    "low":   [4325.10, 4324.30],
+    "close": [4325.40, 4324.55],
+  }, index=idx)
+  retest = evaluate_retest(
+    df, side="BUY", level=4324.90, break_index=0,
+    max_retest_delay_bars=5, retest_front_run_tolerance=0.0,
+    max_retest_penetration=0.20,
+  )
+  assert retest["retest_index"] is None
+  assert retest["failure_reason"] == BR_REASON_RETEST_TOO_DEEP
+
+
+def test_v2_immediate_reclaim_fails_acceptance():
+  """TEST 6 — a strong immediate reclaim into the old range fails acceptance."""
+  idx = pd.date_range("2026-07-01 10:00", periods=2, freq="1min", tz="UTC")
+  df = pd.DataFrame({
+    "open":  [4325.30, 4324.90],
+    "high":  [4325.50, 4325.00],
+    "low":   [4325.10, 4324.40],
+    "close": [4325.40, 4324.60],
+  }, index=idx)
+  acceptance = evaluate_breakout_acceptance(
+    df, side="BUY", level=4324.90, break_index=0,
+    acceptance_bars=1, acceptance_required_closes=1,
+  )
+  assert acceptance["accepted"] is False
+  assert acceptance["failure_reason"] == BR_REASON_IMMEDIATE_RECLAIM
+
+
+def test_v2_breakout_before_compression_end_never_qualifies():
+  """TEST 7 — break_index <= box_end_index must never qualify for that episode."""
+  idx = pd.date_range("2026-07-01 10:00", periods=4, freq="1min", tz="UTC")
+  df = pd.DataFrame({
+    "open":  [4324.55, 4324.65, 4324.75, 4325.30],
+    "high":  [4324.75, 4324.85, 4325.40, 4325.35],
+    "low":   [4324.45, 4324.55, 4324.65, 4325.15],
+    "close": [4324.60, 4324.70, 4325.30, 4325.25],
+  }, index=idx)
+  # The only true crossing in this df is at index 2 (prev=4324.70 <= level,
+  # close=4325.30 > level) - bind the compression episode so it ends at
+  # index 2, i.e. exactly at the crossing candle, which must therefore be
+  # rejected as "not after the box".
+  candidate = BreakoutLevelCandidate(
+    level=4324.90, side="BUY", source=BR_SOURCE_COMPRESSION_BOX,
+    subtype=BR_SUBTYPE_RANGE_BREAK, timeframe="M1", source_index=2,
+    metadata={
+      "box_start_index": 0, "box_end_index": 2,
+      "box_low": 4320.0, "box_high": 4324.90,
+      "invalidation_level": 4320.0,
+    },
+  )
+  result = evaluate_breakout_retest_episode(df, candidate, atr=1.0)
+  assert result.get("break_index") is None
+  assert result["state"] == BR_WATCH_LEVEL
+
+
+def test_v2_stale_retest_expires():
+  """TEST 8 — a retest arriving after max_retest_delay_bars is rejected."""
+  idx = pd.date_range("2026-07-01 10:00", periods=4, freq="1min", tz="UTC")
+  df = pd.DataFrame({
+    "open":  [4325.30, 4325.40, 4325.35, 4325.10],
+    "high":  [4325.50, 4325.60, 4325.55, 4325.20],
+    "low":   [4325.10, 4325.30, 4325.25, 4324.80],
+    "close": [4325.40, 4325.45, 4325.30, 4324.95],
+  }, index=idx)
+  retest = evaluate_retest(
+    df, side="BUY", level=4324.90, break_index=0,
+    max_retest_delay_bars=2, retest_front_run_tolerance=0.0,
+    max_retest_penetration=0.20,
+  )
+  assert retest["retest_index"] is None
+  assert retest["failure_reason"] == BR_REASON_RETEST_TOO_LATE
+
+
+def test_v2_structural_m1_breakout_full_episode_arms():
+  """TEST 9 — a confirmed M1 swing high breaks/accepts/retests/reclaims/continues."""
+  idx = pd.date_range("2026-07-01 10:00", periods=6, freq="1min", tz="UTC")
+  df = pd.DataFrame({
+    "open":  [4324.55, 4324.60, 4324.70, 4325.30, 4325.20, 4325.00],
+    "high":  [4324.75, 4324.85, 4325.40, 4325.45, 4325.30, 4325.35],
+    "low":   [4324.45, 4324.55, 4324.65, 4325.10, 4324.85, 4324.95],
+    "close": [4324.60, 4324.70, 4325.30, 4325.20, 4325.00, 4325.15],
+  }, index=idx)
+  micro = MicroStructure(
+    structure="range",
+    swings=(MicroSwing(kind="high", price=4324.90, bar_ts=0, index=0),),
+    last_break_direction=None, last_break_price=None, last_break_ts=None,
+    equal_highs=(), equal_lows=(),
+  )
+  candidates = structure_flip_candidates(
+    micro, side="BUY", current_index=5, min_age_bars=1, max_age_bars=240, atr=1.0,
+  )
+  assert len(candidates) == 1
+  assert candidates[0].source == BR_SOURCE_M1_SWING_HIGH
+  assert candidates[0].subtype == BR_SUBTYPE_STRUCTURE_FLIP
+
+  result = evaluate_breakout_retest_episode(
+    df, candidates[0], atr=1.0,
+    acceptance_bars=1, acceptance_required_closes=1,
+    max_retest_delay_bars=20, retest_front_run_tolerance=0.0,
+    max_retest_penetration=0.20,
+  )
+  assert result["state"] == BR_ARMED
+  assert result["subtype"] == BR_SUBTYPE_STRUCTURE_FLIP
+  assert result["break_source"] == BR_SOURCE_M1_SWING_HIGH
+  assert result["break_index"] == 2
+  assert result["retest_index"] == 4
+  assert result["confirmation_type"] == "retest_close_reclaim"
+
+
+def test_v2_compression_subtype_full_episode_arms():
+  """TEST 10 — compression breakout still arms, now tagged subtype=range_break."""
+  idx = pd.date_range("2026-07-01 10:00", periods=14, freq="1min", tz="UTC")
+  opens = [4050.0] * 10 + [4050.5, 4054.10, 4054.20, 4051.10]
+  highs = [
+    4050.5, 4050.8, 4051.0, 4050.6, 4051.0, 4050.7, 4051.0, 4050.9, 4051.0, 4050.5,
+  ] + [4054.60, 4054.40, 4054.40, 4051.60]
+  lows = [
+    4049.5, 4049.2, 4049.0, 4049.4, 4049.0, 4049.3, 4049.0, 4049.1, 4049.0, 4049.5,
+  ] + [4050.40, 4054.00, 4050.95, 4051.00]
+  closes = [4050.0] * 10 + [4054.50, 4054.30, 4051.20, 4051.50]
+  df = pd.DataFrame(
+    {"open": opens, "high": highs, "low": lows, "close": closes}, index=idx,
+  )
+  box = find_compression_box(
+    df, atr=2.0, min_box_bars=8, max_box_bars=12, box_max_atr=1.5, min_touches_per_side=2,
+  )
+  assert box is not None
+  assert box["box_end_index"] < 10  # strictly inside the 10-bar coil
+
+  candidate = candidate_from_compression_box(box, side="BUY")
+  assert candidate.source == BR_SOURCE_COMPRESSION_BOX
+  assert candidate.subtype == BR_SUBTYPE_RANGE_BREAK
+  assert candidate.source_index == box["box_end_index"]
+
+  result = evaluate_breakout_retest_episode(
+    df, candidate, atr=2.0,
+    acceptance_bars=1, acceptance_required_closes=1,
+    max_retest_delay_bars=20, retest_front_run_tolerance=0.0,
+    max_retest_penetration=0.20,
+  )
+  assert result["state"] == BR_ARMED
+  assert result["subtype"] == BR_SUBTYPE_RANGE_BREAK
+  assert result["break_source"] == BR_SOURCE_COMPRESSION_BOX
+  assert result["break_index"] > box["box_end_index"]
+
+
+def test_v2_sell_symmetry_cross_acceptance_retest():
+  """TEST 11 — SELL mirrors BUY for crossing, acceptance and retest tolerance."""
+  assert is_true_level_cross(
+    side="SELL", prev_close=4324.90, close=4324.30, level=4324.60,
+    cross_tolerance=0.0, breakout_margin=0.0,
+  )
+  assert not is_true_level_cross(
+    side="SELL", prev_close=4324.90, close=4324.90, level=4324.60,
+  )
+
+  idx = pd.date_range("2026-07-01 10:00", periods=2, freq="1min", tz="UTC")
+  reclaim_df = pd.DataFrame({
+    "open":  [4324.30, 4324.65],
+    "high":  [4324.60, 4325.10],
+    "low":   [4324.10, 4324.60],
+    "close": [4324.20, 4325.00],
+  }, index=idx)
+  acceptance = evaluate_breakout_acceptance(
+    reclaim_df, side="SELL", level=4324.60, break_index=0,
+    acceptance_bars=1, acceptance_required_closes=1,
+  )
+  assert acceptance["accepted"] is False
+  assert acceptance["failure_reason"] == BR_REASON_IMMEDIATE_RECLAIM
+
+  shallow_df = pd.DataFrame({
+    "open":  [4324.30, 4324.70],
+    "high":  [4324.50, 4324.75],
+    "low":   [4324.10, 4324.55],
+    "close": [4324.20, 4324.65],
+  }, index=idx)
+  shallow = evaluate_retest(
+    shallow_df, side="SELL", level=4324.60, break_index=0,
+    max_retest_delay_bars=5, retest_front_run_tolerance=0.0,
+    max_retest_penetration=0.20,
+  )
+  assert shallow["retest_index"] == 1
+  assert shallow["retest_penetration"] == pytest.approx(0.15)
+
+  deep_df = pd.DataFrame({
+    "open":  [4324.30, 4325.20],
+    "high":  [4324.50, 4325.40],
+    "low":   [4324.10, 4324.90],
+    "close": [4324.20, 4325.10],
+  }, index=idx)
+  deep = evaluate_retest(
+    deep_df, side="SELL", level=4324.60, break_index=0,
+    max_retest_delay_bars=5, retest_front_run_tolerance=0.0,
+    max_retest_penetration=0.20,
+  )
+  assert deep["retest_index"] is None
+  assert deep["failure_reason"] == BR_REASON_RETEST_TOO_DEEP
+
+
+def test_v2_mad_handles_flat_market_without_crashing():
+  """TEST 12 — flat market data must not divide by zero, inf, or crash."""
+  idx = pd.date_range("2026-07-01 10:00", periods=20, freq="1min", tz="UTC")
+  flat = pd.DataFrame({
+    "open": [4000.0] * 20, "high": [4000.0] * 20,
+    "low": [4000.0] * 20, "close": [4000.0] * 20,
+  }, index=idx)
+  mad = m1_mad_volatility(flat, lookback=14, min_floor=0.0)
+  assert mad == 0.0
+  assert mad == mad  # not NaN
+  assert mad != float("inf")
+
+  floored = m1_mad_volatility(flat, lookback=14, min_floor=0.05)
+  assert floored == pytest.approx(0.05)
+
+  candidate = BreakoutLevelCandidate(
+    level=4000.0, side="BUY", source=BR_SOURCE_M1_SWING_HIGH,
+    subtype=BR_SUBTYPE_STRUCTURE_FLIP, timeframe="M1",
+  )
+  result = evaluate_breakout_retest_episode(flat, candidate, atr=0.0, mad=0.0)
+  assert result["state"] == BR_WATCH_LEVEL  # no crash, no cross on flat data
+
+
+def test_v2_no_future_leakage_break_index_is_stable_under_truncation():
+  """TEST 13 — a break decision must not depend on bars that occur after it."""
+  idx = pd.date_range("2026-07-01 10:00", periods=4, freq="1min", tz="UTC")
+  full_df = pd.DataFrame({
+    "open":  [4324.50, 4324.60, 4325.40, 4326.30],
+    "high":  [4324.80, 4325.40, 4326.30, 4327.10],
+    "low":   [4324.40, 4324.55, 4325.25, 4326.15],
+    "close": [4324.70, 4325.30, 4326.20, 4327.00],
+  }, index=idx)
+  truncated_df = full_df.iloc[:2]
+  candidate = BreakoutLevelCandidate(
+    level=4324.90, side="BUY", source=BR_SOURCE_M1_SWING_HIGH,
+    subtype=BR_SUBTYPE_STRUCTURE_FLIP, timeframe="M1",
+  )
+  truncated_result = evaluate_breakout_retest_episode(truncated_df, candidate, atr=1.0)
+  full_result = evaluate_breakout_retest_episode(full_df, candidate, atr=1.0)
+  assert truncated_result["break_index"] == full_result["break_index"] == 1
+  # No returned index may ever point past the data actually supplied.
+  for key in ("break_index", "retest_index", "confirmation_index"):
+    value = truncated_result.get(key)
+    if value is not None:
+      assert value < len(truncated_df)
+
+
+def test_v2_m5_structure_flip_candidates_filters_side_and_touches():
+  key_levels = [
+    {"price": 4330.0, "kind": "reaction", "touches": 3, "band": 0.5, "score": 0.8},
+    {"price": 4310.0, "kind": "reaction", "touches": 1, "band": 0.5, "score": 0.4},
+    {"price": 4290.0, "kind": "reaction", "touches": 2, "band": 0.5, "score": 0.6},
+  ]
+  buys = m5_structure_flip_candidates(
+    key_levels, side="BUY", current_price=4320.0, min_touches=2,
+  )
+  assert [c.level for c in buys] == [4330.0]
+  assert buys[0].timeframe == "M5"
+  assert buys[0].subtype == BR_SUBTYPE_STRUCTURE_FLIP
+
+  sells = m5_structure_flip_candidates(
+    key_levels, side="SELL", current_price=4320.0, min_touches=2,
+  )
+  assert [c.level for c in sells] == [4290.0]
+
+
+def test_v2_liquidity_level_candidates_reuse_micro_eqh_eql():
+  micro = MicroStructure(
+    structure="range", swings=(),
+    last_break_direction=None, last_break_price=None, last_break_ts=None,
+    equal_highs=(4330.0, 4331.0), equal_lows=(4290.0,),
+  )
+  buys = liquidity_level_candidates(micro, side="BUY")
+  assert sorted(c.level for c in buys) == [4330.0, 4331.0]
+  assert all(c.subtype == "liquidity_level_break" for c in buys)
+
+  sells = liquidity_level_candidates(micro, side="SELL")
+  assert [c.level for c in sells] == [4290.0]
+
+
+def test_discover_breakout_retest_arms_from_m1_structure_without_a_compression_box(
+  monkeypatch,
+):
+  """Regression: a missing compression box must not short-circuit discovery
+  entirely - Breakout Retest must still work from M1 structural levels.
+  """
+  from app.scalping import strategies as strat_mod
+
+  monkeypatch.setattr(strat_mod, "find_compression_box", lambda *a, **k: None)
+
+  idx = pd.date_range("2026-07-01 10:00", periods=6, freq="1min", tz="UTC")
+  df = pd.DataFrame({
+    "open":  [4324.55, 4324.60, 4324.70, 4325.30, 4325.20, 4325.00],
+    "high":  [4324.75, 4324.85, 4325.40, 4325.45, 4325.30, 4325.35],
+    # Bar 5's low sits below the broken level (not just below the box edge)
+    # so the structural stop's binding point is the wick, not the level
+    # itself - avoids the degenerate case where stop_price and zone_low
+    # collapse to the exact same value and _zone_stop_ordered's strict "<"
+    # rejects a mathematically-identical (not actually invalid) stop.
+    "low":   [4324.45, 4324.55, 4324.65, 4325.10, 4324.85, 4324.60],
+    "close": [4324.60, 4324.70, 4325.30, 4325.20, 4325.00, 4325.15],
+    "volume": [1] * 6,
+  }, index=idx)
+  micro = MicroStructure(
+    structure="range",
+    swings=(MicroSwing(kind="high", price=4324.90, bar_ts=0, index=0),),
+    last_break_direction=None, last_break_price=None, last_break_ts=None,
+    equal_highs=(), equal_lows=(),
+  )
+  context = SimpleNamespace(
+    context_id="ctx-v2-no-box",
+    symbol="XAU",
+    atr=1.0,
+    m1_atr=0.05,
+    buy_corridor_room_pips=200.0,
+    sell_corridor_room_pips=200.0,
+    dealing_range_position=0.5,
+    permitted_archetypes={ARCHETYPE_BREAKOUT_RETEST},
+    key_levels=(),
+  )
+  found = strat_mod.discover_breakout_retest(
+    context, micro, df, _cfg(), pip_size=0.1, now=1_780_000_000,
+  )
+  buy = [opp for opp in found if opp.direction == "BUY"]
+  assert buy, "expected an armed BUY opportunity sourced from the M1 swing"
+  opp = buy[0]
+  assert opp.measured["compression_box"] is None
+  assert opp.measured["v2"]["subtype"] == BR_SUBTYPE_STRUCTURE_FLIP
+  assert opp.measured["v2"]["break_source"] == BR_SOURCE_M1_SWING_HIGH
+  assert opp.measured["v2"]["state"] == BR_ARMED
 
 
 def test_breakout_math_stamp_present():
@@ -1162,6 +1608,18 @@ def test_stop_pips_rejects_above_maximum_widens_below_minimum():
   assert _stop_pips(structural=0.0, cfg=cfg) == (None, "stop_not_positive")
 
 
+def test_stop_pips_rejects_when_structure_cannot_clear_spread_cost():
+  from app.scalping.strategies import _stop_pips
+
+  cfg = _cfg()
+  assert _stop_pips(
+    structural=11.9, cfg=cfg, spread_pips=3.0,
+  ) == (None, "stop_below_spread_multiple")
+  assert _stop_pips(
+    structural=12.0, cfg=cfg, spread_pips=3.0,
+  ) == (12.0, None)
+
+
 def test_scalp_target_prefers_1to2_falls_back_to_1to1():
   # Owner 2026-08-11: every scalp is 1:2 when the room supports it, 1:1
   # otherwise - never a ladder, never anything outside this pair.
@@ -1236,6 +1694,10 @@ def test_impulse_pullback_episode_id_survives_an_m5_context_rollover(monkeypatch
     "retracement": 0.5,
     "preferred": True,
     "close": 4250.0,
+    "impulse_len": 40.0,
+    "body_dominance": 0.8,
+    "mean_impulse_body": 2.0,
+    "mean_pullback_body": 0.5,
   }
   monkeypatch.setattr(
     "app.scalping.strategies.detect_impulse_pullback",
@@ -1270,6 +1732,9 @@ def test_impulse_pullback_episode_id_survives_an_m5_context_rollover(monkeypatch
       session="london",
       permitted_archetypes=("impulse_pullback",),
       atr=2.0,
+      m1_atr=1.0,
+      zones=({"bottom": 4251.0, "top": 4252.0, "side": "supply",
+              "touches": 3, "mitigated": False, "score": 5.0},),
     )
 
   # Same real-world opportunity, discovered on two different M5 bars (an
@@ -1345,6 +1810,10 @@ def test_impulse_pullback_allows_sell_against_fresh_reclaim(monkeypatch):
     "retracement": 0.5,
     "preferred": True,
     "close": 4250.0,
+    "impulse_len": 40.0,
+    "body_dominance": 0.8,
+    "mean_impulse_body": 2.0,
+    "mean_pullback_body": 0.5,
   }
   monkeypatch.setattr(
     "app.scalping.strategies.detect_impulse_pullback",
@@ -1377,6 +1846,9 @@ def test_impulse_pullback_allows_sell_against_fresh_reclaim(monkeypatch):
     session="london",
     permitted_archetypes=("impulse_pullback",),
     atr=2.0,
+    m1_atr=1.0,
+    zones=({"bottom": 4251.0, "top": 4252.0, "side": "supply",
+            "touches": 3, "mitigated": False, "score": 5.0},),
   )
 
   reclaiming = _drift_bars(direction="BUY")
@@ -1400,6 +1872,10 @@ def test_impulse_pullback_discovers_sell_when_htf_bias_up(monkeypatch):
     "retracement": 0.5,
     "preferred": True,
     "close": 4250.0,
+    "impulse_len": 40.0,
+    "body_dominance": 0.8,
+    "mean_impulse_body": 2.0,
+    "mean_pullback_body": 0.5,
   }
   monkeypatch.setattr(
     "app.scalping.strategies.detect_impulse_pullback",
@@ -1431,6 +1907,9 @@ def test_impulse_pullback_discovers_sell_when_htf_bias_up(monkeypatch):
     session="london",
     permitted_archetypes=(ARCHETYPE_IMPULSE_PULLBACK,),
     atr=2.0,
+    m1_atr=1.0,
+    zones=({"bottom": 4251.0, "top": 4252.0, "side": "supply",
+            "touches": 3, "mitigated": False, "score": 5.0},),
   )
   m1 = _drift_bars(direction="BUY", step=0.0)
   found = discover_impulse_pullback(
@@ -1516,7 +1995,7 @@ def test_range_sweep_allows_macro_displacement_against_direction(monkeypatch):
     "close": 4098.0,
     # stop_price = extreme + buffer must clear zone_high from worst fill
     # without exceeding maximum_pips (30).
-    "extreme": 4101.1,
+    "extreme": 4100.5,
   }
   monkeypatch.setattr(
     "app.scalping.strategies.detect_sweep_reclaim",
@@ -1560,7 +2039,7 @@ def test_range_sweep_allows_macro_displacement_against_direction(monkeypatch):
   assert found[0].direction == "SELL"
 
 
-def test_impulse_pullback_hard_gates_outside_london_session(monkeypatch):
+def test_impulse_pullback_session_is_a_soft_quality_preference(monkeypatch):
   from app.scalping.strategies import discover_impulse_pullback, idle_discovery_reasons
 
   match = {
@@ -1573,6 +2052,10 @@ def test_impulse_pullback_hard_gates_outside_london_session(monkeypatch):
     "retracement": 0.5,
     "preferred": True,
     "close": 4595.0,
+    "impulse_len": 10.0,
+    "body_dominance": 0.8,
+    "mean_impulse_body": 2.0,
+    "mean_pullback_body": 0.5,
   }
   monkeypatch.setattr(
     "app.scalping.strategies.detect_impulse_pullback",
@@ -1604,6 +2087,9 @@ def test_impulse_pullback_hard_gates_outside_london_session(monkeypatch):
     sell_corridor_room_pips=80.0,
     permitted_archetypes=(ARCHETYPE_IMPULSE_PULLBACK,),
     atr=4.0,
+    m1_atr=1.0,
+    zones=({"bottom": 4593.0, "top": 4594.0, "side": "demand",
+            "touches": 3, "mitigated": False, "score": 5.0},),
   )
   idx = pd.date_range("2026-08-28 03:00", periods=40, freq="1min", tz="UTC")
   m1 = pd.DataFrame(
@@ -1618,9 +2104,23 @@ def test_impulse_pullback_hard_gates_outside_london_session(monkeypatch):
   )
 
   asia_ctx = ScalpContextSnapshot(**base, session="asia")
-  assert discover_impulse_pullback(asia_ctx, None, m1, _cfg(), pip_size=0.1, now=1_780_003_600) == []
+  asia_found = discover_impulse_pullback(
+    asia_ctx, None, m1, _cfg(), pip_size=0.1, now=1_780_003_600,
+  )
+  assert len(asia_found) == 1
+  assert asia_found[0].measured["session_quality"] < 1.0
+  match["impulse_len"] = 20.0
+  m5_setup = m1.iloc[::5].copy()
+  m5_reasons: list[str] = []
+  m5_found = discover_impulse_pullback(
+    asia_ctx, None, m1, _cfg(), pip_size=0.1, now=1_780_003_600,
+    m5_df=m5_setup, idle_reasons=m5_reasons,
+  )
+  assert len(m5_found) == 1, m5_reasons
+  assert m5_found[0].measured["setup_timeframe"] == "M5"
+  assert m5_found[0].measured["confirmation_timeframe"] == "M1"
   reasons = idle_discovery_reasons(asia_ctx, m1, _cfg(), pip_size=0.1)
-  assert "impulse_pullback:outside_allowed_session:asia" in reasons
+  assert "impulse_pullback:not_matched" in reasons
 
   london_ctx = ScalpContextSnapshot(**base, session="london")
   found = discover_impulse_pullback(london_ctx, None, m1, _cfg(), pip_size=0.1, now=1_780_003_600)
@@ -1631,21 +2131,21 @@ def test_impulse_pullback_hard_gates_outside_london_session(monkeypatch):
   asia_activation = evaluate_scalp_activation(
     opp,
     asia_ctx,
-    quote_bid=4594.9,
-    quote_ask=4595.1,
+    quote_bid=4593.5,
+    quote_ask=4593.6,
     quote_ts=1_780_003_600,
     now=1_780_003_600,
     pip_size=0.1,
     cfg=_cfg(),
   )
-  assert not asia_activation.allowed
-  assert asia_activation.reason_code == "scalp_impulse_outside_allowed_session"
+  assert asia_activation.allowed
+  assert asia_activation.measured["session_quality"] < 1.0
 
   london_activation = evaluate_scalp_activation(
     opp,
     london_ctx,
-    quote_bid=4594.9,
-    quote_ask=4595.1,
+    quote_bid=4593.5,
+    quote_ask=4593.6,
     quote_ts=1_780_003_600,
     now=1_780_003_600,
     pip_size=0.1,
@@ -1655,6 +2155,36 @@ def test_impulse_pullback_hard_gates_outside_london_session(monkeypatch):
 
   assert is_impulse_pullback_session_allowed("london", _cfg())
   assert not is_impulse_pullback_session_allowed("asia", _cfg())
+
+
+def test_impulse_pullback_all_session_preference_is_unrestricted():
+  cfg = _cfg()
+  cfg.strategies.scalping.archetypes.impulse_pullback_allowed_sessions = "all"
+
+  assert is_impulse_pullback_session_allowed("asia", cfg)
+  assert is_impulse_pullback_session_allowed("london", cfg)
+
+
+def test_m1_confirmation_is_directional_and_level_aware():
+  idx = pd.date_range("2026-09-18 10:00", periods=3, freq="1min", tz="UTC")
+  df = pd.DataFrame(
+    {
+      "open": [4000.0, 4000.2, 4000.4],
+      "high": [4000.4, 4000.6, 4001.0],
+      "low": [3999.8, 4000.0, 4000.3],
+      "close": [4000.2, 4000.4, 4000.8],
+    },
+    index=idx,
+  )
+  confirmation = confirm_m1_execution(
+    df, direction="BUY", level=4000.5, tolerance=0.3, lookback_bars=2,
+  )
+  assert confirmation is not None
+  assert confirmation["bar_ts"] == int(idx[-1].timestamp())
+  assert confirmation["close"] == pytest.approx(4000.8)
+  assert confirm_m1_execution(
+    df, direction="SELL", level=4000.5, tolerance=0.3, lookback_bars=2,
+  ) is None
 
 
 def _assert_scalp_stop_invariant(opp: ScalpOpportunity, *, pip_size: float = 0.1) -> None:
@@ -1716,7 +2246,7 @@ def test_detect_impulse_pullback_returns_pullback_extreme():
 def test_impulse_pullback_stop_uses_pullback_extreme_not_origin(monkeypatch):
   from app.scalping.strategies import discover_impulse_pullback
 
-  # Origin is ~80 pips away; pullback extreme is local (~15 pips).
+  # Origin is ~80 pips away; the M5 demand zone is the level reference.
   match = {
     "pattern": "impulse_pullback",
     "direction": "BUY",
@@ -1727,6 +2257,10 @@ def test_impulse_pullback_stop_uses_pullback_extreme_not_origin(monkeypatch):
     "retracement": 0.45,
     "preferred": True,
     "close": 4050.0,
+    "impulse_len": 80.0,
+    "body_dominance": 0.8,
+    "mean_impulse_body": 2.0,
+    "mean_pullback_body": 0.5,
   }
   monkeypatch.setattr(
     "app.scalping.strategies.detect_impulse_pullback",
@@ -1758,6 +2292,9 @@ def test_impulse_pullback_stop_uses_pullback_extreme_not_origin(monkeypatch):
     session="london",
     permitted_archetypes=(ARCHETYPE_IMPULSE_PULLBACK,),
     atr=2.0,
+    m1_atr=1.0,
+    zones=({"bottom": 4048.0, "top": 4049.0, "side": "demand",
+            "touches": 3, "mitigated": False, "score": 5.0},),
   )
   flat = _drift_bars(direction="BUY", step=0.0, start=4050.0)
   found = discover_impulse_pullback(
@@ -1768,7 +2305,8 @@ def test_impulse_pullback_stop_uses_pullback_extreme_not_origin(monkeypatch):
   _assert_scalp_stop_invariant(opp)
   origin_stop_pips = (opp.trigger_price - (match["origin"] - 0.2)) / 0.1
   assert opp.expected_stop_pips < origin_stop_pips * 0.5
-  assert abs(opp.invalidation_price - match["pullback_extreme"]) < 1.0
+  assert opp.key_level == pytest.approx(4048.0)
+  assert opp.invalidation_price < opp.key_level
 
 
 def test_scalp_stop_invariant_holds_for_all_archetypes(monkeypatch):
@@ -1786,7 +2324,7 @@ def test_scalp_stop_invariant_holds_for_all_archetypes(monkeypatch):
     "pattern": "sweep_reclaim",
     "direction": "BUY",
     "bar_ts": 1_780_003_600,
-    "extreme": 3999.0,
+    "extreme": 3999.8,
     "close": 4001.0,
     "edge": 4000.0,
   }
@@ -1842,6 +2380,10 @@ def test_scalp_stop_invariant_holds_for_all_archetypes(monkeypatch):
     "retracement": 0.5,
     "preferred": True,
     "close": 4000.0,
+    "impulse_len": 40.0,
+    "body_dominance": 0.8,
+    "mean_impulse_body": 2.0,
+    "mean_pullback_body": 0.5,
   }
   monkeypatch.setattr(
     "app.scalping.strategies.detect_impulse_pullback",
@@ -1873,6 +2415,9 @@ def test_scalp_stop_invariant_holds_for_all_archetypes(monkeypatch):
     session="london",
     permitted_archetypes=(ARCHETYPE_IMPULSE_PULLBACK,),
     atr=2.0,
+    m1_atr=1.0,
+    zones=({"bottom": 3998.0, "top": 3999.0, "side": "demand",
+            "touches": 3, "mitigated": False, "score": 5.0},),
   )
   pb_found = discover_impulse_pullback(
     pb_ctx, None, flat, _cfg(), pip_size=pip, now=1_780_003_600, idle_reasons=idle,
@@ -2009,12 +2554,13 @@ def test_structural_stop_above_maximum_rejects_with_idle_reason(monkeypatch):
 def test_structural_stop_below_minimum_widens_invalidation_outward(monkeypatch):
   from app.scalping.strategies import discover_range_sweep
 
-  # BUY: extreme almost at entry → structural << minimum → floor to 12.
+  # BUY: the noise-scaled buffer keeps the structural stop above the old
+  # minimum floor instead of letting the 12-pip floor determine the result.
   buy_ev = {
     "pattern": "sweep_reclaim",
     "direction": "BUY",
     "bar_ts": 1_780_003_600,
-    "extreme": 4000.5,
+    "extreme": 3999.8,
     "close": 4001.0,
     "edge": 4000.0,
   }
@@ -2057,12 +2603,11 @@ def test_structural_stop_below_minimum_widens_invalidation_outward(monkeypatch):
   )
   assert len(found) == 1
   opp = found[0]
-  assert opp.expected_stop_pips == pytest.approx(12.0)
+  assert opp.expected_stop_pips == pytest.approx(24.5)
   _assert_scalp_stop_invariant(opp)
-  buffer = max(0.2, ctx.atr * 0.05)
+  buffer = _stop_buffer(ctx, _cfg(), 0.1)
   raw_stop_price = float(buy_ev["extreme"]) - buffer
-  # Widened invalidation is further below entry than the raw structural price.
-  assert opp.invalidation_price < raw_stop_price
+  assert opp.invalidation_price == pytest.approx(raw_stop_price)
   assert opp.invalidation_price < opp.trigger_price
 
   # SELL: same floor — invalidation moves further above entry.
@@ -2070,7 +2615,7 @@ def test_structural_stop_below_minimum_widens_invalidation_outward(monkeypatch):
     "pattern": "sweep_reclaim",
     "direction": "SELL",
     "bar_ts": 1_780_003_600,
-    "extreme": 4099.5,
+    "extreme": 4100.2,
     "close": 4099.0,
     "edge": 4100.0,
   }
@@ -2112,23 +2657,23 @@ def test_structural_stop_below_minimum_widens_invalidation_outward(monkeypatch):
   )
   assert len(sell_found) == 1
   sell_opp = sell_found[0]
-  assert sell_opp.expected_stop_pips == pytest.approx(12.0)
+  assert sell_opp.expected_stop_pips == pytest.approx(24.5)
   _assert_scalp_stop_invariant(sell_opp)
-  sell_buffer = max(0.2, sell_ctx.atr * 0.05)
+  sell_buffer = _stop_buffer(sell_ctx, _cfg(), 0.1)
   raw_sell_stop = float(sell_ev["extreme"]) + sell_buffer
-  assert sell_opp.invalidation_price > raw_sell_stop
+  assert sell_opp.invalidation_price == pytest.approx(raw_sell_stop)
   assert sell_opp.invalidation_price > sell_opp.trigger_price
 
 
 def test_structural_stop_inside_envelope_leaves_fields_untouched(monkeypatch):
   from app.scalping.strategies import discover_range_sweep
 
-  # atr=2 → buffer=0.1; extreme 3999 → stop_price=3998.9; structural=21.
+  # The M1/spread buffer is used consistently for the in-envelope case.
   buy_ev = {
     "pattern": "sweep_reclaim",
     "direction": "BUY",
     "bar_ts": 1_780_003_600,
-    "extreme": 3999.0,
+    "extreme": 3999.8,
     "close": 4001.0,
     "edge": 4000.0,
   }
@@ -2171,7 +2716,7 @@ def test_structural_stop_inside_envelope_leaves_fields_untouched(monkeypatch):
   )
   assert len(found) == 1
   opp = found[0]
-  buffer = max(0.2, ctx.atr * 0.05)
+  buffer = _stop_buffer(ctx, _cfg(), 0.1)
   raw_stop_price = float(buy_ev["extreme"]) - buffer
   zone_low = float(ctx.active_range_low) - buffer
   zone_high = float(ctx.active_range_low) + buffer * 2

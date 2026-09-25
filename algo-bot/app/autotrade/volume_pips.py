@@ -6,7 +6,7 @@ never planned TP %, configured close %, estimated pips, or broker money PnL.
 
 from __future__ import annotations
 
-from typing import Iterable, Sequence
+from typing import Sequence
 
 
 def round_pips(value: float) -> float:
@@ -69,19 +69,3 @@ def trade_net_pips(
   return round_pips(pip_volume / float(initial_filled_volume))
 
 
-def accumulate_pip_volume(
-  existing_pip_volume: float,
-  leg_pips_value: float,
-  actual_closed_volume: float,
-) -> float:
-  return float(existing_pip_volume) + float(leg_pips_value) * float(
-    actual_closed_volume
-  )
-
-
-def remaining_after_close(
-  initial_filled_volume: float,
-  closed_volumes: Iterable[float],
-) -> float:
-  closed = sum(float(item) for item in closed_volumes)
-  return max(0.0, float(initial_filled_volume) - closed)

@@ -26,7 +26,7 @@ LIVE_SYMBOL = "XAU"
 
 
 def _instrument_allows_scalping(instrument_cfg: Any) -> bool:
-  """M1 scalping hosts: gold (including technique fixed_rr) — never FX books.
+  """Scalping hosts: gold (including technique fixed_rr) — never FX books.
 
   Live 2026-08-20: treating every live instrument as scalp-eligible ran M1
   cycles on EURUSD/GBPJPY/GBPUSD/USDJPY together with XAU, pegged the
@@ -168,6 +168,30 @@ def is_impulse_pullback_session_allowed(session: str, cfg: Any | None) -> bool:
   return str(session or "").casefold() in allowed
 
 
+def scalp_session_quality(
+  archetype: str,
+  session: str,
+  cfg: Any | None,
+) -> float:
+  """Return a soft session preference in ``[0, 1]``; never a gate.
+
+  The legacy impulse session list remains useful as a research preference,
+  but it must not silence a structurally valid setup. Other archetypes have
+  no inherited session preference: their own M5/M1 evidence owns quality.
+  """
+  from app.scalping.models import ARCHETYPE_IMPULSE_PULLBACK
+
+  if archetype != ARCHETYPE_IMPULSE_PULLBACK:
+    return 1.0
+  value = str(session or "").casefold()
+  if not value or value == "unknown":
+    return 0.65
+  allowed = impulse_pullback_allowed_sessions(cfg)
+  if allowed is None:
+    return 1.0
+  return 1.0 if value in allowed else 0.70
+
+
 def _enabled_scalp_archetypes(cfg: Any | None) -> frozenset[str]:
   arch = getattr(
     getattr(getattr(cfg, "strategies", None), "scalping", None),
@@ -264,6 +288,10 @@ def build_scalp_context_snapshot(
   htf_bias: str = "unknown",
   m5_structure: str = "range",
   regime: str = "range",
+  m1_atr: float = 0.0,
+  key_levels: tuple[dict[str, Any], ...] = (),
+  zones: tuple[dict[str, Any], ...] = (),
+  measured: dict[str, Any] | None = None,
 ) -> ScalpContextSnapshot | None:
   """Build an immutable M5 context. Fail closed for non-live / malformed."""
   if not is_scalping_symbol(symbol, cfg):
@@ -339,10 +367,14 @@ def build_scalp_context_snapshot(
     session=session,
     permitted_archetypes=permitted,
     atr=float(atr or 0.0),
+    m1_atr=float(m1_atr or 0.0),
+    key_levels=tuple(key_levels),
+    zones=tuple(zones),
     measured={
       "active_lookback": active_lookback,
       "price": float(price),
       "dealing_zone": None if dr is None else dr.zone,
+      **(measured or {}),
     },
   )
 

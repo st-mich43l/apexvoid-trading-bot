@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace ApexVoid.CTraderFeed;
@@ -32,6 +33,30 @@ public static class TradePlanContract
     EntryTypeLimitLadder,
     EntryTypeMarketWithLimitScale,
   };
+
+  /// <summary>
+  /// Whether a ladder/scale leg fires as an immediate market order rather
+  /// than a resting limit - shared by TradePlanExecutionEngine's pre-submit
+  /// slippage gate and TradePlanRuntime's actual submission so the two
+  /// never disagree. An explicit order_type wins (market_with_limit_scale's
+  /// L1 must be market); otherwise falls back to marketable-limit
+  /// detection (a resting limit already priced through the live quote
+  /// would fill immediately anyway).
+  /// </summary>
+  public static bool LegUsesMarketOrder(
+    string? orderType, decimal legPrice, bool buy, decimal bid, decimal ask
+  )
+  {
+    if (string.Equals(orderType, OrderTypeMarket, StringComparison.OrdinalIgnoreCase))
+    {
+      return true;
+    }
+    if (string.Equals(orderType, OrderTypeLimit, StringComparison.OrdinalIgnoreCase))
+    {
+      return false;
+    }
+    return buy ? legPrice >= ask : legPrice <= bid;
+  }
 }
 
 public sealed class TradePlanContractException : Exception
@@ -57,7 +82,96 @@ public sealed record TradePlanAnalysis(
   int? ConfluenceV1 = null,
   int? ConfluenceV2 = null,
   double? ConfluenceV2Raw = null,
-  string? ConfluenceScoringVersion = null
+  string? ConfluenceScoringVersion = null,
+  // 2026-09 (owner: "collect data 2 weeks to see if order that has good
+  // math quality can process well than other or not") - descriptive
+  // detection-time telemetry (fib retracement ratio hit, momentum
+  // velocity/acceleration, dealing-range premium/discount position),
+  // never a gate. Republished onto AutoTradeEvent (Models.cs) so
+  // Postgres can correlate it with the eventual fill/outcome.
+  double? MathFibRatio = null,
+  double? MathVelocity = null,
+  double? MathAcceleration = null,
+  double? MathPd = null,
+  // v2 (2026-09) redefined MathAcceleration as a true per-bar second
+  // derivative (was a bare velocity delta) - distinguishes legacy (null/1)
+  // from v2 rows so replay/analysis never silently mixes the populations.
+  int? MathFeatureVersion = null,
+  // MAD v2 context telemetry - descriptive only, never a gate. Republished
+  // onto AutoTradeEvent (Models.cs) the same way as the Math* fields above.
+  // See algo-bot/app/analysis/mad_phase.py MadPhaseSnapshot/MadAffinityScore.
+  int? MadVersion = null,
+  string? MadPhase = null,
+  double? MadConfidence = null,
+  double? MadAffinity = null,
+  string? MadDirection = null,
+  string? MadSweepSide = null,
+  bool? MadReclaim = null,
+  double? MadRangeQualityAtr = null,
+  double? MadBreakDistanceAtr = null,
+  double? MadDisplacementAtr = null,
+  int? MadAcceptanceCloses = null,
+  double? MadSweepPenetrationAtr = null,
+  double? MadReclaimDepthAtr = null,
+  string? MadReasonCode = null,
+  // Candle Confirmation V2 context telemetry - descriptive only, never a
+  // gate. Republished onto AutoTradeEvent (Models.cs) the same way as the
+  // Math*/Mad* fields above. See algo-bot/app/analysis/candle_evidence.py
+  // CandleEvidence.
+  int? CandleVersion = null,
+  string? CandlePrimaryPattern = null,
+  string? CandlePatterns = null,
+  double? CandleFinalScore = null,
+  double? CandleBaseScore = null,
+  double? CandleSynergyBonus = null,
+  double? CandleRejectionScore = null,
+  double? CandleDisplacementScore = null,
+  double? CandleSequenceScore = null,
+  double? CandleBodyFraction = null,
+  double? CandleUpperWickFraction = null,
+  double? CandleLowerWickFraction = null,
+  double? CandleCloseLocation = null,
+  double? CandleBodyAtr = null,
+  double? CandleRangeAtr = null,
+  bool? CandleSweep = null,
+  double? CandleSweepPenetrationAtr = null,
+  bool? CandleReclaim = null,
+  double? CandleReclaimDepthAtr = null,
+  bool? CandleEngulfing = null,
+  bool? CandleDoji = null,
+  double? CandleCompressionScore = null,
+  string? CandleSequenceName = null,
+  int? CandleSequenceBars = null,
+  // Opposing Structure V2 context telemetry (2026-09 Key Level repair) -
+  // descriptive only, never a gate. Republished onto AutoTradeEvent
+  // (Models.cs) the same way as the Math*/Mad*/Candle* fields above -
+  // double (not decimal), matching every other field in this record,
+  // including the other price/ATR-scaled ones (CandleBodyAtr etc.).
+  double? KeyLevelOpposingZoneLow = null,
+  double? KeyLevelOpposingZoneHigh = null,
+  string? KeyLevelOpposingZoneSide = null,
+  bool? OpposingZonePresent = null,
+  string? OpposingZoneSide = null,
+  double? OpposingZoneLow = null,
+  double? OpposingZoneHigh = null,
+  string? OpposingZoneTier = null,
+  double? OpposingZoneScore = null,
+  double? OpposingZoneStrength = null,
+  double? OpposingRawRoomPrice = null,
+  double? OpposingRoomPips = null,
+  double? OpposingRoomAtr = null,
+  double? OpposingRoomR = null,
+  bool? OpposingBeforeTp1 = null,
+  bool? OpposingDisplaced = null,
+  bool? OpposingMitigated = null,
+  double? OpposingRoomPressure = null,
+  double? OpposingRiskScore = null,
+  string? OpposingAction = null,
+  string? OpposingReasonCode = null,
+  // Full causal Trendline V2 evidence is kept as an opaque JSON object.  The
+  // executor must not reinterpret scanner geometry, but retaining it makes a
+  // V8 plan replayable after it crosses the Python/C# boundary.
+  JsonElement? TrendlineV2 = null
 );
 
 public sealed record TradePlanSourceStructure(

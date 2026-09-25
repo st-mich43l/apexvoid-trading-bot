@@ -87,9 +87,6 @@ class ResolvedRuntimeManifest(FrozenConfigModel):
   auto_trade: dict[str, Any]
   live_instruments: list[str]
 
-  def model_dump_manifest(self) -> dict[str, Any]:
-    return self.model_dump(by_alias=True, mode="python")
-
 
 def canonical_decimal(value: Any) -> str:
   """Invariant decimal string suitable for cross-language parity."""

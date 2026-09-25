@@ -18,8 +18,8 @@ from app.persistence.store import init_db, close_pool
 from app.signals.watcher import watcher_loop
 from app.signals.calendar import calendar_sync_loop
 from app.signals.weekly_report import weekly_report_loop
+from app.bot.owner_dm_journal import owner_dm_daily_wipe_loop
 from app.analysis.bar_event_dispatcher import bar_event_dispatcher_loop
-from app.analysis.market_map_delivery import market_map_scan_loop
 from app.autotrade.delivery import auto_trade_events_loop
 from app.autotrade.stats_ingestion import (
   auto_trade_stats_ingestion_loop,
@@ -32,7 +32,6 @@ from app.autotrade.zone_execution_cutover import (
   install_zone_execution_cutover,
   zone_watch_execution_loop,
 )
-from app.autotrade.setup_card import forming_price_track_loop
 from app.bot.client import edit_scanner_message_text
 from app.bot.telegram_actor import start_telegram_actor
 from app.autotrade.zone_execution_runtime import uninstall_zone_execution_cutover
@@ -142,17 +141,22 @@ async def main() -> None:
   _spawn_supervised("watcher_loop", watcher_loop)
   _spawn_supervised("calendar_sync_loop", calendar_sync_loop)
   _spawn_supervised("weekly_report_loop", weekly_report_loop)
+  _spawn_supervised("owner_dm_daily_wipe_loop", owner_dm_daily_wipe_loop)
   _spawn_supervised("bar_event_dispatcher_loop", bar_event_dispatcher_loop)
   _spawn_supervised("zone_watch_execution_loop", zone_watch_execution_loop)
-  _spawn_supervised("forming_price_track_loop", forming_price_track_loop)
   # strategy_match_ready_loop removed from production startup: ZoneWatch →
   # direct TradePlan is authoritative. Legacy parsers remain for one release.
   _spawn_supervised("setup_expiry_sweeper_loop", setup_expiry_sweeper_loop)
-  _spawn_supervised("market_map_scan_loop", market_map_scan_loop)
+  # market_map_scan_loop removed from production startup 2026-09
+  # (owner-directed Market Map purge): the periodic owner digest push is
+  # retired along with Market Map's role as a trading-decision input.
   _spawn_supervised("auto_trade_events_loop", auto_trade_events_loop)
   _spawn_supervised("auto_trade_stats_ingestion_loop", auto_trade_stats_ingestion_loop)
   _spawn_supervised("bridge_intents_loop", bridge_intents_loop)
   _spawn_supervised("reconcile_events_loop", reconcile_events_loop)
+  if runtime_config.analysis.technical_authority.consumer_enabled:
+    from app.analysis_client.consumer import analysis_opportunity_consumer_loop
+    _spawn_supervised("analysis_opportunity_consumer_loop", analysis_opportunity_consumer_loop)
   log.info("DB ready (PostgreSQL)")
   if not runtime_config.delivery.telegram.telegram_owner_id:
     log.warning(

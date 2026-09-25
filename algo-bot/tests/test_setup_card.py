@@ -134,7 +134,7 @@ async def test_concurrent_first_create_sends_only_one_telegram_root():
   card = await setup_card.load_forming_card(client, setup_id)
   assert card is not None
   assert card["message_id"] == 3946
-  assert "POSITION ACTIVATED" in card["text"]
+  assert "ORDER ACTIVATED" in card["text"]
 
 
 @pytest.mark.asyncio
@@ -162,8 +162,37 @@ async def test_edit_failure_falls_back_to_a_fresh_post():
   }
 
 
+@pytest.mark.asyncio
+async def test_forming_card_ttl_survives_a_weekend_not_just_a_day():
+  """Owner-reported live bug: a 24h TTL floor on the card's own identity
+  keys let a Friday fill's mapping expire mid-weekend with no further
+  event to refresh it, so Monday's first real event found no card and
+  posted a duplicate instead of threading onto the original. The floor
+  must comfortably outlive any realistic single silent gap.
+  """
+  client = redis_state.get_client()
+  await _confirmed_setup(client, "setup-ttl")
+  await setup_card.save_forming_card(
+    client, "setup-ttl", chat_id=123, message_id=4242, text="body",
+  )
+  await setup_card.save_forming_card_status(
+    client, "setup-ttl", "✅ <b>ORDER ACTIVATED</b>", state="order_filled",
+  )
+
+  message_ttl = await client.ttl(setup_card.forming_message_key("setup-ttl"))
+  root_ttl = await client.ttl(setup_card.telegram_root_message_key("setup-ttl"))
+  status_ttl = await client.ttl(setup_card.forming_status_key("setup-ttl"))
+
+  a_weekend = 3 * 24 * 3600
+  assert message_ttl > a_weekend
+  assert root_ttl > a_weekend
+  assert status_ttl > a_weekend
+
+
 def test_apply_forming_card_stop_does_not_duplicate_existing_stop():
-  """Card already has Stop after Key level — patch must not insert a second."""
+  """Card already has a Stop/SL line — patch must not insert a second, and
+  migrates a legacy "• <b>Stop:</b>" line to the current "🛡 SL:" format.
+  """
   original = "\n".join([
     "🔎 <b>XAU M5 · SETUP FORMING</b>",
     "• <b>Key level:</b> <b>4,034.85</b>",
@@ -172,20 +201,9 @@ def test_apply_forming_card_stop_does_not_duplicate_existing_stop():
     "🧭 <b>Context</b>",
   ])
   text = setup_card.apply_forming_card_stop(original, 4039.68)
-  assert text.count("• <b>Stop:</b>") == 1
-  assert "• <b>Stop:</b> <b>4,039.68</b>" in text
-
-
-def test_apply_forming_card_price_updates_live_line():
-  original = "\n".join([
-    "🔎 <b>XAU M5 · SETUP FORMING</b>",
-    "• <b>Price now:</b> <b>4,268.10</b> <i>(live)</i>",
-    "• <b>Entry zone:</b> <b>4,270.00–4,275.00</b>",
-  ])
-  text = setup_card.apply_forming_card_price(original, 4269.55)
-  assert "• <b>Price now:</b> <b>4,269.55</b> <i>(live)</i>" in text
-  assert setup_card.parse_forming_card_symbol(original) == "XAU"
-  assert setup_card.parse_forming_card_price_now(text) == pytest.approx(4269.55)
+  assert text.count("🛡 SL:") == 1
+  assert "• <b>Stop:</b>" not in text
+  assert "🛡 SL:     <b>4,039.68</b>" in text
 
 
 def test_should_stop_forming_price_track_after_activation():
@@ -239,7 +257,7 @@ def test_activated_header_stays_intact_on_terminal_status():
   """Close must not paint TERMINAL on the autotrade root card."""
   activated = "\n".join([
     "✅ <b>POSITION ACTIVATED · XAU M5</b>",
-    "🔴 <b>SELL · Key Level Reaction</b> · ⭐⭐",
+    "🔴 <b>SELL · Key Level</b> · ⭐⭐",
     "• <b>Price now:</b> <b>4,396.18</b> <i>(live)</i>",
   ])
   text = setup_card.apply_forming_card_status(
@@ -248,7 +266,7 @@ def test_activated_header_stays_intact_on_terminal_status():
   lines = text.splitlines()
   assert lines[0] == "✅ <b>POSITION ACTIVATED · XAU M5</b>"
   assert "TERMINAL" not in text
-  assert "SELL · Key Level Reaction" in text
+  assert "SELL · Key Level" in text
   assert "(live)" not in text
 
 
@@ -256,7 +274,7 @@ def test_forming_card_matches_strategy_detects_stale_body():
   text = "\n".join([
     "🔎 <b>XAU M5 · SETUP FORMING</b>",
     "🟢 <b>PLAN PUBLISHED</b>",
-    "🔴 <b>SELL · Key Level Reaction</b> · ⭐⭐",
+    "🔴 <b>SELL · Key Level</b> · ⭐⭐",
   ])
   match = SimpleNamespace(
     direction="BUY",
@@ -265,7 +283,7 @@ def test_forming_card_matches_strategy_detects_stale_body():
   assert setup_card.forming_card_matches_strategy(text, match) is False
   match_ok = SimpleNamespace(
     direction="SELL",
-    strategy="Key Level Reaction",
+    strategy="Key Level",
   )
   assert setup_card.forming_card_matches_strategy(text, match_ok) is True
 
@@ -277,90 +295,14 @@ def test_event_recovery_root_card_is_activated_on_fill():
     "message": "SELL 0.10 lots filled 4334.47",
     "strategy": "Impulse Pullback Scalp",
   })
-  assert text.splitlines()[0] == "✅ <b>POSITION ACTIVATED · XAU M1</b>"
+  assert text.splitlines()[0] == "✅ <b>ORDER ACTIVATED · XAU M1</b>"
   assert "SELL · Impulse Pullback Scalp" in text
-
-
-@pytest.mark.asyncio
-async def test_edit_forming_card_price_skips_tiny_move():
-  client = redis_state.get_client()
-  setup_id = "setup-price-live"
-  await _confirmed_setup(client, setup_id)
-  original = "\n".join([
-    "🔎 <b>XAU M5 · SETUP FORMING</b>",
-    "• <b>Price now:</b> <b>4,268.10</b> <i>(live)</i>",
-  ])
-  await setup_card.save_forming_card(
-    client,
-    setup_id,
-    chat_id=123,
-    message_id=901,
-    text=original,
-  )
-  edits: list[str] = []
-
-  async def edit_fn(chat_id, message_id, text):
-    edits.append(text)
-
-  changed = await setup_card.edit_forming_card_price(
-    client,
-    setup_id,
-    4268.15,
-    edit_fn=edit_fn,
-    min_move=0.1,
-  )
-  assert changed is False
-  assert edits == []
-  changed = await setup_card.edit_forming_card_price(
-    client,
-    setup_id,
-    4268.30,
-    edit_fn=edit_fn,
-    min_move=0.1,
-  )
-  assert changed is True
-  assert edits and "4,268.30" in edits[0]
-  members = await client.smembers(setup_card.FORMING_ACTIVE_INDEX_KEY)
-  assert setup_id.encode() in members or setup_id in {
-    (m.decode() if isinstance(m, bytes) else m) for m in members
-  }
-
-
-@pytest.mark.asyncio
-async def test_in_flight_forming_reservation_skips_price_track_and_index():
-  """message_id=0 reserves Redis during Telegram send — never edit Telegram."""
-  client = redis_state.get_client()
-  setup_id = "setup-inflight-reserve"
-  await _confirmed_setup(client, setup_id)
-  text = "🔎 <b>XAU M5 · SETUP FORMING</b>\n• <b>Price now:</b> <b>4,268.10</b>"
-  await setup_card.save_forming_card(
-    client, setup_id, chat_id=123, message_id=0, text=text,
-  )
-  members = await client.smembers(setup_card.FORMING_ACTIVE_INDEX_KEY)
-  normalized = {
-    (m.decode() if isinstance(m, bytes) else m) for m in (members or ())
-  }
-  assert setup_id not in normalized
-
-  edits: list[tuple[int, int, str]] = []
-
-  async def edit_fn(chat_id, message_id, text):
-    edits.append((chat_id, message_id, text))
-
-  assert await setup_card.edit_forming_card_price(
-    client, setup_id, 4268.50, edit_fn=edit_fn, min_move=0.1,
-  ) is False
-  assert edits == []
-  assert await setup_card.refresh_forming_card_prices(
-    client, edit_fn=edit_fn, min_move=0.1,
-  ) == 0
-  assert edits == []
 
 
 def test_parse_forming_card_symbol_from_position_activated_header():
   text = "\n".join([
     "✅ <b>POSITION ACTIVATED · GBPUSD M5</b>",
-    "🟢 <b>BUY · Key Level Reaction</b>",
+    "🟢 <b>BUY · Key Level</b>",
   ])
   assert setup_card.parse_forming_card_symbol(text) == "GBPUSD"
 
@@ -375,7 +317,7 @@ async def test_edit_forming_card_stop_uses_fx_digits_after_activation(monkeypatc
   await _confirmed_setup(client, setup_id)
   original = "\n".join([
     "✅ <b>POSITION ACTIVATED · GBPUSD M5</b>",
-    "🟢 <b>BUY · Key Level Reaction</b>",
+    "🟢 <b>BUY · Key Level</b>",
     "• <b>Stop:</b> <b>SL</b>",
   ])
   await setup_card.save_forming_card(
@@ -389,8 +331,8 @@ async def test_edit_forming_card_stop_uses_fx_digits_after_activation(monkeypatc
   assert await setup_card.edit_forming_card_stop(
     client, setup_id, 1.35806, edit_fn=edit_fn,
   )
-  assert "• <b>Stop:</b> <b>1.35806</b>" in edited[0]
-  assert "• <b>Stop:</b> <b>1.36</b>" not in edited[0]
+  assert "🛡 SL:     <b>1.35806</b>" in edited[0]
+  assert "🛡 SL:     <b>1.36</b>" not in edited[0]
 
 
 @pytest.mark.asyncio
@@ -422,7 +364,7 @@ async def test_apply_forming_card_stop_patches_trade_area_stop_line():
     client, "setup-stop", 4070.5, edit_fn=edit_fn,
   )
   text = edited[0][2]
-  assert "• <b>Stop:</b> <b>4,070.50</b>" in text
+  assert "🛡 SL:     <b>4,070.50</b>" in text
   assert "• <b>Stop:</b> <b>SL</b>" not in text
   assert "Copy draft" not in text
 
@@ -457,7 +399,7 @@ async def test_apply_forming_card_stop_still_patches_legacy_copy_draft_if_presen
     client, "setup-stop-legacy", 4070.5, edit_fn=edit_fn,
   )
   text = edited[0][2]
-  assert "• <b>Stop:</b> <b>4,070.50</b>" in text
+  assert "🛡 SL:     <b>4,070.50</b>" in text
   assert "/ sl 4070.50 /" in text
   assert "sl SL" not in text
 
@@ -510,7 +452,7 @@ async def test_position_activated_rewrites_the_stale_setup_forming_head():
   original = "\n".join([
     "🔎 <b>XAU M5 · SETUP FORMING</b>",
     "​",
-    "🔴 <b>SELL · Key Level Reaction</b> · ⭐⭐",
+    "🔴 <b>SELL · Key Level</b> · ⭐⭐",
   ])
   await setup_card.save_forming_card(
     client,
@@ -535,15 +477,15 @@ async def test_position_activated_rewrites_the_stale_setup_forming_head():
   assert changed
   text = edited[0][2]
   lines = text.splitlines()
-  assert lines[0] == "✅ <b>POSITION ACTIVATED · XAU M5</b>"
+  assert lines[0] == "✅ <b>ORDER ACTIVATED · XAU M5</b>"
   # Live incident: line[1] used to repeat the identical "POSITION
   # ACTIVATED" text the header now already says, reading as a duplicated
   # line. The header alone is enough. A blank placeholder line was tried
   # (an invisible-character-only line) but Telegram still renders that
   # at full line-height, showing a stray empty line under the header -
   # so the slot line is removed outright instead of blanked.
-  assert lines[1] == "🔴 <b>SELL · Key Level Reaction</b> · ⭐⭐"
-  assert text.count("POSITION ACTIVATED") == 1
+  assert lines[1] == "🔴 <b>SELL · Key Level</b> · ⭐⭐"
+  assert text.count("ORDER ACTIVATED") == 1
   assert "SETUP FORMING" not in text
 
 
@@ -561,7 +503,7 @@ async def test_second_fill_event_does_not_double_the_activated_header():
   original = "\n".join([
     "🔎 <b>XAU M5 · SETUP FORMING</b>",
     "​",
-    "🔴 <b>SELL · Trendline Reaction</b> · ⭐⭐",
+    "🔴 <b>SELL · Trendline</b> · ⭐⭐",
   ])
   await setup_card.save_forming_card(
     client,
@@ -592,8 +534,8 @@ async def test_second_fill_event_does_not_double_the_activated_header():
 
   assert len(edited) == 1, "second identical fill event should be a no-op edit"
   text = edited[0][2]
-  assert text.splitlines()[0] == "✅ <b>POSITION ACTIVATED · XAU M5</b>"
-  assert text.count("POSITION ACTIVATED") == 1
+  assert text.splitlines()[0] == "✅ <b>ORDER ACTIVATED · XAU M5</b>"
+  assert text.count("ORDER ACTIVATED") == 1
 
 
 @pytest.mark.asyncio
@@ -608,7 +550,7 @@ async def test_second_post_fill_status_replaces_not_stacks():
   original = "\n".join([
     "🔎 <b>XAU M5 · SETUP FORMING</b>",
     "​",
-    "🔴 <b>SELL · Trendline Reaction</b> · ⭐⭐",
+    "🔴 <b>SELL · Trendline</b> · ⭐⭐",
   ])
   await setup_card.save_forming_card(
     client,
@@ -645,9 +587,9 @@ async def test_second_post_fill_status_replaces_not_stacks():
   )
 
   final_lines = edited[-1][2].splitlines()
-  assert final_lines[0] == "✅ <b>POSITION ACTIVATED · XAU M5</b>"
+  assert final_lines[0] == "✅ <b>ORDER ACTIVATED · XAU M5</b>"
   assert final_lines[1] == "🎯 <b>TP1 HIT</b>"
-  assert final_lines[2] == "🔴 <b>SELL · Trendline Reaction</b> · ⭐⭐"
+  assert final_lines[2] == "🔴 <b>SELL · Trendline</b> · ⭐⭐"
   assert len(final_lines) == 3, "TP status must replace SL line, not stack"
 
 
@@ -747,7 +689,7 @@ async def test_kill_setup_card_leaves_root_body_intact(caplog):
   client = redis_state.get_client()
   original = "\n".join([
     "✅ <b>POSITION ACTIVATED · XAU M5</b>",
-    "🔴 <b>SELL · Key Level Reaction</b> · ⭐⭐",
+    "🔴 <b>SELL · Key Level</b> · ⭐⭐",
     "• <b>Price now:</b> <b>4,396.18</b> <i>(live)</i>",
   ])
   await setup_card.save_forming_card(
@@ -785,7 +727,7 @@ async def test_kill_setup_card_noop_edit_when_already_intact():
   client = redis_state.get_client()
   original = "\n".join([
     "✅ <b>POSITION ACTIVATED · XAU M5</b>",
-    "🔴 <b>SELL · Key Level Reaction</b>",
+    "🔴 <b>SELL · Key Level</b>",
   ])
   await setup_card.save_forming_card(
     client, "setup-not-mod-kill", chat_id=123, message_id=7777,
@@ -814,7 +756,6 @@ async def test_kill_setup_card_noop_edit_when_already_intact():
 
 @pytest.mark.asyncio
 async def test_kill_setup_card_deletes_when_forced(monkeypatch):
-  """Legacy delete path remains reachable only via explicit monkeypatch."""
   client = redis_state.get_client()
   monkeypatch.setattr(setup_card, "should_delete_root_on_terminal", lambda: True)
   await setup_card.save_forming_card(client, "setup-4", chat_id=123, message_id=5555)
@@ -839,6 +780,62 @@ async def test_kill_setup_card_deletes_when_forced(monkeypatch):
   assert deleted == [(123, 5555)]
   assert await setup_card.load_forming_card(client, "setup-4") is None
   assert await setup_card.load_forming_card_status(client, "setup-4") is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("state,line", [
+  ("order_filled", "✅ ORDER FILLED"),
+  ("tp_booked", "🎯 TP BOOKED"),
+  ("sl_moved", "🛡 GROUP STOP"),
+  ("terminal", "🏁 POSITION CLOSED"),
+])
+async def test_kill_setup_card_never_deletes_root_of_a_filled_trade(
+  monkeypatch, state, line,
+):
+  """Owner-reported 2026-09-21: delete_root_on_terminal removed the root of
+  scalps that had already filled, then the close reply (threaded to it) was
+  rejected and skipped - nothing was left in the channel for a real trade.
+  """
+  client = redis_state.get_client()
+  monkeypatch.setattr(setup_card, "should_delete_root_on_terminal", lambda: True)
+  sid = f"setup-filled-{state}"
+  await setup_card.save_forming_card(client, sid, chat_id=123, message_id=7777)
+  await setup_card.save_forming_card_status(client, sid, line, state=state)
+
+  async def delete_fn(chat_id, message_id):
+    raise AssertionError("a filled trade's root card must never be deleted")
+
+  async def edit_fn(chat_id, message_id, text):
+    pass
+
+  await setup_card.kill_setup_card(
+    client, sid, reason_code="position_closed",
+    delete_fn=delete_fn, edit_fn=edit_fn,
+  )
+
+  card = await setup_card.load_forming_card(client, sid)
+  assert card is not None
+  assert card["message_id"] == 7777
+
+
+@pytest.mark.asyncio
+async def test_kill_setup_card_retain_root_flag_overrides_delete_config(monkeypatch):
+  client = redis_state.get_client()
+  monkeypatch.setattr(setup_card, "should_delete_root_on_terminal", lambda: True)
+  await setup_card.save_forming_card(client, "setup-retain", chat_id=123, message_id=8888)
+
+  async def delete_fn(chat_id, message_id):
+    raise AssertionError("retain_root must skip the delete")
+
+  async def edit_fn(chat_id, message_id, text):
+    pass
+
+  await setup_card.kill_setup_card(
+    client, "setup-retain", reason_code="position_closed",
+    delete_fn=delete_fn, edit_fn=edit_fn, retain_root=True,
+  )
+
+  assert await setup_card.load_forming_card(client, "setup-retain") is not None
 
 
 @pytest.mark.asyncio
@@ -928,8 +925,8 @@ async def test_delete_on_terminal_disabled_retains_root_intact(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_delete_root_flag_true_still_retains(monkeypatch):
-  """Config delete flags are ignored — reject/expire leave body intact."""
+async def test_delete_root_flag_true_deletes_on_terminal(monkeypatch):
+  """delete_root_on_terminal=True makes reject/expire delete the root card."""
   client = redis_state.get_client()
   await setup_card.save_forming_card(
     client, "setup-del", chat_id=123, message_id=3333,
@@ -940,20 +937,18 @@ async def test_delete_root_flag_true_still_retains(monkeypatch):
   calls = []
 
   async def delete_fn(chat_id, message_id):
-    calls.append("delete")
+    calls.append(("delete", chat_id, message_id))
 
   async def edit_fn(chat_id, message_id, text):
-    calls.append("edit")
+    calls.append(("edit", chat_id, message_id))
 
   await setup_card.kill_setup_card(
     client, "setup-del", reason_code="expired",
     delete_fn=delete_fn, edit_fn=edit_fn,
   )
-  assert calls == []
-  assert await setup_card.load_telegram_root_message_id(client, "setup-del") == 3333
-  card = await setup_card.load_forming_card(client, "setup-del")
-  assert card is not None
-  assert "TERMINAL" not in card["text"]
+  assert calls == [("delete", 123, 3333)]
+  assert await setup_card.load_telegram_root_message_id(client, "setup-del") is None
+  assert await setup_card.load_forming_card(client, "setup-del") is None
 
 
 @pytest.mark.asyncio
@@ -975,7 +970,7 @@ async def test_identical_status_edit_is_a_local_successful_noop():
   text = "\n".join([
     "🔎 <b>XAU M5 · SETUP FORMING</b>",
     status,
-    "🔴 <b>SELL · Trendline Reaction</b>",
+    "🔴 <b>SELL · Trendline</b>",
   ])
   await setup_card.save_forming_card(
     client,
@@ -1017,7 +1012,7 @@ async def test_not_modified_status_edit_is_treated_as_success():
     text="\n".join([
       "🔎 <b>XAU M5 · SETUP FORMING</b>",
       "🟡 <b>QUEUED</b> · worker acknowledgement pending",
-      "🔴 <b>SELL · Trendline Reaction</b>",
+      "🔴 <b>SELL · Trendline</b>",
     ]),
   )
 
@@ -1051,7 +1046,7 @@ async def test_card_status_is_monotonic_after_plan_publication():
     text="\n".join([
       "🔎 <b>XAU M5 · SETUP FORMING</b>",
       "🟡 <b>QUEUED</b> · worker acknowledgement pending",
-      "🔴 <b>SELL · Trendline Reaction</b>",
+      "🔴 <b>SELL · Trendline</b>",
     ]),
   )
 
@@ -1147,8 +1142,9 @@ def _strategy_match_for_card(setup_id: str = "setup-publish-card") -> object:
     event_ts="2026-07-31T13:03:00+00:00",
     issued_at=1_785_502_980,
     expires_at=1_785_503_400,
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     strategy_mode="with_bias",
+    bias_relationship="with_bias",
     direction="BUY",
     key_level=4050.68,
     entry_low=4048.73,
@@ -1166,6 +1162,27 @@ def _strategy_match_for_card(setup_id: str = "setup-publish-card") -> object:
     reaction_type="sweep_reclaim",
     htf_bias="up (H1)",
   )
+
+
+def test_root_card_omits_bias_line_when_relationship_unknown():
+  from dataclasses import replace
+
+  match = replace(
+    _strategy_match_for_card("setup-neutral-bias"),
+    bias_relationship=None,
+  )
+  text = setup_card.format_plan_published_root_card(match, stop_price=4045.0)
+  assert "Bias:" not in text
+  assert "Mode:" not in text
+
+
+def test_root_card_omits_candle_confirmation_v2_line_when_absent():
+  # Older cached matches / non-M5-structural setups have no candle_*
+  # telemetry at all - the card must render exactly as it did before.
+  match = _strategy_match_for_card("setup-no-candle-v2")
+  text = setup_card.format_plan_published_root_card(match, stop_price=4045.0)
+  assert "Candle Quality" not in text
+  assert "🕯" not in text
 
 
 def test_fx_root_card_uses_instrument_price_digits(monkeypatch):
@@ -1192,32 +1209,53 @@ def test_fx_root_card_uses_instrument_price_digits(monkeypatch):
     match, stop_price=1.36380,
   )
   assert "1.36–1.36" not in text
-  assert "1.36447" in text
-  assert "1.36420–1.36480" in text
-  assert "1.36380" in text
+  assert "1.3642 - 1.3648" in text
+  assert "1.3638" in text
   assert setup_card.card_price_digits("GBPUSD") == 5
-  assert setup_card.card_min_price_move("GBPUSD") == pytest.approx(0.0001)
 
 
 def test_root_card_shows_target_prices_with_pip_offsets():
+  # This file's ambient runtime_config has no registered instruments, so
+  # the configured-R-multiple lookup can't resolve and falls back to the
+  # plain pip offset -- see test_fx_one_to_two.py for the R-multiple path
+  # exercised against a real production-shaped instrument config.
   match = _strategy_match_for_card("setup-tp-levels")
   text = setup_card.format_plan_published_root_card(
     match,
     stop_price=4045.0,
     target_prices=(4050.73, 4052.73, 4054.73),
   )
-  assert "Targets" in text
-  assert "TP1 4,050.73 (+20)" in text
-  assert "TP2 4,052.73 (+40)" in text
-  assert "TP3 4,054.73 (+60)" in text
+  # XAU rounds to a whole number for display (4050.73 -> 4,051, etc.).
+  assert "💰 TP1:   <b>4,051</b>  ·  <b>+20</b>" in text
+  assert "💰 TP2:   <b>4,053</b>  ·  <b>+40</b>" in text
+  assert "💰 TP3:   <b>4,055</b>  ·  <b>+60</b>" in text
+
+
+def test_root_card_target_r_multiple_lookup_never_crashes_on_unknown_symbol():
+  # Live 2026-09-07 regression risk: an unregistered/unresolvable symbol
+  # used to raise EffectiveInstrumentError straight out of the R-multiple
+  # lookup instead of falling back to the pip display.
+  from dataclasses import replace
+
+  match = replace(
+    _strategy_match_for_card("setup-unknown-symbol"), symbol="NOTASYMBOL",
+  )
+  text = setup_card.format_plan_published_root_card(
+    match,
+    stop_price=4045.0,
+    target_prices=(4050.73, 4052.73, 4054.73),
+  )
+  assert "💰 TP1:   <b>4,050.73</b>  ·  <b>+" in text
+  assert "R</b>" not in text
 
 
 def test_root_card_falls_back_to_targets_pips_ladder():
+  """No absolute TP prices known yet - still one labeled line per level."""
   match = _strategy_match_for_card("setup-tp-pips")
   text = setup_card.format_plan_published_root_card(match, stop_price=4045.0)
-  assert "Targets" in text
-  assert "+20 / +40 / +60 pips" in text
-  assert "TP1" not in text
+  assert "💰 TP1:   <b>+20 pips</b>" in text
+  assert "💰 TP2:   <b>+40 pips</b>" in text
+  assert "💰 TP3:   <b>+60 pips</b>" in text
 
 
 def test_fx_root_card_shows_target_levels_with_instrument_digits(monkeypatch):
@@ -1244,9 +1282,9 @@ def test_fx_root_card_shows_target_levels_with_instrument_digits(monkeypatch):
     stop_price=1.36380,
     target_prices=(1.36620, 1.36820, 1.37020),
   )
-  assert "TP1 1.36620 (+20)" in text
-  assert "TP2 1.36820 (+40)" in text
-  assert "TP3 1.37020 (+60)" in text
+  assert "💰 TP1:   <b>1.3662</b>  ·  <b>+20</b>" in text
+  assert "💰 TP2:   <b>1.3682</b>  ·  <b>+40</b>" in text
+  assert "💰 TP3:   <b>1.3702</b>  ·  <b>+60</b>" in text
   assert "1.36 " not in text  # must not collapse FX to 2dp
 
 
@@ -1289,14 +1327,14 @@ async def test_ensure_plan_published_root_card_creates_missing_card():
   assert "SETUP FORMING" not in text
   assert "PLAN PUBLISHED" not in text
   assert "waiting market fill" in text
-  assert "Trade area" in text
-  assert "Price now" in text
-  assert "Entry zone" in text
-  assert "Key level" in text
-  assert "Stop" in text
-  assert "Targets" in text
-  assert "+20 / +40 / +60 pips" in text
-  assert "Context" in text
+  assert "⚡️ Entry Zone:" in text
+  # Scanner-only diagnostics dropped per the shared entry-card design.
+  assert "Key level" not in text
+  assert "🛡 SL:" in text
+  assert "💰 TP1:   <b>+20 pips</b>" in text
+  assert "💰 TP2:   <b>+40 pips</b>" in text
+  assert "💰 TP3:   <b>+60 pips</b>" in text
+  assert "Context" not in text
   assert "Identity" not in text
   assert "Kind:" not in text
   assert "Copy draft" not in text
@@ -1391,8 +1429,8 @@ async def test_ensure_plan_published_root_card_threads_tp_sl_close_replies(monke
   assert len(calls) == 3
   assert all(c[1]["reply_to"] == 6060 for c in calls)
   assert "🎯" in calls[0][0] and "TP1" in calls[0][0]
-  assert any("BE" in text or "Trail" in text or "Stop" in text for text, _ in calls)
-  assert "POSITION CLOSED" in calls[-1][0]
+  assert any("move SL" in text for text, _ in calls)
+  assert "closed —" in calls[-1][0]
   assert "TP3" in calls[-1][0] or "+81.0" in calls[-1][0]
   # position_closed sweeps every still-open manage message (the TP1 and
   # BE/trail messages) from a Redis set, which has no defined order.
@@ -1515,9 +1553,9 @@ async def test_ensure_plan_published_patches_targets_onto_scanner_card(monkeypat
   assert message_id == 555
   card = await setup_card.load_forming_card(client, setup_id)
   assert card is not None
-  assert "Targets" in card["text"]
+  assert "TP1:" in card["text"]
   assert "1.15892" in card["text"]
-  assert any("Targets" in text for text in edited)
+  assert any("TP1:" in text for text in edited)
 
 
 @pytest.mark.asyncio
@@ -1531,7 +1569,7 @@ async def test_ensure_plan_published_root_card_edits_existing_status_only():
   original = "\n".join([
     "🔎 <b>XAU M5 · SETUP FORMING</b>",
     "🟡 <b>QUEUED</b> · worker acknowledgement pending",
-    "🟢 <b>BUY · Key Level Reaction</b>",
+    "🟢 <b>BUY · Key Level</b>",
   ])
   await setup_card.save_forming_card(
     client, setup_id, chat_id=123, message_id=777, text=original,
@@ -1564,9 +1602,9 @@ async def test_ensure_plan_published_root_card_edits_existing_status_only():
     "QUEUED" in text for _, _, text in edited
   )
   assert "PLAN PUBLISHED" not in card["text"]
-  # Match has targets_pips — publish must still surface a Targets line.
-  assert "Targets" in card["text"] or any(
-    "Targets" in text for _, _, text in edited
+  # Match has targets_pips — publish must still surface TP lines.
+  assert "TP1:" in card["text"] or any(
+    "TP1:" in text for _, _, text in edited
   )
 
 
@@ -1579,7 +1617,7 @@ async def test_ensure_plan_published_root_card_rewrites_mismatched_strategy_body
   original = "\n".join([
     "🔎 <b>XAU M5 · SETUP FORMING</b>",
     "🟡 <b>QUEUED</b> · worker acknowledgement pending",
-    "🔴 <b>SELL · Key Level Reaction</b>",
+    "🔴 <b>SELL · Key Level</b>",
   ])
   await setup_card.save_forming_card(
     client, setup_id, chat_id=123, message_id=888, text=original,
@@ -1603,5 +1641,5 @@ async def test_ensure_plan_published_root_card_rewrites_mismatched_strategy_body
   assert edited
   card = await setup_card.load_forming_card(client, setup_id)
   assert card is not None
-  assert "📈 <b>BUY · Key Level Reaction</b>" in card["text"]
+  assert "📈 <b>BUY · Key Level</b>" in card["text"]
   assert "PLAN PUBLISHED" not in card["text"]

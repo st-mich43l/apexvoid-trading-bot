@@ -62,22 +62,6 @@ CREATE INDEX IF NOT EXISTS idx_manual_signals_symbol_trade_date
 CREATE INDEX IF NOT EXISTS idx_manual_signals_parent_id
   ON manual_signals(parent_id);
 
--- Redis OHLC windows around manual /algo issued|filled|closed (formula fitting).
-CREATE TABLE IF NOT EXISTS manual_algo_charts (
-  id            BIGSERIAL PRIMARY KEY,
-  signal_id     BIGINT NOT NULL REFERENCES manual_signals(id),
-  event         TEXT   NOT NULL,
-  captured_at   BIGINT NOT NULL,
-  symbol        TEXT   NOT NULL,
-  timeframe     TEXT   NOT NULL,
-  window_start  BIGINT NOT NULL,
-  window_end    BIGINT NOT NULL,
-  bars          JSONB  NOT NULL,
-  UNIQUE (signal_id, event, timeframe)
-);
-CREATE INDEX IF NOT EXISTS idx_manual_algo_charts_signal
-  ON manual_algo_charts(signal_id, event);
-
 -- Broker fill ledger (scale-ins keep separate rows).
 CREATE TABLE IF NOT EXISTS auto_trade_fills (
   position_id       BIGINT PRIMARY KEY,

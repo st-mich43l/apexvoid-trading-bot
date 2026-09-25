@@ -250,6 +250,15 @@ public interface IAutoTradeStore
     string groupId,
     CancellationToken cancellationToken
   );
+  // Enumerable index of every group plan currently persisted - mirrors
+  // TrackedPositionsKey/GetTrackedPositionIdsAsync's pattern. Without this,
+  // an orphaned plan (submitted, never adopted into _states because the
+  // engine restarted before its fill/close events were seen) is
+  // undiscoverable: SaveGroupPlanAsync only ever wrote a bare keyed string,
+  // nothing enumerable pointed back at it.
+  Task<IReadOnlyList<string>> GetGroupPlanIdsAsync(
+    CancellationToken cancellationToken
+  ) => Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
   Task IncrementMetricAsync(
     string symbol,
     string metric,
@@ -956,23 +965,42 @@ public sealed class StackExchangeRedisSeriesCommands :
     return value.HasValue ? value.ToString() : null;
   }
 
-  public Task SaveGroupPlanAsync(
+  public async Task SaveGroupPlanAsync(
     AutoTradeGroupPlan plan,
     TimeSpan ttl,
     CancellationToken cancellationToken
-  ) => _db.StringSetAsync(
-    $"auto_trade:group_plan:{plan.GroupId}",
-    System.Text.Json.JsonSerializer.Serialize(
-      plan,
-      RedisJsonContext.Default.AutoTradeGroupPlan
-    ),
-    ttl
-  );
+  )
+  {
+    await _db.StringSetAsync(
+      $"auto_trade:group_plan:{plan.GroupId}",
+      System.Text.Json.JsonSerializer.Serialize(
+        plan,
+        RedisJsonContext.Default.AutoTradeGroupPlan
+      ),
+      ttl
+    );
+    await _db.SetAddAsync(GroupPlansKey, plan.GroupId);
+  }
 
-  public Task DeleteGroupPlanAsync(
+  public async Task DeleteGroupPlanAsync(
     string groupId,
     CancellationToken cancellationToken
-  ) => _db.KeyDeleteAsync($"auto_trade:group_plan:{groupId}");
+  )
+  {
+    await _db.KeyDeleteAsync($"auto_trade:group_plan:{groupId}");
+    await _db.SetRemoveAsync(GroupPlansKey, groupId);
+  }
+
+  public async Task<IReadOnlyList<string>> GetGroupPlanIdsAsync(
+    CancellationToken cancellationToken
+  )
+  {
+    var members = await _db.SetMembersAsync(GroupPlansKey);
+    return members
+      .Select(member => member.ToString())
+      .Where(id => !string.IsNullOrWhiteSpace(id))
+      .ToArray();
+  }
 
   public Task IncrementMetricAsync(
     string symbol,
@@ -1209,6 +1237,7 @@ public sealed class StackExchangeRedisSeriesCommands :
     $"auto_trade:position_missing:{positionId}";
 
   private const string TrackedPositionsKey = "auto_trade:positions";
+  private const string GroupPlansKey = "auto_trade:group_plans";
 
   private static string DailyKey(DateOnly date) =>
     $"auto_trade:daily:{date:yyyyMMdd}:trades";

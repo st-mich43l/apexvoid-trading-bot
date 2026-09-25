@@ -1,0 +1,456 @@
+# Shared Technical Primitives V2
+
+Phase S4 (`apexvoid-bot-prompts/rebuild-strategies.md` §23–26) builds the
+four remaining shared technical primitives several already-locked S2
+strategies depend on: Session levels, Fibonacci/Dealing Range, Key Level,
+and Trendline. Each domain lands as its own commit/PR, in the order the
+phase's own plan set (simplest → most complex), so a partial S4 is always
+a safe, complete, mergeable state — see
+[`analysis-engine-v2-migration.md`](../analysis-engine-v2-migration.md)
+for cross-domain status.
+
+**Status: Phase S4 complete. Session, Fib/Dealing Range, Key Level, and
+Trendline are integrated as independent canonical market-fact domains.**
+
+## Session (`internal/session`)
+
+Ports `algo-bot/app/analysis/session_liquidity.py`: UTC session windows
+(Asia/London/NY), prior-day (PDH/PDL) and prior-week (PWH/PWL) extreme
+levels, and their sweep status. Adds one piece with no Python
+equivalent: classifying which session the latest closed bar falls in —
+this is what finally populates `context.SessionContext`, an honest empty
+placeholder (`SessionContext{Name string}`) since Phase S3's own
+foundation task.
+
+### Contract
+
+```go
+type Level struct {
+	Name    string        // ASIA_H/ASIA_L/LONDON_H/LONDON_L/NY_H/NY_L/PDH/PDL/PWH/PWL
+	Price   market.Price
+	Time    int64         // the extreme candle's own Time
+	Swept   bool
+	SweptAt *int64
+}
+
+type State struct {
+	Levels []Level
+	Active string // ASIA/LONDON/NY — the latest closed bar's session
+}
+
+func Update(candles []market.Candle, cfg Config) State
+```
+
+Pure and causal, the same contract every other domain package's
+`Update` follows: only ever reads the `candles` given to it.
+
+### Levels
+
+- **Session extremes** (`ASIA_H`/`ASIA_L`/`LONDON_H`/`LONDON_L`/`NY_H`/
+  `NY_L`): the two most recently **closed** occurrences of each UTC
+  window, walking backward through that window's calendar dates. A
+  window whose close time is still after the latest candle is still
+  forming and is never reported — ports `_session_extremes`'s
+  `if close_ts > last_ts: continue` guard exactly.
+- **PDH/PDL**: the trading day immediately before the current one,
+  rolled over at `analysis.sessions.daily_rollover_utc_hour` (21 UTC,
+  Python's real default). Requires at least two distinct trading days to
+  exist — the still-open current trading day is never reported as
+  "previous."
+- **PWH/PWL**: the calendar week (Monday 00:00 UTC boundaries)
+  immediately before the week the latest candle falls in. Ports
+  `previous_week_levels`'s own conservative guard exactly: the very
+  *first* candle in the given window must reach back to (or before) that
+  prior week's own start, or PWH/PWL are withheld entirely — even when
+  some in-window data exists, a dataset that doesn't reach the week's
+  true start is not trusted to report its extreme.
+
+### Sweep detection
+
+A level is swept by the first later candle (`Time` strictly after the
+level's own close time) whose high exceeds it (a high level) or low
+undercuts it (a low level) — ports `_swept_ts` exactly, including its
+most easily-missed property: the scan runs over **every** later candle
+in the given window, not just the same session's own future occurrences.
+A later session's own extreme can and does sweep an earlier, unrelated
+level — verified directly in `test/session/session_test.go`'s cross-
+session sweep case.
+
+### One difference from production, by design
+
+Production computes PWH/PWL once per symbol from a single representative
+timeframe's frame (`engine.py::_weekly_session_levels`), not once per
+timeframe, before folding it into the same flat `session_levels` list
+`session_levels(df, cfg)` produces. This package's `Update` computes
+every level — including PWH/PWL — per timeframe instead, consistent with
+every other field this package returns and with how every other Go
+domain package (`structure.Update`, `zone.Update`, `liquidity.Update`)
+is architected: one pure function of one timeframe's own candle window.
+A higher timeframe with less stored history simply produces fewer (or
+no) PWH/PWL levels — the same honest behavior Python's own single-frame
+call would have if that frame lacked two weeks of history.
+
+### Config
+
+`analysis.sessions.*` (`config/analysis.yml`):
+
+| Leaf | Value | Source |
+|---|---|---|
+| `asia_start` | 22 | pre-existing |
+| `london_start` | 7 | pre-existing |
+| `ny_start` | 13 | pre-existing |
+| `daily_rollover_utc_hour` | 21 | Phase S4 — `MarketDataSessionsConfig`'s real Pydantic schema default |
+
+### Dependency rank
+
+`session` sits at rank 1, alongside `indicator`/`marketdata`/`config` —
+**not** rank 3 with `zone`/`liquidity` (and Fib/Key Level/Trendline,
+S4's remaining domains). It needs only candles and timestamps; its
+Python source never imports `swings.py`/`structure.py` either. See
+[`architecture/dependency-rules.md`](../architecture/dependency-rules.md)'s
+fifth amendment.
+
+## Fibonacci / Dealing Range (`internal/fib`)
+
+Ports `algo-bot/app/analysis/fibonacci.py` and `dealing_range.py`, kept
+as one Go package since Python keeps them as directly-coupled siblings
+(`fib_from_swings` calls `dealing_range.py::swing_range_pair` directly,
+and `dealing_range()` calls back into `fib_zone_label`).
+
+### Contract
+
+```go
+type Level struct {
+	Ratio float64
+	Price market.Price
+	Kind  LevelKind // KindRetracement | KindExtension
+}
+
+func Ladder(low, high market.Price, includeExtensions bool) []Level
+func NearestLevel(levels []Level, price, atr market.Price, epsilonATR float64, kinds ...LevelKind) (Level, bool)
+
+type DealingRange struct {
+	High, Low, Equilibrium market.Price
+	Position                float64
+	Zone                    string // "discount" | "eq" | "premium"
+	FibZone                 string // "deep_discount" | "discount" | "eq" | "premium" | "deep_premium"
+}
+
+func Resolve(swings []structure.Swing, price market.Price, cfg Config) (DealingRange, bool)
+
+type State struct {
+	Ladder []Level
+	Range  *DealingRange
+}
+
+func Update(candles []market.Candle, swings []structure.Swing, cfg Config) State
+```
+
+Pure and causal, the same contract every other domain package's
+`Update` follows: only ever reads the `candles`/`swings` given to it.
+
+### Ladder
+
+Retracement ratios `0.236/0.382/0.5/0.618/0.786` measured back down from
+`high` toward `low`; extension ratios `1.0/1.272/1.618` anchored at `low`
+(so `1.0` reproduces `high` itself) — `fibonacci.py`'s exact
+`RETRACEMENT_RATIOS`/`EXTENSION_RATIOS`, not a guess (an earlier session
+note had wrongly guessed `0.705`/`0.718`, which actually belong to a
+different, technique-specific fib usage in `technique_geometry.py`, out
+of this package's scope).
+
+### Bracketing swing pair
+
+Both the ladder and the dealing range are built from the **same**
+bracketing search (`swingRangePair`, called once by `Update`) — ports
+`swing_range_pair`'s own two-step search exactly:
+
+1. **Bracketing pair** (`_bracketing_pair`): scanning backward from the
+   most recent swing, the first opposite-kind pair (checked in that same
+   backward order) whose `[low,high]` actually contains price.
+2. **Fallback — last opposing pair** (`_last_opposing_pair`): if no pair
+   brackets price, the most recent swing paired with the nearest earlier
+   swing of the opposite kind, regardless of whether price falls inside
+   it — `Resolve`'s own `Position` then clamps to `[0,1]` at that pair's
+   edge.
+
+Verified directly in `test/fib/dealing_range_test.go`'s own case: an
+older pair that genuinely brackets price wins over the most-recent
+swing's own (non-bracketing) opposite, exactly matching
+`_bracketing_pair`'s scan order rather than a naive "always use the last
+two swings" shortcut.
+
+### Dealing range zones
+
+`Resolve` reports two labels at once: a coarse `Zone`
+(`discount`/`eq`/`premium`, using `EqHalfBand` around the 0.5 midpoint)
+and a finer `FibZone` (`deep_discount`/`discount`/`eq`/`premium`/
+`deep_premium`, using `DeepDiscount`/`DeepPremium` — 0.382/0.618, the
+same ratios as the 38.2%/61.8% retracement levels themselves) — ports
+`dealing_range()`'s coarse zone and `fib_zone_label()`'s fine zone
+exactly, including that both use the SAME half-band value (`dealing_range()`
+halves its own `eq_band` once and passes the result to both).
+
+### Config
+
+`analysis.fibonacci.*` (`config/analysis.yml`), all four leaves newly
+surfaced at their real Python function-default values — no
+`trading-bot.yml` or Pydantic-schema precedent existed before this
+phase:
+
+| Leaf | Value | Source |
+|---|---|---|
+| `epsilon_atr` | 0.15 | `nearest_fib()`'s own default |
+| `deep_discount` | 0.382 | `fib_zone_label()`'s own default |
+| `deep_premium` | 0.618 | `fib_zone_label()`'s own default |
+| `eq_half_band` | 0.05 | `dealing_range()`'s own `eq_band=0.10` default, pre-halved (see `Config.EqHalfBand`'s own comment) |
+
+### Dependency rank
+
+`fib` joins `zone`/`liquidity` at rank 3 — it needs `structure.Swing.Kind`/
+`.Price` directly for the bracketing search, the same situation that
+already promoted `zone`/`liquidity` above `structure`. See
+[`architecture/dependency-rules.md`](../architecture/dependency-rules.md)'s
+fifth amendment (`fib` joins `zone`/`liquidity` at rank 3).
+
+## Key Level (`internal/keylevel`)
+
+Ports `algo-bot/app/analysis/levels.py` (price-clustered key levels) and
+`key_level_role.py` (pure closed-bar role classification), kept as one
+Go package since Python keeps them logically paired even though
+`Role`'s real production call sites source their `kind` argument from
+several different vocabularies, not only `levels.py`'s own `Level.kind`.
+
+### Contract
+
+```go
+type Level struct {
+	Price    market.Price
+	Kind     Kind // KindReaction | KindRound
+	Touches  int
+	Band     float64
+	Strength float64
+}
+
+func Cluster(candles []market.Candle, atr float64, swings []structure.Swing, cfg Config) []Level
+func Update(candles []market.Candle, atrSeries []float64, swings []structure.Swing, cfg Config) State
+
+type RoleKind uint8 // Support | Resistance | Ambiguous | BrokenSupport | BrokenResistance
+
+func Role(kind string, bandLow, bandHigh market.Price, closes []float64, breakoutAcceptBars int) RoleKind
+```
+
+`Cluster`/`Update` are pure and causal, the same contract every other
+domain package's `Update` follows. `Role` is a standalone pure function
+— not wired into the per-timeframe engine pipeline, since it needs a
+live per-signal band and `breakoutAcceptBars` a future strategy supplies
+(S7), the same reasoning the phase's own plan gives for leaving
+`breakoutAcceptBars` uncached.
+
+### Clustering
+
+`Cluster` ports `key_levels()` in full: price-sorted greedy clustering
+of swings (`_price_clusters`/`_can_join_cluster`'s dual gate — a
+candidate must be within `tolerance` of **every** existing cluster
+member, AND the cluster's total span stays within
+`tolerance*MaximumClusterSpanMultiple`, even when every individual
+pairwise gap would otherwise qualify — verified directly in
+`test/keylevel/cluster_test.go` with a constructed chain that clears
+every pairwise gap but not the span cap), a round-number price scan
+(`_round_levels`), a sorted-adjacent dedupe merge, and optional
+wick-touch re-enrichment (`_with_wick_touches`/`wick_touch_episodes`) —
+real OHLC overlap counted as touch **episodes** (a multi-bar dwell in
+the band counts once), not a raw per-bar count, when `Update`/`Cluster`
+are given candles.
+
+### One documented ATR simplification
+
+`key_levels()` reads ATR two different ways in the same function:
+clustering tolerance uses `atr_scalar()` (the **median** of the whole
+ATR series), while `_round_levels()`'s per-swing touch check uses
+`atr_at()` (that swing's **own bar's** ATR value). This package uses
+**one** canonical scalar ATR — the same "current/last value" convention
+`structure.Update`/`zone.Update`/`liquidity.Update`/`fib.Update` already
+use — for both. `Update` passes `atrSeries`'s last value into `Cluster`.
+Documented here and in `internal/keylevel/doc.go` rather than silently
+diverging from Python's own two-different-ATR-reads behavior.
+
+### Role
+
+`Role` ports `key_level_role.py::classify_key_level_role` exactly,
+including one real omission: Python's own `level_price` parameter is
+declared but never read anywhere in the function body (confirmed by
+reading the full source) — not ported, rather than carrying dead surface
+area forward. Explicit support/resistance semantics (substring-matched
+from `kind` — "support"/"low" or "resist"/"high", case-insensitive)
+remain authoritative until `breakoutAcceptBars` **consecutive** closes
+(counted from the most recent, backward) accept beyond the opposite
+edge; an accepted break is always reported as a `Broken*` role, never
+silently reinterpreted as the plain opposite role in place — "Break &
+Retest owns any later flip; Key Level must not reinterpret it," still
+true after the S2 catalog's Break & Retest → Trendline merge.
+
+### Config
+
+`analysis.key_levels.*` (`config/analysis.yml`), all four leaves newly
+surfaced at their real Python function-default values — no
+`trading-bot.yml` or Pydantic-schema precedent existed before this
+phase:
+
+| Leaf | Value | Source |
+|---|---|---|
+| `cluster_atr` | 0.5 | `key_levels()`'s own `level_cluster_atr` default |
+| `round_step` | 5.0 | `key_levels()`'s own `round_step` default |
+| `minimum_touches` | 2 | `key_levels()`'s own `min_touches` default |
+| `maximum_cluster_span_multiple` | 2.0 | `key_levels()`'s own `max_cluster_span_multiple` default |
+
+`breakout_accept_bars` for `Role` stays a caller-supplied parameter, no
+default to carry forward — it already was in Python.
+
+### Dependency rank
+
+`keylevel` joins `zone`/`liquidity`/`fib` at rank 3 — it needs
+`structure.Swing.Kind`/`.Price` directly for
+the clustering search. See
+[`architecture/dependency-rules.md`](../architecture/dependency-rules.md)'s
+seventh amendment (`keylevel` joins `zone`/`liquidity` at rank 3).
+
+## Trendline (`internal/trendline`)
+
+Ports `algo-bot/app/analysis/trendline_v2.py`'s causal construction
+(`build_causal_trendlines`) and live-interaction classifier
+(`evaluate_live_interaction`) — the largest and most complex of S4's four
+domains. V1 (`trendlines.py::_trendlines_v1`, an all-pairs brute-force
+fit) is confirmed dead/shadow-metrics-only in production
+(`analysis.trendlines.version: v2` is the live setting) and is **not**
+ported.
+
+### The central invariant: immutable anchors
+
+A line's two anchor pivots (A/B) never change once chosen. A later pivot
+(C) can **validate** the A/B projection — becoming a `ValidationTouch` —
+but can never be promoted into a new anchor that redraws the line around
+B. `Build` only ever pairs **chronologically adjacent** confirmed pivots
+as anchor candidates, never a later, non-adjacent re-pairing.
+`test/trendline/build_test.go`'s
+`TestBuildOnlyPairsChronologicallyAdjacentPivots` proves this directly:
+three swings whose direct first-to-last slope would be accepted, but
+whose two individual adjacent slopes are each rejected, must yield zero
+lines — if `Build` ever tried the non-adjacent pair, this would produce
+one.
+
+### Contract
+
+```go
+type Trendline struct {
+	Kind Kind // KindSupport | KindResistance
+	AnchorA, AnchorB string // structure.Swing.ID references
+	AnchorAIndex, AnchorBIndex int // candle index within the window Build was given
+	Slope, Intercept, SlopeATRPerBar float64
+	State State // Candidate | Tentative | Confirmed | Exhausted | Degraded | Broken
+	ValidationTouches []ValidationTouch
+	WickViolations, CloseViolations int
+	BrokenAt *int64
+	ViolationReclaimed bool
+	SpanBars int
+	Exhausted bool
+}
+
+func ValueAt(tl Trendline, index int) market.Price
+func Build(candles []market.Candle, atrSeries []float64, swings []structure.Swing, cfg Config) []Trendline
+func Update(candles []market.Candle, atrSeries []float64, swings []structure.Swing, cfg Config) TrendlineState
+
+func EvaluateInteraction(candles []market.Candle, tl Trendline, atr float64, cfg Config) Interaction
+```
+
+`Build`/`Update` are pure and causal, the same contract every other
+domain package follows. `EvaluateInteraction` — like `keylevel.Role` —
+stays a standalone pure function, not part of the per-timeframe engine
+pipeline: it needs a live per-signal ATR reading a future strategy
+supplies at S7, and is explicitly a read-only interaction classifier,
+never an entry signal ("a reclaimed test still needs a new trigger" —
+Python's own docstring).
+
+### Coordinates are candle index, not wall-clock time
+
+A line's `Slope`/`Intercept` are in price-per-**bar**, not price-per-
+second — matching Python's own DataFrame integer-position coordinate
+exactly. A weekend gap between two candles does not distort the line,
+because bar count, not calendar time, is what's measured. This means a
+`Trendline`'s geometry is only meaningful against the SAME candles window
+(same index-0 origin) it was built from — which holds automatically
+here, since `Build` recomputes every line from scratch on every closed
+bar from the full stored candle window, the same "no incremental state"
+contract every other domain package's `Update` already follows.
+
+### Health, lifecycle, and one real state-machine quirk
+
+`computeHealth` scans **every** bar (not just pivot points) from just
+after anchor B to the end of the given candles for wick penetration and
+close violations. "Broken" is defined by an **unresolved close
+violation** — never by a wick alone, however deep; a wick violation the
+same bar's close recovers from marks `ViolationReclaimed` but does not
+break the line (`test/trendline/build_test.go`'s
+`TestHealthWickViolationAloneDoesNotBreakTheLine`/
+`TestHealthUnresolvedCloseViolationBreaksTheLine` prove both halves of
+this directly). `State` carries `StateCandidate` as a named value, but —
+confirmed by reading the real Python control flow — `candidateFromAnchors`
+always overrides it with `Exhausted`/`Confirmed`/`Tentative` whenever
+health's own state is not `Broken`/`Degraded`. A `Trendline` this package
+returns therefore never actually carries `StateCandidate`; the enum
+names the complete conceptual state space Python's `_Health`/`Trendline`
+pair describes, not a gap in this port.
+
+### Validation touches defer until their reaction window fully closes
+
+`measureValidation` only counts a touch once `pivot.confirmed_index +
+validation_reaction_bars` worth of bars have actually closed — a partial
+reaction window is deferred, never counted early. This is the core
+causality guard for validations specifically (on top of `Build`'s own
+immutable-anchor guarantee); proven directly in
+`test/trendline/build_test.go`'s
+`TestMeasureValidationDefersUntilReactionWindowFullyCloses` and, at the
+whole-domain level, in `test/trendline/causality_test.go`.
+
+### One faithfully-ported ATR choice, not simplified
+
+Unlike `internal/keylevel`'s deliberate ATR simplification (documented
+there), `Build` ports `atr_scalar`'s real behavior exactly: the
+**median** of the whole ATR series, not its last value. Computing a
+median in Go is cheap and mechanically simple (unlike `keylevel`'s
+per-swing `atr_at()` lookup, real added plumbing complexity) — and a
+long-lived structural object like a trendline benefits from the same
+stability against one volatile bar that Python's own choice already
+buys. See `internal/trendline/build.go`'s `medianATR`, which also ports
+`atr_scalar`'s real two-stage validation exactly: only NaN is dropped
+per-element (matching pandas' own `dropna()`), and the finite/positive
+check applies to the **final** median only, not each element.
+
+### Config
+
+`analysis.trendlines.*` (`config/analysis.yml`) — twelve leaves already
+existed (this phase adds no new meaning to them); six more
+(`minimum_slope_atr` through `dedup_slope_percent`) existed only as
+Python `getattr()` fallback-default names in `_settings()`, never real
+YAML keys, added here at those same real fallback values:
+
+| Leaf | Value | Source |
+|---|---|---|
+| `minimum_slope_atr` | 0.02 | `_settings()`'s own fallback default |
+| `maximum_slope_atr` | 0.15 | `_settings()`'s own fallback default |
+| `minimum_touch_spacing_bars` | 3 | `_settings()`'s own fallback default |
+| `minimum_span_bars` | 20 | `_settings()`'s own fallback default |
+| `dedup_value_atr` | 0.5 | `_settings()`'s own fallback default |
+| `dedup_slope_percent` | 0.2 | `_settings()`'s own fallback default |
+
+`chop_minimum_validation_touches`/`chop_require_htf_aligned` already
+exist in YAML but are confirmed dead (zero reads in `trendline_v2.py`) —
+left alone, out of scope for this phase.
+
+### Dependency rank
+
+`trendline` joins `zone`/`liquidity`/`fib`/`keylevel` at rank 3 —
+`Build`'s causal anchor construction needs
+`structure.Swing.Kind`/`.Price`/`.Time`/`.ConfirmedAt` directly. See
+[`architecture/dependency-rules.md`](../architecture/dependency-rules.md)'s
+eighth amendment (`trendline` joins `zone`/`liquidity` at rank 3).

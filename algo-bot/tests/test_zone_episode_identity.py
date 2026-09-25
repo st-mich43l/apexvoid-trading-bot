@@ -196,6 +196,14 @@ def test_opposing_supply_zone_unlocks_the_sell_the_naive_guess_missed():
 
   assert result is not None
   assert result.direction == "SELL"
+  # 2026-09 (Opposing Structure V2 repair, §15/16): the SAME zone that
+  # unlocked SELL here is threaded onto the result as its own telemetry,
+  # distinct from (but sourced from the same structural authority as) the
+  # later room-level opposing_* fields evaluate_structural_target_room
+  # computes at the actionability stage.
+  assert result.key_level_opposing_zone_low == 98.0
+  assert result.key_level_opposing_zone_high == 102.0
+  assert result.key_level_opposing_zone_side == "supply"
 
 
 def test_mitigated_opposing_zone_does_not_unlock_the_other_direction():

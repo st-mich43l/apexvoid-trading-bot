@@ -74,6 +74,7 @@ SESSION_LEVEL_SCORE = 2.0
 PD_POSITION_SCORE = 2.0
 GRAB_A_SCORE = 2.0
 TRENDLINE_SCORE = 1.5
+_FLIP_EPS = 1e-9
 
 log = logging.getLogger(__name__)
 
@@ -124,6 +125,19 @@ def supply_demand(df: pd.DataFrame, legs: list[Leg]) -> list[Zone]:
       origin_index=origin,
       created_ts=df.index[origin],
       source="supply_demand",
+      # 2026-09 (owner-reported production incident): without this,
+      # mark_mitigation's scan starts at origin_index+1 == leg.start - the
+      # OWN first bar of the impulsive leg that created this zone, whose
+      # wick almost always still overlaps [bottom, top] since it begins
+      # immediately adjacent to it. That marked essentially every zone
+      # mitigated on its own formation bar, before any genuine retest -
+      # confirmed live at 100% (203/204 sampled zones) across symbols and
+      # timeframes, leaving the opposing-barrier pool empty everywhere.
+      # order_blocks() already avoids this via break_index=bos.index
+      # (scan starts once the break is CONFIRMED); mirror that here with
+      # the leg's own end bar, so mitigation scanning starts only once the
+      # displacement leg has finished moving away, not on its first bar.
+      break_index=leg.end,
     ))
   return zones
 
@@ -185,10 +199,46 @@ def breaker_blocks(order_blocks: list[Zone], df: pd.DataFrame) -> list[Zone]:
   return zones
 
 
-def flip_zones(levels: list[Level], breaks: list[Break]) -> list[Zone]:
+def flip_zones(
+  levels: list[Level],
+  breaks: list[Break],
+  df: pd.DataFrame,
+  *,
+  accept_bars: int = 2,
+  max_break_age_bars: int | None = None,
+  band_body_fraction: float = 0.5,
+  metric_sink=None,
+  symbol: str | None = None,
+  timeframe: str | None = None,
+) -> list[Zone]:
+  required = max(1, int(accept_bars))
+  closes = df["close"].astype(float).tolist()
+
+  def _accepted(index: int, level_price: float, direction: str) -> bool:
+    if index < 0 or index + required > len(closes):
+      return False
+    for offset in range(required):
+      close = closes[index + offset]
+      if direction == "up" and not close > level_price:
+        return False
+      if direction == "down" and not close < level_price:
+        return False
+    return True
+
   zones: list[Zone] = []
   seen: set[tuple[float, str]] = set()
   for item in breaks:
+    if (
+      max_break_age_bars is not None
+      and len(closes) - 1 - item.index > int(max_break_age_bars)
+    ):
+      if metric_sink is not None:
+        metric_sink("flip_zone_break_expired", symbol, {"tf": timeframe})
+      continue
+    if not _accepted(item.index, item.level, item.direction):
+      if metric_sink is not None:
+        metric_sink("flip_zone_break_not_accepted", symbol, {"tf": timeframe})
+      continue
     for level in levels:
       if abs(item.level - level.price) > max(level.band, 0.0):
         continue
@@ -196,17 +246,49 @@ def flip_zones(levels: list[Level], breaks: list[Break]) -> list[Zone]:
       key = (round(level.price, 6), side)
       if key in seen:
         continue
-      seen.add(key)
-      zones.append(Zone(
-        bottom=level.price - level.band,
-        top=level.price + level.band,
+      band = max(level.band, 0.0)
+      if item.direction == "up":
+        bottom = level.price
+        top = level.price + band
+      else:
+        bottom = level.price - band
+        top = level.price
+      row = df.iloc[item.index]
+      body = abs(float(row["close"]) - float(row["open"]))
+      width = max(top - bottom, body * float(band_body_fraction))
+      if item.direction == "up":
+        top = bottom + width
+      else:
+        bottom = top - width
+      zone = Zone(
+        bottom=bottom,
+        top=top,
         side=side,
         origin_index=item.index,
         created_ts=item.ts,
         source="flip_zone",
         break_kind=item.kind,
         break_index=item.index,
-      ))
+      )
+      invalid_anchor = (
+        not math.isfinite(zone.bottom)
+        or not math.isfinite(zone.top)
+        or (
+          side == "demand"
+          and zone.bottom < level.price - _FLIP_EPS
+        )
+        or (
+          side == "supply"
+          and zone.top > level.price + _FLIP_EPS
+        )
+        or zone.top - zone.bottom <= 0
+      )
+      if invalid_anchor:
+        if metric_sink is not None:
+          metric_sink("flip_zone_anchor_violation", symbol, {"tf": timeframe})
+        continue
+      seen.add(key)
+      zones.append(zone)
   return zones
 
 
@@ -223,17 +305,16 @@ def mark_mitigation(
   """
   stamped: list[Zone] = []
   end = len(df) if cutoff is None else max(0, min(cutoff, len(df)))
+  lows = df["low"].to_numpy(dtype=float)
+  highs = df["high"].to_numpy(dtype=float)
   for zone in zones:
-    touches = 0
-    in_touch = False
     start_from = zone.break_index if zone.break_index is not None else zone.origin_index
     start = max(0, start_from + 1)
-    for i in range(start, end):
-      row = df.iloc[i]
-      touched = float(row["low"]) <= zone.top and float(row["high"]) >= zone.bottom
-      if touched and not in_touch:
-        touches += 1
-      in_touch = touched
+    touches = 0
+    if start < end:
+      touched = (lows[start:end] <= zone.top) & (highs[start:end] >= zone.bottom)
+      # A touch is a run of consecutive touching bars: count rising edges.
+      touches = int(touched[0]) + int(((~touched[:-1]) & touched[1:]).sum())
     final_touches = max(touches, zone.touches)
     stamped.append(replace(
       zone,
@@ -241,6 +322,18 @@ def mark_mitigation(
       mitigated=zone.mitigated or final_touches > 0,
     ))
   return stamped
+
+
+def as_single_zones(zones: list[Zone]) -> list[Zone]:
+  """Unmerged zones shaped like merge_zones output (``sources`` populated).
+
+  The technique layer wants every zone with its OWN origin, touch history
+  and break. merge_zones stamps a composite with its earliest member's
+  origin, so a fresh zone that overlaps an old one is judged by the old
+  zone's history (XAU 2026-09-21: the 13:45 supply behind a -29 pt impulse
+  was absorbed into a 06:20 zone that price had since accepted above).
+  """
+  return [replace(zone, sources=_unique_sources([zone])) for zone in zones]
 
 
 def merge_zones(
@@ -743,7 +836,7 @@ def _has_grade_a_grab(
   pip_size: float = 0.1,
 ) -> bool:
   for grab in grabs:
-    if grab.grade != "A":
+    if grab.grade != "A" or grab.inducement:
       continue
     if zone.side == "demand" and grab.direction == "bull":
       if _pool_points_into_zone(zone, grab.pool, pip_size):
@@ -825,8 +918,15 @@ def _append_leg(
 
 
 def _causing_bos(leg: Leg, breaks: list[Break]) -> Break | None:
+  # Any structure break the impulse caused qualifies its origin candle as an
+  # order block. Owner-reported 2026-09-21: XAU M15 demand OB at 4337-42 (the
+  # last down candle before a +18 impulse) was never detected - and Order
+  # Block had never produced a single auto trade - because this only
+  # accepted "BOS". An impulse that reverses the prevailing trend breaks
+  # structure as a "CHoCH" (structure._break_kind), so every reversal OB - the
+  # most common kind - was thrown away.
   for item in breaks:
-    if item.kind != "BOS" or item.direction != leg.direction:
+    if item.kind not in ("BOS", "CHoCH") or item.direction != leg.direction:
       continue
     if leg.start <= item.index <= leg.end:
       return item

@@ -16,7 +16,7 @@ from app.signals import broadcast, trade_ops
 from app.persistence import store
 from app.core import symbols
 from app.bot import wiring
-from app.signals.pips_format import wing_icons
+from app.signals.pips_format import rr_entry, wing_icons
 
 
 VIP_ID = -100123456789
@@ -136,6 +136,187 @@ def test_tier_rendering_hides_public_id():
 
 
 @pytest.mark.no_database
+def test_render_entry_pins_tp_r_multiples_to_original_sl_not_trailed_stop():
+  """Live 2026-09-04: editing the pinned card after a stop trail re-ran
+  this with the now-current (near-BE) sl. R = TP-distance / risk, so as a
+  trailed stop shrinks risk toward zero every TP's R blows up (a 343.8R
+  line went out live on a real XAU SELL). Each TP's R must stay pinned to
+  the ORIGINAL risk - same convention _achieved_rr already uses for the
+  close line - while the SL/risk display itself still tracks the live
+  trail.
+  """
+  # XAU SELL 4420-4425 (entry_reference from rr_entry - the wider edge),
+  # original stop 4428 (risk 8 from that edge), now trailed to 4420.16.
+  signal = {
+    "daily_seq": 10,
+    "symbol": "XAU",
+    "action": "SELL",
+    "entry": 4420.0,
+    "entry_end": 4425.0,
+    "sl": 4420.16,
+    "original_sl": 4428.0,
+    "tps": [4414.0, 4407.0, 4398.0, 4384.0, 4365.0],
+  }
+
+  card = broadcast.render_entry(signal, "vip")
+
+  # XAU displays whole - the actual 4420.16 sl value still drives the pip
+  # math below unrounded (presentation-only rounding).
+  assert "SL:     <b>4,420</b>" in card
+  # risk is displayed in pips (0.16 price / 0.1 pip_size = 1.6, rounds to 2).
+  assert "risk <b>2 pips</b>" in card
+
+
+@pytest.mark.no_database
+def test_render_entry_shows_risk_in_pips_not_raw_price():
+  # Live 2026-09-10: the card showed "risk 8" for an $8.00 XAU stop
+  # distance - readers naturally read a bare number as pips, understating
+  # the real risk by 1/pip_size (10x for XAU's 0.1 pip). Every other pips
+  # figure this bot shows (loss/win, R-multiple denominators) already
+  # divides by pip_for() - this line must match.
+  signal = {
+    "daily_seq": 5,
+    "symbol": "XAU",
+    "action": "BUY",
+    "entry": 4398.0,
+    "entry_end": 4403.0,
+    "sl": 4395.0,
+    "tps": [4408.0],
+  }
+  card = broadcast.render_entry(signal, "vip")
+  # entry_reference (BUY) = entry_end = 4403; risk = 4403-4395 = 8.0 price
+  # = 80 pips, not "risk 8".
+  assert "risk <b>80 pips</b>" in card
+  assert "risk <b>8</b>" not in card
+  # The bug this guards: with the live (near-zero) risk instead, TP1 alone
+  # would have rendered as roughly 37R - assert that never appears.
+  assert "343.8R" not in card
+  assert "37.5R" not in card
+
+
+@pytest.mark.no_database
+def test_render_entry_ignores_broker_fill_and_keeps_zone_edge_risk():
+  """Owner 2026-09-14: 2026-09-10 briefly made the risk line prefer
+  broker_fill_price once known (signal #309: zone edge said "risk 60
+  pips", a fill at 4335.45 would recompute to 54) - the owner rejected
+  this, since it means the pinned card's numbers change out from under
+  readers after it's already posted. The card is a plan, not a live fill
+  ticker: it must always show the advertised zone-edge risk, fill or no
+  fill. Real accuracy belongs at close time only
+  (trade_ops._achieved_rr).
+  """
+  signal = {
+    "daily_seq": 4,
+    "symbol": "XAU",
+    "action": "BUY",
+    "entry": 4333.0,
+    "entry_end": 4336.0,
+    "sl": 4330.0,
+    "tps": [4339.0, 4342.0, 4348.0, 4354.0],
+  }
+  assert "risk <b>60 pips</b>" in broadcast.render_entry(signal, "vip")
+
+  signal["broker_fill_price"] = 4335.45
+  card = broadcast.render_entry(signal, "vip")
+  assert "risk <b>60 pips</b>" in card
+  assert "risk <b>54 pips</b>" not in card
+
+
+@pytest.mark.no_database
+def test_render_entry_tp_r_multiples_ignore_broker_fill_too():
+  """Owner 2026-09-14: same "the card is a plan, not a live fill ticker"
+  rule applies to the TP R-multiples (a brief 2026-09-11 fix had made
+  these prefer broker_fill_price too, for the same reason the risk line
+  briefly did in the previous test) - they must stay pinned to the
+  advertised zone edge and original_sl (never the live-trailing sl, per
+  the 2026-09-04 fix above) regardless of where the broker actually
+  filled.
+  """
+  signal = {
+    "daily_seq": 9,
+    "symbol": "XAU",
+    "action": "SELL",
+    "entry": 4350.0,
+    "entry_end": 4353.0,
+    "sl": 4356.0,
+    "original_sl": 4356.0,
+    "broker_fill_price": 4350.89,
+    "tps": [4347.0, 4344.0, 4338.0, 4332.0],
+  }
+  card = broadcast.render_entry(signal, "vip")
+  assert "risk <b>60 pips</b>" in card
+  assert "TP1:   <b>4,347</b>  ·  <b>0.5R</b>" in card
+  assert "TP2:   <b>4,344</b>  ·  <b>1.0R</b>" in card
+  assert "TP3:   <b>4,338</b>  ·  <b>2.0R</b>" in card
+  assert "TP4:   <b>4,332</b>  ·  <b>3.0R</b>" in card
+
+
+@pytest.mark.no_database
+def test_render_entry_falls_back_to_current_sl_when_never_trailed():
+  """A signal that hasn't trailed yet has no original_sl - must fall back
+  to the live sl so a first-post card (sl == the real original) is
+  unaffected by this fix.
+  """
+  signal = {
+    "daily_seq": 10,
+    "symbol": "XAU",
+    "action": "SELL",
+    "entry": 4420.0,
+    "entry_end": 4425.0,
+    "sl": 4428.0,
+    "tps": [4414.0],
+  }
+
+  card = broadcast.render_entry(signal, "vip")
+  # No original_sl yet - original_risk falls back to the live sl, same
+  # zone-edge entry render_entry always uses.
+  entry_reference = rr_entry(signal)
+  risk = abs(entry_reference - 4428.0)
+
+  assert broadcast._rr(4414.0, entry_reference, risk) in card
+
+
+@pytest.mark.no_database
+def test_manual_entry_card_shows_canonical_setup_and_confluence():
+  signal = {
+    "daily_seq": 7,
+    "symbol": "XAU",
+    "action": "BUY",
+    "entry": 2000.0,
+    "entry_end": 2002.0,
+    "sl": 1990.0,
+    "tps": [2010.0],
+    "setup_type": "key-level",
+    "confluence": 2,
+  }
+
+  vip = broadcast.render_entry(signal, "vip")
+  public = broadcast.render_entry(signal, "public")
+
+  assert "🏷 Setup:  <b>Key Level</b>  ⭐⭐" in vip
+  assert "🏷 Setup:  <b>Key Level</b>  ⭐⭐" in public
+  assert "#7" not in public
+
+
+@pytest.mark.no_database
+def test_manual_entry_card_preserves_unknown_setup_label_safely():
+  signal = {
+    "daily_seq": 7,
+    "symbol": "XAU",
+    "action": "BUY",
+    "entry": 2000.0,
+    "entry_end": 2002.0,
+    "sl": 1990.0,
+    "tps": [2010.0],
+    "setup_type": "Custom <setup>",
+  }
+
+  card = broadcast.render_entry(signal, "vip")
+
+  assert "🏷 Setup:  <b>Custom &lt;setup&gt;</b>" in card
+
+
+@pytest.mark.no_database
 def test_fx_manual_algo_entry_card_uses_entry_price_not_zone(monkeypatch):
   from tests.test_config_effective_instrument_context import _load_production_example
 
@@ -244,7 +425,7 @@ def test_partial_close_uses_clear_pips_without_at_sign():
 
   text = trade_ops.render_result(result, "XAU", "public")
 
-  assert text == "🎯 booked 50% · +100 pips 💸 · remaining 50%"
+  assert text == "🎯 +100 pips 💸"
   assert "@" not in text
 
 
@@ -263,11 +444,199 @@ def test_partial_close_with_tp_number_labels_which_target_was_hit():
   }
 
   assert trade_ops.render_result(result, "XAU", "vip") == (
-    "🎯 #7 TP1 booked 25% · +37 pips 💸 · remaining 75%"
+    "🎯 #7 TP1 +37 pips 💸"
   )
   assert trade_ops.render_result(result, "XAU", "public") == (
-    "🎯 TP1 booked 25% · +37 pips 💸 · remaining 75%"
+    "🎯 TP1 +37 pips 💸"
   )
+
+
+def test_achieved_rr_matches_reports_realized_r_convention():
+  # Entry 2000-2002 (midpoint 2001), original_sl 1990 - risk = 110 pips.
+  # +220 pips achieved is exactly 2R.
+  sig = {
+    "action": "BUY",
+    "entry": 2000.0,
+    "entry_end": 2002.0,
+    "sl": 1994.0,
+    "original_sl": 1990.0,
+    "symbol": "XAU",
+  }
+
+  assert trade_ops._achieved_rr(sig, 220) == "+2.0R"
+  assert trade_ops._achieved_rr(sig, -55) == "-0.5R"
+
+
+def test_achieved_rr_uses_original_sl_not_a_trailed_stop():
+  # sl has since trailed to break-even (2001) - risk must stay pinned to
+  # original_sl, or a trailed stop would inflate R toward infinity.
+  sig = {
+    "action": "BUY",
+    "entry": 2000.0,
+    "entry_end": 2002.0,
+    "sl": 2001.0,
+    "original_sl": 1990.0,
+    "symbol": "XAU",
+  }
+
+  assert trade_ops._achieved_rr(sig, 220) == "+2.0R"
+
+
+def test_achieved_rr_falls_back_to_sl_when_original_sl_missing():
+  sig = {
+    "action": "BUY",
+    "entry": 2000.0, "entry_end": 2002.0, "sl": 1990.0, "symbol": "XAU",
+  }
+
+  assert trade_ops._achieved_rr(sig, 220) == "+2.0R"
+
+
+def test_achieved_rr_none_when_risk_is_zero():
+  sig = {
+    "action": "SELL",
+    "entry": 2000.0, "entry_end": 2002.0, "sl": 2001.0, "symbol": "XAU",
+  }
+
+  assert trade_ops._achieved_rr(sig, 0) is None
+
+
+def test_achieved_rr_uses_the_deepest_legs_own_entry_not_the_peak_pips_leg():
+  # 2026-09 (owner-reported): "for pips archived, it must calculate from
+  # the deepest entry as well" - risk must be measured from the DEEPEST
+  # leg's own entry, not whichever leg happened to report the most pips.
+  # SELL zone 4100-4105: shallow=4100 (near edge, most likely to fill),
+  # deep=4105 (far edge, best sell price) per AutoTradeEngine.cs's
+  # ManualEntryLegPrices. Shallow books a big win (150p, the peak);
+  # deep gets stopped at BE (0p) after price reverses following the
+  # shallow win - a realistic "BE trails to deeper entry" outcome.
+  # Zone midpoint (4102.5) and the old peak-pips-tied lookup (4100, the
+  # SHALLOW leg) would both give the wrong, smaller risk. Correct: risk
+  # from the deep leg's own 4105 entry: |4105-4110| = 5.0 price = 50 pips
+  # -> 150/50 = 3.0R.
+  sig = {
+    "action": "SELL",
+    "entry": 4100.0,
+    "entry_end": 4105.0,
+    "sl": 4106.0,
+    "original_sl": 4110.0,
+    "symbol": "XAU",
+    "legs": [
+      {"frac": 0.8, "pips": 150, "entry_price": 4100.0},
+      {"frac": 0.2, "pips": 0, "entry_price": 4105.0},
+    ],
+  }
+
+  assert trade_ops._achieved_rr(sig, 150) == "+3.0R"
+
+
+def test_achieved_rr_falls_back_to_zone_when_no_leg_carries_entry_price():
+  # An older signal's legs predate entry_price - must not crash, and must
+  # fall back to the zone-midpoint convention rather than silently using
+  # an absent value.
+  sig = {
+    "action": "BUY",
+    "entry": 2000.0,
+    "entry_end": 2002.0,
+    "sl": 1994.0,
+    "original_sl": 1990.0,
+    "symbol": "XAU",
+    "legs": [{"frac": 1.0, "pips": 220, "ts": 1}],
+  }
+
+  assert trade_ops._achieved_rr(sig, 220) == "+2.0R"
+
+
+def test_achieved_rr_prefers_broker_fill_over_a_single_legs_bad_entry():
+  # Live 2026-09-10 (signal #293): a single-leg SELL closed -57 pips but
+  # showed -5.8R, not the correct ~-0.7R. AutoTradeEngine.cs's restart-gap
+  # orphan reconciliation (InvestigateOrphanedGroupPlanAsync) sets a leg's
+  # entry_price from broker deal-history reconstruction, which can disagree
+  # with the normal live-confirmed broker_fill_price. A single-leg trade's
+  # own entry can never legitimately differ from broker_fill_price, so a
+  # mismatch there is the signature of that less-reliable path - trust the
+  # live fill. |4390.16-4398| = 7.84 price = 78.4 pips -> -57/78.4 = -0.7R.
+  sig = {
+    "action": "SELL",
+    "entry": 4390.0,
+    "entry_end": 4395.0,
+    "sl": 4398.0,
+    "original_sl": 4398.0,
+    "symbol": "XAU",
+    "broker_fill_price": 4390.16,
+    "legs": [{"frac": 1.0, "pips": -57, "entry_price": 4397.02}],
+  }
+
+  assert trade_ops._achieved_rr(sig, -57) == "-0.7R"
+
+
+def test_achieved_rr_keeps_deepest_leg_for_genuine_multi_leg_trades():
+  # The broker_fill_price override above must not swallow the legitimate
+  # multi-leg deepest-entry convention: broker_fill_price is deliberately
+  # the group's SHALLOWEST (worst-case) leg there, not the deep leg this
+  # calc needs - see test_achieved_rr_uses_the_deepest_legs_own_entry_not_
+  # the_peak_pips_leg above. Only a single-leg mismatch is now overridden.
+  sig = {
+    "action": "SELL",
+    "entry": 4100.0,
+    "entry_end": 4105.0,
+    "sl": 4106.0,
+    "original_sl": 4110.0,
+    "symbol": "XAU",
+    "broker_fill_price": 4100.0,
+    "legs": [
+      {"frac": 0.8, "pips": 150, "entry_price": 4100.0},
+      {"frac": 0.2, "pips": 0, "entry_price": 4105.0},
+    ],
+  }
+
+  assert trade_ops._achieved_rr(sig, 150) == "+3.0R"
+
+
+def test_achieved_rr_keeps_deepest_leg_for_a_single_combined_group_close_record():
+  # Live 2026-09-15 (signal #358, real XAU SELL): finalize_manual_group
+  # appends exactly ONE legs record for a whole multi-leg group close (see
+  # store.finalize_manual_group) - a real 3-leg group's terminal SL close
+  # looks IDENTICAL to a genuine single-leg trade by leg count alone. The
+  # old len(legs) <= 1 trigger clobbered the now-correctly-computed deep
+  # leg's entry (GroupDeepestEntryPrice excludes the risk leg on the C#
+  # side) right back to broker_fill_price, which deliberately holds the
+  # group's SHALLOWEST leg, not the deep leg this calc needs. SELL zone
+  # 4278-4281, deep leg entry 4279.2 (inside the zone, correctly excluding
+  # the risk leg's ~4281.5) must NOT be overridden just because only one
+  # legs record exists. |4279.2-4283| = 3.8 price = 38 pips -> -38/38 = -1.0R.
+  sig = {
+    "action": "SELL",
+    "entry": 4278.0,
+    "entry_end": 4281.0,
+    "sl": 4283.0,
+    "original_sl": 4283.0,
+    "symbol": "XAU",
+    "broker_fill_price": 4278.03,
+    "legs": [{"frac": 1.0, "pips": -38, "entry_price": 4279.2}],
+  }
+
+  assert trade_ops._achieved_rr(sig, -38) == "-1.0R"
+
+
+def test_achieved_rr_still_overrides_a_risk_leg_tainted_single_record():
+  # The fix above must not swallow the real remaining bug: the manual/algo
+  # risk leg's own price sits outside the advertised zone (near the shared
+  # stop, same as signal #293's reconciliation artifact) - a single
+  # combined record referencing it (a pre-fix engine, or a genuine
+  # single-position anomaly) must still fall back to broker_fill_price.
+  sig = {
+    "action": "SELL",
+    "entry": 4278.0,
+    "entry_end": 4281.0,
+    "sl": 4283.0,
+    "original_sl": 4283.0,
+    "symbol": "XAU",
+    "broker_fill_price": 4278.03,
+    "legs": [{"frac": 1.0, "pips": -38, "entry_price": 4281.57}],
+  }
+
+  # |4278.03-4283| = 4.97 price = 49.7 pips -> -38/49.7 = -0.8R.
+  assert trade_ops._achieved_rr(sig, -38) == "-0.8R"
 
 
 def test_final_close_with_tp_number_labels_which_target_closed_it(monkeypatch):
@@ -464,3 +833,172 @@ def test_entry_vip_flag_is_standalone_and_defaults_both():
   scalp = wiring._parse_manual(base + " / scalp / vip")
   assert scalp["visibility"] == "vip"
   assert scalp["setup_type"] == "scalp"
+
+
+OWNER_ID = 555000111
+
+
+async def _personal_signal(tmp_path, monkeypatch):
+  await store.init_db()
+  record = await store.store_manual_signal(
+    1,
+    "BUY",
+    2000.0,
+    2000.0,
+    1990.0,
+    [2010.0],
+    symbol="XAU",
+    personal_trade=True,
+  )
+  return await store.get_manual_signal(record["id"])
+
+
+@pytest.mark.asyncio
+async def test_broadcast_entry_personal_trade_dms_owner_not_channel(
+  tmp_path,
+  monkeypatch,
+  dual_channels,
+):
+  install_runtime_overrides(
+    monkeypatch, legacy_overrides={"telegram_owner_id": OWNER_ID},
+  )
+  signal = await _personal_signal(tmp_path, monkeypatch)
+  send = AsyncMock(return_value=SimpleNamespace(message_id=555))
+  monkeypatch.setattr(broadcast, "_send_message", send)
+
+  posts = await broadcast.broadcast_entry(signal)
+
+  send.assert_awaited_once()
+  assert send.await_args.args[1] == OWNER_ID
+  assert posts == [{
+    "signal_id": signal["id"],
+    "channel_id": OWNER_ID,
+    "message_id": 555,
+    "tier": "vip",
+  }]
+  stored = await store.get_signal_posts(signal["id"])
+  assert [(p["channel_id"], p["tier"]) for p in stored] == [(OWNER_ID, "vip")]
+  # Never touched the VIP/public channel ids.
+  assert VIP_ID not in {call.args[1] for call in send.await_args_list}
+  assert PUBLIC_ID not in {call.args[1] for call in send.await_args_list}
+
+
+@pytest.mark.asyncio
+async def test_fanout_update_on_personal_trade_replies_to_owner_dm(
+  tmp_path,
+  monkeypatch,
+  dual_channels,
+):
+  install_runtime_overrides(
+    monkeypatch, legacy_overrides={"telegram_owner_id": OWNER_ID},
+  )
+  signal = await _personal_signal(tmp_path, monkeypatch)
+  monkeypatch.setattr(
+    broadcast, "_send_message",
+    AsyncMock(return_value=SimpleNamespace(message_id=555)),
+  )
+  await broadcast.broadcast_entry(signal)
+  reply = AsyncMock(return_value=SimpleNamespace(message_id=556))
+  monkeypatch.setattr(broadcast, "_send_message", reply)
+
+  await broadcast.fanout_update(signal, lambda tier: f"{tier} update")
+
+  reply.assert_awaited_once()
+  assert reply.await_args.args[1] == OWNER_ID
+
+
+def test_1r_suffix_is_standalone_and_arms_execution_without_algo():
+  base = "gold sell 4100-4105 / sl 4110"
+
+  assert wiring._parse_manual(base)["personal_trade"] is False
+  parsed = wiring._parse_manual(base + " / 1r")
+  assert parsed["personal_trade"] is True
+  assert parsed["execution_mode"] == "algo"
+  assert len(parsed["tps"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_broadcast_entry_personal_trade_uses_scanner_bot_root_card_sender(
+  tmp_path,
+  monkeypatch,
+  dual_channels,
+):
+  # The root card for a /1r trade must go out via the scanner/algo bot
+  # (same identity every other algo-armed root card uses), never the main
+  # ApexVoid bot - the main bot stays the command-management surface only.
+  install_runtime_overrides(
+    monkeypatch, legacy_overrides={"telegram_owner_id": OWNER_ID},
+  )
+  signal = await _personal_signal(tmp_path, monkeypatch)
+  root_card_sender = AsyncMock(return_value=SimpleNamespace(message_id=555))
+  main_bot_sender = AsyncMock(
+    return_value=SimpleNamespace(message_id=999),
+  )
+  monkeypatch.setattr(
+    broadcast, "send_scanner_root_card_with_retry", root_card_sender,
+  )
+  monkeypatch.setattr(broadcast, "send_with_retry", main_bot_sender)
+
+  await broadcast.broadcast_entry(signal)
+
+  root_card_sender.assert_awaited_once()
+  assert root_card_sender.await_args.kwargs["chat_id"] == OWNER_ID
+  main_bot_sender.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_fanout_update_on_personal_trade_uses_scanner_bot_sender(
+  tmp_path,
+  monkeypatch,
+  dual_channels,
+):
+  # Every lifecycle reply on a /1r trade must reply through the same bot
+  # that sent the root card - reply_to_message_id is only valid inside the
+  # sending bot's own chat history with that peer.
+  install_runtime_overrides(
+    monkeypatch, legacy_overrides={"telegram_owner_id": OWNER_ID},
+  )
+  signal = await _personal_signal(tmp_path, monkeypatch)
+  monkeypatch.setattr(
+    broadcast, "send_scanner_root_card_with_retry",
+    AsyncMock(return_value=SimpleNamespace(message_id=555)),
+  )
+  await broadcast.broadcast_entry(signal)
+  scanner_sender = AsyncMock(return_value=SimpleNamespace(message_id=556))
+  main_bot_sender = AsyncMock(
+    return_value=SimpleNamespace(message_id=999),
+  )
+  monkeypatch.setattr(broadcast, "send_scanner_with_retry", scanner_sender)
+  monkeypatch.setattr(broadcast, "send_with_retry", main_bot_sender)
+
+  await broadcast.fanout_update(signal, lambda tier: f"{tier} update")
+
+  scanner_sender.assert_awaited_once()
+  assert scanner_sender.await_args.kwargs["chat_id"] == OWNER_ID
+  main_bot_sender.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_replace_entry_posts_deletes_personal_trade_via_scanner_bot(
+  tmp_path,
+  monkeypatch,
+  dual_channels,
+):
+  install_runtime_overrides(
+    monkeypatch, legacy_overrides={"telegram_owner_id": OWNER_ID},
+  )
+  signal = await _personal_signal(tmp_path, monkeypatch)
+  monkeypatch.setattr(
+    broadcast, "send_scanner_root_card_with_retry",
+    AsyncMock(return_value=SimpleNamespace(message_id=555)),
+  )
+  await broadcast.broadcast_entry(signal)
+  scanner_delete = AsyncMock()
+  main_delete = AsyncMock()
+  monkeypatch.setattr(broadcast, "delete_scanner_message", scanner_delete)
+  monkeypatch.setattr(broadcast, "delete_message", main_delete)
+
+  await broadcast.replace_entry_posts(signal)
+
+  scanner_delete.assert_awaited_once_with(OWNER_ID, 555)
+  main_delete.assert_not_awaited()

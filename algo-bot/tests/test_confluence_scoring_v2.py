@@ -164,4 +164,6 @@ async def test_fill_write_persists_all_shadow_confluence_fields(monkeypatch):
   })
   query, args = calls[-1]
   assert "confluence_v2_raw" in query
-  assert args[-4:] == (2, 3, 15.25, "v1")
+  # Positional, not trailing: candle_* telemetry fields append after these
+  # in the same VALUES tuple, so confluence stays at its own fixed slot.
+  assert args[12:16] == (2, 3, 15.25, "v1")

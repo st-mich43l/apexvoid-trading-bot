@@ -56,6 +56,45 @@ public sealed record TradePlanBreakEvenResult(
 /// </summary>
 public static class TradePlanExecutionEngine
 {
+  public static TradePlan? DegradeScalpLadderForMinVolume(
+    TradePlan plan,
+    long totalVolume,
+    SymbolInfo symbol
+  )
+  {
+    if (
+      plan.Analysis.StrategyFamily != "scalp"
+      || plan.Sizing.Mode != "risk"
+      || plan.Targets.Count != 2
+      || totalVolume <= 0
+      || symbol.MinVolume <= 0
+      || symbol.StepVolume <= 0
+    )
+    {
+      return null;
+    }
+    // The 1R/2R scalp book is an equal two-exit ladder. Both halves must
+    // be broker-minimum, step-aligned volumes; otherwise TP1 would silently
+    // collapse and leave a malformed runner. Keep the final target only.
+    var requiresDegrade = totalVolume < checked(2 * symbol.MinVolume)
+      || totalVolume % checked(2 * symbol.StepVolume) != 0;
+    if (!requiresDegrade)
+    {
+      return null;
+    }
+    var finalTarget = plan.Targets[^1] with { CloseRatio = 1m };
+    return plan with
+    {
+      Targets = [finalTarget],
+      Management = plan.Management with
+      {
+        BeAfterTargetId = null,
+        TrailAfterTargetId = null,
+        TrailToTargetId = null,
+      },
+    };
+  }
+
   public static TradePlanEntryDecision EvaluateEntry(
     TradePlan plan,
     decimal bid,
@@ -78,11 +117,72 @@ public static class TradePlanExecutionEngine
       TradePlanContract.EntryTypeSingleLimit =>
         new TradePlanEntryDecision(TradePlanEntryAction.SubmitLimit),
       TradePlanContract.EntryTypeLimitLadder =>
-        new TradePlanEntryDecision(TradePlanEntryAction.SubmitLadder),
+        EvaluateLadder(plan, bid, ask, tickSize),
       TradePlanContract.EntryTypeMarketWithLimitScale =>
-        new TradePlanEntryDecision(TradePlanEntryAction.SubmitLadder),
+        EvaluateLadder(plan, bid, ask, tickSize),
       _ => new TradePlanEntryDecision(TradePlanEntryAction.Wait, "unknown_entry_type"),
     };
+  }
+
+  /// <summary>
+  /// Owner-reported 2026-09-10 (real XAU BUY, Key Level): market_with_limit_
+  /// scale's L1 leg is declared at the live quote when the plan is BUILT
+  /// (Python trade_plan_builder.py, "L1 reference price is the live quote"),
+  /// then submitted as an outright market order whenever TradePlanRuntime
+  /// gets around to it - with no gap check between those two moments. A
+  /// fast M5 break during that gap let the fill land at 4398.39 against a
+  /// published zone topping out at 4397.65. EvaluateMarket already caps
+  /// this exact failure mode for EntryTypeMarket (the 2026-08-24 HFS SELL
+  /// fix below) via MaxSlippageTicks; limit_ladder/market_with_limit_scale
+  /// never got the same cap even though Python already stamps
+  /// max_slippage_ticks onto both. Apply the same cap here to every leg
+  /// that would fire as an immediate market order (explicit order_type, or
+  /// a resting limit already marketable) rather than a resting limit,
+  /// which needs no cap since it cannot chase.
+  /// </summary>
+  private static TradePlanEntryDecision EvaluateLadder(
+    TradePlan plan,
+    decimal bid,
+    decimal ask,
+    decimal tickSize
+  )
+  {
+    if (
+      plan.Entry.Legs is { Count: > 0 } legs
+      && plan.Entry.MaxSlippageTicks is int maxSlippage
+      && maxSlippage >= 0
+      && tickSize > 0m
+    )
+    {
+      var buy = string.Equals(
+        plan.Analysis.Direction,
+        "BUY",
+        StringComparison.OrdinalIgnoreCase
+      );
+      var maxAway = maxSlippage * tickSize;
+      var liveQuote = buy ? ask : bid;
+      foreach (var leg in legs)
+      {
+        var usesMarket = TradePlanContract.LegUsesMarketOrder(
+          leg.OrderType, leg.Price, buy, bid, ask
+        );
+        if (!usesMarket)
+        {
+          continue;
+        }
+        if (
+          (buy && liveQuote > leg.Price + maxAway)
+          || (!buy && liveQuote < leg.Price - maxAway)
+        )
+        {
+          return new TradePlanEntryDecision(
+            TradePlanEntryAction.Wait,
+            "slippage_exceeds_declared_limit"
+          );
+        }
+      }
+    }
+    return new TradePlanEntryDecision(TradePlanEntryAction.SubmitLadder);
   }
 
   private static TradePlanEntryDecision EvaluateMarket(
@@ -248,38 +348,28 @@ public static class TradePlanExecutionEngine
     {
       throw new TradePlanContractException("sizing_contract_missing");
     }
-    if (plan.Sizing.Mode != "equity_table")
-    {
-      throw new TradePlanContractException(
-        $"unsupported sizing mode '{plan.Sizing.Mode}'"
-      );
-    }
-
-    var tableLots = VolumePlanner.LotsForEquity(equity.Equity);
+    var tableLots = VolumePlanner.LotsForEquity(
+      equity.Equity,
+      VolumePlanner.IsFxInstrument(symbol)
+    );
     if (tableLots <= 0)
     {
       throw new TradePlanContractException(
         $"equity {equity.Equity:N2} is below the $200 equity sizing floor"
       );
     }
-    // Python stamps RiskMultiplier (scalp = 2.0 for all quality tiers).
-    // Stop geometry stays unchanged — this scales volume only.
-    // Owner 2026-08-12: below $2k equity, scalp books 1.5× table lots
-    // (e.g. 0.10 → 0.15) instead of doubling.
-    var riskMultiplier = plan.Risk.RiskMultiplier;
-    if (riskMultiplier <= 0m)
+    var sizedLots = plan.Sizing.Mode switch
     {
-      riskMultiplier = 1m;
-    }
-    if (riskMultiplier > 1m && equity.Equity < 2_000m)
-    {
-      riskMultiplier = 1.5m;
-    }
-    var sizedLots = decimal.Round(
-      tableLots * riskMultiplier,
-      2,
-      MidpointRounding.AwayFromZero
-    );
+      "equity_table" => EquityTableLots(plan, equity.Equity, tableLots),
+      // Scalp risk mode intentionally relies only on the plan's declared
+      // entry/stop geometry plus broker-observed equity and pip value. It
+      // must not recompute a structural stop. Per-trade sizing assumes the
+      // scalp lane remains capped at one concurrent position.
+      "risk" => RiskLots(plan, equity.Equity, pipSize, pipValuePerLot),
+      _ => throw new TradePlanContractException(
+        $"unsupported sizing mode '{plan.Sizing.Mode}'"
+      ),
+    };
     var maxVolumeLots = symbol.LotSize > 0
       ? (decimal)plan.Risk.MaxVolume / symbol.LotSize
       : 0m;
@@ -302,9 +392,9 @@ public static class TradePlanExecutionEngine
     if (volume <= 0)
     {
       throw new TradePlanContractException(
-        $"equity-table sizing produced a non-tradeable volume "
-        + $"(table lots={tableLots:0.####}, risk_multiplier={riskMultiplier:0.####}, "
-        + $"sized lots={sizedLots:0.####}, plan max_volume lots={maxVolumeLots:0.####})"
+        $"{plan.Sizing.Mode} sizing produced a non-tradeable volume "
+        + $"(table lots={tableLots:0.####}, sized lots={sizedLots:0.####}, "
+        + $"plan max_volume lots={maxVolumeLots:0.####})"
       );
     }
 
@@ -351,6 +441,58 @@ public static class TradePlanExecutionEngine
         .Zip(slices, (leg, sliceVolume) => new TradePlanVolumeSlice(leg.LegId, sliceVolume))
         .ToArray()
     );
+  }
+
+  private static decimal EquityTableLots(
+    TradePlan plan,
+    decimal equity,
+    decimal tableLots
+  )
+  {
+    // Preserve the established equity-table lane byte-for-byte for reaction,
+    // technique, and manual plans.
+    var riskMultiplier = plan.Risk.RiskMultiplier;
+    if (riskMultiplier <= 0m)
+    {
+      riskMultiplier = 1m;
+    }
+    if (riskMultiplier > 1m && equity < 2_000m)
+    {
+      riskMultiplier = 1.5m;
+    }
+    return decimal.Round(
+      tableLots * riskMultiplier,
+      2,
+      MidpointRounding.AwayFromZero
+    );
+  }
+
+  private static decimal RiskLots(
+    TradePlan plan,
+    decimal equity,
+    decimal pipSize,
+    decimal pipValuePerLot
+  )
+  {
+    if (plan.Risk.RiskPercent <= 0m)
+    {
+      throw new TradePlanContractException("risk_percent_must_be_positive");
+    }
+    var entries = plan.Entry.EntryPrices();
+    if (entries.Count == 0)
+    {
+      throw new TradePlanContractException("entry has no resolvable prices");
+    }
+    var worstFill = plan.Analysis.Direction == "BUY"
+      ? entries.Max()
+      : entries.Min();
+    var stopPips = Math.Abs(worstFill - plan.Stop.Price) / pipSize;
+    if (stopPips <= 0m)
+    {
+      throw new TradePlanContractException("risk_sizing_stop_pips_must_be_positive");
+    }
+    var budget = equity * plan.Risk.RiskPercent / 100m;
+    return budget / (stopPips * pipValuePerLot);
   }
 
   public static bool HasReachedTarget(

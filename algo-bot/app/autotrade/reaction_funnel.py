@@ -82,7 +82,7 @@ def normalize_setup_type(raw: str | None) -> str | None:
   text = str(raw).strip()
   if not text:
     return None
-  # Scale-in tags: "Key Level Reaction · add_momentum"
+  # Scale-in tags: "Key Level · add_momentum"
   base = text.split("·", 1)[0].strip()
   resolved = resolve_strategy(base)
   if resolved is not None:
@@ -93,6 +93,17 @@ def normalize_setup_type(raw: str | None) -> str | None:
     return text if "·" in text else base
   _record_unresolved_setup_name(text)
   return text
+
+
+def is_known_setup_type(raw: str | None) -> bool:
+  """Whether a non-empty setup label is in the canonical vocabulary."""
+  if raw is None:
+    return False
+  text = str(raw).strip()
+  if not text:
+    return False
+  base = text.split("·", 1)[0].strip()
+  return resolve_strategy(base) is not None or base in _STRATEGY_TO_ARCHETYPE
 
 
 def archetype_from_strategy(strategy: str | None) -> str | None:
@@ -233,7 +244,7 @@ async def _maybe_log_funnel_snapshot(
 
   log.info(
     "reaction funnel snapshot symbol=%s trigger_bucket=%s reaction=%s "
-    "scalp=%s hfs_impulse=%s",
+    "scalp=%s scalp_impulse=%s",
     sym,
     bucket,
     json.dumps(_decode(reaction), sort_keys=True),

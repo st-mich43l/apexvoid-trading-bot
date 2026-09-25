@@ -100,6 +100,25 @@ class TechniqueGeometrySettings:
   confluence_min_overlap: float = 0.5
   zone_merge_max_width: float = 6.0
   structural_reaction_lookback_bars: int = 3
+  # Owner 2026-09-21: a touched supply/demand/OB/FVG zone was consumed
+  # forever on its FIRST touch (Zone.mitigated == "touched once"), so a level
+  # price respects again and again (XAU 4340-4352 was tapped ~12x in a week,
+  # rejected 11 times) could only ever trade once. A touched zone that has
+  # not been closed through stays tradeable for this many prior touches;
+  # 0 restores the old first-touch-only behaviour.
+  retest_max_touches: int = 30
+  # A zone is only broken when price ACCEPTS beyond it, not when a candle
+  # merely closes through (owner 2026-09-21: XAU 4341-4353 demand was killed
+  # for good by one M5 close 3.6 points under it on Sep 18 - the liquidity
+  # sweep right before the week's biggest rally - and then held on three
+  # more taps). A close only counts as a break once it is beyond the far
+  # edge by more than this many ATR; it is forgiven when a close returns to
+  # the zone side of that edge within `sweep_reclaim_bars`; and a zone that
+  # keeps getting swept more than `max_break_episodes` times is noise, not
+  # structure. 0 / 0 / 0 restores the old "any close through = dead" rule.
+  invalidation_tolerance_atr: float = 0.5
+  sweep_reclaim_bars: int = 6
+  max_break_episodes: int = 2
 
 
 def _token_is_fvg_imbalance(token: str) -> bool:
@@ -380,22 +399,81 @@ def not_invalidated(
   atr: float,
   settings: TechniqueGeometrySettings,
 ) -> bool:
-  """No close through the far edge after origin (invalidation, not mitigation)."""
+  """Zone still holds: price never *accepted* beyond its far edge.
+
+  A close beyond the far edge (by more than the tolerance) starts a break
+  episode. The episode is forgiven - a liquidity sweep - if a later close
+  returns to the zone side of the far edge within ``sweep_reclaim_bars``.
+  An unreclaimed episode (including one still in progress) means the zone
+  is not tradeable; more than ``max_break_episodes`` forgiven sweeps means
+  it is no longer a level price respects.
+  """
   if df.empty or origin_index < 0:
     return True
   e = epsilon(pip_size=settings.pip_size, atr=atr, settings=settings)
-  start = max(0, origin_index + 1)
-  for index in range(start, len(df)):
-    close = float(df.iloc[index]["close"])
-    if side == "buy" and close < float(low) - e:
+  tolerance = max(e, float(settings.invalidation_tolerance_atr) * max(atr, 0.0))
+  closes = df["close"].to_numpy(dtype=float)
+  count = len(closes)
+  reclaim_window = max(0, int(settings.sweep_reclaim_bars))
+  episodes = 0
+  index = max(0, origin_index + 1)
+  while index < count:
+    close = closes[index]
+    if side == "buy":
+      beyond = close < float(low) - tolerance
+    else:
+      beyond = close > float(high) + tolerance
+    if not beyond:
+      index += 1
+      continue
+    reclaimed_at = None
+    for probe in range(index + 1, min(count, index + 1 + reclaim_window)):
+      back = closes[probe] >= float(low) if side == "buy" else closes[probe] <= float(high)
+      if back:
+        reclaimed_at = probe
+        break
+    if reclaimed_at is None:
       return False
-    if side == "sell" and close > float(high) + e:
+    episodes += 1
+    if episodes > int(settings.max_break_episodes):
       return False
+    index = reclaimed_at + 1
   return True
 
 
 # Deprecated alias — ``mitigated`` in ``measured`` is first-touch consumption.
 is_unmitigated = not_invalidated  # noqa: F841 — one-release alias
+
+
+def zone_is_spent(
+  *,
+  mitigated: bool,
+  touches: int,
+  side: str,
+  low: float,
+  high: float,
+  df: pd.DataFrame,
+  origin_index: int,
+  atr: float,
+  settings: TechniqueGeometrySettings,
+) -> bool:
+  """Whether a zone can no longer produce a trade.
+
+  ``mitigated`` only ever meant "touched at least once" - breaker_blocks also
+  stamps a *violated* order block ``mitigated=True, touches=1``. So a touched
+  zone is only kept alive when it is provably still holding: touched no more
+  than ``retest_max_touches`` times and never closed through its far edge.
+  """
+  if not mitigated:
+    return False
+  if settings.retest_max_touches <= 0 or touches <= 0:
+    return True
+  if touches > settings.retest_max_touches:
+    return True
+  return not not_invalidated(
+    side=side, low=low, high=high, df=df, origin_index=origin_index,
+    atr=atr, settings=settings,
+  )
 
 
 def proximal_retest(
@@ -478,7 +556,17 @@ def validate_technique_instance(
   reasons: list[str] | None = None,
 ) -> bool:
   direction = "BUY" if instance.side == "buy" else "SELL"
-  if instance.measured.get("mitigated"):
+  if zone_is_spent(
+    mitigated=bool(instance.measured.get("mitigated")),
+    touches=int(instance.measured.get("touches", 0)),
+    side=instance.side,
+    low=instance.low,
+    high=instance.high,
+    df=df,
+    origin_index=instance.origin_index,
+    atr=atr,
+    settings=settings,
+  ):
     if reasons is not None:
       reasons.append("mitigated")
     return False
@@ -794,8 +882,21 @@ def collect_technique_instances(
   settings = settings or TechniqueGeometrySettings()
   entry_max_width_price = float(settings.fvg_entry_max_width_price)
   pending: list[TechniqueInstance] = []
+  def _spent(zone: Zone) -> bool:
+    return zone_is_spent(
+      mitigated=bool(zone.mitigated),
+      touches=int(zone.touches),
+      side="buy" if zone.side == "demand" else "sell",
+      low=float(zone.low),
+      high=float(zone.high),
+      df=df,
+      origin_index=int(zone.origin_index),
+      atr=atr,
+      settings=settings,
+    )
+
   for zone in sd_zones:
-    if zone.mitigated:
+    if _spent(zone):
       continue
     item = instance_from_zone(
       zone, technique=TECHNIQUE_SD, entry_max_width_price=entry_max_width_price,
@@ -803,7 +904,7 @@ def collect_technique_instances(
     if item is not None:
       pending.append(item)
   for zone in ob_zones:
-    if zone.mitigated or zone.break_kind is None:
+    if zone.break_kind is None or _spent(zone):
       continue
     item = instance_from_zone(
       zone, technique=TECHNIQUE_OB, entry_max_width_price=entry_max_width_price,
@@ -811,7 +912,7 @@ def collect_technique_instances(
     if item is not None:
       pending.append(item)
   for zone in fvg_zones:
-    if zone.mitigated:
+    if _spent(zone):
       continue
     item = instance_from_zone(
       zone, technique=TECHNIQUE_FVG, entry_max_width_price=entry_max_width_price,
@@ -850,13 +951,6 @@ def collect_technique_instances(
       for reason in fail_reasons:
         rejects[reason] = rejects.get(reason, 0) + 1
   return instances, rejects
-
-
-def instances_for_technique(
-  instances: Sequence[TechniqueInstance],
-  technique: str,
-) -> list[TechniqueInstance]:
-  return [item for item in instances if item.technique == technique]
 
 
 def technique_display_tags(tags: Iterable[str]) -> str:

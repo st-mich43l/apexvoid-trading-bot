@@ -2,14 +2,14 @@
 
 Offline path: **OHLC dumps → LabEvents → math hard gates → paper fills → calibration**.
 
-Live HFS discovery is unchanged. Use this lab to find wide positive expectancy
+Live scalping discovery is unchanged. Use this lab to find wide positive expectancy
 regions before touching production thresholds. **Never tune thresholds on holdout.**
 
 ## Historical builder (Liquidity Sweep)
 
 Point-in-time M5 active range (24 bars ≤ \(t\)) + M1 pierce of range edge →
 `liquidity_sweep_reversal` LabEvents. Math gates decide reclaim / location / room;
-HFS `discover_range_sweep` is **not** required.
+Scalping `discover_range_sweep` is **not** required.
 
 ### OHLC dump format (JSONL)
 
@@ -98,7 +98,7 @@ Reports include expectancy_r, profit_factor, MAE/MFE, and buckets
 
 ## Shadow wiring (PR C)
 
-In HFS `shadow` / `paper` modes, each `range_sweep` opportunity is stamped with
+In scalping `shadow` / `paper` modes, each `range_sweep` opportunity is stamped with
 `measured.math_liquidity_sweep` (and `math_score_inputs` when allowed). Cycle
 Redis key `math_shadow` stores buy+sell edge evaluations plus
 `range_sweep_annotated` count. **Live publish is not gated by these math

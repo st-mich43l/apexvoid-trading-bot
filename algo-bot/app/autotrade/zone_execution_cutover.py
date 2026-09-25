@@ -68,9 +68,9 @@ from app.autotrade.strategy_taxonomy import (
 from app.core import instrument_geometry
 from app.core.log_throttle import log_at_most
 from app.runtime.instrument_config import instrument_runtime_view
+from app.autotrade import zone_relevance
 from app.autotrade.zone_watch import (
   DISCOVERED,
-  EXPIRED,
   GRADE_A,
   GRADE_B,
   INVALIDATED,
@@ -80,6 +80,8 @@ from app.autotrade.zone_watch import (
   WATCHING_RETEST,
   ZoneWatch,
   discover_zone_watch,
+  retire_zone_watch,
+  ZONE_REFORM_COOLDOWN_SECONDS,
   list_active_zone_watches,
   load_zone_watch,
   lock_zone_watch_published,
@@ -285,6 +287,114 @@ def _is_stop_hard_error(code: str | None) -> bool:
   return False
 
 
+# Rejects that depend on where price sits RIGHT NOW, not on the zone itself:
+# the stop-distance envelope and "entry inside an opposing zone / barrier
+# ahead". Owner-reported 2026-09-21: a with-bias tier-A Key Level SELL passed
+# activation on its M5 confirmation and was then vetoed once, because the bid
+# sat on the zone's bottom edge inside a live M15 demand shelf (4339.9-4347.6)
+# - and the zone was INVALIDATED for good, although the same setup plans fine
+# once price is out of the overlap. Earlier the same happened for a stop
+# 68 pips away (cap 60) at first sight. Geometry errors (stop inside the entry
+# zone / opposing zone / not beyond entries, stop unavailable) stay terminal.
+_SOFT_REJECT_PREFIXES = (
+  "stop_exceeds_envelope",
+  "stop_exceeds_max_envelope",
+  "entry_inside_opposing",
+  "entry_inside_ambiguous",
+)
+_SOFT_REJECT_EXACT = frozenset({"opposing_barrier"})
+# A soft-rejected match is retired for good (its plan lifecycle is terminal),
+# so the cooldown is bound to the match id and lasts until the scanner issues
+# a fresh candidate for the zone - not a wall-clock timer that would let the
+# same dead match retry into "lifecycle already terminal" and kill the zone.
+_SOFT_REJECT_COOLDOWN_SECONDS = 600
+
+
+def _is_price_dependent_reject(code: str | None) -> bool:
+  text = str(code or "").strip()
+  if text.startswith("v8_"):
+    text = text[3:]
+  return text in _SOFT_REJECT_EXACT or text.startswith(_SOFT_REJECT_PREFIXES)
+
+
+# Backwards-compatible name used by the stop pre-block below.
+_is_stop_envelope_distance_error = _is_price_dependent_reject
+
+
+def stop_cooldown_key(zone_id: str) -> str:
+  return f"analysis:zone_stop_cooldown:{zone_id}"
+
+
+def soft_reject_token(match: Any) -> str:
+  """Identity of one signal: the match plus the confirmation that produced it.
+
+  match_id is stable per zone+direction for technique/confluence zones, so it
+  alone cannot tell a fresh reaction from the retired one.
+  """
+  stamp = (
+    getattr(match, "m5_confirmation_bar_ts", None)
+    or getattr(match, "confirmation_bar_ts", None)
+    or getattr(match, "event_ts", None)
+    or ""
+  )
+  return f"{getattr(match, 'match_id', '')}|{stamp}"
+
+
+async def _soft_reject_cooldown_active(
+  client: Any, zone_id: str, match: Any,
+) -> bool:
+  """True while THIS signal (match + confirmation) is soft-rejected."""
+  cooled = await client.get(stop_cooldown_key(zone_id))
+  if cooled is None:
+    return False
+  if isinstance(cooled, bytes):
+    cooled = cooled.decode()
+  return str(cooled) == soft_reject_token(match)
+
+
+async def _rearm_retired_setup(client: Any, match: StrategyMatch) -> bool:
+  """Return an INVALIDATED/EXPIRED setup to DISCOVERED on a NEWER confirmation.
+
+  Technique/confluence matches keep one stable match_id per zone+direction, so
+  once any plan on the zone was rejected its setup stayed INVALIDATED for good
+  and every later signal died at "durable TradePlan lifecycle is already
+  terminal" (live 2026-09-21: a fresh grade-A with-bias Supply Demand SELL,
+  M5-confirmed at 18:20, refused because the same match_id was retired at
+  15:39). ``rearm_setup`` existed as "the only way back" but nothing called
+  it. CONSUMED / CANCELLED stay final - a trade was taken or deliberately
+  cancelled.
+  """
+  from app.autotrade.setup_lifecycle import (
+    EXPIRED as SETUP_EXPIRED,
+    INVALIDATED as SETUP_INVALIDATED,
+    SetupLifecycleError,
+    load_setup,
+    rearm_setup,
+  )
+
+  setup = await load_setup(client, match.match_id)
+  if setup is None or setup.state not in {SETUP_INVALIDATED, SETUP_EXPIRED}:
+    return False
+  confirmed_at = _confirmation_close_epoch(match)
+  if confirmed_at is None or confirmed_at <= (
+    int(setup.updated_at) + ZONE_REFORM_COOLDOWN_SECONDS
+  ):
+    return False
+  try:
+    await rearm_setup(
+      client,
+      match.match_id,
+      rearm_condition="new_m5_confirmation_after_terminal",
+    )
+  except SetupLifecycleError:
+    return False
+  log.info(
+    "setup re-armed on new confirmation symbol=%s match_id=%s was=%s",
+    match.symbol, match.match_id, setup.state,
+  )
+  return True
+
+
 def _match_planned_stop_hard_error(match: StrategyMatch) -> str | None:
   """Return a durable stop geometry error already known on the candidate.
 
@@ -301,9 +411,22 @@ def _match_planned_stop_hard_error(match: StrategyMatch) -> str | None:
     getattr(eligibility, "reason_code", None),
   ):
     code = str(raw or "").strip()
-    if _is_stop_hard_error(code):
+    if _is_stop_hard_error(code) and not _is_stop_envelope_distance_error(code):
       return code
   return None
+
+
+# A failed publish retires THAT MATCH (its plan/setup lifecycle goes terminal);
+# it says nothing about the zone. Live 2026-09-21: the same Key Level SELL zone
+# was terminalized three times in one hour - stop distance, entry inside a demand
+# shelf, then "durable lifecycle already terminal" for the match retired by the
+# previous reject - although it was a valid, M5-confirmed, with-bias setup each
+# time. Only zone-level reasons kill a zone: it structurally failed, or its stop
+# geometry can never work. Everything else waits for a fresh candidate.
+_ZONE_LEVEL_TERMINAL_REASONS = frozenset({
+  "structure_invalidated",
+  "zone_decisively_broken",
+})
 
 
 def _publish_should_terminalize_zone_watch(
@@ -311,10 +434,12 @@ def _publish_should_terminalize_zone_watch(
   status: str,
   reason_code: str | None,
 ) -> bool:
-  """True when a failed publish must stop ZoneWatch re-activation thrash."""
-  if status == "invalidated":
+  """True only when a failed publish means the ZONE itself is dead."""
+  if _is_price_dependent_reject(reason_code):
+    return False
+  if _is_stop_hard_error(reason_code):
     return True
-  return _is_stop_hard_error(reason_code)
+  return status == "invalidated" and str(reason_code or "") in _ZONE_LEVEL_TERMINAL_REASONS
 
 
 async def _terminalize_zone_watch(
@@ -405,29 +530,6 @@ async def _load_quote(client: Any, symbol: str) -> tuple[float, float, int] | No
   if _now() - ts > max(0, int(runtime_config.market_data.spot.fresh_secs)):
     return None
   return bid, ask, ts
-
-
-def _quote_evidence(
-  record: ZoneWatch,
-  quote: tuple[float, float, int],
-):
-  from app.autotrade import units
-
-  bid, ask, _ts = quote
-  pip = units.pip_size(record.symbol)
-  tolerance = max(
-    0.0,
-    float(runtime_config.execution.entry.contract_tolerance_pips) * pip,
-  )
-  return executable_quote_in_zone(
-    record.direction,
-    bid,
-    ask,
-    record.low,
-    record.high,
-    tolerance,
-    pip_size=pip,
-  )
 
 
 def _technique_chase_pips() -> float:
@@ -645,6 +747,7 @@ def _location_and_activation_for_record(
     direction=record.direction,
     context=context,
     cfg=inst,
+    bias_relationship=getattr(match, "bias_relationship", None),
   )
   from app.autotrade.execution_confirmation import confirmation_policy_for
 
@@ -689,17 +792,54 @@ async def _prepare_activation(
 ) -> StrategyMatch | None:
   """Return a stamped match ready to activate, or None while waiting/blocked."""
   now = quote[2]
+  if await _soft_reject_cooldown_active(client, record.zone_id, match):
+    # This exact match was soft-rejected (price-dependent veto) and is
+    # retired; wait for the scanner to issue a fresh candidate for the zone.
+    return None
   from app.autotrade.killzone import (
     evaluate_killzone_gate,
+    evaluate_instrument_session_quality,
     evaluate_reaction_publish_window,
     reaction_require_killzone,
     reaction_require_publish_window,
+    session_quality_minimum_confluence,
     technique_enforce,
   )
 
   inst = instrument_geometry.instrument_runtime(record.symbol)
   tech = getattr(inst.execution, "technique", None)
   enforce_pack = technique_enforce(inst)
+  session_quality = evaluate_instrument_session_quality(ts=now, cfg=inst)
+  selective_minimum = session_quality_minimum_confluence(inst, session_quality)
+  if selective_minimum and match.confluence < selective_minimum:
+    log_at_most(
+      log,
+      f"session-quality:{record.symbol}:{record.zone_id}",
+      "entry activation blocked selective session quality symbol=%s zone_id=%s "
+      "confluence=%s required=%s utc_hour=%s windows=%s",
+      record.symbol,
+      record.zone_id,
+      match.confluence,
+      selective_minimum,
+      session_quality.utc_hour,
+      session_quality.measured["reaction_publish_windows"],
+    )
+    await _record_policy_telemetry(
+      client,
+      symbol=record.symbol,
+      kind="activation",
+      reason_code="selective_session_low_confluence",
+      payload={
+        "symbol": record.symbol,
+        "zone_id": record.zone_id,
+        "strategy": match.strategy,
+        "direction": record.direction,
+        "confluence": match.confluence,
+        "minimum_confluence": selective_minimum,
+        **session_quality.measured,
+      },
+    )
+    return None
   candidate_is_scalp = is_scalp_strategy(
     str(getattr(match, "strategy", "") or ""),
     family=str(getattr(match, "strategy_family", "") or getattr(match, "family", "") or "")
@@ -707,13 +847,14 @@ async def _prepare_activation(
     strategy_mode=str(getattr(match, "strategy_mode", "") or "") or None,
   )
   if candidate_is_scalp:
-    # Optional clock sterilizer (prod off). Structure/technique decide entries.
+    # Optional global scalping clock sterilizer (prod off). Pair session quality is
+    # assessed above, but it is deliberately not a time-of-day hard gate.
     require_kz = False if tech is None else bool(
       getattr(tech, "scalp_require_killzone", False)
     )
     from app.scalping.context import classify_session
 
-    hfs_session = classify_session(int(now), inst)
+    scalp_session = classify_session(int(now), inst)
     kz = evaluate_killzone_gate(
       ts=now,
       cfg=inst,
@@ -730,7 +871,7 @@ async def _prepare_activation(
         kz.utc_hour,
         kz.killzone_name,
         kz.reason_code,
-        hfs_session,
+        scalp_session,
       )
       await _record_policy_telemetry(
         client,
@@ -1322,6 +1463,7 @@ async def _activate_match(
     ),
     current_price=float(evidence.executable_quote or match.current_price),
   )
+  await _rearm_retired_setup(client, match)
   match = await _persist_match(client, match)
   result = await _safe_direct_publish(
     client,
@@ -1414,10 +1556,23 @@ async def _activate_match(
       )
     except Exception:
       log.exception("could not retire non-executable setup=%s", match.match_id)
-  if _publish_should_terminalize_zone_watch(
+  terminalize_zone = _publish_should_terminalize_zone_watch(
     status=result.status,
     reason_code=reject_reason,
+  )
+  if not terminalize_zone and (
+    result.status == worker.PUBLISH_STATUS_INVALIDATED
+    or _is_price_dependent_reject(reject_reason)
   ):
+    # The match is retired; the zone lives on. Skip this exact match until the
+    # scanner issues a fresh candidate (a retry would only hit "lifecycle
+    # already terminal").
+    await client.set(
+      stop_cooldown_key(record.zone_id),
+      soft_reject_token(match),
+      ex=_SOFT_REJECT_COOLDOWN_SECONDS,
+    )
+  if terminalize_zone:
     await _terminalize_zone_watch(
       client,
       record.zone_id,
@@ -1537,6 +1692,24 @@ async def _evaluate_record(
   )
 
 
+_SECONDS_PER_M5_BAR = 300
+
+
+def _confirmation_close_epoch(match: Any) -> int | None:
+  """Close time (epoch s) of the M5 bar that structurally confirmed ``match``.
+
+  Lets ZoneWatch tell a genuinely NEW reaction off a level from a detector
+  merely re-seeing an old, already-invalidated structure.
+  """
+  from app.autotrade.execution_confirmation import parse_bar_timestamp
+
+  opened = parse_bar_timestamp(
+    getattr(match, "m5_confirmation_bar_ts", None)
+    or getattr(match, "confirmation_bar_ts", None),
+  )
+  return None if opened is None else int(opened) + _SECONDS_PER_M5_BAR
+
+
 async def _sync_strategy_match_cutover(
   client: Any,
   symbol: str,
@@ -1605,7 +1778,7 @@ async def _sync_strategy_match_cutover(
         symbol, tf, result.setup, result.direction, grade, zone_id,
       )
       continue
-    if str(result.setup) == "Key Level Reaction":
+    if str(result.setup) == "Key Level":
       from app.autotrade.killzone import key_level_min_grade
 
       inst = instrument_geometry.instrument_runtime(symbol)
@@ -1650,6 +1823,7 @@ async def _sync_strategy_match_cutover(
         else str(result.execution_eligibility.market_map_id or "")
       ),
       structure_signature=str(getattr(result, "structural_id", None) or zone_id),
+      confirmed_at=_confirmation_close_epoch(match),
     )
     if created and record.state == DISCOVERED:
       record, _ = await transition_zone_watch(
@@ -1801,7 +1975,7 @@ def _eval_skip_outside_price(symbol: str) -> float:
   """Furthest outside distance that could still be executable.
 
   Reaction zones need inside (chase=0); range scalp may chase up to the
-  configured HFS maximum. Anything beyond that cannot activate — skip the
+  configured scalping maximum. Anything beyond that cannot activate — skip the
   Redis presence write storm that was starving Telegram on prod.
   """
   from app.autotrade import units
@@ -1816,10 +1990,50 @@ def _eval_skip_outside_price(symbol: str) -> float:
   return max(tolerance, chase) + max(pip * 5.0, 0.5)
 
 
+async def _current_atr_by_source_timeframe(
+  source: RedisOHLCSource | None,
+  symbol: str,
+  timeframes: set[str],
+) -> dict[str, float]:
+  """Current ATR per distinct ZoneWatch.source_timeframe present in this
+  pass, for market-relevance distance normalization. Shares the same
+  closed-bar cache `source` already uses elsewhere in this dispatch pass,
+  so this adds at most one extra window fetch per distinct timeframe
+  (typically just M1/M5), not one per zone.
+  """
+  if source is None:
+    return {}
+  from app.analysis.math_utils import atr_scalar, atr_series
+
+  length = int(runtime_config.analysis.atr.length)
+  result: dict[str, float] = {}
+  for tf in timeframes:
+    if not tf:
+      continue
+    try:
+      df = await source.window(symbol, tf, length + 5)
+      if df.empty:
+        continue
+      result[tf] = atr_scalar(atr_series(df, length))
+    except Exception:
+      log.exception(
+        "failed computing relevance atr symbol=%s tf=%s", symbol, tf,
+      )
+  return result
+
+
 # Prod dig 2026-08-12: 118/137 watches were >12h old and far from market,
-# re-evaluated every 2s. Expire those so the active index stays near price.
-_ZONE_STALE_AGE_SECONDS = 12 * 3600
-_ZONE_STALE_OUTSIDE_PRICE = 25.0
+# re-evaluated every 2s. Originally fixed by expiring those - but EXPIRED
+# is a terminal ZoneWatch state (_TRANSITIONS[EXPIRED] == frozenset()), so
+# that destroyed the zone's ability to ever reactivate if price came back,
+# and used a flat, non-ATR-normalized 25.0-price-point threshold ANDed
+# with a 12h floor (owner 2026-09-17: a zone 80 points away but only
+# 9-11h old survived indefinitely under that AND). Replaced with the
+# non-destructive DORMANT relevance classification (app.autotrade.
+# zone_relevance) below: dormant zones are cheaply skipped from full
+# evaluation here (same perf benefit as the original fix) without ever
+# mutating their lifecycle state, so they stay free to reactivate the
+# instant price returns within relevance_nearby_atr.
 _SPOT_ZONE_BANDS: dict[str, list[tuple[float, float]]] = {}
 _SPOT_IN_ZONE_EVALUATED: dict[str, bool] = {}
 SPOT_MIN_INTERVAL_S = 3.0
@@ -1865,7 +2079,9 @@ async def evaluate_active_zone_watches(
   bid, ask, _ts = quote
   mid = (bid + ask) / 2.0
   skip_outside = _eval_skip_outside_price(symbol)
-  now = _now()
+  atr_by_tf = await _current_atr_by_source_timeframe(
+    source, symbol, {record.source_timeframe for record in records},
+  )
   # Near-first so an executable zone is tried before far junk.
   ranked = sorted(
     records,
@@ -1875,26 +2091,23 @@ async def evaluate_active_zone_watches(
     if index and index % 8 == 0:
       await asyncio.sleep(0)
     outside = _outside_distance(record, mid)
-    age_s = now - int(record.discovered_at or now)
-    if (
-      outside >= _ZONE_STALE_OUTSIDE_PRICE
-      and age_s >= _ZONE_STALE_AGE_SECONDS
-      and record.state not in TERMINAL_ZONE_WATCH_STATES | LOCKED_ZONE_WATCH_STATES
-    ):
-      try:
-        await transition_zone_watch(
-          client,
-          record.zone_id,
-          EXPIRED,
-          reason_code="stale_far_from_market",
-        )
-      except Exception:
-        log.exception(
-          "failed expiring stale zone_id=%s outside=%.2f age_s=%s",
-          record.zone_id,
-          outside,
-          age_s,
-        )
+    relevance = zone_relevance.classify_zone_relevance(
+      record, mid, atr_by_tf.get(record.source_timeframe),
+    )
+    if relevance.relevance == zone_relevance.DORMANT:
+      # Skip full evaluation this pass without touching lifecycle state (a
+      # merely DORMANT zone stays free to reactivate if price drifts back).
+      # Once price is far beyond dormant the zone is dead: remove it from
+      # the watchlist (record deleted, NOT an EXPIRED transition - that is
+      # a dead end that would block rediscovery) instead of listing it.
+      if zone_relevance.is_dead_zone(relevance):
+        if await retire_zone_watch(client, record):
+          log.info(
+            "zone watch retired dead zone symbol=%s zone_id=%s "
+            "direction=%s low=%s high=%s distance_atr=%.1f",
+            symbol, record.zone_id, record.direction, record.low,
+            record.high, relevance.distance_atr or 0.0,
+          )
       continue
     if outside > skip_outside:
       continue

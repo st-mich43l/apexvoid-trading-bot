@@ -12,7 +12,6 @@ from __future__ import annotations
 import argparse
 import ast
 import json
-import re
 from pathlib import Path
 
 from app.configuration.catalog import iter_catalog_entries
@@ -33,13 +32,44 @@ from app.configuration.source_types import ConfigurationSourceBundle
 
 
 BASELINE = {
-  "catalog_entry_count": 546,
-  "configurable_count": 479,
+  # 2026-09 Opposing Structure V2 (Key Level repair): +9 new leaf fields
+  # under strategies.reaction.key_level.opposing_structure.* (2 real
+  # canonical_env, 7 ALGORITHM_CONSTANT).
+  # 2026-09 Candle Confirmation V2: +33 new leaf fields under
+  # analysis.candle_confirmation.* (all ConfigOwner.PYTHON,
+  # ConfigKind.ALGORITHM_CONSTANT, canonical_env=None, shadow-only).
+  # 2026-09 MAD v2: +7 new leaf fields under execution.mad.{expand,manip,accum}.
+  # 2026-09 Key Level structural repair Phase 2: +1
+  # (actionability.target_room.structural_barrier_book_enabled).
+  # 2026-09-15 XAU auto algo risk-band rework: +1
+  # (execution.reaction.risk_targeted_entry_enabled).
+  # 2026-09-16 Owner DM daily wipe: +1
+  # (delivery.telegram.owner_dm_daily_wipe_enabled).
+  # 2026-09-16 Breakout Retest V2 rebuild: +21 new leaf fields under
+  # strategies.scalping.breakout.* (all real canonical_env, all
+  # ConfigOwner.PYTHON).
+  # 2026-09-16 Reaction risk leg (Manual-Algo parity): +1
+  # (execution.reaction_risk_leg.enabled), real canonical_env,
+  # ConfigOwner.CTRADER (pure C#-side TradePlanRuntime mechanism).
+  # 2026-09-17 Trendline V2: +15 configurable Python fields for causal
+  # construction, independent validation, interaction, health, and
+  # chop/HTF quality; no C#-owned configuration fields.
+  # 2026-09-17 Zone market-relevance engine: +3 new leaf fields under
+  # analysis.zone_relevance.* (immediate_atr, nearby_atr, remote_atr), all
+  # real canonical_env, all ConfigOwner.PYTHON.
+  # 2026-09-21 Technique zone hold-based validity: +4 under
+  # analysis.techniques.* (retest_max_touches, invalidation_tolerance_atr,
+  # sweep_reclaim_bars, max_break_episodes), real canonical_env,
+  # ConfigOwner.PYTHON.
+  # 2026-09-21 With-bias premium/discount exemption: +1
+  # (actionability.entry_location.with_bias_pd_exempt).
+  "catalog_entry_count": 677,
+  "configurable_count": 570,
   "protocol_constant_count": 10,
-  "algorithm_constant_count": 57,
-  "python_projection_count": 497,
-  "ctrader_only_count": 49,
-  "environment_entry_count": 479,
+  "algorithm_constant_count": 97,
+  "python_projection_count": 627,
+  "ctrader_only_count": 50,
+  "environment_entry_count": 570,
   "deprecated_alias_count": 21,
   "shared_count": 96,
 }
@@ -91,33 +121,6 @@ def _canonical_startup() -> tuple[bool, bool, str | None]:
   except CanonicalConfigurationError:
     fail_closed = True
   return ok, fail_closed, category
-
-
-def _scan_legacy_metadata(root: Path) -> list[str]:
-  blockers: list[str] = []
-  skip = {
-    "docs/configuration/history",
-    "contracts/configuration/catalog-v2-debt-inventory.generated.json",
-  }
-  for path in root.rglob("*.py"):
-    rel = str(path.relative_to(root)).replace("\\", "/")
-    if any(rel.startswith(prefix) for prefix in skip):
-      continue
-    if "/.venv/" in rel or rel.startswith("algo-bot/.venv"):
-      continue
-    text = path.read_text(encoding="utf-8")
-    if "legacy_attr" in text and "history" not in rel:
-      # allow comments mentioning removal in detectors? mission: no active metadata
-      if re.search(r"\blegacy_attr\s*=", text) or "entry.legacy_attr" in text:
-        blockers.append(f"legacy_attr_reference:{rel}")
-    if re.search(r"\bitem_id\s*=", text) and "display_config_id" not in text:
-      if "configuration/history" not in rel:
-        # tests may assert absence
-        if "assert" not in text and "has_no_item_id" not in text and "no_item_id" not in text:
-          if "config_field" in text or "CatalogEntry" in text or "item_id=" in text:
-            if "tests/" not in rel or "item_id=" in text:
-              pass
-  return blockers
 
 
 def evaluate_configuration_integrity(

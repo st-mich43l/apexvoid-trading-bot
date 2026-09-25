@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://apexvoid.internal/contracts/analysis/opportunity-v1.schema.json",
+  "title": "analysis.opportunity.v1",
+  "description": "Transport-ready as of the Kafka transport task (docs/adr/007-shared-cross-service-contracts.md; publisher: internal/transport/kafka/producer.go). Published by analysis-engine when a Strategy.Evaluate call produces a Candidate; consumed by algo-bot's target analysis_client package (docs/architecture/algo-bot.md, not built yet). Field shape mirrors analysis-engine/internal/opportunity.Candidate exactly (docs/architecture/analysis-engine.md) — this schema and that Go struct must be kept in sync by hand until a schema-to-struct generator exists (none does yet). Never contains a lot size, account balance, or risk multiplier — see docs/adr/002-analysis-vs-orchestration-boundary.md: an opportunity is a technical fact, not a trading decision. This is the PAYLOAD only — wrapped inside contracts/common/event-envelope-v1.schema.json's `payload` field; the envelope's own config_version/config_fingerprint carry \"which configuration generated this,\" so algorithm_version below is scoped to the market-structure/liquidity algorithm identity specifically (source task §29's \"algorithm version\"), not configuration in general. No strategy is implemented yet (Analysis Engine V2 task) — this contract publishes no real events today; it exists ready for the first strategy task.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "strategy", "symbol", "direction", "entry", "invalidation", "targets", "evidence", "quality", "algorithm_version", "created_at", "expires_at"],
+  "properties": {
+    "id": { "type": "string" },
+    "strategy": {
+      "type": "string",
+      "description": "opportunity.StrategyID — an architectural slot name (e.g. \"breakoutretest\"), not yet a fixed enum since no strategy is implemented."
+    },
+    "symbol": { "type": "string" },
+    "timeframe": { "type": "string", "enum": ["M1", "M3", "M5", "M15", "M30", "H1", "H4", "D1"], "description": "Additive V1 field: closed-bar timeframe that first made the opportunity actionable. Retained pre-S11 events may omit it." },
+    "direction": { "type": "string", "enum": ["BUY", "SELL"] },
+    "entry": {
+      "type": "object",
+      "description": "opportunity.EntryZone — deliberately not internal/zone's richer Zone type; see docs/architecture/analysis-engine.md's naming note.",
+      "additionalProperties": false,
+      "required": ["low", "high"],
+      "properties": {
+        "low": { "type": "number" },
+        "high": { "type": "number" }
+      }
+    },
+    "invalidation": {
+      "type": "object",
+      "description": "market.PriceLevel.",
+      "additionalProperties": false,
+      "required": ["price"],
+      "properties": {
+        "price": { "type": "number" },
+        "label": { "type": "string" }
+      }
+    },
+    "targets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["price"],
+        "properties": {
+          "price": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["price"],
+            "properties": {
+              "price": { "type": "number" },
+              "label": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "description": "Machine-readable facts, per the source task's §25 — e.g. \"major_structure_bearish\", \"m5_bos_down\", \"fvg_present\". Never opaque free text.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code"],
+        "properties": { "code": { "type": "string" } }
+      }
+    },
+    "quality": {
+      "type": "object",
+      "description": "opportunity.StrategyQuality — strategy-specific components, per §26. Never a universal formula.",
+      "additionalProperties": false,
+      "required": ["overall"],
+      "properties": {
+        "overall": { "type": "number" },
+        "components": {
+          "type": "object",
+          "additionalProperties": { "type": "number" }
+        }
+      }
+    },
+    "algorithm_version": {
+      "type": "object",
+      "description": "Which versioned market-structure/liquidity algorithm produced the state this Candidate was derived from (engine.SnapshotVersion, source task §29's \"algorithm version\") — lets a replay/journal correlation ask \"which exact algorithm generated this opportunity?\" the same way config_version/config_fingerprint answer \"which exact configuration.\"",
+      "additionalProperties": false,
+      "required": ["structure", "liquidity"],
+      "properties": {
+        "structure": { "type": "string", "description": "e.g. \"v2\" — matches analysis.structure.version." },
+        "liquidity": { "type": "string", "description": "e.g. \"v1\" — matches analysis.liquidity.version." }
+      }
+    },
+    "formed_at": { "type": "integer", "description": "Unix seconds when the underlying technical primitive formed. Additive V1 field: current producers always emit it; consumers of retained pre-S11 V1 events must fall back to created_at when absent." },
+    "created_at": { "type": "integer", "description": "Unix seconds when the opportunity was first actionable and observed." },
+    "expires_at": { "type": "integer", "description": "Unix seconds." }
+  }
+}

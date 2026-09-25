@@ -461,7 +461,6 @@ async def test_candidate_publishes_inside_its_own_structural_source(
     "XAU",
     worker.AutoTradeSpot(4051.0, now, True),
     match,
-    consume_redis_match=False,
     htf_zones=zones,
     htf_levels=levels,
   )
@@ -632,11 +631,9 @@ async def test_consuming_one_match_preserves_unrelated_sibling():
 async def test_news_wait_is_telemetry_only_not_a_block(monkeypatch):
   # "news_window_active" is a PREFERENCE_TELEMETRY_REASONS condition
   # (execution_policy.py) - an active news window is recorded and warned on
-  # rather than blocking publication outright, so this now publishes
-  # (and, correctly, is consumed off strategy_matches by the successful
-  # publish path - consume_redis_match=False only controls whether THIS
-  # call site does the consuming itself vs. leaving it to the caller, not
-  # whether the match ever gets consumed at all).
+  # rather than blocking publication outright, so this now publishes (and,
+  # correctly, is consumed off strategy_matches by the successful publish
+  # path).
   client = redis_state.get_client()
   now = int(datetime.now(timezone.utc).timestamp())
   match = _match(event_ts=str(now))
@@ -657,7 +654,6 @@ async def test_news_wait_is_telemetry_only_not_a_block(monkeypatch):
     "XAU",
     worker.AutoTradeSpot(4051.0, now, True),
     match,
-    consume_redis_match=False,
   )
 
   assert candidate_id is not None
@@ -734,7 +730,6 @@ async def test_temporary_entry_drift_wait_preserves_match(monkeypatch):
     "XAU",
     worker.AutoTradeSpot(4053.2, now, True),
     match,
-    consume_redis_match=False,
   )
 
   assert candidate_id is None
@@ -773,7 +768,6 @@ async def test_crossed_invalidation_is_terminal_for_only_that_match(monkeypatch)
     "XAU",
     worker.AutoTradeSpot(4047.9, now, True),
     invalid,
-    consume_redis_match=False,
   )
 
   assert candidate_id is None
@@ -816,7 +810,6 @@ async def test_observe_overlap_allows_both_direct_route_evaluations(monkeypatch)
     "XAU",
     worker.AutoTradeSpot(4118.0, now, True),
     waiting,
-    consume_redis_match=False,
     market_map=_overlap_map(),
   )
   published_result = await worker._publish_strategy_match(
@@ -824,7 +817,6 @@ async def test_observe_overlap_allows_both_direct_route_evaluations(monkeypatch)
     "XAU",
     worker.AutoTradeSpot(4201.0, now, True),
     publishable,
-    consume_redis_match=False,
     market_map=_overlap_map(),
   )
 

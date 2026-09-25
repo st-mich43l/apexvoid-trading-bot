@@ -8,7 +8,7 @@ import json
 import math
 from typing import Any
 
-from app.autotrade.gate import AutoScalpBox, AutoScalpDecision
+from app.autotrade.gate import AutoScalpDecision
 from app.autotrade.range_context import RangeContext
 
 
@@ -197,12 +197,3 @@ def box_break_direction(decision: AutoScalpDecision, price: float) -> str | None
     lower=float(box.lower.level),
     upper=float(box.upper.level),
   )
-
-
-def decision_box_levels(
-  decision: AutoScalpDecision,
-) -> tuple[float, float] | None:
-  box = decision.box
-  if isinstance(box, AutoScalpBox):
-    return float(box.lower.level), float(box.upper.level)
-  return None

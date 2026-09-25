@@ -66,6 +66,7 @@ def test_execution_lifecycle_cards_suppress_noise_keep_essentials():
     "broker_fatal",
     "configuration_health",
     "config_health",
+    "leg_closed",
   ):
     assert delivery.render_auto_trade_event({
       "type": silent,
@@ -100,6 +101,28 @@ def test_execution_lifecycle_cards_suppress_noise_keep_essentials():
   assert "WAITING FOR PRICE" in waiting
   assert "POSITION CLOSED" in closed
   assert rejected is None
+
+
+def test_leg_closed_never_renders_position_closed_headline():
+  """AutoTradeEngine.cs emits "leg_closed" instead of "position_closed" for
+  a non-final leg of a multi-leg algo_auto group (sibling still open) - the
+  subscriber-facing "POSITION CLOSED" headline must stay reserved for
+  whichever leg is genuinely last, matching Manual Algo's own already-
+  correct "defer to the group's authoritative close" behavior.
+  """
+  assert delivery.render_auto_trade_event({
+    "type": "leg_closed",
+    "group_id": "auto-scale-in",
+    "message": "position closed at broker: stop loss / take profit",
+  }) is None
+  # The real terminal leg still renders exactly as before.
+  final = delivery.render_auto_trade_event({
+    "type": "position_closed",
+    "group_id": "auto-scale-in",
+    "message": "position closed at broker: stop loss / take profit",
+  })
+  assert final is not None
+  assert "POSITION CLOSED" in final
 
 
 def test_position_closed_labels_broker_stop_loss_or_take_profit():
@@ -139,9 +162,7 @@ def test_position_closed_near_stop_not_labeled_manual():
   compact = delivery._format_position_closed_compact_line(
     event, str(event["message"]),
   )
-  assert "Closed manually" not in compact
-  assert "🛡 SL" in compact
-  assert "Losing: -34.0 pips" in compact
+  assert compact == "🛑 closed — losing -34 pips"
 
 
 def test_position_closed_break_even_message_uses_be_label():
@@ -159,8 +180,7 @@ def test_position_closed_break_even_message_uses_be_label():
   compact = delivery._format_position_closed_compact_line(
     event, str(event["message"]),
   )
-  assert "Closed manually" not in compact
-  assert "0 pips (BE)" in compact
+  assert compact == "➖ closed — breakeven"
 
 
 def test_position_closed_manual_close_reports_winning_pips():
@@ -201,7 +221,7 @@ def test_algo_auto_manual_close_does_not_invent_stop_loss():
     },
     "position closed at broker: manual or external order · winning 18.0 pips",
   )
-  assert "Winning:" in compact
+  assert compact == "✅ closed — achieved +18 pips 💸"
   assert "SL" not in compact
 
 
@@ -315,7 +335,7 @@ def test_fx_delivery_uses_symbol_pips_and_price_digits(monkeypatch):
     "type": "strategy_route",
     "symbol": "EURUSD",
     "status": "candidate_published",
-    "strategy": "Key Level Reaction",
+    "strategy": "Key Level",
     "direction": "BUY",
     "measured": {
       "planned_execution_route": "market",
@@ -415,7 +435,7 @@ def test_strategy_route_plan_published_shows_executor_fields():
   text = delivery.render_auto_trade_event({
     "type": "strategy_route",
     "status": "candidate_published",
-    "strategy": "Key Level Reaction",
+    "strategy": "Key Level",
     "direction": "BUY",
     "measured": {
       "planned_execution_route": "market",
@@ -697,7 +717,7 @@ async def test_order_filled_replies_using_v8_plan_id_without_head_fill(monkeypat
       "text": "\n".join([
         "🔎 <b>XAU M5 · SETUP FORMING</b>",
         "🟢 <b>PLAN PUBLISHED</b> · TradePlan V8 sent to executor",
-        "🟢 <b>BUY · Key Level Reaction</b>",
+        "🟢 <b>BUY · Key Level</b>",
       ]),
     }),
     ex=60,
@@ -731,20 +751,22 @@ async def test_order_filled_replies_using_v8_plan_id_without_head_fill(monkeypat
   assert len(calls) == 1
   assert calls[0][1]["reply_to"] == 7001
   body = calls[0][0]
-  assert "✅ <b>ORDER FILLED</b>" in body
-  assert "• ✅" not in body
-  assert "• ENTRY L1 FILLED lot=0.08 @ 4074.68; L2 still pending" in body
-  # Reply keeps ORDER FILLED; SETUP FORMING head becomes POSITION ACTIVATED.
+  # Terse, Manual-Algo-style fill line - the entry/SL/targets were already
+  # advertised on the root card, so the fill reply doesn't repeat the raw
+  # engine message (Phase S12 unification). "leg pending" survives because
+  # the source message says L2 is still pending.
+  assert body == "🟢 active — order filled · leg pending"
+  # Reply keeps ORDER FILLED; SETUP FORMING head becomes ORDER ACTIVATED.
   # The header alone carries the text now - the status slot beneath it
   # collapses to invisible instead of repeating it (see setup_card.py's
   # apply_forming_card_status).
   head_edits = [e for e in edited if e[1] == 7001]
   assert len(head_edits) == 1
-  assert "✅ <b>POSITION ACTIVATED · XAU M5</b>" in head_edits[0][2].splitlines()[0]
+  assert "✅ <b>ORDER ACTIVATED · XAU M5</b>" in head_edits[0][2].splitlines()[0]
   assert "ORDER FILLED" not in head_edits[0][2]
   assert "PLAN PUBLISHED" not in head_edits[0][2]
   card = json.loads(await client.get(delivery._forming_message_key(setup_id)))
-  assert "✅ <b>POSITION ACTIVATED · XAU M5</b>" in card["text"].splitlines()[0]
+  assert "✅ <b>ORDER ACTIVATED · XAU M5</b>" in card["text"].splitlines()[0]
   assert "ORDER FILLED" not in card["text"]
   assert "PLAN PUBLISHED" not in card["text"]
 
@@ -795,12 +817,11 @@ async def test_order_filled_prefers_live_forming_card_over_stale_root(monkeypatc
 
   assert len(calls) == 1
   assert calls[0][1]["reply_to"] == 9002
-  assert "✅ <b>ORDER FILLED</b>" in calls[0][0]
-  assert "• ✅" not in calls[0][0]
-  # SETUP FORMING head becomes POSITION ACTIVATED; stale root id 1111 unused.
+  assert calls[0][0] == "🟢 active — order filled · leg pending"
+  # SETUP FORMING head becomes ORDER ACTIVATED; stale root id 1111 unused.
   head_edits = [e for e in edited if e[1] == 9002]
   assert len(head_edits) == 1
-  assert "✅ <b>POSITION ACTIVATED · XAU M5</b>" in head_edits[0][2]
+  assert "✅ <b>ORDER ACTIVATED · XAU M5</b>" in head_edits[0][2]
   assert all(e[1] != 1111 for e in edited)
 
 
@@ -813,7 +834,7 @@ async def test_tp_booked_does_not_overwrite_forming_card_head(monkeypatch):
   head = "\n".join([
     "🔎 <b>XAU M5 · SETUP FORMING</b>",
     "🟢 <b>PLAN PUBLISHED</b> · TradePlan V8 sent to executor",
-    "🔴 <b>SELL · Key Level Reaction</b>",
+    "🔴 <b>SELL · Key Level</b>",
   ])
   await client.set(
     delivery._forming_message_key(setup_id),
@@ -850,7 +871,7 @@ async def test_tp_booked_does_not_overwrite_forming_card_head(monkeypatch):
   # No manage reply yet → one fallback create; never edit the forming head.
   assert len(calls) == 1
   assert calls[0][1]["reply_to"] == 9003
-  assert "🎯 TP3 · 💰 Fill: 4030.00 · ✅ Achieved: +50.0 pips" in calls[0][0]
+  assert "🎯 TP3 +50 pips 💸" in calls[0][0]
   assert "TP COMPLETED" not in calls[0][0]
   head_edits = [e for e in edited if e[1] == 9003]
   assert head_edits == []
@@ -873,7 +894,7 @@ async def test_order_filled_stores_manage_keys_and_second_fill_replaces(monkeypa
       "text": "\n".join([
         "🔎 <b>XAU M5 · SETUP FORMING</b>",
         "🟢 <b>PLAN PUBLISHED</b>",
-        "🟢 <b>BUY · Key Level Reaction</b>",
+        "🟢 <b>BUY · Key Level</b>",
       ]),
     }),
     ex=60,
@@ -913,7 +934,9 @@ async def test_order_filled_stores_manage_keys_and_second_fill_replaces(monkeypa
   )
   assert len(calls) == 1
   assert await client.get(delivery._manage_msg_key(setup_id)) == "8123"
-  assert "ORDER FILLED" in (await client.get(delivery._manage_text_key(setup_id)) or "")
+  assert (
+    await client.get(delivery._manage_text_key(setup_id))
+  ) == "🟢 active — order filled · leg pending"
 
   await delivery._deliver_auto_trade_event(
     client,
@@ -931,9 +954,11 @@ async def test_order_filled_stores_manage_keys_and_second_fill_replaces(monkeypa
   assert deleted == [(123, 8123)]
   assert len(calls) == 2  # second fill deletes old + posts new
   assert await client.get(delivery._manage_msg_key(setup_id)) == "8124"
-  assert "FULLY FILLED" in calls[1][0]
+  # No "still pending" in the second (group-complete) message - no
+  # "leg pending" suffix this time.
+  assert calls[1][0] == "🟢 active — order filled"
   assert calls[1][1]["reply_to"] == 7001
-  # Root card may be edited for POSITION ACTIVATED; manage msg itself is never edited.
+  # Root card may be edited for ORDER ACTIVATED; manage msg itself is never edited.
   assert all(e[1] != 8123 for e in edited)
 
 
@@ -952,7 +977,7 @@ async def test_tp_booked_posts_one_standalone_message_per_level(monkeypatch):
       "text": "\n".join([
         "🔎 <b>XAU M5 · SETUP FORMING</b>",
         "✅ <b>ORDER FILLED</b> · L1 filled",
-        "🟢 <b>BUY · Key Level Reaction</b>",
+        "🟢 <b>BUY · Key Level</b>",
       ]),
     }),
     ex=60,
@@ -1007,9 +1032,9 @@ async def test_tp_booked_posts_one_standalone_message_per_level(monkeypatch):
   assert deleted == []
   assert len(calls) == 2
   first, second = calls[0][0], calls[1][0]
-  assert "🎯 TP1 · 💰 Fill: 4029.98 · ✅ Achieved: +41.0 pips" in first
+  assert "🎯 TP1 +41 pips 💸" in first
   assert "TP2" not in first
-  assert "🎯 TP2 · 💰 Fill: 4010.00 · ✅ Achieved: +60.0 pips" in second
+  assert "🎯 TP2 +60 pips 💸" in second
   assert "TP1" not in second
   assert calls[0][1]["reply_to"] == 7001
   assert calls[1][1]["reply_to"] == 7001
@@ -1049,7 +1074,7 @@ async def test_sl_moved_be_updates_manage_reply_not_head(monkeypatch):
   head = "\n".join([
     "🔎 <b>XAU M5 · SETUP FORMING</b>",
     "🟢 <b>PLAN PUBLISHED</b> · TradePlan V8 sent to executor",
-    "🟢 <b>BUY · Key Level Reaction</b>",
+    "🟢 <b>BUY · Key Level</b>",
     "📍 <b>Trade area</b>",
     "• <b>Stop:</b> <b>4,020.00</b>",
   ])
@@ -1099,8 +1124,8 @@ async def test_sl_moved_be_updates_manage_reply_not_head(monkeypatch):
   assert deleted == [(123, 8123)]
   assert len(calls) == 1
   assert calls[0][1]["reply_to"] == 7001
-  assert "BE" in calls[0][0]
-  assert "4034.99" in calls[0][0]
+  # XAU rounds to a whole number for display (4,035, not 4034.99).
+  assert "🛡 move SL to 4,035" in calls[0][0]
   assert await client.get(delivery._manage_be_msg_key(setup_id)) == "9001"
   head_edits = [e for e in edited if e[1] == 7001]
   assert head_edits == []
@@ -1114,7 +1139,7 @@ async def test_sl_moved_trail_updates_manage_reply_not_head(monkeypatch):
   head = "\n".join([
     "🔎 <b>XAU M5 · SETUP FORMING</b>",
     "🟢 <b>PLAN PUBLISHED</b> · TradePlan V8 sent to executor",
-    "🟢 <b>BUY · Key Level Reaction</b>",
+    "🟢 <b>BUY · Key Level</b>",
     "📍 <b>Trade area</b>",
     "• <b>Stop:</b> <b>4,034.99</b>",
   ])
@@ -1163,8 +1188,10 @@ async def test_sl_moved_trail_updates_manage_reply_not_head(monkeypatch):
 
   assert deleted == [(123, 8124)]
   assert len(calls) == 1
-  assert "Trail" in calls[0][0]
-  assert "4070.31" in calls[0][0]
+  # No BE/Trail distinction now (matches Manual's own "move SL to X"
+  # convention) - the legacy 🔐 BE line is still correctly replaced, not
+  # duplicated.
+  assert "🛡 move SL to 4,070" in calls[0][0]
   assert "🔐" not in calls[0][0]
   assert calls[0][1]["reply_to"] == 7001
   assert await client.get(delivery._manage_be_msg_key(setup_id)) == "9002"
@@ -1239,10 +1266,8 @@ async def test_position_closed_sweeps_open_messages_and_posts_single_status(monk
   assert calls[0][1]["reply_to"] == 7001
   assert "✅ <b>ORDER FILLED</b>" not in final
   assert "TP1" not in final
-  assert "🎯 TP2 · 💰 Fill: 4106.00 · ✅ Achieved: +90.0 pips" in final
-  assert "🏁 POSITION CLOSED" in final
-  assert "@ 4106.00" in final
-  assert "• @ 4106.00" not in final
+  assert "🎯 TP2 +90 pips 💸" in final
+  assert "✅ closed — achieved +90 pips 💸" in final
   assert "Highest TP archived" not in final
   assert all(e[1] != 7001 for e in edited)
   assert all(d[1] != 7001 for d in deleted)
@@ -1325,8 +1350,8 @@ async def test_position_closed_appends_missing_final_tp_line(monkeypatch):
   assert len(calls) == 1
   final = calls[0][0]
   assert "TP1" not in final
-  assert "🎯 TP3 · 💰 Fill: 4010.00 · ✅ Achieved: +81.0 pips" in final
-  assert "🏁 POSITION CLOSED" in final
+  assert "🎯 TP3 +81 pips 💸" in final
+  assert "✅ closed — achieved +81 pips 💸" in final
   assert "Highest TP archived" not in final
   # Root card stays intact (no TERMINAL rewrite); close lives on the reply.
   assert all(e[1] != 7001 or "TERMINAL" not in e[2] for e in edited)
@@ -1384,8 +1409,8 @@ async def test_position_closed_fallback_creates_manage_reply(monkeypatch):
   assert calls[0][1]["reply_to"] == 7001
   assert all(e[1] != 7001 or "TERMINAL" not in e[2] for e in edited)
   assert deleted == []
-  assert "🏁 POSITION CLOSED" in calls[0][0]
-  assert "🎯 TP2 · 💰 Fill: 4106.00 · ✅ Achieved: +90.0 pips" in calls[0][0]
+  assert "✅ closed — achieved +90 pips 💸" in calls[0][0]
+  assert "🎯 TP2 +90 pips 💸" in calls[0][0]
   assert await client.get(delivery._manage_closed_key(setup_id)) == "1"
 
 
@@ -1497,10 +1522,75 @@ async def test_full_lifecycle_notifies_each_tp_then_collapses_to_single_close(
   assert len(calls) == 5
   final = calls[4][0]
   assert calls[4][1]["reply_to"] == 7001
-  assert "🎯 TP4 · 💰 Fill: 4321.00 · ✅ Achieved: +172.0 pips" in final
-  assert "🏁 POSITION CLOSED" in final
+  assert "🎯 TP4 +172 pips 💸" in final
+  assert "✅ closed — achieved +172 pips 💸" in final
   assert "TP1" not in final
   assert "TP2" not in final
+
+
+@pytest.mark.asyncio
+@pytest.mark.no_database
+async def test_position_closed_never_deletes_root_and_posts_standalone_if_root_gone(
+  monkeypatch,
+):
+  """Owner-reported 2026-09-21: two XAU scalps filled and closed within
+  minutes; delete_root_on_terminal removed each root at close, the close
+  reply (threaded to it) was rejected and skipped, and the channel was left
+  with nothing for a trade that really executed.
+  """
+  from app.autotrade import setup_card
+
+  client = redis_state.get_client()
+  monkeypatch.setattr(setup_card, "should_delete_root_on_terminal", lambda: True)
+  setup_id = "close-root-gone"
+  await client.set(
+    delivery._forming_message_key(setup_id),
+    json.dumps({
+      "chat_id": 123,
+      "message_id": 7001,
+      "text": "🔎 <b>XAU M5 · SETUP FORMING</b>\n✅ <b>ORDER FILLED</b>",
+    }),
+    ex=60,
+  )
+  deleted = []
+
+  async def fake_delete(chat_id, message_id):
+    deleted.append((chat_id, message_id))
+
+  async def fake_edit(chat_id, message_id, text):
+    pass
+
+  monkeypatch.setattr(delivery, "delete_scanner_message", fake_delete)
+  monkeypatch.setattr(delivery, "edit_scanner_message_text", fake_edit)
+  calls = []
+
+  async def sent(text, **kwargs):
+    calls.append((text, kwargs))
+    if kwargs.get("reply_to") is not None:
+      raise TelegramBadRequest(
+        method=SimpleNamespace(),
+        message="Bad Request: message to be replied not found",
+      )
+    return SimpleNamespace(message_id=9002)
+
+  await delivery._deliver_auto_trade_event(
+    client,
+    {
+      "type": "position_closed",
+      "match_id": setup_id,
+      "message": "PLAN CLOSED · highest TP archived TP1 · @ 4106.00",
+      "price": 4106.0,
+      "target_pips": 30,
+      "position_id": 1,
+    },
+    profile="internal",
+    chat_id=123,
+    send=sent,
+  )
+
+  assert deleted == []
+  assert [c[1]["reply_to"] for c in calls] == [7001, None]
+  assert "closed — achieved +30 pips" in calls[1][0]
 
 
 @pytest.mark.asyncio
@@ -1547,15 +1637,15 @@ async def test_order_filled_skips_standalone_when_reply_rejected(monkeypatch):
     send=sent,
   )
 
-  # Reply target gone → skip standalone spam; still mark root POSITION ACTIVATED.
+  # Reply target gone → skip standalone spam; still mark root ORDER ACTIVATED.
   assert len(calls) == 1
   assert calls[0][1]["reply_to"] == 7001
   head_edits = [e for e in edited if e[1] == 7001]
   assert len(head_edits) == 1
-  assert "✅ <b>POSITION ACTIVATED · XAU M5</b>" in head_edits[0][2]
+  assert "✅ <b>ORDER ACTIVATED · XAU M5</b>" in head_edits[0][2]
   card = json.loads(await client.get(delivery._forming_message_key(setup_id)))
   assert "ORDER FILLED" not in card["text"]
-  assert "POSITION ACTIVATED" in card["text"]
+  assert "ORDER ACTIVATED" in card["text"]
 
 
 @pytest.mark.asyncio
@@ -1808,10 +1898,10 @@ async def test_stop_moved_and_position_closed_also_thread_to_forming_card(
   # BE/trail seeds manage reply; close deletes it and posts an updated reply.
   assert len(calls) == 2
   assert calls[0][1]["reply_to"] == 7001
-  assert "BE" in calls[0][0] or "Trail" in calls[0][0] or "Stop" in calls[0][0]
+  assert "🛡 move SL to 4,100" in calls[0][0]
   assert deleted == [(123, 8124)]
   assert calls[1][1]["reply_to"] == 7001
-  assert "POSITION CLOSED" in calls[1][0]
+  assert "closed —" in calls[1][0]
   # Root forming card itself is never deleted here.
   assert all(d[1] != 7001 for d in deleted)
 
@@ -2359,7 +2449,7 @@ async def test_v8_order_filled_and_position_closed_feed_trade_stats():
     "group_id": "v8:17ab03ca932a19b11d374d2ae9de8f30",
     "candidate_id": "v8:17ab03ca932a19b11d374d2ae9de8f30",
     "direction": "BUY",
-    "setup": "Key Level Reaction",
+    "setup": "Key Level",
     "symbol": "XAU",
     "price": 4060.85,
     "stop_loss": 4056.55,
@@ -2403,7 +2493,7 @@ async def test_archived_tp_wins_over_group_realized_pips_when_both_present():
     "group_id": "v8:archived-vs-net",
     "candidate_id": "v8:archived-vs-net",
     "direction": "BUY",
-    "setup": "Key Level Reaction",
+    "setup": "Key Level",
     "symbol": "XAU",
     "price": 4270.0,
     "stop_loss": 4267.0,
@@ -2506,7 +2596,7 @@ async def test_status_includes_compact_profile_regime_groups_and_route(monkeypat
     "auto_trade:last_gate:XAU",
     json.dumps({
       "state": "candidate",
-      "selected_strategy": "Key Level Reaction",
+      "selected_strategy": "Key Level",
       "selected_timeframe": "M5",
       "direction": "SELL",
       "regime": "chop",
@@ -2526,7 +2616,7 @@ async def test_status_includes_compact_profile_regime_groups_and_route(monkeypat
   await client.set(
     "auto_trade:last_route_outcome:XAU",
     json.dumps({
-      "strategy": "Key Level Reaction",
+      "strategy": "Key Level",
       "status": "blocked",
       "reason_code": "opposing_barrier",
     }),
@@ -2545,7 +2635,7 @@ async def test_status_includes_compact_profile_regime_groups_and_route(monkeypat
   assert "demo trading · <b>running</b> · demo_eval" in text
   assert "groups <b>2</b>" in text
   assert "Regime <b>chop</b>" in text
-  assert "Route: Key Level Reaction · blocked · opposing_barrier" in text
+  assert "Route: Key Level · blocked · opposing_barrier" in text
   assert len(text) < 900
   assert "auto trader" not in text.lower()
 
@@ -2956,7 +3046,7 @@ async def test_status_includes_today_algo_scorecard(monkeypatch):
     "candidate_id": "v8:status-score-win",
     "stream": "algo_auto",
     "direction": "BUY",
-    "setup": "Key Level Reaction",
+    "setup": "Key Level",
     "symbol": "XAU",
     "price": 4050.0,
     "stop_loss": 4045.0,

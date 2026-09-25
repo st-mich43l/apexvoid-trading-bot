@@ -28,6 +28,7 @@ async def record_cycle(
   for name in (
     "context_load_ms",
     "analysis_labels_ms",
+    "scalp_structure_ms",
     "microstructure_ms",
     "strategy_evaluation_ms",
     "persistence_ms",

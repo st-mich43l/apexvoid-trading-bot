@@ -304,7 +304,6 @@ async def test_incident_replay_publishes_one_candidate(monkeypatch):
       "XAUUSD",
       spot,
       match,
-      consume_redis_match=False,
       match_source="market_map_strategy",
       market_map=_map(_zone(lo, hi), price=4058.5),
       frames={"M1": _rejection_m1()},

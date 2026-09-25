@@ -115,7 +115,7 @@ async def test_order_filled_waits_for_a_root_card_still_mid_send(monkeypatch):
   # Live 2026-08-11: order_filled sent standalone (no reply_to) because its
   # own setup's root card was still mid-send (Telegram flood-control
   # stretched a single edit/send to 17s+) - the owner saw a disconnected
-  # ORDER FILLED bubble with no thread to its POSITION ACTIVATED card.
+  # ORDER FILLED bubble with no thread to its ORDER ACTIVATED card.
   # Reply resolution must poll for the card instead of giving up on the
   # first empty lookup.
   client = redis_state.get_client()
@@ -171,42 +171,107 @@ async def test_order_filled_falls_back_standalone_after_the_wait_expires(
   assert reason != ""
 
 
+@pytest.mark.asyncio
+async def test_ensure_root_card_for_manage_reply_finds_root_via_telegram_root_key_alone(
+  monkeypatch,
+):
+  # 2026-09 (owner-reported duplicate root card): forming_message_key and
+  # telegram_root_message_key are written together by save_forming_card and
+  # are supposed to always name the same message. If forming_message_key is
+  # ever unreadable while telegram_root_message_key still names the real
+  # root - this seeds exactly that split - the old code (a direct
+  # load_forming_card check with no fallback) wrongly concluded no root
+  # existed and created a second one. It must instead find the real root via
+  # telegram_root_message_key and never attempt to create anything.
+  client = redis_state.get_client()
+  match_id = "root-key-split"
+  await client.set(
+    setup_card.telegram_root_message_key(match_id),
+    '{"chat_id":123,"root_message_id":9009,"updated_at":1}',
+  )
+
+  async def fail_if_called(*_args, **_kwargs):
+    raise AssertionError(
+      "ensure_root_card_for_setup_id must not be called when "
+      "telegram_root_message_key already names the real root"
+    )
+
+  monkeypatch.setattr(setup_card, "ensure_root_card_for_setup_id", fail_if_called)
+
+  message_id = await delivery._ensure_root_card_for_manage_reply(
+    client,
+    {"type": "take_profit", "symbol": "XAU"},
+    match_id=match_id,
+    chat_id=123,
+  )
+
+  assert message_id == 9009
+
+
+@pytest.mark.asyncio
+async def test_forming_reply_lookup_logs_identity_mismatch(monkeypatch, caplog):
+  # Companion coverage: when the two keys actively disagree (both present,
+  # different message ids - a re-post raced ahead of a cleanup, or vice
+  # versa), forming_message_key still wins for the reply target, but the
+  # mismatch must be logged loudly so it's caught the moment it happens
+  # instead of requiring after-the-fact archaeology once Telegram history is
+  # gone.
+  client = redis_state.get_client()
+  match_id = "root-key-mismatch"
+  await setup_card.save_forming_card(
+    client, match_id, chat_id=123, message_id=7001,
+  )
+  await client.set(
+    setup_card.telegram_root_message_key(match_id),
+    '{"chat_id":123,"root_message_id":7099,"updated_at":1}',
+  )
+
+  with caplog.at_level("ERROR", logger="app.autotrade.delivery"):
+    message_id = await delivery._lookup_forming_reply_message_id(client, match_id)
+
+  assert message_id == 7001
+  assert any(
+    "forming_reply_identity_mismatch" in record.message
+    for record in caplog.records
+  )
+
+
 def test_compact_route_line_never_shows_a_preflight_pass_through_code():
   # preflight_reason_code lingers as whatever the last preflight-stage
   # event recorded - once a candidate clears every preflight check that's
   # "preflight_allowed", which then sits there as the displayed "why" on
   # every later status check even though it explains nothing (it means
   # "passed", not "here's what happened"). Confirmed live: a card reading
-  # "Key Level Reaction · waiting · preflight allowed" told the owner
+  # "Key Level · waiting · preflight allowed" told the owner
   # nothing about why nothing had executed yet.
   line = _compact_route_line({
-    "strategy": "Key Level Reaction",
+    "strategy": "Key Level",
     "status": "waiting",
     "preflight_reason_code": "preflight_allowed",
   })
 
-  assert line == "Key Level Reaction · waiting"
+  assert line == "Key Level · waiting"
 
 
 def test_compact_route_line_still_shows_a_genuine_rejection_reason():
   line = _compact_route_line({
-    "strategy": "Key Level Reaction",
+    "strategy": "Key Level",
     "status": "blocked",
     "reason_code": "opposing_entry_contained",
   })
 
-  assert line == "Key Level Reaction · blocked · opposing_entry_contained"
+  assert line == "Key Level · blocked · opposing_entry_contained"
 
 
 def test_compact_route_line_prefers_reason_code_over_stale_preflight_code():
   line = _compact_route_line({
-    "strategy": "Key Level Reaction",
+    "strategy": "Key Level",
     "status": "blocked",
     "reason_code": "policy_reward_risk_insufficient",
     "preflight_reason_code": "preflight_allowed",
   })
 
-  assert line == "Key Level Reaction · blocked · policy_reward_risk_insufficient"
+  assert line == "Key Level · blocked · policy_reward_risk_insufficient"
 
 
 @pytest.mark.asyncio
@@ -223,7 +288,7 @@ async def test_mark_forming_card_position_activated_rewrites_head_and_stop(
   original = "\n".join([
     "🔎 <b>XAU M5 · SETUP FORMING</b>",
     "​",
-    "🟢 <b>BUY · Key Level Reaction</b> · ⭐⭐",
+    "🟢 <b>BUY · Key Level</b> · ⭐⭐",
     "",
     "📍 <b>Trade area</b>",
     "• <b>Entry zone:</b> <b>3399.00–3401.00</b>",
@@ -250,11 +315,11 @@ async def test_mark_forming_card_position_activated_rewrites_head_and_stop(
   card = await setup_card.load_forming_card(client, match_id)
   assert card is not None
   lines = card["text"].splitlines()
-  assert lines[0] == "✅ <b>POSITION ACTIVATED · XAU M5</b>"
-  # The header alone carries the POSITION ACTIVATED text now - the status
+  assert lines[0] == "✅ <b>ORDER ACTIVATED · XAU M5</b>"
+  # The header alone carries the ORDER ACTIVATED text now - the status
   # slot beneath it collapses to invisible instead of repeating it.
-  assert card["text"].count("POSITION ACTIVATED") == 1
-  assert "• <b>Stop:</b> <b>3,395.50</b>" in card["text"]
+  assert card["text"].count("ORDER ACTIVATED") == 1
+  assert "🛡 SL:     <b>3,395.50</b>" in card["text"]
   assert "SL</b>" not in card["text"]
 
 
@@ -307,7 +372,7 @@ async def test_order_filled_rewrites_waiting_fill_root(monkeypatch):
   card = await setup_card.load_forming_card(client, match_id)
   assert card is not None
   assert "WAITING FILL" not in card["text"]
-  assert "POSITION ACTIVATED" in card["text"]
+  assert "ORDER ACTIVATED" in card["text"]
   assert not await client.sismember(setup_card.FORMING_ACTIVE_INDEX_KEY, match_id)
 
 
@@ -465,7 +530,7 @@ async def test_order_filled_creates_root_when_publish_never_posted(monkeypatch):
   card = await setup_card.load_forming_card(client, match_id)
   assert card is not None
   assert card["message_id"] == 6100
-  assert "POSITION ACTIVATED" in card["text"]
+  assert "ORDER ACTIVATED" in card["text"]
   assert replies
   assert replies[0][1].get("reply_to") == 6100
-  assert "ORDER FILLED" in replies[0][0]
+  assert replies[0][0] == "🟢 active — order filled"

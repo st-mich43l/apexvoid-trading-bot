@@ -12,7 +12,6 @@ from app.autotrade.entry_activation import (
   evaluate_entry_activation,
   apply_trigger_to_match,
   activation_archetype,
-  ACTIVATION_BLOCK_REASON_CODES,
   EntryActivationDecision,
   emit_activation_gate_metrics,
 )
@@ -177,7 +176,7 @@ def test_case_08_previous_episode_trigger_consumed():
 
 @pytest.mark.parametrize(
   "strategy",
-  ["Key Level Reaction", "Range Edge Scalp"],
+  ["Key Level", "Range Edge Scalp"],
 )
 def test_case_09_grade_a_and_b_require_trigger_when_enforce(strategy):
   decision = _activate(strategy=strategy, trigger=None)
@@ -267,7 +266,7 @@ def test_case_15_shadow_allows_with_would_block():
 
 def test_m5_authoritative_in_zone_allows_without_m1():
   decision = _activate(
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     trigger=None,
     quote_inside=True,
     m5_authoritative=True,
@@ -281,7 +280,7 @@ def test_m5_authoritative_in_zone_allows_without_m1():
 
 def test_m5_fallback_off_blocks_without_m1_even_when_authoritative():
   decision = _activate(
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     trigger=None,
     quote_inside=True,
     m5_authoritative=True,
@@ -293,7 +292,7 @@ def test_m5_fallback_off_blocks_without_m1_even_when_authoritative():
 
 def test_m5_authoritative_outside_zone_still_blocked():
   decision = _activate(
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     trigger=None,
     quote_inside=False,
     m5_authoritative=True,
@@ -306,7 +305,7 @@ def test_m5_authoritative_outside_zone_still_blocked():
 def test_m5_quote_inside_fresh_requires_recent_confirmation():
   fresh_ts = NOW - 300
   decision = _activate(
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     trigger=None,
     quote_inside=True,
     m5_authoritative=True,
@@ -318,7 +317,7 @@ def test_m5_quote_inside_fresh_requires_recent_confirmation():
 
   stale_ts = NOW - 7 * 300
   stale = _activate(
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     trigger=None,
     quote_inside=True,
     m5_authoritative=True,
@@ -329,7 +328,7 @@ def test_m5_quote_inside_fresh_requires_recent_confirmation():
   assert stale.reason_code == "reaction_trigger_missing"
 
   missing = _activate(
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     trigger=None,
     quote_inside=True,
     m5_authoritative=True,
@@ -340,9 +339,56 @@ def test_m5_quote_inside_fresh_requires_recent_confirmation():
   assert missing.reason_code == "reaction_trigger_missing"
 
 
+def _iso(epoch: int) -> str:
+  from datetime import datetime, timezone
+
+  return datetime.fromtimestamp(epoch, timezone.utc).isoformat()
+
+
+def test_m5_quote_inside_fresh_accepts_the_iso_stamp_the_scanner_actually_stores():
+  # Prod stores m5_confirmation_bar_ts as "2026-09-21T13:25:00+00:00". A bare
+  # int() parse returned None for it, so the fallback never fired live.
+  fresh = _activate(
+    strategy="Key Level",
+    trigger=None,
+    quote_inside=True,
+    m5_authoritative=True,
+    m5_fallback="quote_inside_fresh",
+    m5_confirmation_bar_ts=_iso(NOW - 300),
+  )
+  assert fresh.allowed is True
+  assert fresh.reason_code == "reaction_m5_authoritative_in_zone"
+  assert fresh.measured["m5_confirmation_age_seconds"] == 300
+
+  stale = _activate(
+    strategy="Key Level",
+    trigger=None,
+    quote_inside=True,
+    m5_authoritative=True,
+    m5_fallback="quote_inside_fresh",
+    m5_confirmation_bar_ts=_iso(NOW - 7 * 300),
+  )
+  assert stale.allowed is False
+  assert stale.reason_code == "reaction_trigger_missing"
+
+
+def test_m5_confirmation_stamp_parses_iso_pandas_numeric_and_garbage():
+  import pandas as pd
+
+  from app.autotrade.entry_activation import _parse_confirmation_ts
+
+  assert _parse_confirmation_ts("2026-09-21T13:25:00+00:00") == 1789997100
+  assert _parse_confirmation_ts("2026-09-21T13:25:00Z") == 1789997100
+  assert _parse_confirmation_ts(pd.Timestamp("2026-09-21 13:25", tz="UTC")) == 1789997100
+  assert _parse_confirmation_ts("1789997100") == 1789997100
+  assert _parse_confirmation_ts(1789997100) == 1789997100
+  assert _parse_confirmation_ts(None) is None
+  assert _parse_confirmation_ts("not-a-time") is None
+
+
 def test_m5_authoritative_false_without_m1_still_missing():
   decision = _activate(
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     trigger=None,
     quote_inside=True,
     m5_authoritative=False,
@@ -354,7 +400,7 @@ def test_m5_authoritative_false_without_m1_still_missing():
 
 def test_m1_preferred_over_m5_bridge():
   decision = _activate(
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     trigger=_trigger(pattern="wick_rejection", direction="BUY"),
     quote_inside=True,
     m5_authoritative=True,
@@ -448,7 +494,7 @@ def test_m5_authoritative_blocked_under_technique_enforce():
     ),
   )
   decision = evaluate_entry_activation(
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     direction="BUY",
     zone_entered_at=ZONE_ENTERED,
     quote_inside=True,
@@ -471,7 +517,7 @@ def test_reaction_softens_sweep_body_when_instrument_flag_is_false():
     ),
   )
   decision = evaluate_entry_activation(
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     direction="BUY",
     zone_entered_at=ZONE_ENTERED,
     quote_inside=True,
@@ -515,7 +561,7 @@ def test_impulse_against_blocks_sell_into_expanding_highs():
     ),
   )
   decision = evaluate_entry_activation(
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     direction="SELL",
     zone_entered_at=ZONE_ENTERED,
     quote_inside=True,
@@ -592,7 +638,7 @@ def test_key_sell_rejects_distal_quote():
     ),
   )
   decision = evaluate_entry_activation(
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     direction="SELL",
     zone_entered_at=ZONE_ENTERED,
     quote_inside=True,
@@ -609,7 +655,7 @@ def test_key_sell_rejects_distal_quote():
   assert decision.reason_code == "sell_not_proximal"
 
   proximal = evaluate_entry_activation(
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     direction="SELL",
     zone_entered_at=ZONE_ENTERED,
     quote_inside=True,
@@ -638,7 +684,7 @@ def test_key_buy_blocked_into_expanding_bid():
     {"h": 4381.0, "l": 4377.0, "c": 4380.0},
   ]
   decision = evaluate_entry_activation(
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     direction="BUY",
     zone_entered_at=ZONE_ENTERED,
     quote_inside=True,
@@ -657,7 +703,32 @@ def test_key_buy_blocked_into_expanding_bid():
 
 @pytest.mark.parametrize(
   "reason_code",
-  sorted(ACTIVATION_BLOCK_REASON_CODES),
+  sorted({
+    "zone_decisively_broken",
+    "entry_location_context_missing",
+    "entry_location_htf_range_missing",
+    "buy_in_premium",
+    "sell_in_discount",
+    "buy_at_range_extreme",
+    "sell_at_range_extreme",
+    "range_entry_near_equilibrium",
+    "range_buy_not_at_discount_edge",
+    "range_sell_not_at_premium_edge",
+    "quote_outside_zone",
+    "reaction_trigger_missing",
+    "reaction_trigger_before_zone_touch",
+    "reaction_trigger_stale",
+    "reaction_trigger_wrong_direction",
+    "confirmation_requires_sweep_body",
+    "demand_requires_sweep_reclaim",
+    "sell_not_proximal",
+    "key_buy_into_impulse",
+    "impulse_against_block",
+    "breakout_retest_evidence_missing",
+    "trend_pullback_evidence_missing",
+    "momentum_continuation_evidence_missing",
+    "momentum_cannot_reuse_reversal_trigger",
+  }),
 )
 @pytest.mark.asyncio
 async def test_activation_blocked_metrics_emitted_once(reason_code: str):
@@ -676,7 +747,7 @@ async def test_activation_blocked_metrics_emitted_once(reason_code: str):
   await emit_activation_gate_metrics(
     client,
     symbol="XAU",
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     direction="BUY",
     decision=decision,
     allowed=False,
@@ -705,7 +776,7 @@ async def test_activation_allowed_metrics_emitted_once():
   await emit_activation_gate_metrics(
     client,
     symbol="XAU",
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     direction="BUY",
     decision=decision,
     allowed=True,
@@ -736,7 +807,7 @@ async def test_m5_fallback_allowed_metrics_include_m1_fail_reason():
   await emit_activation_gate_metrics(
     client,
     symbol="XAU",
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     direction="BUY",
     decision=decision,
     allowed=True,
@@ -751,6 +822,6 @@ async def test_m5_fallback_allowed_metrics_include_m1_fail_reason():
   assert int(
     await client.hget(
       dim_key,
-      "direction=BUY:m1_fail_reason=reaction_trigger_missing:strategy=Key Level Reaction",
+      "direction=BUY:m1_fail_reason=reaction_trigger_missing:strategy=Key Level",
     ) or 0
   ) == 1

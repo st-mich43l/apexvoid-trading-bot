@@ -25,7 +25,7 @@ def test_take_symbol_canonicalizes_aliases(monkeypatch):
   assert _take_symbol("gbpusd open") == ("GBPUSD", "open")
 
 
-def test_hfs_excludes_fx_fixed_rr_live_books():
+def test_scalp_excludes_fx_fixed_rr_live_books():
   cfg = _load_production_example().config
   allowed = _scalping_symbols(cfg)
   assert "XAU" in allowed

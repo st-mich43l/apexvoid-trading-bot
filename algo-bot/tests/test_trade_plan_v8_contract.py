@@ -76,13 +76,33 @@ def test_market_watch_entry_prices_are_the_zone_edges():
 
 
 def test_market_entry_price_is_the_admitted_quote_reference():
-  plan = TradePlan.from_dict(_valid_plans()["market_buy_hfs_chase"])
+  plan = TradePlan.from_dict(_valid_plans()["market_buy_scalp_chase"])
   assert plan.entry.entry_prices() == (plan.entry.order_price,)
 
 
 def test_limit_ladder_entry_prices_are_the_leg_prices():
   plan = TradePlan.from_dict(_valid_plans()["limit_ladder_buy"])
   assert plan.entry.entry_prices() == tuple(leg.price for leg in plan.entry.legs)
+
+
+def test_stale_pre_rename_analysis_strategy_normalizes_on_load():
+  """A plan can be re-read (trailing/BE/TP updates) long after publish.
+
+  A plan published before "Key Level Reaction" -> "Key Level" (#507) must
+  still read back as the current canonical name, not the retired one it
+  was published with.
+  """
+  raw = copy.deepcopy(_valid_plans()["market_watch_buy"])
+  raw["analysis"]["strategy"] = "Key Level Reaction"
+  plan = TradePlan.from_dict(raw)
+  assert plan.analysis.strategy == "Key Level"
+
+
+def test_unrecognized_analysis_strategy_passes_through_unchanged():
+  raw = copy.deepcopy(_valid_plans()["market_watch_buy"])
+  raw["analysis"]["strategy"] = "Totally Unknown Setup"
+  plan = TradePlan.from_dict(raw)
+  assert plan.analysis.strategy == "Totally Unknown Setup"
 
 
 def test_plan_has_no_planned_star_ambiguous_fields():

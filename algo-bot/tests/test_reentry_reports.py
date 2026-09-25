@@ -153,13 +153,14 @@ def test_entry_setup_segment_parses_like_tag():
   assert signal["confluence"] == 3
 
 
+@pytest.mark.no_database
 def test_entry_scalp_option_sets_internal_setup():
   signal = wiring._parse_manual(
     "gold sell 4100-4105 / sl 4110 / tp 95/90/80 / scalp"
   )
 
   assert signal["setup_type"] == "scalp"
-  assert signal["confluence"] is None
+  assert signal["confluence"] == 2
   assert signal["visibility"] == "both"
 
 

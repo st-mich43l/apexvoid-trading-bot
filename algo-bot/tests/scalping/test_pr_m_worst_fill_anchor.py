@@ -39,7 +39,7 @@ pytestmark = pytest.mark.no_database
 
 
 def _cfg(**overrides):
-  hfs = SimpleNamespace(
+  scalp_cfg = SimpleNamespace(
     mode="shadow",
     archetypes=SimpleNamespace(
       range_sweep_enabled=True,
@@ -84,8 +84,8 @@ def _cfg(**overrides):
     risk=SimpleNamespace(mode="shadow", risk_fraction_per_trade=0.10),
   )
   for key, value in overrides.items():
-    setattr(hfs, key, value)
-  return SimpleNamespace(strategies=SimpleNamespace(scalping=hfs))
+    setattr(scalp_cfg, key, value)
+  return SimpleNamespace(strategies=SimpleNamespace(scalping=scalp_cfg))
 
 
 def _assert_worst_fill_stop(opp: ScalpOpportunity, *, pip_size: float = 0.1) -> None:
@@ -162,7 +162,7 @@ def test_failure_a_widening_from_worst_clears_zone(monkeypatch):
       buy_ev if direction == "BUY" else None
     ),
   )
-  atr = buffer / 0.05  # buffer = max(pip*2, atr*0.05) → atr drives buffer
+  atr = 20.0  # M5 ATR must not drive the L7 M1 stop buffer.
   ctx = ScalpContextSnapshot(
     version=CONTEXT_VERSION,
     context_id="ctx-failure-a",
@@ -189,6 +189,7 @@ def test_failure_a_widening_from_worst_clears_zone(monkeypatch):
     session="london",
     permitted_archetypes=(ARCHETYPE_RANGE_SWEEP,),
     atr=atr,
+    m1_atr=buffer / 1.2,
   )
   import pandas as pd
 
@@ -203,8 +204,10 @@ def test_failure_a_widening_from_worst_clears_zone(monkeypatch):
     index=idx,
   )
   idle: list[str] = []
+  cfg = _cfg()
+  cfg.strategies.scalping.policy.maximum_spread_pips = 1.0
   found = discover_range_sweep(
-    ctx, None, flat, _cfg(), pip_size=pip, now=1_780_003_600, idle_reasons=idle,
+    ctx, None, flat, cfg, pip_size=pip, now=1_780_003_600, idle_reasons=idle,
   )
   assert abs(zone_low - (key_level - buffer)) < 1e-9
   assert abs(zone_high - (key_level + buffer * 2)) < 1e-9

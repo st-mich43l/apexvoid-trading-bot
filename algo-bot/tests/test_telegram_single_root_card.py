@@ -30,12 +30,10 @@ def test_generic_plan_published_is_silent():
   assert text is None
 
 
-def test_should_delete_root_always_retains(monkeypatch):
-  """Reject/expire must edit the root card — delete is permanently off."""
-  install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_telegram_single_root_card": True})
-  install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_telegram_delete_root_on_terminal": True,})
-  assert setup_card.should_delete_root_on_terminal() is False
+def test_should_delete_root_follows_the_delete_root_on_terminal_flag(monkeypatch):
+  """Reject/expire delete the root card when the flag is on, retain when off."""
+  install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_telegram_delete_root_on_terminal": True})
+  assert setup_card.should_delete_root_on_terminal() is True
 
-  install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_telegram_single_root_card": False})
-  install_runtime_overrides(monkeypatch, legacy_overrides={"delivery_delete_on_terminal": True})
+  install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_telegram_delete_root_on_terminal": False})
   assert setup_card.should_delete_root_on_terminal() is False

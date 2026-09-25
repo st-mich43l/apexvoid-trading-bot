@@ -16,10 +16,10 @@ from aiogram.types import (
   Message,
 )
 
+from app.bot.owner_dm_journal import owner_dm_session_middleware
 from app.bot.telegram_actor import (
   PRIORITY_CARD,
   PRIORITY_LIFECYCLE,
-  PRIORITY_PRICE,
   submit as submit_telegram,
 )
 from app.core.config import runtime_config
@@ -30,6 +30,9 @@ bot = Bot(
   token=runtime_config.bootstrap.telegram.bot_token,
   default=DefaultBotProperties(parse_mode=ParseMode.HTML),
 )
+# Owner end-of-day DM wipe (opt-in, see owner_dm_journal) journals every
+# outgoing message here - main `bot` only, never `scanner_bot`.
+bot.session.middleware(owner_dm_session_middleware)
 scanner_bot = Bot(
   token=(
     runtime_config.delivery.telegram.scanner_telegram_bot_token
@@ -45,6 +48,7 @@ OWNER_COMMANDS = [
   BotCommand(command="trade_open", description="[SYMBOL] — list open signals"),
   BotCommand(command="trade_active", description="[SYMBOL] [#id]"),
   BotCommand(command="trade_close", description="[SYMBOL] #id ±pips [%] | be"),
+  BotCommand(command="trade_close_auto", description="[position_id] — close one algo_auto position"),
   BotCommand(command="trade_uncclose", description="[SYMBOL] #id"),
   BotCommand(command="trade_tp", description="[SYMBOL] #id TP +pips"),
   BotCommand(command="trade_sl", description="[SYMBOL] #id be|price"),
@@ -321,23 +325,6 @@ async def edit_scanner_message_text(
     ),
     priority=priority,
     droppable=droppable,
-  )
-
-
-async def edit_scanner_price_now(
-  chat_id: int | str,
-  message_id: int,
-  text: str,
-  reply_markup: InlineKeyboardMarkup | None = None,
-) -> Message | None:
-  """Live Price-now edits — dropped while the actor is flood-paused."""
-  return await edit_scanner_message_text(
-    chat_id,
-    message_id,
-    text,
-    reply_markup,
-    droppable=True,
-    priority=PRIORITY_PRICE,
   )
 
 

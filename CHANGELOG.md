@@ -13,13 +13,1118 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Analysis Engine no longer aliases multiple Flip zones formed by distinct
+  structural breaks on the same candle to one ID, preventing a fatal duplicate
+  `flip_zone` opportunity during Redis recovery and the resulting restart loop.
+
+### Added
+- Phase S11 remediation: durable opportunity publication ledger/outbox with
+  stable retry IDs and creation-before-terminal acknowledgement ordering;
+  bounded no-consumer-group `shadow-audit`; semantic Python-Go comparison
+  harness; causal strength for FVG/iFVG/breaker/flip zones; stable canonical
+  key-level identity; explicit formation/first-observation timestamps and
+  observed timeframe; and concrete factories/tests/specifications for all 12
+  remaining approved V2 strategies. Their prior disabled rollout state is
+  preserved and no Go-driven trading consumer was enabled.
+- Analysis Engine V2 Phase S3 canonical Zone domain: per-origin
+  Supply/Demand, Order Block, FVG/iFVG, Breaker, and Flip primitives with
+  explicit lifecycle and relevance state, wired into `SymbolState`,
+  `MarketContext`, and immutable analysis snapshots.
+
+### Changed
+- The one-time `manual_algo_charts` cleanup now refuses `--apply` without a
+  new archive path, locks the table, atomically archives schema plus all rows,
+  logs the archive SHA-256, and only then drops the obsolete table. Production
+  execution remains a separate authorized deployment operation.
+- Analysis Engine V2 strategy rebuild, Phase S1: removed the obsolete
+  `manual_algo_chart` OHLC-snapshot feature (Redis M1/M5/M15/H1 windows
+  captured around owner `/algo` issue/fill/close events, kept for later
+  formula fitting), per
+  `apexvoid-bot-prompts/rebuild-strategies.md` §58–§68. Deleted
+  `algo-bot/app/signals/manual_algo_chart.py`,
+  `algo-bot/app/scripts/backfill_manual_algo_charts.py`, and
+  `algo-bot/app/scripts/manual_formula_replay.py` (entirely dependent on
+  the table, no rewrite path without it) plus their dedicated test files
+  outright — no stubs, no deprecation wrappers. Removed
+  `manual_algo_charts`'s table/index/column creation and all
+  read/write/delete call sites from `algo-bot/app/persistence/store.py`
+  (`upsert_manual_algo_chart`, `load_manual_algo_charts`/
+  `load_manual_algo_chart_rows`, `_safe_snapshot_manual_chart`, and the
+  5 call sites across `store_manual_signal`/`close_leg`/
+  `finalize_manual_group`/`set_execution_fill`/`close_manual_signal`,
+  plus the hard-delete line in `delete_manual_signal`). Added
+  `algo-bot/app/scripts/drop_manual_algo_charts.py` — a standalone,
+  explicitly-invoked (`--dry-run`/`--apply`) migration that logs the
+  row count before dropping and verifies `to_regclass` returns `NULL`
+  after, since this repo has no migration-file tooling and folding a
+  `DROP TABLE` into `init_db()`'s idempotent startup block would run it
+  on every boot. Verified end to end against a disposable Postgres
+  container (dry-run reports count without dropping; apply drops and
+  confirms; re-running against an already-dropped table is a clean
+  no-op; `init_db()` still runs clean afterward). Updated `docs/schema.sql`
+  and prose references (`docs/deployment.md`, `docs/bot-commands.md`,
+  `docs/architecture.md`, `docs/architecture/algo-bot.md`,
+  `docs/architecture/migration-map.md`); two `docs/history/` records
+  kept with a note marking the feature removed, since their actual
+  content (a lookback-window measurement lesson; a config-tune
+  withdrawal's statistical reasoning) is still relevant. Regenerated
+  `contracts/configuration/environment-usage.generated.json` (drops the
+  two deleted scripts' env-var references) — running the full generator
+  also incidentally caught up `runtime-manifest-example.generated.json`
+  to `config/trading-bot.yml`'s already-current `backfill_bars`/
+  `bars_window_max: 2000` (stale since `fde92eb`, unrelated to this
+  change), fixing 3 pre-existing `pytest` failures
+  (`test_config_catalog_v2.py`, `test_config_runtime_manifest.py`) as a
+  side effect. Full `pytest -m no_database` diffed against a fresh
+  `origin/master` baseline: 0 new failures.
+  **Not touched**: `manual_signals`, `auto_trade_fills`,
+  `auto_trade_results`, `signal_posts`, `pips_log`, TradePlans,
+  execution records, journals — this purge is scoped only to the
+  OHLC-snapshot duplicate feature. The destructive migration itself is
+  not run by this PR — it's a standalone script for the owner to invoke
+  when ready.
+- Analysis Engine V2 strategy rebuild, Phase S0: added
+  `docs/analysis/strategy-v2-catalog.md`, the required legacy-strategy
+  semantic audit (`apexvoid-bot-prompts/rebuild-strategies.md` §7) that
+  must precede any Go strategy implementation. Classifies all 32
+  `algo-bot/app/autotrade/strategy_names.py` entries plus the
+  `auto_algo.strategies.*` config leaves against the actual live
+  detector registry (`detectors.py`'s `LIVE_DETECTOR_REGISTRY`, not just
+  names) — REBUILD/SPLIT/MERGE/RENAME/TECHNIQUE_ONLY/
+  CONFLUENCE_COMPONENT/RETIRED/HISTORICAL_ALIAS per entry. Flags four
+  judgment calls for owner confirmation before Phase S2 locks the
+  catalog: iFVG's inversion semantics, CRT as independent vs. confluence
+  component, Break & Retest as independent vs. merged into Trendline,
+  and Fade Scalp's relationship to a possible `LiquiditySweepStrategy`
+  identity (its `_level_grab`/structural-reaction logic is the strongest
+  existing candidate for that thesis, found by reading the real
+  detector code rather than assuming from the name). Docs only — no Go
+  or Python code changed in this PR.
+- Kafka live pipeline: `ctrader-engine` now publishes acknowledged closed-bar
+  events to the configured V3 topic before persisting the Redis bar, and the
+  Go `analysis-engine` consumes that topic with at-least-once handling. Startup
+  history remains Redis-only; reconnect catch-up is published chronologically.
+  Added the pinned single-node KRaft broker, explicit topic provisioning and
+  drift verification, analysis-engine readiness endpoint, local/production
+  Compose wiring, and the analysis-engine image to deploy CI.
+- `analysis-engine`: centralized Go tests from colocated
+  `internal/<pkg>/*_test.go` files into `test/<pkg>/`, one directory per
+  domain (`test/config`, `test/indicator`, `test/market`), matching this
+  migration's own domain-boundary convention. Each moved test became a
+  black-box `<pkg>_test` package against its package's exported API; the
+  one test that read an unexported field (`Document.raw`, in the Stage C6
+  fixture-parity test) now uses a new exported `Document.Raw()` accessor
+  added for exactly that purpose, and the one test that constructed a
+  `Document` via an unexported struct literal was rewritten to build it
+  through `ResolveDocument` instead, matching its neighboring synthetic-
+  fixture tests. No production code path changed. `gofmt`/`go vet`/
+  `go build`/`go test ./... -race` (whole suite) clean, all 28 subtests
+  passing. See `docs/configuration-v3-migration-audit.md`'s "Go test
+  layout" note for the full rationale.
+- Configuration V3 Stage C6: automated cross-language parity. One test
+  per language (`algo-bot/tests/test_config_v3_cross_language_fixture.py`,
+  `analysis-engine/internal/config/v3_fixture_parity_test.go`,
+  `ctrader-engine/tests/ConfigurationV3Tests.cs`'s
+  `ResolveDocumentMatchesCanonicalFixture`) proves that language's real
+  V3 reader (Stage C3/C4/C5) reproduces
+  `contracts/configuration/examples/resolved-production-v3.json` — the
+  canonical fixture `config/scripts/resolve_reference.py` already
+  generates and schema-validates — when resolving the real
+  `config/apexvoid.yml` for production. Not one shared function called
+  three times: four independent implementations of §14 (the reference
+  resolver plus Python/Go/.NET), run against the same input, checked
+  against one shared arbiter. Found and handled a real cross-language
+  comparison gap along the way: Go's `yaml.v3` and the new .NET parser
+  both distinguish `int`/`long` from `float64`/`double` by source syntax
+  (`3` vs `3.0`), but `encoding/json`/`System.Text.Json` always decode a
+  JSON number to the float type — both new tests add an explicit
+  int→float normalization step before comparing (Python needs none;
+  `3 == 3.0` is already `True` there). All three pass; full Go/.NET
+  suites clean; Python's 44 pre-existing `FAILED` names all already in
+  the session's established baseline (0 new failures — this session's
+  sandbox has no reachable Postgres/Redis, so an unfiltered full run
+  shows many more `ERROR`s than that baseline, all infra-unavailability,
+  not caused by this change).
+- Configuration V3 Stage C5 (.NET): `ctrader-engine/src/ConfigurationV3.cs`
+  + `MinimalYamlParser.cs` are a third independent reader for the same
+  §14 include/merge/overlay spec, hand-rolled (no reflection, AOT-safe by
+  construction — `CTraderFeed.csproj` publishes Native AOT/trimmed/self-
+  contained, and this project already hit one AOT-only reflection crash
+  this parser has nothing analogous to trigger). `GeometryFor`/
+  `LiveInstruments` mirror Go's narrow proof-of-pattern scope exactly (4
+  fields). **Deliberately NOT wired into the live path** —
+  `AutoTradeOptions`/`ResolvedRuntimeManifest`/`ManifestRuntimeFactory`
+  are untouched and still drive real broker order execution exactly as
+  before. `ResolvedAutoTradeProjection` alone carries 100+ live fields;
+  reaching Python's 890/890-leaf verification rigor for that surface by
+  hand, without a reflection-based deserializer, is future work, not
+  rushed here — this is the one runtime in the migration placing real
+  orders with real money (§41). 24 new tests
+  (`ctrader-engine/tests/ConfigurationV3Tests.cs`) read the real
+  `config/apexvoid.yml`/`apexvoid.demo-eval.yml` directly, confirm
+  correct pip size/digits for all 5 live instruments, include-graph
+  error handling matching the Go/Python suites, and parser-level
+  coverage of the YAML subset `config/*.yml` actually uses (block
+  mappings/sequences, inline flow lists, and — discovered by the first
+  real test run — bare flow mappings, since `environments/production.yml`
+  is, in its entirety, an intentionally empty `{}`). Full suite: 738
+  passed, 45 pre-existing `REAL_REDIS_URL`-required failures (unchanged
+  baseline), 0 new failures.
+- Configuration V3 Stage C4 (Go): `analysis-engine/internal/config` now
+  reads `config/apexvoid.yml` directly (`gopkg.in/yaml.v3`, a real
+  include/merge/overlay implementation matching §14 — the same spec
+  Python's `v3_root.py` and `config/scripts/resolve_reference.py` already
+  implement). `GeometryFor`/`LiveInstruments` replace the old
+  `ResolvedRuntimeManifest`-JSON reader entirely — `manifest.go`/
+  `geometry.go`/`manifest_test.go`/the manifest-example testdata fixture
+  deleted, not kept as a fallback (no manifest-or-YAML mode selection).
+  13 new tests read the real `config/apexvoid.yml`/`apexvoid.demo-eval.yml`
+  directly and confirm correct pip size/digits for all 5 live instruments
+  plus include-graph error handling. `gofmt`/`go vet`/`go build`/
+  `go test`/`go test -race` all clean. analysis-engine still isn't wired
+  to Redis or any live decision path, so this is the lowest-risk of the
+  three languages' cutovers by construction — confirmed before deleting
+  the old reader.
+- Configuration V3 Stage C3 for Python (see `docs/configuration-v3-migration-audit.md`'s
+  Stage C3 update) — a real, wired cutover, not another shadow layer.
+  `algo-bot/app/configuration/v3_root.py` resolves `config/apexvoid.yml`'s
+  include/overlay chain for real and un-consolidates it back into the
+  exact shape `ApexVoidConfig` already expects; `config_file.py` uses it
+  automatically whenever `APEXVOID_CONFIG_FILE` points at a V3 root
+  document (detected by an `includes:` key), and is a no-op otherwise —
+  inert wherever `APEXVOID_CONFIG_FILE` still points at `trading-bot.yml`,
+  including actual ansible-driven production, which this repo does not
+  control and which is unaffected until that separate deployment config
+  is updated. Proven byte-for-byte identical to the old resolver for
+  production (890/890 leaves, permanent regression test:
+  `tests/test_config_v3_parity.py`). Found and fixed one real bug along
+  the way: the old resolver's CONFIG_FILE layer silently defeated 7 of
+  the `demo_eval` profile's own 48 assignments whenever `trading-bot.yml`
+  also declared an explicit value for that field (which it did for all
+  7) — production/`conservative` is unaffected (empty assignment list,
+  hence the 890/890 exact match), but local/dev's `demo_eval` profile now
+  actually gets the behavior it was always supposed to.
+  `docker-compose.yml`'s `bot` service now points at the new
+  `config/apexvoid.demo-eval.yml` (mounts all of `./config`) instead of
+  `trading-bot.yml`, with `AUTO_TRADE_PROFILE`/
+  `AUTO_TRADE_MAPPED_ZONE_ENABLED`/`AUTO_TRADE_MARKET_MAP_GUARD_ENABLED`/
+  `LOG_DIR`/`LOG_RETENTION_DAYS`/`LOG_FILE_ENABLED`/
+  `APEXVOID_RUNTIME_MANIFEST_FILE` (confirmed zero real consumers in
+  `bot`) removed from its environment. `.env.example` regenerated via the
+  project's own generator (not hand-edited) to contain only
+  `APEXVOID_CONFIG_FILE` and real secrets. `config-compiler`/
+  `ctrader-engine` unchanged — .NET still depends on
+  `ResolvedRuntimeManifest` until Stage C5.
+- Configuration V3 Stage C2 (see `docs/configuration-v3-migration-audit.md`'s
+  Stage C2 update). Cleaned the Stage C1 categorized YAML itself: removed
+  three global price-denominated geometry defaults that were byte-identical
+  to XAU's own instrument-pack values (`analysis.zones.merge_max_width`/
+  `confluence.merge_gap_price`, `auto_algo.risk.exposure.
+  opposing_minimum_separation_price`) after confirming their live Python
+  consumers already resolve per-instrument; removed duplicated symbol/feed
+  lists (`analysis.scanner.symbols`, `analysis.ctrader_feed.*`) that
+  should derive from `instruments.yml`; removed `telegram.presentation.
+  seq_reset_tz` as an independently-set value (now derived from
+  `runtime.timezone` — confirmed the same one operational timezone via a
+  13-call-site grep, not narrowly Telegram-scoped); surfaced 5 previously-
+  hidden Python schema defaults as explicit YAML (unchanged values);
+  converted 9 CSV-string fields to native YAML lists; converted every
+  dotted-key override in `instruments.yml` to nested mappings. Added
+  `contracts/configuration/apexvoid-config-v3.schema.json` (JSON Schema,
+  `additionalProperties: false`) and a reference include/merge/overlay
+  resolver (`config/scripts/resolve_reference.py`) that produces and
+  validates `contracts/configuration/examples/resolved-production-v3.json`.
+  `config/scripts/verify_stage_c2_parity.py` documents and verifies all 26
+  individual divergences from Stage C1; `config/scripts/config_check.py`
+  runs everything as one command. `config/trading-bot.yml` and the
+  generated `ResolvedRuntimeManifest` remain the sole live, unmodified
+  authority — no Python/Go/.NET runtime code changed, nothing here can
+  affect production. Stage C3 onward (direct readers replacing the live
+  path, cross-language parity, cutover, deletion) explicitly deferred —
+  see the audit's "What this update does not do, and why."
+- Renamed the XAU instrument pack/policy from `xau_fixed_2r_v1` to
+  `xau_fixed_4r_v1` (owner-directed 2026-09-22: "XAU already trade with
+  4R already" — the name had gone stale since the 2026-09-15 change to
+  auto XAU's 1R/2R/3R/4R targeting ladder; the enforced contract itself,
+  `_XAU_FIXED_4R_TARGETING`, is unchanged). Also renamed the two FX packs
+  for a consistent `<instrument-class>_fixed_<R>r_v1` naming template
+  across all three packs (owner-directed: "FX pair keep 2R but naming it
+  better"): `fx_usd_major_v1` → `fx_usd_major_fixed_2r_v1`,
+  `fx_jpy_cross_v1` → `fx_jpy_cross_fixed_2r_v1` — the FX policy shape
+  itself (`fx_fixed_2r_v1`/`fx_fixed_2r_frontload_v1`) was already
+  accurate and is unchanged. Pure rename, no targeting/risk behavior
+  change; `config/trading-bot.yml`, `app/configuration/models/
+  instruments.py`, generated manifest artifacts, and docs updated
+  together.
+
+### Added
+- Started the Go analysis-engine migration (`analysis-engine/`, see
+  `apexvoid-bot-prompts/rebuild-analysis-engine.md`). Stage 0 audit
+  (`docs/go-analysis-migration-audit.md`) traces the Python computation
+  graph and documents every duplicate/divergent calculation found,
+  including a previously-undocumented one: two live ATR formulas
+  (`math_utils.atr_series`'s simple rolling mean vs `indicators.atr`'s
+  pandas_ta Wilder/RMA smoothing) diverge ~6.7% on real XAU M5 data and
+  feed different parts of the same detection pass. Stage 1 (domain types:
+  `Candle`, `CandleWindow`, `Timeframe`, `Geometry`, manifest loader) and
+  the start of Stage 2 (`TrueRange`, both ATR formulas, `AtrAt`/
+  `AtrScalar`) are ported with golden-master parity tests against real
+  Python output. Python remains the authoritative, unmodified reference
+  implementation — nothing here changes live behavior.
+- Started the Configuration V3 migration (see
+  `apexvoid-bot-prompts/rebuild-configuration-architecture.md`). Stage C0
+  audit (`docs/configuration-v3-migration-audit.md`) inventories every
+  configuration source across Python/Go/.NET/deployment: 561 non-secret
+  Python catalog fields are ENV-overridable today (precedence:
+  ENV > CONFIG_FILE YAML), 3 (`AUTO_TRADE_PROFILE`,
+  `AUTO_TRADE_MAPPED_ZONE_ENABLED`, `AUTO_TRADE_MARKET_MAP_GUARD_ENABLED`)
+  are actually wired in `docker-compose.yml`/`.env.example` today, and
+  .NET's `ctrader-engine` has a full second, independent ENV-based config
+  system (`AutoTradeOptions.EnvironmentResolver`) kept alive only for
+  parity-checking against the manifest path. Stage C1: `config/trading-bot.yml`
+  (898 lines, single file) split into `config/apexvoid.yml` (root) plus 10
+  categorized files and 2 environment overlays, every one of the 550
+  resulting leaf values mechanically parity-checked against the old file's
+  effective value (`config/scripts/verify_stage_c1_parity.py`, all match).
+  `config/trading-bot.yml` and the generated `ResolvedRuntimeManifest`
+  remain the live, unmodified authority — no runtime reads the new files
+  yet (that's Stage C3/C4/C5); nothing here changes live behavior.
+
+### Fixed
+- Every executable card carried a "→ Executor owns mechanical entry and
+  risk enforcement." footer that said nothing the rest of the card didn't
+  already convey, and survived every later state of the message (SETUP
+  FORMING → QUEUED → ORDER ACTIVATED rewrites only the head line, never the
+  body) - owner-reported 2026-09-22 on a live ORDER ACTIVATED card still
+  carrying it. Dropped from `scanner._format_detection`.
+- A `tp_booked` card for a plan with 2+ targets carried nothing to say TP2+
+  was still pending. Owner-reported 2026-09-22 (live GBPJPY card: "TP1 ...
+  Achieved +16.0 pips" with TP2 never mentioned, read as "only one TP").
+  The message's own trailing `(open/total)` counts open ENTRY legs
+  (L1/L2), unrelated to target count, and was gated to terminal-close
+  events only for the fields that could disambiguate it
+  (`HighestBookedTargetIndex`). `TradePlanRuntime` now sends
+  `HighestBookedTargetIndex`/`TargetsTotal` on every `tp_booked` event, and
+  `delivery.py` renders "TP1 (1/2)" from those structured fields (never
+  parsed from message text) on both the rich TP card and the compact
+  manage-reply row.
+- A live Supply Demand card carried a bare "• SD" reason line with nothing
+  else on it. Owner-reported 2026-09-22.
+  `technique_display_tags([instance.technique])` exists to join multiple
+  techniques into one combined tag ("SD+OB") for a Confluence Zone band;
+  called with a single-item list for an ordinary technique reaction it only
+  re-abbreviated what the first reason line already named in full. Dropped
+  the redundant line; the Confluence Zone band's own multi-technique tag
+  usage is unchanged.
+- A retired setup re-arms on a NEWER M5 confirmation. Technique / confluence
+  matches keep one stable `match_id` per zone+direction, so once any plan on
+  that zone was rejected its setup stayed INVALIDATED for good and every later
+  signal there died at "durable TradePlan lifecycle is already terminal".
+  `setup_lifecycle.rearm_setup` was documented as "the only way back" and
+  nothing called it. Live 2026-09-21: a fresh, grade-A, with-bias Supply Demand
+  SELL (M5-confirmed 18:20, activation allowed via the M5 path) was refused
+  because the same `match_id` had been retired at 15:39. The cutover now
+  re-arms an INVALIDATED/EXPIRED setup before publishing when the candidate's
+  M5 confirmation closed more than 5 minutes after the setup died (same rule as
+  ZoneWatch re-formation). CONSUMED / CANCELLED setups never re-arm. The
+  soft-reject cooldown now keys on match + confirmation stamp, since the
+  match_id alone cannot tell a fresh reaction from the retired one.
+- A plan reject retires the MATCH, not the ZONE. The cutover terminalized a
+  ZoneWatch on any publish result with `status=invalidated`, and that status is
+  returned whenever the match's setup is retired - for every plan-build reject
+  (fixed-RR room, same-direction active, news, entry inside an opposing zone,
+  stop distance) and for the retired match's own "durable lifecycle already
+  terminal". Live 2026-09-21: one valid, M5-confirmed, with-bias tier-A Key
+  Level SELL zone was terminalized three times in an hour, the last time at
+  17:21 by the retry of a match already retired at 16:55. Only zone-level
+  reasons now terminalize a zone: `structure_invalidated`,
+  `zone_decisively_broken` and the stop-geometry errors. Any other reject with
+  a retired match sets the match-bound cooldown (600 s, cleared by a fresh
+  candidate) and leaves the zone watching. Reasons that are price-dependent
+  (stop distance, entry inside an opposing zone, barrier ahead) are unchanged
+  from the previous fix.
+- Price-dependent publish rejects no longer kill a zone, and the retry is
+  bound to the match. Live 2026-09-21: a with-bias tier-A Key Level SELL passed
+  activation on its M5 confirmation (`reaction_m5_authoritative_in_zone`,
+  first real live activation since the M5 parser fix) and was then vetoed
+  `v8_entry_inside_opposing_zone` because the bid (4344.915) sat on the zone's
+  bottom edge inside a live M15 demand shelf (4339.92-4347.56). The zone was
+  INVALIDATED, and 2 s later the retry hit "durable TradePlan lifecycle is
+  already terminal" (`reason=invalidated`), which is a hard reject. The soft
+  set from the stop-distance fix now also covers `entry_inside_opposing_*`,
+  `entry_inside_ambiguous_*` and `opposing_barrier`, and the cooldown is stored
+  as the rejected `match_id` (600 s) instead of a 60 s timer: the retired match
+  waits for a fresh candidate (a new touch/confirmation bar mints a new
+  `match_id`), while a fresh candidate proceeds immediately. The previous
+  60 s timer let the same dead match retry into the hard reject. Geometry
+  errors and all other rejects are unchanged.
+- Two zone-relevance tests could never fail meaningfully. They call
+  `evaluate_active_zone_watches` without the OHLC `source` production always
+  passes (spot loop and bar dispatcher), so there was no ATR, nothing could be
+  classed "dead", and `..._is_removed_not_expired` failed while
+  `..._within_hysteresis_band_is_kept` passed vacuously. Both now pass a
+  `RedisOHLCSource`, and the "kept" zone sits at 4.6 ATR (the old placement was
+  6.1 ATR, past the 6.0 dead line). They are real-Redis tests that error under
+  the newer pytest installed locally (`FixtureDef.unittest`); CI pins pytest
+  7.4.4, which is how this surfaced once the file joined the CI allowlist.
+- A stop-DISTANCE failure no longer kills a zone. `stop_exceeds_envelope_*` /
+  `stop_exceeds_max_envelope` depend on where price sits inside the zone at that
+  instant, but the cutover read them from a STATIC eligibility snapshot taken at
+  discovery and INVALIDATED the zone for good (and again at publish time).
+  Live 2026-09-21: a with-bias tier-A Key Level SELL (zone 4349.27-4354.73, M5
+  `strong_reclaim` confirmed, confluence 3) was first seen with price on the
+  zone's low edge, so the market leg was 68 pips from the structural stop (cap
+  60) and the zone died, although it plans fine once price is mid-zone. Distance
+  errors are now soft: activation ignores the stale static value, a publish-time
+  distance reject sets a 60 s per-zone cooldown instead of terminalizing.
+  Geometry errors (`stop_inside_entry_zone`, `stop_inside_opposing_zone`,
+  `stop_not_beyond_planned_entries`, `protective_stop_unavailable`) stay terminal.
+- A dead ZoneWatch zone can now re-form on a NEW reaction. An INVALIDATED or
+  EXPIRED zone stayed dead for the full 7-day retention: every later detection
+  at the same price bucket was refused
+  (`zone watch cutover rejected ... reason=zone_watch_locked_or_terminal
+  state=invalidated`, seen live on XAU Key Level SELL while price climbed back
+  to the level, 2026-09-21). Zones now carry `terminal_at`; when a detection's
+  M5 confirmation closes more than 5 minutes after the zone last died or was
+  touched (`discover_zone_watch(confirmed_at=...)`), it is re-created as a
+  fresh DISCOVERED record (touch count and episode reset,
+  `last_rearm_reason=reformed_after_<state>`). A detector that merely re-sees
+  the old structure (no newer confirmation) never revives it, a decisive
+  closed-bar break still re-invalidates it, and CONSUMED (a trade was taken)
+  never re-forms.
+- The M5-authoritative activation fallback never worked in production. The
+  scanner stores `m5_confirmation_bar_ts` as an ISO string
+  (`2026-09-21T13:25:00+00:00`); activation's `_parse_confirmation_ts` was a
+  bare `int()`, which returns None for it, and `quote_inside_fresh` treats None
+  as "no fresh M5 confirmation". So despite
+  `execution.activation.m5_authoritative_fallback: quote_inside_fresh`, every
+  reaction setup still needed an M1 trigger inside a 2-bar window
+  (`reaction_trigger_missing`, owner 2026-09-21: "why m1? m1 only for
+  execution"). It now accepts ISO / pandas / numeric stamps via
+  `parse_bar_timestamp`, so a setup with an M5 structural confirmation in the
+  last 6 bars can activate while price is inside the zone; M1 stays the entry
+  timing. All earlier guards (impulse-against, location, sweep-reclaim,
+  proximal, opposing barrier) still run first. Existing tests only ever used
+  numeric stamps, which is why this survived.
+- `tests/test_structural_barrier_wiring.py` failed whenever run outside 07-11 /
+  13-16 UTC (default schema enforces the reaction publish window; production
+  config has it off): it now freezes the UTC hour like the publish suite. The
+  CI allowlist (`tests/ci_autotrade_paths.txt`) now includes the activation,
+  entry-location, technique-geometry/origin, wall-liveness, setups-report and
+  barrier-wiring suites, which CI was not running.
+- Opposing-barrier walls now exclude zones price has already accepted through.
+  `_htf_zones` fed EVERY width-eligible M15 supply/demand zone to the TradePlan
+  barrier guard, stamping touches but never checking that price had since
+  closed through and stayed beyond it. Owner-reported 2026-09-21: a BUY was
+  vetoed `v8_entry_inside_opposing_zone` ("entry 4355.58 inside supply
+  4348.54-4356.44") - a Sep-17 zone touched 14 times that price had spent two
+  days above; 3 of the 5 walls near price at that moment were dead. The wall
+  list now uses the same hold-based validity as the technique layer
+  (`not_invalidated`: tolerance, sweep-and-reclaim forgiveness, episode
+  budget), so the two never disagree about whether a zone is alive. A swept
+  and reclaimed zone stays a wall; touched-but-holding zones stay walls.
+- Supply/Demand, Order Block and FVG technique instances are now built from
+  UNMERGED zones, each with its own origin, touch history and break. They were
+  built from the map-merge output, whose composite takes the EARLIEST member's
+  origin, so a fresh zone that overlapped an old one was judged by the old
+  zone's history. Owner-reported 2026-09-21 (XAU): the supply behind the -29 pt
+  drop (origin 13:45, 4349-4357) and the one at the 13:20 top existed in the
+  raw generator but were absorbed into a 06:20 zone that price had accepted
+  above for two hours, so no technique instance ever existed there (every
+  supply near price was rejected `not_invalidated`). Replay of that day now
+  fires `supply_demand` SELL at the 13:25 top and iFVG/FVG SELLs through the
+  drop; before, only Key Level did. The engine keeps the per-origin zones as
+  `TimeframeAnalysis.technique_zones` (scored, incl. the multi-timeframe
+  re-score); hand-built analyses without them fall back to the merged views.
+  The map is unchanged. `mark_mitigation` is now vectorised (same result,
+  verified against the original loop) - analysis build is ~15% faster.
+- Manual algo runner stop after TP1 now sits at the ladder's DEEPEST planned
+  entry instead of its own shallow entry. Owner-reported live 2026-09-21
+  (manual 409, XAU SELL zone 4341-4344, SL 4346): only the shallow leg filled
+  (0.08 @ 4341.04); TP1 banked half of it, the unfilled 4342.5 / 4344.5 legs
+  were cancelled, and the runner's stop went to its own entry (BE+6 ticks,
+  4340.98). A normal retest of the zone swept it for ~0 while price kept
+  falling. The group-economic planner fell back to per-clip BE because the
+  funded stop (4346.49) was no tighter than the original 4346. It now records
+  the deepest planned entry (filled legs plus still-pending legs, before they
+  are cancelled) and stops the runner there (4344.50). The economic stop still
+  binds when tighter, an already-tighter held stop is never loosened, and a
+  one-price ladder keeps the protected BE. TP2's shallow-entry trail is
+  unchanged.
+- Premium/discount no longer blocks trades that go WITH the higher-timeframe
+  bias. Owner-reported 2026-09-21: XAU H1 bias was down and the map held a
+  score-23 supply (OB + breaker + FVG, 4344-4356) just above price, but the
+  gate compared price to a stale H1 box (4342-4369) and answered
+  `sell_in_discount` (the top activation blocker, ~45k `activation_blocked`
+  ticks; `buy_in_premium` ~41k). Premium/discount is a counter-trend
+  safeguard, so a reversal / breakout-retest / unknown-archetype entry whose
+  `bias_relationship` is `with_bias` is now continuation and passes the
+  half-range and extreme bands. Counter-bias and neutral entries, and
+  range-reversion / trend-pullback / momentum families, are unchanged. New
+  `actionability.entry_location.with_bias_pd_exempt` (default on) restores the
+  old behaviour when off.
+- Supply/Demand, Order Block and FVG zones stopped being tradeable the moment
+  price touched them or closed once through them. Owner-reported 2026-09-21
+  (XAU chart: 4340-4352 demand tapped ~12 times in a week and held each time,
+  yet the bot never traded it; `technique_sd` fired 26 times and
+  `technique_ob` 18 since metrics began, vs 4190 for Key Level). Two rules
+  were the cause. (1) `Zone.mitigated` means "touched once" and
+  `collect_technique_instances` / `validate_technique_instance` discarded every
+  mitigated zone, so a zone could only trade on its first tap. (2)
+  `not_invalidated` killed a zone permanently on ONE M5 close beyond the far
+  edge by more than 0.05 ATR - live XAU 4341.0-4352.9 demand died on Sep 18
+  03:15 UTC when a candle closed 3.6 points under it (the liquidity sweep
+  before the week's biggest rally) and then held on three further taps.
+  A touched zone now stays tradeable while it still holds: a close only counts
+  as a break when it is beyond the far edge by more than
+  `analysis.techniques.invalidation_tolerance_atr` (0.5 ATR), a close-through
+  is forgiven as a sweep when price returns to the zone side within
+  `sweep_reclaim_bars` (6), a zone swept more than `max_break_episodes` (2)
+  times is treated as noise, and `retest_max_touches` (30) is only a sanity
+  cap. New env: `TECHNIQUE_RETEST_MAX_TOUCHES`,
+  `TECHNIQUE_INVALIDATION_TOLERANCE_ATR`, `TECHNIQUE_SWEEP_RECLAIM_BARS`,
+  `TECHNIQUE_MAX_BREAK_EPISODES`; setting them to 0/0/0/0 restores the old
+  behaviour. Replay on live XAU bars: BUY supply_demand detections now fire at
+  the 09:45 and 11:00 UTC taps of 4340-4352 that produced none before, with
+  roughly one extra detection per ten bars overall (no flood).
+- Key level touches now count wick touches, not only fractal swing points.
+  Owner-reported 2026-09-21. `levels.key_levels` counted a touch only when a
+  confirmed fractal swing sat in the cluster, so a wick that poked a level and
+  was rejected without forming a fractal never counted (live XAU M5: 4369.43
+  had 3 swing touches but 13 wick touches; 4346.18 5 vs 13; 4349.26 5 vs 18).
+  The main analysis now passes the bars in and each level's touches become the
+  number of distinct wick episodes into its band (`levels.wick_touch_episodes`:
+  a bar counts when its range overlaps the band unless it opened on one side
+  and closed beyond the far edge - a break, not a touch; consecutive bars are
+  one episode). It only raises a level's touch count; it never removes a level.
+- Auto ladder leg 2 could be a marketable limit that filled at the same price
+  as leg 1. Owner-reported 2026-09-21: XAU Session Level BUY, zone
+  4344.11-4348.65, quote 4346.68 - L1 and L2 both filled at 4346.83. The
+  entry-price fix (#557) anchored leg 2 to the zone's near edge (4348.65); once
+  price is already inside the zone that edge is on the wrong side of the market,
+  so the "deeper" leg landed at 4347.29, ABOVE the quote - a BUY limit above
+  the ask fills instantly. Leg 2 is now the deeper of the structural-edge
+  ladder and the quote-anchored ladder (lower for BUY, higher for SELL), so it
+  never sits closer to the market than the quote ladder would (applies to
+  `market_with_limit_scale` and both `zone_scale` branches).
+- Order Block detection never found reversal order blocks - it had never
+  produced a single auto trade. Owner-reported 2026-09-21: XAU M15 demand OB
+  at 4337-42 (the last down candle before a +18 impulse) was invisible to the
+  bot. `zones._causing_bos` only accepted a `BOS` as the structure break that
+  qualifies an impulse's origin candle as an order block, but an impulse that
+  reverses the prevailing trend breaks structure as a `CHoCH`
+  (`structure._break_kind`) - so every reversal OB, the most common kind, was
+  discarded. It now accepts BOS or CHoCH. Verified on live production M15/M5
+  bars: the 09-18 03:15 demand OB (4340.8-4344.8 body, 4334.3-4344.9 range on
+  M15; 4336.1-4337.4 on M5) is now detected. Expect Order Block setups to
+  start appearing in the watchlist and, once retested and confirmed, trading.
+- Dead zones are removed from the ZoneWatch watchlist. Zones past the dormant
+  band (`remote_atr`, 3 ATR) were only skipped and stayed listed forever - a
+  BUY zone 8 ATR below a falling XAU market was still on the list. Beyond
+  twice the dormant band (6 ATR) the record and its indexes are now deleted
+  (not an EXPIRED transition, which is a dead end that blocks rediscovery),
+  so the zone can be rediscovered if price returns. The band between 3 and
+  6 ATR stays dormant-but-kept as hysteresis.
+- A filled trade's root card is no longer deleted. Owner-reported
+  2026-09-21: two XAU scalps filled and closed within minutes; with
+  `delivery.telegram.delete_root_on_terminal` on, `kill_setup_card` deleted
+  each root at close, and the close reply (threaded to it) was rejected as
+  "message to be replied not found" and skipped - nothing was left in the
+  channel for trades that really executed. `kill_setup_card` now retains the
+  root for anything that filled or filled-and-closed - that is not a terminal
+  setup, its card is left alone (position close passes `retain_root=True`;
+  reject/expire/invalidate infer a fill from the card text/status line), so root
+  deletion only applies to setups that never filled. A close reply whose
+  root is gone now posts standalone instead of being dropped.
+- Manual /algo runner never trailed after TP1 when the funded economic
+  breakeven fell below the held stop. Owner-reported 2026-09-21 (manual 407,
+  XAU BUY): one clip filled, TP1 banked half of it, and
+  `StopTrailPlanner.PlanGroupEconomicBreakeven` solved a "funded" stop below
+  entry (4354.04) - worse than the original 4355 stop - so it returned "no
+  move" and the runner sat on its original stop until price swept it at a
+  loss. It now falls back to the remaining volume's own protected breakeven
+  whenever the economic stop cannot improve on the held one (it still never
+  widens a held stop).
+- Owner DM daily wipe deletes the owner's own messages again. The incoming
+  journaling middleware removed 2026-09-17 is restored: the wipe now sweeps
+  the owner's typed messages/commands as well as the bot's own, as intended.
+
+- Restore equity-table sizing: non-scalp strategies use their own full lot
+  level, while scalp uses the configured 1.5x volume-only multiplier. Snap-Back
+  no longer applies its hidden 0.75 reduction, and the scalp multiplier no
+  longer changes structural stop geometry.
+- Let a fresh, M5-confirmed Key Level or Reaction setup activate while price
+  remains inside its entry zone. This avoids rejecting brief valid retests
+  solely because no new M1 candle had time to close; non-authoritative setups
+  still require their normal M1 confirmation.
+
+### Added
+- `/algo_setups` now lists the bot's own scored MARKET MAP ZONES (major tier,
+  within 8 M5 ATR, nearest first, with map bias) and marks whether ZoneWatch is
+  already tracking each one. ZoneWatch only holds a zone once a detector has
+  seen a reaction there, so the report said `coverage: GAP` while the map held
+  a score-23 supply 7 points above price. Display only; nothing here arms or
+  trades a zone, and a map failure never breaks the report.
+- Trendline V2: immutable causal A/B anchors, independent forward reaction
+  validation, slope/penetration/violation telemetry, and explicit line
+  lifecycle (`tentative`, `confirmed`, `degraded`, `broken`, `exhausted`).
+  The evidence follows scanner matches into TradePlan V8 for replay.
+- Detection-time "math" telemetry (fib retracement ratio, momentum
+  velocity/acceleration, dealing-range premium/discount position — the
+  same values the root card's Math section already shows) now flows
+  through to Postgres for auto algo (V8) trades. Owner: "collect data 2
+  weeks to see if order that has good math quality can process well
+  than other or not." These fields existed on `StrategyMatch`/the root
+  card already but were dropped before reaching `TradePlan` - added to
+  `TradePlanAnalysis` (Python) and the matching `TradePlan.Analysis`/
+  `AutoTradeEvent` records (C#, `PublishEventCoreAsync` already
+  republishes `ConfluenceV1`/etc. the same way), then to
+  `auto_trade_fills` (4 new nullable columns, `store.py`). Joinable
+  against `auto_trade_results.result_pips` via `group_id` once enough
+  trades have accumulated. Purely descriptive — never a gate.
+- New manual `/algo` suffix `/ 1r` for owner-personal trades that aren't
+  for the channel: collapses any typed entry zone to the conservative
+  edge already used for R sizing and books full volume at that single
+  price, overrides any explicit `tp` with one target at exactly 1R, and
+  arms broker execution on its own (`/ algo` not required). The root card
+  and every later lifecycle update (fills, TP, close, SL moves) are DM'd
+  to the owner instead of posted to the VIP/public channel, sent via the
+  scanner/algo bot identity (the same one every other algo-armed root
+  card already goes out through) rather than the main ApexVoid bot — the
+  main bot's manual `/trade` handling stays command-management only
+  (parse, persist, ack). Same `signal_posts` fan-out mechanism as the
+  channel path, just addressed at the owner's chat id with `tier="vip"`
+  so the daily `#seq` and inline Close button still work; deletes route
+  through the matching bot too (a bot can only delete/edit messages it
+  itself sent). New `manual_signals.personal_trade` column and
+  `ManualTradeIntent.single_entry_override` field; no C# changes (the
+  single-entry/single-TP execution path already existed for FX).
+- Opt-in end-of-day wipe of the ApexVoid bot's own DM with the owner
+  (`DELIVERY_OWNER_DM_DAILY_WIPE_ENABLED`, default off): at each local
+  trade-day rollover, deletes every message sent since the previous wipe
+  in that DM — both the bot's own sends and the owner's own typed
+  commands. Scope is only the ApexVoid bot's DM; the scanner/algo bot's
+  own DM (autonomous root cards, `/1r` cards) is untouched. New
+  `app/bot/owner_dm_journal.py`: a `bot.session` request middleware
+  journals every outgoing message (the single choke point every
+  Telegram API call the bot makes passes through, since `msg.answer(...)`
+  and `send_with_retry` share no other call site), a `dp.message` outer
+  middleware journals the owner's own incoming messages, and a new
+  `owner_dm_daily_wipe_loop` (registered like the other daily loops in
+  `main.py`) sweeps and clears the just-completed day's journal at each
+  local midnight. New `delivery.telegram.owner_dm_daily_wipe_enabled`
+  config field.
+- Turned the owner DM daily wipe above on for production: `config/trading-bot.yml`
+  now sets `delivery.telegram.owner_dm_daily_wipe_enabled: true` (owner
+  request). The Python schema default stays `false` as a safe fallback;
+  this is a plain config value change, synced to `ansible-library`'s
+  `apexvoid_trading_bot_config.yml` mirror in the same change per this
+  repo's mirror-sync requirement (`docs/deployment.md § Production Ansible`).
+
+### Changed
+- FX equity-table sizing now ramps from 0.15 base lots at $2k to 0.20 at
+  $3k and then to 0.30 at $5k. With the FX fixed-RR 1.5x multiplier, this
+  removes the prior $3k jump from 0.23 to 0.38 lots; it is now 0.30 on both
+  sides of that boundary. XAU and all FX stop envelopes are unchanged.
+- Set the default impulse-pullback session preference to `all`; session time
+  no longer reduces quality or restricts discovery for this archetype.
+- Scalping structure is now explicitly `M5 setup -> M1 confirmation` while
+  the runtime remains M1-event-driven. Range Sweep, Impulse Pullback, and
+  Breakout Retest keep independent detectors and geometry; session windows
+  contribute soft quality only and no longer hard-block a valid setup.
+- Trendline's ATR band is now an M5 interaction area, never an automatic
+  entry zone. A V2 reclaim must receive a fresh post-interaction M1 trigger;
+  chop requires stronger independent validation and HTF alignment rather than
+  globally disabling the strategy. `analysis.trendlines.version` provides a
+  reversible V1/V2 rollout, with optional V1 metrics-only shadow evaluation.
+- FX autonomous execution now uses one best entry: a single market fill when
+  price is inside the approved zone, or one proximal resting limit while it
+  approaches. EURUSD, GBPUSD, GBPJPY, and USDJPY no longer emit an XAU-style
+  shallow/deep entry ladder; the optional reaction RISK leg remains XAU-only.
+- Retired the "HFS" product name in favor of "scalping" everywhere it was
+  still live naming: docs prose, Python identifiers/log fields/test names,
+  C# identifiers/test fixture ids, and the shared `market_buy_hfs_chase`
+  TradePlan V8 contract fixture (renamed to `market_buy_scalp_chase` in
+  `contracts/autotrade/trade-plan-v8.json` and both the Python and C#
+  contract tests that reference it by name). The M1 scalping feature
+  itself is unchanged and still fully live - this is a naming-only sweep.
+  Left untouched on purpose: legacy `"HFS ..."` display-name aliases in
+  `strategy_names.py` and matching strategy-key aliases in
+  `mad_phase.py`/`mad_replay.py`/`replay_lab.py` (real historic data may
+  still carry the old label), and comments/docstrings citing a specific
+  past incident by the name it had at the time (e.g. "Aug 20 HFS gold
+  dig", "2026-08-06 HFS fill") - CHANGELOG history is likewise untouched.
+- Structural reactions (Key Level, Zone Reaction, Trendline, Session
+  Level) now feed a real liquidity extreme into protective stop
+  planning: a genuine, non-induced grade A/B sweep-reclaim
+  (`CONFIRM_SWEEP_RECLAIM`) sets `sweep_extreme_price` on the match,
+  which `evaluate_execution_policy` now falls back to when there's no
+  M1 trigger wick - widening the stop past the real liquidity extreme
+  instead of just the zone edge (never narrower; fails closed via the
+  existing `stop_exceeds_envelope_after_wick` guard). Also stops scoring
+  an induced (stop-hunt-bait) grade-A grab the same as a genuine one -
+  `Grab.inducement` was computed and never read before this.
+- XAU auto algo now runs the same risk/target shape as manual /algo. Entry
+  price selection (`execution_route.risk_targeted_entry_price`, XAU only,
+  behind `execution.reaction.risk_targeted_entry_enabled`, default on) picks
+  the entry within the detected zone/room so entry-to-stop risk lands near
+  the 50 pip floor, instead of a pure zone-edge/midpoint pick with zero risk
+  awareness — best-effort when the zone's own span can't reach the target.
+  The stop envelope cap (`xau_fixed_2r_v1` pack `stop_envelope.max_pips`)
+  drops from 100 to 60, so structural stops now clamp to the same
+  `[50, 60]` band manual /algo defaults to. The auto XAU fixed-RR target
+  ladder (`xau_fixed_2r_v1` `targeting`) changes from `0.5R/1R/2R/3R` to
+  manual /algo's own default `1R/2R/3R/4R`
+  (`parsing.MANUAL_ALGO_DEFAULT_TARGET_R_MULTIPLES`), `reward_risk` 3.0→4.0,
+  breakeven now follows 1R instead of 0.5R; close ratios stay
+  `40/20/20/20`. FX (`fx_fixed_2r_v1`) is untouched.
+- The scalp root/forming card now shows an R level for every TP
+  (`StrategyMatch.scalp_target_r_multiples`, new field) instead of a bare
+  pip offset — `technique_fixed_rr_targeting` always returns `None` for
+  M1 scalp strategies by design (scalp keeps its own 1R/2R book,
+  independent of the instrument's fixed_rr ladder), so the root card's
+  R-display logic previously had nothing to fall back to. Computed by
+  `app.scalping.publish._scalp_target_r_multiples` as
+  `targets_pips[i] / stop_pips`, using the exact same stop distance the
+  ladder itself was built from — never re-derived from the card's own
+  displayed prices (a zone edge is a cosmetic pip-offset reference only,
+  a different basis, per the docstring precedent from the 2026-09-07
+  GBPJPY "+10R" bug).
+- Manual /algo leg ladder: split the group's two risk-facing figures apart
+  again. `GroupWorstCase` (the advertised SL risk shown when legs are
+  placed) now sums only the original 2-leg Shallow/Deep ladder's own
+  volume × stop distance, excluding the fixed-size risk/trade-off leg
+  (`ManualAlgoRiskLegPrice`) entirely — that leg's deliberately short
+  distance to the shared stop was understating nothing before, but the
+  owner wants the headline risk figure to describe only the ladder they
+  actually typed. `GroupDeepestEntryPrice` (the archived pips/R
+  denominator, read by `pips_format.legs_achieved_entry_price` on the
+  Python side) now only includes the risk leg for a genuine take-profit /
+  "TP archived level" event — the archived result there must reflect the
+  real deepest fill reached, risk leg included. Every risk calculation
+  (`GroupWorstCase`, and any close where no target was actually achieved —
+  an owner-initiated `/trade_close`/`/auto_close_all`, or a plain SL
+  stop-out) keeps the risk leg excluded, scoped to the original ladder
+  only. Refines the 2026-09-14 (signal 341) exclusion rather than a flat
+  reversal of it.
+- Key Level structural repair Phase 2: the scanner's primary actionability
+  gate and the TradePlan-time room/containment recheck now source their
+  opposing-structure pool from `StructuralBarrierBook` (multi-timeframe
+  M5/M15/H1, same-side merged, cross-side reconciled) instead of an
+  unreconciled single-timeframe (M15-only) zone read - restores the two
+  pooling operations the 2026-09-07 Market Map purge dropped, for every
+  strategy, not just Key Level. The fixed-RR ladder (XAU/FX technique
+  trades) also gets a real opposing-wall room cap again - deleted
+  outright by PR #499, after which every call site passed
+  `available_target_room_pips=None`. Gated by a new
+  `actionability.target_room.structural_barrier_book_enabled` flag
+  (default on) that reverts both to exactly pre-wiring behavior if
+  disabled - no redeploy needed to roll back. Also fixes a telemetry bug
+  (`opposing_zone_present` could only ever be `True`/`None`, never
+  `False`, collapsing "no opposing zone found" and "never evaluated"
+  into the same NULL - confirmed live, 9/10 Key Level fills since PR
+  #523 deployed were NULL).
+- `StructuralBarrierBook` also restores `_attach_confluence`'s one
+  effect that ever reached a trading decision: a barrier overlapping a
+  same-side key level, session level, or unbroken trendline now gets its
+  score bumped to the stronger of the two (never its tier - traced
+  through the old code and confirmed a level/trendline can never itself
+  promote a real zone's tier). That score only matters as a tie-break in
+  cross-side reconciliation. Investigated restoring the old round-number/
+  revisit/swept backfill (`_fill_side`) too, but traced it to a
+  display-only code path in the old `market_map.py` (fed the Telegram
+  card's shown zones, never `MarketMap.actionable_entries`, the field
+  the room-check gate actually reads) - not implemented, since there was
+  nothing here that ever affected a trading decision.
+- FX sessions are now pair-native quality context, never time-of-day hard
+  gates: EURUSD/GBPUSD focus London+NY, GBPJPY focuses London, and USDJPY
+  focuses Tokyo+NY. Focus hours score 2 (good); all other hours score 1
+  (selective), where these FX pairs require three-confluence strategy evidence.
+  XAU keeps the policy disabled. Mirrored in Ansible deployment config.
+- Dropped the "Reaction" suffix from the 3 live strategy names that still
+  had it: "Key Level Reaction" → "Key Level", "Session Level Reaction" →
+  "Session Level", "Trendline Reaction" → "Trendline"
+  (`app/autotrade/strategy_names.py`, the shared naming contract every
+  detector/card/config comparison reads from). The old names remain
+  resolvable as aliases (`resolve_strategy("Key Level Reaction")` still
+  works) so historical Redis/Postgres records and anything still typing
+  the old form keep working. Retired legacy names ("Demand Zone
+  Reaction", "Zone Reaction", "Mapped Zone Reaction", etc. — kept only
+  to parse old records, emitted by no current detector) and the
+  "_reaction" suffix on internal detector IDs / config environment
+  variables (a separate, unrelated naming scheme) are untouched.
+- Manual `/algo` entries simplified from a 3-leg 70/20/10 Shallow/Mid/Deep
+  ladder to a plain 2-leg 80/20 ladder (Shallow/Deep), matching the auto
+  algo's own zone-scale entry shape. A separate, fixed-size risk leg
+  (0.05 lots, or 0.02 below $1k live equity) now rests 10 pips from the
+  stop, on the entry side — not a share of the sized ladder volume, so
+  account size never grows it. If price nearly invalidates the setup
+  before reversing, this leg still catches a much deeper/better fill
+  than Shallow or Deep ever would; if it keeps going instead, the small
+  fixed size caps the extra loss to roughly the cost of that one leg.
+  If the whole group fills, the risk leg is simply the deepest/last leg
+  and rides as the runner toward the final target like any other — the
+  existing shallow-first target-booking walk
+  (`ManualAlgoAllocateTargetPlansAcrossLegs`) already treats it that way
+  with no special-casing needed. `GroupWorstCase` (the group's
+  advertised max-loss risk figure) now sums each leg's own lots × its
+  own distance to the shared stop instead of assuming every leg shares
+  one flat stop distance, since the risk leg's distance is deliberately
+  much smaller than the main ladder's.
+- Technique strategies (FVG/OB/IFVG/CRT/supply_demand — "structural
+  source: technique" on the card) no longer force a single-leg market
+  fill regardless of their declared policy. Owner-reported: a wide
+  demand-zone iFVG BUY filled at market near the top of its own 50-pip
+  zone instead of scaling into it, producing a much wider effective
+  stop than the zone's own low edge would have given. The single-leg-
+  market restriction was a 2026-08-26 workaround for a GROUP RECOVERY
+  REQUIRED false-positive (an SL'd leg's deal lookup returning Unknown
+  while a sibling leg was still open) that `TradePlanRuntime`'s
+  `ClassifyCloseReason`/`ExitBeyondProtectiveStop` has since fixed
+  generally, not entry-type-specific — technique strategies now fall
+  through to their own configured policy (limit + zone_scale for
+  FVG/OB/IFVG/CRT/supply_demand), DCA-ing into the zone at
+  progressively better prices when the zone is wide enough to qualify,
+  falling back to a single `market_watch` entry (broker-side zone
+  revalidation, not a blind immediate fill) when it isn't. Scalp
+  strategies keep their own single-leg-market-only restriction
+  unchanged — that one is about execution simplicity, not the fixed
+  recovery bug.
+- Auto algo (TradePlan V8) TP1 now closes the shallow (worse-priced) leg
+  of a multi-leg entry completely before touching a deeper (better-
+  priced) leg, instead of closing both pro-rata. Owner-reported: "when
+  it hit TP1, it should trail to the deeper entry price like the manual
+  algo, not trail to the shallow entry quickly." Pro-rata closing kept
+  both legs' remaining volume in their original ratio after every
+  target, so the group's weighted-fill breakeven reference stayed
+  skewed toward the shallow leg even once TP1 booked. The breakeven
+  reference is now recomputed from only the legs still actually open at
+  that moment (`VolumePlanner.AllocateShallowFirstStepped`,
+  `TradePlanRuntime.cs`) - once the shallow leg empties, the deeper
+  leg's own better fill dominates, mirroring manual algo's
+  `PlanGroupEconomicBreakeven`.
+
+### Fixed
+- A manual /algo ladder's deepest leg (owning only the final target ordinal
+  in a shallow-first split - e.g. the fixed-size risk leg) could sit
+  unmanaged for the rest of its life once price passed TP3+. Owner-reported
+  live 2026-09-18 (XAU SELL 4360-63, signal 393): the leg's stop never
+  moved past TP2's shared "shallow entry" level even though price reached
+  TP3, and `AutoTradeEngine.cs`'s `NotifySkippedManualTargetsAsync` catch-up
+  - meant exactly for legs that don't own an ordinal - was gated by whether
+  some OTHER *currently-tracked* sibling owned that ordinal, recomputed
+  fresh from `_states` every poll. Two compounding bugs: (1) that gate
+  wrongly suppressed the leg's own catch-up trail even while siblings were
+  still alive and genuinely owned the ordinal for real (TP1/TP2 have
+  dedicated group-wide stop sweeps that cover every leg regardless of
+  ownership; TP3+ has no such sweep, only this catch-up), and (2) once a
+  sibling closed and left `_states`, the ordinals it owned silently
+  vanished from the aggregate, producing a stale, misleading, one-shot,
+  NOW-price-only catch-up that could only catch whichever ordinal still
+  happened to read "reached" at that instant - permanently missing the
+  rest. Fixed by bounding/gating the catch-up on the leg's own target
+  ordinals (so it always evaluates and trails every ordinal it doesn't
+  itself own, immediately as price reaches it) and separately tracking
+  ordinal ownership in a monotonic per-group accumulator
+  (`_groupTargetOrdinalsSeen`) that survives a sibling leaving `_states`,
+  used only to suppress a duplicate Telegram message for an ordinal a
+  sibling already booked for real - never to suppress the stop trail
+  itself.
+- Trendline no longer refits an A-C line and retroactively counts B as a
+  confirming touch. A close-through invalidates the line, while reclaimed
+  wick probes are measured separately instead of being treated as equivalent
+  failures.
+- The reaction RISK leg (PR #554) is now gated to XAU only. Its fixed
+  0.05/0.02-lot sizing was tuned against XAU's own pip value; applying
+  the same fixed lots to an FX pair is a materially different risk —
+  reproduced live on a USDJPY CRT trade this morning that got a RISK
+  leg it should never have had. Also fixed the break-even trigger
+  (`ManageOpenPositionsAsync`) still reading the raw, unfiltered
+  `GroupWeightedFillPrice`/open-legs blend when deciding the BE stop —
+  if the RISK leg's own fill is the only leg still open once earlier
+  targets book (shallow-first TP closing drains it last), the BE
+  reference now falls back to the non-RISK blend instead of the RISK
+  leg's own deliberately-worse fill, mirroring the exclusion
+  `SignedExitPips` already applies to the loss-pips reference.
+  Uncovered along the way: `TradePlanOwnership.TryNormalizeLegId` never
+  recognized the literal `"RISK"` leg token, so a filled RISK leg's
+  broker position could never actually be adopted by
+  `ReconcileSubmittedLegsAsync` — the leg stayed `Pending` forever and
+  the orphan-pending-order path would eventually mislabel a real,
+  broker-protected fill as `Cancelled`. Fixed by recognizing `"RISK"` as
+  a valid leg id there too.
+- `execution_route.py`'s zone-scale routing (`market_with_limit_scale` for
+  Key Level/Session Level/Trendline, and the classic zone_scale ladder for
+  Demand/Supply/CRT/FVG/iFVG/OB) was silently discarding the already-
+  computed better entry price for the second/deeper leg — the XAU
+  risk-targeted price, or the zone's own structural near edge for every
+  other instrument — and re-anchoring it to the live quote instead,
+  whenever price was already inside the zone at confirmation (the normal
+  case for a reaction/technique zone). Since the group stop is fixed
+  regardless of entry price, entry price was the only lever controlling
+  risk on these trades. Reproduced live 2026-09-17 on both XAU (Key Level
+  SELL, `v8:9768e2b1…`) and USDJPY (CRT SELL, `v8:4faf9fb1…`, stopped out
+  −10p; an entry near the zone's own better edge would have cost ~3p for
+  the identical wrong call). The first leg keeps tracking the live quote
+  (still needs to be immediately fillable); only the second/deeper leg
+  now anchors off the true structural price. See
+  `ENTRY_LOGIC_REVIEW_2026-09-17.md`.
+- Scalp volume silently re-inflated to 1.5× table lots despite PR #486's
+  "scalp books the same flat equity-table lot as any other trade" fix.
+  `risk_multiplier_for_tier`'s scalp branch still returned
+  `range_max_risk_multiplier` (1.5) - inert under the OLD `risk` sizing
+  mode (the C# executor's `RiskLots` path never read `RiskMultiplier`
+  at all), but PR #486 switched scalp's default sizing_mode to
+  `equity_table`, whose `EquityTableLots` path DOES read it -
+  `tableLots × 1.5`. Now returns `1.0` unconditionally, matching every
+  other equity-table-sized trade; the paired stop-envelope shrink that
+  existed only to hold dollar risk flat against the inflated volume is
+  now correctly a no-op too.
+
+### Removed
+- The provisional "⏳ Position closed at broker — confirming exit price..."
+  ping (PR #563, shipped the day before) — owner-reported it spammed the
+  VIP channel 2-3 times for a single close, since a manual /algo signal's
+  legs share one stop-loss and commonly all disappear from the broker in
+  the same `AutoTradeEngine.cs` reconcile pass (one `position_closing`
+  event per leg, all resolving to the same signal). A per-signal dedup
+  guard fixed the spam, but the owner's call once shown it working was to
+  drop the ping entirely rather than send it even once — `manual_execution.py`
+  no longer handles `position_closing` at all; it falls through to the
+  same silent no-op path as any other event type this loop doesn't
+  recognize. `AutoTradeEngine.cs` still publishes the event (harmless,
+  never mapped to any lifecycle state) in case a different notification
+  shape is wanted later.
+- Stopped the automatic Market Map owner Telegram digest
+  (`market_map_scan_loop`, previously spawned unconditionally at
+  startup) — owner-reported it was still sending after the trading-
+  decision purge stages. `/trade_map` (on-demand) is unaffected.
+- Market Map as the data source for the scanner's primary actionability
+  gate (Stage 4 of the owner-directed purge). `resolve_actionability`
+  (called from `scanner.py`'s main per-cycle loop — the actual gate that
+  decides which detected setups are actionable, not just TradePlan's own
+  secondary re-check from Stage 3) now reads the scanner's own
+  multi-timeframe-scored M15 zone data (`analysis.per_tf["M15"].zones`)
+  instead of `market_map.actionable_entries`, via the `zone_opposing_entries`
+  adapter shared with Stage 3's worker.py migration (now living in
+  `structural_target_room.py`). Tier is derived with the same formula
+  `build_map` itself uses (`"major" if htf and (fresh or score >=
+  major_score) else "zone"`, keyed off the zone's own `score_reasons`/
+  `touches`/`score`) so a genuinely major wall still hard-blocks exactly
+  as before — this was caught and fixed after an initial version that
+  always assigned "zone" tier silently dropped two real hard-block cases
+  in `test_scanner_actionability.py`.
+- `worker.py`'s remaining Market Map consumers: the overlap-thesis veto
+  (`_resolve_overlap_thesis`), the confluence-claim resolver
+  (`_resolve_match_confluence_claim_id`), and the map-self-contradiction
+  telemetry counter (`_has_overlapping_zones`) all now read `htf_zones`
+  instead of `market_map`/`cached_market_map`. The `market_map` parameter
+  is gone from `_publish_trade_plan_v8` entirely, and the dead
+  `_overlapping_zone_conflict_reason` (superseded by
+  `_resolve_overlap_thesis`, never called outside its own tests) is
+  deleted.
+- `map_strategy.py`'s fully-dead nearest-actionable-zone selection tree
+  (`evaluate_market_map_strategy`, `_select_reaction`/
+  `_select_reaction_detailed`, `ActionableMapEntry`,
+  `MarketMapStrategyDecision`, and their exclusive helpers) — its `.match`
+  result was already confirmed dead in Stage 1; the selection function
+  itself turned out to have zero production callers either. Deleted
+  `tests/test_auto_map_strategy.py` (734 lines, 21 tests, all exercising
+  only this dead tree) and the 4 tests in
+  `test_map_reaction_range_retirement.py` that exercised it too.
+  `_reaction_in_lookback`/`_touches`/`_rejects` (still used by `worker.py`'s
+  overlap-thesis guard and `scale_context.py`) are untouched.
+- Market Map as the data source for the entry-containment hard block
+  (Stage 3 of the owner-directed purge — "these technique calculate swing
+  right? so we can migrate to scanner, detector and clean").
+  `evaluate_structural_target_room`'s `opposing_entry_overlap` /
+  `opposing_entry_contained` / `opposing_major_no_room` reject reasons now
+  read opposing structure from `htf_zones` (the same technique-native
+  displacement/supply-demand zone scan `_opposing_barrier_decision`
+  already used, computed fresh from OHLC frames every M1 cycle) instead of
+  `cached_market_map.actionable_entries`. A new `_zone_opposing_entries`
+  adapter in `worker.py` converts `Zone` objects into the minimal shape
+  the room check duck-types on (`side`/`lo`/`hi`/`tier`/`tags`/
+  `contains_price`), always tagged `"zone"` tier to match the treatment
+  Market Map's own `"zone"` tier already got. `market_map` itself is not
+  removed yet — it still feeds the unrelated confluence-claim resolution
+  and demand/supply overlap-thesis veto, candidates for a later stage.
+- Market Map's "major tier" opposing-wall room cap on the fixed_rr ladder
+  (Stage 2 of the owner-directed purge). `_fixed_rr_adaptive_room_pips`
+  and `_technique_swing_room_pips` are gone — the fixed_rr ladder is no
+  longer capped by any external opposing-structure scan; it's sized
+  entirely from the technique's own configured R-multiples. The prior
+  design let the technique's own `structure_swing` widen a major-tier
+  Market Map wall but never remove it, and defaulted to unconstrained
+  room whenever no major wall existed — a widen-only mechanism has
+  nothing left to widen once there's no wall to widen from, so this is a
+  clean no-op removal, not a narrowing: the common case (no major wall)
+  behaves identically; the rare "major wall present" case now also gets
+  the full ladder instead of a capped one. Deleted
+  `tests/test_fixed_rr_adaptive_room.py` (180 lines, 13 tests) — its
+  entire subject no longer exists.
+- Market Map's candidate-generation role in `worker.py` (Stage 1 of a
+  broader owner-directed purge — "we work on technique zone not
+  calculate opposing zone blindly"). `evaluate_market_map_strategy`'s
+  `.match` has been confirmed dead in production (a prior cutover already
+  stopped it promoting any zone to a trade candidate; zero occurrences of
+  "Market Map" as a live strategy name in production funnel telemetry).
+  The call, its telemetry write (`auto_trade:map_strategy:actionable:*`,
+  never read back anywhere), the disabled `market_map_guard_enabled`
+  variable (computed but never used), and the status-payload debug fields
+  it fed are all removed. `structural_target_room.py`'s opposing-zone room
+  check (the "major tier" wall, already being superseded by technique-
+  native `structure_swing` math per #493/#494) and Market Map's own
+  data-collection pipeline are untouched — later stages.
+
+### Changed
+- Auto-algo root card TP lines now show an R-multiple ("+1R", "+1.5R")
+  instead of a raw pip count ("+21") — a bare pip figure reads as
+  meaningless without the stop distance next to it, especially now that
+  XAU's ladder is no longer uniformly 1R/2R across levels. Read straight
+  from the instrument's own configured `target_r_multiples` rather than
+  derived from the card's own stop/entry-zone prices — those don't share
+  a basis (the stop is anchored to structure; the displayed entry-zone
+  edge is only a reward-side planning reference), so a price-derived
+  ratio could land far from the real R (live 2026-09-07: a GBPJPY SELL
+  showed "+10R"/"+15.6R" for what was actually a uniform 1R/2R trade).
+  Falls back to the previous pip-count display for non-fixed_rr matches
+  or an unresolvable symbol.
+- Manual `/algo` TP levels are now a bot-calculated R-multiple ladder
+  (0.5R / 1R / 2R / 3R, four levels) instead of owner-typed prices or the
+  pip-default ladder — owner-reported: hand-picked levels made some trades
+  read as scalps. Any explicit `tp` the owner still types in algo mode is
+  ignored; non-algo (`notify`) signals are unaffected. FX pairs' own
+  `/algo` shorthand is a separate code path and is unaffected.
+- Auto XAU (`xau_fixed_2r_v1`) now targets the same 0.5R/1R/2R/3R ladder as
+  manual (`reward_risk` 2.0 → 3.0, `close_ratios` 0.5/0.5 → 0.4/0.2/0.2/0.2,
+  `breakeven_after_r` 1.0 → 0.5 to follow the new, closer first target) and
+  raises its structure `stop_envelope.min_pips` floor 25 → 50 (`max_pips`
+  100 unchanged) — the old 25-pip floor let non-scalping structural setups
+  take scalp-sized stops on an instrument that stop-hunts routinely; the
+  owner's own manual XAU trades already run 60-100 pip stops through the
+  same structure and hold. FX packs are unaffected; the per-policy
+  `FIXED_RR_REQUIRED_TARGETING` uniformity check that previously forced
+  every `fixed_rr` instrument onto one shared targeting shape is now keyed
+  per policy so XAU can diverge from FX deliberately.
+
+### Fixed
+- Manual `/algo` stop trail stepped "two rungs behind" the just-booked
+  target instead of one — owner-reported: an XAU BUY fully filled 3 legs
+  of the ladder (TP1/TP2/TP3, up to +202 pips peak) but the stop only
+  moved to TP1's price, leaving the entire TP2-to-TP3 gain unprotected.
+  "Two behind" was only ever equivalent to "one behind" on the old 2-rung
+  (1R/2R) ladder — TP2 has no rung two behind it, so that case was already
+  special-cased to trail to TP1 (one behind). The ladder grew to 4 rungs
+  (0.5R/1R/2R/3R) without updating the general step, so TP3 trailed all
+  the way back to TP1 (skipping TP2 entirely) and TP4 trailed to TP2
+  (skipping TP3). Now walks backward from the immediately preceding rung,
+  falling further back only when that rung isn't resolvable for the
+  specific leg (an adaptive/compressed plan can own a non-contiguous
+  ordinal subset) — every rung now trails to the one right before it.
+- `tp_booked`/`position_closed` events computed "Achieved: Npips" from the
+  planned target price instead of the real close execution price, while
+  the "Fill:" price shown right next to it on the same line was always the
+  real one — live 2026-09-07, a USDJPY TP1 showed "Fill: 154.362" next to
+  "Achieved: +10.0 pips", but 10.0 pips only reconciled against the
+  154.357 *target*, not the 154.362 fill actually booked (off by 0.5
+  pip). Now derives the pips from the same real execution price the Fill
+  line displays; falls back to the planned target price only when no real
+  exit price is available (broker-absent close reconciliation, where deal
+  history itself is what's missing).
+- Auto-algo root card Redis identity keys (`forming_message_key` /
+  `telegram_root_message_key` / `forming_status_key`, and the canonical
+  `analysis:setup:{setup_id}` record) had a 24h TTL floor that re-anchors
+  from the last write, not from activation — a position that fills and
+  then sees no further event for over a day (a normal weekend: fill
+  Friday, market closed until Sunday night) had its mapping silently
+  expire while still open. The next real event then found no card,
+  posted a duplicate instead of threading onto the original, and
+  orphaned the original permanently — confirmed live on a USDJPY
+  position that crossed a weekend. Floors raised to 30 days on both
+  sides.
+- Trade-stats session breakdown (Asia/London/NY) now classifies each trade's
+  hour in UTC instead of `delivery.presentation.seq_reset_tz`
+  (Asia/Ho_Chi_Minh, UTC+7). `asia_start`/`london_start`/`ny_start` (22/7/13)
+  are fixed UTC session-open hours; converting to ICT before comparing
+  against them shifted every boundary by 7 hours, so ~83% of trades landed
+  in the wrong session bucket (e.g. a real London-session trade at 08:00 UTC
+  showed as ICT 15:00, which fell in the NY window). Affects the weekly
+  recap, `/trade_stats`, and `/algo_status`'s scorecard — all three called
+  `build_stats`/`build_stats_by_symbol` with the wrong timezone argument.
+- XAU technique/reaction opposing-structure room check now uses a
+  `barrier_buffer_atr` of 0.15 instead of the FX-tuned global 0.5
+  (`instruments.XAU.overrides`). XAU's ATR is dollar-denominated, so the
+  0.5x buffer was regularly consuming 40-115+ pips of real opposing-zone
+  room — comparable to or larger than XAU's own 25-100 pip stop envelope —
+  turning genuinely tradeable setups (owner's manual trades routinely run
+  60-100 pip stops through the same structure) into false zero-room
+  rejects before the fixed_rr ladder ever ran. FX instruments are
+  unaffected; the original zero/negative-room hard-kill (2026-08-06,
+  `fix/hard-kill-opposing-below-cost-room`) is unchanged.
+- Manual algo now notifies and trails through middle TP levels omitted by a
+  broker-volume ladder; reached-but-unbooked levels never create fake ledger
+  profit or consume execution volume.
+- Manual algo TP/partial-close channel cards drop the "booked X% · remaining
+  Y%" figures — they described the whole group's cumulative fill, not the
+  leg that just booked, and read as confusing/wrong next to the per-leg pips
+  figure. Cards now just show the TP label and pips.
+- Bound missing-position close reconciliation so delayed cTrader deal history
+  cannot leave a filled manual ladder stuck open forever; after five minutes
+  the last protective stop finalizes the state as an explicitly unconfirmed
+  estimate, and a delayed history lookup for one position cannot block a
+  second position from reconciling.
+- Flip Zone now requires the shared key-level role authority to confirm a
+  broken resistance/support for BUY/SELL, rejects unresolved or ambiguous
+  anchors, and yields same-bar overlapping candidates to Key Level Reaction.
+- XAU M1 Impulse Pullback now rejects unconfirmed trigger-bar extremes,
+  weak displacement, non-corrective pullbacks, missing M5 references, broken
+  level roles, and over-wide zones instead of manufacturing a key level from
+  the trigger close. Structural stops are anchored to the selected M5 level
+  or unmitigated demand/supply zone.
+- Flip Zone now requires the configured consecutive breakout closes, rejects
+  expired breaks, and anchors its entry band entirely on the valid side of the
+  broken level. A body-width floor prevents degenerate zones; reject metrics
+  expose acceptance, expiry, and anchor violations.
 - Canonicalize strategy names through `app/autotrade/strategy_names.py`,
   including production HFS/manual aliases and unresolved-name telemetry.
 - Retire the duplicate `Trend Pullback` detector while preserving historical
   resolution and in-flight management; demand/supply coverage remains on the
   enabled Supply Demand and Order Block technique publishers.
 
+### Added
+- Manual algo channel cards now declutter on close: every interim TP/
+  reached/SL-move reply a signal accumulated during its life is deleted
+  once it's fully closed, and the root card gets one summary reply instead
+  — final pips plus the realized R, not a dozen scattered bubbles.
+  AutoTradeEngine.cs now carries the booking leg's own `EntryPrice` on
+  every take_profit/position_closed/group_result event; a multi-leg
+  group's shallow/mid/deep clips fill at different prices, and both the
+  reported pips and the R denominator are measured from the SAME leg that
+  achieved them, not the advertised entry zone.
+
 ### Changed
+- Auto-algo root card (TradePlan V8 publish/`ORDER ACTIVATED` header):
+  renamed the "POSITION ACTIVATED" header to "ORDER ACTIVATED" (backward
+  compatible — a card already live before this deploy is still recognized
+  under the old wording); dropped the "→ Executor owns mechanical entry
+  and risk enforcement." footer line; each TP now gets its own line
+  instead of one ' · '-joined Targets line; and removed live price
+  tracking entirely (`forming_price_track_loop`, the 5s Telegram-edit
+  loop, and the "Price now (live)" line) — one more source of edit-flood
+  competing with ORDER FILLED / status replies for Telegram rate limits,
+  and not something the card needs to show.
+- Scalp stop buffers now use true-range M1 ATR with a live-spread floor;
+  M5 scalp structure is rebuilt on M5 cadence and persists compact levels,
+  zones, M1 ATR, and discovery measurements for deterministic M1 decisions.
+- `strategies.scalping.stop.maximum_pips`: 30 → 45. The 30-pip cap predated
+  the M1-ATR stop buffer above and was never revisited after that buffer
+  landed; a calm-session buffer alone now runs ~8 pips and a volatile one
+  20-30+, leaving little to no room for the actual structural distance.
+  `stop_exceeds_maximum` was the single largest scalp reject reason in prod
+  (260 hits across all three archetypes vs 78 for every new PR-L7 semantic
+  gate combined) — this was the dominant cause of low scalp throughput, not
+  the new discovery-quality gates.
 - `Break & Retest` and `Momentum Ride` now resolve to their registered
   `breakout_retest` and `momentum_continuation` families instead of
   `unknown`. See `docs/audits/PR-S-canonical-strategy-names.md`.

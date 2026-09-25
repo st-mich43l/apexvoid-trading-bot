@@ -12,9 +12,9 @@ scope is **all sessions**.
 ## Binding rules
 
 1. **MAD ≠ scalp control plane.** Only `accum` soft-favors **Range Edge Scalp**.
-2. **M1 Scalping owns structure + session** — Impulse continuation is L1; Range
-   Sweep is reclaim-only; Breakout Retest stays.
-3. **Few hard gates:** cost, chase, killzone/session, one invalidation, min RR
+2. **Scalping uses M5 structure + M1 confirmation** — Impulse continuation is
+   L1; Range Sweep is reclaim-only; Breakout Retest stays.
+3. **Few hard gates:** cost, chase, one invalidation, min RR
    after cost, **filled-only** concurrency. Armed contexts expire and never
    count as open positions.
 4. **Continuation must not require sweep-reclaim** (`require_sweep_body` is for
@@ -30,7 +30,9 @@ scope is **all sessions**.
 | L3r Range Edge | ZoneWatch | Mean-revert at edge; MAD accum soft; FX gate blocks `expand` |
 | L4 Breakout retest | Breakout Retest Scalp | Accepted break + retest |
 
-Do not add new hard MAD gates to M1 scalping without a separate owner decision.
+Do not add new hard session/timezone or MAD gates to scalping without a
+separate owner decision. Session preferences may contribute to quality score,
+but cannot silence an otherwise valid setup.
 
 ## Config map (HFS → scalping)
 

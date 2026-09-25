@@ -190,6 +190,28 @@ def test_order_block_created_by_bos_and_later_mitigated():
   assert stamped.touches == 1
 
 
+def test_order_block_kept_when_the_impulse_breaks_structure_as_choch():
+  """A reversal impulse breaks structure as CHoCH, not BOS (owner-reported
+  2026-09-21: XAU M15 demand OB 4337-42 never detected; Order Block had
+  never traded). Its origin candle is still the order block.
+  """
+  df = _df([
+    (104, 105, 99, 100),
+    (100, 101, 98, 99),
+    (99, 112, 99, 111),
+    (111, 113, 108, 112),
+  ])
+  zones = order_blocks(
+    df,
+    [Leg(2, 2, "up", 13)],
+    [Break("CHoCH", "up", 105, 2, df.index[2])],
+  )
+
+  assert len(zones) == 1
+  assert zones[0].side == "demand"
+  assert zones[0].break_kind == "CHoCH"
+
+
 def test_mark_mitigation_respects_asof_cutoff():
   df = _df([
     (100, 104, 99, 103),
@@ -490,10 +512,14 @@ def test_analyze_excludes_mitigated_zones_from_reconcile_opposing(monkeypatch):
 
   monkeypatch.setattr(engine_module, "mark_mitigation", _mark_spy)
 
-  # A long oscillation (guarantees zones later get traded through and
-  # marked mitigated) followed by a final decisive breakout leg well
-  # beyond the prior range (guarantees some fresh, still-live zones near
-  # the top that nothing after them re-touches).
+  # A long oscillation (produces zones throughout the 90-110 range) followed
+  # by a decisive breakout leg well beyond the prior range (guarantees some
+  # fresh, still-live zones near the top that nothing after them re-touches)
+  # and then a deliberate pullback all the way back through the oscillation
+  # range - genuinely LEAVING the breakout zone before RETURNING to retest
+  # the earlier zones, so mitigation reflects a real retest rather than the
+  # zone's own formation-leg bar merely overlapping its own band (see
+  # zones.py::supply_demand's break_index fix).
   bars: list[tuple[float, float, float, float]] = []
   price = 100.0
   for i in range(250):
@@ -507,6 +533,10 @@ def test_analyze_excludes_mitigated_zones_from_reconcile_opposing(monkeypatch):
     close = price + 3.0
     bars.append((price, close + 0.5, price - 0.3, close))
     price = close
+  for _ in range(20):
+    close = price - 4.0
+    bars.append((price, price + 0.3, close - 0.5, close))
+    price = close
   m5 = _df(bars)
 
   analyze(
@@ -517,7 +547,9 @@ def test_analyze_excludes_mitigated_zones_from_reconcile_opposing(monkeypatch):
     [],
   )
 
-  assert len(marked) == 1
+  # First stamp is the merged/map zone set (the one that feeds reconcile);
+  # a second, unmerged pass stamps the per-origin technique zones.
+  assert len(marked) == 2
   full_zone_set = marked[0]
   mitigated_in_full_set = [zone for zone in full_zone_set if zone.mitigated]
   # The fixture must actually exercise both paths, or this test would
@@ -851,7 +883,11 @@ def test_regime_keeps_expanded_breakout_as_trend():
   assert result.reasons == ["range expanded or broke edge"]
 
 
-def test_liquidity_grab_grade_a_and_inducement_score_bonus():
+def test_liquidity_grab_grade_a_but_induced_gets_no_score_bonus():
+  # An induced (stop-hunt-bait) pool sitting right against opposing
+  # structure must not earn the same "sweep A" score boost as a genuine
+  # sweep, even when the sweep itself grades A - see _has_grade_a_grab's
+  # inducement exclusion.
   df = _df([
     (102, 103, 101, 102),
     (100, 103, 99, 102),
@@ -876,6 +912,37 @@ def test_liquidity_grab_grade_a_and_inducement_score_bonus():
   assert grabs[0].grade == "A"
   assert grabs[0].displacement is True
   assert grabs[0].inducement is True
+
+  scored = score_zones([zone], [], [pool], round_step=0, grabs=grabs)[0]
+  assert "sweep A" not in scored.score_reasons
+
+
+def test_liquidity_grab_grade_a_genuine_gets_score_bonus():
+  # Same setup but the pool is far from opposing structure - not induced -
+  # so the genuine grade-A sweep still earns its score boost.
+  df = _df([
+    (102, 103, 101, 102),
+    (100, 103, 99, 102),
+    (102, 104, 101, 103),
+    (103, 107, 102, 106),
+  ])
+  atr = pd.Series([1.0] * len(df), index=df.index)
+  pool = Pool("sell", 100.0, 0.1, 2)
+  zone = Zone(99.5, 101.0, "demand", source="supply_demand")
+  grabs = liquidity_grabs(
+    df,
+    [pool],
+    [Leg(2, 3, "up", 5.0)],
+    [],
+    atr,
+    sweep_body_frac=0.5,
+    sweep_react_bars=3,
+    inducement_band_atr=0.3,
+  )
+
+  assert len(grabs) == 1
+  assert grabs[0].grade == "A"
+  assert grabs[0].inducement is False
 
   scored = score_zones([zone], [], [pool], round_step=0, grabs=grabs)[0]
   assert "sweep A" in scored.score_reasons
@@ -1076,3 +1143,43 @@ def test_analysis_modules_have_no_delivery_or_state_imports():
 
   for module in modules:
     assert forbidden.isdisjoint(vars(module))
+
+
+def test_wick_touch_episodes_counts_rejected_wicks_not_breaks_or_grinds():
+  """Owner 2026-09-21: only fractal swing points counted as level touches,
+  so a wick that poked a level and was rejected never counted.
+  """
+  from app.analysis.levels import wick_touch_episodes
+
+  df = _df([
+    (105, 106, 103, 105),    # away
+    (105, 105.5, 99.5, 104),  # wick into band 99-101 and rejected  -> 1
+    (104, 106, 103, 105),    # away
+    (103, 103.5, 100.5, 101),  # grind inside band...
+    (101, 101.5, 100, 100.5),  # ...consecutive bars -> still 1 episode -> 2
+    (102, 106, 102, 105),    # away
+    (104, 104, 95, 96),      # opens above band, closes through it: a break
+  ])
+
+  assert wick_touch_episodes(df, price=100.0, band=1.0) == 2
+
+
+def test_key_levels_lift_touches_from_wick_episodes_when_bars_given():
+  from app.analysis.levels import key_levels
+
+  df = _df([(105, 106, 103, 105)] * 3 + [
+    (105, 105.5, 99.5, 104),
+    (104, 106, 103, 105),
+    (105, 105.5, 99.8, 104),
+    (104, 106, 103, 105),
+    (105, 105.5, 99.6, 104),
+    (104, 106, 103, 105),
+  ])
+  swings = [Swing(3, "low", 99.5), Swing(5, "low", 99.8)]
+  atr = 2.0
+
+  swing_only = key_levels(swings, atr, 0.5, 0, 2, 2.0)
+  with_wicks = key_levels(swings, atr, 0.5, 0, 2, 2.0, bars=df)
+
+  assert swing_only[0].touches == 2
+  assert with_wicks[0].touches == 3

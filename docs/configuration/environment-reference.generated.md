@@ -2,8 +2,8 @@
 
 > Generated from the canonical configuration catalog (`app.configuration.environment_contract`). Do not edit manually.
 
-- Contract fingerprint: `d9fc5a863b579b9bbf3ec96a21f0043b78a791c286daa645e6d8f91041b48b60`
-- Environment-bound fields: `499`
+- Contract fingerprint: `bec01459a04ea8c7b6b931d0edf79ee90ab6d15a2f846eefb1a11e60973557d6`
+- Environment-bound fields: `571`
 - Deprecated aliases: `21`
 
 Secret values are never emitted; secret defaults render as `<redacted>`.
@@ -12,6 +12,10 @@ Secret values are never emitted; secret defaults render as `<redacted>`.
 |---|---|---|---|---|---|---|
 | `ALERT_OVERLAP_SUPPRESS` | `analysis.measurements.alert_overlap_suppress` | `float` | no | no | — | `0.5` |
 | `ALLOW_COUNTER_TREND` | `strategies.counter_trend.allow_counter_trend` | `bool` | no | no | — | `True` |
+| `ANALYSIS_ZONES_VERSION` | `analysis.zones.version` | `str` | no | no | — | `v1` |
+| `ANALYSIS_ZONE_RELEVANCE_IMMEDIATE_ATR` | `analysis.zone_relevance.immediate_atr` | `float` | no | no | — | `0.25` |
+| `ANALYSIS_ZONE_RELEVANCE_NEARBY_ATR` | `analysis.zone_relevance.nearby_atr` | `float` | no | no | — | `1.25` |
+| `ANALYSIS_ZONE_RELEVANCE_REMOTE_ATR` | `analysis.zone_relevance.remote_atr` | `float` | no | no | — | `3.0` |
 | `ANTHROPIC_API_KEY` | `delivery.presentation.anthropic_api_key` | `Optional[str]` | yes | no | — | `<redacted>` |
 | `ATR_LENGTH` | `analysis.atr.length` | `int` | no | no | — | `14` |
 | `AUTO_BOOK_BARE_PIPS` | `delivery.presentation.auto_book_bare_pips` | `bool` | no | no | — | `False` |
@@ -75,12 +79,21 @@ Secret values are never emitted; secret defaults render as `<redacted>`.
 | `AUTO_TRADE_INSIDE_ZONE_MARKET_ENTRY_ENABLED` | `execution.entry.inside_zone_market_entry_enabled` | `bool` | no | yes | — | `True` |
 | `AUTO_TRADE_KEY_LEVEL_MIN_GRADE` | `strategies.reaction.key_level.min_grade` | `str` | no | no | — | `B` |
 | `AUTO_TRADE_KEY_LEVEL_MIN_SELL_ZONE_SCORE` | `strategies.reaction.key_level.min_sell_zone_score` | `float` | no | no | — | `0.0` |
+| `AUTO_TRADE_KEY_LEVEL_MISSING_OPPOSING_CONTEXT_POLICY` | `strategies.reaction.key_level.opposing_structure.missing_opposing_context_policy` | `str` | no | no | — | `wait` |
+| `AUTO_TRADE_KEY_LEVEL_OPPOSING_STRUCTURE_ENABLED` | `strategies.reaction.key_level.opposing_structure.enabled` | `bool` | no | no | — | `True` |
 | `AUTO_TRADE_KEY_LEVEL_REACTION_ENABLED` | `strategies.reaction.key_level.enabled` | `bool` | no | no | — | `True` |
 | `AUTO_TRADE_KEY_LEVEL_REQUIRE_EXPLICIT_ROLE` | `strategies.reaction.key_level.require_explicit_role` | `bool` | no | no | — | `False` |
 | `AUTO_TRADE_KEY_LEVEL_REQUIRE_HTF_ALIGNMENT` | `strategies.reaction.key_level.require_htf_alignment` | `bool` | no | no | — | `False` |
 | `AUTO_TRADE_KEY_LEVEL_REQUIRE_KILLZONE` | `strategies.reaction.key_level.require_killzone` | `bool` | no | no | — | `False` |
 | `AUTO_TRADE_LABEL` | `execution.policy.label` | `string` | no | no | — | `apexvoid-auto` |
 | `AUTO_TRADE_LIQUIDITY_REVERSAL_ENABLED` | `strategies.reaction.liquidity_reversal.enabled` | `bool` | no | yes | — | `True` |
+| `AUTO_TRADE_MAD_ACCUM_MAXIMUM_RQ` | `execution.mad.accum.maximum_rq` | `float` | no | no | — | `6.0` |
+| `AUTO_TRADE_MAD_ACCUM_MINIMUM_RQ` | `execution.mad.accum.minimum_rq` | `float` | no | no | — | `0.8` |
+| `AUTO_TRADE_MAD_EXPAND_ACCEPT_CLOSES` | `execution.mad.expand.accept_closes` | `int` | no | no | — | `2` |
+| `AUTO_TRADE_MAD_EXPAND_BREAK_ATR` | `execution.mad.expand.break_atr` | `float` | no | no | — | `0.35` |
+| `AUTO_TRADE_MAD_EXPAND_DISPLACEMENT_ATR` | `execution.mad.expand.displacement_atr` | `float` | no | no | — | `1.25` |
+| `AUTO_TRADE_MAD_MANIP_MIN_PENETRATION_ATR` | `execution.mad.manip.min_penetration_atr` | `float` | no | no | — | `0.05` |
+| `AUTO_TRADE_MAD_MANIP_MIN_RECLAIM_ATR` | `execution.mad.manip.min_reclaim_atr` | `float` | no | no | — | `0.05` |
 | `AUTO_TRADE_MAPPED_ZONE_ENABLED` | `strategies.mapped_zone.enabled` | `bool` | no | yes | `AUTO_TRADE_MARKET_MAP_STRATEGY_ENABLED` | `True` |
 | `AUTO_TRADE_MAP_COUNTER_BIAS_ENABLED` | `strategies.mapped_zone.counter_bias_enabled` | `bool` | no | no | — | `True` |
 | `AUTO_TRADE_MAP_COUNTER_BIAS_MIN_CONFLUENCE` | `actionability.counter_bias.map_counter_bias_min_confluence` | `int` | no | no | — | `2` |
@@ -131,7 +144,7 @@ Secret values are never emitted; secret defaults render as `<redacted>`.
 | `AUTO_TRADE_RANGE_FLIP_ENABLED` | `strategies.range_reversion.flip_enabled` | `bool` | no | yes | — | `False` |
 | `AUTO_TRADE_RANGE_HARD_ENTRY_DRIFT_PIPS` | `execution.range.hard_entry_drift_pips` | `float` | no | no | — | `20.0` |
 | `AUTO_TRADE_RANGE_MAX_ENTRY_DRIFT_ATR` | `execution.range.max_entry_drift_atr` | `float` | no | no | — | `0.35` |
-| `AUTO_TRADE_RANGE_MAX_RISK_MULTIPLIER` | `risk.sizing.range_max_risk_multiplier` | `float` | no | no | — | `2.0` |
+| `AUTO_TRADE_RANGE_MAX_RISK_MULTIPLIER` | `risk.sizing.range_max_risk_multiplier` | `float` | no | no | — | `1.5` |
 | `AUTO_TRADE_RANGE_MIN_ENTRY_DRIFT_PIPS` | `execution.range.min_entry_drift_pips` | `float` | no | no | — | `10.0` |
 | `AUTO_TRADE_RANGE_MIN_RR` | `execution.range.min_rr` | `float` | no | no | — | `1.0` |
 | `AUTO_TRADE_RANGE_MIN_TARGET_PIPS` | `execution.range.min_target_pips` | `float` | no | no | — | `15.0` |
@@ -141,12 +154,14 @@ Secret values are never emitted; secret defaults render as `<redacted>`.
 | `AUTO_TRADE_RANGE_TWO_SIDED_ENABLED` | `strategies.range_reversion.two_sided_enabled` | `bool` | no | yes | — | `False` |
 | `AUTO_TRADE_REACTION_ENABLED` | `strategies.reaction.enabled` | `bool` | no | yes | — | `True` |
 | `AUTO_TRADE_REACTION_MARKET_FRACTION` | `execution.reaction.market_fraction` | `float` | no | yes | — | `0.8` |
+| `AUTO_TRADE_REACTION_RISK_LEG_ENABLED` | `execution.reaction_risk_leg.enabled` | `bool` | no | no | — | `True` |
+| `AUTO_TRADE_REACTION_RISK_TARGETED_ENTRY_ENABLED` | `execution.reaction.risk_targeted_entry_enabled` | `bool` | no | no | — | `True` |
 | `AUTO_TRADE_REACTION_ROOM_STOP_FLOOR_PIPS` | `execution.stops.reaction.room_floor_pips` | `int` | no | no | — | `40` |
 | `AUTO_TRADE_REACTION_ROOM_STOP_MIN_RR` | `execution.reaction.room_stop_min_rr` | `float` | no | no | — | `1.0` |
 | `AUTO_TRADE_REACTION_SCALE_ENABLED` | `strategies.reaction.scale_enabled` | `bool` | no | yes | — | `False` |
 | `AUTO_TRADE_REACTION_SCALE_FRACTION` | `execution.reaction.scale_fraction` | `float` | no | yes | — | `0.2` |
 | `AUTO_TRADE_REACTION_SCALE_INVALID_POLICY` | `execution.reaction.scale_invalid_policy` | `str` | no | yes | — | `single_market` |
-| `AUTO_TRADE_REACTION_SCALE_STEP_ATR` | `execution.reaction.scale_step_atr` | `float` | no | yes | — | `0.5` |
+| `AUTO_TRADE_REACTION_SCALE_STEP_ATR` | `execution.reaction.scale_step_atr` | `float` | no | yes | — | `0.1` |
 | `AUTO_TRADE_REACTION_STOP_MAX_PIPS` | `execution.reaction.stop_max_pips` | `int` | no | no | — | `60` |
 | `AUTO_TRADE_REACTION_STOP_MIN_PIPS` | `execution.reaction.stop_min_pips` | `int` | no | no | — | `40` |
 | `AUTO_TRADE_REGIME_DIRECTION_ENABLED` | `execution.regime.direction_enabled` | `bool` | no | no | — | `False` |
@@ -172,6 +187,7 @@ Secret values are never emitted; secret defaults render as `<redacted>`.
 | `AUTO_TRADE_STRATEGY_MATCH_MAX_AGE_SECONDS` | `lifecycle.strategy_match.maximum_age_seconds` | `int` | no | no | `AUTO_TRADE_FORMING_MAX_AGE_SECONDS` | `420` |
 | `AUTO_TRADE_STREAM_MAXLEN` | `contract.streams.candidate_maximum_length` | `int` | no | no | — | `1000` |
 | `AUTO_TRADE_STRICT_PD_ARCHETYPES` | `execution.technique.strict_premium_discount_archetypes` | `str` | no | no | — | `reversal,range_reversion` |
+| `AUTO_TRADE_STRUCTURAL_BARRIER_BOOK_ENABLED` | `actionability.target_room.structural_barrier_book_enabled` | `bool` | no | no | — | `True` |
 | `AUTO_TRADE_STRUCTURAL_GUARD_MODE` | `actionability.structural_guard.guard_mode` | `str` | no | yes | — | `balanced` |
 | `AUTO_TRADE_STRUCTURAL_REACTION_LOOKBACK_BARS` | `execution.policy.structural_reaction_lookback_bars` | `int` | no | no | — | `3` |
 | `AUTO_TRADE_SUPPLY_REACTION_ENABLED` | `strategies.reaction.supply.enabled` | `bool` | no | no | — | `True` |
@@ -199,6 +215,7 @@ Secret values are never emitted; secret defaults render as `<redacted>`.
 | `AUTO_TRADE_TECHNIQUE_REQUIRE_SWEEP_BODY` | `execution.technique.require_sweep_body` | `bool` | no | no | — | `True` |
 | `AUTO_TRADE_TECHNIQUE_SCALP_REQUIRE_KILLZONE` | `execution.technique.scalp_require_killzone` | `bool` | no | no | — | `True` |
 | `AUTO_TRADE_TECHNIQUE_SD_ENABLED` | `strategies.technique.sd.enabled` | `bool` | no | no | — | `True` |
+| `AUTO_TRADE_TECHNIQUE_SELECTIVE_SESSION_MIN_CONFLUENCE` | `execution.technique.selective_session_min_confluence` | `int` | no | no | — | `0` |
 | `AUTO_TRADE_TECHNIQUE_STRICT_PREMIUM_DISCOUNT` | `execution.technique.strict_premium_discount` | `bool` | no | no | — | `True` |
 | `AUTO_TRADE_TELEGRAM_DELETE_ROOT_ON_TERMINAL` | `delivery.telegram.delete_root_on_terminal` | `bool` | no | no | — | `False` |
 | `AUTO_TRADE_TELEGRAM_SINGLE_ROOT_CARD` | `delivery.telegram.single_root_card` | `bool` | no | no | — | `True` |
@@ -218,7 +235,6 @@ Secret values are never emitted; secret defaults render as `<redacted>`.
 | `AUTO_TRADE_TREND_HARD_ENTRY_DRIFT_PIPS` | `execution.trend.hard_entry_drift_pips` | `float` | no | no | — | `30.0` |
 | `AUTO_TRADE_TREND_MAX_ENTRY_DRIFT_ATR` | `execution.trend.max_entry_drift_atr` | `float` | no | no | — | `0.85` |
 | `AUTO_TRADE_TREND_MIN_ENTRY_DRIFT_PIPS` | `execution.trend.min_entry_drift_pips` | `float` | no | no | — | `15.0` |
-| `AUTO_TRADE_TREND_PULLBACK_ENABLED` | `strategies.trend.pullback_enabled` | `bool` | no | no | — | `True` |
 | `AUTO_TRADE_TREND_STOP_MAX_PIPS` | `execution.trend.stop_max_pips` | `int` | no | yes | — | `60` |
 | `AUTO_TRADE_TREND_STOP_MIN_PIPS` | `execution.stops.trend.minimum_pips` | `int` | no | yes | — | `40` |
 | `AUTO_TRADE_UNFILLED_LEG_AFTER_TP_POLICY` | `execution.targeting.unfilled_leg_after_tp_policy` | `str` | no | yes | — | `cancel` |
@@ -239,7 +255,7 @@ Secret values are never emitted; secret defaults render as `<redacted>`.
 | `AUTO_TRADE_ZONE_RECONCILE_ENABLED` | `actionability.zone_reconciliation.enabled` | `bool` | no | no | — | `True` |
 | `AUTO_TRADE_ZONE_RECONCILE_MODE` | `actionability.zone_reconciliation.mode` | `str` | no | yes | — | `enforce` |
 | `AUTO_TRADE_ZONE_SCALE_FIRST_LEG_FRACTION` | `execution.zone_scaling.first_leg_fraction` | `float` | no | no | — | `0.8` |
-| `AUTO_TRADE_ZONE_SCALE_STEP_ATR` | `execution.zone_scaling.scale_step_atr` | `float` | no | no | — | `0.5` |
+| `AUTO_TRADE_ZONE_SCALE_STEP_ATR` | `execution.zone_scaling.scale_step_atr` | `float` | no | no | — | `0.1` |
 | `AUTO_TRADE_ZONE_SCALE_UNDERSIZED_POLICY` | `execution.zone_scaling.scale_undersized_policy` | `str` | no | yes | — | `single_entry` |
 | `BARS_CHANNEL` | `market_data.ctrader_feed.bars_channel` | `string` | no | yes | — | `bars:new` |
 | `BARS_WINDOW_MAX` | `market_data.ctrader_feed.bars_window_max` | `int` | no | no | — | `1500` |
@@ -282,6 +298,7 @@ Secret values are never emitted; secret defaults render as `<redacted>`.
 | `DAILY_ROLLOVER_UTC_HOUR` | `market_data.sessions.daily_rollover_utc_hour` | `int` | no | no | — | `21` |
 | `DATABASE_URL` | `bootstrap.postgres.url` | `str` | yes | no | `POSTGRES_DSN` | `<redacted>` |
 | `DELIVERY_DELETE_ON_TERMINAL` | `delivery.lifecycle.delete_on_terminal` | `bool` | no | no | — | `True` |
+| `DELIVERY_OWNER_DM_DAILY_WIPE_ENABLED` | `delivery.telegram.owner_dm_daily_wipe_enabled` | `bool` | no | no | — | `False` |
 | `DELIVERY_THREAD_LIFECYCLE` | `delivery.lifecycle.thread_lifecycle` | `bool` | no | no | — | `True` |
 | `DISPLACEMENT_ATR_MULT` | `analysis.displacement.atr_mult` | `float` | no | no | — | `1.5` |
 | `ENTRY_ACTIVATION_M5_AUTHORITATIVE_FALLBACK` | `execution.activation.m5_authoritative_fallback` | `str` | no | no | — | `off` |
@@ -302,6 +319,7 @@ Secret values are never emitted; secret defaults render as `<redacted>`.
 | `ENTRY_LOCATION_REVERSAL_SELL_MIN_POSITION` | `actionability.entry_location.reversal.sell_minimum_position` | `float` | no | no | — | `0.5` |
 | `ENTRY_LOCATION_TREND_BUY_MAX_POSITION` | `actionability.entry_location.trend_pullback.buy_maximum_position` | `float` | no | no | — | `0.7` |
 | `ENTRY_LOCATION_TREND_SELL_MIN_POSITION` | `actionability.entry_location.trend_pullback.sell_minimum_position` | `float` | no | no | — | `0.3` |
+| `ENTRY_LOCATION_WITH_BIAS_PD_EXEMPT` | `actionability.entry_location.with_bias_pd_exempt` | `bool` | no | no | — | `True` |
 | `EQUAL_TOL_ATR` | `analysis.levels.equal_tol_atr` | `float` | no | no | — | `0.15` |
 | `EQ_BAND` | `analysis.measurements.eq_band` | `float` | no | no | — | `0.1` |
 | `EVENT_GUARD_HOURS` | `market_data.calendar.event_guard_hours` | `float` | no | no | — | `4.0` |
@@ -310,6 +328,9 @@ Secret values are never emitted; secret defaults render as `<redacted>`.
 | `FIBONACCI_DEEP_PREMIUM` | `analysis.fibonacci.deep_premium` | `float` | no | no | — | `0.618` |
 | `FIBONACCI_ENABLED` | `analysis.fibonacci.enabled` | `bool` | no | no | — | `True` |
 | `FIBONACCI_EPSILON_ATR` | `analysis.fibonacci.epsilon_atr` | `float` | no | no | — | `0.15` |
+| `FLIP_ZONE_ACCEPT_BARS` | `analysis.flip_zone.accept_bars` | `Optional[int]` | no | no | — | `None` |
+| `FLIP_ZONE_BAND_BODY_FRACTION` | `analysis.flip_zone.band_body_fraction` | `float` | no | no | — | `0.5` |
+| `FLIP_ZONE_MAX_BREAK_AGE_BARS` | `analysis.flip_zone.max_break_age_bars` | `int` | no | no | — | `48` |
 | `GIT_SHA` | `bootstrap.build.git_sha` | `string` | no | yes | — | `unknown` |
 | `HEALTH_FILE` | `market_data.ctrader_feed.health_file` | `string` | no | no | — | `/tmp/ctrader-feed.heartbeat` |
 | `HOSTNAME` | `bootstrap.process.hostname` | `string` | no | no | — | `algo-worker` |
@@ -383,21 +404,45 @@ Secret values are never emitted; secret defaults render as `<redacted>`.
 | `REACTION_MAX_ATR` | `analysis.reactions.max_atr` | `float` | no | no | — | `0.5` |
 | `REDIS_URL` | `bootstrap.redis.url` | `str` | no | yes | — | `redis://redis:6379/0` |
 | `ROUND_STEP` | `analysis.levels.round_step` | `float` | no | no | — | `5.0` |
+| `SCALPING_BREAKOUT_ACCEPTANCE_BARS` | `strategies.scalping.breakout.acceptance_bars` | `int` | no | no | — | `1` |
+| `SCALPING_BREAKOUT_ACCEPTANCE_REQUIRED_CLOSES` | `strategies.scalping.breakout.acceptance_required_closes` | `int` | no | no | — | `1` |
 | `SCALPING_BREAKOUT_BOX_MAX_ATR` | `strategies.scalping.breakout.box_max_atr` | `float` | no | no | — | `1.5` |
+| `SCALPING_BREAKOUT_CONFIRMATION_MODE` | `strategies.scalping.breakout.confirmation_mode` | `str` | no | no | — | `reclaim_close` |
+| `SCALPING_BREAKOUT_CROSS_TOLERANCE_ATR` | `strategies.scalping.breakout.breakout_cross_tolerance_atr` | `float` | no | no | — | `0.0` |
+| `SCALPING_BREAKOUT_ENABLE_LIQUIDITY_LEVEL` | `strategies.scalping.breakout.enable_liquidity_level` | `bool` | no | no | — | `True` |
+| `SCALPING_BREAKOUT_ENABLE_STRUCTURE_FLIP_M1` | `strategies.scalping.breakout.enable_structure_flip_m1` | `bool` | no | no | — | `True` |
+| `SCALPING_BREAKOUT_ENABLE_STRUCTURE_FLIP_M5` | `strategies.scalping.breakout.enable_structure_flip_m5` | `bool` | no | no | — | `True` |
+| `SCALPING_BREAKOUT_M1_SWING_MAX_AGE_BARS` | `strategies.scalping.breakout.m1_swing_max_age_bars` | `int` | no | no | — | `240` |
+| `SCALPING_BREAKOUT_M1_SWING_MIN_AGE_BARS` | `strategies.scalping.breakout.m1_swing_min_age_bars` | `int` | no | no | — | `3` |
+| `SCALPING_BREAKOUT_M1_SWING_MIN_SPACING_ATR` | `strategies.scalping.breakout.m1_swing_min_spacing_atr` | `float` | no | no | — | `0.3` |
+| `SCALPING_BREAKOUT_M5_STRUCTURE_MIN_TOUCHES` | `strategies.scalping.breakout.m5_structure_min_touches` | `int` | no | no | — | `2` |
+| `SCALPING_BREAKOUT_MARGIN_ATR` | `strategies.scalping.breakout.breakout_margin_atr` | `float` | no | no | — | `0.0` |
 | `SCALPING_BREAKOUT_MAX_BOX_BARS` | `strategies.scalping.breakout.max_box_bars` | `int` | no | no | — | `20` |
+| `SCALPING_BREAKOUT_MAX_BREAK_DELAY_BARS` | `strategies.scalping.breakout.max_break_delay_bars` | `Optional[int]` | no | no | — | `None` |
+| `SCALPING_BREAKOUT_MAX_RETEST_DELAY_BARS` | `strategies.scalping.breakout.max_retest_delay_bars` | `int` | no | no | — | `20` |
+| `SCALPING_BREAKOUT_MAX_RETEST_PENETRATION_ATR` | `strategies.scalping.breakout.max_retest_penetration_atr` | `float` | no | no | — | `0.3` |
+| `SCALPING_BREAKOUT_MAX_RETEST_PENETRATION_MAD` | `strategies.scalping.breakout.max_retest_penetration_mad` | `Optional[float]` | no | no | — | `None` |
 | `SCALPING_BREAKOUT_MIN_BOX_BARS` | `strategies.scalping.breakout.min_box_bars` | `int` | no | no | — | `8` |
 | `SCALPING_BREAKOUT_MIN_BREAK_ATR` | `strategies.scalping.breakout.min_break_atr` | `float` | no | no | — | `0.25` |
+| `SCALPING_BREAKOUT_MIN_QUALITY_SCORE` | `strategies.scalping.breakout.min_quality_score` | `float` | no | no | — | `0.0` |
+| `SCALPING_BREAKOUT_MIN_RETEST_DELAY_BARS` | `strategies.scalping.breakout.min_retest_delay_bars` | `int` | no | no | — | `0` |
 | `SCALPING_BREAKOUT_MIN_TOUCHES_PER_SIDE` | `strategies.scalping.breakout.min_touches_per_side` | `int` | no | no | — | `2` |
 | `SCALPING_BREAKOUT_REQUIRE_RETEST_REJECTION` | `strategies.scalping.breakout.require_retest_rejection` | `bool` | no | no | — | `True` |
 | `SCALPING_BREAKOUT_RETEST_ENABLED` | `strategies.scalping.archetypes.breakout_retest_enabled` | `bool` | no | no | — | `True` |
+| `SCALPING_BREAKOUT_RETEST_FRONT_RUN_ATR` | `strategies.scalping.breakout.retest_front_run_atr` | `float` | no | no | — | `0.0` |
 | `SCALPING_BREAKOUT_RETEST_LOOKBACK_BARS` | `strategies.scalping.breakout.retest_lookback_bars` | `int` | no | no | — | `5` |
+| `SCALPING_BREAKOUT_SPREAD_MULTIPLIER` | `strategies.scalping.breakout.breakout_spread_multiplier` | `float` | no | no | — | `1.5` |
 | `SCALPING_BREAKOUT_TOUCH_TOL_ATR` | `strategies.scalping.breakout.touch_tol_atr` | `float` | no | no | — | `0.2` |
+| `SCALPING_BREAKOUT_V2_ENABLED` | `strategies.scalping.breakout.v2_enabled` | `bool` | no | no | — | `True` |
 | `SCALPING_COOLDOWN_AFTER_LOSS_MINUTES` | `strategies.scalping.risk.cooldown_after_loss_minutes` | `int` | no | no | — | `5` |
 | `SCALPING_CURRENT_CONTEXT_TTL_SECONDS` | `strategies.scalping.context.current_context_ttl_seconds` | `int` | no | no | — | `3600` |
 | `SCALPING_DAILY_LOSS_LIMIT_R` | `strategies.scalping.risk.daily_loss_limit_r` | `float` | no | no | — | `3.0` |
 | `SCALPING_HISTORIC_CONTEXT_TTL_SECONDS` | `strategies.scalping.context.historic_context_ttl_seconds` | `int` | no | no | — | `86400` |
-| `SCALPING_IMPULSE_PULLBACK_ALLOWED_SESSIONS` | `strategies.scalping.archetypes.impulse_pullback_allowed_sessions` | `str` | no | no | — | `london` |
+| `SCALPING_IMPULSE_BODY_DOMINANCE` | `strategies.scalping.archetypes.impulse_body_dominance` | `float` | no | no | — | `0.5` |
+| `SCALPING_IMPULSE_DISPLACEMENT_ATR_MULTIPLE` | `strategies.scalping.archetypes.impulse_displacement_atr_multiple` | `float` | no | no | — | `4.0` |
+| `SCALPING_IMPULSE_PULLBACK_ALLOWED_SESSIONS` | `strategies.scalping.archetypes.impulse_pullback_allowed_sessions` | `str` | no | no | — | `all` |
 | `SCALPING_IMPULSE_PULLBACK_ENABLED` | `strategies.scalping.archetypes.impulse_pullback_enabled` | `bool` | no | no | — | `True` |
+| `SCALPING_LEVEL_PROXIMITY_ATR_MULTIPLE` | `strategies.scalping.location.level_proximity_atr_multiple` | `float` | no | no | — | `1.0` |
 | `SCALPING_M1_LOOKBACK_BARS` | `strategies.scalping.context.m1_lookback_bars` | `int` | no | no | — | `60` |
 | `SCALPING_MAXIMUM_ACTIVE_OPPORTUNITIES` | `strategies.scalping.policy.maximum_active_opportunities` | `int` | no | no | — | `10` |
 | `SCALPING_MAXIMUM_CHASE_PIPS` | `strategies.scalping.activation.maximum_chase_pips` | `float` | no | no | — | `40.0` |
@@ -411,9 +456,12 @@ Secret values are never emitted; secret defaults render as `<redacted>`.
 | `SCALPING_MAXIMUM_SPREAD_PIPS` | `strategies.scalping.policy.maximum_spread_pips` | `float` | no | no | — | `5.0` |
 | `SCALPING_MINIMUM_NET_TARGET_PIPS` | `strategies.scalping.target.minimum_net_target_pips` | `float` | no | no | — | `15.0` |
 | `SCALPING_MINIMUM_REWARD_RISK` | `strategies.scalping.policy.minimum_reward_risk` | `float` | no | no | — | `1.1` |
+| `SCALPING_MINIMUM_STOP_SPREAD_MULTIPLE` | `strategies.scalping.stop.minimum_stop_spread_multiple` | `float` | no | no | — | `4.0` |
 | `SCALPING_MODE` | `strategies.scalping.mode` | `str` | no | no | — | `live` |
 | `SCALPING_PREFERRED_LADDER_PIPS` | `strategies.scalping.target.preferred_ladder_pips` | `str` | no | no | — | `20,25,30` |
 | `SCALPING_PULLBACK_BUY_MAX_POSITION` | `strategies.scalping.location.pullback_buy_maximum_position` | `float` | no | no | — | `0.6` |
+| `SCALPING_PULLBACK_CORRECTIVE_RATIO` | `strategies.scalping.archetypes.pullback_corrective_ratio` | `float` | no | no | — | `0.7` |
+| `SCALPING_PULLBACK_EXTREME_CONFIRM_BARS` | `strategies.scalping.archetypes.pullback_extreme_confirm_bars` | `int` | no | no | — | `2` |
 | `SCALPING_PULLBACK_SELL_MIN_POSITION` | `strategies.scalping.location.pullback_sell_minimum_position` | `float` | no | no | — | `0.4` |
 | `SCALPING_RANGE_BUY_MAX_POSITION` | `strategies.scalping.location.range_buy_maximum_position` | `float` | no | no | — | `0.35` |
 | `SCALPING_RANGE_SELL_MIN_POSITION` | `strategies.scalping.location.range_sell_minimum_position` | `float` | no | no | — | `0.65` |
@@ -421,10 +469,15 @@ Secret values are never emitted; secret defaults render as `<redacted>`.
 | `SCALPING_REARM_DISTANCE_ATR` | `strategies.scalping.activation.rearm_distance_atr` | `float` | no | no | — | `0.25` |
 | `SCALPING_RISK_FRACTION_PER_TRADE` | `strategies.scalping.risk.risk_fraction_per_trade` | `float` | no | no | — | `0.1` |
 | `SCALPING_RISK_MODE` | `strategies.scalping.risk.mode` | `str` | no | no | — | `live` |
+| `SCALPING_RISK_PERCENT_PER_TRADE` | `strategies.scalping.risk.risk_percent_per_trade` | `float` | no | no | — | `0.5` |
 | `SCALPING_SESSION_LOSS_LIMIT_R` | `strategies.scalping.risk.session_loss_limit_r` | `float` | no | no | — | `2.0` |
+| `SCALPING_SIZING_MODE` | `strategies.scalping.risk.sizing_mode` | `str` | no | no | — | `equity_table` |
 | `SCALPING_STOP_BUFFER_ATR` | `strategies.scalping.stop.buffer_atr` | `float` | no | no | — | `0.1` |
-| `SCALPING_STOP_MAXIMUM_PIPS` | `strategies.scalping.stop.maximum_pips` | `float` | no | no | — | `30.0` |
+| `SCALPING_STOP_BUFFER_M1_ATR_MULTIPLE` | `strategies.scalping.stop.buffer_m1_atr_multiple` | `float` | no | no | — | `1.2` |
+| `SCALPING_STOP_BUFFER_MINIMUM_SPREAD_MULTIPLE` | `strategies.scalping.stop.buffer_minimum_spread_multiple` | `float` | no | no | — | `1.5` |
+| `SCALPING_STOP_MAXIMUM_PIPS` | `strategies.scalping.stop.maximum_pips` | `float` | no | no | — | `45.0` |
 | `SCALPING_STOP_MINIMUM_PIPS` | `strategies.scalping.stop.minimum_pips` | `float` | no | no | — | `12.0` |
+| `SCALPING_STOP_ZONE_MAXIMUM_ATR_MULTIPLE` | `strategies.scalping.stop.zone_maximum_atr_multiple` | `float` | no | no | — | `1.5` |
 | `SCALPING_TRIGGER_MAXIMUM_AGE_BARS` | `strategies.scalping.activation.trigger_maximum_age_bars` | `int` | no | no | — | `2` |
 | `SCALP_BARRIER_FALLBACK_ENABLED` | `strategies.scalp.scalp_barrier_fallback_enabled` | `bool` | no | no | — | `True` |
 | `SCALP_BARRIER_FALLBACK_MIN_CONFIRMATIONS` | `strategies.scalp.scalp_barrier_fallback_min_confirmations` | `int` | no | no | — | `1` |
@@ -463,21 +516,40 @@ Secret values are never emitted; secret defaults render as `<redacted>`.
 | `SWEEP_BODY_FRAC` | `analysis.liquidity.sweep.body_frac` | `float` | no | no | — | `0.5` |
 | `SWEEP_REACT_BARS` | `analysis.liquidity.sweep.react_bars` | `int` | no | no | — | `3` |
 | `SWING_FRACTAL_N` | `analysis.swings.fractal_size` | `int` | no | no | — | `2` |
+| `TECHNIQUE_INVALIDATION_TOLERANCE_ATR` | `analysis.techniques.invalidation_tolerance_atr` | `float` | no | no | — | `0.5` |
+| `TECHNIQUE_MAX_BREAK_EPISODES` | `analysis.techniques.max_break_episodes` | `int` | no | no | — | `2` |
+| `TECHNIQUE_RETEST_MAX_TOUCHES` | `analysis.techniques.retest_max_touches` | `int` | no | no | — | `30` |
+| `TECHNIQUE_SWEEP_RECLAIM_BARS` | `analysis.techniques.sweep_reclaim_bars` | `int` | no | no | — | `6` |
 | `TECHNIQUE_VALIDATION_ENABLED` | `analysis.techniques.validation_enabled` | `bool` | no | no | — | `True` |
 | `TELEGRAM_BOT_TOKEN` | `bootstrap.telegram.bot_token` | `str` | yes | no | — | `<redacted>` |
 | `TELEGRAM_OWNER_ID` | `delivery.telegram.telegram_owner_id` | `Optional[int]` | no | no | — | `None` |
 | `TIINGO_API_KEY` | `market_data.tiingo.api_key` | `Optional[str]` | yes | no | — | `<redacted>` |
+| `TL_APPROACH_MIN_DISTANCE_ATR` | `analysis.trendlines.approach_min_distance_atr` | `float` | no | no | — | `0.1` |
+| `TL_CHOP_MIN_VALIDATION_TOUCHES` | `analysis.trendlines.chop_minimum_validation_touches` | `int` | no | no | — | `2` |
+| `TL_CHOP_REQUIRE_HTF_ALIGNED` | `analysis.trendlines.chop_require_htf_aligned` | `bool` | no | no | — | `True` |
+| `TL_CLOSE_VIOLATION_ATR` | `analysis.trendlines.close_violation_atr` | `float` | no | no | — | `0.15` |
+| `TL_EXHAUSTION_VALIDATION_TOUCHES` | `analysis.trendlines.exhaustion_validation_touches` | `int` | no | no | — | `4` |
+| `TL_INTERACTION_BAND_ATR` | `analysis.trendlines.interaction_band_atr` | `float` | no | no | — | `0.2` |
+| `TL_INVALIDATION_PENETRATION_ATR` | `analysis.trendlines.invalidation_penetration_atr` | `float` | no | no | — | `0.5` |
 | `TL_MAX_BARS_SINCE_TOUCH` | `analysis.trendlines.maximum_bars_since_last_touch` | `int` | no | no | — | `30` |
 | `TL_MAX_FIT_ERROR_ATR` | `analysis.trendlines.maximum_fit_error_atr` | `float` | no | no | — | `0.15` |
 | `TL_MAX_SLOPE_ATR` | `analysis.trendlines.maximum_slope_atr` | `float` | no | no | — | `0.15` |
 | `TL_MAX_TOUCHES` | `analysis.trendlines.maximum_touches` | `int` | no | no | — | `4` |
 | `TL_MAX_VIOLATIONS` | `analysis.trendlines.maximum_violations` | `int` | no | no | — | `2` |
+| `TL_MAX_WICK_VIOLATIONS` | `analysis.trendlines.maximum_wick_violations` | `int` | no | no | — | `2` |
 | `TL_MIN_SLOPE_ATR` | `analysis.trendlines.minimum_slope_atr` | `float` | no | no | — | `0.02` |
 | `TL_MIN_SPAN_BARS` | `analysis.trendlines.minimum_span_bars` | `int` | no | no | — | `20` |
 | `TL_MIN_TOUCHES` | `analysis.trendlines.minimum_touches` | `int` | no | no | — | `3` |
 | `TL_MIN_TOUCH_SPACING` | `analysis.trendlines.minimum_touch_spacing_bars` | `int` | no | no | — | `3` |
+| `TL_MIN_VALIDATION_FAVORABLE_EXCURSION_ATR` | `analysis.trendlines.minimum_validation_favorable_excursion_atr` | `float` | no | no | — | `0.1` |
+| `TL_MIN_VALIDATION_TOUCHES` | `analysis.trendlines.minimum_validation_touches` | `int` | no | no | — | `1` |
+| `TL_MIN_VALIDATION_TOUCH_SPACING` | `analysis.trendlines.minimum_validation_touch_spacing_bars` | `int` | no | no | — | `5` |
 | `TL_PIERCE_TOL_ATR` | `analysis.trendlines.pierce_tolerance_atr` | `float` | no | no | — | `0.5` |
+| `TL_SHADOW_V1` | `analysis.trendlines.shadow_v1` | `bool` | no | no | — | `False` |
 | `TL_TOL_ATR` | `analysis.trendlines.tolerance_atr` | `float` | no | no | — | `0.3` |
+| `TL_VALIDATION_REACTION_BARS` | `analysis.trendlines.validation_reaction_bars` | `int` | no | no | — | `2` |
+| `TL_VALIDATION_TOUCH_TOL_ATR` | `analysis.trendlines.validation_touch_tolerance_atr` | `float` | no | no | — | `0.3` |
+| `TL_VERSION` | `analysis.trendlines.version` | `str` | no | no | — | `v1` |
 | `TP_MIN_SPACING_ATR` | `analysis.measurements.tp_min_spacing_atr` | `float` | no | no | — | `0.5` |
 | `TRACK_INTERVAL` | `market_data.watcher.interval_seconds` | `int` | no | no | — | `30` |
 | `TREND_ALLOW_CHASE` | `strategies.trend.allow_chase` | `bool` | no | no | — | `False` |

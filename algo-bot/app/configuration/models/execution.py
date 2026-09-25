@@ -63,7 +63,7 @@ class ExecutionZoneScalingConfig(FrozenConfigModel):
     fill_min_atr: float = config_field(0.5, canonical_env='AUTO_TRADE_ZONE_FILL_MIN_ATR', owner=ConfigOwner.SHARED, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.ATR, risk=RiskClassification.EXECUTION_SAFETY, shared_with_ctrader=True, description='Controls  (atr).', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 0.5), ContextDefault(DefaultContext.CTRADER_FROM_ENVIRONMENT, 0.5)), validation_summary='Pydantic required/type coercion only; EnvironmentResolver.Decimal + AutoTradeOptions.Validate')
     fill_min_lots: Decimal = config_field(Decimal('0.09'), canonical_env='AUTO_TRADE_ZONE_FILL_MIN_LOTS', owner=ConfigOwner.CTRADER, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.LOTS, risk=RiskClassification.EXECUTION_SAFETY, description='cTrader configuration option AUTO_TRADE_ZONE_FILL_MIN_LOTS controlling  (lots).', default_contexts=(ContextDefault(DefaultContext.CTRADER_FROM_ENVIRONMENT, Decimal('0.09')),), validation_summary='EnvironmentResolver.Decimal + AutoTradeOptions.Validate')
     first_leg_fraction: float = config_field(0.8, canonical_env='AUTO_TRADE_ZONE_SCALE_FIRST_LEG_FRACTION', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.FRACTION, risk=RiskClassification.EXECUTION_SAFETY, description='Controls  (fraction).', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 0.8),), validation_summary='Pydantic required/type coercion only')
-    scale_step_atr: float = config_field(0.5, canonical_env='AUTO_TRADE_ZONE_SCALE_STEP_ATR', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.ATR, risk=RiskClassification.EXECUTION_SAFETY, description='Controls  (atr).', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 0.5),), validation_summary='Pydantic required/type coercion only')
+    scale_step_atr: float = config_field(0.1, canonical_env='AUTO_TRADE_ZONE_SCALE_STEP_ATR', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.ATR, risk=RiskClassification.EXECUTION_SAFETY, description='Owner 2026-09-16: lowered from 0.5 - at 0.5x ATR the 2nd leg sat far enough from the 1st that the furthest-leg stop distance routinely exceeded the reaction stop envelope (observed 75-79 pips vs a 60 cap on live XAU Key Level candidates), silently killing good setups on both sides. 0.1x ATR keeps real second-leg separation while leaving headroom under the envelope across normal-to-elevated ATR.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 0.1),), validation_summary='Pydantic required/type coercion only')
     scale_undersized_policy: str = config_field('single_entry', canonical_env='AUTO_TRADE_ZONE_SCALE_UNDERSIZED_POLICY', owner=ConfigOwner.SHARED, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.ENUM, risk=RiskClassification.EXECUTION_SAFETY, shared_with_ctrader=True, mismatch_policy=MismatchPolicy.FATAL, description='Controls .', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 'single_entry'), ContextDefault(DefaultContext.CTRADER_FROM_ENVIRONMENT, 'single_entry')), validation_summary='Pydantic required/type coercion only; EnvironmentResolver.String + AutoTradeOptions.Validate')
 
 class ExecutionStopsReactionConfig(FrozenConfigModel):
@@ -118,9 +118,10 @@ class ExecutionReactionConfig(FrozenConfigModel):
     room_stop_min_rr: float = config_field(1.0, canonical_env='AUTO_TRADE_REACTION_ROOM_STOP_MIN_RR', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.MULTIPLIER, risk=RiskClassification.EXECUTION_SAFETY, description='Controls  (multiplier).', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 1.0),), validation_summary='Pydantic required/type coercion only')
     scale_fraction: float = config_field(0.2, canonical_env='AUTO_TRADE_REACTION_SCALE_FRACTION', owner=ConfigOwner.SHARED, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.FRACTION, risk=RiskClassification.EXECUTION_SAFETY, shared_with_ctrader=True, description='Controls  (fraction).', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 0.2), ContextDefault(DefaultContext.CTRADER_FROM_ENVIRONMENT, 0.2)), validation_summary='Pydantic type coercion + Settings cross-field model validator; EnvironmentResolver.Decimal + AutoTradeOptions.Validate', gt=0)
     scale_invalid_policy: str = config_field('single_market', canonical_env='AUTO_TRADE_REACTION_SCALE_INVALID_POLICY', owner=ConfigOwner.SHARED, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.ENUM, risk=RiskClassification.EXECUTION_SAFETY, shared_with_ctrader=True, description='Controls .', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 'single_market'), ContextDefault(DefaultContext.CTRADER_FROM_ENVIRONMENT, 'single_market')), allowed_values=('single_market', 'reject'), validation_summary='Pydantic type coercion + Settings cross-field model validator; EnvironmentResolver.String + AutoTradeOptions.Validate', pattern='^(single_market|reject)$')
-    scale_step_atr: float = config_field(0.5, canonical_env='AUTO_TRADE_REACTION_SCALE_STEP_ATR', owner=ConfigOwner.SHARED, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.ATR, risk=RiskClassification.EXECUTION_SAFETY, shared_with_ctrader=True, description='Controls  (atr).', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 0.5), ContextDefault(DefaultContext.CTRADER_FROM_ENVIRONMENT, 0.5)), validation_summary='Pydantic required/type coercion only; EnvironmentResolver.Decimal + AutoTradeOptions.Validate')
+    scale_step_atr: float = config_field(0.1, canonical_env='AUTO_TRADE_REACTION_SCALE_STEP_ATR', owner=ConfigOwner.SHARED, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.ATR, risk=RiskClassification.EXECUTION_SAFETY, shared_with_ctrader=True, description='Owner 2026-09-16: lowered from 0.5 - at 0.5x ATR the 2nd leg sat far enough from the 1st that the furthest-leg stop distance routinely exceeded the reaction stop envelope (observed 75-79 pips vs a 60 cap on live XAU Key Level candidates), silently killing good setups on both sides. 0.1x ATR keeps real second-leg separation while leaving headroom under the envelope across normal-to-elevated ATR.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 0.1), ContextDefault(DefaultContext.CTRADER_FROM_ENVIRONMENT, 0.1)), validation_summary='Pydantic required/type coercion only; EnvironmentResolver.Decimal + AutoTradeOptions.Validate')
     stop_max_pips: int = config_field(60, canonical_env='AUTO_TRADE_REACTION_STOP_MAX_PIPS', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.PIPS, risk=RiskClassification.EXECUTION_SAFETY, description='Controls  (pips).', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 60),), validation_summary='Pydantic required/type coercion only')
     stop_min_pips: int = config_field(40, canonical_env='AUTO_TRADE_REACTION_STOP_MIN_PIPS', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.PIPS, risk=RiskClassification.EXECUTION_SAFETY, description='Controls  (pips).', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 40),), validation_summary='Pydantic required/type coercion only')
+    risk_targeted_entry_enabled: bool = config_field(True, canonical_env='AUTO_TRADE_REACTION_RISK_TARGETED_ENTRY_ENABLED', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.BOOLEAN, risk=RiskClassification.EXECUTION_SAFETY, description='Chooses the entry price within the detected zone/room so entry-to-stop risk lands near stop_min_pips, instead of a pure zone-edge pick. Disable to revert to the zone-geometry-only entry with no redeploy.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, True),), validation_summary='Pydantic required/type coercion only')
 
     @field_validator('scale_invalid_policy', mode='before')
     @classmethod
@@ -132,6 +133,9 @@ class ExecutionReactionConfig(FrozenConfigModel):
         if abs(self.market_fraction + self.scale_fraction - 1.0) > 1e-06:
             raise ValueError('reaction market and scale fractions must sum to 1.0')
         return self
+
+class ExecutionReactionRiskLegConfig(FrozenConfigModel):
+    enabled: bool = config_field(True, canonical_env='AUTO_TRADE_REACTION_RISK_LEG_ENABLED', owner=ConfigOwner.CTRADER, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.BOOLEAN, risk=RiskClassification.EXECUTION_SAFETY, description='Owner 2026-09-16: kill switch for the Manual-Algo-style fixed risk leg (15 pips beyond the stop, equity-tiered lots) TradePlanRuntime adds to every scaled reaction entry (market_with_limit_scale/limit_ladder). Pure C#-side mechanism - this flag only gates whether the leg is injected.', default_contexts=(ContextDefault(DefaultContext.CTRADER_FROM_ENVIRONMENT, True),), validation_summary='EnvironmentResolver.Bool + AutoTradeOptions.Validate')
 
 class ExecutionRegimeConfig(FrozenConfigModel):
     direction_enabled: bool = config_field(False, canonical_env='AUTO_TRADE_REGIME_DIRECTION_ENABLED', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.BOOLEAN, risk=RiskClassification.EXECUTION_SAFETY, description='Controls .', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, False),), validation_summary='Pydantic required/type coercion only')
@@ -160,6 +164,154 @@ class ExecutionActivationConfig(FrozenConfigModel):
     @classmethod
     def normalize_m5_authoritative_fallback(cls, value):
         return value.strip().lower() if isinstance(value, str) else value
+
+class ExecutionMadExpandConfig(FrozenConfigModel):
+    """MAD v2 expansion evidence thresholds (app/analysis/mad_phase.py)."""
+
+    break_atr: float = config_field(
+      0.35,
+      canonical_env='AUTO_TRADE_MAD_EXPAND_BREAK_ATR',
+      owner=ConfigOwner.PYTHON,
+      reload=ReloadPolicy.NEW_SETUP_ONLY,
+      runtime_reload=ReloadPolicy.RESTART,
+      unit=ConfigUnit.ATR,
+      risk=RiskClassification.ANALYSIS_BEHAVIOR,
+      description=(
+        'Minimum accepted-break distance beyond the sealed Asia edge (ATR) '
+        'before MAD credits directional expansion. Matches the pre-v2 '
+        'default (owner-observed prod behavior); provisional otherwise.'
+      ),
+      default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 0.35),),
+      validation_summary='Pydantic required/type coercion only',
+      gt=0,
+    )
+    displacement_atr: float = config_field(
+      1.25,
+      canonical_env='AUTO_TRADE_MAD_EXPAND_DISPLACEMENT_ATR',
+      owner=ConfigOwner.PYTHON,
+      reload=ReloadPolicy.NEW_SETUP_ONLY,
+      runtime_reload=ReloadPolicy.RESTART,
+      unit=ConfigUnit.ATR,
+      risk=RiskClassification.ANALYSIS_BEHAVIOR,
+      description=(
+        'Causal |close_t - close_t-k| / ATR strong-displacement threshold '
+        'that alone credits expansion even without N accepted closes. '
+        'Matches the pre-v2 impulse threshold value; provisional otherwise.'
+      ),
+      default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 1.25),),
+      validation_summary='Pydantic required/type coercion only',
+      gt=0,
+    )
+    accept_closes: int = config_field(
+      2,
+      canonical_env='AUTO_TRADE_MAD_EXPAND_ACCEPT_CLOSES',
+      owner=ConfigOwner.PYTHON,
+      reload=ReloadPolicy.NEW_SETUP_ONLY,
+      runtime_reload=ReloadPolicy.RESTART,
+      unit=ConfigUnit.COUNT,
+      risk=RiskClassification.ANALYSIS_BEHAVIOR,
+      description=(
+        'Consecutive closes required beyond the sealed Asia edge (alongside '
+        'break_atr) before MAD credits an accepted breakout. Provisional — '
+        'no replay evidence yet, see §29.'
+      ),
+      default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 2),),
+      validation_summary='Pydantic required/type coercion only',
+      ge=1,
+    )
+
+class ExecutionMadManipConfig(FrozenConfigModel):
+    """MAD v2 manipulation-quality thresholds (app/analysis/mad_phase.py)."""
+
+    min_penetration_atr: float = config_field(
+      0.05,
+      canonical_env='AUTO_TRADE_MAD_MANIP_MIN_PENETRATION_ATR',
+      owner=ConfigOwner.PYTHON,
+      reload=ReloadPolicy.NEW_SETUP_ONLY,
+      runtime_reload=ReloadPolicy.RESTART,
+      unit=ConfigUnit.ATR,
+      risk=RiskClassification.ANALYSIS_BEHAVIOR,
+      description=(
+        'Reference sweep-penetration depth (ATR) used to scale MANIP '
+        'confidence — never a phase-classification gate (a negligible poke '
+        'still IS a sweep+reclaim, just low confidence). Provisional, §29.'
+      ),
+      default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 0.05),),
+      validation_summary='Pydantic required/type coercion only',
+      gt=0,
+    )
+    min_reclaim_atr: float = config_field(
+      0.05,
+      canonical_env='AUTO_TRADE_MAD_MANIP_MIN_RECLAIM_ATR',
+      owner=ConfigOwner.PYTHON,
+      reload=ReloadPolicy.NEW_SETUP_ONLY,
+      runtime_reload=ReloadPolicy.RESTART,
+      unit=ConfigUnit.ATR,
+      risk=RiskClassification.ANALYSIS_BEHAVIOR,
+      description=(
+        'Reference reclaim-depth (ATR) used to scale MANIP confidence — '
+        'never a phase-classification gate. Provisional, §29.'
+      ),
+      default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 0.05),),
+      validation_summary='Pydantic required/type coercion only',
+      gt=0,
+    )
+
+class ExecutionMadAccumConfig(FrozenConfigModel):
+    """MAD v2 accumulation range-quality band (app/analysis/mad_phase.py)."""
+
+    minimum_rq: float = config_field(
+      0.8,
+      canonical_env='AUTO_TRADE_MAD_ACCUM_MINIMUM_RQ',
+      owner=ConfigOwner.PYTHON,
+      reload=ReloadPolicy.NEW_SETUP_ONLY,
+      runtime_reload=ReloadPolicy.RESTART,
+      unit=ConfigUnit.RATIO,
+      risk=RiskClassification.ANALYSIS_BEHAVIOR,
+      description=(
+        'Minimum sealed Asia range-quality (width/ATR) MAD accepts as a '
+        'genuine, contained accumulation box. Matches the pre-v2 default.'
+      ),
+      default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 0.8),),
+      validation_summary='Pydantic required/type coercion only',
+      gt=0,
+    )
+    maximum_rq: float = config_field(
+      6.0,
+      canonical_env='AUTO_TRADE_MAD_ACCUM_MAXIMUM_RQ',
+      owner=ConfigOwner.PYTHON,
+      reload=ReloadPolicy.NEW_SETUP_ONLY,
+      runtime_reload=ReloadPolicy.RESTART,
+      unit=ConfigUnit.RATIO,
+      risk=RiskClassification.ANALYSIS_BEHAVIOR,
+      description=(
+        'Maximum sealed Asia range-quality (width/ATR) MAD still accepts as '
+        'accumulation rather than an already-too-wide box. Matches the '
+        'pre-v2 default.'
+      ),
+      default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 6.0),),
+      validation_summary='Pydantic required/type coercion only',
+      gt=0,
+    )
+
+    @model_validator(mode='after')
+    def validate_rq_band(self):
+        if self.minimum_rq >= self.maximum_rq:
+            raise ValueError('mad.accum.minimum_rq must be below mad.accum.maximum_rq')
+        return self
+
+class ExecutionMadConfig(FrozenConfigModel):
+    """MAD v2 (Manipulation/Accumulation/Distribution) tuning (§20 — a small,
+    interpretable set; execution.technique.mad_hard_gate_enabled remains the
+    separate, unrelated hard-gate kill switch). The MAD -> confluence-v2
+    contribution cap is NOT duplicated here — it already lives in
+    app/analysis/detectors.py (DetectorSettings.confluence_v2_mad_score_weight
+    / _mad_score_weight), which self-normalizes against the v2 score range
+    and already measures within the §24 target (<=5-10%) at its default."""
+
+    expand: ExecutionMadExpandConfig = Field(default_factory=ExecutionMadExpandConfig)
+    manip: ExecutionMadManipConfig = Field(default_factory=ExecutionMadManipConfig)
+    accum: ExecutionMadAccumConfig = Field(default_factory=ExecutionMadAccumConfig)
 
 class ExecutionTechniqueConfig(FrozenConfigModel):
     """Prod technique pack (2026-08-10): killzone + sweep/body + strict PD + SL hard-cap."""
@@ -282,6 +434,24 @@ class ExecutionTechniqueConfig(FrozenConfigModel):
       default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, '7-11,13-16'),),
       validation_summary='Pydantic required/type coercion only',
     )
+    selective_session_min_confluence: int = config_field(
+      0,
+      canonical_env='AUTO_TRADE_TECHNIQUE_SELECTIVE_SESSION_MIN_CONFLUENCE',
+      owner=ConfigOwner.PYTHON,
+      reload=ReloadPolicy.NEW_SETUP_ONLY,
+      runtime_reload=ReloadPolicy.RESTART,
+      unit=ConfigUnit.COUNT,
+      risk=RiskClassification.STRATEGY_BEHAVIOR,
+      description=(
+        'Minimum confluence required when an instrument is outside its focused '
+        'session window (session quality=1/selective). Zero disables this '
+        'quality policy; it never creates a time-of-day hard gate.'
+      ),
+      default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 0),),
+      validation_summary='Pydantic integer bounds',
+      ge=0,
+      le=3,
+    )
     strict_premium_discount: bool = config_field(
       True,
       canonical_env='AUTO_TRADE_TECHNIQUE_STRICT_PREMIUM_DISCOUNT',
@@ -339,10 +509,12 @@ class ExecutionConfig(FrozenConfigModel):
     activation: ExecutionActivationConfig = Field(default_factory=ExecutionActivationConfig)
     broker_recovery: ExecutionBrokerRecoveryConfig = Field(default_factory=ExecutionBrokerRecoveryConfig)
     entry: ExecutionEntryConfig = Field(default_factory=ExecutionEntryConfig)
+    mad: ExecutionMadConfig = Field(default_factory=ExecutionMadConfig)
     mapped_zone: ExecutionMappedZoneConfig = Field(default_factory=ExecutionMappedZoneConfig)
     policy: ExecutionPolicyConfig = Field(default_factory=ExecutionPolicyConfig)
     range: ExecutionRangeConfig = Field(default_factory=ExecutionRangeConfig)
     reaction: ExecutionReactionConfig = Field(default_factory=ExecutionReactionConfig)
+    reaction_risk_leg: ExecutionReactionRiskLegConfig = Field(default_factory=ExecutionReactionRiskLegConfig)
     regime: ExecutionRegimeConfig = Field(default_factory=ExecutionRegimeConfig)
     scaling: ExecutionScalingConfig = Field(default_factory=ExecutionScalingConfig)
     stops: ExecutionStopsConfig = Field(default_factory=ExecutionStopsConfig)

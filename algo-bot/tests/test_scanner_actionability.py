@@ -73,14 +73,14 @@ def _result(
     reasons=["fixture reaction"],
     mode="counter_bias" if direction == "BUY" else "with_bias",
     structural_source=(
-      "key_level" if setup == "Key Level Reaction" else "supply_demand"
+      "key_level" if setup == "Key Level" else "supply_demand"
     ),
     structural_id=structural_id or f"{direction}:{low}:{high}",
     structural_low=low,
     structural_high=high,
     structural_timeframe="M5",
     structural_kind=(
-      "round" if setup == "Key Level Reaction" else side
+      "round" if setup == "Key Level" else side
     ),
     key_level_role=role,
     planned_entry_price=(
@@ -128,6 +128,29 @@ def _map(
   )
 
 
+def _map_to_zones(market_map: MarketMap) -> list[Zone]:
+  """2026-09 (Market Map purge stage 4): resolve_actionability now reads
+  technique-native ``Zone`` data, not Market Map. structural_target_room's
+  zone_opposing_entries derives "major" vs "zone" tier the same way
+  build_map itself does (score_reasons containing "HTF Zone", plus fresh/
+  score) - reproduce that here from each fixture's ``tier=`` so existing
+  "major"-tier fixtures still round-trip to "major" through the real
+  formula instead of silently collapsing to "zone".
+  """
+  zones = []
+  for entry in market_map.actionable_entries:
+    is_major = entry.tier == "major"
+    zones.append(Zone(
+      entry.lo,
+      entry.hi,
+      "demand" if entry.side == "buy" else "supply",
+      score=entry.score,
+      score_reasons=["HTF Zone"] if is_major else [],
+      touches=0 if is_major else 1,
+    ))
+  return zones
+
+
 def _cfg(
   *,
   guard_mode: str = "balanced",
@@ -169,7 +192,7 @@ def test_buy_under_overlapping_sell_major_hard_blocks_below_cost_room(
     "BUY",
     4041.67,
     4046.73,
-    setup="Key Level Reaction",
+    setup="Key Level",
     quality=3,
     current_price=4045.95,
   )
@@ -182,7 +205,7 @@ def test_buy_under_overlapping_sell_major_hard_blocks_below_cost_room(
   resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[buy],
-    market_map=market_map,
+    zones=_map_to_zones(market_map),
     context=SimpleNamespace(htf_bias="down"),
     atr=2.0,
     pip_size=0.1,
@@ -221,7 +244,7 @@ def test_scalp_keeps_ladder_when_room_fits_swing_hard_blocks_when_below_cost():
   scalp_resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[scalp],
-    market_map=market_map,
+    zones=_map_to_zones(market_map),
     context=SimpleNamespace(htf_bias="down"),
     atr=2.0,
     pip_size=0.1,
@@ -239,13 +262,13 @@ def test_scalp_keeps_ladder_when_room_fits_swing_hard_blocks_when_below_cost():
     "BUY",
     4044.50,
     4045.00,
-    setup="Key Level Reaction",
+    setup="Key Level",
     current_price=4045.0,
   )
   swing_resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[swing],
-    market_map=market_map,
+    zones=_map_to_zones(market_map),
     context=SimpleNamespace(htf_bias="down"),
     atr=2.0,
     pip_size=0.1,
@@ -275,7 +298,7 @@ def test_scalp_not_hard_killed_by_zero_usable_htf_opposing_room():
   resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[scalp],
-    market_map=market_map,
+    zones=_map_to_zones(market_map),
     context=SimpleNamespace(htf_bias="up"),
     atr=4.53,
     pip_size=0.1,
@@ -307,7 +330,7 @@ def test_raw_room_zero_major_hard_gates():
   resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[buy],
-    market_map=market_map,
+    zones=_map_to_zones(market_map),
     context=SimpleNamespace(htf_bias="down"),
     atr=2.0,
     pip_size=0.1,
@@ -350,7 +373,7 @@ def test_trimmed_zone_touching_opposing_edge_is_not_misreported_as_contained():
   resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[buy],
-    market_map=market_map,
+    zones=_map_to_zones(market_map),
     context=SimpleNamespace(htf_bias="up"),
     atr=2.0,
     pip_size=0.1,
@@ -381,7 +404,7 @@ def test_target_room_below_cost_is_soft_when_actionability_gate_is_off():
   resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[buy],
-    market_map=market_map,
+    zones=_map_to_zones(market_map),
     context=SimpleNamespace(htf_bias="down"),
     atr=2.0,
     pip_size=0.1,
@@ -415,7 +438,7 @@ def test_target_room_hard_blocks_below_cost_when_actionability_gate_is_on():
   resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[buy],
-    market_map=market_map,
+    zones=_map_to_zones(market_map),
     context=SimpleNamespace(htf_bias="down"),
     atr=2.0,
     pip_size=0.1,
@@ -455,7 +478,7 @@ def test_partial_overlap_trims_the_zone_instead_of_killing_the_whole_setup():
   resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[buy],
-    market_map=market_map,
+    zones=_map_to_zones(market_map),
     context=SimpleNamespace(htf_bias="down"),
     atr=2.0,
     pip_size=0.1,
@@ -473,10 +496,58 @@ def test_partial_overlap_trims_the_zone_instead_of_killing_the_whole_setup():
   assert trimmed.target_cap_pips == pytest.approx(70.0)
 
 
-def test_full_overlap_still_rejects_nothing_left_to_trim_into():
-  """A candidate zone entirely consumed by an opposing zone has no clean
-  portion to trim into. Planned entry inside the opposing structure is a
-  hard structural conflict when the actionability gate is on.
+def test_full_overlap_by_a_major_still_rejects_nothing_left_to_trim_into():
+  """A candidate zone entirely consumed by an opposing MAJOR has no clean
+  portion to trim into. Planned entry inside a major opposing structure is
+  a hard structural conflict when the actionability gate is on.
+  """
+  buy = _result(
+    "BUY",
+    4106.5,
+    4107.5,
+    quality=3,
+    current_price=4107.0,
+  )
+  market_map = _map(
+    _entry("sell", 4100.0, 4112.0, tier="major"),
+    price=4107.0,
+  )
+
+  resolution = resolve_actionability(
+    symbol="XAU",
+    observed_results=[buy],
+    zones=_map_to_zones(market_map),
+    context=SimpleNamespace(htf_bias="down"),
+    atr=2.0,
+    pip_size=0.1,
+    cfg=_cfg(),
+  )
+
+  assert resolution.actionable == ()
+  assert len(resolution.gated) == 1
+  decision = resolution.gated[0][1]
+  assert decision.reason_code in {
+    "opposing_entry_contained",
+    "opposing_entry_overlap",
+  }
+  assert decision.hard_block is True
+  assert decision.allowed is False
+
+
+def test_full_overlap_by_an_ordinary_zone_hard_rejects():
+  """2026-09 (Opposing Structure V2 repair): PR #493 (2026-09-07) widened
+  the weak-opposing treatment from just "level" to {"level", "zone"} -
+  meaning full containment by an ordinary directional "zone" (not just
+  "major") stopped hard-blocking at all. That was too coarse: it silently
+  unblocked entries landing directly inside real, undisplaced, unmitigated
+  supply/demand, not just genuinely minor structure. Production data
+  isolated to the exact PR #493 merge timestamp confirmed the cost (Key
+  Level auto-trades: 68 trades/56% win rate/+628 net pips before, vs 8
+  trades/37.5%/-165 net pips after). An ordinary "zone" is real directional
+  evidence again: full containment/overlap hard-blocks exactly like
+  "major" does. Only a genuinely unsided, non-directional "level" (a
+  round-number/generic reaction level with no real supply/demand behind
+  it) keeps the weak treatment.
   """
   buy = _result(
     "BUY",
@@ -493,7 +564,7 @@ def test_full_overlap_still_rejects_nothing_left_to_trim_into():
   resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[buy],
-    market_map=market_map,
+    zones=_map_to_zones(market_map),
     context=SimpleNamespace(htf_bias="down"),
     atr=2.0,
     pip_size=0.1,
@@ -530,7 +601,7 @@ def test_room_below_the_ladder_keeps_configured_ladder():
   resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[buy],
-    market_map=market_map,
+    zones=_map_to_zones(market_map),
     context=SimpleNamespace(htf_bias="down"),
     atr=2.0,
     pip_size=0.1,
@@ -563,7 +634,7 @@ def test_room_below_the_floor_still_keeps_configured_ladder():
   resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[buy],
-    market_map=market_map,
+    zones=_map_to_zones(market_map),
     context=SimpleNamespace(htf_bias="down"),
     atr=2.0,
     pip_size=0.1,
@@ -610,7 +681,7 @@ def test_near_barrier_below_cost_hard_blocks_instead_of_tiny_or_full_ladder():
 
 
 def test_fe023_trendline_sell_into_demand_hard_blocks_below_cost_room():
-  """Live 2026-08-06 08:30 UTC: Trendline Reaction SELL fe023dd8 published
+  """Live 2026-08-06 08:30 UTC: Trendline SELL fe023dd8 published
   with opposing demand high 4267.8, planned entry 4268.24, usable_room=0,
   effective_target=200 via opposing_barrier_room_below_cost_ignored.
   Below-cost room must hard-kill.
@@ -651,7 +722,7 @@ def test_counter_bias_reaction_is_observed_when_disabled():
   resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[buy],
-    market_map=_map(price=4100.5),
+    zones=_map_to_zones(_map(price=4100.5)),
     context=SimpleNamespace(htf_bias="down"),
     atr=2.0,
     pip_size=0.1,
@@ -674,7 +745,7 @@ def test_with_bias_reaction_is_unaffected_by_counter_bias_disabled():
   resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[sell],
-    market_map=_map(price=4100.5),
+    zones=_map_to_zones(_map(price=4100.5)),
     context=SimpleNamespace(htf_bias="down"),
     atr=2.0,
     pip_size=0.1,
@@ -698,7 +769,7 @@ def test_invalid_geometry_is_always_analysis_only():
   resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[result],
-    market_map=_map(price=4100.5),
+    zones=_map_to_zones(_map(price=4100.5)),
     context=SimpleNamespace(htf_bias="up"),
     atr=2.0,
     pip_size=0.1,
@@ -819,7 +890,7 @@ def test_equal_opposing_observations_remain_raw_but_both_are_not_actionable():
   resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[buy, sell],
-    market_map=_map(price=4100.5),
+    zones=_map_to_zones(_map(price=4100.5)),
     context=SimpleNamespace(htf_bias="range"),
     atr=2.0,
     pip_size=0.1,
@@ -854,7 +925,7 @@ def test_confluence_margin_never_picks_a_side_out_of_a_contested_corridor():
   resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[buy, sell],
-    market_map=no_room,
+    zones=_map_to_zones(no_room),
     context=SimpleNamespace(htf_bias="up"),
     atr=1.0,
     pip_size=0.1,
@@ -882,10 +953,10 @@ def test_distant_map_room_does_not_rescue_an_overlapping_pair():
   resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[buy, sell],
-    market_map=_map(
+    zones=_map_to_zones(_map(
       _entry("sell", 4120.0, 4123.0, tier="major"),
       price=4100.5,
-    ),
+    )),
     context=SimpleNamespace(htf_bias="up"),
     atr=1.0,
     pip_size=0.1,
@@ -910,7 +981,7 @@ def test_nearby_non_overlapping_bands_remain_watched():
   resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[buy, sell],
-    market_map=_map(price=4005.0),
+    zones=_map_to_zones(_map(price=4005.0)),
     context=SimpleNamespace(htf_bias="down"),
     atr=2.0,
     pip_size=0.1,
@@ -932,7 +1003,7 @@ def test_bands_well_separated_beyond_the_gap_threshold_are_not_contested():
   resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[buy, sell],
-    market_map=_map(price=4002.0),
+    zones=_map_to_zones(_map(price=4002.0)),
     context=SimpleNamespace(htf_bias="down"),
     atr=2.0,
     pip_size=0.1,
@@ -951,7 +1022,7 @@ def test_proposed_entry_inside_opposing_band_is_executable_conflict():
   resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[buy, sell],
-    market_map=_map(price=4099.0),
+    zones=_map_to_zones(_map(price=4099.0)),
     context=SimpleNamespace(htf_bias="range"),
     atr=2.0,
     pip_size=0.1,
@@ -986,7 +1057,7 @@ def test_valid_direction_with_structural_room_remains_actionable(
   resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[result],
-    market_map=_map(barrier, price=result.current_price),
+    zones=_map_to_zones(_map(barrier, price=result.current_price)),
     context=SimpleNamespace(
       htf_bias="up" if direction == "BUY" else "down",
     ),
@@ -1038,14 +1109,14 @@ def test_role_ambiguity_is_telemetry_only_never_a_hard_block():
     "BUY",
     99.5,
     100.5,
-    setup="Key Level Reaction",
+    setup="Key Level",
     role=ROLE_AMBIGUOUS,
   )
 
   resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[result],
-    market_map=_map(price=100.0),
+    zones=_map_to_zones(_map(price=100.0)),
     context=SimpleNamespace(htf_bias="up"),
     atr=1.0,
     pip_size=0.1,
@@ -1145,7 +1216,7 @@ def test_soft_geometry_remains_mode_aware():
 def test_structural_target_room_keeps_full_ladder_when_barrier_near():
   """Owner 2026-08-06: never invent floor(usable_room) as a solo TP.
 
-  Live Trendline Reaction published TP1=4255.49 close_ratio=1.0 (~9 pips)
+  Live Trendline published TP1=4255.49 close_ratio=1.0 (~9 pips)
   because the barrier path used to shrink fitted_targets to a tiny cap.
   Reaction/swing setups keep the configured partial ladder unchanged.
   """
@@ -1444,6 +1515,118 @@ def test_weak_map_level_containment_does_not_hard_block():
   assert decision.measured.get("weak_opposing_level_ignored") is True
 
 
+def test_ordinary_zone_containment_hard_blocks():
+  """2026-09 (Opposing Structure V2 repair): an ordinary directional "zone"
+  is real evidence again - containment hard-blocks exactly like "major"
+  does, unlike a genuinely unsided "level" (see
+  test_weak_map_level_containment_does_not_hard_block just above, which
+  correctly stays weak).
+  """
+  candidate_low = 4102.0
+  candidate_high = 4105.0
+  opposing = _entry("buy", 4098.0, 4100.5, tier="zone")
+  decision = evaluate_structural_target_room(
+    direction="SELL",
+    planned_entry_price=4100.0,
+    candidate_entry_low=candidate_low,
+    candidate_entry_high=candidate_high,
+    configured_target_pips=(30, 60, 90),
+    actionable_entries=(opposing,),
+    atr=4.0,
+    pip_size=0.1,
+    barrier_buffer_atr=0.5,
+    execution_cost_pips=1.0,
+  )
+  assert decision.allowed is False
+  assert decision.hard_block is True
+  assert decision.reason_code == "opposing_entry_contained"
+  assert decision.measured.get("weak_opposing_level_ignored") is None
+
+
+def test_ordinary_zone_zero_raw_room_hard_blocks():
+  """Same repair, the other hard-block branch: raw_room <= 0 (planned entry
+  already past the opposing zone's near edge, not contained). Mirrors
+  test_raw_room_zero_major_hard_gates's geometry exactly, tier=zone instead
+  of major - the reason code differs (opposing_barrier_no_target, not
+  opposing_major_no_room, which is literally gated on tier=="major") but
+  the hard-block outcome is now identical.
+  """
+  buy = _result(
+    "BUY",
+    4054.0,
+    4057.0,
+    quality=3,
+    current_price=4056.0,
+  )
+  market_map = _map(
+    _entry("sell", 4046.0, 4055.0, tier="zone"),
+    price=4056.0,
+  )
+
+  resolution = resolve_actionability(
+    symbol="XAU",
+    observed_results=[buy],
+    zones=_map_to_zones(market_map),
+    context=SimpleNamespace(htf_bias="down"),
+    atr=2.0,
+    pip_size=0.1,
+    cfg=_cfg(),
+  )
+
+  assert resolution.actionable == ()
+  decision = resolution.gated[0][1]
+  assert decision.reason_code == "opposing_barrier_no_target"
+  assert decision.hard_block is True
+  assert decision.measured["raw_room_price"] < 0
+
+
+def test_opposing_structure_v2_telemetry_flows_onto_the_result():
+  # 2026-09 (Opposing Structure V2 repair, §25): an ordinary "zone" with
+  # genuine room ahead must pass (unchanged Sept-7 behavior) while still
+  # carrying the new continuous strength/room-in-R telemetry - shadow
+  # only, never blocking a setup that already cleared the hard gates.
+  buy = _result(
+    "BUY",
+    4093.95,
+    4101.61,
+    quality=3,
+    current_price=4099.41,
+  )
+  market_map = _map(
+    _entry("sell", 4150.0, 4155.0, tier="zone"),
+    price=4099.41,
+  )
+
+  resolution = resolve_actionability(
+    symbol="XAU",
+    observed_results=[buy],
+    zones=_map_to_zones(market_map),
+    context=SimpleNamespace(htf_bias="down"),
+    atr=2.0,
+    pip_size=0.1,
+    cfg=_cfg(),
+  )
+
+  assert len(resolution.actionable) == 1
+  result = resolution.actionable[0]
+  assert result.opposing_zone_present is True
+  assert result.opposing_zone_side == "sell"
+  assert result.opposing_zone_tier == "zone"
+  assert result.opposing_zone_low == 4150.0
+  assert result.opposing_zone_high == 4155.0
+  assert 0.0 <= result.opposing_zone_strength <= 1.0
+  assert result.opposing_raw_room_price is not None
+  assert result.opposing_raw_room_price > 0
+  # No protective_stop_distance is threaded from the scanner-discovery
+  # actionability call in this stage (documented scope limit) - R-based
+  # fields stay None while raw room still populates.
+  assert result.opposing_room_r is None
+  assert result.opposing_before_tp1 is None
+  assert result.opposing_mitigated is False
+  assert result.opposing_displaced is False
+  assert result.opposing_action in {"CLEAR", "CAUTION", "CONFIRMATION_REQUIRED"}
+
+
 def test_v8_shared_boundary_buy_glued_supply_does_not_block():
   candidate_low = 4100.0
   candidate_high = 4103.0
@@ -1523,7 +1706,7 @@ def test_v8_resolve_actionability_allows_glued_sell_wall():
     4396.20,
     quality=3,
     current_price=4393.50,
-    setup="Key Level Reaction",
+    setup="Key Level",
   )
   market_map = _map(
     _entry("buy", 4388.0, 4393.55, tier="zone"),
@@ -1532,7 +1715,7 @@ def test_v8_resolve_actionability_allows_glued_sell_wall():
   resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[sell],
-    market_map=market_map,
+    zones=_map_to_zones(market_map),
     context=SimpleNamespace(htf_bias="up"),
     atr=4.0,
     pip_size=0.1,
@@ -1653,10 +1836,10 @@ def test_barrier_capped_target_is_used_by_reward_risk_pre_gate(monkeypatch):
   resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[result],
-    market_map=_map(
+    zones=_map_to_zones(_map(
       _entry("sell", 4105.0, 4108.0, tier="zone"),
       price=4100.5,
-    ),
+    )),
     context=ctx,
     atr=2.0,
     pip_size=0.1,
@@ -1721,7 +1904,7 @@ def test_recent_displacement_beyond_barrier_lets_a_contained_buy_through():
   resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[buy],
-    market_map=market_map,
+    zones=_map_to_zones(market_map),
     context=ctx,
     atr=2.0,
     pip_size=0.1,
@@ -1762,7 +1945,7 @@ def test_no_displacement_still_blocks_as_before():
   resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[buy],
-    market_map=market_map,
+    zones=_map_to_zones(market_map),
     context=ctx,
     atr=2.0,
     pip_size=0.1,
@@ -1805,7 +1988,7 @@ def test_displacement_override_disabled_by_default_lookback_zero():
   resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[buy],
-    market_map=market_map,
+    zones=_map_to_zones(market_map),
     context=ctx,
     atr=2.0,
     pip_size=0.1,
@@ -1827,7 +2010,7 @@ def test_empty_market_map_is_valid_and_unavailable_map_retains_candidate():
   available = resolve_actionability(
     symbol="XAU",
     observed_results=[result],
-    market_map=_map(price=4100.5),
+    zones=_map_to_zones(_map(price=4100.5)),
     context=SimpleNamespace(htf_bias="up"),
     atr=1.0,
     pip_size=0.1,
@@ -1836,7 +2019,7 @@ def test_empty_market_map_is_valid_and_unavailable_map_retains_candidate():
   unavailable = resolve_actionability(
     symbol="XAU",
     observed_results=[result],
-    market_map=None,
+    zones=None,
     context=SimpleNamespace(htf_bias="up"),
     atr=1.0,
     pip_size=0.1,
@@ -1866,7 +2049,7 @@ def test_gate_false_retains_contextual_observations_including_contested():
   resolution = resolve_actionability(
     symbol="XAU",
     observed_results=[buy, sell],
-    market_map=_map(price=4100.5),
+    zones=_map_to_zones(_map(price=4100.5)),
     context=SimpleNamespace(htf_bias="range"),
     atr=2.0,
     pip_size=0.1,
@@ -1923,7 +2106,7 @@ async def test_live_incident_never_reaches_lifecycle_card_or_strategy_match(
     "BUY",
     4041.67,
     4046.73,
-    setup="Key Level Reaction",
+    setup="Key Level",
     quality=3,
     current_price=4045.95,
   )

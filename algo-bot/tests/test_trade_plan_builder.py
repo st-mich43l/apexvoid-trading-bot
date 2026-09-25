@@ -120,6 +120,106 @@ def test_builds_valid_plan_with_real_bias_kind_and_regime():
   assert plan.source_structure.timeframe == "H1"
 
 
+def test_candle_confirmation_v2_telemetry_propagates_to_plan_analysis():
+  # Candle Confirmation V2 (§28): unlike the automatically dataclass-
+  # equal StrategyMatch round-trip, TradePlanAnalysis copies each field
+  # by hand in trade_plan_builder.py - worth a direct check.
+  match = replace(
+    _match(),
+    candle_version=2,
+    candle_primary_pattern="sweep_reclaim",
+    candle_patterns="wick_rejection,sweep_reclaim",
+    candle_final_score=0.77,
+    candle_base_score=0.65,
+    candle_synergy_bonus=0.1,
+    candle_body_fraction=0.33,
+    candle_sweep=True,
+    candle_reclaim=True,
+    candle_doji=False,
+    candle_sequence_bars=None,
+  )
+  plan = _build(match)
+  assert plan.analysis.candle_version == 2
+  assert plan.analysis.candle_primary_pattern == "sweep_reclaim"
+  assert plan.analysis.candle_patterns == "wick_rejection,sweep_reclaim"
+  assert plan.analysis.candle_final_score == pytest.approx(0.77)
+  assert plan.analysis.candle_base_score == pytest.approx(0.65)
+  assert plan.analysis.candle_synergy_bonus == pytest.approx(0.1)
+  assert plan.analysis.candle_body_fraction == pytest.approx(0.33)
+  assert plan.analysis.candle_sweep is True
+  assert plan.analysis.candle_reclaim is True
+  assert plan.analysis.candle_doji is False
+  assert plan.analysis.candle_sequence_bars is None
+
+  # to_dict()/from_dict() round-trip (used for the C# echo and Postgres
+  # persistence chain) must preserve every candle_* value too.
+  restored = type(plan.analysis).from_dict(plan.analysis.to_dict())
+  assert restored == plan.analysis
+
+
+def test_trendline_v2_evidence_propagates_to_plan_analysis():
+  evidence = {
+    "version": "v2",
+    "state": "confirmed",
+    "anchor_idx": [10, 20],
+    "validation_touch_count": 1,
+    "interaction_started_at": "2026-09-17T02:42:00+00:00",
+    "micro_confirmation_type": "strong_close",
+  }
+  plan = _build(replace(
+    _match(strategy="Trendline", family="trendline"),
+    trendline_v2=evidence,
+  ))
+
+  assert plan.analysis.trendline_v2 == evidence
+  restored = type(plan.analysis).from_dict(plan.analysis.to_dict())
+  assert restored.trendline_v2 == evidence
+
+
+def test_opposing_structure_v2_telemetry_propagates_to_plan_analysis():
+  # Same hand-copied-field concern as Candle Confirmation V2 above -
+  # trade_plan_builder.py copies each opposing_*/key_level_opposing_zone_*
+  # field individually, worth a direct check.
+  match = replace(
+    _match(),
+    key_level_opposing_zone_low=4098.0,
+    key_level_opposing_zone_high=4102.0,
+    key_level_opposing_zone_side="supply",
+    opposing_zone_present=True,
+    opposing_zone_side="sell",
+    opposing_zone_low=4150.0,
+    opposing_zone_high=4155.0,
+    opposing_zone_tier="zone",
+    opposing_zone_score=8.0,
+    opposing_zone_strength=0.53,
+    opposing_raw_room_price=50.0,
+    opposing_room_pips=500.0,
+    opposing_room_atr=25.0,
+    opposing_room_r=None,
+    opposing_before_tp1=None,
+    opposing_displaced=False,
+    opposing_mitigated=False,
+    opposing_room_pressure=None,
+    opposing_risk_score=None,
+    opposing_action="CLEAR",
+    opposing_reason_code="opposing_room_clear",
+  )
+  plan = _build(match)
+  assert plan.analysis.key_level_opposing_zone_low == pytest.approx(4098.0)
+  assert plan.analysis.key_level_opposing_zone_high == pytest.approx(4102.0)
+  assert plan.analysis.key_level_opposing_zone_side == "supply"
+  assert plan.analysis.opposing_zone_present is True
+  assert plan.analysis.opposing_zone_side == "sell"
+  assert plan.analysis.opposing_zone_tier == "zone"
+  assert plan.analysis.opposing_zone_strength == pytest.approx(0.53)
+  assert plan.analysis.opposing_room_r is None
+  assert plan.analysis.opposing_action == "CLEAR"
+  assert plan.analysis.opposing_reason_code == "opposing_room_clear"
+
+  restored = type(plan.analysis).from_dict(plan.analysis.to_dict())
+  assert restored == plan.analysis
+
+
 def test_bias_and_kind_are_whatever_was_captured_not_direction_derived():
   # A BUY with a bearish HTF bias and a supply-side structural kind (e.g. a
   # counter-trend fade) must round-trip exactly as captured - the builder
@@ -245,7 +345,7 @@ def test_key_level_reaction_emits_market_with_limit_scale():
     auto_trade_reaction_scale_invalid_policy="single_market",
   )
   match = _match(
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     family="key_level",
     structural_kind="key_level",
     entry_low=4088.10,
@@ -385,6 +485,32 @@ def test_retest_trigger_wick_drives_stop_rr_and_confirmation_provenance():
   assert plan.provenance.zone_episode_id == "episode-1"
 
 
+def test_match_sweep_extreme_price_widens_stop_like_trigger_wick():
+  # A genuine liquidity sweep behind a structural reaction
+  # (StrategyMatch.sweep_extreme_price, set by detectors._structural_finish
+  # for a non-induced grade A/B CONFIRM_SWEEP_RECLAIM) must drive the same
+  # wick-stop widening as an M1 trigger_wick_extreme - it's the same
+  # execution_policy.py fallback chain, just sourced differently. No
+  # explicit trigger_wick_extreme param this time.
+  via_trigger = _build(
+    _match(structure_swing=4085.0, targets=(140, 250)),
+    trigger_wick_extreme=4083.5,
+  )
+  via_match_field = _build(
+    replace(
+      _match(structure_swing=4085.0, targets=(140, 250)),
+      sweep_extreme_price=4083.5,
+    ),
+  )
+
+  assert via_match_field.stop.price == via_trigger.stop.price
+  # trade_plan_builder's own "m1_trigger_wick" label only applies when the
+  # explicit param was used; sourced from the match field it surfaces the
+  # underlying protective_stop telemetry value instead.
+  assert via_trigger.stop.source == "m1_trigger_wick"
+  assert via_match_field.stop.source == "wick"
+
+
 def test_final_reward_risk_preference_keeps_builder_plan():
   plan = _build(
     _match(structure_swing=4085.0, targets=(60,)),
@@ -395,5 +521,3 @@ def test_final_reward_risk_preference_keeps_builder_plan():
   )
   assert plan.management is not None
   assert plan.stop.source == "m1_trigger_wick"
-
-

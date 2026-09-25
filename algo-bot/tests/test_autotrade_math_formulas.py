@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pandas as pd
+import pytest
 
 from app.analysis.dealing_range import dealing_range
 from app.analysis.detectors import (
@@ -82,6 +83,19 @@ def test_momentum_state_velocity_and_acceleration_signs():
   assert bear.state == "bear"
 
 
+def test_momentum_acceleration_is_per_bar_not_a_bare_velocity_delta():
+  """2026-09: a = (v[t]-v[t-n])/n, a true per-bar second derivative - not the
+  v1 `a = v[t]-v[t-n]` velocity delta. Three-segment rate-of-rise closes
+  (1/bar, then 2/bar, then 3/bar) with n=4, ATR=1 give known v/v_prev.
+  """
+  closes = [0.0, 1.0, 2.0, 3.0, 4.0, 6.0, 8.0, 10.0, 12.0, 15.0, 18.0, 21.0, 24.0]
+  df, atr = _ohlc(closes, atr=1.0)
+  state = momentum_state(df, atr, lookback=4, bull_threshold=0.1, bear_threshold=-0.1)
+  # v[12] = (24-12)/(4*1) = 3.0; v[8] = (12-4)/(4*1) = 2.0
+  assert state.velocity == pytest.approx(3.0)
+  assert state.acceleration == pytest.approx((3.0 - 2.0) / 4)
+
+
 def test_confluence_fib_touch_weight():
   base = _confluence_from_factors(ConfluenceFactors(htf_aligned=True))
   boosted = _confluence_from_factors(
@@ -91,7 +105,7 @@ def test_confluence_fib_touch_weight():
   assert boosted >= base
 
 
-def test_hfs_impulse_preferred_defaults_are_fib_band():
+def test_scalp_impulse_preferred_defaults_are_fib_band():
   import inspect
 
   sig = inspect.signature(detect_impulse_pullback)
@@ -145,6 +159,9 @@ def test_strategy_match_math_round_trip_and_card_line():
   assert "v=+0.41" in line
   assert "PD 0.37" in line
 
+  # Math is scanner-only diagnostic detail, dropped from the shared
+  # entry-card design (Phase S12) - _format_math_line above is still the
+  # real computation, just no longer rendered onto the card itself.
   card = format_plan_published_root_card(match)
-  assert "📐 <b>Math</b>" in card
-  assert "fib 0.618" in card
+  assert "📐 <b>Math</b>" not in card
+  assert "fib 0.618" not in card

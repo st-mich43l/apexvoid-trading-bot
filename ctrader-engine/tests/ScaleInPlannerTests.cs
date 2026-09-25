@@ -78,9 +78,16 @@ public sealed class ScaleInPlannerTests
     Assert.True(allowed.PostAddWorstCase >= 0);
   }
 
+  // openVolume shifted from 200/300 to 600/700 (commit 7b7129af raised
+  // LotsForEquity(900) 0.06->0.10, i.e. table headroom 600->1000 volume) so
+  // headroomLots stays the binding term the test means to exercise -
+  // otherwise both cases collapse onto the unrelated addCapLots term
+  // (0.5 * 18 / 150 = 0.06 lots = 600 volume) regardless of openVolume,
+  // which no longer differentiates a fallback ladder at all. Expected
+  // add/target values are unchanged from before this shift.
   [Theory]
-  [InlineData(200, 400, 4)]
-  [InlineData(300, 300, 3)]
+  [InlineData(600, 400, 4)]
+  [InlineData(700, 300, 3)]
   public void SelectsFallbackLadderForAvailableSteps(
     long openVolume,
     long expectedAddVolume,
@@ -107,6 +114,9 @@ public sealed class ScaleInPlannerTests
     Assert.Equal(expectedTargets, decision.TargetPlan!.TargetsPips.Count);
   }
 
+  // openVolume shifted 500->900 for the same reason as the theory above -
+  // reproduces the original tiny 100-volume headroom against the new,
+  // higher table (1000 volume instead of 600).
   [Fact]
   public void OneStepAddIsRefusedAsLadderInfeasible()
   {
@@ -117,7 +127,7 @@ public sealed class ScaleInPlannerTests
       addRiskFraction: 0.5m,
       addStopPips: 15m,
       bookedPnl: 20m,
-      openTranches: [new(TradeDirection.Buy, 4000m, 4000.3m, 500)],
+      openTranches: [new(TradeDirection.Buy, 4000m, 4000.3m, 900)],
       requireRiskFree: false,
       pipSize: 0.1m,
       Symbol,

@@ -1313,9 +1313,27 @@ public sealed class TradePlanRuntime(
       );
       var bound = BoundSymbol(plan.Symbol, symbol);
       var units = UnitsFor(plan.Symbol);
-      TradePlanExecutionEngine.CalculateVolume(
+      var volumePlan = TradePlanExecutionEngine.CalculateVolume(
         plan, equity, units.PipSize, units.PipValuePerLot, bound
       );
+      var degraded = TradePlanExecutionEngine.DegradeScalpLadderForMinVolume(
+        plan, volumePlan.TotalVolume, bound
+      );
+      if (degraded is not null)
+      {
+        plan = degraded;
+        await store.IncrementMetricAsync(
+          plan.Symbol, "ladder_degraded_min_volume", cancellationToken
+        );
+        await PublishEventAsync(
+          "warning",
+          "Scalp 1R/2R ladder degraded to a single final target because "
+            + "broker minimum volume cannot support two step-aligned exits",
+          plan,
+          cancellationToken,
+          reasonCode: "ladder_degraded_min_volume"
+        );
+      }
     }
     catch (Exception exception) when (
       exception is VolumePlanningException or TradePlanContractException
@@ -1600,18 +1618,21 @@ public sealed class TradePlanRuntime(
       }
     }
     bool? breakEvenApplied = null;
-    int? bookedIndex = null;
     decimal? plannedRewardRisk = null;
     bool? targetRoomFallbackUsed = null;
     var isTerminalClose = type is "position_closed" or "group_result";
     if (isTerminalClose)
     {
       breakEvenApplied = runtimeState?.BreakEvenApplied;
-      bookedIndex = highestBookedTargetIndex
-        ?? runtimeState?.HighestBookedTargetIndex;
       plannedRewardRisk = plan.Targets.Count >= 2 ? 2.0m : 1.0m;
       targetRoomFallbackUsed = plan.Targets.Count == 1;
     }
+    // Which target this event concerns (and how many the plan declares) is
+    // relevant on every tp_booked/position_closed report, not only the
+    // final close - a mid-trade TP hit is exactly where the card needs to
+    // say "1 of 2", not just the terminal summary.
+    var bookedIndex = highestBookedTargetIndex
+      ?? runtimeState?.HighestBookedTargetIndex;
     await store.PublishAutoTradeEventAsync(
       options.EventStream,
       new AutoTradeEvent(
@@ -1644,12 +1665,77 @@ public sealed class TradePlanRuntime(
             : null),
         BreakEvenApplied: breakEvenApplied,
         HighestBookedTargetIndex: bookedIndex,
+        TargetsTotal: plan.Targets.Count,
         PlannedRewardRisk: plannedRewardRisk,
         TargetRoomFallbackUsed: targetRoomFallbackUsed,
         ConfluenceV1: plan.Analysis.ConfluenceV1,
         ConfluenceV2: plan.Analysis.ConfluenceV2,
         ConfluenceV2Raw: plan.Analysis.ConfluenceV2Raw,
-        ConfluenceScoringVersion: plan.Analysis.ConfluenceScoringVersion
+        ConfluenceScoringVersion: plan.Analysis.ConfluenceScoringVersion,
+        MathFibRatio: plan.Analysis.MathFibRatio,
+        MathVelocity: plan.Analysis.MathVelocity,
+        MathAcceleration: plan.Analysis.MathAcceleration,
+        MathPd: plan.Analysis.MathPd,
+        MathFeatureVersion: plan.Analysis.MathFeatureVersion,
+        MadVersion: plan.Analysis.MadVersion,
+        MadPhase: plan.Analysis.MadPhase,
+        MadConfidence: plan.Analysis.MadConfidence,
+        MadAffinity: plan.Analysis.MadAffinity,
+        MadDirection: plan.Analysis.MadDirection,
+        MadSweepSide: plan.Analysis.MadSweepSide,
+        MadReclaim: plan.Analysis.MadReclaim,
+        MadRangeQualityAtr: plan.Analysis.MadRangeQualityAtr,
+        MadBreakDistanceAtr: plan.Analysis.MadBreakDistanceAtr,
+        MadDisplacementAtr: plan.Analysis.MadDisplacementAtr,
+        MadAcceptanceCloses: plan.Analysis.MadAcceptanceCloses,
+        MadSweepPenetrationAtr: plan.Analysis.MadSweepPenetrationAtr,
+        MadReclaimDepthAtr: plan.Analysis.MadReclaimDepthAtr,
+        MadReasonCode: plan.Analysis.MadReasonCode,
+        CandleVersion: plan.Analysis.CandleVersion,
+        CandlePrimaryPattern: plan.Analysis.CandlePrimaryPattern,
+        CandlePatterns: plan.Analysis.CandlePatterns,
+        CandleFinalScore: plan.Analysis.CandleFinalScore,
+        CandleBaseScore: plan.Analysis.CandleBaseScore,
+        CandleSynergyBonus: plan.Analysis.CandleSynergyBonus,
+        CandleRejectionScore: plan.Analysis.CandleRejectionScore,
+        CandleDisplacementScore: plan.Analysis.CandleDisplacementScore,
+        CandleSequenceScore: plan.Analysis.CandleSequenceScore,
+        CandleBodyFraction: plan.Analysis.CandleBodyFraction,
+        CandleUpperWickFraction: plan.Analysis.CandleUpperWickFraction,
+        CandleLowerWickFraction: plan.Analysis.CandleLowerWickFraction,
+        CandleCloseLocation: plan.Analysis.CandleCloseLocation,
+        CandleBodyAtr: plan.Analysis.CandleBodyAtr,
+        CandleRangeAtr: plan.Analysis.CandleRangeAtr,
+        CandleSweep: plan.Analysis.CandleSweep,
+        CandleSweepPenetrationAtr: plan.Analysis.CandleSweepPenetrationAtr,
+        CandleReclaim: plan.Analysis.CandleReclaim,
+        CandleReclaimDepthAtr: plan.Analysis.CandleReclaimDepthAtr,
+        CandleEngulfing: plan.Analysis.CandleEngulfing,
+        CandleDoji: plan.Analysis.CandleDoji,
+        CandleCompressionScore: plan.Analysis.CandleCompressionScore,
+        CandleSequenceName: plan.Analysis.CandleSequenceName,
+        CandleSequenceBars: plan.Analysis.CandleSequenceBars,
+        KeyLevelOpposingZoneLow: plan.Analysis.KeyLevelOpposingZoneLow,
+        KeyLevelOpposingZoneHigh: plan.Analysis.KeyLevelOpposingZoneHigh,
+        KeyLevelOpposingZoneSide: plan.Analysis.KeyLevelOpposingZoneSide,
+        OpposingZonePresent: plan.Analysis.OpposingZonePresent,
+        OpposingZoneSide: plan.Analysis.OpposingZoneSide,
+        OpposingZoneLow: plan.Analysis.OpposingZoneLow,
+        OpposingZoneHigh: plan.Analysis.OpposingZoneHigh,
+        OpposingZoneTier: plan.Analysis.OpposingZoneTier,
+        OpposingZoneScore: plan.Analysis.OpposingZoneScore,
+        OpposingZoneStrength: plan.Analysis.OpposingZoneStrength,
+        OpposingRawRoomPrice: plan.Analysis.OpposingRawRoomPrice,
+        OpposingRoomPips: plan.Analysis.OpposingRoomPips,
+        OpposingRoomAtr: plan.Analysis.OpposingRoomAtr,
+        OpposingRoomR: plan.Analysis.OpposingRoomR,
+        OpposingBeforeTp1: plan.Analysis.OpposingBeforeTp1,
+        OpposingDisplaced: plan.Analysis.OpposingDisplaced,
+        OpposingMitigated: plan.Analysis.OpposingMitigated,
+        OpposingRoomPressure: plan.Analysis.OpposingRoomPressure,
+        OpposingRiskScore: plan.Analysis.OpposingRiskScore,
+        OpposingAction: plan.Analysis.OpposingAction,
+        OpposingReasonCode: plan.Analysis.OpposingReasonCode
       ),
       cancellationToken
     );
@@ -2100,6 +2186,34 @@ public sealed class TradePlanRuntime(
           OrderType = TradePlanContract.OrderTypeMarket,
           Ratio = 1m,
         },
+      ];
+    }
+    if (
+      options.ReactionRiskLegEnabled
+      // Owner 2026-09-17: XAU only. The fixed 0.05/0.02 lot sizing was
+      // tuned against XAU's pip value; applying it unchanged to FX pairs
+      // is a materially different risk (reproduced live on a USDJPY CRT
+      // trade that got a RISK leg it should never have had).
+      && string.Equals(plan.Symbol, "XAU", StringComparison.OrdinalIgnoreCase)
+      && (plan.Entry.Legs?.Count ?? 0) > 1
+      && plan.Entry.Type
+        is TradePlanContract.EntryTypeLimitLadder
+        or TradePlanContract.EntryTypeMarketWithLimitScale
+    )
+    {
+      var riskLegVolume = ReactionRiskLegVolume(equity.Equity, symbol);
+      declaredLegs =
+      [
+        .. declaredLegs,
+        new DeclaredLeg(
+          ReactionRiskLegId,
+          ReactionRiskLegPrice(direction, absoluteStop, units.PipSize, symbol),
+          0m, // fixed equity-tiered size, not a share of the plan's own
+              // equity-table volume - see ReactionRiskLegVolume.
+          riskLegVolume,
+          riskLegVolume / (decimal)symbol.LotSize,
+          TradePlanContract.OrderTypeLimit
+        ),
       ];
     }
 
@@ -2722,7 +2836,13 @@ public sealed class TradePlanRuntime(
           await PersistStateAsync(state, cancellationToken);
           continue;
         }
-        var allocations = VolumePlanner.AllocateProRataStepped(
+        // Owner 2026-09-08: shallow-first, not pro-rata - openLegs preserves
+        // plan.Entry.Legs declaration order (L1/market/shallow first), so
+        // draining index 0 before any deeper sibling matches manual algo's
+        // own ladder and lets the remaining-weighted-fill BE reference above
+        // actually reach the deeper leg's own (better) price once shallow
+        // empties, instead of staying pinned near it target after target.
+        var allocations = VolumePlanner.AllocateShallowFirstStepped(
           openLegs.Select(leg => leg.RemainingVolume).ToArray(),
           closeVolume,
           symbol
@@ -2816,6 +2936,15 @@ public sealed class TradePlanRuntime(
         }
         else
         {
+          // Owner-reported 2026-09-22: this trailing "(open/total)" is
+          // ENTRY-leg bookkeeping (L1/L2 fills), not target progress - but
+          // sitting right after the target id it read as "target N of M",
+          // implying TP1 was the plan's only target even when TP2+ were
+          // still pending. Structured target-progress fields now travel on
+          // the event itself (HighestBookedTargetIndex/TargetsTotal, see
+          // PublishEventCoreAsync) for the delivery layer to render
+          // unambiguously; this text keeps its original, regex-matched
+          // shape (app.autotrade.delivery._TP_BOOKED_RE) unchanged.
           tpMessage =
             $"TP COMPLETED {target.TargetId} closed {string.Join(" ", perLegCloses)} "
             + $"remaining lot={FormatEventLot(remainingAfter, symbol)} "
@@ -2828,7 +2957,9 @@ public sealed class TradePlanRuntime(
           cancellationToken,
           positionId: state.PositionId,
           price: lastExecution?.ExecutionPrice,
-          targetPips: ArchivedTargetPips(plan, state, target.TargetId),
+          targetPips: ArchivedTargetPips(
+            plan, state, target.TargetId, lastExecution?.ExecutionPrice
+          ),
           volume: closedTotal,
           eventKey: remainingAfter <= 0
             ? $"tp_completed_{target.TargetId}_closed"
@@ -2876,10 +3007,19 @@ public sealed class TradePlanRuntime(
       var beAfterIndex = plan.Management.BeAfterTargetId is null
         ? -1
         : IndexOfTarget(plan, plan.Management.BeAfterTargetId);
+      // ENTRY_LOGIC_REVIEW_2026-09-17: the RISK leg's own fill must not
+      // skew the BE reference toward its deliberately-worse price, same
+      // exclusion SignedExitPips already applies to the loss-pips
+      // reference - so beFill is computed off non-RISK legs only.
+      var beReferenceLegs = (state.Legs ?? [])
+        .Where(leg => !IsReactionRiskLeg(leg.LegId))
+        .ToArray();
+      var beFillPrice = TradePlanJson.WeightedFillPrice(beReferenceLegs)
+        ?? state.EntryFillPrice;
       if (
         !state.BreakEvenApplied
         && beAfterIndex >= 0
-        && fillPrice is decimal beFill
+        && beFillPrice is decimal beFill
         // Require a real booked TP at/after BeAfterTargetId. Advancing
         // NextTargetIndex on deferred undersized shares must not move BE.
         && state.HighestBookedTargetIndex >= beAfterIndex
@@ -2895,8 +3035,28 @@ public sealed class TradePlanRuntime(
             && leg.RemainingVolume > 0
           )
           .ToArray();
+        // Owner 2026-09-08: GroupWeightedFillPrice is the WHOLE position's
+        // original blend (e.g. 80% shallow / 20% deep) and never changes as
+        // legs close, so BE after the shallow-dominated leg closes on TP1
+        // still moved every remaining leg's stop to a price skewed toward
+        // the shallow entry - the manual-algo ladder's equivalent moment
+        // (PlanGroupEconomicBreakeven, AutoTradeEngine.cs) already weights
+        // only the legs still actually open. Recompute the same way here:
+        // once a leg closes, it drops out of the reference, so the deeper
+        // still-open leg's own (better) fill dominates instead.
+        // The RISK leg is excluded from this reference too (same reasoning
+        // as beFillPrice above), but stays in `openLegs` below so its own
+        // stop still gets amended to BE like every other open leg.
+        var remainingReferenceLegs = openLegs
+          .Where(leg => !IsReactionRiskLeg(leg.LegId))
+          .ToArray();
+        var remainingWeightedFill = remainingReferenceLegs.Length > 0
+          && remainingReferenceLegs.All(leg => leg.FillPrice is not null)
+          ? remainingReferenceLegs.Sum(leg => leg.FillPrice!.Value * leg.RemainingVolume)
+            / remainingReferenceLegs.Sum(leg => leg.RemainingVolume)
+          : beFill;
         var be = TradePlanExecutionEngine.CalculateBreakEven(
-          plan, beFill, state.CurrentStop, symbol
+          plan, remainingWeightedFill, state.CurrentStop, symbol
         );
         if (be.Improved && openLegs.Length > 0)
         {
@@ -3862,31 +4022,63 @@ public sealed class TradePlanRuntime(
     SpotPrice quote
   )
   {
-    if (
-      string.Equals(
-        declared.OrderType,
-        TradePlanContract.OrderTypeMarket,
-        StringComparison.OrdinalIgnoreCase
-      )
-    )
-    {
-      return true;
-    }
-    if (
-      string.Equals(
-        declared.OrderType,
-        TradePlanContract.OrderTypeLimit,
-        StringComparison.OrdinalIgnoreCase
-      )
-    )
-    {
-      return false;
-    }
-    // limit_ladder without explicit order_type: marketable-limit detection.
-    return direction == TradeDirection.Buy
-      ? declared.Price >= quote.Ask
-      : declared.Price <= quote.Bid;
+    return TradePlanContract.LegUsesMarketOrder(
+      declared.OrderType,
+      declared.Price,
+      direction == TradeDirection.Buy,
+      quote.Bid,
+      quote.Ask
+    );
   }
+
+  // Owner 2026-09-16: reaction-family "trade-off" risk leg - same spirit as
+  // Manual Algo's own (ManualAlgoRiskLegPrice/Volume in AutoTradeEngine.cs)
+  // but computed independently here, since TradePlan v8 is a fully
+  // separate execution path Manual Algo never touches. Resting
+  // deliberately close to the stop: if price nearly invalidates the setup
+  // before reversing, this leg still catches a much deeper (better) fill
+  // than L1/L2 ever would; if price keeps going instead, the small fixed
+  // size caps the extra loss. Equity-tiered off live account equity, not
+  // scaled from the plan's own equity-table sizing - a large account books
+  // the same small fixed size here as a smaller one above the floor,
+  // exactly like Manual Algo's. Purely a C# addition: Python never plans
+  // or knows about this leg, exactly like it never knew about Manual
+  // Algo's - see options.ReactionRiskLegEnabled for the kill switch.
+  private const string ReactionRiskLegId = "RISK";
+  private const decimal ReactionRiskLegLotsDefault = 0.05m;
+  private const decimal ReactionRiskLegLotsBelowEquityFloor = 0.02m;
+  private const decimal ReactionRiskLegEquityFloor = 1_000m;
+  private const decimal ReactionRiskLegPipsFromStop = 15m;
+
+  private static decimal ReactionRiskLegPrice(
+    TradeDirection direction,
+    decimal stopPrice,
+    decimal pipSize,
+    SymbolInfo symbol
+  ) => decimal.Round(
+    direction == TradeDirection.Buy
+      ? stopPrice + ReactionRiskLegPipsFromStop * pipSize
+      : stopPrice - ReactionRiskLegPipsFromStop * pipSize,
+    symbol.Digits,
+    MidpointRounding.AwayFromZero
+  );
+
+  private static long ReactionRiskLegVolume(decimal equity, SymbolInfo symbol) =>
+    VolumePlanner.VolumeForLots(
+      equity < ReactionRiskLegEquityFloor
+        ? ReactionRiskLegLotsBelowEquityFloor
+        : ReactionRiskLegLotsDefault,
+      symbol
+    );
+
+  /// <summary>
+  /// True for the leg <see cref="ReactionRiskLegId"/> injected above - used
+  /// wherever a group's realized/loss pips must exclude this leg's own
+  /// contribution unless a genuine TP was actually archived, mirroring
+  /// AutoTradeEngine's IsManualRiskLeg/includeRiskLeg for Manual Algo.
+  /// </summary>
+  public static bool IsReactionRiskLeg(string legId) =>
+    string.Equals(legId, ReactionRiskLegId, StringComparison.Ordinal);
 
   private static IReadOnlyList<DeclaredLeg> BuildDeclaredLegs(
     TradePlan plan,
@@ -4023,7 +4215,8 @@ public sealed class TradePlanRuntime(
   private int? ArchivedTargetPips(
     TradePlan plan,
     TradePlanRuntimeState state,
-    string targetId
+    string targetId,
+    decimal? actualExitPrice = null
   )
   {
     var weightedFill = state.GroupWeightedFillPrice ?? state.EntryFillPrice;
@@ -4041,6 +4234,17 @@ public sealed class TradePlanRuntime(
     {
       return null;
     }
+    // Prefer the real close execution price over the planned target price --
+    // slippage/spread mean they rarely match exactly, and the Telegram line
+    // this feeds always shows the real fill price right next to this figure
+    // (e.g. "TP1 · Fill: 154.362 · Achieved: +Npips"). Computing the pips
+    // from a different price than the one displayed made the two numbers
+    // visibly inconsistent (live 2026-09-07: Fill showed 154.362 but
+    // Achieved was computed from the 154.357 target, off by 0.5 pip).
+    // Falls back to the planned target price only when no real exit price
+    // is available (e.g. FinalizeBrokerAbsentCloseAsync, where deal history
+    // itself is the thing that's missing).
+    var exitPrice = actualExitPrice ?? plan.Targets[index].Price;
     // Report realized direction vs fill — never abs() a losing chase-through
     // TP as "+1 pip achieved".
     var buy = string.Equals(
@@ -4049,8 +4253,8 @@ public sealed class TradePlanRuntime(
       StringComparison.OrdinalIgnoreCase
     );
     var raw = buy
-      ? (plan.Targets[index].Price - fillPrice) / pipSize
-      : (fillPrice - plan.Targets[index].Price) / pipSize;
+      ? (exitPrice - fillPrice) / pipSize
+      : (fillPrice - exitPrice) / pipSize;
     if (raw <= 0)
     {
       return null;
@@ -4068,7 +4272,16 @@ public sealed class TradePlanRuntime(
     decimal exitPrice
   )
   {
-    var weightedFill = state.GroupWeightedFillPrice ?? state.EntryFillPrice;
+    // Owner-directed 2026-09-16 (matching the Manual Algo risk-leg decision
+    // in AutoTradeEngine.cs): this is only ever reached when no TP was
+    // archived (see the sole call site's `highestTp is null` guard), so the
+    // risk leg's own real fill must NOT drag the loss-pips reference toward
+    // its own deliberately-deeper price - it only counts when archived as
+    // part of a genuine TP win, which takes the other code path entirely.
+    var referenceLegs = (state.Legs ?? [])
+      .Where(leg => !IsReactionRiskLeg(leg.LegId))
+      .ToArray();
+    var weightedFill = TradePlanJson.WeightedFillPrice(referenceLegs) ?? state.EntryFillPrice;
     var pipSize = PipSizeFor(plan.Symbol);
     if (
       pipSize <= 0

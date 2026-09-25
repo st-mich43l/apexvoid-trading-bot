@@ -24,7 +24,7 @@ from app.configuration.models.instruments import (
   InstrumentTargetMode,
   InstrumentsConfig,
   XAU_CURRENT_V1_POLICY,
-  XAU_FIXED_2R_V1_POLICY,
+  XAU_FIXED_4R_V1_POLICY,
   effective_rollout,
   resolve_manual_profile,
 )
@@ -110,7 +110,7 @@ def test_production_yaml_xau_effective_parity():
   cfg = loaded.config
   effective = cfg.for_instrument("XAU")
   assert effective.identity.rollout is InstrumentRollout.LIVE
-  assert effective.policy_name == XAU_FIXED_2R_V1_POLICY
+  assert effective.policy_name == XAU_FIXED_4R_V1_POLICY
   assert "XAUUSD" in effective.identity.aliases
   # Structure fixed_rr pack expands execution/stop/session away from root
   # ladder defaults — parity is identity + units + non-pack domains only.
@@ -127,8 +127,8 @@ def test_production_yaml_xau_effective_parity():
   assert cfg.enabled_instruments() == ("EURUSD", "GBPJPY", "GBPUSD", "USDJPY", "XAU")
   assert cfg.live_instruments() == ("EURUSD", "GBPJPY", "GBPUSD", "USDJPY", "XAU")
   assert cfg.instrument_for_broker_symbol("xauusd").identity.canonical_symbol == "XAU"
-  assert int(effective.execution.reaction.stop_min_pips) == 25
-  assert int(effective.execution.reaction.stop_max_pips) == 100
+  assert int(effective.execution.reaction.stop_min_pips) == 50
+  assert int(effective.execution.reaction.stop_max_pips) == 60
   assert effective.targeting.mode is InstrumentTargetMode.FIXED_RR
 
 
@@ -136,7 +136,9 @@ def test_production_yaml_fx_live_executable_units():
   loaded = _load_production_example()
   cfg = loaded.config
   eurusd = cfg.for_instrument("EURUSD")
+  gbpusd = cfg.for_instrument("GBPUSD")
   gbpjpy = cfg.for_instrument("GBPJPY")
+  usdjpy = cfg.for_instrument("USDJPY")
   xau = cfg.for_instrument("XAU")
   assert eurusd.identity.rollout is InstrumentRollout.LIVE
   assert gbpjpy.identity.rollout is InstrumentRollout.LIVE
@@ -160,7 +162,7 @@ def test_production_yaml_fx_live_executable_units():
   # GBPJPY keeps the historical frontload policy name; close-ratio front-load
   # was retired — same uniform 1R/2R 50/50 + BE contract as other fixed_rr.
   assert gbpjpy.policy_name == "fx_fixed_2r_frontload_v1"
-  assert xau.policy_name == XAU_FIXED_2R_V1_POLICY
+  assert xau.policy_name == XAU_FIXED_4R_V1_POLICY
   assert eurusd.targeting.mode is InstrumentTargetMode.FIXED_RR
   assert gbpjpy.targeting.mode is InstrumentTargetMode.FIXED_RR
   assert eurusd.targeting.reward_risk == 2.0
@@ -176,17 +178,24 @@ def test_production_yaml_fx_live_executable_units():
   assert eurusd.targeting.trail_to_r is None
   assert gbpjpy.targeting.trail_to_r is None
   assert eurusd.targeting.entry_clips == 2
+  assert eurusd.auto_entry.mode.value == "single_best"
+  assert gbpusd.auto_entry.mode.value == "single_best"
+  assert gbpjpy.auto_entry.mode.value == "single_best"
+  assert usdjpy.auto_entry.mode.value == "single_best"
+  assert xau.auto_entry.mode.value == "scale"
   assert gbpjpy.targeting.entry_clips == 2
   assert xau.targeting.mode is InstrumentTargetMode.FIXED_RR
-  assert xau.targeting.reward_risk == 2.0
-  assert xau.targeting.target_r_multiples == (1.0, 2.0)
-  assert xau.targeting.close_ratios == (0.5, 0.5)
+  # XAU deliberately diverges from the FX policies' shared 1R/2R shape onto
+  # manual /algo's own default 4-level R ladder (1R/2R/3R/4R).
+  assert xau.targeting.reward_risk == 4.0
+  assert xau.targeting.target_r_multiples == (1.0, 2.0, 3.0, 4.0)
+  assert xau.targeting.close_ratios == (0.4, 0.2, 0.2, 0.2)
   assert xau.targeting.breakeven_after_r == 1.0
   assert xau.targeting.trail_after_r is None
   assert xau.targeting.trail_to_r is None
   assert xau.targeting.entry_clips == 2
-  assert int(xau.execution.reaction.stop_min_pips) == 25
-  assert int(xau.execution.reaction.stop_max_pips) == 100
+  assert int(xau.execution.reaction.stop_min_pips) == 50
+  assert int(xau.execution.reaction.stop_max_pips) == 60
   assert float(xau.execution.stops.sl_distance) == 10.0
   # Scalp RR floor must stay 1.10 — pack must not overwrite with technique 2.0.
   assert float(xau.strategies.scalping.policy.minimum_reward_risk) == 1.10
@@ -222,7 +231,13 @@ def test_production_yaml_fx_live_executable_units():
   assert int(eurusd.execution.entry.max_spread_pips) == 1
   assert int(gbpjpy.execution.entry.max_spread_pips) == 3
   assert eurusd.execution.technique.reaction_publish_windows == "7-11,13-16"
-  assert gbpjpy.execution.technique.reaction_publish_windows == "0-11"
+  assert gbpusd.execution.technique.reaction_publish_windows == "7-11,13-16"
+  assert gbpjpy.execution.technique.reaction_publish_windows == "7-11"
+  assert usdjpy.execution.technique.reaction_publish_windows == "0-7,13-16"
+  for instrument in (eurusd, gbpusd, gbpjpy, usdjpy):
+    assert instrument.execution.technique.reaction_require_publish_window is False
+    assert instrument.execution.technique.scalp_require_killzone is False
+    assert instrument.execution.technique.selective_session_min_confluence == 3
   assert eurusd.execution.technique.require_sweep_body is False
   assert gbpjpy.execution.technique.require_sweep_body is False
   assert int(eurusd.execution.activation.reaction_trigger_maximum_age_bars) == 3
@@ -236,23 +251,30 @@ def test_production_yaml_fx_live_executable_units():
   assert cfg.instrument_for_broker_symbol("EURUSD").identity.canonical_symbol == "EURUSD"
   assert cfg.instrument_for_broker_symbol("GBPJPY").identity.canonical_symbol == "GBPJPY"
   assert cfg.instruments.root["EURUSD"].reaction_session == "london_ny"
-  assert cfg.instruments.root["GBPJPY"].reaction_session == "tokyo_london"
-  assert cfg.instruments.root["USDJPY"].reaction_session == "tokyo_london_ny"
-  assert cfg.instruments.root["EURUSD"].overrides == {}
-  assert cfg.instruments.root["XAU"].overrides == {}
-  # GBPJPY/USDJPY each keep exactly one escape-hatch override for a leaf no
-  # pack composes: GBPJPY's event-cluster news guard, USDJPY's defended-
-  # level guard. Neither duplicates anything the packs already expand.
+  assert cfg.instruments.root["GBPJPY"].reaction_session == "london"
+  assert cfg.instruments.root["USDJPY"].reaction_session == "tokyo_ny"
+  assert cfg.instruments.root["EURUSD"].overrides == {
+    "execution.technique.selective_session_min_confluence": 3,
+  }
+  # XAU's ATR is dollar-denominated, so the FX-tuned barrier_buffer_atr
+  # (0.5) buffers away 40-115+ pips of real opposing-structure room -- an
+  # escape-hatch override, same shape as GBPJPY/USDJPY below.
+  assert cfg.instruments.root["XAU"].overrides == {
+    "actionability.target_room.barrier_buffer_atr": 0.15,
+  }
+  # The FX session quality floor is explicit instrument ownership. GBPJPY retains
+  # its event-cluster quality guard, and USDJPY its directional defended level.
   assert cfg.instruments.root["GBPJPY"].overrides == {
     "actionability.gates.event_cluster_guard_enabled": True,
     "analysis.levels.minimum_key_touches": 3,
     "strategies.reaction.key_level.require_explicit_role": True,
-    "strategies.reaction.key_level.require_killzone": True,
     "strategies.reaction.key_level.min_grade": "A",
+    "execution.technique.selective_session_min_confluence": 3,
   }
   assert set(cfg.instruments.root["USDJPY"].overrides) == {
     "risk.exposure.defended_levels",
     "risk.exposure.defended_level_buffer_price",
+    "execution.technique.selective_session_min_confluence",
   }
   assert cfg.instruments.root["EURUSD"].price_scale is not None
   assert cfg.instruments.root["GBPJPY"].price_scale is not None

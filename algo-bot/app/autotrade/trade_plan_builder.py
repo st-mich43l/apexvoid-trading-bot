@@ -143,7 +143,7 @@ def _build_entry(
   max_slippage_ticks: int,
 ) -> TradePlanEntry:
   if route == "market":
-    # HFS activation explicitly permits a trade-direction chase inside its
+    # Scalping activation explicitly permits a trade-direction chase inside its
     # pip budget. Re-arming that already-confirmed decision as market_watch
     # against the abandoned structural zone made winning scalp plans wait
     # for a retrace and expire. The route planner marks only that case as a
@@ -492,6 +492,71 @@ def build_trade_plan_from_strategy_match(
     confluence_v2=match.confluence_v2,
     confluence_v2_raw=match.confluence_v2_raw,
     confluence_scoring_version=match.confluence_scoring_version,
+    math_fib_ratio=match.math_fib_ratio,
+    math_velocity=match.math_velocity,
+    math_acceleration=match.math_acceleration,
+    math_pd=match.math_pd,
+    math_feature_version=match.math_feature_version,
+    mad_version=match.mad_version,
+    mad_phase=match.mad_phase,
+    mad_confidence=match.mad_confidence,
+    mad_affinity=match.mad_affinity,
+    mad_direction=match.mad_direction,
+    mad_sweep_side=match.mad_sweep_side,
+    mad_reclaim=match.mad_reclaim,
+    mad_range_quality_atr=match.mad_range_quality_atr,
+    mad_break_distance_atr=match.mad_break_distance_atr,
+    mad_displacement_atr=match.mad_displacement_atr,
+    mad_acceptance_closes=match.mad_acceptance_closes,
+    mad_sweep_penetration_atr=match.mad_sweep_penetration_atr,
+    mad_reclaim_depth_atr=match.mad_reclaim_depth_atr,
+    mad_reason_code=match.mad_reason_code,
+    candle_version=match.candle_version,
+    candle_primary_pattern=match.candle_primary_pattern,
+    candle_patterns=match.candle_patterns,
+    candle_final_score=match.candle_final_score,
+    candle_base_score=match.candle_base_score,
+    candle_synergy_bonus=match.candle_synergy_bonus,
+    candle_rejection_score=match.candle_rejection_score,
+    candle_displacement_score=match.candle_displacement_score,
+    candle_sequence_score=match.candle_sequence_score,
+    candle_body_fraction=match.candle_body_fraction,
+    candle_upper_wick_fraction=match.candle_upper_wick_fraction,
+    candle_lower_wick_fraction=match.candle_lower_wick_fraction,
+    candle_close_location=match.candle_close_location,
+    candle_body_atr=match.candle_body_atr,
+    candle_range_atr=match.candle_range_atr,
+    candle_sweep=match.candle_sweep,
+    candle_sweep_penetration_atr=match.candle_sweep_penetration_atr,
+    candle_reclaim=match.candle_reclaim,
+    candle_reclaim_depth_atr=match.candle_reclaim_depth_atr,
+    candle_engulfing=match.candle_engulfing,
+    candle_doji=match.candle_doji,
+    candle_compression_score=match.candle_compression_score,
+    candle_sequence_name=match.candle_sequence_name,
+    candle_sequence_bars=match.candle_sequence_bars,
+    key_level_opposing_zone_low=match.key_level_opposing_zone_low,
+    key_level_opposing_zone_high=match.key_level_opposing_zone_high,
+    key_level_opposing_zone_side=match.key_level_opposing_zone_side,
+    opposing_zone_present=match.opposing_zone_present,
+    opposing_zone_side=match.opposing_zone_side,
+    opposing_zone_low=match.opposing_zone_low,
+    opposing_zone_high=match.opposing_zone_high,
+    opposing_zone_tier=match.opposing_zone_tier,
+    opposing_zone_score=match.opposing_zone_score,
+    opposing_zone_strength=match.opposing_zone_strength,
+    opposing_raw_room_price=match.opposing_raw_room_price,
+    opposing_room_pips=match.opposing_room_pips,
+    opposing_room_atr=match.opposing_room_atr,
+    opposing_room_r=match.opposing_room_r,
+    opposing_before_tp1=match.opposing_before_tp1,
+    opposing_displaced=match.opposing_displaced,
+    opposing_mitigated=match.opposing_mitigated,
+    opposing_room_pressure=match.opposing_room_pressure,
+    opposing_risk_score=match.opposing_risk_score,
+    opposing_action=match.opposing_action,
+    opposing_reason_code=match.opposing_reason_code,
+    trendline_v2=match.trendline_v2,
   )
 
   source_structure = TradePlanSourceStructure(
@@ -612,8 +677,21 @@ def build_trade_plan_from_strategy_match(
     trail_to_target_id=trail_to_target_id,
   )
 
+  is_scalp_plan = (
+    str(match.family or "").casefold() == "scalp"
+    or str(match.strategy_mode or "").casefold() == "scalp_m1"
+  )
+  scalp_risk = getattr(
+    getattr(getattr(cfg_resolved, "strategies", None), "scalping", None),
+    "risk",
+    None,
+  )
+  scalp_risk_percent = Decimal(str(
+    getattr(scalp_risk, "risk_percent_per_trade", 0.5) or 0.5
+  ))
+  scalp_sizing_mode = str(getattr(scalp_risk, "sizing_mode", "risk") or "risk")
   risk = TradePlanRisk(
-    risk_percent=Decimal("1.0"),
+    risk_percent=scalp_risk_percent if is_scalp_plan else Decimal("1.0"),
     risk_multiplier=Decimal(str(measured.get(
       "effective_risk_multiplier", match.risk_multiplier,
     ))),
@@ -637,7 +715,9 @@ def build_trade_plan_from_strategy_match(
     leg_ratios = (first_leg_fraction, remainder)
   entry_distribution = str(measured.get("entry_distribution") or "zone_scale")
   sizing = TradePlanSizing(
-    mode="equity_table",
+    # Owner 2026-09-18: non-scalp stays at its own full equity-table level.
+    # Scalp keeps its configured equity-table volume multiplier.
+    mode=scalp_sizing_mode if is_scalp_plan else "equity_table",
     table_version="owner_equity_v1",
     entry_distribution=entry_distribution,
     leg_ratios=leg_ratios,

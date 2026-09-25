@@ -30,7 +30,8 @@ public static class VolumePlanner
     decimal pipValuePerLot,
     SymbolInfo symbol,
     IReadOnlyList<int> targetsPips,
-    IReadOnlyList<int> targetWeights
+    IReadOnlyList<int> targetWeights,
+    bool useFxEquitySizing = false
   )
   {
     if (
@@ -44,7 +45,7 @@ public static class VolumePlanner
     }
     var budget = balance * riskPercent / 100m;
     var riskLots = budget / (stopPips * pipValuePerLot);
-    var tableLots = LotsForEquity(balance);
+    var tableLots = LotsForEquity(balance, useFxEquitySizing);
     if (tableLots <= 0)
     {
       throw new VolumePlanningException(
@@ -92,13 +93,31 @@ public static class VolumePlanner
   /// Owner 2026-08-06: $600–$1000 inclusive always 0.10; above $1000 and
   /// below $2000 always 0.12 (no progressive ramp in those bands).
   /// </summary>
-  public static decimal LotsForEquity(decimal equity)
+  public static decimal LotsForEquity(
+    decimal equity,
+    bool useFxEquitySizing = false
+  )
   {
     if (equity < 200m)
     {
       return 0m;
     }
-    // The upward discontinuities at band boundaries are intentional.
+    if (useFxEquitySizing && equity >= 2_000m)
+    {
+      // FX uses the same 1.5x fixed-RR pack multiplier as manual /algo.
+      // The owner table's 0.15 -> 0.25 jump at $3k turned into 0.23 ->
+      // 0.38 actual FX lots. Interpolate the FX base from 0.15 at $2k to
+      // 0.20 at $3k, then 0.30 at $5k. It removes the boundary jump while
+      // retaining the existing $5k-and-up base ceiling.
+      var fxLots = equity switch
+      {
+        >= 5_000m => 0.30m,
+        >= 3_000m => 0.20m + (equity - 3_000m) * 0.10m / 2_000m,
+        _ => 0.15m + (equity - 2_000m) * 0.05m / 1_000m,
+      };
+      return decimal.Round(fxLots, 2, MidpointRounding.AwayFromZero);
+    }
+    // Non-FX bands retain their established intentional discontinuities.
     var rawLots = equity switch
     {
       >= 5_000m => 0.30m,
@@ -113,6 +132,12 @@ public static class VolumePlanner
 
   [Obsolete("Use LotsForEquity — sizing is equity-based, not balance-based.")]
   public static decimal LotsForBalance(decimal balance) => LotsForEquity(balance);
+
+  public static bool IsFxInstrument(SymbolInfo symbol)
+  {
+    var name = symbol.RedisSymbol.Trim().ToUpperInvariant();
+    return name is "EURUSD" or "GBPUSD" or "GBPJPY" or "USDJPY";
+  }
 
   public static long VolumeForLots(decimal lots, SymbolInfo symbol)
   {
@@ -536,6 +561,53 @@ public static class VolumePlanner
     // Any leftover that still cannot be placed step-wise on a single leg is
     // dropped — better to under-close than send TRADING_BAD_VOLUME.
     return raw;
+  }
+
+  /// <summary>
+  /// Sequentially allocate a step-aligned close volume, draining the
+  /// shallowest leg (index 0) completely before any volume comes off a
+  /// deeper sibling. Owner 2026-09-08: pro-rata closing (see
+  /// AllocateProRataStepped) kept every leg's remaining volume in its
+  /// original ratio after each TP, so the group's weighted fill price
+  /// stayed skewed toward the shallow (larger, worse-price) leg even
+  /// after several targets booked - mirrors manual algo's own ladder,
+  /// where the shallow leg's TP1 fully consumes it and only the deeper,
+  /// better-priced leg is left to compute BE/trail from. Callers must
+  /// pass ``remaining`` in shallow-to-deep leg order (index 0 = the
+  /// declared entry.legs[0]/L1 - the market/nearest-price leg by
+  /// convention).
+  /// </summary>
+  public static long[] AllocateShallowFirstStepped(
+    long[] remaining,
+    long closeVolume,
+    SymbolInfo symbol
+  )
+  {
+    var total = remaining.Sum();
+    if (total <= 0 || closeVolume <= 0)
+    {
+      return new long[remaining.Length];
+    }
+    closeVolume = Math.Min(closeVolume, total);
+    var step = Math.Max(1L, symbol.StepVolume);
+    if (closeVolume % step != 0)
+    {
+      closeVolume = closeVolume / step * step;
+    }
+    if (closeVolume <= 0)
+    {
+      return new long[remaining.Length];
+    }
+    var allocations = new long[remaining.Length];
+    var left = closeVolume;
+    for (var i = 0; i < remaining.Length && left > 0; i++)
+    {
+      var take = Math.Min(remaining[i], left);
+      take = take / step * step;
+      allocations[i] = take;
+      left -= take;
+    }
+    return allocations;
   }
 
   private static long MinimumStepsPerClose(SymbolInfo symbol) => Math.Max(

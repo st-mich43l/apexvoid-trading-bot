@@ -71,7 +71,6 @@ def _configure(monkeypatch, skip_empty=False):
   install_runtime_overrides(monkeypatch, legacy_overrides={"weekly_report_dow": 6})
   install_runtime_overrides(monkeypatch, legacy_overrides={"weekly_report_hour": 8})
   install_runtime_overrides(monkeypatch, legacy_overrides={"weekly_report_skip_empty": skip_empty,})
-  monkeypatch.setattr(weekly_report, "SYMBOLS", {"XAU": {}})
 
 
 @pytest.mark.asyncio
@@ -116,6 +115,49 @@ async def test_sunday_tick_posts_once_and_survives_restart(
 
   send.assert_awaited_once()
   assert meta["last_weekly_report_date"] == "2026-06-29"
+
+
+@pytest.mark.asyncio
+async def test_sessions_are_classified_in_utc_not_seq_reset_tz(monkeypatch):
+  # 08:00 UTC = 15:00 Asia/Ho_Chi_Minh. True session is London
+  # (07:00-13:00 UTC); the seq_reset_tz bug this regresses would have
+  # classified it as NY (13:00-22:00) using the ICT-shifted hour instead.
+  utc_ts = int(datetime(2026, 7, 1, 8, tzinfo=ZoneInfo("UTC")).timestamp())
+  records = [{
+    "id": 1,
+    "ts": utc_ts,
+    "sign": "+",
+    "pips": 50,
+    "signal_id": 1,
+    "signal_ts": utc_ts,
+    "setup_type": "ob-retest",
+    "daily_seq": 1,
+    "symbol": "XAU",
+  }]
+  _configure(monkeypatch)
+  monkeypatch.setattr(weekly_report, "get_meta", AsyncMock(return_value=None))
+  monkeypatch.setattr(weekly_report, "set_meta", AsyncMock())
+  monkeypatch.setattr(
+    weekly_report, "get_pips_records", AsyncMock(return_value=records),
+  )
+  monkeypatch.setattr(
+    weekly_report, "get_all_signals", AsyncMock(return_value=_signals(count=1)),
+  )
+  monkeypatch.setattr(
+    weekly_report,
+    "channels_for",
+    lambda symbol, visibility: [{
+      "symbol": symbol, "tier": "vip", "channel_id": -1001,
+    }],
+  )
+  send = AsyncMock()
+  monkeypatch.setattr(weekly_report, "_send_recap", send)
+
+  assert await weekly_report._weekly_report_tick(SUNDAY)
+
+  text = send.await_args.args[0]
+  assert "🌍 London" in text
+  assert "🌎 NY" not in text
 
 
 @pytest.mark.asyncio

@@ -4,19 +4,20 @@ Outbound-only Docker Compose stack: **no DNS, TLS cert, reverse proxy, or
 inbound app ports**. SSH to the host is enough.
 
 ```text
-postgres + redis  →  config-compiler  →  ctrader-engine  →  bot
-                         │
-                         └── writes /runtime/resolved-runtime.json
-                             (ResolvedRuntimeManifest V2)
+postgres + redis + kafka → config-compiler + kafka-init
+                         → ctrader-engine + analysis-engine → bot
 ```
 
 | Service | Image / role |
 |---|---|
 | `postgres` | `postgres:17-alpine` — `signals` DB |
 | `redis` | `redis:7-alpine` — bars, watches, plans, token mirror |
+| `kafka` | `apache/kafka:4.0.0` — single-node KRaft business-event bus, internal only |
+| `kafka-init` | analysis-engine image — creates and verifies V3 topic contracts |
 | `config-compiler` | algo-bot one-shot — validate YAML + emit manifest (exit 0) |
 | `ctrader-engine` | .NET feed + TradePlan V8 executor |
-| `bot` | Python Telegram + scanner + ZoneWatch + HFS |
+| `analysis-engine` | Go Redis market-data runtime and Kafka event producer; `/health/ready` reflects Redis readiness |
+| `bot` | Python Telegram + scanner + ZoneWatch + scalping |
 
 Production cTrader authority (set on the engine; do not flip casually):
 
@@ -41,7 +42,7 @@ and [runtime/multi-symbol-routing.md](runtime/multi-symbol-routing.md).
 | Compose | [`docker-compose.yml`](../docker-compose.yml) | Rendered from [`deployment-template/docker-compose.yml.j2`](../deployment-template/docker-compose.yml.j2) |
 | Images | `docker compose build` | Pre-built registry tags (`…/apexvoid-trading-bot:<sha>`, `…/apexvoid-ctrader-engine:<sha>`) |
 | Secrets | root `.env` | `secrets/trading-bot.env` (`env_file`) |
-| Config | `config/trading-bot.yml` bind-mount | Same path on host |
+| Config | `config/` V3 tree + legacy manifest file | Ansible ships the non-secret V3 tree and legacy manifest mirror |
 
 Day-2 logs, backups, and troubleshooting: [operations.md](operations.md).
 
@@ -147,12 +148,39 @@ the compose service names (`postgres`, `redis`).
 
 Vault renders `secrets/trading-bot.env` and the Jinja compose file. Do not
 hand-edit the rendered compose on the VPS; change inventory/vault and
-re-deploy. Keep `config/trading-bot.yml` on the host in sync with the release.
+re-deploy.
+
+**`config/trading-bot.yml` on the host is rendered from a mirror, not read
+from this repo.** The deploy pipeline (`ansible-library`'s `deploy_image`
+role, "Render trading-bot CONFIG_FILE YAML" task) writes the host's
+`config/trading-bot.yml` verbatim from the Ansible variable
+`apexvoid_trading_bot_config.yml`
+(`inventory/group_vars/all/apexvoid_trading_bot_config.yml` in
+`ansible-library`) — it never checks out or reads this repo's own
+`config/trading-bot.yml` at deploy time. That variable is a **hand-maintained
+copy** of this file, kept in sync manually.
+
+Any PR that changes `config/trading-bot.yml` — new instrument fields, changed
+policy values, a new `config_field` with a value that must differ from its
+schema default — must update `apexvoid_trading_bot_config.yml` in
+`ansible-library` in the same change (or a fast follow-up, merged and
+deployed before/with this repo's change). Missing this does not fail the
+build or the PR's own CI: it fails **every subsequent deploy**, silently,
+until someone notices — `config-compiler` runs Pydantic validation against
+the stale mirror on every container start, and a value mismatch (e.g. a
+cross-field validator like "targeting.reward_risk must equal the final
+target_r_multiple") makes it exit 1. Since `ctrader-engine` and `bot` both
+`depends_on: config-compiler: condition: service_completed_successfully`,
+that one exit code takes down the whole bot — not a partial/degraded start,
+a full outage until the mirror is fixed and the stack is recreated. See
+`docker compose logs config-compiler` first if a deploy "succeeds" in CI but
+the bot doesn't come up — [operations.md § Troubleshooting](operations.md#troubleshooting)
+has the exact signature.
 
 ### Non-secret YAML
 
 Edit [`config/trading-bot.yml`](../config/trading-bot.yml) for instruments,
-technique pack, activation, HFS mode, etc. After changes:
+technique pack, activation, scalping mode, etc. After changes:
 
 ```bash
 docker compose up -d --force-recreate config-compiler ctrader-engine bot
@@ -168,7 +196,7 @@ execution:
     include_late_ny: true
     reaction_require_killzone: false
     reaction_require_publish_window: false
-    hfs_require_killzone: false
+    scalp_require_killzone: false
     require_sweep_body: false
     strict_premium_discount: true
   activation:
@@ -196,8 +224,10 @@ Expected:
 | Check | Success signal |
 |---|---|
 | `config-compiler` | Exited **0**; wrote `/runtime/resolved-runtime.json` |
+| `kafka-init` | Exited **0**; verified the four business-event topics |
+| `analysis-engine` | Up; `/health/ready` becomes healthy after the first authoritative Redis bar read |
 | `ctrader-engine` | Healthy after backfill (~2 min start period); bars for live symbols |
-| `bot` | Up; Telegram polling + scanner / ZoneWatch / HFS loops |
+| `bot` | Up; Telegram polling + scanner / ZoneWatch / scalping loops |
 | Redis | `bars:XAU:M5` (and FX keys) receiving closes |
 | Host logs | `logs/algo-bot/algo-bot.log`, `logs/ctrader-engine/ctrader-engine.log` |
 
@@ -230,14 +260,13 @@ Expect:
 
 Optional:
 
-- `/trade XAU … / algo` — arms broker path; chart rows land in
-  `manual_algo_charts` after issue/fill/close
+- `/trade XAU … / algo` — arms broker path
 - Chart screenshot DM — Claude analysis if `ANTHROPIC_API_KEY` is set
 
 Technique / ZoneWatch smoke (after auto-trade is on):
 
 - ZoneWatches retain across spot wicks; invalidate on closed-bar break
-- HFS discovery permits follow enabled archetypes in every session; optional `hfs_require_killzone` only blocks publish/activation when explicitly on
+- Scalping discovery permits follow enabled archetypes in every session; optional `scalp_require_killzone` only blocks publish/activation when explicitly on
 - Stops past furthest envelope log `stop_exceeds_envelope_furthest_leg`
 
 ---

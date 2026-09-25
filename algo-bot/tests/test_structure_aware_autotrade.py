@@ -20,7 +20,6 @@ from app.analysis.scalp_ranges import (
   _fallback_barrier,
   build_scalp_structure,
   build_scalp_structure_detailed,
-  role_flip_barrier,
 )
 from app.autotrade.execution_policy import (
   classify_tier,
@@ -241,9 +240,13 @@ def test_quality_tiers_and_risk_multipliers():
   assert risk_multiplier_for_tier("A") == 1.0
   assert risk_multiplier_for_tier("C") == 1.0
   assert risk_multiplier_for_tier("A", post_impulse=True) == 0.5
-  assert risk_multiplier_for_tier("A", range_scalp=True) == 2.0
-  assert risk_multiplier_for_tier("B", range_scalp=True) == 2.0
-  assert risk_multiplier_for_tier("C", range_scalp=True) == 2.0
+  # Owner 2026-09-07: scalp books the same flat equity-table lot as any
+  # other trade now (PR #486's equity_table sizing_mode default) - the
+  # prior 1.5x here was a leftover from the old risk-percent sizing
+  # formula and had started silently re-inflating every scalp position.
+  assert risk_multiplier_for_tier("A", range_scalp=True) == 1.0
+  assert risk_multiplier_for_tier("B", range_scalp=True) == 1.0
+  assert risk_multiplier_for_tier("C", range_scalp=True) == 1.0
 
 
 def test_evaluate_ignores_stale_tier_b_half_size_stamp():
@@ -435,17 +438,6 @@ def test_same_match_replayed_five_times_never_inflates_confluence():
     not tag.startswith("contributor:") for tag in kept[0].tags
   )
   assert sum(item["event"] == "replay_updated" for item in events) == 4
-
-
-def test_role_flip_creates_opposite_side_barrier():
-  df = _range_df()
-  atr = pd.Series([2.0] * len(df), index=df.index)
-  barriers, _ = build_scalp_structure(df, atr, [], [], None, _cfg())
-  resistance = next(b for b in barriers if b.side == "resistance")
-  flipped = role_flip_barrier(resistance, accepted_break=True, retest_held=True)
-  assert flipped is not None
-  assert flipped.side == "support"
-  assert "role-flip" in flipped.tags
 
 
 def test_staircase_downtrend_is_not_a_confirmed_range():

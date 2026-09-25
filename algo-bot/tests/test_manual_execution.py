@@ -167,6 +167,21 @@ def test_xau_manual_tp1_fraction_adapts_to_any_tp_count(
   assert payload["risk_multiplier"] == 1.0
 
 
+@pytest.mark.no_database
+def test_intent_single_entry_override_forces_single_entry_on_zone_ladder_xau():
+  # Baseline (no override): XAU is configured zone_ladder, so the default
+  # path (test above / test_intent_to_candidate_payload_sell_uses_entry_low_
+  # reference_edge) already asserts manual_single_entry is False. The owner
+  # /1r suffix must force it True regardless, without touching the
+  # instrument's own configured entry_mode.
+  payload = manual_execution._intent_to_candidate_payload(
+    _intent(tps=(4095.0,), single_entry_override=True)
+  )
+
+  assert payload["manual_single_entry"] is True
+  assert payload["manual_target_weights"] == [100]
+
+
 # ---------------------------------------------------------------------------
 # bridge_intents_loop / _process_intent_entries
 # ---------------------------------------------------------------------------
@@ -445,8 +460,49 @@ async def test_handle_event_fill_marks_filled_records_broker_fields_and_activate
   assert row["broker_fill_price"] == pytest.approx(4100.5)
   assert row["algo_armed"] is True
   assert row["fill_state"] == "filled"
-  send.assert_awaited_once()
+  # Owner 2026-09-14: the entry card must never repost off a real fill - a
+  # real fill only records broker_fill_price/broker_position_id and sends
+  # the usual "active" reply, nothing else.
+  assert send.await_count == 1
   truth.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_fill_event_never_reposts_entry_card_even_when_fill_differs_from_zone_edge(
+  monkeypatch,
+):
+  """Owner 2026-09-14: 2026-09-10/09-11 briefly made a real fill repost the
+  pinned entry card with the real-fill risk (a BUY zone 4333-4336 against
+  sl 4330 advertised "risk 60 pips"; a fill at 4335.45 would recompute to
+  54 pips) - the owner rejected this, since it deletes/reposts an
+  already-published channel message on every fill. The card is a plan, not
+  a live fill ticker: it must stay exactly as first posted regardless of
+  where the broker actually filled; only the close-time R-multiple
+  (trade_ops._achieved_rr) is allowed to use the real fill.
+  """
+  send = _mock_send(monkeypatch)
+  sid = await _algo_signal(
+    action="BUY", entry=4333.0, entry_end=4336.0, sl=4330.0,
+    tps=[4339.0, 4342.0, 4348.0, 4354.0],
+  )
+  client = redis_state.get_client()
+  positions: dict[int, int] = {}
+
+  event = {
+    "type": "manual_opened",
+    "position_id": 309,
+    "candidate_id": f"manual:{sid}:0",
+    "setup": "Key Level",
+    "stream": "algo_manual",
+    "price": 4335.45,
+    "volume": 600,
+  }
+  await manual_execution._handle_event(client, event, positions)
+
+  row = await store.get_manual_signal(sid)
+  assert row["broker_fill_price"] == pytest.approx(4335.45)
+  # Only the "active" reply is sent - no card repost.
+  assert send.await_count == 1
 
 
 @pytest.mark.asyncio
@@ -539,8 +595,9 @@ async def test_fill_event_owner_dm_is_off_by_default(monkeypatch):
   row = await store.get_manual_signal(sid)
   assert row["execution_status"] == "filled"
   truth.assert_not_awaited()
-  # The real subscriber-facing channel update must still fire unchanged.
-  send.assert_awaited_once()
+  # The real subscriber-facing channel update must still fire unchanged;
+  # the entry card itself is never reposted on a fill.
+  assert send.await_count == 1
 
 
 @pytest.mark.asyncio
@@ -915,6 +972,73 @@ async def test_take_profit_skips_when_tp_already_reached(monkeypatch):
 
 @pytest.mark.asyncio
 @pytest.mark.no_database
+async def test_manual_tp_reached_is_notify_only(monkeypatch):
+  notify = AsyncMock(return_value={
+    "action": "tp_reached",
+    "ok": True,
+    "sid": 7,
+    "seq": 7,
+    "tp_number": 4,
+    "pips": 130,
+  })
+  post = AsyncMock()
+  monkeypatch.setattr("app.signals.trade_ops.do_tp_reached", notify)
+  monkeypatch.setattr("app.signals.trade_ops.post_result", post)
+  sig = {
+    "id": 7,
+    "action": "SELL",
+    "symbol": "XAU",
+    "entry": 4100.0,
+    "entry_end": 4105.0,
+    "sl": 4110.0,
+    "tps": [4097.0, 4094.0, 4090.0, 4087.0, 4080.0],
+  }
+  monkeypatch.setattr(manual_execution, "get_manual_signal", AsyncMock(return_value=sig))
+  monkeypatch.setattr(
+    manual_execution,
+    "get_signal_by_execution_intent_id",
+    AsyncMock(return_value=sig),
+  )
+
+  await manual_execution._handle_event(
+    None,
+    {
+      "type": "manual_tp_reached",
+      "stream": "algo_manual",
+      "candidate_id": "manual:7:0",
+      "position_id": 555,
+      "target_pips": 130,
+    },
+    {555: 7},
+  )
+
+  notify.assert_awaited_once_with({
+    "sid": 7,
+    "symbol": "XAU",
+    "tp_number": 4,
+    "pips": 130,
+  })
+  post.assert_awaited_once()
+
+
+@pytest.mark.no_database
+def test_trade_result_renders_unbooked_tp_as_reached():
+  from app.signals import trade_ops
+
+  rendered = trade_ops.render_result({
+    "action": "tp_reached",
+    "ok": True,
+    "seq": 7,
+    "tp_number": 4,
+    "pips": 130,
+  }, "XAU")
+
+  assert "TP4 reached" in rendered
+  assert "no volume booked" in rendered
+
+
+@pytest.mark.asyncio
+@pytest.mark.no_database
 async def test_handle_event_sl_moved_is_treated_as_stop_moved(monkeypatch):
   execute = AsyncMock()
   post = AsyncMock()
@@ -1115,6 +1239,122 @@ async def test_handle_event_group_result_keeps_peak_tp_not_shallow_blend(
 
 
 @pytest.mark.asyncio
+async def test_final_close_declutters_interim_replies_and_shows_realized_rr(
+  monkeypatch,
+):
+  """On the terminal close, every interim TP/reached/SL reply this signal
+  accumulated during its life gets deleted and replaced by one summary
+  reply on the root card carrying the realized R, instead of leaving a
+  dozen scattered bubbles behind.
+  """
+  import re
+
+  from app.signals import trade_ops
+
+  send = _mock_send(monkeypatch)
+  deleted = AsyncMock()
+  monkeypatch.setattr(trade_ops, "delete_posts", deleted)
+  sid = await _algo_signal(
+    tps=[4095.0, 4090.0, 4080.0, 4070.0, 4050.0],
+  )
+  await store.set_execution_fill(sid, broker_position_id=555, broker_fill_price=4100.0)
+  client = redis_state.get_client()
+  positions = {555: sid}
+
+  # TP1 books for real (a genuine partial close).
+  await manual_execution._handle_event(
+    client,
+    {
+      "type": "take_profit", "position_id": 555, "price": 4095.0,
+      "target_pips": 50, "candidate_id": f"manual:{sid}:0",
+    },
+    positions,
+  )
+  # TP3 is reached but never booked (no leg's own ladder owns it).
+  await manual_execution._handle_event(
+    client,
+    {
+      "type": "manual_tp_reached", "position_id": 555,
+      "target_pips": 200, "candidate_id": f"manual:{sid}:0",
+    },
+    positions,
+  )
+  deleted.assert_not_awaited()
+  send.reset_mock()
+
+  await manual_execution._handle_event(
+    client,
+    {
+      "type": "group_result",
+      "position_id": 555,
+      "candidate_id": f"manual:{sid}:0",
+      "group_realized_pips": 160,
+    },
+    positions,
+  )
+
+  deleted.assert_awaited_once()
+  assert len(deleted.await_args.args[0]) == 2
+  send.assert_awaited_once()
+  text = send.await_args.args[0]
+  assert "closed" in text
+  assert re.search(r"[+-]\d+\.\dR", text)
+
+
+@pytest.mark.asyncio
+async def test_realized_rr_uses_the_booking_legs_own_entry_price(monkeypatch):
+  """``leg_entry_price`` on a real take_profit event must flow all the way
+  through to the terminal close summary's R, not the advertised entry
+  zone - a multi-leg group's actual fills routinely differ from it.
+  """
+  send = _mock_send(monkeypatch)
+  sid = await _algo_signal()  # SELL entry=4100/4105, sl=original_sl=4110
+  await store.set_execution_fill(sid, broker_position_id=555, broker_fill_price=4100.0)
+  client = redis_state.get_client()
+  positions = {555: sid}
+
+  # TP1 (tps[0]=4095.0 -> 50p) books with a real leg fill of 4098.0 -
+  # inside the advertised 4100-4105 zone, but not its 4102.5 midpoint.
+  await manual_execution._handle_event(
+    client,
+    {
+      "type": "take_profit", "position_id": 555, "price": 4095.0,
+      "target_pips": 50, "candidate_id": f"manual:{sid}:0",
+      "leg_realized_pips": 30, "leg_entry_price": 4098.0,
+    },
+    positions,
+  )
+  row = await store.get_manual_signal(sid)
+  assert row["legs"][0]["entry_price"] == 4098.0
+  send.reset_mock()
+
+  await manual_execution._handle_event(
+    client,
+    {
+      "type": "group_result",
+      "position_id": 555,
+      "candidate_id": f"manual:{sid}:0",
+      "group_realized_pips": 30,
+      # Same physical leg 555 - AutoTradeEngine.cs always carries its own
+      # EntryPrice on this event too (see PublishAsync call sites).
+      "leg_entry_price": 4098.0,
+    },
+    positions,
+  )
+
+  # _resolve_group_close_pips takes the runner-pips high-water mark (the
+  # TP1 target level, 50) over the raw group_realized_pips (30) here, so
+  # the achieved net is 50 - filled at the same leg's 4098.0. Risk against
+  # original_sl 4110.0 = |4098-4110| = 12.0 price = 120 pips (XAU pip 0.1)
+  # -> 50/120 = +0.4R. The zone-midpoint calc (4102.5) would give a
+  # different, wrong number.
+  send.assert_awaited_once()
+  text = send.await_args.args[0]
+  assert "+50 pips" in text
+  assert "+0.4R" in text
+
+
+@pytest.mark.asyncio
 async def test_handle_event_position_closed_partial_close_uses_leg_fields_not_broker_fill(
   monkeypatch,
 ):
@@ -1215,6 +1455,40 @@ async def test_handle_take_profit_uses_the_booking_legs_own_pips(monkeypatch):
   row = await store.get_manual_signal(sid)
   assert row["legs"][0]["pips"] == 30
 
+
+
+@pytest.mark.asyncio
+async def test_handle_event_position_closing_sends_nothing(monkeypatch):
+  """Owner-reported 2026-09-18: the provisional "confirming exit price..."
+  ping (added 2026-09-17) spammed the VIP channel 2-3 times for one close,
+  since a manual /algo signal's legs share one stop-loss and commonly all
+  disappear from the broker in the same AutoTradeEngine.cs reconcile pass
+  - one position_closing event per leg, all resolving to the same
+  signal_id. Owner's call once shown the dedup fix: don't send this ping
+  at all, not even once. AutoTradeEngine.cs still publishes the event
+  (harmless - nothing on this side maps it to any lifecycle state); this
+  loop now silently ignores it, same as any other informational event
+  type it doesn't recognize.
+  """
+  send = _mock_send(monkeypatch)
+  sid = await _algo_signal()
+  await store.set_execution_fill(sid, broker_position_id=555, broker_fill_price=4100.0)
+  client = redis_state.get_client()
+  positions = {555: sid, 556: sid, 557: sid}
+  before = await store.get_manual_signal(sid)
+
+  for position_id in (555, 556, 557):
+    event = {
+      "type": "position_closing",
+      "position_id": position_id,
+      "candidate_id": f"manual:{sid}:0",
+    }
+    await manual_execution._handle_event(client, event, positions)
+
+  send.assert_not_awaited()
+  after = await store.get_manual_signal(sid)
+  assert after == before
+  assert positions == {555: sid, 556: sid, 557: sid}
 
 
 @pytest.mark.asyncio
@@ -1526,3 +1800,72 @@ async def test_request_move_sl_xadds_move_sl_command(monkeypatch):
   entries = await client.xrange("manual_trade:cmd3")
   payload = json.loads(entries[0][1]["payload"])
   assert payload == {"type": "move_sl", "position_id": 555, "price": 4108.5}
+
+
+@pytest.mark.asyncio
+async def test_request_close_auto_position_xadds_close_position_command(monkeypatch):
+  install_runtime_overrides(monkeypatch, legacy_overrides={"manual_trade_command_stream": "manual_trade:cmd4",})
+  client = redis_state.get_client()
+
+  await manual_execution.request_close_auto_position(777)
+
+  entries = await client.xrange("manual_trade:cmd4")
+  payload = json.loads(entries[0][1]["payload"])
+  assert payload == {"type": "close_position", "position_id": 777}
+
+
+# ---------------------------------------------------------------------------
+# list_open_algo_auto_positions
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_list_open_algo_auto_positions_filters_stream_symbol_and_remaining():
+  # Only the genuinely open algo_auto XAU position should survive: the
+  # algo_manual one belongs to /trade_close instead, the GBPJPY one is a
+  # different instrument, and the zero-remaining one is already flat.
+  client = redis_state.get_client()
+  await client.sadd(
+    "auto_trade:positions", "101", "102", "103", "104",
+  )
+  await client.set("auto_trade:position:101", json.dumps({
+    "position_id": 101, "symbol": "XAU", "direction": 0,
+    "entry_price": 4350.0, "remaining_volume": 500, "stream": "algo_auto",
+    "setup": "key-level",
+  }))
+  await client.set("auto_trade:position:102", json.dumps({
+    "position_id": 102, "symbol": "XAU", "direction": 1,
+    "entry_price": 4360.0, "remaining_volume": 300, "stream": "algo_manual",
+  }))
+  await client.set("auto_trade:position:103", json.dumps({
+    "position_id": 103, "symbol": "GBPJPY", "direction": 0,
+    "entry_price": 215.0, "remaining_volume": 400, "stream": "algo_auto",
+  }))
+  await client.set("auto_trade:position:104", json.dumps({
+    "position_id": 104, "symbol": "XAU", "direction": 1,
+    "entry_price": 4370.0, "remaining_volume": 0, "stream": "algo_auto",
+  }))
+
+  rows = await manual_execution.list_open_algo_auto_positions("XAU")
+
+  assert [row["position_id"] for row in rows] == [101]
+  assert rows[0]["direction"] == "BUY"
+  assert rows[0]["entry_price"] == 4350.0
+  assert rows[0]["remaining_volume"] == 500
+
+
+@pytest.mark.asyncio
+async def test_list_open_algo_auto_positions_no_symbol_returns_all_symbols():
+  client = redis_state.get_client()
+  await client.sadd("auto_trade:positions", "201", "202")
+  await client.set("auto_trade:position:201", json.dumps({
+    "position_id": 201, "symbol": "XAU", "direction": 0,
+    "entry_price": 4350.0, "remaining_volume": 500, "stream": "algo_auto",
+  }))
+  await client.set("auto_trade:position:202", json.dumps({
+    "position_id": 202, "symbol": "GBPJPY", "direction": 1,
+    "entry_price": 215.0, "remaining_volume": 200, "stream": "algo_auto",
+  }))
+
+  rows = await manual_execution.list_open_algo_auto_positions()
+
+  assert sorted(row["position_id"] for row in rows) == [201, 202]

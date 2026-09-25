@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import datetime, timezone
 from app.core.config import runtime_config
 from tests.configuration.canonical_fixtures import install_runtime_overrides, leaf
@@ -98,12 +99,44 @@ def test_strategy_match_contract_round_trips_and_rejects_wrong_version():
   assert measured.get("matches", 1) >= 1
   assert StrategyMatch.from_json(match.to_json()) == match
   assert StrategyMatch.from_json("not-json") is None
+
+
+def test_sweep_extreme_price_copies_through_and_round_trips():
+  match, reason, _ = scanner._build_strategy_match(
+    "XAU", "M5", "1784721300", _context(),
+    [replace(_result(), sweep_extreme_price=4112.55)],
+    now=NOW,
+  )
+
+  assert match is not None
+  assert reason is None
+  assert match.sweep_extreme_price == pytest.approx(4112.55)
+  assert StrategyMatch.from_json(match.to_json()) == match
   assert StrategyMatch.from_json(
     match.to_json().replace(
       f'"version":{STRATEGY_MATCH_VERSION}',
       f'"version":{STRATEGY_MATCH_VERSION + 1}',
     )
   ) is None
+
+
+def test_from_json_normalizes_a_stale_pre_rename_strategy_name():
+  """Redis candidates carry a 7d TTL and can outlive a strategy rename.
+
+  A candidate written before "Key Level Reaction" -> "Key Level" (#507) must
+  still read back as the current canonical name, not the retired one it was
+  saved with.
+  """
+  match, reason, measured = scanner._build_strategy_match(
+    "XAU", "M5", "1784721300", _context(), [_result(setup="Key Level")], now=NOW,
+  )
+  assert match is not None
+  stale_json = match.to_json().replace(
+    '"strategy":"Key Level"', '"strategy":"Key Level Reaction"',
+  )
+  reloaded = StrategyMatch.from_json(stale_json)
+  assert reloaded is not None
+  assert reloaded.strategy == "Key Level"
 
 
 def test_scanner_transports_strongest_strategy_without_regime_routing(

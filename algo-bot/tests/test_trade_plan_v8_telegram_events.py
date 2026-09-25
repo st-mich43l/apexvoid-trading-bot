@@ -98,7 +98,7 @@ def test_tp_booked_event_renders_without_crashing():
   text = delivery.render_auto_trade_event({
     "type": "tp_booked",
     "message": "TP COMPLETED TP1 closed L1=320 L2=120 remaining=660 (2/2)",
-    "setup": "Key Level Reaction",
+    "setup": "Key Level",
     "price": 4054.86,
     "target_pips": 60,
   })
@@ -108,7 +108,7 @@ def test_tp_booked_event_renders_without_crashing():
   assert "TP1" in text
   assert "4054.86" in text
   assert "+60.0 pips" in text
-  assert "Key Level Reaction" not in text
+  assert "Key Level" not in text
   assert "🧭" not in text
   assert "Closed" not in text
   assert "Remaining" not in text
@@ -116,6 +116,52 @@ def test_tp_booked_event_renders_without_crashing():
   assert "L1" not in text
   assert "📦" not in text
   assert "🎯" in text
+
+
+def test_tp_booked_shows_target_progress_from_structured_fields():
+  """Owner-reported 2026-09-22: a live TP1 card with TP2 still pending had
+  nothing on it to say so - it read as "this was the only target". The
+  progress comes from the plan's own structured fields
+  (highest_booked_target_index / targets_total), not the message text.
+  """
+  text = delivery.render_auto_trade_event({
+    "type": "tp_booked",
+    "message": "TP COMPLETED TP1 closed L1=320 remaining=660 (1/1)",
+    "setup": "Confluence Zone",
+    "price": 210.534,
+    "target_pips": 16,
+    "highest_booked_target_index": 0,
+    "targets_total": 2,
+  })
+  assert text is not None
+  assert "(1/2)" in text
+
+
+def test_tp_booked_omits_progress_for_a_single_target_plan():
+  text = delivery.render_auto_trade_event({
+    "type": "tp_booked",
+    "message": "TP COMPLETED TP1 closed L1=320 remaining=0 (1/1)",
+    "setup": "Confluence Zone",
+    "price": 210.534,
+    "target_pips": 16,
+    "highest_booked_target_index": 0,
+    "targets_total": 1,
+  })
+  assert text is not None
+  assert "(1/1)" not in text
+
+
+def test_tp_compact_line_shows_target_progress():
+  line = delivery._format_tp_compact_line(
+    {
+      "price": 4029.98,
+      "target_pips": 41.0,
+      "highest_booked_target_index": 0,
+      "targets_total": 2,
+    },
+    "TP COMPLETED TP1 closed L1 lot=0.02 remaining lot=0.06 (1/2)",
+  )
+  assert line == "🎯 TP1 (1/2) +41 pips 💸"
 
 
 def test_clean_message_formats_tp_leg_and_remaining_as_lot():
@@ -142,7 +188,7 @@ def test_sl_moved_event_renders_without_crashing():
   text = delivery.render_auto_trade_event({
     "type": "sl_moved",
     "message": "GROUP SL MOVED TO BE 4089.10 (2/2)",
-    "setup": "Key Level Reaction",
+    "setup": "Key Level",
   })
 
   assert text is not None
@@ -150,7 +196,7 @@ def test_sl_moved_event_renders_without_crashing():
   assert "Break-even" in text
   assert "4089.10" in text
   assert "🔐" in text or "🛡" in text
-  assert "Key Level Reaction" not in text
+  assert "Key Level" not in text
   assert "🧭" not in text
 
 
@@ -158,25 +204,25 @@ def test_sl_moved_trail_renders_trail_kind():
   text = delivery.render_auto_trade_event({
     "type": "sl_moved",
     "message": "SL MOVED to 4070.31 (trail TP1)",
-    "setup": "Key Level Reaction",
+    "setup": "Key Level",
   })
 
   assert text is not None
   assert "Trail" in text
   assert "4070.31" in text
   assert "trail TP1" in text
-  assert "Key Level Reaction" not in text
+  assert "Key Level" not in text
   assert "🧭" not in text
 
 
 def test_tp_compact_line_format():
+  # Matches Manual Algo's own TP wording (trade_ops.render_result's "tp"
+  # action: "🎯 TPn +N pips") - no separate Fill/Achieved breakdown.
   line = delivery._format_tp_compact_line(
     {"price": 4029.98, "target_pips": 41.0},
     "TP COMPLETED TP1 closed L1 lot=0.02 remaining lot=0.06 (1/2)",
   )
-  assert line == (
-    "🎯 TP1 · 💰 Fill: 4029.98 · ✅ Achieved: +41.0 pips"
-  )
+  assert line == "🎯 TP1 +41 pips 💸"
 
 
 def test_tp_compact_lines_stack_like_owner_sample():
@@ -190,18 +236,20 @@ def test_tp_compact_lines_stack_like_owner_sample():
   )
   body = "\n".join([tp1, tp2])
   assert body == "\n".join([
-    "🎯 TP1 · 💰 Fill: 4029.98 · ✅ Achieved: +41.0 pips",
-    "🎯 TP2 · 💰 Fill: 4033.00 · ✅ Achieved: +45.0 pips",
+    "🎯 TP1 +41 pips 💸",
+    "🎯 TP2 +45 pips 💸",
   ])
 
 
 def test_be_trail_head_status_formats():
+  # Matches Manual Algo's own SL-move wording (trade_ops.render_result's
+  # "sl" action: "🛡 move SL to price") - no BE/Trail distinction, same as
+  # Manual doesn't make one either. XAU rounds to a whole number.
   be_status, be_state, be_price = delivery._format_be_trail_head_status(
     {"price": 4034.99},
     "GROUP SL MOVED TO BE 4034.99 (2/2)",
   )
-  assert "BE" in be_status
-  assert "4034.99" in be_status
+  assert be_status == "🛡 move SL to 4,035"
   assert be_state == "sl_moved"
   assert be_price == 4034.99
 
@@ -209,25 +257,24 @@ def test_be_trail_head_status_formats():
     {"price": 4070.31},
     "SL MOVED to 4070.31 (trail TP1)",
   )
-  assert "Trail" in trail_status
-  assert "4070.31" in trail_status
+  assert trail_status == "🛡 move SL to 4,070"
   assert trail_price == 4070.31
 
 
 def test_position_closed_compact_line_format():
+  # Matches Manual Algo's own close wording (trade_ops.render_result's
+  # "close" action: "closed — achieved +N pips" / "closed — losing N pips").
   line = delivery._format_position_closed_compact_line(
     {"target_pips": 90},
     "PLAN CLOSED · highest TP archived TP2 · @ 4106.00",
   )
-  assert line == "🏁 POSITION CLOSED · @ 4106.00"
+  assert line == "✅ closed — achieved +90 pips 💸"
 
   losing = delivery._format_position_closed_compact_line(
     {"group_realized_pips": -47},
     "PLAN CLOSED · no TP archived · losing -47 pips · @ 4090.50",
   )
-  assert losing == (
-    "🏁 POSITION CLOSED · 🛡 SL · ❌ Losing: -47.0 pips · @ 4090.50"
-  )
+  assert losing == "🛑 closed — losing -47 pips"
   assert "\n" not in losing
   assert "Highest TP archived" not in losing
 
@@ -238,9 +285,7 @@ def test_tp_compact_line_from_final_close_message():
     {"price": 4010.0, "target_pips": 81.0},
     "PLAN CLOSED · highest TP archived TP3 · @ 4010.00",
   )
-  assert line == (
-    "🎯 TP3 · 💰 Fill: 4010.00 · ✅ Achieved: +81.0 pips"
-  )
+  assert line == "🎯 TP3 +81 pips 💸"
 
 
 def test_deferred_tp_stopout_cannot_render_as_achieved_tp():
@@ -263,9 +308,10 @@ def test_deferred_tp_stopout_cannot_render_as_achieved_tp():
   close = delivery._format_position_closed_compact_line(
     event, event["message"],
   )
-  assert close == (
-    "🏁 POSITION CLOSED · 🛡 SL · ❌ Losing: -60.0 pips · @ 4630.96"
-  )
+  # contradictory_archived_tp catches the "highest TP archived" text
+  # despite the actual result being a loss, falling through to the
+  # generic (Manual-style) losing wording instead of a false "achieved".
+  assert close == "🛑 closed — losing -60 pips"
   rendered = delivery.render_auto_trade_event(event)
   assert "Highest TP archived" not in rendered
   assert "Achieved" not in rendered
@@ -324,10 +370,7 @@ def test_position_closed_compact_sl_shows_net_loss():
     {"group_realized_pips": -39.1, "reason_code": "stop_loss_or_take_profit"},
     "PLAN CLOSED · no TP archived",
   )
-  assert "🛡 SL" in line
-  assert "❌ Losing: -39.1 pips" in line
-  assert "Closed by broker SL/TP" not in line
-  assert "Highest TP archived" not in line
+  assert line == "🛑 closed — losing -39 pips"
 
 
 def test_position_closed_one_shot_sl_reports_losing():

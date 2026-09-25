@@ -120,7 +120,11 @@ def _publish_technique(
   price = _current_price(ctx, df)
   atr = _atr(ind)
   if instance.measured.get("mitigated"):
-    return None
+    # Touched zones were validated as still holding (never closed through)
+    # when the instance was collected; here only the retest budget remains.
+    retests = int(getattr(ctx.settings, "technique_retest_max_touches", 0))
+    if retests <= 0 or int(instance.measured.get("touches", 0)) > retests:
+      return None
   direction = "BUY" if instance.side == "buy" else "SELL"
   zone = _instance_to_zone(instance)
   structural_low = float(instance.measured.get("structural_low", zone.low))
@@ -152,9 +156,13 @@ def _publish_technique(
     displacement_grade=float(getattr(zone, "score", 0.0)) >= STAR_TWO_SCORE,
   )
   side_label = trade_side_to_zone_side(instance.side)
+  # Owner-reported 2026-09-22 (live card): a bare "• SD" reason line with no
+  # other text. technique_display_tags() exists to join multiple techniques
+  # into one combined tag ("SD+OB") for a Confluence Zone band - called here
+  # with a single-item list it just re-abbreviates the technique the first
+  # reason line already names in full, adding nothing.
   reasons = [
     f"{side_label} {instance.technique} {_number(zone.low)}-{_number(zone.high)}",
-    technique_display_tags([instance.technique]),
   ]
   if instance.measured.get("entry_clipped"):
     structural_label = "H1" if instance.technique == TECHNIQUE_CRT else "structural"

@@ -10,7 +10,7 @@ ApexVoid is a **multi-service multi-symbol** trading stack on one Docker host:
 | `redis` | Closed OHLC bars, ZoneWatch state, TradePlans, executor events |
 | `config-compiler` | One-shot: validate YAML + emit `ResolvedRuntimeManifest` |
 | `ctrader-engine` | cTrader Open API feed + TradePlan V8 execution |
-| `bot` (`algo-bot`) | Telegram, scanner, ZoneWatch activation, plan publish, HFS |
+| `bot` (`algo-bot`) | Telegram, scanner, ZoneWatch activation, plan publish, scalping |
 
 ```text
 ┌──────────────────────────── single host (Docker) ───────────────────────────┐
@@ -38,7 +38,7 @@ No inbound application ports. Only SSH to the host is required.
 
 | Loop | Purpose |
 |---|---|
-| `bar_event_dispatcher_loop` | One `bars:new` subscriber: ZoneWatch M1 + HFS, then scanner + worker |
+| `bar_event_dispatcher_loop` | One `bars:new` subscriber: ZoneWatch M1 + scalping, then scanner + worker |
 | `zone_watch_execution_loop` | Spot-driven re-eval → activate → direct publish |
 | `forming_price_track_loop` | Live edits on forming Telegram cards |
 | `setup_expiry_sweeper_loop` | Age out stale setups / watches |
@@ -58,8 +58,7 @@ exceptional durable fallback.
 1. Owner DMs a zone entry (`/trade` / `/algo` or legacy free-text).
 2. Parser extracts symbol, side, zone, SL, TPs (2-digit shorthand expanded).
 3. Post to VIP (and public unless VIP-only); insert Postgres lifecycle row.
-4. On `/algo`, optional broker arm; OHLC windows snapshot into
-   `manual_algo_charts` at issued / filled / closed for later XAU fitting.
+4. On `/algo`, optional broker arm.
 5. Later `close` / `cancel` / `/trade_modify` / reply-`cancel` update status
    and channel posts.
 
@@ -102,8 +101,7 @@ filters: [technique-zonewatch-publish.md](technique-zonewatch-publish.md).
 
 ### PostgreSQL (`signals`)
 
-Manual signal lifecycle, pips/results, `manual_algo_charts` (Redis OHLC
-windows around owner `/algo` events), and autonomous stats ingested from
+Manual signal lifecycle, pips/results, and autonomous stats ingested from
 executor events (`auto_trade_fills` / `auto_trade_results`). Schema is owned
 by `algo-bot` `store.init_db()` — see [schema.sql](schema.sql) for a reference
 DDL mirror.

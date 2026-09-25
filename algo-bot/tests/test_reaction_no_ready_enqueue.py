@@ -17,9 +17,9 @@ pytestmark = pytest.mark.no_database
 @pytest.mark.asyncio
 async def test_reaction_remained_watching_skips_ready_enqueue():
   """Mirror scanner handoff: reaction + remained_watching → no ready xadd."""
-  assert is_reaction_strategy("Key Level Reaction")
-  assert is_reaction_strategy("Session Level Reaction")
-  assert is_reaction_strategy("Trendline Reaction")
+  assert is_reaction_strategy("Key Level")
+  assert is_reaction_strategy("Session Level")
+  assert is_reaction_strategy("Trendline")
   assert not is_reaction_strategy("Demand Zone")
 
   enqueued = AsyncMock(return_value="1-0")
@@ -34,9 +34,9 @@ async def test_reaction_remained_watching_skips_ready_enqueue():
   )
 
   strategies = (
-    "Key Level Reaction",
-    "Session Level Reaction",
-    "Trendline Reaction",
+    "Key Level",
+    "Session Level",
+    "Trendline",
   )
   for strategy in strategies:
     result = await direct()
@@ -81,7 +81,7 @@ async def test_cutover_reaction_exception_skips_ready_fallback(monkeypatch):
     event_ts="2026-07-30T06:00:00+00:00",
     issued_at=1_785_390_000,
     expires_at=1_785_390_420,
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     strategy_mode="with_bias",
     direction="SELL",
     key_level=4114.5,

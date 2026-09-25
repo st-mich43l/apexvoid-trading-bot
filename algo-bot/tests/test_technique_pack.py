@@ -13,7 +13,6 @@ from app.autotrade.entry_activation import evaluate_entry_activation
 from app.autotrade.killzone import (
   classify_killzone,
   confirmation_is_sweep_body,
-  is_killzone_utc,
 )
 from app.autotrade.protective_stop import ProtectiveStopError, plan_group_protective_stop
 from app.scalping.context import permitted_archetypes_for_session
@@ -38,7 +37,7 @@ def _technique_cfg(
   enforce: bool = True,
   require_sweep: bool = True,
   strict_pd: bool = True,
-  hfs_kz: bool = True,
+  scalp_kz: bool = True,
 ):
   return SimpleNamespace(
     market_data=SimpleNamespace(
@@ -56,7 +55,7 @@ def _technique_cfg(
         london_window_hours=3,
         ny_window_hours=3,
         reaction_require_killzone=True,
-        scalp_require_killzone=hfs_kz,
+        scalp_require_killzone=scalp_kz,
         require_sweep_body=require_sweep,
         strict_premium_discount=strict_pd,
       ),
@@ -109,14 +108,13 @@ def _technique_cfg(
 )
 def test_killzone_hour_matrix(hour: int, allowed: bool):
   cfg = _technique_cfg()
-  assert is_killzone_utc(hour, cfg) is allowed
   decision = classify_killzone(hour=hour, cfg=cfg)
   assert decision.allowed is allowed
   if not allowed:
     assert decision.reason_code == "outside_killzone"
 
 
-def test_hfs_permitted_archetypes_are_structure_not_clock():
+def test_scalp_permitted_archetypes_are_structure_not_clock():
   """Enabled archetypes print in every session; analysis rejects weak hours."""
   cfg = _technique_cfg()
   for session, hour in (
@@ -132,7 +130,7 @@ def test_hfs_permitted_archetypes_are_structure_not_clock():
     assert permitted_archetypes_for_session(session, hour=hour, cfg=cfg) == _SCALP_ALL
 
 
-def test_hfs_session_fallback_without_clock():
+def test_scalp_session_fallback_without_clock():
   cfg = _technique_cfg()
   assert permitted_archetypes_for_session("asia", cfg=cfg) == _SCALP_ALL
   assert permitted_archetypes_for_session("london", cfg=cfg) == _SCALP_ALL
@@ -165,11 +163,11 @@ def test_key_level_can_raise_killzone_without_global_reaction_gate():
   cfg = _technique_cfg()
   cfg.execution.technique.reaction_require_killzone = False
   assert reaction_require_killzone(cfg, strategy="Demand Zone") is False
-  assert reaction_require_killzone(cfg, strategy="Key Level Reaction") is False
+  assert reaction_require_killzone(cfg, strategy="Key Level") is False
 
   cfg.strategies.reaction.key_level.require_killzone = True
   assert reaction_require_killzone(cfg, strategy="Demand Zone") is False
-  assert reaction_require_killzone(cfg, strategy="Key Level Reaction") is True
+  assert reaction_require_killzone(cfg, strategy="Key Level") is True
 
   cfg.strategies.reaction.key_level.min_grade = "A"
   assert key_level_min_grade(cfg) == "A"
@@ -192,7 +190,7 @@ def test_activation_blocks_pin_bar_under_technique():
     "pin_bar", "BUY", 4080.0, now - 60, "pin only",
   )
   decision = evaluate_entry_activation(
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     direction="BUY",
     zone_entered_at=now - 120,
     quote_inside=True,
@@ -212,7 +210,7 @@ def test_activation_allows_sweep_reclaim_under_technique():
     "sweep_reclaim", "BUY", 4080.0, now - 60, "sweep",
   )
   decision = evaluate_entry_activation(
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     direction="BUY",
     zone_entered_at=now - 120,
     quote_inside=True,
@@ -284,7 +282,7 @@ def test_entry_location_blocks_buy_premium_sell_discount():
     m15_range_high=4100.0,
   )
   buy = evaluate_entry_location(
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     direction="BUY",
     context=buy_ctx,
     cfg=cfg,
@@ -299,7 +297,7 @@ def test_entry_location_blocks_buy_premium_sell_discount():
     m15_range_high=4100.0,
   )
   sell = evaluate_entry_location(
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     direction="SELL",
     context=sell_ctx,
     cfg=cfg,

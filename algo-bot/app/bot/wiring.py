@@ -2,6 +2,7 @@
 
 import time
 
+from app.bot.owner_dm_journal import owner_dm_incoming_middleware
 from app.signals import broadcast as _broadcast
 from app.signals import parsing as _parsing
 from app.bot.handlers import callbacks as _callbacks
@@ -91,6 +92,11 @@ _send_with_retry = send_with_retry
 _ORIGINAL_DELETE_COMMAND = _channel._delete_command
 _ORIGINAL_HANDLE_PIPS = _fallback._handle_pips
 _ORIGINAL_TODAY_STR = _parsing._today_str
+
+# Owner end-of-day DM wipe (opt-in, see owner_dm_journal): journals the
+# owner's own incoming messages before any command router sees them - main
+# `dp` only, never `scanner_dp`.
+dp.message.outer_middleware(owner_dm_incoming_middleware)
 
 # Include order is load-bearing: command routers before generic catch-alls.
 _INCLUDED_ROUTERS = (

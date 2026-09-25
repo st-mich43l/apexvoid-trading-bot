@@ -162,17 +162,6 @@ async def _alert_owner_component_fatal(
     log.exception("fatal owner alert failed component=%s", component)
 
 
-async def load_component_health(component: str) -> dict | None:
-  raw = await get_client().get(component_health_key(component))
-  if not raw:
-    return None
-  try:
-    payload = json.loads(raw)
-  except (TypeError, ValueError, json.JSONDecodeError):
-    return None
-  return payload if isinstance(payload, dict) else None
-
-
 async def list_fatal_components() -> list[dict]:
   """Return component health payloads currently marked fatal."""
   client = get_client()
@@ -375,6 +364,24 @@ async def tp_ordinal_already_booked(row_id: int, ordinal: int) -> bool:
 async def mark_tp_ordinal_booked(row_id: int, ordinal: int) -> None:
   client = _get_client()
   key = _tp_ordinals_key(row_id)
+  await client.sadd(key, ordinal)
+  await client.expire(key, _PROGRESS_TTL)
+
+
+def _tp_reached_ordinals_key(row_id: int) -> str:
+  return f"manual_signal:tp_reached:{row_id}"
+
+
+async def tp_ordinal_already_reached(row_id: int, ordinal: int) -> bool:
+  """Deduplicate notify-only TP progress separately from booked TPs."""
+  return bool(
+    await _get_client().sismember(_tp_reached_ordinals_key(row_id), ordinal)
+  )
+
+
+async def mark_tp_ordinal_reached(row_id: int, ordinal: int) -> None:
+  client = _get_client()
+  key = _tp_reached_ordinals_key(row_id)
   await client.sadd(key, ordinal)
   await client.expire(key, _PROGRESS_TTL)
 

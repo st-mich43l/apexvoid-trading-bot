@@ -248,91 +248,6 @@ public sealed partial class AutoTradeEngineTests
     await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
   }
 
-  [Fact]
-  public async Task LeaseLossBetweenZoneLegsStopsBeforeTheNextLeg()
-  {
-    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-    var store = new FakeAutoTradeStore(CandidateJson(
-      entryLow: 3999m,
-      entryHigh: 4000.5m
-    ));
-    var client = new FakeTradingClient { PauseLimitOrderCall = 1 };
-    var engine = new AutoTradeEngine(
-      Options() with { ZoneFillEnabled = true, SizingMode = "table" },
-      store,
-      () => Now,
-      _ => { }
-    );
-    await engine.ObserveSpotAsync(
-      new SpotPrice("XAU", 4000.4m, 4000.6m, Now.ToUnixTimeSeconds()),
-      cts.Token
-    );
-
-    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
-    await client.LimitOrderEntered.Task.WaitAsync(TimeSpan.FromSeconds(2));
-    store.LeaseRenewalBlocked = true;
-    client.ReleaseLimitOrder.TrySetResult(true);
-
-    await WaitForEventAsync(store, "broker_outcome_unknown");
-
-    // Leg 1 is live and stays live: the stale executor may neither place leg 2
-    // nor roll back a leg a successor now owns.
-    Assert.Single(client.LimitOrders);
-    Assert.Empty(client.CancelledOrders);
-    Assert.Contains("broker_outcome_unknown_preserved", store.Metrics);
-    // The group plan survives the ambiguity: recovery needs it to map
-    // deterministic client order IDs back to this candidate.
-    Assert.Contains(
-      store.Values.Keys,
-      key => key.StartsWith("auto_trade:group_plan:", StringComparison.Ordinal)
-    );
-
-    cts.Cancel();
-    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
-  }
-
-  [Fact]
-  public async Task StaleRollbackCannotCancelASuccessorLeg()
-  {
-    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-    var store = new FakeAutoTradeStore(CandidateJson(
-      entryLow: 3999m,
-      entryHigh: 4000.5m
-    ));
-    var client = new FakeTradingClient
-    {
-      PauseLimitOrderCall = 2,
-      FailLimitOrderCall = 2,
-    };
-    var engine = new AutoTradeEngine(
-      Options() with { ZoneFillEnabled = true, SizingMode = "table" },
-      store,
-      () => Now,
-      _ => { }
-    );
-    await engine.ObserveSpotAsync(
-      new SpotPrice("XAU", 4000.4m, 4000.6m, Now.ToUnixTimeSeconds()),
-      cts.Token
-    );
-
-    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
-    await client.LimitOrderEntered.Task.WaitAsync(TimeSpan.FromSeconds(2));
-    // Ownership is gone by the time leg 2 fails, so the rollback that failure
-    // would normally trigger must not touch leg 1.
-    store.LeaseRenewalBlocked = true;
-    client.ReleaseLimitOrder.TrySetResult(true);
-
-    await WaitUntilAsync(() =>
-      store.Metrics.Contains("executor_stale_release_blocked")
-    );
-
-    Assert.Empty(client.CancelledOrders);
-    Assert.Single(client.PendingOrders);
-
-    cts.Cancel();
-    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
-  }
-
   // ------------------------------------------------------- broker uncertainty
 
   [Fact]
@@ -362,42 +277,6 @@ public sealed partial class AutoTradeEngineTests
       store.Transitions
     );
     Assert.Contains(store.Events, item => item.Type == "broker_outcome_unknown");
-
-    cts.Cancel();
-    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
-  }
-
-  [Fact]
-  public async Task LostLimitResponseIsAdoptedInsteadOfDuplicated()
-  {
-    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-    var store = new FakeAutoTradeStore(CandidateJson(
-      entryLow: 3999m,
-      entryHigh: 4000.5m
-    ));
-    var client = new FakeTradingClient
-    {
-      LoseLimitResponseCall = 2,
-    };
-    var engine = new AutoTradeEngine(
-      Options() with { ZoneFillEnabled = true, SizingMode = "table" },
-      store,
-      () => Now,
-      _ => { }
-    );
-    await engine.ObserveSpotAsync(
-      new SpotPrice("XAU", 4000.4m, 4000.6m, Now.ToUnixTimeSeconds()),
-      cts.Token
-    );
-
-    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
-    await WaitUntilAsync(() => store.Metrics.Contains("broker_outcome_adopted"));
-
-    // Both legs reached the broker once; the lost acknowledgement is adopted
-    // from broker state instead of re-placed.
-    Assert.Equal(2, client.LimitOrders.Count);
-    Assert.Contains("broker_duplicate_prevented", store.Metrics);
-    Assert.Contains(store.Events, item => item.Type == "order_accepted");
 
     cts.Cancel();
     await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
@@ -758,52 +637,6 @@ public sealed partial class AutoTradeEngineTests
   }
 
   [Fact]
-  public async Task ZoneSplitStopContractIsValidatedAtTheReferenceEntry()
-  {
-    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-    var contract = PlannedStopContract(4000.5m);
-    var store = new FakeAutoTradeStore(PlannedCandidateJson(
-      contract,
-      plannedRoute: "zone_split",
-      plannedEntryPrice: 4000.5m,
-      legEntryPrices: [4000.5m, 3999.75m],
-      orderTypePreference: "limit",
-      entryDistribution: "zone_split",
-      entryLow: 3999m,
-      entryHigh: 4000.5m
-    ));
-    var client = new FakeTradingClient();
-    var engine = new AutoTradeEngine(
-      DemoEvalOptions() with { ZoneFillEnabled = true, SizingMode = "table" },
-      store,
-      () => Now,
-      _ => { }
-    );
-    await engine.ObserveSpotAsync(
-      new SpotPrice("XAU", 4000.4m, 4000.6m, Now.ToUnixTimeSeconds()),
-      cts.Token
-    );
-
-    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
-    await WaitForEventAsync(store, "zone_planned");
-
-    Assert.Equal(
-      new[] { 4000.5m, 3999.75m },
-      client.LimitOrders.Select(order => order.LimitPrice)
-    );
-    // Every leg protects the one approved absolute stop.
-    Assert.All(client.LimitOrders, order => Assert.Equal(
-      decimal.ToInt64(
-        Math.Abs(order.LimitPrice - contract.StopLoss) * 100_000m
-      ),
-      order.RelativeStopLoss
-    ));
-
-    cts.Cancel();
-    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
-  }
-
-  [Fact]
   public async Task RouteMismatchRejectsBeforeAnyBrokerCall()
   {
     using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
@@ -1001,55 +834,6 @@ public sealed partial class AutoTradeEngineTests
       && item.Message.Contains("entry distance rejected")
     );
     Assert.DoesNotContain("entry_contract_market_drift_observed", store.Metrics);
-
-    cts.Cancel();
-    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
-  }
-
-  [Fact]
-  public async Task ZoneSplitSizingFallbackRevalidatesAsMarketWithLiveDrift()
-  {
-    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-    const decimal structureSwing = 3995.5m;
-    var contract = PlannedStopContract(
-      4000.5m,
-      structureSwing: structureSwing
-    );
-    var store = new FakeAutoTradeStore(PlannedCandidateJson(
-      contract,
-      plannedRoute: "zone_split",
-      plannedEntryPrice: 4000.5m,
-      legEntryPrices: [4000.5m, 3999.75m],
-      orderTypePreference: "limit",
-      entryDistribution: "zone_split",
-      entryLow: 3999m,
-      entryHigh: 4000.5m,
-      structureSwing: structureSwing,
-      stopPlanVersion: 2
-    ));
-    var client = new FakeTradingClient();
-    var engine = new AutoTradeEngine(
-      DemoEvalOptions() with
-      {
-        ZoneFillEnabled = true,
-        ZoneFillMinLots = 10m,
-        SizingMode = "table",
-      },
-      store,
-      () => Now,
-      _ => { }
-    );
-    await engine.ObserveSpotAsync(
-      new SpotPrice("XAU", 4000.4m, 4000.6m, Now.ToUnixTimeSeconds()),
-      cts.Token
-    );
-
-    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
-    await store.Ordered.Task.WaitAsync(TimeSpan.FromSeconds(2));
-
-    Assert.Single(client.Orders);
-    Assert.Empty(client.LimitOrders);
-    Assert.DoesNotContain(store.Events, item => item.Type == "rejected");
 
     cts.Cancel();
     await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);

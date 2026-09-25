@@ -36,6 +36,10 @@ class ManualTradeIntent:
   setup_type: str | None
   confluence: int | None
   execution_mode: str         # "algo" (this contract only exists for algo-mode signals)
+  # Owner opt-in via `/1r`: force a single full-volume entry regardless of
+  # the instrument's configured entry_mode (see
+  # manual_execution._intent_to_candidate_payload).
+  single_entry_override: bool = False
 
 
 def _end_of_trade_day(trade_date: str | None) -> int:
@@ -52,13 +56,30 @@ def _end_of_trade_day(trade_date: str | None) -> int:
   return int(end_of_day.timestamp())
 
 
-def build_intent(signal: dict, *, revision: int = 0) -> ManualTradeIntent:
+def build_intent(
+  signal: dict, *, revision: int = 0, created_at: int | None = None,
+) -> ManualTradeIntent:
   """Build a ManualTradeIntent from a ``manual_signals`` row dict.
 
   ``signal`` is the same shape ``store.get_manual_signal`` (and the row
   ``store.store_manual_signal`` inserts) produce: ``tps`` already decoded to
   a list of numbers by ``store._decode_signal`` — not a raw JSON string — so
   no extra JSON parsing happens here.
+
+  ``created_at`` defaults to the signal's own ``ts`` (correct for the
+  initial revision=0 arm, built moments after the signal itself is
+  created — see ``fallback.py::_arm_algo_intent``). A re-arm
+  (``trade_ops._rearm_algo_after_modify``, after /trade_modify) MUST pass
+  a fresh timestamp instead: AutoTradeEngine.cs rejects any candidate as
+  "stale" once ``now - CreatedAt`` exceeds ``CandidateMaxAgeSeconds``
+  (default 420s), and this field flows straight through unchanged into
+  the candidate payload (``manual_execution.py::_intent_to_candidate_
+  payload``'s ``created_at``) - reusing the original signal.ts on a
+  revision bumped well after that window means the re-armed order is
+  rejected before ever reaching the broker, with no fill and no owner-
+  visible error beyond the bare "stale candidate" reject reason. Owner-
+  reported 2026-09: a modified BUY order got exactly this - "stale
+  candidate and no broker fill."
   """
   return ManualTradeIntent(
     intent_id=f"manual:{signal['id']}:{revision}",
@@ -70,11 +91,12 @@ def build_intent(signal: dict, *, revision: int = 0) -> ManualTradeIntent:
     entry_high=float(signal["entry_end"]),
     sl=float(signal["sl"]),
     tps=tuple(float(v) for v in signal["tps"]),
-    created_at=int(signal["ts"]),
+    created_at=int(signal["ts"]) if created_at is None else int(created_at),
     expires_at=_end_of_trade_day(signal.get("trade_date")),
     setup_type=signal.get("setup_type"),
     confluence=signal.get("confluence"),
     execution_mode="algo",
+    single_entry_override=bool(signal.get("personal_trade", False)),
   )
 
 

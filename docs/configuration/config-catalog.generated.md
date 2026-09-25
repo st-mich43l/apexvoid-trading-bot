@@ -3,9 +3,9 @@
 > Generated from the typed `ApexVoidConfig` Catalog V2 schema. Do not edit manually.
 
 - Catalog version: `2`
-- Contract fingerprint: `d9fc5a863b579b9bbf3ec96a21f0043b78a791c286daa645e6d8f91041b48b60`
-- Document fingerprint: `6a60fc8fc4538b3077fccc782d924494c7a778a3b1d20b0afe2991e52a03ffbb`
-- Items: `566`
+- Contract fingerprint: `bec01459a04ea8c7b6b931d0edf79ee90ab6d15a2f846eefb1a11e60973557d6`
+- Document fingerprint: `b020888e776ffb182fc55e837b09e2cb8df8a8aca448561415653a01f09ed058`
+- Items: `678`
 - Runtime status: canonical-only; `app.core.config.runtime_config` is authoritative
 
 ## actionability
@@ -31,6 +31,7 @@
 | `actionability.entry_location.reversal.sell_minimum_position` | `ENTRY_LOCATION_REVERSAL_SELL_MIN_POSITION` | `float` | `fraction` | `configurable` | `0.5` |
 | `actionability.entry_location.trend_pullback.buy_maximum_position` | `ENTRY_LOCATION_TREND_BUY_MAX_POSITION` | `float` | `fraction` | `configurable` | `0.7` |
 | `actionability.entry_location.trend_pullback.sell_minimum_position` | `ENTRY_LOCATION_TREND_SELL_MIN_POSITION` | `float` | `fraction` | `configurable` | `0.3` |
+| `actionability.entry_location.with_bias_pd_exempt` | `ENTRY_LOCATION_WITH_BIAS_PD_EXEMPT` | `bool` | `boolean` | `configurable` | `true` |
 | `actionability.gates.edge_proximity_atr` | `AUTO_TRADE_EDGE_PROXIMITY_ATR` | `float` | `atr` | `configurable` | `0.5` |
 | `actionability.gates.eq_exclusion_fraction` | `AUTO_TRADE_EQ_EXCLUSION_FRACTION` | `float` | `fraction` | `configurable` | `0.15` |
 | `actionability.gates.event_cluster_guard_enabled` | `AUTO_TRADE_EVENT_CLUSTER_GUARD_ENABLED` | `bool` | `boolean` | `configurable` | `false` |
@@ -56,6 +57,7 @@
 | `actionability.target_room.minimum_capped_target_pips` | `AUTO_TRADE_MIN_CAPPED_TARGET_PIPS` | `float` | `pips` | `configurable` | `15.0` |
 | `actionability.target_room.scalp_barrier_buffer_atr` | `AUTO_TRADE_SCALP_OPPOSING_BARRIER_ATR` | `float` | `atr` | `configurable` | `0.15` |
 | `actionability.target_room.scalp_minimum_capped_target_pips` | `AUTO_TRADE_SCALP_MIN_CAPPED_TARGET_PIPS` | `float` | `pips` | `configurable` | `8.0` |
+| `actionability.target_room.structural_barrier_book_enabled` | `AUTO_TRADE_STRUCTURAL_BARRIER_BOOK_ENABLED` | `bool` | `boolean` | `configurable` | `true` |
 | `actionability.zone_reconciliation.enabled` | `AUTO_TRADE_ZONE_RECONCILE_ENABLED` | `bool` | `boolean` | `configurable` | `true` |
 | `actionability.zone_reconciliation.mode` | `AUTO_TRADE_ZONE_RECONCILE_MODE` | `str` | `enum` | `configurable` | `"enforce"` |
 
@@ -67,6 +69,39 @@
 | `analysis.breakout.accept_bars` | `BREAKOUT_ACCEPT_BARS` | `int` | `bars` | `configurable` | `2` |
 | `analysis.breakout.buffer_atr` | `BREAKOUT_BUFFER_ATR` | `float` | `atr` | `configurable` | `0.1` |
 | `analysis.breakout.max_age_bars` | `BREAKOUT_MAX_AGE_BARS` | `int` | `bars` | `configurable` | `6` |
+| `analysis.candle_confirmation.displacement.body.minimum_atr` | `—` | `float` | `atr` | `algorithm_constant` | `0.3` |
+| `analysis.candle_confirmation.displacement.body_dominance.minimum` | `—` | `float` | `fraction` | `algorithm_constant` | `0.55` |
+| `analysis.candle_confirmation.displacement.close_beyond_level.enabled` | `—` | `bool` | `boolean` | `algorithm_constant` | `true` |
+| `analysis.candle_confirmation.displacement.engulfing.enabled` | `—` | `bool` | `boolean` | `algorithm_constant` | `true` |
+| `analysis.candle_confirmation.displacement.engulfing.minimum_range_atr` | `—` | `float` | `atr` | `algorithm_constant` | `0.5` |
+| `analysis.candle_confirmation.displacement.range.minimum_atr` | `—` | `float` | `atr` | `algorithm_constant` | `0.4` |
+| `analysis.candle_confirmation.displacement.strong_close.buy_minimum_location` | `—` | `float` | `fraction` | `algorithm_constant` | `0.7` |
+| `analysis.candle_confirmation.displacement.strong_close.sell_maximum_location` | `—` | `float` | `fraction` | `algorithm_constant` | `0.3` |
+| `analysis.candle_confirmation.enabled` | `—` | `bool` | `boolean` | `algorithm_constant` | `true` |
+| `analysis.candle_confirmation.rejection.body.maximum_fraction` | `—` | `float` | `fraction` | `algorithm_constant` | `0.45` |
+| `analysis.candle_confirmation.rejection.close.buy_minimum_location` | `—` | `float` | `fraction` | `algorithm_constant` | `0.65` |
+| `analysis.candle_confirmation.rejection.close.sell_maximum_location` | `—` | `float` | `fraction` | `algorithm_constant` | `0.35` |
+| `analysis.candle_confirmation.rejection.reclaim.enabled` | `—` | `bool` | `boolean` | `algorithm_constant` | `true` |
+| `analysis.candle_confirmation.rejection.sweep.enabled` | `—` | `bool` | `boolean` | `algorithm_constant` | `true` |
+| `analysis.candle_confirmation.rejection.sweep.minimum_penetration_atr` | `—` | `float` | `atr` | `algorithm_constant` | `0.05` |
+| `analysis.candle_confirmation.rejection.wick.minimum_fraction` | `—` | `float` | `fraction` | `algorithm_constant` | `0.3` |
+| `analysis.candle_confirmation.rejection.wick.strong_fraction` | `—` | `float` | `fraction` | `algorithm_constant` | `0.55` |
+| `analysis.candle_confirmation.rejection.wick_to_body.minimum_ratio` | `—` | `float` | `ratio` | `algorithm_constant` | `1.5` |
+| `analysis.candle_confirmation.sequences.compression_break.breakout_body_minimum_atr` | `—` | `float` | `atr` | `algorithm_constant` | `0.3` |
+| `analysis.candle_confirmation.sequences.compression_break.maximum_average_body_fraction` | `—` | `float` | `fraction` | `algorithm_constant` | `0.35` |
+| `analysis.candle_confirmation.sequences.compression_break.maximum_bars` | `—` | `int` | `count` | `algorithm_constant` | `4` |
+| `analysis.candle_confirmation.sequences.compression_break.maximum_total_range_atr` | `—` | `float` | `atr` | `algorithm_constant` | `0.8` |
+| `analysis.candle_confirmation.sequences.compression_break.minimum_bars` | `—` | `int` | `count` | `algorithm_constant` | `2` |
+| `analysis.candle_confirmation.sequences.indecision.doji_body_fraction` | `—` | `float` | `fraction` | `algorithm_constant` | `0.1` |
+| `analysis.candle_confirmation.sequences.morning_evening_star.first_body_minimum_atr` | `—` | `float` | `atr` | `algorithm_constant` | `0.3` |
+| `analysis.candle_confirmation.sequences.morning_evening_star.middle_body_maximum_fraction` | `—` | `float` | `fraction` | `algorithm_constant` | `0.3` |
+| `analysis.candle_confirmation.sequences.morning_evening_star.recovery_minimum_ratio` | `—` | `float` | `ratio` | `algorithm_constant` | `0.5` |
+| `analysis.candle_confirmation.sequences.morning_evening_star.third_body_minimum_atr` | `—` | `float` | `atr` | `algorithm_constant` | `0.25` |
+| `analysis.candle_confirmation.synergy.maximum_bonus` | `—` | `float` | `score` | `algorithm_constant` | `0.12` |
+| `analysis.candle_confirmation.synergy.rejection_plus_displacement` | `—` | `float` | `score` | `algorithm_constant` | `0.08` |
+| `analysis.candle_confirmation.synergy.sequence_plus_displacement` | `—` | `float` | `score` | `algorithm_constant` | `0.06` |
+| `analysis.candle_confirmation.synergy.sweep_plus_reclaim` | `—` | `float` | `score` | `algorithm_constant` | `0.1` |
+| `analysis.candle_confirmation.version` | `—` | `int` | `count` | `algorithm_constant` | `2` |
 | `analysis.confluence.scoring_version` | `CONFLUENCE_SCORING_VERSION` | `str` | `enum` | `configurable` | `"v1"` |
 | `analysis.confluence.v2_mad_score_weight` | `CONFLUENCE_V2_MAD_WEIGHT` | `float` | `score` | `configurable` | `2.0` |
 | `analysis.confluence.v2_star_three_ratio` | `CONFLUENCE_V2_STAR_THREE_RATIO` | `float` | `ratio` | `configurable` | `0.585` |
@@ -84,6 +119,9 @@
 | `analysis.fibonacci.deep_premium` | `FIBONACCI_DEEP_PREMIUM` | `float` | `fraction` | `configurable` | `0.618` |
 | `analysis.fibonacci.enabled` | `FIBONACCI_ENABLED` | `bool` | `boolean` | `configurable` | `true` |
 | `analysis.fibonacci.epsilon_atr` | `FIBONACCI_EPSILON_ATR` | `float` | `atr` | `configurable` | `0.15` |
+| `analysis.flip_zone.accept_bars` | `FLIP_ZONE_ACCEPT_BARS` | `Optional[int]` | `bars` | `configurable` | `null` |
+| `analysis.flip_zone.band_body_fraction` | `FLIP_ZONE_BAND_BODY_FRACTION` | `float` | `fraction` | `configurable` | `0.5` |
+| `analysis.flip_zone.max_break_age_bars` | `FLIP_ZONE_MAX_BREAK_AGE_BARS` | `int` | `bars` | `configurable` | `48` |
 | `analysis.levels.equal_tol_atr` | `EQUAL_TOL_ATR` | `float` | `atr` | `configurable` | `0.15` |
 | `analysis.levels.level_cluster_atr` | `LEVEL_CLUSTER_ATR` | `float` | `atr` | `configurable` | `0.5` |
 | `analysis.levels.minimum_key_touches` | `KEY_LEVEL_MIN_TOUCHES` | `int` | `count` | `configurable` | `2` |
@@ -126,23 +164,45 @@
 | `analysis.swings.fractal_size` | `SWING_FRACTAL_N` | `int` | `bars` | `configurable` | `2` |
 | `analysis.swings.zigzag.atr_mult` | `ZIGZAG_ATR_MULT` | `float` | `atr` | `configurable` | `1.0` |
 | `analysis.swings.zigzag.pct` | `ZIGZAG_PCT` | `float` | `percent` | `configurable` | `0.0` |
+| `analysis.techniques.invalidation_tolerance_atr` | `TECHNIQUE_INVALIDATION_TOLERANCE_ATR` | `float` | `atr` | `configurable` | `0.5` |
+| `analysis.techniques.max_break_episodes` | `TECHNIQUE_MAX_BREAK_EPISODES` | `int` | `count` | `configurable` | `2` |
+| `analysis.techniques.retest_max_touches` | `TECHNIQUE_RETEST_MAX_TOUCHES` | `int` | `count` | `configurable` | `30` |
+| `analysis.techniques.sweep_reclaim_bars` | `TECHNIQUE_SWEEP_RECLAIM_BARS` | `int` | `bars` | `configurable` | `6` |
 | `analysis.techniques.validation_enabled` | `TECHNIQUE_VALIDATION_ENABLED` | `bool` | `boolean` | `configurable` | `true` |
+| `analysis.trendlines.approach_min_distance_atr` | `TL_APPROACH_MIN_DISTANCE_ATR` | `float` | `atr` | `configurable` | `0.1` |
+| `analysis.trendlines.chop_minimum_validation_touches` | `TL_CHOP_MIN_VALIDATION_TOUCHES` | `int` | `count` | `configurable` | `2` |
+| `analysis.trendlines.chop_require_htf_aligned` | `TL_CHOP_REQUIRE_HTF_ALIGNED` | `bool` | `boolean` | `configurable` | `true` |
+| `analysis.trendlines.close_violation_atr` | `TL_CLOSE_VIOLATION_ATR` | `float` | `atr` | `configurable` | `0.15` |
 | `analysis.trendlines.dedup_slope_percent` | `—` | `float` | `percent` | `algorithm_constant` | `0.2` |
 | `analysis.trendlines.dedup_value_atr` | `—` | `float` | `atr` | `algorithm_constant` | `0.5` |
+| `analysis.trendlines.exhaustion_validation_touches` | `TL_EXHAUSTION_VALIDATION_TOUCHES` | `int` | `count` | `configurable` | `4` |
+| `analysis.trendlines.interaction_band_atr` | `TL_INTERACTION_BAND_ATR` | `float` | `atr` | `configurable` | `0.2` |
+| `analysis.trendlines.invalidation_penetration_atr` | `TL_INVALIDATION_PENETRATION_ATR` | `float` | `atr` | `configurable` | `0.5` |
 | `analysis.trendlines.maximum_bars_since_last_touch` | `TL_MAX_BARS_SINCE_TOUCH` | `int` | `count` | `configurable` | `30` |
 | `analysis.trendlines.maximum_fit_error_atr` | `TL_MAX_FIT_ERROR_ATR` | `float` | `atr` | `configurable` | `0.15` |
 | `analysis.trendlines.maximum_slope_atr` | `TL_MAX_SLOPE_ATR` | `float` | `atr` | `configurable` | `0.15` |
 | `analysis.trendlines.maximum_touches` | `TL_MAX_TOUCHES` | `int` | `count` | `configurable` | `4` |
 | `analysis.trendlines.maximum_violations` | `TL_MAX_VIOLATIONS` | `int` | `count` | `configurable` | `2` |
+| `analysis.trendlines.maximum_wick_violations` | `TL_MAX_WICK_VIOLATIONS` | `int` | `count` | `configurable` | `2` |
 | `analysis.trendlines.minimum_slope_atr` | `TL_MIN_SLOPE_ATR` | `float` | `atr` | `configurable` | `0.02` |
 | `analysis.trendlines.minimum_span_bars` | `TL_MIN_SPAN_BARS` | `int` | `count` | `configurable` | `20` |
 | `analysis.trendlines.minimum_touch_spacing_bars` | `TL_MIN_TOUCH_SPACING` | `int` | `count` | `configurable` | `3` |
 | `analysis.trendlines.minimum_touches` | `TL_MIN_TOUCHES` | `int` | `count` | `configurable` | `3` |
+| `analysis.trendlines.minimum_validation_favorable_excursion_atr` | `TL_MIN_VALIDATION_FAVORABLE_EXCURSION_ATR` | `float` | `atr` | `configurable` | `0.1` |
+| `analysis.trendlines.minimum_validation_touch_spacing_bars` | `TL_MIN_VALIDATION_TOUCH_SPACING` | `int` | `bars` | `configurable` | `5` |
+| `analysis.trendlines.minimum_validation_touches` | `TL_MIN_VALIDATION_TOUCHES` | `int` | `count` | `configurable` | `1` |
 | `analysis.trendlines.pierce_tolerance_atr` | `TL_PIERCE_TOL_ATR` | `float` | `atr` | `configurable` | `0.5` |
+| `analysis.trendlines.shadow_v1` | `TL_SHADOW_V1` | `bool` | `boolean` | `configurable` | `false` |
 | `analysis.trendlines.tolerance_atr` | `TL_TOL_ATR` | `float` | `atr` | `configurable` | `0.3` |
+| `analysis.trendlines.validation_reaction_bars` | `TL_VALIDATION_REACTION_BARS` | `int` | `bars` | `configurable` | `2` |
+| `analysis.trendlines.validation_touch_tolerance_atr` | `TL_VALIDATION_TOUCH_TOL_ATR` | `float` | `atr` | `configurable` | `0.3` |
+| `analysis.trendlines.version` | `TL_VERSION` | `str` | `enum` | `configurable` | `"v1"` |
 | `analysis.triggers.m1.patterns` | `M1_TRIGGER_PATTERNS` | `str` | `string` | `configurable` | `"wick_rejection,body_close,strong_close,pin_bar,engulfing,hammer"` |
 | `analysis.triggers.m1.strong_close_pct` | `M1_TRIGGER_STRONG_CLOSE_PCT` | `float` | `percent` | `configurable` | `0.2` |
 | `analysis.triggers.m1.wick_fraction` | `M1_TRIGGER_WICK_FRACTION` | `float` | `fraction` | `configurable` | `0.5` |
+| `analysis.zone_relevance.immediate_atr` | `ANALYSIS_ZONE_RELEVANCE_IMMEDIATE_ATR` | `float` | `atr` | `configurable` | `0.25` |
+| `analysis.zone_relevance.nearby_atr` | `ANALYSIS_ZONE_RELEVANCE_NEARBY_ATR` | `float` | `atr` | `configurable` | `1.25` |
+| `analysis.zone_relevance.remote_atr` | `ANALYSIS_ZONE_RELEVANCE_REMOTE_ATR` | `float` | `atr` | `configurable` | `3.0` |
 | `analysis.zones.alert_ttl` | `ZONE_ALERT_TTL` | `int` | `seconds` | `configurable` | `14400` |
 | `analysis.zones.confluence.merge_gap_price` | `ZONE_MERGE_GAP` | `float` | `price` | `configurable` | `1.0` |
 | `analysis.zones.confluence.technique_bonus_score` | `CONFLUENCE_TECHNIQUE_BONUS_SCORE` | `float` | `score` | `configurable` | `2.5` |
@@ -168,6 +228,7 @@
 | `analysis.zones.symbol_contract.minimum_width_price` | `XAU_ZONE_MIN_WIDTH_PRICE` | `float` | `price` | `configurable` | `3.0` |
 | `analysis.zones.symbol_contract.preferred_maximum_width_price` | `XAU_ZONE_PREFERRED_MAX_WIDTH_PRICE` | `float` | `price` | `configurable` | `6.0` |
 | `analysis.zones.symbol_contract.preferred_minimum_width_price` | `XAU_ZONE_PREFERRED_MIN_WIDTH_PRICE` | `float` | `price` | `configurable` | `3.0` |
+| `analysis.zones.version` | `ANALYSIS_ZONES_VERSION` | `str` | `enum` | `configurable` | `"v1"` |
 | `analysis.zones.width` | `ZONE_WIDTH` | `str` | `enum` | `configurable` | `"body"` |
 
 ## bootstrap
@@ -249,6 +310,7 @@
 | `delivery.scanner_cards.maximum_cards` | `SCANNER_CARD_TOP_N` | `int` | `count` | `configurable` | `2` |
 | `delivery.scanner_cards.top_n` | `SCANNER_TOP_N` | `int` | `count` | `configurable` | `3` |
 | `delivery.telegram.delete_root_on_terminal` | `AUTO_TRADE_TELEGRAM_DELETE_ROOT_ON_TERMINAL` | `bool` | `boolean` | `configurable` | `false` |
+| `delivery.telegram.owner_dm_daily_wipe_enabled` | `DELIVERY_OWNER_DM_DAILY_WIPE_ENABLED` | `bool` | `boolean` | `configurable` | `false` |
 | `delivery.telegram.photo_debounce_seconds` | `—` | `float` | `seconds` | `algorithm_constant` | `2.0` |
 | `delivery.telegram.public_show_pips` | `SIGNAL_PUBLIC_SHOW_PIPS` | `bool` | `boolean` | `configurable` | `true` |
 | `delivery.telegram.scanner_telegram_bot_token` | `SCANNER_TELEGRAM_BOT_TOKEN` | `Optional[str]` | `string` | `configurable` | `"<redacted>"` |
@@ -271,6 +333,13 @@
 | `execution.entry.max_spread_pips` | `AUTO_TRADE_MAX_SPREAD_PIPS` | `int` | `pips` | `configurable` | `5` |
 | `execution.entry.maximum_chase_distance_pips` | `AUTO_TRADE_MAX_ENTRY_DISTANCE_PIPS` | `float` | `pips` | `configurable` | `40.0` |
 | `execution.entry.poll_ms` | `AUTO_TRADE_POLL_MS` | `int` | `milliseconds` | `configurable` | `250` |
+| `execution.mad.accum.maximum_rq` | `AUTO_TRADE_MAD_ACCUM_MAXIMUM_RQ` | `float` | `ratio` | `configurable` | `6.0` |
+| `execution.mad.accum.minimum_rq` | `AUTO_TRADE_MAD_ACCUM_MINIMUM_RQ` | `float` | `ratio` | `configurable` | `0.8` |
+| `execution.mad.expand.accept_closes` | `AUTO_TRADE_MAD_EXPAND_ACCEPT_CLOSES` | `int` | `count` | `configurable` | `2` |
+| `execution.mad.expand.break_atr` | `AUTO_TRADE_MAD_EXPAND_BREAK_ATR` | `float` | `atr` | `configurable` | `0.35` |
+| `execution.mad.expand.displacement_atr` | `AUTO_TRADE_MAD_EXPAND_DISPLACEMENT_ATR` | `float` | `atr` | `configurable` | `1.25` |
+| `execution.mad.manip.min_penetration_atr` | `AUTO_TRADE_MAD_MANIP_MIN_PENETRATION_ATR` | `float` | `atr` | `configurable` | `0.05` |
+| `execution.mad.manip.min_reclaim_atr` | `AUTO_TRADE_MAD_MANIP_MIN_RECLAIM_ATR` | `float` | `atr` | `configurable` | `0.05` |
 | `execution.mapped_zone.counter_bias_min_score` | `AUTO_TRADE_MAP_COUNTER_BIAS_MIN_SCORE` | `float` | `score` | `configurable` | `6.0` |
 | `execution.mapped_zone.execute_distance_atr` | `AUTO_TRADE_MAP_EXECUTE_DISTANCE_ATR` | `float` | `atr` | `configurable` | `1.5` |
 | `execution.mapped_zone.execute_tolerance_atr` | `AUTO_TRADE_MAP_EXECUTE_TOLERANCE_ATR` | `float` | `atr` | `configurable` | `0.15` |
@@ -307,12 +376,14 @@
 | `execution.range.room_stop_floor_pips` | `AUTO_TRADE_RANGE_ROOM_STOP_FLOOR_PIPS` | `int` | `pips` | `configurable` | `15` |
 | `execution.range.tp_buffer_pips` | `AUTO_TRADE_RANGE_TP_BUFFER_PIPS` | `float` | `pips` | `configurable` | `3.0` |
 | `execution.reaction.market_fraction` | `AUTO_TRADE_REACTION_MARKET_FRACTION` | `float` | `fraction` | `configurable` | `0.8` |
+| `execution.reaction.risk_targeted_entry_enabled` | `AUTO_TRADE_REACTION_RISK_TARGETED_ENTRY_ENABLED` | `bool` | `boolean` | `configurable` | `true` |
 | `execution.reaction.room_stop_min_rr` | `AUTO_TRADE_REACTION_ROOM_STOP_MIN_RR` | `float` | `multiplier` | `configurable` | `1.0` |
 | `execution.reaction.scale_fraction` | `AUTO_TRADE_REACTION_SCALE_FRACTION` | `float` | `fraction` | `configurable` | `0.2` |
 | `execution.reaction.scale_invalid_policy` | `AUTO_TRADE_REACTION_SCALE_INVALID_POLICY` | `str` | `enum` | `configurable` | `"single_market"` |
-| `execution.reaction.scale_step_atr` | `AUTO_TRADE_REACTION_SCALE_STEP_ATR` | `float` | `atr` | `configurable` | `0.5` |
+| `execution.reaction.scale_step_atr` | `AUTO_TRADE_REACTION_SCALE_STEP_ATR` | `float` | `atr` | `configurable` | `0.1` |
 | `execution.reaction.stop_max_pips` | `AUTO_TRADE_REACTION_STOP_MAX_PIPS` | `int` | `pips` | `configurable` | `60` |
 | `execution.reaction.stop_min_pips` | `AUTO_TRADE_REACTION_STOP_MIN_PIPS` | `int` | `pips` | `configurable` | `40` |
+| `execution.reaction_risk_leg.enabled` | `AUTO_TRADE_REACTION_RISK_LEG_ENABLED` | `bool` | `boolean` | `configurable` | `true` |
 | `execution.regime.direction_enabled` | `AUTO_TRADE_REGIME_DIRECTION_ENABLED` | `bool` | `boolean` | `configurable` | `false` |
 | `execution.regime.direction_lookback` | `AUTO_TRADE_REGIME_DIRECTION_LOOKBACK` | `int` | `bars` | `configurable` | `120` |
 | `execution.regime.min_directional_swings` | `AUTO_TRADE_REGIME_MIN_DIRECTIONAL_SWINGS` | `int` | `count` | `configurable` | `3` |
@@ -345,6 +416,7 @@
 | `execution.technique.reaction_require_publish_window` | `AUTO_TRADE_TECHNIQUE_REACTION_REQUIRE_PUBLISH_WINDOW` | `bool` | `boolean` | `configurable` | `true` |
 | `execution.technique.require_sweep_body` | `AUTO_TRADE_TECHNIQUE_REQUIRE_SWEEP_BODY` | `bool` | `boolean` | `configurable` | `true` |
 | `execution.technique.scalp_require_killzone` | `AUTO_TRADE_TECHNIQUE_SCALP_REQUIRE_KILLZONE` | `bool` | `boolean` | `configurable` | `true` |
+| `execution.technique.selective_session_min_confluence` | `AUTO_TRADE_TECHNIQUE_SELECTIVE_SESSION_MIN_CONFLUENCE` | `int` | `count` | `configurable` | `0` |
 | `execution.technique.strict_premium_discount` | `AUTO_TRADE_TECHNIQUE_STRICT_PREMIUM_DISCOUNT` | `bool` | `boolean` | `configurable` | `true` |
 | `execution.technique.strict_premium_discount_archetypes` | `AUTO_TRADE_STRICT_PD_ARCHETYPES` | `str` | `string` | `configurable` | `"reversal,range_reversion"` |
 | `execution.trend.hard_entry_drift_pips` | `AUTO_TRADE_TREND_HARD_ENTRY_DRIFT_PIPS` | `float` | `pips` | `configurable` | `30.0` |
@@ -356,7 +428,7 @@
 | `execution.zone_scaling.fill_min_atr` | `AUTO_TRADE_ZONE_FILL_MIN_ATR` | `float` | `atr` | `configurable` | `0.5` |
 | `execution.zone_scaling.fill_min_lots` | `AUTO_TRADE_ZONE_FILL_MIN_LOTS` | `decimal` | `lots` | `configurable` | `"0.09"` |
 | `execution.zone_scaling.first_leg_fraction` | `AUTO_TRADE_ZONE_SCALE_FIRST_LEG_FRACTION` | `float` | `fraction` | `configurable` | `0.8` |
-| `execution.zone_scaling.scale_step_atr` | `AUTO_TRADE_ZONE_SCALE_STEP_ATR` | `float` | `atr` | `configurable` | `0.5` |
+| `execution.zone_scaling.scale_step_atr` | `AUTO_TRADE_ZONE_SCALE_STEP_ATR` | `float` | `atr` | `configurable` | `0.1` |
 | `execution.zone_scaling.scale_undersized_policy` | `AUTO_TRADE_ZONE_SCALE_UNDERSIZED_POLICY` | `str` | `enum` | `configurable` | `"single_entry"` |
 
 ## lifecycle
@@ -470,7 +542,7 @@
 | `risk.sizing.mode` | `AUTO_TRADE_SIZING_MODE` | `str` | `enum` | `configurable` | `"equity_table"` |
 | `risk.sizing.one_sided_range_risk_multiplier` | `AUTO_TRADE_ONE_SIDED_RANGE_RISK_MULTIPLIER` | `float` | `multiplier` | `configurable` | `0.5` |
 | `risk.sizing.post_impulse_risk_multiplier` | `AUTO_TRADE_POST_IMPULSE_RISK_MULTIPLIER` | `float` | `multiplier` | `configurable` | `0.5` |
-| `risk.sizing.range_max_risk_multiplier` | `AUTO_TRADE_RANGE_MAX_RISK_MULTIPLIER` | `float` | `multiplier` | `configurable` | `2.0` |
+| `risk.sizing.range_max_risk_multiplier` | `AUTO_TRADE_RANGE_MAX_RISK_MULTIPLIER` | `float` | `multiplier` | `configurable` | `1.5` |
 | `risk.sizing.risk_pct` | `AUTO_TRADE_RISK_PCT` | `decimal` | `percent` | `configurable` | `"2"` |
 | `risk.tiers.a_multiplier` | `AUTO_TRADE_TIER_A_RISK_MULTIPLIER` | `float` | `multiplier` | `configurable` | `1.0` |
 | `risk.tiers.b_multiplier` | `AUTO_TRADE_TIER_B_RISK_MULTIPLIER` | `float` | `multiplier` | `configurable` | `1.0` |
@@ -539,6 +611,15 @@
 | `strategies.reaction.key_level.enabled` | `AUTO_TRADE_KEY_LEVEL_REACTION_ENABLED` | `bool` | `boolean` | `configurable` | `true` |
 | `strategies.reaction.key_level.min_grade` | `AUTO_TRADE_KEY_LEVEL_MIN_GRADE` | `str` | `enum` | `configurable` | `"B"` |
 | `strategies.reaction.key_level.min_sell_zone_score` | `AUTO_TRADE_KEY_LEVEL_MIN_SELL_ZONE_SCORE` | `float` | `score` | `configurable` | `0.0` |
+| `strategies.reaction.key_level.opposing_structure.caution_room_r` | `—` | `float` | `ratio` | `algorithm_constant` | `2.0` |
+| `strategies.reaction.key_level.opposing_structure.critical_room_r` | `—` | `float` | `ratio` | `algorithm_constant` | `0.5` |
+| `strategies.reaction.key_level.opposing_structure.enabled` | `AUTO_TRADE_KEY_LEVEL_OPPOSING_STRUCTURE_ENABLED` | `bool` | `boolean` | `configurable` | `true` |
+| `strategies.reaction.key_level.opposing_structure.m1_required_below_room_r` | `—` | `float` | `ratio` | `algorithm_constant` | `1.0` |
+| `strategies.reaction.key_level.opposing_structure.minimum_candle_score_tight_room` | `—` | `float` | `fraction` | `algorithm_constant` | `0.7` |
+| `strategies.reaction.key_level.opposing_structure.missing_opposing_context_policy` | `AUTO_TRADE_KEY_LEVEL_MISSING_OPPOSING_CONTEXT_POLICY` | `str` | `enum` | `configurable` | `"wait"` |
+| `strategies.reaction.key_level.opposing_structure.require_strong_confirmation_below_r` | `—` | `float` | `ratio` | `algorithm_constant` | `1.0` |
+| `strategies.reaction.key_level.opposing_structure.strength_score_ceiling` | `—` | `float` | `score` | `algorithm_constant` | `15.0` |
+| `strategies.reaction.key_level.opposing_structure.tight_room_r` | `—` | `float` | `ratio` | `algorithm_constant` | `1.0` |
 | `strategies.reaction.key_level.require_explicit_role` | `AUTO_TRADE_KEY_LEVEL_REQUIRE_EXPLICIT_ROLE` | `bool` | `boolean` | `configurable` | `false` |
 | `strategies.reaction.key_level.require_htf_alignment` | `AUTO_TRADE_KEY_LEVEL_REQUIRE_HTF_ALIGNMENT` | `bool` | `boolean` | `configurable` | `false` |
 | `strategies.reaction.key_level.require_killzone` | `AUTO_TRADE_KEY_LEVEL_REQUIRE_KILLZONE` | `bool` | `boolean` | `configurable` | `false` |
@@ -563,21 +644,47 @@
 | `strategies.scalping.activation.rearm_distance_atr` | `SCALPING_REARM_DISTANCE_ATR` | `float` | `atr` | `configurable` | `0.25` |
 | `strategies.scalping.activation.trigger_maximum_age_bars` | `SCALPING_TRIGGER_MAXIMUM_AGE_BARS` | `int` | `bars` | `configurable` | `2` |
 | `strategies.scalping.archetypes.breakout_retest_enabled` | `SCALPING_BREAKOUT_RETEST_ENABLED` | `bool` | `boolean` | `configurable` | `true` |
-| `strategies.scalping.archetypes.impulse_pullback_allowed_sessions` | `SCALPING_IMPULSE_PULLBACK_ALLOWED_SESSIONS` | `str` | `string` | `configurable` | `"london"` |
+| `strategies.scalping.archetypes.impulse_body_dominance` | `SCALPING_IMPULSE_BODY_DOMINANCE` | `float` | `fraction` | `configurable` | `0.5` |
+| `strategies.scalping.archetypes.impulse_displacement_atr_multiple` | `SCALPING_IMPULSE_DISPLACEMENT_ATR_MULTIPLE` | `float` | `atr` | `configurable` | `4.0` |
+| `strategies.scalping.archetypes.impulse_pullback_allowed_sessions` | `SCALPING_IMPULSE_PULLBACK_ALLOWED_SESSIONS` | `str` | `string` | `configurable` | `"all"` |
 | `strategies.scalping.archetypes.impulse_pullback_enabled` | `SCALPING_IMPULSE_PULLBACK_ENABLED` | `bool` | `boolean` | `configurable` | `true` |
+| `strategies.scalping.archetypes.pullback_corrective_ratio` | `SCALPING_PULLBACK_CORRECTIVE_RATIO` | `float` | `fraction` | `configurable` | `0.7` |
+| `strategies.scalping.archetypes.pullback_extreme_confirm_bars` | `SCALPING_PULLBACK_EXTREME_CONFIRM_BARS` | `int` | `bars` | `configurable` | `2` |
 | `strategies.scalping.archetypes.range_sweep_enabled` | `SCALPING_RANGE_SWEEP_ENABLED` | `bool` | `boolean` | `configurable` | `true` |
+| `strategies.scalping.breakout.acceptance_bars` | `SCALPING_BREAKOUT_ACCEPTANCE_BARS` | `int` | `bars` | `configurable` | `1` |
+| `strategies.scalping.breakout.acceptance_required_closes` | `SCALPING_BREAKOUT_ACCEPTANCE_REQUIRED_CLOSES` | `int` | `count` | `configurable` | `1` |
 | `strategies.scalping.breakout.box_max_atr` | `SCALPING_BREAKOUT_BOX_MAX_ATR` | `float` | `atr` | `configurable` | `1.5` |
+| `strategies.scalping.breakout.breakout_cross_tolerance_atr` | `SCALPING_BREAKOUT_CROSS_TOLERANCE_ATR` | `float` | `atr` | `configurable` | `0.0` |
+| `strategies.scalping.breakout.breakout_margin_atr` | `SCALPING_BREAKOUT_MARGIN_ATR` | `float` | `atr` | `configurable` | `0.0` |
+| `strategies.scalping.breakout.breakout_spread_multiplier` | `SCALPING_BREAKOUT_SPREAD_MULTIPLIER` | `float` | `multiplier` | `configurable` | `1.5` |
+| `strategies.scalping.breakout.confirmation_mode` | `SCALPING_BREAKOUT_CONFIRMATION_MODE` | `str` | `enum` | `configurable` | `"reclaim_close"` |
+| `strategies.scalping.breakout.enable_liquidity_level` | `SCALPING_BREAKOUT_ENABLE_LIQUIDITY_LEVEL` | `bool` | `boolean` | `configurable` | `true` |
+| `strategies.scalping.breakout.enable_structure_flip_m1` | `SCALPING_BREAKOUT_ENABLE_STRUCTURE_FLIP_M1` | `bool` | `boolean` | `configurable` | `true` |
+| `strategies.scalping.breakout.enable_structure_flip_m5` | `SCALPING_BREAKOUT_ENABLE_STRUCTURE_FLIP_M5` | `bool` | `boolean` | `configurable` | `true` |
+| `strategies.scalping.breakout.m1_swing_max_age_bars` | `SCALPING_BREAKOUT_M1_SWING_MAX_AGE_BARS` | `int` | `bars` | `configurable` | `240` |
+| `strategies.scalping.breakout.m1_swing_min_age_bars` | `SCALPING_BREAKOUT_M1_SWING_MIN_AGE_BARS` | `int` | `bars` | `configurable` | `3` |
+| `strategies.scalping.breakout.m1_swing_min_spacing_atr` | `SCALPING_BREAKOUT_M1_SWING_MIN_SPACING_ATR` | `float` | `atr` | `configurable` | `0.3` |
+| `strategies.scalping.breakout.m5_structure_min_touches` | `SCALPING_BREAKOUT_M5_STRUCTURE_MIN_TOUCHES` | `int` | `count` | `configurable` | `2` |
 | `strategies.scalping.breakout.max_box_bars` | `SCALPING_BREAKOUT_MAX_BOX_BARS` | `int` | `bars` | `configurable` | `20` |
+| `strategies.scalping.breakout.max_break_delay_bars` | `SCALPING_BREAKOUT_MAX_BREAK_DELAY_BARS` | `Optional[int]` | `bars` | `configurable` | `null` |
+| `strategies.scalping.breakout.max_retest_delay_bars` | `SCALPING_BREAKOUT_MAX_RETEST_DELAY_BARS` | `int` | `bars` | `configurable` | `20` |
+| `strategies.scalping.breakout.max_retest_penetration_atr` | `SCALPING_BREAKOUT_MAX_RETEST_PENETRATION_ATR` | `float` | `atr` | `configurable` | `0.3` |
+| `strategies.scalping.breakout.max_retest_penetration_mad` | `SCALPING_BREAKOUT_MAX_RETEST_PENETRATION_MAD` | `Optional[float]` | `ratio` | `configurable` | `null` |
 | `strategies.scalping.breakout.min_box_bars` | `SCALPING_BREAKOUT_MIN_BOX_BARS` | `int` | `bars` | `configurable` | `8` |
 | `strategies.scalping.breakout.min_break_atr` | `SCALPING_BREAKOUT_MIN_BREAK_ATR` | `float` | `atr` | `configurable` | `0.25` |
+| `strategies.scalping.breakout.min_quality_score` | `SCALPING_BREAKOUT_MIN_QUALITY_SCORE` | `float` | `score` | `configurable` | `0.0` |
+| `strategies.scalping.breakout.min_retest_delay_bars` | `SCALPING_BREAKOUT_MIN_RETEST_DELAY_BARS` | `int` | `bars` | `configurable` | `0` |
 | `strategies.scalping.breakout.min_touches_per_side` | `SCALPING_BREAKOUT_MIN_TOUCHES_PER_SIDE` | `int` | `count` | `configurable` | `2` |
 | `strategies.scalping.breakout.require_retest_rejection` | `SCALPING_BREAKOUT_REQUIRE_RETEST_REJECTION` | `bool` | `boolean` | `configurable` | `true` |
+| `strategies.scalping.breakout.retest_front_run_atr` | `SCALPING_BREAKOUT_RETEST_FRONT_RUN_ATR` | `float` | `atr` | `configurable` | `0.0` |
 | `strategies.scalping.breakout.retest_lookback_bars` | `SCALPING_BREAKOUT_RETEST_LOOKBACK_BARS` | `int` | `bars` | `configurable` | `5` |
 | `strategies.scalping.breakout.touch_tol_atr` | `SCALPING_BREAKOUT_TOUCH_TOL_ATR` | `float` | `atr` | `configurable` | `0.2` |
+| `strategies.scalping.breakout.v2_enabled` | `SCALPING_BREAKOUT_V2_ENABLED` | `bool` | `boolean` | `configurable` | `true` |
 | `strategies.scalping.context.current_context_ttl_seconds` | `SCALPING_CURRENT_CONTEXT_TTL_SECONDS` | `int` | `seconds` | `configurable` | `3600` |
 | `strategies.scalping.context.historic_context_ttl_seconds` | `SCALPING_HISTORIC_CONTEXT_TTL_SECONDS` | `int` | `seconds` | `configurable` | `86400` |
 | `strategies.scalping.context.m1_lookback_bars` | `SCALPING_M1_LOOKBACK_BARS` | `int` | `bars` | `configurable` | `60` |
 | `strategies.scalping.context.maximum_m5_age_seconds` | `SCALPING_MAXIMUM_M5_AGE_SECONDS` | `int` | `seconds` | `configurable` | `420` |
+| `strategies.scalping.location.level_proximity_atr_multiple` | `SCALPING_LEVEL_PROXIMITY_ATR_MULTIPLE` | `float` | `atr` | `configurable` | `1.0` |
 | `strategies.scalping.location.pullback_buy_maximum_position` | `SCALPING_PULLBACK_BUY_MAX_POSITION` | `float` | `fraction` | `configurable` | `0.6` |
 | `strategies.scalping.location.pullback_sell_minimum_position` | `SCALPING_PULLBACK_SELL_MIN_POSITION` | `float` | `fraction` | `configurable` | `0.4` |
 | `strategies.scalping.location.range_buy_maximum_position` | `SCALPING_RANGE_BUY_MAX_POSITION` | `float` | `fraction` | `configurable` | `0.35` |
@@ -595,10 +702,16 @@
 | `strategies.scalping.risk.maximum_session_trades` | `SCALPING_MAXIMUM_SESSION_TRADES` | `int` | `count` | `configurable` | `12` |
 | `strategies.scalping.risk.mode` | `SCALPING_RISK_MODE` | `str` | `enum` | `configurable` | `"live"` |
 | `strategies.scalping.risk.risk_fraction_per_trade` | `SCALPING_RISK_FRACTION_PER_TRADE` | `float` | `fraction` | `configurable` | `0.1` |
+| `strategies.scalping.risk.risk_percent_per_trade` | `SCALPING_RISK_PERCENT_PER_TRADE` | `float` | `percent` | `configurable` | `0.5` |
 | `strategies.scalping.risk.session_loss_limit_r` | `SCALPING_SESSION_LOSS_LIMIT_R` | `float` | `multiplier` | `configurable` | `2.0` |
+| `strategies.scalping.risk.sizing_mode` | `SCALPING_SIZING_MODE` | `str` | `enum` | `configurable` | `"equity_table"` |
 | `strategies.scalping.stop.buffer_atr` | `SCALPING_STOP_BUFFER_ATR` | `float` | `atr` | `configurable` | `0.1` |
-| `strategies.scalping.stop.maximum_pips` | `SCALPING_STOP_MAXIMUM_PIPS` | `float` | `pips` | `configurable` | `30.0` |
+| `strategies.scalping.stop.buffer_m1_atr_multiple` | `SCALPING_STOP_BUFFER_M1_ATR_MULTIPLE` | `float` | `atr` | `configurable` | `1.2` |
+| `strategies.scalping.stop.buffer_minimum_spread_multiple` | `SCALPING_STOP_BUFFER_MINIMUM_SPREAD_MULTIPLE` | `float` | `multiplier` | `configurable` | `1.5` |
+| `strategies.scalping.stop.maximum_pips` | `SCALPING_STOP_MAXIMUM_PIPS` | `float` | `pips` | `configurable` | `45.0` |
 | `strategies.scalping.stop.minimum_pips` | `SCALPING_STOP_MINIMUM_PIPS` | `float` | `pips` | `configurable` | `12.0` |
+| `strategies.scalping.stop.minimum_stop_spread_multiple` | `SCALPING_MINIMUM_STOP_SPREAD_MULTIPLE` | `float` | `multiplier` | `configurable` | `4.0` |
+| `strategies.scalping.stop.zone_maximum_atr_multiple` | `SCALPING_STOP_ZONE_MAXIMUM_ATR_MULTIPLE` | `float` | `atr` | `configurable` | `1.5` |
 | `strategies.scalping.target.minimum_net_target_pips` | `SCALPING_MINIMUM_NET_TARGET_PIPS` | `float` | `pips` | `configurable` | `15.0` |
 | `strategies.scalping.target.preferred_ladder_pips` | `SCALPING_PREFERRED_LADDER_PIPS` | `str` | `string` | `configurable` | `"20,25,30"` |
 | `strategies.selection.box_breakout_enabled` | `AUTO_TRADE_BOX_BREAKOUT_ENABLED` | `bool` | `boolean` | `configurable` | `false` |
@@ -628,7 +741,6 @@
 | `strategies.trend.level_buffer_atr` | `TREND_LEVEL_BUFFER_ATR` | `float` | `atr` | `configurable` | `1.0` |
 | `strategies.trend.min_height_atr` | `TREND_MIN_HEIGHT_ATR` | `float` | `atr` | `configurable` | `3.0` |
 | `strategies.trend.minimum_bos` | `TREND_MIN_BOS` | `int` | `count` | `configurable` | `2` |
-| `strategies.trend.pullback_enabled` | `AUTO_TRADE_TREND_PULLBACK_ENABLED` | `bool` | `boolean` | `configurable` | `true` |
 | `strategies.zone.demand.enabled` | `AUTO_TRADE_DEMAND_ZONE_ENABLED` | `bool` | `boolean` | `configurable` | `true` |
 | `strategies.zone.enabled` | `AUTO_TRADE_ZONE_ENABLED` | `bool` | `boolean` | `configurable` | `true` |
 | `strategies.zone.flip.enabled` | `AUTO_TRADE_FLIP_ZONE_ENABLED` | `bool` | `boolean` | `configurable` | `true` |

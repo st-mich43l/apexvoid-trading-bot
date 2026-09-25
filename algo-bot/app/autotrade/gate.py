@@ -61,7 +61,6 @@ class AutoScalpBox:
   efficiency: float = 0.0
   formation_start_ts: int = 0
   formation_end_ts: int = 0
-  detector_version: int = BOX_DETECTOR_VERSION
 
 
 @dataclass(frozen=True)
@@ -429,7 +428,6 @@ def _m1_consolidation_box(
     efficiency,
     formation_start_ts,
     formation_end_ts,
-    BOX_DETECTOR_VERSION,
   )
 
 

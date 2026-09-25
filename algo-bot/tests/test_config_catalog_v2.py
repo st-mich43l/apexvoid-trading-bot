@@ -44,13 +44,57 @@ pytestmark = pytest.mark.no_database
 
 
 BASELINE = {
-  "entries": 546,
-  "configurable": 479,
+  # 2026-09 Opposing Structure V2 (Key Level repair): +9 new leaf fields
+  # under strategies.reaction.key_level.opposing_structure.* (enabled,
+  # missing_opposing_context_policy real canonical_env; the other 7
+  # ALGORITHM_CONSTANT/canonical_env=None), all ConfigOwner.PYTHON, none
+  # deprecated-alias'd.
+  # 2026-09 Candle Confirmation V2: +33 new leaf fields under
+  # analysis.candle_confirmation.* (enabled, version, rejection.*,
+  # displacement.*, sequences.*, synergy.*), all ConfigOwner.PYTHON,
+  # ConfigKind.ALGORITHM_CONSTANT (canonical_env=None, shadow-only, no
+  # new environment surface), none deprecated-alias'd.
+  # 2026-09 MAD v2: +7 new leaf fields (execution.mad.expand.break_atr,
+  # .displacement_atr, .accept_closes, execution.mad.manip.min_penetration_atr,
+  # .min_reclaim_atr, execution.mad.accum.minimum_rq, .maximum_rq), all
+  # ConfigOwner.PYTHON, none deprecated-alias'd.
+  # 2026-09 Key Level structural repair Phase 2: +1 new leaf field
+  # (actionability.target_room.structural_barrier_book_enabled), real
+  # canonical_env, ConfigOwner.PYTHON, not deprecated-alias'd.
+  # 2026-09-15 XAU auto algo risk-band rework: +1 new leaf field
+  # (execution.reaction.risk_targeted_entry_enabled), real canonical_env,
+  # ConfigOwner.PYTHON, not deprecated-alias'd.
+  # 2026-09-16 Owner DM daily wipe: +1 new leaf field
+  # (delivery.telegram.owner_dm_daily_wipe_enabled), real canonical_env,
+  # ConfigOwner.PYTHON, not deprecated-alias'd.
+  # 2026-09-16 Breakout Retest V2 rebuild: +21 new leaf fields under
+  # strategies.scalping.breakout.* (v2_enabled, breakout_cross_tolerance_atr,
+  # breakout_margin_atr, breakout_spread_multiplier, max_break_delay_bars,
+  # acceptance_bars, acceptance_required_closes, min_retest_delay_bars,
+  # max_retest_delay_bars, retest_front_run_atr, max_retest_penetration_atr,
+  # max_retest_penetration_mad, confirmation_mode, min_quality_score,
+  # enable_structure_flip_m1, enable_structure_flip_m5,
+  # enable_liquidity_level, m1_swing_min_age_bars, m1_swing_max_age_bars,
+  # m1_swing_min_spacing_atr, m5_structure_min_touches), all real
+  # canonical_env, all ConfigOwner.PYTHON, none deprecated-alias'd.
+  # 2026-09-16 Reaction risk leg (Manual-Algo parity): +1 new leaf field
+  # (execution.reaction_risk_leg.enabled), real canonical_env
+  # (AUTO_TRADE_REACTION_RISK_LEG_ENABLED), ConfigOwner.CTRADER (pure
+  # C#-side TradePlanRuntime mechanism, no Python behavior reads it), not
+  # deprecated-alias'd. Lives on its own leaf-only sibling model rather
+  # than inline on ExecutionReactionConfig because that class carries
+  # model/field validators, which the python_runtime projection refuses
+  # to auto-filter for a mixed-owner model.
+  # 2026-09-17 Trendline V2 (+15), zone market-relevance (+3), 2026-09-21
+  # technique zone retests (+1: analysis.techniques.retest_max_touches) - all
+  # ConfigOwner.PYTHON, real canonical_env, none deprecated-alias'd.
+  "entries": 677,
+  "configurable": 570,
   "protocol": 10,
-  "algorithm": 57,
-  "owners": {"python": 401, "shared": 96, "ctrader": 49},
-  "projection": 497,
-  "env": 479,
+  "algorithm": 97,
+  "owners": {"python": 531, "shared": 96, "ctrader": 50},
+  "projection": 627,
+  "env": 570,
   "deprecated_aliases": 21,
 }
 
@@ -58,6 +102,7 @@ BASELINE = {
 # Historical leaf_types still list them; skip rather than rewriting history.
 _INTENTIONAL_POST_V1_REMOVED_PATHS = frozenset({
   "analysis.measurements.regime_chop_alert_share",
+  "strategies.trend.pullback_enabled",
 })
 
 
@@ -318,9 +363,22 @@ _INTENTIONAL_POST_V1_DEFAULT_CHANGES = {
   "execution.entry.poll_ms",
   "execution.reaction.market_fraction",
   "execution.reaction.scale_fraction",
+  # 2026-09-16: 0.5 -> 0.1. At 0.5x ATR the reaction zone_scale/
+  # market_with_limit_scale 2nd leg sat far enough from the 1st that the
+  # furthest-leg stop distance routinely exceeded the reaction stop
+  # envelope (observed 75-79 pips vs a 60-pip cap on live XAU Key Level
+  # candidates), silently killing good setups regardless of confluence,
+  # bias, or opposing-zone clearance.
+  "execution.reaction.scale_step_atr",
   "execution.stops.reaction.room_floor_pips",
   "execution.zone_scaling.first_leg_fraction",
+  # 2026-09-16: 0.5 -> 0.1, same incident as execution.reaction.scale_step_atr
+  # above (this is the zone_split ladder's own leg-2-spacing knob).
+  "execution.zone_scaling.scale_step_atr",
   "risk.tiers.b_multiplier",
+  # The range risk cap was reduced to the current conservative value after
+  # the v1 parity snapshot was frozen.
+  "risk.sizing.range_max_risk_multiplier",
   # 12 Aug 2026 HFS quality dig: Impulse bleed on late chase / wide stops /
   # mid-range location; tighten chase and pullback location gates.
   "strategies.scalping.activation.maximum_chase_pips",

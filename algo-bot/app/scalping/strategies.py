@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 from typing import Any
 
 import pandas as pd
@@ -10,20 +11,34 @@ import pandas as pd
 log = logging.getLogger(__name__)
 
 from app.scalping.microstructure import (
+  candidate_from_compression_box,
+  confirm_m1_execution,
   detect_breakout_retest,
   detect_impulse_pullback,
   detect_sweep_reclaim,
+  evaluate_breakout_retest_episode,
   find_compression_box,
+  liquidity_level_candidates,
+  m1_mad_volatility,
+  m5_structure_flip_candidates,
+  structure_flip_candidates,
 )
-from app.scalping.context import is_impulse_pullback_session_allowed
+from app.scalping.context import scalp_session_quality
+from app.analysis.key_level_role import classify_key_level_role
 from app.scalping.models import (
   ARCHETYPE_BREAKOUT_RETEST,
   ARCHETYPE_IMPULSE_PULLBACK,
   ARCHETYPE_RANGE_SWEEP,
+  BR_ARMED,
+  BR_SOURCE_COMPRESSION_BOX,
+  BR_SUBTYPE_RANGE_BREAK,
+  BreakoutLevelCandidate,
   OPPORTUNITY_VERSION,
   ScalpContextSnapshot,
   ScalpOpportunity,
   MicroStructure,
+  SCALP_CONFIRMATION_TIMEFRAME,
+  SCALP_SETUP_TIMEFRAME,
   STRATEGY_DISPLAY,
   deterministic_id,
 )
@@ -107,6 +122,7 @@ def _stop_pips(
   *,
   structural: float,
   cfg: Any,
+  spread_pips: float = 0.0,
 ) -> tuple[float | None, str | None]:
   """Return ``(stop_pips, reject_reason)``.
 
@@ -130,15 +146,192 @@ def _stop_pips(
     return None, "stop_not_positive"
   if mx < mn:
     return None, "stop_envelope_invalid"
+  spread_floor = _parse_float(stop_cfg, "minimum_stop_spread_multiple", 4.0)
+  if spread_pips > 0 and value < spread_floor * spread_pips:
+    return None, "stop_below_spread_multiple"
   if value > mx:
     return None, "stop_exceeds_maximum"
   return max(value, mn), None
 
 
-def _technique_require_sweep_body(cfg: Any) -> bool:
-  from app.autotrade.killzone import technique_require_sweep_body
+def _stop_buffer(
+  context: ScalpContextSnapshot,
+  cfg: Any,
+  pip_size: float,
+) -> float:
+  """Return the M1 volatility/spread floor beyond a structural level."""
+  root = _scalping_cfg(cfg)
+  stop_cfg = getattr(root, "stop", None)
+  policy = getattr(root, "policy", None)
+  m1_atr = _parse_float(context, "m1_atr", 0.0)
+  if not math.isfinite(m1_atr) or m1_atr <= 0:
+    m1_atr = max(float(pip_size) * 3.0, float(pip_size))
+  atr_multiple = _parse_float(stop_cfg, "buffer_m1_atr_multiple", 1.2)
+  spread_multiple = _parse_float(
+    stop_cfg, "buffer_minimum_spread_multiple", 1.5,
+  )
+  maximum_spread = _parse_float(policy, "maximum_spread_pips", 5.0)
+  return max(
+    m1_atr * atr_multiple,
+    float(pip_size) * maximum_spread * spread_multiple,
+  )
 
-  return technique_require_sweep_body(cfg)
+
+def _impulse_reference(
+  context: ScalpContextSnapshot,
+  *,
+  direction: str,
+  pullback_extreme: float,
+  cfg: Any,
+  pip_size: float,
+) -> dict[str, Any] | None:
+  """Choose an unmitigated M5 zone first, then a nearby canonical level."""
+  root = _scalping_cfg(cfg)
+  location = getattr(root, "location", None)
+  proximity_multiple = _parse_float(
+    location, "level_proximity_atr_multiple", 1.0,
+  )
+  m1_atr = max(float(context.m1_atr or 0.0), float(pip_size) * 3.0)
+  proximity = max(0.0, proximity_multiple * m1_atr)
+  side = "demand" if direction == "BUY" else "supply"
+  candidates: list[dict[str, Any]] = []
+
+  for zone in context.zones:
+    try:
+      bottom = float(zone["bottom"])
+      top = float(zone["top"])
+      zone_side = str(zone.get("side") or "").casefold()
+      if zone_side not in {side, direction.casefold()}:
+        continue
+      if bool(zone.get("mitigated", False)) or top <= bottom:
+        continue
+      if direction == "BUY" and bottom > pullback_extreme:
+        continue
+      if direction == "SELL" and top < pullback_extreme:
+        continue
+      if bottom <= pullback_extreme <= top:
+        distance = 0.0
+      else:
+        distance = min(
+          abs(pullback_extreme - bottom), abs(pullback_extreme - top),
+        )
+      if distance > proximity:
+        continue
+      candidates.append({
+        "kind": "zone",
+        "bottom": bottom,
+        "top": top,
+        "level": bottom if direction == "BUY" else top,
+        "distance": distance,
+        "score": float(zone.get("score") or 0.0),
+        "touches": int(zone.get("touches") or 0),
+        "zone_score": float(zone.get("score") or 0.0),
+        "zone_touches": int(zone.get("touches") or 0),
+      })
+    except (KeyError, TypeError, ValueError):
+      continue
+
+  if candidates:
+    reference = max(
+      candidates,
+      key=lambda item: (
+        item["score"], item["touches"], -item["distance"],
+      ),
+    )
+    maximum_zone_atr = _parse_float(
+      getattr(root, "stop", None), "zone_maximum_atr_multiple", 1.5,
+    )
+    if reference["top"] - reference["bottom"] > maximum_zone_atr * m1_atr:
+      return {"rejected": True, "reason": "impulse_zone_too_wide"}
+    return reference
+
+  levels: list[dict[str, Any]] = []
+  for level in context.key_levels:
+    try:
+      price = float(level["price"])
+      band = max(0.0, float(level.get("band") or 0.0))
+      distance = abs(price - pullback_extreme)
+      if distance > proximity + band:
+        continue
+      if direction == "BUY" and price > pullback_extreme + proximity:
+        continue
+      if direction == "SELL" and price < pullback_extreme - proximity:
+        continue
+      levels.append({
+        "kind": "level",
+        "level": price,
+        "raw_kind": str(level.get("kind") or ""),
+        "band": band,
+        "bottom": price,
+        "top": price,
+        "distance": distance,
+        "score": float(level.get("score") or 0.0),
+        "touches": int(level.get("touches") or 0),
+        "zone_score": 0.0,
+        "zone_touches": 0,
+      })
+    except (KeyError, TypeError, ValueError):
+      continue
+  if not levels:
+    return None
+  return min(levels, key=lambda item: (item["distance"], -item["touches"]))
+
+
+def _impulse_level_role(
+  context: ScalpContextSnapshot,
+  reference: dict[str, Any],
+  *,
+  direction: str,
+  cfg: Any,
+) -> str:
+  analysis = getattr(getattr(cfg, "analysis", None), "breakout", None)
+  accept_bars = int(getattr(analysis, "accept_bars", 2) or 2)
+  if reference["kind"] == "zone":
+    kind = "support" if direction == "BUY" else "resistance"
+    band_low = float(reference["bottom"])
+    band_high = float(reference["top"])
+  else:
+    raw_kind = str(reference.get("raw_kind") or "")
+    raw_kind_lower = raw_kind.casefold()
+    explicit_role = any(
+      token in raw_kind_lower
+      for token in ("support", "resistance", "resist", "swing_low", "swing_high")
+    )
+    kind = raw_kind if explicit_role else (
+      "support" if direction == "BUY" else "resistance"
+    )
+    band = max(0.0, float(reference.get("band") or 0.0))
+    band_low = float(reference["level"]) - band
+    band_high = float(reference["level"]) + band
+  closed = context.measured.get("m5_closes", [])
+  closed_bars = pd.DataFrame({"close": list(closed)})
+  return classify_key_level_role(
+    kind=kind,
+    level_price=float(reference["level"]),
+    band_low=band_low,
+    band_high=band_high,
+    closed_bars=closed_bars,
+    breakout_accept_bars=accept_bars,
+  ).role
+
+
+def _detect_impulse(
+  m1_df: pd.DataFrame,
+  *,
+  direction: str,
+  confirm_bars: int,
+) -> dict[str, Any] | None:
+  """Keep lightweight test doubles compatible with the extended detector."""
+  try:
+    return detect_impulse_pullback(
+      m1_df,
+      direction=direction,
+      pullback_extreme_confirm_bars=confirm_bars,
+    )
+  except TypeError as exc:
+    if "pullback_extreme_confirm_bars" not in str(exc):
+      raise
+    return detect_impulse_pullback(m1_df, direction=direction)
 
 
 def _enabled(cfg: Any, name: str) -> bool:
@@ -149,6 +342,27 @@ def _enabled(cfg: Any, name: str) -> bool:
   return bool(getattr(arch, attr, False))
 
 
+def _setup_inputs(
+  m1_df: pd.DataFrame,
+  *,
+  m5_df: pd.DataFrame | None,
+  m5_micro: MicroStructure | None,
+  m1_micro: MicroStructure | None,
+) -> tuple[pd.DataFrame, MicroStructure | None, bool]:
+  """Resolve the explicit setup/confirmation roles.
+
+  The fallback keeps direct unit-test and replay callers source-compatible;
+  live runtime always supplies M5 setup data and therefore cannot silently
+  use M1 structure.
+  """
+  use_m5 = m5_df is not None and not m5_df.empty
+  return (
+    m5_df if use_m5 else m1_df,
+    m5_micro if use_m5 else m1_micro,
+    use_m5,
+  )
+
+
 def discover_range_sweep(
   context: ScalpContextSnapshot,
   micro: MicroStructure,
@@ -157,7 +371,10 @@ def discover_range_sweep(
   *,
   pip_size: float,
   now: int,
+  spread_pips: float = 0.0,
   idle_reasons: list[str] | None = None,
+  m5_df: pd.DataFrame | None = None,
+  m5_micro: MicroStructure | None = None,
 ) -> list[ScalpOpportunity]:
   if not _enabled(cfg, "range_sweep"):
     return []
@@ -181,7 +398,7 @@ def discover_range_sweep(
 
   out: list[ScalpOpportunity] = []
   reasons = idle_reasons if idle_reasons is not None else []
-  buffer = max(pip_size * 2, context.atr * 0.05)
+  buffer = _stop_buffer(context, cfg, pip_size)
   min_net = _parse_float(getattr(_scalping_cfg(cfg), "target", None), "minimum_net_target_pips", 15.0)
   act = getattr(_scalping_cfg(cfg), "activation", None)
   lookback = max(1, int(getattr(act, "trigger_maximum_age_bars", 2) or 2))
@@ -201,7 +418,9 @@ def discover_range_sweep(
       worst = _worst_fill(direction="BUY", zone_low=zone_low, zone_high=zone_high)
       stop_price = float(buy_ev["extreme"]) - buffer
       structural = (worst - stop_price) / pip_size
-      stop, reject = _stop_pips(structural=structural, cfg=cfg)
+      stop, reject = _stop_pips(
+        structural=structural, cfg=cfg, spread_pips=spread_pips,
+      )
       if stop is None:
         if reject:
           reasons.append(f"{ARCHETYPE_RANGE_SWEEP}:{reject}")
@@ -260,7 +479,11 @@ def discover_range_sweep(
               expires_at=int(now) + 15 * 60,
               episode_id=source,
               source_identity=source,
-              measured={"strategy": STRATEGY_DISPLAY[ARCHETYPE_RANGE_SWEEP]},
+              measured={
+                "strategy": STRATEGY_DISPLAY[ARCHETYPE_RANGE_SWEEP],
+                "setup_timeframe": SCALP_SETUP_TIMEFRAME,
+                "confirmation_timeframe": SCALP_CONFIRMATION_TIMEFRAME,
+              },
             ))
 
   sell_ev = detect_sweep_reclaim(
@@ -277,7 +500,9 @@ def discover_range_sweep(
       worst = _worst_fill(direction="SELL", zone_low=zone_low, zone_high=zone_high)
       stop_price = float(sell_ev["extreme"]) + buffer
       structural = (stop_price - worst) / pip_size
-      stop, reject = _stop_pips(structural=structural, cfg=cfg)
+      stop, reject = _stop_pips(
+        structural=structural, cfg=cfg, spread_pips=spread_pips,
+      )
       if stop is None:
         if reject:
           reasons.append(f"{ARCHETYPE_RANGE_SWEEP}:{reject}")
@@ -336,7 +561,11 @@ def discover_range_sweep(
               expires_at=int(now) + 15 * 60,
               episode_id=source,
               source_identity=source,
-              measured={"strategy": STRATEGY_DISPLAY[ARCHETYPE_RANGE_SWEEP]},
+              measured={
+                "strategy": STRATEGY_DISPLAY[ARCHETYPE_RANGE_SWEEP],
+                "setup_timeframe": SCALP_SETUP_TIMEFRAME,
+                "confirmation_timeframe": SCALP_CONFIRMATION_TIMEFRAME,
+              },
             ))
   return out
 
@@ -349,20 +578,24 @@ def discover_impulse_pullback(
   *,
   pip_size: float,
   now: int,
+  spread_pips: float = 0.0,
   idle_reasons: list[str] | None = None,
+  m5_df: pd.DataFrame | None = None,
+  m5_micro: MicroStructure | None = None,
 ) -> list[ScalpOpportunity]:
   if not _enabled(cfg, "impulse_pullback"):
     return []
   if ARCHETYPE_IMPULSE_PULLBACK not in context.permitted_archetypes:
     return []
-  if not is_impulse_pullback_session_allowed(context.session, cfg):
-    return []
+  setup_df, _setup_micro, using_m5_setup = _setup_inputs(
+    m1_df, m5_df=m5_df, m5_micro=m5_micro, m1_micro=micro,
+  )
 
   loc = getattr(_scalping_cfg(cfg), "location", None)
   buy_max = _parse_float(loc, "pullback_buy_maximum_position", 0.60)
   sell_min = _parse_float(loc, "pullback_sell_minimum_position", 0.40)
   min_net = _parse_float(getattr(_scalping_cfg(cfg), "target", None), "minimum_net_target_pips", 15.0)
-  buffer = max(pip_size * 2, context.atr * _parse_float(getattr(_scalping_cfg(cfg), "stop", None), "buffer_atr", 0.10))
+  buffer = _stop_buffer(context, cfg, pip_size)
   out: list[ScalpOpportunity] = []
   reasons = idle_reasons if idle_reasons is not None else []
   pos = context.dealing_range_position
@@ -372,28 +605,104 @@ def discover_impulse_pullback(
       continue
     if direction == "SELL" and pos is not None and pos < sell_min:
       continue
-    ev = detect_impulse_pullback(m1_df, direction=direction)
+    arch = getattr(_scalping_cfg(cfg), "archetypes", None)
+    ev = _detect_impulse(
+      setup_df,
+      direction=direction,
+      confirm_bars=int(
+        getattr(arch, "pullback_extreme_confirm_bars", 2) or 2
+      ),
+    )
     if ev is None:
       continue
     if ev.get("rejected"):
+      reasons.append(
+        f"{ARCHETYPE_IMPULSE_PULLBACK}:{ev.get('reason', 'rejected')}"
+      )
       continue
-    # Continuation must not require sweep-reclaim (that gate belongs to
-    # range_sweep). Owner 2026-08-26: require_sweep_body was killing L1.
     entry = float(ev["close"])
-    # Stop at the pullback extreme (local swing), not the impulse-leg origin.
-    band = max(buffer, pip_size * 3)
-    zone_low = entry - band
-    zone_high = entry + band
+    m1_atr = max(float(context.m1_atr or 0.0), pip_size * 3.0)
+    structure_atr = max(
+      float(context.atr if using_m5_setup else context.m1_atr or 0.0),
+      pip_size * 3.0,
+    )
+    impulse_len = float(ev.get("impulse_len") or 0.0)
+    body_dominance = float(ev.get("body_dominance") or 0.0)
+    displacement_multiple = impulse_len / structure_atr if structure_atr > 0 else 0.0
+    if displacement_multiple < _parse_float(
+      arch, "impulse_displacement_atr_multiple", 4.0,
+    ) or body_dominance < _parse_float(
+      arch, "impulse_body_dominance", 0.5,
+    ):
+      reasons.append(f"{ARCHETYPE_IMPULSE_PULLBACK}:impulse_no_displacement")
+      continue
+    mean_impulse_body = float(ev.get("mean_impulse_body") or 0.0)
+    mean_pullback_body = float(ev.get("mean_pullback_body") or 0.0)
+    if (
+      mean_impulse_body <= 0
+      or mean_pullback_body >= mean_impulse_body * _parse_float(
+        arch, "pullback_corrective_ratio", 0.7,
+      )
+    ):
+      reasons.append(f"{ARCHETYPE_IMPULSE_PULLBACK}:pullback_not_corrective")
+      continue
+    reference = _impulse_reference(
+      context,
+      direction=direction,
+      pullback_extreme=float(ev["pullback_extreme"]),
+      cfg=cfg,
+      pip_size=pip_size,
+    )
+    if reference is None:
+      reasons.append(f"{ARCHETYPE_IMPULSE_PULLBACK}:impulse_no_level_reference")
+      continue
+    if reference.get("rejected"):
+      reasons.append(
+        f"{ARCHETYPE_IMPULSE_PULLBACK}:{reference.get('reason')}"
+      )
+      continue
+    confirmation = None
+    if using_m5_setup:
+      confirmation = confirm_m1_execution(
+        m1_df,
+        direction=direction,
+        level=float(reference["level"]),
+        tolerance=buffer,
+        lookback_bars=2,
+      )
+      if confirmation is None:
+        reasons.append(f"{ARCHETYPE_IMPULSE_PULLBACK}:m1_confirmation_missing")
+        continue
+      entry = float(confirmation["close"])
+    key_level_role = _impulse_level_role(
+      context, reference, direction=direction, cfg=cfg,
+    )
+    expected_role = "support" if direction == "BUY" else "resistance"
+    if key_level_role != expected_role:
+      reasons.append(f"{ARCHETYPE_IMPULSE_PULLBACK}:impulse_level_role_mismatch")
+      continue
+    key_level = float(reference["level"])
+    if reference["kind"] == "zone":
+      zone_low = float(reference["bottom"])
+      zone_high = float(reference["top"])
+    elif direction == "BUY":
+      zone_low = key_level
+      zone_high = key_level + buffer
+    else:
+      zone_low = key_level - buffer
+      zone_high = key_level
     worst = _worst_fill(direction=direction, zone_low=zone_low, zone_high=zone_high)
     if direction == "BUY":
-      stop_price = float(ev["pullback_extreme"]) - buffer
+      stop_price = key_level - buffer
       structural = (worst - stop_price) / pip_size
       room = context.buy_corridor_room_pips
     else:
-      stop_price = float(ev["pullback_extreme"]) + buffer
+      stop_price = key_level + buffer
       structural = (stop_price - worst) / pip_size
       room = context.sell_corridor_room_pips
-    stop, reject = _stop_pips(structural=structural, cfg=cfg)
+    stop, reject = _stop_pips(
+      structural=structural, cfg=cfg, spread_pips=spread_pips,
+    )
     if stop is None:
       if reject:
         reasons.append(f"{ARCHETYPE_IMPULSE_PULLBACK}:{reject}")
@@ -433,6 +742,7 @@ def discover_impulse_pullback(
       direction,
       rounded_price(float(ev["origin"]), pip_size),
       rounded_price(float(ev["extreme"]), pip_size),
+      rounded_price(key_level, pip_size),
     )
     oid = deterministic_id(
       context.symbol, ARCHETYPE_IMPULSE_PULLBACK, direction, context.context_id, source,
@@ -448,9 +758,9 @@ def discover_impulse_pullback(
       source_bar_ts=int(ev["bar_ts"]),
       zone_low=zone_low,
       zone_high=zone_high,
-      key_level=entry,
+      key_level=key_level,
       trigger_type=str(ev["pattern"]),
-      trigger_bar_ts=int(ev["bar_ts"]),
+      trigger_bar_ts=int(confirmation["bar_ts"] if confirmation else ev["bar_ts"]),
       trigger_price=entry,
       invalidation_price=invalidation,
       expected_target_price=target_price,
@@ -463,12 +773,43 @@ def discover_impulse_pullback(
       expires_at=int(now) + 15 * 60,
       episode_id=source,
       source_identity=source,
+      key_level_role=key_level_role,
       measured={
         "strategy": STRATEGY_DISPLAY[ARCHETYPE_IMPULSE_PULLBACK],
         "retracement": ev.get("retracement"),
         "impulse_origin": ev.get("origin"),
         "impulse_extreme": ev.get("extreme"),
         "pullback_extreme": ev.get("pullback_extreme"),
+        "impulse_bars": ev.get("impulse_bars"),
+        "pullback_bars": ev.get("pullback_bars"),
+        "impulse_atr_multiple": displacement_multiple,
+        "body_dominance": body_dominance,
+        "preferred_fib": ev.get("preferred"),
+        "level_kind": reference["kind"],
+        "key_level_role": key_level_role,
+        "zone_score": reference.get("zone_score", 0.0),
+        "zone_touches": reference.get("zone_touches", 0),
+        "level_distance_pips": reference["distance"] / pip_size,
+        "m1_atr": m1_atr,
+        "session": context.session,
+        "session_quality": scalp_session_quality(
+          ARCHETYPE_IMPULSE_PULLBACK, context.session, cfg,
+        ),
+        "setup_timeframe": (
+          SCALP_SETUP_TIMEFRAME if using_m5_setup else SCALP_CONFIRMATION_TIMEFRAME
+        ),
+        "confirmation_timeframe": SCALP_CONFIRMATION_TIMEFRAME,
+        "htf_bias": context.htf_bias,
+        "bias_alignment": (
+          "aligned"
+          if (
+            (direction == "BUY" and context.htf_bias == "up")
+            or (direction == "SELL" and context.htf_bias == "down")
+          )
+          else "counter"
+          if context.htf_bias in {"up", "down"}
+          else "neutral"
+        ),
       },
     ))
   return out
@@ -478,7 +819,9 @@ def _breakout_cfg(cfg: Any) -> Any:
   return getattr(_scalping_cfg(cfg), "breakout", None)
 
 
-def _breakout_knobs(cfg: Any, *, atr: float, pip_size: float) -> dict[str, Any]:
+def _breakout_knobs(
+  cfg: Any, *, atr: float, pip_size: float, spread_pips: float = 0.0,
+) -> dict[str, Any]:
   bo = _breakout_cfg(cfg)
   act = getattr(_scalping_cfg(cfg), "activation", None)
   box_max_atr = _parse_float(bo, "box_max_atr", 1.5)
@@ -505,6 +848,54 @@ def _breakout_knobs(cfg: Any, *, atr: float, pip_size: float) -> dict[str, Any]:
     "require_retest_rejection": require_rej,
     "retest_lookback_bars": retest_lookback,
     "min_displacement": min_disp,
+    # --- Breakout Retest V2 (owner-directed 2026-09-16 rebuild) ----------
+    "v2_enabled": bool(getattr(bo, "v2_enabled", True)) if bo is not None else True,
+    "cross_tolerance": _parse_float(bo, "breakout_cross_tolerance_atr", 0.0) * float(atr),
+    "breakout_margin": max(
+      _parse_float(bo, "breakout_margin_atr", 0.0) * float(atr),
+      _parse_float(bo, "breakout_spread_multiplier", 1.5) * float(spread_pips) * pip_size,
+    ),
+    "max_break_delay_bars": (
+      int(getattr(bo, "max_break_delay_bars", None))
+      if bo is not None and getattr(bo, "max_break_delay_bars", None) is not None
+      else None
+    ),
+    "acceptance_bars": int(getattr(bo, "acceptance_bars", 1) or 1) if bo is not None else 1,
+    "acceptance_required_closes": (
+      int(getattr(bo, "acceptance_required_closes", 1) or 1) if bo is not None else 1
+    ),
+    "min_retest_delay_bars": (
+      int(getattr(bo, "min_retest_delay_bars", 0) or 0) if bo is not None else 0
+    ),
+    "max_retest_delay_bars": (
+      int(getattr(bo, "max_retest_delay_bars", 20) or 20) if bo is not None else 20
+    ),
+    "retest_front_run_tolerance": _parse_float(bo, "retest_front_run_atr", 0.0) * float(atr),
+    "max_retest_penetration": _parse_float(bo, "max_retest_penetration_atr", 0.30) * float(atr),
+    "confirmation_mode": (
+      str(getattr(bo, "confirmation_mode", "reclaim_close") or "reclaim_close")
+      if bo is not None else "reclaim_close"
+    ),
+    "min_quality_score": _parse_float(bo, "min_quality_score", 0.0),
+    "enable_structure_flip_m1": (
+      bool(getattr(bo, "enable_structure_flip_m1", True)) if bo is not None else True
+    ),
+    "enable_structure_flip_m5": (
+      bool(getattr(bo, "enable_structure_flip_m5", True)) if bo is not None else True
+    ),
+    "enable_liquidity_level": (
+      bool(getattr(bo, "enable_liquidity_level", True)) if bo is not None else True
+    ),
+    "m1_swing_min_age_bars": (
+      int(getattr(bo, "m1_swing_min_age_bars", 3) or 3) if bo is not None else 3
+    ),
+    "m1_swing_max_age_bars": (
+      int(getattr(bo, "m1_swing_max_age_bars", 240) or 240) if bo is not None else 240
+    ),
+    "m1_swing_min_spacing_atr": _parse_float(bo, "m1_swing_min_spacing_atr", 0.3),
+    "m5_structure_min_touches": (
+      int(getattr(bo, "m5_structure_min_touches", 2) or 2) if bo is not None else 2
+    ),
   }
 
 
@@ -542,6 +933,7 @@ def diagnose_breakout_reject(
       min_displacement=knobs["min_displacement"],
       retest_lookback_bars=knobs["retest_lookback_bars"],
       require_retest_rejection=knobs["require_retest_rejection"],
+      box_end_index=int(box["box_end_index"]),
     )
     if ev is None:
       continue
@@ -558,6 +950,62 @@ def diagnose_breakout_reject(
   return states[0] if states else "wait_break"
 
 
+_BREAKOUT_QUALITY_WEIGHTS = {
+  "displacement": 0.30,
+  "acceptance": 0.15,
+  "retest_quality": 0.25,
+  "retest_speed": 0.15,
+  "confirmation": 0.15,
+}
+
+
+def _breakout_retest_quality_score(
+  info: dict[str, Any],
+) -> tuple[float, dict[str, float | None]]:
+  """0..100 quality score from one already-ARMED episode's telemetry.
+
+  Mandatory pass/fail already happened before this is ever called (only
+  ARMED candidates reach here) - this purely ranks already-valid candidates
+  against each other (rebuild spec section 9). Weights are centralized
+  here rather than scattered, and every component is returned alongside
+  the total so replay/production telemetry can tune them later; this is a
+  reasonable starting point, not a tuned result.
+  """
+  components: dict[str, float | None] = {}
+
+  disp_atr = info.get("break_distance_atr")
+  components["displacement"] = (
+    min(1.0, max(0.0, float(disp_atr))) if disp_atr is not None else 0.5
+  )
+
+  acceptance_bars = info.get("acceptance_bars")
+  components["acceptance"] = (
+    min(1.0, 1.0 / max(1, int(acceptance_bars))) if acceptance_bars else 0.5
+  )
+
+  pen_atr = info.get("retest_penetration_atr")
+  components["retest_quality"] = (
+    max(0.0, 1.0 - min(1.0, float(pen_atr))) if pen_atr is not None else 0.5
+  )
+
+  bars_until = info.get("bars_until_retest")
+  components["retest_speed"] = (
+    max(0.0, 1.0 - min(1.0, float(bars_until) / 10.0)) if bars_until is not None else 0.5
+  )
+
+  confirmation_type = info.get("confirmation_type")
+  components["confirmation"] = (
+    1.0 if confirmation_type == "retest_high_break"
+    else 0.7 if confirmation_type == "retest_close_reclaim"
+    else 0.5
+  )
+
+  total = 100.0 * sum(
+    _BREAKOUT_QUALITY_WEIGHTS[name] * value for name, value in components.items()
+  )
+  return total, components
+
+
 def discover_breakout_retest(
   context: ScalpContextSnapshot,
   micro: MicroStructure,
@@ -566,48 +1014,181 @@ def discover_breakout_retest(
   *,
   pip_size: float,
   now: int,
+  spread_pips: float = 0.0,
   idle_reasons: list[str] | None = None,
+  m5_df: pd.DataFrame | None = None,
+  m5_micro: MicroStructure | None = None,
 ) -> list[ScalpOpportunity]:
   if not _enabled(cfg, "breakout_retest"):
     return []
   if ARCHETYPE_BREAKOUT_RETEST not in context.permitted_archetypes:
     return []
 
-  knobs = _breakout_knobs(cfg, atr=float(context.atr or 0.0), pip_size=pip_size)
+  atr = float(context.atr or 0.0)
+  setup_df, setup_micro, using_m5_setup = _setup_inputs(
+    m1_df, m5_df=m5_df, m5_micro=m5_micro, m1_micro=micro,
+  )
+  knobs = _breakout_knobs(cfg, atr=atr, pip_size=pip_size, spread_pips=spread_pips)
   box = find_compression_box(
-    m1_df,
-    atr=float(context.atr or 0.0),
+    setup_df,
+    atr=atr,
     min_box_bars=knobs["min_box_bars"],
     max_box_bars=knobs["max_box_bars"],
     box_max_atr=knobs["box_max_atr"],
     min_touches_per_side=knobs["min_touches_per_side"],
     touch_tol_atr=knobs["touch_tol_atr"],
   )
-  if box is None:
+  # Owner-directed 2026-09-16 rebuild: a missing compression box no longer
+  # ends discovery outright - Breakout Retest must work on M1/M5 structural
+  # and liquidity levels even when the market isn't presently coiled into a
+  # tight range (rebuild spec success criterion "works outside compression
+  # boxes"). Only the compression candidate itself is skipped below.
+  if box is None and not knobs["v2_enabled"]:
     return []
 
-  low = float(box["box_low"])
-  high = float(box["box_high"])
+  low = float(box["box_low"]) if box is not None else None
+  high = float(box["box_high"]) if box is not None else None
   min_net = _parse_float(getattr(_scalping_cfg(cfg), "target", None), "minimum_net_target_pips", 15.0)
-  buffer = max(pip_size * 2, context.atr * 0.1)
+  buffer = _stop_buffer(context, cfg, pip_size)
   retest_lookback = knobs["retest_lookback_bars"]
   out: list[ScalpOpportunity] = []
   reasons = idle_reasons if idle_reasons is not None else []
+  mad = m1_mad_volatility(setup_df, lookback=14, min_floor=0.0) if knobs["v2_enabled"] else 0.0
+  current_index = len(setup_df) - 1
 
   for direction in ("BUY", "SELL"):
-    ev = detect_breakout_retest(
-      m1_df,
+    best: dict[str, Any] | None = None
+
+    box_ev = detect_breakout_retest(
+      setup_df,
       direction=direction,
       box_high=high,
       box_low=low,
       min_displacement=knobs["min_displacement"],
       retest_lookback_bars=retest_lookback,
       require_retest_rejection=knobs["require_retest_rejection"],
-    )
-    if ev is None or ev.get("state") != "armed" or not ev.get("accepted_break"):
+      box_end_index=box.get("box_end_index"),
+    ) if box is not None else None
+    if box_ev is not None and box_ev.get("state") == "armed" and box_ev.get("accepted_break"):
+      info = {
+        "entry": float(box_ev["close"]),
+        "level": float(box_ev["level"]),
+        "bar_ts": int(box_ev["bar_ts"]),
+        "pattern": str(box_ev["pattern"]),
+        "subtype": BR_SUBTYPE_RANGE_BREAK,
+        "source": BR_SOURCE_COMPRESSION_BOX,
+        "timeframe": (
+          SCALP_SETUP_TIMEFRAME if using_m5_setup else SCALP_CONFIRMATION_TIMEFRAME
+        ),
+        "accepted_break": bool(box_ev.get("accepted_break")),
+        "correct_key_level_role": bool(box_ev.get("correct_key_level_role")),
+        "retest_of_broken_level": bool(box_ev.get("retest_of_broken_level")),
+        "retest_rejection": bool(box_ev.get("retest_rejection")),
+        "directionally_valid_close": bool(box_ev.get("directionally_valid_close")),
+        "break_displacement": box_ev.get("break_displacement"),
+        "break_distance_atr": (
+          box_ev.get("break_displacement") / atr
+          if atr > 0 and box_ev.get("break_displacement") is not None
+          else None
+        ),
+      }
+      score, components = _breakout_retest_quality_score(info)
+      info["quality_score"] = score
+      info["quality_components"] = components
+      best = info
+
+    if knobs["v2_enabled"]:
+      candidates: list[BreakoutLevelCandidate] = []
+      if setup_micro is not None and (
+        knobs["enable_structure_flip_m5"] if using_m5_setup
+        else knobs["enable_structure_flip_m1"]
+      ):
+        candidates.extend(structure_flip_candidates(
+          setup_micro, side=direction, current_index=current_index,
+          timeframe=SCALP_SETUP_TIMEFRAME if using_m5_setup else SCALP_CONFIRMATION_TIMEFRAME,
+          min_age_bars=knobs["m1_swing_min_age_bars"],
+          max_age_bars=knobs["m1_swing_max_age_bars"],
+          atr=atr, min_level_spacing_atr=knobs["m1_swing_min_spacing_atr"],
+        ))
+      context_key_levels = getattr(context, "key_levels", None)
+      if knobs["enable_structure_flip_m5"] and context_key_levels:
+        candidates.extend(m5_structure_flip_candidates(
+          context_key_levels, side=direction,
+          current_price=float(setup_df["close"].iloc[-1]),
+          min_touches=knobs["m5_structure_min_touches"],
+        ))
+      if setup_micro is not None and knobs["enable_liquidity_level"]:
+        candidates.extend(liquidity_level_candidates(
+          setup_micro,
+          side=direction,
+          timeframe=SCALP_SETUP_TIMEFRAME if using_m5_setup else SCALP_CONFIRMATION_TIMEFRAME,
+        ))
+
+      for candidate in candidates:
+        result = evaluate_breakout_retest_episode(
+          setup_df, candidate, atr=atr, mad=mad,
+          cross_tolerance=knobs["cross_tolerance"],
+          breakout_margin=knobs["breakout_margin"],
+          max_break_delay_bars=knobs["max_break_delay_bars"],
+          acceptance_bars=knobs["acceptance_bars"],
+          acceptance_required_closes=knobs["acceptance_required_closes"],
+          min_retest_delay_bars=knobs["min_retest_delay_bars"],
+          max_retest_delay_bars=knobs["max_retest_delay_bars"],
+          retest_front_run_tolerance=knobs["retest_front_run_tolerance"],
+          max_retest_penetration=knobs["max_retest_penetration"],
+          confirmation_mode=knobs["confirmation_mode"],
+        )
+        if result.get("state") != BR_ARMED:
+          continue
+        info = {
+          "entry": float(m1_df["close"].iloc[-1]),
+          "level": float(candidate.level),
+          "bar_ts": int(result["break_time"]),
+          "pattern": "breakout_retest",
+          "subtype": candidate.subtype,
+          "source": candidate.source,
+          "timeframe": candidate.timeframe,
+          "accepted_break": True,
+          "correct_key_level_role": True,
+          "retest_of_broken_level": True,
+          "retest_rejection": True,
+          "directionally_valid_close": bool(result.get("directionally_valid_close")),
+          "break_displacement": result.get("break_distance"),
+          "break_distance_atr": result.get("break_distance_atr"),
+          "acceptance_bars": result.get("acceptance_bars"),
+          "retest_penetration_atr": result.get("retest_penetration_atr"),
+          "bars_until_retest": result.get("bars_until_retest"),
+          "confirmation_type": result.get("confirmation_type"),
+          "v2_result": result,
+        }
+        score, components = _breakout_retest_quality_score(info)
+        info["quality_score"] = score
+        info["quality_components"] = components
+        if best is None or score > best["quality_score"]:
+          best = info
+
+    if best is None or best["quality_score"] < knobs["min_quality_score"]:
+      if best is not None:
+        reasons.append(f"{ARCHETYPE_BREAKOUT_RETEST}:below_min_quality_score")
       continue
-    entry = float(ev["close"])
-    level = float(ev["level"])
+
+    confirmation = None
+    if using_m5_setup:
+      confirmation = confirm_m1_execution(
+        m1_df,
+        direction=direction,
+        level=float(best["level"]),
+        tolerance=buffer,
+        lookback_bars=2,
+      )
+      if confirmation is None:
+        reasons.append(f"{ARCHETYPE_BREAKOUT_RETEST}:m1_confirmation_missing")
+        continue
+      best["entry"] = float(confirmation["close"])
+      best["bar_ts"] = int(confirmation["bar_ts"])
+
+    entry = best["entry"]
+    level = best["level"]
     zone_low = level - buffer
     zone_high = level + buffer
     worst = _worst_fill(direction=direction, zone_low=zone_low, zone_high=zone_high)
@@ -619,7 +1200,9 @@ def discover_breakout_retest(
       stop_price = max(float(m1_df["high"].iloc[-1]), level) + buffer
       structural = (stop_price - worst) / pip_size
       room = context.sell_corridor_room_pips
-    stop, reject = _stop_pips(structural=structural, cfg=cfg)
+    stop, reject = _stop_pips(
+      structural=structural, cfg=cfg, spread_pips=spread_pips,
+    )
     if stop is None:
       if reject:
         reasons.append(f"{ARCHETYPE_BREAKOUT_RETEST}:{reject}")
@@ -652,15 +1235,61 @@ def discover_breakout_retest(
     target_price, target_pips = target
     room_ok = room is not None and float(room) >= float(target_pips)
     source = deterministic_id(
-      "box",
+      best["source"],
       context.symbol,
       direction,
-      rounded_price(low, pip_size),
-      rounded_price(high, pip_size),
+      rounded_price(level, pip_size),
     )
     oid = deterministic_id(
       context.symbol, ARCHETYPE_BREAKOUT_RETEST, direction, context.context_id, source,
     )
+    measured: dict[str, Any] = {
+      "strategy": STRATEGY_DISPLAY[ARCHETYPE_BREAKOUT_RETEST],
+      "compression_box": (
+        {
+          "box_low": low,
+          "box_high": high,
+          "box_bars": box.get("box_bars"),
+          "compression_atr": box.get("compression_atr"),
+          "touch_count": box.get("touch_count"),
+        }
+        if box is not None else None
+      ),
+      "breakout_evidence": {
+        "accepted_break": bool(best.get("accepted_break")),
+        "correct_key_level_role": bool(best.get("correct_key_level_role")),
+        "retest_of_broken_level": bool(best.get("retest_of_broken_level")),
+        "retest_rejection": bool(best.get("retest_rejection")),
+        "directionally_valid_close": bool(best.get("directionally_valid_close")),
+        "target_room_beyond_breakout": bool(room_ok),
+        "break_displacement": best.get("break_displacement"),
+        "state": "armed",
+        "setup_timeframe": (
+          SCALP_SETUP_TIMEFRAME if using_m5_setup else SCALP_CONFIRMATION_TIMEFRAME
+        ),
+        "confirmation_timeframe": SCALP_CONFIRMATION_TIMEFRAME,
+      },
+      "session_quality": scalp_session_quality(
+        ARCHETYPE_BREAKOUT_RETEST, getattr(context, "session", "unknown"), cfg,
+      ),
+      "setup_timeframe": (
+        SCALP_SETUP_TIMEFRAME if using_m5_setup else SCALP_CONFIRMATION_TIMEFRAME
+      ),
+      "confirmation_timeframe": SCALP_CONFIRMATION_TIMEFRAME,
+      "v2": {
+        "subtype": best["subtype"],
+        "break_source": best["source"],
+        "break_source_timeframe": best["timeframe"],
+        "quality_score": best["quality_score"],
+        "quality_components": best["quality_components"],
+        "confluences": (),
+      },
+    }
+    if best.get("v2_result") is not None:
+      measured["v2"].update({
+        key: value for key, value in best["v2_result"].items()
+        if key not in ("strategy", "version", "direction")
+      })
     out.append(ScalpOpportunity(
       version=OPPORTUNITY_VERSION,
       opportunity_id=oid,
@@ -669,12 +1298,12 @@ def discover_breakout_retest(
       archetype=ARCHETYPE_BREAKOUT_RETEST,
       direction=direction,
       discovered_at=int(now),
-      source_bar_ts=int(ev["bar_ts"]),
+      source_bar_ts=best["bar_ts"],
       zone_low=zone_low,
       zone_high=zone_high,
       key_level=level,
-      trigger_type=str(ev["pattern"]),
-      trigger_bar_ts=int(ev["bar_ts"]),
+      trigger_type=best["pattern"],
+      trigger_bar_ts=best["bar_ts"],
       trigger_price=entry,
       invalidation_price=invalidation,
       expected_target_price=target_price,
@@ -682,31 +1311,12 @@ def discover_breakout_retest(
       expected_stop_pips=stop,
       expected_reward_risk=target_pips / stop,
       location_position=context.dealing_range_position,
-      score=0.0,
+      score=best["quality_score"] / 100.0,
       reasons=("micro_breakout_retest",),
       expires_at=int(now) + 15 * 60,
       episode_id=source,
       source_identity=source,
-      measured={
-        "strategy": STRATEGY_DISPLAY[ARCHETYPE_BREAKOUT_RETEST],
-        "compression_box": {
-          "box_low": low,
-          "box_high": high,
-          "box_bars": box.get("box_bars"),
-          "compression_atr": box.get("compression_atr"),
-          "touch_count": box.get("touch_count"),
-        },
-        "breakout_evidence": {
-          "accepted_break": bool(ev.get("accepted_break")),
-          "correct_key_level_role": bool(ev.get("correct_key_level_role")),
-          "retest_of_broken_level": bool(ev.get("retest_of_broken_level")),
-          "retest_rejection": bool(ev.get("retest_rejection")),
-          "directionally_valid_close": bool(ev.get("directionally_valid_close")),
-          "target_room_beyond_breakout": bool(room_ok),
-          "break_displacement": ev.get("break_displacement"),
-          "state": "armed",
-        },
-      },
+      measured=measured,
     ))
   return out
 
@@ -719,23 +1329,32 @@ def discover_all(
   *,
   pip_size: float,
   now: int,
+  spread_pips: float = 0.0,
   idle_reasons: list[str] | None = None,
+  m5_df: pd.DataFrame | None = None,
+  m5_micro: MicroStructure | None = None,
 ) -> list[ScalpOpportunity]:
   found: list[ScalpOpportunity] = []
   reasons = idle_reasons if idle_reasons is not None else []
   found.extend(
     discover_range_sweep(
-      context, micro, m1_df, cfg, pip_size=pip_size, now=now, idle_reasons=reasons,
+      context, micro, m1_df, cfg, pip_size=pip_size, now=now,
+      spread_pips=spread_pips, idle_reasons=reasons,
+      m5_df=m5_df, m5_micro=m5_micro,
     )
   )
   found.extend(
     discover_impulse_pullback(
-      context, micro, m1_df, cfg, pip_size=pip_size, now=now, idle_reasons=reasons,
+      context, micro, m1_df, cfg, pip_size=pip_size, now=now,
+      spread_pips=spread_pips, idle_reasons=reasons,
+      m5_df=m5_df, m5_micro=m5_micro,
     )
   )
   found.extend(
     discover_breakout_retest(
-      context, micro, m1_df, cfg, pip_size=pip_size, now=now, idle_reasons=reasons,
+      context, micro, m1_df, cfg, pip_size=pip_size, now=now,
+      spread_pips=spread_pips, idle_reasons=reasons,
+      m5_df=m5_df, m5_micro=m5_micro,
     )
   )
   # Deduplicate by opportunity_id
@@ -749,6 +1368,7 @@ def idle_discovery_reasons(
   cfg: Any,
   *,
   pip_size: float,
+  m5_df: pd.DataFrame | None = None,
 ) -> list[str]:
   """Explain an empty discover_all cycle for last_cycle telemetry."""
   reasons: list[str] = []
@@ -767,7 +1387,7 @@ def idle_discovery_reasons(
       # near_equilibrium is telemetry-only / not an absolute mute (owner 2026-08-06).
       act = getattr(_scalping_cfg(cfg), "activation", None)
       lookback = max(1, int(getattr(act, "trigger_maximum_age_bars", 2) or 2))
-      buffer = max(pip_size * 2, context.atr * 0.05)
+      buffer = _stop_buffer(context, cfg, pip_size)
       buy_ev = detect_sweep_reclaim(
         m1_df, direction="BUY", edge_price=low, tolerance=buffer, lookback_bars=lookback,
       )
@@ -786,12 +1406,12 @@ def idle_discovery_reasons(
         if sell_ev is not None and pos is not None and pos < sell_min:
           reasons.append("range_sweep:sell_location_blocked")
   if ARCHETYPE_IMPULSE_PULLBACK in context.permitted_archetypes and _enabled(cfg, "impulse_pullback"):
-    if not is_impulse_pullback_session_allowed(context.session, cfg):
-      reasons.append(f"impulse_pullback:outside_allowed_session:{context.session}")
-    else:
-      reasons.append("impulse_pullback:not_matched")
+    reasons.append("impulse_pullback:not_matched")
   if ARCHETYPE_BREAKOUT_RETEST in context.permitted_archetypes and _enabled(cfg, "breakout_retest"):
-    code = diagnose_breakout_reject(context, m1_df, cfg, pip_size=pip_size)
+    code = diagnose_breakout_reject(
+      context, m1_df if m5_df is None or m5_df.empty else m5_df,
+      cfg, pip_size=pip_size,
+    )
     if code and code != "armed":
       reasons.append(f"breakout_retest:{code}")
     elif code == "armed":

@@ -1,4 +1,4 @@
-"""Shadow/paper M1 scalping event loop."""
+"""M1-event-driven scalping loop with M5 setup and M1 confirmation."""
 
 from __future__ import annotations
 
@@ -6,8 +6,10 @@ import asyncio
 import json
 import logging
 import time
+from dataclasses import replace
 from typing import Any
 
+from app.analysis.engine import AnalysisSettings, ScalpStructure, scalp_structure
 from app.analysis.ohlc_source import RedisOHLCSource
 from app.autotrade import units
 from app.core.config import runtime_config
@@ -24,9 +26,11 @@ from app.scalping.context import (
 from app.scalping.unified_context import (
   build_scalp_context_and_micro,
   load_scalp_ohlc_windows,
+  scalp_structure_payload,
 )
 from app.scalping.models import (
   ARMED,
+  ARCHETYPE_IMPULSE_PULLBACK,
   DISCOVERED,
   EXECUTABLE,
   MISSED,
@@ -133,7 +137,7 @@ async def _ensure_context(
   now: int,
   cfg: Any,
   force: bool = False,
-) -> tuple[Any, float]:
+) -> tuple[Any, float, float]:
   existing = await load_current_context(client, symbol, cfg)
   ctx_cfg = getattr(_scalping_cfg(cfg), "context", None)
   max_age = int(getattr(ctx_cfg, "maximum_m5_age_seconds", 420) or 420)
@@ -142,15 +146,17 @@ async def _ensure_context(
     and not force
     and is_context_fresh(existing, now, max_age, cfg)
   ):
-    return existing, 0.0
+    return existing, 0.0, 0.0
+  m1_lookback = int(getattr(ctx_cfg, "m1_lookback_bars", 60) or 60)
 
   windows = await load_scalp_ohlc_windows(
-    source, symbol, m1_bars=1, m5_bars=120, m15_bars=120, h1_bars=120,
+    source, symbol, m1_bars=max(15, m1_lookback), m5_bars=120,
+    m15_bars=120, h1_bars=120,
   )
   m5 = windows["m5"]
   quote = await _load_quote(client, symbol)
   if quote is None or m5 is None or m5.empty:
-    return existing, 0.0
+    return existing, 0.0, 0.0
   bid, ask, _ = quote
   mid = (bid + ask) / 2.0
   pip = _pip_size(symbol, cfg)
@@ -163,8 +169,27 @@ async def _ensure_context(
     now=now,
     cfg=cfg,
   )
+  structure_t0 = time.perf_counter()
+  try:
+    structure = await asyncio.to_thread(
+      scalp_structure,
+      m5,
+      AnalysisSettings(pip_size=pip),
+    )
+  except Exception:
+    log.exception("scalp structure build failed symbol=%s", symbol)
+    structure = ScalpStructure()
+  scalp_structure_ms = (time.perf_counter() - structure_t0) * 1000.0
   if snapshot is None:
-    return existing, analysis_labels_ms
+    return existing, analysis_labels_ms, scalp_structure_ms
+  key_levels, zones = scalp_structure_payload(structure)
+  m5_closes = [float(value) for value in m5["close"].astype(float).tail(120)]
+  snapshot = replace(
+    snapshot,
+    key_levels=key_levels,
+    zones=zones,
+    measured={**snapshot.measured, "m5_closes": m5_closes},
+  )
   current_ttl = int(getattr(ctx_cfg, "current_context_ttl_seconds", 3600) or 3600)
   historic_ttl = int(getattr(ctx_cfg, "historic_context_ttl_seconds", 86400) or 86400)
   await save_context(
@@ -174,7 +199,7 @@ async def _ensure_context(
     historic_ttl=historic_ttl,
   )
   await set_last(client, "context", symbol, json.loads(snapshot.to_json()))
-  return snapshot, analysis_labels_ms
+  return snapshot, analysis_labels_ms, scalp_structure_ms
 
 
 async def process_m1_bar(
@@ -212,8 +237,13 @@ async def process_m1_bar(
   now = int(bar_ts)
 
   t_ctx = time.perf_counter()
-  context, analysis_labels_ms = await _ensure_context(
+  # Refresh the structural snapshot at every M5 boundary. The event loop is
+  # still M1-driven, but retaining a previous snapshot for the full freshness
+  # TTL would make the new M5 setup role lag by several candles.
+  refresh_m5_boundary = int(bar_ts) % (5 * 60) == 0
+  context, analysis_labels_ms, scalp_structure_ms = await _ensure_context(
     client, source, symbol=symbol, now=now, cfg=cfg,
+    force=refresh_m5_boundary,
   )
   context_ms = (time.perf_counter() - t_ctx) * 1000.0
   if context is None:
@@ -241,13 +271,17 @@ async def process_m1_bar(
   lookback = int(getattr(ctx_cfg, "m1_lookback_bars", 60) or 60)
   t_micro = time.perf_counter()
   m1 = await source.window(symbol, "M1", lookback)
+  # The loop remains M1-event driven for timely execution, but M5 owns all
+  # structural setup detection. M1 is passed to strategies only as the
+  # closed-bar confirmation frame.
+  m5 = await source.window(symbol, "M5", 120)
   pip = _pip_size(symbol, cfg)
   # build_micro_structure/discover_all are pandas/CPU-heavy, same as
   # build_context/build_map/build_scalp_context_snapshot elsewhere in this
   # codebase - _ensure_context right above already offloads its own heavy
   # call via asyncio.to_thread, but these two ran inline on the shared
   # event loop that also runs Telegram polling. Fires on every M1 bar
-  # close for every HFS-enabled symbol (once a minute, all symbols'
+  # close for every scalping-enabled symbol (once a minute, all symbols'
   # bars closing in sync) - a real, frequent blocking cost.
   micro = await asyncio.to_thread(
     build_micro_structure,
@@ -262,6 +296,18 @@ async def process_m1_bar(
     ),
   )
   micro_ms = (time.perf_counter() - t_micro) * 1000.0
+  m5_micro = await asyncio.to_thread(
+    build_micro_structure,
+    m5,
+    equal_tol=0.5 * pip,
+    price_digits=int(
+      getattr(
+        getattr(cfg, "units", None),
+        "price_digits",
+        pip_price_digits(pip),
+      )
+    ),
+  ) if m5 is not None and not m5.empty else None
 
   # Live outcome instrumentation: accrue MFE/MAE from this M1 bar for every
   # open scalp position (continues after TP1 / BE until full close).
@@ -280,6 +326,11 @@ async def process_m1_bar(
       log.exception("scalp excursion update failed symbol=%s", symbol)
 
   t_strat = time.perf_counter()
+  quote = await _load_quote(client, symbol)
+  if quote is None:
+    result["reason"] = "scalp_quote_missing"
+    return result
+  bid, ask, qts = quote
   discovery_idle: list[str] = []
   opportunities = await asyncio.to_thread(
     discover_all,
@@ -289,10 +340,13 @@ async def process_m1_bar(
     cfg,
     pip_size=pip,
     now=now,
+    spread_pips=max(0.0, (float(ask) - float(bid)) / pip),
     idle_reasons=discovery_idle,
+    m5_df=m5,
+    m5_micro=m5_micro,
   )
   idle_reasons = (
-    idle_discovery_reasons(context, m1, cfg, pip_size=pip)
+    idle_discovery_reasons(context, m1, cfg, pip_size=pip, m5_df=m5)
     if not opportunities
     else []
   )
@@ -313,23 +367,31 @@ async def process_m1_bar(
         symbol,
         f"opportunity_blocked:{reason.replace(':', '_')}",
       )
+    if reason.endswith(":stop_below_spread_multiple"):
+      await incr(client, symbol, "stop_below_spread_multiple")
+    if reason.startswith(f"{ARCHETYPE_IMPULSE_PULLBACK}:"):
+      code = reason.split(":", 1)[1]
+      if code in {
+        "pullback_extreme_unconfirmed",
+        "impulse_no_displacement",
+        "pullback_not_corrective",
+        "impulse_no_level_reference",
+        "impulse_level_role_mismatch",
+        "impulse_zone_too_wide",
+      }:
+        await incr(client, symbol, code)
   strat_ms = (time.perf_counter() - t_strat) * 1000.0
 
   # Per-reason breakout telemetry every cycle (quiet archetype diagnosis).
   try:
     breakout_reason = diagnose_breakout_reject(
-      context, m1, cfg, pip_size=pip,
+      context, m5 if m5 is not None and not m5.empty else m1,
+      cfg, pip_size=pip,
     )
     if breakout_reason:
       await incr(client, symbol, f"breakout:{breakout_reason}")
   except Exception:
     log.exception("breakout reject telemetry failed symbol=%s", symbol)
-
-  quote = await _load_quote(client, symbol)
-  if quote is None:
-    result["reason"] = "scalp_quote_missing"
-    return result
-  bid, ask, qts = quote
 
   risk_state = await load_risk(client, symbol)
   risk_state = apply_daily_reset(
@@ -340,19 +402,19 @@ async def process_m1_bar(
     from app.autotrade.active_exposure import load_active_exposures
 
     # Per-symbol book only — a live GBPJPY plan must not inflate EURUSD
-    # HFS concurrent / ghost-reconcile (live 2026-08-17 cross-symbol lock).
+    # Scalping concurrent / ghost-reconcile (live 2026-08-17 cross-symbol lock).
     live = live_exposure_ids(
       await load_active_exposures(client, symbol=symbol)
     )
   except Exception:
-    log.exception("hfs live exposure reconcile failed symbol=%s", symbol)
+    log.exception("scalp live exposure reconcile failed symbol=%s", symbol)
     live = set()
   risk_state = reconcile_open_positions(risk_state, live)
   await save_risk(client, symbol, risk_state)
   risk = evaluate_risk(risk_state, cfg, session=context.session, now=now)
 
   # Shared MAD clock for Redis / Range Edge technique only — never used to
-  # rank or gate HFS opportunities (owner 2026-08-26).
+  # rank or gate scalping opportunities (owner 2026-08-26).
   mad_payload: dict[str, Any] | None = None
   if mode in {"shadow", "paper", "live"}:
     try:
@@ -384,7 +446,7 @@ async def process_m1_bar(
     except Exception:
       log.exception("mad phase evaluation failed symbol=%s", symbol)
 
-  # Drop stale armed/discovered HFS contexts so scalp:active cannot pile up.
+  # Drop stale armed/discovered scalping contexts so scalp:active cannot pile up.
   try:
     from app.scalping.lifecycle import prune_stale_active
 
@@ -459,7 +521,7 @@ async def process_m1_bar(
         once_key=f"discover:{opportunity.opportunity_id}:{bar_ts}",
       )
     except Exception:
-      log.exception("hfs discover funnel bump failed")
+      log.exception("scalp discover funnel bump failed")
     existing = await load_lifecycle(client, symbol, opportunity.opportunity_id)
     if existing is None:
       record = ScalpLifecycleRecord(
@@ -552,7 +614,7 @@ async def process_m1_bar(
         once_key=f"activate:{opportunity.opportunity_id}:{bar_ts}",
       )
     except Exception:
-      log.exception("hfs activation funnel bump failed")
+      log.exception("scalp activation funnel bump failed")
     signal = ScalpSignal(
       signal_id=deterministic_id("signal", opportunity.opportunity_id, bar_ts),
       opportunity_id=opportunity.opportunity_id,
@@ -652,7 +714,7 @@ async def process_m1_bar(
                 once_key=f"publish:{opportunity.opportunity_id}",
               )
             except Exception:
-              log.exception("hfs publish funnel bump failed")
+              log.exception("scalp publish funnel bump failed")
             result["allowed"].append({
               "opportunity_id": opportunity.opportunity_id,
               "archetype": opportunity.archetype,
@@ -712,6 +774,7 @@ async def process_m1_bar(
     "context_age_seconds": result.get("context_age_seconds"),
     "context_load_ms": round(context_ms, 3),
     "analysis_labels_ms": round(analysis_labels_ms, 3),
+    "scalp_structure_ms": round(scalp_structure_ms, 3),
     "microstructure_ms": round(micro_ms, 3),
     "strategy_evaluation_ms": round(strat_ms, 3),
     "persistence_ms": round(persist_ms, 3),
@@ -818,7 +881,7 @@ async def handle_closed_bar(
   client: Any,
   source: RedisOHLCSource,
 ) -> None:
-  """HFS handler for one closed-bar event (M5 context refresh, M1 cycle)."""
+  """Scalping handler for one closed-bar event (M5 context refresh, M1 cycle)."""
   if _mode() == "off":
     return
   parsed = _parse_bar_event(data)
@@ -873,5 +936,5 @@ async def scalp_m1_event_loop() -> None:
     log.info("M1 scalping disabled: strategies.scalping.mode=off")
     return
   log.info(
-    "scalp_m1_event_loop idle; bar_event_dispatcher_loop owns live HFS symbols"
+    "scalp_m1_event_loop idle; bar_event_dispatcher_loop owns live scalping symbols"
   )

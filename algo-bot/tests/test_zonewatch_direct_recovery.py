@@ -24,7 +24,7 @@ def _match() -> StrategyMatch:
     event_ts="2026-07-30T06:00:00+00:00",
     issued_at=1_785_390_000,
     expires_at=1_785_390_420,
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     strategy_mode="with_bias",
     direction="SELL",
     key_level=4114.5,

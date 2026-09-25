@@ -5,7 +5,6 @@ from app.autotrade.volume_pips import (
   format_lots,
   format_signed_pips,
   leg_pips,
-  remaining_after_close,
   trade_net_pips,
   volume_percent,
 )
@@ -23,7 +22,7 @@ def test_mandatory_two_leg_volume_weighted_net():
   leg2_pips = 0.9
 
   booked = volume_percent(leg1_volume, initial)
-  remaining_volume = remaining_after_close(initial, [leg1_volume])
+  remaining_volume = max(0.0, initial - leg1_volume)
   remaining_pct = volume_percent(remaining_volume, initial)
   net = trade_net_pips(
     [(leg1_pips, leg1_volume), (leg2_pips, leg2_volume)],

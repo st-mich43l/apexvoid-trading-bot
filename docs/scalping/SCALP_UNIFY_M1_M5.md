@@ -2,7 +2,7 @@
 
 ## Intent
 
-Centralize M1 scalp strategies on **M5 context + M1 micro**, use **Scalp**
+Centralize scalp strategies on **M5 setup structure + closed M1 confirmation**, use **Scalp**
 display names only, and keep open-plan / historical compatibility for legacy
 ``HFS *`` labels.
 
@@ -15,8 +15,8 @@ display names only, and keep open-plan / historical compatibility for legacy
 | Legacy | `HFS *` names still accepted in taxonomy, C#, protective stop, confirmation |
 | Publish | `family=scalp`, `strategy_mode=scalp_m1`, `structural_source=scalp` |
 | Funnel | `auto_trade:funnel:{SYM}:scalp:{archetype}` |
-| Context | `app.scalping.unified_context` loads shared M1/M5/M15/H1 windows |
-| MAD | Does not rank/gate M1 scalping; only Range Edge may soft-favor `accum` |
+| Context | `app.scalping.unified_context` loads shared M1/M5/M15/H1 windows; M5 owns setup and M1 confirms |
+| MAD | Does not rank/gate scalping; only Range Edge may soft-favor `accum` |
 
 ## Kept (no hard delete)
 

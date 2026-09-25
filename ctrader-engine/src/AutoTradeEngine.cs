@@ -10,6 +10,30 @@ public sealed class AutoTradeEngine(
   Action<string>? log = null
 )
 {
+  // Deal history is diagnostic for a position already absent from the
+  // broker snapshot. It must never repeatedly occupy the live quote/order
+  // channel; retry no more than once per minute after the absence is
+  // confirmed.
+  internal const int CloseHistoryRetrySeconds = 60;
+  // Deal history can lag a broker position snapshot, but an unresolved
+  // position must not remain in durable state forever. After this bounded
+  // window, the last protective stop is retained as an explicitly
+  // unconfirmed estimate so a filled ladder can be finalized.
+  //
+  // Owner-reported 2026-09-04: a manual /algo SL hit sat unreported for
+  // ~5.5 minutes end to end. Traced production logs across a full day:
+  // position_close_execution_price_fallback fired for every single
+  // confirmed-missing position (17/17) - the deal-history lookup has a
+  // measured 0% success rate against this account/broker, so the previous
+  // 300s bound was pure dead weight, never once yielding a confirmed
+  // reason. Cut to 30s - long enough for a genuine late-arriving deal
+  // record to still resolve normally (the per-attempt 500ms timeout and
+  // 60s retry cadence above are untouched, so nothing about the actual
+  // lookup got riskier), short enough that the realistic case (which is
+  // now demonstrably the deal history never showing up) stops wasting
+  // minutes of real silence before the already-reliable stop-price
+  // fallback ships the notification.
+  internal const int CloseHistoryMaxWaitSeconds = 30;
   // Owner-override commands for algo-armed/filled manual signals
   // (cancel_pending/close/move_sl). Not wired through AutoTradeOptions -
   // this stream name is a fixed constant matching Python's
@@ -19,6 +43,27 @@ public sealed class AutoTradeEngine(
   private const string ManualCommandStream = "manual_trade:commands";
   private readonly SemaphoreSlim _gate = new(1, 1);
   private readonly Dictionary<long, AutoTradePositionState> _states = [];
+  // Owner-reported live 2026-09-18 (manual signal 393): ProcessTargetsAsync
+  // used to rebuild each group's "which ordinals does some leg already own"
+  // set fresh from _states.Values every poll. That set is what stops a
+  // leg's own NotifySkippedManualTargetsAsync catch-up check from
+  // re-notifying an ordinal a sibling already handles for real - but once
+  // that sibling fully closes and leaves _states, the ordinal it owned
+  // silently disappears from the aggregate too. A leg that never itself
+  // got broker volume for TP1-TP3 (the deepest leg of a shallow-first
+  // ladder) then sat unevaluated for almost an hour - the "someone owns
+  // this ordinal" skip kept firing for ordinals it didn't itself hold,
+  // right up until its siblings closed, at which point a single, late,
+  // NOW-price-only catch-up check fired for whichever ordinals still read
+  // as reached at that instant, permanently missing the rest and never
+  // trailing its stop past "shallow entry". Accumulate ordinal ownership
+  // per group monotonically instead of recomputing it from whoever is
+  // still live - a sibling leaving _states must never make the group
+  // forget an ordinal it already owned. Does not survive an engine
+  // restart (in-memory only, like _states itself); a resumed group's
+  // still-open legs recover a self-consistent (if temporarily narrower)
+  // view the same way this bug's fresh-recompute path already did before.
+  private readonly Dictionary<string, HashSet<int>> _groupTargetOrdinalsSeen = [];
   private readonly Dictionary<string, StructuralRouteIdentity> _routeIdentityByCandidate = [];
   // Multi-instrument: PublishAsync must stamp the candidate's own symbol,
   // not RequireSymbolOrDefault() (session XAU). Otherwise FX manual /algo
@@ -50,6 +95,10 @@ public sealed class AutoTradeEngine(
   private SymbolInfo? _symbol;
   private IReadOnlyList<TradingPosition> _allSymbolPositions = [];
   private IReadOnlyList<TradingPendingOrder> _allSymbolPendingOrders = [];
+  // Deepest planned entry per group (filled legs + pending ladder legs),
+  // captured just before unfilled legs are cancelled after TP1 so the runner
+  // stop can use the zone's own depth. See RecordGroupPlannedDeepestEntry.
+  private readonly Dictionary<string, decimal> _groupPlannedDeepestEntry = new();
   private TradingAccountSnapshot? _account;
   private bool _accountSupportsHedging;
   private int _tradePlanConsumerFailures;
@@ -83,7 +132,6 @@ public sealed class AutoTradeEngine(
   {
     Market,
     SingleLimit,
-    ZoneSplit,
     ManualLimit,
   }
 
@@ -335,6 +383,7 @@ public sealed class AutoTradeEngine(
         );
       }
       await ReconcileAllBoundSymbolsAsync(cancellationToken);
+      await ReconcileOrphanedGroupPlansAsync(cancellationToken);
       _ready = true;
       await PublishReadinessAsync(
         true,
@@ -379,7 +428,14 @@ public sealed class AutoTradeEngine(
             () => ReconcileAllBoundSymbolsAsync(cancellationToken),
             cancellationToken
           );
-          nextReconcile = _clock().AddSeconds(15);
+          // Owner-reported 2026-09-04: a stop-loss that closes without a
+          // live broker push (only ever detected here, via the missing-
+          // snapshot quorum below) sat unreported for up to ~30-45s at the
+          // old 15s cadence - two PositionMissingConfirmations spaced this
+          // far apart. 5s keeps the same 2-confirmation safety margin (a
+          // single transient snapshot gap still never terminalises an open
+          // position) while cutting that floor to roughly 5-10s.
+          nextReconcile = _clock().AddSeconds(5);
         }
         // Owner-override commands (/trade_close, /trade_sl, /trade_cancel on
         // an algo-armed/filled signal) share this loop/gate/thread rather
@@ -878,6 +934,9 @@ public sealed class AutoTradeEngine(
         case "close_all":
           await HandleCloseAllCommandAsync(cancellationToken);
           break;
+        case "close_position":
+          await HandleCloseAutoPositionCommandAsync(command, cancellationToken);
+          break;
         case "move_sl":
           await HandleMoveSlCommandAsync(command, cancellationToken);
           break;
@@ -1069,6 +1128,70 @@ public sealed class AutoTradeEngine(
     );
   }
 
+  // Owner single-position control for fully-autonomous positions: before
+  // this, the only broker verb touching an algo_auto position was
+  // /auto_close_all (flattens every open position, manual and autonomous
+  // alike). Scoped to Stream == "algo_auto" only - manual /algo positions
+  // keep going through HandleCloseCommandAsync's own intent_id/group-aware
+  // path so this bare-PositionId command can never bypass /trade_close's
+  // richer partial-close/BE semantics for a signal the owner typed. Uses
+  // eventType "position_closed" (not "manual_closed") so the channel card
+  // renders through delivery.py's existing generic handler the same way
+  // /auto_close_all's own per-position closes already do - "manual_closed"
+  // is manual_execution.py-only and would silently produce no card for a
+  // signal with no manual_signals row.
+  private async Task HandleCloseAutoPositionCommandAsync(
+    ManualTradeCommand command,
+    CancellationToken cancellationToken
+  )
+  {
+    if (command.PositionId is not long positionId)
+    {
+      _log("auto-trade close_position command missing position_id");
+      return;
+    }
+    var client = RequireClient();
+    var state = _states.GetValueOrDefault(positionId)
+      ?? await store.GetPositionAsync(positionId, cancellationToken);
+    if (state is null || state.Stream != "algo_auto")
+    {
+      _log($"auto-trade close_position: position {positionId} is not an open algo_auto position");
+      await PublishAsync(
+        "manual_command_error",
+        $"close_position requested but position {positionId} is not an open algo_auto position",
+        cancellationToken,
+        positionId: positionId
+      );
+      return;
+    }
+    var remaining = (long?)state.RemainingVolume;
+    if (remaining is null || remaining <= 0)
+    {
+      var positions = await client.ReconcilePositionsAsync(cancellationToken);
+      remaining = positions.FirstOrDefault(item => item.PositionId == positionId)?.Volume;
+    }
+    if (remaining is not long remainingVolume || remainingVolume <= 0)
+    {
+      _log($"auto-trade close_position: position {positionId} not found");
+      await PublishAsync(
+        "manual_command_error",
+        $"close_position requested but position {positionId} is not open",
+        cancellationToken,
+        positionId: positionId
+      );
+      return;
+    }
+    var execution = await client.ClosePositionAsync(positionId, remainingVolume, cancellationToken);
+    await ApplyOwnerCloseAsync(
+      state,
+      execution,
+      eventType: "position_closed",
+      message: $"algo_auto position {positionId} closed by owner",
+      candidateId: state.CandidateId,
+      cancellationToken
+    );
+  }
+
   // /auto_close_all: market-close every tracked ApexVoid Algo position and
   // cancel resting labeled limits. Net pips use the broker close fill, not
   // a stop estimate.
@@ -1160,6 +1283,13 @@ public sealed class AutoTradeEngine(
     {
       currentGroup = [state];
     }
+    // An owner-initiated close (/trade_close, /auto_close_all,
+    // /trade_close_auto) is not itself a take-profit event - risk leg
+    // excluded, same as any other risk-facing figure.
+    var deepestEntry = GroupDeepestEntryPrice(
+      currentGroup, state.Direction, includeRiskLeg: false
+    );
+    var displayLegPips = SignedPipsFromEntry(state, deepestEntry, fill);
     var groupPipVolume = GroupRealizedPipVolume(currentGroup)
       + realizedPips * closeVolume;
     // Sibling legs (e.g. a manual-algo group's other filled entry clips)
@@ -1211,7 +1341,8 @@ public sealed class AutoTradeEngine(
         matchId: state.MatchId,
         rangeId: state.RangeId,
         strategyFamily: state.StrategyFamily,
-        legRealizedPips: realizedPips,
+        legRealizedPips: displayLegPips,
+        legEntryPrice: deepestEntry,
         groupInitialVolume: groupInitialVolume,
         lotSize: symbol.LotSize
       );
@@ -1219,8 +1350,34 @@ public sealed class AutoTradeEngine(
     }
     _states.Remove(state.PositionId);
     await store.DeletePositionAsync(state.PositionId, cancellationToken);
+    // This leg being fully closed does not mean the GROUP is closed - a
+    // manual/auto ladder's other legs can still be resting or open. Firing
+    // "position_closed" (renders as the subscriber-facing "POSITION CLOSED"
+    // headline) for a non-final leg would falsely announce the whole trade
+    // is over while a sibling is still live. "leg_closed" is Telegram-silent
+    // (TELEGRAM_SILENT_LIFECYCLE_TYPES in delivery.py) but keeps every field
+    // this call already computes, so metrics/journal/audit are unaffected -
+    // only the premature subscriber-facing card is suppressed. The real
+    // terminal card still fires as "position_closed" on whichever leg
+    // actually is last, unchanged from today.
+    //
+    // Scoped to Stream == "algo_auto" only: /auto_close_all deliberately
+    // reuses eventType "position_closed" (never "manual_closed") even for a
+    // manual /algo position (see this method's own callers), specifically
+    // so manual_execution.py's generic "position_closed" dispatch still
+    // resolves it - that handler already defers its OWN Telegram/ledger
+    // work correctly via remaining_volume/_handle_group_result, but it also
+    // pops the closed position_id from its local positions cache ONLY on a
+    // recognized "position_closed"/"manual_closed" type. Substituting
+    // "leg_closed" there would silently starve that cache cleanup, since
+    // manual_execution.py has no handler for this new type at all.
+    var groupFullyClosed = !_states.Values.Any(item => GroupId(item) == groupId);
+    var publishedEventType =
+      eventType == "position_closed" && !groupFullyClosed && state.Stream == "algo_auto"
+        ? "leg_closed"
+        : eventType;
     await PublishAsync(
-      eventType,
+      publishedEventType,
       message,
       cancellationToken,
       candidateId: candidateId ?? state.CandidateId,
@@ -1239,11 +1396,12 @@ public sealed class AutoTradeEngine(
       matchId: state.MatchId,
       rangeId: state.RangeId,
       strategyFamily: state.StrategyFamily,
-      legRealizedPips: realizedPips,
+      legRealizedPips: displayLegPips,
+      legEntryPrice: deepestEntry,
       groupInitialVolume: groupInitialVolume,
       lotSize: symbol.LotSize
     );
-    if (!_states.Values.Any(item => GroupId(item) == groupId))
+    if (groupFullyClosed)
     {
       await PublishAsync(
         "group_result",
@@ -1263,7 +1421,8 @@ public sealed class AutoTradeEngine(
         stream: ExecutionStream(state),
         direction: DirectionLabel(state.Direction),
         groupInitialVolume: groupInitialVolume,
-        lotSize: symbol.LotSize
+        lotSize: symbol.LotSize,
+        legEntryPrice: deepestEntry
       );
       await MaybeDeleteGroupPlanAsync(groupId, cancellationToken);
     }
@@ -2096,16 +2255,6 @@ public sealed class AutoTradeEngine(
       date,
       cancellationToken
     ),
-    ExecutionRoute.ZoneSplit => await ProcessZoneFillAsync(
-      candidate,
-      account,
-      direction,
-      expectedEntry,
-      route.PlannedEntryPrice,
-      stopPlan,
-      date,
-      cancellationToken
-    ),
     _ => await ProcessSingleInitialAsync(
       candidate,
       account,
@@ -2157,27 +2306,24 @@ public sealed class AutoTradeEngine(
           null
         );
     }
+    // zone_split entry-distribution (the V6 zone-fill ladder) was removed
+    // entirely - any candidate still declaring it is rejected outright
+    // rather than silently downgraded to a route it never asked for.
+    if (distribution == "zone_split")
+    {
+      return new ExecutionRouteResolution(
+        ExecutionRoute.Market,
+        executableEntry,
+        null,
+        "execution policy requires unavailable zone_split limit capability"
+      );
+    }
     var geometry = ClassifyEntryGeometry(
       candidate.EntryZone,
       direction,
       executableEntry
     );
-    var splitQualified = (
-      options.ZoneFillEnabled
-      && candidate.Atr is decimal limitAtr
-      && ZoneFillPlanner.Qualifies(
-        candidate.EntryZone,
-        limitAtr,
-        options.ZoneFillMinAtr
-      )
-    );
-    if (
-      preference == "limit"
-      && (
-        distribution == "single"
-        || (distribution == "either" && !splitQualified)
-      )
-    )
+    if (preference == "limit" && distribution is "single" or "either")
     {
       var limitPrice = SelectValidSideProximal(
         candidate.EntryZone,
@@ -2199,58 +2345,6 @@ public sealed class AutoTradeEngine(
           null,
           "required single limit is not on the valid broker side"
         );
-    }
-    if (distribution == "zone_split" && !splitQualified)
-    {
-      return new ExecutionRouteResolution(
-        ExecutionRoute.ZoneSplit,
-        executableEntry,
-        null,
-        "execution policy requires unavailable zone_split limit capability"
-      );
-    }
-    if (
-      !IsBoxRangeScalp(candidate)
-      && distribution != "single"
-      && (!IsStrategyMatchCandidate(candidate) || preference == "limit"
-        || distribution == "zone_split")
-      && splitQualified
-    )
-    {
-      var proximal = SelectValidSideProximal(
-        candidate.EntryZone,
-        direction,
-        executableEntry,
-        geometry,
-        options.InsideZoneMarketEntryEnabled
-      );
-      if (proximal is decimal reference)
-      {
-        return new ExecutionRouteResolution(
-          ExecutionRoute.ZoneSplit,
-          reference,
-          "execution policy: zone split",
-          null
-        );
-      }
-      if (!options.ZoneFillFallbackEnabled)
-      {
-        return new ExecutionRouteResolution(
-          ExecutionRoute.ZoneSplit,
-          executableEntry,
-          null,
-          "zone-fill proximal edge is not on the valid limit-order side"
-        );
-      }
-      // Deterministic fallback to a single market entry. The stop contract is
-      // then validated at the executable quote, so a limit-priced contract
-      // fails route validation instead of silently trading a different entry.
-      return new ExecutionRouteResolution(
-        ExecutionRoute.Market,
-        executableEntry,
-        $"zone-fill geometry invalid; single-entry fallback ({geometry})",
-        null
-      );
     }
     return new ExecutionRouteResolution(
       ExecutionRoute.Market,
@@ -2397,38 +2491,6 @@ public sealed class AutoTradeEngine(
         return "final_stop_leg_entry_mismatch";
       }
     }
-    if (declaredRoute == PlannedExecutionRoute.ZoneSplit)
-    {
-      var legs = candidate.PlannedLegEntryPrices;
-      if (legs is null || legs.Count == 0)
-      {
-        await store.IncrementMetricAsync(
-          candidate.Symbol,
-          "final_stop_leg_entries_missing",
-          cancellationToken
-        );
-        return "final_stop_leg_entries_missing";
-      }
-      if (legs.Count != 2)
-      {
-        await store.IncrementMetricAsync(
-          candidate.Symbol,
-          "final_stop_leg_entry_count_mismatch",
-          cancellationToken
-        );
-        return "final_stop_leg_entry_count_mismatch";
-      }
-      // Reference entry is the proximal leg; it must match the planned entry.
-      if (Math.Abs(legs[0] - plannedEntry) > tick)
-      {
-        await store.IncrementMetricAsync(
-          candidate.Symbol,
-          "final_stop_leg_entry_mismatch",
-          cancellationToken
-        );
-        return "final_stop_leg_entry_mismatch";
-      }
-    }
     return null;
   }
 
@@ -2472,7 +2534,13 @@ public sealed class AutoTradeEngine(
   {
     PlannedExecutionRoute.Market => resolved == ExecutionRoute.Market,
     PlannedExecutionRoute.SingleLimit => resolved == ExecutionRoute.SingleLimit,
-    PlannedExecutionRoute.ZoneSplit => resolved == ExecutionRoute.ZoneSplit,
+    // zone_split (the V6 zone-fill ladder) was removed entirely - no
+    // resolved route can ever satisfy a candidate that still declares it.
+    // Kept parseable (rather than removed from PlannedExecutionRoute) only
+    // so an old/replayed candidate fails with the specific
+    // final_stop_entry_route_mismatch reason instead of the less precise
+    // final_stop_entry_route_invalid.
+    PlannedExecutionRoute.ZoneSplit => false,
     PlannedExecutionRoute.Either => true,
     _ => false,
   };
@@ -2524,7 +2592,8 @@ public sealed class AutoTradeEngine(
         options.PipValuePerLot,
         RequireSymbol(),
         targetPips,
-        targetWeights
+        targetWeights,
+        useFxEquitySizing: VolumePlanner.IsFxInstrument(RequireSymbol())
       );
     }
     catch (VolumePlanningException exception) when (rangeBoxScaleOut)
@@ -2548,7 +2617,8 @@ public sealed class AutoTradeEngine(
           options.PipValuePerLot,
           RequireSymbol(),
           targetPips,
-          targetWeights
+          targetWeights,
+          useFxEquitySizing: VolumePlanner.IsFxInstrument(RequireSymbol())
         );
       }
       catch (VolumePlanningException fallbackException)
@@ -2668,7 +2738,8 @@ public sealed class AutoTradeEngine(
         options.PipValuePerLot,
         symbol,
         targets,
-        weights
+        weights,
+        useFxEquitySizing: VolumePlanner.IsFxInstrument(symbol)
       );
     }
     catch (VolumePlanningException exception)
@@ -2797,400 +2868,6 @@ public sealed class AutoTradeEngine(
     return true;
   }
 
-  // `referenceEntry` is the route-resolved zone-fill reference entry and
-  // `zoneStopPlan` was already validated against it.
-  private async Task<bool> ProcessZoneFillAsync(
-    TradeCandidate candidate,
-    TradingAccountSnapshot account,
-    TradeDirection direction,
-    decimal expectedEntry,
-    decimal referenceEntry,
-    StructureStopPlan zoneStopPlan,
-    DateOnly date,
-    CancellationToken cancellationToken
-  )
-  {
-    var symbol = RequireSymbol();
-    var geometry = ClassifyEntryGeometry(
-      candidate.EntryZone,
-      direction,
-      expectedEntry
-    );
-    var proximal = (decimal?)referenceEntry;
-    InitialSizingResult sizing;
-    var zoneTargets = UsesCandidateTargetPlan(candidate)
-      ? candidate.TargetsPips!
-      : options.TargetsPips;
-    var zoneWeights = UsesCandidateTargetPlan(candidate)
-      ? EqualWeights(zoneTargets.Count)
-      : options.TargetWeights;
-    try
-    {
-      sizing = VolumePlanner.SizeInitial(
-        account.Balance,
-        EffectiveInitialRiskPercent(candidate),
-        options.SizingMode,
-        zoneStopPlan.StopPips,
-        options.PipValuePerLot,
-        symbol,
-        zoneTargets,
-        zoneWeights
-      );
-    }
-    catch (VolumePlanningException exception)
-    {
-      return await RejectAsync(candidate, exception.Message, cancellationToken);
-    }
-    if (sizing.Lots < options.ZoneFillMinLots)
-    {
-      var reason = $"zone-fill skipped: {sizing.Lots:0.00} lots below "
-        + $"{options.ZoneFillMinLots:0.00} minimum";
-      _log($"auto-trade {reason}");
-      return await FallBackToSingleEntryAsync(
-        candidate,
-        account,
-        direction,
-        expectedEntry,
-        symbol,
-        date,
-        reason,
-        cancellationToken
-      );
-    }
-    var validLimitSide = direction == TradeDirection.Buy
-      ? proximal.Value <= expectedEntry
-      : proximal.Value >= expectedEntry;
-    if (!validLimitSide)
-    {
-      if (!options.ZoneFillFallbackEnabled)
-      {
-        return await RejectAsync(
-          candidate,
-          "zone-fill proximal edge is not on the valid limit-order side",
-          cancellationToken
-        );
-      }
-      var fallbackReason =
-        "zone-fill geometry invalid; single-entry fallback"
-        + $" ({geometry})";
-      _log($"auto-trade {fallbackReason}");
-      return await FallBackToSingleEntryAsync(
-        candidate,
-        account,
-        direction,
-        expectedEntry,
-        symbol,
-        date,
-        fallbackReason,
-        cancellationToken
-      );
-    }
-    var fillZone = SliceValidSideZone(
-      candidate.EntryZone,
-      direction,
-      expectedEntry,
-      proximal.Value
-    );
-    ZoneFillPlan plan;
-    try
-    {
-      // Every leg shares the one approved absolute stop.
-      var stopLoss = decimal.Round(
-        zoneStopPlan.StopLoss,
-        symbol.Digits,
-        MidpointRounding.AwayFromZero
-      );
-      plan = ZoneFillPlanner.Build(
-        direction,
-        fillZone,
-        stopLoss,
-        sizing.Volume,
-        symbol,
-        zoneTargets,
-        zoneWeights
-      );
-    }
-    catch (VolumePlanningException exception)
-    {
-      return await RejectAsync(candidate, exception.Message, cancellationToken);
-    }
-    if (candidate.PlannedLegEntryPrices is { Count: > 0 } declaredLegs)
-    {
-      var tick = SymbolTick(symbol);
-      if (declaredLegs.Count != plan.Legs.Count)
-      {
-        await store.IncrementMetricAsync(
-          candidate.Symbol,
-          "final_stop_leg_entry_count_mismatch",
-          cancellationToken
-        );
-        return await RejectAsync(
-          candidate,
-          "final_stop_leg_entry_count_mismatch",
-          cancellationToken
-        );
-      }
-      for (var index = 0; index < plan.Legs.Count; index++)
-      {
-        if (Math.Abs(declaredLegs[index] - plan.Legs[index].LimitPrice) > tick)
-        {
-          await store.IncrementMetricAsync(
-            candidate.Symbol,
-            "final_stop_leg_entry_mismatch",
-            cancellationToken
-          );
-          return await RejectAsync(
-            candidate,
-            "final_stop_leg_entry_mismatch",
-            cancellationToken
-          );
-        }
-      }
-    }
-    var groupId = CandidateGroupId(candidate);
-    var barTs = candidate.BarTs ?? candidate.CreatedAt;
-    if (options.DryRun)
-    {
-      return await CompleteDryRunAsync(
-        candidate,
-        $"zone fill · {sizing.Lots:N2} lots across {plan.Legs.Count} limits · "
-          + $"SL {plan.StopLoss:N2} · {sizing.BindingTerm} · route={geometry}",
-        sizing.Volume,
-        proximal.Value,
-        cancellationToken
-      );
-    }
-    if (await store.IsPausedAsync(cancellationToken))
-    {
-      return await RejectAsync(candidate, "executor paused", cancellationToken);
-    }
-    await ReconcileAsync(cancellationToken);
-    if (!CanOpenNewGroup(direction))
-    {
-      return await RejectAsync(
-        candidate,
-        "XAU exposure policy changed before zone-fill orders",
-        cancellationToken
-      );
-    }
-    var placed = new List<long>();
-    await PublishAsync(
-      "order_planned",
-      $"zone fill {candidate.Direction} planned across {plan.Legs.Count} limits",
-      cancellationToken,
-      candidate.CandidateId,
-      volume: sizing.Volume,
-      groupId: groupId,
-      setup: candidate.Setup,
-      direction: candidate.Direction,
-      matchId: candidate.MatchId,
-      rangeId: candidate.RangeId,
-      strategyFamily: candidate.StrategyFamily,
-      riskMultiplier: candidate.RiskMultiplier,
-      targetModel: candidate.TargetModel,
-      entryDistribution: candidate.EntryDistribution
-    );
-    await PublishAsync(
-      "order_submitted",
-      $"zone fill {candidate.Direction} submitted to broker",
-      cancellationToken,
-      candidate.CandidateId,
-      volume: sizing.Volume,
-      groupId: groupId,
-      setup: candidate.Setup,
-      direction: candidate.Direction,
-      matchId: candidate.MatchId,
-      rangeId: candidate.RangeId,
-      strategyFamily: candidate.StrategyFamily,
-      riskMultiplier: candidate.RiskMultiplier,
-      targetModel: candidate.TargetModel,
-      entryDistribution: candidate.EntryDistribution
-    );
-    await store.IncrementMetricAsync(
-      candidate.Symbol,
-      "order_submitted",
-      cancellationToken
-    );
-    // The plan persists the route this executor actually resolved and the
-    // exact per-leg client order IDs it is about to submit - never the
-    // declared candidate route (which may be `either`).
-    await SaveGroupPlanAsync(
-      candidate,
-      groupId,
-      cancellationToken,
-      streamEventId: _activeLease?.StreamEventId,
-      route: "zone_split",
-      clientOrderIds: plan.Legs
-        .Select(leg => $"{ClientOrderId(candidate.CandidateId)}-z{leg.Leg}")
-        .ToArray()
-    );
-    if (!await EnsureBrokerLeaseAsync(cancellationToken))
-    {
-      // The group plan stays: a successor or recovery run needs it to map
-      // deterministic client order IDs back to this candidate.
-      throw new CandidateLeaseLostException(candidate.CandidateId);
-    }
-    var legClientOrderId = ClientOrderId(candidate.CandidateId);
-    using var brokerCts = CreateBrokerCancellation(cancellationToken);
-    try
-    {
-      foreach (var leg in plan.Legs)
-      {
-        // Ownership is proven before every leg, not once before the loop: a
-        // multi-leg placement can easily outlive a single lease window.
-        if (!await StillOwnsCandidateAsync(cancellationToken))
-        {
-          if (placed.Count == 0)
-          {
-            throw new CandidateLeaseLostException(candidate.CandidateId);
-          }
-          // Legs are already live and belong to this candidate, but ownership
-          // is gone: reconciliation must decide, not this executor.
-          throw ClassifyBrokerUncertainty(
-            candidate,
-            $"{legClientOrderId}-z{leg.Leg}",
-            new CandidateLeaseLostException(candidate.CandidateId)
-          );
-        }
-        var distance = Math.Abs(leg.LimitPrice - plan.StopLoss);
-        var comment = BuildZoneComment(
-          candidate.CandidateId,
-          groupId,
-          leg,
-          barTs
-        );
-        legClientOrderId = $"{ClientOrderId(candidate.CandidateId)}-z{leg.Leg}";
-        var orderId = await RequireClient().PlaceLimitOrderAsync(
-          new LimitOrderRequest(
-            symbol.SymbolId,
-            direction,
-            leg.Volume,
-            leg.LimitPrice,
-            decimal.ToInt64(distance * 100_000m),
-            options.Label,
-            comment,
-            legClientOrderId
-          ),
-          brokerCts.Token
-        );
-        placed.Add(orderId);
-      }
-    }
-    catch (Exception exception)
-      when (exception is not BrokerOutcomeUnknownException
-        and not CandidateLeaseLostException
-        && (exception is not OperationCanceledException || BrokerOwnershipCancelled()))
-    {
-      // A failed leg does not prove the request never arrived, so rollback is
-      // restricted to order IDs the broker confirmed and the group plan is
-      // retained for reconciliation either way.
-      await RollbackZoneFillAsync(
-        candidate.CandidateId,
-        placed,
-        cancellationToken
-      );
-      throw ClassifyBrokerUncertainty(candidate, legClientOrderId, exception);
-    }
-    await CompleteActiveCandidateAsync(
-      $"ordered:{string.Join(',', placed)}",
-      cancellationToken
-    );
-    await PublishAsync(
-      "order_accepted",
-      $"broker accepted {placed.Count} zone-fill limit order(s)",
-      cancellationToken,
-      candidate.CandidateId,
-      volume: sizing.Volume,
-      groupId: groupId,
-      setup: candidate.Setup,
-      direction: candidate.Direction,
-      matchId: candidate.MatchId,
-      rangeId: candidate.RangeId,
-      strategyFamily: candidate.StrategyFamily,
-      pendingOrderIds: placed
-    );
-    await store.IncrementDailyTradeCountAsync(date, cancellationToken);
-    await PublishAsync(
-      "zone_planned",
-      $"zone fill · {sizing.Lots:N2} lots · limits "
-        + string.Join(" / ", plan.Legs.Select(leg =>
-          $"{leg.LimitPrice:N2} ({leg.Volume / (decimal)symbol.LotSize:N2})"
-        ))
-        + $" · SL {plan.StopLoss:N2} · midpoint TTL "
-        + $"{options.ZoneFillTtlBars} bars · {sizing.BindingTerm} · route={geometry}",
-      cancellationToken,
-      candidate.CandidateId,
-      volume: sizing.Volume,
-      price: proximal.Value,
-      groupId: groupId,
-      trancheIndex: 1,
-      groupWorstCase: -sizing.Lots * zoneStopPlan.StopPips
-        * options.PipValuePerLot,
-      riskBudget: sizing.Budget,
-      hadAdds: false,
-      setup: candidate.Setup,
-      direction: candidate.Direction,
-      matchId: candidate.MatchId,
-      rangeId: candidate.RangeId,
-      strategyFamily: candidate.StrategyFamily,
-      pendingOrderIds: placed
-    );
-    await ReconcileAsync(cancellationToken);
-    return true;
-  }
-
-  // A late zone-fill fallback changes the route to a single market entry, so
-  // the stop contract is revalidated at the new planned entry instead of
-  // reusing a plan priced against the abandoned limit geometry.
-  private async Task<bool> FallBackToSingleEntryAsync(
-    TradeCandidate candidate,
-    TradingAccountSnapshot account,
-    TradeDirection direction,
-    decimal expectedEntry,
-    SymbolInfo symbol,
-    DateOnly date,
-    string routingReason,
-    CancellationToken cancellationToken
-  )
-  {
-    StructureStopPlan fallbackStopPlan;
-    try
-    {
-      fallbackStopPlan = StructureStop(
-        candidate,
-        direction,
-        expectedEntry,
-        symbol,
-        ExecutionRoute.Market
-      );
-    }
-    catch (VolumePlanningException exception)
-    {
-      await store.IncrementMetricAsync(
-        candidate.Symbol,
-        "final_stop_entry_route_mismatch",
-        cancellationToken
-      );
-      return await RejectAsync(candidate, exception.Message, cancellationToken);
-    }
-    await ObserveMarketStopContractRecomputeAsync(
-      candidate,
-      ExecutionRoute.Market,
-      expectedEntry,
-      cancellationToken
-    );
-    return await ProcessSingleInitialAsync(
-      candidate,
-      account,
-      direction,
-      expectedEntry,
-      fallbackStopPlan,
-      date,
-      routingReason,
-      cancellationToken
-    );
-  }
-
   private static string ClassifyEntryGeometry(
     TradeCandidateZone zone,
     TradeDirection direction,
@@ -3271,118 +2948,29 @@ public sealed class AutoTradeEngine(
 
   // Removed erroneous static options hook.
 
-  private static TradeCandidateZone SliceValidSideZone(
-    TradeCandidateZone zone,
-    TradeDirection direction,
-    decimal expectedEntry,
-    decimal proximal
-  )
-  {
-    if (direction == TradeDirection.Buy)
-    {
-      var high = Math.Min(zone.High, expectedEntry);
-      var low = Math.Min(zone.Low, high);
-      if (high <= low)
-      {
-        return new TradeCandidateZone(proximal, proximal);
-      }
-      return new TradeCandidateZone(low, high);
-    }
-    var sellLow = Math.Max(zone.Low, expectedEntry);
-    var sellHigh = Math.Max(zone.High, sellLow);
-    if (sellHigh <= sellLow)
-    {
-      return new TradeCandidateZone(proximal, proximal);
-    }
-    return new TradeCandidateZone(sellLow, sellHigh);
-  }
-
-  // Rollback is a broker mutation and therefore fenced: a stale executor must
-  // never cancel orders a successor or adopter now owns. Only order IDs the
-  // broker confirmed are cancelled - never a speculative ID whose acceptance
-  // was never acknowledged.
-  private async Task RollbackZoneFillAsync(
-    string candidateId,
-    IReadOnlyList<long> placedOrderIds,
-    CancellationToken cancellationToken
-  )
-  {
-    if (!await StillOwnsCandidateAsync(cancellationToken))
-    {
-      await store.IncrementMetricAsync(
-        CandidateSymbolHint(),
-        "executor_stale_release_blocked",
-        cancellationToken
-      );
-      _log(
-        $"auto-trade zone-fill rollback skipped for {Short(candidateId)}: "
-        + "lease no longer owned"
-      );
-      return;
-    }
-    var client = RequireClient();
-    foreach (var orderId in placedOrderIds)
-    {
-      try
-      {
-        await client.CancelPendingOrderAsync(orderId, cancellationToken);
-      }
-      catch (Exception exception) when (exception is not OperationCanceledException)
-      {
-        // Cancellation is unverified, so the leg may still be live. Leave the
-        // candidate recovery-required rather than reporting a clean rollback.
-        _log($"auto-trade zone-fill rollback cancel failed order={orderId}: "
-          + exception.Message);
-        throw new BrokerOutcomeUnknownException(
-          candidateId,
-          orderId.ToString(CultureInfo.InvariantCulture),
-          exception
-        );
-      }
-    }
-    var positions = await client.ReconcilePositionsAsync(cancellationToken);
-    foreach (var position in positions.Where(position => (
-      position.SymbolId == RequireSymbol().SymbolId
-      && position.Label == options.Label
-      && position.Comment.Contains(
-        CandidateToken(candidateId),
-        StringComparison.Ordinal
-      )
-    )))
-    {
-      try
-      {
-        await client.ClosePositionAsync(
-          position.PositionId,
-          position.Volume,
-          cancellationToken
-        );
-      }
-      catch (Exception exception) when (exception is not OperationCanceledException)
-      {
-        _log($"auto-trade zone-fill rollback close failed position="
-          + $"{position.PositionId}: {exception.Message}");
-        throw;
-      }
-    }
-  }
-
   /// <summary>
-  /// Three entry-leg prices spanning the owner's zone: Shallow (near edge,
-  /// most likely to fill), Mid (midpoint), Deep (far edge, best price,
-  /// least likely to fill).
+  /// Two entry-leg prices spanning the owner's zone: Shallow (near edge,
+  /// most likely to fill) and Deep (best price, least likely to fill).
+  /// Owner 2026-09-08: dropped the former Mid leg down to a plain 2-leg
+  /// 80/20 ladder (<see cref="ManualEntryLegRatios"/>) - a separate
+  /// fixed-size risk leg near the stop (<see cref="ManualAlgoRiskLegPrice"/>)
+  /// replaces Mid's old role instead of splitting the same sized volume
+  /// three ways.
   ///
-  /// A real typed range (zone.Low != zone.High) is used directly - Shallow
-  /// is whichever edge is closer to a profitable fill (High for BUY, Low
-  /// for SELL), Deep the opposite edge.
+  /// Owner 2026-09-09: Deep must not rest at the zone's far edge - that's
+  /// the single least-likely-to-fill price in the whole typed range. A real
+  /// typed range (zone.Low != zone.High) places Deep at the zone's own
+  /// midpoint instead, keeping it inside the typed range while still
+  /// meaningfully deeper than Shallow (the near edge, High for BUY, Low for
+  /// SELL, unchanged).
   ///
   /// A degenerate/single-price zone (zone.Low == zone.High, e.g. the owner
   /// typed one number twice) has no real span to split, so Deep is derived
   /// as the midpoint between the typed price and the stop loss - confirmed
-  /// against a live example (BUY 4390, SL 4384 -> Deep 4387, Mid 4388.5).
-  /// This never places a leg past the halfway point to the stop.
+  /// against a live example (BUY 4390, SL 4384 -> Deep 4387). This never
+  /// places a leg past the halfway point to the stop.
   /// </summary>
-  private static (decimal Shallow, decimal Mid, decimal Deep) ManualEntryLegPrices(
+  private static (decimal Shallow, decimal Deep) ManualEntryLegPrices(
     TradeCandidateZone zone,
     TradeDirection direction,
     decimal manualStopLoss,
@@ -3394,20 +2982,53 @@ public sealed class AutoTradeEngine(
     if (zone.Low != zone.High)
     {
       shallow = direction == TradeDirection.Buy ? zone.High : zone.Low;
-      deep = direction == TradeDirection.Buy ? zone.Low : zone.High;
+      deep = (zone.Low + zone.High) / 2m;
     }
     else
     {
       shallow = zone.Low;
       deep = shallow + (manualStopLoss - shallow) / 2m;
     }
-    var mid = shallow + (deep - shallow) / 2m;
     return (
       decimal.Round(shallow, symbol.Digits, MidpointRounding.AwayFromZero),
-      decimal.Round(mid, symbol.Digits, MidpointRounding.AwayFromZero),
       decimal.Round(deep, symbol.Digits, MidpointRounding.AwayFromZero)
     );
   }
+
+  // Owner 2026-09-08: additional risk leg beyond the 80/20 ladder, resting
+  // ManualAlgoRiskLegPipsFromStop pips away from the stop on the entry
+  // side - a deliberate "trade off" spot: if price nearly invalidates the
+  // setup before reversing, this leg still catches a much deeper (better)
+  // fill than Shallow/Deep ever would; if it keeps going instead, the
+  // small fixed size caps the extra loss. Equity-tiered (live account
+  // equity, not balance, per owner instruction), not lot-scaled from the
+  // main ladder's own sizing - a large account books the same small
+  // fixed size here as a smaller one above the floor.
+  private const decimal ManualAlgoRiskLegLotsDefault = 0.05m;
+  private const decimal ManualAlgoRiskLegLotsBelowEquityFloor = 0.02m;
+  private const decimal ManualAlgoRiskLegEquityFloor = 1_000m;
+  private const decimal ManualAlgoRiskLegPipsFromStop = 15m;
+
+  private static decimal ManualAlgoRiskLegPrice(
+    TradeDirection direction,
+    decimal manualStopLoss,
+    decimal pipSize,
+    SymbolInfo symbol
+  ) => decimal.Round(
+    direction == TradeDirection.Buy
+      ? manualStopLoss + ManualAlgoRiskLegPipsFromStop * pipSize
+      : manualStopLoss - ManualAlgoRiskLegPipsFromStop * pipSize,
+    symbol.Digits,
+    MidpointRounding.AwayFromZero
+  );
+
+  private static long ManualAlgoRiskLegVolume(decimal equity, SymbolInfo symbol) =>
+    VolumePlanner.VolumeForLots(
+      equity < ManualAlgoRiskLegEquityFloor
+        ? ManualAlgoRiskLegLotsBelowEquityFloor
+        : ManualAlgoRiskLegLotsDefault,
+      symbol
+    );
 
   // Owner /algo instructions have their own execution route. Autonomous
   // selection, zone, regime, bias and scale-in policy must never alter them.
@@ -3440,7 +3061,8 @@ public sealed class AutoTradeEngine(
     var targetPrices = candidate.ManualTakeProfits!;
     // Validate against Shallow (the worst-case/most-likely-to-fill entry) -
     // if targets are profitable and correctly ordered relative to the worst
-    // entry, they are automatically profitable relative to Mid/Deep too.
+    // entry, they are automatically profitable relative to the deeper legs
+    // (Deep, risk) too.
     var priceValidation = ValidateManualPrices(
       candidate,
       direction,
@@ -3479,7 +3101,8 @@ public sealed class AutoTradeEngine(
         pipValuePerLot,
         symbol,
         targetsPips,
-        targetWeights
+        targetWeights,
+        useFxEquitySizing: VolumePlanner.IsFxInstrument(symbol)
       );
     }
     catch (VolumePlanningException exception)
@@ -3500,14 +3123,16 @@ public sealed class AutoTradeEngine(
     {
       return await RejectAsync(candidate, exception.Message, cancellationToken);
     }
-    // Split the sized total across three entry legs (2026-08 R:R redesign):
-    // Shallow 70% / Mid 20% / Deep 10%. SplitEntryVolume already collapses
-    // to a single slice when the total can't support three broker-minimum
-    // legs, but a slice that individually clears MinVolume can still be too
-    // small for BuildTargetPlan's own "at least two broker-valid exits"
-    // requirement (a small deep 10% leg, in particular) - fail closed to
-    // the original single-leg-at-Shallow behavior rather than losing the
-    // candidate to an unhandled exception.
+    // Split the sized total across the 2-leg ladder (2026-08 R:R redesign,
+    // 2026-09-08 simplified to 2 legs): Shallow 80% / Deep 20%.
+    // SplitEntryVolume already collapses to a single slice when the total
+    // can't support two broker-minimum legs, but a slice that individually
+    // clears MinVolume can still be too small for BuildTargetPlan's own
+    // "at least two broker-valid exits" requirement - fail closed to the
+    // original single-leg-at-Shallow behavior rather than losing the
+    // candidate to an unhandled exception. The fixed-size risk leg is
+    // added on top either way (see below), independent of whether this
+    // ladder itself qualifies for two legs.
     IReadOnlyList<long> legVolumes;
     IReadOnlyList<decimal> legEntryPrices;
     TargetVolumePlan[] legTargetPlans;
@@ -3533,6 +3158,22 @@ public sealed class AutoTradeEngine(
     }
     else
     {
+      // Owner 2026-09-08: a third, fixed-size risk leg rests close to the
+      // stop (10 pips away, on the entry side) - not a share of
+      // sizing.Volume, so account size never grows it. If price nearly
+      // invalidates the setup before reversing, this leg still catches a
+      // much deeper (better) fill; if it keeps going the small fixed size
+      // caps the extra loss to roughly one lot's worth of pips. If the
+      // whole ladder fills, it is simply the deepest/last leg and rides
+      // as the runner like any other - ManualAlgoAllocateTargetPlansAcrossLegs's
+      // existing shallow-first booking already treats it that way with no
+      // special-casing needed. Equity-tiered (not lot-scaled) per owner
+      // instruction: below $1k equity 0.02 lots, otherwise 0.05.
+      var riskLegPrice = ManualAlgoRiskLegPrice(
+        direction, manualStopLoss, pipSize, symbol
+      );
+      var riskLegVolume = ManualAlgoRiskLegVolume(account.Equity, symbol);
+      var riskLegStopPlan = ManualStop(candidate, direction, riskLegPrice, symbol);
       try
       {
         var splitVolumes = VolumePlanner.SplitEntryVolume(
@@ -3540,44 +3181,43 @@ public sealed class AutoTradeEngine(
         );
         var splitPrices = splitVolumes.Count == 1
           ? new[] { legPrices.Shallow }
-          : new[] { legPrices.Shallow, legPrices.Mid, legPrices.Deep };
-        // Owner-reported live 2026-08-19: Mid/Deep legs need their own stop
+          : new[] { legPrices.Shallow, legPrices.Deep };
+        // Owner-reported live 2026-08-19: Deep legs need their own stop
         // plan from their own entry so the broker stop resolves to the one
         // owner-declared absolute price (relative SL is fill-anchored).
-        var splitStopPlans = new StructureStopPlan[splitVolumes.Count];
+        var allVolumes = new List<long>(splitVolumes) { riskLegVolume };
+        var allPrices = new List<decimal>(splitPrices) { riskLegPrice };
+        var splitStopPlans = new StructureStopPlan[allVolumes.Count];
         var splitTargetPlans = ManualAlgoAllocateTargetPlansAcrossLegs(
-          splitVolumes,
+          allVolumes,
           symbol,
           targetsPips,
           targetWeights
         );
-        for (var index = 0; index < splitVolumes.Count; index++)
+        for (var index = 0; index < allVolumes.Count; index++)
         {
-          splitStopPlans[index] = splitPrices[index] == legPrices.Shallow
+          splitStopPlans[index] = allPrices[index] == legPrices.Shallow
             ? manualStopPlan
-            : ManualStop(candidate, direction, splitPrices[index], symbol);
+            : allPrices[index] == riskLegPrice
+              ? riskLegStopPlan
+              : ManualStop(candidate, direction, allPrices[index], symbol);
         }
-        legVolumes = splitVolumes;
-        legEntryPrices = splitPrices;
+        legVolumes = allVolumes;
+        legEntryPrices = allPrices;
         legTargetPlans = splitTargetPlans;
         legStopPlans = splitStopPlans;
       }
       catch (VolumePlanningException)
       {
-        var fallbackTargetPlan = sizing.TargetPlan;
-        if (sizing.Lots > ManualAlgoFirstLegThresholdLots)
-        {
-          var fixedFirstLeg = VolumePlanner.VolumeForLots(
-            ManualAlgoFirstLegLots, symbol
-          );
-          fallbackTargetPlan = VolumePlanner.FixFirstLegVolume(
-            fallbackTargetPlan, sizing.Volume, fixedFirstLeg, symbol
-          );
-        }
-        legVolumes = [sizing.Volume];
-        legEntryPrices = [legPrices.Shallow];
-        legTargetPlans = [fallbackTargetPlan];
-        legStopPlans = [manualStopPlan];
+        var allVolumes = new List<long> { sizing.Volume, riskLegVolume };
+        var allPrices = new List<decimal> { legPrices.Shallow, riskLegPrice };
+        var allTargetPlans = ManualAlgoAllocateTargetPlansAcrossLegs(
+          allVolumes, symbol, targetsPips, targetWeights
+        );
+        legVolumes = allVolumes;
+        legEntryPrices = allPrices;
+        legTargetPlans = allTargetPlans;
+        legStopPlans = [manualStopPlan, riskLegStopPlan];
       }
     }
     var legCount = legVolumes.Count;
@@ -3641,6 +3281,25 @@ public sealed class AutoTradeEngine(
     {
       throw new CandidateLeaseLostException(candidate.CandidateId);
     }
+    // Owner 2026-09-08: sum each leg's OWN lots x its OWN stop distance,
+    // not sizing.Lots x manualStopPlan.StopPips alone - Deep's distance to
+    // the shared absolute stop differs from Shallow's, so the group's true
+    // total risk must add its contribution in too. Reduces to the exact
+    // prior formula when every leg shares one stop distance (the
+    // ManualSingleEntry case).
+    //
+    // Owner 2026-09-15: the advertised SL risk figure must describe the
+    // original group ladder (Shallow/Deep) the owner actually typed, not
+    // the fixed-size risk/trade-off leg (ManualAlgoRiskLegPrice) tacked on
+    // deliberately close to the stop - that leg's own short stop distance
+    // would otherwise understate the group's real headline risk. The risk
+    // leg is always appended last when present (see the ladder-build
+    // branch above); excluded here by skipping the trailing leg whenever
+    // this is not the single-entry case.
+    var riskLeggedGroupCount = candidate.ManualSingleEntry ? legCount : legCount - 1;
+    var groupWorstCase = -legVolumes.Zip(
+      legStopPlans, (volume, stopPlan) => volume / (decimal)symbol.LotSize * stopPlan.StopPips
+    ).Take(riskLeggedGroupCount).Sum() * pipValuePerLot;
     var orderIds = new List<long>(legCount);
     for (var index = 0; index < legCount; index++)
     {
@@ -3702,14 +3361,13 @@ public sealed class AutoTradeEngine(
         price: legEntryPrices[index],
         groupId: groupId,
         trancheIndex: legIndex,
-        groupWorstCase: -sizing.Lots * manualStopPlan.StopPips
-          * pipValuePerLot,
+        groupWorstCase: groupWorstCase,
         riskBudget: sizing.Budget,
         hadAdds: false,
         setup: candidate.Setup,
-        // All three clips belong to one owner intent, sized from Shallow.
-        // Reporting each Mid/Deep distance here made one XAU setup look
-        // like three different risk contracts (for example 60p/45p/30p).
+        // All clips belong to one owner intent, sized from Shallow.
+        // Reporting each deeper leg's own distance here made one XAU setup
+        // look like several different risk contracts (for example 60p/45p/10p).
         stopPips: manualStopPlan.StopPips,
         targetsPips: legTargetPlans[index].TargetsPips,
         stream: "algo_manual",
@@ -4195,7 +3853,16 @@ public sealed class AutoTradeEngine(
       RangeExitPrice: IsBoxRangeScalp(candidate) && targetPlan.TargetsPips.Count < 2
         ? BoxExitPrice(candidate, direction)
         : null,
-      Stream: "algo_auto",
+      // Owner-reported 2026-09-15 (signal 358): this hardcoded "algo_auto"
+      // regardless of candidate source, so every live-filled manual/algo
+      // leg's own AutoTradePositionState.Stream read "algo_auto" - never
+      // "algo_manual". GroupDeepestEntryPrice's IsManualRiskLeg check
+      // (ExecutionStream(state) == "algo_manual") never engaged for a real
+      // fill as a result, only for restart-recovery-reconstructed states
+      // (ParseManualComment sets Stream explicitly) - so the manual risk
+      // leg kept winning the group's "deepest fill" reference in
+      // production exactly as before that fix.
+      Stream: IsManualAlgoCandidate(candidate) ? "algo_manual" : "algo_auto",
       MatchId: candidate.MatchId,
       StrategyFamily: string.IsNullOrWhiteSpace(candidate.StrategyFamily)
         ? StrategyFamilyFromSetup(candidate.Setup)
@@ -4675,7 +4342,7 @@ public sealed class AutoTradeEngine(
   }
 
   private static bool EntryIsResting(ExecutionRoute route) =>
-    route is ExecutionRoute.SingleLimit or ExecutionRoute.ZoneSplit;
+    route is ExecutionRoute.SingleLimit;
 
   internal static (string Metric, string Reason)? FinalStopSideRejection(
     TradeDirection direction,
@@ -5286,6 +4953,23 @@ public sealed class AutoTradeEngine(
     return move / PipSizeForState(state);
   }
 
+  /// <summary>
+  /// Same as <see cref="SignedPips"/> but measured from an explicit entry
+  /// price instead of <c>state.EntryPrice</c> - used for the group-facing
+  /// "leg pips" telemetry, which must be measured from the group's deepest
+  /// fill (see <see cref="GroupDeepestEntryPrice"/>), not this specific
+  /// tranche's own entry.
+  /// </summary>
+  private decimal SignedPipsFromEntry(
+    AutoTradePositionState state, decimal entry, decimal price
+  )
+  {
+    var move = state.Direction == TradeDirection.Buy
+      ? price - entry
+      : entry - price;
+    return move / PipSizeForState(state);
+  }
+
   private decimal? InitialStopPips(AutoTradePositionState state)
   {
     if (state.InitialRiskStopPips is decimal planned && planned > 0m)
@@ -5327,6 +5011,30 @@ public sealed class AutoTradeEngine(
     return state.TargetsPips[index];
   }
 
+  // Owner-reported 2026-09-15 (real XAU SELL example): AchievedTargetPips
+  // returns TargetsPips[index], the SAME fixed shallow-relative pip count
+  // every leg in the group shares (all legs' TargetsPips are computed once
+  // from Shallow's own distance in ProcessManualAlgoAsync) - a deep or risk
+  // leg that rode the exact same move to the exact same target price
+  // therefore reported the shallow leg's smaller distance, undercounting
+  // its own real capture (e.g. TP4 at 200p from Shallow measured only 200p
+  // for a Deep leg that actually captured 215p from its own, better entry).
+  // Re-measured from the group's real deepest entry (deepestEntry, already
+  // includeRiskLeg-aware) to the achieved target's own absolute price
+  // (TargetPrice) instead of the stored fixed distance.
+  private decimal? AchievedTargetPipsFromEntry(
+    AutoTradePositionState state, decimal entry
+  )
+  {
+    if (state.NextTargetIndex <= 0 || state.TargetsPips.Count == 0)
+    {
+      return null;
+    }
+    var index = Math.Min(state.NextTargetIndex, state.TargetsPips.Count) - 1;
+    var targetPrice = TargetPrice(state, state.TargetsPips[index], index);
+    return SignedPipsFromEntry(state, entry, targetPrice);
+  }
+
   // Close-card / group_result total: prefer the highest target reached over
   // a volume-weighted blend that mixes booked TPs with a later BE residual.
   // If the final exit itself printed higher than that target (manual/trail
@@ -5336,11 +5044,15 @@ public sealed class AutoTradeEngine(
     decimal exitEstimate,
     long remainingVolume,
     decimal pipVolume,
-    long initialVolume
+    long initialVolume,
+    decimal deepestEntry
   )
   {
     var weighted = WeightedPips(pipVolume, initialVolume);
-    if (AchievedTargetPips(state) is not decimal achieved || achieved <= 0)
+    if (
+      AchievedTargetPipsFromEntry(state, deepestEntry) is not decimal achieved
+      || achieved <= 0
+    )
     {
       return weighted;
     }
@@ -5348,7 +5060,7 @@ public sealed class AutoTradeEngine(
     {
       return achieved;
     }
-    return Math.Max(achieved, SignedPips(state, exitEstimate));
+    return Math.Max(achieved, SignedPipsFromEntry(state, deepestEntry, exitEstimate));
   }
 
   // True when the exit sits on the protective stop (initial or trailed)
@@ -5368,71 +5080,6 @@ public sealed class AutoTradeEngine(
     var pipSize = PipSizeForState(state);
     var tolerance = 2m * pipSize;
     return Math.Abs(exitEstimate - stopPrice) <= tolerance;
-  }
-
-  // Live dig 2026-08-25 XAU manual #5: deal window missed the SL fill and
-  // the live bid kept printing the post-stop sweep (4622 vs SL 4629), so
-  // group_result booked -109 against a 60-pip stop. A quote strictly past
-  // the protective stop on the loss side is the continuing wick, not the
-  // fill we should journal.
-  private bool ExitBeyondProtectiveStop(
-    AutoTradePositionState state,
-    decimal exitEstimate
-  )
-  {
-    var stop = state.CurrentStopLoss ?? state.InitialStopLoss;
-    if (stop is not decimal stopPrice)
-    {
-      return false;
-    }
-    return state.Direction == TradeDirection.Buy
-      ? exitEstimate < stopPrice
-      : exitEstimate > stopPrice;
-  }
-
-  private decimal ResolveMissingPositionExit(
-    AutoTradePositionState state,
-    PositionCloseLookup closeLookup,
-    PositionCloseReason closeReason
-  )
-  {
-    if (closeLookup.ExecutionPrice is decimal recovered)
-    {
-      return recovered;
-    }
-    if (closeReason == PositionCloseReason.StopLossOrTakeProfit)
-    {
-      return state.CurrentStopLoss ?? state.InitialStopLoss ?? state.EntryPrice;
-    }
-    return LiveExitQuote(state) ?? state.EntryPrice;
-  }
-
-  private decimal? LiveExitQuote(AutoTradePositionState state)
-  {
-    SpotPrice? spot = null;
-    if (
-      !string.IsNullOrWhiteSpace(state.Symbol)
-      && _lastSpotBySymbol.TryGetValue(state.Symbol, out var bySymbol)
-    )
-    {
-      spot = bySymbol;
-    }
-    else if (
-      RedisSymbolFor(state.SymbolId) is string redisSymbol
-      && _lastSpotBySymbol.TryGetValue(redisSymbol, out var byId)
-    )
-    {
-      spot = byId;
-    }
-    else
-    {
-      spot = _lastSpot;
-    }
-    if (spot is null)
-    {
-      return null;
-    }
-    return state.Direction == TradeDirection.Buy ? spot.Bid : spot.Ask;
   }
 
   private static string GroupId(AutoTradePositionState state) =>
@@ -5492,6 +5139,77 @@ public sealed class AutoTradeEngine(
     group.Max(state => state.InitialTrancheVolume),
     group.Where(state => state.TrancheIndex == 1).Sum(state => state.InitialVolume)
   );
+
+  /// <summary>
+  /// Owner-reported 2026-09-14 (signal 341, real XAU SELL): the manual/algo
+  /// risk leg (see <see cref="ManualAlgoRiskLegPrice"/>) sits deliberately
+  /// close to the shared stop - a small, fixed-size trade-off leg, not a
+  /// genuinely favorable fill. Naive Min/Max below picked it as the
+  /// group's "deepest" entry purely because it is numerically closest to
+  /// the stop side, corrupting the group-facing pips/loss telemetry
+  /// (signal 341's reported entry landed ~1.5 pips off the stop - the risk
+  /// leg's price - instead of the main ladder's real entry).
+  /// </summary>
+  private bool IsManualRiskLeg(AutoTradePositionState state)
+  {
+    // ExecutionStream, not the raw Stream field directly - restart-recovery
+    // reconstructed states can leave Stream at its "algo_auto" record
+    // default and only carry Setup, same as every other Stream check here.
+    if (
+      ExecutionStream(state) != "algo_manual"
+      || state.InitialStopLoss is not decimal stop
+    )
+    {
+      return false;
+    }
+    var distancePips = Math.Abs(state.EntryPrice - stop) / PipSizeForState(state);
+    return Math.Abs(distancePips - ManualAlgoRiskLegPipsFromStop) <= 3m;
+  }
+
+  /// <summary>
+  /// Owner-reported 2026-09-10 (signal 300, real XAU BUY): a manual /algo
+  /// group's shallow leg (tranche 1, filled at the zone's worse edge) hit
+  /// TP1 and the channel card reported that leg's own entry-to-target
+  /// distance (+30 pips) - correct for that one tranche in isolation, but
+  /// the group's deep leg (tranche 2) had already filled at a materially
+  /// better price a few price units away, and the owner reads the whole
+  /// zone as one trade. The group-facing "leg pips" telemetry (and the
+  /// archived pips/R record it feeds - pips_format.legs_achieved_entry_price
+  /// on the Python side reads the same published entry price) must be
+  /// measured from whichever tranche filled at the single most favorable
+  /// price in the group (lower for BUY, higher for SELL) - not from
+  /// whichever specific tranche happens to be the one booking this event.
+  ///
+  /// Owner 2026-09-15: the fixed-size risk leg only belongs in that pool
+  /// when this is a genuine take-profit / archived-TP-level event
+  /// (<paramref name="includeRiskLeg"/> true) - it is NOT part of the
+  /// "original" group ladder, so it must never be involved in a risk
+  /// calculation (a plain owner-initiated close, or a terminal event where
+  /// no target was actually achieved). GroupWorstCase (the group's
+  /// advertised SL risk, see ProcessManualAlgoAsync) already excludes it
+  /// unconditionally for the same reason.
+  /// </summary>
+  private decimal GroupDeepestEntryPrice(
+    IReadOnlyList<AutoTradePositionState> group,
+    TradeDirection direction,
+    bool includeRiskLeg
+  )
+  {
+    if (group.Count == 0)
+    {
+      return 0m;
+    }
+    var candidates = includeRiskLeg || group.Count <= 1
+      ? group
+      : group.Where(state => !IsManualRiskLeg(state)).ToArray();
+    if (candidates.Count == 0)
+    {
+      candidates = group;
+    }
+    return direction == TradeDirection.Buy
+      ? candidates.Min(state => state.EntryPrice)
+      : candidates.Max(state => state.EntryPrice);
+  }
 
   private async Task<bool> CompleteDryRunAsync(
     TradeCandidate candidate,
@@ -5619,6 +5337,22 @@ public sealed class AutoTradeEngine(
     {
       return;
     }
+    foreach (
+      var group in _states.Values
+        .Where(item => item.SymbolId == symbol.SymbolId)
+        .GroupBy(GroupId)
+    )
+    {
+      if (!_groupTargetOrdinalsSeen.TryGetValue(group.Key, out var seen))
+      {
+        seen = [];
+        _groupTargetOrdinalsSeen[group.Key] = seen;
+      }
+      foreach (var ordinal in group.SelectMany(item => item.TargetOrdinals ?? []))
+      {
+        seen.Add(ordinal);
+      }
+    }
     foreach (var original in _states.Values.ToArray())
     {
       if (original.SymbolId != symbol.SymbolId)
@@ -5626,6 +5360,19 @@ public sealed class AutoTradeEngine(
         continue;
       }
       var state = _states.GetValueOrDefault(original.PositionId, original);
+      if (state.Stream == "algo_manual")
+      {
+        _groupTargetOrdinalsSeen.TryGetValue(
+          GroupId(state), out var groupSelectedOrdinals
+        );
+        state = await NotifySkippedManualTargetsAsync(
+          state,
+          groupSelectedOrdinals,
+          spot,
+          symbol,
+          cancellationToken
+        );
+      }
       while (
         state.RemainingVolume > 0
         && state.NextTargetIndex < state.TargetsPips.Count
@@ -5692,7 +5439,22 @@ public sealed class AutoTradeEngine(
           && state.RemainingVolume - closeVolume < RequireSymbol().MinVolume
         )
         {
-          // Would leave an invalid dust remainder — skip partial, ride Full TP.
+          // Would leave an invalid dust remainder — skip the broker close,
+          // but manual /algo still needs the level notification and normal
+          // trailing before it rides the final target.
+          if (state.Stream == "algo_manual")
+          {
+            state = await NotifyManualTargetReachedAsync(
+              state,
+              targetOrdinal,
+              target,
+              targetPips,
+              symbol,
+              true,
+              true,
+              cancellationToken
+            );
+          }
           _log(
             $"range-box scale-out skipped at runtime for position "
             + $"{state.PositionId}: dust remainder after TP1"
@@ -5810,6 +5572,11 @@ public sealed class AutoTradeEngine(
         var currentGroup = _states.Values
           .Where(item => GroupId(item) == GroupId(state))
           .ToArray();
+        // A genuine take-profit event - the archived TP level, risk leg
+        // included.
+        var deepestEntry = GroupDeepestEntryPrice(
+          currentGroup, state.Direction, includeRiskLeg: true
+        );
         var groupBooked = GroupBookedPnl(currentGroup) + realized;
         var initialBooked = InitialBookedPnl(currentGroup)
           + (state.TrancheIndex == 1 ? realized : 0m);
@@ -5902,7 +5669,8 @@ public sealed class AutoTradeEngine(
           matchId: state.MatchId,
           rangeId: state.RangeId,
           strategyFamily: state.StrategyFamily,
-          legRealizedPips: realizedPips,
+          legRealizedPips: SignedPipsFromEntry(state, deepestEntry, fill),
+          legEntryPrice: deepestEntry,
           groupInitialVolume: groupInitialVolume,
           lotSize: symbol.LotSize
         );
@@ -5968,7 +5736,8 @@ public sealed class AutoTradeEngine(
               stream: ExecutionStream(state),
               direction: DirectionLabel(state.Direction),
               groupInitialVolume: groupInitialVolume,
-              lotSize: symbol.LotSize
+              lotSize: symbol.LotSize,
+              legEntryPrice: deepestEntry
             );
             await MaybeDeleteGroupPlanAsync(groupId, cancellationToken);
           }
@@ -6031,6 +5800,158 @@ public sealed class AutoTradeEngine(
     }
   }
 
+  private async Task<AutoTradePositionState> NotifySkippedManualTargetsAsync(
+    AutoTradePositionState state,
+    IReadOnlySet<int>? groupOwnedOrdinals,
+    SpotPrice spot,
+    SymbolInfo symbol,
+    CancellationToken cancellationToken
+  )
+  {
+    if (
+      state.TargetPrices is not { Count: > 0 } targetPrices
+      || state.TargetOrdinals is not { Count: > 0 } selectedOrdinals
+      || _spotSequence <= state.FillSourceQuoteSequence
+      || (
+        state.FillSourceQuoteTimestamp > 0
+        && spot.Timestamp < state.FillSourceQuoteTimestamp
+      )
+    )
+    {
+      return state;
+    }
+    // Owner-reported live 2026-09-18 (manual signal 393): this used to
+    // bound the loop and gate evaluation by whether some OTHER leg in the
+    // group already owns an ordinal ("selectedForGroup") - meaning a leg
+    // with no real booking at TP1-3 (the deepest/leftover leg of a
+    // shallow-first ladder) never independently confirmed price actually
+    // reached those levels, and so never trailed ITS OWN stop past
+    // whatever the last ordinal it does own picked up. Sibling ownership
+    // only matters for whether a SECOND, duplicate Telegram message needs
+    // suppressing (see notifyPublicly below) - it must never gate whether
+    // this leg's own protective stop keeps advancing. Bound and gate
+    // purely on this leg's OWN target ordinals instead.
+    var finalOwnOrdinal = selectedOrdinals.Max();
+    if (finalOwnOrdinal <= 1)
+    {
+      return state;
+    }
+    var reached = (state.ReachedTargetOrdinals ?? []).ToHashSet();
+    var exitQuote = state.Direction == TradeDirection.Buy ? spot.Bid : spot.Ask;
+    for (var ordinal = 1; ordinal < finalOwnOrdinal; ordinal++)
+    {
+      if (
+        selectedOrdinals.Contains(ordinal)
+        || reached.Contains(ordinal)
+        || ordinal > targetPrices.Count
+      )
+      {
+        continue;
+      }
+      var target = targetPrices[ordinal - 1];
+      if (!TradePlanExecutionEngine.HasReachedExitTarget(
+        DirectionLabel(state.Direction), exitQuote, target
+      ))
+      {
+        continue;
+      }
+      var targetPips = decimal.ToInt32(decimal.Round(
+        Math.Abs(target - state.EntryPrice) / PipSizeForSymbol(symbol.RedisSymbol),
+        0,
+        MidpointRounding.AwayFromZero
+      ));
+      // A sibling that durably owns this ordinal already sent the real
+      // "TPn +Xp closed volume Y" message for it - this leg still needs
+      // its own stop trailed to match, it just must not post a second,
+      // redundant "no broker volume booked" ping for the same ordinal.
+      var notifyPublicly = groupOwnedOrdinals is null
+        || !groupOwnedOrdinals.Contains(ordinal);
+      // Ordinals 1 and 2 already move every currently-live group member's
+      // stop the instant ANY leg reaches them (ProtectRemainingGroupStops
+      // AtBreakEvenAsync / ProtectRemainingManualGroupStopsAtShallowEntry
+      // Async, both re-scan _states fresh, not just the booking leg) - the
+      // one gap that mechanism doesn't cover is a leg that closes before
+      // this catch-up runs. Trailing again here with this leg's own
+      // per-ordinal level would fight that shared stop instead. Ordinal 3+
+      // has no such group-wide sweep - MoveStopAfterTargetAsync only ever
+      // moves the booking leg's own stop - so this leg's own trail here is
+      // the only thing that will ever protect it there.
+      var trailOwnStop = ordinal > 2;
+      state = await NotifyManualTargetReachedAsync(
+        state,
+        ordinal,
+        target,
+        targetPips,
+        symbol,
+        notifyPublicly,
+        trailOwnStop,
+        cancellationToken
+      );
+      reached.Add(ordinal);
+    }
+    return state;
+  }
+
+  private async Task<AutoTradePositionState> NotifyManualTargetReachedAsync(
+    AutoTradePositionState state,
+    int ordinal,
+    decimal target,
+    int targetPips,
+    SymbolInfo symbol,
+    bool notifyPublicly,
+    bool trailOwnStop,
+    CancellationToken cancellationToken
+  )
+  {
+    var reached = (state.ReachedTargetOrdinals ?? []).ToHashSet();
+    if (reached.Contains(ordinal))
+    {
+      return state;
+    }
+    reached.Add(ordinal);
+    state = state with { ReachedTargetOrdinals = reached.Order().ToArray() };
+    _states[state.PositionId] = state;
+    if (notifyPublicly)
+    {
+      await PublishAsync(
+        "manual_tp_reached",
+        $"TP{ordinal} reached at {target:N2} · no broker volume booked",
+        cancellationToken,
+        state.CandidateId,
+        state.PositionId,
+        targetPips,
+        volume: 0,
+        price: target,
+        groupId: GroupId(state),
+        trancheIndex: state.TrancheIndex,
+        setup: state.Setup,
+        regime: state.Regime,
+        confluence: state.Confluence,
+        stopPips: InitialStopPips(state),
+        targetsPips: state.TargetsPips,
+        stream: ExecutionStream(state),
+        direction: DirectionLabel(state.Direction),
+        remainingVolume: state.RemainingVolume,
+        matchId: state.MatchId,
+        rangeId: state.RangeId,
+        strategyFamily: state.StrategyFamily,
+        legRealizedPips: SignedPips(state, target),
+        groupInitialVolume: GroupInitialVolume([state]),
+        lotSize: symbol.LotSize,
+        targetPrices: state.TargetPrices,
+        reasonCode: "target_reached_not_booked_volume_floor"
+      );
+    }
+    if (trailOwnStop)
+    {
+      state = await MoveStopAfterTargetOrdinalAsync(
+        state, ordinal, symbol, cancellationToken
+      );
+    }
+    await store.SavePositionAsync(state, cancellationToken);
+    return state;
+  }
+
   /// <summary>
   /// After group TP1, protect every remaining entry leg. A manual multi-leg
   /// ladder uses one group-economic BE price: booked TP1 profit funds room
@@ -6060,7 +5981,10 @@ public sealed class AutoTradeEngine(
         GroupRealizedPipVolume(remainingStates),
         symbol,
         PipSizeForSymbol(symbol.RedisSymbol),
-        options.BreakEvenBufferTicks
+        options.BreakEvenBufferTicks,
+        _groupPlannedDeepestEntry.TryGetValue(groupId, out var plannedDeepest)
+          ? plannedDeepest
+          : (decimal?)null
       );
       if (move is null)
       {
@@ -6215,6 +6139,29 @@ public sealed class AutoTradeEngine(
     var move = StopTrailPlanner.Plan(
       state,
       completedTargetIndex,
+      symbol,
+      options.PipSize,
+      options.BreakEvenBufferTicks
+    );
+    if (move is null)
+    {
+      return state;
+    }
+    return await ApplyStopTrailMoveAsync(
+      state, move, targetOrdinal, cancellationToken
+    );
+  }
+
+  private async Task<AutoTradePositionState> MoveStopAfterTargetOrdinalAsync(
+    AutoTradePositionState state,
+    int targetOrdinal,
+    SymbolInfo symbol,
+    CancellationToken cancellationToken
+  )
+  {
+    var move = StopTrailPlanner.PlanForTargetOrdinal(
+      state,
+      targetOrdinal,
       symbol,
       options.PipSize,
       options.BreakEvenBufferTicks
@@ -6428,46 +6375,6 @@ public sealed class AutoTradeEngine(
       .ToArray();
     foreach (var order in _allSymbolPendingOrders.ToArray())
     {
-      var zone = ParseZoneComment(order.Comment);
-      if (
-        order.Label != options.Label
-        || zone is null
-        || zone.Value.Leg != 2
-        || _clock().ToUnixTimeSeconds() - zone.Value.BarTs
-          < options.ZoneFillTtlBars * 60L
-      )
-      {
-        continue;
-      }
-      await client.CancelPendingOrderAsync(order.OrderId, cancellationToken);
-      _allSymbolPendingOrders = _allSymbolPendingOrders
-        .Where(item => item.OrderId != order.OrderId)
-        .ToArray();
-      var plan = await LoadGroupPlanAsync(zone.Value.GroupId, cancellationToken);
-      await PublishAsync(
-        "zone_expired",
-        $"zone midpoint limit {order.OrderId} cancelled after "
-          + $"{options.ZoneFillTtlBars} bars; filled volume keeps its "
-          + "proportional ladder",
-        cancellationToken,
-        candidateId: plan?.CandidateId,
-        groupId: zone.Value.GroupId,
-        trancheIndex: 1,
-        hadAdds: false,
-        setup: plan?.Setup,
-        direction: plan?.Direction,
-        matchId: plan?.MatchId,
-        rangeId: plan?.RangeId,
-        strategyFamily: plan?.StrategyFamily,
-        pendingOrderIds: PendingOrderIdsForGroup(zone.Value.GroupId)
-      );
-      await MaybeDeleteGroupPlanAsync(
-        zone.Value.GroupId,
-        cancellationToken
-      );
-    }
-    foreach (var order in _allSymbolPendingOrders.ToArray())
-    {
       var manual = ParseManualExpiry(order.Comment);
       if (
         order.Label != options.Label
@@ -6533,10 +6440,11 @@ public sealed class AutoTradeEngine(
       // reach this reconcile-driven stale-detection loop.
       var missingNow = _clock().ToUnixTimeSeconds();
       var missing = await store.GetPositionMissingAsync(stale, cancellationToken);
-      if (
-        missing is not null
-        && missingNow - missing.LastCheckedAt < options.PositionMissingRecheckSeconds
-      )
+      var recheckSeconds = missing is not null
+        && missing.Confirmations >= options.PositionMissingConfirmations
+        ? CloseHistoryRetrySeconds
+        : options.PositionMissingRecheckSeconds;
+      if (missing is not null && missingNow - missing.LastCheckedAt < recheckSeconds)
       {
         continue;
       }
@@ -6561,24 +6469,14 @@ public sealed class AutoTradeEngine(
         );
         continue;
       }
-      await store.ClearPositionMissingAsync(stale, cancellationToken);
-      await store.IncrementMetricAsync(
-        RequireSymbol().RedisSymbol,
-        "position_missing_snapshot_confirmed",
-        cancellationToken
-      );
-      _log(
-        $"auto-trade position_missing_snapshot_confirmed position_id={stale}"
-          + $" confirmations={confirmations}"
-      );
       var state = _states.GetValueOrDefault(stale)
         ?? trackedStates.GetValueOrDefault(stale);
-      _states.Remove(stale);
-      await store.DeletePositionAsync(stale, cancellationToken);
-      confirmedMissingPositionIds.Add(stale);
       if (state is not null)
       {
         var groupId = GroupId(state);
+        // Process every missing group in this snapshot. Siblings in the same
+        // ladder still share the in-pass P/L aggregate below, while a slow
+        // deal-history lookup for one group must never block another group.
         var trackedGroup = trackedStates.Values
           .Where(item => GroupId(item) == groupId)
           .ToArray();
@@ -6592,6 +6490,34 @@ public sealed class AutoTradeEngine(
               : state.InitialVolume;
           }
           closingGroupInitialVolumes[groupId] = initialVolume;
+        }
+        // Owner 2026-09-17: the close-reason + exit-price lookup just below
+        // can add several more seconds (windowed ProtoOADealListByPositionIdReq,
+        // capped at DealListLookupTimeout, with a retry) before the real
+        // "position_closed" event fires - previously the owner saw nothing
+        // at all in that window, which read as the bot being slow to react
+        // to a stop-out. Fire once, right when absence is first confirmed
+        // (not on a later price-pending retry of this same position, which
+        // re-enters this block on every subsequent reconcile pass) - gated
+        // on the PRE-increment confirmation count so it can only be true on
+        // the single pass that just crossed the threshold. Deliberately
+        // unmapped in AutoTradeLifecycle.TransitionForEvent (falls through
+        // to the null/telemetry-only case), so this never mutates candidate
+        // lifecycle state - "position_closed" still owns that transition
+        // entirely once it fires moments later.
+        if ((missing?.Confirmations ?? 0) < options.PositionMissingConfirmations)
+        {
+          await PublishAsync(
+            "position_closing",
+            "position confirmed closed at broker, resolving exit details",
+            cancellationToken,
+            state.CandidateId,
+            stale,
+            groupId: groupId,
+            setup: state.Setup,
+            stream: ExecutionStream(state),
+            direction: DirectionLabel(state.Direction)
+          );
         }
         // Best-effort: was this the broker-attached SL/TP order, or a
         // manual/external order (almost certainly the owner closing it
@@ -6616,10 +6542,66 @@ public sealed class AutoTradeEngine(
         {
           _log(
             $"auto-trade position_close_reason_lookup_failed position_id={stale}: "
-              + exception.Message
+            + exception.Message
           );
         }
+        // A broker snapshot only proves that the position is no longer open;
+        // it does not provide its close fill. Never turn a later live quote
+        // into realised P/L (manual #243: XAU SL filled 4496.12 but the
+        // next quote was 4492.80 and was incorrectly reported as -33 pips).
+        // Keep retrying historical deal lookup first. If cTrader still has
+        // not exposed a closing deal after the bounded window, use the last
+        // broker-confirmed protective stop as an explicitly unconfirmed
+        // estimate so a filled ladder cannot remain open forever.
+        var closePriceFallback = false;
+        var recoveredClosePrice = closeLookup.ExecutionPrice;
         var closeReason = closeLookup.Reason;
+        var closeHistoryAge = missing is null
+          ? 0
+          : Math.Max(0, missingNow - missing.FirstMissingAt);
+        if (
+          recoveredClosePrice is null
+          && closeHistoryAge >= CloseHistoryMaxWaitSeconds
+          && state.CurrentStopLoss is decimal fallbackStop
+          && fallbackStop > 0m
+        )
+        {
+          recoveredClosePrice = fallbackStop;
+          closePriceFallback = true;
+          closeReason = PositionCloseReason.Unknown;
+          await store.IncrementMetricAsync(
+            RequireSymbol().RedisSymbol,
+            "position_close_execution_price_fallback",
+            cancellationToken
+          );
+          _log(
+            $"auto-trade position_close_execution_price_fallback "
+              + $"position_id={stale} price={fallbackStop} "
+              + $"age_seconds={closeHistoryAge}"
+          );
+        }
+        if (recoveredClosePrice is null)
+        {
+          await store.SavePositionMissingAsync(
+            stale,
+            new PositionMissingRecord(
+              confirmations,
+              missing?.FirstMissingAt ?? missingNow,
+              missingNow
+            ),
+            cancellationToken
+          );
+          await store.IncrementMetricAsync(
+            RequireSymbol().RedisSymbol,
+            "position_close_execution_price_pending",
+            cancellationToken
+          );
+          _log(
+            $"auto-trade position_close_execution_price_pending position_id={stale}"
+              + $" confirmations={confirmations}"
+          );
+          continue;
+        }
         // Promote Unknown → SL/TP only when the deal lookup recovered a real
         // execution price sitting on the protective stop. Defaulting the
         // exit estimate FROM CurrentStopLoss and then comparing to that same
@@ -6627,37 +6609,30 @@ public sealed class AutoTradeEngine(
         // fabricated "stop loss / take profit" with no TP5 book).
         if (
           closeReason == PositionCloseReason.Unknown
-          && closeLookup.ExecutionPrice is decimal recoveredExit
+          && !closePriceFallback
+          && recoveredClosePrice is decimal recoveredExit
           && LooksLikeProtectiveStopHit(state, recoveredExit)
         )
         {
           closeReason = PositionCloseReason.StopLossOrTakeProfit;
         }
-        // No recovered deal + live quote on/beyond the protective stop:
-        // the SL almost certainly filled and the quote is the continuing
-        // sweep (2026-08-25 manual #5 booked -109 from bid 4622 vs SL 4629).
-        // Promote to SL/TP so ResolveMissingPositionExit books the stop,
-        // not the wick. Do NOT invent SL from CurrentStopLoss alone when
-        // live is still between entry and stop (ambiguous manual/external).
-        if (
-          closeReason == PositionCloseReason.Unknown
-          && closeLookup.ExecutionPrice is null
-          && LiveExitQuote(state) is decimal liveExit
-          && (
-            LooksLikeProtectiveStopHit(state, liveExit)
-            || ExitBeyondProtectiveStop(state, liveExit)
-          )
-        )
-        {
-          closeReason = PositionCloseReason.StopLossOrTakeProfit;
-        }
-        // Manual / unconfirmed closes must not book P&L against the stop.
-        // Prefer the recovered deal fill, then the live quote, then entry.
-        var exitEstimate = ResolveMissingPositionExit(
-          state,
-          closeLookup,
-          closeReason
+        // A recovered closing deal is the source of realised P/L. The only
+        // exception is the bounded, explicitly unconfirmed stop fallback
+        // above; a current quote is never used as a close price.
+        var exitEstimate = recoveredClosePrice.Value;
+        await store.ClearPositionMissingAsync(stale, cancellationToken);
+        await store.IncrementMetricAsync(
+          RequireSymbol().RedisSymbol,
+          "position_missing_snapshot_confirmed",
+          cancellationToken
         );
+        _log(
+          $"auto-trade position_missing_snapshot_confirmed position_id={stale}"
+            + $" confirmations={confirmations}"
+        );
+        _states.Remove(stale);
+        await store.DeletePositionAsync(stale, cancellationToken);
+        confirmedMissingPositionIds.Add(stale);
         var remainingVolume = Math.Max(0, state.RemainingVolume);
         // Seed from the complete tracked group, not this leg's own (possibly
         // stale) field. Manual /algo groups commonly disappear together in
@@ -6669,6 +6644,27 @@ public sealed class AutoTradeEngine(
         var siblingStates = _states.Values
           .Where(item => GroupId(item) == groupId)
           .ToArray();
+        // Same win/loss read TerminalAchievedPips uses just below: only a
+        // genuinely achieved target makes this an archived-TP-level event
+        // eligible to include the risk leg - a pure SL/unconfirmed
+        // disappearance is a risk calculation and must exclude it.
+        //
+        // Owner-reported 2026-09-15 (signal 358, real XAU SELL): this used
+        // [state, .. siblingStates] - siblingStates queried from the LIVE
+        // _states dict, which this same loop has already shrunk by the time
+        // a group's later legs are processed (_states.Remove(stale) below
+        // runs per leg, in order, within one pass). Whichever leg happens to
+        // be processed LAST therefore found no siblings left and fell back
+        // to its own entry - exactly the risk leg's own price when it was
+        // last, reintroducing the bug this whole exclusion exists to fix.
+        // trackedGroup (above) is the frozen, complete group from this
+        // pass's own snapshot and already includes state itself - immune to
+        // the same-pass shrinkage siblingStates has.
+        var includeRiskLeg = AchievedTargetPips(state) is decimal achievedForDeepest
+          && achievedForDeepest > 0;
+        var deepestEntry = GroupDeepestEntryPrice(
+          trackedGroup, state.Direction, includeRiskLeg
+        );
         if (!closingGroupPipVolumes.TryGetValue(groupId, out var carriedPipVolume))
         {
           // Propagation normally keeps every sibling equal; max is defensive
@@ -6679,20 +6675,40 @@ public sealed class AutoTradeEngine(
             ? GroupRealizedPipVolume(trackedGroup)
             : state.GroupRealizedPipVolume;
         }
-        var pipVolume = carriedPipVolume
-          + SignedPips(state, exitEstimate) * remainingVolume;
+        // Owner 2026-09-15: the risk leg's own pips only ever count toward
+        // the reported group result on a genuine archived-TP event
+        // (includeRiskLeg above) - a pure SL/loss close must read as if the
+        // risk leg were never part of the group at all, same principle as
+        // GroupDeepestEntryPrice/GroupWorstCase already apply. Skipping its
+        // own contribution here (rather than after the fact) keeps every
+        // sibling's synced GroupRealizedPipVolume correct regardless of
+        // which leg in the group happens to close first.
+        var pipVolume = carriedPipVolume + (
+          !includeRiskLeg && IsManualRiskLeg(state)
+            ? 0m
+            : SignedPips(state, exitEstimate) * remainingVolume
+        );
         closingGroupPipVolumes[groupId] = pipVolume;
         await SyncGroupRealizedPipVolumeAsync(siblingStates, pipVolume, cancellationToken);
         // Total on the close card is the highest target reached (e.g. TP2
         // = 60), not the volume-weighted blend that dilutes booked TPs
         // with a later BE residual. Fall back to weighted only when no
         // target was booked yet (pure SL / full one-shot close).
+        // The weighting denominator excludes the risk leg's own volume too
+        // (same includeRiskLeg gate) - otherwise its pips-free contribution
+        // above would still dilute the ladder's own result toward zero.
+        var ladderInitialVolume = includeRiskLeg
+          ? initialVolume
+          : trackedGroup
+            .Where(item => !IsManualRiskLeg(item))
+            .Sum(item => item.InitialVolume);
         var terminalGroupPips = TerminalAchievedPips(
           state,
           exitEstimate,
           remainingVolume,
           pipVolume,
-          initialVolume
+          ladderInitialVolume > 0 ? ladderInitialVolume : initialVolume,
+          deepestEntry
         );
         var pipText = terminalGroupPips.ToString("0.0", CultureInfo.InvariantCulture);
         var resultPhrase = terminalGroupPips > 0m
@@ -6715,8 +6731,34 @@ public sealed class AutoTradeEngine(
             (string?)null
           ),
         };
+        // Same reasoning as ApplyOwnerCloseAsync's identical guard: this
+        // leg being confirmed missing does not mean every sibling leg of
+        // the same group is also gone. Firing "position_closed" (the
+        // subscriber-facing "POSITION CLOSED" headline) here would falsely
+        // announce the whole trade is over while a sibling is still open
+        // or not yet reconciled this pass. "leg_closed" is Telegram-silent
+        // but keeps every field this call already computes - only the
+        // premature card is suppressed. Whichever leg turns out to
+        // genuinely be last still fires "position_closed" unchanged.
+        //
+        // Scoped to Stream == "algo_auto" only, same reasoning as
+        // ApplyOwnerCloseAsync's identical guard: manual_execution.py's
+        // dispatch has no handler for "leg_closed" and depends on receiving
+        // "position_closed" for every leg (including a non-final one) to
+        // pop its position_id from the local positions cache - it already
+        // defers its own Telegram/ledger work correctly via
+        // remaining_volume/_handle_group_result, so substituting the event
+        // type here would only starve that cache cleanup, not fix anything
+        // for Manual Algo.
+        var trackedGroupStillOpen = trackedGroup.Any(item =>
+          !confirmedMissingPositionIds.Contains(item.PositionId)
+        );
+        var groupFullyClosed =
+          !_states.Values.Any(item => GroupId(item) == groupId)
+          && !trackedGroupStillOpen;
+        var isAutoStream = state.Stream == "algo_auto";
         await PublishAsync(
-          "position_closed",
+          groupFullyClosed || !isAutoStream ? "position_closed" : "leg_closed",
           closeMessage,
           cancellationToken,
           state.CandidateId,
@@ -6738,16 +6780,11 @@ public sealed class AutoTradeEngine(
           groupInitialVolume: initialVolume,
           remainingVolume: 0,
           legRealizedPips: remainingVolume > 0
-            ? SignedPips(state, exitEstimate)
-            : null
+            ? SignedPipsFromEntry(state, deepestEntry, exitEstimate)
+            : null,
+          legEntryPrice: deepestEntry
         );
-        var trackedGroupStillOpen = trackedGroup.Any(item =>
-          !confirmedMissingPositionIds.Contains(item.PositionId)
-        );
-        if (
-          !_states.Values.Any(item => GroupId(item) == groupId)
-          && !trackedGroupStillOpen
-        )
+        if (groupFullyClosed)
         {
           await PublishAsync(
             "group_result",
@@ -6766,7 +6803,8 @@ public sealed class AutoTradeEngine(
             stopPips: InitialStopPips(state),
             stream: ExecutionStream(state),
             direction: DirectionLabel(state.Direction),
-            groupInitialVolume: initialVolume
+            groupInitialVolume: initialVolume,
+            legEntryPrice: deepestEntry
           );
           await MaybeDeleteGroupPlanAsync(groupId, cancellationToken);
         }
@@ -6795,6 +6833,14 @@ public sealed class AutoTradeEngine(
             cancellationToken
           );
         }
+      }
+      else
+      {
+        // No durable state remains to value. This is cleanup only; a tracked
+        // position always takes the broker-deal path above before removal.
+        await store.ClearPositionMissingAsync(stale, cancellationToken);
+        _states.Remove(stale);
+        await store.DeletePositionAsync(stale, cancellationToken);
       }
     }
     // Adopt bot-labeled positions and any still-tracked IDs present on the
@@ -7676,6 +7722,42 @@ public sealed class AutoTradeEngine(
       .ToArray();
   }
 
+  /// <summary>
+  /// Remember the ladder's deepest planned entry (the far edge of the owner's
+  /// zone): the deepest of every live filled leg and every still-pending
+  /// ladder leg of the group, excluding the fixed-size risk leg (not part of
+  /// the original ladder). Must run BEFORE the pending legs are cancelled.
+  /// </summary>
+  private void RecordGroupPlannedDeepestEntry(string groupId)
+  {
+    var groupToken = $"|{GroupToken(groupId)}|";
+    var pending = _allSymbolPendingOrders
+      .Where(order =>
+        order.Label == options.Label
+        && order.Comment.Contains(groupToken, StringComparison.Ordinal)
+      )
+      .ToArray();
+    var live = _states.Values
+      .Where(item => GroupId(item) == groupId)
+      .ToArray();
+    var ladder = live.Where(state => !IsManualRiskLeg(state)).ToArray();
+    if (ladder.Length == 0)
+    {
+      ladder = live;
+    }
+    var prices = pending.Select(order => order.LimitPrice)
+      .Concat(ladder.Select(state => state.EntryPrice))
+      .ToArray();
+    if (prices.Length == 0)
+    {
+      return;
+    }
+    var direction = ladder.Length > 0 ? ladder[0].Direction : pending[0].Direction;
+    _groupPlannedDeepestEntry[groupId] = direction == TradeDirection.Buy
+      ? prices.Min()
+      : prices.Max();
+  }
+
   private async Task CancelUnfilledGroupEntryLegsAfterTpAsync(
     string groupId,
     CancellationToken cancellationToken
@@ -7697,6 +7779,7 @@ public sealed class AutoTradeEngine(
     _allSymbolPendingOrders = snapshot.PendingOrders
       .Where(order => order.SymbolId == symbol.SymbolId)
       .ToArray();
+    RecordGroupPlannedDeepestEntry(groupId);
     var orderIds = PendingOrderIdsForGroup(groupId);
     if (orderIds.Count == 0)
     {
@@ -7744,6 +7827,7 @@ public sealed class AutoTradeEngine(
     {
       return;
     }
+    _groupPlannedDeepestEntry.Remove(groupId);
     await DeleteGroupPlanAsync(groupId, cancellationToken);
   }
 
@@ -7829,6 +7913,201 @@ public sealed class AutoTradeEngine(
     {
       return null;
     }
+  }
+
+  // One-time startup sweep for AutoTradeGroupPlans this executor submitted
+  // orders for but never adopted into _states - the exact gap that let real
+  // manual /algo signals fill AND stop out with zero record anywhere
+  // (owner-reported 2026-09-04): the previous engine instance was mid-
+  // shutdown for a redeploy exactly when the broker pushed those fill/close
+  // notifications, so it never got the chance to publish them, and a fresh
+  // instance's own startup reconciliation only ever adopts positions still
+  // open right now (see ReconcileSymbolSnapshotAsync) - it has no path to
+  // learn what happened to one that already closed while nothing was
+  // listening. Runs once, right after the startup
+  // ReconcileAllBoundSymbolsAsync (so _states already reflects every
+  // position adoptable from the live snapshot) - not the recurring 15s
+  // reconcile loop, since this is a restart-gap concern, not an ongoing
+  // one, and every candidate here costs an extra OrderList + per-leg
+  // DealList broker round-trip.
+  //
+  // Deliberately does not retroactively catch plans saved before this
+  // fix shipped - GetGroupPlanIdsAsync only ever returns plans SaveGroupPlanAsync
+  // added to the new index, and that dual-write only exists from here on.
+  private async Task ReconcileOrphanedGroupPlansAsync(
+    CancellationToken cancellationToken
+  )
+  {
+    IReadOnlyList<string> groupIds;
+    try
+    {
+      groupIds = await store.GetGroupPlanIdsAsync(cancellationToken);
+    }
+    catch (Exception exception) when (exception is not OperationCanceledException)
+    {
+      _log($"orphaned_group_plan_scan_failed: {exception.Message}");
+      return;
+    }
+    if (groupIds.Count == 0)
+    {
+      return;
+    }
+    var client = RequireClient();
+    TradingReconcileSnapshot snapshot;
+    try
+    {
+      snapshot = await client.ReconcileAccountAsync(cancellationToken);
+    }
+    catch (Exception exception) when (exception is not OperationCanceledException)
+    {
+      _log($"orphaned_group_plan_scan_snapshot_failed: {exception.Message}");
+      return;
+    }
+    var liveClientOrderIds = snapshot.Positions
+      .Select(position => position.ClientOrderId)
+      .Concat(snapshot.PendingOrders.Select(order => order.ClientOrderId))
+      .Where(id => !string.IsNullOrEmpty(id))
+      .ToHashSet(StringComparer.Ordinal);
+    foreach (var groupId in groupIds)
+    {
+      cancellationToken.ThrowIfCancellationRequested();
+      if (_states.Values.Any(state => GroupId(state) == groupId))
+      {
+        continue; // already tracked normally - the live reconcile owns it
+      }
+      var plan = await LoadGroupPlanAsync(groupId, cancellationToken);
+      if (
+        plan is null
+        || plan.SubmittedAt is not long submittedAt
+        || plan.ClientOrderIds is not { Count: > 0 } clientOrderIds
+      )
+      {
+        continue; // nothing to correlate a closed position against
+      }
+      if (clientOrderIds.Any(liveClientOrderIds.Contains))
+      {
+        // Still resting or still open right now - either the normal
+        // pending-order path or the existing broker-position self-adoption
+        // path already owns this, not this scan.
+        continue;
+      }
+      await InvestigateOrphanedGroupPlanAsync(
+        client, plan, clientOrderIds, submittedAt, cancellationToken
+      );
+    }
+  }
+
+  private async Task InvestigateOrphanedGroupPlanAsync(
+    ICTraderTradeClient client,
+    AutoTradeGroupPlan plan,
+    IReadOnlyList<string> clientOrderIds,
+    long submittedAt,
+    CancellationToken cancellationToken
+  )
+  {
+    var fromMs = submittedAt * 1000L;
+    var nowMs = _clock().ToUnixTimeMilliseconds();
+    var historicalOrders = await client.FindHistoricalOrdersAsync(
+      fromMs, nowMs, cancellationToken
+    );
+    var filledLegs = historicalOrders
+      .Where(order =>
+        clientOrderIds.Contains(order.ClientOrderId, StringComparer.Ordinal)
+        && order.Filled
+        && order.PositionId is long)
+      .ToArray();
+    if (filledLegs.Length == 0)
+    {
+      // Never filled (still genuinely pending at the broker, or was
+      // cancelled/expired/rejected), or the broker's own history simply
+      // doesn't have it yet. Leave the plan for its own TTL / a later
+      // restart's scan rather than guessing.
+      return;
+    }
+    var symbolId = filledLegs[0].SymbolId;
+    var canonical = RedisSymbolFor(symbolId);
+    if (canonical is null)
+    {
+      _log(
+        $"orphaned_group_plan_unresolved_symbol group_id={plan.GroupId} "
+          + $"symbol_id={symbolId}"
+      );
+      return;
+    }
+    var pipSize = PipSizeForSymbol(canonical);
+    var direction = ParseDirection(plan.Direction);
+    var totalPipVolume = 0m;
+    var totalVolume = 0L;
+    decimal? deepestEntryPrice = null;
+    foreach (var leg in filledLegs)
+    {
+      var positionId = leg.PositionId!.Value;
+      var deals = await client.GetClosingDealsAsync(
+        positionId, fromMs, nowMs, cancellationToken
+      );
+      foreach (var deal in deals)
+      {
+        // Deepest fill across every leg (lower for BUY, higher for SELL) -
+        // not simply the first deal iterated, which depends on broker
+        // history ordering and is not necessarily the group's best fill.
+        // Mirrors GroupDeepestEntryPrice's live-path rule.
+        if (
+          deepestEntryPrice is not decimal current
+          || (direction == TradeDirection.Buy && deal.EntryPrice < current)
+          || (direction == TradeDirection.Sell && deal.EntryPrice > current)
+        )
+        {
+          deepestEntryPrice = deal.EntryPrice;
+        }
+        var move = direction == TradeDirection.Buy
+          ? deal.ExitPrice - deal.EntryPrice
+          : deal.EntryPrice - deal.ExitPrice;
+        totalPipVolume += (move / pipSize) * deal.ClosedVolume;
+        totalVolume += deal.ClosedVolume;
+      }
+    }
+    if (totalVolume <= 0)
+    {
+      // Every filled leg's own PositionId is confirmed no-longer-open, but
+      // no closing deal was found for any of them - broker deal history is
+      // genuinely unavailable right now rather than the group being
+      // unresolved. Leave the plan in place; the next restart's scan gets
+      // another chance once the broker's own history catches up.
+      _log(
+        $"orphaned_group_plan_no_closing_deals group_id={plan.GroupId} "
+          + $"legs={filledLegs.Length}"
+      );
+      return;
+    }
+    // One consolidated group_result, exactly the shape a normal group close
+    // already publishes (see the stale-tracked-position path above) - this
+    // is deliberately NOT a per-leg TP-ladder replay. Reconstructing the
+    // exact booking sequence (which leg hit which configured target, in
+    // what order) from bare deal history would be guesswork; a single
+    // volume-weighted total is the same bypass finalize_manual_group
+    // already uses for any group whose legs closed independently.
+    var groupRealizedPips = totalPipVolume / totalVolume;
+    await PublishAsync(
+      "group_result",
+      $"group {plan.GroupId} reconciled after a restart gap: realised "
+        + $"{groupRealizedPips.ToString("0.0", CultureInfo.InvariantCulture)} "
+        + $"pips ({filledLegs.Length} leg(s) filled and closed while "
+        + "unmonitored)",
+      cancellationToken,
+      plan.CandidateId,
+      groupId: plan.GroupId,
+      groupRealizedPips: groupRealizedPips,
+      setup: plan.Setup,
+      matchId: plan.MatchId,
+      rangeId: plan.RangeId,
+      strategyFamily: plan.StrategyFamily,
+      direction: DirectionLabel(direction),
+      groupInitialVolume: totalVolume,
+      legEntryPrice: deepestEntryPrice,
+      reasonCode: "orphaned_group_plan_reconciled",
+      symbol: canonical
+    );
+    await DeleteGroupPlanAsync(plan.GroupId, cancellationToken);
   }
 
   private static bool SameStrategyFamily(
@@ -8954,6 +9233,7 @@ public sealed class AutoTradeEngine(
     decimal? entryLow = null,
     decimal? entryHigh = null,
     decimal? legRealizedPips = null,
+    decimal? legEntryPrice = null,
     long? groupInitialVolume = null,
     long? lotSize = null,
     string? structuralSource = null,
@@ -9091,6 +9371,7 @@ public sealed class AutoTradeEngine(
       entryLow,
       entryHigh,
       legRealizedPips,
+      legEntryPrice,
       groupInitialVolume,
       lotSize,
       structuralSource,
@@ -9369,25 +9650,33 @@ public sealed class AutoTradeEngine(
   // 2026-08 R:R dig: manual /algo positions were a single entry, so a real
   // win typically only banked TP1 on 20% before the remaining 80% gave back
   // to breakeven on a pullback (58 closed XAU trades: median win 36 pips vs
-  // median loss the full -60 stop). Splitting into 3 legs across the
-  // owner's zone improves the realized average entry instead of touching
-  // exits: shallow (near edge, most likely to actually fill) carries the
-  // most size, deep (far edge, best price, least likely to fill) the least.
+  // median loss the full -60 stop). Splitting across the owner's zone
+  // improves the realized average entry instead of touching exits: shallow
+  // (near edge, most likely to actually fill) carries the most size, deep
+  // (far edge, best price, least likely to fill) the least.
   //
   // 2026-08-21 owner-reported: too many trades only ever filled the shallow
-  // clip - mid/deep's more favorable price often never got reached at all,
-  // so the original 50/30/20 split left 50% of the intended risk unfilled
-  // on those trades. Reweighted shallow-heavy to 70/20/10 so the size
-  // that's actually most likely to see a fill captures more of the
-  // intended position, while mid/deep still ride for the better average
-  // entry on the trades where price does come back for them.
+  // clip - the deeper leg's more favorable price often never got reached
+  // at all, so an even split left much of the intended risk unfilled on
+  // those trades. Shallow-heavy weighting means the size that's actually
+  // most likely to see a fill captures more of the intended position,
+  // while the deep leg still rides for the better average entry on the
+  // trades where price does come back for it.
+  //
+  // 2026-09-08 owner: simplified the former 3-leg 70/20/10 (shallow/mid/
+  // deep) ladder down to a plain 2-leg 80/20 ladder like the auto algo's
+  // own zone-scale entries - see ManualAlgoRiskLegPrice/
+  // ManualAlgoRiskLegVolume for the separate fixed-size risk leg that
+  // replaces mid's old role near the stop instead of splitting the same
+  // sized volume three ways.
   //
   // Exit policy (2026-08 ladder PM): book the group TP ladder shallow-first
   // so a shallow-only fill still owns the nearby targets. One broker-valid
   // shallow slice is reserved for the final owner target so cancelling
-  // unfilled Mid/Deep orders after TP1 does not silently remove the runner.
+  // unfilled deeper-leg orders after TP1 does not silently remove the
+  // runner.
   private static readonly IReadOnlyList<decimal> ManualEntryLegRatios =
-    [0.7m, 0.2m, 0.1m];
+    [0.8m, 0.2m];
 
   private static TargetVolumePlan ManualAlgoBuildGroupTargetPlan(
     long totalVolume,
@@ -9413,17 +9702,22 @@ public sealed class AutoTradeEngine(
   }
 
   /// <summary>
-  /// Distribute the group TP book across entry legs shallow → mid → deep.
-  /// Owner-reported 2026-08-19: deep-first booking assigned the group's
+  /// Distribute the group TP book across entry legs shallow-to-deep, in
+  /// the order the caller passes them (Shallow, Deep, then the fixed-size
+  /// risk leg nearest the stop - see ManualAlgoRiskLegPrice). Owner-
+  /// reported 2026-08-19: deep-first booking assigned the group's
   /// earliest/closest TP ordinals to the deepest (least-likely-to-fill,
-  /// smallest) leg - when deep (and often mid) never filled at all (price
+  /// smallest) leg - when the deeper leg(s) never filled at all (price
   /// never reached their more favorable entry), no order ever existed to
   /// hit TP1/TP2, so those ordinals silently never appeared on the channel
   /// even though shallow itself had already booked real profit under a
   /// later ordinal's label. Shallow is the most-likely-to-fill, largest
-  /// leg (70% of size) and should own the close, early targets it can
-  /// reliably reach; deep - the smallest leg, only filling on a genuinely
-  /// favorable move - rides as the runner toward the final target instead.
+  /// leg (80% of the main ladder) and should own the close, early targets
+  /// it can reliably reach; each deeper leg - filling only on a genuinely
+  /// favorable move - rides further out instead, with whichever leg is
+  /// deepest (ordinarily the risk leg, once it exists) riding as the
+  /// runner toward the final target if the whole group fills - it is not
+  /// treated specially, just naturally last in this walk.
   /// </summary>
   private static TargetVolumePlan[] ManualAlgoAllocateTargetPlansAcrossLegs(
     IReadOnlyList<long> legVolumes,
@@ -9454,7 +9748,7 @@ public sealed class AutoTradeEngine(
       var need = groupPlan.Slices[sliceIndex];
       var pips = groupPlan.TargetsPips[sliceIndex];
       var ordinal = groupPlan.TargetOrdinals[sliceIndex];
-      // Legs are ordered shallow/mid/deep — walk shallow-first.
+      // Legs are ordered shallow-to-deep — walk shallow-first.
       for (var leg = 0; leg < remaining.Length && need > 0; leg++)
       {
         if (remaining[leg] <= 0)
@@ -9943,6 +10237,29 @@ public sealed class AutoTradeEngine(
   // {barTs}|{expiresAt} - single-leg manual-algo equivalent of av3/avz.
   // expiresAt is an absolute unix timestamp (0 = never expires), unlike
   // zone-fill's bars*60s TTL formula.
+  private static string BuildManualBasePart(
+    string candidateId,
+    string groupId,
+    long volume,
+    IReadOnlyList<long> slices,
+    IReadOnlyList<int> targets,
+    IReadOnlyList<int> ordinals,
+    long barTs,
+    long expiresAt
+  ) =>
+    string.Join(
+      '|',
+      "avm",
+      CandidateToken(candidateId),
+      GroupToken(groupId),
+      volume.ToString(CultureInfo.InvariantCulture),
+      string.Join(',', slices),
+      string.Join(',', targets),
+      string.Join(',', ordinals),
+      barTs.ToString(CultureInfo.InvariantCulture),
+      expiresAt.ToString(CultureInfo.InvariantCulture)
+    );
+
   private static string BuildManualComment(
     string candidateId,
     string groupId,
@@ -9956,17 +10273,8 @@ public sealed class AutoTradeEngine(
     int legCount
   )
   {
-    var basePart = string.Join(
-      '|',
-      "avm",
-      CandidateToken(candidateId),
-      GroupToken(groupId),
-      volume.ToString(CultureInfo.InvariantCulture),
-      string.Join(',', slices),
-      string.Join(',', targets),
-      string.Join(',', ordinals),
-      barTs.ToString(CultureInfo.InvariantCulture),
-      expiresAt.ToString(CultureInfo.InvariantCulture)
+    var basePart = BuildManualBasePart(
+      candidateId, groupId, volume, slices, targets, ordinals, barTs, expiresAt
     );
     var comment = string.Join(
       '|',
@@ -9987,6 +10295,32 @@ public sealed class AutoTradeEngine(
     if (basePart.Length <= 100)
     {
       return basePart;
+    }
+    // Owner-reported 2026-09-17: a 5-level TP ladder left even the 9-part
+    // base over 100 chars, so BuildManualComment threw and the candidate
+    // was lost entirely - the retry that followed landed outside the
+    // staleness window, so the owner saw an opaque "stale candidate"
+    // reject with no fill and no obvious connection to the real cause.
+    // Drop the farthest (highest-ordinal) target first - it's the TP the
+    // position is least likely to ever reach - and keep dropping until the
+    // base fits or only one target is left. A fill with a shorter ladder
+    // is always a better outcome than losing the trade outright.
+    var trimmedSlices = slices;
+    var trimmedTargets = targets;
+    var trimmedOrdinals = ordinals;
+    while (trimmedTargets.Count > 1)
+    {
+      trimmedSlices = trimmedSlices.Take(trimmedSlices.Count - 1).ToArray();
+      trimmedTargets = trimmedTargets.Take(trimmedTargets.Count - 1).ToArray();
+      trimmedOrdinals = trimmedOrdinals.Take(trimmedOrdinals.Count - 1).ToArray();
+      var trimmedBasePart = BuildManualBasePart(
+        candidateId, groupId, volume, trimmedSlices, trimmedTargets, trimmedOrdinals,
+        barTs, expiresAt
+      );
+      if (trimmedBasePart.Length <= 100)
+      {
+        return trimmedBasePart;
+      }
     }
     throw new VolumePlanningException(
       $"manual algo comment is {basePart.Length} chars; cTrader maximum is 100"

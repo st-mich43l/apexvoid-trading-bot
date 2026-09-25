@@ -15,7 +15,6 @@ from app.persistence import store, redis_state
 from app.analysis import scanner
 from app.analysis.market_map import MapEntry, MarketMap, ScalpRail
 from app.analysis.ohlc_source import RedisOHLCSource
-from app.signals.parsing import _parse_manual
 from app.analysis.scalp_ranges import ScalpBarrier, ScalpRange
 from app.analysis.structure import Zone
 from app.analysis.zones import ZONE_RECONCILED_TAG_PREFIX
@@ -37,71 +36,6 @@ class StaticSource:
     assert symbol == "XAU"
     assert tf in {"M5", "M30", "M15", "H1"}
     return _frame()
-
-
-def test_scanner_copy_draft_becomes_valid_manual_signal_after_filling_risk():
-  result = scanner.DetectionResult(
-    "Fade Scalp",
-    "SELL",
-    4105.0,
-    Zone(4104.13, 4107.96, "supply"),
-    4105.38,
-    3,
-    ["HTF bias down"],
-  )
-
-  draft = scanner._copy_draft("XAU", result)
-  assert draft is not None
-  ready = draft.replace("SL", "4112").replace(
-    "TP1/TP2/TP3",
-    "4100/4095/4090",
-  )
-
-  parsed = _parse_manual(ready)
-  assert parsed is not None
-  assert parsed["action"] == "SELL"
-  assert parsed["entry"] == pytest.approx(4104.13)
-  assert parsed["entry_end"] == pytest.approx(4107.96)
-  assert parsed["sl"] == pytest.approx(4112)
-  assert parsed["tps"] == [4100, 4095, 4090]
-  assert parsed["setup_type"] == "fade-scalp"
-  assert parsed["confluence"] == 3
-
-
-def test_scanner_copy_draft_includes_planned_stop_price():
-  from app.analysis.execution_eligibility import (
-    EXECUTION_ELIGIBILITY_VERSION,
-    STATIC_ELIGIBLE,
-    ExecutionEligibility,
-  )
-
-  result = scanner.DetectionResult(
-    "Key Level Reaction",
-    "BUY",
-    4075.0,
-    Zone(4072.99, 4076.89, "demand"),
-    4074.94,
-    2,
-    ["HTF bias up"],
-    execution_eligibility=ExecutionEligibility(
-      version=EXECUTION_ELIGIBILITY_VERSION,
-      allowed=True,
-      state=STATIC_ELIGIBLE,
-      reason_code="static_eligibility_passed",
-      message="ok",
-      hard_block=False,
-      direction="BUY",
-      entry_low=4072.99,
-      entry_high=4076.89,
-      planned_entry_price=4075.0,
-      measured={"planned_stop_price": "4070.50"},
-    ),
-  )
-
-  draft = scanner._copy_draft("XAU", result)
-  assert draft is not None
-  assert "/ sl 4070.5 /" in draft or "/ sl 4070.50 /" in draft
-  assert "sl SL" not in draft
 
 
 @pytest.mark.asyncio
@@ -702,7 +636,10 @@ def test_range_scalp_alert_is_two_sided_and_keeps_target_reasons():
 
   text = scanner._format_detection("XAU", "M5", ctx, result, ["M30"])
 
-  assert "RANGE SCALP" in text
+  # Owner 2026-08-25: card no longer carries a Mode: line at all - the
+  # header only ever shows a unified with_bias/counter_bias Bias: line.
+  assert "Mode:" not in text
+  assert "RANGE SCALP" not in text
   assert "COUNTER-TREND" not in text
   assert "TP1 EQ 4105" in text
   assert "TP2 edge 4100" in text
@@ -753,6 +690,12 @@ def test_scanner_card_never_claims_ready_before_worker(monkeypatch):
   assert "Algo bot READY" not in ready
   assert "ANALYSIS ONLY" in blocked
   assert "Algo bot BLOCKED" not in blocked
+  # Owner-reported 2026-09-22 (live ORDER ACTIVATED card): this boilerplate
+  # footer survives every later card state (the header gets rewritten,
+  # the body - including this line - does not), so it kept showing up on
+  # filled/activated trades where it says nothing the rest of the card
+  # doesn't already convey. Dropped from every executable card.
+  assert "Executor owns mechanical entry" not in ready
 
 
 def test_scalp_status_reports_active_range_and_touched_edge():
@@ -1145,7 +1088,7 @@ async def test_structural_anchor_preference_is_telemetry_not_execution_filter(
     lambda symbol, tf, frames, settings, htf_order, **_kwargs: ctx,
   )
   round_only = scanner.DetectionResult(
-    "Key Level Reaction",
+    "Key Level",
     "BUY",
     4100.0,
     Zone(4099.5, 4100.5, "demand"),
@@ -1177,13 +1120,13 @@ async def test_structural_anchor_preference_is_telemetry_not_execution_filter(
   notify.assert_not_awaited()
   forwarded = sync_strategy_match.await_args.args[5]
   assert len(forwarded) == 1
-  assert forwarded[0].setup == "Key Level Reaction"
+  assert forwarded[0].setup == "Key Level"
   assert scanner._structure_card_gate(anchored, ctx) is None
   status = json.loads(await client.get("scanner:last_tick:XAU:M5"))
   assert len(status["detected"]) == 1
-  assert status["detected"][0]["setup"] == "Key Level Reaction"
+  assert status["detected"][0]["setup"] == "Key Level"
   assert status["structure_gated"] == [{
-    "setup": "Key Level Reaction",
+    "setup": "Key Level",
     "direction": "BUY",
     "reason": "round_without_structural_anchor",
   }]
@@ -1203,7 +1146,7 @@ def test_structure_gate_defaults_are_a_noop(monkeypatch):
   install_runtime_overrides(monkeypatch, legacy_overrides={"scanner_gate_suppress_counter_bias_in_range": False,})
   install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_track_all_structural_matches": True,})
   result = scanner.DetectionResult(
-    "Key Level Reaction",
+    "Key Level",
     "SELL",
     4100.0,
     Zone(4099.5, 4100.5, "supply"),
@@ -1483,7 +1426,7 @@ def test_box_breakout_now_participates_in_confluence_merge():
   actual root cause: neither detector ever set structural_source/
   structural_id on its DetectionResult, and _merge_detection_confluence
   below only considers results with a truthy structural_id - so a Box
-  Breakout firing on the same band as an already-live Key Level Reaction
+  Breakout firing on the same band as an already-live Key Level
   used to always stay a separate, unmerged result instead of collapsing
   into one order. Now that both fields are wired (see detectors.py), a
   Box Breakout result merges exactly like every other structural source.
@@ -1502,7 +1445,7 @@ def test_box_breakout_now_participates_in_confluence_merge():
     structural_high=4110.4,
   )
   key_level_result = scanner.DetectionResult(
-    setup="Key Level Reaction",
+    setup="Key Level",
     direction="BUY",
     key_level=4110.0,
     entry_zone=Zone(4109.8, 4110.2, "demand", source="key_level"),
@@ -1932,7 +1875,7 @@ async def test_setup_invalidation_suppressed_after_autonomous_entry(monkeypatch)
   install_runtime_overrides(monkeypatch, legacy_overrides={"telegram_owner_id": 4242})
   await client.delete("auto_trade:positions")
   result = scanner.DetectionResult(
-    "Key Level Reaction",
+    "Key Level",
     "BUY",
     4095.0,
     Zone(4093.88, 4097.2, "demand"),
@@ -1942,7 +1885,7 @@ async def test_setup_invalidation_suppressed_after_autonomous_entry(monkeypatch)
   )
   key = scanner._active_setup_band_key("XAU", "M5", result)
   await client.set(key, json.dumps({
-    "setup": "Key Level Reaction",
+    "setup": "Key Level",
     "direction": "BUY",
     "zone_low": 4093.88,
     "zone_high": 4097.2,
@@ -1978,7 +1921,7 @@ async def test_overlapping_setup_invalidations_are_all_silent(monkeypatch):
   install_runtime_overrides(monkeypatch, legacy_overrides={"telegram_owner_id": 4242})
   install_runtime_overrides(monkeypatch, legacy_overrides={"scanner_level_bucket": 20})
   key_level = scanner.DetectionResult(
-    "Key Level Reaction",
+    "Key Level",
     "BUY",
     4095.0,
     Zone(4093.88, 4097.2, "demand"),
@@ -2191,7 +2134,7 @@ async def test_confluence_zone_id_mismatch_falls_back_to_strategy_match(
 async def test_sync_strategy_match_logs_the_real_build_rejection(
   monkeypatch, caplog,
 ):
-  """Live incident: two SELL setups (Zone Reaction, Session Level Reaction)
+  """Live incident: two SELL setups (Zone Reaction, Session Level)
   both passed actionability/room checks and still vanished as "no
   executable StrategyMatch" with nothing left to explain it -
   auto_trade:gate_reject:*/last_match_build had no fresh hit for either.
@@ -2213,7 +2156,7 @@ async def test_sync_strategy_match_logs_the_real_build_rejection(
     ),
   )
   result = scanner.DetectionResult(
-    "Session Level Reaction",
+    "Session Level",
     "SELL",
     4175.71,
     Zone(4175.71, 4181.23, "supply"),
@@ -2229,7 +2172,7 @@ async def test_sync_strategy_match_logs_the_real_build_rejection(
   assert match is None
   assert "scanner match build rejected" in caplog.text
   assert "reason=unknown_strategy_policy" in caplog.text
-  assert "Session Level Reaction:SELL" in caplog.text
+  assert "Session Level:SELL" in caplog.text
 
 
 def test_build_strategy_match_logs_dedupe_merge_events(monkeypatch, caplog):

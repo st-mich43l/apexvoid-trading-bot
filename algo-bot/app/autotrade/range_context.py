@@ -155,12 +155,6 @@ def range_context_compare_key(symbol: str) -> str:
   return f"auto_trade:range_context_compare:{symbol.upper()}"
 
 
-def source_max_age_seconds(source: str) -> int:
-  if source == "scanner":
-    return SCANNER_SOURCE_MAX_AGE_SECONDS
-  return PRIVATE_SOURCE_MAX_AGE_SECONDS
-
-
 def is_range_context_current(
   context: RangeContext | None,
   *,
@@ -673,29 +667,6 @@ async def persist_resolved_range(
   )
 
 
-async def persist_range_resolution(
-  client: Any,
-  *,
-  symbol: str,
-  scanner: RangeContext | None,
-  private: RangeContext | None,
-  resolved: RangeContext | None,
-  comparison: dict[str, Any],
-) -> None:
-  """Deprecated compatibility wrapper.
-
-  Source keys are producer-owned. Callers must persist scanner/private
-  observations through the dedicated helpers; this only writes resolved
-  and comparison keys.
-  """
-  del scanner, private
-  await persist_resolved_range(
-    client,
-    symbol=symbol,
-    resolved=resolved,
-    comparison=comparison,
-  )
-
 def _build_context(
   *,
   symbol: str,
@@ -861,14 +832,3 @@ def _state_rank(state: str) -> int:
     "retired": 0,
     "no_range": 0,
   }.get(state, 0)
-
-
-def _summary(context: RangeContext) -> dict[str, Any]:
-  return {
-    "range_id": context.range_id,
-    "state": context.state,
-    "source": context.source,
-    "lower": context.lower,
-    "upper": context.upper,
-    "quality": context.quality,
-  }

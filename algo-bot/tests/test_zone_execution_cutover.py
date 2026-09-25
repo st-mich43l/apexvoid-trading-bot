@@ -4,6 +4,7 @@ from tests.configuration.canonical_fixtures import install_runtime_overrides, le
 
 import asyncio
 import os
+import time
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -15,6 +16,7 @@ from redis.asyncio import Redis
 from app.autotrade.strategy_match import StrategyMatch
 from app.autotrade import worker
 from app.autotrade import zone_execution_cutover as cutover
+from app.analysis.ohlc_source import RedisOHLCSource
 from app.autotrade import zone_watch as zw
 
 
@@ -91,7 +93,7 @@ async def client():
     await redis.aclose()
 
 
-def _match(*, strategy: str = "Key Level Reaction") -> StrategyMatch:
+def _match(*, strategy: str = "Key Level") -> StrategyMatch:
   return StrategyMatch(
     version=1,
     match_id="setup-1",
@@ -128,7 +130,7 @@ def _result(
   *,
   low: float = 4113.0,
   high: float = 4116.0,
-  setup="Key Level Reaction",
+  setup="Key Level",
   structural_source: str = "key_level",
 ):
   return SimpleNamespace(
@@ -287,6 +289,95 @@ async def test_rediscovery_refreshes_metadata_without_resetting_touch(client):
   assert refreshed.last_confirmed_at == 300
   assert refreshed.low == pytest.approx(4112.9)
   assert refreshed.score == pytest.approx(14.0)
+
+
+async def _seed_price_and_bars(client, *, spot=4360.0, base=4358.0):
+  now = int(time.time())
+  await client.set(
+    "price:XAU:spot",
+    f'{{"bid": {spot}, "ask": {spot + 0.5}, "ts": {now}}}',
+  )
+  for index in range(30):
+    close = base + (index % 3)
+    payload = (
+      f'{{"t": {index}, "o": {close}, "h": {close + 1}, '
+      f'"l": {close - 1}, "c": {close}, "v": 1}}'
+    )
+    await client.zadd("bars:XAU:M5", {payload: index})
+  return now
+
+
+async def _discover(client, zone_id, low, high, direction="BUY"):
+  record, _ = await zw.discover_zone_watch(
+    client,
+    zone_id=zone_id,
+    symbol="XAU",
+    direction=direction,
+    low=low,
+    high=high,
+    source_timeframe="M5",
+    structural_sources=("key_level",),
+    confluence_tags=("key_level",),
+    grade=zw.GRADE_A,
+    now=100,
+  )
+  await zw.transition_zone_watch(client, record.zone_id, zw.WATCHING_RETEST)
+  return record
+
+
+@pytest.mark.asyncio
+async def test_dead_zone_far_beyond_dormant_is_removed_not_expired(client):
+  """Owner 2026-09-21: a zone 8 ATR from price was still listed. Beyond
+  twice the dormant band a zone is removed from the watchlist (record and
+  indexes) - but by deletion, never an EXPIRED transition, so the same
+  zone can be rediscovered if price ever returns.
+  """
+  record = await _discover(client, "zone-far", 4280.0, 4285.0)
+  now = await _seed_price_and_bars(client)
+
+  # Production always passes the dispatch pass's OHLC source (spot loop and
+  # bar dispatcher); without it there is no ATR and nothing can be "dead".
+  matched = await cutover.evaluate_active_zone_watches(
+    client, symbol="XAU", event_ts=str(now), source=RedisOHLCSource(client),
+  )
+
+  assert matched is None
+  assert await zw.load_zone_watch(client, record.zone_id) is None
+  assert await zw.list_active_zone_watches(client, symbol="XAU") == []
+  rediscovered, created = await zw.discover_zone_watch(
+    client,
+    zone_id="zone-far",
+    symbol="XAU",
+    direction="BUY",
+    low=4280.0,
+    high=4285.0,
+    source_timeframe="M5",
+    structural_sources=("key_level",),
+    confluence_tags=("key_level",),
+    grade=zw.GRADE_A,
+    now=200,
+  )
+  assert created is True
+  assert rediscovered.state != zw.EXPIRED
+
+
+@pytest.mark.asyncio
+async def test_dormant_zone_within_hysteresis_band_is_kept(client):
+  """Between remote_atr and 2x remote_atr a zone is dormant (skipped) but
+  kept - price drifting back must not find it deleted.
+  """
+  # Seeded M5 ATR is 2.33 and price 4360.25; bands are 3.0 (dormant) / 6.0
+  # (dead) ATR. Top edge 4349.5 is 4.6 ATR away: dormant, must be KEPT.
+  record = await _discover(client, "zone-mid", 4346.0, 4349.5)
+  now = await _seed_price_and_bars(client)
+
+  await cutover.evaluate_active_zone_watches(
+    client, symbol="XAU", event_ts=str(now), source=RedisOHLCSource(client),
+  )
+
+  reloaded = await zw.load_zone_watch(client, record.zone_id)
+  assert reloaded is not None
+  assert reloaded.state == zw.WATCHING_RETEST
 
 
 @pytest.mark.asyncio
@@ -461,7 +552,7 @@ async def test_enforce_reaction_waits_for_m1_without_persisting(
       "actionability.entry_location.mode": "shadow",
     },
   )
-  result = _result(setup="Key Level Reaction")
+  result = _result(setup="Key Level")
   ctx = SimpleNamespace(
     indicators={"M5": SimpleNamespace(atr=pd.Series([4.0]))},
   )
@@ -521,7 +612,7 @@ async def test_enforce_reaction_activates_with_fresh_m1_once(
       "actionability.entry_location.mode": "shadow",
     },
   )
-  result = _result(setup="Key Level Reaction")
+  result = _result(setup="Key Level")
   ctx = SimpleNamespace(
     indicators={"M5": SimpleNamespace(atr=pd.Series([4.0]))},
   )
@@ -680,16 +771,6 @@ async def test_enforce_location_blocks_buy_after_premium_rally(
     "_load_quote",
     AsyncMock(return_value=(4079.5, 4080.5, now_ts)),
   )
-  # Force zone presence "inside" even though dealing range says premium.
-  monkeypatch.setattr(
-    cutover,
-    "_quote_evidence",
-    lambda record, quote: SimpleNamespace(
-      inside=True,
-      executable_quote=quote[1],
-      side="ask",
-    ),
-  )
   monkeypatch.setattr(
     cutover,
     "_m1_trigger_for_zone",
@@ -818,15 +899,6 @@ async def test_prod_replay_null_match_range_no_longer_context_missing(
     cutover,
     "_load_quote",
     AsyncMock(return_value=(4231.01, 4231.10, now_ts)),
-  )
-  monkeypatch.setattr(
-    cutover,
-    "_quote_evidence",
-    lambda record, quote: SimpleNamespace(
-      inside=True,
-      executable_quote=quote[0],
-      side="bid",
-    ),
   )
   # No M1 yet — location must still evaluate with dealing ranges (not missing).
   monkeypatch.setattr(
@@ -1146,13 +1218,13 @@ def test_match_planned_stop_hard_error_reads_measured_even_when_allowed():
   match = replace(
     _match(),
     execution_eligibility=_eligibility_with_stop_error(
-      planned_stop_error="stop_exceeds_envelope_furthest_leg",
+      planned_stop_error="stop_inside_entry_zone",
       allowed=True,
     ),
   )
   assert (
     cutover._match_planned_stop_hard_error(match)
-    == "stop_exceeds_envelope_furthest_leg"
+    == "stop_inside_entry_zone"
   )
   assert cutover._publish_should_terminalize_zone_watch(
     status=worker.PUBLISH_STATUS_INVALIDATED,
@@ -1168,8 +1240,66 @@ def test_match_planned_stop_hard_error_reads_measured_even_when_allowed():
   )
 
 
+@pytest.mark.parametrize("code", [
+  "stop_exceeds_envelope_furthest_leg",
+  "stop_exceeds_envelope_after_wick",
+  "stop_exceeds_max_envelope",
+  "v8_stop_exceeds_max_envelope",
+  "v8_stop_exceeds_envelope_furthest_leg",
+  "entry_inside_opposing_zone",
+  "v8_entry_inside_opposing_zone",
+  "entry_inside_ambiguous_zone",
+  "entry_inside_opposing_level",
+  "opposing_barrier",
+  "v8_opposing_barrier",
+])
+def test_stop_distance_errors_never_kill_a_zone(code):
+  """Owner 2026-09-21: a tier-A with-bias Key Level SELL seen with price on the
+  zone's low edge (market leg 68 pips from the stop, cap 60) was INVALIDATED
+  for good although it plans fine once price is mid-zone."""
+  from dataclasses import replace
+
+  match = replace(
+    _match(),
+    execution_eligibility=_eligibility_with_stop_error(
+      planned_stop_error=code, allowed=True,
+    ),
+  )
+  assert cutover._is_stop_envelope_distance_error(code)
+  assert cutover._match_planned_stop_hard_error(match) is None
+  for status in (
+    worker.PUBLISH_STATUS_INVALIDATED,
+    worker.PUBLISH_STATUS_REJECTED,
+  ):
+    assert not cutover._publish_should_terminalize_zone_watch(
+      status=status, reason_code=code,
+    )
+
+
+@pytest.mark.parametrize("code", [
+  "stop_inside_entry_zone",
+  "stop_inside_opposing_zone",
+  "stop_not_beyond_planned_entries",
+  "protective_stop_unavailable",
+])
+def test_stop_geometry_errors_stay_terminal(code):
+  from dataclasses import replace
+
+  match = replace(
+    _match(),
+    execution_eligibility=_eligibility_with_stop_error(
+      planned_stop_error=code, allowed=True,
+    ),
+  )
+  assert not cutover._is_stop_envelope_distance_error(code)
+  assert cutover._match_planned_stop_hard_error(match) == code
+  assert cutover._publish_should_terminalize_zone_watch(
+    status=worker.PUBLISH_STATUS_REJECTED, reason_code=code,
+  )
+
+
 @pytest.mark.asyncio
-async def test_prepare_activation_preblocks_planned_stop_envelope_error(
+async def test_prepare_activation_preblocks_planned_stop_geometry_error(
   monkeypatch,
 ):
   from dataclasses import replace
@@ -1212,14 +1342,14 @@ async def test_prepare_activation_preblocks_planned_stop_envelope_error(
     confluence_zone_id="zone-stop",
     structural_zone_id="zone-stop",
     execution_eligibility=_eligibility_with_stop_error(
-      planned_stop_error="stop_exceeds_envelope_furthest_leg",
+      planned_stop_error="stop_inside_entry_zone",
     ),
   )
   terminalize = AsyncMock()
   monkeypatch.setattr(cutover, "_terminalize_zone_watch", terminalize)
   monkeypatch.setattr(cutover, "_record_policy_telemetry", AsyncMock())
   prepared = await cutover._prepare_activation(
-    SimpleNamespace(),
+    SimpleNamespace(get=AsyncMock(return_value=None)),
     record=record,
     match=match,
     quote=(4114.4, 4114.6, 1_785_390_200),
@@ -1228,135 +1358,8 @@ async def test_prepare_activation_preblocks_planned_stop_envelope_error(
   assert prepared is None
   terminalize.assert_awaited_once()
   assert terminalize.await_args.kwargs["reason_code"] == (
-    "stop_exceeds_envelope_furthest_leg"
+    "stop_inside_entry_zone"
   )
-
-
-@pytest.mark.asyncio
-async def test_prepare_activation_does_not_apply_mad_hard_gate(monkeypatch):
-  """MAD must not veto activation — entry quality / structure only."""
-  from dataclasses import replace
-  from app.core import instrument_geometry
-  from tests.test_config_effective_instrument_context import _load_production_example
-
-  eurusd_cfg = _load_production_example().config.for_instrument("EURUSD")
-  monkeypatch.setattr(
-    instrument_geometry,
-    "instrument_runtime",
-    lambda symbol: eurusd_cfg if str(symbol).upper() == "EURUSD" else eurusd_cfg,
-  )
-  install_runtime_overrides(
-    monkeypatch,
-    overrides={
-      "execution.activation.mode": "enforce",
-      "execution.technique.enforce": True,
-      "execution.technique.mad_hard_gate_enabled": True,
-      "actionability.entry_location.mode": "shadow",
-    },
-  )
-  record = zw.ZoneWatch(
-    version=zw.ZONE_WATCH_VERSION,
-    zone_id="zone-mad",
-    symbol="EURUSD",
-    direction="SELL",
-    low=1.0850,
-    high=1.0855,
-    width=0.0005,
-    source_timeframe="M15",
-    structural_sources=("range",),
-    confluence_tags=("range",),
-    technique_tags=(),
-    grade=zw.GRADE_B,
-    score=1.0,
-    freshness=0,
-    touch_count=0,
-    discovered_at=1_785_390_000,
-    last_confirmed_at=1_785_390_000,
-    last_touch_at=None,
-    invalidation_price=None,
-    state=zw.WATCHING_RETEST,
-    market_map_id="",
-    structure_signature="",
-    updated_at=1_785_390_000,
-  )
-  match = replace(
-    _match(strategy="Range Edge Scalp"),
-    match_id="setup-mad",
-    symbol="EURUSD",
-    confluence_zone_id="zone-mad",
-    structural_zone_id="zone-mad",
-    family="range",
-    strategy_mode="range_scalp",
-  )
-  telemetry = AsyncMock()
-  mad_gate = AsyncMock(
-    return_value=(
-      False,
-      "mad_gate_reversal_avoid_expand",
-      {"mad_phase": "expand"},
-    )
-  )
-  monkeypatch.setattr(cutover, "_record_policy_telemetry", telemetry)
-  monkeypatch.setattr(cutover, "_m1_trigger_for_zone", AsyncMock(return_value=None))
-  monkeypatch.setattr(cutover, "_recent_m1_impulse_bars", AsyncMock(return_value=0))
-  monkeypatch.setattr(
-    cutover,
-    "_resolve_location_range_bounds",
-    AsyncMock(return_value={
-      "m15_range_low": 1.0800,
-      "m15_range_high": 1.0900,
-    }),
-  )
-  monkeypatch.setattr(
-    cutover,
-    "_closed_bar_decisive_break",
-    AsyncMock(return_value=False),
-  )
-  monkeypatch.setattr(
-    cutover,
-    "_location_and_activation_for_record",
-    lambda **_kwargs: (
-      SimpleNamespace(
-        allowed=True,
-        reason_code="location_allowed",
-        would_block=False,
-        measured={"mode": "shadow"},
-      ),
-      SimpleNamespace(
-        allowed=True,
-        reason_code="reaction_trigger_fresh",
-        would_block=False,
-        requires_trigger=True,
-        measured={"mode": "enforce"},
-      ),
-      SimpleNamespace(
-        effective_range_source="scanner",
-        effective_range_low=1.0800,
-        effective_range_high=1.0900,
-        effective_range_position_raw=0.5,
-      ),
-    ),
-  )
-  monkeypatch.setattr(
-    "app.autotrade.reaction_funnel.bump_funnel",
-    AsyncMock(),
-  )
-  monkeypatch.setattr(
-    "app.analysis.mad_phase.evaluate_technique_mad_gate",
-    mad_gate,
-  )
-
-  prepared = await cutover._prepare_activation(
-    SimpleNamespace(),
-    record=record,
-    match=match,
-    quote=(1.0852, 1.0854, 1_785_390_200),
-    evidence=SimpleNamespace(executable_quote=1.0852, inside=True),
-  )
-  assert prepared is not None
-  mad_gate.assert_not_awaited()
-  for call in telemetry.await_args_list:
-    assert call.kwargs.get("reason_code") != "mad_gate_reversal_avoid_expand"
 
 
 @pytest.mark.asyncio
@@ -1454,3 +1457,186 @@ async def test_activate_match_terminalizes_zone_on_v8_stop_invalidate(
     "v8_protective_stop_unavailable"
   )
   presence.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_prepare_activation_waits_out_a_stop_distance_cooldown_without_terminalizing(
+  monkeypatch,
+):
+  from dataclasses import replace
+
+  record = zw.ZoneWatch(
+    version=zw.ZONE_WATCH_VERSION,
+    zone_id="zone-cool",
+    symbol="XAU",
+    direction="SELL",
+    low=4113.0,
+    high=4116.0,
+    width=3.0,
+    source_timeframe="M5",
+    structural_sources=("key_level",),
+    confluence_tags=("key_level",),
+    technique_tags=(),
+    grade=zw.GRADE_A,
+    score=1.0,
+    freshness=0,
+    touch_count=0,
+    discovered_at=1_785_390_000,
+    last_confirmed_at=1_785_390_000,
+    last_touch_at=None,
+    invalidation_price=None,
+    state=zw.WATCHING_RETEST,
+    market_map_id="",
+    structure_signature="",
+    updated_at=1_785_390_000,
+  )
+  terminalize = AsyncMock()
+  monkeypatch.setattr(cutover, "_terminalize_zone_watch", terminalize)
+  cooled_match = replace(_match(), match_id="setup-cool")
+  client = SimpleNamespace(
+    get=AsyncMock(return_value=cutover.soft_reject_token(cooled_match).encode()),
+  )
+
+  prepared = await cutover._prepare_activation(
+    client,
+    record=record,
+    match=cooled_match,
+    quote=(4114.4, 4114.6, 1_785_390_200),
+    evidence=SimpleNamespace(executable_quote=4114.4, inside=True),
+  )
+
+  assert prepared is None
+  client.get.assert_awaited_once_with(cutover.stop_cooldown_key("zone-cool"))
+  terminalize.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_soft_reject_cooldown_is_bound_to_the_signal_not_the_clock():
+  """match_id is stable per zone+direction for technique/confluence zones, so the
+  cooldown must also carry the confirmation: the retired signal stays skipped,
+  a fresh M5 confirmation on the same match_id proceeds."""
+  old = SimpleNamespace(match_id="match-A", m5_confirmation_bar_ts="2026-09-21T15:35:00+00:00")
+  fresh = SimpleNamespace(match_id="match-A", m5_confirmation_bar_ts="2026-09-21T18:20:00+00:00")
+  other = SimpleNamespace(match_id="match-B", m5_confirmation_bar_ts=old.m5_confirmation_bar_ts)
+  client = SimpleNamespace(
+    get=AsyncMock(return_value=cutover.soft_reject_token(old).encode()),
+  )
+
+  assert await cutover._soft_reject_cooldown_active(client, "z", old) is True
+  assert await cutover._soft_reject_cooldown_active(client, "z", fresh) is False
+  assert await cutover._soft_reject_cooldown_active(client, "z", other) is False
+  client.get.assert_awaited_with(cutover.stop_cooldown_key("z"))
+
+  empty = SimpleNamespace(get=AsyncMock(return_value=None))
+  assert await cutover._soft_reject_cooldown_active(empty, "z", old) is False
+
+
+@pytest.mark.parametrize("code", [
+  "structure_invalidated",
+  "zone_decisively_broken",
+  "v8_same_direction_active_before_tp2",
+  "v8_fixed_rr_room_insufficient",
+  "invalidated",
+])
+def test_other_publish_rejects_keep_their_existing_behaviour(code):
+  assert not cutover._is_price_dependent_reject(code)
+
+
+@pytest.mark.parametrize("reason,expected", [
+  # zone-level: the zone itself is dead
+  ("structure_invalidated", True),
+  ("zone_decisively_broken", True),
+  ("stop_inside_entry_zone", True),
+  ("stop_inside_opposing_zone", True),
+  ("stop_not_beyond_planned_entries", True),
+  ("v8_protective_stop_unavailable", True),
+  # match-level: only that match is retired, the zone lives on
+  ("invalidated", False),
+  ("expired", False),
+  ("v8_fixed_rr_room_insufficient", False),
+  ("v8_same_direction_active_before_tp2", False),
+  ("v8_entry_inside_opposing_zone", False),
+  ("entry_inside_opposing_zone", False),
+  ("v8_stop_exceeds_max_envelope", False),
+  ("opposing_barrier", False),
+  ("v8_news_block", False),
+  ("zone_no_longer_executable", False),
+])
+def test_only_zone_level_reasons_terminalize_a_zone(reason, expected):
+  """Owner 2026-09-21: one valid Key Level SELL zone was terminalized three times
+  in an hour by plan rejects that only concern the match (stop distance, entry
+  inside a demand shelf, then the retired match's own 'lifecycle terminal')."""
+  assert cutover._publish_should_terminalize_zone_watch(
+    status=worker.PUBLISH_STATUS_INVALIDATED, reason_code=reason,
+  ) is expected
+
+
+def _iso(epoch: int) -> str:
+  from datetime import datetime, timezone
+
+  return datetime.fromtimestamp(epoch, timezone.utc).isoformat()
+
+
+async def _retire_setup(client, setup_id: str, state: str):
+  from app.autotrade import setup_lifecycle as sl
+
+  await sl.create_setup(client, setup_id=setup_id, thesis_id="t", symbol="XAU")
+  await sl.transition_setup(client, setup_id, state, reason_code="test")
+  return await sl.load_setup(client, setup_id)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("state", ["invalidated", "expired"])
+async def test_newer_confirmation_rearms_a_retired_setup(state):
+  from app.autotrade import setup_lifecycle as sl
+  from app.persistence import redis_state
+
+  client = redis_state.get_client()
+  retired = await _retire_setup(client, f"rearm-{state}", state)
+  # confirmation bar OPENS after the terminal time; its close is > cooldown later
+  opened = int(retired.updated_at) + zw.ZONE_REFORM_COOLDOWN_SECONDS + 1
+  match = SimpleNamespace(
+    match_id=retired.setup_id, symbol="XAU", m5_confirmation_bar_ts=_iso(opened),
+  )
+
+  assert await cutover._rearm_retired_setup(client, match) is True
+
+  assert (await sl.load_setup(client, retired.setup_id)).state == sl.DISCOVERED
+
+
+@pytest.mark.asyncio
+async def test_stale_or_missing_confirmation_never_rearms():
+  from app.autotrade import setup_lifecycle as sl
+  from app.persistence import redis_state
+
+  client = redis_state.get_client()
+  retired = await _retire_setup(client, "rearm-stale", "invalidated")
+  terminal_at = int(retired.updated_at)
+  for stamp in (
+    _iso(terminal_at - 3600),                                   # before it died
+    _iso(terminal_at - zw.ZONE_REFORM_COOLDOWN_SECONDS),        # closes at death
+    _iso(terminal_at),                                          # closes inside cooldown
+    None,
+  ):
+    match = SimpleNamespace(match_id=retired.setup_id, symbol="XAU", m5_confirmation_bar_ts=stamp)
+    assert await cutover._rearm_retired_setup(client, match) is False
+  assert (await sl.load_setup(client, retired.setup_id)).state == sl.INVALIDATED
+
+
+@pytest.mark.asyncio
+async def test_consumed_cancelled_and_live_setups_are_never_rearmed():
+  from app.autotrade import setup_lifecycle as sl
+  from app.persistence import redis_state
+
+  client = redis_state.get_client()
+  await sl.create_setup(client, setup_id="live", thesis_id="t", symbol="XAU")
+  cancelled = sl.SetupRecord(
+    setup_id="cancelled", thesis_id="t", symbol="XAU", state=sl.CANCELLED,
+  )
+  await sl._save(client, cancelled)
+  far = int(cancelled.updated_at) + 10_000
+  for setup_id in ("live", "cancelled", "does-not-exist"):
+    match = SimpleNamespace(match_id=setup_id, symbol="XAU", m5_confirmation_bar_ts=_iso(far))
+    assert await cutover._rearm_retired_setup(client, match) is False
+  assert (await sl.load_setup(client, "cancelled")).state == sl.CANCELLED
+  assert (await sl.load_setup(client, "live")).state == sl.DISCOVERED

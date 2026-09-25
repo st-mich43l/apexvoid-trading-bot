@@ -7,6 +7,7 @@ import pytest
 from app.autotrade.execution_route import (
   ROUTE_MARKET,
   ROUTE_MARKET_WITH_LIMIT_SCALE,
+  ROUTE_ZONE_SPLIT,
   SCALP_MICRO_CLIPS,
   resolve_execution_route_plan,
   scalp_micro_grid_legs,
@@ -36,7 +37,7 @@ def test_sell_grid_steps_up_from_quote_to_distal():
   assert legs == tuple(sorted(legs))
 
 
-def test_hfs_route_is_single_leg_market_not_micro_grid():
+def test_scalp_route_is_single_leg_market_not_micro_grid():
   plan = resolve_execution_route_plan(
     direction="BUY",
     order_type_preference="market",
@@ -65,7 +66,7 @@ def test_hfs_route_is_single_leg_market_not_micro_grid():
     ("SELL", 4001.0),
   ],
 )
-def test_xau_hfs_auto_route_is_single_leg_market(
+def test_xau_scalp_auto_route_is_single_leg_market(
   direction: str,
   quote: float,
 ):
@@ -95,7 +96,7 @@ def test_xau_hfs_auto_route_is_single_leg_market(
   assert plan.routing_reason == "scalp: single-leg market (no micro-grid)"
 
 
-def test_hfs_chase_sell_books_full_market_not_five_legs_into_abandoned_zone():
+def test_scalp_chase_sell_books_full_market_not_five_legs_into_abandoned_zone():
   """Live 2026-08-21: quote below supply, five equal clips → only L1 rode TP."""
   plan = resolve_execution_route_plan(
     direction="SELL",
@@ -118,7 +119,7 @@ def test_hfs_chase_sell_books_full_market_not_five_legs_into_abandoned_zone():
   assert plan.immediate_market is True
 
 
-def test_hfs_chase_buy_books_full_market_not_micro_grid():
+def test_scalp_chase_buy_books_full_market_not_micro_grid():
   plan = resolve_execution_route_plan(
     direction="BUY",
     order_type_preference="market",
@@ -137,11 +138,18 @@ def test_hfs_chase_buy_books_full_market_not_micro_grid():
   assert plan.immediate_market is True
 
 
-def test_technique_fvg_uses_single_leg_market():
+def test_technique_fvg_uses_its_declared_zone_scale_policy():
+  # Owner 2026-09-08 (bad technique entries): technique strategies no
+  # longer share scalp's single-leg-market-only short-circuit - the
+  # GROUP RECOVERY REQUIRED bug that motivated it (v8:a80bf164…) is fixed
+  # generally in TradePlanRuntime now, so FVG/OB/IFVG/CRT/supply_demand
+  # fall through to their own declared policy (limit + zone_scale),
+  # DCA-ing into the zone at progressively better prices instead of
+  # market-filling at whatever price confirmation happened to land on.
   plan = resolve_execution_route_plan(
     direction="BUY",
-    order_type_preference="market",
-    entry_distribution="single",
+    order_type_preference="limit",
+    entry_distribution="zone_scale",
     executable_quote=4004.0,
     zone_low=4000.0,
     zone_high=4005.0,
@@ -151,10 +159,9 @@ def test_technique_fvg_uses_single_leg_market():
     strategy_family="zone",
   )
   assert plan.valid is True
-  assert plan.route == ROUTE_MARKET
-  assert plan.planned_leg_entry_prices == ()
-  assert plan.immediate_market is True
-  assert plan.routing_reason == "technique: single-leg market (no micro-grid)"
+  assert plan.route == ROUTE_ZONE_SPLIT
+  assert len(plan.planned_leg_entry_prices) == 2
+  assert plan.routing_reason != "technique: single-leg market (no micro-grid)"
 
 
 def test_key_level_reaction_is_not_forced_onto_scalp_grid():
@@ -167,7 +174,7 @@ def test_key_level_reaction_is_not_forced_onto_scalp_grid():
     zone_high=4005.0,
     atr=4.0,
     zone_fill_enabled=True,
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     strategy_family="key_level",
   )
   assert plan.route == "market"

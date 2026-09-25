@@ -141,68 +141,6 @@ public sealed partial class AutoTradeEngineTests
     await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
   }
 
-  // Scenario D: Python declares planned_execution_route=either and the
-  // executor resolves zone_split. The group plan must persist the resolved
-  // route and the exact -z1/-z2 identities before submission, and a lost
-  // second-leg acknowledgement must recover by adopting the existing legs.
-  [Fact]
-  public async Task BrokerRecoveryEitherRouteZoneSplitPersistsResolvedIdentities()
-  {
-    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-    var contract = PlannedStopContract(4000.5m);
-    var store = new FakeAutoTradeStore(PlannedCandidateJson(
-      contract,
-      plannedRoute: "either",
-      plannedEntryPrice: 4000.5m,
-      legEntryPrices: [4000.5m, 3999.75m],
-      orderTypePreference: "limit",
-      entryDistribution: "zone_split",
-      entryLow: 3999m,
-      entryHigh: 4000.5m
-    ));
-    var client = new FakeTradingClient { LoseLimitResponseCall = 2 };
-    var engine = new AutoTradeEngine(
-      DemoEvalOptions() with { ZoneFillEnabled = true, SizingMode = "table" },
-      store,
-      () => Now,
-      _ => { }
-    );
-    await engine.ObserveSpotAsync(
-      new SpotPrice("XAU", 4000.4m, 4000.6m, Now.ToUnixTimeSeconds()),
-      cts.Token
-    );
-
-    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
-    await WaitUntilAsync(() =>
-      store.MetricsSnapshot().Contains("broker_outcome_adopted")
-    );
-
-    // The plan stores what the executor resolved and submitted - never the
-    // declared `either`.
-    var plan = GroupPlanOf(store);
-    Assert.NotNull(plan);
-    Assert.Equal("zone_split", plan!.Route);
-    Assert.Equal(
-      new[]
-      {
-        $"{ExpectedRootClientOrderId}-z1",
-        $"{ExpectedRootClientOrderId}-z2",
-      },
-      plan.ClientOrderIds
-    );
-
-    // Both legs reached the broker exactly once: the partial zone outcome was
-    // adopted by exact client-order identity, never re-submitted and never
-    // mistaken for absence.
-    Assert.Equal(2, client.LimitOrders.Count);
-    Assert.Contains("broker_recovery_direct_lookup", store.Metrics);
-    Assert.Contains("broker_duplicate_prevented", store.Metrics);
-    Assert.DoesNotContain("broker_recovery_absence_confirmed", store.Metrics);
-
-    cts.Cancel();
-    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
-  }
-
   // Either resolving to market persists the exact root identity before the
   // broker call so a lost acknowledgement is always recoverable.
   [Fact]

@@ -37,7 +37,7 @@ def _match(**overrides) -> StrategyMatch:
     event_ts=str(now - 60),
     issued_at=now - 60,
     expires_at=now + 600,
-    strategy="Key Level Reaction",
+    strategy="Key Level",
     strategy_mode="with_bias",
     direction="SELL",
     key_level=4040.23,
@@ -98,6 +98,25 @@ def test_confirmation_policy_is_authoritative_only_with_complete_reaction_eviden
   assert non_reaction.reaction_family is False
   assert non_reaction.m5_authoritative is True
   assert non_reaction.m1_required_on_retest is False
+
+
+def test_trendline_v2_cannot_fall_back_to_m5_entry_without_fresh_m1():
+  policy = confirmation_policy_for(replace(
+    _match(),
+    strategy="Trendline",
+    family="trendline",
+    trendline_v2={
+      "version": "v2",
+      "state": "confirmed",
+      "interaction_started_at": "2026-09-17T02:42:00+00:00",
+    },
+  ))
+
+  assert policy.m5_authoritative is False
+  assert policy.m5_authoritative_contract is False
+  assert policy.m1_required_on_retest is True
+  assert policy.allow_same_cycle_publish is False
+  assert policy.reason_code == "trendline_v2_fresh_m1_required"
 
 
 def test_configured_m1_body_close_is_authoritative_confirmation():

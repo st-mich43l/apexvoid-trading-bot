@@ -18,6 +18,7 @@ from app.core.symbols import digits_for
 from app.runtime.price_identity import price_token
 from app.analysis.execution_eligibility import ExecutionEligibility
 from app.analysis.structural_reaction_support import structural_thesis_id
+from app.autotrade.strategy_names import resolve_strategy
 from app.autotrade.strategy_taxonomy import is_m1_scalp_match
 
 
@@ -50,6 +51,12 @@ class StrategyMatch:
   range_low: float | None = None
   range_high: float | None = None
   full_take_profit_pips: int | None = None
+  # M1 scalp only: the authoritative R-multiple for each targets_pips
+  # entry, computed from the SAME stop distance the ladder itself was
+  # built from (app.scalping.publish._scalp_target_ladder) - never
+  # re-derived from displayed card prices, which use an unrelated zone
+  # edge as their pip-offset reference. Empty for every non-scalp match.
+  scalp_target_r_multiples: tuple[float, ...] = ()
   tags: tuple[str, ...] = ()
   target_price: float | None = None
   tier: str = "A"
@@ -91,6 +98,12 @@ class StrategyMatch:
   structural_timeframe: str | None = None
   htf_bias: str = ""
   regime_kind: str = ""
+  # Resolved with_bias/counter_bias/neutral (app.analysis.structural_reaction_
+  # support.bias_relationship). Distinct from strategy_mode, which also
+  # carries non-bias identities like "scalp_m1"/"range_scalp" that real
+  # trade-plan/taxonomy logic keys on — this field exists purely so card
+  # rendering has an unambiguous bias signal to switch on. Additive/optional.
+  bias_relationship: str | None = None
   execution_eligibility: ExecutionEligibility | None = None
   # Additive activation / location provenance (older Redis payloads omit these).
   entry_location_source: str | None = None
@@ -103,11 +116,82 @@ class StrategyMatch:
   math_velocity: float | None = None
   math_acceleration: float | None = None
   math_pd: float | None = None
+  math_feature_version: int | None = None
+  # MAD v2 context telemetry (§17) — descriptive only, never a gate.
+  mad_version: int | None = None
+  mad_phase: str | None = None
+  mad_confidence: float | None = None
+  mad_affinity: float | None = None
+  mad_direction: str | None = None
+  mad_sweep_side: str | None = None
+  mad_reclaim: bool | None = None
+  mad_range_quality_atr: float | None = None
+  mad_break_distance_atr: float | None = None
+  mad_displacement_atr: float | None = None
+  mad_acceptance_closes: int | None = None
+  mad_sweep_penetration_atr: float | None = None
+  mad_reclaim_depth_atr: float | None = None
+  mad_reason_code: str | None = None
   # Shadow confluence telemetry. ``confluence`` remains the selected gate.
   confluence_v1: int | None = None
   confluence_v2: int | None = None
   confluence_v2_raw: float | None = None
   confluence_scoring_version: str | None = None
+  # Candle Confirmation V2 context telemetry (§28) — descriptive only,
+  # never a gate. See app/analysis/candle_evidence.py CandleEvidence.
+  candle_version: int | None = None
+  candle_primary_pattern: str | None = None
+  candle_patterns: str | None = None
+  candle_final_score: float | None = None
+  candle_base_score: float | None = None
+  candle_synergy_bonus: float | None = None
+  candle_rejection_score: float | None = None
+  candle_displacement_score: float | None = None
+  candle_sequence_score: float | None = None
+  candle_body_fraction: float | None = None
+  candle_upper_wick_fraction: float | None = None
+  candle_lower_wick_fraction: float | None = None
+  candle_close_location: float | None = None
+  candle_body_atr: float | None = None
+  candle_range_atr: float | None = None
+  candle_sweep: bool | None = None
+  candle_sweep_penetration_atr: float | None = None
+  candle_reclaim: bool | None = None
+  candle_reclaim_depth_atr: float | None = None
+  candle_engulfing: bool | None = None
+  candle_doji: bool | None = None
+  candle_compression_score: float | None = None
+  candle_sequence_name: str | None = None
+  candle_sequence_bars: int | None = None
+  # Opposing Structure V2 context telemetry (2026-09 Key Level repair) —
+  # descriptive only, never a gate. See
+  # app/autotrade/structural_target_room.py OpposingStructureEvidence.
+  key_level_opposing_zone_low: float | None = None
+  key_level_opposing_zone_high: float | None = None
+  key_level_opposing_zone_side: str | None = None
+  opposing_zone_present: bool | None = None
+  opposing_zone_side: str | None = None
+  opposing_zone_low: float | None = None
+  opposing_zone_high: float | None = None
+  opposing_zone_tier: str | None = None
+  opposing_zone_score: float | None = None
+  opposing_zone_strength: float | None = None
+  opposing_raw_room_price: float | None = None
+  opposing_room_pips: float | None = None
+  opposing_room_atr: float | None = None
+  opposing_room_r: float | None = None
+  opposing_before_tp1: bool | None = None
+  opposing_displaced: bool | None = None
+  opposing_mitigated: bool | None = None
+  # Real liquidity extreme (Grab.pool.level) behind a genuine, non-induced
+  # sweep-reclaim confirmation. Feeds execution_policy's sweep_extreme
+  # wick-stop widening. None when there was no such sweep.
+  sweep_extreme_price: float | None = None
+  opposing_room_pressure: float | None = None
+  opposing_risk_score: float | None = None
+  opposing_action: str | None = None
+  opposing_reason_code: str | None = None
+  trendline_v2: dict[str, object] | None = None
 
   @property
   def is_range_edge(self) -> bool:
@@ -133,6 +217,11 @@ class StrategyMatch:
     text = raw.decode() if isinstance(raw, bytes) else str(raw)
     try:
       payload = json.loads(text)
+      # Redis candidates can outlive a strategy-name rename (7d TTL): a
+      # candidate saved under the pre-rename name must still read back as
+      # the current canonical name, not the stale one it was written with.
+      raw_strategy = str(payload["strategy"])
+      resolved_strategy = resolve_strategy(raw_strategy)
       result = cls(
         version=int(payload["version"]),
         match_id=str(payload["match_id"]),
@@ -141,7 +230,11 @@ class StrategyMatch:
         event_ts=str(payload["event_ts"]),
         issued_at=int(payload["issued_at"]),
         expires_at=int(payload["expires_at"]),
-        strategy=str(payload["strategy"]),
+        strategy=(
+          resolved_strategy.canonical
+          if resolved_strategy is not None
+          else raw_strategy
+        ),
         strategy_mode=str(payload["strategy_mode"]),
         direction=str(payload["direction"]).upper(),
         key_level=float(payload["key_level"]),
@@ -167,6 +260,9 @@ class StrategyMatch:
         full_take_profit_pips=(
           None if payload.get("full_take_profit_pips") is None
           else int(payload["full_take_profit_pips"])
+        ),
+        scalp_target_r_multiples=tuple(
+          float(item) for item in payload.get("scalp_target_r_multiples", [])
         ),
         tags=tuple(str(item) for item in payload.get("tags", [])),
         target_price=(
@@ -275,6 +371,10 @@ class StrategyMatch:
         ),
         htf_bias=str(payload.get("htf_bias") or ""),
         regime_kind=str(payload.get("regime_kind") or ""),
+        bias_relationship=(
+          None if payload.get("bias_relationship") is None
+          else str(payload["bias_relationship"])
+        ),
         execution_eligibility=ExecutionEligibility.from_dict(
           payload.get("execution_eligibility"),
         ),
@@ -314,6 +414,65 @@ class StrategyMatch:
           None if payload.get("math_pd") is None
           else float(payload["math_pd"])
         ),
+        math_feature_version=(
+          None if payload.get("math_feature_version") is None
+          else int(payload["math_feature_version"])
+        ),
+        mad_version=(
+          None if payload.get("mad_version") is None
+          else int(payload["mad_version"])
+        ),
+        mad_phase=(
+          None if payload.get("mad_phase") is None else str(payload["mad_phase"])
+        ),
+        mad_confidence=(
+          None if payload.get("mad_confidence") is None
+          else float(payload["mad_confidence"])
+        ),
+        mad_affinity=(
+          None if payload.get("mad_affinity") is None
+          else float(payload["mad_affinity"])
+        ),
+        mad_direction=(
+          None if payload.get("mad_direction") is None
+          else str(payload["mad_direction"])
+        ),
+        mad_sweep_side=(
+          None if payload.get("mad_sweep_side") is None
+          else str(payload["mad_sweep_side"])
+        ),
+        mad_reclaim=(
+          None if payload.get("mad_reclaim") is None
+          else bool(payload["mad_reclaim"])
+        ),
+        mad_range_quality_atr=(
+          None if payload.get("mad_range_quality_atr") is None
+          else float(payload["mad_range_quality_atr"])
+        ),
+        mad_break_distance_atr=(
+          None if payload.get("mad_break_distance_atr") is None
+          else float(payload["mad_break_distance_atr"])
+        ),
+        mad_displacement_atr=(
+          None if payload.get("mad_displacement_atr") is None
+          else float(payload["mad_displacement_atr"])
+        ),
+        mad_acceptance_closes=(
+          None if payload.get("mad_acceptance_closes") is None
+          else int(payload["mad_acceptance_closes"])
+        ),
+        mad_sweep_penetration_atr=(
+          None if payload.get("mad_sweep_penetration_atr") is None
+          else float(payload["mad_sweep_penetration_atr"])
+        ),
+        mad_reclaim_depth_atr=(
+          None if payload.get("mad_reclaim_depth_atr") is None
+          else float(payload["mad_reclaim_depth_atr"])
+        ),
+        mad_reason_code=(
+          None if payload.get("mad_reason_code") is None
+          else str(payload["mad_reason_code"])
+        ),
         confluence_v1=(
           None if payload.get("confluence_v1") is None
           else int(payload["confluence_v1"])
@@ -329,6 +488,194 @@ class StrategyMatch:
         confluence_scoring_version=(
           None if payload.get("confluence_scoring_version") is None
           else str(payload["confluence_scoring_version"])
+        ),
+        candle_version=(
+          None if payload.get("candle_version") is None
+          else int(payload["candle_version"])
+        ),
+        candle_primary_pattern=(
+          None if payload.get("candle_primary_pattern") is None
+          else str(payload["candle_primary_pattern"])
+        ),
+        candle_patterns=(
+          None if payload.get("candle_patterns") is None
+          else str(payload["candle_patterns"])
+        ),
+        candle_final_score=(
+          None if payload.get("candle_final_score") is None
+          else float(payload["candle_final_score"])
+        ),
+        candle_base_score=(
+          None if payload.get("candle_base_score") is None
+          else float(payload["candle_base_score"])
+        ),
+        candle_synergy_bonus=(
+          None if payload.get("candle_synergy_bonus") is None
+          else float(payload["candle_synergy_bonus"])
+        ),
+        candle_rejection_score=(
+          None if payload.get("candle_rejection_score") is None
+          else float(payload["candle_rejection_score"])
+        ),
+        candle_displacement_score=(
+          None if payload.get("candle_displacement_score") is None
+          else float(payload["candle_displacement_score"])
+        ),
+        candle_sequence_score=(
+          None if payload.get("candle_sequence_score") is None
+          else float(payload["candle_sequence_score"])
+        ),
+        candle_body_fraction=(
+          None if payload.get("candle_body_fraction") is None
+          else float(payload["candle_body_fraction"])
+        ),
+        candle_upper_wick_fraction=(
+          None if payload.get("candle_upper_wick_fraction") is None
+          else float(payload["candle_upper_wick_fraction"])
+        ),
+        candle_lower_wick_fraction=(
+          None if payload.get("candle_lower_wick_fraction") is None
+          else float(payload["candle_lower_wick_fraction"])
+        ),
+        candle_close_location=(
+          None if payload.get("candle_close_location") is None
+          else float(payload["candle_close_location"])
+        ),
+        candle_body_atr=(
+          None if payload.get("candle_body_atr") is None
+          else float(payload["candle_body_atr"])
+        ),
+        candle_range_atr=(
+          None if payload.get("candle_range_atr") is None
+          else float(payload["candle_range_atr"])
+        ),
+        candle_sweep=(
+          None if payload.get("candle_sweep") is None
+          else bool(payload["candle_sweep"])
+        ),
+        candle_sweep_penetration_atr=(
+          None if payload.get("candle_sweep_penetration_atr") is None
+          else float(payload["candle_sweep_penetration_atr"])
+        ),
+        candle_reclaim=(
+          None if payload.get("candle_reclaim") is None
+          else bool(payload["candle_reclaim"])
+        ),
+        candle_reclaim_depth_atr=(
+          None if payload.get("candle_reclaim_depth_atr") is None
+          else float(payload["candle_reclaim_depth_atr"])
+        ),
+        candle_engulfing=(
+          None if payload.get("candle_engulfing") is None
+          else bool(payload["candle_engulfing"])
+        ),
+        candle_doji=(
+          None if payload.get("candle_doji") is None
+          else bool(payload["candle_doji"])
+        ),
+        candle_compression_score=(
+          None if payload.get("candle_compression_score") is None
+          else float(payload["candle_compression_score"])
+        ),
+        candle_sequence_name=(
+          None if payload.get("candle_sequence_name") is None
+          else str(payload["candle_sequence_name"])
+        ),
+        candle_sequence_bars=(
+          None if payload.get("candle_sequence_bars") is None
+          else int(payload["candle_sequence_bars"])
+        ),
+        key_level_opposing_zone_low=(
+          None if payload.get("key_level_opposing_zone_low") is None
+          else float(payload["key_level_opposing_zone_low"])
+        ),
+        key_level_opposing_zone_high=(
+          None if payload.get("key_level_opposing_zone_high") is None
+          else float(payload["key_level_opposing_zone_high"])
+        ),
+        key_level_opposing_zone_side=(
+          None if payload.get("key_level_opposing_zone_side") is None
+          else str(payload["key_level_opposing_zone_side"])
+        ),
+        opposing_zone_present=(
+          None if payload.get("opposing_zone_present") is None
+          else bool(payload["opposing_zone_present"])
+        ),
+        opposing_zone_side=(
+          None if payload.get("opposing_zone_side") is None
+          else str(payload["opposing_zone_side"])
+        ),
+        opposing_zone_low=(
+          None if payload.get("opposing_zone_low") is None
+          else float(payload["opposing_zone_low"])
+        ),
+        opposing_zone_high=(
+          None if payload.get("opposing_zone_high") is None
+          else float(payload["opposing_zone_high"])
+        ),
+        opposing_zone_tier=(
+          None if payload.get("opposing_zone_tier") is None
+          else str(payload["opposing_zone_tier"])
+        ),
+        opposing_zone_score=(
+          None if payload.get("opposing_zone_score") is None
+          else float(payload["opposing_zone_score"])
+        ),
+        opposing_zone_strength=(
+          None if payload.get("opposing_zone_strength") is None
+          else float(payload["opposing_zone_strength"])
+        ),
+        opposing_raw_room_price=(
+          None if payload.get("opposing_raw_room_price") is None
+          else float(payload["opposing_raw_room_price"])
+        ),
+        opposing_room_pips=(
+          None if payload.get("opposing_room_pips") is None
+          else float(payload["opposing_room_pips"])
+        ),
+        opposing_room_atr=(
+          None if payload.get("opposing_room_atr") is None
+          else float(payload["opposing_room_atr"])
+        ),
+        opposing_room_r=(
+          None if payload.get("opposing_room_r") is None
+          else float(payload["opposing_room_r"])
+        ),
+        opposing_before_tp1=(
+          None if payload.get("opposing_before_tp1") is None
+          else bool(payload["opposing_before_tp1"])
+        ),
+        opposing_displaced=(
+          None if payload.get("opposing_displaced") is None
+          else bool(payload["opposing_displaced"])
+        ),
+        opposing_mitigated=(
+          None if payload.get("opposing_mitigated") is None
+          else bool(payload["opposing_mitigated"])
+        ),
+        opposing_room_pressure=(
+          None if payload.get("opposing_room_pressure") is None
+          else float(payload["opposing_room_pressure"])
+        ),
+        opposing_risk_score=(
+          None if payload.get("opposing_risk_score") is None
+          else float(payload["opposing_risk_score"])
+        ),
+        opposing_action=(
+          None if payload.get("opposing_action") is None
+          else str(payload["opposing_action"])
+        ),
+        opposing_reason_code=(
+          None if payload.get("opposing_reason_code") is None
+          else str(payload["opposing_reason_code"])
+        ),
+        sweep_extreme_price=(
+          None if payload.get("sweep_extreme_price") is None
+          else float(payload["sweep_extreme_price"])
+        ),
+        trendline_v2=(
+          dict(payload["trendline_v2"])
+          if isinstance(payload.get("trendline_v2"), dict) else None
         ),
       )
     except (KeyError, TypeError, ValueError, json.JSONDecodeError):

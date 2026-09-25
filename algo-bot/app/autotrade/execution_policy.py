@@ -11,6 +11,7 @@ from typing import Any, Callable
 from app.autotrade.execution_route import SCALP_MICRO_CLIPS, resolve_execution_route_plan
 from app.autotrade.protective_stop import (
   ProtectiveStopError,
+  approximate_structural_stop_price,
   opposing_zone_context_from_values,
   opposing_zone_context_measured,
   plan_group_protective_stop,
@@ -181,25 +182,8 @@ PREFERENCE_TELEMETRY_REASONS = frozenset({
   "entry_inside_ambiguous_zone",
 })
 
-# True structural conflicts — must hard-block publication.
-HARD_STRUCTURAL_TARGET_ROOM_REASONS = frozenset({
-  "opposing_entry_contained",
-  "opposing_entry_overlap",
-  "opposing_major_no_room",
-  "opposing_barrier_no_target",
-  "opposing_barrier_room_below_cost",
-  "entry_inside_opposing_zone",
-  "invalid_target_room_geometry",
-  "execution_cost_insufficient_room",
-})
-
-
 def is_preference_telemetry(reason_code: str | None) -> bool:
   return str(reason_code or "").strip() in PREFERENCE_TELEMETRY_REASONS
-
-
-def is_hard_structural_target_room(reason_code: str | None) -> bool:
-  return str(reason_code or "").strip() in HARD_STRUCTURAL_TARGET_ROOM_REASONS
 
 
 @dataclass(frozen=True)
@@ -429,7 +413,7 @@ _STRATEGY_FAMILY = {
   "Mapped Zone Reaction": FAMILY_MAPPED_ZONE_REACTION,
   "Liquidity Sweep": FAMILY_LIQUIDITY_REVERSAL,
   "Snap-Back": FAMILY_LIQUIDITY_REVERSAL,
-  "Key Level Reaction": FAMILY_KEY_LEVEL,
+  "Key Level": FAMILY_KEY_LEVEL,
   "Zone Reaction": FAMILY_SUPPLY_DEMAND,
   "Flip Zone": FAMILY_SUPPLY_DEMAND,
   "Supply Demand": FAMILY_SUPPLY_DEMAND,
@@ -441,8 +425,8 @@ _STRATEGY_FAMILY = {
   # Legacy display names (kept for open plans / historical events):
   "Demand Zone Reaction": FAMILY_SUPPLY_DEMAND,
   "Supply Zone Reaction": FAMILY_SUPPLY_DEMAND,
-  "Session Level Reaction": FAMILY_SESSION_LEVEL,
-  "Trendline Reaction": FAMILY_TRENDLINE,
+  "Session Level": FAMILY_SESSION_LEVEL,
+  "Trendline": FAMILY_TRENDLINE,
 }
 
 
@@ -512,7 +496,7 @@ _DEFAULT_POLICIES: dict[str, ExecutionPolicy] = {
     "market", ("trend", "breakout", "unknown"),
   ),
   FAMILY_LIQUIDITY_REVERSAL: ExecutionPolicy(
-    FAMILY_LIQUIDITY_REVERSAL, 2, 0.45, 10.0, 1.5, 0.55, 1.15, 0.75,
+    FAMILY_LIQUIDITY_REVERSAL, 2, 0.45, 10.0, 1.5, 0.55, 1.15, 1.0,
     "market", ("chop", "range", "trend", "unknown"),
   ),
   FAMILY_MAPPED_ZONE_REACTION: ExecutionPolicy(
@@ -698,6 +682,13 @@ def evaluate_execution_policy(
     if policy.order_type_preference == "limit" and zone_width_atr >= 0.5
     else "single"
   )
+  auto_entry_mode = str(
+    getattr(getattr(instrument_cfg, "auto_entry", None), "mode", "scale")
+    or "scale"
+  ).strip().lower()
+  single_best_entry = auto_entry_mode == "single_best"
+  if single_best_entry:
+    entry_distribution = "single"
   quote = float(
     spot_price if executable_quote is None else executable_quote
   )
@@ -705,6 +696,24 @@ def evaluate_execution_policy(
   zone_scaling = execution.zone_scaling
   execution_entry = execution.entry
   reaction_execution = execution.reaction
+  # 2026-09-15 (owner-reported, XAU only): pick the entry within the
+  # detected zone/room so entry-to-stop risk lands near stop_min_pips
+  # (the same floor the stop envelope already enforces), instead of a
+  # pure zone-edge pick with zero risk awareness. Uses the real
+  # structural stop - independent of which entry within the zone ends up
+  # chosen - computed here, before route resolution picks an entry.
+  structural_stop_for_entry: float | None = None
+  risk_targeted_entry_pips: float | None = None
+  if symbol == "XAU" and bool(reaction_execution.risk_targeted_entry_enabled):
+    structure_swing_value = getattr(match, "structure_swing", None)
+    if structure_swing_value is not None and atr > 0:
+      structural_stop_for_entry = approximate_structural_stop_price(
+        direction=direction,
+        structure_swing=float(structure_swing_value),
+        atr=atr,
+        structure_buffer_atr=float(execution.scaling.add.stop_buffer_atr),
+      )
+      risk_targeted_entry_pips = float(reaction_execution.stop_min_pips)
   route_plan = resolve_execution_route_plan(
     direction=direction,
     order_type_preference=policy.order_type_preference,
@@ -713,11 +722,15 @@ def evaluate_execution_policy(
     zone_low=low,
     zone_high=high,
     atr=atr,
+    structural_stop=structural_stop_for_entry,
+    target_risk_pips=risk_targeted_entry_pips,
+    pip_size=pip,
     zone_fill_enabled=bool(zone_scaling.fill_enabled),
     zone_fill_min_atr=float(zone_scaling.fill_min_atr or 0.5),
     inside_zone_market_entry_enabled=bool(
       execution_entry.inside_zone_market_entry_enabled
     ),
+    single_entry_market_inside=single_best_entry,
     zone_fill_fallback_enabled=bool(zone_scaling.fill_fallback_enabled),
     digits=digits,
     allow_either=False,
@@ -793,12 +806,9 @@ def evaluate_execution_policy(
   stop_plan_error_measured: dict[str, Any] = {}
   stop_bounds_measured: dict[str, Any] = {}
   opposing_zone = None
-  # Scalp tiers book sizing_risk_multiplier x the equity-table lots at the
-  # same equity band (owner 2026-08-06). Left alone, stop geometry computed
-  # below stays at the 1x envelope while volume doubles -- dollar risk
-  # (lots x stop_distance) doubles with it. Shrink the pip envelope by the
-  # same multiplier here so a 2x-volume scalp risks the same dollars as a
-  # 1x reaction trade, not double.
+  # Scalp sizing is a configured volume-only 1.5x equity-table boost. Its
+  # protective stop remains structural; volume must not reshape the entry or
+  # invalidation geometry.
   range_scalp = is_scalp_strategy(
     str(getattr(match, "strategy", "") or ""),
     family=str(getattr(match, "family", "") or strategy_family(
@@ -857,17 +867,6 @@ def evaluate_execution_policy(
       for_group_stop=use_group_stop,
       symbol=symbol,
     )
-    if sizing_risk_multiplier > 1.0:
-      stop_bounds_measured = {
-        **stop_bounds_measured,
-        "stop_bounds_pre_sizing_min_pips": minimum_stop_pips,
-        "stop_bounds_pre_sizing_max_pips": maximum_stop_pips,
-        "sizing_risk_multiplier": sizing_risk_multiplier,
-      }
-      minimum_stop_pips = max(1, int(minimum_stop_pips / sizing_risk_multiplier))
-      maximum_stop_pips = max(
-        minimum_stop_pips, int(maximum_stop_pips / sizing_risk_multiplier),
-      )
     if (
       is_reaction_strategy(strategy_name)
       or is_zone_strategy(strategy_name)
@@ -889,12 +888,14 @@ def evaluate_execution_policy(
     sweep_extreme = (
       trigger_wick_extreme
       if trigger_wick_extreme is not None
-      else getattr(
+      else getattr(match, "sweep_extreme_price", None)
+    )
+    if sweep_extreme is None:
+      sweep_extreme = getattr(
         match,
         "sweep_low" if direction == "BUY" else "sweep_high",
         None,
       )
-    )
     zone_low = (
       opposing_zone_low
       if opposing_zone_low is not None
@@ -911,7 +912,7 @@ def evaluate_execution_policy(
       else getattr(match, "opposing_zone_id", None)
       or getattr(match, "zone_id", None)
     )
-    # Scalp (Range / HFS) with fitted target room ignores HTF opposing stop
+    # Scalp (Range Edge) with fitted target room ignores HTF opposing stop
     # push/reject; native room is the gate. Envelope still applies.
     if match_bypasses_opposing_structure(match):
       zone_low = zone_high = zone_id = None
@@ -1010,12 +1011,11 @@ def evaluate_execution_policy(
   stamped_risk_multiplier = float(
     1.0 if raw_risk_multiplier is None else raw_risk_multiplier
   )
-  # range_scalp / match_risk_multiplier already resolved above (needed
-  # early to shrink the stop envelope for the same 2x-volume scalp tiers).
+  # range_scalp / match_risk_multiplier already resolved above. Scalp's
+  # multiplier is volume-only and must never reshape its structural stop.
   # FX pack volume (manual.risk_multiplier=1.5) applies to autonomous
   # fixed_rr *reaction* only — never fold it into sizing_risk_multiplier
-  # or the stop envelope would shrink the way scalp 2x does. Scalp already
-  # books range_max (2.0 → engine clamps to 1.5 below $2k); do not stack.
+  # with the scalp multiplier. Scalp already books range_max; do not stack.
   instrument_volume_multiplier = 1.0
   if (
     not range_scalp
@@ -1064,6 +1064,7 @@ def evaluate_execution_policy(
     "stamped_risk_multiplier": stamped_risk_multiplier,
     "instrument_volume_multiplier": instrument_volume_multiplier,
     "effective_risk_multiplier": effective_risk_multiplier,
+    "auto_entry_mode": auto_entry_mode,
     "order_type_preference": policy.order_type_preference,
     "entry_distribution": entry_distribution,
     "planned_execution_route": planned_route,
@@ -1431,8 +1432,8 @@ def classify_tier(
 def risk_multiplier_for_tier(tier: str, cfg: Any | None = None, *, post_impulse: bool = False, one_sided: bool = False, range_scalp: bool = False) -> float:
   """Resolve volume multiplier for equity-table sizing.
 
-  Owner 2026-08-06:
-  - Scalp (HFS / Range Edge / Box) books **2×** equity-table lots.
+  Owner 2026-09-18: non-scalp reaction/swing books its own full
+  equity-table level; scalp books the configured 1.5x volume-only boost.
   - Reaction / swing books **full** equity-table lots on every quality
     tier (A/B/C). Tier stars remain card/telemetry only — live Trend
     Pullback ⭐⭐ was half-sizing to 0.05 on a $887 → 0.10 table because
@@ -1444,10 +1445,8 @@ def risk_multiplier_for_tier(tier: str, cfg: Any | None = None, *, post_impulse:
     cfg = _default_runtime_cfg()
   sizing = cfg.risk.sizing
   if range_scalp:
-    scalp_mult = float(sizing.range_max_risk_multiplier)
-    if not math.isfinite(scalp_mult) or scalp_mult <= 0:
-      scalp_mult = 2.0
-    return scalp_mult
+    scalp = float(sizing.range_max_risk_multiplier)
+    return scalp if math.isfinite(scalp) and scalp > 0 else 1.5
   # Equity-table reaction: ignore tier A/B/C shrink.
   _ = tier
   mult = 1.0
