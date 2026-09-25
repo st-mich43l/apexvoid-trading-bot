@@ -425,7 +425,7 @@ def _format_opened(
     return None
   direction, _lots, entry, stop, stop_pips, details = match.groups()
   symbol = _event_symbol(event)
-  side_icon = "🟢" if direction.upper() == "BUY" else "🔴"
+  side_icon = "📈" if direction.upper() == "BUY" else "📉"
   full_tp = re.search(r"(?i)full TP\s+(\d+)p", details)
   range_box = re.search(r"(?i)range\s+([\d.,]+)-([\d.,]+)", details)
   lines = [
@@ -1670,14 +1670,28 @@ def _archived_pips_from_close_message(cleaned: str) -> float | None:
 _MANAGE_CLOSE_MARKER = "closed —"
 
 
+def _achieved_rr_suffix(event: dict, pips: float) -> str:
+  """" · +1.1R" / " · -1.2R" - same convention as Manual Algo's own close
+  line (trade_ops._achieved_rr), computed from the plan's own risk
+  distance (event["stop_pips"], the entry-to-stop distance captured at
+  plan build) instead of reconstructing it from entry/original-stop like
+  Manual has to.
+  """
+  stop_pips = _event_float(event, "stop_pips")
+  if stop_pips is None or stop_pips <= 0:
+    return ""
+  return f" · {pips / stop_pips:+.1f}R"
+
+
 def _format_position_closed_compact_line(event: dict, message: str) -> str:
   """Close trailer for the manage reply - matches Manual Algo's own close
   wording (trade_ops.render_result's "close" action: "closed — achieved
-  +N pips" / "closed — losing N pips" / "closed — breakeven") instead of
-  the previous Auto-only "POSITION CLOSED · @ price"/reason-label style.
-  _MANAGE_CLOSE_MARKER ("closed —") is just the shared wording prefix
-  every return path here contains; _deliver_compact_position_closed's own
-  idempotency guard lives in _manage_closed_key instead.
+  +N pips · +1.1R" / "closed — losing N pips · -1.2R" / "closed —
+  breakeven") instead of the previous Auto-only "POSITION CLOSED · @
+  price"/reason-label style. _MANAGE_CLOSE_MARKER ("closed —") is just
+  the shared wording prefix every return path here contains;
+  _deliver_compact_position_closed's own idempotency guard lives in
+  _manage_closed_key instead.
   """
   cleaned = _MONEY_RE.sub("", message).strip(" ·") if message else ""
   highest = _HIGHEST_TP_ARCHIVED_RE.search(cleaned) if cleaned else None
@@ -1695,7 +1709,8 @@ def _format_position_closed_compact_line(event: dict, message: str) -> str:
       archived = _resolve_close_pips(event, cleaned, allow_stop_fallback=False)
     if archived is not None:
       rounded = round(abs(archived))
-      return f"✅ {_MANAGE_CLOSE_MARKER} achieved +{rounded} pips{_wings(rounded)}"
+      rr = _achieved_rr_suffix(event, rounded)
+      return f"✅ {_MANAGE_CLOSE_MARKER} achieved +{rounded} pips{_wings(rounded)}{rr}"
     return f"✅ {_MANAGE_CLOSE_MARKER} confirmed"
   reason = str(event.get("reason_code") or "")
   # A confirmed stop-loss/take-profit close (or a confirmed loss at the
@@ -1710,11 +1725,12 @@ def _format_position_closed_compact_line(event: dict, message: str) -> str:
   if pips is None:
     return f"🏁 {_MANAGE_CLOSE_MARKER} unconfirmed result"
   rounded = round(pips)
+  rr = _achieved_rr_suffix(event, rounded)
   if rounded > 0:
-    return f"✅ {_MANAGE_CLOSE_MARKER} achieved +{rounded} pips{_wings(rounded)}"
+    return f"✅ {_MANAGE_CLOSE_MARKER} achieved +{rounded} pips{_wings(rounded)}{rr}"
   if rounded < 0:
-    return f"🛑 {_MANAGE_CLOSE_MARKER} losing {rounded} pips"
-  return f"➖ {_MANAGE_CLOSE_MARKER} breakeven"
+    return f"🛑 {_MANAGE_CLOSE_MARKER} losing {rounded} pips{rr}"
+  return f"➖ {_MANAGE_CLOSE_MARKER} breakeven{rr}"
 
 
 def _format_be_trail_head_status(event: dict, message: str) -> tuple[str, str, float | None]:

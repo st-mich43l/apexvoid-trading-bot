@@ -279,6 +279,35 @@ def test_position_closed_compact_line_format():
   assert "Highest TP archived" not in losing
 
 
+def test_position_closed_compact_line_includes_r_multiple_like_manual():
+  """Owner-reported: the auto card's close line was missing the R-multiple
+  Manual Algo's own close message always shows (e.g. "-41 pips loss ·
+  -1.2R" / "+56 pips win · +1.1R") - computed here from event["stop_pips"]
+  (the plan's own risk distance) instead of Manual's entry/original-stop
+  reconstruction, since Auto already has it on hand.
+  """
+  win = delivery._format_position_closed_compact_line(
+    {"target_pips": 90, "stop_pips": 30},
+    "PLAN CLOSED · highest TP archived TP2 · @ 4106.00",
+  )
+  assert win == "✅ closed — achieved +90 pips 💸 · +3.0R"
+
+  loss = delivery._format_position_closed_compact_line(
+    {"group_realized_pips": -41, "stop_pips": 34},
+    "PLAN CLOSED · no TP archived · losing -41 pips · @ 4090.50",
+  )
+  assert loss == "🛑 closed — losing -41 pips · -1.2R"
+
+  # No stop_pips on the event (older executor, or genuinely unknown risk) -
+  # omit the suffix entirely rather than inventing a distance.
+  no_risk = delivery._format_position_closed_compact_line(
+    {"group_realized_pips": -47},
+    "PLAN CLOSED · no TP archived · losing -47 pips · @ 4090.50",
+  )
+  assert no_risk == "🛑 closed — losing -47 pips"
+  assert "R" not in no_risk
+
+
 def test_tp_compact_line_from_final_close_message():
   """Final target hit is position_closed only — still render a 🎯 TP line."""
   line = delivery._format_tp_compact_line(

@@ -221,7 +221,7 @@ def test_algo_auto_manual_close_does_not_invent_stop_loss():
     },
     "position closed at broker: manual or external order · winning 18.0 pips",
   )
-  assert compact == "✅ closed — achieved +18 pips 💸"
+  assert compact == "✅ closed — achieved +18 pips 💸 · +0.7R"
   assert "SL" not in compact
 
 
