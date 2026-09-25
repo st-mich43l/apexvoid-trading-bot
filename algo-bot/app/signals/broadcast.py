@@ -10,9 +10,9 @@ from app.persistence.store import (
   insert_signal_post,
 )
 from app.signals.pips_format import rr_entry
-from app.signals.fx_manual_algo import uses_entry_price_display
 from app.autotrade.strategy_names import resolve_strategy
-from app.core.symbols import digits_for, channels_for, pip_for
+from app.autotrade.trade_card import format_entry_line, format_sl_line, format_target_line
+from app.core.symbols import channels_for
 from app.bot.client import (
   delete_message,
   delete_scanner_message,
@@ -25,25 +25,8 @@ from app.bot.client import (
 log = logging.getLogger(__name__)
 
 
-def _price(value: float, symbol: str) -> str:
-  digits = digits_for(symbol)
-  return f"{value:,.{digits}f}".rstrip("0").rstrip(".")
-
-
 def _rr(tp: float, entry: float, risk: float) -> str:
   return f"{abs(tp - entry) / risk:.1f}R" if risk > 0 else "-"
-
-
-def _entry_line(sig: dict, symbol: str) -> str:
-  entry_end = sig.get("entry_end")
-  if entry_end is None:
-    entry_end = sig["entry"]
-  if uses_entry_price_display(symbol, sig["entry"], entry_end):
-    return f"⚡️ Entry Price:  <b>{_price(sig['entry'], symbol)}</b>"
-  return (
-    f"⚡️ Entry Zone:  <b>{_price(sig['entry'], symbol)} - "
-    f"{_price(entry_end, symbol)}</b>"
-  )
 
 
 def _setup_line(sig: dict) -> str | None:
@@ -73,7 +56,6 @@ def render_entry(sig: dict, tier: str) -> str:
   # Real accuracy belongs at close time only (trade_ops._achieved_rr
   # already measures against the real fill/deepest leg there) - this card
   # always uses the advertised zone edge, fill or no fill.
-  risk = abs(rr_entry(sig) - sig["sl"])
   # Live 2026-09-04: editing the pinned card after a stop trail re-ran this
   # with the now-current (near-BE) sl, and R-multiples are TP-distance /
   # risk - as risk shrinks toward zero the ratio blows up into nonsense
@@ -87,13 +69,16 @@ def render_entry(sig: dict, tier: str) -> str:
   original_risk = abs(rr_entry(sig) - original_sl)
   seq = f"  #{sig['daily_seq']}" if tier == "vip" else ""
   action_icon = "📈" if action == "BUY" else "📉"
+  entry_end = sig.get("entry_end")
+  if entry_end is None:
+    entry_end = sig["entry"]
   lines = [
     (
       f"📍 {action_icon} <b>{escape(symbol)} "
       f"{escape(action)}{seq}</b>  🔔"
     ),
     "",
-    _entry_line(sig, symbol),
+    format_entry_line(symbol, sig["entry"], entry_end),
   ]
   setup_line = _setup_line(sig)
   if setup_line:
@@ -104,15 +89,12 @@ def render_entry(sig: dict, tier: str) -> str:
   # 1/pip_size. Every other pips figure on this bot (loss/win, R-multiple
   # denominators) already divides by pip_for() - this line was the one
   # holdout still showing raw price.
-  risk_pips = round(risk / pip_for(symbol)) if pip_for(symbol) > 0 else 0
-  lines.append(
-    f"🛡 SL:     <b>{_price(sig['sl'], symbol)}</b>  ·  "
-    f"risk <b>{risk_pips} pips</b>"
-  )
+  lines.append(format_sl_line(symbol, sig["sl"], rr_entry(sig)))
   for index, tp in enumerate(sig.get("tps") or []):
     lines.append(
-      f"💰 TP{index + 1}:   <b>{_price(tp, symbol)}</b>  ·  "
-      f"<b>{_rr(tp, rr_entry(sig), original_risk)}</b>"
+      format_target_line(
+        index, symbol, tp, _rr(tp, rr_entry(sig), original_risk),
+      )
     )
   if sig.get("guard_text"):
     lines.extend(["", sig["guard_text"]])
