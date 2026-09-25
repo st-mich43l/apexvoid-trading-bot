@@ -533,4 +533,4 @@ async def test_order_filled_creates_root_when_publish_never_posted(monkeypatch):
   assert "ORDER ACTIVATED" in card["text"]
   assert replies
   assert replies[0][1].get("reply_to") == 6100
-  assert "ORDER FILLED" in replies[0][0]
+  assert replies[0][0] == "🟢 active — order filled"

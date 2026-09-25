@@ -754,9 +754,11 @@ async def test_order_filled_replies_using_v8_plan_id_without_head_fill(monkeypat
   assert len(calls) == 1
   assert calls[0][1]["reply_to"] == 7001
   body = calls[0][0]
-  assert "✅ <b>ORDER FILLED</b>" in body
-  assert "• ✅" not in body
-  assert "• ENTRY L1 FILLED lot=0.08 @ 4074.68; L2 still pending" in body
+  # Terse, Manual-Algo-style fill line - the entry/SL/targets were already
+  # advertised on the root card, so the fill reply doesn't repeat the raw
+  # engine message (Phase S12 unification). "leg pending" survives because
+  # the source message says L2 is still pending.
+  assert body == "🟢 active — order filled · leg pending"
   # Reply keeps ORDER FILLED; SETUP FORMING head becomes ORDER ACTIVATED.
   # The header alone carries the text now - the status slot beneath it
   # collapses to invisible instead of repeating it (see setup_card.py's
@@ -818,8 +820,7 @@ async def test_order_filled_prefers_live_forming_card_over_stale_root(monkeypatc
 
   assert len(calls) == 1
   assert calls[0][1]["reply_to"] == 9002
-  assert "✅ <b>ORDER FILLED</b>" in calls[0][0]
-  assert "• ✅" not in calls[0][0]
+  assert calls[0][0] == "🟢 active — order filled · leg pending"
   # SETUP FORMING head becomes ORDER ACTIVATED; stale root id 1111 unused.
   head_edits = [e for e in edited if e[1] == 9002]
   assert len(head_edits) == 1
@@ -936,7 +937,9 @@ async def test_order_filled_stores_manage_keys_and_second_fill_replaces(monkeypa
   )
   assert len(calls) == 1
   assert await client.get(delivery._manage_msg_key(setup_id)) == "8123"
-  assert "ORDER FILLED" in (await client.get(delivery._manage_text_key(setup_id)) or "")
+  assert (
+    await client.get(delivery._manage_text_key(setup_id))
+  ) == "🟢 active — order filled · leg pending"
 
   await delivery._deliver_auto_trade_event(
     client,
@@ -954,7 +957,9 @@ async def test_order_filled_stores_manage_keys_and_second_fill_replaces(monkeypa
   assert deleted == [(123, 8123)]
   assert len(calls) == 2  # second fill deletes old + posts new
   assert await client.get(delivery._manage_msg_key(setup_id)) == "8124"
-  assert "FULLY FILLED" in calls[1][0]
+  # No "still pending" in the second (group-complete) message - no
+  # "leg pending" suffix this time.
+  assert calls[1][0] == "🟢 active — order filled"
   assert calls[1][1]["reply_to"] == 7001
   # Root card may be edited for ORDER ACTIVATED; manage msg itself is never edited.
   assert all(e[1] != 8123 for e in edited)
