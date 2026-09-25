@@ -930,11 +930,3 @@ async def handle_closed_bar(
   )
 
 
-async def scalp_m1_event_loop() -> None:
-  """Deprecated: closed bars are owned by bar_event_dispatcher_loop."""
-  if _mode() == "off":
-    log.info("M1 scalping disabled: strategies.scalping.mode=off")
-    return
-  log.info(
-    "scalp_m1_event_loop idle; bar_event_dispatcher_loop owns live scalping symbols"
-  )
