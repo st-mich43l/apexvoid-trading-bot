@@ -1598,6 +1598,8 @@ def _format_position_closed_compact_line(event: dict, message: str) -> str:
     # confirmation rather than forcing the generic pips resolution below
     # to fail into "unconfirmed."
     archived = _event_float(event, "target_pips", "leg_realized_pips")
+    if archived is None:
+      archived = _resolve_close_pips(event, cleaned, allow_stop_fallback=False)
     if archived is not None:
       rounded = round(abs(archived))
       return f"✅ {_MANAGE_CLOSE_MARKER} achieved +{rounded} pips{_wings(rounded)}"
