@@ -409,7 +409,7 @@ def _format_opened(
     return None
   direction, _lots, entry, stop, stop_pips, details = match.groups()
   symbol = _event_symbol(event)
-  side_icon = "🟢" if direction.upper() == "BUY" else "🔴"
+  side_icon = "📈" if direction.upper() == "BUY" else "📉"
   full_tp = re.search(r"(?i)full TP\s+(\d+)p", details)
   range_box = re.search(r"(?i)range\s+([\d.,]+)-([\d.,]+)", details)
   lines = [

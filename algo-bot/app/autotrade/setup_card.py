@@ -37,6 +37,7 @@ from app.autotrade.setup_lifecycle import TERMINAL_STATES, load_setup
 from app.autotrade.strategy_match import StrategyMatch
 from app.core.config import runtime_config
 from app.core.symbols import digits_for, pip_for
+from app.signals.fx_manual_algo import uses_entry_price_display
 
 log = logging.getLogger(__name__)
 
@@ -509,7 +510,7 @@ _LIVE_PRICE_MARKER_RE = re.compile(r"\s*<i>\(live\)</i>", re.IGNORECASE)
 # (SL MOVED/TP hit/...) is already sitting here", since several status
 # texts and a BUY body line happen to share the same leading emoji (both
 # TRIGGER READY and a BUY line start with 🟢).
-_BODY_DIRECTION_LINE_RE = re.compile(r"^[🔴🟢]\s*<b>(BUY|SELL)\b")
+_BODY_DIRECTION_LINE_RE = re.compile(r"^[🔴🟢📈📉]\s*<b>(BUY|SELL)\b")
 
 
 def _position_activated_header(line: str) -> str | None:
@@ -1994,7 +1995,10 @@ def format_plan_published_root_card(
   rewritten on BE / trailing updates.
   """
   direction = str(match.direction or "").upper()
-  direction_icon = "🟢" if direction == "BUY" else "🔴"
+  # Matches the manual-channel card's action_icon (app/signals/broadcast.py)
+  # so the same BUY/SELL event doesn't wear a different icon depending on
+  # which card is looking at it.
+  direction_icon = "📈" if direction == "BUY" else "📉"
   stars = "⭐" * max(1, min(3, int(match.confluence or 1)))
   setup_label = str(match.strategy or "").strip() or "Setup"
   mode = str(match.strategy_mode or "").strip()
@@ -2048,6 +2052,29 @@ def format_plan_published_root_card(
   if math_line:
     lines.extend(["", "📐 <b>Math</b>", f"• {escape(math_line)}"])
 
+  # FX pairs enter at one precise level, not XAU's wider zone - same rule
+  # the manual channel's cards already use (uses_entry_price_display).
+  # The single price shown is the key level itself, so the separate Key
+  # level line below would just repeat it.
+  if uses_entry_price_display(symbol, match.entry_low, match.entry_high):
+    entry_lines = [
+      (
+        "• <b>Entry:</b> "
+        f"<b>{_price_text(match.key_level, symbol=symbol)}</b>"
+      ),
+    ]
+  else:
+    entry_lines = [
+      (
+        "• <b>Entry zone:</b> "
+        f"<b>{_price_text(match.entry_low, symbol=symbol)}–"
+        f"{_price_text(match.entry_high, symbol=symbol)}</b>"
+      ),
+      (
+        "• <b>Key level:</b> "
+        f"<b>{_price_text(match.key_level, symbol=symbol)}</b>"
+      ),
+    ]
   lines.extend([
     "",
     "📍 <b>Trade area</b>",
@@ -2056,15 +2083,7 @@ def format_plan_published_root_card(
       f"<b>{_price_text(match.current_price, symbol=symbol)}</b> "
       "<i>(live)</i>"
     ),
-    (
-      "• <b>Entry zone:</b> "
-      f"<b>{_price_text(match.entry_low, symbol=symbol)}–"
-      f"{_price_text(match.entry_high, symbol=symbol)}</b>"
-    ),
-    (
-      "• <b>Key level:</b> "
-      f"<b>{_price_text(match.key_level, symbol=symbol)}</b>"
-    ),
+    *entry_lines,
   ])
   if stop_price is not None and math.isfinite(float(stop_price)):
     lines.append(
@@ -2415,7 +2434,7 @@ def format_event_recovery_root_card(event: dict) -> str:
   )
   # Never paint TERMINAL on a recovered root — close lives on reply cards.
   head = f"✅ <b>POSITION ACTIVATED · {symbol} {tf}</b>"
-  icon = "🟢" if direction == "BUY" else "🔴"
+  icon = "📈" if direction == "BUY" else "📉"
   lines = [head]
   if direction:
     lines.append(f"{icon} <b>{direction} · {strategy}</b>")
