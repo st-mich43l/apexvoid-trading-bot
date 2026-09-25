@@ -162,9 +162,7 @@ def test_position_closed_near_stop_not_labeled_manual():
   compact = delivery._format_position_closed_compact_line(
     event, str(event["message"]),
   )
-  assert "Closed manually" not in compact
-  assert "🛡 SL" in compact
-  assert "Losing: -34.0 pips" in compact
+  assert compact == "🛑 closed — losing -34 pips"
 
 
 def test_position_closed_break_even_message_uses_be_label():
@@ -182,8 +180,7 @@ def test_position_closed_break_even_message_uses_be_label():
   compact = delivery._format_position_closed_compact_line(
     event, str(event["message"]),
   )
-  assert "Closed manually" not in compact
-  assert "0 pips (BE)" in compact
+  assert compact == "➖ closed — breakeven"
 
 
 def test_position_closed_manual_close_reports_winning_pips():
@@ -224,7 +221,7 @@ def test_algo_auto_manual_close_does_not_invent_stop_loss():
     },
     "position closed at broker: manual or external order · winning 18.0 pips",
   )
-  assert "Winning:" in compact
+  assert compact == "✅ closed — achieved +18 pips 💸"
   assert "SL" not in compact
 
 
@@ -874,7 +871,7 @@ async def test_tp_booked_does_not_overwrite_forming_card_head(monkeypatch):
   # No manage reply yet → one fallback create; never edit the forming head.
   assert len(calls) == 1
   assert calls[0][1]["reply_to"] == 9003
-  assert "🎯 TP3 · 💰 Fill: 4030.00 · ✅ Achieved: +50.0 pips" in calls[0][0]
+  assert "🎯 TP3 +50 pips 💸" in calls[0][0]
   assert "TP COMPLETED" not in calls[0][0]
   head_edits = [e for e in edited if e[1] == 9003]
   assert head_edits == []
@@ -1032,8 +1029,8 @@ async def test_tp_booked_replaces_manage_reply_accumulates_lines(monkeypatch):
   assert len(calls) == 2
   final = calls[-1][0]
   assert "✅ <b>ORDER FILLED</b>" in final
-  assert "🎯 TP1 · 💰 Fill: 4029.98 · ✅ Achieved: +41.0 pips" in final
-  assert "🎯 TP2 · 💰 Fill: 4010.00 · ✅ Achieved: +60.0 pips" in final
+  assert "🎯 TP1 +41 pips 💸" in final
+  assert "🎯 TP2 +60 pips 💸" in final
   assert calls[-1][1]["reply_to"] == 7001
   assert await client.get(delivery._manage_msg_key(setup_id)) == "9002"
   head_edits = [e for e in edited if e[1] == 7001]
@@ -1099,8 +1096,8 @@ async def test_sl_moved_be_updates_manage_reply_not_head(monkeypatch):
   assert deleted == [(123, 8123)]
   assert len(calls) == 1
   assert calls[0][1]["reply_to"] == 7001
-  assert "BE" in calls[0][0]
-  assert "4034.99" in calls[0][0]
+  # XAU rounds to a whole number for display (4,035, not 4034.99).
+  assert "🛡 move SL to 4,035" in calls[0][0]
   assert await client.get(delivery._manage_msg_key(setup_id)) == "9001"
   head_edits = [e for e in edited if e[1] == 7001]
   assert head_edits == []
@@ -1165,8 +1162,10 @@ async def test_sl_moved_trail_updates_manage_reply_not_head(monkeypatch):
 
   assert deleted == [(123, 8124)]
   assert len(calls) == 1
-  assert "Trail" in calls[0][0]
-  assert "4070.31" in calls[0][0]
+  # No BE/Trail distinction now (matches Manual's own "move SL to X"
+  # convention) - the legacy 🔐 BE line is still correctly replaced, not
+  # duplicated.
+  assert "🛡 move SL to 4,070" in calls[0][0]
   assert "🔐" not in calls[0][0]
   assert calls[0][1]["reply_to"] == 7001
   head_edits = [e for e in edited if e[1] == 7001]
@@ -1233,11 +1232,11 @@ async def test_position_closed_replaces_manage_reply_under_card(monkeypatch):
   final = calls[0][0]
   assert calls[0][1]["reply_to"] == 7001
   assert "✅ <b>ORDER FILLED</b>" in final
+  # Seeded (legacy-format) TP1 line is carried forward unchanged - only
+  # newly-generated lines use the current format.
   assert "🎯 TP1 · 💰 Fill: 4029.98 · ✅ Achieved: +41.0 pips" in final
-  assert "🎯 TP2 · 💰 Fill: 4106.00 · ✅ Achieved: +90.0 pips" in final
-  assert "🏁 POSITION CLOSED" in final
-  assert "@ 4106.00" in final
-  assert "• @ 4106.00" not in final
+  assert "🎯 TP2 +90 pips 💸" in final
+  assert "✅ closed — achieved +90 pips 💸" in final
   assert "Highest TP archived" not in final
   assert await client.get(delivery._manage_msg_key(setup_id)) == "9001"
 
@@ -1302,8 +1301,8 @@ async def test_position_closed_appends_missing_final_tp_line(monkeypatch):
   assert len(calls) == 1
   final = calls[0][0]
   assert "🎯 TP1 · 💰 Fill: 4029.98 · ✅ Achieved: +41.0 pips" in final
-  assert "🎯 TP3 · 💰 Fill: 4010.00 · ✅ Achieved: +81.0 pips" in final
-  assert "🏁 POSITION CLOSED" in final
+  assert "🎯 TP3 +81 pips 💸" in final
+  assert "✅ closed — achieved +81 pips 💸" in final
   assert "Highest TP archived" not in final
   # Root card stays intact (no TERMINAL rewrite); close lives on the reply.
   assert all(e[1] != 7001 or "TERMINAL" not in e[2] for e in edited)
@@ -1361,8 +1360,8 @@ async def test_position_closed_fallback_creates_manage_reply(monkeypatch):
   assert calls[0][1]["reply_to"] == 7001
   assert all(e[1] != 7001 or "TERMINAL" not in e[2] for e in edited)
   assert deleted == []
-  assert "🏁 POSITION CLOSED" in calls[0][0]
-  assert "🎯 TP2 · 💰 Fill: 4106.00 · ✅ Achieved: +90.0 pips" in calls[0][0]
+  assert "✅ closed — achieved +90 pips 💸" in calls[0][0]
+  assert "🎯 TP2 +90 pips 💸" in calls[0][0]
   assert await client.get(delivery._manage_msg_key(setup_id)) == "9001"
 
 
@@ -1428,7 +1427,7 @@ async def test_position_closed_never_deletes_root_and_posts_standalone_if_root_g
 
   assert deleted == []
   assert [c[1]["reply_to"] for c in calls] == [7001, None]
-  assert "POSITION CLOSED" in calls[1][0]
+  assert "closed — achieved +30 pips" in calls[1][0]
 
 
 @pytest.mark.asyncio
@@ -1736,10 +1735,10 @@ async def test_stop_moved_and_position_closed_also_thread_to_forming_card(
   # BE/trail seeds manage reply; close deletes it and posts an updated reply.
   assert len(calls) == 2
   assert calls[0][1]["reply_to"] == 7001
-  assert "BE" in calls[0][0] or "Trail" in calls[0][0] or "Stop" in calls[0][0]
+  assert "🛡 move SL to 4,100" in calls[0][0]
   assert deleted == [(123, 8124)]
   assert calls[1][1]["reply_to"] == 7001
-  assert "POSITION CLOSED" in calls[1][0]
+  assert "closed —" in calls[1][0]
   # Root forming card itself is never deleted here.
   assert all(d[1] != 7001 for d in deleted)
 
