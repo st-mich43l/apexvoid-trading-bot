@@ -8,7 +8,7 @@ import re
 import time
 from datetime import datetime, timezone
 from html import escape
-from typing import Literal
+from typing import Awaitable, Callable, Literal
 
 from aiogram.exceptions import TelegramBadRequest, TelegramRetryAfter
 
@@ -1074,11 +1074,57 @@ def tp_message_key(profile: DeliveryProfile, position_id: int) -> str:
 
 
 def _manage_msg_key(match_id: str) -> str:
+  """Current ORDER FILLED status message - replaced in place as a scaled
+  entry progresses from a partial fill to fully filled. Each TP notice is
+  independent (tracked via _manage_active_key/_manage_tp_seen_key), and
+  BE/trail has its own replace-in-place slot (_manage_be_msg_key)."""
   return f"auto_trade:manage_msg:{match_id}"
 
 
 def _manage_text_key(match_id: str) -> str:
   return f"auto_trade:manage_text:{match_id}"
+
+
+def _manage_be_msg_key(match_id: str) -> str:
+  """Current BE/trail status message - replaced in place on each move."""
+  return f"auto_trade:manage_be_msg:{match_id}"
+
+
+def _manage_be_text_key(match_id: str) -> str:
+  return f"auto_trade:manage_be_text:{match_id}"
+
+
+def _manage_active_key(match_id: str) -> str:
+  """Every manage-reply message still visible for this trade (fill
+  announcement + each open TP notification + the current BE/trail
+  message) - swept on position_closed so only the final status remains."""
+  return f"auto_trade:manage_active:{match_id}"
+
+
+def _manage_tp_seen_key(match_id: str) -> str:
+  """TP levels already notified for this trade, so a retried tp_booked
+  event or a final-target close doesn't double-post the same level."""
+  return f"auto_trade:manage_tp_seen:{match_id}"
+
+
+def _manage_closed_key(match_id: str) -> str:
+  """Set once the single final status message has been posted, so a
+  redelivered position_closed event never posts a second one."""
+  return f"auto_trade:manage_closed:{match_id}"
+
+
+async def _save_manage_slot(
+  client,
+  msg_key: str,
+  text_key: str,
+  *,
+  message_id: int,
+  text: str,
+) -> None:
+  pipe = client.pipeline()
+  pipe.set(msg_key, str(int(message_id)), ex=_TRADE_MESSAGE_TTL)
+  pipe.set(text_key, text, ex=_TRADE_MESSAGE_TTL)
+  await pipe.execute()
 
 
 async def _save_manage_message(
@@ -1088,20 +1134,87 @@ async def _save_manage_message(
   message_id: int,
   text: str,
 ) -> None:
+  await _save_manage_slot(
+    client, _manage_msg_key(match_id), _manage_text_key(match_id),
+    message_id=message_id, text=text,
+  )
+
+
+async def _save_manage_be_message(
+  client,
+  match_id: str,
+  *,
+  message_id: int,
+  text: str,
+) -> None:
+  await _save_manage_slot(
+    client, _manage_be_msg_key(match_id), _manage_be_text_key(match_id),
+    message_id=message_id, text=text,
+  )
+
+
+async def _track_active_manage_message(
+  client, match_id: str, message_id: int,
+) -> None:
   pipe = client.pipeline()
-  pipe.set(_manage_msg_key(match_id), str(int(message_id)), ex=_TRADE_MESSAGE_TTL)
-  pipe.set(_manage_text_key(match_id), text, ex=_TRADE_MESSAGE_TTL)
+  pipe.sadd(_manage_active_key(match_id), str(int(message_id)))
+  pipe.expire(_manage_active_key(match_id), _TRADE_MESSAGE_TTL)
   await pipe.execute()
 
 
-async def _load_manage_message(
-  client,
-  match_id: str,
-) -> tuple[int | None, str | None]:
-  raw_id, raw_text = await client.mget(
+async def _untrack_active_manage_message(
+  client, match_id: str, message_id: int,
+) -> None:
+  await client.srem(_manage_active_key(match_id), str(int(message_id)))
+
+
+async def _clear_active_manage_messages(
+  client, chat_id: int, match_id: str,
+) -> None:
+  """Delete every still-open manage-reply message (best effort) so a
+  closed position leaves only the single final status behind."""
+  raw_ids = await client.smembers(_manage_active_key(match_id))
+  for raw in raw_ids:
+    try:
+      message_id = int(raw.decode() if isinstance(raw, bytes) else raw)
+    except (TypeError, ValueError):
+      continue
+    try:
+      await delete_scanner_message(chat_id, message_id)
+    except Exception:
+      log.info(
+        "manage thread cleanup delete failed setup_id=%s message_id=%s",
+        match_id,
+        message_id,
+        exc_info=True,
+      )
+  await client.delete(
+    _manage_active_key(match_id),
+    _manage_tp_seen_key(match_id),
     _manage_msg_key(match_id),
     _manage_text_key(match_id),
+    _manage_be_msg_key(match_id),
+    _manage_be_text_key(match_id),
   )
+
+
+async def _tp_already_notified(client, match_id: str, target: str) -> bool:
+  return bool(await client.sismember(_manage_tp_seen_key(match_id), target))
+
+
+async def _mark_tp_notified(client, match_id: str, target: str) -> None:
+  pipe = client.pipeline()
+  pipe.sadd(_manage_tp_seen_key(match_id), target)
+  pipe.expire(_manage_tp_seen_key(match_id), _TRADE_MESSAGE_TTL)
+  await pipe.execute()
+
+
+async def _load_manage_slot(
+  client,
+  msg_key: str,
+  text_key: str,
+) -> tuple[int | None, str | None]:
+  raw_id, raw_text = await client.mget(msg_key, text_key)
   message_id: int | None = None
   if raw_id:
     try:
@@ -1114,6 +1227,24 @@ async def _load_manage_message(
   if message_id is not None and message_id <= 0:
     message_id = None
   return message_id, text
+
+
+async def _load_manage_message(
+  client,
+  match_id: str,
+) -> tuple[int | None, str | None]:
+  return await _load_manage_slot(
+    client, _manage_msg_key(match_id), _manage_text_key(match_id),
+  )
+
+
+async def _load_manage_be_message(
+  client,
+  match_id: str,
+) -> tuple[int | None, str | None]:
+  return await _load_manage_slot(
+    client, _manage_be_msg_key(match_id), _manage_be_text_key(match_id),
+  )
 
 
 async def _delete_prior_manage_reply(
@@ -1145,8 +1276,14 @@ async def _post_manage_reply(
   text: str,
   remember: bool = False,
   require_reply_target: bool = False,
+  on_sent: Callable[[int], Awaitable[None]] | None = None,
 ) -> int | None:
-  """Post a manage reply under the root card and persist Redis keys."""
+  """Post a manage reply under the root card.
+
+  Callers decide their own Redis bookkeeping via on_sent - fill/TP replies
+  track themselves as active-until-close, BE/trail replaces its own single
+  pointer, and the final close status needs neither.
+  """
   reply_to, reason = await _resolve_reply_message_id(client, event, "internal")
   if reply_to is None and match_id:
     # Live 2026-08-12: publish raced Telegram flood → root never created,
@@ -1176,6 +1313,7 @@ async def _post_manage_reply(
           send=send,
           text=text,
           remember=remember,
+          on_sent=on_sent,
         )
         log.error(
           "Auto-trade manage reply deferred for %s until root card exists "
@@ -1207,7 +1345,8 @@ async def _post_manage_reply(
       return None
     raise
   message_id = int(sent.message_id)
-  await _save_manage_message(client, match_id, message_id=message_id, text=text)
+  if on_sent is not None:
+    await on_sent(message_id)
   if remember:
     await _remember_trade_message(client, event, "internal", message_id)
   return message_id
@@ -1283,6 +1422,7 @@ async def _schedule_deferred_manage_reply(
   send,
   text: str,
   remember: bool,
+  on_sent: Callable[[int], Awaitable[None]] | None = None,
 ) -> None:
   """Post fill/TP/close under the root after flood clears — never standalone."""
 
@@ -1306,9 +1446,8 @@ async def _schedule_deferred_manage_reply(
         return
       sent = await send(text, reply_to=recovered, chat_id=chat_id)
       message_id = int(sent.message_id)
-      await _save_manage_message(
-        client, match_id, message_id=message_id, text=text,
-      )
+      if on_sent is not None:
+        await on_sent(message_id)
       if remember:
         await _remember_trade_message(client, event, "internal", message_id)
       await _mark_forming_card_position_activated(client, match_id)
@@ -1342,11 +1481,12 @@ async def _replace_manage_reply(
   old_message_id: int | None,
   remember: bool = False,
   require_reply_target: bool = False,
+  on_sent: Callable[[int], Awaitable[None]] | None = None,
 ) -> int | None:
   """Delete the prior manage notification and reply with updated information.
 
   The SETUP FORMING root card is left untouched — only the threaded manage
-  reply (fills / TP / SL / closed) is replaced.
+  reply being replaced (currently: BE/trail) is.
   """
   await _delete_prior_manage_reply(chat_id, old_message_id, match_id=match_id)
   return await _post_manage_reply(
@@ -1358,38 +1498,8 @@ async def _replace_manage_reply(
     text=text,
     remember=remember,
     require_reply_target=require_reply_target,
+    on_sent=on_sent,
   )
-
-
-def _split_manage_fill_and_tps(text: str) -> tuple[str, list[str]]:
-  """Split stored manage body into fill header + accumulated TP/close lines."""
-  fill_lines: list[str] = []
-  append_lines: list[str] = []
-
-  def _is_append(line: str) -> bool:
-    stripped = line.lstrip("• ").strip()
-    return (
-      stripped.startswith("🎯")
-      or stripped.startswith("🏁")
-      or stripped.startswith("🔐")
-      or stripped.startswith("🛰️")
-      or (
-        stripped.startswith("🛡")
-        and ("<b>Stop</b>" in stripped or stripped.startswith("🛡 <b>Stop</b>"))
-      )
-      or line.startswith("🎯 ·")
-      or line.startswith("🏁 ·")
-    )
-
-  for line in text.splitlines():
-    if _is_append(line):
-      append_lines.append(line)
-    elif append_lines:
-      # Keep stray lines after TP/close with the append block.
-      append_lines.append(line)
-    else:
-      fill_lines.append(line)
-  return "\n".join(fill_lines).rstrip(), append_lines
 
 
 POSITION_ACTIVATED_STATUS_LINE = "✅ <b>POSITION ACTIVATED</b>"
@@ -1407,16 +1517,14 @@ def _format_order_filled_manage_body(event: dict) -> str:
   ])
 
 
-def _format_tp_compact_line(event: dict, message: str) -> str | None:
-  """One row per TP; stack a new row only when another TP hits.
-
-  Exact owner format::
-    🎯 TP1 · 💰 Fill: 4029.98 · ✅ Achieved: +41.0 pips
-  """
+def _extract_tp_target(event: dict, message: str) -> tuple[str | None, str]:
+  """Which TP level (if any) this event's message names, plus the cleaned
+  text - shared by the compact-line formatter and the per-level dedup
+  check used to decide whether this level has already been notified."""
   symbol = _event_symbol(event)
   cleaned = _clean_message(message, symbol=symbol)
   if contradictory_archived_tp(event, cleaned):
-    return None
+    return None, cleaned
   match = _TP_BOOKED_RE.match(cleaned)
   target = match.group("target").upper() if match else None
   if target is None:
@@ -1430,8 +1538,20 @@ def _format_tp_compact_line(event: dict, message: str) -> str | None:
     highest = _HIGHEST_TP_ARCHIVED_RE.search(cleaned)
     if highest is not None:
       target = highest.group("target").upper()
+  return target, cleaned
+
+
+def _format_tp_compact_line(event: dict, message: str) -> str | None:
+  """One row per TP level.
+
+  Exact owner format::
+    🎯 TP1 · 💰 Fill: 4029.98 · ✅ Achieved: +41.0 pips
+  """
+  symbol = _event_symbol(event)
+  target, cleaned = _extract_tp_target(event, message)
   if not target:
     return None
+  match = _TP_BOOKED_RE.match(cleaned)
   parts = [f"🎯 {escape(target)}"]
   price = event.get("price")
   try:
@@ -1472,30 +1592,6 @@ def _archived_pips_from_close_message(cleaned: str) -> float | None:
     return float(match.group("pips"))
   except (TypeError, ValueError):
     return None
-
-
-def _manage_has_tp_target(text: str, target: str) -> bool:
-  """True when manage body already has a compact line for this TP level."""
-  needle = target.upper()
-  for line in text.splitlines():
-    stripped = line.lstrip("• ").strip()
-    if not (
-      stripped.startswith("🎯 ·")
-      or stripped.startswith("🎯 ")
-      or line.startswith("🎯 ·")
-    ):
-      continue
-    # Matches "• 🎯 TP1", "🎯 · TP1 · …", and legacy "🎯 · <b>TP1</b> · …".
-    if (
-      f"🎯 {needle}" in stripped
-      or f"🎯 · {needle}" in stripped
-      or f"· {needle} ·" in stripped
-      or f"· <b>{needle}</b> ·" in stripped
-      or stripped.rstrip().endswith(needle)
-      or stripped.rstrip().endswith(f"<b>{needle}</b>")
-    ):
-      return True
-  return False
 
 
 def _format_position_closed_compact_line(event: dict, message: str) -> str:
@@ -1585,34 +1681,6 @@ def _format_be_trail_head_status(event: dict, message: str) -> tuple[str, str, f
   return status, state, price_val
 
 
-def _is_manage_be_trail_line(line: str) -> bool:
-  stripped = line.lstrip("• ").strip()
-  return (
-    stripped.startswith("🔐")
-    or stripped.startswith("🛰️")
-    or (
-      stripped.startswith("🛡")
-      and ("<b>Stop</b>" in stripped or stripped.startswith("🛡 <b>Stop</b>"))
-    )
-  )
-
-
-def _upsert_manage_be_trail_line(text: str, trail_line: str) -> str:
-  """Replace prior BE/Trail/Stop status line, else append."""
-  out: list[str] = []
-  replaced = False
-  for line in text.splitlines():
-    if _is_manage_be_trail_line(line):
-      if not replaced:
-        out.append(trail_line)
-        replaced = True
-      continue
-    out.append(line)
-  if not replaced:
-    out.append(trail_line)
-  return "\n".join(out)
-
-
 async def _mark_forming_card_position_activated(client, match_id: str) -> None:
   """Move SETUP FORMING head from publish/queued → POSITION ACTIVATED."""
   try:
@@ -1671,29 +1739,36 @@ async def _deliver_compact_order_filled(
   chat_id: int,
   send,
 ) -> bool:
-  # Reply keeps ORDER FILLED; root SETUP FORMING card becomes POSITION ACTIVATED.
+  # Replaces the ORDER FILLED status in place as a scaled entry progresses
+  # (L1 partial → fully filled) - one evolving state, not a discrete event
+  # per leg. TP/BE updates each post their own message instead of merging
+  # in here - see _deliver_compact_tp_booked and _deliver_compact_be_trail.
   body = _format_order_filled_manage_body(event)
-  manage_id, manage_text = await _load_manage_message(client, match_id)
-  new_text = body
-  if manage_text:
-    _, tp_lines = _split_manage_fill_and_tps(manage_text)
-    if tp_lines:
-      new_text = f"{body}\n" + "\n".join(tp_lines)
   # Create a missing root first (publish can lag the fill), then rewrite
   # WAITING FILL → POSITION ACTIVATED before the manage reply.
   await _ensure_root_card_for_manage_reply(
     client, event, match_id=match_id, chat_id=chat_id,
   )
   await _mark_forming_card_position_activated(client, match_id)
+
+  manage_id, _manage_text = await _load_manage_message(client, match_id)
+  if manage_id is not None:
+    await _untrack_active_manage_message(client, match_id, manage_id)
+
+  async def _on_sent(message_id: int) -> None:
+    await _save_manage_message(client, match_id, message_id=message_id, text=body)
+    await _track_active_manage_message(client, match_id, message_id)
+
   await _replace_manage_reply(
     client,
     event,
     match_id=match_id,
     chat_id=chat_id,
     send=send,
-    text=new_text,
+    text=body,
     old_message_id=manage_id,
     remember=True,
+    on_sent=_on_sent,
   )
   return True
 
@@ -1706,30 +1781,30 @@ async def _deliver_compact_tp_booked(
   chat_id: int,
   send,
 ) -> bool | None:
+  """Post one standalone notification per TP level - never merged into a
+  running card, and never repeated for a level already notified."""
   message = str(event.get("message") or "")
+  target, _cleaned = _extract_tp_target(event, message)
   line = _format_tp_compact_line(event, message)
   if line is None:
     return None
-  manage_id, manage_text = await _load_manage_message(client, match_id)
-  if manage_text and line in manage_text:
+  if target and await _tp_already_notified(client, match_id, target):
     return True
-  if manage_text:
-    new_text = f"{manage_text.rstrip()}\n{line}"
-  else:
-    new_text = "\n".join([
-      "🤖 <b>ApexVoid Algo</b>",
-      "• ✅ <b>ORDER FILLED</b>",
-      "",
-      line,
-    ])
-  await _replace_manage_reply(
+  text = "\n".join(["🤖 <b>ApexVoid Algo</b>", line])
+
+  async def _on_sent(message_id: int) -> None:
+    await _track_active_manage_message(client, match_id, message_id)
+    if target:
+      await _mark_tp_notified(client, match_id, target)
+
+  await _post_manage_reply(
     client,
     event,
     match_id=match_id,
     chat_id=chat_id,
     send=send,
-    text=new_text,
-    old_message_id=manage_id,
+    text=text,
+    on_sent=_on_sent,
   )
   return True
 
@@ -1742,39 +1817,35 @@ async def _deliver_compact_position_closed(
   chat_id: int,
   send,
 ) -> bool:
-  """Replace manage reply under the forming card with close (and missing TP).
+  """Sweep every open manage message (fill + each TP + BE/trail) and post
+  a single final status reply in their place - owner's call: once a
+  position is closed, the running play-by-play has served its purpose and
+  only the result matters.
 
   Final target hits emit position_closed without a separate tp_booked, so
-  this path also appends the archived TP compact line when missing.
-  The prior manage notification is deleted and a fresh reply is posted.
-  The root card is also resolved here: a fill can race the card create, so
-  close must not leave IN ZONE · WAITING FILL on a dead trade.
+  this path also adds the archived TP compact line when that level wasn't
+  already notified. The root card is also resolved here: a fill can race
+  the card create, so close must not leave IN ZONE · WAITING FILL on a
+  dead trade.
   """
+  if await client.get(_manage_closed_key(match_id)):
+    return True
+
   message = str(event.get("message") or "")
   close_line = _format_position_closed_compact_line(event, message)
+  target, _cleaned = _extract_tp_target(event, message)
   tp_line = _format_tp_compact_line(event, message)
 
-  def _compose(base: str) -> str:
-    text = base.rstrip()
-    if tp_line:
-      highest = _HIGHEST_TP_ARCHIVED_RE.search(message)
-      target = highest.group("target").upper() if highest else None
-      if target and not _manage_has_tp_target(text, target):
-        text = f"{text}\n{tp_line}"
-    if "POSITION CLOSED" not in text:
-      text = f"{text}\n{close_line}"
-    return text
+  lines = ["🤖 <b>ApexVoid Algo</b>"]
+  if tp_line and target and not await _tp_already_notified(client, match_id, target):
+    lines.append(tp_line)
+  lines.append(close_line)
+  final_text = "\n".join(lines)
 
-  manage_id, manage_text = await _load_manage_message(client, match_id)
-  already_closed = bool(manage_text and "POSITION CLOSED" in manage_text)
-  if manage_text:
-    new_text = _compose(manage_text)
-  else:
-    new_text = _compose("\n".join([
-      "🤖 <b>ApexVoid Algo</b>",
-      "✅ <b>ORDER FILLED</b>",
-      "",
-    ]))
+  root = await load_forming_card(client, match_id)
+  cleanup_chat_id = int(root["chat_id"]) if root else chat_id
+  await _clear_active_manage_messages(client, cleanup_chat_id, match_id)
+
   # Fill may have raced card create; never leave WAITING FILL after close.
   await kill_setup_card(
     client,
@@ -1783,17 +1854,16 @@ async def _deliver_compact_position_closed(
     delete_fn=delete_scanner_message,
     edit_fn=edit_scanner_message_text,
   )
-  if already_closed:
-    return True
-  await _replace_manage_reply(
+
+  await _post_manage_reply(
     client,
     event,
     match_id=match_id,
     chat_id=chat_id,
     send=send,
-    text=new_text,
-    old_message_id=manage_id,
+    text=final_text,
   )
+  await client.set(_manage_closed_key(match_id), "1", ex=_TRADE_MESSAGE_TTL)
   return True
 
 
@@ -1805,38 +1875,32 @@ async def _deliver_compact_be_trail(
   chat_id: int,
   send,
 ) -> bool:
-  """Replace manage reply with BE/Trail; leave Trade-area Stop on the root card."""
+  """Replace the current BE/Trail status message in place; leave the
+  fill announcement and any already-sent TP notifications untouched."""
   message = str(event.get("message") or "")
   status_line, _state, _price_val = _format_be_trail_head_status(event, message)
+  body = "\n".join(["🤖 <b>ApexVoid Algo</b>", status_line])
 
-  manage_id, manage_text = await _load_manage_message(client, match_id)
-  if manage_text:
-    new_text = _upsert_manage_be_trail_line(manage_text, status_line)
-    await _replace_manage_reply(
-      client,
-      event,
-      match_id=match_id,
-      chat_id=chat_id,
-      send=send,
-      text=new_text,
-      old_message_id=manage_id,
-      remember=True,
-    )
-  else:
-    body = "\n".join([
-      "🤖 <b>ApexVoid Algo</b>",
-      status_line,
-    ])
-    await _post_manage_reply(
-      client,
-      event,
-      match_id=match_id,
-      chat_id=chat_id,
-      send=send,
-      text=body,
-      remember=True,
-      require_reply_target=True,
-    )
+  manage_id, _manage_text = await _load_manage_be_message(client, match_id)
+  if manage_id is not None:
+    await _untrack_active_manage_message(client, match_id, manage_id)
+
+  async def _on_sent(message_id: int) -> None:
+    await _save_manage_be_message(client, match_id, message_id=message_id, text=body)
+    await _track_active_manage_message(client, match_id, message_id)
+
+  await _replace_manage_reply(
+    client,
+    event,
+    match_id=match_id,
+    chat_id=chat_id,
+    send=send,
+    text=body,
+    old_message_id=manage_id,
+    remember=True,
+    require_reply_target=True,
+    on_sent=_on_sent,
+  )
   return True
 
 

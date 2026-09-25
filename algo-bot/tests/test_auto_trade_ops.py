@@ -939,7 +939,9 @@ async def test_order_filled_stores_manage_keys_and_second_fill_replaces(monkeypa
 
 @pytest.mark.asyncio
 @pytest.mark.no_database
-async def test_tp_booked_replaces_manage_reply_accumulates_lines(monkeypatch):
+async def test_tp_booked_posts_one_standalone_message_per_level(monkeypatch):
+  """Each TP level gets its own notification - never merged into a
+  running card, never re-sent once that level has been notified."""
   client = redis_state.get_client()
   setup_id = "manage-tp-setup"
   await client.set(
@@ -1000,16 +1002,43 @@ async def test_tp_booked_replaces_manage_reply_accumulates_lines(monkeypatch):
       send=sent,
     )
 
-  assert deleted == [(123, 8123), (123, 9001)]
+  # Nothing is deleted while the trade is open - each level is its own
+  # standalone message, and the fill announcement is left alone.
+  assert deleted == []
   assert len(calls) == 2
-  final = calls[-1][0]
-  assert "✅ <b>ORDER FILLED</b>" in final
-  assert "🎯 TP1 · 💰 Fill: 4029.98 · ✅ Achieved: +41.0 pips" in final
-  assert "🎯 TP2 · 💰 Fill: 4010.00 · ✅ Achieved: +60.0 pips" in final
-  assert calls[-1][1]["reply_to"] == 7001
-  assert await client.get(delivery._manage_msg_key(setup_id)) == "9002"
+  first, second = calls[0][0], calls[1][0]
+  assert "🎯 TP1 · 💰 Fill: 4029.98 · ✅ Achieved: +41.0 pips" in first
+  assert "TP2" not in first
+  assert "🎯 TP2 · 💰 Fill: 4010.00 · ✅ Achieved: +60.0 pips" in second
+  assert "TP1" not in second
+  assert calls[0][1]["reply_to"] == 7001
+  assert calls[1][1]["reply_to"] == 7001
+  assert await client.get(delivery._manage_msg_key(setup_id)) == "8123"
+  active = {
+    int(m.decode() if isinstance(m, bytes) else m)
+    for m in await client.smembers(delivery._manage_active_key(setup_id))
+  }
+  assert active == {calls[0][2], calls[1][2]}
   head_edits = [e for e in edited if e[1] == 7001]
   assert head_edits == []
+
+  # A retried TP1 event is a no-op - that level was already notified.
+  await delivery._deliver_auto_trade_event(
+    client,
+    {
+      "type": "tp_booked",
+      "match_id": setup_id,
+      "message": "TP COMPLETED TP1 closed L1 lot=0.02 remaining lot=0.06 (1/2)",
+      "price": 4029.98,
+      "target_pips": 41.0,
+      "position_id": 1,
+      "reason_code": "tp1_booked",
+    },
+    profile="internal",
+    chat_id=123,
+    send=sent,
+  )
+  assert len(calls) == 2
 
 
 @pytest.mark.asyncio
@@ -1029,13 +1058,12 @@ async def test_sl_moved_be_updates_manage_reply_not_head(monkeypatch):
     json.dumps({"chat_id": 123, "message_id": 7001, "text": head}),
     ex=60,
   )
-  fill_body = "\n".join([
+  prior_be_body = "\n".join([
     "🤖 <b>ApexVoid Algo</b>",
-    "✅ <b>ORDER FILLED</b>",
-    "• ENTRY L1 FILLED lot=0.08 @ 4034.50",
+    "🛡 <b>Stop</b> · 4,020.00",
   ])
-  await delivery._save_manage_message(
-    client, setup_id, message_id=8123, text=fill_body,
+  await delivery._save_manage_be_message(
+    client, setup_id, message_id=8123, text=prior_be_body,
   )
   edited = []
   deleted = []
@@ -1073,7 +1101,7 @@ async def test_sl_moved_be_updates_manage_reply_not_head(monkeypatch):
   assert calls[0][1]["reply_to"] == 7001
   assert "BE" in calls[0][0]
   assert "4034.99" in calls[0][0]
-  assert await client.get(delivery._manage_msg_key(setup_id)) == "9001"
+  assert await client.get(delivery._manage_be_msg_key(setup_id)) == "9001"
   head_edits = [e for e in edited if e[1] == 7001]
   assert head_edits == []
 
@@ -1095,14 +1123,12 @@ async def test_sl_moved_trail_updates_manage_reply_not_head(monkeypatch):
     json.dumps({"chat_id": 123, "message_id": 7001, "text": head}),
     ex=60,
   )
-  fill_body = "\n".join([
+  prior_be_body = "\n".join([
     "🤖 <b>ApexVoid Algo</b>",
-    "✅ <b>ORDER FILLED</b>",
-    "• ENTRY L1 FILLED lot=0.08 @ 4034.50",
     "🔐 <b>BE</b> · 4034.99",
   ])
-  await delivery._save_manage_message(
-    client, setup_id, message_id=8124, text=fill_body,
+  await delivery._save_manage_be_message(
+    client, setup_id, message_id=8124, text=prior_be_body,
   )
   edited = []
   deleted = []
@@ -1141,13 +1167,16 @@ async def test_sl_moved_trail_updates_manage_reply_not_head(monkeypatch):
   assert "4070.31" in calls[0][0]
   assert "🔐" not in calls[0][0]
   assert calls[0][1]["reply_to"] == 7001
+  assert await client.get(delivery._manage_be_msg_key(setup_id)) == "9002"
   head_edits = [e for e in edited if e[1] == 7001]
   assert head_edits == []
 
 
 @pytest.mark.asyncio
 @pytest.mark.no_database
-async def test_position_closed_replaces_manage_reply_under_card(monkeypatch):
+async def test_position_closed_sweeps_open_messages_and_posts_single_status(monkeypatch):
+  """On close: every still-open manage message (fill/TP/BE) is deleted and
+  replaced with exactly one final status - the root card is untouched."""
   client = redis_state.get_client()
   setup_id = "manage-close-setup"
   await client.set(
@@ -1163,11 +1192,13 @@ async def test_position_closed_replaces_manage_reply_under_card(monkeypatch):
     "🤖 <b>ApexVoid Algo</b>",
     "✅ <b>ORDER FILLED</b>",
     "• ENTRY L1 FILLED lot=0.08 @ 4034.50",
-    "🎯 TP1 · 💰 Fill: 4029.98 · ✅ Achieved: +41.0 pips",
   ])
   await delivery._save_manage_message(
     client, setup_id, message_id=8123, text=fill_body,
   )
+  await delivery._track_active_manage_message(client, setup_id, 8123)
+  await delivery._track_active_manage_message(client, setup_id, 8200)
+  await delivery._mark_tp_notified(client, setup_id, "TP1")
   edited = []
   deleted = []
 
@@ -1200,24 +1231,47 @@ async def test_position_closed_replaces_manage_reply_under_card(monkeypatch):
     send=sent,
   )
 
-  assert deleted == [(123, 8123)]
+  # Both the fill message (8123) and the earlier TP1 message (8200) are
+  # swept - only one final status message is posted in their place.
+  assert set(deleted) == {(123, 8123), (123, 8200)}
   assert len(calls) == 1
   final = calls[0][0]
   assert calls[0][1]["reply_to"] == 7001
-  assert "✅ <b>ORDER FILLED</b>" in final
-  assert "🎯 TP1 · 💰 Fill: 4029.98 · ✅ Achieved: +41.0 pips" in final
+  assert "✅ <b>ORDER FILLED</b>" not in final
+  assert "TP1" not in final
   assert "🎯 TP2 · 💰 Fill: 4106.00 · ✅ Achieved: +90.0 pips" in final
   assert "🏁 POSITION CLOSED" in final
   assert "@ 4106.00" in final
   assert "• @ 4106.00" not in final
   assert "Highest TP archived" not in final
-  assert await client.get(delivery._manage_msg_key(setup_id)) == "9001"
+  assert all(e[1] != 7001 for e in edited)
+  assert all(d[1] != 7001 for d in deleted)
+  assert await client.get(delivery._manage_closed_key(setup_id)) == "1"
+
+  # A redelivered close event is a no-op - it never posts a second status.
+  await delivery._deliver_auto_trade_event(
+    client,
+    {
+      "type": "position_closed",
+      "match_id": setup_id,
+      "message": "PLAN CLOSED · highest TP archived TP2 · @ 4106.00",
+      "price": 4106.0,
+      "target_pips": 90,
+      "position_id": 1,
+    },
+    profile="internal",
+    chat_id=123,
+    send=sent,
+  )
+  assert len(calls) == 1
 
 
 @pytest.mark.asyncio
 @pytest.mark.no_database
 async def test_position_closed_appends_missing_final_tp_line(monkeypatch):
-  """Engine skips tp_booked on final target — close must still show that TP."""
+  """Engine skips tp_booked on final target — close must still show that
+  TP, but the final status stays lean: an already-notified level (TP1,
+  deleted as its own message) isn't recapped."""
   client = redis_state.get_client()
   setup_id = "manage-close-final-tp"
   await client.set(
@@ -1229,15 +1283,12 @@ async def test_position_closed_appends_missing_final_tp_line(monkeypatch):
     }),
     ex=60,
   )
-  fill_body = "\n".join([
-    "🤖 <b>ApexVoid Algo</b>",
-    "✅ <b>ORDER FILLED</b>",
-    "• ENTRY L1 FILLED lot=0.08 @ 4034.50",
-    "🎯 TP1 · 💰 Fill: 4029.98 · ✅ Achieved: +41.0 pips",
-  ])
   await delivery._save_manage_message(
-    client, setup_id, message_id=8123, text=fill_body,
+    client, setup_id, message_id=8123, text="fill",
   )
+  await delivery._track_active_manage_message(client, setup_id, 8123)
+  await delivery._track_active_manage_message(client, setup_id, 8200)
+  await delivery._mark_tp_notified(client, setup_id, "TP1")
   edited = []
   deleted = []
 
@@ -1270,10 +1321,10 @@ async def test_position_closed_appends_missing_final_tp_line(monkeypatch):
     send=sent,
   )
 
-  assert deleted == [(123, 8123)]
+  assert set(deleted) == {(123, 8123), (123, 8200)}
   assert len(calls) == 1
   final = calls[0][0]
-  assert "🎯 TP1 · 💰 Fill: 4029.98 · ✅ Achieved: +41.0 pips" in final
+  assert "TP1" not in final
   assert "🎯 TP3 · 💰 Fill: 4010.00 · ✅ Achieved: +81.0 pips" in final
   assert "🏁 POSITION CLOSED" in final
   assert "Highest TP archived" not in final
@@ -1285,7 +1336,7 @@ async def test_position_closed_appends_missing_final_tp_line(monkeypatch):
 @pytest.mark.asyncio
 @pytest.mark.no_database
 async def test_position_closed_fallback_creates_manage_reply(monkeypatch):
-  """No prior fill manage msg → one reply under the card with close line."""
+  """No prior manage messages at all → one reply under the card with close line."""
   client = redis_state.get_client()
   setup_id = "manage-close-fallback"
   await client.set(
@@ -1335,7 +1386,121 @@ async def test_position_closed_fallback_creates_manage_reply(monkeypatch):
   assert deleted == []
   assert "🏁 POSITION CLOSED" in calls[0][0]
   assert "🎯 TP2 · 💰 Fill: 4106.00 · ✅ Achieved: +90.0 pips" in calls[0][0]
-  assert await client.get(delivery._manage_msg_key(setup_id)) == "9001"
+  assert await client.get(delivery._manage_closed_key(setup_id)) == "1"
+
+
+@pytest.mark.asyncio
+@pytest.mark.no_database
+async def test_full_lifecycle_notifies_each_tp_then_collapses_to_single_close(
+  monkeypatch,
+):
+  """End-to-end: fill, TP1, a BE move, and TP2 each post their own
+  notification while the trade is open; closing sweeps all four and
+  leaves just one final status - the exact behavior requested: notify
+  each TP level individually, then collapse to a single status on close."""
+  client = redis_state.get_client()
+  setup_id = "manage-lifecycle-setup"
+  await client.set(
+    delivery._forming_message_key(setup_id),
+    json.dumps({
+      "chat_id": 123,
+      "message_id": 7001,
+      "text": "🔎 <b>XAU M5 · SETUP FORMING</b>",
+    }),
+    ex=60,
+  )
+  deleted = []
+
+  async def fake_edit(chat_id, message_id, text):
+    pass
+
+  async def fake_delete(chat_id, message_id):
+    deleted.append((chat_id, message_id))
+
+  monkeypatch.setattr(delivery, "edit_scanner_message_text", fake_edit)
+  monkeypatch.setattr(delivery, "delete_scanner_message", fake_delete)
+  calls = []
+  next_id = {"n": 9001}
+
+  async def sent(text, **kwargs):
+    mid = next_id["n"]
+    next_id["n"] += 1
+    calls.append((text, kwargs, mid))
+    return SimpleNamespace(message_id=mid)
+
+  await delivery._deliver_auto_trade_event(
+    client,
+    {
+      "type": "order_filled",
+      "match_id": setup_id,
+      "message": "ENTRY GROUP FULLY FILLED BUY lot=0.10 weighted=4287.28",
+      "position_id": 1,
+    },
+    profile="internal", chat_id=123, send=sent,
+  )
+  await delivery._deliver_auto_trade_event(
+    client,
+    {
+      "type": "tp_booked",
+      "match_id": setup_id,
+      "message": "TP COMPLETED TP1 closed L1 lot=0.02 remaining lot=0.08 (1/4)",
+      "price": 4293.16,
+      "target_pips": 59.0,
+      "position_id": 1,
+    },
+    profile="internal", chat_id=123, send=sent,
+  )
+  await delivery._deliver_auto_trade_event(
+    client,
+    {
+      "type": "sl_moved",
+      "match_id": setup_id,
+      "message": "GROUP SL MOVED TO BE 4287.28 (2/4)",
+      "price": 4287.28,
+      "position_id": 1,
+    },
+    profile="internal", chat_id=123, send=sent,
+  )
+  await delivery._deliver_auto_trade_event(
+    client,
+    {
+      "type": "tp_booked",
+      "match_id": setup_id,
+      "message": "TP COMPLETED TP2 closed L1 lot=0.02 remaining lot=0.06 (2/4)",
+      "price": 4310.0,
+      "target_pips": 110.0,
+      "position_id": 1,
+    },
+    profile="internal", chat_id=123, send=sent,
+  )
+
+  assert len(calls) == 4
+  assert deleted == []  # nothing removed yet - the trade is still open
+
+  await delivery._deliver_auto_trade_event(
+    client,
+    {
+      "type": "position_closed",
+      "match_id": setup_id,
+      "message": "PLAN CLOSED · highest TP archived TP4 · @ 4321.00",
+      "price": 4321.0,
+      "target_pips": 172.0,
+      "position_id": 1,
+    },
+    profile="internal", chat_id=123, send=sent,
+  )
+
+  fill_id, tp1_id, be_id, tp2_id = (c[2] for c in calls[:4])
+  assert set(deleted) == {
+    (123, fill_id), (123, tp1_id), (123, be_id), (123, tp2_id),
+  }
+  assert len(calls) == 5
+  final = calls[4][0]
+  assert calls[4][1]["reply_to"] == 7001
+  assert "🎯 TP4 · 💰 Fill: 4321.00 · ✅ Achieved: +172.0 pips" in final
+  assert "🏁 POSITION CLOSED" in final
+  assert "TP1" not in final
+  assert "TP2" not in final
 
 
 @pytest.mark.asyncio
