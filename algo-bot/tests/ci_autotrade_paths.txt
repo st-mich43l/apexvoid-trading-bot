@@ -51,3 +51,4 @@ tests/test_analysis_consumer.py
 tests/test_analysis_opportunity_repository.py
 tests/test_analysis_shadow.py
 tests/test_technical_authority_config.py
+tests/test_s13_analysis_client_boundary.py
