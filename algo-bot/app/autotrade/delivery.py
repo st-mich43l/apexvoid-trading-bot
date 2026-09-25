@@ -56,8 +56,16 @@ from app.autotrade.config_health import (
   CONFIG_HEALTH_KEY,
   EXECUTOR_READINESS_KEY,
 )
+from app.autotrade.trade_card import format_price
+from app.signals.pips_format import wing_icons
 
 log = logging.getLogger(__name__)
+
+
+def _wings(pips: float) -> str:
+  """Same convention as app.signals.trade_ops._win_wings."""
+  icons = wing_icons(pips)
+  return f" {icons}" if icons else ""
 
 _CURSOR_KEY = "auto_trade:telegram_event_cursor"
 _PAUSED_KEY = "auto_trade:paused"
@@ -1431,16 +1439,16 @@ def _split_manage_fill_and_tps(text: str) -> tuple[str, list[str]]:
   append_lines: list[str] = []
 
   def _is_append(line: str) -> bool:
+    # 🛡 is unqualified here (see _is_manage_be_trail_line's identical
+    # reasoning) so it matches both the current "move SL to X" line and
+    # the legacy "<b>Stop</b>"-tagged one it replaced.
     stripped = line.lstrip("• ").strip()
     return (
       stripped.startswith("🎯")
       or stripped.startswith("🏁")
       or stripped.startswith("🔐")
       or stripped.startswith("🛰️")
-      or (
-        stripped.startswith("🛡")
-        and ("<b>Stop</b>" in stripped or stripped.startswith("🛡 <b>Stop</b>"))
-      )
+      or stripped.startswith("🛡")
       or line.startswith("🎯 ·")
       or line.startswith("🏁 ·")
     )
@@ -1485,8 +1493,9 @@ def _format_order_filled_manage_body(event: dict) -> str:
 def _format_tp_compact_line(event: dict, message: str) -> str | None:
   """One row per TP; stack a new row only when another TP hits.
 
-  Exact owner format::
-    🎯 TP1 · 💰 Fill: 4029.98 · ✅ Achieved: +41.0 pips
+  Matches Manual Algo's own TP wording (trade_ops.render_result's "tp"
+  action: "🎯 TPn +N pips") instead of the three-part
+  "🎯 TPn · 💰 Fill: price · ✅ Achieved: +N pips" breakdown this replaced.
   """
   symbol = _event_symbol(event)
   cleaned = _clean_message(message, symbol=symbol)
@@ -1508,18 +1517,7 @@ def _format_tp_compact_line(event: dict, message: str) -> str | None:
   if not target:
     return None
   progress = _tp_progress_text(event)
-  parts = [
-    f"🎯 {escape(target)}"
-    + (f" ({escape(progress)})" if progress else "")
-  ]
-  price = event.get("price")
-  try:
-    if price is not None:
-      parts.append(
-        f"💰 Fill: {escape(_format_event_price(str(price), symbol=symbol))}"
-      )
-  except Exception:
-    pass
+  label = f"🎯 {escape(target)}" + (f" ({escape(progress)})" if progress else "")
   archived_pips = _event_float(event, "target_pips", "leg_realized_pips")
   if archived_pips is None and match is None:
     tp_match = _TP_RE.match(cleaned)
@@ -1530,11 +1528,10 @@ def _format_tp_compact_line(event: dict, message: str) -> str | None:
         archived_pips = None
   if archived_pips is None:
     archived_pips = _archived_pips_from_close_message(cleaned)
-  if archived_pips is not None:
-    parts.append(
-      f"✅ Achieved: {format_signed_pips(abs(archived_pips))} pips"
-    )
-  return " · ".join(parts)
+  if archived_pips is None:
+    return label
+  rounded = round(abs(archived_pips))
+  return f"{label} +{rounded} pips{_wings(rounded)}"
 
 
 _ARCHIVED_PIPS_SUFFIX_RE = re.compile(
@@ -1577,60 +1574,67 @@ def _manage_has_tp_target(text: str, target: str) -> bool:
   return False
 
 
+_MANAGE_CLOSE_MARKER = "closed —"
+
+
 def _format_position_closed_compact_line(event: dict, message: str) -> str:
-  """Close trailer for the manage reply — SL status stays on one line."""
+  """Close trailer for the manage reply - matches Manual Algo's own close
+  wording (trade_ops.render_result's "close" action: "closed — achieved
+  +N pips" / "closed — losing N pips" / "closed — breakeven") instead of
+  the previous Auto-only "POSITION CLOSED · @ price"/reason-label style.
+  _MANAGE_CLOSE_MARKER ("closed —") is the idempotency marker
+  _deliver_compact_position_closed checks for below - every return path
+  here contains it.
+  """
   cleaned = _MONEY_RE.sub("", message).strip(" ·") if message else ""
   highest = _HIGHEST_TP_ARCHIVED_RE.search(cleaned) if cleaned else None
-  no_tp = _NO_TP_ARCHIVED_RE.search(cleaned) if cleaned else None
-  reason = str(event.get("reason_code") or "")
   if contradictory_archived_tp(event, cleaned):
     highest = None
-    no_tp = True
   if highest is not None:
-    # Highest level is already on a 🎯 line; only add exit price here.
-    at = _PLAN_CLOSED_AT_RE.search(cleaned)
-    if at is not None:
-      return f"🏁 POSITION CLOSED · @ {escape(at.group('price'))}"
-    return "🏁 POSITION CLOSED"
-  if (
+    # The achieved pips for this exit were already reported on the 🎯
+    # TPn line just above (from the same target_pips field), so this
+    # close event's own dict often carries no separate group-level pips
+    # figure at all - try target_pips before falling back to a bare
+    # confirmation rather than forcing the generic pips resolution below
+    # to fail into "unconfirmed."
+    archived = _event_float(event, "target_pips", "leg_realized_pips")
+    if archived is not None:
+      rounded = round(abs(archived))
+      return f"✅ {_MANAGE_CLOSE_MARKER} achieved +{rounded} pips{_wings(rounded)}"
+    return f"✅ {_MANAGE_CLOSE_MARKER} confirmed"
+  reason = str(event.get("reason_code") or "")
+  # A confirmed stop-loss/take-profit close (or a confirmed loss at the
+  # protective stop) may fall back to the stop distance when no other
+  # pips figure is present; an unconfirmed/manual close must not invent
+  # one - the same safety gate the prior version enforced.
+  allow_stop_fallback = (
     _use_stop_close_format(event, reason=reason, cleaned=cleaned)
     or terminal_loss_at_protective_stop(event)
-  ):
-    parts = ["🏁 POSITION CLOSED", *_sl_close_result_parts(
-      event, cleaned, html=False,
-    )]
-    return " · ".join(parts)
-  reason_label = _CLOSE_REASON_LABELS.get(reason)
-  if close_at_breakeven(event, cleaned):
-    reason_label = "🛡 Closed at BE stop"
-  elif reason_label and close_at_protective_stop(event):
-    reason_label = None
-  parts = ["🏁 POSITION CLOSED"]
-  if reason_label:
-    parts.append(reason_label)
-  pips = _resolve_close_pips(event, cleaned, allow_stop_fallback=False)
-  if pips is not None and pips < 0:
-    parts.append(f"❌ Losing: {format_signed_pips(pips)} pips")
-  elif pips is not None and pips > 0:
-    parts.append(f"✅ Winning: {format_signed_pips(pips)} pips")
-  elif pips is not None:
-    parts.append("➖ Result: 0 pips (BE)")
-  return " · ".join(parts)
+  )
+  pips = _resolve_close_pips(event, cleaned, allow_stop_fallback=allow_stop_fallback)
+  if pips is None:
+    return f"🏁 {_MANAGE_CLOSE_MARKER} unconfirmed result"
+  rounded = round(pips)
+  if rounded > 0:
+    return f"✅ {_MANAGE_CLOSE_MARKER} achieved +{rounded} pips{_wings(rounded)}"
+  if rounded < 0:
+    return f"🛑 {_MANAGE_CLOSE_MARKER} losing {rounded} pips"
+  return f"➖ {_MANAGE_CLOSE_MARKER} breakeven"
 
 
 def _format_be_trail_head_status(event: dict, message: str) -> tuple[str, str, float | None]:
-  """Short BE/trail manage-reply line + optional stop price."""
+  """Short SL-move manage-reply line - matches Manual Algo's own wording
+  (trade_ops.render_result's "sl" action: "🛡 move SL to price") instead
+  of the previous BE/Trail/Stop-labeled variants (🔐/🛰️/🛡), which had no
+  Manual equivalent. Manual's own SL-move notification does not
+  distinguish breakeven from a later trail either - both are just "move
+  SL to X" - so this does not either.
+  """
   symbol = _event_symbol(event)
   cleaned = _clean_message(message, symbol=symbol)
   match = _SL_MOVED_RE.match(cleaned)
-  price_text = None
-  details = ""
-  if match is not None:
-    price_text = match.group("price")
-    details = str(match.group("details") or "").strip()
+  price_text = match.group("price") if match is not None else None
   price_val = _event_float(event, "price", "stop_price", "new_stop")
-  if price_text is None and price_val is not None:
-    price_text = _format_event_price(str(price_val), symbol=symbol)
   if price_val is None and price_text is not None:
     try:
       price_val = float(str(price_text).replace(",", ""))
@@ -1641,38 +1645,25 @@ def _format_be_trail_head_status(event: dict, message: str) -> tuple[str, str, f
     if stop_match is not None:
       try:
         price_val = float(str(stop_match.group(1)).replace(",", ""))
-        price_text = _format_event_price(str(price_val), symbol=symbol)
       except (TypeError, ValueError):
         pass
-  upper = cleaned.upper()
-  if "TO BE" in upper or "BREAK" in upper or upper.startswith("GROUP SL MOVED TO BE"):
-    kind = "BE"
-    icon = "🔐"
-    state = "sl_moved"
-  elif "TRAIL" in upper or "trail" in details.lower():
-    kind = "Trail"
-    icon = "🛰️"
-    state = "sl_moved"
-  else:
-    kind = "Stop"
-    icon = "🛡"
-    state = "sl_moved"
-  if price_text:
-    status = f"{icon} <b>{escape(kind)}</b> · {escape(str(price_text))}"
-  else:
-    status = f"{icon} <b>{escape(kind)}</b>"
-  return status, state, price_val
+  state = "sl_moved"
+  if price_val is None:
+    return "🛡 stop moved", state, None
+  return f"🛡 move SL to {escape(format_price(price_val, symbol))}", state, price_val
 
 
 def _is_manage_be_trail_line(line: str) -> bool:
+  # Recognizes both the current "🛡 move SL to X"/"🛡 stop moved" line and
+  # the legacy 🔐/🛰️/🛡+"<b>Stop</b>" variants it replaced, so an
+  # already-open trade's stored manage text still gets its next SL-move
+  # correctly replaced (not duplicated) instead of getting stuck on the
+  # old line forever.
   stripped = line.lstrip("• ").strip()
   return (
     stripped.startswith("🔐")
     or stripped.startswith("🛰️")
-    or (
-      stripped.startswith("🛡")
-      and ("<b>Stop</b>" in stripped or stripped.startswith("🛡 <b>Stop</b>"))
-    )
+    or stripped.startswith("🛡")
   )
 
 
@@ -1835,12 +1826,17 @@ async def _deliver_compact_position_closed(
       target = highest.group("target").upper() if highest else None
       if target and not _manage_has_tp_target(text, target):
         text = f"{text}\n{tp_line}"
-    if "POSITION CLOSED" not in text:
+    # "POSITION CLOSED" (legacy) recognized too, so an already-open
+    # trade's stored manage text (written before the close line's
+    # wording changed) still correctly suppresses a duplicate append.
+    if _MANAGE_CLOSE_MARKER not in text and "POSITION CLOSED" not in text:
       text = f"{text}\n{close_line}"
     return text
 
   manage_id, manage_text = await _load_manage_message(client, match_id)
-  already_closed = bool(manage_text and "POSITION CLOSED" in manage_text)
+  already_closed = bool(manage_text) and (
+    _MANAGE_CLOSE_MARKER in manage_text or "POSITION CLOSED" in manage_text
+  )
   if manage_text:
     new_text = _compose(manage_text)
   else:
