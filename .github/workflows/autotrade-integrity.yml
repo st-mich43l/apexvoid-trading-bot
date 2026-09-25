@@ -85,7 +85,7 @@ jobs:
 
       - name: S13 Python legacy import inventory
         working-directory: algo-bot
-        run: python s13_legacy_dependency_audit.py > s13-legacy-imports.json
+        run: python s13_legacy_classification.py > s13-legacy-imports.json
 
       - name: Upload S13 legacy import inventory
         if: always()
