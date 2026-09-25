@@ -63,6 +63,43 @@ Confirmed dependencies at this baseline include:
 
 Do not bulk-delete `app/analysis` or `app/scalping`.
 
+## Classified inventory (S13B-1)
+
+`algo-bot/s13_legacy_classification.py` extends the S13A import list with a
+reviewed role for every legacy module, per-edge classification, static
+reachability from the real process entrypoints, and separate scans for
+dynamic imports, lazy function-scope imports, startup tasks and Redis/Kafka
+contract names. The full generated table is
+[`s13-legacy-inventory.md`](s13-legacy-inventory.md); CI uploads the JSON.
+
+Findings at this baseline (63 modules, 32,958 lines):
+
+- **Not all of `app.scalping` is technical detection.** `outcomes`, `risk`,
+  `lifecycle`, `models` and `telemetry` are outcome accounting used by
+  `autotrade/stats_ingestion.py` and the expiry sweeper; `context`,
+  `activation` and `rollout` are execution-policy inputs. They are classified
+  *retain* and must not be swept up by a directory delete.
+- **Five modules are unreachable from every entrypoint** (`lab_event_builder`,
+  `mad_replay`, `replay_lab`, `performance`, and the `mad_phase` re-export).
+  They are offline research/compat, have their own tests and docs, and are
+  retained. A guard test fails if a *new* module becomes unreachable without
+  review.
+- **One legacy background loop starts at boot**: `bar_event_dispatcher_loop`
+  (which drives the scanner and the M1 scalp runtime). The Go consumer loop is
+  conditional and opt-in.
+- **No dynamic import can reach a legacy module** (the only `__import__` call
+  is `typing`); there are 29 function-scope (lazy) imports, all listed.
+- **19 production modules import a `replace_with_go` module.** These are the
+  actual work for S13C, not the two directories as a whole: the detector-facing
+  ones are `autotrade/worker.py`, `zone_execution_cutover.py`, `trend.py`,
+  `scale_context.py`, `structural_barriers.py`, `structural_target_room.py`,
+  `strategy_registry.py`, `strategy_match.py`, `entry_activation.py`,
+  `multi_match.py`, `map_strategy.py`; the presentation-side ones
+  (`setup_card.py`, `delivery.py`, `setups_report.py`, `bot/handlers/dm.py`,
+  `analysis/market_map_delivery.py`) need Go facts or an "unavailable" state.
+
+Regenerate with `python s13_legacy_classification.py --markdown` from `algo-bot/`.
+
 ## Sequenced retirement
 
 1. **S13A — boundary and dependency inventory (this PR).** Protect
