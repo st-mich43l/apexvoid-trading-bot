@@ -65,3 +65,43 @@ Enable `go_shadow` only in a dedicated configuration/deployment change after:
 Rollback is configuration-only: set `consumer_enabled: false` (or retain
 `mode: python`) and redeploy. Existing ledger rows remain audit evidence;
 there is no execution state to unwind.
+
+## S13B: additive `technical_context` (policy inputs from Go)
+
+The S12B shadow recorded six missing inputs. `analysis.opportunity.v1` now
+carries an **additive, optional** `technical_context` block, assigned by
+`SymbolWorker` at the same observation boundary as `timeframe` (never by a
+strategy) from the exact closed bar that first made the setup actionable:
+
+| Field | Meaning | Proof |
+|---|---|---|
+| `atr` | canonical ATR of `timeframe` as of the observed bar | engine test: equals `CanonicalATR(candles[:i+1])` for every live opportunity on real XAU data (no look-ahead, no recompute drift) |
+| `reference_price`, `reference_time` | close / open time of the observed bar | equals the real bar's close; `reference_time == created_at` |
+| `bias` (optional) | confirmed structural bias; **omitted**, never a guessed neutral | schema rejects `NEUTRAL` |
+
+Resolution of the S12B gap list:
+
+1. *current executable price / spread* — **deliberately not carried.** A live
+   quote is the policy layer's own concern; embedding one in a technical event
+   would be stale on arrival. The schema forbids spread/account fields.
+2. *ATR* — provided (above).
+3. *confluence components* — the strategy's own `evidence` and `quality`
+   components are the facts; there is no universal score. The Python mapping
+   from these to the legacy integer `confluence` is an adapter concern and is
+   reviewed there (S13B-4), not smuggled into the contract.
+4. *source-structure geometry* — the entry band **is** the zone/level band for
+   zone-anchored strategies; `strategy` + `direction` identify the kind.
+5. *execution confirmation* — a Go opportunity is a resting technical thesis,
+   not a confirmed reaction; the existing V8 execution-confirmation machinery
+   (quote-in-zone, WAITING_RETEST) stays Python policy.
+6. *strategy routing* — a reviewed per-scope profile in the adapter, not data.
+
+When the block is absent (e.g. ATR not yet available, or a retained pre-S13B
+event) consumers must fail closed. **Deployment order matters**: `algo-bot`'s
+decoder forbids unknown fields, so a Python build without this change would
+reject every new opportunity; the Python consumer is off by default, but roll
+`algo-bot` out first.
+
+The bytes are pinned in `contracts/analysis/examples/opportunity-v1-technical-context.json`.
+Go's contract test regenerates and compares them (`UPDATE_GOLDEN=1` to refresh);
+algo-bot's decoder test parses the same file, so neither side can drift alone.

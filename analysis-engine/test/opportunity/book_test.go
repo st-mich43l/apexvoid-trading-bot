@@ -1,6 +1,7 @@
 package opportunity_test
 
 import (
+	"math"
 	"testing"
 
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
@@ -249,5 +250,55 @@ func TestAtFirstObservationSeparatesFormationFromActionableCreation(t *testing.T
 	}
 	if observed.FormedAt != 100 || observed.CreatedAt != 300 || observed.ExpiresAt != 660 {
 		t.Fatalf("unexpected timing migration: %+v", observed)
+	}
+}
+
+func technical() *opportunity.TechnicalContext {
+	return &opportunity.TechnicalContext{ATR: 3.6, ReferencePrice: 2001, ReferenceTime: 10, BiasDirection: market.Sell, BiasLayer: "internal"}
+}
+
+func TestCandidate_TechnicalContextMustBeFinitePositiveAndBiasMustBeDirectional(t *testing.T) {
+	for name, mutate := range map[string]func(*opportunity.TechnicalContext){
+		"zero ATR":       func(c *opportunity.TechnicalContext) { c.ATR = 0 },
+		"negative ATR":   func(c *opportunity.TechnicalContext) { c.ATR = -1 },
+		"NaN reference":  func(c *opportunity.TechnicalContext) { c.ReferencePrice = math.NaN() },
+		"zero reference": func(c *opportunity.TechnicalContext) { c.ReferencePrice = 0 },
+		"bad time":       func(c *opportunity.TechnicalContext) { c.ReferenceTime = -1 },
+		"neutral bias":   func(c *opportunity.TechnicalContext) { c.BiasDirection = "NEUTRAL" },
+	} {
+		c := candidate("opp-tech")
+		c.Technical = technical()
+		mutate(c.Technical)
+		if err := c.Validate(); err == nil {
+			t.Errorf("%s: expected Validate to reject the technical context", name)
+		}
+	}
+	ok := candidate("opp-tech-ok")
+	ok.Technical = technical()
+	if err := ok.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	// Absent facts stay valid: the consumer, not the engine, fails closed.
+	if err := candidate("opp-none").Validate(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestBook_DoesNotLeakOrShareTheTechnicalContextPointer(t *testing.T) {
+	book := opportunity.NewBook()
+	c := candidate("opp-clone")
+	c.Technical = technical()
+	if _, err := book.Observe(c, 11); err != nil {
+		t.Fatal(err)
+	}
+	c.Technical.ATR = 999 // caller mutates its own copy after Observe
+	record, _ := book.Record("opp-clone")
+	if record.Candidate.Technical.ATR != 3.6 {
+		t.Fatalf("stored record shares the caller's pointer: %+v", record.Candidate.Technical)
+	}
+	record.Candidate.Technical.ATR = 1 // and a returned copy cannot write back
+	live := book.Live()
+	if live[0].Technical.ATR != 3.6 {
+		t.Fatalf("Record() leaked a mutable pointer into the book: %+v", live[0].Technical)
 	}
 }

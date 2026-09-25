@@ -11,6 +11,7 @@ import (
 
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/config"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/engine"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/indicator"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/marketdata"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
@@ -181,5 +182,63 @@ func TestEngine_BootstrapBuildsStateWithoutRepublishingHistory(t *testing.T) {
 	opportunities, _, _ := client.snapshot()
 	if len(opportunities) != 0 || len(invalidations) != 0 || len(calls) != 0 {
 		t.Fatalf("bootstrap must not publish historical lifecycle transitions, got calls=%v", calls)
+	}
+}
+
+// TestEngine_EveryLiveOpportunityCarriesCausalTechnicalFacts proves the S13B
+// policy inputs are the engine's own, causal facts and not placeholders: for
+// every opportunity produced from real production XAU data, ATR is exactly the
+// canonical ATR of the candles up to and including the observed bar, the
+// reference price is that bar's real close, and nothing looks past it.
+func TestEngine_EveryLiveOpportunityCarriesCausalTechnicalFacts(t *testing.T) {
+	repoRoot := filepath.Join("..", "..", "..")
+	doc, err := config.ResolveDocument(filepath.Join(repoRoot, "config", "apexvoid.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	settings, err := engine.LoadSettings(doc, "M5", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := engine.NewEngine(nil)
+	if err := e.Register("XAU", settings); err != nil {
+		t.Fatal(err)
+	}
+	candles := loadRealXAUFixture(t)
+	index := make(map[int64]int, len(candles))
+	var last engine.AnalysisSnapshot
+	for i, c := range candles {
+		index[c.Time] = i
+		snap, err := e.Dispatch(marketdata.BarEvent{Symbol: "XAU", Timeframe: "M5", Candle: c})
+		if err != nil {
+			t.Fatal(err)
+		}
+		last = snap
+	}
+	if len(last.Opportunities) == 0 {
+		t.Fatal("no live opportunities to check")
+	}
+	for _, opp := range last.Opportunities {
+		tech := opp.Technical
+		if tech == nil {
+			t.Fatalf("%s carries no technical context", opp.ID)
+		}
+		i, ok := index[tech.ReferenceTime]
+		if !ok {
+			t.Fatalf("%s reference time %d is not a real bar", opp.ID, tech.ReferenceTime)
+		}
+		if tech.ReferenceTime != opp.CreatedAt {
+			t.Errorf("%s: reference %d != created_at %d", opp.ID, tech.ReferenceTime, opp.CreatedAt)
+		}
+		if tech.ReferencePrice != candles[i].Close {
+			t.Errorf("%s: reference price %v != real close %v", opp.ID, tech.ReferencePrice, candles[i].Close)
+		}
+		series, err := indicator.CanonicalATR(candles[:i+1], settings.ATR.Length, settings.ATR.Algorithm)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if want := series[len(series)-1]; tech.ATR != want {
+			t.Errorf("%s: ATR %v != canonical ATR %v over candles[:%d] (look-ahead or recompute drift)", opp.ID, tech.ATR, want, i+1)
+		}
 	}
 }

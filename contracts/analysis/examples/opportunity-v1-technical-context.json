@@ -1,0 +1,64 @@
+{
+  "config_fingerprint": "fixture",
+  "config_version": 3,
+  "correlation_id": "corr-golden-1",
+  "event_id": "evt-golden-1",
+  "event_type": "analysis.opportunity.v1",
+  "event_version": 1,
+  "occurred_at": 1789961100,
+  "payload": {
+    "algorithm_version": {
+      "liquidity": "v1",
+      "structure": "v2"
+    },
+    "created_at": 1789961100,
+    "direction": "SELL",
+    "entry": {
+      "high": 4356,
+      "low": 4352.5
+    },
+    "evidence": [
+      {
+        "code": "m5_supply_zone_fresh"
+      },
+      {
+        "code": "m5_supply_zone_relevance_immediate"
+      }
+    ],
+    "expires_at": 1790047500,
+    "formed_at": 1789960500,
+    "id": "opp_golden_supply_xau",
+    "invalidation": {
+      "label": "supply_zone_invalidated",
+      "price": 4358.75
+    },
+    "quality": {
+      "components": {
+        "zone_strength_quality": 0.9
+      },
+      "overall": 0.82
+    },
+    "strategy": "supply",
+    "symbol": "XAU",
+    "targets": [
+      {
+        "price": {
+          "label": "nearest_sell_side_liquidity",
+          "price": 4344
+        }
+      }
+    ],
+    "technical_context": {
+      "atr": 3.61,
+      "bias": {
+        "direction": "SELL",
+        "layer": "internal"
+      },
+      "reference_price": 4351.9,
+      "reference_time": 1789961100
+    },
+    "timeframe": "M5"
+  },
+  "produced_at": 1789961101,
+  "producer": "apexvoid-analysis-engine"
+}
