@@ -110,10 +110,6 @@ def drain_discovery_observations() -> dict[str, int]:
   return counts
 
 
-def _record_discovery_rejection(reason: str) -> None:
-  _discovery_rejections[reason] += 1
-
-
 def _record_discovery_observation(reason: str) -> None:
   _discovery_observations[reason] += 1
 
@@ -894,24 +890,6 @@ def build_context(
     regime=_exec_regime(analysis_ctx, tf),
     analysis=analysis_ctx,
     metric_sink=metric_sink,
-  )
-
-
-def replay_build_context(
-  symbol: str,
-  tf: str,
-  frames: dict[str, pd.DataFrame],
-  settings: DetectorSettings,
-  htf_order: list[str],
-) -> DetectionContext:
-  """Point-in-time structure for offline replay and research."""
-  return build_context(
-    symbol,
-    tf,
-    frames,
-    settings,
-    htf_order,
-    causal_structure=True,
   )
 
 
