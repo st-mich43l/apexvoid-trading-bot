@@ -1350,8 +1350,34 @@ public sealed class AutoTradeEngine(
     }
     _states.Remove(state.PositionId);
     await store.DeletePositionAsync(state.PositionId, cancellationToken);
+    // This leg being fully closed does not mean the GROUP is closed - a
+    // manual/auto ladder's other legs can still be resting or open. Firing
+    // "position_closed" (renders as the subscriber-facing "POSITION CLOSED"
+    // headline) for a non-final leg would falsely announce the whole trade
+    // is over while a sibling is still live. "leg_closed" is Telegram-silent
+    // (TELEGRAM_SILENT_LIFECYCLE_TYPES in delivery.py) but keeps every field
+    // this call already computes, so metrics/journal/audit are unaffected -
+    // only the premature subscriber-facing card is suppressed. The real
+    // terminal card still fires as "position_closed" on whichever leg
+    // actually is last, unchanged from today.
+    //
+    // Scoped to Stream == "algo_auto" only: /auto_close_all deliberately
+    // reuses eventType "position_closed" (never "manual_closed") even for a
+    // manual /algo position (see this method's own callers), specifically
+    // so manual_execution.py's generic "position_closed" dispatch still
+    // resolves it - that handler already defers its OWN Telegram/ledger
+    // work correctly via remaining_volume/_handle_group_result, but it also
+    // pops the closed position_id from its local positions cache ONLY on a
+    // recognized "position_closed"/"manual_closed" type. Substituting
+    // "leg_closed" there would silently starve that cache cleanup, since
+    // manual_execution.py has no handler for this new type at all.
+    var groupFullyClosed = !_states.Values.Any(item => GroupId(item) == groupId);
+    var publishedEventType =
+      eventType == "position_closed" && !groupFullyClosed && state.Stream == "algo_auto"
+        ? "leg_closed"
+        : eventType;
     await PublishAsync(
-      eventType,
+      publishedEventType,
       message,
       cancellationToken,
       candidateId: candidateId ?? state.CandidateId,
@@ -1375,7 +1401,7 @@ public sealed class AutoTradeEngine(
       groupInitialVolume: groupInitialVolume,
       lotSize: symbol.LotSize
     );
-    if (!_states.Values.Any(item => GroupId(item) == groupId))
+    if (groupFullyClosed)
     {
       await PublishAsync(
         "group_result",
@@ -6705,8 +6731,34 @@ public sealed class AutoTradeEngine(
             (string?)null
           ),
         };
+        // Same reasoning as ApplyOwnerCloseAsync's identical guard: this
+        // leg being confirmed missing does not mean every sibling leg of
+        // the same group is also gone. Firing "position_closed" (the
+        // subscriber-facing "POSITION CLOSED" headline) here would falsely
+        // announce the whole trade is over while a sibling is still open
+        // or not yet reconciled this pass. "leg_closed" is Telegram-silent
+        // but keeps every field this call already computes - only the
+        // premature card is suppressed. Whichever leg turns out to
+        // genuinely be last still fires "position_closed" unchanged.
+        //
+        // Scoped to Stream == "algo_auto" only, same reasoning as
+        // ApplyOwnerCloseAsync's identical guard: manual_execution.py's
+        // dispatch has no handler for "leg_closed" and depends on receiving
+        // "position_closed" for every leg (including a non-final one) to
+        // pop its position_id from the local positions cache - it already
+        // defers its own Telegram/ledger work correctly via
+        // remaining_volume/_handle_group_result, so substituting the event
+        // type here would only starve that cache cleanup, not fix anything
+        // for Manual Algo.
+        var trackedGroupStillOpen = trackedGroup.Any(item =>
+          !confirmedMissingPositionIds.Contains(item.PositionId)
+        );
+        var groupFullyClosed =
+          !_states.Values.Any(item => GroupId(item) == groupId)
+          && !trackedGroupStillOpen;
+        var isAutoStream = state.Stream == "algo_auto";
         await PublishAsync(
-          "position_closed",
+          groupFullyClosed || !isAutoStream ? "position_closed" : "leg_closed",
           closeMessage,
           cancellationToken,
           state.CandidateId,
@@ -6732,13 +6784,7 @@ public sealed class AutoTradeEngine(
             : null,
           legEntryPrice: deepestEntry
         );
-        var trackedGroupStillOpen = trackedGroup.Any(item =>
-          !confirmedMissingPositionIds.Contains(item.PositionId)
-        );
-        if (
-          !_states.Values.Any(item => GroupId(item) == groupId)
-          && !trackedGroupStillOpen
-        )
+        if (groupFullyClosed)
         {
           await PublishAsync(
             "group_result",

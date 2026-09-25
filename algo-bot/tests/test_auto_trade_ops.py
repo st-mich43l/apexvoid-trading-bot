@@ -66,6 +66,7 @@ def test_execution_lifecycle_cards_suppress_noise_keep_essentials():
     "broker_fatal",
     "configuration_health",
     "config_health",
+    "leg_closed",
   ):
     assert delivery.render_auto_trade_event({
       "type": silent,
@@ -100,6 +101,28 @@ def test_execution_lifecycle_cards_suppress_noise_keep_essentials():
   assert "WAITING FOR PRICE" in waiting
   assert "POSITION CLOSED" in closed
   assert rejected is None
+
+
+def test_leg_closed_never_renders_position_closed_headline():
+  """AutoTradeEngine.cs emits "leg_closed" instead of "position_closed" for
+  a non-final leg of a multi-leg algo_auto group (sibling still open) - the
+  subscriber-facing "POSITION CLOSED" headline must stay reserved for
+  whichever leg is genuinely last, matching Manual Algo's own already-
+  correct "defer to the group's authoritative close" behavior.
+  """
+  assert delivery.render_auto_trade_event({
+    "type": "leg_closed",
+    "group_id": "auto-scale-in",
+    "message": "position closed at broker: stop loss / take profit",
+  }) is None
+  # The real terminal leg still renders exactly as before.
+  final = delivery.render_auto_trade_event({
+    "type": "position_closed",
+    "group_id": "auto-scale-in",
+    "message": "position closed at broker: stop loss / take profit",
+  })
+  assert final is not None
+  assert "POSITION CLOSED" in final
 
 
 def test_position_closed_labels_broker_stop_loss_or_take_profit():
