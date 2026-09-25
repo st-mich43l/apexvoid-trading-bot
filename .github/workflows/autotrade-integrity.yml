@@ -83,6 +83,17 @@ jobs:
         working-directory: algo-bot
         run: python -m vulture app tests/vulture_whitelist.py --min-confidence 90
 
+      - name: S13 Python legacy import inventory
+        working-directory: algo-bot
+        run: python s13_legacy_dependency_audit.py > s13-legacy-imports.json
+
+      - name: Upload S13 legacy import inventory
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: s13-legacy-import-inventory
+          path: algo-bot/s13-legacy-imports.json
+
   csharp:
     name: C# autotrade suite
     runs-on: ubuntu-latest
