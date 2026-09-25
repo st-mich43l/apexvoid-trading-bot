@@ -207,6 +207,7 @@ func (w *SymbolWorker) ApplyWithResult(event marketdata.BarEvent) (AnalysisSnaps
 			return AnalysisSnapshot{}, result, timingErr
 		}
 		candidate.ObservedTimeframe = event.Timeframe
+		candidate.Technical = w.technicalContext(event)
 		observed, obsErr := w.state.Opportunities.Observe(candidate, event.Candle.Time)
 		if obsErr != nil {
 			doneOpp()
@@ -283,4 +284,28 @@ func (w *SymbolWorker) rebuildContext() {
 		}
 	}
 	w.state.Context = context.Build(w.state.Symbol, w.settings.PrimaryTimeframe, perTF)
+}
+
+// technicalContext assembles the policy-input facts for the bar that just
+// closed (S13B): the canonical ATR of that bar's own timeframe, that bar's
+// close as the geometric reference, and the engine's structural bias. Returns
+// nil — never a placeholder — when the ATR series is not yet available, so a
+// consumer sees "unavailable" and fails closed instead of guessing.
+func (w *SymbolWorker) technicalContext(event marketdata.BarEvent) *opportunity.TechnicalContext {
+	atrSeries := w.state.Measurements.ATR(event.Timeframe)
+	if len(atrSeries) == 0 {
+		return nil
+	}
+	atr := atrSeries[len(atrSeries)-1]
+	if !(atr > 0) || !(event.Candle.Close > 0) {
+		return nil
+	}
+	facts := &opportunity.TechnicalContext{
+		ATR: atr, ReferencePrice: event.Candle.Close, ReferenceTime: event.Candle.Time,
+	}
+	if bias := w.state.Context.Bias; bias.Direction.IsValid() {
+		facts.BiasDirection = bias.Direction
+		facts.BiasLayer = bias.Layer.String()
+	}
+	return facts
 }
