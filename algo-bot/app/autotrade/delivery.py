@@ -135,6 +135,14 @@ TELEGRAM_SILENT_LIFECYCLE_TYPES = frozenset({
   # card under one-root-card mode — progress edits the root instead.
   "plan_published",
   "v8_order_submitted",
+  # A single leg of a multi-leg group closing is not the group closing -
+  # AutoTradeEngine.cs (ApplyOwnerCloseAsync and the reconcile-path missing-
+  # position handler) emits this instead of "position_closed" whenever
+  # sibling legs are still open/untracked-missing, so the subscriber-facing
+  # "POSITION CLOSED" headline is reserved for the leg that is genuinely
+  # last. Metrics/journal/audit still see every field via the normal
+  # emission path; only the Telegram card is suppressed.
+  "leg_closed",
 })
 # Preflight route outcomes remain in Redis, route history, metrics, and
 # /auto_status, but are operator diagnostics rather than Telegram content.
