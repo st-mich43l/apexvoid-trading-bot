@@ -1429,10 +1429,12 @@ async def test_ensure_plan_published_root_card_threads_tp_sl_close_replies(monke
   assert len(calls) == 3
   assert all(c[1]["reply_to"] == 6060 for c in calls)
   assert "🎯" in calls[0][0] and "TP1" in calls[0][0]
-  assert any("BE" in text or "Trail" in text or "Stop" in text for text, _ in calls)
-  assert "POSITION CLOSED" in calls[-1][0]
+  assert any("move SL" in text for text, _ in calls)
+  assert "closed —" in calls[-1][0]
   assert "TP3" in calls[-1][0] or "+81.0" in calls[-1][0]
-  assert deleted == [(123, 7001), (123, 7002)]
+  # position_closed sweeps every still-open manage message (the TP1 and
+  # BE/trail messages) from a Redis set, which has no defined order.
+  assert set(deleted) == {(123, 7001), (123, 7002)}
   # Root forming card itself is never deleted here.
   assert all(d[1] != 6060 for d in deleted)
   # Trailing / BE update the manage reply; Trade-area Stop stays as published.
@@ -1639,5 +1641,5 @@ async def test_ensure_plan_published_root_card_rewrites_mismatched_strategy_body
   assert edited
   card = await setup_card.load_forming_card(client, setup_id)
   assert card is not None
-  assert "🟢 <b>BUY · Key Level</b>" in card["text"]
+  assert "📈 <b>BUY · Key Level</b>" in card["text"]
   assert "PLAN PUBLISHED" not in card["text"]
