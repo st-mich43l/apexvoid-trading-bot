@@ -89,6 +89,27 @@
     },
     "formed_at": { "type": "integer", "description": "Unix seconds when the underlying technical primitive formed. Additive V1 field: current producers always emit it; consumers of retained pre-S11 V1 events must fall back to created_at when absent." },
     "created_at": { "type": "integer", "description": "Unix seconds when the opportunity was first actionable and observed." },
-    "expires_at": { "type": "integer", "description": "Unix seconds." }
+    "expires_at": { "type": "integer", "description": "Unix seconds." },
+    "technical_context": {
+      "type": "object",
+      "description": "Additive V1 field (S13B): engine-owned policy inputs for the closed bar that first made the opportunity actionable, so a consumer never recomputes ATR/structure from raw OHLC. Optional: when absent a consumer MUST treat policy inputs as unavailable and fail closed. Never carries a quote, spread, account or confluence-score value.",
+      "additionalProperties": false,
+      "required": ["atr", "reference_price", "reference_time"],
+      "properties": {
+        "atr": { "type": "number", "exclusiveMinimum": 0, "description": "Canonical ATR of `timeframe` as of the observed bar." },
+        "reference_price": { "type": "number", "exclusiveMinimum": 0, "description": "Close of the observed bar; a geometric reference, not an executable price." },
+        "reference_time": { "type": "integer", "minimum": 0, "description": "Open time of the observed bar, Unix seconds." },
+        "bias": {
+          "type": "object",
+          "description": "Confirmed structural bias (primary-timeframe derived). Omitted when the engine has none; never a guessed neutral.",
+          "additionalProperties": false,
+          "required": ["direction", "layer"],
+          "properties": {
+            "direction": { "type": "string", "enum": ["BUY", "SELL"] },
+            "layer": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    }
   }
 }
