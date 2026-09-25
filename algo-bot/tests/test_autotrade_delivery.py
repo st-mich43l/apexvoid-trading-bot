@@ -319,7 +319,7 @@ async def test_mark_forming_card_position_activated_rewrites_head_and_stop(
   # The header alone carries the ORDER ACTIVATED text now - the status
   # slot beneath it collapses to invisible instead of repeating it.
   assert card["text"].count("ORDER ACTIVATED") == 1
-  assert "• <b>Stop:</b> <b>3,395.50</b>" in card["text"]
+  assert "🛡 SL:     <b>3,395.50</b>" in card["text"]
   assert "SL</b>" not in card["text"]
 
 

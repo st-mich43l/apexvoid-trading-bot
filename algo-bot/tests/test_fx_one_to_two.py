@@ -747,8 +747,8 @@ def test_root_card_r_multiples_use_the_configured_ladder_not_card_prices(
     stop_price=209.369,
     target_prices=(209.013, 208.835),
   )
-  assert "(+1R)</b>" in text
-  assert "(+2R)</b>" in text
+  assert "<b>+1R</b>" in text
+  assert "<b>+2R</b>" in text
 
   xau_match = replace(
     _fx_match("XAU"),
@@ -763,10 +763,10 @@ def test_root_card_r_multiples_use_the_configured_ladder_not_card_prices(
     stop_price=4396.0,
     target_prices=(4380.0, 4376.0, 4368.0, 4360.0),
   )
-  assert "• <b>TP1:</b> <b>4,380.00 (+1R)</b>" in xau_text
-  assert "• <b>TP2:</b> <b>4,376.00 (+2R)</b>" in xau_text
-  assert "• <b>TP3:</b> <b>4,368.00 (+3R)</b>" in xau_text
-  assert "• <b>TP4:</b> <b>4,360.00 (+4R)</b>" in xau_text
+  assert "💰 TP1:   <b>4,380</b>  ·  <b>+1R</b>" in xau_text
+  assert "💰 TP2:   <b>4,376</b>  ·  <b>+2R</b>" in xau_text
+  assert "💰 TP3:   <b>4,368</b>  ·  <b>+3R</b>" in xau_text
+  assert "💰 TP4:   <b>4,360</b>  ·  <b>+4R</b>" in xau_text
 
 
 def test_xau_gets_a_smaller_opposing_barrier_buffer_than_fx():

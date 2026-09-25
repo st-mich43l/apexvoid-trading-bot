@@ -159,6 +159,9 @@ def test_strategy_match_math_round_trip_and_card_line():
   assert "v=+0.41" in line
   assert "PD 0.37" in line
 
+  # Math is scanner-only diagnostic detail, dropped from the shared
+  # entry-card design (Phase S12) - _format_math_line above is still the
+  # real computation, just no longer rendered onto the card itself.
   card = format_plan_published_root_card(match)
-  assert "📐 <b>Math</b>" in card
-  assert "fib 0.618" in card
+  assert "📐 <b>Math</b>" not in card
+  assert "fib 0.618" not in card

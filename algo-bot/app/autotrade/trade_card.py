@@ -34,16 +34,22 @@ from app.core.symbols import digits_for, pip_for
 from app.signals.fx_manual_algo import uses_entry_price_display
 
 
-def format_price(value: float, symbol: str) -> str:
-  # setup_card.py's own card_price_digits() falls back to 2 on an unknown
-  # symbol (live 2026-08-21 GBPUSD incident: a hard-coded XAU digit count
-  # rendered every price as "1.36") - kept here so both callers get the
-  # same defensive floor instead of Auto Algo losing it by switching to
-  # this shared formatter.
-  try:
-    digits = int(digits_for(symbol))
-  except KeyError:
-    digits = 2
+def format_price(value: float, symbol: str, *, digits: int | None = None) -> str:
+  """``digits`` lets a caller that already resolved its own instrument
+  digit count (e.g. setup_card.card_price_digits, which callers/tests
+  patch independently of this module's own digits_for import) pass it
+  through instead of this function re-deriving it a second, unpatchable
+  way.
+  """
+  if digits is None:
+    # setup_card.py's own card_price_digits() falls back to 2 on an
+    # unknown symbol (live 2026-08-21 GBPUSD incident: a hard-coded XAU
+    # digit count rendered every price as "1.36") - kept here too so a
+    # caller that doesn't pass digits explicitly still gets that floor.
+    try:
+      digits = int(digits_for(symbol))
+    except KeyError:
+      digits = 2
   return f"{value:,.{digits}f}".rstrip("0").rstrip(".")
 
 
@@ -59,7 +65,9 @@ def conservative_entry_reference(
   return low if str(direction).upper() == "SELL" else edge_high
 
 
-def format_entry_line(symbol: str, low: float, high: float | None) -> str:
+def format_entry_line(
+  symbol: str, low: float, high: float | None, *, digits: int | None = None,
+) -> str:
   """"Entry Zone: low - high" or "Entry Price: low" per instrument config.
 
   ``uses_entry_price_display`` already applies uniformly by instrument
@@ -69,33 +77,48 @@ def format_entry_line(symbol: str, low: float, high: float | None) -> str:
   """
   end = low if high is None else high
   if uses_entry_price_display(symbol, low, end):
-    return f"⚡️ Entry Price:  <b>{format_price(low, symbol)}</b>"
+    return f"⚡️ Entry Price:  <b>{format_price(low, symbol, digits=digits)}</b>"
   return (
-    f"⚡️ Entry Zone:  <b>{format_price(low, symbol)} - "
-    f"{format_price(end, symbol)}</b>"
+    f"⚡️ Entry Zone:  <b>{format_price(low, symbol, digits=digits)} - "
+    f"{format_price(end, symbol, digits=digits)}</b>"
   )
 
 
-def format_sl_line(symbol: str, sl: float, risk_reference: float) -> str:
+def format_sl_line(
+  symbol: str,
+  sl: float,
+  risk_reference: float,
+  *,
+  digits: int | None = None,
+  pip_size: float | None = None,
+) -> str:
   """"SL: price · risk N pips", measured from the CURRENT sl/reference -
   see format_target_line's own doc comment for why targets use a
   separately pinned original risk instead.
   """
+  resolved_pip = pip_for(symbol) if pip_size is None else pip_size
   risk = abs(risk_reference - sl)
-  risk_pips = round(risk / pip_for(symbol)) if pip_for(symbol) > 0 else 0
+  risk_pips = round(risk / resolved_pip) if resolved_pip > 0 else 0
   return (
-    f"🛡 SL:     <b>{format_price(sl, symbol)}</b>  ·  "
+    f"🛡 SL:     <b>{format_price(sl, symbol, digits=digits)}</b>  ·  "
     f"risk <b>{risk_pips} pips</b>"
   )
 
 
-def format_target_line(index: int, symbol: str, price: float, suffix: str | None) -> str:
+def format_target_line(
+  index: int,
+  symbol: str,
+  price: float,
+  suffix: str | None,
+  *,
+  digits: int | None = None,
+) -> str:
   """"TPn: price · suffix" - suffix (an R-multiple, a pip offset, or None)
   is the caller's own, since Manual and Auto Algo compute it from
   different authoritative sources (see module doc comment).
   """
   label = f"TP{index + 1}"
-  price_text = format_price(price, symbol)
+  price_text = format_price(price, symbol, digits=digits)
   if suffix:
     return f"💰 {label}:   <b>{price_text}</b>  ·  <b>{suffix}</b>"
   return f"💰 {label}:   <b>{price_text}</b>"

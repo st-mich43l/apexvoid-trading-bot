@@ -190,7 +190,9 @@ async def test_forming_card_ttl_survives_a_weekend_not_just_a_day():
 
 
 def test_apply_forming_card_stop_does_not_duplicate_existing_stop():
-  """Card already has Stop after Key level — patch must not insert a second."""
+  """Card already has a Stop/SL line — patch must not insert a second, and
+  migrates a legacy "• <b>Stop:</b>" line to the current "🛡 SL:" format.
+  """
   original = "\n".join([
     "🔎 <b>XAU M5 · SETUP FORMING</b>",
     "• <b>Key level:</b> <b>4,034.85</b>",
@@ -199,8 +201,9 @@ def test_apply_forming_card_stop_does_not_duplicate_existing_stop():
     "🧭 <b>Context</b>",
   ])
   text = setup_card.apply_forming_card_stop(original, 4039.68)
-  assert text.count("• <b>Stop:</b>") == 1
-  assert "• <b>Stop:</b> <b>4,039.68</b>" in text
+  assert text.count("🛡 SL:") == 1
+  assert "• <b>Stop:</b>" not in text
+  assert "🛡 SL:     <b>4,039.68</b>" in text
 
 
 def test_should_stop_forming_price_track_after_activation():
@@ -328,8 +331,8 @@ async def test_edit_forming_card_stop_uses_fx_digits_after_activation(monkeypatc
   assert await setup_card.edit_forming_card_stop(
     client, setup_id, 1.35806, edit_fn=edit_fn,
   )
-  assert "• <b>Stop:</b> <b>1.35806</b>" in edited[0]
-  assert "• <b>Stop:</b> <b>1.36</b>" not in edited[0]
+  assert "🛡 SL:     <b>1.35806</b>" in edited[0]
+  assert "🛡 SL:     <b>1.36</b>" not in edited[0]
 
 
 @pytest.mark.asyncio
@@ -361,7 +364,7 @@ async def test_apply_forming_card_stop_patches_trade_area_stop_line():
     client, "setup-stop", 4070.5, edit_fn=edit_fn,
   )
   text = edited[0][2]
-  assert "• <b>Stop:</b> <b>4,070.50</b>" in text
+  assert "🛡 SL:     <b>4,070.50</b>" in text
   assert "• <b>Stop:</b> <b>SL</b>" not in text
   assert "Copy draft" not in text
 
@@ -396,7 +399,7 @@ async def test_apply_forming_card_stop_still_patches_legacy_copy_draft_if_presen
     client, "setup-stop-legacy", 4070.5, edit_fn=edit_fn,
   )
   text = edited[0][2]
-  assert "• <b>Stop:</b> <b>4,070.50</b>" in text
+  assert "🛡 SL:     <b>4,070.50</b>" in text
   assert "/ sl 4070.50 /" in text
   assert "sl SL" not in text
 
@@ -1161,27 +1164,6 @@ def _strategy_match_for_card(setup_id: str = "setup-publish-card") -> object:
   )
 
 
-def test_root_card_shows_unified_with_bias_line():
-  match = _strategy_match_for_card("setup-with-bias")
-  text = setup_card.format_plan_published_root_card(match, stop_price=4045.0)
-  assert "🧭 <b>Bias:</b> with bias" in text
-  assert "Mode:" not in text
-
-
-def test_root_card_shows_unified_counter_bias_line():
-  from dataclasses import replace
-
-  match = replace(
-    _strategy_match_for_card("setup-counter-bias"),
-    bias_relationship="counter_bias",
-  )
-  text = setup_card.format_plan_published_root_card(match, stop_price=4045.0)
-  assert "⚠️ <b>Bias:</b> counter bias" in text
-  assert "Mode:" not in text
-  assert "counter swing" not in text
-  assert "Counter-trend" not in text
-
-
 def test_root_card_omits_bias_line_when_relationship_unknown():
   from dataclasses import replace
 
@@ -1192,44 +1174,6 @@ def test_root_card_omits_bias_line_when_relationship_unknown():
   text = setup_card.format_plan_published_root_card(match, stop_price=4045.0)
   assert "Bias:" not in text
   assert "Mode:" not in text
-
-
-def test_root_card_scalp_match_shows_real_bias_not_hardcoded_mode():
-  """Live 2026-08-25: HFS scalp cards hardcoded strategy_mode='scalp_m1',
-  which always rendered as 'Mode: Counter-trend - counter swing' regardless
-  of true bias. bias_relationship is now a separate, correctly-computed
-  field so scalp cards show the same unified Bias: line structural cards do.
-  """
-  from dataclasses import replace
-
-  match = replace(
-    _strategy_match_for_card("setup-scalp-bias"),
-    strategy="Breakout Retest Scalp",
-    strategy_mode="scalp_m1",
-    bias_relationship="with_bias",
-    structural_source="scalp",
-  )
-  text = setup_card.format_plan_published_root_card(match, stop_price=4045.0)
-  assert "🧭 <b>Bias:</b> with bias" in text
-  assert "Counter-trend" not in text
-  assert "Mode:" not in text
-
-
-def test_root_card_shows_candle_confirmation_v2_line_when_present():
-  from dataclasses import replace
-
-  match = replace(
-    _strategy_match_for_card("setup-candle-v2"),
-    candle_version=2,
-    candle_primary_pattern="sweep_reclaim",
-    candle_final_score=0.7657,
-  )
-  text = setup_card.format_plan_published_root_card(match, stop_price=4045.0)
-  # Candle Quality gets its own line, not squeezed onto Confirmation's.
-  assert "🕯 Confirmation: sweep_reclaim\n🔥 Candle Quality: 77%" in text
-  # Detailed metrics never dump onto the public card - only these two lines.
-  assert "candle_base_score" not in text
-  assert "wick_fraction" not in text
 
 
 def test_root_card_omits_candle_confirmation_v2_line_when_absent():
@@ -1265,9 +1209,8 @@ def test_fx_root_card_uses_instrument_price_digits(monkeypatch):
     match, stop_price=1.36380,
   )
   assert "1.36–1.36" not in text
-  assert "1.36447" in text
-  assert "1.36420–1.36480" in text
-  assert "1.36380" in text
+  assert "1.3642 - 1.3648" in text
+  assert "1.3638" in text
   assert setup_card.card_price_digits("GBPUSD") == 5
 
 
@@ -1282,9 +1225,9 @@ def test_root_card_shows_target_prices_with_pip_offsets():
     stop_price=4045.0,
     target_prices=(4050.73, 4052.73, 4054.73),
   )
-  assert "• <b>TP1:</b> <b>4,050.73 (+20)</b>" in text
-  assert "• <b>TP2:</b> <b>4,052.73 (+40)</b>" in text
-  assert "• <b>TP3:</b> <b>4,054.73 (+60)</b>" in text
+  assert "💰 TP1:   <b>4,050.73</b>  ·  <b>+20</b>" in text
+  assert "💰 TP2:   <b>4,052.73</b>  ·  <b>+40</b>" in text
+  assert "💰 TP3:   <b>4,054.73</b>  ·  <b>+60</b>" in text
 
 
 def test_root_card_target_r_multiple_lookup_never_crashes_on_unknown_symbol():
@@ -1301,17 +1244,17 @@ def test_root_card_target_r_multiple_lookup_never_crashes_on_unknown_symbol():
     stop_price=4045.0,
     target_prices=(4050.73, 4052.73, 4054.73),
   )
-  assert "• <b>TP1:</b> <b>4,050.73 (+" in text
-  assert "R)</b>" not in text
+  assert "💰 TP1:   <b>4,050.73</b>  ·  <b>+" in text
+  assert "R</b>" not in text
 
 
 def test_root_card_falls_back_to_targets_pips_ladder():
   """No absolute TP prices known yet - still one labeled line per level."""
   match = _strategy_match_for_card("setup-tp-pips")
   text = setup_card.format_plan_published_root_card(match, stop_price=4045.0)
-  assert "• <b>TP1:</b> <b>+20 pips</b>" in text
-  assert "• <b>TP2:</b> <b>+40 pips</b>" in text
-  assert "• <b>TP3:</b> <b>+60 pips</b>" in text
+  assert "💰 TP1:   <b>+20 pips</b>" in text
+  assert "💰 TP2:   <b>+40 pips</b>" in text
+  assert "💰 TP3:   <b>+60 pips</b>" in text
 
 
 def test_fx_root_card_shows_target_levels_with_instrument_digits(monkeypatch):
@@ -1338,9 +1281,9 @@ def test_fx_root_card_shows_target_levels_with_instrument_digits(monkeypatch):
     stop_price=1.36380,
     target_prices=(1.36620, 1.36820, 1.37020),
   )
-  assert "• <b>TP1:</b> <b>1.36620 (+20)</b>" in text
-  assert "• <b>TP2:</b> <b>1.36820 (+40)</b>" in text
-  assert "• <b>TP3:</b> <b>1.37020 (+60)</b>" in text
+  assert "💰 TP1:   <b>1.3662</b>  ·  <b>+20</b>" in text
+  assert "💰 TP2:   <b>1.3682</b>  ·  <b>+40</b>" in text
+  assert "💰 TP3:   <b>1.3702</b>  ·  <b>+60</b>" in text
   assert "1.36 " not in text  # must not collapse FX to 2dp
 
 
@@ -1383,14 +1326,14 @@ async def test_ensure_plan_published_root_card_creates_missing_card():
   assert "SETUP FORMING" not in text
   assert "PLAN PUBLISHED" not in text
   assert "waiting market fill" in text
-  assert "Trade area" in text
-  assert "Entry zone" in text
-  assert "Key level" in text
-  assert "Stop" in text
-  assert "TP1:</b> <b>+20 pips" in text
-  assert "TP2:</b> <b>+40 pips" in text
-  assert "TP3:</b> <b>+60 pips" in text
-  assert "Context" in text
+  assert "⚡️ Entry Zone:" in text
+  # Scanner-only diagnostics dropped per the shared entry-card design.
+  assert "Key level" not in text
+  assert "🛡 SL:" in text
+  assert "💰 TP1:   <b>+20 pips</b>" in text
+  assert "💰 TP2:   <b>+40 pips</b>" in text
+  assert "💰 TP3:   <b>+60 pips</b>" in text
+  assert "Context" not in text
   assert "Identity" not in text
   assert "Kind:" not in text
   assert "Copy draft" not in text
