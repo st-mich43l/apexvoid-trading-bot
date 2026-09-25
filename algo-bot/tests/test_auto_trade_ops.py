@@ -1,3 +1,4 @@
+import asyncio
 import json
 from pathlib import Path
 from unittest.mock import AsyncMock
@@ -1591,6 +1592,74 @@ async def test_position_closed_never_deletes_root_and_posts_standalone_if_root_g
   assert deleted == []
   assert [c[1]["reply_to"] for c in calls] == [7001, None]
   assert "closed — achieved +30 pips" in calls[1][0]
+
+
+@pytest.mark.asyncio
+@pytest.mark.no_database
+async def test_deferred_manage_reply_deletes_itself_if_trade_closed_meanwhile(
+  monkeypatch,
+):
+  """Owner-reported 2026-09-25 (live TP4 card): a TP4 notice survived right
+  next to the final close status. Its send was still waiting out a
+  Telegram flood (_schedule_deferred_manage_reply's fire-and-forget
+  background task) when position_closed's sweep ran - the sweep only
+  knows about messages already tracked, so it never saw this one, and
+  nothing else was ever going to delete it. The deferred send must check
+  for a meanwhile-closed trade itself once it finally completes.
+  """
+  client = redis_state.get_client()
+  setup_id = "deferred-tp-after-close"
+  await client.set(
+    delivery._forming_message_key(setup_id),
+    json.dumps({
+      "chat_id": 123,
+      "message_id": 7001,
+      "text": "🔎 <b>XAU M5 · SETUP FORMING</b>\n✅ <b>ORDER FILLED</b>",
+    }),
+    ex=60,
+  )
+  # The trade already closed by the time this deferred send finally goes
+  # through - _manage_closed_key is claimed as the very first thing
+  # _deliver_compact_position_closed does.
+  await client.set(delivery._manage_closed_key(setup_id), "1", ex=60)
+  deleted = []
+
+  async def fake_delete(chat_id, message_id):
+    deleted.append((chat_id, message_id))
+
+  monkeypatch.setattr(delivery, "delete_scanner_message", fake_delete)
+
+  async def sent(text, **kwargs):
+    return SimpleNamespace(message_id=9500)
+
+  tracked = []
+
+  async def on_sent(message_id):
+    tracked.append(message_id)
+    await delivery._track_active_manage_message(client, setup_id, message_id)
+    await delivery._mark_tp_notified(client, setup_id, "TP4")
+
+  await delivery._schedule_deferred_manage_reply(
+    client,
+    {"type": "tp_booked", "match_id": setup_id, "position_id": 1},
+    match_id=setup_id,
+    chat_id=123,
+    send=sent,
+    text="🎯 TP4 (4/4) +247 pips 💸💸",
+    remember=False,
+    on_sent=on_sent,
+  )
+  # _schedule_deferred_manage_reply only spawns a background task - give
+  # it a moment to actually run (wait_out_scanner_flood + its own 0.2s
+  # pacing sleep, both no-ops here with no flood recorded).
+  await asyncio.sleep(0.4)
+
+  assert tracked == [9500]
+  # Tracked, then immediately deleted and untracked once the send noticed
+  # the trade had already closed - never left as a stray orphan.
+  assert deleted == [(123, 9500)]
+  active = await client.smembers(delivery._manage_active_key(setup_id))
+  assert active == set()
 
 
 @pytest.mark.asyncio
