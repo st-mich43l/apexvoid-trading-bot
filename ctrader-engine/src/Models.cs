@@ -89,6 +89,31 @@ public sealed record PositionCloseLookup(
   decimal? ExecutionPrice = null
 );
 
+// One historical order the executor can correlate against its own
+// ClientOrderId convention, independent of whether that order is still
+// resting, was filled, or was cancelled/expired/rejected - the broker-truth
+// counterpart to a submitted-but-never-adopted AutoTradeGroupPlan leg (see
+// AutoTradeEngine.ReconcileOrphanedGroupPlansAsync).
+public sealed record HistoricalOrderMatch(
+  string ClientOrderId,
+  bool Filled,
+  long? PositionId,
+  long SymbolId,
+  long ExecutedVolume
+);
+
+// One closing deal for a position, carrying the SAME entry/exit prices the
+// broker itself used so realized pips can be computed with the existing
+// direction-adjusted (exit - entry) / pipSize convention (see
+// AutoTradeEngine.SignedPips) - never derived from GrossProfit/account
+// currency, which would need a separate, untested money-digits conversion.
+public sealed record ClosingDeal(
+  decimal EntryPrice,
+  decimal ExitPrice,
+  long ClosedVolume,
+  long ExecutionTimestamp
+);
+
 public sealed record TradingAccountSnapshot(
   long AccountId,
   bool IsLive,
@@ -370,7 +395,11 @@ public sealed record AutoTradePositionState(
   // (worst-case) entry. Mid/deep clips keep their own actual fill for PnL,
   // but lifecycle risk metadata must retain this group-level initial stop
   // distance instead of shrinking it as deeper clips fill.
-  decimal? InitialRiskStopPips = null
+  decimal? InitialRiskStopPips = null,
+  // Manual ladders can omit broker-untradeable middle targets. Keep those
+  // levels durable once price has reached them so notification-only progress
+  // and trailing are emitted exactly once across restarts.
+  IReadOnlyList<int>? ReachedTargetOrdinals = null
 );
 
 public sealed record RedisClaimPayload(
@@ -454,6 +483,14 @@ public sealed record AutoTradeEvent(
   decimal? EntryLow = null,
   decimal? EntryHigh = null,
   decimal? LegRealizedPips = null,
+  // The group's DEEPEST fill price behind LegRealizedPips (see
+  // AutoTradeEngine.GroupDeepestEntryPrice) - a multi-leg manual /algo
+  // group's shallow/mid/deep clips each fill at their own price, but both
+  // the channel pips card and the Python-side realized-R calc must measure
+  // against the group's single best (deepest) fill, not whichever specific
+  // tranche happens to be booking this event, and not the advertised entry
+  // zone either.
+  decimal? LegEntryPrice = null,
   long? GroupInitialVolume = null,
   long? LotSize = null,
   string? StructuralSource = null,
@@ -474,13 +511,95 @@ public sealed record AutoTradeEvent(
   // Terminal close analytics for fixed_rr journal (Python store.py).
   bool? BreakEvenApplied = null,
   int? HighestBookedTargetIndex = null,
+  // Plan's total declared target count, alongside HighestBookedTargetIndex,
+  // so a mid-trade tp_booked card can say "TP1 of 2" instead of the
+  // open-entry-legs fraction the card text used to carry there (owner
+  // 2026-09-22: read as "this was the only target" when TP2+ were pending).
+  int? TargetsTotal = null,
   decimal? PlannedRewardRisk = null,
   bool? TargetRoomFallbackUsed = null,
   string? ExitPath = null,
   int? ConfluenceV1 = null,
   int? ConfluenceV2 = null,
   double? ConfluenceV2Raw = null,
-  string? ConfluenceScoringVersion = null
+  string? ConfluenceScoringVersion = null,
+  // 2026-09 (owner: "collect data 2 weeks to see if order that has good
+  // math quality can process well than other or not") - republished
+  // from plan.Analysis.MathFibRatio etc. (TradePlan.cs) so Postgres
+  // (auto_trade_fills, store.py) can correlate detection-time math
+  // telemetry with the eventual fill/outcome.
+  double? MathFibRatio = null,
+  double? MathVelocity = null,
+  double? MathAcceleration = null,
+  double? MathPd = null,
+  int? MathFeatureVersion = null,
+  // MAD v2 context telemetry - republished from plan.Analysis.MadPhase etc.
+  // (TradePlan.cs), same pattern as the Math* fields above.
+  int? MadVersion = null,
+  string? MadPhase = null,
+  double? MadConfidence = null,
+  double? MadAffinity = null,
+  string? MadDirection = null,
+  string? MadSweepSide = null,
+  bool? MadReclaim = null,
+  double? MadRangeQualityAtr = null,
+  double? MadBreakDistanceAtr = null,
+  double? MadDisplacementAtr = null,
+  int? MadAcceptanceCloses = null,
+  double? MadSweepPenetrationAtr = null,
+  double? MadReclaimDepthAtr = null,
+  string? MadReasonCode = null,
+  // Candle Confirmation V2 context telemetry - republished from
+  // plan.Analysis.CandleVersion etc. (TradePlan.cs), same pattern as the
+  // Math*/Mad* fields above.
+  int? CandleVersion = null,
+  string? CandlePrimaryPattern = null,
+  string? CandlePatterns = null,
+  double? CandleFinalScore = null,
+  double? CandleBaseScore = null,
+  double? CandleSynergyBonus = null,
+  double? CandleRejectionScore = null,
+  double? CandleDisplacementScore = null,
+  double? CandleSequenceScore = null,
+  double? CandleBodyFraction = null,
+  double? CandleUpperWickFraction = null,
+  double? CandleLowerWickFraction = null,
+  double? CandleCloseLocation = null,
+  double? CandleBodyAtr = null,
+  double? CandleRangeAtr = null,
+  bool? CandleSweep = null,
+  double? CandleSweepPenetrationAtr = null,
+  bool? CandleReclaim = null,
+  double? CandleReclaimDepthAtr = null,
+  bool? CandleEngulfing = null,
+  bool? CandleDoji = null,
+  double? CandleCompressionScore = null,
+  string? CandleSequenceName = null,
+  int? CandleSequenceBars = null,
+  // Opposing Structure V2 context telemetry - republished from
+  // plan.Analysis.KeyLevelOpposingZoneLow etc. (TradePlan.cs), same
+  // pattern as the Math*/Mad*/Candle* fields above.
+  double? KeyLevelOpposingZoneLow = null,
+  double? KeyLevelOpposingZoneHigh = null,
+  string? KeyLevelOpposingZoneSide = null,
+  bool? OpposingZonePresent = null,
+  string? OpposingZoneSide = null,
+  double? OpposingZoneLow = null,
+  double? OpposingZoneHigh = null,
+  string? OpposingZoneTier = null,
+  double? OpposingZoneScore = null,
+  double? OpposingZoneStrength = null,
+  double? OpposingRawRoomPrice = null,
+  double? OpposingRoomPips = null,
+  double? OpposingRoomAtr = null,
+  double? OpposingRoomR = null,
+  bool? OpposingBeforeTp1 = null,
+  bool? OpposingDisplaced = null,
+  bool? OpposingMitigated = null,
+  double? OpposingRoomPressure = null,
+  double? OpposingRiskScore = null,
+  string? OpposingAction = null,
+  string? OpposingReasonCode = null
 );
 
 public sealed record AutoTradeGroupPlan(

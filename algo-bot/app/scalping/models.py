@@ -1,4 +1,4 @@
-"""Typed contracts for the M1 scalping engine."""
+"""Typed contracts for the M5-structure/M1-confirmation scalping engine."""
 
 from __future__ import annotations
 
@@ -22,12 +22,123 @@ ARCHETYPE_RANGE_SWEEP = "range_sweep"
 ARCHETYPE_IMPULSE_PULLBACK = "impulse_pullback"
 ARCHETYPE_BREAKOUT_RETEST = "breakout_retest"
 
-# Canonical display names for M1 scalping archetypes.
+# Timeframe ownership is explicit: strategies discover structure on M5 and
+# use the closed M1 bar only as the execution confirmation. Keeping these as
+# constants prevents a future strategy from quietly reverting to M1 setup
+# detection when the runtime remains M1-event driven.
+SCALP_SETUP_TIMEFRAME = "M5"
+SCALP_CONFIRMATION_TIMEFRAME = "M1"
+
+# Canonical display names for the independent M5/M1 scalping archetypes.
 STRATEGY_DISPLAY = {
   ARCHETYPE_RANGE_SWEEP: RANGE_SWEEP_SCALP,
   ARCHETYPE_IMPULSE_PULLBACK: IMPULSE_PULLBACK_SCALP,
   ARCHETYPE_BREAKOUT_RETEST: BREAKOUT_RETEST_SCALP,
 }
+
+
+# --- Breakout Retest V2 taxonomy -------------------------------------------
+# Owner-directed 2026-09-16 rebuild: generalize Breakout Retest beyond the M1
+# compression box into BREAKOUT -> ACCEPTANCE -> RETEST -> ROLE FLIP ->
+# CONTINUATION, with compression kept as one subtype/source among several.
+
+BR_SUBTYPE_STRUCTURE_FLIP = "structure_flip"
+BR_SUBTYPE_RANGE_BREAK = "range_break"
+BR_SUBTYPE_LIQUIDITY_LEVEL_BREAK = "liquidity_level_break"
+
+BR_SOURCE_COMPRESSION_BOX = "compression_box"
+BR_SOURCE_M1_SWING_HIGH = "m1_swing_high"
+BR_SOURCE_M1_SWING_LOW = "m1_swing_low"
+BR_SOURCE_M5_SWING_HIGH = "m5_swing_high"
+BR_SOURCE_M5_SWING_LOW = "m5_swing_low"
+BR_SOURCE_EQH = "eqh"
+BR_SOURCE_EQL = "eql"
+BR_SOURCE_SESSION_HIGH = "session_high"
+BR_SOURCE_SESSION_LOW = "session_low"
+
+# Episode state machine (section 3 of the rebuild spec). Distinct from the
+# ScalpOpportunity lifecycle states above (DISCOVERED/ARMED/...) and from the
+# legacy detect_breakout_retest() reject-code vocabulary
+# (no_box/wait_break/wait_retest/failed_break/armed) - this is the richer,
+# per-episode state exposed in ScalpOpportunity.measured["v2"]["state"] for
+# telemetry. See BR_LEGACY_STATE_MAP below for how it collapses to the
+# legacy vocabulary that existing consumers still read.
+BR_WATCH_LEVEL = "WATCH_LEVEL"
+BR_BREAK_DETECTED = "BREAK_DETECTED"
+BR_ACCEPTED = "ACCEPTED"
+BR_WAIT_RETEST = "WAIT_RETEST"
+BR_RETESTED = "RETESTED"
+BR_CONFIRMATION = "CONFIRMATION"
+BR_ARMED = "ARMED"
+BR_FAILED_BREAK = "FAILED_BREAK"
+BR_EXPIRED = "EXPIRED"
+BR_INVALID_RETEST = "INVALID_RETEST"
+BR_INVALIDATED = "INVALIDATED"
+BR_NO_CONTINUATION = "NO_CONTINUATION"
+
+BR_FAILURE_STATES = frozenset({
+  BR_FAILED_BREAK, BR_EXPIRED, BR_INVALID_RETEST, BR_INVALIDATED,
+  BR_NO_CONTINUATION,
+})
+
+# Every v2 episode state collapses to one of the 6 legacy
+# detect_breakout_retest() state strings so existing Redis telemetry
+# (diagnose_breakout_reject) and any future consumer reading the legacy key
+# keep working unchanged. "expired" is a new 6th legacy value - additive,
+# never returned before, so it cannot regress an existing exact-match check.
+BR_LEGACY_STATE_MAP = {
+  BR_WATCH_LEVEL: "wait_break",
+  BR_BREAK_DETECTED: "wait_break",
+  BR_ACCEPTED: "wait_retest",
+  BR_WAIT_RETEST: "wait_retest",
+  BR_RETESTED: "wait_retest",
+  BR_CONFIRMATION: "wait_retest",
+  BR_ARMED: "armed",
+  BR_FAILED_BREAK: "failed_break",
+  BR_EXPIRED: "expired",
+  BR_INVALID_RETEST: "failed_break",
+  BR_INVALIDATED: "failed_break",
+  BR_NO_CONTINUATION: "failed_break",
+}
+
+# Explicit failure reasons (section 12). Prefer one of these over a generic
+# "invalid_setup" whenever the cause is known.
+BR_REASON_NO_CANDIDATE_LEVEL = "no_candidate_level"
+BR_REASON_NO_TRUE_CROSS = "no_true_cross"
+BR_REASON_INSUFFICIENT_BREAKOUT_MARGIN = "insufficient_breakout_margin"
+BR_REASON_BREAK_NOT_AFTER_SOURCE = "break_not_after_source"
+BR_REASON_IMMEDIATE_RECLAIM = "immediate_reclaim"
+BR_REASON_FAILED_ACCEPTANCE = "failed_acceptance"
+BR_REASON_RETEST_TOO_EARLY = "retest_too_early"
+BR_REASON_RETEST_TOO_LATE = "retest_too_late"
+BR_REASON_RETEST_TOO_DEEP = "retest_too_deep"
+BR_REASON_NO_ROLE_FLIP = "no_role_flip"
+BR_REASON_WEAK_REJECTION = "weak_rejection"
+BR_REASON_NO_CONFIRMATION = "no_confirmation"
+BR_REASON_OPPOSITE_STRUCTURE_BREAK = "opposite_structure_break"
+BR_REASON_EXPIRED = "expired"
+
+
+@dataclass(frozen=True)
+class BreakoutLevelCandidate:
+  """One candidate level a Breakout Retest episode can be built from.
+
+  Produced by compression-box detection, M1/M5 structural swings, or
+  liquidity levels (EQH/EQL, session highs/lows once wired). Consumed by the
+  generic breakout/acceptance/retest/confirmation engine in
+  microstructure.py - the engine itself never knows which source produced
+  the level.
+  """
+
+  level: float
+  side: str
+  source: str
+  subtype: str
+  timeframe: str
+  source_index: int | None = None
+  source_time: int | None = None
+  strength: float | None = None
+  metadata: dict[str, Any] = field(default_factory=dict)
 
 
 DISCOVERED = "discovered"
@@ -92,6 +203,9 @@ class ScalpContextSnapshot:
   permitted_archetypes: tuple[str, ...]
 
   atr: float = 0.0
+  m1_atr: float = 0.0
+  key_levels: tuple[dict[str, Any], ...] = ()
+  zones: tuple[dict[str, Any], ...] = ()
   measured: dict[str, Any] = field(default_factory=dict)
 
   def to_json(self) -> str:
@@ -127,6 +241,15 @@ class ScalpContextSnapshot:
       session=str(data.get("session") or "unknown"),
       permitted_archetypes=tuple(data.get("permitted_archetypes") or ()),
       atr=float(data.get("atr") or 0.0),
+      m1_atr=float(data.get("m1_atr") or 0.0),
+      key_levels=tuple(
+        dict(item) for item in (data.get("key_levels") or ())
+        if isinstance(item, dict)
+      ),
+      zones=tuple(
+        dict(item) for item in (data.get("zones") or ())
+        if isinstance(item, dict)
+      ),
       measured=dict(data.get("measured") or {}),
     )
 
@@ -164,6 +287,7 @@ class ScalpOpportunity:
   expires_at: int
   episode_id: str = ""
   source_identity: str = ""
+  key_level_role: str | None = None
   measured: dict[str, Any] = field(default_factory=dict)
 
   def to_json(self) -> str:
@@ -198,6 +322,9 @@ class ScalpOpportunity:
       expires_at=int(data["expires_at"]),
       episode_id=str(data.get("episode_id") or ""),
       source_identity=str(data.get("source_identity") or ""),
+      key_level_role=(
+        str(data["key_level_role"]) if data.get("key_level_role") else None
+      ),
       measured=dict(data.get("measured") or {}),
     )
 

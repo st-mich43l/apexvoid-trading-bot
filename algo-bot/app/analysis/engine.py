@@ -40,6 +40,7 @@ from app.analysis.technique_geometry import (
 from app.analysis.zones import (
   ZONE_MERGE_OVERLAP,
   ZONE_MIN_WIDTH,
+  as_single_zones,
   breaker_blocks,
   displacement,
   flip_zones,
@@ -95,6 +96,21 @@ def _nested_cfg_from_analysis_settings(settings: AnalysisSettings) -> Any:
         "maximum_bars_since_last_touch": settings.tl_max_bars_since_last_touch,
         "maximum_fit_error_atr": settings.tl_max_fit_error_atr,
         "maximum_violations": settings.tl_max_violations,
+        "version": settings.tl_version,
+        "shadow_v1": settings.tl_shadow_v1,
+        "validation_touch_tolerance_atr": settings.tl_validation_touch_tolerance_atr,
+        "interaction_band_atr": settings.tl_interaction_band_atr,
+        "invalidation_penetration_atr": settings.tl_invalidation_penetration_atr,
+        "close_violation_atr": settings.tl_close_violation_atr,
+        "approach_min_distance_atr": settings.tl_approach_min_distance_atr,
+        "minimum_validation_touches": settings.tl_min_validation_touches,
+        "minimum_validation_touch_spacing_bars": settings.tl_min_validation_touch_spacing_bars,
+        "validation_reaction_bars": settings.tl_validation_reaction_bars,
+        "minimum_validation_favorable_excursion_atr": settings.tl_min_validation_favorable_excursion_atr,
+        "maximum_wick_violations": settings.tl_max_wick_violations,
+        "exhaustion_validation_touches": settings.tl_exhaustion_validation_touches,
+        "chop_minimum_validation_touches": settings.tl_chop_min_validation_touches,
+        "chop_require_htf_aligned": settings.tl_chop_require_htf_aligned,
       },
       "breakout": {
         "buffer_atr": settings.breakout_buffer_atr,
@@ -188,10 +204,28 @@ class AnalysisSettings:
   tl_max_bars_since_last_touch: int = 30
   tl_max_fit_error_atr: float = 0.15
   tl_max_violations: int = 2
+  tl_version: str = "v1"
+  tl_shadow_v1: bool = False
+  tl_validation_touch_tolerance_atr: float = 0.30
+  tl_interaction_band_atr: float = 0.20
+  tl_invalidation_penetration_atr: float = 0.50
+  tl_close_violation_atr: float = 0.15
+  tl_approach_min_distance_atr: float = 0.10
+  tl_min_validation_touches: int = 1
+  tl_min_validation_touch_spacing_bars: int = 5
+  tl_validation_reaction_bars: int = 2
+  tl_min_validation_favorable_excursion_atr: float = 0.10
+  tl_max_wick_violations: int = 2
+  tl_exhaustion_validation_touches: int = 4
+  tl_chop_min_validation_touches: int = 2
+  tl_chop_require_htf_aligned: bool = True
   coil_contract: float = 0.8
   breakout_buffer_atr: float = 0.1
   breakout_accept_bars: int = 2
   breakout_max_age_bars: int = 6
+  flip_zone_accept_bars: int | None = None
+  flip_zone_max_break_age_bars: int = 48
+  flip_band_body_fraction: float = 0.5
   range_scalp_lookback: int = 36
   range_scalp_cluster_atr: float = 0.20
   range_scalp_min_touches: int = 3
@@ -214,6 +248,10 @@ class AnalysisSettings:
   fvg_entry_max_width_price: float = 5.0
   fvg_max_atr: float = 2.0
   technique_validation_enabled: bool = True
+  technique_retest_max_touches: int = 30
+  technique_invalidation_tolerance_atr: float = 0.5
+  technique_sweep_reclaim_bars: int = 6
+  technique_max_break_episodes: int = 2
   causal_structure: bool = False
   max_cluster_span_multiple: float = 2.0
 
@@ -268,6 +306,10 @@ class TimeframeAnalysis:
   zone_reconcile_shadow_output: int = 0
   zone_reconcile_trimmed: int = 0
   zone_reconcile_candidate_difference_count: int = 0
+  # Every S/D, OB and FVG zone with its OWN origin/touches/break (map merge
+  # skipped). Feeds collect_technique_instances; empty means "fall back to the
+  # merged views" (hand-built analyses).
+  technique_zones: list[Zone] = field(default_factory=list)
   technique_instances: list[TechniqueInstance] = field(default_factory=list)
   technique_validation_rejects: dict[str, int] = field(default_factory=dict)
 
@@ -279,6 +321,48 @@ class AnalysisContext:
   htf_bias: str
   dealing_range: DealingRange | None = None
   regime: Regime | None = None
+
+
+@dataclass(frozen=True)
+class ScalpStructure:
+  """Canonical M5 levels/zones needed by the lightweight scalp lane."""
+
+  key_levels: tuple[Level, ...] = ()
+  zones: tuple[Zone, ...] = ()
+
+
+def scalp_structure(
+  m5: pd.DataFrame,
+  settings: AnalysisSettings | None = None,
+) -> ScalpStructure:
+  """Build scalp structure without the trendline/technique stack."""
+  if m5 is None or m5.empty:
+    return ScalpStructure()
+  settings = settings or AnalysisSettings()
+  atr = atr_series(m5, settings.atr_length)
+  swings = find_swings(
+    m5,
+    settings.swing_fractal_n,
+    settings.zigzag_pct,
+    settings.zigzag_atr_mult,
+    atr,
+  )
+  levels = key_levels(
+    swings,
+    atr,
+    settings.level_cluster_atr,
+    settings.round_step,
+    settings.key_level_min_touches,
+    settings.max_cluster_span_multiple,
+  )
+  legs = displacement(
+    m5,
+    atr,
+    settings.displacement_atr_mult,
+    settings.momentum_body_frac,
+  )
+  zones = mark_mitigation(supply_demand(m5, legs), m5)
+  return ScalpStructure(tuple(levels), tuple(zones))
 
 
 def analyze(
@@ -344,15 +428,27 @@ def _attach_technique_instances(
     crt_h1_lookback_bars=int(settings.crt_h1_lookback_bars),
     fvg_entry_max_width_price=float(settings.fvg_entry_max_width_price),
     fvg_max_atr=float(settings.fvg_max_atr),
+    retest_max_touches=int(settings.technique_retest_max_touches),
+    invalidation_tolerance_atr=float(settings.technique_invalidation_tolerance_atr),
+    sweep_reclaim_bars=int(settings.technique_sweep_reclaim_bars),
+    max_break_episodes=int(settings.technique_max_break_episodes),
   )
   updated: dict[str, TimeframeAnalysis] = {}
   for tf, analysis in per_tf.items():
     exec_atr = atr_scalar(analysis.atr)
     price = float(analysis.df.iloc[-1]["close"]) if not analysis.df.empty else 0.0
+    if analysis.technique_zones:
+      technique_ob, technique_sd, _flip, technique_fvg = _zone_views(
+        analysis.technique_zones,
+      )
+    else:
+      technique_sd = analysis.supply_demand_zones
+      technique_ob = analysis.order_blocks
+      technique_fvg = analysis.fvg_zones
     instances, rejects = collect_technique_instances(
-      sd_zones=analysis.supply_demand_zones,
-      ob_zones=analysis.order_blocks,
-      fvg_zones=analysis.fvg_zones,
+      sd_zones=technique_sd,
+      ob_zones=technique_ob,
+      fvg_zones=technique_fvg,
       df=analysis.df,
       price=price,
       atr=exec_atr,
@@ -412,6 +508,7 @@ def _analyze_tf(
     settings.round_step,
     settings.key_level_min_touches,
     settings.max_cluster_span_multiple,
+    bars=df,
   )
   legs = displacement(
     df,
@@ -431,7 +528,22 @@ def _analyze_tf(
   sd_zones = breaker_blocks(sd_zones, df)
   ob_zones = order_blocks(df, legs, breaks, settings.zone_width)
   ob_zones = breaker_blocks(ob_zones, df)
-  flip = flip_zones(levels, breaks)
+  flip_accept = (
+    settings.breakout_accept_bars
+    if settings.flip_zone_accept_bars is None
+    else settings.flip_zone_accept_bars
+  )
+  flip = flip_zones(
+    levels,
+    breaks,
+    df,
+    accept_bars=flip_accept,
+    max_break_age_bars=settings.flip_zone_max_break_age_bars,
+    band_body_fraction=settings.flip_band_body_fraction,
+    metric_sink=metric_sink,
+    symbol=symbol,
+    timeframe=timeframe,
+  )
   fvg_zones = fvg(df)
   pools = liquidity_pools(
     swings,
@@ -453,6 +565,7 @@ def _analyze_tf(
   )
   regime_ = regime(df, atr, swings, structure, range_, settings)
   box_break = accepted_box_break(df, atr, regime_, nested_cfg)
+  unmerged_technique_zones = as_single_zones([*sd_zones, *ob_zones, *fvg_zones])
   zones = merge_zones(
     [*sd_zones, *ob_zones, *flip, *fvg_zones],
     settings.zone_merge_overlap,
@@ -472,6 +585,18 @@ def _analyze_tf(
   )
   zones = score_zones(
     zones,
+    levels,
+    pools,
+    settings.round_step,
+    session_levels=sessions,
+    dealing_range=range_,
+    grabs=grabs,
+    trendlines=diagonal_lines,
+    bar_index=len(df) - 1,
+    pip_size=settings.pip_size,
+  )
+  technique_zones = score_zones(
+    mark_mitigation(unmerged_technique_zones, df, cutoff=max(0, len(df) - 1)),
     levels,
     pools,
     settings.round_step,
@@ -572,6 +697,7 @@ def _analyze_tf(
     flip_zones=flip,
     fvg_zones=fvg_zones,
     zones=zones,
+    technique_zones=technique_zones,
     liquidity_pools=pools,
     liquidity_grabs=grabs,
     momentum=mom.state,
@@ -834,7 +960,24 @@ def _apply_mtf_zone_scores(
         len(item.df) - 1,
         settings.pip_size,
       )
-      item = _with_zone_views(item, zones)
+      technique_zones = (
+        score_zones(
+          item.technique_zones,
+          item.key_levels,
+          item.liquidity_pools,
+          settings.round_step,
+          higher_zones,
+          item.session_levels,
+          item.dealing_range,
+          item.liquidity_grabs,
+          item.trendlines,
+          len(item.df) - 1,
+          settings.pip_size,
+        )
+        if item.technique_zones
+        else item.technique_zones
+      )
+      item = replace(_with_zone_views(item, zones), technique_zones=technique_zones)
       updated[tf] = item
     higher_zones.extend(item.zones)
   return updated

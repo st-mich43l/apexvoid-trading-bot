@@ -1,0 +1,51 @@
+# Service identity, runtime mode, and logging — owned exclusively here.
+# See docs/configuration-v3-migration-audit.md §5/§9 for where each leaf
+# below came from and the naming-collision note on `runtime.*`: the OLD
+# config/trading-bot.yml also had a top-level `runtime:` key, but it meant
+# auto-trade/scanner enable toggles — those moved to auto-algo.yml's
+# `auto_algo.enabled`/`auto_algo.scanner.enabled`, not here. This file is
+# only ever service identity / mode / logging, per the new architecture's
+# own category definition.
+runtime:
+  # Not a distinct setting in the current system (no runtime.environment
+  # concept exists yet) — this mirrors AUTO_TRADE_PROFILE's current live
+  # value ("conservative" == production, the empty-override profile; see
+  # environments/production.yml). "demo_eval" is the other live profile
+  # name today; see docs/configuration-v3-migration-audit.md §9 on why
+  # Stage C1 keeps that name rather than inventing development/paper.
+  environment: production
+
+  # The only real timezone value anywhere in the current system today is
+  # delivery.presentation.seq_reset_tz (kept, unchanged, in telegram.yml —
+  # it is specifically Telegram sequence-reset scoped). Recorded here too
+  # as the service-wide operational timezone since every session/killzone
+  # boundary in the system is computed against it in practice. Consolidating
+  # these into one value is a Stage C2+ decision (see the audit's §9).
+  timezone: Asia/Ho_Chi_Minh
+
+  # Currently ENV/code-default only (app/configuration/models/bootstrap.py
+  # BootstrapLoggingConfig; ctrader-engine/src/DailyFileLog.cs reads the
+  # same ENV names directly) — populated here with today's real defaults,
+  # not invented values. LOG_DIR/LOG_RETENTION_DAYS/LOG_FILE_ENABLED are
+  # shared_with_ctrader in the catalog (same ENV name, same default, both
+  # languages) — file_name genuinely differs per service today (Python's
+  # is actually a hardcoded constant, DEFAULT_LOG_FILE_NAME in
+  # app/core/logging_setup.py, not wired to the catalog at all; .NET's is
+  # the catalog's ctrader_file_name / LOG_FILE_NAME).
+  logging:
+    directory: /var/log/apexvoid
+    retention_days: 14
+    file_enabled: true
+    level: INFO
+    file_name:
+      algo-bot: algo-bot.log
+      ctrader-engine: ctrader-engine.log
+
+  # contract.account.* / contract.mode in the old file — broker/account
+  # identity and the execution contract version in force.
+  broker:
+    expected_broker: fpmarkets
+    require_demo: true
+
+  execution_contract:
+    mode: v8_only

@@ -98,13 +98,15 @@ gold sell 4100-4105 / sl 4110 / tp 95/90/80 / scalp
 gold sell 4100-4105 / sl 4110 / tp 95/90/80 / scalp nhanh
 gold sell 4100-4105 / sl 4110 / tp 95/90/80 / vip
 gold sell 4100-4105 / sl 4110 / tp 95/90/80 / setup ob-retest ***
+gold sell 4100-4105 / sl 4110 / 1r
 ```
 
 | Option | Effect |
 |---|---|
-| `/ scalp`, `/ scalp nhanh`, `/ quick scalp` | Marks the trade internally as `scalp` for review/stats. It does not add a channel tag. |
+| `/ scalp`, `/ scalp nhanh`, `/ quick scalp` | Marks the trade internally as `scalp` for review/stats and displays it on the channel card. |
 | `/ vip` | Publishes the signal and later lifecycle updates to VIP only. |
-| `/ setup <name> [*|**|***]` | Sets the internal setup label and optional confidence grade. If used with `/ scalp`, explicit `/ setup` wins. |
+| `/ setup <name> [*|**|***]` | Sets the setup type shown on the channel card and its optional confidence grade. New manual signals default to `**`; provide `*`, `**`, or `***` to override it. Known aliases render as their canonical strategy name (for example `key-level` becomes `Key Level Reaction`). If used with `/ scalp`, explicit `/ setup` wins. |
+| `/ 1r` | Personal trade, not for the channel. Collapses any typed entry zone to its conservative edge and enters full volume at that one price; overrides any explicit `tp` with a single target at exactly 1R. Arms broker execution on its own — `/ algo` is not needed. The root card and every later lifecycle update (fills, TP, close, SL moves) go to your own DM instead of the VIP/public channel. |
 
 ### Channel Output
 
@@ -114,6 +116,7 @@ The bot posts a message like:
 📉 SELL XAUUSD  🔔
 
 ⚡️ Entry Zone:  4,100 - 4,105
+🏷 Setup:  Key Level Reaction  ⭐⭐
 🛡 SL:     4,110  ·  risk 10
 💰 TP1:   4,095  ·  0.5R
 💰 TP2:   4,090  ·  1.0R
@@ -131,10 +134,6 @@ After posting, the bot replies to your DM:
 ```
 
 Keep the `#id` — you use it with `close`, `cancel`, and `/trade_modify`.
-
-When the signal is armed with `/algo`, the bot also snapshots Redis OHLC
-windows (M1/M5/M15/H1) into `manual_algo_charts` at issued, filled, and
-closed — used later for XAU formula fitting, not for live auto decisions.
 
 ---
 
@@ -363,7 +362,6 @@ Schema is owned by `algo-bot` `store.init_db()`; see [schema.sql](schema.sql).
 | Table | Role |
 |---|---|
 | `manual_signals` | Owner signal lifecycle (`#id`, fills, `/algo` arm) |
-| `manual_algo_charts` | OHLC snapshots around issued/filled/closed |
 | `signal_posts` | VIP/public message ids |
 | `pips_log` | Channel pips accounting |
 | `auto_trade_fills` / `auto_trade_results` | Autonomous + algo broker ledger |

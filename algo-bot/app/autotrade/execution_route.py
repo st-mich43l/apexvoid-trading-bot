@@ -12,11 +12,9 @@ from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
 
 from app.autotrade.strategy_taxonomy import (
-  REACTION_STRATEGIES,
   is_breakout_retest_scalp_strategy,
   is_reaction_strategy,
   is_scalp_strategy,
-  is_technique_or_confluence,
 )
 
 # Legacy/default micro-grid size; production instruments may override it.
@@ -29,7 +27,6 @@ ROUTE_MARKET_WITH_LIMIT_SCALE = "market_with_limit_scale"
 ROUTE_EITHER = "either"
 
 # Key Level / Session / Trendline only — Demand/Supply keep zone_scale → limit_ladder.
-REACTION_MARKET_SCALE_STRATEGIES = REACTION_STRATEGIES
 REACTION_MARKET_SCALE_FAMILIES = frozenset({
   "key_level",
   "session_level",
@@ -76,6 +73,48 @@ def _round_price(value: float, digits: int) -> float:
   )
 
 
+def risk_targeted_entry_price(
+  *,
+  direction: str,
+  structural_stop: float,
+  zone_low: float,
+  zone_high: float,
+  target_risk_pips: float,
+  pip_size: float,
+  digits: int,
+) -> float:
+  """Entry price within ``[zone_low, zone_high]`` closest to a real
+  ``target_risk_pips`` distance from the actual structural stop.
+
+  2026-09-15 (owner-reported, XAU only): entry price used to come purely
+  from zone geometry (the near edge / midpoint), with zero awareness of
+  the risk distance that entry would produce against the real structural
+  stop - the stop envelope (``execution.reaction.stop_min_pips``/
+  ``stop_max_pips``) only ever clamped the STOP afterward. This picks the
+  entry instead, so risk lands near the target up front. ``structural_stop``
+  must be the real stop (mirrors ``_plan_base_stop``'s raw structural
+  stop - structure_swing offset by the ATR buffer, before any wick/
+  opposing-zone push), independent of which entry within the zone is
+  chosen.
+
+  Best-effort: when the zone's own span can't reach ``target_risk_pips``
+  from the stop (too tight or too wide), returns whichever zone edge gets
+  closest instead of rejecting - the caller's own stop envelope remains
+  the final backstop.
+  """
+  side = str(direction).upper()
+  low = min(zone_low, zone_high)
+  high = max(zone_low, zone_high)
+  target_distance = float(target_risk_pips) * float(pip_size)
+  desired = (
+    structural_stop + target_distance
+    if side == "BUY"
+    else structural_stop - target_distance
+  )
+  clamped = min(max(desired, low), high)
+  return _round_price(clamped, digits)
+
+
 def zone_split_qualifies(
   *,
   zone_low: float,
@@ -116,6 +155,43 @@ def _scale_ladder_legs(
   return (
     _round_price(proximal, digits),
     _round_price(second_leg, digits),
+  )
+
+
+def _deeper_second_leg(
+  *,
+  side: str,
+  low: float,
+  high: float,
+  proximal: float,
+  anchor: float,
+  atr: float,
+  scale_step_atr: float,
+  digits: int,
+) -> float:
+  """Leg 2 price: the DEEPER of the structural-price ladder and the
+  quote-safe ladder (lower for BUY, higher for SELL).
+
+  Leg 2 anchors off ``proximal`` so it keeps the better structural price
+  (ENTRY_LOGIC_REVIEW_2026-09-17), but once price is already inside the
+  zone that structural edge can sit on the wrong side of the market - a BUY
+  zone whose near edge is above the current quote gives a "deeper" leg
+  ABOVE the quote, i.e. a marketable limit that fills instantly at the same
+  price as leg 1 (owner-reported live 2026-09-21: XAU Session Level BUY,
+  L1 and L2 both filled at 4346.83). Taking the deeper of the two ladders
+  guarantees leg 2 is never closer to the market than the quote-anchored
+  ladder would have put it.
+  """
+  from_proximal = _scale_ladder_legs(
+    side=side, low=low, high=high, proximal=proximal,
+    atr=atr, scale_step_atr=scale_step_atr, digits=digits,
+  )[1]
+  from_anchor = _scale_ladder_legs(
+    side=side, low=low, high=high, proximal=anchor,
+    atr=atr, scale_step_atr=scale_step_atr, digits=digits,
+  )[1]
+  return min(from_proximal, from_anchor) if side == "BUY" else max(
+    from_proximal, from_anchor,
   )
 
 
@@ -160,15 +236,6 @@ def scalp_micro_grid_legs(
   return _unique_prices([_round_price(price, digits) for price in raw])
 
 
-def _equal_clip_ratios(count: int) -> tuple[float, ...]:
-  if count <= 0:
-    return ()
-  base = round(1.0 / count, 6)
-  ratios = [base] * count
-  ratios[-1] = round(1.0 - base * (count - 1), 6)
-  return tuple(ratios)
-
-
 def resolve_execution_route_plan(
   *,
   direction: str,
@@ -181,6 +248,7 @@ def resolve_execution_route_plan(
   zone_fill_enabled: bool = False,
   zone_fill_min_atr: float = 0.5,
   inside_zone_market_entry_enabled: bool = True,
+  single_entry_market_inside: bool = False,
   zone_fill_fallback_enabled: bool = True,
   digits: int = 2,
   allow_either: bool = False,
@@ -194,8 +262,19 @@ def resolve_execution_route_plan(
   strategy: str | None = None,
   strategy_family: str | None = None,
   entry_clips: int = SCALP_MICRO_CLIPS,
+  structural_stop: float | None = None,
+  target_risk_pips: float | None = None,
+  pip_size: float | None = None,
 ) -> ExecutionRoutePlan:
-  """Resolve a concrete route mirroring AutoTradeEngine.ResolveExecutionRoute."""
+  """Resolve a concrete route mirroring AutoTradeEngine.ResolveExecutionRoute.
+
+  ``structural_stop``/``target_risk_pips``/``pip_size`` are optional and,
+  when all three are given, replace the anchor entry (``proximal`` below)
+  with ``risk_targeted_entry_price`` - see that function's docstring. Any
+  one missing keeps today's pure zone-geometry anchor unchanged; this is
+  how a caller (XAU only, behind a rollback flag) opts in without every
+  other instrument's routing changing.
+  """
   preference = (order_type_preference or "").strip().lower()
   distribution = (entry_distribution or "").strip().lower()
   side = direction.strip().upper()
@@ -210,6 +289,20 @@ def resolve_execution_route_plan(
     zone_fill_min_atr=zone_fill_min_atr,
   )
   proximal = high if side == "BUY" else low
+  if (
+    structural_stop is not None
+    and target_risk_pips is not None
+    and pip_size is not None
+  ):
+    proximal = risk_targeted_entry_price(
+      direction=side,
+      structural_stop=float(structural_stop),
+      zone_low=low,
+      zone_high=high,
+      target_risk_pips=float(target_risk_pips),
+      pip_size=float(pip_size),
+      digits=digits,
+    )
   midpoint = _round_price((low + high) / 2.0, digits)
   first_leg_fraction = min(1.0, max(0.0, scale_first_leg_fraction))
   leg_ratios = (first_leg_fraction, round(1.0 - first_leg_fraction, 6))
@@ -274,15 +367,21 @@ def resolve_execution_route_plan(
         "execution policy requires unavailable market_with_limit_scale",
       )
     # Confirmed in-zone (or zone-scale reaction selected): L1 market at live
-    # quote, L2 resting limit one step deeper into the zone.
-    l2_anchor = scale_entry_anchor if geometry == "inside" else proximal
-    legs = _scale_ladder_legs(
-      side=side, low=low, high=high, proximal=l2_anchor,
-      atr=atr, scale_step_atr=reaction_step, digits=digits,
-    )
+    # quote, L2 resting limit one step deeper into the zone. L2 always
+    # anchors off `proximal` (the risk-targeted price for XAU, or the
+    # zone's own far/better edge otherwise) - never the quote-collapsed
+    # `scale_entry_anchor`, which exists only to keep L1 fillable once
+    # price is already inside the zone. Owner-reported 2026-09:
+    # market_with_limit_scale was silently discarding a correctly-computed
+    # risk-targeted/zone-edge price for L2, clustering both legs at the
+    # live quote instead - see ENTRY_LOGIC_REVIEW_2026-09-17.md.
     # L1 reference price is the live quote (not a limit); L2 is deeper limit.
     l1_price = _round_price(quote, digits)
-    l2_price = legs[1]
+    l2_price = _deeper_second_leg(
+      side=side, low=low, high=high, proximal=proximal,
+      anchor=scale_entry_anchor, atr=atr,
+      scale_step_atr=reaction_step, digits=digits,
+    )
     if l1_price == l2_price:
       policy = (reaction_scale_invalid_policy or "single_market").strip().lower()
       if policy == "single_market":
@@ -307,7 +406,7 @@ def resolve_execution_route_plan(
   if is_scalp_strategy(
     str(strategy or ""),
     family=strategy_family,
-  ) or is_technique_or_confluence(str(strategy or "")):
+  ):
     retest_only = is_breakout_retest_scalp_strategy(str(strategy or ""))
     if retest_only and geometry != "inside":
       return ExecutionRoutePlan(
@@ -327,17 +426,23 @@ def resolve_execution_route_plan(
       (side == "SELL" and geometry == "below")
       or (side == "BUY" and geometry == "above")
     )
-    # Scalp + technique (FVG/OB/IFVG/…): single-leg market only. Multi-leg
-    # scale-in caused false GROUP RECOVERY REQUIRED on demo when L1 SL'd
-    # and deal lookup missed (2026-08-26 v8:a80bf164…). Full size on one fill.
+    # Scalp: single-leg market only (no micro-grid) - fast, simple
+    # execution matters more than entry-price optimality for a scalp.
+    # 2026-09-08 (owner-reported bad technique entries): technique
+    # strategies (FVG/OB/IFVG/CRT/supply_demand/…) used to share this
+    # single-leg-market restriction too, forcing every technique setup to
+    # fill immediately at whatever price confirmation landed on rather
+    # than using their own declared zone_scale/limit policy - a 2026-08-26
+    # workaround for a GROUP RECOVERY REQUIRED false-positive
+    # (v8:a80bf164…, an SL'd leg's deal lookup returning Unknown while a
+    # sibling leg was still open) that TradePlanRuntime.ClassifyCloseReason/
+    # ExitBeyondProtectiveStop has since fixed generally (ctrader-engine,
+    # not entry-type-specific) - technique strategies now fall through to
+    # their own policy below instead.
     reason = (
       "scalp chase: full market (micro-grid would rest into abandoned zone)"
       if chase_away
-      else (
-        "scalp: single-leg market (no micro-grid)"
-        if is_scalp_strategy(str(strategy or ""), family=strategy_family)
-        else "technique: single-leg market (no micro-grid)"
-      )
+      else "scalp: single-leg market (no micro-grid)"
     )
     return ExecutionRoutePlan(
       ROUTE_MARKET,
@@ -375,6 +480,23 @@ def resolve_execution_route_plan(
     )
 
   if preference == "limit":
+    # FX's single-best-entry contract is intentionally not a marketable
+    # limit at the quote. A true market route fills once against the current
+    # bid/ask and cannot leave a second entry leg behind. Outside the zone,
+    # the single-limit branch below still waits at the proximal boundary.
+    if (
+      distribution == "single"
+      and single_entry_market_inside
+      and geometry == "inside"
+    ):
+      return ExecutionRoutePlan(
+        ROUTE_MARKET,
+        _round_price(quote, digits),
+        (),
+        geometry,
+        "execution policy: single best in-zone market",
+        True,
+      )
     # Only force market_with_limit_scale once price is already inside the
     # zone. Outside approaches keep the resting limit / DCA ladder path.
     if reaction_scale_ok and geometry == "inside":
@@ -404,9 +526,23 @@ def resolve_execution_route_plan(
           "execution policy requires unavailable zone_split limit capability",
         )
       if distribution == "zone_scale":
-        legs = _scale_ladder_legs(
-          side=side, low=low, high=high, proximal=scale_entry_anchor,
-          atr=atr, scale_step_atr=scale_step_atr, digits=digits,
+        # Leg 2's step-basis is `proximal` (the risk-targeted/zone-edge
+        # price), not the quote-collapsed `scale_entry_anchor` - passing
+        # the quote here (the pre-fix behavior) both discards the better
+        # price AND, once geometry is "inside", can hand leg 2 a step
+        # computed from the wrong side of the market. Leg 1 stays
+        # `scale_entry_anchor` deliberately - it must remain a valid,
+        # likely-marketable resting price once price is already inside the
+        # zone (see the comment above `scale_entry_anchor`'s definition);
+        # `_scale_ladder_legs`'s own first return value (== its `proximal`
+        # argument verbatim) is not reused for that reason.
+        legs = (
+          _round_price(scale_entry_anchor, digits),
+          _deeper_second_leg(
+            side=side, low=low, high=high, proximal=proximal,
+            anchor=scale_entry_anchor, atr=atr,
+            scale_step_atr=scale_step_atr, digits=digits,
+          ),
         )
         return ExecutionRoutePlan(
           ROUTE_ZONE_SPLIT,
@@ -461,9 +597,15 @@ def resolve_execution_route_plan(
       return scaled
   if split_ok and distribution in {"zone_split", "zone_scale", "either", ""}:
     if distribution == "zone_scale":
-      legs = _scale_ladder_legs(
-        side=side, low=low, high=high, proximal=scale_entry_anchor, atr=atr,
-        scale_step_atr=scale_step_atr, digits=digits,
+      # Same fix as the two zone_scale branches above: leg 2 steps from
+      # `proximal`, leg 1 stays the quote-safe `scale_entry_anchor`.
+      legs = (
+        _round_price(scale_entry_anchor, digits),
+        _deeper_second_leg(
+          side=side, low=low, high=high, proximal=proximal,
+          anchor=scale_entry_anchor, atr=atr,
+          scale_step_atr=scale_step_atr, digits=digits,
+        ),
       )
       return ExecutionRoutePlan(
         ROUTE_ZONE_SPLIT,

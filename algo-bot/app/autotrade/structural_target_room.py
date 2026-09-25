@@ -7,9 +7,123 @@ import logging
 import math
 from typing import Any, Iterable
 
+from app.analysis.types import Zone
 from app.core.log_throttle import log_at_most
+from app.scalping.math_features import safe_div
 
 log = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class ZoneOpposingEntry:
+  """Minimal opposing-structure shape this module's own functions read
+  (``side``/``lo``/``hi``/``tier``/``tags``/``contains_price``) -- adapts a
+  technique-native ``Zone`` (the same displacement/supply-demand detector
+  data both the scanner's actionability gate and TradePlan build from)
+  instead of Market Map.
+
+  ``touches``/``mitigated`` (2026-09, Opposing Structure V2) are additive —
+  every existing caller that builds a ``ZoneOpposingEntry`` without them
+  keeps today's behavior (touches=0/mitigated=False are never read by the
+  pre-existing tier/containment/zero-room logic in this file).
+  """
+  side: str
+  lo: float
+  hi: float
+  tier: str = "zone"
+  tags: tuple[str, ...] = ()
+  contains_price: bool = False
+  score: float = 0.0
+  touches: int = 0
+  mitigated: bool = False
+
+
+def zone_meets_execution_width(
+  zone: Zone,
+  *,
+  atr: float,
+  pip_size: float,
+  max_width_atr: float,
+  max_width_pips: float,
+) -> bool:
+  """True when ``zone`` is narrow enough to be a meaningful execution wall.
+
+  Mirrors the M1 HTF veto's own execution-zone width gate so a caller
+  feeding this module raw per-timeframe zones (not already filtered, as
+  the M1 veto's own zone scan is) gets the same treatment.
+  """
+  width = float(zone.high - zone.low)
+  if not math.isfinite(width) or width <= 0 or pip_size <= 0 or atr <= 0:
+    return False
+  return not (
+    width / atr > max_width_atr or width / pip_size > max_width_pips
+  )
+
+
+def _zone_tier(zone: Zone, *, major_score: float) -> str:
+  """Mirrors market_map.py's own tier formula exactly (``_zone_entry``):
+  ``"major" if htf and (fresh or score >= major_score) else "zone"``. A
+  zone only ever carries the "HTF Zone" score reason when it was scored
+  through the full multi-timeframe pipeline (``_apply_mtf_zone_scores``,
+  what builds the scanner's own ``per_tf`` analysis) - a caller working
+  from a bare single-timeframe zone scan (no MTF scoring applied) will
+  therefore always get "zone" tier here, same as before this function
+  existed, with no separate code path needed for that caller.
+  """
+  htf = any(
+    str(reason).casefold() == "htf zone"
+    for reason in (zone.score_reasons or ())
+  )
+  fresh = int(zone.touches) == 0
+  return "major" if htf and (fresh or zone.score >= major_score) else "zone"
+
+
+def zone_opposing_entries(
+  zones: Iterable[Zone] | None,
+  *,
+  major_score: float = 12.0,
+  include_mitigated: bool = False,
+) -> tuple[ZoneOpposingEntry, ...]:
+  """Technique-native opposing entries for the target-room check.
+
+  2026-09 (owner: "these technique calculate swing right? so we can
+  migrate to scanner, detector and clean"). Tier is derived the same way
+  Market Map's own build_map derives it (see ``_zone_tier``) so a
+  genuinely major wall still hard-blocks the way it always has -
+  "zone"/"level" tier gets the weaker treatment
+  (``_WEAK_OPPOSING_TIERS``), "major" does not. ``major_score`` defaults
+  to the schema default for ``analysis.market_map.major_score``; pass the
+  configured value when available. Unsided round-number/reaction key
+  levels are not included: they only ever got the same lenient, near-
+  zero-effect treatment Market Map's own "level" tier already had, so
+  there's no safety value dropped by leaving them out. Callers that need
+  an execution-width gate (the M1 HTF veto's own zone scan already has
+  one applied) should pre-filter with ``zone_meets_execution_width``
+  before calling this.
+
+  ``include_mitigated`` (2026-09, Opposing Structure V2): every existing
+  caller keeps the original mitigated-zone drop (default False) - a
+  mitigated zone has never been a real opposing wall here. Opposing
+  Structure V2's own evaluator passes True so it can positively label
+  ``IGNORED_MITIGATED`` instead of silently seeing "no barrier at all,"
+  which telemetry needs to distinguish from "genuinely nothing opposing."
+  """
+  if not zones:
+    return ()
+  return tuple(
+    ZoneOpposingEntry(
+      side="buy" if zone.side == "demand" else "sell",
+      lo=zone.low,
+      hi=zone.high,
+      tier=_zone_tier(zone, major_score=major_score),
+      score=zone.score,
+      touches=int(zone.touches or 0),
+      mitigated=bool(zone.mitigated),
+    )
+    for zone in zones
+    if zone.side in ("demand", "supply")
+    and (include_mitigated or not zone.mitigated)
+  )
 
 
 @dataclass(frozen=True)
@@ -22,6 +136,40 @@ class StructuralTargetRoomDecision:
   opposing_entry: Any | None = None
   fitted_targets_pips: tuple[int, ...] = ()
   effective_target_pips: float | None = None
+
+
+# 2026-09 (owner-reported production regression, repaired via Opposing
+# Structure V2): PR #493 widened this to {"level", "zone"} so a
+# geometrically-nearest "zone"-tier entry (e.g. a minor reclaimed
+# breakout-retest demand pocket) would never hard-block or room-starve a
+# setup whose own technique read the move as continuing well past it. That
+# was correct for room-with-genuine-distance, but it also silently
+# unblocked the two *structurally impossible* cases this module exists to
+# catch - an entry landing directly inside a real, undisplaced, unmitigated
+# directional zone, or zero/negative raw room against one - for every
+# ordinary zone, not just the minor ones. Production data isolated to the
+# exact PR #493 merge timestamp confirmed the cost: Key Level auto-trades
+# went from 68 trades / 56% win rate / +628 net pips to 8 trades / 37.5% /
+# -165 net pips in the days after.
+#
+# Only a genuinely unsided, non-directional "level" (a round-number/generic
+# reaction level with no real supply/demand behind it) gets the weak
+# treatment now - it never carried directional structural authority to
+# begin with. An ordinary directional "zone" is real evidence again: it
+# hard-blocks on containment/zero-room exactly like "major" does. What
+# "zone" tier does NOT get back is the room-based fixed_rr ladder cap PR
+# #493 mentioned - that mechanism (_fixed_rr_adaptive_room_pips) was
+# deleted outright by a separate same-day PR (#499) and is out of scope
+# here; a "zone" with genuine positive room (the Sept-7 motivating trade)
+# still passes through this function exactly as before.
+#
+# Continuous strength/room-in-R context for a "zone"/"major" barrier that
+# does NOT hit one of these two hard-structural branches is computed by
+# evaluate_opposing_structure_v2() below and persisted as telemetry
+# (OpposingStructureEvidence) - not read by this frozenset or by the
+# containment/zero-room branches themselves, which stay pure geometry per
+# the owner's own "hard geometry stays separate from quality" instruction.
+_WEAK_OPPOSING_TIERS = frozenset({"level"})
 
 
 def _overlap(
@@ -334,6 +482,346 @@ def _nearest_opposing(
   return min(relevant, default=None, key=lambda item: item[:4])[-1] if relevant else None
 
 
+def _clamp01(value: float) -> float:
+  return max(0.0, min(1.0, value))
+
+
+@dataclass(frozen=True)
+class OpposingStructureEvidence:
+  """Opposing Structure V2 (2026-09 Key Level repair): continuous
+  strength/room-in-R context for the nearest opposing barrier this module
+  already found via ``_nearest_opposing`` - computed and persisted as
+  telemetry alongside ``evaluate_structural_target_room``'s existing
+  hard-block decision, never read BY that decision. Hard geometry
+  (containment, zero/negative room) stays pure price-space geometry per
+  the owner's own "hard geometry stays separate from quality" instruction
+  - nothing here softens or toughens ``_WEAK_OPPOSING_TIERS``/the
+  containment/zero-room branches.
+
+  ``room_r``/``before_tp1``/``room_pressure_score``/``opposing_risk_score``
+  are all ``None`` when no protective-stop distance was supplied by the
+  caller - "persist raw room and defer authoritative R-based gating"
+  rather than fabricate a stop. ``action``/``reason_code`` are computed
+  for every barrier (including the R-based bands: ``BLOCK_BEFORE_TP1``,
+  ``CAUTION``, ``CONFIRMATION_REQUIRED``) but in this pass nothing reads
+  them to gate anything - only ``BLOCK_INSIDE``/``BLOCK_ZERO_ROOM`` have a
+  live counterpart (the containment/zero-room hard-block branches in
+  ``evaluate_structural_target_room``, keyed on geometry directly, not on
+  this dataclass). The rest is shadow telemetry for a follow-up PR.
+  """
+  direction: str
+  zone_low: float
+  zone_high: float
+  zone_side: str
+  tier: str
+  zone_score: float
+  touches: int
+  mitigated: bool
+  displaced: bool
+  entry_price: float
+  raw_room_price: float
+  raw_room_pips: float
+  room_atr: float | None
+  room_r: float | None
+  first_target_r: float | None
+  before_tp1: bool | None
+  strength_score: float
+  room_pressure_score: float | None
+  opposing_risk_score: float | None
+  action: str
+  reason_code: str
+
+  def to_dict(self) -> dict[str, Any]:
+    return {
+      "direction": self.direction,
+      "zone_low": self.zone_low,
+      "zone_high": self.zone_high,
+      "zone_side": self.zone_side,
+      "tier": self.tier,
+      "zone_score": round(float(self.zone_score), 4),
+      "touches": self.touches,
+      "mitigated": self.mitigated,
+      "displaced": self.displaced,
+      "entry_price": self.entry_price,
+      "raw_room_price": round(float(self.raw_room_price), 6),
+      "raw_room_pips": round(float(self.raw_room_pips), 3),
+      "room_atr": None if self.room_atr is None else round(float(self.room_atr), 4),
+      "room_r": None if self.room_r is None else round(float(self.room_r), 4),
+      "first_target_r": self.first_target_r,
+      "before_tp1": self.before_tp1,
+      "strength_score": round(float(self.strength_score), 4),
+      "room_pressure_score": (
+        None if self.room_pressure_score is None
+        else round(float(self.room_pressure_score), 4)
+      ),
+      "opposing_risk_score": (
+        None if self.opposing_risk_score is None
+        else round(float(self.opposing_risk_score), 4)
+      ),
+      "action": self.action,
+      "reason_code": self.reason_code,
+    }
+
+
+def _opposing_structure_evidence_for_barrier(
+  *,
+  direction: str,
+  barrier: Any,
+  planned: float,
+  raw_room: float,
+  raw_room_pips: float,
+  room_atr: float | None,
+  protective_stop_distance: float | None,
+  first_target_r: float | None,
+  strength_score_ceiling: float,
+  caution_room_r: float,
+) -> OpposingStructureEvidence:
+  """Shared math for an already-selected barrier - both
+  ``evaluate_opposing_structure_v2`` (which selects its own barrier) and
+  ``evaluate_structural_target_room`` (which reuses the barrier/room it
+  already computed for its own hard-block decision, never re-selecting)
+  build the evidence object through this one function so the two never
+  drift.
+  """
+  zone_low = float(getattr(barrier, "lo"))
+  zone_high = float(getattr(barrier, "hi"))
+  tier = str(getattr(barrier, "tier", "") or "")
+  zone_score = float(getattr(barrier, "score", 0.0) or 0.0)
+  touches = int(getattr(barrier, "touches", 0) or 0)
+  mitigated = bool(getattr(barrier, "mitigated", False))
+  # A genuinely displaced entry never reaches _nearest_opposing in
+  # production - callers filter displacement upstream via
+  # filter_displaced_opposing_entries on authoritative closed bars (this
+  # module's own contract, unchanged). ``displaced`` here only fires for a
+  # caller/test that deliberately keeps a displaced-flagged entry in for
+  # telemetry purposes, mirroring ``include_mitigated``.
+  displaced = bool(getattr(barrier, "displaced", False))
+  contained = zone_low <= planned <= zone_high
+
+  strength = 0.0 if (mitigated or displaced) else _clamp01(
+    zone_score / max(1e-9, float(strength_score_ceiling))
+  )
+
+  room_r: float | None = None
+  if protective_stop_distance is not None:
+    risk = float(protective_stop_distance)
+    if math.isfinite(risk) and risk > 0:
+      room_r = raw_room / risk
+
+  before_tp1: float | None = None
+  if room_r is not None and first_target_r is not None and float(first_target_r) > 0:
+    before_tp1 = room_r < float(first_target_r)
+
+  room_pressure: float | None = None
+  opposing_risk: float | None = None
+  if room_r is not None and float(caution_room_r) > 0:
+    room_pressure = _clamp01((float(caution_room_r) - room_r) / float(caution_room_r))
+    opposing_risk = strength * room_pressure
+
+  if mitigated:
+    action, reason_code = "IGNORED_MITIGATED", "opposing_zone_mitigated"
+  elif displaced:
+    action, reason_code = "IGNORED_DISPLACED", "opposing_zone_displaced"
+  elif contained:
+    action, reason_code = "BLOCK_INSIDE", "opposing_entry_contained"
+  elif raw_room <= 0:
+    action, reason_code = "BLOCK_ZERO_ROOM", "opposing_zero_or_negative_room"
+  elif before_tp1:
+    action, reason_code = "BLOCK_BEFORE_TP1", "opposing_room_before_tp1"
+  elif room_r is not None and room_r < 0.5:
+    action, reason_code = "CAUTION", "opposing_room_critical"
+  elif room_r is not None and room_r < float(caution_room_r):
+    action, reason_code = "CONFIRMATION_REQUIRED", "opposing_room_tight"
+  else:
+    action, reason_code = "CLEAR", "opposing_room_clear"
+
+  # §47 — one throttled debug line per distinct barrier decision, not a
+  # noisy per-cycle INFO log. Keyed on the barrier's own bounds/action so
+  # a transition (e.g. clear -> tight as price drifts) gets its own key
+  # and isn't swallowed by the throttle window for the prior state.
+  log_at_most(
+    log,
+    f"opp_v2:{direction}:{round(zone_low, 4)}:{round(zone_high, 4)}:{action}",
+    "key_level_opposing_structure direction=%s entry=%s zone=%s-%s "
+    "tier=%s strength=%.3f room_pips=%.2f room_r=%s tp1_r=%s "
+    "before_tp1=%s action=%s reason=%s",
+    direction,
+    round(planned, 6),
+    round(zone_low, 6),
+    round(zone_high, 6),
+    tier,
+    strength,
+    raw_room_pips,
+    None if room_r is None else round(room_r, 4),
+    first_target_r,
+    before_tp1,
+    action,
+    reason_code,
+    level=logging.DEBUG,
+  )
+
+  return OpposingStructureEvidence(
+    direction=str(direction).upper(),
+    zone_low=zone_low,
+    zone_high=zone_high,
+    zone_side=str(getattr(barrier, "side", "")),
+    tier=tier,
+    zone_score=zone_score,
+    touches=touches,
+    mitigated=mitigated,
+    displaced=displaced,
+    entry_price=planned,
+    raw_room_price=raw_room,
+    raw_room_pips=raw_room_pips,
+    room_atr=room_atr,
+    room_r=room_r,
+    first_target_r=(None if first_target_r is None else float(first_target_r)),
+    before_tp1=before_tp1,
+    strength_score=strength,
+    room_pressure_score=room_pressure,
+    opposing_risk_score=opposing_risk,
+    action=action,
+    reason_code=reason_code,
+  )
+
+
+# 2026-09 (owner-reported, restoring PR #494's principle deleted outright
+# by PR #499): a swing distance shorter than this many ATRs is too close
+# to be a credible "the technique expects real room" signal - it reads as
+# noise (a minor recent wiggle), not a structural read worth trusting over
+# a real opposing wall. Mirrors the deleted
+# worker.py::_TECHNIQUE_SWING_ROOM_MIN_ATR_MULTIPLE exactly (tunable, no
+# empirical calibration behind it).
+_TECHNIQUE_SWING_ROOM_MIN_ATR_MULTIPLE = 2.0
+
+
+def widen_room_for_technique_swing(
+  raw_room_price: float,
+  *,
+  direction: str,
+  planned_entry_price: float,
+  structural_swing: float | None,
+  atr: float,
+  barrier_tier: str,
+) -> float:
+  """Restores PR #494's principle (deleted wholesale by PR #499's
+  ``_fixed_rr_adaptive_room_pips``/``_technique_swing_room_pips``) against
+  the current ``StructuralBarrierBook`` instead of Market Map tiers: a
+  technique's own ``structural_swing`` reference can only ever WIDEN the
+  room a major-tier opposing wall would otherwise imply, never narrow it,
+  and only when the swing distance itself clears a credibility floor.
+
+  Never applied to a non-"major" barrier (an ordinary "zone" already hard-
+  blocks on containment/zero-room per PR #517 - there is no wall room to
+  widen past for it in the first place, same as the deleted code only ever
+  widening a *major*-wall room base). Never applied when there is no
+  barrier at all (nothing to widen against). This function never narrows
+  ``raw_room_price`` - the return value is always ``>= raw_room_price``.
+  """
+  if barrier_tier != "major" or structural_swing is None:
+    return raw_room_price
+  try:
+    swing = float(structural_swing)
+    entry = float(planned_entry_price)
+    atr_value = float(atr)
+  except (TypeError, ValueError):
+    return raw_room_price
+  if not all(math.isfinite(value) for value in (swing, entry, atr_value)):
+    return raw_room_price
+  swing_distance = abs(entry - swing)
+  if swing_distance < _TECHNIQUE_SWING_ROOM_MIN_ATR_MULTIPLE * max(0.0, atr_value):
+    return raw_room_price
+  side = str(direction).upper()
+  # A credible swing only widens room in the direction the technique
+  # itself measured it - a swing behind the entry (wrong side) is not a
+  # forward room signal at all.
+  if side == "BUY" and swing <= entry:
+    return raw_room_price
+  if side == "SELL" and swing >= entry:
+    return raw_room_price
+  return max(raw_room_price, swing_distance)
+
+
+def evaluate_opposing_structure_v2(
+  *,
+  direction: str,
+  planned_entry_price: float,
+  entries: Iterable[Any],
+  atr: float,
+  pip_size: float,
+  protective_stop_distance: float | None = None,
+  first_target_r: float | None = None,
+  strength_score_ceiling: float = 15.0,
+  caution_room_r: float = 2.0,
+  structural_swing: float | None = None,
+) -> OpposingStructureEvidence | None:
+  """Opposing Structure V2: continuous strength + room-in-R evidence for
+  the nearest opposing barrier ahead of ``planned_entry_price``, reusing
+  the same proximity-first ``_nearest_opposing`` selection
+  ``evaluate_structural_target_room`` uses for its own hard-block
+  decision. Returns ``None`` when there's no opposing entry on the correct
+  side at all - "nothing to evaluate" is distinct from "evaluated and
+  clear."
+
+  ``strength_score`` is deliberately just the zone's own score normalized
+  against ``strength_score_ceiling`` (0 when mitigated or displaced) - the
+  zone's score already bakes in freshness/HTF/touch-quality/source
+  confluence (see app/analysis/zones.py::_score_zone); re-adding separate
+  terms for the same evidence would double-count it.
+
+  ``room_r``/``before_tp1``/``room_pressure_score``/``opposing_risk_score``
+  need a real ``protective_stop_distance`` (price units, always positive)
+  to mean anything - when the caller doesn't have one yet, those fields
+  stay ``None`` (never a fabricated stop) and only the raw
+  price/pips/ATR room is reported.
+
+  ``structural_swing`` (2026-09, restoring PR #494's principle after PR
+  #499 deleted it outright): the technique's own structural swing
+  reference, if any - see ``widen_room_for_technique_swing``. Only ever
+  widens ``raw_room_price`` past what a *major*-tier wall alone implies,
+  never narrows it, and only for genuinely positive room (a
+  containment/zero-room case is never "widened" into looking clear).
+  """
+  side = str(direction).upper()
+  if side not in {"BUY", "SELL"}:
+    return None
+  planned = float(planned_entry_price)
+  pip = float(pip_size)
+  if not math.isfinite(planned) or not math.isfinite(pip) or pip <= 0:
+    return None
+  barrier = _nearest_opposing(side, planned, planned, planned, entries)
+  if barrier is None:
+    return None
+
+  zone_low = float(getattr(barrier, "lo"))
+  zone_high = float(getattr(barrier, "hi"))
+  raw_room = zone_low - planned if side == "BUY" else planned - zone_high
+  if raw_room > 0:
+    raw_room = widen_room_for_technique_swing(
+      raw_room,
+      direction=side,
+      planned_entry_price=planned,
+      structural_swing=structural_swing,
+      atr=atr,
+      barrier_tier=str(getattr(barrier, "tier", "") or ""),
+    )
+  raw_room_pips = safe_div(raw_room, pip, default=0.0) or 0.0
+  room_atr = safe_div(raw_room, atr) if atr > 0 else None
+
+  return _opposing_structure_evidence_for_barrier(
+    direction=side,
+    barrier=barrier,
+    planned=planned,
+    raw_room=raw_room,
+    raw_room_pips=raw_room_pips,
+    room_atr=room_atr,
+    protective_stop_distance=protective_stop_distance,
+    first_target_r=first_target_r,
+    strength_score_ceiling=strength_score_ceiling,
+    caution_room_r=caution_room_r,
+  )
+
+
 def evaluate_structural_target_room(
   *,
   direction: str,
@@ -352,13 +840,17 @@ def evaluate_structural_target_room(
   executable_entry_price: float | None = None,
   shared_boundary_state: dict[str, Any] | None = None,
   allow_same_wall_overlap: bool = True,
+  protective_stop_distance: float | None = None,
+  first_target_r: float | None = None,
+  strength_score_ceiling: float = 15.0,
+  caution_room_r: float = 2.0,
 ) -> StructuralTargetRoomDecision:
   """Measure opposing structure ahead — never invent a tiny TP ladder.
 
   Hard-blocks only on structural impossibility: planned entry contained in
   the opposing structure, or raw geometric room <= 0.
 
-  Live 2026-08-06 Trendline Reaction BUY published a single absolute TP at
+  Live 2026-08-06 Trendline BUY published a single absolute TP at
   4255.49 with close_ratio=1.0 (~9 pips from fill) because this function
   used to replace the owner ladder with ``floor(usable_room)``. That is
   scalping theatre. Owner directive: reaction/swing setups always keep the
@@ -371,6 +863,13 @@ def evaluate_structural_target_room(
 
   Callers must apply ``filter_displaced_opposing_entries`` on authoritative
   recent closed bars before passing ``actionable_entries``.
+
+  ``protective_stop_distance``/``first_target_r``/``strength_score_ceiling``/
+  ``caution_room_r`` (2026-09, Opposing Structure V2, all optional) feed
+  ``measured["opposing_evidence"]`` (an ``OpposingStructureEvidence.to_dict()``,
+  present whenever a barrier was found) - shadow telemetry only. They never
+  change ``allowed``/``hard_block`` here; the containment/zero-room hard
+  gates below stay pure price-space geometry.
   """
   side = str(direction).upper()
   planned = float(planned_entry_price)
@@ -533,6 +1032,24 @@ def evaluate_structural_target_room(
     "room_pips": round(room_pips, 3),
     "room_atr": round(room_atr, 4),
   }
+  # Opposing Structure V2 (2026-09) — shadow telemetry only, built from the
+  # SAME barrier/raw_room this function already selected above (never a
+  # second, possibly-divergent _nearest_opposing call). Uses raw (not
+  # buffer-adjusted) room throughout, matching OpposingStructureEvidence's
+  # own "raw_room_*" naming.
+  raw_room_atr = safe_div(raw_room, atr) if atr > 0 else None
+  measured["opposing_evidence"] = _opposing_structure_evidence_for_barrier(
+    direction=side,
+    barrier=barrier,
+    planned=planned,
+    raw_room=raw_room,
+    raw_room_pips=raw_room_pips,
+    room_atr=raw_room_atr,
+    protective_stop_distance=protective_stop_distance,
+    first_target_r=first_target_r,
+    strength_score_ceiling=strength_score_ceiling,
+    caution_room_r=caution_room_r,
+  ).to_dict()
 
   def _log_decision(decision: StructuralTargetRoomDecision) -> StructuralTargetRoomDecision:
     msg = (
@@ -584,10 +1101,11 @@ def evaluate_structural_target_room(
       if planned_in_overlap
       else "opposing_entry_contained"
     )
-    # Weak map "level" bands are often stacked noise next to a real zone —
-    # they silenced HFS/technique analysis while discretionary charts still
-    # had a trade. Major/zone containment stays a hard structural reject.
-    if tier.casefold() == "level":
+    # Weak map "level"/"zone" bands are often stacked noise, or minor
+    # reclaimed structure a real technique setup is expected to trade
+    # through, next to the real move. Major containment stays a hard
+    # structural reject.
+    if tier.casefold() in _WEAK_OPPOSING_TIERS:
       measured["weak_opposing_level_ignored"] = True
       measured["weak_opposing_level_reason"] = reason
       log.debug(
@@ -619,7 +1137,7 @@ def evaluate_structural_target_room(
       if tier.casefold() == "major"
       else "opposing_barrier_no_target"
     )
-    if tier.casefold() == "level":
+    if tier.casefold() in _WEAK_OPPOSING_TIERS:
       measured["weak_opposing_level_ignored"] = True
       measured["weak_opposing_level_reason"] = reason
       log.debug(

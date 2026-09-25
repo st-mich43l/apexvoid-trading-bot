@@ -85,32 +85,16 @@
       "api": "os.environ.get",
       "classification": "UNKNOWN_BLOCKER",
       "env_name": "DATABASE_URL",
-      "file": "algo-bot/app/scripts/backfill_manual_algo_charts.py",
-      "line": 60
+      "file": "algo-bot/app/scripts/auto_strategy_baseline.py",
+      "line": 90
     },
     {
       "allowed": false,
       "api": "os.environ.get",
       "classification": "UNKNOWN_BLOCKER",
       "env_name": "POSTGRES_DSN",
-      "file": "algo-bot/app/scripts/backfill_manual_algo_charts.py",
-      "line": 60
-    },
-    {
-      "allowed": false,
-      "api": "os.environ.get",
-      "classification": "UNKNOWN_BLOCKER",
-      "env_name": "DATABASE_URL",
-      "file": "algo-bot/app/scripts/manual_formula_replay.py",
-      "line": 868
-    },
-    {
-      "allowed": false,
-      "api": "os.environ.get",
-      "classification": "UNKNOWN_BLOCKER",
-      "env_name": "POSTGRES_DSN",
-      "file": "algo-bot/app/scripts/manual_formula_replay.py",
-      "line": 868
+      "file": "algo-bot/app/scripts/auto_strategy_baseline.py",
+      "line": 90
     }
   ],
   "allowed_sites": 10,
@@ -119,9 +103,9 @@
     "DEPLOYMENT_OBSERVABILITY_ALLOWED": 3,
     "EARLY_BOOT_ALLOWED": 2,
     "SCRIPT_TOOL_ALLOWED": 3,
-    "UNKNOWN_BLOCKER": 4
+    "UNKNOWN_BLOCKER": 2
   },
   "direct_production_env_forbidden": 0,
-  "total_access_sites": 14,
-  "unknown_blockers": 4
+  "total_access_sites": 12,
+  "unknown_blockers": 2
 }

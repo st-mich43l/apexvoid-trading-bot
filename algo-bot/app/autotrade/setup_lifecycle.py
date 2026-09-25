@@ -27,8 +27,22 @@ from typing import Any, Mapping
 # transitioned to EXPIRED, with no terminal lifecycle event, no card
 # deletion, and no audit trail. These two constants keep the record
 # readable well past both business expiry and terminal transition.
-SETUP_AUDIT_RETENTION_SECONDS = 24 * 3600
-TERMINAL_SETUP_RETENTION_SECONDS = 24 * 3600
+#
+# 2026-09: a 24h floor was still far too short for an ACTIVE (non-terminal)
+# record - it re-anchors from whichever save last touched it, not from
+# activation, so a position that fills and then sees no further event for
+# >24h (a normal weekend: fill Friday, market closed until Sunday night)
+# has this record silently expire while the position is still genuinely
+# open. Startup reconciliation (_reconcile_forming_cards) then reads
+# load_setup() as None and deletes the still-needed forming-card Telegram
+# mapping, so the next real event (order_filled / position_closed) can't
+# find the original card and creates a duplicate instead - confirmed live
+# on a USDJPY position that crossed a weekend. 30 days safely outlives any
+# realistic single gap (weekend, holiday closure) between events for a
+# still-open position; TERMINAL is a pure audit window with no functional
+# cost to extending it the same way.
+SETUP_AUDIT_RETENTION_SECONDS = 30 * 24 * 3600
+TERMINAL_SETUP_RETENTION_SECONDS = 30 * 24 * 3600
 
 
 DISCOVERED = "discovered"
@@ -69,11 +83,6 @@ _LEGACY_PRE_PLAN_STATES = frozenset({
   WORKER_ACKNOWLEDGED,
   ARMED_WAITING_TRIGGER,
 })
-
-# Analysis-only states: a setup here has never produced a TradePlan and
-# never directly causes execution. Mirrors the ADR's split between the
-# analysis/watchlist flow and the confirmed execution-plan flow.
-ANALYSIS_ONLY_STATES = frozenset({DISCOVERED, WATCHING, TOUCHED, FORMING})
 
 TERMINAL_STATES = frozenset({CANCELLED, INVALIDATED, EXPIRED, CONSUMED})
 
@@ -163,10 +172,6 @@ def setup_key(setup_id: str) -> str:
 
 def active_thesis_key(symbol: str, thesis_id: str) -> str:
   return f"analysis:active_thesis:{symbol}:{thesis_id}"
-
-
-def watchlist_key() -> str:
-  return "analysis:watchlist"
 
 
 def setup_expiry_index_key() -> str:

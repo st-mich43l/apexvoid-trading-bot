@@ -25,7 +25,6 @@ from app.autotrade.map_strategy import market_map_display_key
 log = logging.getLogger(__name__)
 
 _META_SCAN_KEY = "last_map_scan"
-_LOOP_INTERVAL_SECONDS = 60
 _MARKET_MAP_TELEGRAM_TTL_SECONDS = 7 * 24 * 3600
 
 
@@ -181,20 +180,6 @@ async def _market_map_scan_tick(now: datetime | None = None) -> bool:
   if evaluated:
     await set_meta(_META_SCAN_KEY, scan_key)
   return sent
-
-
-async def market_map_scan_loop() -> None:
-  if not runtime_config.delivery.market_map.session_send:
-    log.info("Market Map automatic delivery disabled")
-    return
-  while True:
-    try:
-      await _market_map_scan_tick()
-    except asyncio.CancelledError:
-      raise
-    except Exception:
-      log.exception("Market Map periodic delivery failed")
-    await asyncio.sleep(_LOOP_INTERVAL_SECONDS)
 
 
 async def _replace_owner_market_map_message(symbol: str, text: str) -> None:

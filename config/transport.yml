@@ -1,0 +1,59 @@
+# Transport ownership is intentional and non-overlapping:
+# Redis is the authoritative operational market-data plane; Kafka carries
+# durable business/trading events and commands. PostgreSQL owns permanent
+# trade history and audit data. See ADR-010.
+transport:
+  redis:
+    url: redis://redis:6379/0
+    # Exact existing cTrader pub/sub channel. Messages are wake-ups only;
+    # analysis-engine always reads bars:{SYMBOL}:{TIMEFRAME} as authority.
+    bars_channel: bars:new
+    # Reconcile ZSET timestamps even while pub/sub is healthy. This bounds
+    # recovery latency after a missed notification or subscriber reconnect.
+    reconciliation_interval_seconds: 30
+
+  redis_streams:
+    candidates: auto_trade:candidates
+    events: auto_trade:events
+    trade_plans: execution:trade_plans
+    candidate_maximum_length: 1000
+    candidate_version: 6
+
+  kafka:
+    # The broker is deployed now for the event/command plane. Kafka is not
+    # in cTrader's market-data path and analysis-engine is producer-only.
+    enabled: true
+    brokers:
+      - kafka:9092
+    client_id:
+      analysis_engine: apexvoid-analysis-engine
+      algo_bot: apexvoid-algo-bot
+      ctrader_engine: apexvoid-ctrader-engine
+    # Durable publication ledger/outbox. This is analysis lifecycle state,
+    # never market data and never an execution queue.
+    outbox_path: /var/lib/apexvoid-analysis-engine/publication-ledger.json
+    topics:
+      analysis_opportunity: analysis.opportunity.v1
+      analysis_opportunity_invalidated: analysis.opportunity.invalidated.v1
+      execution_trade_plan: execution.trade-plan.v1
+      execution_trade_event: execution.trade-event.v1
+    # Explicit, idempotently provisioned broker contracts. The execution
+    # topics are deployment-ready only: their consumers/producers are not
+    # implemented in this phase.
+    topic_specs:
+      analysis.opportunity.v1:
+        partitions: 3
+        replication_factor: 1
+        retention_ms: 604800000
+      analysis.opportunity.invalidated.v1:
+        partitions: 3
+        replication_factor: 1
+        retention_ms: 604800000
+      execution.trade-plan.v1:
+        partitions: 3
+        replication_factor: 1
+        retention_ms: 604800000
+      execution.trade-event.v1:
+        partitions: 3
+        replication_factor: 1
+        retention_ms: 604800000

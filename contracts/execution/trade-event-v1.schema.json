@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://apexvoid.internal/contracts/execution/trade-event-v1.schema.json",
+  "title": "execution.trade-event.v1",
+  "description": "SKELETON, not yet wired into any service (docs/adr/007-shared-cross-service-contracts.md). Target Kafka replacement for today's real, live auto_trade:events Redis stream that ctrader-engine publishes to and algo-bot's execution/delivery layer consumes from — the event `type` values below (order_filled, take_profit, stop_moved, position_closed, ...) are the real type strings observed on that live stream, not invented names. ctrader-engine never decides trade validity (docs/architecture/service-boundaries.md) — every event here is a fact about what already happened at the broker.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["type", "symbol", "timestamp"],
+  "properties": {
+    "type": {
+      "type": "string",
+      "enum": [
+        "order_filled",
+        "position_closed",
+        "position_closing",
+        "take_profit",
+        "stop_moved",
+        "sl_moved",
+        "tp_booked",
+        "group_result",
+        "manual_limit_placed",
+        "manual_opened",
+        "invalidated",
+        "strategy_route"
+      ],
+      "description": "Not exhaustive — the real stream has more types observed live this session (e.g. account_capability, ready, config_health, warning are operational, not trade events, and would not belong on this schema at all)."
+    },
+    "symbol": { "type": "string" },
+    "direction": { "type": "string", "enum": ["BUY", "SELL"] },
+    "position_id": { "type": "integer" },
+    "plan_id": { "type": "string" },
+    "price": { "type": "number" },
+    "stop_loss": { "type": "number" },
+    "message": { "type": "string" },
+    "reason_code": { "type": "string" },
+    "timestamp": { "type": "integer", "description": "Unix seconds." }
+  }
+}

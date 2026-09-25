@@ -93,6 +93,35 @@ def legs_net_pips(legs: list[dict]) -> int:
   return legs_achieved_pips(legs)
 
 
+def legs_achieved_entry_price(legs: list[dict], action: str) -> float | None:
+  """Entry price of the DEEPEST-filled leg — the risk-calc denominator.
+
+  2026-09 (owner-reported): "for pips archived, it must calculate from the
+  deepest entry as well" - this used to reuse legs_achieved_pips's peak-pips
+  leg as a proxy for "the deep leg," on the assumption that whichever leg
+  ran furthest before closing was the deep one. That assumption doesn't
+  hold: a shallow leg can run further before closing than the deep leg
+  does before an early BE stop, so "peak pips" and "deepest entry" are not
+  the same leg in general.
+
+  A multi-leg manual /algo group fills clips at different prices (see
+  AutoTradeEngine.cs's ManualEntryLegPrices: deep is whichever edge is the
+  more favorable fill - lower for BUY, higher for SELL). Realized R must be
+  measured against the deepest fill specifically, by entry price, since
+  that's the leg carrying the group's real risk furthest - independent of
+  which leg happened to report the most pips. None when no leg carries its
+  own entry_price (older events).
+  """
+  candidates = [
+    float(leg["entry_price"])
+    for leg in legs
+    if leg.get("entry_price") is not None
+  ]
+  if not candidates:
+    return None
+  return min(candidates) if action == "BUY" else max(candidates)
+
+
 def wing_icons(pips: int) -> str:
   """Return dollar-wing icons for positive pip wins.
 

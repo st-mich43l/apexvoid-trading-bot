@@ -67,7 +67,7 @@ _PENDING_TRADE_PLAN_GROUP_STAGES = frozenset({
 })
 # Live 2026-08-26: V8 left Stage=FullyOpen + GroupStage=recovery_required after
 # unknown_leg_close while broker position keys were already gone. Python still
-# counted FullyOpen as live exposure → HFS scalp_max_concurrent_positions
+# counted FullyOpen as live exposure → scalping scalp_max_concurrent_positions
 # blocked every XAU discovery for hours. Recovery is not a manageable open book.
 _NON_LIVE_TRADE_PLAN_GROUP_STAGES = frozenset({
   "recovery_required",
@@ -125,7 +125,7 @@ def _is_non_live_trade_plan(
   if group in _NON_LIVE_TRADE_PLAN_GROUP_STAGES:
     return True
   reason = _normalize_stage_token(terminal_reason)
-  # Sticky FullyOpen + unknown_leg_close must not lock HFS concurrent forever.
+  # Sticky FullyOpen + unknown_leg_close must not lock scalping concurrent forever.
   if reason in _NON_LIVE_TERMINAL_REASONS and _normalize_stage_token(stage) in {
     "fullyopen",
     "fully_open",
@@ -141,12 +141,6 @@ def normalize_symbol(value: object) -> str | None:
   if not text:
     return None
   return _SYMBOL_ALIASES.get(text, text)
-
-
-def same_instrument(left: object, right: object) -> bool:
-  a = normalize_symbol(left)
-  b = normalize_symbol(right)
-  return a is not None and a == b
 
 
 def normalize_direction(value: object) -> str | None:
@@ -285,7 +279,7 @@ async def load_active_exposures(
   Received/Submitted plans occupy the symbol before the first fill. Omitting
   them let two GBPJPY Key Level sells publish 5s apart (2026-08-17).
 
-  Pass ``symbol`` to keep only that instrument's book (HFS reconcile / any
+  Pass ``symbol`` to keep only that instrument's book (scalping reconcile / any
   per-symbol caller). Omit only when the caller will filter next.
   """
   exposures: list[ActiveExposure] = []
@@ -626,7 +620,7 @@ def apply_same_direction_stack_sizing(
   entry = out.get("planned_entry_price")
   # Always collapse to a single limit at planned_entry_price. Converting
   # market_with_limit_scale → market_watch left validate() checking targets
-  # against the full zone (furthest = zone_low for SELL). Short HFS targets
+  # against the full zone (furthest = zone_low for SELL). Short scalping targets
   # computed from the proximal planned entry then fail with
   # "SELL targets must all be below the entry zone" (live 2026-08-20
   # XAU 49ffb74 under same-direction stack) and TradePlanError bypassed

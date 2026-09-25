@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://apexvoid.internal/contracts/analysis/opportunity-invalidated-v1.schema.json",
+  "title": "analysis.opportunity.invalidated.v1",
+  "description": "Transport-ready as of the Kafka transport task (docs/adr/007-shared-cross-service-contracts.md; publisher: internal/transport/kafka/producer.go). Published by analysis-engine when a previously-published opportunity (analysis.opportunity.v1) is no longer valid — its invalidation price traded through, it expired, or the structure it was based on was itself invalidated. algo-bot's analysis_client uses this to retire a Candidate it may have already started evaluating. Deliberately a separate, minimal event rather than re-publishing the full opportunity with a status flag — a consumer that only cares about invalidation should not need the full Candidate shape. This is the PAYLOAD only — wrapped inside contracts/common/event-envelope-v1.schema.json's `payload` field. No strategy is implemented yet — this contract publishes no real events today.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["opportunity_id", "symbol", "strategy", "reason_code", "invalidated_at"],
+  "properties": {
+    "opportunity_id": {
+      "type": "string",
+      "description": "Matches the id field of the analysis.opportunity.v1 event being invalidated."
+    },
+    "symbol": { "type": "string" },
+    "strategy": { "type": "string", "description": "Neutral StrategyID from the opportunity being invalidated." },
+    "reason_code": {
+      "type": "string",
+      "description": "Machine-readable reason code (source task §30 — never free-text-only), same discipline as opportunity-v1's evidence[].code — e.g. \"INVALIDATION_PRICE_TRADED_THROUGH\", \"EXPIRED\", \"STRUCTURE_INVALIDATED\". Not schema-enumerated here: the fixed value set belongs to the strategy layer that will first emit this event, not to this transport contract."
+    },
+    "invalidated_at": { "type": "integer", "description": "Unix seconds." }
+  }
+}

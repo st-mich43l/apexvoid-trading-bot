@@ -14,7 +14,10 @@ from app.analysis.execution_eligibility import (
   STATIC_ELIGIBLE,
   ExecutionEligibility,
 )
-from app.analysis.structural_reaction_support import structural_thesis_id
+from app.analysis.structural_reaction_support import (
+  bias_relationship,
+  structural_thesis_id,
+)
 from app.autotrade import worker
 from app.autotrade.multi_match import (
   dedupe_matches,
@@ -74,6 +77,23 @@ def _scalp_target_ladder(
   return last, (first, last)
 
 
+def _scalp_target_r_multiples(
+  targets_pips: tuple[int, ...],
+  stop_pips: int,
+) -> tuple[float, ...]:
+  """The R-multiple each ``_scalp_target_ladder`` entry actually is.
+
+  Every entry in ``targets_pips`` is built as an exact multiple of
+  ``stop_pips`` (1R, or 1R/2R) - dividing the two recovers that multiple
+  directly, with no re-derivation from a card's own displayed prices (a
+  root-card zone edge is a cosmetic pip-offset reference only, a different
+  basis from this stop - see setup_card._configured_target_r_multiples).
+  """
+  if stop_pips <= 0:
+    return ()
+  return tuple(round(pips / stop_pips, 2) for pips in targets_pips)
+
+
 def build_scalp_strategy_match(
   opportunity: ScalpOpportunity,
   context: ScalpContextSnapshot,
@@ -101,6 +121,10 @@ def build_scalp_strategy_match(
   now = int(bar_ts)
   expires = max(now + 60, int(opportunity.expires_at))
   target_pips, targets_pips = _scalp_target_ladder(opportunity, cfg)
+  scalp_target_r_multiples = _scalp_target_r_multiples(
+    targets_pips,
+    max(1, int(round(float(opportunity.expected_stop_pips)))),
+  )
   htf_bias = str(context.htf_bias or "range")
   if htf_bias in {"", "unknown"}:
     htf_bias = "range"
@@ -171,6 +195,7 @@ def build_scalp_strategy_match(
     structure_swing=float(structure_swing),
     targets_pips=targets_pips,
     full_take_profit_pips=target_pips,
+    scalp_target_r_multiples=scalp_target_r_multiples,
     absolute_target_price=float(opportunity.expected_target_price),
     tier="A",
     family="scalp",
@@ -181,6 +206,7 @@ def build_scalp_strategy_match(
     structural_kind=_structural_kind(opportunity),
     structural_timeframe="M1",
     htf_bias=htf_bias,
+    bias_relationship=bias_relationship(htf_bias, opportunity.direction.upper()),
     regime_kind=str(context.regime or "range"),
     touch_bar_ts=touch,
     confirmation_bar_ts=confirm,

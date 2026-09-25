@@ -25,9 +25,6 @@ PUBLISHED_LOCKED = "published_locked"
 CONSUMED = "consumed"
 INVALIDATED = "invalidated"
 EXPIRED = "expired"
-# Backward-compat alias: pre-v3 code/tests used EXHAUSTED for terminal
-# structural exhaustion. Mission names that state EXPIRED.
-EXHAUSTED = EXPIRED
 
 ZONE_WATCH_STATES = (
   DISCOVERED,
@@ -66,6 +63,13 @@ ACTIVE_WATCHLIST_GRADES = frozenset({GRADE_A, GRADE_B})
 
 ZONE_WATCH_VERSION = 3
 ZONE_WATCH_RETENTION_SECONDS = 7 * 24 * 3600
+# A dead (INVALIDATED / EXPIRED) zone may re-form when a NEW structural
+# confirmation closes at least this long after it died. Owner 2026-09-21: a
+# price bucket that was invalidated once refused every later reaction at the
+# same level for the full 7-day retention. CONSUMED (a trade was taken) never
+# re-forms.
+ZONE_REFORM_COOLDOWN_SECONDS = 300
+REFORMABLE_ZONE_WATCH_STATES = frozenset({INVALIDATED, EXPIRED})
 # Touch count may downgrade confidence (A→B) but must never terminally
 # consume or expire a structurally valid zone. Kept as a soft telemetry
 # threshold only for callers that still want "many retests" signals.
@@ -176,6 +180,9 @@ class ZoneWatch:
   last_evaluated_m1_ts: int | None = None
   last_plan_id: str | None = None
   last_rearm_reason: str | None = None
+  # When the zone entered a terminal state (epoch s). Lets a NEW structural
+  # confirmation after that moment re-form the zone (see discover_zone_watch).
+  terminal_at: int | None = None
 
   def to_dict(self) -> dict[str, Any]:
     return {
@@ -210,6 +217,7 @@ class ZoneWatch:
       "last_evaluated_m1_ts": self.last_evaluated_m1_ts,
       "last_plan_id": self.last_plan_id,
       "last_rearm_reason": self.last_rearm_reason,
+      "terminal_at": self.terminal_at,
     }
 
   @classmethod
@@ -257,6 +265,7 @@ class ZoneWatch:
         if data.get("last_rearm_reason") is None
         else str(data["last_rearm_reason"])
       ),
+      terminal_at=_optional_int(data.get("terminal_at")),
     )
 
 
@@ -541,8 +550,18 @@ async def discover_zone_watch(
   structure_signature: str = "",
   technique_tags: Sequence[str] = (),
   now: int | None = None,
+  confirmed_at: int | None = None,
 ) -> tuple[ZoneWatch, bool]:
-  """Create or refresh a stable retained zone without resetting its episode."""
+  """Create or refresh a stable retained zone without resetting its episode.
+
+  ``confirmed_at`` is the close time (epoch s) of the structural confirmation
+  behind this detection. A zone that already died (INVALIDATED / EXPIRED) is
+  re-formed as a fresh DISCOVERED record only when that confirmation closed
+  more than ``ZONE_REFORM_COOLDOWN_SECONDS`` after the zone's last terminal /
+  interaction time - i.e. price reacted off the level AGAIN. A detector that
+  merely sees the old structure, or omits ``confirmed_at``, never resurrects
+  it. CONSUMED zones never re-form.
+  """
   ts = int(now if now is not None else time.time())
   low_value = float(low)
   high_value = float(high)
@@ -582,6 +601,50 @@ async def discover_zone_watch(
         return created, True
       continue
 
+    if (
+      existing.state in REFORMABLE_ZONE_WATCH_STATES
+      and confirmed_at is not None
+      and int(confirmed_at) > (
+        (
+          existing.terminal_at
+          or existing.zone_exited_at
+          or existing.last_touch_at
+          or existing.discovered_at
+        )
+        + ZONE_REFORM_COOLDOWN_SECONDS
+      )
+    ):
+      reformed = ZoneWatch(
+        version=ZONE_WATCH_VERSION,
+        zone_id=zone_id,
+        symbol=symbol.upper(),
+        direction=direction.upper(),
+        low=low_value,
+        high=high_value,
+        width=high_value - low_value,
+        source_timeframe=source_timeframe.upper(),
+        structural_sources=tuple(sorted(set(structural_sources))),
+        confluence_tags=tuple(sorted(set(confluence_tags))),
+        technique_tags=tuple(sorted(set(technique_tags))),
+        grade=grade.upper(),
+        score=float(score),
+        freshness=0,
+        touch_count=0,
+        discovered_at=ts,
+        last_confirmed_at=ts,
+        last_touch_at=None,
+        invalidation_price=None,
+        state=DISCOVERED,
+        market_map_id=market_map_id,
+        structure_signature=structure_signature,
+        updated_at=ts,
+        revision=existing.revision + 1,
+        last_rearm_reason=f"reformed_after_{existing.state}",
+      )
+      if await _cas_save(client, reformed, expected_revision=existing.revision):
+        return reformed, True
+      continue
+
     # Refresh discovery metadata and TTL while preserving state, touch count,
     # grade decay, and the current retest episode.  Terminal zones never
     # resurrect merely because a detector sees the old structure again.
@@ -607,6 +670,25 @@ async def discover_zone_watch(
   raise ZoneWatchError(f"zone discovery CAS contention exceeded for {key!r}")
 
 
+async def retire_zone_watch(client: Any, record: ZoneWatch) -> bool:
+  """Drop a dead zone from the watchlist entirely (record + every index).
+
+  Deliberately NOT a terminal-state transition: EXPIRED is a dead end
+  (``_TRANSITIONS[EXPIRED] == frozenset()``), so expiring a zone would
+  permanently block it if price ever returned. Deleting the record instead
+  leaves the zone free to be rediscovered from scratch (same deterministic
+  zone_id) the next time the scanner sees a reaction off that structure.
+  Only ever retires a zone that is still watchable - never a published/
+  locked one that may carry a live plan.
+  """
+  if not _index_wants_record(record):
+    return False
+  await client.srem(ZONE_WATCH_INDEX_KEY, record.zone_id)
+  await client.srem(zone_watch_symbol_index_key(record.symbol), record.zone_id)
+  await client.delete(zone_watch_key(record.zone_id))
+  return True
+
+
 async def transition_zone_watch(
   client: Any,
   zone_id: str,
@@ -627,11 +709,15 @@ async def transition_zone_watch(
         f"illegal zone watch transition {record.state!r} -> {new_state!r} "
         f"for {zone_id!r}{suffix}"
       )
+    now_ts = int(time.time())
+    updates = dict(field_updates)
+    if new_state in TERMINAL_ZONE_WATCH_STATES:
+      updates.setdefault("terminal_at", now_ts)
     return replace(
       record,
       state=new_state,
-      updated_at=int(time.time()),
-      **field_updates,
+      updated_at=now_ts,
+      **updates,
     ), True
 
   return await _mutate(client, zone_id, apply)
@@ -720,6 +806,7 @@ async def record_zone_presence(
         zone_exited_at=ts,
         invalidation_price=record.invalidation_price,
         updated_at=ts,
+        terminal_at=ts,
       ), True
     return replace(
       record,

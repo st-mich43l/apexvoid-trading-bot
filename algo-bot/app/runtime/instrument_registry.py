@@ -21,8 +21,6 @@ from app.configuration.models.instruments import InstrumentRollout
 from app.runtime.rollout_gates import (
   permits_analysis,
   permits_broker_execution,
-  permits_candidate_publication,
-  permits_feed,
 )
 
 
@@ -49,25 +47,11 @@ class InstrumentRuntimeRegistry(FrozenConfigModel):
       raise InstrumentRuntimeError(f"unknown instrument symbol {symbol!r}")
     return self.by_id[instrument_id]
 
-  def try_get(self, symbol: str) -> InstrumentRuntimeContext | None:
-    try:
-      return self.get(symbol)
-    except InstrumentRuntimeError:
-      return None
-
   def all(self) -> tuple[InstrumentRuntimeContext, ...]:
     return tuple(self.by_id[key] for key in sorted(self.by_id))
 
-  def feed_instruments(self) -> tuple[InstrumentRuntimeContext, ...]:
-    return tuple(ctx for ctx in self.all() if permits_feed(ctx.rollout))
-
   def analysis_instruments(self) -> tuple[InstrumentRuntimeContext, ...]:
     return tuple(ctx for ctx in self.all() if permits_analysis(ctx.rollout))
-
-  def executable_instruments(self) -> tuple[InstrumentRuntimeContext, ...]:
-    return tuple(
-      ctx for ctx in self.all() if permits_candidate_publication(ctx.rollout)
-    )
 
   def live_instruments(self) -> tuple[InstrumentRuntimeContext, ...]:
     return tuple(

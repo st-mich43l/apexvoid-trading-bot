@@ -1,13 +1,13 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "d9fc5a863b579b9bbf3ec96a21f0043b78a791c286daa645e6d8f91041b48b60",
+  "configuration_contract_fingerprint_sha256": "bec01459a04ea8c7b6b931d0edf79ee90ab6d15a2f846eefb1a11e60973557d6",
   "counts": {
     "bootstrap_environment": 12,
     "deprecated_compatibility": 1,
     "derived_runtime": 2,
-    "manifest": 113,
+    "manifest": 114,
     "secret_environment": 3,
-    "total": 131,
+    "total": 132,
     "unclassified": 0
   },
   "entries": [
@@ -876,6 +876,15 @@
       "removable_after_cutover": true
     },
     {
+      "canonical_path": "execution.reaction_risk_leg.enabled",
+      "classification": "manifest",
+      "environment": "AUTO_TRADE_REACTION_RISK_LEG_ENABLED",
+      "manifest_path": "auto_trade.reaction_risk_leg_enabled",
+      "options_type": "AutoTradeOptions",
+      "property": "ReactionRiskLegEnabled",
+      "removable_after_cutover": true
+    },
+    {
       "canonical_path": "strategies.reaction.scale_enabled",
       "classification": "manifest",
       "environment": "AUTO_TRADE_REACTION_SCALE_ENABLED",
@@ -1192,6 +1201,6 @@
     }
   ],
   "manifest_version": 2,
-  "source_fingerprint_sha256": "d9fc5a863b579b9bbf3ec96a21f0043b78a791c286daa645e6d8f91041b48b60",
+  "source_fingerprint_sha256": "bec01459a04ea8c7b6b931d0edf79ee90ab6d15a2f846eefb1a11e60973557d6",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

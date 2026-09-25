@@ -667,24 +667,17 @@ public sealed class CTraderOpenApiFeedClient : ICTraderFeedClient, ICTraderTrade
     }
     catch (Exception exception) when (
       exception is not OperationCanceledException
-      && IsRetryableDealListFailure(exception)
+      && IsIncorrectBoundaries(exception)
     )
     {
       Log(
         $"position_close_deal_list_windowed_failed position_id={positionId} "
           + $"window={fromTimestamp}-{toTimestamp}: {exception.Message}"
       );
-      // Live 2026-08-18 (fpmarketssc demo): every windowed attempt on record
-      // (38/38 in 14 days retained logs) timed out at DealListLookupTimeout,
-      // never once an INCORRECT_BOUNDARIES rejection — the old
-      // IsIncorrectBoundaries-only gate meant the unbounded fallback below
-      // was never actually reached for this broker, so every broker-absent
-      // close landed as Unknown and forced a false GROUP RECOVERY REQUIRED
-      // alarm even on ordinary TP/SL fills. Always give the differently-
-      // shaped fallback a try on any retryable failure — it shares the same
-      // short DealListLookupTimeout, so the worst case (both attempts fail)
-      // stays well under RequestTimeout; see
-      // DealListLookupTimeoutStaysWellUnderTheDefaultRequestTimeout.
+      // Only a rejected time window needs the unbounded fallback. Retrying a
+      // timeout with another request would monopolize the single broker
+      // request channel and make live quotes stale; AutoTradeEngine schedules
+      // the next best-effort lookup separately.
     }
 
     // Last resort: position-scoped query without a time window. Some brokers
@@ -702,10 +695,99 @@ public sealed class CTraderOpenApiFeedClient : ICTraderFeedClient, ICTraderTrade
     );
   }
 
+  // Every historical order in the window, for AutoTradeEngine to correlate
+  // against its own ClientOrderIds convention - see
+  // AutoTradeEngine.ReconcileOrphanedGroupPlansAsync. One unbounded scan
+  // (not per-leg) since the caller already knows every ClientOrderId it is
+  // looking for and can match them all against a single response.
+  public async Task<IReadOnlyList<HistoricalOrderMatch>> FindHistoricalOrdersAsync(
+    long fromTimestampMs,
+    long toTimestampMs,
+    CancellationToken cancellationToken
+  )
+  {
+    var (fromTimestamp, toTimestamp) = BuildDealListWindow(
+      fromTimestampMs, toTimestampMs, _clock().ToUnixTimeMilliseconds()
+    );
+    try
+    {
+      var response = await SendAndWaitAsync<ProtoOAOrderListRes>(
+        new ProtoOAOrderListReq
+        {
+          CtidTraderAccountId = options.AccountId,
+          FromTimestamp = fromTimestamp,
+          ToTimestamp = toTimestamp,
+        },
+        res => res.CtidTraderAccountId == options.AccountId,
+        cancellationToken,
+        DealListLookupTimeout
+      );
+      return response.Order
+        .Where(order => order.HasClientOrderId && !string.IsNullOrEmpty(order.ClientOrderId))
+        .Select(order => new HistoricalOrderMatch(
+          order.ClientOrderId,
+          order.HasOrderStatus && order.OrderStatus == ProtoOAOrderStatus.OrderStatusFilled,
+          order.HasPositionId ? order.PositionId : null,
+          order.TradeData.SymbolId,
+          order.HasExecutedVolume ? order.ExecutedVolume : 0
+        ))
+        .ToArray();
+    }
+    catch (Exception exception) when (exception is not OperationCanceledException)
+    {
+      Log(
+        $"historical_orders_lookup_failed window={fromTimestamp}-{toTimestamp}: "
+          + exception.Message
+      );
+      return [];
+    }
+  }
+
+  // Thin projection over the same windowed+fallback deal fetch
+  // DeterminePositionCloseReasonAsync already uses, keeping every closing
+  // deal's own entry/exit price instead of collapsing to one reason+price.
+  public async Task<IReadOnlyList<ClosingDeal>> GetClosingDealsAsync(
+    long positionId,
+    long fromTimestampMs,
+    long toTimestampMs,
+    CancellationToken cancellationToken
+  )
+  {
+    try
+    {
+      var dealsResponse = await FetchDealsByPositionIdAsync(
+        positionId, fromTimestampMs, toTimestampMs, cancellationToken
+      );
+      return dealsResponse.Deal
+        .Where(deal => deal.PositionId == positionId && deal.ClosePositionDetail is not null)
+        .Select(deal => new ClosingDeal(
+          Convert.ToDecimal(deal.ClosePositionDetail.EntryPrice),
+          Convert.ToDecimal(deal.ExecutionPrice),
+          deal.ClosePositionDetail.HasClosedVolume
+            ? deal.ClosePositionDetail.ClosedVolume
+            : deal.HasFilledVolume ? deal.FilledVolume : 0,
+          deal.ExecutionTimestamp
+        ))
+        .ToArray();
+    }
+    catch (Exception exception) when (exception is not OperationCanceledException)
+    {
+      Log($"closing_deals_lookup_failed position_id={positionId}: {exception.Message}");
+      return [];
+    }
+  }
+
   // Kept well under options.RequestTimeout (default 30s) — see the
   // FetchDealsByPositionIdAsync comment above for why this specific lookup
   // must not hold the shared request lock as long as a live order call.
-  internal static readonly TimeSpan DealListLookupTimeout = TimeSpan.FromSeconds(3);
+  // Live 2026-09-14: at 500ms this lookup was timing out 100% of the time
+  // in production (every manual/algo close logged "Timed out after 0s" -
+  // that's 500ms rounding down in the N0 log format), forcing every close
+  // through the full CloseHistoryRetrySeconds/CloseHistoryMaxWaitSeconds
+  // fallback wait (~60-70s) before Telegram ever got notified. 2s gives the
+  // broker's real round-trip time a fair chance while staying an order of
+  // magnitude under the 30s that caused the original blocking incident.
+  internal static readonly TimeSpan DealListLookupTimeout = TimeSpan.FromMilliseconds(2000);
 
   internal static bool IsIncorrectBoundaries(Exception exception)
   {

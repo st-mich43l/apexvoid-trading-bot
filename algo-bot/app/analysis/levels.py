@@ -17,6 +17,7 @@ def key_levels(
   round_step: float = 5.0,
   min_touches: int = 2,
   max_cluster_span_multiple: float = 2.0,
+  bars: pd.DataFrame | None = None,
 ) -> list[Level]:
   tolerance = atr_scalar(atr) * max(0.0, level_cluster_atr)
   clusters = _price_clusters(swings, tolerance, max_cluster_span_multiple)
@@ -46,7 +47,56 @@ def key_levels(
       )
     else:
       deduped.append(level)
+  if bars is not None and not bars.empty:
+    deduped = [_with_wick_touches(level, bars, tolerance) for level in deduped]
   return deduped
+
+
+def wick_touch_episodes(bars: pd.DataFrame, price: float, band: float) -> int:
+  """Distinct times a bar's wick (high/low, not just its close) reached the
+  band around ``price`` without closing decisively through it.
+
+  Owner 2026-09-21: touches were only ever counted from fractal swing
+  points, so a wick that poked a level and was rejected without forming a
+  confirmed fractal never counted, and a level was under-counted or missed.
+  A bar counts when its range overlaps the band, unless it opened on one
+  side and closed beyond the far edge (a break, not a touch). Consecutive
+  qualifying bars are one episode, so a grind inside the band counts once.
+  """
+  if bars.empty or band < 0:
+    return 0
+  lo, hi = price - band, price + band
+  highs = bars["high"].to_numpy(dtype=float)
+  lows = bars["low"].to_numpy(dtype=float)
+  opens = bars["open"].to_numpy(dtype=float)
+  closes = bars["close"].to_numpy(dtype=float)
+  episodes = 0
+  in_episode = False
+  for high, low, open_, close in zip(highs, lows, opens, closes):
+    touched = low <= hi and high >= lo
+    if touched:
+      if open_ > hi and close < lo:
+        touched = False
+      elif open_ < lo and close > hi:
+        touched = False
+    if touched and not in_episode:
+      episodes += 1
+    in_episode = touched
+  return episodes
+
+
+def _with_wick_touches(level: Level, bars: pd.DataFrame, tolerance: float) -> Level:
+  band = max(level.band, tolerance)
+  episodes = wick_touch_episodes(bars, level.price, band)
+  if episodes <= level.touches:
+    return level
+  return Level(
+    price=level.price,
+    kind=level.kind,
+    touches=episodes,
+    band=level.band,
+    strength=max(level.strength, float(episodes)),
+  )
 
 
 def _price_clusters(

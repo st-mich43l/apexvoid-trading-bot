@@ -8,12 +8,14 @@ Both ZoneWatch technique and M1 scalp loops consume the same OHLC windows and
 from __future__ import annotations
 
 import logging
+import math
 import time
 from typing import Any
 
 import pandas as pd
 
 from app.analysis.engine import AnalysisSettings, analysis_labels
+from app.analysis.engine import ScalpStructure
 from app.analysis.ohlc_source import RedisOHLCSource
 from app.runtime.price_identity import pip_price_digits
 from app.scalping.context import build_scalp_context_snapshot
@@ -34,6 +36,50 @@ def _m5_atr(m5: pd.DataFrame, *, pip_size: float) -> float:
   if atr <= 0 or atr != atr:
     return max(float(pip_size) * 50.0, float(pip_size))
   return atr
+
+
+def _m1_atr(m1: pd.DataFrame, *, pip_size: float) -> float:
+  """True-range ATR on M1, used to size noise-resistant scalp buffers."""
+  fallback = max(float(pip_size) * 3.0, float(pip_size))
+  if m1 is None or m1.empty or len(m1) < 15:
+    return fallback
+  try:
+    high = m1["high"].astype(float)
+    low = m1["low"].astype(float)
+    close = m1["close"].astype(float)
+    previous_close = close.shift(1)
+    true_range = pd.concat(
+      [
+        high - low,
+        (high - previous_close).abs(),
+        (low - previous_close).abs(),
+      ],
+      axis=1,
+    ).max(axis=1).tail(14)
+    value = float(true_range.mean())
+    return value if value > 0 and math.isfinite(value) else fallback
+  except (KeyError, TypeError, ValueError):
+    return fallback
+
+
+def scalp_structure_payload(structure: ScalpStructure) -> tuple[tuple[dict[str, Any], ...], tuple[dict[str, Any], ...]]:
+  """Serialize only the compact structure fields needed by M1 discovery."""
+  levels = tuple({
+    "price": float(level.price),
+    "kind": str(level.kind),
+    "touches": int(level.touches),
+    "band": float(level.band),
+    "score": float(level.strength),
+  } for level in structure.key_levels)
+  zones = tuple({
+    "bottom": float(zone.bottom),
+    "top": float(zone.top),
+    "side": str(zone.side),
+    "touches": int(zone.touches),
+    "mitigated": bool(zone.mitigated),
+    "score": float(zone.score),
+  } for zone in structure.zones)
+  return levels, zones
 
 
 def derive_scalp_analysis_labels(
@@ -106,6 +152,10 @@ def build_scalp_context_and_micro(
     m5 if isinstance(m5, pd.DataFrame) else pd.DataFrame(),
     pip_size=pip_size,
   )
+  m1_atr = _m1_atr(
+    m1 if isinstance(m1, pd.DataFrame) else pd.DataFrame(),
+    pip_size=pip_size,
+  )
   context = build_scalp_context_snapshot(
     symbol=symbol,
     m5=m5 if isinstance(m5, pd.DataFrame) else pd.DataFrame(),
@@ -114,6 +164,7 @@ def build_scalp_context_and_micro(
     price=float(price),
     pip_size=float(pip_size),
     atr=atr,
+    m1_atr=m1_atr,
     now=int(now),
     cfg=cfg,
     htf_bias=htf_bias,

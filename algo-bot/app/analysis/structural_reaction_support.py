@@ -12,6 +12,7 @@ from typing import Any
 
 import pandas as pd
 
+from app.analysis.candle_evidence import CandleEvidence, evaluate_all_candle_evidence
 from app.analysis.types import Grab, Level, SessionLevel, Zone
 from app.core.symbols import digits_for
 from app.runtime.price_identity import price_token
@@ -23,14 +24,14 @@ CONFIRM_STRONG_RECLAIM = "strong_reclaim"
 CONFIRM_ENGULFING = "engulfing"
 
 STRUCTURAL_SETUPS = frozenset({
-  "Key Level Reaction",
+  "Key Level",
   "Zone Reaction",
   "Flip Zone",
   # Legacy labels still treated as structural for open/historical setups:
   "Demand Zone Reaction",
   "Supply Zone Reaction",
-  "Session Level Reaction",
-  "Trendline Reaction",
+  "Session Level",
+  "Trendline",
   # Atomic technique publishers + confluence band:
   "Supply Demand",
   "Order Block",
@@ -63,6 +64,14 @@ class ReactionConfirmation:
   touch_index: int
   confirmation_index: int
   has_choch: bool = False
+  # Candle Confirmation V2 (shadow-only, §3/§21): additive scored evidence
+  # for the SAME confirmation bar this dataclass already committed to
+  # above. Never consulted when deciding confirmation_type - it observes
+  # the winning bar, it never picks it.
+  candle_evidence: CandleEvidence | None = None
+  # The Grab that produced CONFIRM_SWEEP_RECLAIM, if that's what won.
+  # None for every other confirmation_type.
+  grab: Grab | None = None
 
 
 def bias_relationship(htf_bias: str, direction: str) -> str:
@@ -164,13 +173,33 @@ def trendline_structural_id(
   timeframe: str,
   line: Any,
 ) -> str:
-  anchors = ",".join(str(int(idx)) for idx in getattr(line, "point_idx", ()))
+  version = str(getattr(line, "version", "v1"))
+  if version == "v1":
+    anchors = ",".join(str(int(idx)) for idx in getattr(line, "point_idx", ()))
+    return structural_hash(
+      symbol.upper(),
+      timeframe.upper(),
+      "trendline",
+      getattr(line, "kind", ""),
+      anchors,
+      f"{float(getattr(line, 'slope', 0.0)):.8f}",
+      _price_id(symbol, getattr(line, "intercept", 0.0)),
+    )
+  anchor_indexes = getattr(line, "anchor_idx", ()) or getattr(line, "point_idx", ())
+  validation_indexes = tuple(
+    int(getattr(item, "bar_index", -1))
+    for item in getattr(line, "validation_touches", ())
+  )
+  anchors = ",".join(str(int(idx)) for idx in anchor_indexes)
+  validations = ",".join(str(index) for index in validation_indexes)
   return structural_hash(
     symbol.upper(),
     timeframe.upper(),
     "trendline",
+    version,
     getattr(line, "kind", ""),
     anchors,
+    validations,
     f"{float(getattr(line, 'slope', 0.0)):.8f}",
     _price_id(symbol, getattr(line, "intercept", 0.0)),
   )
@@ -254,13 +283,6 @@ def thesis_id(
 
 def band_touched(row: pd.Series, low: float, high: float) -> bool:
   return float(row["low"]) <= high + _EPS and float(row["high"]) >= low - _EPS
-
-
-def level_band_touched(row: pd.Series, price: float, band: float) -> bool:
-  return (
-    float(row["low"]) <= price + max(0.0, band) + _EPS
-    and float(row["high"]) >= price - max(0.0, band) - _EPS
-  )
 
 
 def wick_rejection_on_bar(row: pd.Series, direction: str) -> bool:
@@ -452,6 +474,22 @@ def evaluate_structural_reaction(
 
     if confirmation is None:
       continue
+
+    # Candle Confirmation V2 (shadow-only, §3/§21): scored on the bar this
+    # loop already chose - never influences which bar/confirmation_type wins.
+    near_level = low if side == "BUY" else high
+    evidence_bars = (
+      [df.iloc[confirm_index - 1], row] if confirm_index > 0 else [row]
+    )
+    candle_evidence = evaluate_all_candle_evidence(
+      evidence_bars,
+      direction=side,
+      atr=atr,
+      level=near_level,
+      zone_low=low,
+      zone_high=high,
+    )
+
     return ReactionConfirmation(
       confirmation_type=confirmation,
       touch_bar_ts=bar_ts(df, touch_index),
@@ -459,5 +497,7 @@ def evaluate_structural_reaction(
       touch_index=touch_index,
       confirmation_index=confirm_index,
       has_choch=confirmation == CONFIRM_REJECTION_CHOCH,
+      candle_evidence=candle_evidence,
+      grab=grab if confirmation == CONFIRM_SWEEP_RECLAIM else None,
     )
   return None

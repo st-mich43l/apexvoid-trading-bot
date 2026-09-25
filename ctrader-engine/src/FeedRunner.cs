@@ -413,6 +413,12 @@ public sealed class FeedRunner(
     IReadOnlyList<string>? timeframeOverride = null
   )
   {
+    // Startup history establishes the Redis source of truth silently;
+    // reconnect catch-up publishes bars:new one-by-one after each ZSET
+    // write so Redis consumers wake promptly. Analysis correctness never
+    // depends on that pub/sub delivery: it reads the ZSET on every wake-up
+    // and periodically reconciles cursor gaps.
+    var publish = !fullWindow;
     var now = DateTimeOffset.UtcNow;
     var timeframes = timeframeOverride ?? options.Timeframes;
     foreach (var timeframe in timeframes)
@@ -445,6 +451,9 @@ public sealed class FeedRunner(
       {
         LogRawTrendbar("historical", firstRaw);
       }
+      // Chronological order is mandatory for recovery: each ZSET write and
+      // its bars:new notification advance the Redis market-data plane in
+      // causal order.
       foreach (var raw in rawBars.OrderBy(bar => bar.UtcTimestampInMinutes))
       {
         var bar = TrendbarDecoder.Decode(raw, symbol.Digits);
@@ -457,7 +466,7 @@ public sealed class FeedRunner(
           timeframe,
           bar,
           cancellationToken,
-          publish: false
+          publish: publish
         );
       }
       Log($"backfill {symbol.RedisSymbol} {timeframe}: wrote {rawBars.Count} raw bars");

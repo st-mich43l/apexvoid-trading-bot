@@ -1,0 +1,33 @@
+# ApexVoid root configuration entrypoint (Configuration V3).
+#
+# All runtimes (analysis-engine / algo-bot / ctrader-engine) start here.
+# APEXVOID_CONFIG_FILE must point at this file — see docs/configuration.md.
+#
+# The categorized files below are populated with today's real effective
+# values (mechanically split out of the single config/trading-bot.yml this
+# replaces), not a redesign. Status (see docs/configuration.md and
+# docs/configuration-v3-migration-audit.md for the full detail): Python
+# (Stage C3) reads this file directly and is wired live for local/dev;
+# Go's analysis-engine (Stage C4) reads it directly too, though nothing
+# there is wired to a live decision path yet regardless; .NET's
+# ctrader-engine (Stage C5) has a proven direct reader but is NOT wired to
+# its live order-execution path — config/trading-bot.yml + the generated
+# ResolvedRuntimeManifest remain ctrader-engine's live authority, and
+# actual ansible-driven production (outside this repo) still reads
+# trading-bot.yml unconditionally until that separate deployment is
+# updated. Do not add a setting here directly; add it to the owning
+# category file and list it below.
+version: 3
+
+includes:
+  - runtime.yml
+  - transport.yml
+  - database.yml
+  - instruments.yml
+  - analysis.yml
+  - auto-algo.yml
+  - manual-algo.yml
+  - execution.yml
+  - telegram.yml
+  - journal.yml
+  - environments/production.yml

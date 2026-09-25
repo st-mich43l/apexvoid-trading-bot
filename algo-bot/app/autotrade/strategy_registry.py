@@ -158,7 +158,7 @@ def _m1_scalp_row(name: str) -> StrategyRow:
 
 _STRATEGY_ROWS: tuple[StrategyRow, ...] = (
   _reaction_row(
-    "Key Level Reaction",
+    "Key Level",
     detector_key="key_level_reaction",
     detector_family=FAMILY_DETECTOR_KEY_LEVEL,
     execution_family=FAMILY_EXEC_KEY_LEVEL,
@@ -201,6 +201,10 @@ _STRATEGY_ROWS: tuple[StrategyRow, ...] = (
     is_technique=True,
   ),
   _zone_row(
+    # Production asymmetry: both Zone Reaction detectors also require the
+    # legacy zone-reaction fallback (default False and absent from YAML),
+    # while Flip Zone defaults True and is absent from YAML. Flip Zone is
+    # therefore the only live supply/demand-band publisher by default.
     "Demand Zone Reaction",
     detector_key="demand_zone_reaction",
     enable_setting="strategies.reaction.demand.enabled",
@@ -216,14 +220,14 @@ _STRATEGY_ROWS: tuple[StrategyRow, ...] = (
     enable_setting="strategies.zone.flip.enabled",
   ),
   _reaction_row(
-    "Session Level Reaction",
+    "Session Level",
     detector_key="session_level_reaction",
     detector_family=FAMILY_DETECTOR_SESSION_LEVEL,
     execution_family=FAMILY_EXEC_SESSION_LEVEL,
     enable_setting="strategies.reaction.session_level.enabled",
   ),
   _reaction_row(
-    "Trendline Reaction",
+    "Trendline",
     detector_key="trendline_reaction",
     detector_family=FAMILY_DETECTOR_TRENDLINE,
     execution_family=FAMILY_EXEC_TRENDLINE,

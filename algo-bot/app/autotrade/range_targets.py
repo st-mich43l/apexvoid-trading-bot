@@ -13,7 +13,6 @@ _EPS = 1e-9
 
 DEFAULT_RANGE_TARGETS_PIPS: tuple[int, ...] = (70, 50, 40, 30, 20, 15)
 DEFAULT_RANGE_TP_BUFFER_PIPS = 3.0
-DEFAULT_RANGE_MIN_TARGET_PIPS = 15.0
 DEFAULT_RANGE_MIN_RR = 1.00
 
 
@@ -47,17 +46,6 @@ def range_tp_buffer_pips() -> float:
   except (TypeError, ValueError):
     return DEFAULT_RANGE_TP_BUFFER_PIPS
   return parsed if parsed >= 0 else DEFAULT_RANGE_TP_BUFFER_PIPS
-
-
-def range_min_target_pips() -> float:
-  value = runtime_config.execution.range.min_target_pips
-  if value is None:
-    return DEFAULT_RANGE_MIN_TARGET_PIPS
-  try:
-    parsed = float(value)
-  except (TypeError, ValueError):
-    return DEFAULT_RANGE_MIN_TARGET_PIPS
-  return parsed if parsed > 0 else DEFAULT_RANGE_MIN_TARGET_PIPS
 
 
 def range_min_rr() -> float:

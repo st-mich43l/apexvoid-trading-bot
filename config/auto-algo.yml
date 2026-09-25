@@ -1,0 +1,274 @@
+# Auto trading orchestration/policy — owned exclusively here. Answers
+# "should ApexVoid act on it?" (analysis.yml already answered "what
+# opportunity exists?" — that boundary is preserved deliberately, per the
+# new architecture's own §5). Market-analysis formulas never belong here.
+#
+# Consolidates FOUR old trading-bot.yml top-level keys:
+# `actionability.*`, `lifecycle.*`, `risk.*`, `strategies.*`, plus the
+# auto-trade/scanner enable toggles that used to live under the OLD
+# top-level `runtime:` key — see docs/configuration-v3-migration-audit.md
+# §5's naming-collision note: that old `runtime.*` is NOT the same thing
+# as the new runtime.yml file.
+auto_algo:
+  enabled: true
+  dry_run: false
+  direct_publish_enabled: true
+  strategy_match_enabled: true
+
+  scanner:
+    enabled: true
+
+  actionability:
+    counter_bias:
+      allowed: true
+    entry_location:
+      # Enforce: block ZoneWatch at premium BUYs / discount SELLs (and extremes).
+      # Must pair with execution.activation.mode=enforce for cutover to hard-stop.
+      # Technique pack: also forces detectors.strict_pd_gate via execution.technique.
+      mode: enforce
+      missing_context_policy: block
+      reversal:
+        buy_maximum_position: 0.50
+        sell_minimum_position: 0.50
+        extreme_buy_block_position: 0.65
+        extreme_sell_block_position: 0.35
+      range_reversion:
+        buy_maximum_position: 0.40
+        sell_minimum_position: 0.60
+        equilibrium_exclusion_width: 0.20
+      trend_pullback:
+        buy_maximum_position: 0.70
+        sell_minimum_position: 0.30
+      breakout_retest:
+        allow_directional_expansion: true
+    gates:
+      htf_veto_enabled: true
+      market_map_guard_enabled: false
+      min_confluence: 2
+      news_guard_minutes: 30
+      opposing_barrier_veto_enabled: true
+      range_context_disagreement_gate_enabled: false
+    key_level_role:
+      enabled: false
+    overlapping_zones:
+      veto_enabled: true
+    scanner_gates:
+      actionability_gate_enabled: false
+      zone_width_gate_enabled: false
+    structural_guard:
+      guard_mode: observe
+    zone_reconciliation:
+      enabled: true
+      mode: shadow
+
+  lifecycle:
+    candidate:
+      execution_maximum_age_seconds: 420
+      storage_ttl_seconds: 604800
+    mapped_zone:
+      reaction_rearm_atr: 0.5
+      reaction_rearm_bars: 3
+    reconciliation:
+      absence_recheck_seconds: 3
+      missing_confirmations: 2
+      missing_recheck_seconds: 3
+      recovery_timeout_seconds: 30
+    scaling:
+      cooldown_bars: 3
+      max_age_bars: 3
+    zone:
+      cooldown_enabled: false
+
+  risk:
+    exposure:
+      allow_concurrent_strategies: true
+      non_hedged_opposite_policy: broker_netting
+      # §8/§9: newly surfaced (RiskExposureConfig.allow_hedged_xau /
+      # .require_flat_for_range Python schema defaults, unchanged values)
+      # — previously only reachable via the demo_eval profile override
+      # (which happened to set both to the exact same values as the
+      # default), never a base trading-bot.yml leaf. The schema caught
+      # this: an overlay setting a leaf with no base value is exactly the
+      # gap §8 exists to close.
+      allow_hedged_xau: false
+      require_flat_for_range: true
+      # §7: opposing_minimum_separation_price REMOVED — price-absolute,
+      # already instrument-scoped live via app.core.instrument_geometry.
+      # opposing_minimum_separation_price(symbol) (same reasoning as
+      # analysis.yml's zones.merge_max_width/confluence.merge_gap_price
+      # removal — see that file's comment). Old value here (15.0) was
+      # byte-identical to XAU's own instruments.yml price_scale value;
+      # every live instrument already declares its own, instruments.yml
+      # is the one owner now.
+    position_limits:
+      max_tracked_candidates: 9
+      maximum_per_symbol: 1
+      same_direction_stack_size_fraction: 0.6
+    sizing:
+      add_require_risk_free: false
+      add_risk_fraction: 0.5
+      equity_table_version: owner_equity_v1
+      mode: equity_table
+      one_sided_range_risk_multiplier: 0.5
+      post_impulse_risk_multiplier: 0.5
+      range_max_risk_multiplier: 1.5
+    tiers:
+      a_multiplier: 1.0
+      b_multiplier: 1.0
+
+  strategies:
+    technique:
+      fvg:
+        # Proximal entry width for FVG/iFVG/imbalance (price). Full gap stays
+        # structural; every strategy clips tradeable entry to this band.
+        entry_max_width_price: 5.0
+    # `scalping` is a sibling of `technique`, not nested under it — matches
+    # the old trading-bot.yml's own `strategies.scalping.*` shape exactly
+    # (a prior draft of this file nested it under `technique` by mistake;
+    # caught by the parity-check script comparing every leaf against the
+    # old file — see docs/configuration-v3-migration-audit.md).
+    scalping:
+      # M1-event-driven scalping: M5 owns setup structure; closed M1 owns
+      # execution confirmation. Publish TradePlan when activation + risk pass.
+      # Requires auto_algo.enabled=true. XAU hosts M1 scalping even
+      # when technique uses structure fixed_rr; FX fixed_rr books stay excluded
+      # in app.scalping.context._scalping_symbols.
+      mode: live
+      archetypes:
+        range_sweep_enabled: true
+        impulse_pullback_enabled: true
+        # Soft preference for scoring only. No session timezone hard gate.
+        impulse_pullback_allowed_sessions: all
+        pullback_extreme_confirm_bars: 2
+        impulse_displacement_atr_multiple: 4.0
+        impulse_body_dominance: 0.5
+        pullback_corrective_ratio: 0.7
+        breakout_retest_enabled: true
+      context:
+        maximum_m5_age_seconds: 420
+        m1_lookback_bars: 60
+        current_context_ttl_seconds: 3600
+        historic_context_ttl_seconds: 86400
+      location:
+        range_buy_maximum_position: 0.35
+        range_sell_minimum_position: 0.65
+        pullback_buy_maximum_position: 0.60
+        pullback_sell_minimum_position: 0.40
+        level_proximity_atr_multiple: 1.0
+      activation:
+        trigger_maximum_age_bars: 2
+        maximum_chase_pips: 40
+        maximum_chase_stop_fraction: 0.30
+        rearm_distance_atr: 0.25
+      target:
+        preferred_ladder_pips:
+          - 10
+          - 15
+          - 20
+        minimum_net_target_pips: 10
+      stop:
+        minimum_pips: 12
+        maximum_pips: 45
+        buffer_atr: 0.10
+        minimum_stop_spread_multiple: 4.0
+        buffer_m1_atr_multiple: 1.2
+        buffer_minimum_spread_multiple: 1.5
+        zone_maximum_atr_multiple: 1.5
+      policy:
+        minimum_reward_risk: 1.10
+        maximum_opportunities_per_cycle: 3
+        maximum_active_opportunities: 10
+        maximum_spread_pips: 5
+      risk:
+        mode: live
+        risk_fraction_per_trade: 0.10
+        risk_percent_per_trade: 0.5
+        sizing_mode: equity_table
+        maximum_concurrent_positions: 1
+        maximum_session_trades: 12
+        maximum_daily_trades: 30
+        maximum_consecutive_losses: 3
+        cooldown_after_loss_minutes: 5
+        daily_loss_limit_r: 3.0
+        session_loss_limit_r: 2.0
+      # ApexVoid Breakout Retest — M5 compression/structure setup with M1
+      # confirmation. Each archetype owns its own detector and quality score.
+      # See docs/scalping/OWN_BREAKOUT_TECHNIQUE.md
+      breakout:
+        box_max_atr: 1.5
+        min_break_atr: 0.25
+        min_box_bars: 8
+        max_box_bars: 20
+        retest_lookback_bars: 5
+        require_retest_rejection: true
+        min_touches_per_side: 2
+        touch_tol_atr: 0.20
+    breakout:
+      break_retest_enabled: true
+      breakout_enabled: true
+    mapped_zone:
+      counter_bias_enabled: true
+      enabled: false
+    matching:
+      multiple_matches_enabled: true
+      track_all_structural_matches: true
+    range_reversion:
+      box_scale_out_enabled: true
+      # §8/§9: newly surfaced (StrategiesRangeReversionConfig.enabled
+      # Python schema default, unchanged value True) — same
+      # only-reachable-via-demo_eval-override gap as risk.exposure above.
+      enabled: true
+      flip_enabled: true
+      range_edge:
+        allow_rejection_only: true
+        break_closes: 2
+        cluster_atr: 0.25
+        enabled: true
+        entry_tol_atr: 0.25
+        lookback: 48
+        max_edge_width_atr: 0.75
+        max_width_atr: 6.0
+        min_inside_closes: 3
+        min_room_atr: 0.75
+        min_touches: 2
+        min_wick_frac: 0.25
+        min_wick_rejections: 1
+        min_width_atr: 1.0
+      two_sided_enabled: true
+    reaction:
+      demand:
+        enabled: true
+      enabled: true
+      key_level:
+        enabled: true
+      liquidity_reversal:
+        enabled: true
+      scale_enabled: true
+      session_level:
+        enabled: true
+      supply:
+        enabled: true
+      trendline:
+        enabled: true
+        reject_exhausted: true
+        # optional per-strategy tightenings, omitted = inherit analysis.trendlines
+        # maximum_bars_since_last_touch:
+        # maximum_fit_error_atr:
+        # require_htf_aligned: false
+        # require_killzone: false
+        # minimum_grade:
+    scalp:
+      fade_scalp_enabled: true
+      scalp_barrier_fallback_enabled: true
+      scalp_barrier_fallback_min_confirmations: 1
+      scalp_post_impulse_range_enabled: true
+      scalp_range_provisional_enabled: true
+    selection:
+      box_breakout_enabled: true
+      momentum_ride_enabled: true
+      retest_enabled: true
+      snap_back_enabled: true
+    trend:
+      allow_chase: true
+      breakout_min_room_pips: 35
+      enabled: true

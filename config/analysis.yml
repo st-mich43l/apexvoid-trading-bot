@@ -1,0 +1,472 @@
+# Market-analysis behavior — owned logically by analysis-engine (Go), still
+# readable by every service. Answers "what opportunity exists?", never
+# "should ApexVoid act on it?" (that's auto-algo.yml — see its own header).
+#
+# market_data.* (calendar/session/feed/scanner/spot inputs) is folded in
+# here too: the new architecture's own category list never names a home
+# for it (see docs/configuration-v3-migration-audit.md §9, an open
+# question for the owner) — analysis.yml is the closest fit since these
+# are all analysis *inputs*, not execution or delivery concerns.
+analysis:
+  # S12A/B foundation is deliberately inactive. S12C enables go_shadow only
+  # after its production shadow evidence is reviewed; `go` remains rejected.
+  technical_authority:
+    mode: python
+    consumer_enabled: false
+    consumer_group: apexvoid-algo-bot-analysis-opportunity-v1
+
+  # Canonical ATR decision (rebuild-configuration-architecture.md §4):
+  # the Go migration audit (docs/go-analysis-migration-audit.md §2.1) found
+  # TWO live ATR formulas today — a simple rolling mean
+  # (app/analysis/math_utils.py::atr_series, used pervasively throughout
+  # the canonical _analyze_tf pipeline) and pandas_ta's Wilder/RMA
+  # smoothing (app/analysis/indicators.py::atr, used only by
+  # detectors.py's IndicatorSet and one worker.py call site) — diverging
+  # ~6.7% on real XAU M5 data. `simple` is both this prompt's own example
+  # value AND the one the prior audit found already pervasive/canonical
+  # in practice, so it is set explicitly here rather than left ambiguous.
+  # This YAML value alone does not yet change runtime behavior — detectors.py
+  # still reads the Wilder formula today; making every consumer (detectors,
+  # structure, zones, scalping, worker) read this one canonical value is a
+  # real code change for a later stage, tracked against this setting.
+  # §23 requires this to become real before cutover, not stay decorative —
+  # see docs/configuration-v3-migration-audit.md's C2 update for the
+  # consumer-by-consumer plan and the required parity coverage.
+  indicators:
+    atr:
+      algorithm: simple
+      length: 14
+
+  # Registry contract for every strategy approved by the semantic catalog.
+  # An enabled entry without a compiled factory
+  # fails analysis-engine startup; it cannot silently become a no-op.
+  #
+  # `confluence_zone` is the one compositional exception, so this has 19
+  # entries: 18 independent strategies plus Confluence Zone.
+  #
+  # Phase S7 implemented and enabled the first 7: key_level, session_level,
+  # supply, demand, order_block, fvg, flip_zone. Each strategy owns its own
+  # threshold parsing (internal/strategy/<name>'s own parseConfig) — the
+  # registry itself treats these as opaque raw parameters (source task §51;
+  # docs/analysis/strategy-registry-v2.md's "Configuration contract"). None
+  # These parameter names have no old-Python-detector precedent — the
+  # legacy monolithic detectors never parametrized per-setup invalidation/
+  # target/expiry this way — so every value below is a genuine initial
+  # calibration, not an empirically-tuned or ported constant. They are
+  # flagged as a research/tuning item in docs/analysis-engine-v2-migration.md,
+  # not silently presented as final:
+  #   minimum_strength/minimum_touches — floors zone.Zone.Strength (or, for
+  #     key_level, keylevel.Level.Touches/Strength) below which a setup is
+  #     not tradeable at all.
+  #   proximity_atr (key_level/session_level only — these primitives carry
+  #     no zone.Relevance equivalent) — how close, in ATR, current price
+  #     must sit to the level for it to be a live setup; 1.0 sits in the
+  #     same ballpark as zone_relevance.nearby_atr (1.25) above, since both
+  #     answer "is this currently close enough to matter."
+  #   invalidation_buffer_atr — matches this file's own existing
+  #     invalidation_tolerance_atr/invalidation_penetration_atr convention
+  #     (0.5) for "how far beyond the setup's edge before a confirmed close
+  #     invalidates it."
+  #   minimum_target_distance_atr — the floor below which a candidate
+  #     liquidity pool is too close to entry to be a meaningful technical
+  #     objective.
+  #   expiry_hours — this strategy's own technical SETUP_EXPIRED window
+  #     (docs/analysis/opportunity-lifecycle-v2.md), distinct from Algo
+  #     Bot's own execution-age policy; 24h is one trading day.
+  # S11 completed concrete factories for all 19 registry entries. Every
+  # strategy is enabled for the production shadow run; this emits technical
+  # Kafka opportunities only and cannot place a trade until Phase S12 adds an
+  # explicit Algo Bot consumer.
+  strategies:
+    key_level:
+      version: v2
+      enabled: true
+      minimum_touches: 2
+      minimum_strength: 0.4
+      proximity_atr: 1.0
+      invalidation_buffer_atr: 0.5
+      minimum_target_distance_atr: 1.0
+      expiry_hours: 24.0
+    confluence_zone:
+      version: v2
+      enabled: true
+      minimum_facts: 2
+      invalidation_buffer_atr: 0.5
+      minimum_target_distance_atr: 1.0
+      expiry_hours: 12.0
+    supply:
+      version: v2
+      enabled: true
+      minimum_strength: 0.4
+      invalidation_buffer_atr: 0.5
+      minimum_target_distance_atr: 1.0
+      expiry_hours: 24.0
+    demand:
+      version: v2
+      enabled: true
+      minimum_strength: 0.4
+      invalidation_buffer_atr: 0.5
+      minimum_target_distance_atr: 1.0
+      expiry_hours: 24.0
+    order_block:
+      version: v2
+      enabled: true
+      minimum_strength: 0.4
+      invalidation_buffer_atr: 0.5
+      minimum_target_distance_atr: 1.0
+      expiry_hours: 24.0
+    fvg:
+      version: v2
+      enabled: true
+      minimum_strength: 0.4
+      invalidation_buffer_atr: 0.5
+      minimum_target_distance_atr: 1.0
+      expiry_hours: 24.0
+    ifvg:
+      version: v2
+      enabled: true
+      minimum_strength: 0.4
+      invalidation_buffer_atr: 0.5
+      minimum_target_distance_atr: 1.0
+      expiry_hours: 24.0
+    crt:
+      version: v2
+      enabled: true
+      minimum_h1_range_atr: 1.5
+      invalidation_buffer_atr: 0.25
+      expiry_hours: 8.0
+    flip_zone:
+      version: v2
+      enabled: true
+      minimum_strength: 0.4
+      invalidation_buffer_atr: 0.5
+      minimum_target_distance_atr: 1.0
+      expiry_hours: 24.0
+    session_level:
+      version: v2
+      enabled: true
+      proximity_atr: 1.0
+      invalidation_buffer_atr: 0.5
+      minimum_target_distance_atr: 1.0
+      expiry_hours: 24.0
+    trendline:
+      version: v2
+      enabled: true
+      minimum_validation_touches: 2
+      invalidation_buffer_atr: 0.25
+      target_r: 2.0
+      expiry_hours: 12.0
+    range_edge:
+      version: v2
+      enabled: true
+      lookback_bars: 24
+      minimum_rejections: 2
+      edge_tolerance_atr: 0.2
+      invalidation_buffer_atr: 0.25
+      expiry_hours: 4.0
+    box_breakout:
+      version: v2
+      enabled: true
+      box_bars: 12
+      maximum_width_atr: 2.0
+      retest_tolerance_atr: 0.2
+      invalidation_buffer_atr: 0.25
+      target_r: 2.0
+      expiry_hours: 8.0
+    momentum_ride:
+      version: v2
+      enabled: true
+      minimum_body_atr: 0.5
+      maximum_overlap_fraction: 0.35
+      invalidation_buffer_atr: 0.25
+      minimum_target_distance_atr: 1.0
+      expiry_hours: 4.0
+    snap_back:
+      version: v2
+      enabled: true
+      extension_atr: 2.0
+      invalidation_buffer_atr: 0.25
+      target_fraction: 0.5
+      expiry_hours: 4.0
+    liquidity_sweep:
+      version: v2
+      enabled: true
+      minimum_rejection_body_atr: 0.3
+      invalidation_buffer_atr: 0.25
+      target_r: 2.0
+      expiry_hours: 8.0
+    range_sweep:
+      version: v2
+      enabled: true
+      range_bars: 24
+      minimum_sweep_atr: 0.1
+      invalidation_buffer_atr: 0.2
+      expiry_hours: 2.0
+    impulse_pullback:
+      version: v2
+      enabled: true
+      minimum_impulse_atr: 1.0
+      minimum_pullback_fraction: 0.25
+      maximum_pullback_fraction: 0.65
+      invalidation_buffer_atr: 0.2
+      target_r: 2.0
+      expiry_hours: 2.0
+    scalp_breakout_retest:
+      version: v2
+      enabled: true
+      m5_box_bars: 12
+      m1_accept_bars: 2
+      maximum_width_atr: 2.0
+      retest_tolerance_atr: 0.15
+      invalidation_buffer_atr: 0.2
+      target_r: 2.0
+      expiry_hours: 2.0
+
+  # Analysis Engine V2 (docs/analysis/market-structure-v2.md). Go-only today
+  # (analysis-engine/internal/marketdata, .../structure, .../liquidity) — no
+  # Python consumer exists for these leaves, unlike every other key in this
+  # file. Depth/thresholds below are grounded in real prior art already
+  # shipped and running in production this session (PRs #574/#578/#579's
+  # hold-based zone validity, technique_geometry.py's epsilon(), and
+  # zones.py::displacement()'s k/body_frac) rather than fresh guesses — see
+  # the spec doc's "Threshold provenance" section for the exact mapping.
+  # Promotion thresholds (structure.swing.promotion.*) have no Python
+  # precedent (the layer hierarchy is a genuine V2 concept) and are an
+  # initial calibration, not empirically tuned — flagged as a research item
+  # in docs/analysis-engine-v2-migration.md, not silently presented as final.
+  history:
+    # Stored history depth per timeframe (source task §5) — NOT the
+    # calculation lookback any one algorithm uses (§6); MarketHistory keeps
+    # this much, structure/liquidity request a narrower window at read time.
+    depth:
+      M1: 2000
+      M5: 1000
+      M15: 1000
+      H1: 500
+      H4: 250
+      D1: 150
+
+  structure:
+    version: v2
+    pivot:
+      # Matches Python's common swing_fractal_n=2 default (swings.py /
+      # structure.py's own find_swings(df, 2, ...) call) — a pivot needs
+      # this many strictly-lesser/greater bars on each side to be a raw
+      # candidate. Causal: a pivot at bar i is only CONFIRMED once
+      # right_bars additional bars have closed (docs/analysis/
+      # market-structure-v2.md's causality section).
+      left_bars: 2
+      right_bars: 2
+    swing:
+      # A confirmed pivot whose excursion (in ATR) is below this floor is
+      # not promoted to a Swing at all — not every fractal is meaningful
+      # (source task §12).
+      minimum_excursion_atr: 0.5
+      promotion:
+        internal_atr: 1.0
+        intermediate_atr: 2.0
+        major_atr: 3.5
+    equal_level:
+      # Matches technique_geometry.py's epsilon() — 0.05 ATR — already the
+      # live, tested "same price level" tolerance for zone/level identity.
+      tolerance_atr: 0.05
+    break:
+      # Matches this session's PR #574 invalidation_tolerance_atr exactly —
+      # the real, live threshold XAU technique zones use today to decide a
+      # close is genuinely beyond a level, not noise.
+      minimum_penetration_atr: 0.5
+      # Matches zones.py::displacement()'s k=1.5 / body_frac=0.55 exactly.
+      displacement_range_atr: 1.5
+      displacement_body_dominance: 0.55
+      # Matches PR #574's sweep_reclaim_bars=6 exactly.
+      sweep_reclaim_bars: 6
+      failed_break_reclaim_bars: 3
+
+  liquidity:
+    version: v1
+    # Same epsilon as structure.equal_level.tolerance_atr — one canonical
+    # "same price level" tolerance across structure and liquidity, not two
+    # independently-drifting ones (the exact class of bug PR #574-580 spent
+    # this session fixing in the Python system).
+    equal_level_tolerance_atr: 0.05
+    pool_minimum_touches: 2
+    sweep_reclaim_bars: 6
+
+  trendlines:
+    # V2 keeps A/B anchors immutable, requires a later causal validation, and
+    # turns this band into an interaction watch rather than an automatic fill.
+    version: v2
+    shadow_v1: true
+    validation_touch_tolerance_atr: 0.30
+    interaction_band_atr: 0.20
+    invalidation_penetration_atr: 0.50
+    close_violation_atr: 0.15
+    approach_min_distance_atr: 0.10
+    minimum_validation_touches: 1
+    minimum_validation_touch_spacing_bars: 5
+    validation_reaction_bars: 2
+    minimum_validation_favorable_excursion_atr: 0.10
+    maximum_wick_violations: 2
+    exhaustion_validation_touches: 4
+    chop_minimum_validation_touches: 2
+    chop_require_htf_aligned: true
+    # Phase S4 — internal/trendline. These six existed only as Python
+    # getattr() fallback-default names in trendline_v2.py::_settings
+    # (never a real trading-bot.yml OR YAML leaf before this phase) —
+    # added here at those same real fallback values, closing the gap
+    # rather than inventing new numbers.
+    minimum_slope_atr: 0.02
+    maximum_slope_atr: 0.15
+    minimum_touch_spacing_bars: 3
+    minimum_span_bars: 20
+    dedup_value_atr: 0.5
+    dedup_slope_percent: 0.2
+
+  triggers:
+    m1:
+      # Prefer body/strong close for technique pack allowlist; wick-only is
+      # blocked at activation when execution.technique.require_sweep_body.
+      patterns:
+        - body_close
+        - strong_close
+        - engulfing
+        - wick_rejection
+        - pin_bar
+        - hammer
+      strong_close_pct: 0.2
+      wick_fraction: 0.5
+
+  techniques:
+    # PR-D: filter technique instances via validate_technique_instance predicates.
+    validation_enabled: true
+    # Canonical zone lifecycle inputs shared by the Go zone domain and the
+    # legacy research validator during the migration window.
+    retest_max_touches: 30
+    invalidation_tolerance_atr: 0.5
+    sweep_reclaim_bars: 6
+    max_break_episodes: 2
+
+  zone_relevance:
+    immediate_atr: 0.25
+    nearby_atr: 1.25
+    remote_atr: 3.0
+
+  flip_zone:
+    accept_bars: 2
+    band_body_fraction: 0.5
+
+  # Dimensionless zone-merge fields consumed live via
+  # app.analysis.detectors._detector_settings(symbol) ->
+  # detector_settings_from(instrument_runtime_view(symbol)) — already
+  # correctly instrument-scoped today, unrelated to the price-absolute
+  # zones.merge_max_width / zones.confluence.merge_gap_price removed below.
+  # §8/§9: newly surfaced explicitly — previously only a Python schema
+  # default (AnalysisZonesConfig.merge_overlap / AnalysisMeasurementsConfig.
+  # max_merged_zone_atr), never a settable trading-bot.yml leaf; value
+  # unchanged (0.5 / 3.0, the real current schema default in both cases).
+  zones:
+    version: v1
+    merge_overlap: 0.5
+
+  measurements:
+    max_merged_zone_atr: 3.0
+
+  # Phase S4 — internal/keylevel. No old trading-bot.yml OR Python-
+  # schema-default precedent at all (levels.py reads these as plain
+  # function-argument defaults, never a config leaf) — values are those
+  # real function defaults, ported explicitly rather than invented.
+  key_levels:
+    # key_levels()'s level_cluster_atr.
+    cluster_atr: 0.5
+    # key_levels()'s round_step.
+    round_step: 5.0
+    # key_levels()'s min_touches.
+    minimum_touches: 2
+    # key_levels()'s max_cluster_span_multiple.
+    maximum_cluster_span_multiple: 2.0
+  # Phase S4 — internal/fib. No old trading-bot.yml OR Python-schema-
+  # default precedent at all (fibonacci.py/dealing_range.py read these as
+  # plain function-argument defaults, never a config leaf) — values are
+  # those real function defaults, ported explicitly rather than invented.
+  fibonacci:
+    # nearest_fib()'s epsilon_atr.
+    epsilon_atr: 0.15
+    # fib_zone_label()'s deep_discount/deep_premium position thresholds —
+    # not a coincidence that these equal the 38.2%/61.8% retracement
+    # ratios themselves.
+    deep_discount: 0.382
+    deep_premium: 0.618
+    # dealing_range()'s own eq_band=0.10 default, already halved — see
+    # internal/fib.Config.EqHalfBand's own comment on why it's stored
+    # pre-halved.
+    eq_half_band: 0.05
+
+  # §7: zones.merge_max_width / zones.confluence.merge_gap_price (price-
+  # absolute, not ATR-relative — see zones.merge_overlap/max_merged_zone_atr
+  # above for those) are REMOVED from here, not just left unused. Investigated
+  # live: app/core/instrument_geometry.py::merge_max_width(symbol)/
+  # merge_gap_price(symbol) already resolve through instrument_runtime_view
+  # (analysis_runtime(symbol)), and every live instrument (instruments.yml,
+  # each pack or instrument override) already declares its own
+  # price_scale.zone_merge_gap_price/zone_merge_max_width — so this was not
+  # live-wrong today, but the old global value here (1.0 / 6.0) was byte-
+  # identical to XAU's own pack number, meaning a new instrument that forgot
+  # to declare these two leaves would have silently inherited XAU's
+  # dollar-scale geometry, exactly the failure mode §7 forbids by
+  # construction. instruments.yml is the one owner now; each pack/instrument
+  # must declare both explicitly (schema should make them required, not
+  # defaulted, once a real loader exists).
+
+  # --- market_data.* from the old trading-bot.yml, unchanged values ---
+  calendar:
+    currencies:
+      - USD
+      - EUR
+      - GBP
+      - JPY
+    enabled: true
+    event_guard_hours: 4.0
+    feed_nextweek: https://nfs.faireconomy.media/ff_calendar_nextweek.json
+    feed_thisweek: https://nfs.faireconomy.media/ff_calendar_thisweek.json
+    news_brief_hour: 7
+    news_guard_block: false
+    oil_keywords:
+      - crude oil inventories
+      - opec
+      - cushing
+      - api weekly crude
+    user_agent: apexvoid-trading-bot/1.0 (+contact)
+
+  # §4/§5: ctrader_feed.symbol/timeframes REMOVED. Feed subscription derives
+  # from instruments.yml: subscribe every instrument with rollout == live,
+  # using its own broker_symbol and timeframes list — never a second,
+  # independent symbol/timeframe list. The single XAUUSD/[M1,M5,M15,H1]
+  # this held is exactly instruments.yml's XAU entry (broker_symbol XAUUSD
+  # via the aliases list, timeframes from its pack) — a real duplicate, not
+  # a distinct concept.
+
+  scanner:
+    execution_timeframe: M5
+    # HTF context set: analysis semantics (which higher timeframes bias is
+    # read from), not a feed subscription list — stays here per §5.
+    htf:
+      - H1
+      - M15
+    # §3: scanner.symbols REMOVED — derives from instruments.yml
+    # (instruments.*.rollout == live), never a second symbol list.
+    window: 500
+
+  sessions:
+    asia_start: 22
+    london_start: 7
+    ny_start: 13
+    # Trading-day boundary for PDH/PDL (Phase S4, internal/session) —
+    # session_liquidity.py::_daily_rollover's real Python default, not
+    # invented.
+    daily_rollover_utc_hour: 21
+
+  spot:
+    maximum_age_seconds: 5
+
+  watcher:
+    interval_seconds: 120

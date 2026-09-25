@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://apexvoid.internal/contracts/common/event-envelope-v1.schema.json",
+  "title": "event-envelope.v1",
+  "description": "The shared wrapper for every ApexVoid Kafka business-event record. Topic payload schemas describe only the `payload` object; this schema owns the metadata wrapper once. A producer or consumer decodes this envelope before its event-specific payload. Go implementation: internal/transport/kafka.Envelope.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["event_id", "event_type", "event_version", "occurred_at", "produced_at", "producer", "correlation_id", "payload"],
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "description": "A unique, time-sortable UUIDv7 for this event instance. It is for tracing and log correlation, not a replacement for a payload's lifecycle identity.",
+      "minLength": 1
+    },
+    "event_type": {
+      "type": "string",
+      "description": "The Kafka business-event topic name this event was published to, and therefore which payload schema `payload` must validate against — for example \"analysis.opportunity.v1\". Must match the topic's own name exactly.",
+      "minLength": 1
+    },
+    "event_version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "The payload contract version, redundant with (and must agree with) the \"vN\" suffix already present in event_type — carried separately so a consumer can branch on it without string-parsing the topic name."
+    },
+    "occurred_at": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Unix seconds. The domain moment this business event represents — for example, the moment an opportunity was identified. Never milliseconds; never mixed with produced_at's unit."
+    },
+    "produced_at": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Unix seconds — wall-clock time the producing service actually published this record. May differ from occurred_at (processing latency); produced_at >= occurred_at is expected but not schema-enforced (semantic validation, not structural)."
+    },
+    "producer": {
+      "type": "string",
+      "description": "Which service produced this event — e.g. \"ctrader-engine\", \"analysis-engine\". Free-form but must match an actual known service name; not schema-enumerated here because this schema is shared before every producer exists.",
+      "minLength": 1
+    },
+    "correlation_id": {
+      "type": "string",
+      "description": "End-to-end trace identifier, propagated unchanged across a derived business-event chain. A root event still carries a freshly generated value.",
+      "minLength": 1
+    },
+    "causation_id": {
+      "type": "string",
+      "description": "The event_id of the specific business event that directly caused this one. Omitted for a root event with no event parent. Distinct from correlation_id: correlation_id is shared across a chain; causation_id points to one immediate parent."
+    },
+    "config_version": {
+      "type": "integer",
+      "description": "Configuration V3 schema version that produced this event's payload when the payload reflects configured engine behavior, such as analysis.opportunity.v1. Never a secret value."
+    },
+    "config_fingerprint": {
+      "type": "string",
+      "description": "A content hash of the resolved Configuration V3 document that produced this event, alongside config_version — together they answer \"which exact configuration generated this opportunity?\" historically. Never a secret value; the fingerprint is a hash, not the configuration content itself."
+    },
+    "payload": {
+      "type": "object",
+      "description": "The event-type-specific body. Validate against event_type's own business-event payload schema. This remains generic because the envelope owns only wrapper metadata."
+    }
+  }
+}

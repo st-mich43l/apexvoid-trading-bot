@@ -245,7 +245,7 @@ def replay_from_fixture(path: Path) -> dict[str, Any]:
 
 
 def main(argv: list[str] | None = None) -> int:
-  parser = argparse.ArgumentParser(description="Replay HFS scalp paper outcomes")
+  parser = argparse.ArgumentParser(description="Replay scalp paper outcomes")
   parser.add_argument("--symbol", default="XAU")
   parser.add_argument("--from", dest="date_from", default=None)
   parser.add_argument("--to", dest="date_to", default=None)

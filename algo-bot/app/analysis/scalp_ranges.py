@@ -7,7 +7,7 @@ fallback barriers for one-sided structure, and explicit range states
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 import math
 from typing import Any
 
@@ -58,7 +58,6 @@ RANGE_STATE_PROVISIONAL = "provisional_range"
 RANGE_STATE_CONFIRMED = "confirmed_range"
 RANGE_STATE_POST_IMPULSE = "post_impulse_range"
 RANGE_STATE_BROKEN = "broken_range"
-BARRIER_GRADES = ("A", "B", "C", "invalid")
 
 
 @dataclass(frozen=True)
@@ -804,16 +803,6 @@ def _fallback_barrier(
   )
 
 
-def _best_range(
-  barriers: list[ScalpBarrier],
-  price: float,
-  atr: float,
-  cfg,
-) -> ScalpRange | None:
-  scalp_range, _ = _best_range_with_state(barriers, price, atr, cfg, None, None)
-  return scalp_range
-
-
 def _best_range_with_state(
   barriers: list[ScalpBarrier],
   price: float,
@@ -1011,28 +1000,6 @@ def _is_post_impulse(
     if lower - _EPS <= float(close) <= upper + _EPS
   )
   return inside >= 4
-
-
-def role_flip_barrier(
-  barrier: ScalpBarrier,
-  *,
-  accepted_break: bool,
-  retest_held: bool,
-) -> ScalpBarrier | None:
-  """Resistance→support (or support→resistance) after accepted break + retest."""
-  if not accepted_break or not retest_held:
-    return None
-  new_side = "support" if barrier.side == "resistance" else "resistance"
-  tags = _unique([*barrier.tags, "role-flip", f"was-{barrier.side}"])
-  return replace(
-    barrier,
-    side=new_side,
-    tags=tags,
-    sources=tuple(sorted({*barrier.sources, "role_flip"})),
-    reclaimed=True,
-    grade="B",
-    confidence_grade="B",
-  )
 
 
 def _last_atr(atr) -> float:

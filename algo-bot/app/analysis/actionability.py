@@ -20,16 +20,18 @@ from app.analysis.key_level_role import (
   ROLE_SUPPORT,
   classify_key_level_role,
 )
-from app.analysis.market_map import MapEntry, MarketMap
 from app.analysis.structural_reaction_support import STRUCTURAL_SETUPS
+from app.analysis.types import Zone
 from app.autotrade.strategy_taxonomy import (
   is_scalp_strategy,
   is_technique_or_confluence,
 )
 from app.autotrade.structural_target_room import (
+  ZoneOpposingEntry,
   evaluate_structural_target_room,
   filter_displaced_opposing_entries,
   filter_shared_boundary_opposing_entries,
+  zone_opposing_entries,
   zone_proximal_room_reference,
 )
 
@@ -41,7 +43,7 @@ class ActionabilityDecision:
   message: str
   hard_block: bool
   measured: dict[str, Any]
-  opposing_entry: MapEntry | None = None
+  opposing_entry: ZoneOpposingEntry | None = None
 
 
 @dataclass(frozen=True)
@@ -51,7 +53,6 @@ class ActionabilityResolution:
   gated: tuple[tuple[DetectionResult, ActionabilityDecision], ...]
   decisions: tuple[tuple[DetectionResult, ActionabilityDecision], ...]
   conflicts: tuple[dict[str, Any], ...]
-  entry_locations: tuple[tuple[DetectionResult, EntryLocationDecision], ...] = ()
   demoted_hard: tuple[tuple[DetectionResult, ActionabilityDecision], ...] = ()
 
 
@@ -191,7 +192,7 @@ def _band_overlap(
 def _map_conflict(
   first: DetectionResult,
   second: DetectionResult,
-  entries: Sequence[MapEntry],
+  entries: Sequence[ZoneOpposingEntry],
 ) -> bool:
   """Whether opposing observations resolve into contradictory map space."""
   first_side = "buy" if first.direction.upper() == "BUY" else "sell"
@@ -235,12 +236,12 @@ def _result_payload(result: DetectionResult) -> dict[str, Any]:
 
 
 def _entries_excluding_displaced_barriers(
-  entries: Sequence[MapEntry],
+  entries: Sequence[ZoneOpposingEntry],
   *,
   result: DetectionResult,
   context: Any,
   cfg: Any,
-) -> tuple[Sequence[MapEntry], dict[str, Any]]:
+) -> tuple[Sequence[ZoneOpposingEntry], dict[str, Any]]:
   """See structural_target_room.filter_displaced_opposing_entries: excludes
   an opposing barrier the candidate's own recent execution-tf closes have
   already closed decisively beyond, rather than hard-blocking on a barrier
@@ -284,7 +285,7 @@ _ZONE_TRIM_EPS = 1e-9
 
 def _trim_zone_against_overlapping_barrier(
   result: DetectionResult,
-  entries: Sequence[MapEntry],
+  entries: Sequence[ZoneOpposingEntry],
 ) -> DetectionResult:
   """Recovery mission (2026-07-31): a partially-overlapping opposing
   barrier used to hard-reject the whole candidate (opposing_entry_overlap)
@@ -351,7 +352,7 @@ def _decision(
   measured: dict[str, Any],
   *,
   hard_block: bool = True,
-  opposing_entry: MapEntry | None = None,
+  opposing_entry: ZoneOpposingEntry | None = None,
 ) -> ActionabilityDecision:
   return ActionabilityDecision(
     not hard_block,
@@ -368,7 +369,7 @@ def _key_level_role(
   context: Any,
   cfg: Any,
 ) -> str | None:
-  if result.setup != "Key Level Reaction":
+  if result.setup != "Key Level":
     return None
   if result.key_level_role:
     return result.key_level_role
@@ -391,22 +392,41 @@ def resolve_actionability(
   *,
   symbol: str,
   observed_results: Sequence[DetectionResult],
-  market_map: MarketMap | None,
+  zones: list[Zone] | None,
   context: Any,
   atr: float,
   pip_size: float,
   cfg: Any | None = None,
+  opposing_entries: tuple[ZoneOpposingEntry, ...] | None = None,
 ) -> ActionabilityResolution:
   """Resolve semantic, cross-side, and opposing-room hard geometry.
 
   ``cfg`` defaults to the authority-neutral canonical ``runtime_config``;
-  tests may inject a canonical-shaped override.
+  tests may inject a canonical-shaped override. ``zones`` is the scanner's
+  own technique-native HTF supply/demand scan (2026-09, Market Map purge
+  stage 4 - "these technique calculate swing right? so we can migrate to
+  scanner, detector and clean"), not Market Map.
+
+  ``opposing_entries`` (2026-09, Key Level structural repair Phase 2), when
+  given, is used directly instead of deriving entries from ``zones`` via
+  ``zone_opposing_entries`` - the caller has already built a multi-timeframe,
+  merged, cross-side-reconciled pool (``StructuralBarrierBook``) and tiered
+  it the same way ``zone_opposing_entries`` would, so re-deriving from raw
+  ``zones`` here would silently discard that work. ``zones`` stays required
+  either way (still read directly above for the missing-context telemetry
+  check) so this is additive, not a breaking signature change.
   """
   if cfg is None:
     from app.core.config import runtime_config
     cfg = runtime_config
   observed = tuple(observed_results)
-  entries = () if market_map is None else tuple(market_map.actionable_entries)
+  entries = (
+    tuple(opposing_entries)
+    if opposing_entries is not None
+    else zone_opposing_entries(
+      zones, major_score=float(cfg.analysis.market_map.major_score),
+    )
+  )
   gated: dict[int, ActionabilityDecision] = {}
   decisions: dict[int, list[ActionabilityDecision]] = {}
   conflicts: list[dict[str, Any]] = []
@@ -453,11 +473,11 @@ def resolve_actionability(
       ))
 
   for index, result in enumerate(observed):
-    if _structural(result) and market_map is None:
-      # Missing Market Map is telemetry only — never drop the candidate.
+    if _structural(result) and not zones:
+      # Missing HTF zone context is telemetry only — never drop the candidate.
       record(index, _decision(
         "context_degraded",
-        "current Market Map context is unavailable",
+        "current opposing zone context is unavailable",
         {
           "symbol": symbol,
           "htf_bias": getattr(context, "htf_bias", None),
@@ -561,8 +581,8 @@ def resolve_actionability(
           planned_entry=room_planned,
         )
       result = _trim_zone_against_overlapping_barrier(result, room_entries)
-      # Range/HFS scalp: detector already required native min room (EQ /
-      # select_range_target / HFS fitted TP). HTF opposing barriers must not
+      # Range/scalp: detector already required native min room (EQ /
+      # select_range_target / scalp fitted TP). HTF opposing barriers must not
       # hard-kill discovery — same rule as worker opposing bypass when
       # fitted room exists. Reaction/zone still evaluate the map.
       is_scalp = is_scalp_strategy(result.setup)
@@ -596,6 +616,12 @@ def resolve_actionability(
           None if is_scalp else shared_boundary_state
         ),
         allow_same_wall_overlap=is_technique_or_confluence(result.setup),
+        strength_score_ceiling=float(
+          cfg.strategies.reaction.key_level.opposing_structure.strength_score_ceiling
+        ),
+        caution_room_r=float(
+          cfg.strategies.reaction.key_level.opposing_structure.caution_room_r
+        ),
       )
       measured = {
         **room.measured,
@@ -624,16 +650,61 @@ def resolve_actionability(
           hard_block=False,
         ))
       if room.opposing_entry is not None:
+        # Opposing Structure V2 (§25) — shadow telemetry only, flattened
+        # from the SAME evidence evaluate_structural_target_room already
+        # attached to measured["opposing_evidence"] above (no second
+        # lookup). Absent (empty dict) only for an older/simplified caller
+        # of evaluate_structural_target_room in a test fixture that
+        # doesn't build it - OpposingStructureEvidence.to_dict() itself
+        # never returns an empty dict in production, so opposing_zone_
+        # present is a real True/False here, never a silent None.
+        evidence = measured.get("opposing_evidence") or {}
         result = replace(
           result,
           target_cap_pips=room.effective_target_pips,
           target_room_measured=measured,
+          opposing_zone_present=bool(evidence),
+          opposing_zone_side=evidence.get("zone_side"),
+          opposing_zone_low=evidence.get("zone_low"),
+          opposing_zone_high=evidence.get("zone_high"),
+          opposing_zone_tier=evidence.get("tier"),
+          opposing_zone_score=evidence.get("zone_score"),
+          opposing_zone_strength=evidence.get("strength_score"),
+          opposing_raw_room_price=evidence.get("raw_room_price"),
+          opposing_room_pips=evidence.get("raw_room_pips"),
+          opposing_room_atr=evidence.get("room_atr"),
+          opposing_room_r=evidence.get("room_r"),
+          opposing_before_tp1=evidence.get("before_tp1"),
+          opposing_displaced=evidence.get("displaced"),
+          opposing_mitigated=evidence.get("mitigated"),
+          opposing_room_pressure=evidence.get("room_pressure_score"),
+          opposing_risk_score=evidence.get("opposing_risk_score"),
+          opposing_action=evidence.get("action"),
+          opposing_reason_code=evidence.get("reason_code"),
+        )
+      else:
+        # 2026-09 (Key Level structural repair Phase 2, telemetry fix): the
+        # room check genuinely ran and found no opposing barrier at all -
+        # a real, meaningful outcome distinct from "never evaluated"
+        # (this whole block only runs when ``targets`` was non-empty in
+        # the first place). Previously this branch left every opposing_*
+        # field - including opposing_zone_present - at its dataclass
+        # default (None), indistinguishable from a result that never
+        # reached this check, making it impossible to tell live whether
+        # the opposing-structure gate was running at all. Confirmed via
+        # production query: 9/10 Key Level fills since PR #523 deployed
+        # were NULL, 0 were ever False.
+        result = replace(
+          result,
+          target_cap_pips=room.effective_target_pips,
+          target_room_measured=measured,
+          opposing_zone_present=False,
         )
 
     role = _key_level_role(result, context, cfg)
     if role == ROLE_AMBIGUOUS:
       # P0 zone/M1 simplification: this used to hard-block every ambiguous-
-      # role Key Level Reaction outright. key_level_reaction() (detectors.py)
+      # role Key Level outright. key_level_reaction() (detectors.py)
       # no longer emits a genuinely-undecided result for an ambiguous role -
       # it deterministically resolves to exactly one direction (price
       # below/above the level, or whichever single side actually confirms a
@@ -671,7 +742,7 @@ def resolve_actionability(
     ):
       decision = _decision(
         "key_level_role_direction_mismatch",
-        "Key Level Reaction direction conflicts with the classified role",
+        "Key Level direction conflicts with the classified role",
         {
           "key_level_role": role,
           "direction": result.direction.upper(),
@@ -731,14 +802,11 @@ def resolve_actionability(
   # Discovery-time entry-location is a separate decision domain. Soft
   # telemetry only — never demote scanner actionable observations here.
   # Activation-time recheck in zone_execution_cutover is authoritative.
-  entry_location_pairs: list[tuple[DetectionResult, EntryLocationDecision]] = []
   for index, location in _evaluate_discovery_entry_locations(
     observed=observed,
     context=context,
     cfg=cfg,
   ):
-    result = observed[index]
-    entry_location_pairs.append((result, location))
     demoted_decisions.setdefault(index, []).append(
       ActionabilityDecision(
         allowed=True if not location.hard_block else location.allowed,
@@ -767,7 +835,6 @@ def resolve_actionability(
       for decision in demoted_decisions[index]
     ),
     tuple(conflicts),
-    tuple(entry_location_pairs),
     tuple(demoted_hard),
   )
 
@@ -873,6 +940,7 @@ def _evaluate_discovery_entry_locations(
       direction=result.direction,
       context=context_loc,
       cfg=cfg,
+      bias_relationship=result.bias_relationship,
     )
     found.append((index, decision))
   return found

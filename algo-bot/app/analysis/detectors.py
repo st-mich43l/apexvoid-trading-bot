@@ -7,12 +7,13 @@ import logging
 import math
 from collections import Counter
 from types import SimpleNamespace
-from typing import Callable, Protocol
+from typing import Any, Callable, Protocol
 
 import pandas as pd
 
 from app.analysis.engine import AnalysisContext, AnalysisSettings, Regime, analyze
 from app.analysis.indicators import atr as atr_indicator
+from app.analysis.momentum import MATH_FEATURE_VERSION
 from app.analysis.key_level_role import (
   ROLE_AMBIGUOUS,
   ROLE_BROKEN_RESISTANCE,
@@ -38,6 +39,7 @@ from app.analysis.structure import (
   swings,
 )
 from app.analysis.trendlines import Trendline, value_at
+from app.analysis.trendline_v2 import evaluate_live_interaction
 from app.analysis.execution_eligibility import ExecutionEligibility
 from app.analysis.structural_reaction_support import (
   CONFIRM_ENGULFING,
@@ -82,11 +84,11 @@ from app.autotrade.strategy_names import (
   BOX_BREAKOUT,
   FADE_SCALP,
   FLIP_ZONE,
-  KEY_LEVEL_REACTION,
+  KEY_LEVEL,
   MOMENTUM_RIDE,
   SNAP_BACK,
-  SESSION_LEVEL_REACTION,
-  TRENDLINE_REACTION,
+  SESSION_LEVEL,
+  TRENDLINE,
   ZONE_REACTION,
 )
 
@@ -215,10 +217,21 @@ class DetectorSettings:
   tl_max_bars_since_last_touch: int = 30
   tl_max_fit_error_atr: float = 0.15
   tl_max_violations: int = 2
+  tl_version: str = "v1"
+  tl_shadow_v1: bool = False
+  tl_interaction_band_atr: float = 0.20
+  tl_close_violation_atr: float = 0.15
+  tl_approach_min_distance_atr: float = 0.10
+  tl_min_validation_touches: int = 1
+  tl_chop_min_validation_touches: int = 2
+  tl_chop_require_htf_aligned: bool = True
   coil_contract: float = 0.8
   breakout_buffer_atr: float = 0.1
   breakout_accept_bars: int = 2
   breakout_max_age_bars: int = 6
+  flip_zone_accept_bars: int | None = None
+  flip_zone_max_break_age_bars: int = 48
+  flip_band_body_fraction: float = 0.5
   allow_counter_trend: bool = True
   range_scalp_enabled: bool = True
   range_scalp_lookback: int = 48
@@ -271,6 +284,10 @@ class DetectorSettings:
   fvg_max_atr: float = 2.0
   fvg_entry_max_width_price: float = 5.0
   technique_validation_enabled: bool = True
+  technique_retest_max_touches: int = 30
+  technique_invalidation_tolerance_atr: float = 0.5
+  technique_sweep_reclaim_bars: int = 6
+  technique_max_break_episodes: int = 2
   causal_structure: bool = False
   max_cluster_span_multiple: float = 2.0
   # Recovery mission (2026-07-30): these six sources were live around
@@ -346,10 +363,21 @@ class DetectorSettings:
       tl_max_bars_since_last_touch=self.tl_max_bars_since_last_touch,
       tl_max_fit_error_atr=self.tl_max_fit_error_atr,
       tl_max_violations=self.tl_max_violations,
+      tl_version=self.tl_version,
+      tl_shadow_v1=self.tl_shadow_v1,
+      tl_interaction_band_atr=self.tl_interaction_band_atr,
+      tl_close_violation_atr=self.tl_close_violation_atr,
+      tl_approach_min_distance_atr=self.tl_approach_min_distance_atr,
+      tl_min_validation_touches=self.tl_min_validation_touches,
+      tl_chop_min_validation_touches=self.tl_chop_min_validation_touches,
+      tl_chop_require_htf_aligned=self.tl_chop_require_htf_aligned,
       coil_contract=self.coil_contract,
       breakout_buffer_atr=self.breakout_buffer_atr,
       breakout_accept_bars=self.breakout_accept_bars,
       breakout_max_age_bars=self.breakout_max_age_bars,
+      flip_zone_accept_bars=self.flip_zone_accept_bars,
+      flip_zone_max_break_age_bars=self.flip_zone_max_break_age_bars,
+      flip_band_body_fraction=self.flip_band_body_fraction,
       range_scalp_lookback=self.range_scalp_lookback,
       range_scalp_cluster_atr=self.range_scalp_cluster_atr,
       range_scalp_min_touches=self.range_scalp_min_touches,
@@ -372,6 +400,10 @@ class DetectorSettings:
       fvg_entry_max_width_price=self.fvg_entry_max_width_price,
       fvg_max_atr=self.fvg_max_atr,
       technique_validation_enabled=self.technique_validation_enabled,
+      technique_retest_max_touches=self.technique_retest_max_touches,
+      technique_invalidation_tolerance_atr=self.technique_invalidation_tolerance_atr,
+      technique_sweep_reclaim_bars=self.technique_sweep_reclaim_bars,
+      technique_max_break_episodes=self.technique_max_break_episodes,
       causal_structure=self.causal_structure,
       max_cluster_span_multiple=self.max_cluster_span_multiple,
     )
@@ -430,6 +462,7 @@ def detector_settings_from(config: object | None = None) -> DetectorSettings:
     flip_zone_enabled = bool(strategies.zone.flip.enabled)
   except AttributeError:
     flip_zone_enabled = True
+  flip_zone = getattr(analysis, "flip_zone", None)
   fib = _fib_cfg(analysis)
   confluence = getattr(analysis, "confluence", None) or SimpleNamespace(
     scoring_version="v1",
@@ -526,10 +559,37 @@ def detector_settings_from(config: object | None = None) -> DetectorSettings:
       getattr(analysis.trendlines, "maximum_fit_error_atr", 0.15)
     ),
     tl_max_violations=int(getattr(analysis.trendlines, "maximum_violations", 2)),
+    tl_version=str(getattr(analysis.trendlines, "version", "v1")),
+    tl_shadow_v1=bool(getattr(analysis.trendlines, "shadow_v1", False)),
+    tl_interaction_band_atr=float(
+      getattr(analysis.trendlines, "interaction_band_atr", 0.20)
+    ),
+    tl_close_violation_atr=float(
+      getattr(analysis.trendlines, "close_violation_atr", 0.15)
+    ),
+    tl_approach_min_distance_atr=float(
+      getattr(analysis.trendlines, "approach_min_distance_atr", 0.10)
+    ),
+    tl_min_validation_touches=int(
+      getattr(analysis.trendlines, "minimum_validation_touches", 1)
+    ),
+    tl_chop_min_validation_touches=int(
+      getattr(analysis.trendlines, "chop_minimum_validation_touches", 2)
+    ),
+    tl_chop_require_htf_aligned=bool(
+      getattr(analysis.trendlines, "chop_require_htf_aligned", True)
+    ),
     coil_contract=analysis.measurements.coil_contract,
     breakout_buffer_atr=analysis.breakout.buffer_atr,
     breakout_accept_bars=analysis.breakout.accept_bars,
     breakout_max_age_bars=analysis.breakout.max_age_bars,
+    flip_zone_accept_bars=getattr(flip_zone, "accept_bars", None),
+    flip_zone_max_break_age_bars=int(
+      getattr(flip_zone, "max_break_age_bars", 48)
+    ),
+    flip_band_body_fraction=float(
+      getattr(flip_zone, "band_body_fraction", 0.5)
+    ),
     allow_counter_trend=strategies.counter_trend.allow_counter_trend,
     range_scalp_enabled=strategies.range_reversion.range_edge.enabled,
     range_scalp_lookback=strategies.range_reversion.range_edge.lookback,
@@ -605,6 +665,10 @@ def detector_settings_from(config: object | None = None) -> DetectorSettings:
       strategies.technique.fvg.entry_max_width_price
     ),
     technique_validation_enabled=bool(analysis.techniques.validation_enabled),
+    technique_retest_max_touches=int(analysis.techniques.retest_max_touches),
+    technique_invalidation_tolerance_atr=float(analysis.techniques.invalidation_tolerance_atr),
+    technique_sweep_reclaim_bars=int(analysis.techniques.sweep_reclaim_bars),
+    technique_max_break_episodes=int(analysis.techniques.max_break_episodes),
     box_breakout_enabled=bool(strategies.selection.box_breakout_enabled),
     break_retest_enabled=bool(strategies.breakout.break_retest_enabled),
     momentum_ride_enabled=bool(strategies.selection.momentum_ride_enabled),
@@ -628,7 +692,7 @@ class DetectionContext:
   trigger_ts: str | None = None
   regime: Regime | None = None
   analysis: AnalysisContext | None = None
-  # Shared MAD phase (Asia accum/manip/expand) — technique + HFS.
+  # Shared MAD phase (Asia accum/manip/expand) — technique + scalping.
   mad_phase: str | None = None
   mad: dict[str, object] | None = None
   metric_sink: Callable[[str, str, dict[str, str]], None] | None = None
@@ -658,6 +722,13 @@ class DetectionResult:
   source_touches: int | None = None
   source_score: float | None = None
   bias_relationship: str | None = None
+  # The real liquidity extreme (Grab.pool.level) behind a genuine,
+  # non-induced CONFIRM_SWEEP_RECLAIM. Feeds plan_protective_stop's
+  # sweep_extreme wick-stop widening; None for every other confirmation.
+  sweep_extreme_price: float | None = None
+  # Causal Trendline V2 evidence, deliberately JSON-shaped because it is
+  # persisted through StrategyMatch and TradePlan for production replay.
+  trendline_v2: dict[str, object] | None = None
   # Detection/card identity after same-side structural members are merged.
   # Additive so direct detector tests and non-structural setups keep their
   # existing construction and behavior.
@@ -675,11 +746,96 @@ class DetectionResult:
   math_velocity: float | None = None
   math_acceleration: float | None = None
   math_pd: float | None = None
+  math_feature_version: int | None = None
+  # MAD v2 context telemetry (§17) — descriptive only, never a gate. See
+  # app/analysis/mad_phase.py MadPhaseSnapshot/MadAffinityScore for the
+  # authoritative field semantics.
+  mad_version: int | None = None
+  mad_phase: str | None = None
+  mad_confidence: float | None = None
+  mad_affinity: float | None = None
+  mad_direction: str | None = None
+  mad_sweep_side: str | None = None
+  mad_reclaim: bool | None = None
+  mad_range_quality_atr: float | None = None
+  mad_break_distance_atr: float | None = None
+  mad_displacement_atr: float | None = None
+  mad_acceptance_closes: int | None = None
+  mad_sweep_penetration_atr: float | None = None
+  mad_reclaim_depth_atr: float | None = None
+  mad_reason_code: str | None = None
   # Shadow confluence outputs. ``confluence`` remains the selected gate.
   confluence_v1: int | None = None
   confluence_v2: int | None = None
   confluence_v2_raw: float | None = None
   confluence_scoring_version: str | None = None
+  # Candle Confirmation V2 context telemetry (§28) — descriptive only,
+  # never a gate. See app/analysis/candle_evidence.py CandleEvidence for
+  # the authoritative field semantics. Sourced from the M5 structural
+  # confirmation bar (§22) via ReactionConfirmation.candle_evidence.
+  candle_version: int | None = None
+  candle_primary_pattern: str | None = None
+  candle_patterns: str | None = None
+  candle_final_score: float | None = None
+  candle_base_score: float | None = None
+  candle_synergy_bonus: float | None = None
+  candle_rejection_score: float | None = None
+  candle_displacement_score: float | None = None
+  candle_sequence_score: float | None = None
+  candle_body_fraction: float | None = None
+  candle_upper_wick_fraction: float | None = None
+  candle_lower_wick_fraction: float | None = None
+  candle_close_location: float | None = None
+  candle_body_atr: float | None = None
+  candle_range_atr: float | None = None
+  candle_sweep: bool | None = None
+  candle_sweep_penetration_atr: float | None = None
+  candle_reclaim: bool | None = None
+  candle_reclaim_depth_atr: float | None = None
+  candle_engulfing: bool | None = None
+  candle_doji: bool | None = None
+  candle_compression_score: float | None = None
+  candle_sequence_name: str | None = None
+  candle_sequence_bars: int | None = None
+  # Key Level direction-resolution opposing zone (§15/16 of the 2026-09
+  # Opposing Structure V2 repair): the SAME zone _opposing_zone_contradicts
+  # (detectors.py) used to widen which direction(s) key_level_reaction even
+  # tries, when it fired. Distinct from the opposing_* room-telemetry
+  # fields below, which come from the nearest barrier ahead of the full
+  # entry at the later actionability/TradePlan stage — different pipeline
+  # stages answering different questions (direction vs. room), not two
+  # disagreeing subsystems. None whenever direction resolution didn't need
+  # to consult an opposing zone (role was explicit, or price was inside
+  # the level's own band).
+  key_level_opposing_zone_low: float | None = None
+  key_level_opposing_zone_high: float | None = None
+  key_level_opposing_zone_side: str | None = None
+  # Opposing Structure V2 (§25) — descriptive only in this phase, never a
+  # gate beyond the existing containment/zero-room hard-block already
+  # applied inside evaluate_structural_target_room itself (unaffected by
+  # any field here). See app/autotrade/structural_target_room.py
+  # OpposingStructureEvidence for the authoritative field semantics.
+  # Populated from target_room_measured["opposing_evidence"] wherever that
+  # dict is already attached to a DetectionResult (app/analysis/
+  # actionability.py resolve_actionability) — no new call site.
+  opposing_zone_present: bool | None = None
+  opposing_zone_side: str | None = None
+  opposing_zone_low: float | None = None
+  opposing_zone_high: float | None = None
+  opposing_zone_tier: str | None = None
+  opposing_zone_score: float | None = None
+  opposing_zone_strength: float | None = None
+  opposing_raw_room_price: float | None = None
+  opposing_room_pips: float | None = None
+  opposing_room_atr: float | None = None
+  opposing_room_r: float | None = None
+  opposing_before_tp1: bool | None = None
+  opposing_displaced: bool | None = None
+  opposing_mitigated: bool | None = None
+  opposing_room_pressure: float | None = None
+  opposing_risk_score: float | None = None
+  opposing_action: str | None = None
+  opposing_reason_code: str | None = None
 
 
 class SetupDetector(Protocol):
@@ -763,21 +919,6 @@ def _indicator_set(df: pd.DataFrame, length: int = 14) -> IndicatorSet:
   return IndicatorSet(atr=atr_indicator(df, length))
 
 
-def _structure_set(df: pd.DataFrame) -> StructureSet:
-  ctx = analyze({"_": df})
-  if "_" in ctx.per_tf:
-    return _structure_sets_from_analysis(ctx.per_tf)["_"]
-  items = swings(df, 2, 2)
-  return StructureSet(
-    swings=items,
-    bias=market_structure(items),
-    levels=key_levels(df),
-    equal_levels=equal_highs_lows(df),
-    fvg_zones=fvg(df),
-    order_blocks=order_blocks(df),
-  )
-
-
 def _structure_sets_from_analysis(items) -> dict[str, StructureSet]:
   result = {}
   for name, item in items.items():
@@ -833,16 +974,6 @@ def _exec(ctx: DetectionContext) -> tuple[pd.DataFrame, IndicatorSet, StructureS
   )
 
 
-def _uses_counter_bias_direction(ctx: DetectionContext) -> bool:
-  if not ctx.settings.allow_counter_trend:
-    return False
-  local_bias = ctx.structures[ctx.tf].bias
-  if local_bias not in {"up", "down"}:
-    return False
-  htf_bias = (ctx.htf_bias or "").casefold()
-  if htf_bias not in {"up", "down"}:
-    return False
-  return local_bias != htf_bias
 
 
 def _direction(ctx: DetectionContext) -> str | None:
@@ -989,13 +1120,6 @@ def _candidate_zones(st: StructureSet, direction: str) -> list[Zone]:
     seen.add(key)
     zones.append(zone)
   return zones
-
-
-def _last_touches_zone(df: pd.DataFrame, zone: Zone) -> bool:
-  if df.empty:
-    return False
-  row = df.iloc[-1]
-  return float(row["low"]) <= zone.high and float(row["high"]) >= zone.low
 
 
 def _best_valid_zone(
@@ -1452,6 +1576,9 @@ def _finish(
   source_touches: int | None = None,
   source_score: float | None = None,
   bias_relationship: str | None = None,
+  candle_evidence: Any | None = None,
+  sweep_extreme_price: float | None = None,
+  trendline_v2: dict[str, object] | None = None,
 ) -> DetectionResult | None:
   from app.analysis.technique_geometry import (
     optimize_crt_entry_zone,
@@ -1521,15 +1648,90 @@ def _finish(
   )
   if include_score_reasons:
     full_reasons = _merge_score_reasons(full_reasons, zone)
+  # v1 stays fully MAD-blind (§8) — no discrete star can be added by a MAD
+  # phase match. MAD only enters continuously, and only into v2, below.
   confluence_v1 = _confluence_from_zone(zone, factors, ctx.settings)
-  # MAD is entry quality + structure analysis only — soft confluence nudge,
-  # never a hard block on trade-plan publish / activation.
   mad_family = _mad_family_for_setup(setup, mode)
-  from app.analysis.mad_phase import PHASE_UNCLEAR, mad_soft_bonus
+  from app.analysis.mad_phase import (
+    PHASE_UNCLEAR,
+    MadPhaseSnapshot,
+    compute_mad_affinity,
+    mad_gate_strategy_for_setup,
+  )
 
-  mad_bonus = mad_soft_bonus(phase=ctx.mad_phase, family=mad_family)
-  if mad_bonus >= 0.1:
-    confluence_v1 += 1
+  mad_snapshot = MadPhaseSnapshot.from_dict(ctx.mad) if ctx.mad else None
+  mad_gate_strategy = mad_gate_strategy_for_setup(
+    setup, family=mad_family, strategy_mode=mode,
+  )
+  mad_affinity = (
+    compute_mad_affinity(mad_snapshot, direction=direction, strategy=mad_gate_strategy)
+    if mad_snapshot is not None
+    else None
+  )
+  # affinity.final is already 0..1 and 0 whenever direction/strategy disagree
+  # with the phase's own evidence (§9) — never a bypass for poor structure.
+  mad_bonus = mad_affinity.final if mad_affinity is not None else 0.0
+  mad_telemetry: dict[str, Any] = {}
+  if mad_snapshot is not None:
+    measured = mad_snapshot.measured
+    mad_telemetry = {
+      "mad_version": mad_snapshot.mad_version,
+      "mad_phase": mad_snapshot.phase,
+      "mad_confidence": mad_snapshot.confidence,
+      "mad_affinity": mad_affinity.final if mad_affinity is not None else None,
+      "mad_direction": (
+        mad_snapshot.manipulation_direction or mad_snapshot.expansion_direction
+      ),
+      "mad_sweep_side": mad_snapshot.sweep_side,
+      "mad_reclaim": mad_snapshot.reclaim,
+      "mad_range_quality_atr": mad_snapshot.range_quality_atr,
+      "mad_break_distance_atr": measured.get("break_distance_atr"),
+      "mad_displacement_atr": measured.get("displacement_atr"),
+      "mad_acceptance_closes": measured.get("accepted_closes"),
+      "mad_sweep_penetration_atr": measured.get("sweep_penetration_atr"),
+      "mad_reclaim_depth_atr": measured.get("reclaim_depth_atr"),
+      "mad_reason_code": mad_snapshot.reason_code,
+    }
+  candle_telemetry: dict[str, Any] = {}
+  if candle_evidence is not None:
+    rejection = candle_evidence.rejection
+    displacement = candle_evidence.displacement
+    sequence = candle_evidence.sequence
+    indecision = candle_evidence.indecision
+    geometry = candle_evidence.geometry
+    candle_telemetry = {
+      "candle_version": candle_evidence.version,
+      "candle_primary_pattern": candle_evidence.primary_pattern,
+      "candle_patterns": (
+        ",".join(candle_evidence.all_patterns) if candle_evidence.all_patterns else None
+      ),
+      "candle_final_score": candle_evidence.final_score,
+      "candle_base_score": candle_evidence.base_score,
+      "candle_synergy_bonus": candle_evidence.synergy_bonus,
+      "candle_rejection_score": rejection.score if rejection else None,
+      "candle_displacement_score": displacement.score if displacement else None,
+      "candle_sequence_score": sequence.score if sequence else None,
+      "candle_body_fraction": geometry.body_fraction if geometry else None,
+      "candle_upper_wick_fraction": geometry.upper_wick_fraction if geometry else None,
+      "candle_lower_wick_fraction": geometry.lower_wick_fraction if geometry else None,
+      "candle_close_location": geometry.close_location if geometry else None,
+      "candle_body_atr": geometry.body_atr if geometry else None,
+      "candle_range_atr": geometry.range_atr if geometry else None,
+      "candle_sweep": rejection.sweep if rejection else None,
+      "candle_sweep_penetration_atr": rejection.sweep_penetration_atr if rejection else None,
+      "candle_reclaim": (
+        rejection.reclaim if rejection else (displacement.reclaim if displacement else None)
+      ),
+      "candle_reclaim_depth_atr": (
+        rejection.reclaim_depth_atr if rejection and rejection.reclaim
+        else (displacement.reclaim_depth_atr if displacement else None)
+      ),
+      "candle_engulfing": displacement.engulfing if displacement else None,
+      "candle_doji": indecision.doji if indecision else None,
+      "candle_compression_score": indecision.compression_score if indecision else None,
+      "candle_sequence_name": sequence.sequence_name if sequence else None,
+      "candle_sequence_bars": sequence.bars if sequence else None,
+    }
   confluence_v2_raw = _confluence_v2_score(
     zone, factors, ctx.settings, mad_bonus,
   )
@@ -1577,6 +1779,8 @@ def _finish(
     source_touches=source_touches,
     source_score=source_score,
     bias_relationship=relationship,
+    sweep_extreme_price=sweep_extreme_price,
+    trendline_v2=trendline_v2,
     math_fib_ratio=(None if fib_hit is None else float(fib_hit.ratio)),
     math_velocity=(
       None if mom is None else float(getattr(mom, "velocity", 0.0))
@@ -1585,10 +1789,49 @@ def _finish(
       None if mom is None else float(getattr(mom, "acceleration", 0.0))
     ),
     math_pd=math_pd,
+    math_feature_version=(None if mom is None else MATH_FEATURE_VERSION),
+    mad_version=mad_telemetry.get("mad_version"),
+    mad_phase=mad_telemetry.get("mad_phase"),
+    mad_confidence=mad_telemetry.get("mad_confidence"),
+    mad_affinity=mad_telemetry.get("mad_affinity"),
+    mad_direction=mad_telemetry.get("mad_direction"),
+    mad_sweep_side=mad_telemetry.get("mad_sweep_side"),
+    mad_reclaim=mad_telemetry.get("mad_reclaim"),
+    mad_range_quality_atr=mad_telemetry.get("mad_range_quality_atr"),
+    mad_break_distance_atr=mad_telemetry.get("mad_break_distance_atr"),
+    mad_displacement_atr=mad_telemetry.get("mad_displacement_atr"),
+    mad_acceptance_closes=mad_telemetry.get("mad_acceptance_closes"),
+    mad_sweep_penetration_atr=mad_telemetry.get("mad_sweep_penetration_atr"),
+    mad_reclaim_depth_atr=mad_telemetry.get("mad_reclaim_depth_atr"),
+    mad_reason_code=mad_telemetry.get("mad_reason_code"),
     confluence_v1=confluence_v1,
     confluence_v2=confluence_v2,
     confluence_v2_raw=confluence_v2_raw,
     confluence_scoring_version=scoring_version,
+    candle_version=candle_telemetry.get("candle_version"),
+    candle_primary_pattern=candle_telemetry.get("candle_primary_pattern"),
+    candle_patterns=candle_telemetry.get("candle_patterns"),
+    candle_final_score=candle_telemetry.get("candle_final_score"),
+    candle_base_score=candle_telemetry.get("candle_base_score"),
+    candle_synergy_bonus=candle_telemetry.get("candle_synergy_bonus"),
+    candle_rejection_score=candle_telemetry.get("candle_rejection_score"),
+    candle_displacement_score=candle_telemetry.get("candle_displacement_score"),
+    candle_sequence_score=candle_telemetry.get("candle_sequence_score"),
+    candle_body_fraction=candle_telemetry.get("candle_body_fraction"),
+    candle_upper_wick_fraction=candle_telemetry.get("candle_upper_wick_fraction"),
+    candle_lower_wick_fraction=candle_telemetry.get("candle_lower_wick_fraction"),
+    candle_close_location=candle_telemetry.get("candle_close_location"),
+    candle_body_atr=candle_telemetry.get("candle_body_atr"),
+    candle_range_atr=candle_telemetry.get("candle_range_atr"),
+    candle_sweep=candle_telemetry.get("candle_sweep"),
+    candle_sweep_penetration_atr=candle_telemetry.get("candle_sweep_penetration_atr"),
+    candle_reclaim=candle_telemetry.get("candle_reclaim"),
+    candle_reclaim_depth_atr=candle_telemetry.get("candle_reclaim_depth_atr"),
+    candle_engulfing=candle_telemetry.get("candle_engulfing"),
+    candle_doji=candle_telemetry.get("candle_doji"),
+    candle_compression_score=candle_telemetry.get("candle_compression_score"),
+    candle_sequence_name=candle_telemetry.get("candle_sequence_name"),
+    candle_sequence_bars=candle_telemetry.get("candle_sequence_bars"),
   )
 
 
@@ -2281,6 +2524,7 @@ def range_edge_scalp(ctx: DetectionContext) -> DetectionResult | None:
       touch_bar_ts=confirmation.touch_bar_ts,
       source_touches=barrier.touches,
       source_score=barrier.score,
+      candle_evidence=getattr(confirmation, "candle_evidence", None),
     )
   return None
 
@@ -2417,21 +2661,6 @@ def _pseudo_level_zone(
     source=source,
     score=0.0,
     score_reasons=[reason],
-  )
-
-
-def _recent_choch(
-  st: StructureSet,
-  direction: str,
-  bar_count: int,
-  settings: DetectorSettings,
-) -> bool:
-  lookback = max(1, settings.sweep_react_bars)
-  earliest = max(0, bar_count - lookback - 1)
-  wanted = "up" if direction == "BUY" else "down"
-  return any(
-    item.kind == "CHoCH" and item.direction == wanted and item.index >= earliest
-    for item in st.breaks
   )
 
 
@@ -2579,6 +2808,7 @@ def _structural_finish(
   source_touches: int | None = None,
   source_score: float | None = None,
   factors: ConfluenceFactors | None = None,
+  trendline_v2: dict[str, object] | None = None,
 ) -> DetectionResult | None:
   relationship = resolve_bias_relationship(ctx.htf_bias, direction)
   full_reasons = [
@@ -2587,6 +2817,12 @@ def _structural_finish(
     confirmation.confirmation_type,
     f"bias {relationship}",
   ]
+  grab = getattr(confirmation, "grab", None)
+  sweep_extreme_price = (
+    float(grab.pool.level)
+    if grab is not None and grab.grade in {"A", "B"} and not grab.inducement
+    else None
+  )
   return _finish(
     ctx,
     setup,
@@ -2611,6 +2847,9 @@ def _structural_finish(
     source_touches=source_touches,
     source_score=source_score,
     bias_relationship=relationship,
+    candle_evidence=getattr(confirmation, "candle_evidence", None),
+    sweep_extreme_price=sweep_extreme_price,
+    trendline_v2=trendline_v2,
   )
 
 
@@ -2680,6 +2919,48 @@ def _nearest_same_side_zone_score(
   return float(getattr(best, "score", 0.0) or 0.0)
 
 
+def _key_level_reaction_band(
+  level: Level,
+  ctx: DetectionContext,
+  atr: float,
+) -> float:
+  """Return the role-classification band shared by KL and Flip Zone."""
+  band = max(
+    _EPS,
+    ctx.settings.proximal_band_atr * max(0.0, atr),
+  )
+  return max(float(level.band), band)
+
+
+def _flip_zone_level(st: StructureSet, zone: Zone) -> Level | None:
+  """Return the key level a PR-N1 flip zone is anchored to."""
+  anchor = float(zone.bottom) if zone.side == "demand" else float(zone.top)
+  best: Level | None = None
+  best_gap: float | None = None
+  for level in st.levels:
+    gap = abs(float(level.price) - anchor)
+    if gap > max(float(level.band), 0.0) + _EPS:
+      continue
+    if best_gap is None or gap < best_gap:
+      best, best_gap = level, gap
+  return best
+
+
+def _flip_role_agrees(role: str, direction: str) -> bool:
+  """A flip is valid only when the role authority confirms its direction."""
+  if direction == "BUY":
+    return role == ROLE_BROKEN_RESISTANCE
+  if direction == "SELL":
+    return role == ROLE_BROKEN_SUPPORT
+  return False
+
+
+def _count(ctx: DetectionContext, name: str) -> None:
+  """Emit detector counters through the scanner's existing metric sink."""
+  if ctx.metric_sink is not None:
+    ctx.metric_sink(name, ctx.symbol, {"tf": ctx.tf})
+
+
 def key_level_reaction(ctx: DetectionContext) -> DetectionResult | None:
   if not ctx.settings.key_level_reaction_enabled:
     return None
@@ -2689,7 +2970,6 @@ def key_level_reaction(ctx: DetectionContext) -> DetectionResult | None:
   price = _current_price(ctx, df)
   atr = _atr(ind)
   lookback = max(1, int(ctx.settings.structural_reaction_lookback_bars))
-  band = max(_EPS, ctx.settings.proximal_band_atr * max(0.0, atr))
   min_touches = max(1, int(ctx.settings.key_level_min_touches))
   min_sell_zone = float(
     getattr(ctx.settings, "key_level_min_sell_zone_score", 0.0) or 0.0
@@ -2698,7 +2978,7 @@ def key_level_reaction(ctx: DetectionContext) -> DetectionResult | None:
   for level in sorted(st.levels, key=lambda item: abs(item.price - price)):
     if level.touches < min_touches:
       continue
-    zone_band = max(level.band, band)
+    zone_band = _key_level_reaction_band(level, ctx, atr)
     role = classify_key_level_role(
       kind=level.kind,
       level_price=level.price,
@@ -2722,6 +3002,7 @@ def key_level_reaction(ctx: DetectionContext) -> DetectionResult | None:
     react_high = band_high
     contra_direction: str | None = None
     contra_level: float | None = None
+    opposing_zone: Zone | None = None
     if role == ROLE_SUPPORT:
       directions = ("BUY",)
     elif role == ROLE_RESISTANCE:
@@ -2748,6 +3029,7 @@ def key_level_reaction(ctx: DetectionContext) -> DetectionResult | None:
         react_high = max(band_high, opposing.high)
         contra_direction = "SELL"
         contra_level = opposing.high
+        opposing_zone = opposing
       else:
         directions = ("BUY",)
     elif price < band_low:
@@ -2762,6 +3044,7 @@ def key_level_reaction(ctx: DetectionContext) -> DetectionResult | None:
         react_high = max(band_high, opposing.high)
         contra_direction = "BUY"
         contra_level = opposing.low
+        opposing_zone = opposing
       else:
         directions = ("SELL",)
     else:
@@ -2819,7 +3102,7 @@ def key_level_reaction(ctx: DetectionContext) -> DetectionResult | None:
       )
       candidate = _structural_finish(
         ctx,
-        setup=KEY_LEVEL_REACTION,
+        setup=KEY_LEVEL,
         direction=direction,
         level=level_price,
         zone=zone,
@@ -2840,7 +3123,19 @@ def key_level_reaction(ctx: DetectionContext) -> DetectionResult | None:
         factors=factors,
       )
       if candidate is not None:
-        candidate = replace(candidate, key_level_role=role)
+        candidate = replace(
+          candidate,
+          key_level_role=role,
+          key_level_opposing_zone_low=(
+            None if opposing_zone is None else float(opposing_zone.low)
+          ),
+          key_level_opposing_zone_high=(
+            None if opposing_zone is None else float(opposing_zone.high)
+          ),
+          key_level_opposing_zone_side=(
+            None if opposing_zone is None else str(opposing_zone.side)
+          ),
+        )
         confirmed_here.append(candidate)
     if len(confirmed_here) != 1:
       # Zero confirmations: nothing to keep. Two confirmations (only
@@ -2904,6 +3199,7 @@ def flip_demand_zone_reaction(ctx: DetectionContext) -> DetectionResult | None:
     setup=FLIP_ZONE,
     require_source="flip_zone",
     structural_source="flip_zone",
+    enforce_key_level_role=True,
   )
 
 
@@ -2917,6 +3213,7 @@ def flip_supply_zone_reaction(ctx: DetectionContext) -> DetectionResult | None:
     setup=FLIP_ZONE,
     require_source="flip_zone",
     structural_source="flip_zone",
+    enforce_key_level_role=True,
   )
 
 
@@ -2929,6 +3226,7 @@ def _sd_zone_reaction(
   require_source: str | None = None,
   exclude_sources: tuple[str, ...] = (),
   structural_source: str = "supply_demand",
+  enforce_key_level_role: bool = False,
 ) -> DetectionResult | None:
   df, ind, st = _exec(ctx)
   if len(df) < 3:
@@ -2959,6 +3257,25 @@ def _sd_zone_reaction(
   else:
     zone, _proximal = selected
 
+  resolved_role: str | None = None
+  if enforce_key_level_role:
+    level = _flip_zone_level(st, zone)
+    if level is None:
+      _count(ctx, "flip_zone_level_unresolved")
+      return None
+    zone_band = _key_level_reaction_band(level, ctx, atr)
+    resolved_role = classify_key_level_role(
+      kind=level.kind,
+      level_price=float(level.price),
+      band_low=float(level.price) - zone_band,
+      band_high=float(level.price) + zone_band,
+      closed_bars=df,
+      breakout_accept_bars=ctx.settings.breakout_accept_bars,
+    ).role
+    if not _flip_role_agrees(resolved_role, direction):
+      _count(ctx, "flip_zone_role_contradiction")
+      return None
+
   conf = evaluate_structural_reaction(
     df,
     direction=direction,
@@ -2984,7 +3301,7 @@ def _sd_zone_reaction(
   ]
   if zone.touches:
     reasons.append(f"touches {zone.touches}")
-  return _structural_finish(
+  result = _structural_finish(
     ctx,
     setup=setup,
     direction=direction,
@@ -3003,6 +3320,9 @@ def _sd_zone_reaction(
     source_score=float(getattr(zone, "score", 0.0)),
     factors=factors,
   )
+  if result is not None and resolved_role is not None:
+    result = replace(result, key_level_role=resolved_role)
+  return result
 
 
 def session_level_reaction(ctx: DetectionContext) -> DetectionResult | None:
@@ -3052,7 +3372,7 @@ def session_level_reaction(ctx: DetectionContext) -> DetectionResult | None:
     )
     candidate = _structural_finish(
       ctx,
-      setup=SESSION_LEVEL_REACTION,
+      setup=SESSION_LEVEL,
       direction=direction,
       level=session.price,
       zone=zone,
@@ -3076,6 +3396,13 @@ def session_level_reaction(ctx: DetectionContext) -> DetectionResult | None:
 
 
 def trendline_reaction(ctx: DetectionContext) -> DetectionResult | None:
+  """Dispatch the reversible V1/V2 Trendline strategy contract."""
+  if str(ctx.settings.tl_version).casefold() == "v2":
+    return _trendline_reaction_v2(ctx)
+  return _trendline_reaction_v1(ctx)
+
+
+def _trendline_reaction_v1(ctx: DetectionContext) -> DetectionResult | None:
   if not ctx.settings.trendline_reaction_enabled:
     return None
   df, ind, st = _exec(ctx)
@@ -3147,7 +3474,7 @@ def trendline_reaction(ctx: DetectionContext) -> DetectionResult | None:
     )
     candidate = _structural_finish(
       ctx,
-      setup=TRENDLINE_REACTION,
+      setup=TRENDLINE,
       direction=direction,
       level=line_price,
       zone=zone,
@@ -3170,11 +3497,172 @@ def trendline_reaction(ctx: DetectionContext) -> DetectionResult | None:
   return best
 
 
+def _trendline_reaction_v2(ctx: DetectionContext) -> DetectionResult | None:
+  """Gate V2 Trendline execution on causal health and a fresh M5 reclaim.
+
+  The M5 reclaim creates a watchable interaction area only.  The worker's
+  Trendline-specific confirmation policy subsequently requires an M1 trigger
+  after this interaction before it can publish an executable plan.
+  """
+  if not ctx.settings.trendline_reaction_enabled:
+    return None
+  df, ind, st = _exec(ctx)
+  if len(df) < 3:
+    return None
+  price = _current_price(ctx, df)
+  atr = _atr(ind)
+  band = max(_EPS, ctx.settings.tl_interaction_band_atr * max(0.0, atr))
+  stale_limit = ctx.settings.trendline_maximum_bars_since_last_touch
+  if stale_limit is None:
+    stale_limit = ctx.settings.tl_max_bars_since_last_touch
+  lookback = max(1, int(ctx.settings.structural_reaction_lookback_bars))
+  best: DetectionResult | None = None
+  for line in sorted(
+    (item for item in st.trendlines if item.version == "v2"),
+    key=lambda item: abs(value_at(item, len(df) - 1) - price),
+  ):
+    direction = "BUY" if line.kind == "support" else "SELL"
+    if line.kind not in {"support", "resistance"}:
+      continue
+    htf_aligned = ctx.htf_bias == _bias_for_direction(direction)
+    rejection = _trendline_v2_structural_rejection(
+      ctx,
+      line,
+      direction=direction,
+      htf_aligned=htf_aligned,
+      stale_limit=int(stale_limit),
+    )
+    if rejection is not None:
+      _emit_trendline_metric(ctx, f"trendline_v2_rejected_{rejection}")
+      continue
+    interaction = evaluate_live_interaction(line, df, atr, SimpleNamespace(
+      interaction_band_atr=ctx.settings.tl_interaction_band_atr,
+      close_violation_atr=ctx.settings.tl_close_violation_atr,
+      approach_min_distance_atr=ctx.settings.tl_approach_min_distance_atr,
+    ))
+    if interaction.state.startswith("FAILED"):
+      _emit_trendline_metric(ctx, f"trendline_v2_rejected_{interaction.rejection_reason}")
+      continue
+    if not interaction.state.startswith("RECLAIMED"):
+      _emit_trendline_metric(ctx, "trendline_v2_rejected_testing_without_reaction")
+      continue
+    line_price = interaction.line_price
+    conf = evaluate_structural_reaction(
+      df,
+      direction=direction,
+      low=interaction.band_low,
+      high=interaction.band_high,
+      lookback_bars=lookback,
+      grabs=[],
+      has_choch=_recent_choch_flag(st, direction, len(df), ctx.settings, lookback),
+      atr=atr,
+      engulfing_minimum_range_atr=ctx.settings.engulfing_minimum_range_atr,
+    )
+    if conf is None:
+      _emit_trendline_metric(ctx, "trendline_v2_rejected_testing_without_reaction")
+      continue
+    zone = _pseudo_level_zone(
+      line_price,
+      band,
+      direction,
+      f"TL V2 {line.kind} forward×{line.validation_touch_count}",
+      source="trendline",
+    )
+    if not _entry_valid_for_settings(zone, price, atr, direction, ctx.settings):
+      _emit_trendline_metric(ctx, "trendline_v2_rejected_entry_outside_interaction")
+      continue
+    telemetry = line.to_telemetry()
+    telemetry.update({
+      "observed_regime": str(getattr(ctx.regime, "kind", "") or "unknown"),
+      "htf_alignment": htf_aligned,
+      "interaction": interaction.to_dict(),
+      "interaction_line_price": interaction.line_price,
+      "interaction_band_low": interaction.band_low,
+      "interaction_band_high": interaction.band_high,
+      "interaction_started_at": interaction.interaction_ts,
+      "touch_at": interaction.interaction_ts,
+      "reaction_at": conf.touch_bar_ts,
+      "reclaim_at": conf.confirmation_bar_ts,
+      "confirmation_at": None,
+      "reaction_type": conf.confirmation_type,
+      "reaction_strength": getattr(conf, "candle_evidence", None).final_score
+      if getattr(conf, "candle_evidence", None) is not None else None,
+      "micro_confirmation_required": True,
+      "micro_confirmation_type": None,
+      "entry_reason": "causal_confirmed_m5_reclaim_waiting_fresh_m1",
+      "rejection_reason": None,
+      "v1_shadow_enabled": ctx.settings.tl_shadow_v1,
+    })
+    factors = _reaction_factors(
+      conf,
+      htf_aligned=htf_aligned,
+      touches=line.total_touch_count,
+      session_context=ctx.session_ok,
+    )
+    candidate = _structural_finish(
+      ctx,
+      setup=TRENDLINE,
+      direction=direction,
+      level=line_price,
+      zone=zone,
+      price=price,
+      atr=atr,
+      reasons=[
+        f"TL V2 {line.kind}",
+        f"forward validations {line.validation_touch_count}",
+        f"state {line.state}",
+      ],
+      structural_source="trendline",
+      structural_id=trendline_structural_id(ctx.symbol, ctx.tf, line),
+      structural_low=interaction.band_low,
+      structural_high=interaction.band_high,
+      structural_kind=line.kind,
+      confirmation=conf,
+      source_touches=line.total_touch_count,
+      factors=factors,
+      trendline_v2=telemetry,
+    )
+    if candidate is not None and (
+      best is None or candidate.confluence > best.confluence
+    ):
+      best = candidate
+  return best
+
+
+def _trendline_v2_structural_rejection(
+  ctx: DetectionContext,
+  line: Trendline,
+  *,
+  direction: str,
+  htf_aligned: bool,
+  stale_limit: int,
+) -> str | None:
+  if line.state == "tentative" or (
+    line.validation_touch_count < ctx.settings.tl_min_validation_touches
+  ):
+    return "insufficient_forward_validation"
+  if line.state == "broken" or line.broken:
+    return "close_violation"
+  if line.state == "degraded":
+    return "line_degraded"
+  if line.state == "exhausted" or (
+    ctx.settings.trendline_reject_exhausted and line.exhausted
+  ):
+    return "exhausted_line"
+  if line.bars_since_last_touch > stale_limit:
+    return "stale_trendline"
+  if ctx.settings.trendline_require_htf_aligned and not htf_aligned:
+    return "htf_context_insufficient"
+  if str(getattr(ctx.regime, "kind", "")).casefold() == "chop":
+    if line.validation_touch_count < ctx.settings.tl_chop_min_validation_touches:
+      return "regime_quality_insufficient"
+    if ctx.settings.tl_chop_require_htf_aligned and not htf_aligned:
+      return "htf_context_insufficient"
+  return None
+
+
 def _emit_trendline_metric(ctx: DetectionContext, name: str) -> None:
-  sink = ctx.metric_sink
-  if sink is None:
-    return
-  sink(name, ctx.symbol, {"tf": ctx.tf})
+  _count(ctx, name)
 
 
 

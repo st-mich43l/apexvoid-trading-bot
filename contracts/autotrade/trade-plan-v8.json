@@ -113,7 +113,7 @@
       }
     },
     {
-      "name": "market_buy_hfs_chase",
+      "name": "market_buy_scalp_chase",
       "plan": {
         "version": 8,
         "plan_id": "v8:f61032b9bc5a79ba15e3fa380ea995eb",
@@ -159,7 +159,7 @@
           "price": "4628.89",
           "source": "m5_structure",
           "structure_id": "c5f681bfbd6efdbf3d59eadd",
-          "reason": "confirmed in-budget HFS chase"
+          "reason": "confirmed in-budget scalp chase"
         },
         "targets": [
           {
@@ -461,7 +461,7 @@
       "name": "market_missing_order_price_rejected",
       "error": "market entry requires order_price",
       "plan_overrides": {
-        "base": "market_buy_hfs_chase",
+        "base": "market_buy_scalp_chase",
         "entry.order_price": null
       }
     },

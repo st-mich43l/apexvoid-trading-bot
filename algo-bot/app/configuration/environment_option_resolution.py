@@ -229,11 +229,3 @@ def canonical_option_health(
   ]
 
 
-def deprecated_option_warnings(
-  environment: Mapping[str, str] | None = None,
-) -> list[str]:
-  return sorted({
-    warning
-    for option in resolve_environment_options(environment)
-    for warning in option.warnings
-  })

@@ -22,10 +22,6 @@ manual_signals
   Status flow:
     open  ──► closed     (via DM "close <id> +pips" or reply "+pips" to channel post)
         ──► cancelled  (via DM "cancel <id>" or reply "cancel" to channel post)
-
-manual_algo_charts
-  Redis OHLC windows (M1/M5/M15/H1) captured at issue, fill, and close for each
-  VIP/manual signal so later formula fitting uses the same tape the owner measured.
 """
 
 import json
@@ -203,6 +199,14 @@ async def init_db() -> None:
       "ADD COLUMN IF NOT EXISTS execution_revision INTEGER NOT NULL DEFAULT 0"
     )
     await db.execute(
+      # Owner opt-in via the `/1r` suffix: full volume at one entry, one TP
+      # at 1R, root card + every lifecycle update DM'd to the owner instead
+      # of posted to the VIP/public channel. Orthogonal to `visibility`
+      # (which channel(s)) — this replaces the channel entirely with a DM.
+      "ALTER TABLE manual_signals "
+      "ADD COLUMN IF NOT EXISTS personal_trade BOOLEAN NOT NULL DEFAULT FALSE"
+    )
+    await db.execute(
       # Broker-side position id once filled. Internal only — never rendered
       # to Telegram.
       "ALTER TABLE manual_signals "
@@ -243,37 +247,6 @@ async def init_db() -> None:
       "ON manual_signals(symbol, trade_date)"
     )
     await db.execute(
-      """
-      CREATE TABLE IF NOT EXISTS manual_algo_charts (
-        id            BIGSERIAL PRIMARY KEY,
-        signal_id     BIGINT NOT NULL REFERENCES manual_signals(id),
-        event         TEXT   NOT NULL,
-        captured_at   BIGINT NOT NULL,
-        symbol        TEXT   NOT NULL,
-        timeframe     TEXT   NOT NULL,
-        window_start  BIGINT NOT NULL,
-        window_end    BIGINT NOT NULL,
-        bars          JSONB  NOT NULL,
-        UNIQUE (signal_id, event, timeframe)
-      )
-      """
-    )
-    await db.execute(
-      "CREATE INDEX IF NOT EXISTS idx_manual_algo_charts_signal "
-      "ON manual_algo_charts(signal_id, event)"
-    )
-    for column_sql in (
-      "ALTER TABLE manual_algo_charts "
-      "ADD COLUMN IF NOT EXISTS bars_requested INT NOT NULL DEFAULT 0",
-      "ALTER TABLE manual_algo_charts "
-      "ADD COLUMN IF NOT EXISTS bars_stored INT NOT NULL DEFAULT 0",
-      "ALTER TABLE manual_algo_charts "
-      "ADD COLUMN IF NOT EXISTS bars_after_event INT NOT NULL DEFAULT 0",
-      "ALTER TABLE manual_algo_charts "
-      "ADD COLUMN IF NOT EXISTS capture_version INT NOT NULL DEFAULT 1",
-    ):
-      await db.execute(column_sql)
-    await db.execute(
       "CREATE INDEX IF NOT EXISTS idx_manual_signals_parent_id "
       "ON manual_signals(parent_id)"
     )
@@ -292,6 +265,7 @@ async def init_db() -> None:
         trade_stream TEXT            NOT NULL,
         symbol      TEXT             NOT NULL DEFAULT 'XAU',
         setup_type  TEXT,
+        setup_type_raw TEXT,
         direction   TEXT,
         entry_price DOUBLE PRECISION,
         stop_pips   DOUBLE PRECISION,
@@ -316,6 +290,8 @@ async def init_db() -> None:
       "ALTER TABLE auto_trade_fills "
       "ADD COLUMN IF NOT EXISTS corrected_at BIGINT",
       "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS setup_type_raw TEXT",
+      "ALTER TABLE auto_trade_fills "
       "ADD COLUMN IF NOT EXISTS confluence_v1 SMALLINT",
       "ALTER TABLE auto_trade_fills "
       "ADD COLUMN IF NOT EXISTS confluence_v2 SMALLINT",
@@ -323,6 +299,151 @@ async def init_db() -> None:
       "ADD COLUMN IF NOT EXISTS confluence_v2_raw DOUBLE PRECISION",
       "ALTER TABLE auto_trade_fills "
       "ADD COLUMN IF NOT EXISTS confluence_scoring_version TEXT",
+      # 2026-09 (owner: "collect data 2 weeks to see if order that has
+      # good math quality can process well than other or not") -
+      # detection-time math telemetry (fib retracement ratio, momentum
+      # velocity/acceleration, dealing-range premium/discount position),
+      # recorded at fill time for later correlation against
+      # auto_trade_results.result_pips via group_id.
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS math_fib_ratio DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS math_velocity DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS math_acceleration DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS math_pd DOUBLE PRECISION",
+      # v2 (2026-09) redefined math_acceleration as a true per-bar second
+      # derivative (was a bare velocity delta) - this distinguishes legacy
+      # (NULL/1) rows from v2 rows so replay/analysis never silently mixes
+      # the two populations.
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS math_feature_version SMALLINT",
+      # MAD v2 context telemetry (descriptive only, never a gate) - see
+      # app/analysis/mad_phase.py MadPhaseSnapshot/MadAffinityScore.
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS mad_version SMALLINT",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS mad_phase TEXT",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS mad_confidence DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS mad_affinity DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS mad_direction TEXT",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS mad_sweep_side TEXT",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS mad_reclaim BOOLEAN",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS mad_range_quality_atr DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS mad_break_distance_atr DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS mad_displacement_atr DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS mad_acceptance_closes SMALLINT",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS mad_sweep_penetration_atr DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS mad_reclaim_depth_atr DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS mad_reason_code TEXT",
+      # Candle Confirmation V2 context telemetry (descriptive only, never
+      # a gate) - see app/analysis/candle_evidence.py CandleEvidence.
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS candle_version SMALLINT",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS candle_primary_pattern TEXT",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS candle_patterns TEXT",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS candle_final_score DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS candle_base_score DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS candle_synergy_bonus DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS candle_rejection_score DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS candle_displacement_score DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS candle_sequence_score DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS candle_body_fraction DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS candle_upper_wick_fraction DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS candle_lower_wick_fraction DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS candle_close_location DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS candle_body_atr DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS candle_range_atr DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS candle_sweep BOOLEAN",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS candle_sweep_penetration_atr DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS candle_reclaim BOOLEAN",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS candle_reclaim_depth_atr DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS candle_engulfing BOOLEAN",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS candle_doji BOOLEAN",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS candle_compression_score DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS candle_sequence_name TEXT",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS candle_sequence_bars SMALLINT",
+      # Opposing Structure V2 context telemetry (descriptive only, never
+      # a gate) - see app/autotrade/structural_target_room.py
+      # OpposingStructureEvidence.
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS key_level_opposing_zone_low DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS key_level_opposing_zone_high DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS key_level_opposing_zone_side TEXT",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS opposing_zone_present BOOLEAN",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS opposing_zone_side TEXT",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS opposing_zone_low DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS opposing_zone_high DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS opposing_zone_tier TEXT",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS opposing_zone_score DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS opposing_zone_strength DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS opposing_raw_room_price DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS opposing_room_pips DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS opposing_room_atr DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS opposing_room_r DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS opposing_before_tp1 BOOLEAN",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS opposing_displaced BOOLEAN",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS opposing_mitigated BOOLEAN",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS opposing_room_pressure DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS opposing_risk_score DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS opposing_action TEXT",
+      "ALTER TABLE auto_trade_fills "
+      "ADD COLUMN IF NOT EXISTS opposing_reason_code TEXT",
     ):
       await db.execute(stmt)
     await db.execute(
@@ -374,6 +495,35 @@ async def init_db() -> None:
       "CREATE UNIQUE INDEX IF NOT EXISTS idx_signal_posts_message "
       "ON signal_posts(channel_id, message_id)"
     )
+
+    # ------------------------------------------------------------------
+    # Table: manual_signal_updates
+    # One row per delivered TP/TP-reached/SL-move reply for a manual /algo
+    # signal (unlike signal_posts, which is one row per root card). Tracked
+    # so the terminal close can delete every interim reply and replace them
+    # with a single summary, instead of leaving a dozen scattered bubbles
+    # behind - and so a later correction (see manual_signals #102, 2026-09)
+    # can find and fix the exact message that needs it.
+    # ------------------------------------------------------------------
+    await db.execute(
+      """
+      CREATE TABLE IF NOT EXISTS manual_signal_updates (
+        id         BIGSERIAL PRIMARY KEY,
+        signal_id  BIGINT NOT NULL REFERENCES manual_signals(id),
+        channel_id BIGINT NOT NULL,
+        message_id BIGINT NOT NULL,
+        tier       TEXT   NOT NULL,
+        kind       TEXT   NOT NULL,
+        payload    JSONB  NOT NULL,
+        created_at BIGINT NOT NULL
+      )
+      """
+    )
+    await db.execute(
+      "CREATE INDEX IF NOT EXISTS idx_manual_signal_updates_signal "
+      "ON manual_signal_updates(signal_id)"
+    )
+
     # Back-fill VIP posts for signals stored before signal_posts existed.
     await db.execute(
       """
@@ -411,6 +561,80 @@ async def init_db() -> None:
       CREATE TABLE IF NOT EXISTS meta (
         key   TEXT PRIMARY KEY,
         value TEXT
+      )
+      """
+    )
+    # Go Analysis Engine opportunity lifecycle ledger (S12). Kafka delivery
+    # is at-least-once, so event_id is the durable delivery fence and the
+    # opportunity row is a terminal tombstone that prevents late recreation.
+    await db.execute(
+      """
+      CREATE TABLE IF NOT EXISTS analysis_opportunities (
+        opportunity_id TEXT PRIMARY KEY,
+        symbol TEXT NOT NULL,
+        strategy TEXT NOT NULL,
+        state TEXT NOT NULL CHECK (state IN ('active', 'invalidated', 'expired')),
+        creation_event_id TEXT,
+        terminal_event_id TEXT,
+        created_at BIGINT,
+        expires_at BIGINT,
+        terminal_at BIGINT,
+        creation_envelope JSONB,
+        terminal_envelope JSONB,
+        updated_at BIGINT NOT NULL
+      )
+      """
+    )
+    await db.execute(
+      "CREATE INDEX IF NOT EXISTS idx_analysis_opportunities_active_symbol "
+      "ON analysis_opportunities(symbol, state, expires_at)"
+    )
+    await db.execute(
+      """
+      CREATE TABLE IF NOT EXISTS analysis_opportunity_events (
+        event_id TEXT PRIMARY KEY,
+        opportunity_id TEXT NOT NULL,
+        topic TEXT NOT NULL,
+        partition_id INTEGER,
+        kafka_offset BIGINT,
+        event_kind TEXT NOT NULL CHECK (event_kind IN ('creation', 'terminal')),
+        disposition TEXT NOT NULL,
+        envelope JSONB NOT NULL,
+        processed_at BIGINT NOT NULL
+      )
+      """
+    )
+    await db.execute(
+      "CREATE UNIQUE INDEX IF NOT EXISTS idx_analysis_opportunity_events_position "
+      "ON analysis_opportunity_events(topic, partition_id, kafka_offset) "
+      "WHERE partition_id IS NOT NULL AND kafka_offset IS NOT NULL"
+    )
+    await db.execute(
+      """
+      CREATE TABLE IF NOT EXISTS analysis_opportunity_rejections (
+        topic TEXT NOT NULL,
+        partition_id INTEGER NOT NULL,
+        kafka_offset BIGINT NOT NULL,
+        reason TEXT NOT NULL,
+        raw_payload TEXT NOT NULL,
+        rejected_at BIGINT NOT NULL,
+        PRIMARY KEY (topic, partition_id, kafka_offset)
+      )
+      """
+    )
+    await db.execute(
+      """
+      CREATE TABLE IF NOT EXISTS analysis_shadow_decisions (
+        decision_id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+        opportunity_id TEXT NOT NULL,
+        event_id TEXT NOT NULL,
+        mode TEXT NOT NULL,
+        outcome TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        missing_fields JSONB NOT NULL DEFAULT '[]'::jsonb,
+        details JSONB NOT NULL DEFAULT '{}'::jsonb,
+        created_at BIGINT NOT NULL,
+        UNIQUE (opportunity_id, event_id, mode, outcome)
       )
       """
     )
@@ -722,6 +946,72 @@ def _resolve_auto_trade_stream(event: dict) -> str:
   ):
     return "algo_auto"
   return stream
+
+
+def _event_setup_value(event: dict) -> str | None:
+  for key in ("setup", "setup_type", "strategy"):
+    value = event.get(key)
+    if value is not None and str(value).strip():
+      return str(value)
+  return None
+
+
+async def _record_unresolved_fill_setup(
+  event: dict,
+  *,
+  symbol: str,
+  stream: str,
+  raw_setup: str | None,
+) -> None:
+  """Make a missing or unknown fill label observable without blocking it."""
+  log.warning(
+    "fill setup unresolved symbol=%s stream=%s raw_setup=%r event_keys=%s",
+    symbol,
+    stream,
+    raw_setup,
+    ",".join(sorted(str(key) for key in event)),
+  )
+  try:
+    from app.autotrade.lifecycle import increment_metric
+    from app.persistence import redis_state
+
+    await increment_metric(
+      redis_state.get_client(),
+      "fill_setup_unresolved",
+      symbol=symbol,
+      dimensions={"stream": stream},
+    )
+  except Exception:
+    log.exception(
+      "fill setup unresolved metric failed symbol=%s stream=%s",
+      symbol,
+      stream,
+    )
+
+
+async def _resolve_fill_setup(
+  event: dict,
+  *,
+  symbol: str,
+  stream: str,
+) -> tuple[str | None, str | None]:
+  """Return canonical setup and raw unknown label for a persisted fill."""
+  from app.autotrade.reaction_funnel import (
+    is_known_setup_type,
+    normalize_setup_type,
+  )
+
+  raw_setup = _event_setup_value(event)
+  setup_type = normalize_setup_type(raw_setup)
+  unresolved = raw_setup is None or not is_known_setup_type(raw_setup)
+  if unresolved:
+    await _record_unresolved_fill_setup(
+      event,
+      symbol=symbol,
+      stream=stream,
+      raw_setup=raw_setup,
+    )
+  return setup_type, raw_setup if raw_setup is not None and unresolved else None
 
 
 def _resolve_fill_stop_pips(event: dict, symbol: str) -> float | None:
@@ -1102,10 +1392,10 @@ async def _ensure_fill_from_close_event(event: dict, group_id: str) -> None:
       {**event, "price": entry if entry is not None else event.get("price")},
       symbol,
     )
-  from app.autotrade.reaction_funnel import normalize_setup_type
-
-  setup_type = normalize_setup_type(
-    event.get("setup") or event.get("setup_type") or event.get("strategy"),
+  setup_type, setup_type_raw = await _resolve_fill_setup(
+    event,
+    symbol=symbol,
+    stream=stream,
   )
   trade_key = f"algo:{group_id}"
   async with _connect() as db:
@@ -1113,20 +1403,88 @@ async def _ensure_fill_from_close_event(event: dict, group_id: str) -> None:
       """
       INSERT INTO auto_trade_fills (
         position_id, group_id, trade_key, trade_stream, symbol,
-        setup_type, direction, entry_price, stop_pips, volume, filled_at,
+        setup_type, setup_type_raw, direction, entry_price, stop_pips, volume, filled_at,
         confluence_v1, confluence_v2, confluence_v2_raw,
-        confluence_scoring_version
+        confluence_scoring_version,
+        math_fib_ratio, math_velocity, math_acceleration, math_pd,
+        math_feature_version,
+        mad_version, mad_phase, mad_confidence, mad_affinity, mad_direction,
+        mad_sweep_side, mad_reclaim, mad_range_quality_atr,
+        mad_break_distance_atr, mad_displacement_atr, mad_acceptance_closes,
+        mad_sweep_penetration_atr, mad_reclaim_depth_atr, mad_reason_code,
+        candle_version, candle_primary_pattern, candle_patterns,
+        candle_final_score, candle_base_score, candle_synergy_bonus,
+        candle_rejection_score, candle_displacement_score, candle_sequence_score,
+        candle_body_fraction, candle_upper_wick_fraction, candle_lower_wick_fraction,
+        candle_close_location, candle_body_atr, candle_range_atr,
+        candle_sweep, candle_sweep_penetration_atr, candle_reclaim,
+        candle_reclaim_depth_atr, candle_engulfing, candle_doji,
+        candle_compression_score, candle_sequence_name, candle_sequence_bars,
+        key_level_opposing_zone_low, key_level_opposing_zone_high,
+        key_level_opposing_zone_side,
+        opposing_zone_present, opposing_zone_side, opposing_zone_low,
+        opposing_zone_high, opposing_zone_tier, opposing_zone_score,
+        opposing_zone_strength, opposing_raw_room_price, opposing_room_pips,
+        opposing_room_atr, opposing_room_r, opposing_before_tp1,
+        opposing_displaced, opposing_mitigated, opposing_room_pressure,
+        opposing_risk_score, opposing_action, opposing_reason_code
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
+        $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30,
+        $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44,
+        $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57, $58,
+        $59, $60, $61, $62, $63, $64, $65, $66, $67, $68, $69, $70, $71, $72,
+        $73, $74, $75, $76, $77, $78, $79, $80
       )
       ON CONFLICT (position_id) DO NOTHING
       """,
       int(position_id), group_id, trade_key, stream,
-      symbol, setup_type,
+      symbol, setup_type, setup_type_raw,
       event.get("direction"), entry, stop_pips,
       event.get("volume"), int(event.get("timestamp") or time.time()),
       event.get("confluence_v1"), event.get("confluence_v2"),
       event.get("confluence_v2_raw"), event.get("confluence_scoring_version"),
+      event.get("math_fib_ratio"), event.get("math_velocity"),
+      event.get("math_acceleration"), event.get("math_pd"),
+      event.get("math_feature_version"),
+      event.get("mad_version"), event.get("mad_phase"),
+      event.get("mad_confidence"), event.get("mad_affinity"),
+      event.get("mad_direction"), event.get("mad_sweep_side"),
+      event.get("mad_reclaim"), event.get("mad_range_quality_atr"),
+      event.get("mad_break_distance_atr"), event.get("mad_displacement_atr"),
+      event.get("mad_acceptance_closes"), event.get("mad_sweep_penetration_atr"),
+      event.get("mad_reclaim_depth_atr"), event.get("mad_reason_code"),
+      event.get("candle_version"), event.get("candle_primary_pattern"),
+      event.get("candle_patterns"),
+      event.get("candle_final_score"), event.get("candle_base_score"),
+      event.get("candle_synergy_bonus"),
+      event.get("candle_rejection_score"), event.get("candle_displacement_score"),
+      event.get("candle_sequence_score"),
+      event.get("candle_body_fraction"), event.get("candle_upper_wick_fraction"),
+      event.get("candle_lower_wick_fraction"),
+      event.get("candle_close_location"), event.get("candle_body_atr"),
+      event.get("candle_range_atr"),
+      event.get("candle_sweep"), event.get("candle_sweep_penetration_atr"),
+      event.get("candle_reclaim"),
+      event.get("candle_reclaim_depth_atr"), event.get("candle_engulfing"),
+      event.get("candle_doji"),
+      event.get("candle_compression_score"), event.get("candle_sequence_name"),
+      event.get("candle_sequence_bars"),
+      event.get("key_level_opposing_zone_low"),
+      event.get("key_level_opposing_zone_high"),
+      event.get("key_level_opposing_zone_side"),
+      event.get("opposing_zone_present"), event.get("opposing_zone_side"),
+      event.get("opposing_zone_low"),
+      event.get("opposing_zone_high"), event.get("opposing_zone_tier"),
+      event.get("opposing_zone_score"),
+      event.get("opposing_zone_strength"), event.get("opposing_raw_room_price"),
+      event.get("opposing_room_pips"),
+      event.get("opposing_room_atr"), event.get("opposing_room_r"),
+      event.get("opposing_before_tp1"),
+      event.get("opposing_displaced"), event.get("opposing_mitigated"),
+      event.get("opposing_room_pressure"),
+      event.get("opposing_risk_score"), event.get("opposing_action"),
+      event.get("opposing_reason_code"),
     )
 
 
@@ -1140,10 +1498,10 @@ async def _record_auto_trade_fill(event: dict) -> None:
   candidate_id = str(event.get("candidate_id") or "")
   symbol = str(event.get("symbol") or "XAU").upper()
   stop_pips = _resolve_fill_stop_pips(event, symbol)
-  from app.autotrade.reaction_funnel import normalize_setup_type
-
-  setup_type = normalize_setup_type(
-    event.get("setup") or event.get("setup_type") or event.get("strategy"),
+  setup_type, setup_type_raw = await _resolve_fill_setup(
+    event,
+    symbol=symbol,
+    stream=stream,
   )
   async with _connect() as db:
     if stream == "algo_manual" and candidate_id:
@@ -1164,11 +1522,38 @@ async def _record_auto_trade_fill(event: dict) -> None:
       """
       INSERT INTO auto_trade_fills (
         position_id, group_id, trade_key, trade_stream, symbol,
-        setup_type, direction, entry_price, stop_pips, volume, filled_at,
+        setup_type, setup_type_raw, direction, entry_price, stop_pips, volume, filled_at,
         confluence_v1, confluence_v2, confluence_v2_raw,
-        confluence_scoring_version
+        confluence_scoring_version,
+        math_fib_ratio, math_velocity, math_acceleration, math_pd,
+        math_feature_version,
+        mad_version, mad_phase, mad_confidence, mad_affinity, mad_direction,
+        mad_sweep_side, mad_reclaim, mad_range_quality_atr,
+        mad_break_distance_atr, mad_displacement_atr, mad_acceptance_closes,
+        mad_sweep_penetration_atr, mad_reclaim_depth_atr, mad_reason_code,
+        candle_version, candle_primary_pattern, candle_patterns,
+        candle_final_score, candle_base_score, candle_synergy_bonus,
+        candle_rejection_score, candle_displacement_score, candle_sequence_score,
+        candle_body_fraction, candle_upper_wick_fraction, candle_lower_wick_fraction,
+        candle_close_location, candle_body_atr, candle_range_atr,
+        candle_sweep, candle_sweep_penetration_atr, candle_reclaim,
+        candle_reclaim_depth_atr, candle_engulfing, candle_doji,
+        candle_compression_score, candle_sequence_name, candle_sequence_bars,
+        key_level_opposing_zone_low, key_level_opposing_zone_high,
+        key_level_opposing_zone_side,
+        opposing_zone_present, opposing_zone_side, opposing_zone_low,
+        opposing_zone_high, opposing_zone_tier, opposing_zone_score,
+        opposing_zone_strength, opposing_raw_room_price, opposing_room_pips,
+        opposing_room_atr, opposing_room_r, opposing_before_tp1,
+        opposing_displaced, opposing_mitigated, opposing_room_pressure,
+        opposing_risk_score, opposing_action, opposing_reason_code
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
+        $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30,
+        $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44,
+        $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57, $58,
+        $59, $60, $61, $62, $63, $64, $65, $66, $67, $68, $69, $70, $71, $72,
+        $73, $74, $75, $76, $77, $78, $79, $80
       )
       ON CONFLICT (position_id) DO UPDATE SET
         group_id = excluded.group_id,
@@ -1176,6 +1561,9 @@ async def _record_auto_trade_fill(event: dict) -> None:
         trade_stream = excluded.trade_stream,
         symbol = excluded.symbol,
         setup_type = COALESCE(excluded.setup_type, auto_trade_fills.setup_type),
+        setup_type_raw = COALESCE(
+          excluded.setup_type_raw, auto_trade_fills.setup_type_raw
+        ),
         direction = COALESCE(excluded.direction, auto_trade_fills.direction),
         entry_price = COALESCE(excluded.entry_price, auto_trade_fills.entry_price),
         stop_pips = COALESCE(excluded.stop_pips, auto_trade_fills.stop_pips),
@@ -1183,15 +1571,120 @@ async def _record_auto_trade_fill(event: dict) -> None:
         confluence_v1 = COALESCE(excluded.confluence_v1, auto_trade_fills.confluence_v1),
         confluence_v2 = COALESCE(excluded.confluence_v2, auto_trade_fills.confluence_v2),
         confluence_v2_raw = COALESCE(excluded.confluence_v2_raw, auto_trade_fills.confluence_v2_raw),
-        confluence_scoring_version = COALESCE(excluded.confluence_scoring_version, auto_trade_fills.confluence_scoring_version)
+        confluence_scoring_version = COALESCE(excluded.confluence_scoring_version, auto_trade_fills.confluence_scoring_version),
+        math_fib_ratio = COALESCE(excluded.math_fib_ratio, auto_trade_fills.math_fib_ratio),
+        math_velocity = COALESCE(excluded.math_velocity, auto_trade_fills.math_velocity),
+        math_acceleration = COALESCE(excluded.math_acceleration, auto_trade_fills.math_acceleration),
+        math_pd = COALESCE(excluded.math_pd, auto_trade_fills.math_pd),
+        math_feature_version = COALESCE(excluded.math_feature_version, auto_trade_fills.math_feature_version),
+        mad_version = COALESCE(excluded.mad_version, auto_trade_fills.mad_version),
+        mad_phase = COALESCE(excluded.mad_phase, auto_trade_fills.mad_phase),
+        mad_confidence = COALESCE(excluded.mad_confidence, auto_trade_fills.mad_confidence),
+        mad_affinity = COALESCE(excluded.mad_affinity, auto_trade_fills.mad_affinity),
+        mad_direction = COALESCE(excluded.mad_direction, auto_trade_fills.mad_direction),
+        mad_sweep_side = COALESCE(excluded.mad_sweep_side, auto_trade_fills.mad_sweep_side),
+        mad_reclaim = COALESCE(excluded.mad_reclaim, auto_trade_fills.mad_reclaim),
+        mad_range_quality_atr = COALESCE(excluded.mad_range_quality_atr, auto_trade_fills.mad_range_quality_atr),
+        mad_break_distance_atr = COALESCE(excluded.mad_break_distance_atr, auto_trade_fills.mad_break_distance_atr),
+        mad_displacement_atr = COALESCE(excluded.mad_displacement_atr, auto_trade_fills.mad_displacement_atr),
+        mad_acceptance_closes = COALESCE(excluded.mad_acceptance_closes, auto_trade_fills.mad_acceptance_closes),
+        mad_sweep_penetration_atr = COALESCE(excluded.mad_sweep_penetration_atr, auto_trade_fills.mad_sweep_penetration_atr),
+        mad_reclaim_depth_atr = COALESCE(excluded.mad_reclaim_depth_atr, auto_trade_fills.mad_reclaim_depth_atr),
+        mad_reason_code = COALESCE(excluded.mad_reason_code, auto_trade_fills.mad_reason_code),
+        candle_version = COALESCE(excluded.candle_version, auto_trade_fills.candle_version),
+        candle_primary_pattern = COALESCE(excluded.candle_primary_pattern, auto_trade_fills.candle_primary_pattern),
+        candle_patterns = COALESCE(excluded.candle_patterns, auto_trade_fills.candle_patterns),
+        candle_final_score = COALESCE(excluded.candle_final_score, auto_trade_fills.candle_final_score),
+        candle_base_score = COALESCE(excluded.candle_base_score, auto_trade_fills.candle_base_score),
+        candle_synergy_bonus = COALESCE(excluded.candle_synergy_bonus, auto_trade_fills.candle_synergy_bonus),
+        candle_rejection_score = COALESCE(excluded.candle_rejection_score, auto_trade_fills.candle_rejection_score),
+        candle_displacement_score = COALESCE(excluded.candle_displacement_score, auto_trade_fills.candle_displacement_score),
+        candle_sequence_score = COALESCE(excluded.candle_sequence_score, auto_trade_fills.candle_sequence_score),
+        candle_body_fraction = COALESCE(excluded.candle_body_fraction, auto_trade_fills.candle_body_fraction),
+        candle_upper_wick_fraction = COALESCE(excluded.candle_upper_wick_fraction, auto_trade_fills.candle_upper_wick_fraction),
+        candle_lower_wick_fraction = COALESCE(excluded.candle_lower_wick_fraction, auto_trade_fills.candle_lower_wick_fraction),
+        candle_close_location = COALESCE(excluded.candle_close_location, auto_trade_fills.candle_close_location),
+        candle_body_atr = COALESCE(excluded.candle_body_atr, auto_trade_fills.candle_body_atr),
+        candle_range_atr = COALESCE(excluded.candle_range_atr, auto_trade_fills.candle_range_atr),
+        candle_sweep = COALESCE(excluded.candle_sweep, auto_trade_fills.candle_sweep),
+        candle_sweep_penetration_atr = COALESCE(excluded.candle_sweep_penetration_atr, auto_trade_fills.candle_sweep_penetration_atr),
+        candle_reclaim = COALESCE(excluded.candle_reclaim, auto_trade_fills.candle_reclaim),
+        candle_reclaim_depth_atr = COALESCE(excluded.candle_reclaim_depth_atr, auto_trade_fills.candle_reclaim_depth_atr),
+        candle_engulfing = COALESCE(excluded.candle_engulfing, auto_trade_fills.candle_engulfing),
+        candle_doji = COALESCE(excluded.candle_doji, auto_trade_fills.candle_doji),
+        candle_compression_score = COALESCE(excluded.candle_compression_score, auto_trade_fills.candle_compression_score),
+        candle_sequence_name = COALESCE(excluded.candle_sequence_name, auto_trade_fills.candle_sequence_name),
+        candle_sequence_bars = COALESCE(excluded.candle_sequence_bars, auto_trade_fills.candle_sequence_bars),
+        key_level_opposing_zone_low = COALESCE(excluded.key_level_opposing_zone_low, auto_trade_fills.key_level_opposing_zone_low),
+        key_level_opposing_zone_high = COALESCE(excluded.key_level_opposing_zone_high, auto_trade_fills.key_level_opposing_zone_high),
+        key_level_opposing_zone_side = COALESCE(excluded.key_level_opposing_zone_side, auto_trade_fills.key_level_opposing_zone_side),
+        opposing_zone_present = COALESCE(excluded.opposing_zone_present, auto_trade_fills.opposing_zone_present),
+        opposing_zone_side = COALESCE(excluded.opposing_zone_side, auto_trade_fills.opposing_zone_side),
+        opposing_zone_low = COALESCE(excluded.opposing_zone_low, auto_trade_fills.opposing_zone_low),
+        opposing_zone_high = COALESCE(excluded.opposing_zone_high, auto_trade_fills.opposing_zone_high),
+        opposing_zone_tier = COALESCE(excluded.opposing_zone_tier, auto_trade_fills.opposing_zone_tier),
+        opposing_zone_score = COALESCE(excluded.opposing_zone_score, auto_trade_fills.opposing_zone_score),
+        opposing_zone_strength = COALESCE(excluded.opposing_zone_strength, auto_trade_fills.opposing_zone_strength),
+        opposing_raw_room_price = COALESCE(excluded.opposing_raw_room_price, auto_trade_fills.opposing_raw_room_price),
+        opposing_room_pips = COALESCE(excluded.opposing_room_pips, auto_trade_fills.opposing_room_pips),
+        opposing_room_atr = COALESCE(excluded.opposing_room_atr, auto_trade_fills.opposing_room_atr),
+        opposing_room_r = COALESCE(excluded.opposing_room_r, auto_trade_fills.opposing_room_r),
+        opposing_before_tp1 = COALESCE(excluded.opposing_before_tp1, auto_trade_fills.opposing_before_tp1),
+        opposing_displaced = COALESCE(excluded.opposing_displaced, auto_trade_fills.opposing_displaced),
+        opposing_mitigated = COALESCE(excluded.opposing_mitigated, auto_trade_fills.opposing_mitigated),
+        opposing_room_pressure = COALESCE(excluded.opposing_room_pressure, auto_trade_fills.opposing_room_pressure),
+        opposing_risk_score = COALESCE(excluded.opposing_risk_score, auto_trade_fills.opposing_risk_score),
+        opposing_action = COALESCE(excluded.opposing_action, auto_trade_fills.opposing_action),
+        opposing_reason_code = COALESCE(excluded.opposing_reason_code, auto_trade_fills.opposing_reason_code)
       WHERE auto_trade_fills.correction_source IS NULL
       """,
       int(position_id), group_id, trade_key, stream,
-      symbol, setup_type,
+      symbol, setup_type, setup_type_raw,
       event.get("direction"), event.get("price"), stop_pips,
       event.get("volume"), int(event.get("timestamp") or time.time()),
       event.get("confluence_v1"), event.get("confluence_v2"),
       event.get("confluence_v2_raw"), event.get("confluence_scoring_version"),
+      event.get("math_fib_ratio"), event.get("math_velocity"),
+      event.get("math_acceleration"), event.get("math_pd"),
+      event.get("math_feature_version"),
+      event.get("mad_version"), event.get("mad_phase"),
+      event.get("mad_confidence"), event.get("mad_affinity"),
+      event.get("mad_direction"), event.get("mad_sweep_side"),
+      event.get("mad_reclaim"), event.get("mad_range_quality_atr"),
+      event.get("mad_break_distance_atr"), event.get("mad_displacement_atr"),
+      event.get("mad_acceptance_closes"), event.get("mad_sweep_penetration_atr"),
+      event.get("mad_reclaim_depth_atr"), event.get("mad_reason_code"),
+      event.get("candle_version"), event.get("candle_primary_pattern"),
+      event.get("candle_patterns"),
+      event.get("candle_final_score"), event.get("candle_base_score"),
+      event.get("candle_synergy_bonus"),
+      event.get("candle_rejection_score"), event.get("candle_displacement_score"),
+      event.get("candle_sequence_score"),
+      event.get("candle_body_fraction"), event.get("candle_upper_wick_fraction"),
+      event.get("candle_lower_wick_fraction"),
+      event.get("candle_close_location"), event.get("candle_body_atr"),
+      event.get("candle_range_atr"),
+      event.get("candle_sweep"), event.get("candle_sweep_penetration_atr"),
+      event.get("candle_reclaim"),
+      event.get("candle_reclaim_depth_atr"), event.get("candle_engulfing"),
+      event.get("candle_doji"),
+      event.get("candle_compression_score"), event.get("candle_sequence_name"),
+      event.get("candle_sequence_bars"),
+      event.get("key_level_opposing_zone_low"),
+      event.get("key_level_opposing_zone_high"),
+      event.get("key_level_opposing_zone_side"),
+      event.get("opposing_zone_present"), event.get("opposing_zone_side"),
+      event.get("opposing_zone_low"),
+      event.get("opposing_zone_high"), event.get("opposing_zone_tier"),
+      event.get("opposing_zone_score"),
+      event.get("opposing_zone_strength"), event.get("opposing_raw_room_price"),
+      event.get("opposing_room_pips"),
+      event.get("opposing_room_atr"), event.get("opposing_room_r"),
+      event.get("opposing_before_tp1"),
+      event.get("opposing_displaced"), event.get("opposing_mitigated"),
+      event.get("opposing_room_pressure"),
+      event.get("opposing_risk_score"), event.get("opposing_action"),
+      event.get("opposing_reason_code"),
     )
 
 
@@ -1579,6 +2072,7 @@ async def store_manual_signal(
   symbol: str = "XAU",
   visibility: str = "both",
   execution_mode: str = "notify",
+  personal_trade: bool = False,
 ) -> dict:
   """Insert a manual signal and return its primary and daily display ids.
 
@@ -1587,6 +2081,9 @@ async def store_manual_signal(
       today. ``'algo'`` additionally arms broker-side execution (handled by
       the caller — this function only persists the flag, it does not branch
       on it).
+    personal_trade: owner opt-in via ``/1r`` — the root card and every
+      lifecycle update go to the owner's DM instead of the VIP/public
+      channel (handled by the caller — see ``broadcast.broadcast_entry``).
 
   Returns:
     A dict containing the primary key ``id`` and today's ``daily_seq``.
@@ -1615,46 +2112,22 @@ async def store_manual_signal(
         INSERT INTO manual_signals
           (ts, action, entry, entry_end, sl, original_sl, tps, order_type,
            channel_message_id, daily_seq, trade_date, parent_id,
-           setup_type, confluence, symbol, visibility, execution_mode)
-        VALUES ($1, $2, $3, $4, $5, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+           setup_type, confluence, symbol, visibility, execution_mode,
+           personal_trade)
+        VALUES ($1, $2, $3, $4, $5, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
         RETURNING id
         """,
         ts, action, entry, entry_end, sl, json.dumps(tps), "zone",
         channel_message_id, daily_seq, trade_date, parent_id,
         setup_type, confluence, symbol, visibility, execution_mode,
+        personal_trade,
       )
-  await _safe_snapshot_manual_chart(
-    signal_id=int(new_id),
-    event="issued",
-    ts=int(ts),
-    symbol=symbol,
-  )
   return {
     "id": new_id,
     "daily_seq": daily_seq,
     "symbol": symbol,
     "visibility": visibility,
   }
-
-
-async def set_manual_signal_channel_id(row_id: int, channel_message_id: int) -> None:
-  """Back-fill the channel_message_id for an already-inserted manual signal."""
-  async with _connect() as db:
-    async with db.transaction():
-      await db.execute(
-        "UPDATE manual_signals SET channel_message_id = $1 WHERE id = $2",
-        channel_message_id, row_id,
-      )
-      await db.execute(
-        """
-        INSERT INTO signal_posts (signal_id, channel_id, message_id, tier)
-        VALUES ($1, $2, $3, 'vip')
-        ON CONFLICT (signal_id, channel_id) DO UPDATE SET
-          message_id = excluded.message_id,
-          tier = 'vip'
-        """,
-        row_id, runtime_config.delivery.telegram.telegram_channel_id, channel_message_id,
-      )
 
 
 async def insert_signal_post(
@@ -1691,6 +2164,43 @@ async def get_signal_posts(signal_id: int) -> list[dict]:
       signal_id,
     )
   return [dict(row) for row in rows]
+
+
+async def insert_signal_update(
+  signal_id: int,
+  channel_id: int,
+  message_id: int,
+  tier: str,
+  kind: str,
+  payload: dict,
+) -> None:
+  """Record one delivered TP/TP-reached/SL-move reply for later cleanup.
+
+  Unlike ``insert_signal_post`` this is an append-only log - a signal fires
+  several of these over its life, all replying to the same root card.
+  """
+  async with _connect() as db:
+    await db.execute(
+      """
+      INSERT INTO manual_signal_updates
+        (signal_id, channel_id, message_id, tier, kind, payload, created_at)
+      VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)
+      """,
+      signal_id, int(channel_id), message_id, tier, kind,
+      json.dumps(payload), int(time.time()),
+    )
+
+
+async def get_signal_updates(signal_id: int) -> list[dict]:
+  async with _connect() as db:
+    rows = await db.fetch(
+      "SELECT * FROM manual_signal_updates WHERE signal_id = $1 ORDER BY id",
+      signal_id,
+    )
+  return [
+    {**dict(row), "payload": json.loads(row["payload"])}
+    for row in rows
+  ]
 
 
 async def get_signal_by_post(
@@ -1798,140 +2308,6 @@ async def get_untagged_signals(limit: int = 20) -> list[dict]:
   return [_decode_signal(row) for row in rows]
 
 
-async def upsert_manual_algo_chart(
-  *,
-  signal_id: int,
-  event: str,
-  captured_at: int,
-  symbol: str,
-  timeframe: str,
-  window_start: int,
-  window_end: int,
-  bars: list,
-  bars_requested: int = 0,
-  bars_stored: int = 0,
-  bars_after_event: int = 0,
-  capture_version: int = 1,
-) -> None:
-  """Idempotent OHLC snapshot for one signal event and timeframe."""
-  async with _connect() as db:
-    await db.execute(
-      """
-      INSERT INTO manual_algo_charts
-        (signal_id, event, captured_at, symbol, timeframe,
-         window_start, window_end, bars,
-         bars_requested, bars_stored, bars_after_event, capture_version)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12)
-      ON CONFLICT (signal_id, event, timeframe) DO UPDATE SET
-        captured_at = excluded.captured_at,
-        symbol = excluded.symbol,
-        window_start = excluded.window_start,
-        window_end = excluded.window_end,
-        bars = excluded.bars,
-        bars_requested = excluded.bars_requested,
-        bars_stored = excluded.bars_stored,
-        bars_after_event = excluded.bars_after_event,
-        capture_version = excluded.capture_version
-      """,
-      signal_id,
-      event,
-      captured_at,
-      symbol,
-      timeframe,
-      window_start,
-      window_end,
-      json.dumps(bars),
-      int(bars_requested),
-      int(bars_stored),
-      int(bars_after_event),
-      int(capture_version),
-    )
-
-
-async def load_manual_algo_charts(
-  signal_id: int,
-  *,
-  event: str,
-  causal_only: bool = True,
-) -> dict[str, list[dict]]:
-  """Bars per timeframe for one signal event.
-
-  causal_only drops bars with t > captured_at, which is the only safe default
-  for anything that fits or scores strategy math.
-  """
-  rows = await load_manual_algo_chart_rows(
-    signal_id, event=event, causal_only=causal_only,
-  )
-  return {tf: row["bars"] for tf, row in rows.items()}
-
-
-async def load_manual_algo_chart_rows(
-  signal_id: int,
-  *,
-  event: str,
-  causal_only: bool = True,
-) -> dict[str, dict]:
-  """Per-timeframe bars plus capture adequacy fields for one signal event."""
-  async with _connect() as db:
-    rows = await db.fetch(
-      """
-      SELECT timeframe, captured_at, bars,
-             bars_requested, bars_stored, bars_after_event, capture_version
-      FROM manual_algo_charts
-      WHERE signal_id = $1 AND event = $2
-      """,
-      signal_id,
-      event,
-    )
-  out: dict[str, dict] = {}
-  for row in rows:
-    bars = row["bars"]
-    if isinstance(bars, str):
-      bars = json.loads(bars)
-    if not isinstance(bars, list):
-      bars = []
-    captured_at = int(row["captured_at"])
-    if causal_only:
-      bars = [
-        bar for bar in bars
-        if isinstance(bar, dict) and int(bar.get("t") or 0) <= captured_at
-      ]
-    tf = str(row["timeframe"]).upper()
-    out[tf] = {
-      "bars": bars,
-      "bars_requested": int(row["bars_requested"] or 0),
-      "bars_stored": int(row["bars_stored"] or 0),
-      "bars_after_event": int(row["bars_after_event"] or 0),
-      "capture_version": int(row["capture_version"] or 1),
-      "captured_at": captured_at,
-    }
-  return out
-
-
-async def _safe_snapshot_manual_chart(
-  *,
-  signal_id: int,
-  event: str,
-  ts: int,
-  symbol: str = "XAU",
-) -> None:
-  """Never fail the Telegram/fill path if Redis or chart write is empty."""
-  try:
-    from app.signals.manual_algo_chart import snapshot_manual_algo_chart
-    await snapshot_manual_algo_chart(
-      signal_id=signal_id,
-      event=event,
-      ts=ts,
-      symbol=symbol,
-    )
-  except Exception:
-    log.exception(
-      "manual_algo_chart snapshot failed signal=%s event=%s",
-      signal_id,
-      event,
-    )
-
-
 async def get_manual_signal(row_id: int) -> dict | None:
   """Return one signal by primary key, regardless of lifecycle state."""
   async with _connect() as db:
@@ -1985,18 +2361,6 @@ async def undo_last_close_leg(row_id: int) -> dict | None:
       "remaining": remaining,
       "previous_status": row["status"],
     }
-
-
-async def get_manual_signal_any_by_channel_id(
-  channel_message_id: int,
-) -> dict | None:
-  """Return a signal by channel message id, regardless of lifecycle state."""
-  async with _connect() as db:
-    row = await db.fetchrow(
-      "SELECT * FROM manual_signals WHERE channel_message_id = $1",
-      channel_message_id,
-    )
-  return _decode_signal(row) if row else None
 
 
 def signal_root(signal: dict) -> int:
@@ -2069,9 +2433,15 @@ async def close_leg(
   row_id: int,
   pips: int,
   frac: float | None = None,
+  entry_price: float | None = None,
 ) -> dict | None:
-  """Book one scale-out leg and close the signal when no size remains."""
-  snapshot_close: tuple[int, int, str] | None = None
+  """Book one scale-out leg and close the signal when no size remains.
+
+  ``entry_price`` is this booking leg's own actual fill price (a multi-leg
+  manual /algo group's shallow/mid/deep clips each fill at their own price)
+  — carried on the leg record so a later realized-R calc can measure risk
+  against the SAME leg its reported pips came from.
+  """
   async with _connect() as db:
     async with db.transaction():
       row = await db.fetchrow(
@@ -2101,7 +2471,10 @@ async def close_leg(
         }
 
       now = int(time.time())
-      legs.append({"frac": close_frac, "pips": pips, "ts": now})
+      leg_record = {"frac": close_frac, "pips": pips, "ts": now}
+      if entry_price is not None:
+        leg_record["entry_price"] = entry_price
+      legs.append(leg_record)
       new_remaining = 1.0 - sum(float(leg["frac"]) for leg in legs)
       # Journal /trade_stats uses the highest TP/pips reached, not a
       # volume-fraction weighted blend that dilutes booked targets with a
@@ -2113,7 +2486,6 @@ async def close_leg(
           "closed_at = $2, legs = $3 WHERE id = $4 AND status = 'open'",
           achieved, now, json.dumps(legs), row_id,
         )
-        snapshot_close = (int(row_id), now, str(row["symbol"] or "XAU"))
         result = {
           **result_base,
           "closed": True,
@@ -2134,19 +2506,13 @@ async def close_leg(
           "remaining": new_remaining,
           "frac": close_frac,
         }
-  if snapshot_close is not None:
-    await _safe_snapshot_manual_chart(
-      signal_id=snapshot_close[0],
-      event="closed",
-      ts=snapshot_close[1],
-      symbol=snapshot_close[2],
-    )
   return result
 
 
 async def finalize_manual_group(
   row_id: int,
   result_pips: int,
+  entry_price: float | None = None,
 ) -> dict | None:
   """Close a manual /algo signal using AutoTradeEngine.cs's own final,
   authoritative group result (its ``group_result`` event's
@@ -2165,7 +2531,6 @@ async def finalize_manual_group(
   from the last shallow leg prints +130.
   """
   now = int(time.time())
-  snapshot_close: tuple[int, int, str] | None = None
   async with _connect() as db:
     async with db.transaction():
       row = await db.fetchrow(
@@ -2176,7 +2541,10 @@ async def finalize_manual_group(
       if row is None:
         return None
       legs = json.loads(row["legs"] or "[]")
-      legs.append({"frac": 1.0, "pips": result_pips, "ts": now})
+      leg_record = {"frac": 1.0, "pips": result_pips, "ts": now}
+      if entry_price is not None:
+        leg_record["entry_price"] = entry_price
+      legs.append(leg_record)
       # Channel TP cards already booked the highest target reached; the
       # close line must never report a lower number than those legs (e.g.
       # group_realized_pips from the last shallow leg after TP4 printed
@@ -2187,14 +2555,6 @@ async def finalize_manual_group(
         "closed_at = $2, legs = $3 WHERE id = $4 AND status = 'open'",
         achieved, now, json.dumps(legs), row_id,
       )
-      snapshot_close = (int(row_id), now, str(row["symbol"] or "XAU"))
-  if snapshot_close is not None:
-    await _safe_snapshot_manual_chart(
-      signal_id=snapshot_close[0],
-      event="closed",
-      ts=snapshot_close[1],
-      symbol=snapshot_close[2],
-    )
   return {
     "id": row["id"],
     "channel_message_id": row["channel_message_id"],
@@ -2374,15 +2734,7 @@ async def set_execution_fill(
       """,
       str(broker_position_id), broker_fill_price, signal_id,
     )
-  decoded = _decode_signal(row) if row else None
-  if decoded is not None:
-    await _safe_snapshot_manual_chart(
-      signal_id=int(signal_id),
-      event="filled",
-      ts=int(time.time()),
-      symbol=str(decoded.get("symbol") or "XAU"),
-    )
-  return decoded
+  return _decode_signal(row) if row else None
 
 
 async def get_signal_by_execution_intent_id(intent_token: str) -> dict | None:
@@ -2408,17 +2760,6 @@ async def get_signal_by_execution_intent_id(intent_token: str) -> dict | None:
   return _decode_signal(row) if row else None
 
 
-async def get_manual_signal_by_channel_id(channel_message_id: int) -> dict | None:
-  """Look up an open manual signal by its Telegram channel message_id."""
-  async with _connect() as db:
-    row = await db.fetchrow(
-      "SELECT * FROM manual_signals "
-      "WHERE channel_message_id = $1 AND status = 'open'",
-      channel_message_id,
-    )
-    return dict(row) if row else None
-
-
 async def close_manual_signal(row_id: int, result_pips: int) -> dict | None:
   """Mark a signal as closed and record the pip result.
 
@@ -2442,34 +2783,7 @@ async def close_manual_signal(row_id: int, result_pips: int) -> dict | None:
         "closed_at = $2 WHERE id = $3",
         result_pips, closed_at, row_id,
       )
-  await _safe_snapshot_manual_chart(
-    signal_id=int(row_id),
-    event="closed",
-    ts=closed_at,
-    symbol=str(row["symbol"] or "XAU"),
-  )
   return dict(row)
-
-
-async def cancel_manual_signal_by_channel_id(channel_message_id: int) -> dict | None:
-  """Cancel an open signal identified by the Telegram channel message_id."""
-  async with _connect() as db:
-    async with db.transaction():
-      row = await db.fetchrow(
-        "SELECT * FROM manual_signals "
-        "WHERE channel_message_id = $1 AND status = 'open' "
-        "FOR UPDATE",
-        channel_message_id,
-      )
-      if row is None:
-        return None
-      row = dict(row)
-      await db.execute(
-        "UPDATE manual_signals SET status = 'cancelled', closed_at = $1 "
-        "WHERE id = $2",
-        int(time.time()), row["id"],
-      )
-    return row
 
 
 async def cancel_manual_signal(row_id: int) -> dict | None:
@@ -2516,9 +2830,6 @@ async def delete_manual_signal(row_id: int) -> dict | None:
         "SELECT * FROM signal_posts WHERE signal_id = $1", row_id,
       )
       await db.execute("DELETE FROM pips_log WHERE signal_id = $1", row_id)
-      await db.execute(
-        "DELETE FROM manual_algo_charts WHERE signal_id = $1", row_id,
-      )
       await db.execute("DELETE FROM signal_posts WHERE signal_id = $1", row_id)
       await db.execute("DELETE FROM manual_signals WHERE id = $1", row_id)
     return {**_decode_signal(row), "posts": [dict(post) for post in posts]}

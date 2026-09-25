@@ -112,9 +112,6 @@ class FinalProtectiveStopPlan:
     return fields
 
 
-ProtectiveStopPlan = FinalProtectiveStopPlan
-
-
 def decimal_value(value: Any, name: str) -> Decimal:
   try:
     result = Decimal(str(value))
@@ -213,6 +210,29 @@ def opposing_zone_context_from_values(
       else 0.3,
       "auto_trade_add_stop_buffer_atr",
     ),
+  )
+
+
+def approximate_structural_stop_price(
+  *,
+  direction: str,
+  structure_swing: float,
+  atr: float,
+  structure_buffer_atr: float,
+) -> float:
+  """Float mirror of ``_plan_base_stop``'s raw structural stop (structure
+  minus/plus the ATR buffer, before any wick/opposing-zone push).
+
+  For entry-selection logic that needs the real stop *before* the exact
+  Decimal stop contract is built (see
+  ``execution_route.risk_targeted_entry_price``) - never itself the final
+  stop price; ``plan_protective_stop`` remains authoritative for that.
+  """
+  side = str(direction).upper()
+  return (
+    float(structure_swing) - float(structure_buffer_atr) * float(atr)
+    if side == "BUY"
+    else float(structure_swing) + float(structure_buffer_atr) * float(atr)
   )
 
 
@@ -763,9 +783,9 @@ def stop_bounds_for_reaction_room(
       except (TypeError, ValueError):
         floor_pips = 12
       try:
-        cap_pips = int(float(getattr(scalp_stop_cfg, "maximum_pips", 30) or 30))
+        cap_pips = int(float(getattr(scalp_stop_cfg, "maximum_pips", 45) or 45))
       except (TypeError, ValueError):
-        cap_pips = 30
+        cap_pips = 45
       if cap_pips < floor_pips:
         cap_pips = floor_pips
       min_rr = 1.0
@@ -871,49 +891,6 @@ def volume_weighted_reference_entry(
   total = sum(volumes)
   weighted = sum(price * volume for price, volume in zip(prices, volumes))
   return weighted / total
-
-
-def resolve_entry_leg_lots(
-  total_lots: Any,
-  ratios: Any,
-  *,
-  step_lots: Any = Decimal("0.01"),
-) -> tuple[Decimal, ...]:
-  """Mirror C# ``VolumePlanner.SplitEntryVolume`` in lot space.
-
-  AwayFromZero 2dp round on the first N-1 legs, remainder on the last — so
-  0.11 at 70/30 resolves to 0.08 + 0.03 (weights 8/11, 3/11).
-  """
-  total = decimal_value(total_lots, "total_lots")
-  step = decimal_value(step_lots, "step_lots")
-  ratio_values = [decimal_value(ratio, "leg_ratio") for ratio in ratios]
-  if total <= 0 or step <= 0 or not ratio_values:
-    raise ProtectiveStopError("entry lot split inputs are invalid")
-  if any(ratio <= 0 for ratio in ratio_values):
-    raise ProtectiveStopError("entry ratios must all be positive")
-  ratio_sum = sum(ratio_values)
-  if abs(ratio_sum - Decimal("1")) > Decimal("0.0001"):
-    raise ProtectiveStopError("entry ratios must sum to 1.0")
-  if len(ratio_values) == 1:
-    return (total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP),)
-
-  lot_quantum = Decimal("0.01")
-  slices: list[Decimal] = []
-  allocated = Decimal("0")
-  for ratio in ratio_values[:-1]:
-    # C#: Round(totalLots * ratio, 2, AwayFromZero); with step 0.01 that
-    # lot-cent value is already broker-step aligned.
-    ideal = (total * ratio).quantize(lot_quantum, rounding=ROUND_HALF_UP)
-    slices.append(ideal)
-    allocated += ideal
-  slices.append(total - allocated)
-  if any(slice_lots < step for slice_lots in slices):
-    raise ProtectiveStopError(
-      "resolved entry legs fall below broker step",
-    )
-  if sum(slices) != total:
-    raise ProtectiveStopError("resolved entry legs do not sum to total lots")
-  return tuple(slices)
 
 
 def plan_group_protective_stop(
@@ -1254,9 +1231,9 @@ def stop_bounds_for_strategy(
     except (TypeError, ValueError):
       scalp_min = 12
     try:
-      scalp_max = int(float(getattr(scalp_stop_cfg, "maximum_pips", 30) or 30))
+      scalp_max = int(float(getattr(scalp_stop_cfg, "maximum_pips", 45) or 45))
     except (TypeError, ValueError):
-      scalp_max = 30
+      scalp_max = 45
     if scalp_max < scalp_min:
       scalp_max = scalp_min
     return scalp_min, scalp_max

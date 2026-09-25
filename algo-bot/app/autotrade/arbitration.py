@@ -75,7 +75,6 @@ class ExecutionIntent:
   absolute_target_price: float | None = None
   target_reference_price: str = "broker_fill"
   proposed_group_id: str | None = None
-  is_initial: bool = True
   cycle_id: str | None = None
 
 
