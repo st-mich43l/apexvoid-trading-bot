@@ -118,8 +118,8 @@ def test_scalp_root_card_shows_r_multiples_not_bare_pips():
     stop_price=match.structure_swing,
     target_prices=(4003.0, 4003.5),
   )
-  assert "<b>+1R</b>" in text
-  assert "<b>+1.7R</b>" in text
+  assert "<b>1.0R</b>" in text
+  assert "<b>1.7R</b>" in text
   assert "+65" not in text
   # Targets must show an R-multiple, never fall back to a bare pip offset -
   # the SL line's own "risk N pips" is unrelated and expected here.

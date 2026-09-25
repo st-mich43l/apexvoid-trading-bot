@@ -40,7 +40,19 @@ def format_price(value: float, symbol: str, *, digits: int | None = None) -> str
   patch independently of this module's own digits_for import) pass it
   through instead of this function re-deriving it a second, unpatchable
   way.
+
+  XAU always displays as a whole number here, overriding whatever digits
+  was resolved to (production XAU config is price_digits: 2, used for
+  broker/technical precision - this is a presentation-only override, per
+  the owner's explicit preference, and never touches the broker order or
+  the underlying technical price this function's caller keeps precise
+  elsewhere). This is display rounding, not a claim that a narrow zone
+  collapsing to one whole number is still a valid trade - a caller
+  building a plan from a zone too narrow to survive this must decide not
+  to advertise it, not rely on this function to hide that.
   """
+  if str(symbol).upper() == "XAU":
+    return f"{round(value):,d}"
   if digits is None:
     # setup_card.py's own card_price_digits() falls back to 2 on an
     # unknown symbol (live 2026-08-21 GBPUSD incident: a hard-coded XAU
@@ -51,6 +63,17 @@ def format_price(value: float, symbol: str, *, digits: int | None = None) -> str
     except KeyError:
       digits = 2
   return f"{value:,.{digits}f}".rstrip("0").rstrip(".")
+
+
+def format_r_multiple(value: float) -> str:
+  """"1.0R" style - no leading "+" (matches the owner's own approved
+  entry-card example) and always one decimal place, e.g. "1.0R"/"2.0R".
+  A prior Auto-only formatter (setup_card._format_r_multiple) both added
+  a "+" and stripped the trailing ".0" instead - two divergences from
+  Manual's own R-multiple convention (app.signals.broadcast's local
+  ``_rr`` helper), fixed here as the one shared formatter both should use.
+  """
+  return f"{value:.1f}R"
 
 
 def conservative_entry_reference(

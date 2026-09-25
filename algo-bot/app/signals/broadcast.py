@@ -11,7 +11,12 @@ from app.persistence.store import (
 )
 from app.signals.pips_format import rr_entry
 from app.autotrade.strategy_names import resolve_strategy
-from app.autotrade.trade_card import format_entry_line, format_sl_line, format_target_line
+from app.autotrade.trade_card import (
+  format_entry_line,
+  format_r_multiple,
+  format_sl_line,
+  format_target_line,
+)
 from app.core.symbols import channels_for
 from app.bot.client import (
   delete_message,
@@ -26,7 +31,7 @@ log = logging.getLogger(__name__)
 
 
 def _rr(tp: float, entry: float, risk: float) -> str:
-  return f"{abs(tp - entry) / risk:.1f}R" if risk > 0 else "-"
+  return format_r_multiple(abs(tp - entry) / risk) if risk > 0 else "-"
 
 
 def _setup_line(sig: dict) -> str | None:
