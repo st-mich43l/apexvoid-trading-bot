@@ -56,6 +56,24 @@ class AlgorithmVersion(FrozenConfigModel):
   liquidity: str = Field(min_length=1)
 
 
+class TechnicalBias(FrozenConfigModel):
+  direction: Literal["BUY", "SELL"]
+  layer: str = Field(min_length=1)
+
+
+class TechnicalContext(FrozenConfigModel):
+  """Engine-owned policy inputs for the bar that made the setup actionable.
+
+  Additive V1 block (S13B). Absent => policy inputs are unavailable and the
+  consumer must fail closed; it never substitutes a Python recomputation.
+  """
+
+  atr: FiniteFloat = Field(gt=0)
+  reference_price: FiniteFloat = Field(gt=0)
+  reference_time: int = Field(ge=0)
+  bias: TechnicalBias | None = None
+
+
 class AnalysisOpportunity(FrozenConfigModel):
   id: str = Field(min_length=1)
   strategy: str = Field(min_length=1)
@@ -71,11 +89,14 @@ class AnalysisOpportunity(FrozenConfigModel):
   formed_at: int | None = Field(default=None, ge=0)
   created_at: int = Field(ge=0)
   expires_at: int = Field(ge=0)
+  technical_context: TechnicalContext | None = None
 
   @model_validator(mode="after")
   def validate_trade_geometry(self):
     if self.expires_at < self.created_at:
       raise ValueError("expires_at must be >= created_at")
+    if self.technical_context is not None and self.technical_context.reference_time > self.created_at:
+      raise ValueError("technical_context.reference_time must be <= created_at (no look-ahead)")
     if self.formed_at is not None and self.formed_at > self.created_at:
       raise ValueError("formed_at must be <= created_at")
     if self.direction == "BUY":

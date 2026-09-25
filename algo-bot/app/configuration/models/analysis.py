@@ -363,7 +363,7 @@ class AnalysisZoneRelevanceConfig(FrozenConfigModel):
 class AnalysisTechnicalAuthorityConfig(FrozenConfigModel):
     """Rollout gate for the Go analysis authority integration (S12)."""
 
-    mode: str = config_field('python', canonical_env=None, owner=ConfigOwner.PYTHON, reload=ReloadPolicy.RESTART, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.ENUM, risk=RiskClassification.EXECUTION_SAFETY, description='Technical-analysis authority. Go can only be consumed in shadow mode until separately approved S12D cutover.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 'python'),), allowed_values=('python', 'go_shadow', 'go'), validation_summary='Go mode fails closed until S12D implements the separately approved cutover.')
+    mode: str = config_field('python', canonical_env=None, owner=ConfigOwner.PYTHON, reload=ReloadPolicy.RESTART, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.ENUM, risk=RiskClassification.EXECUTION_SAFETY, description='Technical-analysis authority mode. python: legacy detectors own every scope. go_shadow: record what Go would decide, no plans. go: the Go consumer adapts opportunities for scopes the authority fence has handed to Go (an operator-recorded acceptance is required per scope; default every scope stays Python-owned).', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 'python'),), allowed_values=('python', 'go_shadow', 'go'), validation_summary='go and go_shadow require consumer_enabled=true; go still changes nothing for any scope until the authority fence records an accepted handover.')
     consumer_enabled: bool = config_field(False, canonical_env=None, owner=ConfigOwner.PYTHON, reload=ReloadPolicy.RESTART, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.BOOLEAN, risk=RiskClassification.EXECUTION_SAFETY, description='Starts the durable Go analysis Kafka consumer. Default false preserves Python-only production behavior.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, False),), validation_summary='go_shadow requires this true; go mode is unavailable.')
     consumer_group: str = config_field('apexvoid-algo-bot-analysis-opportunity-v1', canonical_env=None, owner=ConfigOwner.PYTHON, reload=ReloadPolicy.RESTART, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.IDENTIFIER, risk=RiskClassification.CROSS_SERVICE_CONTRACT, description='Stable Kafka consumer group for durable Go analysis opportunity lifecycle processing.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 'apexvoid-algo-bot-analysis-opportunity-v1'),), validation_summary='Pydantic required/type coercion only.', min_length=1)
 
@@ -376,10 +376,8 @@ class AnalysisTechnicalAuthorityConfig(FrozenConfigModel):
 
     @model_validator(mode='after')
     def validate_rollout_gate(self):
-        if self.mode == 'go':
-            raise ValueError('analysis.technical_authority.mode=go is unavailable until separately approved S12D cutover')
-        if self.mode == 'go_shadow' and not self.consumer_enabled:
-            raise ValueError('analysis.technical_authority.go_shadow requires consumer_enabled=true')
+        if self.mode in {'go_shadow', 'go'} and not self.consumer_enabled:
+            raise ValueError(f'analysis.technical_authority.{self.mode} requires consumer_enabled=true')
         return self
 
 class AnalysisConfig(FrozenConfigModel):

@@ -20,6 +20,7 @@ import math
 from typing import Any, Awaitable, Callable
 
 from app.persistence import redis_state
+from app.analysis_client.authority import authorize_legacy_match
 from app.autotrade import units
 from app.core import instrument_geometry
 from app.autotrade.range_targets import configured_range_targets
@@ -4809,6 +4810,36 @@ async def _publish_trade_plan_v8(
       reason_code="v8_plan_build_incomplete",
       message="TradePlan V8 build left incomplete across a restart/crash",
       publish_status=True,
+    )
+    return None
+  # S13B technical-authority fence: exactly one of {Python detectors, Go
+  # analysis} may create an executable plan for a (symbol, catalog strategy)
+  # scope. Reconciliation of an already-published/terminal plan (above) is
+  # deliberately not fenced: ownership governs plan *creation*, never the
+  # management of positions that already exist.
+  authority = await authorize_legacy_match(
+    symbol=match.symbol,
+    strategy_name=match.strategy,
+    direction=match.direction,
+    tags=match.tags,
+    consumer_enabled=runtime_config.analysis.technical_authority.consumer_enabled,
+  )
+  if not authority.allowed:
+    await record_route_outcome(
+      client,
+      match,
+      stage="mode_check",
+      status="blocked",
+      reason_code="authority_fenced",
+      message=f"plan creation for this scope is not owned by this publisher ({authority.reason})",
+      measured={
+        "authority_reason": authority.reason,
+        "authority_owner": authority.owner,
+        "authority_epoch": authority.epoch,
+        "authority_scopes": list(authority.scopes),
+      },
+      retained=False,
+      publish_status=False,
     )
     return None
   if spot is None or not spot.fresh:
