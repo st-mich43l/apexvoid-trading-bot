@@ -1577,6 +1577,22 @@ def _format_detection(
       or result.execution_eligibility.allowed
     )
   )
+  if executable:
+    # A real executable setup gets exactly the same card the post-publish
+    # path (ensure_plan_published_root_card) renders - one function, one
+    # look, from SETUP FORMING through ORDER ACTIVATED and close, instead
+    # of this module's own separate (and pre-unification) card body.
+    # Scanner-only diagnostics (bias, structural source, confirmation, HTF
+    # bias/context reasons, "Also" alternates, map references) stay below
+    # for non-executable analysis-only posts; a real trade card already
+    # drops them per the unified-card spec.
+    from app.autotrade.setup_card import format_plan_published_root_card
+
+    return format_plan_published_root_card(
+      execution_match,
+      stop_price=_planned_stop_price(result, execution_match),
+      target_prices=None,
+    )
   stars = "⭐" * max(1, min(3, int(result.confluence)))
   direction_icon = "🟢" if result.direction.upper() == "BUY" else "🔴"
   setup_label = str(result.setup or "").strip() or "Setup"
@@ -1584,31 +1600,10 @@ def _format_detection(
     reason for reason in result.reasons
     if not reason.lower().startswith("htf bias")
   ][:6 if result.setup in {"Box Breakout", "Range Edge Scalp"} else 2]
-  from app.autotrade.setup_card import (
-    forming_card_headline,
-    quote_inside_entry_zone,
-  )
-  in_zone = bool(
-    executable
-    and result.entry_zone is not None
-    and quote_inside_entry_zone(
-      result.current_price,
-      float(result.entry_zone.low),
-      float(result.entry_zone.high),
-    )
-  )
   lines = [
+    f"🔵 <b>{escape(symbol)} {escape(tf)} · MARKET OBSERVATION</b>",
     (
-      forming_card_headline(symbol, tf, in_zone=in_zone)
-      if executable
-      else f"🔵 <b>{escape(symbol)} {escape(tf)} · MARKET OBSERVATION</b>"
-    ),
-    (
-      "⏳ <b>IN ZONE</b> · waiting market fill"
-      if in_zone
-      else "🟡 <b>QUEUED</b> · worker acknowledgement pending"
-      if executable
-      else "🔵 <b>ANALYSIS ONLY</b> · no executable StrategyMatch"
+      "🔵 <b>ANALYSIS ONLY</b> · no executable StrategyMatch"
       if runtime_config.runtime.auto_trade.enabled
       else "🔵 <b>ANALYSIS ONLY</b> · autonomous execution disabled"
     ),
@@ -1618,8 +1613,7 @@ def _format_detection(
     ),
   ]
   if (
-    not executable
-    and result.execution_eligibility is not None
+    result.execution_eligibility is not None
     and result.execution_eligibility.reason_code
   ):
     lines.append(
