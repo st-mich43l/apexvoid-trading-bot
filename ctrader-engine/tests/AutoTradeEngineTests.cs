@@ -3629,6 +3629,78 @@ public sealed partial class AutoTradeEngineTests
   }
 
   [Fact]
+  public async Task AutoAlgoNonFinalLegCloseEmitsLegClosedNotPositionClosed()
+  {
+    // Spec requirement: never publish POSITION CLOSED while a sibling
+    // position of the same group is still open. A scale-in algo_auto group
+    // (Stream "algo_auto", unlike Manual Algo's "algo_manual") has no
+    // Python-side deferral of its own - manual_execution.py's remaining-
+    // volume/_handle_group_result deferral is Manual-only, so this exact
+    // race is only guarded here, at emission, for the auto stream.
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    const string groupId = "auto-scale-in";
+    const decimal ownerStop = 4006m;
+    var store = new FakeAutoTradeStore(CandidateJson());
+    var entries = new[] { 4000m, 4001m };
+    var volumes = new long[] { 500, 500 };
+    for (var index = 0; index < entries.Length; index++)
+    {
+      var state = new AutoTradePositionState(
+        CandidateId: "auto:scale:0",
+        PositionId: 981 + index,
+        SymbolId: Symbol.SymbolId,
+        Direction: TradeDirection.Sell,
+        EntryPrice: entries[index],
+        InitialVolume: volumes[index],
+        RemainingVolume: volumes[index],
+        Slices: [volumes[index]],
+        TargetsPips: [30],
+        NextTargetIndex: 0,
+        OpenedAt: Now.ToUnixTimeSeconds(),
+        CurrentStopLoss: ownerStop,
+        TargetOrdinals: [1],
+        GroupId: groupId,
+        TrancheIndex: index + 1,
+        GroupTrancheCount: entries.Length,
+        InitialStopLoss: ownerStop,
+        GroupInitialVolume: volumes.Sum(),
+        Setup: "Confluence Zone",
+        Stream: "algo_auto",
+        StrategyFamily: "trend",
+        Symbol: "XAU",
+        InitialRiskStopPips: 60m
+      );
+      store.Positions[state.PositionId] = state;
+    }
+    var client = new FakeTradingClient
+    {
+      PositionCloseReasonToReturn = PositionCloseReason.StopLossOrTakeProfit,
+      PositionCloseExecutionPriceToReturn = ownerStop,
+    };
+    var engine = new AutoTradeEngine(
+      Options() with { PositionMissingConfirmations = 1 },
+      store,
+      () => Now,
+      _ => { }
+    );
+
+    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
+    await WaitForEventAsync(store, "group_result");
+
+    // Both legs vanish in the same snapshot; exactly one of them is the
+    // group's genuine last leg. The other must be reported as "leg_closed"
+    // (Telegram-silent), never "position_closed" (the subscriber-facing
+    // POSITION CLOSED headline), since its sibling is still unaccounted for
+    // at the moment IT is confirmed missing.
+    Assert.Single(store.Events, item => item.Type == "position_closed");
+    Assert.Single(store.Events, item => item.Type == "leg_closed");
+    Assert.Single(store.Events, item => item.Type == "group_result");
+
+    cts.Cancel();
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+  }
+
+  [Fact]
   public async Task ManualAlgoFixesFirstLegToPointZeroFiveLotsAboveThreshold()
   {
     using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
@@ -5107,6 +5179,58 @@ public sealed partial class AutoTradeEngineTests
       store.Events,
       item => item.Type == "group_result" && item.GroupRealizedPips == expectedPips
     );
+
+    cts.Cancel();
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+  }
+
+  [Fact]
+  public async Task ClosePositionCommandOnOneLegOfAnAutoGroupEmitsLegClosedNotPositionClosed()
+  {
+    // Same spec requirement as AutoAlgoNonFinalLegCloseEmitsLegClosedNotPositionClosed
+    // (reconcile-detected close), exercised through the owner's explicit
+    // /trade_close_auto <position_id> command instead: closing ONE leg of a
+    // still-open multi-leg algo_auto group must not announce POSITION
+    // CLOSED while its sibling is genuinely still open. Positions are
+    // broker-seeded (not store-seeded) and adopted via the real av3
+    // two-tranche path (mirrors ReconcileAdoptsTwoTranchesWithIndependentPlans)
+    // so _states genuinely holds both siblings before the close command
+    // runs, rather than racing the startup reconcile's own stale-position
+    // detection.
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    var store = new FakeAutoTradeStore(CandidateJson());
+    var client = new FakeTradingClient();
+    client.SeedPosition(new TradingPosition(
+      991, 7, TradeDirection.Buy, 500, 4000m, 3994m,
+      "apexvoid-auto", "av3|autoclose1xxx|autoclosegroup|1|500|500|30|1|1000"
+    ));
+    client.SeedPosition(new TradingPosition(
+      992, 7, TradeDirection.Buy, 500, 4001m, 3994m,
+      "apexvoid-auto", "av3|autoclose2xxx|autoclosegroup|2|500|500|30|1|1000"
+    ));
+    var engine = new AutoTradeEngine(Options(), store, () => Now, _ => { });
+    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
+    await WaitForEventAsync(store, "ready");
+    Assert.Equal(2, store.Positions.Count);
+    Assert.All(store.Positions.Values, state => Assert.Equal("algo_auto", state.Stream));
+
+    store.EnqueueCommand(JsonSerializer.Serialize(new
+    {
+      type = "close_position",
+      position_id = 991,
+    }));
+    await WaitUntilAsync(() => client.Closes.Count == 1);
+    await WaitUntilAsync(() =>
+      store.Events.Any(item => item.Type == "leg_closed")
+    );
+
+    Assert.Single(client.Closes);
+    Assert.DoesNotContain(store.Positions, item => item.Key == 991);
+    Assert.Contains(store.Positions, item => item.Key == 992);
+    Assert.DoesNotContain(store.Events, item => item.Type == "position_closed");
+    Assert.DoesNotContain(store.Events, item => item.Type == "group_result");
+    var legClosed = Assert.Single(store.Events, item => item.Type == "leg_closed");
+    Assert.Equal("autoclosegroup", legClosed.GroupId);
 
     cts.Cancel();
     await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
