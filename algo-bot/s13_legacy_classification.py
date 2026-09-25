@@ -162,6 +162,7 @@ DEFAULT_ENTRYPOINTS = (
   "app.scripts.backfill_auto_trade_stats",
   "app.scripts.drop_manual_algo_charts",
   "app.scripts.repair_manual_algo_results",
+  "app.scripts.analysis_authority",
 )
 
 
