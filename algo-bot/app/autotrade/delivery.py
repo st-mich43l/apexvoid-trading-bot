@@ -1460,15 +1460,26 @@ POSITION_ACTIVATED_STATUS_LINE = "✅ <b>ORDER ACTIVATED</b>"
 
 
 def _format_order_filled_manage_body(event: dict) -> str:
-  cleaned = _clean_message(
-    event.get("message", ""),
-    symbol=_event_symbol(event),
-  ) or "order filled"
-  return "\n".join([
-    "🤖 <b>ApexVoid Algo</b>",
-    "✅ <b>ORDER FILLED</b>",
-    f"• {escape(cleaned)}",
-  ])
+  """Terse, Manual-Algo-style fill line - matches
+  trade_ops.render_result's own "active" action ("🟢 active — order
+  filled") exactly. The entry zone/SL/targets were already advertised on
+  the root card before this fill; restating them here is what the old
+  3-line "🤖 ApexVoid Algo / ✅ ORDER FILLED / • <raw message>" body did,
+  and Manual Algo's own fill reply never repeats that detail either.
+
+  Unlike Manual, a TradePlan V8 group can fill in more than one
+  order_filled event (leg 1, then the group's later legs) - "leg pending"
+  keeps that one real piece of information Manual doesn't need, without
+  reintroducing the old body's full raw-message dump.
+
+  _split_manage_fill_and_tps classifies lines by leading marker emoji
+  (🎯/🏁/🔐/🛰️/🛡+Stop), not by this function's exact text, so this stays
+  correctly recognized as the "fill" head once later TP/close lines are
+  appended below it.
+  """
+  if "still pending" in str(event.get("message") or "").lower():
+    return "🟢 active — order filled · leg pending"
+  return "🟢 active — order filled"
 
 
 def _format_tp_compact_line(event: dict, message: str) -> str | None:
@@ -1784,12 +1795,7 @@ async def _deliver_compact_tp_booked(
   if manage_text:
     new_text = f"{manage_text.rstrip()}\n{line}"
   else:
-    new_text = "\n".join([
-      "🤖 <b>ApexVoid Algo</b>",
-      "• ✅ <b>ORDER FILLED</b>",
-      "",
-      line,
-    ])
+    new_text = "\n".join([_format_order_filled_manage_body(event), "", line])
   await _replace_manage_reply(
     client,
     event,
@@ -1838,11 +1844,7 @@ async def _deliver_compact_position_closed(
   if manage_text:
     new_text = _compose(manage_text)
   else:
-    new_text = _compose("\n".join([
-      "🤖 <b>ApexVoid Algo</b>",
-      "✅ <b>ORDER FILLED</b>",
-      "",
-    ]))
+    new_text = _compose(f"{_format_order_filled_manage_body(event)}\n")
   # Fill may have raced card create; never leave WAITING FILL after close.
   # The root of a filled trade is never deleted - the close reply below
   # threads to it.
@@ -1895,10 +1897,7 @@ async def _deliver_compact_be_trail(
       remember=True,
     )
   else:
-    body = "\n".join([
-      "🤖 <b>ApexVoid Algo</b>",
-      status_line,
-    ])
+    body = "\n".join([_format_order_filled_manage_body(event), status_line])
     await _post_manage_reply(
       client,
       event,

@@ -38,6 +38,7 @@ from app.autotrade.strategy_match import StrategyMatch
 from app.autotrade.trade_card import (
   conservative_entry_reference,
   format_entry_line,
+  format_r_multiple,
   format_sl_line,
   format_target_line,
 )
@@ -1898,11 +1899,6 @@ def _configured_target_r_multiples(
   return multiples or None
 
 
-def _format_r_multiple(r_multiple: float) -> str:
-  text = f"{r_multiple:.1f}".rstrip("0").rstrip(".")
-  return f"+{text or '0'}R"
-
-
 def _trade_area_target_lines(
   match: StrategyMatch,
   *,
@@ -1943,7 +1939,7 @@ def _trade_area_target_lines(
     r_multiples = _configured_target_r_multiples(match, symbol)
     for index, price in enumerate(prices):
       if r_multiples is not None and index < len(r_multiples):
-        suffix = _format_r_multiple(r_multiples[index])
+        suffix = format_r_multiple(r_multiples[index])
       elif reference is not None:
         offset = _target_pip_offset(
           price,
