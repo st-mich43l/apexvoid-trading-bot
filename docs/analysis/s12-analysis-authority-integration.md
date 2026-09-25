@@ -98,10 +98,10 @@ Every transition is appended to `analysis_authority_transitions`. Rollback is
 therefore both configuration-free (a DB row) and configuration-level
 (`consumer_enabled: false` returns every scope to Python with no DB read).
 
-What this does **not** do: it does not produce Go-owned plans. The Go→TradePlan
-adapter and the technical facts it needs are S13B-3; until then a Go-owned
-scope simply has *no* publisher, which is why no acceptance is ever recorded
-here.
+What this does **not** do: it does not itself produce Go-owned plans — see the
+S13C adapter (`autotrade/go_opportunity_policy.py`) and the two policy blockers
+it exposed in `s13-python-retirement.md`. Until those are resolved by an owner
+decision, no acceptance should be recorded.
 
 ## S13B: additive `technical_context` (policy inputs from Go)
 

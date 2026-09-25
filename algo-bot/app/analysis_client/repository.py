@@ -147,18 +147,26 @@ class PostgresAnalysisOpportunityRepository:
       )
     return [dict(row) for row in rows]
 
+  async def opportunity_state(self, opportunity_id: str) -> str | None:
+    """Ledger state ('active'/'invalidated'/'expired') or None if unknown."""
+    async with store._connect() as db:
+      return await db.fetchval(
+        "SELECT state FROM analysis_opportunities WHERE opportunity_id = $1", opportunity_id,
+      )
+
   async def record_shadow_decision(
     self, *, opportunity_id: str, event_id: str, outcome: str, reason: str,
     missing_fields: tuple[str, ...] = (), details: dict | None = None,
+    mode: str = "go_shadow",
   ) -> None:
     async with store._connect() as db:
       await db.execute(
         """
         INSERT INTO analysis_shadow_decisions (
           opportunity_id, event_id, mode, outcome, reason, missing_fields, details, created_at
-        ) VALUES ($1, $2, 'go_shadow', $3, $4, $5::jsonb, $6::jsonb, $7)
+        ) VALUES ($1, $2, $8, $3, $4, $5::jsonb, $6::jsonb, $7)
         ON CONFLICT (opportunity_id, event_id, mode, outcome) DO NOTHING
         """,
         opportunity_id, event_id, outcome, reason,
-        json.dumps(list(missing_fields)), json.dumps(details or {}), int(time.time()),
+        json.dumps(list(missing_fields)), json.dumps(details or {}), int(time.time()), mode,
       )
