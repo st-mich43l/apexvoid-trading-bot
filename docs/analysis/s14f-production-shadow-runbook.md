@@ -70,4 +70,6 @@ python -m app.scripts.shadow_acceptance --symbol XAU --since <ISO> --until <ISO>
 
 Every gate above except the ones the shadow window itself can populate. Concretely open: production
 `go_shadow` window (not started), Kafka drills, deployed-SHA record, risk review (live phase), and owner
-disposition of the S14C differences (22/185 strict matches, 21 % coverage, constant confluence 4, 9 H1 conflicts).
+disposition of the S14C differences: 22 strict Go/Python matches of 185 Go cases (155 Python-only, 163 Go-only; many-to-many
+coverage 39/185 Go and 53/177 Python), Go confluence a constant 4 (every case Tier A), 9 matched setups with an H1 conflict, 12 cases
+without H1 bias, Go prices not on the tick (0/185), simple-vs-Wilder ATR spread of about -24 % to +31 % (median +1 %).
