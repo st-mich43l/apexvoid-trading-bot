@@ -128,6 +128,13 @@ def build_strategy_match(
     raise AdapterRejection("technical_context_unavailable", "Go supplied no policy inputs; Python must not recompute them")
   if not payload.timeframe:
     raise AdapterRejection("missing_observed_timeframe")
+  if payload.timeframe.upper() != "M5":
+    raise AdapterRejection("confirmation_timeframe_unreviewed")
+  reaction = tech.confirmation
+  if reaction is None:
+    raise AdapterRejection("reaction_confirmation_unavailable", "resting zones are technical observations, not confirmed trades")
+  if reaction.confirmation_bar_time != tech.reference_time:
+    raise AdapterRejection("reaction_not_current_observation")
   if payload.direction != profile.direction:
     raise AdapterRejection("direction_scope_mismatch", f"{profile.catalog_id} produces {profile.direction}, got {payload.direction}")
   if now >= payload.expires_at:
@@ -163,6 +170,8 @@ def build_strategy_match(
   relation = "neutral" if bias is None else ("with_bias" if bias == direction else "counter_bias")
   higher = next((item for tf in ("H1", "H4") for item in tech.higher_timeframes if item.timeframe == tf), None)
   htf_bias = ("up" if higher.direction == "BUY" else "down") if higher is not None else ""
+  if higher is None:
+    raise AdapterRejection("higher_timeframe_bias_unavailable", "no fresh confirmed H1/H4 structure")
   reasons = tuple(item.code for item in payload.evidence)
   confluence = len(reasons)
   legacy = profile.legacy_strategy
@@ -180,6 +189,7 @@ def build_strategy_match(
     f"kind:{profile.structural_kind}",
     f"bias:{relation}",
     "bias_source:go_primary_tf",
+    f"go_reaction:{reaction.reaction_type}",
     f"htf_bias_source:go_{higher.timeframe}" if higher is not None else "htf_bias_unavailable",
   )
   eligibility = ExecutionEligibility(
@@ -226,12 +236,17 @@ def build_strategy_match(
     risk_multiplier=risk_multiplier,
     family=family,
     structural_source=f"go:{profile.catalog_id}",
-    zone_id=payload.id,
-    structural_zone_id=payload.id,
+    zone_id=reaction.zone_id,
+    structural_zone_id=reaction.zone_id,
     structural_zone_low=low,
     structural_zone_high=high,
     structural_kind=profile.structural_kind,
     structural_timeframe=payload.timeframe.upper(),
+    touch_bar_ts=str(reaction.touch_bar_time),
+    confirmation_bar_ts=str(reaction.confirmation_bar_time),
+    reaction_type=reaction.reaction_type,
+    m5_confirmation_bar_ts=str(reaction.confirmation_bar_time),
+    m5_reaction_type=reaction.reaction_type,
     htf_bias=htf_bias,
     regime_kind="",
     bias_relationship=relation,
