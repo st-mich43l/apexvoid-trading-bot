@@ -9,6 +9,7 @@ def test_technical_authority_defaults_to_python_with_consumer_off():
     "mode": "python", "consumer_enabled": False,
     "consumer_group": "apexvoid-algo-bot-analysis-opportunity-v1",
     "max_event_age_seconds": 900, "max_delivery_lag_seconds": 300,
+    "go_origin_risk_leg_enabled": False,
   }
 
 

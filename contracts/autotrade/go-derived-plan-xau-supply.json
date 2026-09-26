@@ -95,7 +95,8 @@
       "bias:with_bias",
       "bias_source:go_primary_tf",
       "go_reaction:rejection",
-      "htf_bias_source:go_H1"
+      "htf_bias_source:go_H1",
+      "risk_leg:disabled"
     ],
     "trendline_v2": null
   },
