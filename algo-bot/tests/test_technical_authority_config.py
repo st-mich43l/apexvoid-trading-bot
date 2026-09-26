@@ -8,6 +8,7 @@ def test_technical_authority_defaults_to_python_with_consumer_off():
   assert AnalysisTechnicalAuthorityConfig().model_dump() == {
     "mode": "python", "consumer_enabled": False,
     "consumer_group": "apexvoid-algo-bot-analysis-opportunity-v1",
+    "max_event_age_seconds": 900, "max_delivery_lag_seconds": 300,
   }
 
 
@@ -30,3 +31,16 @@ def test_go_mode_is_accepted_only_with_the_consumer_and_never_by_default():
   operator-recorded acceptance) is the gate. Enabling the mode moves no scope."""
   assert AnalysisTechnicalAuthorityConfig(mode="go", consumer_enabled=True).mode == "go"
   assert AnalysisTechnicalAuthorityConfig().mode == "python"
+
+
+@pytest.mark.parametrize("field", ["max_event_age_seconds", "max_delivery_lag_seconds"])
+@pytest.mark.parametrize("value", [0, -1])
+def test_live_freshness_limits_must_be_positive(field, value):
+  """A zero/negative limit would silently disable backlog protection."""
+  with pytest.raises(ValidationError):
+    AnalysisTechnicalAuthorityConfig(**{field: value})
+
+
+def test_live_freshness_limits_are_configurable_and_default_conservatively():
+  config = AnalysisTechnicalAuthorityConfig(max_event_age_seconds=300, max_delivery_lag_seconds=60)
+  assert (config.max_event_age_seconds, config.max_delivery_lag_seconds) == (300, 60)

@@ -844,6 +844,15 @@ public sealed class TradePlanRuntime(
     $"execution:plan_state:{planId}";
   private static string PlanAcknowledgementKey(string planId) =>
     $"execution:plan_ack:{planId}";
+  // S14B: Python writes a cancel intent here when a Go-derived plan's
+  // opportunity was invalidated/expired or its authority scope was rolled
+  // back (a tombstone: it may exist before the plan does). The executor
+  // reports what it did in the ack key. See docs/redis-contract.md.
+  private static string PlanCancelKey(string planId) =>
+    $"execution:plan_cancel:{planId}";
+  private static string PlanCancelAckKey(string planId) =>
+    $"execution:plan_cancel_ack:{planId}";
+  private static readonly TimeSpan PlanCancelAckTtl = TimeSpan.FromDays(7);
   private static string PlanRejectionKey(string streamId) =>
     $"execution:plan_rejection:{streamId}";
   private static string TrackedPlansKey() => "execution:trade_plan_runtime_ids";
@@ -879,6 +888,10 @@ public sealed class TradePlanRuntime(
       _restored = true;
     }
     await ReadAndArmNewPlansAsync(client, symbol, cancellationToken);
+    // Before any submission and independent of the quote: a withdrawn plan
+    // must not place an order, and its resting orders must come off even
+    // while the feed is stale.
+    await ApplyPlanCancelIntentsAsync(client, symbol, cancellationToken);
     if (quote is null)
     {
       return;
@@ -3698,16 +3711,228 @@ public sealed class TradePlanRuntime(
     return next;
   }
 
+  // Plans whose cancel intent was fully applied this process; a restart simply
+  // re-applies it (every step is idempotent).
+  private readonly HashSet<string> _cancelIntentsSettled = new(StringComparer.Ordinal);
+
+  /// <summary>
+  /// S14B: honours the cancel intent Python writes when a Go-derived plan's
+  /// opportunity was invalidated/expired or its authority scope was rolled
+  /// back. Outcome by how far the plan got:
+  ///   - not yet submitted           -> cancelled, no broker call, never submits
+  ///   - resting/unfilled orders     -> every pending entry leg cancelled at
+  ///                                    the broker (retried until it sticks)
+  ///   - some legs already filled    -> those are positions: they keep their
+  ///                                    stop and normal TP/BE management; only
+  ///                                    the unfilled remainder is withdrawn
+  /// Never closes a position and never touches a plan without an intent.
+  /// </summary>
+  private async Task ApplyPlanCancelIntentsAsync(
+    ICTraderTradeClient client,
+    SymbolInfo symbol,
+    CancellationToken cancellationToken
+  )
+  {
+    foreach (var initial in _statesById.Values.ToArray())
+    {
+      if (_cancelIntentsSettled.Contains(initial.PlanId))
+      {
+        continue;
+      }
+      if (
+        !_plansById.TryGetValue(initial.PlanId, out var plan)
+        || !SameInstrument(plan.Symbol, symbol)
+      )
+      {
+        continue;
+      }
+      var raw = await store.GetStringAsync(
+        PlanCancelKey(initial.PlanId), cancellationToken
+      );
+      if (string.IsNullOrWhiteSpace(raw))
+      {
+        continue;
+      }
+      var (source, reason) = ParseCancelIntent(raw);
+      var state = initial;
+      var legs = (state.Legs ?? []).ToList();
+      bool StillResting(TradePlanLegRuntimeState leg) =>
+        leg.BrokerOrderId is not null
+        && leg.BrokerPositionId is null
+        && leg.Stage is not TradePlanLegStages.Cancelled;
+      var hadResting = legs.Any(StillResting);
+      if (hadResting && ShouldSubmitOrders)
+      {
+        state = await CancelUnfilledEntryLegsAsync(
+          client, plan, state, $"plan_cancel_intent:{source}",
+          cancellationToken, force: true
+        );
+        legs = (state.Legs ?? []).ToList();
+        if (legs.Any(StillResting))
+        {
+          // The broker refused or the call failed: the order is still live.
+          // Do not report success; the next poll retries.
+          log(
+            $"v8 plan cancel intent incomplete id={plan.PlanId} "
+            + $"source={source} - resting order still live, will retry"
+          );
+          continue;
+        }
+      }
+      // Legs that never reached the broker must never be submitted later
+      // (a Submitting plan retries its remaining legs every poll).
+      var neverSent = 0;
+      for (var i = 0; i < legs.Count; i++)
+      {
+        var leg = legs[i];
+        if (
+          leg.BrokerOrderId is null
+          && leg.BrokerPositionId is null
+          && leg.Stage is TradePlanLegStages.Planned
+            or TradePlanLegStages.Pending
+            or TradePlanLegStages.Submitted
+        )
+        {
+          legs[i] = leg with
+          {
+            Stage = TradePlanLegStages.Cancelled,
+            LastError = $"plan_cancel_intent:{source}",
+          };
+          neverSent++;
+        }
+      }
+      for (var i = 0; i < legs.Count; i++)
+      {
+        // A withdrawn leg no longer has a live broker order; leaving the id
+        // on it would keep the plan derived as PartiallyOpen forever (the
+        // same clearing the owner-cancelled-on-broker path does).
+        if (
+          legs[i].Stage == TradePlanLegStages.Cancelled
+          && legs[i].BrokerPositionId is null
+          && legs[i].BrokerOrderId is not null
+        )
+        {
+          legs[i] = legs[i] with { BrokerOrderId = null };
+        }
+      }
+      var hasPosition = legs.Any(leg => leg.BrokerPositionId is not null);
+      string outcome;
+      if (!hasPosition)
+      {
+        await PersistPlanExecutionStateAsync(
+          plan.PlanId, "cancelled", null, cancellationToken,
+          $"plan_cancel_intent:{source}"
+        );
+        await PublishEventAsync(
+          "plan_cancelled",
+          $"TradePlan V8 cancelled {plan.Analysis.Direction} · "
+            + $"analysis withdrawn ({reason})",
+          plan,
+          cancellationToken,
+          eventKey: "plan_cancelled",
+          state: TradePlanGroupStages.Cancelled,
+          reasonCode: $"plan_cancel_intent:{source}"
+        );
+        await ForgetPlanAsync(state.PlanId, cancellationToken);
+        outcome = hadResting ? "cancelled_pending_orders" : "cancelled_unsubmitted";
+        log(
+          $"v8 plan cancelled id={plan.PlanId} reason=plan_cancel_intent "
+          + $"source={source} outcome={outcome}"
+        );
+      }
+      else
+      {
+        var next = AggregateState(
+          state with
+          {
+            Legs = legs,
+            PendingOrderIds = Array.Empty<long>(),
+            Stage = DeriveRuntimeStage(legs),
+            GroupStage = DeriveGroupStage(legs),
+          }
+        );
+        await PersistStateAsync(next, cancellationToken);
+        outcome = hadResting || neverSent > 0
+          ? "positions_kept_unfilled_cancelled"
+          : "positions_kept";
+        log(
+          $"v8 plan cancel intent id={plan.PlanId} source={source} "
+          + $"outcome={outcome} - open positions stay managed"
+        );
+      }
+      await WritePlanCancelAckAsync(
+        plan.PlanId, outcome, source, legs, cancellationToken
+      );
+      _cancelIntentsSettled.Add(plan.PlanId);
+    }
+  }
+
+  private static (string Source, string Reason) ParseCancelIntent(string raw)
+  {
+    try
+    {
+      using var doc = System.Text.Json.JsonDocument.Parse(raw);
+      string Field(string name, string fallback) =>
+        doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Object
+        && doc.RootElement.TryGetProperty(name, out var value)
+        && value.ValueKind == System.Text.Json.JsonValueKind.String
+          ? value.GetString() ?? fallback
+          : fallback;
+      return (Field("source", "unspecified"), Field("reason", "unspecified"));
+    }
+    catch (System.Text.Json.JsonException)
+    {
+      // An unparseable intent still cancels: failing to withdraw is worse.
+      return ("unparseable", "unparseable");
+    }
+  }
+
+  private async Task WritePlanCancelAckAsync(
+    string planId,
+    string outcome,
+    string source,
+    IReadOnlyList<TradePlanLegRuntimeState> legs,
+    CancellationToken cancellationToken
+  )
+  {
+    using var stream = new MemoryStream();
+    using (var writer = new System.Text.Json.Utf8JsonWriter(stream))
+    {
+      writer.WriteStartObject();
+      writer.WriteString("plan_id", planId);
+      writer.WriteString("outcome", outcome);
+      writer.WriteString("source", source);
+      writer.WriteNumber("cancelled_legs", legs.Count(leg => leg.Stage == TradePlanLegStages.Cancelled));
+      writer.WriteNumber("open_legs", legs.Count(leg => leg.BrokerPositionId is not null));
+      writer.WriteNumber("at", clock().ToUnixTimeSeconds());
+      writer.WriteString("executor", options.Label);
+      writer.WriteEndObject();
+    }
+    // Expiring claim (NX + TTL): the ack is written once, when the intent
+    // is fully applied, and does not accumulate forever.
+    await store.TryClaimStringAsync(
+      PlanCancelAckKey(planId),
+      System.Text.Encoding.UTF8.GetString(stream.ToArray()),
+      PlanCancelAckTtl,
+      cancellationToken
+    );
+  }
+
   private async Task<TradePlanRuntimeState> CancelUnfilledEntryLegsAsync(
     ICTraderTradeClient client,
     TradePlan plan,
     TradePlanRuntimeState state,
     string reason,
-    CancellationToken cancellationToken
+    CancellationToken cancellationToken,
+    // A cancel intent (S14B) is not the after-TP policy: the opportunity
+    // behind these entries is gone, so resting legs come off regardless of
+    // UnfilledLegAfterTpPolicy.
+    bool force = false
   )
   {
     if (
-      !string.Equals(
+      !force
+      && !string.Equals(
         options.UnfilledLegAfterTpPolicy,
         "cancel",
         StringComparison.OrdinalIgnoreCase

@@ -37,6 +37,7 @@ class MemoryStore:
     self.rows: dict[tuple[str, str], AuthorityRecord] = {}
     self.log: list[tuple[str, str, int, int, str, str]] = []
     self.accept: dict[tuple[str, str, str], int] = {}
+    self.audit: list[dict] = []
 
   async def get(self, symbol, strategy_id):
     return self.rows.get((symbol.upper(), strategy_id))
@@ -57,6 +58,15 @@ class MemoryStore:
 
   async def owned_by(self, owner):
     return [rec for rec in self.rows.values() if rec.owner == owner]
+
+  async def active_handovers(self):
+    return [rec for rec in self.rows.values() if rec.owner != "python"]
+
+  async def record_runtime_audit(self, **fields):
+    self.audit.append(fields)
+
+  async def last_runtime_audit(self):
+    return self.audit[-1] if self.audit else None
 
 
 def make(clock=None, store=None, ttl=0.0):
@@ -288,10 +298,13 @@ class BrokenFence:
 
 @pytest.mark.asyncio
 async def test_predicate_makes_no_fence_read_while_consumer_is_disabled():
+  auth.reset_snapshot_for_tests()
   decision = await authorize_legacy_match(
     symbol="XAU", strategy_name="Supply Demand", direction="SELL", consumer_enabled=False, fence=ExplodingFence(),
   )
-  assert decision.allowed and decision.reason == "consumer_disabled_python_authority"
+  # No per-plan fence/DB read, and no blind allow either: with no Go-owned scope
+  # recorded in the (un-required) snapshot Python keeps its default authority.
+  assert decision.allowed and decision.reason == "authority_snapshot_uninitialized_python_default"
 
 
 @pytest.mark.asyncio
