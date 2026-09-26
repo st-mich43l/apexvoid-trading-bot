@@ -424,9 +424,12 @@
             "max_delivery_lag_seconds": {
               "type": "integer",
               "exclusiveMinimum": 0
+            },
+            "go_origin_risk_leg_enabled": {
+              "type": "boolean"
             }
           },
-          "required": ["mode", "consumer_enabled", "consumer_group", "max_event_age_seconds", "max_delivery_lag_seconds"]
+          "required": ["mode", "consumer_enabled", "consumer_group", "max_event_age_seconds", "max_delivery_lag_seconds", "go_origin_risk_leg_enabled"]
         },
         "indicators": {
           "type": "object",

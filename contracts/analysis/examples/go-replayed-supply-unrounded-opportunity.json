@@ -1,0 +1,87 @@
+{
+  "_provenance": "One real Go opportunity replayed from the committed real XAU capture (S14C: contracts/analysis/replay/xau-production-capture-20260921.json). Unrounded prices; used to prove the trading contract keeps full precision.",
+  "config_fingerprint": "<config-fingerprint>",
+  "config_version": 3,
+  "correlation_id": "replay-opp_f087bc21415787fdb916cda245d8a89e2c846b5fb5cd3c8bb231935cffcc8de7",
+  "event_id": "replay-opp_f087bc21415787fdb916cda245d8a89e2c846b5fb5cd3c8bb231935cffcc8de7",
+  "event_type": "analysis.opportunity.v1",
+  "event_version": 1,
+  "occurred_at": 1789388100,
+  "payload": {
+    "algorithm_version": {
+      "liquidity": "v1",
+      "structure": "v2"
+    },
+    "created_at": 1789388100,
+    "direction": "SELL",
+    "entry": {
+      "high": 4296.87,
+      "low": 4291.21
+    },
+    "evidence": [
+      {
+        "code": "m5_supply_zone_touched"
+      },
+      {
+        "code": "m5_supply_zone_relevance_immediate"
+      },
+      {
+        "code": "m5_supply_zone_layer_micro"
+      },
+      {
+        "code": "m5_supply_zone_rejection_confirmed"
+      }
+    ],
+    "expires_at": 1789474500,
+    "formed_at": 1789385100,
+    "id": "opp_f087bc21415787fdb916cda245d8a89e2c846b5fb5cd3c8bb231935cffcc8de7",
+    "invalidation": {
+      "label": "supply_zone_invalidated",
+      "price": 4298.970714285714
+    },
+    "quality": {
+      "components": {
+        "freshness_quality": 0.85,
+        "relevance_quality": 1,
+        "zone_strength_quality": 0.85
+      },
+      "overall": 0.9
+    },
+    "strategy": "supply",
+    "symbol": "XAU",
+    "targets": [
+      {
+        "price": {
+          "label": "nearest_sell_side_liquidity",
+          "price": 4284.159928571428
+        }
+      }
+    ],
+    "technical_context": {
+      "atr": 4.2014285714286155,
+      "bias": {
+        "direction": "BUY",
+        "layer": "internal"
+      },
+      "confirmation": {
+        "confirmation_bar_time": 1789388100,
+        "reaction_type": "rejection",
+        "touch_bar_time": 1789388100,
+        "zone_id": "zone:M5:supply:1789385100"
+      },
+      "higher_timeframes": [
+        {
+          "direction": "SELL",
+          "layer": "internal",
+          "reference_time": 1789383600,
+          "timeframe": "H1"
+        }
+      ],
+      "reference_price": 4290.33,
+      "reference_time": 1789388100
+    },
+    "timeframe": "M5"
+  },
+  "produced_at": 1789388100,
+  "producer": "apexvoid-analysis-engine"
+}
