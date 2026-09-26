@@ -101,6 +101,16 @@ func DeterministicID(identity Identity) (string, error) {
 	return "opp_" + hex.EncodeToString(sum[:]), nil
 }
 
+// ReactionConfirmation identifies the actual causal zone touch and later (or
+// same-bar) closed-bar rejection. Resting-zone candidates leave it absent.
+// A confirmed reaction receives a separate deterministic opportunity ID.
+type ReactionConfirmation struct {
+	ZoneID string
+	TouchBarTime int64
+	ConfirmationBarTime int64
+	ReactionType string
+}
+
 // TechnicalContext is the engine-owned technical facts an execution policy
 // needs to evaluate a Candidate without re-running any detector or recomputing
 // ATR from raw OHLC (S13B). Strategies never set it: SymbolWorker assigns it at
@@ -135,6 +145,7 @@ type TechnicalContext struct {
 	// HigherTimeframes is ordered H1, H4; each entry is read only after its
 	// own bar has closed and is fresh at the opportunity's observation bar.
 	HigherTimeframes []HigherTimeframeBias
+	Confirmation *ReactionConfirmation
 }
 
 // Candidate is one strategy's technical opportunity, as of the source
@@ -172,6 +183,9 @@ type Candidate struct {
 	// Technical is nil until SymbolWorker attaches it; a nil value means the
 	// consumer must treat the policy inputs as unavailable (fail closed).
 	Technical *TechnicalContext
+	// Reaction is assigned by a strategy ONLY when its own confirmed thesis
+	// is observed; worker copies it into technical context at publication.
+	Reaction *ReactionConfirmation
 }
 
 // Validate verifies the lifecycle-relevant, transport-neutral Candidate
@@ -225,6 +239,12 @@ func (c Candidate) Validate() error {
 	for name, value := range c.Quality.Components {
 		if name == "" || !finite(value) {
 			return fmt.Errorf("opportunity: quality components need non-empty names and finite values")
+		}
+	}
+	if c.Reaction != nil {
+		r := c.Reaction
+		if r.ZoneID == "" || r.ReactionType != "rejection" || r.TouchBarTime < 0 || r.ConfirmationBarTime < r.TouchBarTime || r.ConfirmationBarTime > c.CreatedAt {
+			return fmt.Errorf("opportunity: confirmed reaction needs a causal touch and closed confirmation bar")
 		}
 	}
 	if c.Technical != nil {
@@ -281,9 +301,17 @@ func cloneCandidate(c Candidate) Candidate {
 	clone := c
 	clone.Targets = append([]Target(nil), c.Targets...)
 	clone.Evidence = append([]Evidence(nil), c.Evidence...)
+	if c.Reaction != nil {
+		reaction := *c.Reaction
+		clone.Reaction = &reaction
+	}
 	if c.Technical != nil {
 		technical := *c.Technical
 		technical.HigherTimeframes = append([]HigherTimeframeBias(nil), c.Technical.HigherTimeframes...)
+		if c.Technical.Confirmation != nil {
+			confirmation := *c.Technical.Confirmation
+			technical.Confirmation = &confirmation
+		}
 		clone.Technical = &technical
 	}
 	if c.Quality.Components != nil {
