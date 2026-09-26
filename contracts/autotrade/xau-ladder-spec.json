@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "description": "The single reviewed XAU shallow/deep entry-ladder and risk-leg specification, with hand-computed cases. Held identical by Manual Algo (AutoTradeEngine.cs), the Auto Algo executor's risk leg (TradePlanRuntime.cs) and the Python calculator (xau_ladder.py). It describes the Manual Algo ladder; the Auto Algo entry ladder (execution_route.py) is a DIFFERENT, owner-defined rule and is pinned separately, not unified here.",
+  "instrument": {"symbol": "XAU", "pip_size": "0.1", "digits": 2, "pip_value_per_lot": "10", "lot_size": 10000, "min_volume": 100, "step_volume": 100, "max_volume": 100000},
+  "entry_leg_ratios": ["0.8", "0.2"],
+  "risk_leg": {"leg_id": "RISK", "order_type": "limit", "lots_default": "0.05", "lots_below_equity_floor": "0.02", "equity_floor": "1000", "pips_from_stop": "15", "xau_only": true},
+  "rounding": "prices are rounded to the instrument's digits, midpoints away from zero (decimal arithmetic, never binary floats)",
+  "go_origin_risk_leg_disabled_tag": "risk_leg:disabled",
+  "entry_price_cases": [
+    {"name": "sell_typed_range", "direction": "SELL", "zone_low": "4341.00", "zone_high": "4344.00", "stop": "4346.00", "shallow": "4341.00", "deep": "4342.50"},
+    {"name": "buy_typed_range", "direction": "BUY", "zone_low": "4048.73", "zone_high": "4052.63", "stop": "4045.00", "shallow": "4052.63", "deep": "4050.68"},
+    {"name": "buy_degenerate_zone_deep_is_half_way_to_stop", "direction": "BUY", "zone_low": "4390.00", "zone_high": "4390.00", "stop": "4384.00", "shallow": "4390.00", "deep": "4387.00"},
+    {"name": "sell_degenerate_zone", "direction": "SELL", "zone_low": "4390.00", "zone_high": "4390.00", "stop": "4396.00", "shallow": "4390.00", "deep": "4393.00"},
+    {"name": "midpoint_rounds_away_from_zero", "direction": "BUY", "zone_low": "4100.005", "zone_high": "4102.005", "stop": "4095.00", "shallow": "4102.01", "deep": "4101.01"},
+    {"name": "sell_fractional_edges", "direction": "SELL", "zone_low": "4321.115", "zone_high": "4325.335", "stop": "4330.00", "shallow": "4321.12", "deep": "4323.23"}
+  ],
+  "risk_price_cases": [
+    {"name": "sell_risk_leg_sits_15_pips_inside_the_stop", "direction": "SELL", "stop": "4346.00", "price": "4344.50"},
+    {"name": "buy_risk_leg_sits_15_pips_inside_the_stop", "direction": "BUY", "stop": "4045.00", "price": "4046.50"},
+    {"name": "buy_risk_price_rounds_away_from_zero", "direction": "BUY", "stop": "4045.055", "price": "4046.56"}
+  ],
+  "risk_volume_cases": [
+    {"equity": "200", "lots": "0.02", "volume": 200},
+    {"equity": "999.99", "lots": "0.02", "volume": 200},
+    {"equity": "1000", "lots": "0.05", "volume": 500},
+    {"equity": "50000", "lots": "0.05", "volume": 500}
+  ]
+}
