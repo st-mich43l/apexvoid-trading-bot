@@ -207,7 +207,7 @@ func (w *SymbolWorker) ApplyWithResult(event marketdata.BarEvent) (AnalysisSnaps
 			return AnalysisSnapshot{}, result, timingErr
 		}
 		candidate.ObservedTimeframe = event.Timeframe
-		candidate.Technical = w.technicalContext(event)
+		candidate.Technical = w.technicalContext(event, candidate.Reaction)
 		observed, obsErr := w.state.Opportunities.Observe(candidate, event.Candle.Time)
 		if obsErr != nil {
 			doneOpp()
@@ -291,7 +291,7 @@ func (w *SymbolWorker) rebuildContext() {
 // close as the geometric reference, and the engine's structural bias. Returns
 // nil — never a placeholder — when the ATR series is not yet available, so a
 // consumer sees "unavailable" and fails closed instead of guessing.
-func (w *SymbolWorker) technicalContext(event marketdata.BarEvent) *opportunity.TechnicalContext {
+func (w *SymbolWorker) technicalContext(event marketdata.BarEvent, reaction *opportunity.ReactionConfirmation) *opportunity.TechnicalContext {
 	atrSeries := w.state.Measurements.ATR(event.Timeframe)
 	if len(atrSeries) == 0 {
 		return nil
@@ -307,5 +307,11 @@ func (w *SymbolWorker) technicalContext(event marketdata.BarEvent) *opportunity.
 		facts.BiasDirection = bias.Direction
 		facts.BiasLayer = bias.Layer.String()
 	}
+	facts.HigherTimeframes = ClosedHigherTimeframeBiases(&w.state.Context, event.Timeframe, event.Candle.Time)
+	if reaction != nil {
+		confirmed := *reaction
+		facts.Confirmation = &confirmed
+	}
+
 	return facts
 }

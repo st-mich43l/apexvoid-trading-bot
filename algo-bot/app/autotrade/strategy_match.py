@@ -723,7 +723,22 @@ def _identity_ok(match: StrategyMatch) -> bool:
   # the same integrity boundary as legacy identities, rather than forcing Go
   # matches through the legacy structural-thesis hash.
   if GO_ORIGIN_TAG in match.tags:
-    return bool(match.structural_zone_id) and match.match_id == f"go_{match.structural_zone_id}"
+    # A confirmed Go reaction has its OWN opportunity ID, separate from
+    # its underlying canonical zone ID. The immutable Go opportunity tag
+    # provides the match identity; structural_zone_id remains the actual
+    # technical zone used by structural/risk policy. Require exactly one
+    # provenance tag and reject inconsistent or missing IDs fail-closed.
+    opportunity_ids = [
+      tag.removeprefix("go_opportunity:")
+      for tag in match.tags
+      if tag.startswith("go_opportunity:")
+    ]
+    return (
+      bool(match.structural_zone_id)
+      and len(opportunity_ids) == 1
+      and bool(opportunity_ids[0])
+      and match.match_id == f"go_{opportunity_ids[0]}"
+    )
   if match.reaction_id:
     return match.match_id == match.reaction_id
   if match.confluence_zone_id:

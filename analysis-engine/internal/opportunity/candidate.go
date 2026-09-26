@@ -101,6 +101,16 @@ func DeterministicID(identity Identity) (string, error) {
 	return "opp_" + hex.EncodeToString(sum[:]), nil
 }
 
+// ReactionConfirmation identifies the actual causal zone touch and later (or
+// same-bar) closed-bar rejection. Resting-zone candidates leave it absent.
+// A confirmed reaction receives a separate deterministic opportunity ID.
+type ReactionConfirmation struct {
+	ZoneID string
+	TouchBarTime int64
+	ConfirmationBarTime int64
+	ReactionType string
+}
+
 // TechnicalContext is the engine-owned technical facts an execution policy
 // needs to evaluate a Candidate without re-running any detector or recomputing
 // ATR from raw OHLC (S13B). Strategies never set it: SymbolWorker assigns it at
@@ -110,6 +120,15 @@ func DeterministicID(identity Identity) (string, error) {
 // It deliberately carries no quote/spread (a live, executable-price concern the
 // policy layer owns), no account fact, and no confluence *score*: strategies'
 // own Evidence and Quality are the confluence facts.
+// HigherTimeframeBias is a confirmed structural read from the named closed
+// higher-timeframe candle; it is not the entry timeframe's bias or a guess.
+type HigherTimeframeBias struct {
+	Timeframe market.Timeframe
+	Direction market.Direction
+	Layer string
+	ReferenceTime int64
+}
+
 type TechnicalContext struct {
 	// ATR is the canonical ATR of ObservedTimeframe as of the observed bar.
 	ATR float64
@@ -123,6 +142,10 @@ type TechnicalContext struct {
 	// engine has no confirmed bias — never a guessed neutral.
 	BiasDirection market.Direction
 	BiasLayer     string
+	// HigherTimeframes is ordered H1, H4; each entry is read only after its
+	// own bar has closed and is fresh at the opportunity's observation bar.
+	HigherTimeframes []HigherTimeframeBias
+	Confirmation *ReactionConfirmation
 }
 
 // Candidate is one strategy's technical opportunity, as of the source
@@ -160,6 +183,9 @@ type Candidate struct {
 	// Technical is nil until SymbolWorker attaches it; a nil value means the
 	// consumer must treat the policy inputs as unavailable (fail closed).
 	Technical *TechnicalContext
+	// Reaction is assigned by a strategy ONLY when its own confirmed thesis
+	// is observed; worker copies it into technical context at publication.
+	Reaction *ReactionConfirmation
 }
 
 // Validate verifies the lifecycle-relevant, transport-neutral Candidate
@@ -215,6 +241,12 @@ func (c Candidate) Validate() error {
 			return fmt.Errorf("opportunity: quality components need non-empty names and finite values")
 		}
 	}
+	if c.Reaction != nil {
+		r := c.Reaction
+		if r.ZoneID == "" || r.ReactionType != "rejection" || r.TouchBarTime < 0 || r.ConfirmationBarTime < r.TouchBarTime || r.ConfirmationBarTime > c.CreatedAt {
+			return fmt.Errorf("opportunity: confirmed reaction needs a causal touch and closed confirmation bar")
+		}
+	}
 	if c.Technical != nil {
 		t := c.Technical
 		if !finite(t.ATR) || t.ATR <= 0 || !finite(t.ReferencePrice) || t.ReferencePrice <= 0 || t.ReferenceTime < 0 {
@@ -222,6 +254,16 @@ func (c Candidate) Validate() error {
 		}
 		if t.BiasDirection != "" && !t.BiasDirection.IsValid() {
 			return fmt.Errorf("opportunity: technical bias direction must be BUY or SELL when present")
+		}
+		seen := make(map[market.Timeframe]bool, len(t.HigherTimeframes))
+		for _, higher := range t.HigherTimeframes {
+			if higher.Timeframe != market.H1 && higher.Timeframe != market.H4 {
+				return fmt.Errorf("opportunity: higher timeframe must be H1 or H4")
+			}
+			if seen[higher.Timeframe] || !higher.Direction.IsValid() || higher.Layer == "" || higher.ReferenceTime < 0 || higher.ReferenceTime > c.CreatedAt {
+				return fmt.Errorf("opportunity: higher timeframe needs distinct causal confirmed structure")
+			}
+			seen[higher.Timeframe] = true
 		}
 	}
 	if c.Provenance.StructureVersion == "" || c.Provenance.LiquidityVersion == "" || c.Provenance.ZoneVersion == "" || c.Provenance.ConfigVersion <= 0 || c.Provenance.ConfigFingerprint == "" {
@@ -259,8 +301,17 @@ func cloneCandidate(c Candidate) Candidate {
 	clone := c
 	clone.Targets = append([]Target(nil), c.Targets...)
 	clone.Evidence = append([]Evidence(nil), c.Evidence...)
+	if c.Reaction != nil {
+		reaction := *c.Reaction
+		clone.Reaction = &reaction
+	}
 	if c.Technical != nil {
 		technical := *c.Technical
+		technical.HigherTimeframes = append([]HigherTimeframeBias(nil), c.Technical.HigherTimeframes...)
+		if c.Technical.Confirmation != nil {
+			confirmation := *c.Technical.Confirmation
+			technical.Confirmation = &confirmation
+		}
 		clone.Technical = &technical
 	}
 	if c.Quality.Components != nil {
