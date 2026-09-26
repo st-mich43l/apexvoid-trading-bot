@@ -166,6 +166,11 @@ var rank = map[string]int{
 	"shadowcompare":                0,
 
 	"engine": 8,
+
+	// S14C offline replay adapter: drives the engine from a captured bar
+	// stream and encodes what the producer would have published. Above the
+	// engine on purpose; nothing under internal/ may import it (cmd/replay does).
+	"replaycapture": 9,
 }
 
 // leaf packages: exempt from having their own imports checked; nothing
