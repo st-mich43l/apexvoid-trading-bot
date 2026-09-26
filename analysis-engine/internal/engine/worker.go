@@ -307,33 +307,7 @@ func (w *SymbolWorker) technicalContext(event marketdata.BarEvent) *opportunity.
 		facts.BiasDirection = bias.Direction
 		facts.BiasLayer = bias.Layer.String()
 	}
-	// Never read a still-forming H1/H4 candle: market.Candle.Time is the
-	// *open* timestamp, whereas the current strategy event is a closed bar.
-	// Reuse canonical per-timeframe Structure; never run a second HTF detector.
-	observedMinutes, valid := event.Timeframe.Minutes()
-	if !valid {
-		return facts
-	}
-	observedClose := event.Candle.Time + int64(observedMinutes)*60
-	for _, tf := range []market.Timeframe{market.H1, market.H4} {
-		frame, exists := w.state.Context.Timeframes[tf]
-		if !exists || len(frame.Candles) == 0 {
-			continue
-		}
-		minutes, _ := tf.Minutes()
-		latest := frame.Candles[len(frame.Candles)-1]
-		closeAt := latest.Time + int64(minutes)*60
-		// A closed HTF bar from a previous session is not current context.
-		if closeAt > observedClose || observedClose-closeAt > int64(minutes)*120 {
-			continue
-		}
-		bias := context.DeriveBias(frame.Structure)
-		if !bias.Direction.IsValid() {
-			continue
-		}
-		facts.HigherTimeframes = append(facts.HigherTimeframes, opportunity.HigherTimeframeBias{
-			Timeframe: tf, Direction: bias.Direction, Layer: bias.Layer.String(), ReferenceTime: latest.Time,
-		})
-	}
+	facts.HigherTimeframes = ClosedHigherTimeframeBiases(&w.state.Context, event.Timeframe, event.Candle.Time)
+
 	return facts
 }
