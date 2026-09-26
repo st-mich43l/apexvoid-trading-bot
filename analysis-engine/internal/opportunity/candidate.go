@@ -110,6 +110,15 @@ func DeterministicID(identity Identity) (string, error) {
 // It deliberately carries no quote/spread (a live, executable-price concern the
 // policy layer owns), no account fact, and no confluence *score*: strategies'
 // own Evidence and Quality are the confluence facts.
+// HigherTimeframeBias is a confirmed structural read from the named closed
+// higher-timeframe candle; it is not the entry timeframe's bias or a guess.
+type HigherTimeframeBias struct {
+	Timeframe market.Timeframe
+	Direction market.Direction
+	Layer string
+	ReferenceTime int64
+}
+
 type TechnicalContext struct {
 	// ATR is the canonical ATR of ObservedTimeframe as of the observed bar.
 	ATR float64
@@ -123,6 +132,9 @@ type TechnicalContext struct {
 	// engine has no confirmed bias — never a guessed neutral.
 	BiasDirection market.Direction
 	BiasLayer     string
+	// HigherTimeframes is ordered H1, H4; each entry is read only after its
+	// own bar has closed and is fresh at the opportunity's observation bar.
+	HigherTimeframes []HigherTimeframeBias
 }
 
 // Candidate is one strategy's technical opportunity, as of the source
@@ -223,6 +235,16 @@ func (c Candidate) Validate() error {
 		if t.BiasDirection != "" && !t.BiasDirection.IsValid() {
 			return fmt.Errorf("opportunity: technical bias direction must be BUY or SELL when present")
 		}
+		seen := make(map[market.Timeframe]bool, len(t.HigherTimeframes))
+		for _, higher := range t.HigherTimeframes {
+			if higher.Timeframe != market.H1 && higher.Timeframe != market.H4 {
+				return fmt.Errorf("opportunity: higher timeframe must be H1 or H4")
+			}
+			if seen[higher.Timeframe] || !higher.Direction.IsValid() || higher.Layer == "" || higher.ReferenceTime < 0 || higher.ReferenceTime > c.CreatedAt {
+				return fmt.Errorf("opportunity: higher timeframe needs distinct causal confirmed structure")
+			}
+			seen[higher.Timeframe] = true
+		}
 	}
 	if c.Provenance.StructureVersion == "" || c.Provenance.LiquidityVersion == "" || c.Provenance.ZoneVersion == "" || c.Provenance.ConfigVersion <= 0 || c.Provenance.ConfigFingerprint == "" {
 		return fmt.Errorf("opportunity: complete analytical and configuration provenance is required")
@@ -261,6 +283,7 @@ func cloneCandidate(c Candidate) Candidate {
 	clone.Evidence = append([]Evidence(nil), c.Evidence...)
 	if c.Technical != nil {
 		technical := *c.Technical
+		technical.HigherTimeframes = append([]HigherTimeframeBias(nil), c.Technical.HigherTimeframes...)
 		clone.Technical = &technical
 	}
 	if c.Quality.Components != nil {
