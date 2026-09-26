@@ -12,6 +12,14 @@ needs neither. Every command prints one JSON document.
   python -m app.scripts.analysis_authority rollback --symbol XAU --scope supply \\
       --expected-epoch 3 --actor <name> --reason <text>
   python -m app.scripts.analysis_authority rollback-all --actor <name> --reason <text>
+  python -m app.scripts.analysis_authority withdraw --symbol XAU --scope supply \\
+      --actor <name> --reason <text>
+
+`rollback` / `rollback-all` are two ordered steps: (1) flip the fence, so Go can
+create and publish nothing new; (2) withdraw what Go already made (matches,
+unpublished setups, queued/unfilled plans via a cancel intent the executor
+honours; open positions are never touched). If step 2 fails after step 1 the
+command reports it and exits 3; `withdraw` re-runs step 2 and is idempotent.
 
 `grant` fails unless an unexpired `accept` for the same symbol/scope/evidence
 exists; `--expected-epoch` (from `status`) makes a stale operator lose the
@@ -33,6 +41,7 @@ from app.analysis_client.authority import (
   PostgresAuthorityStore,
   TransferRefused,
 )
+from app.autotrade.go_plan_cancel import SOURCE_ROLLBACK, withdraw_go_scope
 
 
 async def _status(store: PostgresAuthorityStore, symbol: str | None) -> dict:
@@ -48,6 +57,20 @@ async def _status(store: PostgresAuthorityStore, symbol: str | None) -> dict:
     rec = store._row(row)
     scopes.append({**asdict(rec), "effective_owner": rec.effective_owner(now)})
   return {"scopes": scopes, "note": "absent scope == python owns it at epoch 0"}
+
+
+async def _withdraw(symbol: str, scope: str | None, reason: str, actor: str) -> dict:
+  """Step 2 of a rollback. Never raises: the fence has already flipped, so a
+  Redis failure is reported for the operator to re-run, not lost."""
+  try:
+    from app.persistence import redis_state
+    report = await withdraw_go_scope(
+      redis_state.get_client(), symbol=symbol, scope=scope, reason=reason,
+      source=SOURCE_ROLLBACK, now=int(time.time()), actor=actor,
+    )
+    return report.as_dict()
+  except Exception as exc:  # noqa: BLE001
+    return {"error": f"{type(exc).__name__}: {exc}", "symbol": symbol.upper(), "scope": scope}
 
 
 async def run(args: argparse.Namespace) -> dict:
@@ -71,10 +94,17 @@ async def run(args: argparse.Namespace) -> dict:
       args.symbol, args.scope, expected_epoch=args.expected_epoch, actor=args.actor,
       reason=args.reason, drain_seconds=args.drain_seconds,
     )
-    return {"handover": asdict(rec), "note": "Go stops now; Python resumes after drain_until"}
+    withdrawal = await _withdraw(args.symbol, args.scope, args.reason, args.actor)
+    return {
+      "handover": asdict(rec), "withdrawal": withdrawal,
+      "note": "Go stops now; Python resumes after drain_until; queued/unfilled Go plans are cancelled, open positions are kept",
+    }
   if args.command == "rollback-all":
     moved = await fence.rollback_all(actor=args.actor, reason=args.reason, drain_seconds=args.drain_seconds)
-    return {"rolled_back": [asdict(rec) for rec in moved]}
+    withdrawals = [await _withdraw(rec.symbol, rec.strategy_id, args.reason, args.actor) for rec in moved]
+    return {"rolled_back": [asdict(rec) for rec in moved], "withdrawals": withdrawals}
+  if args.command == "withdraw":
+    return {"withdrawal": await _withdraw(args.symbol, args.scope, args.reason, args.actor)}
   raise AssertionError(args.command)
 
 
@@ -113,6 +143,11 @@ def build_parser() -> argparse.ArgumentParser:
 
   rollback_all = sub.add_parser("rollback-all")
   audit(rollback_all)
+
+  withdraw = sub.add_parser("withdraw", help="re-run the withdrawal step of a rollback (idempotent)")
+  scope(withdraw, epoch=False)
+  withdraw.add_argument("--actor", required=True)
+  withdraw.add_argument("--reason", required=True)
   return parser
 
 
@@ -124,7 +159,8 @@ def main(argv: list[str] | None = None) -> int:
     print(json.dumps({"refused": exc.code, "message": str(exc)}, indent=2))
     return 2
   print(json.dumps(result, indent=2, sort_keys=True, default=str))
-  return 0
+  failed = [w for w in [result.get("withdrawal"), *result.get("withdrawals", [])] if w and "error" in w]
+  return 3 if failed else 0
 
 
 if __name__ == "__main__":

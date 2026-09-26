@@ -265,7 +265,10 @@ class Harness:
     await self._ensure()
     await self.fence.record_acceptance(symbol, scope, "ev", approved_by="owner", ttl_seconds=3600)
     await self.fence.begin_transfer(symbol, scope, "go", expected_epoch=0, actor="owner", reason="approved", evidence_ref="ev", drain_seconds=5)
-    self.clock.advance(5)
+    # Past the drain, and past the go-effective boundary by more than the
+    # "observed a minute ago" age of ``event()``: only opportunities observed
+    # after activation may adapt (S14B), so the fixture activates two minutes ago.
+    self.clock.advance(5 + 120)
 
   async def decisions(self):
     await self._ensure()

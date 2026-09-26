@@ -147,6 +147,8 @@ DIVERGENCES: dict[str, dict] = {
   "analysis.yml/analysis.technical_authority.mode": {"kind": "new_surfaced", "expected": "python", "reason": "S12A — Go analysis authority rollout gate; no old-config precedent. Default keeps Python authority."},
   "analysis.yml/analysis.technical_authority.consumer_enabled": {"kind": "new_surfaced", "expected": False, "reason": "S12A — starts the durable Go opportunity consumer; default off preserves Python-only production behaviour."},
   "analysis.yml/analysis.technical_authority.consumer_group": {"kind": "new_surfaced", "expected": "apexvoid-algo-bot-analysis-opportunity-v1", "reason": "S12A — stable Kafka consumer group for the Go opportunity lifecycle."},
+  "analysis.yml/analysis.technical_authority.max_event_age_seconds": {"kind": "new_surfaced", "expected": 900, "reason": "S14B — freshness limit for a NEW live Go plan (confirmed-observation age at consumption); no old-config precedent."},
+  "analysis.yml/analysis.technical_authority.max_delivery_lag_seconds": {"kind": "new_surfaced", "expected": 300, "reason": "S14B — Kafka publish->consume lag limit so a backlogged event never becomes a fresh plan; no old-config precedent."},
   "analysis.yml/analysis.structure.pivot.left_bars": {"kind": "new_surfaced", "expected": 2, "reason": "Matches Python's common swing_fractal_n=2 default."},
   "analysis.yml/analysis.structure.pivot.right_bars": {"kind": "new_surfaced", "expected": 2, "reason": "Matches Python's common swing_fractal_n=2 default."},
   "analysis.yml/analysis.structure.swing.minimum_excursion_atr": {"kind": "new_surfaced", "expected": 0.5, "reason": "No Python precedent — new V2 layer-promotion floor, initial calibration."},

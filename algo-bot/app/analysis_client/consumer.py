@@ -63,7 +63,9 @@ class AnalysisOpportunityConsumer:
       # event is redelivered, and the (idempotent) policy retries. Failing
       # closed means a missed plan, never a duplicate or a half-authorised one.
       if isinstance(event, OpportunityEnvelope):
-        outcome = await self._policy.on_creation(event, result)
+        stamp = getattr(record, "timestamp", None)  # Kafka publish time, ms
+        published_at = int(stamp // 1000) if isinstance(stamp, (int, float)) and stamp > 0 else None
+        outcome = await self._policy.on_creation(event, result, published_at=published_at)
       else:
         outcome = await self._policy.on_terminal(event, result)
       log.info("Go analysis policy opportunity=%s outcome=%s", result.opportunity_id, outcome)
@@ -100,10 +102,21 @@ async def analysis_opportunity_consumer_loop() -> None:
   await consumer.start()
   await redis_state.publish_component_health(component="analysis_opportunity_consumer", state="ready")
   try:
-    while True:
-      record = await consumer.getone()
-      # If durable handling fails, do not commit: Kafka redelivers the event.
-      await handler.process_record(record)
-      await consumer.commit({TopicPartition(record.topic, record.partition): record.offset + 1})
+    await run_consumer_loop(consumer, handler, partition_key=TopicPartition)
   finally:
     await consumer.stop()
+
+
+async def run_consumer_loop(consumer: Any, handler: AnalysisOpportunityConsumer, *, partition_key: Callable[[str, int], Any]) -> None:
+  """The commit discipline, separated from Kafka so it is testable end to end.
+
+  An offset is committed only after ``process_record`` returned: a failure in
+  the ledger *or* the policy leaves it uncommitted and the record is redelivered
+  (every step is idempotent by identity), which is what makes a crash between
+  "match written" and "offset committed" safe. Poison records are recorded as
+  rejections inside ``process_record`` and do advance.
+  """
+  while True:
+    record = await consumer.getone()
+    await handler.process_record(record)
+    await consumer.commit({partition_key(record.topic, record.partition): record.offset + 1})

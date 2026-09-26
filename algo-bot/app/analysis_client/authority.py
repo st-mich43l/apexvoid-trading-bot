@@ -22,9 +22,11 @@ observations, manual trading and management of already-open positions are
 unaffected: ownership is a property of who may create a plan, not of who
 manages one.
 
-The fence is consulted only when the Go consumer is enabled
-(``analysis.technical_authority.consumer_enabled``); with it off, Python owns
-every scope by definition and no database read is made.
+The live fence is consulted only when the Go consumer is enabled
+(``analysis.technical_authority.consumer_enabled``). Turning the consumer off
+is *not* a rollback: a scope still recorded as Go-owned (or mid-handover) stays
+closed to legacy Python plans, enforced without a per-plan DB read by a
+periodically refreshed ``AuthoritySnapshot`` that fails closed when stale (S14B).
 """
 
 from __future__ import annotations
@@ -32,7 +34,7 @@ from __future__ import annotations
 import time
 from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Any, Protocol
 
 OWNER_PYTHON = "python"
 OWNER_GO = "go"
@@ -130,6 +132,18 @@ class AuthorityRecord:
       return self.owner
     return self.target_owner if now >= self.drain_until else OWNER_NONE  # type: ignore[return-value]
 
+  @property
+  def go_effective_at(self) -> int:
+    """The durable live-activation boundary for Go: the instant this record
+    made Go the effective publisher. A creation whose technical time is before
+    it is history, not a new opportunity (S14B). For a direct ``go`` row (only
+    ever written by hand, never by begin_transfer) the row's own update time."""
+    if self.owner == OWNER_DRAINING and self.target_owner == OWNER_GO:
+      return self.drain_until
+    if self.owner == OWNER_GO:
+      return self.updated_at
+    return 0
+
 
 def default_record(symbol: str, strategy_id: str) -> AuthorityRecord:
   return AuthorityRecord(symbol.upper(), strategy_id, OWNER_PYTHON, None, 0)
@@ -142,6 +156,8 @@ class AuthorityDecision:
   owner: str = OWNER_PYTHON
   epoch: int = 0
   scopes: tuple[str, ...] = ()
+  # Go decisions only: the activation boundary of the record that allowed it.
+  boundary: int = 0
 
 
 class AuthorityStore(Protocol):
@@ -150,6 +166,9 @@ class AuthorityStore(Protocol):
   async def has_acceptance(self, symbol: str, strategy_id: str, evidence_ref: str, now: int) -> bool: ...
   async def record_acceptance(self, symbol: str, strategy_id: str, evidence_ref: str, approved_by: str, approved_at: int, expires_at: int) -> None: ...
   async def owned_by(self, owner: str) -> list[AuthorityRecord]: ...
+  async def active_handovers(self) -> list[AuthorityRecord]: ...
+  async def record_runtime_audit(self, **fields: Any) -> None: ...
+  async def last_runtime_audit(self) -> dict[str, Any] | None: ...
 
 
 class AuthorityFence:
@@ -221,7 +240,7 @@ class AuthorityFence:
       return AuthorityDecision(False, f"scope_owned_by_{owner}", owner, rec.epoch, (strategy_id,))
     if epoch is not None and epoch != rec.epoch:
       return AuthorityDecision(False, "stale_authority_epoch", owner, rec.epoch, (strategy_id,))
-    return AuthorityDecision(True, "go_owns_scope", OWNER_GO, rec.epoch, (strategy_id,))
+    return AuthorityDecision(True, "go_owns_scope", OWNER_GO, rec.epoch, (strategy_id,), boundary=rec.go_effective_at)
 
   async def begin_transfer(
     self,
@@ -401,6 +420,167 @@ class PostgresAuthorityStore:
       )
     return [self._row(row) for row in rows]
 
+  async def active_handovers(self) -> list[AuthorityRecord]:
+    """Every row that is not plainly Python-owned (go, or draining either way)."""
+    from app.persistence import store
+    async with store._connect() as db:
+      rows = await db.fetch(
+        "SELECT * FROM analysis_authority_scopes WHERE owner <> 'python' ORDER BY symbol, strategy_id",
+      )
+    return [self._row(row) for row in rows]
+
+  async def record_runtime_audit(
+    self, *, at: int, event: str, consumer_enabled: bool, mode: str,
+    previous_consumer_enabled: bool | None, go_bound_scopes: list[str], detail: str,
+  ) -> None:
+    import json
+    from app.persistence import store
+    async with store._connect() as db:
+      await db.execute(
+        """
+        INSERT INTO analysis_authority_runtime_audit
+          (at, event, consumer_enabled, mode, previous_consumer_enabled, go_bound_scopes, detail)
+        VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7)
+        """,
+        at, event, consumer_enabled, mode, previous_consumer_enabled, json.dumps(go_bound_scopes), detail,
+      )
+
+  async def last_runtime_audit(self) -> dict[str, Any] | None:
+    from app.persistence import store
+    async with store._connect() as db:
+      row = await db.fetchrow("SELECT * FROM analysis_authority_runtime_audit ORDER BY audit_id DESC LIMIT 1")
+    return dict(row) if row else None
+
+
+async def audit_authority_runtime(
+  store: AuthorityStore, *, consumer_enabled: bool, mode: str, clock: Callable[[], float] = time.time,
+) -> dict[str, Any]:
+  """Append the boot-time authority audit row and return what was recorded.
+
+  ``consumer_enabled`` is a config flag, not fence state, so flipping it is
+  invisible to the per-scope transition log. This makes it visible: every boot
+  writes a row, a change from the previous boot is a distinct
+  ``consumer_enabled_changed`` event, and a consumer that is off while a scope is
+  still Go-owned/mid-handover is flagged ``consumer_disabled_go_scopes_fail_closed``
+  (those scopes then publish from *nobody*: the snapshot guard denies legacy
+  Python plans and no Go events are consumed). The correct way to give a scope
+  back to Python is the fenced rollback, never the flag.
+  """
+  now = int(clock())
+  previous = await store.last_runtime_audit()
+  before = None if previous is None else bool(previous["consumer_enabled"])
+  bound = sorted(f"{r.symbol}:{r.strategy_id}" for r in await store.active_handovers())
+  if not consumer_enabled and bound:
+    event = "consumer_disabled_go_scopes_fail_closed"
+    detail = "consumer is off but scopes are not Python-owned; legacy Python plans stay blocked until a fenced rollback completes"
+  elif before is not None and before != consumer_enabled:
+    event = "consumer_enabled_changed"
+    detail = f"consumer_enabled {before} -> {consumer_enabled}"
+  else:
+    event = "runtime_boot"
+    detail = ""
+  row = {
+    "at": now, "event": event, "consumer_enabled": consumer_enabled, "mode": mode,
+    "previous_consumer_enabled": before, "go_bound_scopes": bound, "detail": detail,
+  }
+  await store.record_runtime_audit(**row)
+  return row
+
+
+SNAPSHOT_MAX_AGE_SECONDS = 90.0
+SNAPSHOT_REFRESH_SECONDS = 15.0
+
+
+class AuthoritySnapshot:
+  """Process-local view of every non-Python scope, for the consumer-off case.
+
+  With the Go consumer disabled there is no live fence read on the publish hot
+  path, so a scope still recorded as Go-owned (or mid-handover) would let a
+  legacy Python plan through: turning the consumer off is *not* a rollback. A
+  periodically refreshed snapshot closes that hole without a DB read per plan.
+  It is stale-safe: past ``max_age`` without a successful refresh it denies
+  Python publication into every catalog-mapped scope (fail closed).
+  """
+
+  def __init__(self, clock: Callable[[], float] = time.time, *, max_age: float = SNAPSHOT_MAX_AGE_SECONDS):
+    self._clock = clock
+    self._max_age = max_age
+    self._records: dict[tuple[str, str], AuthorityRecord] = {}
+    self._loaded_at: float | None = None
+    self._required = False
+
+  @property
+  def initialized(self) -> bool:
+    return self._loaded_at is not None
+
+  def require(self) -> None:
+    """Called once the watch loop is running in production: from then on a
+    snapshot that never loaded is as unsafe as a stale one (fail closed).
+    Un-required snapshots (unit tests, one-shot CLIs) default to Python."""
+    self._required = True
+
+  async def refresh(self, store: AuthorityStore) -> int:
+    rows = await store.active_handovers()
+    self._records = {(r.symbol.upper(), r.strategy_id): r for r in rows}
+    self._loaded_at = self._clock()
+    return len(rows)
+
+  def go_bound(self) -> list[AuthorityRecord]:
+    now = self._clock()
+    return [r for r in self._records.values() if r.effective_owner(now) != OWNER_PYTHON]
+
+  def authorize_python_publication(self, symbol: str, scopes: Iterable[str]) -> AuthorityDecision:
+    scopes = tuple(scopes)
+    if self._loaded_at is None:
+      if self._required:
+        return AuthorityDecision(False, "authority_snapshot_unavailable", OWNER_NONE, 0, scopes)
+      return AuthorityDecision(True, "authority_snapshot_uninitialized_python_default", scopes=scopes)
+    if self._clock() - self._loaded_at > self._max_age:
+      return AuthorityDecision(False, "authority_snapshot_stale", OWNER_NONE, 0, scopes)
+    now = self._clock()
+    for scope in scopes:
+      rec = self._records.get((symbol.upper(), scope))
+      if rec is not None and rec.effective_owner(now) != OWNER_PYTHON:
+        return AuthorityDecision(False, f"scope_owned_by_{rec.effective_owner(now)}_consumer_disabled", rec.effective_owner(now), rec.epoch, scopes)
+    return AuthorityDecision(True, "python_owns_scope_snapshot", OWNER_PYTHON, 0, scopes)
+
+
+_default_snapshot = AuthoritySnapshot()
+
+
+def get_snapshot() -> AuthoritySnapshot:
+  return _default_snapshot
+
+
+def reset_snapshot_for_tests() -> None:
+  global _default_snapshot
+  _default_snapshot = AuthoritySnapshot()
+
+
+async def refresh_authority_snapshot(store: AuthorityStore | None = None) -> int:
+  """Boot-time and loop refresh; raises on DB failure so boot cannot proceed
+  blind (a Go-owned scope must never be discovered *after* Python publishes)."""
+  return await get_snapshot().refresh(store or PostgresAuthorityStore())
+
+
+async def authority_watch_loop(interval: float = SNAPSHOT_REFRESH_SECONDS) -> None:
+  """Supervised background task: keep the snapshot fresh while running."""
+  import asyncio
+  import logging
+  log = logging.getLogger(__name__)
+  get_snapshot().require()
+  announced: tuple[str, ...] | None = None
+  while True:
+    try:
+      await refresh_authority_snapshot()
+      bound = tuple(sorted(f"{r.symbol}:{r.strategy_id}:{r.effective_owner(time.time())}" for r in get_snapshot().go_bound()))
+      if bound != announced:            # log transitions, not every tick
+        announced = bound
+        log.warning("technical-authority: non-Python scopes now %s", list(bound) or "none")
+    except Exception:  # noqa: BLE001 - stale snapshot fails closed by itself
+      log.exception("technical-authority snapshot refresh failed")
+    await asyncio.sleep(interval)
+
 
 _default_fence: AuthorityFence | None = None
 
@@ -425,10 +605,12 @@ async def authorize_legacy_match(
   tags: Iterable[str] = (),
   consumer_enabled: bool,
   fence: AuthorityFence | None = None,
+  snapshot: AuthoritySnapshot | None = None,
 ) -> AuthorityDecision:
   """Single publication predicate for an executable TradePlan.
 
-  * consumer disabled           -> Python owns everything (no DB read).
+  * consumer disabled           -> Python owns every scope the fence snapshot
+                                   does not show as Go-owned/mid-handover.
   * match carries GO_ORIGIN_TAG -> must be Go-owned at publish time.
   * otherwise (legacy detector) -> every mapped scope must be Python-owned.
   Any failure to read the fence denies publication: two publishers is worse
@@ -437,7 +619,13 @@ async def authorize_legacy_match(
   tag_set = tuple(tags)
   is_go = GO_ORIGIN_TAG in tag_set
   if not consumer_enabled and not is_go:
-    return AuthorityDecision(True, "consumer_disabled_python_authority")
+    # No per-plan DB read here, but never a blind allow: a scope still
+    # recorded as Go-owned/mid-handover stays closed to legacy Python plans
+    # even though the consumer is off (see AuthoritySnapshot).
+    scopes = catalog_ids_for_legacy(strategy_name, direction)
+    if not scopes:
+      return AuthorityDecision(True, "no_catalog_scope")
+    return (snapshot or get_snapshot()).authorize_python_publication(symbol, scopes)
   fence = fence or get_fence()
   try:
     if is_go:
