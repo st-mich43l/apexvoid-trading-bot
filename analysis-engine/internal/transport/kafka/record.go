@@ -31,6 +31,15 @@ type TechnicalContextPayload struct {
 	ReferencePrice float64      `json:"reference_price"`
 	ReferenceTime  int64        `json:"reference_time"`
 	Bias           *BiasPayload `json:"bias,omitempty"`
+	HigherTimeframes []HigherTimeframeBiasPayload `json:"higher_timeframes,omitempty"`
+}
+
+// HigherTimeframeBiasPayload is one fresh, causally closed H1/H4 structure.
+type HigherTimeframeBiasPayload struct {
+	Timeframe string `json:"timeframe"`
+	Direction string `json:"direction"`
+	Layer string `json:"layer"`
+	ReferenceTime int64 `json:"reference_time"`
 }
 
 // BiasPayload is the engine's confirmed structural bias; absent means none.
