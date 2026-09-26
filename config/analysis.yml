@@ -8,11 +8,15 @@
 # question for the owner) — analysis.yml is the closest fit since these
 # are all analysis *inputs*, not execution or delivery concerns.
 analysis:
-  # S12A/B foundation is deliberately inactive. S12C enables go_shadow only
-  # after its production shadow evidence is reviewed; `go` remains rejected.
+  # S14F: go_shadow. The Go opportunity consumer runs and every creation goes
+  # through the real policy dry run (analysis_shadow_decisions); it can create no
+  # plan, reservation, card or order and moves no authority. Python stays the only
+  # publisher. Roll back by reverting this pair to `python` / `false`.
+  # `go` is S14G: it is configured only after the acceptance report is reviewed
+  # and grants nothing by itself (a fenced, operator-approved transfer does).
   technical_authority:
-    mode: python
-    consumer_enabled: false
+    mode: go_shadow
+    consumer_enabled: true
     consumer_group: apexvoid-algo-bot-analysis-opportunity-v1
     # S14B live-freshness limits. A NEW live plan needs a confirmed observation
     # no older than max_event_age_seconds and a Kafka publish->consume gap no
