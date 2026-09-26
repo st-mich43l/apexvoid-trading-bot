@@ -53,8 +53,10 @@ class AnalysisOpportunityConsumer:
       log.warning("rejected Go analysis event topic=%s partition=%s offset=%s reason=%s", topic, partition, offset, exc)
       return
     result = await self._repository.apply(event, topic=topic, partition=partition, offset=offset)
+    stamp = getattr(record, "timestamp", None)  # Kafka publish time, ms
+    published_at = int(stamp // 1000) if isinstance(stamp, (int, float)) and stamp > 0 else None
     if self._mode == "go_shadow" and isinstance(event, OpportunityEnvelope):
-      decision = await self._shadow.evaluate_creation(event) if self._shadow else None
+      decision = await self._shadow.evaluate_creation(event, published_at=published_at) if self._shadow else None
       log.info("Go analysis shadow opportunity=%s disposition=%s outcome=%s", result.opportunity_id, result.disposition, decision.outcome if decision else "disabled")
     else:
       log.info("Go analysis lifecycle opportunity=%s disposition=%s", result.opportunity_id, result.disposition)
@@ -63,8 +65,6 @@ class AnalysisOpportunityConsumer:
       # event is redelivered, and the (idempotent) policy retries. Failing
       # closed means a missed plan, never a duplicate or a half-authorised one.
       if isinstance(event, OpportunityEnvelope):
-        stamp = getattr(record, "timestamp", None)  # Kafka publish time, ms
-        published_at = int(stamp // 1000) if isinstance(stamp, (int, float)) and stamp > 0 else None
         outcome = await self._policy.on_creation(event, result, published_at=published_at)
       else:
         outcome = await self._policy.on_terminal(event, result)
@@ -84,7 +84,10 @@ async def analysis_opportunity_consumer_loop() -> None:
   except ImportError as exc:  # deployment must install requirements before feature enablement
     raise RuntimeError("aiokafka is required for the analysis opportunity consumer") from exc
   repository = PostgresAnalysisOpportunityRepository()
-  shadow = AnalysisShadowEvaluator(repository) if authority.mode == "go_shadow" else None
+  shadow = None
+  if authority.mode == "go_shadow":
+    from app.autotrade.go_shadow_policy import GoShadowPolicy
+    shadow = AnalysisShadowEvaluator(repository, dry_run=GoShadowPolicy(repository).dry_run_creation)
   policy = None
   if authority.mode == "go":
     from app.autotrade.go_opportunity_policy import GoOpportunityPolicy

@@ -12,7 +12,10 @@ import asyncio
 import json
 import logging
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
+from typing import Any
 
 import redis.asyncio as redis
 from redis.asyncio.retry import Retry
@@ -48,8 +51,27 @@ def _build_client() -> redis.Redis:
   )
 
 
+# S14A: a shadow dry run installs an in-memory overlay for the *current asyncio
+# context only* (tasks it spawns inherit it; concurrent live tasks do not see
+# it), so any helper that reaches for the shared client cannot write to the
+# production Redis while a dry run is in flight.
+_client_override: ContextVar[Any] = ContextVar("redis_state_client_override", default=None)
+
+
+@contextmanager
+def client_override(client: Any) -> Iterator[None]:
+  token = _client_override.set(client)
+  try:
+    yield
+  finally:
+    _client_override.reset(token)
+
+
 def _get_client() -> redis.Redis:
   global _client
+  override = _client_override.get()
+  if override is not None:
+    return override
   if _client is None:
     _client = _build_client()
   return _client
