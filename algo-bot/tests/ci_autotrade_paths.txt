@@ -57,3 +57,4 @@ tests/test_analysis_authority_fence.py
 tests/test_analysis_authority_cli.py
 tests/test_go_opportunity_policy.py
 tests/test_worker_authority_fence.py
+tests/test_s14c_policy_replay.py

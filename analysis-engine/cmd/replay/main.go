@@ -28,6 +28,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/marketdata"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/replaycapture"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/visualization"
 )
 
@@ -46,6 +47,9 @@ type jsonBar struct {
 
 func main() {
 	barsPath := flag.String("bars", "", "path to a JSONL file of bars ({\"t\":...,\"o\":...,\"h\":...,\"l\":...,\"c\":...,\"v\":...} per line), oldest first")
+	capturePath := flag.String("capture", "", "S14C: path to a multi-timeframe real capture (contracts/analysis/replay/*.json); replaces -bars, dispatches every timeframe in causal close order")
+	envelopesOut := flag.String("envelopes-out", "", "S14C, with -capture: write every discovered opportunity as a deterministic analysis.opportunity.v1 envelope (JSONL) to this path")
+	deriveH4 := flag.Bool("derive-h4", false, "S14C, with -capture: derive H4 from H1 (UTC-aligned). Off by default: the production feed delivers no H4, so the faithful replay has H1 only")
 	configPath := flag.String("config", "", "path to config/apexvoid.yml (Configuration V3 root)")
 	symbol := flag.String("symbol", "XAU", "symbol these bars belong to")
 	timeframe := flag.String("timeframe", "M5", "timeframe these bars belong to")
@@ -59,6 +63,17 @@ func main() {
 	verbose := flag.Bool("verbose", false, "print every final live opportunity as well as aggregate counts")
 	flag.Parse()
 
+	if *capturePath != "" {
+		if *barsPath != "" || *configPath == "" {
+			fmt.Fprintln(os.Stderr, "usage: replay -capture <capture.json> -config <apexvoid.yml> [-symbol XAU] [-timeframe M5] [-envelopes-out out.jsonl] [-derive-h4]  (-capture excludes -bars)")
+			os.Exit(2)
+		}
+		if err := runCapture(*capturePath, *configPath, market.Symbol(*symbol), market.Timeframe(*timeframe), *envelopesOut, *deriveH4); err != nil {
+			fmt.Fprintln(os.Stderr, "replay:", err)
+			os.Exit(1)
+		}
+		return
+	}
 	if *barsPath == "" || *configPath == "" {
 		fmt.Fprintln(os.Stderr, "usage: replay -bars <file.jsonl> -config <apexvoid.yml> [-symbol XAU] [-timeframe M5] [-png out.png] [-setup-png-dir dir -strategy id|-opportunity-id id-prefix]")
 		os.Exit(2)
@@ -276,4 +291,72 @@ func readBars(path string) ([]market.Candle, error) {
 		return nil, err
 	}
 	return out, nil
+}
+
+// runCapture replays a real multi-timeframe capture through the same
+// Engine.Dispatch path a live feed uses (S14C) and optionally exports every
+// discovered opportunity as a deterministic Kafka-shaped envelope, so the
+// Python consumer/adapter can be exercised on exactly what Go would publish.
+func runCapture(capturePath, configPath string, symbol market.Symbol, primary market.Timeframe, envelopesOut string, deriveH4 bool) error {
+	doc, err := config.ResolveDocument(configPath)
+	if err != nil {
+		return fmt.Errorf("loading config: %w", err)
+	}
+	capture, err := replaycapture.Load(capturePath)
+	if err != nil {
+		return err
+	}
+	if capture.Symbol != symbol {
+		return fmt.Errorf("capture is for %s, not %s", capture.Symbol, symbol)
+	}
+	result, err := replaycapture.Replay(doc, capture, primary, replaycapture.Options{DeriveH4: deriveH4})
+	if err != nil {
+		return err
+	}
+	type tally struct{ total, confirmed, withHTF int }
+	counts := make(map[string]*tally)
+	var out *bufio.Writer
+	if envelopesOut != "" {
+		f, err := os.Create(envelopesOut)
+		if err != nil {
+			return fmt.Errorf("creating %s: %w", envelopesOut, err)
+		}
+		defer f.Close()
+		out = bufio.NewWriter(f)
+		defer out.Flush()
+	}
+	for _, candidate := range result.Discovered {
+		key := fmt.Sprintf("%s/%s", candidate.Strategy, candidate.ObservedTimeframe)
+		if counts[key] == nil {
+			counts[key] = &tally{}
+		}
+		counts[key].total++
+		if candidate.Technical != nil && candidate.Technical.Confirmation != nil {
+			counts[key].confirmed++
+		}
+		if candidate.Technical != nil && len(candidate.Technical.HigherTimeframes) > 0 {
+			counts[key].withHTF++
+		}
+		if out != nil {
+			line, err := replaycapture.CreationEnvelope(candidate, result.Options)
+			if err != nil {
+				return fmt.Errorf("encoding %s: %w", candidate.ID, err)
+			}
+			out.Write(line)
+			out.WriteByte('\n')
+		}
+	}
+	fmt.Printf("replayed %d events (%d timeframes; H4 derived from H1: %t) for %s\n", result.Events, result.Timeframes, result.DerivedH4, symbol)
+	keys := make([]string, 0, len(counts))
+	for k := range counts {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		fmt.Printf("  %-28s created=%d confirmed=%d with_htf=%d\n", k, counts[k].total, counts[k].confirmed, counts[k].withHTF)
+	}
+	if envelopesOut != "" {
+		fmt.Printf("  wrote %d envelopes to %s\n", len(result.Discovered), envelopesOut)
+	}
+	return nil
 }
