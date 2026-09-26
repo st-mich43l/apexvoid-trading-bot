@@ -221,6 +221,26 @@ func replay(t *testing.T) (*replaycapture.Result, [][]byte) {
 	return result, lines
 }
 
+// normalizeEnvelope pins the one field that legitimately varies with unrelated
+// configuration edits: config_fingerprint hashes the whole resolved config, so a
+// change to any leaf (e.g. a new technical_authority setting) must not churn the
+// golden. Numbers keep their exact text (UseNumber); keys come out sorted.
+func normalizeEnvelope(t *testing.T, line []byte) []byte {
+	t.Helper()
+	decoder := json.NewDecoder(bytes.NewReader(line))
+	decoder.UseNumber()
+	var envelope map[string]any
+	if err := decoder.Decode(&envelope); err != nil {
+		t.Fatal(err)
+	}
+	envelope["config_fingerprint"] = "<config-fingerprint>"
+	out, err := json.Marshal(envelope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
 func isConfirmedZoneReaction(c opportunity.Candidate) bool {
 	return (c.Strategy == "supply" || c.Strategy == "demand") && c.ObservedTimeframe == market.M5 &&
 		c.Technical != nil && c.Technical.Confirmation != nil
@@ -241,10 +261,11 @@ func TestRealCaptureReplayIsDeterministicAndMatchesTheCommittedGolden(t *testing
 	all := sha256.New()
 	confirmed := 0
 	for i, candidate := range result.Discovered {
-		all.Write(lines[i])
+		normalized := normalizeEnvelope(t, lines[i])
+		all.Write(normalized)
 		all.Write([]byte("\n"))
 		if isConfirmedZoneReaction(candidate) {
-			golden.Write(lines[i])
+			golden.Write(normalized)
 			golden.WriteByte('\n')
 			confirmed++
 		}
