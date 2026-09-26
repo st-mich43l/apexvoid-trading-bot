@@ -32,6 +32,16 @@ type TechnicalContextPayload struct {
 	ReferenceTime  int64        `json:"reference_time"`
 	Bias           *BiasPayload `json:"bias,omitempty"`
 	HigherTimeframes []HigherTimeframeBiasPayload `json:"higher_timeframes,omitempty"`
+	Confirmation *ReactionConfirmationPayload `json:"confirmation,omitempty"`
+}
+
+// ReactionConfirmationPayload describes a confirmed, separate zone-reaction
+// opportunity. Its fields are never synthesized from the primary bias.
+type ReactionConfirmationPayload struct {
+	ZoneID string `json:"zone_id"`
+	TouchBarTime int64 `json:"touch_bar_time"`
+	ConfirmationBarTime int64 `json:"confirmation_bar_time"`
+	ReactionType string `json:"reaction_type"`
 }
 
 // HigherTimeframeBiasPayload is one fresh, causally closed H1/H4 structure.
