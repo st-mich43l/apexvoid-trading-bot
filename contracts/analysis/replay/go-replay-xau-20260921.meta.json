@@ -1,0 +1,10 @@
+{
+  "description": "S14C Go replay of the committed real XAU capture (regenerate with UPDATE_GOLDEN=1 go test ./test/replaycapture)",
+  "capture": "xau-production-capture-20260921.json",
+  "total_discovered": 1702,
+  "total_envelopes_sha256": "d5176dd2fe4a3aa7dfef41c4ea1851292d977dd843db785bfa897c22c4fc7070",
+  "golden_supply_demand_confirmed_count": 185,
+  "h4_derived_from_h1_utc_aligned": false,
+  "timeframes_dispatched": 3,
+  "events_dispatched": 2400
+}
