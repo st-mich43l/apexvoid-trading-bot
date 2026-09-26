@@ -124,6 +124,18 @@
               "reference_time": { "type": "integer", "minimum": 0 }
             }
           }
+        },
+        "confirmation": {
+          "type": "object",
+          "description": "Additive V1 facts only on an independently identified, confirmed zone-reaction opportunity. Resting-zone opportunities omit this block and remain non-executable.",
+          "additionalProperties": false,
+          "required": ["zone_id", "touch_bar_time", "confirmation_bar_time", "reaction_type"],
+          "properties": {
+            "zone_id": { "type": "string", "minLength": 1 },
+            "touch_bar_time": { "type": "integer", "minimum": 0 },
+            "confirmation_bar_time": { "type": "integer", "minimum": 0 },
+            "reaction_type": { "type": "string", "enum": ["rejection"] }
+          }
         }
       }
     }
