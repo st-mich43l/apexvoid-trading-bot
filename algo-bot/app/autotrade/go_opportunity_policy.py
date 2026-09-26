@@ -127,8 +127,14 @@ def match_id_for(opportunity_id: str) -> str:
   return f"go_{opportunity_id}"
 
 
+# Plan tag the executor honours (contracts/autotrade/xau-ladder-spec.json): a plan carrying it never
+# receives the executor-injected XAU risk leg. Go-origin plans carry it until the separate
+# analysis.technical_authority.go_origin_risk_leg_enabled gate is turned on.
+RISK_LEG_DISABLED_TAG = "risk_leg:disabled"
+
+
 def build_strategy_match(
-  event: OpportunityEnvelope, *, profile: ScopeProfile, epoch: int, now: int,
+  event: OpportunityEnvelope, *, profile: ScopeProfile, epoch: int, now: int, risk_leg_enabled: bool = False,
 ) -> StrategyMatch:
   """Pure translation. Raises AdapterRejection rather than approximating."""
   payload = event.payload
@@ -200,6 +206,7 @@ def build_strategy_match(
     "bias_source:go_primary_tf",
     f"go_reaction:{reaction.reaction_type}",
     f"htf_bias_source:go_{higher.timeframe}" if higher is not None else "htf_bias_unavailable",
+    *(() if risk_leg_enabled else (RISK_LEG_DISABLED_TAG,)),
   )
   eligibility = ExecutionEligibility(
     version=EXECUTION_ELIGIBILITY_VERSION,
@@ -276,7 +283,9 @@ class GoOpportunityPolicy:
     clock: Callable[[], float] = time.time,
     multiple_matches_enabled: Callable[[], bool] | None = None,
     freshness_limits: Callable[[], FreshnessLimits] | None = None,
+    risk_leg_enabled: Callable[[], bool] | None = None,
   ):
+    self._risk_leg = risk_leg_enabled
     self._repository = repository
     self._fence = fence
     self._client_factory = client_factory
@@ -298,6 +307,12 @@ class GoOpportunityPolicy:
       return self._multiple()
     from app.core.config import runtime_config
     return bool(runtime_config.strategies.matching.multiple_matches_enabled)
+
+  def _risk_leg_enabled(self) -> bool:
+    if self._risk_leg is not None:
+      return self._risk_leg()
+    from app.core.config import runtime_config
+    return bool(runtime_config.analysis.technical_authority.go_origin_risk_leg_enabled)
 
   def _freshness_limits(self) -> FreshnessLimits:
     if self._limits is not None:
@@ -368,7 +383,7 @@ class GoOpportunityPolicy:
       await self._decide(event, "not_adapted", verdict.code, owner=decision.owner, epoch=decision.epoch, **verdict.details())
       return "not_adapted"
     try:
-      match = build_strategy_match(event, profile=profile, epoch=decision.epoch, now=now)
+      match = build_strategy_match(event, profile=profile, epoch=decision.epoch, now=now, risk_leg_enabled=self._risk_leg_enabled())
     except AdapterRejection as exc:
       await self._decide(event, "rejected", exc.code, message=exc.message)
       return "rejected"

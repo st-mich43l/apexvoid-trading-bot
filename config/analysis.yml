@@ -19,6 +19,9 @@ analysis:
     # larger than max_delivery_lag_seconds; older events only rebuild the ledger.
     max_event_age_seconds: 900
     max_delivery_lag_seconds: 300
+    # S14E: the executor-injected XAU risk leg is NOT added to Go-origin plans until
+    # this gate is turned on (separate from execution.reaction_risk_leg.enabled).
+    go_origin_risk_leg_enabled: false
 
   # Canonical ATR decision (rebuild-configuration-architecture.md §4):
   # the Go migration audit (docs/go-analysis-migration-audit.md §2.1) found

@@ -1,42 +1,47 @@
 """Shared XAU shallow/deep entry-ladder and risk-leg calculator.
 
-Phase S12 (Unified Manual & Auto Algo Trading Experience) asks for one
-shared XAU ladder/risk-leg mechanism instead of the two independent
-implementations that exist today, both in C#:
+The single reviewed specification lives in ``contracts/autotrade/xau-ladder-spec.json`` and is
+held identical by three implementations, each pinned to the same hand-computed cases:
 
-- Manual Algo: ``ctrader-engine/src/AutoTradeEngine.cs``
-  (``ManualEntryLegPrices``, ``ManualAlgoRiskLegPrice``,
-  ``ManualAlgoRiskLegVolume``, ``ManualEntryLegRatios``).
-- Auto Algo (TradePlan V8): a second, independently-declared copy of the
-  identical risk-leg constants in ``ctrader-engine/src/TradePlanRuntime.cs``
-  (``ReactionRiskLeg*``), injected at runtime - Python's own ``TradePlan``
-  contract never declares this leg at all, so it is invisible to any
-  group-risk accounting.
+- Manual Algo: ``ctrader-engine/src/AutoTradeEngine.cs`` (``ManualEntryLegPrices``,
+  ``ManualAlgoRiskLegPrice``, ``ManualAlgoRiskLegVolume``, ``ManualEntryLegRatios``);
+- the Auto Algo executor's injected risk leg: ``ctrader-engine/src/TradePlanRuntime.cs``
+  (``ReactionRiskLeg*``, the same constants declared a second time);
+- this module.
 
-This module is the Python-side single source of truth those two should
-eventually both defer to, ported line-for-line from the C# formulas above
-(verified against the source, not re-derived) so it produces identical
-numbers to what Manual Algo already places live. It is deliberately NOT
-wired into any execution path yet: neither ``manual_execution.py`` nor
-``trade_plan_builder.py`` calls this module. Using it to actually decide
-what gets submitted to the broker is a separate, later step that needs a
-shadow-comparison window against real Manual Algo fills first, the same
-discipline this codebase already applied to the Go analysis-engine
-rollout - a silently-wrong shared formula here would affect two live
-order-placement paths at once instead of one.
+What this is **not**: the Auto Algo *entry* ladder (``execution_route._scale_ladder_legs`` /
+``_deeper_second_leg``: leg 2 one ATR step deeper, capped at the far edge, ratios from the
+equity table) is a different owner-defined rule. Nothing here unifies the two; a test pins
+where they differ so any future change is deliberate. This module is still not wired into any
+execution path, and the risk leg is not activated for Go-origin plans (see
+``analysis.technical_authority.go_origin_risk_leg_enabled``).
+
+All arithmetic is decimal, matching the C# ``decimal`` behaviour: prices are rounded to the
+instrument's digits, midpoints away from zero. Binary floats would round 4101.005 down.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import ROUND_HALF_UP, Decimal
 
-# Verified against ctrader-engine/src/AutoTradeEngine.cs (ManualEntryLegRatios,
-# ManualAlgoRiskLegLotsDefault/LotsBelowEquityFloor/EquityFloor/PipsFromStop).
+# Verified against ctrader-engine/src/AutoTradeEngine.cs and pinned by the shared spec.
 ENTRY_LEG_RATIOS: tuple[float, float] = (0.8, 0.2)
 RISK_LEG_LOTS_DEFAULT = 0.05
 RISK_LEG_LOTS_BELOW_EQUITY_FLOOR = 0.02
 RISK_LEG_EQUITY_FLOOR = 1_000.0
 RISK_LEG_PIPS_FROM_STOP = 15.0
+XAU_DIGITS = 2
+
+
+def _d(value: float | int | str | Decimal) -> Decimal:
+  return value if isinstance(value, Decimal) else Decimal(repr(value) if isinstance(value, float) else str(value))
+
+
+def round_price(value: float | Decimal, digits: int = XAU_DIGITS) -> float:
+  """Round to ``digits`` decimals, midpoints away from zero (C# MidpointRounding.AwayFromZero)."""
+  quantum = Decimal(1).scaleb(-digits)
+  return float(_d(value).quantize(quantum, rounding=ROUND_HALF_UP))
 
 
 @dataclass(frozen=True)
@@ -50,55 +55,56 @@ def entry_leg_prices(
   zone_low: float,
   zone_high: float,
   stop_loss: float,
+  *,
+  digits: int = XAU_DIGITS,
 ) -> EntryLegPrices:
-  """Shallow (near edge, most likely to fill) and Deep (best price, least
-  likely to fill) - ports ManualEntryLegPrices exactly.
+  """Shallow (near edge, most likely to fill) and Deep (best price, least likely to fill).
 
-  A real typed range (zone_low != zone_high) places Shallow at the near
-  edge (High for BUY, Low for SELL) and Deep at the zone's own midpoint.
-  A degenerate/single-price zone has no span to split, so Deep is the
-  midpoint between the typed price and the stop - this never places a leg
-  past the halfway point to the stop.
+  A real typed range (zone_low != zone_high) places Shallow at the near edge (High for BUY,
+  Low for SELL) and Deep at the zone's own midpoint. A degenerate zone has no span to split,
+  so Deep is the midpoint between the typed price and the stop: never past halfway to it.
   """
   direction = direction.upper()
-  if zone_low != zone_high:
-    shallow = zone_high if direction == "BUY" else zone_low
-    deep = (zone_low + zone_high) / 2.0
+  low, high, stop = _d(zone_low), _d(zone_high), _d(stop_loss)
+  if low != high:
+    shallow = high if direction == "BUY" else low
+    deep = (low + high) / 2
   else:
-    shallow = zone_low
-    deep = shallow + (stop_loss - shallow) / 2.0
-  return EntryLegPrices(shallow=shallow, deep=deep)
+    shallow = low
+    deep = shallow + (stop - shallow) / 2
+  return EntryLegPrices(shallow=round_price(shallow, digits), deep=round_price(deep, digits))
 
 
-def risk_leg_price(direction: str, stop_loss: float, pip_size: float) -> float:
-  """Rests RISK_LEG_PIPS_FROM_STOP pips from the stop, on the entry side -
-  ports ManualAlgoRiskLegPrice exactly. A deliberate "trade off" spot: if
-  price nearly invalidates the setup before reversing, this leg still
-  catches a much deeper (better) fill than Shallow/Deep ever would; if it
-  keeps going instead, the small fixed size (see risk_leg_volume) caps the
-  extra loss.
-  """
-  offset = RISK_LEG_PIPS_FROM_STOP * pip_size
-  return stop_loss + offset if direction.upper() == "BUY" else stop_loss - offset
+def risk_leg_price(direction: str, stop_loss: float, pip_size: float, *, digits: int = XAU_DIGITS) -> float:
+  """Rests RISK_LEG_PIPS_FROM_STOP pips from the stop, on the entry side."""
+  offset = _d(RISK_LEG_PIPS_FROM_STOP) * _d(pip_size)
+  stop = _d(stop_loss)
+  return round_price(stop + offset if direction.upper() == "BUY" else stop - offset, digits)
 
 
 def risk_leg_volume(equity: float) -> float:
-  """Equity-tiered (live account equity, not balance) fixed lot size, never
-  scaled from the main ladder's own sizing - ports ManualAlgoRiskLegVolume
-  exactly. A large account books the same small fixed size here as a
-  smaller one above the floor.
-  """
-  return (
-    RISK_LEG_LOTS_BELOW_EQUITY_FLOOR
-    if equity < RISK_LEG_EQUITY_FLOOR
-    else RISK_LEG_LOTS_DEFAULT
-  )
+  """Equity-tiered (live account equity, not balance) fixed lot size, never scaled from the main
+  ladder's own sizing."""
+  return RISK_LEG_LOTS_BELOW_EQUITY_FLOOR if equity < RISK_LEG_EQUITY_FLOOR else RISK_LEG_LOTS_DEFAULT
+
+
+def volume_for_lots(lots: float, *, lot_size: int, min_volume: int, step_volume: int, max_volume: int) -> int:
+  """Broker volume for a lot size: floor to the step, 0 when below the minimum or above the
+  maximum. Ports ``VolumePlanner.VolumeForLots`` exactly."""
+  lots_d = _d(lots)
+  if lots_d <= 0 or lot_size <= 0 or min_volume <= 0 or step_volume <= 0 or max_volume < min_volume:
+    return 0
+  raw = int((lots_d * lot_size).to_integral_value(rounding="ROUND_FLOOR"))
+  if raw > max_volume:
+    return 0
+  stepped = raw // step_volume * step_volume
+  return stepped if stepped >= min_volume else 0
 
 
 @dataclass(frozen=True)
 class LadderLeg:
   price: float
-  volume: float
+  volume: float                 # lots
   is_risk_leg: bool = False
 
 
@@ -113,13 +119,8 @@ def build_ladder(
   equity: float,
   include_risk_leg: bool = True,
 ) -> tuple[LadderLeg, ...]:
-  """The full leg set (Shallow, Deep, optionally the risk leg) for one XAU
-  group - the shape both Manual and Auto Algo place today via their own
-  separate C# implementations. Pure computation only: no broker-minimum-
-  volume collapse, no order submission. A caller enforcing a broker
-  minimum still needs its own fallback to a single-entry order, exactly
-  as VolumePlanner.SplitEntryVolume does today in C#.
-  """
+  """The full leg set (Shallow, Deep, optionally the risk leg) for one XAU group. Pure
+  computation: no broker-minimum collapse, no order submission."""
   prices = entry_leg_prices(direction, zone_low, zone_high, stop_loss)
   shallow_ratio, deep_ratio = ENTRY_LEG_RATIOS
   legs = [
@@ -136,13 +137,16 @@ def build_ladder(
 
 
 def worst_case_group_risk(legs: tuple[LadderLeg, ...], stop_loss: float) -> float:
-  """Sum of every leg's own volume * its own distance to the stop, i.e.
-  the loss if every resting leg fills and the group then stops out -
-  including the risk leg. Neither AutoTradeEngine.cs (excludes the risk
-  leg from its own worst-case report) nor TradePlanRuntime.cs (never
-  computes this at all - TradePlan.risk.max_group_risk_percent is
-  deserialized but never read) does this full computation today; this is
-  the piece Phase S12's "critical risk requirement" (spec S12 prompt §9)
-  asks for before any group-risk gate can be real.
-  """
+  """Sum of every leg's own volume * its own distance to the stop: the loss (in lot-price units)
+  if every resting leg fills and the group then stops out, including the risk leg."""
   return sum(leg.volume * abs(leg.price - stop_loss) for leg in legs)
+
+
+def worst_case_group_loss(
+  legs: tuple[LadderLeg, ...], stop_loss: float, *, pip_size: float, pip_value_per_lot: float,
+) -> float:
+  """The same worst case in account currency: lots x pips-to-stop x pip value per lot per leg."""
+  return sum(
+    float(_d(leg.volume) * (abs(_d(leg.price) - _d(stop_loss)) / _d(pip_size)) * _d(pip_value_per_lot))
+    for leg in legs
+  )

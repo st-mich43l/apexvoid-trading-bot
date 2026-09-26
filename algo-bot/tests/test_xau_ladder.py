@@ -11,7 +11,7 @@ def test_entry_leg_prices_sell_uses_low_shallow_and_midpoint_deep():
 def test_entry_leg_prices_buy_uses_high_shallow_and_midpoint_deep():
   prices = xau_ladder.entry_leg_prices("BUY", 4048.73, 4052.63, 4045.0)
   assert prices.shallow == 4052.63
-  assert prices.deep == (4048.73 + 4052.63) / 2.0
+  assert prices.deep == 4050.68           # midpoint, rounded to the instrument's 2 digits
 
 
 def test_entry_leg_prices_degenerate_zone_uses_stop_midpoint():

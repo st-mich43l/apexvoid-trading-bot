@@ -2208,6 +2208,10 @@ public sealed class TradePlanRuntime(
       // is a materially different risk (reproduced live on a USDJPY CRT
       // trade that got a RISK leg it should never have had).
       && string.Equals(plan.Symbol, "XAU", StringComparison.OrdinalIgnoreCase)
+      // S14E: a plan that carries RiskLegDisabledTag (every Go-origin plan until the
+      // separate analysis.technical_authority.go_origin_risk_leg_enabled gate is on)
+      // never gets the injected leg; Python-owned plans are untouched.
+      && !PlanDisablesReactionRiskLeg(plan)
       && (plan.Entry.Legs?.Count ?? 0) > 1
       && plan.Entry.Type
         is TradePlanContract.EntryTypeLimitLadder
@@ -4269,6 +4273,11 @@ public sealed class TradePlanRuntime(
   // exactly like Manual Algo's. Purely a C# addition: Python never plans
   // or knows about this leg, exactly like it never knew about Manual
   // Algo's - see options.ReactionRiskLegEnabled for the kill switch.
+  public const string RiskLegDisabledTag = "risk_leg:disabled";
+
+  private static bool PlanDisablesReactionRiskLeg(TradePlan plan) =>
+    plan.Analysis.Tags?.Contains(RiskLegDisabledTag, StringComparer.Ordinal) ?? false;
+
   private const string ReactionRiskLegId = "RISK";
   private const decimal ReactionRiskLegLotsDefault = 0.05m;
   private const decimal ReactionRiskLegLotsBelowEquityFloor = 0.02m;
