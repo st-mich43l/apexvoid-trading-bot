@@ -8,6 +8,8 @@ on:
   pull_request:
     paths:
       - "algo-bot/**"
+      - "analysis-engine/**"
+      - "contracts/analysis/**"
       - "ctrader-engine/**"
       - "contracts/autotrade/**"
       - "contracts/configuration/**"
@@ -93,6 +95,22 @@ jobs:
         with:
           name: s13-legacy-import-inventory
           path: algo-bot/s13-legacy-imports.json
+
+  go-analysis:
+    name: Go analysis strategy and contract suite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: analysis-engine/go.mod
+          cache-dependency-path: analysis-engine/go.sum
+      - name: Build, vet and test
+        working-directory: analysis-engine
+        run: |
+          go build ./...
+          go vet ./...
+          go test ./...
 
   csharp:
     name: C# autotrade suite
