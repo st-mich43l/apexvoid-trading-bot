@@ -90,6 +90,42 @@ def test_supply_translation_is_exact_and_carries_authority_provenance():
   assert elig.measured["source"] == "go" and elig.reward_risk == round(85 / 62.5, 4)
 
 
+def test_go_higher_timeframe_bias_never_uses_primary_m5_as_substitute():
+  raw = golden()
+  p = raw["payload"]
+  observed = p["technical_context"]["reference_time"]
+  p["technical_context"]["higher_timeframes"] = [
+    {"timeframe": "H4", "direction": "BUY", "layer": "intermediate", "reference_time": observed - 18000},
+    {"timeframe": "H1", "direction": "SELL", "layer": "major", "reference_time": observed - 3900},
+  ]
+  ev = parse_analysis_event(OpportunityTopic, json.dumps(raw))
+  match = pol.build_strategy_match(ev, profile=SUPPLY, epoch=1, now=p["created_at"] + 1)
+  assert match.htf_bias == "down"
+  assert "htf_bias_source:go_H1" in match.tags
+  # Preserve the H4 disagreement on the Kafka contract; do not flatten it
+  # into the primary bias or replace the reviewed H1-first policy.
+  assert {item.timeframe: item.direction for item in ev.payload.technical_context.higher_timeframes} == {"H1": "SELL", "H4": "BUY"}
+
+
+@pytest.mark.parametrize("mutate", [
+  lambda r: r["payload"]["technical_context"]["higher_timeframes"].append(
+    dict(r["payload"]["technical_context"]["higher_timeframes"][0])
+  ),
+  lambda r: r["payload"]["technical_context"]["higher_timeframes"].__setitem__(
+    0, {"timeframe": "H1", "direction": "SELL", "layer": "major", "reference_time": r["payload"]["created_at"]}
+  ),
+])
+def test_higher_timeframe_duplicates_and_unclosed_bars_fail_contract(mutate):
+  raw = golden()
+  raw["payload"]["technical_context"]["higher_timeframes"] = [
+    {"timeframe": "H1", "direction": "SELL", "layer": "major", "reference_time": raw["payload"]["created_at"] - 3900},
+  ]
+  mutate(raw)
+  from app.analysis_client.models import AnalysisContractError
+  with pytest.raises(AnalysisContractError):
+    parse_analysis_event(OpportunityTopic, json.dumps(raw))
+
+
 def test_counter_bias_and_neutral_are_derived_only_from_go_bias():
   raw = golden()
   raw["payload"]["technical_context"]["bias"]["direction"] = "BUY"
