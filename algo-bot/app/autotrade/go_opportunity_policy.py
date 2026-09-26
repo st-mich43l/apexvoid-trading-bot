@@ -161,6 +161,8 @@ def build_strategy_match(
 
   bias = tech.bias.direction if tech.bias else None
   relation = "neutral" if bias is None else ("with_bias" if bias == direction else "counter_bias")
+  higher = next((item for tf in ("H1", "H4") for item in tech.higher_timeframes if item.timeframe == tf), None)
+  htf_bias = ("up" if higher.direction == "BUY" else "down") if higher is not None else ""
   reasons = tuple(item.code for item in payload.evidence)
   confluence = len(reasons)
   legacy = profile.legacy_strategy
@@ -178,6 +180,7 @@ def build_strategy_match(
     f"kind:{profile.structural_kind}",
     f"bias:{relation}",
     "bias_source:go_primary_tf",
+    f"htf_bias_source:go_{higher.timeframe}" if higher is not None else "htf_bias_unavailable",
   )
   eligibility = ExecutionEligibility(
     version=EXECUTION_ELIGIBILITY_VERSION,
@@ -229,7 +232,7 @@ def build_strategy_match(
     structural_zone_high=high,
     structural_kind=profile.structural_kind,
     structural_timeframe=payload.timeframe.upper(),
-    htf_bias="",
+    htf_bias=htf_bias,
     regime_kind="",
     bias_relationship=relation,
     execution_eligibility=eligibility,
