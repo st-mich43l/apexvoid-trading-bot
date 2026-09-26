@@ -193,6 +193,27 @@ func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate 
 			},
 		}
 		candidates = append(candidates, candidate)
+		if reaction := confirmedRejection(z, tfCtx.Candles); reaction != nil {
+			// The initial resting-zone opportunity remains a technical
+			// observation. Only a distinct, causally identified reaction can
+			// enter Algo Bot's confirmed-zone policy.
+			confirmed := candidate
+			confirmedID, identityErr := opportunity.DeterministicID(opportunity.Identity{
+				Strategy: ID, StrategyVersion: Version, Symbol: ctx.Symbol, Direction: market.Buy,
+				SetupKey: fmt.Sprintf("zone:%s:rejection:%d:%d", z.ID, reaction.TouchBarTime, reaction.ConfirmationBarTime),
+			})
+			if identityErr != nil {
+				continue
+			}
+			confirmed.ID = confirmedID
+			confirmed.FormedAt = z.CreatedAt
+			confirmed.CreatedAt = reaction.ConfirmationBarTime
+			confirmed.ExpiresAt = confirmed.CreatedAt + int64(s.cfg.ExpiryHours*3600)
+			confirmed.Reaction = reaction
+			confirmed.Evidence = append(append([]opportunity.Evidence(nil), candidate.Evidence...),
+				opportunity.Evidence{Code: "m5_demand_zone_rejection_confirmed"})
+			candidates = append(candidates, confirmed)
+		}
 	}
 	return candidates
 }

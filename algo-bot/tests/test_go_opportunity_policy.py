@@ -50,6 +50,20 @@ def golden(now: int | None = None, **payload_overrides):
     for key in ("formed_at", "created_at", "expires_at"):
       p[key] += shift
     p["technical_context"]["reference_time"] += shift
+  # A reviewed, test-only confirmed event. The raw Go golden file remains
+  # the unconfirmed resting-zone example; production must obtain these
+  # fields from Go's independent causal reaction and H1/H4 calculations.
+  p = raw["payload"]
+  observed = p["technical_context"]["reference_time"]
+  p["technical_context"]["confirmation"] = {
+    "zone_id": "zone-golden-supply",
+    "touch_bar_time": observed - 300,
+    "confirmation_bar_time": observed,
+    "reaction_type": "rejection",
+  }
+  p["technical_context"]["higher_timeframes"] = [{
+    "timeframe": "H1", "direction": "SELL", "layer": "major", "reference_time": observed - 3900,
+  }]
   raw["payload"].update(payload_overrides)
   return raw
 
@@ -79,15 +93,66 @@ def test_supply_translation_is_exact_and_carries_authority_provenance():
   assert match.absolute_target_price == 4344.0
   assert match.reasons == ("m5_supply_zone_fresh", "m5_supply_zone_relevance_immediate")
   assert match.confluence == 2
-  assert match.structural_kind == "supply" and match.structural_zone_id == "opp_golden_supply_xau"
+  assert match.structural_kind == "supply" and match.structural_zone_id == "zone-golden-supply"
   assert match.match_id == "go_opp_golden_supply_xau" and match.thesis_id.startswith("go-thesis-")
-  assert match.htf_bias == "" and match.regime_kind == ""     # not invented from a different timeframe
+  assert match.htf_bias == "down" and match.regime_kind == ""  # real Go H1 structure; no invented regime
+  assert (match.touch_bar_ts, match.confirmation_bar_ts, match.reaction_type) == (str(ev.payload.created_at - 300), str(ev.payload.created_at), "rejection")
   assert match.bias_relationship == "with_bias" and match.strategy_mode == "with_bias"  # Go bias SELL == direction
   tags = set(match.tags)
-  assert {auth.GO_ORIGIN_TAG, "catalog:supply", "authority_epoch:3", "bias_source:go_primary_tf"} <= tags
+  assert {auth.GO_ORIGIN_TAG, "catalog:supply", "authority_epoch:3", "bias_source:go_primary_tf", "htf_bias_source:go_H1", "go_reaction:rejection"} <= tags
   elig = match.execution_eligibility
   assert elig.allowed and elig.planned_entry_price == 4354.25
   assert elig.measured["source"] == "go" and elig.reward_risk == round(85 / 62.5, 4)
+
+
+def test_go_higher_timeframe_bias_never_uses_primary_m5_as_substitute():
+  raw = golden()
+  p = raw["payload"]
+  observed = p["technical_context"]["reference_time"]
+  p["technical_context"]["higher_timeframes"] = [
+    {"timeframe": "H4", "direction": "BUY", "layer": "intermediate", "reference_time": observed - 18000},
+    {"timeframe": "H1", "direction": "SELL", "layer": "major", "reference_time": observed - 3900},
+  ]
+  ev = parse_analysis_event(OpportunityTopic, json.dumps(raw))
+  match = pol.build_strategy_match(ev, profile=SUPPLY, epoch=1, now=p["created_at"] + 1)
+  assert match.htf_bias == "down"
+  assert "htf_bias_source:go_H1" in match.tags
+  # Preserve the H4 disagreement on the Kafka contract; do not flatten it
+  # into the primary bias or replace the reviewed H1-first policy.
+  assert {item.timeframe: item.direction for item in ev.payload.technical_context.higher_timeframes} == {"H1": "SELL", "H4": "BUY"}
+
+
+@pytest.mark.parametrize("mutate", [
+  lambda r: r["payload"]["technical_context"]["higher_timeframes"].append(
+    dict(r["payload"]["technical_context"]["higher_timeframes"][0])
+  ),
+  lambda r: r["payload"]["technical_context"]["higher_timeframes"].__setitem__(
+    0, {"timeframe": "H1", "direction": "SELL", "layer": "major", "reference_time": r["payload"]["created_at"]}
+  ),
+])
+def test_higher_timeframe_duplicates_and_unclosed_bars_fail_contract(mutate):
+  raw = golden()
+  raw["payload"]["technical_context"]["higher_timeframes"] = [
+    {"timeframe": "H1", "direction": "SELL", "layer": "major", "reference_time": raw["payload"]["created_at"] - 3900},
+  ]
+  mutate(raw)
+  from app.analysis_client.models import AnalysisContractError
+  with pytest.raises(AnalysisContractError):
+    parse_analysis_event(OpportunityTopic, json.dumps(raw))
+
+
+@pytest.mark.parametrize("field,value", [
+  ("touch_bar_time", -1),
+  ("confirmation_bar_time", 10**12),
+  ("reaction_type", "assumed_reclaim"),
+  ("zone_id", ""),
+])
+def test_invalid_reaction_evidence_is_rejected_at_the_kafka_contract(field, value):
+  raw = golden()
+  raw["payload"]["technical_context"]["confirmation"][field] = value
+  from app.analysis_client.models import AnalysisContractError
+  with pytest.raises(AnalysisContractError):
+    parse_analysis_event(OpportunityTopic, json.dumps(raw))
 
 
 def test_counter_bias_and_neutral_are_derived_only_from_go_bias():
@@ -114,7 +179,6 @@ def test_demand_translation_mirrors_geometry_for_buy():
 
 @pytest.mark.parametrize("mutate,code", [
   (lambda r: r["payload"].pop("technical_context"), "technical_context_unavailable"),
-  (lambda r: r["payload"].pop("timeframe"), "missing_observed_timeframe"),
   (lambda r: r["payload"].update(symbol="NOSUCH"), "unknown_instrument"),
   (lambda r: r["payload"].update(targets=[{"price": {"price": 4352.48}}]), "target_not_beyond_entry"),
 ])
@@ -125,6 +189,30 @@ def test_missing_or_unusable_facts_are_rejected_not_approximated(mutate, code):
   with pytest.raises(pol.AdapterRejection) as exc:
     pol.build_strategy_match(ev, profile=SUPPLY, epoch=1, now=raw["payload"]["created_at"] + 1)
   assert exc.value.code == code
+
+
+def test_missing_observed_timeframe_with_htf_facts_fails_at_contract_boundary():
+  raw = golden()
+  del raw["payload"]["timeframe"]
+  from app.analysis_client.models import AnalysisContractError
+  with pytest.raises(AnalysisContractError, match="timeframe is required"):
+    parse_analysis_event(OpportunityTopic, json.dumps(raw))
+
+
+def test_confirmed_go_identity_survives_redis_without_confusing_zone_and_opportunity():
+  match = pol.build_strategy_match(event(), profile=SUPPLY, epoch=3, now=golden()["payload"]["created_at"] + 1)
+  from app.autotrade.multi_match import serialize_matches, deserialize_matches
+  from dataclasses import replace
+  assert match.match_id != f"go_{match.structural_zone_id}"
+  assert deserialize_matches(serialize_matches([match])) == [match]
+  # A missing, forged, or duplicated opportunity provenance cannot turn a
+  # real zone into a differently identified executable Go opportunity.
+  for bad in (
+    replace(match, tags=tuple(t for t in match.tags if not t.startswith("go_opportunity:"))),
+    replace(match, tags=match.tags + ("go_opportunity:other",)),
+    replace(match, match_id="go_some_other_opportunity"),
+  ):
+    assert deserialize_matches(serialize_matches([bad])) == []
 
 
 def test_direction_and_expiry_guards():
@@ -294,71 +382,50 @@ async def _outcome(client, match):
 
 
 @pytest.mark.asyncio
-async def test_existing_live_policy_refuses_an_unconfirmed_go_zone_thesis(h):
-  """The real gate, not a mock: legacy zone policy trades *confirmed reactions*.
-
-  A Go S7 zone opportunity is a resting thesis and carries no touch /
-  confirmation / reaction-type facts. The adapter must NOT fabricate them, so
-  the unchanged V8 pipeline correctly fails closed. Trading resting Go zones
-  needs an owner-approved confirmation policy or Go-side reaction facts — it
-  is a product/risk decision, recorded as a blocker in docs/analysis/s13-*.
-  """
+async def test_resting_go_zone_is_a_non_executable_observation(h):
   await h.grant()
-  await h.deliver(event(int(h.clock.now)))
-  client = redis_state.get_client()
-  match = deserialize_matches(await client.get(strategy_matches_key("XAU")))[0]
-  assert (match.touch_bar_ts, match.m5_confirmation_bar_ts, match.reaction_type) == (None, None, None)
+  raw = golden(int(h.clock.now))
+  del raw["payload"]["technical_context"]["confirmation"]
+  assert await h.deliver(parse_analysis_event(OpportunityTopic, json.dumps(raw))) == "rejected"
+  assert (await h.decisions())[-1]["reason"] == "reaction_confirmation_unavailable"
+  assert await redis_state.get_client().get(strategy_matches_key("XAU")) is None
 
-  plan_id = await worker._publish_trade_plan_v8(client, "XAU", _spot(4354.1, 4354.3), match, frames={"M1": _m1_trigger_bar()})
 
-  assert plan_id is None
-  outcome = await _outcome(client, match)
-  assert outcome["reason_code"] == "confirmation_metadata_missing" and outcome["status"] == "blocked"
-  assert (await load_setup(client, match.match_id)).state == INVALIDATED
+def test_missing_go_htf_structure_is_rejected_not_recreated_from_m5():
+  raw = golden()
+  del raw["payload"]["technical_context"]["higher_timeframes"]
+  ev = parse_analysis_event(OpportunityTopic, json.dumps(raw))
+  with pytest.raises(pol.AdapterRejection) as exc:
+    pol.build_strategy_match(ev, profile=SUPPLY, epoch=1, now=raw["payload"]["created_at"] + 1)
+  assert exc.value.code == "higher_timeframe_bias_unavailable"
 
 
 @pytest.mark.asyncio
-async def test_even_with_confirmation_the_v8_builder_refuses_a_match_without_an_htf_bias(h):
-  """Go's bias is primary-timeframe, so the adapter leaves htf_bias empty; the
-  real builder (ADR: never derive bias from direction) then refuses. This is
-  the second recorded blocker, enforced by the existing code, not by us."""
+async def test_existing_v8_builder_fails_closed_if_htf_is_stripped(h):
   from dataclasses import replace
   await h.grant()
   await h.deliver(event(int(h.clock.now)))
   client = redis_state.get_client()
   base = deserialize_matches(await client.get(strategy_matches_key("XAU")))[0]
-  now = int(time.time())
-  match = replace(base, event_ts=str(now - 60), touch_bar_ts=str(now - 120), confirmation_bar_ts=str(now - 60),
-                  m5_confirmation_bar_ts=str(now - 60), reaction_type="strong_reclaim", expires_at=now + 900)
+  match = replace(base, htf_bias="")
   assert await worker._publish_trade_plan_v8(client, "XAU", _spot(4354.1, 4354.3), match, frames={"M1": _m1_trigger_bar()}) is None
   assert (await _outcome(client, match))["reason_code"] == "v8_missing_htf_bias"
 
 
 @pytest.mark.asyncio
-async def test_go_owned_zone_becomes_a_real_v8_plan_once_confirmation_facts_exist(h):
-  """Positive path for the *rest* of the pipeline (fence, policy, TradePlan V8).
+async def test_go_owned_zone_becomes_a_real_v8_plan_with_real_contract_fields(h):
+  """No Python detector or post-adaptation mutation supplies confirmation.
 
-  The confirmation facts and HTF bias are supplied by the test, standing in
-  for future reviewed Go/policy sources; nothing in production produces them
-  today. Exactly these two are what the unchanged builder demands.
+  The Go-pinned resting golden is enriched with the additive confirmed
+  reaction/HTF test fixture; the same typed event is consumed by the actual
+  adapter and the unchanged V8 policy and publisher.
   """
-  from dataclasses import replace
   await h.grant()
   await h.deliver(event(int(h.clock.now)))
   client = redis_state.get_client()
-  base = deserialize_matches(await client.get(strategy_matches_key("XAU")))[0]
-  now = int(time.time())
-  match = replace(
-    base, event_ts=str(now - 60), touch_bar_ts=str(now - 120), confirmation_bar_ts=str(now - 60),
-    m5_confirmation_bar_ts=str(now - 60), reaction_type="strong_reclaim", expires_at=now + 900,
-    # Second gap the real V8 builder enforces (see the test above): an H1/H4
-    # bias, which Go does not publish. (regime_kind is NOT required: verified
-    # by omitting it.)
-    htf_bias="down",
-  )
-
+  match = deserialize_matches(await client.get(strategy_matches_key("XAU")))[0]
+  assert match.htf_bias == "down" and match.reaction_type == "rejection"
   plan_id = await worker._publish_trade_plan_v8(client, "XAU", _spot(4354.1, 4354.3), match, frames={"M1": _m1_trigger_bar()})
-
   assert plan_id is not None, f"policy rejected: {await _outcome(client, match)}"
   plan = await read_trade_plan(client, plan_id)
   assert plan is not None and await read_plan_state(client, plan_id) == "published"

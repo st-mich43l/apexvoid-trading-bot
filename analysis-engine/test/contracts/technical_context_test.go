@@ -141,3 +141,48 @@ func TestOpportunitySchema_RejectsMalformedTechnicalContext(t *testing.T) {
 		}
 	}
 }
+
+func TestTechnicalContext_HigherTimeframesAreCausalAndSchemaValid(t *testing.T) {
+	c := goldenCandidate()
+	c.Technical.HigherTimeframes = []opportunity.HigherTimeframeBias{
+		{Timeframe: market.H1, Direction: market.Sell, Layer: "major", ReferenceTime: c.CreatedAt - 3900},
+		{Timeframe: market.H4, Direction: market.Buy, Layer: "intermediate", ReferenceTime: c.CreatedAt - 18000},
+	}
+	if err := c.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	payload := kafka.OpportunityPayloadFromCandidate(c, kafka.AlgorithmVersion{Structure: "v2", Liquidity: "v1"})
+	if len(payload.TechnicalContext.HigherTimeframes) != 2 {
+		t.Fatalf("two independent higher-timeframe reads required, got %+v", payload.TechnicalContext)
+	}
+	validateGo(t, compileSchema(t, repoContractPath("analysis", "opportunity-v1.schema.json")), payload)
+
+	c.Technical.HigherTimeframes = append(c.Technical.HigherTimeframes,
+		opportunity.HigherTimeframeBias{Timeframe: market.H1, Direction: market.Buy, Layer: "micro", ReferenceTime: c.CreatedAt - 3900})
+	if err := c.Validate(); err == nil {
+		t.Fatal("duplicate HTF source must fail validation")
+	}
+}
+
+func TestTechnicalContext_ConfirmedReactionIsAdditiveAndSchemaValid(t *testing.T) {
+	c := goldenCandidate()
+	c.Reaction = &opportunity.ReactionConfirmation{
+		ZoneID: "zone:confirmed", TouchBarTime: c.CreatedAt - 300,
+		ConfirmationBarTime: c.CreatedAt, ReactionType: "rejection",
+	}
+	if err := c.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	confirmed := *c.Reaction
+	c.Technical.Confirmation = &confirmed
+	payload := kafka.OpportunityPayloadFromCandidate(c, kafka.AlgorithmVersion{Structure: "v2", Liquidity: "v1"})
+	if payload.TechnicalContext.Confirmation == nil || payload.TechnicalContext.Confirmation.ZoneID != "zone:confirmed" {
+		t.Fatalf("real zone reaction must survive Kafka adapter: %+v", payload.TechnicalContext)
+	}
+	validateGo(t, compileSchema(t, repoContractPath("analysis", "opportunity-v1.schema.json")), payload)
+
+	c.Reaction.ConfirmationBarTime = c.CreatedAt + 300
+	if err := c.Validate(); err == nil {
+		t.Fatal("future confirmation must fail")
+	}
+}
