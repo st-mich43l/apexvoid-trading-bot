@@ -8,14 +8,14 @@
 # question for the owner) — analysis.yml is the closest fit since these
 # are all analysis *inputs*, not execution or delivery concerns.
 analysis:
-  # S14F: go_shadow. The Go opportunity consumer runs and every creation goes
-  # through the real policy dry run (analysis_shadow_decisions); it can create no
-  # plan, reservation, card or order and moves no authority. Python stays the only
-  # publisher. Roll back by reverting this pair to `python` / `false`.
-  # `go` is S14G: it is configured only after the acceptance report is reviewed
-  # and grants nothing by itself (a fenced, operator-approved transfer does).
+  # S14G: go. Turns on the Go->policy path only. It grants NO authority: every scope
+  # stays Python-owned in the fence until an operator-approved, fenced transfer
+  # (`analysis_authority accept` + `grant`, docs/analysis/s14g-scoped-cutover.md).
+  # A Go creation for a Python-owned scope is recorded and refused by the policy.
+  # Roll back with `analysis_authority rollback`, then set this pair back to
+  # go_shadow / true (or python / false).
   technical_authority:
-    mode: go_shadow
+    mode: go
     consumer_enabled: true
     consumer_group: apexvoid-algo-bot-analysis-opportunity-v1
     # S14B live-freshness limits. A NEW live plan needs a confirmed observation
