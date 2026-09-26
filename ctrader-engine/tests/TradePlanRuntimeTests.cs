@@ -4073,10 +4073,21 @@ public sealed partial class TradePlanRuntimeTests
       ));
     }
 
+    // The next N PlaceMarketOrderAsync calls fail before anything is accepted
+    // (broker outage / rejection): nothing is recorded and no position opens.
+    public int FailMarketCalls { get; set; }
+
     public Task<TradeExecution> PlaceMarketOrderAsync(
       MarketOrderRequest order, CancellationToken ct
     )
     {
+      if (FailMarketCalls > 0)
+      {
+        FailMarketCalls--;
+        throw new InvalidOperationException(
+          "cTrader rejected order operation: market order failed"
+        );
+      }
       if (
         RejectDuplicateClientOrderIds
         && !string.IsNullOrWhiteSpace(order.ClientOrderId)
@@ -4149,6 +4160,9 @@ public sealed partial class TradePlanRuntimeTests
       return Task.CompletedTask;
     }
 
+    // Broker fill price of the next close; unset keeps the historical 4096.00.
+    public decimal? NextCloseFillPrice { get; set; }
+
     public Task<TradeExecution> ClosePositionAsync(
       long positionId, long volume, CancellationToken ct
     )
@@ -4168,7 +4182,7 @@ public sealed partial class TradePlanRuntimeTests
           _positions[idx] = current with { Volume = remaining };
         }
       }
-      return Task.FromResult(new TradeExecution(positionId, 2, 4096.0m, volume));
+      return Task.FromResult(new TradeExecution(positionId, 2, NextCloseFillPrice ?? 4096.0m, volume));
     }
   }
 
