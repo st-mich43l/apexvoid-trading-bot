@@ -180,3 +180,19 @@ computation that blocks deleting those modules).
 Consequently **no live Python detector is deleted in this series**: every
 scope's live entrypoint still has a production importer *and* no approved,
 evidence-backed Go replacement. See the final report for the itemised list.
+
+## Follow-up after S13C: Go confirmation and higher-timeframe inputs
+
+The separate S12 confirmation-contract PR implements two inputs that the
+original S13C adapter identified as missing. The initial Go Supply/Demand
+opportunity is still a resting observation, while a separately identified
+M5 rejection opportunity has real touch/confirmation timestamps. Closed,
+fresh H1/H4 canonical structure is carried independently from M5 bias.
+
+The adapter rejects unconfirmed resting opportunities and missing HTF
+context rather than writing a match with missing policy evidence. Existing
+V8 execution/risk gates remain in force. These changes are not an approval
+of the new reaction semantics or a substitute for S12C/S12D production
+comparison and scoped authority handover. The worker's remaining Python
+opposing-barrier and target-room recomputations still block whole-directory
+technical-detector deletion.
