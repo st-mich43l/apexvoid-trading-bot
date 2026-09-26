@@ -20,7 +20,8 @@ import math
 from typing import Any, Awaitable, Callable
 
 from app.persistence import redis_state
-from app.analysis_client.authority import GO_ORIGIN_TAG, authorize_legacy_match
+from app.analysis_client.authority import GO_ORIGIN_TAG, AuthorityDecision, authorize_legacy_match
+from app.analysis_client.shadow_overlay import is_shadow_overlay
 from app.autotrade.go_plan_cancel import read_plan_cancel, register_go_plan
 from app.autotrade import units
 from app.core import instrument_geometry
@@ -4818,13 +4819,21 @@ async def _publish_trade_plan_v8(
   # scope. Reconciliation of an already-published/terminal plan (above) is
   # deliberately not fenced: ownership governs plan *creation*, never the
   # management of positions that already exist.
-  authority = await authorize_legacy_match(
-    symbol=match.symbol,
-    strategy_name=match.strategy,
-    direction=match.direction,
-    tags=match.tags,
-    consumer_enabled=runtime_config.analysis.technical_authority.consumer_enabled,
-  )
+  if is_shadow_overlay(client):
+    # S14A dry run on an in-memory overlay: nothing here can reach Redis,
+    # Postgres or Telegram, so the fence (which protects live publication) is
+    # bypassed to see what the pipeline WOULD do. The real fence state is
+    # recorded separately by the shadow policy. Honoured for the overlay class
+    # only; a real client always takes the fenced branch.
+    authority = AuthorityDecision(True, "shadow_dry_run_overlay")
+  else:
+    authority = await authorize_legacy_match(
+      symbol=match.symbol,
+      strategy_name=match.strategy,
+      direction=match.direction,
+      tags=match.tags,
+      consumer_enabled=runtime_config.analysis.technical_authority.consumer_enabled,
+    )
   if not authority.allowed:
     await record_route_outcome(
       client,
@@ -6619,6 +6628,13 @@ async def _publish_trade_plan_v8(
       "zone_episode_id": confirmation.zone_episode_id,
     },
   )
+  if is_shadow_overlay(client):
+    # S14A dry run: the owner's Telegram must never see a shadow plan.
+    log.info(
+      "v8 plan built (shadow dry run, no Telegram card) id=%s symbol=%s strategy=%s",
+      plan.plan_id, symbol, match.strategy,
+    )
+    return plan.plan_id
   try:
     from app.autotrade.setup_card import (
       ensure_plan_published_root_card,
