@@ -108,6 +108,22 @@
             "direction": { "type": "string", "enum": ["BUY", "SELL"] },
             "layer": { "type": "string", "minLength": 1 }
           }
+        },
+        "higher_timeframes": {
+          "type": "array",
+          "description": "Additive S12 field: independently confirmed, fresh H1/H4 structural reads from causal closed bars. Empty/absent means policy must not infer an HTF bias from the entry timeframe.",
+          "maxItems": 2,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["timeframe", "direction", "layer", "reference_time"],
+            "properties": {
+              "timeframe": { "type": "string", "enum": ["H1", "H4"] },
+              "direction": { "type": "string", "enum": ["BUY", "SELL"] },
+              "layer": { "type": "string", "minLength": 1 },
+              "reference_time": { "type": "integer", "minimum": 0 }
+            }
+          }
         }
       }
     }
