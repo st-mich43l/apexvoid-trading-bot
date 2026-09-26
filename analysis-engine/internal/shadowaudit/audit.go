@@ -77,12 +77,12 @@ type Report struct {
 }
 
 type Audit struct {
-	report     Report
-	baseline   map[string]struct{}
-	created    map[string]string
-	terminals  map[string]struct{}
+	report          Report
+	baseline        map[string]struct{}
+	created         map[string]string
+	terminals       map[string]struct{}
 	terminalSamples map[string]Sample
-	ages, lags []int64
+	ages, lags      []int64
 }
 
 func New(boundaries []Boundary, baseline []string, cleanEpoch bool) *Audit {

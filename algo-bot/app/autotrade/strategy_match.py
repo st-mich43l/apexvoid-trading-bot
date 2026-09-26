@@ -13,6 +13,7 @@ import hashlib
 import json
 import math
 
+from app.analysis_client.authority import GO_ORIGIN_TAG
 from app.analysis.confluence_zone import confluence_setup_id
 from app.core.symbols import digits_for
 from app.runtime.price_identity import price_token
@@ -717,6 +718,12 @@ def strategy_range_id(symbol: str, lower: float, upper: float) -> str:
 
 
 def _identity_ok(match: StrategyMatch) -> bool:
+  # S13C: a Go-origin match's identity is its Go opportunity id, verbatim
+  # (app.autotrade.go_opportunity_policy.match_id_for). It is checked here, at
+  # the same integrity boundary as legacy identities, rather than forcing Go
+  # matches through the legacy structural-thesis hash.
+  if GO_ORIGIN_TAG in match.tags:
+    return bool(match.structural_zone_id) and match.match_id == f"go_{match.structural_zone_id}"
   if match.reaction_id:
     return match.match_id == match.reaction_id
   if match.confluence_zone_id:

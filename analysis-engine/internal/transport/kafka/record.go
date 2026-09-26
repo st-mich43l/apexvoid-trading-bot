@@ -18,6 +18,25 @@ type OpportunityPayload struct {
 	FormedAt         int64                   `json:"formed_at"`
 	CreatedAt        int64                   `json:"created_at"`
 	ExpiresAt        int64                   `json:"expires_at"`
+	// TechnicalContext is the additive V1 policy-input block (S13B). Omitted
+	// when the engine could not produce it; consumers must then fail closed.
+	TechnicalContext *TechnicalContextPayload `json:"technical_context,omitempty"`
+}
+
+// TechnicalContextPayload carries engine-owned facts an execution policy needs
+// so it never recomputes ATR/structure from raw OHLC. No quote, spread, account
+// or confluence-score fields belong here.
+type TechnicalContextPayload struct {
+	ATR            float64      `json:"atr"`
+	ReferencePrice float64      `json:"reference_price"`
+	ReferenceTime  int64        `json:"reference_time"`
+	Bias           *BiasPayload `json:"bias,omitempty"`
+}
+
+// BiasPayload is the engine's confirmed structural bias; absent means none.
+type BiasPayload struct {
+	Direction string `json:"direction"`
+	Layer     string `json:"layer"`
 }
 
 type EntryZonePayload struct {
