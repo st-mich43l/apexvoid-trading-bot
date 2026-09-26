@@ -274,7 +274,7 @@
       "go_origin_risk_leg_enabled": false,
       "max_delivery_lag_seconds": 300,
       "max_event_age_seconds": 900,
-      "mode": "go_shadow"
+      "mode": "go"
     },
     "techniques": {
       "invalidation_tolerance_atr": 0.5,
