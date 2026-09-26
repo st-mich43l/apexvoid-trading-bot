@@ -34,8 +34,14 @@ separately approved S12D implementation.
 
 ## S12B: policy shadow
 
-In `go_shadow`, each accepted creation produces a durable `contract_gap`
-decision. It does not call a TradePlan builder, Redis trade-plan publisher,
+> **Superseded by S14A** (`s14a-policy-dry-run-shadow.md`). S12B originally
+> recorded a static `contract_gap` because the V1 contract lacked the policy
+> inputs listed below. The S13B `technical_context` block supplies them, and
+> `go_shadow` now records the outcome of a real, side-effect-free dry run of the
+> live pipeline. The text below is kept as the historical rationale.
+
+In `go_shadow`, each accepted creation produced a durable `contract_gap`
+decision. It did not call a TradePlan builder, Redis trade-plan publisher,
 risk reservation, Telegram delivery, or broker path.
 
 The current `analysis.opportunity.v1` contract does not contain the factual

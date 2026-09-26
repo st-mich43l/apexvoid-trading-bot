@@ -52,9 +52,10 @@ contract, never a local Python recomputation.
 
 `analysis.technical_authority.mode` defaults to `python` and
 `consumer_enabled` defaults to `false`. The only consumer-enabled mode now
-implemented is `go_shadow`: it durably records Go opportunity lifecycle state
-and a `contract_gap` policy result, but cannot construct, publish, reserve, or
-execute a TradePlan. `go` fails configuration validation until the separately
+implemented before the cutover is `go_shadow`: it durably records Go
+opportunity lifecycle state and the outcome of a real dry run of the live
+pipeline (S14A: an in-memory Redis overlay, read-only PostgreSQL, no Telegram),
+but cannot publish, reserve, or execute a TradePlan. `go` fails configuration validation until the separately
 approved S12D cutover implementation exists.
 
 Opportunity V1 currently lacks the execution-policy facts required by the
