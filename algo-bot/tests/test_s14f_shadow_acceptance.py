@@ -50,7 +50,7 @@ def prod(monkeypatch, event_loop):
 
 @pytest.fixture
 def h(sql, monkeypatch, prod):
-  install_runtime_overrides(monkeypatch, {"analysis.technical_authority.consumer_enabled": True})
+  install_runtime_overrides(monkeypatch, {"analysis.technical_authority.consumer_enabled": True, "analysis.technical_authority.mode": "go_shadow"})
   live_inputs(monkeypatch)
   harness = Harness(sql, monkeypatch)
   from app.autotrade.go_shadow_policy import GoShadowPolicy
@@ -90,15 +90,19 @@ async def clean_shadow_window(h):
 async def test_an_empty_window_passes_nothing(prod, sql):
   rep = await report(prod)
   assert rep["overall"] == "blocked"
-  assert set(statuses(rep).values()) == {acc.NOT_MEASURED}                           # not one gate passes on an empty window
+  s = statuses(rep)
+  assert s.pop("go_consumer_is_running_in_the_process_under_test") == acc.FAIL       # python / consumer off: nothing can be observed
+  assert set(s.values()) == {acc.NOT_MEASURED}                                       # not one other gate passes on an empty window
 
 
 @pytest.mark.asyncio
 async def test_a_clean_real_shadow_window_passes_only_what_it_actually_measured(h, prod):
   _ev, decision = await clean_shadow_window(h)
   assert decision.outcome == "would_publish"
+  await redis_state.publish_component_health(component="analysis_opportunity_consumer", state="ready")   # what the running consumer writes
   rep = await report(prod)
   s = statuses(rep)
+  assert s["go_consumer_is_running_in_the_process_under_test"] == acc.PASS
   assert s["no_orphan_or_resurrected_lifecycle"] == acc.PASS
   assert s["no_missing_confirmation_or_htf_bypass"] == acc.PASS
   assert s["no_shadow_plan_reservation_card_or_broker_side_effect"] == acc.PASS      # production Redis/Postgres untouched by the dry run
@@ -111,6 +115,23 @@ async def test_a_clean_real_shadow_window_passes_only_what_it_actually_measured(
   assert rep["overall"] == "blocked"
   assert rep["connectivity"]["decisions_by_outcome"] == {"go_shadow:would_publish": 1}
   assert "approves nothing" in rep["note"]
+
+
+# ---- the process under test must actually run the consumer ----------------------------------------------------------------
+
+def test_consumer_gate_names_the_config_channel_mistake_instead_of_staying_silent():
+  """2026-09-26 production: config/analysis.yml said go/true, the bot (which reads the ansible-rendered
+  trading-bot.yml) ran python/false, no consumer group existed, and every gate was merely not_measured."""
+  for mode, enabled in (("python", False), ("python", True), ("go_shadow", False), ("go", False)):
+    gate = acc.gate_consumer_running(mode, enabled, None, health_readable=True)
+    assert gate.status == acc.FAIL and "trading-bot.yml" in gate.summary, (mode, enabled)
+
+
+def test_consumer_gate_fails_when_enabled_but_never_ready_and_is_not_measured_when_redis_is_unreadable():
+  for health in (None, {}, {"state": "starting"}, {"state": "failed"}):
+    assert acc.gate_consumer_running("go_shadow", True, health, health_readable=True).status == acc.FAIL
+  assert acc.gate_consumer_running("go_shadow", True, None, health_readable=False).status == acc.NOT_MEASURED
+  assert acc.gate_consumer_running("go", True, {"state": "ready"}, health_readable=True).status == acc.PASS
 
 
 # ---- operator-supplied evidence --------------------------------------------------------------------------------------

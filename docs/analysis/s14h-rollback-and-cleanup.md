@@ -30,6 +30,10 @@ Turning the consumer off mid-ownership does not reopen the scope to legacy Pytho
 ### Dependency trouble: where a hard stop replaces a fallback
 
 * **Kafka down/lagging**: no new Go events; the freshness gate refuses any backlog on recovery. Rollback needs no Kafka.
+* **Kafka data lost** (before the log dir was moved onto the volume every recreate did this): topics and committed offsets vanish
+  together, so nothing is replayed or skipped inconsistently, but a terminal event for a creation published earlier never
+  arrives. The consumer-side match keeps a TTL of `expires_at`, so an orphaned match ends by expiry, and rollback/`withdraw` does not
+  need Kafka. This is why the persistent log dir and the engine's ledger volume are a precondition of the shadow window.
 * **PostgreSQL down**: the fence cannot be read, so **both** publishers are denied (fail closed): plans are skipped, never
   doubled. `status`/`rollback`/`grant` refuse loudly. `withdraw` needs only Redis and works (tested with Postgres
   unreachable). To bring Python back you need Postgres: there is deliberately no bypass flag.
