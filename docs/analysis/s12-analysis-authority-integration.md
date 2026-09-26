@@ -142,3 +142,23 @@ reject every new opportunity; the Python consumer is off by default, but roll
 The bytes are pinned in `contracts/analysis/examples/opportunity-v1-technical-context.json`.
 Go's contract test regenerates and compares them (`UPDATE_GOLDEN=1` to refresh);
 algo-bot's decoder test parses the same file, so neither side can drift alone.
+
+## S12 follow-up: causal higher-timeframe bias contract
+
+The Go worker now reads the existing canonical H1 and H4 StructureState at
+the observation boundary and includes independent `higher_timeframes` facts
+in the additive V1 `technical_context`. It omits an unclosed, stale or
+structurally undecided higher-timeframe bar rather than substituting M5 bias.
+
+The Python Supply/Demand adapter prefers a real H1 structural read, falling
+back to H4 only when H1 is unavailable; it records the source timeframe in
+the match tags. When both disagree the event preserves both; it does not
+flatten the disagreement into a synthetic neutral. This is Go structural
+bias, not an assertion of exact legacy momentum-filter parity.
+
+**This does not by itself authorize a Go-owned plan.** Existing V8 policy
+still requires the separately confirmed M5 reaction (touch, confirmation
+bar, reaction type); Go's resting zone creation event contains no such
+confirmation. The reviewed reaction event must have its own causal
+opportunity identity. Do not enable Go authority or backfill HTF facts by
+recomputing Python structure.
