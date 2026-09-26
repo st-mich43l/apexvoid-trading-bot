@@ -50,6 +50,20 @@ def golden(now: int | None = None, **payload_overrides):
     for key in ("formed_at", "created_at", "expires_at"):
       p[key] += shift
     p["technical_context"]["reference_time"] += shift
+  # A reviewed, test-only confirmed event. The raw Go golden file remains
+  # the unconfirmed resting-zone example; production must obtain these
+  # fields from Go's independent causal reaction and H1/H4 calculations.
+  p = raw["payload"]
+  observed = p["technical_context"]["reference_time"]
+  p["technical_context"]["confirmation"] = {
+    "zone_id": "zone-golden-supply",
+    "touch_bar_time": observed - 300,
+    "confirmation_bar_time": observed,
+    "reaction_type": "rejection",
+  }
+  p["technical_context"]["higher_timeframes"] = [{
+    "timeframe": "H1", "direction": "SELL", "layer": "major", "reference_time": observed - 3900,
+  }]
   raw["payload"].update(payload_overrides)
   return raw
 
@@ -79,12 +93,13 @@ def test_supply_translation_is_exact_and_carries_authority_provenance():
   assert match.absolute_target_price == 4344.0
   assert match.reasons == ("m5_supply_zone_fresh", "m5_supply_zone_relevance_immediate")
   assert match.confluence == 2
-  assert match.structural_kind == "supply" and match.structural_zone_id == "opp_golden_supply_xau"
+  assert match.structural_kind == "supply" and match.structural_zone_id == "zone-golden-supply"
   assert match.match_id == "go_opp_golden_supply_xau" and match.thesis_id.startswith("go-thesis-")
-  assert match.htf_bias == "" and match.regime_kind == ""     # not invented from a different timeframe
+  assert match.htf_bias == "down" and match.regime_kind == ""  # real Go H1 structure; no invented regime
+  assert (match.touch_bar_ts, match.confirmation_bar_ts, match.reaction_type) == (str(ev.payload.created_at - 300), str(ev.payload.created_at), "rejection")
   assert match.bias_relationship == "with_bias" and match.strategy_mode == "with_bias"  # Go bias SELL == direction
   tags = set(match.tags)
-  assert {auth.GO_ORIGIN_TAG, "catalog:supply", "authority_epoch:3", "bias_source:go_primary_tf"} <= tags
+  assert {auth.GO_ORIGIN_TAG, "catalog:supply", "authority_epoch:3", "bias_source:go_primary_tf", "htf_bias_source:go_H1", "go_reaction:rejection"} <= tags
   elig = match.execution_eligibility
   assert elig.allowed and elig.planned_entry_price == 4354.25
   assert elig.measured["source"] == "go" and elig.reward_risk == round(85 / 62.5, 4)
