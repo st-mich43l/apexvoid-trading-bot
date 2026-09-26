@@ -31,6 +31,11 @@ func confirmedRejection(z zone.Zone, candles []market.Candle) *opportunity.React
 		if touch.Time != touchTime {
 			return nil
 		}
+		if touch.IsBearish() && touch.Close < float64(z.Low) {
+			// The touching bar already confirmed this episode; a later
+			// follow-through candle must not create another opportunity.
+			return nil
+		}
 	}
 	if touch.Low > float64(z.High) || touch.High < float64(z.Low) {
 		return nil
