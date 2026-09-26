@@ -68,6 +68,19 @@ class HigherTimeframeBias(FrozenConfigModel):
   reference_time: int = Field(ge=0)
 
 
+class ReactionConfirmation(FrozenConfigModel):
+  zone_id: str = Field(min_length=1)
+  touch_bar_time: int = Field(ge=0)
+  confirmation_bar_time: int = Field(ge=0)
+  reaction_type: Literal["rejection"]
+
+  @model_validator(mode="after")
+  def validate_timing(self):
+    if self.confirmation_bar_time < self.touch_bar_time:
+      raise ValueError("reaction confirmation must not precede the zone touch")
+    return self
+
+
 class TechnicalContext(FrozenConfigModel):
   """Engine-owned policy inputs for the bar that made the setup actionable.
 
@@ -80,6 +93,7 @@ class TechnicalContext(FrozenConfigModel):
   reference_time: int = Field(ge=0)
   bias: TechnicalBias | None = None
   higher_timeframes: list[HigherTimeframeBias] = Field(default_factory=list, max_length=2)
+  confirmation: ReactionConfirmation | None = None
 
   @model_validator(mode="after")
   def validate_higher_timeframes(self):
@@ -120,6 +134,9 @@ class AnalysisOpportunity(FrozenConfigModel):
       for higher in self.technical_context.higher_timeframes:
         if higher.reference_time + bar_minutes[higher.timeframe] * 60 > observed_close:
           raise ValueError("higher-timeframe candle must be closed at opportunity observation")
+      confirmation = self.technical_context.confirmation
+      if confirmation is not None and confirmation.confirmation_bar_time > self.technical_context.reference_time:
+        raise ValueError("reaction confirmation must not follow the observed closed bar")
     if self.formed_at is not None and self.formed_at > self.created_at:
       raise ValueError("formed_at must be <= created_at")
     if self.direction == "BUY":
