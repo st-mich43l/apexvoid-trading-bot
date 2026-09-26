@@ -21,6 +21,12 @@ func OpportunityPayloadFromCandidate(c opportunity.Candidate, algo AlgorithmVers
 		if c.Technical.BiasDirection.IsValid() {
 			technical.Bias = &BiasPayload{Direction: string(c.Technical.BiasDirection), Layer: c.Technical.BiasLayer}
 		}
+		if c.Technical.Confirmation != nil {
+			r := c.Technical.Confirmation
+			technical.Confirmation = &ReactionConfirmationPayload{
+				ZoneID: r.ZoneID, TouchBarTime: r.TouchBarTime, ConfirmationBarTime: r.ConfirmationBarTime, ReactionType: r.ReactionType,
+			}
+		}
 		for _, higher := range c.Technical.HigherTimeframes {
 			technical.HigherTimeframes = append(technical.HigherTimeframes, HigherTimeframeBiasPayload{
 				Timeframe: string(higher.Timeframe), Direction: string(higher.Direction), Layer: higher.Layer, ReferenceTime: higher.ReferenceTime,
