@@ -100,6 +100,17 @@ public sealed class LadderSpecParityTests
     Assert.Equal(expected, (long)Method(typeof(TradePlanRuntime), "ReactionRiskLegVolume").Invoke(null, args)!);
   }
 
+  public static IEnumerable<object[]> EquityTableCases() =>
+    Spec.GetProperty("equity_table").GetProperty("cases").EnumerateArray().Select(c => new object[] { c.GetProperty("equity").GetString()! });
+
+  [Theory]
+  [MemberData(nameof(EquityTableCases))]
+  public void OwnerEquityTableLotsMatchTheSpec(string equityText)
+  {
+    var c = Spec.GetProperty("equity_table").GetProperty("cases").EnumerateArray().Single(x => x.GetProperty("equity").GetString() == equityText);
+    Assert.Equal(D(c, "lots"), VolumePlanner.LotsForEquity(D(c, "equity")));
+  }
+
   [Fact]
   public void EveryLadderConstantMatchesTheSpecInBothPlaces()
   {

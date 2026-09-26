@@ -101,6 +101,28 @@ def volume_for_lots(lots: float, *, lot_size: int, min_volume: int, step_volume:
   return stepped if stepped >= min_volume else 0
 
 
+def equity_table_lots(equity: float) -> float:
+  """The owner's equity-table lots for non-FX instruments, ports ``VolumePlanner.LotsForEquity``
+  (bands with deliberate discontinuities; below $200 no trade). Pinned to the same hand-computed
+  cases as the C# original in the shared spec."""
+  e = _d(equity)
+  if e < 200:
+    lots = Decimal(0)
+  elif e >= 5_000:
+    lots = Decimal("0.30")
+  elif e >= 3_000:
+    lots = Decimal("0.25") + (e - 3_000) * Decimal("0.05") / 2_000
+  elif e >= 2_000:
+    lots = Decimal("0.15")
+  elif e > 1_000:
+    lots = Decimal("0.12")
+  elif e >= 600:
+    lots = Decimal("0.10")
+  else:
+    lots = Decimal("0.02") + (e - 200) * Decimal("0.04") / 700
+  return float(lots.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
+
 @dataclass(frozen=True)
 class LadderLeg:
   price: float

@@ -68,3 +68,6 @@ tests/test_s14d_executor_events_delivery.py
 tests/test_s14e_ladder_spec.py
 tests/test_s14e_go_precision_and_card.py
 tests/test_xau_ladder.py
+tests/test_s14f_shadow_acceptance.py
+tests/test_s14g_cutover_packet.py
+tests/test_s14h_rollback_drills.py

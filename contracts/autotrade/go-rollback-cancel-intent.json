@@ -1,0 +1,8 @@
+{
+  "epoch": 1,
+  "opportunity_id": null,
+  "plan_id": "v8:go_opp_chain",
+  "reason": "emergency rollback drill",
+  "requested_at": 1790000200,
+  "source": "authority_rollback"
+}
