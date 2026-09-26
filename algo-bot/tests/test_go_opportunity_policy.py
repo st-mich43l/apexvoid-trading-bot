@@ -94,7 +94,7 @@ def test_supply_translation_is_exact_and_carries_authority_provenance():
   assert match.reasons == ("m5_supply_zone_fresh", "m5_supply_zone_relevance_immediate")
   assert match.confluence == 2
   assert match.structural_kind == "supply" and match.structural_zone_id == "zone-golden-supply"
-  assert match.match_id == "go_opp_golden_supply_xau" and match.thesis_id.startswith("go-thesis-")
+  assert match.match_id == "go_opp_golden_supply_xau" and match.thesis_id == pol._thesis_id("XAU", "supply_demand", "SELL", ev.payload.technical_context.confirmation.zone_id)
   assert match.htf_bias == "down" and match.regime_kind == ""  # real Go H1 structure; no invented regime
   assert (match.touch_bar_ts, match.confirmation_bar_ts, match.reaction_type) == (str(ev.payload.created_at - 300), str(ev.payload.created_at), "rejection")
   assert match.bias_relationship == "with_bias" and match.strategy_mode == "with_bias"  # Go bias SELL == direction

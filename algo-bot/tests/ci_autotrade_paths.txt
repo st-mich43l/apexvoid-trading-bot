@@ -64,3 +64,5 @@ tests/test_s14b_go_lifecycle.py
 tests/test_s14b_plan_cancel_contract.py
 tests/test_s14a_shadow_overlay.py
 tests/test_s14a_shadow_dry_run.py
+tests/test_s14d_go_full_chain.py
+tests/test_s14d_executor_events_delivery.py

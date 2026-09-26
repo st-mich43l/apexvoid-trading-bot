@@ -111,9 +111,16 @@ class AdapterRejection(Exception):
     self.message = message
 
 
-def _thesis_id(symbol: str, catalog_id: str, direction: str, opportunity_id: str) -> str:
-  digest = hashlib.sha256(f"go|{symbol}|{catalog_id}|{direction}|{opportunity_id}".encode()).hexdigest()
-  return f"go-thesis-{digest[:24]}"
+def _thesis_id(symbol: str, family: str, direction: str, zone_id: str) -> str:
+  """Stable TradePlan thesis identity: what *structure* this is, not which bar
+  confirmed it. Same rule and same bytes as the legacy scanner's
+  ``structural_reaction_support.thesis_id`` (a parity test pins that), so a Go zone
+  re-confirmed on later bars (the real replay shows up to 7 re-confirmations per
+  zone, each under its own opportunity id) is ONE thesis, and the plan builder's
+  active-thesis claim stops a second executable plan for it. Keying this on the
+  opportunity id (the S13C behaviour) let every re-confirmation publish its own plan."""
+  raw = "|".join(("thesis", "v1", symbol.upper(), family, direction.upper(), zone_id))
+  return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
 
 
 def match_id_for(opportunity_id: str) -> str:
@@ -182,7 +189,7 @@ def build_strategy_match(
   risk_multiplier = risk_multiplier_for_tier(tier)
   prices = [t.price.price for t in payload.targets]
   farthest = max(prices) if direction == "BUY" else min(prices)
-  thesis = _thesis_id(symbol, profile.catalog_id, direction, payload.id)
+  thesis = _thesis_id(symbol, family, direction, reaction.zone_id)
   tags = (
     GO_ORIGIN_TAG,
     f"{CATALOG_TAG}{profile.catalog_id}",
