@@ -258,10 +258,31 @@ execution:plan_claim:{plan_id}     executor claim, 24-hour TTL
 execution:plan_runtime:{plan_id}   C# open runtime state
 execution:plan_recovery:{plan_id}  C# recovery copy while runtime state is open
 execution:plan_ack:{plan_id}       latest structured executor acknowledgement
+execution:plan_cancel:{plan_id}    cancel intent written by Python (S14B), 7-day TTL
+execution:plan_cancel_ack:{plan_id} executor's report of applying the intent, 7-day TTL
+analysis:go_plans                  hash plan_id -> Go-derived plan index (S14B)
 execution:plan_rejection:{id}      durable malformed/unsupported stream record
 execution:trade_plan_runtime_ids   tracked C# runtime plan IDs
 execution:trade_plan_cursor        last durably handled stream ID
 ```
+
+### Plan cancel intent (S14B)
+
+`execution:plan_cancel:{plan_id}` is a Python-written *tombstone*: it may exist
+before the plan does. It is written (`SET NX`, first reason wins) when a
+Go-derived plan's opportunity is invalidated or expires, or when its authority
+scope is rolled back. The executor checks it every poll, before any submission
+and independent of the quote, and reports in `execution:plan_cancel_ack:{plan_id}`.
+Python never edits `execution:plan_state:*`; the executor stays its single
+writer. Field lists, sources and outcomes are pinned in
+`contracts/autotrade/plan-cancel-intent.json`, which both test suites read.
+
+| plan stage when the intent is applied | executor action | ack outcome |
+| --- | --- | --- |
+| received / not yet submitted | never submits; plan cancelled | `cancelled_unsubmitted` |
+| resting entry orders, no fill | every pending leg cancelled at the broker (retried until it sticks) | `cancelled_pending_orders` |
+| some legs filled, some resting or unsent | unfilled remainder withdrawn; filled legs stay managed | `positions_kept_unfilled_cancelled` |
+| every leg already a position | nothing withdrawn, nothing closed | `positions_kept` |
 
 Python atomically checks/sets the dedup tombstone, writes the short-lived plan
 payload and `published` state, then appends exactly one stream entry. The
