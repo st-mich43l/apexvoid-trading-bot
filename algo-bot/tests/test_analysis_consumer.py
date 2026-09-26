@@ -15,6 +15,7 @@ class _Record:
   partition: int
   offset: int
   value: bytes
+  timestamp: int | None = None
 
 
 class _Repository:
@@ -35,14 +36,21 @@ class _Repository:
 
 
 @pytest.mark.asyncio
-async def test_consumer_persists_valid_record_then_evaluates_shadow():
+async def test_consumer_persists_valid_record_then_runs_the_shadow_dry_run_with_the_publish_time():
   repository = _Repository()
-  from app.analysis_client.shadow import AnalysisShadowEvaluator
-  consumer = AnalysisOpportunityConsumer(repository, shadow=AnalysisShadowEvaluator(repository), mode="go_shadow")
+  from app.analysis_client.shadow import AnalysisShadowEvaluator, ShadowDecision
+  seen = []
+
+  async def dry_run(event, *, published_at=None):
+    seen.append((event.payload.id, published_at))
+    return ShadowDecision("would_wait", "waiting_retest_entry_zone")
+
+  consumer = AnalysisOpportunityConsumer(repository, shadow=AnalysisShadowEvaluator(repository, dry_run=dry_run), mode="go_shadow")
   record = _Record(OpportunityTopic, 1, 9, json.dumps(_opportunity()).encode())
+  record.timestamp = 1_700_000_123_456
   await consumer.process_record(record)
-  assert len(repository.applied) == 1
-  assert repository.decisions[0]["outcome"] == "contract_gap"
+  assert len(repository.applied) == 1                   # ledger first, then the dry run
+  assert seen == [("opp-1", 1_700_000_123)]
 
 
 @pytest.mark.asyncio

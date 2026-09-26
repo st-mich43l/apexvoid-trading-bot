@@ -61,3 +61,5 @@ tests/test_s14b_freshness.py
 tests/test_s14b_authority_boundary.py
 tests/test_s14b_go_lifecycle.py
 tests/test_s14b_plan_cancel_contract.py
+tests/test_s14a_shadow_overlay.py
+tests/test_s14a_shadow_dry_run.py

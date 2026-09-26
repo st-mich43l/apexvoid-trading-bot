@@ -8,9 +8,10 @@ does not certify that S12 cutover or production acceptance has occurred.
 
 At this baseline, `config/analysis.yml` selects `mode: python` with
 `consumer_enabled: false`; `AnalysisTechnicalAuthorityConfig` rejects
-`mode: go`. The Python Analysis Client's `go_shadow` evaluator records
-`contract_gap` instead of invoking the complete trading policy. Go strategy
-events are published, but this does **not** mean Go owns live TradePlans.
+`mode: go`. The Python Analysis Client's `go_shadow` evaluator (S14A) records
+the outcome of a real dry run of the trading policy (`would_publish` /
+`would_wait` / `would_reject` ...), replacing the earlier static `contract_gap`.
+Go strategy events are published, but this does **not** mean Go owns live TradePlans.
 
 The S13 deletion gate requires an approved, observed S12D/E cutover for each
 instrument/strategy scope, including durable consumption, full policy inputs,
