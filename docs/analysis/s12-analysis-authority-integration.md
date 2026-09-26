@@ -156,9 +156,25 @@ the match tags. When both disagree the event preserves both; it does not
 flatten the disagreement into a synthetic neutral. This is Go structural
 bias, not an assertion of exact legacy momentum-filter parity.
 
-**This does not by itself authorize a Go-owned plan.** Existing V8 policy
-still requires the separately confirmed M5 reaction (touch, confirmation
-bar, reaction type); Go's resting zone creation event contains no such
-confirmation. The reviewed reaction event must have its own causal
-opportunity identity. Do not enable Go authority or backfill HTF facts by
-recomputing Python structure.
+## S12 follow-up: separately identified confirmed Supply/Demand reaction
+
+The Supply and Demand Go strategies now emit their existing resting-zone
+opportunity unchanged and, only when the actual closed M5 bar proves a
+directional rejection of a touched canonical zone, a **second opportunity**
+with a distinct ID anchored to the zone, real touch bar and real confirming
+bar. The confirming bar is the touching candle itself or the next candle;
+later follow-through without a fresh touch cannot create another reaction.
+
+The added `technical_context.confirmation` records the zone ID, touch-bar
+open time, confirmation-bar open time and exact `rejection` evidence. The Go
+publisher never upgrades the original resting creation event in place.
+Python accepts only a confirmed reaction with fresh causal HTF context
+for the reviewed Supply/Demand adapter, then lets the existing V8 policy
+recheck current quote, eligibility, risk, entry geometry and retest.
+
+This is **code-complete, not production acceptance**. The exact same-bar/
+next-bar rejection semantics are a reviewed Go thesis and must pass real
+XAU/FX replay and production shadow comparison against the previously
+traded Python confirmation patterns. No operator acceptance, go authority
+grant, live order or Python detector retirement follows automatically.
+The unchanged checked-in default is Python authority with the consumer off.
