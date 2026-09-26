@@ -416,9 +416,17 @@
             "consumer_group": {
               "type": "string",
               "minLength": 1
+            },
+            "max_event_age_seconds": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "max_delivery_lag_seconds": {
+              "type": "integer",
+              "exclusiveMinimum": 0
             }
           },
-          "required": ["mode", "consumer_enabled", "consumer_group"]
+          "required": ["mode", "consumer_enabled", "consumer_group", "max_event_age_seconds", "max_delivery_lag_seconds"]
         },
         "indicators": {
           "type": "object",
