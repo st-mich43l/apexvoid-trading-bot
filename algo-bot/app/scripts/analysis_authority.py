@@ -75,6 +75,10 @@ async def _withdraw(symbol: str, scope: str | None, reason: str, actor: str) -> 
 
 async def run(args: argparse.Namespace) -> dict:
   from app.persistence import store as db_store
+  if args.command == "withdraw":
+    # Redis only, on purpose: the recovery step of a rollback must stay usable when PostgreSQL
+    # (and therefore the fence) is unreachable. It never reads or writes authority state.
+    return {"withdrawal": await _withdraw(args.symbol, args.scope, args.reason, args.actor)}
   await db_store.init_db()
   store = PostgresAuthorityStore()
   fence = AuthorityFence(store)
@@ -103,8 +107,6 @@ async def run(args: argparse.Namespace) -> dict:
     moved = await fence.rollback_all(actor=args.actor, reason=args.reason, drain_seconds=args.drain_seconds)
     withdrawals = [await _withdraw(rec.symbol, rec.strategy_id, args.reason, args.actor) for rec in moved]
     return {"rolled_back": [asdict(rec) for rec in moved], "withdrawals": withdrawals}
-  if args.command == "withdraw":
-    return {"withdrawal": await _withdraw(args.symbol, args.scope, args.reason, args.actor)}
   raise AssertionError(args.command)
 
 
