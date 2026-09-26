@@ -14,6 +14,11 @@ analysis:
     mode: python
     consumer_enabled: false
     consumer_group: apexvoid-algo-bot-analysis-opportunity-v1
+    # S14B live-freshness limits. A NEW live plan needs a confirmed observation
+    # no older than max_event_age_seconds and a Kafka publish->consume gap no
+    # larger than max_delivery_lag_seconds; older events only rebuild the ledger.
+    max_event_age_seconds: 900
+    max_delivery_lag_seconds: 300
 
   # Canonical ATR decision (rebuild-configuration-architecture.md §4):
   # the Go migration audit (docs/go-analysis-migration-audit.md §2.1) found

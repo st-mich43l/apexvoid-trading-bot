@@ -20,7 +20,8 @@ import math
 from typing import Any, Awaitable, Callable
 
 from app.persistence import redis_state
-from app.analysis_client.authority import authorize_legacy_match
+from app.analysis_client.authority import GO_ORIGIN_TAG, authorize_legacy_match
+from app.autotrade.go_plan_cancel import read_plan_cancel, register_go_plan
 from app.autotrade import units
 from app.core import instrument_geometry
 from app.autotrade.range_targets import configured_range_targets
@@ -4842,6 +4843,24 @@ async def _publish_trade_plan_v8(
       publish_status=False,
     )
     return None
+  if GO_ORIGIN_TAG in match.tags:
+    # S14B: a Go opportunity that was invalidated/expired, or whose scope was
+    # rolled back, leaves a cancel tombstone. A match that raced the withdrawal
+    # (already in this cycle's memory) must not become a fresh plan.
+    withdrawn = await read_plan_cancel(client, _v8_plan_id(match))
+    if withdrawn is not None:
+      await record_route_outcome(
+        client,
+        match,
+        stage="mode_check",
+        status="blocked",
+        reason_code="go_plan_withdrawn",
+        message=f"Go-derived plan was withdrawn before publication ({withdrawn.get('source')}: {withdrawn.get('reason')})",
+        measured={"withdrawn_source": withdrawn.get("source"), "withdrawn_reason": withdrawn.get("reason")},
+        retained=False,
+        publish_status=False,
+      )
+      return None
   if spot is None or not spot.fresh:
     await record_route_outcome(
       client,
@@ -6505,6 +6524,10 @@ async def _publish_trade_plan_v8(
         PLAN_BUILT,
         reason_code="v8_builder",
       )
+    if GO_ORIGIN_TAG in match.tags:
+      # Index before publishing: a rollback must always be able to find every
+      # Go-derived plan. A failure here aborts the publish (fail closed).
+      await register_go_plan(client, plan_id=plan.plan_id, match=match, expires_at=plan.expires_at)
     await publish_trade_plan(client, plan)
     await transition_setup(
       client, setup_id, PLAN_PUBLISHED, reason_code="v8_stream_publish",
