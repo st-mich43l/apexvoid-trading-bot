@@ -61,6 +61,13 @@ class TechnicalBias(FrozenConfigModel):
   layer: str = Field(min_length=1)
 
 
+class HigherTimeframeBias(FrozenConfigModel):
+  timeframe: Literal["H1", "H4"]
+  direction: Literal["BUY", "SELL"]
+  layer: str = Field(min_length=1)
+  reference_time: int = Field(ge=0)
+
+
 class TechnicalContext(FrozenConfigModel):
   """Engine-owned policy inputs for the bar that made the setup actionable.
 
@@ -72,6 +79,13 @@ class TechnicalContext(FrozenConfigModel):
   reference_price: FiniteFloat = Field(gt=0)
   reference_time: int = Field(ge=0)
   bias: TechnicalBias | None = None
+  higher_timeframes: list[HigherTimeframeBias] = Field(default_factory=list, max_length=2)
+
+  @model_validator(mode="after")
+  def validate_higher_timeframes(self):
+    if len({item.timeframe for item in self.higher_timeframes}) != len(self.higher_timeframes):
+      raise ValueError("higher_timeframes must have distinct timeframe identifiers")
+    return self
 
 
 class AnalysisOpportunity(FrozenConfigModel):
@@ -97,6 +111,15 @@ class AnalysisOpportunity(FrozenConfigModel):
       raise ValueError("expires_at must be >= created_at")
     if self.technical_context is not None and self.technical_context.reference_time > self.created_at:
       raise ValueError("technical_context.reference_time must be <= created_at (no look-ahead)")
+    if self.technical_context is not None:
+      bar_minutes = {"M1": 1, "M3": 3, "M5": 5, "M15": 15, "M30": 30, "H1": 60, "H4": 240, "D1": 1440}
+      observed_minutes = bar_minutes.get(self.timeframe or "")
+      if self.technical_context.higher_timeframes and observed_minutes is None:
+        raise ValueError("timeframe is required when higher-timeframe context is present")
+      observed_close = self.technical_context.reference_time + (observed_minutes or 0) * 60
+      for higher in self.technical_context.higher_timeframes:
+        if higher.reference_time + bar_minutes[higher.timeframe] * 60 > observed_close:
+          raise ValueError("higher-timeframe candle must be closed at opportunity observation")
     if self.formed_at is not None and self.formed_at > self.created_at:
       raise ValueError("formed_at must be <= created_at")
     if self.direction == "BUY":
