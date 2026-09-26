@@ -50,9 +50,11 @@ from app.analysis_client.authority import (
   AuthorityFence,
   get_fence,
 )
+from app.analysis_client.freshness import FreshnessLimits, evaluate_freshness
 from app.analysis_client.models import InvalidationEnvelope, OpportunityEnvelope
 from app.analysis_client.repository import LifecycleResult, PostgresAnalysisOpportunityRepository
 from app.autotrade import units
+from app.autotrade.go_plan_cancel import SOURCE_EXPIRED, SOURCE_INVALIDATED, plan_id_for_match, request_plan_cancel
 from app.autotrade.execution_policy import classify_tier, risk_multiplier_for_tier, strategy_family
 from app.autotrade.multi_match import deserialize_matches, serialize_matches, strategy_matches_key
 from app.autotrade.setup_lifecycle import (
@@ -266,12 +268,14 @@ class GoOpportunityPolicy:
     client_factory: Callable[[], Any] | None = None,
     clock: Callable[[], float] = time.time,
     multiple_matches_enabled: Callable[[], bool] | None = None,
+    freshness_limits: Callable[[], FreshnessLimits] | None = None,
   ):
     self._repository = repository
     self._fence = fence
     self._client_factory = client_factory
     self._clock = clock
     self._multiple = multiple_matches_enabled
+    self._limits = freshness_limits
 
   def _client(self):
     if self._client_factory is not None:
@@ -288,14 +292,30 @@ class GoOpportunityPolicy:
     from app.core.config import runtime_config
     return bool(runtime_config.strategies.matching.multiple_matches_enabled)
 
+  def _freshness_limits(self) -> FreshnessLimits:
+    if self._limits is not None:
+      return self._limits()
+    from app.core.config import runtime_config
+    authority = runtime_config.analysis.technical_authority
+    return FreshnessLimits(authority.max_event_age_seconds, authority.max_delivery_lag_seconds)
+
   async def _decide(self, event: OpportunityEnvelope, outcome: str, reason: str, **details: Any) -> None:
     await self._repository.record_shadow_decision(
       opportunity_id=event.payload.id, event_id=event.event_id, outcome=outcome, reason=reason,
       details={"strategy": event.payload.strategy, "symbol": event.payload.symbol, **details}, mode=MODE,
     )
 
-  async def on_creation(self, event: OpportunityEnvelope, result: LifecycleResult) -> str:
+  async def on_creation(
+    self, event: OpportunityEnvelope, result: LifecycleResult, *, published_at: int | None = None,
+  ) -> str:
     """Idempotent: safe to re-run on a redelivered creation event.
+
+    ``published_at`` is the Kafka record's publish time (epoch seconds) when the
+    broker supplied one; the S14B freshness gate falls back to the envelope's
+    ``produced_at``. Only a *new* confirmed observation made after the scope's
+    durable go-effective boundary, still inside its event-age, delivery-lag and
+    technical-expiry limits, may become a match: a restart or backlog never
+    trades history.
 
     Handles ``created`` and ``duplicate_delivery`` (a redelivery after a failed
     earlier attempt — exceptions propagate so the Kafka offset is not
@@ -325,16 +345,32 @@ class GoOpportunityPolicy:
       await self._decide(event, "not_adapted", "multiple_matches_disabled")
       return "not_adapted"
     now = int(self._clock())
+    client = self._client()
+    # A redelivery after this opportunity was already adapted (e.g. the process
+    # died between the match write and its decision row) finishes the same
+    # idempotent write; it is not "stale" merely because time has passed.
+    already_adapted = any(
+      m.match_id == match_id_for(payload.id)
+      for m in deserialize_matches(await client.get(strategy_matches_key(payload.symbol)))
+    )
+    verdict = evaluate_freshness(
+      observed_at=payload.created_at, expires_at=payload.expires_at, produced_at=event.produced_at,
+      published_at=published_at, consumed_at=now, boundary=decision.boundary, limits=self._freshness_limits(),
+    )
+    if not verdict.ok and not already_adapted:
+      await self._decide(event, "not_adapted", verdict.code, owner=decision.owner, epoch=decision.epoch, **verdict.details())
+      return "not_adapted"
     try:
       match = build_strategy_match(event, profile=profile, epoch=decision.epoch, now=now)
     except AdapterRejection as exc:
       await self._decide(event, "rejected", exc.code, message=exc.message)
       return "rejected"
 
-    client = self._client()
     await self._advance_setup(client, match)
     await self._store_match(client, match, now)
-    await self._decide(event, "match_written", "go_owned_scope", match_id=match.match_id, epoch=decision.epoch)
+    await self._decide(
+      event, "match_written", "go_owned_scope", match_id=match.match_id, epoch=decision.epoch, **verdict.details(),
+    )
     log.info("Go opportunity adapted opportunity=%s match=%s epoch=%s", payload.id, match.match_id, decision.epoch)
     return "match_written"
 
@@ -361,8 +397,16 @@ class GoOpportunityPolicy:
         await transition_setup(client, match_id, target, reason_code=f"go_{payload.reason_code.lower()}")
       except SetupLifecycleError:
         log.exception("Go terminal could not advance setup %s to %s", match_id, target)
-    # A plan that was already built/published is left alone: execution owns
-    # position management; authority governs plan *creation* only.
+    # S14B: an invalidated/expired opportunity must not keep a queued or
+    # unfilled plan alive. The cancel intent is a tombstone (also stops a plan
+    # being published concurrently); open positions are never touched.
+    if len(kept) != len(matches) or record is not None:
+      expired = payload.reason_code.upper() == "SETUP_EXPIRED"
+      await request_plan_cancel(
+        client, plan_id_for_match(match_id), reason=payload.reason_code.lower(),
+        source=SOURCE_EXPIRED if expired else SOURCE_INVALIDATED,
+        requested_at=int(self._clock()), opportunity_id=payload.opportunity_id,
+      )
     return "match_withdrawn"
 
   @staticmethod

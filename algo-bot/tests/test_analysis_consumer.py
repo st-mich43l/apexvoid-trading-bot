@@ -58,7 +58,7 @@ class _Policy:
   def __init__(self, fail_times=0):
     self.created, self.terminal, self.fail_times = [], [], fail_times
 
-  async def on_creation(self, event, result):
+  async def on_creation(self, event, result, **_):
     if self.fail_times:
       self.fail_times -= 1
       raise ConnectionError("redis down")

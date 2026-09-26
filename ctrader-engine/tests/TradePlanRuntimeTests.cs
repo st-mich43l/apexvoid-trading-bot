@@ -11,7 +11,7 @@ namespace CTraderFeed.Tests;
 /// ICTraderTradeClient, with fill/target/BE tracking and restart recovery -
 /// see docs/adr-trade-plan-v8-cutover.md Sections F/H/I/J/K.
 /// </summary>
-public sealed class TradePlanRuntimeTests
+public sealed partial class TradePlanRuntimeTests
 {
   private static readonly SymbolInfo Symbol = new(
     "XAU", "XAUUSD", 7, Digits: 2, PipPosition: 2,
@@ -4036,8 +4036,19 @@ public sealed class TradePlanRuntimeTests
       ));
     }
 
+    // The next N CancelPendingOrderAsync calls throw before touching the
+    // order (a broker outage / rejection): the order stays live.
+    public int FailCancelCalls { get; set; }
+
     public Task CancelPendingOrderAsync(long orderId, CancellationToken ct)
     {
+      if (FailCancelCalls > 0)
+      {
+        FailCancelCalls--;
+        throw new InvalidOperationException(
+          "cTrader rejected order operation: cancel failed"
+        );
+      }
       CancelledOrderIds.Add(orderId);
       var pending = PendingOrders.FirstOrDefault(order => order.OrderId == orderId);
       PendingOrders.RemoveAll(order => order.OrderId == orderId);

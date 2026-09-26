@@ -271,6 +271,8 @@
     "technical_authority": {
       "consumer_enabled": false,
       "consumer_group": "apexvoid-algo-bot-analysis-opportunity-v1",
+      "max_delivery_lag_seconds": 300,
+      "max_event_age_seconds": 900,
       "mode": "python"
     },
     "techniques": {
