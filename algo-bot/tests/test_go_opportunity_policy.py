@@ -141,6 +141,20 @@ def test_higher_timeframe_duplicates_and_unclosed_bars_fail_contract(mutate):
     parse_analysis_event(OpportunityTopic, json.dumps(raw))
 
 
+@pytest.mark.parametrize("field,value", [
+  ("touch_bar_time", -1),
+  ("confirmation_bar_time", 10**12),
+  ("reaction_type", "assumed_reclaim"),
+  ("zone_id", ""),
+])
+def test_invalid_reaction_evidence_is_rejected_at_the_kafka_contract(field, value):
+  raw = golden()
+  raw["payload"]["technical_context"]["confirmation"][field] = value
+  from app.analysis_client.models import AnalysisContractError
+  with pytest.raises(AnalysisContractError):
+    parse_analysis_event(OpportunityTopic, json.dumps(raw))
+
+
 def test_counter_bias_and_neutral_are_derived_only_from_go_bias():
   raw = golden()
   raw["payload"]["technical_context"]["bias"]["direction"] = "BUY"
