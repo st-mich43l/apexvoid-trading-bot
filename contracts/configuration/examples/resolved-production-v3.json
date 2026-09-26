@@ -269,12 +269,12 @@
       "version": "v2"
     },
     "technical_authority": {
-      "consumer_enabled": true,
+      "consumer_enabled": false,
       "consumer_group": "apexvoid-algo-bot-analysis-opportunity-v1",
       "go_origin_risk_leg_enabled": false,
       "max_delivery_lag_seconds": 300,
       "max_event_age_seconds": 900,
-      "mode": "go"
+      "mode": "python"
     },
     "techniques": {
       "invalidation_tolerance_atr": 0.5,

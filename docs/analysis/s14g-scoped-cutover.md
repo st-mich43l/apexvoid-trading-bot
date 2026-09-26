@@ -1,7 +1,8 @@
 # S14G: scoped live cutover (prepared, not executed)
 
-`mode: go` and `consumer_enabled: true` are prepared as a **draft** configuration PR that must not be merged
-until the S14F report has been reviewed. **Setting them grants no authority**: every scope remains Python-owned
+`mode: go` and `consumer_enabled: true` are set **in the ansible vars that render the bot's trading-bot.yml**
+(`apexvoid_trading_bot_config.analysis.technical_authority`), only after the S14F report has been reviewed; `config/analysis.yml`
+does not drive the bot (see the S14F runbook §2). **Setting them grants no authority**: every scope remains Python-owned
 until an accepted, fenced transfer (`app.scripts.analysis_authority`), which only the operator can request.
 
 ## The stop

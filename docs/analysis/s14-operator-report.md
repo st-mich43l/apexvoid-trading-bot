@@ -14,8 +14,8 @@ CI-equivalent runs (real Redis and PostgreSQL, the production Lua, the C# execut
 | 3 | #644 | S14D | Go event to a real V8 plan through the unmodified chain, executor over a broker simulator, never `bypass_analysis_gates`; stable thesis identity (one plan per zone) |
 | 4 | #645 | S14E | one reviewed XAU ladder spec with Python/C# parity, full-precision contract vs whole-point card, worst-case group-risk function, default-off `go_origin_risk_leg_enabled` |
 | 5 | #646 | S14F-H | acceptance report, cutover packet, rollback drills, runbooks (this report) |
-| 6 | #647 | S14F | config: `go_shadow`, consumer on (dry run only) |
-| hold | #648 | S14G | **draft.** config `mode: go`. Grants nothing; do not merge before the acceptance report is reviewed |
+| 6 | #647 | S14F | config `go_shadow` in `config/analysis.yml` — **had no effect on the bot** (see section 8) |
+| hold | #648 | S14G | config `mode: go` in `config/analysis.yml`, merged although drafted — **no effect on the bot**; returned to `python` in the review PR |
 | any | #643 | S14C | deterministic Go-vs-Python replay + committed report on a real capture. Independent of the stack |
 
 You merge; automation cannot. (#647 and #648 are stacked: retarget #647 to master after #646 merges.)
@@ -36,7 +36,9 @@ Suites on the top of the stack: autotrade allowlist 1164 passed (the 1 failure a
 | gate | who | evidence needed | command |
 | --- | --- | --- | --- |
 | merge #642, #644, #645, #646, #647 | operator | green CI | (GitHub) |
-| production `go_shadow` window | operator | consumer group assigned, lag, decision counts, side-effect counts | runbook `s14f-production-shadow-runbook.md` §3 |
+| deploy the review PR (persistent Kafka log dir + engine ledger volume) and restart the executor | operator | Kafka data on the volume; executor healthy | section 7 |
+| set `go_shadow` in the **ansible vars** (not `config/analysis.yml`) and verify the consumer runs | operator | boot audit `go_shadow / t`, consumer health `ready`, Kafka group exists | runbook `s14f-production-shadow-runbook.md` §2 |
+| production `go_shadow` window on a live session | operator | consumer group assigned, lag, decision counts, side-effect counts | runbook §3 |
 | Kafka restart and outage drills | operator | measured recovery | runbook §5 |
 | deployed image SHAs equal reviewed commits | operator | `images.json`, `reviewed.json` | runbook §6 |
 | acceptance report shows `ready_for_operator_review` | operator | all nine gates evidenced | `python -m app.scripts.shadow_acceptance ...` |
@@ -71,7 +73,26 @@ It is a separate gate and does not block the authority cutover.
 Deletion only after stable accepted production operation and a fresh S13 classification. Today: 62 legacy modules, 0 unclassified,
 19 production importers still block deletion. Nothing was removed. See `s14h-rollback-and-cleanup.md`.
 
-## 7. Rollback (one screen)
+## 7. Post-merge production check (read-only, 2026-09-26 ~15:00 UTC, master `a75b655` deployed)
+
+Nothing was changed on the host. Facts, then what they mean:
+
+| finding | evidence | consequence |
+| --- | --- | --- |
+| The bot runs `mode=python`, consumer **off** | `analysis_authority_runtime_audit` boot rows `python / f`; no `component_health:analysis_opportunity_consumer` key; Kafka group `apexvoid-algo-bot-analysis-opportunity-v1` does not exist; bot log has no consumer line | #647/#648 changed a file the bot does not read. Production behaviour unchanged (safe), but the shadow window has **not started**. The real switch is the ansible-rendered trading-bot.yml |
+| No authority moved | `analysis_authority_scopes/transitions/acceptance` all 0 rows; log `non-Python scopes now none` | as designed; no `accept`/`grant` exists |
+| Kafka is empty | both opportunity topics end offset 0 on all partitions | expected today (Saturday, closed market; ledger has 1198 bootstrap `suppressed` records, 0 published) — not evidence of a fault |
+| **Kafka data is not persistent** | broker logs to `/tmp/kafka-logs` (container layer); the `kafkadata` volume at `/var/lib/kafka/data` is empty; the container was recreated 12:46:44 | every recreate wipes topics **and** consumer offsets; fixed in the review PR (`KAFKA_LOG_DIRS`), verified locally: topic data and a group offset survive a recreate |
+| **Go publication ledger not persistent** | `/var/lib/apexvoid-analysis-engine` has no volume | ledger (ordering of creations/terminals) is lost on recreate; fixed in the review PR (`analysisdata` volume) |
+| **Executor (ctrader-engine) frozen, unhealthy** | health file last touched 12:48:20; no event/log after 12:48:21; 455 consecutive health failures; process alive, TCP to the broker and Redis established; heartbeat is only touched when the broker sends a heartbeat | live plans are not being managed: EURUSD BUY 0.18 resting limit (stop 1.13749), GBPUSD SELL 0.18 (stop 1.32584), GBPJPY BUY 0.18 (stop 208.133), XAU SELL 0.08 at breakeven stop 4290.53. Broker-side stops exist; TP/BE/trailing management and new orders do not run. Cause **unproven** (Saturday 07:19 already logged broker `service_error`s: "No pooled connection", "Trading account is not authorized"; nothing in the cancel-intent path can block: no tombstone keys exist). Nothing restarts an unhealthy container (`restart: unless-stopped` ignores health) |
+| Journal healthy | 1130 results, 0 duplicate `group_id`, 0 null pips / bad stops in 30 days | — |
+| Infra healthy | Postgres/Redis on volumes, Redis AOF on, disk 29 %, no error lines in 24 h for the bot and the analysis engine | — |
+
+Decision for the operator: restart `apexvoid-ctrader-engine` before Sunday's open (state is recovered from Redis on every start; the
+frozen loop is the risk) and decide whether to add a watchdog that restarts it on a stale heartbeat. I did not do either: the first is a
+live-trading action and the second needs the weekend heartbeat behaviour confirmed first, or it could restart-loop on weekends.
+
+## 8. Rollback (one screen)
 
 ```bash
 python -m app.scripts.analysis_authority status --symbol XAU
