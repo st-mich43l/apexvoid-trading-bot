@@ -1860,8 +1860,27 @@ async def _deliver_compact_order_filled(
   )
   await _mark_forming_card_position_activated(client, match_id)
 
-  manage_id, _manage_text = await _load_manage_message(client, match_id)
+  manage_id, manage_text = await _load_manage_message(client, match_id)
   if manage_id is not None:
+    # Manual-Algo flow: the fill line is posted once and stays where it was
+    # posted; later TP / SL-move / close messages append *below* it. A second
+    # fill event (the group's later leg, or a redelivery) therefore edits the
+    # existing message in place instead of delete+repost, which used to drop
+    # the fill line to the bottom of the thread, below TP1 and the SL move.
+    if manage_text == body:
+      return True
+    root = await load_forming_card(client, match_id)
+    edit_chat_id = int(root["chat_id"]) if root else chat_id
+    try:
+      await edit_scanner_message_text(edit_chat_id, manage_id, body)
+    except Exception:
+      log.exception(
+        "fill reply in-place edit failed; replacing setup_id=%s message_id=%s",
+        match_id, manage_id,
+      )
+    else:
+      await _save_manage_message(client, match_id, message_id=manage_id, text=body)
+      return True
     await _untrack_active_manage_message(client, match_id, manage_id)
 
   async def _on_sent(message_id: int) -> None:

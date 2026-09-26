@@ -952,15 +952,14 @@ async def test_order_filled_stores_manage_keys_and_second_fill_replaces(monkeypa
     chat_id=123,
     send=sent,
   )
-  assert deleted == [(123, 8123)]
-  assert len(calls) == 2  # second fill deletes old + posts new
-  assert await client.get(delivery._manage_msg_key(setup_id)) == "8124"
-  # No "still pending" in the second (group-complete) message - no
-  # "leg pending" suffix this time.
-  assert calls[1][0] == "🟢 active — order filled"
-  assert calls[1][1]["reply_to"] == 7001
-  # Root card may be edited for ORDER ACTIVATED; manage msg itself is never edited.
-  assert all(e[1] != 8123 for e in edited)
+  # Manual-flow ordering: the second fill EDITS the first fill message in
+  # place. Nothing is deleted or re-posted, so the fill line can never end up
+  # below later TP / SL-move messages.
+  assert deleted == []
+  assert len(calls) == 1
+  assert await client.get(delivery._manage_msg_key(setup_id)) == "8123"
+  assert await client.get(delivery._manage_text_key(setup_id)) == "🟢 active — order filled"
+  assert (123, 8123, "🟢 active — order filled") in edited
 
 
 @pytest.mark.asyncio
@@ -3230,3 +3229,55 @@ async def test_status_open_book_caps_at_three_plans(monkeypatch):
   assert text.count("Open: <b>BUY</b>") == 3
   assert "+1 more" in text
   assert len(text) < 4000
+
+
+@pytest.mark.asyncio
+@pytest.mark.no_database
+async def test_late_fill_event_never_moves_the_fill_line_below_tp_and_sl_messages(monkeypatch):
+  """Live 2026-09-26 (XAU Key Level): fill, TP1 and 'move SL' were posted, then
+  a later order_filled event reposted 'active - order filled' at the bottom.
+  Manual Algo's thread order is fill -> TP -> SL move, always."""
+  client = redis_state.get_client()
+  setup_id = "fill-order-setup"
+  await client.set(
+    delivery._forming_message_key(setup_id),
+    json.dumps({"chat_id": 123, "message_id": 7001, "text": "root", "updated_at": 1}),
+    ex=60,
+  )
+  await client.set(
+    setup_card.telegram_root_message_key(setup_id),
+    json.dumps({"chat_id": 123, "root_message_id": 7001, "updated_at": 1}),
+    ex=60,
+  )
+  thread, edits, deleted = [], [], []
+
+  async def fake_edit(chat_id, message_id, text):
+    edits.append((message_id, text))
+
+  async def fake_delete(chat_id, message_id):
+    deleted.append(message_id)
+
+  monkeypatch.setattr(delivery, "edit_scanner_message_text", fake_edit)
+  monkeypatch.setattr(delivery, "delete_scanner_message", fake_delete)
+  ids = iter(range(9000, 9100))
+
+  async def sent(text, **kwargs):
+    mid = next(ids)
+    thread.append((mid, text))
+    return SimpleNamespace(message_id=mid)
+
+  async def deliver(event):
+    await delivery._deliver_auto_trade_event(
+      client, {"match_id": setup_id, "position_id": 1, **event}, profile="internal", chat_id=123, send=sent,
+    )
+
+  await deliver({"type": "order_filled", "message": "ENTRY L1 FILLED lot=0.06 @ 4290.33; L2 still pending"})
+  await deliver({"type": "take_profit", "message": "TP1 4285.0 +58 pips"})
+  await deliver({"type": "stop_moved", "message": "SL moved to 4291.00 (BE+2)"})
+  fill_id = thread[0][0]
+  await deliver({"type": "order_filled", "message": "ENTRY GROUP FULLY FILLED SELL lot=0.08 weighted=4290.6"})
+
+  assert deleted == [] or fill_id not in deleted
+  assert [mid for mid, _ in thread].count(fill_id) == 1
+  assert all("order filled" not in text for _mid, text in thread[1:]), thread
+  assert (fill_id, "🟢 active — order filled") in edits
