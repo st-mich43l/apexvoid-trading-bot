@@ -1,0 +1,17 @@
+{
+  "capture_sha256": "a7663f03efe8f564b17cf32b0af678a8f09c93d4a429b661efa672b7c7004f30",
+  "closes_evaluated": 1351,
+  "closes_skipped_for_warmup": 149,
+  "detectors": [
+    "supply_demand_technique_reaction"
+  ],
+  "observations": 177,
+  "pandas": "3.0.5",
+  "pandas_ta": "0.4.71b0",
+  "python": "3.14.7",
+  "stride": 1,
+  "window_close_at": [
+    1789360800,
+    1790001300
+  ]
+}
