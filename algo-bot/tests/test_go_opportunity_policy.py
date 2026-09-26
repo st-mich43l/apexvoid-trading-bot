@@ -345,71 +345,50 @@ async def _outcome(client, match):
 
 
 @pytest.mark.asyncio
-async def test_existing_live_policy_refuses_an_unconfirmed_go_zone_thesis(h):
-  """The real gate, not a mock: legacy zone policy trades *confirmed reactions*.
-
-  A Go S7 zone opportunity is a resting thesis and carries no touch /
-  confirmation / reaction-type facts. The adapter must NOT fabricate them, so
-  the unchanged V8 pipeline correctly fails closed. Trading resting Go zones
-  needs an owner-approved confirmation policy or Go-side reaction facts — it
-  is a product/risk decision, recorded as a blocker in docs/analysis/s13-*.
-  """
+async def test_resting_go_zone_is_a_non_executable_observation(h):
   await h.grant()
-  await h.deliver(event(int(h.clock.now)))
-  client = redis_state.get_client()
-  match = deserialize_matches(await client.get(strategy_matches_key("XAU")))[0]
-  assert (match.touch_bar_ts, match.m5_confirmation_bar_ts, match.reaction_type) == (None, None, None)
+  raw = golden(int(h.clock.now))
+  del raw["payload"]["technical_context"]["confirmation"]
+  assert await h.deliver(parse_analysis_event(OpportunityTopic, json.dumps(raw))) == "rejected"
+  assert (await h.decisions())[-1]["reason"] == "reaction_confirmation_unavailable"
+  assert await redis_state.get_client().get(strategy_matches_key("XAU")) is None
 
-  plan_id = await worker._publish_trade_plan_v8(client, "XAU", _spot(4354.1, 4354.3), match, frames={"M1": _m1_trigger_bar()})
 
-  assert plan_id is None
-  outcome = await _outcome(client, match)
-  assert outcome["reason_code"] == "confirmation_metadata_missing" and outcome["status"] == "blocked"
-  assert (await load_setup(client, match.match_id)).state == INVALIDATED
+def test_missing_go_htf_structure_is_rejected_not_recreated_from_m5():
+  raw = golden()
+  del raw["payload"]["technical_context"]["higher_timeframes"]
+  ev = parse_analysis_event(OpportunityTopic, json.dumps(raw))
+  with pytest.raises(pol.AdapterRejection) as exc:
+    pol.build_strategy_match(ev, profile=SUPPLY, epoch=1, now=raw["payload"]["created_at"] + 1)
+  assert exc.value.code == "higher_timeframe_bias_unavailable"
 
 
 @pytest.mark.asyncio
-async def test_even_with_confirmation_the_v8_builder_refuses_a_match_without_an_htf_bias(h):
-  """Go's bias is primary-timeframe, so the adapter leaves htf_bias empty; the
-  real builder (ADR: never derive bias from direction) then refuses. This is
-  the second recorded blocker, enforced by the existing code, not by us."""
+async def test_existing_v8_builder_fails_closed_if_htf_is_stripped(h):
   from dataclasses import replace
   await h.grant()
   await h.deliver(event(int(h.clock.now)))
   client = redis_state.get_client()
   base = deserialize_matches(await client.get(strategy_matches_key("XAU")))[0]
-  now = int(time.time())
-  match = replace(base, event_ts=str(now - 60), touch_bar_ts=str(now - 120), confirmation_bar_ts=str(now - 60),
-                  m5_confirmation_bar_ts=str(now - 60), reaction_type="strong_reclaim", expires_at=now + 900)
+  match = replace(base, htf_bias="")
   assert await worker._publish_trade_plan_v8(client, "XAU", _spot(4354.1, 4354.3), match, frames={"M1": _m1_trigger_bar()}) is None
   assert (await _outcome(client, match))["reason_code"] == "v8_missing_htf_bias"
 
 
 @pytest.mark.asyncio
-async def test_go_owned_zone_becomes_a_real_v8_plan_once_confirmation_facts_exist(h):
-  """Positive path for the *rest* of the pipeline (fence, policy, TradePlan V8).
+async def test_go_owned_zone_becomes_a_real_v8_plan_with_real_contract_fields(h):
+  """No Python detector or post-adaptation mutation supplies confirmation.
 
-  The confirmation facts and HTF bias are supplied by the test, standing in
-  for future reviewed Go/policy sources; nothing in production produces them
-  today. Exactly these two are what the unchanged builder demands.
+  The Go-pinned resting golden is enriched with the additive confirmed
+  reaction/HTF test fixture; the same typed event is consumed by the actual
+  adapter and the unchanged V8 policy and publisher.
   """
-  from dataclasses import replace
   await h.grant()
   await h.deliver(event(int(h.clock.now)))
   client = redis_state.get_client()
-  base = deserialize_matches(await client.get(strategy_matches_key("XAU")))[0]
-  now = int(time.time())
-  match = replace(
-    base, event_ts=str(now - 60), touch_bar_ts=str(now - 120), confirmation_bar_ts=str(now - 60),
-    m5_confirmation_bar_ts=str(now - 60), reaction_type="strong_reclaim", expires_at=now + 900,
-    # Second gap the real V8 builder enforces (see the test above): an H1/H4
-    # bias, which Go does not publish. (regime_kind is NOT required: verified
-    # by omitting it.)
-    htf_bias="down",
-  )
-
+  match = deserialize_matches(await client.get(strategy_matches_key("XAU")))[0]
+  assert match.htf_bias == "down" and match.reaction_type == "rejection"
   plan_id = await worker._publish_trade_plan_v8(client, "XAU", _spot(4354.1, 4354.3), match, frames={"M1": _m1_trigger_bar()})
-
   assert plan_id is not None, f"policy rejected: {await _outcome(client, match)}"
   plan = await read_trade_plan(client, plan_id)
   assert plan is not None and await read_plan_state(client, plan_id) == "published"
