@@ -179,7 +179,6 @@ def test_demand_translation_mirrors_geometry_for_buy():
 
 @pytest.mark.parametrize("mutate,code", [
   (lambda r: r["payload"].pop("technical_context"), "technical_context_unavailable"),
-  (lambda r: r["payload"].pop("timeframe"), "missing_observed_timeframe"),
   (lambda r: r["payload"].update(symbol="NOSUCH"), "unknown_instrument"),
   (lambda r: r["payload"].update(targets=[{"price": {"price": 4352.48}}]), "target_not_beyond_entry"),
 ])
@@ -190,6 +189,30 @@ def test_missing_or_unusable_facts_are_rejected_not_approximated(mutate, code):
   with pytest.raises(pol.AdapterRejection) as exc:
     pol.build_strategy_match(ev, profile=SUPPLY, epoch=1, now=raw["payload"]["created_at"] + 1)
   assert exc.value.code == code
+
+
+def test_missing_observed_timeframe_with_htf_facts_fails_at_contract_boundary():
+  raw = golden()
+  del raw["payload"]["timeframe"]
+  from app.analysis_client.models import AnalysisContractError
+  with pytest.raises(AnalysisContractError, match="timeframe is required"):
+    parse_analysis_event(OpportunityTopic, json.dumps(raw))
+
+
+def test_confirmed_go_identity_survives_redis_without_confusing_zone_and_opportunity():
+  match = pol.build_strategy_match(event(), profile=SUPPLY, epoch=3, now=golden()["payload"]["created_at"] + 1)
+  from app.autotrade.multi_match import serialize_matches, deserialize_matches
+  from dataclasses import replace
+  assert match.match_id != f"go_{match.structural_zone_id}"
+  assert deserialize_matches(serialize_matches([match])) == [match]
+  # A missing, forged, or duplicated opportunity provenance cannot turn a
+  # real zone into a differently identified executable Go opportunity.
+  for bad in (
+    replace(match, tags=tuple(t for t in match.tags if not t.startswith("go_opportunity:"))),
+    replace(match, tags=match.tags + ("go_opportunity:other",)),
+    replace(match, match_id="go_some_other_opportunity"),
+  ):
+    assert deserialize_matches(serialize_matches([bad])) == []
 
 
 def test_direction_and_expiry_guards():
