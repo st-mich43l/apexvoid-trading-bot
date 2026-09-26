@@ -65,3 +65,80 @@ Enable `go_shadow` only in a dedicated configuration/deployment change after:
 Rollback is configuration-only: set `consumer_enabled: false` (or retain
 `mode: python`) and redeploy. Existing ledger rows remain audit evidence;
 there is no execution state to unwind.
+
+## S13B: fenced technical-authority switch (implemented)
+
+Kafka publication is not a cutover. Who may create an executable TradePlan for a
+`(symbol, catalog strategy)` scope is a separate, durable, fenced decision:
+`algo-bot/app/analysis_client/authority.py`.
+
+| Property | Behaviour |
+|---|---|
+| Default | Every scope is Python-owned (no row = epoch 0). Deploying this changes nothing. |
+| Consulted when | Only if `consumer_enabled` is true (or a match is Go-tagged). With the consumer off, Python owns everything and no DB read is made. |
+| Handover | `python → draining → go` and back. While draining **neither** publisher may create a plan; the target takes effect after `drain_until`. Minimum drain is 3× the read-cache TTL, so a process holding a stale read is provably quiet first. |
+| Fencing token | Every handover advances a monotonic `epoch`, compare-and-set on the caller's `expected_epoch` (real Postgres test: 8 concurrent handovers → exactly 1 wins). A Go match carries its accepted epoch and is refused after any later handover, rollback or re-grant. |
+| Go needs acceptance | A grant requires an operator-recorded, unexpired acceptance for the exact symbol/scope/evidence. **Nothing in the code base writes one.** |
+| Rollback | Always allowed, needs no acceptance, works mid-drain; Go stops immediately, Python resumes after the drain. `rollback-all` is the emergency form. |
+| Failure mode | Any fence read failure **denies** publication (two publishers is worse than a skipped plan). |
+| Where enforced | The single executable-plan path: `worker._publish_trade_plan_v8` (the only caller of `publish_trade_plan`). Reconciling an already-published plan is deliberately not fenced; ownership governs creation, never management of existing positions. |
+| Not fenced | Analysis-only Telegram observations, manual trading, position management, retired legacy strategy names (no Go equivalent). |
+
+Operator interface (audited, nothing automatic):
+
+```bash
+python -m app.scripts.analysis_authority status [--symbol XAU]
+python -m app.scripts.analysis_authority accept   --symbol XAU --scope supply --evidence <ref> --approved-by <name>
+python -m app.scripts.analysis_authority grant    --symbol XAU --scope supply --expected-epoch 0 --evidence <ref> --actor <name> --reason <text>
+python -m app.scripts.analysis_authority rollback --symbol XAU --scope supply --expected-epoch <n> --actor <name> --reason <text>
+python -m app.scripts.analysis_authority rollback-all --actor <name> --reason <text>
+```
+
+Every transition is appended to `analysis_authority_transitions`. Rollback is
+therefore both configuration-free (a DB row) and configuration-level
+(`consumer_enabled: false` returns every scope to Python with no DB read).
+
+What this does **not** do: it does not itself produce Go-owned plans — see the
+S13C adapter (`autotrade/go_opportunity_policy.py`) and the two policy blockers
+it exposed in `s13-python-retirement.md`. Until those are resolved by an owner
+decision, no acceptance should be recorded.
+
+## S13B: additive `technical_context` (policy inputs from Go)
+
+The S12B shadow recorded six missing inputs. `analysis.opportunity.v1` now
+carries an **additive, optional** `technical_context` block, assigned by
+`SymbolWorker` at the same observation boundary as `timeframe` (never by a
+strategy) from the exact closed bar that first made the setup actionable:
+
+| Field | Meaning | Proof |
+|---|---|---|
+| `atr` | canonical ATR of `timeframe` as of the observed bar | engine test: equals `CanonicalATR(candles[:i+1])` for every live opportunity on real XAU data (no look-ahead, no recompute drift) |
+| `reference_price`, `reference_time` | close / open time of the observed bar | equals the real bar's close; `reference_time == created_at` |
+| `bias` (optional) | confirmed structural bias; **omitted**, never a guessed neutral | schema rejects `NEUTRAL` |
+
+Resolution of the S12B gap list:
+
+1. *current executable price / spread* — **deliberately not carried.** A live
+   quote is the policy layer's own concern; embedding one in a technical event
+   would be stale on arrival. The schema forbids spread/account fields.
+2. *ATR* — provided (above).
+3. *confluence components* — the strategy's own `evidence` and `quality`
+   components are the facts; there is no universal score. The Python mapping
+   from these to the legacy integer `confluence` is an adapter concern and is
+   reviewed there (S13B-4), not smuggled into the contract.
+4. *source-structure geometry* — the entry band **is** the zone/level band for
+   zone-anchored strategies; `strategy` + `direction` identify the kind.
+5. *execution confirmation* — a Go opportunity is a resting technical thesis,
+   not a confirmed reaction; the existing V8 execution-confirmation machinery
+   (quote-in-zone, WAITING_RETEST) stays Python policy.
+6. *strategy routing* — a reviewed per-scope profile in the adapter, not data.
+
+When the block is absent (e.g. ATR not yet available, or a retained pre-S13B
+event) consumers must fail closed. **Deployment order matters**: `algo-bot`'s
+decoder forbids unknown fields, so a Python build without this change would
+reject every new opportunity; the Python consumer is off by default, but roll
+`algo-bot` out first.
+
+The bytes are pinned in `contracts/analysis/examples/opportunity-v1-technical-context.json`.
+Go's contract test regenerates and compares them (`UPDATE_GOLDEN=1` to refresh);
+algo-bot's decoder test parses the same file, so neither side can drift alone.

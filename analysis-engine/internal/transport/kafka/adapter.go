@@ -13,8 +13,18 @@ func OpportunityPayloadFromCandidate(c opportunity.Candidate, algo AlgorithmVers
 	for i, e := range c.Evidence {
 		evidence[i] = EvidencePayload{Code: e.Code}
 	}
+	var technical *TechnicalContextPayload
+	if c.Technical != nil {
+		technical = &TechnicalContextPayload{
+			ATR: c.Technical.ATR, ReferencePrice: c.Technical.ReferencePrice, ReferenceTime: c.Technical.ReferenceTime,
+		}
+		if c.Technical.BiasDirection.IsValid() {
+			technical.Bias = &BiasPayload{Direction: string(c.Technical.BiasDirection), Layer: c.Technical.BiasLayer}
+		}
+	}
 	return OpportunityPayload{
-		ID: c.ID, Strategy: string(c.Strategy), Symbol: string(c.Symbol), Timeframe: string(c.ObservedTimeframe), Direction: string(c.Direction),
+		TechnicalContext: technical,
+		ID:               c.ID, Strategy: string(c.Strategy), Symbol: string(c.Symbol), Timeframe: string(c.ObservedTimeframe), Direction: string(c.Direction),
 		Entry:        EntryZonePayload{Low: c.Entry.Low, High: c.Entry.High},
 		Invalidation: PriceLevelPayload{Price: float64(c.Invalidation.Price), Label: c.Invalidation.Label},
 		Targets:      targets, Evidence: evidence,

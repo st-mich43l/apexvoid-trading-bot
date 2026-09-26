@@ -127,3 +127,56 @@ Do not declare S13 complete from a green CI run alone; provide deployed
 build/config fingerprints, accepted S12 evidence, deletion diffs and a
 production smoke report. The first removal PR should name its exact obsolete
 entrypoints and prove the absence of callers.
+
+
+## S13C: Go opportunity → existing policy (implemented) and the blockers it exposed
+
+`algo-bot/app/autotrade/go_opportunity_policy.py` translates a durable, decoded
+Go opportunity into an ordinary `StrategyMatch` in the **same** Redis store the
+scanner writes, so arbitration, guards, execution policy (min R:R, stop, routing,
+sizing), duplicate protection, the TradePlan V8 build and the publish-time
+authority fence all run unchanged. It decides nothing about risk and does not
+route through Manual Algo's `bypass_analysis_gates`.
+
+* **Reviewed scopes only:** `supply`, `demand` (zone-anchored; the entry band *is*
+  the zone). Every other catalog scope is recorded `scope_not_reviewed` and
+  dropped.
+* **Fence first** (`go` owner at the accepted epoch), then translate; a rollback
+  between match-write and publish is refused by the publish guard.
+* **Idempotent + fail-closed:** a policy exception is not swallowed — the offset
+  is not committed, the event is redelivered, the policy retries; a late
+  redelivery of a creation never resurrects a terminated opportunity.
+* `mode: go` is now a legal config value (requires `consumer_enabled`); it moves
+  **no** scope — every scope stays Python-owned until an operator records an
+  acceptance and performs a fenced handover.
+
+### Blockers found by running the *real* V8 pipeline (not assumed)
+
+The adapter is pipeline-compatible: with the two facts below supplied, the real
+`_publish_trade_plan_v8` builds and publishes a TradePlan V8 from a Go-derived
+match (`test_go_owned_zone_becomes_a_real_v8_plan_once_confirmation_facts_exist`).
+Without them the **existing, unmodified** policy refuses, and the tests pin both:
+
+1. **No reaction confirmation** — `confirmation_metadata_missing`. Legacy zone
+   (`supply_demand`) and key-level/session/trendline policy trade *confirmed
+   reactions* (touch bar, confirmation bar, reaction type). The Go S7 strategies
+   emit a *resting* thesis and carry none of these; the adapter refuses to
+   fabricate them. This is a **product/risk decision**, not plumbing: either Go
+   must publish reaction-confirmation facts (new Go detection semantics) or the
+   owner must approve a resting-thesis confirmation policy. Enabling Go for a
+   scope today would silently change *what is traded* (resting zones vs.
+   confirmed reactions).
+2. **No H1/H4 bias** — `v8_missing_htf_bias`. Go's bias is primary-timeframe
+   structural bias; the legacy field means higher-timeframe bias and the builder
+   (per its ADR) refuses to derive it from direction.
+
+`regime_kind` is *not* required (verified). Retained, documented approximations
+that replay/shadow must reconcile **before** any acceptance: `confluence` =
+count of Go evidence codes; `strategy_mode`/`bias_relationship` derive from Go
+primary-timeframe bias; the worker's opposing-barrier and target-room checks
+still recompute Python zones from Redis OHLC (a retained duplicate technical
+computation that blocks deleting those modules).
+
+Consequently **no live Python detector is deleted in this series**: every
+scope's live entrypoint still has a production importer *and* no approved,
+evidence-backed Go replacement. See the final report for the itemised list.
