@@ -334,7 +334,7 @@ async def test_unconfigured_scope_defaults_to_go_in_global_go_mode(h):
   now = int(h.clock.now)
   assert await h.deliver(event(now)) == "match_written"
   assert await redis_state.get_client().get(strategy_matches_key("XAU")) is not None
-  assert await h.decisions() == [{"outcome": "match_written", "reason": "go_mode_default", "mode": "go"}]
+  assert await h.decisions() == [{"outcome": "match_written", "reason": "go_owned_scope", "mode": "go"}]
 
 
 @pytest.mark.asyncio

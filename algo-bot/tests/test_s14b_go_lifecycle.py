@@ -249,8 +249,9 @@ async def test_expiry_is_recorded_as_expiry_and_expires_the_setup(h, real_redis_
 
 @pytest.mark.asyncio
 async def test_invalidation_of_something_never_adapted_leaves_no_tombstone(h, real_redis_client):
-  # Python-owned scope: the creation was recorded but never adapted.
-  await deliver(h, make_event(h.clock.now))
+  # A terminal event can arrive before its creation record. It must not invent
+  # a setup or plan-cancel tombstone for an opportunity never adapted by the
+  # policy.
   assert await deliver(h, terminal(h), topic=InvalidationTopic) == "match_withdrawn"
   assert await real_redis_client.keys("execution:plan_cancel:*") == []
 

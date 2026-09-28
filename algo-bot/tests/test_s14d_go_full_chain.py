@@ -257,9 +257,8 @@ async def test_go_zone_book_hard_blocks_a_go_origin_plan_inside_a_published_oppo
 @pytest.mark.asyncio
 async def test_go_zone_book_unavailable_falls_back_to_the_existing_publish_path(h, prod):
   """No zone book published (Go has not written one, or it expired): the
-  plan still publishes via the Python-recompute fallback, unchanged from
-  before this feature - never a silent, permanent block for lack of a Go
-  publish."""
+  plan still publishes using Go's opportunity geometry, without inventing a
+  competing Python zone book or silently blocking the opportunity."""
   await h.grant(scope="key_level")
   await h._ensure()
   record = catalog_kafka_record(h.clock.now, "key_level")
