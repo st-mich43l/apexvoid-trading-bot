@@ -32,6 +32,20 @@ dated section after deployment.
   `MarketContext`, and immutable analysis snapshots.
 
 ### Changed
+- Go is the sole automatic technical-opportunity source. `config/trading-bot.yml`
+  now sets `analysis.technical_authority.mode: go` with the consumer on, and the
+  Algo Bot refuses to start automatic trading on an effective python/go_shadow
+  config or without Kafka (`app/analysis_client/startup_gate.py`; Manual-Algo-only
+  deployments with `runtime.auto_trade.enabled=false` are not gated). The closed-bar
+  dispatcher no longer runs the Python scanner or M1 scalping discovery, and in
+  `mode=go` the worker's closed-bar sweep only evaluates Go-origin matches, so a
+  leftover Python match in Redis cannot trade. Unlike the unmerged #653, live
+  ZoneWatch activation of already-retained zones is preserved (cutover install,
+  `zone_watch_execution_loop`, M1 `evaluate_active_zone_watches`, and the worker's
+  `ready_match_id` publish path); only its private scanner market-context reload
+  and market-map cache fallback were removed (it now uses the zone's discovery
+  range snapshot). Scope ownership is unchanged: every scope still needs an
+  operator-recorded fenced grant before Go may publish into it.
 - The one-time `manual_algo_charts` cleanup now refuses `--apply` without a
   new archive path, locks the table, atomically archives schema plus all rows,
   logs the archive SHA-256, and only then drops the obsolete table. Production
