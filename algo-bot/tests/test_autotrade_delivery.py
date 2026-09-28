@@ -18,7 +18,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.analysis.scanner import clear_active_setup_tracking
+from app.autotrade.setup_tracking import clear_active_setup_tracking
 from app.autotrade import delivery, setup_card
 from app.autotrade.delivery import (
   _compact_route_line,

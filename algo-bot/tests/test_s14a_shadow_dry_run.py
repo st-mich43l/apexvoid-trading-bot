@@ -232,7 +232,10 @@ async def test_a_policy_block_is_a_would_reject_with_the_gates_own_reason(h, pro
 async def test_pre_policy_stops_are_recorded_as_not_adapted_with_their_reason(h, prod):
   now = int(h.clock.now)
   raw = golden(now)
-  raw["payload"]["strategy"] = "order_block"
+  # Every catalog ID the Go engine can actually emit has a reviewed adapter now
+  # (go_opportunity_policy.REVIEWED_SCOPES covers registry.go's full knownIDs); this
+  # exercises the defensive fallback for a strategy name outside that catalog.
+  raw["payload"]["strategy"] = "not_a_registered_go_strategy"
   unreviewed = parse_analysis_event(OpportunityTopic, json.dumps(raw))
   await ledger(h, unreviewed)
   assert (await h.shadow.dry_run_creation(unreviewed)).reason == "scope_not_reviewed"

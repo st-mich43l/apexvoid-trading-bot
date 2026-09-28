@@ -100,7 +100,7 @@ async def build_packet(args: argparse.Namespace, *, db: Any, redis: Any | None) 
                  "blocking_gates": [{"name": g["name"], "status": g["status"]} for g in blockers]},
     "deployed_shas": _load(args.images_json) or "unavailable: no --images-json supplied",
     "proposed_scope": {"symbol": symbol, "scope": scope, "eligible": eligible,
-                       "why": "reviewed XAU supply/demand scope" if eligible else "not a reviewed scope: leave it Python-owned"},
+                       "why": "reviewed XAU scope" if eligible else "not a reviewed scope: leave it Python-owned"},
     "maximum_permitted_exposure": maximum_exposure(args.equity, stop_max_pips=int(runtime_config.execution.reaction.stop_max_pips),
                                                    risk_leg_gate=bool(authority.go_origin_risk_leg_enabled)),
     "open_exposure_and_pending_plans": exposures,

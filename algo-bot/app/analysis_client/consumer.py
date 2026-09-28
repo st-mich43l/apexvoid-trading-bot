@@ -103,7 +103,15 @@ async def analysis_opportunity_consumer_loop() -> None:
     auto_offset_reset="earliest",
   )
   await consumer.start()
-  await redis_state.publish_component_health(component="analysis_opportunity_consumer", state="ready")
+  # Production incident 2026-09-28: this used to publish its own one-shot "ready" key
+  # (component="analysis_opportunity_consumer") that nothing ever corrected on failure —
+  # the consumer joined its group, died on the first fetch (aiokafka.errors.
+  # UnsupportedCodecError, no snappy codec installed), and that key stayed falsely
+  # "ready" for hours while run_supervised's own component_health for this loop
+  # correctly went to "fatal". run_supervised (app.main._spawn_supervised, name=
+  # "analysis_opportunity_consumer_loop") already publishes ready/degraded/fatal for
+  # this loop's whole lifetime; a second, narrower, never-corrected key only invites
+  # exactly that staleness. Read component_health:analysis_opportunity_consumer_loop.
   try:
     await run_consumer_loop(consumer, handler, partition_key=TopicPartition)
   finally:

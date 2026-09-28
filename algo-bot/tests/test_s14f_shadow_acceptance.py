@@ -99,7 +99,7 @@ async def test_an_empty_window_passes_nothing(prod, sql):
 async def test_a_clean_real_shadow_window_passes_only_what_it_actually_measured(h, prod):
   _ev, decision = await clean_shadow_window(h)
   assert decision.outcome == "would_publish"
-  await redis_state.publish_component_health(component="analysis_opportunity_consumer", state="ready")   # what the running consumer writes
+  await redis_state.publish_component_health(component="analysis_opportunity_consumer_loop", state="ready")   # what run_supervised writes for this loop
   rep = await report(prod)
   s = statuses(rep)
   assert s["go_consumer_is_running_in_the_process_under_test"] == acc.PASS

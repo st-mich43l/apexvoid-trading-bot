@@ -75,10 +75,12 @@ async def test_the_current_epoch_is_read_from_status_never_assumed(sql, prod):
 
 @pytest.mark.asyncio
 async def test_only_reviewed_scopes_are_eligible(sql, prod):
-  assert (await packet(prod, scope="supply"))["proposed_scope"]["eligible"] is True
-  assert (await packet(prod, scope="demand"))["proposed_scope"]["eligible"] is True
-  for scope in ("order_block", "fvg", "key_level"):
-    assert (await packet(prod, scope=scope))["proposed_scope"]["eligible"] is False
+  # Every catalog ID the Go engine can actually emit (registry.go's full knownIDs) has a
+  # reviewed adapter now (go_opportunity_policy.REVIEWED_SCOPES); "eligible" tracks that
+  # coverage, so order_block/fvg/key_level are eligible here just like supply/demand.
+  for scope in ("supply", "demand", "order_block", "fvg", "key_level"):
+    assert (await packet(prod, scope=scope))["proposed_scope"]["eligible"] is True, scope
+  assert (await packet(prod, scope="not_a_registered_go_strategy"))["proposed_scope"]["eligible"] is False
   assert (await packet(prod, symbol="EURUSD"))["proposed_scope"]["eligible"] is False
 
 

@@ -113,7 +113,12 @@ STRATEGY_NAMES: tuple[StrategyName, ...] = (
   _name(RANGE_BOX_SCALP, CANONICAL_FAMILY_RANGE, retired=True),
   _name(ONE_SIDED_RANGE_REACTION, CANONICAL_FAMILY_RANGE, retired=True),
   _name(CHOP_ZONE_REACTION, CANONICAL_FAMILY_RANGE, retired=True),
-  _name(LIQUIDITY_SWEEP, CANONICAL_FAMILY_LIQUIDITY, retired=True),
+  # No longer retired: the reviewed Go liquidity_sweep adapter
+  # (go_opportunity_policy.REVIEWED_SCOPES) now publishes live matches under
+  # exactly this display name, distinct from the still-live Python "Fade
+  # Scalp" M1 technique below (different execution_family: liquidity_reversal
+  # vs range_reversion).
+  _name(LIQUIDITY_SWEEP, CANONICAL_FAMILY_LIQUIDITY, "go:liquidity_sweep"),
   _name(BREAKOUT_CONTINUATION, CANONICAL_FAMILY_MOMENTUM, retired=True),
   _name(MAPPED_ZONE_REACTION, CANONICAL_FAMILY_UNKNOWN, retired=True),
   _name(RANGE_SWEEP_SCALP, CANONICAL_FAMILY_SCALP, aliases=("range sweep", "hfs range sweep")),

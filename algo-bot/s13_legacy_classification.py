@@ -70,7 +70,7 @@ ROLE_RETIREMENT = {
 MODULE_ROLES: dict[str, tuple[tuple[str, ...], str]] = {
   "app.analysis": ((MARKER,), "package marker"),
   "app.analysis.actionability": ((TECHNICAL,), "range bounds / actionability gates over Python context"),
-  "app.analysis.bar_event_dispatcher": ((TECHNICAL_ORCHESTRATION,), "startup task; drives ZoneWatch M1 activation and the worker per closed bar (scanner and scalping no longer dispatched)"),
+  "app.analysis.bar_event_dispatcher": ((TECHNICAL_ORCHESTRATION,), "startup task; drives the execution worker per closed bar (ZoneWatch M1 activation, scanner and scalping no longer dispatched)"),
   "app.analysis.candle_displacement": ((TECHNICAL,), "candle geometry detector"),
   "app.analysis.candle_evidence": ((TECHNICAL,), "candle evidence detector"),
   "app.analysis.candle_geometry": ((TECHNICAL,), "candle geometry primitives"),
