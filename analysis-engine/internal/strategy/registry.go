@@ -48,9 +48,9 @@ type Registry struct {
 	strategies []registeredStrategy
 }
 
-// KnownIDs is the semantic V2 catalog approved in Phase S2. It is a config
-// contract, not an implementation list: Phase S6 intentionally keeps every
-// entry disabled until Phase S7 supplies its independent technical thesis.
+// KnownIDs is the complete semantic strategy catalog. It is a config
+// contract and implementation list: every enabled entry must resolve to its
+// own registered factory, while disabled entries remain explicit in config.
 func KnownIDs() []StrategyID {
 	return append([]StrategyID(nil), knownIDs...)
 }

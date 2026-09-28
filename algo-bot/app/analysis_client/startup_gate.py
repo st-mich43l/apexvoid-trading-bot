@@ -29,7 +29,12 @@ def require_go_technical_authority(runtime_config: Any) -> None:
       "Python scanners must not be used as a fallback."
     )
   kafka = runtime_config.transport.kafka
-  if not kafka.enabled or not kafka.brokers:
+  if (
+    not kafka.enabled
+    or not kafka.brokers
+    or not str(getattr(authority, "consumer_group", "") or "").strip()
+  ):
     raise RuntimeError(
-      "Go technical authority requires enabled Kafka transport and at least one broker."
+      "Go technical authority requires enabled Kafka transport, at least one broker, "
+      "and a non-empty consumer group."
     )

@@ -119,8 +119,8 @@ async def test_forced_dispatcher_close_balances_abandoned_queue(monkeypatch):
   await asyncio.wait_for(queue.join(), timeout=1)
 
 
-def _patch_handlers(monkeypatch, *, zone, worker):
-  """Install ZoneWatch/worker doubles plus scanner/scalping sentinels.
+def _patch_handlers(monkeypatch, *, zone=None, worker):
+  """Install worker doubles plus scanner/scalping sentinels.
 
   The scanner and M1 scalping discovery are no longer dispatched (Go is the
   sole automatic technical-opportunity producer); the sentinels prove it.
@@ -130,16 +130,11 @@ def _patch_handlers(monkeypatch, *, zone, worker):
   monkeypatch.setattr("app.analysis.scanner._handle_event", scanner, raising=False)
   monkeypatch.setattr("app.scalping.runtime.handle_closed_bar", scalp_handler, raising=False)
   monkeypatch.setattr("app.autotrade.worker._handle_event", worker, raising=False)
-  monkeypatch.setattr(
-    "app.autotrade.zone_execution_cutover.evaluate_active_zone_watches",
-    zone,
-    raising=False,
-  )
   return scanner, scalp_handler
 
 
 @pytest.mark.asyncio
-async def test_dispatch_runs_zone_watch_then_worker_and_never_python_detection(monkeypatch):
+async def test_dispatch_runs_worker_only_and_never_python_detection(monkeypatch):
   # scanner.enabled=True on purpose: the flag no longer brings the scanner back.
   _enable_handlers(monkeypatch)
   worker = AsyncMock()
@@ -154,25 +149,18 @@ async def test_dispatch_runs_zone_watch_then_worker_and_never_python_detection(m
     source=source,
   )
 
-  assert ran == ["zone_watch", "worker"]
+  assert ran == ["worker"]
   worker.assert_awaited_once()
-  zone.assert_awaited_once()
+  zone.assert_not_awaited()
   scanner.assert_not_awaited()
   scalp_handler.assert_not_awaited()
-  assert zone.await_args.args[0] is client
-  assert zone.await_args.kwargs["source"] is source
-  assert zone.await_args.kwargs["symbol"] == "XAU"
-  assert zone.await_args.kwargs["event_ts"] == "1700000000"
 
 
 @pytest.mark.asyncio
-async def test_dispatch_keeps_worker_if_zone_watch_raises(monkeypatch):
+async def test_dispatch_keeps_worker_when_legacy_zone_handler_is_unavailable(monkeypatch):
   _enable_handlers(monkeypatch)
-  async def boom(*args, **kwargs):
-    raise RuntimeError("zone watch down")
-
   worker = AsyncMock()
-  _patch_handlers(monkeypatch, zone=boom, worker=worker)
+  _patch_handlers(monkeypatch, zone=AsyncMock(), worker=worker)
 
   ran = await dispatcher.dispatch_closed_bar(
     "XAU:M1:1700000000",
@@ -185,7 +173,7 @@ async def test_dispatch_keeps_worker_if_zone_watch_raises(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_m5_bar_skips_zone_watch(monkeypatch):
+async def test_m5_bar_never_runs_zone_watch(monkeypatch):
   _enable_handlers(monkeypatch)
   worker = AsyncMock()
   zone = AsyncMock()
@@ -208,9 +196,6 @@ async def test_dispatch_m1_shares_one_bar_cache_and_clears_it(monkeypatch):
   _enable_handlers(monkeypatch)
   order: list[str] = []
 
-  async def zone(*args, **kwargs):
-    order.append("zone_watch")
-
   async def worker(*args, **kwargs):
     order.append("worker")
 
@@ -218,7 +203,7 @@ async def test_dispatch_m1_shares_one_bar_cache_and_clears_it(monkeypatch):
     begin_closed_bar_cache=lambda: order.append("begin"),
     end_closed_bar_cache=lambda: order.append("end"),
   )
-  _patch_handlers(monkeypatch, zone=zone, worker=worker)
+  _patch_handlers(monkeypatch, zone=AsyncMock(), worker=worker)
 
   await dispatcher.dispatch_closed_bar(
     "XAU:M1:1700000000",
@@ -226,7 +211,7 @@ async def test_dispatch_m1_shares_one_bar_cache_and_clears_it(monkeypatch):
     source=source,
   )
 
-  assert order == ["begin", "zone_watch", "worker", "end"]
+  assert order == ["begin", "worker", "end"]
 
 
 @pytest.mark.asyncio

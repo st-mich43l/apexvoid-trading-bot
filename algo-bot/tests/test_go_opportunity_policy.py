@@ -78,6 +78,7 @@ DEMAND = pol.REVIEWED_SCOPES["demand"]
 
 # ---- pure translation ---------------------------------------------------------
 
+@pytest.mark.no_database
 def test_supply_translation_is_exact_and_carries_authority_provenance():
   ev = event()
   now = ev.payload.created_at + 60
@@ -105,6 +106,7 @@ def test_supply_translation_is_exact_and_carries_authority_provenance():
   assert elig.measured["source"] == "go" and elig.reward_risk == round(85 / 62.5, 4)
 
 
+@pytest.mark.no_database
 def test_go_higher_timeframe_bias_never_uses_primary_m5_as_substitute():
   raw = golden()
   p = raw["payload"]
@@ -130,6 +132,7 @@ def test_go_higher_timeframe_bias_never_uses_primary_m5_as_substitute():
     0, {"timeframe": "H1", "direction": "SELL", "layer": "major", "reference_time": r["payload"]["created_at"]}
   ),
 ])
+@pytest.mark.no_database
 def test_higher_timeframe_duplicates_and_unclosed_bars_fail_contract(mutate):
   raw = golden()
   raw["payload"]["technical_context"]["higher_timeframes"] = [
@@ -147,6 +150,7 @@ def test_higher_timeframe_duplicates_and_unclosed_bars_fail_contract(mutate):
   ("reaction_type", "assumed_reclaim"),
   ("zone_id", ""),
 ])
+@pytest.mark.no_database
 def test_invalid_reaction_evidence_is_rejected_at_the_kafka_contract(field, value):
   raw = golden()
   raw["payload"]["technical_context"]["confirmation"][field] = value
@@ -155,6 +159,7 @@ def test_invalid_reaction_evidence_is_rejected_at_the_kafka_contract(field, valu
     parse_analysis_event(OpportunityTopic, json.dumps(raw))
 
 
+@pytest.mark.no_database
 def test_counter_bias_and_neutral_are_derived_only_from_go_bias():
   raw = golden()
   raw["payload"]["technical_context"]["bias"]["direction"] = "BUY"
@@ -163,6 +168,7 @@ def test_counter_bias_and_neutral_are_derived_only_from_go_bias():
   assert pol.build_strategy_match(parse_analysis_event(OpportunityTopic, json.dumps(raw)), profile=SUPPLY, epoch=1, now=raw["payload"]["created_at"] + 1).bias_relationship == "neutral"
 
 
+@pytest.mark.no_database
 def test_demand_translation_mirrors_geometry_for_buy():
   raw = golden()
   p = raw["payload"]
@@ -170,6 +176,10 @@ def test_demand_translation_mirrors_geometry_for_buy():
     "strategy": "demand", "direction": "BUY", "entry": {"low": 4330.0, "high": 4333.5},
     "invalidation": {"price": 4327.0}, "targets": [{"price": {"price": 4341.0}}, {"price": {"price": 4350.0}}],
   })
+  p["evidence"] = [
+    {"code": "m5_demand_zone_fresh"},
+    {"code": "m5_demand_zone_rejection_confirmed"},
+  ]
   p["technical_context"].update({"reference_price": 4334.0, "bias": {"direction": "BUY", "layer": "internal"}})
   match = pol.build_strategy_match(parse_analysis_event(OpportunityTopic, json.dumps(raw)), profile=DEMAND, epoch=1, now=p["created_at"] + 1)
   # BUY enters at the proximal (upper) edge 4333.5.
@@ -182,6 +192,7 @@ def test_demand_translation_mirrors_geometry_for_buy():
   (lambda r: r["payload"].update(symbol="NOSUCH"), "unknown_instrument"),
   (lambda r: r["payload"].update(targets=[{"price": {"price": 4352.48}}]), "target_not_beyond_entry"),
 ])
+@pytest.mark.no_database
 def test_missing_or_unusable_facts_are_rejected_not_approximated(mutate, code):
   raw = golden()
   mutate(raw)
@@ -191,6 +202,7 @@ def test_missing_or_unusable_facts_are_rejected_not_approximated(mutate, code):
   assert exc.value.code == code
 
 
+@pytest.mark.no_database
 def test_missing_observed_timeframe_with_htf_facts_fails_at_contract_boundary():
   raw = golden()
   del raw["payload"]["timeframe"]
@@ -199,6 +211,7 @@ def test_missing_observed_timeframe_with_htf_facts_fails_at_contract_boundary():
     parse_analysis_event(OpportunityTopic, json.dumps(raw))
 
 
+@pytest.mark.no_database
 def test_confirmed_go_identity_survives_redis_without_confusing_zone_and_opportunity():
   match = pol.build_strategy_match(event(), profile=SUPPLY, epoch=3, now=golden()["payload"]["created_at"] + 1)
   from app.autotrade.multi_match import serialize_matches, deserialize_matches
@@ -215,6 +228,7 @@ def test_confirmed_go_identity_survives_redis_without_confusing_zone_and_opportu
     assert deserialize_matches(serialize_matches([bad])) == []
 
 
+@pytest.mark.no_database
 def test_direction_and_expiry_guards():
   ev = event()
   with pytest.raises(pol.AdapterRejection) as wrong:
@@ -225,11 +239,44 @@ def test_direction_and_expiry_guards():
   assert expired.value.code == "opportunity_expired"
 
 
-def test_only_reviewed_zone_scopes_are_adaptable():
-  assert set(pol.REVIEWED_SCOPES) == {"supply", "demand"}
-  assert set(pol.REVIEWED_SCOPES) <= auth.CATALOG_STRATEGY_IDS
+@pytest.mark.no_database
+def test_every_enabled_catalog_scope_has_an_explicit_adapter():
+  assert set(pol.REVIEWED_SCOPES) == set(auth.CATALOG_STRATEGY_IDS)
   for scope, profile in pol.REVIEWED_SCOPES.items():
     assert scope in auth.catalog_ids_for_legacy(profile.legacy_strategy, profile.direction)
+
+
+@pytest.mark.parametrize("scope", sorted(pol.REVIEWED_SCOPES))
+@pytest.mark.no_database
+def test_each_catalog_adapter_preserves_its_own_evidence_and_geometry(scope):
+  profile = pol.REVIEWED_SCOPES[scope]
+  raw = golden()
+  payload = raw["payload"]
+  payload["strategy"] = scope
+  payload["direction"] = "BUY" if scope == "demand" else "SELL" if scope == "supply" else "BUY"
+  payload["timeframe"] = "M1" if scope in {"range_sweep", "impulse_pullback", "scalp_breakout_retest"} else "M5"
+  if payload["direction"] == "BUY":
+    payload.update({
+      "entry": {"low": 4330.0, "high": 4333.5},
+      "invalidation": {"price": 4327.0},
+      "targets": [{"price": {"price": 4341.0}}],
+    })
+  evidence = profile.evidence_prefixes[0]
+  payload["evidence"] = [{"code": evidence + ("confirmed" if evidence.endswith("_") else "")}]
+  if scope not in {"supply", "demand"}:
+    payload["technical_context"].pop("confirmation", None)
+  event_payload = parse_analysis_event(OpportunityTopic, json.dumps(raw))
+  match = pol.build_strategy_match(
+    event_payload,
+    profile=profile,
+    epoch=1,
+    now=payload["created_at"] + 1,
+  )
+  assert match.structural_source == f"go:{scope}"
+  assert match.direction == payload["direction"]
+  assert match.targets_pips
+  assert auth.GO_ORIGIN_TAG in match.tags
+  assert "go_strategy_confirmed" in match.tags
 
 
 # ---- runner: fence, durable ledger, Redis match store ---------------------------

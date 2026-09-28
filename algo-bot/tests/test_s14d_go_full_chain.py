@@ -38,7 +38,6 @@ from app.autotrade.setup_lifecycle import CONFIRMED, PLAN_PUBLISHED, load_setup
 from app.autotrade.trade_plan import TradePlan
 from app.autotrade.zone_watch import (
   GRADE_A,
-  PUBLISHED_LOCKED,
   WATCHING_RETEST,
   discover_zone_watch,
   load_zone_watch,
@@ -87,6 +86,47 @@ def kafka_record(now: int, opp: str = "opp_chain", *, ago: int = 60, offset: int
   raw = golden(int(now) + 60 - ago, id=opp)
   raw["event_id"] = f"evt-{opp}"
   return SimpleNamespace(topic=OpportunityTopic, partition=0, offset=offset, timestamp=(int(now) - 5) * 1000, value=json.dumps(raw).encode())
+
+
+def catalog_kafka_record(now: int, scope: str, *, offset: int = 1):
+  """Build a Go-shaped record for one reviewed catalog adapter.
+
+  The payload keeps its strategy-specific evidence and geometry. The test is
+  deliberately downstream of the real consumer, so a missing adapter or a
+  Python reconstruction cannot make the complete-path matrix pass.
+  """
+  raw = golden(int(now) - 60, id=f"opp_{scope}")
+  payload = raw["payload"]
+  direction = "SELL" if scope == "supply" else "BUY"
+  payload.update({
+    "strategy": scope,
+    "direction": direction,
+    "timeframe": "M1" if scope in {"range_sweep", "impulse_pullback", "scalp_breakout_retest"} else "M5",
+  })
+  if direction == "BUY":
+    payload.update({
+      "entry": {"low": 4352.5, "high": 4356.0},
+      "invalidation": {"price": 4350.0},
+      "targets": [{"price": {"price": 4362.0}}, {"price": {"price": 4368.0}}],
+    })
+  payload["technical_context"]["bias"] = {"direction": direction, "layer": "internal"}
+  observed = payload["technical_context"]["reference_time"]
+  payload["technical_context"]["higher_timeframes"] = [{
+    "timeframe": "H1", "direction": direction, "layer": "major", "reference_time": observed - 3900,
+  }]
+  profile = pol.REVIEWED_SCOPES[scope]
+  evidence = profile.evidence_prefixes[0]
+  payload["evidence"] = [{"code": evidence + ("confirmed" if evidence.endswith("_") else "")}]
+  if scope not in {"supply", "demand"}:
+    payload["technical_context"].pop("confirmation", None)
+  raw["event_id"] = f"evt-{scope}"
+  return SimpleNamespace(
+    topic=OpportunityTopic,
+    partition=0,
+    offset=offset,
+    timestamp=int(now) * 1000,
+    value=json.dumps(raw).encode(),
+  )
 
 
 def consumer_for(h) -> AnalysisOpportunityConsumer:
@@ -160,6 +200,34 @@ async def test_kafka_event_becomes_a_real_v8_plan_with_full_provenance(h, prod, 
   assert await prod.exists(f"execution:plan_dedup:{plan['plan_id']}")
   assert (await route(prod, match.match_id))["status"] == "candidate_published"
   assert json.loads(await prod.hget("analysis:go_plans", plan["plan_id"]))["epoch"] == 1
+
+
+@pytest.mark.parametrize("scope", sorted(pol.REVIEWED_SCOPES))
+@pytest.mark.asyncio
+async def test_every_reviewed_go_strategy_reaches_tradeplan_v8(h, prod, scope):
+  """The complete Kafka -> adapter -> V8 path is covered for every scope."""
+  await h.grant(scope=scope)
+  await h._ensure()
+  record = catalog_kafka_record(h.clock.now, scope)
+  await consumer_for(h).process_record(record)
+
+  match = deserialize_matches(await prod.get(strategy_matches_key("XAU")))[0]
+  assert match.structural_source == f"go:{scope}"
+  assert "authority:go" in match.tags
+  plan_id = await worker._publish_trade_plan_v8(
+    prod,
+    "XAU",
+    _spot(4354.1, 4354.3),
+    match,
+    frames={},
+  )
+  assert plan_id is not None, f"{scope} policy rejected: {await route(prod, match.match_id)}"
+  plan = await read_trade_plan(prod, plan_id)
+  assert plan is not None
+  assert plan.setup_id == match.match_id
+  assert plan.provenance.confirmation_source == "go_analysis_engine"
+  assert plan.analysis.tags and "authority:go" in plan.analysis.tags
+  TradePlan.from_dict(plan.to_dict()).validate()
 
 
 @pytest.mark.asyncio
@@ -333,10 +401,8 @@ async def test_go_match_still_publishes_next_to_a_stale_python_match_in_go_mode(
 
 
 @pytest.mark.asyncio
-async def test_retained_zone_watch_still_activates_and_publishes_in_go_mode(h, prod, monkeypatch):
-  """The live-execution path the unmerged #653 deleted: a zone retained before cutover
-  still activates on a quote inside its stored band and publishes through the worker's
-  ready_match_id path, which the Go-only sweep filter deliberately leaves alone."""
+async def test_retained_python_zone_watch_cannot_activate_in_go_mode(h, prod, monkeypatch):
+  """Historical ZoneWatch state cannot bypass the Go authority boundary."""
   _go_mode(monkeypatch)
   await h._ensure()
   # What install_zone_execution_cutover() binds at startup, without leaking the install.
@@ -356,9 +422,9 @@ async def test_retained_zone_watch_still_activates_and_publishes_in_go_mode(h, p
 
   activated = await cutover._activate_match(prod, record, retained, event_ts=str(now))
 
-  assert activated is not None and activated.match_id == retained.match_id
-  assert [plan["setup_id"] for plan in await plans(prod)] == [retained.match_id]
-  assert (await load_zone_watch(prod, "zone-retained")).state == PUBLISHED_LOCKED
+  assert activated is None
+  assert await plans(prod) == []
+  assert (await load_zone_watch(prod, "zone-retained")).state == WATCHING_RETEST
 
 
 # ---- static guarantees --------------------------------------------------------------------------------------

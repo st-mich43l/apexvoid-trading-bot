@@ -2,8 +2,7 @@
 
 The gate fails closed on an effective python/go_shadow config or a missing
 Kafka transport, but never blocks a Manual-Algo-only deployment
-(auto_trade disabled). Passing it must not cost the retained ZoneWatch
-execution path: the cutover install and the spots:new loop stay wired.
+(auto_trade disabled). Go mode must not install a Python ZoneWatch publisher.
 """
 
 from __future__ import annotations
@@ -23,8 +22,6 @@ os.environ.setdefault("TELEGRAM_CHAT_ID", "-100123456789")
 from app import main  # noqa: E402
 from app.analysis_client import authority  # noqa: E402
 from app.analysis_client.startup_gate import require_go_technical_authority  # noqa: E402
-from app.autotrade import worker  # noqa: E402
-from app.autotrade import zone_execution_cutover as cutover  # noqa: E402
 from app.core import config as config_module  # noqa: E402
 from tests.configuration.canonical_fixtures import install_runtime_overrides  # noqa: E402
 
@@ -41,7 +38,11 @@ def _cfg(*, auto_trade=True, mode="go", consumer=True, kafka=True, brokers=("kaf
   return SimpleNamespace(
     runtime=SimpleNamespace(auto_trade=SimpleNamespace(enabled=auto_trade)),
     analysis=SimpleNamespace(
-      technical_authority=SimpleNamespace(mode=mode, consumer_enabled=consumer),
+      technical_authority=SimpleNamespace(
+        mode=mode,
+        consumer_enabled=consumer,
+        consumer_group="apexvoid-algo-bot-analysis-opportunity-v1",
+      ),
     ),
     transport=SimpleNamespace(kafka=SimpleNamespace(enabled=kafka, brokers=list(brokers))),
   )
@@ -100,16 +101,26 @@ def test_gate_reads_the_real_config_model_paths(monkeypatch):
 def _startup_doubles(monkeypatch) -> dict[str, object]:
   doubles = {
     "init_db": AsyncMock(),
-    "install_zone_execution_cutover": Mock(wraps=main.install_zone_execution_cutover),
     "reconcile_startup_state": AsyncMock(),
     "backfill_retained_auto_trade_stats": AsyncMock(return_value="0-0"),
     "setup_commands": AsyncMock(),
     "start_telegram_actor": Mock(),
     "_spawn_supervised": Mock(),
+    "verify_mounted_runtime_manifest_or_raise": Mock(),
+    "publish_python_manifest": AsyncMock(return_value={"state": "ok"}),
   }
   for name, double in doubles.items():
     monkeypatch.setattr(main, name, double)
   monkeypatch.setattr(main.scanner_bot.session, "close", AsyncMock())
+  monkeypatch.setattr(main.redis_state, "wait_until_ready", AsyncMock())
+  monkeypatch.setattr(main.redis_state, "get_client", Mock(return_value=SimpleNamespace()))
+  monkeypatch.setattr(authority, "refresh_authority_snapshot", AsyncMock())
+  monkeypatch.setattr(
+    authority,
+    "audit_authority_runtime",
+    AsyncMock(return_value={"event": "runtime_boot", "go_bound_scopes": [], "detail": "test"}),
+    raising=False,
+  )
   return doubles
 
 
@@ -140,42 +151,27 @@ async def test_main_fails_closed_before_any_side_effect(monkeypatch, overrides, 
   with pytest.raises(RuntimeError, match=message):
     await main.main()
 
-  doubles["install_zone_execution_cutover"].assert_not_called()
   doubles["init_db"].assert_not_awaited()
   doubles["_spawn_supervised"].assert_not_called()
   polling.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_main_in_go_mode_keeps_zone_watch_execution_wired(monkeypatch):
-  """The failure mode of the unmerged #653: passing the gate must not remove
-  live ZoneWatch activation. The cutover is installed (it binds the direct
-  publish ZoneWatch activation calls) and the spots:new loop is spawned next to
-  the bar dispatcher and the Go consumer."""
+async def test_main_in_go_mode_has_no_python_technical_publisher(monkeypatch):
+  """Go mode starts the durable consumer and worker only.
+
+  ZoneWatch activation and scanner monkeypatches are intentionally absent from
+  the production composition root; stale Python matches are rejected by the
+  worker's final origin fence.
+  """
   install_runtime_overrides(monkeypatch, GO, legacy_overrides={"auto_trade_enabled": True})
   doubles = _startup_doubles(monkeypatch)
-  during_polling: dict[str, bool] = {}
 
-  async def polling(*_args, **_kwargs):
-    during_polling["installed"] = cutover._INSTALLED
-    during_polling["direct_publish_wrapped"] = (
-      worker.try_publish_executable_signal is cutover._safe_direct_publish
-    )
-    during_polling["original_bound"] = cutover._ORIGINAL_DIRECT_PUBLISH is not None
-
-  monkeypatch.setattr(main.dp, "start_polling", polling)
+  monkeypatch.setattr(main.dp, "start_polling", AsyncMock())
 
   await main.main()
 
-  doubles["install_zone_execution_cutover"].assert_called_once_with()
-  assert during_polling == {
-    "installed": True,
-    "direct_publish_wrapped": True,
-    "original_bound": True,
-  }
   spawned = {call.args[0]: call.args[1] for call in doubles["_spawn_supervised"].call_args_list}
-  assert spawned["zone_watch_execution_loop"] is cutover.zone_watch_execution_loop
   assert spawned["bar_event_dispatcher_loop"] is main.bar_event_dispatcher_loop
   assert "analysis_opportunity_consumer_loop" in spawned
-  # main() restores module globals on shutdown for bounded lifecycles.
-  assert not cutover._INSTALLED
+  assert "zone_watch_execution_loop" not in spawned
