@@ -17,13 +17,23 @@ cutover still lazy-imports private ``app.analysis.scanner`` helpers for match
 persist/sync and monkeypatches ``worker.try_publish_executable_signal``. Peel
 those scanner couplings into an injected publication / match-sync seam later;
 do not reintroduce scanner imports into ``worker.py``.
+
+Go-only automatic path: production no longer dispatches the scanner, so the
+discovery half (``_sync_strategy_match_cutover``) creates no new ZoneWatch;
+activation of already-retained zones (``evaluate_active_zone_watches``) keeps
+running against each zone's stored band, stop and discovery range snapshot.
+``install_zone_execution_cutover`` stays load-bearing for that: it binds
+``_ORIGINAL_DIRECT_PUBLISH``, without which ``_safe_direct_publish`` cannot
+publish at all. Two Python technical computations remain on the activation
+path because activation cannot function without them and Go does not yet
+supply the fact (each is marked RETAINED below): the ATR used for relevance
+banding, and the M1 reaction trigger.
 """
 
 from __future__ import annotations
 
 from dataclasses import replace
 from datetime import datetime, timezone
-from types import SimpleNamespace
 import asyncio
 import json
 import logging
@@ -216,13 +226,24 @@ async def _resolve_location_range_bounds(
   zone_id: str,
   analysis_context: Any | None = None,
 ) -> dict[str, float | None]:
-  """Resolve dealing-range bounds the same way discovery does.
+  """Resolve the dealing-range bounds the entry-location check runs against.
 
   Preference order:
-  1. Live analysis / detection context passed by the scanner sync path
-  2. In-process market-map analysis cache
-  3. Snapshot written when the ZoneWatch candidate was saved
-  4. Fresh market-context load (M1 path when cache is cold)
+  1. Detection context, only when a caller passes one (the scanner sync path,
+     which production no longer dispatches)
+  2. Snapshot written when the ZoneWatch candidate was saved: the dealing
+     range the zone was approved under
+
+  Go is the sole technical-opportunity producer, so activation no longer
+  re-derives market context. Removed from this path: the private
+  ``scanner._load_market_context_for_symbol`` reload (a full Python
+  build_context) and the in-process market-map analysis cache, which only the
+  scanner's M5 pass kept fresh - with the scanner gone, whatever populated it
+  once (/trade_map, the setups report) would have frozen it and silently
+  outranked the zone's own snapshot. A zone without a usable snapshot gets
+  empty bounds and ``actionability.entry_location.missing_context_policy``
+  decides (block in production): fail closed, never a Python recomputation.
+  Follow-up: a Go dealing-range fact would restore "current range" semantics.
 
   Never use StrategyMatch.range_low/high — those are scalp box edges.
   """
@@ -231,37 +252,18 @@ async def _resolve_location_range_bounds(
     if _ranges_usable(ranges):
       return ranges
 
-  try:
-    from app.analysis.market_map_delivery import get_cached_analysis
-
-    cached = get_cached_analysis(symbol)
-  except Exception:
-    cached = None
-  if cached is not None and getattr(cached, "analysis", None) is not None:
-    ranges = range_bounds_from_context(
-      SimpleNamespace(analysis=cached.analysis),
-    )
-    if _ranges_usable(ranges):
-      return ranges
-
   snap = await _load_location_ranges(client, zone_id)
   if _ranges_usable(snap):
     return snap
-
-  try:
-    from app.analysis.scanner import _load_market_context_for_symbol
-
-    ctx, _frames = await _load_market_context_for_symbol(symbol)
-  except Exception:
-    log.exception(
-      "entry_location_range_reload_failed symbol=%s zone_id=%s",
-      symbol,
-      zone_id,
-    )
-    return _empty_range_bounds()
-  if ctx is None:
-    return _empty_range_bounds()
-  return range_bounds_from_context(ctx)
+  log_at_most(
+    log,
+    f"range-snapshot-missing:{zone_id}",
+    "entry_location range snapshot unavailable symbol=%s zone_id=%s; "
+    "missing_context_policy decides (no Python market-context reload)",
+    symbol,
+    zone_id,
+  )
+  return _empty_range_bounds()
 
 
 def width_telemetry_key(symbol: str, zone_id: str) -> str:
@@ -1589,6 +1591,10 @@ async def _m1_trigger_for_zone(
   *,
   source: RedisOHLCSource | None = None,
 ) -> Any | None:
+  # RETAINED Python technical computation (M1 reaction-pattern detection).
+  # Reaction archetypes cannot activate without a fresh post-touch trigger
+  # (evaluate_entry_activation -> reaction_trigger_missing), so this stays
+  # until Go publishes an M1 trigger/confirmation fact per retained zone.
   ohlc = _ohlc_source(client, source)
   frame = await ohlc.window(record.symbol, "M1", window_for_timeframe("M1"))
   if frame.empty or record.zone_entered_at is None:
@@ -2000,6 +2006,12 @@ async def _current_atr_by_source_timeframe(
   closed-bar cache `source` already uses elsewhere in this dispatch pass,
   so this adds at most one extra window fetch per distinct timeframe
   (typically just M1/M5), not one per zone.
+
+  RETAINED Python technical computation (ATR re-derived from Redis OHLC).
+  Without it classify_zone_relevance falls back to "overlapping or DORMANT",
+  so a zone the quote is approaching or chasing (range scalp / technique
+  chase budget, near-edge zone_entered_at tracking) would be skipped and
+  could never activate. Stays until Go supplies a per-timeframe ATR fact.
   """
   if source is None:
     return {}

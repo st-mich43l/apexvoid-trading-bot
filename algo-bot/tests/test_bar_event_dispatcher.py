@@ -119,27 +119,32 @@ async def test_forced_dispatcher_close_balances_abandoned_queue(monkeypatch):
   await asyncio.wait_for(queue.join(), timeout=1)
 
 
-@pytest.mark.asyncio
-async def test_dispatch_runs_isolated_handlers(monkeypatch):
-  _enable_handlers(monkeypatch)
+def _patch_handlers(monkeypatch, *, zone, worker):
+  """Install ZoneWatch/worker doubles plus scanner/scalping sentinels.
+
+  The scanner and M1 scalping discovery are no longer dispatched (Go is the
+  sole automatic technical-opportunity producer); the sentinels prove it.
+  """
   scanner = AsyncMock()
-  worker = AsyncMock()
-  zone = AsyncMock()
   scalp_handler = AsyncMock()
-  monkeypatch.setattr(
-    "app.analysis.scanner._handle_event", scanner, raising=False,
-  )
-  monkeypatch.setattr(
-    "app.autotrade.worker._handle_event", worker, raising=False,
-  )
+  monkeypatch.setattr("app.analysis.scanner._handle_event", scanner, raising=False)
+  monkeypatch.setattr("app.scalping.runtime.handle_closed_bar", scalp_handler, raising=False)
+  monkeypatch.setattr("app.autotrade.worker._handle_event", worker, raising=False)
   monkeypatch.setattr(
     "app.autotrade.zone_execution_cutover.evaluate_active_zone_watches",
     zone,
     raising=False,
   )
-  monkeypatch.setattr(
-    "app.scalping.runtime.handle_closed_bar", scalp_handler, raising=False,
-  )
+  return scanner, scalp_handler
+
+
+@pytest.mark.asyncio
+async def test_dispatch_runs_zone_watch_then_worker_and_never_python_detection(monkeypatch):
+  # scanner.enabled=True on purpose: the flag no longer brings the scanner back.
+  _enable_handlers(monkeypatch)
+  worker = AsyncMock()
+  zone = AsyncMock()
+  scanner, scalp_handler = _patch_handlers(monkeypatch, zone=zone, worker=worker)
 
   client = SimpleNamespace()
   source = SimpleNamespace()
@@ -149,36 +154,25 @@ async def test_dispatch_runs_isolated_handlers(monkeypatch):
     source=source,
   )
 
-  assert ran == ["zone_watch", "scalp", "scanner", "worker"]
-  scanner.assert_awaited_once()
+  assert ran == ["zone_watch", "worker"]
   worker.assert_awaited_once()
   zone.assert_awaited_once()
-  scalp_handler.assert_awaited_once()
+  scanner.assert_not_awaited()
+  scalp_handler.assert_not_awaited()
   assert zone.await_args.args[0] is client
   assert zone.await_args.kwargs["source"] is source
+  assert zone.await_args.kwargs["symbol"] == "XAU"
+  assert zone.await_args.kwargs["event_ts"] == "1700000000"
 
 
 @pytest.mark.asyncio
-async def test_dispatch_keeps_later_handlers_if_scanner_raises(monkeypatch):
+async def test_dispatch_keeps_worker_if_zone_watch_raises(monkeypatch):
   _enable_handlers(monkeypatch)
   async def boom(*args, **kwargs):
-    raise RuntimeError("scanner down")
+    raise RuntimeError("zone watch down")
 
   worker = AsyncMock()
-  zone = AsyncMock()
-  scalp_handler = AsyncMock()
-  monkeypatch.setattr("app.analysis.scanner._handle_event", boom, raising=False)
-  monkeypatch.setattr(
-    "app.autotrade.worker._handle_event", worker, raising=False,
-  )
-  monkeypatch.setattr(
-    "app.autotrade.zone_execution_cutover.evaluate_active_zone_watches",
-    zone,
-    raising=False,
-  )
-  monkeypatch.setattr(
-    "app.scalping.runtime.handle_closed_bar", scalp_handler, raising=False,
-  )
+  _patch_handlers(monkeypatch, zone=boom, worker=worker)
 
   ran = await dispatcher.dispatch_closed_bar(
     "XAU:M1:1700000000",
@@ -186,27 +180,16 @@ async def test_dispatch_keeps_later_handlers_if_scanner_raises(monkeypatch):
     source=SimpleNamespace(),
   )
 
-  assert ran == ["zone_watch", "scalp", "worker"]
+  assert ran == ["worker"]
   worker.assert_awaited_once()
-  scalp_handler.assert_awaited_once()
-  zone.assert_awaited_once()
 
 
 @pytest.mark.asyncio
 async def test_m5_bar_skips_zone_watch(monkeypatch):
   _enable_handlers(monkeypatch)
-  scanner = AsyncMock()
   worker = AsyncMock()
   zone = AsyncMock()
-  scalp_handler = AsyncMock()
-  monkeypatch.setattr("app.analysis.scanner._handle_event", scanner, raising=False)
-  monkeypatch.setattr("app.autotrade.worker._handle_event", worker, raising=False)
-  monkeypatch.setattr(
-    "app.autotrade.zone_execution_cutover.evaluate_active_zone_watches",
-    zone,
-    raising=False,
-  )
-  monkeypatch.setattr("app.scalping.runtime.handle_closed_bar", scalp_handler, raising=False)
+  scanner, scalp_handler = _patch_handlers(monkeypatch, zone=zone, worker=worker)
 
   ran = await dispatcher.dispatch_closed_bar(
     "XAU:M5:1700000000",
@@ -214,35 +197,28 @@ async def test_m5_bar_skips_zone_watch(monkeypatch):
     source=SimpleNamespace(),
   )
 
-  assert ran == ["scalp", "scanner", "worker"]
+  assert ran == ["worker"]
   zone.assert_not_awaited()
+  scanner.assert_not_awaited()
+  scalp_handler.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_dispatch_m1_skips_htf_prefetch_and_clears_cache(monkeypatch):
+async def test_dispatch_m1_shares_one_bar_cache_and_clears_it(monkeypatch):
   _enable_handlers(monkeypatch)
   order: list[str] = []
-  prefetch = AsyncMock()
 
   async def zone(*args, **kwargs):
     order.append("zone_watch")
 
-  async def scalp_handler(*args, **kwargs):
-    order.append("scalp")
+  async def worker(*args, **kwargs):
+    order.append("worker")
 
   source = SimpleNamespace(
     begin_closed_bar_cache=lambda: order.append("begin"),
     end_closed_bar_cache=lambda: order.append("end"),
   )
-  monkeypatch.setattr(
-    "app.autotrade.zone_execution_cutover.evaluate_active_zone_watches",
-    zone,
-    raising=False,
-  )
-  monkeypatch.setattr("app.scalping.runtime.handle_closed_bar", scalp_handler, raising=False)
-  monkeypatch.setattr("app.analysis.scanner._handle_event", AsyncMock(), raising=False)
-  monkeypatch.setattr("app.autotrade.worker._handle_event", AsyncMock(), raising=False)
-  monkeypatch.setattr(dispatcher, "prefetch_closed_bar_windows", prefetch)
+  _patch_handlers(monkeypatch, zone=zone, worker=worker)
 
   await dispatcher.dispatch_closed_bar(
     "XAU:M1:1700000000",
@@ -250,36 +226,25 @@ async def test_dispatch_m1_skips_htf_prefetch_and_clears_cache(monkeypatch):
     source=source,
   )
 
-  prefetch.assert_not_awaited()
-  assert order[:3] == ["begin", "zone_watch", "scalp"]
-  assert order[-1] == "end"
+  assert order == ["begin", "zone_watch", "worker", "end"]
 
 
 @pytest.mark.asyncio
-async def test_dispatch_m5_prefetches_before_scalp(monkeypatch):
+async def test_dispatch_m5_no_longer_prefetches_scanner_windows(monkeypatch):
+  """The HTF prefetch only warmed windows the scanner read; nothing reads them now."""
   _enable_handlers(monkeypatch)
   order: list[str] = []
+  window = AsyncMock()
 
-  async def prefetch(*args, **kwargs):
-    order.append("prefetch")
-    assert kwargs.get("closed_tf") == "M5"
-
-  async def scalp_handler(*args, **kwargs):
-    order.append("scalp")
+  async def worker(*args, **kwargs):
+    order.append("worker")
 
   source = SimpleNamespace(
     begin_closed_bar_cache=lambda: order.append("begin"),
     end_closed_bar_cache=lambda: order.append("end"),
+    window=window,
   )
-  monkeypatch.setattr(
-    "app.autotrade.zone_execution_cutover.evaluate_active_zone_watches",
-    AsyncMock(),
-    raising=False,
-  )
-  monkeypatch.setattr("app.scalping.runtime.handle_closed_bar", scalp_handler, raising=False)
-  monkeypatch.setattr("app.analysis.scanner._handle_event", AsyncMock(), raising=False)
-  monkeypatch.setattr("app.autotrade.worker._handle_event", AsyncMock(), raising=False)
-  monkeypatch.setattr(dispatcher, "prefetch_closed_bar_windows", prefetch)
+  _patch_handlers(monkeypatch, zone=AsyncMock(), worker=worker)
 
   await dispatcher.dispatch_closed_bar(
     "XAU:M5:1700000000",
@@ -287,5 +252,69 @@ async def test_dispatch_m5_prefetches_before_scalp(monkeypatch):
     source=source,
   )
 
-  assert order[:3] == ["begin", "prefetch", "scalp"]
-  assert order[-1] == "end"
+  window.assert_not_awaited()
+  assert order == ["begin", "worker", "end"]
+
+
+@pytest.mark.asyncio
+async def test_dispatch_runs_nothing_with_auto_trade_disabled(monkeypatch):
+  monkeypatch.setattr(
+    dispatcher,
+    "runtime_config",
+    SimpleNamespace(
+      runtime=SimpleNamespace(
+        scanner=SimpleNamespace(enabled=True),
+        auto_trade=SimpleNamespace(enabled=False),
+      )
+    ),
+  )
+  worker = AsyncMock()
+  zone = AsyncMock()
+  scanner, scalp_handler = _patch_handlers(monkeypatch, zone=zone, worker=worker)
+
+  ran = await dispatcher.dispatch_closed_bar(
+    "XAU:M1:1700000000",
+    client=SimpleNamespace(),
+    source=SimpleNamespace(),
+  )
+
+  assert ran == []
+  for handler in (worker, zone, scanner, scalp_handler):
+    handler.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_dispatcher_loop_still_reconciles_legacy_thesis_claims(monkeypatch):
+  """The startup thesis-claim reconcile is execution housekeeping, not scanner work."""
+  _enable_handlers(monkeypatch)
+  monkeypatch.setattr(
+    dispatcher.runtime_config,
+    "market_data",
+    SimpleNamespace(ctrader_feed=SimpleNamespace(bars_channel="bars:new")),
+    raising=False,
+  )
+  reconcile = AsyncMock()
+  monkeypatch.setattr(
+    "app.autotrade.worker._reconcile_legacy_mapped_thesis_claims", reconcile,
+  )
+
+  class _PubSub:
+    async def subscribe(self, *_a):
+      return None
+
+    async def unsubscribe(self, *_a):
+      return None
+
+    async def close(self):
+      return None
+
+    async def listen(self):
+      if False:  # pragma: no cover - an empty async generator
+        yield None
+
+  client = SimpleNamespace(pubsub=lambda: _PubSub())
+  monkeypatch.setattr(dispatcher.redis_state, "get_client", lambda: client)
+
+  await dispatcher.bar_event_dispatcher_loop()
+
+  reconcile.assert_awaited_once_with(client)

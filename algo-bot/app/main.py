@@ -15,6 +15,7 @@ from app.bot.wiring import (
   setup_scanner_commands,
 )
 from app.persistence.store import init_db, close_pool
+from app.analysis_client.startup_gate import require_go_technical_authority
 from app.signals.watcher import watcher_loop
 from app.signals.calendar import calendar_sync_loop
 from app.signals.weekly_report import weekly_report_loop
@@ -74,9 +75,15 @@ def _spawn_supervised(name: str, factory) -> asyncio.Task:
 
 
 async def main() -> None:
-  # Scanner and worker are already imported above. Install the retained-zone
-  # cutover before any background task starts so every live scanner cycle uses
-  # ZoneWatch and direct publication from its first event.
+  # Go is the sole automatic technical-opportunity producer. Refuse to start
+  # automatic trading on an effective python/go_shadow config or without Kafka,
+  # before anything touches Redis, PostgreSQL or Telegram. Manual-only
+  # deployments (auto_trade disabled) are not gated.
+  require_go_technical_authority(runtime_config)
+  # The scanner is no longer dispatched, but the cutover install stays
+  # load-bearing: retained ZoneWatch activation publishes through
+  # _safe_direct_publish, which needs the original direct publish bound here.
+  # Install before any background task starts.
   install_zone_execution_cutover()
   install_same_cycle_publish_retry()
   # Composition-root Telegram edit callback — worker never imports bot.client.

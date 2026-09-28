@@ -7838,6 +7838,20 @@ async def _handle_event(
       item for item in scanner_strategy_matches
       if item.match_id == ready_match_id
     ]
+  elif runtime_config.analysis.technical_authority.mode == "go":
+    # Go is the sole automatic technical-opportunity producer: the closed-bar
+    # sweep only evaluates Go-origin matches, so a leftover Python scanner
+    # match still sitting in Redis can never produce a plan after cutover
+    # (with none left, this takes the idle branch below, never the private
+    # pass). The explicit ready_match_id path above is deliberately not
+    # filtered: it is how ZoneWatch activation publishes an already-retained
+    # zone (try_publish_executable_signal -> _handle_event), and filtering it
+    # would leave every pending ZoneWatch setup unable to publish and get its
+    # setup invalidated by _activate_match's reject branch.
+    scanner_strategy_matches = [
+      item for item in scanner_strategy_matches
+      if GO_ORIGIN_TAG in item.tags
+    ]
   if not scanner_strategy_matches:
     frames = await _load_frames(
       source, symbol, timeframes=(EXECUTION_TIMEFRAME,),

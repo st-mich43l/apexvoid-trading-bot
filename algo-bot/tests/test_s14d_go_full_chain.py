@@ -17,6 +17,7 @@ import json
 import os
 import re
 import time
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -25,14 +26,24 @@ import pytest
 from redis.asyncio import Redis
 
 from app.analysis_client.consumer import AnalysisOpportunityConsumer
-from app.analysis_client.models import OpportunityTopic
+from app.analysis_client.models import OpportunityTopic, parse_analysis_event
+from app.analysis.structural_reaction_support import structural_thesis_id
 from app.autotrade import go_opportunity_policy as pol
 from app.autotrade import killzone, worker
+from app.autotrade import zone_execution_cutover as cutover
 from app.autotrade.go_plan_cancel import request_plan_cancel
 from app.autotrade.multi_match import deserialize_matches, strategy_matches_key
 from app.autotrade.route_outcome import route_outcome_key
 from app.autotrade.setup_lifecycle import CONFIRMED, PLAN_PUBLISHED, load_setup
 from app.autotrade.trade_plan import TradePlan
+from app.autotrade.zone_watch import (
+  GRADE_A,
+  PUBLISHED_LOCKED,
+  WATCHING_RETEST,
+  discover_zone_watch,
+  load_zone_watch,
+  transition_zone_watch,
+)
 from app.persistence import redis_state
 from tests.configuration.canonical_fixtures import install_runtime_overrides
 from tests.test_go_opportunity_policy import Harness, golden
@@ -250,6 +261,104 @@ async def test_rollback_between_match_and_plan_fences_the_publication(h, prod):
   await h.fence.rollback("XAU", "supply", expected_epoch=1, actor="oncall", reason="drill", drain_seconds=30)
   await cycle(prod, n=2)
   assert await prod.xlen(STREAM) == 0 and (await route(prod, "go_opp_chain"))["reason_code"] == "authority_fenced"
+
+
+# ---- Go-only automatic path: a leftover Python scanner match never trades ----------------------------
+
+def _stale_python_match():
+  """A Python-scanner-shaped leftover sitting in Redis at cutover: the same executable
+  geometry as the golden Go match, none of the Go provenance tags, and the scanner's own
+  structural identity, in a scope Python still owns (nothing is granted) - so the
+  authority fence alone would let it publish."""
+  now = int(time.time())
+  event = parse_analysis_event(OpportunityTopic, json.dumps(golden(now)))
+  go = pol.build_strategy_match(event, profile=pol.REVIEWED_SCOPES["supply"], epoch=0, now=now)
+  legacy = replace(
+    go,
+    tags=tuple(t for t in go.tags if t.startswith(("kind:", "bias:"))),
+    structural_source="scanner:supply_demand",
+  )
+  return replace(legacy, match_id=structural_thesis_id(
+    symbol=legacy.symbol, strategy=legacy.strategy, direction=legacy.direction,
+    structural_source=legacy.structural_source, structural_id=legacy.structural_zone_id,
+    touch_bar_ts=str(legacy.touch_bar_ts), confirmation_bar_ts=str(legacy.confirmation_bar_ts),
+  ))
+
+
+async def _plant(prod, match):
+  await pol.GoOpportunityPolicy._advance_setup(prod, match)
+  await pol.GoOpportunityPolicy._store_match(prod, match, int(time.time()))
+
+
+def _go_mode(monkeypatch):
+  install_runtime_overrides(monkeypatch, {"analysis.technical_authority.mode": "go"})
+
+
+@pytest.mark.asyncio
+async def test_control_stale_python_match_would_publish_under_python_authority(h, prod):
+  """Proves the fixture is a real, publishable plan - so the go-mode test below
+  shows the Go-only sweep blocking it, not a match that could never trade."""
+  await h._ensure()
+  stale = _stale_python_match()
+  await _plant(prod, stale)
+  assert [m.match_id for m in deserialize_matches(await prod.get(strategy_matches_key("XAU")))] == [stale.match_id]
+  await cycle(prod)
+  assert [plan["setup_id"] for plan in await plans(prod)] == [stale.match_id]
+
+
+@pytest.mark.asyncio
+async def test_stale_python_match_cannot_produce_a_plan_in_go_mode(h, prod, monkeypatch):
+  _go_mode(monkeypatch)
+  await h._ensure()
+  stale = _stale_python_match()
+  await _plant(prod, stale)
+  assert [m.match_id for m in deserialize_matches(await prod.get(strategy_matches_key("XAU")))] == [stale.match_id]
+  await cycle(prod, n=3)
+  assert await prod.xlen(STREAM) == 0
+  assert await prod.get(route_outcome_key("XAU", stale.match_id)) is None   # never even preflighted
+  assert (await load_setup(prod, stale.match_id)).state == CONFIRMED         # left alone, not traded
+
+
+@pytest.mark.asyncio
+async def test_go_match_still_publishes_next_to_a_stale_python_match_in_go_mode(h, prod, monkeypatch):
+  _go_mode(monkeypatch)
+  await granted_and_delivered(h)
+  stale = _stale_python_match()
+  await _plant(prod, stale)
+  await cycle(prod, n=2)
+  published = await plans(prod)
+  assert [plan["setup_id"] for plan in published] == ["go_opp_chain"]
+  assert "authority:go" in published[0]["analysis"]["tags"]
+  assert await prod.get(route_outcome_key("XAU", stale.match_id)) is None
+
+
+@pytest.mark.asyncio
+async def test_retained_zone_watch_still_activates_and_publishes_in_go_mode(h, prod, monkeypatch):
+  """The live-execution path the unmerged #653 deleted: a zone retained before cutover
+  still activates on a quote inside its stored band and publishes through the worker's
+  ready_match_id path, which the Go-only sweep filter deliberately leaves alone."""
+  _go_mode(monkeypatch)
+  await h._ensure()
+  # What install_zone_execution_cutover() binds at startup, without leaking the install.
+  monkeypatch.setattr(cutover, "_ORIGINAL_DIRECT_PUBLISH", worker.try_publish_executable_signal)
+  monkeypatch.setattr(cutover, "_ensure_published_root_card", AsyncMock())
+  retained = _stale_python_match()
+  now = int(time.time())
+  record, _created = await discover_zone_watch(
+    prod, zone_id="zone-retained", symbol="XAU", direction=retained.direction,
+    low=retained.entry_low, high=retained.entry_high, source_timeframe="M5",
+    structural_sources=("supply_demand",), confluence_tags=(), grade=GRADE_A, score=3.0,
+    structure_signature="zone-retained", confirmed_at=now,
+  )
+  # Discovery leaves a retained zone watching for its retest, as the cutover does.
+  record, _ = await transition_zone_watch(prod, "zone-retained", WATCHING_RETEST, reason_code="zone_discovered")
+  await prod.set("price:XAU:spot", json.dumps({"bid": 4354.1, "ask": 4354.3, "ts": now}))
+
+  activated = await cutover._activate_match(prod, record, retained, event_ts=str(now))
+
+  assert activated is not None and activated.match_id == retained.match_id
+  assert [plan["setup_id"] for plan in await plans(prod)] == [retained.match_id]
+  assert (await load_zone_watch(prod, "zone-retained")).state == PUBLISHED_LOCKED
 
 
 # ---- static guarantees --------------------------------------------------------------------------------------
