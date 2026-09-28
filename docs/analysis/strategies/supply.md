@@ -57,8 +57,7 @@ thesis, not a "price just touched it this bar" reaction.
 
 `expiry_hours` after the zone's own most recent real timestamp
 (`LastTouchedAt` if more recent than `CreatedAt`, else `CreatedAt`) —
-this strategy's own `SETUP_EXPIRED` window
-(`docs/analysis/opportunity-lifecycle-v2.md`), distinct from Algo Bot's
+this strategy's own `SETUP_EXPIRED` window, distinct from Algo Bot's
 execution-age policy.
 
 ## Failure cases / anti-patterns
@@ -97,9 +96,8 @@ all three).
 ## Known old-engine false positive
 
 The legacy `supply_demand_technique_reaction` detector
-(`detectors.py`) served both directions from one function
-(`docs/analysis/strategy-v2-catalog.md` row 3) — a documented risk there
-was direction bugs from shared conditional branches. `SupplyStrategy` and
-`DemandStrategy` are fully independent Go packages (verified by
+(`detectors.py`) served both directions from one function — a documented
+risk was direction bugs from shared conditional branches. `SupplyStrategy`
+and `DemandStrategy` are fully independent Go packages (verified by
 `test/architecture/dependency_test.go`'s strategy-isolation rank rule),
 eliminating that class of bug by construction.

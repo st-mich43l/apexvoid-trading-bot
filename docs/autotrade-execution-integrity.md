@@ -626,6 +626,28 @@ AUTO_TRADE_ENABLED=false
 
 Do not enable live accounts.
 
+## Go-origin risk-leg gate
+
+`analysis.technical_authority.go_origin_risk_leg_enabled` (default **false**)
+is a separate acceptance gate for the executor-injected XAU risk leg (fixed
+0.02/0.05 lots depending on equity, 15 pips inside the stop) on Go-origin
+plans. It is independent of `execution.reaction_risk_leg.enabled`, which
+keeps governing Python-owned plans unchanged. While false, every Go-origin
+match is tagged `risk_leg:disabled` and the executor places only the
+declared ladder; turning it on removes the tag and injects the leg for
+Go-origin plans exactly as it already does for Python-owned ones.
+
+The gate exists because worst-case group risk is a function of the full
+group — declared ladder plus any injected risk leg — not of either leg in
+isolation. `xau_ladder.worst_case_group_loss` computes that combined
+worst case (ladder loss at every leg's widest permitted stop, plus the risk
+leg's own fixed worst case) so it can be reviewed against account equity
+before the leg is turned on for Go-origin plans; `risk.max_group_risk_percent`
+is declarative only — the executor never reads it, so an absurdly tight cap
+does not by itself stop an order. Turning the gate on requires that review
+to have actually happened: an accepted ceiling for group worst case, and
+something enforcing it.
+
 ## Production-path Redis tests
 
 Tests marked `real_redis` / `REAL_REDIS_URL` require a real disposable Redis

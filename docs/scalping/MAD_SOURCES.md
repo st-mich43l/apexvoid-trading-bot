@@ -67,4 +67,4 @@ MAD-2 shows improved expectancy on holdout **and** ops accept opportunity cost.
 ## Related docs
 
 - [MAD.md](MAD.md) — live rules and Redis keys
-- [TECHNIQUE_SCALP_REDEFINE.md](TECHNIQUE_SCALP_REDEFINE.md) — family map (L3 Reaction vs L3r Range Edge)
+- [README.md](README.md) — current scalping lanes and the legacy HFS compatibility note

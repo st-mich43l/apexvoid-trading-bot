@@ -3,8 +3,8 @@
 ## Status
 
 Accepted. Prior TradePlan versions are fully removed from production code,
-contracts, and tests. Historical rationale lives only under `docs/history/` and
-`CHANGELOG.md` past entries.
+contracts, and tests. Historical rationale lives only in `CHANGELOG.md` past
+entries.
 
 ## Decision
 

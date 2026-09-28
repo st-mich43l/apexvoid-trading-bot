@@ -4,9 +4,8 @@
 // structural role change (a broken level accepted and re-tested from the
 // new side), not a generic "old resistance became support" label. Two
 // legacy detector functions (flip_demand_zone_reaction/
-// flip_supply_zone_reaction) mapped to this one canonical V2 identity
-// (docs/analysis/strategy-v2-catalog.md, row 10) — direction-symmetric,
-// one strategy, not two.
+// flip_supply_zone_reaction) mapped to this one canonical V2 identity —
+// direction-symmetric, one strategy, not two.
 //
 // Thesis: a still-valid, currently-relevant flip zone is a standing
 // role-reversal reaction zone in whichever direction its own Side

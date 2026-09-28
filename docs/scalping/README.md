@@ -65,6 +65,17 @@ Structure/technique decide permits (not killzone clock). See
 | `paper` | Paper TradePlan-like records, no broker |
 | `live` | Publishes TradePlan V8 when gates pass + math sidecar observe-only |
 
+## Legacy HFS compatibility
+
+Live config and display names live under `strategies.scalping` (env
+`SCALPING_*`). For backward compatibility, the former **HFS** ("high
+frequency scalp") product tag is still accepted: the YAML alias
+`high_frequency_scalp` still loads as `strategies.scalping`, deprecated
+`HFS_*` env vars still map to their `SCALPING_*` equivalents, and legacy
+`HFS *` display/taxonomy labels are still recognized in taxonomy, C#,
+protective stop, and confirmation code paths — but only for historical
+fills and already-open plans, never for new configuration.
+
 ## Archetypes
 
 1. `range_sweep` — micro range edge false-break sweep/reclaim

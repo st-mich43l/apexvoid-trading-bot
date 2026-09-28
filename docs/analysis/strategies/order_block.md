@@ -78,9 +78,8 @@ a Breaker zone), `State=Mitigated`, `Strength` below floor
 
 ## Known old-engine false positive
 
-`docs/analysis/strategy-v2-catalog.md` row 4 flags the legacy heuristic
-risk directly: "last bearish candle before bullish move" alone is not a
-sufficient OB definition. `internal/zone`'s own OB primitive requires the
-origin-candle/displacement/structure-break relationship, which this
-strategy inherits rather than re-deriving from a naive last-opposite-candle
-heuristic.
+The legacy heuristic risk is direct: "last bearish candle before bullish
+move" alone is not a sufficient OB definition. `internal/zone`'s own OB
+primitive requires the origin-candle/displacement/structure-break
+relationship, which this strategy inherits rather than re-deriving from a
+naive last-opposite-candle heuristic.

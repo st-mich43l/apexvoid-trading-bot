@@ -1,8 +1,9 @@
 # Documentation index
 
 Active operator and design docs for ApexVoid. Completed migrations and
-phase ledgers live under [`history/`](history/) and
-[`configuration/history/`](configuration/history/).
+phase reports have been retired: essential operational content was folded
+into the current docs below, and the rest is available in git history if
+ever needed again.
 
 ## Start here
 
@@ -55,8 +56,3 @@ phase ledgers live under [`history/`](history/) and
 | [deployment.md](deployment.md) | Host → running stack |
 | [operations.md](operations.md) | Logs, backups, troubleshooting |
 | [security.md](security.md) | Threat model and secrets |
-
-## History
-
-- [`history/`](history/) — completed P0 / migration / one-shot regression notes
-- [`configuration/history/`](configuration/history/) — Catalog V2 phase ledgers

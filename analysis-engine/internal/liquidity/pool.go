@@ -38,8 +38,7 @@ func (s LiquiditySide) String() string {
 // pool categories (§29) — those describe a pool's position relative to
 // the CURRENT dealing range (inside it vs. at its extremes), not its
 // structural-hierarchy significance; see Source below for that
-// distinction, and docs/analysis/market-structure-v2.md for the full
-// writeup.
+// distinction.
 type Pool struct {
 	ID string
 
