@@ -296,6 +296,7 @@ def build_strategy_match(
     atr=float(tech.atr),
     structure_swing=stop,
     targets_pips=tuple(targets_pips),
+    go_invalidation_price=stop,
     tags=tags,
     absolute_target_price=float(farthest),
     tier=tier,

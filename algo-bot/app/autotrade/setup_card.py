@@ -1967,6 +1967,7 @@ def format_plan_published_root_card(
   *,
   stop_price: float | None = None,
   target_prices: tuple[float, ...] | None = None,
+  risk_reference: float | None = None,
 ) -> str:
   """Root card after publish, in the shared Manual/Auto Algo card design
   (Phase S12) below its own headline/status-slot/direction line.
@@ -2030,8 +2031,12 @@ def format_plan_published_root_card(
       and match.entry_high is not None
       and card_pip_size is not None
     ):
-      reference = conservative_entry_reference(
-        direction, float(match.entry_low), float(match.entry_high),
+      reference = (
+        float(risk_reference)
+        if risk_reference is not None and math.isfinite(float(risk_reference))
+        else conservative_entry_reference(
+          direction, float(match.entry_low), float(match.entry_high),
+        )
       )
       lines.append(format_sl_line(
         symbol, float(stop_price), reference,
@@ -2070,6 +2075,34 @@ async def published_plan_stop_price(client, match_id: str) -> float | None:
     return float(plan.stop.price)
   except (TypeError, ValueError):
     return None
+
+
+async def published_plan_risk_reference(client, match_id: str) -> float | None:
+  """Worst planned fill used to report the published plan's real risk."""
+  try:
+    from app.autotrade.setup_execution_aggregate import v8_plan_id
+    from app.autotrade.trade_plan_stream import read_trade_plan
+
+    plan = await read_trade_plan(client, v8_plan_id(match_id))
+  except Exception:
+    log.exception(
+      "plan_published_root_card_entry_lookup_failed setup_id=%s", match_id,
+    )
+    return None
+  if plan is None:
+    return None
+  try:
+    prices = tuple(float(price) for price in plan.entry.entry_prices())
+  except (AttributeError, TypeError, ValueError):
+    return None
+  prices = tuple(price for price in prices if math.isfinite(price))
+  if not prices:
+    return None
+  return (
+    min(prices)
+    if str(plan.analysis.direction).upper() == "SELL"
+    else max(prices)
+  )
 
 
 async def published_plan_target_prices(
@@ -2140,6 +2173,7 @@ async def ensure_plan_published_root_card(
   resolved_send = send_fn or send_scanner_root_card_with_retry
   resolved_delete = delete_fn or delete_scanner_message
   stop_price = await published_plan_stop_price(client, match.match_id)
+  risk_reference = await published_plan_risk_reference(client, match.match_id)
   target_prices = await published_plan_target_prices(client, match.match_id)
 
   existing = await load_forming_card(client, match.match_id)
@@ -2154,6 +2188,7 @@ async def ensure_plan_published_root_card(
       # (or wrong-direction) body must not stay as the Trend Pullback root.
       replacement = format_plan_published_root_card(
         match, stop_price=stop_price, target_prices=target_prices or None,
+        risk_reference=risk_reference,
       )
       upper_head = existing_text.splitlines()[0].upper() if existing_text else ""
       if "TERMINAL" in upper_head:
@@ -2210,6 +2245,7 @@ async def ensure_plan_published_root_card(
     match.match_id,
     format_plan_published_root_card(
       match, stop_price=stop_price, target_prices=target_prices or None,
+      risk_reference=risk_reference,
     ),
     chat_id=int(owner_id),
     send_fn=resolved_send,

@@ -23,7 +23,6 @@ from app.persistence import redis_state
 from app.analysis_client.authority import GO_ORIGIN_TAG, AuthorityDecision, authorize_legacy_match
 from app.analysis_client.shadow_overlay import is_shadow_overlay
 from app.autotrade.go_plan_cancel import read_plan_cancel, register_go_plan
-from app.autotrade.go_zone_book import opposing_entries_for_go_match
 from app.autotrade import units
 from app.core import instrument_geometry
 from app.autotrade.range_targets import configured_range_targets
@@ -92,6 +91,7 @@ from app.autotrade.structural_barriers import (
   to_opposing_entries,
 )
 from app.autotrade.structural_target_room import (
+  StructuralTargetRoomDecision,
   ZoneOpposingEntry,
   evaluate_structural_target_room,
   filter_displaced_opposing_entries,
@@ -4760,14 +4760,11 @@ async def _publish_trade_plan_v8(
   Deliberately separate from _publish_strategy_match (the V6 path) rather
   than sharing its body: V6's function is full of V6-only concerns
   (candidate_id/group_id shaping, ZoneFillPlanner routing, ...) that must
-  not leak into the V8 contract. What IS shared are the same quality/safety
-  guard functions the V6 path already calls (opposing barrier, zone
-  cooldown, overlapping-zone veto) - these are Python-side risk checks with
-  no C#-side duplicate, not the dual-planning anti-pattern the ADR is
-  about. _adapt_counter_bias_target is deliberately NOT called here. The
-  scanner-owned target ladder is only revalidated with the shared pure
-  structural-target-room helper against the latest Market Map; this is a
-  final stale-context safety check, not a second strategy planner.
+  not leak into the V8 contract. Python execution checks are shared only for
+  legacy matches. A Go-origin match carries its complete technical thesis;
+  Python does not run opposing-barrier, overlap, HTF, cooldown, target-room,
+  or stop-rewrite logic against it. _adapt_counter_bias_target is deliberately
+  NOT called here.
 
   A formed setup may continue through final preflight only while the
   side-aware executable quote is inside the scanner's raw entry zone plus
@@ -4780,6 +4777,7 @@ async def _publish_trade_plan_v8(
   guard/policy rejection - always recorded via _record_v8_build_rejected,
   never a bare silent return, except the ordinary retained retest wait).
   """
+  go_origin = GO_ORIGIN_TAG in tuple(getattr(match, "tags", ()) or ())
   existing = await resolve_existing_v8_state(client, match)
   if existing.already_terminal:
     return existing.plan_id if existing.plan_exists else None
@@ -4912,7 +4910,7 @@ async def _publish_trade_plan_v8(
   spot_ts = int(getattr(spot, "ts", 0) or int(datetime.now(timezone.utc).timestamp()))
   session_quality = evaluate_instrument_session_quality(ts=spot_ts, cfg=inst)
   selective_minimum = session_quality_minimum_confluence(inst, session_quality)
-  if selective_minimum and match.confluence < selective_minimum:
+  if selective_minimum and match.confluence < selective_minimum and not go_origin:
     log.info(
       "v8 publish blocked selective session quality symbol=%s match_id=%s "
       "confluence=%s required=%s utc_hour=%s windows=%s",
@@ -5820,7 +5818,7 @@ async def _publish_trade_plan_v8(
   structural_barrier_book_enabled = bool(
     runtime_config.actionability.target_room.structural_barrier_book_enabled
   )
-  if match_bypasses_opposing_structure(execution_match):
+  if go_origin or match_bypasses_opposing_structure(execution_match):
     room_entries: tuple[Any, ...] = ()
   else:
     room_entries = ()
@@ -5843,16 +5841,6 @@ async def _publish_trade_plan_v8(
       # real opposing-structure awareness the caller explicitly provided -
       # it only ever adds to what the M15-only read alone would see.
       room_entries = _zone_opposing_entries(htf_zones)
-    if GO_ORIGIN_TAG in match.tags:
-      # Prefer the Go engine's own live-published zone book (the single
-      # source of truth for structure, refreshed on every closed bar) over
-      # Python's just-computed recompute above; that recompute is kept as
-      # the fallback when Go has not published yet/recently, never
-      # silently dropped to "no opposing structure" - see
-      # go_zone_book.py's own doc comment.
-      room_entries = await opposing_entries_for_go_match(
-        client, symbol, python_fallback=room_entries,
-      )
   displacement_lookback = max(
     0, int(runtime_config.execution.policy.displacement_override_lookback_bars),
   )
@@ -5935,6 +5923,17 @@ async def _publish_trade_plan_v8(
       execution_match.strategy,
     ),
   )
+  if go_origin:
+    # Go already owns the technical entry, invalidation and target geometry.
+    # Python must not turn its own Market Map into a second technical veto or
+    # silently fit the Go ladder to a Python opposing wall.
+    target_room = StructuralTargetRoomDecision(
+      allowed=True,
+      reason_code="go_authoritative_geometry",
+      message="Go analysis owns structural target-room geometry",
+      hard_block=False,
+      measured={"source": "go_analysis_engine", "python_override": False},
+    )
   if not target_room.allowed:
     # Counter-bias vs HTF intentionally presses into opposing structure.
     # Keep the setup when native usable room still clears the floor —
@@ -6012,10 +6011,14 @@ async def _publish_trade_plan_v8(
       execution_match.targets_pips,
     )
 
-  zone_claim_id = _resolve_match_confluence_claim_id(
-    symbol,
-    match_for_plan,
-    htf_zones,
+  zone_claim_id = (
+    None
+    if go_origin
+    else _resolve_match_confluence_claim_id(
+      symbol,
+      match_for_plan,
+      htf_zones,
+    )
   )
   if zone_claim_id is not None:
     zone_claimed = await claim_confluence_zone(
@@ -6046,7 +6049,7 @@ async def _publish_trade_plan_v8(
     )
     return None
 
-  strategy_opposing_zone = _nearest_directional_zone(
+  strategy_opposing_zone = None if go_origin else _nearest_directional_zone(
     match_for_plan.direction,
     spot.price,
     htf_zones or [],
@@ -6068,15 +6071,21 @@ async def _publish_trade_plan_v8(
     zone_id=match_for_plan.zone_id,
     level_id=match_for_plan.level_id,
   )
-  barrier_outcome = _opposing_barrier_decision(
-    match_for_plan.direction,
-    spot.price,
-    match_for_plan.target_price,
-    match_for_plan.atr,
-    htf_zones or [], htf_levels or [],
-    instrument_geometry.structural_barrier_buffer_atr(symbol),
-    source=source,
-    guard_mode=guard_mode,
+  barrier_outcome = (
+    GuardOutcome(
+      "barrier", OUTCOME_ALLOW, "go_authoritative",
+      "Go analysis owns technical barriers", False,
+    )
+    if go_origin else _opposing_barrier_decision(
+      match_for_plan.direction,
+      spot.price,
+      match_for_plan.target_price,
+      match_for_plan.atr,
+      htf_zones or [], htf_levels or [],
+      instrument_geometry.structural_barrier_buffer_atr(symbol),
+      source=source,
+      guard_mode=guard_mode,
+    )
   )
   async def _release_claims() -> None:
     await release_active_thesis(
@@ -6090,6 +6099,7 @@ async def _publish_trade_plan_v8(
   if (
     barrier_outcome.hard_block
     and not match_bypasses_opposing_structure(match_for_plan)
+    and not go_origin
   ):
     await _release_claims()
     await _record_v8_build_rejected(
@@ -6106,7 +6116,7 @@ async def _publish_trade_plan_v8(
     direction=str(getattr(match_for_plan, "direction", "") or ""),
     guard_mode=guard_mode,
   )
-  if defended_outcome.hard_block:
+  if defended_outcome.hard_block and not go_origin:
     await _release_claims()
     await _record_v8_build_rejected(
       client, symbol, match, defended_outcome.reason_code,
@@ -6121,6 +6131,7 @@ async def _publish_trade_plan_v8(
   if (
     runtime_config.actionability.gates.htf_veto_enabled
     and not match_bypasses_opposing_structure(match_for_plan)
+    and not go_origin
   ):
     htf_opposing = _nearest_directional_zone(
       match_for_plan.direction,
@@ -6149,14 +6160,20 @@ async def _publish_trade_plan_v8(
   # Hard overlap veto: an entry inside both demand and supply must fail before
   # publishing, resolved via the reaction-lookback thesis check that the
   # preflight used to run.
-  overlap_outcome = _resolve_overlap_thesis(
-    match_for_plan.direction,
-    entry_reference,
-    htf_zones,
-    None if frames is None else frames.get("M1"),
-    float(match_for_plan.atr),
-    None,
-    symbol=symbol,
+  overlap_outcome = (
+    GuardOutcome(
+      "overlap", OUTCOME_ALLOW, "go_authoritative",
+      "Go analysis owns technical overlap", False,
+    )
+    if go_origin else _resolve_overlap_thesis(
+      match_for_plan.direction,
+      entry_reference,
+      htf_zones,
+      None if frames is None else frames.get("M1"),
+      float(match_for_plan.atr),
+      None,
+      symbol=symbol,
+    )
   )
   if overlap_outcome.hard_block:
     await _release_claims()
@@ -6202,7 +6219,7 @@ async def _publish_trade_plan_v8(
       symbol, news_event.get("title", "unknown"),
     )
 
-  cooldown_reason = await _zone_cooldown_reason(
+  cooldown_reason = None if go_origin else await _zone_cooldown_reason(
     client, symbol, match.direction, spot.price,
     match.atr, runtime_config.lifecycle.zone.cooldown_atr,
   )
@@ -6308,7 +6325,7 @@ async def _publish_trade_plan_v8(
   # unconstrained, matching today's behavior) or when the flag is off.
   fixed_rr_room_pips = (
     target_room.measured.get("room_pips")
-    if structural_barrier_book_enabled
+    if structural_barrier_book_enabled and not go_origin
     else None
   )
   available_target_room_pips = (
@@ -6435,7 +6452,7 @@ async def _publish_trade_plan_v8(
         runtime_config.risk.position_limits.same_direction_stack_size_fraction
       ),
       be_after_target_index=0,
-      approved_measured=gate_measured if fixed_rr_target else None,
+      approved_measured=gate_measured if (fixed_rr_target or go_origin) else None,
     )
   except TradePlanBuildRejected as exc:
     await _release_claims()
