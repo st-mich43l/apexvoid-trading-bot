@@ -5038,7 +5038,8 @@ async def _publish_trade_plan_v8(
       return None
 
   if (
-    technique_require_sweep_body(inst)
+    GO_ORIGIN_TAG not in match.tags
+    and technique_require_sweep_body(inst)
     and (
       is_reaction_strategy(match.strategy)
       or match.family in {
@@ -5048,6 +5049,14 @@ async def _publish_trade_plan_v8(
       }
     )
   ):
+    # This classifies the candle pattern (sweep/reclaim vs. body-close) Python's
+    # own M1/M5 detectors produced as `entry_activation_trigger`/`reaction_type`.
+    # A Go-origin match has no such Python-computed pattern name to classify —
+    # Go's causal, strategy-specific confirmation already gated Candidate
+    # creation (go_opportunity_policy.build_strategy_match) — so re-demanding
+    # a legacy pattern label here would be a second, Python-only technical
+    # authority over the same decision, exactly what confirmation_policy_for's
+    # GO_ORIGIN_TAG bypass already avoids for the M1/M5 confirmation source.
     trigger_name = (
       str(match.entry_activation_trigger or "")
       or str(match.reaction_type or "")
