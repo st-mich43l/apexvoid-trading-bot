@@ -179,7 +179,8 @@ public sealed partial class TradePlanRuntimeTests
 
     var order = Assert.Single(client.MarketOrders);
     Assert.Equal(TradeDirection.Buy, order.Direction);
-    Assert.Contains("v8:plan-1", order.Comment);
+    Assert.StartsWith("v8c|", order.Comment);
+    Assert.True(order.Comment.Length <= 50);
     var open = Assert.Single(runtime.TrackedStates);
     Assert.Equal(TradePlanRuntimeStage.FullyOpen, open.Stage);
     Assert.NotNull(open.PositionId);
