@@ -48,13 +48,20 @@ actionability:
     mode: shadow
 analysis:
   # THIS file (rendered by ansible from apexvoid_trading_bot_config) is where the Python bot reads
-  # the Go-authority switches. config/analysis.yml is not read by the bot. Production: go_shadow first,
-  # then verify `auto_trade:component_health:analysis_opportunity_consumer` is ready and the Kafka group
-  # apexvoid-algo-bot-analysis-opportunity-v1 exists (docs/operations.md, "Kafka & Analysis-Authority
-  # Incident Response" § go_shadow activation).
-  # technical_authority:
-  #   mode: go_shadow
-  #   consumer_enabled: true
+  # the Go-authority switches. config/analysis.yml is not read by the bot. Go is the sole automatic
+  # technical-opportunity producer: with runtime.auto_trade.enabled the bot refuses to start unless
+  # mode=go, consumer_enabled=true and Kafka is enabled (app/analysis_client/startup_gate.py). This
+  # hands no scope to Go by itself: every (symbol, catalog strategy) still needs an operator-recorded,
+  # fenced grant (docs/operations.md, "Kafka & Analysis-Authority Incident Response"). After start,
+  # verify `auto_trade:component_health:analysis_opportunity_consumer` is ready and the Kafka group
+  # below exists.
+  technical_authority:
+    mode: go
+    consumer_enabled: true
+    consumer_group: apexvoid-algo-bot-analysis-opportunity-v1
+    max_event_age_seconds: 900
+    max_delivery_lag_seconds: 300
+    go_origin_risk_leg_enabled: false
   trendlines:
     # V2 keeps A/B anchors immutable, requires a later causal validation, and
     # turns this band into an interaction watch rather than an automatic fill.

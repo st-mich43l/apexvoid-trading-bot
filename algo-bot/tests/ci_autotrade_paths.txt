@@ -53,6 +53,7 @@ tests/test_analysis_shadow.py
 tests/test_s14_deployment_persistence.py
 tests/test_s14c_policy_replay.py
 tests/test_technical_authority_config.py
+tests/test_go_only_startup_gate.py
 tests/test_s13_analysis_client_boundary.py
 tests/test_s13_legacy_classification.py
 tests/test_analysis_authority_fence.py
