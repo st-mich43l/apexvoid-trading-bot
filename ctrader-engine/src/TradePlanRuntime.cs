@@ -925,17 +925,32 @@ public sealed class TradePlanRuntime(
     CancellationToken cancellationToken
   )
   {
-    var ownership = TradePlanOwnership.TryParseOwnership(
-      position.Comment, position.ClientOrderId
-    );
-    if (ownership is null)
-    {
-      return false;
-    }
     if (!_restored)
     {
       await RestoreAsync(cancellationToken);
       _restored = true;
+    }
+    // New V8 broker identities are compact because cTrader bounds both
+    // ClientOrderId and comment fields. Resolve them against the exact
+    // persisted leg first; legacy full IDs still use the parser fallback.
+    var exact = _statesById.Values
+      .SelectMany(state => (state.Legs ?? []).Select(leg => (state, leg)))
+      .FirstOrDefault(item =>
+        !string.IsNullOrWhiteSpace(position.ClientOrderId)
+        && string.Equals(
+          item.leg.ClientOrderId, position.ClientOrderId, StringComparison.Ordinal
+        )
+      );
+    var ownership = exact.state is not null
+      ? new TradePlanOwnership.Ownership(
+        exact.state.PlanId, "", exact.leg.LegId
+      )
+      : TradePlanOwnership.TryParseOwnership(
+        position.Comment, position.ClientOrderId
+      );
+    if (ownership is null)
+    {
+      return false;
     }
     if (!_statesById.TryGetValue(ownership.PlanId, out var state))
     {
@@ -2505,20 +2520,29 @@ public sealed class TradePlanRuntime(
         var ownership = TradePlanOwnership.TryParseOwnership(
           position.Comment, position.ClientOrderId
         );
-        if (ownership is null || ownership.PlanId != state.PlanId)
+        var exactLeg = !string.IsNullOrWhiteSpace(position.ClientOrderId)
+          ? legs.FirstOrDefault(leg => string.Equals(
+            leg.ClientOrderId, position.ClientOrderId, StringComparison.Ordinal
+          ))
+          : null;
+        if (
+          exactLeg is null
+          && (ownership is null || ownership.PlanId != state.PlanId)
+        )
         {
           continue;
         }
-        var before = legs.FirstOrDefault(leg => leg.LegId == ownership.LegId);
+        var legId = exactLeg?.LegId ?? ownership!.LegId;
+        var before = legs.FirstOrDefault(leg => leg.LegId == legId);
         if (before?.BrokerPositionId == position.PositionId
             && before.Stage is TradePlanLegStages.Filled or TradePlanLegStages.Managing)
         {
           continue;
         }
-        state = AdoptFilledLeg(state, ownership.LegId, position, absoluteStop, now);
+        state = AdoptFilledLeg(state, legId, position, absoluteStop, now);
         legs = (state.Legs ?? []).ToList();
         state = await AmendAndVerifyLegStopAsync(
-          client, symbol, state, ownership.LegId, absoluteStop, cancellationToken
+          client, symbol, state, legId, absoluteStop, cancellationToken
         );
         legs = (state.Legs ?? []).ToList();
         changed = true;
@@ -4379,8 +4403,30 @@ public sealed class TradePlanRuntime(
   {
     foreach (var item in declared)
     {
-      if (runtimeLegs.Any(leg => leg.LegId == item.LegId))
+      var existingIndex = runtimeLegs.FindIndex(leg => leg.LegId == item.LegId);
+      if (existingIndex >= 0)
       {
+        var existing = runtimeLegs[existingIndex];
+        // A rejected pre-fix submission can leave a planned leg with the old
+        // overlong broker identity. Migrate only before any broker object is
+        // owned; live legacy orders retain their old exact identity.
+        if (
+          existing.BrokerOrderId is null
+          && existing.BrokerPositionId is null
+          && !string.Equals(
+            existing.ClientOrderId,
+            TradePlanOwnership.FormatClientOrderId(plan.PlanId, item.LegId),
+            StringComparison.Ordinal
+          )
+        )
+        {
+          runtimeLegs[existingIndex] = existing with
+          {
+            ClientOrderId = TradePlanOwnership.FormatClientOrderId(
+              plan.PlanId, item.LegId
+            ),
+          };
+        }
         continue;
       }
       runtimeLegs.Add(new TradePlanLegRuntimeState(

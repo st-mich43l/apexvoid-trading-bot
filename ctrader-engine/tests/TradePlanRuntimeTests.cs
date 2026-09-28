@@ -2103,6 +2103,21 @@ public sealed partial class TradePlanRuntimeTests
   }
 
   [Fact]
+  public void LongGoPlanBrokerIdentityStaysWithinBrokerLimitsAndRemainsReversible()
+  {
+    var planId = "v8:go_opp_" + new string('a', 64);
+    var clientOrderId = TradePlanOwnership.FormatClientOrderId(planId, "L1");
+    var comment = TradePlanOwnership.FormatComment(planId, "thesis-too-long-for-broker", "L1");
+
+    Assert.True(clientOrderId.Length <= 50);
+    Assert.True(comment.Length <= 50);
+    var ownership = TradePlanOwnership.TryParseOwnership(comment, clientOrderId);
+    Assert.NotNull(ownership);
+    Assert.Equal(planId, ownership!.PlanId);
+    Assert.Equal("L1", ownership.LegId);
+  }
+
+  [Fact]
   public async Task LadderL1MarketFillAndL2PendingIsPartiallyOpenThenFullyOpen()
   {
     var store = new FakeTradePlanStore();

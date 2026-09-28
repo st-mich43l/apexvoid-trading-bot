@@ -76,10 +76,14 @@ public sealed partial class TradePlanRuntimeTests
     var order = Assert.Single(client.MarketOrders);
     Assert.Equal(TradeDirection.Sell, order.Direction);              // supply -> SELL, never counter-directed
     Assert.True(order.Volume >= Symbol.MinVolume && order.Volume % Symbol.StepVolume == 0);
-    Assert.Equal($"{GoPlanId}:L1", order.ClientOrderId);
+    Assert.Equal(
+      TradePlanOwnership.FormatClientOrderId(GoPlanId, "L1"),
+      order.ClientOrderId
+    );
+    Assert.True(order.ClientOrderId.Length <= 50);
     var comment = Assert.IsType<string>(order.Comment);
-    Assert.Contains(GoPlanId, comment);
-    Assert.Contains(state.ThesisId, comment);                        // the stable structural thesis rides on the broker order
+    Assert.StartsWith("v8c|", comment);
+    Assert.True(comment.Length <= 50);
     var ownership = TradePlanOwnership.TryParseOwnership(order.Comment, order.ClientOrderId);
     Assert.Equal(GoPlanId, ownership!.PlanId);
     Assert.Equal("L1", ownership.LegId);
@@ -111,7 +115,10 @@ public sealed partial class TradePlanRuntimeTests
     await runtime.PollAsync(client, Symbol, InsideZone, CancellationToken.None);
 
     var order = Assert.Single(client.MarketOrders);                  // exactly one order after the retry
-    Assert.Equal($"{GoPlanId}:L1", order.ClientOrderId);
+    Assert.Equal(
+      TradePlanOwnership.FormatClientOrderId(GoPlanId, "L1"),
+      order.ClientOrderId
+    );
     Assert.Equal(TradePlanRuntimeStage.FullyOpen, Assert.Single(runtime.TrackedStates).Stage);
     Assert.Single(store.Events, e => e.Type == "order_filled");
   }
