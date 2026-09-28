@@ -227,14 +227,23 @@ class AuthorityFence:
 
   async def authorize_go_publication(
     self, symbol: str, strategy_id: str, *, epoch: int | None = None,
+    allow_unconfigured: bool = False,
   ) -> AuthorityDecision:
-    """A Go-derived plan may publish only while Go owns the scope.
+    """Authorize a Go-derived plan while preserving explicit handovers.
 
     ``epoch``: the epoch under which the opportunity was accepted; a handover
     since then (including rollback and re-grant) invalidates it.
+    ``allow_unconfigured``: global ``mode=go`` treats an absent row as Go-owned;
+    explicit Python or draining rows remain authoritative.
     """
     if strategy_id not in CATALOG_STRATEGY_IDS:
       return AuthorityDecision(False, "unknown_catalog_scope", OWNER_NONE, 0, (strategy_id,))
+    if allow_unconfigured:
+      # In global Go mode, an absent row means the centralized runtime switch
+      # owns the scope. Explicit Python/draining rows still retain the fence.
+      configured = await self._store.get(symbol.upper(), strategy_id)
+      if configured is None:
+        return AuthorityDecision(True, "go_mode_default", OWNER_GO, 0, (strategy_id,), boundary=0)
     rec = await self.record(symbol, strategy_id)
     owner = rec.effective_owner(self._clock())
     if owner != OWNER_GO:
@@ -605,6 +614,7 @@ async def authorize_legacy_match(
   direction: str | None,
   tags: Iterable[str] = (),
   consumer_enabled: bool,
+  go_authority_mode: bool = False,
   fence: AuthorityFence | None = None,
   snapshot: AuthoritySnapshot | None = None,
 ) -> AuthorityDecision:
@@ -639,7 +649,9 @@ async def authorize_legacy_match(
       epoch = int(epochs[0]) if len(epochs) == 1 and epochs[0].isdigit() else None
       if epoch is None:
         return AuthorityDecision(False, "go_origin_missing_epoch", scopes=ids)
-      return await fence.authorize_go_publication(symbol, ids[0], epoch=epoch)
+      return await fence.authorize_go_publication(
+        symbol, ids[0], epoch=epoch, allow_unconfigured=go_authority_mode,
+      )
     scopes = catalog_ids_for_legacy(strategy_name, direction)
     if not scopes:
       return AuthorityDecision(True, "no_catalog_scope")
