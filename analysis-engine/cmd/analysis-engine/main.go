@@ -14,6 +14,7 @@ import (
 
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/config"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/engine"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/logging"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/marketdata"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/transport/kafka"
@@ -22,14 +23,16 @@ import (
 
 const primaryTimeframe = market.M5
 
+var log = logging.New("analysis-engine")
+
 func main() {
 	path := os.Getenv(config.RootFileEnv)
 	if path == "" {
-		fmt.Fprintf(os.Stderr, "analysis-engine: %s not set\n", config.RootFileEnv)
+		log.Error("configuration path is not set", "env", config.RootFileEnv)
 		os.Exit(1)
 	}
 	if err := run(path); err != nil {
-		fmt.Fprintln(os.Stderr, "analysis-engine:", err)
+		log.Error("service stopped", "error", err)
 		os.Exit(1)
 	}
 }
@@ -70,7 +73,7 @@ func run(configPath string) error {
 		}
 		producer, err = kafka.NewProducer(ctx, kafkaCfg, provenance, kafka.NewMetrics(), kafkaHealth)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "analysis-engine: Kafka producer unavailable; Redis market ingestion continues: %v\n", err)
+			log.Warn("Kafka producer unavailable; Redis market ingestion continues", "error", err)
 		}
 	}
 	defer func() {
@@ -130,7 +133,7 @@ func run(configPath string) error {
 			// A publish failure must never interrupt candle ingestion, same
 			// principle this file already applies to the Kafka producer.
 			if pubErr := runtime.PublishZoneBook(ctx, event.Symbol, snapshot.Zones, time.Now().UTC()); pubErr != nil {
-				fmt.Fprintf(os.Stderr, "analysis-engine: zone book publish failed for %s: %v\n", event.Symbol, pubErr)
+				log.Warn("zone book publish failed", "symbol", event.Symbol, "error", pubErr)
 			}
 		}
 		return result, err

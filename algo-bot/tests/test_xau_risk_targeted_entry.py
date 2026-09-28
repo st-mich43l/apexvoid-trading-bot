@@ -17,6 +17,7 @@ import pytest
 from tests.configuration.canonical_fixtures import execution_cfg
 
 from app.autotrade.execution_policy import evaluate_execution_policy
+from app.autotrade.protective_stop import plan_go_invalidation_stop
 from app.autotrade.execution_route import (
   ROUTE_MARKET_WITH_LIMIT_SCALE,
   ROUTE_SINGLE_LIMIT,
@@ -40,6 +41,65 @@ def test_risk_targeted_entry_lands_at_exactly_target_pips_when_reachable():
     digits=2,
   )
   assert entry == pytest.approx(4091.0)
+
+
+def test_go_invalidation_is_used_verbatim_for_every_entry_leg():
+  plan = plan_go_invalidation_stop(
+    direction="SELL",
+    entry_zone_low=4132.61,
+    entry_zone_high=4139.02,
+    planned_leg_prices=(4133.00, 4136.50),
+    resolved_leg_volumes=(0.8, 0.2),
+    invalidation_price=4142.00,
+    minimum_stop_pips=50,
+    maximum_stop_pips=100,
+    pip_size=0.1,
+    digits=2,
+  )
+  assert float(plan.final_stop_price) == pytest.approx(4142.00)
+  assert plan.source == "go_invalidation"
+  assert float(plan.final_stop_pips) == pytest.approx(90.0)
+
+
+def test_go_invalidation_is_rejected_when_its_worst_leg_breaks_max_risk():
+  with pytest.raises(ValueError, match="stop_exceeds_go_invalidation_envelope"):
+    plan_go_invalidation_stop(
+      direction="SELL",
+      entry_zone_low=4132.61,
+      entry_zone_high=4139.02,
+      planned_leg_prices=(4133.00, 4136.50),
+      resolved_leg_volumes=(0.8, 0.2),
+      invalidation_price=4142.00,
+      minimum_stop_pips=50,
+      maximum_stop_pips=80,
+      pip_size=0.1,
+      digits=2,
+    )
+
+
+def test_go_policy_does_not_apply_fixed_rr_or_python_stop_rewrite():
+  match = _match(
+    direction="SELL",
+    entry_low=4132.61,
+    entry_high=4139.02,
+    current_price=4130.0,
+    structure_swing=4150.0,
+    go_invalidation_price=4142.0,
+    targets_pips=(40, 80),
+    tags=("authority:go",),
+  )
+  evaluation = evaluate_execution_policy(
+    match,
+    spot_price=4130.0,
+    executable_quote=4130.0,
+    regime="range",
+    pip_size=0.1,
+    cfg=_cfg(**{"execution.reaction.stop_max_pips": 100}),
+  )
+  assert evaluation.allowed
+  assert evaluation.measured["planned_stop_price"] == "4142.00"
+  assert evaluation.measured["stop_source"] == "go_invalidation"
+  assert "target_policy_mode" not in evaluation.measured
 
 
 def test_risk_targeted_entry_sell_direction_mirrors_buy():

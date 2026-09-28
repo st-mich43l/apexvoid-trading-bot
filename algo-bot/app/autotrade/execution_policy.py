@@ -15,6 +15,7 @@ from app.autotrade.protective_stop import (
   opposing_zone_context_from_values,
   opposing_zone_context_measured,
   plan_group_protective_stop,
+  plan_go_invalidation_stop,
   plan_protective_stop,
   plan_scalp_invalidation_stop,
   primary_tp_pips_from_match,
@@ -654,6 +655,7 @@ def evaluate_execution_policy(
   low = float(getattr(match, "entry_low", 0.0))
   high = float(getattr(match, "entry_high", 0.0))
   direction = str(getattr(match, "direction", "")).upper()
+  go_origin = "authority:go" in tuple(getattr(match, "tags", ()) or ())
   pip = pip_size if pip_size > 0 else 0.1
   confluence = int(getattr(match, "confluence", 0) or 0)
   zone_width_atr = (
@@ -705,8 +707,17 @@ def evaluate_execution_policy(
   structural_stop_for_entry: float | None = None
   risk_targeted_entry_pips: float | None = None
   if symbol == "XAU" and bool(reaction_execution.risk_targeted_entry_enabled):
+    if go_origin and getattr(match, "go_invalidation_price", None) is not None:
+      # Go already owns the complete invalidation.  Do not reinterpret it as
+      # a swing and add Python's ATR buffer before choosing the entry.
+      structural_stop_for_entry = float(match.go_invalidation_price)
+      risk_targeted_entry_pips = float(reaction_execution.stop_min_pips)
     structure_swing_value = getattr(match, "structure_swing", None)
-    if structure_swing_value is not None and atr > 0:
+    if (
+      structural_stop_for_entry is None
+      and structure_swing_value is not None
+      and atr > 0
+    ):
       structural_stop_for_entry = approximate_structural_stop_price(
         direction=direction,
         structure_swing=float(structure_swing_value),
@@ -930,7 +941,20 @@ def evaluate_execution_policy(
     digits = _instrument_digits("", instrument_cfg)
     structure_buffer_atr = float(execution.scaling.add.stop_buffer_atr)
     wick_buffer_atr = float(execution.stops.wick_stop_buffer_atr)
-    if is_m1_scalp_strategy(strategy_name):
+    if go_origin and getattr(match, "go_invalidation_price", None) is not None:
+      stop_plan = plan_go_invalidation_stop(
+        direction=direction,
+        entry_zone_low=low,
+        entry_zone_high=high,
+        planned_leg_prices=leg_prices,
+        resolved_leg_volumes=leg_ratios,
+        invalidation_price=match.go_invalidation_price,
+        minimum_stop_pips=minimum_stop_pips,
+        maximum_stop_pips=maximum_stop_pips,
+        pip_size=pip,
+        digits=digits,
+      )
+    elif is_m1_scalp_strategy(strategy_name):
       stop_plan = plan_scalp_invalidation_stop(
         direction=direction,
         entry_price=planned_entry,
@@ -1111,6 +1135,9 @@ def evaluate_execution_policy(
       "stop_exceeds_envelope_after_wick",
       "stop_exceeds_max_envelope",
       "stop_exceeds_envelope_furthest_leg",
+      "stop_exceeds_go_invalidation_envelope",
+      "go_invalidation_not_beyond_buy_entries",
+      "go_invalidation_not_beyond_sell_entries",
       "stop_inside_opposing_zone",
       "stop_inside_entry_zone",
       "stop_not_beyond_planned_entries",
@@ -1132,7 +1159,7 @@ def evaluate_execution_policy(
     instrument_cfg,
     strategy=str(getattr(match, "strategy", "") or ""),
   )
-  if fixed_targeting is not None:
+  if fixed_targeting is not None and not go_origin:
     preferred_reward_risk = float(fixed_targeting.reward_risk)
     entry_value = Decimal(str(planned_entry))
     stop_value = stop_plan.final_stop_price

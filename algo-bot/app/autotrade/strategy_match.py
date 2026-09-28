@@ -48,6 +48,11 @@ class StrategyMatch:
   atr: float
   structure_swing: float
   targets_pips: tuple[int, ...]
+  # Go-origin opportunities carry an authoritative invalidation price.  It is
+  # deliberately separate from ``structure_swing`` because the Python stop
+  # planner adds its own ATR buffer to a swing, while a Go Candidate's
+  # invalidation is already the complete technical stop fact.
+  go_invalidation_price: float | None = None
   range_id: str | None = None
   range_low: float | None = None
   range_high: float | None = None
@@ -246,6 +251,10 @@ class StrategyMatch:
         reasons=tuple(str(item) for item in payload.get("reasons", [])),
         atr=float(payload["atr"]),
         structure_swing=float(payload["structure_swing"]),
+        go_invalidation_price=(
+          None if payload.get("go_invalidation_price") is None
+          else float(payload["go_invalidation_price"])
+        ),
         targets_pips=tuple(int(item) for item in payload["targets_pips"]),
         range_id=(
           None if payload.get("range_id") is None else str(payload["range_id"])
