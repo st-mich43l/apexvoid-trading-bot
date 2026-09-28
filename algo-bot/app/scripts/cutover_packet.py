@@ -54,7 +54,7 @@ def maximum_exposure(equity: float | None, *, stop_max_pips: int, risk_leg_gate:
     "one_plan_per_structural_thesis": True,
     "notes": [
       "Concurrency across theses stays under the existing Auto Algo open-exposure and account-risk controls; Go does not change them.",
-      "risk.max_group_risk_percent is declarative today (the executor never reads it); see docs/analysis/s14e-ladder-precision-risk.md.",
+      "risk.max_group_risk_percent is declarative today (the executor never reads it); see docs/autotrade-execution-integrity.md (Go-origin risk-leg gate).",
     ],
   }
 
