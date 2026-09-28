@@ -204,6 +204,7 @@ public sealed class MultiInstrumentRoutingTests
       BarsChannel: "bars:new",
       BarQualityLookback: 6,
       HeartbeatFile: "/tmp/h",
+      AutoTradeHeartbeatFile: "/tmp/h.autotrade",
       RefreshTokenKey: "ctrader:refresh_token",
       RefreshTokenFile: "/tmp/t.json",
       RequestTimeout: TimeSpan.FromSeconds(30),

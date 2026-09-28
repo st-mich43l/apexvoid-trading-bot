@@ -50,6 +50,7 @@ public static class RuntimeManifestParity
     "Port",
     "RedisUrl",
     "HeartbeatFile",
+    "AutoTradeHeartbeatFile",
     "RefreshTokenKey",
     "RefreshTokenFile",
     "RequestTimeout",

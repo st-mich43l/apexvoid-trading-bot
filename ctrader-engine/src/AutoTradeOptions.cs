@@ -762,6 +762,7 @@ public sealed record AutoTradeOptions(
         Port: 1,
         RedisUrl: bootstrapFromEnvironment.RedisUrl,
         HeartbeatFile: "/tmp/compat",
+        AutoTradeHeartbeatFile: "/tmp/compat.autotrade",
         RefreshTokenKey: "compat",
         RefreshTokenFile: "/tmp/compat",
         RequestTimeout: TimeSpan.FromSeconds(30),

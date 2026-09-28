@@ -61,6 +61,35 @@ public sealed partial class AutoTradeEngineTests
     await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
   }
 
+  [Fact]
+  public async Task RunSessionTouchesTheSessionHeartbeatOnEveryLoopIteration()
+  {
+    // Owner-reported 2026-09-26/09-28: ctrader-engine sat "healthy" for
+    // hours because the feed heartbeat FeedRunner touches only reflects
+    // market-data activity (spots/bars), never this loop. This proves the
+    // loop-specific callback fires repeatedly on its own, independent of
+    // any candidate/order activity.
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    var store = new FakeAutoTradeStore(CandidateJson());
+    store.SeedCandidateState(CandidateId, "ordered:91");
+    var client = new FakeTradingClient();
+    var touches = 0;
+    var engine = new AutoTradeEngine(
+      Options(),
+      store,
+      () => Now,
+      _ => { },
+      sessionHeartbeat: () => Interlocked.Increment(ref touches)
+    );
+
+    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
+    await WaitUntilAsync(() => touches >= 3);
+
+    cts.Cancel();
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+    Assert.True(touches >= 3);
+  }
+
   [Theory]
   [InlineData("ordered:91")]
   [InlineData("rejected:stale")]

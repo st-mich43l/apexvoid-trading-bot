@@ -17,6 +17,7 @@ public sealed record FeedOptions(
   string BarsChannel,
   int BarQualityLookback,
   string HeartbeatFile,
+  string AutoTradeHeartbeatFile,
   string RefreshTokenKey,
   string RefreshTokenFile,
   TimeSpan RequestTimeout,
@@ -45,6 +46,10 @@ public sealed record FeedOptions(
       BarsChannel: Env("BARS_CHANNEL", "bars:new"),
       BarQualityLookback: int.Parse(Env("BAR_QUALITY_LOOKBACK", "6")),
       HeartbeatFile: Env("HEALTH_FILE", "/tmp/ctrader-feed.heartbeat"),
+      AutoTradeHeartbeatFile: Env(
+        "AUTO_TRADE_HEALTH_FILE",
+        "/tmp/ctrader-autotrade.heartbeat"
+      ),
       RefreshTokenKey: Env("CTRADER_REFRESH_TOKEN_KEY", "ctrader:refresh_token"),
       RefreshTokenFile: Env(
         "CTRADER_REFRESH_TOKEN_FILE",
@@ -109,6 +114,7 @@ public sealed record FeedOptions(
       BarsChannel: feed.BarsChannel,
       BarQualityLookback: feed.BarQualityLookback,
       HeartbeatFile: account.HeartbeatFile,
+      AutoTradeHeartbeatFile: account.AutoTradeHeartbeatFile,
       RefreshTokenKey: account.RefreshTokenKey,
       RefreshTokenFile: account.RefreshTokenFile,
       RequestTimeout: account.RequestTimeout,
