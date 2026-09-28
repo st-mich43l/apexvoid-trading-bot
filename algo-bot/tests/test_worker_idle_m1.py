@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, Mock
+from types import SimpleNamespace
 
 import pandas as pd
 import pytest
@@ -86,3 +87,29 @@ async def test_mapped_thesis_rearm_does_not_bool_coerce_m1_frame(monkeypatch):
   assert called["symbol"] == "XAU"
   assert called["rows"] == 20
   assert called["atr"] > 0
+
+
+@pytest.mark.asyncio
+async def test_go_authority_never_reactivates_old_python_scanner_match(monkeypatch):
+  """A Redis match surviving the cutover is NOT a second analysis source."""
+  now = int(datetime.now(timezone.utc).timestamp())
+  install_runtime_overrides(
+    monkeypatch,
+    overrides={"analysis.technical_authority.mode": "go",
+               "analysis.technical_authority.consumer_enabled": True},
+    legacy_overrides={"auto_trade_enabled": True, "auto_trade_symbols": "XAU"},
+  )
+  monkeypatch.setattr(worker, "_symbols", lambda: ("XAU",))
+  monkeypatch.setattr(worker, "_load_spot", AsyncMock(return_value=None))
+  monkeypatch.setattr(worker, "_load_strategy_matches", AsyncMock(return_value=[
+    SimpleNamespace(match_id="python-legacy-match", tags=()),
+  ]))
+  load_frames = AsyncMock()
+  publish = AsyncMock()
+  monkeypatch.setattr(worker, "_load_frames", load_frames)
+  monkeypatch.setattr(worker, "_publish_trade_plan_v8", publish)
+  assert await worker._handle_event(
+    f"XAU:M1:{now}", source=SimpleNamespace(), client=SimpleNamespace(),
+  ) is None
+  load_frames.assert_not_awaited()
+  publish.assert_not_awaited()
