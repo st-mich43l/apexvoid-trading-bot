@@ -105,7 +105,6 @@ Sequence remains: `research → model → replay → shadow → paper → live g
 
 ## Related
 
-- [SCALP_UNIFY_M1_M5.md](SCALP_UNIFY_M1_M5.md) — naming / M1+M5 unify
+- [README.md](README.md) — naming / M1+M5 unify and the legacy HFS compatibility note
 - [PHASE1_AUDIT.md](PHASE1_AUDIT.md) — pipeline inventory
 - [CONTROLLED_LIVE.md](CONTROLLED_LIVE.md) — gated promotion (still disabled)
-- [TECHNIQUE_SCALP_REDEFINE.md](TECHNIQUE_SCALP_REDEFINE.md) — MAD off M1 scalping

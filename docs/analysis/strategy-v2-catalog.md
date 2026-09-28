@@ -335,8 +335,8 @@ renderer accepts only the already-computed `AnalysisSnapshot` plus an optional
 candidate, and `cmd/replay -setup-png-dir` captures the snapshot from the
 candidate's first observed lifecycle appearance. The generated image contains
 the supplied market facts and candidate geometry; it never recalculates setup
-validity. The initial real-XAU review is recorded in
-[`20260923-xau-m5-s7-setup-review.md`](20260923-xau-m5-s7-setup-review.md).
+validity. The initial real-XAU review confirmed this on real production
+config and 300 real XAU M5 bars.
 
 ### Phase S11 remediation status
 

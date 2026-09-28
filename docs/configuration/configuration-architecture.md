@@ -30,8 +30,9 @@ singleton, flat facade, or runtime legacy selector.
 | [config-catalog.generated.md](config-catalog.generated.md) | Generated catalog |
 | [environment-reference.generated.md](environment-reference.generated.md) | Generated ENV reference |
 
-Phase ledgers from the Catalog V2 programme:
-[history/](history/).
+`configuration/history/artifacts/` retains the raw JSON fixtures the Catalog
+V2 migration tests still read; the narrative phase ledgers themselves have
+been retired now that the migration is complete.
 
 ## Fingerprints
 
