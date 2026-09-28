@@ -13,6 +13,16 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Analysis Engine's `key_level` strategy now ports the legacy Python
+  detector's role classification (support/resistance/broken, `internal/
+  keylevel.Role`, already existed but was never wired up) and its
+  opposing-zone-contradiction logic (a real supply/demand zone overlapping
+  a level's band widens the reaction window and lets confirmation, not a
+  price-position guess, pick the direction), plus real closed-bar rejection
+  confirmation. Previously a naive "price above the level = Buy" proximity
+  check with no confirmation and no structural awareness. Full-capture
+  replay against the committed real XAU capture now discovers 1731 total
+  candidates versus 1702 before (golden regenerated).
 - Analysis Engine no longer aliases multiple Flip zones formed by distinct
   structural breaks on the same candle to one ID, preventing a fatal duplicate
   `flip_zone` opportunity during Redis recovery and the resulting restart loop.
