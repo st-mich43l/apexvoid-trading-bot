@@ -78,6 +78,7 @@ _LEGACY_TO_CATALOG: dict[str, str | tuple[str, str]] = {
   "momentum ride": "momentum_ride",
   "snap-back": "snap_back",
   "fade scalp": "liquidity_sweep",
+  "liquidity sweep": "liquidity_sweep",
   "range sweep scalp": "range_sweep",
   "impulse pullback scalp": "impulse_pullback",
   "breakout retest scalp": "scalp_breakout_retest",

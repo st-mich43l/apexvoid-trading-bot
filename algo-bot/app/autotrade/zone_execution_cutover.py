@@ -1,8 +1,10 @@
-"""Live ZoneWatch -> executable signal cutover.
+"""Retained ZoneWatch compatibility helpers, outside the Go auto path.
 
-This module is deliberately installed once from ``app.main`` after scanner and
-worker imports are complete.  It replaces the old scanner handoff at the
-function boundary without duplicating detector logic:
+Production Go mode does not install or run this module. It remains available
+for manual tooling, reconciliation of historical state, and tests that need
+to inspect old ZoneWatch records. Any attempt to activate a non-Go match while
+Go owns technical production is rejected at this boundary as well as in the
+worker:
 
   detection result -> retained ZoneWatch (no setup, card, or ready event)
   -> side-aware quote enters zone
@@ -12,22 +14,10 @@ function boundary without duplicating detector logic:
 The old ready stream remains an emergency durable fallback only when an
 unexpected direct-publication exception occurs after setup creation.
 
-Architecture follow-up (out of scope for the Minimal worker DI pass): this
-cutover still lazy-imports private ``app.analysis.scanner`` helpers for match
-persist/sync and monkeypatches ``worker.try_publish_executable_signal``. Peel
-those scanner couplings into an injected publication / match-sync seam later;
-do not reintroduce scanner imports into ``worker.py``.
-
-Go-only automatic path: production no longer dispatches the scanner, so the
-discovery half (``_sync_strategy_match_cutover``) creates no new ZoneWatch;
-activation of already-retained zones (``evaluate_active_zone_watches``) keeps
-running against each zone's stored band, stop and discovery range snapshot.
-``install_zone_execution_cutover`` stays load-bearing for that: it binds
-``_ORIGINAL_DIRECT_PUBLISH``, without which ``_safe_direct_publish`` cannot
-publish at all. Two Python technical computations remain on the activation
-path because activation cannot function without them and Go does not yet
-supply the fact (each is marked RETAINED below): the ATR used for relevance
-banding, and the M1 reaction trigger.
+The automatic startup path no longer dispatches scanner or ZoneWatch
+technical discovery. Historical helpers are intentionally not a fallback for
+Go opportunities; the Go event's geometry and confirmation remain the only
+automatic technical facts.
 """
 
 from __future__ import annotations
@@ -42,6 +32,7 @@ import time
 from typing import Any
 
 from app.analysis.actionability import range_bounds_from_context
+from app.analysis_client.authority import GO_ORIGIN_TAG
 from app.analysis.confluence_zone import (
   BandKind,
   classify_band_kind,
@@ -1417,6 +1408,17 @@ async def _activate_match(
     transition_setup,
   )
 
+  if (
+    runtime_config.analysis.technical_authority.mode == "go"
+    and GO_ORIGIN_TAG not in match.tags
+  ):
+    log.info(
+      "ZoneWatch activation rejected in Go mode symbol=%s zone_id=%s reason=python_match_rejected_go_authority",
+      record.symbol,
+      record.zone_id,
+    )
+    return None
+
   now = _now()
   quote = await _load_quote(client, record.symbol)
   if quote is None:
@@ -2287,6 +2289,9 @@ async def zone_watch_execution_loop() -> None:
 def install_zone_execution_cutover() -> None:
   """Install once after scanner/worker imports; safe for tests and reloads."""
   global _INSTALLED, _ORIGINAL_SYNC, _ORIGINAL_FORMAT, _ORIGINAL_DIRECT_PUBLISH
+  if runtime_config.analysis.technical_authority.mode == "go":
+    log.info("ZoneWatch cutover not installed in Go-only automatic mode")
+    return
   if _INSTALLED:
     return
   from app.analysis import scanner

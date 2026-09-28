@@ -12,7 +12,7 @@ from typing import Awaitable, Callable, Literal
 
 from aiogram.exceptions import TelegramBadRequest, TelegramRetryAfter
 
-from app.analysis.scanner import clear_active_setup_tracking
+from app.autotrade.setup_tracking import clear_active_setup_tracking
 from app.autotrade import units
 from app.autotrade.event_integrity import (
   contradictory_archived_tp,
