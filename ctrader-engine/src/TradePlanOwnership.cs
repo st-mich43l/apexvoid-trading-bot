@@ -1,3 +1,6 @@
+using System.Security.Cryptography;
+using System.Text;
+
 namespace ApexVoid.CTraderFeed;
 
 /// <summary>
@@ -8,6 +11,8 @@ namespace ApexVoid.CTraderFeed;
 /// </summary>
 public static class TradePlanOwnership
 {
+  private const string GoPlanPrefix = "v8:go_opp_";
+
   public sealed record Ownership(string PlanId, string ThesisId, string LegId);
 
   public static Ownership? TryParseOwnership(
@@ -62,20 +67,43 @@ public static class TradePlanOwnership
       return null;
     }
     var separator = clientOrderId.LastIndexOf(':');
-    if (separator <= 0 || separator >= clientOrderId.Length - 1)
+    if (separator > 0 && separator < clientOrderId.Length - 1)
     {
-      return null;
+      var planId = clientOrderId[..separator];
+      var legToken = clientOrderId[(separator + 1)..];
+      if (!string.IsNullOrWhiteSpace(planId) && TryNormalizeLegId(legToken) is { } legId)
+      {
+        return new Ownership(planId, "", legId);
+      }
     }
-    var planId = clientOrderId[..separator];
-    var legToken = clientOrderId[(separator + 1)..];
-    if (string.IsNullOrWhiteSpace(planId) || TryNormalizeLegId(legToken) is not { } legId)
+
+    // Long Go opportunity IDs are encoded reversibly as a compact base64url
+    // payload so the broker's 50-character ClientOrderId limit does not lose
+    // the exact plan identity during restart/reconciliation.
+    if (clientOrderId.StartsWith('g'))
     {
-      return null;
+      var compactSeparator = clientOrderId.LastIndexOf('.');
+      if (
+        compactSeparator > 1
+        && compactSeparator < clientOrderId.Length - 1
+        && TryNormalizeLegId(clientOrderId[(compactSeparator + 1)..]) is { } compactLeg
+      )
+      {
+        try
+        {
+          var encoded = clientOrderId[1..compactSeparator]
+            .Replace('-', '+').Replace('_', '/');
+          encoded = encoded.PadRight(encoded.Length + (4 - encoded.Length % 4) % 4, '=');
+          var suffix = Convert.ToHexString(Convert.FromBase64String(encoded)).ToLowerInvariant();
+          return new Ownership(GoPlanPrefix + suffix, "", compactLeg);
+        }
+        catch (FormatException)
+        {
+          return null;
+        }
+      }
     }
-    // ClientOrderId does not carry thesis_id; callers that only have this
-    // form still get a usable planId+legId with an empty thesis placeholder
-    // so reconcile can match against persisted Legs[].ClientOrderId.
-    return new Ownership(planId, "", legId);
+    return null;
   }
 
   /// <summary>
@@ -114,9 +142,39 @@ public static class TradePlanOwnership
     return null;
   }
 
+  // cTrader bounds broker metadata. Go plan IDs carry a full opportunity
+  // hash and can exceed that limit when combined with the thesis ID. The
+  // exact identity remains in the persisted runtime leg and deterministic
+  // ClientOrderId; the comment is only a compact diagnostic token. Its v8c
+  // prefix prevents the legacy full ownership parser from treating a
+  // truncated token as an exact plan ID.
   public static string FormatComment(string planId, string thesisId, string legId) =>
-    $"v8|{planId}|{thesisId}|{legId}";
+    $"v8c|{PlanToken(planId)}|{legId}";
 
   public static string FormatClientOrderId(string planId, string legId) =>
-    $"{planId}:{legId}";
+    planId.Length + legId.Length + 1 <= 50
+      ? $"{planId}:{legId}"
+      : TryEncodeGoPlanId(planId) is { } encoded
+        ? $"g{encoded}.{legId}"
+        : $"h{PlanToken(planId)}.{legId}";
+
+  private static string? TryEncodeGoPlanId(string planId)
+  {
+    if (!planId.StartsWith(GoPlanPrefix, StringComparison.Ordinal))
+    {
+      return null;
+    }
+    var suffix = planId[GoPlanPrefix.Length..];
+    if (suffix.Length != 64 || suffix.Any(value => !Uri.IsHexDigit(value)))
+    {
+      return null;
+    }
+    return Convert.ToBase64String(Convert.FromHexString(suffix))
+      .TrimEnd('=').Replace('+', '-').Replace('/', '_');
+  }
+
+  private static string PlanToken(string planId) =>
+    Convert.ToHexString(
+      SHA256.HashData(Encoding.UTF8.GetBytes(planId))
+    )[..24].ToLowerInvariant();
 }
