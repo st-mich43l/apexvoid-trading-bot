@@ -205,7 +205,7 @@ public sealed partial class TradePlanRuntimeTests
     // below the BUY stop. Reject before cTrader can accept an unprotected
     // market position and fail the later stop amend.
     await runtime.PollAsync(
-      client, Symbol, new SpotPrice("XAU", 4088.20m, 4088.30m, 1), CancellationToken.None
+      client, Symbol, new SpotPrice("XAU", 4088.25m, 4088.30m, 1), CancellationToken.None
     );
 
     Assert.Empty(client.MarketOrders);
