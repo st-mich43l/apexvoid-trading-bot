@@ -23,6 +23,7 @@ from app.persistence import redis_state
 from app.analysis_client.authority import GO_ORIGIN_TAG, AuthorityDecision, authorize_legacy_match
 from app.analysis_client.shadow_overlay import is_shadow_overlay
 from app.autotrade.go_plan_cancel import read_plan_cancel, register_go_plan
+from app.autotrade.go_zone_book import opposing_entries_for_go_match
 from app.autotrade import units
 from app.core import instrument_geometry
 from app.autotrade.range_targets import configured_range_targets
@@ -5841,6 +5842,16 @@ async def _publish_trade_plan_v8(
       # real opposing-structure awareness the caller explicitly provided -
       # it only ever adds to what the M15-only read alone would see.
       room_entries = _zone_opposing_entries(htf_zones)
+    if GO_ORIGIN_TAG in match.tags:
+      # Prefer the Go engine's own live-published zone book (the single
+      # source of truth for structure, refreshed on every closed bar) over
+      # Python's just-computed recompute above; that recompute is kept as
+      # the fallback when Go has not published yet/recently, never
+      # silently dropped to "no opposing structure" - see
+      # go_zone_book.py's own doc comment.
+      room_entries = await opposing_entries_for_go_match(
+        client, symbol, python_fallback=room_entries,
+      )
   displacement_lookback = max(
     0, int(runtime_config.execution.policy.displacement_override_lookback_bars),
   )
@@ -7875,11 +7886,18 @@ async def _handle_event(
     return None
 
   if go_authority:
-    # The Go event is the complete technical decision. Do not load OHLC or
-    # call Python regime, range, trendline, scalp, barrier, or scanner helpers
-    # on this path. The remaining worker work is execution-time only: quote,
-    # spread, expiry, exposure, risk, order policy, and TradePlan V8.
-    frames = {}
+    # The Go event is the complete technical decision: do not call Python
+    # regime, range, trendline, or scalp detectors on this path, and do not
+    # let scanner_strategy_matches (see above) ever carry a non-Go match
+    # here. OHLC is still loaded, same as the Python path (production
+    # finding 2026-09-28: skipping it silently turned the execution-time
+    # opposing-barrier/target-room recheck below into a no-op for every
+    # Go-origin match, for lack of anything to check against) - this is the
+    # "retain execution-time... risk... checks" case, not a second
+    # technical-production source: nothing here builds a candidate, it only
+    # rechecks whether Go's own confirmed geometry is already contained in a
+    # standing opposing zone before letting it publish.
+    frames = await _load_frames(source, symbol)
     private_decision = AutoScalpDecision(
       "go_owned", reasons=("technical facts supplied by Go Analysis Engine",),
     )
@@ -8003,15 +8021,12 @@ async def _handle_event(
   arbitrable: list[ExecutionIntent] = []
   arbitration = arbitrate_execution_intents([])
   if strategy_matches:
-    # In Go authority mode Python has no technical barrier book. Go supplies
-    # the strategy geometry; these lists stay empty so the worker cannot
-    # reconstruct zones/levels from Redis OHLC while building the plan.
-    if go_authority:
-      htf_zones = []
-      htf_levels = []
-    else:
-      htf_zones = _htf_zones(frames, None, symbol=symbol)
-      htf_levels = _htf_levels(frames, None, symbol=symbol)
+    # Go supplies the strategy's own geometry in both modes; these are the
+    # opposing-barrier/target-room execution recheck's own inputs, not a
+    # second technical-production source, and apply identically whether the
+    # match came from a Go event or a legacy Python match.
+    htf_zones = _htf_zones(frames, None, symbol=symbol)
+    htf_levels = _htf_levels(frames, None, symbol=symbol)
     for routed_match in strategy_matches:
       intent_id = f"strategy:{routed_match.match_id}"
       intent_matches[intent_id] = routed_match

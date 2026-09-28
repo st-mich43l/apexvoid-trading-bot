@@ -2,6 +2,8 @@ package redis_test
 
 import (
 	"context"
+	"encoding/json"
+	"os"
 	"testing"
 	"time"
 
@@ -10,6 +12,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/marketdata"
 	redistransport "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/transport/redis"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/zone"
 )
 
 func TestDecodeBar_ConsumesTheExactDotNetRedisBarJSON(t *testing.T) {
@@ -85,5 +88,128 @@ func TestRuntime_RedisOutageKeepsProcessLiveAndReadinessFalse(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("runtime did not stop after cancellation")
+	}
+}
+
+func TestZoneBookKeyIsUppercaseAndNamespaced(t *testing.T) {
+	if got, want := redistransport.ZoneBookKey("xau"), "analysis:zone_book:XAU"; got != want {
+		t.Fatalf("ZoneBookKey(%q) = %q, want %q", "xau", got, want)
+	}
+}
+
+func TestBuildZoneBook_FlattensSupplyDemandZonesAcrossTimeframesAndSkipsOtherKinds(t *testing.T) {
+	zones := map[market.Timeframe]zone.ZoneState{
+		market.M15: {Zones: []zone.Zone{
+			{ID: "z1", Kind: zone.KindSupply, Low: 2020, High: 2025, Strength: 0.8, TouchCount: 2, State: zone.StateFresh},
+			{ID: "z2", Kind: zone.KindDemand, Low: 1990, High: 1995, Strength: 0.6, TouchCount: 1, State: zone.StateTouched},
+		}},
+		market.H1: {Zones: []zone.Zone{
+			{ID: "z3", Kind: zone.KindSupply, Low: 2030, High: 2040, Strength: 0.9, TouchCount: 0, State: zone.StateInvalidated},
+		}},
+	}
+	doc := redistransport.BuildZoneBook("XAU", zones, 1700000100)
+	if doc.Symbol != "XAU" || doc.GeneratedAt != 1700000100 {
+		t.Fatalf("unexpected document header: %+v", doc)
+	}
+	if len(doc.Entries) != 3 {
+		t.Fatalf("expected 3 entries (every zone, kind and state included — filtering is the reader's job), got %d: %+v", len(doc.Entries), doc.Entries)
+	}
+	byID := map[string]redistransport.ZoneBookEntry{}
+	for _, e := range doc.Entries {
+		byID[e.Timeframe+":"+e.Kind+":"+e.State] = e
+	}
+	m15Supply, ok := byID["M15:supply:fresh"]
+	if !ok {
+		t.Fatalf("missing M15 supply/fresh entry in %+v", doc.Entries)
+	}
+	if m15Supply.Low != 2020 || m15Supply.High != 2025 || m15Supply.Strength != 0.8 || m15Supply.TouchCount != 2 {
+		t.Errorf("unexpected M15 supply entry: %+v", m15Supply)
+	}
+	if _, ok := byID["H1:supply:invalidated"]; !ok {
+		t.Fatalf("expected the invalidated H1 zone to still be published (the reader, not the publisher, decides what's a live barrier): %+v", doc.Entries)
+	}
+	// The document round-trips through JSON with exactly the field names a
+	// Python reader keys off — a silent rename here breaks the contract.
+	raw, err := json.Marshal(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	for _, field := range []string{"symbol", "generated_at", "entries"} {
+		if _, ok := decoded[field]; !ok {
+			t.Errorf("expected top-level JSON field %q, got %v", field, decoded)
+		}
+	}
+}
+
+func TestBuildZoneBook_EmptyWhenNoZonesTracked(t *testing.T) {
+	doc := redistransport.BuildZoneBook("XAU", map[market.Timeframe]zone.ZoneState{}, 1700000100)
+	if len(doc.Entries) != 0 {
+		t.Fatalf("expected no entries, got %+v", doc.Entries)
+	}
+}
+
+// zoneBookTestClient mirrors test/integration/redis_pipeline_test.go's own
+// redisTestClient — duplicated rather than shared because Go test helpers do
+// not cross package/directory boundaries.
+func zoneBookTestClient(t *testing.T) *redisv9.Client {
+	t.Helper()
+	raw := os.Getenv("REDIS_TEST_URL")
+	if raw == "" {
+		t.Skip("REDIS_TEST_URL not set — skipping real Redis integration")
+	}
+	options, err := redisv9.ParseURL(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := redisv9.NewClient(options)
+	if err := client.Ping(context.Background()).Err(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = client.Close() })
+	return client
+}
+
+func TestPublishZoneBook_RealRedisRoundTrip(t *testing.T) {
+	client := zoneBookTestClient(t)
+	runtime, err := redistransport.NewRuntimeWithClient(
+		client,
+		redistransport.Config{URL: "redis://127.0.0.1:0/0", BarsChannel: "bars:new", ReconciliationInterval: time.Second},
+		[]redistransport.Series{{Symbol: "XAU", Timeframe: market.M5, Depth: 10}},
+		func(context.Context, marketdata.BarEvent) (marketdata.AppendResult, error) { return marketdata.AppendAccepted, nil },
+		nil, nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	key := redistransport.ZoneBookKey("XAU")
+	t.Cleanup(func() { _ = client.Del(ctx, key).Err() })
+	zones := map[market.Timeframe]zone.ZoneState{
+		market.M15: {Zones: []zone.Zone{{ID: "z1", Kind: zone.KindSupply, Low: 2020, High: 2025, Strength: 0.8, TouchCount: 2, State: zone.StateFresh}}},
+	}
+	if err := runtime.PublishZoneBook(ctx, "XAU", zones, time.Unix(1700000100, 0)); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := client.Get(ctx, key).Result()
+	if err != nil {
+		t.Fatalf("expected the zone book to be readable back from Redis: %v", err)
+	}
+	var doc redistransport.ZoneBookDTO
+	if err := json.Unmarshal([]byte(raw), &doc); err != nil {
+		t.Fatal(err)
+	}
+	if doc.Symbol != "XAU" || len(doc.Entries) != 1 || doc.Entries[0].Kind != "supply" {
+		t.Fatalf("unexpected round-tripped document: %+v", doc)
+	}
+	ttl, err := client.TTL(ctx, key).Result()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ttl <= 0 || ttl > 20*time.Minute {
+		t.Errorf("expected a positive TTL of at most 20m, got %v", ttl)
 	}
 }

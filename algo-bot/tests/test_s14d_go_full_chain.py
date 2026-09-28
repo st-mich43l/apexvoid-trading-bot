@@ -213,6 +213,66 @@ async def test_kafka_event_becomes_a_real_v8_plan_with_full_provenance(h, prod, 
   assert json.loads(await prod.hget("analysis:go_plans", plan["plan_id"]))["epoch"] == 1
 
 
+@pytest.mark.asyncio
+async def test_go_zone_book_hard_blocks_a_go_origin_plan_inside_a_published_opposing_zone(h, prod):
+  """The worker's execution-time opposing-barrier recheck (production
+  finding 2026-09-28: it was a silent no-op for every Go-origin match) now
+  prefers the Go engine's own live-published zone book over a Python OHLC
+  recompute. A supply zone Go publishes that contains the Key Level match's
+  own entry band must hard-block the plan, exactly as a Python-origin
+  match's own opposing-barrier check already would.
+
+  Key Level (not Supply/Demand) is deliberately used here: Supply/Demand is
+  a "technique" strategy, and evaluate_structural_target_room's own
+  same-wall overlap glue (filter_overlapping_opposing_entries) is designed
+  to drop an opposing entry that substantially overlaps a technique
+  match's own entry band - by design, since a technique zone's own map
+  entry commonly reappears in the opposing pool. That glue does not apply
+  to Key Level, so a genuinely separate opposing zone the Go zone book
+  publishes reaches the real containment hard-block untouched.
+  """
+  from app.autotrade.go_zone_book import go_zone_book_key
+
+  await h.grant(scope="key_level")
+  await h._ensure()
+  record = catalog_kafka_record(h.clock.now, "key_level")
+  await consumer_for(h).process_record(record)
+  match = deserialize_matches(await prod.get(strategy_matches_key("XAU")))[0]
+
+  await prod.set(go_zone_book_key("XAU"), json.dumps({
+    "symbol": "XAU", "generated_at": int(h.clock.now),
+    "entries": [{
+      "timeframe": "M15", "kind": "supply", "low": 4340.0, "high": 4370.0,
+      "strength": 0.9, "touch_count": 2, "state": "fresh",
+    }],
+  }))
+
+  plan_id = await worker._publish_trade_plan_v8(
+    prod, "XAU", _spot(4354.1, 4354.3), match, frames={},
+  )
+  assert plan_id is None
+  assert await plans(prod) == []
+
+
+@pytest.mark.asyncio
+async def test_go_zone_book_unavailable_falls_back_to_the_existing_publish_path(h, prod):
+  """No zone book published (Go has not written one, or it expired): the
+  plan still publishes via the Python-recompute fallback, unchanged from
+  before this feature - never a silent, permanent block for lack of a Go
+  publish."""
+  await h.grant(scope="key_level")
+  await h._ensure()
+  record = catalog_kafka_record(h.clock.now, "key_level")
+  await consumer_for(h).process_record(record)
+  match = deserialize_matches(await prod.get(strategy_matches_key("XAU")))[0]
+
+  plan_id = await worker._publish_trade_plan_v8(
+    prod, "XAU", _spot(4354.1, 4354.3), match, frames={},
+  )
+  assert plan_id is not None
+  assert len(await plans(prod)) == 1
+
+
 @pytest.mark.parametrize("scope", sorted(pol.REVIEWED_SCOPES))
 @pytest.mark.asyncio
 async def test_every_reviewed_go_strategy_reaches_tradeplan_v8(h, prod, scope):

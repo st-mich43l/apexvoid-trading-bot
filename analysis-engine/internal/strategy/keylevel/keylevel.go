@@ -5,23 +5,29 @@
 // enrichment — this strategy decides tradeability, the primitive already
 // decided what a key level IS).
 //
-// Thesis: a sufficiently touched, sufficiently strong key level, close
-// enough to the current price to matter, is a standing reaction zone —
-// support (buy) if price sits above it, resistance (sell) if below.
-// Unlike internal/zone, internal/keylevel.Level carries no Relevance
-// field (that concept is zone-specific), and MarketContext exposes no
-// raw candle/price feed a strategy could read directly — only already-
-// computed causal facts (source task §17/§92). This strategy therefore
-// derives a "current price" proxy from the primary timeframe's own most
-// recently formed Micro-layer swing (structure.LayerState.LastHigh/
-// LastLow — whichever is more recent), the smallest and therefore
-// closest-to-price structural fact already available, rather than
-// re-deriving price from raw OHLC this package cannot see. This is a
-// real, documented, non-obvious limitation of the current primitive set,
-// not a shortcut: internal/keylevel.Role (the primitive's own live
-// support/resistance/broken classifier) needs a real closes series this
-// strategy also cannot supply, so it is deliberately not used here
-// either — see docs/analysis/strategies/key_level.md.
+// Thesis (ported from the legacy Python detector, app/analysis/
+// detectors.py::key_level_reaction, not the simplified proximity-only
+// v1 this package originally shipped with — see docs/analysis/
+// strategies/key_level.md's "2026-09 port" section): a sufficiently
+// touched level is a standing reaction zone only once its role is
+// actually classified — support/resistance from an explicit structural
+// kind, or (key_levels() only ever emits "reaction"/"round", never an
+// explicit kind) a role inferred from price position, with a genuine
+// opposing supply/demand zone overlapping the level's own band allowed
+// to contradict that naive inference rather than being ignored (see
+// opposing.go). A level several consecutive closes have already accepted
+// through is reported BROKEN and skipped here — Break & Retest/Trendline
+// own that reinterpretation, Key Level must not re-trade it. A bare touch
+// is a technical observation, not a trade: only a real, closed-bar
+// rejection (confirmation.go) produces a Candidate, and a level where
+// BOTH candidate directions independently confirm in the same evaluation
+// is a genuine contradiction — discarded entirely, never a coin flip.
+//
+// internal/keylevel.Level carries no support/resistance field itself
+// (that is internal/keylevel.Role's job, ported 1:1 from
+// key_level_role.py — see role.go's own doc comment); this package owns
+// turning that role, plus real closed-bar price action from
+// TimeframeContext.Candles, into a tradeable, confirmed opportunity.
 package keylevel
 
 import (
@@ -37,7 +43,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy"
-	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/zone"
 )
 
 const ID strategy.StrategyID = "key_level"
@@ -53,16 +59,25 @@ const (
 // Config is KeyLevel's own parsed technical configuration.
 type Config struct {
 	MinimumTouches int
-	// MinimumStrength floors keylevel.Level.Strength.
+	// MinimumStrength floors keylevel.Level.Strength. The legacy Python
+	// detector this package now ports has no equivalent per-level floor
+	// (its quality gates live downstream, in confluence/policy) — this
+	// stays as an additional, strictly-tighter-never-looser safety floor
+	// this platform already had, not a behavior this port removes.
 	MinimumStrength float64
-	// ProximityATR is how close (in ATR) current price must be to a
-	// level for it to be a live setup — KeyLevel's own location
-	// requirement, independently computed (zone.Relevance's equivalent
-	// concept does not exist on keylevel.Level).
+	// ProximityATR is how close (in ATR) current price must be to a level
+	// for it to be considered at all — likewise an additional pre-filter
+	// the legacy detector didn't need (it relied on confirmation alone to
+	// bound relevance); kept for the same reason as MinimumStrength.
 	ProximityATR             float64
 	InvalidationBufferATR    float64
 	MinimumTargetDistanceATR float64
 	ExpiryHours              float64
+	// BreakoutAcceptBars is key_level_role.py's breakout_accept_bars —
+	// consecutive closed bars that must accept beyond a level's band
+	// before Role reports it BROKEN rather than the level's plain role.
+	// Legacy default (TREND_BREAKOUT_ACCEPT_BARS): 2.
+	BreakoutAcceptBars int
 }
 
 // Strategy is KeyLevelStrategy.
@@ -108,6 +123,10 @@ func parseConfig(params map[string]any) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	breakoutAcceptBars, err := requireInt(params, "breakout_accept_bars")
+	if err != nil {
+		return Config{}, err
+	}
 	if minimumTouches < 1 {
 		return Config{}, fmt.Errorf("minimum_touches must be >= 1")
 	}
@@ -120,9 +139,13 @@ func parseConfig(params map[string]any) (Config, error) {
 	if expiryHours <= 0 {
 		return Config{}, fmt.Errorf("expiry_hours must be > 0")
 	}
+	if breakoutAcceptBars < 1 {
+		return Config{}, fmt.Errorf("breakout_accept_bars must be >= 1")
+	}
 	return Config{
 		MinimumTouches: minimumTouches, MinimumStrength: minimumStrength, ProximityATR: proximityATR,
-		InvalidationBufferATR: invalidationBuffer, MinimumTargetDistanceATR: minimumTargetDistance, ExpiryHours: expiryHours,
+		InvalidationBufferATR: invalidationBuffer, MinimumTargetDistanceATR: minimumTargetDistance,
+		ExpiryHours: expiryHours, BreakoutAcceptBars: breakoutAcceptBars,
 	}, nil
 }
 
@@ -161,16 +184,21 @@ func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate 
 		return nil
 	}
 	atr := ctx.Volatility.ATR
-	if atr <= 0 {
+	if atr <= 0 || len(tfCtx.Candles) == 0 {
 		return nil
 	}
-	currentPrice, ok := currentPriceProxy(tfCtx.Structure)
-	if !ok {
-		return nil
+	currentPrice := tfCtx.Candles[len(tfCtx.Candles)-1].Close
+	closes := make([]float64, len(tfCtx.Candles))
+	for i, c := range tfCtx.Candles {
+		closes[i] = c.Close
 	}
 
 	var candidates []opportunity.Candidate
-	for _, level := range tfCtx.KeyLevel.Levels {
+	levels := append([]keylevel.Level(nil), tfCtx.KeyLevel.Levels...)
+	sort.Slice(levels, func(i, j int) bool {
+		return math.Abs(float64(levels[i].Price)-currentPrice) < math.Abs(float64(levels[j].Price)-currentPrice)
+	})
+	for _, level := range levels {
 		if level.Touches < s.cfg.MinimumTouches || level.Strength < s.cfg.MinimumStrength {
 			continue
 		}
@@ -180,106 +208,148 @@ func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate 
 			continue
 		}
 
-		var direction market.Direction
-		var invalidationPrice float64
-		var poolSide liquidity.LiquiditySide
-		if currentPrice >= levelPrice {
-			direction = market.Buy // level acting as support
-			invalidationPrice = levelPrice - level.Band - s.cfg.InvalidationBufferATR*atr
-			poolSide = liquidity.LiquidityBuySide
-		} else {
-			direction = market.Sell // level acting as resistance
-			invalidationPrice = levelPrice + level.Band + s.cfg.InvalidationBufferATR*atr
-			poolSide = liquidity.LiquiditySellSide
-		}
-		entryLow, entryHigh := levelPrice-level.Band, levelPrice+level.Band
-
-		referencePrice := entryHigh
-		if direction == market.Sell {
-			referencePrice = entryLow
-		}
-		targetPool, ok := nearestPool(tfCtx.Liquidity.Pools, poolSide, referencePrice, s.cfg.MinimumTargetDistanceATR*atr, direction)
-		if !ok {
-			continue
-		}
-		targetPrice := targetPool.High
-		if direction == market.Sell {
-			targetPrice = targetPool.Low
-		}
-
-		createdAt := currentReferenceTime(tfCtx.Structure)
-		expiresAt := createdAt + int64(s.cfg.ExpiryHours*3600)
-
-		// Level.ID is anchored to the canonical structural fact, not to a
-		// moving price/ATR bucket. Direction remains part of DeterministicID,
-		// so a genuine support/resistance role transition is a new setup.
-		setupKey := fmt.Sprintf("keylevel:%s", level.ID)
-		id, err := opportunity.DeterministicID(opportunity.Identity{
-			Strategy: ID, StrategyVersion: Version, Symbol: ctx.Symbol, Direction: direction, SetupKey: setupKey,
-		})
-		if err != nil {
+		band := level.Band
+		bandLow, bandHigh := market.Price(levelPrice-band), market.Price(levelPrice+band)
+		role := keylevel.Role(level.Kind.String(), bandLow, bandHigh, closes, s.cfg.BreakoutAcceptBars)
+		if role == keylevel.RoleBrokenSupport || role == keylevel.RoleBrokenResistance {
 			continue
 		}
 
-		quality := computeQuality(level, distanceATR, s.cfg.ProximityATR)
+		reactLow, reactHigh := bandLow, bandHigh
+		var directions []market.Direction
+		var contraDirection *market.Direction
+		var contraLevel float64
+		switch {
+		case role == keylevel.RoleSupport:
+			directions = []market.Direction{market.Buy}
+		case role == keylevel.RoleResistance:
+			directions = []market.Direction{market.Sell}
+		case currentPrice > float64(bandHigh):
+			// No explicit role either way, but price sits above the level —
+			// deterministic support hypothesis, unless a real opposing
+			// (supply) zone overlapping this band contradicts it.
+			if opposing, found := opposingZoneContradicts(tfCtx.Zones.Zones, bandLow, bandHigh, zone.KindDemand); found {
+				directions = []market.Direction{market.Buy, market.Sell}
+				reactLow, reactHigh = minPrice(bandLow, opposing.Low), maxPrice(bandHigh, opposing.High)
+				sell := market.Sell
+				contraDirection, contraLevel = &sell, float64(opposing.High)
+			} else {
+				directions = []market.Direction{market.Buy}
+			}
+		case currentPrice < float64(bandLow):
+			// Level sits above current price — deterministic resistance
+			// hypothesis, same caveat mirrored for an opposing demand zone.
+			if opposing, found := opposingZoneContradicts(tfCtx.Zones.Zones, bandLow, bandHigh, zone.KindSupply); found {
+				directions = []market.Direction{market.Sell, market.Buy}
+				reactLow, reactHigh = minPrice(bandLow, opposing.Low), maxPrice(bandHigh, opposing.High)
+				buy := market.Buy
+				contraDirection, contraLevel = &buy, float64(opposing.Low)
+			} else {
+				directions = []market.Direction{market.Sell}
+			}
+		default:
+			// Price is inside the level's own band — direction comes from
+			// which side actually confirms a reaction, never a guess. If
+			// both sides independently confirm, that is a genuine
+			// contradiction (handled below), not a coin flip.
+			directions = []market.Direction{market.Buy, market.Sell}
+		}
 
-		candidate := opportunity.Candidate{
-			ID: id, Strategy: ID, StrategyVersion: Version, Symbol: ctx.Symbol,
-			Direction: direction,
-			Entry:     opportunity.EntryZone{Low: entryLow, High: entryHigh},
-			Invalidation: market.PriceLevel{
-				Price: market.Price(invalidationPrice), Label: "key_level_invalidated",
-			},
-			Targets: []opportunity.Target{{
-				Price: market.PriceLevel{Price: targetPrice, Label: "nearest_opposing_liquidity"},
-			}},
-			Evidence: []opportunity.Evidence{
+		var confirmedHere []opportunity.Candidate
+		for _, direction := range directions {
+			effectiveLevelPrice := levelPrice
+			if contraDirection != nil && direction == *contraDirection {
+				effectiveLevelPrice = contraLevel
+			}
+			reaction := confirmedReaction(tfCtx.Candles, direction, reactLow, reactHigh, level.ID)
+			if reaction == nil {
+				continue
+			}
+			invalidationPrice := effectiveLevelPrice - band - s.cfg.InvalidationBufferATR*atr
+			poolSide := liquidity.LiquidityBuySide
+			if direction == market.Sell {
+				invalidationPrice = effectiveLevelPrice + band + s.cfg.InvalidationBufferATR*atr
+				poolSide = liquidity.LiquiditySellSide
+			}
+			referencePrice := float64(reactHigh)
+			if direction == market.Sell {
+				referencePrice = float64(reactLow)
+			}
+			targetPool, ok := nearestPool(tfCtx.Liquidity.Pools, poolSide, referencePrice, s.cfg.MinimumTargetDistanceATR*atr, direction)
+			if !ok {
+				continue
+			}
+			targetPrice := targetPool.High
+			if direction == market.Sell {
+				targetPrice = targetPool.Low
+			}
+
+			setupKey := fmt.Sprintf("keylevel:%s:%s:%d:%d", level.ID, direction, reaction.TouchBarTime, reaction.ConfirmationBarTime)
+			id, err := opportunity.DeterministicID(opportunity.Identity{
+				Strategy: ID, StrategyVersion: Version, Symbol: ctx.Symbol, Direction: direction, SetupKey: setupKey,
+			})
+			if err != nil {
+				continue
+			}
+
+			quality := computeQuality(level, distanceATR, s.cfg.ProximityATR)
+			evidence := []opportunity.Evidence{
 				{Code: "m5_key_level_" + level.Kind.String()},
 				{Code: "m5_key_level_touches_sufficient"},
-			},
-			Quality:   quality,
-			CreatedAt: createdAt, ExpiresAt: expiresAt,
-			Provenance: opportunity.AnalysisProvenance{
-				StructureVersion: structureVersion, LiquidityVersion: liquidityVersion, ZoneVersion: zoneVersionUsed,
-				ConfigVersion: configVersion, ConfigFingerprint: s.fingerprint,
-			},
+				{Code: "m5_key_level_role_" + role.String()},
+				{Code: "m5_key_level_rejection_confirmed"},
+			}
+			if contraDirection != nil {
+				evidence = append(evidence, opportunity.Evidence{Code: "m5_key_level_opposing_zone_widened"})
+			}
+
+			confirmedHere = append(confirmedHere, opportunity.Candidate{
+				ID: id, Strategy: ID, StrategyVersion: Version, Symbol: ctx.Symbol,
+				Direction: direction,
+				Entry:     opportunity.EntryZone{Low: float64(reactLow), High: float64(reactHigh)},
+				Invalidation: market.PriceLevel{
+					Price: market.Price(invalidationPrice), Label: "key_level_invalidated",
+				},
+				Targets: []opportunity.Target{{
+					Price: market.PriceLevel{Price: targetPrice, Label: "nearest_opposing_liquidity"},
+				}},
+				Evidence:  evidence,
+				Quality:   quality,
+				FormedAt:  level.AnchorTime,
+				CreatedAt: reaction.ConfirmationBarTime,
+				ExpiresAt: reaction.ConfirmationBarTime + int64(s.cfg.ExpiryHours*3600),
+				Provenance: opportunity.AnalysisProvenance{
+					StructureVersion: structureVersion, LiquidityVersion: liquidityVersion, ZoneVersion: zoneVersionUsed,
+					ConfigVersion: configVersion, ConfigFingerprint: s.fingerprint,
+				},
+				Reaction: reaction,
+			})
 		}
-		candidates = append(candidates, candidate)
+		// Zero confirmations: nothing to keep. Two (only reachable when both
+		// directions were tried): both sides independently confirmed a
+		// reaction off the same level in the same evaluation — a genuine
+		// contradiction, not something a quality score should tiebreak.
+		// Neither survives; this level produces no opportunity until price
+		// action resolves it.
+		if len(confirmedHere) == 1 {
+			candidates = append(candidates, confirmedHere[0])
+		}
 	}
 	return candidates
 }
 
-// currentPriceProxy derives a "current price" reference from the primary
-// timeframe's own most recently formed Micro-layer swing — see package
-// doc comment for why this substitutes for raw price (unavailable
-// through MarketContext).
-func currentPriceProxy(structState structure.StructureState) (float64, bool) {
-	high, low := structState.Micro.LastHigh, structState.Micro.LastLow
-	switch {
-	case high != nil && low != nil:
-		if high.Time >= low.Time {
-			return float64(high.Price), true
-		}
-		return float64(low.Price), true
-	case high != nil:
-		return float64(high.Price), true
-	case low != nil:
-		return float64(low.Price), true
-	default:
-		return 0, false
+func minPrice(a, b market.Price) market.Price {
+	if a < b {
+		return a
 	}
+	return b
 }
 
-func currentReferenceTime(structState structure.StructureState) int64 {
-	high, low := structState.Micro.LastHigh, structState.Micro.LastLow
-	var t int64
-	if high != nil && high.Time > t {
-		t = high.Time
+func maxPrice(a, b market.Price) market.Price {
+	if a > b {
+		return a
 	}
-	if low != nil && low.Time > t {
-		t = low.Time
-	}
-	return t
+	return b
 }
 
 func nearestPool(pools []liquidity.Pool, side liquidity.LiquiditySide, referencePrice, minimumDistance float64, direction market.Direction) (liquidity.Pool, bool) {
