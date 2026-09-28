@@ -28,17 +28,8 @@ from app.autotrade.stats_ingestion import (
 from app.autotrade.setup_expiry_sweeper import setup_expiry_sweeper_loop
 from app.autotrade.startup_reconciliation import reconcile_startup_state
 from app.autotrade.worker import configure_forming_card_edit_fn
-from app.autotrade.zone_execution_cutover import (
-  install_zone_execution_cutover,
-  zone_watch_execution_loop,
-)
 from app.bot.client import edit_scanner_message_text
 from app.bot.telegram_actor import start_telegram_actor
-from app.autotrade.zone_execution_runtime import uninstall_zone_execution_cutover
-from app.autotrade.direct_publish_same_cycle import (
-  install_same_cycle_publish_retry,
-  uninstall_same_cycle_publish_retry,
-)
 from app.autotrade.config_health import (
   python_manifest,
   publish_python_manifest,
@@ -47,6 +38,7 @@ from app.configuration.runtime_manifest_boot import (
   verify_mounted_runtime_manifest_or_raise,
 )
 from app.signals.manual_execution import bridge_intents_loop, reconcile_events_loop
+from app.analysis_client.startup_gate import require_go_technical_authority
 from app.persistence import redis_state
 
 _log_info = configure_logging(
@@ -74,11 +66,10 @@ def _spawn_supervised(name: str, factory) -> asyncio.Task:
 
 
 async def main() -> None:
-  # Scanner and worker are already imported above. Install the retained-zone
-  # cutover before any background task starts so every live scanner cycle uses
-  # ZoneWatch and direct publication from its first event.
-  install_zone_execution_cutover()
-  install_same_cycle_publish_retry()
+  # Validate the ACTUAL Ansible-rendered bot config before opening the DB,
+  # starting Telegram, or registering any background task. No Python scanner
+  # fallback is permitted even if a stale deployment still selects python.
+  require_go_technical_authority(runtime_config)
   # Composition-root Telegram edit callback — worker never imports bot.client.
   configure_forming_card_edit_fn(edit_scanner_message_text)
   verify_mounted_runtime_manifest_or_raise()
@@ -160,7 +151,6 @@ async def main() -> None:
   _spawn_supervised("weekly_report_loop", weekly_report_loop)
   _spawn_supervised("owner_dm_daily_wipe_loop", owner_dm_daily_wipe_loop)
   _spawn_supervised("bar_event_dispatcher_loop", bar_event_dispatcher_loop)
-  _spawn_supervised("zone_watch_execution_loop", zone_watch_execution_loop)
   # strategy_match_ready_loop removed from production startup: ZoneWatch →
   # direct TradePlan is authoritative. Legacy parsers remain for one release.
   _spawn_supervised("setup_expiry_sweeper_loop", setup_expiry_sweeper_loop)
@@ -198,10 +188,6 @@ async def main() -> None:
     await scanner_bot.session.close()
     await redis_state.close_client()
     await close_pool()
-    # Production normally exits the process here. Bounded app-lifecycle tests
-    # continue in the same interpreter, so restore patched module globals.
-    uninstall_same_cycle_publish_retry()
-    uninstall_zone_execution_cutover()
 
 
 if __name__ == "__main__":
