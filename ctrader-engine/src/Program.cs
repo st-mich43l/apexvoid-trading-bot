@@ -8,7 +8,20 @@ public static class Program
     {
       var path = Environment.GetEnvironmentVariable("HEALTH_FILE")
         ?? "/tmp/ctrader-feed.heartbeat";
-      return HealthFile.Check(path, TimeSpan.FromMinutes(10));
+      var feedResult = HealthFile.Check(path, TimeSpan.FromMinutes(10));
+      if (feedResult != 0)
+      {
+        return feedResult;
+      }
+      // The feed heartbeat only proves the market-data connection is alive;
+      // it is touched by spot/bar activity, never by the auto-trade session
+      // loop. 2026-09-26/09-28: ctrader-engine sat "healthy" for hours while
+      // that loop was hung. This second file is touched once per auto-trade
+      // loop iteration (AutoTradeEngine.RunSessionAsync) so a stuck loop is
+      // now visible to Docker even while the feed connection stays up.
+      var autoTradePath = Environment.GetEnvironmentVariable("AUTO_TRADE_HEALTH_FILE")
+        ?? "/tmp/ctrader-autotrade.heartbeat";
+      return HealthFile.CheckIfPresent(autoTradePath, TimeSpan.FromMinutes(2));
     }
 
     DailyFileLog.Install();
@@ -138,7 +151,12 @@ public static class Program
       options.BarsWindowMax,
       options.BarsChannel
     );
-    var autoTrade = new AutoTradeEngine(autoTradeOptions, redis);
+    var autoTradeHealthFile = new HealthFile(options.AutoTradeHeartbeatFile);
+    var autoTrade = new AutoTradeEngine(
+      autoTradeOptions,
+      redis,
+      sessionHeartbeat: autoTradeHealthFile.Touch
+    );
     autoTrade.InstrumentRegistry = instrumentRegistry;
     Func<string, string, CancellationToken, Task> notify =
       autoTrade.PublishOperationalEventAsync;

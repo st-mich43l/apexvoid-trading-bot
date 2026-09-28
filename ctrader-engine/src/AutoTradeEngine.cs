@@ -7,7 +7,8 @@ public sealed class AutoTradeEngine(
   AutoTradeOptions options,
   IAutoTradeStore store,
   Func<DateTimeOffset>? clock = null,
-  Action<string>? log = null
+  Action<string>? log = null,
+  Action? sessionHeartbeat = null
 )
 {
   // Deal history is diagnostic for a position already absent from the
@@ -78,6 +79,14 @@ public sealed class AutoTradeEngine(
   private readonly object _reportLock = new();
   private readonly Func<DateTimeOffset> _clock = clock ?? (() => DateTimeOffset.UtcNow);
   private readonly Action<string> _log = log ?? Log;
+  // Touched once per RunSessionAsync main-loop iteration (never by
+  // ObserveSpotAsync's own separate call path) - a stale value means this
+  // loop specifically has stopped making progress, distinct from the feed
+  // heartbeat FeedRunner touches on market-data activity alone. See
+  // Program.cs's --healthcheck for why this exists. Named distinctly from
+  // the unrelated _heartbeat field below (CandidateLeaseHeartbeat, a
+  // Redis-lease liveness signal for multi-worker candidate ownership).
+  private readonly Action _sessionHeartbeat = sessionHeartbeat ?? (() => { });
   // TradePlan V8 broker-execution runtime (docs/adr-trade-plan-v8-cutover.md) -
   // composed into this engine's own session loop (see PollTradePlansAsync)
   // rather than given a separate RunSessionAsync/reconcile/heartbeat of its
@@ -422,6 +431,11 @@ public sealed class AutoTradeEngine(
         // when it lands while a candidate is mid-flight. Exiting the loop
         // silently would report a cancelled session as a clean shutdown.
         cancellationToken.ThrowIfCancellationRequested();
+        // Every iteration reaching here proves the loop body below (reconcile,
+        // owner commands, TradePlan poll, candidate processing) completed its
+        // previous pass without hanging - the liveness fact --healthcheck
+        // actually needs.
+        _sessionHeartbeat();
         if (_clock() >= nextReconcile)
         {
           await WithGateAsync(

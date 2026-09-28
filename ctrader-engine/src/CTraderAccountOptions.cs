@@ -15,6 +15,7 @@ public sealed record CTraderAccountOptions(
   int Port,
   string RedisUrl,
   string HeartbeatFile,
+  string AutoTradeHeartbeatFile,
   string RefreshTokenKey,
   string RefreshTokenFile,
   TimeSpan RequestTimeout,
@@ -34,6 +35,10 @@ public sealed record CTraderAccountOptions(
       Port: int.Parse(Env("CTRADER_PORT", "5035")),
       RedisUrl: Env("REDIS_URL", "redis://redis:6379/0"),
       HeartbeatFile: Env("HEALTH_FILE", "/tmp/ctrader-feed.heartbeat"),
+      AutoTradeHeartbeatFile: Env(
+        "AUTO_TRADE_HEALTH_FILE",
+        "/tmp/ctrader-autotrade.heartbeat"
+      ),
       RefreshTokenKey: Env("CTRADER_REFRESH_TOKEN_KEY", "ctrader:refresh_token"),
       RefreshTokenFile: Env(
         "CTRADER_REFRESH_TOKEN_FILE",
@@ -62,6 +67,7 @@ public sealed record CTraderAccountOptions(
       Port: feed.Port,
       RedisUrl: feed.RedisUrl,
       HeartbeatFile: feed.HeartbeatFile,
+      AutoTradeHeartbeatFile: feed.AutoTradeHeartbeatFile,
       RefreshTokenKey: feed.RefreshTokenKey,
       RefreshTokenFile: feed.RefreshTokenFile,
       RequestTimeout: feed.RequestTimeout,
