@@ -120,8 +120,19 @@ func run(configPath string) error {
 		return fmt.Errorf("loading Redis transport config: %w", err)
 	}
 	redisHealth := redistransport.NewHealth(true)
-	runtime, err := redistransport.NewRuntime(redisCfg, series, func(ctx context.Context, event marketdata.BarEvent) (marketdata.AppendResult, error) {
-		_, result, err := e.DispatchWithResult(event)
+	var runtime *redistransport.Runtime
+	runtime, err = redistransport.NewRuntime(redisCfg, series, func(ctx context.Context, event marketdata.BarEvent) (marketdata.AppendResult, error) {
+		snapshot, result, err := e.DispatchWithResult(event)
+		if err == nil && result == marketdata.AppendAccepted {
+			// Best-effort: Algo Bot's execution-time opposing-barrier check
+			// reads this to recheck a Go-origin plan against live structure
+			// (see internal/transport/redis/zonebook.go's own doc comment).
+			// A publish failure must never interrupt candle ingestion, same
+			// principle this file already applies to the Kafka producer.
+			if pubErr := runtime.PublishZoneBook(ctx, event.Symbol, snapshot.Zones, time.Now().UTC()); pubErr != nil {
+				fmt.Fprintf(os.Stderr, "analysis-engine: zone book publish failed for %s: %v\n", event.Symbol, pubErr)
+			}
+		}
 		return result, err
 	}, redisHealth, redistransport.NewMetrics())
 	if err != nil {

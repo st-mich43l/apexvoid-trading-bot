@@ -23,6 +23,15 @@ dated section after deployment.
   check with no confirmation and no structural awareness. Full-capture
   replay against the committed real XAU capture now discovers 1731 total
   candidates versus 1702 before (golden regenerated).
+- The worker's execution-time opposing-barrier/target-room recheck
+  (`evaluate_structural_target_room`, called from `_publish_trade_plan_v8`)
+  is no longer a silent no-op for Go-origin matches. The `go_authority` fast
+  path introduced with #655 hardcoded `frames={}` and
+  `htf_zones=htf_levels=[]` for every Go-origin plan, believing Go being the
+  sole technical producer made the check redundant; it actually just left
+  the check with nothing to evaluate against, for all 19 reviewed
+  strategies. Frames are loaded and `_htf_zones`/`_htf_levels` computed
+  unconditionally again, restoring pre-#655 behavior.
 - Analysis Engine no longer aliases multiple Flip zones formed by distinct
   structural breaks on the same candle to one ID, preventing a fatal duplicate
   `flip_zone` opportunity during Redis recovery and the resulting restart loop.
@@ -33,6 +42,17 @@ dated section after deployment.
   rejected at the final automatic-publication fence.
 
 ### Added
+- Analysis Engine now publishes its own live per-symbol zone book to Redis
+  (`analysis:zone_book:{SYMBOL}`, 20m TTL) after every accepted closed-bar
+  dispatch, flattened from the same `zone.Zone` state its Supply/Demand
+  detectors and Key Level's own opposing-zone check already compute — no
+  new detector, no extra read, the existing bar-ingestion Redis connection
+  reused for the write. The worker's opposing-barrier/target-room recheck
+  now prefers this live Go-sourced read over its own OHLC recompute for a
+  Go-origin match specifically (`app/autotrade/go_zone_book.py`), falling
+  back to the Python recompute when Go has not published or the read fails
+  to parse; a Python-origin match is unaffected. See
+  `docs/redis-contract.md`'s "Analysis Zone Book" section for the schema.
 - Phase S11 remediation: durable opportunity publication ledger/outbox with
   stable retry IDs and creation-before-terminal acknowledgement ordering;
   bounded no-consumer-group `shadow-audit`; semantic Python-Go comparison

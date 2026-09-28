@@ -23,6 +23,7 @@ from app.persistence import redis_state
 from app.analysis_client.authority import GO_ORIGIN_TAG, AuthorityDecision, authorize_legacy_match
 from app.analysis_client.shadow_overlay import is_shadow_overlay
 from app.autotrade.go_plan_cancel import read_plan_cancel, register_go_plan
+from app.autotrade.go_zone_book import opposing_entries_for_go_match
 from app.autotrade import units
 from app.core import instrument_geometry
 from app.autotrade.range_targets import configured_range_targets
@@ -5841,6 +5842,16 @@ async def _publish_trade_plan_v8(
       # real opposing-structure awareness the caller explicitly provided -
       # it only ever adds to what the M15-only read alone would see.
       room_entries = _zone_opposing_entries(htf_zones)
+    if GO_ORIGIN_TAG in match.tags:
+      # Prefer the Go engine's own live-published zone book (the single
+      # source of truth for structure, refreshed on every closed bar) over
+      # Python's just-computed recompute above; that recompute is kept as
+      # the fallback when Go has not published yet/recently, never
+      # silently dropped to "no opposing structure" - see
+      # go_zone_book.py's own doc comment.
+      room_entries = await opposing_entries_for_go_match(
+        client, symbol, python_fallback=room_entries,
+      )
   displacement_lookback = max(
     0, int(runtime_config.execution.policy.displacement_override_lookback_bars),
   )
