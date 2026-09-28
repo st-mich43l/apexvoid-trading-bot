@@ -330,11 +330,11 @@ def h(sql, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_python_owned_scope_writes_no_match_and_records_why(h):
+async def test_unconfigured_scope_defaults_to_go_in_global_go_mode(h):
   now = int(h.clock.now)
-  assert await h.deliver(event(now)) == "not_adapted"
-  assert await redis_state.get_client().get(strategy_matches_key("XAU")) is None
-  assert await h.decisions() == [{"outcome": "not_adapted", "reason": "not_go_owner:scope_owned_by_python", "mode": "go"}]
+  assert await h.deliver(event(now)) == "match_written"
+  assert await redis_state.get_client().get(strategy_matches_key("XAU")) is not None
+  assert await h.decisions() == [{"outcome": "match_written", "reason": "go_mode_default", "mode": "go"}]
 
 
 @pytest.mark.asyncio
@@ -400,7 +400,7 @@ async def test_single_match_key_ambiguity_fails_closed(h):
 
 
 @pytest.mark.asyncio
-async def test_unreadable_fence_fails_closed(h):
+async def test_unreadable_fence_still_fails_closed(h):
   class Down:
     async def get(self, *_):
       raise ConnectionError("down")

@@ -146,6 +146,21 @@ async def test_go_origin_publication_is_unchanged_by_the_snapshot():
   assert (await authorize_legacy_match(symbol="XAU", strategy_name="Supply Demand", direction="SELL", tags=GO_TAGS, consumer_enabled=True, fence=fence)).allowed
 
 
+@pytest.mark.asyncio
+async def test_global_go_mode_allows_an_unconfigured_scope_without_a_grant():
+  class EmptyStore:
+    async def get(self, *_):
+      return None
+
+  fence = auth.AuthorityFence(EmptyStore(), cache_ttl=0.0)
+  decision = await authorize_legacy_match(
+    symbol="EURUSD", strategy_name="Supply Demand", direction="SELL",
+    tags=(*GO_TAGS[:2], "authority_epoch:0"), consumer_enabled=True,
+    go_authority_mode=True, fence=fence,
+  )
+  assert decision.allowed and decision.reason == "go_mode_default" and decision.epoch == 0
+
+
 # ---- runtime audit ----------------------------------------------------------
 
 @pytest.mark.asyncio
