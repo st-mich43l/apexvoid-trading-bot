@@ -255,21 +255,25 @@ async def test_go_mode_sweep_keeps_go_origin_matches(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_go_mode_leaves_zone_watch_direct_publish_path_alone(monkeypatch):
-  """ZoneWatch activation publishes a retained zone through
-  try_publish_executable_signal -> _handle_event(ready_match_id=...). Filtering
-  that path would strand every pending ZoneWatch setup, so it is not filtered."""
+async def test_go_mode_filters_a_retained_zonewatch_match_even_via_ready_match_id(monkeypatch):
+  """Go is the sole automatic technical-opportunity producer: the explicit
+  ready_match_id path ZoneWatch activation used to publish through
+  (try_publish_executable_signal -> _handle_event(ready_match_id=...)) is now
+  filtered the same as the closed-bar sweep. Production no longer installs the
+  ZoneWatch cutover in go mode at all (app.main / install_zone_execution_cutover),
+  so this can only happen from a leftover retained-zone record; it must still
+  never reach arbitration. See test_go_mode_sweep_keeps_go_origin_matches for
+  the closed-bar-sweep half of the same invariant."""
   client = redis_state.get_client()
   now = int(datetime.now(timezone.utc).timestamp())
   source = _worker_cycle(monkeypatch, mode="go", now=now)
   retained, go = _python_match(now), _go_match(now)
   await client.set(strategy_matches_key("XAU"), serialize_matches([retained, go]))
-  seen = _capture_full_pass(monkeypatch)
+  _capture_full_pass(monkeypatch)
 
-  with pytest.raises(_ReachedFullPass):
-    await worker._handle_event(
-      f"XAU:M1:{now}", source=source, client=client,
-      ready_match_id=retained.match_id,
-    )
+  result = await worker._handle_event(
+    f"XAU:M1:{now}", source=source, client=client,
+    ready_match_id=retained.match_id,
+  )
 
-  assert seen == [[retained.match_id]]
+  assert result is None  # idle: no Go-origin match to arbitrate, nothing published

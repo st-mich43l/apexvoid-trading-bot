@@ -92,6 +92,10 @@
       "authority_epoch:1",
       "go_opportunity:opp_chain",
       "kind:supply",
+      "go_strategy_confirmed",
+      "go_strategy_mode:go_m5_zone",
+      "go_evidence:m5_supply_zone_fresh",
+      "go_evidence:m5_supply_zone_relevance_immediate",
       "bias:with_bias",
       "bias_source:go_primary_tf",
       "go_reaction:rejection",
@@ -132,7 +136,7 @@
     "analysis_engine_version": "",
     "config_fingerprint": "",
     "confirmation_bar_ts": 1790000000,
-    "confirmation_source": "m5_authoritative",
+    "confirmation_source": "go_analysis_engine",
     "market_map_id": "",
     "zone_episode_id": "<episode>"
   },
@@ -162,8 +166,8 @@
   },
   "stop": {
     "price": "4359.83",
-    "reason": "execution confirmation=m5_authoritative; app.autotrade.execution_policy.evaluate_execution_policy -> app.autotrade.protective_stop.plan_protective_stop",
-    "source": "m5_structure",
+    "reason": "execution confirmation=go_analysis_engine; app.autotrade.execution_policy.evaluate_execution_policy -> app.autotrade.protective_stop.plan_protective_stop",
+    "source": "structure",
     "structure_id": "zone-golden-supply",
     "type": "absolute"
   },

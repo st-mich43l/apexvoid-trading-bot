@@ -142,6 +142,17 @@ async def plans(prod) -> list[dict]:
   return [json.loads(fields["payload"]) for _id, fields in await prod.xrange(STREAM)]
 
 
+def _spot(bid: float, ask: float, *, fresh: bool = True) -> worker.AutoTradeSpot:
+  return worker.AutoTradeSpot(price=round((bid + ask) / 2, 5), ts=int(time.time()), fresh=fresh, bid=bid, ask=ask)
+
+
+async def read_trade_plan(prod, plan_id: str) -> TradePlan | None:
+  for raw in await plans(prod):
+    if raw.get("plan_id") == plan_id:
+      return TradePlan.from_dict(raw)
+  return None
+
+
 async def route(prod, match_id: str) -> dict:
   return json.loads(await prod.get(route_outcome_key("XAU", match_id)))
 

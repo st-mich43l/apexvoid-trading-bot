@@ -376,7 +376,10 @@ async def test_unreviewed_scope_and_missing_facts_are_recorded_and_dropped(h):
   await h.grant()
   now = int(h.clock.now)
   raw = golden(now)
-  raw["payload"]["strategy"] = "order_block"
+  # Every catalog ID the Go engine can actually emit (registry.go's knownIDs) has a
+  # reviewed adapter now; this exercises the defensive fallback for an event the
+  # producer's own schema does not close off (the contract's `strategy` is free text).
+  raw["payload"]["strategy"] = "not_a_registered_go_strategy"
   assert await h.deliver(parse_analysis_event(OpportunityTopic, json.dumps(raw))) == "not_adapted"
 
   raw = golden(now)
@@ -459,7 +462,12 @@ async def test_existing_v8_builder_fails_closed_if_htf_is_stripped(h):
   base = deserialize_matches(await client.get(strategy_matches_key("XAU")))[0]
   match = replace(base, htf_bias="")
   assert await worker._publish_trade_plan_v8(client, "XAU", _spot(4354.1, 4354.3), match, frames={"M1": _m1_trigger_bar()}) is None
-  assert (await _outcome(client, match))["reason_code"] == "v8_missing_htf_bias"
+  # A Go-origin match's confirmation policy (GO_ORIGIN_TAG bypass) sets zone_family/
+  # require_quote_inside_zone False, so it skips the legacy M5-authoritative "preflight"
+  # htf_bias check (v8_missing_htf_bias) a Python-detected match would hit there; it fails
+  # closed one stage later, in trade_plan_builder's own htf_bias requirement — still no
+  # plan, still the correct cause.
+  assert (await _outcome(client, match))["reason_code"] == "missing_htf_bias"
 
 
 @pytest.mark.asyncio
