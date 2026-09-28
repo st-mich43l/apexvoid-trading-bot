@@ -111,6 +111,7 @@ from app.autotrade.execution_confirmation import (
   WAITING_RETEST,
   ExecutionConfirmation,
   ExecutionConfirmationState,
+  GO_AUTHORITATIVE,
   confirmation_policy_for,
   deterministic_episode_id,
   executable_quote_in_zone,
@@ -5084,6 +5085,9 @@ async def _publish_trade_plan_v8(
   now_ts = int(datetime.now(timezone.utc).timestamp())
   quote_ts = int(getattr(spot, "ts", 0) or now_ts)
   policy = confirmation_policy_for(match)
+  authoritative_source = (
+    GO_AUTHORITATIVE if GO_ORIGIN_TAG in match.tags else M5_AUTHORITATIVE
+  )
   pip_size = units.pip_size(symbol)
   evidence = executable_quote_in_zone(
     match.direction,
@@ -5378,7 +5382,7 @@ async def _publish_trade_plan_v8(
     if execution_state.phase == IMMEDIATE_CONFIRMATION:
       if execution_eligible:
         confirmation = ExecutionConfirmation(
-          source=M5_AUTHORITATIVE,
+          source=authoritative_source,
           pattern=match.reaction_type,
           bar_ts=confirmation_boundary,
           wick_extreme=None,
@@ -5533,7 +5537,7 @@ async def _publish_trade_plan_v8(
             status="checking",
           )
           return None
-        confirmation_source = M5_AUTHORITATIVE
+        confirmation_source = authoritative_source
         trigger = ExecutionConfirmation(
           source=confirmation_source,
           pattern=match.reaction_type,
@@ -5628,7 +5632,7 @@ async def _publish_trade_plan_v8(
             metric="trendline_v2_m1_stale",
           )
           return None
-        confirmation_source = M5_AUTHORITATIVE
+        confirmation_source = authoritative_source
         trigger = ExecutionConfirmation(
           source=confirmation_source,
           pattern=match.reaction_type,
@@ -5746,7 +5750,7 @@ async def _publish_trade_plan_v8(
       )
     else:
       confirmation = ExecutionConfirmation(
-        source=M5_AUTHORITATIVE,
+        source=authoritative_source,
         pattern=match.reaction_type,
         bar_ts=confirmation_boundary,
         wick_extreme=None,
@@ -7833,56 +7837,119 @@ async def _handle_event(
   source = source or RedisOHLCSource(client)
   spot = await _load_spot(client, symbol)
   scanner_strategy_matches = await _load_strategy_matches(client, symbol)
+  go_authority = runtime_config.analysis.technical_authority.mode == "go"
   if ready_match_id is not None:
     scanner_strategy_matches = [
       item for item in scanner_strategy_matches
       if item.match_id == ready_match_id
     ]
-  elif runtime_config.analysis.technical_authority.mode == "go":
-    # Go is the sole automatic technical-opportunity producer: the closed-bar
-    # sweep only evaluates Go-origin matches, so a leftover Python scanner
-    # match still sitting in Redis can never produce a plan after cutover
-    # (with none left, this takes the idle branch below, never the private
-    # pass). The explicit ready_match_id path above is deliberately not
-    # filtered: it is how ZoneWatch activation publishes an already-retained
-    # zone (try_publish_executable_signal -> _handle_event), and filtering it
-    # would leave every pending ZoneWatch setup unable to publish and get its
-    # setup invalidated by _activate_match's reject branch.
+  if go_authority:
+    # Go is the sole automatic technical-opportunity producer. This filter is
+    # applied even for a ready-stream wake-up: a ZoneWatch or legacy Python
+    # caller cannot smuggle a non-Go match through the explicit-match path.
     scanner_strategy_matches = [
       item for item in scanner_strategy_matches
       if GO_ORIGIN_TAG in item.tags
     ]
   if not scanner_strategy_matches:
-    frames = await _load_frames(
+    frames = {} if go_authority else await _load_frames(
       source, symbol, timeframes=(EXECUTION_TIMEFRAME,),
     )
-    await _rearm_scanner_range_edges(client, symbol, spot)
-    await _advance_mapped_thesis_rearms_from_frames(
-      client, symbol=symbol, frames=frames,
-    )
+    if not go_authority:
+      await _rearm_scanner_range_edges(client, symbol, spot)
+      await _advance_mapped_thesis_rearms_from_frames(
+        client, symbol=symbol, frames=frames,
+      )
     await _persist_idle_last_gate(
       client, symbol=symbol, event_ts=event_ts, spot=spot,
     )
     return None
 
-  frames = await _load_frames(source, symbol)
-  await _rearm_scanner_range_edges(client, symbol, spot)
-  await _advance_mapped_thesis_rearms_from_frames(
-    client, symbol=symbol, frames=frames,
-  )
-  private_decision = evaluate_auto_scalp_gate(
-    frames,
-    symbol=symbol,
-    spot_price=None if spot is None or not spot.fresh else spot.price,
-  )
-  private_decision, resolved_range, range_comparison = await _resolve_worker_range(
-    client,
-    symbol=symbol,
-    frames=frames,
-    private_decision=private_decision,
-    spot=spot,
-  )
-  strategy_cfg = instrument_runtime_view(symbol)
+  if go_authority:
+    # The Go event is the complete technical decision. Do not load OHLC or
+    # call Python regime, range, trendline, scalp, barrier, or scanner helpers
+    # on this path. The remaining worker work is execution-time only: quote,
+    # spread, expiry, exposure, risk, order policy, and TradePlan V8.
+    frames = {}
+    private_decision = AutoScalpDecision(
+      "go_owned", reasons=("technical facts supplied by Go Analysis Engine",),
+    )
+    resolved_range = None
+    range_comparison = {"source": "go_analysis_engine"}
+    strategy_cfg = None
+    regime = RegimeInfo("go_owned", None, 0, 0.0, False, None, ())
+    trend_decision = TrendDecision("no_setup", reasons=("go_owned",))
+    decision = private_decision
+    closed_price = None
+    box_eligibility = RangeExecutionEligibility(
+      symbol=symbol,
+      range_id=None,
+      source="go_analysis_engine",
+      has_current_private_box=False,
+      has_current_resolved_range=False,
+      resolved_state=None,
+      regime="go_owned",
+      box_decision_state="go_owned",
+      eligible=False,
+      reason_code="go_owned",
+      checked_at=int(datetime.now(timezone.utc).timestamp()),
+    )
+  else:
+    frames = await _load_frames(source, symbol)
+    await _rearm_scanner_range_edges(client, symbol, spot)
+    await _advance_mapped_thesis_rearms_from_frames(
+      client, symbol=symbol, frames=frames,
+    )
+    private_decision = evaluate_auto_scalp_gate(
+      frames,
+      symbol=symbol,
+      spot_price=None if spot is None or not spot.fresh else spot.price,
+    )
+    private_decision, resolved_range, range_comparison = await _resolve_worker_range(
+      client,
+      symbol=symbol,
+      frames=frames,
+      private_decision=private_decision,
+      spot=spot,
+    )
+    strategy_cfg = instrument_runtime_view(symbol)
+    decision = private_decision
+    regime = classify_regime(
+      frames,
+      decision,
+      strategy_cfg,
+      symbol=symbol,
+    )
+    trend_decision = evaluate_trend_gate(
+      frames,
+      regime,
+      decision,
+      symbol=symbol,
+      spot_price=None if spot is None or not spot.fresh else spot.price,
+      cfg=strategy_cfg,
+    )
+    closed_price = (
+      float(frames[EXECUTION_TIMEFRAME]["close"].iloc[-1])
+      if EXECUTION_TIMEFRAME in frames
+      else None
+    )
+    decision = await _apply_box_retirement(
+      client,
+      symbol,
+      decision,
+      closed_price,
+    )
+    box_eligibility = evaluate_range_box_eligibility(
+      symbol=symbol,
+      decision=decision,
+      private_context=RangeContext.from_json(
+        await client.get(range_context_source_key(symbol, "private"))
+      ),
+      resolved=resolved_range,
+      regime_state=regime.state,
+      now=int(datetime.now(timezone.utc).timestamp()),
+      range_enabled=bool(runtime_config.strategies.range_reversion.enabled),
+    )
   strategy_matches = list(scanner_strategy_matches)
   if runtime_config.strategies.matching.multiple_matches_enabled and strategy_matches:
     strategy_matches, _ = dedupe_matches(
@@ -7900,42 +7967,6 @@ async def _handle_event(
     else "scanner_strategy_match"
     if scanner_strategy_matches
     else "private_ohlc"
-  )
-  regime = classify_regime(
-    frames,
-    decision,
-    strategy_cfg,
-    symbol=symbol,
-  )
-  trend_decision = evaluate_trend_gate(
-    frames,
-    regime,
-    decision,
-    symbol=symbol,
-    spot_price=None if spot is None or not spot.fresh else spot.price,
-    cfg=strategy_cfg,
-  )
-  closed_price = (
-    float(frames[EXECUTION_TIMEFRAME]["close"].iloc[-1])
-    if EXECUTION_TIMEFRAME in frames
-    else None
-  )
-  decision = await _apply_box_retirement(
-    client,
-    symbol,
-    decision,
-    closed_price,
-  )
-  box_eligibility = evaluate_range_box_eligibility(
-    symbol=symbol,
-    decision=decision,
-    private_context=RangeContext.from_json(
-      await client.get(range_context_source_key(symbol, "private"))
-    ),
-    resolved=resolved_range,
-    regime_state=regime.state,
-    now=int(datetime.now(timezone.utc).timestamp()),
-    range_enabled=bool(runtime_config.strategies.range_reversion.enabled),
   )
   if box_eligibility.eligible:
     await increment_metric(client, "range_box_eligible", symbol=symbol)
@@ -7963,8 +7994,15 @@ async def _handle_event(
   arbitrable: list[ExecutionIntent] = []
   arbitration = arbitrate_execution_intents([])
   if strategy_matches:
-    htf_zones = _htf_zones(frames, None, symbol=symbol)
-    htf_levels = _htf_levels(frames, None, symbol=symbol)
+    # In Go authority mode Python has no technical barrier book. Go supplies
+    # the strategy geometry; these lists stay empty so the worker cannot
+    # reconstruct zones/levels from Redis OHLC while building the plan.
+    if go_authority:
+      htf_zones = []
+      htf_levels = []
+    else:
+      htf_zones = _htf_zones(frames, None, symbol=symbol)
+      htf_levels = _htf_levels(frames, None, symbol=symbol)
     for routed_match in strategy_matches:
       intent_id = f"strategy:{routed_match.match_id}"
       intent_matches[intent_id] = routed_match
@@ -7974,6 +8012,8 @@ async def _handle_event(
         source=(
           "market_map_strategy"
           if routed_match.strategy_mode == "mapped_zone_reaction"
+          else "go_analysis_engine"
+          if go_authority
           else "scanner_strategy_match"
         ),
         strategy=routed_match.strategy,
@@ -8018,14 +8058,9 @@ async def _handle_event(
       )
       intents.append(intent)
       intent_subjects[intent_id] = routed_match
-    # The private M1 range gate (gate.py) is retired as an autonomous setup
-    # source (H1->M15->M5 single-analysis-source cutover, P2) - M1 no longer
-    # originates trade candidates on its own. evaluate_auto_scalp_gate/
-    # evaluate_range_box_eligibility above are still called because `decision`
-    # also feeds classify_regime's breakout classifier (a distinct, still-valid
-    # concern) and box_eligibility still feeds status/telemetry payloads below;
-    # box_intent_id staying permanently None is what guarantees this gate can
-    # never construct an ExecutionIntent, so it emits no setups.
+    # Private range/trend detectors do not construct intents here. In Go mode
+    # their placeholders are execution telemetry only; all technical facts in
+    # the executable intent came from the Go opportunity event.
     box_intent_id = None
     trend_intent_id = None
     # Private trend has no TradePlan V8 path. Do not build intents or
@@ -8648,6 +8683,30 @@ async def try_publish_executable_signal(
   setup_id = match.match_id
   zone_id = str(match.confluence_zone_id or match.structural_zone_id or "")
   plan_id = _v8_plan_id(match)
+  if (
+    runtime_config.analysis.technical_authority.mode == "go"
+    and GO_ORIGIN_TAG not in match.tags
+  ):
+    # This is the final data-plane fence. A stale Python/ZoneWatch match may
+    # still be present in Redis after a restart, but it can never become a new
+    # automatic plan while Go owns technical production.
+    await record_route_outcome(
+      client,
+      match,
+      stage="mode_check",
+      status="blocked",
+      reason_code="python_match_rejected_go_authority",
+      message="Go-only mode rejects non-Go automatic matches",
+      retained=False,
+      publish_status=False,
+    )
+    return PublishResult(
+      status=PUBLISH_STATUS_REJECTED,
+      plan_id=plan_id,
+      reason_code="python_match_rejected_go_authority",
+      zone_id=zone_id,
+      setup_id=setup_id,
+    )
   bar_event = f"{symbol}:{EXECUTION_TIMEFRAME}:{event_ts or match.event_ts}"
 
   await _handle_event(bar_event, source=source, client=client, ready_match_id=setup_id)

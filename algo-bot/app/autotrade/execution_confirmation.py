@@ -16,6 +16,7 @@ import time
 from typing import Any
 
 from app.autotrade.strategy_taxonomy import is_m1_scalp_match, is_m1_scalp_strategy
+from app.analysis_client.authority import GO_ORIGIN_TAG
 
 
 IMMEDIATE_CONFIRMATION = "immediate_confirmation"
@@ -65,6 +66,12 @@ _M1_SCALP_TRIGGERS = frozenset({
   "breakout_retest",
   "range_sweep",
 })
+
+# Provenance written into TradePlan V8 when the closed-bar confirmation was
+# supplied by the Go Analysis Engine. This is deliberately distinct from the
+# legacy Python M5 confirmation label so a plan cannot appear technically
+# Python-confirmed after the Go-only cutover.
+GO_AUTHORITATIVE = "go_analysis_engine"
 # Product Reaction taxonomy is only Key/Session/Trendline (see
 # strategy_taxonomy.REACTION_STRATEGIES). Confirmation mechanics below are
 # M5-authoritative / M1-optional — not product "Reaction" naming.
@@ -297,6 +304,22 @@ def _m5_confirmation_bar_ts(match: Any) -> Any:
 def confirmation_policy_for(match: Any) -> ConfirmationPolicy:
   strategy = str(getattr(match, "strategy", "") or "")
   family = str(getattr(match, "family", "") or "").casefold()
+  # Go candidates are already closed-bar, strategy-specific confirmations.
+  # Re-running Python's reaction/M1 detector here would create a second
+  # technical authority and would reject valid Go candidates whose thesis is
+  # not a legacy zone-rejection shape. Execution still owns quote, spread,
+  # expiry, invalidation, exposure and order checks below.
+  if GO_ORIGIN_TAG in tuple(getattr(match, "tags", ()) or ()):
+    return ConfirmationPolicy(
+      m5_authoritative=True,
+      m1_required_on_retest=False,
+      allow_same_cycle_publish=True,
+      require_quote_inside_zone=False,
+      reaction_family=False,
+      zone_family=False,
+      metadata_valid=True,
+      reason_code="go_strategy_confirmation",
+    )
   trendline_v2 = getattr(match, "trendline_v2", None)
   if (
     strategy == "Trendline"

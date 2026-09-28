@@ -1,16 +1,12 @@
-"""One Redis ``bars:new`` subscriber for ZoneWatch M1 activation and the worker.
+"""One Redis ``bars:new`` subscriber for execution against Go-owned matches.
 
 Go is the sole automatic technical-opportunity producer, so the Python scanner
 detectors and the M1 scalping discovery loop are no longer dispatched here.
 What still runs is execution against setups that already exist:
 
-* ZoneWatch M1 activation of retained zones runs first, so an already-watched
-  zone is never delayed by the worker pass.
 * The worker evaluates StrategyMatches against execution-time policy and
-  publishes TradePlan V8 (in ``technical_authority.mode=go`` its closed-bar
-  sweep only considers Go-origin matches).
-
-ZoneWatch still owns ``spots:new`` separately.
+  publishes TradePlan V8. In Go mode its closed-bar sweep only considers
+  Go-origin matches; stale Python matches cannot create plans.
 """
 
 from __future__ import annotations
@@ -46,12 +42,7 @@ async def dispatch_closed_bar(
   client: Any,
   source: RedisOHLCSource,
 ) -> list[str]:
-  """Run isolated handlers: ZoneWatch activation first, then the worker.
-
-  ZoneWatch and the worker share one OHLC window cache for this bar. Both only
-  act on M1, so there is no HTF prefetch any more: it existed to warm the
-  windows the scanner read on M5, and nothing reads them now.
-  """
+  """Run the execution worker for this closed bar."""
   parsed = parse_closed_bar(data)
   if parsed is None:
     return []
@@ -71,16 +62,6 @@ async def dispatch_closed_bar(
       )
 
   try:
-    if runtime_config.runtime.auto_trade.enabled and tf == "M1":
-      from app.autotrade.zone_execution_cutover import evaluate_active_zone_watches
-
-      await _run(
-        "zone_watch",
-        evaluate_active_zone_watches(
-          client, symbol=symbol, event_ts=event_ts, source=source,
-        ),
-      )
-
     if runtime_config.runtime.auto_trade.enabled:
       from app.autotrade.worker import _handle_event as worker_handle
 
@@ -95,10 +76,9 @@ async def dispatch_closed_bar(
 class _PerSymbolBarDispatcher:
   """Keep per-symbol FIFO while allowing different symbols to make progress.
 
-  A single subscriber previously awaited the complete ZoneWatch/scalping/scanner/
-  worker chain before reading the next Pub/Sub message.  Five bars closing at
-  the same instant therefore multiplied queue age by five.  Each worker owns
-  its OHLC source/cache, so one symbol cannot clear another symbol's cache.
+  Each symbol has its own FIFO so one symbol cannot delay another symbol's
+  execution-policy evaluation. Technical discovery is owned by the Go engine;
+  this dispatcher does not rebuild it from Python OHLC.
   """
 
   def __init__(self, client: Any):

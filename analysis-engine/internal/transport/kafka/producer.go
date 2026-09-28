@@ -38,10 +38,9 @@ type AlgorithmVersion struct {
 // Producer publishes analysis.opportunity.v1 and
 // analysis.opportunity.invalidated.v1 — the only two topics
 // analysis-engine ever produces to (source task §3: no topic is ever
-// created for an internal calculation). No strategy exists yet, so
-// nothing in this codebase calls PublishOpportunity for real today —
-// this type exists ready for the first strategy task, proven correct by
-// test/kafka/producer_test.go and the real-broker integration test.
+// created for an internal calculation). The engine's concrete strategy
+// registry owns candidate creation; this transport owns only the durable
+// lifecycle publication and invalidation envelope.
 type Producer struct {
 	client     *kgo.Client
 	cfg        Config

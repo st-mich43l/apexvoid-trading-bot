@@ -16,6 +16,11 @@ dated section after deployment.
 - Analysis Engine no longer aliases multiple Flip zones formed by distinct
   structural breaks on the same candle to one ID, preventing a fatal duplicate
   `flip_zone` opportunity during Redis recovery and the resulting restart loop.
+- Completed the Go-to-policy adapter registry for all 19 enabled strategies,
+  including Demand, all remaining XAU strategies, and the M1-confirmed FX
+  strategies. Each adapter preserves its Go-owned direction, evidence,
+  timeframe, geometry, invalidation, and target contract; non-Go matches are
+  rejected at the final automatic-publication fence.
 
 ### Added
 - Phase S11 remediation: durable opportunity publication ledger/outbox with
@@ -39,13 +44,12 @@ dated section after deployment.
   deployments with `runtime.auto_trade.enabled=false` are not gated). The closed-bar
   dispatcher no longer runs the Python scanner or M1 scalping discovery, and in
   `mode=go` the worker's closed-bar sweep only evaluates Go-origin matches, so a
-  leftover Python match in Redis cannot trade. Unlike the unmerged #653, live
-  ZoneWatch activation of already-retained zones is preserved (cutover install,
-  `zone_watch_execution_loop`, M1 `evaluate_active_zone_watches`, and the worker's
-  `ready_match_id` publish path); only its private scanner market-context reload
-  and market-map cache fallback were removed (it now uses the zone's discovery
-  range snapshot). Scope ownership is unchanged: every scope still needs an
-  operator-recorded fenced grant before Go may publish into it.
+  leftover Python match in Redis cannot trade. ZoneWatch activation and its
+  scanner monkeypatches are no longer part of the automatic production startup;
+  the worker consumes only Go-origin matches and retains execution-time quote,
+  spread, risk, exposure, and order checks. Scope ownership is unchanged:
+  every scope still needs an operator-recorded fenced grant before Go may
+  publish into it.
 - The one-time `manual_algo_charts` cleanup now refuses `--apply` without a
   new archive path, locks the table, atomically archives schema plus all rows,
   logs the archive SHA-256, and only then drops the obsolete table. Production

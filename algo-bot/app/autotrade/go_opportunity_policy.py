@@ -1,11 +1,11 @@
-"""S13C: Go opportunity -> existing Algo Bot policy pipeline, one scope at a time.
+"""Go opportunity -> existing Algo Bot policy pipeline, one scope at a time.
 
 A durable, decoded Go opportunity (``analysis_client``) becomes an ordinary
-``StrategyMatch`` in the *same* Redis store the legacy scanner writes, so every
-existing gate downstream — arbitration, killzone/news guards, execution policy
-(min R:R, stop, routing), sizing, duplicate protection, the TradePlan V8 build
-and its publish-time authority fence — runs unchanged. This module decides
-nothing about risk and duplicates no detector; it only translates facts.
+``StrategyMatch`` in Redis, so every execution gate downstream — arbitration,
+killzone/news guards, execution policy (min R:R, stop, routing), sizing,
+duplicate protection, TradePlan V8 and its publish-time authority fence — runs
+unchanged. This module decides nothing about technical structure or risk; it
+only translates the Go-owned facts.
 
 Hard rules encoded here:
 
@@ -21,16 +21,11 @@ Hard rules encoded here:
 * **No auto-trade via Manual Algo's analysis-gate bypass.** Matches take the
   normal automatic path; nothing here touches ``bypass_analysis_gates``.
 
-Known, documented semantic gaps (each must be reconciled in replay/shadow
-*before* any acceptance is recorded — they are not papered over):
-
-* ``htf_bias`` is left empty: Go's bias is primary-timeframe structural bias,
-  not the H1/H4 bias the legacy field means. ``strategy_mode`` /
-  ``bias_relationship`` use it, tagged ``bias_source:go_primary_tf``.
-* ``confluence`` is the count of Go evidence codes (Go has no legacy integer).
-* The worker's opposing-barrier / target-room checks still recompute Python
-  zones from Redis OHLC; that duplicate technical computation is a *retained*
-  dependency, blocking deletion of those modules, not a Go fact.
+Translation notes are explicit rather than inferred: ``htf_bias`` is selected
+from the Go H1/H4 facts, ``confluence`` is the count of Go evidence codes, and
+the worker's Go path does not load OHLC or run Python detectors. Python remains
+responsible only for execution-time quote, spread, expiry, exposure, risk and
+order checks.
 """
 
 from __future__ import annotations
@@ -91,16 +86,43 @@ class ScopeProfile:
   catalog_id: str
   legacy_strategy: str      # canonical legacy name policy/taxonomy keys on
   structural_kind: str      # legacy structural_kind for the V8 source_structure
-  direction: str            # the only direction this scope may produce
+  direction: str | None     # None means the Go strategy owns the direction
+  allowed_timeframes: frozenset[str]
+  strategy_mode: str
+  requires_reaction: bool = False
+  evidence_prefixes: tuple[str, ...] = ()
 
 
-# Zone-anchored primitives whose entry band *is* the zone: the translation is
-# exact. Level/trendline/range/scalp scopes are deliberately absent until each
-# has a reviewed profile (their legacy semantics are not derivable from the
-# current contract).
+# This is deliberately an explicit adapter registry, rather than a generic
+# Supply/Demand fallback.  The Go Candidate already owns each strategy's
+# entry geometry, invalidation, targets, evidence, and observation timeframe;
+# the profile only names the downstream policy taxonomy and the facts that
+# must be present for that strategy.  Keeping one row per catalog ID makes an
+# enabled Go strategy impossible to silently drop at the Kafka boundary.
 REVIEWED_SCOPES: dict[str, ScopeProfile] = {
-  "supply": ScopeProfile("supply", "Supply Demand", "supply", "SELL"),
-  "demand": ScopeProfile("demand", "Supply Demand", "demand", "BUY"),
+  "key_level": ScopeProfile("key_level", "Key Level", "key_level", None, frozenset({"M5"}), "go_m5_reaction", evidence_prefixes=("m5_key_level_",)),
+  "confluence_zone": ScopeProfile("confluence_zone", "Confluence Zone", "confluence_zone", None, frozenset({"M5"}), "go_m5_confluence", evidence_prefixes=("m5_distinct_zone_overlap", "m5_confluence_reaction")),
+  "supply": ScopeProfile("supply", "Supply Demand", "supply", "SELL", frozenset({"M5"}), "go_m5_zone", True, ("m5_supply_zone_",)),
+  "demand": ScopeProfile("demand", "Supply Demand", "demand", "BUY", frozenset({"M5"}), "go_m5_zone", True, ("m5_demand_zone_",)),
+  "order_block": ScopeProfile("order_block", "Order Block", "order_block", None, frozenset({"M5"}), "go_m5_order_block", evidence_prefixes=("m5_order_block_",)),
+  "fvg": ScopeProfile("fvg", "FVG", "fvg", None, frozenset({"M5"}), "go_m5_fvg", evidence_prefixes=("m5_fvg_",)),
+  "ifvg": ScopeProfile("ifvg", "iFVG", "ifvg", None, frozenset({"M5"}), "go_m5_ifvg", evidence_prefixes=("m5_ifvg_",)),
+  "crt": ScopeProfile("crt", "CRT", "crt", None, frozenset({"M5"}), "go_h1_m5_crt", evidence_prefixes=("h1_impulse_range", "m5_range_sweep_reclaim")),
+  "flip_zone": ScopeProfile("flip_zone", "Flip Zone", "flip_zone", None, frozenset({"M5"}), "go_m5_flip_zone", evidence_prefixes=("m5_flip_",)),
+  "session_level": ScopeProfile("session_level", "Session Level", "session_level", None, frozenset({"M5"}), "go_m5_session_level", evidence_prefixes=("session_level_",)),
+  "trendline": ScopeProfile("trendline", "Trendline", "trendline", None, frozenset({"M5"}), "go_m5_trendline", evidence_prefixes=("m5_trendline_",)),
+  "range_edge": ScopeProfile("range_edge", "Range Edge Scalp", "range_edge", None, frozenset({"M5"}), "go_m5_range_edge", evidence_prefixes=("m5_canonical_range", "m5_repeated_edge_rejection")),
+  "box_breakout": ScopeProfile("box_breakout", "Box Breakout", "box_breakout", None, frozenset({"M5"}), "go_m5_box_breakout", evidence_prefixes=("m5_box_compression", "m5_breakout_accepted", "m5_box_retest")),
+  "momentum_ride": ScopeProfile("momentum_ride", "Momentum Ride", "momentum_ride", None, frozenset({"M5"}), "go_m5_momentum", evidence_prefixes=("m5_persistent_direction", "m5_low_overlap_displacement")),
+  "snap_back": ScopeProfile("snap_back", "Snap-Back", "snap_back", None, frozenset({"M5"}), "go_m5_snap_back", evidence_prefixes=("m5_extended_from_key_level", "m5_reversal_close")),
+  "liquidity_sweep": ScopeProfile("liquidity_sweep", "Liquidity Sweep", "liquidity_sweep", None, frozenset({"M5"}), "go_m5_liquidity_sweep", evidence_prefixes=("m5_liquidity_pool_swept", "m5_sweep_reclaimed", "m5_opposite_displacement")),
+  # These strategies intentionally publish on the M1 observation boundary:
+  # their Go implementations consume their M5 structure and own the M1
+  # confirmation before Candidate creation.  Python must not run a second M1
+  # detector after receiving the event.
+  "range_sweep": ScopeProfile("range_sweep", "Range Sweep Scalp", "range_sweep", None, frozenset({"M1"}), "go_m5_m1_range_sweep", evidence_prefixes=("m5_range_context", "m1_edge_sweep", "m1_reclaim")),
+  "impulse_pullback": ScopeProfile("impulse_pullback", "Impulse Pullback Scalp", "impulse_pullback", None, frozenset({"M1"}), "go_m5_m1_impulse_pullback", evidence_prefixes=("m5_qualified_impulse", "m1_bounded_pullback", "m1_continuation_trigger")),
+  "scalp_breakout_retest": ScopeProfile("scalp_breakout_retest", "Breakout Retest Scalp", "scalp_breakout_retest", None, frozenset({"M1"}), "go_m5_m1_breakout_retest", evidence_prefixes=("m5_prebreakout_box", "m1_breakout_accepted", "m1_retest_confirmed")),
 }
 
 
@@ -143,15 +165,28 @@ def build_strategy_match(
     raise AdapterRejection("technical_context_unavailable", "Go supplied no policy inputs; Python must not recompute them")
   if not payload.timeframe:
     raise AdapterRejection("missing_observed_timeframe")
-  if payload.timeframe.upper() != "M5":
-    raise AdapterRejection("confirmation_timeframe_unreviewed")
+  timeframe = payload.timeframe.upper()
+  if timeframe not in profile.allowed_timeframes:
+    raise AdapterRejection(
+      "confirmation_timeframe_unreviewed",
+      f"{profile.catalog_id} expects {sorted(profile.allowed_timeframes)}, got {timeframe}",
+    )
   reaction = tech.confirmation
-  if reaction is None:
-    raise AdapterRejection("reaction_confirmation_unavailable", "resting zones are technical observations, not confirmed trades")
-  if reaction.confirmation_bar_time != tech.reference_time:
+  if profile.requires_reaction and reaction is None:
+    raise AdapterRejection("reaction_confirmation_unavailable", "this zone adapter requires Go's causal rejection confirmation")
+  if reaction is not None and reaction.confirmation_bar_time != tech.reference_time:
     raise AdapterRejection("reaction_not_current_observation")
-  if payload.direction != profile.direction:
+  if profile.direction is not None and payload.direction != profile.direction:
     raise AdapterRejection("direction_scope_mismatch", f"{profile.catalog_id} produces {profile.direction}, got {payload.direction}")
+  evidence_codes = tuple(item.code for item in payload.evidence)
+  if profile.evidence_prefixes and not any(
+    any(code.startswith(prefix) for prefix in profile.evidence_prefixes)
+    for code in evidence_codes
+  ):
+    raise AdapterRejection(
+      "strategy_evidence_mismatch",
+      f"{profile.catalog_id} did not provide its own evidence contract",
+    )
   if now >= payload.expires_at:
     raise AdapterRejection("opportunity_expired")
   symbol = payload.symbol.upper()
@@ -187,7 +222,7 @@ def build_strategy_match(
   htf_bias = ("up" if higher.direction == "BUY" else "down") if higher is not None else ""
   if higher is None:
     raise AdapterRejection("higher_timeframe_bias_unavailable", "no fresh confirmed H1/H4 structure")
-  reasons = tuple(item.code for item in payload.evidence)
+  reasons = evidence_codes
   confluence = len(reasons)
   legacy = profile.legacy_strategy
   family = strategy_family(legacy)
@@ -195,16 +230,27 @@ def build_strategy_match(
   risk_multiplier = risk_multiplier_for_tier(tier)
   prices = [t.price.price for t in payload.targets]
   farthest = max(prices) if direction == "BUY" else min(prices)
-  thesis = _thesis_id(symbol, family, direction, reaction.zone_id)
+  # Only Supply/Demand confirmed reactions have a Go zone identity. Other
+  # strategies are not coerced into a zone-reaction shape; their deterministic
+  # opportunity ID is the structural identity for policy deduplication.
+  structural_id = (
+    reaction.zone_id
+    if reaction is not None
+    else f"{profile.catalog_id}:{payload.id}"
+  )
+  thesis = _thesis_id(symbol, family, direction, structural_id)
   tags = (
     GO_ORIGIN_TAG,
     f"{CATALOG_TAG}{profile.catalog_id}",
     f"{EPOCH_TAG}{epoch}",
     f"go_opportunity:{payload.id}",
     f"kind:{profile.structural_kind}",
+    "go_strategy_confirmed",
+    f"go_strategy_mode:{profile.strategy_mode}",
+    *(f"go_evidence:{code}" for code in evidence_codes),
     f"bias:{relation}",
     "bias_source:go_primary_tf",
-    f"go_reaction:{reaction.reaction_type}",
+    *(() if reaction is None else (f"go_reaction:{reaction.reaction_type}",)),
     f"htf_bias_source:go_{higher.timeframe}" if higher is not None else "htf_bias_unavailable",
     *(() if risk_leg_enabled else (RISK_LEG_DISABLED_TAG,)),
   )
@@ -235,7 +281,11 @@ def build_strategy_match(
     issued_at=payload.created_at,
     expires_at=payload.expires_at,
     strategy=legacy,
-    strategy_mode=relation,
+    strategy_mode=(
+      relation
+      if profile.catalog_id in {"supply", "demand"}
+      else profile.strategy_mode
+    ),
     direction=direction,
     key_level=mid,
     entry_low=low,
@@ -252,17 +302,21 @@ def build_strategy_match(
     risk_multiplier=risk_multiplier,
     family=family,
     structural_source=f"go:{profile.catalog_id}",
-    zone_id=reaction.zone_id,
-    structural_zone_id=reaction.zone_id,
+    zone_id=structural_id,
+    structural_zone_id=structural_id,
     structural_zone_low=low,
     structural_zone_high=high,
     structural_kind=profile.structural_kind,
-    structural_timeframe=payload.timeframe.upper(),
-    touch_bar_ts=str(reaction.touch_bar_time),
-    confirmation_bar_ts=str(reaction.confirmation_bar_time),
-    reaction_type=reaction.reaction_type,
-    m5_confirmation_bar_ts=str(reaction.confirmation_bar_time),
-    m5_reaction_type=reaction.reaction_type,
+    # Every reviewed strategy uses M5 structure, including the three M1
+    # confirmation strategies. The event timeframe is kept separately in
+    # ``source_tf`` so downstream policy never mistakes M1 confirmation for
+    # the structural timeframe.
+    structural_timeframe="M5",
+    touch_bar_ts=None if reaction is None else str(reaction.touch_bar_time),
+    confirmation_bar_ts=None if reaction is None else str(reaction.confirmation_bar_time),
+    reaction_type=None if reaction is None else reaction.reaction_type,
+    m5_confirmation_bar_ts=None if reaction is None else str(reaction.confirmation_bar_time),
+    m5_reaction_type=None if reaction is None else reaction.reaction_type,
     htf_bias=htf_bias,
     regime_kind="",
     bias_relationship=relation,
