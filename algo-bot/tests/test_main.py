@@ -21,11 +21,18 @@ pytestmark = pytest.mark.no_database
 
 @pytest.mark.asyncio
 async def test_startup_warns_when_owner_id_is_unset(monkeypatch, caplog):
-  install_runtime_overrides(monkeypatch, legacy_overrides={
-    "telegram_owner_id": None,
-    "scanner_telegram_bot_token": "scanner-token",
-    "telegram_bot_token": "general-token",
-  })
+  install_runtime_overrides(
+    monkeypatch,
+    overrides={
+      "analysis.technical_authority.mode": "go",
+      "analysis.technical_authority.consumer_enabled": True,
+    },
+    legacy_overrides={
+      "telegram_owner_id": None,
+      "scanner_telegram_bot_token": "scanner-token",
+      "telegram_bot_token": "general-token",
+    },
+  )
   init_db = AsyncMock()
   watcher = AsyncMock()
   calendar = AsyncMock()
@@ -77,3 +84,22 @@ async def test_startup_warns_when_owner_id_is_unset(monkeypatch, caplog):
     close_bot_session=False,
   )
   scanner_close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_startup_refuses_legacy_python_authority_before_db_or_telegram(monkeypatch):
+  install_runtime_overrides(
+    monkeypatch,
+    overrides={
+      "analysis.technical_authority.mode": "python",
+      "analysis.technical_authority.consumer_enabled": False,
+    },
+  )
+  init_db = AsyncMock()
+  poll = AsyncMock()
+  monkeypatch.setattr(main, "init_db", init_db)
+  monkeypatch.setattr(main.dp, "start_polling", poll)
+  with pytest.raises(RuntimeError, match="Go technical authority required"):
+    await main.main()
+  init_db.assert_not_awaited()
+  poll.assert_not_awaited()
