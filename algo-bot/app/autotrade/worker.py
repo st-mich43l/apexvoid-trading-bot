@@ -7838,6 +7838,19 @@ async def _handle_event(
       item for item in scanner_strategy_matches
       if item.match_id == ready_match_id
     ]
+  if runtime_config.analysis.technical_authority.mode == "go":
+    # A stopped/restarted bot may still have old Python scanner matches in
+    # Redis. They are not an alternative technical opportunity source; never
+    # publish them while Go owns the technical pipeline. Existing broker
+    # positions remain managed by the separate execution/reconciliation loops.
+    scanner_strategy_matches = [
+      item for item in scanner_strategy_matches
+      if GO_ORIGIN_TAG in item.tags
+    ]
+    if not scanner_strategy_matches:
+      # Do not perform the private Python scalp/structure pass just because a
+      # bar closed when Kafka supplied no technical opportunity.
+      return None
   if not scanner_strategy_matches:
     frames = await _load_frames(
       source, symbol, timeframes=(EXECUTION_TIMEFRAME,),
