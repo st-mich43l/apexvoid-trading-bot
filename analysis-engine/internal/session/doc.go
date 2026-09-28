@@ -4,8 +4,8 @@
 //
 // Ported from algo-bot/app/analysis/session_liquidity.py
 // (session_levels/previous_week_levels and their private helpers), per
-// Phase S4's plan (apexvoid-bot-prompts/rebuild-strategies.md §23-26) and
-// docs/analysis/shared-primitives-v2.md. Production combines
+// Phase S4's plan (apexvoid-bot-prompts/rebuild-strategies.md §23-26).
+// Production combines
 // session_levels(df, cfg) (Asia/London/NY extremes + PDH/PDL) with
 // previous_week_levels(df) (PWH/PWL) into one flat list before scoring
 // (algo-bot/app/analysis/engine.py::_analyze_tf) — this package's Update
