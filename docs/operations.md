@@ -153,6 +153,105 @@ trade date; at rollover the just-completed day's journal is swept
 rest) and cleared. A missed sweep (restart, Redis hiccup) self-expires
 after 3 days rather than accumulating forever.
 
+## Kafka & Analysis-Authority Incident Response
+
+The Go analysis engine can be handed technical authority over a symbol/scope
+via the Kafka opportunity pipeline. This section is the escalation path when
+that pipeline, or the authority it feeds, needs to be rolled back.
+
+### Emergency authority rollback
+
+```bash
+python -m app.scripts.analysis_authority status --symbol XAU
+python -m app.scripts.analysis_authority rollback --symbol XAU --scope supply --expected-epoch <n> --actor <you> --reason <why>
+python -m app.scripts.analysis_authority rollback-all --actor <you> --reason <why>
+python -m app.scripts.analysis_authority withdraw --symbol XAU --scope supply --actor <you> --reason <why>
+```
+
+The order is fixed and cannot be swapped: **1)** the fence flips first — Go
+can no longer create or publish anything new for the scope, and Python
+resumes once the drain window ends; **2)** withdrawal follows — unexecuted
+matches, unpublished setups, and queued/unfilled plans are cancelled via a
+tombstoned cancel intent the executor honours. `withdraw` is Redis-only and
+safe to re-run if step 2 fails after step 1 lands. `rollback-all` runs both
+steps for every Go-bound scope at once.
+
+**Open positions are never closed by rollback or withdrawal.** Rollback only
+governs plan *creation*; it never touches a position that already exists.
+
+### Kafka failure modes
+
+- **Kafka down or lagging** — no new Go events reach the consumer. On
+  recovery, the freshness gate refuses to replay a stale backlog as live
+  opportunities (see reason codes below). Rollback and withdrawal need no
+  Kafka at all.
+- **Kafka data loss** (broker logging to a non-persistent log dir) — topics
+  and committed offsets vanish together, so nothing is replayed
+  inconsistently, but a terminal event for an earlier creation may never
+  arrive. Orphaned matches are not stuck: they self-expire via their own
+  `expires_at` TTL. This is why a persistent Kafka log directory
+  (`KAFKA_LOG_DIRS`) and the analysis-engine's own ledger volume
+  (`analysis-engine-state`) are a hard precondition for trusting any
+  shadow/live authority window — without them, a container recreate silently
+  resets both the topic history and the publication ledger.
+- **PostgreSQL down** — the authority fence itself cannot be read, so both
+  the Go and Python publishers fail closed (no double-publish is possible).
+  `withdraw` still works because it only needs Redis; there is no bypass
+  flag to force a publish while the fence is unreadable.
+- **Redis down** — the executor and the trade-plan stream have no fallback;
+  execution stops.
+- Disabling the Kafka consumer flag is **not** a rollback — a scope Go
+  already owns stays closed to legacy Python plans until a fenced rollback
+  actually runs.
+
+### Freshness-gate reason codes
+
+An event failing any of these is applied to the durable ledger for history,
+but never becomes a live plan:
+
+| reason code | meaning |
+| --- | --- |
+| `pre_activation_event` | observed before the scope's durable go-effective boundary |
+| `opportunity_expired` | the opportunity's own `expires_at` passed before consumption |
+| `event_too_old` | observation older than the configured max event age |
+| `delivery_lag_exceeded` | Kafka publish-to-consume lag exceeded the configured maximum |
+
+### Broker-position recovery
+
+Rollback/withdraw behavior is defined at every lifecycle stage, and none of
+them close an open position:
+
+| stage | on rollback/withdrawal |
+| --- | --- |
+| pending match, no plan yet | match removed, setup invalidated — nothing was ever at the broker |
+| plan submitted, unfilled | every resting order is cancelled at the broker; plan cancelled |
+| partially filled | unfilled legs are withdrawn; filled legs remain open, still managed to their own TP/BE |
+| open position | untouched — stop and target management continues exactly as before |
+
+Executor state recovers from Redis on every process start, so a restart of
+the executor does not lose track of open work.
+
+**Known operational gap:** an unhealthy or frozen `ctrader-engine` container
+stops TP/BE/trailing management for everything it holds, while the
+broker-side stops already placed remain in force (nothing closes, but
+nothing actively manages either). `restart: unless-stopped` does **not**
+restart the container on a stale internal heartbeat by itself — Docker only
+restarts on process exit, not on a healthy-looking-but-stuck process. A
+heartbeat fix for the auto-trade session loop specifically shipped in PR
+#651 (2026-09-28), but a watchdog that auto-restarts `ctrader-engine` itself
+on a stale heartbeat is still not implemented. Until it is, a frozen executor
+needs a manual restart.
+
+### `go_shadow` activation
+
+`go_shadow` (and the Go consumer) is switched on through the
+**ansible-rendered** vars that produce the deployed `trading-bot.yml`, not by
+editing `config/analysis.yml` directly. `config/analysis.yml` is read only by
+the Go engine and the C# executor — editing it alone has no effect on the
+Python bot's own authority mode. Confirm the change actually took after a
+deploy (boot audit row, consumer health key, Kafka consumer group existing)
+rather than assuming the ansible var change was sufficient.
+
 ## Troubleshooting
 
 ### Container is not starting

@@ -11,8 +11,7 @@ type Price float64
 
 // IsFinite reports whether p is a real, usable price — never NaN or Inf.
 // Every structure/liquidity algorithm must reject non-finite input at the
-// boundary (docs/analysis/market-structure-v2.md's validation section)
-// rather than let it propagate into a Swing/Break/Pool silently.
+// boundary rather than let it propagate into a Swing/Break/Pool silently.
 func (p Price) IsFinite() bool {
 	f := float64(p)
 	return !math.IsNaN(f) && !math.IsInf(f, 0)

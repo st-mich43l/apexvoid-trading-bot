@@ -1,9 +1,8 @@
 // Package demand implements DemandStrategy — Phase S7
 // (apexvoid-bot-prompts/rebuild-strategies.md §9/§21), the buy-side sibling
 // of internal/strategy/supply, per the Phase S2 catalog's split of the
-// legacy "Supply Demand" detector (docs/analysis/strategy-v2-catalog.md,
-// row 3). Independently implemented — this package must never import
-// internal/strategy/supply, and vice versa
+// legacy "Supply Demand" detector. Independently implemented — this
+// package must never import internal/strategy/supply, and vice versa
 // (test/architecture/dependency_test.go's strategy-isolation rule); any
 // resemblance in code shape is a coincidence of two theses that happen to
 // be mirror images, not shared strategy behavior.

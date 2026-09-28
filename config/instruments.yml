@@ -478,8 +478,7 @@ instruments:
     # M1 scalping keeps strategies.scalping discovery book.
     # Withdrew min_sell_zone_score:10 (PR #449) - nearest-zone gap was ~1pt
     # on n=26, inverted in 4/8 SELL cells, and the floor sat above most
-    # winning sample z scores. Field stays at default 0 (off); see
-    # docs/history/manual-formula-replay-key-level-floor-withdrawal.md.
+    # winning sample z scores. Field stays at default 0 (off).
     broker_symbol: XAU
     canonical_symbol: XAU
     aliases:

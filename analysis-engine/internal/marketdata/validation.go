@@ -21,8 +21,8 @@ const (
 )
 
 // ValidationError reports exactly why a candle was rejected — never a bare
-// bool, per docs/analysis/market-structure-v2.md's validation section
-// ("reject or explicitly classify malformed candles").
+// bool; every structure/liquidity algorithm must reject or explicitly
+// classify malformed candles at this boundary.
 type ValidationError struct {
 	Reason InvalidReason
 	Candle market.Candle

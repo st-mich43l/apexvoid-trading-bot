@@ -8,8 +8,8 @@ import (
 
 // buildIFVGZones ports technique_geometry.py::discover_ifvg_instances
 // ("T4 — first close through gap flips side"), locked in the Phase S2
-// catalog (docs/analysis/strategy-v2-catalog.md #6): for each existing
-// FVG zone, the inversion trigger is the first candle CLOSE fully
+// catalog: for each existing FVG zone, the inversion trigger is the
+// first candle CLOSE fully
 // through the gap's far bound (below Low for a demand-side gap, above
 // High for a supply-side gap) — that flips the zone's tradeable side
 // (demand->sell, supply->buy). The flip is confirmed only if no later

@@ -8,9 +8,9 @@
 //
 // Ported from algo-bot/app/analysis/zones.py and
 // technique_geometry.py's not_invalidated/zone_is_spent pair, per
-// docs/analysis/zone-v2.md's full specification and Phase S3's own plan
-// (apexvoid-bot-prompts/rebuild-strategies.md §14). Three already-shipped
-// production fixes are the canonical behavior here, not the pre-fix
+// Phase S3's own plan (apexvoid-bot-prompts/rebuild-strategies.md §14).
+// Three already-shipped production fixes are the canonical behavior
+// here, not the pre-fix
 // Python this session found and corrected:
 //   - PR #574 (6fab6b0): hold-based invalidation — a zone stays valid
 //     through a reclaimed sweep, invalidated only by a decisive

@@ -26,8 +26,7 @@
 // function. This package uses ONE canonical scalar ATR (the same
 // "current/last value" convention structure.Update/zone.Update/
 // liquidity.Update/fib.Update already use) for both, documented here
-// rather than silently diverging. See docs/analysis/
-// shared-primitives-v2.md's Key Level section for the full reasoning.
+// rather than silently diverging.
 //
 // Dependency rule: keylevel depends on structure (Swing.Kind/Price for
 // clustering) and MUST NOT import zone, liquidity, fib, trendline,

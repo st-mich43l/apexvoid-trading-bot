@@ -36,7 +36,7 @@ func (r AppendResult) String() string {
 
 // TimeframeHistory is the bounded, causally-sequenced candle history for
 // one symbol+timeframe — the concrete type MarketHistory.Timeframes holds
-// one of per configured timeframe (docs/analysis/market-structure-v2.md).
+// one of per configured timeframe.
 // Wraps market.CandleWindow (bounded ring buffer) with the sequencing/
 // validation contract §8-9 require: a duplicate timestamp is reported, not
 // silently ignored or silently pushed as a new bar; an out-of-order

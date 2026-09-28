@@ -1,9 +1,9 @@
 // Package supply implements SupplyStrategy — Phase S7
 // (apexvoid-bot-prompts/rebuild-strategies.md §9/§21), one of the two
 // strategies the Phase S2 catalog split the legacy "Supply Demand"
-// detector into (docs/analysis/strategy-v2-catalog.md, row 3). Supply and
-// demand share a canonical primitive (internal/zone's displacement-based
-// Supply/Demand geometry) but are independently-owned strategies here —
+// detector into. Supply and demand share a canonical primitive
+// (internal/zone's displacement-based Supply/Demand geometry) but are
+// independently-owned strategies here —
 // this package must never be imported by internal/strategy/demand or vice
 // versa (test/architecture/dependency_test.go's strategy-isolation rule).
 //
@@ -32,7 +32,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/zone"
 )
 
-// ID is this strategy's fixed V2 identity (docs/analysis/strategy-v2-catalog.md).
+// ID is this strategy's fixed V2 identity.
 const ID strategy.StrategyID = "supply"
 
 // Version is this strategy's own technical-thesis version — increments
@@ -69,7 +69,7 @@ type Config struct {
 	MinimumTargetDistanceATR float64
 	// ExpiryHours is this strategy's own technical expiry window (source
 	// task's opportunity-lifecycle SETUP_EXPIRED reason) — distinct from
-	// Algo Bot's execution-age policy (docs/analysis/opportunity-lifecycle-v2.md).
+	// Algo Bot's execution-age policy.
 	ExpiryHours float64
 }
 
@@ -283,9 +283,8 @@ func nearestPool(pools []liquidity.Pool, side liquidity.LiquiditySide, reference
 // used as this Candidate's CreatedAt. MarketContext exposes no
 // evaluation-time clock (strategy.Strategy.Evaluate takes only ctx), so
 // the most recent already-known causal fact about the zone itself is the
-// correct, deterministic, replay-safe substitute — never the SetupKey
-// (docs/analysis/opportunity-lifecycle-v2.md: "must not be an evaluation
-// timestamp").
+// correct, deterministic, replay-safe substitute — never the SetupKey,
+// which must not be an evaluation timestamp or Kafka event ID.
 func zoneReferenceTime(z zone.Zone) int64 {
 	if z.LastTouchedAt != nil && *z.LastTouchedAt > z.CreatedAt {
 		return *z.LastTouchedAt

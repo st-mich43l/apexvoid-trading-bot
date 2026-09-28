@@ -163,9 +163,7 @@ apexvoid-trading-bot/
 ├── docs/                   # architecture, runtime, config, ops, ADRs
 │   ├── runtime/            # multi-symbol routing
 │   ├── configuration/      # catalog + manifest authority
-│   ├── scalping/           # scalping lane
-│   ├── audits/             # point-in-time capability/behavior audits
-│   └── history/            # finished P0 plans, regression write-ups, one-shot migrations
+│   └── scalping/           # scalping lane
 ├── contracts/              # shared JSON schemas
 │   ├── autotrade/          # TradePlan V8, …
 │   └── configuration/      # catalog / env / manifest contracts
