@@ -1,7 +1,15 @@
-"""One Redis ``bars:new`` subscriber for ZoneWatch M1, scalping, scanner, and worker.
+"""One Redis ``bars:new`` subscriber for ZoneWatch M1 activation and the worker.
 
-Publish/activation handlers run first. Scanner detectors and the legacy worker
-gate run after so a heavy analysis tick cannot delay an already-watched zone.
+Go is the sole automatic technical-opportunity producer, so the Python scanner
+detectors and the M1 scalping discovery loop are no longer dispatched here.
+What still runs is execution against setups that already exist:
+
+* ZoneWatch M1 activation of retained zones runs first, so an already-watched
+  zone is never delayed by the worker pass.
+* The worker evaluates StrategyMatches against execution-time policy and
+  publishes TradePlan V8 (in ``technical_authority.mode=go`` its closed-bar
+  sweep only considers Go-origin matches).
+
 ZoneWatch still owns ``spots:new`` separately.
 """
 
@@ -11,10 +19,7 @@ import asyncio
 import logging
 from typing import Any
 
-from app.analysis.ohlc_source import (
-  RedisOHLCSource,
-  prefetch_closed_bar_windows,
-)
+from app.analysis.ohlc_source import RedisOHLCSource
 from app.core.config import runtime_config
 from app.persistence import redis_state
 
@@ -41,13 +46,11 @@ async def dispatch_closed_bar(
   client: Any,
   source: RedisOHLCSource,
 ) -> list[str]:
-  """Run isolated handlers. Publish/activation first, analysis last.
+  """Run isolated handlers: ZoneWatch activation first, then the worker.
 
-  Existing ZoneWatches and M1 scalping must not wait on scanner detectors. Scanner
-  still runs before the worker because the worker reads this bar's matches.
-  ZoneWatch, scalping, scanner, and worker share one OHLC window cache for this
-  bar. ZoneWatch still runs first. M1 does not prefetch H1/M15; M5 warms
-  the HTF windows scanner needs.
+  ZoneWatch and the worker share one OHLC window cache for this bar. Both only
+  act on M1, so there is no HTF prefetch any more: it existed to warm the
+  windows the scanner read on M5, and nothing reads them now.
   """
   parsed = parse_closed_bar(data)
   if parsed is None:
@@ -77,25 +80,6 @@ async def dispatch_closed_bar(
           client, symbol=symbol, event_ts=event_ts, source=source,
         ),
       )
-
-    if tf != "M1":
-      try:
-        await prefetch_closed_bar_windows(
-          source, symbol, closed_tf=tf,
-        )
-      except Exception:
-        log.exception(
-          "dispatcher OHLC prefetch failed symbol=%s tf=%s", symbol, tf,
-        )
-
-    from app.scalping.runtime import handle_closed_bar as scalp_handle
-
-    await _run("scalp", scalp_handle(data, client=client, source=source))
-
-    if runtime_config.runtime.scanner.enabled:
-      from app.analysis.scanner import _handle_event as scanner_handle
-
-      await _run("scanner", scanner_handle(data, source=source, client=client))
 
     if runtime_config.runtime.auto_trade.enabled:
       from app.autotrade.worker import _handle_event as worker_handle
@@ -224,10 +208,6 @@ async def bar_event_dispatcher_loop() -> None:
   dispatcher = _PerSymbolBarDispatcher(client)
   await pubsub.subscribe(channel)
   log.info("bar event dispatcher started channel=%s", channel)
-  if runtime_config.runtime.scanner.enabled:
-    log.info(
-      "scanner structure mode causal=False (live confirmed-swing lookahead)",
-    )
   try:
     async for message in pubsub.listen():
       if message.get("type") != "message":
