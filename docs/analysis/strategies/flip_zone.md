@@ -13,7 +13,7 @@ reaction zone in whichever direction its own `Side` implies — the NEW
 role after the flip, never the original one (the primitive only ever
 exists post-flip). Two legacy detector functions
 (`flip_demand_zone_reaction`/`flip_supply_zone_reaction`) map to this one
-canonical V2 identity (`docs/analysis/strategy-v2-catalog.md` row 10).
+canonical V2 identity — direction-symmetric, one strategy, not two.
 
 ## Supported instruments / timeframes
 

@@ -60,8 +60,8 @@ analysis:
   # Phase S7 implemented and enabled the first 7: key_level, session_level,
   # supply, demand, order_block, fvg, flip_zone. Each strategy owns its own
   # threshold parsing (internal/strategy/<name>'s own parseConfig) — the
-  # registry itself treats these as opaque raw parameters (source task §51;
-  # docs/analysis/strategy-registry-v2.md's "Configuration contract"). None
+  # registry itself treats these as opaque raw parameters (source task §51).
+  # None
   # These parameter names have no old-Python-detector precedent — the
   # legacy monolithic detectors never parametrized per-setup invalidation/
   # target/expiry this way — so every value below is a genuine initial
@@ -83,9 +83,9 @@ analysis:
   #   minimum_target_distance_atr — the floor below which a candidate
   #     liquidity pool is too close to entry to be a meaningful technical
   #     objective.
-  #   expiry_hours — this strategy's own technical SETUP_EXPIRED window
-  #     (docs/analysis/opportunity-lifecycle-v2.md), distinct from Algo
-  #     Bot's own execution-age policy; 24h is one trading day.
+  #   expiry_hours — this strategy's own technical SETUP_EXPIRED window,
+  #     distinct from Algo Bot's own execution-age policy; 24h is one
+  #     trading day.
   # S11 completed concrete factories for all 19 registry entries. Every
   # strategy is enabled for the production shadow run; this emits technical
   # Kafka opportunities only and cannot place a trade until Phase S12 adds an
@@ -235,14 +235,13 @@ analysis:
       target_r: 2.0
       expiry_hours: 2.0
 
-  # Analysis Engine V2 (docs/analysis/market-structure-v2.md). Go-only today
+  # Analysis Engine V2. Go-only today
   # (analysis-engine/internal/marketdata, .../structure, .../liquidity) — no
   # Python consumer exists for these leaves, unlike every other key in this
   # file. Depth/thresholds below are grounded in real prior art already
   # shipped and running in production this session (PRs #574/#578/#579's
   # hold-based zone validity, technique_geometry.py's epsilon(), and
-  # zones.py::displacement()'s k/body_frac) rather than fresh guesses — see
-  # the spec doc's "Threshold provenance" section for the exact mapping.
+  # zones.py::displacement()'s k/body_frac) rather than fresh guesses.
   # Promotion thresholds (structure.swing.promotion.*) have no Python
   # precedent (the layer hierarchy is a genuine V2 concept) and are an
   # initial calibration, not empirically tuned — flagged as a research item
@@ -266,8 +265,7 @@ analysis:
       # structure.py's own find_swings(df, 2, ...) call) — a pivot needs
       # this many strictly-lesser/greater bars on each side to be a raw
       # candidate. Causal: a pivot at bar i is only CONFIRMED once
-      # right_bars additional bars have closed (docs/analysis/
-      # market-structure-v2.md's causality section).
+      # right_bars additional bars have closed.
       left_bars: 2
       right_bars: 2
     swing:

@@ -24,9 +24,8 @@ func (k PivotKind) String() string {
 // Time is the pivot bar's own timestamp. ConfirmedAt is strictly later —
 // the timestamp of the bar that completed the right-bar confirmation
 // window. A consumer must never treat a Pivot (or the Swing built from it)
-// as known before ConfirmedAt: see docs/analysis/market-structure-v2.md's
-// causality section and test/structure/causality_test.go's prefix-
-// stability proof.
+// as known before ConfirmedAt: see test/structure/causality_test.go's
+// prefix-stability proof.
 type Pivot struct {
 	Kind        PivotKind
 	Price       market.Price
@@ -49,9 +48,8 @@ type Pivot struct {
 // ConfirmedAt is later than candles[T-1].Time (proven in
 // test/structure/causality_test.go, not just asserted here). There is no
 // separate "provisional, not-yet-confirmed" pivot record — a pivot simply
-// does not appear in the result until its right window has closed; see
-// docs/analysis/market-structure-v2.md's own note on this deliberate
-// scope simplification.
+// does not appear in the result until its right window has closed, a
+// deliberate scope simplification.
 //
 // atrSeries must be the SAME canonical series (indicator.CanonicalATR)
 // index-aligned with candles — never a second, independently-computed

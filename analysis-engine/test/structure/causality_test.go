@@ -10,8 +10,7 @@ import (
 
 // These tests are the actual proof behind every causality claim made in
 // this package's doc comments (source task §10, §48; DoD item 34) — not
-// an assertion by construction. See docs/analysis/market-structure-v2.md's
-// causality section for the exact contract being proven here.
+// an assertion by construction.
 
 func randomCandles(n int, seed int64) []market.Candle {
 	r := rand.New(rand.NewSource(seed))

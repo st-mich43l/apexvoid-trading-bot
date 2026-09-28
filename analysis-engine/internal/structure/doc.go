@@ -11,11 +11,11 @@
 // and Update/StructureState/Book (state.go, book.go) tie it together into
 // one per-timeframe entrypoint.
 //
-// Full behavioral specification, including every threshold's provenance
-// and every deliberate divergence from the legacy Python system:
-// docs/analysis/market-structure-v2.md. That document and this package
-// must always describe the same behavior — source task §65's own
-// requirement.
+// Every threshold's provenance and every deliberate divergence from the
+// legacy Python system are documented inline, file by file, in this
+// package's own doc comments and proven by its tests — source task §65's
+// own requirement that documentation and code always describe the same
+// behavior.
 //
 // It answers "what happened structurally," never "should we trade it" —
 // that is internal/strategy's job, reading this package's output through

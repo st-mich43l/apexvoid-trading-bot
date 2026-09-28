@@ -178,7 +178,7 @@ func TestSupply_DemandZoneNeverProducesASupplyCandidate(t *testing.T) {
 // TestSupply_SameSetupIsDeterministicAcrossEvaluations is the causality/
 // determinism proof: evaluating the identical MarketContext twice must
 // yield the identical opportunity ID — required for the OpportunityBook's
-// own dedup to work at all (docs/analysis/opportunity-lifecycle-v2.md).
+// own dedup to work at all.
 func TestSupply_SameSetupIsDeterministicAcrossEvaluations(t *testing.T) {
 	s := newStrategy(t, validParams())
 	build := func() *context.MarketContext {

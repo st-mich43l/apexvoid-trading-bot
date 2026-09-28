@@ -129,7 +129,7 @@ DIVERGENCES: dict[str, dict] = {
     "kind": "new_surfaced", "expected": 3.0,
     "reason": "§8 — AnalysisMeasurementsConfig.max_merged_zone_atr Python schema default (unchanged value), now explicit.",
   },
-  # analysis.yml — Analysis Engine V2 (docs/analysis/market-structure-v2.md):
+  # analysis.yml — Analysis Engine V2:
   # genuinely new Go-only leaves, no old trading-bot.yml OR Python-schema-
   # default precedent at all (unlike merge_overlap/max_merged_zone_atr
   # above) — analysis-engine's structure/liquidity domains did not exist
@@ -423,7 +423,7 @@ def verify_unlisted_leaves_still_match_stage_c1() -> None:
     if k not in (
       "indicators", "calendar", "ctrader_feed", "scanner", "sessions", "spot",
       "watcher", "measurements", "zones",
-      # Analysis Engine V2 (docs/analysis/market-structure-v2.md): whole new
+      # Analysis Engine V2: whole new
       # top-level sections with no old trading-bot.yml namespace at all —
       # same treatment as measurements/zones above. Each leaf's value is
       # still individually pinned and change-detected via its own

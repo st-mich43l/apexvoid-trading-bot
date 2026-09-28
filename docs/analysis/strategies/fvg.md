@@ -79,7 +79,6 @@ markedly lower quality — see `TestFVG_MoreFillsLowersQualityRatherThanRaisingI
 ## Known old-engine false positive
 
 No specific documented false-positive note beyond the general
-`TECHNIQUE_ONLY` primitive split (`docs/analysis/strategy-v2-catalog.md`
-row 5) — the legacy detector conflated gap *geometry* with gap
-*tradeability* in one function; V2 separates them so a filled-but-still-open
-gap doesn't score identically to a fresh one.
+`TECHNIQUE_ONLY` primitive split — the legacy detector conflated gap
+*geometry* with gap *tradeability* in one function; V2 separates them so a
+filled-but-still-open gap doesn't score identically to a fresh one.
