@@ -76,6 +76,8 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      # apache/kafka logs under /tmp by default (container layer); keep data on the kafkadata volume.
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
       CLUSTER_ID: 4L6g3nShT-eMCtK--X86sw
     volumes:
       - kafkadata:/var/lib/kafka/data

@@ -47,6 +47,13 @@ actionability:
     enabled: true
     mode: shadow
 analysis:
+  # S14: THIS file (rendered by ansible from apexvoid_trading_bot_config) is where the Python bot reads
+  # the Go-authority switches. config/analysis.yml is not read by the bot. Production: go_shadow first,
+  # then verify `auto_trade:component_health:analysis_opportunity_consumer` is ready and the Kafka group
+  # apexvoid-algo-bot-analysis-opportunity-v1 exists (docs/analysis/s14f-production-shadow-runbook.md).
+  # technical_authority:
+  #   mode: go_shadow
+  #   consumer_enabled: true
   trendlines:
     # V2 keeps A/B anchors immutable, requires a later causal validation, and
     # turns this band into an interaction watch rather than an automatic fill.

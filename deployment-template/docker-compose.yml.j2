@@ -54,6 +54,9 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      # The image's own default log dir is under /tmp, i.e. the container layer: without this
+      # every recreate silently wiped topics and consumer offsets while kafkadata stayed empty.
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
       CLUSTER_ID: 4L6g3nShT-eMCtK--X86sw
     volumes:
       - kafkadata:/var/lib/kafka/data
@@ -92,6 +95,8 @@ services:
         condition: service_completed_successfully
     volumes:
       - ./config:/config:ro
+      # transport.kafka.outbox_path lives here: the publication ledger must outlive a recreate.
+      - analysis-engine-state:/var/lib/apexvoid-analysis-engine
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/health/ready"]
       interval: 10s
@@ -185,3 +190,4 @@ volumes:
   redisdata:
   runtime-config:
   kafkadata:
+  analysis-engine-state:

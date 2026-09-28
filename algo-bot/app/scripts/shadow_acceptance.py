@@ -52,7 +52,16 @@ async def build_report(args: argparse.Namespace, *, db: Any, redis: Any | None) 
       side_error = f"{type(exc).__name__}: {exc}"
   scopes = [dict(r) for r in await db.fetch("SELECT symbol, strategy_id, owner, target_owner, epoch, drain_until, updated_by FROM analysis_authority_scopes ORDER BY symbol, strategy_id")]
   runtime_audit = [dict(r) for r in await db.fetch("SELECT at, event, consumer_enabled, mode, go_bound_scopes FROM analysis_authority_runtime_audit WHERE at BETWEEN $1 AND $2 ORDER BY audit_id", since, until)]
+  consumer_health, health_readable = None, False
+  if redis is not None:
+    try:
+      raw = await redis.get(acc.CONSUMER_HEALTH_KEY)
+      consumer_health = json.loads(raw) if raw else None
+      health_readable = True
+    except Exception:  # noqa: BLE001 - the gate reports not_measured
+      health_readable = False
   gates = [
+    acc.gate_consumer_running(authority.mode, authority.consumer_enabled, consumer_health, health_readable=health_readable),
     acc.gate_lifecycle(ledger),
     acc.gate_duplicates(side, ledger),
     acc.gate_freshness(ledger, max_age=authority.max_event_age_seconds, max_lag=authority.max_delivery_lag_seconds),

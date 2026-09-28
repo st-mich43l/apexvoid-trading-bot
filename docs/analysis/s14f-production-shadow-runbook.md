@@ -13,12 +13,43 @@ report in which any gate without evidence is `not_measured` (a blocker), never a
    SHAs from the running containers (`docker inspect` on the VPS; see the deploy repo for the exact label)
    in `images.json` and the reviewed commits in `reviewed.json`; the report compares them.
 4. `python -m app.scripts.analysis_authority status` shows **no** scope owned by Go (shadow is Python-owned).
+5. Kafka state survives a container recreate: `docker exec apexvoid-kafka ls /var/lib/kafka/data` lists topic directories and
+   `docker inspect apexvoid-kafka` shows `KAFKA_LOG_DIRS=/var/lib/kafka/data`. (Until the S14 production-review PR the broker logged to
+   `/tmp/kafka-logs` in the container layer: every recreate wiped topics **and** consumer offsets while the `kafkadata` volume stayed
+   empty. The analysis-engine publication ledger likewise had no volume.) Do not start the window before this holds.
 
-## 2. Enable `go_shadow` (its own small change)
+## 2. Enable `go_shadow` (its own small change, **in the ansible vars, not `config/analysis.yml`**)
 
-`config/analysis.yml`: `mode: go_shadow`, `consumer_enabled: true` (PR "S14F: enable go_shadow"). The consumer group is
-`apexvoid-algo-bot-analysis-opportunity-v1`. In `go_shadow` each creation is applied to the ledger and then run through the
-real policy dry run (S14A): no plan, reservation, card or order is possible. Roll back by reverting the config change.
+The Python bot reads `/config/trading-bot.yml`, rendered by ansible from `apexvoid_trading_bot_config` (ansible-library
+`inventory/group_vars/all/vars.yml`). `config/analysis.yml` is read only by the Go engine and the C# executor and does **not** switch
+the bot. On 2026-09-26 `mode: go` was merged into `config/analysis.yml` and production stayed `python`/consumer off: the boot audit
+row said so, no consumer health key existed and no Kafka group was ever created. Set, in the ansible vars:
+
+```yaml
+apexvoid_trading_bot_config:
+  analysis:
+    technical_authority:
+      mode: go_shadow
+      consumer_enabled: true
+```
+
+then redeploy and **verify the bot really runs it** (all three must hold, otherwise the window is not evidence):
+
+```bash
+psql "$DATABASE_URL" -c "SELECT at, mode, consumer_enabled FROM analysis_authority_runtime_audit ORDER BY audit_id DESC LIMIT 1"   # go_shadow | t
+docker exec apexvoid-trading-redis redis-cli GET auto_trade:component_health:analysis_opportunity_consumer                         # {"state":"ready",...}
+docker exec apexvoid-kafka /opt/kafka/bin/kafka-consumer-groups.sh --bootstrap-server localhost:9092 --describe --group apexvoid-algo-bot-analysis-opportunity-v1
+```
+
+The consumer group is `apexvoid-algo-bot-analysis-opportunity-v1`. In `go_shadow` each creation is applied to the ledger and then run
+through the real policy dry run (S14A): no plan, reservation, card or order is possible. Roll back by reverting the ansible var.
+The acceptance report's first gate (`go_consumer_is_running_in_the_process_under_test`) fails when the process under test is
+`python`/consumer-off or the consumer never reported ready.
+
+**Weekends and bootstrap.** The Go engine publishes only for live closed bars; bars replayed while it rebuilds state at startup are
+recorded as `suppressed` and never published. Kafka is therefore legitimately empty after a deploy and on a closed market
+(checked 2026-09-26: both opportunity topics at offset 0 on every partition, 1198 suppressed ledger records). Start the counting
+window on a live session.
 
 ## 3. Verify connectivity (record the outputs)
 

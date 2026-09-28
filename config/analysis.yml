@@ -8,15 +8,16 @@
 # question for the owner) — analysis.yml is the closest fit since these
 # are all analysis *inputs*, not execution or delivery concerns.
 analysis:
-  # S14G: go. Turns on the Go->policy path only. It grants NO authority: every scope
-  # stays Python-owned in the fence until an operator-approved, fenced transfer
-  # (`analysis_authority accept` + `grant`, docs/analysis/s14g-scoped-cutover.md).
-  # A Go creation for a Python-owned scope is recorded and refused by the policy.
-  # Roll back with `analysis_authority rollback`, then set this pair back to
-  # go_shadow / true (or python / false).
+  # NOT the switch for the Python bot. This V3 file is read by the Go engine and the C# executor;
+  # the Python bot reads the ansible-rendered trading-bot.yml (`analysis.technical_authority`, see
+  # config/trading-bot.yml) and only that file turns go_shadow / go / the consumer on.
+  # Kept at python / false so it never claims an activation that has not happened: on 2026-09-26
+  # `go` was merged here while production kept running python and never started the consumer.
+  # Activation order: go_shadow first (dry run only), `go` only after the S14F acceptance report
+  # is reviewed, and even then no scope moves without an operator-approved fenced grant.
   technical_authority:
-    mode: go
-    consumer_enabled: true
+    mode: python
+    consumer_enabled: false
     consumer_group: apexvoid-algo-bot-analysis-opportunity-v1
     # S14B live-freshness limits. A NEW live plan needs a confirmed observation
     # no older than max_event_age_seconds and a Kafka publish->consume gap no

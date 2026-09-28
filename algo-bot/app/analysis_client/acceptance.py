@@ -190,6 +190,28 @@ def gate_risk(operator_supplied: dict[str, Any] | None) -> Gate:
               "operator-supplied live risk review", review)
 
 
+CONSUMER_HEALTH_KEY = "auto_trade:component_health:analysis_opportunity_consumer"
+
+
+def gate_consumer_running(mode: str, consumer_enabled: bool, health: dict[str, Any] | None, *, health_readable: bool) -> Gate:
+  """The window can only be evidence if the process under test actually runs the Go consumer.
+
+  Production finding (2026-09-26): config/analysis.yml said go / true, but the bot reads the
+  ansible-rendered trading-bot.yml, so it ran mode=python with the consumer never started and no
+  Kafka group existed. Every other gate was then vacuously `not_measured`; this one names the cause.
+  """
+  name = "go_consumer_is_running_in_the_process_under_test"
+  ev: dict[str, Any] = {"mode": mode, "consumer_enabled": consumer_enabled, "consumer_health": health}
+  if mode == "python" or not consumer_enabled:
+    return Gate(name, FAIL, f"this process runs mode={mode} consumer_enabled={consumer_enabled}: it observes no Go events. The bot reads the "
+                "ansible-rendered trading-bot.yml (analysis.technical_authority), not config/analysis.yml", ev)
+  if not health_readable:
+    return Gate(name, NOT_MEASURED, "Redis was unreadable, so the consumer's health key could not be checked", ev)
+  if not health or health.get("state") != "ready":
+    return Gate(name, FAIL, "the consumer is enabled but never reported ready (no health key): it did not start or cannot reach Kafka", ev)
+  return Gate(name, PASS, "the consumer reported ready", ev)
+
+
 def gate_kafka(ledger: dict[str, Any] | None, kafka: dict[str, Any] | None, *, max_lag: int) -> Gate:
   name = "kafka_delivery_lag_restart_outage_within_limits"
   lags = ledger["delivery_lag_seconds"] if ledger else []
