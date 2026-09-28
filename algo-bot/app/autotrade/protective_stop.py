@@ -1169,6 +1169,90 @@ def plan_group_protective_stop(
   )
 
 
+def plan_go_invalidation_stop(
+  *,
+  direction: str,
+  entry_zone_low: Any,
+  entry_zone_high: Any,
+  planned_leg_prices: Any,
+  resolved_leg_volumes: Any,
+  invalidation_price: Any,
+  minimum_stop_pips: int,
+  maximum_stop_pips: int,
+  pip_size: Any,
+  digits: int,
+) -> FinalProtectiveStopPlan:
+  """Use the Go engine's invalidation without Python technical rewriting.
+
+  Go has already computed the complete technical invalidation.  This helper
+  only validates broker-safe geometry and the configured maximum risk
+  envelope; it deliberately does not add ATR/wick buffers, push through a
+  Python opposing zone, or expand the stop to Python's minimum floor.
+  """
+  side = str(direction).upper()
+  zone_low = decimal_value(entry_zone_low, "entry_zone_low")
+  zone_high = decimal_value(entry_zone_high, "entry_zone_high")
+  stop = decimal_value(invalidation_price, "go_invalidation_price")
+  prices = [
+    decimal_value(price, "planned_leg_price") for price in planned_leg_prices
+  ]
+  pip = decimal_value(pip_size, "pip_size")
+  if (
+    side not in {"BUY", "SELL"}
+    or zone_low <= 0
+    or zone_high <= zone_low
+    or stop <= 0
+    or not prices
+    or any(price <= 0 for price in prices)
+    or pip <= 0
+    or digits < 0
+    or maximum_stop_pips < minimum_stop_pips
+  ):
+    raise ProtectiveStopError("Go invalidation inputs are invalid")
+  if side == "BUY":
+    if stop >= zone_low or any(stop >= price for price in prices):
+      raise ProtectiveStopError("go_invalidation_not_beyond_buy_entries")
+    distances = [(price - stop) / pip for price in prices]
+  else:
+    if stop <= zone_high or any(stop <= price for price in prices):
+      raise ProtectiveStopError("go_invalidation_not_beyond_sell_entries")
+    distances = [(stop - price) / pip for price in prices]
+  widest = max(distances)
+  if widest > Decimal(str(maximum_stop_pips)) + Decimal("0.000001"):
+    raise ProtectiveStopError(
+      "stop_exceeds_go_invalidation_envelope",
+      measured={
+        "stop_reject_detail": "go_invalidation_over_max",
+        "stop_max_envelope_pips": int(maximum_stop_pips),
+        "furthest_leg_stop_pips": format(widest, "f"),
+        "planned_leg_prices": [format(price, "f") for price in prices],
+        "go_invalidation_price": format(stop, "f"),
+      },
+    )
+  tick = Decimal(1).scaleb(-digits)
+  stop = stop.quantize(tick, rounding=ROUND_HALF_UP)
+  reference = volume_weighted_reference_entry(prices, resolved_leg_volumes)
+  final_pips = max(
+    (price - stop if side == "BUY" else stop - price) / pip
+    for price in prices
+  )
+  return FinalProtectiveStopPlan(
+    entry_price=reference,
+    base_stop_price=stop,
+    base_stop_pips=final_pips,
+    final_stop_price=stop,
+    final_stop_distance=final_pips * pip,
+    final_stop_pips=final_pips,
+    raw_stop_price=stop,
+    clamped=False,
+    source="go_invalidation",
+    adjustment="none",
+    adjustment_zone_id=None,
+    adjustment_zone_low=None,
+    adjustment_zone_high=None,
+  )
+
+
 def stop_bounds_for_strategy(
   *,
   strategy: str,
