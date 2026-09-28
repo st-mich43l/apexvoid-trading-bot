@@ -148,6 +148,7 @@
         "version": "v2"
       },
       "key_level": {
+        "breakout_accept_bars": 2,
         "enabled": true,
         "expiry_hours": 24.0,
         "invalidation_buffer_atr": 0.5,

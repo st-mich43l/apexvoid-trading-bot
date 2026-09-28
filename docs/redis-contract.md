@@ -304,3 +304,50 @@ The scalar plan state is the cross-language lifecycle projection:
 adds executor timestamp, stream ID, executor label, and optional reason code.
 C# recovery payloads use their own key so they do not extend Python's plan
 payload TTL. Recovery/runtime keys are removed when execution becomes terminal.
+
+## Analysis Zone Book (2026-09)
+
+```text
+analysis:zone_book:{SYMBOL}   Go's live per-symbol zone snapshot, 20m TTL
+```
+
+Written by the Go analysis engine (`analysis-engine/internal/transport/redis/zonebook.go`)
+after every accepted closed-bar dispatch that produces a snapshot
+(`cmd/analysis-engine/main.go`), from that symbol's own already-computed
+`map[market.Timeframe]zone.ZoneState` - no separate detector, no extra
+Redis read. Reused, not opened separately: the existing `redistransport.Runtime`
+connection used for bar ingestion.
+
+```json
+{
+  "symbol": "XAU",
+  "generated_at": 1700000100,
+  "entries": [
+    {"timeframe": "M15", "kind": "supply", "low": 2020.0, "high": 2025.0,
+     "strength": 0.8, "touch_count": 2, "state": "fresh"}
+  ]
+}
+```
+
+`kind` is `supply` or `demand` (other zone kinds are never written). `state`
+is the zone's full lifecycle label (`fresh`, `touched`,
+`partially_mitigated`, `mitigated`, `invalidated`) - the publisher writes
+every zone unfiltered; deciding what still counts as a live barrier is the
+reader's job, not the publisher's, so a schema change to what "live" means
+never requires a Go redeploy. Every tracked timeframe's zones are flattened
+into one `entries` list.
+
+Consumer: `algo-bot/app/autotrade/go_zone_book.py`. The worker's
+execution-time opposing-barrier/target-room recheck
+(`structural_target_room.py`) prefers this key over its own OHLC recompute
+specifically for a Go-origin `StrategyMatch` (`GO_ORIGIN_TAG in match.tags`);
+a Python-origin match never reads it. The reader keeps only `fresh`,
+`touched`, and `partially_mitigated` states as live barriers
+(`_LIVE_STATES` in `go_zone_book.py`, mirroring the same "not
+Invalidated/Mitigated" rule Key Level's own `internal/strategy/keylevel/opposing.go`
+applies on the Go side, so a Go-origin match's opposing check and Key
+Level's own detection-time opposing check never disagree about what counts
+as live). A missing or unparseable key is reported as unavailable (`None`),
+distinct from "Go published that there is genuinely nothing opposing" (an
+empty tuple) - the worker falls back to its own Python recompute only in
+the first case, never in the second.

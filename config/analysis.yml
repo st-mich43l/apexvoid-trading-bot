@@ -100,6 +100,12 @@ analysis:
       invalidation_buffer_atr: 0.5
       minimum_target_distance_atr: 1.0
       expiry_hours: 24.0
+      # Ported from the legacy Python detector's key_level_role.py::
+      # classify_key_level_role (breakout_accept_bars) — consecutive
+      # closed bars that must accept beyond a level's band before its
+      # role is reported BROKEN rather than plain support/resistance.
+      # Legacy default (TREND_BREAKOUT_ACCEPT_BARS): 2.
+      breakout_accept_bars: 2
     confluence_zone:
       version: v2
       enabled: true
