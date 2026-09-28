@@ -89,6 +89,7 @@ public sealed class ResolvedRuntimeManifestTests : IDisposable
     BarsChannel: manifest.Feed.BarsChannel,
     BarQualityLookback: manifest.Feed.BarQualityLookback,
     HeartbeatFile: "/tmp/ctrader-feed-heartbeat",
+    AutoTradeHeartbeatFile: "/tmp/ctrader-autotrade-heartbeat",
     RefreshTokenKey: "ctrader:refresh_token",
     RefreshTokenFile: "/tmp/ctrader-token.json",
     RequestTimeout: TimeSpan.FromSeconds(30),

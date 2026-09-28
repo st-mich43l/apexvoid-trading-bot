@@ -413,6 +413,7 @@ public sealed class ReconnectTests
       BarsChannel: "bars:new",
       BarQualityLookback: 6,
       HeartbeatFile: heartbeatPath,
+      AutoTradeHeartbeatFile: "/tmp/ctrader-autotrade-unused.heartbeat",
       RefreshTokenKey: "ctrader:refresh_token",
       RefreshTokenFile: "/tmp/ctrader-token.json",
       RequestTimeout: TimeSpan.FromSeconds(1),

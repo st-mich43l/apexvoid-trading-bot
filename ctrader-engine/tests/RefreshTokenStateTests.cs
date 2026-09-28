@@ -195,6 +195,7 @@ public sealed class RefreshTokenStateTests
       BarsChannel: "bars:new",
       BarQualityLookback: 6,
       HeartbeatFile: "/tmp/ctrader-feed.heartbeat",
+      AutoTradeHeartbeatFile: "/tmp/ctrader-autotrade.heartbeat",
       RefreshTokenKey: "ctrader:refresh_token",
       RefreshTokenFile: "/tmp/ctrader-token.json",
       RequestTimeout: TimeSpan.FromSeconds(1),

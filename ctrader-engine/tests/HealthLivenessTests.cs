@@ -45,6 +45,33 @@ public sealed class HealthLivenessTests
     Assert.Equal(1, HealthFile.Check(temp.Path, TimeSpan.FromMinutes(10)));
   }
 
+  [Fact]
+  public void CheckIfPresentIsHealthyWhenTheFileNeverExisted()
+  {
+    var path = Path.Combine(Path.GetTempPath(), $"ctrader-autotrade-{Guid.NewGuid():N}.heartbeat");
+    Assert.False(File.Exists(path));
+
+    Assert.Equal(0, HealthFile.CheckIfPresent(path, TimeSpan.FromMinutes(2)));
+  }
+
+  [Fact]
+  public void CheckIfPresentIsHealthyWhenFresh()
+  {
+    using var temp = new TempHeartbeat();
+    new HealthFile(temp.Path).Touch();
+
+    Assert.Equal(0, HealthFile.CheckIfPresent(temp.Path, TimeSpan.FromMinutes(2)));
+  }
+
+  [Fact]
+  public void CheckIfPresentIsUnhealthyWhenStale()
+  {
+    using var temp = new TempHeartbeat();
+    TouchStale(temp.Path, DateTime.UtcNow.AddMinutes(-20));
+
+    Assert.Equal(1, HealthFile.CheckIfPresent(temp.Path, TimeSpan.FromMinutes(2)));
+  }
+
   private static FeedRunner Runner(string heartbeatPath, FakeCTraderClient client) =>
     new(
       Options(heartbeatPath),
@@ -72,6 +99,7 @@ public sealed class HealthLivenessTests
       BarsChannel: "bars:new",
       BarQualityLookback: 6,
       HeartbeatFile: heartbeatPath,
+      AutoTradeHeartbeatFile: "/tmp/ctrader-autotrade-unused.heartbeat",
       RefreshTokenKey: "ctrader:refresh_token",
       RefreshTokenFile: "/tmp/ctrader-token.json",
       RequestTimeout: TimeSpan.FromSeconds(1),
