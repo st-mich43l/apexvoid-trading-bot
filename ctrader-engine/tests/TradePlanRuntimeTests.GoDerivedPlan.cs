@@ -143,7 +143,7 @@ public sealed partial class TradePlanRuntimeTests
     var positionId = Assert.Single(Assert.Single(runtime.TrackedStates).Legs!).BrokerPositionId!.Value;
 
     client.PositionCloseReasonToReturn = PositionCloseReason.StopLossOrTakeProfit;
-    client.PositionCloseExecutionPriceToReturn = 4359.83m;           // the plan's own stop
+    client.PositionCloseExecutionPriceToReturn = 4358.75m;           // the plan's own Go invalidation
     client.RemovePosition(positionId);                               // the broker closed it
     clock.Advance();
     await runtime.PollAsync(client, Symbol, new SpotPrice("XAU", 4359.90m, 4360.10m, 2), CancellationToken.None);

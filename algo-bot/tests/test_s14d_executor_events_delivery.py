@@ -67,7 +67,7 @@ async def test_events_reach_the_journal_with_a_trace_back_to_the_kafka_opportuni
   result = await sql.row("SELECT * FROM auto_trade_results WHERE group_id = $1", PLAN_ID)
   assert (result["setup_type"], result["direction"], result["trade_stream"], result["symbol"]) == ("Supply Demand", "SELL", "algo_auto", "XAU")
   assert result["result_pips"] == pytest.approx(86.0) and result["booked_tp_count"] == 1 and result["exit_path"] == "tp1_stop"
-  assert result["stop_pips"] == pytest.approx(57.3, abs=0.05)                        # |4354.10 - 4359.83| in XAU pips
+  assert result["stop_pips"] == pytest.approx(46.5, abs=0.05)                        # |4354.10 - 4358.75| in XAU pips
   # provenance: the journal's group id IS the plan id, which embeds the match id, which embeds the Kafka opportunity id
   traced = await sql.val(
     "SELECT o.opportunity_id FROM auto_trade_results r JOIN analysis_opportunities o ON r.group_id = 'v8:go_' || o.opportunity_id WHERE r.group_id = $1",

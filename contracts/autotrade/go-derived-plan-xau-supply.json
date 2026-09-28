@@ -165,9 +165,9 @@
     "timeframe": "M5"
   },
   "stop": {
-    "price": "4359.83",
+    "price": "4358.75",
     "reason": "execution confirmation=go_analysis_engine; app.autotrade.execution_policy.evaluate_execution_policy -> app.autotrade.protective_stop.plan_protective_stop",
-    "source": "structure",
+    "source": "go_invalidation",
     "structure_id": "zone-golden-supply",
     "type": "absolute"
   },

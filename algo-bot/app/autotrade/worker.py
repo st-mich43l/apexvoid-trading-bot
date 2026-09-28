@@ -23,6 +23,7 @@ from app.persistence import redis_state
 from app.analysis_client.authority import GO_ORIGIN_TAG, AuthorityDecision, authorize_legacy_match
 from app.analysis_client.shadow_overlay import is_shadow_overlay
 from app.autotrade.go_plan_cancel import read_plan_cancel, register_go_plan
+from app.autotrade.go_zone_book import opposing_entries_for_go_match
 from app.autotrade import units
 from app.core import instrument_geometry
 from app.autotrade.range_targets import configured_range_targets
@@ -91,7 +92,6 @@ from app.autotrade.structural_barriers import (
   to_opposing_entries,
 )
 from app.autotrade.structural_target_room import (
-  StructuralTargetRoomDecision,
   ZoneOpposingEntry,
   evaluate_structural_target_room,
   filter_displaced_opposing_entries,
@@ -5818,8 +5818,15 @@ async def _publish_trade_plan_v8(
   structural_barrier_book_enabled = bool(
     runtime_config.actionability.target_room.structural_barrier_book_enabled
   )
-  if go_origin or match_bypasses_opposing_structure(execution_match):
-    room_entries: tuple[Any, ...] = ()
+  if go_origin:
+    # Go owns technical structure for Go-origin opportunities.  Read only
+    # the analysis-engine zone book here; never reconstruct a competing
+    # Python zone book when Go has not published one.
+    room_entries = await opposing_entries_for_go_match(
+      client, symbol, python_fallback=(),
+    )
+  elif match_bypasses_opposing_structure(execution_match):
+    room_entries = ()
   else:
     room_entries = ()
     if structural_barrier_book_enabled and frames:
@@ -5923,17 +5930,6 @@ async def _publish_trade_plan_v8(
       execution_match.strategy,
     ),
   )
-  if go_origin:
-    # Go already owns the technical entry, invalidation and target geometry.
-    # Python must not turn its own Market Map into a second technical veto or
-    # silently fit the Go ladder to a Python opposing wall.
-    target_room = StructuralTargetRoomDecision(
-      allowed=True,
-      reason_code="go_authoritative_geometry",
-      message="Go analysis owns structural target-room geometry",
-      hard_block=False,
-      measured={"source": "go_analysis_engine", "python_override": False},
-    )
   if not target_room.allowed:
     # Counter-bias vs HTF intentionally presses into opposing structure.
     # Keep the setup when native usable room still clears the floor —

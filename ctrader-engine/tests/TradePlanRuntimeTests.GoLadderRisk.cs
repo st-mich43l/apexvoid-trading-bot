@@ -15,7 +15,7 @@ public sealed partial class TradePlanRuntimeTests
 {
   private const decimal XauPipSize = 0.1m;
   private const decimal XauPipValuePerLot = 10m;
-  private const decimal GoStop = 4359.83m;
+  private const decimal GoStop = 4358.75m;
   private static readonly SpotPrice LadderQuote = new("XAU", 4354.10m, 4354.30m, 1);
 
   private static string GoLadderPlanJson(bool riskLegDisabled, decimal maxGroupRiskPercent = 2.0m, string entryType = "market_with_limit_scale")
