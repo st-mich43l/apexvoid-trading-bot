@@ -4835,6 +4835,7 @@ async def _publish_trade_plan_v8(
       direction=match.direction,
       tags=match.tags,
       consumer_enabled=runtime_config.analysis.technical_authority.consumer_enabled,
+      go_authority_mode=runtime_config.analysis.technical_authority.mode == "go",
     )
   if not authority.allowed:
     await record_route_outcome(

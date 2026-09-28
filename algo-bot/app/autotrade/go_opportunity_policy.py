@@ -11,9 +11,9 @@ Hard rules encoded here:
 
 * **Reviewed scopes only.** ``REVIEWED_SCOPES`` is the allowlist; anything else
   is recorded as a decision and dropped, never guessed at.
-* **Fence first.** No match is written unless the authority fence says Go owns
-  the scope *now*; the match carries the accepted epoch, and the plan-publish
-  guard re-checks it (a rollback between here and publish blocks the plan).
+* **Global Go mode.** When `analysis.technical_authority.mode=go`, an absent
+  scope row defaults to Go. Explicit Python/draining rows remain fenced; the
+  match carries its epoch and the plan-publish guard re-checks it.
 * **Fail closed on missing facts.** No ``technical_context``, no observed
   timeframe, unknown instrument, expired opportunity, non-directional
   geometry, or ``multiple_matches_enabled`` off (which would make the shared
@@ -410,8 +410,10 @@ class GoOpportunityPolicy:
       await self._decide(event, "not_adapted", "scope_not_reviewed")
       return "not_adapted"
     try:
-      decision = await self._fence_instance().authorize_go_publication(payload.symbol, profile.catalog_id)
-    except Exception as exc:  # noqa: BLE001 - fail closed
+      decision = await self._fence_instance().authorize_go_publication(
+        payload.symbol, profile.catalog_id, allow_unconfigured=True,
+      )
+    except Exception as exc:  # noqa: BLE001 - fail closed on dependency outage
       await self._decide(event, "not_adapted", f"authority_unavailable:{type(exc).__name__}")
       return "not_adapted"
     if not decision.allowed:
