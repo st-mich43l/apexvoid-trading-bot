@@ -2006,6 +2006,13 @@ def format_plan_published_root_card(
       f"{direction_icon} <b>{escape(direction)} · "
       f"{escape(setup_label)}</b> · {stars}"
     ),
+    # Owner-reported 2026-09-28: the root card carries no branding of its
+    # own (unlike the reply thread, which gets "ApexVoid Algo" for free
+    # from Telegram's reply-quote preview) - inserted here, after the
+    # fixed 3-line head/status-slot/direction block, so it doesn't shift
+    # the positions apply_forming_card_status/_position_activated_header
+    # parse by fixed index.
+    "🤖 <b>ApexVoid Algo</b>",
     "",
   ]
   card_digits = card_price_digits(symbol)
@@ -2377,6 +2384,7 @@ def format_event_recovery_root_card(event: dict) -> str:
   lines = [head]
   if direction:
     lines.append(f"{icon} <b>{direction} · {strategy}</b>")
+  lines.append("🤖 <b>ApexVoid Algo</b>")
   if message:
     lines.append(f"• {escape(message)}")
   return "\n".join(lines)

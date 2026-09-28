@@ -151,7 +151,11 @@ def test_tp_booked_omits_progress_for_a_single_target_plan():
   assert "(1/1)" not in text
 
 
-def test_tp_compact_line_shows_target_progress():
+def test_tp_compact_line_omits_target_progress():
+  """Owner-reported 2026-09-28: the "(i/n)" suffix from the 2026-09-22 fix
+  doesn't belong here - each TP level already posts its own standalone
+  message in the manage-reply thread, so there's nothing to disambiguate.
+  """
   line = delivery._format_tp_compact_line(
     {
       "price": 4029.98,
@@ -161,7 +165,7 @@ def test_tp_compact_line_shows_target_progress():
     },
     "TP COMPLETED TP1 closed L1 lot=0.02 remaining lot=0.06 (1/2)",
   )
-  assert line == "🎯 TP1 (1/2) +41 pips 💸"
+  assert line == "🎯 TP1 +41 pips 💸"
 
 
 def test_clean_message_formats_tp_leg_and_remaining_as_lot():

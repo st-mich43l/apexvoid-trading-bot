@@ -1654,13 +1654,18 @@ def _format_tp_compact_line(event: dict, message: str) -> str | None:
   Matches Manual Algo's own TP wording (trade_ops.render_result's "tp"
   action: "🎯 TPn +N pips") instead of the three-part
   "🎯 TPn · 💰 Fill: price · ✅ Achieved: +N pips" breakdown this replaced.
+
+  Owner-reported 2026-09-28: the "(i/n)" progress suffix this line briefly
+  carried (added for the 2026-09-22 ambiguous-TP1 case) doesn't belong on a
+  per-level message that's already labeled with its own target - each level
+  posts its own message here, unlike the single-message root card that
+  suffix was meant for.
   """
   target, cleaned = _extract_tp_target(event, message)
   if not target:
     return None
   match = _TP_BOOKED_RE.match(cleaned)
-  progress = _tp_progress_text(event)
-  label = f"🎯 {escape(target)}" + (f" ({escape(progress)})" if progress else "")
+  label = f"🎯 {escape(target)}"
   archived_pips = _event_float(event, "target_pips", "leg_realized_pips")
   if archived_pips is None and match is None:
     tp_match = _TP_RE.match(cleaned)
