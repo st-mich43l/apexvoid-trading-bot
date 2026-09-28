@@ -190,7 +190,7 @@ def gate_risk(operator_supplied: dict[str, Any] | None) -> Gate:
               "operator-supplied live risk review", review)
 
 
-CONSUMER_HEALTH_KEY = "auto_trade:component_health:analysis_opportunity_consumer"
+CONSUMER_HEALTH_KEY = "auto_trade:component_health:analysis_opportunity_consumer_loop"
 
 
 def gate_consumer_running(mode: str, consumer_enabled: bool, health: dict[str, Any] | None, *, health_readable: bool) -> Gate:
