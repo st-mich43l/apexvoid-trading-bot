@@ -14,6 +14,7 @@ public static class TradePlanOwnership
   private const string GoPlanPrefix = "v8:go_opp_";
 
   public sealed record Ownership(string PlanId, string ThesisId, string LegId);
+  public sealed record CompactOwnership(string PlanToken, string LegId);
 
   public static Ownership? TryParseOwnership(
     string? comment,
@@ -29,7 +30,10 @@ public static class TradePlanOwnership
 
   public static bool IsTradePlanOwnershipComment(string? comment) =>
     !string.IsNullOrWhiteSpace(comment)
-    && comment.StartsWith("v8|", StringComparison.Ordinal);
+    && (
+      comment.StartsWith("v8|", StringComparison.Ordinal)
+      || comment.StartsWith("v8c|", StringComparison.Ordinal)
+    );
 
   private static Ownership? TryParseComment(string? comment)
   {
@@ -38,6 +42,15 @@ public static class TradePlanOwnership
       return null;
     }
     var parts = comment.Split('|');
+    if (
+      parts.Length == 3
+      && parts[0] == "v8c"
+      && TryNormalizeLegId(parts[2]) is { } compactLeg
+      && TryDecodeGoPlanToken(parts[1]) is { } compactPlanId
+    )
+    {
+      return new Ownership(compactPlanId, "", compactLeg);
+    }
     if (parts.Length < 3 || parts[0] != "v8")
     {
       return null;
@@ -58,6 +71,21 @@ public static class TradePlanOwnership
       return new Ownership(planId, thesisId, legId);
     }
     return null;
+  }
+
+  public static CompactOwnership? TryParseCompactComment(string? comment)
+  {
+    if (string.IsNullOrWhiteSpace(comment))
+    {
+      return null;
+    }
+    var parts = comment.Split('|');
+    return parts.Length == 3
+      && parts[0] == "v8c"
+      && !string.IsNullOrWhiteSpace(parts[1])
+      && TryNormalizeLegId(parts[2]) is { } legId
+        ? new CompactOwnership(parts[1], legId)
+        : null;
   }
 
   private static Ownership? TryParseClientOrderId(string? clientOrderId)
@@ -89,18 +117,8 @@ public static class TradePlanOwnership
         && TryNormalizeLegId(clientOrderId[(compactSeparator + 1)..]) is { } compactLeg
       )
       {
-        try
-        {
-          var encoded = clientOrderId[1..compactSeparator]
-            .Replace('-', '+').Replace('_', '/');
-          encoded = encoded.PadRight(encoded.Length + (4 - encoded.Length % 4) % 4, '=');
-          var suffix = Convert.ToHexString(Convert.FromBase64String(encoded)).ToLowerInvariant();
-          return new Ownership(GoPlanPrefix + suffix, "", compactLeg);
-        }
-        catch (FormatException)
-        {
-          return null;
-        }
+        var planId = TryDecodeGoPlanToken(clientOrderId[1..compactSeparator]);
+        return planId is null ? null : new Ownership(planId, "", compactLeg);
       }
     }
     return null;
@@ -149,14 +167,24 @@ public static class TradePlanOwnership
   // prefix prevents the legacy full ownership parser from treating a
   // truncated token as an exact plan ID.
   public static string FormatComment(string planId, string thesisId, string legId) =>
-    $"v8c|{PlanToken(planId)}|{legId}";
+    $"v8c|{TryEncodeGoPlanId(planId) ?? LegacyPlanToken(planId)}|{legId}";
 
   public static string FormatClientOrderId(string planId, string legId) =>
     planId.Length + legId.Length + 1 <= 50
       ? $"{planId}:{legId}"
       : TryEncodeGoPlanId(planId) is { } encoded
         ? $"g{encoded}.{legId}"
-        : $"h{PlanToken(planId)}.{legId}";
+        : $"h{LegacyPlanToken(planId)}.{legId}";
+
+  public static IReadOnlyList<string> PlanTokens(string planId)
+  {
+    var tokens = new List<string> { LegacyPlanToken(planId) };
+    if (TryEncodeGoPlanId(planId) is { } encoded)
+    {
+      tokens.Add(encoded);
+    }
+    return tokens;
+  }
 
   private static string? TryEncodeGoPlanId(string planId)
   {
@@ -173,7 +201,24 @@ public static class TradePlanOwnership
       .TrimEnd('=').Replace('+', '-').Replace('/', '_');
   }
 
-  private static string PlanToken(string planId) =>
+  private static string? TryDecodeGoPlanToken(string token)
+  {
+    try
+    {
+      var encoded = token.Replace('-', '+').Replace('_', '/');
+      encoded = encoded.PadRight(encoded.Length + (4 - encoded.Length % 4) % 4, '=');
+      var bytes = Convert.FromBase64String(encoded);
+      return bytes.Length == 32
+        ? GoPlanPrefix + Convert.ToHexString(bytes).ToLowerInvariant()
+        : null;
+    }
+    catch (FormatException)
+    {
+      return null;
+    }
+  }
+
+  private static string LegacyPlanToken(string planId) =>
     Convert.ToHexString(
       SHA256.HashData(Encoding.UTF8.GetBytes(planId))
     )[..24].ToLowerInvariant();

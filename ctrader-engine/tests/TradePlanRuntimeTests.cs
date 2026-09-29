@@ -2168,10 +2168,52 @@ public sealed partial class TradePlanRuntimeTests
 
     Assert.True(clientOrderId.Length <= 50);
     Assert.True(comment.Length <= 50);
-    var ownership = TradePlanOwnership.TryParseOwnership(comment, clientOrderId);
+    var ownership = TradePlanOwnership.TryParseOwnership(comment, null);
     Assert.NotNull(ownership);
     Assert.Equal(planId, ownership!.PlanId);
     Assert.Equal("L1", ownership.LegId);
+  }
+
+  [Fact]
+  public async Task LegacyCompactCommentRestoresForgottenPlanFromOwnerIndex()
+  {
+    var planId = "v8:go_opp_" + new string('b', 64);
+    var planJson = PlanJson(planId: planId);
+    var legacyToken = TradePlanOwnership.PlanTokens(planId)[0];
+    var store = new FakeTradePlanStore();
+    await store.SetStringAsync(
+      $"execution:plan_owner:{legacyToken}", planId, CancellationToken.None
+    );
+    await store.SetStringAsync(
+      $"execution:plan:{planId}", planJson, CancellationToken.None
+    );
+    var client = new FakeTradePlanTradingClient();
+    var runtime = new TradePlanRuntime(
+      Options(), store, () => DateTimeOffset.FromUnixTimeSeconds(1_720_000_000), _ => { }
+    );
+    var position = new TradingPosition(
+      41911414,
+      Symbol.SymbolId,
+      TradeDirection.Buy,
+      500,
+      4089.00m,
+      4082.50m,
+      "apexvoid-auto",
+      $"v8c|{legacyToken}|L1",
+      ""
+    );
+
+    var adopted = await runtime.TryAdoptBrokerPositionAsync(
+      client, Symbol, position, CancellationToken.None
+    );
+
+    Assert.True(adopted);
+    var state = Assert.Single(runtime.TrackedStates);
+    Assert.Equal(planId, state.PlanId);
+    Assert.Equal(TradePlanRuntimeStage.FullyOpen, state.Stage);
+    Assert.Equal(41911414, Assert.Single(state.Legs!).BrokerPositionId);
+    Assert.Equal("filled", store.Value($"execution:plan_state:{planId}"));
+    Assert.Contains(store.Events, item => item.Type == "order_filled");
   }
 
   [Fact]
@@ -2242,6 +2284,12 @@ public sealed partial class TradePlanRuntimeTests
     // Owner cancels both legs directly on the broker - not through our own
     // CancelPendingOrderAsync, which is exactly the point: the broker-side
     // state changed out from under us.
+    foreach (var leg in submitted.Legs!)
+    {
+      client.HistoricalOrders.Add(new HistoricalOrderMatch(
+        leg.ClientOrderId, false, null, Symbol.SymbolId, 0
+      ));
+    }
     client.PendingOrders.Clear();
 
     // First poll after the cancel: the gap is only just noticed, not yet
@@ -2288,6 +2336,9 @@ public sealed partial class TradePlanRuntimeTests
     );
     var partial = Assert.Single(runtime.TrackedStates);
     var l2 = Assert.Single(partial.Legs!, leg => leg.LegId == "L2");
+    client.HistoricalOrders.Add(new HistoricalOrderMatch(
+      l2.ClientOrderId, false, null, Symbol.SymbolId, 0
+    ));
     client.PendingOrders.RemoveAll(order => order.OrderId == l2.BrokerOrderId!.Value);
 
     currentTime += 12;
@@ -2304,6 +2355,89 @@ public sealed partial class TradePlanRuntimeTests
     Assert.NotEqual(TradePlanGroupStages.Cancelled, state.GroupStage);
     Assert.Contains(state.Legs!, leg => leg.LegId == "L2"
       && leg.Stage == TradePlanLegStages.Cancelled);
+  }
+
+  [Fact]
+  public async Task PendingFillWithMissingBrokerIdentityIsRecoveredFromOrderHistory()
+  {
+    var store = new FakeTradePlanStore();
+    store.EnqueuePlan(LadderPlanJson);
+    var client = new FakeTradePlanTradingClient();
+    var currentTime = 1_720_000_000L;
+    var runtime = new TradePlanRuntime(
+      Options(), store, () => DateTimeOffset.FromUnixTimeSeconds(currentTime), _ => { }
+    );
+
+    await runtime.PollAsync(
+      client, Symbol, new SpotPrice("XAU", 4095.00m, 4095.20m, 1), CancellationToken.None
+    );
+    var submitted = Assert.Single(runtime.TrackedStates);
+    var leg = Assert.Single(submitted.Legs!, item => item.LegId == "L1");
+    client.PendingOrders.RemoveAll(
+      order => order.OrderId == leg.BrokerOrderId
+    );
+    client.SeedPosition(
+      9901,
+      TradeDirection.Buy,
+      leg.IntendedVolume,
+      comment: "",
+      clientOrderId: "",
+      entryPrice: leg.IntendedPrice,
+      stopLoss: 4079.00m
+    );
+    client.HistoricalOrders.Add(new HistoricalOrderMatch(
+      leg.ClientOrderId,
+      true,
+      9901,
+      Symbol.SymbolId,
+      leg.IntendedVolume
+    ));
+
+    currentTime += 1;
+    await runtime.PollAsync(
+      client, Symbol, new SpotPrice("XAU", 4095.00m, 4095.20m, 2), CancellationToken.None
+    );
+    currentTime += 11;
+    await runtime.PollAsync(
+      client, Symbol, new SpotPrice("XAU", 4095.00m, 4095.20m, 3), CancellationToken.None
+    );
+
+    var recovered = Assert.Single(runtime.TrackedStates);
+    Assert.Equal(TradePlanRuntimeStage.PartiallyOpen, recovered.Stage);
+    Assert.Equal(
+      9901,
+      Assert.Single(recovered.Legs!, item => item.LegId == "L1").BrokerPositionId
+    );
+    Assert.Contains(store.Events, item => item.Type == "order_filled");
+    Assert.DoesNotContain(store.Events, item => item.Type == "plan_cancelled");
+  }
+
+  [Fact]
+  public async Task MissingPendingWithoutBrokerHistoryIsNeverGuessedCancelled()
+  {
+    var store = new FakeTradePlanStore();
+    store.EnqueuePlan(LadderPlanJson);
+    var client = new FakeTradePlanTradingClient();
+    var currentTime = 1_720_000_000L;
+    var runtime = new TradePlanRuntime(
+      Options(), store, () => DateTimeOffset.FromUnixTimeSeconds(currentTime), _ => { }
+    );
+    await runtime.PollAsync(
+      client, Symbol, new SpotPrice("XAU", 4095.00m, 4095.20m, 1), CancellationToken.None
+    );
+    client.PendingOrders.Clear();
+
+    currentTime += 60;
+    await runtime.PollAsync(
+      client, Symbol, new SpotPrice("XAU", 4095.00m, 4095.20m, 2), CancellationToken.None
+    );
+    currentTime += 60;
+    await runtime.PollAsync(
+      client, Symbol, new SpotPrice("XAU", 4095.00m, 4095.20m, 3), CancellationToken.None
+    );
+
+    Assert.Single(runtime.TrackedStates);
+    Assert.DoesNotContain(store.Events, item => item.Type == "plan_cancelled");
   }
 
   [Fact]
@@ -4031,6 +4165,8 @@ public sealed partial class TradePlanRuntimeTests
     public decimal? PositionCloseExecutionPriceToReturn { get; set; }
     public decimal? NextMarketFillPrice { get; set; }
     public List<long> PositionCloseReasonLookups { get; } = [];
+    public List<HistoricalOrderMatch> HistoricalOrders { get; } = [];
+    public Dictionary<long, List<ClosingDeal>> ClosingDealsByPosition { get; } = [];
     public int ReconcileAccountCalls { get; private set; }
 
     public void ResetReconcileAccountCalls() => ReconcileAccountCalls = 0;
@@ -4144,6 +4280,25 @@ public sealed partial class TradePlanRuntimeTests
         PositionCloseExecutionPriceToReturn
       ));
     }
+
+    public Task<IReadOnlyList<HistoricalOrderMatch>> FindHistoricalOrdersAsync(
+      long fromTimestampMs,
+      long toTimestampMs,
+      CancellationToken cancellationToken
+    ) => Task.FromResult<IReadOnlyList<HistoricalOrderMatch>>(
+      HistoricalOrders.ToArray()
+    );
+
+    public Task<IReadOnlyList<ClosingDeal>> GetClosingDealsAsync(
+      long positionId,
+      long fromTimestampMs,
+      long toTimestampMs,
+      CancellationToken cancellationToken
+    ) => Task.FromResult<IReadOnlyList<ClosingDeal>>(
+      ClosingDealsByPosition.TryGetValue(positionId, out var deals)
+        ? deals.ToArray()
+        : []
+    );
 
     // The next N PlaceMarketOrderAsync calls fail before anything is accepted
     // (broker outage / rejection): nothing is recorded and no position opens.

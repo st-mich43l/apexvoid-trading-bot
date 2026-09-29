@@ -67,9 +67,18 @@ def h(sql, monkeypatch, real_redis_client):
   return Harness(sql, monkeypatch)
 
 
-def make_event(now, opp="opp_golden_supply_xau", *, observed_ago=60, **payload):
+def make_event(
+  now,
+  opp="opp_golden_supply_xau",
+  *,
+  observed_ago=60,
+  zone_id: str | None = None,
+  **payload,
+):
   """A confirmed supply opportunity observed ``observed_ago`` seconds before ``now``."""
   raw = golden(int(now) + 60 - observed_ago, id=opp, **payload)
+  if zone_id is not None:
+    raw["payload"]["technical_context"]["confirmation"]["zone_id"] = zone_id
   raw["event_id"] = f"evt-{opp}"
   return parse_analysis_event(OpportunityTopic, json.dumps(raw))
 
@@ -309,12 +318,14 @@ async def test_published_go_plan_is_registered_and_its_invalidation_requests_the
 async def test_explicit_withdraw_remains_rerunnable(h, real_redis_client):
   await h.activate()
   now = int(h.clock.now)
-  await deliver(h, make_event(now, "opp-a"))
-  await deliver(h, make_event(now, "opp-b"))
+  await deliver(h, make_event(now, "opp-a", zone_id="zone-a"))
+  await deliver(h, make_event(now, "opp-b", zone_id="zone-b"))
   first = next(m for m in deserialize_matches(await real_redis_client.get(CLIENT_KEY)) if m.match_id == "go_opp-a")
   assert await publish(real_redis_client, first) == "v8:go_opp-a"
 
-  assert await deliver(h, make_event(now, "opp-c", observed_ago=10)) == "match_written"
+  assert await deliver(
+    h, make_event(now, "opp-c", observed_ago=10, zone_id="zone-c")
+  ) == "match_written"
   assert (await decision_rows(h))[-1]["reason"] == "go_live"
   second = next(m for m in deserialize_matches(await real_redis_client.get(CLIENT_KEY)) if m.match_id == "go_opp-b")
   assert await publish(real_redis_client, second) == "v8:go_opp-b"

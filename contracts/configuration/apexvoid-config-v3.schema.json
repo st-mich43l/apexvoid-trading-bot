@@ -67,11 +67,15 @@
                 },
                 "ctrader-engine": {
                   "type": "string"
+                },
+                "analysis-engine": {
+                  "type": "string"
                 }
               },
               "required": [
                 "algo-bot",
-                "ctrader-engine"
+                "ctrader-engine",
+                "analysis-engine"
               ]
             }
           },

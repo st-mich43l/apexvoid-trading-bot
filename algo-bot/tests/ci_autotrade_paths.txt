@@ -28,6 +28,8 @@ tests/test_execution_confirmation.py
 tests/test_auto_trade_stats_ingestion.py
 tests/test_repair_manual_algo_results.py
 tests/test_protective_stop.py
+tests/test_xau_risk_targeted_entry.py
+tests/test_config_v3_cross_language_fixture.py
 tests/test_legs_achieved_pips.py
 tests/test_telegram_single_root_card.py
 tests/test_worker_terminal_card_cleanup.py

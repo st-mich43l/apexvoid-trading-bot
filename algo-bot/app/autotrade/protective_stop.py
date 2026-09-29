@@ -1181,13 +1181,17 @@ def plan_go_invalidation_stop(
   maximum_stop_pips: int,
   pip_size: Any,
   digits: int,
+  enforce_minimum_stop: bool = False,
 ) -> FinalProtectiveStopPlan:
   """Use the Go engine's invalidation without Python technical rewriting.
 
   Go has already computed the complete technical invalidation.  This helper
-  only validates broker-safe geometry and the configured maximum risk
-  envelope; it deliberately does not add ATR/wick buffers, push through a
-  Python opposing zone, or expand the stop to Python's minimum floor.
+  only validates broker-safe geometry and the configured risk envelope; it
+  deliberately does not add ATR/wick buffers, push through a Python opposing
+  zone, or expand the stop to Python's minimum floor.  When the instrument
+  policy enables the minimum guard, an invalidation that is too close is
+  rejected rather than rewritten: Go remains the technical owner, while
+  execution policy refuses broker-noise-sized risk.
   """
   side = str(direction).upper()
   zone_low = decimal_value(entry_zone_low, "entry_zone_low")
@@ -1218,6 +1222,20 @@ def plan_go_invalidation_stop(
       raise ProtectiveStopError("go_invalidation_not_beyond_sell_entries")
     distances = [(stop - price) / pip for price in prices]
   widest = max(distances)
+  if (
+    enforce_minimum_stop
+    and widest + Decimal("0.000001") < Decimal(str(minimum_stop_pips))
+  ):
+    raise ProtectiveStopError(
+      "stop_below_go_invalidation_envelope",
+      measured={
+        "stop_reject_detail": "go_invalidation_under_min",
+        "stop_min_envelope_pips": int(minimum_stop_pips),
+        "furthest_leg_stop_pips": format(widest, "f"),
+        "planned_leg_prices": [format(price, "f") for price in prices],
+        "go_invalidation_price": format(stop, "f"),
+      },
+    )
   if widest > Decimal(str(maximum_stop_pips)) + Decimal("0.000001"):
     raise ProtectiveStopError(
       "stop_exceeds_go_invalidation_envelope",
