@@ -205,6 +205,12 @@ class StrategyMatch:
   # the actual per-instance signal arbitration ranking should prefer.
   quality_overall: float | None = None
   quality_components: dict[str, float] | None = None
+  # Go's cross-strategy arbitration decision (Phase 2, analysis.
+  # opportunity.arbitration.v1) — additive/optional: absent until Go
+  # publishes a decision for this match_id. See go_opportunity_policy.
+  # on_arbitration_decision for how this is kept current.
+  arbitration_status: str | None = None
+  arbitration_reason_code: str | None = None
 
   @property
   def is_range_edge(self) -> bool:
@@ -702,6 +708,14 @@ class StrategyMatch:
           {str(k): float(v) for k, v in payload["quality_components"].items()}
           if isinstance(payload.get("quality_components"), dict) else None
         ),
+        arbitration_status=(
+          None if payload.get("arbitration_status") is None
+          else str(payload["arbitration_status"])
+        ),
+        arbitration_reason_code=(
+          None if payload.get("arbitration_reason_code") is None
+          else str(payload["arbitration_reason_code"])
+        ),
       )
     except (KeyError, TypeError, ValueError, json.JSONDecodeError):
       return None
@@ -857,6 +871,10 @@ def _valid_match(match: StrategyMatch) -> bool:
         math.isfinite(match.quality_overall)
         and 0.0 <= match.quality_overall <= 1.0
       )
+    )
+    and (
+      match.arbitration_status is None
+      or match.arbitration_status in {"winner", "suppressed", "conflict_held", "uncontested"}
     )
     and valid_range
     and identity_ok

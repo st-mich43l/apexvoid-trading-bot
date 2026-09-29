@@ -27,29 +27,29 @@ type OpportunityPayload struct {
 // so it never recomputes ATR/structure from raw OHLC. No quote, spread, account
 // or confluence-score fields belong here.
 type TechnicalContextPayload struct {
-	ATR            float64      `json:"atr"`
-	ReferencePrice float64      `json:"reference_price"`
-	ReferenceTime  int64        `json:"reference_time"`
-	Bias           *BiasPayload `json:"bias,omitempty"`
+	ATR              float64                      `json:"atr"`
+	ReferencePrice   float64                      `json:"reference_price"`
+	ReferenceTime    int64                        `json:"reference_time"`
+	Bias             *BiasPayload                 `json:"bias,omitempty"`
 	HigherTimeframes []HigherTimeframeBiasPayload `json:"higher_timeframes,omitempty"`
-	Confirmation *ReactionConfirmationPayload `json:"confirmation,omitempty"`
+	Confirmation     *ReactionConfirmationPayload `json:"confirmation,omitempty"`
 }
 
 // ReactionConfirmationPayload describes a confirmed, separate zone-reaction
 // opportunity. Its fields are never synthesized from the primary bias.
 type ReactionConfirmationPayload struct {
-	ZoneID string `json:"zone_id"`
-	TouchBarTime int64 `json:"touch_bar_time"`
-	ConfirmationBarTime int64 `json:"confirmation_bar_time"`
-	ReactionType string `json:"reaction_type"`
+	ZoneID              string `json:"zone_id"`
+	TouchBarTime        int64  `json:"touch_bar_time"`
+	ConfirmationBarTime int64  `json:"confirmation_bar_time"`
+	ReactionType        string `json:"reaction_type"`
 }
 
 // HigherTimeframeBiasPayload is one fresh, causally closed H1/H4 structure.
 type HigherTimeframeBiasPayload struct {
-	Timeframe string `json:"timeframe"`
-	Direction string `json:"direction"`
-	Layer string `json:"layer"`
-	ReferenceTime int64 `json:"reference_time"`
+	Timeframe     string `json:"timeframe"`
+	Direction     string `json:"direction"`
+	Layer         string `json:"layer"`
+	ReferenceTime int64  `json:"reference_time"`
 }
 
 // BiasPayload is the engine's confirmed structural bias; absent means none.
@@ -96,4 +96,19 @@ type OpportunityInvalidatedPayload struct {
 	Strategy      string `json:"strategy"`
 	ReasonCode    string `json:"reason_code"`
 	InvalidatedAt int64  `json:"invalidated_at"`
+}
+
+// ArbitrationDecisionPayload mirrors
+// contracts/analysis/opportunity-arbitration-v1.schema.json. Republished
+// whenever internal/arbitration.Decision changes for an opportunity_id —
+// a time-varying relationship between live candidates, deliberately kept
+// off the Created-event-happens-once analysis.opportunity.v1 envelope
+// (see internal/engine's arbitration-publish wiring for why).
+type ArbitrationDecisionPayload struct {
+	OpportunityID   string   `json:"opportunity_id"`
+	Symbol          string   `json:"symbol"`
+	Status          string   `json:"status"`
+	ReasonCode      string   `json:"reason_code"`
+	ConflictingWith []string `json:"conflicting_with,omitempty"`
+	DecidedAt       int64    `json:"decided_at"`
 }

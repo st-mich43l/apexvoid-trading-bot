@@ -22,9 +22,11 @@ type fakeKafkaClient struct {
 
 	failNextOpportunity int // PublishOpportunity fails this many more times before succeeding
 	failNextInvalidated int
+	failNextArbitration int
 	opportunities       []opportunity.Candidate
 	invalidations       []kafka.OpportunityInvalidatedPayload
-	calls               []string // "created" / "invalidated", in call order
+	arbitrations        []kafka.ArbitrationDecisionPayload
+	calls               []string // "created" / "invalidated" / "arbitration", in call order
 	eventIDs            []string
 }
 
@@ -54,12 +56,31 @@ func (f *fakeKafkaClient) PublishOpportunityInvalidated(_ context.Context, event
 	return nil
 }
 
+func (f *fakeKafkaClient) PublishArbitrationDecision(_ context.Context, eventID, _, _ string, _ market.Symbol, payload kafka.ArbitrationDecisionPayload, _ time.Time) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.eventIDs = append(f.eventIDs, eventID)
+	if f.failNextArbitration > 0 {
+		f.failNextArbitration--
+		return context.DeadlineExceeded
+	}
+	f.arbitrations = append(f.arbitrations, payload)
+	f.calls = append(f.calls, "arbitration:"+payload.OpportunityID)
+	return nil
+}
+
 func (f *fakeKafkaClient) snapshot() ([]opportunity.Candidate, []kafka.OpportunityInvalidatedPayload, []string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return append([]opportunity.Candidate(nil), f.opportunities...),
 		append([]kafka.OpportunityInvalidatedPayload(nil), f.invalidations...),
 		append([]string(nil), f.calls...)
+}
+
+func (f *fakeKafkaClient) arbitrationSnapshot() []kafka.ArbitrationDecisionPayload {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]kafka.ArbitrationDecisionPayload(nil), f.arbitrations...)
 }
 
 func (f *fakeKafkaClient) IDs() []string {

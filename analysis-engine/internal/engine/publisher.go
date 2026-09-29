@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/arbitration"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/telemetry"
@@ -46,6 +47,7 @@ const publishRetryBackoff = 2 * time.Second
 type OpportunityKafkaClient interface {
 	PublishOpportunity(ctx context.Context, eventID, correlationID, causationID string, candidate opportunity.Candidate, algo kafka.AlgorithmVersion, occurredAt time.Time) error
 	PublishOpportunityInvalidated(ctx context.Context, eventID, correlationID, causationID string, symbol market.Symbol, payload kafka.OpportunityInvalidatedPayload, occurredAt time.Time) error
+	PublishArbitrationDecision(ctx context.Context, eventID, correlationID, causationID string, symbol market.Symbol, payload kafka.ArbitrationDecisionPayload, occurredAt time.Time) error
 }
 
 // OpportunityPublisher decouples opportunity lifecycle publication from
@@ -177,6 +179,33 @@ func (p *OpportunityPublisher) Observe(symbol market.Symbol, algo kafka.Algorith
 	}
 }
 
+// EnqueueArbitrationDecision records one Phase 2 arbitration.Decision for
+// background publication. Unlike Enqueue/Observe, an arbitration decision
+// carries no creation/terminal ledger bookkeeping: it is a current-status
+// projection, not a once-only lifecycle fact, so republishing it is
+// harmless and this appends directly to the durable queue rather than
+// consulting p.store.ledger.Records. Safe to call on a nil
+// *OpportunityPublisher (Kafka disabled/absent).
+func (p *OpportunityPublisher) EnqueueArbitrationDecision(symbol market.Symbol, opportunityID string, decision arbitration.Decision, decidedAt int64) {
+	if p == nil {
+		return
+	}
+	p.mu.Lock()
+	p.store.ledger.Queue = append(p.store.ledger.Queue, publishJob{
+		EventID: kafka.NewEventID(), Symbol: symbol,
+		Arbitration: &arbitrationJob{OpportunityID: opportunityID, Decision: decision, DecidedAt: decidedAt},
+	})
+	p.telemetry.Count(telemetry.CounterOpportunityPublishEnqueued, string(symbol), "", 1)
+	if err := p.store.save(); err != nil {
+		p.telemetry.Count(telemetry.CounterOpportunityOutboxPersistFailed, string(symbol), "", 1)
+	}
+	p.mu.Unlock()
+	select {
+	case p.notify <- struct{}{}:
+	default:
+	}
+}
+
 // ResumeLive promotes terminal transitions recovered during bootstrap only
 // after a live bar arrives. Bootstrap itself therefore emits zero events.
 func (p *OpportunityPublisher) ResumeLive(symbol market.Symbol) {
@@ -243,11 +272,18 @@ func (p *OpportunityPublisher) Run(ctx context.Context) {
 		if err := p.publishOne(ctx, job); err != nil {
 			p.telemetry.Count(telemetry.CounterOpportunityPublishFailed, string(job.Symbol), "", 1)
 			p.telemetry.Count(telemetry.CounterOpportunityPublishRetried, string(job.Symbol), "", 1)
-			log.Warn("opportunity publish failed, retrying",
-				"symbol", job.Symbol, "strategy", job.Transition.Record.Candidate.Strategy,
-				"opportunity_id", job.Transition.Record.Candidate.ID,
-				"transition", string(job.Transition.Kind), "error", err,
-			)
+			if job.Arbitration != nil {
+				log.Warn("arbitration decision publish failed, retrying",
+					"symbol", job.Symbol, "opportunity_id", job.Arbitration.OpportunityID,
+					"status", job.Arbitration.Decision.Status, "error", err,
+				)
+			} else {
+				log.Warn("opportunity publish failed, retrying",
+					"symbol", job.Symbol, "strategy", job.Transition.Record.Candidate.Strategy,
+					"opportunity_id", job.Transition.Record.Candidate.ID,
+					"transition", string(job.Transition.Kind), "error", err,
+				)
+			}
 			select {
 			case <-ctx.Done():
 				return
@@ -263,11 +299,18 @@ func (p *OpportunityPublisher) Run(ctx context.Context) {
 		// was missing during the 2026-09-29 incident, when diagnosing what
 		// the engine had actually published required reading Algo Bot's
 		// consumer-side logs instead of this service's own.
-		candidate := job.Transition.Record.Candidate
-		log.Info("opportunity published",
-			"symbol", job.Symbol, "strategy", candidate.Strategy, "direction", candidate.Direction,
-			"opportunity_id", candidate.ID, "transition", string(job.Transition.Kind),
-		)
+		if job.Arbitration != nil {
+			log.Info("arbitration decision published",
+				"symbol", job.Symbol, "opportunity_id", job.Arbitration.OpportunityID,
+				"status", job.Arbitration.Decision.Status, "reason_code", job.Arbitration.Decision.ReasonCode,
+			)
+		} else {
+			candidate := job.Transition.Record.Candidate
+			log.Info("opportunity published",
+				"symbol", job.Symbol, "strategy", candidate.Strategy, "direction", candidate.Direction,
+				"opportunity_id", candidate.ID, "transition", string(job.Transition.Kind),
+			)
+		}
 		p.ackFront(job)
 	}
 }
@@ -298,16 +341,20 @@ func (p *OpportunityPublisher) ackFront(job publishJob) {
 	if len(p.store.ledger.Queue) == 0 {
 		return
 	}
-	id := job.Transition.Record.Candidate.ID
-	record := p.store.ledger.Records[id]
-	if job.Transition.Kind == opportunity.TransitionCreated {
-		record.Creation = publicationPublished
-		p.store.ledger.Records[id] = record
-	} else {
-		// Acknowledged terminal records no longer carry ordering state. Remove
-		// them so the durable ledger is bounded by live opportunities and
-		// pending jobs rather than by all historical opportunities forever.
-		delete(p.store.ledger.Records, id)
+	// Arbitration jobs carry no creation/terminal ledger record to update —
+	// see EnqueueArbitrationDecision's own doc comment.
+	if job.Arbitration == nil {
+		id := job.Transition.Record.Candidate.ID
+		record := p.store.ledger.Records[id]
+		if job.Transition.Kind == opportunity.TransitionCreated {
+			record.Creation = publicationPublished
+			p.store.ledger.Records[id] = record
+		} else {
+			// Acknowledged terminal records no longer carry ordering state. Remove
+			// them so the durable ledger is bounded by live opportunities and
+			// pending jobs rather than by all historical opportunities forever.
+			delete(p.store.ledger.Records, id)
+		}
 	}
 	p.store.ledger.Queue[0] = publishJob{}
 	p.store.ledger.Queue = p.store.ledger.Queue[1:]
@@ -322,9 +369,20 @@ func (p *OpportunityPublisher) ackFront(job publishJob) {
 // (§83: no per-reason topic — the machine-readable reason code inside
 // the payload already distinguishes them, ReasonSetupExpired vs. a
 // strategy-owned reason). Every other Kind either never reaches here
-// (ShouldPublish() already filtered at Enqueue) or has nothing to do.
+// (ShouldPublish() already filtered at Enqueue) or has nothing to do. A
+// Phase 2 arbitration job (job.Arbitration set) publishes
+// analysis.opportunity.arbitration.v1 instead, independent of Transition.
 func (p *OpportunityPublisher) publishOne(ctx context.Context, job publishJob) error {
 	correlationID := job.EventID
+	if job.Arbitration != nil {
+		a := job.Arbitration
+		payload := kafka.ArbitrationDecisionPayload{
+			OpportunityID: a.OpportunityID, Symbol: string(job.Symbol),
+			Status: string(a.Decision.Status), ReasonCode: a.Decision.ReasonCode,
+			ConflictingWith: a.Decision.ConflictingWith, DecidedAt: a.DecidedAt,
+		}
+		return p.client.PublishArbitrationDecision(ctx, job.EventID, correlationID, "", job.Symbol, payload, time.Unix(a.DecidedAt, 0))
+	}
 	switch job.Transition.Kind {
 	case opportunity.TransitionCreated:
 		candidate := job.Transition.Record.Candidate

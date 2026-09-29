@@ -80,6 +80,12 @@ class ExecutionIntent:
   # own doc comment). None only for a hypothetical non-Go source; every
   # live source today ("go_analysis_engine") always sets this.
   quality_overall: float | None = None
+  # Go's cross-strategy arbitration decision for this intent's match
+  # (Phase 2, analysis.opportunity.arbitration.v1 — threaded from
+  # StrategyMatch.arbitration_status/arbitration_reason_code). None until
+  # Go publishes a decision for this opportunity.
+  arbitration_status: str | None = None
+  arbitration_reason_code: str | None = None
 
 
 @dataclass(frozen=True)
@@ -185,3 +191,36 @@ def arbitrate_execution_intents(
     suppressed,
     "ranked_single_direction",
   )
+
+
+def select_go_arbitrated_intent(intents: list[ExecutionIntent]) -> ArbitrationResult:
+  """Phase 2: read Go's already-decided winner instead of ranking here.
+
+  ``intents`` must already be admission-filtered — the same staleness/
+  spot/regime gate (``_admit_strategy_intent_for_cycle``) every caller of
+  ``arbitrate_execution_intents`` already ran before arbitration. Each
+  intent's ``arbitration_status`` is threaded from its StrategyMatch (see
+  ``go_opportunity_policy.on_arbitration_decision``) — analysis-engine's
+  own ``internal/arbitration.Arbitrate`` decision for this symbol's live
+  set. This function's job is purely "read the answer, never invent one":
+  it never promotes a lower-ranked or non-winner intent itself when no
+  winner is present or a caller passes stale/mixed data — it returns
+  nothing, and waits for Go's next re-evaluation to publish an updated
+  decision instead.
+  """
+  if not intents:
+    return ArbitrationResult((), (), "no_intent")
+  winners = sorted(
+    (item for item in intents if item.arbitration_status == "winner"),
+    key=lambda item: item.intent_id,
+  )
+  if not winners:
+    return ArbitrationResult((), tuple(intents), "go_arbitration_no_winner")
+  # Go's own per-symbol Arbitrate() yields at most one winner per
+  # direction-conflict-group; more than one here would mean a stale or
+  # mixed read across unrelated theses — the lowest intent_id keeps this
+  # deterministic rather than raising, matching _rank's own tie-break.
+  winner = winners[0]
+  suppressed = tuple(item for item in intents if item.intent_id != winner.intent_id)
+  reason = winner.arbitration_reason_code or "ranked_single_direction"
+  return ArbitrationResult((winner,), suppressed, reason)

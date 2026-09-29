@@ -28,6 +28,9 @@ func TestKafkaConfigFromConfig_UsesOnlyBusinessEventTopics(t *testing.T) {
 	if cfg.Topics.AnalysisOpportunity != "analysis.opportunity.v1" || cfg.Topics.AnalysisOpportunityInvalidated != "analysis.opportunity.invalidated.v1" {
 		t.Fatalf("unexpected analysis topics: %+v", cfg.Topics)
 	}
+	if cfg.Topics.AnalysisOpportunityArbitration != "analysis.opportunity.arbitration.v1" {
+		t.Fatalf("unexpected arbitration topic: %+v", cfg.Topics)
+	}
 	if _, ok := cfg.TopicSpecs["market.bar.closed.v1"]; ok {
 		t.Fatal("market bar Kafka topic must not be active")
 	}
@@ -43,7 +46,10 @@ func TestKafkaConfigFromConfig_UsesOnlyBusinessEventTopics(t *testing.T) {
 
 func validKafkaConfig() kafka.Config {
 	return kafka.Config{Enabled: true, Brokers: []string{"kafka:9092"}, ClientID: "apexvoid-analysis-engine", OutboxPath: "/tmp/apexvoid-test-outbox.json",
-		Topics: kafka.Topics{AnalysisOpportunity: "analysis.opportunity.v1", AnalysisOpportunityInvalidated: "analysis.opportunity.invalidated.v1"}}
+		Topics: kafka.Topics{
+			AnalysisOpportunity: "analysis.opportunity.v1", AnalysisOpportunityInvalidated: "analysis.opportunity.invalidated.v1",
+			AnalysisOpportunityArbitration: "analysis.opportunity.arbitration.v1",
+		}}
 }
 
 func TestKafkaConfigValidationIsProducerOnly(t *testing.T) {
@@ -55,6 +61,8 @@ func TestKafkaConfigValidationIsProducerOnly(t *testing.T) {
 		func(c *kafka.Config) { c.ClientID = "" },
 		func(c *kafka.Config) { c.Topics.AnalysisOpportunity = "" },
 		func(c *kafka.Config) { c.Topics.AnalysisOpportunityInvalidated = c.Topics.AnalysisOpportunity },
+		func(c *kafka.Config) { c.Topics.AnalysisOpportunityArbitration = "" },
+		func(c *kafka.Config) { c.Topics.AnalysisOpportunityArbitration = c.Topics.AnalysisOpportunity },
 	} {
 		cfg := validKafkaConfig()
 		mutate(&cfg)

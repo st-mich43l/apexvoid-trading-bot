@@ -1,0 +1,23 @@
+{
+  "_provenance": "Illustrative example (not a replayed real event): shows the analysis.opportunity.arbitration.v1 shape for the opp_f087bc2... supply candidate in contracts/analysis/examples/go-replayed-supply-unrounded-opportunity.json, held against a same-tier opposite-direction rival within the configured conflict_margin_quality.",
+  "config_fingerprint": "<config-fingerprint>",
+  "config_version": 3,
+  "correlation_id": "arb-opp_f087bc21415787fdb916cda245d8a89e2c846b5fb5cd3c8bb231935cffcc8de7-1789388100",
+  "event_id": "arb-opp_f087bc21415787fdb916cda245d8a89e2c846b5fb5cd3c8bb231935cffcc8de7-1789388100",
+  "event_type": "analysis.opportunity.arbitration.v1",
+  "event_version": 1,
+  "occurred_at": 1789388100,
+  "payload": {
+    "opportunity_id": "opp_f087bc21415787fdb916cda245d8a89e2c846b5fb5cd3c8bb231935cffcc8de7",
+    "symbol": "XAU",
+    "status": "conflict_held",
+    "reason_code": "opposite_direction_conflict",
+    "conflicting_with": [
+      "opp_f087bc21415787fdb916cda245d8a89e2c846b5fb5cd3c8bb231935cffcc8de7",
+      "opp_1a2b3c4d5e6f7890abcdef1234567890abcdef1234567890abcdef1234567890"
+    ],
+    "decided_at": 1789388100
+  },
+  "produced_at": 1789388100,
+  "producer": "apexvoid-analysis-engine"
+}
