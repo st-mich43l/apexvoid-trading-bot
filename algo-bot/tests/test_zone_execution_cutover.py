@@ -480,14 +480,10 @@ async def test_waiting_zone_creates_no_setup_or_ready_event(client, monkeypatch)
 
 
 @pytest.mark.asyncio
-async def test_grade_b_zone_publishes_without_waiting_for_an_m1_trigger(
+async def test_legacy_grade_b_zone_never_publishes_in_live_go_mode(
   client, monkeypatch,
 ):
-  """Shadow/default activation mode preserves legacy zone-touch publish.
-
-  Enforce mode (separate tests) requires a fresh episode-scoped M1 reaction
-  before StrategyMatch persistence / direct publication.
-  """
+  """Retained Python ZoneWatch state cannot publish in live Go mode."""
   from app.analysis import scanner
 
   result = _result(setup="Range Edge Scalp")
@@ -529,12 +525,12 @@ async def test_grade_b_zone_publishes_without_waiting_for_an_m1_trigger(
     require_static_eligibility=True,
   )
 
-  assert published is not None
-  direct_publish.assert_awaited_once()
+  assert published is None
+  direct_publish.assert_not_awaited()
   watched = await zw.load_zone_watch(client, "zone-1")
   assert watched is not None
-  assert watched.state == zw.PUBLISHED_LOCKED
-  assert watched.last_plan_id == "v8:setup-1"
+  assert watched.state != zw.PUBLISHED_LOCKED
+  assert watched.last_plan_id is None
 
 
 @pytest.mark.asyncio
@@ -598,7 +594,7 @@ async def test_enforce_reaction_waits_for_m1_without_persisting(
 
 
 @pytest.mark.asyncio
-async def test_enforce_reaction_activates_with_fresh_m1_once(
+async def test_legacy_enforce_reaction_still_cannot_publish_in_live_go_mode(
   client, monkeypatch,
 ):
   from dataclasses import replace
@@ -677,11 +673,11 @@ async def test_enforce_reaction_activates_with_fresh_m1_once(
     [result],
     require_static_eligibility=True,
   )
-  assert published is not None
-  direct_publish.assert_awaited_once()
+  assert published is None
+  direct_publish.assert_not_awaited()
   watched = await zw.load_zone_watch(client, "zone-1")
   assert watched is not None
-  assert watched.state == zw.PUBLISHED_LOCKED
+  assert watched.state != zw.PUBLISHED_LOCKED
 
 
 @pytest.mark.asyncio
@@ -1363,7 +1359,7 @@ async def test_prepare_activation_preblocks_planned_stop_geometry_error(
 
 
 @pytest.mark.asyncio
-async def test_activate_match_terminalizes_zone_on_v8_stop_invalidate(
+async def test_live_go_rejects_legacy_match_before_stop_terminalization(
   monkeypatch,
 ):
   from dataclasses import replace
@@ -1452,10 +1448,7 @@ async def test_activate_match_terminalizes_zone_on_v8_stop_invalidate(
     event_ts="2026-07-30T06:02:00+00:00",
   )
   assert published is None
-  terminalize.assert_awaited_once()
-  assert terminalize.await_args.kwargs["reason_code"] == (
-    "v8_protective_stop_unavailable"
-  )
+  terminalize.assert_not_awaited()
   presence.assert_not_awaited()
 
 

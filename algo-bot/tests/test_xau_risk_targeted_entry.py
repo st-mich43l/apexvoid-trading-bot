@@ -1,4 +1,4 @@
-"""XAU-only entry-targeted risk band (2026-09-15, owner-reported).
+"""Entry-targeted risk bands for Go-owned XAU and FX zones.
 
 Entry price used to come purely from zone geometry (near edge / midpoint),
 with zero awareness of the risk distance that entry would produce against
@@ -10,6 +10,7 @@ front; the stop envelope (min 50 / max 60) remains the backstop.
 
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -17,6 +18,8 @@ import pytest
 from tests.configuration.canonical_fixtures import execution_cfg
 
 from app.autotrade.execution_policy import evaluate_execution_policy
+from app.configuration.python_loader import load_python_canonical_settings
+from app.configuration.python_sources import load_python_runtime_source_bundle
 from app.autotrade.protective_stop import plan_go_invalidation_stop
 from app.autotrade.execution_route import (
   ROUTE_MARKET_WITH_LIMIT_SCALE,
@@ -27,6 +30,14 @@ from app.autotrade.execution_route import (
 
 
 pytestmark = pytest.mark.no_database
+
+
+def _production_cfg(monkeypatch):
+  config_file = Path(__file__).resolve().parents[2] / "config" / "trading-bot.yml"
+  monkeypatch.setenv("APEXVOID_CONFIG_FILE", str(config_file))
+  return load_python_canonical_settings(
+    load_python_runtime_source_bundle(),
+  ).config
 
 
 def test_risk_targeted_entry_lands_at_exactly_target_pips_when_reachable():
@@ -74,6 +85,23 @@ def test_go_invalidation_is_rejected_when_its_worst_leg_breaks_max_risk():
       maximum_stop_pips=80,
       pip_size=0.1,
       digits=2,
+    )
+
+
+def test_go_invalidation_is_rejected_instead_of_expanded_below_minimum_risk():
+  with pytest.raises(ValueError, match="stop_below_go_invalidation_envelope"):
+    plan_go_invalidation_stop(
+      direction="BUY",
+      entry_zone_low=1.13414,
+      entry_zone_high=1.13425,
+      planned_leg_prices=(1.13425,),
+      resolved_leg_volumes=(1.0,),
+      invalidation_price=1.13398,
+      minimum_stop_pips=12,
+      maximum_stop_pips=20,
+      pip_size=0.0001,
+      digits=5,
+      enforce_minimum_stop=True,
     )
 
 
@@ -281,3 +309,57 @@ def test_xau_evaluate_execution_policy_reverts_when_flag_disabled():
   )
   assert evaluation.allowed
   assert evaluation.measured["planned_entry_price"] == pytest.approx(4095.0)
+
+
+def test_fx_go_policy_targets_entry_to_instrument_stop_floor(monkeypatch):
+  match = _match(
+    symbol="EURUSD",
+    strategy="FVG",
+    direction="BUY",
+    entry_low=1.1340,
+    entry_high=1.1350,
+    current_price=1.1360,
+    atr=0.0010,
+    structure_swing=None,
+    go_invalidation_price=1.1335,
+    targets_pips=(20,),
+    tags=("origin:go",),
+  )
+  evaluation = evaluate_execution_policy(
+    match,
+    spot_price=1.1360,
+    executable_quote=1.1360,
+    regime="range",
+    pip_size=0.0001,
+    cfg=_production_cfg(monkeypatch),
+  )
+  assert evaluation.allowed
+  assert evaluation.measured["planned_entry_price"] == pytest.approx(1.1347)
+  assert evaluation.measured["planned_stop_pips"] == "12.0"
+
+
+def test_fx_go_policy_rejects_live_three_pip_stop_geometry(monkeypatch):
+  match = _match(
+    symbol="EURUSD",
+    strategy="FVG",
+    direction="BUY",
+    entry_low=1.13414,
+    entry_high=1.13425,
+    current_price=1.13469,
+    atr=0.0005,
+    structure_swing=None,
+    go_invalidation_price=1.1339839285714286,
+    targets_pips=(20,),
+    tags=("origin:go",),
+  )
+  evaluation = evaluate_execution_policy(
+    match,
+    spot_price=1.13469,
+    executable_quote=1.13469,
+    regime="range",
+    pip_size=0.0001,
+    cfg=_production_cfg(monkeypatch),
+  )
+  assert not evaluation.allowed
+  assert evaluation.reason_code == "stop_below_go_invalidation_envelope"
+  assert float(evaluation.measured["furthest_leg_stop_pips"]) == pytest.approx(2.66, abs=0.01)

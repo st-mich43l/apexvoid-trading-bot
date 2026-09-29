@@ -270,9 +270,9 @@ instrument_packs:
       mode: single_best
     reaction_session: london_ny
     stop_envelope:
-      min_pips: 10
-      max_pips: 18
-      sl_distance: 0.0018
+      min_pips: 12
+      max_pips: 20
+      sl_distance: 0.0020
     activation:
       # Fresh M1 confirmation remains mandatory; sweep/body is preferred.
       require_sweep_body: false
@@ -523,7 +523,7 @@ instruments:
     # EUR/USD earns its cleanest liquidity at the London and NY opens.
     overrides:
       execution.technique.selective_session_min_confluence: 3
-    # London/NY major: tight spread and 10-18 pip stop. Prefer the pack's 2R
+    # London/NY major: tight spread and 12-20 pip stop. Prefer the pack's 2R
     # ladder, with a 1R full-close fallback when opposing room is constrained.
   GBPUSD:
     pack: fx_usd_major_fixed_2r_v1
@@ -548,17 +548,17 @@ instruments:
       execution.technique.selective_session_min_confluence: 3
     # London/NY major, same active-session profile as EURUSD (unlike
     # London-only GBPJPY or Tokyo/NY USDJPY) - Cable's
-    # wider typical range earns a wider envelope than EURUSD's 10-18,
-    # short of GBPJPY's 15-30. Standard fx_fixed_2r_v1 25/25/50 ladder
+    # wider production M5 volatility earns a 15-25 envelope, above
+    # EURUSD's 12-20 and below GBPJPY's 22-35.
     # (inherited from the pack, not repeated here): no documented
     # fast-move-then-hard-reversal pattern here to justify GBPJPY's
     # frontload, and no defended-level/event-cluster incident on record
     # for this pair yet either; only the execution-session overrides above
     # are needed.
     stop_envelope:
-      min_pips: 12
-      max_pips: 22
-      sl_distance: 0.0022
+      min_pips: 15
+      max_pips: 25
+      sl_distance: 0.0025
     price_scale:
       # Scaled with the zone geometry above, not copied from EURUSD.
       # round_step and market_map.change_min are unchanged from the pack.
@@ -605,9 +605,9 @@ instruments:
     # Sterling's primary session is London; Tokyo/NY are deliberately quiet.
     reaction_session: london
     stop_envelope:
-      min_pips: 15
-      max_pips: 30
-      sl_distance: 0.30
+      min_pips: 22
+      max_pips: 35
+      sl_distance: 0.35
     activation:
       max_spread_pips: 3
     price_scale:
@@ -650,13 +650,14 @@ instruments:
       risk.exposure.defended_level_buffer_price: 0.30
       execution.technique.selective_session_min_confluence: 3
     policy: fx_fixed_2r_v1
-    # Major pair, tight like EURUSD (not a volatile cross like GBPJPY).
+    # JPY quote volatility is materially above EURUSD even though this is a
+    # major; production M5 ATR therefore uses an 18-28 pip envelope.
     # Tokyo (JPY driver) + NY (USD driver); London is intentionally excluded.
     reaction_session: tokyo_ny
     stop_envelope:
-      min_pips: 10
-      max_pips: 18
-      sl_distance: 0.18
+      min_pips: 18
+      max_pips: 28
+      sl_distance: 0.28
     activation:
       max_spread_pips: 1
     price_scale:

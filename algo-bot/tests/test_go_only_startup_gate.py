@@ -81,6 +81,11 @@ def test_manual_only_deployment_is_never_gated(mode, consumer, kafka):
 
 def test_gate_reads_the_real_config_model_paths(monkeypatch):
   install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_enabled": True})
+  require_live_go_consumer(config_module.runtime_config)
+  install_runtime_overrides(
+    monkeypatch,
+    {"analysis.technical_authority.consumer_enabled": False},
+  )
   with pytest.raises(RuntimeError, match="Live Go analysis consumer required"):
     require_live_go_consumer(config_module.runtime_config)
   install_runtime_overrides(monkeypatch, GO)
@@ -113,7 +118,13 @@ def _startup_doubles(monkeypatch) -> dict[str, object]:
 @pytest.mark.parametrize(
   "overrides,message",
   [
-    ({}, "Live Go analysis consumer required"),
+    (
+      {
+        "analysis.technical_authority.mode": "python",
+        "analysis.technical_authority.consumer_enabled": True,
+      },
+      "Live Go analysis consumer required",
+    ),
     (
       {
         "analysis.technical_authority.mode": "go",
@@ -123,7 +134,7 @@ def _startup_doubles(monkeypatch) -> dict[str, object]:
     ),
     ({**GO, "transport.kafka.enabled": False}, "Kafka transport"),
   ],
-  ids=["consumer_disabled", "kafka_disabled"],
+  ids=["python_mode", "consumer_disabled", "kafka_disabled"],
 )
 async def test_main_fails_closed_before_any_side_effect(monkeypatch, overrides, message):
   install_runtime_overrides(

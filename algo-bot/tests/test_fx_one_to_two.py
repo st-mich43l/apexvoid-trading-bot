@@ -403,6 +403,20 @@ def test_fx_reaction_stop_envelopes_diverge_while_gold_uses_structure_band():
     cfg=cfg,
     symbol="GBPJPY",
   )
+  gbpusd_min, gbpusd_max, gbpusd_measured = stop_bounds_for_reaction_room(
+    strategy="Key Level",
+    primary_tp_pips=50,
+    pip_size=0.0001,
+    cfg=cfg,
+    symbol="GBPUSD",
+  )
+  usdjpy_min, usdjpy_max, usdjpy_measured = stop_bounds_for_reaction_room(
+    strategy="Key Level",
+    primary_tp_pips=50,
+    pip_size=0.01,
+    cfg=cfg,
+    symbol="USDJPY",
+  )
   gold_min, gold_max, gold_measured = stop_bounds_for_reaction_room(
     strategy="Key Level",
     primary_tp_pips=90,
@@ -410,9 +424,13 @@ def test_fx_reaction_stop_envelopes_diverge_while_gold_uses_structure_band():
     cfg=cfg,
     symbol="XAU",
   )
-  assert (eurusd_min, eurusd_max) == (10, 18)
+  assert (eurusd_min, eurusd_max) == (12, 20)
   assert eurusd_measured["fixed_rr_targeting"] is True
-  assert (gbpjpy_min, gbpjpy_max) == (15, 30)
+  assert (gbpusd_min, gbpusd_max) == (15, 25)
+  assert gbpusd_measured["fixed_rr_targeting"] is True
+  assert (usdjpy_min, usdjpy_max) == (18, 28)
+  assert usdjpy_measured["fixed_rr_targeting"] is True
+  assert (gbpjpy_min, gbpjpy_max) == (22, 35)
   assert gbpjpy_measured["fixed_rr_targeting"] is True
   assert (gold_min, gold_max) == (50, 60)
   assert gold_measured["fixed_rr_targeting"] is True
@@ -629,7 +647,7 @@ def test_fixed_rr_one_r_fallback_is_symmetric_for_sell():
     regime="trend",
     pip_size=0.01,
     cfg=cfg,
-    available_target_room_pips=20.0,
+    available_target_room_pips=25.0,
   )
   assert evaluation.allowed is True
   assert evaluation.measured["target_room_fallback_used"] is True

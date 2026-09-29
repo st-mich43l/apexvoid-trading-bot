@@ -39,7 +39,7 @@ def _frame() -> pd.DataFrame:
 
 
 @pytest.mark.asyncio
-async def test_idle_m1_skips_pandas_gates_and_writes_thin_last_gate(monkeypatch):
+async def test_go_only_idle_m1_skips_python_frames_and_writes_thin_last_gate(monkeypatch):
   client = redis_state.get_client()
   now = int(datetime.now(timezone.utc).timestamp())
   install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_enabled": True})
@@ -70,8 +70,7 @@ async def test_idle_m1_skips_pandas_gates_and_writes_thin_last_gate(monkeypatch)
   gate.assert_not_called()
   trend_fn.assert_not_called()
   regime_fn.assert_not_called()
-  source.window.assert_awaited_once()
-  assert source.window.await_args.args[1] == "M1"
+  source.window.assert_not_awaited()
   status = json.loads(await client.get("auto_trade:last_gate:XAU"))
   assert status["state"] == "idle_no_match"
   assert status["gate_source"] == "idle_no_match"

@@ -699,15 +699,15 @@ def evaluate_execution_policy(
   zone_scaling = execution.zone_scaling
   execution_entry = execution.entry
   reaction_execution = execution.reaction
-  # 2026-09-15 (owner-reported, XAU only): pick the entry within the
+  # Pick the entry within the Go-owned zone for every instrument so
   # detected zone/room so entry-to-stop risk lands near stop_min_pips
-  # (the same floor the stop envelope already enforces), instead of a
+  # (the same instrument-specific floor the stop envelope enforces), instead of a
   # pure zone-edge pick with zero risk awareness. Uses the real
   # structural stop - independent of which entry within the zone ends up
   # chosen - computed here, before route resolution picks an entry.
   structural_stop_for_entry: float | None = None
   risk_targeted_entry_pips: float | None = None
-  if symbol == "XAU" and bool(reaction_execution.risk_targeted_entry_enabled):
+  if bool(reaction_execution.risk_targeted_entry_enabled):
     if go_origin and getattr(match, "go_invalidation_price", None) is not None:
       # Go already owns the complete invalidation.  Do not reinterpret it as
       # a swing and add Python's ATR buffer before choosing the entry.
@@ -954,6 +954,9 @@ def evaluate_execution_policy(
         maximum_stop_pips=maximum_stop_pips,
         pip_size=pip,
         digits=digits,
+        enforce_minimum_stop=str(
+          getattr(instrument_cfg, "policy_name", "") or ""
+        ).startswith("fx_"),
       )
     elif is_m1_scalp_strategy(strategy_name):
       stop_plan = plan_scalp_invalidation_stop(
@@ -1136,6 +1139,7 @@ def evaluate_execution_policy(
       "stop_exceeds_envelope_after_wick",
       "stop_exceeds_max_envelope",
       "stop_exceeds_envelope_furthest_leg",
+      "stop_below_go_invalidation_envelope",
       "stop_exceeds_go_invalidation_envelope",
       "go_invalidation_not_beyond_buy_entries",
       "go_invalidation_not_beyond_sell_entries",
