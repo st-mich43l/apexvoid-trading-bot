@@ -82,7 +82,7 @@
       "m5_supply_zone_fresh",
       "m5_supply_zone_relevance_immediate"
     ],
-    "regime": "trend",
+    "regime": "go_owned",
     "score": 2.0,
     "strategy": "Supply Demand",
     "strategy_family": "supply_demand",

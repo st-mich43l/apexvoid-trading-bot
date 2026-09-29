@@ -842,6 +842,8 @@ public sealed class TradePlanRuntime(
     $"execution:plan_recovery_grace:{planId}";
   private static string PlanExecutorStateKey(string planId) =>
     $"execution:plan_state:{planId}";
+  private static string PlanOwnershipKey(string token) =>
+    $"execution:plan_owner:{token}";
   private static string PlanAcknowledgementKey(string planId) =>
     $"execution:plan_ack:{planId}";
   // S14B: Python writes a cancel intent here when a Go-derived plan's
@@ -941,6 +943,7 @@ public sealed class TradePlanRuntime(
           item.leg.ClientOrderId, position.ClientOrderId, StringComparison.Ordinal
         )
       );
+    var compact = TradePlanOwnership.TryParseCompactComment(position.Comment);
     var ownership = exact.state is not null
       ? new TradePlanOwnership.Ownership(
         exact.state.PlanId, "", exact.leg.LegId
@@ -948,17 +951,33 @@ public sealed class TradePlanRuntime(
       : TradePlanOwnership.TryParseOwnership(
         position.Comment, position.ClientOrderId
       );
+    if (ownership is null && compact is not null)
+    {
+      var mappedPlanId = await store.GetStringAsync(
+        PlanOwnershipKey(compact.PlanToken), cancellationToken
+      );
+      if (!string.IsNullOrWhiteSpace(mappedPlanId))
+      {
+        ownership = new TradePlanOwnership.Ownership(
+          mappedPlanId, "", compact.LegId
+        );
+      }
+    }
     if (ownership is null)
     {
       return false;
     }
     if (!_statesById.TryGetValue(ownership.PlanId, out var state))
     {
-      log(
-        $"v8 adopt: no tracked plan for position={position.PositionId} "
-        + $"plan_id={ownership.PlanId} leg={ownership.LegId}"
-      );
-      return true;
+      state = await RestoreOwnedPlanAsync(ownership.PlanId, cancellationToken);
+      if (state is null)
+      {
+        log(
+          $"v8 adopt: no tracked plan for position={position.PositionId} "
+          + $"plan_id={ownership.PlanId} leg={ownership.LegId}"
+        );
+        return true;
+      }
     }
     _plansById.TryGetValue(ownership.PlanId, out var plan);
     var existingLeg = (state.Legs ?? [])
@@ -1006,6 +1025,9 @@ public sealed class TradePlanRuntime(
       );
     }
     await PersistStateAsync(next, cancellationToken);
+    await PersistPlanExecutionStateAsync(
+      ownership.PlanId, "filled", null, cancellationToken
+    );
     if (plan is not null)
     {
       await PublishEntryFillProgressAsync(
@@ -1017,6 +1039,55 @@ public sealed class TradePlanRuntime(
       + $"leg={ownership.LegId} stage={next.Stage}"
     );
     return true;
+  }
+
+  private async Task<TradePlanRuntimeState?> RestoreOwnedPlanAsync(
+    string planId,
+    CancellationToken cancellationToken
+  )
+  {
+    var planJson = await store.GetStringAsync(
+      PlanRecoveryKey(planId), cancellationToken
+    ) ?? await store.GetStringAsync(
+      TradePlanStreamKeys.PlanKey(planId), cancellationToken
+    );
+    if (string.IsNullOrWhiteSpace(planJson))
+    {
+      return null;
+    }
+    try
+    {
+      var plan = TradePlanJson.DeserializePlan(planJson);
+      if (plan is null || !string.Equals(plan.PlanId, planId, StringComparison.Ordinal))
+      {
+        return null;
+      }
+      TradePlanValidator.Validate(plan);
+      _plansById[planId] = plan;
+      var state = new TradePlanRuntimeState(
+        plan.PlanId,
+        plan.ThesisId,
+        plan.SetupId,
+        plan.Symbol,
+        plan.Analysis.Direction,
+        plan.Entry.Type,
+        TradePlanRuntimeStage.Received,
+        CurrentStop: plan.Stop.Price,
+        GroupStage: TradePlanGroupStages.Received,
+        IntendedEntryPrice: IntendedEntryPriceFrom(plan)
+      );
+      await PersistStateAsync(state, cancellationToken);
+      log($"v8 adopt: restored forgotten plan id={planId} from durable payload");
+      return state;
+    }
+    catch (Exception exception) when (exception is not OperationCanceledException)
+    {
+      log(
+        $"v8 adopt: failed restoring plan id={planId} "
+        + $"exception={exception.GetType().Name} message={exception.Message}"
+      );
+      return null;
+    }
   }
 
   private async Task PublishEntryFillProgressAsync(
@@ -1422,6 +1493,12 @@ public sealed class TradePlanRuntime(
       return;
     }
     _plansById[plan.PlanId] = plan;
+    foreach (var token in TradePlanOwnership.PlanTokens(plan.PlanId))
+    {
+      await store.SetStringAsync(
+        PlanOwnershipKey(token), plan.PlanId, cancellationToken
+      );
+    }
     // Keep the executor recovery copy independent of Python's payload TTL.
     await store.SetStringAsync(
       PlanRecoveryKey(plan.PlanId), entry.Payload, cancellationToken
@@ -2549,6 +2626,7 @@ public sealed class TradePlanRuntime(
     var positions = reconcile.Positions;
     var pending = reconcile.PendingOrders;
     var pendingById = pending.ToDictionary(order => order.OrderId);
+    var positionsById = positions.ToDictionary(position => position.PositionId);
     var now = clock().ToUnixTimeSeconds();
 
     foreach (var initial in candidates)
@@ -2565,6 +2643,8 @@ public sealed class TradePlanRuntime(
       }
       var absoluteStop = plan.Stop.Price;
       var changed = false;
+      IReadOnlyList<HistoricalOrderMatch>? historicalOrders = null;
+      var historicalOrderLookupFailed = false;
 
       // Match broker positions onto legs via ownership tokens.
       foreach (var position in positions)
@@ -2651,6 +2731,97 @@ public sealed class TradePlanRuntime(
         {
           continue;
         }
+        if (historicalOrders is null && !historicalOrderLookupFailed)
+        {
+          try
+          {
+            var oldestSubmission = legs
+              .Where(item => item.SubmittedAt is not null)
+              .Select(item => item.SubmittedAt!.Value)
+              .DefaultIfEmpty(now - 3600)
+              .Min();
+            historicalOrders = await client.FindHistoricalOrdersAsync(
+              oldestSubmission * 1000L,
+              clock().ToUnixTimeMilliseconds(),
+              cancellationToken
+            );
+          }
+          catch (Exception exception) when (exception is not OperationCanceledException)
+          {
+            historicalOrderLookupFailed = true;
+            log(
+              $"v8 pending history lookup failed id={state.PlanId} "
+              + $"exception={exception.GetType().Name} message={exception.Message}"
+            );
+          }
+        }
+        var historical = historicalOrders?.FirstOrDefault(item =>
+          string.Equals(
+            item.ClientOrderId, leg.ClientOrderId, StringComparison.Ordinal
+          )
+        );
+        if (historical?.Filled == true && historical.PositionId is long positionId)
+        {
+          TradingPosition? filledPosition = positionsById.GetValueOrDefault(positionId);
+          var positionStillOpen = filledPosition is not null;
+          if (filledPosition is null)
+          {
+            var deals = await client.GetClosingDealsAsync(
+              positionId,
+              (leg.SubmittedAt ?? now - 3600) * 1000L,
+              clock().ToUnixTimeMilliseconds(),
+              cancellationToken
+            );
+            var dealVolume = deals.Sum(deal => deal.ClosedVolume);
+            if (dealVolume <= 0)
+            {
+              // Broker history confirms a fill, but deal history has not
+              // caught up yet. Never downgrade this to an owner cancel.
+              continue;
+            }
+            var entryPrice = deals.Sum(
+              deal => deal.EntryPrice * deal.ClosedVolume
+            ) / dealVolume;
+            filledPosition = new TradingPosition(
+              positionId,
+              historical.SymbolId,
+              string.Equals(
+                plan.Analysis.Direction, "BUY", StringComparison.OrdinalIgnoreCase
+              ) ? TradeDirection.Buy : TradeDirection.Sell,
+              historical.ExecutedVolume > 0
+                ? historical.ExecutedVolume
+                : dealVolume,
+              entryPrice,
+              absoluteStop,
+              options.Label,
+              "",
+              leg.ClientOrderId
+            );
+          }
+          state = AdoptFilledLeg(
+            state, leg.LegId, filledPosition, absoluteStop, now
+          );
+          legs = (state.Legs ?? []).ToList();
+          if (positionStillOpen)
+          {
+            state = await AmendAndVerifyLegStopAsync(
+              client, symbol, state, leg.LegId, absoluteStop, cancellationToken
+            );
+            legs = (state.Legs ?? []).ToList();
+          }
+          changed = true;
+          log(
+            $"v8 pending reconciled from broker history id={state.PlanId} "
+            + $"leg={leg.LegId} position={positionId} open={positionStillOpen}"
+          );
+          continue;
+        }
+        if (historical is null)
+        {
+          // An empty/lagging history response is not proof of cancellation.
+          // Keep ownership and retry on the next poll.
+          continue;
+        }
         legs[i] = leg with
         {
           Stage = TradePlanLegStages.Cancelled,
@@ -2718,6 +2889,13 @@ public sealed class TradePlanRuntime(
             cancellationToken,
             eventKey: "plan_cancelled",
             state: TradePlanGroupStages.Cancelled
+          );
+          await PersistPlanExecutionStateAsync(
+            plan.PlanId,
+            "cancelled",
+            null,
+            cancellationToken,
+            "owner_cancelled_on_broker"
           );
           log($"v8 plan cancelled id={state.PlanId} reason=owner_cancelled_on_broker");
           await ForgetPlanAsync(state.PlanId, cancellationToken);
