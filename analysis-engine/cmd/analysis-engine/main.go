@@ -25,6 +25,10 @@ const primaryTimeframe = market.M5
 
 var log = logging.New("analysis-engine")
 
+func init() {
+	engine.SetLogger(log)
+}
+
 func main() {
 	path := os.Getenv(config.RootFileEnv)
 	if path == "" {

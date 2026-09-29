@@ -2,6 +2,8 @@ package engine
 
 import (
 	"context"
+	"io"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -10,6 +12,22 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/telemetry"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/transport/kafka"
 )
+
+// log is package-level rather than a constructor parameter so the 16+
+// existing NewOpportunityPublisher/NewDurableOpportunityPublisher call
+// sites (production and test) never need to change. Tests get a silent
+// discard logger by default; cmd/analysis-engine/main.go calls SetLogger
+// once at startup to install the real structured logger.
+var log = slog.New(slog.NewTextHandler(io.Discard, nil))
+
+// SetLogger installs the logger opportunity publication events are
+// recorded through. Nil is ignored so a misordered or absent call can
+// never leave publisher logging pointed at a nil logger.
+func SetLogger(l *slog.Logger) {
+	if l != nil {
+		log = l
+	}
+}
 
 // publishRetryBackoff is how long OpportunityPublisher waits before
 // retrying a failed publish — a fixed, documented constant (no
@@ -225,6 +243,11 @@ func (p *OpportunityPublisher) Run(ctx context.Context) {
 		if err := p.publishOne(ctx, job); err != nil {
 			p.telemetry.Count(telemetry.CounterOpportunityPublishFailed, string(job.Symbol), "", 1)
 			p.telemetry.Count(telemetry.CounterOpportunityPublishRetried, string(job.Symbol), "", 1)
+			log.Warn("opportunity publish failed, retrying",
+				"symbol", job.Symbol, "strategy", job.Transition.Record.Candidate.Strategy,
+				"opportunity_id", job.Transition.Record.Candidate.ID,
+				"transition", string(job.Transition.Kind), "error", err,
+			)
 			select {
 			case <-ctx.Done():
 				return
@@ -233,6 +256,18 @@ func (p *OpportunityPublisher) Run(ctx context.Context) {
 			continue // retry the SAME job (still at the front of the queue) — never drop it
 		}
 		p.telemetry.Count(telemetry.CounterOpportunityPublishSucceeded, string(job.Symbol), "", 1)
+		// The one place every successful opportunity lifecycle publish
+		// (any strategy, any symbol) passes through - see this file's own
+		// "one goroutine that ever touches Kafka" doc comment above. Info
+		// level, not Debug: this is the exact per-opportunity record that
+		// was missing during the 2026-09-29 incident, when diagnosing what
+		// the engine had actually published required reading Algo Bot's
+		// consumer-side logs instead of this service's own.
+		candidate := job.Transition.Record.Candidate
+		log.Info("opportunity published",
+			"symbol", job.Symbol, "strategy", candidate.Strategy, "direction", candidate.Direction,
+			"opportunity_id", candidate.ID, "transition", string(job.Transition.Kind),
+		)
 		p.ackFront(job)
 	}
 }
