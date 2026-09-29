@@ -1,5 +1,6 @@
 from dataclasses import replace
 from datetime import datetime, timezone
+import json
 from app.core.config import runtime_config
 from tests.configuration.canonical_fixtures import install_runtime_overrides, leaf
 
@@ -118,6 +119,37 @@ def test_sweep_extreme_price_copies_through_and_round_trips():
       f'"version":{STRATEGY_MATCH_VERSION + 1}',
     )
   ) is None
+
+
+def test_quality_overall_is_additive_optional_and_round_trips():
+  match, reason, _ = scanner._build_strategy_match(
+    "XAU", "M5", "1784721300", _context(), [_result()], now=NOW,
+  )
+  assert match is not None and reason is None
+  # Absent on a plain legacy-scanner match (Go-only field).
+  assert match.quality_overall is None
+  assert match.quality_components is None
+  assert StrategyMatch.from_json(match.to_json()) == match
+
+  with_quality = replace(
+    match,
+    quality_overall=0.785338090383933,
+    quality_components={
+      "proximity_quality": 0.356, "touch_quality": 1.0, "strength_quality": 1.0,
+    },
+  )
+  assert StrategyMatch.from_json(with_quality.to_json()) == with_quality
+
+  # Older cached Redis payloads (no such keys at all) still round-trip.
+  stripped = json.loads(match.to_json())
+  stripped.pop("quality_overall", None)
+  stripped.pop("quality_components", None)
+  assert StrategyMatch.from_json(json.dumps(stripped)) == match
+
+  # Out-of-[0,1] quality is rejected the same way other bounded fields are.
+  invalid = json.loads(with_quality.to_json())
+  invalid["quality_overall"] = 1.5
+  assert StrategyMatch.from_json(json.dumps(invalid)) is None
 
 
 def test_from_json_normalizes_a_stale_pre_rename_strategy_name():

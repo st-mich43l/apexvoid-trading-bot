@@ -103,6 +103,10 @@ def test_supply_translation_is_exact_and_carries_go_provenance():
   assert match.absolute_target_price == 4344.0
   assert match.reasons == ("m5_supply_zone_fresh", "m5_supply_zone_relevance_immediate")
   assert match.confluence == 2
+  # Go's real per-instance quality (distinct from the legacy confluence
+  # evidence-code count above) - verbatim from the envelope, never recomputed.
+  assert match.quality_overall == 0.82
+  assert match.quality_components == {"zone_strength_quality": 0.9}
   assert match.structural_kind == "supply" and match.structural_zone_id == "zone-golden-supply"
   assert match.match_id == "go_opp_golden_supply_xau" and match.thesis_id == pol._thesis_id("XAU", "supply_demand", "SELL", ev.payload.technical_context.confirmation.zone_id)
   assert match.htf_bias == "down" and match.regime_kind == ""  # real Go H1 structure; no invented regime

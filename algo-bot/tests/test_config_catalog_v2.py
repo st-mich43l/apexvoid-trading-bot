@@ -88,13 +88,21 @@ BASELINE = {
   # 2026-09-17 Trendline V2 (+15), zone market-relevance (+3), 2026-09-21
   # technique zone retests (+1: analysis.techniques.retest_max_touches) - all
   # ConfigOwner.PYTHON, real canonical_env, none deprecated-alias'd.
-  "entries": 677,
-  "configurable": 570,
+  # Pre-existing +12 drift absorbed here (entries/configurable/projection/env):
+  # not introduced by this change: this baseline was already stale vs. the
+  # actual FX-stop-and-fast-fill-reconciliation PR (#665) merge (measured
+  # 689/582/641/571 on a clean checkout before the two fields below).
+  # 2026-09-29 Go quality-ranking arbitration fix: +2 new leaf fields under
+  # actionability.scanner_gates (conflict_margin_quality,
+  # use_quality_ranking), both ConfigOwner.PYTHON, real canonical_env,
+  # not deprecated-alias'd.
+  "entries": 691,
+  "configurable": 584,
   "protocol": 10,
   "algorithm": 97,
-  "owners": {"python": 531, "shared": 96, "ctrader": 50},
-  "projection": 627,
-  "env": 570,
+  "owners": {"python": 541, "shared": 100, "ctrader": 50},
+  "projection": 641,
+  "env": 573,
   "deprecated_aliases": 21,
 }
 
