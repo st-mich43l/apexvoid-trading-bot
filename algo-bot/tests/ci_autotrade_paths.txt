@@ -56,13 +56,9 @@ tests/test_technical_authority_config.py
 tests/test_go_only_startup_gate.py
 tests/test_s13_analysis_client_boundary.py
 tests/test_s13_legacy_classification.py
-tests/test_analysis_authority_fence.py
-tests/test_analysis_authority_cli.py
 tests/test_go_opportunity_policy.py
 tests/test_go_zone_book.py
-tests/test_worker_authority_fence.py
 tests/test_s14b_freshness.py
-tests/test_s14b_authority_boundary.py
 tests/test_s14b_go_lifecycle.py
 tests/test_s14b_plan_cancel_contract.py
 tests/test_s14a_shadow_overlay.py
@@ -72,6 +68,3 @@ tests/test_s14d_executor_events_delivery.py
 tests/test_s14e_ladder_spec.py
 tests/test_s14e_go_precision_and_card.py
 tests/test_xau_ladder.py
-tests/test_s14f_shadow_acceptance.py
-tests/test_s14g_cutover_packet.py
-tests/test_s14h_rollback_drills.py

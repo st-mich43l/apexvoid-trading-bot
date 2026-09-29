@@ -15,12 +15,9 @@ from unittest.mock import AsyncMock
 import pytest
 from redis.asyncio import Redis
 
-from app.analysis_client import authority as auth
-from app.analysis_client.consumer import AnalysisOpportunityConsumer
 from app.analysis_client.models import InvalidationTopic, OpportunityTopic, parse_analysis_event
 from app.analysis_client.shadow import AnalysisShadowEvaluator
 from app.analysis_client.shadow_overlay import READ_COMMANDS, OverlayRedis, dry_run_context
-from app.autotrade import go_shadow_policy as shadow_mod
 from app.autotrade import worker
 from app.autotrade.gate import AutoScalpDecision
 from app.autotrade.go_shadow_policy import GoShadowPolicy, plan_digest
@@ -109,7 +106,7 @@ def h(sql, monkeypatch, prod):
   live_inputs(monkeypatch)
   harness = Harness(sql, monkeypatch)
   harness.shadow = GoShadowPolicy(
-    harness.repo, fence=harness.fence, clock=harness.clock, multiple_matches_enabled=lambda: True,
+    harness.repo, clock=harness.clock, multiple_matches_enabled=lambda: True,
   )
   return harness
 
@@ -163,7 +160,6 @@ async def test_python_owned_scope_yields_would_publish_with_the_full_plan_and_no
   row = (await decisions(h))[-1]
   d = row["details"]
   assert row["mode"] == "go_shadow" and d["dry_run"] is True and d["scope"] == "supply"
-  assert d["fence_actual"]["owner"] == "python" and d["fence_actual"]["go_allowed"] is False   # not Go-owned, and irrelevant to the dry run
   assert d["plan_id"] == "v8:go_opp_golden_supply_xau" and d["plan"]["analysis"]["direction"] == "SELL"
   assert d["plan_digest"] == plan_digest(d["plan"]) and len(d["plan_digest"]) == 64
   assert d["route"]["status"] == "candidate_published"
@@ -180,14 +176,14 @@ async def test_python_owned_scope_yields_would_publish_with_the_full_plan_and_no
 
 @pytest.mark.asyncio
 async def test_dry_run_plan_is_identical_to_the_plan_the_live_pipeline_publishes(h, prod):
-  """Same inputs through the shadow and through the live (granted) path."""
+  """Same inputs through the offline replay and the live Kafka path."""
   ev = event(int(h.clock.now))
   await ledger(h, ev)
   await h.shadow.dry_run_creation(ev)
   shadow_details = (await decisions(h))[-1]["details"]
 
   await prod.inner.flushdb()
-  await h.grant()
+  await h.activate()
   ev_live = event(int(h.clock.now))
   assert await h.deliver(ev_live) == "match_written"
   await worker._handle_event(f"XAU:M1:{int(time.time())}", client=prod.inner)
@@ -196,7 +192,7 @@ async def test_dry_run_plan_is_identical_to_the_plan_the_live_pipeline_publishes
   live_plan = json.loads(raw)
   assert plan_digest(live_plan) == shadow_details["plan_digest"]
   for field in ("entry", "stop", "targets", "risk", "sizing", "management", "execution_policy", "analysis", "source_structure"):
-    if field == "analysis":                      # reasons/tags carry the authority epoch: 0 in shadow, 1 live
+    if field == "analysis":                      # reasons/tags are provenance only
       assert live_plan[field]["direction"] == shadow_details["plan"][field]["direction"]
       continue
     assert live_plan[field] == shadow_details["plan"][field], field
@@ -244,7 +240,7 @@ async def test_pre_policy_stops_are_recorded_as_not_adapted_with_their_reason(h,
   await ledger(h, stale)
   assert (await h.shadow.dry_run_creation(stale)).reason == "event_too_old"
 
-  h.shadow = GoShadowPolicy(h.repo, fence=h.fence, clock=h.clock, multiple_matches_enabled=lambda: False)
+  h.shadow = GoShadowPolicy(h.repo, clock=h.clock, multiple_matches_enabled=lambda: False)
   fresh = event(now)
   await ledger(h, fresh)
   assert (await h.shadow.dry_run_creation(fresh)).reason == "multiple_matches_disabled"
@@ -300,18 +296,14 @@ async def test_repeating_the_dry_run_records_one_row_per_outcome(h, prod):
 # ---- containment: the guards that make "zero side effects" true ------------------------
 
 @pytest.mark.asyncio
-async def test_the_fence_bypass_exists_only_for_the_overlay(h, prod):
-  """A Go match on a Python-owned scope: fenced for a real client, allowed for the overlay."""
+async def test_dry_run_overlay_bypasses_live_side_effects(h, prod):
+  """The overlay remains an explicit offline replay mechanism."""
   ev = event(int(h.clock.now))
   await ledger(h, ev)
-  await h.grant()
+  await h.activate()
   await h.deliver(event(int(h.clock.now)))                  # writes the match on the real store
   match = deserialize_matches(await prod.inner.get(strategy_matches_key("XAU")))[0]
-  await h.fence.rollback("XAU", "supply", expected_epoch=1, actor="oncall", reason="back", drain_seconds=30)
   spot = worker.AutoTradeSpot(price=4354.2, ts=int(time.time()), fresh=True, bid=4354.1, ask=4354.3)
-  assert await worker._publish_trade_plan_v8(prod.inner, "XAU", spot, match, frames={"M1": _m1_trigger_bar()}) is None
-  route = json.loads(await prod.inner.get(route_outcome_key("XAU", match.match_id)))
-  assert route["reason_code"] == "authority_fenced"
   overlay = OverlayRedis(prod.inner)
   with dry_run_context(overlay):
     assert await worker._publish_trade_plan_v8(overlay, "XAU", spot, match, frames={"M1": _m1_trigger_bar()}) is not None
@@ -339,8 +331,6 @@ async def test_postgres_is_read_only_inside_a_dry_run(h, prod):
         with pytest.raises(store.DryRunWriteError):
           await db.execute(statement)
       with pytest.raises(store.DryRunWriteError):
-        await db.fetch("INSERT INTO analysis_authority_acceptance VALUES ('a','b','c','d',1,2) RETURNING 1")
-      with pytest.raises(store.DryRunWriteError):
         db.transaction()
   async with store._connect() as db:                        # outside: normal connection again
     assert await db.execute("SELECT 1") is not None
@@ -353,24 +343,6 @@ async def test_the_shared_client_is_the_overlay_only_while_a_dry_run_runs(h, pro
   with dry_run_context(overlay):
     assert redis_state.get_client() is overlay
   assert redis_state.get_client() is prod
-
-
-# ---- consumer wiring ----------------------------------------------------------------------
-
-@pytest.mark.asyncio
-async def test_go_shadow_consumer_records_the_real_outcome_instead_of_contract_gap(h, prod):
-  from types import SimpleNamespace
-  evaluator = AnalysisShadowEvaluator(h.repo, dry_run=h.shadow.dry_run_creation)
-  consumer = AnalysisOpportunityConsumer(h.repo, shadow=evaluator, mode="go_shadow")
-  await h._ensure()
-  now = int(h.clock.now)
-  record = SimpleNamespace(topic=OpportunityTopic, partition=0, offset=1, timestamp=(now - 10) * 1000,
-                           value=json.dumps(golden(now)).encode())
-  await consumer.process_record(record)
-  rows = await decisions(h)
-  assert [r["outcome"] for r in rows] == ["would_publish"] and "contract_gap" not in [r["outcome"] for r in rows]
-  assert rows[0]["details"]["published_at"] == now - 10       # Kafka publish time reached the gate
-  assert await prod.inner.xlen("execution:trade_plans") == 0
 
 
 @pytest.mark.asyncio

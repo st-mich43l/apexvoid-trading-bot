@@ -1,4 +1,4 @@
-"""S13C: Go opportunity -> StrategyMatch -> the real V8 plan pipeline, fenced.
+"""Go opportunity -> StrategyMatch -> the real V8 plan pipeline.
 
 The end-to-end tests run the *real* worker plan build against fakeredis; only
 the Go event is a fixture (the golden envelope the Go encoder pins).
@@ -13,8 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from app.analysis_client import authority as auth
-from app.analysis_client.authority import AuthorityFence
+from app.analysis_client.provenance import CATALOG_STRATEGY_IDS, GO_ORIGIN_TAG
 from app.analysis_client.models import (
   InvalidationTopic,
   OpportunityTopic,
@@ -27,7 +26,6 @@ from app.autotrade.multi_match import deserialize_matches, strategy_matches_key
 from app.autotrade.setup_lifecycle import CONFIRMED, INVALIDATED, load_setup
 from app.autotrade.trade_plan_stream import read_plan_state, read_trade_plan
 from app.persistence import redis_state, store
-from tests.test_analysis_authority_fence import Clock, MemoryStore
 from tests.test_analysis_client_models import _invalidated
 from tests.configuration.canonical_fixtures import install_runtime_overrides
 from tests.test_publish_trade_plan_v8 import (  # noqa: F401 - autouse fixtures
@@ -37,6 +35,17 @@ from tests.test_publish_trade_plan_v8 import (  # noqa: F401 - autouse fixtures
 )
 
 GOLDEN = Path(__file__).resolve().parents[2] / "contracts/analysis/examples/opportunity-v1-technical-context.json"
+
+
+class Clock:
+  def __init__(self, now: float):
+    self.now = now
+
+  def __call__(self) -> float:
+    return self.now
+
+  def advance(self, seconds: float) -> None:
+    self.now += seconds
 
 
 def golden(now: int | None = None, **payload_overrides):
@@ -79,10 +88,10 @@ DEMAND = pol.REVIEWED_SCOPES["demand"]
 # ---- pure translation ---------------------------------------------------------
 
 @pytest.mark.no_database
-def test_supply_translation_is_exact_and_carries_authority_provenance():
+def test_supply_translation_is_exact_and_carries_go_provenance():
   ev = event()
   now = ev.payload.created_at + 60
-  match = pol.build_strategy_match(ev, profile=SUPPLY, epoch=3, now=now)
+  match = pol.build_strategy_match(ev, profile=SUPPLY, now=now)
 
   assert (match.symbol, match.direction, match.strategy, match.source_tf) == ("XAU", "SELL", "Supply Demand", "M5")
   assert (match.entry_low, match.entry_high) == (4352.5, 4356.0)
@@ -100,7 +109,7 @@ def test_supply_translation_is_exact_and_carries_authority_provenance():
   assert (match.touch_bar_ts, match.confirmation_bar_ts, match.reaction_type) == (str(ev.payload.created_at - 300), str(ev.payload.created_at), "rejection")
   assert match.bias_relationship == "with_bias" and match.strategy_mode == "with_bias"  # Go bias SELL == direction
   tags = set(match.tags)
-  assert {auth.GO_ORIGIN_TAG, "catalog:supply", "authority_epoch:3", "bias_source:go_primary_tf", "htf_bias_source:go_H1", "go_reaction:rejection"} <= tags
+  assert {GO_ORIGIN_TAG, "catalog:supply", "bias_source:go_primary_tf", "htf_bias_source:go_H1", "go_reaction:rejection"} <= tags
   elig = match.execution_eligibility
   assert elig.allowed and elig.planned_entry_price == 4354.25
   assert elig.measured["source"] == "go" and elig.reward_risk == round(85 / 62.5, 4)
@@ -116,7 +125,7 @@ def test_go_higher_timeframe_bias_never_uses_primary_m5_as_substitute():
     {"timeframe": "H1", "direction": "SELL", "layer": "major", "reference_time": observed - 3900},
   ]
   ev = parse_analysis_event(OpportunityTopic, json.dumps(raw))
-  match = pol.build_strategy_match(ev, profile=SUPPLY, epoch=1, now=p["created_at"] + 1)
+  match = pol.build_strategy_match(ev, profile=SUPPLY, now=p["created_at"] + 1)
   assert match.htf_bias == "down"
   assert "htf_bias_source:go_H1" in match.tags
   # Preserve the H4 disagreement on the Kafka contract; do not flatten it
@@ -163,9 +172,9 @@ def test_invalid_reaction_evidence_is_rejected_at_the_kafka_contract(field, valu
 def test_counter_bias_and_neutral_are_derived_only_from_go_bias():
   raw = golden()
   raw["payload"]["technical_context"]["bias"]["direction"] = "BUY"
-  assert pol.build_strategy_match(parse_analysis_event(OpportunityTopic, json.dumps(raw)), profile=SUPPLY, epoch=1, now=raw["payload"]["created_at"] + 1).bias_relationship == "counter_bias"
+  assert pol.build_strategy_match(parse_analysis_event(OpportunityTopic, json.dumps(raw)), profile=SUPPLY, now=raw["payload"]["created_at"] + 1).bias_relationship == "counter_bias"
   del raw["payload"]["technical_context"]["bias"]
-  assert pol.build_strategy_match(parse_analysis_event(OpportunityTopic, json.dumps(raw)), profile=SUPPLY, epoch=1, now=raw["payload"]["created_at"] + 1).bias_relationship == "neutral"
+  assert pol.build_strategy_match(parse_analysis_event(OpportunityTopic, json.dumps(raw)), profile=SUPPLY, now=raw["payload"]["created_at"] + 1).bias_relationship == "neutral"
 
 
 @pytest.mark.no_database
@@ -181,7 +190,7 @@ def test_demand_translation_mirrors_geometry_for_buy():
     {"code": "m5_demand_zone_rejection_confirmed"},
   ]
   p["technical_context"].update({"reference_price": 4334.0, "bias": {"direction": "BUY", "layer": "internal"}})
-  match = pol.build_strategy_match(parse_analysis_event(OpportunityTopic, json.dumps(raw)), profile=DEMAND, epoch=1, now=p["created_at"] + 1)
+  match = pol.build_strategy_match(parse_analysis_event(OpportunityTopic, json.dumps(raw)), profile=DEMAND, now=p["created_at"] + 1)
   # BUY enters at the proximal (upper) edge 4333.5.
   assert match.targets_pips == (75, 165) and match.absolute_target_price == 4350.0
   assert match.structural_kind == "demand" and match.direction == "BUY"
@@ -198,7 +207,7 @@ def test_missing_or_unusable_facts_are_rejected_not_approximated(mutate, code):
   mutate(raw)
   ev = parse_analysis_event(OpportunityTopic, json.dumps(raw))
   with pytest.raises(pol.AdapterRejection) as exc:
-    pol.build_strategy_match(ev, profile=SUPPLY, epoch=1, now=raw["payload"]["created_at"] + 1)
+    pol.build_strategy_match(ev, profile=SUPPLY, now=raw["payload"]["created_at"] + 1)
   assert exc.value.code == code
 
 
@@ -213,7 +222,7 @@ def test_missing_observed_timeframe_with_htf_facts_fails_at_contract_boundary():
 
 @pytest.mark.no_database
 def test_confirmed_go_identity_survives_redis_without_confusing_zone_and_opportunity():
-  match = pol.build_strategy_match(event(), profile=SUPPLY, epoch=3, now=golden()["payload"]["created_at"] + 1)
+  match = pol.build_strategy_match(event(), profile=SUPPLY, now=golden()["payload"]["created_at"] + 1)
   from app.autotrade.multi_match import serialize_matches, deserialize_matches
   from dataclasses import replace
   assert match.match_id != f"go_{match.structural_zone_id}"
@@ -232,18 +241,16 @@ def test_confirmed_go_identity_survives_redis_without_confusing_zone_and_opportu
 def test_direction_and_expiry_guards():
   ev = event()
   with pytest.raises(pol.AdapterRejection) as wrong:
-    pol.build_strategy_match(ev, profile=DEMAND, epoch=1, now=ev.payload.created_at + 1)   # SELL into demand scope
+    pol.build_strategy_match(ev, profile=DEMAND, now=ev.payload.created_at + 1)   # SELL into demand scope
   assert wrong.value.code == "direction_scope_mismatch"
   with pytest.raises(pol.AdapterRejection) as expired:
-    pol.build_strategy_match(ev, profile=SUPPLY, epoch=1, now=ev.payload.expires_at)
+    pol.build_strategy_match(ev, profile=SUPPLY, now=ev.payload.expires_at)
   assert expired.value.code == "opportunity_expired"
 
 
 @pytest.mark.no_database
 def test_every_enabled_catalog_scope_has_an_explicit_adapter():
-  assert set(pol.REVIEWED_SCOPES) == set(auth.CATALOG_STRATEGY_IDS)
-  for scope, profile in pol.REVIEWED_SCOPES.items():
-    assert scope in auth.catalog_ids_for_legacy(profile.legacy_strategy, profile.direction)
+  assert set(pol.REVIEWED_SCOPES) == set(CATALOG_STRATEGY_IDS)
 
 
 @pytest.mark.parametrize("scope", sorted(pol.REVIEWED_SCOPES))
@@ -269,13 +276,12 @@ def test_each_catalog_adapter_preserves_its_own_evidence_and_geometry(scope):
   match = pol.build_strategy_match(
     event_payload,
     profile=profile,
-    epoch=1,
-    now=payload["created_at"] + 1,
+        now=payload["created_at"] + 1,
   )
   assert match.structural_source == f"go:{scope}"
   assert match.direction == payload["direction"]
   assert match.targets_pips
-  assert auth.GO_ORIGIN_TAG in match.tags
+  assert GO_ORIGIN_TAG in match.tags
   assert "go_strategy_confirmed" in match.tags
 
 
@@ -293,7 +299,7 @@ def _no_reaction_match(*, entry_low, entry_high, opportunity_id, scope="box_brea
   raw["payload"]["technical_context"].pop("confirmation", None)
   event_payload = parse_analysis_event(OpportunityTopic, json.dumps(raw))
   return pol.build_strategy_match(
-    event_payload, profile=profile, epoch=1, now=raw["payload"]["created_at"] + 1,
+    event_payload, profile=profile, now=raw["payload"]["created_at"] + 1,
   )
 
 
@@ -340,7 +346,7 @@ def test_genuinely_distant_opportunities_get_different_theses():
   )
 
 
-# ---- runner: fence, durable ledger, Redis match store ---------------------------
+# ---- runner: durable ledger, Redis match store ----------------------------------
 
 pytestmark_db = pytest.mark.asyncio
 
@@ -348,10 +354,8 @@ pytestmark_db = pytest.mark.asyncio
 class Harness:
   def __init__(self, sql, monkeypatch):
     self.clock = Clock(now=time.time())
-    self.fence = AuthorityFence(MemoryStore(), cache_ttl=0.0, clock=self.clock)
-    monkeypatch.setattr(auth, "_default_fence", self.fence)
     self.repo = PostgresAnalysisOpportunityRepository()
-    self.policy = pol.GoOpportunityPolicy(self.repo, fence=self.fence, clock=self.clock, multiple_matches_enabled=lambda: True)
+    self.policy = pol.GoOpportunityPolicy(self.repo, clock=self.clock, multiple_matches_enabled=lambda: True)
     self.sql = sql
     self.offset = 0
     self._ready = False
@@ -369,14 +373,10 @@ class Harness:
       return await self.policy.on_creation(ev, result)
     return await self.policy.on_terminal(ev, result)
 
-  async def grant(self, scope="supply", symbol="XAU"):
+  async def activate(self, **_ignored):
     await self._ensure()
-    await self.fence.record_acceptance(symbol, scope, "ev", approved_by="owner", ttl_seconds=3600)
-    await self.fence.begin_transfer(symbol, scope, "go", expected_epoch=0, actor="owner", reason="approved", evidence_ref="ev", drain_seconds=5)
-    # Past the drain, and past the go-effective boundary by more than the
-    # "observed a minute ago" age of ``event()``: only opportunities observed
-    # after activation may adapt (S14B), so the fixture activates two minutes ago.
-    self.clock.advance(5 + 120)
+    # The live Kafka consumer is active from process start. There is no
+    # The live Kafka consumer is already active in this fixture.
 
   async def decisions(self):
     await self._ensure()
@@ -395,18 +395,18 @@ async def test_unconfigured_scope_defaults_to_go_in_global_go_mode(h):
   now = int(h.clock.now)
   assert await h.deliver(event(now)) == "match_written"
   assert await redis_state.get_client().get(strategy_matches_key("XAU")) is not None
-  assert await h.decisions() == [{"outcome": "match_written", "reason": "go_owned_scope", "mode": "go"}]
+  assert await h.decisions() == [{"outcome": "match_written", "reason": "go_live", "mode": "go"}]
 
 
 @pytest.mark.asyncio
-async def test_go_owned_scope_writes_a_confirmed_setup_and_one_match_idempotently(h):
-  await h.grant()
+async def test_live_go_writes_a_confirmed_setup_and_one_match_idempotently(h):
+  await h.activate()
   ev = event(int(h.clock.now))
   assert await h.deliver(ev) == "match_written"
   client = redis_state.get_client()
   matches = deserialize_matches(await client.get(strategy_matches_key("XAU")))
   assert [m.match_id for m in matches] == ["go_opp_golden_supply_xau"]
-  assert "authority_epoch:1" in matches[0].tags
+  assert GO_ORIGIN_TAG in matches[0].tags
   assert (await load_setup(client, "go_opp_golden_supply_xau")).state == CONFIRMED
   # Redelivery of the same Kafka event is idempotent (it must be, so a failed
   # first attempt can be retried) and a different event for the same
@@ -420,7 +420,7 @@ async def test_go_owned_scope_writes_a_confirmed_setup_and_one_match_idempotentl
 
 @pytest.mark.asyncio
 async def test_late_redelivery_of_a_creation_never_resurrects_a_terminated_opportunity(h):
-  await h.grant()
+  await h.activate()
   ev = event(int(h.clock.now))
   await h.deliver(ev)
   term = parse_analysis_event(InvalidationTopic, json.dumps(_invalidated(payload={
@@ -434,7 +434,7 @@ async def test_late_redelivery_of_a_creation_never_resurrects_a_terminated_oppor
 
 @pytest.mark.asyncio
 async def test_unreviewed_scope_and_missing_facts_are_recorded_and_dropped(h):
-  await h.grant()
+  await h.activate()
   now = int(h.clock.now)
   raw = golden(now)
   # Every catalog ID the Go engine can actually emit (registry.go's knownIDs) has a
@@ -454,25 +454,22 @@ async def test_unreviewed_scope_and_missing_facts_are_recorded_and_dropped(h):
 
 @pytest.mark.asyncio
 async def test_single_match_key_ambiguity_fails_closed(h):
-  await h.grant()
-  h.policy = pol.GoOpportunityPolicy(h.repo, fence=h.fence, clock=h.clock, multiple_matches_enabled=lambda: False)
+  await h.activate()
+  h.policy = pol.GoOpportunityPolicy(h.repo, clock=h.clock, multiple_matches_enabled=lambda: False)
   assert await h.deliver(event(int(h.clock.now))) == "not_adapted"
   assert (await h.decisions())[-1]["reason"] == "multiple_matches_disabled"
 
 
 @pytest.mark.asyncio
-async def test_unreadable_fence_still_fails_closed(h):
-  class Down:
-    async def get(self, *_):
-      raise ConnectionError("down")
-  h.policy = pol.GoOpportunityPolicy(h.repo, fence=AuthorityFence(Down(), cache_ttl=0.0), clock=h.clock, multiple_matches_enabled=lambda: True)
-  assert await h.deliver(event(int(h.clock.now))) == "not_adapted"
-  assert (await h.decisions())[-1]["reason"].startswith("authority_unavailable")
+async def test_live_go_does_not_consult_a_legacy_store(h):
+  h.policy = pol.GoOpportunityPolicy(h.repo, clock=h.clock, multiple_matches_enabled=lambda: True)
+  assert await h.deliver(event(int(h.clock.now))) == "match_written"
+  assert (await h.decisions())[-1]["reason"] == "go_live"
 
 
 @pytest.mark.asyncio
 async def test_go_terminal_withdraws_the_match_and_invalidates_the_setup(h):
-  await h.grant()
+  await h.activate()
   await h.deliver(event(int(h.clock.now)))
   term = parse_analysis_event(InvalidationTopic, json.dumps(_invalidated(payload={
     "opportunity_id": "opp_golden_supply_xau", "symbol": "XAU", "strategy": "supply",
@@ -497,7 +494,7 @@ async def _outcome(client, match):
 
 @pytest.mark.asyncio
 async def test_resting_go_zone_is_a_non_executable_observation(h):
-  await h.grant()
+  await h.activate()
   raw = golden(int(h.clock.now))
   del raw["payload"]["technical_context"]["confirmation"]
   assert await h.deliver(parse_analysis_event(OpportunityTopic, json.dumps(raw))) == "rejected"
@@ -510,14 +507,14 @@ def test_missing_go_htf_structure_is_rejected_not_recreated_from_m5():
   del raw["payload"]["technical_context"]["higher_timeframes"]
   ev = parse_analysis_event(OpportunityTopic, json.dumps(raw))
   with pytest.raises(pol.AdapterRejection) as exc:
-    pol.build_strategy_match(ev, profile=SUPPLY, epoch=1, now=raw["payload"]["created_at"] + 1)
+    pol.build_strategy_match(ev, profile=SUPPLY, now=raw["payload"]["created_at"] + 1)
   assert exc.value.code == "higher_timeframe_bias_unavailable"
 
 
 @pytest.mark.asyncio
 async def test_existing_v8_builder_fails_closed_if_htf_is_stripped(h):
   from dataclasses import replace
-  await h.grant()
+  await h.activate()
   await h.deliver(event(int(h.clock.now)))
   client = redis_state.get_client()
   base = deserialize_matches(await client.get(strategy_matches_key("XAU")))[0]
@@ -539,7 +536,7 @@ async def test_go_owned_zone_becomes_a_real_v8_plan_with_real_contract_fields(h)
   reaction/HTF test fixture; the same typed event is consumed by the actual
   adapter and the unchanged V8 policy and publisher.
   """
-  await h.grant()
+  await h.activate()
   await h.deliver(event(int(h.clock.now)))
   client = redis_state.get_client()
   match = deserialize_matches(await client.get(strategy_matches_key("XAU")))[0]
@@ -553,16 +550,14 @@ async def test_go_owned_zone_becomes_a_real_v8_plan_with_real_contract_fields(h)
 
 
 @pytest.mark.asyncio
-async def test_rollback_between_match_write_and_publish_blocks_the_plan(h):
-  await h.grant()
+async def test_match_write_and_publish_have_no_scope_approval_dependency(h):
+  await h.activate()
   await h.deliver(event(int(h.clock.now)))
   client = redis_state.get_client()
   match = deserialize_matches(await client.get(strategy_matches_key("XAU")))[0]
-  await h.fence.rollback("XAU", "supply", expected_epoch=1, actor="oncall", reason="rollback", drain_seconds=30)
   plan_id = await worker._publish_trade_plan_v8(client, "XAU", _spot(4354.1, 4354.3), match, frames={"M1": _m1_trigger_bar()})
-  assert plan_id is None
-  raw = await client.get(worker_route_key(match))
-  assert json.loads(raw)["reason_code"] == "authority_fenced"
+  assert plan_id is not None
+  assert await read_plan_state(client, plan_id) == "published"
 
 
 def worker_route_key(match):

@@ -20,7 +20,7 @@ import math
 from typing import Any, Awaitable, Callable
 
 from app.persistence import redis_state
-from app.analysis_client.authority import GO_ORIGIN_TAG, AuthorityDecision, authorize_legacy_match
+from app.analysis_client.provenance import GO_ORIGIN_TAG
 from app.analysis_client.shadow_overlay import is_shadow_overlay
 from app.autotrade.go_plan_cancel import read_plan_cancel, register_go_plan
 from app.autotrade.go_zone_book import opposing_entries_for_go_match
@@ -4814,48 +4814,12 @@ async def _publish_trade_plan_v8(
       publish_status=True,
     )
     return None
-  # S13B technical-authority fence: exactly one of {Python detectors, Go
-  # analysis} may create an executable plan for a (symbol, catalog strategy)
-  # scope. Reconciliation of an already-published/terminal plan (above) is
-  # deliberately not fenced: ownership governs plan *creation*, never the
-  # management of positions that already exist.
-  if is_shadow_overlay(client):
-    # S14A dry run on an in-memory overlay: nothing here can reach Redis,
-    # Postgres or Telegram, so the fence (which protects live publication) is
-    # bypassed to see what the pipeline WOULD do. The real fence state is
-    # recorded separately by the shadow policy. Honoured for the overlay class
-    # only; a real client always takes the fenced branch.
-    authority = AuthorityDecision(True, "shadow_dry_run_overlay")
-  else:
-    authority = await authorize_legacy_match(
-      symbol=match.symbol,
-      strategy_name=match.strategy,
-      direction=match.direction,
-      tags=match.tags,
-      consumer_enabled=runtime_config.analysis.technical_authority.consumer_enabled,
-      go_authority_mode=runtime_config.analysis.technical_authority.mode == "go",
-    )
-  if not authority.allowed:
-    await record_route_outcome(
-      client,
-      match,
-      stage="mode_check",
-      status="blocked",
-      reason_code="authority_fenced",
-      message=f"plan creation for this scope is not owned by this publisher ({authority.reason})",
-      measured={
-        "authority_reason": authority.reason,
-        "authority_owner": authority.owner,
-        "authority_epoch": authority.epoch,
-        "authority_scopes": list(authority.scopes),
-      },
-      retained=False,
-      publish_status=False,
-    )
-    return None
+  # Go is the live technical source; provenance and the Go-only match filter remain the protection
+  # against stale Python/ZoneWatch state. Everything after this point is
+  # execution-time quote, confirmation, risk and order validation.
   if GO_ORIGIN_TAG in match.tags:
-    # S14B: a Go opportunity that was invalidated/expired, or whose scope was
-    # rolled back, leaves a cancel tombstone. A match that raced the withdrawal
+    # A Go opportunity that was invalidated/expired leaves a cancel tombstone.
+    # A match that raced the withdrawal
     # (already in this cycle's memory) must not become a fresh plan.
     withdrawn = await read_plan_cancel(client, _v8_plan_id(match))
     if withdrawn is not None:
@@ -5055,7 +5019,7 @@ async def _publish_trade_plan_v8(
     # Go's causal, strategy-specific confirmation already gated Candidate
     # creation (go_opportunity_policy.build_strategy_match) — so re-demanding
     # a legacy pattern label here would be a second, Python-only technical
-    # authority over the same decision, exactly what confirmation_policy_for's
+    # technical ownership over the same decision, exactly what confirmation_policy_for's
     # GO_ORIGIN_TAG bypass already avoids for the M1/M5 confirmation source.
     trigger_name = (
       str(match.entry_activation_trigger or "")
@@ -6572,7 +6536,7 @@ async def _publish_trade_plan_v8(
         reason_code="v8_builder",
       )
     if GO_ORIGIN_TAG in match.tags:
-      # Index before publishing: a rollback must always be able to find every
+      # Index before publishing: a cancellation must always be able to find every
       # Go-derived plan. A failure here aborts the publish (fail closed).
       await register_go_plan(client, plan_id=plan.plan_id, match=match, expires_at=plan.expires_at)
     await publish_trade_plan(client, plan)
@@ -7871,13 +7835,13 @@ async def _handle_event(
   source = source or RedisOHLCSource(client)
   spot = await _load_spot(client, symbol)
   scanner_strategy_matches = await _load_strategy_matches(client, symbol)
-  go_authority = runtime_config.analysis.technical_authority.mode == "go"
+  go_mode = runtime_config.analysis.technical_authority.mode == "go"
   if ready_match_id is not None:
     scanner_strategy_matches = [
       item for item in scanner_strategy_matches
       if item.match_id == ready_match_id
     ]
-  if go_authority:
+  if go_mode:
     # Go is the sole automatic technical-opportunity producer. This filter is
     # applied even for a ready-stream wake-up: a ZoneWatch or legacy Python
     # caller cannot smuggle a non-Go match through the explicit-match path.
@@ -7886,10 +7850,10 @@ async def _handle_event(
       if GO_ORIGIN_TAG in item.tags
     ]
   if not scanner_strategy_matches:
-    frames = {} if go_authority else await _load_frames(
+    frames = {} if go_mode else await _load_frames(
       source, symbol, timeframes=(EXECUTION_TIMEFRAME,),
     )
-    if not go_authority:
+    if not go_mode:
       await _rearm_scanner_range_edges(client, symbol, spot)
       await _advance_mapped_thesis_rearms_from_frames(
         client, symbol=symbol, frames=frames,
@@ -7899,7 +7863,7 @@ async def _handle_event(
     )
     return None
 
-  if go_authority:
+  if go_mode:
     # The Go event is the complete technical decision: do not call Python
     # regime, range, trendline, or scalp detectors on this path, and do not
     # let scanner_strategy_matches (see above) ever carry a non-Go match
@@ -8051,7 +8015,7 @@ async def _handle_event(
           "market_map_strategy"
           if routed_match.strategy_mode == "mapped_zone_reaction"
           else "go_analysis_engine"
-          if go_authority
+          if go_mode
           else "scanner_strategy_match"
         ),
         strategy=routed_match.strategy,
@@ -8733,7 +8697,7 @@ async def try_publish_executable_signal(
       match,
       stage="mode_check",
       status="blocked",
-      reason_code="python_match_rejected_go_authority",
+      reason_code="python_match_rejected_live_go",
       message="Go-only mode rejects non-Go automatic matches",
       retained=False,
       publish_status=False,
@@ -8741,7 +8705,7 @@ async def try_publish_executable_signal(
     return PublishResult(
       status=PUBLISH_STATUS_REJECTED,
       plan_id=plan_id,
-      reason_code="python_match_rejected_go_authority",
+      reason_code="python_match_rejected_live_go",
       zone_id=zone_id,
       setup_id=setup_id,
     )

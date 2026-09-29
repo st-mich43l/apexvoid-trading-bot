@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, Mock
 import pandas as pd
 import pytest
 
-from app.analysis_client.authority import CATALOG_TAG, EPOCH_TAG, GO_ORIGIN_TAG
+from app.analysis_client.provenance import CATALOG_TAG, GO_ORIGIN_TAG
 from app.autotrade import worker
 from app.autotrade.gate import AutoScalpDecision
 from app.autotrade.multi_match import serialize_matches, strategy_matches_key
@@ -98,9 +98,9 @@ async def test_mapped_thesis_rearm_does_not_bool_coerce_m1_frame(monkeypatch):
   assert called["atr"] > 0
 
 
-# ---- Go is the sole automatic technical-opportunity producer (mode=go) -------
+# ---- Go is the sole automatic technical-opportunity producer -----------------
 
-GO_TAGS = (GO_ORIGIN_TAG, f"{CATALOG_TAG}supply", f"{EPOCH_TAG}1", "go_opportunity:opp")
+GO_TAGS = (GO_ORIGIN_TAG, f"{CATALOG_TAG}supply", "go_opportunity:opp")
 
 
 def _base_match(now: int) -> StrategyMatch:
@@ -142,12 +142,12 @@ def _go_match(now: int) -> StrategyMatch:
   )
 
 
-def _worker_cycle(monkeypatch, *, mode: str, now: int):
+def _worker_cycle(monkeypatch, *, now: int):
   install_runtime_overrides(
     monkeypatch,
     {
-      "analysis.technical_authority.mode": mode,
-      "analysis.technical_authority.consumer_enabled": mode != "python",
+      "analysis.technical_authority.mode": "go",
+      "analysis.technical_authority.consumer_enabled": True,
       "strategies.matching.multiple_matches_enabled": True,
     },
     legacy_overrides={
@@ -197,7 +197,7 @@ async def test_go_mode_stale_python_match_cannot_produce_a_plan(monkeypatch):
   Python scalp/regime/trend pass runs - the cycle is the ordinary idle one."""
   client = redis_state.get_client()
   now = int(datetime.now(timezone.utc).timestamp())
-  source = _worker_cycle(monkeypatch, mode="go", now=now)
+  source = _worker_cycle(monkeypatch, now=now)
   stale = _python_match(now)
   await client.set(strategy_matches_key("XAU"), serialize_matches([stale]))
   assert [m.match_id for m in await worker._load_strategy_matches(client, "XAU")] == [stale.match_id]
@@ -224,26 +224,10 @@ async def test_go_mode_stale_python_match_cannot_produce_a_plan(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_python_mode_still_evaluates_the_same_match(monkeypatch):
-  """Control for the test above: the filter is what hides it, not the fixture."""
-  client = redis_state.get_client()
-  now = int(datetime.now(timezone.utc).timestamp())
-  source = _worker_cycle(monkeypatch, mode="python", now=now)
-  stale, go = _python_match(now), _go_match(now)
-  await client.set(strategy_matches_key("XAU"), serialize_matches([stale, go]))
-  seen = _capture_full_pass(monkeypatch)
-
-  with pytest.raises(_ReachedFullPass):
-    await worker._handle_event(f"XAU:M1:{now}", source=source, client=client)
-
-  assert seen == [sorted([stale.match_id, go.match_id])]
-
-
-@pytest.mark.asyncio
 async def test_go_mode_sweep_keeps_go_origin_matches(monkeypatch):
   client = redis_state.get_client()
   now = int(datetime.now(timezone.utc).timestamp())
-  source = _worker_cycle(monkeypatch, mode="go", now=now)
+  source = _worker_cycle(monkeypatch, now=now)
   stale, go = _python_match(now), _go_match(now)
   await client.set(strategy_matches_key("XAU"), serialize_matches([stale, go]))
   seen = _capture_full_pass(monkeypatch)
@@ -266,7 +250,7 @@ async def test_go_mode_filters_a_retained_zonewatch_match_even_via_ready_match_i
   the closed-bar-sweep half of the same invariant."""
   client = redis_state.get_client()
   now = int(datetime.now(timezone.utc).timestamp())
-  source = _worker_cycle(monkeypatch, mode="go", now=now)
+  source = _worker_cycle(monkeypatch, now=now)
   retained, go = _python_match(now), _go_match(now)
   await client.set(strategy_matches_key("XAU"), serialize_matches([retained, go]))
   _capture_full_pass(monkeypatch)

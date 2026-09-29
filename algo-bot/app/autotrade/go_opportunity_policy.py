@@ -3,17 +3,16 @@
 A durable, decoded Go opportunity (``analysis_client``) becomes an ordinary
 ``StrategyMatch`` in Redis, so every execution gate downstream — arbitration,
 killzone/news guards, execution policy (min R:R, stop, routing), sizing,
-duplicate protection, TradePlan V8 and its publish-time authority fence — runs
-unchanged. This module decides nothing about technical structure or risk; it
-only translates the Go-owned facts.
+duplicate protection and TradePlan V8 — runs unchanged. This module decides
+nothing about technical structure or risk; it only translates the Go-owned
+facts.
 
 Hard rules encoded here:
 
 * **Reviewed scopes only.** ``REVIEWED_SCOPES`` is the allowlist; anything else
   is recorded as a decision and dropped, never guessed at.
-* **Global Go mode.** When `analysis.technical_authority.mode=go`, an absent
-  scope row defaults to Go. Explicit Python/draining rows remain fenced; the
-  match carries its epoch and the plan-publish guard re-checks it.
+* **Live Go source.** Kafka delivery is the technical-source boundary. No
+  per-scope approval table is consulted by this path.
 * **Fail closed on missing facts.** No ``technical_context``, no observed
   timeframe, unknown instrument, expired opportunity, non-directional
   geometry, or ``multiple_matches_enabled`` off (which would make the shared
@@ -38,12 +37,10 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from app.analysis_client.authority import (
+from app.analysis_client.provenance import (
   CATALOG_TAG,
-  EPOCH_TAG,
   GO_ORIGIN_TAG,
-  AuthorityFence,
-  get_fence,
+  CATALOG_STRATEGY_IDS,
 )
 from app.analysis_client.freshness import FreshnessLimits, evaluate_freshness
 from app.analysis_client.models import InvalidationEnvelope, OpportunityEnvelope
@@ -125,6 +122,9 @@ REVIEWED_SCOPES: dict[str, ScopeProfile] = {
   "scalp_breakout_retest": ScopeProfile("scalp_breakout_retest", "Breakout Retest Scalp", "scalp_breakout_retest", None, frozenset({"M1"}), "go_m5_m1_breakout_retest", evidence_prefixes=("m5_prebreakout_box", "m1_breakout_accepted", "m1_retest_confirmed")),
 }
 
+if frozenset(REVIEWED_SCOPES) != CATALOG_STRATEGY_IDS:
+  raise RuntimeError("Go strategy catalog and Go-to-policy adapter registry are out of sync")
+
 
 class AdapterRejection(Exception):
   def __init__(self, code: str, message: str = ""):
@@ -133,7 +133,7 @@ class AdapterRejection(Exception):
     self.message = message
 
 
-# Incident 2026-09-29: with all 19 catalog strategies granted authority at
+# Incident 2026-09-29: with all 19 catalog strategies enabled at
 # once, several strategies with no persistent Go-side zone object (their
 # Evaluate() re-scans a sliding OHLC window on every bar rather than tracking
 # a created-once Zone) produced dozens of distinct-ID opportunities for
@@ -165,12 +165,12 @@ def match_id_for(opportunity_id: str) -> str:
 
 # Plan tag the executor honours (contracts/autotrade/xau-ladder-spec.json): a plan carrying it never
 # receives the executor-injected XAU risk leg. Go-origin plans carry it until the separate
-# analysis.technical_authority.go_origin_risk_leg_enabled gate is turned on.
+# analysis.technical_authority.go_origin_risk_leg_enabled option is turned on.
 RISK_LEG_DISABLED_TAG = "risk_leg:disabled"
 
 
 def build_strategy_match(
-  event: OpportunityEnvelope, *, profile: ScopeProfile, epoch: int, now: int, risk_leg_enabled: bool = False,
+  event: OpportunityEnvelope, *, profile: ScopeProfile, now: int, risk_leg_enabled: bool = False,
 ) -> StrategyMatch:
   """Pure translation. Raises AdapterRejection rather than approximating."""
   payload = event.payload
@@ -263,7 +263,6 @@ def build_strategy_match(
   tags = (
     GO_ORIGIN_TAG,
     f"{CATALOG_TAG}{profile.catalog_id}",
-    f"{EPOCH_TAG}{epoch}",
     f"go_opportunity:{payload.id}",
     f"kind:{profile.structural_kind}",
     "go_strategy_confirmed",
@@ -348,13 +347,17 @@ def build_strategy_match(
 
 
 class GoOpportunityPolicy:
-  """Consumer hook: durable Go lifecycle events -> matches, under the fence."""
+  """Consumer hook: durable Go lifecycle events -> live matches.
+
+  Go is the active technical producer. This adapter no longer consults a
+  per-scope approval table; Kafka delivery, lifecycle idempotency,
+  freshness and the normal execution checks remain active below it.
+  """
 
   def __init__(
     self,
     repository: PostgresAnalysisOpportunityRepository,
     *,
-    fence: AuthorityFence | None = None,
     client_factory: Callable[[], Any] | None = None,
     clock: Callable[[], float] = time.time,
     multiple_matches_enabled: Callable[[], bool] | None = None,
@@ -363,7 +366,6 @@ class GoOpportunityPolicy:
   ):
     self._risk_leg = risk_leg_enabled
     self._repository = repository
-    self._fence = fence
     self._client_factory = client_factory
     self._clock = clock
     self._multiple = multiple_matches_enabled
@@ -374,9 +376,6 @@ class GoOpportunityPolicy:
       return self._client_factory()
     from app.persistence import redis_state
     return redis_state.get_client()
-
-  def _fence_instance(self) -> AuthorityFence:
-    return self._fence or get_fence()
 
   def _multiple_enabled(self) -> bool:
     if self._multiple is not None:
@@ -394,8 +393,8 @@ class GoOpportunityPolicy:
     if self._limits is not None:
       return self._limits()
     from app.core.config import runtime_config
-    authority = runtime_config.analysis.technical_authority
-    return FreshnessLimits(authority.max_event_age_seconds, authority.max_delivery_lag_seconds)
+    analysis_config = runtime_config.analysis.technical_authority
+    return FreshnessLimits(analysis_config.max_event_age_seconds, analysis_config.max_delivery_lag_seconds)
 
   async def _decide(self, event: OpportunityEnvelope, outcome: str, reason: str, **details: Any) -> None:
     await self._repository.record_shadow_decision(
@@ -409,11 +408,10 @@ class GoOpportunityPolicy:
     """Idempotent: safe to re-run on a redelivered creation event.
 
     ``published_at`` is the Kafka record's publish time (epoch seconds) when the
-    broker supplied one; the S14B freshness gate falls back to the envelope's
-    ``produced_at``. Only a *new* confirmed observation made after the scope's
-    durable go-effective boundary, still inside its event-age, delivery-lag and
-    technical-expiry limits, may become a match: a restart or backlog never
-    trades history.
+    broker supplied one; the freshness check falls back to the envelope's
+    ``produced_at``. Only a confirmed observation inside its event-age,
+    delivery-lag and technical-expiry limits may become a match: a backlog
+    never trades stale history.
 
     Handles ``created`` and ``duplicate_delivery`` (a redelivery after a failed
     earlier attempt — exceptions propagate so the Kafka offset is not
@@ -431,16 +429,7 @@ class GoOpportunityPolicy:
     if profile is None:
       await self._decide(event, "not_adapted", "scope_not_reviewed")
       return "not_adapted"
-    try:
-      decision = await self._fence_instance().authorize_go_publication(
-        payload.symbol, profile.catalog_id, allow_unconfigured=True,
-      )
-    except Exception as exc:  # noqa: BLE001 - fail closed on dependency outage
-      await self._decide(event, "not_adapted", f"authority_unavailable:{type(exc).__name__}")
-      return "not_adapted"
-    if not decision.allowed:
-      await self._decide(event, "not_adapted", f"not_go_owner:{decision.reason}", owner=decision.owner, epoch=decision.epoch)
-      return "not_adapted"
+    # The live Kafka opportunity event is the technical-source boundary.
     if not self._multiple_enabled():
       await self._decide(event, "not_adapted", "multiple_matches_disabled")
       return "not_adapted"
@@ -455,13 +444,13 @@ class GoOpportunityPolicy:
     )
     verdict = evaluate_freshness(
       observed_at=payload.created_at, expires_at=payload.expires_at, produced_at=event.produced_at,
-      published_at=published_at, consumed_at=now, boundary=decision.boundary, limits=self._freshness_limits(),
+      published_at=published_at, consumed_at=now, limits=self._freshness_limits(),
     )
     if not verdict.ok and not already_adapted:
-      await self._decide(event, "not_adapted", verdict.code, owner=decision.owner, epoch=decision.epoch, **verdict.details())
+      await self._decide(event, "not_adapted", verdict.code, owner="go", **verdict.details())
       return "not_adapted"
     try:
-      match = build_strategy_match(event, profile=profile, epoch=decision.epoch, now=now, risk_leg_enabled=self._risk_leg_enabled())
+      match = build_strategy_match(event, profile=profile, now=now, risk_leg_enabled=self._risk_leg_enabled())
     except AdapterRejection as exc:
       await self._decide(event, "rejected", exc.code, message=exc.message)
       return "rejected"
@@ -469,9 +458,9 @@ class GoOpportunityPolicy:
     await self._advance_setup(client, match)
     await self._store_match(client, match, now)
     await self._decide(
-      event, "match_written", "go_owned_scope", match_id=match.match_id, epoch=decision.epoch, **verdict.details(),
+      event, "match_written", "go_live", match_id=match.match_id, **verdict.details(),
     )
-    log.info("Go opportunity adapted opportunity=%s match=%s epoch=%s", payload.id, match.match_id, decision.epoch)
+    log.info("Go opportunity adapted opportunity=%s match=%s", payload.id, match.match_id)
     return "match_written"
 
   async def on_terminal(self, event: InvalidationEnvelope, result: LifecycleResult) -> str:

@@ -8,7 +8,6 @@ from app.analysis_client.freshness import (
   EXPIRED,
   FRESH,
   LAG_EXCEEDED,
-  PRE_ACTIVATION,
   TOO_OLD,
   FreshnessLimits,
   evaluate_freshness,
@@ -21,28 +20,16 @@ BOUNDARY = 10_000
 def verdict(**overrides):
   fields = dict(
     observed_at=BOUNDARY + 100, expires_at=BOUNDARY + 5_000, produced_at=BOUNDARY + 101, published_at=None,
-    consumed_at=BOUNDARY + 160, boundary=BOUNDARY, limits=LIMITS,
+    consumed_at=BOUNDARY + 160, limits=LIMITS,
   )
   fields.update(overrides)
   return evaluate_freshness(**fields)
 
 
-def test_a_new_confirmed_observation_after_activation_is_fresh():
+def test_a_recent_confirmed_observation_is_fresh():
   v = verdict()
   assert v.ok and v.code == FRESH
   assert (v.event_age_seconds, v.delivery_lag_seconds) == (60, 59)
-
-
-def test_observation_exactly_at_the_boundary_counts_one_second_earlier_does_not():
-  assert verdict(observed_at=BOUNDARY, produced_at=BOUNDARY).ok
-  early = verdict(observed_at=BOUNDARY - 1, produced_at=BOUNDARY - 1)
-  assert not early.ok and early.code == PRE_ACTIVATION
-
-
-def test_history_replayed_after_activation_never_trades_however_fresh_the_delivery():
-  # Old observation, brand-new Kafka publish (a re-published/replayed record).
-  v = verdict(observed_at=BOUNDARY - 3_600, produced_at=BOUNDARY - 3_600, published_at=BOUNDARY + 155)
-  assert not v.ok and v.code == PRE_ACTIVATION
 
 
 def test_technical_expiry_is_inclusive_of_the_expiry_second():
@@ -69,7 +56,7 @@ def test_reasons_are_reported_most_fundamental_first():
   everything_wrong = verdict(
     observed_at=BOUNDARY - 10, produced_at=BOUNDARY - 10, expires_at=BOUNDARY, consumed_at=BOUNDARY + 99_999,
   )
-  assert everything_wrong.code == PRE_ACTIVATION
+  assert everything_wrong.code == EXPIRED
   expired_and_old = verdict(expires_at=BOUNDARY + 200, consumed_at=BOUNDARY + 99_999)
   assert expired_and_old.code == EXPIRED
   old_and_lagging = verdict(consumed_at=BOUNDARY + 99_999, expires_at=BOUNDARY + 999_999)
@@ -86,7 +73,7 @@ def test_details_record_technical_publication_and_consumption_times():
   d = verdict(published_at=BOUNDARY + 150).details()
   assert d == {
     "observed_at": BOUNDARY + 100, "expires_at": BOUNDARY + 5_000, "produced_at": BOUNDARY + 101,
-    "published_at": BOUNDARY + 150, "consumed_at": BOUNDARY + 160, "activation_boundary": BOUNDARY,
+    "published_at": BOUNDARY + 150, "consumed_at": BOUNDARY + 160,
     "event_age_seconds": 60, "delivery_lag_seconds": 10, "max_event_age_seconds": 900, "max_delivery_lag_seconds": 300,
   }
 

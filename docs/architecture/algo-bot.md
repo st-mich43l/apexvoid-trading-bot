@@ -48,21 +48,16 @@ No technical recalculation. If a consumer needs a value `analysis_client`
 doesn't expose, the fix is a new field on the `analysis.opportunity.v1`
 contract, never a local Python recomputation.
 
-### S12 rollout guard
+### Live Go consumer
 
-`analysis.technical_authority.mode` defaults to `python` and
-`consumer_enabled` defaults to `false`. The only consumer-enabled mode now
-implemented before the cutover is `go_shadow`: it durably records Go
-opportunity lifecycle state and the outcome of a real dry run of the live
-pipeline (S14A: an in-memory Redis overlay, read-only PostgreSQL, no Telegram),
-but cannot publish, reserve, or execute a TradePlan. `go` fails configuration validation until the separately
-approved S12D cutover implementation exists.
-
-Opportunity V1 currently lacks the execution-policy facts required by the
-existing `StrategyMatch` → `TradePlanBuilder` route: current price, ATR,
-confluence, source-structure geometry, execution confirmation, and strategy
-routing. S12 deliberately records that gap rather than recreating detectors in
-Python.
+`analysis.technical_authority.mode=go` and `consumer_enabled=true` are the
+production configuration. Kafka delivery is the Go-analysis boundary: the
+consumer durably applies each lifecycle event, adapts every catalog strategy
+through its explicit Go-to-policy adapter, and sends the resulting
+`StrategyMatch` through the normal TradePlan V8 path. Python remains
+responsible for execution-time quote, spread, risk and order checks, but is not
+a competing technical producer. Offline replay tooling is not a production
+mode and cannot publish automatic plans.
 
 ## Auto Algo flow (§41, frozen)
 
@@ -76,11 +71,9 @@ flowchart TD
     TPB --> TP[TradePlan]
 ```
 
-Today's real equivalent (verified this session, live): ZoneWatch discovery
-→ location/activation gates → `_evaluate_record`/`_sync_strategy_match_cutover`
-→ `_publish_trade_plan_v8`. This is the same shape with different names;
-the target rename is cosmetic reorganization, not a logic rewrite, once it
-happens.
+Today's live path is Kafka Go opportunity → durable lifecycle ledger → explicit
+Go-to-policy adapter → execution checks → `_publish_trade_plan_v8`. ZoneWatch,
+the legacy scanner and their startup monkeypatches are not automatic producers.
 
 ## Manual Algo (§42)
 

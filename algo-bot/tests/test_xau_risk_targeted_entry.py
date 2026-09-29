@@ -86,7 +86,7 @@ def test_go_policy_does_not_apply_fixed_rr_or_python_stop_rewrite():
     structure_swing=4150.0,
     go_invalidation_price=4142.0,
     targets_pips=(40, 80),
-    tags=("authority:go",),
+    tags=("origin:go",),
   )
   evaluation = evaluate_execution_policy(
     match,

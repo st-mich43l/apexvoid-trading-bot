@@ -8,16 +8,11 @@
 # question for the owner) — analysis.yml is the closest fit since these
 # are all analysis *inputs*, not execution or delivery concerns.
 analysis:
-  # NOT the switch for the Python bot. This V3 file is read by the Go engine and the C# executor;
-  # the Python bot reads the ansible-rendered trading-bot.yml (`analysis.technical_authority`, see
-  # config/trading-bot.yml) and only that file turns go_shadow / go / the consumer on.
-  # Kept at python / false so it never claims an activation that has not happened: on 2026-09-26
-  # `go` was merged here while production kept running python and never started the consumer.
-  # Activation order: go_shadow first (dry run only), `go` only after the S14F acceptance report
-  # is reviewed, and even then no scope moves without an operator-approved fenced grant.
+  # Go is live. The Kafka opportunity lifecycle is the sole automatic
+  # technical-analysis path; Python only applies execution-time policy.
   technical_authority:
-    mode: python
-    consumer_enabled: false
+    mode: go
+    consumer_enabled: true
     consumer_group: apexvoid-algo-bot-analysis-opportunity-v1
     # S14B live-freshness limits. A NEW live plan needs a confirmed observation
     # no older than max_event_age_seconds and a Kafka publish->consume gap no
@@ -87,9 +82,8 @@ analysis:
   #     distinct from Algo Bot's own execution-age policy; 24h is one
   #     trading day.
   # S11 completed concrete factories for all 19 registry entries. Every
-  # strategy is enabled for the production shadow run; this emits technical
-  # Kafka opportunities only and cannot place a trade until Phase S12 adds an
-  # explicit Algo Bot consumer.
+  # strategy is enabled for the live Kafka opportunity stream; Algo Bot
+  # consumes those events and applies execution policy before publishing V8.
   strategies:
     key_level:
       version: v2

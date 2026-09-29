@@ -19,9 +19,9 @@ Decision vocabulary (``outcome``; ``reason`` is the gate's own code):
 * ``rejected``        the adapter refused (missing facts; never guessed)
 * ``dry_run_error``   the dry run itself failed (recorded; the consumer goes on)
 
-The authority fence protects *live* publication and is deliberately not applied
-inside the dry run (see ``worker._publish_trade_plan_v8``); the fence's actual
-state for the scope is recorded in ``details.fence_actual`` instead.
+This module is retained only for explicit offline replay tooling. It has no
+production approval dependency and is never selected by the live
+consumer configuration.
 """
 
 from __future__ import annotations
@@ -63,7 +63,6 @@ class GoShadowPolicy:
     repository: PostgresAnalysisOpportunityRepository,
     *,
     real_client_factory: Callable[[], Any] | None = None,
-    fence: Any | None = None,
     clock: Callable[[], float] = time.time,
     multiple_matches_enabled: Callable[[], bool] | None = None,
     freshness_limits: Callable[[], FreshnessLimits] | None = None,
@@ -72,7 +71,6 @@ class GoShadowPolicy:
     self._risk_leg = risk_leg_enabled
     self._repository = repository
     self._real_client_factory = real_client_factory
-    self._fence = fence
     self._clock = clock
     self._multiple = multiple_matches_enabled
     self._limits = freshness_limits
@@ -100,16 +98,8 @@ class GoShadowPolicy:
     if self._limits is not None:
       return self._limits()
     from app.core.config import runtime_config
-    authority = runtime_config.analysis.technical_authority
-    return FreshnessLimits(authority.max_event_age_seconds, authority.max_delivery_lag_seconds)
-
-  async def _fence_actual(self, symbol: str, scope: str) -> dict[str, Any]:
-    try:
-      from app.analysis_client.authority import get_fence
-      decision = await (self._fence or get_fence()).authorize_go_publication(symbol, scope)
-      return {"go_allowed": decision.allowed, "reason": decision.reason, "owner": decision.owner, "epoch": decision.epoch}
-    except Exception as exc:  # noqa: BLE001 - informational only
-      return {"error": f"{type(exc).__name__}: {exc}"}
+    analysis_config = runtime_config.analysis.technical_authority
+    return FreshnessLimits(analysis_config.max_event_age_seconds, analysis_config.max_delivery_lag_seconds)
 
   # ---- the dry run --------------------------------------------------------------
   async def dry_run_creation(self, event: OpportunityEnvelope, *, published_at: int | None = None) -> ShadowDecision:
@@ -124,21 +114,20 @@ class GoShadowPolicy:
     base["scope"] = profile.catalog_id
     if await self._repository.opportunity_state(payload.id) != "active":
       return await self._record(event, ShadowDecision("not_adapted", "ignored_not_active"), base)
-    base["fence_actual"] = await self._fence_actual(payload.symbol, profile.catalog_id)
     if not self._multiple_enabled():
       return await self._record(event, ShadowDecision("not_adapted", "multiple_matches_disabled"), base)
 
     now = int(self._clock())
-    # No activation exists in shadow (boundary 0): only expiry, age and lag apply.
+    # Offline replay applies the same expiry, age and delivery-lag checks.
     verdict = evaluate_freshness(
       observed_at=payload.created_at, expires_at=payload.expires_at, produced_at=event.produced_at,
-      published_at=published_at, consumed_at=now, boundary=0, limits=self._freshness_limits(),
+      published_at=published_at, consumed_at=now, limits=self._freshness_limits(),
     )
     base.update(verdict.details())
     if not verdict.ok:
       return await self._record(event, ShadowDecision("not_adapted", verdict.code), base)
     try:
-      match = build_strategy_match(event, profile=profile, epoch=0, now=now, risk_leg_enabled=self._risk_leg_enabled())
+      match = build_strategy_match(event, profile=profile, now=now, risk_leg_enabled=self._risk_leg_enabled())
     except AdapterRejection as exc:
       return await self._record(event, ShadowDecision("rejected", exc.code), {**base, "message": exc.message})
     base["match_id"] = match.match_id

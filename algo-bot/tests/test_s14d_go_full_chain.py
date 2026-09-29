@@ -130,7 +130,7 @@ def catalog_kafka_record(now: int, scope: str, *, offset: int = 1):
 
 
 def consumer_for(h) -> AnalysisOpportunityConsumer:
-  return AnalysisOpportunityConsumer(h.repo, shadow=None, mode="go", policy=h.policy)
+  return AnalysisOpportunityConsumer(h.repo, policy=h.policy)
 
 
 async def cycle(prod, *, n: int = 1):
@@ -157,8 +157,8 @@ async def route(prod, match_id: str) -> dict:
   return json.loads(await prod.get(route_outcome_key("XAU", match_id)))
 
 
-async def granted_and_delivered(h, opp: str = "opp_chain", **kw):
-  await h.grant()
+async def go_event_delivered(h, opp: str = "opp_chain", **kw):
+  await h.activate()
   await h._ensure()
   record = kafka_record(h.clock.now, opp, **kw)
   await consumer_for(h).process_record(record)
@@ -169,7 +169,7 @@ async def granted_and_delivered(h, opp: str = "opp_chain", **kw):
 
 @pytest.mark.asyncio
 async def test_kafka_event_becomes_a_real_v8_plan_with_full_provenance(h, prod, sql):
-  record = await granted_and_delivered(h)
+  record = await go_event_delivered(h)
   # durable PostgreSQL lifecycle first
   assert await h.repo.opportunity_state("opp_chain") == "active"
   assert [r["outcome"] for r in await sql.fetch("SELECT outcome FROM analysis_shadow_decisions")] == ["match_written"]
@@ -189,7 +189,7 @@ async def test_kafka_event_becomes_a_real_v8_plan_with_full_provenance(h, prod, 
   zone_id = event["technical_context"]["confirmation"]["zone_id"]
   assert plan["thesis_id"] == match.thesis_id == pol._thesis_id("XAU", "supply_demand", "SELL", zone_id)
   tags = set(plan["analysis"]["tags"])
-  assert {"authority:go", "catalog:supply", "authority_epoch:1", f"go_opportunity:{event['id']}", "htf_bias_source:go_H1", "go_reaction:rejection"} <= tags
+  assert {"origin:go", "catalog:supply", f"go_opportunity:{event['id']}", "htf_bias_source:go_H1", "go_reaction:rejection"} <= tags
   assert plan["analysis"]["strategy"] == "Supply Demand" and plan["analysis"]["direction"] == "SELL"
   # actual structural zone identity, entry band and invalidation come from Go, not from a Python detector
   assert plan["source_structure"]["structure_id"] == event["technical_context"]["confirmation"]["zone_id"]
@@ -210,7 +210,7 @@ async def test_kafka_event_becomes_a_real_v8_plan_with_full_provenance(h, prod, 
   assert await prod.get(f"execution:plan_state:{plan['plan_id']}") == "published"
   assert await prod.exists(f"execution:plan_dedup:{plan['plan_id']}")
   assert (await route(prod, match.match_id))["status"] == "candidate_published"
-  assert json.loads(await prod.hget("analysis:go_plans", plan["plan_id"]))["epoch"] == 1
+  assert json.loads(await prod.hget("analysis:go_plans", plan["plan_id"]))["scope"] == "supply"
 
 
 @pytest.mark.asyncio
@@ -233,7 +233,7 @@ async def test_go_zone_book_hard_blocks_a_go_origin_plan_inside_a_published_oppo
   """
   from app.autotrade.go_zone_book import go_zone_book_key
 
-  await h.grant(scope="key_level")
+  await h.activate(scope="key_level")
   await h._ensure()
   record = catalog_kafka_record(h.clock.now, "key_level")
   await consumer_for(h).process_record(record)
@@ -259,7 +259,7 @@ async def test_go_zone_book_unavailable_falls_back_to_the_existing_publish_path(
   """No zone book published (Go has not written one, or it expired): the
   plan still publishes using Go's opportunity geometry, without inventing a
   competing Python zone book or silently blocking the opportunity."""
-  await h.grant(scope="key_level")
+  await h.activate(scope="key_level")
   await h._ensure()
   record = catalog_kafka_record(h.clock.now, "key_level")
   await consumer_for(h).process_record(record)
@@ -276,14 +276,14 @@ async def test_go_zone_book_unavailable_falls_back_to_the_existing_publish_path(
 @pytest.mark.asyncio
 async def test_every_reviewed_go_strategy_reaches_tradeplan_v8(h, prod, scope):
   """The complete Kafka -> adapter -> V8 path is covered for every scope."""
-  await h.grant(scope=scope)
+  await h.activate(scope=scope)
   await h._ensure()
   record = catalog_kafka_record(h.clock.now, scope)
   await consumer_for(h).process_record(record)
 
   match = deserialize_matches(await prod.get(strategy_matches_key("XAU")))[0]
   assert match.structural_source == f"go:{scope}"
-  assert "authority:go" in match.tags
+  assert "origin:go" in match.tags
   plan_id = await worker._publish_trade_plan_v8(
     prod,
     "XAU",
@@ -296,13 +296,13 @@ async def test_every_reviewed_go_strategy_reaches_tradeplan_v8(h, prod, scope):
   assert plan is not None
   assert plan.setup_id == match.match_id
   assert plan.provenance.confirmation_source == "go_analysis_engine"
-  assert plan.analysis.tags and "authority:go" in plan.analysis.tags
+  assert plan.analysis.tags and "origin:go" in plan.analysis.tags
   TradePlan.from_dict(plan.to_dict()).validate()
 
 
 @pytest.mark.asyncio
 async def test_redelivery_and_repeated_cycles_never_duplicate_the_plan(h, prod):
-  record = await granted_and_delivered(h)
+  record = await go_event_delivered(h)
   await cycle(prod, n=3)
   await consumer_for(h).process_record(record)                        # Kafka redelivers the same record
   await cycle(prod, n=3)
@@ -313,7 +313,7 @@ async def test_redelivery_and_repeated_cycles_never_duplicate_the_plan(h, prod):
 @pytest.mark.asyncio
 async def test_a_second_confirmation_of_the_same_zone_is_not_a_second_order(h, prod):
   """Go re-confirms a zone on consecutive bars under distinct opportunity ids."""
-  await h.grant()
+  await h.activate()
   await h._ensure()
   consumer = consumer_for(h)
   await consumer.process_record(kafka_record(h.clock.now, "opp_first", ago=65, offset=1))
@@ -329,7 +329,7 @@ async def test_a_second_confirmation_of_the_same_zone_is_not_a_second_order(h, p
 
 @pytest.mark.asyncio
 async def test_a_second_go_event_after_publication_does_not_add_a_plan_while_the_first_is_live(h, prod):
-  await granted_and_delivered(h, "opp_early", ago=120)
+  await go_event_delivered(h, "opp_early", ago=120)
   await cycle(prod)
   assert len(await plans(prod)) == 1
   await consumer_for(h).process_record(kafka_record(h.clock.now, "opp_later", ago=30, offset=2))
@@ -378,7 +378,7 @@ CONTROLS = [
 @pytest.mark.asyncio
 async def test_existing_auto_algo_controls_still_gate_a_go_origin_match(h, prod, monkeypatch, name, setup, status, reason):
   setup(monkeypatch)
-  await granted_and_delivered(h)
+  await go_event_delivered(h)
   await cycle(prod, n=2)
   assert await prod.xlen(STREAM) == 0, "a control that should have gated the Go match let a plan through"
   outcome = await route(prod, "go_opp_chain")
@@ -387,18 +387,18 @@ async def test_existing_auto_algo_controls_still_gate_a_go_origin_match(h, prod,
 
 @pytest.mark.asyncio
 async def test_a_withdrawn_or_unowned_go_match_never_publishes(h, prod):
-  await granted_and_delivered(h)
+  await go_event_delivered(h)
   await request_plan_cancel(prod, "v8:go_opp_chain", reason="zone_invalidated", source="opportunity_invalidated", requested_at=int(h.clock.now))
   await cycle(prod, n=2)
   assert await prod.xlen(STREAM) == 0 and (await route(prod, "go_opp_chain"))["reason_code"] == "go_plan_withdrawn"
 
 
 @pytest.mark.asyncio
-async def test_rollback_between_match_and_plan_fences_the_publication(h, prod):
-  await granted_and_delivered(h)
-  await h.fence.rollback("XAU", "supply", expected_epoch=1, actor="oncall", reason="drill", drain_seconds=30)
+async def test_no_scope_grant_is_needed_between_match_and_plan(h, prod):
+  await go_event_delivered(h)
   await cycle(prod, n=2)
-  assert await prod.xlen(STREAM) == 0 and (await route(prod, "go_opp_chain"))["reason_code"] == "authority_fenced"
+  assert len(await plans(prod)) == 1
+  assert (await route(prod, "go_opp_chain"))["status"] == "candidate_published"
 
 
 # ---- Go-only automatic path: a leftover Python scanner match never trades ----------------------------
@@ -406,11 +406,11 @@ async def test_rollback_between_match_and_plan_fences_the_publication(h, prod):
 def _stale_python_match():
   """A Python-scanner-shaped leftover sitting in Redis at cutover: the same executable
   geometry as the golden Go match, none of the Go provenance tags, and the scanner's own
-  structural identity, in a scope Python still owns (nothing is granted) - so the
-  authority fence alone would let it publish."""
+  structural identity with no Go provenance; the worker must reject it even if
+  its geometry looks like a valid Go match."""
   now = int(time.time())
   event = parse_analysis_event(OpportunityTopic, json.dumps(golden(now)))
-  go = pol.build_strategy_match(event, profile=pol.REVIEWED_SCOPES["supply"], epoch=0, now=now)
+  go = pol.build_strategy_match(event, profile=pol.REVIEWED_SCOPES["supply"], now=now)
   legacy = replace(
     go,
     tags=tuple(t for t in go.tags if t.startswith(("kind:", "bias:"))),
@@ -428,25 +428,8 @@ async def _plant(prod, match):
   await pol.GoOpportunityPolicy._store_match(prod, match, int(time.time()))
 
 
-def _go_mode(monkeypatch):
-  install_runtime_overrides(monkeypatch, {"analysis.technical_authority.mode": "go"})
-
-
-@pytest.mark.asyncio
-async def test_control_stale_python_match_would_publish_under_python_authority(h, prod):
-  """Proves the fixture is a real, publishable plan - so the go-mode test below
-  shows the Go-only sweep blocking it, not a match that could never trade."""
-  await h._ensure()
-  stale = _stale_python_match()
-  await _plant(prod, stale)
-  assert [m.match_id for m in deserialize_matches(await prod.get(strategy_matches_key("XAU")))] == [stale.match_id]
-  await cycle(prod)
-  assert [plan["setup_id"] for plan in await plans(prod)] == [stale.match_id]
-
-
 @pytest.mark.asyncio
 async def test_stale_python_match_cannot_produce_a_plan_in_go_mode(h, prod, monkeypatch):
-  _go_mode(monkeypatch)
   await h._ensure()
   stale = _stale_python_match()
   await _plant(prod, stale)
@@ -459,21 +442,19 @@ async def test_stale_python_match_cannot_produce_a_plan_in_go_mode(h, prod, monk
 
 @pytest.mark.asyncio
 async def test_go_match_still_publishes_next_to_a_stale_python_match_in_go_mode(h, prod, monkeypatch):
-  _go_mode(monkeypatch)
-  await granted_and_delivered(h)
+  await go_event_delivered(h)
   stale = _stale_python_match()
   await _plant(prod, stale)
   await cycle(prod, n=2)
   published = await plans(prod)
   assert [plan["setup_id"] for plan in published] == ["go_opp_chain"]
-  assert "authority:go" in published[0]["analysis"]["tags"]
+  assert "origin:go" in published[0]["analysis"]["tags"]
   assert await prod.get(route_outcome_key("XAU", stale.match_id)) is None
 
 
 @pytest.mark.asyncio
 async def test_retained_python_zone_watch_cannot_activate_in_go_mode(h, prod, monkeypatch):
-  """Historical ZoneWatch state cannot bypass the Go authority boundary."""
-  _go_mode(monkeypatch)
+  """Historical ZoneWatch state cannot bypass the Go provenance boundary."""
   await h._ensure()
   # What install_zone_execution_cutover() binds at startup, without leaking the install.
   monkeypatch.setattr(cutover, "_ORIGINAL_DIRECT_PUBLISH", worker.try_publish_executable_signal)
@@ -558,7 +539,7 @@ def normalized(plan: dict) -> dict:
 
 @pytest.mark.asyncio
 async def test_the_published_plan_is_the_shared_fixture_the_executor_consumes(h, prod):
-  await granted_and_delivered(h)
+  await go_event_delivered(h)
   await cycle(prod)
   (plan,) = await plans(prod)
   fresh = normalized(plan)

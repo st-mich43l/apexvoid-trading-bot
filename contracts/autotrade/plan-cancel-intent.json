@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "description": "Plan cancel intent: Python (analysis authority / Go opportunity lifecycle) asks the C# executor to withdraw a plan that must no longer trade. Consumed by algo-bot/tests/test_s14b_plan_cancel_contract.py and ctrader-engine/tests/TradePlanRuntimeTests.CancelIntent.cs so both sides are held to one table.",
+  "description": "Plan cancel intent: the Go opportunity lifecycle asks the C# executor to withdraw a plan that must no longer trade. Consumed by the Python and C# contract tests.",
   "intent_key": "execution:plan_cancel:{plan_id}",
   "ack_key": "execution:plan_cancel_ack:{plan_id}",
   "intent_ttl_seconds": 604800,
   "ack_ttl_seconds": 604800,
-  "intent_fields": ["epoch", "opportunity_id", "plan_id", "reason", "requested_at", "source"],
-  "sources": ["authority_rollback", "opportunity_expired", "opportunity_invalidated"],
+  "intent_fields": ["opportunity_id", "plan_id", "reason", "requested_at", "source"],
+  "sources": ["operator_cancel", "opportunity_expired", "opportunity_invalidated"],
   "ack_fields": ["at", "cancelled_legs", "executor", "open_legs", "outcome", "plan_id", "source"],
   "outcomes": [
     "cancelled_pending_orders",

@@ -11,6 +11,7 @@ import (
 
 func TestNewHonoursConfiguredLevel(t *testing.T) {
 	t.Setenv("APEXVOID_LOG_LEVEL", "debug")
+	t.Setenv("LOG_LEVEL", "")
 	t.Setenv("LOG_FILE_ENABLED", "false")
 	logger := New("test")
 	if !logger.Enabled(nil, slog.LevelDebug) {
@@ -18,8 +19,21 @@ func TestNewHonoursConfiguredLevel(t *testing.T) {
 	}
 }
 
+func TestNewHonoursCanonicalLogLevel(t *testing.T) {
+	t.Setenv("APEXVOID_LOG_LEVEL", "")
+	t.Setenv("LOG_LEVEL", "debug")
+	t.Setenv("LOG_FILE_ENABLED", "false")
+	logger := New("test")
+	if !logger.Enabled(nil, slog.LevelDebug) {
+		t.Fatal("debug logging should be enabled from LOG_LEVEL")
+	}
+}
+
 func TestNewDefaultsToInfo(t *testing.T) {
 	if err := os.Unsetenv("APEXVOID_LOG_LEVEL"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Unsetenv("LOG_LEVEL"); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("LOG_FILE_ENABLED", "false")
