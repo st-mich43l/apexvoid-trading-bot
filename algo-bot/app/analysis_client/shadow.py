@@ -1,12 +1,12 @@
-"""S12B/S14A shadow policy: a real dry run, never a side effect.
+"""Offline replay policy: a real dry run, never a side effect.
 
 Historically this recorded a static ``contract_gap`` because Go opportunities
 lacked the policy inputs. Since the S13B ``technical_context`` block the real
 question can be answered: what would the live pipeline do with this event? That
 answer comes from an injected ``dry_run`` (``autotrade.go_shadow_policy``), which
 runs the actual worker cycle against an in-memory Redis overlay and a read-only
-PostgreSQL. This module stays free of autotrade imports (the S13 boundary) and
-only decides whether a dry run is configured.
+PostgreSQL. This module is intentionally outside the production composition
+root: the live consumer always runs the Go policy directly.
 """
 
 from __future__ import annotations

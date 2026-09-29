@@ -1,6 +1,6 @@
 """S14B: withdraw unexecuted Go-derived work when the reason to trade it is gone.
 
-Kafka invalidation/expiry or an authority rollback must not leave a Go-derived
+Kafka invalidation/expiry or an operator cancellation must not leave a Go-derived
 plan alive somewhere between "match in Redis" and "order at the broker". Three
 stages, each with a defined owner and outcome:
 
@@ -12,7 +12,7 @@ stages, each with a defined owner and outcome:
                                      still-pending entry leg. Legs that already
                                      filled are *positions*: they keep their
                                      protective stop and normal TP/BE management.
-* open position                      never closed by an authority change or an
+* open position                      never closed by a cancellation or an
                                      invalidation; ownership governs plan
                                      *creation*, not management (S13B).
 
@@ -29,7 +29,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
-from app.analysis_client.authority import CATALOG_TAG, EPOCH_TAG, GO_ORIGIN_TAG
+from app.analysis_client.provenance import CATALOG_TAG, GO_ORIGIN_TAG
 from app.autotrade.multi_match import deserialize_matches, serialize_matches, strategy_matches_key
 from app.autotrade.setup_lifecycle import (
   CANCELLED,
@@ -51,7 +51,7 @@ PLAN_CANCEL_TTL_SECONDS = 7 * 86400
 # Shared with the executor: contracts/autotrade/plan-cancel-intent.json.
 SOURCE_INVALIDATED = "opportunity_invalidated"
 SOURCE_EXPIRED = "opportunity_expired"
-SOURCE_ROLLBACK = "authority_rollback"
+SOURCE_OPERATOR_CANCEL = "operator_cancel"
 GO_PLAN_REGISTRY_KEY = "analysis:go_plans"
 # Setup states in which withdrawal is still Python's to do (nothing published
 # yet). The lifecycle only allows pre-plan -> INVALIDATED and PLAN_BUILT ->
@@ -78,13 +78,13 @@ def _text(raw: Any) -> str:
 
 async def request_plan_cancel(
   client: Any, plan_id: str, *, reason: str, source: str, requested_at: int,
-  opportunity_id: str | None = None, epoch: int | None = None,
+  opportunity_id: str | None = None,
 ) -> bool:
   """Write the cancel intent once. True if newly written, False if one already
   existed (first reason wins: the audit trail keeps the original cause)."""
   payload = json.dumps({
     "plan_id": plan_id, "reason": reason, "source": source, "requested_at": int(requested_at),
-    "opportunity_id": opportunity_id, "epoch": epoch,
+    "opportunity_id": opportunity_id,
   }, separators=(",", ":"), sort_keys=True)
   return bool(await client.set(plan_cancel_key(plan_id), payload, ex=PLAN_CANCEL_TTL_SECONDS, nx=True))
 
@@ -99,19 +99,18 @@ async def read_plan_cancel_ack(client: Any, plan_id: str) -> dict[str, Any] | No
   return None if raw is None else json.loads(_text(raw))
 
 
-def _go_scope(tags: Any) -> tuple[str | None, int | None]:
+def _go_scope(tags: Any) -> str | None:
   scope = next((t[len(CATALOG_TAG):] for t in tags if t.startswith(CATALOG_TAG)), None)
-  epoch = next((t[len(EPOCH_TAG):] for t in tags if t.startswith(EPOCH_TAG)), None)
-  return scope, int(epoch) if epoch is not None and epoch.isdigit() else None
+  return scope
 
 
 async def register_go_plan(client: Any, *, plan_id: str, match: Any, expires_at: int) -> None:
-  """Index a Go-derived plan *before* it is published, so a rollback can always
+  """Index a Go-derived plan *before* it is published, so a cancellation can always
   find it. Registration failure aborts the publish (fail closed)."""
-  scope, epoch = _go_scope(match.tags)
+  scope = _go_scope(match.tags)
   await client.hset(GO_PLAN_REGISTRY_KEY, plan_id, json.dumps({
     "plan_id": plan_id, "match_id": match.match_id, "symbol": match.symbol, "scope": scope,
-    "epoch": epoch, "expires_at": int(expires_at),
+    "expires_at": int(expires_at),
   }, separators=(",", ":"), sort_keys=True))
 
 
@@ -142,7 +141,7 @@ class WithdrawalReport:
 
 
 async def withdraw_go_scope(
-  client: Any, *, symbol: str, scope: str | None, reason: str, source: str, now: int, actor: str = "analysis_authority",
+  client: Any, *, symbol: str, scope: str | None, reason: str, source: str, now: int, actor: str = "algo_bot",
 ) -> WithdrawalReport:
   """Withdraw every Go-derived match and unexecuted plan of a scope (or of every
   Go scope of the symbol when ``scope`` is None). Idempotent and re-runnable: the
@@ -176,15 +175,14 @@ async def withdraw_go_scope(
         report.setups_withdrawn.append(match.match_id)
       except SetupLifecycleError:
         log.exception("could not withdraw setup %s during Go withdrawal", match.match_id)
-    _, epoch = _go_scope(match.tags)
-    await _cancel(client, report, plan_id_for_match(match.match_id), reason, source, now, epoch=epoch)
+    await _cancel(client, report, plan_id_for_match(match.match_id), reason, source, now)
   for plan in await registered_go_plans(client, symbol=symbol, scope=scope):
-    await _cancel(client, report, plan["plan_id"], reason, source, now, epoch=plan.get("epoch"))
+    await _cancel(client, report, plan["plan_id"], reason, source, now)
   return report
 
 
-async def _cancel(client: Any, report: WithdrawalReport, plan_id: str, reason: str, source: str, now: int, *, epoch: int | None) -> None:
+async def _cancel(client: Any, report: WithdrawalReport, plan_id: str, reason: str, source: str, now: int) -> None:
   if plan_id in report.plans_cancel_requested or plan_id in report.plans_already_requested:
     return
-  fresh = await request_plan_cancel(client, plan_id, reason=reason, source=source, requested_at=now, epoch=epoch)
+  fresh = await request_plan_cancel(client, plan_id, reason=reason, source=source, requested_at=now)
   (report.plans_cancel_requested if fresh else report.plans_already_requested).append(plan_id)

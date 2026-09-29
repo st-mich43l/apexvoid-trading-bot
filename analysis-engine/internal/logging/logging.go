@@ -1,8 +1,8 @@
 // Package logging provides the analysis engine's structured runtime logger.
 // Logs are JSON so container log collectors can index fields without
-// scraping human-formatted strings. By default output goes to stderr only
-// (docker logs); setting LOG_FILE_ENABLED also tees it to a daily-rotating
-// file on a host-mounted directory, the same LOG_DIR/LOG_FILE_NAME/
+// scraping human-formatted strings. Output always goes to stderr (docker
+// logs); file logging is enabled by default and tees to a daily-rotating file
+// on a host-mounted directory, the same LOG_DIR/LOG_FILE_NAME/
 // LOG_RETENTION_DAYS contract ctrader-engine and algo-bot already use, so
 // this service's history survives container recreation instead of being
 // lost with docker logs' own container-lifetime window - the exact gap
@@ -21,15 +21,17 @@ import (
 	"time"
 )
 
-// New creates a service logger. APEXVOID_LOG_LEVEL accepts debug, info, warn,
-// or error and defaults to info. LOG_FILE_ENABLED (default true) additionally
-// tees output to LOG_DIR/LOG_FILE_NAME (defaults /var/log/apexvoid/<service>.log),
-// rotating at local midnight and pruning files older than LOG_RETENTION_DAYS
-// (default 14). A file-open failure never blocks logging: it falls back to
-// stderr-only and reports the failure on stderr once.
+// New creates a service logger. LOG_LEVEL accepts debug, info, warn, or error
+// and defaults to info. APEXVOID_LOG_LEVEL remains a compatibility override
+// for older local deployments. LOG_FILE_ENABLED (default true) tees output to
+// LOG_DIR/LOG_FILE_NAME (defaults /var/log/apexvoid/<service>.log), rotating
+// at local midnight and pruning files older than LOG_RETENTION_DAYS (default
+// 14). A file-open failure never blocks logging: it falls back to stderr-only
+// and reports the failure on stderr once.
 func New(service string) *slog.Logger {
 	level := slog.LevelInfo
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("APEXVOID_LOG_LEVEL"))) {
+	levelRaw := envOr("APEXVOID_LOG_LEVEL", os.Getenv("LOG_LEVEL"))
+	switch strings.ToLower(strings.TrimSpace(levelRaw)) {
 	case "debug":
 		level = slog.LevelDebug
 	case "warn", "warning":

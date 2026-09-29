@@ -13,7 +13,7 @@ import hashlib
 import json
 import math
 
-from app.analysis_client.authority import GO_ORIGIN_TAG
+from app.analysis_client.provenance import GO_ORIGIN_TAG
 from app.analysis.confluence_zone import confluence_setup_id
 from app.core.symbols import digits_for
 from app.runtime.price_identity import price_token

@@ -87,9 +87,8 @@
     "strategy": "Supply Demand",
     "strategy_family": "supply_demand",
     "tags": [
-      "authority:go",
+      "origin:go",
       "catalog:supply",
-      "authority_epoch:1",
       "go_opportunity:opp_chain",
       "kind:supply",
       "go_strategy_confirmed",

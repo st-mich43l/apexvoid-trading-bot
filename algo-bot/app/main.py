@@ -15,7 +15,7 @@ from app.bot.wiring import (
   setup_scanner_commands,
 )
 from app.persistence.store import init_db, close_pool
-from app.analysis_client.startup_gate import require_go_technical_authority
+from app.analysis_client.startup_gate import require_live_go_consumer
 from app.signals.watcher import watcher_loop
 from app.signals.calendar import calendar_sync_loop
 from app.signals.weekly_report import weekly_report_loop
@@ -67,31 +67,14 @@ def _spawn_supervised(name: str, factory) -> asyncio.Task:
 
 async def main() -> None:
   # Go is the sole automatic technical-opportunity producer. Refuse to start
-  # automatic trading on an effective python/go_shadow config or without Kafka,
+  # automatic trading without the live Go/Kafka path,
   # before anything touches Redis, PostgreSQL or Telegram. Manual-only
   # deployments (auto_trade disabled) are not gated.
-  require_go_technical_authority(runtime_config)
+  require_live_go_consumer(runtime_config)
   # Composition-root Telegram edit callback — worker never imports bot.client.
   configure_forming_card_edit_fn(edit_scanner_message_text)
   verify_mounted_runtime_manifest_or_raise()
   await init_db()
-  # S14B: load the technical-authority snapshot before any background task can
-  # publish a plan. A failed load stays fail-closed (require()) for catalog
-  # scopes rather than letting a Go-owned scope be discovered after the fact.
-  from app.analysis_client.authority import get_snapshot, refresh_authority_snapshot
-  get_snapshot().require()
-  try:
-    await refresh_authority_snapshot()
-    from app.analysis_client.authority import PostgresAuthorityStore, audit_authority_runtime
-    technical_authority = runtime_config.analysis.technical_authority
-    audit = await audit_authority_runtime(
-      PostgresAuthorityStore(), consumer_enabled=technical_authority.consumer_enabled,
-      mode=technical_authority.mode,
-    )
-    if audit["event"] != "runtime_boot":
-      log.warning("technical-authority audit event=%s scopes=%s %s", audit["event"], audit["go_bound_scopes"], audit["detail"])
-  except Exception:  # noqa: BLE001 - the watch loop keeps retrying
-    log.exception("technical-authority boot snapshot failed; catalog scopes fail closed until it loads")
   # Compose can report Redis healthy then briefly drop DNS while recreating the
   # container; wait for a real PING before anything else touches the client.
   await redis_state.wait_until_ready()
@@ -162,12 +145,7 @@ async def main() -> None:
   _spawn_supervised("auto_trade_stats_ingestion_loop", auto_trade_stats_ingestion_loop)
   _spawn_supervised("bridge_intents_loop", bridge_intents_loop)
   _spawn_supervised("reconcile_events_loop", reconcile_events_loop)
-  # S14B: watch the technical-authority fence even (especially) with the Go
-  # consumer off, so a scope still recorded as Go-owned never accepts a legacy
-  # Python plan just because the consumer was switched off.
-  from app.analysis_client.authority import authority_watch_loop
-  _spawn_supervised("authority_watch_loop", authority_watch_loop)
-  if runtime_config.analysis.technical_authority.consumer_enabled:
+  if runtime_config.runtime.auto_trade.enabled:
     from app.analysis_client.consumer import analysis_opportunity_consumer_loop
     _spawn_supervised("analysis_opportunity_consumer_loop", analysis_opportunity_consumer_loop)
   log.info("DB ready (PostgreSQL)")

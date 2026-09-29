@@ -93,6 +93,7 @@ services:
     image: apexvoid-analysis-engine:latest
     container_name: apexvoid-kafka-init
     restart: "no"
+    user: apexvoid
     environment:
       APEXVOID_CONFIG_FILE: /config/apexvoid.yml
     entrypoint: ["/app/kafka-admin"]
@@ -109,6 +110,7 @@ services:
     restart: unless-stopped
     environment:
       APEXVOID_CONFIG_FILE: /config/apexvoid.yml
+      LOG_LEVEL: ${ANALYSIS_ENGINE_LOG_LEVEL:-INFO}
       LOG_DIR: ${LOG_DIR:-/var/log/apexvoid}
       LOG_RETENTION_DAYS: ${LOG_RETENTION_DAYS:-14}
       LOG_FILE_ENABLED: ${LOG_FILE_ENABLED:-true}

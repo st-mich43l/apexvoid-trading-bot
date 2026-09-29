@@ -16,7 +16,7 @@ import time
 from typing import Any
 
 from app.autotrade.strategy_taxonomy import is_m1_scalp_match, is_m1_scalp_strategy
-from app.analysis_client.authority import GO_ORIGIN_TAG
+from app.analysis_client.provenance import GO_ORIGIN_TAG
 
 
 IMMEDIATE_CONFIRMATION = "immediate_confirmation"

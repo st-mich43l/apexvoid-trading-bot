@@ -8,6 +8,7 @@ import math
 from types import SimpleNamespace
 from typing import Any, Callable
 
+from app.analysis_client.provenance import GO_ORIGIN_TAG
 from app.autotrade.execution_route import SCALP_MICRO_CLIPS, resolve_execution_route_plan
 from app.autotrade.protective_stop import (
   ProtectiveStopError,
@@ -655,7 +656,7 @@ def evaluate_execution_policy(
   low = float(getattr(match, "entry_low", 0.0))
   high = float(getattr(match, "entry_high", 0.0))
   direction = str(getattr(match, "direction", "")).upper()
-  go_origin = "authority:go" in tuple(getattr(match, "tags", ()) or ())
+  go_origin = GO_ORIGIN_TAG in tuple(getattr(match, "tags", ()) or ())
   pip = pip_size if pip_size > 0 else 0.1
   confluence = int(getattr(match, "confluence", 0) or 0)
   zone_width_atr = (

@@ -157,7 +157,7 @@ class PostgresAnalysisOpportunityRepository:
   async def record_shadow_decision(
     self, *, opportunity_id: str, event_id: str, outcome: str, reason: str,
     missing_fields: tuple[str, ...] = (), details: dict | None = None,
-    mode: str = "go_shadow",
+    mode: str = "go",
   ) -> None:
     async with store._connect() as db:
       await db.execute(
