@@ -44,6 +44,13 @@ const (
 	// through internal/opportunity.Book (Observe + Expire).
 	PhaseStrategy    Phase = "strategy_evaluation_ms"
 	PhaseOpportunity Phase = "opportunity_lifecycle_ms"
+
+	// PhaseArbitration is a Phase 2 amendment (cross-strategy conflict
+	// resolution moving into analysis-engine): times
+	// internal/arbitration.Arbitrate plus the changed-decision diff/
+	// enqueue pass, immediately after PhaseOpportunity in the same
+	// SymbolWorker.ApplyWithResult pipeline.
+	PhaseArbitration Phase = "arbitration_ms"
 )
 
 // Counter names an event-count metric — source task §57's "events

@@ -12,7 +12,11 @@ from app.configuration.models.base import FrozenConfigModel
 
 OpportunityTopic = "analysis.opportunity.v1"
 InvalidationTopic = "analysis.opportunity.invalidated.v1"
+ArbitrationTopic = "analysis.opportunity.arbitration.v1"
 ExpectedProducer = "apexvoid-analysis-engine"
+
+ArbitrationStatuses = {"winner", "suppressed", "conflict_held", "uncontested"}
+ArbitrationReasonCodes = {"uncontested", "ranked_single_direction", "opposite_direction_conflict"}
 
 
 class AnalysisContractError(ValueError):
@@ -160,6 +164,30 @@ class AnalysisOpportunityInvalidated(FrozenConfigModel):
   invalidated_at: int = Field(ge=0)
 
 
+class AnalysisOpportunityArbitration(FrozenConfigModel):
+  """Go's cross-strategy conflict-resolution decision for one opportunity.
+
+  Republished whenever it changes, independent of the opportunity's own
+  lifecycle (see contracts/analysis/opportunity-arbitration-v1.schema.json's
+  own doc comment for why this is not a field on AnalysisOpportunity).
+  """
+
+  opportunity_id: str = Field(min_length=1)
+  symbol: str = Field(min_length=1)
+  status: str
+  reason_code: str
+  conflicting_with: list[str] = Field(default_factory=list)
+  decided_at: int = Field(ge=0)
+
+  @model_validator(mode="after")
+  def validate_enums(self):
+    if self.status not in ArbitrationStatuses:
+      raise ValueError(f"unknown arbitration status {self.status!r}")
+    if self.reason_code not in ArbitrationReasonCodes:
+      raise ValueError(f"unknown arbitration reason_code {self.reason_code!r}")
+    return self
+
+
 class AnalysisEnvelopeBase(FrozenConfigModel):
   event_id: str = Field(min_length=1)
   event_type: str = Field(min_length=1)
@@ -193,12 +221,17 @@ class InvalidationEnvelope(AnalysisEnvelopeBase):
   payload: AnalysisOpportunityInvalidated
 
 
-AnalysisEvent = OpportunityEnvelope | InvalidationEnvelope
+class ArbitrationEnvelope(AnalysisEnvelopeBase):
+  event_type: Literal[ArbitrationTopic]
+  payload: AnalysisOpportunityArbitration
+
+
+AnalysisEvent = OpportunityEnvelope | InvalidationEnvelope | ArbitrationEnvelope
 
 
 def parse_analysis_event(topic: str, raw: bytes | str) -> AnalysisEvent:
   """Decode and semantically validate a Kafka record before it reaches policy."""
-  if topic not in {OpportunityTopic, InvalidationTopic}:
+  if topic not in {OpportunityTopic, InvalidationTopic, ArbitrationTopic}:
     raise AnalysisContractError(f"unexpected analysis topic {topic!r}")
   try:
     decoded = json.loads(raw.decode("utf-8") if isinstance(raw, bytes) else raw)
@@ -210,8 +243,10 @@ def parse_analysis_event(topic: str, raw: bytes | str) -> AnalysisEvent:
     event: AnalysisEvent
     if topic == OpportunityTopic:
       event = OpportunityEnvelope.model_validate(decoded)
-    else:
+    elif topic == InvalidationTopic:
       event = InvalidationEnvelope.model_validate(decoded)
+    else:
+      event = ArbitrationEnvelope.model_validate(decoded)
   except ValidationError as exc:
     error = exc.errors(include_input=False, include_url=False)[0]
     location = ".".join(str(part) for part in error["loc"])

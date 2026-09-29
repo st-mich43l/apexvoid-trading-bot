@@ -3,6 +3,7 @@ package engine
 import (
 	"sync"
 
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/arbitration"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/context"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/fib"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/indicator"
@@ -36,6 +37,10 @@ type SymbolWorker struct {
 	registry  *strategy.Registry
 	publisher *OpportunityPublisher // nil = no Kafka opportunity publication (Phase S9)
 	algo      kafka.AlgorithmVersion
+	// lastArbitration is the previous Arbitrate() result for this symbol,
+	// keyed by opportunity ID - Phase 2's diff base so only a changed
+	// decision is republished (see arbitrate's own doc comment).
+	lastArbitration map[string]arbitration.Decision
 }
 
 // NewSymbolWorker returns a worker for symbol with an empty SymbolState
@@ -63,7 +68,10 @@ func NewSymbolWorker(symbol market.Symbol, settings Settings, recorder *telemetr
 		recorder = telemetry.NewRecorder()
 	}
 	algo := kafka.AlgorithmVersion{Structure: settings.Structure.Version, Liquidity: settings.Liquidity.Version}
-	return &SymbolWorker{state: ws, settings: settings, telemetry: recorder, registry: registry, publisher: publisher, algo: algo}, nil
+	return &SymbolWorker{
+		state: ws, settings: settings, telemetry: recorder, registry: registry, publisher: publisher, algo: algo,
+		lastArbitration: make(map[string]arbitration.Decision),
+	}, nil
 }
 
 // Apply processes one closed-bar event through the full pipeline —
@@ -220,6 +228,10 @@ func (w *SymbolWorker) ApplyWithResult(event marketdata.BarEvent) (AnalysisSnaps
 	}
 	doneOpp()
 
+	doneArb := w.telemetry.Time(telemetry.PhaseArbitration, symbolLabel, tfLabel)
+	w.arbitrate(event.Candle.Time, event.PublishesOpportunity())
+	doneArb()
+
 	doneSnap := w.telemetry.Time(telemetry.PhaseSnapshot, symbolLabel, tfLabel)
 	snap := SnapshotFrom(w.state, w.settings, event.Candle.Time)
 	doneSnap()
@@ -314,4 +326,49 @@ func (w *SymbolWorker) technicalContext(event marketdata.BarEvent, reaction *opp
 	}
 
 	return facts
+}
+
+// arbitrate re-evaluates cross-strategy direction conflict for this
+// symbol's full live set on every Apply, not only when a candidate is
+// newly created - strategies evaluate on different bar-close cadences
+// (most M5, three M1: range_sweep/impulse_pullback/scalp_breakout_retest),
+// so a new candidate on one timeframe can change an already-decided
+// candidate's status on another without that other candidate itself
+// re-evaluating. Only a changed decision is enqueued for publication;
+// see OpportunityPublisher.EnqueueArbitrationDecision's own doc comment
+// for why republishing an unchanged decision would be harmless but is
+// still avoided (it is a current-status projection, not a once-only
+// lifecycle fact — unlike Enqueue/Observe, there is no ledger bookkeeping
+// to violate by republishing, only unnecessary Kafka traffic to avoid).
+//
+// publish mirrors observeTransition's own parameter (event.
+// PublishesOpportunity()): lastArbitration is always updated so the diff
+// baseline stays correct, but nothing is enqueued while publish is false —
+// bootstrap/replay must emit zero events, the same contract ResumeLive's
+// own doc comment already establishes for opportunity lifecycle events.
+func (w *SymbolWorker) arbitrate(now int64, publish bool) {
+	live := w.state.Opportunities.Live()
+	decisions := arbitration.Arbitrate(live, w.settings.Arbitration)
+	fresh := make(map[string]arbitration.Decision, len(decisions))
+	for _, d := range decisions {
+		fresh[d.CandidateID] = d
+		if previous, ok := w.lastArbitration[d.CandidateID]; publish && (!ok || !decisionEqual(previous, d)) {
+			w.publisher.EnqueueArbitrationDecision(w.state.Symbol, d.CandidateID, d, now)
+		}
+	}
+	w.lastArbitration = fresh
+}
+
+// decisionEqual compares two arbitration.Decision values field-by-field —
+// Decision is not `==`-comparable (ConflictingWith is a slice).
+func decisionEqual(a, b arbitration.Decision) bool {
+	if a.Status != b.Status || a.ReasonCode != b.ReasonCode || len(a.ConflictingWith) != len(b.ConflictingWith) {
+		return false
+	}
+	for i := range a.ConflictingWith {
+		if a.ConflictingWith[i] != b.ConflictingWith[i] {
+			return false
+		}
+	}
+	return true
 }
