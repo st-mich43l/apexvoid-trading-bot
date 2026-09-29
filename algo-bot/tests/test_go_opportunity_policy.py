@@ -15,6 +15,7 @@ import pytest
 
 from app.analysis_client.provenance import CATALOG_STRATEGY_IDS, GO_ORIGIN_TAG
 from app.analysis_client.models import (
+  ArbitrationTopic,
   InvalidationTopic,
   OpportunityTopic,
   parse_analysis_event,
@@ -483,6 +484,57 @@ async def test_go_terminal_withdraws_the_match_and_invalidates_the_setup(h):
   client = redis_state.get_client()
   assert await client.get(strategy_matches_key("XAU")) is None
   assert (await load_setup(client, "go_opp_golden_supply_xau")).state == INVALIDATED
+
+
+def _arbitration_event(**overrides):
+  event = {
+    "event_id": "evt-arb-1", "event_type": ArbitrationTopic,
+    "event_version": 1, "occurred_at": 102, "produced_at": 103,
+    "producer": "apexvoid-analysis-engine", "correlation_id": "corr-arb-1",
+    "payload": {
+      "opportunity_id": "opp_golden_supply_xau", "symbol": "XAU",
+      "status": "winner", "reason_code": "ranked_single_direction", "decided_at": 102,
+    },
+  }
+  event.update(overrides)
+  return parse_analysis_event(ArbitrationTopic, json.dumps(event))
+
+
+@pytest.mark.asyncio
+async def test_arbitration_decision_annotates_the_live_match(h):
+  await h.activate()
+  await h.deliver(event(int(h.clock.now)))
+  client = redis_state.get_client()
+
+  assert await h.policy.on_arbitration_decision(_arbitration_event()) == "arbitration_updated"
+  matches = deserialize_matches(await client.get(strategy_matches_key("XAU")))
+  assert len(matches) == 1
+  assert matches[0].arbitration_status == "winner"
+  assert matches[0].arbitration_reason_code == "ranked_single_direction"
+
+  # Republishing the identical decision is a no-op, not an error.
+  assert await h.policy.on_arbitration_decision(_arbitration_event()) == "unchanged"
+
+  # A changed decision updates the same match in place.
+  held = _arbitration_event(payload={
+    "opportunity_id": "opp_golden_supply_xau", "symbol": "XAU",
+    "status": "conflict_held", "reason_code": "opposite_direction_conflict",
+    "conflicting_with": ["opp_golden_supply_xau", "opp_rival"], "decided_at": 103,
+  })
+  assert await h.policy.on_arbitration_decision(held) == "arbitration_updated"
+  matches = deserialize_matches(await client.get(strategy_matches_key("XAU")))
+  assert matches[0].arbitration_status == "conflict_held"
+  assert matches[0].arbitration_reason_code == "opposite_direction_conflict"
+
+
+@pytest.mark.asyncio
+async def test_arbitration_decision_for_an_unknown_match_is_dropped(h):
+  await h.activate()
+  # No creation event delivered - nothing live for this opportunity_id yet
+  # (or it was already withdrawn by on_terminal). Must not raise or create
+  # a phantom match.
+  assert await h.policy.on_arbitration_decision(_arbitration_event()) == "ignored_unknown_match"
+  assert await redis_state.get_client().get(strategy_matches_key("XAU")) is None
 
 
 # ---- end to end: Go event -> match -> REAL V8 plan --------------------------------

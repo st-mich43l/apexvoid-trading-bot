@@ -18,6 +18,7 @@ from app.autotrade.arbitration import (
   CandidatePublicationResult,
   ExecutionIntent,
   arbitrate_execution_intents,
+  select_go_arbitrated_intent,
 )
 from app.autotrade.candidate_execution_state import (
   parse_candidate_execution_record,
@@ -75,6 +76,8 @@ def _intent(
   freshness: float = 100.0,
   distance_pips: float = 0.0,
   quality_overall: float | None = None,
+  arbitration_status: str | None = None,
+  arbitration_reason_code: str | None = None,
 ) -> ExecutionIntent:
   return ExecutionIntent(
     intent_id=intent_id,
@@ -86,6 +89,8 @@ def _intent(
     freshness=freshness,
     distance_pips=distance_pips,
     quality_overall=quality_overall,
+    arbitration_status=arbitration_status,
+    arbitration_reason_code=arbitration_reason_code,
   )
 
 
@@ -165,6 +170,47 @@ def test_quality_ranking_falls_back_to_confluence_when_quality_is_missing():
 
   assert [item.intent_id for item in result.ordered] == ["buy"]
   assert result.reason_code == "ranked_single_direction"
+
+
+def test_select_go_arbitrated_intent_reads_the_marked_winner():
+  result = select_go_arbitrated_intent([
+    _intent("buy", direction="BUY", arbitration_status="winner", arbitration_reason_code="ranked_single_direction"),
+    _intent("sell", direction="SELL", arbitration_status="suppressed", arbitration_reason_code="ranked_single_direction"),
+  ])
+
+  assert [item.intent_id for item in result.ordered] == ["buy"]
+  assert [item.intent_id for item in result.suppressed] == ["sell"]
+  assert result.reason_code == "ranked_single_direction"
+
+
+def test_select_go_arbitrated_intent_returns_nothing_when_go_has_not_decided_yet():
+  # No arbitration_status at all - Go hasn't published a decision (e.g.
+  # the consumer hasn't caught up yet). Python must not invent a winner.
+  result = select_go_arbitrated_intent([
+    _intent("buy", direction="BUY"),
+    _intent("sell", direction="SELL"),
+  ])
+
+  assert result.ordered == ()
+  assert result.reason_code == "go_arbitration_no_winner"
+
+
+def test_select_go_arbitrated_intent_never_promotes_a_non_winner_itself():
+  # Every intent held/suppressed, no winner anywhere - must return nothing,
+  # never pick the "least suppressed" one as a fallback.
+  result = select_go_arbitrated_intent([
+    _intent("buy", direction="BUY", arbitration_status="conflict_held", arbitration_reason_code="opposite_direction_conflict"),
+    _intent("sell", direction="SELL", arbitration_status="conflict_held", arbitration_reason_code="opposite_direction_conflict"),
+  ])
+
+  assert result.ordered == ()
+  assert result.reason_code == "go_arbitration_no_winner"
+
+
+def test_select_go_arbitrated_intent_empty_input_returns_no_intent():
+  result = select_go_arbitrated_intent([])
+  assert result.ordered == ()
+  assert result.reason_code == "no_intent"
 
 
 @pytest.mark.asyncio

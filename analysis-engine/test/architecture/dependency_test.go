@@ -134,9 +134,10 @@ var rank = map[string]int{
 
 	"opportunity": 5,
 
-	"strategy":   6,
-	"confluence": 6,
-	"state":      6,
+	"strategy":    6,
+	"confluence":  6,
+	"state":       6,
+	"arbitration": 6,
 
 	"transport":       7,
 	"transport/kafka": 7,

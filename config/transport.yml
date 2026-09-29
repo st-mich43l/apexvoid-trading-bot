@@ -35,6 +35,12 @@ transport:
     topics:
       analysis_opportunity: analysis.opportunity.v1
       analysis_opportunity_invalidated: analysis.opportunity.invalidated.v1
+      # A time-varying decision (which live candidate currently wins a
+      # direction conflict), republished whenever it changes - not a
+      # one-time lifecycle fact like the two topics above, so it is its
+      # own topic rather than a mutation of analysis.opportunity.v1's
+      # Created-event-happens-once contract.
+      analysis_opportunity_arbitration: analysis.opportunity.arbitration.v1
       execution_trade_plan: execution.trade-plan.v1
       execution_trade_event: execution.trade-event.v1
     # Explicit, idempotently provisioned broker contracts. The execution
@@ -49,6 +55,12 @@ transport:
         partitions: 3
         replication_factor: 1
         retention_ms: 604800000
+      # A current-status projection, not a durable audit log: shorter
+      # retention than the lifecycle topics above.
+      analysis.opportunity.arbitration.v1:
+        partitions: 3
+        replication_factor: 1
+        retention_ms: 86400000
       execution.trade-plan.v1:
         partitions: 3
         replication_factor: 1

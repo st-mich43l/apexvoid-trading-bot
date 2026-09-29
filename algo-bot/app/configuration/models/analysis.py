@@ -376,11 +376,20 @@ class AnalysisTechnicalAuthorityConfig(FrozenConfigModel):
 
     go_origin_risk_leg_enabled: bool = config_field(False, canonical_env=None, owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.BOOLEAN, risk=RiskClassification.EXECUTION_SAFETY, description='Separate acceptance gate for the executor-injected XAU risk leg (fixed 0.02/0.05 lots, 15 pips inside the stop) on Go-origin plans. False tags every Go-origin plan risk_leg:disabled and the executor then places only the declared ladder. Independent of execution.reaction_risk_leg.enabled, which keeps governing Python-owned plans unchanged. Turn on only after the worst-case group-risk review in docs/autotrade-execution-integrity.md (Go-origin risk-leg gate) has been accepted.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, False),), validation_summary='Boolean; default false.')
 
+    arbitration_mode: str = config_field('python_legacy', canonical_env='ANALYSIS_ARBITRATION_MODE', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.ENUM, risk=RiskClassification.EXECUTION_SAFETY, description="python_legacy: algo-bot ranks/decides which candidate wins a direction conflict itself (arbitrate_execution_intents). go: algo-bot reads analysis-engine's own internal/arbitration.Arbitrate decision instead (select_go_arbitrated_intent) and only applies its own execution-timing admission gate on top. Default stays python_legacy until a shadow-diff soak period (compare both paths' picks on live traffic) confirms agreement — see docs plan for the Phase 2 rollout.", default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 'python_legacy'),), allowed_values=('go', 'python_legacy'), validation_summary='Only go or python_legacy is supported.')
+
     @field_validator('mode')
     @classmethod
     def validate_mode(cls, value):
         if value != 'go':
             raise ValueError('mode must be go')
+        return value
+
+    @field_validator('arbitration_mode')
+    @classmethod
+    def validate_arbitration_mode(cls, value):
+        if value not in ('go', 'python_legacy'):
+            raise ValueError('arbitration_mode must be go or python_legacy')
         return value
 
     @model_validator(mode='after')

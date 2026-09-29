@@ -34,7 +34,7 @@ import logging
 import math
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from app.analysis_client.provenance import (
@@ -43,7 +43,7 @@ from app.analysis_client.provenance import (
   CATALOG_STRATEGY_IDS,
 )
 from app.analysis_client.freshness import FreshnessLimits, evaluate_freshness
-from app.analysis_client.models import InvalidationEnvelope, OpportunityEnvelope
+from app.analysis_client.models import ArbitrationEnvelope, InvalidationEnvelope, OpportunityEnvelope
 from app.analysis_client.repository import LifecycleResult, PostgresAnalysisOpportunityRepository
 from app.autotrade import units
 from app.autotrade.go_plan_cancel import SOURCE_EXPIRED, SOURCE_INVALIDATED, plan_id_for_match, request_plan_cancel
@@ -502,6 +502,31 @@ class GoOpportunityPolicy:
         requested_at=int(self._clock()), opportunity_id=payload.opportunity_id,
       )
     return "match_withdrawn"
+
+  async def on_arbitration_decision(self, event: ArbitrationEnvelope) -> str:
+    """Idempotent: republishing the same decision is a no-op write.
+
+    Updates the live StrategyMatch's arbitration_status/
+    arbitration_reason_code — Go's cross-strategy conflict-resolution
+    decision (Phase 2), read by select_go_arbitrated_intent instead of
+    Python re-deriving one via arbitrate_execution_intents. A decision for
+    a match_id with no live StrategyMatch (already withdrawn by
+    on_terminal, or arrived before the match write completed) is simply
+    dropped: there is nothing live left to annotate.
+    """
+    payload = event.payload
+    match_id = match_id_for(payload.opportunity_id)
+    client = self._client()
+    key = strategy_matches_key(payload.symbol)
+    matches = deserialize_matches(await client.get(key))
+    match = next((m for m in matches if m.match_id == match_id), None)
+    if match is None:
+      return "ignored_unknown_match"
+    if match.arbitration_status == payload.status and match.arbitration_reason_code == payload.reason_code:
+      return "unchanged"
+    updated = replace(match, arbitration_status=payload.status, arbitration_reason_code=payload.reason_code)
+    await self._store_match(client, updated, int(self._clock()))
+    return "arbitration_updated"
 
   @staticmethod
   async def _advance_setup(client: Any, match: StrategyMatch) -> None:

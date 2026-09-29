@@ -96,13 +96,16 @@ BASELINE = {
   # actionability.scanner_gates (conflict_margin_quality,
   # use_quality_ranking), both ConfigOwner.PYTHON, real canonical_env,
   # not deprecated-alias'd.
-  "entries": 691,
-  "configurable": 584,
+  # 2026-09-29 Phase 2 (Go arbitration decision): +1 new leaf field
+  # (analysis.technical_authority.arbitration_mode), ConfigOwner.PYTHON,
+  # real canonical_env, not deprecated-alias'd.
+  "entries": 692,
+  "configurable": 585,
   "protocol": 10,
   "algorithm": 97,
-  "owners": {"python": 541, "shared": 100, "ctrader": 50},
-  "projection": 641,
-  "env": 573,
+  "owners": {"python": 542, "shared": 100, "ctrader": 50},
+  "projection": 642,
+  "env": 574,
   "deprecated_aliases": 21,
 }
 

@@ -8,6 +8,8 @@ from typing import Any
 
 from app.analysis_client.models import (
   AnalysisContractError,
+  ArbitrationEnvelope,
+  ArbitrationTopic,
   OpportunityEnvelope,
   OpportunityTopic,
   InvalidationTopic,
@@ -45,6 +47,14 @@ class AnalysisOpportunityConsumer:
       )
       log.warning("rejected Go analysis event topic=%s partition=%s offset=%s reason=%s", topic, partition, offset, exc)
       return
+    if isinstance(event, ArbitrationEnvelope):
+      # A time-varying decision, not an opportunity lifecycle fact - it
+      # never touches the Postgres opportunity-lifecycle repository
+      # (analysis_opportunities/analysis_opportunity_events), only the
+      # live StrategyMatch in Redis via the policy hook.
+      outcome = await self._policy.on_arbitration_decision(event)
+      log.info("Go arbitration decision opportunity=%s status=%s outcome=%s", event.payload.opportunity_id, event.payload.status, outcome)
+      return
     result = await self._repository.apply(event, topic=topic, partition=partition, offset=offset)
     stamp = getattr(record, "timestamp", None)  # Kafka publish time, ms
     published_at = int(stamp // 1000) if isinstance(stamp, (int, float)) and stamp > 0 else None
@@ -78,6 +88,7 @@ async def analysis_opportunity_consumer_loop() -> None:
   consumer = AIOKafkaConsumer(
     OpportunityTopic,
     InvalidationTopic,
+    ArbitrationTopic,
     bootstrap_servers=kafka.brokers,
     client_id=kafka.algo_bot_client_id,
     group_id=analysis_config.consumer_group,

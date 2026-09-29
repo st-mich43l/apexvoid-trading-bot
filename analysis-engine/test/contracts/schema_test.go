@@ -98,3 +98,31 @@ func TestOpportunityInvalidatedSchema_ValidatesARealGoPayload(t *testing.T) {
 	}
 	validateGo(t, schema, p)
 }
+
+func TestOpportunityArbitrationSchema_ValidatesARealGoPayload(t *testing.T) {
+	schema := compileSchema(t, repoContractPath("analysis", "opportunity-arbitration-v1.schema.json"))
+	p := kafka.ArbitrationDecisionPayload{
+		OpportunityID: "cand-1", Symbol: "XAU", Status: "winner", ReasonCode: "ranked_single_direction", DecidedAt: 1500,
+	}
+	validateGo(t, schema, p)
+}
+
+func TestOpportunityArbitrationSchema_ValidatesAHeldDecisionWithConflictingWith(t *testing.T) {
+	schema := compileSchema(t, repoContractPath("analysis", "opportunity-arbitration-v1.schema.json"))
+	p := kafka.ArbitrationDecisionPayload{
+		OpportunityID: "cand-1", Symbol: "XAU", Status: "conflict_held", ReasonCode: "opposite_direction_conflict",
+		ConflictingWith: []string{"cand-1", "cand-2"}, DecidedAt: 1500,
+	}
+	validateGo(t, schema, p)
+}
+
+func TestOpportunityArbitrationSchema_RejectsAnUnknownStatus(t *testing.T) {
+	schema := compileSchema(t, repoContractPath("analysis", "opportunity-arbitration-v1.schema.json"))
+	raw := map[string]any{
+		"opportunity_id": "cand-1", "symbol": "XAU", "status": "not_a_real_status",
+		"reason_code": "ranked_single_direction", "decided_at": 1500,
+	}
+	if err := schema.Validate(raw); err == nil {
+		t.Error("expected schema validation to fail for an unrecognized status")
+	}
+}

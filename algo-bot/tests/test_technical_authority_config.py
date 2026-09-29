@@ -10,6 +10,7 @@ def test_technical_authority_defaults_to_live_go_with_consumer_on():
     "consumer_group": "apexvoid-algo-bot-analysis-opportunity-v1",
     "max_event_age_seconds": 900, "max_delivery_lag_seconds": 300,
     "go_origin_risk_leg_enabled": False,
+    "arbitration_mode": "python_legacy",
   }
 
 
@@ -20,6 +21,23 @@ def test_technical_authority_defaults_to_live_go_with_consumer_on():
 def test_technical_authority_rejects_non_go_modes(values):
   with pytest.raises(ValidationError):
     AnalysisTechnicalAuthorityConfig(**values)
+
+
+def test_arbitration_mode_defaults_to_python_legacy():
+  # Phase 2 rollout flag: must default to today's exact behavior
+  # (algo-bot ranks/decides itself) until a deliberate operator cutover -
+  # never silently switch which side owns arbitration on this PR merging.
+  assert AnalysisTechnicalAuthorityConfig().arbitration_mode == "python_legacy"
+
+
+@pytest.mark.parametrize("values", [{"arbitration_mode": "shadow"}, {"arbitration_mode": "nope"}])
+def test_arbitration_mode_rejects_unknown_values(values):
+  with pytest.raises(ValidationError):
+    AnalysisTechnicalAuthorityConfig(**values)
+
+
+def test_arbitration_mode_accepts_go():
+  assert AnalysisTechnicalAuthorityConfig(arbitration_mode="go").arbitration_mode == "go"
 
 
 def test_go_mode_is_the_default_live_configuration():
