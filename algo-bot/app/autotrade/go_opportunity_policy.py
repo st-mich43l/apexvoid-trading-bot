@@ -193,6 +193,9 @@ def build_strategy_match(
   if profile.direction is not None and payload.direction != profile.direction:
     raise AdapterRejection("direction_scope_mismatch", f"{profile.catalog_id} produces {profile.direction}, got {payload.direction}")
   evidence_codes = tuple(item.code for item in payload.evidence)
+  quality = payload.quality
+  quality_overall = float(quality.overall)
+  quality_components = dict(quality.components)
   if profile.evidence_prefixes and not any(
     any(code.startswith(prefix) for prefix in profile.evidence_prefixes)
     for code in evidence_codes
@@ -321,6 +324,8 @@ def build_strategy_match(
     absolute_target_price=float(farthest),
     tier=tier,
     risk_multiplier=risk_multiplier,
+    quality_overall=quality_overall,
+    quality_components=quality_components,
     family=family,
     structural_source=f"go:{profile.catalog_id}",
     zone_id=structural_id,
