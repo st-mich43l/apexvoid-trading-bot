@@ -50,11 +50,10 @@ analysis:
   # THIS file (rendered by ansible from apexvoid_trading_bot_config) is where the Python bot reads
   # the Go-authority switches. config/analysis.yml is not read by the bot. Go is the sole automatic
   # technical-opportunity producer: with runtime.auto_trade.enabled the bot refuses to start unless
-  # mode=go, consumer_enabled=true and Kafka is enabled (app/analysis_client/startup_gate.py). This
-  # hands no scope to Go by itself: every (symbol, catalog strategy) still needs an operator-recorded,
-  # fenced grant (docs/operations.md, "Kafka & Analysis-Authority Incident Response"). After start,
-  # verify `auto_trade:component_health:analysis_opportunity_consumer` is ready and the Kafka group
-  # below exists.
+  # mode=go, consumer_enabled=true and Kafka is enabled (app/analysis_client/startup_gate.py). The
+  # live Kafka consumer is the Go activation boundary; no per-scope authority grant is required.
+  # After start, verify `auto_trade:component_health:analysis_opportunity_consumer_loop` is ready
+  # and the Kafka group below exists.
   technical_authority:
     mode: go
     consumer_enabled: true

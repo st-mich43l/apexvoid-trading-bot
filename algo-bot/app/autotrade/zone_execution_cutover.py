@@ -32,7 +32,7 @@ import time
 from typing import Any
 
 from app.analysis.actionability import range_bounds_from_context
-from app.analysis_client.authority import GO_ORIGIN_TAG
+from app.analysis_client.provenance import GO_ORIGIN_TAG
 from app.analysis.confluence_zone import (
   BandKind,
   classify_band_kind,

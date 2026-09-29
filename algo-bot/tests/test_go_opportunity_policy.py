@@ -1,4 +1,4 @@
-"""S13C: Go opportunity -> StrategyMatch -> the real V8 plan pipeline, fenced.
+"""Go opportunity -> StrategyMatch -> the real V8 plan pipeline.
 
 The end-to-end tests run the *real* worker plan build against fakeredis; only
 the Go event is a fixture (the golden envelope the Go encoder pins).
@@ -395,18 +395,18 @@ async def test_unconfigured_scope_defaults_to_go_in_global_go_mode(h):
   now = int(h.clock.now)
   assert await h.deliver(event(now)) == "match_written"
   assert await redis_state.get_client().get(strategy_matches_key("XAU")) is not None
-  assert await h.decisions() == [{"outcome": "match_written", "reason": "go_owned_scope", "mode": "go"}]
+  assert await h.decisions() == [{"outcome": "match_written", "reason": "go_live_authority", "mode": "go"}]
 
 
 @pytest.mark.asyncio
-async def test_go_owned_scope_writes_a_confirmed_setup_and_one_match_idempotently(h):
+async def test_live_go_writes_a_confirmed_setup_and_one_match_idempotently(h):
   await h.grant()
   ev = event(int(h.clock.now))
   assert await h.deliver(ev) == "match_written"
   client = redis_state.get_client()
   matches = deserialize_matches(await client.get(strategy_matches_key("XAU")))
   assert [m.match_id for m in matches] == ["go_opp_golden_supply_xau"]
-  assert "authority_epoch:1" in matches[0].tags
+  assert "authority_epoch:0" in matches[0].tags
   assert (await load_setup(client, "go_opp_golden_supply_xau")).state == CONFIRMED
   # Redelivery of the same Kafka event is idempotent (it must be, so a failed
   # first attempt can be retried) and a different event for the same
@@ -461,13 +461,13 @@ async def test_single_match_key_ambiguity_fails_closed(h):
 
 
 @pytest.mark.asyncio
-async def test_unreadable_fence_still_fails_closed(h):
+async def test_unreadable_legacy_fence_does_not_block_live_go(h):
   class Down:
     async def get(self, *_):
       raise ConnectionError("down")
   h.policy = pol.GoOpportunityPolicy(h.repo, fence=AuthorityFence(Down(), cache_ttl=0.0), clock=h.clock, multiple_matches_enabled=lambda: True)
-  assert await h.deliver(event(int(h.clock.now))) == "not_adapted"
-  assert (await h.decisions())[-1]["reason"].startswith("authority_unavailable")
+  assert await h.deliver(event(int(h.clock.now))) == "match_written"
+  assert (await h.decisions())[-1]["reason"] == "go_live_authority"
 
 
 @pytest.mark.asyncio
@@ -553,16 +553,15 @@ async def test_go_owned_zone_becomes_a_real_v8_plan_with_real_contract_fields(h)
 
 
 @pytest.mark.asyncio
-async def test_rollback_between_match_write_and_publish_blocks_the_plan(h):
+async def test_rollback_between_match_write_and_publish_does_not_gate_live_go(h):
   await h.grant()
   await h.deliver(event(int(h.clock.now)))
   client = redis_state.get_client()
   match = deserialize_matches(await client.get(strategy_matches_key("XAU")))[0]
   await h.fence.rollback("XAU", "supply", expected_epoch=1, actor="oncall", reason="rollback", drain_seconds=30)
   plan_id = await worker._publish_trade_plan_v8(client, "XAU", _spot(4354.1, 4354.3), match, frames={"M1": _m1_trigger_bar()})
-  assert plan_id is None
-  raw = await client.get(worker_route_key(match))
-  assert json.loads(raw)["reason_code"] == "authority_fenced"
+  assert plan_id is not None
+  assert await read_plan_state(client, plan_id) == "published"
 
 
 def worker_route_key(match):

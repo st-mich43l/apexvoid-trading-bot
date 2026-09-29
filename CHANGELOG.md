@@ -13,6 +13,11 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Removed the live Python/Go scope-authority gate from `analysis_client/authority.py`
+  consumers. Go Kafka lifecycle delivery is now the activation boundary with
+  provenance-only `authority:go` tags; no Postgres grant or shadow acceptance
+  row is required before the reviewed adapter builds a match and enters the
+  normal execution policy.
 - Analysis Engine's `key_level` strategy now ports the legacy Python
   detector's role classification (support/resistance/broken, `internal/
   keylevel.Role`, already existed but was never wired up) and its
@@ -77,9 +82,8 @@ dated section after deployment.
   leftover Python match in Redis cannot trade. ZoneWatch activation and its
   scanner monkeypatches are no longer part of the automatic production startup;
   the worker consumes only Go-origin matches and retains execution-time quote,
-  spread, risk, exposure, and order checks. Scope ownership is unchanged:
-  every scope still needs an operator-recorded fenced grant before Go may
-  publish into it.
+  spread, risk, exposure, and order checks. The live Go consumer no longer
+  waits for per-scope grant/acceptance rows.
 - The one-time `manual_algo_charts` cleanup now refuses `--apply` without a
   new archive path, locks the table, atomically archives schema plus all rows,
   logs the archive SHA-256, and only then drops the obsolete table. Production

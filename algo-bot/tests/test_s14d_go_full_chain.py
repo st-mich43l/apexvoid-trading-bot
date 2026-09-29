@@ -189,7 +189,7 @@ async def test_kafka_event_becomes_a_real_v8_plan_with_full_provenance(h, prod, 
   zone_id = event["technical_context"]["confirmation"]["zone_id"]
   assert plan["thesis_id"] == match.thesis_id == pol._thesis_id("XAU", "supply_demand", "SELL", zone_id)
   tags = set(plan["analysis"]["tags"])
-  assert {"authority:go", "catalog:supply", "authority_epoch:1", f"go_opportunity:{event['id']}", "htf_bias_source:go_H1", "go_reaction:rejection"} <= tags
+  assert {"authority:go", "catalog:supply", "authority_epoch:0", f"go_opportunity:{event['id']}", "htf_bias_source:go_H1", "go_reaction:rejection"} <= tags
   assert plan["analysis"]["strategy"] == "Supply Demand" and plan["analysis"]["direction"] == "SELL"
   # actual structural zone identity, entry band and invalidation come from Go, not from a Python detector
   assert plan["source_structure"]["structure_id"] == event["technical_context"]["confirmation"]["zone_id"]
@@ -210,7 +210,7 @@ async def test_kafka_event_becomes_a_real_v8_plan_with_full_provenance(h, prod, 
   assert await prod.get(f"execution:plan_state:{plan['plan_id']}") == "published"
   assert await prod.exists(f"execution:plan_dedup:{plan['plan_id']}")
   assert (await route(prod, match.match_id))["status"] == "candidate_published"
-  assert json.loads(await prod.hget("analysis:go_plans", plan["plan_id"]))["epoch"] == 1
+  assert json.loads(await prod.hget("analysis:go_plans", plan["plan_id"]))["epoch"] == 0
 
 
 @pytest.mark.asyncio
@@ -394,11 +394,12 @@ async def test_a_withdrawn_or_unowned_go_match_never_publishes(h, prod):
 
 
 @pytest.mark.asyncio
-async def test_rollback_between_match_and_plan_fences_the_publication(h, prod):
+async def test_rollback_between_match_and_plan_does_not_gate_live_go(h, prod):
   await granted_and_delivered(h)
   await h.fence.rollback("XAU", "supply", expected_epoch=1, actor="oncall", reason="drill", drain_seconds=30)
   await cycle(prod, n=2)
-  assert await prod.xlen(STREAM) == 0 and (await route(prod, "go_opp_chain"))["reason_code"] == "authority_fenced"
+  assert len(await plans(prod)) == 1
+  assert (await route(prod, "go_opp_chain"))["status"] == "candidate_published"
 
 
 # ---- Go-only automatic path: a leftover Python scanner match never trades ----------------------------
@@ -433,9 +434,9 @@ def _go_mode(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_control_stale_python_match_would_publish_under_python_authority(h, prod):
-  """Proves the fixture is a real, publishable plan - so the go-mode test below
-  shows the Go-only sweep blocking it, not a match that could never trade."""
+async def test_control_stale_python_match_would_publish_under_legacy_python_mode(h, prod, monkeypatch):
+  """Proves the fixture is a real, publishable legacy match before Go mode filters it."""
+  install_runtime_overrides(monkeypatch, {"analysis.technical_authority.mode": "python"})
   await h._ensure()
   stale = _stale_python_match()
   await _plant(prod, stale)

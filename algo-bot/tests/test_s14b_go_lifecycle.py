@@ -107,13 +107,13 @@ async def publish(client, match):
 # ---- activation boundary and freshness --------------------------------------------
 
 @pytest.mark.asyncio
-async def test_history_observed_before_the_activation_boundary_never_becomes_a_match(h, real_redis_client):
+async def test_recent_history_is_live_without_an_activation_boundary(h, real_redis_client):
   await h.grant()
-  ev = make_event(h.clock.now, observed_ago=180 + 120)      # observed before the grant took effect
-  assert await deliver(h, ev) == "not_adapted"
+  ev = make_event(h.clock.now, observed_ago=180 + 120)
+  assert await deliver(h, ev) == "match_written"
   row = (await decision_rows(h))[-1]
-  assert row["reason"] == "pre_activation_event" and row["details"]["observed_at"] < row["details"]["activation_boundary"]
-  assert await matches(real_redis_client) == []
+  assert row["reason"] == "go_live_authority" and row["details"]["activation_boundary"] == 0
+  assert await matches(real_redis_client) == ["go_opp_golden_supply_xau"]
   assert await h.repo.opportunity_state("opp_golden_supply_xau") == "active"     # ledger keeps the history
 
 
@@ -127,7 +127,7 @@ async def test_a_new_observation_after_activation_adapts_and_records_all_three_t
   assert row["outcome"] == "match_written"
   assert (d["observed_at"], d["published_at"], d["consumed_at"]) == (now - 60, now - 20, now)
   assert (d["event_age_seconds"], d["delivery_lag_seconds"]) == (60, 20)
-  assert d["activation_boundary"] < d["observed_at"] and d["epoch"] == 1
+  assert d["activation_boundary"] == 0 and d["epoch"] == 0
   assert await matches(real_redis_client) == ["go_opp_golden_supply_xau"]
 
 
@@ -295,7 +295,7 @@ async def test_published_go_plan_is_registered_and_its_invalidation_requests_the
   plan_id = await publish(real_redis_client, match)
   assert plan_id == "v8:go_opp_golden_supply_xau"
   registry = await registered_go_plans(real_redis_client, symbol="XAU", scope="supply")
-  assert [(p["plan_id"], p["epoch"], p["match_id"]) for p in registry] == [(plan_id, 1, "go_opp_golden_supply_xau")]
+  assert [(p["plan_id"], p["epoch"], p["match_id"]) for p in registry] == [(plan_id, 0, "go_opp_golden_supply_xau")]
   await deliver(h, terminal(h), topic=InvalidationTopic)
   assert (await read_plan_cancel(real_redis_client, plan_id))["source"] == "opportunity_invalidated"
   # Python never edits executor state: only the executor moves it, and reports back.
@@ -307,7 +307,7 @@ async def test_published_go_plan_is_registered_and_its_invalidation_requests_the
 # ---- rollback sequence ------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_rollback_sequence_fence_first_then_withdraw_and_it_is_rerunnable(h, real_redis_client):
+async def test_explicit_withdraw_remains_rerunnable_without_a_live_fence(h, real_redis_client):
   await h.grant()
   now = int(h.clock.now)
   await deliver(h, make_event(now, "opp-a"))
@@ -315,28 +315,27 @@ async def test_rollback_sequence_fence_first_then_withdraw_and_it_is_rerunnable(
   first = next(m for m in deserialize_matches(await real_redis_client.get(CLIENT_KEY)) if m.match_id == "go_opp-a")
   assert await publish(real_redis_client, first) == "v8:go_opp-a"
 
-  # 1) fence: Go stops immediately, nothing new can be created or published.
+  # The historical rollback row does not gate the live Go consumer.
   await h.fence.rollback("XAU", "supply", expected_epoch=1, actor="oncall", reason="rollback drill", drain_seconds=30)
-  assert await deliver(h, make_event(now, "opp-c", observed_ago=10)) == "not_adapted"
-  assert (await decision_rows(h))[-1]["reason"].startswith("not_go_owner:")
+  assert await deliver(h, make_event(now, "opp-c", observed_ago=10)) == "match_written"
+  assert (await decision_rows(h))[-1]["reason"] == "go_live_authority"
   second = next(m for m in deserialize_matches(await real_redis_client.get(CLIENT_KEY)) if m.match_id == "go_opp-b")
-  assert await publish(real_redis_client, second) is None
-  assert (await _outcome(real_redis_client, second))["reason_code"] == "authority_fenced"
+  assert await publish(real_redis_client, second) == "v8:go_opp-b"
 
   # 2) withdraw: matches, unpublished setups and queued plans.
   report = await withdraw_go_scope(real_redis_client, symbol="XAU", scope="supply", reason="rollback drill", source="authority_rollback", now=int(h.clock.now))
-  assert sorted(report.matches_removed) == ["go_opp-a", "go_opp-b"]
-  assert report.setups_withdrawn == ["go_opp-b"]            # the published one is the executor's now
-  assert sorted(report.plans_cancel_requested) == ["v8:go_opp-a", "v8:go_opp-b"]
+  assert sorted(report.matches_removed) == ["go_opp-a", "go_opp-b", "go_opp-c"]
+  assert report.setups_withdrawn == ["go_opp-c"]             # published plans belong to the executor now
+  assert sorted(report.plans_cancel_requested) == ["v8:go_opp-a", "v8:go_opp-b", "v8:go_opp-c"]
   assert await matches(real_redis_client) == []
-  assert (await load_setup(real_redis_client, "go_opp-b")).state == INVALIDATED
+  assert (await load_setup(real_redis_client, "go_opp-c")).state == INVALIDATED
   assert (await load_setup(real_redis_client, "go_opp-a")).state == PLAN_PUBLISHED
   assert (await read_plan_cancel(real_redis_client, "v8:go_opp-a"))["source"] == "authority_rollback"
 
   # Re-running (the operator's recovery from a crash mid-sequence) changes nothing.
   again = await withdraw_go_scope(real_redis_client, symbol="XAU", scope="supply", reason="rerun", source="authority_rollback", now=int(h.clock.now))
   assert again.matches_removed == [] and again.plans_cancel_requested == []
-  assert sorted(again.plans_already_requested) == ["v8:go_opp-a"]
+  assert sorted(again.plans_already_requested) == ["v8:go_opp-a", "v8:go_opp-b"]
   assert (await read_plan_cancel(real_redis_client, "v8:go_opp-a"))["reason"] == "rollback drill"
 
   # 3) Python only resumes after the drain.

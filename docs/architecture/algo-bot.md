@@ -48,15 +48,14 @@ No technical recalculation. If a consumer needs a value `analysis_client`
 doesn't expose, the fix is a new field on the `analysis.opportunity.v1`
 contract, never a local Python recomputation.
 
-### S12 rollout guard
+### Live Go consumer
 
-`analysis.technical_authority.mode` defaults to `python` and
-`consumer_enabled` defaults to `false`. The only consumer-enabled mode now
-implemented before the cutover is `go_shadow`: it durably records Go
-opportunity lifecycle state and the outcome of a real dry run of the live
-pipeline (S14A: an in-memory Redis overlay, read-only PostgreSQL, no Telegram),
-but cannot publish, reserve, or execute a TradePlan. `go` fails configuration validation until the separately
-approved S12D cutover implementation exists.
+`analysis.technical_authority.mode=go` and `consumer_enabled=true` are the
+production defaults. Kafka delivery is the technical-authority boundary: the
+consumer adapts each reviewed Go opportunity into the normal StrategyMatch and
+TradePlan V8 path. Python remains responsible for execution-time quote,
+spread, risk and order checks, but is not a competing technical producer.
+`go_shadow` remains available only to offline dry-run tooling.
 
 Opportunity V1 currently lacks the execution-policy facts required by the
 existing `StrategyMatch` → `TradePlanBuilder` route: current price, ATR,
