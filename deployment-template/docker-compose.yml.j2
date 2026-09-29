@@ -97,6 +97,7 @@ services:
       - ./config:/config:ro
       # transport.kafka.outbox_path lives here: the publication ledger must outlive a recreate.
       - analysis-engine-state:/var/lib/apexvoid-analysis-engine
+      - ./logs/analysis-engine:/var/log/apexvoid
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/health/ready"]
       interval: 10s
