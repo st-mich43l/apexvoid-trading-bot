@@ -964,6 +964,23 @@ public sealed class TradePlanRuntime(
     var existingLeg = (state.Legs ?? [])
       .FirstOrDefault(leg => leg.LegId == ownership.LegId);
     if (
+      existingLeg?.BrokerPositionId is long existingPositionId
+      && existingPositionId != position.PositionId
+    )
+    {
+      // A broker may expose duplicate positions carrying the same compact
+      // client identity after an old pre-persistence retry loop. Do not
+      // overwrite the durable leg mapping with each duplicate; recovery
+      // keeps the first position authoritative and surfaces the duplicate
+      // for operator reconciliation.
+      log(
+        $"v8 adopt: duplicate broker position ignored position={position.PositionId} "
+        + $"plan_id={ownership.PlanId} leg={ownership.LegId} "
+        + $"existing_position={existingPositionId}"
+      );
+      return true;
+    }
+    if (
       existingLeg is not null
       && existingLeg.BrokerPositionId == position.PositionId
       && existingLeg.Stage is TradePlanLegStages.Filled
@@ -2109,6 +2126,9 @@ public sealed class TradePlanRuntime(
         or TradePlanContract.EntryTypeMarketWatch
     )
     {
+      ValidateLiveMarketStopGeometry(
+        plan, direction, absoluteStop, quote
+      );
       const string legId = "L1";
       var entryPrice = direction == TradeDirection.Buy ? quote.Ask : quote.Bid;
       var comment = TradePlanOwnership.FormatComment(
@@ -2157,9 +2177,23 @@ public sealed class TradePlanRuntime(
           Legs = [leg],
         }
       );
-      next = await AmendAndVerifyLegStopAsync(
-        client, symbol, next, legId, absoluteStop, cancellationToken
-      );
+      // The broker order is already accepted at this point. Persist the
+      // accepted position before the verification/amend call so an amend
+      // failure cannot replay the market order on the next poll.
+      await PersistStateAsync(next, cancellationToken);
+      try
+      {
+        next = await AmendAndVerifyLegStopAsync(
+          client, symbol, next, legId, absoluteStop, cancellationToken
+        );
+      }
+      catch (Exception exception)
+      {
+        log(
+          $"v8 initial stop amend failed id={plan.PlanId} leg={legId} "
+          + $"message={exception.Message}"
+        );
+      }
       await PersistStateAsync(next, cancellationToken);
       await PersistPlanExecutionStateAsync(
         plan.PlanId, "filled", null, cancellationToken
@@ -2251,6 +2285,10 @@ public sealed class TradePlanRuntime(
 
     var runtimeLegs = new List<TradePlanLegRuntimeState>(state.Legs ?? []);
     EnsurePlannedLegs(runtimeLegs, declaredLegs, plan);
+
+    ValidateLiveMarketStopGeometry(
+      plan, direction, absoluteStop, quote, declaredLegs
+    );
 
     // Resume from the first leg not yet durably recorded as submitted -
     // never restart the ladder at leg 0.
@@ -2378,9 +2416,23 @@ public sealed class TradePlanRuntime(
       );
       if (updatedLeg.BrokerPositionId is not null)
       {
-        state = await AmendAndVerifyLegStopAsync(
-          client, symbol, state, updatedLeg.LegId, absoluteStop, cancellationToken
-        );
+        // The market order has already been accepted. Save the broker
+        // position and SubmittedLegCount before touching its stop so an
+        // amend rejection cannot cause this leg to be submitted again.
+        await PersistStateAsync(state, cancellationToken);
+        try
+        {
+          state = await AmendAndVerifyLegStopAsync(
+            client, symbol, state, updatedLeg.LegId, absoluteStop, cancellationToken
+          );
+        }
+        catch (Exception exception)
+        {
+          log(
+            $"v8 initial stop amend failed id={plan.PlanId} "
+            + $"leg={updatedLeg.LegId} message={exception.Message}"
+          );
+        }
         // AmendAndVerify rewrites Legs (StopVerified); keep the local list
         // in sync so the post-loop AggregateState does not clobber it.
         runtimeLegs = (state.Legs ?? []).ToList();
@@ -4120,9 +4172,25 @@ public sealed class TradePlanRuntime(
     {
       return state;
     }
-    await client.AmendPositionStopLossAsync(
-      positionId, absoluteStop, cancellationToken
-    );
+    try
+    {
+      await client.AmendPositionStopLossAsync(
+        positionId, absoluteStop, cancellationToken
+      );
+    }
+    catch (Exception exception) when (IsBrokerStopRejection(exception))
+    {
+      // A broker-side stop geometry rejection is terminal for this exact
+      // amend, not a reason to replay an already accepted entry. Keep the
+      // position mapped to its leg and leave StopVerified=false so recovery
+      // can inspect it without losing the durable broker identity.
+      legs[idx] = legs[idx] with { LastError = exception.Message };
+      log(
+        $"v8 stop amend rejected id={state.PlanId} leg={legId} "
+        + $"message={exception.Message}"
+      );
+      return AggregateState(state with { Legs = legs });
+    }
     var positions = await client.ReconcilePositionsAsync(cancellationToken);
     var position = positions.FirstOrDefault(item => item.PositionId == positionId);
     var tick = StopTrailPlanner.RequireTickSize(symbol);
@@ -4141,6 +4209,51 @@ public sealed class TradePlanRuntime(
         GroupStopVerified = allVerified,
       }
     );
+  }
+
+  private static bool IsBrokerStopRejection(Exception exception) =>
+    exception.Message.Contains("TRADING_BAD_STOPS", StringComparison.OrdinalIgnoreCase);
+
+  private static void ValidateLiveMarketStopGeometry(
+    TradePlan plan,
+    TradeDirection direction,
+    decimal absoluteStop,
+    SpotPrice quote,
+    IReadOnlyList<DeclaredLeg>? declaredLegs = null
+  )
+  {
+    var hasMarketOrder = plan.Entry.Type
+      is TradePlanContract.EntryTypeMarket
+      or TradePlanContract.EntryTypeMarketWatch;
+    if (!hasMarketOrder && declaredLegs is not null)
+    {
+      hasMarketOrder = declaredLegs.Any(leg =>
+        ResolveLegUsesMarket(leg, direction, quote)
+      );
+    }
+    if (!hasMarketOrder)
+    {
+      return;
+    }
+
+    // cTrader validates a BUY stop against the live BID and a SELL stop
+    // against the live ASK. The plan contract validates the declared entry
+    // geometry, but a market leg can cross that stop while waiting in the
+    // stream/poll pipeline. Reject before the first broker call instead of
+    // submitting an unprotected/wrong-side position.
+    var executableSide = direction == TradeDirection.Buy ? quote.Bid : quote.Ask;
+    var valid = direction == TradeDirection.Buy
+      ? absoluteStop < executableSide
+      : absoluteStop > executableSide;
+    if (!valid)
+    {
+      var side = direction == TradeDirection.Buy ? "BID" : "ASK";
+      throw new TradePlanContractException(
+        $"live market stop geometry invalid: {direction} stop={absoluteStop} "
+        + $"must be {(direction == TradeDirection.Buy ? "below" : "above")} "
+        + $"current {side}={executableSide}"
+      );
+    }
   }
 
   private static TradePlanRuntimeState AggregateState(TradePlanRuntimeState state)
