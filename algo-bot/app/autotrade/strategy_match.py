@@ -198,6 +198,13 @@ class StrategyMatch:
   opposing_action: str | None = None
   opposing_reason_code: str | None = None
   trendline_v2: dict[str, object] | None = None
+  # Go's real per-instance strategy quality (analysis-engine's
+  # StrategyQuality.Overall/Components) — additive/optional so older cached
+  # matches and non-Go origins still round-trip. ``confluence`` remains the
+  # legacy evidence-code count used for validity/admission floors; this is
+  # the actual per-instance signal arbitration ranking should prefer.
+  quality_overall: float | None = None
+  quality_components: dict[str, float] | None = None
 
   @property
   def is_range_edge(self) -> bool:
@@ -687,6 +694,14 @@ class StrategyMatch:
           dict(payload["trendline_v2"])
           if isinstance(payload.get("trendline_v2"), dict) else None
         ),
+        quality_overall=(
+          None if payload.get("quality_overall") is None
+          else float(payload["quality_overall"])
+        ),
+        quality_components=(
+          {str(k): float(v) for k, v in payload["quality_components"].items()}
+          if isinstance(payload.get("quality_components"), dict) else None
+        ),
       )
     except (KeyError, TypeError, ValueError, json.JSONDecodeError):
       return None
@@ -836,6 +851,13 @@ def _valid_match(match: StrategyMatch) -> bool:
     and match.tier in {"A", "B", "C"}
     and math.isfinite(match.risk_multiplier)
     and match.risk_multiplier >= 0
+    and (
+      match.quality_overall is None
+      or (
+        math.isfinite(match.quality_overall)
+        and 0.0 <= match.quality_overall <= 1.0
+      )
+    )
     and valid_range
     and identity_ok
   )

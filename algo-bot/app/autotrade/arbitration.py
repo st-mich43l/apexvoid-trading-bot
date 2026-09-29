@@ -76,6 +76,10 @@ class ExecutionIntent:
   target_reference_price: str = "broker_fill"
   proposed_group_id: str | None = None
   cycle_id: str | None = None
+  # Go's real per-instance StrategyQuality.Overall (see strategy_match.py's
+  # own doc comment). None only for a hypothetical non-Go source; every
+  # live source today ("go_analysis_engine") always sets this.
+  quality_overall: float | None = None
 
 
 @dataclass(frozen=True)
@@ -93,10 +97,23 @@ _SOURCE_PRIORITY = {
 }
 
 
-def _rank(intent: ExecutionIntent) -> tuple:
+def _rank(intent: ExecutionIntent, *, use_quality: bool) -> tuple:
+  if use_quality:
+    # Go's real per-instance quality when present; a scaled-down confluence
+    # fallback otherwise (only reachable for a hypothetical non-Go source —
+    # every live source today always sets quality_overall). The /10.0 keeps
+    # the fallback well below any real quality score's [0, 1] range rather
+    # than letting an int proxy silently dominate a real signal.
+    quality_key = -(
+      intent.quality_overall
+      if intent.quality_overall is not None
+      else float(intent.confluence) / 10.0
+    )
+  else:
+    quality_key = -intent.confluence
   return (
     0 if intent.tier.upper() == "A" else 1,
-    -intent.confluence,
+    quality_key,
     -intent.freshness,
     intent.distance_pips,
     _SOURCE_PRIORITY.get(intent.source, 9),
@@ -108,25 +125,49 @@ def arbitrate_execution_intents(
   intents: list[ExecutionIntent],
   *,
   conflict_margin: float = 1.0,
+  use_quality_ranking: bool = False,
+  conflict_margin_quality: float = 0.15,
 ) -> ArbitrationResult:
   """Return one-direction publication order for this M1 confirmation cycle.
 
   At most one caller may publish. The ordered tail exists only as fallback
   when a higher-ranked intent fails its own execution checks.
+
+  ``use_quality_ranking`` switches the rank/decisiveness signal from the
+  legacy evidence-code ``confluence`` count (constant per strategy family,
+  not a real per-instance signal) to Go's real ``quality_overall`` score.
+  Defaults off so existing behavior is reproduced exactly until the
+  rollout flag (``actionability.scanner_gates.use_quality_ranking``) is
+  flipped. ``conflict_margin`` stays confluence-integer-scaled;
+  ``conflict_margin_quality`` is the analogous margin on the [0, 1]
+  quality scale — the two are not interchangeable units.
   """
   if not intents:
     return ArbitrationResult((), (), "no_intent")
-  ordered = sorted(intents, key=_rank)
+  ordered = sorted(
+    intents, key=lambda intent: _rank(intent, use_quality=use_quality_ranking),
+  )
   top = ordered[0]
   opposing = [item for item in ordered if item.direction != top.direction]
   if opposing:
     strongest_opposing = opposing[0]
     same_tier = strongest_opposing.tier.upper() == top.tier.upper()
-    decisive = (
-      not same_tier
-      or top.confluence - strongest_opposing.confluence
-        >= max(1.0, float(conflict_margin))
-    )
+    if (
+      use_quality_ranking
+      and top.quality_overall is not None
+      and strongest_opposing.quality_overall is not None
+    ):
+      decisive = (
+        not same_tier
+        or top.quality_overall - strongest_opposing.quality_overall
+          >= float(conflict_margin_quality)
+      )
+    else:
+      decisive = (
+        not same_tier
+        or top.confluence - strongest_opposing.confluence
+          >= max(1.0, float(conflict_margin))
+      )
     if not decisive:
       return ArbitrationResult(
         (),
