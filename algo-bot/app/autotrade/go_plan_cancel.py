@@ -29,7 +29,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
-from app.analysis_client.authority import CATALOG_TAG, EPOCH_TAG, GO_ORIGIN_TAG
+from app.analysis_client.provenance import CATALOG_TAG, EPOCH_TAG, GO_ORIGIN_TAG
 from app.autotrade.multi_match import deserialize_matches, serialize_matches, strategy_matches_key
 from app.autotrade.setup_lifecycle import (
   CANCELLED,

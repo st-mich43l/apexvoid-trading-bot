@@ -1,8 +1,14 @@
-"""S13B fenced technical-authority switch, per (symbol, catalog strategy).
+"""Retired S13B authority ledger kept for rollback/report compatibility.
 
-Kafka publication from the Go Analysis Engine is *not* a cutover. Who may
-create an executable TradePlan for a scope is a separate, durable, fenced
-decision recorded here:
+The live Go consumer no longer calls this module.  Kafka delivery is the
+technical-authority boundary; the Python/Go scope-grant gate was removed from
+the production path.  The transition records and CLI helpers remain readable
+for historical audits and explicit operator rollback tooling only.
+
+The historical state machine below records who *used to* own an executable
+scope. It remains available to read old audit rows and to support explicit
+rollback drills, but it is not consulted by the live Go consumer or the V8
+publisher:
 
 * absent row  -> Python owns the scope (epoch 0). This is the default for
   every scope, so deploying this module changes nothing.
@@ -22,11 +28,9 @@ observations, manual trading and management of already-open positions are
 unaffected: ownership is a property of who may create a plan, not of who
 manages one.
 
-The live fence is consulted only when the Go consumer is enabled
-(``analysis.technical_authority.consumer_enabled``). Turning the consumer off
-is *not* a rollback: a scope still recorded as Go-owned (or mid-handover) stays
-closed to legacy Python plans, enforced without a per-plan DB read by a
-periodically refreshed ``AuthoritySnapshot`` that fails closed when stale (S14B).
+Historical callers may still use the fence APIs for audit/replay workflows.
+Live startup requires Go mode and Kafka, while the Go consumer itself does not
+wait for a per-scope grant or acceptance row.
 """
 
 from __future__ import annotations
@@ -36,16 +40,15 @@ from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from app.analysis_client.provenance import CATALOG_TAG, EPOCH_TAG, GO_ORIGIN_TAG
+
 OWNER_PYTHON = "python"
 OWNER_GO = "go"
 OWNER_DRAINING = "draining"
 OWNER_NONE = "none"  # effective owner while draining: nobody may publish
 
-# Marks a StrategyMatch that the Go adapter produced. Legacy Python matches
-# never carry it, so origin is decided from data, not from the caller.
-GO_ORIGIN_TAG = "authority:go"
-CATALOG_TAG = "catalog:"       # tag value: catalog strategy id of a Go match
-EPOCH_TAG = "authority_epoch:"  # tag value: fence epoch the Go match was accepted under
+# Re-exported for old audit/test/CLI imports. These tags are provenance only;
+# they no longer authorize or deny live publication.
 
 CACHE_TTL_SECONDS = 2.0
 DEFAULT_DRAIN_SECONDS = 30

@@ -20,7 +20,7 @@ import math
 from typing import Any, Awaitable, Callable
 
 from app.persistence import redis_state
-from app.analysis_client.authority import GO_ORIGIN_TAG, AuthorityDecision, authorize_legacy_match
+from app.analysis_client.provenance import GO_ORIGIN_TAG
 from app.analysis_client.shadow_overlay import is_shadow_overlay
 from app.autotrade.go_plan_cancel import read_plan_cancel, register_go_plan
 from app.autotrade.go_zone_book import opposing_entries_for_go_match
@@ -4814,45 +4814,10 @@ async def _publish_trade_plan_v8(
       publish_status=True,
     )
     return None
-  # S13B technical-authority fence: exactly one of {Python detectors, Go
-  # analysis} may create an executable plan for a (symbol, catalog strategy)
-  # scope. Reconciliation of an already-published/terminal plan (above) is
-  # deliberately not fenced: ownership governs plan *creation*, never the
-  # management of positions that already exist.
-  if is_shadow_overlay(client):
-    # S14A dry run on an in-memory overlay: nothing here can reach Redis,
-    # Postgres or Telegram, so the fence (which protects live publication) is
-    # bypassed to see what the pipeline WOULD do. The real fence state is
-    # recorded separately by the shadow policy. Honoured for the overlay class
-    # only; a real client always takes the fenced branch.
-    authority = AuthorityDecision(True, "shadow_dry_run_overlay")
-  else:
-    authority = await authorize_legacy_match(
-      symbol=match.symbol,
-      strategy_name=match.strategy,
-      direction=match.direction,
-      tags=match.tags,
-      consumer_enabled=runtime_config.analysis.technical_authority.consumer_enabled,
-      go_authority_mode=runtime_config.analysis.technical_authority.mode == "go",
-    )
-  if not authority.allowed:
-    await record_route_outcome(
-      client,
-      match,
-      stage="mode_check",
-      status="blocked",
-      reason_code="authority_fenced",
-      message=f"plan creation for this scope is not owned by this publisher ({authority.reason})",
-      measured={
-        "authority_reason": authority.reason,
-        "authority_owner": authority.owner,
-        "authority_epoch": authority.epoch,
-        "authority_scopes": list(authority.scopes),
-      },
-      retained=False,
-      publish_status=False,
-    )
-    return None
+  # Go is the live technical source. The old Python/Go scope-grant fence is
+  # retired; provenance and the Go-only match filter remain the protection
+  # against stale Python/ZoneWatch state. Everything after this point is
+  # execution-time quote, confirmation, risk and order validation.
   if GO_ORIGIN_TAG in match.tags:
     # S14B: a Go opportunity that was invalidated/expired, or whose scope was
     # rolled back, leaves a cancel tombstone. A match that raced the withdrawal

@@ -3,17 +3,16 @@
 A durable, decoded Go opportunity (``analysis_client``) becomes an ordinary
 ``StrategyMatch`` in Redis, so every execution gate downstream — arbitration,
 killzone/news guards, execution policy (min R:R, stop, routing), sizing,
-duplicate protection, TradePlan V8 and its publish-time authority fence — runs
-unchanged. This module decides nothing about technical structure or risk; it
-only translates the Go-owned facts.
+duplicate protection and TradePlan V8 — runs unchanged. This module decides
+nothing about technical structure or risk; it only translates the Go-owned
+facts.
 
 Hard rules encoded here:
 
 * **Reviewed scopes only.** ``REVIEWED_SCOPES`` is the allowlist; anything else
   is recorded as a decision and dropped, never guessed at.
-* **Global Go mode.** When `analysis.technical_authority.mode=go`, an absent
-  scope row defaults to Go. Explicit Python/draining rows remain fenced; the
-  match carries its epoch and the plan-publish guard re-checks it.
+* **Live Go source.** Kafka delivery is the authority boundary. The old
+  Python/Go scope-grant table is not consulted by this path.
 * **Fail closed on missing facts.** No ``technical_context``, no observed
   timeframe, unknown instrument, expired opportunity, non-directional
   geometry, or ``multiple_matches_enabled`` off (which would make the shared
@@ -38,12 +37,10 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from app.analysis_client.authority import (
+from app.analysis_client.provenance import (
   CATALOG_TAG,
   EPOCH_TAG,
   GO_ORIGIN_TAG,
-  AuthorityFence,
-  get_fence,
 )
 from app.analysis_client.freshness import FreshnessLimits, evaluate_freshness
 from app.analysis_client.models import InvalidationEnvelope, OpportunityEnvelope
@@ -348,13 +345,18 @@ def build_strategy_match(
 
 
 class GoOpportunityPolicy:
-  """Consumer hook: durable Go lifecycle events -> matches, under the fence."""
+  """Consumer hook: durable Go lifecycle events -> live matches.
+
+  Go is the active technical producer. This adapter no longer consults the
+  retired Python/Go scope-grant fence; Kafka delivery, lifecycle idempotency,
+  freshness and the normal execution checks remain active below it.
+  """
 
   def __init__(
     self,
     repository: PostgresAnalysisOpportunityRepository,
     *,
-    fence: AuthorityFence | None = None,
+    fence: Any | None = None,
     client_factory: Callable[[], Any] | None = None,
     clock: Callable[[], float] = time.time,
     multiple_matches_enabled: Callable[[], bool] | None = None,
@@ -363,7 +365,8 @@ class GoOpportunityPolicy:
   ):
     self._risk_leg = risk_leg_enabled
     self._repository = repository
-    self._fence = fence
+    # Compatibility argument for old replay/test harnesses. It is not
+    # consulted: live Go authority comes from the enabled Kafka consumer.
     self._client_factory = client_factory
     self._clock = clock
     self._multiple = multiple_matches_enabled
@@ -374,9 +377,6 @@ class GoOpportunityPolicy:
       return self._client_factory()
     from app.persistence import redis_state
     return redis_state.get_client()
-
-  def _fence_instance(self) -> AuthorityFence:
-    return self._fence or get_fence()
 
   def _multiple_enabled(self) -> bool:
     if self._multiple is not None:
@@ -431,16 +431,11 @@ class GoOpportunityPolicy:
     if profile is None:
       await self._decide(event, "not_adapted", "scope_not_reviewed")
       return "not_adapted"
-    try:
-      decision = await self._fence_instance().authorize_go_publication(
-        payload.symbol, profile.catalog_id, allow_unconfigured=True,
-      )
-    except Exception as exc:  # noqa: BLE001 - fail closed on dependency outage
-      await self._decide(event, "not_adapted", f"authority_unavailable:{type(exc).__name__}")
-      return "not_adapted"
-    if not decision.allowed:
-      await self._decide(event, "not_adapted", f"not_go_owner:{decision.reason}", owner=decision.owner, epoch=decision.epoch)
-      return "not_adapted"
+    # No Python/Go authority grant is required. This process is consuming the
+    # live Go opportunity topic, so the event itself is the technical source
+    # of truth. Epoch zero is retained for wire compatibility only; it is not
+    # a database fence.
+    epoch = 0
     if not self._multiple_enabled():
       await self._decide(event, "not_adapted", "multiple_matches_disabled")
       return "not_adapted"
@@ -455,13 +450,13 @@ class GoOpportunityPolicy:
     )
     verdict = evaluate_freshness(
       observed_at=payload.created_at, expires_at=payload.expires_at, produced_at=event.produced_at,
-      published_at=published_at, consumed_at=now, boundary=decision.boundary, limits=self._freshness_limits(),
+      published_at=published_at, consumed_at=now, boundary=0, limits=self._freshness_limits(),
     )
     if not verdict.ok and not already_adapted:
-      await self._decide(event, "not_adapted", verdict.code, owner=decision.owner, epoch=decision.epoch, **verdict.details())
+      await self._decide(event, "not_adapted", verdict.code, owner="go", epoch=epoch, **verdict.details())
       return "not_adapted"
     try:
-      match = build_strategy_match(event, profile=profile, epoch=decision.epoch, now=now, risk_leg_enabled=self._risk_leg_enabled())
+      match = build_strategy_match(event, profile=profile, epoch=epoch, now=now, risk_leg_enabled=self._risk_leg_enabled())
     except AdapterRejection as exc:
       await self._decide(event, "rejected", exc.code, message=exc.message)
       return "rejected"
@@ -469,9 +464,9 @@ class GoOpportunityPolicy:
     await self._advance_setup(client, match)
     await self._store_match(client, match, now)
     await self._decide(
-      event, "match_written", "go_owned_scope", match_id=match.match_id, epoch=decision.epoch, **verdict.details(),
+      event, "match_written", "go_live_authority", match_id=match.match_id, epoch=epoch, **verdict.details(),
     )
-    log.info("Go opportunity adapted opportunity=%s match=%s epoch=%s", payload.id, match.match_id, decision.epoch)
+    log.info("Go opportunity adapted opportunity=%s match=%s", payload.id, match.match_id)
     return "match_written"
 
   async def on_terminal(self, event: InvalidationEnvelope, result: LifecycleResult) -> str:

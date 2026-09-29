@@ -194,15 +194,14 @@ governs plan *creation*; it never touches a position that already exists.
   (`analysis-engine-state`) are a hard precondition for trusting any
   shadow/live authority window — without them, a container recreate silently
   resets both the topic history and the publication ledger.
-- **PostgreSQL down** — the authority fence itself cannot be read, so both
-  the Go and Python publishers fail closed (no double-publish is possible).
-  `withdraw` still works because it only needs Redis; there is no bypass
-  flag to force a publish while the fence is unreadable.
+- **PostgreSQL down** — lifecycle persistence and the normal plan pipeline fail
+  closed, but the retired Python/Go authority-grant fence is not on the live
+  publication path. `withdraw` still works because it only needs Redis.
 - **Redis down** — the executor and the trade-plan stream have no fallback;
   execution stops.
-- Disabling the Kafka consumer flag is **not** a rollback — a scope Go
-  already owns stays closed to legacy Python plans until a fenced rollback
-  actually runs.
+- Disabling the Kafka consumer flag is an outage switch, not a strategy
+  handover. The bot startup gate refuses automatic trading until Go mode and
+  the durable consumer are enabled again.
 
 ### Freshness-gate reason codes
 
@@ -242,15 +241,13 @@ heartbeat fix for the auto-trade session loop specifically shipped in PR
 on a stale heartbeat is still not implemented. Until it is, a frozen executor
 needs a manual restart.
 
-### `go_shadow` activation
+### Live Go activation
 
-`go_shadow` (and the Go consumer) is switched on through the
-**ansible-rendered** vars that produce the deployed `trading-bot.yml`, not by
-editing `config/analysis.yml` directly. `config/analysis.yml` is read only by
-the Go engine and the C# executor — editing it alone has no effect on the
-Python bot's own authority mode. Confirm the change actually took after a
-deploy (boot audit row, consumer health key, Kafka consumer group existing)
-rather than assuming the ansible var change was sufficient.
+Set `mode: go` and `consumer_enabled: true` in the **Ansible-rendered**
+`trading-bot.yml`, with Kafka enabled and the stable consumer group present.
+`config/analysis.yml` mirrors the same live setting for the Go engine. After a
+deploy, verify `analysis_opportunity_consumer_loop` health and the Kafka group;
+the old per-scope acceptance/grant rows are no longer required.
 
 ## Troubleshooting
 
