@@ -230,6 +230,7 @@ logs/**
 !logs/**/.gitkeep
 !logs/algo-bot/
 !logs/ctrader-engine/
+!logs/analysis-engine/
 pgdata/
 *.db
 *.bak

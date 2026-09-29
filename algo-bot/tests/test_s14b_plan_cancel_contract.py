@@ -19,14 +19,14 @@ def test_keys_and_ttl_match_the_shared_contract():
 
 
 def test_sources_are_exactly_the_contract_sources():
-  assert sorted({gpc.SOURCE_INVALIDATED, gpc.SOURCE_EXPIRED, gpc.SOURCE_ROLLBACK}) == FIXTURE["sources"]
+  assert sorted({gpc.SOURCE_OPERATOR_CANCEL, gpc.SOURCE_EXPIRED, gpc.SOURCE_INVALIDATED}) == FIXTURE["sources"]
 
 
 @pytest.mark.asyncio
 async def test_written_intent_has_exactly_the_contract_fields():
   from app.persistence import redis_state
   client = redis_state.get_client()
-  await gpc.request_plan_cancel(client, "v8:go_x", reason="r", source=gpc.SOURCE_ROLLBACK, requested_at=5, opportunity_id="x", epoch=1)
+  await gpc.request_plan_cancel(client, "v8:go_x", reason="r", source=gpc.SOURCE_OPERATOR_CANCEL, requested_at=5, opportunity_id="x")
   intent = await gpc.read_plan_cancel(client, "v8:go_x")
   assert sorted(intent) == FIXTURE["intent_fields"]
   assert intent["source"] in FIXTURE["sources"]

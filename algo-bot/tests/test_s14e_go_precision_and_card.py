@@ -68,7 +68,7 @@ def rebased(now: int) -> dict:
 
 async def deliver_and_publish(h, prod, monkeypatch):
   live_inputs(monkeypatch, bid=4293.0, ask=4293.2)                    # inside the replayed zone 4291.21-4296.87
-  await h.grant()
+  await h.activate()
   await h._ensure()
   now = int(h.clock.now)
   raw = rebased(now)
@@ -148,7 +148,7 @@ def test_the_go_origin_risk_leg_gate_is_off_by_default_and_names_the_spec_tag():
 @pytest.mark.parametrize("enabled,expect_tag", [(False, True), (True, False)])
 def test_go_matches_carry_the_disable_tag_until_the_gate_is_on(enabled, expect_tag):
   event = parse_analysis_event(OpportunityTopic, replayed_event_line())
-  match = pol.build_strategy_match(event, profile=pol.REVIEWED_SCOPES["supply"], epoch=1, now=event.payload.created_at + 1, risk_leg_enabled=enabled)
+  match = pol.build_strategy_match(event, profile=pol.REVIEWED_SCOPES["supply"], now=event.payload.created_at + 1, risk_leg_enabled=enabled)
   assert (pol.RISK_LEG_DISABLED_TAG in match.tags) is expect_tag
 
 
@@ -162,7 +162,7 @@ async def test_the_plan_a_default_go_deployment_publishes_disables_the_executor_
 @pytest.mark.asyncio
 async def test_turning_the_gate_on_removes_the_tag_so_the_executor_may_inject_the_leg(h, prod, monkeypatch):
   install_runtime_overrides(monkeypatch, {"analysis.technical_authority.go_origin_risk_leg_enabled": True})
-  h.policy = pol.GoOpportunityPolicy(h.repo, fence=h.fence, clock=h.clock, multiple_matches_enabled=lambda: True)
+  h.policy = pol.GoOpportunityPolicy(h.repo, clock=h.clock, multiple_matches_enabled=lambda: True)
   await deliver_and_publish(h, prod, monkeypatch)
   (plan,) = await plans(prod)
   assert "risk_leg:disabled" not in plan["analysis"]["tags"]

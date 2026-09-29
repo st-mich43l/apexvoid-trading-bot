@@ -6,7 +6,7 @@ namespace CTraderFeed.Tests;
 /// <summary>
 /// S14B: the executor honours the cancel intent Python writes at
 /// execution:plan_cancel:{plan_id} when a Go-derived plan's opportunity is
-/// invalidated/expired or its authority scope is rolled back. Covers every
+/// invalidated/expired or explicitly cancelled. Covers every
 /// stage a plan can be in: never submitted, resting orders, partially
 /// filled, fully open, retried broker failure, restart. Positions are never
 /// closed by an intent.
@@ -47,11 +47,11 @@ public sealed partial class TradePlanRuntimeTests
   private static string AckKey(string planId) =>
     CancelContract.GetProperty("ack_key").GetString()!.Replace("{plan_id}", planId);
 
-  private static string CancelIntentJson(string source = "authority_rollback") =>
-    $$"""{"plan_id":"{{PlanId}}","reason":"rollback drill","source":"{{source}}","requested_at":1720000000}""";
+  private static string CancelIntentJson(string source = "operator_cancel") =>
+    $$"""{"plan_id":"{{PlanId}}","reason":"operator cancel","source":"{{source}}","requested_at":1720000000}""";
 
   private static Task WriteCancelIntent(
-    FakeTradePlanStore store, string planId = PlanId, string source = "authority_rollback"
+    FakeTradePlanStore store, string planId = PlanId, string source = "operator_cancel"
   ) => store.SetStringAsync(
     IntentKey(planId),
     CancelIntentJson(source).Replace(PlanId, planId),
@@ -91,7 +91,7 @@ public sealed partial class TradePlanRuntimeTests
     Assert.Contains(store.Events, e => e.Type == "plan_cancelled");
     var ack = Ack(store);
     Assert.Equal("cancelled_unsubmitted", ack.GetProperty("outcome").GetString());
-    Assert.Equal("authority_rollback", ack.GetProperty("source").GetString());
+    Assert.Equal("operator_cancel", ack.GetProperty("source").GetString());
   }
 
   [Fact]

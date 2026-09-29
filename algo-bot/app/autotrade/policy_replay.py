@@ -185,7 +185,7 @@ def load_go_cases(path: str | Path) -> tuple[list[GoCase], Counter]:
       skipped["resting_zone_not_confirmed"] += 1
       continue
     try:
-      match = pol.build_strategy_match(event, profile=profile, epoch=0, now=event.payload.created_at + 1)
+      match = pol.build_strategy_match(event, profile=profile, now=event.payload.created_at + 1)
       cases.append(GoCase(event, match, None))
     except pol.AdapterRejection as exc:
       cases.append(GoCase(event, None, exc.code))

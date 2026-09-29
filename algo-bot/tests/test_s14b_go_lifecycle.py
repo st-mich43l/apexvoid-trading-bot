@@ -1,4 +1,4 @@
-"""S14B: activation boundary, freshness, withdrawal and rollback on real Postgres + real Redis.
+"""S14B: consumer freshness, withdrawal and cancellation on real Postgres + real Redis.
 
 Nothing here is mocked below the policy: the ledger is PostgreSQL, the match /
 setup / plan / cancel-intent state is a real Redis (production Lua included) and
@@ -104,22 +104,22 @@ async def publish(client, match):
   return await worker._publish_trade_plan_v8(client, "XAU", _spot(4354.1, 4354.3), match, frames={"M1": _m1_trigger_bar()})
 
 
-# ---- activation boundary and freshness --------------------------------------------
+# ---- freshness ---------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_recent_history_is_live_without_an_activation_boundary(h, real_redis_client):
-  await h.grant()
+async def test_recent_history_is_live_without_scope_approval(h, real_redis_client):
+  await h.activate()
   ev = make_event(h.clock.now, observed_ago=180 + 120)
   assert await deliver(h, ev) == "match_written"
   row = (await decision_rows(h))[-1]
-  assert row["reason"] == "go_live_authority" and row["details"]["activation_boundary"] == 0
+  assert row["reason"] == "go_live"
   assert await matches(real_redis_client) == ["go_opp_golden_supply_xau"]
   assert await h.repo.opportunity_state("opp_golden_supply_xau") == "active"     # ledger keeps the history
 
 
 @pytest.mark.asyncio
-async def test_a_new_observation_after_activation_adapts_and_records_all_three_times(h, real_redis_client):
-  await h.grant()
+async def test_a_new_observation_adapts_and_records_all_three_times(h, real_redis_client):
+  await h.activate()
   now = int(h.clock.now)
   assert await deliver(h, make_event(now), published_at=now - 20) == "match_written"
   row = (await decision_rows(h))[-1]
@@ -127,13 +127,12 @@ async def test_a_new_observation_after_activation_adapts_and_records_all_three_t
   assert row["outcome"] == "match_written"
   assert (d["observed_at"], d["published_at"], d["consumed_at"]) == (now - 60, now - 20, now)
   assert (d["event_age_seconds"], d["delivery_lag_seconds"]) == (60, 20)
-  assert d["activation_boundary"] == 0 and d["epoch"] == 0
   assert await matches(real_redis_client) == ["go_opp_golden_supply_xau"]
 
 
 @pytest.mark.asyncio
 async def test_backlog_older_than_the_event_age_limit_is_recorded_never_traded(h, real_redis_client):
-  await h.grant()
+  await h.activate()
   ev = make_event(h.clock.now)
   h.clock.advance(1_000)
   assert await deliver(h, ev) == "not_adapted"
@@ -143,7 +142,7 @@ async def test_backlog_older_than_the_event_age_limit_is_recorded_never_traded(h
 
 @pytest.mark.asyncio
 async def test_a_young_setup_held_up_in_kafka_is_a_backlog_too(h, real_redis_client):
-  await h.grant()
+  await h.activate()
   now = int(h.clock.now)
   assert await deliver(h, make_event(now), published_at=now - 400) == "not_adapted"
   assert (await decision_rows(h))[-1]["reason"] == "delivery_lag_exceeded"
@@ -152,7 +151,7 @@ async def test_a_young_setup_held_up_in_kafka_is_a_backlog_too(h, real_redis_cli
 
 @pytest.mark.asyncio
 async def test_technically_expired_opportunity_is_not_adapted(h, real_redis_client):
-  await h.grant()
+  await h.activate()
   now = int(h.clock.now)
   assert await deliver(h, make_event(now, expires_at=now - 30)) == "not_adapted"
   assert (await decision_rows(h))[-1]["reason"] == "opportunity_expired"
@@ -162,10 +161,10 @@ async def test_technically_expired_opportunity_is_not_adapted(h, real_redis_clie
 @pytest.mark.asyncio
 async def test_new_consumer_group_replaying_history_only_rebuilds_the_ledger(h, real_redis_client):
   """A wiped/renamed consumer group re-reads the topic from the beginning."""
-  await h.grant()
+  await h.activate()
   now = int(h.clock.now)
   outcomes = []
-  for i, ago in enumerate((3_000, 2_400, 1_800, 1_200)):     # all after activation, all stale by now
+  for i, ago in enumerate((3_000, 2_400, 1_800, 1_200)):     # all stale by now
     outcomes.append(await deliver(h, make_event(now, f"opp-old-{i}", observed_ago=ago), published_at=now - ago))
   outcomes.append(await deliver(h, make_event(now, "opp-new", observed_ago=45), published_at=now - 5))
   assert outcomes == ["not_adapted"] * 4 + ["match_written"]
@@ -175,7 +174,7 @@ async def test_new_consumer_group_replaying_history_only_rebuilds_the_ledger(h, 
 
 @pytest.mark.asyncio
 async def test_redelivery_of_an_adapted_opportunity_is_idempotent_even_once_stale(h, real_redis_client):
-  await h.grant()
+  await h.activate()
   ev = make_event(h.clock.now)
   assert await deliver(h, ev) == "match_written"
   h.clock.advance(2_000)                                     # far past the age limit, well inside the 24h expiry
@@ -186,7 +185,7 @@ async def test_redelivery_of_an_adapted_opportunity_is_idempotent_even_once_stal
 
 @pytest.mark.asyncio
 async def test_crash_after_the_match_write_recovers_on_redelivery_without_duplicating(h, real_redis_client):
-  await h.grant()
+  await h.activate()
   ev = make_event(h.clock.now)
   real_decide, armed = h.policy._decide, {"crash": True}
 
@@ -208,9 +207,9 @@ async def test_crash_after_the_match_write_recovers_on_redelivery_without_duplic
 
 @pytest.mark.asyncio
 async def test_kafka_record_timestamp_reaches_the_gate_through_the_consumer(h, real_redis_client):
-  await h.grant()
+  await h.activate()
   now = int(h.clock.now)
-  consumer = AnalysisOpportunityConsumer(h.repo, shadow=None, mode="go", policy=h.policy)
+  consumer = AnalysisOpportunityConsumer(h.repo, policy=h.policy)
   stale_publish = SimpleNamespace(
     topic=OpportunityTopic, partition=0, offset=1, timestamp=(now - 400) * 1000,
     value=json.dumps(golden(now, id="opp-lag")).encode(),
@@ -227,7 +226,7 @@ async def test_kafka_record_timestamp_reaches_the_gate_through_the_consumer(h, r
 
 @pytest.mark.asyncio
 async def test_invalidation_withdraws_match_setup_and_tombstones_the_plan(h, real_redis_client):
-  await h.grant()
+  await h.activate()
   await deliver(h, make_event(h.clock.now))
   assert await deliver(h, terminal(h), topic=InvalidationTopic) == "match_withdrawn"
   assert await matches(real_redis_client) == []
@@ -240,7 +239,7 @@ async def test_invalidation_withdraws_match_setup_and_tombstones_the_plan(h, rea
 
 @pytest.mark.asyncio
 async def test_expiry_is_recorded_as_expiry_and_expires_the_setup(h, real_redis_client):
-  await h.grant()
+  await h.activate()
   await deliver(h, make_event(h.clock.now))
   await deliver(h, terminal(h, reason="SETUP_EXPIRED"), topic=InvalidationTopic)
   assert (await load_setup(real_redis_client, "go_opp_golden_supply_xau")).state == EXPIRED
@@ -259,13 +258,13 @@ async def test_invalidation_of_something_never_adapted_leaves_no_tombstone(h, re
 @pytest.mark.asyncio
 async def test_first_cancel_reason_wins_and_repeats_are_no_ops(h, real_redis_client):
   assert await request_plan_cancel(real_redis_client, "v8:x", reason="a", source="opportunity_invalidated", requested_at=1)
-  assert not await request_plan_cancel(real_redis_client, "v8:x", reason="b", source="authority_rollback", requested_at=2)
+  assert not await request_plan_cancel(real_redis_client, "v8:x", reason="b", source="operator_cancel", requested_at=2)
   assert (await read_plan_cancel(real_redis_client, "v8:x"))["reason"] == "a"
 
 
 @pytest.mark.asyncio
 async def test_a_match_racing_the_invalidation_cannot_become_a_plan(h, real_redis_client):
-  await h.grant()
+  await h.activate()
   await deliver(h, make_event(h.clock.now))
   match = deserialize_matches(await real_redis_client.get(CLIENT_KEY))[0]
   # The worker cycle already holds `match` in memory when the withdrawal lands
@@ -279,7 +278,7 @@ async def test_a_match_racing_the_invalidation_cannot_become_a_plan(h, real_redi
 
 @pytest.mark.asyncio
 async def test_after_a_full_invalidation_the_stale_in_memory_match_still_cannot_publish(h, real_redis_client):
-  await h.grant()
+  await h.activate()
   await deliver(h, make_event(h.clock.now))
   match = deserialize_matches(await real_redis_client.get(CLIENT_KEY))[0]
   await deliver(h, terminal(h), topic=InvalidationTopic)
@@ -289,13 +288,13 @@ async def test_after_a_full_invalidation_the_stale_in_memory_match_still_cannot_
 
 @pytest.mark.asyncio
 async def test_published_go_plan_is_registered_and_its_invalidation_requests_the_cancel(h, real_redis_client):
-  await h.grant()
+  await h.activate()
   await deliver(h, make_event(h.clock.now))
   match = deserialize_matches(await real_redis_client.get(CLIENT_KEY))[0]
   plan_id = await publish(real_redis_client, match)
   assert plan_id == "v8:go_opp_golden_supply_xau"
   registry = await registered_go_plans(real_redis_client, symbol="XAU", scope="supply")
-  assert [(p["plan_id"], p["epoch"], p["match_id"]) for p in registry] == [(plan_id, 0, "go_opp_golden_supply_xau")]
+  assert [(p["plan_id"], p["scope"], p["match_id"]) for p in registry] == [(plan_id, "supply", "go_opp_golden_supply_xau")]
   await deliver(h, terminal(h), topic=InvalidationTopic)
   assert (await read_plan_cancel(real_redis_client, plan_id))["source"] == "opportunity_invalidated"
   # Python never edits executor state: only the executor moves it, and reports back.
@@ -304,54 +303,46 @@ async def test_published_go_plan_is_registered_and_its_invalidation_requests_the
   assert (await load_setup(real_redis_client, "go_opp_golden_supply_xau")).state == PLAN_PUBLISHED
 
 
-# ---- rollback sequence ------------------------------------------------------------
+# ---- operator cancellation ------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_explicit_withdraw_remains_rerunnable_without_a_live_fence(h, real_redis_client):
-  await h.grant()
+async def test_explicit_withdraw_remains_rerunnable(h, real_redis_client):
+  await h.activate()
   now = int(h.clock.now)
   await deliver(h, make_event(now, "opp-a"))
   await deliver(h, make_event(now, "opp-b"))
   first = next(m for m in deserialize_matches(await real_redis_client.get(CLIENT_KEY)) if m.match_id == "go_opp-a")
   assert await publish(real_redis_client, first) == "v8:go_opp-a"
 
-  # The historical rollback row does not gate the live Go consumer.
-  await h.fence.rollback("XAU", "supply", expected_epoch=1, actor="oncall", reason="rollback drill", drain_seconds=30)
   assert await deliver(h, make_event(now, "opp-c", observed_ago=10)) == "match_written"
-  assert (await decision_rows(h))[-1]["reason"] == "go_live_authority"
+  assert (await decision_rows(h))[-1]["reason"] == "go_live"
   second = next(m for m in deserialize_matches(await real_redis_client.get(CLIENT_KEY)) if m.match_id == "go_opp-b")
   assert await publish(real_redis_client, second) == "v8:go_opp-b"
 
   # 2) withdraw: matches, unpublished setups and queued plans.
-  report = await withdraw_go_scope(real_redis_client, symbol="XAU", scope="supply", reason="rollback drill", source="authority_rollback", now=int(h.clock.now))
+  report = await withdraw_go_scope(real_redis_client, symbol="XAU", scope="supply", reason="operator cancel", source="operator_cancel", now=int(h.clock.now))
   assert sorted(report.matches_removed) == ["go_opp-a", "go_opp-b", "go_opp-c"]
   assert report.setups_withdrawn == ["go_opp-c"]             # published plans belong to the executor now
   assert sorted(report.plans_cancel_requested) == ["v8:go_opp-a", "v8:go_opp-b", "v8:go_opp-c"]
   assert await matches(real_redis_client) == []
   assert (await load_setup(real_redis_client, "go_opp-c")).state == INVALIDATED
   assert (await load_setup(real_redis_client, "go_opp-a")).state == PLAN_PUBLISHED
-  assert (await read_plan_cancel(real_redis_client, "v8:go_opp-a"))["source"] == "authority_rollback"
+  assert (await read_plan_cancel(real_redis_client, "v8:go_opp-a"))["source"] == "operator_cancel"
 
   # Re-running (the operator's recovery from a crash mid-sequence) changes nothing.
-  again = await withdraw_go_scope(real_redis_client, symbol="XAU", scope="supply", reason="rerun", source="authority_rollback", now=int(h.clock.now))
+  again = await withdraw_go_scope(real_redis_client, symbol="XAU", scope="supply", reason="rerun", source="operator_cancel", now=int(h.clock.now))
   assert again.matches_removed == [] and again.plans_cancel_requested == []
   assert sorted(again.plans_already_requested) == ["v8:go_opp-a", "v8:go_opp-b"]
-  assert (await read_plan_cancel(real_redis_client, "v8:go_opp-a"))["reason"] == "rollback drill"
-
-  # 3) Python only resumes after the drain.
-  assert not (await h.fence.authorize_python_publication("XAU", ["supply"])).allowed
-  h.clock.advance(30)
-  assert (await h.fence.authorize_python_publication("XAU", ["supply"])).allowed
-
+  assert (await read_plan_cancel(real_redis_client, "v8:go_opp-a"))["reason"] == "operator cancel"
 
 @pytest.mark.asyncio
 async def test_withdrawal_is_scoped_to_the_named_scope(h, real_redis_client):
-  await h.grant()
+  await h.activate()
   await deliver(h, make_event(h.clock.now))
-  report = await withdraw_go_scope(real_redis_client, symbol="XAU", scope="demand", reason="x", source="authority_rollback", now=int(h.clock.now))
+  report = await withdraw_go_scope(real_redis_client, symbol="XAU", scope="demand", reason="x", source="operator_cancel", now=int(h.clock.now))
   assert report.matches_removed == [] and report.plans_cancel_requested == []
   assert await matches(real_redis_client) == ["go_opp_golden_supply_xau"]
-  everything = await withdraw_go_scope(real_redis_client, symbol="XAU", scope=None, reason="x", source="authority_rollback", now=int(h.clock.now))
+  everything = await withdraw_go_scope(real_redis_client, symbol="XAU", scope=None, reason="x", source="operator_cancel", now=int(h.clock.now))
   assert everything.matches_removed == ["go_opp_golden_supply_xau"]
 
 
@@ -389,13 +380,13 @@ class _FakeKafka:
 
 @pytest.mark.asyncio
 async def test_restart_redelivers_the_uncommitted_record_and_completes_once(h, real_redis_client):
-  await h.grant()
+  await h.activate()
   now = int(h.clock.now)
   raw = golden(now, id="opp-crash")
   raw["event_id"] = "evt-opp-crash"
   record = SimpleNamespace(topic=OpportunityTopic, partition=0, offset=41, timestamp=(now - 5) * 1000, value=json.dumps(raw).encode())
   kafka = _FakeKafka([record])
-  handler = AnalysisOpportunityConsumer(h.repo, shadow=None, mode="go", policy=h.policy)
+  handler = AnalysisOpportunityConsumer(h.repo, policy=h.policy)
   real_decide, armed = h.policy._decide, {"crash": True}
 
   async def flaky(event, outcome, reason, **details):
@@ -423,7 +414,7 @@ async def test_poison_record_is_recorded_and_the_partition_moves_on(h, real_redi
   await h._ensure()
   poison = SimpleNamespace(topic=OpportunityTopic, partition=0, offset=7, timestamp=None, value=b"{not json")
   kafka = _FakeKafka([poison])
-  handler = AnalysisOpportunityConsumer(h.repo, shadow=None, mode="go", policy=h.policy)
+  handler = AnalysisOpportunityConsumer(h.repo, policy=h.policy)
   with pytest.raises(asyncio.CancelledError):
     await run_consumer_loop(kafka, handler, partition_key=lambda t, p: (t, p))
   assert kafka.commits == [8]

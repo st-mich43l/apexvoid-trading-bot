@@ -364,11 +364,11 @@ class AnalysisTechnicalAuthorityConfig(FrozenConfigModel):
     """Live Go analysis consumer configuration.
 
     Python remains responsible for execution policy, but it is no longer a
-    competing technical-analysis authority.
+    competing technical-analysis source.
     """
 
-    mode: str = config_field('go', canonical_env=None, owner=ConfigOwner.PYTHON, reload=ReloadPolicy.RESTART, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.ENUM, risk=RiskClassification.EXECUTION_SAFETY, description='Technical-analysis source. go is the live Kafka consumer; go_shadow is retained only for offline dry-run tooling.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 'go'),), allowed_values=('python', 'go_shadow', 'go'), validation_summary='go and go_shadow require consumer_enabled=true; python is legacy compatibility only.')
-    consumer_enabled: bool = config_field(True, canonical_env=None, owner=ConfigOwner.PYTHON, reload=ReloadPolicy.RESTART, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.BOOLEAN, risk=RiskClassification.EXECUTION_SAFETY, description='Starts the durable Go analysis Kafka consumer. Automatic production analysis requires this to remain enabled.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, True),), validation_summary='go and go_shadow require this true.')
+    mode: str = config_field('go', canonical_env=None, owner=ConfigOwner.PYTHON, reload=ReloadPolicy.RESTART, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.ENUM, risk=RiskClassification.EXECUTION_SAFETY, description='Go Analysis Engine is the sole automatic technical-analysis source and delivers opportunities through Kafka.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 'go'),), allowed_values=('go',), validation_summary='Only go is supported for automatic analysis.')
+    consumer_enabled: bool = config_field(True, canonical_env=None, owner=ConfigOwner.PYTHON, reload=ReloadPolicy.RESTART, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.BOOLEAN, risk=RiskClassification.EXECUTION_SAFETY, description='Starts the durable Go analysis Kafka consumer. Automatic production analysis requires this to remain enabled.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, True),), validation_summary='Must remain true for automatic analysis.')
     consumer_group: str = config_field('apexvoid-algo-bot-analysis-opportunity-v1', canonical_env=None, owner=ConfigOwner.PYTHON, reload=ReloadPolicy.RESTART, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.IDENTIFIER, risk=RiskClassification.CROSS_SERVICE_CONTRACT, description='Stable Kafka consumer group for durable Go analysis opportunity lifecycle processing.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 'apexvoid-algo-bot-analysis-opportunity-v1'),), validation_summary='Pydantic required/type coercion only.', min_length=1)
 
     max_event_age_seconds: int = config_field(900, canonical_env=None, owner=ConfigOwner.PYTHON, reload=ReloadPolicy.RESTART, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.SECONDS, risk=RiskClassification.EXECUTION_SAFETY, description='Maximum age, at consumption time, of the confirmed technical observation (the confirmation bar) a Go opportunity may have and still become a NEW live plan. Older events rebuild the lifecycle ledger only; they never become fresh orders.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 900),), validation_summary='Must be a positive integer; a live event older than this is refused as event_too_old.', gt=0)
@@ -379,14 +379,14 @@ class AnalysisTechnicalAuthorityConfig(FrozenConfigModel):
     @field_validator('mode')
     @classmethod
     def validate_mode(cls, value):
-        if value not in {'python', 'go_shadow', 'go'}:
-            raise ValueError('mode must be python, go_shadow, or go')
+        if value != 'go':
+            raise ValueError('mode must be go')
         return value
 
     @model_validator(mode='after')
     def validate_rollout_gate(self):
-        if self.mode in {'go_shadow', 'go'} and not self.consumer_enabled:
-            raise ValueError(f'analysis.technical_authority.{self.mode} requires consumer_enabled=true')
+        if not self.consumer_enabled:
+            raise ValueError('analysis.technical_authority.go requires consumer_enabled=true')
         return self
 
 class AnalysisConfig(FrozenConfigModel):

@@ -51,17 +51,13 @@ contract, never a local Python recomputation.
 ### Live Go consumer
 
 `analysis.technical_authority.mode=go` and `consumer_enabled=true` are the
-production defaults. Kafka delivery is the technical-authority boundary: the
-consumer adapts each reviewed Go opportunity into the normal StrategyMatch and
-TradePlan V8 path. Python remains responsible for execution-time quote,
-spread, risk and order checks, but is not a competing technical producer.
-`go_shadow` remains available only to offline dry-run tooling.
-
-Opportunity V1 currently lacks the execution-policy facts required by the
-existing `StrategyMatch` → `TradePlanBuilder` route: current price, ATR,
-confluence, source-structure geometry, execution confirmation, and strategy
-routing. S12 deliberately records that gap rather than recreating detectors in
-Python.
+production configuration. Kafka delivery is the Go-analysis boundary: the
+consumer durably applies each lifecycle event, adapts every catalog strategy
+through its explicit Go-to-policy adapter, and sends the resulting
+`StrategyMatch` through the normal TradePlan V8 path. Python remains
+responsible for execution-time quote, spread, risk and order checks, but is not
+a competing technical producer. Offline replay tooling is not a production
+mode and cannot publish automatic plans.
 
 ## Auto Algo flow (§41, frozen)
 
@@ -75,11 +71,9 @@ flowchart TD
     TPB --> TP[TradePlan]
 ```
 
-Today's real equivalent (verified this session, live): ZoneWatch discovery
-→ location/activation gates → `_evaluate_record`/`_sync_strategy_match_cutover`
-→ `_publish_trade_plan_v8`. This is the same shape with different names;
-the target rename is cosmetic reorganization, not a logic rewrite, once it
-happens.
+Today's live path is Kafka Go opportunity → durable lifecycle ledger → explicit
+Go-to-policy adapter → execution checks → `_publish_trade_plan_v8`. ZoneWatch,
+the legacy scanner and their startup monkeypatches are not automatic producers.
 
 ## Manual Algo (§42)
 

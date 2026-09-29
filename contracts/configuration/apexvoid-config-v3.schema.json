@@ -408,7 +408,7 @@
           "properties": {
             "mode": {
               "type": "string",
-              "enum": ["python", "go_shadow", "go"]
+              "enum": ["go"]
             },
             "consumer_enabled": {
               "type": "boolean"

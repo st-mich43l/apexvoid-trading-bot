@@ -36,27 +36,9 @@ class _Repository:
 
 
 @pytest.mark.asyncio
-async def test_consumer_persists_valid_record_then_runs_the_shadow_dry_run_with_the_publish_time():
-  repository = _Repository()
-  from app.analysis_client.shadow import AnalysisShadowEvaluator, ShadowDecision
-  seen = []
-
-  async def dry_run(event, *, published_at=None):
-    seen.append((event.payload.id, published_at))
-    return ShadowDecision("would_wait", "waiting_retest_entry_zone")
-
-  consumer = AnalysisOpportunityConsumer(repository, shadow=AnalysisShadowEvaluator(repository, dry_run=dry_run), mode="go_shadow")
-  record = _Record(OpportunityTopic, 1, 9, json.dumps(_opportunity()).encode())
-  record.timestamp = 1_700_000_123_456
-  await consumer.process_record(record)
-  assert len(repository.applied) == 1                   # ledger first, then the dry run
-  assert seen == [("opp-1", 1_700_000_123)]
-
-
-@pytest.mark.asyncio
 async def test_consumer_durably_records_malformed_record_without_applying():
   repository = _Repository()
-  consumer = AnalysisOpportunityConsumer(repository, shadow=None, mode="python")
+  consumer = AnalysisOpportunityConsumer(repository, policy=object())
   await consumer.process_record(_Record(OpportunityTopic, 1, 10, b"not json"))
   assert repository.applied == []
   assert repository.rejections[0]["partition"] == 1
@@ -79,14 +61,9 @@ class _Policy:
 
 
 @pytest.mark.asyncio
-async def test_policy_hook_runs_only_in_go_mode():
-  for mode in ("python", "go_shadow"):
-    repository, policy = _Repository(), _Policy()
-    consumer = AnalysisOpportunityConsumer(repository, shadow=None, mode=mode, policy=policy)
-    await consumer.process_record(_Record(OpportunityTopic, 1, 1, json.dumps(_opportunity()).encode()))
-    assert policy.created == [], mode
+async def test_policy_hook_runs_for_every_valid_kafka_event():
   repository, policy = _Repository(), _Policy()
-  consumer = AnalysisOpportunityConsumer(repository, shadow=None, mode="go", policy=policy)
+  consumer = AnalysisOpportunityConsumer(repository, policy=policy)
   await consumer.process_record(_Record(OpportunityTopic, 1, 2, json.dumps(_opportunity()).encode()))
   assert policy.created == ["opp-1"]
 
@@ -96,7 +73,7 @@ async def test_policy_failure_propagates_so_the_offset_is_not_committed():
   """The loop only commits after process_record returns; a raised error means
   redelivery, and the idempotent policy retries. Fail closed, never half-done."""
   repository, policy = _Repository(), _Policy(fail_times=1)
-  consumer = AnalysisOpportunityConsumer(repository, shadow=None, mode="go", policy=policy)
+  consumer = AnalysisOpportunityConsumer(repository, policy=policy)
   record = _Record(OpportunityTopic, 1, 3, json.dumps(_opportunity()).encode())
   with pytest.raises(ConnectionError):
     await consumer.process_record(record)
@@ -114,6 +91,6 @@ async def test_terminal_events_reach_the_policy_in_go_mode():
       return LifecycleResult("terminated", event.payload.opportunity_id)
 
   repository, policy = _TerminalRepository(), _Policy()
-  consumer = AnalysisOpportunityConsumer(repository, shadow=None, mode="go", policy=policy)
+  consumer = AnalysisOpportunityConsumer(repository, policy=policy)
   await consumer.process_record(_Record(InvalidationTopic, 1, 4, json.dumps(_invalidated()).encode()))
   assert policy.terminal == ["opp-1"]

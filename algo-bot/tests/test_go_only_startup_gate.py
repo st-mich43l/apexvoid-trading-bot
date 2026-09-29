@@ -1,7 +1,7 @@
-"""Go-only startup: automatic trading needs Go as the effective technical authority.
+"""Go-only startup: automatic trading needs the live Go Kafka path.
 
-The gate fails closed on an effective python/go_shadow config or a missing
-Kafka transport, but never blocks a Manual-Algo-only deployment
+The startup check fails closed on a missing Kafka transport, but never blocks a
+Manual-Algo-only deployment
 (auto_trade disabled). Go mode must not install a Python ZoneWatch publisher.
 """
 
@@ -20,8 +20,7 @@ os.environ.setdefault(
 os.environ.setdefault("TELEGRAM_CHAT_ID", "-100123456789")
 
 from app import main  # noqa: E402
-from app.analysis_client import authority  # noqa: E402
-from app.analysis_client.startup_gate import require_go_technical_authority  # noqa: E402
+from app.analysis_client.startup_gate import require_live_go_consumer  # noqa: E402
 from app.core import config as config_module  # noqa: E402
 from tests.configuration.canonical_fixtures import install_runtime_overrides  # noqa: E402
 
@@ -48,54 +47,47 @@ def _cfg(*, auto_trade=True, mode="go", consumer=True, kafka=True, brokers=("kaf
   )
 
 
-@pytest.fixture(autouse=True)
-def _reset_authority_snapshot():
-  # main() calls get_snapshot().require(); keep that out of later tests.
-  yield
-  authority.reset_snapshot_for_tests()
-
-
 def test_go_mode_with_consumer_and_kafka_passes():
-  require_go_technical_authority(_cfg())
+  require_live_go_consumer(_cfg())
 
 
 @pytest.mark.parametrize(
   "mode,consumer",
-  [("python", False), ("python", True), ("go_shadow", True), ("go", False)],
+  [("go", False)],
 )
-def test_python_or_shadow_authority_fails_closed(mode, consumer):
-  with pytest.raises(RuntimeError, match="Go technical authority required") as exc:
-    require_go_technical_authority(_cfg(mode=mode, consumer=consumer))
+def test_disabled_consumer_fails_closed(mode, consumer):
+  with pytest.raises(RuntimeError, match="Live Go analysis consumer required") as exc:
+    require_live_go_consumer(_cfg(mode=mode, consumer=consumer))
   assert f"effective mode={mode!r}" in str(exc.value)
 
 
 @pytest.mark.parametrize("kafka,brokers", [(False, ("kafka:9092",)), (True, ())])
 def test_missing_kafka_fails_closed(kafka, brokers):
   with pytest.raises(RuntimeError, match="Kafka transport"):
-    require_go_technical_authority(_cfg(kafka=kafka, brokers=brokers))
+    require_live_go_consumer(_cfg(kafka=kafka, brokers=brokers))
 
 
 @pytest.mark.parametrize(
   "mode,consumer,kafka",
-  [("python", False, False), ("go_shadow", True, True), ("python", False, True)],
+  [("go", False, False), ("go", False, True)],
 )
 def test_manual_only_deployment_is_never_gated(mode, consumer, kafka):
   """auto_trade disabled = Manual Algo / Telegram / journaling only: no
   automatic technical-opportunity producer exists, so nothing to refuse."""
-  require_go_technical_authority(
+  require_live_go_consumer(
     _cfg(auto_trade=False, mode=mode, consumer=consumer, kafka=kafka),
   )
 
 
 def test_gate_reads_the_real_config_model_paths(monkeypatch):
   install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_enabled": True})
-  with pytest.raises(RuntimeError, match="Go technical authority required"):
-    require_go_technical_authority(config_module.runtime_config)
+  with pytest.raises(RuntimeError, match="Live Go analysis consumer required"):
+    require_live_go_consumer(config_module.runtime_config)
   install_runtime_overrides(monkeypatch, GO)
-  require_go_technical_authority(config_module.runtime_config)
+  require_live_go_consumer(config_module.runtime_config)
   install_runtime_overrides(monkeypatch, {"transport.kafka.enabled": False})
   with pytest.raises(RuntimeError, match="Kafka transport"):
-    require_go_technical_authority(config_module.runtime_config)
+    require_live_go_consumer(config_module.runtime_config)
 
 
 def _startup_doubles(monkeypatch) -> dict[str, object]:
@@ -114,13 +106,6 @@ def _startup_doubles(monkeypatch) -> dict[str, object]:
   monkeypatch.setattr(main.scanner_bot.session, "close", AsyncMock())
   monkeypatch.setattr(main.redis_state, "wait_until_ready", AsyncMock())
   monkeypatch.setattr(main.redis_state, "get_client", Mock(return_value=SimpleNamespace()))
-  monkeypatch.setattr(authority, "refresh_authority_snapshot", AsyncMock())
-  monkeypatch.setattr(
-    authority,
-    "audit_authority_runtime",
-    AsyncMock(return_value={"event": "runtime_boot", "go_bound_scopes": [], "detail": "test"}),
-    raising=False,
-  )
   return doubles
 
 
@@ -128,17 +113,17 @@ def _startup_doubles(monkeypatch) -> dict[str, object]:
 @pytest.mark.parametrize(
   "overrides,message",
   [
-    ({}, "Go technical authority required"),
+    ({}, "Live Go analysis consumer required"),
     (
       {
-        "analysis.technical_authority.mode": "go_shadow",
-        "analysis.technical_authority.consumer_enabled": True,
+        "analysis.technical_authority.mode": "go",
+        "analysis.technical_authority.consumer_enabled": False,
       },
-      "Go technical authority required",
+      "Live Go analysis consumer required",
     ),
     ({**GO, "transport.kafka.enabled": False}, "Kafka transport"),
   ],
-  ids=["python", "go_shadow", "kafka_disabled"],
+  ids=["consumer_disabled", "kafka_disabled"],
 )
 async def test_main_fails_closed_before_any_side_effect(monkeypatch, overrides, message):
   install_runtime_overrides(

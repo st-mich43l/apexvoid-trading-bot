@@ -153,31 +153,13 @@ trade date; at rollover the just-completed day's journal is swept
 rest) and cleared. A missed sweep (restart, Redis hiccup) self-expires
 after 3 days rather than accumulating forever.
 
-## Kafka & Analysis-Authority Incident Response
+## Kafka & Go Analysis Incident Response
 
-The Go analysis engine can be handed technical authority over a symbol/scope
-via the Kafka opportunity pipeline. This section is the escalation path when
-that pipeline, or the authority it feeds, needs to be rolled back.
-
-### Emergency authority rollback
-
-```bash
-python -m app.scripts.analysis_authority status --symbol XAU
-python -m app.scripts.analysis_authority rollback --symbol XAU --scope supply --expected-epoch <n> --actor <you> --reason <why>
-python -m app.scripts.analysis_authority rollback-all --actor <you> --reason <why>
-python -m app.scripts.analysis_authority withdraw --symbol XAU --scope supply --actor <you> --reason <why>
-```
-
-The order is fixed and cannot be swapped: **1)** the fence flips first — Go
-can no longer create or publish anything new for the scope, and Python
-resumes once the drain window ends; **2)** withdrawal follows — unexecuted
-matches, unpublished setups, and queued/unfilled plans are cancelled via a
-tombstoned cancel intent the executor honours. `withdraw` is Redis-only and
-safe to re-run if step 2 fails after step 1 lands. `rollback-all` runs both
-steps for every Go-bound scope at once.
-
-**Open positions are never closed by rollback or withdrawal.** Rollback only
-governs plan *creation*; it never touches a position that already exists.
+Go is the sole automatic technical-opportunity producer. Kafka delivery is
+the live boundary; there is no per-symbol, per-strategy grant, acceptance row,
+or Python fallback to roll back to. If Kafka or the consumer fails, automatic
+plan creation stops and the startup/health checks must be repaired before
+restarting automatic trading.
 
 ### Kafka failure modes
 
@@ -192,11 +174,10 @@ governs plan *creation*; it never touches a position that already exists.
   `expires_at` TTL. This is why a persistent Kafka log directory
   (`KAFKA_LOG_DIRS`) and the analysis-engine's own ledger volume
   (`analysis-engine-state`) are a hard precondition for trusting any
-  shadow/live authority window — without them, a container recreate silently
+  live analysis window — without them, a container recreate silently
   resets both the topic history and the publication ledger.
 - **PostgreSQL down** — lifecycle persistence and the normal plan pipeline fail
-  closed, but the retired Python/Go authority-grant fence is not on the live
-  publication path. `withdraw` still works because it only needs Redis.
+  closed; no technical fallback is enabled.
 - **Redis down** — the executor and the trade-plan stream have no fallback;
   execution stops.
 - Disabling the Kafka consumer flag is an outage switch, not a strategy
@@ -210,7 +191,6 @@ but never becomes a live plan:
 
 | reason code | meaning |
 | --- | --- |
-| `pre_activation_event` | observed before the scope's durable go-effective boundary |
 | `opportunity_expired` | the opportunity's own `expires_at` passed before consumption |
 | `event_too_old` | observation older than the configured max event age |
 | `delivery_lag_exceeded` | Kafka publish-to-consume lag exceeded the configured maximum |
@@ -246,8 +226,7 @@ needs a manual restart.
 Set `mode: go` and `consumer_enabled: true` in the **Ansible-rendered**
 `trading-bot.yml`, with Kafka enabled and the stable consumer group present.
 `config/analysis.yml` mirrors the same live setting for the Go engine. After a
-deploy, verify `analysis_opportunity_consumer_loop` health and the Kafka group;
-the old per-scope acceptance/grant rows are no longer required.
+deploy, verify `analysis_opportunity_consumer_loop` health and the Kafka group.
 
 ## Troubleshooting
 

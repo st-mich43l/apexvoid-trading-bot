@@ -15,16 +15,11 @@ def test_technical_authority_defaults_to_live_go_with_consumer_on():
 
 @pytest.mark.parametrize(
   "values",
-  [{"mode": "go_shadow"}, {"mode": "go"}, {"mode": "nope"}],
+  [{"mode": "python"}, {"mode": "go_shadow"}, {"mode": "nope"}],
 )
-def test_technical_authority_rejects_modes_without_a_consumer_or_unknown_modes(values):
+def test_technical_authority_rejects_non_go_modes(values):
   with pytest.raises(ValidationError):
     AnalysisTechnicalAuthorityConfig(**values)
-
-
-def test_shadow_mode_requires_explicit_consumer_enablement():
-  config = AnalysisTechnicalAuthorityConfig(mode="go_shadow", consumer_enabled=True)
-  assert config.mode == "go_shadow"
 
 
 def test_go_mode_is_the_default_live_configuration():
