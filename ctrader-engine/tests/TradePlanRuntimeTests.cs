@@ -157,6 +157,62 @@ public sealed partial class TradePlanRuntimeTests
   }
 
   [Fact]
+  public async Task AcceptedMarketOrderIsNotResubmittedWhenStopAmendFails()
+  {
+    var store = new FakeTradePlanStore();
+    store.EnqueuePlan(PlanJson());
+    var client = new FakeTradePlanTradingClient { FailAmendCalls = 1 };
+    var runtime = new TradePlanRuntime(
+      Options(), store, () => DateTimeOffset.UtcNow, _ => { }
+    );
+
+    await runtime.PollAsync(
+      client, Symbol, new SpotPrice("XAU", 4089.05m, 4089.10m, 1), CancellationToken.None
+    );
+    await runtime.PollAsync(
+      client, Symbol, new SpotPrice("XAU", 4089.05m, 4089.10m, 2), CancellationToken.None
+    );
+
+    Assert.Single(client.MarketOrders);
+    var state = Assert.Single(runtime.TrackedStates);
+    Assert.Equal(TradePlanRuntimeStage.FullyOpen, state.Stage);
+    Assert.Equal(1, state.SubmittedLegCount);
+    Assert.NotNull(state.Legs?.Single().BrokerPositionId);
+  }
+
+  [Fact]
+  public async Task MarketLegIsRejectedWhenLiveQuoteHasCrossedItsStop()
+  {
+    var store = new FakeTradePlanStore();
+    store.EnqueuePlan(PlanJson(
+      stopPrice: 4088.50m,
+      entryJson: """
+        {
+          "type": "market",
+          "expires_at": 2000000000,
+          "order_price": "4089.00",
+          "max_spread_ticks": 8,
+          "max_slippage_ticks": 10
+        }
+        """
+    ));
+    var client = new FakeTradePlanTradingClient();
+    var runtime = new TradePlanRuntime(
+      Options(), store, () => DateTimeOffset.UtcNow, _ => { }
+    );
+
+    // The declared plan is valid at 4089.00, but the live BID has fallen
+    // below the BUY stop. Reject before cTrader can accept an unprotected
+    // market position and fail the later stop amend.
+    await runtime.PollAsync(
+      client, Symbol, new SpotPrice("XAU", 4088.25m, 4088.30m, 1), CancellationToken.None
+    );
+
+    Assert.Empty(client.MarketOrders);
+    Assert.Equal("rejected", store.Value("execution:plan_state:v8:plan-1"));
+  }
+
+  [Fact]
   public async Task ReceivesPlanAndSubmitsMarketOrderWhenQuoteEntersZone()
   {
     var store = new FakeTradePlanStore();
@@ -4093,6 +4149,10 @@ public sealed partial class TradePlanRuntimeTests
     // (broker outage / rejection): nothing is recorded and no position opens.
     public int FailMarketCalls { get; set; }
 
+    // The next N stop amendments fail after the broker has already accepted
+    // the market order. This models the production duplicate-order incident.
+    public int FailAmendCalls { get; set; }
+
     public Task<TradeExecution> PlaceMarketOrderAsync(
       MarketOrderRequest order, CancellationToken ct
     )
@@ -4166,6 +4226,14 @@ public sealed partial class TradePlanRuntimeTests
       long positionId, decimal stopLoss, CancellationToken ct
     )
     {
+      if (FailAmendCalls > 0)
+      {
+        FailAmendCalls--;
+        throw new InvalidOperationException(
+          "cTrader order error after ProtoOAAmendPositionSLTPReq: "
+          + "TRADING_BAD_STOPS: invalid stop"
+        );
+      }
       StopAmendments.Add((positionId, stopLoss));
       var idx = _positions.FindIndex(position => position.PositionId == positionId);
       if (idx >= 0)
