@@ -74,6 +74,7 @@ def _intent(
   tier: str = "A",
   freshness: float = 100.0,
   distance_pips: float = 0.0,
+  quality_overall: float | None = None,
 ) -> ExecutionIntent:
   return ExecutionIntent(
     intent_id=intent_id,
@@ -84,6 +85,7 @@ def _intent(
     tier=tier,
     freshness=freshness,
     distance_pips=distance_pips,
+    quality_overall=quality_overall,
   )
 
 
@@ -107,6 +109,62 @@ def test_arbiter_orders_only_the_winning_direction():
 
   assert [item.intent_id for item in result.ordered] == ["buy-a", "buy-b"]
   assert [item.intent_id for item in result.suppressed] == ["sell-b"]
+
+
+def test_quality_ranking_off_by_default_reproduces_legacy_confluence_order():
+  # Equal confluence (old signal ties), different quality (real signal
+  # differs) - with the flag off, this must still gridlock exactly like
+  # today's production behavior, since quality is not consulted.
+  result = arbitrate_execution_intents([
+    _intent("buy", direction="BUY", confluence=3, quality_overall=0.95),
+    _intent("sell", direction="SELL", confluence=3, quality_overall=0.10),
+  ])
+
+  assert result.ordered == ()
+  assert result.reason_code == "opposite_direction_conflict"
+
+
+def test_quality_ranking_resolves_a_confluence_tie_the_legacy_path_could_not():
+  result = arbitrate_execution_intents(
+    [
+      _intent("buy", direction="BUY", confluence=3, quality_overall=0.95),
+      _intent("sell", direction="SELL", confluence=3, quality_overall=0.10),
+    ],
+    use_quality_ranking=True,
+  )
+
+  assert [item.intent_id for item in result.ordered] == ["buy"]
+  assert [item.intent_id for item in result.suppressed] == ["sell"]
+  assert result.reason_code == "ranked_single_direction"
+
+
+def test_quality_ranking_holds_when_quality_gap_is_within_margin():
+  result = arbitrate_execution_intents(
+    [
+      _intent("buy", direction="BUY", confluence=3, quality_overall=0.80),
+      _intent("sell", direction="SELL", confluence=3, quality_overall=0.75),
+    ],
+    use_quality_ranking=True,
+    conflict_margin_quality=0.15,
+  )
+
+  assert result.ordered == ()
+  assert result.reason_code == "opposite_direction_conflict"
+
+
+def test_quality_ranking_falls_back_to_confluence_when_quality_is_missing():
+  # A hypothetical non-Go intent with no quality_overall must not crash the
+  # quality-ranking path, and must not be silently treated as quality 0.
+  result = arbitrate_execution_intents(
+    [
+      _intent("buy", direction="BUY", confluence=4, quality_overall=None),
+      _intent("sell", direction="SELL", confluence=2, quality_overall=None),
+    ],
+    use_quality_ranking=True,
+  )
+
+  assert [item.intent_id for item in result.ordered] == ["buy"]
+  assert result.reason_code == "ranked_single_direction"
 
 
 @pytest.mark.asyncio

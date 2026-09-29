@@ -8059,6 +8059,7 @@ async def _handle_event(
         target_reference_price=routed_match.target_reference_price,
         proposed_group_id=group_id,
         cycle_id=str(event_ts or ""),
+        quality_overall=routed_match.quality_overall,
       )
       intents.append(intent)
       intent_subjects[intent_id] = routed_match
@@ -8161,6 +8162,12 @@ async def _handle_event(
     arbitration = arbitrate_execution_intents(
       arbitrable,
       conflict_margin=runtime_config.actionability.scanner_gates.conflict_margin,
+      use_quality_ranking=(
+        runtime_config.actionability.scanner_gates.use_quality_ranking
+      ),
+      conflict_margin_quality=(
+        runtime_config.actionability.scanner_gates.conflict_margin_quality
+      ),
     )
 
     strategy_candidate_ids: list[str] = []
