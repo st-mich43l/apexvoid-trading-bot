@@ -13,6 +13,9 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- analysis-engine container no longer crash-loops on start: the privilege-dropping
+  entrypoint added with persistent logging had no default command, so `su-exec`
+  ran with nothing to execute. The image now defaults to `/app/analysis-engine`.
 - Go analysis-engine logging now honors the shared LOG_LEVEL contract and
   repairs bind-mount ownership before dropping privileges, so persistent
   analysis logs are written after a clean deployment instead of silently
