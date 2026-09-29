@@ -23,3 +23,4 @@ COPY docker-entrypoint.sh /usr/local/bin/apexvoid-entrypoint
 RUN chmod 0755 /usr/local/bin/apexvoid-entrypoint
 WORKDIR /app
 ENTRYPOINT ["/usr/local/bin/apexvoid-entrypoint"]
+CMD ["/app/analysis-engine"]
