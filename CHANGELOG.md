@@ -13,11 +13,14 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
-- Removed the live Python/Go scope-authority gate from `analysis_client/authority.py`
-  consumers. Go Kafka lifecycle delivery is now the activation boundary with
-  provenance-only `authority:go` tags; no Postgres grant or shadow acceptance
-  row is required before the reviewed adapter builds a match and enters the
-  normal execution policy.
+- Go analysis-engine logging now honors the shared LOG_LEVEL contract and
+  repairs bind-mount ownership before dropping privileges, so persistent
+  analysis logs are written after a clean deployment instead of silently
+  falling back to stderr.
+- Removed the obsolete Python/Go scope-authority module, grant/rollback CLI,
+  acceptance tables, and cutover tests. Kafka lifecycle delivery is the live
+  Go-analysis boundary; `origin:go` is provenance only and no operator grant
+  can block or enable a strategy.
 - Analysis Engine's `key_level` strategy now ports the legacy Python
   detector's role classification (support/resistance/broken, `internal/
   keylevel.Role`, already existed but was never wired up) and its
@@ -30,8 +33,8 @@ dated section after deployment.
   candidates versus 1702 before (golden regenerated).
 - The worker's execution-time opposing-barrier/target-room recheck
   (`evaluate_structural_target_room`, called from `_publish_trade_plan_v8`)
-  is no longer a silent no-op for Go-origin matches. The `go_authority` fast
-  path introduced with #655 hardcoded `frames={}` and
+  is no longer a silent no-op for Go-origin matches. The Go-origin fast path
+  introduced with #655 hardcoded `frames={}` and
   `htf_zones=htf_levels=[]` for every Go-origin plan, believing Go being the
   sole technical producer made the check redundant; it actually just left
   the check with nothing to evaluate against, for all 19 reviewed
@@ -65,7 +68,7 @@ dated section after deployment.
   key-level identity; explicit formation/first-observation timestamps and
   observed timeframe; and concrete factories/tests/specifications for all 12
   remaining approved V2 strategies. Their prior disabled rollout state is
-  preserved and no Go-driven trading consumer was enabled.
+  superseded by the live Go-driven Kafka consumer described below.
 - Analysis Engine V2 Phase S3 canonical Zone domain: per-origin
   Supply/Demand, Order Block, FVG/iFVG, Breaker, and Flip primitives with
   explicit lifecycle and relevance state, wired into `SymbolState`,
@@ -73,17 +76,14 @@ dated section after deployment.
 
 ### Changed
 - Go is the sole automatic technical-opportunity source. `config/trading-bot.yml`
-  now sets `analysis.technical_authority.mode: go` with the consumer on, and the
-  Algo Bot refuses to start automatic trading on an effective python/go_shadow
-  config or without Kafka (`app/analysis_client/startup_gate.py`; Manual-Algo-only
-  deployments with `runtime.auto_trade.enabled=false` are not gated). The closed-bar
-  dispatcher no longer runs the Python scanner or M1 scalping discovery, and in
-  `mode=go` the worker's closed-bar sweep only evaluates Go-origin matches, so a
-  leftover Python match in Redis cannot trade. ZoneWatch activation and its
-  scanner monkeypatches are no longer part of the automatic production startup;
-  the worker consumes only Go-origin matches and retains execution-time quote,
-  spread, risk, exposure, and order checks. The live Go consumer no longer
-  waits for per-scope grant/acceptance rows.
+  sets the live Kafka consumer on, and automatic startup requires that path plus
+  Kafka (`app/analysis_client/startup_gate.py`; Manual-Algo-only deployments
+  with `runtime.auto_trade.enabled=false` are not gated). The consumer has no
+  Python or shadow selector, and the closed-bar dispatcher no longer runs the
+  Python scanner or M1 scalping discovery. The worker consumes only Go-origin
+  matches, so a leftover Python match in Redis cannot trade; it retains
+  execution-time quote, spread, risk, exposure, and order checks. Per-scope
+  grant/acceptance rows and the old authority fence are removed entirely.
 - The one-time `manual_algo_charts` cleanup now refuses `--apply` without a
   new archive path, locks the table, atomically archives schema plus all rows,
   logs the archive SHA-256, and only then drops the obsolete table. Production

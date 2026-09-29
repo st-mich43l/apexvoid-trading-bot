@@ -71,6 +71,7 @@ services:
     image: "{{ registry_namespace }}/apexvoid-analysis-engine:{{ image_tag }}"
     container_name: apexvoid-kafka-init
     restart: "no"
+    user: apexvoid
     environment:
       APEXVOID_CONFIG_FILE: /config/apexvoid.yml
     entrypoint: ["/app/kafka-admin"]
@@ -86,6 +87,13 @@ services:
     restart: unless-stopped
     environment:
       APEXVOID_CONFIG_FILE: /config/apexvoid.yml
+      # Keep shared retention/enable/level policy aligned with Ansible's
+      # bootstrap ENV; the file name remains service-specific.
+      LOG_LEVEL: {{ (apexvoid_trading_bot_bootstrap_env | default({})).LOG_LEVEL | default("INFO") | to_json }}
+      LOG_DIR: {{ (apexvoid_trading_bot_bootstrap_env | default({})).LOG_DIR | default("/var/log/apexvoid") | to_json }}
+      LOG_RETENTION_DAYS: {{ (apexvoid_trading_bot_bootstrap_env | default({})).LOG_RETENTION_DAYS | default("14") | to_json }}
+      LOG_FILE_ENABLED: {{ (apexvoid_trading_bot_bootstrap_env | default({})).LOG_FILE_ENABLED | default("true") | to_json }}
+      LOG_FILE_NAME: analysis-engine.log
     depends_on:
       redis:
         condition: service_healthy

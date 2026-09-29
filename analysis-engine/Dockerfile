@@ -14,11 +14,12 @@ RUN addgroup -S apexvoid \
     && adduser -S -G apexvoid apexvoid \
     && mkdir -p /var/lib/apexvoid-analysis-engine \
     && chown apexvoid:apexvoid /var/lib/apexvoid-analysis-engine \
-    && apk add --no-cache wget
+    && apk add --no-cache su-exec wget
 COPY --from=build /out/analysis-engine /app/analysis-engine
 COPY --from=build /out/kafka-admin /app/kafka-admin
 COPY --from=build /out/shadow-audit /app/shadow-audit
 COPY --from=build /out/strategy-compare /app/strategy-compare
-USER apexvoid
+COPY docker-entrypoint.sh /usr/local/bin/apexvoid-entrypoint
+RUN chmod 0755 /usr/local/bin/apexvoid-entrypoint
 WORKDIR /app
-ENTRYPOINT ["/app/analysis-engine"]
+ENTRYPOINT ["/usr/local/bin/apexvoid-entrypoint"]

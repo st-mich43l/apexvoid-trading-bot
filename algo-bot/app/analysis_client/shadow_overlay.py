@@ -17,7 +17,7 @@ The live worker cycle is client-injectable. The shadow gives it an
   ``_apexvoid_allow_non_atomic_test_fallback``; the overlay sets that flag.
 
 ``is_shadow_overlay`` is the only way callers may relax a live-only check (the
-authority fence): the relaxation is honoured only for this class, whose writes
+live consumer boundary): the relaxation is honoured only for this class, whose writes
 can never reach Redis.
 """
 

@@ -1413,7 +1413,7 @@ async def _activate_match(
     and GO_ORIGIN_TAG not in match.tags
   ):
     log.info(
-      "ZoneWatch activation rejected in Go mode symbol=%s zone_id=%s reason=python_match_rejected_go_authority",
+      "ZoneWatch activation rejected in live Go path symbol=%s zone_id=%s reason=python_match_rejected_live_go",
       record.symbol,
       record.zone_id,
     )

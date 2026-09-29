@@ -1,10 +1,29 @@
-"""Stable provenance tags for automatic analysis decisions.
+"""Stable provenance and catalog identity for Go-owned opportunities."""
 
-These tags describe where a match came from. They are deliberately separate
-from the retired ``authority.py`` scope-grant state machine: a Go-origin tag
-is data provenance, not an operator approval gate.
-"""
-
-GO_ORIGIN_TAG = "authority:go"
+GO_ORIGIN_TAG = "origin:go"
 CATALOG_TAG = "catalog:"
-EPOCH_TAG = "authority_epoch:"
+
+# Keep this registry beside the event provenance contract. It is the producer
+# Every enabled Go strategy must have an explicit adapter in
+# ``go_opportunity_policy``; catalog completeness is checked at import time.
+CATALOG_STRATEGY_IDS = frozenset({
+  "key_level",
+  "confluence_zone",
+  "supply",
+  "demand",
+  "order_block",
+  "fvg",
+  "ifvg",
+  "crt",
+  "flip_zone",
+  "session_level",
+  "trendline",
+  "range_edge",
+  "box_breakout",
+  "momentum_ride",
+  "snap_back",
+  "liquidity_sweep",
+  "range_sweep",
+  "impulse_pullback",
+  "scalp_breakout_retest",
+})

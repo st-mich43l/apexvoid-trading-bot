@@ -40,6 +40,7 @@ runtime:
     file_name:
       algo-bot: algo-bot.log
       ctrader-engine: ctrader-engine.log
+      analysis-engine: analysis-engine.log
 
   # contract.account.* / contract.mode in the old file — broker/account
   # identity and the execution contract version in force.
