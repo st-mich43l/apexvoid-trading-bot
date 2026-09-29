@@ -6406,7 +6406,9 @@ async def _publish_trade_plan_v8(
       zone_episode_id=confirmation.zone_episode_id,
       trigger_wick_extreme=confirmation.wick_extreme,
       max_volume=int(instrument_geometry.plan_max_volume(symbol)),
-      now_ts=now_ts,
+      # Go opportunities carry an authority-owned technical expiry.  Do not
+      # re-anchor that deadline at Python publication time.
+      now_ts=None if go_origin else now_ts,
       same_direction_stack=same_direction_stack,
       same_direction_size_fraction=float(
         runtime_config.risk.position_limits.same_direction_stack_size_fraction

@@ -7042,9 +7042,12 @@ public sealed class AutoTradeEngine(
     // log so multi-leg ladder fills are not treated as unowned orphans.
     if (
       state is null
-      && TradePlanOwnership.TryParseOwnership(
-        position.Comment, position.ClientOrderId
-      ) is not null
+      && (
+        TradePlanOwnership.IsTradePlanOwnershipComment(position.Comment)
+        || TradePlanOwnership.TryParseOwnership(
+          position.Comment, position.ClientOrderId
+        ) is not null
+      )
     )
     {
       await TradePlans.TryAdoptBrokerPositionAsync(
