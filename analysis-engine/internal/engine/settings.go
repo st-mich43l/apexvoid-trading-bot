@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/arbitration"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/config"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/fib"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/keylevel"
@@ -26,6 +27,7 @@ type Settings struct {
 	KeyLevel         keylevel.Config
 	Session          session.Config
 	Fib              fib.Config
+	Arbitration      arbitration.Config
 	Strategies       []strategy.Config
 	HistoryDepths    map[market.Timeframe]int
 	PrimaryTimeframe market.Timeframe
@@ -88,6 +90,10 @@ func LoadSettings(doc *config.Document, primary market.Timeframe, allowReplaceFo
 	if err != nil {
 		return Settings{}, err
 	}
+	arbitrationConfig, err := ArbitrationConfigFromConfig(doc)
+	if err != nil {
+		return Settings{}, err
+	}
 	strategyConfigs, err := StrategyConfigsFromConfig(doc)
 	if err != nil {
 		return Settings{}, err
@@ -102,7 +108,8 @@ func LoadSettings(doc *config.Document, primary market.Timeframe, allowReplaceFo
 	}
 	return Settings{
 		ATR: atr, Structure: structureSettings, Liquidity: liquidityConfig, Zone: zoneConfig,
-		Trendline: trendlineConfig, KeyLevel: keyLevelConfig, Session: sessionConfig, Fib: fibConfig, Strategies: strategyConfigs,
+		Trendline: trendlineConfig, KeyLevel: keyLevelConfig, Session: sessionConfig, Fib: fibConfig,
+		Arbitration: arbitrationConfig, Strategies: strategyConfigs,
 		HistoryDepths: depths, PrimaryTimeframe: primary,
 		AllowReplaceForming: allowReplaceForming,
 		ConfigVersion:       configProvenance.Version,

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/arbitration"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/transport/kafka"
@@ -26,6 +27,21 @@ type publishJob struct {
 	Symbol     market.Symbol          `json:"symbol"`
 	Algorithm  kafka.AlgorithmVersion `json:"algorithm"`
 	Transition opportunity.Transition `json:"transition"`
+
+	// Arbitration is set instead of Transition for a Phase 2
+	// arbitration-decision job — see
+	// OpportunityPublisher.EnqueueArbitrationDecision.
+	Arbitration *arbitrationJob `json:"arbitration,omitempty"`
+}
+
+// arbitrationJob is one enqueued analysis.opportunity.arbitration.v1
+// publish — deliberately not opportunity.Transition-shaped, since a
+// Decision is not a lifecycle transition (see ArbitrationDecisionPayload's
+// own doc comment).
+type arbitrationJob struct {
+	OpportunityID string               `json:"opportunity_id"`
+	Decision      arbitration.Decision `json:"decision"`
+	DecidedAt     int64                `json:"decided_at"`
 }
 
 type publicationRecord struct {

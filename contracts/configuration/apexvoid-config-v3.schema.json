@@ -234,6 +234,7 @@
               "required": [
                 "analysis_opportunity",
                 "analysis_opportunity_invalidated",
+                "analysis_opportunity_arbitration",
                 "execution_trade_plan",
                 "execution_trade_event"
               ],
@@ -243,6 +244,10 @@
                   "minLength": 1
                 },
                 "analysis_opportunity_invalidated": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "analysis_opportunity_arbitration": {
                   "type": "string",
                   "minLength": 1
                 },
@@ -262,6 +267,7 @@
               "required": [
                 "analysis.opportunity.v1",
                 "analysis.opportunity.invalidated.v1",
+                "analysis.opportunity.arbitration.v1",
                 "execution.trade-plan.v1",
                 "execution.trade-event.v1"
               ],
@@ -290,6 +296,29 @@
                   }
                 },
                 "analysis.opportunity.invalidated.v1": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "partitions",
+                    "replication_factor",
+                    "retention_ms"
+                  ],
+                  "properties": {
+                    "partitions": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "replication_factor": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "retention_ms": {
+                      "type": "integer",
+                      "minimum": 1
+                    }
+                  }
+                },
+                "analysis.opportunity.arbitration.v1": {
                   "type": "object",
                   "additionalProperties": false,
                   "required": [
@@ -672,6 +701,20 @@
           "required": [
             "accept_bars",
             "band_body_fraction"
+          ]
+        },
+        "arbitration": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "conflict_margin_quality": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          },
+          "required": [
+            "conflict_margin_quality"
           ]
         },
         "zone_relevance": {

@@ -366,6 +366,17 @@ analysis:
     accept_bars: 2
     band_body_fraction: 0.5
 
+  # Cross-strategy conflict-resolution decisiveness margin (internal/
+  # arbitration): a same-tier opposite-direction candidate must trail the
+  # top-ranked one by at least this much Quality.Overall (a [0,1] scale) to
+  # be treated as decisively weaker; otherwise the symbol holds rather than
+  # picking a side on a near-tie. Mirrors algo-bot's own
+  # actionability.scanner_gates.conflict_margin_quality default (0.15) -
+  # the two are today independently-tunable copies of the same concept,
+  # Python's used only while arbitration_mode=python_legacy.
+  arbitration:
+    conflict_margin_quality: 0.15
+
   # Dimensionless zone-merge fields consumed live via
   # app.analysis.detectors._detector_settings(symbol) ->
   # detector_settings_from(instrument_runtime_view(symbol)) — already

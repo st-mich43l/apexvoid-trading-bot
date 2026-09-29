@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://apexvoid.internal/contracts/analysis/opportunity-arbitration-v1.schema.json",
+  "title": "analysis.opportunity.arbitration.v1",
+  "description": "Published by analysis-engine's internal/arbitration package whenever a live opportunity's cross-strategy conflict-resolution status changes for its symbol (docs/adr/004-analysis-engine-owns-arbitration-and-technique.md). Deliberately a separate, small, frequently-republished topic rather than a field on analysis.opportunity.v1: that topic's Created-event-happens-once contract is load-bearing for algo-bot's idempotent match-write logic, while arbitration status is a time-varying relationship between candidates that changes independently of any single candidate's own lifecycle (a new candidate on one timeframe can flip an already-published candidate's status on another without that candidate itself re-evaluating — see internal/engine's SymbolWorker.arbitrate doc comment). Consumers should treat decided_at as a monotonic freshness check and discard a stale/reordered event, the same way analysis_client.freshness already does for opportunity envelopes — this event carries no ledger/outbox de-duplication guarantee beyond at-least-once delivery, since republishing the same decision is harmless by design. This is the PAYLOAD only — wrapped inside contracts/common/event-envelope-v1.schema.json's `payload` field.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["opportunity_id", "symbol", "status", "reason_code", "decided_at"],
+  "properties": {
+    "opportunity_id": {
+      "type": "string",
+      "description": "Matches the id field of the analysis.opportunity.v1 event this decision is about."
+    },
+    "symbol": { "type": "string" },
+    "status": {
+      "type": "string",
+      "enum": ["winner", "suppressed", "conflict_held", "uncontested"],
+      "description": "winner: this candidate is the current arbitrated pick for its direction. suppressed: ranked lower (same direction) or on the losing side of a decisive opposite-direction resolution. conflict_held: an opposite-direction rival is not decisively weaker; the whole symbol holds rather than picking a side. uncontested: the only live candidate for this symbol right now."
+    },
+    "reason_code": {
+      "type": "string",
+      "enum": ["uncontested", "ranked_single_direction", "opposite_direction_conflict"],
+      "description": "Shared across every Decision one Arbitrate call returns — describes the batch outcome, not a per-candidate property (internal/arbitration.ReasonCode)."
+    },
+    "conflicting_with": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Present only when status is conflict_held: the opportunity_ids of the opposing-direction candidates this decision was held against."
+    },
+    "decided_at": {
+      "type": "integer",
+      "description": "Unix seconds — the closed bar's time that produced this Arbitrate() evaluation, not wall-clock publish time."
+    }
+  }
+}

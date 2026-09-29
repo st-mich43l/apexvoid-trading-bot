@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/arbitration"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/config"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/fib"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/indicator"
@@ -480,6 +481,16 @@ func FibConfigFromConfig(doc *config.Document) (fib.Config, error) {
 	}, nil
 }
 
+// ArbitrationConfigFromConfig reads analysis.arbitration.* into
+// arbitration.Config.
+func ArbitrationConfigFromConfig(doc *config.Document) (arbitration.Config, error) {
+	conflictMarginQuality, err := getFloat(doc, "analysis.arbitration.conflict_margin_quality")
+	if err != nil {
+		return arbitration.Config{}, err
+	}
+	return arbitration.Config{ConflictMarginQuality: conflictMarginQuality}, nil
+}
+
 // StrategyConfigsFromConfig reads the complete semantic V2 strategy catalog
 // from analysis.strategies. This is intentionally only registry-level
 // configuration: each Phase S7 concrete strategy owns validation of its
@@ -631,6 +642,10 @@ func KafkaConfigFromConfig(doc *config.Document) (kafka.Config, error) {
 	if err != nil {
 		return kafka.Config{}, err
 	}
+	analysisOpportunityArbitration, err := getString(doc, "transport.kafka.topics.analysis_opportunity_arbitration")
+	if err != nil {
+		return kafka.Config{}, err
+	}
 	topicSpecs, err := kafkaTopicSpecsFromConfig(doc)
 	if err != nil {
 		return kafka.Config{}, err
@@ -640,6 +655,7 @@ func KafkaConfigFromConfig(doc *config.Document) (kafka.Config, error) {
 		Enabled: enabled, Brokers: brokers, ClientID: clientID, OutboxPath: outboxPath,
 		Topics: kafka.Topics{
 			AnalysisOpportunity: analysisOpportunity, AnalysisOpportunityInvalidated: analysisOpportunityInvalidated,
+			AnalysisOpportunityArbitration: analysisOpportunityArbitration,
 		},
 		TopicSpecs: topicSpecs,
 	}

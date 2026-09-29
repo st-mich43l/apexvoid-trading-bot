@@ -38,6 +38,7 @@ type TopicSpec struct {
 type Topics struct {
 	AnalysisOpportunity            string
 	AnalysisOpportunityInvalidated string
+	AnalysisOpportunityArbitration string
 }
 
 // Validate fails closed per source task §5: no brokers, an empty broker
@@ -71,9 +72,10 @@ func (c Config) Validate() error {
 	topics := map[string]string{
 		"analysis_opportunity":             c.Topics.AnalysisOpportunity,
 		"analysis_opportunity_invalidated": c.Topics.AnalysisOpportunityInvalidated,
+		"analysis_opportunity_arbitration": c.Topics.AnalysisOpportunityArbitration,
 	}
 	seen := make(map[string]string, len(topics))
-	for _, name := range []string{"analysis_opportunity", "analysis_opportunity_invalidated"} {
+	for _, name := range []string{"analysis_opportunity", "analysis_opportunity_invalidated", "analysis_opportunity_arbitration"} {
 		value := topics[name]
 		if strings.TrimSpace(value) == "" {
 			return fmt.Errorf("kafka: transport.kafka.topics.%s is required", name)

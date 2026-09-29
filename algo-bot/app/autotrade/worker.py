@@ -41,6 +41,7 @@ from app.autotrade.arbitration import (
   CandidatePublicationResult,
   ExecutionIntent,
   arbitrate_execution_intents,
+  select_go_arbitrated_intent,
 )
 from app.autotrade.entry_distance import measure_entry_distance
 from app.autotrade.execution_policy import (
@@ -8060,6 +8061,8 @@ async def _handle_event(
         proposed_group_id=group_id,
         cycle_id=str(event_ts or ""),
         quality_overall=routed_match.quality_overall,
+        arbitration_status=routed_match.arbitration_status,
+        arbitration_reason_code=routed_match.arbitration_reason_code,
       )
       intents.append(intent)
       intent_subjects[intent_id] = routed_match
@@ -8159,7 +8162,7 @@ async def _handle_event(
           stage="publication",
           terminal_reason_code="publication_unavailable",
         )
-    arbitration = arbitrate_execution_intents(
+    legacy_arbitration = arbitrate_execution_intents(
       arbitrable,
       conflict_margin=runtime_config.actionability.scanner_gates.conflict_margin,
       use_quality_ranking=(
@@ -8169,6 +8172,24 @@ async def _handle_event(
         runtime_config.actionability.scanner_gates.conflict_margin_quality
       ),
     )
+    if runtime_config.analysis.technical_authority.arbitration_mode == "go":
+      arbitration = select_go_arbitrated_intent(arbitrable)
+    else:
+      arbitration = legacy_arbitration
+      # Shadow (Phase 2 rollout step 2a): log disagreement between what
+      # Go already decided and what the still-live legacy ranking picked,
+      # without acting on Go's answer yet. Only meaningful once matches
+      # actually carry an arbitration_status (on_arbitration_decision has
+      # run) - silent otherwise, never a behavior change on its own.
+      if any(item.arbitration_status is not None for item in arbitrable):
+        shadow = select_go_arbitrated_intent(arbitrable)
+        legacy_winner = legacy_arbitration.ordered[0].intent_id if legacy_arbitration.ordered else None
+        go_winner = shadow.ordered[0].intent_id if shadow.ordered else None
+        if legacy_winner != go_winner:
+          log.info(
+            "arbitration_mode=python_legacy shadow disagreement symbol=%s legacy_winner=%s go_winner=%s go_reason=%s",
+            symbol, legacy_winner, go_winner, shadow.reason_code,
+          )
 
     strategy_candidate_ids: list[str] = []
     box_candidate_id = None

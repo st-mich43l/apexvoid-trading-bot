@@ -90,6 +90,14 @@ func (p *Producer) PublishOpportunityInvalidated(ctx context.Context, eventID, c
 	return p.publish(ctx, p.cfg.Topics.AnalysisOpportunityInvalidated, symbol, eventID, correlationID, causationID, payload, occurredAt)
 }
 
+// PublishArbitrationDecision encodes payload as
+// analysis.opportunity.arbitration.v1 and publishes it, keyed by symbol.
+// Deliberately its own topic, not a mutation of analysis.opportunity.v1 —
+// see ArbitrationDecisionPayload's own doc comment.
+func (p *Producer) PublishArbitrationDecision(ctx context.Context, eventID, correlationID, causationID string, symbol market.Symbol, payload ArbitrationDecisionPayload, occurredAt time.Time) error {
+	return p.publish(ctx, p.cfg.Topics.AnalysisOpportunityArbitration, symbol, eventID, correlationID, causationID, payload, occurredAt)
+}
+
 func (p *Producer) publish(ctx context.Context, topic string, symbol market.Symbol, eventID, correlationID, causationID string, payload any, occurredAt time.Time) error {
 	payloadBytes, err := Encode(payload)
 	if err != nil {
