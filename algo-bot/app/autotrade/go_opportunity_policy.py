@@ -133,6 +133,20 @@ class AdapterRejection(Exception):
     self.message = message
 
 
+# Incident 2026-09-29: with all 19 catalog strategies granted authority at
+# once, several strategies with no persistent Go-side zone object (their
+# Evaluate() re-scans a sliding OHLC window on every bar rather than tracking
+# a created-once Zone) produced dozens of distinct-ID opportunities for
+# overlapping GBPJPY zones within minutes. Below, structural_id fell back to
+# payload.id for every non-reaction strategy - unique by construction - so
+# thesis_id was too, and the "one plan per structural thesis" claim this
+# module's docstring promises was a silent no-op for 17 of 19 strategies.
+# These two constants define how close two entry zones must be, for the same
+# symbol+direction+strategy, to collapse into one thesis instead of one each.
+_THESIS_BUCKET_ATR_FRACTION = 0.5
+_THESIS_BUCKET_MIN_PIPS = 15
+
+
 def _thesis_id(symbol: str, family: str, direction: str, zone_id: str) -> str:
   """Stable TradePlan thesis identity: what *structure* this is, not which bar
   confirmed it. Same rule and same bytes as the legacy scanner's
@@ -230,14 +244,21 @@ def build_strategy_match(
   risk_multiplier = risk_multiplier_for_tier(tier)
   prices = [t.price.price for t in payload.targets]
   farthest = max(prices) if direction == "BUY" else min(prices)
-  # Only Supply/Demand confirmed reactions have a Go zone identity. Other
-  # strategies are not coerced into a zone-reaction shape; their deterministic
-  # opportunity ID is the structural identity for policy deduplication.
-  structural_id = (
-    reaction.zone_id
-    if reaction is not None
-    else f"{profile.catalog_id}:{payload.id}"
-  )
+  # Only Supply/Demand confirmed reactions have a Go zone identity that stays
+  # stable across re-confirmations (reaction.zone_id is assigned once, when
+  # Go's own Zone is created). Every other strategy has no such persistent
+  # object, so its entry zone is bucketed to a stable, ATR-scaled granularity
+  # instead: two opportunities from the same strategy, for the same
+  # symbol+direction, whose entry midpoints fall in the same bucket are the
+  # same real-world setup re-observed, not two independent ones - matching
+  # what reaction.zone_id already guarantees for supply/demand.
+  if reaction is not None:
+    structural_id = reaction.zone_id
+  else:
+    atr = float(tech.atr) if tech.atr else 0.0
+    bucket_size = max(atr * _THESIS_BUCKET_ATR_FRACTION, pip * _THESIS_BUCKET_MIN_PIPS)
+    bucket = round(mid / bucket_size)
+    structural_id = f"{profile.catalog_id}:{bucket}"
   thesis = _thesis_id(symbol, family, direction, structural_id)
   tags = (
     GO_ORIGIN_TAG,

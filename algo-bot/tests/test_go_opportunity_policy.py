@@ -279,6 +279,67 @@ def test_each_catalog_adapter_preserves_its_own_evidence_and_geometry(scope):
   assert "go_strategy_confirmed" in match.tags
 
 
+def _no_reaction_match(*, entry_low, entry_high, opportunity_id, scope="box_breakout"):
+  profile = pol.REVIEWED_SCOPES[scope]
+  raw = golden()
+  raw["payload"]["id"] = opportunity_id
+  raw["payload"]["strategy"] = scope
+  raw["payload"]["direction"] = "BUY"
+  raw["payload"]["timeframe"] = "M5"
+  raw["payload"]["entry"] = {"low": entry_low, "high": entry_high}
+  raw["payload"]["invalidation"] = {"price": entry_low - 5.0}
+  raw["payload"]["targets"] = [{"price": {"price": entry_high + 10.0}}]
+  raw["payload"]["evidence"] = [{"code": profile.evidence_prefixes[0]}]
+  raw["payload"]["technical_context"].pop("confirmation", None)
+  event_payload = parse_analysis_event(OpportunityTopic, json.dumps(raw))
+  return pol.build_strategy_match(
+    event_payload, profile=profile, epoch=1, now=raw["payload"]["created_at"] + 1,
+  )
+
+
+@pytest.mark.no_database
+def test_repeated_sliding_window_opportunities_share_one_thesis():
+  """Incident 2026-09-29: box_breakout (no persistent Go-side zone object,
+  unlike supply/demand's reaction.zone_id) re-fired on the same real GBPJPY
+  breakout across several M5 closes, each with a distinct deterministic
+  opportunity ID because its SetupKey includes the current sliding window's
+  own bounds. Before this fix, thesis_id fell back to payload.id - unique by
+  construction - so every re-fire became its own thesis and its own plan.
+  Two overlapping-zone re-observations of the same strategy/direction/symbol
+  must collapse onto one thesis_id, the same guarantee supply/demand already
+  had, or `create_setup`'s active-thesis claim never engages.
+  """
+  first = _no_reaction_match(
+    entry_low=4352.5, entry_high=4356.0, opportunity_id="opp_a",
+  )
+  # A later re-evaluation of essentially the same breakout: same zone
+  # midpoint (the level the box compressed around), slightly narrower band -
+  # exactly the kind of sliding-window drift that produced a fresh
+  # deterministic ID in the incident.
+  nearby = _no_reaction_match(
+    entry_low=4353.25, entry_high=4355.25, opportunity_id="opp_b",
+  )
+  assert first.thesis_id == nearby.thesis_id, (
+    "overlapping re-observations of the same sliding-window strategy must "
+    "share one thesis, or duplicate plans can be built for the same setup"
+  )
+
+
+@pytest.mark.no_database
+def test_genuinely_distant_opportunities_get_different_theses():
+  near = _no_reaction_match(
+    entry_low=4352.5, entry_high=4356.0, opportunity_id="opp_a",
+  )
+  # Many ATRs away: a real, independent setup, not a re-observation.
+  far = _no_reaction_match(
+    entry_low=4400.0, entry_high=4403.5, opportunity_id="opp_c",
+  )
+  assert near.thesis_id != far.thesis_id, (
+    "bucketing must not merge genuinely independent setups just because "
+    "they share a strategy/symbol/direction"
+  )
+
+
 # ---- runner: fence, durable ledger, Redis match store ---------------------------
 
 pytestmark_db = pytest.mark.asyncio
