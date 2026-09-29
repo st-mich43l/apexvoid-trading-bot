@@ -109,6 +109,10 @@ services:
     restart: unless-stopped
     environment:
       APEXVOID_CONFIG_FILE: /config/apexvoid.yml
+      LOG_DIR: ${LOG_DIR:-/var/log/apexvoid}
+      LOG_RETENTION_DAYS: ${LOG_RETENTION_DAYS:-14}
+      LOG_FILE_ENABLED: ${LOG_FILE_ENABLED:-true}
+      LOG_FILE_NAME: ${ANALYSIS_ENGINE_LOG_FILE_NAME:-analysis-engine.log}
     depends_on:
       redis:
         condition: service_healthy
@@ -119,6 +123,7 @@ services:
     volumes:
       - ./config:/config:ro
       - analysis-engine-state:/var/lib/apexvoid-analysis-engine
+      - ./logs/analysis-engine:/var/log/apexvoid
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/health/ready"]
       interval: 10s
