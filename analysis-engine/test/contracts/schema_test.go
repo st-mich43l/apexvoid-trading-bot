@@ -91,6 +91,22 @@ func TestOpportunitySchema_ValidatesARealGoPayload(t *testing.T) {
 	validateGo(t, schema, p)
 }
 
+func TestOpportunitySchema_ValidatesARealGoPayloadWithStopEnvelope(t *testing.T) {
+	schema := compileSchema(t, repoContractPath("analysis", "opportunity-v1.schema.json"))
+	p := kafka.OpportunityPayload{
+		ID: "cand-1", Strategy: "key_level", Symbol: "XAU", Direction: "BUY",
+		Entry:            kafka.EntryZonePayload{Low: 2000, High: 2002},
+		Invalidation:     kafka.PriceLevelPayload{Price: 1990, Label: "key_level_invalidated"},
+		Targets:          []kafka.TargetPayload{{Price: kafka.PriceLevelPayload{Price: 2020}}},
+		Evidence:         []kafka.EvidencePayload{{Code: "m5_key_level_reaction"}},
+		Quality:          kafka.QualityPayload{Overall: 0.8},
+		AlgorithmVersion: kafka.AlgorithmVersionPayload{Structure: "v2", Liquidity: "v1"},
+		CreatedAt:        1000, ExpiresAt: 2000,
+		StopEnvelope: &kafka.StopEnvelopePayload{FloorPips: 40, CapPips: 60, DesiredMinimumPips: 60, Source: "reaction_room"},
+	}
+	validateGo(t, schema, p)
+}
+
 func TestOpportunityInvalidatedSchema_ValidatesARealGoPayload(t *testing.T) {
 	schema := compileSchema(t, repoContractPath("analysis", "opportunity-invalidated-v1.schema.json"))
 	p := kafka.OpportunityInvalidatedPayload{

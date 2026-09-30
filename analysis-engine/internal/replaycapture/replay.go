@@ -46,6 +46,10 @@ func Replay(doc *config.Document, capture *Capture, primary market.Timeframe, op
 	if err != nil {
 		return nil, fmt.Errorf("loading Analysis Engine V2 settings: %w", err)
 	}
+	settings.Geometry, err = doc.GeometryFor(string(capture.Symbol))
+	if err != nil {
+		return nil, fmt.Errorf("loading instrument geometry for %s: %w", capture.Symbol, err)
+	}
 	byTF := make(map[market.Timeframe][]market.Candle)
 	for name := range capture.Timeframes {
 		tf := market.Timeframe(name)

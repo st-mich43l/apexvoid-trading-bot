@@ -5,7 +5,7 @@ from __future__ import annotations
 from decimal import Decimal
 from types import SimpleNamespace
 
-from tests.configuration.canonical_fixtures import execution_cfg
+from tests.configuration.canonical_fixtures import execution_cfg, install_runtime_overrides
 
 import pytest
 
@@ -568,6 +568,27 @@ def test_stop_bounds_for_reaction_room_keeps_band_for_group_stop():
     pip_size=0.1,
     cfg=cfg,
   )[:2] == (60, 60)
+
+
+def test_stop_envelope_mode_go_reads_the_go_envelope_not_the_legacy_lookup(monkeypatch):
+  # End-to-end through evaluate_execution_policy: with the flag off
+  # (default), a match carrying a go_stop_envelope is ignored and the
+  # legacy per-strategy-family lookup still runs. With the flag on, the
+  # match's own go_stop_envelope wins instead.
+  subject = _policy_subject(
+    strategy="Mapped Zone Reaction", targets_pips=(60,),
+    go_stop_envelope_floor_pips=55.0, go_stop_envelope_cap_pips=70.0,
+    go_stop_envelope_desired_minimum_pips=55.0, go_stop_envelope_source="strategy_default",
+  )
+
+  legacy = evaluate_execution_policy(subject, spot_price=4100.0, regime="trend", pip_size=0.1)
+  assert legacy.measured["planned_stop_pips"] == "40.0"
+  assert legacy.measured.get("stop_bounds_source") == "strategy_default"
+
+  install_runtime_overrides(monkeypatch, {"analysis.technical_authority.stop_envelope_mode": "go"})
+  go_mode = evaluate_execution_policy(subject, spot_price=4100.0, regime="trend", pip_size=0.1)
+  assert go_mode.measured["planned_stop_pips"] == "55.0"
+  assert go_mode.measured.get("stop_bounds_source") == "go_strategy_default"
 
 
 def test_group_stop_survives_realistic_leg_spread_after_bounds_fix():

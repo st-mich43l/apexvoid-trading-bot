@@ -73,6 +73,10 @@ func TestEngine_RealEnabledStrategiesProduceRealOpportunitiesAgainstRealXAUData(
 	if err != nil {
 		t.Fatalf("loading real engine settings: %v", err)
 	}
+	settings.Geometry, err = doc.GeometryFor("XAU")
+	if err != nil {
+		t.Fatalf("loading real XAU instrument geometry: %v", err)
+	}
 
 	e := engine.NewEngine(nil)
 	if err := e.Register("XAU", settings); err != nil {
@@ -99,6 +103,11 @@ func TestEngine_RealEnabledStrategiesProduceRealOpportunitiesAgainstRealXAUData(
 		}
 		if candidate.Symbol != "XAU" {
 			t.Errorf("opportunity %s has symbol %q, want XAU", candidate.ID, candidate.Symbol)
+		}
+		if candidate.StopEnvelope == nil {
+			t.Errorf("opportunity %s (%s) has no StopEnvelope against real production execution config", candidate.ID, candidate.Strategy)
+		} else if candidate.StopEnvelope.FloorPips <= 0 || candidate.StopEnvelope.CapPips < candidate.StopEnvelope.FloorPips {
+			t.Errorf("opportunity %s has an invalid StopEnvelope: %+v", candidate.ID, candidate.StopEnvelope)
 		}
 		seenStrategies[candidate.Strategy] = true
 	}

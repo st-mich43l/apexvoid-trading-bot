@@ -110,6 +110,10 @@ func run(configPath string) error {
 		if err != nil {
 			return fmt.Errorf("loading analysis settings for %s: %w", symbol, err)
 		}
+		settings.Geometry, err = doc.GeometryFor(symbol)
+		if err != nil {
+			return fmt.Errorf("loading instrument geometry for %s: %w", symbol, err)
+		}
 		canonical := market.Symbol(symbol)
 		if err := e.Register(canonical, settings); err != nil {
 			return fmt.Errorf("registering %s: %w", symbol, err)

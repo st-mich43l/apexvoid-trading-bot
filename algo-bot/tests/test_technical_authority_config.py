@@ -12,6 +12,7 @@ def test_technical_authority_defaults_to_live_go_with_consumer_on():
     "go_origin_risk_leg_enabled": False,
     "arbitration_mode": "python_legacy",
     "thesis_correlation_mode": "python_legacy",
+    "stop_envelope_mode": "python_legacy",
   }
 
 
@@ -73,3 +74,20 @@ def test_thesis_correlation_mode_rejects_unknown_values(values):
 
 def test_thesis_correlation_mode_accepts_go():
   assert AnalysisTechnicalAuthorityConfig(thesis_correlation_mode="go").thesis_correlation_mode == "go"
+
+
+def test_stop_envelope_mode_defaults_to_python_legacy():
+  # Phase 4 rollout flag: must default to today's exact behavior
+  # (protective_stop's own per-strategy-family lookup) until a deliberate
+  # cutover.
+  assert AnalysisTechnicalAuthorityConfig().stop_envelope_mode == "python_legacy"
+
+
+@pytest.mark.parametrize("values", [{"stop_envelope_mode": "shadow"}, {"stop_envelope_mode": "nope"}])
+def test_stop_envelope_mode_rejects_unknown_values(values):
+  with pytest.raises(ValidationError):
+    AnalysisTechnicalAuthorityConfig(**values)
+
+
+def test_stop_envelope_mode_accepts_go():
+  assert AnalysisTechnicalAuthorityConfig(stop_envelope_mode="go").stop_envelope_mode == "go"
