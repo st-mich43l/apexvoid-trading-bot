@@ -290,6 +290,37 @@ def test_each_catalog_adapter_preserves_its_own_evidence_and_geometry(scope):
   assert "go_strategy_confirmed" in match.tags
 
 
+@pytest.mark.no_database
+def test_range_sweep_adapter_marks_room_as_one_r_two_r_scalp_book():
+  """The Go opposite-range target is a room ceiling, not a broker TP."""
+  raw = golden()
+  payload = raw["payload"]
+  payload.update({
+    "strategy": "range_sweep",
+    "direction": "SELL",
+    "timeframe": "M1",
+    "entry": {"low": 4194.90, "high": 4196.46},
+    "invalidation": {"price": 4198.888285714286},
+    "targets": [{"price": {"price": 4165.78}}],
+    "evidence": [
+      {"code": "m5_range_context"},
+      {"code": "m1_edge_sweep"},
+      {"code": "m1_reclaim"},
+    ],
+  })
+  payload["technical_context"].pop("confirmation", None)
+  event_payload = parse_analysis_event(OpportunityTopic, json.dumps(raw))
+  match = pol.build_strategy_match(
+    event_payload,
+    profile=pol.REVIEWED_SCOPES["range_sweep"],
+    now=payload["created_at"] + 1,
+  )
+
+  assert match.targets_pips == (291,)
+  assert match.absolute_target_price == 4165.78
+  assert match.scalp_target_r_multiples == (1.0, 2.0)
+
+
 def _no_reaction_match(*, entry_low, entry_high, opportunity_id, scope="box_breakout"):
   profile = pol.REVIEWED_SCOPES[scope]
   raw = golden()
