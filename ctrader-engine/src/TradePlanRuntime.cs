@@ -1904,6 +1904,13 @@ public sealed class TradePlanRuntime(
   // during the missed touch, since only the CURRENT quote is ever used to
   // execute - this never fires an order off stale/historical data alone.
   private const decimal RecoveryCatchUpToleranceFraction = 0.5m;
+  // Beyond the zone in the direction of travel (below a SELL zone, above a
+  // BUY zone) is a chase, not a better price: the fill lands past the planned
+  // entry with less room to the targets and a wider stop. Live 2026-09-30 a
+  // SELL zone 4215.22-4216.93 filled at 4214.52 through this path. Only a
+  // sliver of the zone width is tolerated on that side; the better-price side
+  // keeps RecoveryCatchUpToleranceFraction.
+  private const decimal RecoveryCatchUpChaseFraction = 0.1m;
   // Bars searched for a missed touch - generous relative to how long a
   // restart plausibly takes, without scanning arbitrarily far back.
   private const int RecoveryCatchUpLookbackBars = 120;
@@ -1946,8 +1953,13 @@ public sealed class TradePlanRuntime(
       return false;
     }
     var currentQuote = plan.Entry.PriceSide == "ask" ? quote.Ask : quote.Bid;
-    var tolerance = (zoneHigh - zoneLow) * RecoveryCatchUpToleranceFraction;
-    return currentQuote >= zoneLow - tolerance && currentQuote <= zoneHigh + tolerance;
+    var width = zoneHigh - zoneLow;
+    var betterSide = width * RecoveryCatchUpToleranceFraction;
+    var chaseSide = width * RecoveryCatchUpChaseFraction;
+    var isBuy = plan.Analysis.Direction == "BUY";
+    var floor = zoneLow - (isBuy ? betterSide : chaseSide);
+    var ceiling = zoneHigh + (isBuy ? chaseSide : betterSide);
+    return currentQuote >= floor && currentQuote <= ceiling;
   }
 
   private async Task<string> FormatPlanExpiredMessageAsync(

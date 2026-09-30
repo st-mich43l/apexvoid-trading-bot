@@ -1332,7 +1332,7 @@ public sealed partial class TradePlanRuntimeTests
 
     store.Bars.Add(new OhlcBar(1_720_000_060, 4087.50m, 4089.60m, 4087.20m, 4089.10m, 100));
     await runtime.PollAsync(
-      client, Symbol, new SpotPrice("XAU", 4090.35m, 4090.40m, 2), CancellationToken.None
+      client, Symbol, new SpotPrice("XAU", 4090.10m, 4090.15m, 2), CancellationToken.None
     );
 
     Assert.Contains(logs, line => line.Contains("v8 zone catch-up"));
@@ -3574,11 +3574,12 @@ public sealed partial class TradePlanRuntimeTests
       logs.Add
     );
     // Live quote has drifted just outside the zone by the time recovery
-    // finishes, but is still within tolerance (half the 1.90-wide zone) -
-    // spread kept inside max_spread_ticks=8 (0.05 = 5 ticks at 0.01) so
-    // that check isn't what's actually being exercised here.
+    // finishes, but is still within the chase tolerance (a tenth of the
+    // 1.90-wide zone on the side price is travelling) - spread kept inside
+    // max_spread_ticks=8 (0.05 = 5 ticks at 0.01) so that check isn't what's
+    // actually being exercised here.
     await second.PollAsync(
-      client, Symbol, new SpotPrice("XAU", 4090.35m, 4090.40m, 2), CancellationToken.None
+      client, Symbol, new SpotPrice("XAU", 4090.10m, 4090.15m, 2), CancellationToken.None
     );
 
     Assert.Contains(logs, line => line.Contains("v8 zone catch-up"));
@@ -3657,6 +3658,109 @@ public sealed partial class TradePlanRuntimeTests
 
     Assert.Empty(client.MarketOrders);
     Assert.Equal(TradePlanRuntimeStage.Received, second.TrackedStates.Single().Stage);
+  }
+
+  private static async Task<(FakeTradePlanTradingClient Client, TradePlanRuntime Runtime, List<string> Logs)>
+    TouchThenQuoteAsync(
+      string planJson, SpotPrice waitingQuote, OhlcBar touchBar, SpotPrice laterQuote
+    )
+  {
+    var store = new FakeTradePlanStore();
+    store.EnqueuePlan(planJson);
+    var client = new FakeTradePlanTradingClient();
+    var logs = new List<string>();
+    var runtime = new TradePlanRuntime(
+      Options(), store, () => DateTimeOffset.FromUnixTimeSeconds(1_720_000_000),
+      logs.Add
+    );
+    await runtime.PollAsync(client, Symbol, waitingQuote, CancellationToken.None);
+    store.Bars.Add(touchBar);
+    await runtime.PollAsync(client, Symbol, laterQuote, CancellationToken.None);
+    return (client, runtime, logs);
+  }
+
+  [Fact]
+  public async Task CatchUpDoesNotChaseASellThatFellPastTheZoneInTheDirectionOfTravel()
+  {
+    // Live 2026-09-30 XAU Confluence Zone SELL 4215.22-4216.93: the bid fell
+    // to 4214.52 (0.70 below the zone) and catch-up sold there.
+    var (client, runtime, logs) = await TouchThenQuoteAsync(
+      PlanJson(
+        direction: "SELL", zoneLow: 4215.22m, zoneHigh: 4216.93m, stopPrice: 4220.26m,
+        targetsJson: """
+          [
+            {"target_id": "TP1", "type": "absolute", "price": "4210.26", "close_ratio": "0.5"},
+            {"target_id": "TP2", "type": "absolute", "price": "4205.26", "close_ratio": "0.5"}
+          ]
+          """
+      ),
+      new SpotPrice("XAU", 4222.00m, 4222.05m, 1),
+      new OhlcBar(1_720_000_060, 4217.50m, 4218.00m, 4214.90m, 4215.00m, 100),
+      new SpotPrice("XAU", 4214.52m, 4214.57m, 2)
+    );
+
+    Assert.Empty(client.MarketOrders);
+    Assert.DoesNotContain(logs, line => line.Contains("v8 zone catch-up"));
+    Assert.Equal(TradePlanRuntimeStage.Received, runtime.TrackedStates.Single().Stage);
+  }
+
+  [Fact]
+  public async Task CatchUpStillSellsASellThatSitsJustBelowTheZoneWithinTheChaseSliver()
+  {
+    var (client, _, logs) = await TouchThenQuoteAsync(
+      PlanJson(
+        direction: "SELL", zoneLow: 4215.22m, zoneHigh: 4216.93m, stopPrice: 4220.26m,
+        targetsJson: """
+          [
+            {"target_id": "TP1", "type": "absolute", "price": "4210.26", "close_ratio": "0.5"},
+            {"target_id": "TP2", "type": "absolute", "price": "4205.26", "close_ratio": "0.5"}
+          ]
+          """
+      ),
+      new SpotPrice("XAU", 4222.00m, 4222.05m, 1),
+      new OhlcBar(1_720_000_060, 4217.50m, 4218.00m, 4214.90m, 4215.00m, 100),
+      new SpotPrice("XAU", 4215.10m, 4215.15m, 2)
+    );
+
+    Assert.Contains(logs, line => line.Contains("v8 zone catch-up"));
+    Assert.Single(client.MarketOrders);
+  }
+
+  [Fact]
+  public async Task CatchUpKeepsTheWiderToleranceOnTheBetterPriceSide()
+  {
+    // A SELL quote ABOVE the zone is a better price than planned.
+    var (client, _, logs) = await TouchThenQuoteAsync(
+      PlanJson(
+        direction: "SELL", zoneLow: 4215.22m, zoneHigh: 4216.93m, stopPrice: 4220.26m,
+        targetsJson: """
+          [
+            {"target_id": "TP1", "type": "absolute", "price": "4210.26", "close_ratio": "0.5"},
+            {"target_id": "TP2", "type": "absolute", "price": "4205.26", "close_ratio": "0.5"}
+          ]
+          """
+      ),
+      new SpotPrice("XAU", 4222.00m, 4222.05m, 1),
+      new OhlcBar(1_720_000_060, 4217.50m, 4218.00m, 4214.90m, 4215.00m, 100),
+      new SpotPrice("XAU", 4217.60m, 4217.65m, 2)
+    );
+
+    Assert.Contains(logs, line => line.Contains("v8 zone catch-up"));
+    Assert.Single(client.MarketOrders);
+  }
+
+  [Fact]
+  public async Task CatchUpDoesNotChaseABuyThatRanPastTheZoneHigh()
+  {
+    var (client, runtime, _) = await TouchThenQuoteAsync(
+      PlanJson(zoneLow: 4088.10m, zoneHigh: 4090.00m),
+      new SpotPrice("XAU", 4080.0m, 4080.2m, 1),
+      new OhlcBar(1_720_000_060, 4087.50m, 4089.60m, 4087.20m, 4089.10m, 100),
+      new SpotPrice("XAU", 4090.35m, 4090.40m, 2)
+    );
+
+    Assert.Empty(client.MarketOrders);
+    Assert.Equal(TradePlanRuntimeStage.Received, runtime.TrackedStates.Single().Stage);
   }
 
   [Fact]
