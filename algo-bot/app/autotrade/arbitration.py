@@ -86,6 +86,13 @@ class ExecutionIntent:
   # Go publishes a decision for this opportunity.
   arbitration_status: str | None = None
   arbitration_reason_code: str | None = None
+  # False when the executable quote is outside this intent's entry contract, so
+  # it can only wait for a retest this cycle. A waiting intent must not create a
+  # direction conflict with an intent that can execute now: the two-sided
+  # picture "demand below price, supply above it, both waiting" is not a
+  # BUY-vs-SELL conflict. Defaults True so callers that do not know keep the
+  # legacy behavior of treating every intent as a live competitor.
+  executable_now: bool = True
 
 
 @dataclass(frozen=True)
@@ -153,8 +160,13 @@ def arbitrate_execution_intents(
   ordered = sorted(
     intents, key=lambda intent: _rank(intent, use_quality=use_quality_ranking),
   )
-  top = ordered[0]
-  opposing = [item for item in ordered if item.direction != top.direction]
+  # The direction decision is made among intents that can execute right now;
+  # only when none can does it fall back to the whole set (the legacy rule).
+  # Waiting intents of the chosen direction still stay in ``ordered`` so their
+  # retest state keeps advancing and they can publish the moment price enters.
+  decision_pool = [item for item in ordered if item.executable_now] or ordered
+  top = decision_pool[0]
+  opposing = [item for item in decision_pool if item.direction != top.direction]
   if opposing:
     strongest_opposing = opposing[0]
     same_tier = strongest_opposing.tier.upper() == top.tier.upper()

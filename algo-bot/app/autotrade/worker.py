@@ -4744,6 +4744,78 @@ def _resolve_match_confluence_claim_id(
 
 
 
+def _execution_quote_access(
+  match: StrategyMatch,
+  spot: AutoTradeSpot | None,
+  symbol: str,
+  inst: Any,
+) -> tuple[Any, bool]:
+  """Whether the side-aware executable quote may act on ``match`` right now.
+
+  Returns ``(evidence, execution_eligible)``: the quote-versus-entry-zone
+  evidence and whether it authorizes entry - quote inside the raw entry zone
+  plus the configured contract tolerance, or, for scalp families, within their
+  own chase allowance. The one definition shared by the plan builder and by
+  arbitration, so "can execute now" can never mean two different things.
+  """
+  pip_size = units.pip_size(symbol)
+  evidence = executable_quote_in_zone(
+    match.direction,
+    getattr(spot, "bid", None),
+    getattr(spot, "ask", None),
+    match.entry_low,
+    match.entry_high,
+    max(
+      0.0,
+      float(inst.execution.entry.contract_tolerance_pips) * pip_size,
+    ),
+    pip_size=pip_size,
+  )
+  # Scalping / range-scalp activation already allows trade-direction chase within
+  # maximum_chase_pips. V8 used to require quote-inside only
+  # (execution_eligible = evidence.inside), so chase activations were parked
+  # as waiting_retest_entry_zone until price returned — by then envelope /
+  # stack / thesis often killed the plan (Aug 20 HFS gold dig). Treat chase
+  # as immediately executable for those families, matching activation.
+  candidate_allows_chase = is_m1_scalp_strategy(str(match.strategy)) or is_scalp_strategy(
+    str(match.strategy or ""),
+    family=str(getattr(match, "family", "") or "") or None,
+    strategy_mode=str(getattr(match, "strategy_mode", "") or "") or None,
+  )
+  if candidate_allows_chase:
+    zone_access_mode = (
+      ZONE_ACCESS_RETEST_ONLY
+      if is_breakout_retest_scalp_strategy(str(match.strategy))
+      else ZONE_ACCESS_MOMENTUM_CHASE
+    )
+    try:
+      side = str(match.direction).upper()
+      worst = float(match.entry_high if side == "BUY" else match.entry_low)
+      stop_pips = abs(worst - float(match.structure_swing)) / pip_size
+    except (TypeError, ValueError, AttributeError):
+      stop_pips = None
+    chase_cap = scalp_effective_chase_pips(inst, stop_pips=stop_pips)
+    scalp_access = scalp_zone_access(
+      match.direction,
+      getattr(spot, "bid", None),
+      getattr(spot, "ask", None),
+      match.entry_low,
+      match.entry_high,
+      max(
+        0.0,
+        float(inst.execution.entry.contract_tolerance_pips) * pip_size,
+      ),
+      pip_size=pip_size,
+      maximum_chase_pips=chase_cap,
+      zone_access_mode=zone_access_mode,
+    )
+    evidence = scalp_access.evidence
+    execution_eligible = scalp_access.executable
+  else:
+    execution_eligible = evidence.inside
+  return evidence, execution_eligible
+
+
 async def _publish_trade_plan_v8(
   client: Any,
   symbol: str,
@@ -5062,60 +5134,7 @@ async def _publish_trade_plan_v8(
     GO_AUTHORITATIVE if GO_ORIGIN_TAG in match.tags else M5_AUTHORITATIVE
   )
   pip_size = units.pip_size(symbol)
-  evidence = executable_quote_in_zone(
-    match.direction,
-    getattr(spot, "bid", None),
-    getattr(spot, "ask", None),
-    match.entry_low,
-    match.entry_high,
-    max(
-      0.0,
-      float(inst.execution.entry.contract_tolerance_pips) * pip_size,
-    ),
-    pip_size=pip_size,
-  )
-  # Scalping / range-scalp activation already allows trade-direction chase within
-  # maximum_chase_pips. V8 used to require quote-inside only
-  # (execution_eligible = evidence.inside), so chase activations were parked
-  # as waiting_retest_entry_zone until price returned — by then envelope /
-  # stack / thesis often killed the plan (Aug 20 HFS gold dig). Treat chase
-  # as immediately executable for those families, matching activation.
-  candidate_allows_chase = is_m1_scalp_strategy(str(match.strategy)) or is_scalp_strategy(
-    str(match.strategy or ""),
-    family=str(getattr(match, "family", "") or "") or None,
-    strategy_mode=str(getattr(match, "strategy_mode", "") or "") or None,
-  )
-  if candidate_allows_chase:
-    zone_access_mode = (
-      ZONE_ACCESS_RETEST_ONLY
-      if is_breakout_retest_scalp_strategy(str(match.strategy))
-      else ZONE_ACCESS_MOMENTUM_CHASE
-    )
-    try:
-      side = str(match.direction).upper()
-      worst = float(match.entry_high if side == "BUY" else match.entry_low)
-      stop_pips = abs(worst - float(match.structure_swing)) / pip_size
-    except (TypeError, ValueError, AttributeError):
-      stop_pips = None
-    chase_cap = scalp_effective_chase_pips(inst, stop_pips=stop_pips)
-    scalp_access = scalp_zone_access(
-      match.direction,
-      getattr(spot, "bid", None),
-      getattr(spot, "ask", None),
-      match.entry_low,
-      match.entry_high,
-      max(
-        0.0,
-        float(inst.execution.entry.contract_tolerance_pips) * pip_size,
-      ),
-      pip_size=pip_size,
-      maximum_chase_pips=chase_cap,
-      zone_access_mode=zone_access_mode,
-    )
-    evidence = scalp_access.evidence
-    execution_eligible = scalp_access.executable
-  else:
-    execution_eligible = evidence.inside
+  evidence, execution_eligible = _execution_quote_access(match, spot, symbol, inst)
 
   if match.expires_at and now_ts >= int(match.expires_at):
     try:
@@ -8001,6 +8020,7 @@ async def _handle_event(
     # match came from a Go event or a legacy Python match.
     htf_zones = _htf_zones(frames, None, symbol=symbol)
     htf_levels = _htf_levels(frames, None, symbol=symbol)
+    execution_inst = instrument_geometry.instrument_runtime(symbol)
     for routed_match in strategy_matches:
       intent_id = f"strategy:{routed_match.match_id}"
       intent_matches[intent_id] = routed_match
@@ -8056,6 +8076,16 @@ async def _handle_event(
         quality_overall=routed_match.quality_overall,
         arbitration_status=routed_match.arbitration_status,
         arbitration_reason_code=routed_match.arbitration_reason_code,
+        # Only an intent whose executable quote is inside its entry contract can
+        # publish this cycle; the rest merely wait for a retest and must not
+        # create a BUY-vs-SELL conflict with one that can.
+        executable_now=bool(
+          spot is not None
+          and spot.fresh
+          and _execution_quote_access(
+            routed_match, spot, symbol, execution_inst,
+          )[1]
+        ),
       )
       intents.append(intent)
       intent_subjects[intent_id] = routed_match
