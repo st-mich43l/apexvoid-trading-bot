@@ -233,6 +233,16 @@ def build_strategy_match(
   stop_pips = abs(proximal - stop) / pip
   if stop_pips <= 0:
     raise AdapterRejection("degenerate_stop")
+  scalp_target_r_multiples: tuple[float, ...] = ()
+  if profile.catalog_id in {
+    "range_sweep", "impulse_pullback", "scalp_breakout_retest",
+  }:
+    available_r = targets_pips[-1] / stop_pips
+    scalp_target_r_multiples = (
+      (1.0, 2.0) if available_r + 1e-9 >= 2.0
+      else (1.0,) if available_r + 1e-9 >= 1.0
+      else ()
+    )
 
   bias = tech.bias.direction if tech.bias else None
   relation = "neutral" if bias is None else ("with_bias" if bias == direction else "counter_bias")
@@ -319,6 +329,7 @@ def build_strategy_match(
     atr=float(tech.atr),
     structure_swing=stop,
     targets_pips=tuple(targets_pips),
+    scalp_target_r_multiples=scalp_target_r_multiples,
     go_invalidation_price=stop,
     tags=tags,
     absolute_target_price=float(farthest),
