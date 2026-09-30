@@ -1,20 +1,20 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "bec01459a04ea8c7b6b931d0edf79ee90ab6d15a2f846eefb1a11e60973557d6",
-  "configuration_document_fingerprint_sha256": "b020888e776ffb182fc55e837b09e2cb8df8a8aca448561415653a01f09ed058",
+  "configuration_contract_fingerprint_sha256": "15bf89aec2a266196a4a733a11f2a915bffaf0ada3d7ed5a62eaf2727dca09bf",
+  "configuration_document_fingerprint_sha256": "adb9a117a98caabd3f2d3624ffce0d64cfbc49b9e60dffe1b0a965df689e09d0",
   "counts": {
     "algorithm_constants": 97,
-    "configurable": 571,
+    "configurable": 586,
     "known_conflicts": 30,
     "owners": {
       "ctrader": 50,
-      "python": 532,
-      "shared": 96
+      "python": 543,
+      "shared": 100
     },
     "protocol_constants": 10,
     "secrets": 9,
-    "shared": 96,
-    "total_items": 678
+    "shared": 100,
+    "total_items": 693
   },
   "items": [
     {
@@ -1444,6 +1444,83 @@
       "terminal_deprecation_reason": null,
       "type": "float",
       "unit": "score",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCANNER_CONFLICT_MARGIN_QUALITY",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "ge": 0,
+        "le": 1
+      },
+      "default": 0.15,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 0.15
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Decisiveness margin on Go quality_overall [0,1] scale, used only when use_quality_ranking is on; not interchangeable with conflict_margin (confluence-integer scale).",
+      "display_id": "config:actionability.scanner_gates.conflict_margin_quality",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "actionability.scanner_gates.conflict_margin_quality",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "execution_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "float",
+      "unit": "score",
+      "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": "SCANNER_USE_QUALITY_RANKING",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {},
+      "default": true,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": true
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Compatibility setting for non-AE callers only. Live Go opportunities carry their own quality and arbitration decision; the Python worker must not re-rank them.",
+      "display_id": "config:actionability.scanner_gates.use_quality_ranking",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "actionability.scanner_gates.use_quality_ranking",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "execution_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "bool",
+      "unit": "boolean",
       "validation_summary": "Pydantic required/type coercion only"
     },
     {
@@ -5345,6 +5422,319 @@
       "type": "float",
       "unit": "percent",
       "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [
+        "go",
+        "python_legacy"
+      ],
+      "canonical_env": "ANALYSIS_ARBITRATION_MODE",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {},
+      "default": "go",
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": "go"
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Go analysis-engine owns cross-strategy arbitration. Algo Bot only applies execution-time admission and risk policy; it must not re-rank Go opportunities.",
+      "display_id": "config:analysis.technical_authority.arbitration_mode",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "analysis.technical_authority.arbitration_mode",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "execution_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "str",
+      "unit": "enum",
+      "validation_summary": "Only go or python_legacy is supported."
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": null,
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {},
+      "default": true,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": true
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Starts the durable Go analysis Kafka consumer. Automatic production analysis requires this to remain enabled.",
+      "display_id": "config:analysis.technical_authority.consumer_enabled",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "analysis.technical_authority.consumer_enabled",
+      "protocol_constant": false,
+      "reload_policy": "restart",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "execution_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "bool",
+      "unit": "boolean",
+      "validation_summary": "Must remain true for automatic analysis."
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": null,
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "min_length": 1
+      },
+      "default": "apexvoid-algo-bot-analysis-opportunity-v1",
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": "apexvoid-algo-bot-analysis-opportunity-v1"
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Stable Kafka consumer group for durable Go analysis opportunity lifecycle processing.",
+      "display_id": "config:analysis.technical_authority.consumer_group",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "analysis.technical_authority.consumer_group",
+      "protocol_constant": false,
+      "reload_policy": "restart",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "cross_service_contract",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "str",
+      "unit": "identifier",
+      "validation_summary": "Pydantic required/type coercion only."
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": null,
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "gt": 0
+      },
+      "default": 300,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 300
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Maximum gap between Kafka publication (produced_at) and consumption for a Go opportunity to become a NEW live plan. A larger gap means the event sat in a backlog (outage, restart, lag) and is refused as delivery_lag_exceeded. Distinct from technical event age.",
+      "display_id": "config:analysis.technical_authority.max_delivery_lag_seconds",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "analysis.technical_authority.max_delivery_lag_seconds",
+      "protocol_constant": false,
+      "reload_policy": "restart",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "execution_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "int",
+      "unit": "seconds",
+      "validation_summary": "Must be a positive integer."
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": null,
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "gt": 0
+      },
+      "default": 900,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": 900
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Maximum age, at consumption time, of the confirmed technical observation (the confirmation bar) a Go opportunity may have and still become a NEW live plan. Older events rebuild the lifecycle ledger only; they never become fresh orders.",
+      "display_id": "config:analysis.technical_authority.max_event_age_seconds",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "analysis.technical_authority.max_event_age_seconds",
+      "protocol_constant": false,
+      "reload_policy": "restart",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "execution_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "int",
+      "unit": "seconds",
+      "validation_summary": "Must be a positive integer; a live event older than this is refused as event_too_old."
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [
+        "go"
+      ],
+      "canonical_env": null,
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {},
+      "default": "go",
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": "go"
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Go Analysis Engine is the sole automatic technical-analysis source and delivers opportunities through Kafka.",
+      "display_id": "config:analysis.technical_authority.mode",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "analysis.technical_authority.mode",
+      "protocol_constant": false,
+      "reload_policy": "restart",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "execution_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "str",
+      "unit": "enum",
+      "validation_summary": "Only go is supported for automatic analysis."
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [
+        "go",
+        "python_legacy"
+      ],
+      "canonical_env": "ANALYSIS_STOP_ENVELOPE_MODE",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {},
+      "default": "go",
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": "go"
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Go analysis-engine owns the stop-distance envelope. Algo Bot consumes the published bounds and applies execution safety checks without rebuilding technical stop geometry.",
+      "display_id": "config:analysis.technical_authority.stop_envelope_mode",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "analysis.technical_authority.stop_envelope_mode",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "execution_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "str",
+      "unit": "enum",
+      "validation_summary": "Only go or python_legacy is supported."
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [
+        "go",
+        "python_legacy"
+      ],
+      "canonical_env": "ANALYSIS_THESIS_CORRELATION_MODE",
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {},
+      "default": "go",
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": "go"
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Go analysis-engine owns cross-strategy thesis identity. Algo Bot consumes go_thesis_id and must not infer structural correlation with its local ATR heuristic for Go opportunities.",
+      "display_id": "config:analysis.technical_authority.thesis_correlation_mode",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "analysis.technical_authority.thesis_correlation_mode",
+      "protocol_constant": false,
+      "reload_policy": "new_setup_only",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "execution_safety",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "str",
+      "unit": "enum",
+      "validation_summary": "Only go or python_legacy is supported."
     },
     {
       "algorithm_constant": false,
@@ -25313,8 +25703,199 @@
       "type": "bool",
       "unit": "boolean",
       "validation_summary": "Pydantic required/type coercion only"
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": null,
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {},
+      "default": "apexvoid-algo-bot",
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": "apexvoid-algo-bot"
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Kafka client identifier used by the Algo Bot consumer.",
+      "display_id": "config:transport.kafka.algo_bot_client_id",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "python",
+      "path": "transport.kafka.algo_bot_client_id",
+      "protocol_constant": false,
+      "reload_policy": "restart",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "infrastructure",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": false,
+      "terminal_deprecation_reason": null,
+      "type": "str",
+      "unit": "identifier",
+      "validation_summary": "Pydantic required/type coercion only."
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": null,
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {
+        "min_length": 1
+      },
+      "default": [
+        "kafka:9092"
+      ],
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": [
+            "kafka:9092"
+          ]
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Kafka bootstrap brokers for durable business events.",
+      "display_id": "config:transport.kafka.brokers",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "shared",
+      "path": "transport.kafka.brokers",
+      "protocol_constant": false,
+      "reload_policy": "restart",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "infrastructure",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": true,
+      "terminal_deprecation_reason": null,
+      "type": "list[string]",
+      "unit": "url",
+      "validation_summary": "At least one broker is required when the consumer is enabled."
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": null,
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {},
+      "default": true,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": true
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Whether the deployed Kafka event plane is available.",
+      "display_id": "config:transport.kafka.enabled",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "shared",
+      "path": "transport.kafka.enabled",
+      "protocol_constant": false,
+      "reload_policy": "restart",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "infrastructure",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": true,
+      "terminal_deprecation_reason": null,
+      "type": "bool",
+      "unit": "boolean",
+      "validation_summary": "Pydantic required/type coercion only."
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": null,
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {},
+      "default": "analysis.opportunity.v1",
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": "analysis.opportunity.v1"
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Kafka topic carrying versioned Go analysis opportunities.",
+      "display_id": "config:transport.kafka.topics.analysis_opportunity",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "shared",
+      "path": "transport.kafka.topics.analysis_opportunity",
+      "protocol_constant": false,
+      "reload_policy": "restart",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "cross_service_contract",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": true,
+      "terminal_deprecation_reason": null,
+      "type": "str",
+      "unit": "identifier",
+      "validation_summary": "Kafka contract topic; changes require coordinated deployment."
+    },
+    {
+      "algorithm_constant": false,
+      "allowed_values": [],
+      "canonical_env": null,
+      "catalog_version": 2,
+      "configurable": true,
+      "constraints": {},
+      "default": "analysis.opportunity.invalidated.v1",
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": "analysis.opportunity.invalidated.v1"
+        }
+      ],
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Kafka topic carrying terminal Go analysis opportunity events.",
+      "display_id": "config:transport.kafka.topics.analysis_opportunity_invalidated",
+      "evidence_notes": [],
+      "introduced_in": "config-catalog-v2",
+      "kind": "configurable",
+      "mismatch_policy": "not_reported",
+      "owner": "shared",
+      "path": "transport.kafka.topics.analysis_opportunity_invalidated",
+      "protocol_constant": false,
+      "reload_policy": "restart",
+      "replacement_path": null,
+      "required": false,
+      "risk_classification": "cross_service_contract",
+      "runtime_reload_policy": "restart",
+      "secret": false,
+      "shared_with_ctrader": true,
+      "terminal_deprecation_reason": null,
+      "type": "str",
+      "unit": "identifier",
+      "validation_summary": "Kafka contract topic; changes require coordinated deployment."
     }
   ],
-  "source_fingerprint_sha256": "bec01459a04ea8c7b6b931d0edf79ee90ab6d15a2f846eefb1a11e60973557d6",
+  "source_fingerprint_sha256": "15bf89aec2a266196a4a733a11f2a915bffaf0ada3d7ed5a62eaf2727dca09bf",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

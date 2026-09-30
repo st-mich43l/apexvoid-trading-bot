@@ -30,6 +30,7 @@ order checks.
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import math
 import time
@@ -74,6 +75,13 @@ log = logging.getLogger(__name__)
 MODE = "go"
 _PRE_CONFIRMED = (DISCOVERED, WATCHING, TOUCHED, FORMING, CONFIRMED)
 _TERMINAL_OR_LIVE = {"plan_built", "plan_published", "invalidated", "expired", "cancelled"}
+_ARBITRATION_CACHE_TTL_SECONDS = 7 * 24 * 60 * 60
+GO_ARBITRATION_KEY_PREFIX = "analysis:go_arbitration"
+
+
+def go_arbitration_key(symbol: str, opportunity_id: str) -> str:
+  """Redis projection for the latest Go decision, including pre-creation races."""
+  return f"{GO_ARBITRATION_KEY_PREFIX}:{symbol.upper()}:{opportunity_id}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -472,6 +480,13 @@ class GoOpportunityPolicy:
       await self._decide(event, "rejected", exc.code, message=exc.message)
       return "rejected"
 
+    # The arbitration topic is intentionally separate from the once-only
+    # lifecycle topic.  Kafka can deliver either one first (and a restart can
+    # replay either one), so apply the latest monotonic decision cached by
+    # on_arbitration_decision before exposing the match to the worker.
+    pending = await self._load_cached_arbitration(client, payload.symbol, payload.id)
+    if pending is not None:
+      match = self._with_arbitration(match, pending)
     await self._advance_setup(client, match)
     await self._store_match(client, match, now)
     await self._decide(
@@ -487,6 +502,7 @@ class GoOpportunityPolicy:
     if payload.strategy not in REVIEWED_SCOPES:
       return "not_adapted"
     client = self._client()
+    await client.delete(go_arbitration_key(payload.symbol, payload.opportunity_id))
     match_id = match_id_for(payload.opportunity_id)
     key = strategy_matches_key(payload.symbol)
     matches = deserialize_matches(await client.get(key))
@@ -525,33 +541,76 @@ class GoOpportunityPolicy:
     go_thesis_id/go_merged_with (Phase 3), Go's own structural-identity
     thesis correlation, read by multi_match.dedupe_matches in place of its
     ATR-bucket geometric heuristic once thesis_correlation_mode=go. A
-    decision for a match_id with no live StrategyMatch (already withdrawn
-    by on_terminal, or arrived before the match write completed) is
-    simply dropped: there is nothing live left to annotate.
+    decision for a match_id with no live StrategyMatch is retained briefly as
+    a pending projection, so a cross-topic delivery race or process restart
+    cannot lose Go's current status. It never creates a phantom match.
     """
     payload = event.payload
     match_id = match_id_for(payload.opportunity_id)
     client = self._client()
+    cache_key = go_arbitration_key(payload.symbol, payload.opportunity_id)
+    cached = await client.get(cache_key)
+    payload_json = payload.model_dump(mode="json")
+    if cached is not None:
+      try:
+        cached_payload = json.loads(cached)
+      except (TypeError, ValueError):
+        cached_payload = None
+      if isinstance(cached_payload, dict) and int(cached_payload.get("decided_at", -1)) > payload.decided_at:
+        # Reordered or duplicate projection.  Do not let an older Go decision
+        # roll Redis back after a restart or partition rebalance.
+        return "stale_arbitration_ignored"
+      if isinstance(cached_payload, dict) and (
+        int(cached_payload.get("decided_at", -1)) == payload.decided_at
+        and cached_payload == payload_json
+      ):
+        # An exact republish is harmless and, when the match is present, keeps
+        # the consumer's idempotent outcome stable for retry tests/telemetry.
+        key = strategy_matches_key(payload.symbol)
+        matches = deserialize_matches(await client.get(key))
+        return "unchanged" if any(m.match_id == match_id for m in matches) else "stale_arbitration_ignored"
+    await client.set(
+      cache_key,
+      json.dumps(payload_json, separators=(",", ":"), sort_keys=True),
+      ex=_ARBITRATION_CACHE_TTL_SECONDS,
+    )
     key = strategy_matches_key(payload.symbol)
     matches = deserialize_matches(await client.get(key))
     match = next((m for m in matches if m.match_id == match_id), None)
     if match is None:
-      return "ignored_unknown_match"
-    go_thesis_id = None if payload.thesis_id is None else match_id_for(payload.thesis_id)
-    go_merged_with = tuple(match_id_for(item) for item in payload.merged_with)
-    if (
-      match.arbitration_status == payload.status
-      and match.arbitration_reason_code == payload.reason_code
-      and match.go_thesis_id == go_thesis_id
-      and match.go_merged_with == go_merged_with
-    ):
+      # Keep the decision: the lifecycle record may be in flight on another
+      # Kafka partition, or this process may have restarted between topics.
+      # No phantom StrategyMatch is created.
+      return "arbitration_stored_pending"
+    updated = self._with_arbitration(match, payload)
+    if updated == match:
       return "unchanged"
-    updated = replace(
-      match, arbitration_status=payload.status, arbitration_reason_code=payload.reason_code,
-      go_thesis_id=go_thesis_id, go_merged_with=go_merged_with,
-    )
     await self._store_match(client, updated, int(self._clock()))
     return "arbitration_updated"
+
+  @staticmethod
+  def _with_arbitration(match: StrategyMatch, payload: Any) -> StrategyMatch:
+    go_thesis_id = None if payload.thesis_id is None else match_id_for(payload.thesis_id)
+    go_merged_with = tuple(match_id_for(item) for item in payload.merged_with)
+    return replace(
+      match,
+      arbitration_status=payload.status,
+      arbitration_reason_code=payload.reason_code,
+      go_thesis_id=go_thesis_id,
+      go_merged_with=go_merged_with,
+    )
+
+  @staticmethod
+  async def _load_cached_arbitration(client: Any, symbol: str, opportunity_id: str) -> Any | None:
+    raw = await client.get(go_arbitration_key(symbol, opportunity_id))
+    if raw is None:
+      return None
+    try:
+      from app.analysis_client.models import AnalysisOpportunityArbitration
+      return AnalysisOpportunityArbitration.model_validate(json.loads(raw))
+    except (TypeError, ValueError, json.JSONDecodeError):
+      log.warning("discarding malformed cached Go arbitration opportunity=%s", opportunity_id)
+      return None
 
   @staticmethod
   async def _advance_setup(client: Any, match: StrategyMatch) -> None:

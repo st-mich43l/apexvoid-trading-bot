@@ -28,7 +28,7 @@ import pytest
 from redis.asyncio import Redis
 
 from app.analysis_client.consumer import AnalysisOpportunityConsumer
-from app.analysis_client.models import OpportunityTopic, parse_analysis_event
+from app.analysis_client.models import ArbitrationTopic, OpportunityTopic, parse_analysis_event
 from app.analysis.structural_reaction_support import structural_thesis_id
 from app.autotrade import go_opportunity_policy as pol
 from app.autotrade import killzone, worker
@@ -111,6 +111,32 @@ def kafka_record(now: int, opp: str = "opp_chain", *, ago: int = 60, offset: int
   return SimpleNamespace(topic=OpportunityTopic, partition=0, offset=offset, timestamp=(int(now) - 5) * 1000, value=json.dumps(raw).encode())
 
 
+def arbitration_record(now: int, opportunity_id: str, *, status: str = "uncontested", reason: str = "uncontested", offset: int = 100):
+  raw = {
+    "event_id": f"evt-arbitration-{opportunity_id}",
+    "event_type": ArbitrationTopic,
+    "event_version": 1,
+    "occurred_at": int(now),
+    "produced_at": int(now),
+    "producer": "apexvoid-analysis-engine",
+    "correlation_id": f"corr-arbitration-{opportunity_id}",
+    "payload": {
+      "opportunity_id": opportunity_id,
+      "symbol": "XAU",
+      "status": status,
+      "reason_code": reason,
+      "decided_at": int(now),
+    },
+  }
+  return SimpleNamespace(
+    topic=ArbitrationTopic,
+    partition=0,
+    offset=offset,
+    timestamp=int(now) * 1000,
+    value=json.dumps(raw).encode(),
+  )
+
+
 def catalog_kafka_record(now: int, scope: str, *, offset: int = 1):
   """Build a Go-shaped record for one reviewed catalog adapter.
 
@@ -184,7 +210,12 @@ async def go_event_delivered(h, opp: str = "opp_chain", **kw):
   await h.activate()
   await h._ensure()
   record = kafka_record(h.clock.now, opp, **kw)
-  await consumer_for(h).process_record(record)
+  consumer = consumer_for(h)
+  await consumer.process_record(record)
+  # The Go engine publishes arbitration on its separate current-status topic;
+  # include that projection in the end-to-end fixture so the worker never
+  # invents a winner while tests still exercise the real join boundary.
+  await consumer.process_record(arbitration_record(h.clock.now, opp))
   return record
 
 
@@ -342,7 +373,13 @@ async def test_a_second_confirmation_of_the_same_zone_is_not_a_second_order(h, p
   await h._ensure()
   consumer = consumer_for(h)
   await consumer.process_record(kafka_record(h.clock.now, "opp_first", ago=65, offset=1))
+  await consumer.process_record(arbitration_record(h.clock.now, "opp_first", offset=101))
   await consumer.process_record(kafka_record(h.clock.now, "opp_second", ago=60, offset=2))
+  # Go's thesis-group decision is published for every member; same-thesis
+  # confirmations inherit the representative's winner status.
+  await consumer.process_record(arbitration_record(
+    h.clock.now, "opp_second", status="winner", reason="ranked_single_direction", offset=102,
+  ))
   assert len(deserialize_matches(await prod.get(strategy_matches_key("XAU")))) == 2
   await cycle(prod, n=4)
   published = await plans(prod)

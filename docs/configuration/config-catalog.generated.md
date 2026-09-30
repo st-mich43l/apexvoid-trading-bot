@@ -3,9 +3,9 @@
 > Generated from the typed `ApexVoidConfig` Catalog V2 schema. Do not edit manually.
 
 - Catalog version: `2`
-- Contract fingerprint: `bec01459a04ea8c7b6b931d0edf79ee90ab6d15a2f846eefb1a11e60973557d6`
-- Document fingerprint: `b020888e776ffb182fc55e837b09e2cb8df8a8aca448561415653a01f09ed058`
-- Items: `678`
+- Contract fingerprint: `15bf89aec2a266196a4a733a11f2a915bffaf0ada3d7ed5a62eaf2727dca09bf`
+- Document fingerprint: `adb9a117a98caabd3f2d3624ffce0d64cfbc49b9e60dffe1b0a965df689e09d0`
+- Items: `693`
 - Runtime status: canonical-only; `app.core.config.runtime_config` is authoritative
 
 ## actionability
@@ -49,6 +49,8 @@
 | `actionability.overlapping_zones.veto_enabled` | `AUTO_TRADE_OVERLAP_VETO_ENABLED` | `bool` | `boolean` | `configurable` | `true` |
 | `actionability.scanner_gates.actionability_gate_enabled` | `SCANNER_ACTIONABILITY_GATE_ENABLED` | `bool` | `boolean` | `configurable` | `false` |
 | `actionability.scanner_gates.conflict_margin` | `SCANNER_CONFLICT_MARGIN` | `float` | `score` | `configurable` | `1.0` |
+| `actionability.scanner_gates.conflict_margin_quality` | `SCANNER_CONFLICT_MARGIN_QUALITY` | `float` | `score` | `configurable` | `0.15` |
+| `actionability.scanner_gates.use_quality_ranking` | `SCANNER_USE_QUALITY_RANKING` | `bool` | `boolean` | `configurable` | `true` |
 | `actionability.scanner_gates.zone_width_gate_enabled` | `SCANNER_ZONE_WIDTH_GATE_ENABLED` | `bool` | `boolean` | `configurable` | `false` |
 | `actionability.structural_anchor.maximum_source_touches` | `SCANNER_GATE_MAX_SOURCE_TOUCHES` | `int` | `count` | `configurable` | `0` |
 | `actionability.structural_anchor.required` | `SCANNER_GATE_REQUIRE_STRUCTURAL_ANCHOR` | `bool` | `boolean` | `configurable` | `false` |
@@ -164,6 +166,14 @@
 | `analysis.swings.fractal_size` | `SWING_FRACTAL_N` | `int` | `bars` | `configurable` | `2` |
 | `analysis.swings.zigzag.atr_mult` | `ZIGZAG_ATR_MULT` | `float` | `atr` | `configurable` | `1.0` |
 | `analysis.swings.zigzag.pct` | `ZIGZAG_PCT` | `float` | `percent` | `configurable` | `0.0` |
+| `analysis.technical_authority.arbitration_mode` | `ANALYSIS_ARBITRATION_MODE` | `str` | `enum` | `configurable` | `"go"` |
+| `analysis.technical_authority.consumer_enabled` | `—` | `bool` | `boolean` | `configurable` | `true` |
+| `analysis.technical_authority.consumer_group` | `—` | `str` | `identifier` | `configurable` | `"apexvoid-algo-bot-analysis-opportunity-v1"` |
+| `analysis.technical_authority.max_delivery_lag_seconds` | `—` | `int` | `seconds` | `configurable` | `300` |
+| `analysis.technical_authority.max_event_age_seconds` | `—` | `int` | `seconds` | `configurable` | `900` |
+| `analysis.technical_authority.mode` | `—` | `str` | `enum` | `configurable` | `"go"` |
+| `analysis.technical_authority.stop_envelope_mode` | `ANALYSIS_STOP_ENVELOPE_MODE` | `str` | `enum` | `configurable` | `"go"` |
+| `analysis.technical_authority.thesis_correlation_mode` | `ANALYSIS_THESIS_CORRELATION_MODE` | `str` | `enum` | `configurable` | `"go"` |
 | `analysis.techniques.invalidation_tolerance_atr` | `TECHNIQUE_INVALIDATION_TOLERANCE_ATR` | `float` | `atr` | `configurable` | `0.5` |
 | `analysis.techniques.max_break_episodes` | `TECHNIQUE_MAX_BREAK_EPISODES` | `int` | `count` | `configurable` | `2` |
 | `analysis.techniques.retest_max_touches` | `TECHNIQUE_RETEST_MAX_TOUCHES` | `int` | `count` | `configurable` | `30` |
@@ -745,3 +755,13 @@
 | `strategies.zone.enabled` | `AUTO_TRADE_ZONE_ENABLED` | `bool` | `boolean` | `configurable` | `true` |
 | `strategies.zone.flip.enabled` | `AUTO_TRADE_FLIP_ZONE_ENABLED` | `bool` | `boolean` | `configurable` | `true` |
 | `strategies.zone.supply.enabled` | `AUTO_TRADE_SUPPLY_ZONE_ENABLED` | `bool` | `boolean` | `configurable` | `true` |
+
+## transport
+
+| Path | ENV | Type | Unit | Kind | Default |
+|---|---|---|---|---|---|
+| `transport.kafka.algo_bot_client_id` | `—` | `str` | `identifier` | `configurable` | `"apexvoid-algo-bot"` |
+| `transport.kafka.brokers` | `—` | `list[string]` | `url` | `configurable` | `["kafka:9092"]` |
+| `transport.kafka.enabled` | `—` | `bool` | `boolean` | `configurable` | `true` |
+| `transport.kafka.topics.analysis_opportunity` | `—` | `str` | `identifier` | `configurable` | `"analysis.opportunity.v1"` |
+| `transport.kafka.topics.analysis_opportunity_invalidated` | `—` | `str` | `identifier` | `configurable` | `"analysis.opportunity.invalidated.v1"` |

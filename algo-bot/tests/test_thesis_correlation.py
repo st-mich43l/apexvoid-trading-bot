@@ -95,14 +95,12 @@ def test_dedupe_matches_keeps_both_when_go_thesis_ids_differ_in_go_mode(monkeypa
   assert {m.match_id for m in kept} == {"go_a", "go_b"}
 
 
-def test_dedupe_matches_defaults_to_python_legacy_mode(monkeypatch):
-  # No override: must reproduce today's exact behavior even when both
-  # matches carry an identical go_thesis_id.
+def test_dedupe_matches_defaults_to_go_mode(monkeypatch):
+  # The live default follows Go's identity even when both matches carry an
+  # identical go_thesis_id.
   a = _match("go_a", zone_id="zone-9", go_thesis_id="shared", entry_low=100.0, entry_high=100.5)
   b = _match("go_b", zone_id="zone-other", go_thesis_id="shared", entry_low=999.0, entry_high=999.5)
 
   kept, _events = dedupe_matches([a, b], atr=1.0)
 
-  # Different zone_id and wildly different geometry - the legacy heuristic
-  # must not correlate these, confirming Go's answer was ignored.
-  assert {m.match_id for m in kept} == {"go_a", "go_b"}
+  assert {m.match_id for m in kept} == {"go_a"}

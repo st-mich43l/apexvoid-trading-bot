@@ -584,8 +584,17 @@ async def test_arbitration_decision_for_an_unknown_match_is_dropped(h):
   # No creation event delivered - nothing live for this opportunity_id yet
   # (or it was already withdrawn by on_terminal). Must not raise or create
   # a phantom match.
-  assert await h.policy.on_arbitration_decision(_arbitration_event()) == "ignored_unknown_match"
+  assert await h.policy.on_arbitration_decision(_arbitration_event()) == "arbitration_stored_pending"
   assert await redis_state.get_client().get(strategy_matches_key("XAU")) is None
+
+
+@pytest.mark.asyncio
+async def test_pending_arbitration_is_joined_when_lifecycle_event_arrives_after_it(h):
+  await h.activate()
+  assert await h.policy.on_arbitration_decision(_arbitration_event()) == "arbitration_stored_pending"
+  assert await h.deliver(event(int(h.clock.now))) == "match_written"
+  matches = deserialize_matches(await redis_state.get_client().get(strategy_matches_key("XAU")))
+  assert matches[0].arbitration_status == "winner"
 
 
 # ---- end to end: Go event -> match -> REAL V8 plan --------------------------------

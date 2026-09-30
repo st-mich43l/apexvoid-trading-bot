@@ -571,16 +571,18 @@ def test_stop_bounds_for_reaction_room_keeps_band_for_group_stop():
 
 
 def test_stop_envelope_mode_go_reads_the_go_envelope_not_the_legacy_lookup(monkeypatch):
-  # End-to-end through evaluate_execution_policy: with the flag off
-  # (default), a match carrying a go_stop_envelope is ignored and the
-  # legacy per-strategy-family lookup still runs. With the flag on, the
-  # match's own go_stop_envelope wins instead.
+  # Explicitly exercise the compatibility path, then confirm the live Go
+  # mode uses the match's own envelope.
   subject = _policy_subject(
     strategy="Mapped Zone Reaction", targets_pips=(60,),
     go_stop_envelope_floor_pips=55.0, go_stop_envelope_cap_pips=70.0,
     go_stop_envelope_desired_minimum_pips=55.0, go_stop_envelope_source="strategy_default",
   )
 
+  install_runtime_overrides(
+    monkeypatch,
+    {"analysis.technical_authority.stop_envelope_mode": "python_legacy"},
+  )
   legacy = evaluate_execution_policy(subject, spot_price=4100.0, regime="trend", pip_size=0.1)
   assert legacy.measured["planned_stop_pips"] == "40.0"
   assert legacy.measured.get("stop_bounds_source") == "strategy_default"

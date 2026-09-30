@@ -183,6 +183,14 @@ def test_select_go_arbitrated_intent_reads_the_marked_winner():
   assert result.reason_code == "ranked_single_direction"
 
 
+def test_select_go_arbitrated_intent_accepts_go_uncontested_status():
+  result = select_go_arbitrated_intent([
+    _intent("solo", direction="BUY", arbitration_status="uncontested"),
+  ])
+  assert [item.intent_id for item in result.ordered] == ["solo"]
+  assert result.reason_code == "uncontested"
+
+
 def test_select_go_arbitrated_intent_returns_nothing_when_go_has_not_decided_yet():
   # No arbitration_status at all - Go hasn't published a decision (e.g.
   # the consumer hasn't caught up yet). Python must not invent a winner.

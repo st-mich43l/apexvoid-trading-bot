@@ -59,6 +59,22 @@ V1_ID_PREFIXES = (
   "hardcoded.",
 )
 
+# These values are deployment-owned YAML, not process-environment settings.
+# They are still cataloged and validated, but forcing synthetic ENV names for
+# them would create a second configuration channel beside Ansible.
+CONFIG_FILE_ONLY_PATHS = frozenset({
+  "analysis.technical_authority.mode",
+  "analysis.technical_authority.consumer_enabled",
+  "analysis.technical_authority.consumer_group",
+  "analysis.technical_authority.max_event_age_seconds",
+  "analysis.technical_authority.max_delivery_lag_seconds",
+  "transport.kafka.enabled",
+  "transport.kafka.brokers",
+  "transport.kafka.algo_bot_client_id",
+  "transport.kafka.topics.analysis_opportunity",
+  "transport.kafka.topics.analysis_opportunity_invalidated",
+})
+
 
 def _duplicates(values: Iterable[str]) -> list[str]:
   counts = Counter(values)
@@ -74,7 +90,11 @@ def catalog_semantic_errors(
     label = entry.path
     shared_owner = entry.owner == ConfigOwner.SHARED.value
 
-    if entry.configurable and entry.canonical_env is None:
+    if (
+      entry.configurable
+      and entry.canonical_env is None
+      and entry.path not in CONFIG_FILE_ONLY_PATHS
+    ):
       errors.append(f"{label}: configurable field has no canonical ENV")
     if shared_owner != entry.shared_with_ctrader:
       errors.append(

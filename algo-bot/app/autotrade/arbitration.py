@@ -223,7 +223,10 @@ def select_go_arbitrated_intent(intents: list[ExecutionIntent]) -> ArbitrationRe
   if not intents:
     return ArbitrationResult((), (), "no_intent")
   winners = sorted(
-    (item for item in intents if item.arbitration_status == "winner"),
+    (
+      item for item in intents
+      if item.arbitration_status in {"winner", "uncontested"}
+    ),
     key=lambda item: item.intent_id,
   )
   if not winners:
@@ -234,5 +237,9 @@ def select_go_arbitrated_intent(intents: list[ExecutionIntent]) -> ArbitrationRe
   # deterministic rather than raising, matching _rank's own tie-break.
   winner = winners[0]
   suppressed = tuple(item for item in intents if item.intent_id != winner.intent_id)
-  reason = winner.arbitration_reason_code or "ranked_single_direction"
+  reason = winner.arbitration_reason_code or (
+    "uncontested"
+    if winner.arbitration_status == "uncontested"
+    else "ranked_single_direction"
+  )
   return ArbitrationResult((winner,), suppressed, reason)
