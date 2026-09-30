@@ -50,6 +50,8 @@
       "actionability.overlapping_zones.veto_enabled",
       "actionability.scanner_gates.actionability_gate_enabled",
       "actionability.scanner_gates.conflict_margin",
+      "actionability.scanner_gates.conflict_margin_quality",
+      "actionability.scanner_gates.use_quality_ranking",
       "actionability.scanner_gates.zone_width_gate_enabled",
       "actionability.structural_anchor.maximum_source_touches",
       "actionability.structural_anchor.required",
@@ -120,6 +122,14 @@
       "analysis.swings.fractal_size",
       "analysis.swings.zigzag.atr_mult",
       "analysis.swings.zigzag.pct",
+      "analysis.technical_authority.arbitration_mode",
+      "analysis.technical_authority.consumer_enabled",
+      "analysis.technical_authority.consumer_group",
+      "analysis.technical_authority.max_delivery_lag_seconds",
+      "analysis.technical_authority.max_event_age_seconds",
+      "analysis.technical_authority.mode",
+      "analysis.technical_authority.stop_envelope_mode",
+      "analysis.technical_authority.thesis_correlation_mode",
       "analysis.techniques.invalidation_tolerance_atr",
       "analysis.techniques.max_break_episodes",
       "analysis.techniques.retest_max_touches",
@@ -574,7 +584,12 @@
       "strategies.zone.demand.enabled",
       "strategies.zone.enabled",
       "strategies.zone.flip.enabled",
-      "strategies.zone.supply.enabled"
+      "strategies.zone.supply.enabled",
+      "transport.kafka.algo_bot_client_id",
+      "transport.kafka.brokers",
+      "transport.kafka.enabled",
+      "transport.kafka.topics.analysis_opportunity",
+      "transport.kafka.topics.analysis_opportunity_invalidated"
     ],
     "secrets_forbidden": true,
     "top_level_keys": [
@@ -591,7 +606,8 @@
       "market_data",
       "risk",
       "runtime",
-      "strategies"
+      "strategies",
+      "transport"
     ]
   },
   "contract_version": 1,
@@ -608,7 +624,7 @@
     "XAU_ZONE_PREFERRED_MAX_WIDTH_PRICE": "instruments.XAU.analysis.zones.preferred_maximum_width_price",
     "XAU_ZONE_PREFERRED_MIN_WIDTH_PRICE": "instruments.XAU.analysis.zones.preferred_minimum_width_price"
   },
-  "fingerprint": "bec01459a04ea8c7b6b931d0edf79ee90ab6d15a2f846eefb1a11e60973557d6",
+  "fingerprint": "15bf89aec2a266196a4a733a11f2a915bffaf0ada3d7ed5a62eaf2727dca09bf",
   "instrument_schema": {
     "active_projection_symbol": "XAU",
     "optional": [
