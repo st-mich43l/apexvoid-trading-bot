@@ -52,7 +52,6 @@ from app.autotrade.trade_plan_stream import (
   read_plan_state,
   read_trade_plan,
 )
-from app.autotrade.trend import RegimeInfo
 from app.persistence import redis_state
 
 
@@ -648,9 +647,6 @@ async def test_inside_authoritative_reaction_admits_and_publishes(
     intent,
     match,
     spot=spot,
-    regime=RegimeInfo(
-      "trend", "down", 3, 1.0, True, None, ("test",),
-    ),
     htf_zones=[],
     htf_levels=[],
   )
@@ -706,7 +702,6 @@ async def test_scalp_match_without_eligibility_is_admission_rejected(monkeypatch
 
   failure = await worker._admit_strategy_intent_for_cycle(
     client, intent, match, spot=spot,
-    regime=RegimeInfo("trend", "down", 3, 1.0, True, None, ("test",)),
     htf_zones=[], htf_levels=[],
   )
   assert failure is not None
@@ -733,7 +728,6 @@ async def test_scalp_match_with_eligibility_is_admitted(monkeypatch):
 
   failure = await worker._admit_strategy_intent_for_cycle(
     client, intent, match, spot=spot,
-    regime=RegimeInfo("trend", "down", 3, 1.0, True, None, ("test",)),
     htf_zones=[], htf_levels=[],
   )
   assert failure is None

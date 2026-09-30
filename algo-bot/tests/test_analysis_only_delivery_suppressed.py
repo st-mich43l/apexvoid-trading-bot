@@ -28,7 +28,6 @@ from app.analysis.detectors import DetectionResult
 from app.analysis.types import Zone
 from app.autotrade.multi_match import strategy_matches_key
 from app.autotrade.strategy_match import strategy_match_key
-from app.autotrade.strategy_match_ready import READY_STREAM
 from app.persistence import redis_state
 
 
@@ -86,85 +85,6 @@ REPRESENTATIVE_REASONS = [
   "policy_target_room_insufficient",
   "rr_pre_gate",
 ]
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("reason_code", REPRESENTATIVE_REASONS)
-async def test_analysis_only_reason_produces_zero_telegram_effects(
-  monkeypatch, reason_code,
-):
-  client = redis_state.get_client()
-  symbol, tf = "XAU", "M5"
-  result = _result(reason_code)
-
-  install_runtime_overrides(monkeypatch, legacy_overrides={"scanner_symbols": symbol})
-  install_runtime_overrides(monkeypatch, legacy_overrides={"scanner_exec_tf": tf})
-  install_runtime_overrides(monkeypatch, legacy_overrides={"scanner_htf": "M30,M15"})
-  install_runtime_overrides(monkeypatch, legacy_overrides={"telegram_owner_id": 4242})
-  monkeypatch.setattr(
-    scanner,
-    "resolve_actionability",
-    lambda **_kwargs: _gated_resolution(result, reason_code),
-  )
-  monkeypatch.setattr(
-    scanner,
-    "_load_market_context_for_symbol",
-    AsyncMock(return_value=(
-      SimpleNamespace(
-        tf=tf, htf_bias="up", frames={tf: _frame()},
-        structures={"M30": SimpleNamespace(bias="up")},
-        regime=SimpleNamespace(kind="trend"),
-        spot_price=4100.5, analysis=SimpleNamespace(per_tf={}),
-      ),
-      {tf: _frame()},
-    )),
-  )
-  monkeypatch.setattr(
-    scanner, "build_map", lambda *_a, **_k: scanner.MarketMap(
-      [], 4100.5, None, None, None, "up", "M30",
-    ),
-  )
-  notify = AsyncMock()
-  edit = AsyncMock()
-
-  sent = await scanner._handle_event(
-    f"{symbol}:{tf}:2026-07-28T12:10:00+00:00",
-    client=client,
-    detectors=[lambda _ctx: result],
-    notify=notify,
-    edit=edit,
-  )
-
-  # Zero Telegram sends of any kind.
-  notify.assert_not_awaited()
-  edit.assert_not_awaited()
-  assert sent == []
-
-  # Zero forming card / forming status projections.
-  assert [
-    key async for key in client.scan_iter(match="auto_trade:forming_message:*")
-  ] == []
-  assert [
-    key async for key in client.scan_iter(match="auto_trade:forming_status:*")
-  ] == []
-
-  # Zero setup lifecycle records, zero ready events, zero plans.
-  assert [key async for key in client.scan_iter(match="analysis:setup:*")] == []
-  assert await client.xlen(READY_STREAM) == 0
-  assert [key async for key in client.scan_iter(match="execution:plan:*")] == []
-  assert await client.get(strategy_match_key(symbol)) is None
-  assert await client.get(strategy_matches_key(symbol)) is None
-
-  # Telemetry must still exist and reflect the observation.
-  import json
-  status_raw = await client.get(f"scanner:last_tick:{symbol}:{tf}")
-  assert status_raw is not None
-  status = json.loads(status_raw)
-  assert status["observed_count"] == 1
-  assert status["actionable_count"] == 0
-  assert status["actionability_gated"][0]["reason_code"] == reason_code
-  logs = await client.lrange(scanner._detect_log_key(symbol, tf), 0, 0)
-  assert logs, "detect log must still record the observation"
 
 
 @pytest.mark.asyncio

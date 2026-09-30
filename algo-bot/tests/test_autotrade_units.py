@@ -1,12 +1,11 @@
 import pytest
 
-from app.autotrade import delivery, gate, trend, units
+from app.autotrade import delivery, gate, units
 from app.core.symbols import canonical_symbol, pip_for
 
 
 def test_auto_trade_modules_share_one_pip_definition():
   assert gate.units is units
-  assert trend.units is units
   assert delivery.units is units
 
 
