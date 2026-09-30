@@ -60,7 +60,6 @@ analysis:
     consumer_group: apexvoid-algo-bot-analysis-opportunity-v1
     max_event_age_seconds: 900
     max_delivery_lag_seconds: 300
-    go_origin_risk_leg_enabled: false
   trendlines:
     # V2 keeps A/B anchors immutable, requires a later causal validation, and
     # turns this band into an interaction watch rather than an automatic fill.

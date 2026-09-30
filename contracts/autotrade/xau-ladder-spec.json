@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "description": "The single reviewed XAU shallow/deep entry-ladder and risk-leg specification, with hand-computed cases. Held identical by Manual Algo (AutoTradeEngine.cs), the Auto Algo executor's risk leg (TradePlanRuntime.cs) and the Python calculator (xau_ladder.py). It describes the Manual Algo ladder; the Auto Algo entry ladder (execution_route.py) is a DIFFERENT, owner-defined rule and is pinned separately, not unified here.",
+  "description": "The single reviewed XAU shallow/deep entry-ladder and risk-leg specification, with hand-computed cases. Held identical by Manual Algo (AutoTradeEngine.cs), the Auto Algo XAU entry policy (execution_route.py), the Auto Algo executor's risk leg (TradePlanRuntime.cs) and the Python calculator (xau_ladder.py). The RISK leg belongs to execution policy and applies to XAU multi-leg plans regardless of technical-source provenance; risk_leg:disabled remains an explicit opt-out.",
   "instrument": {
     "symbol": "XAU",
     "pip_size": "0.1",
@@ -25,7 +25,7 @@
     "xau_only": true
   },
   "rounding": "prices are rounded to the instrument's digits, midpoints away from zero (decimal arithmetic, never binary floats)",
-  "go_origin_risk_leg_disabled_tag": "risk_leg:disabled",
+  "risk_leg_disabled_tag": "risk_leg:disabled",
   "entry_price_cases": [
     {
       "name": "sell_typed_range",

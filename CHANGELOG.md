@@ -13,6 +13,11 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Auto Algo now applies the execution policy to Go-origin opportunities: Go's
+  single technical target no longer collapses XAU's configured 1R/2R/3R/4R
+  ladder, and non-scalp XAU entry legs use Manual Algo's rounded shallow/deep
+  80/20 geometry plus the Manual Algo-style equity-tiered RISK leg. FX entry
+  precision, routing and risk-leg exclusion remain unchanged.
 - analysis-engine container no longer crash-loops on start: the privilege-dropping
   entrypoint added with persistent logging had no default command, so `su-exec`
   ran with nothing to execute. The image now defaults to `/app/analysis-engine`.
