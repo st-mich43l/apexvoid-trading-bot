@@ -9,7 +9,6 @@ import pytest
 
 from app.analysis.entry_location import EntryLocationDecision
 from app.analysis.m1_trigger import M1TriggerResult
-from app.autotrade.entry_activation import evaluate_entry_activation
 from app.autotrade.killzone import (
   classify_killzone,
   confirmation_is_sweep_body,
@@ -182,46 +181,6 @@ def _location_ok() -> EntryLocationDecision:
     would_block=False,
     measured={},
   )
-
-
-def test_activation_blocks_pin_bar_under_technique():
-  now = 1_700_000_000
-  trigger = M1TriggerResult(
-    "pin_bar", "BUY", 4080.0, now - 60, "pin only",
-  )
-  decision = evaluate_entry_activation(
-    strategy="Key Level",
-    direction="BUY",
-    zone_entered_at=now - 120,
-    quote_inside=True,
-    decisive_break=False,
-    trigger=trigger,
-    location_decision=_location_ok(),
-    now=now,
-    cfg=_technique_cfg(),
-  )
-  assert decision.allowed is False
-  assert decision.reason_code == "confirmation_requires_sweep_body"
-
-
-def test_activation_allows_sweep_reclaim_under_technique():
-  now = 1_700_000_000
-  trigger = M1TriggerResult(
-    "sweep_reclaim", "BUY", 4080.0, now - 60, "sweep",
-  )
-  decision = evaluate_entry_activation(
-    strategy="Key Level",
-    direction="BUY",
-    zone_entered_at=now - 120,
-    quote_inside=True,
-    decisive_break=False,
-    trigger=trigger,
-    location_decision=_location_ok(),
-    now=now,
-    cfg=_technique_cfg(),
-  )
-  assert decision.allowed is True
-  assert decision.reason_code == "entry_activation_allowed"
 
 
 def test_group_stop_hard_rejects_furthest_leg_over_max():

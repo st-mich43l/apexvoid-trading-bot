@@ -120,17 +120,16 @@ async def test_forced_dispatcher_close_balances_abandoned_queue(monkeypatch):
 
 
 def _patch_handlers(monkeypatch, *, zone=None, worker):
-  """Install worker doubles plus scanner/scalping sentinels.
+  """Install worker doubles plus a scanner sentinel.
 
-  The scanner and M1 scalping discovery are no longer dispatched (Go is the
-  sole automatic technical-opportunity producer); the sentinels prove it.
+  The Python scanner is no longer dispatched (Go is the sole automatic
+  technical-opportunity producer); the sentinel proves it. The M1 scalping
+  runtime no longer exists, so there is nothing left to sentinel there.
   """
   scanner = AsyncMock()
-  scalp_handler = AsyncMock()
   monkeypatch.setattr("app.analysis.scanner._handle_event", scanner, raising=False)
-  monkeypatch.setattr("app.scalping.runtime.handle_closed_bar", scalp_handler, raising=False)
   monkeypatch.setattr("app.autotrade.worker._handle_event", worker, raising=False)
-  return scanner, scalp_handler
+  return scanner
 
 
 @pytest.mark.asyncio
@@ -139,7 +138,7 @@ async def test_dispatch_runs_worker_only_and_never_python_detection(monkeypatch)
   _enable_handlers(monkeypatch)
   worker = AsyncMock()
   zone = AsyncMock()
-  scanner, scalp_handler = _patch_handlers(monkeypatch, zone=zone, worker=worker)
+  scanner = _patch_handlers(monkeypatch, zone=zone, worker=worker)
 
   client = SimpleNamespace()
   source = SimpleNamespace()
@@ -153,7 +152,6 @@ async def test_dispatch_runs_worker_only_and_never_python_detection(monkeypatch)
   worker.assert_awaited_once()
   zone.assert_not_awaited()
   scanner.assert_not_awaited()
-  scalp_handler.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -177,7 +175,7 @@ async def test_m5_bar_never_runs_zone_watch(monkeypatch):
   _enable_handlers(monkeypatch)
   worker = AsyncMock()
   zone = AsyncMock()
-  scanner, scalp_handler = _patch_handlers(monkeypatch, zone=zone, worker=worker)
+  scanner = _patch_handlers(monkeypatch, zone=zone, worker=worker)
 
   ran = await dispatcher.dispatch_closed_bar(
     "XAU:M5:1700000000",
@@ -188,7 +186,6 @@ async def test_m5_bar_never_runs_zone_watch(monkeypatch):
   assert ran == ["worker"]
   zone.assert_not_awaited()
   scanner.assert_not_awaited()
-  scalp_handler.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -255,7 +252,7 @@ async def test_dispatch_runs_nothing_with_auto_trade_disabled(monkeypatch):
   )
   worker = AsyncMock()
   zone = AsyncMock()
-  scanner, scalp_handler = _patch_handlers(monkeypatch, zone=zone, worker=worker)
+  scanner = _patch_handlers(monkeypatch, zone=zone, worker=worker)
 
   ran = await dispatcher.dispatch_closed_bar(
     "XAU:M1:1700000000",
@@ -264,7 +261,7 @@ async def test_dispatch_runs_nothing_with_auto_trade_disabled(monkeypatch):
   )
 
   assert ran == []
-  for handler in (worker, zone, scanner, scalp_handler):
+  for handler in (worker, zone, scanner):
     handler.assert_not_awaited()
 
 

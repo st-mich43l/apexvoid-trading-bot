@@ -5,9 +5,6 @@ import pytest
 
 from app.analysis.types import Leg, Level, Zone
 from app.scalping.models import CONTEXT_VERSION, ScalpContextSnapshot
-from app.scalping.strategies import _stop_buffer, discover_impulse_pullback
-from app.scalping.unified_context import _m1_atr
-from app.scalping.microstructure import detect_impulse_pullback
 
 
 pytestmark = pytest.mark.no_database
@@ -95,16 +92,6 @@ def _event():
   }
 
 
-def test_m1_atr_uses_true_range_gap_component():
-  rows = [
-    {"high": 100.0, "low": 99.0, "close": 99.5}
-    for _ in range(15)
-  ]
-  rows[-1] = {"high": 110.0, "low": 109.0, "close": 109.5}
-  frame = pd.DataFrame(rows)
-  assert _m1_atr(frame, pip_size=0.1) > 1.0
-
-
 def test_scalp_structure_uses_canonical_m5_structure_without_trendlines(monkeypatch):
   import app.analysis.engine as engine
 
@@ -129,129 +116,3 @@ def test_scalp_structure_uses_canonical_m5_structure_without_trendlines(monkeypa
   assert structure.key_levels == (level,)
   assert structure.zones == (zone,)
   assert calls == ["atr", "swings", "levels", "legs", "zones", "mitigation"]
-
-
-def test_stop_buffer_has_spread_floor():
-  context = SimpleNamespace(m1_atr=0.1)
-  cfg = _cfg()
-  assert _stop_buffer(context, cfg, 0.1) >= 0.75
-  assert _stop_buffer(SimpleNamespace(m1_atr=3.0), cfg, 0.1) == pytest.approx(3.6)
-
-
-def test_trigger_bar_extreme_is_unconfirmed():
-  rows = []
-  for i in range(10):
-    rows.append({
-      "open": 100.0 if i == 0 else 106.0,
-      "high": 100.5 if i == 0 else 110.0 if i == 5 else 108.0,
-      "low": 100.0 if i == 0 else 106.0,
-      "close": 100.5 if i == 0 else 106.0,
-    })
-  rows[-1] = {"open": 105.0, "high": 108.0, "low": 104.0, "close": 106.0}
-  result = detect_impulse_pullback(
-    pd.DataFrame(rows), direction="BUY", pullback_extreme_confirm_bars=2,
-  )
-  assert result is not None
-  assert result["reason"] == "pullback_extreme_unconfirmed"
-
-
-def test_impulse_pullback_anchors_to_demand_zone(monkeypatch):
-  monkeypatch.setattr(
-    "app.scalping.strategies._detect_impulse",
-    lambda *_args, **_kwargs: _event(),
-  )
-  zone = {
-    "bottom": 99.0,
-    "top": 100.0,
-    "side": "demand",
-    "touches": 4,
-    "mitigated": False,
-    "score": 8.0,
-  }
-  found = discover_impulse_pullback(
-    _context(zones=(zone,), closes=(101.0, 102.0)),
-    None,
-    pd.DataFrame(),
-    _cfg(),
-    pip_size=0.1,
-    now=1_780_000_000,
-  )
-  assert len(found) == 1
-  opportunity = found[0]
-  assert opportunity.key_level == 99.0
-  assert opportunity.key_level != opportunity.trigger_price
-  assert (opportunity.zone_low, opportunity.zone_high) == (99.0, 100.0)
-  assert opportunity.key_level_role == "support"
-  assert opportunity.measured["level_kind"] == "zone"
-
-
-def test_impulse_pullback_without_reference_is_rejected(monkeypatch):
-  monkeypatch.setattr(
-    "app.scalping.strategies._detect_impulse",
-    lambda *_args, **_kwargs: _event(),
-  )
-  reasons = []
-  found = discover_impulse_pullback(
-    _context(closes=(101.0, 102.0)),
-    None,
-    pd.DataFrame(),
-    _cfg(),
-    pip_size=0.1,
-    now=1_780_000_000,
-    idle_reasons=reasons,
-  )
-  assert found == []
-  assert "impulse_pullback:impulse_no_level_reference" in reasons
-
-
-def test_weak_impulse_and_impulsive_pullback_are_rejected(monkeypatch):
-  weak = _event()
-  weak["impulse_len"] = 3.0
-  reasons = []
-  monkeypatch.setattr(
-    "app.scalping.strategies._detect_impulse",
-    lambda *_args, **_kwargs: weak,
-  )
-  assert discover_impulse_pullback(
-    _context(closes=(101.0, 102.0)), None, pd.DataFrame(), _cfg(),
-    pip_size=0.1, now=1_780_000_000, idle_reasons=reasons,
-  ) == []
-  assert "impulse_pullback:impulse_no_displacement" in reasons
-
-  corrective = _event()
-  corrective["mean_pullback_body"] = corrective["mean_impulse_body"]
-  reasons = []
-  monkeypatch.setattr(
-    "app.scalping.strategies._detect_impulse",
-    lambda *_args, **_kwargs: corrective,
-  )
-  assert discover_impulse_pullback(
-    _context(closes=(101.0, 102.0)), None, pd.DataFrame(), _cfg(),
-    pip_size=0.1, now=1_780_000_000, idle_reasons=reasons,
-  ) == []
-  assert "impulse_pullback:pullback_not_corrective" in reasons
-
-
-def test_broken_demand_and_wide_zone_are_rejected(monkeypatch):
-  monkeypatch.setattr(
-    "app.scalping.strategies._detect_impulse",
-    lambda *_args, **_kwargs: _event(),
-  )
-  broken = {
-    "bottom": 99.0, "top": 100.0, "side": "demand",
-    "touches": 4, "mitigated": False, "score": 8.0,
-  }
-  reasons = []
-  assert discover_impulse_pullback(
-    _context(zones=(broken,), closes=(98.0, 97.0)), None, pd.DataFrame(),
-    _cfg(), pip_size=0.1, now=1_780_000_000, idle_reasons=reasons,
-  ) == []
-  assert "impulse_pullback:impulse_level_role_mismatch" in reasons
-
-  wide = {**broken, "top": 102.0}
-  reasons = []
-  assert discover_impulse_pullback(
-    _context(zones=(wide,), closes=(103.0, 104.0)), None, pd.DataFrame(),
-    _cfg(), pip_size=0.1, now=1_780_000_000, idle_reasons=reasons,
-  ) == []
-  assert "impulse_pullback:impulse_zone_too_wide" in reasons

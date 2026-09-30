@@ -17,8 +17,6 @@ tests/test_telegram_actor.py
 tests/test_bar_event_dispatcher.py
 tests/test_worker_idle_m1.py
 tests/test_ohlc_bar_cache.py
-tests/test_technique_zonewatch_decisive_break.py
-tests/test_spot_zonewatch_ohlc_cache.py
 tests/test_active_exposure.py
 tests/test_zone_watch.py
 tests/test_zone_watch_published_locked.py
@@ -40,7 +38,6 @@ tests/test_autotrade_units.py
 tests/test_fx_one_to_two.py
 tests/test_instrument_scale_parity.py
 tests/test_import_all_modules.py
-tests/test_entry_activation.py
 tests/test_entry_location.py
 tests/test_technique_geometry.py
 tests/test_technique_zone_origins.py
@@ -52,7 +49,6 @@ tests/test_zone_execution_cutover.py
 tests/test_analysis_client_models.py
 tests/test_analysis_consumer.py
 tests/test_analysis_opportunity_repository.py
-tests/test_analysis_shadow.py
 tests/test_s14_deployment_persistence.py
 tests/test_s14c_policy_replay.py
 tests/test_technical_authority_config.py
@@ -65,8 +61,6 @@ tests/test_go_zone_book.py
 tests/test_s14b_freshness.py
 tests/test_s14b_go_lifecycle.py
 tests/test_s14b_plan_cancel_contract.py
-tests/test_s14a_shadow_overlay.py
-tests/test_s14a_shadow_dry_run.py
 tests/test_s14d_go_full_chain.py
 tests/test_s14d_executor_events_delivery.py
 tests/test_s14e_ladder_spec.py

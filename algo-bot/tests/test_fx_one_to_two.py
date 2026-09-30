@@ -17,7 +17,6 @@ from app.configuration.models.instruments import (
   InstrumentTargetingConfig,
 )
 from app.core.instrument_geometry import fixed_reward_risk
-from app.scalping.strategies import _select_target
 from tests.test_config_effective_instrument_context import _load_production_example
 
 
@@ -338,51 +337,6 @@ def test_fx_targeting_is_explicit_configuration_not_symbol_detection():
   # see test_xau_technique_uses_the_owner_requested_r_ladder below.
   assert fixed_reward_risk("XAU", cfg) == 4.0
   assert fixed_reward_risk("XAUUSD", cfg) == 4.0
-
-
-def test_scalp_fixed_rr_prefers_two_r_then_falls_back_to_one_r():
-  cfg = _load_production_example().config
-  # Room fits 1R (15) but not preferred 2R (30): FX takes exactly 1R.
-  gold = _select_target(
-    direction="BUY",
-    worst_fill=1.16,
-    room_pips=18,
-    stop_pips=15,
-    min_net=10,
-    pip_size=0.0001,
-    symbol="XAU",
-    cfg=cfg,
-  )
-  fx = _select_target(
-    direction="BUY",
-    worst_fill=1.16,
-    room_pips=18,
-    stop_pips=15,
-    min_net=10,
-    pip_size=0.0001,
-    symbol="EURUSD",
-    cfg=cfg,
-  )
-  assert gold is not None
-  assert gold[1] == 15.0
-  assert fx is not None
-  assert fx[1] == 15.0
-
-
-def test_scalp_fixed_rr_takes_two_r_when_room_fits():
-  cfg = _load_production_example().config
-  target = _select_target(
-    direction="SELL",
-    worst_fill=216.0,
-    room_pips=40,
-    stop_pips=15,
-    min_net=10,
-    pip_size=0.01,
-    symbol="GBPJPY",
-    cfg=cfg,
-  )
-  assert target is not None
-  assert target[1] == 30.0
 
 
 def test_fx_reaction_stop_envelopes_diverge_while_gold_uses_structure_band():

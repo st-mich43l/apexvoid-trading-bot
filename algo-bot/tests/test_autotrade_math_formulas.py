@@ -20,7 +20,6 @@ from app.analysis.momentum import momentum_state
 from app.analysis.types import Swing
 from app.autotrade.setup_card import _format_math_line, format_plan_published_root_card
 from app.autotrade.strategy_match import STRATEGY_MATCH_VERSION, StrategyMatch
-from app.scalping.microstructure import detect_impulse_pullback
 
 
 def _ohlc(closes: list[float], atr: float = 1.0) -> tuple[pd.DataFrame, pd.Series]:
@@ -103,16 +102,6 @@ def test_confluence_fib_touch_weight():
     DetectorSettings(fibonacci_confluence_weight=2.5),
   )
   assert boosted >= base
-
-
-def test_scalp_impulse_preferred_defaults_are_fib_band():
-  import inspect
-
-  sig = inspect.signature(detect_impulse_pullback)
-  assert sig.parameters["preferred_low"].default == 0.382
-  assert sig.parameters["preferred_high"].default == 0.618
-  assert sig.parameters["min_retracement"].default == 0.25
-  assert sig.parameters["max_retracement"].default == 0.75
 
 
 def test_strategy_match_math_round_trip_and_card_line():
