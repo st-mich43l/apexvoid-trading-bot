@@ -10,6 +10,7 @@ from typing import Any, Callable
 
 from app.analysis_client.provenance import GO_ORIGIN_TAG
 from app.autotrade.execution_route import SCALP_MICRO_CLIPS, resolve_execution_route_plan
+from app.autotrade.xau_ladder import XAU_DIGITS, round_price as round_xau_price
 from app.autotrade.protective_stop import (
   ProtectiveStopError,
   approximate_structural_stop_price,
@@ -57,6 +58,18 @@ def _instrument_digits(symbol: str, cfg: Any) -> int:
   if units is not None:
     return int(units.price_digits)
   return int(context.contract.instrument.price_digits or 2)
+
+
+def _planned_entry_price(symbol: str, value: float) -> float:
+  """Canonicalize only XAU entry prices with the Manual Algo decimal rule.
+
+  FX entry values intentionally keep the existing route precision. XAU's
+  shallow/deep broker prices must use the same Decimal/AwayFromZero rounding
+  as Manual Algo, so a Telegram plan and the submitted ladder cannot drift.
+  """
+  if str(symbol).upper() in {"XAU", "XAUUSD"}:
+    return round_xau_price(float(value), digits=XAU_DIGITS)
+  return round(float(value), 6)
 
 
 def _instrument_fixed_targeting(
@@ -697,15 +710,18 @@ def evaluate_execution_policy(
     spot_price if executable_quote is None else executable_quote
   )
   digits = _instrument_digits("", instrument_cfg)
+  manual_xau_ladder = (
+    symbol.upper() in {"XAU", "XAUUSD"} and not is_m1_scalp_strategy(
+      str(getattr(match, "strategy", "") or "")
+    )
+  )
   zone_scaling = execution.zone_scaling
   execution_entry = execution.entry
   reaction_execution = execution.reaction
-  # Pick the entry within the Go-owned zone for every instrument so
-  # detected zone/room so entry-to-stop risk lands near stop_min_pips
-  # (the same instrument-specific floor the stop envelope enforces), instead of a
-  # pure zone-edge pick with zero risk awareness. Uses the real
-  # structural stop - independent of which entry within the zone ends up
-  # chosen - computed here, before route resolution picks an entry.
+  # Pick a risk-aware entry for instruments that use the generic route. XAU's
+  # non-scalp ladder deliberately replaces that anchor with Manual Algo's
+  # shallow/deep geometry below; its structural stop is still used for the
+  # protective-stop contract.
   structural_stop_for_entry: float | None = None
   risk_targeted_entry_pips: float | None = None
   if bool(reaction_execution.risk_targeted_entry_enabled):
@@ -777,6 +793,7 @@ def evaluate_execution_policy(
       "entry_clips",
       SCALP_MICRO_CLIPS,
     )),
+    manual_xau_ladder=manual_xau_ladder,
   )
   if not route_plan.valid:
     return ExecutionPolicyEvaluation(
@@ -792,7 +809,7 @@ def evaluate_execution_policy(
       policy,
     )
   planned_route = route_plan.route
-  planned_entry = float(route_plan.planned_entry_price)
+  planned_entry = _planned_entry_price(symbol, route_plan.planned_entry_price)
   ladder_room_price = max(targets) * pip if targets else 0.0
   absolute_room_price = 0.0
   if absolute_target is not None and math.isfinite(float(absolute_target)):
@@ -1082,14 +1099,18 @@ def evaluate_execution_policy(
   planned_leg_entry_prices: list[float]
   if route_plan.planned_leg_entry_prices:
     planned_leg_entry_prices = [
-      round(float(price), 6) for price in route_plan.planned_leg_entry_prices
+      _planned_entry_price(symbol, float(price))
+      for price in route_plan.planned_leg_entry_prices
     ]
   elif planned_route == "single_limit":
-    planned_leg_entry_prices = [round(planned_entry, 6)]
+    planned_leg_entry_prices = [_planned_entry_price(symbol, planned_entry)]
   elif planned_route == "zone_split":
     proximal = high if direction == "BUY" else low
-    midpoint = round((low + high) / 2.0, 6)
-    planned_leg_entry_prices = [round(proximal, 6), midpoint]
+    midpoint = _planned_entry_price(symbol, (low + high) / 2.0)
+    planned_leg_entry_prices = [
+      _planned_entry_price(symbol, proximal),
+      midpoint,
+    ]
   else:
     planned_leg_entry_prices = []
   measured = {
@@ -1123,7 +1144,7 @@ def evaluate_execution_policy(
       getattr(match, "target_reference_price", "broker_fill")
     ),
     "absolute_target_price": absolute_target,
-    "planned_entry_price": round(planned_entry, 6),
+    "planned_entry_price": planned_entry,
     "planned_stop_error": stop_plan_error,
     "entry_plan_version": ENTRY_PLAN_VERSION,
     "regime": normalized_regime or "unknown",
@@ -1180,7 +1201,7 @@ def evaluate_execution_policy(
     instrument_cfg,
     strategy=str(getattr(match, "strategy", "") or ""),
   )
-  if fixed_targeting is not None and not go_origin:
+  if fixed_targeting is not None:
     preferred_reward_risk = float(fixed_targeting.reward_risk)
     entry_value = Decimal(str(planned_entry))
     stop_value = stop_plan.final_stop_price
@@ -1189,12 +1210,16 @@ def evaluate_execution_policy(
     configured_target_r_multiples = tuple(
       float(value) for value in fixed_targeting.target_r_multiples
     )
+    # A Go target is technical provenance, not the execution policy. In
+    # particular, a one-target Go event must not collapse XAU's configured
+    # 1R/2R/3R/4R ladder. A real opposing-barrier room value is still an
+    # explicit cap when the worker supplies one.
     available_room = (
       float(available_target_room_pips)
       if available_target_room_pips is not None
       and math.isfinite(float(available_target_room_pips))
       else remaining_pips
-      if target_model in {"absolute", "hybrid"}
+      if target_model in {"absolute", "hybrid"} and not go_origin
       else None
     )
 

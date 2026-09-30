@@ -66,9 +66,7 @@ class GoShadowPolicy:
     clock: Callable[[], float] = time.time,
     multiple_matches_enabled: Callable[[], bool] | None = None,
     freshness_limits: Callable[[], FreshnessLimits] | None = None,
-    risk_leg_enabled: Callable[[], bool] | None = None,
   ):
-    self._risk_leg = risk_leg_enabled
     self._repository = repository
     self._real_client_factory = real_client_factory
     self._clock = clock
@@ -87,12 +85,6 @@ class GoShadowPolicy:
       return self._multiple()
     from app.core.config import runtime_config
     return bool(runtime_config.strategies.matching.multiple_matches_enabled)
-
-  def _risk_leg_enabled(self) -> bool:
-    if self._risk_leg is not None:
-      return self._risk_leg()
-    from app.core.config import runtime_config
-    return bool(runtime_config.analysis.technical_authority.go_origin_risk_leg_enabled)
 
   def _freshness_limits(self) -> FreshnessLimits:
     if self._limits is not None:
@@ -127,7 +119,7 @@ class GoShadowPolicy:
     if not verdict.ok:
       return await self._record(event, ShadowDecision("not_adapted", verdict.code), base)
     try:
-      match = build_strategy_match(event, profile=profile, now=now, risk_leg_enabled=self._risk_leg_enabled())
+      match = build_strategy_match(event, profile=profile, now=now)
     except AdapterRejection as exc:
       return await self._record(event, ShadowDecision("rejected", exc.code), {**base, "message": exc.message})
     base["match_id"] = match.match_id
