@@ -211,6 +211,15 @@ class StrategyMatch:
   # on_arbitration_decision for how this is kept current.
   arbitration_status: str | None = None
   arbitration_reason_code: str | None = None
+  # Go's cross-strategy thesis correlation (Phase 3) — additive/optional,
+  # distinct from the existing ``thesis_id`` field above (Python's own
+  # ATR-bucket heuristic; still the fallback until
+  # analysis.technical_authority.thesis_correlation_mode is flipped to
+  # "go" — see that config field's own doc comment). ``go_thesis_id`` is
+  # the representative match_id of whichever group member ranks best;
+  # every member of the group carries the same value.
+  go_thesis_id: str | None = None
+  go_merged_with: tuple[str, ...] = ()
 
   @property
   def is_range_edge(self) -> bool:
@@ -715,6 +724,13 @@ class StrategyMatch:
         arbitration_reason_code=(
           None if payload.get("arbitration_reason_code") is None
           else str(payload["arbitration_reason_code"])
+        ),
+        go_thesis_id=(
+          None if payload.get("go_thesis_id") is None
+          else str(payload["go_thesis_id"])
+        ),
+        go_merged_with=tuple(
+          str(item) for item in payload.get("go_merged_with", [])
         ),
       )
     except (KeyError, TypeError, ValueError, json.JSONDecodeError):

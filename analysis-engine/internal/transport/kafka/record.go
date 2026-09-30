@@ -110,5 +110,11 @@ type ArbitrationDecisionPayload struct {
 	Status          string   `json:"status"`
 	ReasonCode      string   `json:"reason_code"`
 	ConflictingWith []string `json:"conflicting_with,omitempty"`
-	DecidedAt       int64    `json:"decided_at"`
+	// ThesisID/MergedWith: this opportunity's cross-strategy thesis
+	// correlation (internal/arbitration.Decision's own fields) — present
+	// only when this opportunity shares its real-world structural identity
+	// with at least one other live candidate.
+	ThesisID   string   `json:"thesis_id,omitempty"`
+	MergedWith []string `json:"merged_with,omitempty"`
+	DecidedAt  int64    `json:"decided_at"`
 }

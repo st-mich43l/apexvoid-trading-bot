@@ -171,8 +171,9 @@ func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate 
 
 		candidate := opportunity.Candidate{
 			ID: id, Strategy: ID, StrategyVersion: Version, Symbol: ctx.Symbol,
-			Direction: market.Buy,
-			Entry:     opportunity.EntryZone{Low: entryLow, High: entryHigh},
+			Direction:    market.Buy,
+			StructuralID: z.ID,
+			Entry:        opportunity.EntryZone{Low: entryLow, High: entryHigh},
 			Invalidation: market.PriceLevel{
 				Price: market.Price(invalidationPrice), Label: "demand_zone_invalidated",
 			},

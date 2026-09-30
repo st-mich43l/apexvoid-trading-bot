@@ -314,6 +314,22 @@ def merge_confluence(
   return merged or primary
 
 
+def _same_thesis_via_go_or_legacy(
+  left: StrategyMatch, right: StrategyMatch, *, atr: float, mode: str,
+) -> bool:
+  """Phase 3: prefer Go's own structural-identity thesis correlation.
+
+  Falls back to the legacy ATR-bucket geometric heuristic (``same_thesis``)
+  whenever either side has no ``go_thesis_id`` yet (a non-Go source, or Go
+  has not published a decision for it) — never when ``mode`` is
+  ``"python_legacy"``, so the existing behavior is reproduced exactly
+  until a deliberate cutover.
+  """
+  if mode == "go" and left.go_thesis_id is not None and right.go_thesis_id is not None:
+    return left.go_thesis_id == right.go_thesis_id
+  return same_thesis(left, right, atr=atr)
+
+
 def dedupe_matches(
   matches: Iterable[StrategyMatch],
   *,
@@ -321,6 +337,9 @@ def dedupe_matches(
   cfg: Any | None = None,
 ) -> tuple[list[StrategyMatch], list[dict[str, str]]]:
   """Keep distinct theses; merge same-thesis into the higher-quality match."""
+  from app.core.config import runtime_config
+
+  mode = runtime_config.analysis.technical_authority.thesis_correlation_mode
   kept: list[StrategyMatch] = []
   events: list[dict[str, str]] = []
   for match in sorted(
@@ -341,7 +360,7 @@ def dedupe_matches(
       # Tier C is preference telemetry — keep the match executable.
     merged_into = None
     for index, existing in enumerate(kept):
-      if same_thesis(existing, match, atr=atr):
+      if _same_thesis_via_go_or_legacy(existing, match, atr=atr, mode=mode):
         primary, secondary = existing, match
         if _freshness(match) > _freshness(existing):
           primary, secondary = match, existing
