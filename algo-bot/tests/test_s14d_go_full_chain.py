@@ -507,6 +507,35 @@ async def test_go_match_still_publishes_next_to_a_stale_python_match_in_go_mode(
 
 
 @pytest.mark.asyncio
+async def test_a_go_match_that_go_no_longer_holds_live_is_skipped_then_recovers(h, prod):
+  from app.autotrade.go_live_opportunities import go_live_opportunities_key
+
+  await go_event_delivered(h)
+  key = go_live_opportunities_key("XAU")
+
+  # Go holds nothing live (for example it restarted and its current rules
+  # would not create this old opportunity): the match is skipped, not closed.
+  await prod.set(key, json.dumps({"symbol": "XAU", "generated_at": 1, "ids": []}))
+  await cycle(prod, n=2)
+  assert await plans(prod) == []
+
+  # If Go does hold it, the same match publishes on the next cycle.
+  await prod.set(key, json.dumps({"symbol": "XAU", "generated_at": 2, "ids": ["opp_chain"]}))
+  await cycle(prod)
+  assert [plan["setup_id"] for plan in await plans(prod)] == ["go_opp_chain"]
+
+
+@pytest.mark.asyncio
+async def test_an_unreadable_live_set_fails_open_and_the_match_still_publishes(h, prod):
+  from app.autotrade.go_live_opportunities import go_live_opportunities_key
+
+  await go_event_delivered(h)
+  await prod.set(go_live_opportunities_key("XAU"), "{broken")
+  await cycle(prod)
+  assert [plan["setup_id"] for plan in await plans(prod)] == ["go_opp_chain"]
+
+
+@pytest.mark.asyncio
 async def test_a_go_only_cycle_publishes_without_recomputing_python_htf_zones_or_levels(h, prod, monkeypatch):
   calls: list[str] = []
   real_zones, real_levels = worker._htf_zones, worker._htf_levels

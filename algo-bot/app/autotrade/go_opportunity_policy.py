@@ -163,6 +163,11 @@ def match_id_for(opportunity_id: str) -> str:
   return f"go_{opportunity_id}"
 
 
+def opportunity_id_for_match_id(match_id: str) -> str:
+  """Inverse of match_id_for: the Go opportunity ID behind a Go-origin match."""
+  return match_id.removeprefix("go_")
+
+
 def build_strategy_match(
   event: OpportunityEnvelope, *, profile: ScopeProfile, now: int,
 ) -> StrategyMatch:
