@@ -15,6 +15,7 @@ import (
 func validParams() map[string]any {
 	return map[string]any{
 		"minimum_strength":            0.3,
+		"minimum_zone_atr":            0.5,
 		"invalidation_buffer_atr":     0.5,
 		"minimum_target_distance_atr": 1.0,
 		"expiry_hours":                24.0,
@@ -198,5 +199,30 @@ func TestOrderBlock_RequiredTimeframesIsM5(t *testing.T) {
 	tfs := s.RequiredTimeframes()
 	if len(tfs) != 1 || tfs[0] != market.M5 {
 		t.Errorf("expected RequiredTimeframes()==[M5], got %v", tfs)
+	}
+}
+
+func TestOrderBlock_BlockSmallerThanTheMinimumATRFractionIsIgnored(t *testing.T) {
+	s := newStrategy(t, validParams())
+	ctx := baseContext(3.6)
+	ctx.Timeframes[market.M5] = &context.TimeframeContext{
+		Timeframe: market.M5,
+		Zones:     zone.ZoneState{Zones: []zone.Zone{obZone("sliver", zone.Demand, 4184.90, 4185.00)}},
+		Liquidity: liquidity.LiquidityState{Pools: []liquidity.Pool{{Side: liquidity.LiquidityBuySide, Low: 4195, High: 4196}}},
+	}
+	if got := s.Evaluate(ctx); len(got) != 0 {
+		t.Fatalf("a 0.03 ATR order block must not produce a candidate, got %d", len(got))
+	}
+	ctx.Timeframes[market.M5].Zones = zone.ZoneState{Zones: []zone.Zone{obZone("real", zone.Demand, 4179.59, 4183.34)}}
+	if got := s.Evaluate(ctx); len(got) != 1 {
+		t.Fatalf("a 1.04 ATR order block must produce a candidate, got %d", len(got))
+	}
+}
+
+func TestOrderBlock_MinimumZoneATRIsRequired(t *testing.T) {
+	params := validParams()
+	delete(params, "minimum_zone_atr")
+	if _, err := orderblock.New(strategy.Config{ID: orderblock.ID, Version: orderblock.Version, Enabled: true, Parameters: params}); err == nil {
+		t.Fatal("expected an error when minimum_zone_atr is missing")
 	}
 }

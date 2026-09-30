@@ -24,6 +24,7 @@ Any symbol; single timeframe `M5`.
 - `State` is `Fresh` or `Touched`.
 - `Relevance` is `Immediate` or `Nearby`.
 - `Strength >= minimum_strength`.
+- `(High - Low) >= minimum_gap_atr*ATR` (a gap under the fraction of ATR is noise even when a large middle candle lifts its strength).
 - An opposing-side liquidity pool exists at the required distance.
 - `ctx.Volatility.ATR > 0`.
 

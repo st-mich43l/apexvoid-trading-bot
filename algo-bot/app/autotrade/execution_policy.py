@@ -161,18 +161,29 @@ def _execution_entry_zone(
 
   low, high = raw_low, raw_high
   direction = str(getattr(match, "direction", "") or "").upper()
-  invalidation = getattr(match, "go_invalidation_price", None)
+  # The stop follows the band: plan_go_invalidation_stop moves Go's
+  # invalidation out by the same distance the band grows here.
   if direction == "BUY":
-    expanded_low = high - desired_width
-    if invalidation is not None:
-      expanded_low = max(expanded_low, float(invalidation) + pip_size)
-    low = min(low, expanded_low)
+    low = min(low, high - desired_width)
   elif direction == "SELL":
-    expanded_high = low + desired_width
-    if invalidation is not None:
-      expanded_high = min(expanded_high, float(invalidation) - pip_size)
-    high = max(high, expanded_high)
+    high = max(high, low + desired_width)
   return low, high, (high - low) > (raw_high - raw_low + 1e-12)
+
+def _band_extension_pips(
+  match: Any, *, low: float, high: float, pip_size: float,
+) -> float:
+  """Pips the execution band extends past Go's zone on the stop side."""
+  if pip_size <= 0:
+    return 0.0
+  direction = str(getattr(match, "direction", "") or "").upper()
+  if direction == "BUY":
+    extension = float(getattr(match, "entry_low", low)) - low
+  elif direction == "SELL":
+    extension = high - float(getattr(match, "entry_high", high))
+  else:
+    return 0.0
+  return max(0.0, extension / pip_size)
+
 
 OUTCOME_ALLOW = "allow"
 OUTCOME_ALLOW_WITH_WARNING = "allow_with_warning"
@@ -1025,6 +1036,9 @@ def evaluate_execution_policy(
     digits = _instrument_digits("", instrument_cfg)
     structure_buffer_atr = float(execution.scaling.add.stop_buffer_atr)
     wick_buffer_atr = float(execution.stops.wick_stop_buffer_atr)
+    is_fx_policy = str(
+      getattr(instrument_cfg, "policy_name", "") or ""
+    ).startswith("fx_")
     if go_origin and getattr(match, "go_invalidation_price", None) is not None:
       stop_plan = plan_go_invalidation_stop(
         direction=direction,
@@ -1037,9 +1051,11 @@ def evaluate_execution_policy(
         maximum_stop_pips=maximum_stop_pips,
         pip_size=pip,
         digits=digits,
-        enforce_minimum_stop=str(
-          getattr(instrument_cfg, "policy_name", "") or ""
-        ).startswith("fx_"),
+        enforce_minimum_stop=is_fx_policy,
+        widen_to_minimum=not is_fx_policy,
+        band_extension_pips=_band_extension_pips(
+          match, low=low, high=high, pip_size=pip,
+        ),
       )
     elif is_m1_scalp_strategy(strategy_name):
       stop_plan = plan_scalp_invalidation_stop(

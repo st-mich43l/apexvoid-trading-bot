@@ -1225,16 +1225,25 @@ def plan_go_invalidation_stop(
   pip_size: Any,
   digits: int,
   enforce_minimum_stop: bool = False,
+  widen_to_minimum: bool = False,
+  band_extension_pips: Any = 0,
 ) -> FinalProtectiveStopPlan:
-  """Use the Go engine's invalidation without Python technical rewriting.
+  """Use the Go engine's invalidation as the technical floor for the stop.
 
-  Go has already computed the complete technical invalidation.  This helper
-  only validates broker-safe geometry and the configured risk envelope; it
-  deliberately does not add ATR/wick buffers, push through a Python opposing
-  zone, or expand the stop to Python's minimum floor.  When the instrument
-  policy enables the minimum guard, an invalidation that is too close is
-  rejected rather than rewritten: Go remains the technical owner, while
-  execution policy refuses broker-noise-sized risk.
+  Go owns the technical invalidation, so the stop is never moved closer than
+  Go's price and no ATR/wick buffer or Python opposing zone is added. Python
+  owns execution risk, so the stop may be moved *further out* in two ways:
+
+  * ``band_extension_pips``: execution widened the entry band beyond Go's
+    zone toward the stop; the stop moves out by the same distance so Go's
+    zone-to-invalidation buffer is preserved around the band actually traded.
+  * ``widen_to_minimum``: when the widest leg sits closer to the stop than
+    the envelope minimum, the stop is moved out to exactly that minimum
+    instead of leaving broker-noise-sized risk.
+
+  With ``enforce_minimum_stop`` (FX) a too-close invalidation is rejected
+  rather than widened. A stop wider than the envelope maximum is always
+  rejected.
   """
   side = str(direction).upper()
   zone_low = decimal_value(entry_zone_low, "entry_zone_low")
@@ -1244,6 +1253,7 @@ def plan_go_invalidation_stop(
     decimal_value(price, "planned_leg_price") for price in planned_leg_prices
   ]
   pip = decimal_value(pip_size, "pip_size")
+  extension = decimal_value(band_extension_pips, "band_extension_pips")
   if (
     side not in {"BUY", "SELL"}
     or zone_low <= 0
@@ -1254,8 +1264,14 @@ def plan_go_invalidation_stop(
     or pip <= 0
     or digits < 0
     or maximum_stop_pips < minimum_stop_pips
+    or extension < 0
   ):
     raise ProtectiveStopError("Go invalidation inputs are invalid")
+  go_stop = stop
+  adjustment = "none"
+  if extension > 0:
+    stop = stop - extension * pip if side == "BUY" else stop + extension * pip
+    adjustment = "band_extension"
   if side == "BUY":
     if stop >= zone_low or any(stop >= price for price in prices):
       raise ProtectiveStopError("go_invalidation_not_beyond_buy_entries")
@@ -1265,9 +1281,23 @@ def plan_go_invalidation_stop(
       raise ProtectiveStopError("go_invalidation_not_beyond_sell_entries")
     distances = [(stop - price) / pip for price in prices]
   widest = max(distances)
+  minimum = Decimal(str(minimum_stop_pips))
+  if (
+    widen_to_minimum
+    and not enforce_minimum_stop
+    and widest + Decimal("0.000001") < minimum
+  ):
+    shortfall = (minimum - widest) * pip
+    stop = stop - shortfall if side == "BUY" else stop + shortfall
+    distances = [d + (minimum - widest) for d in distances]
+    widest = max(distances)
+    adjustment = (
+      "band_extension_and_envelope_minimum"
+      if adjustment == "band_extension" else "envelope_minimum"
+    )
   if (
     enforce_minimum_stop
-    and widest + Decimal("0.000001") < Decimal(str(minimum_stop_pips))
+    and widest + Decimal("0.000001") < minimum
   ):
     raise ProtectiveStopError(
       "stop_below_go_invalidation_envelope",
@@ -1297,17 +1327,21 @@ def plan_go_invalidation_stop(
     (price - stop if side == "BUY" else stop - price) / pip
     for price in prices
   )
+  widened = adjustment != "none"
   return FinalProtectiveStopPlan(
     entry_price=reference,
-    base_stop_price=stop,
-    base_stop_pips=final_pips,
+    base_stop_price=go_stop.quantize(tick, rounding=ROUND_HALF_UP),
+    base_stop_pips=max(
+      (price - go_stop if side == "BUY" else go_stop - price) / pip
+      for price in prices
+    ),
     final_stop_price=stop,
     final_stop_distance=final_pips * pip,
     final_stop_pips=final_pips,
-    raw_stop_price=stop,
-    clamped=False,
-    source="go_invalidation",
-    adjustment="none",
+    raw_stop_price=go_stop,
+    clamped=widened,
+    source="go_invalidation_widened" if widened else "go_invalidation",
+    adjustment=adjustment,
     adjustment_zone_id=None,
     adjustment_zone_low=None,
     adjustment_zone_high=None,

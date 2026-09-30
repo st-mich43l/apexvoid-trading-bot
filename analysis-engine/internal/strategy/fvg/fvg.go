@@ -38,6 +38,7 @@ const (
 // Config is FVG's own parsed technical configuration.
 type Config struct {
 	MinimumStrength          float64
+	MinimumGapATR            float64
 	InvalidationBufferATR    float64
 	MinimumTargetDistanceATR float64
 	ExpiryHours              float64
@@ -66,6 +67,10 @@ func parseConfig(params map[string]any) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	minimumGap, err := requireFloat(params, "minimum_gap_atr")
+	if err != nil {
+		return Config{}, err
+	}
 	invalidationBuffer, err := requireFloat(params, "invalidation_buffer_atr")
 	if err != nil {
 		return Config{}, err
@@ -78,6 +83,9 @@ func parseConfig(params map[string]any) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	if minimumGap < 0 {
+		return Config{}, fmt.Errorf("minimum_gap_atr must be >= 0")
+	}
 	if invalidationBuffer <= 0 {
 		return Config{}, fmt.Errorf("invalidation_buffer_atr must be > 0")
 	}
@@ -85,7 +93,7 @@ func parseConfig(params map[string]any) (Config, error) {
 		return Config{}, fmt.Errorf("expiry_hours must be > 0")
 	}
 	return Config{
-		MinimumStrength: minimumStrength, InvalidationBufferATR: invalidationBuffer,
+		MinimumStrength: minimumStrength, MinimumGapATR: minimumGap, InvalidationBufferATR: invalidationBuffer,
 		MinimumTargetDistanceATR: minimumTargetDistance, ExpiryHours: expiryHours,
 	}, nil
 }
@@ -133,6 +141,12 @@ func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate 
 			continue
 		}
 		if z.Strength < s.cfg.MinimumStrength {
+			continue
+		}
+		// Strength blends gap size with the middle candle's body, so a large
+		// displacement candle can carry a gap that is only a fraction of ATR.
+		// A gap that small is noise, not an imbalance worth trading.
+		if float64(z.High-z.Low) < s.cfg.MinimumGapATR*atr {
 			continue
 		}
 

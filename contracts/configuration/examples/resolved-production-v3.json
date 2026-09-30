@@ -133,6 +133,7 @@
         "enabled": true,
         "expiry_hours": 24.0,
         "invalidation_buffer_atr": 0.5,
+        "minimum_gap_atr": 0.5,
         "minimum_strength": 0.4,
         "minimum_target_distance_atr": 1.0,
         "version": "v2"
@@ -141,6 +142,7 @@
         "enabled": true,
         "expiry_hours": 24.0,
         "invalidation_buffer_atr": 0.5,
+        "minimum_gap_atr": 0.5,
         "minimum_strength": 0.4,
         "minimum_target_distance_atr": 1.0,
         "version": "v2"
@@ -189,6 +191,7 @@
         "invalidation_buffer_atr": 0.5,
         "minimum_strength": 0.4,
         "minimum_target_distance_atr": 1.0,
+        "minimum_zone_atr": 0.5,
         "version": "v2"
       },
       "range_edge": {
