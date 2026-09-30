@@ -21,8 +21,20 @@ def _doc(*entries, symbol="XAU", generated_at=1790000000):
   return json.dumps({"symbol": symbol, "generated_at": generated_at, "entries": list(entries)})
 
 
-def _entry(kind="supply", state="fresh", low=2020.0, high=2025.0, strength=0.8, touch_count=2, timeframe="M15"):
-  return {"timeframe": timeframe, "kind": kind, "low": low, "high": high, "strength": strength, "touch_count": touch_count, "state": state}
+def _entry(
+  kind="supply", state="fresh", low=2020.0, high=2025.0,
+  strength=0.8, touch_count=2, timeframe="M15", atr=4.0,
+):
+  return {
+    "timeframe": timeframe,
+    "kind": kind,
+    "low": low,
+    "high": high,
+    "atr": atr,
+    "strength": strength,
+    "touch_count": touch_count,
+    "state": state,
+  }
 
 
 def test_go_zone_book_key_matches_the_go_publisher_exactly():
@@ -32,8 +44,8 @@ def test_go_zone_book_key_matches_the_go_publisher_exactly():
 def test_parse_zone_book_converts_supply_and_demand_to_sell_buy_sides():
   parsed = parse_zone_book(_doc(_entry(kind="supply"), _entry(kind="demand", low=1990.0, high=1995.0)))
   assert parsed == (
-    ZoneOpposingEntry(side="sell", lo=2020.0, hi=2025.0, tier="zone", score=0.8, touches=2, mitigated=False),
     ZoneOpposingEntry(side="buy", lo=1990.0, hi=1995.0, tier="zone", score=0.8, touches=2, mitigated=False),
+    ZoneOpposingEntry(side="sell", lo=2020.0, hi=2025.0, tier="zone", score=0.8, touches=2, mitigated=False),
   )
 
 
@@ -52,6 +64,34 @@ def test_parse_zone_book_keeps_partially_mitigated_as_still_live():
 def test_parse_zone_book_ignores_a_kind_it_does_not_recognize():
   parsed = parse_zone_book(_doc(_entry(kind="order_block")))
   assert parsed == ()
+
+
+def test_parse_zone_book_drops_m1_and_oversized_fx_zones():
+  parsed = parse_zone_book(
+    _doc(
+      _entry(timeframe="M1", low=1.1000, high=1.1005, atr=0.0004),
+      _entry(timeframe="M5", low=1.1010, high=1.1040, atr=0.0010),
+      _entry(timeframe="M15", low=1.1050, high=1.1065, atr=0.0010),
+    ),
+    pip_size=0.0001,
+    max_width_atr=2.0,
+    max_width_pips=100.0,
+  )
+  assert [(entry.lo, entry.hi) for entry in parsed] == [(1.105, 1.1065)]
+
+
+def test_parse_zone_book_merges_same_side_and_reconciles_cross_side_noise():
+  parsed = parse_zone_book(_doc(
+    _entry(kind="supply", low=1.1000, high=1.1100, strength=0.9, atr=0.01),
+    _entry(kind="supply", low=1.1080, high=1.1120, strength=0.7, atr=0.01),
+    _entry(kind="demand", low=1.1050, high=1.1150, strength=0.4, atr=0.01),
+    _entry(kind="demand", low=0.9000, high=0.9100, strength=0.8, atr=0.01),
+    _entry(kind="supply", low=1.2000, high=1.2100, strength=0.8, atr=0.01),
+  ))
+  bands = [(entry.side, entry.lo, entry.hi) for entry in parsed]
+  assert ("sell", 1.1, 1.112) in bands
+  assert ("buy", 1.105, 1.115) not in bands
+  assert len(parsed) == 3
 
 
 def test_parse_zone_book_raises_on_malformed_json_the_caller_must_handle():

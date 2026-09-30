@@ -242,8 +242,8 @@ async def test_go_zone_book_hard_blocks_a_go_origin_plan_inside_a_published_oppo
   await prod.set(go_zone_book_key("XAU"), json.dumps({
     "symbol": "XAU", "generated_at": int(h.clock.now),
     "entries": [{
-      "timeframe": "M15", "kind": "supply", "low": 4340.0, "high": 4370.0,
-      "strength": 0.9, "touch_count": 2, "state": "fresh",
+      "timeframe": "M15", "kind": "supply", "low": 4349.0, "high": 4355.0,
+      "atr": 4.0, "strength": 0.9, "touch_count": 2, "state": "fresh",
     }],
   }))
 
@@ -255,7 +255,7 @@ async def test_go_zone_book_hard_blocks_a_go_origin_plan_inside_a_published_oppo
 
 
 @pytest.mark.asyncio
-async def test_go_zone_book_unavailable_falls_back_to_the_existing_publish_path(h, prod):
+async def test_go_zone_book_unavailable_continues_without_python_fallback(h, prod):
   """No zone book published (Go has not written one, or it expired): the
   plan still publishes using Go's opportunity geometry, without inventing a
   competing Python zone book or silently blocking the opportunity."""

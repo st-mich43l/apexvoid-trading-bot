@@ -166,6 +166,26 @@ func TestLifecycleForgivesReclaimedSweepButInvalidatesUnreclaimedBreak(t *testin
 	}
 }
 
+func TestLifecycleEpsilonATRIsScaledToInstrumentPrice(t *testing.T) {
+	cfg := zone.LifecycleConfig{
+		InvalidationToleranceATR: 0.01,
+		SweepReclaimBars:         0,
+		MaxBreakEpisodes:         0,
+		EpsilonATR:               0.05,
+	}
+	z := zone.Zone{Side: zone.Demand, Low: 1.1000, High: 1.1010}
+	candles := []market.Candle{
+		c(1, 1.1001, 1.1002, 1.0997, 1.0998),
+	}
+
+	// ATR=0.001 means epsilon is 0.00005, not the raw price 0.05. The
+	// two-pip close through demand is therefore a real breach in this
+	// deliberately small-tolerance fixture.
+	if zone.NotInvalidated(candles, 0, z, 0.001, cfg) {
+		t.Fatal("ATR epsilon must not become a 500-pip raw-price tolerance on EURUSD")
+	}
+}
+
 func TestLifecycleSeparatesTouchExhaustionFromStructuralInvalidation(t *testing.T) {
 	cfg := zoneTestConfig().Lifecycle
 	z := zone.Zone{Side: zone.Supply, Low: 100, High: 102}

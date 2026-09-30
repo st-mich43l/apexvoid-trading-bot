@@ -16,6 +16,7 @@ from app.core.config import runtime_config
 from tests.configuration.canonical_fixtures import install_runtime_overrides, leaf
 
 from dataclasses import replace
+import json
 import time
 from unittest.mock import AsyncMock
 
@@ -1119,7 +1120,9 @@ async def test_range_edge_scalp_publishes_inside_opposing_structure():
 
 @pytest.mark.asyncio
 async def test_scalp_m1_publishes_inside_opposing_structure():
-  """M1 scalp with fitted native room must ignore HTF opposing containment."""
+  """Go-origin M1 scalp keeps the provenance-neutral opposing bypass."""
+  from app.autotrade.go_zone_book import go_zone_book_key
+
   client = redis_state.get_client()
   match = _match(
     match_id="match-v8-scalp-opposing",
@@ -1136,6 +1139,7 @@ async def test_scalp_m1_publishes_inside_opposing_structure():
     current_price=4089.0,
     targets_pips=(20,),
     full_take_profit_pips=20,
+    tags=("origin:go",),
     # Scalping room-synced envelope is ~15–20p. A 4070 swing + deep wick fails
     # stop_exceeds_envelope_* and reds every PR CI on an unrelated stop
     # check (master already red 2026-08-26). Keep swing/wick inside the
@@ -1143,6 +1147,20 @@ async def test_scalp_m1_publishes_inside_opposing_structure():
     structure_swing=4087.9,
   )
   await _confirm_setup(client, match)
+  await client.set(go_zone_book_key("XAU"), json.dumps({
+    "symbol": "XAU",
+    "generated_at": int(time.time()),
+    "entries": [{
+      "timeframe": "M15",
+      "kind": "supply",
+      "low": 4088.5,
+      "high": 4091.5,
+      "atr": 1.8,
+      "strength": 0.9,
+      "touch_count": 1,
+      "state": "fresh",
+    }],
+  }))
   spot = worker.AutoTradeSpot(
     price=4089.0,
     ts=int(time.time()),
