@@ -203,6 +203,38 @@ def _unique_prices(prices: list[float]) -> tuple[float, ...]:
   return tuple(out)
 
 
+def _manual_xau_entry_legs(
+  *,
+  side: str,
+  low: float,
+  high: float,
+  stop: float | None,
+  digits: int,
+) -> tuple[float, float] | None:
+  """Return the Manual Algo shallow/deep geometry for an XAU ladder.
+
+  Manual Algo owns this contract: shallow is the near edge (BUY high, SELL
+  low), deep is the zone midpoint, and both prices use Decimal/AwayFromZero
+  rounding. A degenerate zone needs the stop to derive its deep leg; when it
+  is unavailable, the caller keeps the existing route instead of inventing a
+  stop.
+  """
+  if low == high and stop is None:
+    return None
+  from app.autotrade.xau_ladder import entry_leg_prices
+
+  legs = entry_leg_prices(
+    side,
+    low,
+    high,
+    low if stop is None else stop,
+  )
+  return (
+    _round_price(legs.shallow, digits),
+    _round_price(legs.deep, digits),
+  )
+
+
 def scalp_micro_grid_legs(
   *,
   side: str,
@@ -265,15 +297,16 @@ def resolve_execution_route_plan(
   structural_stop: float | None = None,
   target_risk_pips: float | None = None,
   pip_size: float | None = None,
+  manual_xau_ladder: bool = False,
 ) -> ExecutionRoutePlan:
   """Resolve a concrete route mirroring AutoTradeEngine.ResolveExecutionRoute.
 
   ``structural_stop``/``target_risk_pips``/``pip_size`` are optional and,
   when all three are given, replace the anchor entry (``proximal`` below)
   with ``risk_targeted_entry_price`` - see that function's docstring. Any
-  one missing keeps today's pure zone-geometry anchor unchanged; this is
-  how a caller (XAU only, behind a rollback flag) opts in without every
-  other instrument's routing changing.
+  one missing keeps today's pure zone-geometry anchor unchanged. The explicit
+  ``manual_xau_ladder`` switch is the only path that adopts Manual Algo's
+  shallow/deep geometry; FX callers never set it.
   """
   preference = (order_type_preference or "").strip().lower()
   distribution = (entry_distribution or "").strip().lower()
@@ -306,6 +339,18 @@ def resolve_execution_route_plan(
   midpoint = _round_price((low + high) / 2.0, digits)
   first_leg_fraction = min(1.0, max(0.0, scale_first_leg_fraction))
   leg_ratios = (first_leg_fraction, round(1.0 - first_leg_fraction, 6))
+  manual_xau_legs = (
+    _manual_xau_entry_legs(
+      side=side,
+      low=low,
+      high=high,
+      stop=structural_stop,
+      digits=digits,
+    )
+    if manual_xau_ladder and split_ok
+    else None
+  )
+  manual_xau_ratios = (0.80, 0.20)
   geometry = (
     "inside"
     if low <= quote <= high
@@ -526,6 +571,16 @@ def resolve_execution_route_plan(
           "execution policy requires unavailable zone_split limit capability",
         )
       if distribution == "zone_scale":
+        if manual_xau_legs is not None:
+          return ExecutionRoutePlan(
+            ROUTE_ZONE_SPLIT,
+            manual_xau_legs[0],
+            manual_xau_legs,
+            geometry,
+            "execution policy: Manual Algo XAU shallow/deep ladder",
+            True,
+            planned_leg_volume_ratios=manual_xau_ratios,
+          )
         # Leg 2's step-basis is `proximal` (the risk-targeted/zone-edge
         # price), not the quote-collapsed `scale_entry_anchor` - passing
         # the quote here (the pre-fix behavior) both discards the better
@@ -553,7 +608,7 @@ def resolve_execution_route_plan(
           True,
           planned_leg_volume_ratios=leg_ratios,
         )
-      legs = (_round_price(proximal, digits), midpoint)
+      legs = manual_xau_legs or (_round_price(proximal, digits), midpoint)
       return ExecutionRoutePlan(
         ROUTE_ZONE_SPLIT,
         legs[0],
@@ -561,6 +616,9 @@ def resolve_execution_route_plan(
         geometry,
         "execution policy: zone split",
         True,
+        planned_leg_volume_ratios=(
+          manual_xau_ratios if manual_xau_legs is not None else ()
+        ),
       )
     # single limit
     if side == "BUY":
@@ -597,6 +655,16 @@ def resolve_execution_route_plan(
       return scaled
   if split_ok and distribution in {"zone_split", "zone_scale", "either", ""}:
     if distribution == "zone_scale":
+      if manual_xau_legs is not None:
+        return ExecutionRoutePlan(
+          ROUTE_ZONE_SPLIT,
+          manual_xau_legs[0],
+          manual_xau_legs,
+          geometry,
+          "resolved either → Manual Algo XAU shallow/deep ladder",
+          True,
+          planned_leg_volume_ratios=manual_xau_ratios,
+        )
       # Same fix as the two zone_scale branches above: leg 2 steps from
       # `proximal`, leg 1 stays the quote-safe `scale_entry_anchor`.
       legs = (
@@ -616,7 +684,7 @@ def resolve_execution_route_plan(
         True,
         planned_leg_volume_ratios=leg_ratios,
       )
-    legs = (_round_price(proximal, digits), midpoint)
+    legs = manual_xau_legs or (_round_price(proximal, digits), midpoint)
     return ExecutionRoutePlan(
       ROUTE_ZONE_SPLIT,
       legs[0],
@@ -624,7 +692,9 @@ def resolve_execution_route_plan(
       geometry,
       "resolved either → zone split",
       True,
-      planned_leg_volume_ratios=leg_ratios,
+      planned_leg_volume_ratios=(
+        manual_xau_ratios if manual_xau_legs is not None else leg_ratios
+      ),
     )
   return ExecutionRoutePlan(
     ROUTE_MARKET,

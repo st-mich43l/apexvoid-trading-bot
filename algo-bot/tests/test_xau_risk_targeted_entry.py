@@ -17,7 +17,10 @@ import pytest
 
 from tests.configuration.canonical_fixtures import execution_cfg
 
-from app.autotrade.execution_policy import evaluate_execution_policy
+from app.autotrade.execution_policy import (
+  _planned_entry_price,
+  evaluate_execution_policy,
+)
 from app.configuration.python_loader import load_python_canonical_settings
 from app.configuration.python_sources import load_python_runtime_source_bundle
 from app.autotrade.protective_stop import plan_go_invalidation_stop
@@ -105,11 +108,11 @@ def test_go_invalidation_is_rejected_instead_of_expanded_below_minimum_risk():
     )
 
 
-def test_go_policy_does_not_apply_fixed_rr_or_python_stop_rewrite():
+def test_go_policy_keeps_go_stop_but_uses_python_execution_rr_ladder(monkeypatch):
   match = _match(
     direction="SELL",
-    entry_low=4132.61,
-    entry_high=4139.02,
+    entry_low=4137.00,
+    entry_high=4139.00,
     current_price=4130.0,
     structure_swing=4150.0,
     go_invalidation_price=4142.0,
@@ -122,12 +125,15 @@ def test_go_policy_does_not_apply_fixed_rr_or_python_stop_rewrite():
     executable_quote=4130.0,
     regime="range",
     pip_size=0.1,
-    cfg=_cfg(**{"execution.reaction.stop_max_pips": 100}),
+    cfg=_production_cfg(monkeypatch),
   )
   assert evaluation.allowed
   assert evaluation.measured["planned_stop_price"] == "4142.00"
   assert evaluation.measured["stop_source"] == "go_invalidation"
-  assert "target_policy_mode" not in evaluation.measured
+  assert evaluation.measured["target_policy_mode"] == "fixed_rr"
+  assert evaluation.measured["planned_target_r_multiples"] == [
+    "1.0", "2.0", "3.0", "4.0",
+  ]
 
 
 def test_risk_targeted_entry_sell_direction_mirrors_buy():
@@ -261,17 +267,23 @@ def _cfg(**overrides):
   return execution_cfg(**values)
 
 
+def test_entry_rounding_is_xau_only_and_keeps_fx_precision():
+  assert _planned_entry_price("XAU", 4101.005) == pytest.approx(4101.01)
+  assert _planned_entry_price("XAUUSD", 4101.005) == pytest.approx(4101.01)
+  assert _planned_entry_price("EURUSD", 1.1000054) == pytest.approx(1.100005)
+
+
 def _match(**overrides):
   values = {
     "strategy": "Key Level",
     "symbol": "XAU",
     "direction": "BUY",
-    "entry_low": 4090.0,
+    "entry_low": 4094.0,
     "entry_high": 4095.0,
     "current_price": 4096.0,
     "confluence": 3,
     "atr": 1.0,
-    "structure_swing": 4086.3,
+    "structure_swing": 4089.8,
     "targets_pips": (300,),
     "target_price": None,
     "risk_multiplier": 1.0,
@@ -281,11 +293,8 @@ def _match(**overrides):
 
 
 def test_xau_evaluate_execution_policy_picks_risk_targeted_entry_by_default():
-  # Default cfg leaves risk_targeted_entry_enabled at its schema default
-  # (True) - structure_swing=4086.3, buffer 0.3*ATR(1.0) -> raw stop
-  # 4086.0; target 50p (stop_min_pips default 50) -> entry 4091.0, deep
-  # inside the [4090, 4095] zone, not the old near-edge pick (4095.0 for
-  # a BUY single/market route).
+  # The Manual XAU contract owns this non-scalp zone: BUY shallow is the
+  # high edge, so the structural stop remains within the XAU envelope.
   evaluation = evaluate_execution_policy(
     _match(),
     spot_price=4096.0,
@@ -295,7 +304,7 @@ def test_xau_evaluate_execution_policy_picks_risk_targeted_entry_by_default():
     cfg=_cfg(),
   )
   assert evaluation.allowed
-  assert evaluation.measured["planned_entry_price"] == pytest.approx(4091.0)
+  assert evaluation.measured["planned_entry_price"] == pytest.approx(4095.0)
 
 
 def test_xau_evaluate_execution_policy_reverts_when_flag_disabled():

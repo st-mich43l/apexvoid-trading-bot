@@ -9,12 +9,11 @@ held identical by three implementations, each pinned to the same hand-computed c
   (``ReactionRiskLeg*``, the same constants declared a second time);
 - this module.
 
-What this is **not**: the Auto Algo *entry* ladder (``execution_route._scale_ladder_legs`` /
-``_deeper_second_leg``: leg 2 one ATR step deeper, capped at the far edge, ratios from the
-equity table) is a different owner-defined rule. Nothing here unifies the two; a test pins
-where they differ so any future change is deliberate. This module is still not wired into any
-execution path, and the risk leg is not activated for Go-origin plans (see
-``analysis.technical_authority.go_origin_risk_leg_enabled``).
+The Auto Algo's XAU non-scalp zone ladder now calls ``entry_leg_prices`` as
+well. That keeps the broker entry geometry identical to Manual Algo: shallow
+at the near edge, deep at the midpoint, and 80/20 volume. The executor owns
+the same optional XAU RISK leg as Manual Algo through the shared execution
+policy; technical-source provenance does not change the leg set.
 
 All arithmetic is decimal, matching the C# ``decimal`` behaviour: prices are rounded to the
 instrument's digits, midpoints away from zero. Binary floats would round 4101.005 down.
