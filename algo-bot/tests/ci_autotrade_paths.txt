@@ -29,6 +29,7 @@ tests/test_repair_manual_algo_results.py
 tests/test_protective_stop.py
 tests/test_stop_bounds_from_go_envelope.py
 tests/test_go_stop_widening.py
+tests/test_go_no_python_htf_structure.py
 tests/test_xau_risk_targeted_entry.py
 tests/test_config_v3_cross_language_fixture.py
 tests/test_legs_achieved_pips.py

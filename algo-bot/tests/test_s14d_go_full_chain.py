@@ -506,6 +506,28 @@ async def test_go_match_still_publishes_next_to_a_stale_python_match_in_go_mode(
   assert await prod.get(route_outcome_key("XAU", stale.match_id)) is None
 
 
+@pytest.mark.asyncio
+async def test_a_go_only_cycle_publishes_without_recomputing_python_htf_zones_or_levels(h, prod, monkeypatch):
+  calls: list[str] = []
+  real_zones, real_levels = worker._htf_zones, worker._htf_levels
+
+  def zones_spy(*args, **kwargs):
+    calls.append("zones")
+    return real_zones(*args, **kwargs)
+
+  def levels_spy(*args, **kwargs):
+    calls.append("levels")
+    return real_levels(*args, **kwargs)
+
+  monkeypatch.setattr(worker, "_htf_zones", zones_spy)
+  monkeypatch.setattr(worker, "_htf_levels", levels_spy)
+  await go_event_delivered(h)
+  await cycle(prod)
+  published = await plans(prod)
+  assert [plan["setup_id"] for plan in published] == ["go_opp_chain"]
+  assert calls == []
+
+
 # ---- static guarantees --------------------------------------------------------------------------------------
 
 GO_PATH_FILES = ("go_opportunity_policy.py", "go_plan_cancel.py")

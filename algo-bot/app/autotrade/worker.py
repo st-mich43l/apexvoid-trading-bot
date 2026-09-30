@@ -1385,6 +1385,20 @@ def _htf_levels(
   )
 
 
+def _needs_python_htf_structure(matches: list[StrategyMatch]) -> bool:
+  """True when any match still reads the Python HTF zone/level recompute.
+
+  Go-origin matches never do: their barriers and target room come from the
+  zone book Go publishes, and every branch below that takes ``htf_zones`` or
+  ``htf_levels`` is guarded by ``go_origin`` (the counter-bias adapter only
+  acts on the exact ``counter_bias`` tag, which Go does not emit).
+  """
+  return any(
+    GO_ORIGIN_TAG not in tuple(getattr(match, "tags", ()) or ())
+    for match in matches
+  )
+
+
 def _structural_barrier_zone_book(
   frames: dict[str, Any],
   cfg: Any | None = None,
@@ -8055,13 +8069,14 @@ async def _handle_event(
   intent_subjects: dict[str, Any] = {}
   arbitrable: list[ExecutionIntent] = []
   arbitration = arbitrate_execution_intents([])
+  htf_zones: list[Zone] = []
+  htf_levels: list[Level] = []
   if strategy_matches:
-    # Go supplies the strategy's own geometry in both modes; these are the
-    # opposing-barrier/target-room execution recheck's own inputs, not a
-    # second technical-production source, and apply identically whether the
-    # match came from a Go event or a legacy Python match.
-    htf_zones = _htf_zones(frames, None, symbol=symbol)
-    htf_levels = _htf_levels(frames, None, symbol=symbol)
+    # Only a non-Go match reads these; Go owns zones, swings and levels, so
+    # a Go-only cycle no longer recomputes them from raw bars in Python.
+    if _needs_python_htf_structure(strategy_matches):
+      htf_zones = _htf_zones(frames, None, symbol=symbol)
+      htf_levels = _htf_levels(frames, None, symbol=symbol)
     execution_inst = instrument_geometry.instrument_runtime(symbol)
     for routed_match in strategy_matches:
       intent_id = f"strategy:{routed_match.match_id}"
