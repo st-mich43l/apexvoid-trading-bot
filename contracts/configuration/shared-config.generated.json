@@ -1,7 +1,7 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "bec01459a04ea8c7b6b931d0edf79ee90ab6d15a2f846eefb1a11e60973557d6",
-  "count": 96,
+  "configuration_contract_fingerprint_sha256": "15bf89aec2a266196a4a733a11f2a915bffaf0ada3d7ed5a62eaf2727dca09bf",
+  "count": 100,
   "items": [
     {
       "allowed_values": [],
@@ -2948,6 +2948,118 @@
       "secret": false,
       "unit": "boolean",
       "validation_summary": "Pydantic required/type coercion only; EnvironmentResolver.Bool + AutoTradeOptions.Validate"
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": null,
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": null,
+      "ctrader_type": "IReadOnlyList<string>",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": [
+            "kafka:9092"
+          ]
+        }
+      ],
+      "deprecated_aliases": [],
+      "display_id": "config:transport.kafka.brokers",
+      "evidence_notes": [],
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "not_reported",
+      "path": "transport.kafka.brokers",
+      "python_schema_default": [
+        "kafka:9092"
+      ],
+      "python_type": "list[string]",
+      "secret": false,
+      "unit": "url",
+      "validation_summary": "At least one broker is required when the consumer is enabled."
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": null,
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": null,
+      "ctrader_type": "bool",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": true
+        }
+      ],
+      "deprecated_aliases": [],
+      "display_id": "config:transport.kafka.enabled",
+      "evidence_notes": [],
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "not_reported",
+      "path": "transport.kafka.enabled",
+      "python_schema_default": true,
+      "python_type": "bool",
+      "secret": false,
+      "unit": "boolean",
+      "validation_summary": "Pydantic required/type coercion only."
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": null,
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": null,
+      "ctrader_type": "string",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": "analysis.opportunity.v1"
+        }
+      ],
+      "deprecated_aliases": [],
+      "display_id": "config:transport.kafka.topics.analysis_opportunity",
+      "evidence_notes": [],
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "not_reported",
+      "path": "transport.kafka.topics.analysis_opportunity",
+      "python_schema_default": "analysis.opportunity.v1",
+      "python_type": "str",
+      "secret": false,
+      "unit": "identifier",
+      "validation_summary": "Kafka contract topic; changes require coordinated deployment."
+    },
+    {
+      "allowed_values": [],
+      "canonical_env": null,
+      "configurable": true,
+      "ctrader_constructor_default": null,
+      "ctrader_from_environment_default": null,
+      "ctrader_type": "string",
+      "default_conflict": false,
+      "default_contexts": [
+        {
+          "context": "python_schema",
+          "value": "analysis.opportunity.invalidated.v1"
+        }
+      ],
+      "deprecated_aliases": [],
+      "display_id": "config:transport.kafka.topics.analysis_opportunity_invalidated",
+      "evidence_notes": [],
+      "kind": "configurable",
+      "known_conflict": false,
+      "mismatch_policy": "not_reported",
+      "path": "transport.kafka.topics.analysis_opportunity_invalidated",
+      "python_schema_default": "analysis.opportunity.invalidated.v1",
+      "python_type": "str",
+      "secret": false,
+      "unit": "identifier",
+      "validation_summary": "Kafka contract topic; changes require coordinated deployment."
     }
   ],
   "known_conflict_count": 30,
@@ -2995,6 +3107,6 @@
       "path": "strategies.mapped_zone.enabled"
     }
   ],
-  "source_fingerprint_sha256": "bec01459a04ea8c7b6b931d0edf79ee90ab6d15a2f846eefb1a11e60973557d6",
+  "source_fingerprint_sha256": "15bf89aec2a266196a4a733a11f2a915bffaf0ada3d7ed5a62eaf2727dca09bf",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }
