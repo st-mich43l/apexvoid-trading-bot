@@ -209,7 +209,10 @@ public sealed class EquityZoneLadderGroupE2ETests
       store.Events,
       item => item.Type == "tp_booked"
         && item.Message.Contains("TP COMPLETED")
-        && item.TargetPips == 93
+        // SELL: measured from the group's best (highest) fill, L2 at
+        // 4101.03, like Manual Algo: (4101.03 - 4090.00) / 0.1 pip = 110.
+        // The old volume-weighted blend of L1 and L2 gave 93.
+        && item.TargetPips == 110
     );
     // L2 already filled before TP1, so no pending cancel is required.
     Assert.Empty(client.PendingOrders);
@@ -239,7 +242,7 @@ public sealed class EquityZoneLadderGroupE2ETests
       store.Events,
       item => item.Type == "position_closed"
         && item.Message.Contains("highest TP archived", StringComparison.OrdinalIgnoreCase)
-        && item.TargetPips == 93
+        && item.TargetPips == 110
     );
     Assert.Contains(
       store.Events,
