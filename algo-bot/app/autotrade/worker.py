@@ -44,20 +44,17 @@ from app.autotrade.execution_policy import (
   OUTCOME_ALLOW,
   OUTCOME_ALLOW_WITH_WARNING,
   ExecutionGuardDecision,
-  GuardOutcome,
   StructuralBarrier,
   StructuralSourceIdentity,
   classify_barrier_relationship,
   classify_guard_severity,
   evaluate_execution_policy,
-  resolve_guard_mode,
 )
 from app.autotrade.active_exposure import (
   evaluate_entry_against_exposure,
   load_active_exposures,
 )
 from app.autotrade.entry_overlap import release_entry_zone, reserve_entry_zone
-from app.autotrade.protective_stop import opposing_zone_fingerprint
 from app.autotrade.strategy_match import (
   StrategyMatch,
   strategy_match_key,
@@ -139,12 +136,7 @@ from app.analysis.m1_trigger import (
   evaluate_m1_trigger_window,
   latest_eligible_m1_bar_ts,
 )
-from app.analysis.confluence_zone import (
-  ConfluenceMember,
-  claim_confluence_zone,
-  release_confluence_zone,
-  resolve_confluence_zone_id,
-)
+from app.analysis.confluence_zone import ConfluenceMember
 from app.autotrade.trade_plan import TradePlanError
 from app.autotrade.trade_plan_builder import (
   TradePlanBuildRejected,
@@ -754,100 +746,6 @@ def _htf_levels(
   )
 
 
-def _needs_python_htf_structure(matches: list[StrategyMatch]) -> bool:
-  """True when any match still reads the Python HTF zone/level recompute.
-
-  Go-origin matches never do: their barriers and target room come from the
-  zone book Go publishes, and every branch below that takes ``htf_zones`` or
-  ``htf_levels`` is guarded by ``go_origin`` (the counter-bias adapter only
-  acts on the exact ``counter_bias`` tag, which Go does not emit).
-  """
-  return any(
-    GO_ORIGIN_TAG not in tuple(getattr(match, "tags", ()) or ())
-    for match in matches
-  )
-
-
-def _structural_barrier_zone_book(
-  frames: dict[str, Any],
-  cfg: Any | None = None,
-  *,
-  symbol: str = "XAU",
-) -> dict[str, Any]:
-  """Per-timeframe zones+ATR for ``build_structural_barrier_book``, computed
-  directly from ``frames`` the same way ``_htf_zones`` computes its own
-  single-timeframe (M15) read (displacement -> supply_demand ->
-  mark_mitigation), generalized across ``DEFAULT_STRUCTURAL_TIMEFRAMES``
-  (M5/M15/H1 - the same set ``frames`` is normally loaded with, see
-  ``CONTEXT_TIMEFRAMES``). Deliberately stops at ``mark_mitigation``, not
-  ``_htf_zones``'s further ``classify_execution_zone`` grade filter -
-  ``build_structural_barrier_book``/``_barriers_from_timeframe`` already
-  apply their own side/mitigation/width filtering, and this must define
-  the SAME barrier pool scanner.py's ``_structural_barrier_opposing_entries``
-  builds from ``analysis.per_tf``, not a stricter one.
-  """
-  if cfg is None:
-    cfg = _default_runtime_cfg()
-  atr_length = max(2, int(cfg.analysis.atr.length))
-  per_tf: dict[str, Any] = {}
-  for tf in DEFAULT_STRUCTURAL_TIMEFRAMES:
-    tf_frame = frames.get(tf)
-    if tf_frame is None or tf_frame.empty:
-      continue
-    atr_values = atr_series(tf_frame, atr_length)
-    legs = displacement(
-      tf_frame,
-      atr_values,
-      max(0.1, float(cfg.analysis.displacement.atr_mult)),
-      max(0.0, float(cfg.analysis.momentum.body_frac)),
-    )
-    if not legs:
-      continue
-    zones = mark_mitigation(supply_demand(tf_frame, legs), tf_frame)
-    per_tf[tf] = SimpleNamespace(zones=zones, atr=atr_values)
-  return per_tf
-
-
-def _structural_barrier_entries(
-  frames: dict[str, Any],
-  cfg: Any | None = None,
-  *,
-  symbol: str = "XAU",
-) -> tuple[ZoneOpposingEntry, ...]:
-  """Multi-timeframe, merged, cross-side-reconciled opposing-structure
-  entries for the TradePlan-time room/containment recheck (2026-09, Key
-  Level structural repair Phase 2) - the ``_zone_opposing_entries(htf_zones)``
-  single-timeframe (M15-only) call this replaces at the call site below.
-
-  ``_structural_barrier_zone_book`` only computes zones from raw frames
-  (displacement -> supply_demand -> mark_mitigation) - unlike scanner.py's
-  ``analysis.per_tf`` (a full ``TimeframeAnalysis``), it carries no
-  key_levels/session_levels/trendlines, so ``build_structural_barrier_book``'s
-  confluence-score boost is a documented no-op here (``getattr`` fallbacks
-  to empty, never an error) - this path only ever gets the zone pooling/
-  merge/reconciliation, not the confluence boost. Acceptable: this is the
-  secondary TradePlan-time recheck ("a final stale-context safety check,
-  not a second strategy planner"), not the primary actionability gate
-  (scanner.py's ``_structural_barrier_opposing_entries``), which does get
-  the full boost from real per-timeframe analysis.
-  """
-  if cfg is None:
-    cfg = _default_runtime_cfg()
-  per_tf = _structural_barrier_zone_book(frames, cfg, symbol=symbol)
-  if not per_tf:
-    return ()
-  policy = cfg.execution.policy
-  barriers = build_structural_barrier_book(
-    per_tf,
-    major_score=float(cfg.analysis.market_map.major_score),
-    pip_size=units.pip_size(symbol),
-    max_width_atr=float(policy.execution_zone_max_width_atr),
-    max_width_pips=float(policy.execution_zone_max_width_pips),
-    proximal_band_atr=float(cfg.actionability.gates.proximal_band_atr),
-  )
-  return to_opposing_entries(barriers)
-
-
 # _ZoneOpposingEntry/_zone_opposing_entries moved to structural_target_room.py
 # (2026-09, Market Map purge stage 4) so actionability.py's scanner-side
 # opposing-zone check can share the identical technique-native adapter
@@ -1100,78 +998,6 @@ def _opposing_barrier_decision(
   )
 
 
-def _defended_level_guard(
-  symbol: str,
-  entry_reference: float,
-  *,
-  direction: str,
-  guard_mode: str,
-) -> ExecutionGuardDecision:
-  """Block fresh BUY entries near a macro-significant defended price level.
-
-  2026 USDJPY dig: Japan/the US ran a record ~Y11.73T (~$73B) joint
-  intervention when USDJPY breached 160 — the dollar snapped from 163 to
-  ~156-157 within days. Intervention sells USDJPY, so the asymmetric risk
-  is being **long** into that ceiling — not short.
-
-  Prod failure mode (2026-08-25): a symmetric 100-pip buffer around 160
-  hard-blocked every USDJPY plan (including SELLs at ~159.4) while
-  activation_allowed kept climbing — zero publishes lifetime. Guard is
-  therefore:
-
-  - **BUY** (or unknown side) within ``buffer`` of a configured level →
-    hard block (``hard_geometry=True``, ignores observe mode).
-  - **SELL** near the level → allow (aligned with intervention direction).
-  - Outside buffer → allow.
-
-  Off by default (defended_levels empty / buffer 0); currently only
-  configured for USDJPY.
-  """
-  levels = instrument_geometry.defended_levels(symbol)
-  buffer_price = instrument_geometry.defended_level_buffer_price(symbol)
-  if not levels or buffer_price <= 0:
-    return ExecutionGuardDecision(
-      "defended_level",
-      OUTCOME_ALLOW,
-      "no_defended_level_configured",
-      "no defended level configured",
-      False,
-    )
-  nearest = min(levels, key=lambda level: abs(level - entry_reference))
-  distance = abs(nearest - entry_reference)
-  if distance > buffer_price:
-    return ExecutionGuardDecision(
-      "defended_level",
-      OUTCOME_ALLOW,
-      "no_defended_level_nearby",
-      f"nearest defended level {nearest:.5f} is {distance:.5f} away",
-      False,
-    )
-  side = str(direction or "").upper()
-  if side == "SELL":
-    return ExecutionGuardDecision(
-      "defended_level",
-      OUTCOME_ALLOW,
-      "defended_level_sell_aligned",
-      (
-        f"SELL {entry_reference:.5f} near defended {nearest:.5f} "
-        f"(buffer {buffer_price:.5f}) aligned with intervention risk"
-      ),
-      False,
-    )
-  message = (
-    f"entry {entry_reference:.5f} is {distance:.5f} from defended level "
-    f"{nearest:.5f} (buffer {buffer_price:.5f})"
-  )
-  return classify_guard_severity(
-    "defended_level",
-    "entry_near_defended_level",
-    message,
-    guard_mode=guard_mode,
-    hard_geometry=True,
-  )
-
-
 def _opposing_barrier_reason(
   direction: str,
   entry_reference: float,
@@ -1232,503 +1058,7 @@ def _opposing_barrier_reason(
   return decision.message if decision.hard_block else None
 
 
-def _counter_bias_barrier_between(
-  direction: str,
-  entry_reference: float,
-  target: float,
-  zones: list[Zone],
-  levels: list[Level],
-) -> tuple[float, str] | None:
-  """Nearest structural barrier strictly between ``entry_reference`` and
-  ``target``, as (near_edge_price, description). Used by
-  ``_adapt_counter_bias_target`` (Fix 7 - anchor the target to the barrier
-  instead of only rejecting).
-  """
-  if direction == "BUY":
-    between = [
-      zone for zone in zones
-      if zone.side == "supply"
-      and zone.high >= entry_reference
-      and zone.low <= target
-    ]
-    barrier = _nearest_directional_zone("SELL", entry_reference, between)
-    if barrier is not None:
-      return barrier.low, f"{barrier.side} {barrier.low:.5f}-{barrier.high:.5f}"
-  else:
-    between = [
-      zone for zone in zones
-      if zone.side == "demand"
-      and zone.low <= entry_reference
-      and zone.high >= target
-    ]
-    barrier = _nearest_directional_zone("BUY", entry_reference, between)
-    if barrier is not None:
-      return barrier.high, f"{barrier.side} {barrier.low:.5f}-{barrier.high:.5f}"
-
-  level_bounds = [
-    (level.price - level.band, level.price + level.band, level.kind)
-    for level in levels
-  ]
-  ahead = [
-    (abs(entry_reference - low), low, high, kind)
-    for low, high, kind in level_bounds
-    if (
-      direction == "BUY"
-      and high >= entry_reference
-      and low <= target
-    ) or (
-      direction == "SELL"
-      and low <= entry_reference
-      and high >= target
-    )
-  ]
-  if not ahead:
-    return None
-  _, low, high, kind = min(ahead, key=lambda item: item[0])
-  near_edge = low if direction == "BUY" else high
-  return near_edge, f"{kind} {low:.5f}-{high:.5f}"
-
-
 _MIN_COUNTER_BIAS_TARGET_PIPS = 15
-
-
-def _adapt_counter_bias_target(
-  match: StrategyMatch,
-  entry_reference: float,
-  zones: list[Zone],
-  levels: list[Level],
-  pip_size: float,
-) -> tuple[StrategyMatch, GuardOutcome]:
-  """Fix 7: a barrier before a counter-bias target caps the target instead
-  of rejecting the setup outright. Selects the largest configured target
-  that still fits inside the room to the barrier (buffered a couple of
-  pips short of it), and trims ``targets_pips`` to match; only blocks when
-  even the smallest configured target does not fit.
-  """
-  target = float(match.target_price) if match.target_price is not None else None
-  if target is None or "counter_bias" not in match.tags:
-    return match, GuardOutcome(
-      "counter_bias", OUTCOME_ALLOW, "not_counter_bias", "", False,
-      measured={"target_outcome": "target_unchanged"},
-    )
-  if (
-    match.direction == "BUY" and target <= entry_reference
-    or match.direction == "SELL" and target >= entry_reference
-  ):
-    # Not adaptable - the target itself is on the wrong side of entry,
-    # a genuine invalidation regardless of guard mode.
-    return match, GuardOutcome(
-      "counter_bias",
-      "block",
-      "target_not_ahead_of_entry",
-      f"counter-bias target {target:.5f} is not ahead of "
-      f"{match.direction} entry {entry_reference:.5f}",
-      True,
-    )
-  source_levels = [
-    level for level in levels
-    if not (
-      level.price - level.band <= match.key_level <= level.price + level.band
-      and level.price - level.band <= match.entry_high
-      and level.price + level.band >= match.entry_low
-    )
-  ]
-  barrier = _counter_bias_barrier_between(
-    match.direction, entry_reference, target, zones, source_levels,
-  )
-  if barrier is None:
-    return match, GuardOutcome(
-      "counter_bias", OUTCOME_ALLOW, "no_barrier", "no barrier before target", False,
-      measured={"target_outcome": "target_unchanged"},
-    )
-  barrier_price, description = barrier
-  buffer_pips = 2.0
-  if match.direction == "BUY":
-    room_pips = (barrier_price - entry_reference) / pip_size - buffer_pips
-  else:
-    room_pips = (entry_reference - barrier_price) / pip_size - buffer_pips
-  fitted = max(
-    (pips for pips in match.targets_pips if pips <= room_pips),
-    default=None,
-  )
-  if fitted is None and room_pips >= _MIN_COUNTER_BIAS_TARGET_PIPS:
-    fitted = max(
-      _MIN_COUNTER_BIAS_TARGET_PIPS,
-      int(math.floor(room_pips)),
-    )
-  if fitted is None:
-    return match, GuardOutcome(
-      "counter_bias",
-      OUTCOME_ALLOW_WITH_WARNING,
-      "target_room_insufficient",
-      (
-        f"counter-bias target preference before EQ {target:.5f} by {description}: "
-        f"room {room_pips:.1f}p does not fit the smallest configured target "
-        f"({min(match.targets_pips) if match.targets_pips else 0}p)"
-      ),
-      False,
-      measured={
-        "target_outcome": "target_room_insufficient",
-        "preference_telemetry": True,
-        "available_room_pips": round(room_pips, 1),
-        "minimum_target_pips": (
-          min(match.targets_pips)
-          if match.targets_pips else _MIN_COUNTER_BIAS_TARGET_PIPS
-        ),
-        "barrier_price": barrier_price,
-      },
-    )
-  adjusted_target = (
-    entry_reference + fitted * pip_size
-    if match.direction == "BUY"
-    else entry_reference - fitted * pip_size
-  )
-  adapted = replace(
-    match,
-    target_price=adjusted_target,
-    target_model="hybrid",
-    target_reference_price="planned_entry",
-    absolute_target_price=adjusted_target,
-    targets_pips=tuple(sorted(set([
-      *(p for p in match.targets_pips if p <= room_pips),
-      fitted,
-    ]))),
-  )
-  return adapted, GuardOutcome(
-    "counter_bias",
-    "adjust_target",
-    "target_capped_by_structure",
-    (
-      f"counter-bias target adapted {target:.5f} -> {adjusted_target:.5f} "
-      f"(room {room_pips:.1f}p, barrier {description})"
-    ),
-    False,
-    measured={
-      "target_outcome": "target_adapted",
-      "original_target": target,
-      "adjusted_target": adjusted_target,
-      "barrier_price": barrier_price,
-      "available_room_pips": round(room_pips, 1),
-      "selected_target_pips": fitted,
-    },
-  )
-
-
-def _zone_cooldown_key(symbol: str, direction: str) -> str:
-  return f"auto_trade:zone:cooldown:{symbol.upper()}:{direction.upper()}"
-
-
-async def _zone_cooldown_reason(
-  client: Any,
-  symbol: str,
-  direction: str,
-  entry_reference: float,
-  atr: float | None,
-  cooldown_atr: float,
-) -> str | None:
-  """Veto a same-direction re-entry near a price that just stopped a trade
-  out (23 Jul 2026 incident: a stopped-out zone was re-traded 15 minutes
-  later).
-
-  The marker is written by AutoTradeEngine.cs whenever a tracked position
-  vanishes from the broker without the engine itself having closed it - a
-  clean take-profit exit never produces one (see AutoTradeEngine.cs's
-  reconcile stale-position branch) - but the vanish itself is ambiguous
-  between a genuine stop-loss and a manual/external close, and the current
-  broker integration has no execution-history lookup to tell them apart.
-  Root cause of the post-23-Jul frequency collapse: the marker was treated
-  as a confirmed stop-out unconditionally, blocking every ambiguous close
-  (including manual closes) for the full cooldown window. Only a marker
-  explicitly tagged ``reason=stop_loss`` and ``confidence=confirmed``
-  enforces the block now; legacy markers and anything the engine could not
-  positively attribute pass straight through (fail open, matching the
-  pattern the zone-reconcile circuit breaker already uses for "don't guess,
-  don't destroy the opportunity").
-  """
-  if (
-    not runtime_config.lifecycle.zone.cooldown_enabled
-    or not atr or atr <= 0 or cooldown_atr <= 0
-  ):
-    return None
-  raw = await client.get(_zone_cooldown_key(symbol, direction))
-  if raw is None:
-    return None
-  try:
-    state = json.loads(raw)
-    recorded_entry = float(state["entry_price"])
-  except (TypeError, ValueError, KeyError, json.JSONDecodeError):
-    return None
-  if (
-    state.get("reason") != "stop_loss"
-    or state.get("confidence") != "confirmed"
-  ):
-    return None
-  distance_atr = abs(entry_reference - recorded_entry) / atr
-  if distance_atr > cooldown_atr:
-    return None
-  return (
-    f"zone cooldown: {direction} entry {entry_reference:.5f} is "
-    f"{distance_atr:.2f} ATR from a stopped-out entry at "
-    f"{recorded_entry:.5f} (limit {cooldown_atr:.2f} ATR)"
-  )
-
-
-def _has_overlapping_zones(zones: list[Zone] | None) -> bool:
-  """True when the technique-native HTF zone scan itself contains a BUY
-  and a SELL band whose ranges intersect at all - a self-contradiction in
-  the structure, not yet necessarily where any candidate is entering.
-  Feeds the observability counter regardless of the veto flag or any
-  specific candidate.
-  """
-  entries = zone_opposing_entries(zones)
-  buys = [entry for entry in entries if entry.side == "buy"]
-  sells = [entry for entry in entries if entry.side == "sell"]
-  return any(
-    buy.lo <= sell.hi and sell.lo <= buy.hi
-    for buy in buys
-    for sell in sells
-  )
-
-
-def _resolve_overlap_thesis(
-  direction: str,
-  entry_reference: float,
-  htf_zones: list[Zone] | None,
-  m1: Any,
-  atr: float | None,
-  cfg: Any | None = None,
-  *,
-  symbol: str = "XAU",
-) -> GuardOutcome:
-  """Resolve an entry inside both a demand and a supply band by the same
-  M1 reaction-lookback memory ``map_strategy.py`` already computes for its
-  own reaction selection (PR #100), instead of the previous unconditional
-  "both directions are dead" veto. Never trims or deletes either band from
-  the HTF zone scan itself - this only decides whether THIS candidate's
-  thesis has directional confirmation.
-  """
-  from app.autotrade.map_strategy import _reaction_in_lookback
-
-  if cfg is None:
-    cfg = instrument_runtime_view(symbol)
-  guard_mode = resolve_guard_mode(cfg)
-  if not htf_zones:
-    return GuardOutcome("overlap", OUTCOME_ALLOW, "no_map", "no HTF zones", False)
-  entries = zone_opposing_entries(htf_zones)
-  demand_hit = next(
-    (entry for entry in entries if entry.side == "buy" and entry.lo <= entry_reference <= entry.hi),
-    None,
-  )
-  supply_hit = next(
-    (entry for entry in entries if entry.side == "sell" and entry.lo <= entry_reference <= entry.hi),
-    None,
-  )
-  if demand_hit is None or supply_hit is None:
-    return GuardOutcome("overlap", OUTCOME_ALLOW, "no_overlap", "no overlap", False)
-  reason = (
-    f"entry {entry_reference:.5f} inside both demand "
-    f"{demand_hit.lo:.5f}-{demand_hit.hi:.5f} and supply "
-    f"{supply_hit.lo:.5f}-{supply_hit.hi:.5f}"
-  )
-  if m1 is None or getattr(m1, "empty", True) or not atr or atr <= 0:
-    return classify_guard_severity(
-      "overlap",
-      "ambiguous_waiting_confirmation",
-      reason,
-      guard_mode=guard_mode,
-    )
-  tolerance = max(0.5 * units.pip_size(symbol), 0.5 * atr)
-  own_entry = demand_hit if direction == "BUY" else supply_hit
-  own_reaction = _reaction_in_lookback(
-    m1, own_entry, direction, atr, tolerance, cfg, entry_reference,
-  )
-  if own_reaction is not None and own_reaction.reaction_type in ("rejection", "reclaim"):
-    return GuardOutcome(
-      "overlap", OUTCOME_ALLOW, "reaction_direction_resolved",
-      f"{reason} - {direction} {own_reaction.reaction_type} confirms thesis",
-      False,
-    )
-  opposite_direction = "SELL" if direction == "BUY" else "BUY"
-  opposite_entry = supply_hit if direction == "BUY" else demand_hit
-  opposite_reaction = _reaction_in_lookback(
-    m1, opposite_entry, opposite_direction, atr, tolerance, cfg, entry_reference,
-  )
-  if (
-    opposite_reaction is not None
-    and opposite_reaction.reaction_type in ("rejection", "reclaim")
-  ):
-    return classify_guard_severity(
-      "overlap",
-      "opposing_zone_ahead",
-      (
-        f"{reason} - {opposite_direction} reaction confirmed "
-        f"instead of {direction}"
-      ),
-      guard_mode=guard_mode,
-    )
-  return classify_guard_severity(
-    "overlap",
-    "ambiguous_waiting_confirmation",
-    reason,
-    guard_mode=guard_mode,
-  )
-
-
-def _opposing_zone_identity(
-  zone: Zone,
-  *,
-  symbol: str,
-  timeframe: str,
-) -> str:
-  """Exact identity of the zone a stop may be pushed beyond.
-
-  Zone detectors carry no stored id, and the detector name identifies the
-  detector rather than the zone, so two different zones from one detector
-  would share it. The fingerprint therefore includes the zone's own geometry
-  and provenance, and the executor derives the same string.
-  """
-  stored = getattr(zone, "zone_id", None)
-  if stored:
-    return str(stored)
-  created = getattr(zone, "created_ts", None)
-  return opposing_zone_fingerprint(
-    symbol=symbol,
-    timeframe=timeframe,
-    side=zone.side,
-    low=zone.low,
-    high=zone.high,
-    created_bar_ts=(
-      int(created.timestamp()) if created is not None else zone.origin_index
-    ),
-    source=zone.source or getattr(zone, "kind", "") or "zone",
-  )
-
-
-def _opposing_zone_policy_kwargs(
-  zone: Zone | None,
-  *,
-  atr: float,
-  pip_size: float,
-  symbol: str,
-  timeframe: str,
-) -> dict[str, float | str | None]:
-  if zone is None:
-    return {}
-  return {
-    "opposing_zone_low": float(zone.low),
-    "opposing_zone_high": float(zone.high),
-    "opposing_zone_id": _opposing_zone_identity(
-      zone,
-      symbol=symbol,
-      timeframe=timeframe,
-    ),
-  }
-
-
-def _zone_overlaps_candidate_band(
-  zone: Zone,
-  *,
-  candidate_low: float,
-  candidate_high: float,
-  atr: float,
-  pip_size: float,
-) -> bool:
-  """True when an HTF zone is the candidate's own wall (stacked map noise)."""
-  from app.autotrade.structural_target_room import overlap_exclusion_threshold
-
-  low = min(float(candidate_low), float(candidate_high))
-  high = max(float(candidate_low), float(candidate_high))
-  overlap = min(high, float(zone.high)) - max(low, float(zone.low))
-  if overlap <= 0:
-    return False
-  threshold = overlap_exclusion_threshold(pip_size=pip_size, atr=atr)
-  return overlap >= threshold
-
-
-def _nearest_directional_zone(
-  direction: str,
-  entry_reference: float,
-  zones: list[Zone],
-  *,
-  candidate_entry_low: float | None = None,
-  candidate_entry_high: float | None = None,
-  atr: float | None = None,
-  pip_size: float | None = None,
-  exclude_entry_structure: bool = True,
-) -> Zone | None:
-  """Nearest HTF zone on the side that can trap the stop of ``direction``.
-
-  Supply for SELL, demand for BUY. Used for opposing-zone attachment and
-  HTF veto.
-
-  Excludes the candidate's own entry structure: a SELL at supply used to
-  pick that same supply (distance 0), then opposing-stop push blew the
-  envelope and silenced valid trades. Same for BUY at demand.
-  """
-  side = "supply" if direction == "SELL" else "demand"
-  candidates = [zone for zone in zones if zone.side == side]
-  if not candidates:
-    return None
-
-  band_low = candidate_entry_low
-  band_high = candidate_entry_high
-  if (
-    band_low is not None
-    and band_high is not None
-    and atr is not None
-    and pip_size is not None
-    and float(atr) > 0
-    and float(pip_size) > 0
-  ):
-    candidates = [
-      zone for zone in candidates
-      if not _zone_overlaps_candidate_band(
-        zone,
-        candidate_low=float(band_low),
-        candidate_high=float(band_high),
-        atr=float(atr),
-        pip_size=float(pip_size),
-      )
-    ]
-  if exclude_entry_structure:
-    candidates = [
-      zone for zone in candidates
-      if not (float(zone.low) <= float(entry_reference) <= float(zone.high))
-    ]
-  if not candidates:
-    return None
-
-  def _distance(zone: Zone) -> float:
-    if zone.low <= entry_reference <= zone.high:
-      return 0.0
-    return min(abs(entry_reference - zone.low), abs(entry_reference - zone.high))
-
-  return min(candidates, key=_distance)
-
-
-def _htf_veto_reason(
-  direction: str,
-  entry_reference: float,
-  zone: Zone | None,
-) -> str | None:
-  """Veto a direction that opposes a fresh HTF zone price hasn't reached yet
-  (defect 4, 22 Jul: SELL taken 13 pips below untested supply). A short
-  should be taken at supply, not beneath it.
-  """
-  if zone is None or zone.touches > 0:
-    return None
-  untested_and_ahead = (
-    zone.low > entry_reference if direction == "SELL"
-    else zone.high < entry_reference
-  )
-  if not untested_and_ahead:
-    return None
-  kind = "supply" if direction == "SELL" else "demand"
-  side_word = "below" if direction == "SELL" else "above"
-  return (
-    f"HTF veto: {direction} {side_word} untested {kind} "
-    f"{zone.low:.5f}-{zone.high:.5f}"
-  )
 
 
 async def _record_gate_reject(client: Any, symbol: str, condition: str) -> None:
@@ -2312,50 +1642,6 @@ async def _persist_v8_confirmation_phase(
   )
 
 
-def _resolve_match_confluence_claim_id(
-  symbol: str,
-  match: StrategyMatch,
-  htf_zones: list[Zone] | None,
-) -> str | None:
-  """Use scanner's merged zone identity; resolve only for legacy matches."""
-  if match.confluence_zone_id:
-    return match.confluence_zone_id
-  if not htf_zones:
-    return None
-  other_members = [
-    ConfluenceMember(
-      member_id=f"{getattr(entry, 'tier', 'entry')}:{entry.lo:.5f}:{entry.hi:.5f}",
-      side=entry.side,
-      low=float(entry.lo),
-      high=float(entry.hi),
-      kind=next(
-        (tag for tag in entry.tags if tag.casefold() in {
-          "demand", "supply", "ob", "fvg", "breaker",
-        }),
-        entry.tier,
-      ),
-      score=float(entry.score),
-    )
-    for entry in zone_opposing_entries(htf_zones)
-  ]
-  return resolve_confluence_zone_id(
-    match.entry_low,
-    match.entry_high,
-    "buy" if match.direction == "BUY" else "sell",
-    match.tags or (match.structural_kind or "candidate",),
-    other_members=other_members,
-    symbol=symbol,
-    atr=match.atr,
-    pip_size=units.pip_size(symbol),
-    source_tf=match.source_tf,
-    max_width=float(instrument_geometry.merge_max_width(symbol)),
-    gap=float(instrument_geometry.merge_gap_price(symbol)),
-    candidate_id=match.match_id,
-  )
-
-
-
-
 def _execution_quote_access(
   match: StrategyMatch,
   spot: AutoTradeSpot | None,
@@ -2434,8 +1720,6 @@ async def _publish_trade_plan_v8(
   spot: AutoTradeSpot | None,
   match: StrategyMatch,
   *,
-  htf_zones: list[Zone] | None = None,
-  htf_levels: list[Level] | None = None,
   regime: str | None = None,
   frames: dict[str, Any] | None = None,
 ) -> str | None:
@@ -2461,7 +1745,6 @@ async def _publish_trade_plan_v8(
   guard/policy rejection - always recorded via _record_v8_build_rejected,
   never a bare silent return, except the ordinary retained retest wait).
   """
-  go_origin = GO_ORIGIN_TAG in tuple(getattr(match, "tags", ()) or ())
   existing = await resolve_existing_v8_state(client, match)
   if existing.already_terminal:
     return existing.plan_id if existing.plan_exists else None
@@ -2541,47 +1824,17 @@ async def _publish_trade_plan_v8(
 
   # Technique pack: pair reaction windows for non-scalp; scalping killzone for scalps.
   from app.autotrade.killzone import (
-    confirmation_is_sweep_body,
-    evaluate_instrument_session_quality,
     evaluate_killzone_gate,
     evaluate_reaction_publish_window,
     reaction_require_killzone,
     reaction_require_publish_window,
-    session_quality_minimum_confluence,
     technique_enforce,
-    technique_require_sweep_body,
   )
 
   inst = instrument_geometry.instrument_runtime(symbol)
   tech = getattr(inst.execution, "technique", None)
   enforce_pack = technique_enforce(inst)
   spot_ts = int(getattr(spot, "ts", 0) or int(datetime.now(timezone.utc).timestamp()))
-  session_quality = evaluate_instrument_session_quality(ts=spot_ts, cfg=inst)
-  selective_minimum = session_quality_minimum_confluence(inst, session_quality)
-  if selective_minimum and match.confluence < selective_minimum and not go_origin:
-    log.info(
-      "v8 publish blocked selective session quality symbol=%s match_id=%s "
-      "confluence=%s required=%s utc_hour=%s windows=%s",
-      symbol,
-      match.match_id,
-      match.confluence,
-      selective_minimum,
-      session_quality.utc_hour,
-      session_quality.measured["reaction_publish_windows"],
-    )
-    await _record_v8_build_rejected(
-      client,
-      symbol,
-      match,
-      "selective_session_low_confluence",
-      "session quality is selective; strategy confluence is below its floor",
-      {
-        "confluence": match.confluence,
-        "minimum_confluence": selective_minimum,
-        **session_quality.measured,
-      },
-    )
-    return None
   candidate_is_scalp = is_scalp_strategy(
     str(getattr(match, "strategy", "") or ""),
     family=str(getattr(match, "strategy_family", "") or getattr(match, "family", "") or "")
@@ -2681,45 +1934,6 @@ async def _publish_trade_plan_v8(
           "killzone_name": kz.killzone_name,
           "utc_hour": kz.utc_hour,
           **kz.measured,
-        },
-      )
-      return None
-
-  if (
-    GO_ORIGIN_TAG not in match.tags
-    and technique_require_sweep_body(inst)
-    and (
-      is_reaction_strategy(match.strategy)
-      or match.family in {
-        "mapped_zone_reaction",
-        "liquidity_reversal",
-        "range_reversion",
-      }
-    )
-  ):
-    # This classifies the candle pattern (sweep/reclaim vs. body-close) Python's
-    # own M1/M5 detectors produced as `entry_activation_trigger`/`reaction_type`.
-    # A Go-origin match has no such Python-computed pattern name to classify —
-    # Go's causal, strategy-specific confirmation already gated Candidate
-    # creation (go_opportunity_policy.build_strategy_match) — so re-demanding
-    # a legacy pattern label here would be a second, Python-only technical
-    # technical ownership over the same decision, exactly what confirmation_policy_for's
-    # GO_ORIGIN_TAG bypass already avoids for the M1/M5 confirmation source.
-    trigger_name = (
-      str(match.entry_activation_trigger or "")
-      or str(match.reaction_type or "")
-    )
-    if not confirmation_is_sweep_body(trigger_name):
-      await _record_v8_build_rejected(
-        client,
-        symbol,
-        match,
-        "confirmation_requires_sweep_body",
-        "technique pack: reaction publish requires sweep_reclaim/body_close",
-        {
-          "trigger": trigger_name or None,
-          "killzone_name": kz.killzone_name,
-          "utc_hour": kz.utc_hour,
         },
       )
       return None
@@ -3410,40 +2624,14 @@ async def _publish_trade_plan_v8(
       match,
       expires_at=min(int(match.expires_at), trigger_expiry),
     )
-  structural_barrier_book_enabled = bool(
-    runtime_config.actionability.target_room.structural_barrier_book_enabled
-  )
   if match_bypasses_opposing_structure(execution_match):
-    # Native-room scalp/range policy is provenance-neutral. A Go-origin
-    # match must keep the same bypass as the legacy Python-origin match.
+    # Native-room scalp/range policy is provenance-neutral.
     room_entries = ()
-  elif go_origin:
-    # Go owns technical structure for Go-origin opportunities.  Read only
-    # the barrier book the analysis-engine publishes (already width-gated,
-    # merged and reconciled there); never reconstruct a competing Python
-    # zone book when Go has not published one.
-    room_entries = await opposing_entries_for_go_match(client, symbol)
   else:
-    room_entries = ()
-    if structural_barrier_book_enabled and frames:
-      # 2026-09 (Key Level structural repair Phase 2): multi-timeframe,
-      # merged, cross-side-reconciled pool instead of the single-timeframe
-      # (M15-only) _zone_opposing_entries(htf_zones) read below - restores
-      # the same-side merge/cross-side reconciliation the 2026-09-07
-      # Market Map purge dropped.
-      room_entries = _structural_barrier_entries(
-        frames, runtime_config, symbol=symbol,
-      )
-    if not room_entries and htf_zones:
-      # Falls back to the caller's own htf_zones whenever the barrier
-      # book comes up empty - the flag is off, frames lacks full M5/M15/H1
-      # coverage (a caller/test that only loaded M1, or a live gap on one
-      # timeframe), or genuinely no barrier was found on any pooled
-      # timeframe. htf_zones is already computed from the SAME frames by
-      # this function's own caller in production, so this never discards
-      # real opposing-structure awareness the caller explicitly provided -
-      # it only ever adds to what the M15-only read alone would see.
-      room_entries = _zone_opposing_entries(htf_zones)
+    # Go owns technical structure. Read only the barrier book the
+    # analysis-engine publishes (already width-gated, merged and reconciled
+    # there); never reconstruct a competing Python zone book.
+    room_entries = await opposing_entries_for_go_match(client, symbol)
   displacement_lookback = max(
     0, int(runtime_config.execution.policy.displacement_override_lookback_bars),
   )
@@ -3603,36 +2791,10 @@ async def _publish_trade_plan_v8(
       execution_match.targets_pips,
     )
 
-  zone_claim_id = (
-    None
-    if go_origin
-    else _resolve_match_confluence_claim_id(
-      symbol,
-      match_for_plan,
-      htf_zones,
-    )
-  )
-  if zone_claim_id is not None:
-    zone_claimed = await claim_confluence_zone(
-      client, zone_id=zone_claim_id, owner_id=setup_id,
-    )
-    if not zone_claimed:
-      await _record_v8_build_rejected(
-        client, symbol, match, "zone_already_claimed",
-        f"merged confluence zone {zone_claim_id!r} is already owned by a "
-        "different setup - one merged zone may own at most one order",
-        {"zone_id": zone_claim_id},
-      )
-      return None
-
   claimed = await claim_active_thesis(
     client, symbol=symbol, thesis_id=match.thesis_id, setup_id=setup_id,
   )
   if not claimed:
-    if zone_claim_id is not None:
-      await release_confluence_zone(
-        client, zone_id=zone_claim_id, owner_id=setup_id,
-      )
     await _record_v8_build_rejected(
       client, symbol, match, "thesis_already_owned",
       f"thesis {match.thesis_id!r} is already owned by a different setup - "
@@ -3641,149 +2803,11 @@ async def _publish_trade_plan_v8(
     )
     return None
 
-  strategy_opposing_zone = None if go_origin else _nearest_directional_zone(
-    match_for_plan.direction,
-    spot.price,
-    htf_zones or [],
-    candidate_entry_low=match_for_plan.entry_low,
-    candidate_entry_high=match_for_plan.entry_high,
-    atr=float(match_for_plan.atr),
-    pip_size=float(units.pip_size(symbol)),
-  )
-  guard_mode = resolve_guard_mode()
-  source = _structural_source_identity(
-    strategy=match_for_plan.strategy,
-    family=match_for_plan.family,
-    structural_source=(
-      match_for_plan.structural_source or match_for_plan.strategy
-    ),
-    low=match_for_plan.entry_low,
-    high=match_for_plan.entry_high,
-    key_level=match_for_plan.key_level,
-    zone_id=match_for_plan.zone_id,
-    level_id=match_for_plan.level_id,
-  )
-  barrier_outcome = (
-    GuardOutcome(
-      "barrier", OUTCOME_ALLOW, "go_authoritative",
-      "Go analysis owns technical barriers", False,
-    )
-    if go_origin else _opposing_barrier_decision(
-      match_for_plan.direction,
-      spot.price,
-      match_for_plan.target_price,
-      match_for_plan.atr,
-      htf_zones or [], htf_levels or [],
-      instrument_geometry.structural_barrier_buffer_atr(symbol),
-      source=source,
-      guard_mode=guard_mode,
-    )
-  )
   async def _release_claims() -> None:
     await release_active_thesis(
       client, symbol=symbol, thesis_id=match.thesis_id, setup_id=setup_id,
     )
     await release_entry_zone(client, symbol=symbol, setup_id=setup_id)
-    if zone_claim_id is not None:
-      await release_confluence_zone(
-        client, zone_id=zone_claim_id, owner_id=setup_id,
-      )
-
-  if (
-    barrier_outcome.hard_block
-    and not match_bypasses_opposing_structure(match_for_plan)
-    and not go_origin
-  ):
-    await _release_claims()
-    await _record_v8_build_rejected(
-      client, symbol, match, barrier_outcome.reason_code,
-      barrier_outcome.message, barrier_outcome.measured,
-    )
-    return None
-
-  # Defended-level guard: intervention risk is long into the macro ceiling
-  # (USDJPY 160). SELLs near the level stay eligible; BUYs hard-block.
-  defended_outcome = _defended_level_guard(
-    symbol,
-    spot.price,
-    direction=str(getattr(match_for_plan, "direction", "") or ""),
-    guard_mode=guard_mode,
-  )
-  if defended_outcome.hard_block and not go_origin:
-    await _release_claims()
-    await _record_v8_build_rejected(
-      client, symbol, match, defended_outcome.reason_code,
-      defended_outcome.message, defended_outcome.measured,
-    )
-    return None
-
-  # HTF veto: reject when the nearest opposing HTF zone is still untested and
-  # ahead of the executable quote (defect 4: a short taken below untested
-  # supply). Preflight used to enforce this; TradePlan owns it now. Scalps with
-  # fitted native room skip HTF opposing — range/scalping room is the gate.
-  if (
-    runtime_config.actionability.gates.htf_veto_enabled
-    and not match_bypasses_opposing_structure(match_for_plan)
-    and not go_origin
-  ):
-    htf_opposing = _nearest_directional_zone(
-      match_for_plan.direction,
-      spot.price,
-      htf_zones or [],
-      candidate_entry_low=match_for_plan.entry_low,
-      candidate_entry_high=match_for_plan.entry_high,
-      atr=float(match_for_plan.atr),
-      pip_size=float(units.pip_size(symbol)),
-    )
-    htf_reason = _htf_veto_reason(match_for_plan.direction, spot.price, htf_opposing)
-    if htf_reason is not None:
-      htf_severity = classify_guard_severity(
-        "htf_veto",
-        "htf_veto",
-        htf_reason,
-        guard_mode=guard_mode,
-      )
-      if htf_severity.hard_block:
-        await _release_claims()
-        await _record_v8_build_rejected(
-          client, symbol, match, "htf_veto", htf_reason, dict(htf_severity.measured),
-        )
-        return None
-
-  # Hard overlap veto: an entry inside both demand and supply must fail before
-  # publishing, resolved via the reaction-lookback thesis check that the
-  # preflight used to run.
-  overlap_outcome = (
-    GuardOutcome(
-      "overlap", OUTCOME_ALLOW, "go_authoritative",
-      "Go analysis owns technical overlap", False,
-    )
-    if go_origin else _resolve_overlap_thesis(
-      match_for_plan.direction,
-      entry_reference,
-      htf_zones,
-      None if frames is None else frames.get("M1"),
-      float(match_for_plan.atr),
-      None,
-      symbol=symbol,
-    )
-  )
-  if overlap_outcome.hard_block:
-    await _release_claims()
-    await _record_v8_build_rejected(
-      client,
-      symbol,
-      match,
-      overlap_outcome.reason_code,
-      overlap_outcome.message,
-      dict(overlap_outcome.measured),
-    )
-    return None
-  if overlap_outcome.reason_code not in {"no_map", "no_overlap"}:
-    log.info(
-      "v8 overlap preference observed symbol=%s reason=%s",
-      symbol, overlap_outcome.reason_code,
-    )
 
   # News window: a lookup failure retains the intent (non-terminal wait);
   # an active window is preference telemetry only (matches old preflight
@@ -3812,52 +2836,40 @@ async def _publish_trade_plan_v8(
       symbol, news_event.get("title", "unknown"),
     )
 
-  cooldown_reason = None if go_origin else await _zone_cooldown_reason(
-    client, symbol, match.direction, spot.price,
-    match.atr, runtime_config.lifecycle.zone.cooldown_atr,
+  overlap_blocker = await reserve_entry_zone(
+    client,
+    symbol=symbol,
+    setup_id=setup_id,
+    strategy=str(match_for_plan.strategy),
+    direction=str(match_for_plan.direction),
+    low=float(match_for_plan.entry_low),
+    high=float(match_for_plan.entry_high),
+    atr=float(match_for_plan.atr or 0.0),
+    now=now_ts,
   )
-  if cooldown_reason is not None:
-    log.info(
-      "v8 zone_cooldown preference observed symbol=%s reason=%s",
-      symbol, cooldown_reason,
-    )
-    # Zone cooldown is preference telemetry — continue to publish.
-
-  if go_origin:
-    overlap_blocker = await reserve_entry_zone(
+  if overlap_blocker is not None:
+    await _release_claims()
+    await _record_v8_build_rejected(
       client,
-      symbol=symbol,
-      setup_id=setup_id,
-      strategy=str(match_for_plan.strategy),
-      direction=str(match_for_plan.direction),
-      low=float(match_for_plan.entry_low),
-      high=float(match_for_plan.entry_high),
-      atr=float(match_for_plan.atr or 0.0),
-      now=now_ts,
+      symbol,
+      match,
+      "entry_zone_overlap_same_direction",
+      (
+        f"{match_for_plan.direction} zone "
+        f"{match_for_plan.entry_low:.5f}-{match_for_plan.entry_high:.5f} "
+        f"overlaps {overlap_blocker.strategy} zone "
+        f"{overlap_blocker.low:.5f}-{overlap_blocker.high:.5f} "
+        "admitted within the last 45 minutes"
+      ),
+      {
+        "overlap_setup_id": overlap_blocker.setup_id,
+        "overlap_strategy": overlap_blocker.strategy,
+        "overlap_low": overlap_blocker.low,
+        "overlap_high": overlap_blocker.high,
+        "overlap_reserved_at": overlap_blocker.reserved_at,
+      },
     )
-    if overlap_blocker is not None:
-      await _release_claims()
-      await _record_v8_build_rejected(
-        client,
-        symbol,
-        match,
-        "entry_zone_overlap_same_direction",
-        (
-          f"{match_for_plan.direction} zone "
-          f"{match_for_plan.entry_low:.5f}-{match_for_plan.entry_high:.5f} "
-          f"overlaps {overlap_blocker.strategy} zone "
-          f"{overlap_blocker.low:.5f}-{overlap_blocker.high:.5f} "
-          "admitted within the last 45 minutes"
-        ),
-        {
-          "overlap_setup_id": overlap_blocker.setup_id,
-          "overlap_strategy": overlap_blocker.strategy,
-          "overlap_low": overlap_blocker.low,
-          "overlap_high": overlap_blocker.high,
-          "overlap_reserved_at": overlap_blocker.reserved_at,
-        },
-      )
-      return None
+    return None
 
   exposures = await load_active_exposures(client)
   scalp_ignores_opposing_active = match_bypasses_opposing_structure(
@@ -3916,24 +2928,6 @@ async def _publish_trade_plan_v8(
       exposure.message,
     )
 
-  opposing_zone_low = (
-    strategy_opposing_zone.low if strategy_opposing_zone is not None else None
-  )
-  opposing_zone_high = (
-    strategy_opposing_zone.high if strategy_opposing_zone is not None else None
-  )
-  if match_bypasses_opposing_structure(match_for_plan):
-    opposing_kwargs: dict[str, Any] = {}
-    opposing_zone_low = None
-    opposing_zone_high = None
-  else:
-    opposing_kwargs = _opposing_zone_policy_kwargs(
-      strategy_opposing_zone,
-      atr=float(match_for_plan.atr),
-      pip_size=float(units.pip_size(symbol)),
-      symbol=symbol,
-      timeframe=str(match_for_plan.source_tf or "M5"),
-    )
   # Zone-split capability + required-limit-side checks: mirror old preflight
   # policy gates against the fresh policy evaluation for the plan-time match.
   side_aware_quote = _executable_spot_price(spot, match_for_plan.direction)
@@ -3952,16 +2946,7 @@ async def _publish_trade_plan_v8(
   # None when no opposing barrier was found (evaluate_execution_policy's
   # own "available_room is not None" guard already treats that as
   # unconstrained, matching today's behavior) or when the flag is off.
-  fixed_rr_room_pips = (
-    target_room.measured.get("room_pips")
-    if structural_barrier_book_enabled and not go_origin
-    else None
-  )
-  available_target_room_pips = (
-    float(fixed_rr_room_pips)
-    if fixed_rr_room_pips is not None and math.isfinite(float(fixed_rr_room_pips))
-    else None
-  )
+  available_target_room_pips = None
   gate_policy = evaluate_execution_policy(
     match_for_plan,
     spot_price=spot.price,
@@ -3971,7 +2956,6 @@ async def _publish_trade_plan_v8(
     cfg=None,
     available_target_room_pips=available_target_room_pips,
     metric_sink=_collect_fixed_rr_metric_sink(fixed_rr_metrics),
-    **opposing_kwargs,
   )
   for metric_name, metric_symbol, metric_dims in fixed_rr_metrics:
     await increment_metric(
@@ -4066,13 +3050,6 @@ async def _publish_trade_plan_v8(
       spot_price=spot.price,
       regime=regime,
       cfg=inst,
-      opposing_zone_low=opposing_kwargs.get(
-        "opposing_zone_low", opposing_zone_low,
-      ),
-      opposing_zone_high=opposing_kwargs.get(
-        "opposing_zone_high", opposing_zone_high,
-      ),
-      opposing_zone_id=opposing_kwargs.get("opposing_zone_id"),
       executable_quote=entry_reference,
       confirmation_source=confirmation.source,
       execution_confirmation_bar_ts=confirmation.bar_ts,
@@ -4081,13 +3058,13 @@ async def _publish_trade_plan_v8(
       max_volume=int(instrument_geometry.plan_max_volume(symbol)),
       # Go opportunities carry an authority-owned technical expiry.  Do not
       # re-anchor that deadline at Python publication time.
-      now_ts=None if go_origin else now_ts,
+      now_ts=None,
       same_direction_stack=same_direction_stack,
       same_direction_size_fraction=float(
         runtime_config.risk.position_limits.same_direction_stack_size_fraction
       ),
       be_after_target_index=0,
-      approved_measured=gate_measured if (fixed_rr_target or go_origin) else None,
+      approved_measured=gate_measured,
     )
   except TradePlanBuildRejected as exc:
     await _release_claims()
@@ -4450,8 +3427,6 @@ async def _admit_strategy_intent_for_cycle(
   match: StrategyMatch,
   *,
   spot: AutoTradeSpot | None,
-  htf_zones: list[Zone],
-  htf_levels: list[Level],
 ) -> _AdmissionFailure | None:
   """Admit or reject a StrategyMatch intent before cross-engine arbitration.
 
@@ -4532,22 +3507,6 @@ async def _admit_strategy_intent_for_cycle(
       message="strategy confluence is below the global minimum",
       measured={"confluence": match.confluence},
     )
-  if spot is not None and spot.fresh:
-    _, counter_bias = _adapt_counter_bias_target(
-      match,
-      spot.price,
-      htf_zones,
-      htf_levels,
-      units.pip_size(intent.symbol),
-    )
-    if counter_bias.hard_block:
-      return _AdmissionFailure(
-        reason_code=counter_bias.reason_code,
-        terminal=True,
-        message=counter_bias.message,
-        stage="counter_bias",
-        measured=dict(counter_bias.measured or {}),
-      )
   return None
 
 
@@ -4783,14 +3742,7 @@ async def _handle_event(
   intent_subjects: dict[str, Any] = {}
   arbitrable: list[ExecutionIntent] = []
   arbitration = select_go_arbitrated_intent([])
-  htf_zones: list[Zone] = []
-  htf_levels: list[Level] = []
   if strategy_matches:
-    # Only a non-Go match reads these; Go owns zones, swings and levels, so
-    # a Go-only cycle no longer recomputes them from raw bars in Python.
-    if _needs_python_htf_structure(strategy_matches):
-      htf_zones = _htf_zones(frames, None, symbol=symbol)
-      htf_levels = _htf_levels(frames, None, symbol=symbol)
     execution_inst = instrument_geometry.instrument_runtime(symbol)
     for routed_match in strategy_matches:
       intent_id = f"strategy:{routed_match.match_id}"
@@ -4867,8 +3819,6 @@ async def _handle_event(
           intent,
           routed_match,
           spot=spot,
-          htf_zones=htf_zones,
-          htf_levels=htf_levels,
         )
         if failure is None:
           arbitrable.append(intent)
@@ -4999,8 +3949,6 @@ async def _handle_event(
             symbol,
             spot,
             routed_match,
-            htf_zones=htf_zones,
-            htf_levels=htf_levels,
             regime=_GO_OWNED_REGIME,
             frames=frames,
           )
@@ -5123,8 +4071,6 @@ async def _handle_event(
           signal_source=intent.source,
           publish_status=False,
         )
-  if _has_overlapping_zones(htf_zones):
-    await client.incr(f"auto_trade:zone_overlap:{symbol.upper()}")
   candidate_ids = list(strategy_candidate_ids)
   candidate_id = candidate_ids[0] if candidate_ids else None
   gate_source = (
@@ -5212,7 +4158,6 @@ PUBLISH_STATUS_PUBLISHED = PUBLISH_STATUS_EXECUTION_HANDOFF_CREATED
 PUBLISH_STATUS_REMAINED_WATCHING = "remained_watching"
 PUBLISH_STATUS_INVALIDATED = "invalidated"
 PUBLISH_STATUS_REJECTED = "rejected"
-PUBLISH_STATUS_DUPLICATE_RECONCILED = "duplicate_reconciled"
 
 
 @dataclass(frozen=True)
