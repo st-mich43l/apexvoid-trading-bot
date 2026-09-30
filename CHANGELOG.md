@@ -13,6 +13,21 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Removed the retired Python analysis/execution stack that no live code
+  reaches (ADR-002: Go is the sole automatic technical-analysis path; Algo Bot
+  only applies execution-time policy). Deleted ~10.5k lines / 21 modules:
+  ZoneWatch execution (`zone_execution_cutover`, `zone_execution_runtime`,
+  `entry_activation`, `direct_publish_same_cycle`, `scale_in_sizing`), the S14A
+  shadow-mode evaluator and dry-run overlay (`analysis_client/shadow*`,
+  `go_shadow_policy`), and the M1 scalping runtime and research/replay tooling
+  (`scalping.runtime/strategies/microstructure/activation/ranking/rollout/
+  research_stamp/unified_context/replay*/mad_replay/lab_event_builder/
+  math_strategies/performance`), together with the tests that only exercised
+  them. No live behavior changes: none of these modules was imported by
+  `app.main`, an operational script, or any live loop (static import graph with
+  package-`__init__` semantics, cross-checked against
+  `s13_legacy_classification.py`, which now reports 0 unreachable legacy
+  modules).
 - Analysis-engine now owns the opposing-structure barrier book and the
   higher-timeframe momentum fallback, and no longer publishes invalid
   opportunity geometry:
