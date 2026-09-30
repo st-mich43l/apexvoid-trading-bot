@@ -315,7 +315,14 @@ async def test_published_go_plan_is_registered_and_its_invalidation_requests_the
 # ---- operator cancellation ------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_explicit_withdraw_remains_rerunnable(h, real_redis_client):
+async def test_explicit_withdraw_remains_rerunnable(h, real_redis_client, monkeypatch):
+  # Withdraw semantics need several published plans, and every fixture zone
+  # must contain the same spot quote, so they necessarily overlap. Admission
+  # overlap is covered by tests/test_entry_overlap.py.
+  async def _no_overlap(*_args, **_kwargs):
+    return None
+
+  monkeypatch.setattr("app.autotrade.worker.reserve_entry_zone", _no_overlap)
   await h.activate()
   now = int(h.clock.now)
   await deliver(h, make_event(now, "opp-a", zone_id="zone-a"))
