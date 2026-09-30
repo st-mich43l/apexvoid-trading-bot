@@ -8,7 +8,7 @@ It never parses rendered Telegram text or imports scanner detector functions.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field, replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from decimal import Decimal
 from types import SimpleNamespace
@@ -27,12 +27,9 @@ from app.autotrade.go_opportunity_policy import opportunity_id_for_match_id
 from app.autotrade.go_zone_book import opposing_entries_for_go_match
 from app.autotrade import units
 from app.core import instrument_geometry
-from app.autotrade.range_targets import configured_range_targets
 from app.autotrade.candidate_publish import (
   acquire_owned_lock,
   autonomous_cycle_owner_key,
-  candidate_key,
-  explicit_test_fallback_enabled,
   publish_ranked_cycle,
   release_owned_lock,
 )
@@ -43,7 +40,6 @@ from app.autotrade.arbitration import (
   select_go_arbitrated_intent,
 )
 from app.autotrade.execution_policy import (
-  GUARD_MODE_OBSERVE,
   GUARD_MODE_STRICT,
   OUTCOME_ALLOW,
   OUTCOME_ALLOW_WITH_WARNING,
@@ -54,25 +50,19 @@ from app.autotrade.execution_policy import (
   classify_barrier_relationship,
   classify_guard_severity,
   evaluate_execution_policy,
-  is_preference_telemetry,
-  max_entry_drift_pips,
   resolve_guard_mode,
-  risk_multiplier_for_tier,
 )
 from app.autotrade.active_exposure import (
-  apply_same_direction_stack_sizing,
   evaluate_entry_against_exposure,
   load_active_exposures,
 )
 from app.autotrade.entry_overlap import release_entry_zone, reserve_entry_zone
 from app.autotrade.protective_stop import opposing_zone_fingerprint
-from app.autotrade.gate import AutoScalpBox, AutoScalpDecision, AutoScalpRail
 from app.autotrade.strategy_match import (
   StrategyMatch,
   strategy_match_key,
 )
 from app.autotrade.strategy_taxonomy import (
-  bypasses_opposing_structure_gates,
   is_breakout_retest_scalp_strategy,
   is_m1_scalp_strategy,
   is_reaction_strategy,
@@ -114,7 +104,6 @@ from app.autotrade.execution_confirmation import (
   new_state,
   parse_bar_timestamp,
   save_execution_confirmation,
-  scalp_maximum_chase_pips,
   scalp_effective_chase_pips,
   scalp_zone_access,
   ZONE_ACCESS_MOMENTUM_CHASE,
@@ -139,18 +128,12 @@ from app.autotrade.setup_lifecycle import (
   PLAN_PUBLISHED,
   TERMINAL_STATES,
   SetupLifecycleError,
-  active_thesis_key,
   claim_active_thesis,
   is_publishable_setup_state,
   load_setup,
   normalize_setup_state,
   release_active_thesis,
   transition_setup,
-)
-from app.autotrade.strategy_match_ready import (
-  READY_GROUP,
-  READY_STREAM,
-  StrategyMatchReadyEvent,
 )
 from app.analysis.m1_trigger import (
   evaluate_m1_trigger_window,
@@ -173,38 +156,17 @@ from app.autotrade.trade_plan_stream import (
   read_plan_state,
 )
 from app.autotrade.route_outcome import record_route_outcome, route_outcome_key
-from app.autotrade.setup_card import save_forming_card_status, edit_forming_card_stop
+from app.autotrade.setup_card import save_forming_card_status
 from app.autotrade.reaction_identity import (
   ACTIVE_THESIS_STATES,
   dump_claim,
   mapped_group_id,
-  parse_reaction_claim,
   parse_thesis_claim,
-  reaction_claim_key,
   thesis_claim_key,
   thesis_claim_payload,
   thesis_state_blocks_new_initial,
 )
-from app.autotrade.range_context import (
-  ACTIVE_RANGE_STATES,
-  PRIVATE_SOURCE_MAX_AGE_SECONDS,
-  SCANNER_SOURCE_MAX_AGE_SECONDS,
-  WORKER_SNAPSHOT_TTL_SECONDS,
-  RangeContext,
-  RangeExecutionEligibility,
-  continue_range_episode,
-  is_range_context_current,
-  range_context_key,
-  range_context_source_key,
-  range_geometry_matches_match,
-)
-from app.autotrade.range_lifecycle import (
-  load_breakout_retest_watch,
-  status_label_for_retired,
-)
-from app.autotrade.map_strategy import MarketMap
-from app.autotrade.scale_context import AutoScaleContext
-from app.autotrade.trend import RegimeInfo, TrendDecision
+from app.autotrade.range_context import WORKER_SNAPSHOT_TTL_SECONDS
 from app.core.config import runtime_config
 from app.runtime.instrument_config import instrument_runtime_view
 from app.runtime.price_identity import price_token
@@ -684,79 +646,6 @@ async def _consume_strategy_match(
   legacy = StrategyMatch.from_json(await client.get(legacy_key) or "")
   if legacy is not None and legacy.match_id == match.match_id:
     await client.delete(legacy_key)
-
-
-async def _range_side_has_active_ownership(
-  client: Any,
-  *,
-  symbol: str,
-  range_id: str,
-  direction: str,
-) -> bool:
-  raw = await client.get(
-    (
-      f"auto_trade:range_side:{symbol.upper()}:{range_id}:"
-      f"{direction.upper()}"
-    )
-  )
-  if not raw:
-    return False
-  try:
-    payload = json.loads(
-      raw.decode() if isinstance(raw, bytes) else str(raw)
-    )
-  except (TypeError, ValueError, json.JSONDecodeError):
-    return False
-  state = str(payload.get("state") or "").upper()
-  return bool(
-    payload.get("position_ids")
-    or payload.get("pending_order_ids")
-    or (
-      payload.get("candidate_id")
-      and state not in {
-        "", "CLOSED", "REARMED", "REJECTED", "EXPIRED", "CANCELLED",
-      }
-    )
-  )
-
-
-async def _load_range_side_status(
-  client: Any,
-  *,
-  symbol: str,
-  range_id: str,
-  direction: str,
-) -> dict[str, Any]:
-  raw = await client.get(
-    f"auto_trade:range_side:{symbol.upper()}:{range_id}:{direction.upper()}"
-  )
-  if not raw:
-    return {
-      "state": "ARMED",
-      "candidate_id": None,
-      "pending_order_ids": [],
-      "position_ids": [],
-      "group_id": None,
-    }
-  try:
-    payload = json.loads(
-      raw.decode() if isinstance(raw, bytes) else str(raw)
-    )
-  except (TypeError, ValueError, json.JSONDecodeError):
-    return {
-      "state": "REJECTED",
-      "candidate_id": None,
-      "pending_order_ids": [],
-      "position_ids": [],
-      "group_id": None,
-    }
-  return {
-    "state": str(payload.get("state") or "ARMED").upper(),
-    "candidate_id": payload.get("candidate_id"),
-    "pending_order_ids": list(payload.get("pending_order_ids") or []),
-    "position_ids": list(payload.get("position_ids") or []),
-    "group_id": payload.get("group_id"),
-  }
 
 
 def _htf_zones(
@@ -2111,21 +2000,6 @@ async def _reconcile_legacy_mapped_thesis_claims(client: Any) -> None:
       await increment_metric(client, "legacy_group_thesis_recovered", symbol=symbol)
 
 
-def _trend_group_id(
-  symbol: str,
-  decision: TrendDecision,
-) -> str:
-  return _group_id(
-    symbol.upper(),
-    "trend",
-    decision.direction.upper(),
-    decision.mode,
-    f"{decision.key_level:.5f}",
-    f"{decision.entry_zone[0]:.5f}",
-    f"{decision.entry_zone[1]:.5f}",
-  )
-
-
 def _strategy_mode_enabled(match: StrategyMatch) -> bool:
   from app.autotrade.strategy_registry import strategy_mode_enabled
 
@@ -2562,7 +2436,7 @@ async def _publish_trade_plan_v8(
   *,
   htf_zones: list[Zone] | None = None,
   htf_levels: list[Level] | None = None,
-  regime: RegimeInfo | None = None,
+  regime: str | None = None,
   frames: dict[str, Any] | None = None,
 ) -> str | None:
   """Build and publish a TradePlan V8 from an already-CONFIRMED match.
@@ -4092,7 +3966,7 @@ async def _publish_trade_plan_v8(
     match_for_plan,
     spot_price=spot.price,
     executable_quote=side_aware_quote,
-    regime=None if regime is None else regime.state,
+    regime=regime,
     pip_size=units.pip_size(symbol),
     cfg=None,
     available_target_room_pips=available_target_room_pips,
@@ -4190,7 +4064,7 @@ async def _publish_trade_plan_v8(
       thesis_id=match.thesis_id,
       pip_size=Decimal(str(units.pip_size(symbol))),
       spot_price=spot.price,
-      regime=None if regime is None else regime.state,
+      regime=regime,
       cfg=inst,
       opposing_zone_low=opposing_kwargs.get(
         "opposing_zone_low", opposing_zone_low,
@@ -4493,151 +4367,45 @@ _TREND_MODE_LABELS = {
 }
 
 
+# The Go event is the complete technical decision; this string is what the
+# status report shows where the Python regime classifier used to report.
+_GO_OWNED_REGIME = "go_owned"
+
+
 def _status_payload(
-  decision: AutoScalpDecision,
   *,
   symbol: str,
   event_ts: str,
   frames: dict[str, Any],
   spot: AutoTradeSpot | None,
   candidate_id: str | None,
-  regime: RegimeInfo | None = None,
-  trend_decision: TrendDecision | None = None,
-  gate_source: str = "private_ohlc",
-  strategy_match: StrategyMatch | None = None,
-  breakout_retest: dict[str, Any] | None = None,
-  resolved_range: RangeContext | None = None,
-  box_eligibility: RangeExecutionEligibility | None = None,
-  box_candidate_id: str | None = None,
+  gate_source: str,
+  strategy_match: StrategyMatch | None,
 ) -> dict[str, Any]:
-  rail = decision.rail
-  target = decision.target
-  box = decision.box
-  trend_routed = (
-    gate_source in {"private_ohlc", "private_trend"}
-    and trend_decision is not None
-    and trend_decision.state == "candidate"
-    and (
-      decision.state != "candidate"
-      or (regime is not None and regime.state != "chop")
-      or (
-        box_eligibility is not None
-        and not box_eligibility.eligible
-      )
-      or trend_decision.confluence > decision.confluence
-    )
-  )
-  state = decision.state
-  direction = decision.direction
-  reasons = decision.reasons
-  if (
-    breakout_retest
-    and str(breakout_retest.get("state") or "") == "waiting"
-    and strategy_match is None
-    and candidate_id is None
-  ):
-    state = "breakout_retest_waiting"
-    direction = str(breakout_retest.get("direction") or direction or "")
-    zone_low = breakout_retest.get("zone_low")
-    zone_high = breakout_retest.get("zone_high")
-    reasons = (
-      (
-        f"breakout retest waiting at {float(zone_low):.5f}-{float(zone_high):.5f}",
-      )
-      if zone_low is not None and zone_high is not None
-      else ("breakout retest waiting",)
-    )
-  elif strategy_match is not None:
+  if strategy_match is not None:
     state = "candidate" if candidate_id is not None else "strategy_match_waiting"
     direction = strategy_match.direction
     reasons = strategy_match.reasons
-  elif trend_routed and trend_decision is not None:
-    state = (
-      trend_decision.state
-      if runtime_config.strategies.trend.enabled
-      else "trend_disabled"
-    )
-    direction = trend_decision.direction
+  else:
+    state = "go_owned"
+    direction = None
+    reasons = ("technical facts supplied by Go Analysis Engine",)
   selected_strategy = None
   selected_timeframe = None
   if strategy_match is not None and candidate_id is not None:
     selected_strategy = strategy_match.strategy
     selected_timeframe = strategy_match.source_tf
-  elif trend_routed and trend_decision is not None and candidate_id is not None:
-    selected_strategy = _TREND_SETUP_LABELS.get(
-      trend_decision.mode or "",
-      "Trend Strategy",
-    )
-    selected_timeframe = EXECUTION_TIMEFRAME
-  elif box_candidate_id is not None:
-    selected_strategy = "Range Box Scalp"
-    selected_timeframe = EXECUTION_TIMEFRAME
-  elif (
-    box_eligibility is not None
-    and box_eligibility.reason_code == "candidate_ready"
-    and box_candidate_id is None
-  ):
-    selected_strategy = "Range Box publish failed"
-    selected_timeframe = EXECUTION_TIMEFRAME
-  elif box_eligibility is not None and not box_eligibility.eligible:
-    if box_eligibility.reason_code in {
-      "waiting_for_touch",
-      "waiting_for_rejection",
-    }:
-      selected_strategy = (
-        f"Range Box waiting · {box_eligibility.reason_code}"
-      )
-      selected_timeframe = EXECUTION_TIMEFRAME
-    elif box_eligibility.has_current_private_box:
-      selected_strategy = (
-        f"Range Box ineligible · {box_eligibility.reason_code}"
-      )
-      selected_timeframe = EXECUTION_TIMEFRAME
-  range_status = None
-  if resolved_range is not None:
-    range_status = (
-      status_label_for_retired(resolved_range)
-      if resolved_range.state == "retired"
-      else f"{resolved_range.state}"
-    )
   return {
     "state": state,
-    "box_state": decision.state,
-    "range_status": range_status,
     "symbol": symbol,
     "tf": EXECUTION_TIMEFRAME,
     "event_ts": event_ts,
     "checked_at": datetime.now(timezone.utc).isoformat(),
-    "trigger": decision.trigger,
     "direction": direction,
-    "rail": None if rail is None else {
-      "low": rail.low,
-      "high": rail.high,
-      "level": rail.level,
-      "role": rail.role,
-      "timeframes": list(rail.timeframes),
-      "sources": list(rail.sources),
-    },
-    "target": None if target is None else {
-      "low": target.low,
-      "high": target.high,
-      "level": target.level,
-      "role": target.role,
-    },
-    "target_room_pips": decision.target_room_pips,
-    "full_tp_pips": decision.full_tp_pips,
-    "box": None if box is None else {
-      "id": box.box_id,
-      "low": box.lower.level,
-      "high": box.upper.level,
-      "width_pips": box.width_pips,
-    },
-    "rail_count": decision.rail_count,
     "spot_fresh": None if spot is None else spot.fresh,
     "candidate_id": candidate_id,
     "published": candidate_id is not None,
     "gate_source": gate_source,
-    "breakout_retest": breakout_retest,
     "selected_strategy": selected_strategy,
     "selected_timeframe": selected_timeframe,
     "selection_state": (
@@ -4661,25 +4429,8 @@ def _status_payload(
       timeframe: len(frame)
       for timeframe, frame in sorted(frames.items())
     },
-    "regime": None if regime is None else regime.state,
-    "regime_reasons": [] if regime is None else list(regime.reasons),
-    "trend_state": None if trend_decision is None else trend_decision.state,
-    "trend_mode": None if trend_decision is None else trend_decision.mode,
-    "trend_reasons": (
-      [] if trend_decision is None else list(trend_decision.reasons)
-    ),
+    "regime": _GO_OWNED_REGIME,
   }
-
-
-def _box_retired_key(symbol: str, box_id: str) -> str:
-  return f"auto_trade:box:retired:{symbol.upper()}:{box_id}"
-
-
-def _box_edge_key(symbol: str, box_id: str, direction: str) -> str:
-  return (
-    f"auto_trade:box:edge:{symbol.upper()}:{box_id}:"
-    f"{direction.upper()}"
-  )
 
 
 @dataclass(frozen=True)
@@ -4699,7 +4450,6 @@ async def _admit_strategy_intent_for_cycle(
   match: StrategyMatch,
   *,
   spot: AutoTradeSpot | None,
-  regime: RegimeInfo,
   htf_zones: list[Zone],
   htf_levels: list[Level],
 ) -> _AdmissionFailure | None:
@@ -4782,42 +4532,6 @@ async def _admit_strategy_intent_for_cycle(
       message="strategy confluence is below the global minimum",
       measured={"confluence": match.confluence},
     )
-  if match.is_range_edge:
-    if regime.state != "chop":
-      return _AdmissionFailure(
-        reason_code="range_edge_not_chop",
-        terminal=True,
-        message=f"Range Edge requires chop; regime={regime.state}",
-        stage="range_context",
-      )
-    scanner_context = RangeContext.from_json(
-      await client.get(range_context_source_key(intent.symbol, "scanner"))
-    )
-    now = int(datetime.now(timezone.utc).timestamp())
-    if (
-      scanner_context is None
-      or not is_range_context_current(
-        scanner_context,
-        now=now,
-        max_age_seconds=SCANNER_SOURCE_MAX_AGE_SECONDS,
-      )
-      or scanner_context.state not in ACTIVE_RANGE_STATES
-      or not range_geometry_matches_match(
-        scanner_context,
-        range_id=match.range_id,
-        range_low=match.range_low,
-        range_high=match.range_high,
-      )
-    ):
-      return _AdmissionFailure(
-        reason_code=(
-          "range_context_withdrawn"
-          if scanner_context is None else "scanner_range_stale"
-        ),
-        terminal=scanner_context is None,
-        message="Range Edge requires its current scanner range episode",
-        stage="range_context",
-      )
   if spot is not None and spot.fresh:
     _, counter_bias = _adapt_counter_bias_target(
       match,
@@ -4944,7 +4658,6 @@ async def _persist_idle_last_gate(
 ) -> None:
   payload = {
     "state": "idle_no_match",
-    "box_state": "idle_no_match",
     "symbol": symbol.upper(),
     "tf": EXECUTION_TIMEFRAME,
     "event_ts": event_ts,
@@ -4988,7 +4701,7 @@ async def _handle_event(
   source: RedisOHLCSource | None = None,
   client: Any | None = None,
   ready_match_id: str | None = None,
-) -> AutoScalpDecision | None:
+) -> None:
   parsed = _parse_bar_event(data)
   if parsed is None:
     return None
@@ -5043,29 +4756,6 @@ async def _handle_event(
   # rechecks whether Go's own confirmed geometry is already contained in a
   # standing opposing zone before letting it publish.
   frames = await _load_frames(source, symbol)
-  private_decision = AutoScalpDecision(
-    "go_owned", reasons=("technical facts supplied by Go Analysis Engine",),
-  )
-  resolved_range = None
-  range_comparison = {"source": "go_analysis_engine"}
-  strategy_cfg = None
-  regime = RegimeInfo("go_owned", None, 0, 0.0, False, None, ())
-  trend_decision = TrendDecision("no_setup", reasons=("go_owned",))
-  decision = private_decision
-  closed_price = None
-  box_eligibility = RangeExecutionEligibility(
-    symbol=symbol,
-    range_id=None,
-    source="go_analysis_engine",
-    has_current_private_box=False,
-    has_current_resolved_range=False,
-    resolved_state=None,
-    regime="go_owned",
-    box_decision_state="go_owned",
-    eligible=False,
-    reason_code="go_owned",
-    checked_at=int(datetime.now(timezone.utc).timestamp()),
-  )
   strategy_matches = list(scanner_strategy_matches)
   if runtime_config.strategies.matching.multiple_matches_enabled and strategy_matches:
     strategy_matches, _ = dedupe_matches(
@@ -5076,7 +4766,6 @@ async def _handle_event(
   elif strategy_matches:
     strategy_matches = [strategy_matches[0]]
   strategy_match = select_primary(strategy_matches)
-  decision = private_decision
   observed_gate_source = (
     "multi_strategy_match"
     if len(strategy_matches) > 1
@@ -5084,23 +4773,8 @@ async def _handle_event(
     if scanner_strategy_matches
     else "private_ohlc"
   )
-  if box_eligibility.eligible:
-    await increment_metric(client, "range_box_eligible", symbol=symbol)
-  else:
-    await increment_metric(
-      client,
-      f"range_box_ineligible:{box_eligibility.reason_code}",
-      symbol=symbol,
-    )
-    await increment_metric(client, "range_box_ineligible", symbol=symbol)
-  # Private box/trend have no V8 publish path. Do not build scale context
-  # for them on the autonomous cycle.
   spot_price = spot.price if spot is not None and spot.fresh else None
-  box_intent_id = None
-  trend_intent_id = None
   strategy_candidate_ids: list[str] = []
-  box_candidate_id = None
-  trend_candidate_id = None
   published_match: StrategyMatch | None = None
   published_intent: ExecutionIntent | None = None
   attempted_intent_ids: set[str] = set()
@@ -5184,14 +4858,6 @@ async def _handle_event(
       )
       intents.append(intent)
       intent_subjects[intent_id] = routed_match
-    # Private range/trend detectors do not construct intents here. In Go mode
-    # their placeholders are execution telemetry only; all technical facts in
-    # the executable intent came from the Go opportunity event.
-    box_intent_id = None
-    trend_intent_id = None
-    # Private trend has no TradePlan V8 path. Do not build intents or
-    # record publication_unavailable private routes on leftover matches.
-
     arbitrable: list[ExecutionIntent] = []
     for intent in intents:
       routed_match = intent_matches.get(intent.intent_id)
@@ -5201,7 +4867,6 @@ async def _handle_event(
           intent,
           routed_match,
           spot=spot,
-          regime=regime,
           htf_zones=htf_zones,
           htf_levels=htf_levels,
         )
@@ -5285,9 +4950,6 @@ async def _handle_event(
     # ranking and then choose between two technical answers.
     arbitration = select_go_arbitrated_intent(arbitrable)
 
-    strategy_candidate_ids: list[str] = []
-    box_candidate_id = None
-    trend_candidate_id = None
     published_match: StrategyMatch | None = None
     published_intent: ExecutionIntent | None = None
     attempted_intent_ids: set[str] = set()
@@ -5296,8 +4958,6 @@ async def _handle_event(
     async def publish_ranked_intent(
       intent: ExecutionIntent,
     ) -> CandidatePublicationResult:
-      nonlocal box_candidate_id
-      nonlocal trend_candidate_id
       nonlocal published_match
       nonlocal published_intent
 
@@ -5341,7 +5001,7 @@ async def _handle_event(
             routed_match,
             htf_zones=htf_zones,
             htf_levels=htf_levels,
-            regime=regime,
+            regime=_GO_OWNED_REGIME,
             frames=frames,
           )
         finally:
@@ -5367,30 +5027,6 @@ async def _handle_event(
           )
         publication_result = await _strategy_publication_result(
           client, routed_match, published,
-        )
-      elif intent.intent_id == box_intent_id:
-        # Private M1 range gate is a V6-only autonomous detector (Section A/L
-        # of the TradePlan cutover) - it never feeds scanner.py's setup lifecycle, so
-        # it has no TradePlan equivalent and must not publish new autonomous
-        # candidates now that TradePlan V8 is the sole autonomous path.
-        published = None
-        box_candidate_id = published
-        publication_result = (
-          CandidatePublicationResult.published(published)
-          if published is not None
-          else CandidatePublicationResult.blocked("publication_unavailable")
-        )
-      elif intent.intent_id == trend_intent_id:
-        # Private trend detector (trend.py) is likewise V6-only autonomous
-        # analysis, parallel to (not fed by) scanner.py - see Section A/L. It
-        # must not publish new autonomous candidates now that TradePlan V8 is the sole
-        # autonomous path.
-        published = None
-        trend_candidate_id = published
-        publication_result = (
-          CandidatePublicationResult.published(published)
-          if published is not None
-          else CandidatePublicationResult.blocked("publication_unavailable")
         )
       if publication_result is None:
         publication_result = CandidatePublicationResult.blocked(
@@ -5448,28 +5084,6 @@ async def _handle_event(
             winner_intent_id=winner_intent_id,
             publish_status=False,
           )
-        else:
-          await _record_private_route(
-            client,
-            symbol=symbol,
-            event_ts=event_ts,
-            strategy=top.strategy,
-            family=top.family,
-            direction=top.direction,
-            source=top.source,
-            structural_id=top.structural_id,
-            entry_low=top.entry_low,
-            entry_high=top.entry_high,
-            spot_price=spot_price,
-            status=status,
-            reason_code=reason_code,
-            message=message,
-            group_id=top.proposed_group_id,
-            retained=True,
-            stage="candidate_claim",
-            arbitration_reason_code=reason_code,
-            winner_intent_id=winner_intent_id,
-          )
     arbitrable_ids = {item.intent_id for item in arbitrable}
     ordered_ids = {item.intent_id for item in arbitration.ordered}
     for intent in intents:
@@ -5509,112 +5123,9 @@ async def _handle_event(
           signal_source=intent.source,
           publish_status=False,
         )
-      else:
-        await _record_private_route(
-          client,
-          symbol=symbol,
-          event_ts=event_ts,
-          strategy=intent.strategy,
-          family=intent.family,
-          direction=intent.direction,
-          source=intent.source,
-          structural_id=intent.structural_id,
-          entry_low=intent.entry_low,
-          entry_high=intent.entry_high,
-          spot_price=spot_price,
-          status=status,
-          reason_code=reason_code,
-          message=message,
-          group_id=intent.proposed_group_id,
-          retained=True,
-          stage="arbitration",
-          arbitration_reason_code=reason_code,
-          winner_intent_id=(
-            None if published_intent is None else published_intent.intent_id
-          ),
-        )
-    if (
-      box_candidate_id is not None
-      and box_intent_id is not None
-      and decision.box is not None
-      and decision.rail is not None
-      and decision.direction is not None
-      and (decision.state == "candidate" or box_eligibility.eligible)
-    ):
-      await _record_private_route(
-        client,
-        symbol=symbol,
-        event_ts=event_ts,
-        strategy="Range Box Scalp",
-        family="range",
-        direction=decision.direction,
-        source="private_range",
-        structural_id=decision.box.box_id,
-        entry_low=decision.rail.low,
-        entry_high=decision.rail.high,
-        spot_price=spot_price,
-        status="candidate_published",
-        reason_code="candidate_published",
-        message="private range candidate published",
-        candidate_id=box_candidate_id,
-        group_id=(
-          None
-          if box_candidate_id is None
-          else _group_id(
-            symbol,
-            "range",
-            decision.box.box_id,
-            decision.direction,
-          )
-        ),
-        retained=False,
-        stage="stream_publish",
-        arbitration_reason_code="selected_for_publication",
-        publication_reason_code="candidate_published",
-        winner_intent_id=box_intent_id,
-      )
-    if (
-      trend_candidate_id is not None
-      and trend_intent_id is not None
-      and trend_decision.state == "candidate"
-      and trend_decision.direction is not None
-      and trend_decision.entry_zone is not None
-      and trend_decision.mode is not None
-    ):
-      await _record_private_route(
-        client,
-        symbol=symbol,
-        event_ts=event_ts,
-        strategy=_TREND_SETUP_LABELS[trend_decision.mode],
-        family="trend",
-        direction=trend_decision.direction,
-        source="private_trend",
-        structural_id=_trend_group_id(symbol, trend_decision),
-        entry_low=trend_decision.entry_zone[0],
-        entry_high=trend_decision.entry_zone[1],
-        spot_price=spot_price,
-        status="candidate_published",
-        reason_code="candidate_published",
-        message="private trend candidate published",
-        candidate_id=trend_candidate_id,
-        group_id=(
-          None
-          if trend_candidate_id is None
-          else _trend_group_id(symbol, trend_decision)
-        ),
-        retained=False,
-        stage="stream_publish",
-        arbitration_reason_code="selected_for_publication",
-        publication_reason_code="candidate_published",
-        winner_intent_id=trend_intent_id,
-      )
   if _has_overlapping_zones(htf_zones):
     await client.incr(f"auto_trade:zone_overlap:{symbol.upper()}")
-  candidate_ids = [
-    *strategy_candidate_ids,
-    *([box_candidate_id] if box_candidate_id is not None else []),
-    *([trend_candidate_id] if trend_candidate_id is not None else []),
-  ]
+  candidate_ids = list(strategy_candidate_ids)
   candidate_id = candidate_ids[0] if candidate_ids else None
   gate_source = (
     published_intent.source
@@ -5626,29 +5137,14 @@ async def _handle_event(
     if candidate_id is not None
     else strategy_match
   )
-  if candidate_id is None:
-    if strategy_match is None and decision.state != "candidate":
-      await _record_gate_reject(client, symbol, decision.state)
-    if (
-      strategy_match is None
-      and trend_decision.state != "candidate"
-    ):
-      await _record_gate_reject(client, symbol, trend_decision.state)
   payload = _status_payload(
-    decision,
     symbol=symbol,
     event_ts=event_ts,
     frames=frames,
     spot=spot,
     candidate_id=candidate_id,
-    regime=regime,
-    trend_decision=trend_decision,
     gate_source=gate_source,
     strategy_match=status_strategy_match,
-    breakout_retest=await load_breakout_retest_watch(client, symbol),
-    resolved_range=resolved_range,
-    box_eligibility=box_eligibility,
-    box_candidate_id=box_candidate_id,
   )
   payload["tracked_strategy_matches"] = [
     {
@@ -5689,43 +5185,6 @@ async def _handle_event(
       None if published_intent is None else published_intent.intent_id
     ),
   }
-  payload["box_eligibility"] = asdict(box_eligibility)
-  payload["box_candidate_id"] = box_candidate_id
-  range_buy_side = (
-    None
-    if resolved_range is None
-    else await _load_range_side_status(
-      client,
-      symbol=symbol,
-      range_id=resolved_range.range_id,
-      direction="BUY",
-    )
-  )
-  range_sell_side = (
-    None
-    if resolved_range is None
-    else await _load_range_side_status(
-      client,
-      symbol=symbol,
-      range_id=resolved_range.range_id,
-      direction="SELL",
-    )
-  )
-  payload["resolved_range"] = (
-    None
-    if resolved_range is None
-    else {
-      "range_id": resolved_range.range_id,
-      "state": resolved_range.state,
-      "source": resolved_range.source,
-      "lower": resolved_range.lower,
-      "upper": resolved_range.upper,
-      "equilibrium": resolved_range.equilibrium,
-      "buy_rail": range_buy_side,
-      "sell_rail": range_sell_side,
-    }
-  )
-  payload["range_context_comparison"] = range_comparison
   encoded = json.dumps(payload, separators=(",", ":"), sort_keys=True)
   await client.set(
     "auto_trade:last_gate",
@@ -5738,17 +5197,13 @@ async def _handle_event(
     ex=WORKER_SNAPSHOT_TTL_SECONDS,
   )
   log.info(
-    "ApexVoid Algo cycle symbol=%s source=%s state=%s trigger=%s "
-    "direction=%s candidate=%s observed_regime=%s",
+    "ApexVoid Algo cycle symbol=%s source=%s state=%s direction=%s candidate=%s",
     symbol,
     gate_source,
     payload["state"],
-    decision.trigger or "-",
     payload["direction"] or "-",
     candidate_id[:12] if candidate_id else "-",
-    regime.state,
   )
-  return decision
 
 
 PUBLISH_STATUS_EXECUTION_HANDOFF_CREATED = "execution_handoff_created"
