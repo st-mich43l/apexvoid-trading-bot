@@ -164,8 +164,8 @@ def _build_entry(
     return TradePlanEntry(
       type=ENTRY_TYPE_MARKET_WATCH,
       expires_at=expires_at,
-      zone_low=Decimal(str(match.entry_low)),
-      zone_high=Decimal(str(match.entry_high)),
+      zone_low=Decimal(str(measured.get("planned_entry_zone_low", match.entry_low))),
+      zone_high=Decimal(str(measured.get("planned_entry_zone_high", match.entry_high))),
       activation="quote_inside_zone",
       price_side="ask" if direction == "BUY" else "bid",
       max_spread_ticks=max_spread_ticks,
@@ -211,8 +211,8 @@ def _build_entry(
     return TradePlanEntry(
       type=ENTRY_TYPE_MARKET_WITH_LIMIT_SCALE,
       expires_at=expires_at,
-      zone_low=Decimal(str(match.entry_low)),
-      zone_high=Decimal(str(match.entry_high)),
+      zone_low=Decimal(str(measured.get("planned_entry_zone_low", match.entry_low))),
+      zone_high=Decimal(str(measured.get("planned_entry_zone_high", match.entry_high))),
       legs=legs,
       max_spread_ticks=max_spread_ticks,
       max_slippage_ticks=max_slippage_ticks,
@@ -411,29 +411,31 @@ def build_trade_plan_from_strategy_match(
       measured,
     )
 
-  fixed_target_prices = tuple(
+  policy_target_prices = tuple(
     Decimal(str(price))
     for price in (measured.get("planned_target_prices") or ())
   )
-  fixed_close_ratios = tuple(
+  policy_close_ratios = tuple(
     Decimal(str(ratio))
     for ratio in (measured.get("planned_target_close_ratios") or ())
   )
-  fixed_rr = measured.get("target_policy_mode") == "fixed_rr"
-  if fixed_rr:
+  target_policy_mode = str(measured.get("target_policy_mode") or "")
+  fixed_rr = target_policy_mode == "fixed_rr"
+  policy_targets = target_policy_mode in {"fixed_rr", "scalp_rr"}
+  if policy_targets:
     if (
-      not fixed_target_prices
-      or len(fixed_target_prices) != len(fixed_close_ratios)
-      or any(ratio <= 0 for ratio in fixed_close_ratios)
-      or sum(fixed_close_ratios) != Decimal("1")
+      not policy_target_prices
+      or len(policy_target_prices) != len(policy_close_ratios)
+      or any(ratio <= 0 for ratio in policy_close_ratios)
+      or sum(policy_close_ratios) != Decimal("1")
     ):
       raise TradePlanBuildRejected(
-        "invalid_fixed_rr_target",
-        "fixed_rr policy must produce aligned targets whose ratios sum to 1",
+        "invalid_fixed_rr_target" if fixed_rr else "invalid_scalp_rr_target",
+        f"{target_policy_mode} policy must produce aligned targets whose ratios sum to 1",
         measured,
       )
-    ratios = fixed_close_ratios
-    target_values = fixed_target_prices
+    ratios = policy_close_ratios
+    target_values = policy_target_prices
   else:
     ratios = (
       tuple(Decimal(str(r)) for r in close_ratios)

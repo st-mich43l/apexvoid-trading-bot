@@ -119,6 +119,7 @@ def _instrument_volume_multiplier(instrument_cfg: Any) -> float:
 # Version of the entry-plan contract (`planned_execution_route`,
 # `planned_entry_price`, `planned_leg_entry_prices`) shared with the executor.
 ENTRY_PLAN_VERSION = 1
+XAU_FVG_EXECUTION_MIN_PIPS = 30
 
 ROUTE_MARKET = "market"
 ROUTE_SINGLE_LIMIT = "single_limit"
@@ -126,6 +127,52 @@ ROUTE_ZONE_SPLIT = "zone_split"
 # The policy allows either route: the executor picks deterministically and is
 # not held to one planned entry.
 ROUTE_EITHER = "either"
+
+
+def _execution_entry_zone(
+  match: Any,
+  *,
+  instrument_cfg: Any,
+  pip_size: float,
+) -> tuple[float, float, bool]:
+  """Return the policy-owned entry band while preserving raw Go structure."""
+  raw_low = float(getattr(match, "entry_low", 0.0))
+  raw_high = float(getattr(match, "entry_high", 0.0))
+  tags = tuple(getattr(match, "tags", ()) or ())
+  symbol = str(getattr(match, "symbol", "") or "").upper()
+  kind = str(getattr(match, "structural_kind", "") or "").lower()
+  if (
+    GO_ORIGIN_TAG not in tags
+    or symbol not in {"XAU", "XAUUSD"}
+    or kind not in {"fvg", "ifvg"}
+    or pip_size <= 0
+  ):
+    return raw_low, raw_high, False
+
+  configured_max = float(
+    instrument_cfg.strategies.technique.fvg.entry_max_width_price
+  )
+  desired_width = min(
+    configured_max,
+    XAU_FVG_EXECUTION_MIN_PIPS * pip_size,
+  )
+  if raw_high - raw_low >= desired_width - 1e-12:
+    return raw_low, raw_high, False
+
+  low, high = raw_low, raw_high
+  direction = str(getattr(match, "direction", "") or "").upper()
+  invalidation = getattr(match, "go_invalidation_price", None)
+  if direction == "BUY":
+    expanded_low = high - desired_width
+    if invalidation is not None:
+      expanded_low = max(expanded_low, float(invalidation) + pip_size)
+    low = min(low, expanded_low)
+  elif direction == "SELL":
+    expanded_high = low + desired_width
+    if invalidation is not None:
+      expanded_high = min(expanded_high, float(invalidation) - pip_size)
+    high = max(high, expanded_high)
+  return low, high, (high - low) > (raw_high - raw_low + 1e-12)
 
 OUTCOME_ALLOW = "allow"
 OUTCOME_ALLOW_WITH_WARNING = "allow_with_warning"
@@ -667,11 +714,14 @@ def evaluate_execution_policy(
       None,
     )
   atr = float(getattr(match, "atr", 0.0) or 0.0)
-  low = float(getattr(match, "entry_low", 0.0))
-  high = float(getattr(match, "entry_high", 0.0))
   direction = str(getattr(match, "direction", "")).upper()
   go_origin = GO_ORIGIN_TAG in tuple(getattr(match, "tags", ()) or ())
   pip = pip_size if pip_size > 0 else 0.1
+  low, high, execution_zone_expanded = _execution_entry_zone(
+    match,
+    instrument_cfg=instrument_cfg,
+    pip_size=pip,
+  )
   confluence = int(getattr(match, "confluence", 0) or 0)
   zone_width_atr = (
     (high - low) / atr if atr > 0 and math.isfinite(atr) else float("inf")
@@ -1145,6 +1195,9 @@ def evaluate_execution_policy(
     ),
     "absolute_target_price": absolute_target,
     "planned_entry_price": planned_entry,
+    "planned_entry_zone_low": _planned_entry_price(symbol, low),
+    "planned_entry_zone_high": _planned_entry_price(symbol, high),
+    "execution_zone_expanded": execution_zone_expanded,
     "planned_stop_error": stop_plan_error,
     "entry_plan_version": ENTRY_PLAN_VERSION,
     "regime": normalized_regime or "unknown",
@@ -1196,6 +1249,69 @@ def evaluate_execution_policy(
       measured,
       policy,
     )
+  if is_m1_scalp_strategy(str(getattr(match, "strategy", "") or "")):
+    risk_pips = float(stop_plan.final_stop_pips)
+    available_r = remaining_pips / risk_pips if risk_pips > 0 else 0.0
+    # Quote-side spread and tick rounding can make a discovery-time 1R room
+    # one pip smaller than the final broker-side stop (20p room vs 21p stop in
+    # the existing XAU replay). Treat that as the intended 1R book; a material
+    # shortfall still fails closed.
+    room_tolerance_pips = max(1.0, risk_pips * 0.05)
+    if remaining_pips + room_tolerance_pips + 1e-9 < risk_pips:
+      measured.update({
+        "target_policy_mode": "scalp_rr",
+        "available_target_room_r": round(available_r, 4),
+        "target_room_tolerance_pips": round(room_tolerance_pips, 3),
+        "minimum_target_r": 1.0,
+      })
+      return ExecutionPolicyEvaluation(
+        False,
+        "scalp_room_below_1r",
+        f"scalp requires at least 1R room; available {available_r:.2f}R",
+        True,
+        measured,
+        policy,
+      )
+    target_r_multiples = (
+      (1.0, 2.0)
+      if remaining_pips + room_tolerance_pips + 1e-9 >= risk_pips * 2.0
+      else (1.0,)
+    )
+    target_close_ratios = (0.5, 0.5) if len(target_r_multiples) == 2 else (1.0,)
+    entry_value = Decimal(str(planned_entry))
+    stop_value = stop_plan.final_stop_price
+    risk_distance = abs(entry_value - stop_value)
+    quantum = Decimal(1).scaleb(-_instrument_digits("", instrument_cfg))
+    sign = Decimal("1") if direction == "BUY" else Decimal("-1")
+    target_values = [
+      (entry_value + sign * risk_distance * Decimal(str(multiple))).quantize(
+        quantum,
+        rounding=ROUND_HALF_UP,
+      )
+      for multiple in target_r_multiples
+    ]
+    target_pips_values = [
+      abs(value - entry_value) / Decimal(str(pip))
+      for value in target_values
+    ]
+    reward_risk = target_r_multiples[-1]
+    measured.update({
+      "target_policy_mode": "scalp_rr",
+      "planned_target_r_multiples": [
+        format(Decimal(str(value)), "f") for value in target_r_multiples
+      ],
+      "planned_target_prices": [format(value, "f") for value in target_values],
+      "planned_target_pips": [
+        format(value, "f") for value in target_pips_values
+      ],
+      "planned_target_close_ratios": [
+        format(Decimal(str(value)), "f") for value in target_close_ratios
+      ],
+      "available_target_room_r": round(available_r, 4),
+      "target_room_tolerance_pips": round(room_tolerance_pips, 3),
+      "reward_risk": reward_risk,
+      "min_reward_risk": 1.0,
+    })
   fixed_targeting = _instrument_fixed_targeting(
     symbol,
     instrument_cfg,

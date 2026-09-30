@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 import pytest
 
 from app.autotrade.execution_policy import evaluate_execution_policy
+from app.autotrade.trade_plan_builder import build_trade_plan_from_strategy_match
 from app.core.instrument_geometry import (
   fixed_reward_risk,
   technique_fixed_rr_targeting,
@@ -14,6 +17,7 @@ from app.scalping.models import OPPORTUNITY_VERSION, ScalpOpportunity
 from app.scalping.publish import _scalp_target_ladder
 from tests.test_config_effective_instrument_context import _load_production_example
 from tests.test_execution_pipeline_integrity import _policy_match
+from tests.test_publish_trade_plan_v8 import _match
 
 
 pytestmark = pytest.mark.no_database
@@ -98,7 +102,173 @@ def test_xau_scalp_match_does_not_expand_technique_fixed_rr_ladder():
     available_target_room_pips=80.0,
   )
   if evaluation.allowed:
-    assert evaluation.measured.get("target_policy_mode") != "fixed_rr"
+    assert evaluation.measured["target_policy_mode"] == "scalp_rr"
+
+
+def test_live_go_range_sweep_is_capped_to_one_r_two_r():
+  """Production replay: the opposite M5 edge is room, not a 291-pip TP."""
+  cfg = _load_production_example().config
+  match = _policy_match(
+    strategy="Range Sweep Scalp",
+    family="range_reversion",
+    strategy_mode="go_m5_m1_range_sweep",
+    symbol="XAU",
+    direction="SELL",
+    entry_low=4194.90,
+    entry_high=4196.46,
+    current_price=4195.27,
+    atr=4.232,
+    structure_swing=4198.888285714286,
+    go_invalidation_price=4198.888285714286,
+    targets_pips=(291,),
+    absolute_target_price=4165.78,
+    structural_kind="range_sweep",
+    tags=("origin:go", "catalog:range_sweep"),
+  )
+  evaluation = evaluate_execution_policy(
+    match,
+    spot_price=4195.27,
+    executable_quote=4194.88,
+    regime="range",
+    pip_size=0.1,
+    cfg=cfg,
+  )
+
+  assert evaluation.allowed is True
+  assert evaluation.measured["target_policy_mode"] == "scalp_rr"
+  assert evaluation.measured["planned_target_r_multiples"] == ["1.0", "2.0"]
+  assert evaluation.measured["planned_target_close_ratios"] == ["0.5", "0.5"]
+  stop_pips = float(evaluation.measured["planned_final_stop_pips"])
+  target_pips = [
+    float(value) for value in evaluation.measured["planned_target_pips"]
+  ]
+  assert target_pips == pytest.approx([stop_pips, stop_pips * 2], abs=0.11)
+  assert target_pips[-1] < 100
+
+  plan_match = _match(
+    match_id="go-range-sweep-production-replay",
+    thesis_id="range-sweep-thesis",
+    strategy="Range Sweep Scalp",
+    family="range_reversion",
+    strategy_mode="go_m5_m1_range_sweep",
+    direction="SELL",
+    source_tf="M1",
+    entry_low=4194.90,
+    entry_high=4196.46,
+    current_price=4195.27,
+    atr=4.232,
+    structure_swing=4198.888285714286,
+    go_invalidation_price=4198.888285714286,
+    targets_pips=(291,),
+    absolute_target_price=4165.78,
+    structural_zone_id="range-sweep:2797",
+    structural_zone_low=4194.90,
+    structural_zone_high=4196.46,
+    structural_kind="range_sweep",
+    structural_timeframe="M5",
+    tags=("origin:go", "catalog:range_sweep"),
+  )
+  plan = build_trade_plan_from_strategy_match(
+    plan_match,
+    plan_id="v8:go-range-sweep-production-replay",
+    setup_id=plan_match.match_id,
+    thesis_id=plan_match.thesis_id,
+    pip_size=Decimal("0.1"),
+    spot_price=4195.27,
+    executable_quote=4194.88,
+    regime="range",
+    cfg=cfg.for_instrument("XAU"),
+    max_volume=100000,
+    approved_measured=evaluation.measured,
+  )
+  assert [target.close_ratio for target in plan.targets] == [
+    Decimal("0.5"), Decimal("0.5"),
+  ]
+  assert [target.price for target in plan.targets] == [
+    Decimal(value) for value in evaluation.measured["planned_target_prices"]
+  ]
+  assert plan.targets[-1].price > Decimal("4185")
+
+
+def test_live_go_xau_fvg_gets_30_pip_execution_band_only():
+  """Production replay: raw 15.4-pip FVG remains structural provenance."""
+  cfg = _load_production_example().config
+  match = _policy_match(
+    strategy="FVG",
+    family="supply_demand",
+    strategy_mode="go_m5_fvg",
+    symbol="XAU",
+    direction="BUY",
+    entry_low=4195.90,
+    entry_high=4197.44,
+    current_price=4196.84,
+    atr=4.232,
+    structure_swing=4193.783928571428,
+    go_invalidation_price=4193.783928571428,
+    targets_pips=(100,),
+    absolute_target_price=4207.44,
+    structural_kind="fvg",
+    tags=("origin:go", "catalog:fvg"),
+  )
+  evaluation = evaluate_execution_policy(
+    match,
+    spot_price=4196.84,
+    executable_quote=4196.84,
+    regime="trend",
+    pip_size=0.1,
+    cfg=cfg,
+  )
+
+  assert evaluation.allowed is True
+  assert evaluation.measured["execution_zone_expanded"] is True
+  assert evaluation.measured["planned_entry_zone_low"] == pytest.approx(4194.44)
+  assert evaluation.measured["planned_entry_zone_high"] == pytest.approx(4197.44)
+  assert match.entry_low == 4195.90 and match.entry_high == 4197.44
+  assert evaluation.measured["planned_leg_entry_prices"] == pytest.approx(
+    [4197.44, 4195.94],
+  )
+
+  plan_match = _match(
+    match_id="go-fvg-production-replay",
+    thesis_id="fvg-thesis",
+    strategy="FVG",
+    family="supply_demand",
+    strategy_mode="go_m5_fvg",
+    direction="BUY",
+    source_tf="M5",
+    entry_low=4195.90,
+    entry_high=4197.44,
+    current_price=4196.84,
+    atr=4.232,
+    structure_swing=4193.783928571428,
+    go_invalidation_price=4193.783928571428,
+    targets_pips=(100,),
+    absolute_target_price=4207.44,
+    structural_zone_id="fvg:1983",
+    structural_zone_low=4195.90,
+    structural_zone_high=4197.44,
+    structural_kind="fvg",
+    structural_timeframe="M5",
+    tags=("origin:go", "catalog:fvg"),
+  )
+  plan = build_trade_plan_from_strategy_match(
+    plan_match,
+    plan_id="v8:go-fvg-production-replay",
+    setup_id=plan_match.match_id,
+    thesis_id=plan_match.thesis_id,
+    pip_size=Decimal("0.1"),
+    spot_price=4196.84,
+    executable_quote=4196.84,
+    regime="trend",
+    cfg=cfg.for_instrument("XAU"),
+    max_volume=100000,
+    approved_measured=evaluation.measured,
+  )
+  assert plan.source_structure.low == Decimal("4195.9")
+  assert plan.source_structure.high == Decimal("4197.44")
+  assert [leg.price for leg in plan.entry.legs] == [
+    Decimal("4197.44"), Decimal("4195.94"),
+  ]
 
 
 def test_xau_scalp_publish_ladder_stays_one_r_two_r():

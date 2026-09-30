@@ -13,6 +13,8 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Go-origin M1 scalp opportunities now use the Go structural target as an available-room ceiling while Algo Bot execution policy publishes a bounded 1R or 1R/2R broker target book; a distant opposite range edge can no longer become a single oversized scalp TP.
+- Thin Go-origin XAU FVG/iFVG structures now receive a policy-owned 30-pip execution band for shallow/deep entry planning while retaining the exact raw Go zone as TradePlan structural provenance.
 - Execution-time arbitration no longer lets a *waiting* setup suppress one that
   can execute. A BUY/SELL direction conflict now only counts between intents
   whose executable quote is inside their entry contract (`ExecutionIntent.
