@@ -6363,8 +6363,12 @@ async def _publish_trade_plan_v8(
     if gate_policy.policy is not None else "either"
   )
   gate_direction = str(match_for_plan.direction).upper()
-  gate_entry_low = float(match_for_plan.entry_low)
-  gate_entry_high = float(match_for_plan.entry_high)
+  gate_entry_low = float(
+    gate_measured.get("planned_entry_zone_low", match_for_plan.entry_low)
+  )
+  gate_entry_high = float(
+    gate_measured.get("planned_entry_zone_high", match_for_plan.entry_high)
+  )
   gate_zone_width = gate_entry_high - gate_entry_low
   gate_limit_side_valid = (
     gate_direction == "BUY"
