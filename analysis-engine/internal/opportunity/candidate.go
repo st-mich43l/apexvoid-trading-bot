@@ -162,6 +162,17 @@ type Candidate struct {
 
 	Direction market.Direction
 
+	// StructuralID is the strategy's own persistent identity for the
+	// underlying technical object (a zone.Zone.ID, keylevel.Level.ID,
+	// liquidity.Pool.ID, or an equivalent stable anchor) — the same real
+	// identity DeterministicID's SetupKey hashes into ID, retained here in
+	// recoverable form so a consumer (e.g. internal/arbitration's thesis
+	// correlation) can tell whether two different Candidates are the same
+	// real-world technical object without re-deriving an approximate
+	// bucket from price geometry. Empty when a strategy has no such
+	// persistent object to offer (never fabricated).
+	StructuralID string
+
 	Entry        EntryZone
 	Invalidation market.PriceLevel
 	Targets      []Target

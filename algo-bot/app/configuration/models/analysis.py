@@ -378,6 +378,8 @@ class AnalysisTechnicalAuthorityConfig(FrozenConfigModel):
 
     arbitration_mode: str = config_field('python_legacy', canonical_env='ANALYSIS_ARBITRATION_MODE', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.ENUM, risk=RiskClassification.EXECUTION_SAFETY, description="python_legacy: algo-bot ranks/decides which candidate wins a direction conflict itself (arbitrate_execution_intents). go: algo-bot reads analysis-engine's own internal/arbitration.Arbitrate decision instead (select_go_arbitrated_intent) and only applies its own execution-timing admission gate on top. Default stays python_legacy until a shadow-diff soak period (compare both paths' picks on live traffic) confirms agreement — see docs plan for the Phase 2 rollout.", default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 'python_legacy'),), allowed_values=('go', 'python_legacy'), validation_summary='Only go or python_legacy is supported.')
 
+    thesis_correlation_mode: str = config_field('python_legacy', canonical_env='ANALYSIS_THESIS_CORRELATION_MODE', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.ENUM, risk=RiskClassification.EXECUTION_SAFETY, description="python_legacy: multi_match.dedupe_matches decides whether two cross-strategy candidates are the same real-world thesis itself, via an ATR-bucket geometric heuristic (same_thesis/merge_confluence). go: dedupe_matches instead groups by StrategyMatch.go_thesis_id, Go's own structural-identity correlation (internal/arbitration's thesis grouping) - falls back to the legacy heuristic for any pair missing a go_thesis_id (a non-Go source, or Go hasn't published a decision for it yet). Default stays python_legacy until cutover is deliberately chosen, same rollout shape as arbitration_mode.", default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 'python_legacy'),), allowed_values=('go', 'python_legacy'), validation_summary='Only go or python_legacy is supported.')
+
     @field_validator('mode')
     @classmethod
     def validate_mode(cls, value):
@@ -390,6 +392,13 @@ class AnalysisTechnicalAuthorityConfig(FrozenConfigModel):
     def validate_arbitration_mode(cls, value):
         if value not in ('go', 'python_legacy'):
             raise ValueError('arbitration_mode must be go or python_legacy')
+        return value
+
+    @field_validator('thesis_correlation_mode')
+    @classmethod
+    def validate_thesis_correlation_mode(cls, value):
+        if value not in ('go', 'python_legacy'):
+            raise ValueError('thesis_correlation_mode must be go or python_legacy')
         return value
 
     @model_validator(mode='after')

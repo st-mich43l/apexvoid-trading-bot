@@ -528,6 +528,26 @@ async def test_arbitration_decision_annotates_the_live_match(h):
 
 
 @pytest.mark.asyncio
+async def test_arbitration_decision_annotates_thesis_correlation(h):
+  await h.activate()
+  await h.deliver(event(int(h.clock.now)))
+  client = redis_state.get_client()
+
+  correlated = _arbitration_event(payload={
+    "opportunity_id": "opp_golden_supply_xau", "symbol": "XAU",
+    "status": "winner", "reason_code": "ranked_single_direction",
+    # Go's own raw opportunity_ids - go_opportunity_policy must translate
+    # these through match_id_for, matching every other Go-origin match_id.
+    "thesis_id": "opp_golden_supply_xau", "merged_with": ["opp_sibling"],
+    "decided_at": 102,
+  })
+  assert await h.policy.on_arbitration_decision(correlated) == "arbitration_updated"
+  matches = deserialize_matches(await client.get(strategy_matches_key("XAU")))
+  assert matches[0].go_thesis_id == "go_opp_golden_supply_xau"
+  assert matches[0].go_merged_with == ("go_opp_sibling",)
+
+
+@pytest.mark.asyncio
 async def test_arbitration_decision_for_an_unknown_match_is_dropped(h):
   await h.activate()
   # No creation event delivered - nothing live for this opportunity_id yet

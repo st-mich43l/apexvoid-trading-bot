@@ -362,11 +362,21 @@ func (w *SymbolWorker) arbitrate(now int64, publish bool) {
 // decisionEqual compares two arbitration.Decision values field-by-field —
 // Decision is not `==`-comparable (ConflictingWith is a slice).
 func decisionEqual(a, b arbitration.Decision) bool {
-	if a.Status != b.Status || a.ReasonCode != b.ReasonCode || len(a.ConflictingWith) != len(b.ConflictingWith) {
+	if a.Status != b.Status || a.ReasonCode != b.ReasonCode || a.ThesisID != b.ThesisID {
 		return false
 	}
-	for i := range a.ConflictingWith {
-		if a.ConflictingWith[i] != b.ConflictingWith[i] {
+	if !stringSlicesEqual(a.ConflictingWith, b.ConflictingWith) || !stringSlicesEqual(a.MergedWith, b.MergedWith) {
+		return false
+	}
+	return true
+}
+
+func stringSlicesEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
 			return false
 		}
 	}

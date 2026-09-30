@@ -82,6 +82,12 @@ func TestKeyLevel_PriceAboveLevelProducesABuyCandidate(t *testing.T) {
 	if candidates[0].Reaction == nil || candidates[0].Reaction.ReactionType != "rejection" {
 		t.Errorf("expected a confirmed rejection reaction, got %+v", candidates[0].Reaction)
 	}
+	// The level's own stable ID, never the full local setup key (which also
+	// embeds this reaction's own touch/confirmation bar times) - two
+	// confirmations of the SAME level must correlate as one thesis.
+	if candidates[0].StructuralID != "level-2020" {
+		t.Errorf("expected StructuralID to be the level's own ID, got %q", candidates[0].StructuralID)
+	}
 	if err := candidates[0].Validate(); err != nil {
 		t.Errorf("expected a fully valid Candidate, got: %v", err)
 	}

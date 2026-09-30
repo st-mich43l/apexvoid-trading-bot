@@ -177,6 +177,12 @@ class AnalysisOpportunityArbitration(FrozenConfigModel):
   status: str
   reason_code: str
   conflicting_with: list[str] = Field(default_factory=list)
+  # Cross-strategy thesis correlation (Phase 3): present only when this
+  # opportunity shares its real-world structural identity with at least
+  # one other live candidate. See go_opportunity_policy's own handling for
+  # how this replaces the Python-side ATR-bucket heuristic.
+  thesis_id: str | None = None
+  merged_with: list[str] = Field(default_factory=list)
   decided_at: int = Field(ge=0)
 
   @model_validator(mode="after")

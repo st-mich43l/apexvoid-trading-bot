@@ -509,10 +509,13 @@ class GoOpportunityPolicy:
     Updates the live StrategyMatch's arbitration_status/
     arbitration_reason_code — Go's cross-strategy conflict-resolution
     decision (Phase 2), read by select_go_arbitrated_intent instead of
-    Python re-deriving one via arbitrate_execution_intents. A decision for
-    a match_id with no live StrategyMatch (already withdrawn by
-    on_terminal, or arrived before the match write completed) is simply
-    dropped: there is nothing live left to annotate.
+    Python re-deriving one via arbitrate_execution_intents — and
+    go_thesis_id/go_merged_with (Phase 3), Go's own structural-identity
+    thesis correlation, read by multi_match.dedupe_matches in place of its
+    ATR-bucket geometric heuristic once thesis_correlation_mode=go. A
+    decision for a match_id with no live StrategyMatch (already withdrawn
+    by on_terminal, or arrived before the match write completed) is
+    simply dropped: there is nothing live left to annotate.
     """
     payload = event.payload
     match_id = match_id_for(payload.opportunity_id)
@@ -522,9 +525,19 @@ class GoOpportunityPolicy:
     match = next((m for m in matches if m.match_id == match_id), None)
     if match is None:
       return "ignored_unknown_match"
-    if match.arbitration_status == payload.status and match.arbitration_reason_code == payload.reason_code:
+    go_thesis_id = None if payload.thesis_id is None else match_id_for(payload.thesis_id)
+    go_merged_with = tuple(match_id_for(item) for item in payload.merged_with)
+    if (
+      match.arbitration_status == payload.status
+      and match.arbitration_reason_code == payload.reason_code
+      and match.go_thesis_id == go_thesis_id
+      and match.go_merged_with == go_merged_with
+    ):
       return "unchanged"
-    updated = replace(match, arbitration_status=payload.status, arbitration_reason_code=payload.reason_code)
+    updated = replace(
+      match, arbitration_status=payload.status, arbitration_reason_code=payload.reason_code,
+      go_thesis_id=go_thesis_id, go_merged_with=go_merged_with,
+    )
     await self._store_match(client, updated, int(self._clock()))
     return "arbitration_updated"
 

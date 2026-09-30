@@ -126,3 +126,12 @@ func TestOpportunityArbitrationSchema_RejectsAnUnknownStatus(t *testing.T) {
 		t.Error("expected schema validation to fail for an unrecognized status")
 	}
 }
+
+func TestOpportunityArbitrationSchema_ValidatesAThesisCorrelatedPayload(t *testing.T) {
+	schema := compileSchema(t, repoContractPath("analysis", "opportunity-arbitration-v1.schema.json"))
+	p := kafka.ArbitrationDecisionPayload{
+		OpportunityID: "cand-1", Symbol: "XAU", Status: "winner", ReasonCode: "ranked_single_direction",
+		ThesisID: "cand-1", MergedWith: []string{"cand-2"}, DecidedAt: 1500,
+	}
+	validateGo(t, schema, p)
+}
