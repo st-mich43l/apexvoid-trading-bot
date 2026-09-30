@@ -7,6 +7,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/keylevel"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/liquidity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/momentum"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/session"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
@@ -27,6 +28,7 @@ type Settings struct {
 	KeyLevel         keylevel.Config
 	Session          session.Config
 	Fib              fib.Config
+	Momentum         momentum.Config
 	Arbitration      arbitration.Config
 	StopEnvelope     StopEnvelopeConfig
 	Strategies       []strategy.Config
@@ -98,6 +100,10 @@ func LoadSettings(doc *config.Document, primary market.Timeframe, allowReplaceFo
 	if err != nil {
 		return Settings{}, err
 	}
+	momentumConfig, err := MomentumConfigFromConfig(doc)
+	if err != nil {
+		return Settings{}, err
+	}
 	arbitrationConfig, err := ArbitrationConfigFromConfig(doc)
 	if err != nil {
 		return Settings{}, err
@@ -120,7 +126,7 @@ func LoadSettings(doc *config.Document, primary market.Timeframe, allowReplaceFo
 	}
 	return Settings{
 		ATR: atr, Structure: structureSettings, Liquidity: liquidityConfig, Zone: zoneConfig,
-		Trendline: trendlineConfig, KeyLevel: keyLevelConfig, Session: sessionConfig, Fib: fibConfig,
+		Trendline: trendlineConfig, KeyLevel: keyLevelConfig, Session: sessionConfig, Fib: fibConfig, Momentum: momentumConfig,
 		Arbitration: arbitrationConfig, StopEnvelope: stopEnvelopeConfig, Strategies: strategyConfigs,
 		HistoryDepths: depths, PrimaryTimeframe: primary,
 		AllowReplaceForming: allowReplaceForming,

@@ -402,6 +402,16 @@ analysis:
     minimum_touches: 2
     # key_levels()'s max_cluster_span_multiple.
     maximum_cluster_span_multiple: 2.0
+  # ATR-normalized velocity thresholds for the price-only momentum read
+  # (internal/momentum, a port of app/analysis/momentum.py::momentum_state):
+  # v = (close[t] - close[t-n]) / (n * ATR14), bull at v >= velocity_bull_threshold,
+  # bear at v <= velocity_bear_threshold. Values equal the Python schema
+  # defaults (analysis.momentum.*) so both sides classify identically.
+  momentum:
+    velocity_lookback: 8
+    velocity_bull_threshold: 0.15
+    velocity_bear_threshold: -0.15
+
   # Phase S4 — internal/fib. No old trading-bot.yml OR Python-schema-
   # default precedent at all (fibonacci.py/dealing_range.py read these as
   # plain function-argument defaults, never a config leaf) — values are

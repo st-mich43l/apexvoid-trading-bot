@@ -8,12 +8,14 @@ import (
 	"time"
 
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/arbitration"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/barrier"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/config"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/fib"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/indicator"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/keylevel"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/liquidity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/momentum"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/session"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
@@ -833,4 +835,52 @@ func ConfigProvenanceFromConfig(doc *config.Document) (kafka.ConfigProvenance, e
 	}
 	sum := sha256.Sum256(raw)
 	return kafka.ConfigProvenance{Version: version, Fingerprint: hex.EncodeToString(sum[:16])}, nil
+}
+
+// BarrierConfigFromConfig resolves the opposing-barrier normalization policy
+// for one instrument. The execution-zone width limits are the same
+// execution.policy values Algo Bot's structural barrier book has always
+// applied (execution_zone_max_width_atr / _pips); pip size comes from the
+// instrument's own contract geometry, never an assumed constant.
+func BarrierConfigFromConfig(doc *config.Document, geometry market.Geometry) (barrier.Config, error) {
+	maxATR, err := getFloat(doc, "execution.policy.execution_zone_max_width_atr")
+	if err != nil {
+		return barrier.Config{}, err
+	}
+	maxPips, err := getFloat(doc, "execution.policy.execution_zone_max_width_pips")
+	if err != nil {
+		return barrier.Config{}, err
+	}
+	if maxATR <= 0 || maxPips <= 0 || geometry.PipSize <= 0 {
+		return barrier.Config{}, fmt.Errorf("engine: barrier width limits and pip size must be positive (atr=%v pips=%v pip_size=%v)", maxATR, maxPips, geometry.PipSize)
+	}
+	return barrier.Config{
+		Timeframes: barrier.DefaultTimeframes, PipSize: geometry.PipSize, MaxWidthATR: maxATR, MaxWidthPips: maxPips,
+	}, nil
+}
+
+// MomentumConfigFromConfig reads the price-only momentum thresholds
+// (analysis.momentum.*). Every value is required: momentum is used as the
+// higher-timeframe bias fallback, so a missing leaf must fail startup rather
+// than silently classify with a hidden default.
+func MomentumConfigFromConfig(doc *config.Document) (momentum.Config, error) {
+	lookback, err := getFloat(doc, "analysis.momentum.velocity_lookback")
+	if err != nil {
+		return momentum.Config{}, err
+	}
+	bull, err := getFloat(doc, "analysis.momentum.velocity_bull_threshold")
+	if err != nil {
+		return momentum.Config{}, err
+	}
+	bear, err := getFloat(doc, "analysis.momentum.velocity_bear_threshold")
+	if err != nil {
+		return momentum.Config{}, err
+	}
+	if lookback < 1 || lookback != float64(int(lookback)) {
+		return momentum.Config{}, fmt.Errorf("engine: analysis.momentum.velocity_lookback must be a positive whole number of bars, got %v", lookback)
+	}
+	if !(bull > 0) || !(bear < 0) {
+		return momentum.Config{}, fmt.Errorf("engine: analysis.momentum thresholds must satisfy bear < 0 < bull, got bull=%v bear=%v", bull, bear)
+	}
+	return momentum.Config{Lookback: int(lookback), BullThreshold: bull, BearThreshold: bear}, nil
 }

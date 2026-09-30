@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/barrier"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/config"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/engine"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/logging"
@@ -105,6 +106,7 @@ func run(configPath string) error {
 	go publisher.Run(ctx)
 
 	series := make([]redistransport.Series, 0)
+	barrierConfigs := make(map[market.Symbol]barrier.Config, len(live))
 	for _, symbol := range live {
 		settings, err := engine.LoadSettings(doc, primaryTimeframe, false)
 		if err != nil {
@@ -118,6 +120,11 @@ func run(configPath string) error {
 		if err := e.Register(canonical, settings); err != nil {
 			return fmt.Errorf("registering %s: %w", symbol, err)
 		}
+		barrierCfg, err := engine.BarrierConfigFromConfig(doc, settings.Geometry)
+		if err != nil {
+			return fmt.Errorf("loading opposing-barrier policy for %s: %w", symbol, err)
+		}
+		barrierConfigs[canonical] = barrierCfg
 		for timeframe, depth := range settings.HistoryDepths {
 			series = append(series, redistransport.Series{Symbol: canonical, Timeframe: timeframe, Depth: depth})
 		}
@@ -150,6 +157,9 @@ func run(configPath string) error {
 		return fmt.Errorf("initializing Redis market runtime: %w", err)
 	}
 	defer runtime.Close()
+	for symbol, cfg := range barrierConfigs {
+		runtime.SetBarrierConfig(symbol, cfg)
+	}
 
 	server := &http.Server{Addr: ":8080", Handler: healthHandler(redisHealth)}
 	serverErr := make(chan error, 1)

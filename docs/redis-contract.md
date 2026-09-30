@@ -325,35 +325,47 @@ connection used for bar ingestion.
   "entries": [
     {"timeframe": "M15", "kind": "supply", "low": 2020.0, "high": 2025.0,
      "atr": 4.0, "strength": 0.8, "touch_count": 2, "state": "fresh"}
+  ],
+  "barriers": [
+    {"side": "sell", "low": 2020.0, "high": 2025.0, "tier": "zone",
+     "score": 0.8, "touches": 2, "source_timeframes": ["M15"]}
   ]
 }
 ```
 
-`kind` is `supply` or `demand` (other zone kinds are never written). `state`
-is the zone's full lifecycle label (`fresh`, `touched`,
-`partially_mitigated`, `mitigated`, `invalidated`) - the publisher writes
-every zone unfiltered; deciding what still counts as a live barrier is the
-reader's job, not the publisher's, so a schema change to what "live" means
-never requires a Go redeploy. `atr` is the current ATR for the entry's own
-symbol/timeframe and lets execution policy enforce the same ATR-relative width
-limit as the canonical Python StructuralBarrierBook. Every tracked timeframe's
-zones are flattened into one `entries` list.
+`entries` is the raw snapshot: every tracked timeframe's zones flattened into
+one list, unfiltered. `kind` is `supply` or `demand` (other zone kinds are never
+written), `state` is the zone's full lifecycle label (`fresh`, `touched`,
+`partially_mitigated`, `mitigated`, `invalidated`), and `atr` is the current ATR
+of the entry's own symbol/timeframe.
+
+`barriers` is the normalized opposing-structure book, computed by Go
+(`analysis-engine/internal/barrier`, a port of the Python StructuralBarrierBook
+normalization and parity-tested against it). It is built from `entries` by:
+
+1. keeping only standing zones (`fresh`, `touched`, `partially_mitigated`);
+2. keeping only M5/M15/H1;
+3. dropping zones outside the execution width gate
+   (`execution.policy.execution_zone_max_width_atr` / `_pips`, measured against
+   the zone's own timeframe ATR and the instrument's pip size; a zone with no
+   positive ATR is dropped);
+4. merging touching or overlapping same-side bands (max score, min touches,
+   union of `source_timeframes`);
+5. reconciling contradictory cross-side bands (the weaker of two substantially
+   overlapping opposing bands is dropped; a pass that would drop more than a
+   third of the book is discarded).
+
+`side` is `buy` (a demand wall below price) or `sell` (a supply wall above it).
+`barriers` is `[]` when Go computed the book and found no opposing structure,
+and `null` (or absent) when Go did not compute it; the two must never be
+confused.
 
 Consumer: `algo-bot/app/autotrade/go_zone_book.py`. The worker's
 execution-time opposing-barrier/target-room recheck
-(`structural_target_room.py`) prefers this key over its own OHLC recompute
-specifically for a Go-origin `StrategyMatch` (`GO_ORIGIN_TAG in match.tags`);
-a Python-origin match never reads it. The reader keeps only `fresh`,
-`touched`, and `partially_mitigated` states as live barriers
-(`_LIVE_STATES` in `go_zone_book.py`, mirroring the same "not
-Invalidated/Mitigated" rule Key Level's own `internal/strategy/keylevel/opposing.go`
-applies on the Go side, so a Go-origin match's opposing check and Key
-Level's own detection-time opposing check never disagree about what counts
-as live). Before target-room evaluation, the reader keeps only M5/M15/H1,
-applies `execution_zone_max_width_atr` and
-`execution_zone_max_width_pips`, merges overlapping same-side bands and
-reconciles contradictory cross-side bands through the shared
-StructuralBarrierBook normalization. A missing or unparseable key is reported
-as unavailable (`None`), distinct from "Go published that there is genuinely
-nothing opposing" (an empty tuple). Production Go-origin execution does not
-fall back to Python technical detection in either case.
+(`structural_target_room.py`) reads `barriers` for a Go-origin `StrategyMatch`
+(`GO_ORIGIN_TAG in match.tags`); a Python-origin match never reads it. Algo Bot
+adapts the published list and does not re-derive, filter or normalize structure:
+there is no Python fallback. A missing key, unparseable payload, or a book
+without a `barriers` list is reported as unavailable (`None`), distinct from
+Go's genuinely empty list; the worker then continues with no barriers rather
+than substituting a Python-derived book.

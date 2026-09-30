@@ -244,6 +244,13 @@ func (c Candidate) Validate() error {
 	if !finite(c.Entry.Low) || !finite(c.Entry.High) || c.Entry.Low > c.Entry.High {
 		return fmt.Errorf("opportunity: entry must be a finite low-to-high range")
 	}
+	// Algo Bot rejects a zero-width band (degenerate_entry_band) and the
+	// analysis.opportunity.v1 consumer contract requires the geometry below;
+	// enforcing both here means a strategy defect drops the candidate at the
+	// source instead of publishing an event every consumer must reject.
+	if c.Entry.Low == c.Entry.High {
+		return fmt.Errorf("opportunity: entry band must have positive width")
+	}
 	if !finite(float64(c.Invalidation.Price)) {
 		return fmt.Errorf("opportunity: invalidation price must be finite")
 	}
@@ -253,6 +260,27 @@ func (c Candidate) Validate() error {
 	for _, target := range c.Targets {
 		if !finite(float64(target.Price.Price)) {
 			return fmt.Errorf("opportunity: target prices must be finite")
+		}
+	}
+	invalidation := float64(c.Invalidation.Price)
+	switch c.Direction {
+	case market.Buy:
+		if invalidation >= c.Entry.Low {
+			return fmt.Errorf("opportunity: BUY invalidation must be below entry.low")
+		}
+		for _, target := range c.Targets {
+			if float64(target.Price.Price) <= c.Entry.High {
+				return fmt.Errorf("opportunity: BUY targets must be above entry.high")
+			}
+		}
+	case market.Sell:
+		if invalidation <= c.Entry.High {
+			return fmt.Errorf("opportunity: SELL invalidation must be above entry.high")
+		}
+		for _, target := range c.Targets {
+			if float64(target.Price.Price) >= c.Entry.Low {
+				return fmt.Errorf("opportunity: SELL targets must be below entry.low")
+			}
 		}
 	}
 	for _, evidence := range c.Evidence {
