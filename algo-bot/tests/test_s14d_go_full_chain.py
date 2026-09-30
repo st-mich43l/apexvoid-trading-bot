@@ -12,8 +12,6 @@ plan bytes exported below):
 
 from __future__ import annotations
 
-from app.autotrade.gate import AutoScalpDecision
-from app.autotrade.trend import RegimeInfo, TrendDecision
 import ast
 import json
 import os
@@ -69,10 +67,6 @@ def live_inputs(monkeypatch, *, bid=4354.1, ask=4354.3, news=None):
   monkeypatch.setattr(worker, "_load_frames", AsyncMock(return_value=frames))
   monkeypatch.setattr(worker, "_load_spot", AsyncMock(return_value=worker.AutoTradeSpot(
     price=(bid + ask) / 2, ts=int(time.time()), fresh=True, bid=bid, ask=ask)))
-  monkeypatch.setattr(worker, "evaluate_auto_scalp_gate", lambda *a, **k: AutoScalpDecision("waiting_for_box"))
-  monkeypatch.setattr(worker, "_resolve_worker_range", AsyncMock(return_value=(AutoScalpDecision("waiting_for_box"), None, {})))
-  monkeypatch.setattr(worker, "classify_regime", lambda *a, **k: RegimeInfo("trend", "down", 3, 1.0, True, None, ("shadow test",)))
-  monkeypatch.setattr(worker, "evaluate_trend_gate", lambda *a, **k: TrendDecision("no_setup"))
   monkeypatch.setattr(worker, "_htf_zones", lambda *a, **k: [])
   monkeypatch.setattr(worker, "_htf_levels", lambda *a, **k: [])
 

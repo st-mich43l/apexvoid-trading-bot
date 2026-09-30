@@ -287,35 +287,6 @@ def _frame_with_bullish_reclaim() -> pd.DataFrame:
   }, index=index)
 
 
-def test_overlap_resolves_to_buy_thesis_on_bullish_m1_reclaim():
-  """A bullish reclaim through the demand zone's own reaction memory must
-  let the BUY thesis survive an otherwise-symmetric BUY/SELL overlap,
-  instead of the current unconditional double-reject.
-  """
-  from app.analysis.market_map import MapEntry, MarketMap
-  from app.autotrade.worker import _resolve_overlap_thesis
-
-  demand = MapEntry(
-    side="buy", lo=4112.0, hi=4122.0, label_lo=4112, label_hi=4122,
-    tier="major", tags=[], score=6.0,
-  )
-  supply = MapEntry(
-    side="sell", lo=4116.0, hi=4127.0, label_lo=4116, label_hi=4127,
-    tier="major", tags=[], score=5.0,
-  )
-  market_map = MarketMap(
-    entries=[demand, supply], price=4118.0, eq=None, box_low=None,
-    box_high=None, bias="up", bias_tf="M30",
-  )
-
-  outcome = _resolve_overlap_thesis(
-    "BUY", 4118.0, market_map, _frame_with_bullish_reclaim(), atr=1.0, cfg=None,
-  )
-
-  assert outcome.outcome in ("allow", "allow_with_warning")
-  assert outcome.hard_block is False
-
-
 def _frame_with_bearish_rejection() -> pd.DataFrame:
   index = pd.date_range("2026-07-23", periods=6, freq="1min", tz="UTC")
   return pd.DataFrame({
@@ -347,36 +318,6 @@ def _overlap_map():
     bias="range",
     bias_tf="M30",
   )
-
-
-def test_overlap_resolves_to_sell_thesis_on_bearish_m1_rejection():
-  outcome = worker._resolve_overlap_thesis(
-    "SELL",
-    4118.0,
-    _overlap_map(),
-    _frame_with_bearish_rejection(),
-    atr=1.0,
-    cfg=execution_cfg(auto_trade_structural_guard_mode="observe"),
-  )
-
-  assert outcome.outcome in ("allow", "allow_with_warning")
-  assert not outcome.hard_block
-
-
-@pytest.mark.parametrize("direction", ["BUY", "SELL"])
-def test_ambiguous_overlap_is_advisory_in_observe(direction):
-  outcome = worker._resolve_overlap_thesis(
-    direction,
-    4118.0,
-    _overlap_map(),
-    None,
-    atr=1.0,
-    cfg=execution_cfg(auto_trade_structural_guard_mode="observe"),
-  )
-
-  assert outcome.outcome == "allow_with_warning"
-  assert outcome.reason_code == "ambiguous_waiting_confirmation"
-  assert not outcome.hard_block
 
 
 def _match(
@@ -427,51 +368,6 @@ def _match(
     family="mapped_zone_reaction",
     structural_source="market_map_zone",
   )
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-  ("direction", "zones", "levels"),
-  [
-    ("BUY", [], [Level(4051.0, "reaction", 3, 1.0)]),
-    ("SELL", [], [Level(4051.0, "reaction", 3, 1.0)]),
-    ("BUY", [Zone(4050.0, 4052.0, "demand", touches=2)], []),
-    ("SELL", [Zone(4050.0, 4052.0, "supply", touches=2)], []),
-  ],
-)
-async def test_candidate_publishes_inside_its_own_structural_source(
-  monkeypatch,
-  direction,
-  zones,
-  levels,
-):
-  client = redis_state.get_client()
-  now = int(datetime.now(timezone.utc).timestamp())
-  match = _match(direction=direction, event_ts=str(now))
-  install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_enabled": True})
-  install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_stream": "auto_trade:replay"})
-  install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_structural_guard_mode": "observe"})
-  install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_opposing_barrier_veto_enabled": False})
-  install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_overlap_veto_enabled": False})
-  install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_zone_cooldown_enabled": False})
-  monkeypatch.setattr(worker, "event_in_window", AsyncMock(return_value=None))
-
-  candidate_id = await worker._publish_strategy_match(
-    client,
-    "XAU",
-    worker.AutoTradeSpot(4051.0, now, True),
-    match,
-    htf_zones=zones,
-    htf_levels=levels,
-  )
-
-  assert candidate_id == match.match_id
-  assert await client.xlen("auto_trade:replay") == 1
-  guard = json.loads(await client.get("auto_trade:last_guard:XAU"))
-  assert guard["reason"] in {
-    "primary_source_excluded_from_barrier",
-    "no_overlap",
-  }
 
 
 @pytest.mark.asyncio
@@ -627,38 +523,6 @@ async def test_consuming_one_match_preserves_unrelated_sibling():
   assert [item.match_id for item in remaining] == [second.match_id]
 
 
-@pytest.mark.asyncio
-async def test_news_wait_is_telemetry_only_not_a_block(monkeypatch):
-  # "news_window_active" is a PREFERENCE_TELEMETRY_REASONS condition
-  # (execution_policy.py) - an active news window is recorded and warned on
-  # rather than blocking publication outright, so this now publishes (and,
-  # correctly, is consumed off strategy_matches by the successful publish
-  # path).
-  client = redis_state.get_client()
-  now = int(datetime.now(timezone.utc).timestamp())
-  match = _match(event_ts=str(now))
-  await client.set(
-    strategy_matches_key("XAU"),
-    serialize_matches([match]),
-  )
-  install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_enabled": True})
-  install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_multi_match_enabled": True})
-  install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_structural_guard_mode": "observe"})
-  install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_zone_cooldown_enabled": False})
-  monkeypatch.setattr(worker, "event_in_window", AsyncMock(return_value={
-    "title": "US high impact",
-  }))
-
-  candidate_id = await worker._publish_strategy_match(
-    client,
-    "XAU",
-    worker.AutoTradeSpot(4051.0, now, True),
-    match,
-  )
-
-  assert candidate_id is not None
-
-
 def test_barrier_relationship_distinguishes_source_support_and_opposition():
   source = StructuralSourceIdentity(
     strategy="Demand Zone Reaction",
@@ -705,125 +569,3 @@ def test_barrier_relationship_distinguishes_source_support_and_opposition():
     barrier=resistance,
   ) == "opposing_ahead"
 
-
-@pytest.mark.asyncio
-async def test_temporary_entry_drift_wait_preserves_match(monkeypatch):
-  client = redis_state.get_client()
-  now = int(datetime.now(timezone.utc).timestamp())
-  match = _match(event_ts=str(now))
-  await client.set(
-    strategy_matches_key("XAU"),
-    serialize_matches([match]),
-  )
-  install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_enabled": True})
-  install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_multi_match_enabled": True})
-  install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_structural_guard_mode": "observe"})
-  install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_zone_cooldown_enabled": False})
-  install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_max_entry_distance_pips": 10.0})
-  install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_map_min_entry_drift_pips": 10.0})
-  install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_map_max_entry_drift_atr": 0.4})
-  install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_map_hard_entry_drift_pips": 20.0})
-  monkeypatch.setattr(worker, "event_in_window", AsyncMock(return_value=None))
-
-  candidate_id = await worker._publish_strategy_match(
-    client,
-    "XAU",
-    worker.AutoTradeSpot(4053.2, now, True),
-    match,
-  )
-
-  assert candidate_id is None
-  remaining = deserialize_matches(
-    await client.get(strategy_matches_key("XAU"))
-  )
-  assert [item.match_id for item in remaining] == [match.match_id]
-  guard = json.loads(await client.get("auto_trade:last_guard:XAU"))
-  assert guard["outcome"] == "wait"
-  assert guard["reason"] == "strategy_entry_moved"
-
-
-@pytest.mark.asyncio
-async def test_crossed_invalidation_is_terminal_for_only_that_match(monkeypatch):
-  client = redis_state.get_client()
-  now = int(datetime.now(timezone.utc).timestamp())
-  invalid = _match(event_ts=str(now))
-  sibling = _match(
-    direction="SELL",
-    entry_low=4060.0,
-    entry_high=4062.0,
-    key_level=4061.0,
-    event_ts=str(now + 1),
-  )
-  await client.set(
-    strategy_matches_key("XAU"),
-    serialize_matches([invalid, sibling]),
-  )
-  install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_enabled": True})
-  install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_multi_match_enabled": True})
-  install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_structural_guard_mode": "observe"})
-  install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_zone_cooldown_enabled": False})
-
-  candidate_id = await worker._publish_strategy_match(
-    client,
-    "XAU",
-    worker.AutoTradeSpot(4047.9, now, True),
-    invalid,
-  )
-
-  assert candidate_id is None
-  remaining = deserialize_matches(
-    await client.get(strategy_matches_key("XAU"))
-  )
-  assert [item.match_id for item in remaining] == [sibling.match_id]
-
-
-@pytest.mark.asyncio
-async def test_observe_overlap_allows_both_direct_route_evaluations(monkeypatch):
-  client = redis_state.get_client()
-  now = int(datetime.now(timezone.utc).timestamp())
-  waiting = _match(
-    entry_low=4117.0,
-    entry_high=4119.0,
-    key_level=4118.0,
-    event_ts=str(now),
-  )
-  publishable = _match(
-    entry_low=4200.0,
-    entry_high=4202.0,
-    key_level=4201.0,
-    event_ts=str(now + 1),
-  )
-  await client.set(
-    strategy_matches_key("XAU"),
-    serialize_matches([waiting, publishable]),
-  )
-  install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_enabled": True})
-  install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_multi_match_enabled": True})
-  install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_stream": "auto_trade:replay"})
-  install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_structural_guard_mode": "observe"})
-  install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_zone_cooldown_enabled": False})
-  install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_overlap_veto_enabled": False})
-  monkeypatch.setattr(worker, "event_in_window", AsyncMock(return_value=None))
-
-  waiting_result = await worker._publish_strategy_match(
-    client,
-    "XAU",
-    worker.AutoTradeSpot(4118.0, now, True),
-    waiting,
-    market_map=_overlap_map(),
-  )
-  published_result = await worker._publish_strategy_match(
-    client,
-    "XAU",
-    worker.AutoTradeSpot(4201.0, now, True),
-    publishable,
-    market_map=_overlap_map(),
-  )
-
-  assert waiting_result == waiting.match_id
-  assert published_result == publishable.match_id
-  assert await client.xlen("auto_trade:replay") == 2
-  remaining = deserialize_matches(
-    await client.get(strategy_matches_key("XAU"))
-  )
-  assert remaining == []

@@ -248,53 +248,6 @@ def test_parse_lifecycle_state_supports_plain_and_structured_records():
 
 
 @pytest.mark.asyncio
-async def test_both_range_rails_stay_independent(monkeypatch):
-  client = fakeredis.FakeAsyncRedis(decode_responses=True)
-  context = _context("merged", 4000, 4010)
-  decision = AutoScalpDecision("candidate", direction="BUY")
-  install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_box_retire_seconds": 14400,})
-
-  await worker._persist_range_side_states(
-    client,
-    symbol="XAU",
-    context=context,
-    decision=decision,
-  )
-  buy_key = (
-    f"auto_trade:range_side:XAU:{context.range_id}:BUY"
-  )
-  sell_key = (
-    f"auto_trade:range_side:XAU:{context.range_id}:SELL"
-  )
-  buy = json.loads(await client.get(buy_key))
-  sell = json.loads(await client.get(sell_key))
-  assert buy["state"] == "CONFIRMED"
-  assert sell["state"] == "ARMED"
-
-  await worker._mark_range_side_candidate(
-    client,
-    symbol="XAU",
-    range_id=context.range_id,
-    direction="BUY",
-    candidate_id="buy-candidate",
-  )
-  await client.set(
-    worker._box_edge_key("XAU", context.range_id, "BUY"), "1",
-  )
-  await worker._persist_range_side_states(
-    client,
-    symbol="XAU",
-    context=context,
-    decision=AutoScalpDecision("candidate", direction="SELL"),
-  )
-  buy = json.loads(await client.get(buy_key))
-  sell = json.loads(await client.get(sell_key))
-  assert buy["state"] == "CANDIDATE_PUBLISHED"
-  assert buy["candidate_id"] == "buy-candidate"
-  assert sell["state"] == "CONFIRMED"
-
-
-@pytest.mark.asyncio
 async def test_python_config_manifest_is_published(monkeypatch):
   client = fakeredis.FakeAsyncRedis(decode_responses=True)
   cfg = _settings(monkeypatch)

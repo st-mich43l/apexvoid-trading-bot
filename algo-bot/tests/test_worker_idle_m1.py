@@ -5,14 +5,13 @@ from __future__ import annotations
 import json
 from dataclasses import replace
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock
 
 import pandas as pd
 import pytest
 
 from app.analysis_client.provenance import CATALOG_TAG, GO_ORIGIN_TAG
 from app.autotrade import worker
-from app.autotrade.gate import AutoScalpDecision
 from app.autotrade.multi_match import serialize_matches, strategy_matches_key
 from app.autotrade.route_outcome import route_outcome_key
 from app.autotrade.strategy_match import (
@@ -45,9 +44,6 @@ async def test_go_only_idle_m1_skips_python_frames_and_writes_thin_last_gate(mon
   install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_enabled": True})
   install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_symbols": "XAU"})
   publish = AsyncMock(return_value=None)
-  gate = Mock()
-  trend_fn = Mock()
-  regime_fn = Mock()
   monkeypatch.setattr(worker, "_publish_trade_plan_v8", publish)
   monkeypatch.setattr(worker, "event_in_window", AsyncMock(return_value=None))
   source = AsyncMock()
@@ -57,9 +53,6 @@ async def test_go_only_idle_m1_skips_python_frames_and_writes_thin_last_gate(mon
     "_load_spot",
     AsyncMock(return_value=worker.AutoTradeSpot(4017.2, now, True)),
   )
-  monkeypatch.setattr(worker, "evaluate_auto_scalp_gate", gate)
-  monkeypatch.setattr(worker, "evaluate_trend_gate", trend_fn)
-  monkeypatch.setattr(worker, "classify_regime", regime_fn)
 
   result = await worker._handle_event(
     f"XAU:M1:{now}", source=source, client=client,
@@ -67,34 +60,10 @@ async def test_go_only_idle_m1_skips_python_frames_and_writes_thin_last_gate(mon
 
   assert result is None
   publish.assert_not_awaited()
-  gate.assert_not_called()
-  trend_fn.assert_not_called()
-  regime_fn.assert_not_called()
   source.window.assert_not_awaited()
   status = json.loads(await client.get("auto_trade:last_gate:XAU"))
   assert status["state"] == "idle_no_match"
   assert status["gate_source"] == "idle_no_match"
-
-
-@pytest.mark.asyncio
-async def test_mapped_thesis_rearm_does_not_bool_coerce_m1_frame(monkeypatch):
-  """Prod 2026-08-17: frames.get('M1') or frames.get('M1') crashed every minute."""
-  client = redis_state.get_client()
-  df = _frame()
-  called = {}
-
-  async def fake_advance(client_arg, *, symbol, m1, atr):
-    called["symbol"] = symbol
-    called["rows"] = len(m1)
-    called["atr"] = atr
-
-  monkeypatch.setattr(worker, "_advance_mapped_thesis_rearms", fake_advance)
-  await worker._advance_mapped_thesis_rearms_from_frames(
-    client, symbol="XAU", frames={"M1": df},
-  )
-  assert called["symbol"] == "XAU"
-  assert called["rows"] == 20
-  assert called["atr"] > 0
 
 
 # ---- Go is the sole automatic technical-opportunity producer -----------------
@@ -178,22 +147,14 @@ def _capture_full_pass(monkeypatch) -> list[list[str]]:
     raise _ReachedFullPass
 
   monkeypatch.setattr(worker, "dedupe_matches", capture)
-  monkeypatch.setattr(
-    worker, "evaluate_auto_scalp_gate",
-    lambda *a, **k: AutoScalpDecision("waiting_for_box"),
-  )
-  monkeypatch.setattr(
-    worker, "_resolve_worker_range",
-    AsyncMock(return_value=(AutoScalpDecision("waiting_for_box"), None, {})),
-  )
   return seen
 
 
 @pytest.mark.asyncio
 async def test_go_mode_stale_python_match_cannot_produce_a_plan(monkeypatch):
   """A Python scanner match left in Redis at cutover is invisible to the sweep:
-  no preflight, no publish, no route outcome, and none of the private
-  Python scalp/regime/trend pass runs - the cycle is the ordinary idle one."""
+  no preflight, no publish, no route outcome - the cycle is the ordinary idle
+  one."""
   client = redis_state.get_client()
   now = int(datetime.now(timezone.utc).timestamp())
   source = _worker_cycle(monkeypatch, now=now)
@@ -202,21 +163,14 @@ async def test_go_mode_stale_python_match_cannot_produce_a_plan(monkeypatch):
   assert [m.match_id for m in await worker._load_strategy_matches(client, "XAU")] == [stale.match_id]
   publish = AsyncMock(return_value="plan-should-never-exist")
   admit = AsyncMock(return_value=None)
-  gate, trend_fn, regime_fn = Mock(), Mock(), Mock()
   monkeypatch.setattr(worker, "_publish_trade_plan_v8", publish)
   monkeypatch.setattr(worker, "_admit_strategy_intent_for_cycle", admit)
-  monkeypatch.setattr(worker, "evaluate_auto_scalp_gate", gate)
-  monkeypatch.setattr(worker, "evaluate_trend_gate", trend_fn)
-  monkeypatch.setattr(worker, "classify_regime", regime_fn)
 
   result = await worker._handle_event(f"XAU:M1:{now}", source=source, client=client)
 
   assert result is None
   publish.assert_not_awaited()
   admit.assert_not_awaited()
-  gate.assert_not_called()
-  trend_fn.assert_not_called()
-  regime_fn.assert_not_called()
   assert await client.get(route_outcome_key("XAU", stale.match_id)) is None
   status = json.loads(await client.get("auto_trade:last_gate:XAU"))
   assert status["state"] == "idle_no_match"

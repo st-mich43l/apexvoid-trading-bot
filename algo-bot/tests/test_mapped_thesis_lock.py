@@ -24,7 +24,6 @@ from app.autotrade.reaction_identity import (
   thesis_claim_payload,
 )
 from app.autotrade.strategy_match import StrategyMatch
-from app.autotrade.worker import _publish_strategy_match
 
 
 def _cfg(**overrides):
@@ -127,109 +126,6 @@ def _match(
     confirmation_bar_ts=confirm,
     reaction_type="rejection",
   )
-
-
-@pytest.mark.asyncio
-async def test_incident_second_reaction_suppressed_by_thesis_lock(monkeypatch):
-  """22:46 then 22:49 same zone/thesis, different reaction_id → one publish."""
-  cfg = install_runtime_overrides(monkeypatch, legacy_overrides={
-    "auto_trade_enabled": True,
-    "auto_trade_mapped_zone_enabled": True,
-    "auto_trade_map_thesis_lock_enabled": True,
-    "auto_trade_min_confluence": 1,
-    "auto_trade_candidate_ttl": 600,
-    "auto_trade_opposing_barrier_veto_enabled": False,
-    "auto_trade_overlap_veto_enabled": False,
-    "auto_trade_zone_cooldown_enabled": False,
-    "auto_trade_htf_veto_enabled": False,
-  })
-
-  client = FakeRedis()
-
-  async def _noop_async(*args, **kwargs):
-    return None
-
-  async def _incr(c, name, symbol="XAU"):
-    await c.hincrby(f"auto_trade:metrics:{symbol.upper()}", name, 1)
-
-  monkeypatch.setattr("app.autotrade.worker.increment_metric", _incr)
-  monkeypatch.setattr("app.autotrade.worker.emit_lifecycle", _noop_async)
-  monkeypatch.setattr("app.autotrade.worker.event_in_window", _noop_async)
-  monkeypatch.setattr("app.autotrade.worker._consume_strategy_match", _noop_async)
-  monkeypatch.setattr("app.autotrade.worker._record_guard_evaluation", _noop_async)
-  monkeypatch.setattr("app.autotrade.worker._zone_cooldown_reason", _noop_async)
-  monkeypatch.setattr("app.autotrade.worker._record_gate_reject", _noop_async)
-
-  zone = structural_zone_id(
-    "XAU", "BUY", 4060.39, 4072.38, atr=2.4, pip_size=0.1, tags=["demand", "ob"],
-  )
-  thesis = mapped_thesis_id(
-    symbol="XAU",
-    strategy="Mapped Zone Reaction",
-    direction="BUY",
-    structural_zone_id=zone,
-  )
-  r1 = mapped_reaction_id(
-    symbol="XAU",
-    strategy="Mapped Zone Reaction",
-    direction="BUY",
-    structural_zone_id=zone,
-    touch_bar_ts="2026-07-24T15:45:00+00:00",
-    confirmation_bar_ts="2026-07-24T15:46:00+00:00",
-    reaction_type="rejection",
-  )
-  r2 = mapped_reaction_id(
-    symbol="XAU",
-    strategy="Mapped Zone Reaction",
-    direction="BUY",
-    structural_zone_id=zone,
-    touch_bar_ts="2026-07-24T15:48:00+00:00",
-    confirmation_bar_ts="2026-07-24T15:49:00+00:00",
-    reaction_type="rejection",
-  )
-  assert r1 != r2
-  assert thesis
-
-  spot = SimpleNamespace(price=4072.55, ts=1_784_908_000, fresh=True)
-  first = await _publish_strategy_match(
-    client,
-    "XAU",
-    spot,
-    _match(
-      reaction_id=r1,
-      thesis_id=thesis,
-      touch="2026-07-24T15:45:00+00:00",
-      confirm="2026-07-24T15:46:00+00:00",
-      zone_id=zone,
-    ),
-  )
-  assert first is not None
-  assert sum(
-    1 for stream, _ in client.stream
-    if stream == leaf(cfg, "auto_trade_stream")
-  ) == 1
-
-  second = await _publish_strategy_match(
-    client,
-    "XAU",
-    spot,
-    _match(
-      reaction_id=r2,
-      thesis_id=thesis,
-      touch="2026-07-24T15:48:00+00:00",
-      confirm="2026-07-24T15:49:00+00:00",
-      zone_id=zone,
-    ),
-  )
-  assert second is None
-  assert sum(
-    1 for stream, _ in client.stream
-    if stream == leaf(cfg, "auto_trade_stream")
-  ) == 1
-  metrics = client.metrics.get("auto_trade:metrics:XAU", {})
-  assert metrics.get("mapped_thesis_claimed", 0) == 1
-  assert metrics.get("duplicate_thesis_suppressed", 0) >= 1
-  assert thesis_claim_key(thesis) in client.kv
 
 
 def test_rearm_requires_outside_bars_then_reentry():

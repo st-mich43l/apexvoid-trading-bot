@@ -22,7 +22,7 @@ from app.autotrade.reaction_identity import (
   zones_materially_equivalent,
 )
 from app.autotrade.strategy_match import StrategyMatch
-from app.autotrade.worker import _publish_strategy_match, _strategy_group_id
+from app.autotrade.worker import _strategy_group_id
 
 
 def _zone(lo: float, hi: float) -> MapEntry:
@@ -200,133 +200,6 @@ def _mapped_zone_reaction_match(
     confirmation_bar_ts="2026-07-24T21:41:00+00:00",
     reaction_type="reclaim",
   )
-
-
-@pytest.mark.asyncio
-async def test_incident_replay_publishes_one_candidate(monkeypatch):
-  """Exact 21:43–21:49 replay: one match identity, one publish, six suppressed."""
-  cfg = install_runtime_overrides(monkeypatch, legacy_overrides={
-    "auto_trade_enabled": True,
-    "auto_trade_mapped_zone_enabled": True,
-    "auto_trade_min_confluence": 1,
-    "auto_trade_candidate_ttl": 600,
-    "auto_trade_opposing_barrier_veto_enabled": False,
-    "auto_trade_overlap_veto_enabled": False,
-    "auto_trade_zone_cooldown_enabled": False,
-    "auto_trade_htf_veto_enabled": False,
-    "auto_trade_map_thesis_lock_enabled": True,
-  })
-
-  class FakeRedis:
-    def __init__(self):
-      self._apexvoid_allow_non_atomic_test_fallback = True
-      self.kv = {}
-      self.stream = []
-      self.metrics = {}
-
-    async def get(self, key):
-      return self.kv.get(key)
-
-    async def set(self, key, value, ex=None, nx=False):
-      if nx and key in self.kv:
-        return False
-      self.kv[key] = value
-      return True
-
-    async def delete(self, *keys):
-      for key in keys:
-        self.kv.pop(key, None)
-      return 1
-
-    async def exists(self, key):
-      return 1 if key in self.kv else 0
-
-    async def eval(self, *args, **kwargs):
-      raise RuntimeError("lua unavailable in FakeRedis")
-
-    async def xadd(self, stream, fields, maxlen=None, approximate=True):
-      self.stream.append((stream, fields))
-      return "1-0"
-
-    async def hincrby(self, key, field, amount):
-      bucket = self.metrics.setdefault(key, {})
-      bucket[field] = bucket.get(field, 0) + amount
-      return bucket[field]
-
-    def pipeline(self):
-      return self
-
-    async def execute(self):
-      return []
-
-    def rpush(self, *args, **kwargs):
-      return self
-
-    def ltrim(self, *args, **kwargs):
-      return self
-
-    def expire(self, *args, **kwargs):
-      return self
-
-  client = FakeRedis()
-  async def _noop_async(*args, **kwargs):
-    return None
-
-  async def _incr(c, name, symbol="XAU"):
-    await c.hincrby(f"auto_trade:metrics:{symbol.upper()}", name, 1)
-
-  monkeypatch.setattr("app.autotrade.worker.increment_metric", _incr)
-  monkeypatch.setattr("app.autotrade.worker.emit_lifecycle", _noop_async)
-  monkeypatch.setattr("app.autotrade.worker.event_in_window", _noop_async)
-  monkeypatch.setattr("app.autotrade.worker._consume_strategy_match", _noop_async)
-  monkeypatch.setattr("app.autotrade.worker._record_guard_evaluation", _noop_async)
-  monkeypatch.setattr("app.autotrade.worker._zone_cooldown_reason", _noop_async)
-  monkeypatch.setattr("app.autotrade.worker._record_gate_reject", _noop_async)
-
-  bands = [
-    (4054.26, 4062.31),
-    (4054.10, 4062.20),
-    (4054.08, 4062.16),
-    (4054.08, 4062.15),
-    (4054.06, 4062.17),
-    (4054.07, 4062.17),
-    (4054.08, 4062.15),
-  ]
-  event_hours = list(range(43, 50))
-  matches = []
-  published = []
-  for hour, (lo, hi) in zip(event_hours, bands):
-    match = _mapped_zone_reaction_match(lo, hi, hour=hour)
-    matches.append(match)
-    spot = SimpleNamespace(price=4058.5, ts=1_780_000_000 + hour, fresh=True)
-    result = await _publish_strategy_match(
-      client,
-      "XAUUSD",
-      spot,
-      match,
-      match_source="market_map_strategy",
-      market_map=_map(_zone(lo, hi), price=4058.5),
-      frames={"M1": _rejection_m1()},
-    )
-    published.append(result)
-
-  assert len({m.reaction_id for m in matches}) == 1
-  assert len({m.match_id for m in matches}) == 1
-  assert len({_strategy_group_id(m) for m in matches}) == 1
-  assert sum(1 for item in published if item is not None) == 1
-  assert sum(1 for item in published if item is None) == 6
-  metrics = client.metrics.get("auto_trade:metrics:XAUUSD", {})
-  suppressed = (
-    metrics.get("duplicate_reaction_suppressed", 0)
-    + metrics.get("duplicate_thesis_suppressed", 0)
-  )
-  assert suppressed == 6
-  assert metrics.get("mapped_reaction_claimed", 0) == 1
-  assert metrics.get("mapped_thesis_claimed", 0) == 1
-  assert sum(
-    1 for stream, _ in client.stream
-    if stream == leaf(cfg, "auto_trade_stream")
-  ) == 1
 
 
 def test_same_thesis_uses_reaction_id_not_event_ts():

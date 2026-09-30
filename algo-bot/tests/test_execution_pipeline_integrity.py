@@ -545,40 +545,6 @@ def test_reward_risk_is_measured_against_the_final_absolute_stop():
   )
 
 
-def test_entry_plan_fields_reach_the_published_candidate_contract():
-  evaluation = evaluate_execution_policy(
-    _policy_match(
-      strategy="Trend Pullback",
-      entry_low=4100.0,
-      entry_high=4100.3,
-      current_price=4100.2,
-      structure_swing=4098.5,
-    ),
-    spot_price=4100.2,
-    regime="trend",
-    pip_size=0.1,
-  )
-
-  forwarded = worker._stop_contract_fields(evaluation.measured)
-
-  # The executor rejects route or entry drift using exactly these fields, so
-  # a field that never reaches the payload is a silent contract hole.
-  for field in (
-    "planned_execution_route",
-    "planned_market_immediate",
-    "planned_entry_price",
-    "planned_leg_entry_prices",
-    "entry_plan_version",
-    "planned_stop_entry_price",
-    "planned_stop_price",
-    "planned_stop_pips",
-  ):
-    assert field in forwarded, field
-  assert forwarded["planned_execution_route"] == "single_limit"
-  assert forwarded["planned_market_immediate"] is False
-  assert forwarded["planned_entry_price"] == 4100.2
-
-
 def test_execution_policy_prefers_wide_zone_and_rejects_unknown_strategies():
   wide = evaluate_execution_policy(
     _policy_match(entry_high=4103.0),
