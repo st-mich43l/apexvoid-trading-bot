@@ -13,6 +13,15 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Execution-time arbitration no longer lets a *waiting* setup suppress one that
+  can execute. A BUY/SELL direction conflict now only counts between intents
+  whose executable quote is inside their entry contract (`ExecutionIntent.
+  executable_now`, computed by the same `_execution_quote_access` helper the
+  plan builder uses); waiting intents of the winning direction stay in the
+  fallback order so their retest state keeps advancing. Production 2026-09-30:
+  607 of 1183 route outcomes were `opposite_direction_conflict` suppressions,
+  but only ~12% of the suppressed intents had the quote inside their zone; the
+  rest were the ordinary "demand below, supply above, both waiting" picture.
 - Analysis-engine now owns the opposing-structure barrier book and the
   higher-timeframe momentum fallback, and no longer publishes invalid
   opportunity geometry:
