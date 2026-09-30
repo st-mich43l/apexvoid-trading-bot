@@ -1,4 +1,8 @@
 from app.autotrade import xau_ladder
+import pytest
+
+
+pytestmark = pytest.mark.no_database
 
 
 def test_entry_leg_prices_sell_uses_low_shallow_and_midpoint_deep():

@@ -1,6 +1,6 @@
 """S14E: Go-origin cards use the canonical Manual/Auto card helpers, the trading contract keeps full
 numeric precision while the card shows the instrument's approved precision, and the executor-injected
-risk leg is a separate, default-off gate for Go-origin plans.
+risk leg remains an execution-policy concern rather than a technical-source concern.
 
 Real PostgreSQL + real Redis (production Lua); the price data is a real replayed Go opportunity
 (contracts/analysis/replay), rebased in time only.
@@ -9,7 +9,6 @@ Real PostgreSQL + real Redis (production Lua); the price data is a real replayed
 from __future__ import annotations
 
 import json
-import os
 from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
@@ -21,7 +20,6 @@ from app.autotrade import go_opportunity_policy as pol
 from app.autotrade import setup_card
 from app.autotrade.multi_match import deserialize_matches, strategy_matches_key
 from app.autotrade.setup_card import format_plan_published_root_card
-from app.core.config import runtime_config
 from tests.configuration.canonical_fixtures import install_runtime_overrides
 from tests.test_s14d_go_full_chain import (  # noqa: F401 - fixtures + helpers
   _freeze_technique_killzone_hour,
@@ -78,7 +76,7 @@ async def deliver_and_publish(h, prod, monkeypatch):
   return raw["payload"], deserialize_matches(await prod.get(strategy_matches_key("XAU")))[0]
 
 
-# ---- precision: the contract keeps it, the card shows the approved precision --------------------------------------
+# ---- precision: the contract keeps it, the card shows the approved precision ------------------------------
 
 @pytest.mark.asyncio
 async def test_contract_keeps_full_precision_while_the_card_shows_the_instruments_approved_precision(h, prod, monkeypatch):
@@ -93,6 +91,10 @@ async def test_contract_keeps_full_precision_while_the_card_shows_the_instrument
   assert Decimal(plan["stop"]["price"]).as_tuple().exponent >= -2
   # ...and Go's own target is NOT what gets executed: the plan's TP is the builder's (recorded, not hidden)
   assert plan["targets"][0]["price"] != str(Decimal(repr(go["targets"][0]["price"]["price"])))
+  assert len(plan["targets"]) == 4
+  assert [target["close_ratio"] for target in plan["targets"]] == [
+    "0.4", "0.2", "0.2", "0.2",
+  ]
 
   card = format_plan_published_root_card(
     match, stop_price=float(plan["stop"]["price"]), target_prices=tuple(float(t["price"]) for t in plan["targets"]),
@@ -138,31 +140,20 @@ async def test_a_second_render_edits_the_one_root_card_and_never_starts_a_second
   assert len(sent) == 1                                                                    # exactly one Telegram root for the setup
 
 
-# ---- the separate risk-leg gate for Go-origin plans ---------------------------------------------------------------
+# ---- the Manual-Algo-style risk leg belongs to execution policy -------------------------------
 
-def test_the_go_origin_risk_leg_gate_is_off_by_default_and_names_the_spec_tag():
-  assert runtime_config.analysis.technical_authority.go_origin_risk_leg_enabled is False
-  assert pol.RISK_LEG_DISABLED_TAG == SPEC["go_origin_risk_leg_disabled_tag"] == "risk_leg:disabled"
-
-
-@pytest.mark.parametrize("enabled,expect_tag", [(False, True), (True, False)])
-def test_go_matches_carry_the_disable_tag_until_the_gate_is_on(enabled, expect_tag):
+@pytest.mark.no_database
+def test_go_adapter_does_not_make_risk_leg_a_source_specific_decision():
+  assert SPEC["risk_leg_disabled_tag"] == "risk_leg:disabled"
   event = parse_analysis_event(OpportunityTopic, replayed_event_line())
-  match = pol.build_strategy_match(event, profile=pol.REVIEWED_SCOPES["supply"], now=event.payload.created_at + 1, risk_leg_enabled=enabled)
-  assert (pol.RISK_LEG_DISABLED_TAG in match.tags) is expect_tag
+  match = pol.build_strategy_match(
+    event, profile=pol.REVIEWED_SCOPES["supply"], now=event.payload.created_at + 1,
+  )
+  assert not any(tag.startswith("risk_leg:") for tag in match.tags)
 
 
 @pytest.mark.asyncio
-async def test_the_plan_a_default_go_deployment_publishes_disables_the_executor_risk_leg(h, prod, monkeypatch):
+async def test_the_plan_keeps_risk_leg_ownership_out_of_go_provenance(h, prod, monkeypatch):
   await deliver_and_publish(h, prod, monkeypatch)
   (plan,) = await plans(prod)
-  assert "risk_leg:disabled" in plan["analysis"]["tags"]
-
-
-@pytest.mark.asyncio
-async def test_turning_the_gate_on_removes_the_tag_so_the_executor_may_inject_the_leg(h, prod, monkeypatch):
-  install_runtime_overrides(monkeypatch, {"analysis.technical_authority.go_origin_risk_leg_enabled": True})
-  h.policy = pol.GoOpportunityPolicy(h.repo, clock=h.clock, multiple_matches_enabled=lambda: True)
-  await deliver_and_publish(h, prod, monkeypatch)
-  (plan,) = await plans(prod)
-  assert "risk_leg:disabled" not in plan["analysis"]["tags"]
+  assert not any(tag.startswith("risk_leg:") for tag in plan["analysis"]["tags"])

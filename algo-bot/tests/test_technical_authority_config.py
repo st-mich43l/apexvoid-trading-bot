@@ -9,7 +9,6 @@ def test_technical_authority_defaults_to_live_go_with_consumer_on():
     "mode": "go", "consumer_enabled": True,
     "consumer_group": "apexvoid-algo-bot-analysis-opportunity-v1",
     "max_event_age_seconds": 900, "max_delivery_lag_seconds": 300,
-    "go_origin_risk_leg_enabled": False,
     "arbitration_mode": "python_legacy",
     "thesis_correlation_mode": "python_legacy",
     "stop_envelope_mode": "python_legacy",

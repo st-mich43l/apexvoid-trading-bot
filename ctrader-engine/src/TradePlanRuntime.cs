@@ -2334,9 +2334,8 @@ public sealed class TradePlanRuntime(
       // is a materially different risk (reproduced live on a USDJPY CRT
       // trade that got a RISK leg it should never have had).
       && string.Equals(plan.Symbol, "XAU", StringComparison.OrdinalIgnoreCase)
-      // S14E: a plan that carries RiskLegDisabledTag (every Go-origin plan until the
-      // separate analysis.technical_authority.go_origin_risk_leg_enabled gate is on)
-      // never gets the injected leg; Python-owned plans are untouched.
+      // An explicit risk_leg:disabled tag is the only opt-out. The leg is an
+      // execution-policy mechanism, not a Go/Python provenance decision.
       && !PlanDisablesReactionRiskLeg(plan)
       && (plan.Entry.Legs?.Count ?? 0) > 1
       && plan.Entry.Type

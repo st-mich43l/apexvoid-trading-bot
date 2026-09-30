@@ -133,10 +133,13 @@ def test_all_reaction_families_use_the_zone_scale_ladder():
     test_key_session_trendline_use_market_with_limit_scale(strategy)
 
 
-def test_sell_zone_first_leg_is_proximal_low_at_seventy_percent():
-  # Demand Zone (not market_with_limit_scale) still anchors L1 at proximal.
+def test_xau_manual_zone_ladder_uses_shallow_midpoint_at_eighty_twenty():
+  # Auto XAU now follows Manual Algo's reviewed ladder: SELL shallow at the
+  # low edge, deep at the zone midpoint, with 80/20 volume.
   evaluation = evaluate_execution_policy(
-    _policy_match(direction="SELL", strategy="Demand Zone Reaction"),
+    _policy_match(
+      direction="SELL", strategy="Demand Zone Reaction", symbol="XAU",
+    ),
     spot_price=4035.0,
     executable_quote=4035.0,
     regime="range",
@@ -146,23 +149,17 @@ def test_sell_zone_first_leg_is_proximal_low_at_seventy_percent():
   measured = evaluation.measured
   assert measured["planned_execution_route"] == "zone_split"
   assert measured["planned_leg_entry_prices"][0] == pytest.approx(4035.0)
-  assert measured["planned_leg_volume_ratios"] == pytest.approx([0.70, 0.30])
-  assert measured["planned_leg_entry_prices"][1] == pytest.approx(4035.5)
+  assert measured["planned_leg_volume_ratios"] == pytest.approx([0.80, 0.20])
+  assert measured["planned_leg_entry_prices"][1] == pytest.approx(4035.75)
 
 
-def test_sell_zone_scale_uses_true_proximal_not_quote_when_meaningfully_inside():
-  # ENTRY_LOGIC_REVIEW_2026-09-17.md / reproduced live 2026-09-17 (USDJPY
-  # CRT SELL v8:4faf9fb1..., stopped out -10p): the classic zone_scale
-  # ladder (Demand/Supply/CRT/FVG/...) anchored its SECOND leg off the
-  # quote-collapsed scale_entry_anchor once price was inside the zone,
-  # instead of the zone's own true proximal edge - clustering both legs
-  # near wherever price already was rather than spreading the ladder
-  # across the zone's real width. Quote here (4035.7) has moved
-  # meaningfully past the near edge (4035.0), unlike
-  # test_sell_zone_first_leg_is_proximal_low_at_seventy_percent above
-  # (quote sits exactly at the edge, so old and new logic coincide there).
+def test_xau_manual_zone_ladder_ignores_quote_for_leg_geometry():
+  # The quote has moved meaningfully past the near edge, but Manual Algo's
+  # ladder still uses the typed zone rather than re-anchoring to that quote.
   evaluation = evaluate_execution_policy(
-    _policy_match(direction="SELL", strategy="Demand Zone Reaction"),
+    _policy_match(
+      direction="SELL", strategy="Demand Zone Reaction", symbol="XAU",
+    ),
     spot_price=4035.7,
     executable_quote=4035.7,
     regime="range",
@@ -171,12 +168,25 @@ def test_sell_zone_scale_uses_true_proximal_not_quote_when_meaningfully_inside()
   )
   measured = evaluation.measured
   assert measured["planned_execution_route"] == "zone_split"
-  # L1 still tracks the quote (kept fillable).
-  assert measured["planned_leg_entry_prices"][0] == pytest.approx(4035.7)
-  # L2 is the deeper of the proximal ladder (4035.0 + 0.5*ATR = 4035.5,
-  # BELOW this SELL quote - a marketable limit) and the quote ladder
-  # (4035.7 + 0.5*ATR = 4036.2): never closer to the market than the quote.
-  assert measured["planned_leg_entry_prices"][1] == pytest.approx(4036.2)
+  assert measured["planned_leg_entry_prices"] == pytest.approx([4035.0, 4035.75])
+
+
+def test_manual_xau_route_uses_the_same_shallow_deep_contract_as_manual_algo():
+  plan = resolve_execution_route_plan(
+    direction="BUY",
+    order_type_preference="limit",
+    entry_distribution="zone_scale",
+    executable_quote=4050.0,
+    zone_low=4048.73,
+    zone_high=4052.63,
+    atr=1.0,
+    zone_fill_enabled=True,
+    zone_fill_min_atr=0.5,
+    digits=2,
+    manual_xau_ladder=True,
+  )
+  assert plan.planned_leg_entry_prices == pytest.approx((4052.63, 4050.68))
+  assert plan.planned_leg_volume_ratios == pytest.approx((0.80, 0.20))
 
 
 def test_sell_zone_already_inside_anchors_first_leg_at_current_price():
