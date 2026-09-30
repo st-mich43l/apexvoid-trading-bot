@@ -196,6 +196,13 @@ def build_strategy_match(
   quality = payload.quality
   quality_overall = float(quality.overall)
   quality_components = dict(quality.components)
+  stop_envelope = payload.stop_envelope
+  stop_envelope_floor_pips = None if stop_envelope is None else float(stop_envelope.floor_pips)
+  stop_envelope_cap_pips = None if stop_envelope is None else float(stop_envelope.cap_pips)
+  stop_envelope_desired_minimum_pips = (
+    None if stop_envelope is None else float(stop_envelope.desired_minimum_pips)
+  )
+  stop_envelope_source = None if stop_envelope is None else str(stop_envelope.source)
   if profile.evidence_prefixes and not any(
     any(code.startswith(prefix) for prefix in profile.evidence_prefixes)
     for code in evidence_codes
@@ -326,6 +333,10 @@ def build_strategy_match(
     risk_multiplier=risk_multiplier,
     quality_overall=quality_overall,
     quality_components=quality_components,
+    go_stop_envelope_floor_pips=stop_envelope_floor_pips,
+    go_stop_envelope_cap_pips=stop_envelope_cap_pips,
+    go_stop_envelope_desired_minimum_pips=stop_envelope_desired_minimum_pips,
+    go_stop_envelope_source=stop_envelope_source,
     family=family,
     structural_source=f"go:{profile.catalog_id}",
     zone_id=structural_id,

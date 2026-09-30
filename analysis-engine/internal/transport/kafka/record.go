@@ -21,6 +21,21 @@ type OpportunityPayload struct {
 	// TechnicalContext is the additive V1 policy-input block (S13B). Omitted
 	// when the engine could not produce it; consumers must then fail closed.
 	TechnicalContext *TechnicalContextPayload `json:"technical_context,omitempty"`
+	// StopEnvelope is the additive Phase 4 policy-input block. Omitted when
+	// the engine could not produce a positive floor for this candidate's
+	// strategy family; consumers fall back to their own legacy envelope
+	// lookup rather than fabricating one.
+	StopEnvelope *StopEnvelopePayload `json:"stop_envelope,omitempty"`
+}
+
+// StopEnvelopePayload mirrors opportunity.StopEnvelope — see that type's
+// own doc comment for why DesiredMinimumPips is a raw fact, not a final
+// decision.
+type StopEnvelopePayload struct {
+	FloorPips          float64 `json:"floor_pips"`
+	CapPips            float64 `json:"cap_pips"`
+	DesiredMinimumPips float64 `json:"desired_minimum_pips"`
+	Source             string  `json:"source"`
 }
 
 // TechnicalContextPayload carries engine-owned facts an execution policy needs

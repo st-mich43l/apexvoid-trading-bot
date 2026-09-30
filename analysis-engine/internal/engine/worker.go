@@ -216,6 +216,7 @@ func (w *SymbolWorker) ApplyWithResult(event marketdata.BarEvent) (AnalysisSnaps
 		}
 		candidate.ObservedTimeframe = event.Timeframe
 		candidate.Technical = w.technicalContext(event, candidate.Reaction)
+		candidate.StopEnvelope = computeStopEnvelope(candidate, w.settings.Geometry, w.settings.StopEnvelope)
 		observed, obsErr := w.state.Opportunities.Observe(candidate, event.Candle.Time)
 		if obsErr != nil {
 			doneOpp()

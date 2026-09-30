@@ -491,6 +491,76 @@ func ArbitrationConfigFromConfig(doc *config.Document) (arbitration.Config, erro
 	return arbitration.Config{ConflictMarginQuality: conflictMarginQuality}, nil
 }
 
+// StopEnvelopeConfig is the per-strategy-family stop-distance risk policy
+// (Phase 4) — the SAME execution.reaction/range/trend leaves algo-bot's
+// own protective_stop.py reads, and execution.trend.stop_max_pips is
+// already shared_with_ctrader (MismatchPolicy.FATAL) — reading it here
+// too extends an existing cross-service contract, not a new one.
+type StopEnvelopeConfig struct {
+	ReactionMinRR         float64
+	ReactionMinPips       float64
+	ReactionMaxPips       float64
+	ReactionRoomFloorPips float64
+	RangeMinRR            float64
+	RangeRoomFloorPips    float64
+	ScalpMinPips          float64
+	ScalpMaxPips          float64
+	TrendMinPips          float64
+	TrendMaxPips          float64
+}
+
+// StopEnvelopeConfigFromConfig reads execution.{reaction,range,trend,stops}.*
+// and auto_algo.strategies.scalping.stop.* — the one place YAML becomes
+// StopEnvelopeConfig, mirroring every other *ConfigFromConfig function in
+// this file.
+func StopEnvelopeConfigFromConfig(doc *config.Document) (StopEnvelopeConfig, error) {
+	reactionMinRR, err := getFloat(doc, "execution.reaction.room_stop_min_rr")
+	if err != nil {
+		return StopEnvelopeConfig{}, err
+	}
+	reactionMinPips, err := getFloat(doc, "execution.reaction.stop_min_pips")
+	if err != nil {
+		return StopEnvelopeConfig{}, err
+	}
+	reactionMaxPips, err := getFloat(doc, "execution.reaction.stop_max_pips")
+	if err != nil {
+		return StopEnvelopeConfig{}, err
+	}
+	reactionRoomFloorPips, err := getFloat(doc, "execution.stops.reaction.room_floor_pips")
+	if err != nil {
+		return StopEnvelopeConfig{}, err
+	}
+	rangeMinRR, err := getFloat(doc, "execution.range.min_rr")
+	if err != nil {
+		return StopEnvelopeConfig{}, err
+	}
+	rangeRoomFloorPips, err := getFloat(doc, "execution.range.room_stop_floor_pips")
+	if err != nil {
+		return StopEnvelopeConfig{}, err
+	}
+	scalpMinPips, err := getFloat(doc, "auto_algo.strategies.scalping.stop.minimum_pips")
+	if err != nil {
+		return StopEnvelopeConfig{}, err
+	}
+	scalpMaxPips, err := getFloat(doc, "auto_algo.strategies.scalping.stop.maximum_pips")
+	if err != nil {
+		return StopEnvelopeConfig{}, err
+	}
+	trendMinPips, err := getFloat(doc, "execution.stops.trend.minimum_pips")
+	if err != nil {
+		return StopEnvelopeConfig{}, err
+	}
+	trendMaxPips, err := getFloat(doc, "execution.trend.stop_max_pips")
+	if err != nil {
+		return StopEnvelopeConfig{}, err
+	}
+	return StopEnvelopeConfig{
+		ReactionMinRR: reactionMinRR, ReactionMinPips: reactionMinPips, ReactionMaxPips: reactionMaxPips,
+		ReactionRoomFloorPips: reactionRoomFloorPips, RangeMinRR: rangeMinRR, RangeRoomFloorPips: rangeRoomFloorPips,
+		ScalpMinPips: scalpMinPips, ScalpMaxPips: scalpMaxPips, TrendMinPips: trendMinPips, TrendMaxPips: trendMaxPips,
+	}, nil
+}
+
 // StrategyConfigsFromConfig reads the complete semantic V2 strategy catalog
 // from analysis.strategies. This is intentionally only registry-level
 // configuration: each Phase S7 concrete strategy owns validation of its

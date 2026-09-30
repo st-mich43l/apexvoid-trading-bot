@@ -197,6 +197,31 @@ type Candidate struct {
 	// Reaction is assigned by a strategy ONLY when its own confirmed thesis
 	// is observed; worker copies it into technical context at publication.
 	Reaction *ReactionConfirmation
+	// StopEnvelope is nil until SymbolWorker attaches it (Phase 4) — the
+	// technical stop-distance floor/cap this strategy family's own risk
+	// policy allows, computed from this candidate's own target geometry.
+	// A nil value means the consumer must fail closed the same way a nil
+	// Technical does; it is never fabricated from a hardcoded default.
+	StopEnvelope *StopEnvelope
+}
+
+// StopEnvelope is the technical stop-distance bounds for one candidate —
+// engine-owned so algo-bot's execution policy never re-derives a
+// per-strategy-family pip floor/cap from its own taxonomy lookup (source:
+// the same execution.reaction/range/trend/scalping config algo-bot itself
+// reads, ctrader-engine shares execution.trend.stop_max_pips already).
+// Deliberately raw facts, not a final decision: DesiredMinimumPips is the
+// single-leg "pin near this instance's own target" recommendation: a
+// multi-leg group stop or a fixed-R:R instrument should use FloorPips as
+// its minimum instead — that choice depends on execution-time context
+// (how many legs, which instrument's targeting mode) StopEnvelope
+// deliberately does not know, matching Candidate's own "no quote/
+// spread/account" boundary.
+type StopEnvelope struct {
+	FloorPips          float64
+	CapPips            float64
+	DesiredMinimumPips float64
+	Source             string
 }
 
 // Validate verifies the lifecycle-relevant, transport-neutral Candidate
@@ -280,6 +305,12 @@ func (c Candidate) Validate() error {
 	if c.Provenance.StructureVersion == "" || c.Provenance.LiquidityVersion == "" || c.Provenance.ZoneVersion == "" || c.Provenance.ConfigVersion <= 0 || c.Provenance.ConfigFingerprint == "" {
 		return fmt.Errorf("opportunity: complete analytical and configuration provenance is required")
 	}
+	if c.StopEnvelope != nil {
+		e := c.StopEnvelope
+		if !finite(e.FloorPips) || !finite(e.CapPips) || !finite(e.DesiredMinimumPips) || e.FloorPips <= 0 || e.CapPips < e.FloorPips || e.DesiredMinimumPips < e.FloorPips || e.Source == "" {
+			return fmt.Errorf("opportunity: stop envelope needs a positive floor, a cap at or above the floor, and a desired minimum at or above the floor")
+		}
+	}
 	return nil
 }
 
@@ -330,6 +361,10 @@ func cloneCandidate(c Candidate) Candidate {
 		for name, value := range c.Quality.Components {
 			clone.Quality.Components[name] = value
 		}
+	}
+	if c.StopEnvelope != nil {
+		envelope := *c.StopEnvelope
+		clone.StopEnvelope = &envelope
 	}
 	return clone
 }
