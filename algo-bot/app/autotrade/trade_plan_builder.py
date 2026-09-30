@@ -28,6 +28,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from typing import Any, Mapping, Sequence
 
 from app.autotrade.execution_policy import evaluate_execution_policy
+from app.analysis_client.provenance import GO_ORIGIN_TAG
 from app.autotrade.strategy_match import StrategyMatch
 from app.autotrade.trade_plan import (
   ENTRY_TYPE_LIMIT_LADDER,
@@ -258,6 +259,20 @@ def _build_entry(
     f"execution policy resolved an unsupported route: {route!r}",
     measured,
   )
+
+
+# Stamped by the removed go_origin_risk_leg_enabled flag on Go matches adapted
+# before PR #669 moved the RISK leg into execution policy. Nothing produces it
+# now, but such a match keeps its tags in Redis and a plan built from it later
+# would carry the opt-out and silently lose the risk leg.
+_LEGACY_GO_RISK_LEG_OPT_OUT = "risk_leg:disabled"
+
+
+def _plan_tags(match: StrategyMatch) -> tuple[str, ...]:
+  tags = tuple(match.tags or ())
+  if GO_ORIGIN_TAG not in tags:
+    return tags
+  return tuple(tag for tag in tags if tag != _LEGACY_GO_RISK_LEG_OPT_OUT)
 
 
 def build_trade_plan_from_strategy_match(
@@ -492,7 +507,7 @@ def build_trade_plan_from_strategy_match(
     bias=match.htf_bias,
     regime=match.regime_kind or regime or "unknown",
     reasons=match.reasons,
-    tags=match.tags,
+    tags=_plan_tags(match),
     confluence_v1=match.confluence_v1,
     confluence_v2=match.confluence_v2,
     confluence_v2_raw=match.confluence_v2_raw,
