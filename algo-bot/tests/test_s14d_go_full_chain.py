@@ -443,6 +443,35 @@ async def test_stale_python_match_cannot_produce_a_plan_in_go_mode(h, prod, monk
 
 
 @pytest.mark.asyncio
+async def test_a_waiting_opposite_setup_does_not_suppress_the_setup_price_is_in(h, prod):
+  """Production 2026-09-30: half of all route outcomes were arbitration
+  suppressions between a BUY and a SELL where only one of them could execute.
+
+  The SELL supply zone contains the quote (executable now). A BUY demand
+  setup 50 points below is merely waiting for a retest; it must not create a
+  direction conflict that blocks the SELL.
+  """
+  await go_event_delivered(h)
+  far = catalog_kafka_record(h.clock.now, "demand", offset=2)
+  raw = json.loads(far.value)
+  raw["payload"].update({
+    "entry": {"low": 4300.0, "high": 4303.0},
+    "invalidation": {"price": 4296.0},
+    "targets": [{"price": {"price": 4312.0}}],
+    # Same evidence count as the SELL, so both are tier B / confluence 2 and the
+    # legacy rule cannot separate them: the tie is exactly the production case.
+    "evidence": [*raw["payload"]["evidence"], {"code": "m5_demand_zone_rejection_confirmed"}],
+  })
+  far.value = json.dumps(raw).encode()
+  await consumer_for(h).process_record(far)
+  assert len(deserialize_matches(await prod.get(strategy_matches_key("XAU")))) == 2
+
+  await cycle(prod, n=2)
+
+  assert [plan["setup_id"] for plan in await plans(prod)] == ["go_opp_chain"]
+
+
+@pytest.mark.asyncio
 async def test_go_match_still_publishes_next_to_a_stale_python_match_in_go_mode(h, prod, monkeypatch):
   await go_event_delivered(h)
   stale = _stale_python_match()
