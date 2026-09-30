@@ -121,6 +121,9 @@ analysis:
       version: v2
       enabled: true
       minimum_strength: 0.4
+      # 2026-09-30: production saw order blocks as small as 0.03 ATR (half
+      # of them under 0.5 ATR); same threshold as fvg/ifvg.
+      minimum_zone_atr: 0.5
       invalidation_buffer_atr: 0.5
       minimum_target_distance_atr: 1.0
       expiry_hours: 24.0

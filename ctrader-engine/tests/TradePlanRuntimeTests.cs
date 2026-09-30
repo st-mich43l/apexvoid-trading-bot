@@ -181,6 +181,43 @@ public sealed partial class TradePlanRuntimeTests
   }
 
   [Fact]
+  public async Task MarketFillBeyondItsOwnStopIsClosedWhenTheBrokerRejectsTheStop()
+  {
+    // Live 2026-09-30 XAU scalp: decided at ask 4187.81 with stop 4186.96 and
+    // filled at 4186.26, already below its own stop. cTrader rejected the stop
+    // (TRADING_BAD_STOPS) and the position sat unprotected for about 3 minutes.
+    var store = new FakeTradePlanStore();
+    store.EnqueuePlan(PlanJson(
+      stopPrice: 4088.50m,
+      entryJson: """
+        {
+          "type": "market",
+          "expires_at": 2000000000,
+          "order_price": "4089.00",
+          "max_spread_ticks": 8,
+          "max_slippage_ticks": 10
+        }
+        """
+    ));
+    var client = new FakeTradePlanTradingClient
+    {
+      FailAmendCalls = 1,
+      NextMarketFillPrice = 4088.20m,
+    };
+    var runtime = new TradePlanRuntime(
+      Options(), store, () => DateTimeOffset.UtcNow, _ => { }
+    );
+
+    await runtime.PollAsync(
+      client, Symbol, new SpotPrice("XAU", 4089.05m, 4089.10m, 1), CancellationToken.None
+    );
+
+    Assert.Single(client.MarketOrders);
+    var close = Assert.Single(client.Closes);
+    Assert.Equal(client.MarketOrders[0].Volume, close.Volume);
+  }
+
+  [Fact]
   public async Task MarketLegIsRejectedWhenLiveQuoteHasCrossedItsStop()
   {
     var store = new FakeTradePlanStore();

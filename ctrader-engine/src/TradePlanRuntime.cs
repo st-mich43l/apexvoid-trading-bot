@@ -4366,6 +4366,35 @@ public sealed class TradePlanRuntime(
         $"v8 stop amend rejected id={state.PlanId} leg={legId} "
         + $"message={exception.Message}"
       );
+      // A fill already beyond its own stop (a fast move between the decision
+      // quote and the fill) can never accept that stop and the thesis is
+      // already invalidated: close it now instead of leaving it unprotected.
+      // The next reconcile books the vanished position as a stop-out because
+      // its exit is beyond the protective stop.
+      var rejected = legs[idx];
+      if (
+        FillIsBeyondStop(state.Direction, rejected.FillPrice, absoluteStop)
+        && rejected.RemainingVolume > 0
+      )
+      {
+        try
+        {
+          await client.ClosePositionAsync(
+            positionId, rejected.RemainingVolume, cancellationToken
+          );
+          log(
+            $"v8 filled beyond stop, position closed id={state.PlanId} "
+            + $"leg={legId} fill={rejected.FillPrice} stop={absoluteStop}"
+          );
+        }
+        catch (Exception closeException)
+        {
+          log(
+            $"v8 filled beyond stop, close failed id={state.PlanId} "
+            + $"leg={legId} message={closeException.Message}"
+          );
+        }
+      }
       return AggregateState(state with { Legs = legs });
     }
     var positions = await client.ReconcilePositionsAsync(cancellationToken);
@@ -4387,6 +4416,12 @@ public sealed class TradePlanRuntime(
       }
     );
   }
+
+  private static bool FillIsBeyondStop(
+    string direction, decimal? fillPrice, decimal stop
+  ) =>
+    fillPrice is decimal fill
+    && (direction == "BUY" ? stop >= fill : direction == "SELL" && stop <= fill);
 
   private static bool IsBrokerStopRejection(Exception exception) =>
     exception.Message.Contains("TRADING_BAD_STOPS", StringComparison.OrdinalIgnoreCase);
