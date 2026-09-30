@@ -295,7 +295,9 @@ def test_event_recovery_root_card_is_activated_on_fill():
     "message": "SELL 0.10 lots filled 4334.47",
     "strategy": "Impulse Pullback Scalp",
   })
-  assert text.splitlines()[0] == "✅ <b>ORDER ACTIVATED · XAU M1</b>"
+  lines = text.splitlines()
+  assert lines[0] == "🤖 <b>ApexVoid Algo</b>"
+  assert lines[1] == "✅ <b>ORDER ACTIVATED · XAU M1</b>"
   assert "SELL · Impulse Pullback Scalp" in text
 
 
@@ -1643,3 +1645,111 @@ async def test_ensure_plan_published_root_card_rewrites_mismatched_strategy_body
   assert card is not None
   assert "📈 <b>BUY · Key Level</b>" in card["text"]
   assert "PLAN PUBLISHED" not in card["text"]
+
+def _scalp_card_match():
+  from dataclasses import replace
+
+  # Production 2026-09-30 12:53: Go left scalp_target_r_multiples at (1.0,)
+  # because available room was 1.99R on the zone edge, while the plan booked
+  # 1R and 2R on the real market entry.
+  return replace(
+    _strategy_match_for_card("setup-scalp-r"),
+    strategy="Impulse Pullback Scalp",
+    source_tf="M1",
+    direction="BUY",
+    entry_low=4210.08,
+    entry_high=4212.56,
+    scalp_target_r_multiples=(1.0,),
+    targets_pips=(31, 63),
+  )
+
+
+def test_published_root_card_shows_r_for_every_scalp_target_from_the_plan():
+  text = setup_card.format_plan_published_root_card(
+    _scalp_card_match(),
+    stop_price=4208.09,
+    target_prices=(4214.37, 4217.51),
+    risk_reference=4211.23,
+  )
+  assert "TP1:" in text and "1.0R" in text
+  assert "2.0R" in text
+  assert "+74" not in text
+  assert "31 pips" in text
+
+
+def test_card_target_keeps_the_pip_offset_when_it_is_not_on_an_r_ladder():
+  text = setup_card.format_plan_published_root_card(
+    _scalp_card_match(),
+    stop_price=4208.09,
+    target_prices=(4214.37, 4218.40),
+    risk_reference=4211.23,
+  )
+  assert "1.0R" in text
+  assert "R" not in text.split("TP2:")[1].splitlines()[0].replace("TP2:", "")
+
+
+def test_card_target_r_ignores_a_target_on_the_loss_side():
+  assert setup_card._plan_r_label(4200.0, (4211.23, 4208.09)) is None
+  assert setup_card._plan_r_label(4214.37, None) is None
+
+
+def test_fvg_ladder_shows_1r_to_4r_from_the_plan_basis():
+  labels = [
+    setup_card._plan_r_label(price, (4186.10, 4181.10))
+    for price in (4191.10, 4196.10, 4201.10, 4206.10)
+  ]
+  assert labels == ["1.0R", "2.0R", "3.0R", "4.0R"]
+
+
+def test_apply_forming_card_stop_uses_the_plan_risk_reference():
+  text = "\n".join([
+    "🤖 <b>ApexVoid Algo</b>",
+    "✅ <b>ORDER ACTIVATED · XAU M1</b>",
+    "📈 <b>BUY · Impulse Pullback Scalp</b> · ⭐⭐⭐",
+    "",
+    "⚡ Entry Zone:  <b>4,210.08 - 4,212.56</b>",
+    "🛡 SL:     <b>4,205.00</b>",
+  ])
+  patched = setup_card.apply_forming_card_stop(
+    text, 4208.09, digits=2, risk_reference=4211.23,
+  )
+  assert "31 pips" in patched
+  zone_based = setup_card.apply_forming_card_stop(text, 4208.09, digits=2)
+  assert "31 pips" not in zone_based
+
+
+def test_status_edits_keep_working_with_the_brand_line_first():
+  card = "\n".join([
+    "🤖 <b>ApexVoid Algo</b>",
+    "🔎 <b>XAU M5 · SETUP FORMING</b>",
+    "​",
+    "📉 <b>SELL · Confluence Zone</b> · ⭐⭐",
+    "",
+    "⚡ Entry Zone:  <b>4,215 - 4,217</b>",
+  ])
+  filled = setup_card.apply_forming_card_status(card, "✅ <b>ORDER FILLED</b>")
+  lines = filled.splitlines()
+  assert lines[0] == "🤖 <b>ApexVoid Algo</b>"
+  assert lines[1] == "✅ <b>ORDER ACTIVATED · XAU M5</b>"
+  assert lines[2].startswith("📉 <b>SELL")
+  moved = setup_card.apply_forming_card_status(filled, "🛡 <b>SL MOVED</b> · 4,214.46")
+  assert moved.splitlines()[2] == "🛡 <b>SL MOVED</b> · 4,214.46"
+  moved_again = setup_card.apply_forming_card_status(moved, "🎯 <b>TP1</b> +42 pips")
+  assert moved_again.splitlines()[2] == "🎯 <b>TP1</b> +42 pips"
+  assert moved_again.count("📉 <b>SELL") == 1
+
+
+def test_status_edits_still_work_on_a_card_published_with_the_old_layout():
+  card = "\n".join([
+    "🔎 <b>XAU M5 · SETUP FORMING</b>",
+    "​",
+    "📉 <b>SELL · Confluence Zone</b> · ⭐⭐",
+    "🤖 <b>ApexVoid Algo</b>",
+    "",
+    "⚡ Entry Zone:  <b>4,215 - 4,217</b>",
+  ])
+  filled = setup_card.apply_forming_card_status(card, "✅ <b>ORDER FILLED</b>")
+  lines = filled.splitlines()
+  assert lines[0] == "✅ <b>ORDER ACTIVATED · XAU M5</b>"
+  assert lines[1].startswith("📉 <b>SELL")
+  assert lines[2] == "🤖 <b>ApexVoid Algo</b>"

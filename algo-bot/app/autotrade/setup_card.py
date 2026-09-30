@@ -310,7 +310,13 @@ def _parse_card_entry_reference(text: str) -> float | None:
   return conservative_entry_reference(direction, low, high)
 
 
-def apply_forming_card_stop(text: str, stop_price: float, *, digits: int = 2) -> str:
+def apply_forming_card_stop(
+  text: str,
+  stop_price: float,
+  *,
+  digits: int = 2,
+  risk_reference: float | None = None,
+) -> str:
   """Insert or replace the SL line and copy-draft SL value.
 
   Recognizes both the current "🛡 SL:" line and the legacy "• <b>Stop:</b>"
@@ -321,7 +327,11 @@ def apply_forming_card_stop(text: str, stop_price: float, *, digits: int = 2) ->
   if not text or not math.isfinite(stop_price):
     return text
   symbol = parse_forming_card_symbol(text)
-  reference = _parse_card_entry_reference(text)
+  reference = (
+    float(risk_reference)
+    if risk_reference is not None and math.isfinite(float(risk_reference))
+    else _parse_card_entry_reference(text)
+  )
   pip_size = _card_pip_size(symbol) if symbol else None
   if symbol and reference is not None and pip_size is not None:
     stop_line = format_sl_line(
@@ -645,23 +655,41 @@ def forming_card_matches_strategy(text: str, match: StrategyMatch) -> bool:
   return False
 
 
+_BRAND_LINE = "🤖 <b>ApexVoid Algo</b>"
+
+
+def _head_index(lines: list[str]) -> int:
+  """Index of the headline: 1 when the card leads with the brand line.
+
+  Cards published before the brand line moved to the top keep it after the
+  direction line, so those still resolve to index 0.
+  """
+  return 1 if lines and lines[0].strip() == _BRAND_LINE else 0
+
+
 def apply_forming_card_status(text: str, status_line: str) -> str:
   lines = text.splitlines()
   if not lines or not status_line:
     return text
+  head = _head_index(lines)
+  slot = head + 1
   # Whether the header ALREADY says ORDER ACTIVATED tells us whether
   # line[1] is still the reserved status slot or was already folded away
   # by an earlier order_filled call below - it's the only reliable signal
   # since real status text and BUY/SELL body lines can share a leading
   # emoji (both TRIGGER READY and a BUY line start with 🟢). The POSITION
   # check stays so a card already live before the ORDER rename still works.
-  activated = "ORDER ACTIVATED" in lines[0] or "POSITION ACTIVATED" in lines[0]
+  if head >= len(lines):
+    return text
+  activated = (
+    "ORDER ACTIVATED" in lines[head] or "POSITION ACTIVATED" in lines[head]
+  )
   inferred = _infer_status_state(status_line)
   if inferred == "order_filled":
-    rewritten_header = _position_activated_header(lines[0])
+    rewritten_header = _position_activated_header(lines[head])
     if rewritten_header is not None:
-      lines[0] = rewritten_header
-    if not activated and len(lines) > 1:
+      lines[head] = rewritten_header
+    if not activated and len(lines) > slot:
       # First fill event on this setup: the header now already says
       # ORDER ACTIVATED, so a status line repeating it below is
       # redundant. A blank placeholder line was tried before, but
@@ -670,7 +698,7 @@ def apply_forming_card_status(text: str, status_line: str) -> str:
       # header. Remove the line outright instead; a later real status
       # update (SL move/TP hit) re-inserts one via the branch below,
       # since by then the header will already read as activated.
-      del lines[1]
+      del lines[slot]
     return "\n".join(lines)
   if inferred == "terminal":
     # Owner 2026-08-17: never paint TERMINAL on the autotrade root card.
@@ -683,12 +711,14 @@ def apply_forming_card_status(text: str, status_line: str) -> str:
     # replacing the SAME line, not stack a new one each time - only
     # insert when index 1 is still the direction/strategy body line,
     # i.e. no status has been shown here since activation yet.
-    if len(lines) > 1 and not _BODY_DIRECTION_LINE_RE.match(lines[1].strip()):
-      lines[1] = status_line
+    if len(lines) > slot and not _BODY_DIRECTION_LINE_RE.match(
+      lines[slot].strip()
+    ):
+      lines[slot] = status_line
     else:
-      lines.insert(1, status_line)
-  elif len(lines) > 1:
-    lines[1] = status_line
+      lines.insert(slot, status_line)
+  elif len(lines) > slot:
+    lines[slot] = status_line
   else:
     lines.append(status_line)
   joined = "\n".join(lines)
@@ -1415,8 +1445,11 @@ async def edit_forming_card_stop(
   if resolved_digits is None:
     symbol = parse_forming_card_symbol(str(card["text"]))
     resolved_digits = card_price_digits(symbol) if symbol else 2
+  # The plan's own worst fill is the real risk basis; the printed zone edge
+  # overstates risk for a market entry that filled inside the zone.
   text = apply_forming_card_stop(
     str(card["text"]), float(stop_price), digits=int(resolved_digits),
+    risk_reference=await published_plan_risk_reference(client, setup_id),
   )
   if text == card["text"]:
     return True
@@ -1514,6 +1547,11 @@ async def ensure_forming_card_targets(
     prices = await published_plan_target_prices(client, setup_id)
   if resolved_match is None and not prices:
     return False
+  plan_basis = None
+  plan_reference = await published_plan_risk_reference(client, setup_id)
+  plan_stop = await published_plan_stop_price(client, setup_id)
+  if plan_reference is not None and plan_stop is not None:
+    plan_basis = (plan_reference, plan_stop)
   card_symbol = str(
     (resolved_match.symbol if resolved_match is not None else None)
     or symbol
@@ -1524,7 +1562,7 @@ async def ensure_forming_card_targets(
     # block shape apply_forming_card_targets replaces/detects below.
     target_lines = [
       format_target_line(
-        index, card_symbol, price, None,
+        index, card_symbol, price, _plan_r_label(price, plan_basis),
         digits=card_price_digits(card_symbol),
       )
       for index, price in enumerate(prices or ())
@@ -1534,6 +1572,7 @@ async def ensure_forming_card_targets(
       resolved_match,
       symbol=card_symbol,
       target_prices=prices or None,
+      plan_basis=plan_basis,
     )
   if not target_lines:
     return False
@@ -1697,9 +1736,9 @@ async def assert_or_repair_forming_projection(
   if card is None or not card.get("text"):
     return False
   snapshot = await load_forming_card_status_snapshot(client, setup_id)
-  cached_line = str(card["text"]).splitlines()[1] if len(
-    str(card["text"]).splitlines(),
-  ) > 1 else ""
+  cached_lines = str(card["text"]).splitlines()
+  cached_slot = _head_index(cached_lines) + 1
+  cached_line = cached_lines[cached_slot] if len(cached_lines) > cached_slot else ""
   if (
     snapshot is not None
     and snapshot.status_line == aggregate.status_line
@@ -1899,11 +1938,38 @@ def _configured_target_r_multiples(
   return multiples or None
 
 
+def _plan_r_label(
+  price: float, plan_basis: tuple[float, float] | None,
+) -> str | None:
+  """R multiple of ``price`` on the plan's own entry and stop, or None.
+
+  Only a clean multiple of 0.5 is shown, so a target that is not on an R
+  ladder keeps the pip offset instead of an odd "+10R" (see
+  _configured_target_r_multiples).
+  """
+  if plan_basis is None:
+    return None
+  reference, stop = plan_basis
+  risk = abs(reference - stop)
+  if not (math.isfinite(risk) and risk > 0):
+    return None
+  side = 1.0 if reference > stop else -1.0
+  gain = (price - reference) * side
+  if gain <= 0:
+    return None
+  ratio = gain / risk
+  nearest = round(ratio * 2) / 2
+  if nearest >= 0.5 and abs(ratio - nearest) <= 0.03:
+    return format_r_multiple(nearest)
+  return None
+
+
 def _trade_area_target_lines(
   match: StrategyMatch,
   *,
   symbol: str,
   target_prices: tuple[float, ...] | None = None,
+  plan_basis: tuple[float, float] | None = None,
 ) -> list[str]:
   """One bullet per TP level, for the initial root-card render.
 
@@ -1938,7 +2004,10 @@ def _trade_area_target_lines(
     direction = str(match.direction or "").upper()
     r_multiples = _configured_target_r_multiples(match, symbol)
     for index, price in enumerate(prices):
-      if r_multiples is not None and index < len(r_multiples):
+      plan_label = _plan_r_label(price, plan_basis)
+      if plan_label is not None:
+        suffix = plan_label
+      elif r_multiples is not None and index < len(r_multiples):
         suffix = format_r_multiple(r_multiples[index])
       elif reference is not None:
         offset = _target_pip_offset(
@@ -1997,6 +2066,10 @@ def format_plan_published_root_card(
   symbol = str(match.symbol or "").upper() or "XAU"
 
   lines = [
+    # Owner 2026-09-30: branding is the first line of the card, so the
+    # headline/status-slot positions that apply_forming_card_status parses
+    # start after it (see _head_index).
+    _BRAND_LINE,
     forming_card_headline(symbol, str(match.source_tf), in_zone=in_zone),
     (
       "⏳ <b>IN ZONE</b> · waiting market fill"
@@ -2007,13 +2080,6 @@ def format_plan_published_root_card(
       f"{direction_icon} <b>{escape(direction)} · "
       f"{escape(setup_label)}</b> · {stars}"
     ),
-    # Owner-reported 2026-09-28: the root card carries no branding of its
-    # own (unlike the reply thread, which gets "ApexVoid Algo" for free
-    # from Telegram's reply-quote preview) - inserted here, after the
-    # fixed 3-line head/status-slot/direction block, so it doesn't shift
-    # the positions apply_forming_card_status/_position_activated_header
-    # parse by fixed index.
-    "🤖 <b>ApexVoid Algo</b>",
     "",
   ]
   card_digits = card_price_digits(symbol)
@@ -2049,8 +2115,16 @@ def format_plan_published_root_card(
   else:
     lines.append("🛡 SL:     <b>pending</b>")
 
+  plan_basis = (
+    (float(risk_reference), float(stop_price))
+    if risk_reference is not None
+    and stop_price is not None
+    and math.isfinite(float(risk_reference))
+    and math.isfinite(float(stop_price))
+    else None
+  )
   lines.extend(_trade_area_target_lines(
-    match, symbol=symbol, target_prices=target_prices,
+    match, symbol=symbol, target_prices=target_prices, plan_basis=plan_basis,
   ))
 
   return "\n".join(lines)
@@ -2190,7 +2264,11 @@ async def ensure_plan_published_root_card(
         match, stop_price=stop_price, target_prices=target_prices or None,
         risk_reference=risk_reference,
       )
-      upper_head = existing_text.splitlines()[0].upper() if existing_text else ""
+      existing_lines = existing_text.splitlines()
+      upper_head = (
+        existing_lines[_head_index(existing_lines)].upper()
+        if existing_lines else ""
+      )
       if "TERMINAL" in upper_head:
         snapshot = await load_forming_card_status_snapshot(client, match.match_id)
         status = (
@@ -2417,10 +2495,9 @@ def format_event_recovery_root_card(event: dict) -> str:
   # Never paint TERMINAL on a recovered root — close lives on reply cards.
   head = f"✅ <b>ORDER ACTIVATED · {symbol} {tf}</b>"
   icon = "📈" if direction == "BUY" else "📉"
-  lines = [head]
+  lines = [_BRAND_LINE, head]
   if direction:
     lines.append(f"{icon} <b>{direction} · {strategy}</b>")
-  lines.append("🤖 <b>ApexVoid Algo</b>")
   if message:
     lines.append(f"• {escape(message)}")
   return "\n".join(lines)
