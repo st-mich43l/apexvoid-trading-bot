@@ -5783,24 +5783,16 @@ async def _publish_trade_plan_v8(
   structural_barrier_book_enabled = bool(
     runtime_config.actionability.target_room.structural_barrier_book_enabled
   )
-  pip_size = units.pip_size(symbol)
   if match_bypasses_opposing_structure(execution_match):
     # Native-room scalp/range policy is provenance-neutral. A Go-origin
     # match must keep the same bypass as the legacy Python-origin match.
     room_entries = ()
   elif go_origin:
     # Go owns technical structure for Go-origin opportunities.  Read only
-    # the analysis-engine zone book here; never reconstruct a competing
-    # Python zone book when Go has not published one.
-    width_policy = runtime_config.execution.policy
-    room_entries = await opposing_entries_for_go_match(
-      client,
-      symbol,
-      python_fallback=(),
-      pip_size=pip_size,
-      max_width_atr=float(width_policy.execution_zone_max_width_atr),
-      max_width_pips=float(width_policy.execution_zone_max_width_pips),
-    )
+    # the barrier book the analysis-engine publishes (already width-gated,
+    # merged and reconciled there); never reconstruct a competing Python
+    # zone book when Go has not published one.
+    room_entries = await opposing_entries_for_go_match(client, symbol)
   else:
     room_entries = ()
     if structural_barrier_book_enabled and frames:
@@ -5855,6 +5847,7 @@ async def _publish_trade_plan_v8(
         "lookback_bars": displacement_lookback,
         "reason": "no_closed_bars",
       }
+  pip_size = units.pip_size(symbol)
   room_planned, room_reference_source = zone_proximal_room_reference(
     direction=execution_match.direction,
     spot_price=entry_reference,

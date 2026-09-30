@@ -13,6 +13,27 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Analysis-engine now owns the opposing-structure barrier book and the
+  higher-timeframe momentum fallback, and no longer publishes invalid
+  opportunity geometry:
+  - The Redis zone book carries a Go-computed `barriers` array (live zones,
+    M5/M15/H1, execution-width gate, same-side merge, cross-side
+    reconciliation; `internal/barrier`, parity-tested against the Python
+    StructuralBarrierBook). Algo Bot adapts it and no longer re-derives or
+    normalizes structure for Go-origin matches - the Python fallback and the
+    width/merge code added in #670 are removed. A book without `barriers` is
+    unavailable, exactly like a missing key.
+  - When an H1/H4 frame's structure is undecided, its bias falls back to that
+    frame's ATR-normalized price momentum (`internal/momentum`, a port of
+    `momentum_state`; layer `momentum`; new `analysis.momentum.*` config).
+    Decided structure is never overridden. On the 2026-09-29 XAU range this
+    recovers ~59% of the bars the bot previously rejected with
+    `higher_timeframe_bias_unavailable`.
+  - `confluence_zone` no longer publishes zero-width entry bands, `key_level`
+    and `liquidity_sweep` keep their stop beyond the whole entry band, `crt`
+    skips setups with no reward left, and `Candidate.Validate` enforces the
+    v1 contract geometry so a defect drops the candidate at the source instead
+    of publishing an event Algo Bot must reject (105 rejections in 30 hours).
 - Go opposing-structure books no longer wall in FX execution with stale M1 or
   oversized zones: lifecycle epsilon is now ATR-scaled instead of treating
   `0.05` as raw price, zone-book entries carry timeframe ATR, and Algo Bot

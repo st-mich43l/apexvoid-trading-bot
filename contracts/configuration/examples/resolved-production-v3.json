@@ -65,6 +65,11 @@
     "measurements": {
       "max_merged_zone_atr": 3.0
     },
+    "momentum": {
+      "velocity_bear_threshold": -0.15,
+      "velocity_bull_threshold": 0.15,
+      "velocity_lookback": 8
+    },
     "scanner": {
       "execution_timeframe": "M5",
       "htf": [

@@ -67,9 +67,19 @@ func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Ca
 		if direction == market.Sell && !bar.IsBearish() {
 			continue
 		}
-		invalid := edge - s.invalidationATR*atr
+		buffer := s.invalidationATR * atr
+		invalid := edge - buffer
 		if direction == market.Sell {
-			invalid = edge + s.invalidationATR*atr
+			invalid = edge + buffer
+		}
+		// The entry band is the reclaim bar's body, which can extend past the
+		// swept pool edge (the bar opened beyond it before reclaiming). A stop
+		// inside that body is an invalid setup, so anchor it beyond the body's
+		// outer edge whenever the pool-edge stop would fall inside it.
+		if direction == market.Buy {
+			invalid = math.Min(invalid, math.Min(bar.Open, bar.Close)-buffer)
+		} else {
+			invalid = math.Max(invalid, math.Max(bar.Open, bar.Close)+buffer)
 		}
 		entry := bar.Close
 		risk := math.Abs(entry - invalid)
