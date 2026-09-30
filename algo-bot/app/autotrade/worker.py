@@ -22,6 +22,8 @@ from typing import Any, Awaitable, Callable
 from app.persistence import redis_state
 from app.analysis_client.provenance import GO_ORIGIN_TAG
 from app.autotrade.go_plan_cancel import read_plan_cancel, register_go_plan
+from app.autotrade.go_live_opportunities import go_live_opportunity_ids
+from app.autotrade.go_opportunity_policy import opportunity_id_for_match_id
 from app.autotrade.go_zone_book import opposing_entries_for_go_match
 from app.autotrade import units
 from app.core import instrument_geometry
@@ -7920,6 +7922,19 @@ async def _handle_event(
       item for item in scanner_strategy_matches
       if GO_ORIGIN_TAG in item.tags
     ]
+    # Execute only what Go still holds live. Go rebuilds its book under the
+    # current rules on every restart, so an old event it would no longer
+    # create (for example a sliver zone from before a rule change) is absent
+    # from its published set and is skipped here, not closed: it stays in
+    # Redis and is picked up again if Go ever holds it. An unavailable set
+    # fails open.
+    if scanner_strategy_matches:
+      live_ids = await go_live_opportunity_ids(client, symbol)
+      if live_ids is not None:
+        scanner_strategy_matches = [
+          item for item in scanner_strategy_matches
+          if opportunity_id_for_match_id(item.match_id) in live_ids
+        ]
   if not scanner_strategy_matches:
     frames = {} if go_mode else await _load_frames(
       source, symbol, timeframes=(EXECUTION_TIMEFRAME,),
