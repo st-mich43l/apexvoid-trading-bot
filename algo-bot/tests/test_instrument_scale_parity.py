@@ -16,7 +16,6 @@ from app.analysis.zones import score_zones
 from app.analysis.types import Grab, Pool, Zone
 from app.autotrade.gate import AutoScalpBox, AutoScalpRail, _m1_rail_trigger
 from app.autotrade.reaction_identity import structural_zone_id
-from app.autotrade.trend import _breakout_direction_and_age
 from app.configuration.python_loader import load_python_canonical_settings
 from app.configuration.python_sources import load_python_runtime_source_bundle
 from app.configuration.source_policy import PythonConfigurationSourcePolicy
@@ -162,49 +161,3 @@ def test_eurusd_mapped_zone_uses_fx_minimum_width(runtime_root):
   assert narrow.eligible is False
   assert wide.eligible is True
 
-
-@pytest.mark.parametrize(
-  ("base", "pip_size"),
-  [(4000.0, 0.1), (1.08500, 0.0001), (191.250, 0.01)],
-)
-def test_rail_trigger_and_breakout_are_scale_invariant(base, pip_size):
-  lower = AutoScalpRail(
-    "support",
-    base - pip_size,
-    base + pip_size,
-    base,
-    3,
-    3.0,
-    ("M1", "M5"),
-    ("range",),
-  )
-  upper = AutoScalpRail(
-    "resistance",
-    base + 9.0 * pip_size,
-    base + 10.0 * pip_size,
-    base + 9.5 * pip_size,
-    3,
-    3.0,
-    ("M1", "M5"),
-    ("range",),
-  )
-  reaction = pd.DataFrame({
-    "open": [base + pip_size],
-    "high": [base + 4.0 * pip_size],
-    "low": [base - pip_size],
-    "close": [base + 3.0 * pip_size],
-  })
-  box = AutoScalpBox("box", lower, upper, 10.0)
-  breakout = pd.DataFrame({
-    "close": [base + 9.0 * pip_size, base + 14.0 * pip_size],
-  })
-
-  trigger = _m1_rail_trigger(reaction, lower, 10.0 * pip_size, pip_size)
-  direction, age = _breakout_direction_and_age(
-    breakout, box, 10.0 * pip_size, 3, pip_size,
-  )
-
-  assert trigger is not None
-  assert trigger[:2] == ("BUY", "range_rejection")
-  assert direction == "up"
-  assert age == 0

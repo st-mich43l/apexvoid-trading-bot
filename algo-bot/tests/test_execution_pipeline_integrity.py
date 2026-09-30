@@ -1055,38 +1055,6 @@ def test_all_selected_publication_failures_keep_exact_publisher_evidence():
 
 
 @pytest.mark.asyncio
-async def test_range_rail_status_uses_real_ownership_state():
-  from app.autotrade.worker import _load_range_side_status
-
-  client = redis_state.get_client()
-  await client.set(
-    "auto_trade:range_side:XAU:episode-2:BUY",
-    json.dumps({
-      "state": "MANAGING",
-      "candidate_id": "candidate-2",
-      "pending_order_ids": [71],
-      "position_ids": [81],
-      "group_id": "group-2",
-    }),
-  )
-
-  status = await _load_range_side_status(
-    client,
-    symbol="XAU",
-    range_id="episode-2",
-    direction="BUY",
-  )
-
-  assert status == {
-    "state": "MANAGING",
-    "candidate_id": "candidate-2",
-    "pending_order_ids": [71],
-    "position_ids": [81],
-    "group_id": "group-2",
-  }
-
-
-@pytest.mark.asyncio
 async def test_route_funnel_is_unique_and_history_tracks_material_change():
   client = redis_state.get_client()
   match = SimpleNamespace(

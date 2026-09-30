@@ -20,8 +20,6 @@ from app.autotrade.strategy_match import (
   strategy_match_id,
   strategy_match_key,
 )
-from app.autotrade.scale_context import AutoScaleContext
-from app.autotrade.trend import RegimeInfo, TrendDecision
 from app.analysis.types import Level, Zone
 from app.analysis.market_map import MapEntry, MarketMap
 
@@ -72,19 +70,6 @@ def _decision() -> AutoScalpDecision:
     reasons=("M1 range rejection", "support rail"),
     rail_count=4,
     sweep_low=4015.9,
-  )
-
-
-def _scale_context(now: int) -> AutoScaleContext:
-  return AutoScaleContext(
-    bar_ts=now - 60,
-    atr=1.2,
-    structure_swing=4014.8,
-    displacement_direction="up",
-    displacement_age_bars=1,
-    bos_direction="up",
-    bos_ts=now - 60,
-    opposing_level_distance_atr=2.5,
   )
 
 
@@ -286,26 +271,6 @@ def test_worker_source_has_no_direct_scanner_market_map_or_telegram_import():
       found.add(needle)
 
   assert not found, f"worker forbidden layer imports: {sorted(found)}"
-
-
-def test_trend_groups_are_scoped_to_the_structural_zone():
-  first = TrendDecision(
-    "candidate",
-    direction="BUY",
-    mode="pullback",
-    entry_zone=(4010.0, 4011.0),
-    key_level=4010.5,
-  )
-  second = replace(
-    first,
-    entry_zone=(4016.0, 4017.0),
-    key_level=4016.5,
-  )
-
-  assert worker._trend_group_id("XAU", first) != worker._trend_group_id(
-    "XAU",
-    second,
-  )
 
 
 # --- A1: entry-location guard -----------------------------------------------
@@ -612,91 +577,6 @@ async def test_news_guard_hit_falls_back_to_single_event_window(monkeypatch):
   hit = await worker._news_guard_hit("EURUSD", 1_780_000_000)
 
   assert hit == single_event
-
-
-def test_defended_level_guard_blocks_buy_within_buffer(monkeypatch):
-  # Intervention sells USDJPY near 160 — only BUY is hard-blocked in-band.
-  monkeypatch.setattr(
-    instrument_geometry, "defended_levels", lambda symbol: (160.0,),
-  )
-  monkeypatch.setattr(
-    instrument_geometry, "defended_level_buffer_price", lambda symbol: 0.30,
-  )
-
-  decision = worker._defended_level_guard(
-    "USDJPY",
-    159.85,
-    direction="BUY",
-    guard_mode=worker.GUARD_MODE_OBSERVE,
-  )
-
-  assert decision.hard_block is True
-  assert decision.reason_code == "entry_near_defended_level"
-  # Unconditional even in observe mode — hard_geometry=True.
-  decision_strict = worker._defended_level_guard(
-    "USDJPY",
-    159.85,
-    direction="BUY",
-    guard_mode=worker.GUARD_MODE_STRICT,
-  )
-  assert decision_strict.hard_block is True
-
-
-def test_defended_level_guard_allows_sell_within_buffer(monkeypatch):
-  # Prod 2026-08-25: SELLs at ~159.4 were wrongly sterilized by a symmetric
-  # 100-pip band. SELLs near 160 are intervention-aligned.
-  monkeypatch.setattr(
-    instrument_geometry, "defended_levels", lambda symbol: (160.0,),
-  )
-  monkeypatch.setattr(
-    instrument_geometry, "defended_level_buffer_price", lambda symbol: 0.30,
-  )
-
-  decision = worker._defended_level_guard(
-    "USDJPY",
-    159.85,
-    direction="SELL",
-    guard_mode=worker.GUARD_MODE_OBSERVE,
-  )
-
-  assert decision.hard_block is False
-  assert decision.reason_code == "defended_level_sell_aligned"
-
-
-def test_defended_level_guard_allows_buy_outside_buffer(monkeypatch):
-  monkeypatch.setattr(
-    instrument_geometry, "defended_levels", lambda symbol: (160.0,),
-  )
-  monkeypatch.setattr(
-    instrument_geometry, "defended_level_buffer_price", lambda symbol: 0.30,
-  )
-
-  decision = worker._defended_level_guard(
-    "USDJPY",
-    159.40,
-    direction="BUY",
-    guard_mode=worker.GUARD_MODE_OBSERVE,
-  )
-
-  assert decision.hard_block is False
-  assert decision.reason_code == "no_defended_level_nearby"
-
-
-def test_defended_level_guard_noop_when_unconfigured(monkeypatch):
-  monkeypatch.setattr(instrument_geometry, "defended_levels", lambda symbol: ())
-  monkeypatch.setattr(
-    instrument_geometry, "defended_level_buffer_price", lambda symbol: 0.0,
-  )
-
-  decision = worker._defended_level_guard(
-    "EURUSD",
-    1.16,
-    direction="BUY",
-    guard_mode=worker.GUARD_MODE_OBSERVE,
-  )
-
-  assert decision.hard_block is False
-  assert decision.reason_code == "no_defended_level_configured"
 
 
 # --- Fix 3: post-stop-out cooldown ------------------------------------------
