@@ -265,11 +265,21 @@ func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate 
 			if reaction == nil {
 				continue
 			}
-			invalidationPrice := effectiveLevelPrice - band - s.cfg.InvalidationBufferATR*atr
+			invalidationBuffer := s.cfg.InvalidationBufferATR * atr
+			invalidationPrice := effectiveLevelPrice - band - invalidationBuffer
 			poolSide := liquidity.LiquidityBuySide
 			if direction == market.Sell {
-				invalidationPrice = effectiveLevelPrice + band + s.cfg.InvalidationBufferATR*atr
+				invalidationPrice = effectiveLevelPrice + band + invalidationBuffer
 				poolSide = liquidity.LiquiditySellSide
+			}
+			// The entry is the reaction window, which an opposing zone can widen
+			// past the level's own band. A stop derived from the level alone then
+			// lands inside the entry (published as an invalid event); keep it
+			// beyond the outer edge of the whole window.
+			if direction == market.Buy {
+				invalidationPrice = math.Min(invalidationPrice, float64(reactLow)-invalidationBuffer)
+			} else {
+				invalidationPrice = math.Max(invalidationPrice, float64(reactHigh)+invalidationBuffer)
 			}
 			referencePrice := float64(reactHigh)
 			if direction == market.Sell {

@@ -13,6 +13,7 @@ import (
 
 	redisv9 "github.com/redis/go-redis/v9"
 
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/barrier"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/marketdata"
 )
@@ -36,6 +37,9 @@ type Runtime struct {
 	cursors map[Series]int64
 	dirty   map[Series]map[int64]struct{}
 	queues  map[Series]chan struct{}
+
+	barrierMu   sync.RWMutex
+	barrierCfgs map[market.Symbol]barrier.Config
 }
 
 func NewRuntime(cfg Config, series []Series, dispatch Dispatch, health *Health, metrics *Metrics) (*Runtime, error) {

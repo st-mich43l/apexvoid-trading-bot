@@ -241,9 +241,11 @@ async def test_go_zone_book_hard_blocks_a_go_origin_plan_inside_a_published_oppo
 
   await prod.set(go_zone_book_key("XAU"), json.dumps({
     "symbol": "XAU", "generated_at": int(h.clock.now),
-    "entries": [{
-      "timeframe": "M15", "kind": "supply", "low": 4349.0, "high": 4355.0,
-      "atr": 4.0, "strength": 0.9, "touch_count": 2, "state": "fresh",
+    "entries": [],
+    # The normalized barrier list Go publishes (analysis-engine/internal/barrier).
+    "barriers": [{
+      "side": "sell", "low": 4349.0, "high": 4355.0, "tier": "zone", "score": 0.9,
+      "touches": 2, "source_timeframes": ["M15"],
     }],
   }))
 
