@@ -4829,6 +4829,33 @@ public sealed class TradePlanRuntime(
     return plan.Targets[index].TargetId;
   }
 
+  /// <summary>
+  /// The single most favourable fill in the group (lowest for BUY, highest
+  /// for SELL), RISK leg included. Same rule as Manual Algo's
+  /// GroupDeepestEntryPrice(includeRiskLeg: true) for a take-profit event:
+  /// the owner reads the whole zone as one trade, so a target is measured
+  /// from the best price any leg got, not from a volume-weighted blend.
+  /// </summary>
+  private static decimal? GroupBestFillPrice(
+    TradePlan plan,
+    TradePlanRuntimeState state
+  )
+  {
+    var fills = (state.Legs ?? [])
+      .Where(leg => leg.FillPrice is > 0 && leg.FilledVolume > 0)
+      .Select(leg => leg.FillPrice!.Value)
+      .ToArray();
+    if (fills.Length == 0)
+    {
+      return null;
+    }
+    return string.Equals(
+      plan.Analysis.Direction, "BUY", StringComparison.OrdinalIgnoreCase
+    )
+      ? fills.Min()
+      : fills.Max();
+  }
+
   private int? ArchivedTargetPips(
     TradePlan plan,
     TradePlanRuntimeState state,
@@ -4836,11 +4863,13 @@ public sealed class TradePlanRuntime(
     decimal? actualExitPrice = null
   )
   {
-    var weightedFill = state.GroupWeightedFillPrice ?? state.EntryFillPrice;
+    var referenceFill = GroupBestFillPrice(plan, state)
+      ?? state.GroupWeightedFillPrice
+      ?? state.EntryFillPrice;
     var pipSize = PipSizeFor(plan.Symbol);
     if (
       pipSize <= 0
-      || weightedFill is not decimal fillPrice
+      || referenceFill is not decimal fillPrice
       || fillPrice <= 0
     )
     {
