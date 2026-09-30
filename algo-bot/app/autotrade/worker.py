@@ -66,6 +66,7 @@ from app.autotrade.active_exposure import (
   evaluate_entry_against_exposure,
   load_active_exposures,
 )
+from app.autotrade.entry_overlap import release_entry_zone, reserve_entry_zone
 from app.autotrade.protective_stop import opposing_zone_fingerprint
 from app.autotrade.gate import (
   AutoScalpBox,
@@ -6071,6 +6072,7 @@ async def _publish_trade_plan_v8(
     await release_active_thesis(
       client, symbol=symbol, thesis_id=match.thesis_id, setup_id=setup_id,
     )
+    await release_entry_zone(client, symbol=symbol, setup_id=setup_id)
     if zone_claim_id is not None:
       await release_confluence_zone(
         client, zone_id=zone_claim_id, owner_id=setup_id,
@@ -6209,6 +6211,42 @@ async def _publish_trade_plan_v8(
       symbol, cooldown_reason,
     )
     # Zone cooldown is preference telemetry — continue to publish.
+
+  if go_origin:
+    overlap_blocker = await reserve_entry_zone(
+      client,
+      symbol=symbol,
+      setup_id=setup_id,
+      strategy=str(match_for_plan.strategy),
+      direction=str(match_for_plan.direction),
+      low=float(match_for_plan.entry_low),
+      high=float(match_for_plan.entry_high),
+      atr=float(match_for_plan.atr or 0.0),
+      now=now_ts,
+    )
+    if overlap_blocker is not None:
+      await _release_claims()
+      await _record_v8_build_rejected(
+        client,
+        symbol,
+        match,
+        "entry_zone_overlap_same_direction",
+        (
+          f"{match_for_plan.direction} zone "
+          f"{match_for_plan.entry_low:.5f}-{match_for_plan.entry_high:.5f} "
+          f"overlaps {overlap_blocker.strategy} zone "
+          f"{overlap_blocker.low:.5f}-{overlap_blocker.high:.5f} "
+          "admitted within the last 45 minutes"
+        ),
+        {
+          "overlap_setup_id": overlap_blocker.setup_id,
+          "overlap_strategy": overlap_blocker.strategy,
+          "overlap_low": overlap_blocker.low,
+          "overlap_high": overlap_blocker.high,
+          "overlap_reserved_at": overlap_blocker.reserved_at,
+        },
+      )
+      return None
 
   exposures = await load_active_exposures(client)
   scalp_ignores_opposing_active = match_bypasses_opposing_structure(
