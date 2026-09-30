@@ -33,9 +33,16 @@ func OpportunityPayloadFromCandidate(c opportunity.Candidate, algo AlgorithmVers
 			})
 		}
 	}
+	var stopEnvelope *StopEnvelopePayload
+	if c.StopEnvelope != nil {
+		stopEnvelope = &StopEnvelopePayload{
+			FloorPips: c.StopEnvelope.FloorPips, CapPips: c.StopEnvelope.CapPips,
+			DesiredMinimumPips: c.StopEnvelope.DesiredMinimumPips, Source: c.StopEnvelope.Source,
+		}
+	}
 	return OpportunityPayload{
-		TechnicalContext: technical,
-		ID:               c.ID, Strategy: string(c.Strategy), Symbol: string(c.Symbol), Timeframe: string(c.ObservedTimeframe), Direction: string(c.Direction),
+		TechnicalContext: technical, StopEnvelope: stopEnvelope,
+		ID: c.ID, Strategy: string(c.Strategy), Symbol: string(c.Symbol), Timeframe: string(c.ObservedTimeframe), Direction: string(c.Direction),
 		Entry:        EntryZonePayload{Low: c.Entry.Low, High: c.Entry.High},
 		Invalidation: PriceLevelPayload{Price: float64(c.Invalidation.Price), Label: c.Invalidation.Label},
 		Targets:      targets, Evidence: evidence,

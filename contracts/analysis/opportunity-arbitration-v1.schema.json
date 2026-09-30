@@ -27,6 +27,15 @@
       "items": { "type": "string" },
       "description": "Present only when status is conflict_held: the opportunity_ids of the opposing-direction candidates this decision was held against."
     },
+    "thesis_id": {
+      "type": "string",
+      "description": "Present only when this opportunity shares its real-world structural identity (the same zone/level/pool, same direction) with at least one other live candidate — a re-confirmation or a different strategy observing the same technical object, not an independent competing setup. Equal to the opportunity_id of whichever member of the group ranks best (internal/arbitration's own representativeOf) — every member of the group carries the same thesis_id."
+    },
+    "merged_with": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Present only alongside thesis_id: the opportunity_ids of every OTHER live candidate in the same thesis group."
+    },
     "decided_at": {
       "type": "integer",
       "description": "Unix seconds — the closed bar's time that produced this Arbitrate() evaluation, not wall-clock publish time."

@@ -306,7 +306,13 @@ func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate 
 			confirmedHere = append(confirmedHere, opportunity.Candidate{
 				ID: id, Strategy: ID, StrategyVersion: Version, Symbol: ctx.Symbol,
 				Direction: direction,
-				Entry:     opportunity.EntryZone{Low: float64(reactLow), High: float64(reactHigh)},
+				// reaction.ZoneID (the level's own ID), not the local
+				// setupKey — that also embeds this reaction's touch/
+				// confirmation bar times, which would make two
+				// confirmations of the SAME level look like different
+				// theses (see Candidate.StructuralID's own doc comment).
+				StructuralID: reaction.ZoneID,
+				Entry:        opportunity.EntryZone{Low: float64(reactLow), High: float64(reactHigh)},
 				Invalidation: market.PriceLevel{
 					Price: market.Price(invalidationPrice), Label: "key_level_invalidated",
 				},
