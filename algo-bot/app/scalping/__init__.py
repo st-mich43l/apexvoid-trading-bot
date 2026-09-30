@@ -18,12 +18,4 @@ __all__ = [
   "ScalpDecision",
   "ScalpOpportunity",
   "ScalpScore",
-  "process_m1_bar",
 ]
-
-
-def __getattr__(name: str):
-  if name == "process_m1_bar":
-    from app.scalping import runtime as _runtime
-    return getattr(_runtime, name)
-  raise AttributeError(name)
