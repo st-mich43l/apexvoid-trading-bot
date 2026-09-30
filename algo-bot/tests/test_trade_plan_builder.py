@@ -521,3 +521,23 @@ def test_final_reward_risk_preference_keeps_builder_plan():
   )
   assert plan.management is not None
   assert plan.stop.source == "m1_trigger_wick"
+
+
+def test_go_plan_drops_the_legacy_risk_leg_opt_out_tag():
+  # Production 2026-09-30 14:26: a Key Level match adapted at 02:00 by the
+  # build that still had go_origin_risk_leg_enabled=false kept the stamped
+  # "risk_leg:disabled" in Redis, so the plan built hours later opened
+  # without the RISK leg.
+  match = replace(
+    _match(),
+    tags=("origin:go", "catalog:key_level", "risk_leg:disabled", "bias:with_bias"),
+  )
+  plan = _build(match)
+  assert "risk_leg:disabled" not in plan.analysis.tags
+  assert plan.analysis.tags == ("origin:go", "catalog:key_level", "bias:with_bias")
+
+
+def test_a_non_go_plan_keeps_its_tags_untouched():
+  match = replace(_match(), tags=("key_level", "risk_leg:disabled"))
+  plan = _build(match)
+  assert plan.analysis.tags == ("key_level", "risk_leg:disabled")
