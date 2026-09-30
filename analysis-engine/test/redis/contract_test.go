@@ -99,11 +99,11 @@ func TestZoneBookKeyIsUppercaseAndNamespaced(t *testing.T) {
 
 func TestBuildZoneBook_FlattensSupplyDemandZonesAcrossTimeframesAndSkipsOtherKinds(t *testing.T) {
 	zones := map[market.Timeframe]zone.ZoneState{
-		market.M15: {Zones: []zone.Zone{
+		market.M15: {ATR: 4.0, Zones: []zone.Zone{
 			{ID: "z1", Kind: zone.KindSupply, Low: 2020, High: 2025, Strength: 0.8, TouchCount: 2, State: zone.StateFresh},
 			{ID: "z2", Kind: zone.KindDemand, Low: 1990, High: 1995, Strength: 0.6, TouchCount: 1, State: zone.StateTouched},
 		}},
-		market.H1: {Zones: []zone.Zone{
+		market.H1: {ATR: 8.0, Zones: []zone.Zone{
 			{ID: "z3", Kind: zone.KindSupply, Low: 2030, High: 2040, Strength: 0.9, TouchCount: 0, State: zone.StateInvalidated},
 		}},
 	}
@@ -122,7 +122,7 @@ func TestBuildZoneBook_FlattensSupplyDemandZonesAcrossTimeframesAndSkipsOtherKin
 	if !ok {
 		t.Fatalf("missing M15 supply/fresh entry in %+v", doc.Entries)
 	}
-	if m15Supply.Low != 2020 || m15Supply.High != 2025 || m15Supply.Strength != 0.8 || m15Supply.TouchCount != 2 {
+	if m15Supply.Low != 2020 || m15Supply.High != 2025 || m15Supply.ATR != 4.0 || m15Supply.Strength != 0.8 || m15Supply.TouchCount != 2 {
 		t.Errorf("unexpected M15 supply entry: %+v", m15Supply)
 	}
 	if _, ok := byID["H1:supply:invalidated"]; !ok {
@@ -179,7 +179,9 @@ func TestPublishZoneBook_RealRedisRoundTrip(t *testing.T) {
 		client,
 		redistransport.Config{URL: "redis://127.0.0.1:0/0", BarsChannel: "bars:new", ReconciliationInterval: time.Second},
 		[]redistransport.Series{{Symbol: "XAU", Timeframe: market.M5, Depth: 10}},
-		func(context.Context, marketdata.BarEvent) (marketdata.AppendResult, error) { return marketdata.AppendAccepted, nil },
+		func(context.Context, marketdata.BarEvent) (marketdata.AppendResult, error) {
+			return marketdata.AppendAccepted, nil
+		},
 		nil, nil,
 	)
 	if err != nil {
@@ -189,7 +191,7 @@ func TestPublishZoneBook_RealRedisRoundTrip(t *testing.T) {
 	key := redistransport.ZoneBookKey("XAU")
 	t.Cleanup(func() { _ = client.Del(ctx, key).Err() })
 	zones := map[market.Timeframe]zone.ZoneState{
-		market.M15: {Zones: []zone.Zone{{ID: "z1", Kind: zone.KindSupply, Low: 2020, High: 2025, Strength: 0.8, TouchCount: 2, State: zone.StateFresh}}},
+		market.M15: {ATR: 4.0, Zones: []zone.Zone{{ID: "z1", Kind: zone.KindSupply, Low: 2020, High: 2025, Strength: 0.8, TouchCount: 2, State: zone.StateFresh}}},
 	}
 	if err := runtime.PublishZoneBook(ctx, "XAU", zones, time.Unix(1700000100, 0)); err != nil {
 		t.Fatal(err)

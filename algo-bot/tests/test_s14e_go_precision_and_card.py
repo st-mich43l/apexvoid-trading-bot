@@ -21,6 +21,7 @@ from app.autotrade import setup_card
 from app.autotrade.multi_match import deserialize_matches, strategy_matches_key
 from app.autotrade.setup_card import format_plan_published_root_card
 from tests.configuration.canonical_fixtures import install_runtime_overrides
+from tests.test_config_effective_instrument_context import _load_production_example
 from tests.test_s14d_go_full_chain import (  # noqa: F401 - fixtures + helpers
   _freeze_technique_killzone_hour,
   _no_news_by_default,
@@ -65,6 +66,15 @@ def rebased(now: int) -> dict:
 
 
 async def deliver_and_publish(h, prod, monkeypatch):
+  from app.core import config as config_module
+
+  production = _load_production_example().config
+  install_runtime_overrides(
+    monkeypatch,
+    base=config_module.runtime_config.model_copy(
+      update={"instruments": production.instruments},
+    ),
+  )
   live_inputs(monkeypatch, bid=4293.0, ask=4293.2)                    # inside the replayed zone 4291.21-4296.87
   await h.activate()
   await h._ensure()

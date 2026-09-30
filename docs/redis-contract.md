@@ -324,7 +324,7 @@ connection used for bar ingestion.
   "generated_at": 1700000100,
   "entries": [
     {"timeframe": "M15", "kind": "supply", "low": 2020.0, "high": 2025.0,
-     "strength": 0.8, "touch_count": 2, "state": "fresh"}
+     "atr": 4.0, "strength": 0.8, "touch_count": 2, "state": "fresh"}
   ]
 }
 ```
@@ -334,8 +334,10 @@ is the zone's full lifecycle label (`fresh`, `touched`,
 `partially_mitigated`, `mitigated`, `invalidated`) - the publisher writes
 every zone unfiltered; deciding what still counts as a live barrier is the
 reader's job, not the publisher's, so a schema change to what "live" means
-never requires a Go redeploy. Every tracked timeframe's zones are flattened
-into one `entries` list.
+never requires a Go redeploy. `atr` is the current ATR for the entry's own
+symbol/timeframe and lets execution policy enforce the same ATR-relative width
+limit as the canonical Python StructuralBarrierBook. Every tracked timeframe's
+zones are flattened into one `entries` list.
 
 Consumer: `algo-bot/app/autotrade/go_zone_book.py`. The worker's
 execution-time opposing-barrier/target-room recheck
@@ -347,7 +349,11 @@ a Python-origin match never reads it. The reader keeps only `fresh`,
 Invalidated/Mitigated" rule Key Level's own `internal/strategy/keylevel/opposing.go`
 applies on the Go side, so a Go-origin match's opposing check and Key
 Level's own detection-time opposing check never disagree about what counts
-as live). A missing or unparseable key is reported as unavailable (`None`),
-distinct from "Go published that there is genuinely nothing opposing" (an
-empty tuple) - the worker falls back to its own Python recompute only in
-the first case, never in the second.
+as live). Before target-room evaluation, the reader keeps only M5/M15/H1,
+applies `execution_zone_max_width_atr` and
+`execution_zone_max_width_pips`, merges overlapping same-side bands and
+reconciles contradictory cross-side bands through the shared
+StructuralBarrierBook normalization. A missing or unparseable key is reported
+as unavailable (`None`), distinct from "Go published that there is genuinely
+nothing opposing" (an empty tuple). Production Go-origin execution does not
+fall back to Python technical detection in either case.

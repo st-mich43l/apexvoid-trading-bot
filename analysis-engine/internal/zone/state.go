@@ -64,6 +64,10 @@ func (c Config) displacementMaxBars() int {
 // source).
 type ZoneState struct {
 	Zones []Zone
+	// ATR is the current ATR for this exact symbol/timeframe snapshot. It is
+	// published with the Redis zone book so execution policy can apply the
+	// same ATR-relative width gate as the legacy structural barrier book.
+	ATR float64
 }
 
 // Book is the zone-domain slice of a symbol's canonical state — same
@@ -141,7 +145,7 @@ func Update(candles []market.Candle, atrSeries []float64, swings []structure.Swi
 		zones[i].Relevance = ClassifyRelevance(zones[i], float64(candles[len(candles)-1].Close), currentATR, cfg.Relevance)
 	}
 
-	return ZoneState{Zones: zones}
+	return ZoneState{Zones: zones, ATR: currentATR}
 }
 
 func lastValue(series []float64) float64 {

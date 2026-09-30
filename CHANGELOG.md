@@ -13,6 +13,12 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Go opposing-structure books no longer wall in FX execution with stale M1 or
+  oversized zones: lifecycle epsilon is now ATR-scaled instead of treating
+  `0.05` as raw price, zone-book entries carry timeframe ATR, and Algo Bot
+  applies the canonical M5/M15/H1 width, merge and cross-side reconciliation
+  rules before structural target-room evaluation. Go-origin scalp/range
+  setups also retain the same native-room opposing bypass as other origins.
 - Auto Algo now applies the execution policy to Go-origin opportunities: Go's
   single technical target no longer collapses XAU's configured 1R/2R/3R/4R
   ladder, and non-scalp XAU entry legs use Manual Algo's rounded shallow/deep
