@@ -15,6 +15,7 @@ import (
 func validParams() map[string]any {
 	return map[string]any{
 		"minimum_strength":            0.3,
+		"minimum_gap_atr":             0.5,
 		"invalidation_buffer_atr":     0.5,
 		"minimum_target_distance_atr": 1.0,
 		"expiry_hours":                24.0,
@@ -186,5 +187,36 @@ func TestFVG_RequiredTimeframesIsM5(t *testing.T) {
 	tfs := s.RequiredTimeframes()
 	if len(tfs) != 1 || tfs[0] != market.M5 {
 		t.Errorf("expected RequiredTimeframes()==[M5], got %v", tfs)
+	}
+}
+
+func TestFVG_GapSmallerThanTheMinimumATRFractionIsIgnored(t *testing.T) {
+	s := newStrategy(t, validParams())
+	// Production 2026-09-30: XAU 4184.81-4186.10 with ATR 3.62 is a 0.36 ATR gap.
+	ctx := baseContext(3.62)
+	ctx.Timeframes[market.M5] = &context.TimeframeContext{
+		Timeframe: market.M5,
+		Zones:     zone.ZoneState{Zones: []zone.Zone{gapZone("tiny", zone.Demand, 4184.81, 4186.10, 0)}},
+		Liquidity: liquidity.LiquidityState{Pools: []liquidity.Pool{{Side: liquidity.LiquidityBuySide, Low: 4190.6, High: 4190.7}}},
+	}
+	if got := s.Evaluate(ctx); len(got) != 0 {
+		t.Fatalf("a 0.36 ATR gap must not produce a candidate, got %d", len(got))
+	}
+
+	ctx.Timeframes[market.M5].Zones = zone.ZoneState{Zones: []zone.Zone{gapZone("real", zone.Demand, 4183.00, 4186.10, 0)}}
+	if got := s.Evaluate(ctx); len(got) != 1 {
+		t.Fatalf("a 0.86 ATR gap must produce a candidate, got %d", len(got))
+	}
+}
+
+func TestFVG_MinimumGapATRIsRequiredAndNonNegative(t *testing.T) {
+	params := validParams()
+	delete(params, "minimum_gap_atr")
+	if _, err := fvg.New(strategy.Config{ID: fvg.ID, Version: fvg.Version, Enabled: true, Parameters: params}); err == nil {
+		t.Fatal("expected an error when minimum_gap_atr is missing")
+	}
+	params["minimum_gap_atr"] = -0.1
+	if _, err := fvg.New(strategy.Config{ID: fvg.ID, Version: fvg.Version, Enabled: true, Parameters: params}); err == nil {
+		t.Fatal("expected an error when minimum_gap_atr is negative")
 	}
 }

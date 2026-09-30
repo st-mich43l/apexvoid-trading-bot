@@ -18,8 +18,8 @@ const ID strategy.StrategyID = "ifvg"
 const Version = "v2"
 
 type Strategy struct {
-	minimumStrength, invalidationATR, targetATR, expiryHours float64
-	fingerprint                                              string
+	minimumStrength, minimumGapATR, invalidationATR, targetATR, expiryHours float64
+	fingerprint                                                             string
 }
 
 func New(cfg strategy.Config) (strategy.Strategy, error) {
@@ -27,9 +27,9 @@ func New(cfg strategy.Config) (strategy.Strategy, error) {
 		return nil, fmt.Errorf("ifvg: wrong strategy ID %q", cfg.ID)
 	}
 	values := []*float64{}
-	keys := []string{"minimum_strength", "invalidation_buffer_atr", "minimum_target_distance_atr", "expiry_hours"}
+	keys := []string{"minimum_strength", "minimum_gap_atr", "invalidation_buffer_atr", "minimum_target_distance_atr", "expiry_hours"}
 	s := &Strategy{fingerprint: strategyutil.Fingerprint(string(cfg.ID), cfg.Version, cfg.Parameters)}
-	values = append(values, &s.minimumStrength, &s.invalidationATR, &s.targetATR, &s.expiryHours)
+	values = append(values, &s.minimumStrength, &s.minimumGapATR, &s.invalidationATR, &s.targetATR, &s.expiryHours)
 	for i, key := range keys {
 		value, err := strategyutil.Float(cfg.Parameters, key)
 		if err != nil {
@@ -37,7 +37,7 @@ func New(cfg strategy.Config) (strategy.Strategy, error) {
 		}
 		*values[i] = value
 	}
-	if s.minimumStrength < 0 || s.invalidationATR <= 0 || s.targetATR <= 0 || s.expiryHours <= 0 {
+	if s.minimumStrength < 0 || s.minimumGapATR < 0 || s.invalidationATR <= 0 || s.targetATR <= 0 || s.expiryHours <= 0 {
 		return nil, fmt.Errorf("ifvg: invalid non-positive strategy parameter")
 	}
 	return s, nil
@@ -59,6 +59,12 @@ func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Ca
 		if z.Kind != zone.KindIFVG || z.Strength < s.minimumStrength ||
 			(z.State != zone.StateFresh && z.State != zone.StateTouched) ||
 			(z.Relevance != zone.Immediate && z.Relevance != zone.Nearby) {
+			continue
+		}
+		// The inverted gap keeps its original width; one that is a sliver of
+		// ATR is noise (production 2026-09-30: a 0.10 ATR iFVG stopped for
+		// -13 pips inside a minute).
+		if float64(z.High-z.Low) < s.minimumGapATR*atr {
 			continue
 		}
 		direction := z.Side.Direction()

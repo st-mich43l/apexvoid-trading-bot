@@ -71,7 +71,7 @@ func assertOne(t *testing.T, instance strategy.Strategy, marketCtx *analysiscont
 func TestS11MissingStrategiesKnownQualifyingFixtures(t *testing.T) {
 	const base = int64(1_700_000_000)
 	t.Run("ifvg", func(t *testing.T) {
-		s, err := ifvg.New(cfg(ifvg.ID, map[string]any{"minimum_strength": .4, "invalidation_buffer_atr": .5, "minimum_target_distance_atr": 1.0, "expiry_hours": 4.0}))
+		s, err := ifvg.New(cfg(ifvg.ID, map[string]any{"minimum_strength": .4, "minimum_gap_atr": .5, "invalidation_buffer_atr": .5, "minimum_target_distance_atr": 1.0, "expiry_hours": 4.0}))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -187,7 +187,7 @@ func TestS11BreakoutRetestsRejectDeepFailedReentry(t *testing.T) {
 }
 
 func TestS11IFVGDeduplicatesRepeatedCanonicalZone(t *testing.T) {
-	s, err := ifvg.New(cfg(ifvg.ID, map[string]any{"minimum_strength": .4, "invalidation_buffer_atr": .5, "minimum_target_distance_atr": 1.0, "expiry_hours": 4.0}))
+	s, err := ifvg.New(cfg(ifvg.ID, map[string]any{"minimum_strength": .4, "minimum_gap_atr": .5, "invalidation_buffer_atr": .5, "minimum_target_distance_atr": 1.0, "expiry_hours": 4.0}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -227,5 +227,34 @@ func TestS11MissingStrategiesRejectMissingConfiguration(t *testing.T) {
 				t.Fatal("missing strategy-owned config must fail closed")
 			}
 		})
+	}
+}
+
+func TestS11IFVGIgnoresAGapThatIsASliverOfATR(t *testing.T) {
+	s, err := ifvg.New(cfg(ifvg.ID, map[string]any{"minimum_strength": .4, "minimum_gap_atr": .5, "invalidation_buffer_atr": .5, "minimum_target_distance_atr": 1.0, "expiry_hours": 4.0}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	const base = int64(1_700_000_000)
+	build := func(low, high float64) *analysiscontext.MarketContext {
+		c := ctx(map[market.Timeframe]*analysiscontext.TimeframeContext{market.M5: {
+			Timeframe: market.M5,
+			Candles:   []market.Candle{bar(base, 4186, 4187, 4185, 4186)},
+			Zones: zone.ZoneState{Zones: []zone.Zone{{
+				ID: "ifvg-sliver", Kind: zone.KindIFVG, Side: zone.Demand,
+				Low: market.Price(low), High: market.Price(high), OriginTime: base - 300,
+				Strength: .8, State: zone.StateFresh, Relevance: zone.Immediate,
+			}}},
+			Liquidity: liquidity.LiquidityState{Pools: []liquidity.Pool{{Side: liquidity.LiquidityBuySide, Low: 4195, High: 4196}}},
+		}})
+		c.Volatility.ATR = 3.45
+		return c
+	}
+	// Production 2026-09-30: 4185.91-4186.27 with ATR 3.45 is a 0.10 ATR gap.
+	if got := s.Evaluate(build(4185.91, 4186.27)); len(got) != 0 {
+		t.Fatalf("a 0.10 ATR iFVG must not produce a candidate, got %d", len(got))
+	}
+	if got := s.Evaluate(build(4184.00, 4186.27)); len(got) != 1 {
+		t.Fatalf("a 0.66 ATR iFVG must produce a candidate, got %d", len(got))
 	}
 }
