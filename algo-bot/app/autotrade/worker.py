@@ -21,7 +21,6 @@ from typing import Any, Awaitable, Callable
 
 from app.persistence import redis_state
 from app.analysis_client.provenance import GO_ORIGIN_TAG
-from app.analysis_client.shadow_overlay import is_shadow_overlay
 from app.autotrade.go_plan_cancel import read_plan_cancel, register_go_plan
 from app.autotrade.go_zone_book import opposing_entries_for_go_match
 from app.autotrade import units
@@ -6634,13 +6633,6 @@ async def _publish_trade_plan_v8(
       "zone_episode_id": confirmation.zone_episode_id,
     },
   )
-  if is_shadow_overlay(client):
-    # S14A dry run: the owner's Telegram must never see a shadow plan.
-    log.info(
-      "v8 plan built (shadow dry run, no Telegram card) id=%s symbol=%s strategy=%s",
-      plan.plan_id, symbol, match.strategy,
-    )
-    return plan.plan_id
   try:
     from app.autotrade.setup_card import (
       ensure_plan_published_root_card,

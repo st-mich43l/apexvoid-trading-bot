@@ -6,14 +6,12 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.autotrade.entry_activation import evaluate_entry_activation
 from app.autotrade.execution_confirmation import (
   ZONE_ACCESS_MOMENTUM_CHASE,
   ZONE_ACCESS_RETEST_ONLY,
   scalp_zone_access,
 )
 from app.analysis.entry_location import EntryLocationDecision
-from app.autotrade.zone_execution_cutover import _scalp_access
 from app.autotrade.zone_watch import ZoneWatch
 
 
@@ -134,38 +132,6 @@ def test_sell_scalp_chase_missed_beyond_100():
   assert access.executable is False
 
 
-def test_entry_activation_allows_range_edge_chase():
-  location = EntryLocationDecision(
-    allowed=True,
-    reason_code="entry_location_allowed",
-    hard_block=False,
-    archetype="range_reversion",
-    would_block=False,
-    measured={"mode": "enforce"},
-  )
-  cfg = SimpleNamespace(
-    execution=SimpleNamespace(
-      activation=SimpleNamespace(
-        mode="enforce",
-        reaction_trigger_maximum_age_bars=2,
-      ),
-    ),
-  )
-  decision = evaluate_entry_activation(
-    strategy="Range Edge Scalp",
-    direction="SELL",
-    zone_entered_at=100,
-    quote_inside=False,
-    decisive_break=False,
-    trigger=None,
-    location_decision=location,
-    now=160,
-    cfg=cfg,
-    chase_pips=10.0,
-    maximum_chase_pips=100.0,
-  )
-  assert decision.measured.get("chase_entry") is True
-  assert decision.reason_code != "quote_outside_zone"
   # Missing M1 trigger may still wait — but never die on quote_outside.
 
 
@@ -195,102 +161,3 @@ def _zone_record(*, direction: str = "SELL") -> ZoneWatch:
     updated_at=1,
     technique_tags=("fvg",),
   )
-
-
-def test_technique_scalp_access_uses_execution_chase_budget(monkeypatch):
-  from app.autotrade import zone_execution_cutover as cutover
-  from app.autotrade.execution_confirmation import ScalpZoneAccess, ExecutableZoneEvidence
-
-  monkeypatch.setattr(cutover, "_technique_chase_pips", lambda: 40.0)
-  captured: dict = {}
-
-  def _fake_scalp(*args, **kwargs):
-    captured["kwargs"] = kwargs
-    evidence = ExecutableZoneEvidence(
-      executable_quote=4098.0,
-      quote_side="ask",
-      inside=False,
-      distance_to_zone=2.0,
-      distance_pips=20.0,
-      tolerance_price=0.0,
-    )
-    return ScalpZoneAccess(evidence, "chase", 20.0, float(kwargs["maximum_chase_pips"]))
-
-  monkeypatch.setattr(cutover, "scalp_zone_access", _fake_scalp)
-  access = _scalp_access(
-    _zone_record(),
-    (4098.0, 4098.1, 100),
-    strategy="FVG",
-  )
-  assert captured["kwargs"]["maximum_chase_pips"] == pytest.approx(40.0)
-  assert access.status == "chase"
-  assert access.executable is True
-  assert access.maximum_chase_pips == pytest.approx(40.0)
-
-
-def test_confluence_scalp_access_uses_execution_chase_budget(monkeypatch):
-  from app.autotrade import zone_execution_cutover as cutover
-  from app.autotrade.execution_confirmation import ScalpZoneAccess, ExecutableZoneEvidence
-
-  monkeypatch.setattr(cutover, "_technique_chase_pips", lambda: 40.0)
-  captured: dict = {}
-
-  def _fake_scalp(*args, **kwargs):
-    captured["kwargs"] = kwargs
-    evidence = ExecutableZoneEvidence(
-      executable_quote=4095.0,
-      quote_side="ask",
-      inside=False,
-      distance_to_zone=5.0,
-      distance_pips=50.0,
-      tolerance_price=0.0,
-    )
-    return ScalpZoneAccess(
-      evidence, "chase_missed", 50.0, float(kwargs["maximum_chase_pips"]),
-    )
-
-  monkeypatch.setattr(cutover, "scalp_zone_access", _fake_scalp)
-  access = _scalp_access(
-    _zone_record(),
-    (4095.0, 4095.1, 100),
-    strategy="Confluence Zone",
-  )
-  assert captured["kwargs"]["maximum_chase_pips"] == pytest.approx(40.0)
-  assert access.status == "chase_missed"
-  assert access.executable is False
-
-
-def test_zone_reaction_scalp_access_stays_strict_inside(monkeypatch):
-  from app.autotrade import zone_execution_cutover as cutover
-
-  called = {"scalp": False}
-
-  def _fake_scalp(*args, **kwargs):
-    called["scalp"] = True
-    raise AssertionError("Zone Reaction must not use scalp_zone_access chase")
-
-  monkeypatch.setattr(cutover, "scalp_zone_access", _fake_scalp)
-  access = _scalp_access(
-    _zone_record(),
-    (4098.0, 4098.1, 100),
-    strategy="Zone Reaction",
-  )
-  assert called["scalp"] is False
-  assert access.maximum_chase_pips == pytest.approx(0.0)
-  assert access.executable is False
-  assert access.status == "approach_wait"
-
-
-def test_technique_chase_pips_helper_reads_execution_budget(monkeypatch):
-  from app.autotrade import zone_execution_cutover as cutover
-
-  monkeypatch.setattr(
-    cutover,
-    "runtime_config",
-    SimpleNamespace(
-      execution=SimpleNamespace(
-        entry=SimpleNamespace(maximum_chase_distance_pips=40.0),
-      ),
-    ),
-  )
-  assert cutover._technique_chase_pips() == pytest.approx(40.0)

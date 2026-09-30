@@ -79,19 +79,3 @@ async def test_inline_submit_without_actor():
     return 7
 
   assert await actor.submit(ping, priority=actor.PRIORITY_CARD) == 7
-
-
-def test_quote_inside_cached_spot_zone():
-  from app.autotrade.zone_execution_cutover import (
-    _cache_spot_zone_bands,
-    quote_inside_cached_spot_zone,
-  )
-
-  class Rec:
-    def __init__(self, low, high):
-      self.low = low
-      self.high = high
-
-  _cache_spot_zone_bands("XAU", [Rec(4330.0, 4335.0)])
-  assert quote_inside_cached_spot_zone("XAU", 4332.0) is True
-  assert quote_inside_cached_spot_zone("XAU", 4320.0) is False

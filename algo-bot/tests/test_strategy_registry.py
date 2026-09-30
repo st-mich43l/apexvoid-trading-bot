@@ -5,7 +5,6 @@ from __future__ import annotations
 import pytest
 
 from app.analysis.detectors import LIVE_DETECTOR_REGISTRY
-from app.autotrade.entry_activation import activation_archetype as legacy_activation
 from app.autotrade.execution_policy import strategy_family as legacy_strategy_family
 from app.autotrade.strategy_registry import (
   STRATEGY_BY_DETECTOR_KEY,
@@ -47,11 +46,6 @@ def test_registry_canonical_family_matches_legacy(strategy):
 @pytest.mark.parametrize("strategy", _KNOWN_STRATEGIES)
 def test_registry_location_archetype_matches_legacy(strategy):
   assert location_archetype(strategy) == legacy_location(strategy)
-
-
-@pytest.mark.parametrize("strategy", _KNOWN_STRATEGIES)
-def test_registry_activation_archetype_matches_legacy(strategy):
-  assert activation_archetype(strategy) == legacy_activation(strategy)
 
 
 @pytest.mark.parametrize("strategy", _KNOWN_STRATEGIES)

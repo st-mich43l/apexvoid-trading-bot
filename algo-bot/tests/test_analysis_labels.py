@@ -6,7 +6,6 @@ import pandas as pd
 import pytest
 
 from app.analysis.engine import AnalysisSettings, analyze, analysis_labels
-from app.scalping.unified_context import derive_scalp_analysis_labels
 
 
 pytestmark = pytest.mark.no_database
@@ -111,19 +110,3 @@ def test_analysis_labels_h1_only():
     ctx.per_tf["H1"].structure,
     ctx.regime.kind if ctx.regime is not None else "unknown",
   )
-
-
-def test_derive_scalp_analysis_labels_uppercase_keys():
-  h1 = _trending_ohlc(bars=55, direction="up")
-  m15 = h1.iloc[-30:].copy()
-  m5 = h1.iloc[-20:].copy()
-  lower = derive_scalp_analysis_labels(
-    {"h1": h1, "m15": m15, "m5": m5},
-    pip_size=0.1,
-  )
-  upper = derive_scalp_analysis_labels(
-    {"H1": h1, "M15": m15, "M5": m5},
-    pip_size=0.1,
-  )
-  assert upper == lower
-  assert upper != ("unknown", "unknown", "unknown")

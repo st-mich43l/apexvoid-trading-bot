@@ -22,8 +22,6 @@ from app.configuration.python_sources import load_python_runtime_source_bundle
 from app.configuration.source_policy import PythonConfigurationSourcePolicy
 from app.runtime.instrument_config import instrument_runtime_view
 from app.scalping.context import compute_context_id, is_scalping_symbol
-from app.scalping.microstructure import build_micro_structure
-from app.scalping.strategies import _select_target
 
 
 pytestmark = pytest.mark.no_database
@@ -69,76 +67,6 @@ def test_effective_runtime_exposes_symbol_geometry(
     assert not is_scalping_symbol(symbol, cfg)
   else:
     assert is_scalping_symbol(symbol, cfg)
-
-
-@pytest.mark.parametrize(
-  ("symbol", "entry"),
-  [("XAU", 4000.0), ("EURUSD", 1.08500), ("GBPJPY", 191.250)],
-)
-def test_target_selection_is_identical_in_pip_space(runtime_root, symbol, entry):
-  cfg = instrument_runtime_view(symbol, runtime_root)
-  pip_size = cfg.units.pip_size
-
-  selected = _select_target(
-    direction="BUY",
-    worst_fill=entry,
-    room_pips=30.0,
-    stop_pips=15.0,
-    min_net=15.0,
-    pip_size=pip_size,
-    symbol=symbol,
-    cfg=cfg,
-  )
-
-  assert selected is not None
-  target, target_pips = selected
-  assert target_pips == pytest.approx(30.0)
-  assert target == pytest.approx(entry + 30.0 * pip_size)
-
-
-@pytest.mark.parametrize(
-  ("symbol", "base"),
-  [("XAU", 4000.0), ("EURUSD", 1.08500), ("GBPJPY", 191.250)],
-)
-def test_microstructure_equal_levels_follow_symbol_precision(
-  runtime_root,
-  symbol,
-  base,
-):
-  cfg = instrument_runtime_view(symbol, runtime_root)
-  pip_size = cfg.units.pip_size
-  index = pd.date_range("2026-08-18", periods=5, freq="1min", tz="UTC")
-  frame = pd.DataFrame(
-    {
-      "open": [base] * 5,
-      "high": [
-        base + 1.0 * pip_size,
-        base + 5.0 * pip_size,
-        base + 2.0 * pip_size,
-        base + 5.3 * pip_size,
-        base + 1.0 * pip_size,
-      ],
-      "low": [
-        base - 1.0 * pip_size,
-        base - 0.5 * pip_size,
-        base - 2.0 * pip_size,
-        base - 0.5 * pip_size,
-        base - 1.0 * pip_size,
-      ],
-      "close": [base] * 5,
-    },
-    index=index,
-  )
-
-  micro = build_micro_structure(
-    frame,
-    swing_lookback=1,
-    equal_tol=0.5 * pip_size,
-    price_digits=cfg.units.price_digits,
-  )
-
-  assert len(micro.equal_highs) == 1
-  assert micro.equal_highs[0] == pytest.approx(base + 5.2 * pip_size)
 
 
 def test_eurusd_context_and_zone_ids_do_not_collapse_to_two_decimals():

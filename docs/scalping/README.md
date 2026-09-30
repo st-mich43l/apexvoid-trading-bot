@@ -1,3 +1,10 @@
+> **Removed 2026-09-30.** The scalping runtime, strategies, microstructure,
+> ranking, rollout, research and replay modules described in this directory were
+> deleted (Go is the sole automatic technical-analysis path, ADR-002). The
+> documents below are kept as history only; see git history before this date for
+> the code. Only `scalping.context/lifecycle/models/outcomes/risk/telemetry`
+> (outcome accounting and execution-policy inputs) remain.
+
 # M1 + M5 Scalping Engine
 
 Shadow/paper/live event-driven scalping on closed M1 bars with immutable M5

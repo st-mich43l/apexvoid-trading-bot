@@ -12,6 +12,8 @@ plan bytes exported below):
 
 from __future__ import annotations
 
+from app.autotrade.gate import AutoScalpDecision
+from app.autotrade.trend import RegimeInfo, TrendDecision
 import ast
 import json
 import os
@@ -30,7 +32,6 @@ from app.analysis_client.models import OpportunityTopic, parse_analysis_event
 from app.analysis.structural_reaction_support import structural_thesis_id
 from app.autotrade import go_opportunity_policy as pol
 from app.autotrade import killzone, worker
-from app.autotrade import zone_execution_cutover as cutover
 from app.autotrade.go_plan_cancel import request_plan_cancel
 from app.autotrade.multi_match import deserialize_matches, strategy_matches_key
 from app.autotrade.route_outcome import route_outcome_key
@@ -46,13 +47,35 @@ from app.autotrade.zone_watch import (
 from app.persistence import redis_state
 from tests.configuration.canonical_fixtures import install_runtime_overrides
 from tests.test_go_opportunity_policy import Harness, golden
-from tests.test_s14a_shadow_dry_run import live_inputs
 from tests.test_publish_trade_plan_v8 import (  # noqa: F401 - autouse fixtures
   _freeze_technique_killzone_hour,
+  _m1_trigger_bar,
   _no_news_by_default,
 )
 
 pytestmark = pytest.mark.real_redis
+
+def live_inputs(monkeypatch, *, bid=4354.1, ask=4354.3, news=None):
+  """The market inputs the live worker cycle would read, pinned like the repo's own worker tests."""
+  install_runtime_overrides(
+    monkeypatch, {"strategies.matching.multiple_matches_enabled": True},
+    legacy_overrides={
+      "auto_trade_enabled": True, "auto_trade_symbols": "XAU",
+      "auto_trade_strategy_match_enabled": True, "auto_trade_news_guard_minutes": 0,
+    },
+  )
+  frames = {"M1": _m1_trigger_bar()}
+  monkeypatch.setattr(worker, "event_in_window", AsyncMock(return_value=news))
+  monkeypatch.setattr(worker, "_load_frames", AsyncMock(return_value=frames))
+  monkeypatch.setattr(worker, "_load_spot", AsyncMock(return_value=worker.AutoTradeSpot(
+    price=(bid + ask) / 2, ts=int(time.time()), fresh=True, bid=bid, ask=ask)))
+  monkeypatch.setattr(worker, "evaluate_auto_scalp_gate", lambda *a, **k: AutoScalpDecision("waiting_for_box"))
+  monkeypatch.setattr(worker, "_resolve_worker_range", AsyncMock(return_value=(AutoScalpDecision("waiting_for_box"), None, {})))
+  monkeypatch.setattr(worker, "classify_regime", lambda *a, **k: RegimeInfo("trend", "down", 3, 1.0, True, None, ("shadow test",)))
+  monkeypatch.setattr(worker, "evaluate_trend_gate", lambda *a, **k: TrendDecision("no_setup"))
+  monkeypatch.setattr(worker, "_htf_zones", lambda *a, **k: [])
+  monkeypatch.setattr(worker, "_htf_levels", lambda *a, **k: [])
+
 
 STREAM = "execution:trade_plans"
 FIXTURE = Path(__file__).resolve().parents[2] / "contracts" / "autotrade" / "go-derived-plan-xau-supply.json"
@@ -454,35 +477,9 @@ async def test_go_match_still_publishes_next_to_a_stale_python_match_in_go_mode(
   assert await prod.get(route_outcome_key("XAU", stale.match_id)) is None
 
 
-@pytest.mark.asyncio
-async def test_retained_python_zone_watch_cannot_activate_in_go_mode(h, prod, monkeypatch):
-  """Historical ZoneWatch state cannot bypass the Go provenance boundary."""
-  await h._ensure()
-  # What install_zone_execution_cutover() binds at startup, without leaking the install.
-  monkeypatch.setattr(cutover, "_ORIGINAL_DIRECT_PUBLISH", worker.try_publish_executable_signal)
-  monkeypatch.setattr(cutover, "_ensure_published_root_card", AsyncMock())
-  retained = _stale_python_match()
-  now = int(time.time())
-  record, _created = await discover_zone_watch(
-    prod, zone_id="zone-retained", symbol="XAU", direction=retained.direction,
-    low=retained.entry_low, high=retained.entry_high, source_timeframe="M5",
-    structural_sources=("supply_demand",), confluence_tags=(), grade=GRADE_A, score=3.0,
-    structure_signature="zone-retained", confirmed_at=now,
-  )
-  # Discovery leaves a retained zone watching for its retest, as the cutover does.
-  record, _ = await transition_zone_watch(prod, "zone-retained", WATCHING_RETEST, reason_code="zone_discovered")
-  await prod.set("price:XAU:spot", json.dumps({"bid": 4354.1, "ask": 4354.3, "ts": now}))
-
-  activated = await cutover._activate_match(prod, record, retained, event_ts=str(now))
-
-  assert activated is None
-  assert await plans(prod) == []
-  assert (await load_zone_watch(prod, "zone-retained")).state == WATCHING_RETEST
-
-
 # ---- static guarantees --------------------------------------------------------------------------------------
 
-GO_PATH_FILES = ("go_opportunity_policy.py", "go_shadow_policy.py", "go_plan_cancel.py")
+GO_PATH_FILES = ("go_opportunity_policy.py", "go_plan_cancel.py")
 FORBIDDEN = re.compile(r"bypass_analysis_gates|manual_algo|manual_execution")
 
 
