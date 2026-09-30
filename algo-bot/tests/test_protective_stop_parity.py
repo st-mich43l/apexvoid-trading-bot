@@ -11,12 +11,9 @@ from decimal import Decimal
 import json
 from pathlib import Path
 
-import pandas as pd
 import pytest
 
-from app.analysis.types import Zone
 from app.autotrade.execution_policy import planned_execution_route
-from app.autotrade.worker import _opposing_zone_identity
 from app.autotrade.protective_stop import (
   OpposingZoneStopContext,
   ProtectiveStopError,
@@ -200,53 +197,3 @@ def test_zone_fingerprint_separates_identical_geometry_from_different_origins():
   assert first != later_bar
   assert first != other_detector
 
-
-def _zone_at(bottom: float, top: float, *, bar: str, source: str) -> Zone:
-  return Zone(
-    bottom=bottom,
-    top=top,
-    side="demand",
-    origin_index=7,
-    created_ts=pd.Timestamp(bar, tz="UTC"),
-    source=source,
-  )
-
-
-def test_two_zones_from_one_detector_get_distinct_identities():
-  first = _opposing_zone_identity(
-    _zone_at(3997.0, 3998.5, bar="2024-07-03T08:00:00", source="supply_demand"),
-    symbol="XAU",
-    timeframe="M15",
-  )
-  other_geometry = _opposing_zone_identity(
-    _zone_at(3990.0, 3992.0, bar="2024-07-03T08:00:00", source="supply_demand"),
-    symbol="XAU",
-    timeframe="M15",
-  )
-
-  # The detector name alone would collide here, which is exactly how a stop
-  # could be pushed beyond a zone the publisher never approved.
-  assert first != other_geometry
-
-
-def test_zone_identity_survives_a_zone_without_a_detector_label():
-  # A zone with no detector label still needs a usable identity, otherwise a
-  # pushed stop can never be validated against it.
-  identity = _opposing_zone_identity(
-    _zone_at(3997.0, 3998.5, bar="2024-07-03T08:00:00", source=""),
-    symbol="XAU",
-    timeframe="M15",
-  )
-
-  assert identity == "XAU|M15|demand|3997|3998.5|1719993600|demand"
-
-
-def test_stored_zone_id_is_preferred_over_a_derived_fingerprint():
-  zone = _zone_at(
-    3997.0, 3998.5, bar="2024-07-03T08:00:00", source="supply_demand",
-  )
-  object.__setattr__(zone, "zone_id", "supply:M15:persisted-1")
-
-  assert _opposing_zone_identity(
-    zone, symbol="XAU", timeframe="M15",
-  ) == "supply:M15:persisted-1"

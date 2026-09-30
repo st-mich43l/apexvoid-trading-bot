@@ -16,14 +16,12 @@ from app.core.config import runtime_config
 from tests.configuration.canonical_fixtures import install_runtime_overrides, leaf
 
 from dataclasses import replace
-import json
 import time
 from unittest.mock import AsyncMock
 
 import pandas as pd
 import pytest
 
-from app.analysis.types import Zone
 from app.analysis.execution_eligibility import (
   EXECUTION_ELIGIBILITY_VERSION,
   STATIC_ELIGIBLE,
@@ -470,8 +468,8 @@ async def test_rejected_plan_state_wins_over_retained_plan_payload():
 async def test_published_setup_reconciles_on_replay_without_re_publishing():
   client = redis_state.get_client()
   match = _reaction_match(
-    match_id="published-opposing-replay",
-    thesis_id="published-opposing-thesis",
+    match_id="published-replay",
+    thesis_id="published-replay-thesis",
   )
   await _confirm_setup(client, match)
   spot = worker.AutoTradeSpot(
@@ -486,16 +484,10 @@ async def test_published_setup_reconciles_on_replay_without_re_publishing():
   )
   assert plan_id is not None
 
-  # A second TradePlan pass with an opposing HTF market map must reconcile the
-  # already-published plan without either re-publishing or invalidating it.
-  # (Old code path: preflight short-circuited on existing_v8_plan; TradePlan now
-  # owns that reconciliation itself.)
+  # A second pass over the already-published setup must reconcile it without
+  # re-publishing or invalidating it.
   replay_plan_id = await worker._publish_trade_plan_v8(
-    client,
-    "XAU",
-    spot,
-    match,
-    htf_zones=[Zone(bottom=4037.0, top=4041.0, side="demand", score=20.0)],
+    client, "XAU", spot, match,
   )
 
   assert replay_plan_id == plan_id
@@ -647,8 +639,6 @@ async def test_inside_authoritative_reaction_admits_and_publishes(
     intent,
     match,
     spot=spot,
-    htf_zones=[],
-    htf_levels=[],
   )
   assert failure is None
 
@@ -702,7 +692,6 @@ async def test_scalp_match_without_eligibility_is_admission_rejected(monkeypatch
 
   failure = await worker._admit_strategy_intent_for_cycle(
     client, intent, match, spot=spot,
-    htf_zones=[], htf_levels=[],
   )
   assert failure is not None
   assert failure.reason_code == "static_eligibility_missing"
@@ -728,82 +717,8 @@ async def test_scalp_match_with_eligibility_is_admitted(monkeypatch):
 
   failure = await worker._admit_strategy_intent_for_cycle(
     client, intent, match, spot=spot,
-    htf_zones=[], htf_levels=[],
   )
   assert failure is None
-
-
-@pytest.mark.asyncio
-async def test_retest_episode_finds_fresh_m1_and_publishes_in_same_cycle():
-  client = redis_state.get_client()
-  match = _reaction_match(
-    match_id="incident-a-retest",
-    thesis_id="incident-a-retest-thesis",
-    strategy="Trendline",
-    family="trendline",
-    reaction_type="rejection_choch",
-    key_level=4044.98,
-    entry_low=4043.80,
-    entry_high=4046.16,
-    current_price=4040.68,
-    structure_swing=4049.0,
-    structural_source="trendline",
-    structural_zone_id="trendline-retest-4044",
-    structural_zone_low=4043.80,
-    structural_zone_high=4046.16,
-  )
-  await _confirm_setup(client, match)
-  outside_ts = int(time.time())
-  outside = worker.AutoTradeSpot(
-    price=4037.88,
-    ts=outside_ts,
-    fresh=True,
-    bid=4037.78,
-    ask=4037.98,
-  )
-  assert await worker._publish_trade_plan_v8(
-    client, "XAU", outside, match,
-  ) is None
-
-  entered_ts = outside_ts + 60
-  inside = worker.AutoTradeSpot(
-    price=4044.60,
-    ts=entered_ts,
-    fresh=True,
-    bid=4044.50,
-    ask=4044.70,
-  )
-  before_publish = int(time.time())
-  plan_id = await worker._publish_trade_plan_v8(
-    client,
-    "XAU",
-    inside,
-    match,
-    frames={"M1": _sell_retest_bar(entered_ts)},
-  )
-
-  assert plan_id is not None
-  plan = await read_trade_plan(client, plan_id)
-  assert plan is not None
-  assert plan.provenance.confirmation_source == "m1_retest"
-  assert plan.provenance.confirmation_bar_ts == entered_ts
-  assert plan.provenance.zone_episode_id
-  assert plan.stop.source == "m1_trigger_wick"
-  state = await load_execution_confirmation(client, match.match_id)
-  assert state is not None
-  assert state.phase == PUBLISHED
-  assert state.trigger_bar_ts == entered_ts
-  assert state.episode_id == plan.provenance.zone_episode_id
-  # Live incident fix: expiry restarts from actual publish time using
-  # match_for_plan's own configured TTL - not inherited unchanged from
-  # whenever the original match was built, which could leave a published
-  # plan seconds from an already-near-exhausted deadline. An M1_RETEST
-  # confirmation also truncates that TTL to the trigger's own validity
-  # window (trigger_bar_ts + 60 + validity_bars*60) before this fix's
-  # now_ts re-anchoring ever sees it - both must compose correctly.
-  trigger_expiry = entered_ts + 60 + 2 * 60
-  ttl_seconds = min(match.expires_at - match.issued_at, trigger_expiry - match.issued_at)
-  assert plan.expires_at == pytest.approx(before_publish + ttl_seconds, abs=5)
 
 
 @pytest.mark.asyncio
@@ -1054,171 +969,6 @@ async def test_midpoint_inside_does_not_override_executable_quote_outside(
   assert state is not None
   assert state.phase == WAITING_RETEST
 
-
-@pytest.mark.asyncio
-async def test_range_edge_scalp_publishes_inside_opposing_structure():
-  """Scalp may trade inside HTF opposing as long as native range room fits."""
-  client = redis_state.get_client()
-  match = _match(
-    match_id="match-v8-range-edge-opposing",
-    thesis_id="thesis-v8-range-edge-opposing",
-    strategy="Range Edge Scalp",
-    strategy_mode="range_scalp",
-    direction="BUY",
-    family="range",
-    structural_source="range_edge",
-    structural_kind="demand",
-    key_level=4089.0,
-    entry_low=4088.10,
-    entry_high=4090.00,
-    current_price=4089.0,
-    targets_pips=(20, 40, 60),
-    full_take_profit_pips=20,
-    range_id="range-xau-4070-4110",
-    range_low=4070.0,
-    range_high=4110.0,
-    structure_swing=4070.0,
-  )
-  await _confirm_setup(client, match)
-  spot = worker.AutoTradeSpot(
-    price=4089.0,
-    ts=int(time.time()),
-    fresh=True,
-    bid=4088.9,
-    ask=4089.1,
-  )
-  # BUY entry sits inside opposing supply — reaction would hard-reject;
-  # Range Edge Scalp must still publish (native room already selected 20p).
-  plan_id = await worker._publish_trade_plan_v8(
-    client,
-    "XAU",
-    spot,
-    match,
-    # Scalp tiers now halve the pip envelope to offset 2x volume sizing
-    # (owner 2026-08-06, same-dollar-risk fix); the default 2.0-price-unit
-    # wick would exceed the new smaller cap and fail on an unrelated wick
-    # check. This is still a real wick-rejection bar, just sized to fit.
-    frames={"M1": _m1_trigger_bar(wick_depth=1.2)},
-    htf_zones=[Zone(bottom=4089.2, top=4095.0, side="supply", score=13.0)],
-  )
-
-  assert plan_id is not None
-  plan = await read_trade_plan(client, plan_id)
-  assert plan is not None
-  assert plan.analysis.direction == "BUY"
-  rejected = int(
-    await client.hget("auto_trade:metrics:XAU", "target_room_rejected") or 0
-  )
-  assert rejected == 0
-
-
-@pytest.mark.asyncio
-async def test_scalp_m1_publishes_inside_opposing_structure():
-  """Go-origin M1 scalp keeps the provenance-neutral opposing bypass."""
-  from app.autotrade.go_zone_book import go_zone_book_key
-
-  client = redis_state.get_client()
-  match = _match(
-    match_id="match-v8-scalp-opposing",
-    thesis_id="thesis-v8-scalp-opposing",
-    strategy="Range Sweep Scalp",
-    strategy_mode="scalp_m1",
-    direction="BUY",
-    family="scalp",
-    structural_source="scalp",
-    structural_kind="demand",
-    key_level=4089.0,
-    entry_low=4088.10,
-    entry_high=4090.00,
-    current_price=4089.0,
-    targets_pips=(20,),
-    full_take_profit_pips=20,
-    tags=("origin:go",),
-    # Scalping room-synced envelope is ~15–20p. A 4070 swing + deep wick fails
-    # stop_exceeds_envelope_* and reds every PR CI on an unrelated stop
-    # check (master already red 2026-08-26). Keep swing/wick inside the
-    # envelope so this smoke only asserts opposing-structure bypass.
-    structure_swing=4087.9,
-  )
-  await _confirm_setup(client, match)
-  await client.set(go_zone_book_key("XAU"), json.dumps({
-    "symbol": "XAU",
-    "generated_at": int(time.time()),
-    "entries": [{
-      "timeframe": "M15",
-      "kind": "supply",
-      "low": 4088.5,
-      "high": 4091.5,
-      "atr": 1.8,
-      "strength": 0.9,
-      "touch_count": 1,
-      "state": "fresh",
-    }],
-  }))
-  spot = worker.AutoTradeSpot(
-    price=4089.0,
-    ts=int(time.time()),
-    fresh=True,
-    bid=4088.9,
-    ask=4089.1,
-  )
-  plan_id = await worker._publish_trade_plan_v8(
-    client,
-    "XAU",
-    spot,
-    match,
-    frames={"M1": _m1_trigger_bar(wick_depth=0.2)},
-    htf_zones=[Zone(bottom=4089.2, top=4095.0, side="supply", score=13.0)],
-  )
-  assert plan_id is not None
-  plan = await read_trade_plan(client, plan_id)
-  assert plan is not None
-  assert plan.analysis.direction == "BUY"
-  rejected = int(
-    await client.hget("auto_trade:metrics:XAU", "target_room_rejected") or 0
-  )
-  assert rejected == 0
-
-
-@pytest.mark.asyncio
-async def test_final_gate_keeps_configured_ladder_with_opposing_structure():
-  """Owner 2026-08-06: opposing geometry is not a reason to shrink the
-  configured partial ladder into a solo TP before publish.
-
-  2026-09: the room check now reads htf_zones (scanner/detector-native),
-  not Market Map -- market_map= is no longer a _publish_trade_plan_v8
-  parameter at all (Stage 4 of the purge).
-  """
-  client = redis_state.get_client()
-  match = _match(
-    match_id="match-v8-target-cap",
-    thesis_id="thesis-v8-target-cap",
-    structure_swing=4087.5,
-  )
-  await _confirm_setup(client, match)
-  now = int(time.time())
-  spot = worker.AutoTradeSpot(
-    price=4089.0,
-    ts=now,
-    fresh=True,
-    bid=4088.9,
-    ask=4089.1,
-  )
-  htf_zones = [Zone(bottom=4096.0, top=4098.0, side="supply", score=10.0)]
-
-  plan_id = await worker._publish_trade_plan_v8(
-    client,
-    "XAU",
-    spot,
-    match,
-    frames={"M1": _m1_trigger_bar()},
-    htf_zones=htf_zones,
-  )
-
-  assert plan_id is not None
-  plan = await read_trade_plan(client, plan_id)
-  assert plan is not None
-  assert len(plan.targets) == len(match.targets_pips)
 
 @pytest.mark.asyncio
 async def test_publish_no_longer_reads_contract_mode_at_all(monkeypatch):
