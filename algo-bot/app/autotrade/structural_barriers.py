@@ -225,6 +225,21 @@ def _resolve_cross_side_overlaps(
   return [barrier for index, barrier in enumerate(barriers) if index not in drop]
 
 
+def canonicalize_structural_barriers(
+  barriers: Sequence[StructuralBarrier],
+) -> tuple[StructuralBarrier, ...]:
+  """Apply the canonical same-side merge and cross-side reconciliation.
+
+  The Go zone-book adapter starts from already-detected structural facts,
+  so it does not need ``build_structural_barrier_book``'s Python zone
+  discovery or confluence pass. It does still need these two normalization
+  steps; exposing them here prevents the Redis consumer from growing a
+  second, subtly different implementation.
+  """
+  merged = _merge_same_side(list(barriers))
+  return tuple(_resolve_cross_side_overlaps(merged))
+
+
 def _confluence_candidates(
   per_tf: Mapping[str, Any],
   *,
