@@ -709,6 +709,49 @@ def primary_tp_pips_from_match(match: Any) -> float | None:
   return value if math.isfinite(value) and value > 0 else None
 
 
+def stop_bounds_from_go_envelope(
+  match: Any,
+  *,
+  for_group_stop: bool = False,
+  fixed_rr: bool = False,
+) -> tuple[int, int, dict[str, Any]] | None:
+  """Phase 4: read Go's own stop-distance envelope instead of deriving one.
+
+  Mirrors stop_bounds_for_reaction_room's own for_group_stop/fixed_rr
+  minimum-pinning rule exactly, but every number it pins between (floor,
+  cap, desired minimum) comes from analysis-engine's computeStopEnvelope
+  — the SAME execution.reaction/range/trend/scalping config, computed
+  engine-side from this candidate's own target geometry, not re-derived
+  from a Python taxonomy lookup. Returns None when the match carries no
+  go_stop_envelope_* facts (a non-Go source, or Go has not attached one
+  yet) — the caller falls back to stop_bounds_for_reaction_room.
+
+  A multi-leg group stop or a fixed-R:R instrument pins to the floor
+  exactly like the legacy function does, for the same reason: Go's
+  desired_minimum_pips is a single-leg recommendation, deliberately
+  computed without execution-time context (leg count, instrument
+  targeting mode) it does not carry — see StopEnvelope's own doc comment.
+  """
+  floor_pips = getattr(match, "go_stop_envelope_floor_pips", None)
+  cap_pips = getattr(match, "go_stop_envelope_cap_pips", None)
+  desired_pips = getattr(match, "go_stop_envelope_desired_minimum_pips", None)
+  source = getattr(match, "go_stop_envelope_source", None)
+  if floor_pips is None or cap_pips is None or desired_pips is None or source is None:
+    return None
+  minimum = int(round(floor_pips)) if (for_group_stop or fixed_rr) else int(round(min(desired_pips, cap_pips)))
+  maximum = int(round(cap_pips))
+  measured: dict[str, Any] = {
+    "stop_bounds_source": f"go_{source}",
+    "primary_tp_pips": None,
+    "desired_stop_pips": round(desired_pips, 3),
+    "stop_bounds_for_group_stop": for_group_stop,
+    "fixed_rr_targeting": fixed_rr,
+    "go_stop_envelope_floor_pips": floor_pips,
+    "go_stop_envelope_cap_pips": cap_pips,
+  }
+  return minimum, maximum, measured
+
+
 def stop_bounds_for_reaction_room(
   *,
   strategy: str,

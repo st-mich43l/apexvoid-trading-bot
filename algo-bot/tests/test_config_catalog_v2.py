@@ -99,13 +99,19 @@ BASELINE = {
   # 2026-09-29 Phase 2 (Go arbitration decision): +1 new leaf field
   # (analysis.technical_authority.arbitration_mode), ConfigOwner.PYTHON,
   # real canonical_env, not deprecated-alias'd.
-  "entries": 692,
-  "configurable": 585,
+  # 2026-09-30 Phase 3 (Go thesis correlation): +1 new leaf field
+  # (analysis.technical_authority.thesis_correlation_mode),
+  # ConfigOwner.PYTHON, real canonical_env, not deprecated-alias'd.
+  # 2026-09-30 Phase 4 (Go stop envelope): +1 new leaf field
+  # (analysis.technical_authority.stop_envelope_mode), ConfigOwner.PYTHON,
+  # real canonical_env, not deprecated-alias'd.
+  "entries": 694,
+  "configurable": 587,
   "protocol": 10,
   "algorithm": 97,
-  "owners": {"python": 542, "shared": 100, "ctrader": 50},
-  "projection": 642,
-  "env": 574,
+  "owners": {"python": 544, "shared": 100, "ctrader": 50},
+  "projection": 644,
+  "env": 576,
   "deprecated_aliases": 21,
 }
 

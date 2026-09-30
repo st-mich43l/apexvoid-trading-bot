@@ -42,6 +42,12 @@ func TestSupply_PublishesDistinctCausallyConfirmedReaction(t *testing.T) {
 		confirmed.Reaction.ReactionType != "rejection" {
 		t.Fatalf("confirmation must have a separate causal identity: %+v", confirmed)
 	}
+	// Distinct opportunity IDs (a resting observation vs. its later
+	// confirmed reaction), but the SAME real-world zone: a thesis
+	// correlator must see these as one structural object, not two.
+	if confirmed.StructuralID != found[0].StructuralID || confirmed.StructuralID != "zone1" {
+		t.Fatalf("resting and confirmed observations of the same zone must share StructuralID, got resting=%q confirmed=%q", found[0].StructuralID, confirmed.StructuralID)
+	}
 	if err := confirmed.Validate(); err != nil {
 		t.Fatalf("confirmed technical opportunity failed validation: %v", err)
 	}

@@ -11,6 +11,8 @@ def test_technical_authority_defaults_to_live_go_with_consumer_on():
     "max_event_age_seconds": 900, "max_delivery_lag_seconds": 300,
     "go_origin_risk_leg_enabled": False,
     "arbitration_mode": "python_legacy",
+    "thesis_correlation_mode": "python_legacy",
+    "stop_envelope_mode": "python_legacy",
   }
 
 
@@ -56,3 +58,36 @@ def test_live_freshness_limits_must_be_positive(field, value):
 def test_live_freshness_limits_are_configurable_and_default_conservatively():
   config = AnalysisTechnicalAuthorityConfig(max_event_age_seconds=300, max_delivery_lag_seconds=60)
   assert (config.max_event_age_seconds, config.max_delivery_lag_seconds) == (300, 60)
+
+
+def test_thesis_correlation_mode_defaults_to_python_legacy():
+  # Phase 3 rollout flag: must default to today's exact behavior
+  # (multi_match's own ATR-bucket heuristic) until a deliberate cutover.
+  assert AnalysisTechnicalAuthorityConfig().thesis_correlation_mode == "python_legacy"
+
+
+@pytest.mark.parametrize("values", [{"thesis_correlation_mode": "shadow"}, {"thesis_correlation_mode": "nope"}])
+def test_thesis_correlation_mode_rejects_unknown_values(values):
+  with pytest.raises(ValidationError):
+    AnalysisTechnicalAuthorityConfig(**values)
+
+
+def test_thesis_correlation_mode_accepts_go():
+  assert AnalysisTechnicalAuthorityConfig(thesis_correlation_mode="go").thesis_correlation_mode == "go"
+
+
+def test_stop_envelope_mode_defaults_to_python_legacy():
+  # Phase 4 rollout flag: must default to today's exact behavior
+  # (protective_stop's own per-strategy-family lookup) until a deliberate
+  # cutover.
+  assert AnalysisTechnicalAuthorityConfig().stop_envelope_mode == "python_legacy"
+
+
+@pytest.mark.parametrize("values", [{"stop_envelope_mode": "shadow"}, {"stop_envelope_mode": "nope"}])
+def test_stop_envelope_mode_rejects_unknown_values(values):
+  with pytest.raises(ValidationError):
+    AnalysisTechnicalAuthorityConfig(**values)
+
+
+def test_stop_envelope_mode_accepts_go():
+  assert AnalysisTechnicalAuthorityConfig(stop_envelope_mode="go").stop_envelope_mode == "go"

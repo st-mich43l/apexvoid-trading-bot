@@ -55,6 +55,29 @@ class Quality(FrozenConfigModel):
   components: dict[str, FiniteFloat] = Field(default_factory=dict)
 
 
+class StopEnvelope(FrozenConfigModel):
+  """Engine-owned stop-distance risk policy (Phase 4).
+
+  desired_minimum_pips is a single-leg recommendation, not a final
+  decision — see contracts/analysis/opportunity-v1.schema.json's own doc
+  comment on this block for why a multi-leg group stop or a fixed-R:R
+  instrument should use floor_pips as its minimum instead.
+  """
+
+  floor_pips: FiniteFloat = Field(gt=0)
+  cap_pips: FiniteFloat = Field(gt=0)
+  desired_minimum_pips: FiniteFloat = Field(gt=0)
+  source: str = Field(min_length=1)
+
+  @model_validator(mode="after")
+  def validate_bounds(self):
+    if self.cap_pips < self.floor_pips:
+      raise ValueError("stop_envelope.cap_pips must be >= floor_pips")
+    if self.desired_minimum_pips < self.floor_pips:
+      raise ValueError("stop_envelope.desired_minimum_pips must be >= floor_pips")
+    return self
+
+
 class AlgorithmVersion(FrozenConfigModel):
   structure: str = Field(min_length=1)
   liquidity: str = Field(min_length=1)
@@ -122,6 +145,7 @@ class AnalysisOpportunity(FrozenConfigModel):
   created_at: int = Field(ge=0)
   expires_at: int = Field(ge=0)
   technical_context: TechnicalContext | None = None
+  stop_envelope: StopEnvelope | None = None
 
   @model_validator(mode="after")
   def validate_trade_geometry(self):
@@ -177,6 +201,12 @@ class AnalysisOpportunityArbitration(FrozenConfigModel):
   status: str
   reason_code: str
   conflicting_with: list[str] = Field(default_factory=list)
+  # Cross-strategy thesis correlation (Phase 3): present only when this
+  # opportunity shares its real-world structural identity with at least
+  # one other live candidate. See go_opportunity_policy's own handling for
+  # how this replaces the Python-side ATR-bucket heuristic.
+  thesis_id: str | None = None
+  merged_with: list[str] = Field(default_factory=list)
   decided_at: int = Field(ge=0)
 
   @model_validator(mode="after")

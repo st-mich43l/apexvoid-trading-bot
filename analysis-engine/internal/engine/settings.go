@@ -28,9 +28,17 @@ type Settings struct {
 	Session          session.Config
 	Fib              fib.Config
 	Arbitration      arbitration.Config
+	StopEnvelope     StopEnvelopeConfig
 	Strategies       []strategy.Config
 	HistoryDepths    map[market.Timeframe]int
 	PrimaryTimeframe market.Timeframe
+
+	// Geometry is left zero-value by LoadSettings (LoadSettings is symbol-
+	// agnostic) — callers that need per-candidate stop-envelope pip
+	// conversion (SymbolWorker) set it once per symbol, right after
+	// LoadSettings returns, via config.Document.GeometryFor(symbol). Tests
+	// that never populate a StopEnvelope may safely leave it zero.
+	Geometry market.Geometry
 
 	// ConfigVersion/ConfigFingerprint are the resolved document's own
 	// whole-document provenance (ConfigProvenanceFromConfig — the SAME
@@ -94,6 +102,10 @@ func LoadSettings(doc *config.Document, primary market.Timeframe, allowReplaceFo
 	if err != nil {
 		return Settings{}, err
 	}
+	stopEnvelopeConfig, err := StopEnvelopeConfigFromConfig(doc)
+	if err != nil {
+		return Settings{}, err
+	}
 	strategyConfigs, err := StrategyConfigsFromConfig(doc)
 	if err != nil {
 		return Settings{}, err
@@ -109,7 +121,7 @@ func LoadSettings(doc *config.Document, primary market.Timeframe, allowReplaceFo
 	return Settings{
 		ATR: atr, Structure: structureSettings, Liquidity: liquidityConfig, Zone: zoneConfig,
 		Trendline: trendlineConfig, KeyLevel: keyLevelConfig, Session: sessionConfig, Fib: fibConfig,
-		Arbitration: arbitrationConfig, Strategies: strategyConfigs,
+		Arbitration: arbitrationConfig, StopEnvelope: stopEnvelopeConfig, Strategies: strategyConfigs,
 		HistoryDepths: depths, PrimaryTimeframe: primary,
 		AllowReplaceForming: allowReplaceForming,
 		ConfigVersion:       configProvenance.Version,

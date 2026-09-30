@@ -138,6 +138,22 @@
           }
         }
       }
+    },
+    "stop_envelope": {
+      "type": "object",
+      "description": "Additive Phase 4 field: engine-owned stop-distance risk policy for this candidate's own strategy family and target geometry (internal/engine's computeStopEnvelope, mirroring algo-bot's stop_bounds_for_reaction_room). Optional: absent means the consumer falls back to its own legacy per-strategy-family envelope lookup. desired_minimum_pips is a single-leg recommendation, not a final decision — a multi-leg group stop or a fixed-R:R instrument should use floor_pips as its minimum instead; that choice needs execution-time context (leg count, instrument targeting mode) this block deliberately does not carry.",
+      "additionalProperties": false,
+      "required": ["floor_pips", "cap_pips", "desired_minimum_pips", "source"],
+      "properties": {
+        "floor_pips": { "type": "number", "exclusiveMinimum": 0 },
+        "cap_pips": { "type": "number", "exclusiveMinimum": 0 },
+        "desired_minimum_pips": { "type": "number", "exclusiveMinimum": 0 },
+        "source": {
+          "type": "string",
+          "enum": ["reaction_room", "scalp_room", "scalp_stop_envelope", "strategy_default"],
+          "description": "Which family rule produced floor_pips/cap_pips — algo-bot's own stop_bounds_source telemetry values."
+        }
+      }
     }
   }
 }

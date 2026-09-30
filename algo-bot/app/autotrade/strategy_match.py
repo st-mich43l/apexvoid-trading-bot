@@ -211,6 +211,24 @@ class StrategyMatch:
   # on_arbitration_decision for how this is kept current.
   arbitration_status: str | None = None
   arbitration_reason_code: str | None = None
+  # Go's cross-strategy thesis correlation (Phase 3) — additive/optional,
+  # distinct from the existing ``thesis_id`` field above (Python's own
+  # ATR-bucket heuristic; still the fallback until
+  # analysis.technical_authority.thesis_correlation_mode is flipped to
+  # "go" — see that config field's own doc comment). ``go_thesis_id`` is
+  # the representative match_id of whichever group member ranks best;
+  # every member of the group carries the same value.
+  go_thesis_id: str | None = None
+  go_merged_with: tuple[str, ...] = ()
+  # Go's engine-owned stop-distance risk policy (Phase 4) — additive/
+  # optional, read by protective_stop.stop_bounds_from_go_envelope in
+  # place of stop_bounds_for_reaction_room's own per-strategy-family
+  # config lookup once analysis.technical_authority.stop_envelope_mode is
+  # "go". See analysis_client.models.StopEnvelope's own doc comment.
+  go_stop_envelope_floor_pips: float | None = None
+  go_stop_envelope_cap_pips: float | None = None
+  go_stop_envelope_desired_minimum_pips: float | None = None
+  go_stop_envelope_source: str | None = None
 
   @property
   def is_range_edge(self) -> bool:
@@ -716,6 +734,29 @@ class StrategyMatch:
           None if payload.get("arbitration_reason_code") is None
           else str(payload["arbitration_reason_code"])
         ),
+        go_thesis_id=(
+          None if payload.get("go_thesis_id") is None
+          else str(payload["go_thesis_id"])
+        ),
+        go_merged_with=tuple(
+          str(item) for item in payload.get("go_merged_with", [])
+        ),
+        go_stop_envelope_floor_pips=(
+          None if payload.get("go_stop_envelope_floor_pips") is None
+          else float(payload["go_stop_envelope_floor_pips"])
+        ),
+        go_stop_envelope_cap_pips=(
+          None if payload.get("go_stop_envelope_cap_pips") is None
+          else float(payload["go_stop_envelope_cap_pips"])
+        ),
+        go_stop_envelope_desired_minimum_pips=(
+          None if payload.get("go_stop_envelope_desired_minimum_pips") is None
+          else float(payload["go_stop_envelope_desired_minimum_pips"])
+        ),
+        go_stop_envelope_source=(
+          None if payload.get("go_stop_envelope_source") is None
+          else str(payload["go_stop_envelope_source"])
+        ),
       )
     except (KeyError, TypeError, ValueError, json.JSONDecodeError):
       return None
@@ -875,6 +916,14 @@ def _valid_match(match: StrategyMatch) -> bool:
     and (
       match.arbitration_status is None
       or match.arbitration_status in {"winner", "suppressed", "conflict_held", "uncontested"}
+    )
+    and (
+      match.go_stop_envelope_floor_pips is None
+      or (
+        match.go_stop_envelope_floor_pips > 0
+        and (match.go_stop_envelope_cap_pips or 0) >= match.go_stop_envelope_floor_pips
+        and (match.go_stop_envelope_desired_minimum_pips or 0) >= match.go_stop_envelope_floor_pips
+      )
     )
     and valid_range
     and identity_ok

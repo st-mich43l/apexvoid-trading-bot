@@ -216,6 +216,7 @@ func (w *SymbolWorker) ApplyWithResult(event marketdata.BarEvent) (AnalysisSnaps
 		}
 		candidate.ObservedTimeframe = event.Timeframe
 		candidate.Technical = w.technicalContext(event, candidate.Reaction)
+		candidate.StopEnvelope = computeStopEnvelope(candidate, w.settings.Geometry, w.settings.StopEnvelope)
 		observed, obsErr := w.state.Opportunities.Observe(candidate, event.Candle.Time)
 		if obsErr != nil {
 			doneOpp()
@@ -362,11 +363,21 @@ func (w *SymbolWorker) arbitrate(now int64, publish bool) {
 // decisionEqual compares two arbitration.Decision values field-by-field —
 // Decision is not `==`-comparable (ConflictingWith is a slice).
 func decisionEqual(a, b arbitration.Decision) bool {
-	if a.Status != b.Status || a.ReasonCode != b.ReasonCode || len(a.ConflictingWith) != len(b.ConflictingWith) {
+	if a.Status != b.Status || a.ReasonCode != b.ReasonCode || a.ThesisID != b.ThesisID {
 		return false
 	}
-	for i := range a.ConflictingWith {
-		if a.ConflictingWith[i] != b.ConflictingWith[i] {
+	if !stringSlicesEqual(a.ConflictingWith, b.ConflictingWith) || !stringSlicesEqual(a.MergedWith, b.MergedWith) {
+		return false
+	}
+	return true
+}
+
+func stringSlicesEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
 			return false
 		}
 	}

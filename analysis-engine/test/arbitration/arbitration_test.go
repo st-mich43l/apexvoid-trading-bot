@@ -21,6 +21,11 @@ func candidate(id string, direction market.Direction, quality float64) opportuni
 	}
 }
 
+func withStructuralID(c opportunity.Candidate, structuralID string) opportunity.Candidate {
+	c.StructuralID = structuralID
+	return c
+}
+
 func decisionFor(decisions []arbitration.Decision, id string) arbitration.Decision {
 	for _, d := range decisions {
 		if d.CandidateID == id {
@@ -154,5 +159,105 @@ func TestArbitrate_ManyCandidatesGridlockOnNearTieMatchesProductionShape(t *test
 		if d.Status != arbitration.StatusConflictHeld {
 			t.Fatalf("expected the whole gridlocked set held, got %s for %s", d.Status, d.CandidateID)
 		}
+	}
+}
+
+func TestArbitrate_SameThesisCandidatesShareOneOutcome(t *testing.T) {
+	// Two observations of the SAME real-world zone (e.g. supply's resting
+	// vs. confirmed reaction) - different strategy-assigned IDs, same
+	// Direction + StructuralID. Must never compete against each other, and
+	// must share the group's outcome.
+	resting := withStructuralID(candidate("resting", market.Buy, 0.60), "zone-42")
+	confirmed := withStructuralID(candidate("confirmed", market.Buy, 0.90), "zone-42")
+	rival := withStructuralID(candidate("rival", market.Sell, 0.20), "zone-99")
+
+	decisions := arbitration.Arbitrate(
+		[]opportunity.Candidate{resting, confirmed, rival},
+		arbitration.Config{ConflictMarginQuality: 0.15},
+	)
+
+	restingD, confirmedD, rivalD := decisionFor(decisions, "resting"), decisionFor(decisions, "confirmed"), decisionFor(decisions, "rival")
+	if restingD.Status != arbitration.StatusWinner || confirmedD.Status != arbitration.StatusWinner {
+		t.Fatalf("expected both same-thesis observations to win together, got resting=%s confirmed=%s", restingD.Status, confirmedD.Status)
+	}
+	if rivalD.Status != arbitration.StatusSuppressed {
+		t.Fatalf("expected the weaker rival thesis suppressed, got %s", rivalD.Status)
+	}
+	// The representative is whichever ranks best within the group
+	// (highest quality, i.e. "confirmed" at 0.90) - both members point to
+	// it as ThesisID and name each other in MergedWith.
+	if restingD.ThesisID != "confirmed" || confirmedD.ThesisID != "confirmed" {
+		t.Fatalf("expected both to share ThesisID=confirmed, got resting=%q confirmed=%q", restingD.ThesisID, confirmedD.ThesisID)
+	}
+	if len(restingD.MergedWith) != 1 || restingD.MergedWith[0] != "confirmed" {
+		t.Fatalf("expected resting.MergedWith=[confirmed], got %v", restingD.MergedWith)
+	}
+	if len(confirmedD.MergedWith) != 1 || confirmedD.MergedWith[0] != "resting" {
+		t.Fatalf("expected confirmed.MergedWith=[resting], got %v", confirmedD.MergedWith)
+	}
+	if rivalD.ThesisID != "" || rivalD.MergedWith != nil {
+		t.Fatalf("expected the unrelated rival to have no thesis correlation, got ThesisID=%q MergedWith=%v", rivalD.ThesisID, rivalD.MergedWith)
+	}
+}
+
+func TestArbitrate_SameThesisDuplicatesDoNotInflateRankingAgainstARival(t *testing.T) {
+	// Three observations of the SAME zone, each individually weaker than a
+	// single opposing rival - if thesis grouping did not happen before
+	// ranking, three same-direction entries might look like a "crowd"
+	// argument for that direction. It must not: it is one thesis, still
+	// weaker than the rival, so the rival must win outright, not hold.
+	a := withStructuralID(candidate("a", market.Buy, 0.50), "zone-1")
+	b := withStructuralID(candidate("b", market.Buy, 0.52), "zone-1")
+	c := withStructuralID(candidate("c", market.Buy, 0.48), "zone-1")
+	rival := withStructuralID(candidate("rival", market.Sell, 0.90), "zone-2")
+
+	decisions := arbitration.Arbitrate(
+		[]opportunity.Candidate{a, b, c, rival},
+		arbitration.Config{ConflictMarginQuality: 0.15},
+	)
+
+	if decisionFor(decisions, "rival").Status != arbitration.StatusWinner {
+		t.Fatalf("expected the decisively stronger rival thesis to win outright")
+	}
+	for _, id := range []string{"a", "b", "c"} {
+		if decisionFor(decisions, id).Status != arbitration.StatusSuppressed {
+			t.Fatalf("expected %s suppressed as part of the losing thesis", id)
+		}
+		if decisionFor(decisions, id).ThesisID != "b" { // b has the highest quality (0.52) among a/b/c
+			t.Fatalf("expected %s to point at the group's representative b, got %q", id, decisionFor(decisions, id).ThesisID)
+		}
+	}
+}
+
+func TestArbitrate_DifferentDirectionsWithTheSameStructuralIDDoNotMerge(t *testing.T) {
+	// Same StructuralID but opposite Direction cannot be the same trade
+	// thesis by construction (thesisKey includes Direction).
+	buy := withStructuralID(candidate("buy", market.Buy, 0.80), "zone-7")
+	sell := withStructuralID(candidate("sell", market.Sell, 0.10), "zone-7")
+
+	decisions := arbitration.Arbitrate(
+		[]opportunity.Candidate{buy, sell},
+		arbitration.Config{ConflictMarginQuality: 0.15},
+	)
+
+	if decisionFor(decisions, "buy").ThesisID != "" || decisionFor(decisions, "sell").ThesisID != "" {
+		t.Fatalf("opposite-direction candidates must never share a ThesisID even with the same StructuralID")
+	}
+	if decisionFor(decisions, "buy").Status != arbitration.StatusWinner {
+		t.Fatalf("expected the decisively stronger side to win")
+	}
+}
+
+func TestArbitrate_EmptyStructuralIDNeverMerges(t *testing.T) {
+	// Two candidates with no StructuralID at all (a strategy with no
+	// persistent identity to offer) must never be treated as the same
+	// thesis just because both happen to be empty strings.
+	a := candidate("a", market.Buy, 0.50)
+	b := candidate("b", market.Buy, 0.50)
+
+	decisions := arbitration.Arbitrate([]opportunity.Candidate{a, b}, arbitration.Config{ConflictMarginQuality: 0.15})
+
+	if decisionFor(decisions, "a").ThesisID != "" || decisionFor(decisions, "b").ThesisID != "" {
+		t.Fatalf("expected no thesis correlation when StructuralID is empty")
 	}
 }

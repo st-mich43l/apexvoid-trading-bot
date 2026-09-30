@@ -180,8 +180,9 @@ func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate 
 
 		candidate := opportunity.Candidate{
 			ID: id, Strategy: ID, StrategyVersion: Version, Symbol: ctx.Symbol,
-			Direction: direction,
-			Entry:     opportunity.EntryZone{Low: entryLow, High: entryHigh},
+			Direction:    direction,
+			StructuralID: z.ID,
+			Entry:        opportunity.EntryZone{Low: entryLow, High: entryHigh},
 			Invalidation: market.PriceLevel{
 				Price: market.Price(invalidationPrice), Label: "flip_zone_invalidated",
 			},

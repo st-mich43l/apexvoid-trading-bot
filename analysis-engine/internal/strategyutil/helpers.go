@@ -134,6 +134,12 @@ func Candidate(spec CandidateSpec) (opportunity.Candidate, error) {
 	candidate := opportunity.Candidate{
 		ID: id, Strategy: opportunity.StrategyID(spec.ID), StrategyVersion: spec.Version,
 		Symbol: spec.Symbol, Direction: spec.Direction,
+		// SetupKey is already this strategy's own persistent identity for
+		// the underlying technical object (a zone/pool/anchor ID, or a
+		// stable formation timestamp) — the same value DeterministicID
+		// hashes into ID. Retained here in recoverable form; see
+		// Candidate.StructuralID's own doc comment.
+		StructuralID: spec.SetupKey,
 		Entry:        opportunity.EntryZone{Low: spec.EntryLow, High: spec.EntryHigh},
 		Invalidation: market.PriceLevel{Price: market.Price(spec.Invalidation), Label: spec.InvalidationLabel},
 		Targets:      []opportunity.Target{{Price: market.PriceLevel{Price: market.Price(spec.Target), Label: spec.TargetLabel}}},

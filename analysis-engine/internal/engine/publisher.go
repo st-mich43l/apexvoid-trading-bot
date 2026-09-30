@@ -379,7 +379,9 @@ func (p *OpportunityPublisher) publishOne(ctx context.Context, job publishJob) e
 		payload := kafka.ArbitrationDecisionPayload{
 			OpportunityID: a.OpportunityID, Symbol: string(job.Symbol),
 			Status: string(a.Decision.Status), ReasonCode: a.Decision.ReasonCode,
-			ConflictingWith: a.Decision.ConflictingWith, DecidedAt: a.DecidedAt,
+			ConflictingWith: a.Decision.ConflictingWith,
+			ThesisID:        a.Decision.ThesisID, MergedWith: a.Decision.MergedWith,
+			DecidedAt: a.DecidedAt,
 		}
 		return p.client.PublishArbitrationDecision(ctx, job.EventID, correlationID, "", job.Symbol, payload, time.Unix(a.DecidedAt, 0))
 	}

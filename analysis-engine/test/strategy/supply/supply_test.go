@@ -76,6 +76,9 @@ func TestSupply_ValidZoneProducesASellCandidate(t *testing.T) {
 	if float64(c.Invalidation.Price) <= 2022 {
 		t.Errorf("expected invalidation beyond the zone's high, got %v", c.Invalidation.Price)
 	}
+	if c.StructuralID != "z1" {
+		t.Errorf("expected StructuralID to be the zone's own ID, got %q", c.StructuralID)
+	}
 	if err := c.Validate(); err != nil {
 		t.Errorf("expected a fully valid Candidate, got: %v", err)
 	}
