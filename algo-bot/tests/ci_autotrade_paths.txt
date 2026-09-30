@@ -72,3 +72,4 @@ tests/test_s14d_executor_events_delivery.py
 tests/test_s14e_ladder_spec.py
 tests/test_s14e_go_precision_and_card.py
 tests/test_xau_ladder.py
+tests/test_arbitration_executable_intents.py
