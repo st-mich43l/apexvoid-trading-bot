@@ -150,6 +150,11 @@ func run(configPath string) error {
 			if pubErr := runtime.PublishZoneBook(ctx, event.Symbol, snapshot.Zones, time.Now().UTC()); pubErr != nil {
 				log.Warn("zone book publish failed", "symbol", event.Symbol, "error", pubErr)
 			}
+			// Algo Bot executes only opportunities the engine still holds
+			// live; see internal/transport/redis/liveopportunities.go.
+			if pubErr := runtime.PublishLiveOpportunities(ctx, event.Symbol, snapshot.Opportunities, time.Now().UTC()); pubErr != nil {
+				log.Warn("live opportunities publish failed", "symbol", event.Symbol, "error", pubErr)
+			}
 		}
 		return result, err
 	}, redisHealth, redistransport.NewMetrics())

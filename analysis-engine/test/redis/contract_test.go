@@ -13,6 +13,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/barrier"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/marketdata"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
 	redistransport "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/transport/redis"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/zone"
 )
@@ -253,6 +254,70 @@ func TestPublishZoneBook_RealRedisRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	if doc.Symbol != "XAU" || len(doc.Entries) != 1 || doc.Entries[0].Kind != "supply" {
+		t.Fatalf("unexpected round-tripped document: %+v", doc)
+	}
+	ttl, err := client.TTL(ctx, key).Result()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ttl <= 0 || ttl > 20*time.Minute {
+		t.Errorf("expected a positive TTL of at most 20m, got %v", ttl)
+	}
+}
+
+func TestLiveOpportunitiesKeyIsUppercaseAndNamespaced(t *testing.T) {
+	if got, want := redistransport.LiveOpportunitiesKey("xau"), "analysis:live_opportunities:XAU"; got != want {
+		t.Fatalf("LiveOpportunitiesKey(%q) = %q, want %q", "xau", got, want)
+	}
+}
+
+func TestBuildLiveOpportunities_SortsIDsAndNeverReturnsNil(t *testing.T) {
+	doc := redistransport.BuildLiveOpportunities("XAU", []opportunity.Candidate{{ID: "opp_b"}, {ID: "opp_a"}, {ID: ""}}, 1700000100)
+	if doc.Symbol != "XAU" || doc.GeneratedAt != 1700000100 {
+		t.Fatalf("unexpected header: %+v", doc)
+	}
+	if len(doc.IDs) != 2 || doc.IDs[0] != "opp_a" || doc.IDs[1] != "opp_b" {
+		t.Fatalf("expected sorted non-empty IDs, got %v", doc.IDs)
+	}
+	empty := redistransport.BuildLiveOpportunities("XAU", nil, 1)
+	if empty.IDs == nil || len(empty.IDs) != 0 {
+		t.Fatalf("an empty live set must serialise as [] not null, got %#v", empty.IDs)
+	}
+	raw, _ := json.Marshal(empty)
+	if !strings.Contains(string(raw), `"ids":[]`) {
+		t.Fatalf("expected ids:[] in %s", raw)
+	}
+}
+
+func TestPublishLiveOpportunities_RealRedisRoundTrip(t *testing.T) {
+	client := zoneBookTestClient(t)
+	runtime, err := redistransport.NewRuntimeWithClient(
+		client,
+		redistransport.Config{URL: "redis://127.0.0.1:0/0", BarsChannel: "bars:new", ReconciliationInterval: time.Second},
+		[]redistransport.Series{{Symbol: "XAU", Timeframe: market.M5, Depth: 10}},
+		func(context.Context, marketdata.BarEvent) (marketdata.AppendResult, error) {
+			return marketdata.AppendAccepted, nil
+		},
+		nil, nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	key := redistransport.LiveOpportunitiesKey("XAU")
+	t.Cleanup(func() { _ = client.Del(ctx, key).Err() })
+	if err := runtime.PublishLiveOpportunities(ctx, "XAU", []opportunity.Candidate{{ID: "opp_1"}}, time.Unix(1700000100, 0)); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := client.Get(ctx, key).Result()
+	if err != nil {
+		t.Fatalf("expected the live set to be readable back from Redis: %v", err)
+	}
+	var doc redistransport.LiveOpportunitiesDTO
+	if err := json.Unmarshal([]byte(raw), &doc); err != nil {
+		t.Fatal(err)
+	}
+	if doc.Symbol != "XAU" || len(doc.IDs) != 1 || doc.IDs[0] != "opp_1" {
 		t.Fatalf("unexpected round-tripped document: %+v", doc)
 	}
 	ttl, err := client.TTL(ctx, key).Result()
