@@ -1,16 +1,18 @@
 # Analysis Engine V2 — Migration Tracking
 
 Tracks, capability by capability, where each piece of market-intelligence
-logic now lives: the legacy Python path (still production), the V2 Go
-owner built this task, whether V2 is an exact-parity port or a deliberate
-redesign (source task §3), whether V2 is live yet, and whether the
-Python path can be removed.
+logic lives: the remaining Python implementation, the Go Analysis Engine
+owner, whether the behavior is parity or a redesign, and whether the live
+automatic opportunity path uses it.
 
-**Nothing in this table has been cut over.** Python remains the sole
-production path for every capability below. V2 Go runs only via
-`cmd/replay` (research/shadow use) — it is not wired into live trade-plan
-generation. See [`architecture/analysis-engine.md`](architecture/analysis-engine.md)
-and [ADR-004](adr/) for the transport/cutover gating this depends on.
+**Current production boundary:** the Go Analysis Engine owns automatic
+opportunity detection, lifecycle, zones, invalidation, arbitration, thesis
+correlation, quality and stop-envelope facts. Algo Bot remains the execution
+policy owner: it applies freshness, broker/account, exposure and submission
+checks to Go's published opportunity. Manual Algo and display-only market
+maps remain Python-owned. The Python detector modules listed below are not a
+second live automatic source; they remain only where an execution or
+presentation consumer still imports them.
 
 | Capability | Legacy Python path | V2 Go owner | Parity or redesign? | Live status | Python removal status |
 |---|---|---|---|---|---|
@@ -33,9 +35,9 @@ and [ADR-004](adr/) for the transport/cutover gating this depends on.
 | Key level clustering + role | `app/analysis/levels.py`, `app/analysis/key_level_role.py` | `internal/keylevel` (`Cluster`, `Update`, `Role`) | **Exact parity** on clustering/round-levels/wick-touch re-enrichment/dedupe and role classification, with one documented ATR simplification (one canonical scalar ATR throughout, not Python's median-for-clustering vs. per-swing-for-round-levels split) | Shadow only | Not removable |
 | Session/PDH-PDL/PWH-PWL levels, sweep detection, active session | `app/analysis/session_liquidity.py` (`session_levels`, `previous_week_levels`; no active-session classifier) | `internal/session` (`Update`, `State`, `Book`) | **Exact parity** on levels/sweep (same window/rollover/week-start rules, same cross-window sweep scan), plus **new**: the active-session (Asia/London/NY) classifier has no Python equivalent — added to finally populate `context.SessionContext`, previously an honest empty placeholder | Shadow only | Not removable |
 | Fibonacci ladder, premium/discount dealing range | `app/analysis/fibonacci.py`, `app/analysis/dealing_range.py` | `internal/fib` (`Ladder`, `NearestLevel`, `Resolve`, `Update`) | **Exact parity** — same retracement/extension ratios, same bracketing/opposing swing-pair search, same premium/discount + fine fib-zone thresholds | Shadow only | Not removable |
-| Technical opportunity lifecycle | Legacy candidate/delivery state mixes technical setup validity with execution policy | `internal/opportunity` (`DeterministicID`, `Book`) | **Explicit redesign** — one per-symbol runtime book owns Created → Active → Invalidated/Expired transitions, deduplicates semantic IDs, and permits only strategy-owned technical terminal reasons; it has no account, broker, or Kafka dependency | Phase S8 wired it into the live per-symbol engine loop; real candidates now flow through it against real data (see next two rows) | Legacy authority remains until strategy cutover |
+| Technical opportunity lifecycle | Legacy candidate/delivery state mixes technical setup validity with execution policy | `internal/opportunity` (`DeterministicID`, `Book`) | **Explicit redesign** — one per-symbol runtime book owns Created → Active → Invalidated/Expired transitions, deduplicates semantic IDs, and permits only strategy-owned technical terminal reasons; it has no account, broker, or Kafka dependency | **Production live** through the Go Kafka lifecycle; Algo Bot consumes only Go-origin opportunities | Python lifecycle helpers remain only for execution/presentation consumers and can be retired after import inventory is clean |
 | Strategy registry / evaluator | Legacy Python family registries and broad scanner passes | `internal/strategy` (`Config`, `Registry`, `Evaluate`) | **Explicit redesign** — the complete semantic V2 catalog is configuration-declared; only enabled concrete implementations instantiate; closed-bar evaluation runs only strategies that require that timeframe and defers until all declared timeframe context exists | Phase S6 done; Phase S8 wired `Registry.Evaluate` into `SymbolWorker.ApplyWithResult` via a new `internal/engine/strategies.go` composition root (the one place a strategy subpackage may be imported, per the architecture rank rule) | Legacy authority remains until strategy cutover |
-| Strategy registry (19 entries; 18 independent theses) | Various legacy detector functions in `detectors.py` | `internal/strategy/*` (one package per registry entry) | **Explicit redesign** — each independent strategy is a Go package with its own `Evaluate`, configuration parsing/validation, specification under `docs/analysis/strategies/`, and deterministic qualifying/rejection/lifecycle coverage. `confluence_zone` is the one approved compositional exception: it consumes canonical facts and never invokes another strategy. | All 19 registry entries have concrete factories, construct from production configuration, and are enabled for the production shadow run. Phase S9 publishes eligible lifecycle transitions; Phase S10 can render each first-observed setup for review. | Shadow only: no Algo Bot Kafka consumer exists, so Go opportunities cannot generate trades. Python remains the live technical authority until the cutover gate is satisfied. |
+| Strategy registry (19 entries; 18 independent theses) | Various legacy detector functions in `detectors.py` | `internal/strategy/*` (one package per registry entry) | **Explicit redesign** — each independent strategy is a Go package with its own `Evaluate`, configuration parsing/validation, specification under `docs/analysis/strategies/`, and deterministic qualifying/rejection/lifecycle coverage. `confluence_zone` is the one approved compositional exception: it consumes canonical facts and never invokes another strategy. | **Production live**: all 19 registry entries have concrete factories, are enabled in the resolved Go configuration, and publish eligible lifecycle transitions consumed by Algo Bot | Legacy detector definitions remain for import cleanup and manual/display consumers; they must not be reintroduced into automatic publication |
 | Opportunity Kafka publication | Legacy has no equivalent event stream — trade-plan generation reads Python's own in-process state directly | `internal/engine/publisher.go` (`OpportunityPublisher`), `internal/transport/kafka` (`Producer.PublishOpportunity`/`PublishOpportunityInvalidated`, already built and real-broker-tested in the earlier Kafka transport task) | **New** — Phase S9 (source task §81-84). `SymbolWorker.observeTransition` enqueues every `ShouldPublish()` transition (Created/Invalidated/Expired); a single background goroutine per `Engine` (`OpportunityPublisher.Run`) drains that queue and calls the real Producer, off the ingestion hot path — `cmd/analysis-engine/main.go`'s own stated invariant ("a Kafka outage never becomes a candle-ingestion outage") would otherwise be violated by a synchronous publish inside `SymbolWorker`'s own mutex | Wired in `cmd/analysis-engine/main.go`; proven against a fake `OpportunityKafkaClient` (6 new tests: delivery, both/either payload shape, non-publishable transitions filtered, order preservation, retry-until-success, and the typed-nil-producer trap this wiring itself first hit) — **not** re-verified against a real broker in this session (no broker available in this sandbox); the underlying `Producer.PublishOpportunity`/`PublishOpportunityInvalidated` methods themselves were already real-broker-tested in the earlier Kafka transport task | N/A |
 | Engine ↔ strategy wiring | N/A (no equivalent — the legacy scanner calls detector functions directly, no registry indirection) | `internal/engine/strategies.go` (composition root), `SymbolWorker.ApplyWithResult` (evaluation + lifecycle observation) | **New** — Phase S8. After every closed-bar context rebuild, `Registry.Evaluate` runs against the just-closed timeframe's dependent strategies; every returned `Candidate` is fed through `state.Opportunities.Observe`, then `Expire` applies each strategy's own technical deadline. Two real telemetry phases (`PhaseStrategy`, `PhaseOpportunity`) and five lifecycle-transition counters were added, all a documented amendment to the originally-frozen telemetry list | Working, verified against real data | N/A |
 | Per-symbol event dispatch / worker | `app/analysis/worker.py` (one large sequential pass per symbol per bar, not clearly dependency-scoped) | `internal/engine/worker.go` (`SymbolWorker`), `engine.go` (`Engine`) | **Explicit redesign** — one mutex-guarded worker per symbol, concurrent across symbols, dependency-aware (an M1 close cannot trigger H1 recompute by construction, proven in `test/engine/worker_test.go`) | Shadow only (`cmd/replay` drives it directly; no live feed wired) | Not removable |
@@ -68,11 +70,11 @@ and [ADR-004](adr/) for the transport/cutover gating this depends on.
   `internal/session` as Phase S4's first domain.
   `context.SessionContext` carries the real `session.State` for the
   primary timeframe rather than the prior empty placeholder.
-- **Per-strategy packages**: all 19 registered strategies are now implemented
-  and enabled in the Analysis Engine's production shadow catalogue. This is
-  technical opportunity production only; it does not grant the Go engine an
-  execution path. S12 adds the receiving boundary in Algo Bot, initially
-  disabled and shadow-only.
+- **Per-strategy packages**: all 19 registered strategies are implemented,
+  enabled in the resolved Analysis Engine configuration, and are the live
+  automatic opportunity source. The Go engine still does not own account
+  sizing, exposure policy, broker submission, or Telegram delivery; those
+  remain Algo Bot/executor responsibilities.
 - **Strategy-level config provenance**: each S7 strategy still hardcodes
   its own known-compatible algorithm versions (`structure=v2`,
   `liquidity=v1`, `zone=v1`) and computes its own narrow

@@ -2,8 +2,8 @@
 
 > Generated from the canonical configuration catalog (`app.configuration.environment_contract`). Do not edit manually.
 
-- Contract fingerprint: `bec01459a04ea8c7b6b931d0edf79ee90ab6d15a2f846eefb1a11e60973557d6`
-- Environment-bound fields: `571`
+- Contract fingerprint: `15bf89aec2a266196a4a733a11f2a915bffaf0ada3d7ed5a62eaf2727dca09bf`
+- Environment-bound fields: `576`
 - Deprecated aliases: `21`
 
 Secret values are never emitted; secret defaults render as `<redacted>`.
@@ -12,6 +12,9 @@ Secret values are never emitted; secret defaults render as `<redacted>`.
 |---|---|---|---|---|---|---|
 | `ALERT_OVERLAP_SUPPRESS` | `analysis.measurements.alert_overlap_suppress` | `float` | no | no | — | `0.5` |
 | `ALLOW_COUNTER_TREND` | `strategies.counter_trend.allow_counter_trend` | `bool` | no | no | — | `True` |
+| `ANALYSIS_ARBITRATION_MODE` | `analysis.technical_authority.arbitration_mode` | `str` | no | no | — | `go` |
+| `ANALYSIS_STOP_ENVELOPE_MODE` | `analysis.technical_authority.stop_envelope_mode` | `str` | no | no | — | `go` |
+| `ANALYSIS_THESIS_CORRELATION_MODE` | `analysis.technical_authority.thesis_correlation_mode` | `str` | no | no | — | `go` |
 | `ANALYSIS_ZONES_VERSION` | `analysis.zones.version` | `str` | no | no | — | `v1` |
 | `ANALYSIS_ZONE_RELEVANCE_IMMEDIATE_ATR` | `analysis.zone_relevance.immediate_atr` | `float` | no | no | — | `0.25` |
 | `ANALYSIS_ZONE_RELEVANCE_NEARBY_ATR` | `analysis.zone_relevance.nearby_atr` | `float` | no | no | — | `1.25` |
@@ -487,6 +490,7 @@ Secret values are never emitted; secret defaults render as `<redacted>`.
 | `SCANNER_ALERT_TTL` | `market_data.scanner.alert_ttl` | `int` | no | no | — | `7200` |
 | `SCANNER_CARD_TOP_N` | `delivery.scanner_cards.maximum_cards` | `int` | no | no | — | `2` |
 | `SCANNER_CONFLICT_MARGIN` | `actionability.scanner_gates.conflict_margin` | `float` | no | no | — | `1.0` |
+| `SCANNER_CONFLICT_MARGIN_QUALITY` | `actionability.scanner_gates.conflict_margin_quality` | `float` | no | no | — | `0.15` |
 | `SCANNER_CONFLICT_OVERLAP` | `analysis.measurements.scanner_conflict_overlap` | `float` | no | no | — | `0.5` |
 | `SCANNER_CONFLUENCE_FLOOR` | `market_data.scanner.confluence_floor` | `int` | no | no | — | `2` |
 | `SCANNER_ENABLED` | `runtime.scanner.enabled` | `bool` | no | no | — | `False` |
@@ -500,6 +504,7 @@ Secret values are never emitted; secret defaults render as `<redacted>`.
 | `SCANNER_SYMBOLS` | `market_data.scanner.symbols` | `str` | no | no | — | `XAU` |
 | `SCANNER_TELEGRAM_BOT_TOKEN` | `delivery.telegram.scanner_telegram_bot_token` | `Optional[str]` | yes | no | — | `<redacted>` |
 | `SCANNER_TOP_N` | `delivery.scanner_cards.top_n` | `int` | no | no | — | `3` |
+| `SCANNER_USE_QUALITY_RANKING` | `actionability.scanner_gates.use_quality_ranking` | `bool` | no | no | — | `True` |
 | `SCANNER_WINDOW` | `market_data.scanner.window` | `int` | no | no | — | `500` |
 | `SCANNER_ZONE_WIDTH_GATE_ENABLED` | `actionability.scanner_gates.zone_width_gate_enabled` | `bool` | no | no | — | `False` |
 | `SEQ_RESET_TZ` | `delivery.presentation.seq_reset_tz` | `str` | no | no | — | `Asia/Ho_Chi_Minh` |

@@ -40,6 +40,8 @@ actionability:
     veto_enabled: true
   scanner_gates:
     actionability_gate_enabled: false
+    conflict_margin_quality: 0.15
+    use_quality_ranking: true
     zone_width_gate_enabled: false
   structural_guard:
     guard_mode: observe
@@ -60,6 +62,9 @@ analysis:
     consumer_group: apexvoid-algo-bot-analysis-opportunity-v1
     max_event_age_seconds: 900
     max_delivery_lag_seconds: 300
+    arbitration_mode: go
+    thesis_correlation_mode: go
+    stop_envelope_mode: go
   trendlines:
     # V2 keeps A/B anchors immutable, requires a later causal validation, and
     # turns this band into an interaction watch rather than an automatic fill.

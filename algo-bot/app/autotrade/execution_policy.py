@@ -1132,6 +1132,20 @@ def evaluate_execution_policy(
     else 0.0
   )
   raw_risk_multiplier = getattr(match, "risk_multiplier", 1.0)
+  if raw_risk_multiplier is not None:
+    try:
+      raw_risk_value = float(raw_risk_multiplier)
+    except (TypeError, ValueError):
+      raw_risk_value = float("nan")
+    if not math.isfinite(raw_risk_value) or raw_risk_value <= 0:
+      return ExecutionPolicyEvaluation(
+        False,
+        "invalid_risk_multiplier",
+        "match risk multiplier must be within (0, max]",
+        True,
+        {"stamped_risk_multiplier": raw_risk_multiplier},
+        policy,
+      )
   # Never trust a stale Redis/zone-watch stamp for volume. Live Trend Pullback
   # Tier B kept booking risk_multiplier=0.5 after the helper returned 1.0
   # because analysis:zone_watch_candidate still held the pre-fix field.

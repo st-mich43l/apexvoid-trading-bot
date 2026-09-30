@@ -26,6 +26,7 @@ from tests.test_s14d_go_full_chain import (  # noqa: F401 - fixtures + helpers
   _freeze_technique_killzone_hour,
   _no_news_by_default,
   consumer_for,
+  arbitration_record,
   cycle,
   h,
   live_inputs,
@@ -81,7 +82,9 @@ async def deliver_and_publish(h, prod, monkeypatch):
   now = int(h.clock.now)
   raw = rebased(now)
   record = SimpleNamespace(topic=OpportunityTopic, partition=0, offset=1, timestamp=(now - 5) * 1000, value=json.dumps(raw).encode())
-  await consumer_for(h).process_record(record)
+  consumer = consumer_for(h)
+  await consumer.process_record(record)
+  await consumer.process_record(arbitration_record(now, raw["payload"]["id"]))
   await cycle(prod, n=2)
   return raw["payload"], deserialize_matches(await prod.get(strategy_matches_key("XAU")))[0]
 

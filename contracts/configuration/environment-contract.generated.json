@@ -1,7 +1,7 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "bec01459a04ea8c7b6b931d0edf79ee90ab6d15a2f846eefb1a11e60973557d6",
-  "count": 571,
+  "configuration_contract_fingerprint_sha256": "15bf89aec2a266196a4a733a11f2a915bffaf0ada3d7ed5a62eaf2727dca09bf",
+  "count": 576,
   "deprecated_alias_count": 21,
   "entries": [
     {
@@ -35,6 +35,54 @@
       "shared_with_ctrader": false,
       "type": "bool",
       "unit": "boolean"
+    },
+    {
+      "canonical_env": "ANALYSIS_ARBITRATION_MODE",
+      "default": "go",
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Go analysis-engine owns cross-strategy arbitration. Algo Bot only applies execution-time admission and risk policy; it must not re-rank Go opportunities.",
+      "display_id": "config:analysis.technical_authority.arbitration_mode",
+      "owner": "python",
+      "path": "analysis.technical_authority.arbitration_mode",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "str",
+      "unit": "enum"
+    },
+    {
+      "canonical_env": "ANALYSIS_STOP_ENVELOPE_MODE",
+      "default": "go",
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Go analysis-engine owns the stop-distance envelope. Algo Bot consumes the published bounds and applies execution safety checks without rebuilding technical stop geometry.",
+      "display_id": "config:analysis.technical_authority.stop_envelope_mode",
+      "owner": "python",
+      "path": "analysis.technical_authority.stop_envelope_mode",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "str",
+      "unit": "enum"
+    },
+    {
+      "canonical_env": "ANALYSIS_THESIS_CORRELATION_MODE",
+      "default": "go",
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Go analysis-engine owns cross-strategy thesis identity. Algo Bot consumes go_thesis_id and must not infer structural correlation with its local ATR heuristic for Go opportunities.",
+      "display_id": "config:analysis.technical_authority.thesis_correlation_mode",
+      "owner": "python",
+      "path": "analysis.technical_authority.thesis_correlation_mode",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "str",
+      "unit": "enum"
     },
     {
       "canonical_env": "ANALYSIS_ZONES_VERSION",
@@ -7681,6 +7729,22 @@
       "unit": "score"
     },
     {
+      "canonical_env": "SCANNER_CONFLICT_MARGIN_QUALITY",
+      "default": 0.15,
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Decisiveness margin on Go quality_overall [0,1] scale, used only when use_quality_ranking is on; not interchangeable with conflict_margin (confluence-integer scale).",
+      "display_id": "config:actionability.scanner_gates.conflict_margin_quality",
+      "owner": "python",
+      "path": "actionability.scanner_gates.conflict_margin_quality",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "float",
+      "unit": "score"
+    },
+    {
       "canonical_env": "SCANNER_CONFLICT_OVERLAP",
       "default": 0.5,
       "deprecated": true,
@@ -7887,6 +7951,22 @@
       "shared_with_ctrader": false,
       "type": "int",
       "unit": "count"
+    },
+    {
+      "canonical_env": "SCANNER_USE_QUALITY_RANKING",
+      "default": true,
+      "deprecated": false,
+      "deprecated_aliases": [],
+      "description": "Compatibility setting for non-AE callers only. Live Go opportunities carry their own quality and arbitration decision; the Python worker must not re-rank them.",
+      "display_id": "config:actionability.scanner_gates.use_quality_ranking",
+      "owner": "python",
+      "path": "actionability.scanner_gates.use_quality_ranking",
+      "replacement_path": null,
+      "required": false,
+      "secret": false,
+      "shared_with_ctrader": false,
+      "type": "bool",
+      "unit": "boolean"
     },
     {
       "canonical_env": "SCANNER_WINDOW",
@@ -9194,6 +9274,6 @@
   ],
   "secret_count": 9,
   "shared_with_ctrader_count": 87,
-  "source_fingerprint_sha256": "bec01459a04ea8c7b6b931d0edf79ee90ab6d15a2f846eefb1a11e60973557d6",
+  "source_fingerprint_sha256": "15bf89aec2a266196a4a733a11f2a915bffaf0ada3d7ed5a62eaf2727dca09bf",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

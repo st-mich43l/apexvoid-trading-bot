@@ -41,7 +41,13 @@ def _cfg(*, auto_trade=True, mode="go", consumer=True, kafka=True, brokers=("kaf
         mode=mode,
         consumer_enabled=consumer,
         consumer_group="apexvoid-algo-bot-analysis-opportunity-v1",
+        arbitration_mode="go",
+        thesis_correlation_mode="go",
+        stop_envelope_mode="go",
       ),
+    ),
+    actionability=SimpleNamespace(
+      scanner_gates=SimpleNamespace(use_quality_ranking=True),
     ),
     transport=SimpleNamespace(kafka=SimpleNamespace(enabled=kafka, brokers=list(brokers))),
   )
@@ -49,6 +55,24 @@ def _cfg(*, auto_trade=True, mode="go", consumer=True, kafka=True, brokers=("kaf
 
 def test_go_mode_with_consumer_and_kafka_passes():
   require_live_go_consumer(_cfg())
+
+
+@pytest.mark.parametrize(
+  "field",
+  ["arbitration_mode", "thesis_correlation_mode", "stop_envelope_mode"],
+)
+def test_go_mode_rejects_python_technical_fallbacks(field):
+  config = _cfg()
+  setattr(config.analysis.technical_authority, field, "python_legacy")
+  with pytest.raises(RuntimeError, match="AE ownership"):
+    require_live_go_consumer(config)
+
+
+def test_go_mode_rejects_legacy_quality_ranking():
+  config = _cfg()
+  config.actionability.scanner_gates.use_quality_ranking = False
+  with pytest.raises(RuntimeError, match="use_quality_ranking=true"):
+    require_live_go_consumer(config)
 
 
 @pytest.mark.parametrize(

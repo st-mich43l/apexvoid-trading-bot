@@ -28,6 +28,26 @@ def require_live_go_consumer(runtime_config: Any) -> None:
       f"consumer_enabled={analysis_config.consumer_enabled!r}). "
       "Python scanners must not be used as a fallback."
     )
+  missing_go_ownership = [
+    name for name in (
+      "arbitration_mode",
+      "thesis_correlation_mode",
+      "stop_envelope_mode",
+    )
+    if getattr(analysis_config, name, "go") != "go"
+  ]
+  if missing_go_ownership:
+    raise RuntimeError(
+      "Live Go analysis requires AE ownership of "
+      + ", ".join(missing_go_ownership)
+      + "; Python technical fallbacks are not permitted."
+    )
+  scanner_gates = runtime_config.actionability.scanner_gates
+  if not getattr(scanner_gates, "use_quality_ranking", True):
+    raise RuntimeError(
+      "Live Go analysis requires scanner_gates.use_quality_ranking=true; "
+      "Python evidence-count ranking is not permitted."
+    )
   kafka = runtime_config.transport.kafka
   if (
     not kafka.enabled

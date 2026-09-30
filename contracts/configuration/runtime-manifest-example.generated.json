@@ -133,8 +133,8 @@
     "zone_reconcile_mode": "shadow",
     "zone_scale_undersized_policy": "single_entry"
   },
-  "contract_fingerprint": "bec01459a04ea8c7b6b931d0edf79ee90ab6d15a2f846eefb1a11e60973557d6",
-  "effective_configuration_fingerprint": "44d7c0674cd90a55cf140398c40916e388bd6c117867ea56db2dac98fbbb77d7",
+  "contract_fingerprint": "15bf89aec2a266196a4a733a11f2a915bffaf0ada3d7ed5a62eaf2727dca09bf",
+  "effective_configuration_fingerprint": "528802eb3207c43750ed61f099e7205fae5c42cba54ce8b128436674c5f245fa",
   "feed": {
     "backfill_bars": 2000,
     "bar_quality_lookback": 6,
@@ -259,6 +259,8 @@
         "scanner_gates": {
           "actionability_gate_enabled": false,
           "conflict_margin": "1",
+          "conflict_margin_quality": "0.15",
+          "use_quality_ranking": true,
           "zone_width_gate_enabled": false
         },
         "structural_anchor": {
@@ -487,8 +489,8 @@
           "max_entry_drift_atr": "1",
           "min_entry_drift_pips": "10",
           "min_rr": "2",
-          "min_target_pips": 20,
-          "room_stop_floor_pips": 10,
+          "min_target_pips": 24,
+          "room_stop_floor_pips": 12,
           "tp_buffer_pips": "3"
         },
         "reaction": {
@@ -498,8 +500,8 @@
           "scale_fraction": "0.2",
           "scale_invalid_policy": "single_market",
           "scale_step_atr": "0.1",
-          "stop_max_pips": 18,
-          "stop_min_pips": 10
+          "stop_max_pips": 20,
+          "stop_min_pips": 12
         },
         "reaction_risk_leg": {
           "enabled": true
@@ -513,7 +515,7 @@
         "scaling": {
           "add": {
             "level_buffer_atr": "1",
-            "min_stop_pips": 10,
+            "min_stop_pips": 12,
             "pullback_enabled": false,
             "pullback_max_retrace": "0.7",
             "pullback_min_retrace": "0.2",
@@ -524,12 +526,12 @@
         "stops": {
           "be_buffer_ticks": 6,
           "reaction": {
-            "room_floor_pips": 10
+            "room_floor_pips": 12
           },
-          "sl_distance": "0.0018",
+          "sl_distance": "0.002",
           "stop_push_beyond_zone": true,
           "trend": {
-            "minimum_pips": 10
+            "minimum_pips": 12
           },
           "wick_stop_buffer_atr": "0.15"
         },
@@ -565,7 +567,7 @@
           "hard_entry_drift_pips": "30",
           "max_entry_drift_atr": "1.5",
           "min_entry_drift_pips": "15",
-          "stop_max_pips": 18
+          "stop_max_pips": 20
         },
         "zone_scaling": {
           "fill_enabled": true,
@@ -1273,6 +1275,8 @@
         "scanner_gates": {
           "actionability_gate_enabled": false,
           "conflict_margin": "1",
+          "conflict_margin_quality": "0.15",
+          "use_quality_ranking": true,
           "zone_width_gate_enabled": false
         },
         "structural_anchor": {
@@ -1501,8 +1505,8 @@
           "max_entry_drift_atr": "1",
           "min_entry_drift_pips": "10",
           "min_rr": "2",
-          "min_target_pips": 30,
-          "room_stop_floor_pips": 15,
+          "min_target_pips": 44,
+          "room_stop_floor_pips": 22,
           "tp_buffer_pips": "3"
         },
         "reaction": {
@@ -1512,8 +1516,8 @@
           "scale_fraction": "0.2",
           "scale_invalid_policy": "single_market",
           "scale_step_atr": "0.1",
-          "stop_max_pips": 30,
-          "stop_min_pips": 15
+          "stop_max_pips": 35,
+          "stop_min_pips": 22
         },
         "reaction_risk_leg": {
           "enabled": true
@@ -1527,7 +1531,7 @@
         "scaling": {
           "add": {
             "level_buffer_atr": "1",
-            "min_stop_pips": 15,
+            "min_stop_pips": 22,
             "pullback_enabled": false,
             "pullback_max_retrace": "0.7",
             "pullback_min_retrace": "0.2",
@@ -1538,12 +1542,12 @@
         "stops": {
           "be_buffer_ticks": 6,
           "reaction": {
-            "room_floor_pips": 15
+            "room_floor_pips": 22
           },
-          "sl_distance": "0.3",
+          "sl_distance": "0.35",
           "stop_push_beyond_zone": true,
           "trend": {
-            "minimum_pips": 15
+            "minimum_pips": 22
           },
           "wick_stop_buffer_atr": "0.15"
         },
@@ -1579,7 +1583,7 @@
           "hard_entry_drift_pips": "30",
           "max_entry_drift_atr": "1.5",
           "min_entry_drift_pips": "15",
-          "stop_max_pips": 30
+          "stop_max_pips": 35
         },
         "zone_scaling": {
           "fill_enabled": true,
@@ -2311,6 +2315,8 @@
         "scanner_gates": {
           "actionability_gate_enabled": false,
           "conflict_margin": "1",
+          "conflict_margin_quality": "0.15",
+          "use_quality_ranking": true,
           "zone_width_gate_enabled": false
         },
         "structural_anchor": {
@@ -2539,8 +2545,8 @@
           "max_entry_drift_atr": "1",
           "min_entry_drift_pips": "10",
           "min_rr": "2",
-          "min_target_pips": 24,
-          "room_stop_floor_pips": 12,
+          "min_target_pips": 30,
+          "room_stop_floor_pips": 15,
           "tp_buffer_pips": "3"
         },
         "reaction": {
@@ -2550,8 +2556,8 @@
           "scale_fraction": "0.2",
           "scale_invalid_policy": "single_market",
           "scale_step_atr": "0.1",
-          "stop_max_pips": 22,
-          "stop_min_pips": 12
+          "stop_max_pips": 25,
+          "stop_min_pips": 15
         },
         "reaction_risk_leg": {
           "enabled": true
@@ -2565,7 +2571,7 @@
         "scaling": {
           "add": {
             "level_buffer_atr": "1",
-            "min_stop_pips": 12,
+            "min_stop_pips": 15,
             "pullback_enabled": false,
             "pullback_max_retrace": "0.7",
             "pullback_min_retrace": "0.2",
@@ -2576,12 +2582,12 @@
         "stops": {
           "be_buffer_ticks": 6,
           "reaction": {
-            "room_floor_pips": 12
+            "room_floor_pips": 15
           },
-          "sl_distance": "0.0022",
+          "sl_distance": "0.0025",
           "stop_push_beyond_zone": true,
           "trend": {
-            "minimum_pips": 12
+            "minimum_pips": 15
           },
           "wick_stop_buffer_atr": "0.15"
         },
@@ -2617,7 +2623,7 @@
           "hard_entry_drift_pips": "30",
           "max_entry_drift_atr": "1.5",
           "min_entry_drift_pips": "15",
-          "stop_max_pips": 22
+          "stop_max_pips": 25
         },
         "zone_scaling": {
           "fill_enabled": true,
@@ -3325,6 +3331,8 @@
         "scanner_gates": {
           "actionability_gate_enabled": false,
           "conflict_margin": "1",
+          "conflict_margin_quality": "0.15",
+          "use_quality_ranking": true,
           "zone_width_gate_enabled": false
         },
         "structural_anchor": {
@@ -3553,8 +3561,8 @@
           "max_entry_drift_atr": "1",
           "min_entry_drift_pips": "10",
           "min_rr": "2",
-          "min_target_pips": 20,
-          "room_stop_floor_pips": 10,
+          "min_target_pips": 36,
+          "room_stop_floor_pips": 18,
           "tp_buffer_pips": "3"
         },
         "reaction": {
@@ -3564,8 +3572,8 @@
           "scale_fraction": "0.2",
           "scale_invalid_policy": "single_market",
           "scale_step_atr": "0.1",
-          "stop_max_pips": 18,
-          "stop_min_pips": 10
+          "stop_max_pips": 28,
+          "stop_min_pips": 18
         },
         "reaction_risk_leg": {
           "enabled": true
@@ -3579,7 +3587,7 @@
         "scaling": {
           "add": {
             "level_buffer_atr": "1",
-            "min_stop_pips": 10,
+            "min_stop_pips": 18,
             "pullback_enabled": false,
             "pullback_max_retrace": "0.7",
             "pullback_min_retrace": "0.2",
@@ -3590,12 +3598,12 @@
         "stops": {
           "be_buffer_ticks": 6,
           "reaction": {
-            "room_floor_pips": 10
+            "room_floor_pips": 18
           },
-          "sl_distance": "0.18",
+          "sl_distance": "0.28",
           "stop_push_beyond_zone": true,
           "trend": {
-            "minimum_pips": 10
+            "minimum_pips": 18
           },
           "wick_stop_buffer_atr": "0.15"
         },
@@ -3631,7 +3639,7 @@
           "hard_entry_drift_pips": "30",
           "max_entry_drift_atr": "1.5",
           "min_entry_drift_pips": "15",
-          "stop_max_pips": 18
+          "stop_max_pips": 28
         },
         "zone_scaling": {
           "fill_enabled": true,
@@ -4351,6 +4359,8 @@
         "scanner_gates": {
           "actionability_gate_enabled": false,
           "conflict_margin": "1",
+          "conflict_margin_quality": "0.15",
+          "use_quality_ranking": true,
           "zone_width_gate_enabled": false
         },
         "structural_anchor": {
@@ -5367,6 +5377,8 @@
         "scanner_gates": {
           "actionability_gate_enabled": false,
           "conflict_margin": "1",
+          "conflict_margin_quality": "0.15",
+          "use_quality_ranking": true,
           "zone_width_gate_enabled": false
         },
         "structural_anchor": {
@@ -5465,8 +5477,8 @@
           "max_entry_drift_atr": "1",
           "min_entry_drift_pips": "10",
           "min_rr": "2",
-          "min_target_pips": 20,
-          "room_stop_floor_pips": 10,
+          "min_target_pips": 24,
+          "room_stop_floor_pips": 12,
           "tp_buffer_pips": "3"
         },
         "reaction": {
@@ -5476,8 +5488,8 @@
           "scale_fraction": "0.2",
           "scale_invalid_policy": "single_market",
           "scale_step_atr": "0.1",
-          "stop_max_pips": 18,
-          "stop_min_pips": 10
+          "stop_max_pips": 20,
+          "stop_min_pips": 12
         },
         "reaction_risk_leg": {
           "enabled": true
@@ -5491,7 +5503,7 @@
         "scaling": {
           "add": {
             "level_buffer_atr": "1",
-            "min_stop_pips": 10,
+            "min_stop_pips": 12,
             "pullback_enabled": false,
             "pullback_max_retrace": "0.7",
             "pullback_min_retrace": "0.2",
@@ -5502,12 +5514,12 @@
         "stops": {
           "be_buffer_ticks": 6,
           "reaction": {
-            "room_floor_pips": 10
+            "room_floor_pips": 12
           },
-          "sl_distance": "0.0018",
+          "sl_distance": "0.002",
           "stop_push_beyond_zone": true,
           "trend": {
-            "minimum_pips": 10
+            "minimum_pips": 12
           },
           "wick_stop_buffer_atr": "0.15"
         },
@@ -5543,7 +5555,7 @@
           "hard_entry_drift_pips": "30",
           "max_entry_drift_atr": "1.5",
           "min_entry_drift_pips": "15",
-          "stop_max_pips": 18
+          "stop_max_pips": 20
         },
         "zone_scaling": {
           "fill_enabled": true,
@@ -6243,6 +6255,8 @@
         "scanner_gates": {
           "actionability_gate_enabled": false,
           "conflict_margin": "1",
+          "conflict_margin_quality": "0.15",
+          "use_quality_ranking": true,
           "zone_width_gate_enabled": false
         },
         "structural_anchor": {
@@ -6341,8 +6355,8 @@
           "max_entry_drift_atr": "1",
           "min_entry_drift_pips": "10",
           "min_rr": "2",
-          "min_target_pips": 30,
-          "room_stop_floor_pips": 15,
+          "min_target_pips": 44,
+          "room_stop_floor_pips": 22,
           "tp_buffer_pips": "3"
         },
         "reaction": {
@@ -6352,8 +6366,8 @@
           "scale_fraction": "0.2",
           "scale_invalid_policy": "single_market",
           "scale_step_atr": "0.1",
-          "stop_max_pips": 30,
-          "stop_min_pips": 15
+          "stop_max_pips": 35,
+          "stop_min_pips": 22
         },
         "reaction_risk_leg": {
           "enabled": true
@@ -6367,7 +6381,7 @@
         "scaling": {
           "add": {
             "level_buffer_atr": "1",
-            "min_stop_pips": 15,
+            "min_stop_pips": 22,
             "pullback_enabled": false,
             "pullback_max_retrace": "0.7",
             "pullback_min_retrace": "0.2",
@@ -6378,12 +6392,12 @@
         "stops": {
           "be_buffer_ticks": 6,
           "reaction": {
-            "room_floor_pips": 15
+            "room_floor_pips": 22
           },
-          "sl_distance": "0.3",
+          "sl_distance": "0.35",
           "stop_push_beyond_zone": true,
           "trend": {
-            "minimum_pips": 15
+            "minimum_pips": 22
           },
           "wick_stop_buffer_atr": "0.15"
         },
@@ -6419,7 +6433,7 @@
           "hard_entry_drift_pips": "30",
           "max_entry_drift_atr": "1.5",
           "min_entry_drift_pips": "15",
-          "stop_max_pips": 30
+          "stop_max_pips": 35
         },
         "zone_scaling": {
           "fill_enabled": true,
@@ -7143,6 +7157,8 @@
         "scanner_gates": {
           "actionability_gate_enabled": false,
           "conflict_margin": "1",
+          "conflict_margin_quality": "0.15",
+          "use_quality_ranking": true,
           "zone_width_gate_enabled": false
         },
         "structural_anchor": {
@@ -7241,8 +7257,8 @@
           "max_entry_drift_atr": "1",
           "min_entry_drift_pips": "10",
           "min_rr": "2",
-          "min_target_pips": 24,
-          "room_stop_floor_pips": 12,
+          "min_target_pips": 30,
+          "room_stop_floor_pips": 15,
           "tp_buffer_pips": "3"
         },
         "reaction": {
@@ -7252,8 +7268,8 @@
           "scale_fraction": "0.2",
           "scale_invalid_policy": "single_market",
           "scale_step_atr": "0.1",
-          "stop_max_pips": 22,
-          "stop_min_pips": 12
+          "stop_max_pips": 25,
+          "stop_min_pips": 15
         },
         "reaction_risk_leg": {
           "enabled": true
@@ -7267,7 +7283,7 @@
         "scaling": {
           "add": {
             "level_buffer_atr": "1",
-            "min_stop_pips": 12,
+            "min_stop_pips": 15,
             "pullback_enabled": false,
             "pullback_max_retrace": "0.7",
             "pullback_min_retrace": "0.2",
@@ -7278,12 +7294,12 @@
         "stops": {
           "be_buffer_ticks": 6,
           "reaction": {
-            "room_floor_pips": 12
+            "room_floor_pips": 15
           },
-          "sl_distance": "0.0022",
+          "sl_distance": "0.0025",
           "stop_push_beyond_zone": true,
           "trend": {
-            "minimum_pips": 12
+            "minimum_pips": 15
           },
           "wick_stop_buffer_atr": "0.15"
         },
@@ -7319,7 +7335,7 @@
           "hard_entry_drift_pips": "30",
           "max_entry_drift_atr": "1.5",
           "min_entry_drift_pips": "15",
-          "stop_max_pips": 22
+          "stop_max_pips": 25
         },
         "zone_scaling": {
           "fill_enabled": true,
@@ -8019,6 +8035,8 @@
         "scanner_gates": {
           "actionability_gate_enabled": false,
           "conflict_margin": "1",
+          "conflict_margin_quality": "0.15",
+          "use_quality_ranking": true,
           "zone_width_gate_enabled": false
         },
         "structural_anchor": {
@@ -8117,8 +8135,8 @@
           "max_entry_drift_atr": "1",
           "min_entry_drift_pips": "10",
           "min_rr": "2",
-          "min_target_pips": 20,
-          "room_stop_floor_pips": 10,
+          "min_target_pips": 36,
+          "room_stop_floor_pips": 18,
           "tp_buffer_pips": "3"
         },
         "reaction": {
@@ -8128,8 +8146,8 @@
           "scale_fraction": "0.2",
           "scale_invalid_policy": "single_market",
           "scale_step_atr": "0.1",
-          "stop_max_pips": 18,
-          "stop_min_pips": 10
+          "stop_max_pips": 28,
+          "stop_min_pips": 18
         },
         "reaction_risk_leg": {
           "enabled": true
@@ -8143,7 +8161,7 @@
         "scaling": {
           "add": {
             "level_buffer_atr": "1",
-            "min_stop_pips": 10,
+            "min_stop_pips": 18,
             "pullback_enabled": false,
             "pullback_max_retrace": "0.7",
             "pullback_min_retrace": "0.2",
@@ -8154,12 +8172,12 @@
         "stops": {
           "be_buffer_ticks": 6,
           "reaction": {
-            "room_floor_pips": 10
+            "room_floor_pips": 18
           },
-          "sl_distance": "0.18",
+          "sl_distance": "0.28",
           "stop_push_beyond_zone": true,
           "trend": {
-            "minimum_pips": 10
+            "minimum_pips": 18
           },
           "wick_stop_buffer_atr": "0.15"
         },
@@ -8195,7 +8213,7 @@
           "hard_entry_drift_pips": "30",
           "max_entry_drift_atr": "1.5",
           "min_entry_drift_pips": "15",
-          "stop_max_pips": 18
+          "stop_max_pips": 28
         },
         "zone_scaling": {
           "fill_enabled": true,
@@ -8907,6 +8925,8 @@
         "scanner_gates": {
           "actionability_gate_enabled": false,
           "conflict_margin": "1",
+          "conflict_margin_quality": "0.15",
+          "use_quality_ranking": true,
           "zone_width_gate_enabled": false
         },
         "structural_anchor": {

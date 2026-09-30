@@ -63,15 +63,17 @@ BASELINE = {
   # ConfigOwner.PYTHON.
   # 2026-09-21 With-bias premium/discount exemption: +1
   # (actionability.entry_location.with_bias_pd_exempt).
-  "catalog_entry_count": 677,
-  "configurable_count": 570,
+  # Reconciled with the current typed model after the merged FX/config
+  # cleanup; deployment-owned YAML fields remain config-file-only.
+  "catalog_entry_count": 693,
+  "configurable_count": 586,
   "protocol_constant_count": 10,
   "algorithm_constant_count": 97,
-  "python_projection_count": 627,
+  "python_projection_count": 643,
   "ctrader_only_count": 50,
-  "environment_entry_count": 570,
+  "environment_entry_count": 576,
   "deprecated_alias_count": 21,
-  "shared_count": 96,
+  "shared_count": 100,
 }
 
 FORBIDDEN_GENERATOR_SYMBOLS = (

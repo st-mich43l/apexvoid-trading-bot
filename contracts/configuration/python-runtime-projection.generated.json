@@ -1,6 +1,6 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "bec01459a04ea8c7b6b931d0edf79ee90ab6d15a2f846eefb1a11e60973557d6",
+  "configuration_contract_fingerprint_sha256": "15bf89aec2a266196a4a733a11f2a915bffaf0ada3d7ed5a62eaf2727dca09bf",
   "excluded_ctrader_only_count": 50,
   "excluded_paths": [
     "bootstrap.ctrader.connection.host",
@@ -54,7 +54,7 @@
     "risk.sizing.add_require_risk_free",
     "risk.sizing.risk_pct"
   ],
-  "included_leaf_count": 628,
+  "included_leaf_count": 643,
   "included_paths": [
     "actionability.contested_corridor.gap_atr",
     "actionability.counter_bias.allowed",
@@ -93,6 +93,8 @@
     "actionability.overlapping_zones.veto_enabled",
     "actionability.scanner_gates.actionability_gate_enabled",
     "actionability.scanner_gates.conflict_margin",
+    "actionability.scanner_gates.conflict_margin_quality",
+    "actionability.scanner_gates.use_quality_ranking",
     "actionability.scanner_gates.zone_width_gate_enabled",
     "actionability.structural_anchor.maximum_source_touches",
     "actionability.structural_anchor.required",
@@ -203,6 +205,14 @@
     "analysis.swings.fractal_size",
     "analysis.swings.zigzag.atr_mult",
     "analysis.swings.zigzag.pct",
+    "analysis.technical_authority.arbitration_mode",
+    "analysis.technical_authority.consumer_enabled",
+    "analysis.technical_authority.consumer_group",
+    "analysis.technical_authority.max_delivery_lag_seconds",
+    "analysis.technical_authority.max_event_age_seconds",
+    "analysis.technical_authority.mode",
+    "analysis.technical_authority.stop_envelope_mode",
+    "analysis.technical_authority.thesis_correlation_mode",
     "analysis.techniques.invalidation_tolerance_atr",
     "analysis.techniques.max_break_episodes",
     "analysis.techniques.retest_max_touches",
@@ -683,11 +693,16 @@
     "strategies.zone.demand.enabled",
     "strategies.zone.enabled",
     "strategies.zone.flip.enabled",
-    "strategies.zone.supply.enabled"
+    "strategies.zone.supply.enabled",
+    "transport.kafka.algo_bot_client_id",
+    "transport.kafka.brokers",
+    "transport.kafka.enabled",
+    "transport.kafka.topics.analysis_opportunity",
+    "transport.kafka.topics.analysis_opportunity_invalidated"
   ],
   "included_secret_count": 6,
-  "included_shared_field_count": 96,
+  "included_shared_field_count": 100,
   "projection_model": "app.configuration.models.python_runtime.PythonRuntimeConfig",
-  "source_fingerprint_sha256": "bec01459a04ea8c7b6b931d0edf79ee90ab6d15a2f846eefb1a11e60973557d6",
+  "source_fingerprint_sha256": "15bf89aec2a266196a4a733a11f2a915bffaf0ada3d7ed5a62eaf2727dca09bf",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }
