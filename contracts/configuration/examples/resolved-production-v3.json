@@ -191,6 +191,7 @@
         "invalidation_buffer_atr": 0.5,
         "minimum_strength": 0.4,
         "minimum_target_distance_atr": 1.0,
+        "minimum_zone_atr": 0.5,
         "version": "v2"
       },
       "range_edge": {
