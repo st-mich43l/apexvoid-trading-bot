@@ -801,6 +801,12 @@ public sealed partial class TradePlanRuntimeTests
     Assert.Equal(0, l1After.RemainingVolume);
     Assert.True(l2After.RemainingVolume > 0, "L2 should still be open after TP1");
 
+    // TP1 is measured from the group's best fill (L2, 4085.00), like Manual
+    // Algo, not from the volume-weighted blend of L1 and L2 (4088.28, which
+    // would report 77): (4096.00 - 4085.00) / 0.1 pip = 110.
+    var tpBooked = Assert.Single(store.Events, item => item.Type == "tp_booked");
+    Assert.Equal(110, tpBooked.TargetPips);
+
     // BE stop is L2's own (deeper, better) fill + buffer, not a blend
     // dragged toward L1's shallower fill.
     var expectedStop = decimal.Round(
