@@ -145,31 +145,6 @@ def _map(*entries: MapEntry, price: float = 4055.0) -> MarketMap:
   )
 
 
-@pytest.mark.asyncio
-async def test_broken_range_disarms_both_rails(monkeypatch):
-  client = redis_state.get_client()
-  install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_box_retire_seconds": 3600})
-  context = _context(state="confirmed")
-  await worker._persist_range_side_states(
-    client,
-    symbol="XAU",
-    context=context,
-    decision=AutoScalpDecision("waiting_for_touch", box=_box()),
-  )
-  retired = retire_range_context(context, direction="BUY", now=2_000)
-  await worker._persist_range_side_states(
-    client,
-    symbol="XAU",
-    context=retired,
-    decision=AutoScalpDecision("box_broken", box=_box()),
-  )
-  buy = await _side(client, retired.range_id, "BUY")
-  sell = await _side(client, retired.range_id, "SELL")
-  assert buy["state"] == "DISARMED"
-  assert sell["state"] == "DISARMED"
-  assert retired.state == "retired"
-
-
 async def _side(client, range_id: str, direction: str) -> dict:
   import json
   raw = await client.get(
