@@ -18,10 +18,11 @@ type LifecycleConfig struct {
 	MaxBreakEpisodes         int
 	RetestMaxTouches         int
 
-	// EpsilonATR is the minimum tolerance floor regardless of
-	// InvalidationToleranceATR*atr — mirrors technique_geometry.py's
-	// epsilon() zero-ATR/zero-tolerance guard so a degenerate config
-	// never makes tolerance exactly zero.
+	// EpsilonATR is an ATR fraction, never a raw price. It mirrors
+	// technique_geometry.py's epsilon_atr_frac and must be multiplied by
+	// the instrument's ATR before it participates in price comparisons.
+	// Treating 0.05 as a raw price made the floor about 500 pips on
+	// EURUSD/GBPUSD and prevented their zones from invalidating.
 	EpsilonATR float64
 }
 
@@ -68,7 +69,7 @@ func farEdge(z Zone) float64 {
 // NotInvalidated is the single canonical liveness check every zone kind,
 // and every future consumer (PR #579), uses. Ported from
 // technique_geometry.py::not_invalidated, values and all (PR #574):
-// tolerance is the greater of cfg.EpsilonATR and
+// tolerance is the greater of cfg.EpsilonATR*atr and
 // cfg.InvalidationToleranceATR*atr; a close beyond the far edge by more
 // than tolerance opens a break episode; an episode reclaimed (a later
 // close back on the zone's own side) within cfg.SweepReclaimBars is a
@@ -83,8 +84,12 @@ func NotInvalidated(candles []market.Candle, fromIndex int, z Zone, atr float64,
 	if fromIndex < 0 || fromIndex >= len(candles) {
 		return true
 	}
-	tolerance := cfg.EpsilonATR
-	if t := cfg.InvalidationToleranceATR * atr; t > tolerance {
+	atrValue := atr
+	if atrValue < 0 {
+		atrValue = 0
+	}
+	tolerance := cfg.EpsilonATR * atrValue
+	if t := cfg.InvalidationToleranceATR * atrValue; t > tolerance {
 		tolerance = t
 	}
 	edge := farEdge(z)

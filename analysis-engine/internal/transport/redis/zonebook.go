@@ -30,6 +30,7 @@ type ZoneBookEntry struct {
 	Kind       string  `json:"kind"` // "supply" | "demand"
 	Low        float64 `json:"low"`
 	High       float64 `json:"high"`
+	ATR        float64 `json:"atr"`
 	Strength   float64 `json:"strength"`
 	TouchCount int     `json:"touch_count"`
 	State      string  `json:"state"` // zone.State.String()
@@ -67,7 +68,7 @@ func BuildZoneBook(symbol market.Symbol, zonesByTimeframe map[market.Timeframe]z
 			}
 			entries = append(entries, ZoneBookEntry{
 				Timeframe: string(tf), Kind: kind, Low: float64(z.Low), High: float64(z.High),
-				Strength: z.Strength, TouchCount: z.TouchCount, State: z.State.String(),
+				ATR: state.ATR, Strength: z.Strength, TouchCount: z.TouchCount, State: z.State.String(),
 			})
 		}
 	}
