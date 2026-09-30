@@ -320,7 +320,7 @@ func (w *SymbolWorker) technicalContext(event marketdata.BarEvent, reaction *opp
 		facts.BiasDirection = bias.Direction
 		facts.BiasLayer = bias.Layer.String()
 	}
-	facts.HigherTimeframes = ClosedHigherTimeframeBiases(&w.state.Context, event.Timeframe, event.Candle.Time)
+	facts.HigherTimeframes = ClosedHigherTimeframeBiases(&w.state.Context, event.Timeframe, event.Candle.Time, w.settings.Momentum)
 	if reaction != nil {
 		confirmed := *reaction
 		facts.Confirmation = &confirmed

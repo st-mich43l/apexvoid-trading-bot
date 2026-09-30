@@ -91,6 +91,13 @@ const modulePrefix = "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine
 // (dealing_range.py::_bracketing_pair/_last_opposing_pair's own Python
 // shape). fib does not import zone or liquidity, nor do they import it.
 //
+// barrier and momentum join zone/liquidity at rank 3, made porting Algo
+// Bot's opposing-barrier normalization and price-only momentum read into Go.
+// Both are pure domain packages: barrier imports no internal package (it
+// works on plain zone values, so transport/redis at rank 7 can publish its
+// result), and momentum needs only market candles and indicator's ATR. Neither
+// imports zone/liquidity/fib/keylevel/trendline, nor do they import it.
+//
 // Every internal/strategy/<name> subpackage (supply, demand, orderblock,
 // fvg, flipzone, keylevel, sessionlevel, and any added later) sits at
 // rank 7 — the SAME rank as transport/transport-kafka/transport-redis —
@@ -129,6 +136,8 @@ var rank = map[string]int{
 	"trendline": 3,
 	"keylevel":  3,
 	"fib":       3,
+	"barrier":   3,
+	"momentum":  3,
 
 	"context": 4,
 

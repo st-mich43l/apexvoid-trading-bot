@@ -72,6 +72,14 @@ func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Ca
 		invalid = math.Max(bar.High, anchor.High) + s.invalidationATR*atr
 		target = anchor.Low
 	}
+	// The objective is the opposite edge of the H1 range. If the reclaim bar
+	// already closed at or beyond it there is no reward left to publish.
+	if direction == market.Buy && float64(target) <= math.Max(entry, float64(anchorEdge)) {
+		return nil
+	}
+	if direction == market.Sell && float64(target) >= math.Min(entry, float64(anchorEdge)) {
+		return nil
+	}
 	q := strategyutil.Clamp01(anchor.Range()/(s.impulseATR*atr) - 0.25)
 	c, e := strategyutil.Candidate(strategyutil.CandidateSpec{ID: string(ID), Version: Version, SetupKey: fmt.Sprintf("crt:%d", anchor.Time), Symbol: ctx.Symbol, Direction: direction, EntryLow: math.Min(entry, float64(anchorEdge)), EntryHigh: math.Max(entry, float64(anchorEdge)), Invalidation: invalid, InvalidationLabel: "crt_reclaim_failed", Target: target, TargetLabel: "opposite_h1_range", Evidence: []string{"h1_impulse_range", "m5_range_sweep_reclaim"}, Quality: opportunity.StrategyQuality{Overall: q, Components: map[string]float64{"h1_impulse": q, "m5_reclaim": 1}}, FormedAt: anchor.Time, ConfirmedAt: bar.Time, ExpiryHours: s.expiryHours, Fingerprint: s.fingerprint})
 	if e != nil {

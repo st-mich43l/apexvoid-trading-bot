@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
 	redisv9 "github.com/redis/go-redis/v9"
 
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/barrier"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/marketdata"
 	redistransport "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/transport/redis"
@@ -107,7 +109,7 @@ func TestBuildZoneBook_FlattensSupplyDemandZonesAcrossTimeframesAndSkipsOtherKin
 			{ID: "z3", Kind: zone.KindSupply, Low: 2030, High: 2040, Strength: 0.9, TouchCount: 0, State: zone.StateInvalidated},
 		}},
 	}
-	doc := redistransport.BuildZoneBook("XAU", zones, 1700000100)
+	doc := redistransport.BuildZoneBook("XAU", zones, 1700000100, nil)
 	if doc.Symbol != "XAU" || doc.GeneratedAt != 1700000100 {
 		t.Fatalf("unexpected document header: %+v", doc)
 	}
@@ -138,15 +140,61 @@ func TestBuildZoneBook_FlattensSupplyDemandZonesAcrossTimeframesAndSkipsOtherKin
 	if err := json.Unmarshal(raw, &decoded); err != nil {
 		t.Fatal(err)
 	}
-	for _, field := range []string{"symbol", "generated_at", "entries"} {
+	for _, field := range []string{"symbol", "generated_at", "entries", "barriers"} {
 		if _, ok := decoded[field]; !ok {
 			t.Errorf("expected top-level JSON field %q, got %v", field, decoded)
 		}
 	}
 }
 
+func TestBuildZoneBook_BarriersAreNullWhenNoPolicyAndEmptyArrayWhenComputedEmpty(t *testing.T) {
+	notComputed := redistransport.BuildZoneBook("XAU", map[market.Timeframe]zone.ZoneState{}, 1700000100, nil)
+	if notComputed.Barriers != nil {
+		t.Fatalf("no barrier policy must leave Barriers nil (not computed), got %#v", notComputed.Barriers)
+	}
+	raw, _ := json.Marshal(notComputed)
+	if !strings.Contains(string(raw), `"barriers":null`) {
+		t.Fatalf("not-computed barriers must serialize as null, got %s", raw)
+	}
+	cfg := &barrier.Config{PipSize: 0.1, MaxWidthATR: 2, MaxWidthPips: 100}
+	computedEmpty := redistransport.BuildZoneBook("XAU", map[market.Timeframe]zone.ZoneState{}, 1700000100, cfg)
+	raw, _ = json.Marshal(computedEmpty)
+	if !strings.Contains(string(raw), `"barriers":[]`) {
+		t.Fatalf("computed-but-empty barriers must serialize as [] so a reader can tell it from not-computed, got %s", raw)
+	}
+}
+
+func TestBuildZoneBook_PublishesNormalizedBarriers(t *testing.T) {
+	zones := map[market.Timeframe]zone.ZoneState{
+		market.M1: {ATR: 1.0, Zones: []zone.Zone{
+			{ID: "m1", Kind: zone.KindSupply, Low: 2020, High: 2021, Strength: 0.9, State: zone.StateFresh}, // M1 is out of scope
+		}},
+		market.M15: {ATR: 4.0, Zones: []zone.Zone{
+			{ID: "s", Kind: zone.KindSupply, Low: 2020, High: 2025, Strength: 0.8, TouchCount: 2, State: zone.StatePartiallyMitigated},
+			{ID: "dead", Kind: zone.KindDemand, Low: 1990, High: 1995, Strength: 0.6, State: zone.StateInvalidated},
+			{ID: "wide", Kind: zone.KindDemand, Low: 1900, High: 1990, Strength: 0.6, State: zone.StateFresh}, // wider than 2 ATR
+		}},
+		market.H1: {ATR: 8.0, Zones: []zone.Zone{
+			{ID: "s2", Kind: zone.KindSupply, Low: 2025, High: 2030, Strength: 0.95, TouchCount: 1, State: zone.StateTouched},
+		}},
+	}
+	cfg := &barrier.Config{PipSize: 0.1, MaxWidthATR: 2, MaxWidthPips: 500}
+	doc := redistransport.BuildZoneBook("XAU", zones, 1700000100, cfg)
+	if len(doc.Entries) != 5 {
+		t.Fatalf("entries stay unfiltered for readers that want raw zones: %d", len(doc.Entries))
+	}
+	if len(doc.Barriers) != 1 {
+		t.Fatalf("live in-scope in-width supply zones touching at 2025 must merge into one barrier: %+v", doc.Barriers)
+	}
+	b := doc.Barriers[0]
+	if b.Side != barrier.Sell || b.Low != 2020 || b.High != 2030 || b.Score != 0.95 || b.Touches != 1 ||
+		len(b.SourceTimeframes) != 2 || b.SourceTimeframes[0] != "M15" || b.SourceTimeframes[1] != "H1" {
+		t.Fatalf("unexpected merged barrier: %+v", b)
+	}
+}
+
 func TestBuildZoneBook_EmptyWhenNoZonesTracked(t *testing.T) {
-	doc := redistransport.BuildZoneBook("XAU", map[market.Timeframe]zone.ZoneState{}, 1700000100)
+	doc := redistransport.BuildZoneBook("XAU", map[market.Timeframe]zone.ZoneState{}, 1700000100, nil)
 	if len(doc.Entries) != 0 {
 		t.Fatalf("expected no entries, got %+v", doc.Entries)
 	}

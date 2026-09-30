@@ -74,7 +74,9 @@ func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Ca
 				continue
 			}
 			lo, hi := math.Max(low, float64(b.Low)), math.Min(high, float64(b.High))
-			if lo <= hi {
+			// Strictly overlapping only: zones that merely touch at a shared
+			// edge intersect in a single price, which is not an entry band.
+			if lo < hi {
 				low, high, ids, facts = lo, hi, append(ids, b.ID), facts+1
 			}
 		}

@@ -808,6 +808,30 @@
             "maximum_cluster_span_multiple"
           ]
         },
+        "momentum": {
+          "type": "object",
+          "description": "ATR-normalized velocity thresholds for the price-only momentum read (analysis-engine internal/momentum, a port of app/analysis/momentum.py). bull at v >= velocity_bull_threshold, bear at v <= velocity_bear_threshold, over velocity_lookback bars.",
+          "additionalProperties": false,
+          "properties": {
+            "velocity_lookback": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "velocity_bull_threshold": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "velocity_bear_threshold": {
+              "type": "number",
+              "exclusiveMaximum": 0
+            }
+          },
+          "required": [
+            "velocity_lookback",
+            "velocity_bull_threshold",
+            "velocity_bear_threshold"
+          ]
+        },
         "fibonacci": {
           "type": "object",
           "additionalProperties": false,
@@ -1155,6 +1179,7 @@
       },
       "required": [
         "calendar",
+        "momentum",
         "fibonacci",
         "flip_zone",
         "history",
