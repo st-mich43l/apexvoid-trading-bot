@@ -235,10 +235,13 @@
       },
       "session_level": {
         "enabled": true,
+        "engulfing_minimum_range_atr": 0.5,
         "expiry_hours": 24.0,
         "invalidation_buffer_atr": 0.5,
         "minimum_target_distance_atr": 1.0,
+        "proximal_band_atr": 0.5,
         "proximity_atr": 1.0,
+        "reaction_lookback_bars": 3,
         "version": "v2"
       },
       "snap_back": {
