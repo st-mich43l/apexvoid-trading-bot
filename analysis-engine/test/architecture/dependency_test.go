@@ -139,7 +139,7 @@ var rank = map[string]int{
 	"barrier":    3,
 	"momentum":   3,
 	"reaction":   3,
-	"legacyzone": 3,
+	"legacyzone": 4,
 
 	"context": 4,
 
