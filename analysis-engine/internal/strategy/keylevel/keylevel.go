@@ -73,6 +73,9 @@ type Config struct {
 	InvalidationBufferATR    float64
 	MinimumTargetDistanceATR float64
 	ExpiryHours              float64
+	// RequireExplicitRole skips levels whose support/resistance role is still
+	// ambiguous (legacy per-instrument Key Level quality rule).
+	RequireExplicitRole bool
 	// BreakoutAcceptBars is key_level_role.py's breakout_accept_bars —
 	// consecutive closed bars that must accept beyond a level's band
 	// before Role reports it BROKEN rather than the level's plain role.
@@ -142,10 +145,20 @@ func parseConfig(params map[string]any) (Config, error) {
 	if breakoutAcceptBars < 1 {
 		return Config{}, fmt.Errorf("breakout_accept_bars must be >= 1")
 	}
+	// Override-only parameter (set from an instrument's overrides, which the
+	// config schema cannot express as a base boolean): absent means false.
+	requireExplicitRole := false
+	if raw, present := params["require_explicit_role"]; present {
+		b, ok := raw.(bool)
+		if !ok {
+			return Config{}, fmt.Errorf("parameter \"require_explicit_role\" is not a boolean (got %T)", raw)
+		}
+		requireExplicitRole = b
+	}
 	return Config{
 		MinimumTouches: minimumTouches, MinimumStrength: minimumStrength, ProximityATR: proximityATR,
 		InvalidationBufferATR: invalidationBuffer, MinimumTargetDistanceATR: minimumTargetDistance,
-		ExpiryHours: expiryHours, BreakoutAcceptBars: breakoutAcceptBars,
+		ExpiryHours: expiryHours, BreakoutAcceptBars: breakoutAcceptBars, RequireExplicitRole: requireExplicitRole,
 	}, nil
 }
 
@@ -212,6 +225,9 @@ func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate 
 		bandLow, bandHigh := market.Price(levelPrice-band), market.Price(levelPrice+band)
 		role := keylevel.Role(level.Kind.String(), bandLow, bandHigh, closes, s.cfg.BreakoutAcceptBars)
 		if role == keylevel.RoleBrokenSupport || role == keylevel.RoleBrokenResistance {
+			continue
+		}
+		if role == keylevel.RoleAmbiguous && s.cfg.RequireExplicitRole {
 			continue
 		}
 
