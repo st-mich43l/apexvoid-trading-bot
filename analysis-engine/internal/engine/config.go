@@ -490,7 +490,11 @@ func ArbitrationConfigFromConfig(doc *config.Document) (arbitration.Config, erro
 	if err != nil {
 		return arbitration.Config{}, err
 	}
-	return arbitration.Config{ConflictMarginQuality: conflictMarginQuality}, nil
+	inPlayATR, err := getFloat(doc, "analysis.arbitration.in_play_atr")
+	if err != nil {
+		return arbitration.Config{}, err
+	}
+	return arbitration.Config{ConflictMarginQuality: conflictMarginQuality, InPlayATR: inPlayATR}, nil
 }
 
 // StopEnvelopeConfig is the per-strategy-family stop-distance risk policy

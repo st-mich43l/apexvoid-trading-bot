@@ -16,7 +16,12 @@ ArbitrationTopic = "analysis.opportunity.arbitration.v1"
 ExpectedProducer = "apexvoid-analysis-engine"
 
 ArbitrationStatuses = {"winner", "suppressed", "conflict_held", "uncontested"}
-ArbitrationReasonCodes = {"uncontested", "ranked_single_direction", "opposite_direction_conflict"}
+ArbitrationReasonCodes = {
+  "uncontested",
+  "ranked_single_direction",
+  "opposite_direction_conflict",
+  "not_in_play",
+}
 
 
 class AnalysisContractError(ValueError):

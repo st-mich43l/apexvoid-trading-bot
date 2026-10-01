@@ -379,8 +379,15 @@ analysis:
   # actionability.scanner_gates.conflict_margin_quality default (0.15) -
   # the two are today independently-tunable copies of the same concept,
   # Python's used only while arbitration_mode=python_legacy.
+  #
+  # in_play_atr is the executable-now rule: only candidates whose entry zone
+  # price is inside or within this many of the candidate's own ATRs contend in
+  # the direction decision; farther resting zones are suppressed (not_in_play)
+  # until price arrives. Without it every 24h-live zone above and below price
+  # contends and near-tied qualities hold the whole symbol indefinitely.
   arbitration:
     conflict_margin_quality: 0.15
+    in_play_atr: 1.0
 
   # Dimensionless zone-merge fields consumed live via
   # app.analysis.detectors._detector_settings(symbol) ->
