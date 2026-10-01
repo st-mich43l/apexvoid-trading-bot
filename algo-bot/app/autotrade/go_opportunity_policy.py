@@ -527,7 +527,9 @@ class GoOpportunityPolicy:
       # when Redis confirms that this exact ID is still in the engine's
       # current live book. Missing Redis is fail-closed for recovery; normal
       # events retain their existing behavior.
-      live_ids = await go_live_opportunity_ids(client, payload.symbol)
+      live_ids = await go_live_opportunity_ids(
+        client, payload.symbol, minimum_generated_at=payload.recovered_at,
+      )
       recovered_live = (
         live_ids is not None
         and payload.id in live_ids
@@ -613,7 +615,9 @@ class GoOpportunityPolicy:
     payload = event.payload
     match_id = match_id_for(payload.opportunity_id)
     client = self._client()
-    live_ids = await go_live_opportunity_ids(client, payload.symbol)
+    live_ids = await go_live_opportunity_ids(
+      client, payload.symbol, minimum_generated_at=payload.decided_at,
+    )
     opportunity_is_live = (
       live_ids is None or payload.opportunity_id in live_ids
     )
