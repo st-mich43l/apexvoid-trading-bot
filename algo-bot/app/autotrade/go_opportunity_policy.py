@@ -104,18 +104,22 @@ class ScopeProfile:
 # the profile only names the downstream policy taxonomy and the facts that
 # must be present for that strategy.  Keeping one row per catalog ID makes an
 # enabled Go strategy impossible to silently drop at the Kafka boundary.
+# requires_reaction: every zone/level/line technique executes only on the engine's
+# confirmed reaction (a distinct opportunity carrying technical_context.confirmation).
+# The legacy Python detectors published nothing else; the resting-zone opportunity
+# stays a technical observation.  key_level only ever emits confirmed reactions.
 REVIEWED_SCOPES: dict[str, ScopeProfile] = {
   "key_level": ScopeProfile("key_level", "Key Level", "key_level", None, frozenset({"M5"}), "go_m5_reaction", evidence_prefixes=("m5_key_level_",)),
-  "confluence_zone": ScopeProfile("confluence_zone", "Confluence Zone", "confluence_zone", None, frozenset({"M5"}), "go_m5_confluence", evidence_prefixes=("m5_distinct_zone_overlap", "m5_confluence_reaction")),
+  "confluence_zone": ScopeProfile("confluence_zone", "Confluence Zone", "confluence_zone", None, frozenset({"M5"}), "go_m5_confluence", requires_reaction=True, evidence_prefixes=("m5_distinct_zone_overlap", "m5_confluence_reaction")),
   "supply": ScopeProfile("supply", "Supply Demand", "supply", "SELL", frozenset({"M5"}), "go_m5_zone", True, ("m5_supply_zone_",)),
   "demand": ScopeProfile("demand", "Supply Demand", "demand", "BUY", frozenset({"M5"}), "go_m5_zone", True, ("m5_demand_zone_",)),
-  "order_block": ScopeProfile("order_block", "Order Block", "order_block", None, frozenset({"M5"}), "go_m5_order_block", evidence_prefixes=("m5_order_block_",)),
-  "fvg": ScopeProfile("fvg", "FVG", "fvg", None, frozenset({"M5"}), "go_m5_fvg", evidence_prefixes=("m5_fvg_",)),
-  "ifvg": ScopeProfile("ifvg", "iFVG", "ifvg", None, frozenset({"M5"}), "go_m5_ifvg", evidence_prefixes=("m5_ifvg_",)),
-  "crt": ScopeProfile("crt", "CRT", "crt", None, frozenset({"M5"}), "go_h1_m5_crt", evidence_prefixes=("h1_impulse_range", "m5_range_sweep_reclaim")),
-  "flip_zone": ScopeProfile("flip_zone", "Flip Zone", "flip_zone", None, frozenset({"M5"}), "go_m5_flip_zone", evidence_prefixes=("m5_flip_",)),
-  "session_level": ScopeProfile("session_level", "Session Level", "session_level", None, frozenset({"M5"}), "go_m5_session_level", evidence_prefixes=("session_level_",)),
-  "trendline": ScopeProfile("trendline", "Trendline", "trendline", None, frozenset({"M5"}), "go_m5_trendline", evidence_prefixes=("m5_trendline_",)),
+  "order_block": ScopeProfile("order_block", "Order Block", "order_block", None, frozenset({"M5"}), "go_m5_order_block", requires_reaction=True, evidence_prefixes=("m5_order_block_",)),
+  "fvg": ScopeProfile("fvg", "FVG", "fvg", None, frozenset({"M5"}), "go_m5_fvg", requires_reaction=True, evidence_prefixes=("m5_fvg_",)),
+  "ifvg": ScopeProfile("ifvg", "iFVG", "ifvg", None, frozenset({"M5"}), "go_m5_ifvg", requires_reaction=True, evidence_prefixes=("m5_ifvg_",)),
+  "crt": ScopeProfile("crt", "CRT", "crt", None, frozenset({"M5"}), "go_h1_m5_crt", requires_reaction=True, evidence_prefixes=("h1_impulse_range", "m5_range_sweep_reclaim")),
+  "flip_zone": ScopeProfile("flip_zone", "Flip Zone", "flip_zone", None, frozenset({"M5"}), "go_m5_flip_zone", requires_reaction=True, evidence_prefixes=("m5_flip_",)),
+  "session_level": ScopeProfile("session_level", "Session Level", "session_level", None, frozenset({"M5"}), "go_m5_session_level", requires_reaction=True, evidence_prefixes=("session_level_",)),
+  "trendline": ScopeProfile("trendline", "Trendline", "trendline", None, frozenset({"M5"}), "go_m5_trendline", requires_reaction=True, evidence_prefixes=("m5_trendline_",)),
   "range_edge": ScopeProfile("range_edge", "Range Edge Scalp", "range_edge", None, frozenset({"M5"}), "go_m5_range_edge", evidence_prefixes=("m5_canonical_range", "m5_repeated_edge_rejection")),
   "box_breakout": ScopeProfile("box_breakout", "Box Breakout", "box_breakout", None, frozenset({"M5"}), "go_m5_box_breakout", evidence_prefixes=("m5_box_compression", "m5_breakout_accepted", "m5_box_retest")),
   "momentum_ride": ScopeProfile("momentum_ride", "Momentum Ride", "momentum_ride", None, frozenset({"M5"}), "go_m5_momentum", evidence_prefixes=("m5_persistent_direction", "m5_low_overlap_displacement")),

@@ -119,6 +119,11 @@ analysis:
       # Legacy Python reaction confirmation (shared by every technique).
       reaction_lookback_bars: 3
       engulfing_minimum_range_atr: 0.5
+      # Legacy Python technique validation (technique_geometry.py): price must be at
+      # the zone, width capped in ATR, entry clipped to its proximal slice.
+      epsilon_atr_fraction: 0.05
+      maximum_zone_atr: 3.0
+      entry_max_width_price: 5.0
     demand:
       version: v2
       enabled: true
@@ -129,6 +134,11 @@ analysis:
       # Legacy Python reaction confirmation (shared by every technique).
       reaction_lookback_bars: 3
       engulfing_minimum_range_atr: 0.5
+      # Legacy Python technique validation (technique_geometry.py): price must be at
+      # the zone, width capped in ATR, entry clipped to its proximal slice.
+      epsilon_atr_fraction: 0.05
+      maximum_zone_atr: 3.0
+      entry_max_width_price: 5.0
     order_block:
       version: v2
       enabled: true
@@ -142,6 +152,12 @@ analysis:
       # Legacy Python reaction confirmation (shared by every technique).
       reaction_lookback_bars: 3
       engulfing_minimum_range_atr: 0.5
+      # Legacy Python technique validation (technique_geometry.py): price must be at
+      # the zone, width capped in ATR, entry clipped to its proximal slice.
+      epsilon_atr_fraction: 0.05
+      maximum_zone_atr: 3.0
+      entry_max_width_price: 5.0
+      momentum_body_fraction: 0.6
     fvg:
       version: v2
       enabled: true
@@ -155,6 +171,11 @@ analysis:
       # Legacy Python reaction confirmation (shared by every technique).
       reaction_lookback_bars: 3
       engulfing_minimum_range_atr: 0.5
+      # Legacy Python technique validation (technique_geometry.py): price must be at
+      # the zone, width capped in ATR, entry clipped to its proximal slice.
+      epsilon_atr_fraction: 0.05
+      maximum_zone_atr: 2.0
+      entry_max_width_price: 5.0
     ifvg:
       version: v2
       enabled: true
@@ -168,6 +189,11 @@ analysis:
       # Legacy Python reaction confirmation (shared by every technique).
       reaction_lookback_bars: 3
       engulfing_minimum_range_atr: 0.5
+      # Legacy Python technique validation (technique_geometry.py): price must be at
+      # the zone, width capped in ATR, entry clipped to its proximal slice.
+      epsilon_atr_fraction: 0.05
+      maximum_zone_atr: 3.0
+      entry_max_width_price: 5.0
     crt:
       version: v2
       enabled: true
@@ -422,6 +448,14 @@ analysis:
   # the direction decision; farther resting zones are suppressed (not_in_play)
   # until price arrives. Without it every 24h-live zone above and below price
   # contends and near-tied qualities hold the whole symbol indefinitely.
+  # Python-parity zone population (internal/legacyzone). When enabled, the
+  # primary timeframe's supply/demand, order-block, FVG and iFVG zones are the
+  # legacy technique instances (zones price is at now, passed the legacy
+  # validation) instead of every live zone the redesigned zone package tracks.
+  legacy_zones:
+    enabled: true
+    window_bars: 400
+
   arbitration:
     conflict_margin_quality: 0.15
     in_play_atr: 1.0

@@ -30,6 +30,7 @@ type Settings struct {
 	Fib              fib.Config
 	Momentum         momentum.Config
 	Arbitration      arbitration.Config
+	LegacyZones      LegacyZonesSettings
 	StopEnvelope     StopEnvelopeConfig
 	Strategies       []strategy.Config
 	HistoryDepths    map[market.Timeframe]int
@@ -113,6 +114,10 @@ func LoadSettings(doc *config.Document, primary market.Timeframe, allowReplaceFo
 	if err != nil {
 		return Settings{}, err
 	}
+	legacyZones, err := LegacyZonesSettingsFromConfig(doc)
+	if err != nil {
+		return Settings{}, err
+	}
 	stopEnvelopeConfig, err := StopEnvelopeConfigFromConfig(doc)
 	if err != nil {
 		return Settings{}, err
@@ -132,7 +137,7 @@ func LoadSettings(doc *config.Document, primary market.Timeframe, allowReplaceFo
 	return Settings{
 		ATR: atr, Structure: structureSettings, Liquidity: liquidityConfig, Zone: zoneConfig,
 		Trendline: trendlineConfig, KeyLevel: keyLevelConfig, Session: sessionConfig, Fib: fibConfig, Momentum: momentumConfig,
-		Arbitration: arbitrationConfig, StopEnvelope: stopEnvelopeConfig, Strategies: strategyConfigs,
+		Arbitration: arbitrationConfig, LegacyZones: legacyZones, StopEnvelope: stopEnvelopeConfig, Strategies: strategyConfigs,
 		HistoryDepths: depths, PrimaryTimeframe: primary,
 		AllowReplaceForming: allowReplaceForming,
 		ConfigVersion:       configProvenance.Version,

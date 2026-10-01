@@ -2,10 +2,12 @@ package engine
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/config"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy"
 )
 
 // ApplyInstrument sets every per-symbol field of Settings (LoadSettings is
@@ -20,9 +22,86 @@ func ApplyInstrument(settings *Settings, doc *config.Document, symbol string) er
 		return fmt.Errorf("loading defended levels for %s: %w", symbol, err)
 	}
 	settings.Geometry = geometry
+	settings.LegacyZones.Technique.PipSize = math.Max(geometry.PipSize, 1e-12)
+	if entryMax, ok, err := doc.InstrumentValue(symbol, "price_scale", "fvg_entry_max_width_price"); err != nil {
+		return err
+	} else if ok {
+		switch v := entryMax.(type) {
+		case float64:
+			settings.LegacyZones.Technique.FVGEntryMaxWidthPrice = v
+		case int:
+			settings.LegacyZones.Technique.FVGEntryMaxWidthPrice = float64(v)
+		}
+	}
 	settings.DefendedLevels = levels
 	settings.DefendedLevelBuffer = buffer
+	if err := applyTechniqueGeometry(settings, doc, symbol); err != nil {
+		return err
+	}
+	applyLegacyCRT(settings)
 	return applyKeyLevelOverrides(settings, doc, symbol)
+}
+
+// applyLegacyCRT switches the CRT strategy to the Python technique when the
+// Python-parity zones are enabled (its entry cap is the instrument's
+// fvg_entry_max_width_price, as in the legacy detector settings).
+func applyLegacyCRT(settings *Settings) {
+	if !settings.LegacyZones.Enabled {
+		return
+	}
+	for i := range settings.Strategies {
+		if settings.Strategies[i].ID != "crt" {
+			continue
+		}
+		params := make(map[string]any, len(settings.Strategies[i].Parameters)+5)
+		for k, v := range settings.Strategies[i].Parameters {
+			params[k] = v
+		}
+		params["legacy_window_bars"] = float64(settings.LegacyZones.WindowBars)
+		params["entry_max_width_price"] = settings.LegacyZones.Technique.FVGEntryMaxWidthPrice
+		params["pip_size"] = settings.LegacyZones.Technique.PipSize
+		params["reaction_lookback_bars"] = 3.0
+		params["engulfing_minimum_range_atr"] = 0.5
+		settings.Strategies[i].Parameters = params
+	}
+}
+
+// techniqueStrategies are the zone strategies whose confirmed reactions pass
+// the legacy technique validation.
+var techniqueStrategies = map[strategy.StrategyID]bool{
+	"supply": true, "demand": true, "order_block": true, "fvg": true, "ifvg": true,
+}
+
+// applyTechniqueGeometry gives those strategies the instrument's pip size and
+// its entry-width cap (instrument price_scale.fvg_entry_max_width_price, which
+// the legacy detectors read for every clipped technique), when declared.
+func applyTechniqueGeometry(settings *Settings, doc *config.Document, symbol string) error {
+	entryMax, hasEntryMax, err := doc.InstrumentValue(symbol, "price_scale", "fvg_entry_max_width_price")
+	if err != nil {
+		return err
+	}
+	for i := range settings.Strategies {
+		if !techniqueStrategies[settings.Strategies[i].ID] {
+			continue
+		}
+		params := make(map[string]any, len(settings.Strategies[i].Parameters)+2)
+		for k, v := range settings.Strategies[i].Parameters {
+			params[k] = v
+		}
+		params["pip_size"] = settings.Geometry.PipSize
+		if hasEntryMax {
+			switch v := entryMax.(type) {
+			case float64:
+				params["entry_max_width_price"] = v
+			case int:
+				params["entry_max_width_price"] = float64(v)
+			default:
+				return fmt.Errorf("instrument %s: fvg_entry_max_width_price must be a number, got %T", symbol, entryMax)
+			}
+		}
+		settings.Strategies[i].Parameters = params
+	}
+	return nil
 }
 
 // applyKeyLevelOverrides carries Python's per-instrument Key Level quality
