@@ -62,8 +62,6 @@ _GO_ANALYSIS_ONLY_PATHS = frozenset({
   "analysis.key_levels.maximum_cluster_span_multiple",
   "analysis.key_levels.minimum_touches",
   "analysis.key_levels.round_step",
-  "analysis.legacy_zones.enabled",
-  "analysis.legacy_zones.window_bars",
   "analysis.liquidity.equal_level_tolerance_atr",
   "analysis.liquidity.pool_minimum_touches",
   "analysis.liquidity.sweep_reclaim_bars",

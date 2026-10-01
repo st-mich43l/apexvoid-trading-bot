@@ -2,7 +2,6 @@ package engine
 
 import (
 	"fmt"
-	"math"
 
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/config"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
@@ -29,48 +28,12 @@ func ApplyInstrument(settings *Settings, doc *config.Document, symbol string) er
 	settings.InstrumentStopMinPips = stopMinPips
 	settings.InstrumentStopMaxPips = stopMaxPips
 	settings.InstrumentStopEnvelopeConfigured = true
-	settings.LegacyZones.Technique.PipSize = math.Max(geometry.PipSize, 1e-12)
-	if entryMax, ok, err := doc.InstrumentValue(symbol, "price_scale", "fvg_entry_max_width_price"); err != nil {
-		return err
-	} else if ok {
-		switch v := entryMax.(type) {
-		case float64:
-			settings.LegacyZones.Technique.FVGEntryMaxWidthPrice = v
-		case int:
-			settings.LegacyZones.Technique.FVGEntryMaxWidthPrice = float64(v)
-		}
-	}
 	settings.DefendedLevels = levels
 	settings.DefendedLevelBuffer = buffer
 	if err := applyTechniqueGeometry(settings, doc, symbol); err != nil {
 		return err
 	}
-	applyLegacyCRT(settings)
 	return applyKeyLevelOverrides(settings, doc, symbol)
-}
-
-// applyLegacyCRT switches the CRT strategy to the Python technique when the
-// Python-parity zones are enabled (its entry cap is the instrument's
-// fvg_entry_max_width_price, as in the legacy detector settings).
-func applyLegacyCRT(settings *Settings) {
-	if !settings.LegacyZones.Enabled {
-		return
-	}
-	for i := range settings.Strategies {
-		if settings.Strategies[i].ID != "crt" {
-			continue
-		}
-		params := make(map[string]any, len(settings.Strategies[i].Parameters)+5)
-		for k, v := range settings.Strategies[i].Parameters {
-			params[k] = v
-		}
-		params["legacy_window_bars"] = float64(settings.LegacyZones.WindowBars)
-		params["entry_max_width_price"] = settings.LegacyZones.Technique.FVGEntryMaxWidthPrice
-		params["pip_size"] = settings.LegacyZones.Technique.PipSize
-		params["reaction_lookback_bars"] = 3.0
-		params["engulfing_minimum_range_atr"] = 0.5
-		settings.Strategies[i].Parameters = params
-	}
 }
 
 // techniqueStrategies are the zone strategies whose confirmed reactions pass

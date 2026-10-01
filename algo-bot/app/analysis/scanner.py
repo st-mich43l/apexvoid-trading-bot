@@ -40,7 +40,6 @@ from app.analysis.market_map import (
   market_map_payload,
   rail_reference,
 )
-from app.analysis.market_map_delivery import cache_analysis
 from app.marketdata.ohlc import RedisOHLCSource, window_for_timeframe
 from app.analysis.structure import Zone
 from app.analysis.confluence_zone import (
@@ -2897,7 +2896,6 @@ async def _load_market_context_for_symbol(
   event_ts: str | None = None,
   exec_tf: str | None = None,
   htf_order: list[str] | None = None,
-  cache_market_analysis: bool = True,
   window: int | None = None,
 ) -> tuple[DetectionContext | None, dict[str, Any]]:
   symbol = symbol.upper()
@@ -2979,14 +2977,6 @@ async def _load_market_context_for_symbol(
     ctx = replace(ctx, mad_phase=mad.phase, mad=mad.to_dict())
   except Exception:
     log.exception("scanner MAD refresh failed symbol=%s", symbol)
-  analysis = getattr(ctx, "analysis", None)
-  if analysis is not None and cache_market_analysis:
-    price = (
-      float(ctx.spot_price)
-      if getattr(ctx, "spot_price", None) is not None
-      else float(frames[exec_tf]["close"].iloc[-1])
-    )
-    cache_analysis(symbol, analysis, price, frames[exec_tf].index[-1])
   return ctx, frames
 
 
