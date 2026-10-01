@@ -1,8 +1,11 @@
 package engine_test
 
 import (
+	"fmt"
+	"path/filepath"
 	"testing"
 
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/config"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/engine"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
@@ -41,5 +44,35 @@ func TestBlockedByDefendedLevel_NoConfiguredLevelNeverBlocks(t *testing.T) {
 	zeroBuffer := engine.Settings{DefendedLevels: []float64{160}}
 	if _, blocked := zeroBuffer.BlockedByDefendedLevel(defendedCandidate(market.Buy, 159.9, 160.0)); blocked {
 		t.Fatal("a zero buffer disables the guard")
+	}
+}
+
+func TestApplyInstrument_GBPJPYKeyLevelIsStricterThanTheDefault(t *testing.T) {
+	doc, err := config.ResolveDocument(filepath.Join("..", "..", "..", "config", "apexvoid.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyLevel := func(symbol string) map[string]any {
+		settings, err := engine.LoadSettings(doc, "M5", false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := engine.ApplyInstrument(&settings, doc, symbol); err != nil {
+			t.Fatal(err)
+		}
+		for _, s := range settings.Strategies {
+			if s.ID == "key_level" {
+				return s.Parameters
+			}
+		}
+		t.Fatal("no key_level strategy configured")
+		return nil
+	}
+	gbpjpy, xau := keyLevel("GBPJPY"), keyLevel("XAU")
+	if gbpjpy["minimum_touches"] != 3.0 || gbpjpy["require_explicit_role"] != true {
+		t.Fatalf("GBPJPY key_level params = %v, want minimum_touches 3 and require_explicit_role true", gbpjpy)
+	}
+	if fmt.Sprint(xau["minimum_touches"]) != "2" || xau["require_explicit_role"] != nil {
+		t.Fatalf("XAU key_level must keep the default rules, got %v", xau)
 	}
 }
