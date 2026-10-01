@@ -147,6 +147,33 @@ class PostgresAnalysisOpportunityRepository:
       )
     return [dict(row) for row in rows]
 
+  async def recent_for_symbol(
+    self,
+    symbol: str,
+    *,
+    timeframe: str | None = None,
+    since: int,
+  ) -> list[dict]:
+    """Return Go lifecycle rows for an owner report without re-running Python analysis."""
+    args: list[object] = [symbol.upper(), int(since)]
+    timeframe_clause = ""
+    if timeframe:
+      args.append(timeframe.upper())
+      timeframe_clause = "AND creation_envelope #>> '{payload,timeframe}' = $3"
+    async with store._connect() as db:
+      rows = await db.fetch(
+        f"""
+        SELECT opportunity_id, symbol, strategy, state, created_at, expires_at,
+               terminal_at, creation_envelope
+        FROM analysis_opportunities
+        WHERE symbol = $1 AND COALESCE(created_at, 0) >= $2
+          {timeframe_clause}
+        ORDER BY created_at DESC, opportunity_id
+        """,
+        *args,
+      )
+    return [dict(row) for row in rows]
+
   async def opportunity_state(self, opportunity_id: str) -> str | None:
     """Ledger state ('active'/'invalidated'/'expired') or None if unknown."""
     async with store._connect() as db:

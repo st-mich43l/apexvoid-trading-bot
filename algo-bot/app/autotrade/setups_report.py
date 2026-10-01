@@ -15,6 +15,7 @@ import math
 import time
 
 from app.autotrade import zone_relevance
+from app.autotrade.go_market_map import load_go_market_map
 from app.autotrade.zone_watch import ZoneWatch, list_active_zone_watches
 from app.core.config import runtime_config
 from app.persistence import redis_state
@@ -39,22 +40,14 @@ async def _load_spot(client, symbol: str) -> tuple[float, float] | None:
 async def _atr_by_source_timeframe(
   client, symbol: str, timeframes: set[str],
 ) -> dict[str, float]:
-  # Display-only compatibility report. Keep legacy OHLC/ATR helpers out of
-  # the automatic process import graph.
-  from app.analysis.math_utils import atr_scalar, atr_series
-  from app.marketdata.ohlc import RedisOHLCSource
-
-  source = RedisOHLCSource(client)
-  length = int(runtime_config.analysis.atr.length)
-  result: dict[str, float] = {}
-  for tf in timeframes:
-    if not tf:
-      continue
-    df = await source.window(symbol, tf, length + 5)
-    if df.empty:
-      continue
-    result[tf] = atr_scalar(atr_series(df, length))
-  return result
+  market_map = await load_go_market_map(symbol, client)
+  if market_map is None:
+    return {}
+  return {
+    tf.upper(): value
+    for tf, value in market_map.atr_by_timeframe.items()
+    if tf.upper() in {item.upper() for item in timeframes}
+  }
 
 
 def _fmt_zone(record: ZoneWatch, relevance: "zone_relevance.ZoneRelevance", now: int) -> str:
@@ -182,9 +175,7 @@ async def current_market_setups_text(symbol: str = "XAU") -> str:
       lines.append(f"  {_fmt_zone(record, relevance, now)}")
 
   try:
-    from app.analysis import market_map_delivery
-
-    market_map = await market_map_delivery.get_current_market_map(sym)
+    market_map = await load_go_market_map(sym, client)
     m5_atr = (await _atr_by_source_timeframe(client, sym, {"M5"})).get("M5")
     map_lines = map_zone_lines(market_map, mid, m5_atr, records)
   except Exception:  # noqa: BLE001 - display-only section must never break the report
