@@ -237,6 +237,9 @@ func (w *SymbolWorker) ApplyWithResult(event marketdata.BarEvent) (AnalysisSnaps
 		}
 		candidate.ObservedTimeframe = event.Timeframe
 		candidate.Technical = w.technicalContext(event, candidate.Strategy, candidate.Direction, candidate.Entry.Low, candidate.Entry.High, candidate.Reaction)
+		if candidate.Technical != nil {
+			candidate.Technical.Confluence = w.confluenceContext(event, candidate, candidate.Technical)
+		}
 		stopConfig := w.settings.StopEnvelope
 		if w.settings.InstrumentStopEnvelopeConfigured {
 			stopConfig.InstrumentMinPips = w.settings.InstrumentStopMinPips

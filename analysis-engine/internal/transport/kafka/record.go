@@ -45,8 +45,9 @@ type StopEnvelopePayload struct {
 
 // TechnicalContextPayload carries engine-owned facts an execution policy needs
 // so it never recomputes ATR/structure from raw OHLC. No quote, spread, or
-// account fields belong here. MAD affinity is permitted only as explicitly
-// named soft technical telemetry and is not an execution decision.
+// account fields belong here. MAD affinity and confluence are permitted only
+// as explicitly named soft technical telemetry and are not execution
+// decisions.
 type TechnicalContextPayload struct {
 	ATR              float64                      `json:"atr"`
 	ReferencePrice   float64                      `json:"reference_price"`
@@ -56,6 +57,33 @@ type TechnicalContextPayload struct {
 	Confirmation     *ReactionConfirmationPayload `json:"confirmation,omitempty"`
 	CandleEvidence   *CandleEvidencePayload       `json:"candle_evidence,omitempty"`
 	MAD              *MADContextPayload           `json:"mad,omitempty"`
+	Confluence       *ConfluenceContextPayload    `json:"confluence,omitempty"`
+}
+
+// ConfluenceContextPayload mirrors opportunity.ConfluenceContext. It carries
+// the engine-owned factor score and its named inputs so the Python consumer
+// can apply the selected value without rerunning legacy detectors.
+type ConfluenceContextPayload struct {
+	Version          string                   `json:"version"`
+	SelectedStars    int                      `json:"selected_stars"`
+	V1Stars          int                      `json:"v1_stars"`
+	V2Stars          int                      `json:"v2_stars"`
+	V2Raw            float64                  `json:"v2_raw"`
+	RawFactorScore   float64                  `json:"raw_factor_score"`
+	ZoneQualityScore float64                  `json:"zone_quality_score"`
+	MADBonus         float64                  `json:"mad_bonus"`
+	Factors          ConfluenceFactorsPayload `json:"factors"`
+}
+
+type ConfluenceFactorsPayload struct {
+	HTFAligned          bool `json:"htf_aligned"`
+	Touches             int  `json:"touches"`
+	WickRejection       bool `json:"wick_rejection"`
+	DisplacementGrade   bool `json:"displacement_grade"`
+	SessionContext      bool `json:"session_context"`
+	StructuralAgreement bool `json:"structural_agreement"`
+	FibTouch            bool `json:"fib_touch"`
+	CHoCH               bool `json:"choch"`
 }
 
 // MADContextPayload mirrors opportunity.MADContext. It is explicitly soft
