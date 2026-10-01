@@ -58,7 +58,7 @@
       "round_step": 5.0
     },
     "legacy_zones": {
-      "enabled": false,
+      "enabled": true,
       "window_bars": 400
     },
     "liquidity": {

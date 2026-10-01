@@ -38,7 +38,32 @@ func ApplyInstrument(settings *Settings, doc *config.Document, symbol string) er
 	if err := applyTechniqueGeometry(settings, doc, symbol); err != nil {
 		return err
 	}
+	applyLegacyCRT(settings)
 	return applyKeyLevelOverrides(settings, doc, symbol)
+}
+
+// applyLegacyCRT switches the CRT strategy to the Python technique when the
+// Python-parity zones are enabled (its entry cap is the instrument's
+// fvg_entry_max_width_price, as in the legacy detector settings).
+func applyLegacyCRT(settings *Settings) {
+	if !settings.LegacyZones.Enabled {
+		return
+	}
+	for i := range settings.Strategies {
+		if settings.Strategies[i].ID != "crt" {
+			continue
+		}
+		params := make(map[string]any, len(settings.Strategies[i].Parameters)+5)
+		for k, v := range settings.Strategies[i].Parameters {
+			params[k] = v
+		}
+		params["legacy_window_bars"] = float64(settings.LegacyZones.WindowBars)
+		params["entry_max_width_price"] = settings.LegacyZones.Technique.FVGEntryMaxWidthPrice
+		params["pip_size"] = settings.LegacyZones.Technique.PipSize
+		params["reaction_lookback_bars"] = 3.0
+		params["engulfing_minimum_range_atr"] = 0.5
+		settings.Strategies[i].Parameters = params
+	}
 }
 
 // techniqueStrategies are the zone strategies whose confirmed reactions pass

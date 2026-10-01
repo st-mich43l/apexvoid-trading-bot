@@ -23,6 +23,7 @@ import (
 	"sort"
 
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/reaction"
 )
 
 // Swing mirrors app/analysis/types.py::Swing.
@@ -1066,6 +1067,8 @@ type Instance struct {
 	StructuralHigh float64
 	BodyFrac       float64
 	HasBOS         bool
+	// H1Time is the H1 candle a CRT instance is built on (open time).
+	H1Time int64
 }
 
 func tEpsilon(s TechniqueSettings, atr float64) float64 {
@@ -1437,4 +1440,122 @@ func TechniqueInstances(bars []market.Candle, c ChainSettings, s TechniqueSettin
 	marked := MarkMitigation(AsSingleZones(all), bars, maxInt(0, len(bars)-1))
 	obV, sdV, fvgV := SourceViews(marked)
 	return CollectInstances(sdV, obV, fvgV, bars, bars[len(bars)-1].Close, ATRScalar(atr, 1), s)
+}
+
+// ---- technique_geometry.py: CRT ------------------------------------------------
+
+// CRTSettings are discover_crt_instances' inputs.
+type CRTSettings struct {
+	MinATR               float64 // crt_min_atr (x H1 ATR)
+	ReclaimBars          int
+	EntryMaxWidthPrice   float64
+	H1LookbackBars       int
+	ReactionLookbackBars int // structural_reaction_lookback_bars
+}
+
+// ProductionCRTSettings are the algo-bot production values (entry cap is per
+// instrument and set by the caller; this is XAU's).
+func ProductionCRTSettings() CRTSettings {
+	return CRTSettings{MinATR: 1.5, ReclaimBars: 6, EntryMaxWidthPrice: 5.0, H1LookbackBars: 3, ReactionLookbackBars: 3}
+}
+
+// DiscoverCRT mirrors technique_geometry.discover_crt_instances: a recent
+// closed H1 candle at least MinATR H1-ATRs tall that the execution timeframe
+// swept and reclaimed (within ReclaimBars), price in the correct half of the
+// range, with a structural reaction on the execution bars off the full H1
+// range. h1Bars are CLOSED bars only (the Python skipped its forming bar).
+func DiscoverCRT(h1Bars, execBars []market.Candle, h1ATR float64, s CRTSettings) []Instance {
+	if len(h1Bars) == 0 || len(execBars) == 0 || h1ATR <= 0 {
+		return nil
+	}
+	minRange := s.MinATR * h1ATR
+	reclaim := maxInt(1, s.ReclaimBars)
+	lookback := maxInt(1, s.H1LookbackBars)
+	start := maxInt(0, len(h1Bars)-lookback)
+	foundSides := map[string]bool{}
+	var out []Instance
+	for rowPos := len(h1Bars) - 1; rowPos >= start; rowPos-- {
+		row := h1Bars[rowPos]
+		rangeHigh, rangeLow := row.High, row.Low
+		if rangeHigh-rangeLow < minRange {
+			continue
+		}
+		mid := (rangeHigh + rangeLow) / 2
+		for _, side := range []string{"buy", "sell"} {
+			if foundSides[side] {
+				continue
+			}
+			swept, sweepIndex := false, -1
+			for index := maxInt(0, len(execBars)-reclaim-5); index < len(execBars); index++ {
+				if side == "buy" && execBars[index].Low < rangeLow {
+					swept, sweepIndex = true, index
+				}
+				if side == "sell" && execBars[index].High > rangeHigh {
+					swept, sweepIndex = true, index
+				}
+			}
+			if !swept {
+				continue
+			}
+			reclaimed := false
+			for index := sweepIndex; index < minInt(len(execBars), sweepIndex+reclaim+1); index++ {
+				c := execBars[index].Close
+				if (side == "buy" && c >= rangeLow) || (side == "sell" && c <= rangeHigh) {
+					reclaimed = true
+					break
+				}
+			}
+			if !reclaimed {
+				continue
+			}
+			price := execBars[len(execBars)-1].Close
+			if (side == "buy" && price > mid) || (side == "sell" && price < mid) {
+				continue
+			}
+			direction := "BUY"
+			if side == "sell" {
+				direction = "SELL"
+			}
+			if reaction.Evaluate(execBars, reaction.Params{
+				Direction: direction, Low: rangeLow, High: rangeHigh, TouchLookback: s.ReactionLookbackBars,
+			}) == nil {
+				continue
+			}
+			inst := Instance{
+				Technique: "crt", Side: side, Low: rangeLow, High: rangeHigh, Sources: []string{"crt"},
+				OriginIndex: rowPos, StructuralLow: rangeLow, StructuralHigh: rangeHigh, H1Time: row.Time,
+			}
+			// CRT keeps the SWEPT edge (BUY -> low, SELL -> high).
+			if rangeHigh-rangeLow > s.EntryMaxWidthPrice+1e-12 && s.EntryMaxWidthPrice > 0 {
+				if side == "sell" {
+					inst.Low, inst.High = rangeHigh-s.EntryMaxWidthPrice, rangeHigh
+				} else {
+					inst.Low, inst.High = rangeLow, rangeLow+s.EntryMaxWidthPrice
+				}
+				inst.EntryClipped = true
+			}
+			out = append(out, inst)
+			foundSides[side] = true
+		}
+		if len(foundSides) >= 2 {
+			break
+		}
+	}
+	return out
+}
+
+// CollectCRT returns the CRT instances that pass the technique validation
+// (collect_technique_instances applied them to CRT like any other).
+func CollectCRT(h1Bars, execBars []market.Candle, h1ATR, execATR float64, crt CRTSettings, s TechniqueSettings) []Instance {
+	var out []Instance
+	price := 0.0
+	if len(execBars) > 0 {
+		price = execBars[len(execBars)-1].Close
+	}
+	for _, in := range DiscoverCRT(h1Bars, execBars, h1ATR, crt) {
+		if validateInstance(in, execBars, price, execATR, s) {
+			out = append(out, in)
+		}
+	}
+	return out
 }
