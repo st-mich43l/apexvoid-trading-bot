@@ -106,6 +106,46 @@ func TestBook_InvalidatesExactlyOnceWithMachineReadableReason(t *testing.T) {
 	}
 }
 
+func TestBook_InvalidateByCloseUsesCandidateTimeframeAndLabel(t *testing.T) {
+	book := opportunity.NewBook()
+	c := candidate("opp-close-invalidation")
+	c.ObservedTimeframe = market.M5
+	c.Invalidation = market.PriceLevel{Price: 2010, Label: "supply_zone_invalidated"}
+	c.Direction = market.Sell
+	c.Entry = opportunity.EntryZone{Low: 2000, High: 2002}
+	c.Targets = []opportunity.Target{{Price: market.PriceLevel{Price: 1980, Label: "liquidity"}}}
+	if _, err := book.Observe(c, 11); err != nil {
+		t.Fatal(err)
+	}
+	if got := book.InvalidateByClose(market.M1, 2011, 12); len(got) != 0 {
+		t.Fatalf("a different timeframe must not invalidate the setup: %+v", got)
+	}
+	if got := book.InvalidateByClose(market.M5, 2010.5, 12); len(got) != 1 {
+		t.Fatalf("expected one close-through invalidation, got %+v", got)
+	} else if got[0].Record.Terminal == nil || got[0].Record.Terminal.Reason != "SUPPLY_ZONE_INVALIDATED" {
+		t.Fatalf("expected the strategy label as a machine-readable reason, got %+v", got[0])
+	}
+	if got := book.InvalidateByClose(market.M5, 2011, 13); len(got) != 0 {
+		t.Fatalf("technical invalidation must be emitted once, got %+v", got)
+	}
+}
+
+func TestBook_InvalidateByCloseRequiresAConfirmedClose(t *testing.T) {
+	book := opportunity.NewBook()
+	c := candidate("opp-wick-only")
+	c.ObservedTimeframe = market.M5
+	c.Invalidation = market.PriceLevel{Price: 1990, Label: "structure_invalidated"}
+	if _, err := book.Observe(c, 11); err != nil {
+		t.Fatal(err)
+	}
+	if got := book.InvalidateByClose(market.M5, 1991, 12); len(got) != 0 {
+		t.Fatalf("close above a BUY invalidation must not invalidate: %+v", got)
+	}
+	if got := book.InvalidateByClose(market.M5, 1990, 13); len(got) != 1 {
+		t.Fatalf("close at the invalidation threshold must invalidate: %+v", got)
+	}
+}
+
 func TestBook_ExpiresOnlyFromStrategyTechnicalDeadline(t *testing.T) {
 	book := opportunity.NewBook()
 	c := candidate("opp-expired")

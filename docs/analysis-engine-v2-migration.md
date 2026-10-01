@@ -148,10 +148,12 @@ manual, display, or offline compatibility paths.
     methods it calls were already real-broker-tested in the earlier
     Kafka transport task — but the two have not been exercised together
     end to end against a live broker.
-  - Invalidation transitions still have no real trigger path from any S7
-    strategy (a pre-existing limitation, unchanged by S9): only
-    time-based `Expire` fires today, so `analysis.opportunity.invalidated.v1`
-    in practice currently only ever carries `SETUP_EXPIRED`.
+  - Technical invalidation is now evaluated by the lifecycle book on each
+    closed bar for the candidate's own observed timeframe. A confirmed close
+    through the strategy-owned invalidation threshold publishes exactly one
+    `analysis.opportunity.invalidated.v1` event with the normalized strategy
+    label as its machine-readable reason; time-based `Expire` remains the
+    separate `SETUP_EXPIRED` path.
 - **Threshold calibration**: several V2-only thresholds (swing
   promotion ATR cutoffs, `failed_break_reclaim_bars`, liquidity
   `pool_minimum_touches`) have no Python precedent and were set to
