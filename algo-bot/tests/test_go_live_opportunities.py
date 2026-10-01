@@ -61,6 +61,24 @@ async def test_published_set_is_read_back():
 
 
 @pytest.mark.asyncio
+async def test_older_projection_is_unavailable_when_event_requires_a_newer_snapshot():
+  client = redis_state.get_client()
+  await client.set(
+    go_live_opportunities_key("XAU"),
+    json.dumps({"generated_at": 100, "ids": ["opp_a"]}),
+  )
+  assert await go_live_opportunity_ids(client, "XAU", minimum_generated_at=101) is None
+  assert await go_live_opportunity_ids(client, "XAU", minimum_generated_at=100) == frozenset({"opp_a"})
+
+
+@pytest.mark.asyncio
+async def test_v1_projection_without_timestamp_remains_compatible():
+  client = redis_state.get_client()
+  await client.set(go_live_opportunities_key("XAU"), json.dumps({"ids": ["opp_a"]}))
+  assert await go_live_opportunity_ids(client, "XAU", minimum_generated_at=101) == frozenset({"opp_a"})
+
+
+@pytest.mark.asyncio
 async def test_a_garbled_set_is_unavailable_not_empty():
   client = redis_state.get_client()
   await client.set(go_live_opportunities_key("XAU"), "{broken")

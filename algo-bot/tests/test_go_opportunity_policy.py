@@ -668,6 +668,28 @@ async def test_pending_arbitration_is_joined_when_lifecycle_event_arrives_after_
   assert matches[0].arbitration_status == "winner"
 
 
+@pytest.mark.asyncio
+async def test_stale_live_projection_does_not_suppress_a_current_arbitration(h):
+  """Kafka can beat the Redis projection during an engine restart.
+
+  An older live-set document is not evidence that a newly decided Go
+  opportunity is absent; the next projection is authoritative.  The policy
+  must therefore retain the winner instead of writing the permanent
+  ``go_opportunity_not_live`` suppression used for a current, non-member ID.
+  """
+  await h.activate()
+  await h.deliver(event(int(h.clock.now)))
+  client = redis_state.get_client()
+  from app.autotrade.go_live_opportunities import go_live_opportunities_key
+  await client.set(
+    go_live_opportunities_key("XAU"),
+    json.dumps({"generated_at": 100, "ids": []}),
+  )
+  assert await h.policy.on_arbitration_decision(_arbitration_event()) == "arbitration_updated"
+  matches = deserialize_matches(await client.get(strategy_matches_key("XAU")))
+  assert matches[0].arbitration_status == "winner"
+
+
 # ---- end to end: Go event -> match -> REAL V8 plan --------------------------------
 
 def _spot(bid, ask):
