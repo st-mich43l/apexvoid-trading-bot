@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from app.analysis.ohlc_source import (
+from app.marketdata.ohlc import (
   RedisOHLCSource,
   prefetch_closed_bar_windows,
   prefetch_timeframes_for_closed_bar,

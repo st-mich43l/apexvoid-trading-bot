@@ -70,10 +70,10 @@ def test_real_tree_has_no_dynamic_import_that_can_reach_legacy_modules():
   assert [item for item in report["dynamic_imports"] if item.get("legacy_possible") == "yes"] == []
 
 
-def test_real_startup_tasks_identify_the_one_legacy_background_loop():
+def test_real_startup_tasks_have_no_legacy_analysis_background_loop():
   report = cls.classify_inventory(ROOT)
   legacy = [task["task"] for task in report["startup_tasks"] if task["legacy"] == "yes"]
-  assert legacy == ["bar_event_dispatcher_loop"]
+  assert legacy == []
   consumer = next(task for task in report["startup_tasks"] if task["task"] == "analysis_opportunity_consumer_loop")
   assert consumer["conditional"] == "yes", "Go consumer must stay opt-in"
 

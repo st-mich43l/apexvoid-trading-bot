@@ -14,7 +14,7 @@ from app.signals import broadcast
 from app.persistence import store, redis_state
 from app.analysis import scanner
 from app.analysis.market_map import MapEntry, MarketMap, ScalpRail
-from app.analysis.ohlc_source import RedisOHLCSource
+from app.marketdata.ohlc import RedisOHLCSource
 from app.analysis.scalp_ranges import ScalpBarrier, ScalpRange
 from app.analysis.structure import Zone
 from app.analysis.zones import ZONE_RECONCILED_TAG_PREFIX

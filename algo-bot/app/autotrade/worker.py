@@ -143,7 +143,7 @@ from app.core.config import runtime_config
 from app.runtime.instrument_config import instrument_runtime_view
 from app.runtime.price_identity import price_token
 from app.persistence.store import event_in_window, nearest_currency_event
-from app.analysis.ohlc_source import RedisOHLCSource, window_for_timeframe
+from app.marketdata.ohlc import RedisOHLCSource, window_for_timeframe
 
 
 log = logging.getLogger(__name__)
