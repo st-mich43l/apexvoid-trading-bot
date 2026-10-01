@@ -43,6 +43,7 @@ func opportunityPayloadFromCandidate(c opportunity.Candidate, algo AlgorithmVers
 			}
 		}
 		technical.CandleEvidence = candleEvidencePayload(c.Technical.CandleEvidence)
+		technical.MAD = madContextPayload(c.Technical.MAD)
 		for _, higher := range c.Technical.HigherTimeframes {
 			technical.HigherTimeframes = append(technical.HigherTimeframes, HigherTimeframeBiasPayload{
 				Timeframe: string(higher.Timeframe), Direction: string(higher.Direction), Layer: higher.Layer, ReferenceTime: higher.ReferenceTime,
@@ -65,6 +66,20 @@ func opportunityPayloadFromCandidate(c opportunity.Candidate, algo AlgorithmVers
 		Quality:          QualityPayload{Overall: c.Quality.Overall, Components: c.Quality.Components},
 		AlgorithmVersion: AlgorithmVersionPayload{Structure: algo.Structure, Liquidity: algo.Liquidity},
 		FormedAt:         c.FormedAt, CreatedAt: c.CreatedAt, ExpiresAt: c.ExpiresAt, RecoveredAt: recoveredAt,
+	}
+}
+
+func madContextPayload(m *opportunity.MADContext) *MADContextPayload {
+	if m == nil {
+		return nil
+	}
+	return &MADContextPayload{
+		Version: m.Version, Phase: m.Phase, Confidence: m.Confidence, Affinity: m.Affinity,
+		Direction: m.Direction, SweepSide: m.SweepSide, Reclaim: m.Reclaim,
+		RangeQualityATR: m.RangeQualityATR, BreakDistanceATR: m.BreakDistanceATR,
+		DisplacementATR: m.DisplacementATR, AcceptanceCloses: m.AcceptanceCloses,
+		SweepPenetrationATR: m.SweepPenetrationATR, ReclaimDepthATR: m.ReclaimDepthATR,
+		ReasonCode: m.ReasonCode,
 	}
 }
 

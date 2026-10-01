@@ -130,8 +130,10 @@ var ReactionPatterns = map[string]bool{
 // that first made the setup actionable, so every value is causal at that bar.
 //
 // It deliberately carries no quote/spread (a live, executable-price concern the
-// policy layer owns), no account fact, and no confluence *score*: strategies'
-// own Evidence and Quality are the confluence facts.
+// policy layer owns), no account fact, and no universal execution confluence
+// score. MAD affinity is retained only as explicitly named soft technical
+// telemetry; strategies' own Evidence and Quality remain the candidate's
+// comparable quality facts.
 // HigherTimeframeBias is a confirmed structural read from the named closed
 // higher-timeframe candle; it is not the entry timeframe's bias or a guess.
 type HigherTimeframeBias struct {
@@ -139,6 +141,26 @@ type HigherTimeframeBias struct {
 	Direction     market.Direction
 	Layer         string
 	ReferenceTime int64
+}
+
+// MADContext is the engine-owned MAD/Asia phase snapshot used by the legacy
+// detector's soft-confluence path. It carries technical facts only; it is
+// never an execution gate and contains no quote, account, or sizing input.
+type MADContext struct {
+	Version             int
+	Phase               string
+	Confidence          float64
+	Affinity            float64
+	Direction           string
+	SweepSide           string
+	Reclaim             bool
+	RangeQualityATR     *float64
+	BreakDistanceATR    *float64
+	DisplacementATR     *float64
+	AcceptanceCloses    *int
+	SweepPenetrationATR *float64
+	ReclaimDepthATR     *float64
+	ReasonCode          string
 }
 
 type TechnicalContext struct {
@@ -161,6 +183,10 @@ type TechnicalContext struct {
 	// CandleEvidence is additive descriptive evidence from the same closed
 	// observation bar. It never gates a candidate or changes execution risk.
 	CandleEvidence *candle.Evidence
+	// MAD is additive soft-confluence telemetry from the engine's canonical
+	// primary-timeframe phase snapshot. A nil value means no phase snapshot was
+	// available; it never licenses a consumer to recompute Python detectors.
+	MAD *MADContext
 }
 
 // Candidate is one strategy's technical opportunity, as of the source
@@ -402,6 +428,16 @@ func cloneCandidate(c Candidate) Candidate {
 			evidence.AllPatterns = append([]string(nil), c.Technical.CandleEvidence.AllPatterns...)
 			technical.CandleEvidence = &evidence
 		}
+		if c.Technical.MAD != nil {
+			mad := *c.Technical.MAD
+			mad.RangeQualityATR = cloneFloat(c.Technical.MAD.RangeQualityATR)
+			mad.BreakDistanceATR = cloneFloat(c.Technical.MAD.BreakDistanceATR)
+			mad.DisplacementATR = cloneFloat(c.Technical.MAD.DisplacementATR)
+			mad.SweepPenetrationATR = cloneFloat(c.Technical.MAD.SweepPenetrationATR)
+			mad.ReclaimDepthATR = cloneFloat(c.Technical.MAD.ReclaimDepthATR)
+			mad.AcceptanceCloses = cloneInt(c.Technical.MAD.AcceptanceCloses)
+			technical.MAD = &mad
+		}
 		clone.Technical = &technical
 	}
 	if c.Quality.Components != nil {
@@ -415,4 +451,20 @@ func cloneCandidate(c Candidate) Candidate {
 		clone.StopEnvelope = &envelope
 	}
 	return clone
+}
+
+func cloneFloat(value *float64) *float64 {
+	if value == nil {
+		return nil
+	}
+	copy := *value
+	return &copy
+}
+
+func cloneInt(value *int) *int {
+	if value == nil {
+		return nil
+	}
+	copy := *value
+	return &copy
 }

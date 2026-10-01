@@ -5,6 +5,7 @@ package mad
 
 import (
 	"math"
+	"strings"
 	"time"
 
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
@@ -63,6 +64,96 @@ type Snapshot struct {
 }
 
 type FeatureScores struct{ Accum, Manip, Expand float64 }
+
+// AffinityScore is the bounded, directional MAD quality used by the legacy
+// detector as a soft confluence input.  It is deliberately not an eligibility
+// result: a zero score records that this phase does not support the candidate
+// direction/family, while the execution policy still owns all live gates.
+type AffinityScore struct {
+	PhaseScore     float64
+	DirectionScore float64
+	StrategyScore  float64
+	Confidence     float64
+	Final          float64
+}
+
+// SoftBonus is the small family-specific MAD confluence bonus from the
+// Python detector.  It is telemetry/scoring only and must never be used as a
+// publish or execution veto.
+func SoftBonus(phase, family string) float64 {
+	p := normalize(phase)
+	f := normalize(family)
+	if p == PhaseAccum && (f == "range_scalp" || f == "range_edge" || f == "range_edge_mean_reversion") {
+		return 0.12
+	}
+	if p == PhaseManip && (f == "reaction" || f == "liquidity" || f == "structural_reaction" || f == "liquidity_sweep_reversal") {
+		return 0.12
+	}
+	return 0
+}
+
+// StrategyKey maps the registered Go strategy IDs to the same MAD affinity
+// vocabulary used by mad_gate_strategy_for_setup in Python.  The mapping is
+// explicit: substring guesses were a source of silent detector drift.
+func StrategyKey(strategy string) string {
+	switch normalize(strategy) {
+	case "range_edge", "range_sweep":
+		return "range_edge_mean_reversion"
+	case "liquidity_sweep":
+		return "liquidity_sweep_reversal"
+	case "impulse_pullback", "momentum_ride":
+		return "impulse_pullback_continuation"
+	case "box_breakout", "scalp_breakout_retest":
+		return "breakout_retest"
+	case "":
+		return ""
+	default:
+		// Zone, key-level, CRT, flip, session and trendline candidates are
+		// structural reactions in the Python taxonomy.
+		return "structural_reaction"
+	}
+}
+
+// Affinity computes the Python MAD affinity formula exactly: phase evidence,
+// directional agreement, strategy-family agreement, and snapshot confidence
+// are multiplied and clamped to [0,1].
+func Affinity(snapshot Snapshot, direction, strategy string) AffinityScore {
+	features := Features(snapshot)
+	want := normalize(direction)
+	key := StrategyKey(strategy)
+	score := AffinityScore{Confidence: clamp(snapshot.Confidence)}
+	switch snapshot.Phase {
+	case PhaseAccum:
+		score.PhaseScore = features.Accum
+		if want == "BUY" || want == "SELL" {
+			score.DirectionScore = 1
+		}
+		if key == "range_edge_mean_reversion" || key == "range_sweep" {
+			score.StrategyScore = 1
+		}
+	case PhaseManip:
+		score.PhaseScore = features.Manip
+		if snapshot.ManipulationDirection != "" && normalize(snapshot.ManipulationDirection) == want {
+			score.DirectionScore = 1
+		}
+		if key == "structural_reaction" || key == "liquidity_sweep_reversal" {
+			score.StrategyScore = 1
+		}
+	case PhaseExpand:
+		score.PhaseScore = features.Expand
+		if snapshot.ExpansionDirection != "" && normalize(snapshot.ExpansionDirection) == want {
+			score.DirectionScore = 1
+		}
+		if key == "impulse_pullback_continuation" || key == "breakout_retest" {
+			score.StrategyScore = 1
+		}
+	}
+	score.PhaseScore = clamp(score.PhaseScore)
+	score.DirectionScore = clamp(score.DirectionScore)
+	score.StrategyScore = clamp(score.StrategyScore)
+	score.Final = clamp(score.PhaseScore * score.DirectionScore * score.StrategyScore * score.Confidence)
+	return score
+}
 
 // AsiaDayKey matches mad_phase.py's session-day identity. UTC is explicit so
 // a host timezone can never change the technical read.
@@ -170,7 +261,13 @@ func Classify(candles []market.Candle, atr, atrLong float64, session, structure 
 		return base
 	}
 	building := (session == "ASIA" || session == "asia") && !asia.Sealed && vs == "inside" && rq >= cfg.AccumMinimumRQ && rq <= 24
-	if (vs == "inside" || building) && (structure == "range" || structure == "unknown" || structure == "") && rq >= cfg.AccumMinimumRQ && rq <= cfg.AccumMaximumRQ || building {
+	// Match Python's grouped predicate exactly: a building Asia box still
+	// requires the canonical range/unknown structure read.  The previous Go
+	// expression let `|| building` bypass that owner boundary.
+	structureOK := structure == "range" || structure == "unknown" || structure == ""
+	sealedRQOK := rq >= cfg.AccumMinimumRQ && rq <= cfg.AccumMaximumRQ
+	buildingRQOK := building
+	if (vs == "inside" || building) && structureOK && (sealedRQOK || buildingRQOK) {
 		base.Phase, base.ReasonCode = PhaseAccum, "asia_box_accum"
 		if building && rq > cfg.AccumMaximumRQ {
 			base.ReasonCode = "asia_building_accum"
@@ -334,3 +431,7 @@ func rqScore(rq float64, building bool) float64 {
 	return .15
 }
 func clamp(v float64) float64 { return math.Max(0, math.Min(1, v)) }
+
+func normalize(value string) string {
+	return strings.ToLower(strings.TrimSpace(value))
+}
