@@ -3,6 +3,10 @@ package opportunity
 import (
 	"fmt"
 	"sort"
+	"strings"
+	"unicode"
+
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 )
 
 // State is the analytical lifecycle of a technical opportunity. It has no
@@ -151,6 +155,49 @@ func (b *Book) Invalidate(id string, reason ReasonCode, at int64) (Transition, e
 	return transition(TransitionInvalidated, record), nil
 }
 
+// InvalidateByClose applies each live candidate's own technical invalidation
+// threshold to the closed bar for the timeframe that observed it.  Candidate
+// invalidation prices are strategy-owned facts; the universal lifecycle rule
+// is only the directional close-through check.  A wick that does not close
+// beyond the threshold is deliberately not enough, matching the strategy
+// specifications' confirmed-close semantics.
+func (b *Book) InvalidateByClose(timeframe market.Timeframe, close float64, at int64) []Transition {
+	if b == nil || timeframe == "" || !finite(close) || at < 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(b.records))
+	for id := range b.records {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	transitions := make([]Transition, 0)
+	for _, id := range ids {
+		record := b.records[id]
+		if record.State != StateCreated && record.State != StateActive {
+			continue
+		}
+		candidate := record.Candidate
+		if candidate.ObservedTimeframe != timeframe {
+			continue
+		}
+		invalidated := (candidate.Direction == market.Buy && close <= float64(candidate.Invalidation.Price)) ||
+			(candidate.Direction == market.Sell && close >= float64(candidate.Invalidation.Price))
+		if !invalidated {
+			continue
+		}
+		transition, err := b.Invalidate(id, reasonCodeForInvalidationLabel(candidate.Invalidation.Label), at)
+		if err != nil {
+			// The checks above establish the lifecycle preconditions. Keep the
+			// method defensive if a future caller changes Book mutation order.
+			continue
+		}
+		if transition.Kind == TransitionInvalidated {
+			transitions = append(transitions, transition)
+		}
+	}
+	return transitions
+}
+
 // Expire applies each strategy-owned technical expiry deadline. It never
 // consults account policy or a global execution age; those remain Algo Bot
 // concerns. Results are sorted by ID for deterministic replay/publication.
@@ -259,4 +306,27 @@ func (r ReasonCode) valid() bool {
 		}
 	}
 	return true
+}
+
+func reasonCodeForInvalidationLabel(label string) ReasonCode {
+	if label == "" {
+		return ReasonStructureInvalidated
+	}
+	var builder strings.Builder
+	for _, r := range label {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			builder.WriteRune(unicode.ToUpper(r))
+		} else {
+			builder.WriteByte('_')
+		}
+	}
+	code := strings.Trim(builder.String(), "_")
+	if code == "" || code[0] < 'A' || code[0] > 'Z' {
+		return ReasonStructureInvalidated
+	}
+	reason := ReasonCode(code)
+	if !reason.valid() {
+		return ReasonStructureInvalidated
+	}
+	return reason
 }
