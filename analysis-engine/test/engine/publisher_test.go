@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/arbitration"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/engine"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
@@ -148,6 +149,82 @@ func TestOpportunityPublisher_PublishesACreatedTransition(t *testing.T) {
 	opps, _, _ := client.snapshot()
 	if opps[0].ID != "opp-created" {
 		t.Errorf("expected the published candidate to be opp-created, got %q", opps[0].ID)
+	}
+}
+
+func TestOpportunityPublisher_LifecycleOutranksQueuedArbitration(t *testing.T) {
+	client := &fakeKafkaClient{}
+	pub := engine.NewOpportunityPublisher(client, nil)
+
+	pub.EnqueueArbitrationDecision("XAU", "opp-old-arbitration", arbitration.Decision{
+		Status: arbitration.StatusWinner, ReasonCode: "ranked_single_direction",
+	}, 10)
+	candidate := fakeCandidate("opp-lifecycle")
+	pub.Enqueue("XAU", kafka.AlgorithmVersion{}, opportunity.Transition{
+		Kind: opportunity.TransitionCreated, Record: opportunity.Record{Candidate: candidate},
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go pub.Run(ctx)
+	waitFor(t, 2*time.Second, func() bool {
+		opps, _, calls := client.snapshot()
+		return len(opps) == 1 && len(calls) >= 1
+	})
+	_, _, calls := client.snapshot()
+	if calls[0] != "created:opp-lifecycle" {
+		t.Fatalf("lifecycle event was starved by arbitration projection: calls=%v", calls)
+	}
+}
+
+func TestOpportunityPublisher_CoalescesQueuedArbitrationUpdates(t *testing.T) {
+	client := &fakeKafkaClient{}
+	pub := engine.NewOpportunityPublisher(client, nil)
+	pub.EnqueueArbitrationDecision("XAU", "opp-arbitration", arbitration.Decision{
+		Status: arbitration.StatusConflictHeld, ReasonCode: "opposite_direction_conflict",
+	}, 10)
+	pub.EnqueueArbitrationDecision("XAU", "opp-arbitration", arbitration.Decision{
+		Status: arbitration.StatusWinner, ReasonCode: "ranked_single_direction",
+	}, 20)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go pub.Run(ctx)
+	waitFor(t, 2*time.Second, func() bool { return len(client.arbitrationSnapshot()) == 1 })
+	got := client.arbitrationSnapshot()
+	if got[0].OpportunityID != "opp-arbitration" || got[0].Status != "winner" || got[0].DecidedAt != 20 {
+		t.Fatalf("expected only latest arbitration projection, got %+v", got)
+	}
+}
+
+func TestOpportunityPublisher_DropsPersistedArbitrationBacklogOnRestart(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "publication-ledger.json")
+	client := &fakeKafkaClient{}
+	first, err := engine.NewDurableOpportunityPublisher(client, nil, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first.EnqueueArbitrationDecision("XAU", "opp-persisted-arbitration", arbitration.Decision{
+		Status: arbitration.StatusWinner, ReasonCode: "ranked_single_direction",
+	}, 10)
+
+	restarted, err := engine.NewDurableOpportunityPublisher(client, nil, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	candidate := fakeCandidate("opp-after-restart")
+	restarted.Enqueue("XAU", kafka.AlgorithmVersion{}, opportunity.Transition{
+		Kind: opportunity.TransitionCreated, Record: opportunity.Record{Candidate: candidate},
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go restarted.Run(ctx)
+	waitFor(t, 2*time.Second, func() bool {
+		opps, _, _ := client.snapshot()
+		return len(opps) == 1
+	})
+	if got := client.arbitrationSnapshot(); len(got) != 0 {
+		t.Fatalf("persisted arbitration projection should be discarded on restart, got %+v", got)
 	}
 }
 
