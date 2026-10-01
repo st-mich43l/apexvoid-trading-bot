@@ -308,6 +308,7 @@ func (w *SymbolWorker) rebuildContext() {
 		perTF[tf] = context.TimeframeInput{
 			Candles: w.state.History.For(tf).Snapshot(), Structure: structState, Liquidity: liqState, Zones: zoneState,
 			Trendline: trendState, KeyLevel: keyLevelState, Session: sessionState, Fib: fibState, ATR: lastATR,
+			ATRSeries: atrSeries, RegimeConfig: w.settings.Regime, MADConfig: w.settings.MAD, Geometry: w.settings.Geometry,
 		}
 	}
 	w.state.Context = context.Build(w.state.Symbol, w.settings.PrimaryTimeframe, perTF)

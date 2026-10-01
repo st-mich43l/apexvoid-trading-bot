@@ -6,8 +6,10 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/fib"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/keylevel"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/liquidity"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/mad"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/momentum"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/regime"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/session"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
@@ -29,6 +31,8 @@ type Settings struct {
 	Session          session.Config
 	Fib              fib.Config
 	Momentum         momentum.Config
+	Regime           regime.Config
+	MAD              mad.Config
 	Arbitration      arbitration.Config
 	LegacyZones      LegacyZonesSettings
 	StopEnvelope     StopEnvelopeConfig
@@ -114,6 +118,14 @@ func LoadSettings(doc *config.Document, primary market.Timeframe, allowReplaceFo
 	if err != nil {
 		return Settings{}, err
 	}
+	regimeConfig, err := RegimeConfigFromConfig(doc)
+	if err != nil {
+		return Settings{}, err
+	}
+	madConfig, err := MADConfigFromConfig(doc)
+	if err != nil {
+		return Settings{}, err
+	}
 	legacyZones, err := LegacyZonesSettingsFromConfig(doc)
 	if err != nil {
 		return Settings{}, err
@@ -137,7 +149,7 @@ func LoadSettings(doc *config.Document, primary market.Timeframe, allowReplaceFo
 	return Settings{
 		ATR: atr, Structure: structureSettings, Liquidity: liquidityConfig, Zone: zoneConfig,
 		Trendline: trendlineConfig, KeyLevel: keyLevelConfig, Session: sessionConfig, Fib: fibConfig, Momentum: momentumConfig,
-		Arbitration: arbitrationConfig, LegacyZones: legacyZones, StopEnvelope: stopEnvelopeConfig, Strategies: strategyConfigs,
+		Arbitration: arbitrationConfig, Regime: regimeConfig, MAD: madConfig, LegacyZones: legacyZones, StopEnvelope: stopEnvelopeConfig, Strategies: strategyConfigs,
 		HistoryDepths: depths, PrimaryTimeframe: primary,
 		AllowReplaceForming: allowReplaceForming,
 		ConfigVersion:       configProvenance.Version,
