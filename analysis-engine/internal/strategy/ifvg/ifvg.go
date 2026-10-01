@@ -21,6 +21,7 @@ type Strategy struct {
 	minimumStrength, minimumGapATR, invalidationATR, targetATR, expiryHours float64
 	fingerprint                                                             string
 	reaction                                                                strategyutil.ReactionConfig
+	technique                                                               strategyutil.TechniqueGeometry
 }
 
 func New(cfg strategy.Config) (strategy.Strategy, error) {
@@ -43,6 +44,11 @@ func New(cfg strategy.Config) (strategy.Strategy, error) {
 		return nil, err
 	}
 	s.reaction = reaction
+	technique, err := strategyutil.ParseTechniqueGeometry(cfg.Parameters)
+	if err != nil {
+		return nil, err
+	}
+	s.technique = technique
 	if s.minimumStrength < 0 || s.minimumGapATR < 0 || s.invalidationATR <= 0 || s.targetATR <= 0 || s.expiryHours <= 0 {
 		return nil, fmt.Errorf("ifvg: invalid non-positive strategy parameter")
 	}
@@ -103,8 +109,14 @@ func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Ca
 			}
 			seenCandidates[candidate.ID] = struct{}{}
 			result = append(result, candidate)
-			if rc := strategyutil.ConfirmReaction(tf, z.ID, direction, float64(z.Low), float64(z.High), atr, z.CreatedAt, s.reaction); rc != nil {
-				if confirmed, confirmErr := strategyutil.ConfirmedVariant(candidate, rc, z.ID, z.OriginTime, s.expiryHours, "m5_ifvg_rejection_confirmed"); confirmErr == nil {
+			if rc := strategyutil.ConfirmReaction(tf, z.ID, direction, float64(z.Low), float64(z.High), atr, z.CreatedAt, s.reaction); rc != nil &&
+				s.technique.ProximalRetest(direction, float64(z.Low), float64(z.High), strategyutil.LastClose(tf.Candles), atr) &&
+				strategyutil.WidthWithinATR(float64(z.Low), float64(z.High), atr, s.technique.MaximumZoneATR) {
+				confirmedBase := candidate
+				if clipLow, clipHigh, clipped := s.technique.ClipEntry(direction, float64(z.Low), float64(z.High)); clipped {
+					confirmedBase.Entry = opportunity.EntryZone{Low: clipLow, High: clipHigh}
+				}
+				if confirmed, confirmErr := strategyutil.ConfirmedVariant(confirmedBase, rc, z.ID, z.OriginTime, s.expiryHours, "m5_ifvg_rejection_confirmed"); confirmErr == nil {
 					result = append(result, confirmed)
 				}
 			}

@@ -190,3 +190,25 @@ func (d *Document) InstrumentOverride(symbol string, path ...string) (any, bool,
 	value, ok := cursor[path[len(path)-1]]
 	return value, ok, nil
 }
+
+// InstrumentValue reads one leaf of an instrument's merged declaration (pack
+// underneath, instrument on top), e.g. ("XAU", "price_scale",
+// "fvg_entry_max_width_price"). It reports whether it is set.
+func (d *Document) InstrumentValue(symbol string, path ...string) (any, bool, error) {
+	merged, err := d.mergedInstrument(symbol)
+	if err != nil {
+		return nil, false, err
+	}
+	var cursor any = merged
+	for _, key := range path {
+		m, ok := cursor.(stringMap)
+		if !ok {
+			return nil, false, nil
+		}
+		cursor, ok = m[key]
+		if !ok {
+			return nil, false, nil
+		}
+	}
+	return cursor, true, nil
+}

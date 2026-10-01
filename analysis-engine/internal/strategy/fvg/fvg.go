@@ -45,6 +45,8 @@ type Config struct {
 	ExpiryHours              float64
 	// Reaction is the shared legacy confirmation tuning (see strategyutil).
 	Reaction strategyutil.ReactionConfig
+	// Technique is the legacy Python technique validation (see strategyutil).
+	Technique strategyutil.TechniqueGeometry
 }
 
 // Strategy is FVGStrategy.
@@ -99,9 +101,13 @@ func parseConfig(params map[string]any) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	techniqueConfig, err := strategyutil.ParseTechniqueGeometry(params)
+	if err != nil {
+		return Config{}, err
+	}
 	return Config{
 		MinimumStrength: minimumStrength, MinimumGapATR: minimumGap, InvalidationBufferATR: invalidationBuffer,
-		MinimumTargetDistanceATR: minimumTargetDistance, ExpiryHours: expiryHours, Reaction: reactionConfig,
+		MinimumTargetDistanceATR: minimumTargetDistance, ExpiryHours: expiryHours, Reaction: reactionConfig, Technique: techniqueConfig,
 	}, nil
 }
 
@@ -219,11 +225,18 @@ func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate 
 			},
 		}
 		candidates = append(candidates, candidate)
-		if rc := strategyutil.ConfirmReaction(tfCtx, z.ID, direction, float64(z.Low), float64(z.High), atr, z.CreatedAt, s.cfg.Reaction); rc != nil {
+		if rc := strategyutil.ConfirmReaction(tfCtx, z.ID, direction, float64(z.Low), float64(z.High), atr, z.CreatedAt, s.cfg.Reaction); rc != nil &&
+			s.cfg.Technique.ProximalRetest(direction, entryLow, entryHigh, strategyutil.LastClose(tfCtx.Candles), atr) &&
+			strategyutil.WidthWithinATR(entryLow, entryHigh, atr, s.cfg.Technique.MaximumZoneATR) &&
+			strategyutil.FVGNotFullyFilled(direction, entryLow, entryHigh, tfCtx.Candles, z.CreatedAt) {
 			// The resting-zone opportunity remains a technical observation;
 			// only a distinct, causally identified reaction can enter Algo
 			// Bot's confirmed-zone policy.
-			if confirmed, confirmErr := strategyutil.ConfirmedVariant(candidate, rc, z.ID, z.CreatedAt, s.cfg.ExpiryHours, "m5_fvg_rejection_confirmed"); confirmErr == nil {
+			confirmedBase := candidate
+			if clipLow, clipHigh, clipped := s.cfg.Technique.ClipEntry(direction, entryLow, entryHigh); clipped {
+				confirmedBase.Entry = opportunity.EntryZone{Low: clipLow, High: clipHigh}
+			}
+			if confirmed, confirmErr := strategyutil.ConfirmedVariant(confirmedBase, rc, z.ID, z.CreatedAt, s.cfg.ExpiryHours, "m5_fvg_rejection_confirmed"); confirmErr == nil {
 				candidates = append(candidates, confirmed)
 			}
 		}

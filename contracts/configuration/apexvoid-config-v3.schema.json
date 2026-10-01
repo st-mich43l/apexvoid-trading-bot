@@ -700,6 +700,15 @@
             "band_body_fraction"
           ]
         },
+        "legacy_zones": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "window_bars": { "type": "integer", "minimum": 50, "maximum": 5000 }
+          },
+          "required": ["enabled", "window_bars"]
+        },
         "arbitration": {
           "type": "object",
           "additionalProperties": false,
