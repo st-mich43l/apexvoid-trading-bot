@@ -32,11 +32,14 @@ broker authentication · broker order placement · position management
 domain are implemented and contract-tested. `internal/zone` owns per-origin
 Supply/Demand, Order Block, FVG/iFVG, Breaker, and Flip geometry plus
 lifecycle/relevance state; it is wired through `SymbolState`,
-`MarketContext`, and immutable snapshots. S11 runs those strategy outputs in
-Kafka-only shadow mode: bootstrap/replay reconstruction never publishes a
-historical candidate as a fresh event, and no Algo Bot consumer exists. The
-final Python technical-authority cutover remains gated on observed shadow
-evidence; legacy detectors are therefore still retained.
+`MarketContext`, and immutable snapshots. All 19 Go strategy factories are
+enabled in production, and the Kafka opportunity lifecycle is consumed by
+Algo Bot's execution-policy pipeline. Bootstrap/replay reconstruction still
+suppresses historical publication, but live closed-bar transitions publish
+normally. The old Python-parity `legacyzone` rebuild is no longer in the live
+worker; remaining Python analysis modules are restricted to retained
+presentation, accounting, compatibility, or offline-test paths and are gated
+by `s13_legacy_classification.py --check-production`.
 
 ## `algo-bot` (Python)
 
@@ -58,11 +61,13 @@ notifications · reporting
 calculating technical market structure itself
 ```
 
-**Current state**: `app/autotrade/*`, `app/bot/*`, `app/signals/*` already
-match this boundary in spirit. `app/analysis/*` and `app/scalping/*` violate
-it directly — see the violations table below. Legacy `app/analysis/` is
-**not** deleted by this task (per the task's own §38/§57: only after
-`analysis-engine` is authoritative and cutover is proven).
+**Current state**: `app/autotrade/*`, `app/bot/*`, and `app/signals/*` own
+execution policy, manual operation, Telegram, journal, and reconciliation.
+The automatic worker consumes Go opportunity/technical facts and does not
+rebuild technical zones or detectors. Legacy `app/analysis/*` and
+`app/scalping/*` definitions remain only where the inventory classifies them
+as presentation, accounting, compatibility, research, or test fixtures; CI
+fails if a retired technical module becomes a production importer again.
 
 ## `ctrader-engine` (.NET)
 

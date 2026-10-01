@@ -4,5 +4,6 @@
 bounded-width box must be followed by an accepted close outside and a later M5
 retest that holds the broken edge. Entry is the retest band, invalidation is
 back inside the box and target is configured R. Identity anchors the box window
-and direction. Wide boxes, wick-only breaks and failed retests reject. Enabled
-for Go shadow publication; it does not alter Python live-trading policy.
+and direction. Wide boxes, wick-only breaks and failed retests reject. It is
+enabled in the live Go opportunity stream; Algo Bot applies execution policy
+before any TradePlan is published.

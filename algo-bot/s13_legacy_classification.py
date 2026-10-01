@@ -16,6 +16,7 @@ Run from ``algo-bot``::
 
     python s13_legacy_classification.py            # JSON
     python s13_legacy_classification.py --markdown # review table
+    python s13_legacy_classification.py --check-production # fail on live blockers
 
 Static analysis only. It never imports project modules, and it is evidence for
 a deletion review, not a substitute for one: reachability is *static*, and a
@@ -387,8 +388,40 @@ def render_markdown(report: dict[str, object]) -> str:
   return "\n".join(lines) + "\n"
 
 
+def production_gate_failures(report: dict[str, object]) -> list[str]:
+  """Return violations that would make Python a live technical authority.
+
+  The inventory deliberately keeps offline research, presentation and
+  outcome-accounting modules visible.  Those are not blockers.  This gate is
+  only about automatic runtime wiring: a production importer of a retired
+  detector, a dynamic import that could reach one, or a legacy background
+  task.  Keeping the policy here makes the CI check use the same evidence as
+  the review artifact instead of maintaining a second hand-written allowlist.
+  """
+  failures: list[str] = []
+  for name in report["unclassified_modules"]:  # type: ignore[union-attr]
+    failures.append(f"unclassified legacy module: {name}")
+  for importer in report["production_importers_blocking_deletion"]:  # type: ignore[union-attr]
+    failures.append(f"production importer of retired technical code: {importer}")
+  for item in report["dynamic_imports"]:  # type: ignore[union-attr]
+    if item.get("legacy_possible") == "yes":
+      failures.append(
+        f"dynamic import can reach legacy technical code: {item.get('file')}:{item.get('line')}"
+      )
+  for task in report["startup_tasks"]:  # type: ignore[union-attr]
+    if task.get("legacy") == "yes":
+      failures.append(f"legacy startup task: {task.get('task')} ({task.get('module')})")
+  return sorted(failures)
+
+
 if __name__ == "__main__":
   result = classify_inventory(Path(__file__).resolve().parent)
+  if "--check-production" in sys.argv:
+    failures = production_gate_failures(result)
+    if failures:
+      for failure in failures:
+        print(f"S13 production gate: {failure}", file=sys.stderr)
+      raise SystemExit(1)
   if "--markdown" in sys.argv:
     sys.stdout.write(render_markdown(result))
   else:

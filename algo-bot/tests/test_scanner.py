@@ -401,38 +401,6 @@ async def test_gate_status_records_market_map_counts():
 
 
 @pytest.mark.asyncio
-async def test_scanner_caches_analysis_context_for_market_map(monkeypatch):
-  client = redis_state.get_client()
-  marker = object()
-  cached = Mock()
-  install_runtime_overrides(monkeypatch, legacy_overrides={"scanner_exec_tf": "M5"})
-  install_runtime_overrides(monkeypatch, legacy_overrides={"scanner_htf": "M30,M15"})
-  install_runtime_overrides(monkeypatch, legacy_overrides={"scanner_window": 500})
-  monkeypatch.setattr(
-    scanner,
-    "build_context",
-    lambda symbol, tf, frames, settings, htf_order, **_kwargs: SimpleNamespace(
-      analysis=marker,
-      spot_price=None,
-      spot_ts=None,
-      trigger_ts=None,
-    ),
-  )
-  monkeypatch.setattr(scanner, "cache_analysis", cached)
-
-  ctx, frames = await scanner._load_market_context_for_symbol(
-    "XAU",
-    source=StaticSource(),
-    client=client,
-    event_ts="cache-test",
-  )
-
-  assert ctx is not None
-  assert set(frames) == {"M5", "M30", "M15"}
-  cached.assert_called_once_with("XAU", marker, 4100.5, frames["M5"].index[-1])
-
-
-@pytest.mark.asyncio
 async def test_scanner_increments_zone_reconciled_counter(monkeypatch):
   client = redis_state.get_client()
   install_runtime_overrides(monkeypatch, legacy_overrides={"scanner_symbols": "XAU"})
@@ -893,7 +861,6 @@ async def test_forming_card_cap_does_not_trim_execution_digest(monkeypatch):
     "build_context",
     lambda symbol, tf, frames, settings, htf_order, **_kwargs: ctx,
   )
-  monkeypatch.setattr(scanner, "cache_analysis", lambda *_args: None)
   monkeypatch.setattr(
     scanner,
     "build_map",

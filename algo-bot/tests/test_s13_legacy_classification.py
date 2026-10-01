@@ -27,7 +27,6 @@ REVIEWED_UNREACHABLE = {
 
 RETAINED_UNREACHABLE = {
   "app.analysis",
-  "app.analysis.market_map_delivery",
   "app.analysis.types",
   "app.scalping.context",
 }
@@ -122,6 +121,23 @@ def test_analysis_client_never_imports_legacy_and_is_not_counted_as_blocker():
   report = cls.classify_inventory(ROOT)
   assert not any(edge["importer"].startswith("app/analysis_client/") for edge in report["external_edges"])
   assert not any(item.startswith("app/analysis_client/") for item in report["production_importers_blocking_deletion"])
+
+
+def test_production_gate_has_no_live_python_technical_blocker():
+  report = cls.classify_inventory(ROOT)
+  assert cls.production_gate_failures(report) == []
+
+
+def test_production_gate_rejects_a_new_legacy_startup_task():
+  report = {
+    "unclassified_modules": [],
+    "production_importers_blocking_deletion": [],
+    "dynamic_imports": [],
+    "startup_tasks": [{"task": "legacy_scan", "module": "app.analysis.scanner", "legacy": "yes"}],
+  }
+  assert cls.production_gate_failures(report) == [
+    "legacy startup task: legacy_scan (app.analysis.scanner)"
+  ]
 
 
 def test_real_tree_has_no_dynamic_import_that_can_reach_legacy_modules():
