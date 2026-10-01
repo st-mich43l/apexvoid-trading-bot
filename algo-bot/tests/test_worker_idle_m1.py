@@ -12,6 +12,7 @@ import pytest
 
 from app.analysis_client.provenance import CATALOG_TAG, GO_ORIGIN_TAG
 from app.autotrade import worker
+from app.autotrade.go_live_opportunities import go_live_opportunities_key
 from app.autotrade.multi_match import serialize_matches, strategy_matches_key
 from app.autotrade.route_outcome import route_outcome_key
 from app.autotrade.strategy_match import (
@@ -189,6 +190,31 @@ async def test_go_mode_sweep_keeps_go_origin_matches(monkeypatch):
     await worker._handle_event(f"XAU:M1:{now}", source=source, client=client)
 
   assert seen == [[go.match_id]]
+
+
+@pytest.mark.asyncio
+async def test_go_mode_reconciles_match_that_is_no_longer_in_live_book(monkeypatch):
+  """A restart withdrawal is projected before it can look executable again."""
+  client = redis_state.get_client()
+  now = int(datetime.now(timezone.utc).timestamp())
+  source = _worker_cycle(monkeypatch, now=now)
+  stale = _go_match(now)
+  await client.set(strategy_matches_key("XAU"), serialize_matches([stale]))
+  await client.set(
+    go_live_opportunities_key("XAU"),
+    json.dumps({"symbol": "XAU", "generated_at": now, "ids": []}),
+  )
+
+  result = await worker._handle_event(
+    f"XAU:M1:{now}", source=source, client=client,
+  )
+
+  assert result is None
+  retained = await worker._load_strategy_matches(client, "XAU")
+  assert len(retained) == 1
+  assert retained[0].match_id == stale.match_id
+  assert retained[0].arbitration_status == "suppressed"
+  assert retained[0].arbitration_reason_code == "go_opportunity_not_live"
 
 
 @pytest.mark.asyncio

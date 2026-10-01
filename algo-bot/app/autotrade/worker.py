@@ -23,7 +23,10 @@ from app.persistence import redis_state
 from app.analysis_client.provenance import GO_ORIGIN_TAG
 from app.autotrade.go_plan_cancel import read_plan_cancel, register_go_plan
 from app.autotrade.go_live_opportunities import go_live_opportunity_ids
-from app.autotrade.go_opportunity_policy import opportunity_id_for_match_id
+from app.autotrade.go_opportunity_policy import (
+  go_arbitration_key,
+  opportunity_id_for_match_id,
+)
 from app.autotrade.go_zone_book import opposing_entries_for_go_match
 from app.autotrade import units
 from app.core import instrument_geometry
@@ -3171,6 +3174,66 @@ async def _persist_idle_last_gate(
   )
 
 
+def _reconcile_go_match_projection(
+  matches: list[StrategyMatch],
+  live_ids: frozenset[str],
+) -> tuple[list[StrategyMatch], list[StrategyMatch]]:
+  """Project Go's current live book onto the retained match cache.
+
+  Kafka arbitration can arrive after the opportunity has disappeared from Go's
+  rebuilt book (most commonly across an engine restart).  Keeping that match
+  marked ``winner`` leaves a misleading executable-looking projection in
+  Redis, even though the execution fence correctly refuses it.  Retain the
+  record for audit/history, but make the withdrawal explicit and return only
+  currently live matches to the execution path.
+  """
+  projected: list[StrategyMatch] = []
+  executable: list[StrategyMatch] = []
+  for match in matches:
+    opportunity_id = opportunity_id_for_match_id(match.match_id)
+    if opportunity_id in live_ids:
+      projected.append(match)
+      executable.append(match)
+      continue
+    stale = replace(
+      match,
+      arbitration_status="suppressed",
+      arbitration_reason_code="go_opportunity_not_live",
+    )
+    projected.append(stale)
+  return projected, executable
+
+
+async def _restore_reappeared_go_arbitration(
+  client: Any,
+  matches: list[StrategyMatch],
+) -> list[StrategyMatch]:
+  """Restore a cached Go decision when a previously withdrawn ID returns."""
+  restored: list[StrategyMatch] = []
+  valid_statuses = {"winner", "suppressed", "conflict_held", "uncontested"}
+  for match in matches:
+    if match.arbitration_reason_code != "go_opportunity_not_live":
+      restored.append(match)
+      continue
+    raw = await client.get(
+      go_arbitration_key(match.symbol, opportunity_id_for_match_id(match.match_id)),
+    )
+    try:
+      payload = json.loads(raw) if raw else {}
+    except (TypeError, ValueError, json.JSONDecodeError):
+      payload = {}
+    status = payload.get("status")
+    if status not in valid_statuses:
+      restored.append(match)
+      continue
+    restored.append(replace(
+      match,
+      arbitration_status=status,
+      arbitration_reason_code=payload.get("reason_code"),
+    ))
+  return restored
+
+
 async def _handle_event(
   data: object,
   *,
@@ -3189,11 +3252,6 @@ async def _handle_event(
   source = source or RedisOHLCSource(client)
   spot = await _load_spot(client, symbol)
   scanner_strategy_matches = await _load_strategy_matches(client, symbol)
-  if ready_match_id is not None:
-    scanner_strategy_matches = [
-      item for item in scanner_strategy_matches
-      if item.match_id == ready_match_id
-    ]
   # Go is the sole automatic technical-opportunity producer. This filter is
   # applied even for a ready-stream wake-up: a ZoneWatch or legacy Python
   # caller cannot smuggle a non-Go match through the explicit-match path.
@@ -3204,16 +3262,37 @@ async def _handle_event(
   # Execute only what Go still holds live. Go rebuilds its book under the
   # current rules on every restart, so an old event it would no longer
   # create (for example a sliver zone from before a rule change) is absent
-  # from its published set and is skipped here, not closed: it stays in
-  # Redis and is picked up again if Go ever holds it. An unavailable set
-  # fails open.
+  # from its published set. An unavailable set fails open, but a verified
+  # live set also reconciles the retained projection so a stale winner cannot
+  # remain looking executable in Redis.
   if scanner_strategy_matches:
     live_ids = await go_live_opportunity_ids(client, symbol)
     if live_ids is not None:
-      scanner_strategy_matches = [
-        item for item in scanner_strategy_matches
-        if opportunity_id_for_match_id(item.match_id) in live_ids
+      original_projection = scanner_strategy_matches
+      projected, scanner_strategy_matches = _reconcile_go_match_projection(
+        scanner_strategy_matches, live_ids,
+      )
+      scanner_strategy_matches = await _restore_reappeared_go_arbitration(
+        client, scanner_strategy_matches,
+      )
+      restored_by_id = {
+        item.match_id: item for item in scanner_strategy_matches
+      }
+      projected = [
+        restored_by_id.get(item.match_id, item) for item in projected
       ]
+      if projected != original_projection:
+        now = int(datetime.now(timezone.utc).timestamp())
+        await client.set(
+          strategy_matches_key(symbol),
+          serialize_matches(projected),
+          ex=max(60, max(item.expires_at for item in projected) - now),
+        )
+  if ready_match_id is not None:
+    scanner_strategy_matches = [
+      item for item in scanner_strategy_matches
+      if item.match_id == ready_match_id
+    ]
   if not scanner_strategy_matches:
     await _persist_idle_last_gate(
       client, symbol=symbol, event_ts=event_ts, spot=spot,
