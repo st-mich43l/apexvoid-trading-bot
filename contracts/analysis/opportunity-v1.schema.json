@@ -138,6 +138,76 @@
             "reaction_type": { "type": "string", "enum": ["rejection"] },
             "pattern": { "type": "string", "enum": ["wick_rejection", "rejection_choch", "strong_reclaim", "engulfing", "sweep_reclaim"] }
           }
+        },
+        "candle_evidence": {
+          "type": "object",
+          "description": "Additive Candle Confirmation V2 evidence from the same closed observation bars. Descriptive only: consumers must not treat its score as an execution or risk decision.",
+          "additionalProperties": false,
+          "required": ["version", "direction", "base_score", "synergy_bonus", "final_score"],
+          "properties": {
+            "version": { "type": "integer", "const": 2 },
+            "direction": { "type": "string", "enum": ["BUY", "SELL"] },
+            "rejection": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["score", "wick_fraction", "body_fraction", "close_location", "sweep", "reclaim"],
+              "properties": {
+                "score": { "type": "number", "minimum": 0, "maximum": 1 },
+                "patterns": { "type": "array", "items": { "type": "string" } },
+                "wick_fraction": { "type": "number", "minimum": 0, "maximum": 1 },
+                "body_fraction": { "type": "number", "minimum": 0, "maximum": 1 },
+                "close_location": { "type": "number", "minimum": 0, "maximum": 1 },
+                "sweep": { "type": "boolean" },
+                "sweep_penetration_atr": { "type": "number", "exclusiveMinimum": 0 },
+                "reclaim": { "type": "boolean" },
+                "reclaim_depth_atr": { "type": "number", "exclusiveMinimum": 0 }
+              }
+            },
+            "displacement": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["score", "body_atr", "range_atr", "body_dominance", "close_location", "reclaim", "engulfing"],
+              "properties": {
+                "score": { "type": "number", "minimum": 0, "maximum": 1 },
+                "patterns": { "type": "array", "items": { "type": "string" } },
+                "body_atr": { "type": "number", "minimum": 0 },
+                "range_atr": { "type": "number", "minimum": 0 },
+                "body_dominance": { "type": "number", "minimum": 0, "maximum": 1 },
+                "close_location": { "type": "number", "minimum": 0, "maximum": 1 },
+                "reclaim": { "type": "boolean" },
+                "reclaim_depth_atr": { "type": "number", "exclusiveMinimum": 0 },
+                "engulfing": { "type": "boolean" },
+                "engulfing_quality": { "type": "number", "minimum": 0, "maximum": 1 }
+              }
+            },
+            "sequence": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["score", "bars"],
+              "properties": {
+                "score": { "type": "number", "minimum": 0, "maximum": 1 },
+                "patterns": { "type": "array", "items": { "type": "string" } },
+                "bars": { "type": "integer", "minimum": 2, "maximum": 5 }
+              }
+            },
+            "indecision": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["doji", "spinning_top", "inside_bar", "body_fraction", "compression_score"],
+              "properties": {
+                "doji": { "type": "boolean" },
+                "spinning_top": { "type": "boolean" },
+                "inside_bar": { "type": "boolean" },
+                "body_fraction": { "type": "number", "minimum": 0, "maximum": 1 },
+                "compression_score": { "type": "number", "minimum": 0, "maximum": 1 }
+              }
+            },
+            "base_score": { "type": "number", "minimum": 0, "maximum": 1 },
+            "synergy_bonus": { "type": "number", "minimum": 0, "maximum": 0.12 },
+            "final_score": { "type": "number", "minimum": 0, "maximum": 1 },
+            "primary_pattern": { "type": "string" },
+            "all_patterns": { "type": "array", "items": { "type": "string" } }
+          }
         }
       }
     },

@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/candle"
 	"sync"
 
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/arbitration"
@@ -226,7 +227,7 @@ func (w *SymbolWorker) ApplyWithResult(event marketdata.BarEvent) (AnalysisSnaps
 			continue
 		}
 		candidate.ObservedTimeframe = event.Timeframe
-		candidate.Technical = w.technicalContext(event, candidate.Reaction)
+		candidate.Technical = w.technicalContext(event, candidate.Direction, candidate.Entry.Low, candidate.Entry.High, candidate.Reaction)
 		candidate.StopEnvelope = computeStopEnvelope(candidate, w.settings.Geometry, w.settings.StopEnvelope)
 		observed, obsErr := w.state.Opportunities.Observe(candidate, event.Candle.Time)
 		if obsErr != nil {
@@ -319,7 +320,7 @@ func (w *SymbolWorker) rebuildContext() {
 // close as the geometric reference, and the engine's structural bias. Returns
 // nil — never a placeholder — when the ATR series is not yet available, so a
 // consumer sees "unavailable" and fails closed instead of guessing.
-func (w *SymbolWorker) technicalContext(event marketdata.BarEvent, reaction *opportunity.ReactionConfirmation) *opportunity.TechnicalContext {
+func (w *SymbolWorker) technicalContext(event marketdata.BarEvent, direction market.Direction, entryLow, entryHigh float64, reaction *opportunity.ReactionConfirmation) *opportunity.TechnicalContext {
 	atrSeries := w.state.Measurements.ATR(event.Timeframe)
 	if len(atrSeries) == 0 {
 		return nil
@@ -339,6 +340,18 @@ func (w *SymbolWorker) technicalContext(event marketdata.BarEvent, reaction *opp
 	if reaction != nil {
 		confirmed := *reaction
 		facts.Confirmation = &confirmed
+	}
+	// Candle Confirmation V2 is descriptive technical evidence. Use only the
+	// closed bars already owned by the engine and the candidate's structural
+	// entry band; never fetch a new quote or let this score gate eligibility.
+	if bars := w.state.History.For(event.Timeframe).Snapshot(); len(bars) > 0 {
+		low, high := entryLow, entryHigh
+		facts.CandleEvidence = candle.Evaluate(bars, string(direction), atr, func() float64 {
+			if direction == market.Buy {
+				return low
+			}
+			return high
+		}(), &low, &high)
 	}
 
 	return facts
