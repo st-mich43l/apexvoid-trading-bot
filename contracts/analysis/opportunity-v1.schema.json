@@ -93,7 +93,7 @@
     "recovered_at": { "type": "integer", "minimum": 0, "description": "Additive V1 recovery fact: Unix seconds when the engine re-established ownership of a still-live opportunity after bootstrap. The technical observation remains created_at; consumers may use this only for an explicit current-live recovery path." },
     "technical_context": {
       "type": "object",
-      "description": "Additive V1 field (S13B): engine-owned policy inputs for the closed bar that first made the opportunity actionable, so a consumer never recomputes ATR/structure from raw OHLC. Optional: when absent a consumer MUST treat policy inputs as unavailable and fail closed. Never carries a quote, spread, account or confluence-score value.",
+      "description": "Additive V1 field (S13B): engine-owned policy inputs for the closed bar that first made the opportunity actionable, so a consumer never recomputes ATR/structure from raw OHLC. Optional: when absent a consumer MUST treat policy inputs as unavailable and fail closed. Never carries a quote, spread or account value; MAD affinity is explicitly soft technical telemetry only.",
       "additionalProperties": false,
       "required": ["atr", "reference_price", "reference_time"],
       "properties": {
@@ -207,6 +207,28 @@
             "final_score": { "type": "number", "minimum": 0, "maximum": 1 },
             "primary_pattern": { "type": "string" },
             "all_patterns": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "mad": {
+          "type": "object",
+          "description": "Additive Go-owned MAD/Asia phase facts and soft affinity telemetry. Descriptive only: consumers must not turn affinity into an execution gate or recompute the legacy detector.",
+          "additionalProperties": false,
+          "required": ["version", "phase", "confidence", "affinity", "reclaim", "reason_code"],
+          "properties": {
+            "version": { "type": "integer", "minimum": 1 },
+            "phase": { "type": "string", "minLength": 1 },
+            "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+            "affinity": { "type": "number", "minimum": 0, "maximum": 1 },
+            "direction": { "type": "string", "enum": ["BUY", "SELL"] },
+            "sweep_side": { "type": "string", "enum": ["high", "low", "both"] },
+            "reclaim": { "type": "boolean" },
+            "range_quality_atr": { "type": "number" },
+            "break_distance_atr": { "type": "number" },
+            "displacement_atr": { "type": "number" },
+            "acceptance_closes": { "type": "integer", "minimum": 0 },
+            "sweep_penetration_atr": { "type": "number" },
+            "reclaim_depth_atr": { "type": "number" },
+            "reason_code": { "type": "string", "minLength": 1 }
           }
         }
       }
