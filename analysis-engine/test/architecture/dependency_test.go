@@ -138,6 +138,7 @@ var rank = map[string]int{
 	"fib":       3,
 	"barrier":   3,
 	"momentum":  3,
+	"reaction":  3,
 
 	"context": 4,
 
