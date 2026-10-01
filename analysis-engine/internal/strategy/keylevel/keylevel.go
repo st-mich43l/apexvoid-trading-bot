@@ -43,6 +43,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategyutil"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/zone"
 )
 
@@ -73,6 +74,8 @@ type Config struct {
 	InvalidationBufferATR    float64
 	MinimumTargetDistanceATR float64
 	ExpiryHours              float64
+	// Reaction is the shared legacy confirmation tuning (see strategyutil).
+	Reaction strategyutil.ReactionConfig
 	// BreakoutAcceptBars is key_level_role.py's breakout_accept_bars —
 	// consecutive closed bars that must accept beyond a level's band
 	// before Role reports it BROKEN rather than the level's plain role.
@@ -142,10 +145,14 @@ func parseConfig(params map[string]any) (Config, error) {
 	if breakoutAcceptBars < 1 {
 		return Config{}, fmt.Errorf("breakout_accept_bars must be >= 1")
 	}
+	reactionConfig, err := strategyutil.ParseReactionConfig(params)
+	if err != nil {
+		return Config{}, err
+	}
 	return Config{
 		MinimumTouches: minimumTouches, MinimumStrength: minimumStrength, ProximityATR: proximityATR,
 		InvalidationBufferATR: invalidationBuffer, MinimumTargetDistanceATR: minimumTargetDistance,
-		ExpiryHours: expiryHours, BreakoutAcceptBars: breakoutAcceptBars,
+		ExpiryHours: expiryHours, BreakoutAcceptBars: breakoutAcceptBars, Reaction: reactionConfig,
 	}, nil
 }
 
@@ -261,7 +268,7 @@ func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate 
 			if contraDirection != nil && direction == *contraDirection {
 				effectiveLevelPrice = contraLevel
 			}
-			reaction := confirmedReaction(tfCtx.Candles, direction, reactLow, reactHigh, level.ID)
+			reaction := strategyutil.ConfirmReaction(tfCtx, level.ID, direction, float64(reactLow), float64(reactHigh), atr, 0, s.cfg.Reaction)
 			if reaction == nil {
 				continue
 			}

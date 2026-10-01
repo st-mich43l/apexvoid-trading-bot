@@ -25,6 +25,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategyutil"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/zone"
 )
 
@@ -47,6 +48,8 @@ type Config struct {
 	InvalidationBufferATR    float64
 	MinimumTargetDistanceATR float64
 	ExpiryHours              float64
+	// Reaction is the shared legacy confirmation tuning (see strategyutil).
+	Reaction strategyutil.ReactionConfig
 }
 
 // Strategy is DemandStrategy.
@@ -95,9 +98,13 @@ func parseConfig(params map[string]any) (Config, error) {
 	if expiryHours <= 0 {
 		return Config{}, fmt.Errorf("expiry_hours must be > 0")
 	}
+	reactionConfig, err := strategyutil.ParseReactionConfig(params)
+	if err != nil {
+		return Config{}, err
+	}
 	return Config{
 		MinimumStrength: minimumStrength, InvalidationBufferATR: invalidationBuffer,
-		MinimumTargetDistanceATR: minimumTargetDistance, ExpiryHours: expiryHours,
+		MinimumTargetDistanceATR: minimumTargetDistance, ExpiryHours: expiryHours, Reaction: reactionConfig,
 	}, nil
 }
 
@@ -193,7 +200,7 @@ func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate 
 			},
 		}
 		candidates = append(candidates, candidate)
-		if reaction := confirmedRejection(z, tfCtx.Candles); reaction != nil {
+		if reaction := strategyutil.ConfirmReaction(tfCtx, z.ID, market.Buy, float64(z.Low), float64(z.High), atr, z.CreatedAt, s.cfg.Reaction); reaction != nil {
 			// The initial resting-zone opportunity remains a technical
 			// observation. Only a distinct, causally identified reaction can
 			// enter Algo Bot's confirmed-zone policy.
