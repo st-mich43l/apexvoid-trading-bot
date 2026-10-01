@@ -28,6 +28,7 @@ from app.autotrade.go_plan_cancel import (
   request_plan_cancel,
   withdraw_go_scope,
 )
+from app.autotrade.go_live_opportunities import go_live_opportunities_key
 from app.autotrade.multi_match import deserialize_matches, strategy_matches_key
 from app.autotrade.setup_lifecycle import EXPIRED, INVALIDATED, PLAN_PUBLISHED, load_setup
 from app.autotrade.trade_plan_stream import read_plan_state
@@ -146,6 +147,32 @@ async def test_backlog_older_than_the_event_age_limit_is_recorded_never_traded(h
   h.clock.advance(1_000)
   assert await deliver(h, ev) == "not_adapted"
   assert (await decision_rows(h))[-1]["reason"] == "event_too_old"
+  assert await matches(real_redis_client) == []
+
+
+@pytest.mark.asyncio
+async def test_live_engine_recovery_backfill_can_adapt_an_old_but_unexpired_setup(h, real_redis_client):
+  """Bootstrap recovery is narrow: Go must currently vouch for this ID."""
+  await h.activate()
+  now = int(h.clock.now)
+  ev = make_event(now, observed_ago=2_000, recovered_at=now - 5)
+  await real_redis_client.set(go_live_opportunities_key("XAU"), json.dumps({"ids": [ev.payload.id]}))
+  assert await deliver(h, ev, published_at=now - 1) == "match_written"
+  row = (await decision_rows(h))[-1]
+  assert row["reason"] == "go_live"
+  assert row["details"]["recovered"] is True
+  assert row["details"]["recovered_live"] is True
+  assert await matches(real_redis_client) == ["go_opp_golden_supply_xau"]
+
+
+@pytest.mark.asyncio
+async def test_recovery_marker_without_current_live_engine_ownership_stays_blocked(h, real_redis_client):
+  await h.activate()
+  now = int(h.clock.now)
+  ev = make_event(now, observed_ago=2_000, recovered_at=now - 5)
+  assert await deliver(h, ev, published_at=now - 1) == "not_adapted"
+  row = (await decision_rows(h))[-1]
+  assert row["reason"] == "event_too_old"
   assert await matches(real_redis_client) == []
 
 

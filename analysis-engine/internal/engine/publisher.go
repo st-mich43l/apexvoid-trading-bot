@@ -46,6 +46,7 @@ const publishRetryBackoff = 2 * time.Second
 // OpportunityPublisher without a real broker.
 type OpportunityKafkaClient interface {
 	PublishOpportunity(ctx context.Context, eventID, correlationID, causationID string, candidate opportunity.Candidate, algo kafka.AlgorithmVersion, occurredAt time.Time) error
+	PublishRecoveredOpportunity(ctx context.Context, eventID, correlationID, causationID string, candidate opportunity.Candidate, algo kafka.AlgorithmVersion, occurredAt time.Time, recoveredAt time.Time) error
 	PublishOpportunityInvalidated(ctx context.Context, eventID, correlationID, causationID string, symbol market.Symbol, payload kafka.OpportunityInvalidatedPayload, occurredAt time.Time) error
 	PublishArbitrationDecision(ctx context.Context, eventID, correlationID, causationID string, symbol market.Symbol, payload kafka.ArbitrationDecisionPayload, occurredAt time.Time) error
 }
@@ -238,6 +239,58 @@ func (p *OpportunityPublisher) ResumeLive(symbol market.Symbol) {
 	}
 }
 
+// BackfillLive promotes the current live candidates recovered during Redis
+// bootstrap into lifecycle creation events. Bootstrap deliberately suppresses
+// historical publication, so a normal Observe(Created, publish=true) would
+// incorrectly remain blocked by the durable "suppressed" ledger state. This
+// method is the explicit, idempotent promotion point and marks each event as
+// recovered so Algo Bot can distinguish it from a normal old Kafka replay.
+func (p *OpportunityPublisher) BackfillLive(symbol market.Symbol, algo kafka.AlgorithmVersion, candidates []opportunity.Candidate, recoveredAt time.Time) {
+	if p == nil || len(candidates) == 0 {
+		return
+	}
+	if recoveredAt.IsZero() {
+		recoveredAt = time.Now().UTC()
+	}
+	recoveredUnix := recoveredAt.Unix()
+	p.mu.Lock()
+	changed := false
+	for _, candidate := range candidates {
+		id := candidate.ID
+		if id == "" {
+			continue
+		}
+		record := p.store.ledger.Records[id]
+		if record.Creation == publicationPending || record.Creation == publicationPublished || record.Terminal != publicationUnknown {
+			continue
+		}
+		record.Creation = publicationPending
+		transition := opportunity.Transition{
+			Kind:   opportunity.TransitionCreated,
+			Record: opportunity.Record{Candidate: candidate, State: opportunity.StateCreated},
+		}
+		p.store.ledger.Queue = append(p.store.ledger.Queue, publishJob{
+			EventID: kafka.NewEventID(), Symbol: symbol, Algorithm: algo,
+			Transition: transition, RecoveredAt: recoveredUnix,
+		})
+		p.store.ledger.Records[id] = record
+		p.telemetry.Count(telemetry.CounterOpportunityPublishEnqueued, string(symbol), "recovered", 1)
+		changed = true
+	}
+	if changed {
+		if err := p.store.save(); err != nil {
+			p.telemetry.Count(telemetry.CounterOpportunityOutboxPersistFailed, string(symbol), "recovered", 1)
+		}
+	}
+	p.mu.Unlock()
+	if changed {
+		select {
+		case p.notify <- struct{}{}:
+		default:
+		}
+	}
+}
+
 func newPublishJob(symbol market.Symbol, algo kafka.AlgorithmVersion, transition opportunity.Transition) publishJob {
 	return publishJob{EventID: kafka.NewEventID(), Symbol: symbol, Algorithm: algo, Transition: transition}
 }
@@ -388,6 +441,9 @@ func (p *OpportunityPublisher) publishOne(ctx context.Context, job publishJob) e
 	switch job.Transition.Kind {
 	case opportunity.TransitionCreated:
 		candidate := job.Transition.Record.Candidate
+		if job.RecoveredAt != 0 {
+			return p.client.PublishRecoveredOpportunity(ctx, job.EventID, correlationID, "", candidate, job.Algorithm, time.Now().UTC(), time.Unix(job.RecoveredAt, 0))
+		}
 		return p.client.PublishOpportunity(ctx, job.EventID, correlationID, "", candidate, job.Algorithm, time.Unix(candidate.CreatedAt, 0))
 	case opportunity.TransitionInvalidated, opportunity.TransitionExpired:
 		record := job.Transition.Record
