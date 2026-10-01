@@ -194,8 +194,12 @@ func run(configPath string) error {
 				Structure: snapshot.Version.StructureVersion,
 				Liquidity: snapshot.Version.LiquidityVersion,
 			}
-			publisher.BackfillLive(symbol, algo, snapshot.Opportunities, time.Now().UTC())
+			// The recovered lifecycle event is guarded by Algo Bot against the
+			// Redis live-opportunity projection. Publish that projection first;
+			// otherwise the asynchronous Kafka publisher can outrun Redis and
+			// permanently classify every recovered setup as not-live.
 			publishDerivedState(ctx, symbol, snapshot)
+			publisher.BackfillLive(symbol, algo, snapshot.Opportunities, time.Now().UTC())
 		}
 	})
 	for symbol, cfg := range barrierConfigs {

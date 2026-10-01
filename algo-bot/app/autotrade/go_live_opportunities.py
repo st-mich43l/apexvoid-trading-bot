@@ -44,8 +44,21 @@ def parse_live_opportunities(raw: str | bytes) -> frozenset[str]:
   return frozenset(str(item) for item in ids if isinstance(item, str) and item)
 
 
-async def go_live_opportunity_ids(client: Any, symbol: str) -> frozenset[str] | None:
-  """The IDs Go currently holds live for symbol, or None when unavailable."""
+async def go_live_opportunity_ids(
+  client: Any,
+  symbol: str,
+  *,
+  minimum_generated_at: int | None = None,
+) -> frozenset[str] | None:
+  """The IDs Go currently holds live for symbol, or None when unavailable.
+
+  ``minimum_generated_at`` protects the Kafka/Redis boundary during an engine
+  restart.  A lifecycle or arbitration event can reach Kafka before the
+  corresponding Redis projection is written.  Treating an older projection as
+  an authoritative empty set permanently suppresses a valid Go opportunity;
+  an older projection is therefore unavailable until Go publishes a current
+  one.
+  """
   try:
     raw = await client.get(go_live_opportunities_key(symbol))
   except Exception as exc:  # noqa: BLE001 - Redis errors must not crash the cycle
@@ -54,7 +67,25 @@ async def go_live_opportunity_ids(client: Any, symbol: str) -> frozenset[str] | 
   if not raw:
     return None
   try:
-    return parse_live_opportunities(raw)
+    document = json.loads(raw)
+    ids = parse_live_opportunities(raw)
+    if minimum_generated_at is not None:
+      generated_at = document.get("generated_at")
+      # V1 live-set documents did not carry a projection timestamp. Preserve
+      # their existing compatibility behavior; only a present, older Go V2
+      # timestamp is evidence that Kafka outran Redis.
+      if (
+        generated_at is not None
+        and not isinstance(generated_at, bool)
+        and isinstance(generated_at, (int, float))
+        and int(generated_at) < int(minimum_generated_at)
+      ):
+        log.info(
+          "Go live opportunities projection is behind event symbol=%s generated_at=%s required_at=%s",
+          symbol, generated_at, minimum_generated_at,
+        )
+        return None
+    return ids
   except Exception as exc:  # noqa: BLE001 - a malformed publish must not crash the cycle
     log.warning("go live opportunities parse failed symbol=%s error=%s", symbol, exc)
     return None
