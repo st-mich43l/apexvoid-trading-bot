@@ -185,10 +185,18 @@ analysis:
     trendline:
       version: v2
       enabled: true
-      minimum_validation_touches: 2
+      # Legacy Python trendline-V2 values (analysis.trendlines.minimum_validation_
+      # touches 1, interaction/close-violation/approach bands, 30-bar staleness).
+      minimum_validation_touches: 1
       invalidation_buffer_atr: 0.25
       target_r: 2.0
       expiry_hours: 12.0
+      interaction_band_atr: 0.20
+      close_violation_atr: 0.15
+      approach_min_distance_atr: 0.10
+      maximum_bars_since_last_touch: 30
+      reaction_lookback_bars: 3
+      engulfing_minimum_range_atr: 0.5
     range_edge:
       version: v2
       enabled: true
