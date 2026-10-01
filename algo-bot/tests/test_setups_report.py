@@ -76,10 +76,40 @@ async def _seed_bars(symbol: str, tf: str, closes: list[float]) -> None:
     await client.zadd(f"bars:{symbol}:{tf}", {payload: index})
 
 
+async def _seed_go_zone_book(symbol: str, *, low: float, high: float, kind: str = "supply") -> None:
+  client = redis_state.get_client()
+  await client.set(
+    f"analysis:zone_book:{symbol}",
+    json.dumps({
+      "symbol": symbol,
+      "generated_at": 1,
+      "entries": [{
+        "timeframe": "M5",
+        "kind": kind,
+        "low": low,
+        "high": high,
+        "atr": 5.0,
+        "strength": 20.0,
+        "touch_count": 1,
+        "state": "fresh",
+      }],
+      "barriers": [{
+        "side": "sell" if kind == "supply" else "buy",
+        "low": low,
+        "high": high,
+        "tier": "zone",
+        "score": 20.0,
+        "touches": 1,
+        "source_timeframes": ["M5"],
+      }],
+    }),
+  )
+
+
 @pytest.mark.asyncio
 async def test_no_current_setup_when_only_far_structural_memory_exists():
   await _seed_spot("XAU", 4360.0, 4360.5)
-  await _seed_bars("XAU", "M5", [4358.0 + (i % 3) for i in range(30)])
+  await _seed_go_zone_book("XAU", low=4280.0, high=4285.0, kind="demand")
   await _seed_zone(_zone(zone_id="far-buy", low=4280.0, high=4285.0, direction="BUY"))
 
   text = await current_market_setups_text("XAU")
@@ -92,7 +122,7 @@ async def test_no_current_setup_when_only_far_structural_memory_exists():
 @pytest.mark.asyncio
 async def test_nearby_zone_appears_as_active():
   await _seed_spot("XAU", 4360.0, 4360.5)
-  await _seed_bars("XAU", "M5", [4358.0 + (i % 3) for i in range(30)])
+  await _seed_go_zone_book("XAU", low=4361.0, high=4362.0)
   await _seed_zone(_zone(zone_id="near-sell", low=4361.0, high=4362.0, direction="SELL"))
 
   text = await current_market_setups_text("XAU")
@@ -166,16 +196,18 @@ def test_map_zone_lines_price_inside_and_missing_map():
 @pytest.mark.asyncio
 async def test_report_includes_map_section_and_survives_map_failure(monkeypatch):
   from types import SimpleNamespace
-
-  from app.analysis import market_map_delivery
+  import app.autotrade.setups_report as setups_report
 
   await _seed_spot("XAU", 4336.0, 4336.5)
-  await _seed_bars("XAU", "M5", [4334.0 + (i % 3) for i in range(30)])
 
   async def _map(_symbol):
-    return SimpleNamespace(bias="down", entries=[_map_entry("sell", 4344.0, 4356.0)])
+    return SimpleNamespace(
+      bias="down",
+      entries=[_map_entry("sell", 4344.0, 4356.0)],
+      atr_by_timeframe={"M5": 5.0},
+    )
 
-  monkeypatch.setattr(market_map_delivery, "get_current_market_map", _map)
+  monkeypatch.setattr(setups_report, "load_go_market_map", _map)
   text = await current_market_setups_text("XAU")
   assert "MARKET MAP ZONES" in text and "bias down" in text
   assert "SELL 4344.00-4356.00" in text
@@ -183,7 +215,7 @@ async def test_report_includes_map_section_and_survives_map_failure(monkeypatch)
   async def _boom(_symbol):
     raise RuntimeError("map unavailable")
 
-  monkeypatch.setattr(market_map_delivery, "get_current_market_map", _boom)
+  monkeypatch.setattr(setups_report, "load_go_market_map", _boom)
   text = await current_market_setups_text("XAU")
   assert "MARKET MAP ZONES" not in text
   assert "XAU setups" in text

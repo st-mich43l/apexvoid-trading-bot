@@ -40,7 +40,10 @@ async def _load_spot(client, symbol: str) -> tuple[float, float] | None:
 async def _atr_by_source_timeframe(
   client, symbol: str, timeframes: set[str],
 ) -> dict[str, float]:
-  market_map = await load_go_market_map(symbol, client)
+  try:
+    market_map = await load_go_market_map(symbol, client)
+  except Exception:  # noqa: BLE001 - display-only Go facts fail closed
+    return {}
   if market_map is None:
     return {}
   return {
