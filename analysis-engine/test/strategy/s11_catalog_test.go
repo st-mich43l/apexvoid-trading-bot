@@ -71,7 +71,7 @@ func assertOne(t *testing.T, instance strategy.Strategy, marketCtx *analysiscont
 func TestS11MissingStrategiesKnownQualifyingFixtures(t *testing.T) {
 	const base = int64(1_700_000_000)
 	t.Run("ifvg", func(t *testing.T) {
-		s, err := ifvg.New(cfg(ifvg.ID, map[string]any{"minimum_strength": .4, "minimum_gap_atr": .5, "invalidation_buffer_atr": .5, "minimum_target_distance_atr": 1.0, "expiry_hours": 4.0}))
+		s, err := ifvg.New(cfg(ifvg.ID, map[string]any{"reaction_lookback_bars": 3.0, "engulfing_minimum_range_atr": 0.5, "minimum_strength": .4, "minimum_gap_atr": .5, "invalidation_buffer_atr": .5, "minimum_target_distance_atr": 1.0, "expiry_hours": 4.0}))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -116,7 +116,7 @@ func TestS11MissingStrategiesKnownQualifyingFixtures(t *testing.T) {
 		assertOne(t, s, ctx(map[market.Timeframe]*analysiscontext.TimeframeContext{market.H1: {Timeframe: market.H1, Candles: []market.Candle{bar(base-3600, 100, 103, 99, 102), bar(base, 102, 103, 101, 102)}}, market.M5: {Timeframe: market.M5, Candles: []market.Candle{bar(base-300, 100, 101, 99.5, 100), bar(base, 100, 101, 98.5, 100)}}}))
 	})
 	t.Run("confluence_zone", func(t *testing.T) {
-		s, e := confluencezone.New(cfg(confluencezone.ID, map[string]any{"minimum_facts": 2.0, "invalidation_buffer_atr": .5, "minimum_target_distance_atr": 1.0, "expiry_hours": 4.0}))
+		s, e := confluencezone.New(cfg(confluencezone.ID, map[string]any{"reaction_lookback_bars": 3.0, "engulfing_minimum_range_atr": 0.5, "minimum_facts": 2.0, "invalidation_buffer_atr": .5, "minimum_target_distance_atr": 1.0, "expiry_hours": 4.0}))
 		if e != nil {
 			t.Fatal(e)
 		}
@@ -187,7 +187,7 @@ func TestS11BreakoutRetestsRejectDeepFailedReentry(t *testing.T) {
 }
 
 func TestS11IFVGDeduplicatesRepeatedCanonicalZone(t *testing.T) {
-	s, err := ifvg.New(cfg(ifvg.ID, map[string]any{"minimum_strength": .4, "minimum_gap_atr": .5, "invalidation_buffer_atr": .5, "minimum_target_distance_atr": 1.0, "expiry_hours": 4.0}))
+	s, err := ifvg.New(cfg(ifvg.ID, map[string]any{"reaction_lookback_bars": 3.0, "engulfing_minimum_range_atr": 0.5, "minimum_strength": .4, "minimum_gap_atr": .5, "invalidation_buffer_atr": .5, "minimum_target_distance_atr": 1.0, "expiry_hours": 4.0}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -231,7 +231,7 @@ func TestS11MissingStrategiesRejectMissingConfiguration(t *testing.T) {
 }
 
 func TestS11IFVGIgnoresAGapThatIsASliverOfATR(t *testing.T) {
-	s, err := ifvg.New(cfg(ifvg.ID, map[string]any{"minimum_strength": .4, "minimum_gap_atr": .5, "invalidation_buffer_atr": .5, "minimum_target_distance_atr": 1.0, "expiry_hours": 4.0}))
+	s, err := ifvg.New(cfg(ifvg.ID, map[string]any{"reaction_lookback_bars": 3.0, "engulfing_minimum_range_atr": 0.5, "minimum_strength": .4, "minimum_gap_atr": .5, "invalidation_buffer_atr": .5, "minimum_target_distance_atr": 1.0, "expiry_hours": 4.0}))
 	if err != nil {
 		t.Fatal(err)
 	}

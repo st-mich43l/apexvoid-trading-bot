@@ -23,6 +23,7 @@ type Strategy struct {
 	minimumFacts                            int
 	invalidationATR, targetATR, expiryHours float64
 	fingerprint                             string
+	reaction                                strategyutil.ReactionConfig
 }
 
 func New(c strategy.Config) (strategy.Strategy, error) {
@@ -48,7 +49,11 @@ func New(c strategy.Config) (strategy.Strategy, error) {
 	if facts < 2 || invalid <= 0 || target <= 0 || expiry <= 0 {
 		return nil, fmt.Errorf("confluencezone: invalid parameters")
 	}
-	return &Strategy{facts, invalid, target, expiry, strategyutil.Fingerprint(string(c.ID), c.Version, c.Parameters)}, nil
+	reaction, e := strategyutil.ParseReactionConfig(c.Parameters)
+	if e != nil {
+		return nil, e
+	}
+	return &Strategy{facts, invalid, target, expiry, strategyutil.Fingerprint(string(c.ID), c.Version, c.Parameters), reaction}, nil
 }
 func (s *Strategy) ID() strategy.StrategyID                { return ID }
 func (s *Strategy) RequiredTimeframes() []market.Timeframe { return []market.Timeframe{market.M5} }
@@ -98,7 +103,13 @@ func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Ca
 		sort.Strings(ids)
 		c, e := strategyutil.Candidate(strategyutil.CandidateSpec{ID: string(ID), Version: Version, SetupKey: "overlap:" + strings.Join(ids, "+"), Symbol: ctx.Symbol, Direction: direction, EntryLow: low, EntryHigh: high, Invalidation: invalid, InvalidationLabel: "confluence_overlap_failed", Target: float64(target), TargetLabel: "opposing_liquidity", Evidence: []string{"m5_distinct_zone_overlap", "m5_confluence_reaction"}, Quality: opportunity.StrategyQuality{Overall: q, Components: map[string]float64{"independent_facts": q, "location": 1}}, FormedAt: a.OriginTime, ConfirmedAt: bar.Time, ExpiryHours: s.expiryHours, Fingerprint: s.fingerprint})
 		if e == nil {
-			return []opportunity.Candidate{c}
+			result := []opportunity.Candidate{c}
+			if rc := strategyutil.ConfirmReaction(tf, strings.Join(ids, "+"), direction, low, high, atr, a.CreatedAt, s.reaction); rc != nil {
+				if confirmed, confirmErr := strategyutil.ConfirmedVariant(c, rc, strings.Join(ids, "+"), a.OriginTime, s.expiryHours, "m5_confluence_rejection_confirmed"); confirmErr == nil {
+					result = append(result, confirmed)
+				}
+			}
+			return result
 		}
 	}
 	return nil

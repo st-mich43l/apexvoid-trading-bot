@@ -101,10 +101,12 @@
       },
       "confluence_zone": {
         "enabled": true,
+        "engulfing_minimum_range_atr": 0.5,
         "expiry_hours": 12.0,
         "invalidation_buffer_atr": 0.5,
         "minimum_facts": 2,
         "minimum_target_distance_atr": 1.0,
+        "reaction_lookback_bars": 3,
         "version": "v2"
       },
       "crt": {
@@ -124,28 +126,34 @@
       },
       "flip_zone": {
         "enabled": true,
+        "engulfing_minimum_range_atr": 0.5,
         "expiry_hours": 24.0,
         "invalidation_buffer_atr": 0.5,
         "minimum_strength": 0.4,
         "minimum_target_distance_atr": 1.0,
+        "reaction_lookback_bars": 3,
         "version": "v2"
       },
       "fvg": {
         "enabled": true,
+        "engulfing_minimum_range_atr": 0.5,
         "expiry_hours": 24.0,
         "invalidation_buffer_atr": 0.5,
         "minimum_gap_atr": 0.5,
         "minimum_strength": 0.4,
         "minimum_target_distance_atr": 1.0,
+        "reaction_lookback_bars": 3,
         "version": "v2"
       },
       "ifvg": {
         "enabled": true,
+        "engulfing_minimum_range_atr": 0.5,
         "expiry_hours": 24.0,
         "invalidation_buffer_atr": 0.5,
         "minimum_gap_atr": 0.5,
         "minimum_strength": 0.4,
         "minimum_target_distance_atr": 1.0,
+        "reaction_lookback_bars": 3,
         "version": "v2"
       },
       "impulse_pullback": {
@@ -188,11 +196,13 @@
       },
       "order_block": {
         "enabled": true,
+        "engulfing_minimum_range_atr": 0.5,
         "expiry_hours": 24.0,
         "invalidation_buffer_atr": 0.5,
         "minimum_strength": 0.4,
         "minimum_target_distance_atr": 1.0,
         "minimum_zone_atr": 0.5,
+        "reaction_lookback_bars": 3,
         "version": "v2"
       },
       "range_edge": {

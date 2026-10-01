@@ -105,10 +105,21 @@ func DeterministicID(identity Identity) (string, error) {
 // same-bar) closed-bar rejection. Resting-zone candidates leave it absent.
 // A confirmed reaction receives a separate deterministic opportunity ID.
 type ReactionConfirmation struct {
-	ZoneID string
-	TouchBarTime int64
+	ZoneID              string
+	TouchBarTime        int64
 	ConfirmationBarTime int64
-	ReactionType string
+	ReactionType        string
+	// Pattern names which legacy confirmation pattern produced the
+	// reaction (wick_rejection, rejection_choch, strong_reclaim,
+	// engulfing, sweep_reclaim). Empty for the older strict
+	// close-outside-the-zone confirmation, which has no named pattern.
+	Pattern string
+}
+
+// ReactionPatterns are the confirmation patterns a reaction may carry.
+var ReactionPatterns = map[string]bool{
+	"wick_rejection": true, "rejection_choch": true, "strong_reclaim": true,
+	"engulfing": true, "sweep_reclaim": true,
 }
 
 // TechnicalContext is the engine-owned technical facts an execution policy
@@ -123,9 +134,9 @@ type ReactionConfirmation struct {
 // HigherTimeframeBias is a confirmed structural read from the named closed
 // higher-timeframe candle; it is not the entry timeframe's bias or a guess.
 type HigherTimeframeBias struct {
-	Timeframe market.Timeframe
-	Direction market.Direction
-	Layer string
+	Timeframe     market.Timeframe
+	Direction     market.Direction
+	Layer         string
 	ReferenceTime int64
 }
 
@@ -145,7 +156,7 @@ type TechnicalContext struct {
 	// HigherTimeframes is ordered H1, H4; each entry is read only after its
 	// own bar has closed and is fresh at the opportunity's observation bar.
 	HigherTimeframes []HigherTimeframeBias
-	Confirmation *ReactionConfirmation
+	Confirmation     *ReactionConfirmation
 }
 
 // Candidate is one strategy's technical opportunity, as of the source
@@ -307,7 +318,7 @@ func (c Candidate) Validate() error {
 	}
 	if c.Reaction != nil {
 		r := c.Reaction
-		if r.ZoneID == "" || r.ReactionType != "rejection" || r.TouchBarTime < 0 || r.ConfirmationBarTime < r.TouchBarTime || r.ConfirmationBarTime > c.CreatedAt {
+		if r.ZoneID == "" || r.ReactionType != "rejection" || (r.Pattern != "" && !ReactionPatterns[r.Pattern]) || r.TouchBarTime < 0 || r.ConfirmationBarTime < r.TouchBarTime || r.ConfirmationBarTime > c.CreatedAt {
 			return fmt.Errorf("opportunity: confirmed reaction needs a causal touch and closed confirmation bar")
 		}
 	}

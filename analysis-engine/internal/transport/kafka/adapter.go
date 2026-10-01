@@ -24,7 +24,7 @@ func OpportunityPayloadFromCandidate(c opportunity.Candidate, algo AlgorithmVers
 		if c.Technical.Confirmation != nil {
 			r := c.Technical.Confirmation
 			technical.Confirmation = &ReactionConfirmationPayload{
-				ZoneID: r.ZoneID, TouchBarTime: r.TouchBarTime, ConfirmationBarTime: r.ConfirmationBarTime, ReactionType: r.ReactionType,
+				ZoneID: r.ZoneID, TouchBarTime: r.TouchBarTime, ConfirmationBarTime: r.ConfirmationBarTime, ReactionType: r.ReactionType, Pattern: r.Pattern,
 			}
 		}
 		for _, higher := range c.Technical.HigherTimeframes {

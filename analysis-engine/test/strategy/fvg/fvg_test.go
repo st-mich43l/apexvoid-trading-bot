@@ -19,6 +19,8 @@ func validParams() map[string]any {
 		"invalidation_buffer_atr":     0.5,
 		"minimum_target_distance_atr": 1.0,
 		"expiry_hours":                24.0,
+		"reaction_lookback_bars":      3.0,
+		"engulfing_minimum_range_atr": 0.5,
 	}
 }
 
