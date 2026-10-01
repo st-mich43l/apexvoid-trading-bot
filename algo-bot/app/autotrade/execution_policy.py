@@ -1036,9 +1036,6 @@ def evaluate_execution_policy(
     digits = _instrument_digits("", instrument_cfg)
     structure_buffer_atr = float(execution.scaling.add.stop_buffer_atr)
     wick_buffer_atr = float(execution.stops.wick_stop_buffer_atr)
-    is_fx_policy = str(
-      getattr(instrument_cfg, "policy_name", "") or ""
-    ).startswith("fx_")
     if go_origin and getattr(match, "go_invalidation_price", None) is not None:
       stop_plan = plan_go_invalidation_stop(
         direction=direction,
@@ -1051,8 +1048,13 @@ def evaluate_execution_policy(
         maximum_stop_pips=maximum_stop_pips,
         pip_size=pip,
         digits=digits,
-        enforce_minimum_stop=is_fx_policy,
-        widen_to_minimum=not is_fx_policy,
+        # Go owns the technical invalidation, while Algo Bot owns the
+        # execution-risk floor.  A Go invalidation that is tighter than the
+        # configured FX envelope is widened to that floor; rejecting it here
+        # recreated the live 3-pip/14-pip-stop failure this path is meant to
+        # prevent.  The helper still enforces the configured maximum.
+        enforce_minimum_stop=False,
+        widen_to_minimum=True,
         band_extension_pips=_band_extension_pips(
           match, low=low, high=high, pip_size=pip,
         ),
