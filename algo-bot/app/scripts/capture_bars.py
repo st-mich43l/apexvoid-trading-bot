@@ -7,17 +7,17 @@ JSON file. Nothing is modified in Redis. Run it on the host that owns the feed:
       --symbol XAU --m5 1500 --m15 600 --h1 300 --out /tmp/xau-capture.json
 
 The file records when and from where it was taken; it never contains a
-credential (only the Redis host is stored, without user info). Feed it to both
-engines unchanged:
+credential (only the Redis host is stored, without user info). Feed it to the Go
+replay tool unchanged:
 
   go run ./cmd/replay -capture /tmp/xau-capture.json -config ../config/apexvoid.yml -envelopes-out /tmp/go.jsonl
-  python -m app.scripts.policy_replay python-observations --capture /tmp/xau-capture.json --out /tmp/py.jsonl
 """
 
 from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import json
 import os
 import sys
@@ -26,8 +26,42 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from app.analysis.ohlc_source import RedisOHLCSource
-from app.autotrade import policy_replay as pr
 from app.persistence import redis_state
+
+
+TF_MINUTES = {"M5": 5, "M15": 15, "H1": 60, "H4": 240}
+
+
+class CaptureError(ValueError):
+  """The capture is malformed; never repaired."""
+
+
+def validate_capture(document: dict) -> dict[str, int]:
+  """Bars per timeframe, or CaptureError if the Go replay would reject the file."""
+  if document.get("version") != 1 or not document.get("symbol") or not document.get("timeframes"):
+    raise CaptureError("capture needs version 1, a symbol and timeframes")
+  if document.get("columns") != ["t", "open", "high", "low", "close", "volume"]:
+    raise CaptureError("capture columns must be t,open,high,low,close,volume")
+  counts: dict[str, int] = {}
+  for tf, rows in document["timeframes"].items():
+    if tf not in TF_MINUTES:
+      raise CaptureError(f"unknown timeframe {tf!r}")
+    previous = None
+    for i, row in enumerate(rows):
+      if len(row) != 6:
+        raise CaptureError(f"{tf} row {i} has {len(row)} columns")
+      t, o, h, l, c, _ = row
+      if h < l or h < o or h < c or l > o or l > c or l <= 0:
+        raise CaptureError(f"{tf} bar {i} at t={int(t)} is not OHLC-consistent")
+      if int(t) % (TF_MINUTES[tf] * 60) != 0:
+        raise CaptureError(f"{tf} bar {i} at t={int(t)} is not aligned to its timeframe")
+      if previous is not None and int(t) <= previous:
+        raise CaptureError(f"{tf} bars must be strictly increasing (t={int(t)} after t={previous})")
+      previous = int(t)
+    counts[tf] = len(rows)
+  if "M5" not in counts:
+    raise CaptureError("capture has no M5 bars")
+  return counts
 
 
 def _host() -> str:
@@ -78,14 +112,14 @@ def main(argv: list[str] | None = None) -> int:
   args = parser.parse_args(argv)
   document = asyncio.run(capture(args.symbol, {"M5": args.m5, "M15": args.m15, "H1": args.h1}))
   out = Path(args.out)
-  out.write_text(json.dumps(document, separators=(",", ":")) + "\n")
   try:
-    loaded = pr.load_capture(out)             # refuse to leave a file the replay would reject
-  except pr.ReplayError as exc:
-    out.unlink(missing_ok=True)
+    bars = validate_capture(document)         # refuse to leave a file the replay would reject
+  except CaptureError as exc:
     print(json.dumps({"refused": str(exc)}), file=sys.stderr)
     return 2
-  print(json.dumps({"out": str(out), "bars": {tf: len(df) for tf, df in loaded.frames.items()}, "sha256": loaded.sha256}))
+  payload = (json.dumps(document, separators=(",", ":")) + "\n").encode()
+  out.write_bytes(payload)
+  print(json.dumps({"out": str(out), "bars": bars, "sha256": hashlib.sha256(payload).hexdigest()}))
   return 0
 
 
