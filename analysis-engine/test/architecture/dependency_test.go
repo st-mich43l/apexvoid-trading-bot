@@ -131,14 +131,15 @@ var rank = map[string]int{
 
 	"structure": 2,
 
-	"zone":      3,
-	"liquidity": 3,
-	"trendline": 3,
-	"keylevel":  3,
-	"fib":       3,
-	"barrier":   3,
-	"momentum":  3,
-	"reaction":  3,
+	"zone":       3,
+	"liquidity":  3,
+	"trendline":  3,
+	"keylevel":   3,
+	"fib":        3,
+	"barrier":    3,
+	"momentum":   3,
+	"reaction":   3,
+	"legacyzone": 3,
 
 	"context": 4,
 
