@@ -446,6 +446,24 @@
           "required": ["buffer_atr", "accept_bars", "max_age_bars"]
         },
         "coil_contract": { "type": "number" },
+        "confluence": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "scoring_version": { "type": "string", "enum": ["v1", "v2"] },
+            "v2_star_three_ratio": { "type": "number", "minimum": 0, "maximum": 1 },
+            "v2_star_two_ratio": { "type": "number", "minimum": 0, "maximum": 1 },
+            "v2_zone_quality_weight": { "type": "number", "minimum": 0 },
+            "v2_mad_score_weight": { "type": "number", "minimum": 0 }
+          },
+          "required": [
+            "scoring_version",
+            "v2_star_three_ratio",
+            "v2_star_two_ratio",
+            "v2_zone_quality_weight",
+            "v2_mad_score_weight"
+          ]
+        },
         "technical_authority": {
           "type": "object",
           "additionalProperties": false,
@@ -930,13 +948,18 @@
             },
             "eq_half_band": {
               "type": "number"
+            },
+            "confluence_weight": {
+              "type": "number",
+              "minimum": 0
             }
           },
           "required": [
             "epsilon_atr",
             "deep_discount",
             "deep_premium",
-            "eq_half_band"
+            "eq_half_band",
+            "confluence_weight"
           ]
         },
         "calendar": {
@@ -1264,6 +1287,7 @@
         "breakout",
         "calendar",
         "coil_contract",
+        "confluence",
         "momentum",
         "fibonacci",
         "flip_zone",
