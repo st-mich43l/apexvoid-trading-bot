@@ -76,6 +76,31 @@ type OpportunityPublisher struct {
 
 	client    OpportunityKafkaClient
 	telemetry *telemetry.Recorder
+
+	// dirty means the in-memory ledger holds changes not yet persisted:
+	// suppressed (bootstrap/replay) observations only update memory, because
+	// persisting the whole ledger (pretty-printed JSON, two fsyncs) after each
+	// of thousands of historical transitions made every restart take 15+
+	// minutes. The next live observation or Flush persists them.
+	dirty bool
+}
+
+// Flush persists any ledger changes recorded by suppressed observations. The
+// engine calls it once when the bootstrap replay completes. Nil-safe.
+func (p *OpportunityPublisher) Flush() {
+	if p == nil {
+		return
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if !p.dirty {
+		return
+	}
+	if err := p.store.save(); err != nil {
+		p.telemetry.Count(telemetry.CounterOpportunityOutboxPersistFailed, "", "", 1)
+		return
+	}
+	p.dirty = false
 }
 
 // NewOpportunityPublisher returns nil (a valid, always-no-op receiver —
@@ -166,8 +191,12 @@ func (p *OpportunityPublisher) Observe(symbol market.Symbol, algo kafka.Algorith
 	} else {
 		p.store.ledger.Records[id] = record
 	}
-	if err := p.store.save(); err != nil {
+	if !publish {
+		p.dirty = true
+	} else if err := p.store.save(); err != nil {
 		p.telemetry.Count(telemetry.CounterOpportunityOutboxPersistFailed, string(symbol), "", 1)
+	} else {
+		p.dirty = false
 	}
 	p.mu.Unlock()
 	if !publish {

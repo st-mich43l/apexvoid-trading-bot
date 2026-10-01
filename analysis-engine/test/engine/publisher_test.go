@@ -2,7 +2,10 @@ package engine_test
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -435,4 +438,34 @@ func TestOpportunityPublisher_DefersRecoveredTerminalUntilLiveResume(t *testing.
 	}
 	pub.ResumeLive("XAU")
 	waitFor(t, 2*time.Second, func() bool { _, got, _ := client.snapshot(); return len(got) == 1 })
+}
+
+// TestOpportunityPublisher_SuppressedObservationsAreNotPersistedOneByOne guards
+// the restart-time fix: replaying retained history observes thousands of
+// transitions with publishing suppressed, and each used to rewrite and fsync the
+// whole ledger (15+ minutes per restart in production, 2026-10-01). Suppressed
+// observations now only update memory; Flush persists them once.
+func TestOpportunityPublisher_SuppressedObservationsAreNotPersistedOneByOne(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "publication-ledger.json")
+	pub, err := engine.NewDurableOpportunityPublisher(&fakeKafkaClient{}, nil, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 50; i++ {
+		pub.Observe("XAU", kafka.AlgorithmVersion{}, opportunity.Transition{
+			Kind: opportunity.TransitionCreated, Record: opportunity.Record{Candidate: fakeCandidate(fmt.Sprintf("opp-boot-%d", i))},
+		}, false)
+	}
+	if _, err := os.Stat(path); err == nil {
+		t.Fatal("suppressed observations must not each persist the ledger")
+	}
+
+	pub.Flush()
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("Flush must persist the ledger: %v", err)
+	}
+	if got := strings.Count(string(raw), "opp-boot-"); got < 50 {
+		t.Fatalf("flushed ledger holds %d of 50 suppressed records", got)
+	}
 }
