@@ -42,7 +42,7 @@ async def _atr_by_source_timeframe(
   # Display-only compatibility report. Keep legacy OHLC/ATR helpers out of
   # the automatic process import graph.
   from app.analysis.math_utils import atr_scalar, atr_series
-  from app.analysis.ohlc_source import RedisOHLCSource
+  from app.marketdata.ohlc import RedisOHLCSource
 
   source = RedisOHLCSource(client)
   length = int(runtime_config.analysis.atr.length)

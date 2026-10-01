@@ -13,7 +13,7 @@ from app.persistence.store import get_open_signals
 from app.bot.keyboards import build_close_kb, build_tp_close_kb
 from app.signals.pips_format import signed_result_pips, sl_result_pips, wing_icons
 from app.signals.price import get_xau_bars
-from app.analysis.ohlc_source import RedisOHLCSource
+from app.marketdata.ohlc import RedisOHLCSource
 from app.persistence.redis_state import clear_sl_alert, mark_tp_alert
 from app.persistence import redis_state
 

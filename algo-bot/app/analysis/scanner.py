@@ -41,7 +41,7 @@ from app.analysis.market_map import (
   rail_reference,
 )
 from app.analysis.market_map_delivery import cache_analysis
-from app.analysis.ohlc_source import RedisOHLCSource, window_for_timeframe
+from app.marketdata.ohlc import RedisOHLCSource, window_for_timeframe
 from app.analysis.structure import Zone
 from app.analysis.confluence_zone import (
   BandKind,
