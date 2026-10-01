@@ -347,7 +347,7 @@ def test_fx_go_policy_targets_entry_to_instrument_stop_floor(monkeypatch):
   assert evaluation.measured["planned_stop_pips"] == "12.0"
 
 
-def test_fx_go_policy_rejects_live_three_pip_stop_geometry(monkeypatch):
+def test_fx_go_policy_widens_live_three_pip_stop_to_configured_floor(monkeypatch):
   match = _match(
     symbol="EURUSD",
     strategy="FVG",
@@ -369,6 +369,6 @@ def test_fx_go_policy_rejects_live_three_pip_stop_geometry(monkeypatch):
     pip_size=0.0001,
     cfg=_production_cfg(monkeypatch),
   )
-  assert not evaluation.allowed
-  assert evaluation.reason_code == "stop_below_go_invalidation_envelope"
-  assert float(evaluation.measured["furthest_leg_stop_pips"]) == pytest.approx(2.66, abs=0.01)
+  assert evaluation.allowed
+  assert evaluation.measured["stop_source"] == "go_invalidation_widened"
+  assert float(evaluation.measured["planned_stop_pips"]) == pytest.approx(12.0, abs=0.01)
