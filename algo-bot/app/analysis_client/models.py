@@ -116,6 +116,66 @@ class ReactionConfirmation(FrozenConfigModel):
     return self
 
 
+class CandleRejectionEvidence(FrozenConfigModel):
+  score: FiniteFloat = Field(ge=0, le=1)
+  patterns: list[str] = Field(default_factory=list)
+  wick_fraction: FiniteFloat = Field(ge=0, le=1)
+  body_fraction: FiniteFloat = Field(ge=0, le=1)
+  close_location: FiniteFloat = Field(ge=0, le=1)
+  sweep: bool
+  sweep_penetration_atr: FiniteFloat | None = Field(default=None, gt=0)
+  reclaim: bool
+  reclaim_depth_atr: FiniteFloat | None = Field(default=None, gt=0)
+
+
+class CandleDisplacementEvidence(FrozenConfigModel):
+  score: FiniteFloat = Field(ge=0, le=1)
+  patterns: list[str] = Field(default_factory=list)
+  body_atr: FiniteFloat = Field(ge=0)
+  range_atr: FiniteFloat = Field(ge=0)
+  body_dominance: FiniteFloat = Field(ge=0, le=1)
+  close_location: FiniteFloat = Field(ge=0, le=1)
+  reclaim: bool
+  reclaim_depth_atr: FiniteFloat | None = Field(default=None, gt=0)
+  engulfing: bool
+  engulfing_quality: FiniteFloat | None = Field(default=None, ge=0, le=1)
+
+
+class CandleSequenceEvidence(FrozenConfigModel):
+  score: FiniteFloat = Field(ge=0, le=1)
+  patterns: list[str] = Field(default_factory=list)
+  bars: int = Field(ge=2, le=5)
+
+
+class CandleIndecisionEvidence(FrozenConfigModel):
+  doji: bool
+  spinning_top: bool
+  inside_bar: bool
+  body_fraction: FiniteFloat = Field(ge=0, le=1)
+  compression_score: FiniteFloat = Field(ge=0, le=1)
+
+
+class CandleEvidence(FrozenConfigModel):
+  """Additive Candle Confirmation V2 facts emitted by Go.
+
+  These are descriptive technical evidence only.  Policy must not use this
+  score as an execution or risk decision; strict decoding here merely keeps
+  the producer/consumer contract aligned.
+  """
+
+  version: Literal[2]
+  direction: Literal["BUY", "SELL"]
+  rejection: CandleRejectionEvidence | None = None
+  displacement: CandleDisplacementEvidence | None = None
+  sequence: CandleSequenceEvidence | None = None
+  indecision: CandleIndecisionEvidence | None = None
+  base_score: FiniteFloat = Field(ge=0, le=1)
+  synergy_bonus: FiniteFloat = Field(ge=0, le=0.12)
+  final_score: FiniteFloat = Field(ge=0, le=1)
+  primary_pattern: str | None = None
+  all_patterns: list[str] = Field(default_factory=list)
+
+
 class TechnicalContext(FrozenConfigModel):
   """Engine-owned policy inputs for the bar that made the setup actionable.
 
@@ -129,6 +189,7 @@ class TechnicalContext(FrozenConfigModel):
   bias: TechnicalBias | None = None
   higher_timeframes: list[HigherTimeframeBias] = Field(default_factory=list, max_length=2)
   confirmation: ReactionConfirmation | None = None
+  candle_evidence: CandleEvidence | None = None
 
   @model_validator(mode="after")
   def validate_higher_timeframes(self):
