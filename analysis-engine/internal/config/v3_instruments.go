@@ -165,3 +165,28 @@ func nestedMap(m stringMap, path ...string) stringMap {
 	}
 	return cursor
 }
+
+// InstrumentOverride reads one leaf of an instrument's merged overrides tree,
+// e.g. ("GBPJPY", "analysis", "levels", "minimum_key_touches"). It reports
+// whether the instrument (or its pack) sets it; an unknown instrument is an
+// error. This is the same Python-shaped override tree the algo-bot resolves, so
+// a per-instrument value has one home for both services.
+func (d *Document) InstrumentOverride(symbol string, path ...string) (any, bool, error) {
+	merged, err := d.mergedInstrument(symbol)
+	if err != nil {
+		return nil, false, err
+	}
+	cursor := nestedMap(merged, "overrides")
+	if cursor == nil || len(path) == 0 {
+		return nil, false, nil
+	}
+	for _, key := range path[:len(path)-1] {
+		next, ok := cursor[key].(stringMap)
+		if !ok {
+			return nil, false, nil
+		}
+		cursor = next
+	}
+	value, ok := cursor[path[len(path)-1]]
+	return value, ok, nil
+}

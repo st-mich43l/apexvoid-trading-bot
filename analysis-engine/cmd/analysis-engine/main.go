@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -138,22 +139,38 @@ func run(configPath string) error {
 	}
 	redisHealth := redistransport.NewHealth(true)
 	var runtime *redistransport.Runtime
+	publishDerivedState := func(ctx context.Context, symbol market.Symbol, snapshot engine.AnalysisSnapshot) {
+		// Best-effort: Algo Bot's execution-time opposing-barrier check
+		// reads this to recheck a Go-origin plan against live structure
+		// (see internal/transport/redis/zonebook.go's own doc comment).
+		// A publish failure must never interrupt candle ingestion, same
+		// principle this file already applies to the Kafka producer.
+		if pubErr := runtime.PublishZoneBook(ctx, symbol, snapshot.Zones, time.Now().UTC()); pubErr != nil {
+			log.Warn("zone book publish failed", "symbol", symbol, "error", pubErr)
+		}
+		// Algo Bot executes only opportunities the engine still holds
+		// live; see internal/transport/redis/liveopportunities.go.
+		if pubErr := runtime.PublishLiveOpportunities(ctx, symbol, snapshot.Opportunities, time.Now().UTC()); pubErr != nil {
+			log.Warn("live opportunities publish failed", "symbol", symbol, "error", pubErr)
+		}
+	}
+	// The bootstrap replays every retained bar (about 3,000 per symbol). Writing
+	// the whole zone book and live set to Redis after each one kept the engine
+	// busy for ~10 minutes after every restart with detection silent; only the
+	// state after the last replayed bar is worth publishing, so it is kept and
+	// published once when the bootstrap completes.
+	var bootstrapMu sync.Mutex
+	bootstrapLatest := map[market.Symbol]engine.AnalysisSnapshot{}
 	runtime, err = redistransport.NewRuntime(redisCfg, series, func(ctx context.Context, event marketdata.BarEvent) (marketdata.AppendResult, error) {
 		snapshot, result, err := e.DispatchWithResult(event)
 		if err == nil && result == marketdata.AppendAccepted {
-			// Best-effort: Algo Bot's execution-time opposing-barrier check
-			// reads this to recheck a Go-origin plan against live structure
-			// (see internal/transport/redis/zonebook.go's own doc comment).
-			// A publish failure must never interrupt candle ingestion, same
-			// principle this file already applies to the Kafka producer.
-			if pubErr := runtime.PublishZoneBook(ctx, event.Symbol, snapshot.Zones, time.Now().UTC()); pubErr != nil {
-				log.Warn("zone book publish failed", "symbol", event.Symbol, "error", pubErr)
+			if event.Origin == marketdata.EventOriginBootstrap {
+				bootstrapMu.Lock()
+				bootstrapLatest[event.Symbol] = snapshot
+				bootstrapMu.Unlock()
+				return result, err
 			}
-			// Algo Bot executes only opportunities the engine still holds
-			// live; see internal/transport/redis/liveopportunities.go.
-			if pubErr := runtime.PublishLiveOpportunities(ctx, event.Symbol, snapshot.Opportunities, time.Now().UTC()); pubErr != nil {
-				log.Warn("live opportunities publish failed", "symbol", event.Symbol, "error", pubErr)
-			}
+			publishDerivedState(ctx, event.Symbol, snapshot)
 		}
 		return result, err
 	}, redisHealth, redistransport.NewMetrics())
@@ -161,6 +178,15 @@ func run(configPath string) error {
 		return fmt.Errorf("initializing Redis market runtime: %w", err)
 	}
 	defer runtime.Close()
+	runtime.SetOnBootstrapComplete(func(ctx context.Context) {
+		bootstrapMu.Lock()
+		latest := bootstrapLatest
+		bootstrapLatest = nil
+		bootstrapMu.Unlock()
+		for symbol, snapshot := range latest {
+			publishDerivedState(ctx, symbol, snapshot)
+		}
+	})
 	for symbol, cfg := range barrierConfigs {
 		runtime.SetBarrierConfig(symbol, cfg)
 	}
