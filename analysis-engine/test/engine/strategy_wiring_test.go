@@ -313,13 +313,22 @@ func TestEngine_FirstLiveBarAfterBootstrapRepublishesEveryInPlayArbitrationDecis
 	for _, d := range client.arbitrationSnapshot() {
 		published[d.OpportunityID] = true
 	}
+	reference := candles[last].Close
+	ready := false
+	for _, c := range snapshot.Opportunities {
+		if c.Technical != nil && c.Entry.Low <= reference && reference <= c.Entry.High {
+			ready = true
+			break
+		}
+	}
 	for _, c := range snapshot.Opportunities {
 		inPlay := settings.Arbitration.InPlayATR <= 0
-		if c.Technical != nil && c.Technical.ATR > 0 && settings.Arbitration.InPlayATR > 0 {
+		if ready {
+			inPlay = c.Technical != nil && c.Entry.Low <= reference && reference <= c.Entry.High
+		} else if c.Technical != nil && c.Technical.ATR > 0 && settings.Arbitration.InPlayATR > 0 {
 			distance := 0.0
 			// The live event's close is the same reference passed to
 			// ArbitrateInPlay by SymbolWorker.
-			reference := candles[last].Close
 			switch {
 			case reference < c.Entry.Low:
 				distance = c.Entry.Low - reference
