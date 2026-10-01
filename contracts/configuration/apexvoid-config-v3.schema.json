@@ -708,10 +708,16 @@
               "type": "number",
               "minimum": 0,
               "maximum": 1
+            },
+            "in_play_atr": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 10
             }
           },
           "required": [
-            "conflict_margin_quality"
+            "conflict_margin_quality",
+            "in_play_atr"
           ]
         },
         "zone_relevance": {
