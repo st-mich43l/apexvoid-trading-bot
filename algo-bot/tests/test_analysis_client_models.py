@@ -52,6 +52,13 @@ def test_decodes_creation_and_additive_v1_fields():
   assert event.payload.formed_at == 99
 
 
+def test_decodes_post_bootstrap_recovery_marker():
+  event = parse_analysis_event(OpportunityTopic, json.dumps(_opportunity(
+    payload={**_opportunity()["payload"], "recovered_at": 200},
+  )))
+  assert event.payload.recovered_at == 200
+
+
 def test_decodes_terminal_event():
   event = parse_analysis_event(InvalidationTopic, json.dumps(_invalidated()))
   assert event.payload.reason_code == "SETUP_EXPIRED"

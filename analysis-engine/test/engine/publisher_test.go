@@ -46,6 +46,19 @@ func (f *fakeKafkaClient) PublishOpportunity(_ context.Context, eventID, _, _ st
 	return nil
 }
 
+func (f *fakeKafkaClient) PublishRecoveredOpportunity(_ context.Context, eventID, _, _ string, candidate opportunity.Candidate, _ kafka.AlgorithmVersion, _ time.Time, _ time.Time) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.eventIDs = append(f.eventIDs, eventID)
+	if f.failNextOpportunity > 0 {
+		f.failNextOpportunity--
+		return context.DeadlineExceeded
+	}
+	f.opportunities = append(f.opportunities, candidate)
+	f.calls = append(f.calls, "recovered:"+candidate.ID)
+	return nil
+}
+
 func (f *fakeKafkaClient) PublishOpportunityInvalidated(_ context.Context, eventID, _, _ string, _ market.Symbol, payload kafka.OpportunityInvalidatedPayload, _ time.Time) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -135,6 +148,34 @@ func TestOpportunityPublisher_PublishesACreatedTransition(t *testing.T) {
 	opps, _, _ := client.snapshot()
 	if opps[0].ID != "opp-created" {
 		t.Errorf("expected the published candidate to be opp-created, got %q", opps[0].ID)
+	}
+}
+
+func TestOpportunityPublisher_BackfillsBootstrapLiveCandidatesOnce(t *testing.T) {
+	client := &fakeKafkaClient{}
+	pub := engine.NewOpportunityPublisher(client, nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go pub.Run(ctx)
+
+	candidate := fakeCandidate("opp-recovered")
+	// This is exactly what bootstrap dispatch does: establish the durable
+	// lifecycle record but suppress its historical creation event.
+	pub.Observe("XAU", kafka.AlgorithmVersion{}, opportunity.Transition{
+		Kind:   opportunity.TransitionCreated,
+		Record: opportunity.Record{Candidate: candidate, State: opportunity.StateCreated},
+	}, false)
+	pub.BackfillLive("XAU", kafka.AlgorithmVersion{Structure: "v2", Liquidity: "v1"}, []opportunity.Candidate{candidate}, time.Unix(200, 0))
+	// A repeated bootstrap-complete callback must not create a second event.
+	pub.BackfillLive("XAU", kafka.AlgorithmVersion{Structure: "v2", Liquidity: "v1"}, []opportunity.Candidate{candidate}, time.Unix(201, 0))
+
+	waitFor(t, 2*time.Second, func() bool {
+		opps, _, _ := client.snapshot()
+		return len(opps) == 1
+	})
+	_, _, calls := client.snapshot()
+	if want := []string{"recovered:opp-recovered"}; len(calls) != len(want) || calls[0] != want[0] {
+		t.Fatalf("expected one recovered creation, got calls=%v", calls)
 	}
 }
 

@@ -91,6 +91,21 @@ func TestOpportunitySchema_ValidatesARealGoPayload(t *testing.T) {
 	validateGo(t, schema, p)
 }
 
+func TestOpportunitySchema_ValidatesPostBootstrapRecoveryFact(t *testing.T) {
+	schema := compileSchema(t, repoContractPath("analysis", "opportunity-v1.schema.json"))
+	p := kafka.OpportunityPayload{
+		ID: "cand-recovered", Strategy: "supply", Symbol: "XAU", Direction: "SELL",
+		Entry:            kafka.EntryZonePayload{Low: 2000, High: 2002},
+		Invalidation:     kafka.PriceLevelPayload{Price: 2005},
+		Targets:          []kafka.TargetPayload{{Price: kafka.PriceLevelPayload{Price: 1990}}},
+		Evidence:         []kafka.EvidencePayload{{Code: "reaction"}},
+		Quality:          kafka.QualityPayload{Overall: 0.8},
+		AlgorithmVersion: kafka.AlgorithmVersionPayload{Structure: "v2", Liquidity: "v1"},
+		CreatedAt:        1000, ExpiresAt: 2000, RecoveredAt: 1500,
+	}
+	validateGo(t, schema, p)
+}
+
 func TestOpportunitySchema_ValidatesARealGoPayloadWithStopEnvelope(t *testing.T) {
 	schema := compileSchema(t, repoContractPath("analysis", "opportunity-v1.schema.json"))
 	p := kafka.OpportunityPayload{

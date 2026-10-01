@@ -84,6 +84,15 @@ func (p *Producer) PublishOpportunity(ctx context.Context, eventID, correlationI
 	return p.publish(ctx, p.cfg.Topics.AnalysisOpportunity, candidate.Symbol, eventID, correlationID, causationID, payload, occurredAt)
 }
 
+// PublishRecoveredOpportunity publishes a current live candidate restored
+// after Redis bootstrap. The candidate's original CreatedAt remains intact;
+// recoveredAt is an explicit, additive payload fact so consumers can apply a
+// narrow recovery rule without weakening ordinary event-age validation.
+func (p *Producer) PublishRecoveredOpportunity(ctx context.Context, eventID, correlationID, causationID string, candidate opportunity.Candidate, algo AlgorithmVersion, occurredAt time.Time, recoveredAt time.Time) error {
+	payload := OpportunityPayloadFromRecoveredCandidate(candidate, algo, recoveredAt.Unix())
+	return p.publish(ctx, p.cfg.Topics.AnalysisOpportunity, candidate.Symbol, eventID, correlationID, causationID, payload, occurredAt)
+}
+
 // PublishOpportunityInvalidated encodes payload as
 // analysis.opportunity.invalidated.v1 and publishes it, keyed by symbol.
 func (p *Producer) PublishOpportunityInvalidated(ctx context.Context, eventID, correlationID, causationID string, symbol market.Symbol, payload OpportunityInvalidatedPayload, occurredAt time.Time) error {

@@ -185,6 +185,11 @@ func run(configPath string) error {
 		bootstrapLatest = nil
 		bootstrapMu.Unlock()
 		for symbol, snapshot := range latest {
+			algo := kafka.AlgorithmVersion{
+				Structure: snapshot.Version.StructureVersion,
+				Liquidity: snapshot.Version.LiquidityVersion,
+			}
+			publisher.BackfillLive(symbol, algo, snapshot.Opportunities, time.Now().UTC())
 			publishDerivedState(ctx, symbol, snapshot)
 		}
 	})
