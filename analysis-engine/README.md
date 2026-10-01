@@ -1,44 +1,34 @@
 # analysis-engine
 
-Go port of ApexVoid's deterministic market-analysis domain, per
-`apexvoid-bot-prompts/rebuild-analysis-engine.md`. Extracts the CPU-heavy,
-deterministic analysis math out of `algo-bot/` into Go while
-`ctrader-engine/` (execution) and `algo-bot/` (control plane, Telegram,
-research) stay as they are. **Not a rewrite of the trading strategy** —
-Python remains the reference implementation and stays authoritative until
-a shadow-mode parity run earns cutover (see the source prompt's §14/§26).
+Go owner of ApexVoid's deterministic automatic market-analysis domain, per
+`apexvoid-bot-prompts/rebuild-analysis-engine.md`. The live Go service owns
+technical facts, strategy detection, opportunity lifecycle, arbitration,
+zones, levels, structure, regime, MAD, and candle evidence. `algo-bot/`
+remains the execution-policy/control plane (freshness, quote, account,
+exposure, TradePlan, Telegram), while `ctrader-engine/` remains the broker
+execution service. The Python technical detector graph is no longer a live
+automatic authority; its import reachability is enforced by
+`algo-bot/s13_legacy_classification.py`.
 
 Read **`docs/go-analysis-migration-audit.md`** first — the computation
 graph, every duplicate/divergent calculation found in Python so far, and
 why each package boundary here is drawn where it is.
 
-## Status (Stage 1 + partial Stage 2; Configuration V3 Stage C4)
+## Status (Go automatic path live; S13 retirement audit active)
 
-Ported, with golden-master parity tests against real Python output:
+The live path includes:
 
-- `internal/market` — `Candle`, `CandleWindow` (bounded ring buffer),
-  `Timeframe`, `Geometry` (per-instrument pip/digit geometry, fails closed
-  on an unknown symbol per the source prompt's §12).
-- `internal/config` — Configuration V3 direct YAML reader (see
-  `docs/configuration-v3-migration-audit.md`'s Stage C4 section):
-  `ResolveDocument` implements the same include/merge/overlay spec (§14)
-  as `algo-bot/app/configuration/v3_root.py` and `config/scripts/
-  resolve_reference.py` — three independent implementations of one spec,
-  proven against the real `config/apexvoid.yml`. `GeometryFor`/
-  `LiveInstruments` replace the old `ResolvedRuntimeManifest`-JSON reader
-  entirely (deleted, not kept as a fallback — the source prompt's own
-  §34: "Do not leave manifest OR yaml mode selection. YAML V3 only.").
-- `internal/indicator` — `TrueRange`, `SimpleATR` (`math_utils.atr_series`
-  — simple rolling mean), `WilderATR` (`indicators.atr` — pandas_ta RMA),
-  `AtrAt`, `AtrScalar`. **Both ATR formulas are ported side by side,
-  deliberately** — see the audit §2.1: they diverge ~6.7% on real data and
-  which one is canonical is an open question for the owner, not resolved
-  here.
+- canonical V3 configuration, market history, ATR, structure and liquidity;
+- zone construction/lifecycle and all 19 configured Go strategy factories;
+- technical opportunity Kafka publication, lifecycle, arbitration and
+  technical context (including candle-confirmation evidence);
+- Redis market-data ingestion, production telemetry, replay and parity tests.
 
-Not yet started: swings, market structure/breaks, zones/techniques, MAD,
-regime, trendlines, scalp structure, the `SymbolState`/`TimeframeState`
-engine, detectors, Redis wiring. See `docs/go-analysis-migration-audit.md`
-§6 for the next analysis slice.
+The remaining Python modules are either unreachable technical compatibility
+code or intentionally retained execution/accounting/manual/presentation
+code. The S13 classifier must remain green before any technical module is
+deleted. Known calibration and long-window Python-vs-Go comparison gaps are
+tracked in `docs/analysis-engine-v2-migration.md`.
 
 ## Working on this module
 
@@ -51,12 +41,10 @@ why, and what that meant for the one test that needed unexported access).
 Add new tests there, under the matching domain, not back inside
 `internal/`.
 
-Go is not installed on the host in this environment; everything runs
-through the same `golang:1.23-alpine` Docker image already cached
-locally, mirroring how `ctrader-engine/` is built/tested via the
-`mcr.microsoft.com/dotnet/sdk:8.0` image in this repo. `test/config`'s
-tests read the real `config/apexvoid.yml` two directories up, so mount
-the **whole repository**, not just `analysis-engine/`:
+When Go is unavailable on a host, use the same `golang:1.23-alpine` Docker
+image used by CI. `test/config` reads the real `config/apexvoid.yml` two
+directories up, so mount the **whole repository**, not just
+`analysis-engine/`:
 
 ```bash
 docker run --rm -v "$(pwd)":/src -w /src/analysis-engine golang:1.23-alpine \
