@@ -1914,7 +1914,7 @@ def _configured_target_r_multiples(
   M1 scalp strategies are never on the instrument's fixed_rr ladder (their
   own 1R/2R book is separate - see technique_fixed_rr_targeting), so this
   falls back to scalp_target_r_multiples: the R each targets_pips entry
-  actually is, computed by app.scalping.publish from the SAME stop
+  actually is, computed by the execution-owned scalp ladder from the SAME stop
   distance the ladder itself was built from - same "authoritative source,
   never re-derived from card prices" principle as the fixed_rr branch.
   """

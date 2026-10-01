@@ -29,7 +29,6 @@ order checks.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 import math
@@ -52,15 +51,10 @@ from app.autotrade.go_live_opportunities import go_live_opportunity_ids
 from app.autotrade.execution_policy import classify_tier, risk_multiplier_for_tier, strategy_family
 from app.autotrade.multi_match import deserialize_matches, serialize_matches, strategy_matches_key
 from app.autotrade.setup_lifecycle import (
-  CONFIRMED,
-  DISCOVERED,
   EXPIRED,
-  FORMING,
   INVALIDATED,
-  TOUCHED,
-  WATCHING,
   SetupLifecycleError,
-  create_setup,
+  advance_setup_to_confirmed,
   load_setup,
   transition_setup,
 )
@@ -74,7 +68,6 @@ from app.autotrade.execution_eligibility import (
 log = logging.getLogger(__name__)
 
 MODE = "go"
-_PRE_CONFIRMED = (DISCOVERED, WATCHING, TOUCHED, FORMING, CONFIRMED)
 _TERMINAL_OR_LIVE = {"plan_built", "plan_published", "invalidated", "expired", "cancelled"}
 _ARBITRATION_CACHE_TTL_SECONDS = 7 * 24 * 60 * 60
 GO_ARBITRATION_KEY_PREFIX = "analysis:go_arbitration"
@@ -168,8 +161,14 @@ def _thesis_id(symbol: str, family: str, direction: str, zone_id: str) -> str:
   zone, each under its own opportunity id) is ONE thesis, and the plan builder's
   active-thesis claim stops a second executable plan for it. Keying this on the
   opportunity id (the S13C behaviour) let every re-confirmation publish its own plan."""
-  raw = "|".join(("thesis", "v1", symbol.upper(), family, direction.upper(), zone_id))
-  return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
+  from app.autotrade.strategy_identity import thesis_id
+
+  return thesis_id(
+    symbol=symbol,
+    strategy_family=family,
+    direction=direction,
+    structural_id=zone_id,
+  )
 
 
 def match_id_for(opportunity_id: str) -> str:
@@ -653,15 +652,12 @@ class GoOpportunityPolicy:
 
   @staticmethod
   async def _advance_setup(client: Any, match: StrategyMatch) -> None:
-    record, _ = await create_setup(
-      client, setup_id=match.match_id, thesis_id=match.thesis_id, symbol=match.symbol,
-      source_structure_id=match.structural_zone_id, formation_timeframe=match.structural_timeframe,
-      expires_at=match.expires_at,
+    await advance_setup_to_confirmed(
+      client,
+      match,
+      match.symbol,
+      match.structural_timeframe or "M1",
     )
-    if record.state not in _PRE_CONFIRMED:
-      return
-    for state in _PRE_CONFIRMED[_PRE_CONFIRMED.index(record.state) + 1:]:
-      record, _ = await transition_setup(client, match.match_id, state, reason_code="go_opportunity")
 
   @staticmethod
   async def _store_match(client: Any, match: StrategyMatch, now: int) -> None:

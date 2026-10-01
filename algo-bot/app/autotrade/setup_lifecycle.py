@@ -19,6 +19,8 @@ import json
 import time
 from typing import Any, Mapping
 
+from app.autotrade.strategy_identity import thesis_id
+
 # P0-1: business expiry (the setup's own expires_at) must never be conflated
 # with Redis key TTL (data retention). Before this, _ttl_for set the key's
 # TTL to roughly expires_at-now - once nothing touched the record again
@@ -323,6 +325,58 @@ async def create_setup(
   )
   await _save(client, record)
   return record, True
+
+
+_PRE_CONFIRMED_CHAIN = (DISCOVERED, WATCHING, TOUCHED, FORMING, CONFIRMED)
+
+
+async def advance_setup_to_confirmed(
+  client: Any,
+  match: Any,
+  symbol: str,
+  timeframe: str,
+) -> tuple[str, str] | None:
+  """Record a pre-confirmed typed match as an already confirmed setup.
+
+  Go supplies the technical confirmation.  This helper only persists the
+  execution-side lifecycle and thesis claim; it never calls a detector or
+  rebuilds market context.
+  """
+  structural_id = getattr(match, "structural_zone_id", None)
+  family = getattr(match, "family", None)
+  if not structural_id or not family:
+    return None
+  direction = str(getattr(match, "direction", ""))
+  provided_thesis = getattr(match, "thesis_id", None)
+  thesis = str(provided_thesis) if provided_thesis else thesis_id(
+    symbol=symbol,
+    strategy_family=str(family),
+    direction=direction,
+    structural_id=str(structural_id),
+  )
+  setup_id = str(getattr(match, "match_id", ""))
+  if not setup_id:
+    return None
+  record, _created = await create_setup(
+    client,
+    setup_id=setup_id,
+    thesis_id=thesis,
+    symbol=symbol,
+    source_structure_id=str(structural_id),
+    formation_timeframe=getattr(match, "structural_timeframe", None) or timeframe,
+    expires_at=getattr(match, "expires_at", None),
+  )
+  if record.state not in _PRE_CONFIRMED_CHAIN:
+    return setup_id, thesis
+  start = _PRE_CONFIRMED_CHAIN.index(record.state)
+  try:
+    for state in _PRE_CONFIRMED_CHAIN[start + 1:]:
+      record, _changed = await transition_setup(
+        client, setup_id, state, reason_code="typed_match",
+      )
+  except SetupLifecycleError:
+    return None
+  return setup_id, thesis
 
 
 async def transition_setup(

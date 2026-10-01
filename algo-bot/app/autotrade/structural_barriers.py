@@ -26,8 +26,6 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import Any, Mapping, Sequence
 
-from app.analysis.trendlines import value_at
-from app.analysis.types import Zone
 from app.autotrade.structural_target_room import (
   ZoneOpposingEntry,
   _zone_tier,
@@ -93,7 +91,7 @@ def _bands_overlap(first_lo: float, first_hi: float, lo: float, hi: float) -> bo
 
 
 def _barrier_from_zone(
-  zone: Zone, *, tf: str, major_score: float,
+  zone: Any, *, tf: str, major_score: float,
 ) -> StructuralBarrier:
   return StructuralBarrier(
     side="buy" if zone.side == "demand" else "sell",
@@ -119,7 +117,7 @@ def _timeframe_atr(analysis: Any) -> float:
 
 
 def _barriers_from_timeframe(
-  zones: Sequence[Zone],
+  zones: Sequence[Any],
   *,
   tf: str,
   major_score: float,
@@ -285,7 +283,9 @@ def _confluence_candidates(
       )
       if side is None:
         continue
-      value = value_at(line, current_bar)
+      value = float(getattr(line, "slope", 0.0)) * current_bar + float(
+        getattr(line, "intercept", 0.0)
+      )
       out.append((side, value - band, value + band, float(line.touches)))
   return out
 
