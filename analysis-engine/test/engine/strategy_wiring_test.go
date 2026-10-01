@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/arbitration"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/config"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/engine"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/indicator"
@@ -258,8 +259,10 @@ func TestEngine_EveryLiveOpportunityCarriesCausalTechnicalFacts(t *testing.T) {
 // and then never told the consumer anything — so the algo-bot kept every
 // opportunity on the stale conflict_held status it had stored before the
 // restart. A decision is a current-status projection, so the first live bar
-// must publish the complete current set.
-func TestEngine_FirstLiveBarAfterBootstrapRepublishesEveryArbitrationDecision(t *testing.T) {
+// must publish the complete current in-play set. Resting zones intentionally
+// do not enter Kafka: publishing one projection for every historical zone
+// starves the current executable decision behind the synchronous outbox.
+func TestEngine_FirstLiveBarAfterBootstrapRepublishesEveryInPlayArbitrationDecision(t *testing.T) {
 	repoRoot := filepath.Join("..", "..", "..")
 	doc, err := config.ResolveDocument(filepath.Join(repoRoot, "config", "apexvoid.yml"))
 	if err != nil {
@@ -311,8 +314,27 @@ func TestEngine_FirstLiveBarAfterBootstrapRepublishesEveryArbitrationDecision(t 
 		published[d.OpportunityID] = true
 	}
 	for _, c := range snapshot.Opportunities {
-		if !published[c.ID] {
-			t.Errorf("live opportunity %s had no arbitration decision published on the first live bar after bootstrap", c.ID)
+		inPlay := settings.Arbitration.InPlayATR <= 0
+		if c.Technical != nil && c.Technical.ATR > 0 && settings.Arbitration.InPlayATR > 0 {
+			distance := 0.0
+			// The live event's close is the same reference passed to
+			// ArbitrateInPlay by SymbolWorker.
+			reference := candles[last].Close
+			switch {
+			case reference < c.Entry.Low:
+				distance = c.Entry.Low - reference
+			case reference > c.Entry.High:
+				distance = reference - c.Entry.High
+			}
+			inPlay = distance <= settings.Arbitration.InPlayATR*c.Technical.ATR
+		}
+		if inPlay && !published[c.ID] {
+			t.Errorf("in-play opportunity %s had no arbitration decision published on the first live bar after bootstrap", c.ID)
+		}
+	}
+	for _, d := range client.arbitrationSnapshot() {
+		if d.ReasonCode == arbitration.ReasonNotInPlay {
+			t.Errorf("resting opportunity %s should not publish a not_in_play projection", d.OpportunityID)
 		}
 	}
 }
