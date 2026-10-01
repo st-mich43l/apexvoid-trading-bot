@@ -1241,9 +1241,10 @@ def plan_go_invalidation_stop(
     the envelope minimum, the stop is moved out to exactly that minimum
     instead of leaving broker-noise-sized risk.
 
-  With ``enforce_minimum_stop`` (FX) a too-close invalidation is rejected
-  rather than widened. A stop wider than the envelope maximum is always
-  rejected.
+  With ``enforce_minimum_stop`` a caller may reject a too-close invalidation
+  rather than widen it. The live Go execution path deliberately leaves that
+  flag off so FX and XAU both widen to the configured floor; a stop wider than
+  the envelope maximum is always rejected.
   """
   side = str(direction).upper()
   zone_low = decimal_value(entry_zone_low, "entry_zone_low")
