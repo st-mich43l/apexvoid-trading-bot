@@ -182,6 +182,11 @@ analysis:
       invalidation_buffer_atr: 0.5
       minimum_target_distance_atr: 1.0
       expiry_hours: 24.0
+      # Legacy Python values: reaction band (actionability.gates.proximal_band_atr)
+      # and the shared reaction confirmation.
+      proximal_band_atr: 0.5
+      reaction_lookback_bars: 3
+      engulfing_minimum_range_atr: 0.5
     trendline:
       version: v2
       enabled: true

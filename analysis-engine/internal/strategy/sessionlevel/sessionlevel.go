@@ -29,7 +29,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy"
-	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategyutil"
 )
 
 const ID strategy.StrategyID = "session_level"
@@ -48,6 +48,11 @@ type Config struct {
 	InvalidationBufferATR    float64
 	MinimumTargetDistanceATR float64
 	ExpiryHours              float64
+	// ProximalBandATR is the legacy reaction band around the level (Python
+	// actionability.gates.proximal_band_atr) a touch/confirmation is judged in.
+	ProximalBandATR float64
+	// Reaction is the shared legacy confirmation tuning (see strategyutil).
+	Reaction strategyutil.ReactionConfig
 }
 
 // Strategy is SessionLevelStrategy.
@@ -85,6 +90,17 @@ func parseConfig(params map[string]any) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	proximalBand, err := requireFloat(params, "proximal_band_atr")
+	if err != nil {
+		return Config{}, err
+	}
+	reactionConfig, err := strategyutil.ParseReactionConfig(params)
+	if err != nil {
+		return Config{}, err
+	}
+	if proximalBand <= 0 {
+		return Config{}, fmt.Errorf("proximal_band_atr must be > 0")
+	}
 	if proximityATR <= 0 {
 		return Config{}, fmt.Errorf("proximity_atr must be > 0")
 	}
@@ -97,6 +113,7 @@ func parseConfig(params map[string]any) (Config, error) {
 	return Config{
 		ProximityATR: proximityATR, InvalidationBufferATR: invalidationBuffer,
 		MinimumTargetDistanceATR: minimumTargetDistance, ExpiryHours: expiryHours,
+		ProximalBandATR: proximalBand, Reaction: reactionConfig,
 	}, nil
 }
 
@@ -130,25 +147,21 @@ func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate 
 	if atr <= 0 {
 		return nil
 	}
-	currentPrice, ok := currentPriceProxy(tfCtx.Structure)
-	if !ok {
+	if len(tfCtx.Candles) == 0 {
 		return nil
 	}
+	// The legacy detector judged proximity against the real latest close, not
+	// against the last micro swing.
+	currentPrice := tfCtx.Candles[len(tfCtx.Candles)-1].Close
 
 	var candidates []opportunity.Candidate
 	for _, level := range tfCtx.Session.Levels {
-		if level.Swept {
-			continue
-		}
 		direction, isHighLevel := levelDirection(level.Name)
 		if !direction.IsValid() {
 			continue
 		}
 		levelPrice := float64(level.Price)
 		distanceATR := math.Abs(currentPrice-levelPrice) / atr
-		if distanceATR > s.cfg.ProximityATR {
-			continue
-		}
 
 		var invalidationPrice float64
 		var poolSide liquidity.LiquiditySide
@@ -170,7 +183,7 @@ func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate 
 			targetPrice = targetPool.Low
 		}
 
-		createdAt := currentReferenceTime(tfCtx.Structure)
+		createdAt := tfCtx.Candles[len(tfCtx.Candles)-1].Time
 		expiresAt := createdAt + int64(s.cfg.ExpiryHours*3600)
 
 		setupKey := fmt.Sprintf("session:%s:%d", level.Name, level.Time)
@@ -205,7 +218,31 @@ func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate 
 				ConfigVersion: configVersion, ConfigFingerprint: s.fingerprint,
 			},
 		}
-		candidates = append(candidates, candidate)
+		// The resting-level opportunity is only for an unswept level price is
+		// close to; a swept level matters only through a confirmed reclaim.
+		if !level.Swept && distanceATR <= s.cfg.ProximityATR {
+			candidates = append(candidates, candidate)
+		}
+		band := s.cfg.ProximalBandATR * atr
+		if rc := strategyutil.ConfirmReaction(tfCtx, setupKey, direction, levelPrice-band, levelPrice+band, atr, level.Time, s.cfg.Reaction); rc != nil {
+			// A swept level stays valid only with a reclaim-type confirmation
+			// (legacy rule): a plain wick rejection or engulfing after the
+			// level was taken out is not a reaction off that level.
+			if level.Swept && rc.Pattern != "sweep_reclaim" && rc.Pattern != "strong_reclaim" && rc.Pattern != "rejection_choch" {
+				continue
+			}
+			confirmedBase := candidate
+			confirmedBase.Entry = opportunity.EntryZone{Low: levelPrice - band, High: levelPrice + band}
+			// The wider reaction band is the entry, so the stop sits beyond it.
+			if direction == market.Buy {
+				confirmedBase.Invalidation.Price = market.Price(levelPrice - band - s.cfg.InvalidationBufferATR*atr)
+			} else {
+				confirmedBase.Invalidation.Price = market.Price(levelPrice + band + s.cfg.InvalidationBufferATR*atr)
+			}
+			if confirmed, confirmErr := strategyutil.ConfirmedVariant(confirmedBase, rc, setupKey, level.Time, s.cfg.ExpiryHours, "session_level_reaction_confirmed"); confirmErr == nil {
+				candidates = append(candidates, confirmed)
+			}
+		}
 	}
 	return candidates
 }
@@ -229,35 +266,6 @@ func levelDirection(name string) (market.Direction, bool) {
 	default:
 		return "", false
 	}
-}
-
-func currentPriceProxy(structState structure.StructureState) (float64, bool) {
-	high, low := structState.Micro.LastHigh, structState.Micro.LastLow
-	switch {
-	case high != nil && low != nil:
-		if high.Time >= low.Time {
-			return float64(high.Price), true
-		}
-		return float64(low.Price), true
-	case high != nil:
-		return float64(high.Price), true
-	case low != nil:
-		return float64(low.Price), true
-	default:
-		return 0, false
-	}
-}
-
-func currentReferenceTime(structState structure.StructureState) int64 {
-	high, low := structState.Micro.LastHigh, structState.Micro.LastLow
-	var t int64
-	if high != nil && high.Time > t {
-		t = high.Time
-	}
-	if low != nil && low.Time > t {
-		t = low.Time
-	}
-	return t
 }
 
 func nearestPool(pools []liquidity.Pool, side liquidity.LiquiditySide, referencePrice, minimumDistance float64, direction market.Direction) (liquidity.Pool, bool) {
