@@ -363,3 +363,24 @@ func TestKeyLevel_RequiredTimeframesIsM5(t *testing.T) {
 		t.Errorf("expected RequiredTimeframes()==[M5], got %v", tfs)
 	}
 }
+
+// GBPJPY's legacy quality rule: a level whose support/resistance role is still
+// ambiguous (a plain reaction level with no breakout/kind evidence) is skipped.
+func TestKeyLevel_RequireExplicitRoleSkipsAnAmbiguousLevel(t *testing.T) {
+	params := validParams()
+	params["require_explicit_role"] = true
+	s := newStrategy(t, params)
+	ctx := baseContext(1.0)
+	ctx.Timeframes[market.M5] = &context.TimeframeContext{
+		Timeframe: market.M5,
+		Candles:   buyConfirmationCandles(2020.0),
+		KeyLevel:  keylevel.State{Levels: []keylevel.Level{baseLevel()}},
+		Liquidity: liquidity.LiquidityState{Pools: []liquidity.Pool{{Side: liquidity.LiquidityBuySide, Low: 2031, High: 2032}}},
+	}
+	if got := s.Evaluate(ctx); len(got) != 0 {
+		t.Fatalf("an ambiguous-role level must be skipped when an explicit role is required, got %d candidates", len(got))
+	}
+	if got := newStrategy(t, validParams()).Evaluate(ctx); len(got) != 1 {
+		t.Fatalf("the same level must still trade when no explicit role is required, got %d", len(got))
+	}
+}

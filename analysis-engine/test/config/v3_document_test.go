@@ -250,3 +250,24 @@ func TestDefendedLevelsForReadsTheProductionUSDJPYGuardAndNothingElse(t *testing
 		t.Fatal("an unknown instrument must fail closed")
 	}
 }
+
+func TestInstrumentOverrideReadsTheGBPJPYKeyLevelRulesAndNothingForXAU(t *testing.T) {
+	doc, err := config.ResolveDocument(repoConfigPath("apexvoid.yml"))
+	if err != nil {
+		t.Fatalf("ResolveDocument: %v", err)
+	}
+	touches, ok, err := doc.InstrumentOverride("GBPJPY", "analysis", "levels", "minimum_key_touches")
+	if err != nil || !ok || touches != 3 {
+		t.Fatalf("GBPJPY minimum_key_touches = %v ok=%v err=%v, want 3", touches, ok, err)
+	}
+	explicit, ok, err := doc.InstrumentOverride("GBPJPY", "auto_algo", "strategies", "reaction", "key_level", "require_explicit_role")
+	if err != nil || !ok || explicit != true {
+		t.Fatalf("GBPJPY require_explicit_role = %v ok=%v err=%v, want true", explicit, ok, err)
+	}
+	if _, ok, _ := doc.InstrumentOverride("XAU", "auto_algo", "strategies", "reaction", "key_level", "require_explicit_role"); ok {
+		t.Fatal("XAU must not declare a key-level role override")
+	}
+	if _, _, err := doc.InstrumentOverride("NOPE", "analysis"); err == nil {
+		t.Fatal("an unknown instrument must fail closed")
+	}
+}
