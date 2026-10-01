@@ -160,7 +160,7 @@ def catalog_kafka_record(now: int, scope: str, *, offset: int = 1):
   profile = pol.REVIEWED_SCOPES[scope]
   evidence = profile.evidence_prefixes[0]
   payload["evidence"] = [{"code": evidence + ("confirmed" if evidence.endswith("_") else "")}]
-  if scope not in {"supply", "demand"}:
+  if not profile.requires_reaction:
     payload["technical_context"].pop("confirmation", None)
   raw["event_id"] = f"evt-{scope}"
   return SimpleNamespace(
