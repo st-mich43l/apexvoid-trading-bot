@@ -145,6 +145,29 @@ func NewDurableOpportunityPublisher(client OpportunityKafkaClient, recorder *tel
 	return &OpportunityPublisher{client: client, telemetry: recorder, notify: make(chan struct{}, 1), store: store}, nil
 }
 
+// DiscardStaleLifecycleJobs drops queued historical creation events that are
+// outside the configured Algo Bot freshness window.  It is intentionally an
+// explicit startup action: persisted lifecycle facts are retained by default,
+// while the application composition root supplies the execution freshness
+// contract before the publisher starts draining the outbox.
+func (p *OpportunityPublisher) DiscardStaleLifecycleJobs(now time.Time, maxAge time.Duration) int {
+	if p == nil || maxAge <= 0 {
+		return 0
+	}
+	p.mu.Lock()
+	dropped := p.store.discardStaleLifecycleJobs(now, maxAge)
+	if dropped > 0 {
+		if err := p.store.save(); err != nil {
+			p.telemetry.Count(telemetry.CounterOpportunityOutboxPersistFailed, "", "stale_lifecycle", 1)
+			log.Warn("stale lifecycle cleanup could not persist", "dropped", dropped, "error", err)
+		} else {
+			log.Info("stale lifecycle backlog discarded", "dropped", dropped, "max_age_seconds", int64(maxAge/time.Second))
+		}
+	}
+	p.mu.Unlock()
+	return dropped
+}
+
 // Enqueue records one lifecycle transition for background publication.
 // Safe to call on a nil *OpportunityPublisher (Kafka disabled/absent) —
 // callers never need their own nil check.
