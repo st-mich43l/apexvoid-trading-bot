@@ -208,6 +208,16 @@ func (w *SymbolWorker) ApplyWithResult(event marketdata.BarEvent) (AnalysisSnaps
 	}
 
 	doneOpp := w.telemetry.Time(telemetry.PhaseOpportunity, symbolLabel, tfLabel)
+	// Invalidation is evaluated before this bar's strategy observations so a
+	// previously live setup cannot be re-observed after its own confirmed close
+	// has already broken the technical threshold.  The Book matches the close
+	// only to candidates observed on this timeframe; M1 cannot invalidate an
+	// M5 thesis (or vice versa) by accident.
+	for _, invalidated := range w.state.Opportunities.InvalidateByClose(
+		event.Timeframe, event.Candle.Close, event.Candle.Time,
+	) {
+		w.observeTransition(invalidated, symbolLabel, tfLabel, event.PublishesOpportunity())
+	}
 	for i := range evaluation.Candidates {
 		// Overwrite the strategy's own narrower per-strategy-parameters
 		// placeholder (see e.g. supply.configFingerprint's doc comment)
