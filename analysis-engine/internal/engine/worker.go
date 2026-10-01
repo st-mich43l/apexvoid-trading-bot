@@ -225,6 +225,11 @@ func (w *SymbolWorker) ApplyWithResult(event marketdata.BarEvent) (AnalysisSnaps
 			doneOpp()
 			return AnalysisSnapshot{}, result, timingErr
 		}
+		candidate, timingErr = opportunity.NormalizeGeometry(candidate, w.settings.Geometry)
+		if timingErr != nil {
+			doneOpp()
+			return AnalysisSnapshot{}, result, timingErr
+		}
 		if level, blocked := w.settings.BlockedByDefendedLevel(candidate); blocked {
 			log.Info("opportunity not opened: buy into defended level", "symbol", w.state.Symbol, "strategy", candidate.Strategy, "defended_level", level, "entry_low", candidate.Entry.Low, "entry_high", candidate.Entry.High)
 			continue
