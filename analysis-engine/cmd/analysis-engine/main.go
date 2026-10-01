@@ -179,6 +179,7 @@ func run(configPath string) error {
 	}
 	defer runtime.Close()
 	runtime.SetOnBootstrapComplete(func(ctx context.Context) {
+		publisher.Flush()
 		bootstrapMu.Lock()
 		latest := bootstrapLatest
 		bootstrapLatest = nil
