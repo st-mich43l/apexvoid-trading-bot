@@ -66,7 +66,7 @@ def _sha(raw: str) -> str:
 
 
 def _stable_atr(atr: float, pip_size: float) -> float:
-  """Mirrors app.analysis.confluence_zone._stable_atr exactly.
+  """Preserves the stable ATR identity quantization used by Go matches.
 
   Quantizes ATR into a coarse step before it can affect bucket size, so the
   bucket grid only moves on a genuine regime-scale ATR change rather than
@@ -86,9 +86,9 @@ def canonicalize_zone_bucket(
 ) -> float:
   """Bucket mid so minor map jitter shares one structural identity.
 
-  Width is deliberately NOT part of this bucket (mirrors the fix in
-  app.analysis.confluence_zone._bucket): two detections of the same
-  structural area measured a few tenths of a price unit apart in width can
+  Width is deliberately NOT part of this bucket. The location bucket ensures
+  two detections of the same structural area measured a few tenths of a price
+  unit apart in width can
   straddle the width bucket's own rounding boundary and produce two
   different ids for one zone, each publishing its own TradePlan. Only
   location (the bucketed mid) determines identity here.

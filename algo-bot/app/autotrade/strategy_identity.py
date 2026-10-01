@@ -81,3 +81,22 @@ def structural_thesis_id(
     touch_bar_ts or "",
     confirmation_bar_ts or "",
   )
+
+
+def thesis_id(
+  *,
+  symbol: str,
+  strategy_family: str,
+  direction: str,
+  structural_id: str,
+  version: int = 1,
+) -> str:
+  """Stable execution thesis identity for one Go-owned structure."""
+  return structural_hash(
+    "thesis",
+    f"v{version}",
+    symbol.upper(),
+    strategy_family,
+    direction.upper(),
+    structural_id,
+  )

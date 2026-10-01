@@ -345,7 +345,7 @@ def build_trade_plan_from_strategy_match(
     # confirmation timestamp, so using it as a thesis_id would silently
     # let repeated confirmations of the same structure each look like a
     # brand new thesis - exactly what claim_active_thesis exists to
-    # prevent. See app.analysis.structural_reaction_support.thesis_id.
+    # prevent. See app.autotrade.strategy_identity.thesis_id.
     raise TradePlanBuildRejected(
       "missing_stable_thesis_id",
       f"StrategyMatch {match.match_id!r} has no structural_zone_id to "

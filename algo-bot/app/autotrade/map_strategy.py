@@ -20,9 +20,6 @@ from typing import Any
 
 import pandas as pd
 
-from app.analysis.market_map import MapEntry, MarketMap
-
-
 MARKET_MAP_KEY_PREFIX = "auto_trade:market_map"
 MARKET_MAP_DISPLAY_KEY_PREFIX = "auto_trade:market_map_display"
 
@@ -60,7 +57,7 @@ def _closes_away(
 
 def _reaction_in_lookback(
   m1: pd.DataFrame,
-  entry: MapEntry,
+  entry: Any,
   direction: str,
   atr: float,
   tolerance: float,
@@ -129,7 +126,7 @@ def _reaction_in_lookback(
   )
 
 
-def _touches(row: pd.Series, entry: MapEntry, tolerance: float) -> bool:
+def _touches(row: pd.Series, entry: Any, tolerance: float) -> bool:
   return (
     float(row["low"]) <= entry.hi + tolerance
     and float(row["high"]) >= entry.lo - tolerance
