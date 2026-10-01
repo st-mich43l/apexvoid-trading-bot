@@ -18,6 +18,11 @@ type OpportunityPayload struct {
 	FormedAt         int64                   `json:"formed_at"`
 	CreatedAt        int64                   `json:"created_at"`
 	ExpiresAt        int64                   `json:"expires_at"`
+	// RecoveredAt is set only when the engine backfills a still-live
+	// opportunity after bootstrap. It is an additive V1 fact: the technical
+	// observation remains CreatedAt, while this field records when the
+	// current engine instance re-established ownership of the live candidate.
+	RecoveredAt int64 `json:"recovered_at,omitempty"`
 	// TechnicalContext is the additive V1 policy-input block (S13B). Omitted
 	// when the engine could not produce it; consumers must then fail closed.
 	TechnicalContext *TechnicalContextPayload `json:"technical_context,omitempty"`
