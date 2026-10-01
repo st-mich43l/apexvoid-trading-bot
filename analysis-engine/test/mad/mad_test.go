@@ -56,3 +56,29 @@ func TestStaleAsiaSealFailsClosed(t *testing.T) {
 		t.Fatalf("stale seal must fail closed: %+v", got)
 	}
 }
+
+func TestBuildingAccumulationStillRequiresRangeStructure(t *testing.T) {
+	c := cfg()
+	// 3 ATR is a valid building-session width, but the engine must not turn a
+	// directional structure read into an accumulation phase. This is the
+	// Python predicate's explicit structure owner boundary.
+	a := &mad.AsiaRangeSeal{DayKey: "2026-10-01", High: 106, Low: 100, Sealed: false}
+	got := mad.Classify([]market.Candle{bar(1790895600, 103, 105, 101, 103)}, 2, 2, "ASIA", "trend", a, 1790895600, c)
+	if got.Phase != mad.PhaseUnclear || got.ReasonCode != "no_mad_signature" {
+		t.Fatalf("building range must not bypass structure guard: %+v", got)
+	}
+}
+
+func TestMADAffinityMatchesDirectionalPhaseRules(t *testing.T) {
+	c := cfg()
+	a := &mad.AsiaRangeSeal{DayKey: "2026-10-01", High: 105, Low: 95, Sealed: true}
+	snapshot := mad.Classify([]market.Candle{bar(1790895600, 100, 106, 98, 103)}, 2, 2, "LONDON", "range", a, 1790895600, c)
+	sell := mad.Affinity(snapshot, "SELL", "supply")
+	buy := mad.Affinity(snapshot, "BUY", "supply")
+	if sell.Final <= 0 || sell.DirectionScore != 1 || buy.Final != 0 || buy.DirectionScore != 0 {
+		t.Fatalf("directional manipulation affinity mismatch: sell=%+v buy=%+v", sell, buy)
+	}
+	if mad.SoftBonus(mad.PhaseManip, "reaction") != .12 || mad.SoftBonus(mad.PhaseExpand, "reaction") != 0 {
+		t.Fatal("MAD soft bonus must remain phase/family-specific")
+	}
+}

@@ -157,6 +157,32 @@ def test_go_candle_evidence_extension_decodes_strictly():
   assert parsed.candle_evidence.rejection is not None
 
 
+@pytest.mark.no_database
+def test_go_mad_telemetry_extension_decodes_without_becoming_policy_gate():
+  event = _opportunity()
+  event["payload"]["technical_context"] = {
+    "atr": 3.6,
+    "reference_price": 4353.0,
+    "reference_time": 100,
+    "mad": {
+      "version": 2,
+      "phase": "manip",
+      "confidence": 0.91,
+      "affinity": 0.86,
+      "direction": "SELL",
+      "sweep_side": "high",
+      "reclaim": True,
+      "range_quality_atr": 2.1,
+      "acceptance_closes": 0,
+      "reason_code": "asia_sweep_reclaim",
+    },
+  }
+  parsed = parse_analysis_event(OpportunityTopic, json.dumps(event)).payload.technical_context
+  assert parsed is not None and parsed.mad is not None
+  assert parsed.mad.phase == "manip"
+  assert parsed.mad.affinity == 0.86
+
+
 def test_technical_context_is_optional_for_retained_events():
   assert parse_analysis_event(OpportunityTopic, json.dumps(_opportunity())).payload.technical_context is None
 

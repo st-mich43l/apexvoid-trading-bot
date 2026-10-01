@@ -186,3 +186,23 @@ func TestTechnicalContext_ConfirmedReactionIsAdditiveAndSchemaValid(t *testing.T
 		t.Fatal("future confirmation must fail")
 	}
 }
+
+func TestTechnicalContext_MADTelemetryIsAdditiveAndSchemaValid(t *testing.T) {
+	c := goldenCandidate()
+	breakDistance := 0.8
+	acceptance := 2
+	c.Technical.MAD = &opportunity.MADContext{
+		Version: 2, Phase: "manip", Confidence: 0.91, Affinity: 0.86,
+		Direction: "SELL", SweepSide: "high", Reclaim: true,
+		RangeQualityATR: &c.Technical.ATR, BreakDistanceATR: &breakDistance,
+		AcceptanceCloses: &acceptance, ReasonCode: "asia_sweep_reclaim",
+	}
+	if err := c.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	payload := kafka.OpportunityPayloadFromCandidate(c, kafka.AlgorithmVersion{Structure: "v2", Liquidity: "v1"})
+	if payload.TechnicalContext.MAD == nil || payload.TechnicalContext.MAD.Affinity != 0.86 {
+		t.Fatalf("MAD telemetry did not survive Kafka adaptation: %+v", payload.TechnicalContext)
+	}
+	validateGo(t, compileSchema(t, repoContractPath("analysis", "opportunity-v1.schema.json")), payload)
+}
