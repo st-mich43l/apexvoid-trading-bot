@@ -82,6 +82,29 @@ func ArbitrateInPlay(live []opportunity.Candidate, cfg Config, reference float64
 	if cfg.InPlayATR <= 0 || !(reference > 0) {
 		return Arbitrate(live, cfg)
 	}
+	// A candidate whose entry contains the current reference is executable
+	// now. Waiting candidates may be close enough to watch, but they must not
+	// veto an executable candidate on the opposite side: the execution policy
+	// applies the same rule when it builds its decision pool. Without this
+	// split, a broad ATR window turns every nearby resting supply/demand zone
+	// into a cross-direction conflict and the bot can never receive a winner.
+	ready := make([]opportunity.Candidate, 0, len(live))
+	for _, c := range live {
+		if isEntryReady(c, reference) {
+			ready = append(ready, c)
+		}
+	}
+	if len(ready) > 0 {
+		result := make([]Decision, 0, len(live))
+		for _, c := range live {
+			if !isEntryReady(c, reference) {
+				result = append(result, Decision{CandidateID: c.ID, Status: StatusSuppressed, ReasonCode: ReasonNotInPlay})
+			}
+		}
+		result = append(result, Arbitrate(ready, cfg)...)
+		sort.Slice(result, func(i, j int) bool { return result[i].CandidateID < result[j].CandidateID })
+		return result
+	}
 	inPlay := make([]opportunity.Candidate, 0, len(live))
 	result := make([]Decision, 0, len(live))
 	for _, c := range live {
@@ -94,6 +117,10 @@ func ArbitrateInPlay(live []opportunity.Candidate, cfg Config, reference float64
 	result = append(result, Arbitrate(inPlay, cfg)...)
 	sort.Slice(result, func(i, j int) bool { return result[i].CandidateID < result[j].CandidateID })
 	return result
+}
+
+func isEntryReady(c opportunity.Candidate, reference float64) bool {
+	return c.Technical != nil && c.Entry.Low <= reference && reference <= c.Entry.High
 }
 
 // isInPlay reports whether reference is inside the candidate's entry zone or

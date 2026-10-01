@@ -303,9 +303,25 @@ func TestArbitrateInPlay_BothSidesInPlayStillHoldOnANearTie(t *testing.T) {
 	}
 }
 
+func TestArbitrateInPlay_ExecutableCandidateDoesNotConflictWithWaitingOpposite(t *testing.T) {
+	cfg := arbitration.Config{ConflictMarginQuality: 0.15, InPlayATR: 1.0}
+	live := []opportunity.Candidate{
+		inPlayCandidate("buy_ready", market.Buy, 0.70, 100.0, 100.5),
+		inPlayCandidate("sell_waiting", market.Sell, 1.0, 101.0, 101.5),
+	}
+
+	decisions := arbitration.ArbitrateInPlay(live, cfg, 100.2)
+	if got := decisionFor(decisions, "buy_ready"); got.Status != arbitration.StatusUncontested {
+		t.Fatalf("executable candidate must be uncontested, got %s/%s", got.Status, got.ReasonCode)
+	}
+	if got := decisionFor(decisions, "sell_waiting"); got.Status != arbitration.StatusSuppressed || got.ReasonCode != arbitration.ReasonNotInPlay {
+		t.Fatalf("waiting opposite candidate must not block execution, got %s/%s", got.Status, got.ReasonCode)
+	}
+}
+
 func TestArbitrateInPlay_DistanceIsMeasuredFromTheNearestEdgeInCandidateATR(t *testing.T) {
 	cfg := arbitration.Config{ConflictMarginQuality: 0.15, InPlayATR: 1.0}
-	near := inPlayCandidate("near", market.Buy, 0.7, 100.0, 100.5)
+	near := inPlayCandidate("near", market.Buy, 0.7, 100.5, 101.0)
 	atEdge := inPlayCandidate("edge", market.Sell, 0.7, 98.0, 99.0) // reference 100.0 is exactly 1 ATR above its high edge
 	noATR := inPlayCandidate("no_atr", market.Sell, 0.9, 100.0, 100.5)
 	noATR.Technical = nil
