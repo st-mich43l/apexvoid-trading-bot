@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/arbitration"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
@@ -101,6 +102,55 @@ func (s *publicationStore) discardArbitrationJobs() int {
 		kept = append(kept, job)
 	}
 	s.ledger.Queue = kept
+	return dropped
+}
+
+// discardStaleLifecycleJobs removes lifecycle events that can no longer be
+// actionable by Algo Bot.  A durable outbox must preserve an acknowledged
+// creation's terminal event, but an unacknowledged creation that is older
+// than the consumer freshness window is only historical replay and must not
+// sit in front of current live opportunities after a restart.
+func (s *publicationStore) discardStaleLifecycleJobs(now time.Time, maxAge time.Duration) int {
+	if maxAge <= 0 {
+		return 0
+	}
+	cutoff := now.Add(-maxAge).Unix()
+	staleUnpublished := make(map[string]struct{})
+	for _, job := range s.ledger.Queue {
+		if job.Arbitration != nil || job.Transition.Kind != opportunity.TransitionCreated {
+			continue
+		}
+		createdAt := job.Transition.Record.Candidate.CreatedAt
+		if createdAt == 0 || createdAt >= cutoff {
+			continue
+		}
+		id := job.Transition.Record.Candidate.ID
+		if s.ledger.Records[id].Creation != publicationPublished {
+			staleUnpublished[id] = struct{}{}
+		}
+	}
+
+	kept := s.ledger.Queue[:0]
+	dropped := 0
+	for _, job := range s.ledger.Queue {
+		if job.Arbitration != nil {
+			kept = append(kept, job)
+			continue
+		}
+		id := job.Transition.Record.Candidate.ID
+		if _, stale := staleUnpublished[id]; stale {
+			dropped++
+			continue
+		}
+		kept = append(kept, job)
+	}
+	s.ledger.Queue = kept
+	for id := range staleUnpublished {
+		record := s.ledger.Records[id]
+		if record.Creation != publicationPublished && record.Terminal != publicationDeferred {
+			delete(s.ledger.Records, id)
+		}
+	}
 	return dropped
 }
 

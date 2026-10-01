@@ -70,6 +70,10 @@ func run(configPath string) error {
 	if err != nil {
 		return fmt.Errorf("loading Kafka transport config: %w", err)
 	}
+	replayMaxAge, err := engine.OpportunityReplayMaxAgeFromConfig(doc)
+	if err != nil {
+		return fmt.Errorf("loading opportunity replay freshness: %w", err)
+	}
 	kafkaHealth := kafka.NewHealth(kafkaCfg.Enabled)
 	var producer *kafka.Producer
 	if kafkaCfg.Enabled {
@@ -103,6 +107,7 @@ func run(configPath string) error {
 	if err != nil {
 		return fmt.Errorf("opening opportunity publication outbox: %w", err)
 	}
+	publisher.DiscardStaleLifecycleJobs(time.Now().UTC(), replayMaxAge)
 	e.SetPublisher(publisher)
 	go publisher.Run(ctx)
 

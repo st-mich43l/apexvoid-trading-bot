@@ -228,6 +228,36 @@ func TestOpportunityPublisher_DropsPersistedArbitrationBacklogOnRestart(t *testi
 	}
 }
 
+func TestOpportunityPublisher_DropsStaleUnpublishedLifecycleBacklog(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "publication-ledger.json")
+	client := &fakeKafkaClient{}
+	pub, err := engine.NewDurableOpportunityPublisher(client, nil, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := fakeCandidate("opp-old-lifecycle")
+	old.CreatedAt = 100
+	fresh := fakeCandidate("opp-fresh-lifecycle")
+	fresh.CreatedAt = 950
+	pub.Enqueue("XAU", kafka.AlgorithmVersion{}, opportunity.Transition{Kind: opportunity.TransitionCreated, Record: opportunity.Record{Candidate: old}})
+	pub.Enqueue("XAU", kafka.AlgorithmVersion{}, opportunity.Transition{Kind: opportunity.TransitionCreated, Record: opportunity.Record{Candidate: fresh}})
+
+	if got := pub.DiscardStaleLifecycleJobs(time.Unix(1000, 0), 100*time.Second); got != 1 {
+		t.Fatalf("expected one stale lifecycle job discarded, got %d", got)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go pub.Run(ctx)
+	waitFor(t, 2*time.Second, func() bool {
+		opps, _, _ := client.snapshot()
+		return len(opps) == 1
+	})
+	opps, _, calls := client.snapshot()
+	if opps[0].ID != fresh.ID || len(calls) != 1 {
+		t.Fatalf("expected only fresh lifecycle publication, got opportunities=%+v calls=%v", opps, calls)
+	}
+}
+
 func TestOpportunityPublisher_BackfillsBootstrapLiveCandidatesOnce(t *testing.T) {
 	client := &fakeKafkaClient{}
 	pub := engine.NewOpportunityPublisher(client, nil)
