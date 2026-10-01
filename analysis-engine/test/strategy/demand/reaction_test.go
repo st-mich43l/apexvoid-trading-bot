@@ -21,7 +21,7 @@ func TestDemand_PublishesDistinctCausallyConfirmedReaction(t *testing.T) {
 	candles := []market.Candle{
 		{Time: 600, Open: 2025, High: 2026, Low: 2024, Close: 2025},
 		{Time: 900, Open: 2024, High: 2025, Low: 2023, Close: 2024},
-		{Time: 1200, Open: 2020, High: 2023, Low: 2019.5, Close: 2022.5},
+		{Time: 1200, Open: 2020, High: 2023, Low: 2019.5, Close: 2022},
 	}
 	ctx.Timeframes[market.M5] = &context.TimeframeContext{
 		Timeframe: market.M5,

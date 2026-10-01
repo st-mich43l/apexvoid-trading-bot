@@ -57,6 +57,10 @@
       "minimum_touches": 2,
       "round_step": 5.0
     },
+    "legacy_zones": {
+      "enabled": false,
+      "window_bars": 400
+    },
     "liquidity": {
       "equal_level_tolerance_atr": 0.05,
       "pool_minimum_touches": 2,
@@ -119,8 +123,11 @@
       "demand": {
         "enabled": true,
         "engulfing_minimum_range_atr": 0.5,
+        "entry_max_width_price": 5.0,
+        "epsilon_atr_fraction": 0.05,
         "expiry_hours": 24.0,
         "invalidation_buffer_atr": 0.5,
+        "maximum_zone_atr": 3.0,
         "minimum_strength": 0.4,
         "minimum_target_distance_atr": 1.0,
         "reaction_lookback_bars": 3,
@@ -139,8 +146,11 @@
       "fvg": {
         "enabled": true,
         "engulfing_minimum_range_atr": 0.5,
+        "entry_max_width_price": 5.0,
+        "epsilon_atr_fraction": 0.05,
         "expiry_hours": 24.0,
         "invalidation_buffer_atr": 0.5,
+        "maximum_zone_atr": 2.0,
         "minimum_gap_atr": 0.5,
         "minimum_strength": 0.4,
         "minimum_target_distance_atr": 1.0,
@@ -150,8 +160,11 @@
       "ifvg": {
         "enabled": true,
         "engulfing_minimum_range_atr": 0.5,
+        "entry_max_width_price": 5.0,
+        "epsilon_atr_fraction": 0.05,
         "expiry_hours": 24.0,
         "invalidation_buffer_atr": 0.5,
+        "maximum_zone_atr": 3.0,
         "minimum_gap_atr": 0.5,
         "minimum_strength": 0.4,
         "minimum_target_distance_atr": 1.0,
@@ -201,11 +214,15 @@
       "order_block": {
         "enabled": true,
         "engulfing_minimum_range_atr": 0.5,
+        "entry_max_width_price": 5.0,
+        "epsilon_atr_fraction": 0.05,
         "expiry_hours": 24.0,
         "invalidation_buffer_atr": 0.5,
+        "maximum_zone_atr": 3.0,
         "minimum_strength": 0.4,
         "minimum_target_distance_atr": 1.0,
         "minimum_zone_atr": 0.5,
+        "momentum_body_fraction": 0.6,
         "reaction_lookback_bars": 3,
         "version": "v2"
       },
@@ -259,8 +276,11 @@
       "supply": {
         "enabled": true,
         "engulfing_minimum_range_atr": 0.5,
+        "entry_max_width_price": 5.0,
+        "epsilon_atr_fraction": 0.05,
         "expiry_hours": 24.0,
         "invalidation_buffer_atr": 0.5,
+        "maximum_zone_atr": 3.0,
         "minimum_strength": 0.4,
         "minimum_target_distance_atr": 1.0,
         "reaction_lookback_bars": 3,
