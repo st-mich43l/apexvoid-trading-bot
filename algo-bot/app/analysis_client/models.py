@@ -152,6 +152,10 @@ class AnalysisOpportunity(FrozenConfigModel):
   formed_at: int | None = Field(default=None, ge=0)
   created_at: int = Field(ge=0)
   expires_at: int = Field(ge=0)
+  # Set only by Analysis Engine's post-bootstrap live-set backfill. This is
+  # distinct from created_at: the technical observation stays historical,
+  # while the current engine instance proves it still owns the candidate.
+  recovered_at: int | None = Field(default=None, ge=0)
   technical_context: TechnicalContext | None = None
   stop_envelope: StopEnvelope | None = None
 

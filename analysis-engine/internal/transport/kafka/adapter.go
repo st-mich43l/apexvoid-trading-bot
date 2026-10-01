@@ -5,6 +5,18 @@ import "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/oppo
 // OpportunityPayloadFromCandidate is the single producer-side adapter from
 // the transport-independent strategy domain into the neutral Kafka event.
 func OpportunityPayloadFromCandidate(c opportunity.Candidate, algo AlgorithmVersion) OpportunityPayload {
+	return opportunityPayloadFromCandidate(c, algo, 0)
+}
+
+// OpportunityPayloadFromRecoveredCandidate is the explicit post-bootstrap
+// lifecycle-recovery form. It never changes the candidate's technical
+// CreatedAt; RecoveredAt is a separate transport fact consumed only by the
+// recovery-safe Algo Bot path.
+func OpportunityPayloadFromRecoveredCandidate(c opportunity.Candidate, algo AlgorithmVersion, recoveredAt int64) OpportunityPayload {
+	return opportunityPayloadFromCandidate(c, algo, recoveredAt)
+}
+
+func opportunityPayloadFromCandidate(c opportunity.Candidate, algo AlgorithmVersion, recoveredAt int64) OpportunityPayload {
 	targets := make([]TargetPayload, len(c.Targets))
 	for i, t := range c.Targets {
 		targets[i] = TargetPayload{Price: PriceLevelPayload{Price: float64(t.Price.Price), Label: t.Price.Label}}
@@ -48,6 +60,6 @@ func OpportunityPayloadFromCandidate(c opportunity.Candidate, algo AlgorithmVers
 		Targets:      targets, Evidence: evidence,
 		Quality:          QualityPayload{Overall: c.Quality.Overall, Components: c.Quality.Components},
 		AlgorithmVersion: AlgorithmVersionPayload{Structure: algo.Structure, Liquidity: algo.Liquidity},
-		FormedAt:         c.FormedAt, CreatedAt: c.CreatedAt, ExpiresAt: c.ExpiresAt,
+		FormedAt:         c.FormedAt, CreatedAt: c.CreatedAt, ExpiresAt: c.ExpiresAt, RecoveredAt: recoveredAt,
 	}
 }

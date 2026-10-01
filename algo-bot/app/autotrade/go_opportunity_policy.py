@@ -48,6 +48,7 @@ from app.analysis_client.models import ArbitrationEnvelope, InvalidationEnvelope
 from app.analysis_client.repository import LifecycleResult, PostgresAnalysisOpportunityRepository
 from app.autotrade import units
 from app.autotrade.go_plan_cancel import SOURCE_EXPIRED, SOURCE_INVALIDATED, plan_id_for_match, request_plan_cancel
+from app.autotrade.go_live_opportunities import go_live_opportunity_ids
 from app.autotrade.execution_policy import classify_tier, risk_multiplier_for_tier, strategy_family
 from app.autotrade.multi_match import deserialize_matches, serialize_matches, strategy_matches_key
 from app.autotrade.setup_lifecycle import (
@@ -494,7 +495,20 @@ class GoOpportunityPolicy:
       observed_at=payload.created_at, expires_at=payload.expires_at, produced_at=event.produced_at,
       published_at=published_at, consumed_at=now, limits=self._freshness_limits(),
     )
-    if not verdict.ok and not already_adapted:
+    recovered_live = False
+    if payload.recovered_at is not None:
+      # A recovery event may only bypass the ordinary technical-age limit
+      # when Redis confirms that this exact ID is still in the engine's
+      # current live book. Missing Redis is fail-closed for recovery; normal
+      # events retain their existing behavior.
+      live_ids = await go_live_opportunity_ids(client, payload.symbol)
+      recovered_live = (
+        live_ids is not None
+        and payload.id in live_ids
+        and payload.created_at <= payload.recovered_at <= now
+      )
+    recovery_age_override = recovered_live and verdict.code == "event_too_old"
+    if not verdict.ok and not already_adapted and not recovery_age_override:
       await self._decide(event, "not_adapted", verdict.code, owner="go", **verdict.details())
       return "not_adapted"
     try:
@@ -513,7 +527,9 @@ class GoOpportunityPolicy:
     await self._advance_setup(client, match)
     await self._store_match(client, match, now)
     await self._decide(
-      event, "match_written", "go_live", match_id=match.match_id, **verdict.details(),
+      event, "match_written", "go_live", match_id=match.match_id,
+      recovered=bool(payload.recovered_at is not None),
+      recovered_live=recovered_live, **verdict.details(),
     )
     log.info("Go opportunity adapted opportunity=%s match=%s", payload.id, match.match_id)
     return "match_written"

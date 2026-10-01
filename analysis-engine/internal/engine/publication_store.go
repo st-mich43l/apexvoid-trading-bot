@@ -27,6 +27,10 @@ type publishJob struct {
 	Symbol     market.Symbol          `json:"symbol"`
 	Algorithm  kafka.AlgorithmVersion `json:"algorithm"`
 	Transition opportunity.Transition `json:"transition"`
+	// RecoveredAt is non-zero only for a post-bootstrap lifecycle backfill.
+	// It is persisted with the outbox so a restart cannot lose the recovery
+	// classification or accidentally publish it as an ordinary stale event.
+	RecoveredAt int64 `json:"recovered_at,omitempty"`
 
 	// Arbitration is set instead of Transition for a Phase 2
 	// arbitration-decision job — see
