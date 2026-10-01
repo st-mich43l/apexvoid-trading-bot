@@ -76,3 +76,32 @@ func TestApplyInstrument_GBPJPYKeyLevelIsStricterThanTheDefault(t *testing.T) {
 		t.Fatalf("XAU key_level must keep the default rules, got %v", xau)
 	}
 }
+
+func TestApplyInstrument_UsesResolvedPerInstrumentStopEnvelope(t *testing.T) {
+	doc, err := config.ResolveDocument(filepath.Join("..", "..", "..", "config", "apexvoid.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []struct {
+		symbol  string
+		minPips float64
+		maxPips float64
+	}{
+		{"EURUSD", 12, 20},
+		{"GBPUSD", 15, 25},
+		{"GBPJPY", 22, 35},
+		{"USDJPY", 18, 28},
+		{"XAU", 50, 60},
+	} {
+		settings, err := engine.LoadSettings(doc, "M5", false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := engine.ApplyInstrument(&settings, doc, want.symbol); err != nil {
+			t.Fatal(err)
+		}
+		if !settings.InstrumentStopEnvelopeConfigured || settings.InstrumentStopMinPips != want.minPips || settings.InstrumentStopMaxPips != want.maxPips {
+			t.Fatalf("%s stop envelope = configured:%v %.1f-%.1f, want %.1f-%.1f", want.symbol, settings.InstrumentStopEnvelopeConfigured, settings.InstrumentStopMinPips, settings.InstrumentStopMaxPips, want.minPips, want.maxPips)
+		}
+	}
+}
