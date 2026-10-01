@@ -24,7 +24,7 @@ from app.persistence.store import (
   store_pips,
 )
 from app.bot.keyboards import build_close_kb, build_tp_close_kb, _partial_kb
-from app.analysis.market_map_delivery import send_current_market_map
+from app.autotrade.go_market_map_delivery import send_current_market_map
 from app.signals.parsing import (
   _ACTIVE_RE,
   _CANCEL_RE,

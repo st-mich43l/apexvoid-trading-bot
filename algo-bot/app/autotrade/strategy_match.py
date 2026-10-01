@@ -16,7 +16,7 @@ import math
 from app.analysis_client.provenance import GO_ORIGIN_TAG
 from app.core.symbols import digits_for
 from app.runtime.price_identity import price_token
-from app.analysis.execution_eligibility import ExecutionEligibility
+from app.autotrade.execution_eligibility import ExecutionEligibility
 from app.autotrade.strategy_identity import confluence_setup_id, structural_thesis_id
 from app.autotrade.strategy_names import resolve_strategy
 from app.autotrade.strategy_taxonomy import is_m1_scalp_match

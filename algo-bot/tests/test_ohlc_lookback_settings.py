@@ -10,7 +10,8 @@ from tests.configuration.canonical_fixtures import install_runtime_overrides, le
 
 import pytest
 
-from app.analysis import ohlc_source, scanner
+from app.marketdata import ohlc
+from app.analysis import scanner
 from app.autotrade import worker
 
 
@@ -48,16 +49,16 @@ def test_window_for_timeframe_resolves_each_timeframe_independently(
   install_runtime_overrides(monkeypatch, legacy_overrides={"xau_lookback_m5_bars": 150})
   install_runtime_overrides(monkeypatch, legacy_overrides={"xau_lookback_m1_bars": 150})
 
-  assert ohlc_source.window_for_timeframe("H1") == 400
-  assert ohlc_source.window_for_timeframe("M15") == 250
-  assert ohlc_source.window_for_timeframe("M5") == 150
-  assert ohlc_source.window_for_timeframe("M1") == 150
-  assert ohlc_source.window_for_timeframe("h1") == 400  # case-insensitive
+  assert ohlc.window_for_timeframe("H1") == 400
+  assert ohlc.window_for_timeframe("M15") == 250
+  assert ohlc.window_for_timeframe("M5") == 150
+  assert ohlc.window_for_timeframe("M1") == 150
+  assert ohlc.window_for_timeframe("h1") == 400  # case-insensitive
 
 
 def test_window_for_timeframe_clamps_a_misconfigured_low_value(monkeypatch):
   install_runtime_overrides(monkeypatch, legacy_overrides={"xau_lookback_m1_bars": 1})
-  assert ohlc_source.window_for_timeframe("M1") == 50
+  assert ohlc.window_for_timeframe("M1") == 50
 
 
 @pytest.mark.asyncio

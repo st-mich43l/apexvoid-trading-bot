@@ -27,7 +27,7 @@ from app.analysis.actionability import (
   ActionabilityDecision,
   resolve_actionability,
 )
-from app.analysis.execution_eligibility import (
+from app.autotrade.execution_eligibility import (
   ANALYSIS_ONLY,
   EXECUTION_ELIGIBILITY_VERSION,
   STATIC_ELIGIBLE,
@@ -41,7 +41,7 @@ from app.analysis.market_map import (
   rail_reference,
 )
 from app.analysis.market_map_delivery import cache_analysis
-from app.analysis.ohlc_source import RedisOHLCSource, window_for_timeframe
+from app.marketdata.ohlc import RedisOHLCSource, window_for_timeframe
 from app.analysis.structure import Zone
 from app.analysis.confluence_zone import (
   BandKind,

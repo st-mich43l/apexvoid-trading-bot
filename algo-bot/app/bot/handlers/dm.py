@@ -310,10 +310,18 @@ async def handle_scan_report(msg: Message) -> None:
   client = redis_state.get_client()
   # Owner-only compatibility command.  The automatic path consumes Go
   # opportunities and never imports the Python detector graph.
-  from app.analysis import scanner
+  from app.analysis_client.repository import PostgresAnalysisOpportunityRepository
 
-  rows = await scanner.scan_report(client, symbol, tf, hours=hours)
-  await msg.answer(scanner.format_scan_report(rows, symbol, tf, hours))
+  repository = PostgresAnalysisOpportunityRepository()
+  import time
+
+  rows = await repository.recent_for_symbol(
+    symbol, timeframe=tf, since=int(time.time() - hours * 3600),
+  )
+  await msg.answer(
+    f"📡 <b>Go analysis report {symbol} {tf}</b>\n"
+    f"Lifecycle records in the last {hours:g}h: {len(rows)}"
+  )
 
 
 @router.message(Command("algo_pause", "auto_pause"), F.chat.type == "private")
@@ -418,7 +426,7 @@ async def handle_trade_map(msg: Message) -> None:
   if symbol is None or remainder:
     await msg.answer("Usage: <code>/trade_map [SYMBOL]</code>")
     return
-  from app.analysis.market_map_delivery import send_current_market_map
+  from app.autotrade.go_market_map_delivery import send_current_market_map
 
   if not await send_current_market_map(symbol):
     await msg.answer("⚠️ Market Map unavailable: waiting for complete feed windows.")

@@ -40,7 +40,7 @@ from app.analysis.structure import (
 )
 from app.analysis.trendlines import Trendline, value_at
 from app.analysis.trendline_v2 import evaluate_live_interaction
-from app.analysis.execution_eligibility import ExecutionEligibility
+from app.autotrade.execution_eligibility import ExecutionEligibility
 from app.analysis.structural_reaction_support import (
   CONFIRM_ENGULFING,
   CONFIRM_REJECTION_CHOCH,
