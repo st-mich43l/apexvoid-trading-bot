@@ -251,3 +251,68 @@ func TestEngine_EveryLiveOpportunityCarriesCausalTechnicalFacts(t *testing.T) {
 		}
 	}
 }
+
+// TestEngine_FirstLiveBarAfterBootstrapRepublishesEveryArbitrationDecision
+// guards the 2026-10-01 production failure: a restarted engine rebuilt its
+// state by bootstrap, recorded the rebuilt decisions as "already published",
+// and then never told the consumer anything — so the algo-bot kept every
+// opportunity on the stale conflict_held status it had stored before the
+// restart. A decision is a current-status projection, so the first live bar
+// must publish the complete current set.
+func TestEngine_FirstLiveBarAfterBootstrapRepublishesEveryArbitrationDecision(t *testing.T) {
+	repoRoot := filepath.Join("..", "..", "..")
+	doc, err := config.ResolveDocument(filepath.Join(repoRoot, "config", "apexvoid.yml"))
+	if err != nil {
+		t.Fatalf("resolving config: %v", err)
+	}
+	settings, err := engine.LoadSettings(doc, "M5", false)
+	if err != nil {
+		t.Fatalf("loading settings: %v", err)
+	}
+	if settings.Geometry, err = doc.GeometryFor("XAU"); err != nil {
+		t.Fatal(err)
+	}
+	client := &fakeKafkaClient{}
+	publisher := engine.NewOpportunityPublisher(client, nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go publisher.Run(ctx)
+
+	e := engine.NewEngine(nil)
+	e.SetPublisher(publisher)
+	if err := e.Register("XAU", settings); err != nil {
+		t.Fatal(err)
+	}
+	candles := loadRealXAUFixture(t)
+	last := len(candles) - 1
+	var snapshot engine.AnalysisSnapshot
+	for _, candle := range candles[:last] {
+		snapshot, err = e.Dispatch(marketdata.BarEvent{Symbol: "XAU", Timeframe: "M5", Candle: candle, Origin: marketdata.EventOriginBootstrap})
+		if err != nil {
+			t.Fatalf("bootstrap dispatch: %v", err)
+		}
+	}
+	if len(snapshot.Opportunities) < 2 {
+		t.Fatalf("fixture must leave several live opportunities to arbitrate, got %d", len(snapshot.Opportunities))
+	}
+	time.Sleep(50 * time.Millisecond)
+	if got := client.arbitrationSnapshot(); len(got) != 0 {
+		t.Fatalf("bootstrap must publish no arbitration decisions, got %d", len(got))
+	}
+
+	snapshot, err = e.Dispatch(marketdata.BarEvent{Symbol: "XAU", Timeframe: "M5", Candle: candles[last]})
+	if err != nil {
+		t.Fatalf("first live dispatch: %v", err)
+	}
+	time.Sleep(200 * time.Millisecond)
+
+	published := map[string]bool{}
+	for _, d := range client.arbitrationSnapshot() {
+		published[d.OpportunityID] = true
+	}
+	for _, c := range snapshot.Opportunities {
+		if !published[c.ID] {
+			t.Errorf("live opportunity %s had no arbitration decision published on the first live bar after bootstrap", c.ID)
+		}
+	}
+}
