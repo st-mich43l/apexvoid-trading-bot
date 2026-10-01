@@ -1,4 +1,9 @@
-"""Typed scanner-owned static eligibility for autonomous execution."""
+"""Typed execution-policy eligibility carried by an analysis opportunity.
+
+This contract belongs to the execution adapter, not the technical-analysis
+package.  Go owns the technical facts; Algo Bot owns the decision about
+whether those facts may enter the execution pipeline.
+"""
 
 from __future__ import annotations
 
@@ -61,25 +66,17 @@ class ExecutionEligibility:
         fitted_targets_pips=tuple(
           int(value) for value in payload.get("fitted_targets_pips", ())
         ),
-        effective_target_pips=_optional_float(
-          payload.get("effective_target_pips"),
-        ),
+        effective_target_pips=_optional_float(payload.get("effective_target_pips")),
         reward_risk=_optional_float(payload.get("reward_risk")),
-        minimum_reward_risk=_optional_float(
-          payload.get("minimum_reward_risk"),
-        ),
+        minimum_reward_risk=_optional_float(payload.get("minimum_reward_risk")),
         opposing_entry=(
           dict(payload["opposing_entry"])
           if isinstance(payload.get("opposing_entry"), Mapping)
           else None
         ),
-        opposing_room_pips=_optional_float(
-          payload.get("opposing_room_pips"),
-        ),
+        opposing_room_pips=_optional_float(payload.get("opposing_room_pips")),
         key_level_role=_optional_text(payload.get("key_level_role")),
-        bias_relationship=_optional_text(
-          payload.get("bias_relationship"),
-        ),
+        bias_relationship=_optional_text(payload.get("bias_relationship")),
         market_map_id=str(payload.get("market_map_id") or ""),
         calculated_at=int(payload.get("calculated_at") or 0),
         measured=dict(payload.get("measured") or {}),

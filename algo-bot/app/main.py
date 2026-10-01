@@ -20,7 +20,7 @@ from app.signals.watcher import watcher_loop
 from app.signals.calendar import calendar_sync_loop
 from app.signals.weekly_report import weekly_report_loop
 from app.bot.owner_dm_journal import owner_dm_daily_wipe_loop
-from app.analysis.bar_event_dispatcher import bar_event_dispatcher_loop
+from app.autotrade.bar_event_dispatcher import bar_event_dispatcher_loop
 from app.autotrade.delivery import auto_trade_events_loop
 from app.autotrade.stats_ingestion import (
   auto_trade_stats_ingestion_loop,

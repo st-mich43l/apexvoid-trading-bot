@@ -70,7 +70,6 @@ ROLE_RETIREMENT = {
 MODULE_ROLES: dict[str, tuple[tuple[str, ...], str]] = {
   "app.analysis": ((MARKER,), "package marker"),
   "app.analysis.actionability": ((TECHNICAL,), "range bounds / actionability gates over Python context"),
-  "app.analysis.bar_event_dispatcher": ((POLICY_INPUT,), "startup execution dispatcher; consumes Go-owned matches per closed bar and does not construct technical opportunities"),
   "app.analysis.candle_displacement": ((TECHNICAL,), "candle geometry detector"),
   "app.analysis.candle_evidence": ((TECHNICAL,), "candle evidence detector"),
   "app.analysis.candle_geometry": ((TECHNICAL,), "candle geometry primitives"),
@@ -81,7 +80,6 @@ MODULE_ROLES: dict[str, tuple[tuple[str, ...], str]] = {
   "app.analysis.detectors": ((TECHNICAL,), "LIVE_DETECTOR_REGISTRY: the legacy strategy detectors"),
   "app.analysis.engine": ((TECHNICAL_ORCHESTRATION,), "analyze()/scalp_structure(): per-timeframe technical pipeline"),
   "app.analysis.entry_location": ((TECHNICAL, POLICY_INPUT), "entry location decision; config also parses PD archetypes from it"),
-  "app.analysis.execution_eligibility": ((POLICY_INPUT,), "ExecutionEligibility dataclass consumed by StrategyMatch"),
   "app.analysis.fibonacci": ((TECHNICAL,), "fib ladders"),
   "app.analysis.indicators": ((SHARED_MATH,), "Wilder ATR (second ATR formula)"),
   "app.analysis.key_level_role": ((TECHNICAL,), "support/resistance role"),
@@ -93,7 +91,6 @@ MODULE_ROLES: dict[str, tuple[tuple[str, ...], str]] = {
   "app.analysis.market_map_delivery": ((PRESENTATION,), "Telegram market-map delivery"),
   "app.analysis.math_utils": ((SHARED_MATH,), "atr_series/atr_scalar: duplicate ATR"),
   "app.analysis.momentum": ((TECHNICAL,), "momentum detector"),
-  "app.analysis.ohlc_source": ((MARKET_DATA,), "Redis OHLC reader"),
   "app.analysis.regime": ((TECHNICAL,), "regime classifier"),
   "app.analysis.scalp_ranges": ((TECHNICAL,), "scalp range detector"),
   "app.analysis.scanner": ((TECHNICAL_ORCHESTRATION,), "scanner: detector cycle, setup cards, StrategyMatch publish"),

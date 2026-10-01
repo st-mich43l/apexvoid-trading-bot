@@ -25,7 +25,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
-from app.analysis.ohlc_source import RedisOHLCSource
+from app.marketdata.ohlc import RedisOHLCSource
 from app.persistence import redis_state
 
 
@@ -90,7 +90,7 @@ async def capture(symbol: str, counts: dict[str, int], client=None, *, now: date
     "description": "Real closed-bar capture for the S14C Go-vs-Python policy replay. Nothing here is synthetic or edited.",
     "symbol": symbol.upper(),
     "provenance": {
-      "source": "Redis bars:{SYMBOL}:{TF} read through app.analysis.ohlc_source.RedisOHLCSource (closed bars only)",
+      "source": "Redis bars:{SYMBOL}:{TF} read through app.marketdata.ohlc.RedisOHLCSource (closed bars only)",
       "captured_at_utc": stamp,
       "redis_host": _host(),
       "bars_requested": {tf: n for tf, n in counts.items() if n > 0},
