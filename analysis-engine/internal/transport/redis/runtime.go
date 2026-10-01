@@ -174,18 +174,48 @@ func (r *Runtime) subscribe(ctx context.Context) (*redisv9.PubSub, <-chan *redis
 func (r *Runtime) bootstrap(ctx context.Context) error {
 	started := time.Now()
 	defer func() { r.metrics.Duration(MetricBootstrapMS, time.Since(started).Milliseconds()) }()
+	// Symbol workers own independent mutable state. Replay each symbol in its
+	// own goroutine so a restart does not make EURUSD wait behind XAU's full
+	// technique chain (production 2026-10-01: serial bootstrap kept live
+	// publication paused for several minutes). Series for one symbol remain
+	// sequential, preserving the established per-symbol replay order and
+	// avoiding cross-timeframe races inside SymbolWorker.
+	bySymbol := make(map[market.Symbol][]Series)
 	for series := range r.series {
-		values, err := r.client.ZRevRange(ctx, series.Key(), 0, int64(series.Depth-1)).Result()
-		if err != nil {
-			return r.readError(series, err)
-		}
-		for left, right := 0, len(values)-1; left < right; left, right = left+1, right-1 {
-			values[left], values[right] = values[right], values[left]
-		}
-		for _, raw := range values {
-			if err := r.process(ctx, series, raw, marketdata.EventOriginBootstrap, false); err != nil {
-				return err
+		bySymbol[series.Symbol] = append(bySymbol[series.Symbol], series)
+	}
+	errs := make(chan error, len(bySymbol))
+	var wg sync.WaitGroup
+	for _, seriesList := range bySymbol {
+		sort.Slice(seriesList, func(i, j int) bool {
+			return string(seriesList[i].Timeframe) < string(seriesList[j].Timeframe)
+		})
+		wg.Add(1)
+		go func(seriesList []Series) {
+			defer wg.Done()
+			for _, series := range seriesList {
+				values, err := r.client.ZRevRange(ctx, series.Key(), 0, int64(series.Depth-1)).Result()
+				if err != nil {
+					errs <- r.readError(series, err)
+					return
+				}
+				for left, right := 0, len(values)-1; left < right; left, right = left+1, right-1 {
+					values[left], values[right] = values[right], values[left]
+				}
+				for _, raw := range values {
+					if err := r.process(ctx, series, raw, marketdata.EventOriginBootstrap, false); err != nil {
+						errs <- err
+						return
+					}
+				}
 			}
+		}(seriesList)
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			return err
 		}
 	}
 	return nil
