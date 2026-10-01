@@ -103,6 +103,9 @@ analysis:
       invalidation_buffer_atr: 0.5
       minimum_target_distance_atr: 1.0
       expiry_hours: 12.0
+      # Legacy Python reaction confirmation (shared by every technique).
+      reaction_lookback_bars: 3
+      engulfing_minimum_range_atr: 0.5
     supply:
       version: v2
       enabled: true
@@ -127,6 +130,9 @@ analysis:
       invalidation_buffer_atr: 0.5
       minimum_target_distance_atr: 1.0
       expiry_hours: 24.0
+      # Legacy Python reaction confirmation (shared by every technique).
+      reaction_lookback_bars: 3
+      engulfing_minimum_range_atr: 0.5
     fvg:
       version: v2
       enabled: true
@@ -137,6 +143,9 @@ analysis:
       invalidation_buffer_atr: 0.5
       minimum_target_distance_atr: 1.0
       expiry_hours: 24.0
+      # Legacy Python reaction confirmation (shared by every technique).
+      reaction_lookback_bars: 3
+      engulfing_minimum_range_atr: 0.5
     ifvg:
       version: v2
       enabled: true
@@ -147,6 +156,9 @@ analysis:
       invalidation_buffer_atr: 0.5
       minimum_target_distance_atr: 1.0
       expiry_hours: 24.0
+      # Legacy Python reaction confirmation (shared by every technique).
+      reaction_lookback_bars: 3
+      engulfing_minimum_range_atr: 0.5
     crt:
       version: v2
       enabled: true
@@ -160,6 +172,9 @@ analysis:
       invalidation_buffer_atr: 0.5
       minimum_target_distance_atr: 1.0
       expiry_hours: 24.0
+      # Legacy Python reaction confirmation (shared by every technique).
+      reaction_lookback_bars: 3
+      engulfing_minimum_range_atr: 0.5
     session_level:
       version: v2
       enabled: true

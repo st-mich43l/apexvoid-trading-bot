@@ -20,6 +20,7 @@ const Version = "v2"
 type Strategy struct {
 	minimumStrength, minimumGapATR, invalidationATR, targetATR, expiryHours float64
 	fingerprint                                                             string
+	reaction                                                                strategyutil.ReactionConfig
 }
 
 func New(cfg strategy.Config) (strategy.Strategy, error) {
@@ -37,6 +38,11 @@ func New(cfg strategy.Config) (strategy.Strategy, error) {
 		}
 		*values[i] = value
 	}
+	reaction, err := strategyutil.ParseReactionConfig(cfg.Parameters)
+	if err != nil {
+		return nil, err
+	}
+	s.reaction = reaction
 	if s.minimumStrength < 0 || s.minimumGapATR < 0 || s.invalidationATR <= 0 || s.targetATR <= 0 || s.expiryHours <= 0 {
 		return nil, fmt.Errorf("ifvg: invalid non-positive strategy parameter")
 	}
@@ -97,6 +103,11 @@ func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Ca
 			}
 			seenCandidates[candidate.ID] = struct{}{}
 			result = append(result, candidate)
+			if rc := strategyutil.ConfirmReaction(tf, z.ID, direction, float64(z.Low), float64(z.High), atr, z.CreatedAt, s.reaction); rc != nil {
+				if confirmed, confirmErr := strategyutil.ConfirmedVariant(candidate, rc, z.ID, z.OriginTime, s.expiryHours, "m5_ifvg_rejection_confirmed"); confirmErr == nil {
+					result = append(result, confirmed)
+				}
+			}
 		}
 	}
 	return result

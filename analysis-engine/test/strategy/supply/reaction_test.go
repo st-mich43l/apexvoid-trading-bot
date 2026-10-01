@@ -25,11 +25,11 @@ func TestSupply_PublishesDistinctCausallyConfirmedReaction(t *testing.T) {
 	}
 	ctx.Timeframes[market.M5] = &context.TimeframeContext{
 		Timeframe: market.M5,
-		Candles: candles,
-		Zones: zone.ZoneState{Zones: []zone.Zone{touched}},
+		Candles:   candles,
+		Zones:     zone.ZoneState{Zones: []zone.Zone{touched}},
 		Liquidity: liquidity.LiquidityState{Pools: []liquidity.Pool{{
 			Side: liquidity.LiquiditySellSide,
-			Low: 2010, High: 2011,
+			Low:  2010, High: 2011,
 		}}},
 	}
 	found := s.Evaluate(ctx)
