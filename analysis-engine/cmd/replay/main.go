@@ -97,9 +97,8 @@ func run(barsPath, configPath string, symbol market.Symbol, tf market.Timeframe,
 	if err != nil {
 		return fmt.Errorf("loading Analysis Engine V2 settings: %w", err)
 	}
-	settings.Geometry, err = doc.GeometryFor(string(symbol))
-	if err != nil {
-		return fmt.Errorf("loading instrument geometry: %w", err)
+	if err := engine.ApplyInstrument(&settings, doc, string(symbol)); err != nil {
+		return err
 	}
 
 	candles, err := readBars(barsPath)

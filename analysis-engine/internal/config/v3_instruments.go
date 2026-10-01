@@ -15,26 +15,9 @@ import (
 // unknown symbol or missing/invalid geometry — §12: no hardcoded pip size,
 // ever, for any instrument.
 func (d *Document) GeometryFor(symbol string) (market.Geometry, error) {
-	instruments, err := d.Section("instruments")
+	merged, err := d.mergedInstrument(symbol)
 	if err != nil {
 		return market.Geometry{}, err
-	}
-	instrument, ok := instruments[symbol].(stringMap)
-	if !ok {
-		return market.Geometry{}, fmt.Errorf("config: unknown instrument %q", symbol)
-	}
-
-	merged := instrument
-	if packName, ok := instrument["pack"].(string); ok && packName != "" {
-		packs, err := d.Section("instrument_packs")
-		if err != nil {
-			return market.Geometry{}, err
-		}
-		pack, ok := packs[packName].(stringMap)
-		if !ok {
-			return market.Geometry{}, fmt.Errorf("config: instrument %q references unknown pack %q", symbol, packName)
-		}
-		merged = deepMerge(pack, instrument).(stringMap)
 	}
 
 	contract, ok := merged["contract"].(stringMap)
@@ -98,4 +81,87 @@ func numberField(m stringMap, key string) (float64, error) {
 	default:
 		return 0, fmt.Errorf("field %q is not numeric (got %T)", key, value)
 	}
+}
+
+// mergedInstrument returns instruments.<symbol> with its instrument pack
+// merged underneath (the instrument's own leaves always win).
+func (d *Document) mergedInstrument(symbol string) (stringMap, error) {
+	instruments, err := d.Section("instruments")
+	if err != nil {
+		return nil, err
+	}
+	instrument, ok := instruments[symbol].(stringMap)
+	if !ok {
+		return nil, fmt.Errorf("config: unknown instrument %q", symbol)
+	}
+	merged := instrument
+	if packName, ok := instrument["pack"].(string); ok && packName != "" {
+		packs, err := d.Section("instrument_packs")
+		if err != nil {
+			return nil, err
+		}
+		pack, ok := packs[packName].(stringMap)
+		if !ok {
+			return nil, fmt.Errorf("config: instrument %q references unknown pack %q", symbol, packName)
+		}
+		merged = deepMerge(pack, instrument).(stringMap)
+	}
+	return merged, nil
+}
+
+// DefendedLevelsFor returns the prices an instrument's authorities defend
+// (a market-intervention ceiling such as USDJPY 160) and the buffer around
+// them, from overrides.auto_algo.risk.exposure of the merged instrument.
+// An instrument that declares none returns no levels and no error.
+func (d *Document) DefendedLevelsFor(symbol string) ([]float64, float64, error) {
+	merged, err := d.mergedInstrument(symbol)
+	if err != nil {
+		return nil, 0, err
+	}
+	exposure := nestedMap(merged, "overrides", "auto_algo", "risk", "exposure")
+	if exposure == nil {
+		return nil, 0, nil
+	}
+	rawLevels, present := exposure["defended_levels"]
+	if !present {
+		return nil, 0, nil
+	}
+	list, ok := rawLevels.([]any)
+	if !ok {
+		return nil, 0, fmt.Errorf("config: instrument %q defended_levels must be a list of prices", symbol)
+	}
+	levels := make([]float64, 0, len(list))
+	for _, item := range list {
+		switch v := item.(type) {
+		case float64:
+			levels = append(levels, v)
+		case int:
+			levels = append(levels, float64(v))
+		default:
+			return nil, 0, fmt.Errorf("config: instrument %q defended_levels entry %v is not numeric", symbol, item)
+		}
+	}
+	if len(levels) == 0 {
+		return nil, 0, nil
+	}
+	buffer, err := numberField(exposure, "defended_level_buffer_price")
+	if err != nil {
+		return nil, 0, fmt.Errorf("config: instrument %q: %w", symbol, err)
+	}
+	if !(buffer > 0) {
+		return nil, 0, fmt.Errorf("config: instrument %q defended_level_buffer_price must be positive", symbol)
+	}
+	return levels, buffer, nil
+}
+
+func nestedMap(m stringMap, path ...string) stringMap {
+	cursor := m
+	for _, key := range path {
+		next, ok := cursor[key].(stringMap)
+		if !ok {
+			return nil
+		}
+		cursor = next
+	}
+	return cursor
 }
