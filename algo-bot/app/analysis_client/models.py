@@ -176,6 +176,30 @@ class CandleEvidence(FrozenConfigModel):
   all_patterns: list[str] = Field(default_factory=list)
 
 
+class MADContext(FrozenConfigModel):
+  """Go-owned MAD phase facts and soft affinity telemetry.
+
+  The values are descriptive technical inputs only.  The Python consumer
+  must never use them to rerun the retired detector or to bypass execution
+  policy gates.
+  """
+
+  version: int = Field(ge=1)
+  phase: str = Field(min_length=1)
+  confidence: FiniteFloat = Field(ge=0, le=1)
+  affinity: FiniteFloat = Field(ge=0, le=1)
+  direction: str | None = None
+  sweep_side: str | None = None
+  reclaim: bool
+  range_quality_atr: FiniteFloat | None = None
+  break_distance_atr: FiniteFloat | None = None
+  displacement_atr: FiniteFloat | None = None
+  acceptance_closes: int | None = Field(default=None, ge=0)
+  sweep_penetration_atr: FiniteFloat | None = None
+  reclaim_depth_atr: FiniteFloat | None = None
+  reason_code: str = Field(min_length=1)
+
+
 class TechnicalContext(FrozenConfigModel):
   """Engine-owned policy inputs for the bar that made the setup actionable.
 
@@ -190,6 +214,7 @@ class TechnicalContext(FrozenConfigModel):
   higher_timeframes: list[HigherTimeframeBias] = Field(default_factory=list, max_length=2)
   confirmation: ReactionConfirmation | None = None
   candle_evidence: CandleEvidence | None = None
+  mad: MADContext | None = None
 
   @model_validator(mode="after")
   def validate_higher_timeframes(self):

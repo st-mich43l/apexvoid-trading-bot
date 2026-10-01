@@ -10,6 +10,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/indicator"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/keylevel"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/liquidity"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/mad"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/marketdata"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
@@ -235,7 +236,7 @@ func (w *SymbolWorker) ApplyWithResult(event marketdata.BarEvent) (AnalysisSnaps
 			continue
 		}
 		candidate.ObservedTimeframe = event.Timeframe
-		candidate.Technical = w.technicalContext(event, candidate.Direction, candidate.Entry.Low, candidate.Entry.High, candidate.Reaction)
+		candidate.Technical = w.technicalContext(event, candidate.Strategy, candidate.Direction, candidate.Entry.Low, candidate.Entry.High, candidate.Reaction)
 		stopConfig := w.settings.StopEnvelope
 		if w.settings.InstrumentStopEnvelopeConfigured {
 			stopConfig.InstrumentMinPips = w.settings.InstrumentStopMinPips
@@ -331,7 +332,7 @@ func (w *SymbolWorker) rebuildContext() {
 // close as the geometric reference, and the engine's structural bias. Returns
 // nil — never a placeholder — when the ATR series is not yet available, so a
 // consumer sees "unavailable" and fails closed instead of guessing.
-func (w *SymbolWorker) technicalContext(event marketdata.BarEvent, direction market.Direction, entryLow, entryHigh float64, reaction *opportunity.ReactionConfirmation) *opportunity.TechnicalContext {
+func (w *SymbolWorker) technicalContext(event marketdata.BarEvent, strategyID opportunity.StrategyID, direction market.Direction, entryLow, entryHigh float64, reaction *opportunity.ReactionConfirmation) *opportunity.TechnicalContext {
 	atrSeries := w.state.Measurements.ATR(event.Timeframe)
 	if len(atrSeries) == 0 {
 		return nil
@@ -342,6 +343,10 @@ func (w *SymbolWorker) technicalContext(event marketdata.BarEvent, direction mar
 	}
 	facts := &opportunity.TechnicalContext{
 		ATR: atr, ReferencePrice: event.Candle.Close, ReferenceTime: event.Candle.Time,
+	}
+	if snapshot := w.state.Context.MAD; snapshot.Version > 0 && snapshot.Phase != "" {
+		affinity := mad.Affinity(snapshot, string(direction), string(strategyID))
+		facts.MAD = madTechnicalContext(snapshot, affinity.Final)
 	}
 	if bias := w.state.Context.Bias; bias.Direction.IsValid() {
 		facts.BiasDirection = bias.Direction
@@ -366,6 +371,35 @@ func (w *SymbolWorker) technicalContext(event marketdata.BarEvent, direction mar
 	}
 
 	return facts
+}
+
+func madTechnicalContext(snapshot mad.Snapshot, affinity float64) *opportunity.MADContext {
+	ctx := &opportunity.MADContext{
+		Version: snapshot.Version, Phase: snapshot.Phase, Confidence: snapshot.Confidence,
+		Affinity: affinity, Direction: snapshot.ManipulationDirection,
+		SweepSide: snapshot.SweepSide, Reclaim: snapshot.Reclaim, ReasonCode: snapshot.ReasonCode,
+		RangeQualityATR:     snapshot.RangeQualityATR,
+		BreakDistanceATR:    measuredPointer(snapshot, "break_distance_atr"),
+		DisplacementATR:     measuredPointer(snapshot, "displacement_atr"),
+		SweepPenetrationATR: measuredPointer(snapshot, "sweep_penetration_atr"),
+		ReclaimDepthATR:     measuredPointer(snapshot, "reclaim_depth_atr"),
+	}
+	if ctx.Direction == "" {
+		ctx.Direction = snapshot.ExpansionDirection
+	}
+	if value, ok := snapshot.Measured["accepted_closes"]; ok {
+		count := int(value)
+		ctx.AcceptanceCloses = &count
+	}
+	return ctx
+}
+
+func measuredPointer(snapshot mad.Snapshot, key string) *float64 {
+	value, ok := snapshot.Measured[key]
+	if !ok {
+		return nil
+	}
+	return &value
 }
 
 // arbitrate re-evaluates cross-strategy direction conflict for this

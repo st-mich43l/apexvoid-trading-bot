@@ -44,8 +44,9 @@ type StopEnvelopePayload struct {
 }
 
 // TechnicalContextPayload carries engine-owned facts an execution policy needs
-// so it never recomputes ATR/structure from raw OHLC. No quote, spread, account
-// or confluence-score fields belong here.
+// so it never recomputes ATR/structure from raw OHLC. No quote, spread, or
+// account fields belong here. MAD affinity is permitted only as explicitly
+// named soft technical telemetry and is not an execution decision.
 type TechnicalContextPayload struct {
 	ATR              float64                      `json:"atr"`
 	ReferencePrice   float64                      `json:"reference_price"`
@@ -54,6 +55,27 @@ type TechnicalContextPayload struct {
 	HigherTimeframes []HigherTimeframeBiasPayload `json:"higher_timeframes,omitempty"`
 	Confirmation     *ReactionConfirmationPayload `json:"confirmation,omitempty"`
 	CandleEvidence   *CandleEvidencePayload       `json:"candle_evidence,omitempty"`
+	MAD              *MADContextPayload           `json:"mad,omitempty"`
+}
+
+// MADContextPayload mirrors opportunity.MADContext. It is explicitly soft
+// technical telemetry; consumers must not turn affinity into an execution
+// gate or reconstruct the legacy Python detector from its absence.
+type MADContextPayload struct {
+	Version             int      `json:"version"`
+	Phase               string   `json:"phase"`
+	Confidence          float64  `json:"confidence"`
+	Affinity            float64  `json:"affinity"`
+	Direction           string   `json:"direction,omitempty"`
+	SweepSide           string   `json:"sweep_side,omitempty"`
+	Reclaim             bool     `json:"reclaim"`
+	RangeQualityATR     *float64 `json:"range_quality_atr,omitempty"`
+	BreakDistanceATR    *float64 `json:"break_distance_atr,omitempty"`
+	DisplacementATR     *float64 `json:"displacement_atr,omitempty"`
+	AcceptanceCloses    *int     `json:"acceptance_closes,omitempty"`
+	SweepPenetrationATR *float64 `json:"sweep_penetration_atr,omitempty"`
+	ReclaimDepthATR     *float64 `json:"reclaim_depth_atr,omitempty"`
+	ReasonCode          string   `json:"reason_code"`
 }
 
 type CandleEvidencePayload struct {

@@ -121,6 +121,32 @@ def test_supply_translation_is_exact_and_carries_go_provenance():
 
 
 @pytest.mark.no_database
+def test_go_mad_telemetry_is_copied_verbatim_without_python_reanalysis():
+  raw = golden()
+  raw["payload"]["technical_context"]["mad"] = {
+    "version": 2,
+    "phase": "manip",
+    "confidence": 0.91,
+    "affinity": 0.86,
+    "direction": "SELL",
+    "sweep_side": "high",
+    "reclaim": True,
+    "range_quality_atr": 2.1,
+    "acceptance_closes": 0,
+    "reason_code": "asia_sweep_reclaim",
+  }
+  match = pol.build_strategy_match(
+    parse_analysis_event(OpportunityTopic, json.dumps(raw)),
+    profile=SUPPLY,
+    now=raw["payload"]["created_at"] + 60,
+  )
+  assert (match.mad_version, match.mad_phase) == (2, "manip")
+  assert match.mad_confidence == 0.91 and match.mad_affinity == 0.86
+  assert match.mad_direction == "SELL" and match.mad_sweep_side == "high"
+  assert match.mad_reason_code == "asia_sweep_reclaim"
+
+
+@pytest.mark.no_database
 def test_go_higher_timeframe_bias_never_uses_primary_m5_as_substitute():
   raw = golden()
   p = raw["payload"]

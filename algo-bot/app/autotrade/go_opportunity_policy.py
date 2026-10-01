@@ -226,6 +226,7 @@ def build_strategy_match(
   quality = payload.quality
   quality_overall = float(quality.overall)
   quality_components = dict(quality.components)
+  mad = tech.mad
   stop_envelope = payload.stop_envelope
   stop_envelope_floor_pips = None if stop_envelope is None else float(stop_envelope.floor_pips)
   stop_envelope_cap_pips = None if stop_envelope is None else float(stop_envelope.cap_pips)
@@ -373,6 +374,23 @@ def build_strategy_match(
     risk_multiplier=risk_multiplier,
     quality_overall=quality_overall,
     quality_components=quality_components,
+    # These are Go-owned MAD facts copied verbatim. The adapter preserves
+    # them for cards/telemetry and downstream reporting; it does not rerun
+    # Python MAD or convert affinity into an execution gate.
+    mad_version=None if mad is None else mad.version,
+    mad_phase=None if mad is None else mad.phase,
+    mad_confidence=None if mad is None else float(mad.confidence),
+    mad_affinity=None if mad is None else float(mad.affinity),
+    mad_direction=None if mad is None else mad.direction,
+    mad_sweep_side=None if mad is None else mad.sweep_side,
+    mad_reclaim=None if mad is None else bool(mad.reclaim),
+    mad_range_quality_atr=None if mad is None else mad.range_quality_atr,
+    mad_break_distance_atr=None if mad is None else mad.break_distance_atr,
+    mad_displacement_atr=None if mad is None else mad.displacement_atr,
+    mad_acceptance_closes=None if mad is None else mad.acceptance_closes,
+    mad_sweep_penetration_atr=None if mad is None else mad.sweep_penetration_atr,
+    mad_reclaim_depth_atr=None if mad is None else mad.reclaim_depth_atr,
+    mad_reason_code=None if mad is None else mad.reason_code,
     go_stop_envelope_floor_pips=stop_envelope_floor_pips,
     go_stop_envelope_cap_pips=stop_envelope_cap_pips,
     go_stop_envelope_desired_minimum_pips=stop_envelope_desired_minimum_pips,
