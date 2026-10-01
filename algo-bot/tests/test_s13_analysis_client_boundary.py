@@ -56,3 +56,18 @@ def test_analysis_client_name_is_not_mistaken_for_analysis_package(tmp_path):
   )
   report = inventory_legacy_dependencies(tmp_path)
   assert report["importers"] == {}
+
+
+def test_execution_strategy_registry_does_not_load_legacy_detector_graph():
+  root = Path(__file__).resolve().parents[1]
+  path = root / "app" / "autotrade" / "strategy_registry.py"
+  tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+  imported = set()
+  for node in ast.walk(tree):
+    for module in _imported_modules(node, ("app", "autotrade")):
+      imported.add(module)
+  assert not any(
+    module == "app.analysis.detectors"
+    or module.startswith("app.analysis.detectors.")
+    for module in imported
+  ), "execution strategy policy must not import retired Python detectors"
