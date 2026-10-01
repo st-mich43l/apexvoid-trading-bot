@@ -221,3 +221,32 @@ func TestSectionFailsClosedOnMissingOrWrongType(t *testing.T) {
 		t.Error("expected an error for a non-mapping section")
 	}
 }
+
+func TestDefendedLevelsForReadsTheProductionUSDJPYGuardAndNothingElse(t *testing.T) {
+	doc, err := config.ResolveDocument(repoConfigPath("apexvoid.yml"))
+	if err != nil {
+		t.Fatalf("ResolveDocument: %v", err)
+	}
+
+	levels, buffer, err := doc.DefendedLevelsFor("USDJPY")
+	if err != nil {
+		t.Fatalf("DefendedLevelsFor(USDJPY): %v", err)
+	}
+	if len(levels) != 1 || levels[0] != 160.0 || buffer != 0.30 {
+		t.Fatalf("USDJPY defended level = %v buffer %v, want [160] 0.30", levels, buffer)
+	}
+
+	for _, symbol := range []string{"XAU", "EURUSD", "GBPUSD", "GBPJPY"} {
+		levels, buffer, err := doc.DefendedLevelsFor(symbol)
+		if err != nil {
+			t.Fatalf("DefendedLevelsFor(%s): %v", symbol, err)
+		}
+		if len(levels) != 0 || buffer != 0 {
+			t.Fatalf("%s must declare no defended level, got %v buffer %v", symbol, levels, buffer)
+		}
+	}
+
+	if _, _, err := doc.DefendedLevelsFor("NOPE"); err == nil {
+		t.Fatal("an unknown instrument must fail closed")
+	}
+}

@@ -214,6 +214,10 @@ func (w *SymbolWorker) ApplyWithResult(event marketdata.BarEvent) (AnalysisSnaps
 			doneOpp()
 			return AnalysisSnapshot{}, result, timingErr
 		}
+		if level, blocked := w.settings.BlockedByDefendedLevel(candidate); blocked {
+			log.Info("opportunity not opened: buy into defended level", "symbol", w.state.Symbol, "strategy", candidate.Strategy, "defended_level", level, "entry_low", candidate.Entry.Low, "entry_high", candidate.Entry.High)
+			continue
+		}
 		candidate.ObservedTimeframe = event.Timeframe
 		candidate.Technical = w.technicalContext(event, candidate.Reaction)
 		candidate.StopEnvelope = computeStopEnvelope(candidate, w.settings.Geometry, w.settings.StopEnvelope)

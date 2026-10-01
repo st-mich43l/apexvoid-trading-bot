@@ -42,6 +42,11 @@ type Settings struct {
 	// that never populate a StopEnvelope may safely leave it zero.
 	Geometry market.Geometry
 
+	// DefendedLevels/DefendedLevelBuffer are set per symbol by
+	// ApplyInstrument, like Geometry; see BlockedByDefendedLevel.
+	DefendedLevels      []float64
+	DefendedLevelBuffer float64
+
 	// ConfigVersion/ConfigFingerprint are the resolved document's own
 	// whole-document provenance (ConfigProvenanceFromConfig — the SAME
 	// value already used for Kafka envelope provenance), computed once
