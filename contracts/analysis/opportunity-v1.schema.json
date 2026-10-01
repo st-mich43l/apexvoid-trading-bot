@@ -134,7 +134,8 @@
             "zone_id": { "type": "string", "minLength": 1 },
             "touch_bar_time": { "type": "integer", "minimum": 0 },
             "confirmation_bar_time": { "type": "integer", "minimum": 0 },
-            "reaction_type": { "type": "string", "enum": ["rejection"] }
+            "reaction_type": { "type": "string", "enum": ["rejection"] },
+            "pattern": { "type": "string", "enum": ["wick_rejection", "rejection_choch", "strong_reclaim", "engulfing", "sweep_reclaim"] }
           }
         }
       }

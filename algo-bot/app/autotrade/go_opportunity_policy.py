@@ -370,7 +370,7 @@ def build_strategy_match(
     confirmation_bar_ts=None if reaction is None else str(reaction.confirmation_bar_time),
     reaction_type=None if reaction is None else reaction.reaction_type,
     m5_confirmation_bar_ts=None if reaction is None else str(reaction.confirmation_bar_time),
-    m5_reaction_type=None if reaction is None else reaction.reaction_type,
+    m5_reaction_type=None if reaction is None else (reaction.pattern or reaction.reaction_type),
     htf_bias=htf_bias,
     regime_kind="",
     bias_relationship=relation,
