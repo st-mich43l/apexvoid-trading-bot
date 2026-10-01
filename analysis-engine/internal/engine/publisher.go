@@ -133,6 +133,15 @@ func NewDurableOpportunityPublisher(client OpportunityKafkaClient, recorder *tel
 	if err != nil {
 		return nil, err
 	}
+	// Arbitration is a rebuildable current-status projection, not a
+	// once-only lifecycle fact.  Never let a persisted arbitration backlog
+	// delay creation/terminal events after a restart; the next live bar
+	// republishes the current decisions from SymbolWorker.arbitrate.
+	if dropped := store.discardArbitrationJobs(); dropped > 0 {
+		if err := store.save(); err != nil {
+			return nil, err
+		}
+	}
 	return &OpportunityPublisher{client: client, telemetry: recorder, notify: make(chan struct{}, 1), store: store}, nil
 }
 
@@ -220,11 +229,37 @@ func (p *OpportunityPublisher) EnqueueArbitrationDecision(symbol market.Symbol, 
 	if p == nil {
 		return
 	}
-	p.mu.Lock()
-	p.store.ledger.Queue = append(p.store.ledger.Queue, publishJob{
+	job := publishJob{
 		EventID: kafka.NewEventID(), Symbol: symbol,
 		Arbitration: &arbitrationJob{OpportunityID: opportunityID, Decision: decision, DecidedAt: decidedAt},
-	})
+	}
+	p.mu.Lock()
+	// Arbitration is a latest-value projection.  Coalesce queued updates for
+	// the same opportunity instead of allowing every status change to grow the
+	// durable queue and starve lifecycle publication.  If an older update is
+	// already in flight, replacing its queue slot is safe: ackFront will not
+	// remove the newer job when the older Kafka request completes.
+	replaced := false
+	for i := 0; i < len(p.store.ledger.Queue); i++ {
+		existing := p.store.ledger.Queue[i]
+		if existing.Arbitration == nil || existing.Symbol != symbol || existing.Arbitration.OpportunityID != opportunityID {
+			continue
+		}
+		if existing.Arbitration.DecidedAt >= decidedAt {
+			p.mu.Unlock()
+			return
+		}
+		if !replaced {
+			p.store.ledger.Queue[i] = job
+			replaced = true
+			continue
+		}
+		p.store.ledger.Queue = append(p.store.ledger.Queue[:i], p.store.ledger.Queue[i+1:]...)
+		i--
+	}
+	if !replaced {
+		p.store.ledger.Queue = append(p.store.ledger.Queue, job)
+	}
 	p.telemetry.Count(telemetry.CounterOpportunityPublishEnqueued, string(symbol), "", 1)
 	if err := p.store.save(); err != nil {
 		p.telemetry.Count(telemetry.CounterOpportunityOutboxPersistFailed, string(symbol), "", 1)
@@ -414,13 +449,30 @@ func (p *OpportunityPublisher) peek() (publishJob, bool) {
 	if len(p.store.ledger.Queue) == 0 {
 		return publishJob{}, false
 	}
+	// Lifecycle facts must always outrank arbitration projections.  The old
+	// single FIFO let thousands of current-status decisions sit in front of a
+	// creation event, making the creation arrive after its technical age limit.
+	for _, job := range p.store.ledger.Queue {
+		if job.Arbitration == nil {
+			return job, true
+		}
+	}
 	return p.store.ledger.Queue[0], true
 }
 
 func (p *OpportunityPublisher) ackFront(job publishJob) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if len(p.store.ledger.Queue) == 0 {
+	index := -1
+	for i, queued := range p.store.ledger.Queue {
+		if queued.EventID == job.EventID {
+			index = i
+			break
+		}
+	}
+	if index < 0 {
+		// A newer arbitration update may have replaced an in-flight older
+		// projection.  The replacement remains queued and must not be removed.
 		return
 	}
 	// Arbitration jobs carry no creation/terminal ledger record to update —
@@ -438,8 +490,7 @@ func (p *OpportunityPublisher) ackFront(job publishJob) {
 			delete(p.store.ledger.Records, id)
 		}
 	}
-	p.store.ledger.Queue[0] = publishJob{}
-	p.store.ledger.Queue = p.store.ledger.Queue[1:]
+	p.store.ledger.Queue = append(p.store.ledger.Queue[:index], p.store.ledger.Queue[index+1:]...)
 	if err := p.store.save(); err != nil {
 		p.telemetry.Count(telemetry.CounterOpportunityOutboxPersistFailed, string(job.Symbol), "", 1)
 	}
