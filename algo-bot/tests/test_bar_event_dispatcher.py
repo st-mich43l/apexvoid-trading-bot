@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from app.analysis import bar_event_dispatcher as dispatcher
+from app.autotrade import bar_event_dispatcher as dispatcher
 
 
 def _enable_handlers(monkeypatch) -> None:
