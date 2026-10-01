@@ -212,3 +212,32 @@ func (d *Document) InstrumentValue(symbol string, path ...string) (any, bool, er
 	}
 	return cursor, true, nil
 }
+
+// StopEnvelopeFor returns the resolved instrument stop-distance envelope.
+// The envelope is composed from the instrument pack and the concrete
+// instrument override, exactly like GeometryFor and InstrumentValue.  It is
+// deliberately read from instruments.yml rather than inferred from the
+// symbol or copied from execution defaults: live FX pairs have materially
+// different envelopes (for example EURUSD 12-20 and GBPJPY 22-35 pips).
+func (d *Document) StopEnvelopeFor(symbol string) (minPips, maxPips float64, err error) {
+	merged, err := d.mergedInstrument(symbol)
+	if err != nil {
+		return 0, 0, err
+	}
+	envelope, ok := merged["stop_envelope"].(stringMap)
+	if !ok {
+		return 0, 0, fmt.Errorf("config: instrument %q has no stop_envelope", symbol)
+	}
+	minPips, err = numberField(envelope, "min_pips")
+	if err != nil {
+		return 0, 0, fmt.Errorf("config: instrument %q stop_envelope: %w", symbol, err)
+	}
+	maxPips, err = numberField(envelope, "max_pips")
+	if err != nil {
+		return 0, 0, fmt.Errorf("config: instrument %q stop_envelope: %w", symbol, err)
+	}
+	if !(minPips > 0) || !(maxPips >= minPips) {
+		return 0, 0, fmt.Errorf("config: instrument %q stop_envelope must satisfy 0 < min_pips <= max_pips, got %.3f-%.3f", symbol, minPips, maxPips)
+	}
+	return minPips, maxPips, nil
+}
