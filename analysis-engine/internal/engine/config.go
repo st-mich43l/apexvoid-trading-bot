@@ -847,6 +847,26 @@ func KafkaConfigFromConfig(doc *config.Document) (kafka.Config, error) {
 	return cfg, nil
 }
 
+// OpportunityReplayMaxAgeFromConfig returns the maximum age for a persisted
+// lifecycle replay before it is no longer eligible to become a new live plan.
+// It is the sum of the consumer's confirmed-observation age and the allowed
+// Kafka delivery lag, keeping the publisher cleanup aligned with the single
+// execution freshness authority in analysis.technical_authority.
+func OpportunityReplayMaxAgeFromConfig(doc *config.Document) (time.Duration, error) {
+	maxEventAge, err := getInt(doc, "analysis.technical_authority.max_event_age_seconds")
+	if err != nil {
+		return 0, err
+	}
+	maxDeliveryLag, err := getInt(doc, "analysis.technical_authority.max_delivery_lag_seconds")
+	if err != nil {
+		return 0, err
+	}
+	if maxEventAge <= 0 || maxDeliveryLag < 0 {
+		return 0, fmt.Errorf("analysis technical-authority freshness values must be positive")
+	}
+	return time.Duration(maxEventAge+maxDeliveryLag) * time.Second, nil
+}
+
 // RedisConfigFromConfig resolves the market-data transport. Redis owns bars,
 // spot state and catch-up; no domain package reads this topology directly.
 func RedisConfigFromConfig(doc *config.Document) (redistransport.Config, error) {
