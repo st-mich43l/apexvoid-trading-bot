@@ -11,16 +11,64 @@ ROOT = Path(__file__).resolve().parents[1]
 
 pytestmark = pytest.mark.no_database
 
-# Unreachable from every process entrypoint, reviewed as offline research or a
-# compatibility re-export. A NEW unreachable module must be reviewed and added
-# here deliberately, not slip in unnoticed.
+# Unreachable from every production process entrypoint. Research/compatibility
+# modules are retained, while the explicit Go-cutover set is retired technical
+# code. A NEW unreachable module must be reviewed and added here deliberately,
+# not slip in unnoticed.
 REVIEWED_UNREACHABLE = {
   "app.analysis.m1_trigger",
+  "app.analysis.mad_phase",
   "app.scalping.lab_event_builder",
   "app.scalping.mad_phase",
   "app.scalping.mad_replay",
   "app.scalping.performance",
   "app.scalping.replay_lab",
+}
+
+RETAINED_UNREACHABLE = {
+  "app.analysis",
+  "app.analysis.market_map_delivery",
+  "app.analysis.types",
+  "app.scalping.context",
+}
+
+# The Go cutover intentionally leaves the old Python technical package
+# unreachable. Keep this list explicit so a future legacy module cannot become
+# unreachable without a deliberate retirement review.
+RETIRED_GO_TECHNICAL = {
+  "app.analysis.actionability",
+  "app.analysis.candle_displacement",
+  "app.analysis.candle_evidence",
+  "app.analysis.candle_geometry",
+  "app.analysis.candle_rejection",
+  "app.analysis.candle_sequences",
+  "app.analysis.confluence_zone",
+  "app.analysis.dealing_range",
+  "app.analysis.detectors",
+  "app.analysis.engine",
+  "app.analysis.entry_location",
+  "app.analysis.fibonacci",
+  "app.analysis.indicators",
+  "app.analysis.key_level_role",
+  "app.analysis.levels",
+  "app.analysis.liquidity",
+  "app.analysis.market_map",
+  "app.analysis.math_utils",
+  "app.analysis.momentum",
+  "app.analysis.regime",
+  "app.analysis.scalp_ranges",
+  "app.analysis.scanner",
+  "app.analysis.session_liquidity",
+  "app.analysis.structural_reaction_support",
+  "app.analysis.structure",
+  "app.analysis.swings",
+  "app.analysis.technique_detectors",
+  "app.analysis.technique_geometry",
+  "app.analysis.trendline_v2",
+  "app.analysis.trendlines",
+  "app.analysis.zones",
+  "app.scalping.math_features",
+  "app.scalping.publish",
 }
 
 
@@ -46,10 +94,21 @@ def test_unreachable_legacy_modules_are_exactly_the_reviewed_research_set():
   report = cls.classify_inventory(ROOT)
   # <= (not ==): a reviewed research/compat module may be deleted; a NEW
   # unreachable module must still be reviewed and added above deliberately.
-  assert set(report["unreachable_modules"]) <= REVIEWED_UNREACHABLE
-  for name in set(report["unreachable_modules"]):
+  unreachable = set(report["unreachable_modules"])
+  assert unreachable <= REVIEWED_UNREACHABLE | RETAINED_UNREACHABLE | RETIRED_GO_TECHNICAL
+  for name in unreachable - RETIRED_GO_TECHNICAL - RETAINED_UNREACHABLE:
     roles = report["modules"][name]["roles"]
     assert roles[0] in {cls.RESEARCH, cls.COMPAT}, f"{name} unreachable but not research/compat"
+  for name in unreachable & RETAINED_UNREACHABLE:
+    roles = report["modules"][name]["roles"]
+    assert roles[0] in {cls.MARKER, cls.PRESENTATION, cls.POLICY_INPUT, cls.SHARED_TYPES}
+    assert report["modules"][name]["retirement"] in {
+      "retain", "retain_until_policy_consumes_go_facts",
+    }
+  for name in unreachable & RETIRED_GO_TECHNICAL:
+    assert report["modules"][name]["retirement"] in {
+      "replace_with_go", "replace_with_go_facts", "retain_until_no_python_ohlc_consumer",
+    }, f"{name} is not classified as Go-retired technical code"
 
 
 def test_outcome_accounting_and_policy_modules_are_not_marked_for_replacement():
