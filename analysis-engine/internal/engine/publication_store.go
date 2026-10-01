@@ -85,6 +85,25 @@ func openPublicationStore(path string) (*publicationStore, error) {
 	return store, nil
 }
 
+// discardArbitrationJobs removes queued arbitration projections from a
+// persisted outbox.  They are intentionally not durable lifecycle facts:
+// SymbolWorker republishes the current decision set on the first live bar
+// after startup.  Keeping an old projection queue can otherwise delay a
+// creation event long enough for Algo Bot to reject it as stale.
+func (s *publicationStore) discardArbitrationJobs() int {
+	kept := s.ledger.Queue[:0]
+	dropped := 0
+	for _, job := range s.ledger.Queue {
+		if job.Arbitration != nil {
+			dropped++
+			continue
+		}
+		kept = append(kept, job)
+	}
+	s.ledger.Queue = kept
+	return dropped
+}
+
 func (s *publicationStore) save() error {
 	if s.path == "" {
 		return nil
