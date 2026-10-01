@@ -382,7 +382,14 @@ func (w *SymbolWorker) arbitrate(now int64, reference float64, publish bool) {
 	fresh := make(map[string]arbitration.Decision, len(decisions))
 	for _, d := range decisions {
 		fresh[d.CandidateID] = d
-		if previous, ok := w.lastArbitration[d.CandidateID]; publish && (!ok || !decisionEqual(previous, d)) {
+		// A not-in-play decision is an internal projection, not an
+		// execution-relevant event. Publishing one for every resting zone
+		// floods the synchronous Kafka outbox after bootstrap (production
+		// 2026-10-01: hundreds of these delayed the current candidate's
+		// winner/conflict decision by minutes). Keep it in the diff baseline
+		// so the transition back into play is still published, but only send
+		// decisions that can affect the current execution cycle.
+		if previous, ok := w.lastArbitration[d.CandidateID]; publish && d.ReasonCode != arbitration.ReasonNotInPlay && (!ok || !decisionEqual(previous, d)) {
 			w.publisher.EnqueueArbitrationDecision(w.state.Symbol, d.CandidateID, d, now)
 		}
 	}
