@@ -382,11 +382,11 @@ def ladder_from_opportunity(
   *,
   risk_unit_pips: float | None = None,
 ) -> tuple[tuple[float, ...], tuple[float, ...]]:
-  """Mirror publish._scalp_target_ladder close-ratio semantics."""
+  """Mirror the execution-owned scalp target-ladder semantics."""
   try:
-    from app.scalping.publish import _scalp_target_ladder
+    from app.autotrade.scalp_ladder import scalp_target_ladder
 
-    _final, targets = _scalp_target_ladder(opportunity)
+    _final, targets = scalp_target_ladder(opportunity)
   except Exception:
     targets = ()
   stop = max(

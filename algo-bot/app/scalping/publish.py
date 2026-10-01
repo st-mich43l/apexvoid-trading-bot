@@ -8,17 +8,15 @@ import math
 import time
 from typing import Any
 
-from app.analysis import scanner
 from app.autotrade.execution_eligibility import (
   EXECUTION_ELIGIBILITY_VERSION,
   STATIC_ELIGIBLE,
   ExecutionEligibility,
 )
-from app.analysis.structural_reaction_support import (
-  bias_relationship,
-  structural_thesis_id,
-)
+from app.autotrade.strategy_identity import bias_relationship, structural_thesis_id
 from app.autotrade import worker
+from app.autotrade.scalp_ladder import scalp_target_ladder
+from app.autotrade.setup_lifecycle import advance_setup_to_confirmed
 from app.autotrade.multi_match import (
   dedupe_matches,
   deserialize_matches,
@@ -37,6 +35,15 @@ from app.scalping.models import (
 log = logging.getLogger(__name__)
 
 
+class _LifecycleCompatibility:
+  """Old test/plug-in seam, backed by execution lifecycle only."""
+
+  _advance_setup_to_confirmed = staticmethod(advance_setup_to_confirmed)
+
+
+scanner = _LifecycleCompatibility()
+
+
 def _strategy_name(archetype: str) -> str:
   return STRATEGY_DISPLAY.get(archetype, f"{archetype.replace('_', ' ').title()} Scalp")
 
@@ -49,32 +56,8 @@ def _scalp_target_ladder(
   opportunity: ScalpOpportunity,
   cfg: Any | None = None,
 ) -> tuple[int, tuple[int, ...]]:
-  """Final TP pips + published ladder.
-
-  XAU discovery picks exactly 1:2 or 1:1 room:
-
-  - **1:2** → ladder ``(1R, 2R)`` with equal close ratios (50% / 50%);
-    after TP1 books, management moves SL to BE for the runner.
-  - **1:1** → single target at 1R; equal-ratio builder assigns
-    ``close_ratio=1.0`` so the engine books **full volume** at that print.
-
-  Technique ``fixed_rr`` on XAU must not collapse this ladder — scalp keeps
-  its own 1R/2R book; technique R expansion applies only to non-scalp
-  strategies in execution policy.
-  """
-  final_pips = max(1, int(round(float(opportunity.expected_target_pips))))
-  stop = max(1, int(round(float(opportunity.expected_stop_pips))))
-  try:
-    rr = float(opportunity.expected_reward_risk)
-  except (TypeError, ValueError):
-    rr = (final_pips / stop) if stop else 1.0
-  if rr <= 1.05 or final_pips <= stop:
-    return final_pips, (final_pips,)
-  first = stop
-  last = max(first, min(final_pips, stop * 2))
-  if last <= first:
-    return last, (last,)
-  return last, (first, last)
+  """Compatibility name for the execution-owned ladder implementation."""
+  return scalp_target_ladder(opportunity, cfg)
 
 
 def _scalp_target_r_multiples(
@@ -279,9 +262,8 @@ async def publish_scalp_live(
       match.match_id,
     )
     return None
-
-  _setup_id, thesis_id = lifecycle
-  stamped = replace(match, thesis_id=str(thesis_id))
+  _setup_id, thesis_id_value = lifecycle
+  stamped = replace(match, thesis_id=str(thesis_id_value))
   stamped = await _persist_scalp_match(client, stamped)
   result = await worker.try_publish_executable_signal(
     client,

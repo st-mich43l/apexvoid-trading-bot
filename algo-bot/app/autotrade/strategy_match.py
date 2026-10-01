@@ -58,7 +58,7 @@ class StrategyMatch:
   full_take_profit_pips: int | None = None
   # M1 scalp only: the authoritative R-multiple for each targets_pips
   # entry, computed from the SAME stop distance the ladder itself was
-  # built from (app.scalping.publish._scalp_target_ladder) - never
+  # built from the execution-owned scalp_ladder helper - never
   # re-derived from displayed card prices, which use an unrelated zone
   # edge as their pip-offset reference. Empty for every non-scalp match.
   scalp_target_r_multiples: tuple[float, ...] = ()
@@ -103,7 +103,7 @@ class StrategyMatch:
   structural_timeframe: str | None = None
   htf_bias: str = ""
   regime_kind: str = ""
-  # Resolved with_bias/counter_bias/neutral (app.analysis.structural_reaction_
+  # Resolved with_bias/counter_bias/neutral by the execution identity helper
   # support.bias_relationship). Distinct from strategy_mode, which also
   # carries non-bias identities like "scalp_m1"/"range_scalp" that real
   # trade-plan/taxonomy logic keys on — this field exists purely so card

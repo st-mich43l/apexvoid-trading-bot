@@ -1391,7 +1391,7 @@ async def _publish_trade_plan_v8(
     require_kz = False if tech is None else bool(
       getattr(tech, "scalp_require_killzone", False),
     )
-    from app.scalping.context import classify_session
+    from app.autotrade.session_context import classify_session
 
     scalp_session = classify_session(spot_ts, inst)
     kz = evaluate_killzone_gate(
