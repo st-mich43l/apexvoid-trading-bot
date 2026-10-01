@@ -230,6 +230,37 @@
             "reclaim_depth_atr": { "type": "number" },
             "reason_code": { "type": "string", "minLength": 1 }
           }
+        },
+        "confluence": {
+          "type": "object",
+          "description": "Additive Go-owned confluence factor and V1/V2 score. Descriptive technical context only; consumers must not treat it as account risk or rerun legacy detectors.",
+          "additionalProperties": false,
+          "required": ["version", "selected_stars", "v1_stars", "v2_stars", "v2_raw", "raw_factor_score", "zone_quality_score", "mad_bonus", "factors"],
+          "properties": {
+            "version": { "type": "string", "enum": ["v1", "v2"] },
+            "selected_stars": { "type": "integer", "minimum": 1, "maximum": 3 },
+            "v1_stars": { "type": "integer", "minimum": 1, "maximum": 3 },
+            "v2_stars": { "type": "integer", "minimum": 1, "maximum": 3 },
+            "v2_raw": { "type": "number" },
+            "raw_factor_score": { "type": "number" },
+            "zone_quality_score": { "type": "number", "minimum": 0 },
+            "mad_bonus": { "type": "number", "minimum": 0 },
+            "factors": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["htf_aligned", "touches", "wick_rejection", "displacement_grade", "session_context", "structural_agreement", "fib_touch", "choch"],
+              "properties": {
+                "htf_aligned": { "type": "boolean" },
+                "touches": { "type": "integer", "minimum": 0 },
+                "wick_rejection": { "type": "boolean" },
+                "displacement_grade": { "type": "boolean" },
+                "session_context": { "type": "boolean" },
+                "structural_agreement": { "type": "boolean" },
+                "fib_touch": { "type": "boolean" },
+                "choch": { "type": "boolean" }
+              }
+            }
+          }
         }
       }
     },

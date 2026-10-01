@@ -31,7 +31,15 @@
       "user_agent": "apexvoid-trading-bot/1.0 (+contact)"
     },
     "coil_contract": 0.8,
+    "confluence": {
+      "scoring_version": "v1",
+      "v2_mad_score_weight": 2.0,
+      "v2_star_three_ratio": 0.585,
+      "v2_star_two_ratio": 0.39,
+      "v2_zone_quality_weight": 4.0
+    },
     "fibonacci": {
+      "confluence_weight": 2.5,
       "deep_discount": 0.382,
       "deep_premium": 0.618,
       "epsilon_atr": 0.15,

@@ -73,6 +73,16 @@ analysis:
       min_penetration_atr: 0.05
       min_reclaim_atr: 0.05
 
+  # Versioned confluence scoring. The Go Analysis Engine owns the live
+  # calculation; these same paths remain in the generated Python projection
+  # for decoding and historical compatibility only.
+  confluence:
+    scoring_version: v1
+    v2_star_three_ratio: 0.585
+    v2_star_two_ratio: 0.390
+    v2_zone_quality_weight: 4.0
+    v2_mad_score_weight: 2.0
+
   # Registry contract for every strategy approved by the semantic catalog.
   # An enabled entry without a compiled factory
   # fails analysis-engine startup; it cannot silently become a no-op.
@@ -530,6 +540,8 @@ analysis:
   fibonacci:
     # nearest_fib()'s epsilon_atr.
     epsilon_atr: 0.15
+    # Technical confluence weight for a confirmed fib touch.
+    confluence_weight: 2.5
     # fib_zone_label()'s deep_discount/deep_premium position thresholds —
     # not a coincidence that these equal the 38.2%/61.8% retracement
     # ratios themselves.
