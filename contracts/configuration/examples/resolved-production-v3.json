@@ -4,6 +4,11 @@
       "conflict_margin_quality": 0.15,
       "in_play_atr": 1.0
     },
+    "breakout": {
+      "accept_bars": 2,
+      "buffer_atr": 0.1,
+      "max_age_bars": 6
+    },
     "calendar": {
       "currencies": [
         "USD",
@@ -25,6 +30,7 @@
       ],
       "user_agent": "apexvoid-trading-bot/1.0 (+contact)"
     },
+    "coil_contract": 0.8,
     "fibonacci": {
       "deep_discount": 0.382,
       "deep_premium": 0.618,
@@ -67,6 +73,22 @@
       "sweep_reclaim_bars": 6,
       "version": "v1"
     },
+    "mad": {
+      "accum": {
+        "maximum_rq": 6.0,
+        "minimum_rq": 0.8
+      },
+      "expand": {
+        "accept_closes": 2,
+        "break_atr": 0.35,
+        "displacement_atr": 1.25
+      },
+      "manip": {
+        "min_penetration_atr": 0.05,
+        "min_reclaim_atr": 0.05
+      },
+      "pip_size": 0.0001
+    },
     "measurements": {
       "max_merged_zone_atr": 3.0
     },
@@ -74,6 +96,17 @@
       "velocity_bear_threshold": -0.15,
       "velocity_bull_threshold": 0.15,
       "velocity_lookback": 8
+    },
+    "regime": {
+      "chop": {
+        "filter_enabled": true,
+        "lookback": 24,
+        "range_atr": 4.0
+      },
+      "direction_enabled": false,
+      "direction_lookback": 120,
+      "min_directional_swings": 3,
+      "min_displacement_atr": 4.0
     },
     "scanner": {
       "execution_timeframe": "M5",

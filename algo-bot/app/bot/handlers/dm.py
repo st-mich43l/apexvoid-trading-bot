@@ -21,8 +21,6 @@ from app.signals.manual_execution import (
   request_close_auto_position,
 )
 from app.core.config import runtime_config
-from app.analysis import scanner
-from app.analysis.market_map_delivery import send_current_market_map
 from app.persistence import redis_state
 from app.persistence.store import (
   get_all_signals,
@@ -310,6 +308,10 @@ async def handle_scan_report(msg: Message) -> None:
       pass
   tf = runtime_config.market_data.scanner.execution_timeframe.upper()
   client = redis_state.get_client()
+  # Owner-only compatibility command.  The automatic path consumes Go
+  # opportunities and never imports the Python detector graph.
+  from app.analysis import scanner
+
   rows = await scanner.scan_report(client, symbol, tf, hours=hours)
   await msg.answer(scanner.format_scan_report(rows, symbol, tf, hours))
 
@@ -416,6 +418,8 @@ async def handle_trade_map(msg: Message) -> None:
   if symbol is None or remainder:
     await msg.answer("Usage: <code>/trade_map [SYMBOL]</code>")
     return
+  from app.analysis.market_map_delivery import send_current_market_map
+
   if not await send_current_market_map(symbol):
     await msg.answer("⚠️ Market Map unavailable: waiting for complete feed windows.")
     return

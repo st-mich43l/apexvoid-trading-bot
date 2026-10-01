@@ -14,6 +14,15 @@ maps remain Python-owned. The Python detector modules listed below are not a
 second live automatic source; they remain only where an execution or
 presentation consumer still imports them.
 
+**Automatic cutover status (2026-10-01):** all 19 configured strategy
+factories and their technical inputs are Go-owned in production. The Python
+worker no longer rebuilds HTF zones/levels, runs the M1 detector, or imports
+legacy detector/confluence identity code; it consumes Go opportunity and
+barrier facts and performs execution-time checks only. The historical
+"Shadow only" labels below describe the original S-phase snapshots and are
+superseded for the automatic path. Remaining Python modules are limited to
+manual, display, or offline compatibility paths.
+
 | Capability | Legacy Python path | V2 Go owner | Parity or redesign? | Live status | Python removal status |
 |---|---|---|---|---|---|
 | OHLC candle model / validation | `app/analysis/*` implicit dict shape, no central validator | `internal/market` (`price.go`, `window.go`), `internal/marketdata/validation.go` | **Exact parity** (numeric geometry) + **new**: explicit `ValidateCandle`/`InvalidReason` enum has no Python precedent — legacy never rejected malformed bars structurally | Shadow only (`cmd/replay`) | Not removable — still the only path live trading reads |
@@ -29,7 +38,9 @@ presentation consumer still imports them.
 | Sweep / reclaim | `app/analysis/liquidity.py` (sweep detection present; reclaim tracked inconsistently, sometimes unsets the sweep flag) | `internal/liquidity/pool.go` (`DetectSweep`, `DetectReclaim`) | **Explicit redesign** — reclaim is explicitly informational-only and never un-sets `SweptAt` (a real, documented behavior change from Python's inconsistent handling) | Shadow only | Not removable |
 | Market context / bias | `app/analysis/engine.py` (bias computed by a parallel HTF-swing pass, independent of the structure module's own read — the two can and do disagree in production) | `internal/context/market.go` (`Build`, `DeriveBias`) | **Explicit redesign** — bias is now strictly *derived* from the same canonical `StructureState` (Major→Intermediate→Internal→Micro precedence), never computed independently (source task §36 — this was an explicit, named bug class in the legacy system) | Shadow only | Not removable |
 | Multi-timeframe disagreement | `app/analysis/engine.py` (flattens to a single bias value; per-timeframe disagreement is not preserved in the returned object) | `internal/context/market.go` (`MarketContext.Timeframes map`) | **Explicit redesign** — every timeframe's own structure/liquidity read is preserved in the context, not collapsed | Shadow only | Not removable |
-| Regime classification | `app/analysis/regime.py` | *(not built this task — placeholder `RegimeContext{Kind string}` only)* | N/A — deferred | Not started | N/A |
+| Regime classification | `app/analysis/regime.py` | `internal/regime` (`Classify`, `AcceptedBoxBreak`, `DisplacementGrade`) | **Parity port** — consumes canonical Go ATR, promoted swings and fib dealing range; config is resolved centrally and the result is carried by every timeframe context | Shadow only | Not removable |
+| MAD / Asia phase | `app/analysis/mad_phase.py` | `internal/mad` (`UpdateAsiaRangeSeal`, `Classify`, `Features`) | **Parity port** — causal Asia seal, stale-day fail-closed behavior, single/double sweep-reclaim classification, accepted expansion and accumulation quality; carried in canonical timeframe context | Shadow only | Not removable |
+| Candle Confirmation V2 | `app/analysis/candle_geometry.py`, `candle_rejection.py`, `candle_displacement.py`, `candle_sequences.py`, `candle_evidence.py` | `internal/candle/evidence.go`, `opportunity.TechnicalContext.CandleEvidence`, Kafka `technical_context.candle_evidence` | **Additive parity port** — shared OHLC geometry, rejection/displacement/sequence families, bounded score and presentation labels are computed from the same closed observation bars; descriptive only and never an eligibility/risk gate | Shadow/descriptive context | Not removable until the remaining Python detector import audit is closed |
 | Technical zones (supply/demand, OB, FVG/iFVG, breaker, flip) | `app/analysis/zones.py`, `app/analysis/dealing_range.py` | `internal/zone` (`Zone`, `Book`, lifecycle/relevance) | **Explicit redesign** — per-origin geometry, hold-based invalidation, separate relevance | Shadow only | Not removable until strategy cutover |
 | Trendline V2 (causal construction + live interaction) | `app/analysis/trendline_v2.py` (V1 in `trendlines.py` confirmed dead/shadow-metrics-only, not ported) | `internal/trendline` (`Build`, `Update`, `EvaluateInteraction`) | **Exact parity** — same immutable-anchor causal construction, validation-touch reaction-window deferral, health/lifecycle state machine, dedup, and live-interaction classifier; one faithfully-ported ATR median choice (unlike sibling S4 domains' simplified last-value ATR) documented in `internal/trendline/doc.go` | Shadow only | Not removable |
 | Key level clustering + role | `app/analysis/levels.py`, `app/analysis/key_level_role.py` | `internal/keylevel` (`Cluster`, `Update`, `Role`) | **Exact parity** on clustering/round-levels/wick-touch re-enrichment/dedupe and role classification, with one documented ATR simplification (one canonical scalar ATR throughout, not Python's median-for-clustering vs. per-swing-for-round-levels split) | Shadow only | Not removable |
@@ -58,10 +69,12 @@ presentation consumer still imports them.
   recomputes H1 structure) is still fully proven, because each
   timeframe's computation is self-contained; only the *within-timeframe*
   narrower-lookback optimization is deferred.
-- **Regime context** (source task §38) is left as a bare placeholder
-  (`RegimeContext{Kind string}`) with no real classification logic —
-  confirmed this is *not* part of the 50-item Definition of Done, so this
-  is a legitimate, explicit deferral, not a gap in required scope.
+- **Regime context** is now implemented in `internal/regime` and computed
+  from the canonical per-timeframe inputs. The port includes the legacy
+  chop/range classification, optional directional override, coiling state,
+  accepted box-break detection and displacement-grade acceptance. It remains
+  shadow-only until the strategy-level parity and production comparison gates
+  below are complete.
 - **Technical zones** (Supply/Demand, Order Blocks, FVG/iFVG, Breaker,
   Flip) are now implemented in `internal/zone` as Phase S3. Strategy-level
   entry/quality decisions and higher-layer merging/reconciliation remain

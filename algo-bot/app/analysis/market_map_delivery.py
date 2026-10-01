@@ -12,15 +12,8 @@ from zoneinfo import ZoneInfo
 from app.core.config import runtime_config
 from app.persistence import redis_state
 from app.persistence.store import get_meta, set_meta
-from app.analysis.market_map import (
-  MarketMap,
-  build_map,
-  market_map_payload,
-  render_market_map,
-)
 from app.core.symbols import is_known_symbol
 from app.bot.client import delete_scanner_message, send_scanner_with_retry
-from app.autotrade.map_strategy import market_map_display_key
 
 log = logging.getLogger(__name__)
 
@@ -67,7 +60,12 @@ def market_map_telegram_key(symbol: str) -> str:
   return f"auto_trade:market_map_telegram:{symbol.upper()}"
 
 
-async def get_current_market_map(symbol: str) -> MarketMap | None:
+async def get_current_market_map(symbol: str) -> object | None:
+  # This is an owner-directed compatibility/presentation command. Keep the
+  # retired Python map lazy so importing the automatic bot never loads the
+  # detector graph. Automatic opportunities and barriers come from Go.
+  from app.analysis.market_map import build_map
+
   symbol = symbol.upper()
   cached = _cache.get(symbol)
   if cached is None:
@@ -101,6 +99,8 @@ async def render_current_market_map(
   symbol: str,
   now: datetime | None = None,
 ) -> str | None:
+  from app.analysis.market_map import render_market_map
+
   market_map = await get_current_market_map(symbol)
   if market_map is None:
     return None
@@ -115,6 +115,8 @@ async def send_current_market_map(
 ) -> bool:
   if not runtime_config.delivery.telegram.telegram_owner_id:
     return False
+  from app.analysis.market_map import render_market_map
+
   market_map = await get_current_market_map(symbol)
   if market_map is None:
     return False
@@ -142,6 +144,8 @@ def _xau_weekend_closed(now: datetime) -> bool:
 
 
 async def _market_map_scan_tick(now: datetime | None = None) -> bool:
+  from app.analysis.market_map import render_market_map
+
   if (
     not runtime_config.delivery.market_map.session_send
     or not runtime_config.delivery.telegram.telegram_owner_id
@@ -237,14 +241,16 @@ async def _load_market_map_telegram(client, key: str) -> dict | None:
 
 async def _remember_displayed_map(
   symbol: str,
-  market_map: MarketMap,
+  market_map: object,
 ) -> None:
+  from app.analysis.market_map import market_map_payload
+
   ttl = max(
     3600,
     max(1, int(runtime_config.analysis.market_map.scan_interval_minutes)) * 120,
   )
   await redis_state.get_client().set(
-    market_map_display_key(symbol),
+    f"auto_trade:market_map_display:{symbol.upper()}",
     market_map_payload(market_map),
     ex=ttl,
   )

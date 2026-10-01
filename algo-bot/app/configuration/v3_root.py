@@ -384,7 +384,17 @@ def unconsolidate(resolved: dict[str, Any]) -> dict[str, Any]:
     kafka_out: dict[str, Any] = {}
     for key in ("enabled", "brokers", "topics"):
       if key in kafka_cfg:
-        kafka_out[key] = copy.deepcopy(kafka_cfg[key])
+        if key == "topics" and isinstance(kafka_cfg[key], dict):
+          # Python consumes the two lifecycle topics. Arbitration and
+          # execution topics are Go/transport contracts and have no Python
+          # runtime projection.
+          kafka_out[key] = {
+            topic: copy.deepcopy(value)
+            for topic, value in kafka_cfg[key].items()
+            if topic in ("analysis_opportunity", "analysis_opportunity_invalidated")
+          }
+        else:
+          kafka_out[key] = copy.deepcopy(kafka_cfg[key])
     client_ids = kafka_cfg.get("client_id")
     if isinstance(client_ids, dict) and "algo_bot" in client_ids:
       kafka_out["algo_bot_client_id"] = client_ids["algo_bot"]
@@ -413,7 +423,7 @@ def unconsolidate(resolved: dict[str, Any]) -> dict[str, Any]:
     for key in ("calendar", "scanner", "sessions", "spot", "watcher"):
       if key in analysis:
         market_data[key] = analysis.pop(key)
-    # analysis.indicators / analysis.zones.merge_overlap / analysis.
+    # analysis.indicators / analysis.strategies / analysis.zones.merge_overlap / analysis.
     # measurements.* are Stage C2 additions with no old catalog leaf at
     # all (either brand new — indicators.atr.algorithm didn't exist as a
     # concept — or newly surfaced from a Python-only default, §8/§9);
@@ -421,6 +431,10 @@ def unconsolidate(resolved: dict[str, Any]) -> dict[str, Any]:
     # dropped here rather than raising: they don't change old-shape
     # behavior because the old shape never read them in the first place.
     analysis.pop("indicators", None)
+    # The strategy registry is the Go Analysis Engine's factory/config
+    # contract.  It intentionally has no Python runtime projection: Python
+    # consumes Go opportunities and applies execution policy to them.
+    analysis.pop("strategies", None)
     if "zones" in analysis and isinstance(analysis["zones"], dict):
       analysis["zones"].pop("merge_overlap", None)
       if not analysis["zones"]:

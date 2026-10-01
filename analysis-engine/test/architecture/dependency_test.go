@@ -128,6 +128,8 @@ var rank = map[string]int{
 	"marketdata": 1,
 	"config":     1,
 	"session":    1,
+	"mad":        1,
+	"candle":     1,
 
 	"structure": 2,
 
@@ -139,6 +141,7 @@ var rank = map[string]int{
 	"barrier":    3,
 	"momentum":   3,
 	"reaction":   3,
+	"regime":     3,
 	"legacyzone": 4,
 
 	"context": 4,

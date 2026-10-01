@@ -102,7 +102,7 @@
       "classification": "UNKNOWN_BLOCKER",
       "env_name": "GIT_SHA",
       "file": "algo-bot/app/scripts/capture_bars.py",
-      "line": 63
+      "line": 97
     }
   ],
   "allowed_sites": 10,

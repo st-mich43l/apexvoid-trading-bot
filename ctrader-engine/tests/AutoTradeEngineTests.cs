@@ -7556,7 +7556,11 @@ public sealed partial class AutoTradeEngineTests
 
   private static async Task WaitUntilAsync(Func<bool> predicate)
   {
-    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+    // CI containers occasionally need more than two seconds to schedule the
+    // session loop after a full C# test run. The predicate is still polled at
+    // 10ms and production timing is unchanged; this only prevents a healthy
+    // background reconciliation assertion from becoming a scheduler race.
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
     while (!predicate())
     {
       await Task.Delay(10, cts.Token);

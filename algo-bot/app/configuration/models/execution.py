@@ -14,6 +14,29 @@ from app.configuration.metadata import RiskClassification
 from app.configuration.metadata import config_field
 from app.configuration.models.base import FrozenConfigModel
 
+_STRICT_PD_ARCHETYPES = frozenset({
+    'reversal',
+    'range_reversion',
+    'trend_pullback',
+    'breakout_retest',
+    'momentum',
+    'unknown',
+})
+
+
+def _parse_strict_pd_archetypes(raw: str) -> frozenset[str]:
+    """Validate the config token list without importing Python analysis."""
+    text = str(raw or '').strip()
+    if not text:
+        return frozenset()
+    tokens = frozenset(part.strip().lower() for part in text.split(',') if part.strip())
+    unknown = tokens - _STRICT_PD_ARCHETYPES
+    if unknown:
+        raise ValueError(
+            'unknown strict PD archetypes: ' + ', '.join(sorted(unknown))
+        )
+    return tokens
+
 class ExecutionScalingAddConfig(FrozenConfigModel):
     level_buffer_atr: Decimal = config_field(Decimal('1'), canonical_env='AUTO_TRADE_ADD_LEVEL_BUFFER_ATR', owner=ConfigOwner.CTRADER, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.ATR, risk=RiskClassification.EXECUTION_SAFETY, description='cTrader configuration option AUTO_TRADE_ADD_LEVEL_BUFFER_ATR controlling  (atr).', default_contexts=(ContextDefault(DefaultContext.CTRADER_FROM_ENVIRONMENT, Decimal('1')),), validation_summary='EnvironmentResolver.Decimal + AutoTradeOptions.Validate')
     min_stop_pips: int = config_field(30, canonical_env='AUTO_TRADE_ADD_MIN_STOP_PIPS', owner=ConfigOwner.SHARED, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.PIPS, risk=RiskClassification.EXECUTION_SAFETY, shared_with_ctrader=True, mismatch_policy=MismatchPolicy.FATAL, description='Controls  (pips).', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 30), ContextDefault(DefaultContext.CTRADER_FROM_ENVIRONMENT, 30)), validation_summary='Pydantic required/type coercion only; EnvironmentResolver.Int + AutoTradeOptions.Validate')
@@ -500,8 +523,7 @@ class ExecutionTechniqueConfig(FrozenConfigModel):
 
     @model_validator(mode='after')
     def validate_strict_pd_archetypes(self):
-      from app.analysis.entry_location import parse_strict_pd_archetypes
-      parse_strict_pd_archetypes(self.strict_premium_discount_archetypes)
+      _parse_strict_pd_archetypes(self.strict_premium_discount_archetypes)
       return self
 
 

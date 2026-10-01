@@ -435,6 +435,17 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "breakout": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "buffer_atr": { "type": "number" },
+            "accept_bars": { "type": "integer", "minimum": 1 },
+            "max_age_bars": { "type": "integer", "minimum": 1 }
+          },
+          "required": ["buffer_atr", "accept_bars", "max_age_bars"]
+        },
+        "coil_contract": { "type": "number" },
         "technical_authority": {
           "type": "object",
           "additionalProperties": false,
@@ -489,6 +500,63 @@
           "required": [
             "atr"
           ]
+        },
+        "mad": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "pip_size": { "type": "number", "exclusiveMinimum": 0 },
+            "accum": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "minimum_rq": { "type": "number" },
+                "maximum_rq": { "type": "number" }
+              },
+              "required": ["minimum_rq", "maximum_rq"]
+            },
+            "expand": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "break_atr": { "type": "number" },
+                "displacement_atr": { "type": "number" },
+                "accept_closes": { "type": "integer", "minimum": 1 }
+              },
+              "required": ["break_atr", "displacement_atr", "accept_closes"]
+            },
+            "manip": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "min_penetration_atr": { "type": "number" },
+                "min_reclaim_atr": { "type": "number" }
+              },
+              "required": ["min_penetration_atr", "min_reclaim_atr"]
+            }
+          },
+          "required": ["pip_size", "accum", "expand", "manip"]
+        },
+        "regime": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "chop": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "filter_enabled": { "type": "boolean" },
+                "lookback": { "type": "integer", "minimum": 1 },
+                "range_atr": { "type": "number" }
+              },
+              "required": ["filter_enabled", "lookback", "range_atr"]
+            },
+            "direction_enabled": { "type": "boolean" },
+            "direction_lookback": { "type": "integer", "minimum": 1 },
+            "min_directional_swings": { "type": "integer", "minimum": 1 },
+            "min_displacement_atr": { "type": "number" }
+          },
+          "required": ["chop", "direction_enabled", "direction_lookback", "min_directional_swings", "min_displacement_atr"]
         },
         "strategies": {
           "type": "object",
@@ -1193,7 +1261,9 @@
         }
       },
       "required": [
+        "breakout",
         "calendar",
+        "coil_contract",
         "momentum",
         "fibonacci",
         "flip_zone",
@@ -1201,6 +1271,7 @@
         "indicators",
         "key_levels",
         "liquidity",
+        "mad",
         "measurements",
         "scanner",
         "sessions",
@@ -1208,6 +1279,7 @@
         "strategies",
         "technical_authority",
         "structure",
+        "regime",
         "techniques",
         "trendlines",
         "triggers",

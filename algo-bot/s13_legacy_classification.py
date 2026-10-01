@@ -70,7 +70,7 @@ ROLE_RETIREMENT = {
 MODULE_ROLES: dict[str, tuple[tuple[str, ...], str]] = {
   "app.analysis": ((MARKER,), "package marker"),
   "app.analysis.actionability": ((TECHNICAL,), "range bounds / actionability gates over Python context"),
-  "app.analysis.bar_event_dispatcher": ((TECHNICAL_ORCHESTRATION,), "startup task; drives the execution worker per closed bar (ZoneWatch M1 activation, scanner and scalping no longer dispatched)"),
+  "app.analysis.bar_event_dispatcher": ((POLICY_INPUT,), "startup execution dispatcher; consumes Go-owned matches per closed bar and does not construct technical opportunities"),
   "app.analysis.candle_displacement": ((TECHNICAL,), "candle geometry detector"),
   "app.analysis.candle_evidence": ((TECHNICAL,), "candle evidence detector"),
   "app.analysis.candle_geometry": ((TECHNICAL,), "candle geometry primitives"),
@@ -87,7 +87,7 @@ MODULE_ROLES: dict[str, tuple[tuple[str, ...], str]] = {
   "app.analysis.key_level_role": ((TECHNICAL,), "support/resistance role"),
   "app.analysis.levels": ((TECHNICAL,), "key level clustering"),
   "app.analysis.liquidity": ((TECHNICAL,), "liquidity pools/sweeps"),
-  "app.analysis.m1_trigger": ((TECHNICAL, POLICY_INPUT), "M1 confirmation trigger consumed by entry activation"),
+  "app.analysis.m1_trigger": ((COMPAT,), "retained for historical tests and compatibility data; no automatic Go opportunity path imports or invokes it"),
   "app.analysis.mad_phase": ((RESEARCH,), "MAD phase lanes (shared with replay research)"),
   "app.analysis.market_map": ((TECHNICAL,), "Market Map builder (retired as a decision input)"),
   "app.analysis.market_map_delivery": ((PRESENTATION,), "Telegram market-map delivery"),
@@ -128,6 +128,11 @@ IMPORTER_ROLES: tuple[tuple[str, str], ...] = (
   ("app/autotrade/setup_card.py", PRESENTATION),
   ("app/autotrade/delivery.py", PRESENTATION),
   ("app/autotrade/setups_report.py", PRESENTATION),
+  # These modules are retained only for owner-directed compatibility/report
+  # commands and the retired Python scanner's offline path. They are not
+  # automatic opportunity production or execution policy.
+  ("app/autotrade/map_strategy.py", COMPAT),
+  ("app/autotrade/structural_barriers.py", COMPAT),
   ("app/autotrade/reaction_funnel.py", PRESENTATION),
   ("app/autotrade/stats_ingestion.py", "outcome_accounting"),
   ("app/autotrade/setup_expiry_sweeper.py", "outcome_accounting"),
@@ -340,7 +345,11 @@ def classify_inventory(root: Path, entrypoints=DEFAULT_ENTRYPOINTS) -> dict[str,
       })
 
   external = [edge for edge in edge_report if edge["importer_role"] not in {"legacy_technical", "go_consumer"}]
-  blockers = sorted({str(edge["importer"]) for edge in external if edge["retirement"].startswith("replace")})  # type: ignore[union-attr]
+  automatic_external = [
+    edge for edge in external
+    if edge["importer_role"] not in {PRESENTATION, COMPAT}
+  ]
+  blockers = sorted({str(edge["importer"]) for edge in automatic_external if edge["retirement"].startswith("replace")})  # type: ignore[union-attr]
   unreachable = [name for name, info in module_report.items() if not info["reachable_from_entrypoints"]]
   return {
     "scope": "static analysis of algo-bot/app; reachability is static, not runtime proof",
@@ -351,6 +360,7 @@ def classify_inventory(root: Path, entrypoints=DEFAULT_ENTRYPOINTS) -> dict[str,
     "unreachable_modules": unreachable,
     "modules": module_report,
     "external_edges": external,
+    "automatic_analysis_blockers": blockers,
     "production_importers_blocking_deletion": blockers,
     "dynamic_imports": dynamic_import_findings(root),
     "lazy_function_scope_imports": callback_findings(root),

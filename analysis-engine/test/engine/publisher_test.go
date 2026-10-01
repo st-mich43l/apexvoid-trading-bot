@@ -453,13 +453,18 @@ func TestOpportunityPublisher_RestartAfterCreationAckRecoversPendingTerminal(t *
 		t.Fatal(err)
 	}
 	restartCtx, restartCancel := context.WithCancel(context.Background())
-	defer restartCancel()
-	go restarted.Run(restartCtx)
+	restartDone := make(chan struct{})
+	go func() {
+		restarted.Run(restartCtx)
+		close(restartDone)
+	}()
 	waitFor(t, 2*time.Second, func() bool { _, terminals, _ := client.snapshot(); return len(terminals) == 1 })
 	opps, terminals, calls := client.snapshot()
 	if len(opps) != 1 || len(terminals) != 1 || len(calls) != 2 || calls[0] != "created:opp-acked-before-restart" || calls[1] != "invalidated:opp-acked-before-restart" {
 		t.Fatalf("restart must recover only the pending terminal after creation ack: calls=%v", calls)
 	}
+	restartCancel()
+	<-restartDone
 }
 
 func TestOpportunityPublisher_DefersRecoveredTerminalUntilLiveResume(t *testing.T) {

@@ -7,8 +7,9 @@ stopped publishing, not just that a function was called with the right args.
 
 Formed setups publish as soon as the side-aware executable quote is inside or
 inside the configured entry contract. Outside setups persist WAITING_RETEST.
-M1 is optional timing evidence: a fresh trigger anchors the stop wick, while
-its absence never blocks a setup whose executable quote is inside the zone.
+Go owns technical confirmation and stop geometry.  M1 bars may still be
+passed by compatibility fixtures, but the worker never reruns the retired
+Python trigger detector.
 """
 
 from __future__ import annotations
@@ -173,7 +174,7 @@ async def _publish_nonreaction_after_m1(
   match,
   **kwargs,
 ):
-  # Zone presence alone authorizes publication; M1 is optional stop evidence.
+  # Zone presence alone authorizes publication; Go confirmation owns the stop.
   return await worker._publish_trade_plan_v8(
     client,
     "XAU",
@@ -299,7 +300,7 @@ def _intent_for_match(match: StrategyMatch) -> ExecutionIntent:
 
 
 @pytest.mark.asyncio
-async def test_nonreaction_setup_publishes_with_optional_m1_stop_anchor():
+async def test_nonreaction_setup_publishes_with_go_stop_geometry():
   client = redis_state.get_client()
   match = _match()
   await _confirm_setup(client, match)
@@ -317,8 +318,9 @@ async def test_nonreaction_setup_publishes_with_optional_m1_stop_anchor():
   assert plan.analysis.direction == "BUY"
   assert plan.analysis.bias == "up"
   assert plan.source_structure.kind == "demand"
-  assert plan.stop.source == "m1_trigger_wick"
-  # The trigger bar's low (entry_low - 2.0) drives the stop, not the raw zone edge.
+  assert plan.stop.source == "m5_structure"
+  # The Go/structural stop is used; the compatibility M1 fixture cannot
+  # override it.
   assert float(plan.stop.price) < 4088.10
   assert await read_plan_state(client, plan_id) == "published"
   record = await load_setup(client, "match-v8-1")
@@ -722,7 +724,7 @@ async def test_scalp_match_with_eligibility_is_admitted(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_buy_retest_uses_ask_and_publishes_fresh_episode_trigger():
+async def test_buy_retest_uses_ask_and_publishes_go_confirmation():
   client = redis_state.get_client()
   match = _reaction_match(
     match_id="buy-retest",
@@ -772,7 +774,7 @@ async def test_buy_retest_uses_ask_and_publishes_fresh_episode_trigger():
   plan = await read_trade_plan(client, plan_id)
   assert plan is not None
   assert plan.entry.price_side == "ask"
-  assert plan.provenance.confirmation_source == "m1_retest"
+  assert plan.provenance.confirmation_source == "m5_authoritative"
   assert plan.provenance.confirmation_bar_ts == entered_ts
   state = await load_execution_confirmation(client, match.match_id)
   assert state is not None
