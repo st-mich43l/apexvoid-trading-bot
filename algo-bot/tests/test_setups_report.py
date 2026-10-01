@@ -200,7 +200,7 @@ async def test_report_includes_map_section_and_survives_map_failure(monkeypatch)
 
   await _seed_spot("XAU", 4336.0, 4336.5)
 
-  async def _map(_symbol):
+  async def _map(_symbol, _client):
     return SimpleNamespace(
       bias="down",
       entries=[_map_entry("sell", 4344.0, 4356.0)],
@@ -212,7 +212,7 @@ async def test_report_includes_map_section_and_survives_map_failure(monkeypatch)
   assert "MARKET MAP ZONES" in text and "bias down" in text
   assert "SELL 4344.00-4356.00" in text
 
-  async def _boom(_symbol):
+  async def _boom(_symbol, _client):
     raise RuntimeError("map unavailable")
 
   monkeypatch.setattr(setups_report, "load_go_market_map", _boom)
