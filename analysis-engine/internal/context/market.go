@@ -15,7 +15,9 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/fib"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/keylevel"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/liquidity"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/mad"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/regime"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/session"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/trendline"
@@ -46,6 +48,7 @@ type MarketContext struct {
 	Regime     RegimeContext
 	Volatility VolatilityContext
 	Session    SessionContext
+	MAD        mad.Snapshot
 }
 
 // TimeframeContext is one timeframe's full structural+liquidity read —
@@ -63,6 +66,8 @@ type TimeframeContext struct {
 	KeyLevel  keylevel.State
 	Session   session.State
 	Fib       fib.State
+	Regime    regime.State
+	MAD       mad.Snapshot
 }
 
 // StructureContext is MarketContext's primary-timeframe structural view —
@@ -115,21 +120,14 @@ type BiasContext struct {
 	Trend     structure.TrendState
 }
 
-// RegimeContext / VolatilityContext: minimal, honest placeholders. Regime
-// (source task §38) classification is NOT implemented this task — it
-// does not appear in this task's own Definition of Done (§74's 50
-// items) — and is recorded as not-yet-implemented in
-// docs/analysis-engine-v2-migration.md rather than silently stubbed with
-// fabricated logic. Volatility carries the one real value already
-// available at this layer (the canonical ATR this MarketContext's
-// structure/liquidity passes were built from).
+// RegimeContext is the canonical regime result. It aliases the domain
+// package's state so strategies and renderers cannot create a second regime
+// DTO with different semantics.
 //
 // SessionContext (source task §39) was the same kind of honest
 // placeholder until Phase S4's session domain — it now carries the real
 // session.State for the primary timeframe (see Build).
-type RegimeContext struct {
-	Kind string // empty until §38 is implemented
-}
+type RegimeContext = regime.State
 
 type VolatilityContext struct {
 	ATR float64
@@ -154,9 +152,23 @@ func Build(
 ) MarketContext {
 	timeframes := make(map[market.Timeframe]*TimeframeContext, len(perTimeframe))
 	for tf, input := range perTimeframe {
+		rangeHigh, rangeLow, hasRange := 0.0, 0.0, false
+		if input.Fib.Range != nil {
+			rangeHigh, rangeLow, hasRange = float64(input.Fib.Range.High), float64(input.Fib.Range.Low), true
+		}
+		regimeState := regime.Classify(input.Candles, input.ATRSeries, input.Structure.Swings, DeriveBias(input.Structure).Trend.String(), rangeHigh, rangeLow, hasRange, input.RegimeConfig)
+		asia := input.MADAsia
+		madConfig := input.MADConfig
+		if input.Geometry.PipSize > 0 {
+			madConfig.PipSize = input.Geometry.PipSize
+		}
+		if asia == nil && len(input.Candles) > 0 {
+			asia = mad.UpdateAsiaRangeSeal(input.Candles, lastCandleTime(input.Candles), input.Session.Active, madConfig)
+		}
+		madState := mad.Classify(input.Candles, input.ATR, 0, input.Session.Active, DeriveBias(input.Structure).Trend.String(), asia, lastCandleTime(input.Candles), input.MADConfig)
 		timeframes[tf] = &TimeframeContext{
 			Timeframe: tf, Candles: append([]market.Candle(nil), input.Candles...), Structure: input.Structure, Liquidity: input.Liquidity, Zones: input.Zones,
-			Trendline: input.Trendline, KeyLevel: input.KeyLevel, Session: input.Session, Fib: input.Fib,
+			Trendline: input.Trendline, KeyLevel: input.KeyLevel, Session: input.Session, Fib: input.Fib, Regime: regimeState, MAD: madState,
 		}
 	}
 
@@ -171,6 +183,8 @@ func Build(
 		ctx.Bias = DeriveBias(primaryInput.Structure)
 		ctx.Volatility = VolatilityContext{ATR: primaryInput.ATR}
 		ctx.Session = SessionContext{Timeframe: primary, State: primaryInput.Session}
+		ctx.Regime = timeframes[primary].Regime
+		ctx.MAD = timeframes[primary].MAD
 	}
 	return ctx
 }
@@ -178,15 +192,27 @@ func Build(
 // TimeframeInput is one timeframe's already-computed analytical output,
 // the input Build combines — never recomputed by context itself.
 type TimeframeInput struct {
-	Candles   []market.Candle
-	Structure structure.StructureState
-	Liquidity liquidity.LiquidityState
-	Zones     zone.ZoneState
-	Trendline trendline.TrendlineState
-	KeyLevel  keylevel.State
-	Session   session.State
-	Fib       fib.State
-	ATR       float64
+	Candles      []market.Candle
+	Structure    structure.StructureState
+	Liquidity    liquidity.LiquidityState
+	Zones        zone.ZoneState
+	Trendline    trendline.TrendlineState
+	KeyLevel     keylevel.State
+	Session      session.State
+	Fib          fib.State
+	ATR          float64
+	ATRSeries    []float64
+	RegimeConfig regime.Config
+	MADConfig    mad.Config
+	MADAsia      *mad.AsiaRangeSeal
+	Geometry     market.Geometry
+}
+
+func lastCandleTime(candles []market.Candle) int64 {
+	if len(candles) == 0 {
+		return 0
+	}
+	return candles[len(candles)-1].Time
 }
 
 // DeriveBias reads Structure's own layer trends, preferring the highest

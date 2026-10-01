@@ -93,6 +93,10 @@ analysis:
   techniques:
     # PR-D: filter technique instances via validate_technique_instance predicates.
     validation_enabled: true
+  flip_zone:
+    # Shared structure-break acceptance: the Go zone builder and the legacy
+    # projection must require the same two closed bars.
+    accept_bars: 2
   zones:
     confluence:
       merge_gap_price: 1.0

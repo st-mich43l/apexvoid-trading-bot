@@ -436,18 +436,20 @@ def strategy_mode_enabled(strategy: str, cfg: Any) -> bool:
 
 
 def _assert_registry_complete() -> None:
-  from app.analysis.detectors import LIVE_DETECTOR_REGISTRY
   from app.core.config import runtime_config
 
-  missing = [
-    registration.name
-    for registration in LIVE_DETECTOR_REGISTRY
-    if registration.name not in STRATEGY_BY_DETECTOR_KEY
+  # The Go Analysis Engine catalog is the live technical registry. Do not
+  # import Python's retired detector registry here just to validate a legacy
+  # alias table: importing it loads the entire Python detector graph into the
+  # automatic process and makes the migration boundary false by construction.
+  rows_with_no_identity = [
+    row.name for row in _STRATEGY_ROWS
+    if not row.name.strip()
   ]
-  if missing:
+  if rows_with_no_identity:
     raise RuntimeError(
-      "LIVE_DETECTOR_REGISTRY entries missing strategy_registry rows: "
-      + ", ".join(sorted(missing))
+      "strategy registry rows missing canonical identities: "
+      + ", ".join(sorted(rows_with_no_identity))
     )
 
   for row in _STRATEGY_ROWS:

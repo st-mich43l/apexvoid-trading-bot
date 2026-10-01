@@ -2368,7 +2368,7 @@ async def ensure_plan_published_root_card(
 
 def strategy_match_from_trade_plan(plan: Any) -> StrategyMatch:
   """Rebuild a minimal StrategyMatch so root-card formatting can recover."""
-  from app.analysis.structural_reaction_support import bias_relationship
+  from app.autotrade.strategy_identity import bias_relationship
   from app.autotrade.strategy_match import STRATEGY_MATCH_VERSION
 
   analysis = plan.analysis

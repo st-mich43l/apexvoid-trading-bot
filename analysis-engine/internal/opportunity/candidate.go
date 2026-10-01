@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/candle"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 )
 
@@ -157,6 +158,9 @@ type TechnicalContext struct {
 	// own bar has closed and is fresh at the opportunity's observation bar.
 	HigherTimeframes []HigherTimeframeBias
 	Confirmation     *ReactionConfirmation
+	// CandleEvidence is additive descriptive evidence from the same closed
+	// observation bar. It never gates a candidate or changes execution risk.
+	CandleEvidence *candle.Evidence
 }
 
 // Candidate is one strategy's technical opportunity, as of the source
@@ -392,6 +396,11 @@ func cloneCandidate(c Candidate) Candidate {
 		if c.Technical.Confirmation != nil {
 			confirmation := *c.Technical.Confirmation
 			technical.Confirmation = &confirmation
+		}
+		if c.Technical.CandleEvidence != nil {
+			evidence := *c.Technical.CandleEvidence
+			evidence.AllPatterns = append([]string(nil), c.Technical.CandleEvidence.AllPatterns...)
+			technical.CandleEvidence = &evidence
 		}
 		clone.Technical = &technical
 	}

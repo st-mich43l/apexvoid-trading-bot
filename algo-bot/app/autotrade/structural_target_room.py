@@ -7,11 +7,22 @@ import logging
 import math
 from typing import Any, Iterable
 
-from app.analysis.types import Zone
 from app.core.log_throttle import log_at_most
-from app.scalping.math_features import safe_div
 
 log = logging.getLogger(__name__)
+
+
+def safe_div(
+  numerator: float,
+  denominator: float,
+  *,
+  default: float | None = None,
+) -> float | None:
+  """Small execution-geometry helper kept independent of legacy scalping."""
+  if denominator is None or abs(float(denominator)) <= 1e-12:
+    return default
+  result = float(numerator) / float(denominator)
+  return result if math.isfinite(result) else default
 
 
 @dataclass(frozen=True)
@@ -39,7 +50,7 @@ class ZoneOpposingEntry:
 
 
 def zone_meets_execution_width(
-  zone: Zone,
+  zone: Any,
   *,
   atr: float,
   pip_size: float,
@@ -60,7 +71,7 @@ def zone_meets_execution_width(
   )
 
 
-def _zone_tier(zone: Zone, *, major_score: float) -> str:
+def _zone_tier(zone: Any, *, major_score: float) -> str:
   """Mirrors market_map.py's own tier formula exactly (``_zone_entry``):
   ``"major" if htf and (fresh or score >= major_score) else "zone"``. A
   zone only ever carries the "HTF Zone" score reason when it was scored
@@ -79,7 +90,7 @@ def _zone_tier(zone: Zone, *, major_score: float) -> str:
 
 
 def zone_opposing_entries(
-  zones: Iterable[Zone] | None,
+  zones: Iterable[Any] | None,
   *,
   major_score: float = 12.0,
   include_mitigated: bool = False,

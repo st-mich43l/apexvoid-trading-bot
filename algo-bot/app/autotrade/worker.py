@@ -40,14 +40,6 @@ from app.autotrade.arbitration import (
   select_go_arbitrated_intent,
 )
 from app.autotrade.execution_policy import (
-  GUARD_MODE_STRICT,
-  OUTCOME_ALLOW,
-  OUTCOME_ALLOW_WITH_WARNING,
-  ExecutionGuardDecision,
-  StructuralBarrier,
-  StructuralSourceIdentity,
-  classify_barrier_relationship,
-  classify_guard_severity,
   evaluate_execution_policy,
 )
 from app.autotrade.active_exposure import (
@@ -67,17 +59,10 @@ from app.autotrade.strategy_taxonomy import (
   is_technique_or_confluence,
   match_bypasses_opposing_structure,
 )
-from app.autotrade.structural_barriers import (
-  DEFAULT_STRUCTURAL_TIMEFRAMES,
-  build_structural_barrier_book,
-  to_opposing_entries,
-)
 from app.autotrade.structural_target_room import (
-  ZoneOpposingEntry,
   evaluate_structural_target_room,
   filter_displaced_opposing_entries,
   filter_shared_boundary_opposing_entries,
-  zone_opposing_entries,
   zone_proximal_room_reference,
 )
 from app.autotrade.execution_confirmation import (
@@ -132,11 +117,6 @@ from app.autotrade.setup_lifecycle import (
   release_active_thesis,
   transition_setup,
 )
-from app.analysis.m1_trigger import (
-  evaluate_m1_trigger_window,
-  latest_eligible_m1_bar_ts,
-)
-from app.analysis.confluence_zone import ConfluenceMember
 from app.autotrade.trade_plan import TradePlanError
 from app.autotrade.trade_plan_builder import (
   TradePlanBuildRejected,
@@ -164,27 +144,9 @@ from app.runtime.instrument_config import instrument_runtime_view
 from app.runtime.price_identity import price_token
 from app.persistence.store import event_in_window, nearest_currency_event
 from app.analysis.ohlc_source import RedisOHLCSource, window_for_timeframe
-from app.analysis.math_utils import atr_series
-from app.analysis.types import Level, Zone
-from app.analysis.zones import displacement, mark_mitigation, supply_demand
-from app.analysis.technique_geometry import TechniqueGeometrySettings, not_invalidated
-from app.analysis.levels import key_levels
-from app.analysis.swings import find_swings
 
 
 log = logging.getLogger(__name__)
-
-# Phase 2I-A.1: worker HTF/overlap helpers now default `cfg` to the canonical
-# `runtime_config` singleton. Every other worker call site that previously
-# passed ``None`` still passes ``cfg=None`` so the callee builds its own
-# narrow projection.
-
-
-def _default_runtime_cfg() -> Any:
-  from app.core.config import runtime_config
-
-  return runtime_config
-
 
 EXECUTION_TIMEFRAME = "M1"
 CONTEXT_TIMEFRAMES = ("M5", "M15", "H1")
@@ -423,7 +385,7 @@ _STOP_CONTRACT_FIELDS = (
 
 
 def classify_execution_zone(
-  zone: Zone,
+  zone: Any,
   *,
   atr: float,
   pip_size: float,
@@ -638,424 +600,6 @@ async def _consume_strategy_match(
   legacy = StrategyMatch.from_json(await client.get(legacy_key) or "")
   if legacy is not None and legacy.match_id == match.match_id:
     await client.delete(legacy_key)
-
-
-def _htf_zones(
-  frames: dict[str, Any],
-  cfg: Any | None = None,
-  *,
-  symbol: str = "XAU",
-) -> list[Zone]:
-  """Fresh/tested HTF (M15) supply/demand zones, for the A3 veto and the A2
-  opposing-zone attachment. Independent of gate.py/trend.py's own M1 legs -
-  this is the one place the shared analysis stack enters the autotrade path,
-  and it enters only as a veto input, never as a signal.
-  """
-  if cfg is None:
-    cfg = _default_runtime_cfg()
-  htf = frames.get(_HTF_TIMEFRAME)
-  if htf is None or htf.empty:
-    return []
-  atr_length = max(2, int(cfg.analysis.atr.length))
-  atr_values = atr_series(htf, atr_length)
-  current_atr = (
-    float(atr_values.iloc[-1])
-    if not atr_values.empty and math.isfinite(float(atr_values.iloc[-1]))
-    else 0.0
-  )
-  legs = displacement(
-    htf,
-    atr_values,
-    max(0.1, float(cfg.analysis.displacement.atr_mult)),
-    max(0.0, float(cfg.analysis.momentum.body_frac)),
-  )
-  if not legs:
-    return []
-  zones = supply_demand(htf, legs)
-  marked = mark_mitigation(zones, htf)
-  pip_size = units.pip_size(symbol)
-  # A wall must still be a wall: a zone price has since ACCEPTED through
-  # (closed well beyond its far edge and stayed) is spent, not an opposing
-  # barrier. Owner-reported 2026-09-21: a BUY was vetoed "inside opposing
-  # supply 4348.5-4356.4" - a Sep-17 zone touched 14 times that price had
-  # been trading far above for two days. Same hold-based rule the technique
-  # layer uses, so the two never disagree about whether a zone is alive.
-  techniques = getattr(getattr(cfg, "analysis", None), "techniques", None)
-  geometry = TechniqueGeometrySettings(
-    pip_size=max(float(pip_size), 1e-12),
-    invalidation_tolerance_atr=float(
-      getattr(techniques, "invalidation_tolerance_atr", 0.5),
-    ),
-    sweep_reclaim_bars=int(getattr(techniques, "sweep_reclaim_bars", 6)),
-    max_break_episodes=int(getattr(techniques, "max_break_episodes", 2)),
-  )
-  return [
-    zone
-    for zone in marked
-    if classify_execution_zone(
-      zone,
-      atr=current_atr,
-      pip_size=pip_size,
-      cfg=cfg,
-    ).execution_grade
-    and not_invalidated(
-      side="buy" if zone.side == "demand" else "sell",
-      low=float(zone.low),
-      high=float(zone.high),
-      df=htf,
-      origin_index=int(zone.origin_index),
-      atr=current_atr,
-      settings=geometry,
-    )
-  ]
-
-
-def _htf_levels(
-  frames: dict[str, Any],
-  cfg: Any | None = None,
-  *,
-  symbol: str = "XAU",
-) -> list[Level]:
-  """HTF (M15) round-number and reaction key levels, for the opposing-barrier
-  veto below. Round-number levels aren't sided the way supply/demand zones
-  are (a round number caps a rally the same way it floors a selloff), so
-  they're kept as a separate ``Level`` list rather than folded into ``Zone``.
-  """
-  if cfg is None:
-    cfg = _default_runtime_cfg()
-  htf = frames.get(_HTF_TIMEFRAME)
-  if htf is None or htf.empty:
-    return []
-  atr_length = max(2, int(cfg.analysis.atr.length))
-  atr = atr_series(htf, atr_length)
-  swings = find_swings(
-    htf,
-    max(1, int(cfg.analysis.swings.fractal_size)),
-    max(0.0, float(cfg.analysis.swings.zigzag.pct)),
-    max(0.0, float(cfg.analysis.swings.zigzag.atr_mult)),
-    atr,
-  )
-  if not swings:
-    return []
-  return key_levels(
-    swings,
-    atr,
-    max(0.0, float(cfg.analysis.levels.level_cluster_atr)),
-    max(0.0, float(instrument_geometry.round_step(symbol))),
-    max(1, int(cfg.analysis.levels.minimum_key_touches)),
-  )
-
-
-# _ZoneOpposingEntry/_zone_opposing_entries moved to structural_target_room.py
-# (2026-09, Market Map purge stage 4) so actionability.py's scanner-side
-# opposing-zone check can share the identical technique-native adapter
-# instead of Market Map, not just this module's own TradePlan-time check.
-_ZoneOpposingEntry = ZoneOpposingEntry
-_zone_opposing_entries = zone_opposing_entries
-
-
-def _barrier_id(
-  source_type: str,
-  side: str,
-  low: float,
-  high: float,
-  level_kind: str = "",
-) -> str:
-  return (
-    f"{source_type}:{side}:{level_kind}:"
-    f"{low:.5f}:{high:.5f}"
-  )
-
-
-def _structural_source_identity(
-  *,
-  strategy: str,
-  family: str,
-  structural_source: str,
-  low: float,
-  high: float,
-  key_level: float | None,
-  zone_id: str | None = None,
-  level_id: str | None = None,
-) -> StructuralSourceIdentity:
-  return StructuralSourceIdentity(
-    strategy=strategy,
-    strategy_family=family,
-    structural_source=structural_source,
-    zone_id=zone_id,
-    level_id=level_id,
-    key_level=key_level,
-    low=min(low, high),
-    high=max(low, high),
-  )
-
-
-def _structural_barriers(
-  zones: list[Zone],
-  levels: list[Level],
-  source: StructuralSourceIdentity,
-  direction: str,
-) -> list[StructuralBarrier]:
-  """Convert raw analysis structures into sided, source-aware barriers."""
-  result: list[StructuralBarrier] = []
-  supports = {"demand"} if direction == "BUY" else {"supply"}
-  for zone in zones:
-    barrier_id = _barrier_id(
-      "zone", zone.side, zone.low, zone.high, zone.kind,
-    )
-    overlaps_source = (
-      zone.low <= source.high and zone.high >= source.low
-    )
-    primary = bool(
-      source.zone_id == barrier_id
-      or (
-        overlaps_source
-        and zone.side in supports
-        and (
-          source.key_level is None
-          or zone.low <= source.key_level <= zone.high
-        )
-      )
-    )
-    result.append(StructuralBarrier(
-      barrier_id=barrier_id,
-      source_type="zone",
-      side=zone.side,
-      low=zone.low,
-      high=zone.high,
-      level_kind=zone.kind,
-      timeframe=_HTF_TIMEFRAME,
-      touches=zone.touches,
-      score=zone.score,
-      is_primary_source=primary,
-      is_supporting_source=overlaps_source and zone.side in supports,
-    ))
-  for level in levels:
-    low = level.price - level.band
-    high = level.price + level.band
-    barrier_id = _barrier_id(
-      "level", "neutral", low, high, level.kind,
-    )
-    primary = bool(
-      source.level_id == barrier_id
-      or (
-        low <= source.high
-        and high >= source.low
-        and source.key_level is not None
-        and low <= source.key_level <= high
-      )
-    )
-    result.append(StructuralBarrier(
-      barrier_id=barrier_id,
-      source_type="level",
-      side="neutral",
-      low=low,
-      high=high,
-      level_kind=level.kind,
-      timeframe=_HTF_TIMEFRAME,
-      touches=level.touches,
-      score=level.strength,
-      is_primary_source=primary,
-    ))
-  return result
-
-
-def _opposing_barrier_decision(
-  direction: str,
-  entry_reference: float,
-  target_reference: float | None,
-  atr: float | None,
-  zones: list[Zone],
-  levels: list[Level],
-  buffer_atr: float,
-  *,
-  source: StructuralSourceIdentity,
-  guard_mode: str,
-) -> ExecutionGuardDecision:
-  relationships: list[tuple[StructuralBarrier, str]] = []
-  for barrier in _structural_barriers(zones, levels, source, direction):
-    relationship = classify_barrier_relationship(
-      strategy=source.strategy,
-      direction=direction,
-      entry_reference=entry_reference,
-      target_reference=target_reference,
-      source_identity=source,
-      barrier=barrier,
-    )
-    relationships.append((barrier, relationship))
-
-  primary = next(
-    (
-      barrier for barrier, relationship in relationships
-      if relationship == "primary_source"
-    ),
-    None,
-  )
-  contained = next(
-    (
-      (barrier, relationship) for barrier, relationship in relationships
-      if relationship in ("overlapping_ambiguous", "overlapping_neutral")
-    ),
-    None,
-  )
-  if contained is not None:
-    ambiguous, relationship = contained
-    message = (
-      f"entry {entry_reference:.5f} inside opposing/ambiguous "
-      f"{ambiguous.level_kind or ambiguous.side} "
-      f"{ambiguous.low:.5f}-{ambiguous.high:.5f}"
-    )
-    # A directional supply/demand zone the entry sits inside is a real
-    # structural wall (23 Jul incident: a BUY filled inside an 8-touch SELL
-    # resistance band) and stays an unconditional hard block -- that's
-    # relationship == "overlapping_ambiguous", which classify_barrier_
-    # relationship only returns when the barrier's side cleanly matches the
-    # opposing set. A neutral key level (source_type == "level") or a zone
-    # whose side couldn't be cleanly classified as opposing at all
-    # (relationship == "overlapping_neutral") are both much weaker signals;
-    # route them through the same telemetry-not-block treatment every
-    # other soft structural signal already gets.
-    is_neutral_level = ambiguous.source_type == "level"
-    is_side_unclear = relationship == "overlapping_neutral"
-    if is_neutral_level:
-      reason_code = "entry_inside_opposing_level"
-    elif is_side_unclear:
-      reason_code = "entry_inside_ambiguous_zone"
-    else:
-      reason_code = "entry_inside_opposing_zone"
-    decision = classify_guard_severity(
-      "opposing_barrier",
-      reason_code,
-      message,
-      guard_mode=guard_mode,
-      hard_geometry=not (is_neutral_level or is_side_unclear),
-    )
-    return replace(
-      decision,
-      barrier=ambiguous,
-      measured={
-        "entry_reference": entry_reference,
-        "relationship": relationship,
-      },
-    )
-
-  ahead: list[tuple[float, StructuralBarrier]] = []
-  for barrier, relationship in relationships:
-    if relationship != "opposing_ahead":
-      continue
-    distance = (
-      barrier.low - entry_reference
-      if direction == "BUY"
-      else entry_reference - barrier.high
-    )
-    if distance >= 0:
-      ahead.append((distance, barrier))
-  if ahead and atr and atr > 0 and buffer_atr > 0:
-    distance, barrier = min(ahead, key=lambda item: item[0])
-    if distance <= buffer_atr * atr:
-      message = (
-        f"Opposing barrier ahead: {direction} into "
-        f"{barrier.level_kind or barrier.side} "
-        f"{barrier.low:.5f}-{barrier.high:.5f} "
-        f"({distance:.5f} away)"
-      )
-      decision = classify_guard_severity(
-        "opposing_barrier",
-        "opposing_barrier",
-        message,
-        guard_mode=guard_mode,
-      )
-      return replace(
-        decision,
-        barrier=barrier,
-        measured={
-          "entry_reference": entry_reference,
-          "distance": distance,
-          "distance_atr": distance / atr,
-          "relationship": "opposing_ahead",
-        },
-      )
-
-  if primary is not None:
-    return ExecutionGuardDecision(
-      "opposing_barrier",
-      OUTCOME_ALLOW,
-      "primary_source_excluded_from_barrier",
-      (
-        f"primary source {primary.low:.5f}-{primary.high:.5f} "
-        "excluded from opposing barriers"
-      ),
-      False,
-      measured={"relationship": "primary_source"},
-      barrier=primary,
-    )
-  return ExecutionGuardDecision(
-    "opposing_barrier",
-    OUTCOME_ALLOW,
-    "no_opposing_barrier",
-    "no opposing barrier",
-    False,
-  )
-
-
-def _opposing_barrier_reason(
-  direction: str,
-  entry_reference: float,
-  atr: float | None,
-  zones: list[Zone],
-  levels: list[Level],
-  buffer_atr: float,
-  *,
-  exclude_low: float | None = None,
-  exclude_high: float | None = None,
-) -> str | None:
-  """Veto a direction about to run straight into an opposing HTF barrier it
-  hasn't broken through yet (22 Jul incident: a Box Breakout BUY filled 20
-  pips below a published round-number supply level nobody checked). This is
-  the mirror image of ``_htf_veto_reason`` above: that one protects the zone
-  a trade is retesting *from*; this one checks what could cap the move
-  *ahead* of entry - the opposing side, not the supporting one.
-
-  An entry already *inside* an opposing barrier (23 Jul incident: a BUY
-  filled inside a SELL resistance band tested eight times) is vetoed
-  unconditionally, with no ATR/buffer tolerance - that geometry has zero
-  room by definition. Reason strings for this case start with "entry " so
-  callers can attribute it to its own reject counter; see
-  ``_opposing_barrier_condition`` below.
-
-  ``exclude_low``/``exclude_high``, when given, drop any barrier bound
-  that overlaps the candidate's own structural source before either check
-  runs - see ``_excludes_own_source``. A structural source must never veto
-  the strategy explicitly trading it.
-  """
-  low = (
-    entry_reference if exclude_low is None
-    else min(exclude_low, exclude_high or exclude_low)
-  )
-  high = (
-    entry_reference if exclude_high is None
-    else max(exclude_high, exclude_low or exclude_high)
-  )
-  source = _structural_source_identity(
-    strategy="legacy",
-    family="",
-    structural_source="legacy",
-    low=low,
-    high=high,
-    key_level=entry_reference if exclude_low is not None else None,
-  )
-  decision = _opposing_barrier_decision(
-    direction,
-    entry_reference,
-    None,
-    atr,
-    zones,
-    levels,
-    buffer_atr,
-    source=source,
-    guard_mode=GUARD_MODE_STRICT,
-  )
-  return decision.message if decision.hard_block else None
 
 
 _MIN_COUNTER_BIAS_TARGET_PIPS = 15
@@ -2179,7 +1723,10 @@ async def _publish_trade_plan_v8(
       status="checking",
     )
 
-  m1 = None if frames is None else frames.get("M1")
+  # Go opportunities already carry the closed-bar confirmation that created
+  # the opportunity.  The worker must not rerun the retired Python M1
+  # detector as optional telemetry or as a hidden second authority.
+  m1 = None
   if (
     normalize_setup_state(setup_record.state) in {CONFIRMED, PLAN_BUILT}
     and confirmation is None
@@ -2309,25 +1856,8 @@ async def _publish_trade_plan_v8(
         int(execution_state.zone_entered_at or quote_ts),
         confirmation_boundary + 1,
       )
-      trigger = (
-        None
-        if m1 is None or getattr(m1, "empty", False)
-        else evaluate_m1_trigger_window(
-          m1,
-          zone_low=match.entry_low,
-          zone_high=match.entry_high,
-          key_level=match.key_level,
-          direction=match.direction,
-          earliest_bar_ts=episode_start,
-          after_bar_ts=execution_state.last_evaluated_m1_ts,
-          cfg=instrument_runtime_view(symbol),
-        )
-      )
-      latest_evaluated = latest_eligible_m1_bar_ts(
-        m1,
-        earliest_bar_ts=episode_start,
-        after_bar_ts=execution_state.last_evaluated_m1_ts,
-      )
+      trigger = None
+      latest_evaluated = None
       if trigger is None:
         if policy.m1_required_on_retest:
           execution_state = new_state(
@@ -2543,20 +2073,7 @@ async def _publish_trade_plan_v8(
       match.entry_high,
       confirmation_boundary,
     )
-    trigger = (
-      None
-      if m1 is None or getattr(m1, "empty", False)
-      else evaluate_m1_trigger_window(
-        m1,
-        zone_low=match.entry_low,
-        zone_high=match.entry_high,
-        key_level=match.key_level,
-        direction=match.direction,
-        earliest_bar_ts=confirmation_boundary,
-        after_bar_ts=None,
-        cfg=instrument_runtime_view(symbol),
-      )
-    )
+    trigger = None
     if trigger is not None:
       confirmation = ExecutionConfirmation(
         source=M1_RETEST,
@@ -4343,4 +3860,3 @@ async def try_publish_executable_signal(
     executable_quote=executable_quote,
     quote_side=quote_side,
   )
-
