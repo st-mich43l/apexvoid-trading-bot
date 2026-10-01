@@ -343,10 +343,11 @@ func (w *SymbolWorker) technicalContext(event marketdata.BarEvent, reaction *opp
 // to violate by republishing, only unnecessary Kafka traffic to avoid).
 //
 // publish mirrors observeTransition's own parameter (event.
-// PublishesOpportunity()): lastArbitration is always updated so the diff
-// baseline stays correct, but nothing is enqueued while publish is false —
+// PublishesOpportunity()): nothing is enqueued while publish is false —
 // bootstrap/replay must emit zero events, the same contract ResumeLive's
-// own doc comment already establishes for opportunity lifecycle events.
+// own doc comment already establishes for opportunity lifecycle events —
+// and the diff baseline (lastArbitration) advances only on publishing bars,
+// so the first live bar after bootstrap republishes every current decision.
 func (w *SymbolWorker) arbitrate(now int64, reference float64, publish bool) {
 	live := w.state.Opportunities.Live()
 	decisions := arbitration.ArbitrateInPlay(live, w.settings.Arbitration, reference)
@@ -357,7 +358,15 @@ func (w *SymbolWorker) arbitrate(now int64, reference float64, publish bool) {
 			w.publisher.EnqueueArbitrationDecision(w.state.Symbol, d.CandidateID, d, now)
 		}
 	}
-	w.lastArbitration = fresh
+	// The diff baseline advances only on live bars. Bootstrap/replay publish
+	// nothing, so recording its decisions as "already published" would leave
+	// every consumer on whatever status it last stored before this restart
+	// (production 2026-10-01: Python kept 77 stale conflict_held statuses
+	// because the restarted engine saw "no change"). The first live bar after
+	// bootstrap therefore republishes the whole current decision set.
+	if publish {
+		w.lastArbitration = fresh
+	}
 }
 
 // decisionEqual compares two arbitration.Decision values field-by-field —
