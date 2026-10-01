@@ -38,6 +38,64 @@ _TOP_LEVEL_KEYS = frozenset({
   *_CATALOG_ROOT_GROUPS,
 })
 
+# These leaves are part of the Go Analysis Engine's technical contract.  They
+# must be accepted by the shared V3 source loader so the Python and Go
+# configuration roots can consume the same file, but they are deliberately
+# excluded from Python's runtime model: Python is the execution-policy owner,
+# not the technical-analysis owner.  Keep this list exact (rather than
+# accepting an arbitrary analysis.* subtree) so misspelled technical config
+# still fails closed.
+_GO_ANALYSIS_ONLY_PATHS = frozenset({
+  "analysis.arbitration.conflict_margin_quality",
+  "analysis.coil_contract",
+  "analysis.arbitration.in_play_atr",
+  "analysis.history.depth.D1",
+  "analysis.history.depth.H1",
+  "analysis.history.depth.H4",
+  "analysis.history.depth.M1",
+  "analysis.history.depth.M15",
+  "analysis.history.depth.M5",
+  "analysis.fibonacci.eq_half_band",
+  "analysis.indicators.atr.algorithm",
+  "analysis.indicators.atr.length",
+  "analysis.key_levels.cluster_atr",
+  "analysis.key_levels.maximum_cluster_span_multiple",
+  "analysis.key_levels.minimum_touches",
+  "analysis.key_levels.round_step",
+  "analysis.legacy_zones.enabled",
+  "analysis.legacy_zones.window_bars",
+  "analysis.liquidity.equal_level_tolerance_atr",
+  "analysis.liquidity.pool_minimum_touches",
+  "analysis.liquidity.sweep_reclaim_bars",
+  "analysis.liquidity.version",
+  "analysis.mad.pip_size",
+  "analysis.mad.accum.minimum_rq",
+  "analysis.mad.accum.maximum_rq",
+  "analysis.mad.expand.break_atr",
+  "analysis.mad.expand.displacement_atr",
+  "analysis.mad.expand.accept_closes",
+  "analysis.mad.manip.min_penetration_atr",
+  "analysis.mad.manip.min_reclaim_atr",
+  "analysis.regime.direction_enabled",
+  "analysis.regime.direction_lookback",
+  "analysis.regime.min_directional_swings",
+  "analysis.regime.min_displacement_atr",
+  "analysis.structure.break.displacement_body_dominance",
+  "analysis.structure.break.displacement_range_atr",
+  "analysis.structure.break.failed_break_reclaim_bars",
+  "analysis.structure.break.minimum_penetration_atr",
+  "analysis.structure.break.sweep_reclaim_bars",
+  "analysis.structure.equal_level.tolerance_atr",
+  "analysis.structure.pivot.left_bars",
+  "analysis.structure.pivot.right_bars",
+  "analysis.structure.swing.minimum_excursion_atr",
+  "analysis.structure.swing.promotion.intermediate_atr",
+  "analysis.structure.swing.promotion.internal_atr",
+  "analysis.structure.swing.promotion.major_atr",
+  "analysis.structure.version",
+  "transport.kafka.topics.analysis_opportunity_arbitration",
+})
+
 
 class ConfigFileError(ValueError):
   """Fail-closed YAML configuration error with a path-based message."""
@@ -239,7 +297,10 @@ def load_config_file(
   # instruments is not a catalog leaf group on the schema root for ENV
   # catalog; reject if someone nests under a misspelled group already handled.
 
-  known = _leaf_path_set()
+  known = {
+    **_leaf_path_set(),
+    **{path: None for path in _GO_ANALYSIS_ONLY_PATHS},
+  }
   secrets = _secret_paths()
   flat = _flatten_catalog_values(
     global_nested,
@@ -272,6 +333,15 @@ def load_config_file(
     live_csv = live_instrument_symbol_csv(live_raw)
     flat["contract.instrument.symbols"] = live_csv
     flat["market_data.scanner.symbols"] = live_csv
+
+  # Go-only technical leaves were validated above for exact spelling and type
+  # shape by the V3/schema path, but must not enter Python's canonical runtime
+  # resolver or create a second Python technical authority.
+  flat = {
+    path: value
+    for path, value in flat.items()
+    if path not in _GO_ANALYSIS_ONLY_PATHS
+  }
 
   return LoadedConfigFile(
     path=file_path,
