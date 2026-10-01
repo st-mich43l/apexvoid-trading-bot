@@ -559,6 +559,29 @@ async def test_arbitration_decision_annotates_the_live_match(h):
 
 
 @pytest.mark.asyncio
+async def test_arbitration_cannot_repromote_a_match_absent_from_go_live_book(h):
+  from app.autotrade.go_live_opportunities import go_live_opportunities_key
+
+  await h.activate()
+  await h.deliver(event(int(h.clock.now)))
+  client = redis_state.get_client()
+  await client.set(
+    go_live_opportunities_key("XAU"),
+    json.dumps({"symbol": "XAU", "generated_at": int(h.clock.now), "ids": []}),
+  )
+
+  assert await h.policy.on_arbitration_decision(_arbitration_event()) == "arbitration_updated"
+  matches = deserialize_matches(await client.get(strategy_matches_key("XAU")))
+  assert matches[0].arbitration_status == "suppressed"
+  assert matches[0].arbitration_reason_code == "go_opportunity_not_live"
+
+  # The same redelivered event must not restore the stale winner.
+  assert await h.policy.on_arbitration_decision(_arbitration_event()) == "unchanged"
+  matches = deserialize_matches(await client.get(strategy_matches_key("XAU")))
+  assert matches[0].arbitration_status == "suppressed"
+
+
+@pytest.mark.asyncio
 async def test_arbitration_decision_annotates_thesis_correlation(h):
   await h.activate()
   await h.deliver(event(int(h.clock.now)))

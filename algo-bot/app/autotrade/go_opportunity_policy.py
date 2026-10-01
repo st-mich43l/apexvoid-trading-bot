@@ -586,6 +586,10 @@ class GoOpportunityPolicy:
     payload = event.payload
     match_id = match_id_for(payload.opportunity_id)
     client = self._client()
+    live_ids = await go_live_opportunity_ids(client, payload.symbol)
+    opportunity_is_live = (
+      live_ids is None or payload.opportunity_id in live_ids
+    )
     cache_key = go_arbitration_key(payload.symbol, payload.opportunity_id)
     cached = await client.get(cache_key)
     payload_json = payload.model_dump(mode="json")
@@ -606,7 +610,19 @@ class GoOpportunityPolicy:
         # the consumer's idempotent outcome stable for retry tests/telemetry.
         key = strategy_matches_key(payload.symbol)
         matches = deserialize_matches(await client.get(key))
-        return "unchanged" if any(m.match_id == match_id for m in matches) else "stale_arbitration_ignored"
+        match = next((m for m in matches if m.match_id == match_id), None)
+        if match is None:
+          return "stale_arbitration_ignored"
+        if not opportunity_is_live:
+          withdrawn = replace(
+            match,
+            arbitration_status="suppressed",
+            arbitration_reason_code="go_opportunity_not_live",
+          )
+          if withdrawn != match:
+            await self._store_match(client, withdrawn, int(self._clock()))
+            return "arbitration_withdrawn"
+        return "unchanged"
     await client.set(
       cache_key,
       json.dumps(payload_json, separators=(",", ":"), sort_keys=True),
@@ -620,7 +636,15 @@ class GoOpportunityPolicy:
       # Kafka partition, or this process may have restarted between topics.
       # No phantom StrategyMatch is created.
       return "arbitration_stored_pending"
-    updated = self._with_arbitration(match, payload)
+    updated = (
+      self._with_arbitration(match, payload)
+      if opportunity_is_live
+      else replace(
+        match,
+        arbitration_status="suppressed",
+        arbitration_reason_code="go_opportunity_not_live",
+      )
+    )
     if updated == match:
       return "unchanged"
     await self._store_match(client, updated, int(self._clock()))
