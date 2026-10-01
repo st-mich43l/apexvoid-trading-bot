@@ -78,7 +78,7 @@ func TestS11MissingStrategiesKnownQualifyingFixtures(t *testing.T) {
 		assertOne(t, s, ctx(map[market.Timeframe]*analysiscontext.TimeframeContext{market.M5: {Timeframe: market.M5, Candles: []market.Candle{bar(base, 100, 101, 99, 100)}, Zones: zone.ZoneState{Zones: []zone.Zone{{ID: "ifvg-1", Kind: zone.KindIFVG, Side: zone.Demand, Low: 99, High: 100, OriginTime: base - 300, Strength: .8, State: zone.StateFresh, Relevance: zone.Immediate}}}, Liquidity: liquidity.LiquidityState{Pools: []liquidity.Pool{{Side: liquidity.LiquidityBuySide, Low: 103, High: 104}}}}}))
 	})
 	t.Run("trendline", func(t *testing.T) {
-		s, err := strategytrendline.New(cfg(strategytrendline.ID, map[string]any{"minimum_validation_touches": 2.0, "invalidation_buffer_atr": .25, "target_r": 2.0, "expiry_hours": 4.0}))
+		s, err := strategytrendline.New(cfg(strategytrendline.ID, map[string]any{"interaction_band_atr": 0.2, "close_violation_atr": 0.15, "approach_min_distance_atr": 0.1, "maximum_bars_since_last_touch": 30.0, "reaction_lookback_bars": 3.0, "engulfing_minimum_range_atr": 0.5, "minimum_validation_touches": 2.0, "invalidation_buffer_atr": .25, "target_r": 2.0, "expiry_hours": 4.0}))
 		if err != nil {
 			t.Fatal(err)
 		}

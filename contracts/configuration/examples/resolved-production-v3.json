@@ -258,10 +258,16 @@
         "version": "v2"
       },
       "trendline": {
+        "approach_min_distance_atr": 0.1,
+        "close_violation_atr": 0.15,
         "enabled": true,
+        "engulfing_minimum_range_atr": 0.5,
         "expiry_hours": 12.0,
+        "interaction_band_atr": 0.2,
         "invalidation_buffer_atr": 0.25,
-        "minimum_validation_touches": 2,
+        "maximum_bars_since_last_touch": 30,
+        "minimum_validation_touches": 1,
+        "reaction_lookback_bars": 3,
         "target_r": 2.0,
         "version": "v2"
       }
