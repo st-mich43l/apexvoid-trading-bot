@@ -2,6 +2,7 @@ package engine
 
 import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/arbitration"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/candle"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/config"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/fib"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/keylevel"
@@ -22,6 +23,7 @@ import (
 // single point where config (rank 1) becomes reachable by the domain
 // packages engine wires together (see config.go's own doc comment).
 type Settings struct {
+	Candle           candle.Config
 	ATR              ATRSettings
 	Structure        structure.Settings
 	Liquidity        liquidity.Config
@@ -153,7 +155,7 @@ func LoadSettings(doc *config.Document, primary market.Timeframe, allowReplaceFo
 		return Settings{}, err
 	}
 	return Settings{
-		ATR: atr, Structure: structureSettings, Liquidity: liquidityConfig, Zone: zoneConfig,
+		Candle: candle.DefaultConfig(), ATR: atr, Structure: structureSettings, Liquidity: liquidityConfig, Zone: zoneConfig,
 		Trendline: trendlineConfig, KeyLevel: keyLevelConfig, Session: sessionConfig, Fib: fibConfig, Momentum: momentumConfig,
 		Arbitration: arbitrationConfig, Regime: regimeConfig, MAD: madConfig, StopEnvelope: stopEnvelopeConfig, Strategies: strategyConfigs,
 		HistoryDepths: depths, PrimaryTimeframe: primary,

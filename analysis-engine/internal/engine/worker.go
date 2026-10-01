@@ -352,12 +352,12 @@ func (w *SymbolWorker) technicalContext(event marketdata.BarEvent, direction mar
 	// entry band; never fetch a new quote or let this score gate eligibility.
 	if bars := w.state.History.For(event.Timeframe).Snapshot(); len(bars) > 0 {
 		low, high := entryLow, entryHigh
-		facts.CandleEvidence = candle.Evaluate(bars, string(direction), atr, func() float64 {
+		facts.CandleEvidence = candle.EvaluateWithConfig(bars, string(direction), atr, func() float64 {
 			if direction == market.Buy {
 				return low
 			}
 			return high
-		}(), &low, &high)
+		}(), &low, &high, w.settings.Candle)
 	}
 
 	return facts
