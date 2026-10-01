@@ -40,7 +40,17 @@ type Runtime struct {
 
 	barrierMu   sync.RWMutex
 	barrierCfgs map[market.Symbol]barrier.Config
+
+	// onBootstrapped runs once, after the retained history has been replayed
+	// and before live processing starts.
+	onBootstrapped func(context.Context)
 }
+
+// SetOnBootstrapComplete registers a function Run calls once after the
+// bootstrap replay finishes. The bootstrap replays every retained bar of every
+// series; callers use this to publish derived state once at the end instead of
+// after each historical bar.
+func (r *Runtime) SetOnBootstrapComplete(fn func(context.Context)) { r.onBootstrapped = fn }
 
 func NewRuntime(cfg Config, series []Series, dispatch Dispatch, health *Health, metrics *Metrics) (*Runtime, error) {
 	if err := cfg.Validate(); err != nil {
@@ -115,6 +125,9 @@ func (r *Runtime) Run(ctx context.Context) error {
 				_ = sub.Close()
 				r.health.SetSubscriptionActive(false)
 				return err
+			}
+			if r.onBootstrapped != nil {
+				r.onBootstrapped(ctx)
 			}
 			r.startWorkers(ctx)
 			first = false
