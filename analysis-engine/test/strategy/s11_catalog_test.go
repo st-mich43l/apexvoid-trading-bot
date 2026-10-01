@@ -71,7 +71,7 @@ func assertOne(t *testing.T, instance strategy.Strategy, marketCtx *analysiscont
 func TestS11MissingStrategiesKnownQualifyingFixtures(t *testing.T) {
 	const base = int64(1_700_000_000)
 	t.Run("ifvg", func(t *testing.T) {
-		s, err := ifvg.New(cfg(ifvg.ID, map[string]any{"reaction_lookback_bars": 3.0, "engulfing_minimum_range_atr": 0.5, "minimum_strength": .4, "minimum_gap_atr": .5, "invalidation_buffer_atr": .5, "minimum_target_distance_atr": 1.0, "expiry_hours": 4.0}))
+		s, err := ifvg.New(cfg(ifvg.ID, map[string]any{"epsilon_atr_fraction": 0.05, "maximum_zone_atr": 3.0, "entry_max_width_price": 5.0, "reaction_lookback_bars": 3.0, "engulfing_minimum_range_atr": 0.5, "minimum_strength": .4, "minimum_gap_atr": .5, "invalidation_buffer_atr": .5, "minimum_target_distance_atr": 1.0, "expiry_hours": 4.0}))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -187,7 +187,7 @@ func TestS11BreakoutRetestsRejectDeepFailedReentry(t *testing.T) {
 }
 
 func TestS11IFVGDeduplicatesRepeatedCanonicalZone(t *testing.T) {
-	s, err := ifvg.New(cfg(ifvg.ID, map[string]any{"reaction_lookback_bars": 3.0, "engulfing_minimum_range_atr": 0.5, "minimum_strength": .4, "minimum_gap_atr": .5, "invalidation_buffer_atr": .5, "minimum_target_distance_atr": 1.0, "expiry_hours": 4.0}))
+	s, err := ifvg.New(cfg(ifvg.ID, map[string]any{"epsilon_atr_fraction": 0.05, "maximum_zone_atr": 3.0, "entry_max_width_price": 5.0, "reaction_lookback_bars": 3.0, "engulfing_minimum_range_atr": 0.5, "minimum_strength": .4, "minimum_gap_atr": .5, "invalidation_buffer_atr": .5, "minimum_target_distance_atr": 1.0, "expiry_hours": 4.0}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -231,7 +231,7 @@ func TestS11MissingStrategiesRejectMissingConfiguration(t *testing.T) {
 }
 
 func TestS11IFVGIgnoresAGapThatIsASliverOfATR(t *testing.T) {
-	s, err := ifvg.New(cfg(ifvg.ID, map[string]any{"reaction_lookback_bars": 3.0, "engulfing_minimum_range_atr": 0.5, "minimum_strength": .4, "minimum_gap_atr": .5, "invalidation_buffer_atr": .5, "minimum_target_distance_atr": 1.0, "expiry_hours": 4.0}))
+	s, err := ifvg.New(cfg(ifvg.ID, map[string]any{"epsilon_atr_fraction": 0.05, "maximum_zone_atr": 3.0, "entry_max_width_price": 5.0, "reaction_lookback_bars": 3.0, "engulfing_minimum_range_atr": 0.5, "minimum_strength": .4, "minimum_gap_atr": .5, "invalidation_buffer_atr": .5, "minimum_target_distance_atr": 1.0, "expiry_hours": 4.0}))
 	if err != nil {
 		t.Fatal(err)
 	}

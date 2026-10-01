@@ -21,6 +21,9 @@ func validParams() map[string]any {
 		"expiry_hours":                24.0,
 		"reaction_lookback_bars":      3.0,
 		"engulfing_minimum_range_atr": 0.5,
+		"epsilon_atr_fraction":        0.05,
+		"maximum_zone_atr":            2.0,
+		"entry_max_width_price":       5.0,
 	}
 }
 

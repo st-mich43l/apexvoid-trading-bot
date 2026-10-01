@@ -151,6 +151,8 @@ DIVERGENCES: dict[str, dict] = {
   "analysis.yml/analysis.technical_authority.max_delivery_lag_seconds": {"kind": "new_surfaced", "expected": 300, "reason": "S14B — Kafka publish->consume lag limit so a backlogged event never becomes a fresh plan; no old-config precedent."},
   "analysis.yml/analysis.arbitration.conflict_margin_quality": {"kind": "new_surfaced", "expected": 0.15, "reason": "Analysis Engine owns quality-based arbitration; this is a Go-only threshold with no Python runtime-config precedent."},
   "analysis.yml/analysis.arbitration.in_play_atr": {"kind": "new_surfaced", "expected": 1.0, "reason": "Analysis Engine owns the executable-now rule that used to live in algo-bot arbitration; Go-only threshold with no Python runtime-config precedent."},
+  "analysis.yml/analysis.legacy_zones.enabled": {"kind": "new_surfaced", "expected": True, "reason": "Analysis Engine switch for the Python-parity zone population; Go-only."},
+  "analysis.yml/analysis.legacy_zones.window_bars": {"kind": "new_surfaced", "expected": 400, "reason": "Closed bars the legacy zone chain runs over (Python M5 detection window)."},
   "analysis.yml/analysis.structure.pivot.left_bars": {"kind": "new_surfaced", "expected": 2, "reason": "Matches Python's common swing_fractal_n=2 default."},
   "analysis.yml/analysis.structure.pivot.right_bars": {"kind": "new_surfaced", "expected": 2, "reason": "Matches Python's common swing_fractal_n=2 default."},
   "analysis.yml/analysis.structure.swing.minimum_excursion_atr": {"kind": "new_surfaced", "expected": 0.5, "reason": "No Python precedent — new V2 layer-promotion floor, initial calibration."},

@@ -316,3 +316,55 @@ func TestEngine_FirstLiveBarAfterBootstrapRepublishesEveryArbitrationDecision(t 
 		}
 	}
 }
+
+// TestEngine_LegacyZonesChangeOnlyTheZoneDrivenStrategies proves the
+// Python-parity switch swaps the zone population the zone-driven strategies
+// read (supply/demand/order-block/FVG/iFVG and the confluence bands built from
+// them: the confluence_zone strategy narrows from 155 to 64 opportunities on the
+// real XAU fixture) while strategies that do not read those zones are identical.
+func TestEngine_LegacyZonesChangeOnlyTheZoneDrivenStrategies(t *testing.T) {
+	repoRoot := filepath.Join("..", "..", "..")
+	doc, err := config.ResolveDocument(filepath.Join(repoRoot, "config", "apexvoid.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	discovered := func(enabled bool) map[opportunity.StrategyID]int {
+		settings, err := engine.LoadSettings(doc, "M5", false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := engine.ApplyInstrument(&settings, doc, "XAU"); err != nil {
+			t.Fatal(err)
+		}
+		settings.LegacyZones.Enabled = enabled
+		e := engine.NewEngine(nil)
+		if err := e.Register("XAU", settings); err != nil {
+			t.Fatal(err)
+		}
+		seen := map[string]bool{}
+		counts := map[opportunity.StrategyID]int{}
+		for _, c := range loadRealXAUFixture(t) {
+			snap, err := e.Dispatch(marketdata.BarEvent{Symbol: "XAU", Timeframe: "M5", Candle: c})
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, o := range snap.Opportunities {
+				if !seen[o.ID] {
+					seen[o.ID] = true
+					counts[o.Strategy]++
+				}
+			}
+		}
+		return counts
+	}
+	off, on := discovered(false), discovered(true)
+	if on["confluence_zone"] >= off["confluence_zone"] || on["confluence_zone"] == 0 {
+		t.Fatalf("legacy zones must narrow the confluence bands: off=%d on=%d", off["confluence_zone"], on["confluence_zone"])
+	}
+	for _, unaffected := range []opportunity.StrategyID{"key_level", "session_level", "liquidity_sweep", "trendline", "flip_zone"} {
+		if on[unaffected] != off[unaffected] {
+			t.Fatalf("%s does not read the replaced zones but changed: off=%d on=%d", unaffected, off[unaffected], on[unaffected])
+		}
+	}
+	t.Logf("opportunities per strategy: redesigned %v, legacy %v", off, on)
+}

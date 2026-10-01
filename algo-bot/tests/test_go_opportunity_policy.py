@@ -275,7 +275,7 @@ def test_each_catalog_adapter_preserves_its_own_evidence_and_geometry(scope):
     })
   evidence = profile.evidence_prefixes[0]
   payload["evidence"] = [{"code": evidence + ("confirmed" if evidence.endswith("_") else "")}]
-  if scope not in {"supply", "demand"}:
+  if not profile.requires_reaction:
     payload["technical_context"].pop("confirmation", None)
   event_payload = parse_analysis_event(OpportunityTopic, json.dumps(raw))
   match = pol.build_strategy_match(
