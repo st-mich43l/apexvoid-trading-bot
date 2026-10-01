@@ -1,6 +1,9 @@
 package market
 
-import "fmt"
+import (
+	"fmt"
+	"math"
+)
 
 // Geometry is one instrument's price/pip geometry — everything downstream
 // math needs to turn a raw price difference into pips, or round a price to
@@ -47,6 +50,41 @@ func (g Geometry) RoundToTick(price float64) float64 {
 		scale *= 10
 	}
 	return roundHalfAwayFromZero(price*scale) / scale
+}
+
+// FloorToTick returns the greatest instrument tick not above price. It is
+// used for prices where rounding upward would make the technical fact less
+// protective (for example a BUY stop or a BUY target).
+func (g Geometry) FloorToTick(price float64) float64 {
+	scale := g.tickScale()
+	return math.Floor(normalizeScaled(price*scale)) / scale
+}
+
+// CeilToTick returns the smallest instrument tick not below price. It is used
+// for prices where rounding downward would make the technical fact less
+// protective (for example a SELL stop or a SELL target).
+func (g Geometry) CeilToTick(price float64) float64 {
+	scale := g.tickScale()
+	return math.Ceil(normalizeScaled(price*scale)) / scale
+}
+
+func (g Geometry) tickScale() float64 {
+	scale := 1.0
+	for i := 0; i < g.PriceDigits; i++ {
+		scale *= 10
+	}
+	return scale
+}
+
+// normalizeScaled removes the tiny binary floating-point residue that would
+// otherwise turn an already aligned price into the adjacent tick when using
+// FloorToTick/CeilToTick (for example 4132.61*100).
+func normalizeScaled(scaled float64) float64 {
+	nearest := math.Round(scaled)
+	if math.Abs(scaled-nearest) < 1e-9 {
+		return nearest
+	}
+	return scaled
 }
 
 func roundHalfAwayFromZero(v float64) float64 {
