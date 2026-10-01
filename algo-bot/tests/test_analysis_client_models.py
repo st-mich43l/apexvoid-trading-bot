@@ -107,6 +107,11 @@ def test_go_golden_fixture_decodes_with_its_technical_context():
 
 def test_go_candle_evidence_extension_decodes_strictly():
   event = _opportunity()
+  event["payload"]["technical_context"] = {
+    "atr": 3.6,
+    "reference_price": 4353.0,
+    "reference_time": 100,
+  }
   event["payload"]["technical_context"]["candle_evidence"] = {
     "version": 2,
     "direction": "BUY",
