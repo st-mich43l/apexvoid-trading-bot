@@ -221,7 +221,7 @@ def _eligibility_with_stop_error(
   planned_stop_error: str,
   allowed: bool = True,
 ):
-  from app.analysis.execution_eligibility import (
+from app.autotrade.execution_eligibility import (
     ANALYSIS_ONLY,
     EXECUTION_ELIGIBILITY_VERSION,
     STATIC_ELIGIBLE,

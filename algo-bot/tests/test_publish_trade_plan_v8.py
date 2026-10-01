@@ -23,7 +23,7 @@ from unittest.mock import AsyncMock
 import pandas as pd
 import pytest
 
-from app.analysis.execution_eligibility import (
+from app.autotrade.execution_eligibility import (
   EXECUTION_ELIGIBILITY_VERSION,
   STATIC_ELIGIBLE,
   ExecutionEligibility,
