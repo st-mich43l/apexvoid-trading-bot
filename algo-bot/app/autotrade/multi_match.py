@@ -15,7 +15,7 @@ from app.autotrade.execution_policy import (
   strategy_family,
 )
 from app.autotrade.strategy_match import StrategyMatch
-from app.analysis.structural_reaction_support import (
+from app.autotrade.strategy_identity import (
   STRUCTURAL_SETUPS,
   canonical_structural_setup,
 )
