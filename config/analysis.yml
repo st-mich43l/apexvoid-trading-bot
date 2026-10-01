@@ -480,14 +480,6 @@ analysis:
   # only those executable-now candidates; nearby resting zones are suppressed
   # and cannot create a false BUY-vs-SELL conflict. If none is inside, the
   # ATR window is used for the pending watch projection.
-  # Python-parity zone population (internal/legacyzone). When enabled, the
-  # primary timeframe's supply/demand, order-block, FVG and iFVG zones are the
-  # legacy technique instances (zones price is at now, passed the legacy
-  # validation) instead of every live zone the redesigned zone package tracks.
-  legacy_zones:
-    enabled: true
-    window_bars: 400
-
   arbitration:
     conflict_margin_quality: 0.15
     in_play_atr: 1.0

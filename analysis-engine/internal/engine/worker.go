@@ -42,13 +42,6 @@ type SymbolWorker struct {
 	// keyed by opportunity ID - Phase 2's diff base so only a changed
 	// decision is republished (see arbitrate's own doc comment).
 	lastArbitration map[string]arbitration.Decision
-
-	// legacyZoneAt/legacyZoneState cache the Python-parity zone population for
-	// the primary timeframe by its latest closed bar (rebuildContext runs on
-	// every timeframe's event; the chain only changes with a primary bar).
-	legacyZoneAt    int64
-	legacyZoneValid bool
-	legacyZoneState zone.ZoneState
 }
 
 // NewSymbolWorker returns a worker for symbol with an empty SymbolState
@@ -315,9 +308,6 @@ func (w *SymbolWorker) rebuildContext() {
 			lastATR = atrSeries[len(atrSeries)-1]
 		}
 		zoneState, _ := w.state.Zone.Get(tf)
-		if tf == w.settings.PrimaryTimeframe && w.settings.LegacyZones.Enabled {
-			zoneState = w.legacyZones(zoneState)
-		}
 		trendState, _ := w.state.Trendline.Get(tf)
 		keyLevelState, _ := w.state.KeyLevel.Get(tf)
 		sessionState, _ := w.state.Session.Get(tf)
@@ -457,21 +447,4 @@ func stringSlicesEqual(a, b []string) bool {
 		}
 	}
 	return true
-}
-
-// legacyZones returns the primary timeframe's zones with the supply/demand,
-// order-block, FVG and iFVG population replaced by the legacy technique
-// instances, recomputed only when the primary timeframe has a new closed bar.
-func (w *SymbolWorker) legacyZones(original zone.ZoneState) zone.ZoneState {
-	candles := w.state.History.For(w.settings.PrimaryTimeframe).Snapshot()
-	if len(candles) == 0 {
-		return original
-	}
-	last := candles[len(candles)-1].Time
-	if w.legacyZoneValid && w.legacyZoneAt == last {
-		return w.legacyZoneState
-	}
-	w.legacyZoneState = legacyZoneState(candles, original, w.settings.LegacyZones)
-	w.legacyZoneAt, w.legacyZoneValid = last, true
-	return w.legacyZoneState
 }
