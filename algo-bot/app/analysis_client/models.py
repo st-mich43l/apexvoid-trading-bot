@@ -105,6 +105,9 @@ class ReactionConfirmation(FrozenConfigModel):
   touch_bar_time: int = Field(ge=0)
   confirmation_bar_time: int = Field(ge=0)
   reaction_type: Literal["rejection"]
+  pattern: Literal[
+    "wick_rejection", "rejection_choch", "strong_reclaim", "engulfing", "sweep_reclaim",
+  ] | None = None
 
   @model_validator(mode="after")
   def validate_timing(self):

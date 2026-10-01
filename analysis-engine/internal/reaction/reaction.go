@@ -55,6 +55,10 @@ type Params struct {
 	// of it.
 	ATR                      float64
 	EngulfingMinimumRangeATR float64
+	// MinIndex is the earliest bar that may be a touch or confirmation bar
+	// (a structure cannot react before it exists). Zero allows every bar;
+	// the bar before MinIndex may still serve as an engulfing bar\'s prior.
+	MinIndex int
 }
 
 // Confirmation is a found reaction; indexes are positions in the window.
@@ -80,8 +84,8 @@ func Evaluate(candles []market.Candle, p Params) *Confirmation {
 		confirmLB = p.ConfirmLookback
 	}
 	last := len(candles) - 1
-	touchEarliest := maxInt(0, last-touchLB+1)
-	confirmEarliest := maxInt(0, last-confirmLB+1)
+	touchEarliest := maxInt(maxInt(0, p.MinIndex), last-touchLB+1)
+	confirmEarliest := maxInt(maxInt(0, p.MinIndex), last-confirmLB+1)
 
 	touchIndexes := make([]int, 0, last-touchEarliest+1)
 	for i := touchEarliest; i <= last; i++ {

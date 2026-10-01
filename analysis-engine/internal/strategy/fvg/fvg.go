@@ -22,6 +22,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategyutil"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/zone"
 )
 
@@ -42,6 +43,8 @@ type Config struct {
 	InvalidationBufferATR    float64
 	MinimumTargetDistanceATR float64
 	ExpiryHours              float64
+	// Reaction is the shared legacy confirmation tuning (see strategyutil).
+	Reaction strategyutil.ReactionConfig
 }
 
 // Strategy is FVGStrategy.
@@ -92,9 +95,13 @@ func parseConfig(params map[string]any) (Config, error) {
 	if expiryHours <= 0 {
 		return Config{}, fmt.Errorf("expiry_hours must be > 0")
 	}
+	reactionConfig, err := strategyutil.ParseReactionConfig(params)
+	if err != nil {
+		return Config{}, err
+	}
 	return Config{
 		MinimumStrength: minimumStrength, MinimumGapATR: minimumGap, InvalidationBufferATR: invalidationBuffer,
-		MinimumTargetDistanceATR: minimumTargetDistance, ExpiryHours: expiryHours,
+		MinimumTargetDistanceATR: minimumTargetDistance, ExpiryHours: expiryHours, Reaction: reactionConfig,
 	}, nil
 }
 
@@ -212,6 +219,14 @@ func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate 
 			},
 		}
 		candidates = append(candidates, candidate)
+		if rc := strategyutil.ConfirmReaction(tfCtx, z.ID, direction, float64(z.Low), float64(z.High), atr, z.CreatedAt, s.cfg.Reaction); rc != nil {
+			// The resting-zone opportunity remains a technical observation;
+			// only a distinct, causally identified reaction can enter Algo
+			// Bot's confirmed-zone policy.
+			if confirmed, confirmErr := strategyutil.ConfirmedVariant(candidate, rc, z.ID, z.CreatedAt, s.cfg.ExpiryHours, "m5_fvg_rejection_confirmed"); confirmErr == nil {
+				candidates = append(candidates, confirmed)
+			}
+		}
 	}
 	return candidates
 }

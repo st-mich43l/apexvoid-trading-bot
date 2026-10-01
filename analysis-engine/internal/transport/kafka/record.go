@@ -57,6 +57,9 @@ type ReactionConfirmationPayload struct {
 	TouchBarTime        int64  `json:"touch_bar_time"`
 	ConfirmationBarTime int64  `json:"confirmation_bar_time"`
 	ReactionType        string `json:"reaction_type"`
+	// Pattern is the legacy confirmation pattern; omitted when the
+	// confirmation has no named pattern.
+	Pattern string `json:"pattern,omitempty"`
 }
 
 // HigherTimeframeBiasPayload is one fresh, causally closed H1/H4 structure.
