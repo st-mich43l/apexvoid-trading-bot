@@ -3,10 +3,13 @@
 package kafka_test
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/transport/kafka"
 )
 
@@ -68,6 +71,43 @@ func validEnvelope() kafka.Envelope {
 func TestEnvelope_Validate_AcceptsAWellFormedEnvelope(t *testing.T) {
 	if err := validEnvelope().Validate(); err != nil {
 		t.Fatalf("expected a valid envelope to pass, got: %v", err)
+	}
+}
+
+func TestOpportunityPayload_CarriesGoConfluenceContext(t *testing.T) {
+	candidate := testCandidate()
+	candidate.ObservedTimeframe = market.M5
+	candidate.Technical = &opportunity.TechnicalContext{
+		ATR: 3.2, ReferencePrice: 2001.0, ReferenceTime: 1000,
+		Confluence: &opportunity.ConfluenceContext{
+			Version: "v1", SelectedStars: 3, V1Stars: 3, V2Stars: 2,
+			V2Raw: 14.5, RawFactorScore: 10.5, ZoneQualityScore: 2.0,
+			Factors: opportunity.ConfluenceFactors{HTFAligned: true, Touches: 2, StructuralAgreement: true},
+		},
+	}
+	payload := kafka.OpportunityPayloadFromCandidate(candidate, kafka.AlgorithmVersion{Structure: "v2", Liquidity: "v1"})
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+	var decoded struct {
+		TechnicalContext struct {
+			Confluence struct {
+				Version       string `json:"version"`
+				SelectedStars int    `json:"selected_stars"`
+				Factors       struct {
+					HTFAligned bool `json:"htf_aligned"`
+					Touches    int  `json:"touches"`
+				} `json:"factors"`
+			} `json:"confluence"`
+		} `json:"technical_context"`
+	}
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		t.Fatalf("decode payload: %v", err)
+	}
+	got := decoded.TechnicalContext.Confluence
+	if got.Version != "v1" || got.SelectedStars != 3 || !got.Factors.HTFAligned || got.Factors.Touches != 2 {
+		t.Fatalf("confluence context was not preserved: %+v", got)
 	}
 }
 

@@ -147,6 +147,28 @@ def test_go_mad_telemetry_is_copied_verbatim_without_python_reanalysis():
 
 
 @pytest.mark.no_database
+def test_go_confluence_stars_are_consumed_without_evidence_count_recalculation():
+  raw = golden()
+  raw["payload"]["evidence"] = [{"code": "m5_supply_zone_fresh"}]
+  raw["payload"]["technical_context"]["confluence"] = {
+    "version": "v1", "selected_stars": 3, "v1_stars": 3, "v2_stars": 2,
+    "v2_raw": 14.0, "raw_factor_score": 12.0,
+    "zone_quality_score": 2.0, "mad_bonus": 0.0,
+    "factors": {
+      "htf_aligned": True, "touches": 0, "wick_rejection": True,
+      "displacement_grade": True, "session_context": True,
+      "structural_agreement": True, "fib_touch": False, "choch": False,
+    },
+  }
+  match = pol.build_strategy_match(
+    parse_analysis_event(OpportunityTopic, json.dumps(raw)),
+    profile=SUPPLY, now=raw["payload"]["created_at"] + 1,
+  )
+  assert match.confluence == 3
+  assert (match.confluence_v1, match.confluence_v2, match.confluence_scoring_version) == (3, 2, "v1")
+
+
+@pytest.mark.no_database
 def test_go_higher_timeframe_bias_never_uses_primary_m5_as_substitute():
   raw = golden()
   p = raw["payload"]

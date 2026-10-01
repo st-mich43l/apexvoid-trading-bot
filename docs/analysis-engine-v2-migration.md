@@ -36,6 +36,17 @@ stop/target rounding preserves the candidate's protective ordering. This is
 technical publication geometry only: Algo Bot still owns quote selection,
 entry-ladder construction, account risk, and broker submission.
 
+**Confluence ownership (2026-10-02):** the Python V1/V2 confluence arithmetic
+is now computed by `internal/confluence` from canonical Go zone, structure,
+session, Fibonacci, reaction, and MAD facts. `technical_context.confluence`
+publishes the selected stars plus named factors and raw components. Algo Bot
+consumes that value for policy telemetry and does not rerun the legacy
+confluence detector. Older events without this additive block remain
+backward-compatible and use their existing evidence-count compatibility path.
+The source-zone quality inputs are intentionally documented as a remaining
+parity item where Go does not yet retain Python-only Grade-A grab or exact
+Fibonacci-level provenance.
+
 | Capability | Legacy Python path | V2 Go owner | Parity or redesign? | Live status | Python removal status |
 |---|---|---|---|---|---|
 | OHLC candle model / validation | `app/analysis/*` implicit dict shape, no central validator | `internal/market` (`price.go`, `window.go`), `internal/marketdata/validation.go` | **Exact parity** (numeric geometry) + **new**: explicit `ValidateCandle`/`InvalidReason` enum has no Python precedent — legacy never rejected malformed bars structurally | Shadow only (`cmd/replay`) | Not removable — still the only path live trading reads |

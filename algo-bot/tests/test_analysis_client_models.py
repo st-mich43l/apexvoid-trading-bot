@@ -183,6 +183,40 @@ def test_go_mad_telemetry_extension_decodes_without_becoming_policy_gate():
   assert parsed.mad.affinity == 0.86
 
 
+@pytest.mark.no_database
+def test_go_confluence_extension_decodes_as_engine_owned_facts():
+  event = _opportunity()
+  event["payload"]["technical_context"] = {
+    "atr": 3.6,
+    "reference_price": 4353.0,
+    "reference_time": 100,
+    "confluence": {
+      "version": "v1",
+      "selected_stars": 2,
+      "v1_stars": 2,
+      "v2_stars": 3,
+      "v2_raw": 18.5,
+      "raw_factor_score": 15.0,
+      "zone_quality_score": 2.0,
+      "mad_bonus": 0.75,
+      "factors": {
+        "htf_aligned": True,
+        "touches": 1,
+        "wick_rejection": True,
+        "displacement_grade": False,
+        "session_context": True,
+        "structural_agreement": True,
+        "fib_touch": False,
+        "choch": False,
+      },
+    },
+  }
+  parsed = parse_analysis_event(OpportunityTopic, json.dumps(event)).payload.technical_context
+  assert parsed is not None and parsed.confluence is not None
+  assert parsed.confluence.selected_stars == 2
+  assert parsed.confluence.factors.touches == 1
+
+
 def test_technical_context_is_optional_for_retained_events():
   assert parse_analysis_event(OpportunityTopic, json.dumps(_opportunity())).payload.technical_context is None
 

@@ -44,6 +44,7 @@ func opportunityPayloadFromCandidate(c opportunity.Candidate, algo AlgorithmVers
 		}
 		technical.CandleEvidence = candleEvidencePayload(c.Technical.CandleEvidence)
 		technical.MAD = madContextPayload(c.Technical.MAD)
+		technical.Confluence = confluenceContextPayload(c.Technical.Confluence)
 		for _, higher := range c.Technical.HigherTimeframes {
 			technical.HigherTimeframes = append(technical.HigherTimeframes, HigherTimeframeBiasPayload{
 				Timeframe: string(higher.Timeframe), Direction: string(higher.Direction), Layer: higher.Layer, ReferenceTime: higher.ReferenceTime,
@@ -66,6 +67,23 @@ func opportunityPayloadFromCandidate(c opportunity.Candidate, algo AlgorithmVers
 		Quality:          QualityPayload{Overall: c.Quality.Overall, Components: c.Quality.Components},
 		AlgorithmVersion: AlgorithmVersionPayload{Structure: algo.Structure, Liquidity: algo.Liquidity},
 		FormedAt:         c.FormedAt, CreatedAt: c.CreatedAt, ExpiresAt: c.ExpiresAt, RecoveredAt: recoveredAt,
+	}
+}
+
+func confluenceContextPayload(c *opportunity.ConfluenceContext) *ConfluenceContextPayload {
+	if c == nil {
+		return nil
+	}
+	return &ConfluenceContextPayload{
+		Version: c.Version, SelectedStars: c.SelectedStars, V1Stars: c.V1Stars,
+		V2Stars: c.V2Stars, V2Raw: c.V2Raw, RawFactorScore: c.RawFactorScore,
+		ZoneQualityScore: c.ZoneQualityScore, MADBonus: c.MADBonus,
+		Factors: ConfluenceFactorsPayload{
+			HTFAligned: c.Factors.HTFAligned, Touches: c.Factors.Touches,
+			WickRejection: c.Factors.WickRejection, DisplacementGrade: c.Factors.DisplacementGrade,
+			SessionContext: c.Factors.SessionContext, StructuralAgreement: c.Factors.StructuralAgreement,
+			FibTouch: c.Factors.FibTouch, CHoCH: c.Factors.CHoCH,
+		},
 	}
 }
 
