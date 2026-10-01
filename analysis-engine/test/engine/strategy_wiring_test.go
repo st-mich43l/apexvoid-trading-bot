@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/arbitration"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/config"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/engine"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/indicator"
@@ -259,9 +258,10 @@ func TestEngine_EveryLiveOpportunityCarriesCausalTechnicalFacts(t *testing.T) {
 // and then never told the consumer anything — so the algo-bot kept every
 // opportunity on the stale conflict_held status it had stored before the
 // restart. A decision is a current-status projection, so the first live bar
-// must publish the complete current in-play set. Resting zones intentionally
-// do not enter Kafka: publishing one projection for every historical zone
-// starves the current executable decision behind the synchronous outbox.
+// must publish the complete current decision set. Resting-zone projections
+// are normally omitted, but the first live projection must clear any stale
+// winner/conflict_held status left in the consumer after a restart. The
+// publisher queues executable decisions before that cleanup.
 func TestEngine_FirstLiveBarAfterBootstrapRepublishesEveryInPlayArbitrationDecision(t *testing.T) {
 	repoRoot := filepath.Join("..", "..", "..")
 	doc, err := config.ResolveDocument(filepath.Join(repoRoot, "config", "apexvoid.yml"))
@@ -313,37 +313,9 @@ func TestEngine_FirstLiveBarAfterBootstrapRepublishesEveryInPlayArbitrationDecis
 	for _, d := range client.arbitrationSnapshot() {
 		published[d.OpportunityID] = true
 	}
-	reference := candles[last].Close
-	ready := false
 	for _, c := range snapshot.Opportunities {
-		if c.Technical != nil && c.Entry.Low <= reference && reference <= c.Entry.High {
-			ready = true
-			break
-		}
-	}
-	for _, c := range snapshot.Opportunities {
-		inPlay := settings.Arbitration.InPlayATR <= 0
-		if ready {
-			inPlay = c.Technical != nil && c.Entry.Low <= reference && reference <= c.Entry.High
-		} else if c.Technical != nil && c.Technical.ATR > 0 && settings.Arbitration.InPlayATR > 0 {
-			distance := 0.0
-			// The live event's close is the same reference passed to
-			// ArbitrateInPlay by SymbolWorker.
-			switch {
-			case reference < c.Entry.Low:
-				distance = c.Entry.Low - reference
-			case reference > c.Entry.High:
-				distance = reference - c.Entry.High
-			}
-			inPlay = distance <= settings.Arbitration.InPlayATR*c.Technical.ATR
-		}
-		if inPlay && !published[c.ID] {
-			t.Errorf("in-play opportunity %s had no arbitration decision published on the first live bar after bootstrap", c.ID)
-		}
-	}
-	for _, d := range client.arbitrationSnapshot() {
-		if d.ReasonCode == arbitration.ReasonNotInPlay {
-			t.Errorf("resting opportunity %s should not publish a not_in_play projection", d.OpportunityID)
+		if !published[c.ID] {
+			t.Errorf("opportunity %s had no arbitration decision published on the first live bar after bootstrap", c.ID)
 		}
 	}
 }
