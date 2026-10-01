@@ -67,8 +67,6 @@ def live_inputs(monkeypatch, *, bid=4354.1, ask=4354.3, news=None):
   monkeypatch.setattr(worker, "_load_frames", AsyncMock(return_value=frames))
   monkeypatch.setattr(worker, "_load_spot", AsyncMock(return_value=worker.AutoTradeSpot(
     price=(bid + ask) / 2, ts=int(time.time()), fresh=True, bid=bid, ask=ask)))
-  monkeypatch.setattr(worker, "_htf_zones", lambda *a, **k: [])
-  monkeypatch.setattr(worker, "_htf_levels", lambda *a, **k: [])
 
 
 STREAM = "execution:trade_plans"
@@ -564,28 +562,6 @@ async def test_an_unreadable_live_set_fails_open_and_the_match_still_publishes(h
   await prod.set(go_live_opportunities_key("XAU"), "{broken")
   await cycle(prod)
   assert [plan["setup_id"] for plan in await plans(prod)] == ["go_opp_chain"]
-
-
-@pytest.mark.asyncio
-async def test_a_go_only_cycle_publishes_without_recomputing_python_htf_zones_or_levels(h, prod, monkeypatch):
-  calls: list[str] = []
-  real_zones, real_levels = worker._htf_zones, worker._htf_levels
-
-  def zones_spy(*args, **kwargs):
-    calls.append("zones")
-    return real_zones(*args, **kwargs)
-
-  def levels_spy(*args, **kwargs):
-    calls.append("levels")
-    return real_levels(*args, **kwargs)
-
-  monkeypatch.setattr(worker, "_htf_zones", zones_spy)
-  monkeypatch.setattr(worker, "_htf_levels", levels_spy)
-  await go_event_delivered(h)
-  await cycle(prod)
-  published = await plans(prod)
-  assert [plan["setup_id"] for plan in published] == ["go_opp_chain"]
-  assert calls == []
 
 
 # ---- static guarantees --------------------------------------------------------------------------------------

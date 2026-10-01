@@ -5,13 +5,17 @@ from __future__ import annotations
 from pathlib import Path
 
 import s13_legacy_classification as cls
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
+
+pytestmark = pytest.mark.no_database
 
 # Unreachable from every process entrypoint, reviewed as offline research or a
 # compatibility re-export. A NEW unreachable module must be reviewed and added
 # here deliberately, not slip in unnoticed.
 REVIEWED_UNREACHABLE = {
+  "app.analysis.m1_trigger",
   "app.scalping.lab_event_builder",
   "app.scalping.mad_phase",
   "app.scalping.mad_replay",

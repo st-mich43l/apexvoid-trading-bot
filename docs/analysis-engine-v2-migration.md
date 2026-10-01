@@ -14,6 +14,15 @@ maps remain Python-owned. The Python detector modules listed below are not a
 second live automatic source; they remain only where an execution or
 presentation consumer still imports them.
 
+**Automatic cutover status (2026-10-01):** all 19 configured strategy
+factories and their technical inputs are Go-owned in production. The Python
+worker no longer rebuilds HTF zones/levels, runs the M1 detector, or imports
+legacy detector/confluence identity code; it consumes Go opportunity and
+barrier facts and performs execution-time checks only. The historical
+"Shadow only" labels below describe the original S-phase snapshots and are
+superseded for the automatic path. Remaining Python modules are limited to
+manual, display, or offline compatibility paths.
+
 | Capability | Legacy Python path | V2 Go owner | Parity or redesign? | Live status | Python removal status |
 |---|---|---|---|---|---|
 | OHLC candle model / validation | `app/analysis/*` implicit dict shape, no central validator | `internal/market` (`price.go`, `window.go`), `internal/marketdata/validation.go` | **Exact parity** (numeric geometry) + **new**: explicit `ValidateCandle`/`InvalidReason` enum has no Python precedent — legacy never rejected malformed bars structurally | Shadow only (`cmd/replay`) | Not removable — still the only path live trading reads |

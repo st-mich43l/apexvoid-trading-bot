@@ -14,8 +14,6 @@ import json
 import math
 import time
 
-from app.analysis.math_utils import atr_scalar, atr_series
-from app.analysis.ohlc_source import RedisOHLCSource
 from app.autotrade import zone_relevance
 from app.autotrade.zone_watch import ZoneWatch, list_active_zone_watches
 from app.core.config import runtime_config
@@ -41,6 +39,11 @@ async def _load_spot(client, symbol: str) -> tuple[float, float] | None:
 async def _atr_by_source_timeframe(
   client, symbol: str, timeframes: set[str],
 ) -> dict[str, float]:
+  # Display-only compatibility report. Keep legacy OHLC/ATR helpers out of
+  # the automatic process import graph.
+  from app.analysis.math_utils import atr_scalar, atr_series
+  from app.analysis.ohlc_source import RedisOHLCSource
+
   source = RedisOHLCSource(client)
   length = int(runtime_config.analysis.atr.length)
   result: dict[str, float] = {}
