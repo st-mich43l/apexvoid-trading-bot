@@ -23,6 +23,11 @@ const (
 	ReasonUncontested           = "uncontested"
 	ReasonRankedSingleDirection = "ranked_single_direction"
 	ReasonOppositeDirectionHeld = "opposite_direction_conflict"
+	// ReasonNotInPlay marks a live candidate whose entry zone price is not
+	// at (or near) right now. It takes no part in the direction decision: a
+	// resting demand zone far below price does not conflict with a supply
+	// zone far above it, and neither is executable until price arrives.
+	ReasonNotInPlay = "not_in_play"
 )
 
 // Config is Arbitrate's tunable input.
@@ -32,6 +37,10 @@ type Config struct {
 	// direction thesis to be decisive. Below this margin, arbitration
 	// holds rather than picking a side on a near-tie.
 	ConflictMarginQuality float64
+	// InPlayATR is how far (in the candidate's own ATR) price may sit from
+	// its entry zone for the candidate to count as in play. Zero disables
+	// the filter (every live candidate contends).
+	InPlayATR float64
 }
 
 // Decision is one candidate's arbitration outcome as of one
@@ -54,6 +63,54 @@ type Decision struct {
 	// among this symbol's live set.
 	ThesisID   string
 	MergedWith []string
+}
+
+// ArbitrateInPlay decides the direction only among candidates price is at
+// right now (see Config.InPlayATR); every other live candidate is suppressed
+// as ReasonNotInPlay and re-enters the decision on the bar price reaches it.
+// This is the executable-now rule the algo-bot's own arbitration applied
+// before the decision moved here: without it every 24-hour-live resting zone
+// above and below price contends, near-tied qualities hold the whole symbol,
+// and nothing is ever selected.
+//
+// reference is the latest closed price; a non-positive reference or a
+// disabled InPlayATR falls back to Arbitrate over the whole live set.
+func ArbitrateInPlay(live []opportunity.Candidate, cfg Config, reference float64) []Decision {
+	if len(live) == 0 {
+		return nil
+	}
+	if cfg.InPlayATR <= 0 || !(reference > 0) {
+		return Arbitrate(live, cfg)
+	}
+	inPlay := make([]opportunity.Candidate, 0, len(live))
+	result := make([]Decision, 0, len(live))
+	for _, c := range live {
+		if isInPlay(c, reference, cfg.InPlayATR) {
+			inPlay = append(inPlay, c)
+			continue
+		}
+		result = append(result, Decision{CandidateID: c.ID, Status: StatusSuppressed, ReasonCode: ReasonNotInPlay})
+	}
+	result = append(result, Arbitrate(inPlay, cfg)...)
+	sort.Slice(result, func(i, j int) bool { return result[i].CandidateID < result[j].CandidateID })
+	return result
+}
+
+// isInPlay reports whether reference is inside the candidate's entry zone or
+// within inPlayATR of its candidate-observed ATR from the nearest edge. A
+// candidate with no technical ATR cannot be measured and fails closed.
+func isInPlay(c opportunity.Candidate, reference, inPlayATR float64) bool {
+	if c.Technical == nil || !(c.Technical.ATR > 0) {
+		return false
+	}
+	distance := 0.0
+	switch {
+	case reference < c.Entry.Low:
+		distance = c.Entry.Low - reference
+	case reference > c.Entry.High:
+		distance = reference - c.Entry.High
+	}
+	return distance <= inPlayATR*c.Technical.ATR
 }
 
 // Arbitrate groups every live candidate for one symbol into thesis groups
@@ -191,7 +248,41 @@ func arbitrateRepresentatives(representatives []opportunity.Candidate, cfg Confi
 	if decisive {
 		return decideAll(ordered, top.ID, ReasonRankedSingleDirection, nil)
 	}
+	// A near-tie in quality is not a tie in thesis: the structural bias the
+	// engine already derived breaks it when exactly one side is aligned with
+	// that bias. Both sides aligned, or neither, is a genuine conflict and
+	// still holds.
+	if winner, ok := biasTiebreak(ordered); ok {
+		return decideAll(ordered, winner.ID, ReasonRankedSingleDirection, nil)
+	}
 	return decideAll(ordered, "", ReasonOppositeDirectionHeld, []string{top.ID, strongestOpposing.ID})
+}
+
+// biasAligned reports whether the candidate trades with the engine's
+// structural bias as of its observation bar. An absent bias is not aligned.
+func biasAligned(c opportunity.Candidate) bool {
+	return c.Technical != nil && c.Technical.BiasDirection.IsValid() && c.Technical.BiasDirection == c.Direction
+}
+
+// biasTiebreak returns the best-ranked candidate of the one direction whose
+// candidates are bias-aligned, when only one direction has any. ordered is
+// already rank-sorted.
+func biasTiebreak(ordered []opportunity.Candidate) (opportunity.Candidate, bool) {
+	var winner opportunity.Candidate
+	found := false
+	for _, c := range ordered {
+		if !biasAligned(c) {
+			continue
+		}
+		if !found {
+			winner, found = c, true
+			continue
+		}
+		if c.Direction != winner.Direction {
+			return opportunity.Candidate{}, false
+		}
+	}
+	return winner, found
 }
 
 // less orders by Quality.Overall descending (higher quality ranks first),

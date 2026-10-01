@@ -19,7 +19,7 @@
     },
     "reason_code": {
       "type": "string",
-      "enum": ["uncontested", "ranked_single_direction", "opposite_direction_conflict"],
+      "enum": ["uncontested", "ranked_single_direction", "opposite_direction_conflict", "not_in_play"],
       "description": "Shared across every Decision one Arbitrate call returns — describes the batch outcome, not a per-candidate property (internal/arbitration.ReasonCode)."
     },
     "conflicting_with": {
