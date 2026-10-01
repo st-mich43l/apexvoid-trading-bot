@@ -54,6 +54,25 @@ func TestGeometryRoundToTick(t *testing.T) {
 	}
 }
 
+func TestGeometryDirectionalTickRounding(t *testing.T) {
+	fx, err := market.NewGeometry("EURUSD", "EURUSD", 0.0001, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := fx.FloorToTick(1.101019); got != 1.10101 {
+		t.Fatalf("FloorToTick = %v, want 1.10101", got)
+	}
+	if got := fx.CeilToTick(1.101011); got != 1.10102 {
+		t.Fatalf("CeilToTick = %v, want 1.10102", got)
+	}
+	if got := fx.FloorToTick(1.10101); got != 1.10101 {
+		t.Fatalf("FloorToTick changed aligned price: %v", got)
+	}
+	if got := fx.CeilToTick(1.10101); got != 1.10101 {
+		t.Fatalf("CeilToTick changed aligned price: %v", got)
+	}
+}
+
 func TestParseTimeframeUnknownFailsClosed(t *testing.T) {
 	if _, err := market.ParseTimeframe("M7"); err == nil {
 		t.Fatal("expected an error for an unrecognized timeframe")

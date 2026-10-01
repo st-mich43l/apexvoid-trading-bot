@@ -28,6 +28,14 @@ manual, display, or offline compatibility paths.
 > the authoritative current boundary is the paragraph above and the
 > production import gate in `algo-bot/s13_legacy_classification.py`.
 
+**Publication geometry invariant (2026-10-02):** before a Go opportunity is
+stored in the lifecycle book or published to Kafka, its entry band, technical
+invalidation, and targets are aligned to the resolved instrument
+`price_digits`. Entry bands are widened rather than narrowed; directional
+stop/target rounding preserves the candidate's protective ordering. This is
+technical publication geometry only: Algo Bot still owns quote selection,
+entry-ladder construction, account risk, and broker submission.
+
 | Capability | Legacy Python path | V2 Go owner | Parity or redesign? | Live status | Python removal status |
 |---|---|---|---|---|---|
 | OHLC candle model / validation | `app/analysis/*` implicit dict shape, no central validator | `internal/market` (`price.go`, `window.go`), `internal/marketdata/validation.go` | **Exact parity** (numeric geometry) + **new**: explicit `ValidateCandle`/`InvalidReason` enum has no Python precedent — legacy never rejected malformed bars structurally | Shadow only (`cmd/replay`) | Not removable — still the only path live trading reads |
