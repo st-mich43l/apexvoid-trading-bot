@@ -210,7 +210,7 @@ async def _emit_funnel_complete(client, event: dict) -> None:
     normalize_setup_type,
     BUCKET_SCALP,
   )
-  from app.scalping.context import classify_session
+  from app.autotrade.session_context import classify_session
   from app.scalping.risk import (
     apply_daily_reset,
     load_risk,

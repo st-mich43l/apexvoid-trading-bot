@@ -43,7 +43,8 @@ FAMILY_EXEC_SESSION_LEVEL = "session_level"
 FAMILY_EXEC_TRENDLINE = "trendline"
 FAMILY_UNKNOWN = "unknown"
 
-# Detector-family strings from app.analysis.detectors (avoid circular import).
+# Historical family strings are literals here; this module never imports a
+# technical detector implementation.
 FAMILY_DETECTOR_KEY_LEVEL = "key_level"
 FAMILY_DETECTOR_SUPPLY_DEMAND = "supply_demand"
 FAMILY_DETECTOR_SESSION_LEVEL = "session_level"
