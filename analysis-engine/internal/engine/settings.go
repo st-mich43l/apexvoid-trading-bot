@@ -52,6 +52,17 @@ type Settings struct {
 	DefendedLevels      []float64
 	DefendedLevelBuffer float64
 
+	// InstrumentStopMinPips/InstrumentStopMaxPips are resolved from the
+	// concrete instrument (including its pack) by ApplyInstrument.  They are
+	// intentionally separate from the global execution-family defaults: the
+	// same strategy family has different safe envelopes on EURUSD, GBPJPY and
+	// XAU.  InstrumentStopEnvelopeConfigured is false only for unit tests or
+	// callers that have not applied an instrument yet; production registration
+	// always applies it and therefore fails closed if the config is missing.
+	InstrumentStopMinPips            float64
+	InstrumentStopMaxPips            float64
+	InstrumentStopEnvelopeConfigured bool
+
 	// ConfigVersion/ConfigFingerprint are the resolved document's own
 	// whole-document provenance (ConfigProvenanceFromConfig — the SAME
 	// value already used for Kafka envelope provenance), computed once
