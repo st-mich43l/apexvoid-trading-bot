@@ -46,6 +46,7 @@ type SymbolWorker struct {
 	// the primary timeframe by its latest closed bar (rebuildContext runs on
 	// every timeframe's event; the chain only changes with a primary bar).
 	legacyZoneAt    int64
+	legacyZoneValid bool
 	legacyZoneState zone.ZoneState
 }
 
@@ -415,10 +416,10 @@ func (w *SymbolWorker) legacyZones(original zone.ZoneState) zone.ZoneState {
 		return original
 	}
 	last := candles[len(candles)-1].Time
-	if w.legacyZoneAt == last && w.legacyZoneState.Zones != nil {
+	if w.legacyZoneValid && w.legacyZoneAt == last {
 		return w.legacyZoneState
 	}
 	w.legacyZoneState = legacyZoneState(candles, original, w.settings.LegacyZones)
-	w.legacyZoneAt = last
+	w.legacyZoneAt, w.legacyZoneValid = last, true
 	return w.legacyZoneState
 }
