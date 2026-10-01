@@ -230,7 +230,7 @@ func (w *SymbolWorker) ApplyWithResult(event marketdata.BarEvent) (AnalysisSnaps
 	doneOpp()
 
 	doneArb := w.telemetry.Time(telemetry.PhaseArbitration, symbolLabel, tfLabel)
-	w.arbitrate(event.Candle.Time, event.PublishesOpportunity())
+	w.arbitrate(event.Candle.Time, event.Candle.Close, event.PublishesOpportunity())
 	doneArb()
 
 	doneSnap := w.telemetry.Time(telemetry.PhaseSnapshot, symbolLabel, tfLabel)
@@ -347,9 +347,9 @@ func (w *SymbolWorker) technicalContext(event marketdata.BarEvent, reaction *opp
 // baseline stays correct, but nothing is enqueued while publish is false —
 // bootstrap/replay must emit zero events, the same contract ResumeLive's
 // own doc comment already establishes for opportunity lifecycle events.
-func (w *SymbolWorker) arbitrate(now int64, publish bool) {
+func (w *SymbolWorker) arbitrate(now int64, reference float64, publish bool) {
 	live := w.state.Opportunities.Live()
-	decisions := arbitration.Arbitrate(live, w.settings.Arbitration)
+	decisions := arbitration.ArbitrateInPlay(live, w.settings.Arbitration, reference)
 	fresh := make(map[string]arbitration.Decision, len(decisions))
 	for _, d := range decisions {
 		fresh[d.CandidateID] = d

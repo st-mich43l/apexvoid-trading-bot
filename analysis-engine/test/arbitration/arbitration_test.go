@@ -261,3 +261,133 @@ func TestArbitrate_EmptyStructuralIDNeverMerges(t *testing.T) {
 		t.Fatalf("expected no thesis correlation when StructuralID is empty")
 	}
 }
+
+func inPlayCandidate(id string, direction market.Direction, quality, low, high float64) opportunity.Candidate {
+	c := candidate(id, direction, quality)
+	c.Entry = opportunity.EntryZone{Low: low, High: high}
+	c.Technical = &opportunity.TechnicalContext{ATR: 1.0}
+	return c
+}
+
+func TestArbitrateInPlay_FarOppositeZoneDoesNotHoldTheSymbol(t *testing.T) {
+	cfg := arbitration.Config{ConflictMarginQuality: 0.15, InPlayATR: 1.0}
+	live := []opportunity.Candidate{
+		inPlayCandidate("demand_here", market.Buy, 0.70, 100.0, 100.5),
+		inPlayCandidate("supply_far", market.Sell, 0.72, 120.0, 120.5), // near-tied quality, but 19 ATR away
+	}
+
+	decisions := arbitration.ArbitrateInPlay(live, cfg, 100.2)
+
+	if got := decisionFor(decisions, "demand_here"); got.Status != arbitration.StatusUncontested {
+		t.Fatalf("the only in-play candidate must be uncontested, got %s/%s", got.Status, got.ReasonCode)
+	}
+	far := decisionFor(decisions, "supply_far")
+	if far.Status != arbitration.StatusSuppressed || far.ReasonCode != arbitration.ReasonNotInPlay {
+		t.Fatalf("a zone price is nowhere near must be suppressed as not_in_play, got %s/%s", far.Status, far.ReasonCode)
+	}
+}
+
+func TestArbitrateInPlay_BothSidesInPlayStillHoldOnANearTie(t *testing.T) {
+	cfg := arbitration.Config{ConflictMarginQuality: 0.15, InPlayATR: 1.0}
+	live := []opportunity.Candidate{
+		inPlayCandidate("demand", market.Buy, 0.70, 100.0, 100.5),
+		inPlayCandidate("supply", market.Sell, 0.72, 100.6, 101.0),
+	}
+
+	decisions := arbitration.ArbitrateInPlay(live, cfg, 100.55)
+
+	for _, id := range []string{"demand", "supply"} {
+		if got := decisionFor(decisions, id); got.Status != arbitration.StatusConflictHeld {
+			t.Fatalf("%s: a genuine in-play near-tie must still hold, got %s", id, got.Status)
+		}
+	}
+}
+
+func TestArbitrateInPlay_DistanceIsMeasuredFromTheNearestEdgeInCandidateATR(t *testing.T) {
+	cfg := arbitration.Config{ConflictMarginQuality: 0.15, InPlayATR: 1.0}
+	near := inPlayCandidate("near", market.Buy, 0.7, 100.0, 100.5)
+	atEdge := inPlayCandidate("edge", market.Sell, 0.7, 98.0, 99.0) // reference 100.0 is exactly 1 ATR above its high edge
+	noATR := inPlayCandidate("no_atr", market.Sell, 0.9, 100.0, 100.5)
+	noATR.Technical = nil
+
+	decisions := arbitration.ArbitrateInPlay([]opportunity.Candidate{near, atEdge, noATR}, cfg, 100.0)
+
+	if got := decisionFor(decisions, "no_atr"); got.ReasonCode != arbitration.ReasonNotInPlay {
+		t.Fatalf("a candidate with no technical ATR cannot be measured and must fail closed, got %s", got.ReasonCode)
+	}
+	if got := decisionFor(decisions, "edge"); got.ReasonCode == arbitration.ReasonNotInPlay {
+		t.Fatalf("a candidate exactly InPlayATR from price is in play, got %s", got.ReasonCode)
+	}
+}
+
+func TestArbitrateInPlay_DisabledOrNoReferenceFallsBackToTheWholeLiveSet(t *testing.T) {
+	live := []opportunity.Candidate{
+		inPlayCandidate("a", market.Buy, 0.70, 100.0, 100.5),
+		inPlayCandidate("b", market.Sell, 0.72, 120.0, 120.5),
+	}
+	for name, run := range map[string][]arbitration.Decision{
+		"disabled":     arbitration.ArbitrateInPlay(live, arbitration.Config{ConflictMarginQuality: 0.15}, 100.2),
+		"no_reference": arbitration.ArbitrateInPlay(live, arbitration.Config{ConflictMarginQuality: 0.15, InPlayATR: 1.0}, 0),
+	} {
+		for _, d := range run {
+			if d.Status != arbitration.StatusConflictHeld {
+				t.Fatalf("%s: expected the unfiltered near-tie hold, got %s for %s", name, d.Status, d.CandidateID)
+			}
+		}
+	}
+}
+
+func withBias(c opportunity.Candidate, bias market.Direction) opportunity.Candidate {
+	if c.Technical == nil {
+		c.Technical = &opportunity.TechnicalContext{ATR: 1.0}
+	}
+	c.Technical.BiasDirection = bias
+	return c
+}
+
+func TestArbitrate_NearTieIsBrokenByTheSideAlignedWithStructuralBias(t *testing.T) {
+	cfg := arbitration.Config{ConflictMarginQuality: 0.15}
+	counter := withBias(candidate("buy_counter", market.Buy, 1.0), market.Sell)
+	aligned := withBias(candidate("sell_aligned", market.Sell, 0.92), market.Sell)
+
+	decisions := arbitration.Arbitrate([]opportunity.Candidate{counter, aligned}, cfg)
+
+	if got := decisionFor(decisions, "sell_aligned"); got.Status != arbitration.StatusWinner {
+		t.Fatalf("the bias-aligned side of a near-tie must win, got %s/%s", got.Status, got.ReasonCode)
+	}
+	if got := decisionFor(decisions, "buy_counter"); got.Status != arbitration.StatusSuppressed {
+		t.Fatalf("the counter-bias side of a near-tie must be suppressed, got %s", got.Status)
+	}
+}
+
+func TestArbitrate_NearTieStillHoldsWhenBothOrNeitherSideIsAligned(t *testing.T) {
+	cfg := arbitration.Config{ConflictMarginQuality: 0.15}
+	for name, live := range map[string][]opportunity.Candidate{
+		"neither": {
+			withBias(candidate("b", market.Buy, 1.0), market.Direction("")),
+			withBias(candidate("s", market.Sell, 0.95), market.Direction("")),
+		},
+		"both": {
+			withBias(candidate("b1", market.Buy, 1.0), market.Buy),
+			withBias(candidate("s1", market.Sell, 0.95), market.Sell),
+		},
+	} {
+		for _, d := range arbitration.Arbitrate(live, cfg) {
+			if d.Status != arbitration.StatusConflictHeld {
+				t.Fatalf("%s: expected hold, got %s for %s", name, d.Status, d.CandidateID)
+			}
+		}
+	}
+}
+
+func TestArbitrate_DecisiveQualityStillBeatsBiasAlignment(t *testing.T) {
+	cfg := arbitration.Config{ConflictMarginQuality: 0.15}
+	strong := withBias(candidate("buy_counter", market.Buy, 0.95), market.Sell)
+	weak := withBias(candidate("sell_aligned", market.Sell, 0.60), market.Sell)
+
+	decisions := arbitration.Arbitrate([]opportunity.Candidate{strong, weak}, cfg)
+
+	if got := decisionFor(decisions, "buy_counter"); got.Status != arbitration.StatusWinner {
+		t.Fatalf("a decisively higher quality must win regardless of bias, got %s", got.Status)
+	}
+}

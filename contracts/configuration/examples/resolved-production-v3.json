@@ -1,7 +1,8 @@
 {
   "analysis": {
     "arbitration": {
-      "conflict_margin_quality": 0.15
+      "conflict_margin_quality": 0.15,
+      "in_play_atr": 1.0
     },
     "calendar": {
       "currencies": [
