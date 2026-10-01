@@ -1,6 +1,9 @@
 package kafka
 
-import "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
+import (
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/candle"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
+)
 
 // OpportunityPayloadFromCandidate is the single producer-side adapter from
 // the transport-independent strategy domain into the neutral Kafka event.
@@ -39,6 +42,7 @@ func opportunityPayloadFromCandidate(c opportunity.Candidate, algo AlgorithmVers
 				ZoneID: r.ZoneID, TouchBarTime: r.TouchBarTime, ConfirmationBarTime: r.ConfirmationBarTime, ReactionType: r.ReactionType, Pattern: r.Pattern,
 			}
 		}
+		technical.CandleEvidence = candleEvidencePayload(c.Technical.CandleEvidence)
 		for _, higher := range c.Technical.HigherTimeframes {
 			technical.HigherTimeframes = append(technical.HigherTimeframes, HigherTimeframeBiasPayload{
 				Timeframe: string(higher.Timeframe), Direction: string(higher.Direction), Layer: higher.Layer, ReferenceTime: higher.ReferenceTime,
@@ -62,4 +66,24 @@ func opportunityPayloadFromCandidate(c opportunity.Candidate, algo AlgorithmVers
 		AlgorithmVersion: AlgorithmVersionPayload{Structure: algo.Structure, Liquidity: algo.Liquidity},
 		FormedAt:         c.FormedAt, CreatedAt: c.CreatedAt, ExpiresAt: c.ExpiresAt, RecoveredAt: recoveredAt,
 	}
+}
+
+func candleEvidencePayload(e *candle.Evidence) *CandleEvidencePayload {
+	if e == nil {
+		return nil
+	}
+	p := &CandleEvidencePayload{Version: e.Version, Direction: e.Direction, BaseScore: e.BaseScore, SynergyBonus: e.SynergyBonus, FinalScore: e.FinalScore, PrimaryPattern: e.PrimaryPattern, AllPatterns: append([]string(nil), e.AllPatterns...)}
+	if r := e.Rejection; r != nil {
+		p.Rejection = &CandleRejectionPayload{Score: r.Score, Patterns: append([]string(nil), r.Patterns...), WickFraction: r.WickFraction, BodyFraction: r.BodyFraction, CloseLocation: r.CloseLocation, Sweep: r.Sweep, SweepPenetrationATR: r.SweepPenetrationATR, Reclaim: r.Reclaim, ReclaimDepthATR: r.ReclaimDepthATR}
+	}
+	if d := e.Displacement; d != nil {
+		p.Displacement = &CandleDisplacementPayload{Score: d.Score, Patterns: append([]string(nil), d.Patterns...), BodyATR: d.BodyATR, RangeATR: d.RangeATR, BodyDominance: d.BodyDominance, CloseLocation: d.CloseLocation, Reclaim: d.Reclaim, ReclaimDepthATR: d.ReclaimDepthATR, Engulfing: d.Engulfing, EngulfingQuality: d.EngulfingQuality}
+	}
+	if s := e.Sequence; s != nil {
+		p.Sequence = &CandleSequencePayload{Score: s.Score, Patterns: append([]string(nil), s.Patterns...), Bars: s.Bars}
+	}
+	if i := e.Indecision; i != nil {
+		p.Indecision = &CandleIndecisionPayload{Doji: i.Doji, SpinningTop: i.SpinningTop, InsideBar: i.InsideBar, BodyFraction: i.BodyFraction, CompressionScore: i.CompressionScore}
+	}
+	return p
 }

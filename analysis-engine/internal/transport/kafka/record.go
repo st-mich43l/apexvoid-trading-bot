@@ -53,6 +53,60 @@ type TechnicalContextPayload struct {
 	Bias             *BiasPayload                 `json:"bias,omitempty"`
 	HigherTimeframes []HigherTimeframeBiasPayload `json:"higher_timeframes,omitempty"`
 	Confirmation     *ReactionConfirmationPayload `json:"confirmation,omitempty"`
+	CandleEvidence   *CandleEvidencePayload       `json:"candle_evidence,omitempty"`
+}
+
+type CandleEvidencePayload struct {
+	Version        int                        `json:"version"`
+	Direction      string                     `json:"direction"`
+	Rejection      *CandleRejectionPayload    `json:"rejection,omitempty"`
+	Displacement   *CandleDisplacementPayload `json:"displacement,omitempty"`
+	Sequence       *CandleSequencePayload     `json:"sequence,omitempty"`
+	Indecision     *CandleIndecisionPayload   `json:"indecision,omitempty"`
+	BaseScore      float64                    `json:"base_score"`
+	SynergyBonus   float64                    `json:"synergy_bonus"`
+	FinalScore     float64                    `json:"final_score"`
+	PrimaryPattern string                     `json:"primary_pattern,omitempty"`
+	AllPatterns    []string                   `json:"all_patterns,omitempty"`
+}
+
+type CandleRejectionPayload struct {
+	Score               float64  `json:"score"`
+	Patterns            []string `json:"patterns,omitempty"`
+	WickFraction        float64  `json:"wick_fraction"`
+	BodyFraction        float64  `json:"body_fraction"`
+	CloseLocation       float64  `json:"close_location"`
+	Sweep               bool     `json:"sweep"`
+	SweepPenetrationATR *float64 `json:"sweep_penetration_atr,omitempty"`
+	Reclaim             bool     `json:"reclaim"`
+	ReclaimDepthATR     *float64 `json:"reclaim_depth_atr,omitempty"`
+}
+
+type CandleDisplacementPayload struct {
+	Score            float64  `json:"score"`
+	Patterns         []string `json:"patterns,omitempty"`
+	BodyATR          float64  `json:"body_atr"`
+	RangeATR         float64  `json:"range_atr"`
+	BodyDominance    float64  `json:"body_dominance"`
+	CloseLocation    float64  `json:"close_location"`
+	Reclaim          bool     `json:"reclaim"`
+	ReclaimDepthATR  *float64 `json:"reclaim_depth_atr,omitempty"`
+	Engulfing        bool     `json:"engulfing"`
+	EngulfingQuality *float64 `json:"engulfing_quality,omitempty"`
+}
+
+type CandleSequencePayload struct {
+	Score    float64  `json:"score"`
+	Patterns []string `json:"patterns,omitempty"`
+	Bars     int      `json:"bars"`
+}
+
+type CandleIndecisionPayload struct {
+	Doji             bool    `json:"doji"`
+	SpinningTop      bool    `json:"spinning_top"`
+	InsideBar        bool    `json:"inside_bar"`
+	BodyFraction     float64 `json:"body_fraction"`
+	CompressionScore float64 `json:"compression_score"`
 }
 
 // ReactionConfirmationPayload describes a confirmed, separate zone-reaction

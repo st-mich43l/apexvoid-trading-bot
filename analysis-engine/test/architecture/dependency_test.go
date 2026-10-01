@@ -129,6 +129,7 @@ var rank = map[string]int{
 	"config":     1,
 	"session":    1,
 	"mad":        1,
+	"candle":     1,
 
 	"structure": 2,
 
