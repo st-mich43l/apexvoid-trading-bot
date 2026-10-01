@@ -382,21 +382,35 @@ func (w *SymbolWorker) technicalContext(event marketdata.BarEvent, direction mar
 // own doc comment already establishes for opportunity lifecycle events —
 // and the diff baseline (lastArbitration) advances only on publishing bars,
 // so the first live bar after bootstrap republishes every current decision.
+// The first live bar also republishes not_in_play projections.  They are
+// normally omitted for resting candidates, but omitting them on restart
+// leaves the consumer's old winner/conflict_held status alive forever.
 func (w *SymbolWorker) arbitrate(now int64, reference float64, publish bool) {
 	live := w.state.Opportunities.Live()
 	decisions := arbitration.ArbitrateInPlay(live, w.settings.Arbitration, reference)
 	fresh := make(map[string]arbitration.Decision, len(decisions))
+	var actionable, resting []arbitration.Decision
 	for _, d := range decisions {
 		fresh[d.CandidateID] = d
-		// A not-in-play decision is an internal projection, not an
-		// execution-relevant event. Publishing one for every resting zone
-		// floods the synchronous Kafka outbox after bootstrap (production
-		// 2026-10-01: hundreds of these delayed the current candidate's
-		// winner/conflict decision by minutes). Keep it in the diff baseline
-		// so the transition back into play is still published, but only send
-		// decisions that can affect the current execution cycle.
-		if previous, ok := w.lastArbitration[d.CandidateID]; publish && d.ReasonCode != arbitration.ReasonNotInPlay && (!ok || !decisionEqual(previous, d)) {
-			w.publisher.EnqueueArbitrationDecision(w.state.Symbol, d.CandidateID, d, now)
+		if d.ReasonCode == arbitration.ReasonNotInPlay {
+			resting = append(resting, d)
+		} else {
+			actionable = append(actionable, d)
+		}
+	}
+	if publish {
+		firstLiveProjection := len(w.lastArbitration) == 0
+		// Publish executable decisions first so a large bootstrap cleanup
+		// cannot delay the candidate that can trade now.  Resting decisions
+		// are emitted only on the first live projection (to clear stale
+		// consumer state) or when a candidate leaves/enters the watched set.
+		for _, d := range append(actionable, resting...) {
+			previous, ok := w.lastArbitration[d.CandidateID]
+			changed := !ok || !decisionEqual(previous, d)
+			publishResting := d.ReasonCode != arbitration.ReasonNotInPlay || firstLiveProjection || (ok && previous.ReasonCode != arbitration.ReasonNotInPlay)
+			if changed && publishResting {
+				w.publisher.EnqueueArbitrationDecision(w.state.Symbol, d.CandidateID, d, now)
+			}
 		}
 	}
 	// The diff baseline advances only on live bars. Bootstrap/replay publish
@@ -404,7 +418,8 @@ func (w *SymbolWorker) arbitrate(now int64, reference float64, publish bool) {
 	// every consumer on whatever status it last stored before this restart
 	// (production 2026-10-01: Python kept 77 stale conflict_held statuses
 	// because the restarted engine saw "no change"). The first live bar after
-	// bootstrap therefore republishes the whole current decision set.
+	// bootstrap therefore republishes the whole current decision set, with
+	// executable decisions queued before resting cleanup.
 	if publish {
 		w.lastArbitration = fresh
 	}
