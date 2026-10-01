@@ -27,7 +27,7 @@ from app.analysis.actionability import (
   ActionabilityDecision,
   resolve_actionability,
 )
-from app.analysis.execution_eligibility import (
+from app.autotrade.execution_eligibility import (
   ANALYSIS_ONLY,
   EXECUTION_ELIGIBILITY_VERSION,
   STATIC_ELIGIBLE,

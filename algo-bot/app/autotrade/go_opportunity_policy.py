@@ -65,7 +65,7 @@ from app.autotrade.setup_lifecycle import (
   transition_setup,
 )
 from app.autotrade.strategy_match import STRATEGY_MATCH_VERSION, StrategyMatch
-from app.analysis.execution_eligibility import (
+from app.autotrade.execution_eligibility import (
   EXECUTION_ELIGIBILITY_VERSION,
   STATIC_ELIGIBLE,
   ExecutionEligibility,
