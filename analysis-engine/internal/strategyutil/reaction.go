@@ -61,15 +61,24 @@ func ConfirmReaction(tf *analysiscontext.TimeframeContext, zoneID string, direct
 	for minIndex < len(candles) && candles[minIndex].Time < notBefore {
 		minIndex++
 	}
-	confirmation := reaction.Evaluate(candles, reaction.Params{
-		MinIndex: minIndex,
+	params := reaction.Params{
+		MinIndex:  minIndex,
 		Direction: side, Low: low, High: high,
 		TouchLookback: cfg.LookbackBars,
 		HasCHoCH:      recentCHoCH(tf.Structure.Breaks, direction, candles[earliest].Time),
 		ATR:           atr, EngulfingMinimumRangeATR: cfg.EngulfingMinimumRangeATR,
-	})
+	}
+	confirmation := reaction.Evaluate(candles, params)
 	if confirmation == nil {
 		return nil
+	}
+	// One touch is one reaction episode: if the same touch already produced a
+	// confirmation on an earlier bar, a later bar that also looks like a
+	// confirmation (follow-through) is not a second reaction.
+	if confirmation.ConfirmationIndex > 0 {
+		if earlier := reaction.Evaluate(candles[:confirmation.ConfirmationIndex], params); earlier != nil && earlier.TouchIndex == confirmation.TouchIndex {
+			return nil
+		}
 	}
 	return &opportunity.ReactionConfirmation{
 		ZoneID:              zoneID,

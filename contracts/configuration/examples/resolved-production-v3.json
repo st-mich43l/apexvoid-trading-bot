@@ -118,10 +118,12 @@
       },
       "demand": {
         "enabled": true,
+        "engulfing_minimum_range_atr": 0.5,
         "expiry_hours": 24.0,
         "invalidation_buffer_atr": 0.5,
         "minimum_strength": 0.4,
         "minimum_target_distance_atr": 1.0,
+        "reaction_lookback_bars": 3,
         "version": "v2"
       },
       "flip_zone": {
@@ -169,12 +171,14 @@
       "key_level": {
         "breakout_accept_bars": 2,
         "enabled": true,
+        "engulfing_minimum_range_atr": 0.5,
         "expiry_hours": 24.0,
         "invalidation_buffer_atr": 0.5,
         "minimum_strength": 0.4,
         "minimum_target_distance_atr": 1.0,
         "minimum_touches": 2,
         "proximity_atr": 1.0,
+        "reaction_lookback_bars": 3,
         "version": "v2"
       },
       "liquidity_sweep": {
@@ -254,10 +258,12 @@
       },
       "supply": {
         "enabled": true,
+        "engulfing_minimum_range_atr": 0.5,
         "expiry_hours": 24.0,
         "invalidation_buffer_atr": 0.5,
         "minimum_strength": 0.4,
         "minimum_target_distance_atr": 1.0,
+        "reaction_lookback_bars": 3,
         "version": "v2"
       },
       "trendline": {

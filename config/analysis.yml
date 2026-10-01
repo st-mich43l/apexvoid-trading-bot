@@ -96,6 +96,9 @@ analysis:
       # role is reported BROKEN rather than plain support/resistance.
       # Legacy default (TREND_BREAKOUT_ACCEPT_BARS): 2.
       breakout_accept_bars: 2
+      # Legacy Python reaction confirmation (shared by every technique).
+      reaction_lookback_bars: 3
+      engulfing_minimum_range_atr: 0.5
     confluence_zone:
       version: v2
       enabled: true
@@ -113,6 +116,9 @@ analysis:
       invalidation_buffer_atr: 0.5
       minimum_target_distance_atr: 1.0
       expiry_hours: 24.0
+      # Legacy Python reaction confirmation (shared by every technique).
+      reaction_lookback_bars: 3
+      engulfing_minimum_range_atr: 0.5
     demand:
       version: v2
       enabled: true
@@ -120,6 +126,9 @@ analysis:
       invalidation_buffer_atr: 0.5
       minimum_target_distance_atr: 1.0
       expiry_hours: 24.0
+      # Legacy Python reaction confirmation (shared by every technique).
+      reaction_lookback_bars: 3
+      engulfing_minimum_range_atr: 0.5
     order_block:
       version: v2
       enabled: true

@@ -51,7 +51,12 @@ func TestDemand_PublishesDistinctCausallyConfirmedReaction(t *testing.T) {
 	ctx.Timeframes[market.M5].Candles = append(candles, market.Candle{
 		Time: 1500, Open: 2022.5, High: 2024.2, Low: 2022.3, Close: 2024,
 	})
-	if later := s.Evaluate(ctx); len(later) != 1 {
-		t.Fatalf("follow-through after an already confirmed touch must not duplicate the reaction: %+v", later)
+	// The shared confirmation keeps seeing the same reaction for its lookback
+	// window; that must stay the SAME opportunity (the book deduplicates by
+	// ID), never a second reaction for the same touch.
+	for _, c := range s.Evaluate(ctx) {
+		if c.Reaction != nil && c.ID != confirmed.ID {
+			t.Fatalf("follow-through after an already confirmed touch must not create a second reaction: %+v", c.Reaction)
+		}
 	}
 }

@@ -43,6 +43,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategyutil"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/zone"
 )
 
@@ -73,6 +74,8 @@ type Config struct {
 	InvalidationBufferATR    float64
 	MinimumTargetDistanceATR float64
 	ExpiryHours              float64
+	// Reaction is the shared legacy confirmation tuning (see strategyutil).
+	Reaction strategyutil.ReactionConfig
 	// RequireExplicitRole skips levels whose support/resistance role is still
 	// ambiguous (legacy per-instrument Key Level quality rule).
 	RequireExplicitRole bool
@@ -145,6 +148,10 @@ func parseConfig(params map[string]any) (Config, error) {
 	if breakoutAcceptBars < 1 {
 		return Config{}, fmt.Errorf("breakout_accept_bars must be >= 1")
 	}
+	reactionConfig, err := strategyutil.ParseReactionConfig(params)
+	if err != nil {
+		return Config{}, err
+	}
 	// Override-only parameter (set from an instrument's overrides, which the
 	// config schema cannot express as a base boolean): absent means false.
 	requireExplicitRole := false
@@ -158,7 +165,7 @@ func parseConfig(params map[string]any) (Config, error) {
 	return Config{
 		MinimumTouches: minimumTouches, MinimumStrength: minimumStrength, ProximityATR: proximityATR,
 		InvalidationBufferATR: invalidationBuffer, MinimumTargetDistanceATR: minimumTargetDistance,
-		ExpiryHours: expiryHours, BreakoutAcceptBars: breakoutAcceptBars, RequireExplicitRole: requireExplicitRole,
+		ExpiryHours: expiryHours, BreakoutAcceptBars: breakoutAcceptBars, Reaction: reactionConfig, RequireExplicitRole: requireExplicitRole,
 	}, nil
 }
 
@@ -277,7 +284,7 @@ func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate 
 			if contraDirection != nil && direction == *contraDirection {
 				effectiveLevelPrice = contraLevel
 			}
-			reaction := confirmedReaction(tfCtx.Candles, direction, reactLow, reactHigh, level.ID)
+			reaction := strategyutil.ConfirmReaction(tfCtx, level.ID, direction, float64(reactLow), float64(reactHigh), atr, 0, s.cfg.Reaction)
 			if reaction == nil {
 				continue
 			}
