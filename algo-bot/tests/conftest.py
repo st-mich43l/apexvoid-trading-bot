@@ -27,7 +27,6 @@ os.environ.setdefault("POSTGRES_PASSWORD", "apexvoid")
 from app.core.config import runtime_config  # noqa: E402  (import after env is seeded)
 from app.persistence import store  # noqa: E402  (import after env is seeded)
 from app.persistence import redis_state  # noqa: E402
-from app.analysis import market_map_delivery  # noqa: E402
 
 
 @pytest.fixture(scope="session")
@@ -50,10 +49,8 @@ def _fake_redis(monkeypatch):
     "_client",
     client,
   )
-  market_map_delivery.clear_market_map_cache()
   yield
   redis_state._client = None
-  market_map_delivery.clear_market_map_cache()
 
 
 @pytest.fixture(autouse=True)

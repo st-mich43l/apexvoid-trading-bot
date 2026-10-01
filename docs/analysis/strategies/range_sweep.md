@@ -4,5 +4,6 @@
 one established edge by the configured ATR distance and a close back inside.
 Entry is the reclaimed edge band, invalidation is beyond the M1 sweep and the
 opposite range edge is the target. Identity anchors the M5 range and side.
-No sweep/reclaim or non-range structure rejects. Enabled for Go shadow
-publication; it does not alter Python live-trading policy.
+No sweep/reclaim or non-range structure rejects. It is enabled in the live Go
+opportunity stream; Algo Bot applies execution policy before any TradePlan is
+published.

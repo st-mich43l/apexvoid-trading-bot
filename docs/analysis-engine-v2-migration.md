@@ -23,6 +23,11 @@ barrier facts and performs execution-time checks only. The historical
 superseded for the automatic path. Remaining Python modules are limited to
 manual, display, or offline compatibility paths.
 
+> Status note: the matrix below is retained as the historical migration
+> record. Any row still labelled `Shadow only` predates the live Go cutover;
+> the authoritative current boundary is the paragraph above and the
+> production import gate in `algo-bot/s13_legacy_classification.py`.
+
 | Capability | Legacy Python path | V2 Go owner | Parity or redesign? | Live status | Python removal status |
 |---|---|---|---|---|---|
 | OHLC candle model / validation | `app/analysis/*` implicit dict shape, no central validator | `internal/market` (`price.go`, `window.go`), `internal/marketdata/validation.go` | **Exact parity** (numeric geometry) + **new**: explicit `ValidateCandle`/`InvalidReason` enum has no Python precedent — legacy never rejected malformed bars structurally | Shadow only (`cmd/replay`) | Not removable — still the only path live trading reads |
