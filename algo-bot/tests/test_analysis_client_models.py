@@ -105,6 +105,53 @@ def test_go_golden_fixture_decodes_with_its_technical_context():
   assert event.payload.timeframe == "M5" and event.payload.strategy == "supply"
 
 
+def test_go_candle_evidence_extension_decodes_strictly():
+  event = _opportunity()
+  event["payload"]["technical_context"]["candle_evidence"] = {
+    "version": 2,
+    "direction": "BUY",
+    "rejection": {
+      "score": 0.6,
+      "patterns": ["sweep_reclaim"],
+      "wick_fraction": 0.2,
+      "body_fraction": 0.7,
+      "close_location": 0.9,
+      "sweep": True,
+      "sweep_penetration_atr": 0.4,
+      "reclaim": True,
+      "reclaim_depth_atr": 0.3,
+    },
+    "displacement": {
+      "score": 0.8,
+      "patterns": ["strong_close"],
+      "body_atr": 1.1,
+      "range_atr": 1.4,
+      "body_dominance": 0.75,
+      "close_location": 0.9,
+      "reclaim": True,
+      "reclaim_depth_atr": 0.2,
+      "engulfing": False,
+    },
+    "indecision": {
+      "doji": False,
+      "spinning_top": False,
+      "inside_bar": False,
+      "body_fraction": 0.7,
+      "compression_score": 0.1,
+    },
+    "base_score": 0.72,
+    "synergy_bonus": 0.08,
+    "final_score": 0.8,
+    "primary_pattern": "sweep_reclaim",
+    "all_patterns": ["sweep_reclaim", "strong_close"],
+  }
+  parsed = parse_analysis_event(OpportunityTopic, json.dumps(event)).payload.technical_context
+  assert parsed is not None and parsed.candle_evidence is not None
+  assert parsed.candle_evidence.version == 2
+  assert parsed.candle_evidence.primary_pattern == "sweep_reclaim"
+  assert parsed.candle_evidence.rejection is not None
+
+
 def test_technical_context_is_optional_for_retained_events():
   assert parse_analysis_event(OpportunityTopic, json.dumps(_opportunity())).payload.technical_context is None
 
