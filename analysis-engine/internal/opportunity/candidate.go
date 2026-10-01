@@ -130,10 +130,9 @@ var ReactionPatterns = map[string]bool{
 // that first made the setup actionable, so every value is causal at that bar.
 //
 // It deliberately carries no quote/spread (a live, executable-price concern the
-// policy layer owns), no account fact, and no universal execution confluence
-// score. MAD affinity is retained only as explicitly named soft technical
-// telemetry; strategies' own Evidence and Quality remain the candidate's
-// comparable quality facts.
+// policy layer owns) or account fact. Confluence is included only as a named
+// technical scoring result copied from the engine; it is not a universal
+// execution decision and does not replace a strategy's own Quality.
 // HigherTimeframeBias is a confirmed structural read from the named closed
 // higher-timeframe candle; it is not the entry timeframe's bias or a guess.
 type HigherTimeframeBias struct {
@@ -163,6 +162,36 @@ type MADContext struct {
 	ReasonCode          string
 }
 
+// ConfluenceFactors are the named technical inputs used by the versioned
+// Python confluence scorer. They are facts, not execution gates. Touches is
+// retained as a count because the scorer caps its contribution at three.
+type ConfluenceFactors struct {
+	HTFAligned          bool
+	Touches             int
+	WickRejection       bool
+	DisplacementGrade   bool
+	SessionContext      bool
+	StructuralAgreement bool
+	FibTouch            bool
+	CHoCH               bool
+}
+
+// ConfluenceContext is the engine-owned result of the V1/V2 technical
+// confluence calculation. The selected stars are the configured scorer's
+// value; both versions and the raw components remain available for replay,
+// cards, and parity diagnostics.
+type ConfluenceContext struct {
+	Version          string
+	SelectedStars    int
+	V1Stars          int
+	V2Stars          int
+	V2Raw            float64
+	RawFactorScore   float64
+	ZoneQualityScore float64
+	MADBonus         float64
+	Factors          ConfluenceFactors
+}
+
 type TechnicalContext struct {
 	// ATR is the canonical ATR of ObservedTimeframe as of the observed bar.
 	ATR float64
@@ -187,6 +216,9 @@ type TechnicalContext struct {
 	// primary-timeframe phase snapshot. A nil value means no phase snapshot was
 	// available; it never licenses a consumer to recompute Python detectors.
 	MAD *MADContext
+	// Confluence is the engine's named factor/V1/V2 technical score. It is
+	// optional for compatibility with retained pre-S13C events.
+	Confluence *ConfluenceContext
 }
 
 // Candidate is one strategy's technical opportunity, as of the source
@@ -360,6 +392,14 @@ func (c Candidate) Validate() error {
 		if t.BiasDirection != "" && !t.BiasDirection.IsValid() {
 			return fmt.Errorf("opportunity: technical bias direction must be BUY or SELL when present")
 		}
+		if t.Confluence != nil {
+			if t.Confluence.Version != "v1" && t.Confluence.Version != "v2" {
+				return fmt.Errorf("opportunity: confluence scoring version must be v1 or v2")
+			}
+			if t.Confluence.SelectedStars < 1 || t.Confluence.SelectedStars > 3 || t.Confluence.V1Stars < 1 || t.Confluence.V1Stars > 3 || t.Confluence.V2Stars < 1 || t.Confluence.V2Stars > 3 || t.Confluence.Factors.Touches < 0 || !finite(t.Confluence.V2Raw) || !finite(t.Confluence.RawFactorScore) || !finite(t.Confluence.ZoneQualityScore) || !finite(t.Confluence.MADBonus) || t.Confluence.MADBonus < 0 {
+				return fmt.Errorf("opportunity: confluence facts are invalid")
+			}
+		}
 		seen := make(map[market.Timeframe]bool, len(t.HigherTimeframes))
 		for _, higher := range t.HigherTimeframes {
 			if higher.Timeframe != market.H1 && higher.Timeframe != market.H4 {
@@ -437,6 +477,10 @@ func cloneCandidate(c Candidate) Candidate {
 			mad.ReclaimDepthATR = cloneFloat(c.Technical.MAD.ReclaimDepthATR)
 			mad.AcceptanceCloses = cloneInt(c.Technical.MAD.AcceptanceCloses)
 			technical.MAD = &mad
+		}
+		if c.Technical.Confluence != nil {
+			confluence := *c.Technical.Confluence
+			technical.Confluence = &confluence
 		}
 		clone.Technical = &technical
 	}

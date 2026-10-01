@@ -34,7 +34,7 @@ analysis-engine/
 │   ├── context/          (implemented — Analysis Engine V2 task; MarketContext, Build, DeriveBias)
 │   ├── opportunity/       (implemented lifecycle domain — stable identity, dedup, technical terminal transitions)
 │   ├── strategy/          (registry + dependency-aware evaluator; seven independent S7 theses implemented)
-│   ├── confluence/        (still scaffolded — compositional evidence combining, doc.go + Score)
+│   ├── confluence/        (implemented — versioned Python-compatible V1/V2 technical score)
 │   ├── state/             (implemented — Analysis Engine V2 task; SymbolState wires History/Structure/Liquidity/Context/Opportunities together)
 │   ├── engine/            (implemented — Analysis Engine V2 task; SymbolWorker, Engine, Settings, AnalysisSnapshot)
 │   ├── transport/         (Redis market runtime and Kafka producer implemented — ADR-008/009/010)
@@ -46,7 +46,7 @@ analysis-engine/
 └── README.md
 ```
 
-"Scaffolded" (still applies to `strategy` and `confluence`) means: a real,
+"Scaffolded" (still applies to `strategy`) means: a real,
 compiling Go package with
 type declarations and doc comments that establish the package's
 ownership boundary and prove the dependency direction against its
@@ -282,7 +282,10 @@ The shared contract is the `Strategy` interface above — an engineering
 contract, not shared trading behavior. `internal/confluence` is the
 deliberate, documented exception: it may compose independent evidence
 (demand + order block + FVG + Fibonacci + liquidity + flip zone), but no
-other strategy inherits from a generic confluence base.
+other strategy inherits from a generic confluence base. Its versioned V1/V2
+scorer now runs in Go and is attached to published candidates as named
+technical context; it remains descriptive and does not make an execution
+decision.
 
 Strategy package slots this task's own §20 names (`breakoutretest`,
 `liquiditysweep`, `orderblock`, `fvg`, `keylevel`, `supply`, `demand`,

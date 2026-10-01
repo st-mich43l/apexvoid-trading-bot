@@ -200,6 +200,33 @@ class MADContext(FrozenConfigModel):
   reason_code: str = Field(min_length=1)
 
 
+class ConfluenceFactors(FrozenConfigModel):
+  """Named Go-owned inputs to the versioned technical confluence scorer."""
+
+  htf_aligned: bool
+  touches: int = Field(ge=0)
+  wick_rejection: bool
+  displacement_grade: bool
+  session_context: bool
+  structural_agreement: bool
+  fib_touch: bool
+  choch: bool
+
+
+class ConfluenceContext(FrozenConfigModel):
+  """Go-owned V1/V2 confluence facts; never a Python detector fallback."""
+
+  version: Literal["v1", "v2"]
+  selected_stars: int = Field(ge=1, le=3)
+  v1_stars: int = Field(ge=1, le=3)
+  v2_stars: int = Field(ge=1, le=3)
+  v2_raw: FiniteFloat
+  raw_factor_score: FiniteFloat
+  zone_quality_score: FiniteFloat = Field(ge=0)
+  mad_bonus: FiniteFloat = Field(ge=0)
+  factors: ConfluenceFactors
+
+
 class TechnicalContext(FrozenConfigModel):
   """Engine-owned policy inputs for the bar that made the setup actionable.
 
@@ -215,6 +242,7 @@ class TechnicalContext(FrozenConfigModel):
   confirmation: ReactionConfirmation | None = None
   candle_evidence: CandleEvidence | None = None
   mad: MADContext | None = None
+  confluence: ConfluenceContext | None = None
 
   @model_validator(mode="after")
   def validate_higher_timeframes(self):

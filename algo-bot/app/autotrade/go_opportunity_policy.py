@@ -21,10 +21,11 @@ Hard rules encoded here:
   normal automatic path; nothing here touches ``bypass_analysis_gates``.
 
 Translation notes are explicit rather than inferred: ``htf_bias`` is selected
-from the Go H1/H4 facts, ``confluence`` is the count of Go evidence codes, and
-the worker's Go path does not load OHLC or run Python detectors. Python remains
-responsible only for execution-time quote, spread, expiry, exposure, risk and
-order checks.
+from the Go H1/H4 facts, ``confluence`` comes from Go's versioned confluence
+context (with the evidence-count fallback retained only for older V1 events),
+and the worker's Go path does not load OHLC or run Python detectors. Python
+remains responsible only for execution-time quote, spread, expiry, exposure,
+risk and order checks.
 """
 
 from __future__ import annotations
@@ -288,7 +289,11 @@ def build_strategy_match(
   if higher is None:
     raise AdapterRejection("higher_timeframe_bias_unavailable", "no fresh confirmed H1/H4 structure")
   reasons = evidence_codes
-  confluence = len(reasons)
+  go_confluence = tech.confluence
+  # Retained pre-S13C events have no confluence block. New Go events always
+  # carry it, so this fallback is compatibility decoding, never a Python
+  # technical recomputation.
+  confluence = len(reasons) if go_confluence is None else int(go_confluence.selected_stars)
   legacy = profile.legacy_strategy
   family = strategy_family(legacy)
   tier = classify_tier(confluence=confluence, strategy=legacy)
@@ -374,6 +379,10 @@ def build_strategy_match(
     risk_multiplier=risk_multiplier,
     quality_overall=quality_overall,
     quality_components=quality_components,
+    confluence_v1=None if go_confluence is None else int(go_confluence.v1_stars),
+    confluence_v2=None if go_confluence is None else int(go_confluence.v2_stars),
+    confluence_v2_raw=None if go_confluence is None else float(go_confluence.v2_raw),
+    confluence_scoring_version=None if go_confluence is None else go_confluence.version,
     # These are Go-owned MAD facts copied verbatim. The adapter preserves
     # them for cards/telemetry and downstream reporting; it does not rerun
     # Python MAD or convert affinity into an execution gate.

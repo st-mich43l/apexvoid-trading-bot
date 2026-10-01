@@ -4,6 +4,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/arbitration"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/candle"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/config"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/confluence"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/fib"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/keylevel"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/liquidity"
@@ -24,6 +25,7 @@ import (
 // packages engine wires together (see config.go's own doc comment).
 type Settings struct {
 	Candle           candle.Config
+	Confluence       confluence.Config
 	ATR              ATRSettings
 	Structure        structure.Settings
 	Liquidity        liquidity.Config
@@ -94,6 +96,10 @@ func LoadSettings(doc *config.Document, primary market.Timeframe, allowReplaceFo
 	if err != nil {
 		return Settings{}, err
 	}
+	confluenceConfig, err := ConfluenceConfigFromConfig(doc)
+	if err != nil {
+		return Settings{}, err
+	}
 	structureSettings, err := StructureSettingsFromConfig(doc)
 	if err != nil {
 		return Settings{}, err
@@ -155,7 +161,7 @@ func LoadSettings(doc *config.Document, primary market.Timeframe, allowReplaceFo
 		return Settings{}, err
 	}
 	return Settings{
-		Candle: candle.DefaultConfig(), ATR: atr, Structure: structureSettings, Liquidity: liquidityConfig, Zone: zoneConfig,
+		Candle: candle.DefaultConfig(), Confluence: confluenceConfig, ATR: atr, Structure: structureSettings, Liquidity: liquidityConfig, Zone: zoneConfig,
 		Trendline: trendlineConfig, KeyLevel: keyLevelConfig, Session: sessionConfig, Fib: fibConfig, Momentum: momentumConfig,
 		Arbitration: arbitrationConfig, Regime: regimeConfig, MAD: madConfig, StopEnvelope: stopEnvelopeConfig, Strategies: strategyConfigs,
 		HistoryDepths: depths, PrimaryTimeframe: primary,

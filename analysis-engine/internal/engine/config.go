@@ -10,6 +10,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/arbitration"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/barrier"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/config"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/confluence"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/fib"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/indicator"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/keylevel"
@@ -158,6 +159,48 @@ func MADConfigFromConfig(doc *config.Document) (mad.Config, error) {
 		return mad.Config{}, err
 	}
 	return mad.Config{AsiaStartHour: asiaStart, LondonStartHour: londonStart, AccumMinimumRQ: minRQ, AccumMaximumRQ: maxRQ, ExpandBreakATR: breakATR, ExpandDisplacementATR: displacementATR, ExpandAcceptCloses: acceptCloses, ManipMinimumPenetrationATR: minPen, ManipMinimumReclaimATR: minReclaim, PipSize: pipSize}, nil
+}
+
+// ConfluenceConfigFromConfig reads the versioned technical confluence scorer.
+// These values used to exist only in Python's DetectorSettings; keeping the
+// lookup here makes Go the single live technical owner while preserving the
+// same canonical YAML paths for the Python compatibility projection.
+func ConfluenceConfigFromConfig(doc *config.Document) (confluence.Config, error) {
+	version, err := getString(doc, "analysis.confluence.scoring_version")
+	if err != nil {
+		return confluence.Config{}, err
+	}
+	three, err := getFloat(doc, "analysis.confluence.v2_star_three_ratio")
+	if err != nil {
+		return confluence.Config{}, err
+	}
+	two, err := getFloat(doc, "analysis.confluence.v2_star_two_ratio")
+	if err != nil {
+		return confluence.Config{}, err
+	}
+	zoneWeight, err := getFloat(doc, "analysis.confluence.v2_zone_quality_weight")
+	if err != nil {
+		return confluence.Config{}, err
+	}
+	madWeight, err := getFloat(doc, "analysis.confluence.v2_mad_score_weight")
+	if err != nil {
+		return confluence.Config{}, err
+	}
+	fibWeight, err := getFloat(doc, "analysis.fibonacci.confluence_weight")
+	if err != nil {
+		return confluence.Config{}, err
+	}
+	if version != "v1" && version != "v2" {
+		return confluence.Config{}, fmt.Errorf("engine: unsupported confluence scoring version %q", version)
+	}
+	if !(two >= 0 && two < three && three <= 1 && zoneWeight >= 0 && madWeight >= 0 && fibWeight >= 0) {
+		return confluence.Config{}, fmt.Errorf("engine: invalid confluence scorer thresholds or weights")
+	}
+	return confluence.Config{
+		ScoringVersion: version, StarThreeRatio: three, StarTwoRatio: two,
+		ZoneQualityWeight: zoneWeight, MADScoreWeight: madWeight,
+		FibonacciWeight: fibWeight,
+	}, nil
 }
 
 // HistoryDepthsFromConfig reads analysis.history.depth.* into the
