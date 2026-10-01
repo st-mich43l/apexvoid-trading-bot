@@ -78,6 +78,18 @@ func computeStopEnvelope(c opportunity.Candidate, geometry market.Geometry, cfg 
 		source = "strategy_default"
 		pinToTarget = false
 	}
+	// The resolved instrument envelope is the authoritative per-symbol
+	// policy.  Do not apply it to M1 scalp families: those deliberately use
+	// the dedicated scalping.stop book.  Every other Go candidate must carry
+	// the same pair-specific bounds Python execution previously composed from
+	// instruments.yml (EURUSD 12-20, GBPUSD 15-25, GBPJPY 22-35, USDJPY
+	// 18-28, XAU 50-60).  Without this override Go silently fell back to the
+	// global 40-60 trend/reaction envelope and FX plans were rejected after
+	// trigger confirmation.
+	if cfg.InstrumentConfigured && !m1ScalpStopStrategies[c.Strategy] {
+		floorPips = cfg.InstrumentMinPips
+		capPips = cfg.InstrumentMaxPips
+	}
 	if floorPips <= 0 {
 		return nil
 	}

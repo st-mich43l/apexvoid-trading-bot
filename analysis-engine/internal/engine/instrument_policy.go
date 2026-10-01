@@ -22,6 +22,13 @@ func ApplyInstrument(settings *Settings, doc *config.Document, symbol string) er
 		return fmt.Errorf("loading defended levels for %s: %w", symbol, err)
 	}
 	settings.Geometry = geometry
+	stopMinPips, stopMaxPips, err := doc.StopEnvelopeFor(symbol)
+	if err != nil {
+		return fmt.Errorf("loading stop envelope for %s: %w", symbol, err)
+	}
+	settings.InstrumentStopMinPips = stopMinPips
+	settings.InstrumentStopMaxPips = stopMaxPips
+	settings.InstrumentStopEnvelopeConfigured = true
 	settings.LegacyZones.Technique.PipSize = math.Max(geometry.PipSize, 1e-12)
 	if entryMax, ok, err := doc.InstrumentValue(symbol, "price_scale", "fvg_entry_max_width_price"); err != nil {
 		return err

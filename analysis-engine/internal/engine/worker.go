@@ -228,7 +228,13 @@ func (w *SymbolWorker) ApplyWithResult(event marketdata.BarEvent) (AnalysisSnaps
 		}
 		candidate.ObservedTimeframe = event.Timeframe
 		candidate.Technical = w.technicalContext(event, candidate.Direction, candidate.Entry.Low, candidate.Entry.High, candidate.Reaction)
-		candidate.StopEnvelope = computeStopEnvelope(candidate, w.settings.Geometry, w.settings.StopEnvelope)
+		stopConfig := w.settings.StopEnvelope
+		if w.settings.InstrumentStopEnvelopeConfigured {
+			stopConfig.InstrumentMinPips = w.settings.InstrumentStopMinPips
+			stopConfig.InstrumentMaxPips = w.settings.InstrumentStopMaxPips
+			stopConfig.InstrumentConfigured = true
+		}
+		candidate.StopEnvelope = computeStopEnvelope(candidate, w.settings.Geometry, stopConfig)
 		observed, obsErr := w.state.Opportunities.Observe(candidate, event.Candle.Time)
 		if obsErr != nil {
 			doneOpp()

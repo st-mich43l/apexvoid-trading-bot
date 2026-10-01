@@ -619,6 +619,12 @@ type StopEnvelopeConfig struct {
 	ScalpMaxPips          float64
 	TrendMinPips          float64
 	TrendMaxPips          float64
+	// InstrumentMinPips/InstrumentMaxPips are populated by ApplyInstrument
+	// from instruments.yml.  They override the global family envelope for
+	// non-M1-scalp candidates; the latter retain strategies.scalping.stop.
+	InstrumentMinPips    float64
+	InstrumentMaxPips    float64
+	InstrumentConfigured bool
 }
 
 // StopEnvelopeConfigFromConfig reads execution.{reaction,range,trend,stops}.*
