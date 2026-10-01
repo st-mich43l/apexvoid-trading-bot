@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -328,3 +330,66 @@ func TestPublishLiveOpportunities_RealRedisRoundTrip(t *testing.T) {
 		t.Errorf("expected a positive TTL of at most 20m, got %v", ttl)
 	}
 }
+
+// TestRuntime_BootstrapCompletionHookRunsOnceAfterAllReplayedBars guards the
+// restart-time fix: the engine publishes derived state (zone book, live set)
+// once when the retained history has been replayed, not after every historical
+// bar. The hook must run after every bootstrap bar was dispatched as a
+// bootstrap-origin event, and before any live bar.
+func TestRuntime_BootstrapCompletionHookRunsOnceAfterAllReplayedBars(t *testing.T) {
+	client := zoneBookTestClient(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	key := "bars:ZZTEST:M5"
+	t.Cleanup(func() { _ = client.Del(context.Background(), key).Err() })
+	_ = client.Del(ctx, key).Err()
+	for i := int64(0); i < 5; i++ {
+		ts := 1700000000 + i*300
+		raw := `{"t":` + strconvItoa(ts) + `,"o":10,"h":11,"l":9,"c":10.5,"v":1}`
+		if err := client.ZAdd(ctx, key, redisv9.Z{Score: float64(ts), Member: raw}).Err(); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var mu sync.Mutex
+	bootstrapBars, hookCalls, barsBeforeHook := 0, 0, 0
+	runtime, err := redistransport.NewRuntimeWithClient(
+		client,
+		redistransport.Config{URL: "redis://127.0.0.1:0/0", BarsChannel: "bars:new:zztest", ReconciliationInterval: time.Hour},
+		[]redistransport.Series{{Symbol: "ZZTEST", Timeframe: market.M5, Depth: 10}},
+		func(_ context.Context, event marketdata.BarEvent) (marketdata.AppendResult, error) {
+			mu.Lock()
+			defer mu.Unlock()
+			if event.Origin == marketdata.EventOriginBootstrap {
+				bootstrapBars++
+			}
+			return marketdata.AppendAccepted, nil
+		},
+		nil, nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hooked := make(chan struct{})
+	runtime.SetOnBootstrapComplete(func(context.Context) {
+		mu.Lock()
+		hookCalls++
+		barsBeforeHook = bootstrapBars
+		mu.Unlock()
+		close(hooked)
+	})
+	go func() { _ = runtime.Run(ctx) }()
+	select {
+	case <-hooked:
+	case <-time.After(10 * time.Second):
+		t.Fatal("bootstrap completion hook never ran")
+	}
+	cancel()
+	mu.Lock()
+	defer mu.Unlock()
+	if hookCalls != 1 || barsBeforeHook != 5 {
+		t.Fatalf("hook calls = %d (want 1), bootstrap bars dispatched before it = %d (want 5)", hookCalls, barsBeforeHook)
+	}
+}
+
+func strconvItoa(v int64) string { return strconv.FormatInt(v, 10) }
