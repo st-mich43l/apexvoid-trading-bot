@@ -176,6 +176,23 @@ def opportunity_id_for_match_id(match_id: str) -> str:
   return match_id.removeprefix("go_")
 
 
+_TIMEFRAME_SECONDS = {"M1": 60, "M5": 300, "M15": 900, "H1": 3600, "H4": 14400}
+
+
+def _reaction_is_recent(confirmation_bar_time: int, reference_time: int, timeframe: str) -> bool:
+  """The confirming bar may lie up to ``structural_reaction_lookback_bars - 1``
+  bars before the observation bar: the legacy detector accepted the latest
+  confirmation inside that window, and the engine can first see a zone one bar
+  after the bar that confirmed it (the zone only passes its state/relevance
+  filters then). Requiring the very same bar dropped ~16% of the engine's
+  confirmed supply/demand reactions on the replay capture."""
+  from app.core.config import runtime_config
+  lookback = max(1, int(runtime_config.execution.policy.structural_reaction_lookback_bars))
+  bar_seconds = _TIMEFRAME_SECONDS.get(timeframe.upper(), 300)
+  age = reference_time - confirmation_bar_time
+  return 0 <= age <= (lookback - 1) * bar_seconds
+
+
 def build_strategy_match(
   event: OpportunityEnvelope, *, profile: ScopeProfile, now: int,
 ) -> StrategyMatch:
@@ -195,7 +212,9 @@ def build_strategy_match(
   reaction = tech.confirmation
   if profile.requires_reaction and reaction is None:
     raise AdapterRejection("reaction_confirmation_unavailable", "this zone adapter requires Go's causal rejection confirmation")
-  if reaction is not None and reaction.confirmation_bar_time != tech.reference_time:
+  if reaction is not None and not _reaction_is_recent(
+    reaction.confirmation_bar_time, tech.reference_time, timeframe,
+  ):
     raise AdapterRejection("reaction_not_current_observation")
   if profile.direction is not None and payload.direction != profile.direction:
     raise AdapterRejection("direction_scope_mismatch", f"{profile.catalog_id} produces {profile.direction}, got {payload.direction}")
