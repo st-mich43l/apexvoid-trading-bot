@@ -20,6 +20,8 @@ func validParams() map[string]any {
 		"invalidation_buffer_atr":     0.5,
 		"minimum_target_distance_atr": 1.0,
 		"expiry_hours":                24.0,
+		"reaction_lookback_bars":      3.0,
+		"engulfing_minimum_range_atr": 0.5,
 		"breakout_accept_bars":        2.0,
 	}
 }
@@ -48,14 +50,14 @@ func baseContext(atr float64) *context.MarketContext {
 func buyConfirmationCandles(precedingClose float64) []market.Candle {
 	return []market.Candle{
 		{Time: 1000, Open: precedingClose - 0.1, High: precedingClose + 0.2, Low: precedingClose - 0.2, Close: precedingClose},
-		{Time: 1060, Open: 2019.7, High: 2021.0, Low: 2019.6, Close: 2020.8},
+		{Time: 1060, Open: 2020.3, High: 2021.0, Low: 2019.6, Close: 2020.8},
 	}
 }
 
 func sellConfirmationCandles(precedingClose float64) []market.Candle {
 	return []market.Candle{
 		{Time: 1000, Open: precedingClose - 0.1, High: precedingClose + 0.2, Low: precedingClose - 0.2, Close: precedingClose},
-		{Time: 1060, Open: 2020.3, High: 2020.4, Low: 2019.2, Close: 2019.2},
+		{Time: 1060, Open: 2019.7, High: 2020.4, Low: 2019.2, Close: 2019.2},
 	}
 }
 
