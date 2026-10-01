@@ -78,12 +78,13 @@ manual, display, or offline compatibility paths.
   from the canonical per-timeframe inputs. The port includes the legacy
   chop/range classification, optional directional override, coiling state,
   accepted box-break detection and displacement-grade acceptance. It remains
-  shadow-only until the strategy-level parity and production comparison gates
-  below are complete.
+  live technical context for the automatic Go opportunity path. Long-window
+  Python comparison and threshold calibration remain evidence gaps below.
 - **Technical zones** (Supply/Demand, Order Blocks, FVG/iFVG, Breaker,
   Flip) are now implemented in `internal/zone` as Phase S3. Strategy-level
-  entry/quality decisions and higher-layer merging/reconciliation remain
-  deferred to the independent strategy phases.
+  entry/quality decisions and higher-layer merging/reconciliation are wired
+  through the 19 live Go strategy packages; Algo Bot still owns execution
+  entry/risk policy after receiving the Go facts.
 - **Session context** (source task §39) is now implemented in
   `internal/session` as Phase S4's first domain.
   `context.SessionContext` carries the real `session.State` for the
@@ -173,13 +174,18 @@ manual, display, or offline compatibility paths.
   iterative human chart review — it was not silently skipped, it was
   never attempted, and should not be assumed done.
 
-## Cutover Gate
+## Historical cutover gate and remaining evidence
 
-Per source task §49/§61 and this repo's existing ADR-004 discipline: V2
-Go does not take over live trade-plan generation until a real
-replay/shadow comparison against Python's production output has run
-over a meaningful stretch of real market data and the differences are
-understood and accepted (not just "it compiled and one 300-bar replay
-looked reasonable"). That comparison is unstarted — `cmd/replay`
-proves the pipeline *runs* correctly end to end on real data, it does
-not yet constitute a shadow-vs-production comparison.
+The original S-phase gate required a meaningful Python-vs-Go shadow
+comparison before cutover. Production has since been explicitly switched to
+the Go technical authority (PR #713); the Python detector graph is no longer
+reachable from automatic production entrypoints, and Algo Bot consumes Go
+opportunities with execution policy still in Python. That operational cutover
+is verified by S13 import classification and production Kafka/database data.
+
+The long-window Python-vs-production comparison is still an evidence gap for
+the migration audit: `cmd/replay` proves the Go pipeline runs on real data,
+but does not by itself reproduce a historical Python production decision log.
+It must be completed before claiming byte-for-byte historical parity or
+retiring every offline Python compatibility module. This gap does not restore
+Python as a live technical authority.

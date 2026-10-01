@@ -13,6 +13,197 @@ import (
 
 const Version = 2
 
+// Config is the complete Candle Confirmation V2 parameter set.  It mirrors
+// the Python model's analysis.candle_confirmation defaults so the evidence
+// evaluator has one explicit input instead of hiding behavior in scattered
+// literals.  These values are descriptive technical evidence only; they do
+// not gate a strategy or authorize execution.
+type Config struct {
+	Enabled      bool
+	Version      int
+	Rejection    RejectionConfig
+	Displacement DisplacementConfig
+	Sequences    SequenceConfig
+	Synergy      SynergyConfig
+}
+
+type RejectionConfig struct {
+	WickMinimumFraction        float64
+	WickStrongFraction         float64
+	BodyMaximumFraction        float64
+	CloseBuyMinimumLocation    float64
+	CloseSellMaximumLocation   float64
+	SweepEnabled               bool
+	SweepMinimumPenetrationATR float64
+	ReclaimEnabled             bool
+	ReclaimMinimumDepthATR     float64
+}
+
+type DisplacementConfig struct {
+	BodyMinimumATR           float64
+	RangeMinimumATR          float64
+	BodyDominanceMinimum     float64
+	StrongCloseBuyMinimum    float64
+	StrongCloseSellMaximum   float64
+	EngulfingEnabled         bool
+	EngulfingMinimumRangeATR float64
+	CloseBeyondLevelEnabled  bool
+}
+
+type SequenceConfig struct {
+	DojiBodyFraction               float64
+	FirstBodyMinimumATR            float64
+	MiddleBodyMaximumFraction      float64
+	RecoveryMinimumRatio           float64
+	ThirdBodyMinimumATR            float64
+	CompressionMinimumBars         int
+	CompressionMaximumBars         int
+	CompressionMaximumRangeATR     float64
+	CompressionMaximumBodyFraction float64
+	CompressionBreakoutBodyATR     float64
+}
+
+type SynergyConfig struct {
+	RejectionPlusDisplacement float64
+	SweepPlusReclaim          float64
+	SequencePlusDisplacement  float64
+	MaximumBonus              float64
+}
+
+// DefaultConfig is the versioned Python-compatible Candle Confirmation V2
+// default set.  Keeping it as data makes it possible for the composition
+// root to replace these values from a future canonical config section without
+// changing the evaluator.
+func DefaultConfig() Config {
+	return Config{
+		Enabled: true,
+		Version: Version,
+		Rejection: RejectionConfig{
+			WickMinimumFraction: 0.30, WickStrongFraction: 0.55,
+			BodyMaximumFraction:     0.45,
+			CloseBuyMinimumLocation: 0.65, CloseSellMaximumLocation: 0.35,
+			SweepEnabled: true, SweepMinimumPenetrationATR: 0.05,
+			ReclaimEnabled: true, ReclaimMinimumDepthATR: 0.05,
+		},
+		Displacement: DisplacementConfig{
+			BodyMinimumATR: 0.30, RangeMinimumATR: 0.40,
+			BodyDominanceMinimum:  0.55,
+			StrongCloseBuyMinimum: 0.70, StrongCloseSellMaximum: 0.30,
+			EngulfingEnabled: true, EngulfingMinimumRangeATR: 0.50,
+			CloseBeyondLevelEnabled: true,
+		},
+		Sequences: SequenceConfig{
+			DojiBodyFraction:    0.10,
+			FirstBodyMinimumATR: 0.30, MiddleBodyMaximumFraction: 0.30,
+			RecoveryMinimumRatio: 0.50, ThirdBodyMinimumATR: 0.25,
+			CompressionMinimumBars: 2, CompressionMaximumBars: 4,
+			CompressionMaximumRangeATR:     0.80,
+			CompressionMaximumBodyFraction: 0.35,
+			CompressionBreakoutBodyATR:     0.30,
+		},
+		Synergy: SynergyConfig{
+			RejectionPlusDisplacement: 0.08, SweepPlusReclaim: 0.10,
+			SequencePlusDisplacement: 0.06, MaximumBonus: 0.12,
+		},
+	}
+}
+
+func normalizeConfig(cfg Config) Config {
+	d := DefaultConfig()
+	// A zero Config is convenient for package callers and must retain the
+	// historical behavior of Evaluate.  Non-zero callers can override every
+	// field explicitly; booleans are taken as supplied once any config field
+	// is present, so false remains a valid deliberate override.
+	if cfg.Version == 0 && cfg == (Config{}) {
+		return d
+	}
+	if cfg.Version == 0 {
+		cfg.Version = d.Version
+	}
+	if cfg.Rejection.WickMinimumFraction == 0 {
+		cfg.Rejection.WickMinimumFraction = d.Rejection.WickMinimumFraction
+	}
+	if cfg.Rejection.WickStrongFraction == 0 {
+		cfg.Rejection.WickStrongFraction = d.Rejection.WickStrongFraction
+	}
+	if cfg.Rejection.BodyMaximumFraction == 0 {
+		cfg.Rejection.BodyMaximumFraction = d.Rejection.BodyMaximumFraction
+	}
+	if cfg.Rejection.CloseBuyMinimumLocation == 0 {
+		cfg.Rejection.CloseBuyMinimumLocation = d.Rejection.CloseBuyMinimumLocation
+	}
+	if cfg.Rejection.CloseSellMaximumLocation == 0 {
+		cfg.Rejection.CloseSellMaximumLocation = d.Rejection.CloseSellMaximumLocation
+	}
+	if cfg.Rejection.SweepMinimumPenetrationATR == 0 {
+		cfg.Rejection.SweepMinimumPenetrationATR = d.Rejection.SweepMinimumPenetrationATR
+	}
+	if cfg.Rejection.ReclaimMinimumDepthATR == 0 {
+		cfg.Rejection.ReclaimMinimumDepthATR = d.Rejection.ReclaimMinimumDepthATR
+	}
+	if cfg.Displacement.BodyMinimumATR == 0 {
+		cfg.Displacement.BodyMinimumATR = d.Displacement.BodyMinimumATR
+	}
+	if cfg.Displacement.RangeMinimumATR == 0 {
+		cfg.Displacement.RangeMinimumATR = d.Displacement.RangeMinimumATR
+	}
+	if cfg.Displacement.BodyDominanceMinimum == 0 {
+		cfg.Displacement.BodyDominanceMinimum = d.Displacement.BodyDominanceMinimum
+	}
+	if cfg.Displacement.StrongCloseBuyMinimum == 0 {
+		cfg.Displacement.StrongCloseBuyMinimum = d.Displacement.StrongCloseBuyMinimum
+	}
+	if cfg.Displacement.StrongCloseSellMaximum == 0 {
+		cfg.Displacement.StrongCloseSellMaximum = d.Displacement.StrongCloseSellMaximum
+	}
+	if cfg.Displacement.EngulfingMinimumRangeATR == 0 {
+		cfg.Displacement.EngulfingMinimumRangeATR = d.Displacement.EngulfingMinimumRangeATR
+	}
+	if cfg.Sequences.DojiBodyFraction == 0 {
+		cfg.Sequences.DojiBodyFraction = d.Sequences.DojiBodyFraction
+	}
+	if cfg.Sequences.FirstBodyMinimumATR == 0 {
+		cfg.Sequences.FirstBodyMinimumATR = d.Sequences.FirstBodyMinimumATR
+	}
+	if cfg.Sequences.MiddleBodyMaximumFraction == 0 {
+		cfg.Sequences.MiddleBodyMaximumFraction = d.Sequences.MiddleBodyMaximumFraction
+	}
+	if cfg.Sequences.RecoveryMinimumRatio == 0 {
+		cfg.Sequences.RecoveryMinimumRatio = d.Sequences.RecoveryMinimumRatio
+	}
+	if cfg.Sequences.ThirdBodyMinimumATR == 0 {
+		cfg.Sequences.ThirdBodyMinimumATR = d.Sequences.ThirdBodyMinimumATR
+	}
+	if cfg.Sequences.CompressionMinimumBars == 0 {
+		cfg.Sequences.CompressionMinimumBars = d.Sequences.CompressionMinimumBars
+	}
+	if cfg.Sequences.CompressionMaximumBars == 0 {
+		cfg.Sequences.CompressionMaximumBars = d.Sequences.CompressionMaximumBars
+	}
+	if cfg.Sequences.CompressionMaximumRangeATR == 0 {
+		cfg.Sequences.CompressionMaximumRangeATR = d.Sequences.CompressionMaximumRangeATR
+	}
+	if cfg.Sequences.CompressionMaximumBodyFraction == 0 {
+		cfg.Sequences.CompressionMaximumBodyFraction = d.Sequences.CompressionMaximumBodyFraction
+	}
+	if cfg.Sequences.CompressionBreakoutBodyATR == 0 {
+		cfg.Sequences.CompressionBreakoutBodyATR = d.Sequences.CompressionBreakoutBodyATR
+	}
+	if cfg.Synergy.RejectionPlusDisplacement == 0 {
+		cfg.Synergy.RejectionPlusDisplacement = d.Synergy.RejectionPlusDisplacement
+	}
+	if cfg.Synergy.SweepPlusReclaim == 0 {
+		cfg.Synergy.SweepPlusReclaim = d.Synergy.SweepPlusReclaim
+	}
+	if cfg.Synergy.SequencePlusDisplacement == 0 {
+		cfg.Synergy.SequencePlusDisplacement = d.Synergy.SequencePlusDisplacement
+	}
+	if cfg.Synergy.MaximumBonus == 0 {
+		cfg.Synergy.MaximumBonus = d.Synergy.MaximumBonus
+	}
+	return cfg
+}
+
 type Geometry struct {
 	Open, High, Low, Close float64
 	RangePrice, BodyPrice  float64
@@ -153,7 +344,7 @@ func contains(xs []string, x string) bool {
 	return false
 }
 
-func rejectionEvidence(g Geometry, direction string, atr, level float64, zoneLow, zoneHigh *float64) *Rejection {
+func rejectionEvidence(g Geometry, direction string, atr, level float64, zoneLow, zoneHigh *float64, cfg Config) *Rejection {
 	if direction != "BUY" && direction != "SELL" || !touched(g, zoneLow, zoneHigh) {
 		return nil
 	}
@@ -162,15 +353,20 @@ func rejectionEvidence(g Geometry, direction string, atr, level float64, zoneLow
 	if direction == "SELL" {
 		directionalWick, oppositeWick = g.UpperWickFraction, g.LowerWickFraction
 	}
-	sweep := penetration(direction, g, level, atr)
-	reclaimDepth := reclaim(direction, g, level, atr)
+	var sweep, reclaimDepth *float64
+	if cfg.Rejection.SweepEnabled {
+		sweep = penetration(direction, g, level, atr)
+	}
+	if cfg.Rejection.ReclaimEnabled {
+		reclaimDepth = reclaim(direction, g, level, atr)
+	}
 	closeForDirection := g.CloseLocation
-	closeMinimum := .65
+	closeMinimum := cfg.Rejection.CloseBuyMinimumLocation
 	if direction == "SELL" {
-		closeForDirection, closeMinimum = 1-g.CloseLocation, .65
+		closeForDirection, closeMinimum = 1-g.CloseLocation, 1-cfg.Rejection.CloseSellMaximumLocation
 	}
 	patterns := make([]string, 0, 4)
-	if directionalWick >= .30 {
+	if directionalWick >= cfg.Rejection.WickMinimumFraction {
 		patterns = append(patterns, "wick_rejection")
 	}
 	if g.BodyFraction <= .30 && g.BodyPrice > 0 && directionalWick/math.Max(g.BodyFraction, 1e-9) >= 2 && oppositeWick <= .25 {
@@ -192,7 +388,7 @@ func rejectionEvidence(g Geometry, direction string, atr, level float64, zoneLow
 	if len(patterns) == 0 {
 		return nil
 	}
-	score := clamp(.30*quality(directionalWick, .30, .55) + .20*quality(closeForDirection, closeMinimum, 1) + .15*clamp(1-g.BodyFraction/.45) + .20*atrQuality(value(reclaimDepth), .05) + .15*atrQuality(value(sweep), .05))
+	score := clamp(.30*quality(directionalWick, cfg.Rejection.WickMinimumFraction, cfg.Rejection.WickStrongFraction) + .20*quality(closeForDirection, closeMinimum, 1) + .15*clamp(1-g.BodyFraction/cfg.Rejection.BodyMaximumFraction) + .20*atrQuality(value(reclaimDepth), cfg.Rejection.ReclaimMinimumDepthATR) + .15*atrQuality(value(sweep), cfg.Rejection.SweepMinimumPenetrationATR))
 	return &Rejection{Score: score, Patterns: patterns, WickFraction: directionalWick, BodyFraction: g.BodyFraction, CloseLocation: g.CloseLocation, Sweep: sweep != nil, SweepPenetrationATR: sweep, Reclaim: reclaimDepth != nil, ReclaimDepthATR: reclaimDepth}
 }
 
@@ -203,8 +399,8 @@ func value(v *float64) float64 {
 	return *v
 }
 
-func engulfing(g Geometry, prior *Geometry, direction string, minimumRange float64) (bool, *float64) {
-	if prior == nil || prior.RangePrice <= 0 || g.RangeATR < minimumRange {
+func engulfing(g Geometry, prior *Geometry, direction string, minimumRange float64, enabled bool) (bool, *float64) {
+	if prior == nil || prior.RangePrice <= 0 || !enabled || g.RangeATR < minimumRange {
 		return false, nil
 	}
 	lo, hi := math.Min(g.Open, g.Close), math.Max(g.Open, g.Close)
@@ -216,25 +412,31 @@ func engulfing(g Geometry, prior *Geometry, direction string, minimumRange float
 		return false, nil
 	}
 	priorOpposite := prior.BodyFraction < .1 || direction == "BUY" && prior.Bearish() || direction == "SELL" && prior.Bullish()
-	if !priorOpposite {
-		return false, nil
+	oppositionQuality := 0.4
+	if priorOpposite {
+		oppositionQuality = 1.0
 	}
-	q := clamp((g.BodyPrice / math.Max(prior.BodyPrice, 1e-9) / 2) * func() float64 {
+	bodyRatio := 1.0
+	if prior.BodyPrice > 0 {
+		bodyRatio = g.BodyPrice / prior.BodyPrice
+	}
+	bodySizeQuality := clamp(bodyRatio / 2)
+	q := clamp(bodySizeQuality * func() float64 {
 		if direction == "BUY" {
 			return g.CloseLocation
 		}
 		return 1 - g.CloseLocation
-	}())
+	}() * oppositionQuality)
 	return true, &q
 }
 
-func displacementEvidence(g Geometry, prior *Geometry, direction string, atr, level float64, hasLevel bool) *Displacement {
+func displacementEvidence(g Geometry, prior *Geometry, direction string, atr, level float64, cfg Config) *Displacement {
 	if direction != "BUY" && direction != "SELL" {
 		return nil
 	}
-	engulf, engulfQ := engulfing(g, prior, direction, .50)
+	engulf, engulfQ := engulfing(g, prior, direction, cfg.Displacement.EngulfingMinimumRangeATR, cfg.Displacement.EngulfingEnabled)
 	var reclaimDepth *float64
-	if hasLevel {
+	if cfg.Displacement.CloseBeyondLevelEnabled {
 		reclaimDepth = reclaim(direction, g, level, atr)
 	}
 	directional := g.Bullish()
@@ -246,10 +448,14 @@ func displacementEvidence(g Geometry, prior *Geometry, direction string, atr, le
 		closeForDirection = 1 - g.CloseLocation
 	}
 	patterns := make([]string, 0, 5)
-	if directional && closeForDirection >= .70 {
+	strongCloseMinimum := cfg.Displacement.StrongCloseBuyMinimum
+	if direction == "SELL" {
+		strongCloseMinimum = 1 - cfg.Displacement.StrongCloseSellMaximum
+	}
+	if directional && closeForDirection >= strongCloseMinimum {
 		patterns = append(patterns, "strong_close")
 	}
-	if directional && g.RangeATR >= .40 {
+	if directional && g.RangeATR >= cfg.Displacement.RangeMinimumATR {
 		patterns = append(patterns, "body_close")
 	}
 	if engulf {
@@ -258,7 +464,7 @@ func displacementEvidence(g Geometry, prior *Geometry, direction string, atr, le
 	if reclaimDepth != nil {
 		patterns = append(patterns, "strong_reclaim")
 	}
-	if directional && g.BodyFraction >= .55 && g.BodyATR >= .30 {
+	if directional && g.BodyFraction >= cfg.Displacement.BodyDominanceMinimum && g.BodyATR >= cfg.Displacement.BodyMinimumATR {
 		patterns = append(patterns, "displacement_candle")
 	}
 	if len(patterns) == 0 {
@@ -268,23 +474,23 @@ func displacementEvidence(g Geometry, prior *Geometry, direction string, atr, le
 	if !directional {
 		bodyDominance = 0
 	}
-	score := clamp(.30*quality(bodyDominance, .55, .85) + .25*atrQuality(g.RangeATR, .40) + .20*quality(func() float64 {
+	score := clamp(.30*quality(bodyDominance, cfg.Displacement.BodyDominanceMinimum, .85) + .25*atrQuality(g.RangeATR, cfg.Displacement.RangeMinimumATR) + .20*quality(func() float64 {
 		if directional {
 			return closeForDirection
 		}
 		return 0
-	}(), .70, 1) + .15*atrQuality(value(reclaimDepth), .05) + .10*value(engulfQ))
+	}(), strongCloseMinimum, 1) + .15*atrQuality(value(reclaimDepth), cfg.Rejection.ReclaimMinimumDepthATR) + .10*value(engulfQ))
 	return &Displacement{Score: score, Patterns: patterns, BodyATR: g.BodyATR, RangeATR: g.RangeATR, BodyDominance: bodyDominance, CloseLocation: g.CloseLocation, Reclaim: reclaimDepth != nil, ReclaimDepthATR: reclaimDepth, Engulfing: engulf, EngulfingQuality: engulfQ}
 }
 
-func indecision(g, prior *Geometry) *Indecision {
-	doji := g.BodyFraction <= .10
+func indecision(g, prior *Geometry, cfg Config) *Indecision {
+	doji := g.BodyFraction <= cfg.Sequences.DojiBodyFraction
 	spinning := !doji && g.BodyFraction <= .35 && math.Abs(g.UpperWickFraction-g.LowerWickFraction) <= .20
 	inside := prior != nil && g.High <= prior.High && g.Low >= prior.Low
 	return &Indecision{Doji: doji, SpinningTop: spinning, InsideBar: inside, BodyFraction: g.BodyFraction, CompressionScore: clamp(1 - atrQuality(g.RangeATR, .40))}
 }
 
-func sequenceScore(bars []Geometry, direction string, atr float64, level *float64) float64 {
+func sequenceScore(bars []Geometry, direction string, atr float64, level *float64, cfg Config) float64 {
 	first, last := bars[0], bars[len(bars)-1]
 	middle := bars[1 : len(bars)-1]
 	if len(middle) == 0 {
@@ -308,10 +514,10 @@ func sequenceScore(bars []Geometry, direction string, atr float64, level *float6
 	if level != nil {
 		reclaimQuality = atrQuality(value(reclaim(direction, last, *level, atr)), .05)
 	}
-	return clamp(.25*atrQuality(first.BodyATR, .30) + .20*clamp(1-avg/.30) + .30*atrQuality(last.BodyATR, .25) + .15*quality(math.Max(0, recovery), .50, 1) + .10*reclaimQuality)
+	return clamp(.25*atrQuality(first.BodyATR, cfg.Sequences.FirstBodyMinimumATR) + .20*clamp(1-avg/cfg.Sequences.MiddleBodyMaximumFraction) + .30*atrQuality(last.BodyATR, cfg.Sequences.ThirdBodyMinimumATR) + .15*quality(math.Max(0, recovery), cfg.Sequences.RecoveryMinimumRatio, 1) + .10*reclaimQuality)
 }
 
-func sequences(bars []Geometry, direction string, atr float64, level *float64) *Sequence {
+func sequences(bars []Geometry, direction string, atr float64, level *float64, cfg Config) *Sequence {
 	if len(bars) < 3 {
 		return nil
 	}
@@ -319,16 +525,16 @@ func sequences(bars []Geometry, direction string, atr float64, level *float64) *
 	if len(bars) == 3 {
 		a, b, c := bars[0], bars[1], bars[2]
 		move := math.Abs(a.Open - a.Close)
-		if move > 0 && b.BodyFraction <= .30 && a.BodyATR >= .30 && c.BodyATR >= .25 {
-			if direction == "BUY" && a.Bearish() && c.Bullish() && (c.Close-a.Close)/move >= .50 {
+		if move > 0 && b.BodyFraction <= cfg.Sequences.MiddleBodyMaximumFraction && a.BodyATR >= cfg.Sequences.FirstBodyMinimumATR && c.BodyATR >= cfg.Sequences.ThirdBodyMinimumATR {
+			if direction == "BUY" && a.Bearish() && c.Bullish() && (c.Close-a.Close)/move >= cfg.Sequences.RecoveryMinimumRatio {
 				patterns = append(patterns, "morning_star")
 			}
-			if direction == "SELL" && a.Bullish() && c.Bearish() && (a.Close-c.Close)/move >= .50 {
+			if direction == "SELL" && a.Bullish() && c.Bearish() && (a.Close-c.Close)/move >= cfg.Sequences.RecoveryMinimumRatio {
 				patterns = append(patterns, "evening_star")
 			}
 		}
 		if level != nil {
-			if penetration(direction, a, *level, atr) != nil && b.BodyFraction <= .30 && c.BodyATR >= .25 && value(reclaim(direction, c, *level, atr)) > 0 {
+			if penetration(direction, a, *level, atr) != nil && b.BodyFraction <= cfg.Sequences.MiddleBodyMaximumFraction && c.BodyATR >= cfg.Sequences.ThirdBodyMinimumATR && value(reclaim(direction, c, *level, atr)) > 0 {
 				patterns = append(patterns, "sweep_indecision_displacement")
 			}
 		}
@@ -336,7 +542,7 @@ func sequences(bars []Geometry, direction string, atr float64, level *float64) *
 	if len(bars) >= 3 {
 		compression := bars[:len(bars)-1]
 		breakout := bars[len(bars)-1]
-		if len(compression) >= 2 && len(compression) <= 4 {
+		if len(compression) >= cfg.Sequences.CompressionMinimumBars && len(compression) <= cfg.Sequences.CompressionMaximumBars {
 			hi, lo := compression[0].High, compression[0].Low
 			avg := 0.0
 			for _, b := range compression {
@@ -345,7 +551,7 @@ func sequences(bars []Geometry, direction string, atr float64, level *float64) *
 				avg += b.BodyFraction
 			}
 			avg /= float64(len(compression))
-			if atr > 0 && (hi-lo)/atr <= .80 && avg <= .35 && breakout.BodyATR >= .30 && ((direction == "BUY" && breakout.Bullish() && breakout.Close > hi) || (direction == "SELL" && breakout.Bearish() && breakout.Close < lo)) {
+			if atr > 0 && (hi-lo)/atr <= cfg.Sequences.CompressionMaximumRangeATR && avg <= cfg.Sequences.CompressionMaximumBodyFraction && breakout.BodyATR >= cfg.Sequences.CompressionBreakoutBodyATR && ((direction == "BUY" && breakout.Bullish() && breakout.Close > hi) || (direction == "SELL" && breakout.Bearish() && breakout.Close < lo)) {
 				patterns = append(patterns, "compression_break")
 			}
 		}
@@ -353,7 +559,7 @@ func sequences(bars []Geometry, direction string, atr float64, level *float64) *
 	if len(patterns) == 0 {
 		return nil
 	}
-	return &Sequence{Score: sequenceScore(bars, direction, atr, level), Patterns: unique(patterns), Bars: len(bars)}
+	return &Sequence{Score: sequenceScore(bars, direction, atr, level, cfg), Patterns: unique(patterns), Bars: len(bars)}
 }
 
 func unique(xs []string) []string {
@@ -389,9 +595,16 @@ func mergeSequences(candidates []*Sequence) *Sequence {
 	return &Sequence{Score: score / float64(len(candidates)), Patterns: unique(patterns), Bars: bars}
 }
 
+// Evaluate keeps the package's original API and uses the Python-compatible
+// defaults.  New composition-root callers should use EvaluateWithConfig.
 func Evaluate(bars []market.Candle, direction string, atr, level float64, zoneLow, zoneHigh *float64) *Evidence {
+	return EvaluateWithConfig(bars, direction, atr, level, zoneLow, zoneHigh, DefaultConfig())
+}
+
+func EvaluateWithConfig(bars []market.Candle, direction string, atr, level float64, zoneLow, zoneHigh *float64, cfg Config) *Evidence {
+	cfg = normalizeConfig(cfg)
 	direction = normalize(direction)
-	if len(bars) == 0 || (direction != "BUY" && direction != "SELL") || atr <= 0 {
+	if !cfg.Enabled || len(bars) == 0 || (direction != "BUY" && direction != "SELL") || atr <= 0 {
 		return nil
 	}
 	gs := make([]Geometry, len(bars))
@@ -403,9 +616,9 @@ func Evaluate(bars []market.Candle, direction string, atr, level float64, zoneLo
 	if len(gs) > 1 {
 		prior = &gs[len(gs)-2]
 	}
-	rejection := rejectionEvidence(current, direction, atr, level, zoneLow, zoneHigh)
-	displacement := displacementEvidence(current, prior, direction, atr, level, zoneLow != nil && zoneHigh != nil)
-	ind := indecision(&current, prior)
+	rejection := rejectionEvidence(current, direction, atr, level, zoneLow, zoneHigh, cfg)
+	displacement := displacementEvidence(current, prior, direction, atr, level, cfg)
+	ind := indecision(&current, prior, cfg)
 	sequenceCandidates := []*Sequence{}
 	for _, n := range []int{5, 4, 3} {
 		if len(gs) >= n {
@@ -417,7 +630,7 @@ func Evaluate(bars []market.Candle, direction string, atr, level float64, zoneLo
 					return zoneLow
 				}
 				return zoneHigh
-			}()); x != nil {
+			}(), cfg); x != nil {
 				sequenceCandidates = append(sequenceCandidates, x)
 			}
 		}
@@ -442,16 +655,16 @@ func Evaluate(bars []market.Candle, direction string, atr, level float64, zoneLo
 	base := weighted / active
 	synergy := 0.0
 	if rejection != nil && displacement != nil {
-		synergy += .08
+		synergy += cfg.Synergy.RejectionPlusDisplacement
 	}
 	if rejection != nil && rejection.Sweep && rejection.Reclaim {
-		synergy += .10
+		synergy += cfg.Synergy.SweepPlusReclaim
 	}
 	if seq != nil && displacement != nil {
-		synergy += .06
+		synergy += cfg.Synergy.SequencePlusDisplacement
 	}
-	if synergy > .12 {
-		synergy = .12
+	if synergy > cfg.Synergy.MaximumBonus {
+		synergy = cfg.Synergy.MaximumBonus
 	}
 	patterns := []string{}
 	if rejection != nil {

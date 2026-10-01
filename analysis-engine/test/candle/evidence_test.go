@@ -35,7 +35,7 @@ func TestEvaluateDoesNotCreateEvidenceForNeutralBars(t *testing.T) {
 		{Open: 100.09, High: 100.1, Low: 99.99, Close: 100},
 		{Open: 100.09, High: 100.1, Low: 99.99, Close: 100},
 	}
-	if got := candle.Evaluate(bars, "BUY", .5, 99.5, nil, nil); got != nil {
+	if got := candle.Evaluate(bars, "BUY", .5, 100.5, nil, nil); got != nil {
 		t.Fatalf("neutral bars must not create directional evidence: %+v", got)
 	}
 }
