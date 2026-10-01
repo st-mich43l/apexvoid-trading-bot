@@ -14,8 +14,10 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/indicator"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/keylevel"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/liquidity"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/mad"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/momentum"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/regime"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/session"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
@@ -52,6 +54,110 @@ func ATRSettingsFromConfig(doc *config.Document) (ATRSettings, error) {
 		return ATRSettings{}, err
 	}
 	return ATRSettings{Algorithm: indicator.Algorithm(algo), Length: length}, nil
+}
+
+// RegimeConfigFromConfig reads the shared regime/breakout contract. Regime
+// thresholds are analysis facts and therefore belong in the composition root,
+// not as hidden constants inside a strategy package.
+func RegimeConfigFromConfig(doc *config.Document) (regime.Config, error) {
+	filterEnabled, err := getBool(doc, "analysis.regime.chop.filter_enabled")
+	if err != nil {
+		return regime.Config{}, err
+	}
+	lookback, err := getInt(doc, "analysis.regime.chop.lookback")
+	if err != nil {
+		return regime.Config{}, err
+	}
+	rangeATR, err := getFloat(doc, "analysis.regime.chop.range_atr")
+	if err != nil {
+		return regime.Config{}, err
+	}
+	coil, err := getFloat(doc, "analysis.coil_contract")
+	if err != nil {
+		return regime.Config{}, err
+	}
+	direction, err := getBool(doc, "analysis.regime.direction_enabled")
+	if err != nil {
+		return regime.Config{}, err
+	}
+	directionLookback, err := getInt(doc, "analysis.regime.direction_lookback")
+	if err != nil {
+		return regime.Config{}, err
+	}
+	minSwings, err := getInt(doc, "analysis.regime.min_directional_swings")
+	if err != nil {
+		return regime.Config{}, err
+	}
+	minDisplacement, err := getFloat(doc, "analysis.regime.min_displacement_atr")
+	if err != nil {
+		return regime.Config{}, err
+	}
+	equalTolerance, err := getFloat(doc, "analysis.structure.equal_level.tolerance_atr")
+	if err != nil {
+		return regime.Config{}, err
+	}
+	buffer, err := getFloat(doc, "analysis.breakout.buffer_atr")
+	if err != nil {
+		return regime.Config{}, err
+	}
+	acceptBars, err := getInt(doc, "analysis.breakout.accept_bars")
+	if err != nil {
+		return regime.Config{}, err
+	}
+	return regime.Config{
+		ChopFilterEnabled: filterEnabled, ChopLookback: lookback, ChopRangeATR: rangeATR,
+		CoilContract: coil, DirectionEnabled: direction, DirectionLookback: directionLookback,
+		MinDirectionalSwings: minSwings, MinDisplacementATR: minDisplacement,
+		EqualToleranceATR: equalTolerance,
+		BreakoutBufferATR: buffer, BreakoutAcceptBars: acceptBars,
+	}, nil
+}
+
+// MADConfigFromConfig reads the shared Asia-phase analysis contract. MAD is a
+// technical context input; it is intentionally not read from execution.*.
+func MADConfigFromConfig(doc *config.Document) (mad.Config, error) {
+	readFloat := func(path string) (float64, error) { return getFloat(doc, path) }
+	minRQ, err := readFloat("analysis.mad.accum.minimum_rq")
+	if err != nil {
+		return mad.Config{}, err
+	}
+	maxRQ, err := readFloat("analysis.mad.accum.maximum_rq")
+	if err != nil {
+		return mad.Config{}, err
+	}
+	breakATR, err := readFloat("analysis.mad.expand.break_atr")
+	if err != nil {
+		return mad.Config{}, err
+	}
+	displacementATR, err := readFloat("analysis.mad.expand.displacement_atr")
+	if err != nil {
+		return mad.Config{}, err
+	}
+	acceptCloses, err := getInt(doc, "analysis.mad.expand.accept_closes")
+	if err != nil {
+		return mad.Config{}, err
+	}
+	minPen, err := readFloat("analysis.mad.manip.min_penetration_atr")
+	if err != nil {
+		return mad.Config{}, err
+	}
+	minReclaim, err := readFloat("analysis.mad.manip.min_reclaim_atr")
+	if err != nil {
+		return mad.Config{}, err
+	}
+	pipSize, err := readFloat("analysis.mad.pip_size")
+	if err != nil {
+		return mad.Config{}, err
+	}
+	asiaStart, err := getInt(doc, "analysis.sessions.asia_start")
+	if err != nil {
+		return mad.Config{}, err
+	}
+	londonStart, err := getInt(doc, "analysis.sessions.london_start")
+	if err != nil {
+		return mad.Config{}, err
+	}
+	return mad.Config{AsiaStartHour: asiaStart, LondonStartHour: londonStart, AccumMinimumRQ: minRQ, AccumMaximumRQ: maxRQ, ExpandBreakATR: breakATR, ExpandDisplacementATR: displacementATR, ExpandAcceptCloses: acceptCloses, ManipMinimumPenetrationATR: minPen, ManipMinimumReclaimATR: minReclaim, PipSize: pipSize}, nil
 }
 
 // HistoryDepthsFromConfig reads analysis.history.depth.* into the

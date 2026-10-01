@@ -268,6 +268,7 @@ once Go is authoritative" cutover.
 | Technique geometry/instances | `technique_geometry.collect_technique_instances` + friends | `_attach_technique_instances` (post-`per_tf` pass), `technique_detectors.py` | `technique/geometry.go` | None found beyond 2.1's ATR read via `_atr(ind)` in `technique_detectors.py` | Yes |
 | MAD phase | `mad_phase.classify_mad_phase` + scoring/gating; Redis I/O mixed into the same module | `evaluate_mad_for_cycle`/`refresh_mad_for_symbol` (worker/scanner) | `mad/phase.go` (pure) + Redis I/O kept at the service boundary | Redis I/O currently inline in a "pure" analysis file — separate in Go per Section 9/23 | Yes — this is explicitly flagged as risky in the source prompt (Section 18); exact-parity critical |
 | Candle geometry/displacement/rejection/sequences (V2 evidence) | `candle_geometry.py`, `candle_displacement.py`, `candle_evidence.py`, `candle_rejection.py`, `candle_sequences.py` | detector-level pattern scoring (not traced call-by-call; large surface, deferred to Stage 6) | `market/candle.go` + technique-family evidence packages | 2.6 (documented, intentional) | Yes |
+| MAD / Asia phase | `mad_phase.py` | detector context and soft affinity | `internal/mad` (`UpdateAsiaRangeSeal`, `Classify`, `Features`) | parity port now wired into `MarketContext`; candidate envelope/soft-ranking parity remains to be completed | Yes |
 
 ## 4. What stays Python (confirmed, per source prompt Section 28)
 

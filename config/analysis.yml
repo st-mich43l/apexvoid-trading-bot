@@ -41,6 +41,38 @@ analysis:
       algorithm: simple
       length: 14
 
+  # Canonical regime/breakout inputs ported from app/analysis/engine.py and
+  # app/analysis/regime.py. These are analysis facts, not execution policy.
+  coil_contract: 0.8
+  regime:
+    chop:
+      filter_enabled: true
+      lookback: 24
+      range_atr: 4.0
+    direction_enabled: false
+    direction_lookback: 120
+    min_directional_swings: 3
+    min_displacement_atr: 4.0
+  breakout:
+    buffer_atr: 0.10
+    accept_bars: 2
+    max_age_bars: 6
+
+  # MAD-0 Asia phase classifier. These are descriptive technical inputs and
+  # never execution gates; the Go engine owns the resulting phase context.
+  mad:
+    pip_size: 0.0001
+    accum:
+      minimum_rq: 0.8
+      maximum_rq: 6.0
+    expand:
+      break_atr: 0.35
+      displacement_atr: 1.25
+      accept_closes: 2
+    manip:
+      min_penetration_atr: 0.05
+      min_reclaim_atr: 0.05
+
   # Registry contract for every strategy approved by the semantic catalog.
   # An enabled entry without a compiled factory
   # fails analysis-engine startup; it cannot silently become a no-op.
