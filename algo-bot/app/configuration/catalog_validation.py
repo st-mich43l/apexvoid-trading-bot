@@ -63,7 +63,6 @@ V1_ID_PREFIXES = (
 # They are still cataloged and validated, but forcing synthetic ENV names for
 # them would create a second configuration channel beside Ansible.
 CONFIG_FILE_ONLY_PATHS = frozenset({
-  "analysis.technical_authority.mode",
   "analysis.technical_authority.consumer_enabled",
   "analysis.technical_authority.consumer_group",
   "analysis.technical_authority.max_event_age_seconds",

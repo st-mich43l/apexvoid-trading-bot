@@ -1,20 +1,20 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "15bf89aec2a266196a4a733a11f2a915bffaf0ada3d7ed5a62eaf2727dca09bf",
-  "configuration_document_fingerprint_sha256": "adb9a117a98caabd3f2d3624ffce0d64cfbc49b9e60dffe1b0a965df689e09d0",
+  "configuration_contract_fingerprint_sha256": "8f2ab19d02fd201b4561119d4181e9d1b378d14aa56691460050ea993f8b9a33",
+  "configuration_document_fingerprint_sha256": "97ea4296d16431e66498a30af9459ead9ea1e0834f325c71ebcb06f220231fa7",
   "counts": {
     "algorithm_constants": 97,
-    "configurable": 586,
+    "configurable": 582,
     "known_conflicts": 30,
     "owners": {
       "ctrader": 50,
-      "python": 543,
+      "python": 539,
       "shared": 100
     },
     "protocol_constants": 10,
     "secrets": 9,
     "shared": 100,
-    "total_items": 693
+    "total_items": 689
   },
   "items": [
     {
@@ -5425,46 +5425,6 @@
     },
     {
       "algorithm_constant": false,
-      "allowed_values": [
-        "go",
-        "python_legacy"
-      ],
-      "canonical_env": "ANALYSIS_ARBITRATION_MODE",
-      "catalog_version": 2,
-      "configurable": true,
-      "constraints": {},
-      "default": "go",
-      "default_contexts": [
-        {
-          "context": "python_schema",
-          "value": "go"
-        }
-      ],
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Go analysis-engine owns cross-strategy arbitration. Algo Bot only applies execution-time admission and risk policy; it must not re-rank Go opportunities.",
-      "display_id": "config:analysis.technical_authority.arbitration_mode",
-      "evidence_notes": [],
-      "introduced_in": "config-catalog-v2",
-      "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "python",
-      "path": "analysis.technical_authority.arbitration_mode",
-      "protocol_constant": false,
-      "reload_policy": "new_setup_only",
-      "replacement_path": null,
-      "required": false,
-      "risk_classification": "execution_safety",
-      "runtime_reload_policy": "restart",
-      "secret": false,
-      "shared_with_ctrader": false,
-      "terminal_deprecation_reason": null,
-      "type": "str",
-      "unit": "enum",
-      "validation_summary": "Only go or python_legacy is supported."
-    },
-    {
-      "algorithm_constant": false,
       "allowed_values": [],
       "canonical_env": null,
       "catalog_version": 2,
@@ -5616,125 +5576,6 @@
       "type": "int",
       "unit": "seconds",
       "validation_summary": "Must be a positive integer; a live event older than this is refused as event_too_old."
-    },
-    {
-      "algorithm_constant": false,
-      "allowed_values": [
-        "go"
-      ],
-      "canonical_env": null,
-      "catalog_version": 2,
-      "configurable": true,
-      "constraints": {},
-      "default": "go",
-      "default_contexts": [
-        {
-          "context": "python_schema",
-          "value": "go"
-        }
-      ],
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Go Analysis Engine is the sole automatic technical-analysis source and delivers opportunities through Kafka.",
-      "display_id": "config:analysis.technical_authority.mode",
-      "evidence_notes": [],
-      "introduced_in": "config-catalog-v2",
-      "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "python",
-      "path": "analysis.technical_authority.mode",
-      "protocol_constant": false,
-      "reload_policy": "restart",
-      "replacement_path": null,
-      "required": false,
-      "risk_classification": "execution_safety",
-      "runtime_reload_policy": "restart",
-      "secret": false,
-      "shared_with_ctrader": false,
-      "terminal_deprecation_reason": null,
-      "type": "str",
-      "unit": "enum",
-      "validation_summary": "Only go is supported for automatic analysis."
-    },
-    {
-      "algorithm_constant": false,
-      "allowed_values": [
-        "go",
-        "python_legacy"
-      ],
-      "canonical_env": "ANALYSIS_STOP_ENVELOPE_MODE",
-      "catalog_version": 2,
-      "configurable": true,
-      "constraints": {},
-      "default": "go",
-      "default_contexts": [
-        {
-          "context": "python_schema",
-          "value": "go"
-        }
-      ],
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Go analysis-engine owns the stop-distance envelope. Algo Bot consumes the published bounds and applies execution safety checks without rebuilding technical stop geometry.",
-      "display_id": "config:analysis.technical_authority.stop_envelope_mode",
-      "evidence_notes": [],
-      "introduced_in": "config-catalog-v2",
-      "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "python",
-      "path": "analysis.technical_authority.stop_envelope_mode",
-      "protocol_constant": false,
-      "reload_policy": "new_setup_only",
-      "replacement_path": null,
-      "required": false,
-      "risk_classification": "execution_safety",
-      "runtime_reload_policy": "restart",
-      "secret": false,
-      "shared_with_ctrader": false,
-      "terminal_deprecation_reason": null,
-      "type": "str",
-      "unit": "enum",
-      "validation_summary": "Only go or python_legacy is supported."
-    },
-    {
-      "algorithm_constant": false,
-      "allowed_values": [
-        "go",
-        "python_legacy"
-      ],
-      "canonical_env": "ANALYSIS_THESIS_CORRELATION_MODE",
-      "catalog_version": 2,
-      "configurable": true,
-      "constraints": {},
-      "default": "go",
-      "default_contexts": [
-        {
-          "context": "python_schema",
-          "value": "go"
-        }
-      ],
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Go analysis-engine owns cross-strategy thesis identity. Algo Bot consumes go_thesis_id and must not infer structural correlation with its local ATR heuristic for Go opportunities.",
-      "display_id": "config:analysis.technical_authority.thesis_correlation_mode",
-      "evidence_notes": [],
-      "introduced_in": "config-catalog-v2",
-      "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "python",
-      "path": "analysis.technical_authority.thesis_correlation_mode",
-      "protocol_constant": false,
-      "reload_policy": "new_setup_only",
-      "replacement_path": null,
-      "required": false,
-      "risk_classification": "execution_safety",
-      "runtime_reload_policy": "restart",
-      "secret": false,
-      "shared_with_ctrader": false,
-      "terminal_deprecation_reason": null,
-      "type": "str",
-      "unit": "enum",
-      "validation_summary": "Only go or python_legacy is supported."
     },
     {
       "algorithm_constant": false,
@@ -25896,6 +25737,6 @@
       "validation_summary": "Kafka contract topic; changes require coordinated deployment."
     }
   ],
-  "source_fingerprint_sha256": "15bf89aec2a266196a4a733a11f2a915bffaf0ada3d7ed5a62eaf2727dca09bf",
+  "source_fingerprint_sha256": "8f2ab19d02fd201b4561119d4181e9d1b378d14aa56691460050ea993f8b9a33",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

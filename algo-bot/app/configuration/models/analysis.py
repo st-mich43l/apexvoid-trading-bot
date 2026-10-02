@@ -367,51 +367,16 @@ class AnalysisTechnicalAuthorityConfig(FrozenConfigModel):
     competing technical-analysis source.
     """
 
-    mode: str = config_field('go', canonical_env=None, owner=ConfigOwner.PYTHON, reload=ReloadPolicy.RESTART, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.ENUM, risk=RiskClassification.EXECUTION_SAFETY, description='Go Analysis Engine is the sole automatic technical-analysis source and delivers opportunities through Kafka.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 'go'),), allowed_values=('go',), validation_summary='Only go is supported for automatic analysis.')
     consumer_enabled: bool = config_field(True, canonical_env=None, owner=ConfigOwner.PYTHON, reload=ReloadPolicy.RESTART, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.BOOLEAN, risk=RiskClassification.EXECUTION_SAFETY, description='Starts the durable Go analysis Kafka consumer. Automatic production analysis requires this to remain enabled.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, True),), validation_summary='Must remain true for automatic analysis.')
     consumer_group: str = config_field('apexvoid-algo-bot-analysis-opportunity-v1', canonical_env=None, owner=ConfigOwner.PYTHON, reload=ReloadPolicy.RESTART, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.IDENTIFIER, risk=RiskClassification.CROSS_SERVICE_CONTRACT, description='Stable Kafka consumer group for durable Go analysis opportunity lifecycle processing.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 'apexvoid-algo-bot-analysis-opportunity-v1'),), validation_summary='Pydantic required/type coercion only.', min_length=1)
 
     max_event_age_seconds: int = config_field(900, canonical_env=None, owner=ConfigOwner.PYTHON, reload=ReloadPolicy.RESTART, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.SECONDS, risk=RiskClassification.EXECUTION_SAFETY, description='Maximum age, at consumption time, of the confirmed technical observation (the confirmation bar) a Go opportunity may have and still become a NEW live plan. Older events rebuild the lifecycle ledger only; they never become fresh orders.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 900),), validation_summary='Must be a positive integer; a live event older than this is refused as event_too_old.', gt=0)
     max_delivery_lag_seconds: int = config_field(300, canonical_env=None, owner=ConfigOwner.PYTHON, reload=ReloadPolicy.RESTART, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.SECONDS, risk=RiskClassification.EXECUTION_SAFETY, description='Maximum gap between Kafka publication (produced_at) and consumption for a Go opportunity to become a NEW live plan. A larger gap means the event sat in a backlog (outage, restart, lag) and is refused as delivery_lag_exceeded. Distinct from technical event age.', default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 300),), validation_summary='Must be a positive integer.', gt=0)
 
-    arbitration_mode: str = config_field('go', canonical_env='ANALYSIS_ARBITRATION_MODE', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.ENUM, risk=RiskClassification.EXECUTION_SAFETY, description="Go analysis-engine owns cross-strategy arbitration. Algo Bot only applies execution-time admission and risk policy; it must not re-rank Go opportunities.", default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 'go'),), allowed_values=('go', 'python_legacy'), validation_summary='Only go or python_legacy is supported.')
-
-    thesis_correlation_mode: str = config_field('go', canonical_env='ANALYSIS_THESIS_CORRELATION_MODE', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.ENUM, risk=RiskClassification.EXECUTION_SAFETY, description="Go analysis-engine owns cross-strategy thesis identity. Algo Bot consumes go_thesis_id and must not infer structural correlation with its local ATR heuristic for Go opportunities.", default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 'go'),), allowed_values=('go', 'python_legacy'), validation_summary='Only go or python_legacy is supported.')
-
-    stop_envelope_mode: str = config_field('go', canonical_env='ANALYSIS_STOP_ENVELOPE_MODE', owner=ConfigOwner.PYTHON, reload=ReloadPolicy.NEW_SETUP_ONLY, runtime_reload=ReloadPolicy.RESTART, unit=ConfigUnit.ENUM, risk=RiskClassification.EXECUTION_SAFETY, description="Go analysis-engine owns the stop-distance envelope. Algo Bot consumes the published bounds and applies execution safety checks without rebuilding technical stop geometry.", default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, 'go'),), allowed_values=('go', 'python_legacy'), validation_summary='Only go or python_legacy is supported.')
-
-    @field_validator('mode')
-    @classmethod
-    def validate_mode(cls, value):
-        if value != 'go':
-            raise ValueError('mode must be go')
-        return value
-
-    @field_validator('arbitration_mode')
-    @classmethod
-    def validate_arbitration_mode(cls, value):
-        if value not in ('go', 'python_legacy'):
-            raise ValueError('arbitration_mode must be go or python_legacy')
-        return value
-
-    @field_validator('thesis_correlation_mode')
-    @classmethod
-    def validate_thesis_correlation_mode(cls, value):
-        if value not in ('go', 'python_legacy'):
-            raise ValueError('thesis_correlation_mode must be go or python_legacy')
-        return value
-
-    @field_validator('stop_envelope_mode')
-    @classmethod
-    def validate_stop_envelope_mode(cls, value):
-        if value not in ('go', 'python_legacy'):
-            raise ValueError('stop_envelope_mode must be go or python_legacy')
-        return value
-
     @model_validator(mode='after')
     def validate_rollout_gate(self):
         if not self.consumer_enabled:
-            raise ValueError('analysis.technical_authority.go requires consumer_enabled=true')
+            raise ValueError('analysis.technical_authority requires consumer_enabled=true')
         return self
 
 class AnalysisConfig(FrozenConfigModel):

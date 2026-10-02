@@ -137,6 +137,7 @@
         "invalidation_buffer_atr": 0.25,
         "maximum_width_atr": 2.0,
         "retest_tolerance_atr": 0.2,
+        "retest_window_bars": 3,
         "target_r": 2.0,
         "version": "v2"
       },
@@ -288,6 +289,7 @@
         "m5_box_bars": 12,
         "maximum_width_atr": 2.0,
         "retest_tolerance_atr": 0.15,
+        "retest_window_bars": 3,
         "target_r": 2.0,
         "version": "v2"
       },
@@ -367,8 +369,7 @@
       "consumer_enabled": true,
       "consumer_group": "apexvoid-algo-bot-analysis-opportunity-v1",
       "max_delivery_lag_seconds": 300,
-      "max_event_age_seconds": 900,
-      "mode": "go"
+      "max_event_age_seconds": 900
     },
     "techniques": {
       "invalidation_tolerance_atr": 0.5,

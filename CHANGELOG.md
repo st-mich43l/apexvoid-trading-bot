@@ -13,6 +13,11 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Go opportunities now carry an M15 higher-timeframe fallback when H1/H4 are
+  unavailable, and a missing higher-timeframe bias is treated as neutral
+  instead of suppressing an otherwise executable setup. Box Breakout and
+  Breakout Retest also accept a valid retest within three closed bars rather
+  than requiring it on the breakout bar.
 - Go-origin M1 scalp opportunities now use the Go structural target as an available-room ceiling while Algo Bot execution policy publishes a bounded 1R or 1R/2R broker target book; a distant opposite range edge can no longer become a single oversized scalp TP.
 - Thin Go-origin XAU FVG/iFVG structures now receive a policy-owned 30-pip execution band for shallow/deep entry planning while retaining the exact raw Go zone as TradePlan structural provenance.
 - Execution-time arbitration no longer lets a *waiting* setup suppress one that
@@ -136,6 +141,12 @@ dated section after deployment.
   `MarketContext`, and immutable analysis snapshots.
 
 ### Changed
+- Go Analysis Engine is now the only automatic technical-analysis producer:
+  removed the selectable authority/arbitration switches and the remaining
+  retired Python detector, scanner, market-map, zone, range and scalping
+  publication graph. Algo Bot still owns execution policy, risk, lifecycle
+  management and TradePlan V8 publication, with a final non-Go provenance
+  fence at that boundary.
 - Go is the sole automatic technical-opportunity source. `config/trading-bot.yml`
   sets the live Kafka consumer on, and automatic startup requires that path plus
   Kafka (`app/analysis_client/startup_gate.py`; Manual-Algo-only deployments
