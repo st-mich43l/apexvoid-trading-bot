@@ -176,6 +176,24 @@ type ConfluenceFactors struct {
 	CHoCH               bool
 }
 
+// FibonacciLevelProvenance identifies the exact canonical ladder point that
+// produced FibTouch. A boolean alone was insufficient for replay/parity work.
+type FibonacciLevelProvenance struct {
+	Ratio       float64
+	Price       float64
+	Kind        string
+	DistanceATR float64
+}
+
+// LiquidityGrabProvenance identifies the canonical pool swept and reclaimed
+// by the confirmation bar used for the Grade-A zone-quality bonus. Go's pool
+// identity replaces the deleted Python Grab object's process-local index.
+type LiquidityGrabProvenance struct {
+	PoolID      string
+	SweptAt     int64
+	ReclaimedAt int64
+}
+
 // ConfluenceContext is the engine-owned result of the V1/V2 technical
 // confluence calculation. The selected stars are the configured scorer's
 // value; both versions and the raw components remain available for replay,
@@ -190,6 +208,8 @@ type ConfluenceContext struct {
 	ZoneQualityScore float64
 	MADBonus         float64
 	Factors          ConfluenceFactors
+	FibLevel         *FibonacciLevelProvenance
+	GradeAGrab       *LiquidityGrabProvenance
 }
 
 type TechnicalContext struct {

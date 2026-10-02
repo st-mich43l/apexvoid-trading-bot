@@ -1,7 +1,7 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "8f2ab19d02fd201b4561119d4181e9d1b378d14aa56691460050ea993f8b9a33",
-  "count": 573,
+  "configuration_contract_fingerprint_sha256": "65972ed8d14066facd59e4f48be769f172df3e363dc82902776e434405bf7de0",
+  "count": 572,
   "deprecated_alias_count": 21,
   "entries": [
     {
@@ -733,22 +733,6 @@
       "unit": "boolean"
     },
     {
-      "canonical_env": "AUTO_TRADE_DISPLACEMENT_OVERRIDE_LOOKBACK_BARS",
-      "default": 3,
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Controls  (bars).",
-      "display_id": "config:execution.policy.displacement_override_lookback_bars",
-      "owner": "python",
-      "path": "execution.policy.displacement_override_lookback_bars",
-      "replacement_path": null,
-      "required": false,
-      "secret": false,
-      "shared_with_ctrader": false,
-      "type": "int",
-      "unit": "bars"
-    },
-    {
       "canonical_env": "AUTO_TRADE_DRY_RUN",
       "default": true,
       "deprecated": false,
@@ -976,10 +960,10 @@
     },
     {
       "canonical_env": "AUTO_TRADE_FADE_SCALP_ENABLED",
-      "default": true,
+      "default": false,
       "deprecated": false,
       "deprecated_aliases": [],
-      "description": "Controls .",
+      "description": "Retired automatic thesis; retained only for historical configuration compatibility.",
       "display_id": "config:strategies.scalp.fade_scalp_enabled",
       "owner": "python",
       "path": "strategies.scalp.fade_scalp_enabled",
@@ -7909,7 +7893,7 @@
       "default": true,
       "deprecated": false,
       "deprecated_aliases": [],
-      "description": "Compatibility setting for non-AE callers only. Live Go opportunities carry their own quality and arbitration decision; the Python worker must not re-rank them.",
+      "description": "Rank admitted Go opportunities by their strategy-owned quality during Algo Bot execution arbitration.",
       "display_id": "config:actionability.scanner_gates.use_quality_ranking",
       "owner": "python",
       "path": "actionability.scanner_gates.use_quality_ranking",
@@ -9226,6 +9210,6 @@
   ],
   "secret_count": 9,
   "shared_with_ctrader_count": 87,
-  "source_fingerprint_sha256": "8f2ab19d02fd201b4561119d4181e9d1b378d14aa56691460050ea993f8b9a33",
+  "source_fingerprint_sha256": "65972ed8d14066facd59e4f48be769f172df3e363dc82902776e434405bf7de0",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

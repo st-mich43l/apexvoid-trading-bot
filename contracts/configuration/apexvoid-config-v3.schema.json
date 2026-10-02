@@ -2681,9 +2681,6 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "displacement_override_lookback_bars": {
-              "type": "integer"
-            },
             "execution_zone_max_width_atr": {
               "type": "number"
             },
@@ -2708,7 +2705,6 @@
             }
           },
           "required": [
-            "displacement_override_lookback_bars",
             "execution_zone_max_width_atr",
             "execution_zone_max_width_pips",
             "group_close_allocation",

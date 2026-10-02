@@ -245,6 +245,27 @@
             "raw_factor_score": { "type": "number" },
             "zone_quality_score": { "type": "number", "minimum": 0 },
             "mad_bonus": { "type": "number", "minimum": 0 },
+            "fib_level": {
+              "type": "object",
+              "required": ["ratio", "price", "kind", "distance_atr"],
+              "properties": {
+                "ratio": { "type": "number" },
+                "price": { "type": "number", "exclusiveMinimum": 0 },
+                "kind": { "enum": ["retracement", "extension"] },
+                "distance_atr": { "type": "number", "minimum": 0 }
+              },
+              "additionalProperties": false
+            },
+            "grade_a_grab": {
+              "type": "object",
+              "required": ["pool_id", "swept_at", "reclaimed_at"],
+              "properties": {
+                "pool_id": { "type": "string", "minLength": 1 },
+                "swept_at": { "type": "integer", "minimum": 0 },
+                "reclaimed_at": { "type": "integer", "minimum": 0 }
+              },
+              "additionalProperties": false
+            },
             "factors": {
               "type": "object",
               "additionalProperties": false,

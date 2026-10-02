@@ -133,8 +133,8 @@
     "zone_reconcile_mode": "shadow",
     "zone_scale_undersized_policy": "single_entry"
   },
-  "contract_fingerprint": "8f2ab19d02fd201b4561119d4181e9d1b378d14aa56691460050ea993f8b9a33",
-  "effective_configuration_fingerprint": "6db385f39d7fb308fff74737d3cbf7513f07b9aea3ae5eb413f3f47eadaa2223",
+  "contract_fingerprint": "65972ed8d14066facd59e4f48be769f172df3e363dc82902776e434405bf7de0",
+  "effective_configuration_fingerprint": "721aca833cabdf0bb74655484582d43dde9f5aaffa74367ab8bc04fa2217ff39",
   "feed": {
     "backfill_bars": 2000,
     "bar_quality_lookback": 6,
@@ -468,7 +468,6 @@
         },
         "policy": {
           "box_min_rr": "1.25",
-          "displacement_override_lookback_bars": 3,
           "execution_cost_pips": "1",
           "execution_zone_max_width_atr": "2",
           "execution_zone_max_width_pips": "100",
@@ -945,7 +944,7 @@
           }
         },
         "breakout": {
-          "break_retest_enabled": true,
+          "break_retest_enabled": false,
           "breakout_enabled": true
         },
         "counter_trend": {
@@ -1027,7 +1026,7 @@
           }
         },
         "scalp": {
-          "fade_scalp_enabled": true,
+          "fade_scalp_enabled": false,
           "scalp_barrier_fallback_enabled": true,
           "scalp_barrier_fallback_min_confirmations": 1,
           "scalp_post_impulse_range_enabled": true,
@@ -1484,7 +1483,6 @@
         },
         "policy": {
           "box_min_rr": "1.25",
-          "displacement_override_lookback_bars": 3,
           "execution_cost_pips": "1",
           "execution_zone_max_width_atr": "2",
           "execution_zone_max_width_pips": "100",
@@ -1985,7 +1983,7 @@
           }
         },
         "breakout": {
-          "break_retest_enabled": true,
+          "break_retest_enabled": false,
           "breakout_enabled": true
         },
         "counter_trend": {
@@ -2067,7 +2065,7 @@
           }
         },
         "scalp": {
-          "fade_scalp_enabled": true,
+          "fade_scalp_enabled": false,
           "scalp_barrier_fallback_enabled": true,
           "scalp_barrier_fallback_min_confirmations": 1,
           "scalp_post_impulse_range_enabled": true,
@@ -2524,7 +2522,6 @@
         },
         "policy": {
           "box_min_rr": "1.25",
-          "displacement_override_lookback_bars": 3,
           "execution_cost_pips": "1",
           "execution_zone_max_width_atr": "2",
           "execution_zone_max_width_pips": "100",
@@ -3001,7 +2998,7 @@
           }
         },
         "breakout": {
-          "break_retest_enabled": true,
+          "break_retest_enabled": false,
           "breakout_enabled": true
         },
         "counter_trend": {
@@ -3083,7 +3080,7 @@
           }
         },
         "scalp": {
-          "fade_scalp_enabled": true,
+          "fade_scalp_enabled": false,
           "scalp_barrier_fallback_enabled": true,
           "scalp_barrier_fallback_min_confirmations": 1,
           "scalp_post_impulse_range_enabled": true,
@@ -3540,7 +3537,6 @@
         },
         "policy": {
           "box_min_rr": "1.25",
-          "displacement_override_lookback_bars": 3,
           "execution_cost_pips": "1",
           "execution_zone_max_width_atr": "2",
           "execution_zone_max_width_pips": "100",
@@ -4029,7 +4025,7 @@
           }
         },
         "breakout": {
-          "break_retest_enabled": true,
+          "break_retest_enabled": false,
           "breakout_enabled": true
         },
         "counter_trend": {
@@ -4111,7 +4107,7 @@
           }
         },
         "scalp": {
-          "fade_scalp_enabled": true,
+          "fade_scalp_enabled": false,
           "scalp_barrier_fallback_enabled": true,
           "scalp_barrier_fallback_min_confirmations": 1,
           "scalp_post_impulse_range_enabled": true,
@@ -4572,7 +4568,6 @@
         },
         "policy": {
           "box_min_rr": "1.25",
-          "displacement_override_lookback_bars": 3,
           "execution_cost_pips": "1",
           "execution_zone_max_width_atr": "2",
           "execution_zone_max_width_pips": "100",
@@ -5041,7 +5036,7 @@
           }
         },
         "breakout": {
-          "break_retest_enabled": true,
+          "break_retest_enabled": false,
           "breakout_enabled": true
         },
         "counter_trend": {
@@ -5123,7 +5118,7 @@
           }
         },
         "scalp": {
-          "fade_scalp_enabled": true,
+          "fade_scalp_enabled": false,
           "scalp_barrier_fallback_enabled": true,
           "scalp_barrier_fallback_min_confirmations": 1,
           "scalp_post_impulse_range_enabled": true,
@@ -5456,7 +5451,6 @@
         },
         "policy": {
           "box_min_rr": "1.25",
-          "displacement_override_lookback_bars": 3,
           "execution_cost_pips": "1",
           "execution_zone_max_width_atr": "2",
           "execution_zone_max_width_pips": "100",
@@ -5925,7 +5919,7 @@
           }
         },
         "breakout": {
-          "break_retest_enabled": true,
+          "break_retest_enabled": false,
           "breakout_enabled": true
         },
         "counter_trend": {
@@ -6007,7 +6001,7 @@
           }
         },
         "scalp": {
-          "fade_scalp_enabled": true,
+          "fade_scalp_enabled": false,
           "scalp_barrier_fallback_enabled": true,
           "scalp_barrier_fallback_min_confirmations": 1,
           "scalp_post_impulse_range_enabled": true,
@@ -6334,7 +6328,6 @@
         },
         "policy": {
           "box_min_rr": "1.25",
-          "displacement_override_lookback_bars": 3,
           "execution_cost_pips": "1",
           "execution_zone_max_width_atr": "2",
           "execution_zone_max_width_pips": "100",
@@ -6827,7 +6820,7 @@
           }
         },
         "breakout": {
-          "break_retest_enabled": true,
+          "break_retest_enabled": false,
           "breakout_enabled": true
         },
         "counter_trend": {
@@ -6909,7 +6902,7 @@
           }
         },
         "scalp": {
-          "fade_scalp_enabled": true,
+          "fade_scalp_enabled": false,
           "scalp_barrier_fallback_enabled": true,
           "scalp_barrier_fallback_min_confirmations": 1,
           "scalp_post_impulse_range_enabled": true,
@@ -7236,7 +7229,6 @@
         },
         "policy": {
           "box_min_rr": "1.25",
-          "displacement_override_lookback_bars": 3,
           "execution_cost_pips": "1",
           "execution_zone_max_width_atr": "2",
           "execution_zone_max_width_pips": "100",
@@ -7705,7 +7697,7 @@
           }
         },
         "breakout": {
-          "break_retest_enabled": true,
+          "break_retest_enabled": false,
           "breakout_enabled": true
         },
         "counter_trend": {
@@ -7787,7 +7779,7 @@
           }
         },
         "scalp": {
-          "fade_scalp_enabled": true,
+          "fade_scalp_enabled": false,
           "scalp_barrier_fallback_enabled": true,
           "scalp_barrier_fallback_min_confirmations": 1,
           "scalp_post_impulse_range_enabled": true,
@@ -8114,7 +8106,6 @@
         },
         "policy": {
           "box_min_rr": "1.25",
-          "displacement_override_lookback_bars": 3,
           "execution_cost_pips": "1",
           "execution_zone_max_width_atr": "2",
           "execution_zone_max_width_pips": "100",
@@ -8595,7 +8586,7 @@
           }
         },
         "breakout": {
-          "break_retest_enabled": true,
+          "break_retest_enabled": false,
           "breakout_enabled": true
         },
         "counter_trend": {
@@ -8677,7 +8668,7 @@
           }
         },
         "scalp": {
-          "fade_scalp_enabled": true,
+          "fade_scalp_enabled": false,
           "scalp_barrier_fallback_enabled": true,
           "scalp_barrier_fallback_min_confirmations": 1,
           "scalp_post_impulse_range_enabled": true,
@@ -9004,7 +8995,6 @@
         },
         "policy": {
           "box_min_rr": "1.25",
-          "displacement_override_lookback_bars": 3,
           "execution_cost_pips": "1",
           "execution_zone_max_width_atr": "2",
           "execution_zone_max_width_pips": "100",
@@ -9465,7 +9455,7 @@
           }
         },
         "breakout": {
-          "break_retest_enabled": true,
+          "break_retest_enabled": false,
           "breakout_enabled": true
         },
         "counter_trend": {
@@ -9547,7 +9537,7 @@
           }
         },
         "scalp": {
-          "fade_scalp_enabled": true,
+          "fade_scalp_enabled": false,
           "scalp_barrier_fallback_enabled": true,
           "scalp_barrier_fallback_min_confirmations": 1,
           "scalp_post_impulse_range_enabled": true,

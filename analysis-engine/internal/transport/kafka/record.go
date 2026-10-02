@@ -73,6 +73,21 @@ type ConfluenceContextPayload struct {
 	ZoneQualityScore float64                  `json:"zone_quality_score"`
 	MADBonus         float64                  `json:"mad_bonus"`
 	Factors          ConfluenceFactorsPayload `json:"factors"`
+	FibLevel         *FibonacciLevelPayload   `json:"fib_level,omitempty"`
+	GradeAGrab       *LiquidityGrabPayload    `json:"grade_a_grab,omitempty"`
+}
+
+type FibonacciLevelPayload struct {
+	Ratio       float64 `json:"ratio"`
+	Price       float64 `json:"price"`
+	Kind        string  `json:"kind"`
+	DistanceATR float64 `json:"distance_atr"`
+}
+
+type LiquidityGrabPayload struct {
+	PoolID      string `json:"pool_id"`
+	SweptAt     int64  `json:"swept_at"`
+	ReclaimedAt int64  `json:"reclaimed_at"`
 }
 
 type ConfluenceFactorsPayload struct {

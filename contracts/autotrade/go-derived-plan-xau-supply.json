@@ -113,7 +113,7 @@
     "price_side": "bid",
     "type": "market_watch",
     "zone_high": "4356.0",
-    "zone_low": "4352.5"
+    "zone_low": "4354.1"
   },
   "execution_policy": {
     "allow_limit": false,
