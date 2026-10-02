@@ -6,7 +6,7 @@ import time
 
 import pytest
 
-from app.autotrade.gate import AutoScalpBox, AutoScalpDecision, AutoScalpRail
+from app.autotrade.range_types import AutoScalpBox, AutoScalpDecision, AutoScalpRail
 from app.autotrade.range_context import (
   PRIVATE_SOURCE_MAX_AGE_SECONDS,
   SCANNER_SOURCE_MAX_AGE_SECONDS,

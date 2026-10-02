@@ -8,7 +8,7 @@ import json
 import math
 from typing import Any
 
-from app.autotrade.gate import AutoScalpDecision
+from app.autotrade.range_types import AutoScalpDecision
 from app.autotrade.range_context import RangeContext
 
 

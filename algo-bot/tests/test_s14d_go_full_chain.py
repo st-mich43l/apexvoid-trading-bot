@@ -241,7 +241,10 @@ async def test_kafka_event_becomes_a_real_v8_plan_with_full_provenance(h, prod, 
   assert plan["source_structure"]["structure_id"] == event["technical_context"]["confirmation"]["zone_id"]
   assert plan["source_structure"]["kind"] == "supply"
   assert (float(plan["source_structure"]["low"]), float(plan["source_structure"]["high"])) == (event["entry"]["low"], event["entry"]["high"])
-  assert (float(plan["entry"]["zone_low"]), float(plan["entry"]["zone_high"])) == (event["entry"]["low"], event["entry"]["high"])
+  # The technical structure retains Go's full band. Execution policy caps
+  # the adverse side of a market watch at its planned entry while preserving
+  # the better-price side (SELL: planned entry -> technical high).
+  assert (float(plan["entry"]["zone_low"]), float(plan["entry"]["zone_high"])) == (4354.1, event["entry"]["high"])
   assert float(plan["source_structure"]["invalidation_price"]) == event["invalidation"]["price"]
   # confirmation timestamps and expiry: never outlive the technical opportunity
   assert plan["analysis"]["confirmation_bar_ts"] == event["technical_context"]["confirmation"]["confirmation_bar_time"]

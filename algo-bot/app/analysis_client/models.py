@@ -213,6 +213,19 @@ class ConfluenceFactors(FrozenConfigModel):
   choch: bool
 
 
+class FibonacciLevelProvenance(FrozenConfigModel):
+  ratio: FiniteFloat
+  price: FiniteFloat = Field(gt=0)
+  kind: Literal["retracement", "extension"]
+  distance_atr: FiniteFloat = Field(ge=0)
+
+
+class LiquidityGrabProvenance(FrozenConfigModel):
+  pool_id: str = Field(min_length=1)
+  swept_at: int = Field(ge=0)
+  reclaimed_at: int = Field(ge=0)
+
+
 class ConfluenceContext(FrozenConfigModel):
   """Go-owned V1/V2 confluence facts; never a Python detector fallback."""
 
@@ -225,6 +238,8 @@ class ConfluenceContext(FrozenConfigModel):
   zone_quality_score: FiniteFloat = Field(ge=0)
   mad_bonus: FiniteFloat = Field(ge=0)
   factors: ConfluenceFactors
+  fib_level: FibonacciLevelProvenance | None = None
+  grade_a_grab: LiquidityGrabProvenance | None = None
 
 
 class TechnicalContext(FrozenConfigModel):

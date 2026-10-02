@@ -9,8 +9,13 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
+
 from app.autotrade import worker
 from app.autotrade.arbitration import ExecutionIntent, arbitrate_execution_intents
+
+
+pytestmark = pytest.mark.no_database
 
 
 def _intent(
@@ -20,6 +25,7 @@ def _intent(
   confluence: int = 3,
   tier: str = "A",
   executable_now: bool = True,
+  bias_relationship: str | None = None,
 ) -> ExecutionIntent:
   return ExecutionIntent(
     intent_id=intent_id,
@@ -31,6 +37,7 @@ def _intent(
     freshness=100.0,
     distance_pips=0.0,
     executable_now=executable_now,
+    bias_relationship=bias_relationship,
   )
 
 
@@ -55,6 +62,36 @@ def test_two_executable_opposite_intents_still_conflict():
 
   assert result.ordered == ()
   assert {item.intent_id for item in result.suppressed} == {"buy", "sell"}
+  assert result.reason_code == "opposite_direction_conflict"
+
+
+def test_unique_with_bias_direction_breaks_a_close_quality_tie():
+  result = arbitrate_execution_intents(
+    [
+      _intent(
+        "buy", direction="BUY", bias_relationship="with_bias",
+      ),
+      _intent(
+        "sell", direction="SELL", bias_relationship="counter_bias",
+      ),
+    ],
+    use_quality_ranking=True,
+  )
+
+  assert [item.intent_id for item in result.ordered] == ["buy"]
+  assert [item.intent_id for item in result.suppressed] == ["sell"]
+
+
+def test_ambiguous_bias_does_not_break_a_close_quality_tie():
+  result = arbitrate_execution_intents(
+    [
+      _intent("buy", direction="BUY", bias_relationship="with_bias"),
+      _intent("sell", direction="SELL", bias_relationship="with_bias"),
+    ],
+    use_quality_ranking=True,
+  )
+
+  assert result.ordered == ()
   assert result.reason_code == "opposite_direction_conflict"
 
 

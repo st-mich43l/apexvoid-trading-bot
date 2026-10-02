@@ -422,11 +422,22 @@ def resolve_execution_route_plan(
     # live quote instead - see ENTRY_LOGIC_REVIEW_2026-09-17.md.
     # L1 reference price is the live quote (not a limit); L2 is deeper limit.
     l1_price = _round_price(quote, digits)
-    l2_price = _deeper_second_leg(
-      side=side, low=low, high=high, proximal=proximal,
-      anchor=scale_entry_anchor, atr=atr,
-      scale_step_atr=reaction_step, digits=digits,
-    )
+    if manual_xau_legs is not None:
+      # A confirmed XAU reaction can arrive after price has already crossed
+      # the manual shallow edge and original midpoint. Reusing either level
+      # creates a marketable L2 that fills with L1; a tiny generic ATR step
+      # clusters both entries (production 2026-10-02: SELL L1 4185.51, L2
+      # 4185.90 inside a 4183.28-4187.19 zone). Preserve Manual Algo's
+      # midpoint principle over the still-untraded part of the zone instead:
+      # market L1 now, limit L2 halfway from quote to the far/better edge.
+      remaining_far = low if side == "BUY" else high
+      l2_price = _round_price((quote + remaining_far) / 2.0, digits)
+    else:
+      l2_price = _deeper_second_leg(
+        side=side, low=low, high=high, proximal=proximal,
+        anchor=scale_entry_anchor, atr=atr,
+        scale_step_atr=reaction_step, digits=digits,
+      )
     if l1_price == l2_price:
       policy = (reaction_scale_invalid_policy or "single_market").strip().lower()
       if policy == "single_market":
@@ -443,9 +454,15 @@ def resolve_execution_route_plan(
       l1_price,
       (l1_price, l2_price),
       geometry,
-      "execution policy: reaction market_with_limit_scale",
+      (
+        "execution policy: XAU live-zone midpoint ladder"
+        if manual_xau_legs is not None
+        else "execution policy: reaction market_with_limit_scale"
+      ),
       True,
-      planned_leg_volume_ratios=reaction_ratios,
+      planned_leg_volume_ratios=(
+        manual_xau_ratios if manual_xau_legs is not None else reaction_ratios
+      ),
     )
 
   if is_scalp_strategy(

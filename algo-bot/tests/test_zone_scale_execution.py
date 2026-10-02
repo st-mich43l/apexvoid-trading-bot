@@ -48,6 +48,7 @@ def _cfg(**overrides):
 
 def _policy_match(**overrides):
   values = {
+    "symbol": "XAU",
     "strategy": "Key Level",
     "direction": "SELL",
     "entry_low": 4035.0,
@@ -75,13 +76,8 @@ def _policy_match(**overrides):
   ],
 )
 def test_key_session_trendline_use_market_with_limit_scale(strategy):
-  # 4035.3, not the zone's own 4035.5 midpoint: since the entry-price fix
-  # (leg 2 steps from the true proximal 4035.0, not the quote), a quote of
-  # 4035.5 makes leg 2's computed price (4035.0 + 0.5 step = 4035.5)
-  # coincide with the quote itself, collapsing to a single market fill -
-  # see test_sell_zone_already_inside_anchors_first_leg_at_current_price
-  # for that exact case. This test is about route *selection*, not the
-  # specific prices, so it uses a quote that keeps the two legs distinct.
+  # Production XAU follows Manual Algo geometry: market L1 plus a deeper
+  # resting L2 over the still-untraded part of the zone.
   evaluation = evaluate_execution_policy(
     _policy_match(strategy=strategy),
     spot_price=4035.3,
@@ -92,7 +88,7 @@ def test_key_session_trendline_use_market_with_limit_scale(strategy):
   )
   assert evaluation.allowed
   assert evaluation.measured["planned_execution_route"] == "market_with_limit_scale"
-  assert evaluation.measured["planned_leg_volume_ratios"] == pytest.approx([0.70, 0.30])
+  assert evaluation.measured["planned_leg_volume_ratios"] == pytest.approx([0.80, 0.20])
 
 
 @pytest.mark.parametrize(
@@ -190,11 +186,8 @@ def test_manual_xau_route_uses_the_same_shallow_deep_contract_as_manual_algo():
 
 
 def test_sell_zone_already_inside_anchors_first_leg_at_current_price():
-  # Key Level market_with_limit_scale: L1 is the live quote (market), L2
-  # steps from the true structural proximal (4035.0, the zone's near/low
-  # edge for a SELL) by scale_step_atr*ATR - not from the quote, per the
-  # entry-price fix (ENTRY_LOGIC_REVIEW_2026-09-17.md) - so L2 lands at
-  # 4035.5 regardless of exactly where the quote sits inside the zone.
+  # Key Level market_with_limit_scale: L1 is the live quote (market). XAU L2
+  # uses Manual Algo's midpoint principle over the still-untraded zone.
   evaluation = evaluate_execution_policy(
     _policy_match(direction="SELL"),
     spot_price=4035.3,
@@ -206,12 +199,36 @@ def test_sell_zone_already_inside_anchors_first_leg_at_current_price():
   measured = evaluation.measured
   assert measured["planned_execution_route"] == "market_with_limit_scale"
   assert measured["planned_leg_entry_prices"][0] == pytest.approx(4035.3)
-  # One step above the quote (deeper for a SELL): the proximal ladder
-  # (4035.5) would sit near the quote, the quote ladder (4035.8) is deeper.
-  assert measured["planned_leg_entry_prices"][1] == pytest.approx(4035.8)
+  assert measured["planned_leg_entry_prices"][1] == pytest.approx(4035.9)
+  assert measured["planned_leg_volume_ratios"] == pytest.approx([0.80, 0.20])
 
 
-def test_buy_zone_first_leg_is_proximal_high_at_seventy_percent():
+def test_live_xau_incident_keeps_l2_meaningfully_inside_remaining_zone():
+  plan = resolve_execution_route_plan(
+    direction="SELL",
+    order_type_preference="limit",
+    entry_distribution="zone_scale",
+    executable_quote=4185.51,
+    zone_low=4183.28,
+    zone_high=4187.19,
+    atr=3.9,
+    zone_fill_enabled=True,
+    zone_fill_min_atr=0.5,
+    reaction_scale_enabled=True,
+    reaction_scale_step_atr=0.1,
+    strategy="Key Level",
+    structural_stop=4190.51,
+    target_risk_pips=50,
+    pip_size=0.1,
+    digits=2,
+    manual_xau_ladder=True,
+  )
+
+  assert plan.planned_leg_entry_prices == pytest.approx((4185.51, 4186.35))
+  assert plan.planned_leg_volume_ratios == pytest.approx((0.80, 0.20))
+
+
+def test_buy_zone_first_leg_is_market_at_eighty_percent():
   # BUY Key Level at the high edge: L1 market at quote, L2 deeper limit.
   evaluation = evaluate_execution_policy(
     _policy_match(direction="BUY", structure_swing=4033.5),
@@ -224,15 +241,13 @@ def test_buy_zone_first_leg_is_proximal_high_at_seventy_percent():
   measured = evaluation.measured
   assert measured["planned_execution_route"] == "market_with_limit_scale"
   assert measured["planned_leg_entry_prices"][0] == pytest.approx(4036.5)
-  assert measured["planned_leg_volume_ratios"] == pytest.approx([0.70, 0.30])
-  assert measured["planned_leg_entry_prices"][1] == pytest.approx(4036.0)
+  assert measured["planned_leg_volume_ratios"] == pytest.approx([0.80, 0.20])
+  assert measured["planned_leg_entry_prices"][1] == pytest.approx(4035.75)
 
 
 def test_buy_zone_already_inside_anchors_first_leg_at_current_price():
-  # L2 steps from the true structural proximal (4036.5, the zone's near/
-  # high edge for a BUY) by scale_step_atr*ATR - not from the quote, per
-  # the entry-price fix - so L2 lands at 4036.0 regardless of exactly
-  # where the quote sits inside the zone.
+  # XAU L2 is the midpoint between the live market fill and the remaining
+  # far/better edge of the confirmed zone.
   evaluation = evaluate_execution_policy(
     _policy_match(direction="BUY", structure_swing=4033.5),
     spot_price=4036.2,
@@ -244,8 +259,7 @@ def test_buy_zone_already_inside_anchors_first_leg_at_current_price():
   measured = evaluation.measured
   assert measured["planned_execution_route"] == "market_with_limit_scale"
   assert measured["planned_leg_entry_prices"][0] == pytest.approx(4036.2)
-  # One step below the quote (deeper for a BUY).
-  assert measured["planned_leg_entry_prices"][1] == pytest.approx(4035.7)
+  assert measured["planned_leg_entry_prices"][1] == pytest.approx(4035.6)
 
 
 def test_key_session_trendline_outside_zone_keeps_limit_ladder():

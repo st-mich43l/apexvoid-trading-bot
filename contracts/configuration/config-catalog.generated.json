@@ -1,20 +1,20 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "8f2ab19d02fd201b4561119d4181e9d1b378d14aa56691460050ea993f8b9a33",
-  "configuration_document_fingerprint_sha256": "97ea4296d16431e66498a30af9459ead9ea1e0834f325c71ebcb06f220231fa7",
+  "configuration_contract_fingerprint_sha256": "65972ed8d14066facd59e4f48be769f172df3e363dc82902776e434405bf7de0",
+  "configuration_document_fingerprint_sha256": "2f466d39ebae5c7fe13bb6616cd239ece785ee768b7b067d0f919586abc45cf1",
   "counts": {
     "algorithm_constants": 97,
-    "configurable": 582,
+    "configurable": 581,
     "known_conflicts": 30,
     "owners": {
       "ctrader": 50,
-      "python": 539,
+      "python": 538,
       "shared": 100
     },
     "protocol_constants": 10,
     "secrets": 9,
     "shared": 100,
-    "total_items": 689
+    "total_items": 688
   },
   "items": [
     {
@@ -1502,7 +1502,7 @@
       ],
       "deprecated": false,
       "deprecated_aliases": [],
-      "description": "Compatibility setting for non-AE callers only. Live Go opportunities carry their own quality and arbitration decision; the Python worker must not re-rank them.",
+      "description": "Rank admitted Go opportunities by their strategy-owned quality during Algo Bot execution arbitration.",
       "display_id": "config:actionability.scanner_gates.use_quality_ranking",
       "evidence_notes": [],
       "introduced_in": "config-catalog-v2",
@@ -11815,43 +11815,6 @@
     {
       "algorithm_constant": false,
       "allowed_values": [],
-      "canonical_env": "AUTO_TRADE_DISPLACEMENT_OVERRIDE_LOOKBACK_BARS",
-      "catalog_version": 2,
-      "configurable": true,
-      "constraints": {},
-      "default": 3,
-      "default_contexts": [
-        {
-          "context": "python_schema",
-          "value": 3
-        }
-      ],
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Controls  (bars).",
-      "display_id": "config:execution.policy.displacement_override_lookback_bars",
-      "evidence_notes": [],
-      "introduced_in": "config-catalog-v2",
-      "kind": "configurable",
-      "mismatch_policy": "not_reported",
-      "owner": "python",
-      "path": "execution.policy.displacement_override_lookback_bars",
-      "protocol_constant": false,
-      "reload_policy": "new_setup_only",
-      "replacement_path": null,
-      "required": false,
-      "risk_classification": "execution_safety",
-      "runtime_reload_policy": "restart",
-      "secret": false,
-      "shared_with_ctrader": false,
-      "terminal_deprecation_reason": null,
-      "type": "int",
-      "unit": "bars",
-      "validation_summary": "Pydantic required/type coercion only"
-    },
-    {
-      "algorithm_constant": false,
-      "allowed_values": [],
       "canonical_env": "AUTO_TRADE_EXECUTION_COST_PIPS",
       "catalog_version": 2,
       "configurable": true,
@@ -21273,16 +21236,16 @@
       "catalog_version": 2,
       "configurable": true,
       "constraints": {},
-      "default": true,
+      "default": false,
       "default_contexts": [
         {
           "context": "python_schema",
-          "value": true
+          "value": false
         }
       ],
       "deprecated": false,
       "deprecated_aliases": [],
-      "description": "Controls .",
+      "description": "Retired automatic thesis; retained only for historical configuration compatibility.",
       "display_id": "config:strategies.scalp.fade_scalp_enabled",
       "evidence_notes": [],
       "introduced_in": "config-catalog-v2",
@@ -25737,6 +25700,6 @@
       "validation_summary": "Kafka contract topic; changes require coordinated deployment."
     }
   ],
-  "source_fingerprint_sha256": "8f2ab19d02fd201b4561119d4181e9d1b378d14aa56691460050ea993f8b9a33",
+  "source_fingerprint_sha256": "65972ed8d14066facd59e4f48be769f172df3e363dc82902776e434405bf7de0",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

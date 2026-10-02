@@ -1,5 +1,5 @@
-"""S14E: Go-origin cards use the canonical Manual/Auto card helpers, the trading contract keeps full
-numeric precision while the card shows the instrument's approved precision, and the executor-injected
+"""S14E: Go-origin cards use the canonical Manual/Auto card helpers, technical structure keeps full
+numeric precision while execution policy narrows fill permission and the card shows approved precision, and the executor-injected
 risk leg remains an execution-policy concern rather than a technical-source concern.
 
 Real PostgreSQL + real Redis (production Lua); the price data is a real replayed Go opportunity
@@ -89,14 +89,17 @@ async def deliver_and_publish(h, prod, monkeypatch):
   return raw["payload"], deserialize_matches(await prod.get(strategy_matches_key("XAU")))[0]
 
 
-# ---- precision: the contract keeps it, the card shows the approved precision ------------------------------
+# ---- precision: structure keeps it, execution narrows fill permission, card rounds -------------------------
 
 @pytest.mark.asyncio
 async def test_contract_keeps_full_precision_while_the_card_shows_the_instruments_approved_precision(h, prod, monkeypatch):
   go, match = await deliver_and_publish(h, prod, monkeypatch)
   (plan,) = await plans(prod)
-  # exact decimal text of Go's floats survives into the trading contract
-  assert plan["entry"]["zone_low"] == str(Decimal(repr(go["entry"]["low"]))) == "4291.21"
+  # The source structure keeps Go's exact band. SELL market-watch execution
+  # caps its adverse low at the policy-planned quote and retains the better
+  # technical high; it cannot silently accept a worse fill across the band.
+  assert plan["source_structure"]["low"] == str(Decimal(repr(go["entry"]["low"]))) == "4291.21"
+  assert plan["entry"]["zone_low"] == "4293.0"
   assert plan["entry"]["zone_high"] == str(Decimal(repr(go["entry"]["high"]))) == "4296.87"
   assert plan["source_structure"]["invalidation_price"] == str(Decimal(repr(go["invalidation"]["price"]))) == "4298.970714285714"
   assert match.absolute_target_price == go["targets"][0]["price"]["price"] == 4284.159928571428      # the match keeps Go's exact target

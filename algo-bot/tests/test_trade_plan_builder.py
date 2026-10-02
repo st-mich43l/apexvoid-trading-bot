@@ -19,6 +19,7 @@ import pytest
 from app.autotrade.strategy_match import STRATEGY_MATCH_VERSION, StrategyMatch
 from app.autotrade.trade_plan_builder import (
   TradePlanBuildRejected,
+  _build_entry,
   build_trade_plan_from_strategy_match,
   resolve_max_spread_ticks,
 )
@@ -299,13 +300,50 @@ def test_market_route_produces_market_watch_entry():
 
   assert plan.entry.type == "market_watch"
   assert plan.entry.zone_low == Decimal("4088.1")
-  assert plan.entry.zone_high == Decimal("4090.0")
+  assert plan.entry.zone_high == Decimal("4089.0")
   assert plan.entry.price_side == "ask"
   # Derived from max_spread_pips×pip/tick (not the old hardcoded 8 that
   # rejected a normal ~9-tick XAU spread while quote was already in zone).
   assert plan.entry.max_spread_ticks == 50
   assert plan.execution_policy.allow_market is True
   assert plan.execution_policy.allow_limit is False
+
+
+@pytest.mark.parametrize(
+  ("direction", "zone_low", "zone_high", "planned_entry", "expected_low", "expected_high"),
+  [
+    ("BUY", 4180.76, 4187.76, 4184.04, Decimal("4180.76"), Decimal("4184.04")),
+    ("SELL", 4180.76, 4187.76, 4184.04, Decimal("4184.04"), Decimal("4187.76")),
+  ],
+)
+def test_market_watch_caps_adverse_fill_at_planned_entry_but_keeps_better_prices(
+  direction, zone_low, zone_high, planned_entry, expected_low, expected_high,
+):
+  match = _match(
+    direction=direction,
+    entry_low=zone_low,
+    entry_high=zone_high,
+    strategy="Liquidity Sweep",
+    family="liquidity_sweep",
+  )
+
+  entry = _build_entry(
+    route="market",
+    direction=direction,
+    match=match,
+    measured={
+      "planned_entry_price": planned_entry,
+      "planned_entry_zone_low": zone_low,
+      "planned_entry_zone_high": zone_high,
+    },
+    expires_at=1720003200,
+    max_spread_ticks=50,
+    max_slippage_ticks=20,
+  )
+
+  assert entry.type == "market_watch"
+  assert entry.zone_low == expected_low
+  assert entry.zone_high == expected_high
 
 
 def test_single_limit_route_produces_single_limit_entry():

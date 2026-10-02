@@ -202,58 +202,6 @@ def _overlap(
   return overlap, ratio
 
 
-def filter_displaced_opposing_entries(
-  entries: Iterable[Any],
-  *,
-  direction: str,
-  recent_closes: Iterable[float],
-) -> list[Any]:
-  """Drop opposing-side entries that recent price action has already
-  decisively closed beyond, in the candidate's own direction.
-
-  An opposing zone's own classification (e.g. an H1 breaker/flip) can lag
-  real price by up to a full HTF bar - _breaker_violation (zones.py)
-  requires a confirmed close beyond the zone before relabeling it, which is
-  the right caution against flipping on a mere wick, but it means a zone
-  can still show up here as an unbroken barrier minutes after the
-  candidate's own execution timeframe has already closed decisively
-  through it. Applying the exact same confirmed-close standard directly
-  against the candidate's own recent closes - not waiting on the barrier's
-  own reclassification - recognizes a displacement that has already
-  happened instead of treating a barrier as live once it no longer is.
-  Only genuinely CLOSED beyond the far edge counts; a wick alone does not.
-  """
-  side = direction.upper()
-  closes = [float(value) for value in recent_closes if math.isfinite(value)]
-  opposing_side = "sell" if side == "BUY" else "buy"
-  kept: list[Any] = []
-  dropped: list[tuple[float, float]] = []
-  for entry in entries:
-    if str(getattr(entry, "side", "")).casefold() != opposing_side:
-      kept.append(entry)
-      continue
-    low = float(getattr(entry, "lo"))
-    high = float(getattr(entry, "hi"))
-    displaced = any(
-      (side == "BUY" and close > high) or (side == "SELL" and close < low)
-      for close in closes
-    )
-    if displaced:
-      dropped.append((low, high))
-    else:
-      kept.append(entry)
-  log.debug(
-    "structural_target_room displacement direction=%s closes=%s "
-    "kept=%s dropped=%s dropped_bounds=%s",
-    side,
-    closes,
-    len(kept),
-    len(dropped),
-    [(round(lo, 6), round(hi, 6)) for lo, hi in dropped],
-  )
-  return kept
-
-
 def shared_boundary_epsilon(*, pip_size: float, atr: float) -> float:
   """Tick-scale glue tolerance for Market Map walls that share a proximal edge."""
   pip = max(0.0, float(pip_size))
@@ -600,12 +548,8 @@ def _opposing_structure_evidence_for_barrier(
   zone_score = float(getattr(barrier, "score", 0.0) or 0.0)
   touches = int(getattr(barrier, "touches", 0) or 0)
   mitigated = bool(getattr(barrier, "mitigated", False))
-  # A genuinely displaced entry never reaches _nearest_opposing in
-  # production - callers filter displacement upstream via
-  # filter_displaced_opposing_entries on authoritative closed bars (this
-  # module's own contract, unchanged). ``displaced`` here only fires for a
-  # caller/test that deliberately keeps a displaced-flagged entry in for
-  # telemetry purposes, mirroring ``include_mitigated``.
+  # Go owns barrier lifecycle and marks displaced entries before publishing
+  # the barrier book. Python consumes that fact without recalculating it.
   displaced = bool(getattr(barrier, "displaced", False))
   contained = zone_low <= planned <= zone_high
 
@@ -846,7 +790,6 @@ def evaluate_structural_target_room(
   barrier_buffer_atr: float,
   min_capped_target_pips: float = 0.0,
   execution_cost_pips: float = 0.0,
-  displacement_state: dict[str, Any] | None = None,
   room_reference_source: str | None = None,
   executable_entry_price: float | None = None,
   shared_boundary_state: dict[str, Any] | None = None,
@@ -871,9 +814,6 @@ def evaluate_structural_target_room(
   Market Map ``contains_price`` is telemetry only. Candidate-band overlap
   without planned-entry containment is allow-with-warning — never a hard
   structural reject and never a reason to shrink ``fitted_targets_pips``.
-
-  Callers must apply ``filter_displaced_opposing_entries`` on authoritative
-  recent closed bars before passing ``actionable_entries``.
 
   ``protective_stop_distance``/``first_target_r``/``strength_score_ceiling``/
   ``caution_room_r`` (2026-09, Opposing Structure V2, all optional) feed
@@ -976,18 +916,15 @@ def evaluate_structural_target_room(
     float(executable_entry_price)
   ):
     base_measured["executable_entry_price"] = float(executable_entry_price)
-  if displacement_state:
-    base_measured["displacement_state"] = dict(displacement_state)
   if shared_boundary_state:
     base_measured["shared_boundary_state"] = dict(shared_boundary_state)
   if barrier is None:
     effective = float(max(targets)) if targets else None
     log.debug(
       "structural_target_room allowed=true reason=no_opposing_barrier "
-      "direction=%s planned_entry=%s displacement=%s",
+      "direction=%s planned_entry=%s",
       side,
       planned,
-      displacement_state,
     )
     return StructuralTargetRoomDecision(
       True,
@@ -1067,8 +1004,7 @@ def evaluate_structural_target_room(
       "structural_target_room allowed=%s hard_block=%s reason=%s "
       "direction=%s planned_entry=%s opposing_low=%s opposing_high=%s "
       "planned_entry_contained=%s market_price_contained=%s "
-      "overlap_price=%s overlap_ratio=%s raw_room=%s buffered_room=%s "
-      "displacement=%s"
+      "overlap_price=%s overlap_ratio=%s raw_room=%s buffered_room=%s"
     )
     args = (
       decision.allowed,
@@ -1084,7 +1020,6 @@ def evaluate_structural_target_room(
       round(overlap_ratio, 6),
       round(raw_room, 6),
       round(buffered_room, 6),
-      displacement_state,
     )
     if decision.allowed and not decision.hard_block:
       log.debug(msg, *args)

@@ -66,3 +66,14 @@ zone families produce opportunities without legacy structural IDs; individual
 strategy packages carry their focused positive/negative and causal tests.
 Cross-service Python, Go, C#, contract, and deployment checks remain required
 for every production change.
+
+## Retired automatic theses
+
+`Fade Scalp` is retained only as a historical/manual display label. Its former
+automatic range-reversion role is covered by the independent `range_edge` and
+`snap_back` strategies; recreating it would duplicate ownership and arbitration.
+
+Non-scalp `Break & Retest` is also historical/manual only. `box_breakout` owns
+the M5 compression/break/retest thesis, while `scalp_breakout_retest` owns the
+distinct M5-context/M1-confirmation thesis. Neither retired label is a registry
+ID, Go opportunity source, or automatic execution-policy adapter.

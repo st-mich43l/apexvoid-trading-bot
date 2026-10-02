@@ -319,7 +319,6 @@ def actionability_cfg(**overrides: Any) -> PythonRuntimeConfig:
     "auto_trade_opposing_barrier_atr": 0.5,
     "scanner_actionability_gate_enabled": True,
     "key_level_role_ambiguity_gate_enabled": True,
-    "auto_trade_displacement_override_lookback_bars": 0,
     "auto_trade_execution_cost_pips": 1.0,
     "auto_trade_min_capped_target_pips": 15.0,
     "breakout_accept_bars": 2,

@@ -74,7 +74,7 @@ func confluenceContextPayload(c *opportunity.ConfluenceContext) *ConfluenceConte
 	if c == nil {
 		return nil
 	}
-	return &ConfluenceContextPayload{
+	payload := &ConfluenceContextPayload{
 		Version: c.Version, SelectedStars: c.SelectedStars, V1Stars: c.V1Stars,
 		V2Stars: c.V2Stars, V2Raw: c.V2Raw, RawFactorScore: c.RawFactorScore,
 		ZoneQualityScore: c.ZoneQualityScore, MADBonus: c.MADBonus,
@@ -85,6 +85,19 @@ func confluenceContextPayload(c *opportunity.ConfluenceContext) *ConfluenceConte
 			FibTouch: c.Factors.FibTouch, CHoCH: c.Factors.CHoCH,
 		},
 	}
+	if c.FibLevel != nil {
+		payload.FibLevel = &FibonacciLevelPayload{
+			Ratio: c.FibLevel.Ratio, Price: c.FibLevel.Price,
+			Kind: c.FibLevel.Kind, DistanceATR: c.FibLevel.DistanceATR,
+		}
+	}
+	if c.GradeAGrab != nil {
+		payload.GradeAGrab = &LiquidityGrabPayload{
+			PoolID: c.GradeAGrab.PoolID, SweptAt: c.GradeAGrab.SweptAt,
+			ReclaimedAt: c.GradeAGrab.ReclaimedAt,
+		}
+	}
+	return payload
 }
 
 func madContextPayload(m *opportunity.MADContext) *MADContextPayload {

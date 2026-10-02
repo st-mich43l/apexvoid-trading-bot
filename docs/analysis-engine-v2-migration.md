@@ -46,9 +46,11 @@ publishes the selected stars plus named factors and raw components. Algo Bot
 consumes that value for policy telemetry and does not rerun the legacy
 confluence detector. Older events without this additive block remain
 backward-compatible and use their existing evidence-count compatibility path.
-The source-zone quality inputs are intentionally documented as a remaining
-parity item where Go does not yet retain Python-only Grade-A grab or exact
-Fibonacci-level provenance.
+The source-zone quality inputs retain the canonical swept liquidity-pool
+identity and confirmation-bar reclaim used for the Grade-A grab bonus, plus the exact Fibonacci level
+(ratio, price, kind and ATR distance) used for a Fib touch. This closes the
+former boolean-only provenance gap while preserving Go's redesigned pool
+identity in place of Python's process-local candle index.
 
 | Capability | Legacy Python path (deleted) | V2 Go owner | Parity or redesign? | Historical status | Historical removal note |
 |---|---|---|---|---|---|
