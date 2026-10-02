@@ -27,13 +27,13 @@ from redis.asyncio import Redis
 
 from app.analysis_client.consumer import AnalysisOpportunityConsumer
 from app.analysis_client.models import ArbitrationTopic, OpportunityTopic, parse_analysis_event
-from app.analysis.structural_reaction_support import structural_thesis_id
 from app.autotrade import go_opportunity_policy as pol
 from app.autotrade import killzone, worker
 from app.autotrade.go_plan_cancel import request_plan_cancel
-from app.autotrade.multi_match import deserialize_matches, strategy_matches_key
+from app.autotrade.multi_match import deserialize_matches, serialize_matches, strategy_matches_key
 from app.autotrade.route_outcome import route_outcome_key
 from app.autotrade.setup_lifecycle import CONFIRMED, PLAN_PUBLISHED, load_setup
+from app.autotrade.strategy_identity import structural_thesis_id
 from app.autotrade.trade_plan import TradePlan
 from app.autotrade.zone_watch import (
   GRADE_A,
@@ -471,15 +471,20 @@ def _stale_python_match():
     structural_source="scanner:supply_demand",
   )
   return replace(legacy, match_id=structural_thesis_id(
-    symbol=legacy.symbol, strategy=legacy.strategy, direction=legacy.direction,
-    structural_source=legacy.structural_source, structural_id=legacy.structural_zone_id,
-    touch_bar_ts=str(legacy.touch_bar_ts), confirmation_bar_ts=str(legacy.confirmation_bar_ts),
+    symbol=legacy.symbol,
+    strategy=legacy.strategy,
+    direction=legacy.direction,
+    structural_source=legacy.structural_source,
+    structural_id=legacy.structural_zone_id,
+    touch_bar_ts=str(legacy.touch_bar_ts),
+    confirmation_bar_ts=str(legacy.confirmation_bar_ts),
   ))
 
 
 async def _plant(prod, match):
   await pol.GoOpportunityPolicy._advance_setup(prod, match)
-  await pol.GoOpportunityPolicy._store_match(prod, match, int(time.time()))
+  existing = deserialize_matches(await prod.get(strategy_matches_key(match.symbol)))
+  await prod.set(strategy_matches_key(match.symbol), serialize_matches([*existing, match]))
 
 
 @pytest.mark.asyncio
@@ -635,11 +640,10 @@ async def test_the_published_plan_is_the_shared_fixture_the_executor_consumes(h,
   assert fresh == committed, "the Go-derived plan drifted: regenerate with UPDATE_GOLDEN=1, review, and update the C# expectations"
 
 
-def test_go_thesis_identity_is_the_legacy_stable_identity_of_the_zone_not_of_the_bar():
-  """Same rule and same bytes as the scanner's TradePlan thesis: a new confirmation
-  timestamp alone must never create a new thesis."""
-  from app.analysis.structural_reaction_support import thesis_id as legacy_thesis_id
-  assert pol._thesis_id("XAU", "supply_demand", "SELL", "zone:M5:supply:1789387500") == legacy_thesis_id(
+def test_go_thesis_identity_is_stable_for_the_zone_not_the_confirmation_bar():
+  """A new confirmation timestamp alone must never create a new thesis."""
+  from app.autotrade.strategy_identity import thesis_id
+  assert pol._thesis_id("XAU", "supply_demand", "SELL", "zone:M5:supply:1789387500") == thesis_id(
     symbol="XAU", strategy_family="supply_demand", direction="SELL", structural_id="zone:M5:supply:1789387500")
   assert pol._thesis_id("XAU", "supply_demand", "SELL", "zone-a") != pol._thesis_id("XAU", "supply_demand", "SELL", "zone-b")
   assert pol._thesis_id("XAU", "supply_demand", "SELL", "zone-a") != pol._thesis_id("XAU", "supply_demand", "BUY", "zone-a")

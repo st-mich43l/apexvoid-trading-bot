@@ -3,8 +3,9 @@
 "What should ApexVoid do about it?" — trading orchestration and control
 plane. Consumes analysis; never computes it. See
 [`service-boundaries.md`](service-boundaries.md) for the owns/must-not-own
-list and the current violations (`app/analysis/*`, `app/scalping/*`) this
-document does not repeat.
+list. The retired `app/analysis/*` detector graph and Python scalp technical
+modules were deleted after the Go cutover; the remaining `app/scalping/*`
+package is outcome accounting only.
 
 ## Target tree (§38–49)
 
@@ -50,7 +51,7 @@ contract, never a local Python recomputation.
 
 ### Live Go consumer
 
-`analysis.technical_authority.mode=go` and `consumer_enabled=true` are the
+`analysis.technical_authority.consumer_enabled=true` and Kafka connectivity are the
 production configuration. Kafka delivery is the Go-analysis boundary: the
 consumer durably applies each lifecycle event, adapts every catalog strategy
 through its explicit Go-to-policy adapter, and sends the resulting
@@ -71,9 +72,11 @@ flowchart TD
     TPB --> TP[TradePlan]
 ```
 
-Today's live path is Kafka Go opportunity → durable lifecycle ledger → explicit
-Go-to-policy adapter → execution checks → `_publish_trade_plan_v8`. ZoneWatch,
-the legacy scanner and their startup monkeypatches are not automatic producers.
+The sole automatic path is Kafka Go opportunity → durable lifecycle ledger → explicit
+Go-to-policy adapter → execution checks → `_publish_trade_plan_v8`. The legacy
+scanner, detector graph, Python technical publisher and runtime mode switches
+have been deleted. A non-Go `StrategyMatch` is rejected unconditionally at the
+final publication boundary.
 
 ## Manual Algo (§42)
 

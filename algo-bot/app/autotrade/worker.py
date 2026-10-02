@@ -3805,10 +3805,7 @@ async def try_publish_executable_signal(
   setup_id = match.match_id
   zone_id = str(match.confluence_zone_id or match.structural_zone_id or "")
   plan_id = _v8_plan_id(match)
-  if (
-    runtime_config.analysis.technical_authority.mode == "go"
-    and GO_ORIGIN_TAG not in match.tags
-  ):
+  if GO_ORIGIN_TAG not in match.tags:
     # This is the final data-plane fence. A stale Python/ZoneWatch match may
     # still be present in Redis after a restart, but it can never become a new
     # automatic plan while Go owns technical production.
@@ -3818,7 +3815,7 @@ async def try_publish_executable_signal(
       stage="mode_check",
       status="blocked",
       reason_code="python_match_rejected_live_go",
-      message="Go-only mode rejects non-Go automatic matches",
+      message="Go-only automatic analysis rejects non-Go matches",
       retained=False,
       publish_status=False,
     )

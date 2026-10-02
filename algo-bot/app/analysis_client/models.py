@@ -94,7 +94,7 @@ class TechnicalBias(FrozenConfigModel):
 
 
 class HigherTimeframeBias(FrozenConfigModel):
-  timeframe: Literal["H1", "H4"]
+  timeframe: Literal["M15", "H1", "H4"]
   direction: Literal["BUY", "SELL"]
   layer: str = Field(min_length=1)
   reference_time: int = Field(ge=0)
@@ -238,7 +238,7 @@ class TechnicalContext(FrozenConfigModel):
   reference_price: FiniteFloat = Field(gt=0)
   reference_time: int = Field(ge=0)
   bias: TechnicalBias | None = None
-  higher_timeframes: list[HigherTimeframeBias] = Field(default_factory=list, max_length=2)
+  higher_timeframes: list[HigherTimeframeBias] = Field(default_factory=list, max_length=3)
   confirmation: ReactionConfirmation | None = None
   candle_evidence: CandleEvidence | None = None
   mad: MADContext | None = None

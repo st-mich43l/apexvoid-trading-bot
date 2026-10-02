@@ -210,20 +210,14 @@ class StrategyMatch:
   # on_arbitration_decision for how this is kept current.
   arbitration_status: str | None = None
   arbitration_reason_code: str | None = None
-  # Go's cross-strategy thesis correlation (Phase 3) — additive/optional,
-  # distinct from the existing ``thesis_id`` field above (Python's own
-  # ATR-bucket heuristic; still the fallback until
-  # analysis.technical_authority.thesis_correlation_mode is flipped to
-  # "go" — see that config field's own doc comment). ``go_thesis_id`` is
+  # Go's cross-strategy thesis correlation. ``go_thesis_id`` is
   # the representative match_id of whichever group member ranks best;
   # every member of the group carries the same value.
   go_thesis_id: str | None = None
   go_merged_with: tuple[str, ...] = ()
-  # Go's engine-owned stop-distance risk policy (Phase 4) — additive/
-  # optional, read by protective_stop.stop_bounds_from_go_envelope in
-  # place of stop_bounds_for_reaction_room's own per-strategy-family
-  # config lookup once analysis.technical_authority.stop_envelope_mode is
-  # "go". See analysis_client.models.StopEnvelope's own doc comment.
+  # Go's engine-owned stop-distance risk policy, read by
+  # protective_stop.stop_bounds_from_go_envelope. Missing facts fail closed;
+  # there is no Python strategy-family fallback.
   go_stop_envelope_floor_pips: float | None = None
   go_stop_envelope_cap_pips: float | None = None
   go_stop_envelope_desired_minimum_pips: float | None = None

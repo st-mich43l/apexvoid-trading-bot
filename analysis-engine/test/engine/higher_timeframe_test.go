@@ -34,6 +34,17 @@ func TestClosedHigherTimeframeBiases_PreservesH1H4Disagreement(t *testing.T) {
 	}
 }
 
+func TestClosedHigherTimeframeBiases_AppendsM15AsCausalFallback(t *testing.T) {
+	const base int64 = 86400
+	ctx := &context.MarketContext{Timeframes: map[market.Timeframe]*context.TimeframeContext{
+		market.M15: confirmedFrame(market.M15, base+6300, structure.TrendBullish),
+	}}
+	got := engine.ClosedHigherTimeframeBiases(ctx, market.M5, base+6900, testMomentum)
+	if len(got) != 1 || got[0].Timeframe != market.M15 || got[0].Direction != market.Buy {
+		t.Fatalf("fresh M15 structure must remain available when H1/H4 are absent, got %+v", got)
+	}
+}
+
 func TestClosedHigherTimeframeBiases_ExcludesUnclosedAndStaleBars(t *testing.T) {
 	const base int64 = 86400
 	ctx := &context.MarketContext{Timeframes: map[market.Timeframe]*context.TimeframeContext{

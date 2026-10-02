@@ -1,6 +1,6 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "15bf89aec2a266196a4a733a11f2a915bffaf0ada3d7ed5a62eaf2727dca09bf",
+  "configuration_contract_fingerprint_sha256": "8f2ab19d02fd201b4561119d4181e9d1b378d14aa56691460050ea993f8b9a33",
   "excluded_ctrader_only_count": 50,
   "excluded_paths": [
     "bootstrap.ctrader.connection.host",
@@ -54,7 +54,7 @@
     "risk.sizing.add_require_risk_free",
     "risk.sizing.risk_pct"
   ],
-  "included_leaf_count": 643,
+  "included_leaf_count": 639,
   "included_paths": [
     "actionability.contested_corridor.gap_atr",
     "actionability.counter_bias.allowed",
@@ -205,14 +205,10 @@
     "analysis.swings.fractal_size",
     "analysis.swings.zigzag.atr_mult",
     "analysis.swings.zigzag.pct",
-    "analysis.technical_authority.arbitration_mode",
     "analysis.technical_authority.consumer_enabled",
     "analysis.technical_authority.consumer_group",
     "analysis.technical_authority.max_delivery_lag_seconds",
     "analysis.technical_authority.max_event_age_seconds",
-    "analysis.technical_authority.mode",
-    "analysis.technical_authority.stop_envelope_mode",
-    "analysis.technical_authority.thesis_correlation_mode",
     "analysis.techniques.invalidation_tolerance_atr",
     "analysis.techniques.max_break_episodes",
     "analysis.techniques.retest_max_touches",
@@ -703,6 +699,6 @@
   "included_secret_count": 6,
   "included_shared_field_count": 100,
   "projection_model": "app.configuration.models.python_runtime.PythonRuntimeConfig",
-  "source_fingerprint_sha256": "15bf89aec2a266196a4a733a11f2a915bffaf0ada3d7ed5a62eaf2727dca09bf",
+  "source_fingerprint_sha256": "8f2ab19d02fd201b4561119d4181e9d1b378d14aa56691460050ea993f8b9a33",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

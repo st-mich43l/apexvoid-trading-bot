@@ -139,9 +139,9 @@ async def test_no_spot_price_reports_unavailable_instead_of_guessing():
 
 
 def _map_entry(side, lo, hi, *, score=20.0, tier="major", tags=("OB", "supply"), inside=False):
-  from app.analysis.market_map import MapEntry
+  from types import SimpleNamespace
 
-  return MapEntry(
+  return SimpleNamespace(
     side=side, lo=lo, hi=hi, label_lo=lo, label_hi=hi, tier=tier,
     tags=list(tags), score=score, contains_price=inside,
   )

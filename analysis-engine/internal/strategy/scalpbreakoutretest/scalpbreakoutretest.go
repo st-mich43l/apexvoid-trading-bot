@@ -17,7 +17,7 @@ const ID strategy.StrategyID = "scalp_breakout_retest"
 const Version = "v2"
 
 type Strategy struct {
-	boxBars, acceptBars                                               int
+	boxBars, acceptBars, retestWindowBars                             int
 	maximumWidthATR, retestATR, invalidationATR, targetR, expiryHours float64
 	fingerprint                                                       string
 }
@@ -34,7 +34,14 @@ func New(c strategy.Config) (strategy.Strategy, error) {
 	if e != nil {
 		return nil, e
 	}
-	s := &Strategy{boxBars: box, acceptBars: accept, fingerprint: strategyutil.Fingerprint(string(c.ID), c.Version, c.Parameters)}
+	retestWindow := 3
+	if _, ok := c.Parameters["retest_window_bars"]; ok {
+		retestWindow, e = strategyutil.Int(c.Parameters, "retest_window_bars")
+		if e != nil {
+			return nil, e
+		}
+	}
+	s := &Strategy{boxBars: box, acceptBars: accept, retestWindowBars: retestWindow, fingerprint: strategyutil.Fingerprint(string(c.ID), c.Version, c.Parameters)}
 	vals := []*float64{&s.maximumWidthATR, &s.retestATR, &s.invalidationATR, &s.targetR, &s.expiryHours}
 	for i, k := range []string{"maximum_width_atr", "retest_tolerance_atr", "invalidation_buffer_atr", "target_r", "expiry_hours"} {
 		v, e := strategyutil.Float(c.Parameters, k)
@@ -43,7 +50,7 @@ func New(c strategy.Config) (strategy.Strategy, error) {
 		}
 		*vals[i] = v
 	}
-	if box < 5 || accept < 1 || s.maximumWidthATR <= 0 || s.retestATR <= 0 || s.invalidationATR <= 0 || s.targetR <= 0 || s.expiryHours <= 0 {
+	if box < 5 || accept < 1 || retestWindow < 1 || s.maximumWidthATR <= 0 || s.retestATR <= 0 || s.invalidationATR <= 0 || s.targetR <= 0 || s.expiryHours <= 0 {
 		return nil, fmt.Errorf("scalpbreakoutretest: invalid parameters")
 	}
 	return s, nil
@@ -67,20 +74,33 @@ func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Ca
 	if high-low > s.maximumWidthATR*atr {
 		return nil
 	}
-	start := len(m1.Candles) - s.acceptBars - 1
-	accepted := m1.Candles[start : start+s.acceptBars]
 	retest := m1.Candles[len(m1.Candles)-1]
 	direction := market.Direction("")
 	level := 0.0
-	up, down := true, true
-	for _, b := range accepted {
-		up = up && b.Close > high
-		down = down && b.Close < low
-	}
-	if up && retest.Low >= high-s.retestATR*atr && retest.Low <= high+s.retestATR*atr && retest.Close > high {
-		direction, level = market.Buy, high
-	} else if down && retest.High >= low-s.retestATR*atr && retest.High <= low+s.retestATR*atr && retest.Close < low {
-		direction, level = market.Sell, low
+	n := len(m1.Candles)
+	for delay := 1; delay <= s.retestWindowBars; delay++ {
+		acceptedEnd := n - delay
+		acceptedStart := acceptedEnd - s.acceptBars
+		if acceptedStart < 0 {
+			break
+		}
+		up, down := true, true
+		for _, b := range m1.Candles[acceptedStart:acceptedEnd] {
+			up = up && b.Close > high
+			down = down && b.Close < low
+		}
+		for _, b := range m1.Candles[acceptedEnd : n-1] {
+			up = up && b.Close > high
+			down = down && b.Close < low
+		}
+		if up && retest.Low >= high-s.retestATR*atr && retest.Low <= high+s.retestATR*atr && retest.Close > high {
+			direction, level = market.Buy, high
+		} else if down && retest.High >= low-s.retestATR*atr && retest.High <= low+s.retestATR*atr && retest.Close < low {
+			direction, level = market.Sell, low
+		}
+		if direction.IsValid() {
+			break
+		}
 	}
 	if !direction.IsValid() {
 		return nil

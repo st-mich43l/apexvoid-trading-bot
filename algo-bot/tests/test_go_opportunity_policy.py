@@ -711,13 +711,29 @@ async def test_resting_go_zone_is_a_non_executable_observation(h):
   assert await redis_state.get_client().get(strategy_matches_key("XAU")) is None
 
 
-def test_missing_go_htf_structure_is_rejected_not_recreated_from_m5():
+def test_missing_go_htf_structure_is_explicitly_neutral():
   raw = golden()
   del raw["payload"]["technical_context"]["higher_timeframes"]
   ev = parse_analysis_event(OpportunityTopic, json.dumps(raw))
-  with pytest.raises(pol.AdapterRejection) as exc:
-    pol.build_strategy_match(ev, profile=SUPPLY, now=raw["payload"]["created_at"] + 1)
-  assert exc.value.code == "higher_timeframe_bias_unavailable"
+  match = pol.build_strategy_match(
+    ev, profile=SUPPLY, now=raw["payload"]["created_at"] + 1,
+  )
+  assert match.htf_bias == "neutral"
+  assert "htf_bias_source:go_neutral" in match.tags
+
+
+def test_m15_is_used_only_after_h1_h4_are_unavailable():
+  raw = golden()
+  raw["payload"]["technical_context"]["higher_timeframes"] = [{
+    "timeframe": "M15", "direction": "BUY", "layer": "internal",
+    "reference_time": raw["payload"]["created_at"] - 900,
+  }]
+  ev = parse_analysis_event(OpportunityTopic, json.dumps(raw))
+  match = pol.build_strategy_match(
+    ev, profile=SUPPLY, now=raw["payload"]["created_at"] + 1,
+  )
+  assert match.htf_bias == "up"
+  assert "htf_bias_source:go_M15" in match.tags
 
 
 @pytest.mark.asyncio

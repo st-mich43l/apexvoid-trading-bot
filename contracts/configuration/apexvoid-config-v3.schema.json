@@ -468,10 +468,6 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "mode": {
-              "type": "string",
-              "enum": ["go"]
-            },
             "consumer_enabled": {
               "type": "boolean"
             },
@@ -488,7 +484,7 @@
               "exclusiveMinimum": 0
             }
           },
-          "required": ["mode", "consumer_enabled", "consumer_group", "max_event_age_seconds", "max_delivery_lag_seconds"]
+          "required": ["consumer_enabled", "consumer_group", "max_event_age_seconds", "max_delivery_lag_seconds"]
         },
         "indicators": {
           "type": "object",

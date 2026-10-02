@@ -14,19 +14,22 @@ maps remain Python-owned. The Python detector modules listed below are not a
 second live automatic source; they remain only where an execution or
 presentation consumer still imports them.
 
-**Automatic cutover status (2026-10-01):** all 19 configured strategy
+**Migration complete (2026-10-02):** all 19 configured strategy
 factories and their technical inputs are Go-owned in production. The Python
 worker no longer rebuilds HTF zones/levels, runs the M1 detector, or imports
 legacy detector/confluence identity code; it consumes Go opportunity and
 barrier facts and performs execution-time checks only. The historical
 "Shadow only" labels below describe the original S-phase snapshots and are
-superseded for the automatic path. Remaining Python modules are limited to
-manual, display, or offline compatibility paths.
+superseded for the automatic path. The retired Python detector/scanner graph,
+duplicate technical math and Python scalp technical publisher have been
+deleted. Manual Algo, execution policy, Telegram, journals and position
+management remain Python-owned.
 
 > Status note: the matrix below is retained as the historical migration
-> record. Any row still labelled `Shadow only` predates the live Go cutover;
-> the authoritative current boundary is the paragraph above and the
-> production import gate in `algo-bot/s13_legacy_classification.py`.
+> record, not a current status table. Any row labelled `Shadow only` or `Not
+> removable` predates the live Go cutover. The authoritative current boundary
+> is the completion statement above and
+> `algo-bot/tests/test_go_execution_boundary.py`.
 
 **Publication geometry invariant (2026-10-02):** before a Go opportunity is
 stored in the lifecycle book or published to Kafka, its entry band, technical
@@ -47,7 +50,7 @@ The source-zone quality inputs are intentionally documented as a remaining
 parity item where Go does not yet retain Python-only Grade-A grab or exact
 Fibonacci-level provenance.
 
-| Capability | Legacy Python path | V2 Go owner | Parity or redesign? | Live status | Python removal status |
+| Capability | Legacy Python path (deleted) | V2 Go owner | Parity or redesign? | Historical status | Historical removal note |
 |---|---|---|---|---|---|
 | OHLC candle model / validation | `app/analysis/*` implicit dict shape, no central validator | `internal/market` (`price.go`, `window.go`), `internal/marketdata/validation.go` | **Exact parity** (numeric geometry) + **new**: explicit `ValidateCandle`/`InvalidReason` enum has no Python precedent — legacy never rejected malformed bars structurally | Shadow only (`cmd/replay`) | Not removable — still the only path live trading reads |
 | True Range / ATR | `app/analysis/indicators.py` (Simple/Wilder, recomputed ad hoc per caller) | `internal/indicator/canonical.go` (`CanonicalATR`), `rolling_atr.go` (incremental) | **Exact parity** — same Simple/Wilder formulas, dispatched by `analysis.indicators.atr.{algorithm,length}` instead of each call site choosing independently | Shadow only | Not removable |

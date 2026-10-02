@@ -1290,14 +1290,6 @@ def test_fx_root_card_shows_target_levels_with_instrument_digits(monkeypatch):
   assert "1.36 " not in text  # must not collapse FX to 2dp
 
 
-def test_detector_number_keeps_fx_precision():
-  from app.analysis.detectors import _number
-
-  assert _number(1.36447) == "1.36447"
-  assert _number(216.917) == "216.917"
-  assert _number(4530.12) == "4530.12"
-
-
 @pytest.mark.asyncio
 async def test_ensure_plan_published_root_card_creates_missing_card():
   """Direct-publish path must create the first PLAN PUBLISHED root card."""

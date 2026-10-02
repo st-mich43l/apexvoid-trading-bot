@@ -1,13 +1,9 @@
-"""Phase 3: Go's structural-identity thesis correlation vs. the legacy
-ATR-bucket heuristic, gated by analysis.technical_authority.
-thesis_correlation_mode.
-"""
+"""Go structural-identity thesis correlation is the only live contract."""
 
 from __future__ import annotations
 
-from app.autotrade.multi_match import _same_thesis_via_go_or_legacy, dedupe_matches
+from app.autotrade.multi_match import _same_go_thesis, dedupe_matches
 from app.autotrade.strategy_match import StrategyMatch
-from tests.configuration.canonical_fixtures import install_runtime_overrides
 
 import pytest
 
@@ -37,45 +33,27 @@ def _match(
   )
 
 
-# ---- _same_thesis_via_go_or_legacy -----------------------------------------
-
-def test_go_mode_correlates_on_go_thesis_id_alone():
+def test_correlates_on_go_thesis_id_alone():
   left = _match("go_a", go_thesis_id="go_a", entry_low=100.0, entry_high=100.5)
   right = _match("go_b", go_thesis_id="go_a", entry_low=999.0, entry_high=999.5)  # wildly different geometry
-  assert _same_thesis_via_go_or_legacy(left, right, atr=1.0, mode="go") is True
+  assert _same_go_thesis(left, right) is True
 
 
-def test_go_mode_treats_different_go_thesis_ids_as_different_theses():
+def test_treats_different_go_thesis_ids_as_different_theses():
   left = _match("go_a", go_thesis_id="go_a")
   right = _match("go_b", go_thesis_id="go_b")
-  assert _same_thesis_via_go_or_legacy(left, right, atr=1.0, mode="go") is False
+  assert _same_go_thesis(left, right) is False
 
 
-def test_go_mode_falls_back_to_legacy_when_either_side_has_no_go_thesis_id():
-  # Same geometry/zone as the legacy heuristic would need to correlate -
-  # but with mode="go" and go_thesis_id missing on one side, it must not
-  # silently treat them as unrelated; it defers to same_thesis.
+def test_missing_go_thesis_id_never_invokes_geometric_fallback():
   left = _match("go_a", zone_id="zone-1", go_thesis_id=None)
   right = _match("go_b", zone_id="zone-1", go_thesis_id=None)
-  assert _same_thesis_via_go_or_legacy(left, right, atr=1.0, mode="go") is True
-
-
-def test_python_legacy_mode_never_consults_go_thesis_id():
-  # Even if Go already annotated both with the SAME go_thesis_id, legacy
-  # mode must reproduce today's exact behavior: pure geometric/zone
-  # comparison, ignoring Go's answer entirely. Different entry geometry
-  # (structural_source is unset, so zone_id alone is not compared - see
-  # same_thesis's own structural_source-gated branches) forces the final
-  # geometric fallback to correctly disagree with Go's shared thesis_id.
-  left = _match("go_a", go_thesis_id="shared", entry_low=100.0, entry_high=100.5)
-  right = _match("go_b", go_thesis_id="shared", entry_low=999.0, entry_high=999.5)
-  assert _same_thesis_via_go_or_legacy(left, right, atr=1.0, mode="python_legacy") is False
+  assert _same_go_thesis(left, right) is False
 
 
 # ---- dedupe_matches end-to-end ---------------------------------------------
 
-def test_dedupe_matches_merges_via_go_thesis_id_in_go_mode(monkeypatch):
-  install_runtime_overrides(monkeypatch, {"analysis.technical_authority.thesis_correlation_mode": "go"})
+def test_dedupe_matches_merges_via_go_thesis_id():
   a = _match("go_a", strategy="Key Level", family="key_level", confluence=4, go_thesis_id="go_a", entry_low=100.0, entry_high=100.5)
   b = _match("go_b", strategy="FVG", family="fvg", confluence=3, go_thesis_id="go_a", entry_low=500.0, entry_high=500.5)
 
@@ -85,8 +63,7 @@ def test_dedupe_matches_merges_via_go_thesis_id_in_go_mode(monkeypatch):
   assert {e["event"] for e in events} >= {"merged_confluence"} or {e["event"] for e in events} >= {"tracked"}
 
 
-def test_dedupe_matches_keeps_both_when_go_thesis_ids_differ_in_go_mode(monkeypatch):
-  install_runtime_overrides(monkeypatch, {"analysis.technical_authority.thesis_correlation_mode": "go"})
+def test_dedupe_matches_keeps_both_when_go_thesis_ids_differ():
   a = _match("go_a", go_thesis_id="go_a")
   b = _match("go_b", go_thesis_id="go_b")
 
@@ -95,7 +72,7 @@ def test_dedupe_matches_keeps_both_when_go_thesis_ids_differ_in_go_mode(monkeypa
   assert {m.match_id for m in kept} == {"go_a", "go_b"}
 
 
-def test_dedupe_matches_defaults_to_go_mode(monkeypatch):
+def test_dedupe_matches_uses_go_identity_only():
   # The live default follows Go's identity even when both matches carry an
   # identical go_thesis_id.
   a = _match("go_a", zone_id="zone-9", go_thesis_id="shared", entry_low=100.0, entry_high=100.5)

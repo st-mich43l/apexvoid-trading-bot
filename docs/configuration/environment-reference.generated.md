@@ -2,8 +2,8 @@
 
 > Generated from the canonical configuration catalog (`app.configuration.environment_contract`). Do not edit manually.
 
-- Contract fingerprint: `15bf89aec2a266196a4a733a11f2a915bffaf0ada3d7ed5a62eaf2727dca09bf`
-- Environment-bound fields: `576`
+- Contract fingerprint: `8f2ab19d02fd201b4561119d4181e9d1b378d14aa56691460050ea993f8b9a33`
+- Environment-bound fields: `573`
 - Deprecated aliases: `21`
 
 Secret values are never emitted; secret defaults render as `<redacted>`.
@@ -12,9 +12,6 @@ Secret values are never emitted; secret defaults render as `<redacted>`.
 |---|---|---|---|---|---|---|
 | `ALERT_OVERLAP_SUPPRESS` | `analysis.measurements.alert_overlap_suppress` | `float` | no | no | — | `0.5` |
 | `ALLOW_COUNTER_TREND` | `strategies.counter_trend.allow_counter_trend` | `bool` | no | no | — | `True` |
-| `ANALYSIS_ARBITRATION_MODE` | `analysis.technical_authority.arbitration_mode` | `str` | no | no | — | `go` |
-| `ANALYSIS_STOP_ENVELOPE_MODE` | `analysis.technical_authority.stop_envelope_mode` | `str` | no | no | — | `go` |
-| `ANALYSIS_THESIS_CORRELATION_MODE` | `analysis.technical_authority.thesis_correlation_mode` | `str` | no | no | — | `go` |
 | `ANALYSIS_ZONES_VERSION` | `analysis.zones.version` | `str` | no | no | — | `v1` |
 | `ANALYSIS_ZONE_RELEVANCE_IMMEDIATE_ATR` | `analysis.zone_relevance.immediate_atr` | `float` | no | no | — | `0.25` |
 | `ANALYSIS_ZONE_RELEVANCE_NEARBY_ATR` | `analysis.zone_relevance.nearby_atr` | `float` | no | no | — | `1.25` |

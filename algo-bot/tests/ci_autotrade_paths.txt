@@ -19,10 +19,8 @@ tests/test_worker_idle_m1.py
 tests/test_ohlc_bar_cache.py
 tests/test_active_exposure.py
 tests/test_entry_overlap.py
-tests/test_zone_watch.py
 tests/test_zone_watch_published_locked.py
 tests/test_setup_card.py
-tests/test_autotrade_math_formulas.py
 tests/test_execution_confirmation.py
 tests/test_auto_trade_stats_ingestion.py
 tests/test_repair_manual_algo_results.py
@@ -39,15 +37,9 @@ tests/test_candidate_execution_state.py
 tests/test_scalp_risk_reconcile.py
 tests/test_autotrade_units.py
 tests/test_fx_one_to_two.py
-tests/test_instrument_scale_parity.py
 tests/test_import_all_modules.py
-tests/test_entry_location.py
-tests/test_technique_geometry.py
-tests/test_technique_zone_origins.py
 tests/test_htf_walls_live_only.py
 tests/test_setups_report.py
-tests/test_structural_barrier_wiring.py
-tests/test_zone_watch_reform.py
 tests/test_zone_execution_cutover.py
 tests/test_analysis_client_models.py
 tests/test_analysis_consumer.py
@@ -57,7 +49,6 @@ tests/test_capture_bars.py
 tests/test_technical_authority_config.py
 tests/test_go_only_startup_gate.py
 tests/test_s13_analysis_client_boundary.py
-tests/test_s13_legacy_classification.py
 tests/test_go_opportunity_policy.py
 tests/test_thesis_correlation.py
 tests/test_go_zone_book.py

@@ -17,7 +17,7 @@ const ID strategy.StrategyID = "box_breakout"
 const Version = "v2"
 
 type Strategy struct {
-	boxBars                                                           int
+	boxBars, retestWindowBars                                         int
 	maximumWidthATR, retestATR, invalidationATR, targetR, expiryHours float64
 	fingerprint                                                       string
 }
@@ -30,7 +30,14 @@ func New(c strategy.Config) (strategy.Strategy, error) {
 	if e != nil {
 		return nil, e
 	}
-	s := &Strategy{boxBars: bars, fingerprint: strategyutil.Fingerprint(string(c.ID), c.Version, c.Parameters)}
+	retestWindow := 3
+	if _, ok := c.Parameters["retest_window_bars"]; ok {
+		retestWindow, e = strategyutil.Int(c.Parameters, "retest_window_bars")
+		if e != nil {
+			return nil, e
+		}
+	}
+	s := &Strategy{boxBars: bars, retestWindowBars: retestWindow, fingerprint: strategyutil.Fingerprint(string(c.ID), c.Version, c.Parameters)}
 	vals := []*float64{&s.maximumWidthATR, &s.retestATR, &s.invalidationATR, &s.targetR, &s.expiryHours}
 	for i, k := range []string{"maximum_width_atr", "retest_tolerance_atr", "invalidation_buffer_atr", "target_r", "expiry_hours"} {
 		v, e := strategyutil.Float(c.Parameters, k)
@@ -39,7 +46,7 @@ func New(c strategy.Config) (strategy.Strategy, error) {
 		}
 		*vals[i] = v
 	}
-	if bars < 5 || s.maximumWidthATR <= 0 || s.retestATR <= 0 || s.invalidationATR <= 0 || s.targetR <= 0 || s.expiryHours <= 0 {
+	if bars < 5 || retestWindow < 1 || s.maximumWidthATR <= 0 || s.retestATR <= 0 || s.invalidationATR <= 0 || s.targetR <= 0 || s.expiryHours <= 0 {
 		return nil, fmt.Errorf("boxbreakout: invalid parameters")
 	}
 	return s, nil
@@ -53,22 +60,41 @@ func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Ca
 		return nil
 	}
 	n := len(tf.Candles)
-	box := tf.Candles[n-s.boxBars-2 : n-2]
-	low, high := box[0].Low, box[0].High
-	for _, b := range box[1:] {
-		low = math.Min(low, b.Low)
-		high = math.Max(high, b.High)
-	}
-	if high-low > s.maximumWidthATR*atr {
-		return nil
-	}
-	breakout, retest := tf.Candles[n-2], tf.Candles[n-1]
+	retest := tf.Candles[n-1]
+	var box []market.Candle
 	direction := market.Direction("")
-	level := 0.0
-	if breakout.Close > high && retest.Low >= high-s.retestATR*atr && retest.Low <= high+s.retestATR*atr && retest.Close > high {
-		direction, level = market.Buy, high
-	} else if breakout.Close < low && retest.High >= low-s.retestATR*atr && retest.High <= low+s.retestATR*atr && retest.Close < low {
-		direction, level = market.Sell, low
+	level, low, high := 0.0, 0.0, 0.0
+	for delay := 1; delay <= s.retestWindowBars; delay++ {
+		breakoutIndex := n - 1 - delay
+		boxStart := breakoutIndex - s.boxBars
+		if boxStart < 0 {
+			break
+		}
+		candidateBox := tf.Candles[boxStart:breakoutIndex]
+		candidateLow, candidateHigh := candidateBox[0].Low, candidateBox[0].High
+		for _, b := range candidateBox[1:] {
+			candidateLow = math.Min(candidateLow, b.Low)
+			candidateHigh = math.Max(candidateHigh, b.High)
+		}
+		if candidateHigh-candidateLow > s.maximumWidthATR*atr {
+			continue
+		}
+		breakout := tf.Candles[breakoutIndex]
+		between := tf.Candles[breakoutIndex+1 : n-1]
+		upHeld, downHeld := true, true
+		for _, b := range between {
+			upHeld = upHeld && b.Close > candidateHigh
+			downHeld = downHeld && b.Close < candidateLow
+		}
+		if breakout.Close > candidateHigh && upHeld && retest.Low >= candidateHigh-s.retestATR*atr && retest.Low <= candidateHigh+s.retestATR*atr && retest.Close > candidateHigh {
+			direction, level = market.Buy, candidateHigh
+		} else if breakout.Close < candidateLow && downHeld && retest.High >= candidateLow-s.retestATR*atr && retest.High <= candidateLow+s.retestATR*atr && retest.Close < candidateLow {
+			direction, level = market.Sell, candidateLow
+		}
+		if direction.IsValid() {
+			box, low, high = candidateBox, candidateLow, candidateHigh
+			break
+		}
 	}
 	if !direction.IsValid() {
 		return nil
