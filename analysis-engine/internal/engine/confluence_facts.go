@@ -31,12 +31,13 @@ func (w *SymbolWorker) confluenceContext(event marketdata.BarEvent, candidate op
 		return nil
 	}
 
-	quality, touches := w.canonicalZoneQuality(candidate, tf, event.Timeframe)
+	quality, touches, gradeAGrab := w.canonicalZoneQuality(candidate, technical, tf, event.Timeframe)
+	fibLevel := fibTouch(tf.Fib, candidate, technical.ATR, w.settings.Fib.EpsilonATR)
 	factors := confluencescore.Factors{
 		HTFAligned:     higherTimeframeAligned(technical.HigherTimeframes, candidate.Direction),
 		Touches:        touches,
 		SessionContext: tf.Session.Active != "",
-		FibTouch:       fibTouch(tf.Fib, candidate, technical.ATR, w.settings.Fib.EpsilonATR),
+		FibTouch:       fibLevel != nil,
 	}
 	if candidate.Reaction != nil {
 		switch candidate.Reaction.Pattern {
@@ -82,6 +83,7 @@ func (w *SymbolWorker) confluenceContext(event marketdata.BarEvent, candidate op
 			SessionContext: score.Factors.SessionContext, StructuralAgreement: score.Factors.StructuralAgreement,
 			FibTouch: score.Factors.FibTouch, CHoCH: score.Factors.CHoCH,
 		},
+		FibLevel: fibLevel, GradeAGrab: gradeAGrab,
 	}
 }
 
@@ -103,13 +105,23 @@ func higherTimeframeAligned(higher []opportunity.HigherTimeframeBias, direction 
 	return false
 }
 
-func fibTouch(state fib.State, candidate opportunity.Candidate, atr, epsilon float64) bool {
+func fibTouch(state fib.State, candidate opportunity.Candidate, atr, epsilon float64) *opportunity.FibonacciLevelProvenance {
 	if atr <= 0 || len(state.Ladder) == 0 {
-		return false
+		return nil
 	}
 	level := (candidate.Entry.Low + candidate.Entry.High) / 2
-	_, ok := fib.NearestLevel(state.Ladder, market.Price(level), market.Price(atr), epsilon)
-	return ok
+	nearest, ok := fib.NearestLevel(state.Ladder, market.Price(level), market.Price(atr), epsilon)
+	if !ok {
+		return nil
+	}
+	kind := "retracement"
+	if nearest.Kind == fib.KindExtension {
+		kind = "extension"
+	}
+	return &opportunity.FibonacciLevelProvenance{
+		Ratio: nearest.Ratio, Price: float64(nearest.Price), Kind: kind,
+		DistanceATR: math.Abs(level-float64(nearest.Price)) / atr,
+	}
 }
 
 func recentCHoCH(breaks []structure.StructureBreak, direction market.Direction, createdAt int64) bool {
@@ -131,7 +143,7 @@ func recentCHoCH(breaks []structure.StructureBreak, direction market.Direction, 
 	return false
 }
 
-func (w *SymbolWorker) canonicalZoneQuality(candidate opportunity.Candidate, tf *analysiscontext.TimeframeContext, eventTF market.Timeframe) (confluencescore.ZoneQuality, int) {
+func (w *SymbolWorker) canonicalZoneQuality(candidate opportunity.Candidate, technical *opportunity.TechnicalContext, tf *analysiscontext.TimeframeContext, eventTF market.Timeframe) (confluencescore.ZoneQuality, int, *opportunity.LiquidityGrabProvenance) {
 	for _, z := range tf.Zones.Zones {
 		if z.ID != candidate.StructuralID {
 			continue
@@ -169,8 +181,12 @@ func (w *SymbolWorker) canonicalZoneQuality(candidate opportunity.Candidate, tf 
 				score += 2
 			}
 		}
-		// The Go liquidity domain intentionally has no Python Grab grade yet;
-		// do not invent a Grade-A bonus. HTF and trendline facts are canonical.
+		gradeAGrab := gradeAGrabForZone(z, candidate, technical, tf.Liquidity.Pools, w.settings.Geometry.PipSize)
+		if gradeAGrab != nil {
+			// Legacy GRAB_A_SCORE applied to canonical Go sweep/reclaim and
+			// displacement facts. Provenance makes the bonus replayable.
+			score += 2
+		}
 		eventMinutes, _ := eventTF.Minutes()
 		for higherTF, higher := range w.state.Context.Timeframes {
 			higherMinutes, _ := higherTF.Minutes()
@@ -199,9 +215,45 @@ func (w *SymbolWorker) canonicalZoneQuality(candidate opportunity.Candidate, tf 
 		if score > 24.5 {
 			score = 24.5
 		}
-		return confluencescore.ZoneQuality{Score: score, Touches: z.TouchCount}, z.TouchCount
+		return confluencescore.ZoneQuality{Score: score, Touches: z.TouchCount}, z.TouchCount, gradeAGrab
 	}
-	return confluencescore.ZoneQuality{}, 0
+	return confluencescore.ZoneQuality{}, 0, nil
+}
+
+func gradeAGrabForZone(z zone.Zone, candidate opportunity.Candidate, technical *opportunity.TechnicalContext, pools []liquidity.Pool, pipSize float64) *opportunity.LiquidityGrabProvenance {
+	// Legacy Grade A meant a clean sweep/reclaim with reaction displacement,
+	// not merely any candidate labelled sweep_reclaim. Candle Evidence V2 is
+	// computed from the same closed confirmation bar and carries those three
+	// facts without reconstructing a deleted Python Grab object.
+	if technical == nil || technical.CandleEvidence == nil {
+		return nil
+	}
+	evidence := technical.CandleEvidence
+	if evidence.Rejection == nil || !evidence.Rejection.Sweep || !evidence.Rejection.Reclaim || evidence.Displacement == nil {
+		return nil
+	}
+	confirmationTime := candidate.CreatedAt
+	if candidate.Reaction != nil && candidate.Reaction.ConfirmationBarTime > 0 {
+		confirmationTime = candidate.Reaction.ConfirmationBarTime
+	}
+	for _, pool := range pools {
+		if pool.SweptAt == nil || *pool.SweptAt != confirmationTime || pool.TouchCount == 2 {
+			continue
+		}
+		if z.Side == zone.Demand && candidate.Direction != market.Buy {
+			continue
+		}
+		if z.Side == zone.Supply && candidate.Direction != market.Sell {
+			continue
+		}
+		if !liquidityConfluence(z, []liquidity.Pool{pool}, pipSize) {
+			continue
+		}
+		return &opportunity.LiquidityGrabProvenance{
+			PoolID: pool.ID, SweptAt: *pool.SweptAt, ReclaimedAt: confirmationTime,
+		}
+	}
+	return nil
 }
 
 func sourceScore(z zone.Zone) float64 {

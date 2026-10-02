@@ -13,6 +13,18 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Algo Bot now arbitrates only fresh, execution-admitted Go opportunities, so
+  stale full-book Go arbitration cannot suppress an executable setup. Close
+  opposite-side quality ties use Go's unique with-bias direction.
+- XAU reaction entries now match Manual Algo's 80/20 geometry after price has
+  entered a zone: L1 fills at market and L2 rests at the midpoint of the
+  remaining better-price band. Market-watch entries also cap their adverse
+  edge at the policy-planned entry, preventing broad Liquidity Sweep zones
+  from silently permitting an 80-pip fill risk when policy planned 50 pips.
+- Go confluence now publishes exact Fibonacci-level and Grade-A swept-pool
+  provenance. Python no longer recalculates displaced barriers from OHLC.
+- Removed the unreachable pandas auto-scalp detector and retired the duplicate
+  automatic Fade Scalp and non-scalp Break & Retest labels.
 - Go opportunities now carry an M15 higher-timeframe fallback when H1/H4 are
   unavailable, and a missing higher-timeframe bias is treated as neutral
   instead of suppressing an otherwise executable setup. Box Breakout and

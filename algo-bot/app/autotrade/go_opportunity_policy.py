@@ -608,11 +608,11 @@ class GoOpportunityPolicy:
     """Idempotent: republishing the same decision is a no-op write.
 
     Updates the live StrategyMatch's arbitration_status/
-    arbitration_reason_code — Go's cross-strategy conflict-resolution
-    decision (Phase 2), read by select_go_arbitrated_intent instead of
-    Python re-deriving one via arbitrate_execution_intents — and
-    go_thesis_id/go_merged_with (Phase 3), Go's own structural-identity
-    thesis correlation, read directly by multi_match.dedupe_matches. A
+    arbitration_reason_code — Go's full technical-book conflict telemetry —
+    and go_thesis_id/go_merged_with (Phase 3), Go's own structural-identity
+    thesis correlation, read directly by multi_match.dedupe_matches. Algo Bot
+    arbitrates only the admitted execution set; an expired or otherwise
+    non-executable technical opportunity must not veto that set. A
     decision for a match_id with no live StrategyMatch is retained briefly as
     a pending projection, so a cross-topic delivery race or process restart
     cannot lose Go's current status. It never creates a phantom match.

@@ -1,6 +1,6 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "8f2ab19d02fd201b4561119d4181e9d1b378d14aa56691460050ea993f8b9a33",
+  "configuration_contract_fingerprint_sha256": "65972ed8d14066facd59e4f48be769f172df3e363dc82902776e434405bf7de0",
   "profile_count": 2,
   "profiles": [
     {
@@ -209,6 +209,6 @@
       "profile_fingerprint_sha256": "92166352a83aeaf049ee3529377064743dcaede1f3d2d5f0900c1f1971067589"
     }
   ],
-  "source_fingerprint_sha256": "8f2ab19d02fd201b4561119d4181e9d1b378d14aa56691460050ea993f8b9a33",
+  "source_fingerprint_sha256": "65972ed8d14066facd59e4f48be769f172df3e363dc82902776e434405bf7de0",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

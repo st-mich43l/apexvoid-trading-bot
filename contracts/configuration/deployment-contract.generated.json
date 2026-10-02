@@ -256,7 +256,6 @@
       "execution.mapped_zone.zone_min_width_abs",
       "execution.mapped_zone.zone_min_width_atr",
       "execution.policy.box_min_rr",
-      "execution.policy.displacement_override_lookback_bars",
       "execution.policy.execution_cost_pips",
       "execution.policy.execution_zone_max_width_atr",
       "execution.policy.execution_zone_max_width_pips",
@@ -620,7 +619,7 @@
     "XAU_ZONE_PREFERRED_MAX_WIDTH_PRICE": "instruments.XAU.analysis.zones.preferred_maximum_width_price",
     "XAU_ZONE_PREFERRED_MIN_WIDTH_PRICE": "instruments.XAU.analysis.zones.preferred_minimum_width_price"
   },
-  "fingerprint": "8f2ab19d02fd201b4561119d4181e9d1b378d14aa56691460050ea993f8b9a33",
+  "fingerprint": "65972ed8d14066facd59e4f48be769f172df3e363dc82902776e434405bf7de0",
   "instrument_schema": {
     "active_projection_symbol": "XAU",
     "optional": [
