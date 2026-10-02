@@ -120,14 +120,8 @@ async def test_forced_dispatcher_close_balances_abandoned_queue(monkeypatch):
 
 
 def _patch_handlers(monkeypatch, *, zone=None, worker):
-  """Install worker doubles plus a scanner sentinel.
-
-  The Python scanner is no longer dispatched (Go is the sole automatic
-  technical-opportunity producer); the sentinel proves it. The M1 scalping
-  runtime no longer exists, so there is nothing left to sentinel there.
-  """
+  """Install the sole automatic-analysis consumer double."""
   scanner = AsyncMock()
-  monkeypatch.setattr("app.analysis.scanner._handle_event", scanner, raising=False)
   monkeypatch.setattr("app.autotrade.worker._handle_event", worker, raising=False)
   return scanner
 

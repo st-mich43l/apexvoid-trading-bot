@@ -96,24 +96,18 @@ BASELINE = {
   # actionability.scanner_gates (conflict_margin_quality,
   # use_quality_ranking), both ConfigOwner.PYTHON, real canonical_env,
   # not deprecated-alias'd.
-  # 2026-09-29 Phase 2 (Go arbitration decision): +1 new leaf field
-  # (analysis.technical_authority.arbitration_mode), ConfigOwner.PYTHON,
-  # real canonical_env, not deprecated-alias'd.
-  # 2026-09-30 Phase 3 (Go thesis correlation): +1 new leaf field
-  # (analysis.technical_authority.thesis_correlation_mode),
-  # ConfigOwner.PYTHON, real canonical_env, not deprecated-alias'd.
-  # 2026-09-30 Phase 4 (Go stop envelope): +1 new leaf field
-  # (analysis.technical_authority.stop_envelope_mode), ConfigOwner.PYTHON,
-  # real canonical_env, not deprecated-alias'd.
+  # 2026-10-02 Go authority completion removed the obsolete authority mode,
+  # arbitration, thesis-correlation and stop-envelope switches. Go is now the
+  # only automatic analysis path rather than one selectable mode.
   # Reconciled with the current typed model after the merged FX/config
   # cleanup; deployment-owned YAML fields remain config-file-only below.
-  "entries": 693,
-  "configurable": 586,
+  "entries": 689,
+  "configurable": 582,
   "protocol": 10,
   "algorithm": 97,
-  "owners": {"python": 543, "shared": 100, "ctrader": 50},
-  "projection": 643,
-  "env": 576,
+  "owners": {"python": 539, "shared": 100, "ctrader": 50},
+  "projection": 639,
+  "env": 573,
   "deprecated_aliases": 21,
 }
 

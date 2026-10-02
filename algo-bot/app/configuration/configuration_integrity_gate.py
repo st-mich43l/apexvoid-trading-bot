@@ -65,13 +65,17 @@ BASELINE = {
   # (actionability.entry_location.with_bias_pd_exempt).
   # Reconciled with the current typed model after the merged FX/config
   # cleanup; deployment-owned YAML fields remain config-file-only.
-  "catalog_entry_count": 693,
-  "configurable_count": 586,
+  # 2026-10-02 Go authority completion removed the four obsolete runtime
+  # selectors: authority mode, arbitration mode, thesis-correlation mode and
+  # stop-envelope mode. The corresponding environment surface lost three
+  # entries because one selector was config-file-only.
+  "catalog_entry_count": 689,
+  "configurable_count": 582,
   "protocol_constant_count": 10,
   "algorithm_constant_count": 97,
-  "python_projection_count": 643,
+  "python_projection_count": 639,
   "ctrader_only_count": 50,
-  "environment_entry_count": 576,
+  "environment_entry_count": 573,
   "deprecated_alias_count": 21,
   "shared_count": 100,
 }

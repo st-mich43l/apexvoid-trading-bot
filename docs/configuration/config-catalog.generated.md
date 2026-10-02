@@ -3,9 +3,9 @@
 > Generated from the typed `ApexVoidConfig` Catalog V2 schema. Do not edit manually.
 
 - Catalog version: `2`
-- Contract fingerprint: `15bf89aec2a266196a4a733a11f2a915bffaf0ada3d7ed5a62eaf2727dca09bf`
-- Document fingerprint: `adb9a117a98caabd3f2d3624ffce0d64cfbc49b9e60dffe1b0a965df689e09d0`
-- Items: `693`
+- Contract fingerprint: `8f2ab19d02fd201b4561119d4181e9d1b378d14aa56691460050ea993f8b9a33`
+- Document fingerprint: `97ea4296d16431e66498a30af9459ead9ea1e0834f325c71ebcb06f220231fa7`
+- Items: `689`
 - Runtime status: canonical-only; `app.core.config.runtime_config` is authoritative
 
 ## actionability
@@ -166,14 +166,10 @@
 | `analysis.swings.fractal_size` | `SWING_FRACTAL_N` | `int` | `bars` | `configurable` | `2` |
 | `analysis.swings.zigzag.atr_mult` | `ZIGZAG_ATR_MULT` | `float` | `atr` | `configurable` | `1.0` |
 | `analysis.swings.zigzag.pct` | `ZIGZAG_PCT` | `float` | `percent` | `configurable` | `0.0` |
-| `analysis.technical_authority.arbitration_mode` | `ANALYSIS_ARBITRATION_MODE` | `str` | `enum` | `configurable` | `"go"` |
 | `analysis.technical_authority.consumer_enabled` | `—` | `bool` | `boolean` | `configurable` | `true` |
 | `analysis.technical_authority.consumer_group` | `—` | `str` | `identifier` | `configurable` | `"apexvoid-algo-bot-analysis-opportunity-v1"` |
 | `analysis.technical_authority.max_delivery_lag_seconds` | `—` | `int` | `seconds` | `configurable` | `300` |
 | `analysis.technical_authority.max_event_age_seconds` | `—` | `int` | `seconds` | `configurable` | `900` |
-| `analysis.technical_authority.mode` | `—` | `str` | `enum` | `configurable` | `"go"` |
-| `analysis.technical_authority.stop_envelope_mode` | `ANALYSIS_STOP_ENVELOPE_MODE` | `str` | `enum` | `configurable` | `"go"` |
-| `analysis.technical_authority.thesis_correlation_mode` | `ANALYSIS_THESIS_CORRELATION_MODE` | `str` | `enum` | `configurable` | `"go"` |
 | `analysis.techniques.invalidation_tolerance_atr` | `TECHNIQUE_INVALIDATION_TOLERANCE_ATR` | `float` | `atr` | `configurable` | `0.5` |
 | `analysis.techniques.max_break_episodes` | `TECHNIQUE_MAX_BREAK_EPISODES` | `int` | `count` | `configurable` | `2` |
 | `analysis.techniques.retest_max_touches` | `TECHNIQUE_RETEST_MAX_TOUCHES` | `int` | `count` | `configurable` | `30` |

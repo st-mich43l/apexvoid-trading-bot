@@ -36,10 +36,8 @@ lifecycle/relevance state; it is wired through `SymbolState`,
 enabled in production, and the Kafka opportunity lifecycle is consumed by
 Algo Bot's execution-policy pipeline. Bootstrap/replay reconstruction still
 suppresses historical publication, but live closed-bar transitions publish
-normally. The old Python-parity `legacyzone` rebuild is no longer in the live
-worker; remaining Python analysis modules are restricted to retained
-presentation, accounting, compatibility, or offline-test paths and are gated
-by `s13_legacy_classification.py --check-production`.
+normally. The competing Python detector/scanner graph and duplicate technical
+math have been deleted.
 
 ## `algo-bot` (Python)
 
@@ -64,10 +62,10 @@ calculating technical market structure itself
 **Current state**: `app/autotrade/*`, `app/bot/*`, and `app/signals/*` own
 execution policy, manual operation, Telegram, journal, and reconciliation.
 The automatic worker consumes Go opportunity/technical facts and does not
-rebuild technical zones or detectors. Legacy `app/analysis/*` and
-`app/scalping/*` definitions remain only where the inventory classifies them
-as presentation, accounting, compatibility, research, or test fixtures; CI
-fails if a retired technical module becomes a production importer again.
+rebuild technical zones or detectors. CI asserts that retired technical source
+paths remain absent and that production modules cannot import them. Retained
+`app/scalping/*` modules own outcome accounting, lifecycle, risk and telemetry,
+not technical opportunity production.
 
 ## `ctrader-engine` (.NET)
 
@@ -97,20 +95,10 @@ mechanics (`StopTrailPlanner`, `TradePlanExecutionEngine`,
 geometry from raw candles — the engine consumes a TradePlan's already-decided
 entry/stop/target geometry and executes it. **No violations found.**
 
-## Current boundary violations (full detail)
+## Closed Python-analysis violations
 
-| ID | What | Where | Fix scope |
-|---|---|---|---|
-| V1 | Two divergent ATR formulas live simultaneously (simple mean vs. Wilder RMA, 6.7% apart on real data), feeding different geometry in the same detection pass | `app/analysis/math_utils.py::atr_series` vs `app/analysis/indicators.py::atr` | Owner decision required (which is canonical) before Go Stage 2 continues; see `go-analysis-migration-audit.md` §2.1 |
-| V2 | `detectors.build_context()` recomputes ATR with the divergent formula instead of reusing `analyze()`'s | `app/analysis/detectors.py` | Same as V1 |
-| V3 | A second, parallel structure/zone stack recomputes from raw OHLC with a hardcoded `atr_length=14`, discarding zones already built for the same window in the same pass | `app/analysis/structure.py`'s non-canonical wrapper functions, called from `detectors.py`'s fallback paths | Behavior-affecting fix, not pure translation — flag to owner at Stage 2/6 cutover, per audit §2.3 |
-| V4 | A third, independent swing algorithm (bare fractal, different tie-breaking rule than `find_swings`) for the scalp lane | `app/scalping/context.py::_swings_from_ohlc` | Owner decision: unify or keep as a documented, intentionally distinct variant |
-| V5 | `worker.py` independently recomputes ATR→displacement→supply_demand→mitigation three times for HTF opposing-zone vetoes; self-documented, architecturally justified (autotrade's veto path has no live `AnalysisContext`), but still duplicate CPU and a drift risk if `atr_length` changes between call sites | `app/autotrade/worker.py::_htf_zones` + 2 siblings | Collapse once `SymbolState` is reachable from the autotrade path (Stage 5+) |
-| V6 | `app/scalping/` is simultaneously an independent analysis stack (own context, own swings) **and** an independent orchestration stack (own risk, own activation, own strategies) — the single clearest case of "algo-bot calculating technical market structure itself" | `app/scalping/*` (~1.7MB, ~20 modules) | Largest open architecture decision — see risk #5 in the architecture report |
-| V7 | Possible business-threshold reads directly from `runtime_config` inside Telegram/journal handlers, bypassing a risk/policy boundary | `app/bot/handlers/*`, `app/signals/*` | Not exhaustively audited this pass — migration backlog, unconfirmed severity |
-| V8 | (none) | `ctrader-engine` | — |
-| V9 | Production still runs pre-V3 configuration (`config/trading-bot.yml`); V3 (`config/apexvoid.yml`) is proven and wired live in local/dev only | deployment | Independent migration track (Configuration V3 Stage C7+), not blocked on this task |
-
-Violations are documented, not fixed, per this task's own scope (§60: "Do
-not necessarily fix them in this task. They become migration backlog
-items.").
+The former V1-V6 violations are closed by the Go cutover and physical
+deletion of the competing Python technical graph. The worker consumes Go
+opportunities and Go zone-book facts; retained quote, spread, risk and order
+checks do not reconstruct a technical thesis. Configuration V3 deployment
+and handler-level configuration governance remain independent tracks.

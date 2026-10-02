@@ -1,7 +1,7 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "15bf89aec2a266196a4a733a11f2a915bffaf0ada3d7ed5a62eaf2727dca09bf",
-  "count": 576,
+  "configuration_contract_fingerprint_sha256": "8f2ab19d02fd201b4561119d4181e9d1b378d14aa56691460050ea993f8b9a33",
+  "count": 573,
   "deprecated_alias_count": 21,
   "entries": [
     {
@@ -35,54 +35,6 @@
       "shared_with_ctrader": false,
       "type": "bool",
       "unit": "boolean"
-    },
-    {
-      "canonical_env": "ANALYSIS_ARBITRATION_MODE",
-      "default": "go",
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Go analysis-engine owns cross-strategy arbitration. Algo Bot only applies execution-time admission and risk policy; it must not re-rank Go opportunities.",
-      "display_id": "config:analysis.technical_authority.arbitration_mode",
-      "owner": "python",
-      "path": "analysis.technical_authority.arbitration_mode",
-      "replacement_path": null,
-      "required": false,
-      "secret": false,
-      "shared_with_ctrader": false,
-      "type": "str",
-      "unit": "enum"
-    },
-    {
-      "canonical_env": "ANALYSIS_STOP_ENVELOPE_MODE",
-      "default": "go",
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Go analysis-engine owns the stop-distance envelope. Algo Bot consumes the published bounds and applies execution safety checks without rebuilding technical stop geometry.",
-      "display_id": "config:analysis.technical_authority.stop_envelope_mode",
-      "owner": "python",
-      "path": "analysis.technical_authority.stop_envelope_mode",
-      "replacement_path": null,
-      "required": false,
-      "secret": false,
-      "shared_with_ctrader": false,
-      "type": "str",
-      "unit": "enum"
-    },
-    {
-      "canonical_env": "ANALYSIS_THESIS_CORRELATION_MODE",
-      "default": "go",
-      "deprecated": false,
-      "deprecated_aliases": [],
-      "description": "Go analysis-engine owns cross-strategy thesis identity. Algo Bot consumes go_thesis_id and must not infer structural correlation with its local ATR heuristic for Go opportunities.",
-      "display_id": "config:analysis.technical_authority.thesis_correlation_mode",
-      "owner": "python",
-      "path": "analysis.technical_authority.thesis_correlation_mode",
-      "replacement_path": null,
-      "required": false,
-      "secret": false,
-      "shared_with_ctrader": false,
-      "type": "str",
-      "unit": "enum"
     },
     {
       "canonical_env": "ANALYSIS_ZONES_VERSION",
@@ -9274,6 +9226,6 @@
   ],
   "secret_count": 9,
   "shared_with_ctrader_count": 87,
-  "source_fingerprint_sha256": "15bf89aec2a266196a4a733a11f2a915bffaf0ada3d7ed5a62eaf2727dca09bf",
+  "source_fingerprint_sha256": "8f2ab19d02fd201b4561119d4181e9d1b378d14aa56691460050ea993f8b9a33",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

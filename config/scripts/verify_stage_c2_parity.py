@@ -163,7 +163,6 @@ DIVERGENCES: dict[str, dict] = {
   "analysis.yml/analysis.mad.manip.min_penetration_atr": {"kind": "new_surfaced", "expected": 0.05, "reason": "Analysis Engine V2 MAD phase classifier input; Go-owned technical input with no historical flat-file leaf."},
   "analysis.yml/analysis.mad.manip.min_reclaim_atr": {"kind": "new_surfaced", "expected": 0.05, "reason": "Analysis Engine V2 MAD phase classifier input; Go-owned technical input with no historical flat-file leaf."},
   "analysis.yml/analysis.structure.version": {"kind": "new_surfaced", "expected": "v2", "reason": "Analysis Engine V2 §67 — versioned algorithm selection."},
-  "analysis.yml/analysis.technical_authority.mode": {"kind": "new_surfaced", "expected": "go", "reason": "Live Go Kafka opportunity lifecycle is the sole automatic technical-analysis source."},
   "analysis.yml/analysis.technical_authority.consumer_enabled": {"kind": "new_surfaced", "expected": True, "reason": "Live Go Kafka opportunity lifecycle must be consumed by Algo Bot."},
   "analysis.yml/analysis.technical_authority.consumer_group": {"kind": "new_surfaced", "expected": "apexvoid-algo-bot-analysis-opportunity-v1", "reason": "S12A — stable Kafka consumer group for the Go opportunity lifecycle."},
   "analysis.yml/analysis.technical_authority.max_event_age_seconds": {"kind": "new_surfaced", "expected": 900, "reason": "S14B — freshness limit for a NEW live Go plan (confirmed-observation age at consumption); no old-config precedent."},

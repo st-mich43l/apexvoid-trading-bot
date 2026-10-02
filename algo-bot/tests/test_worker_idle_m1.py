@@ -115,7 +115,6 @@ def _worker_cycle(monkeypatch, *, now: int):
   install_runtime_overrides(
     monkeypatch,
     {
-      "analysis.technical_authority.mode": "go",
       "analysis.technical_authority.consumer_enabled": True,
       "strategies.matching.multiple_matches_enabled": True,
     },

@@ -13,8 +13,10 @@ import (
 // as the full frame without rescanning ~1,400 H1 bars per opportunity.
 const momentumTailBars = 64
 
-// ClosedHigherTimeframeBiases reads the canonical, already-calculated H1 and
-// H4 structure. Candle.Time is its OPEN timestamp: a higher bar is
+// ClosedHigherTimeframeBiases reads canonical, already-calculated H1, H4 and
+// M15 structure. H1/H4 stay first so consumers retain their established
+// preference; M15 is the causal fallback when both slower frames are
+// unavailable or undecided. Candle.Time is its OPEN timestamp: a higher bar is
 // unavailable until its own close is no later than the observed bar's close.
 // Stale frames are omitted. When a fresh frame's structure is undecided (every
 // layer range/unknown) the bias falls back to that SAME higher timeframe's
@@ -22,7 +24,7 @@ const momentumTailBars = 64
 // analysis/engine.py::_bias_from_tf), and is omitted only when momentum is
 // neutral too. It is never filled from the primary-timeframe bias, and a
 // decided structure is never overridden by momentum. The result order is
-// deterministic (H1 then H4).
+// deterministic (H1, H4, then M15).
 func ClosedHigherTimeframeBiases(
 	ctx *context.MarketContext,
 	observedTF market.Timeframe,
@@ -38,12 +40,15 @@ func ClosedHigherTimeframeBiases(
 	}
 	observedClose := observedAt + int64(observedMinutes)*60
 	var result []opportunity.HigherTimeframeBias
-	for _, tf := range []market.Timeframe{market.H1, market.H4} {
+	for _, tf := range []market.Timeframe{market.H1, market.H4, market.M15} {
+		minutes, _ := tf.Minutes()
+		if minutes <= observedMinutes {
+			continue
+		}
 		frame, exists := ctx.Timeframes[tf]
 		if !exists || frame == nil || len(frame.Candles) == 0 {
 			continue
 		}
-		minutes, _ := tf.Minutes()
 		latest := frame.Candles[len(frame.Candles)-1]
 		closeAt := latest.Time + int64(minutes)*60
 		// Two HTF bars without a fresh update is a missing-data condition,

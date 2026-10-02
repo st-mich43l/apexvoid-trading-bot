@@ -11,7 +11,6 @@ analysis:
   # Go is live. The Kafka opportunity lifecycle is the sole automatic
   # technical-analysis path; Python only applies execution-time policy.
   technical_authority:
-    mode: go
     consumer_enabled: true
     consumer_group: apexvoid-algo-bot-analysis-opportunity-v1
     # S14B live-freshness limits. A NEW live plan needs a confirmed observation
@@ -293,6 +292,7 @@ analysis:
       box_bars: 12
       maximum_width_atr: 2.0
       retest_tolerance_atr: 0.2
+      retest_window_bars: 3
       invalidation_buffer_atr: 0.25
       target_r: 2.0
       expiry_hours: 8.0
@@ -341,6 +341,7 @@ analysis:
       m1_accept_bars: 2
       maximum_width_atr: 2.0
       retest_tolerance_atr: 0.15
+      retest_window_bars: 3
       invalidation_buffer_atr: 0.2
       target_r: 2.0
       expiry_hours: 2.0
@@ -483,7 +484,6 @@ analysis:
   # picking a side on a near-tie. Mirrors algo-bot's own
   # actionability.scanner_gates.conflict_margin_quality default (0.15) -
   # the two are today independently-tunable copies of the same concept,
-  # Python's used only while arbitration_mode=python_legacy.
   #
   # in_play_atr bounds the candidates watched around the current price. When
   # any candidate is actually inside its entry zone, arbitration considers

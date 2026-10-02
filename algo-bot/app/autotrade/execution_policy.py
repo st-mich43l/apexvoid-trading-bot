@@ -946,18 +946,18 @@ def evaluate_execution_policy(
         )
       )
     )
-    go_bounds = None
-    from app.core.config import runtime_config as _runtime_config
-    if _runtime_config.analysis.technical_authority.stop_envelope_mode == "go":
-      fixed_rr = False
-      if symbol:
-        from app.core.instrument_geometry import fixed_reward_risk
-        fixed_rr = fixed_reward_risk(symbol, instrument_cfg) is not None
-      go_bounds = stop_bounds_from_go_envelope(
+    fixed_rr = False
+    if symbol:
+      from app.core.instrument_geometry import fixed_reward_risk
+      fixed_rr = fixed_reward_risk(symbol, instrument_cfg) is not None
+    go_bounds = (
+      stop_bounds_from_go_envelope(
         match,
         for_group_stop=use_group_stop,
         fixed_rr=fixed_rr,
       )
+      if go_origin else None
+    )
     if go_bounds is not None:
       minimum_stop_pips, maximum_stop_pips, stop_bounds_measured = go_bounds
     else:

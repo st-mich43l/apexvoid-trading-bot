@@ -12,7 +12,8 @@ import pytest
 
 from app.autotrade.execution_policy import evaluate_execution_policy
 from app.autotrade.protective_stop import ProtectiveStopError, plan_go_invalidation_stop
-from tests.test_xau_structure_fixed_rr import _load_production_example, _policy_match
+from tests.test_config_effective_instrument_context import _load_production_example
+from tests.test_execution_pipeline_integrity import _policy_match
 
 pytestmark = pytest.mark.no_database
 

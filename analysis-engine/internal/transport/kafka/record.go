@@ -171,7 +171,7 @@ type ReactionConfirmationPayload struct {
 	Pattern string `json:"pattern,omitempty"`
 }
 
-// HigherTimeframeBiasPayload is one fresh, causally closed H1/H4 structure.
+// HigherTimeframeBiasPayload is one fresh, causally closed M15/H1/H4 structure.
 type HigherTimeframeBiasPayload struct {
 	Timeframe     string `json:"timeframe"`
 	Direction     string `json:"direction"`

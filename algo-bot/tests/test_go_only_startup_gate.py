@@ -27,23 +27,16 @@ from tests.configuration.canonical_fixtures import install_runtime_overrides  # 
 
 pytestmark = pytest.mark.no_database
 
-GO = {
-  "analysis.technical_authority.mode": "go",
-  "analysis.technical_authority.consumer_enabled": True,
-}
+GO = {"analysis.technical_authority.consumer_enabled": True}
 
 
-def _cfg(*, auto_trade=True, mode="go", consumer=True, kafka=True, brokers=("kafka:9092",)):
+def _cfg(*, auto_trade=True, consumer=True, kafka=True, brokers=("kafka:9092",)):
   return SimpleNamespace(
     runtime=SimpleNamespace(auto_trade=SimpleNamespace(enabled=auto_trade)),
     analysis=SimpleNamespace(
       technical_authority=SimpleNamespace(
-        mode=mode,
         consumer_enabled=consumer,
         consumer_group="apexvoid-algo-bot-analysis-opportunity-v1",
-        arbitration_mode="go",
-        thesis_correlation_mode="go",
-        stop_envelope_mode="go",
       ),
     ),
     actionability=SimpleNamespace(
@@ -57,17 +50,6 @@ def test_go_mode_with_consumer_and_kafka_passes():
   require_live_go_consumer(_cfg())
 
 
-@pytest.mark.parametrize(
-  "field",
-  ["arbitration_mode", "thesis_correlation_mode", "stop_envelope_mode"],
-)
-def test_go_mode_rejects_python_technical_fallbacks(field):
-  config = _cfg()
-  setattr(config.analysis.technical_authority, field, "python_legacy")
-  with pytest.raises(RuntimeError, match="AE ownership"):
-    require_live_go_consumer(config)
-
-
 def test_go_mode_rejects_legacy_quality_ranking():
   config = _cfg()
   config.actionability.scanner_gates.use_quality_ranking = False
@@ -75,14 +57,10 @@ def test_go_mode_rejects_legacy_quality_ranking():
     require_live_go_consumer(config)
 
 
-@pytest.mark.parametrize(
-  "mode,consumer",
-  [("go", False)],
-)
-def test_disabled_consumer_fails_closed(mode, consumer):
+def test_disabled_consumer_fails_closed():
   with pytest.raises(RuntimeError, match="Live Go analysis consumer required") as exc:
-    require_live_go_consumer(_cfg(mode=mode, consumer=consumer))
-  assert f"effective mode={mode!r}" in str(exc.value)
+    require_live_go_consumer(_cfg(consumer=False))
+  assert "effective consumer_enabled=False" in str(exc.value)
 
 
 @pytest.mark.parametrize("kafka,brokers", [(False, ("kafka:9092",)), (True, ())])
@@ -91,15 +69,12 @@ def test_missing_kafka_fails_closed(kafka, brokers):
     require_live_go_consumer(_cfg(kafka=kafka, brokers=brokers))
 
 
-@pytest.mark.parametrize(
-  "mode,consumer,kafka",
-  [("go", False, False), ("go", False, True)],
-)
-def test_manual_only_deployment_is_never_gated(mode, consumer, kafka):
+@pytest.mark.parametrize("consumer,kafka", [(False, False), (False, True)])
+def test_manual_only_deployment_is_never_gated(consumer, kafka):
   """auto_trade disabled = Manual Algo / Telegram / journaling only: no
   automatic technical-opportunity producer exists, so nothing to refuse."""
   require_live_go_consumer(
-    _cfg(auto_trade=False, mode=mode, consumer=consumer, kafka=kafka),
+    _cfg(auto_trade=False, consumer=consumer, kafka=kafka),
   )
 
 
@@ -143,22 +118,12 @@ def _startup_doubles(monkeypatch) -> dict[str, object]:
   "overrides,message",
   [
     (
-      {
-        "analysis.technical_authority.mode": "python",
-        "analysis.technical_authority.consumer_enabled": True,
-      },
-      "Live Go analysis consumer required",
-    ),
-    (
-      {
-        "analysis.technical_authority.mode": "go",
-        "analysis.technical_authority.consumer_enabled": False,
-      },
+      {"analysis.technical_authority.consumer_enabled": False},
       "Live Go analysis consumer required",
     ),
     ({**GO, "transport.kafka.enabled": False}, "Kafka transport"),
   ],
-  ids=["python_mode", "consumer_disabled", "kafka_disabled"],
+  ids=["consumer_disabled", "kafka_disabled"],
 )
 async def test_main_fails_closed_before_any_side_effect(monkeypatch, overrides, message):
   install_runtime_overrides(
