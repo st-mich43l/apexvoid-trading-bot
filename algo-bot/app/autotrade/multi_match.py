@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import math
 from datetime import datetime
 from typing import Any, Iterable
 
@@ -17,12 +16,10 @@ from app.autotrade.execution_policy import (
 from app.autotrade.strategy_match import StrategyMatch
 from app.autotrade.strategy_identity import (
   STRUCTURAL_SETUPS,
-  canonical_structural_setup,
 )
 
 
 STRATEGY_MATCHES_KEY_PREFIX = "auto_trade:strategy_matches"
-_EPS = 1e-9
 
 
 def _freshness(match: StrategyMatch) -> float:
@@ -47,207 +44,8 @@ def _freshness(match: StrategyMatch) -> float:
   return float(match.issued_at)
 
 
-def _zone_overlap_ratio(
-  left_low: float,
-  left_high: float,
-  right_low: float,
-  right_high: float,
-) -> float:
-  overlap = min(left_high, right_high) - max(left_low, right_low)
-  smaller = min(left_high - left_low, right_high - right_low)
-  if overlap <= 0:
-    return 0.0
-  if smaller <= _EPS:
-    return 1.0
-  return overlap / smaller
-
-
 def strategy_matches_key(symbol: str) -> str:
   return f"{STRATEGY_MATCHES_KEY_PREFIX}:{symbol.upper()}"
-
-
-def same_thesis(left: StrategyMatch, right: StrategyMatch, *, atr: float) -> bool:
-  """True when two matches represent materially the same trade thesis."""
-  if left.direction != right.direction:
-    return False
-  if left.symbol != right.symbol:
-    return False
-  # Stable detector identity wins over mutable event payload fields. A replay
-  # may refresh timestamps/geometry but is never independent confluence.
-  if left.match_id == right.match_id:
-    return True
-  left_setup = canonical_structural_setup(left.strategy)
-  right_setup = canonical_structural_setup(right.strategy)
-  left_sid_early = left.structural_zone_id or left.zone_id
-  right_sid_early = right.structural_zone_id or right.zone_id
-  zone_alias_pair = (
-    left_setup == "Zone Reaction" and right_setup == "Zone Reaction"
-  )
-  first_vs_wrapper = (
-    (left.strategy in STRUCTURAL_SETUPS) != (right.strategy in STRUCTURAL_SETUPS)
-  )
-  cross_structural = bool(
-    zone_alias_pair
-    or first_vs_wrapper
-    or (
-      left_sid_early
-      and right_sid_early
-      and left_sid_early == right_sid_early
-      and (
-        left.strategy in STRUCTURAL_SETUPS
-        or right.strategy in STRUCTURAL_SETUPS
-        or left.structural_source in {
-          "key_level", "supply_demand", "session_level", "trendline",
-        }
-        or right.structural_source in {
-          "key_level", "supply_demand", "session_level", "trendline",
-        }
-      )
-    )
-  )
-  if left_setup != right_setup and not cross_structural:
-    return False
-  if (
-    left.family and right.family and left.family != right.family
-    and not cross_structural
-  ):
-    return False
-
-  # Mapped Zone Reaction: same reaction_id is identical; same thesis_id is the
-  # same structural occupancy (dedupe before publish — claim still enforces).
-  if left.reaction_id and right.reaction_id and left.reaction_id == right.reaction_id:
-    return True
-  if left.thesis_id and right.thesis_id and left.thesis_id == right.thesis_id:
-    return True
-  if left.reaction_id and right.reaction_id:
-    return False
-  if left.reaction_id or right.reaction_id:
-    return False
-
-  structural_left = left.structural_zone_id or left.zone_id
-  structural_right = right.structural_zone_id or right.zone_id
-  if (
-    left.strategy_mode == "mapped_zone_reaction"
-    or right.strategy_mode == "mapped_zone_reaction"
-  ):
-    if structural_left and structural_right and structural_left == structural_right:
-      if left.touch_bar_ts and right.touch_bar_ts:
-        return (
-          left.touch_bar_ts == right.touch_bar_ts
-          and left.confirmation_bar_ts == right.confirmation_bar_ts
-          and left.reaction_type == right.reaction_type
-        )
-      from app.autotrade.reaction_identity import zones_materially_equivalent
-      left_lo = left.structural_zone_low if left.structural_zone_low is not None else left.entry_low
-      left_hi = left.structural_zone_high if left.structural_zone_high is not None else left.entry_high
-      right_lo = right.structural_zone_low if right.structural_zone_low is not None else right.entry_low
-      right_hi = right.structural_zone_high if right.structural_zone_high is not None else right.entry_high
-      return zones_materially_equivalent(
-        left_lo,
-        left_hi,
-        right_lo,
-        right_hi,
-        atr=atr,
-      )
-    from app.autotrade.reaction_identity import zones_materially_equivalent
-    return (
-      left.touch_bar_ts == right.touch_bar_ts
-      and left.confirmation_bar_ts == right.confirmation_bar_ts
-      and left.reaction_type == right.reaction_type
-      and zones_materially_equivalent(
-        left.entry_low,
-        left.entry_high,
-        right.entry_low,
-        right.entry_high,
-        atr=atr,
-      )
-    )
-
-  # First-class structural reactions: same source + confirmation is one thesis
-  # even when wrapper detectors also describe it.
-  left_sid = left.structural_zone_id or (
-    left.zone_id if left.structural_source in {
-      "key_level", "supply_demand", "session_level", "trendline",
-    } else None
-  )
-  right_sid = right.structural_zone_id or (
-    right.zone_id if right.structural_source in {
-      "key_level", "supply_demand", "session_level", "trendline",
-    } else None
-  )
-  if left_sid and right_sid and left_sid == right_sid:
-    if left.touch_bar_ts and right.touch_bar_ts:
-      return (
-        left.touch_bar_ts == right.touch_bar_ts
-        and (left.confirmation_bar_ts or "") == (right.confirmation_bar_ts or "")
-      )
-    return True
-
-  # Same-source structural reactions on a proximal overlapping zone are one
-  # thesis even when Market Map rehashed the structural id. Live 2026-08-17
-  # GBPJPY Key Level 215.85 published twice (sids 47519286 vs 90824b10,
-  # zones 215.90-215.92 vs 215.90-215.93) in the same confirmation bar.
-  if (
-    left.structural_source
-    and left.structural_source == right.structural_source
-    and left.structural_source in {
-      "key_level", "supply_demand", "session_level", "trendline",
-    }
-    and left_setup == right_setup
-    and _zone_overlap_ratio(
-      left.entry_low,
-      left.entry_high,
-      right.entry_low,
-      right.entry_high,
-    ) >= 0.5
-  ):
-    if left.confirmation_bar_ts and right.confirmation_bar_ts:
-      return left.confirmation_bar_ts == right.confirmation_bar_ts
-    if left.touch_bar_ts and right.touch_bar_ts:
-      return left.touch_bar_ts == right.touch_bar_ts
-    return True
-
-  # Legacy Zone Reaction aliases without a shared structural id: overlapping
-  # entry (+ shared confirmation when present) is still one thesis.
-  if zone_alias_pair and left.strategy != right.strategy:
-    if _zone_overlap_ratio(
-      left.entry_low,
-      left.entry_high,
-      right.entry_low,
-      right.entry_high,
-    ) >= 0.5:
-      if left.confirmation_bar_ts and right.confirmation_bar_ts:
-        return left.confirmation_bar_ts == right.confirmation_bar_ts
-      return True
-    return False
-
-  # Wrapper vs first-class: overlapping entry + shared confirmation is one thesis.
-  left_first = left.strategy in STRUCTURAL_SETUPS
-  right_first = right.strategy in STRUCTURAL_SETUPS
-  if left_first != right_first:
-    if _zone_overlap_ratio(
-      left.entry_low,
-      left.entry_high,
-      right.entry_low,
-      right.entry_high,
-    ) >= 0.5:
-      if left.confirmation_bar_ts and right.confirmation_bar_ts:
-        return left.confirmation_bar_ts == right.confirmation_bar_ts
-      return True
-    return False
-
-  # Event-based scanner strategies keep timestamp identity.
-  if left.event_ts != right.event_ts:
-    return False
-  if left.range_id != right.range_id:
-    return False
-  if left.targets_pips != right.targets_pips:
-    return False
-  return (
-    math.isclose(left.key_level, right.key_level, abs_tol=_EPS)
-    and math.isclose(left.entry_low, right.entry_low, abs_tol=_EPS)
-    and math.isclose(left.entry_high, right.entry_high, abs_tol=_EPS)
-  )
 
 
 def _structural_strategy_rank(match: StrategyMatch) -> int:
@@ -314,20 +112,15 @@ def merge_confluence(
   return merged or primary
 
 
-def _same_thesis_via_go_or_legacy(
-  left: StrategyMatch, right: StrategyMatch, *, atr: float, mode: str,
+def _same_go_thesis(
+  left: StrategyMatch, right: StrategyMatch,
 ) -> bool:
-  """Phase 3: prefer Go's own structural-identity thesis correlation.
-
-  Falls back to the legacy ATR-bucket geometric heuristic (``same_thesis``)
-  whenever either side has no ``go_thesis_id`` yet (a non-Go source, or Go
-  has not published a decision for it) — never when ``mode`` is
-  ``"python_legacy"``, so the existing behavior is reproduced exactly
-  until a deliberate cutover.
-  """
-  if mode == "go" and left.go_thesis_id is not None and right.go_thesis_id is not None:
-    return left.go_thesis_id == right.go_thesis_id
-  return same_thesis(left, right, atr=atr)
+  """Correlate only the thesis identity published by Go arbitration."""
+  return (
+    left.go_thesis_id is not None
+    and right.go_thesis_id is not None
+    and left.go_thesis_id == right.go_thesis_id
+  )
 
 
 def dedupe_matches(
@@ -337,9 +130,6 @@ def dedupe_matches(
   cfg: Any | None = None,
 ) -> tuple[list[StrategyMatch], list[dict[str, str]]]:
   """Keep distinct theses; merge same-thesis into the higher-quality match."""
-  from app.core.config import runtime_config
-
-  mode = runtime_config.analysis.technical_authority.thesis_correlation_mode
   kept: list[StrategyMatch] = []
   events: list[dict[str, str]] = []
   for match in sorted(
@@ -360,7 +150,7 @@ def dedupe_matches(
       # Tier C is preference telemetry — keep the match executable.
     merged_into = None
     for index, existing in enumerate(kept):
-      if _same_thesis_via_go_or_legacy(existing, match, atr=atr, mode=mode):
+      if _same_go_thesis(existing, match):
         primary, secondary = existing, match
         if _freshness(match) > _freshness(existing):
           primary, secondary = match, existing

@@ -52,19 +52,15 @@ analysis:
   # THIS file (rendered by ansible from apexvoid_trading_bot_config) is where the Python bot reads
   # the Go consumer switches. config/analysis.yml is not read by the bot. Go is the sole automatic
   # technical-opportunity producer: with runtime.auto_trade.enabled the bot refuses to start unless
-  # mode=go, consumer_enabled=true and Kafka is enabled (app/analysis_client/startup_gate.py). The
+  # consumer_enabled=true and Kafka is enabled (app/analysis_client/startup_gate.py). The
   # live Kafka consumer is the Go technical-source boundary; no per-scope approval is required.
   # After start, verify `auto_trade:component_health:analysis_opportunity_consumer_loop` is ready
   # and the Kafka group below exists.
   technical_authority:
-    mode: go
     consumer_enabled: true
     consumer_group: apexvoid-algo-bot-analysis-opportunity-v1
     max_event_age_seconds: 900
     max_delivery_lag_seconds: 300
-    arbitration_mode: go
-    thesis_correlation_mode: go
-    stop_envelope_mode: go
   trendlines:
     # V2 keeps A/B anchors immutable, requires a later causal validation, and
     # turns this band into an interaction watch rather than an automatic fill.

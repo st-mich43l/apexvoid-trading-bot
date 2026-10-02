@@ -156,8 +156,7 @@ _THESIS_BUCKET_MIN_PIPS = 15
 
 def _thesis_id(symbol: str, family: str, direction: str, zone_id: str) -> str:
   """Stable TradePlan thesis identity: what *structure* this is, not which bar
-  confirmed it. Same rule and same bytes as the legacy scanner's
-  ``structural_reaction_support.thesis_id`` (a parity test pins that), so a Go zone
+  confirmed it. The neutral execution-owned identity helper pins the bytes, so a Go zone
   re-confirmed on later bars (the real replay shows up to 7 re-confirmations per
   zone, each under its own opportunity id) is ONE thesis, and the plan builder's
   active-thesis claim stops a second executable plan for it. Keying this on the
@@ -284,10 +283,17 @@ def build_strategy_match(
 
   bias = tech.bias.direction if tech.bias else None
   relation = "neutral" if bias is None else ("with_bias" if bias == direction else "counter_bias")
-  higher = next((item for tf in ("H1", "H4") for item in tech.higher_timeframes if item.timeframe == tf), None)
-  htf_bias = ("up" if higher.direction == "BUY" else "down") if higher is not None else ""
-  if higher is None:
-    raise AdapterRejection("higher_timeframe_bias_unavailable", "no fresh confirmed H1/H4 structure")
+  higher = next((
+    item
+    for tf in ("H1", "H4", "M15")
+    for item in tech.higher_timeframes
+    if item.timeframe == tf
+  ), None)
+  htf_bias = (
+    "up" if higher is not None and higher.direction == "BUY"
+    else "down" if higher is not None
+    else "neutral"
+  )
   reasons = evidence_codes
   go_confluence = tech.confluence
   # Retained pre-S13C events have no confluence block. New Go events always
@@ -327,7 +333,7 @@ def build_strategy_match(
     f"bias:{relation}",
     "bias_source:go_primary_tf",
     *(() if reaction is None else (f"go_reaction:{reaction.reaction_type}",)),
-    f"htf_bias_source:go_{higher.timeframe}" if higher is not None else "htf_bias_unavailable",
+    f"htf_bias_source:go_{higher.timeframe}" if higher is not None else "htf_bias_source:go_neutral",
   )
   eligibility = ExecutionEligibility(
     version=EXECUTION_ELIGIBILITY_VERSION,
@@ -606,8 +612,7 @@ class GoOpportunityPolicy:
     decision (Phase 2), read by select_go_arbitrated_intent instead of
     Python re-deriving one via arbitrate_execution_intents — and
     go_thesis_id/go_merged_with (Phase 3), Go's own structural-identity
-    thesis correlation, read by multi_match.dedupe_matches in place of its
-    ATR-bucket geometric heuristic once thesis_correlation_mode=go. A
+    thesis correlation, read directly by multi_match.dedupe_matches. A
     decision for a match_id with no live StrategyMatch is retained briefly as
     a pending projection, so a cross-topic delivery race or process restart
     cannot lose Go's current status. It never creates a phantom match.

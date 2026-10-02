@@ -205,7 +205,7 @@ type TechnicalContext struct {
 	// engine has no confirmed bias — never a guessed neutral.
 	BiasDirection market.Direction
 	BiasLayer     string
-	// HigherTimeframes is ordered H1, H4; each entry is read only after its
+	// HigherTimeframes is ordered H1, H4, M15; each entry is read only after its
 	// own bar has closed and is fresh at the opportunity's observation bar.
 	HigherTimeframes []HigherTimeframeBias
 	Confirmation     *ReactionConfirmation
@@ -402,8 +402,8 @@ func (c Candidate) Validate() error {
 		}
 		seen := make(map[market.Timeframe]bool, len(t.HigherTimeframes))
 		for _, higher := range t.HigherTimeframes {
-			if higher.Timeframe != market.H1 && higher.Timeframe != market.H4 {
-				return fmt.Errorf("opportunity: higher timeframe must be H1 or H4")
+			if higher.Timeframe != market.M15 && higher.Timeframe != market.H1 && higher.Timeframe != market.H4 {
+				return fmt.Errorf("opportunity: higher timeframe must be M15, H1 or H4")
 			}
 			if seen[higher.Timeframe] || !higher.Direction.IsValid() || higher.Layer == "" || higher.ReferenceTime < 0 || higher.ReferenceTime > c.CreatedAt {
 				return fmt.Errorf("opportunity: higher timeframe needs distinct causal confirmed structure")
