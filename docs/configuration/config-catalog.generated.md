@@ -3,9 +3,9 @@
 > Generated from the typed `ApexVoidConfig` Catalog V2 schema. Do not edit manually.
 
 - Catalog version: `2`
-- Contract fingerprint: `8f2ab19d02fd201b4561119d4181e9d1b378d14aa56691460050ea993f8b9a33`
-- Document fingerprint: `97ea4296d16431e66498a30af9459ead9ea1e0834f325c71ebcb06f220231fa7`
-- Items: `689`
+- Contract fingerprint: `65972ed8d14066facd59e4f48be769f172df3e363dc82902776e434405bf7de0`
+- Document fingerprint: `2f466d39ebae5c7fe13bb6616cd239ece785ee768b7b067d0f919586abc45cf1`
+- Items: `688`
 - Runtime status: canonical-only; `app.core.config.runtime_config` is authoritative
 
 ## actionability
@@ -359,7 +359,6 @@
 | `execution.mapped_zone.zone_min_width_abs` | `AUTO_TRADE_MAP_ZONE_MIN_WIDTH_ABS` | `float` | `price` | `configurable` | `1.0` |
 | `execution.mapped_zone.zone_min_width_atr` | `AUTO_TRADE_MAP_ZONE_MIN_WIDTH_ATR` | `float` | `atr` | `configurable` | `0.15` |
 | `execution.policy.box_min_rr` | `AUTO_TRADE_BOX_MIN_RR` | `decimal` | `multiplier` | `configurable` | `"1.25"` |
-| `execution.policy.displacement_override_lookback_bars` | `AUTO_TRADE_DISPLACEMENT_OVERRIDE_LOOKBACK_BARS` | `int` | `bars` | `configurable` | `3` |
 | `execution.policy.execution_cost_pips` | `AUTO_TRADE_EXECUTION_COST_PIPS` | `float` | `pips` | `configurable` | `1.0` |
 | `execution.policy.execution_zone_max_width_atr` | `AUTO_TRADE_EXECUTION_ZONE_MAX_WIDTH_ATR` | `float` | `atr` | `configurable` | `2.0` |
 | `execution.policy.execution_zone_max_width_pips` | `AUTO_TRADE_EXECUTION_ZONE_MAX_WIDTH_PIPS` | `float` | `pips` | `configurable` | `100.0` |
@@ -640,7 +639,7 @@
 | `strategies.reaction.trendline.reject_exhausted` | `AUTO_TRADE_TRENDLINE_REJECT_EXHAUSTED` | `bool` | `boolean` | `configurable` | `true` |
 | `strategies.reaction.trendline.require_htf_aligned` | `AUTO_TRADE_TRENDLINE_REQUIRE_HTF_ALIGNED` | `bool` | `boolean` | `configurable` | `false` |
 | `strategies.reaction.trendline.require_killzone` | `AUTO_TRADE_TRENDLINE_REQUIRE_KILLZONE` | `bool` | `boolean` | `configurable` | `false` |
-| `strategies.scalp.fade_scalp_enabled` | `AUTO_TRADE_FADE_SCALP_ENABLED` | `bool` | `boolean` | `configurable` | `true` |
+| `strategies.scalp.fade_scalp_enabled` | `AUTO_TRADE_FADE_SCALP_ENABLED` | `bool` | `boolean` | `configurable` | `false` |
 | `strategies.scalp.scalp_barrier_fallback_enabled` | `SCALP_BARRIER_FALLBACK_ENABLED` | `bool` | `boolean` | `configurable` | `true` |
 | `strategies.scalp.scalp_barrier_fallback_min_confirmations` | `SCALP_BARRIER_FALLBACK_MIN_CONFIRMATIONS` | `int` | `count` | `configurable` | `1` |
 | `strategies.scalp.scalp_post_impulse_range_enabled` | `SCALP_POST_IMPULSE_RANGE_ENABLED` | `bool` | `boolean` | `configurable` | `true` |

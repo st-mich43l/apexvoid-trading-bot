@@ -100,11 +100,16 @@ STRATEGY_NAMES: tuple[StrategyName, ...] = (
   _name(TRENDLINE, CANONICAL_FAMILY_REACTION, "trendline_reaction", aliases=("trendline reaction",)),
   _name(RANGE_EDGE_SCALP, CANONICAL_FAMILY_RANGE, "range_edge_scalp"),
   _name(BOX_BREAKOUT, CANONICAL_FAMILY_BREAKOUT_RETEST, "box_breakout"),
-  _name(BREAK_AND_RETEST, CANONICAL_FAMILY_BREAKOUT_RETEST, "break_retest"),
+  # Retired automatic thesis: Box Breakout owns the M5 continuation role and
+  # Breakout Retest Scalp owns the M5-context/M1-trigger role. Keep the label
+  # resolvable for historical journals and manual positions only.
+  _name(BREAK_AND_RETEST, CANONICAL_FAMILY_BREAKOUT_RETEST, retired=True),
   _name(TREND_PULLBACK, CANONICAL_FAMILY_TREND_PULLBACK, retired=True),
   _name(MOMENTUM_RIDE, CANONICAL_FAMILY_MOMENTUM, "momentum_ride"),
   _name(SNAP_BACK, CANONICAL_FAMILY_LIQUIDITY, "snap_back"),
-  _name(FADE_SCALP, CANONICAL_FAMILY_RANGE, "fade_scalp"),
+  # Retired automatic thesis: Range Edge and Snap-Back own its former range
+  # reversion roles without a second detector competing for the same move.
+  _name(FADE_SCALP, CANONICAL_FAMILY_RANGE, retired=True),
   # Legacy plan/report names.  They remain resolvable but are emitted by no
   # current detector, so they must not be mistaken for live sources.
   _name(ZONE_REACTION, CANONICAL_FAMILY_ZONE, retired=True),
@@ -198,4 +203,3 @@ def strategy_for_detector(detector_id: str) -> StrategyName | None:
     (entry for entry in STRATEGY_NAMES if entry.detector_id == detector_id),
     None,
   )
-

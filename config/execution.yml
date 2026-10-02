@@ -64,7 +64,6 @@ execution:
     thesis_lock_enabled: true
 
   policy:
-    displacement_override_lookback_bars: 3
     execution_zone_max_width_atr: 2.0
     execution_zone_max_width_pips: 100.0
     group_close_allocation: pro_rata

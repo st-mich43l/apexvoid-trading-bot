@@ -129,13 +129,9 @@ def test_mitigated_zone_is_ignored_mitigated_when_included():
 
 
 def test_displaced_zone_is_ignored_displaced():
-  # A caller/test-only entry that deliberately keeps a displaced flag for
-  # telemetry (production callers filter displacement upstream so this
-  # never reaches _nearest_opposing there — see filter_displaced_opposing_
-  # entries). ZoneOpposingEntry itself has no "displaced" field (by
-  # design, see module docstring) since a real one is filtered out before
-  # construction — a plain duck-typed stand-in exercises the evaluator's
-  # getattr-based read of it instead.
+  # A caller/test-only entry carrying the historical displaced telemetry
+  # flag remains ignored by the evaluator. Go now owns barrier lifecycle;
+  # Python no longer derives displacement from recent closes.
   displaced_entry = SimpleNamespace(
     side="sell", lo=4102.0, hi=4105.0, tier="zone", score=8.0,
     touches=0, mitigated=False, displaced=True,

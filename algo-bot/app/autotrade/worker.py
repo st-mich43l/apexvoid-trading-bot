@@ -40,7 +40,7 @@ from app.autotrade.arbitration import (
   ArbitrationResult,
   CandidatePublicationResult,
   ExecutionIntent,
-  select_go_arbitrated_intent,
+  arbitrate_execution_intents,
 )
 from app.autotrade.execution_policy import (
   evaluate_execution_policy,
@@ -64,7 +64,6 @@ from app.autotrade.strategy_taxonomy import (
 )
 from app.autotrade.structural_target_room import (
   evaluate_structural_target_room,
-  filter_displaced_opposing_entries,
   filter_shared_boundary_opposing_entries,
   zone_proximal_room_reference,
 )
@@ -2152,39 +2151,6 @@ async def _publish_trade_plan_v8(
     # analysis-engine publishes (already width-gated, merged and reconciled
     # there); never reconstruct a competing Python zone book.
     room_entries = await opposing_entries_for_go_match(client, symbol)
-  displacement_lookback = max(
-    0, int(runtime_config.execution.policy.displacement_override_lookback_bars),
-  )
-  displacement_state: dict[str, object] = {
-    "applied": False,
-    "lookback_bars": displacement_lookback,
-  }
-  if displacement_lookback > 0 and frames is not None:
-    room_frame = frames.get(execution_match.source_tf)
-    if room_frame is not None and not room_frame.empty and "close" in room_frame.columns:
-      recent_closes = tuple(
-        float(value) for value in room_frame["close"].tail(displacement_lookback)
-      )
-      before = len(room_entries)
-      room_entries = filter_displaced_opposing_entries(
-        room_entries,
-        direction=execution_match.direction,
-        recent_closes=recent_closes,
-      )
-      displacement_state = {
-        "applied": True,
-        "lookback_bars": displacement_lookback,
-        "recent_closes": list(recent_closes),
-        "entries_before": before,
-        "entries_after": len(room_entries),
-        "dropped": before - len(room_entries),
-      }
-    else:
-      displacement_state = {
-        "applied": False,
-        "lookback_bars": displacement_lookback,
-        "reason": "no_closed_bars",
-      }
   pip_size = units.pip_size(symbol)
   room_planned, room_reference_source = zone_proximal_room_reference(
     direction=execution_match.direction,
@@ -2226,7 +2192,6 @@ async def _publish_trade_plan_v8(
       runtime_config.actionability.target_room.minimum_capped_target_pips
     ),
     execution_cost_pips=float(runtime_config.execution.policy.execution_cost_pips),
-    displacement_state=displacement_state,
     room_reference_source=room_reference_source,
     executable_entry_price=entry_reference,
     shared_boundary_state=shared_boundary_state,
@@ -3337,7 +3302,7 @@ async def _handle_event(
   intent_matches: dict[str, StrategyMatch] = {}
   intent_subjects: dict[str, Any] = {}
   arbitrable: list[ExecutionIntent] = []
-  arbitration = select_go_arbitrated_intent([])
+  arbitration = arbitrate_execution_intents([])
   if strategy_matches:
     execution_inst = instrument_geometry.instrument_runtime(symbol)
     for routed_match in strategy_matches:
@@ -3391,6 +3356,7 @@ async def _handle_event(
         proposed_group_id=group_id,
         cycle_id=str(event_ts or ""),
         quality_overall=routed_match.quality_overall,
+        bias_relationship=routed_match.bias_relationship,
         arbitration_status=routed_match.arbitration_status,
         arbitration_reason_code=routed_match.arbitration_reason_code,
         # Only an intent whose executable quote is inside its entry contract can
@@ -3491,10 +3457,18 @@ async def _handle_event(
           stage="publication",
           terminal_reason_code="publication_unavailable",
         )
-    # Go is the only automatic technical authority. The match already carries
-    # Go's arbitration status and reason, so Python must not calculate a second
-    # ranking and then choose between two technical answers.
-    arbitration = select_go_arbitrated_intent(arbitrable)
+    # Go owns every technical opportunity. Algo Bot owns execution policy, so
+    # arbitration runs only after freshness, quote and route admission have
+    # removed stale/non-executable opportunities from the decision set. Go's
+    # full-book arbitration remains provenance telemetry; it cannot veto a
+    # fresh executable intent with an old technical opportunity.
+    gates = runtime_config.actionability.scanner_gates
+    arbitration = arbitrate_execution_intents(
+      arbitrable,
+      conflict_margin=float(gates.conflict_margin),
+      use_quality_ranking=bool(gates.use_quality_ranking),
+      conflict_margin_quality=float(gates.conflict_margin_quality),
+    )
 
     published_match: StrategyMatch | None = None
     published_intent: ExecutionIntent | None = None

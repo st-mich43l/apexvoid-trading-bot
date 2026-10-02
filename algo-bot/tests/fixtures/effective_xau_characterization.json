@@ -78,7 +78,6 @@
       "zone_min_width_atr": 0.15
     },
     "policy": {
-      "displacement_override_lookback_bars": 3,
       "execution_cost_pips": 1.0,
       "execution_zone_max_width_atr": 2.0,
       "execution_zone_max_width_pips": 100.0,

@@ -730,10 +730,6 @@
       "repr": "0.15",
       "type": "builtins.float"
     },
-    "execution.policy.displacement_override_lookback_bars": {
-      "repr": "3",
-      "type": "builtins.int"
-    },
     "execution.policy.execution_cost_pips": {
       "repr": "1.0",
       "type": "builtins.float"

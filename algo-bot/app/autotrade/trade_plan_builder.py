@@ -162,11 +162,26 @@ def _build_entry(
         max_spread_ticks=max_spread_ticks,
         max_slippage_ticks=chase_slippage,
       )
+    zone_low = Decimal(str(measured.get("planned_entry_zone_low", match.entry_low)))
+    zone_high = Decimal(str(measured.get("planned_entry_zone_high", match.entry_high)))
+    planned_entry = Decimal(str(measured["planned_entry_price"]))
+    # A market watch is an execution-policy entry, not permission to fill at
+    # any price in a broad technical zone. Cap only the adverse side at the
+    # planned price while retaining better-price fills deeper in the zone.
+    # Production 2026-10-02 Liquidity Sweep BUY planned 4184.04 inside
+    # 4180.76-4187.76; publishing the full zone advertised/allowed ~87 pips
+    # even though the policy intended a 50-pip entry.
+    if direction == "BUY":
+      zone_high = min(zone_high, planned_entry)
+    else:
+      zone_low = max(zone_low, planned_entry)
+    if zone_low > zone_high:
+      zone_low = zone_high = planned_entry
     return TradePlanEntry(
       type=ENTRY_TYPE_MARKET_WATCH,
       expires_at=expires_at,
-      zone_low=Decimal(str(measured.get("planned_entry_zone_low", match.entry_low))),
-      zone_high=Decimal(str(measured.get("planned_entry_zone_high", match.entry_high))),
+      zone_low=zone_low,
+      zone_high=zone_high,
       activation="quote_inside_zone",
       price_side="ask" if direction == "BUY" else "bid",
       max_spread_ticks=max_spread_ticks,

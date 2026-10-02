@@ -2,8 +2,8 @@
 
 > Generated from the canonical configuration catalog (`app.configuration.environment_contract`). Do not edit manually.
 
-- Contract fingerprint: `8f2ab19d02fd201b4561119d4181e9d1b378d14aa56691460050ea993f8b9a33`
-- Environment-bound fields: `573`
+- Contract fingerprint: `65972ed8d14066facd59e4f48be769f172df3e363dc82902776e434405bf7de0`
+- Environment-bound fields: `572`
 - Deprecated aliases: `21`
 
 Secret values are never emitted; secret defaults render as `<redacted>`.
@@ -55,7 +55,6 @@ Secret values are never emitted; secret defaults render as `<redacted>`.
 | `AUTO_TRADE_DEMAND_REACTION_ENABLED` | `strategies.reaction.demand.enabled` | `bool` | no | no | — | `True` |
 | `AUTO_TRADE_DEMAND_ZONE_ENABLED` | `strategies.zone.demand.enabled` | `bool` | no | no | — | `True` |
 | `AUTO_TRADE_DIRECT_PUBLISH_ENABLED` | `runtime.auto_trade.direct_publish_enabled` | `bool` | no | no | — | `True` |
-| `AUTO_TRADE_DISPLACEMENT_OVERRIDE_LOOKBACK_BARS` | `execution.policy.displacement_override_lookback_bars` | `int` | no | no | — | `3` |
 | `AUTO_TRADE_DRY_RUN` | `runtime.auto_trade.dry_run` | `bool` | no | yes | — | `True` |
 | `AUTO_TRADE_EDGE_PROXIMITY_ATR` | `actionability.gates.edge_proximity_atr` | `float` | no | no | — | `0.5` |
 | `AUTO_TRADE_ENABLED` | `runtime.auto_trade.enabled` | `bool` | no | yes | — | `False` |
@@ -70,7 +69,7 @@ Secret values are never emitted; secret defaults render as `<redacted>`.
 | `AUTO_TRADE_EXECUTION_ZONE_MAX_WIDTH_ATR` | `execution.policy.execution_zone_max_width_atr` | `float` | no | yes | — | `2.0` |
 | `AUTO_TRADE_EXECUTION_ZONE_MAX_WIDTH_PIPS` | `execution.policy.execution_zone_max_width_pips` | `float` | no | yes | — | `100.0` |
 | `AUTO_TRADE_EXPECTED_BROKER` | `contract.account.expected_broker` | `string` | no | yes | `CTRADER_EXPECTED_BROKER` | `fpmarkets` |
-| `AUTO_TRADE_FADE_SCALP_ENABLED` | `strategies.scalp.fade_scalp_enabled` | `bool` | no | no | — | `True` |
+| `AUTO_TRADE_FADE_SCALP_ENABLED` | `strategies.scalp.fade_scalp_enabled` | `bool` | no | no | — | `False` |
 | `AUTO_TRADE_FLIP_CONFIRM_TIMEOUT_SECONDS` | `lifecycle.range_flip.confirm_timeout_seconds` | `int` | no | no | — | `30` |
 | `AUTO_TRADE_FLIP_EXIT_BUFFER_PIPS` | `execution.policy.flip_exit_buffer_pips` | `int` | no | no | — | `10` |
 | `AUTO_TRADE_FLIP_ZONE_ENABLED` | `strategies.zone.flip.enabled` | `bool` | no | no | — | `True` |

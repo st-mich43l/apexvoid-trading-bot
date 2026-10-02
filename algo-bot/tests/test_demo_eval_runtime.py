@@ -7,7 +7,7 @@ from app.autotrade.config_health import canonicalize_broker
 from app.autotrade.config_health import compare_manifests
 from app.autotrade.config_health import python_manifest
 from app.autotrade.config_health import publish_python_manifest
-from app.autotrade.gate import AutoScalpDecision
+from app.autotrade.range_types import AutoScalpDecision
 from app.autotrade.lifecycle import emit_lifecycle
 from app.autotrade.lifecycle import parse_lifecycle_state
 from app.autotrade.range_context import (
