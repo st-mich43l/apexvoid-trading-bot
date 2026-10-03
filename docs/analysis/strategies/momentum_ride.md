@@ -1,9 +1,9 @@
 # Momentum Ride Strategy V2
 
-`momentum_ride` requires a causal M5 sequence of directional displacement
-bodies with limited overlap. Entry follows the last accepted impulse,
-invalidation sits behind its origin and target uses available opposing
-liquidity with a minimum distance. Identity anchors the impulse sequence.
-Mixed direction, weak bodies, excessive overlap or missing room reject. It is
-enabled in the live Go opportunity stream; Algo Bot applies execution policy
-before any TradePlan is published.
+`momentum_ride` requires non-chop regime, valid premium/discount location,
+canonical momentum velocity/acceleration alignment and a directional strong
+body close through the latest impulse swing. It prefers a valid canonical zone
+and falls back to a valid-side key level. Candle overlap contributes quality
+but cannot activate the thesis. Identity anchors both the broken swing and the
+selected location source; missing structure, location or opposing-liquidity
+room rejects.

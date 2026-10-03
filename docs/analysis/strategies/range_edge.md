@@ -1,9 +1,9 @@
 # Range Edge Strategy V2
 
-`range_edge` requires canonical M5 internal range state plus repeated wick
-rejections at one lookback boundary. It buys the lower edge and sells the upper
-edge, invalidates beyond the boundary and targets the opposite edge. Identity
-is anchored to the range's first bar and chosen side. A trending context,
-insufficient rejection count or a close away from both edges rejects. It is
-enabled in the live Go opportunity stream; Algo Bot applies execution policy
-before any TradePlan is published.
+`range_edge` builds causal M5 support/resistance barriers from clustered touch
+episodes. It tracks wick-rejection history, consecutive accepted closes and
+last-touch age, selects a valid two-sided range, and widens only the touch
+window to reach the established barrier while keeping confirmation recent. A
+Grade-A grab may satisfy the legacy touch/wick exception. The first target is
+equilibrium and the second is the opposing edge. Accepted breaks, stale or
+weak barriers, insufficient room, or missing shared reaction reject.

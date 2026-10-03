@@ -2,7 +2,7 @@
 
 This is the canonical list of automatic technical theses. Each entry has one
 Go package, one versioned configuration entry in `config/analysis.yml`, and a
-strategy-specific specification under [`strategies/`](strategies/). All 19
+strategy-specific specification under [`strategies/`](strategies/). All 20
 entries are enabled in the live Go opportunity stream as of 2026-10-01.
 
 The Analysis Engine publishes technical opportunities only. Algo Bot remains
@@ -28,6 +28,7 @@ single approved exception and consumes only canonical zone facts.
 | `box_breakout` | `strategy/boxbreakout` | M5 compression box, accepted break, retest | [box breakout](strategies/box_breakout.md) |
 | `momentum_ride` | `strategy/momentumride` | M5 displacement sequence and opposing liquidity | [momentum ride](strategies/momentum_ride.md) |
 | `snap_back` | `strategy/snapback` | canonical key level, extension, reversal close | [snap-back](strategies/snap_back.md) |
+| `fade_scalp` | `strategy/fadescalp` | equal-level sweep/reclaim, PD, reaction, chop edge | [fade scalp](strategies/fade_scalp.md) |
 | `liquidity_sweep` | `strategy/liquiditysweep` | canonical liquidity pool sweep/reclaim | [liquidity sweep](strategies/liquidity_sweep.md) |
 | `range_sweep` | `strategy/rangesweep` | M5 range and M1 edge excursion/reclaim | [range sweep](strategies/range_sweep.md) |
 | `impulse_pullback` | `strategy/impulsepullback` | M5 impulse and M1 bounded correction | [impulse pullback](strategies/impulse_pullback.md) |
@@ -69,11 +70,7 @@ for every production change.
 
 ## Retired automatic theses
 
-`Fade Scalp` is retained only as a historical/manual display label. Its former
-automatic range-reversion role is covered by the independent `range_edge` and
-`snap_back` strategies; recreating it would duplicate ownership and arbitration.
-
-Non-scalp `Break & Retest` is also historical/manual only. `box_breakout` owns
+Non-scalp `Break & Retest` is historical/manual only. `box_breakout` owns
 the M5 compression/break/retest thesis, while `scalp_breakout_retest` owns the
 distinct M5-context/M1-confirmation thesis. Neither retired label is a registry
 ID, Go opportunity source, or automatic execution-policy adapter.

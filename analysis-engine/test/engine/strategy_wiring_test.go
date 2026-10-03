@@ -321,12 +321,10 @@ func TestEngine_FirstLiveBarAfterBootstrapRepublishesEveryInPlayArbitrationDecis
 	}
 }
 
-// TestEngine_CanonicalZonesDriveTheZoneStrategies proves the production
-// worker feeds the strategy registry from internal/zone's canonical state.
-// The old Python-parity rebuild is intentionally not part of the live path;
-// all zone-driven strategies must still produce real opportunities from the
-// checked-in production replay.
-func TestEngine_CanonicalZonesDriveTheZoneStrategies(t *testing.T) {
+// TestEngine_ParityTechniqueZonesDriveTheZoneStrategies proves the production
+// worker feeds the strategy registry from one canonical ZoneState whose
+// tradeable technique geometry is produced by the parity-tested Go port.
+func TestEngine_ParityTechniqueZonesDriveTheZoneStrategies(t *testing.T) {
 	repoRoot := filepath.Join("..", "..", "..")
 	doc, err := config.ResolveDocument(filepath.Join(repoRoot, "config", "apexvoid.yml"))
 	if err != nil {
@@ -356,7 +354,7 @@ func TestEngine_CanonicalZonesDriveTheZoneStrategies(t *testing.T) {
 				counts[o.Strategy]++
 			}
 			if strings.HasPrefix(o.StructuralID, "legacy:") {
-				t.Fatalf("canonical strategy %s received retired legacy zone %q", o.Strategy, o.StructuralID)
+				t.Fatalf("strategy %s exposed obsolete legacy identity %q", o.Strategy, o.StructuralID)
 			}
 		}
 	}
@@ -365,5 +363,5 @@ func TestEngine_CanonicalZonesDriveTheZoneStrategies(t *testing.T) {
 			t.Errorf("canonical zone strategy %s produced no opportunity on the production XAU replay", id)
 		}
 	}
-	t.Logf("canonical zone opportunities per strategy: %v", counts)
+	t.Logf("parity-technique zone opportunities per strategy: %v", counts)
 }

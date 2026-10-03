@@ -13,6 +13,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/mad"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/marketdata"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/momentum"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/session"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/state"
@@ -43,6 +44,12 @@ type SymbolWorker struct {
 	// keyed by opportunity ID - Phase 2's diff base so only a changed
 	// decision is republished (see arbitrate's own doc comment).
 	lastArbitration map[string]arbitration.Decision
+
+	// techniqueZoneAt/state cache the parity-tested technique population by
+	// its latest primary closed bar. Other timeframe events reuse it.
+	techniqueZoneAt    int64
+	techniqueZoneValid bool
+	techniqueZoneState zone.ZoneState
 }
 
 // NewSymbolWorker returns a worker for symbol with an empty SymbolState
@@ -317,6 +324,9 @@ func (w *SymbolWorker) rebuildContext() {
 			lastATR = atrSeries[len(atrSeries)-1]
 		}
 		zoneState, _ := w.state.Zone.Get(tf)
+		if tf == w.settings.PrimaryTimeframe {
+			zoneState = w.techniqueZones(zoneState)
+		}
 		trendState, _ := w.state.Trendline.Get(tf)
 		keyLevelState, _ := w.state.KeyLevel.Get(tf)
 		sessionState, _ := w.state.Session.Get(tf)
@@ -325,9 +335,24 @@ func (w *SymbolWorker) rebuildContext() {
 			Candles: w.state.History.For(tf).Snapshot(), Structure: structState, Liquidity: liqState, Zones: zoneState,
 			Trendline: trendState, KeyLevel: keyLevelState, Session: sessionState, Fib: fibState, ATR: lastATR,
 			ATRSeries: atrSeries, RegimeConfig: w.settings.Regime, MADConfig: w.settings.MAD, Geometry: w.settings.Geometry,
+			Momentum: momentum.Classify(w.state.History.For(tf).Snapshot(), atrSeries, w.settings.Momentum),
 		}
 	}
 	w.state.Context = context.Build(w.state.Symbol, w.settings.PrimaryTimeframe, perTF)
+}
+
+func (w *SymbolWorker) techniqueZones(original zone.ZoneState) zone.ZoneState {
+	candles := w.state.History.For(w.settings.PrimaryTimeframe).Snapshot()
+	if len(candles) == 0 {
+		return original
+	}
+	last := candles[len(candles)-1].Time
+	if w.techniqueZoneValid && w.techniqueZoneAt == last {
+		return w.techniqueZoneState
+	}
+	w.techniqueZoneState = techniqueZoneState(candles, original, w.settings.TechniqueZones)
+	w.techniqueZoneAt, w.techniqueZoneValid = last, true
+	return w.techniqueZoneState
 }
 
 // technicalContext assembles the policy-input facts for the bar that just

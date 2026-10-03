@@ -28,12 +28,46 @@ func ApplyInstrument(settings *Settings, doc *config.Document, symbol string) er
 	settings.InstrumentStopMinPips = stopMinPips
 	settings.InstrumentStopMaxPips = stopMaxPips
 	settings.InstrumentStopEnvelopeConfigured = true
+	settings.TechniqueZones.Technique.PipSize = geometry.PipSize
+	if entryMax, ok, err := doc.InstrumentValue(symbol, "price_scale", "fvg_entry_max_width_price"); err != nil {
+		return err
+	} else if ok {
+		switch v := entryMax.(type) {
+		case float64:
+			settings.TechniqueZones.Technique.FVGEntryMaxWidthPrice = v
+		case int:
+			settings.TechniqueZones.Technique.FVGEntryMaxWidthPrice = float64(v)
+		default:
+			return fmt.Errorf("instrument %s: fvg_entry_max_width_price must be a number, got %T", symbol, entryMax)
+		}
+	}
 	settings.DefendedLevels = levels
 	settings.DefendedLevelBuffer = buffer
 	if err := applyTechniqueGeometry(settings, doc, symbol); err != nil {
 		return err
 	}
+	applyParityCRT(settings)
 	return applyKeyLevelOverrides(settings, doc, symbol)
+}
+
+// applyParityCRT supplies the per-instrument geometry required by the exact
+// Go port of Python CRT. This is unconditional behavior, not a mode switch.
+func applyParityCRT(settings *Settings) {
+	for i := range settings.Strategies {
+		if settings.Strategies[i].ID != "crt" {
+			continue
+		}
+		params := make(map[string]any, len(settings.Strategies[i].Parameters)+5)
+		for k, v := range settings.Strategies[i].Parameters {
+			params[k] = v
+		}
+		params["technique_window_bars"] = float64(settings.TechniqueZones.WindowBars)
+		params["entry_max_width_price"] = settings.TechniqueZones.Technique.FVGEntryMaxWidthPrice
+		params["pip_size"] = settings.TechniqueZones.Technique.PipSize
+		params["reaction_lookback_bars"] = 3.0
+		params["engulfing_minimum_range_atr"] = 0.5
+		settings.Strategies[i].Parameters = params
+	}
 }
 
 // techniqueStrategies are the zone strategies whose confirmed reactions pass

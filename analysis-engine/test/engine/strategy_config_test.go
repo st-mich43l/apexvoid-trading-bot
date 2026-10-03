@@ -18,8 +18,8 @@ func TestStrategyConfigsFromConfigEnablesTheCompleteCatalogForShadow(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(configs) != 19 {
-		t.Fatalf("got %d strategy configs, want 19 approved V2 strategies", len(configs))
+	if len(configs) != 20 {
+		t.Fatalf("got %d strategy configs, want 20 approved V2 strategies", len(configs))
 	}
 	for _, cfg := range configs {
 		if cfg.Version != "v2" {
@@ -31,7 +31,7 @@ func TestStrategyConfigsFromConfigEnablesTheCompleteCatalogForShadow(t *testing.
 	}
 }
 
-func TestAll19StrategiesHaveConcreteFactoriesAndValidProductionConfig(t *testing.T) {
+func TestAll20StrategiesHaveConcreteFactoriesAndValidProductionConfig(t *testing.T) {
 	repoRoot := filepath.Join("..", "..", "..")
 	doc, err := config.ResolveDocument(filepath.Join(repoRoot, "config", "apexvoid.yml"))
 	if err != nil {
@@ -45,6 +45,6 @@ func TestAll19StrategiesHaveConcreteFactoriesAndValidProductionConfig(t *testing
 		settings.Strategies[i].Enabled = true
 	}
 	if _, err := engine.NewSymbolWorker("XAU", settings, nil, nil); err != nil {
-		t.Fatalf("the complete 19-strategy catalog must construct from canonical config: %v", err)
+		t.Fatalf("the complete 20-strategy catalog must construct from canonical config: %v", err)
 	}
 }

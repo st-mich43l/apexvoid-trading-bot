@@ -2,7 +2,7 @@
 
 > Generated from the canonical configuration catalog (`app.configuration.environment_contract`). Do not edit manually.
 
-- Contract fingerprint: `65972ed8d14066facd59e4f48be769f172df3e363dc82902776e434405bf7de0`
+- Contract fingerprint: `c416f680bced2bc885e143326037078c044036c6462568cfd8bd0a1ebbeb0e89`
 - Environment-bound fields: `572`
 - Deprecated aliases: `21`
 
@@ -69,7 +69,7 @@ Secret values are never emitted; secret defaults render as `<redacted>`.
 | `AUTO_TRADE_EXECUTION_ZONE_MAX_WIDTH_ATR` | `execution.policy.execution_zone_max_width_atr` | `float` | no | yes | — | `2.0` |
 | `AUTO_TRADE_EXECUTION_ZONE_MAX_WIDTH_PIPS` | `execution.policy.execution_zone_max_width_pips` | `float` | no | yes | — | `100.0` |
 | `AUTO_TRADE_EXPECTED_BROKER` | `contract.account.expected_broker` | `string` | no | yes | `CTRADER_EXPECTED_BROKER` | `fpmarkets` |
-| `AUTO_TRADE_FADE_SCALP_ENABLED` | `strategies.scalp.fade_scalp_enabled` | `bool` | no | no | — | `False` |
+| `AUTO_TRADE_FADE_SCALP_ENABLED` | `strategies.scalp.fade_scalp_enabled` | `bool` | no | no | — | `True` |
 | `AUTO_TRADE_FLIP_CONFIRM_TIMEOUT_SECONDS` | `lifecycle.range_flip.confirm_timeout_seconds` | `int` | no | no | — | `30` |
 | `AUTO_TRADE_FLIP_EXIT_BUFFER_PIPS` | `execution.policy.flip_exit_buffer_pips` | `int` | no | no | — | `10` |
 | `AUTO_TRADE_FLIP_ZONE_ENABLED` | `strategies.zone.flip.enabled` | `bool` | no | no | — | `True` |

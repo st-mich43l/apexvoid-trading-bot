@@ -45,6 +45,13 @@ func ParseReactionConfig(params map[string]any) (ReactionConfig, error) {
 // lookback+1 back from the latest. Bars before notBefore (when the structure
 // came into existence) can be neither touch nor confirmation.
 func ConfirmReaction(tf *analysiscontext.TimeframeContext, zoneID string, direction market.Direction, low, high, atr float64, notBefore int64, cfg ReactionConfig) *opportunity.ReactionConfirmation {
+	return ConfirmReactionWithLookbacks(tf, zoneID, direction, low, high, atr, notBefore, cfg.LookbackBars, cfg.LookbackBars, cfg.EngulfingMinimumRangeATR)
+}
+
+// ConfirmReactionWithLookbacks preserves Range Edge's legacy distinction:
+// an established barrier may have an older qualifying touch while the actual
+// confirmation still has to be recent.
+func ConfirmReactionWithLookbacks(tf *analysiscontext.TimeframeContext, zoneID string, direction market.Direction, low, high, atr float64, notBefore int64, touchLookback, confirmationLookback int, engulfingMinimumRangeATR float64) *opportunity.ReactionConfirmation {
 	if tf == nil || len(tf.Candles) == 0 {
 		return nil
 	}
@@ -53,7 +60,7 @@ func ConfirmReaction(tf *analysiscontext.TimeframeContext, zoneID string, direct
 	if direction == market.Sell {
 		side = "SELL"
 	}
-	earliest := len(candles) - cfg.LookbackBars - 1
+	earliest := len(candles) - confirmationLookback - 1
 	if earliest < 0 {
 		earliest = 0
 	}
@@ -64,9 +71,9 @@ func ConfirmReaction(tf *analysiscontext.TimeframeContext, zoneID string, direct
 	params := reaction.Params{
 		MinIndex:  minIndex,
 		Direction: side, Low: low, High: high,
-		TouchLookback: cfg.LookbackBars,
-		HasCHoCH:      recentCHoCH(tf.Structure.Breaks, direction, candles[earliest].Time),
-		ATR:           atr, EngulfingMinimumRangeATR: cfg.EngulfingMinimumRangeATR,
+		TouchLookback: touchLookback, ConfirmLookback: confirmationLookback,
+		HasCHoCH: recentCHoCH(tf.Structure.Breaks, direction, candles[earliest].Time),
+		ATR:      atr, EngulfingMinimumRangeATR: engulfingMinimumRangeATR,
 	}
 	confirmation := reaction.Evaluate(candles, params)
 	if confirmation == nil {

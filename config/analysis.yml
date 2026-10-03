@@ -86,8 +86,8 @@ analysis:
   # An enabled entry without a compiled factory
   # fails analysis-engine startup; it cannot silently become a no-op.
   #
-  # `confluence_zone` is the one compositional exception, so this has 19
-  # entries: 18 independent strategies plus Confluence Zone.
+  # `confluence_zone` is the one compositional exception, so this has 20
+  # entries: 19 independent strategies plus Confluence Zone.
   #
   # Phase S7 implemented and enabled the first 7: key_level, session_level,
   # supply, demand, order_block, fvg, flip_zone. Each strategy owns its own
@@ -118,7 +118,7 @@ analysis:
   #   expiry_hours — this strategy's own technical SETUP_EXPIRED window,
   #     distinct from Algo Bot's own execution-age policy; 24h is one
   #     trading day.
-  # S11 completed concrete factories for all 19 registry entries. Every
+  # All 20 registry entries have concrete Go factories. Every
   # strategy is enabled for the live Kafka opportunity stream; Algo Bot
   # consumes those events and applies execution policy before publishing V8.
   strategies:
@@ -281,11 +281,20 @@ analysis:
     range_edge:
       version: v2
       enabled: true
-      lookback_bars: 24
-      minimum_rejections: 2
-      edge_tolerance_atr: 0.2
+      lookback_bars: 48
+      minimum_touches: 2
+      minimum_wick_rejections: 1
+      break_closes: 2
+      cluster_atr: 0.25
+      entry_tolerance_atr: 0.25
+      minimum_wick_fraction: 0.25
+      minimum_width_atr: 1.0
+      maximum_width_atr: 6.0
+      minimum_room_atr: 0.75
       invalidation_buffer_atr: 0.25
       expiry_hours: 4.0
+      reaction_lookback_bars: 3
+      engulfing_minimum_range_atr: 0.5
     box_breakout:
       version: v2
       enabled: true
@@ -299,18 +308,39 @@ analysis:
     momentum_ride:
       version: v2
       enabled: true
-      minimum_body_atr: 0.5
+      minimum_body_fraction: 0.6
       maximum_overlap_fraction: 0.35
       invalidation_buffer_atr: 0.25
       minimum_target_distance_atr: 1.0
       expiry_hours: 4.0
+      maximum_entry_atr: 2.0
+      proximal_band_atr: 0.5
+      require_momentum_va: false
+      momentum_opposition_tolerance: 0.15
     snap_back:
       version: v2
       enabled: true
       extension_atr: 2.0
       invalidation_buffer_atr: 0.25
-      target_fraction: 0.5
+      target_r: 2.0
       expiry_hours: 4.0
+      maximum_entry_atr: 2.0
+      proximal_band_atr: 0.5
+      extension_source: impulse
+      strict_premium_discount: true
+      reaction_lookback_bars: 3
+      engulfing_minimum_range_atr: 0.5
+    fade_scalp:
+      version: v2
+      enabled: true
+      proximal_band_atr: 0.5
+      invalidation_buffer_atr: 0.25
+      target_r: 2.0
+      expiry_hours: 4.0
+      chop_edge_fraction: 0.25
+      strict_premium_discount: true
+      reaction_lookback_bars: 3
+      engulfing_minimum_range_atr: 0.5
     liquidity_sweep:
       version: v2
       enabled: true
