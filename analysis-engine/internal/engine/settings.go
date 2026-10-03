@@ -38,6 +38,7 @@ type Settings struct {
 	Regime           regime.Config
 	MAD              mad.Config
 	Arbitration      arbitration.Config
+	TechniqueZones   TechniqueZoneSettings
 	StopEnvelope     StopEnvelopeConfig
 	Strategies       []strategy.Config
 	HistoryDepths    map[market.Timeframe]int
@@ -160,13 +161,18 @@ func LoadSettings(doc *config.Document, primary market.Timeframe, allowReplaceFo
 	if err != nil {
 		return Settings{}, err
 	}
-	return Settings{
+	settings := Settings{
 		Candle: candle.DefaultConfig(), Confluence: confluenceConfig, ATR: atr, Structure: structureSettings, Liquidity: liquidityConfig, Zone: zoneConfig,
 		Trendline: trendlineConfig, KeyLevel: keyLevelConfig, Session: sessionConfig, Fib: fibConfig, Momentum: momentumConfig,
-		Arbitration: arbitrationConfig, Regime: regimeConfig, MAD: madConfig, StopEnvelope: stopEnvelopeConfig, Strategies: strategyConfigs,
+		Arbitration: arbitrationConfig, Regime: regimeConfig, MAD: madConfig, TechniqueZones: productionTechniqueZoneSettings(), StopEnvelope: stopEnvelopeConfig, Strategies: strategyConfigs,
 		HistoryDepths: depths, PrimaryTimeframe: primary,
 		AllowReplaceForming: allowReplaceForming,
 		ConfigVersion:       configProvenance.Version,
 		ConfigFingerprint:   configProvenance.Fingerprint,
-	}, nil
+	}
+	// Seed CRT with the canonical defaults so construction remains fail-closed
+	// before a symbol is attached. ApplyInstrument replaces the two geometry
+	// values with the concrete instrument values in production.
+	applyParityCRT(&settings)
+	return settings, nil
 }

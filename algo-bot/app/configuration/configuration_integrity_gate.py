@@ -69,13 +69,15 @@ BASELINE = {
   # selectors: authority mode, arbitration mode, thesis-correlation mode and
   # stop-envelope mode. The corresponding environment surface lost three
   # entries because one selector was config-file-only.
-  "catalog_entry_count": 689,
-  "configurable_count": 582,
+  # 2026-10-02 Go behavioral completion removed the obsolete Python-only
+  # displacement override lookback after Go became the sole technical owner.
+  "catalog_entry_count": 688,
+  "configurable_count": 581,
   "protocol_constant_count": 10,
   "algorithm_constant_count": 97,
-  "python_projection_count": 639,
+  "python_projection_count": 638,
   "ctrader_only_count": 50,
-  "environment_entry_count": 573,
+  "environment_entry_count": 572,
   "deprecated_alias_count": 21,
   "shared_count": 100,
 }

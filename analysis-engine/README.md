@@ -19,7 +19,7 @@ why each package boundary here is drawn where it is.
 The live path includes:
 
 - canonical V3 configuration, market history, ATR, structure and liquidity;
-- zone construction/lifecycle and all 19 configured Go strategy factories;
+- zone construction/lifecycle and all 20 configured Go strategy factories;
 - technical opportunity Kafka publication, lifecycle, arbitration and
   technical context (including candle-confirmation evidence);
 - Redis market-data ingestion, production telemetry, replay and parity tests.

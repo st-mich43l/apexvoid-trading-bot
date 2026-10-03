@@ -8,9 +8,9 @@ import (
 )
 
 // Family classification mirrors algo-bot's strategy_taxonomy.py exactly,
-// but keyed on Go's own 19 catalog IDs (opportunity.Candidate.Strategy)
+// but keyed on Go's own 20 catalog IDs (opportunity.Candidate.Strategy)
 // instead of the sprawling legacy display-name taxonomy with its many
-// aliases — Go only ever produces these 19 IDs, so it needs none of
+// aliases — Go only ever produces these 20 IDs, so it needs none of
 // that. Membership verified against a live catalog dump: REACTION_
 // STRATEGIES = {Key Level, Session Level, Trendline}; the scalp-room-
 // synced set is RANGE_STRATEGIES (Range Edge Scalp is the only Go-
@@ -32,7 +32,7 @@ var m1ScalpStopStrategies = map[opportunity.StrategyID]bool{
 // rangeRoomSyncedStrategies use execution.range.* — algo-bot's own
 // RANGE_STRATEGIES family (Go only ever emits range_edge from it).
 var rangeRoomSyncedStrategies = map[opportunity.StrategyID]bool{
-	"range_edge": true,
+	"range_edge": true, "fade_scalp": true,
 }
 
 // computeStopEnvelope mirrors algo-bot's stop_bounds_for_reaction_room

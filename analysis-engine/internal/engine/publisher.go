@@ -446,13 +446,40 @@ func (p *OpportunityPublisher) Run(ctx context.Context) {
 			)
 		} else {
 			candidate := job.Transition.Record.Candidate
+			reactionPattern, touchAt, confirmationAt := "", int64(0), int64(0)
+			if candidate.Reaction != nil {
+				reactionPattern, touchAt, confirmationAt = candidate.Reaction.Pattern, candidate.Reaction.TouchBarTime, candidate.Reaction.ConfirmationBarTime
+			}
+			confluence, sessionContext, htfRelationship := 0, false, "unavailable"
+			if candidate.Technical != nil && candidate.Technical.Confluence != nil {
+				confluence = candidate.Technical.Confluence.SelectedStars
+				sessionContext = candidate.Technical.Confluence.Factors.SessionContext
+			}
+			if candidate.Technical != nil && len(candidate.Technical.HigherTimeframes) > 0 {
+				htfRelationship = "counter_bias"
+				if candidate.Technical.HigherTimeframes[0].Direction == candidate.Direction {
+					htfRelationship = "with_bias"
+				}
+			}
 			log.Info("opportunity published",
 				"symbol", job.Symbol, "strategy", candidate.Strategy, "direction", candidate.Direction,
 				"opportunity_id", candidate.ID, "transition", string(job.Transition.Kind),
+				"structural_id", candidate.StructuralID, "evidence", evidenceCodes(candidate.Evidence),
+				"reaction_pattern", reactionPattern, "touch_at", touchAt, "confirmation_at", confirmationAt,
+				"htf_relationship", htfRelationship, "session_context", sessionContext, "confluence_stars", confluence,
+				"invalidation_price", candidate.Invalidation.Price, "invalidation_reason", candidate.Invalidation.Label,
 			)
 		}
 		p.ackFront(job)
 	}
+}
+
+func evidenceCodes(evidence []opportunity.Evidence) []string {
+	codes := make([]string, len(evidence))
+	for i := range evidence {
+		codes[i] = evidence[i].Code
+	}
+	return codes
 }
 
 // persist enforces write-ahead ordering: a job cannot reach Kafka until the
