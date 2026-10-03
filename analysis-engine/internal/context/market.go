@@ -17,6 +17,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/liquidity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/mad"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/momentum"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/regime"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/session"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
@@ -68,6 +69,7 @@ type TimeframeContext struct {
 	Fib       fib.State
 	Regime    regime.State
 	MAD       mad.Snapshot
+	Momentum  momentum.Result
 }
 
 // StructureContext is MarketContext's primary-timeframe structural view —
@@ -168,7 +170,7 @@ func Build(
 		madState := mad.Classify(input.Candles, input.ATR, 0, input.Session.Active, DeriveBias(input.Structure).Trend.String(), asia, lastCandleTime(input.Candles), input.MADConfig)
 		timeframes[tf] = &TimeframeContext{
 			Timeframe: tf, Candles: append([]market.Candle(nil), input.Candles...), Structure: input.Structure, Liquidity: input.Liquidity, Zones: input.Zones,
-			Trendline: input.Trendline, KeyLevel: input.KeyLevel, Session: input.Session, Fib: input.Fib, Regime: regimeState, MAD: madState,
+			Trendline: input.Trendline, KeyLevel: input.KeyLevel, Session: input.Session, Fib: input.Fib, Regime: regimeState, MAD: madState, Momentum: input.Momentum,
 		}
 	}
 
@@ -205,6 +207,7 @@ type TimeframeInput struct {
 	RegimeConfig regime.Config
 	MADConfig    mad.Config
 	MADAsia      *mad.AsiaRangeSeal
+	Momentum     momentum.Result
 	Geometry     market.Geometry
 }
 

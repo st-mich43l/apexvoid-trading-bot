@@ -101,13 +101,15 @@ BASELINE = {
   # only automatic analysis path rather than one selectable mode.
   # Reconciled with the current typed model after the merged FX/config
   # cleanup; deployment-owned YAML fields remain config-file-only below.
-  "entries": 689,
-  "configurable": 582,
+  # 2026-10-02 Go behavioral completion removed the obsolete Python-only
+  # displacement override lookback after Go became the sole technical owner.
+  "entries": 688,
+  "configurable": 581,
   "protocol": 10,
   "algorithm": 97,
-  "owners": {"python": 539, "shared": 100, "ctrader": 50},
-  "projection": 639,
-  "env": 573,
+  "owners": {"python": 538, "shared": 100, "ctrader": 50},
+  "projection": 638,
+  "env": 572,
   "deprecated_aliases": 21,
 }
 
@@ -115,6 +117,7 @@ BASELINE = {
 # Historical leaf_types still list them; skip rather than rewriting history.
 _INTENTIONAL_POST_V1_REMOVED_PATHS = frozenset({
   "analysis.measurements.regime_chop_alert_share",
+  "execution.policy.displacement_override_lookback_bars",
   "strategies.trend.pullback_enabled",
 })
 

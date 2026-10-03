@@ -133,8 +133,8 @@
     "zone_reconcile_mode": "shadow",
     "zone_scale_undersized_policy": "single_entry"
   },
-  "contract_fingerprint": "65972ed8d14066facd59e4f48be769f172df3e363dc82902776e434405bf7de0",
-  "effective_configuration_fingerprint": "721aca833cabdf0bb74655484582d43dde9f5aaffa74367ab8bc04fa2217ff39",
+  "contract_fingerprint": "c416f680bced2bc885e143326037078c044036c6462568cfd8bd0a1ebbeb0e89",
+  "effective_configuration_fingerprint": "5503b10ce54226a5fa8ad6814d4c597357e06de69a3d5ea28f375702dd289ac0",
   "feed": {
     "backfill_bars": 2000,
     "bar_quality_lookback": 6,
@@ -1026,7 +1026,7 @@
           }
         },
         "scalp": {
-          "fade_scalp_enabled": false,
+          "fade_scalp_enabled": true,
           "scalp_barrier_fallback_enabled": true,
           "scalp_barrier_fallback_min_confirmations": 1,
           "scalp_post_impulse_range_enabled": true,
@@ -2065,7 +2065,7 @@
           }
         },
         "scalp": {
-          "fade_scalp_enabled": false,
+          "fade_scalp_enabled": true,
           "scalp_barrier_fallback_enabled": true,
           "scalp_barrier_fallback_min_confirmations": 1,
           "scalp_post_impulse_range_enabled": true,
@@ -3080,7 +3080,7 @@
           }
         },
         "scalp": {
-          "fade_scalp_enabled": false,
+          "fade_scalp_enabled": true,
           "scalp_barrier_fallback_enabled": true,
           "scalp_barrier_fallback_min_confirmations": 1,
           "scalp_post_impulse_range_enabled": true,
@@ -4107,7 +4107,7 @@
           }
         },
         "scalp": {
-          "fade_scalp_enabled": false,
+          "fade_scalp_enabled": true,
           "scalp_barrier_fallback_enabled": true,
           "scalp_barrier_fallback_min_confirmations": 1,
           "scalp_post_impulse_range_enabled": true,
@@ -5118,7 +5118,7 @@
           }
         },
         "scalp": {
-          "fade_scalp_enabled": false,
+          "fade_scalp_enabled": true,
           "scalp_barrier_fallback_enabled": true,
           "scalp_barrier_fallback_min_confirmations": 1,
           "scalp_post_impulse_range_enabled": true,
@@ -6001,7 +6001,7 @@
           }
         },
         "scalp": {
-          "fade_scalp_enabled": false,
+          "fade_scalp_enabled": true,
           "scalp_barrier_fallback_enabled": true,
           "scalp_barrier_fallback_min_confirmations": 1,
           "scalp_post_impulse_range_enabled": true,
@@ -6902,7 +6902,7 @@
           }
         },
         "scalp": {
-          "fade_scalp_enabled": false,
+          "fade_scalp_enabled": true,
           "scalp_barrier_fallback_enabled": true,
           "scalp_barrier_fallback_min_confirmations": 1,
           "scalp_post_impulse_range_enabled": true,
@@ -7779,7 +7779,7 @@
           }
         },
         "scalp": {
-          "fade_scalp_enabled": false,
+          "fade_scalp_enabled": true,
           "scalp_barrier_fallback_enabled": true,
           "scalp_barrier_fallback_min_confirmations": 1,
           "scalp_post_impulse_range_enabled": true,
@@ -8668,7 +8668,7 @@
           }
         },
         "scalp": {
-          "fade_scalp_enabled": false,
+          "fade_scalp_enabled": true,
           "scalp_barrier_fallback_enabled": true,
           "scalp_barrier_fallback_min_confirmations": 1,
           "scalp_post_impulse_range_enabled": true,
@@ -9537,7 +9537,7 @@
           }
         },
         "scalp": {
-          "fade_scalp_enabled": false,
+          "fade_scalp_enabled": true,
           "scalp_barrier_fallback_enabled": true,
           "scalp_barrier_fallback_min_confirmations": 1,
           "scalp_post_impulse_range_enabled": true,

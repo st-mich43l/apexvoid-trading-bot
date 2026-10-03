@@ -258,7 +258,7 @@ auto_algo:
         # require_killzone: false
         # minimum_grade:
     scalp:
-      fade_scalp_enabled: false
+      fade_scalp_enabled: true
       scalp_barrier_fallback_enabled: true
       scalp_barrier_fallback_min_confirmations: 1
       scalp_post_impulse_range_enabled: true

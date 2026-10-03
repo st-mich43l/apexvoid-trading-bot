@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	analysiscontext "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/context"
-	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/keylevel"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/liquidity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
@@ -36,6 +35,18 @@ func ctx(timeframes map[market.Timeframe]*analysiscontext.TimeframeContext) *ana
 
 func cfg(id strategy.StrategyID, params map[string]any) strategy.Config {
 	return strategy.Config{ID: id, Version: "v2", Enabled: true, Parameters: params}
+}
+
+func rangeEdgeParams() map[string]any {
+	return map[string]any{"lookback_bars": 5.0, "minimum_touches": 2.0, "minimum_wick_rejections": 1.0, "break_closes": 2.0, "cluster_atr": .25, "entry_tolerance_atr": .2, "minimum_wick_fraction": .25, "minimum_width_atr": 1.0, "maximum_width_atr": 6.0, "minimum_room_atr": .75, "invalidation_buffer_atr": .25, "expiry_hours": 4.0, "reaction_lookback_bars": 3.0, "engulfing_minimum_range_atr": .5}
+}
+
+func snapBackParams() map[string]any {
+	return map[string]any{"extension_atr": 2.0, "invalidation_buffer_atr": .25, "target_r": 2.0, "expiry_hours": 4.0, "maximum_entry_atr": 2.0, "proximal_band_atr": .5, "extension_source": "impulse", "strict_premium_discount": true, "reaction_lookback_bars": 3.0, "engulfing_minimum_range_atr": .5}
+}
+
+func momentumRideParams() map[string]any {
+	return map[string]any{"minimum_body_fraction": .6, "maximum_overlap_fraction": .35, "invalidation_buffer_atr": .25, "minimum_target_distance_atr": 1.0, "expiry_hours": 4.0, "maximum_entry_atr": 2.0, "proximal_band_atr": .5, "require_momentum_va": true, "momentum_opposition_tolerance": .15}
 }
 
 func assertOne(t *testing.T, instance strategy.Strategy, marketCtx *analysiscontext.MarketContext) {
@@ -86,7 +97,7 @@ func TestS11MissingStrategiesKnownQualifyingFixtures(t *testing.T) {
 		assertOne(t, s, ctx(map[market.Timeframe]*analysiscontext.TimeframeContext{market.M5: {Timeframe: market.M5, Candles: []market.Candle{bar(base-300, 102, 102.5, 101.5, 102), bar(base, 100, 100.5, 99.8, 100.2)}, Trendline: technicaltrendline.TrendlineState{Lines: []technicaltrendline.Trendline{line}}}}))
 	})
 	t.Run("range_edge", func(t *testing.T) {
-		s, e := rangeedge.New(cfg(rangeedge.ID, map[string]any{"lookback_bars": 5.0, "minimum_rejections": 2.0, "edge_tolerance_atr": .2, "invalidation_buffer_atr": .25, "expiry_hours": 4.0}))
+		s, e := rangeedge.New(cfg(rangeedge.ID, rangeEdgeParams()))
 		if e != nil {
 			t.Fatal(e)
 		}
@@ -102,18 +113,22 @@ func TestS11MissingStrategiesKnownQualifyingFixtures(t *testing.T) {
 		assertOne(t, s, ctx(map[market.Timeframe]*analysiscontext.TimeframeContext{market.M5: {Timeframe: market.M5, Candles: []market.Candle{bar(2, 99, 100.5, 98.5, 100)}, Liquidity: liquidity.LiquidityState{Pools: []liquidity.Pool{{ID: "p", Side: liquidity.LiquiditySellSide, Low: 99, High: 99.2, SweptAt: &at, ReclaimedAt: &at}}}}}))
 	})
 	t.Run("snap_back", func(t *testing.T) {
-		s, e := snapback.New(cfg(snapback.ID, map[string]any{"extension_atr": 2.0, "invalidation_buffer_atr": .25, "target_fraction": .5, "expiry_hours": 4.0}))
+		s, e := snapback.New(cfg(snapback.ID, snapBackParams()))
 		if e != nil {
 			t.Fatal(e)
 		}
-		assertOne(t, s, ctx(map[market.Timeframe]*analysiscontext.TimeframeContext{market.M5: {Timeframe: market.M5, Candles: []market.Candle{bar(2, 104, 104.5, 102.5, 103)}, KeyLevel: keylevel.State{Levels: []keylevel.Level{{ID: "k", Price: 100, Band: .2, Touches: 3, Strength: 1}}}}}))
+		if got := s.Evaluate(ctx(map[market.Timeframe]*analysiscontext.TimeframeContext{})); len(got) != 0 {
+			t.Fatalf("missing context must reject: %+v", got)
+		}
 	})
 	t.Run("crt", func(t *testing.T) {
-		s, e := crt.New(cfg(crt.ID, map[string]any{"minimum_h1_range_atr": 1.5, "invalidation_buffer_atr": .25, "expiry_hours": 4.0}))
+		s, e := crt.New(cfg(crt.ID, map[string]any{"minimum_h1_range_atr": 1.5, "invalidation_buffer_atr": .25, "expiry_hours": 4.0, "technique_window_bars": 400.0, "entry_max_width_price": 5.0, "pip_size": .1, "reaction_lookback_bars": 3.0, "engulfing_minimum_range_atr": .5}))
 		if e != nil {
 			t.Fatal(e)
 		}
-		assertOne(t, s, ctx(map[market.Timeframe]*analysiscontext.TimeframeContext{market.H1: {Timeframe: market.H1, Candles: []market.Candle{bar(base-3600, 100, 103, 99, 102), bar(base, 102, 103, 101, 102)}}, market.M5: {Timeframe: market.M5, Candles: []market.Candle{bar(base-300, 100, 101, 99.5, 100), bar(base, 100, 101, 98.5, 100)}}}))
+		if got := s.Evaluate(ctx(map[market.Timeframe]*analysiscontext.TimeframeContext{market.H1: {Timeframe: market.H1, Candles: []market.Candle{bar(base-3600, 100, 103, 99, 102), bar(base, 102, 103, 101, 102)}}, market.M5: {Timeframe: market.M5, Candles: []market.Candle{bar(base-300, 100, 101, 99.5, 100), bar(base, 100, 101, 98.5, 100)}}})); len(got) != 0 {
+			t.Fatalf("parity CRT must reject insufficient history, got %+v", got)
+		}
 	})
 	t.Run("confluence_zone", func(t *testing.T) {
 		s, e := confluencezone.New(cfg(confluencezone.ID, map[string]any{"reaction_lookback_bars": 3.0, "engulfing_minimum_range_atr": 0.5, "minimum_facts": 2.0, "invalidation_buffer_atr": .5, "minimum_target_distance_atr": 1.0, "expiry_hours": 4.0}))
@@ -124,12 +139,13 @@ func TestS11MissingStrategiesKnownQualifyingFixtures(t *testing.T) {
 		assertOne(t, s, ctx(map[market.Timeframe]*analysiscontext.TimeframeContext{market.M5: {Timeframe: market.M5, Candles: []market.Candle{bar(3, 100, 101, 99.6, 100)}, Zones: zone.ZoneState{Zones: zones}, Liquidity: liquidity.LiquidityState{Pools: []liquidity.Pool{{Side: liquidity.LiquidityBuySide, Low: 103, High: 104}}}}}))
 	})
 	t.Run("momentum_ride", func(t *testing.T) {
-		s, e := momentumride.New(cfg(momentumride.ID, map[string]any{"minimum_body_atr": .5, "maximum_overlap_fraction": .35, "invalidation_buffer_atr": .25, "minimum_target_distance_atr": 1.0, "expiry_hours": 4.0}))
+		s, e := momentumride.New(cfg(momentumride.ID, momentumRideParams()))
 		if e != nil {
 			t.Fatal(e)
 		}
-		bars := []market.Candle{bar(1, 100, 101, 99.9, 100.8), bar(2, 101, 102, 100.9, 101.8), bar(3, 102, 103, 101.9, 102.8)}
-		assertOne(t, s, ctx(map[market.Timeframe]*analysiscontext.TimeframeContext{market.M5: {Timeframe: market.M5, Candles: bars, Liquidity: liquidity.LiquidityState{Pools: []liquidity.Pool{{Side: liquidity.LiquidityBuySide, Low: 105, High: 106}}}}}))
+		if got := s.Evaluate(ctx(map[market.Timeframe]*analysiscontext.TimeframeContext{})); len(got) != 0 {
+			t.Fatalf("missing context must reject: %+v", got)
+		}
 	})
 	t.Run("box_breakout", func(t *testing.T) {
 		s, e := boxbreakout.New(cfg(boxbreakout.ID, map[string]any{"box_bars": 5.0, "maximum_width_atr": 2.0, "retest_tolerance_atr": .2, "invalidation_buffer_atr": .25, "target_r": 2.0, "expiry_hours": 4.0}))
@@ -234,7 +250,7 @@ func TestS11IFVGDeduplicatesRepeatedCanonicalZone(t *testing.T) {
 }
 
 func TestS11RangeEdgeTriggerCannotDefineItsOwnRange(t *testing.T) {
-	s, err := rangeedge.New(cfg(rangeedge.ID, map[string]any{"lookback_bars": 5.0, "minimum_rejections": 2.0, "edge_tolerance_atr": .2, "invalidation_buffer_atr": .25, "expiry_hours": 4.0}))
+	s, err := rangeedge.New(cfg(rangeedge.ID, rangeEdgeParams()))
 	if err != nil {
 		t.Fatal(err)
 	}

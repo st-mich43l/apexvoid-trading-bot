@@ -71,6 +71,7 @@ var knownIDs = []StrategyID{
 	"box_breakout",
 	"momentum_ride",
 	"snap_back",
+	"fade_scalp",
 	"liquidity_sweep",
 	"range_sweep",
 	"impulse_pullback",
