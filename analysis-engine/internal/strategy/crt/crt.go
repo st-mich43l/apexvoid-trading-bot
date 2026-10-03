@@ -1,12 +1,12 @@
-// Package crt implements the approved H1 candle-range sweep and M5 reclaim
-// thesis. The H1 impulse candle owns the range; M5 confirms the trade.
+// Package crt implements the frozen-Python-parity H1 candle-range sweep and
+// M5 reclaim thesis inside the causal Go strategy runtime.
 package crt
 
 import (
 	"fmt"
-	"math"
 
 	analysiscontext "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/context"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/legacyzone"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy"
@@ -18,6 +18,9 @@ const Version = "v2"
 
 type Strategy struct {
 	impulseATR, invalidationATR, expiryHours float64
+	windowBars                               int
+	entryMaxWidthPrice, pipSize              float64
+	reaction                                 strategyutil.ReactionConfig
 	fingerprint                              string
 }
 
@@ -26,64 +29,81 @@ func New(c strategy.Config) (strategy.Strategy, error) {
 		return nil, fmt.Errorf("crt: wrong ID")
 	}
 	s := &Strategy{fingerprint: strategyutil.Fingerprint(string(c.ID), c.Version, c.Parameters)}
-	for i, k := range []string{"minimum_h1_range_atr", "invalidation_buffer_atr", "expiry_hours"} {
-		v, e := strategyutil.Float(c.Parameters, k)
-		if e != nil {
-			return nil, e
+	for i, key := range []string{"minimum_h1_range_atr", "invalidation_buffer_atr", "expiry_hours"} {
+		value, err := strategyutil.Float(c.Parameters, key)
+		if err != nil {
+			return nil, err
 		}
-		*[]*float64{&s.impulseATR, &s.invalidationATR, &s.expiryHours}[i] = v
+		*[]*float64{&s.impulseATR, &s.invalidationATR, &s.expiryHours}[i] = value
 	}
-	if s.impulseATR <= 0 || s.invalidationATR <= 0 || s.expiryHours <= 0 {
+	var err error
+	if s.windowBars, err = strategyutil.Int(c.Parameters, "technique_window_bars"); err != nil {
+		return nil, err
+	}
+	if s.entryMaxWidthPrice, err = strategyutil.Float(c.Parameters, "entry_max_width_price"); err != nil {
+		return nil, err
+	}
+	if s.pipSize, err = strategyutil.Float(c.Parameters, "pip_size"); err != nil {
+		return nil, err
+	}
+	if s.reaction, err = strategyutil.ParseReactionConfig(c.Parameters); err != nil {
+		return nil, err
+	}
+	if s.impulseATR <= 0 || s.invalidationATR <= 0 || s.expiryHours <= 0 || s.windowBars < 50 || s.entryMaxWidthPrice <= 0 || s.pipSize <= 0 {
 		return nil, fmt.Errorf("crt: invalid parameters")
 	}
 	return s, nil
 }
-func (s *Strategy) ID() strategy.StrategyID { return ID }
-func (s *Strategy) RequiredTimeframes() []market.Timeframe {
-	return []market.Timeframe{market.H1, market.M5}
-}
+
+func (s *Strategy) ID() strategy.StrategyID                { return ID }
+func (s *Strategy) RequiredTimeframes() []market.Timeframe { return []market.Timeframe{market.M5} }
+
 func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Candidate {
-	h := ctx.Timeframes[market.H1]
-	m := ctx.Timeframes[market.M5]
-	atr := ctx.Volatility.ATR
-	if h == nil || m == nil || atr <= 0 || len(h.Candles) < 2 || len(m.Candles) < 2 {
+	h1, execTF := ctx.Timeframes[market.H1], ctx.Timeframes[market.M5]
+	if h1 == nil || execTF == nil || len(h1.Candles) < 20 || len(execTF.Candles) < 20 {
 		return nil
 	}
-	anchor := h.Candles[len(h.Candles)-2]
-	if anchor.Range() < s.impulseATR*atr {
-		return nil
+	exec := execTF.Candles
+	if len(exec) > s.windowBars {
+		exec = exec[len(exec)-s.windowBars:]
 	}
-	bar := m.Candles[len(m.Candles)-1]
-	direction := market.Direction("")
-	if bar.Low < anchor.Low && bar.Close > anchor.Low {
-		direction = market.Buy
-	} else if bar.High > anchor.High && bar.Close < anchor.High {
-		direction = market.Sell
+	h1ATR := legacyzone.ATRScalar(legacyzone.ATRSeries(h1.Candles, 14), 1)
+	execATR := legacyzone.ATRScalar(legacyzone.ATRSeries(exec, 14), 1)
+	crtSettings := legacyzone.ProductionCRTSettings()
+	crtSettings.MinATR = s.impulseATR
+	crtSettings.EntryMaxWidthPrice = s.entryMaxWidthPrice
+	techniqueSettings := legacyzone.ProductionTechniqueSettings()
+	techniqueSettings.PipSize = s.pipSize
+	var out []opportunity.Candidate
+	for _, instance := range legacyzone.CollectCRT(h1.Candles, exec, h1ATR, execATR, crtSettings, techniqueSettings) {
+		direction := market.Buy
+		invalidation := instance.StructuralLow - s.invalidationATR*execATR
+		target := instance.StructuralHigh
+		if instance.Side == "sell" {
+			direction = market.Sell
+			invalidation = instance.StructuralHigh + s.invalidationATR*execATR
+			target = instance.StructuralLow
+		}
+		setupKey := fmt.Sprintf("crt:%d", instance.H1Time)
+		reaction := strategyutil.ConfirmReaction(execTF, setupKey, direction, instance.StructuralLow, instance.StructuralHigh, execATR, instance.H1Time, s.reaction)
+		if reaction == nil {
+			continue
+		}
+		quality := strategyutil.Clamp01((instance.StructuralHigh-instance.StructuralLow)/(s.impulseATR*h1ATR) - .25)
+		candidate, err := strategyutil.Candidate(strategyutil.CandidateSpec{
+			ID: string(ID), Version: Version, SetupKey: setupKey, Symbol: ctx.Symbol, Direction: direction,
+			EntryLow: instance.Low, EntryHigh: instance.High, Invalidation: invalidation, InvalidationLabel: "crt_reclaim_failed",
+			Target: target, TargetLabel: "opposite_h1_range", Evidence: []string{"h1_impulse_range", "m5_range_sweep_reclaim", "python_parity_crt_geometry"},
+			Quality:  opportunity.StrategyQuality{Overall: quality, Components: map[string]float64{"h1_impulse": quality, "m5_reclaim": 1}},
+			FormedAt: instance.H1Time, ConfirmedAt: reaction.ConfirmationBarTime, ExpiryHours: s.expiryHours, Fingerprint: s.fingerprint,
+		})
+		if err != nil {
+			continue
+		}
+		// CollectCRT already proves a reaction. Re-evaluating through the shared
+		// contract attaches its exact touch/confirmation provenance.
+		candidate.Reaction = reaction
+		out = append(out, candidate)
 	}
-	if !direction.IsValid() {
-		return nil
-	}
-	anchorEdge := anchor.Low
-	entry := bar.Close
-	invalid := math.Min(bar.Low, anchor.Low) - s.invalidationATR*atr
-	target := anchor.High
-	if direction == market.Sell {
-		anchorEdge = anchor.High
-		invalid = math.Max(bar.High, anchor.High) + s.invalidationATR*atr
-		target = anchor.Low
-	}
-	// The objective is the opposite edge of the H1 range. If the reclaim bar
-	// already closed at or beyond it there is no reward left to publish.
-	if direction == market.Buy && float64(target) <= math.Max(entry, float64(anchorEdge)) {
-		return nil
-	}
-	if direction == market.Sell && float64(target) >= math.Min(entry, float64(anchorEdge)) {
-		return nil
-	}
-	q := strategyutil.Clamp01(anchor.Range()/(s.impulseATR*atr) - 0.25)
-	c, e := strategyutil.Candidate(strategyutil.CandidateSpec{ID: string(ID), Version: Version, SetupKey: fmt.Sprintf("crt:%d", anchor.Time), Symbol: ctx.Symbol, Direction: direction, EntryLow: math.Min(entry, float64(anchorEdge)), EntryHigh: math.Max(entry, float64(anchorEdge)), Invalidation: invalid, InvalidationLabel: "crt_reclaim_failed", Target: target, TargetLabel: "opposite_h1_range", Evidence: []string{"h1_impulse_range", "m5_range_sweep_reclaim"}, Quality: opportunity.StrategyQuality{Overall: q, Components: map[string]float64{"h1_impulse": q, "m5_reclaim": 1}}, FormedAt: anchor.Time, ConfirmedAt: bar.Time, ExpiryHours: s.expiryHours, Fingerprint: s.fingerprint})
-	if e != nil {
-		return nil
-	}
-	return []opportunity.Candidate{c}
+	return out
 }

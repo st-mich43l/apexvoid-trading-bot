@@ -129,6 +129,12 @@ DIVERGENCES: dict[str, dict] = {
     "kind": "new_surfaced", "expected": 3.0,
     "reason": "§8 — AnalysisMeasurementsConfig.max_merged_zone_atr Python schema default (unchanged value), now explicit.",
   },
+  "analysis.yml/analysis.confluence.scoring_version": {"kind": "new_surfaced", "expected": "v1", "reason": "Go-owned versioned confluence scorer; no legacy flat-file leaf."},
+  "analysis.yml/analysis.confluence.v2_star_three_ratio": {"kind": "new_surfaced", "expected": 0.585, "reason": "Go confluence V2 threshold retained for deterministic replay."},
+  "analysis.yml/analysis.confluence.v2_star_two_ratio": {"kind": "new_surfaced", "expected": 0.390, "reason": "Go confluence V2 threshold retained for deterministic replay."},
+  "analysis.yml/analysis.confluence.v2_zone_quality_weight": {"kind": "new_surfaced", "expected": 4.0, "reason": "Go confluence V2 zone-quality weight."},
+  "analysis.yml/analysis.confluence.v2_mad_score_weight": {"kind": "new_surfaced", "expected": 2.0, "reason": "Go confluence V2 MAD weight."},
+  "analysis.yml/analysis.fibonacci.confluence_weight": {"kind": "new_surfaced", "expected": 2.5, "reason": "Go-owned Fibonacci confluence weight; no legacy flat-file leaf."},
   # analysis.yml — Analysis Engine V2:
   # genuinely new Go-only leaves, no old trading-bot.yml OR Python-schema-
   # default precedent at all (unlike merge_overlap/max_merged_zone_atr

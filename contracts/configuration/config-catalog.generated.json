@@ -1,7 +1,7 @@
 {
   "catalog_version": 2,
-  "configuration_contract_fingerprint_sha256": "65972ed8d14066facd59e4f48be769f172df3e363dc82902776e434405bf7de0",
-  "configuration_document_fingerprint_sha256": "2f466d39ebae5c7fe13bb6616cd239ece785ee768b7b067d0f919586abc45cf1",
+  "configuration_contract_fingerprint_sha256": "c416f680bced2bc885e143326037078c044036c6462568cfd8bd0a1ebbeb0e89",
+  "configuration_document_fingerprint_sha256": "a7f91e2eb36ed8fa352e57ddedf975a070cf8eb322a96bf1f35e7372485fb0e5",
   "counts": {
     "algorithm_constants": 97,
     "configurable": 581,
@@ -21236,16 +21236,16 @@
       "catalog_version": 2,
       "configurable": true,
       "constraints": {},
-      "default": false,
+      "default": true,
       "default_contexts": [
         {
           "context": "python_schema",
-          "value": false
+          "value": true
         }
       ],
       "deprecated": false,
       "deprecated_aliases": [],
-      "description": "Retired automatic thesis; retained only for historical configuration compatibility.",
+      "description": "Admits the Go-owned equal-level sweep reversal thesis into execution policy.",
       "display_id": "config:strategies.scalp.fade_scalp_enabled",
       "evidence_notes": [],
       "introduced_in": "config-catalog-v2",
@@ -25700,6 +25700,6 @@
       "validation_summary": "Kafka contract topic; changes require coordinated deployment."
     }
   ],
-  "source_fingerprint_sha256": "65972ed8d14066facd59e4f48be769f172df3e363dc82902776e434405bf7de0",
+  "source_fingerprint_sha256": "c416f680bced2bc885e143326037078c044036c6462568cfd8bd0a1ebbeb0e89",
   "source_model": "app.configuration.models.root.ApexVoidConfig"
 }

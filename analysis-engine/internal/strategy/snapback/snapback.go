@@ -1,5 +1,5 @@
-// Package snapback implements extension mean reversion from the nearest
-// canonical zone or key level. It does not require a liquidity sweep.
+// Package snapback restores the frozen Python Snap Back thesis on top of the
+// canonical Go structure/zone/liquidity books.
 package snapback
 
 import (
@@ -17,8 +17,12 @@ const ID strategy.StrategyID = "snap_back"
 const Version = "v2"
 
 type Strategy struct {
-	extensionATR, invalidationATR, targetFraction, expiryHours float64
-	fingerprint                                                string
+	extensionATR, invalidationATR, targetR, expiryHours float64
+	maximumEntryATR, proximalBandATR                    float64
+	extensionSource                                     string
+	strictPD                                            bool
+	reaction                                            strategyutil.ReactionConfig
+	fingerprint                                         string
 }
 
 func New(cfg strategy.Config) (strategy.Strategy, error) {
@@ -26,69 +30,121 @@ func New(cfg strategy.Config) (strategy.Strategy, error) {
 		return nil, fmt.Errorf("snapback: wrong ID")
 	}
 	s := &Strategy{fingerprint: strategyutil.Fingerprint(string(cfg.ID), cfg.Version, cfg.Parameters)}
-	vals := []*float64{&s.extensionATR, &s.invalidationATR, &s.targetFraction, &s.expiryHours}
-	keys := []string{"extension_atr", "invalidation_buffer_atr", "target_fraction", "expiry_hours"}
-	for i, k := range keys {
-		v, e := strategyutil.Float(cfg.Parameters, k)
-		if e != nil {
-			return nil, e
+	for key, dst := range map[string]*float64{
+		"extension_atr": &s.extensionATR, "invalidation_buffer_atr": &s.invalidationATR,
+		"target_r": &s.targetR, "expiry_hours": &s.expiryHours, "maximum_entry_atr": &s.maximumEntryATR,
+		"proximal_band_atr": &s.proximalBandATR,
+	} {
+		v, err := strategyutil.Float(cfg.Parameters, key)
+		if err != nil {
+			return nil, err
 		}
-		*vals[i] = v
+		*dst = v
 	}
-	if s.extensionATR <= 0 || s.invalidationATR <= 0 || s.targetFraction <= 0 || s.targetFraction > 1 || s.expiryHours <= 0 {
+	var ok bool
+	if s.extensionSource, ok = cfg.Parameters["extension_source"].(string); !ok || (s.extensionSource != "impulse" && s.extensionSource != "zone") {
+		return nil, fmt.Errorf("snapback: extension_source must be impulse or zone")
+	}
+	if s.strictPD, ok = cfg.Parameters["strict_premium_discount"].(bool); !ok {
+		return nil, fmt.Errorf("snapback: strict_premium_discount must be boolean")
+	}
+	var err error
+	if s.reaction, err = strategyutil.ParseReactionConfig(cfg.Parameters); err != nil {
+		return nil, err
+	}
+	if s.extensionATR <= 0 || s.invalidationATR <= 0 || s.targetR <= 0 || s.expiryHours <= 0 || s.maximumEntryATR <= 0 || s.proximalBandATR <= 0 {
 		return nil, fmt.Errorf("snapback: invalid parameters")
 	}
 	return s, nil
 }
+
 func (s *Strategy) ID() strategy.StrategyID                { return ID }
 func (s *Strategy) RequiredTimeframes() []market.Timeframe { return []market.Timeframe{market.M5} }
+
 func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Candidate {
 	tf := ctx.Timeframes[market.M5]
 	bar, ok := strategyutil.LastBar(ctx, market.M5)
 	atr := ctx.Volatility.ATR
-	if tf == nil || !ok || atr <= 0 {
+	direction := strategyutil.StructuralDirection(ctx)
+	if tf == nil || !ok || atr <= 0 || !direction.IsValid() || !strategyutil.PremiumDiscountAllows(tf, direction, s.strictPD) {
 		return nil
 	}
-	anchor := 0.0
-	anchorID := ""
-	best := math.Inf(1)
-	for _, level := range tf.KeyLevel.Levels {
-		d := math.Abs(bar.Close - float64(level.Price))
-		if d < best {
-			best, anchor, anchorID = d, float64(level.Price), level.ID
-		}
-	}
-	if anchorID == "" || best < s.extensionATR*atr {
+
+	low, high, structuralID, formedAt, touches := 0.0, 0.0, "", int64(0), 0
+	structuralSource := "supply_demand"
+	zones := strategyutil.LiveZones(tf, direction, bar.Close, atr, s.maximumEntryATR)
+	if len(zones) > 0 {
+		z := zones[0]
+		low, high, structuralID, formedAt, touches = float64(z.Low), float64(z.High), z.ID, z.OriginTime, z.TouchCount
+	} else if level := strategyutil.NearestValidLevel(tf, direction, bar.Close); level != nil {
+		low, high = strategyutil.EntryBandForLevel(*level, atr, s.proximalBandATR)
+		structuralID, formedAt, touches, structuralSource = level.ID, level.AnchorTime, level.Touches, "key_level"
+	} else {
 		return nil
 	}
-	direction := market.Sell
-	if bar.Close < anchor {
-		direction = market.Buy
-	}
-	if direction == market.Buy && !bar.IsBullish() {
+
+	distance := distanceFromSource(tf, direction, bar.Close, low, high, s.extensionSource)
+	if distance < s.extensionATR*atr {
 		return nil
 	}
-	if direction == market.Sell && !bar.IsBearish() {
+	grab := strategyutil.GrabForBand(tf, direction, low, high, 0)
+	if grab == nil {
 		return nil
 	}
-	invalid := bar.Low - s.invalidationATR*atr
+	reaction := strategyutil.ConfirmReaction(tf, structuralID, direction, low, high, atr, formedAt, s.reaction)
+	if reaction == nil {
+		return nil
+	}
+
+	invalid := low - s.invalidationATR*atr
+	entryReference := high
 	if direction == market.Sell {
-		invalid = bar.High + s.invalidationATR*atr
+		invalid, entryReference = high+s.invalidationATR*atr, low
 	}
-	target := bar.Close + (anchor-bar.Close)*s.targetFraction
-	q := strategyutil.Clamp01(best/(s.extensionATR*atr) - 1)
-	episodeStart := extensionEpisodeStart(tf.Candles, anchor, s.extensionATR*atr)
-	c, e := strategyutil.Candidate(strategyutil.CandidateSpec{ID: string(ID), Version: Version, SetupKey: fmt.Sprintf("snap:%s:%d", anchorID, episodeStart), Symbol: ctx.Symbol, Direction: direction, EntryLow: math.Min(bar.Open, bar.Close), EntryHigh: math.Max(bar.Open, bar.Close), Invalidation: invalid, InvalidationLabel: "extension_continued", Target: target, TargetLabel: "anchor_mean_reversion", Evidence: []string{"m5_extended_from_key_level", "m5_reversal_close"}, Quality: opportunity.StrategyQuality{Overall: q, Components: map[string]float64{"extension": q, "reversal": 1}}, FormedAt: episodeStart, ConfirmedAt: bar.Time, ExpiryHours: s.expiryHours, Fingerprint: s.fingerprint})
-	if e != nil {
+	risk := math.Abs(entryReference - invalid)
+	target := entryReference + s.targetR*risk
+	if direction == market.Sell {
+		target = entryReference - s.targetR*risk
+	}
+	quality := strategyutil.Clamp01(.45 + .1*math.Min(float64(touches), 3) + .15*boolScore(grab.Grade == "A") + .1*strategyutil.Clamp01(distance/(s.extensionATR*atr)-1))
+	evidence := []string{"legacy_snap_extension_" + s.extensionSource, "legacy_pd_location", "liquidity_grab_grade_" + grab.Grade, "structural_reaction_" + reaction.Pattern, "structural_source_" + structuralSource}
+	c, err := strategyutil.Candidate(strategyutil.CandidateSpec{ID: string(ID), Version: Version, SetupKey: "snap:" + structuralID, Symbol: ctx.Symbol, Direction: direction, EntryLow: low, EntryHigh: high, Invalidation: invalid, InvalidationLabel: "snap_back_structure_failed", Target: target, TargetLabel: "snap_back_reversion", Evidence: evidence, Quality: opportunity.StrategyQuality{Overall: quality, Components: map[string]float64{"extension": strategyutil.Clamp01(distance / (s.extensionATR * atr)), "liquidity_grade": .75 + .25*boolScore(grab.Grade == "A"), "reaction": 1}}, FormedAt: formedAt, ConfirmedAt: reaction.ConfirmationBarTime, ExpiryHours: s.expiryHours, Fingerprint: s.fingerprint})
+	if err != nil {
 		return nil
 	}
+	c.Reaction = reaction
 	return []opportunity.Candidate{c}
 }
 
-func extensionEpisodeStart(candles []market.Candle, anchor, threshold float64) int64 {
-	index := len(candles) - 1
-	for index > 0 && math.Abs(candles[index-1].Close-anchor) >= threshold {
-		index--
+func distanceFromSource(tf *analysiscontext.TimeframeContext, direction market.Direction, price, low, high float64, source string) float64 {
+	if source == "zone" {
+		return distanceToBand(price, low, high)
 	}
-	return candles[index].Time
+	for i := len(tf.Structure.Swings) - 1; i >= 0; i-- {
+		sw := tf.Structure.Swings[i]
+		if direction == market.Buy && sw.Kind.String() == "low" {
+			return math.Max(0, price-float64(sw.Price))
+		}
+		if direction == market.Sell && sw.Kind.String() == "high" {
+			return math.Max(0, float64(sw.Price)-price)
+		}
+	}
+	return distanceToBand(price, low, high)
+}
+
+func distanceToBand(price, low, high float64) float64 {
+	if price < low {
+		return low - price
+	}
+	if price > high {
+		return price - high
+	}
+	return 0
+}
+
+func boolScore(v bool) float64 {
+	if v {
+		return 1
+	}
+	return 0
 }
