@@ -214,7 +214,8 @@ public static class NativeRuntimeFactory
       var pipValue = OptionalDecimal(
         section,
         "contract.pip_value_per_lot",
-        (decimal)geometry.PipSize * RequiredDecimal(section, "contract.contract_units_per_lot", symbol)
+        (decimal)geometry.PipSize
+          * RequiredDecimal(section, "contract.contract_units_per_lot", symbol)
       );
       runtimes.Add(new InstrumentRuntime
       {
