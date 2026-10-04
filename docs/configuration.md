@@ -8,15 +8,13 @@ second non-secret configuration file.
 
 ## Categories
 
-- `runtime.yml`: service identity, timezone, logging, feed retention, and
-  runtime bootstrap policy.
-- `transport.yml`, `database.yml`, `telegram.yml`, `journal.yml`: service
-  connections and delivery.
+- `runtime.yml`: service identity, infrastructure connections, feed settings,
+  and logging.
 - `instruments.yml`: symbols, broker names, price geometry, and lookbacks.
 - `analysis.yml`: Go analysis inputs and technical strategy settings.
 - `auto-algo.yml`: Algo Bot execution policy, eligibility, lifecycle, and risk.
-- `manual-algo.yml`: operator-controlled manual workflow.
-- `execution.yml`: TradePlan and broker-execution contract settings.
+- `execution.yml`: TradePlan, broker-execution, manual workflow, and journal
+  policy settings.
 
 ## Authority boundaries
 
