@@ -114,12 +114,41 @@
           "required": [
             "mode"
           ]
+        },
+        "feed": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "backfill_bars": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "bars_window_max": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "bar_quality_lookback": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "bars_channel": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "backfill_bars",
+            "bar_quality_lookback",
+            "bars_channel",
+            "bars_window_max"
+          ]
         }
       },
       "required": [
         "broker",
         "environment",
         "execution_contract",
+        "feed",
         "logging",
         "timezone"
       ]
@@ -1730,6 +1759,10 @@
                 "add_require_risk_free": {
                   "type": "boolean"
                 },
+                "add_max_group_risk_pct": {
+                  "type": "number",
+                  "minimum": 0
+                },
                 "add_risk_fraction": {
                   "type": "number"
                 },
@@ -1749,18 +1782,24 @@
                 "post_impulse_risk_multiplier": {
                   "type": "number"
                 },
+                "risk_pct": {
+                  "type": "number",
+                  "minimum": 0
+                },
                 "range_max_risk_multiplier": {
                   "type": "number"
                 }
               },
               "required": [
+                "add_max_group_risk_pct",
                 "add_require_risk_free",
                 "add_risk_fraction",
                 "equity_table_version",
                 "mode",
                 "one_sided_range_risk_multiplier",
                 "post_impulse_risk_multiplier",
-                "range_max_risk_multiplier"
+                "range_max_risk_multiplier",
+                "risk_pct"
               ]
             },
             "tiers": {
@@ -2511,6 +2550,18 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "reaction_risk_leg": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "enabled"
+          ]
+        },
         "technique": {
           "type": "object",
           "additionalProperties": false,
@@ -2817,6 +2868,17 @@
                 "min_stop_pips": {
                   "type": "integer"
                 },
+                "pullback_enabled": {
+                  "type": "boolean"
+                },
+                "pullback_min_retrace": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "pullback_max_retrace": {
+                  "type": "number",
+                  "minimum": 0
+                },
                 "size_ratio": {
                   "type": "number"
                 },
@@ -2827,6 +2889,9 @@
               "required": [
                 "level_buffer_atr",
                 "min_stop_pips",
+                "pullback_enabled",
+                "pullback_max_retrace",
+                "pullback_min_retrace",
                 "size_ratio",
                 "stop_buffer_atr"
               ]
@@ -2992,6 +3057,7 @@
         "policy",
         "range",
         "reaction",
+        "reaction_risk_leg",
         "scaling",
         "stops",
         "targeting",
