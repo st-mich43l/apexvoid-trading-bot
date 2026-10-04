@@ -90,7 +90,7 @@ async def analysis_opportunity_consumer_loop() -> None:
     InvalidationTopic,
     ArbitrationTopic,
     bootstrap_servers=kafka.brokers,
-    client_id=kafka.algo_bot_client_id,
+    client_id=kafka.client_id.algo_bot,
     group_id=analysis_config.consumer_group,
     enable_auto_commit=False,
     auto_offset_reset="earliest",

@@ -1,8 +1,11 @@
 import json
+import sys
 from dataclasses import dataclass
+from types import SimpleNamespace
 
 import pytest
 
+from app.analysis_client import consumer as consumer_module
 from app.analysis_client.consumer import AnalysisOpportunityConsumer
 from app.analysis_client.models import OpportunityTopic
 from app.analysis_client.repository import LifecycleResult
@@ -94,3 +97,59 @@ async def test_terminal_events_reach_the_policy_in_go_mode():
   consumer = AnalysisOpportunityConsumer(repository, policy=policy)
   await consumer.process_record(_Record(InvalidationTopic, 1, 4, json.dumps(_invalidated()).encode()))
   assert policy.terminal == ["opp-1"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.no_database
+async def test_consumer_uses_canonical_runtime_kafka_client_id(monkeypatch):
+  captured = {}
+
+  class _KafkaConsumer:
+    def __init__(self, *topics, **kwargs):
+      captured["topics"] = topics
+      captured.update(kwargs)
+
+    async def start(self):
+      return None
+
+    async def stop(self):
+      return None
+
+  monkeypatch.setitem(
+    sys.modules,
+    "aiokafka",
+    SimpleNamespace(AIOKafkaConsumer=_KafkaConsumer, TopicPartition=object),
+  )
+  monkeypatch.setattr(
+    consumer_module,
+    "runtime_config",
+    SimpleNamespace(
+      analysis=SimpleNamespace(
+        technical_authority=SimpleNamespace(
+          consumer_enabled=True,
+          consumer_group="go-opportunities",
+        ),
+      ),
+      runtime=SimpleNamespace(
+        kafka=SimpleNamespace(
+          enabled=True,
+          brokers=["kafka:9092"],
+          client_id=SimpleNamespace(algo_bot="apexvoid-algo-bot"),
+        ),
+      ),
+    ),
+  )
+  monkeypatch.setattr(consumer_module, "PostgresAnalysisOpportunityRepository", lambda: object())
+  monkeypatch.setattr(consumer_module, "run_consumer_loop", lambda *args, **kwargs: _noop())
+  monkeypatch.setattr(
+    "app.autotrade.go_opportunity_policy.GoOpportunityPolicy",
+    lambda repository: object(),
+  )
+
+  async def _noop():
+    return None
+
+  await consumer_module.analysis_opportunity_consumer_loop()
+
+  assert captured["client_id"] == "apexvoid-algo-bot"
+  assert captured["bootstrap_servers"] == ["kafka:9092"]
