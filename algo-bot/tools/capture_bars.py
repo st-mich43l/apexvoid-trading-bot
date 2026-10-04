@@ -3,7 +3,7 @@
 Read-only: it issues ZREVRANGE reads through ``RedisOHLCSource`` and writes one
 JSON file. Nothing is modified in Redis. Run it on the host that owns the feed:
 
-  docker compose exec -T bot python -m app.scripts.capture_bars \\
+  docker compose exec -T bot python -m tools.capture_bars \\
       --symbol XAU --m5 1500 --m15 600 --h1 300 --out /tmp/xau-capture.json
 
 The file records when and from where it was taken; it never contains a
