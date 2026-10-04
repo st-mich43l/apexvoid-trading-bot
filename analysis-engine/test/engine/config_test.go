@@ -30,7 +30,7 @@ func TestZoneConfigFromConfigUsesCanonicalPhaseS3Leaves(t *testing.T) {
 		got.Lifecycle.MaxBreakEpisodes != 2 ||
 		got.Lifecycle.RetestMaxTouches != 30 ||
 		got.Lifecycle.EpsilonATR != 0.05 {
-		t.Fatalf("Lifecycle = %+v, want canonical Phase S3 values", got.Lifecycle)
+		t.Fatalf("Lifecycle = %+v, want canonical lifecycle values", got.Lifecycle)
 	}
 	if got.Relevance.ImmediateATR != 0.25 ||
 		got.Relevance.NearbyATR != 1.25 ||

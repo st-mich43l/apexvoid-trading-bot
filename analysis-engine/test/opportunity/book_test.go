@@ -189,7 +189,7 @@ func TestBook_RejectsIdentityCollisionAndProtectsStoredCopies(t *testing.T) {
 }
 
 // TestBook_ReObservationWithDriftedTechnicalFieldsIsNotAFalseCollision is
-// a direct regression guard for the Phase S8 bug this fixed: a real
+// a direct regression guard for the lifecycle bug this fixed: a real
 // strategy's Entry/Invalidation/CreatedAt legitimately differ between two
 // evaluations of the SAME still-valid setup (ATR-relative invalidation,
 // touch/swing-anchored creation references), while DeterministicID stays

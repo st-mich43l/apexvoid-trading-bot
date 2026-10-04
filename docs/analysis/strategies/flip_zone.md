@@ -1,4 +1,4 @@
-# Flip Zone (Phase S7)
+# Flip Zone
 
 ## Strategy ID / version
 

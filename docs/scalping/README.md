@@ -1,107 +1,18 @@
-> **Removed 2026-09-30.** The scalping runtime, strategies, microstructure,
-> ranking, rollout, research and replay modules described in this directory were
-> deleted (Go is the sole automatic technical-analysis path, ADR-002). The
-> documents below are kept as history only; see git history before this date for
-> the code. Only `scalping.context/lifecycle/models/outcomes/risk/telemetry`
-> (outcome accounting and execution-policy inputs) remain.
+# Scalping
 
-# M1 + M5 Scalping Engine
+Scalping is a separate execution-policy lane in Algo Bot. Analysis Engine
+supplies the technical opportunity; Algo Bot owns scalping mode, entry
+location, sizing, exposure, and TradePlan publication.
 
-Shadow/paper/live event-driven scalping on closed M1 bars with immutable M5
-context. Separate lane from technique ZoneWatch publishers. Symbols are
-gated by `is_scalping_symbol` / scalping config (production focus remains XAU).
+The lane consumes closed-bar context through the shared bar-event dispatcher
+and records outcome, risk, and telemetry data in the normal persistence path.
+It does not create a competing technical-analysis authority.
 
-**Own mechanism (research-first):** see
-[OWN_SCALP_MECHANISM.md](OWN_SCALP_MECHANISM.md). Hard gates are deferred —
-live still uses heuristic discovery; math stamps counterfactuals and
-performance joins only. Breakout Retest rules:
-[OWN_BREAKOUT_TECHNIQUE.md](OWN_BREAKOUT_TECHNIQUE.md).
+Current operational references:
 
-## Mathematical program
-
-Research-first roadmap (do not loosen thresholds first):
-
-1. [PHASE1_AUDIT.md](PHASE1_AUDIT.md) — pipeline + threshold inventory
-2. [OWN_SCALP_MECHANISM.md](OWN_SCALP_MECHANISM.md) — mechanism design + gate roadmap
-2b. [OWN_BREAKOUT_TECHNIQUE.md](OWN_BREAKOUT_TECHNIQUE.md) — ApexVoid breakout state machine
-3. `app/scalping/math_features.py` — ATR-normalized \(X_t\) features (PR A)
-4. `app/scalping/math_strategies.py` — Liquidity Sweep / Impulse Pullback / Range Edge (research)
-5. `app/scalping/research_stamp.py` — observe-only per-opp features + math counterfactual
-6. `app/scalping/performance.py` — archetype × session × math_agree join
-7. `app/scalping/ranking.py` — unified score when math_score_inputs present
-8. `app/scalping/replay.py` / `replay_lab.py` — paper outcomes + calibration ([REPLAY_LAB.md](REPLAY_LAB.md))
-9. `app/scalping/rollout.py` — shadow sidecar helpers
-10. [CONTROLLED_LIVE.md](CONTROLLED_LIVE.md) — promotion checklist (gates later)
-11. [MAD.md](MAD.md) — Asia phase clock + FX technique hard gates
-12. [MAD_SOURCES.md](MAD_SOURCES.md) — ICT AMD lineage vs ApexVoid rules
-
-Collect performance first; design hard gates later from data. Holdout is never
-used for tuning. Demo host: ship live and trace from Redis/ledger.
-
-## Architecture
-
-```text
-H1/M15 refresh on closed bars
-        ↓
-M5 ScalpContextSnapshot (immutable, Redis-pinned)
-        ↓
-M5 setup structure + closed M1 confirmation archetypes
-        ↓
-EntryLocation (enforce inside scalp zone) + activation + cost + risk
-        ↓
-shadow / paper / live ScalpSignal → TradePlan V8 (live mode)
-        ↓
-math_shadow sidecar + research.agree_rows (observe-only, no broker)
-```
-
-Owned by `bar_event_dispatcher_loop` (not a standalone M1 subscriber). Live
-mode publishes via `worker.try_publish_executable_signal` when gates pass.
-Requires `runtime.auto_trade.enabled=true` and a live cTrader consumer on the
-trade-plan stream. Math shadow / research stamps record on live M1 cycles
-(`scalp:last_math_shadow:{SYMBOL}`) without changing allow/block.
-
-Structure/technique decide permits (not killzone clock). See
-[OWN_SCALP_MECHANISM.md](OWN_SCALP_MECHANISM.md).
-
-## Modes
-
-| Mode | Behaviour |
-|------|-----------|
-| `off` | Loop exits immediately |
-| `shadow` | Discover/evaluate/record only + math sidecar |
-| `paper` | Paper TradePlan-like records, no broker |
-| `live` | Publishes TradePlan V8 when gates pass + math sidecar observe-only |
-
-## Legacy HFS compatibility
-
-Live config and display names live under `strategies.scalping` (env
-`SCALPING_*`). For backward compatibility, the former **HFS** ("high
-frequency scalp") product tag is still accepted: the YAML alias
-`high_frequency_scalp` still loads as `strategies.scalping`, deprecated
-`HFS_*` env vars still map to their `SCALPING_*` equivalents, and legacy
-`HFS *` display/taxonomy labels are still recognized in taxonomy, C#,
-protective stop, and confirmation code paths — but only for historical
-fills and already-open plans, never for new configuration.
-
-## Archetypes
-
-1. `range_sweep` — micro range edge false-break sweep/reclaim
-2. `impulse_pullback` — join displacement after pullback
-3. `breakout_retest` — M5 compression/structure → displacement break → M1 rejection retest → hold ([OWN_BREAKOUT_TECHNIQUE.md](OWN_BREAKOUT_TECHNIQUE.md))
-
-## Promotion criteria (shadow → paper)
-
-- Stable opportunity density (~15–30/day observation, not a quota)
-- Buy-top / sell-bottom block rates reviewed
-- Net expectancy and drawdown acceptable on holdout replay
-- Spread/cost blocks behaving as expected
-- No publication into live candidate streams while still shadow
-
-## Replay
-
-```bash
-cd algo-bot
-PYTHONPATH=. python -m app.scalping.replay --fixture path.jsonl --output artifacts/scalp-replay.json
-```
-
-Report includes `aggregate` plus `calibration` (development / validation / holdout).
+- [Controlled live operation](CONTROLLED_LIVE.md)
+- [MAD context](MAD.md)
+- [MAD sources](MAD_SOURCES.md)
+- [Own breakout technique](OWN_BREAKOUT_TECHNIQUE.md)
+- [Own scalp mechanism](OWN_SCALP_MECHANISM.md)
+- [XAU fixed-RR policy](XAU_STRUCTURE_FIXED_RR.md)

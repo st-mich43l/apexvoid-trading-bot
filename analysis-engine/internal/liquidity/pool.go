@@ -52,9 +52,7 @@ type Pool struct {
 	// Source names what produced this pool: "swing_high"/"swing_low" (one
 	// swing) or "equal_high"/"equal_low" (a cluster — see equal_high_low.go).
 	// Session-high/session-low and internal/external dealing-range
-	// classification (§29's remaining categories) are NOT produced by
-	// this pass — recorded as not-yet-implemented in
-	// docs/analysis-engine-v2-migration.md, not silently dropped.
+	// classification are outside this pool builder's output contract.
 	Source string
 
 	CreatedAt int64

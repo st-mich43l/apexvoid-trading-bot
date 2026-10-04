@@ -23,7 +23,7 @@ type OpportunityPayload struct {
 	// observation remains CreatedAt, while this field records when the
 	// current engine instance re-established ownership of the live candidate.
 	RecoveredAt int64 `json:"recovered_at,omitempty"`
-	// TechnicalContext is the additive V1 policy-input block (S13B). Omitted
+	// TechnicalContext is the additive policy-input block. Omitted
 	// when the engine could not produce it; consumers must then fail closed.
 	TechnicalContext *TechnicalContextPayload `json:"technical_context,omitempty"`
 	// StopEnvelope is the additive Phase 4 policy-input block. Omitted when

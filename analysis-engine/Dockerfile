@@ -5,9 +5,7 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o /out/analysis-engine ./cmd/analysis-engine \
-    && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o /out/kafka-admin ./cmd/kafka-admin \
-    && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o /out/shadow-audit ./cmd/shadow-audit \
-    && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o /out/strategy-compare ./cmd/strategy-compare
+    && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o /out/kafka-admin ./cmd/kafka-admin
 
 FROM alpine:3.21
 RUN addgroup -S apexvoid \
@@ -17,8 +15,6 @@ RUN addgroup -S apexvoid \
     && apk add --no-cache su-exec wget
 COPY --from=build /out/analysis-engine /app/analysis-engine
 COPY --from=build /out/kafka-admin /app/kafka-admin
-COPY --from=build /out/shadow-audit /app/shadow-audit
-COPY --from=build /out/strategy-compare /app/strategy-compare
 COPY docker-entrypoint.sh /usr/local/bin/apexvoid-entrypoint
 RUN chmod 0755 /usr/local/bin/apexvoid-entrypoint
 WORKDIR /app

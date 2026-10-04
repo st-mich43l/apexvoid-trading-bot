@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Reference implementation of §14's include/merge/overlay semantics.
 
-This is NOT the Stage C3 Python production loader (app/configuration/
-still owns runtime resolution — see docs/configuration-v3-migration-
+This is not the Python production loader (app/configuration/
+still owns runtime resolution — see docs/configuration.md.
 audit.md for why that cutover is a separate, larger, explicitly-deferred
 piece of work). Its jobs are narrower and both bounded/safe:
 

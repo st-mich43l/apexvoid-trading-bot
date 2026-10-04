@@ -1,4 +1,4 @@
-// Package sessionlevel implements SessionLevelStrategy — Phase S7
+// Package sessionlevel implements SessionLevelStrategy.
 // (apexvoid-bot-prompts/rebuild-strategies.md §26), consuming the
 // canonical session-extreme primitive internal/session already builds
 // (Asia/London/NY highs-lows, PDH/PDL, PWH/PWL, sweep status). This

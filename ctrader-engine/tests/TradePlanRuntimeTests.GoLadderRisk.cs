@@ -6,7 +6,7 @@ using ApexVoid.CTraderFeed;
 namespace CTraderFeed.Tests;
 
 /// <summary>
-/// S14E: the executor-injected XAU risk leg on Go-origin ladder plans, and the worst-case group
+/// The executor-injected XAU risk leg on Go-origin ladder plans, and the worst-case group
 /// risk it adds. Every number here comes from the orders the real TradePlanRuntime submits to the
 /// broker simulator, not from a re-derivation. Documents (and pins) that max_group_risk_percent is
 /// declarative today: the executor sizes from the owner's equity table and never reads it.

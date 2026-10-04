@@ -3,9 +3,9 @@
 > Generated from the typed `ApexVoidConfig` Catalog V2 schema. Do not edit manually.
 
 - Catalog version: `2`
-- Contract fingerprint: `c416f680bced2bc885e143326037078c044036c6462568cfd8bd0a1ebbeb0e89`
-- Document fingerprint: `a7f91e2eb36ed8fa352e57ddedf975a070cf8eb322a96bf1f35e7372485fb0e5`
-- Items: `688`
+- Contract fingerprint: `3c41e26c0c1f9ab927b1b43a39322e9c5635955e7d9b08368bb7ad9cc372b42e`
+- Document fingerprint: `2bf06e767e637de6e7bd8d10d7efc692144d4a44107c20ba9d8c9cef62099ba1`
+- Items: `687`
 - Runtime status: canonical-only; `app.core.config.runtime_config` is authoritative
 
 ## actionability
@@ -198,7 +198,6 @@
 | `analysis.trendlines.minimum_validation_touch_spacing_bars` | `TL_MIN_VALIDATION_TOUCH_SPACING` | `int` | `bars` | `configurable` | `5` |
 | `analysis.trendlines.minimum_validation_touches` | `TL_MIN_VALIDATION_TOUCHES` | `int` | `count` | `configurable` | `1` |
 | `analysis.trendlines.pierce_tolerance_atr` | `TL_PIERCE_TOL_ATR` | `float` | `atr` | `configurable` | `0.5` |
-| `analysis.trendlines.shadow_v1` | `TL_SHADOW_V1` | `bool` | `boolean` | `configurable` | `false` |
 | `analysis.trendlines.tolerance_atr` | `TL_TOL_ATR` | `float` | `atr` | `configurable` | `0.3` |
 | `analysis.trendlines.validation_reaction_bars` | `TL_VALIDATION_REACTION_BARS` | `int` | `bars` | `configurable` | `2` |
 | `analysis.trendlines.validation_touch_tolerance_atr` | `TL_VALIDATION_TOUCH_TOL_ATR` | `float` | `atr` | `configurable` | `0.3` |

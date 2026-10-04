@@ -415,12 +415,12 @@ async def test_m5_authoritative_sell_inside_zone_publishes_same_cycle_once():
   state = await load_execution_confirmation(client, match.match_id)
   assert state is not None
   assert state.phase == PUBLISHED
-  assert await client.xlen(leaf(runtime_config, "auto_trade_trade_plan_stream")) == 1
+  assert await client.xlen(leaf(runtime_config, "contract.streams.trade_plans")) == 1
 
   assert await worker._publish_trade_plan_v8(
     client, "XAU", spot, match,
   ) == plan_id
-  assert await client.xlen(leaf(runtime_config, "auto_trade_trade_plan_stream")) == 1
+  assert await client.xlen(leaf(runtime_config, "contract.streams.trade_plans")) == 1
 
 
 @pytest.mark.asyncio
@@ -494,7 +494,7 @@ async def test_published_setup_reconciles_on_replay_without_re_publishing():
 
   assert replay_plan_id == plan_id
   assert (await load_setup(client, match.match_id)).state == PLAN_PUBLISHED
-  assert await client.xlen(leaf(runtime_config, "auto_trade_trade_plan_stream")) == 1
+  assert await client.xlen(leaf(runtime_config, "contract.streams.trade_plans")) == 1
 
 
 @pytest.mark.asyncio
@@ -598,8 +598,8 @@ async def test_outside_reaction_routes_to_waiting_retest_via_v8(
     bid=4037.78,
     ask=4037.98,
   )
-  install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_strategy_match_enabled": True})
-  install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_trendline_reaction_enabled": True,})
+  install_runtime_overrides(monkeypatch, overrides={"runtime.auto_trade.strategy_match_enabled": True})
+  install_runtime_overrides(monkeypatch, overrides={"strategies.reaction.trendline.enabled": True})
 
   plan_id = await worker._publish_trade_plan_v8(
     client, "XAU", spot, match,
@@ -629,10 +629,10 @@ async def test_inside_authoritative_reaction_admits_and_publishes(
     bid=4038.41,
     ask=4038.61,
   )
-  install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_enabled": True})
-  install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_strategy_match_enabled": True})
-  install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_news_guard_minutes": 0})
-  install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_key_level_reaction_enabled": True,})
+  install_runtime_overrides(monkeypatch, overrides={"runtime.auto_trade.enabled": True})
+  install_runtime_overrides(monkeypatch, overrides={"runtime.auto_trade.strategy_match_enabled": True})
+  install_runtime_overrides(monkeypatch, overrides={"actionability.gates.news_guard_minutes": 0})
+  install_runtime_overrides(monkeypatch, overrides={"strategies.reaction.key_level.enabled": True})
   intent = _intent_for_match(match)
 
   # Admission accepts an inside authoritative reaction (no failure record).
@@ -688,8 +688,8 @@ async def test_scalp_match_without_eligibility_is_admission_rejected(monkeypatch
   spot = worker.AutoTradeSpot(
     price=4038.51, ts=int(time.time()), fresh=True, bid=4038.41, ask=4038.61,
   )
-  install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_enabled": True})
-  install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_strategy_match_enabled": True})
+  install_runtime_overrides(monkeypatch, overrides={"runtime.auto_trade.enabled": True})
+  install_runtime_overrides(monkeypatch, overrides={"runtime.auto_trade.strategy_match_enabled": True})
   intent = _intent_for_match(match)
 
   failure = await worker._admit_strategy_intent_for_cycle(
@@ -713,8 +713,8 @@ async def test_scalp_match_with_eligibility_is_admitted(monkeypatch):
   spot = worker.AutoTradeSpot(
     price=4038.51, ts=int(time.time()), fresh=True, bid=4038.41, ask=4038.61,
   )
-  install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_enabled": True})
-  install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_strategy_match_enabled": True})
+  install_runtime_overrides(monkeypatch, overrides={"runtime.auto_trade.enabled": True})
+  install_runtime_overrides(monkeypatch, overrides={"runtime.auto_trade.strategy_match_enabled": True})
   intent = _intent_for_match(match)
 
   failure = await worker._admit_strategy_intent_for_cycle(
@@ -979,7 +979,7 @@ async def test_publish_no_longer_reads_contract_mode_at_all(monkeypatch):
   # setting to a value that would have disabled TradePlan under the old gate (and
   # is now rejected by Settings validation, but this function doesn't
   # validate - it just must not branch on it) to prove the gate is gone.
-  install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_contract_mode": "legacy_v6"})
+  install_runtime_overrides(monkeypatch, overrides={"contract.mode": "legacy_v6"})
   client = redis_state.get_client()
   match = _match(match_id="match-v8-2", thesis_id="thesis-v8-2")
   await _confirm_setup(client, match)

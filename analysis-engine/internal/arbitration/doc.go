@@ -6,9 +6,8 @@
 // stronger or the symbol should hold. Putting this in internal/confluence
 // would contradict that package's own doc comment ("it never decides
 // whether the result is tradeable") and repeat the exact "one mechanism
-// wearing different labels" mistake docs/adr/003-independent-strategy-
-// model.md was written to fix — see docs/adr/004 for the ownership
-// decision this package implements.
+// wearing different labels" mistake. The ownership decision is recorded
+// in docs/adr/004.
 //
 // Arbitrate is pure and side-effect-free: given one symbol's live
 // candidates, it returns a Decision per candidate. It never reads a live

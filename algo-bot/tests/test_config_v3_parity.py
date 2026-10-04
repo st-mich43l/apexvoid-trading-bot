@@ -1,9 +1,9 @@
-"""Configuration V3 Stage C3 parity: config/apexvoid.yml (the categorized
+"""Configuration V3 parity: config/apexvoid.yml (the categorized
 V3 root + includes + production overlay) must resolve to the exact same
 ApexVoidConfig as config/trading-bot.yml (the historical flat file) —
 the whole reason app/configuration/v3_root.py's un-consolidation exists.
 
-See docs/configuration-v3-migration-audit.md's Stage C3 section. This is
+This is
 a permanent regression guard, not a one-off script: if either file drifts
 without a matching update to the other (or to v3_root.py's un-
 consolidation map), this test is what catches it.

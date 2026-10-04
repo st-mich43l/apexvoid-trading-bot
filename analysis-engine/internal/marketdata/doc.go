@@ -11,11 +11,9 @@
 // and must not decide anything (no strategy logic).
 //
 // internal/market's CandleWindow (a bounded ring buffer) already covers
-// part of this package's eventual "rolling history" responsibility for a
-// single symbol+timeframe; whether CandleWindow moves here in full, or
-// marketdata wraps it with the multi-timeframe bootstrap/normalization
-// layer on top, is a Stage 1-continuation implementation decision, not
-// resolved by this architecture task — see docs/architecture/migration-map.md.
+// part of this package's eventual rolling-history responsibility for a
+// single symbol+timeframe. Whether it moves here in full remains an
+// internal implementation detail.
 //
 // No production code lives here yet; this file exists to reserve the
 // package's boundary in the dependency graph

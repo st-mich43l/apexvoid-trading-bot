@@ -1,14 +1,7 @@
-// Package config loads Configuration V3 (config/apexvoid.yml + its
-// categorized includes + one environment overlay) directly — the same
-// files algo-bot's app/configuration/v3_root.py reads, and the same
-// include/merge/overlay spec (rebuild-configuration-architecture.md §14)
-// that module and config/scripts/resolve_reference.py both implement.
+// Package config loads config/apexvoid.yml, its categorized includes, and one
+// environment overlay directly using the shared include/merge contract.
 // This package must never grow a second precedence engine, defaults
-// system, or ad-hoc ENV reader for analysis behavior — see
-// rebuild-analysis-engine.md §13 and rebuild-configuration-architecture.md
-// §9 (Go: "config structs may use zero values only during
-// deserialization, but validation must reject missing required config
-// rather than treating zero as a default").
+// system, or ad-hoc ENV reader for analysis behavior.
 package config
 
 import (
@@ -21,7 +14,7 @@ import (
 )
 
 // RootFileEnv is the one non-secret configuration bootstrap environment
-// variable (rebuild-configuration-architecture.md §12), the same name
+// variable (docs/configuration.md), the same name
 // Python's app/configuration/config_file.py (CONFIG_FILE_ENV) and this
 // repo's docker-compose.yml already use.
 const RootFileEnv = "APEXVOID_CONFIG_FILE"
@@ -42,13 +35,8 @@ type Document struct {
 	raw stringMap
 }
 
-// ResolveDocument reads a V3 root file (config/apexvoid.yml-shaped: a
-// `version: 3` document with an `includes:` list) and resolves its
-// include graph plus environment overlay, exactly mirroring
-// app/configuration/v3_root.py::resolve_v3_document and
-// config/scripts/resolve_reference.py's own reference implementation —
-// three independent implementations of the identical §14 spec, which is
-// the whole point (cross-language parity, §38).
+// ResolveDocument reads a V3 root file (a `version: 3` document with an
+// `includes:` list) and resolves its include graph plus environment overlay.
 func ResolveDocument(rootPath string) (*Document, error) {
 	root, err := loadYAML(rootPath)
 	if err != nil {
@@ -218,7 +206,7 @@ func (d *Document) Get(dottedPath string) (any, bool) {
 
 // Raw returns the whole resolved document as an untyped tree
 // (map[string]any/[]any/scalars, exactly what yaml.v3 produces). Exported
-// only for the Stage C6 cross-language fixture-parity test
+// only for the cross-language fixture-parity test
 // (test/config/v3_fixture_parity_test.go), which needs the complete
 // resolved shape to compare against resolve_reference.py's canonical
 // fixture — not part of the normal consumer surface (use Get/Section for

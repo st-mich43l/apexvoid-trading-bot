@@ -238,7 +238,7 @@ def load_config_file(
     raise ConfigFileError(f"malformed YAML: {exc}", path=file_path) from None
 
   if is_v3_root_document(loaded):
-    # Stage C3 (docs/configuration-v3-migration-audit.md): APEXVOID_CONFIG_FILE
+    # APEXVOID_CONFIG_FILE selects the categorized configuration root.
     # points at config/apexvoid.yml instead of the historical flat
     # trading-bot.yml layout. Resolve includes + environment overlay for
     # real, un-consolidate back into the shape every line below this one

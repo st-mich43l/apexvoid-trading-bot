@@ -49,7 +49,7 @@ Confirmed against every existing test file
 `.../internal/indicator`; `test/market/symbol_test.go`,
 `test/market/window_test.go`: same pattern). The one place this needed
 unexported access (`test/config`'s fixture-parity test) is documented in
-`docs/configuration-v3-migration-audit.md`'s own "Go test layout" note —
+the configuration test layout —
 resolved by exporting the minimum needed surface from `internal/config`
 rather than reaching into it from outside the module.
 

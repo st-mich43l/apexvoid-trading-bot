@@ -1,6 +1,6 @@
-// Package supply implements SupplyStrategy — Phase S7
+// Package supply implements SupplyStrategy.
 // (apexvoid-bot-prompts/rebuild-strategies.md §9/§21), one of the two
-// strategies the Phase S2 catalog split the legacy "Supply Demand"
+// strategies the catalog split the original "Supply Demand"
 // detector into. Supply and demand share a canonical primitive
 // (internal/zone's displacement-based Supply/Demand geometry) but are
 // independently-owned strategies here —
@@ -356,7 +356,7 @@ func clamp01(v float64) float64 {
 // (id/version/sorted parameters) — a real, deterministic value, though
 // deliberately not the whole resolved Configuration V3 document's own
 // fingerprint: a strategy has no access to *config.Document (it sits
-// below internal/config's rank; only internal/engine reads it). Phase S8
+// below internal/config's rank; only internal/engine reads it).
 // (engine wiring, not this phase) is expected to enrich/overwrite
 // Provenance.ConfigFingerprint with the real whole-document fingerprint
 // before a Candidate reaches the OpportunityBook/Kafka — this value is a

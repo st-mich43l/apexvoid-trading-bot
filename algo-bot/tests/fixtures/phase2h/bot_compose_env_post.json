@@ -1,9 +1,0 @@
-{
-  "APEXVOID_CONFIG_AUTHORITY": "legacy",
-  "AUTO_TRADE_MAPPED_ZONE_ENABLED": "false",
-  "AUTO_TRADE_MARKET_MAP_GUARD_ENABLED": "false",
-  "AUTO_TRADE_PROFILE": "demo_eval",
-  "LOG_DIR": "/var/log/apexvoid",
-  "LOG_FILE_ENABLED": "true",
-  "LOG_RETENTION_DAYS": "14"
-}

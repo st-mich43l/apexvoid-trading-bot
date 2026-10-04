@@ -1,14 +1,8 @@
-"""One-time destructive migration: drop the obsolete manual_algo_charts table.
+"""One-time destructive cleanup: drop the obsolete manual_algo_charts table.
 
-The manual_algo_charts feature (Redis OHLC snapshots around owner /algo
-issue/fill/close events, for later formula fitting) is removed — see
-docs/analysis-engine-v2-migration.md and
-apexvoid-bot-prompts/rebuild-strategies.md §58-§68. Its module
-(app/signals/manual_algo_chart.py), persistence helpers (store.py's
-upsert_manual_algo_chart/load_manual_algo_charts/_safe_snapshot_manual_chart
-and every call site), and dependent scripts
-(manual_formula_replay.py, backfill_manual_algo_charts.py) are already
-deleted. This script is the last step: the table itself.
+The manual_algo_charts feature and its application call sites are retired.
+This script is the final explicit database cleanup step for installations
+that still contain the old table.
 
 This repo has no migration-file/version-tracking tool — store.py's
 init_db() is one big idempotent (CREATE TABLE IF NOT EXISTS / ADD COLUMN

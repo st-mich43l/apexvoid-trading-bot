@@ -14,7 +14,7 @@ import (
 
 // goldenCandidate is a fixed, fully-specified supply-zone opportunity. The
 // SAME bytes are consumed by algo-bot's decoder/adapter tests, so a hand-edit
-// to either side of the S13B technical-context contract fails a build on both.
+// to either side of the technical-context contract fails a build on both.
 func goldenCandidate() opportunity.Candidate {
 	return opportunity.Candidate{
 		ID: "opp_golden_supply_xau", Strategy: "supply", StrategyVersion: "v2", Symbol: "XAU",

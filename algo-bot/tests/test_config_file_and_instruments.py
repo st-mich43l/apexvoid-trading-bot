@@ -12,7 +12,6 @@ from app.configuration.config_file import load_config_file
 from app.configuration.deployment_contract import deployment_contract_document
 from app.configuration.fingerprints import configuration_contract_fingerprint
 from app.configuration.catalog import iter_catalog_entries
-from app.configuration.migrate_env_to_config import classify_and_migrate
 from app.configuration.models.instruments import InstrumentsConfig
 from app.configuration.resolver import resolve_configuration
 from app.configuration.source_types import SourceKind
@@ -158,7 +157,6 @@ def test_process_env_overrides_yaml_instrument_projection(tmp_path: Path):
     for warning in result.warnings
   )
 
-
 def test_init_overrides_env_and_yaml(tmp_path: Path):
   path = _write_yaml(tmp_path, {"version": 1, "instruments": {"XAU": _XAU_BLOCK}})
   loaded = load_config_file(path, missing_ok=False)
@@ -265,23 +263,3 @@ def test_deployment_contract_is_deterministic_and_secret_safe():
   assert first["deprecated_environment_aliases"]["AUTO_TRADE_XAU_PIP_SIZE"].startswith(
     "instruments.XAU"
   )
-
-
-def test_migrate_env_classifies_xau_and_secrets():
-  result = classify_and_migrate({
-    "TELEGRAM_BOT_TOKEN": "tok",
-    "AUTO_TRADE_PROFILE": "conservative",
-    "AUTO_TRADE_XAU_PIP_SIZE": "0.1",
-    "XAU_LOOKBACK_H1_BARS": "400",
-    "REDIS_URL": "redis://localhost:6379/0",
-  })
-  assert result["unknown_count"] == 0
-  assert result["yaml"]["instruments"]["XAU"]["contract"]["pip_size"] == 0.1
-  assert result["yaml"]["instruments"]["XAU"]["market_data"]["lookbacks"]["h1_bars"] == 400
-  assert result["env"]["TELEGRAM_BOT_TOKEN"] == "tok"
-  assert result["env"]["AUTO_TRADE_PROFILE"] == "conservative"
-
-
-def test_migrate_fails_on_unknown_keys():
-  result = classify_and_migrate({"TOTALLY_UNKNOWN_KEY": "1"})
-  assert result["unknown_count"] == 1

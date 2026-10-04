@@ -502,7 +502,7 @@ public sealed record AutoTradeEvent(
   string? TargetModel = null,
   string? EntryDistribution = null,
   bool MutatesLifecycle = false,
-  // TradePlan V8 events only (docs/adr-trade-plan-v8-cutover.md):
+  // TradePlan V8 events only (docs/autotrade-execution-integrity.md):
   // CandidateId carries plan_id, MatchId carries setup_id, ThesisId carries
   // thesis_id (all already-existing fields, reused rather than duplicated).
   // EntryType is the one genuinely new label TradePlan needs (market_watch/

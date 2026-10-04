@@ -15,7 +15,7 @@ import (
 // WilderATR below, this one is well-defined for any non-empty input. This
 // is the pervasively-used ATR throughout the canonical analysis pipeline
 // (_analyze_tf, zones, swings, momentum, liquidity, structure) — see
-// docs/go-analysis-migration-audit.md §2.1.
+// the canonical indicator contract.
 func SimpleATR(candles []market.Candle, length int) []float64 {
 	if length < 1 {
 		length = 1

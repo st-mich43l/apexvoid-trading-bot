@@ -1,6 +1,6 @@
 """Shared entry-card line rendering for Manual and Auto Algo.
 
-Phase S12 (Unified Manual & Auto Algo Trading Experience) asks for one
+The unified manual and automatic trading experience uses one
 canonical entry-card design instead of the independently-maintained
 formatters Manual (``app.signals.broadcast``) and Auto Algo
 (``app.autotrade.setup_card``) each grew on their own. This module owns the
@@ -25,7 +25,7 @@ slot mechanism (``setup_card.forming_card_headline``,
 ``apply_forming_card_status``, ``forming_card_matches_strategy``). That
 machinery parses specific line positions/patterns in the card's own text to
 edit it in place as a setup progresses through its lifecycle - unifying it
-is Phase S12's separate "shared setup-lifecycle manager" step, not this
+is the separate setup-lifecycle manager step, not this
 one. This module's functions render one line each and never assume
 anything about which line position they'll land on.
 """

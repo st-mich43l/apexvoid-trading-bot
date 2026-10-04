@@ -1,4 +1,4 @@
-"""Configuration V3 Stage C6: cross-language parity against the shared
+"""Configuration V3 cross-language parity against the shared
 canonical fixture.
 
 `contracts/configuration/examples/resolved-production-v3.json` is
@@ -17,7 +17,7 @@ is `v3_document_test.go`'s `TestResolveDocumentMatchesCanonicalFixture`;
 `ResolveDocumentMatchesCanonicalFixture`.
 
 This is deliberately NOT the same thing as `test_config_v3_parity.py`
-(Stage C3): that test proves the *old flat shape* (`ApexVoidConfig`, via
+(The Python parity test proves the *old flat shape* (`ApexVoidConfig`, via
 un-consolidation) is unchanged by the V3 cutover. This test proves the
 *V3 shape itself* (`resolve_v3_document`'s direct output, before any
 un-consolidation) is what every language actually resolves to — the

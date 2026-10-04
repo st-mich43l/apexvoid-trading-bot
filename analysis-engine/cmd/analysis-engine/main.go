@@ -60,7 +60,7 @@ func run(configPath string) error {
 
 	// Kafka is a producer capability only. Failure to initialize it is visible
 	// in Kafka health/logs but never prevents Redis from maintaining analysis
-	// state. Phase S9: a strategy's opportunity lifecycle transitions are
+	// state. A strategy's opportunity lifecycle transitions are
 	// retained and retried (OpportunityPublisher, off the ingestion hot
 	// path — see its own doc comment) rather than silently discarded;
 	// SetPublisher below must run BEFORE the registration loop, since

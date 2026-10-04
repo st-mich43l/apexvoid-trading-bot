@@ -9,19 +9,17 @@ name: apexvoid-trading-bot
 # variables this file used to set (AUTO_TRADE_PROFILE/
 # AUTO_TRADE_MAPPED_ZONE_ENABLED/AUTO_TRADE_MARKET_MAP_GUARD_ENABLED/
 # LOG_DIR/LOG_RETENTION_DAYS/LOG_FILE_ENABLED all removed from `bot`'s own
-# environment — see docs/configuration-v3-migration-audit.md's Stage C3
+# environment — see docs/configuration.md
 # section for the parity proof and one real, well-evidenced behavior
 # fix this cutover produces for local/dev specifically: those ENV
 # defaults, and trading-bot.yml's own explicit values, were silently
 # defeating several of the demo_eval profile's own intended overrides
 # (config-file/process-env precedence beating the profile layer) —
-# config/environments/demo_eval.yml is now the one place that intent is
+# config/environments/demo_eval.yml is the one place that intent is
 # expressed, and nothing outranks it anymore.
 #
-# `config-compiler` and `ctrader-engine` are UNCHANGED — .NET still reads
-# ResolvedRuntimeManifest (compiled from config/trading-bot.yml) until
-# Stage C5 gives it a direct YAML reader too; trading-bot.yml therefore
-# remains live for that path only, not read by `bot` anymore.
+# `config-compiler` emits the resolved manifest consumed by cTrader and the
+# execution services.
 
 services:
   postgres:

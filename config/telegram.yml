@@ -1,7 +1,7 @@
 # Telegram presentation and user-interaction behavior — owned exclusively
 # here. Bot token remains a secret ENV input (TELEGRAM_BOT_TOKEN). Direct
 # copy of the old trading-bot.yml's `delivery.*` block — see
-# docs/configuration-v3-migration-audit.md §5.
+# Telegram delivery settings.
 #
 # §6: presentation.seq_reset_tz REMOVED as an independently-set value — it
 # held the exact same Asia/Ho_Chi_Minh value as runtime.timezone with no

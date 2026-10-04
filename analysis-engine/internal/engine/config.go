@@ -442,7 +442,7 @@ func ZoneConfigFromConfig(doc *config.Document) (zone.Config, error) {
 }
 
 // TrendlineConfigFromConfig reads analysis.trendlines.* into
-// trendline.Config — Phase S4's fourth domain. Fails closed on any
+// trendline.Config. Fails closed on any
 // version other than "v2": V1 (trendlines.py::_trendlines_v1) is
 // confirmed dead/shadow-metrics-only in production and is not ported
 // (see internal/trendline/doc.go).
@@ -546,7 +546,7 @@ func TrendlineConfigFromConfig(doc *config.Document) (trendline.Config, error) {
 }
 
 // KeyLevelConfigFromConfig reads analysis.key_levels.* into
-// keylevel.Config — Phase S4's third domain. No version gate: levels.py
+// keylevel.Config. No version gate: levels.py
 // has never had a versioned contract.
 func KeyLevelConfigFromConfig(doc *config.Document) (keylevel.Config, error) {
 	clusterATR, err := getFloat(doc, "analysis.key_levels.cluster_atr")
@@ -574,7 +574,7 @@ func KeyLevelConfigFromConfig(doc *config.Document) (keylevel.Config, error) {
 }
 
 // SessionConfigFromConfig reads analysis.sessions.* into session.Config —
-// Phase S4's first domain. asia/london/ny_start are the same leaves
+// Session configuration. asia/london/ny_start are the same leaves
 // StructureConfigFromConfig's siblings already read for scanner/session
 // display purposes; daily_rollover_utc_hour is the one leaf this phase
 // adds (see config/analysis.yml).
@@ -604,7 +604,7 @@ func SessionConfigFromConfig(doc *config.Document) (session.Config, error) {
 }
 
 // FibConfigFromConfig reads analysis.fibonacci.* into fib.Config —
-// Phase S4's second domain. No version gate (unlike Zone/Structure):
+// Fibonacci configuration. No version gate (unlike Zone/Structure):
 // fibonacci.py/dealing_range.py have never had a versioned contract, and
 // neither leaf here changes shape between versions.
 func FibConfigFromConfig(doc *config.Document) (fib.Config, error) {
@@ -724,7 +724,7 @@ func StopEnvelopeConfigFromConfig(doc *config.Document) (StopEnvelopeConfig, err
 
 // StrategyConfigsFromConfig reads the complete semantic V2 strategy catalog
 // from analysis.strategies. This is intentionally only registry-level
-// configuration: each Phase S7 concrete strategy owns validation of its
+// configuration: each concrete strategy owns validation of its
 // technical parameters. Unknown and omitted IDs fail at startup so a strategy
 // is never silently enabled, disabled, or defaulted by an incidental YAML
 // typo.

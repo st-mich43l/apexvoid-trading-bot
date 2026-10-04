@@ -8,7 +8,7 @@
 # deliberately empty for the same reason — production's own values already
 # ARE the base runtime.yml/transport.yml/database.yml/instruments.yml/
 # analysis.yml/auto-algo.yml/manual-algo.yml/execution.yml/telegram.yml/
-# journal.yml, unmodified. See docs/configuration-v3-migration-audit.md §9.
+# journal.yml, unmodified.
 #
 # config/apexvoid.yml includes this file (not demo_eval.yml) by default —
 # switching environments means swapping which environments/*.yml the root

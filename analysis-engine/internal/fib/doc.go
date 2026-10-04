@@ -1,5 +1,5 @@
 // Package fib owns Fibonacci retracement/extension ladders and the
-// premium/discount dealing range they're built from — Phase S4's second
+// premium/discount dealing range they're built from.
 // shared technical primitive (apexvoid-bot-prompts/rebuild-strategies.md
 // §23-26).
 //
@@ -25,6 +25,6 @@
 // promotion those two packages already established for needing
 // structure.Swing directly — see
 // docs/architecture/dependency-rules.md's "zone promoted above
-// structure" amendment, extended to fib/keylevel/trendline as Phase S4
+// structure" amendment, extended to fib/keylevel/trendline.
 // lands each one.
 package fib

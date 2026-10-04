@@ -184,41 +184,6 @@ def assert_complete_classification() -> None:
     raise RuntimeError(f"unclassified options: {missing}")
 
 
-def migration_entries() -> list[dict[str, object]]:
-  entries: list[dict[str, object]] = []
-  for prop, (classification, env, catalog_path) in sorted(
-    FEED_OPTIONS_CLASSIFICATION.items()
-  ):
-    entries.append({
-      "options_type": "FeedOptions",
-      "property": prop,
-      "environment": env,
-      "canonical_path": catalog_path,
-      "classification": classification,
-      "manifest_path": (
-        f"feed.{_manifest_key(prop)}" if classification == "manifest" else None
-      ),
-      "removable_after_cutover": classification == "manifest" and env is not None,
-    })
-  for prop, (classification, env, catalog_path) in sorted(
-    AUTO_TRADE_OPTIONS_CLASSIFICATION.items()
-  ):
-    entries.append({
-      "options_type": "AutoTradeOptions",
-      "property": prop,
-      "environment": env,
-      "canonical_path": catalog_path,
-      "classification": classification,
-      "manifest_path": (
-        f"auto_trade.{_manifest_key(prop)}"
-        if classification == "manifest"
-        else None
-      ),
-      "removable_after_cutover": classification == "manifest" and env is not None,
-    })
-  return entries
-
-
 def _manifest_key(property_name: str) -> str:
   """PascalCase → snake_case for JSON keys."""
   if property_name == "CTraderSymbol":
@@ -229,23 +194,3 @@ def _manifest_key(property_name: str) -> str:
       chars.append("_")
     chars.append(char.lower())
   return "".join(chars)
-
-
-def classification_counts() -> dict[str, int]:
-  values = [
-    item[0]
-    for item in FEED_OPTIONS_CLASSIFICATION.values()
-  ] + [
-    item[0]
-    for item in AUTO_TRADE_OPTIONS_CLASSIFICATION.values()
-  ]
-  return {
-    key: values.count(key)
-    for key in (
-      "manifest",
-      "secret_environment",
-      "bootstrap_environment",
-      "derived_runtime",
-      "deprecated_compatibility",
-    )
-  }

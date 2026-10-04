@@ -152,7 +152,6 @@
       "analysis.trendlines.minimum_validation_touch_spacing_bars",
       "analysis.trendlines.minimum_validation_touches",
       "analysis.trendlines.pierce_tolerance_atr",
-      "analysis.trendlines.shadow_v1",
       "analysis.trendlines.tolerance_atr",
       "analysis.trendlines.validation_reaction_bars",
       "analysis.trendlines.validation_touch_tolerance_atr",
@@ -619,7 +618,7 @@
     "XAU_ZONE_PREFERRED_MAX_WIDTH_PRICE": "instruments.XAU.analysis.zones.preferred_maximum_width_price",
     "XAU_ZONE_PREFERRED_MIN_WIDTH_PRICE": "instruments.XAU.analysis.zones.preferred_minimum_width_price"
   },
-  "fingerprint": "c416f680bced2bc885e143326037078c044036c6462568cfd8bd0a1ebbeb0e89",
+  "fingerprint": "3c41e26c0c1f9ab927b1b43a39322e9c5635955e7d9b08368bb7ad9cc372b42e",
   "instrument_schema": {
     "active_projection_symbol": "XAU",
     "optional": [

@@ -1,5 +1,5 @@
 // Package confluence is the deliberate compositional exception to the
-// independent-strategy model (docs/adr/003-independent-strategy-model.md).
+// independent-strategy boundary.
 // It may combine independent technical evidence from multiple strategies'
 // opportunity.Candidate output — demand + order block + FVG + Fibonacci +
 // liquidity + flip zone — into a combined confluence score. No other

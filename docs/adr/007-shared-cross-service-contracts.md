@@ -16,12 +16,12 @@ scope.
 `contracts/configuration/` already proves the pattern this ADR generalizes:
 one JSON Schema, read/validated by Python (`v3_root.py`), Go
 (`internal/config`), and referenced by `.NET`'s config path, with
-cross-language parity tests (`docs/configuration-v3-migration-audit.md`
-Stage C6) proving no language silently drifted from the schema. Without
+cross-language configuration and contract tests proving no language silently
+drifted from the schema. Without
 this discipline, a cross-service event contract (bar-closed, opportunity,
 trade-plan, trade-event) risks becoming three independently-maintained
 structs that happen to agree today and silently diverge tomorrow — exactly
-the ATR-divergence failure mode (V1 in `service-boundaries.md`) but at the
+the ATR-divergence failure mode, but at the
 service boundary instead of inside one process.
 
 ## Decision

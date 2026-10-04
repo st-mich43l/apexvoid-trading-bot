@@ -1,7 +1,7 @@
 """Static audit of raw environment access inside ``algo-bot/app``.
 
-Phase 2H consolidates configuration onto ``runtime_config`` and the canonical
-resolver. This module performs a deterministic AST scan for the remaining raw
+Configuration is resolved through ``runtime_config`` and the canonical
+resolver. This module performs a deterministic AST scan for remaining raw
 environment surfaces — ``os.environ`` / ``os.getenv`` reads, ``dotenv``
 loading, and ``pydantic_settings`` (``BaseSettings`` / ``SettingsConfigDict``)
 declarations — and classifies every site so a generated contract can assert
@@ -51,9 +51,6 @@ _FILE_CLASSIFICATION: dict[str, str] = {
   "algo-bot/app/configuration/environment_cli.py": SCRIPT_TOOL_ALLOWED,
   "algo-bot/app/configuration/generate.py": SCRIPT_TOOL_ALLOWED,
   "algo-bot/app/configuration/diagnostic_cli.py": SCRIPT_TOOL_ALLOWED,
-  "algo-bot/app/configuration/migrate_env_to_config.py": SCRIPT_TOOL_ALLOWED,
-  "algo-bot/app/configuration/phase2i_completion_gate.py": SCRIPT_TOOL_ALLOWED,
-  "algo-bot/app/configuration/phase2i_inventory.py": SCRIPT_TOOL_ALLOWED,
   "algo-bot/app/configuration/runtime_manifest_boot.py": EARLY_BOOT_ALLOWED,
   "algo-bot/app/configuration/runtime_manifest_cli.py": SCRIPT_TOOL_ALLOWED,
 }

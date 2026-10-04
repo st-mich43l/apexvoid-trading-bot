@@ -57,69 +57,11 @@ const modulePrefix = "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine
 // (docs/architecture/dependency-rules.md's Strategy dependency rule,
 // §52) enforced structurally instead of by a separate carve-out.
 //
-// zone promoted from rank 2 (same-rank sibling of structure) to rank 3
-// (same-rank sibling of liquidity) is a fourth amendment, made
-// implementing Phase S3 (the canonical Zone domain). Real zone kinds
-// (Order Block, Breaker, Flip Zone, Supply/Demand) need structure.Swing/
-// structure.StructureBreak/structure.DetectDisplacement directly — the
-// identical situation liquidity already hit needing structure.Swing, and
-// the identical fix: promote above structure. zone and liquidity are
-// mutually independent (neither imports the other), so they share a
-// rank rather than needing a fifth distinct one.
-//
-// trendline joins zone/liquidity at rank 3 for the identical reason,
-// made implementing Phase S4's fourth (largest) domain: Build's causal
-// anchor-pair construction needs structure.Swing.Kind/.Price/.Time/
-// .ConfirmedAt directly (trendline_v2.py's own _confirmed_points shape).
-// trendline does not import zone/liquidity, nor do they import it.
-// keylevel joins zone/liquidity at rank 3 for the identical reason, made
-// implementing Phase S4's third domain: Cluster's price-clustering scan
-// needs structure.Swing.Kind/.Price directly (levels.py::_price_clusters'
-// own Python shape). keylevel does not import zone/liquidity/fib, nor do
-// they import it.
-// session, added at rank 1 alongside indicator/marketdata/config, is a
-// fifth amendment, made implementing Phase S4's first domain. Unlike
-// zone/liquidity (and fib/keylevel/trendline, S4's remaining three
-// domains, landing at rank 3 for the same structure.Swing-dependency
-// reason), session needs only candles and timestamps — its own Python
-// source (session_liquidity.py) never imports swings.py/structure.py
-// either — so it has no reason to sit above structure at all.
-//
-// fib joins zone/liquidity at rank 3 for the identical reason, made
-// implementing Phase S4's second domain: Resolve/Update's bracketing
-// swing-pair search needs structure.Swing.Kind/Price directly
-// (dealing_range.py::_bracketing_pair/_last_opposing_pair's own Python
-// shape). fib does not import zone or liquidity, nor do they import it.
-//
-// barrier and momentum join zone/liquidity at rank 3, made porting Algo
-// Bot's opposing-barrier normalization and price-only momentum read into Go.
-// Both are pure domain packages: barrier imports no internal package (it
-// works on plain zone values, so transport/redis at rank 7 can publish its
-// result), and momentum needs only market candles and indicator's ATR. Neither
-// imports zone/liquidity/fib/keylevel/trendline, nor do they import it.
-//
-// Every internal/strategy/<name> subpackage (supply, demand, orderblock,
-// fvg, flipzone, keylevel, sessionlevel, and any added later) sits at
-// rank 7 — the SAME rank as transport/transport-kafka/transport-redis —
-// made implementing Phase S7. Each concrete strategy imports the parent
-// internal/strategy package directly (for the Strategy interface and
-// StrategyID type), which only works if a strategy subpackage outranks
-// it; rank 7 is the lowest rank that does. Placing every strategy
-// subpackage at the SAME rank as transport, rather than inventing a new
-// rank number, is deliberate and does double duty with the plain
-// monotonic rule, no special-cased exception needed: (1)
-// apexvoid-bot-prompts/rebuild-strategies.md §93 requires "prevent
-// strategy imports from transport/kafka, transport/redis" — same-rank
-// packages cannot import each other under this test's own rule, so
-// strategy/<name> (7) cannot import transport/kafka (7); (2) that same
-// §93 also requires "one strategy package must not import another
-// strategy package unless a specific architecture decision explicitly
-// permits it" — every strategy subpackage sharing rank 7 makes that
-// forbidden edge structural too, not just a convention. engine (8, the
-// only rank above 7) is the one package permitted to import a strategy
-// subpackage, for Phase S8's factory wiring — not done yet, this task's
-// own scope boundary (Phase S7 builds strategies; Phase S8 wires them
-// into the engine).
+// Structural domains that need swing and structure facts sit above those
+// lower-level inputs. Concrete strategies share a rank with transport so
+// they cannot import transport or one another; the engine is the composition
+// root that wires them together. This keeps technical analysis independent
+// from delivery and execution concerns.
 var rank = map[string]int{
 	"market":    0,
 	"telemetry": 0,
@@ -133,16 +75,16 @@ var rank = map[string]int{
 
 	"structure": 2,
 
-	"zone":       3,
-	"liquidity":  3,
-	"trendline":  3,
-	"keylevel":   3,
-	"fib":        3,
-	"barrier":    3,
-	"momentum":   3,
-	"reaction":   3,
-	"regime":     3,
-	"legacyzone": 4,
+	"zone":          3,
+	"liquidity":     3,
+	"trendline":     3,
+	"keylevel":      3,
+	"fib":           3,
+	"barrier":       3,
+	"momentum":      3,
+	"reaction":      3,
+	"regime":        3,
+	"techniquezone": 4,
 
 	"context": 4,
 
@@ -178,12 +120,9 @@ var rank = map[string]int{
 	"strategy/rangesweep":          7,
 	"strategy/impulsepullback":     7,
 	"strategy/scalpbreakoutretest": 7,
-	"shadowaudit":                  8,
-	"shadowcompare":                0,
+	"engine":                       8,
 
-	"engine": 8,
-
-	// S14C offline replay adapter: drives the engine from a captured bar
+	// Offline replay adapter: drives the engine from a captured bar
 	// stream and encodes what the producer would have published. Above the
 	// engine on purpose; nothing under internal/ may import it (cmd/replay does).
 	"replaycapture": 9,

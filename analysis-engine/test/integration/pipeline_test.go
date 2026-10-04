@@ -18,7 +18,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
 )
 
-// allStrategiesDisabled satisfies strategy.NewRegistry's Phase S8
+// allStrategiesDisabled satisfies strategy.NewRegistry's disabled-strategy
 // validation without engaging any real strategy factory — this test
 // exercises the structure/liquidity/context pipeline, not strategy
 // evaluation (see test/strategy/registry_test.go's own fullConfig for

@@ -1,11 +1,4 @@
-// Package indicator ports app/analysis/math_utils.py and
-// app/analysis/indicators.py. See docs/go-analysis-migration-audit.md §2.1:
-// TWO different ATR formulas are live in Python today (a simple rolling
-// mean, and pandas_ta's Wilder/RMA smoothing), used by different callers,
-// and they diverge materially (~6.7% apart measured on real XAU M5 bars).
-// This package ports BOTH, clearly named, rather than picking a "correct"
-// one — which one is canonical is a product decision for the owner, not
-// something to resolve silently during translation (§17).
+// Package indicator contains the canonical true-range and ATR calculations.
 package indicator
 
 import "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"

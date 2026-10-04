@@ -13,7 +13,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
 )
 
-// allStrategiesDisabled satisfies strategy.NewRegistry's Phase S8
+// allStrategiesDisabled satisfies strategy.NewRegistry's disabled-strategy
 // validation (every known catalog ID must be present with a version;
 // see internal/engine/worker.go's own NewSymbolWorker) without engaging
 // any real strategy factory — these tests exercise the worker/dispatch

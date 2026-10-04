@@ -44,7 +44,7 @@ Manifest schema, fingerprint, rollout, account, and runtime validation remain
 | `deprecated_compatibility` | must not affect behaviour |
 
 Unclassified must remain zero. See
-`contracts/configuration/runtime-manifest-env-migration.generated.json`.
+the generated runtime manifest and the environment contract.
 
 ## Startup
 

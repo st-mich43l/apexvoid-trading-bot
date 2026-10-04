@@ -6,10 +6,10 @@ using ApexVoid.CTraderFeed;
 namespace CTraderFeed.Tests;
 
 /// <summary>
-/// S14E: the single reviewed XAU ladder specification (contracts/autotrade/xau-ladder-spec.json),
+/// The single reviewed XAU ladder specification (contracts/autotrade/xau-ladder-spec.json),
 /// C# half. The same hand-computed cases run against Manual Algo (AutoTradeEngine) and the Auto
 /// Algo executor's independently-declared risk leg (TradePlanRuntime); the Python calculator is
-/// held to them by algo-bot/tests/test_s14e_ladder_spec.py. The methods under test are private,
+/// held to them by algo-bot/tests/test_ladder_spec.py. The methods under test are private,
 /// so they are reached by reflection: this pins behaviour without widening production visibility.
 /// </summary>
 public sealed class LadderSpecParityTests

@@ -6,11 +6,11 @@ import (
 	"fmt"
 
 	analysiscontext "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/context"
-	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/legacyzone"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategyutil"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/techniquezone"
 )
 
 const ID strategy.StrategyID = "crt"
@@ -67,15 +67,15 @@ func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Ca
 	if len(exec) > s.windowBars {
 		exec = exec[len(exec)-s.windowBars:]
 	}
-	h1ATR := legacyzone.ATRScalar(legacyzone.ATRSeries(h1.Candles, 14), 1)
-	execATR := legacyzone.ATRScalar(legacyzone.ATRSeries(exec, 14), 1)
-	crtSettings := legacyzone.ProductionCRTSettings()
+	h1ATR := techniquezone.ATRScalar(techniquezone.ATRSeries(h1.Candles, 14), 1)
+	execATR := techniquezone.ATRScalar(techniquezone.ATRSeries(exec, 14), 1)
+	crtSettings := techniquezone.ProductionCRTSettings()
 	crtSettings.MinATR = s.impulseATR
 	crtSettings.EntryMaxWidthPrice = s.entryMaxWidthPrice
-	techniqueSettings := legacyzone.ProductionTechniqueSettings()
+	techniqueSettings := techniquezone.ProductionTechniqueSettings()
 	techniqueSettings.PipSize = s.pipSize
 	var out []opportunity.Candidate
-	for _, instance := range legacyzone.CollectCRT(h1.Candles, exec, h1ATR, execATR, crtSettings, techniqueSettings) {
+	for _, instance := range techniquezone.CollectCRT(h1.Candles, exec, h1ATR, execATR, crtSettings, techniqueSettings) {
 		direction := market.Buy
 		invalidation := instance.StructuralLow - s.invalidationATR*execATR
 		target := instance.StructuralHigh
