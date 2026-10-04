@@ -224,7 +224,12 @@ func (p *OpportunityPublisher) Observe(symbol market.Symbol, algo kafka.Algorith
 		if record.Terminal == publicationUnknown {
 			job := newPublishJob(symbol, algo, transition)
 			switch {
-			case !publish && record.Creation == publicationPublished:
+			case !publish && (record.Creation == publicationPublished || record.Creation == publicationPending):
+				// A creation can already be visible to the transport while the
+				// publisher is still completing its acknowledgement bookkeeping.
+				// Treat that in-flight creation as externally ordered too; otherwise
+				// a bootstrap terminal observed in this small window is discarded and
+				// the live resume can never publish it.
 				record.Terminal = publicationDeferred
 				record.Deferred = &job
 			case !publish || record.Creation == publicationUnknown || record.Creation == publicationSuppressed:
