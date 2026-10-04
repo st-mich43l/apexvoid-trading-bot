@@ -10,13 +10,9 @@ version: 3
 
 includes:
   - runtime.yml
-  - transport.yml
-  - database.yml
   - instruments.yml
   - analysis.yml
   - auto-algo.yml
-  - manual-algo.yml
   - execution.yml
   - telegram.yml
-  - journal.yml
   - environments/production.yml

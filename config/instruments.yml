@@ -10,7 +10,8 @@
 #
 # Per-instrument `manual.*` leaves (entry_mode, risk_reference,
 # risk_multiplier, target_close_ratios/tp1_close_fraction) stay here too,
-# nested under each pack/instrument — see manual-algo.yml's own header for
+# nested under each pack/instrument — see execution.yml's manual_algo section
+# for the global manual policy.
 # why they're not duplicated there.
 instrument_packs:
   fx_usd_major_fixed_2r_v1:

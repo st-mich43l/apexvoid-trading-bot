@@ -152,6 +152,7 @@ public sealed class InstrumentRuntimeRegistry
     ]);
   }
 
+  #if false // Removed legacy generated-manifest registry; direct YAML is authoritative.
   /// <summary>
   /// Explicit V1 compatibility: one XAU runtime from top-level projections.
   /// </summary>
@@ -354,6 +355,8 @@ public sealed class InstrumentRuntimeRegistry
     }
     return FromRuntimeManifestV2(manifest, feedBootstrap);
   }
+
+  #endif
 
   private void RegisterAlias(string alias, string instrumentId)
   {
