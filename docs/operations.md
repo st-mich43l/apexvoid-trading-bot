@@ -19,11 +19,10 @@ free -h                                     # RAM not pinned
 
 Then DM the bot `active` — a reply confirms the poll loop is alive.
 
-Compose also runs a one-shot `config-compiler` that writes
-`/runtime/resolved-runtime.json`. Production uses
-`CTRADER_CONFIGURATION_SOURCE=manifest` with
-`CTRADER_MANIFEST_PARITY_MODE=off` (legacy ENV parity off; manifest validation
-enforced). See `docs/configuration/manifest-authority-cutover.md`.
+All services resolve the mounted categorized YAML directly from
+`APEXVOID_CONFIG_FILE`. There is no generated runtime manifest or compiler
+container. Validate the selected root with `python -m app.configuration.validate`
+before deployment.
 
 Multi-symbol: production **live** instruments are XAU, EURUSD, GBPUSD,
 GBPJPY, and USDJPY (demo account). See `docs/runtime/multi-symbol-routing.md`.
@@ -223,10 +222,9 @@ needs a manual restart.
 
 ### Live Go activation
 
-Set `mode: go` and `consumer_enabled: true` in the **Ansible-rendered**
-`trading-bot.yml`, with Kafka enabled and the stable consumer group present.
-`config/analysis.yml` mirrors the same live setting for the Go engine. After a
-deploy, verify `analysis_opportunity_consumer_loop` health and the Kafka group.
+The Go consumer is configured by `config/analysis.yml` and the selected root.
+After a deploy, verify `analysis_opportunity_consumer_loop` health and the
+Kafka group.
 
 ## Troubleshooting
 
@@ -234,30 +232,14 @@ deploy, verify `analysis_opportunity_consumer_loop` health and the Kafka group.
 
 ```bash
 docker compose logs bot
-docker compose logs config-compiler
+docker compose logs analysis-engine
 docker compose logs ctrader-engine
 ```
 
-- Config / pydantic validation errors — required secrets missing from `.env`
-  (`TELEGRAM_BOT_TOKEN`, `POSTGRES_PASSWORD`, `CTRADER_*`, …) or invalid
-  `config/trading-bot.yml`.
-- **Production only, deploy "succeeded" in CI but the bot is down**:
-  `config-compiler` exits 1 with a Pydantic error on a field that looks
-  correct in this repo's `config/trading-bot.yml` (e.g. `... must be 4.0,
-  got 3.0`). The host's config isn't read from this repo — it's rendered
-  from a hand-maintained mirror in `ansible-library`
-  (`inventory/group_vars/all/apexvoid_trading_bot_config.yml`) that a recent
-  config change forgot to update. Confirm with
-  `docker logs apexvoid-config-compiler` (full traceback) and
-  `docker exec apexvoid-config-compiler cat /config/trading-bot.yml` (or the
-  host path directly) against this repo's value; fix the mirror in
-  `ansible-library`, merge, then re-run the deploy (or `docker compose up -d
-  --force-recreate` once the host file is corrected) — see
-  [deployment.md § Production Ansible](deployment.md#production-ansible).
-  Since `ctrader-engine`/`bot` both wait on `config-compiler`'s exit code,
-  this is a full outage, not a degraded start.
-- Manifest verify failure — `config-compiler` did not write
-  `/runtime/resolved-runtime.json`; fix YAML and recreate.
+- Config validation errors — required secrets missing from `.env`
+  (`TELEGRAM_BOT_TOKEN`, `POSTGRES_PASSWORD`, `CTRADER_*`, …), or invalid
+  categorized YAML. Run the validator against the exact root mounted in the
+  container and inspect the service that reports the path.
 - Postgres / Redis unhealthy — wait for healthchecks; check
   `DATABASE_URL` / `REDIS_URL`.
 

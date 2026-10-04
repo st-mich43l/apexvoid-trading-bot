@@ -2,7 +2,7 @@
 
 Go is the sole technical-opportunity producer. This guard validates the
 process-wide Go/Kafka path; it does not submit an order.
-The operator's Ansible-rendered trading-bot.yml, not config/analysis.yml,
+The operator's selected Configuration YAML root, not a process ENV tuning set,
 is the actual Python runtime configuration.
 
 The guard only applies while automatic trading is enabled. A deployment that
@@ -22,7 +22,7 @@ def require_live_go_consumer(runtime_config: Any) -> None:
   analysis_config = runtime_config.analysis.technical_authority
   if not analysis_config.consumer_enabled:
     raise RuntimeError(
-      "Live Go analysis consumer required: effective trading-bot.yml must set "
+      "Live Go analysis consumer required: selected YAML root must set "
       "analysis.technical_authority.consumer_enabled=true "
       f"(effective consumer_enabled={analysis_config.consumer_enabled!r}). "
       "Python scanners must not be used as a fallback."

@@ -1,7 +1,7 @@
 # Execution/broker mechanics and risk-execution behavior — owned logically
 # by ctrader-engine. Market interpretation never belongs here; the
-# executor stays mechanical. Direct copy of the old trading-bot.yml's
-# `execution.*` block contains the TradePlan and broker-execution contract.
+# executor stays mechanical. This category contains the TradePlan and
+# broker-execution contract.
 execution:
   technique:
     # Enforce strict PD + hard SL cap; killzone clock and sweep/body off.
@@ -96,10 +96,16 @@ execution:
     stop_max_pips: 60
     stop_min_pips: 40
 
+  reaction_risk_leg:
+    enabled: true
+
   scaling:
     add:
       level_buffer_atr: 1.0
       min_stop_pips: 30
+      pullback_enabled: false
+      pullback_min_retrace: 0.20
+      pullback_max_retrace: 0.70
       size_ratio: 0.5
       stop_buffer_atr: 0.3
 

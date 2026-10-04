@@ -56,6 +56,40 @@ public sealed record CTraderAccountOptions(
     );
   }
 
+  public static CTraderAccountOptions FromEnvironment(ConfigDocument config)
+  {
+    ArgumentNullException.ThrowIfNull(config);
+    return new CTraderAccountOptions(
+      ClientId: Require("CTRADER_CLIENT_ID"),
+      ClientSecret: Require("CTRADER_CLIENT_SECRET"),
+      AccessToken: Require("CTRADER_ACCESS_TOKEN"),
+      RefreshToken: Require("CTRADER_REFRESH_TOKEN"),
+      AccountId: long.Parse(Require("CTRADER_ACCOUNT_ID")),
+      Host: Env("CTRADER_HOST", "demo.ctraderapi.com"),
+      Port: int.Parse(Env("CTRADER_PORT", "5035")),
+      RedisUrl: config.RequiredString("transport.redis.url"),
+      HeartbeatFile: Env("HEALTH_FILE", "/tmp/ctrader-feed.heartbeat"),
+      AutoTradeHeartbeatFile: Env(
+        "AUTO_TRADE_HEALTH_FILE",
+        "/tmp/ctrader-autotrade.heartbeat"
+      ),
+      RefreshTokenKey: Env("CTRADER_REFRESH_TOKEN_KEY", "ctrader:refresh_token"),
+      RefreshTokenFile: Env(
+        "CTRADER_REFRESH_TOKEN_FILE",
+        "/var/lib/apexvoid/ctrader-token.json"
+      ),
+      RequestTimeout: TimeSpan.FromSeconds(
+        int.Parse(Env("CTRADER_REQUEST_TIMEOUT", "30"))
+      ),
+      TokenRefreshLead: TimeSpan.FromDays(
+        double.Parse(Env("CTRADER_TOKEN_REFRESH_LEAD_DAYS", "5"))
+      ),
+      TokenCheckInterval: TimeSpan.FromHours(
+        double.Parse(Env("CTRADER_TOKEN_CHECK_INTERVAL_HOURS", "6"))
+      )
+    );
+  }
+
   public static CTraderAccountOptions FromFeedOptions(FeedOptions feed) =>
     new(
       ClientId: feed.ClientId,

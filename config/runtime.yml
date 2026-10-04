@@ -41,3 +41,12 @@ runtime:
 
   execution_contract:
     mode: v8_only
+
+  # Shared market-feed process settings. Symbol identity and timeframes are
+  # instrument-owned in instruments.yml; these are the connection-wide
+  # retention/quality settings used by ctrader-engine.
+  feed:
+    backfill_bars: 2000
+    bars_window_max: 2000
+    bar_quality_lookback: 6
+    bars_channel: bars:new

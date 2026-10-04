@@ -83,7 +83,7 @@ auto_algo:
       # .require_flat_for_range Python schema defaults, unchanged values)
       # — previously only reachable via the demo_eval profile override
       # (which happened to set both to the exact same values as the
-      # default), never a base trading-bot.yml leaf. The schema caught
+      # default), never a base configuration leaf. The schema caught
       # this: an overlay setting a leaf with no base value is exactly the
       # gap §8 exists to close.
       allow_hedged_xau: false
@@ -102,7 +102,9 @@ auto_algo:
       same_direction_stack_size_fraction: 0.6
     sizing:
       add_require_risk_free: false
+      add_max_group_risk_pct: 3.0
       add_risk_fraction: 0.5
+      risk_pct: 2.0
       equity_table_version: owner_equity_v1
       mode: equity_table
       one_sided_range_risk_multiplier: 0.5
@@ -118,8 +120,8 @@ auto_algo:
         # Proximal entry width for FVG/iFVG/imbalance (price). Full gap stays
         # structural; every strategy clips tradeable entry to this band.
         entry_max_width_price: 5.0
-    # `scalping` is a sibling of `technique`, not nested under it — matches
-    # the old trading-bot.yml's own `strategies.scalping.*` shape exactly
+    # `scalping` is a sibling of `technique`, not nested under it — matching
+    # the categorized strategy shape exactly
     # (a prior draft of this file nested it under `technique` by mistake;
     # caught by the parity-check script comparing every leaf against the
     # The categorized configuration remains the source of truth.
