@@ -86,6 +86,6 @@ func techniqueInstanceZone(in legacyzone.Instance, bars []market.Candle) zone.Zo
 		Kind: kind, Side: side, Low: market.Price(low), High: market.Price(high),
 		Layer: structure.StructureIntermediate, Timeframe: market.M5,
 		OriginTime: originTime, CreatedAt: originTime, TouchCount: in.Touches,
-		Strength: 1, State: state, Relevance: zone.Immediate,
+		Strength: 1, LegacyScore: in.Score, State: state, Relevance: zone.Immediate,
 	}
 }

@@ -137,12 +137,20 @@ func DetectSweep(candles []market.Candle, fromIndex int, pool Pool) (sweptAt int
 // sweptIndex) that returns to the pool's origin side — source task §29's
 // "Reclaim," purely informational context on an already-swept pool (see
 // Pool.ReclaimedAt).
+//
+// The sweep candle is intentionally included. The frozen Python liquidity
+// detector evaluates a wick-through and reclaim on the same bar; starting at
+// sweptIndex+1 silently changed a same-bar reclaim into an unreclaimed pool
+// and removed valid Grade-A/B grabs from the strategy inputs.
 func DetectReclaim(candles []market.Candle, sweptIndex, reclaimBars int, pool Pool) (int64, bool) {
+	if sweptIndex < 0 || sweptIndex >= len(candles) || reclaimBars < 0 {
+		return 0, false
+	}
 	end := sweptIndex + reclaimBars
 	if end > len(candles)-1 {
 		end = len(candles) - 1
 	}
-	for i := sweptIndex + 1; i <= end; i++ {
+	for i := sweptIndex; i <= end; i++ {
 		c := candles[i]
 		if pool.Side == LiquidityBuySide && c.Close <= float64(pool.High) {
 			return c.Time, true

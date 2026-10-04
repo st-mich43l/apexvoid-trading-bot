@@ -47,8 +47,15 @@ func TestDetectSweepAndReclaim(t *testing.T) {
 		t.Errorf("expected sweep at index 1 (time %d), got index %d (time %d)", bars[1].Time, sweptIndex, sweptAt)
 	}
 	reclaimedAt, ok := liquidity.DetectReclaim(bars, sweptIndex, 3, pool)
-	if !ok || reclaimedAt != bars[2].Time {
-		t.Errorf("expected reclaim at bar 2 (time %d), got ok=%v time=%d", bars[2].Time, ok, reclaimedAt)
+	if !ok || reclaimedAt != bars[1].Time {
+		t.Errorf("expected same-bar reclaim at bar 1 (time %d), got ok=%v time=%d", bars[1].Time, ok, reclaimedAt)
+	}
+}
+
+func TestDetectReclaimRejectsInvalidWindow(t *testing.T) {
+	pool := liquidity.Pool{Side: liquidity.LiquidityBuySide, Low: 99.5, High: 100.5}
+	if _, ok := liquidity.DetectReclaim([]market.Candle{{Time: 1, Close: 100}}, -1, 2, pool); ok {
+		t.Fatal("negative sweep index must not produce a reclaim")
 	}
 }
 
