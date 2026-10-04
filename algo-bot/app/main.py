@@ -31,13 +31,6 @@ from app.autotrade.startup_reconciliation import reconcile_startup_state
 from app.autotrade.worker import configure_forming_card_edit_fn
 from app.bot.client import edit_scanner_message_text
 from app.bot.telegram_actor import start_telegram_actor
-from app.autotrade.config_health import (
-  python_manifest,
-  publish_python_manifest,
-)
-from app.configuration.runtime_manifest_boot import (
-  verify_mounted_runtime_manifest_or_raise,
-)
 from app.signals.manual_execution import bridge_intents_loop, reconcile_events_loop
 from app.persistence import redis_state
 
@@ -73,39 +66,18 @@ async def main() -> None:
   require_live_go_consumer(runtime_config)
   # Composition-root Telegram edit callback — worker never imports bot.client.
   configure_forming_card_edit_fn(edit_scanner_message_text)
-  verify_mounted_runtime_manifest_or_raise()
   await init_db()
   # Compose can report Redis healthy then briefly drop DNS while recreating the
   # container; wait for a real PING before anything else touches the client.
   await redis_state.wait_until_ready()
-  config_health = await publish_python_manifest(redis_state.get_client())
-  manifest = python_manifest()
   log.info(
-    "AUTO-TRADE CONFIG service=algo-bot profile=%s enabled=%s "
-    "dry_run=%s candidate_stream=%s event_stream=%s symbols=%s "
-    "targets=%s range_targets=%s candidate_max_age=%s "
-    "candidate_storage_ttl=%s range_flip=%s two_sided=%s concurrent=%s "
-    "counter_bias=%s account_mode=%s contract_version=%s "
-    "deprecated=%s sources=%s config_health=%s",
-    manifest["profile"],
-    manifest["auto_trade_enabled"],
-    manifest["dry_run"],
-    manifest["candidate_stream"],
-    manifest["event_stream"],
-    manifest["symbols"],
-    manifest["target_plans"],
-    manifest["range_target_plans"],
-    manifest["candidate_execution_max_age_seconds"],
-    manifest["candidate_storage_ttl_seconds"],
-    manifest["range_flip"],
-    manifest["two_sided_range"],
-    manifest["concurrent_strategies"],
-    manifest["allow_counter_bias"],
-    manifest["account_mode"],
-    manifest["candidate_contract_version"],
-    manifest["deprecated_variables"],
-    manifest["config_sources"],
-    config_health["state"],
+    "AUTO-TRADE CONFIG service=algo-bot profile=%s enabled=%s dry_run=%s "
+    "candidate_stream=%s event_stream=%s",
+    runtime_config.runtime.profile,
+    runtime_config.runtime.auto_trade.enabled,
+    runtime_config.runtime.auto_trade.dry_run,
+    runtime_config.contract.streams.candidates,
+    runtime_config.contract.streams.events,
   )
   if runtime_config.runtime.auto_trade.enabled:
     # Repair pre-existing orphaned/stale state before any background task
