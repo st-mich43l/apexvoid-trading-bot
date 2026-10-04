@@ -5,20 +5,20 @@ name: apexvoid-trading-bot
 # Configuration V3 (docs/configuration.md): `bot`'s non-secret tuning now
 # comes entirely from config/apexvoid.demo-eval.yml (the categorized
 # config/*.yml files + config/environments/demo_eval.yml, mounted whole
-# below) — not `config/trading-bot.yml`, and not any of the ENV tuning
+# below) and not any of the ENV tuning
 # variables this file used to set (AUTO_TRADE_PROFILE/
 # AUTO_TRADE_MAPPED_ZONE_ENABLED/AUTO_TRADE_MARKET_MAP_GUARD_ENABLED/
 # LOG_DIR/LOG_RETENTION_DAYS/LOG_FILE_ENABLED all removed from `bot`'s own
 # environment — see docs/configuration.md
 # section for the parity proof and one real, well-evidenced behavior
 # fix this cutover produces for local/dev specifically: those ENV
-# defaults, and trading-bot.yml's own explicit values, were silently
+# defaults and explicit YAML values are never silently
 # defeating several of the demo_eval profile's own intended overrides
 # (config-file/process-env precedence beating the profile layer) —
 # config/environments/demo_eval.yml is the one place that intent is
 # expressed, and nothing outranks it anymore.
 #
-# `config-compiler` emits the resolved manifest consumed by cTrader and the
+# each service resolves the same categorized YAML tree directly; cTrader and the
 # execution services.
 
 services:
@@ -135,31 +135,6 @@ services:
       retries: 12
       start_period: 20s
 
-  # Startup order:
-  #   postgres + redis → config-compiler → ctrader-engine → bot
-  # ResolvedRuntimeManifest V2 is authoritative. ENV is secrets + bootstrap only.
-  config-compiler:
-    build: ./algo-bot
-    image: apexvoid-trading-bot:latest
-    container_name: apexvoid-config-compiler
-    restart: "no"
-    env_file: .env
-    environment:
-      APEXVOID_CONFIG_FILE: /config/trading-bot.yml
-      APEXVOID_RUNTIME_MANIFEST_FILE: /runtime/resolved-runtime.json
-    command:
-      - python
-      - -m
-      - app.configuration.runtime_manifest_cli
-      - --config-file
-      - /config/trading-bot.yml
-      - --output
-      - /runtime/resolved-runtime.json
-      - --check
-    volumes:
-      - ./config/trading-bot.yml:/config/trading-bot.yml:ro
-      - runtime-config:/runtime
-
   ctrader-engine:
     build: ./ctrader-engine
     image: apexvoid-ctrader-engine:latest
@@ -172,19 +147,13 @@ services:
       LOG_RETENTION_DAYS: ${LOG_RETENTION_DAYS:-14}
       LOG_FILE_ENABLED: ${LOG_FILE_ENABLED:-true}
       LOG_FILE_NAME: ${CTRADER_LOG_FILE_NAME:-ctrader-engine.log}
-      APEXVOID_RUNTIME_MANIFEST_FILE: /runtime/resolved-runtime.json
-      CTRADER_CONFIGURATION_SOURCE: manifest
-      CTRADER_MANIFEST_PARITY_MODE: off
     depends_on:
       redis:
         condition: service_healthy
-      config-compiler:
-        condition: service_completed_successfully
     volumes:
       - ./config:/config:ro
       - ./data/ctrader-token:/var/lib/apexvoid
       - ./logs/ctrader-engine:/var/log/apexvoid
-      - runtime-config:/runtime:ro
     healthcheck:
       test: ["CMD", "/app/ctrader-feed", "--healthcheck"]
       interval: 15s
@@ -207,8 +176,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      config-compiler:
-        condition: service_completed_successfully
       ctrader-engine:
         condition: service_healthy
     volumes:
@@ -220,6 +187,5 @@ services:
 volumes:
   pgdata:
   redisdata:
-  runtime-config:
   kafkadata:
   analysis-engine-state:

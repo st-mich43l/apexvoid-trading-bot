@@ -10,8 +10,8 @@ namespace ApexVoid.CTraderFeed;
 /// three independent implementations of one spec (cross-language parity,
 /// §38).
 ///
-/// <para><b>This module is a bounded proof of pattern, not a live-path change.</b>
-/// Unlike the Python compatibility projection
+/// <para><b>This is the live direct YAML reader.</b>
+/// The typed runtime factory reads this same resolved document directly.
 /// (Go, fully wired — the old manifest reader was deleted, not kept
 /// alongside this one), this .NET reader is deliberately NOT wired into
 /// <see cref="AutoTradeOptions"/>, <see cref="ResolvedRuntimeManifest"/>,
@@ -50,8 +50,7 @@ public static class ConfigurationV3
   /// The one non-secret configuration bootstrap environment variable
   /// (docs/configuration.md) — the same name Python's
   /// <c>CONFIG_FILE_ENV</c>, Go's <c>config.RootFileEnv</c>, and this
-  /// repo's docker-compose.yml already use. Not read by anything live in
-  /// this project yet (see the module-level remarks above).
+/// repo's docker-compose.yml already use.
   /// </summary>
   public const string RootFileEnv = "APEXVOID_CONFIG_FILE";
 }
@@ -238,6 +237,93 @@ public sealed class ConfigDocument
     return cursor;
   }
 
+  public string RequiredString(string dottedPath) =>
+    Get(dottedPath) is string value && !string.IsNullOrWhiteSpace(value)
+      ? value
+      : throw new ConfigurationV3Error($"missing or invalid string \"{dottedPath}\"");
+
+  public bool RequiredBool(string dottedPath) => ConvertValue<bool>(dottedPath);
+
+  public int RequiredInt(string dottedPath) => ConvertValue<int>(dottedPath);
+
+  public decimal RequiredDecimal(string dottedPath) => ConvertValue<decimal>(dottedPath);
+
+  public IReadOnlyList<string> RequiredStrings(string dottedPath)
+  {
+    var value = Get(dottedPath);
+    if (value is not IEnumerable<object?> items)
+    {
+      throw new ConfigurationV3Error($"missing or invalid string list \"{dottedPath}\"");
+    }
+    var result = items.Select(item => item as string ?? "").Where(item => item.Length > 0).ToArray();
+    if (result.Length == 0)
+    {
+      throw new ConfigurationV3Error($"string list \"{dottedPath}\" is empty");
+    }
+    return result;
+  }
+
+  public IReadOnlyList<int> RequiredInts(string dottedPath)
+  {
+    var value = Get(dottedPath);
+    if (value is IEnumerable<object?> items)
+    {
+      var result = items.Select(item => ConvertValue<int>(dottedPath, item)).ToArray();
+      if (result.Length > 0) return result;
+    }
+    if (value is string text)
+    {
+      var result = text.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        .Select(item => int.Parse(item, System.Globalization.CultureInfo.InvariantCulture)).ToArray();
+      if (result.Length > 0) return result;
+    }
+    throw new ConfigurationV3Error($"missing or invalid integer list \"{dottedPath}\"");
+  }
+
+  public IReadOnlyDictionary<string, object?> InstrumentSection(string symbol)
+  {
+    var declared = Section("instruments");
+    if (declared.GetValueOrDefault(symbol) is not Dictionary<string, object?> instrument)
+    {
+      throw new ConfigurationV3Error($"unknown instrument \"{symbol}\"");
+    }
+    var merged = instrument;
+    if (instrument.GetValueOrDefault("pack") is string packName && packName.Length > 0)
+    {
+      if (Get("instrument_packs") is not Dictionary<string, object?> packs
+          || packs.GetValueOrDefault(packName) is not Dictionary<string, object?> pack)
+      {
+        throw new ConfigurationV3Error($"instrument \"{symbol}\" references unknown pack \"{packName}\"");
+      }
+      merged = (Dictionary<string, object?>)DeepMerge(pack, instrument)!;
+    }
+    return merged;
+  }
+
+  private T ConvertValue<T>(string dottedPath) => ConvertValue<T>(dottedPath, Get(dottedPath));
+
+  private static T ConvertValue<T>(string dottedPath, object? value)
+  {
+    if (value is null)
+    {
+      throw new ConfigurationV3Error($"missing required value \"{dottedPath}\"");
+    }
+    try
+    {
+      if (typeof(T) == typeof(bool) && value is string boolean)
+        return (T)(object)bool.Parse(boolean);
+      if (typeof(T) == typeof(int))
+        return (T)(object)Convert.ToInt32(value, System.Globalization.CultureInfo.InvariantCulture);
+      if (typeof(T) == typeof(decimal))
+        return (T)(object)Convert.ToDecimal(value, System.Globalization.CultureInfo.InvariantCulture);
+      return (T)Convert.ChangeType(value, typeof(T), System.Globalization.CultureInfo.InvariantCulture);
+    }
+    catch (Exception ex) when (ex is FormatException or InvalidCastException or OverflowException)
+    {
+      throw new ConfigurationV3Error($"invalid value for \"{dottedPath}\": {value}", ex);
+    }
+  }
+
   /// <summary>
   /// Returns the mapping at dottedPath, or throws if it's missing or not
   /// a mapping — the C# analogue of §9's "a missing required config value
@@ -269,22 +355,7 @@ public sealed class ConfigDocument
   /// </summary>
   public ConfigInstrumentGeometry GeometryFor(string symbol)
   {
-    var instruments = Section("instruments");
-    if (instruments.GetValueOrDefault(symbol) is not Dictionary<string, object?> instrument)
-    {
-      throw new ConfigurationV3Error($"unknown instrument \"{symbol}\"");
-    }
-
-    var merged = instrument;
-    if (instrument.GetValueOrDefault("pack") is string packName && packName.Length > 0)
-    {
-      var packs = Section("instrument_packs");
-      if (packs.GetValueOrDefault(packName) is not Dictionary<string, object?> pack)
-      {
-        throw new ConfigurationV3Error($"instrument \"{symbol}\" references unknown pack \"{packName}\"");
-      }
-      merged = (Dictionary<string, object?>)DeepMerge(pack, instrument)!;
-    }
+    var merged = InstrumentSection(symbol);
 
     if (merged.GetValueOrDefault("contract") is not Dictionary<string, object?> contract)
     {

@@ -350,7 +350,7 @@ Secrets and bootstrap live in `.env`. Full generated contract:
 | `LOG_DIR` / `LOG_RETENTION_DAYS` | optional | Host-mounted daily logs |
 
 Non-secret detector / technique / actionability knobs belong in
-`config/trading-bot.yml`.
+`config/apexvoid.yml` and its categorized includes.
 
 ---
 

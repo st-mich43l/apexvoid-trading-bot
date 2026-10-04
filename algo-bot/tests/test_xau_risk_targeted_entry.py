@@ -36,7 +36,7 @@ pytestmark = pytest.mark.no_database
 
 
 def _production_cfg(monkeypatch):
-  config_file = Path(__file__).resolve().parents[2] / "config" / "trading-bot.yml"
+  config_file = Path(__file__).resolve().parents[2] / "config" / "apexvoid.yml"
   monkeypatch.setenv("APEXVOID_CONFIG_FILE", str(config_file))
   return load_python_canonical_settings(
     load_python_runtime_source_bundle(),
@@ -258,7 +258,7 @@ def _cfg(**overrides):
     "auto_trade_zone_fill_enabled": True,
     "auto_trade_inside_zone_market_entry_enabled": True,
     "auto_trade_xau_price_digits": 2,
-    # Matches XAU's real production floor (config/trading-bot.yml's
+    # Matches XAU's real production floor (config/instruments.yml's
     # xau_fixed_4r_v1 pack stop_envelope.min_pips) - the target this
     # feature aims entries at.
     "execution.reaction.stop_min_pips": 50,

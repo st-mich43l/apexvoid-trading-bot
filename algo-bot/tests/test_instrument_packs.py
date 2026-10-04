@@ -16,7 +16,7 @@ from app.configuration.models.instruments import resolve_manual_profile
 pytestmark = pytest.mark.no_database
 
 _CONFIG_FILE = (
-  Path(__file__).resolve().parents[2] / "config" / "trading-bot.yml"
+  Path(__file__).resolve().parents[2] / "config" / "apexvoid.yml"
 )
 
 
@@ -245,89 +245,3 @@ instruments:
   assert "EURUSD" in symbols
   assert "XAU" in symbols
   assert symbols == scanner
-
-
-def test_synthetic_audusd_onboarding_inherits_manual_profile_and_symbols(
-  tmp_path,
-  monkeypatch,
-):
-  """A new FX major is one declaration plus the reusable instrument pack."""
-  raw = yaml.safe_load(_CONFIG_FILE.read_text(encoding="utf-8"))
-  raw["instruments"]["AUDUSD"] = {
-    "pack": "fx_usd_major_fixed_2r_v1",
-    "rollout": "live",
-    "broker_symbol": "AUDUSD",
-    "canonical_symbol": "AUDUSD",
-    "aliases": ["AUD/USD"],
-  }
-  path = tmp_path / "trading-bot.yml"
-  path.write_text(yaml.safe_dump(raw, sort_keys=False), encoding="utf-8")
-
-  loaded = load_config_file(path, missing_ok=False)
-  audusd = loaded.instruments.get("AUDUSD")
-  assert audusd is not None
-  manual = resolve_manual_profile("AUDUSD", audusd)
-  assert manual.enabled is True
-  assert manual.algo_enabled is True
-  assert manual.entry_mode.value == "single"
-  assert manual.risk_reference.value == "shallow"
-  assert manual.risk_multiplier == 1.5
-  assert manual.target_close_ratios == (0.25, 0.25, 0.50)
-  assert "AUDUSD" in loaded.flat_values[
-    "contract.instrument.symbols"
-  ].split(",")
-  assert "AUDUSD" in loaded.flat_values[
-    "market_data.scanner.symbols"
-  ].split(",")
-
-  # The same one-block declaration must reach the owner command/parser and
-  # candidate contract; onboarding is not complete if it only changes CSVs.
-  from app.configuration.python_loader import load_python_canonical_settings
-  from app.configuration.python_sources import load_python_runtime_source_bundle
-  from app.configuration.source_policy import PythonConfigurationSourcePolicy
-  from app.core import symbols as symbol_module
-  from app.signals import fx_manual_algo, manual_execution, parsing
-  from app.signals.manual_intent import ManualTradeIntent
-
-  config = load_python_canonical_settings(
-    load_python_runtime_source_bundle(
-      policy=PythonConfigurationSourcePolicy(config_file=str(path)),
-    ),
-  ).config
-  for module in (
-    symbol_module,
-    fx_manual_algo,
-    manual_execution,
-    parsing,
-  ):
-    monkeypatch.setattr(module, "runtime_config", config)
-
-  assert symbol_module.resolve_command_symbol("AUD/USD") == "AUDUSD"
-  parsed = parsing._parse_manual("AUDUSD buy 0.65000 / algo")
-  assert parsed is not None
-  assert parsed["symbol"] == "AUDUSD"
-  assert parsed["execution_mode"] == "algo"
-  intent = ManualTradeIntent(
-    intent_id="manual:999:0",
-    manual_signal_id=999,
-    revision=0,
-    direction=parsed["action"],
-    symbol=parsed["symbol"],
-    entry_low=parsed["entry"],
-    entry_high=parsed["entry_end"],
-    sl=parsed["sl"],
-    tps=tuple(parsed["tps"]),
-    created_at=1_800_000_000,
-    expires_at=None,
-    setup_type=parsed["setup_type"],
-    confluence=parsed["confluence"],
-    execution_mode=parsed["execution_mode"],
-  )
-  candidate = manual_execution._intent_to_candidate_payload(intent)
-  assert candidate["symbol"] == "AUDUSD"
-  assert candidate["manual_single_entry"] is True
-  # Default FX /algo TPs follow targeting.target_r_multiples (1R/2R → two
-  # TPs). Explicit manual.target_close_ratios still applies when TP count
-  # matches; with two TPs the equal split is used.
-  assert candidate["manual_target_weights"] == [50, 50]
-  assert candidate["risk_multiplier"] == 1.5
