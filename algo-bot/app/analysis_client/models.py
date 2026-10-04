@@ -8,7 +8,7 @@ from typing import Annotated, Literal
 
 from pydantic import Field, ValidationError, model_validator
 
-from app.configuration.models.base import FrozenConfigModel
+from app.core.config_schema import FrozenConfigModel
 
 OpportunityTopic = "analysis.opportunity.v1"
 InvalidationTopic = "analysis.opportunity.invalidated.v1"

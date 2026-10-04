@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 from app.core.config import runtime_config
-from tests.configuration.canonical_fixtures import install_runtime_overrides, leaf
+from tests.support.canonical_fixtures import install_runtime_overrides, leaf
 
 from types import SimpleNamespace
 from unittest.mock import AsyncMock

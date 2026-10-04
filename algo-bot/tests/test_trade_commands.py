@@ -11,7 +11,7 @@ os.environ.setdefault(
 os.environ.setdefault("TELEGRAM_CHAT_ID", "-100123456789")
 
 from app.core.config import runtime_config
-from tests.configuration.canonical_fixtures import install_runtime_overrides, leaf
+from tests.support.canonical_fixtures import install_runtime_overrides, leaf
 from app.persistence import store
 from app.core import symbols
 from app.bot import wiring
@@ -163,7 +163,7 @@ async def test_trade_open_lists_open_signals(monkeypatch):
 async def test_trade_lists_runtime_symbols_and_manual_modes(monkeypatch):
   install_runtime_overrides(monkeypatch, legacy_overrides={"telegram_owner_id": 42})
   from app.bot.handlers import dm as dm_handlers
-  from tests.test_config_effective_instrument_context import _load_production_example
+  from tests.support.canonical_fixtures import _load_production_example
 
   monkeypatch.setattr(dm_handlers, "runtime_config", _load_production_example().config)
   msg = _dm("/trade")

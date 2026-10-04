@@ -9,7 +9,7 @@ import pytest
 from app.bot import wiring
 from app.core.symbols import SYMBOLS
 from app.signals.reports import build_stats, build_stats_by_symbol, format_stats
-from tests.configuration.canonical_fixtures import install_runtime_overrides
+from tests.support.canonical_fixtures import install_runtime_overrides
 
 
 def _dm(text: str):

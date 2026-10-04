@@ -28,7 +28,7 @@ from app.autotrade.setup_lifecycle import CONFIRMED, INVALIDATED, load_setup
 from app.autotrade.trade_plan_stream import read_plan_state, read_trade_plan
 from app.persistence import redis_state, store
 from tests.test_analysis_client_models import _invalidated
-from tests.configuration.canonical_fixtures import install_runtime_overrides
+from tests.support.canonical_fixtures import install_runtime_overrides
 from tests.test_publish_trade_plan_v8 import (  # noqa: F401 - autouse fixtures
   _freeze_technique_killzone_hour,
   _m1_trigger_bar,
@@ -470,7 +470,10 @@ class Harness:
 
 @pytest.fixture
 def h(sql, monkeypatch):
-  install_runtime_overrides(monkeypatch, {"analysis.technical_authority.consumer_enabled": True})
+  install_runtime_overrides(monkeypatch, {
+    "analysis.technical_authority.consumer_enabled": True,
+    "instruments.XAU.stop_envelope.max_pips": 65,
+  })
   return Harness(sql, monkeypatch)
 
 

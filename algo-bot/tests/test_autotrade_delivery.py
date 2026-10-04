@@ -30,6 +30,7 @@ from app.autotrade.delivery import (
 )
 from app.autotrade.setup_lifecycle import CONFIRMED, create_setup, transition_setup
 from app.persistence import redis_state
+from tests.support.canonical_fixtures import install_runtime_overrides
 
 
 async def _confirmed_setup(client, setup_id: str) -> None:
@@ -380,6 +381,9 @@ async def test_order_filled_rewrites_waiting_fill_root(monkeypatch):
 @pytest.mark.no_database
 async def test_plan_expired_marks_waiting_fill_root(monkeypatch):
   """Unfilled expire must leave PLAN EXPIRED on the root — not WAITING FILL forever."""
+  install_runtime_overrides(
+    monkeypatch, {"telegram.delete_root_on_terminal": False},
+  )
   client = redis_state.get_client()
   match_id = "11c1d02cexpired"
   await _confirmed_setup(client, match_id)

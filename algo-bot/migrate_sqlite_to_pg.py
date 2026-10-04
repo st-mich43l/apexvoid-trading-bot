@@ -133,13 +133,13 @@ async def main() -> None:
   log.info("Source SQLite : %s", args.sqlite)
   log.info(
     "Target Postgres: %s",
-    runtime_config.bootstrap.postgres.url.split("@")[-1],
+    runtime_config.runtime.postgres.url.split("@")[-1],
   )
 
   # Create the schema in Postgres (idempotent).
   await store.init_db()
 
-  pg = await asyncpg.connect(runtime_config.bootstrap.postgres.url)
+  pg = await asyncpg.connect(runtime_config.runtime.postgres.url)
   try:
     async with pg.transaction():
       total = 0

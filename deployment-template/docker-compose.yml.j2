@@ -107,7 +107,7 @@ services:
         condition: service_completed_successfully
     volumes:
       - ./config:/config:ro
-      # transport.kafka.outbox_path lives here: the publication ledger must outlive a recreate.
+      # runtime.kafka.outbox_path lives here: the publication ledger must outlive a recreate.
       - analysis-engine-state:/var/lib/apexvoid-analysis-engine
       - ./logs/analysis-engine:/var/log/apexvoid
     healthcheck:

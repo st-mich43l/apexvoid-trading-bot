@@ -12,7 +12,6 @@ on:
       - "contracts/analysis/**"
       - "ctrader-engine/**"
       - "contracts/autotrade/**"
-      - "contracts/configuration/**"
       - "docker-compose.yml"
       - ".github/workflows/autotrade-integrity.yml"
 

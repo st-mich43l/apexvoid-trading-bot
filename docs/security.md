@@ -68,6 +68,6 @@ Compose services publish **no** application ports to the host by default
 - [ ] `.env` mode `600`, not world-readable
 - [ ] SSH key-only; disable password auth
 - [ ] Owner ID set; test that non-owner DMs are ignored
-- [ ] Auto-trade profile appropriate (`demo_eval` vs live)
+- [ ] Auto-trade profile appropriate (`demo` vs live)
 - [ ] Backups of Postgres dumps stored off-host
 - [ ] Log retention bounded (`LOG_RETENTION_DAYS`)

@@ -10,7 +10,7 @@ import pytest
 
 from app.bot import owner_dm_journal
 from app.persistence import redis_state
-from tests.configuration.canonical_fixtures import install_runtime_overrides
+from tests.support.canonical_fixtures import install_runtime_overrides
 
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.no_database]

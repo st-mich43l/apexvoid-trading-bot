@@ -21,7 +21,7 @@ from app.autotrade.strategy_match import (
   strategy_match_id,
 )
 from app.persistence import redis_state
-from tests.configuration.canonical_fixtures import install_runtime_overrides
+from tests.support.canonical_fixtures import install_runtime_overrides
 
 
 pytestmark = pytest.mark.no_database
@@ -117,6 +117,7 @@ def _worker_cycle(monkeypatch, *, now: int):
     {
       "analysis.technical_authority.consumer_enabled": True,
       "strategies.matching.multiple_matches_enabled": True,
+      "analysis.scanner.window": 500,
     },
     legacy_overrides={
       "auto_trade_enabled": True,

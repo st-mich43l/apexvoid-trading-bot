@@ -10,14 +10,14 @@ from typing import Iterable, Mapping
 
 from pydantic import ConfigDict
 
-from app.configuration.effective_instrument import (
-  EffectiveInstrumentConfig,
+from app.core.config_schema import FrozenConfigModel
+from app.runtime.instruments import (
+  EffectiveInstrument,
   EffectiveInstrumentError,
-  build_effective_instrument,
-  list_enabled_instrument_ids,
+  InstrumentRollout,
+  enabled_instruments,
+  for_instrument,
 )
-from app.configuration.models.base import FrozenConfigModel
-from app.configuration.models.instruments import InstrumentRollout
 from app.runtime.rollout_gates import (
   permits_analysis,
   permits_broker_execution,
@@ -29,7 +29,7 @@ class InstrumentRuntimeError(ValueError):
 
 
 # EffectiveInstrumentConfig already owns the required domain surface.
-InstrumentRuntimeContext = EffectiveInstrumentConfig
+InstrumentRuntimeContext = EffectiveInstrument
 
 
 class InstrumentRuntimeRegistry(FrozenConfigModel):
@@ -106,34 +106,27 @@ def build_instrument_runtime_registry(
   """Construct the registry from a resolved PythonRuntimeConfig-like root."""
   if instrument_ids is None:
     try:
-      ids = list_enabled_instrument_ids(runtime_config)  # type: ignore[arg-type]
+      ids = enabled_instruments(runtime_config)
     except EffectiveInstrumentError as exc:
       raise InstrumentRuntimeError(str(exc)) from exc
     # Include disabled instruments that are still declared so routing can
     # reject them explicitly rather than treating them as unknown.
     declared = getattr(runtime_config, "instruments", None)
-    if declared is not None and hasattr(declared, "root"):
-      ids = tuple(sorted({*ids, *declared.root.keys()}))
+    if declared is not None:
+      ids = tuple(sorted({*ids, *declared.keys()}))
   else:
     ids = tuple(sorted({item.strip().upper() for item in instrument_ids}))
 
   contexts: dict[str, InstrumentRuntimeContext] = {}
   for instrument_id in ids:
     try:
-      contexts[instrument_id] = build_effective_instrument(
-        runtime_config,  # type: ignore[arg-type]
-        instrument_id,
-        resolution_trace=resolution_trace,  # type: ignore[arg-type]
-      )
+      contexts[instrument_id] = for_instrument(runtime_config, instrument_id)
     except EffectiveInstrumentError as exc:
       # Disabled instruments without full units may still be declared; skip
       # only when rollout resolves to disabled and units are absent.
-      instrument = runtime_config.instruments.root.get(instrument_id)  # type: ignore[attr-defined]
-      if instrument is not None:
-        from app.configuration.models.instruments import effective_rollout
-
-        if effective_rollout(instrument) is InstrumentRollout.DISABLED:
-          continue
+      instrument = runtime_config.instruments.get(instrument_id)
+      if instrument is not None and str(instrument.get("rollout", "live")) == InstrumentRollout.DISABLED:
+        continue
       raise InstrumentRuntimeError(str(exc)) from exc
 
   if not contexts:

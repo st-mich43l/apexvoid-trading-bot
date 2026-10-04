@@ -22,7 +22,7 @@ os.environ.setdefault("TELEGRAM_CHAT_ID", "-100123456789")
 from app import main  # noqa: E402
 from app.analysis_client.startup_gate import require_live_go_consumer  # noqa: E402
 from app.core import config as config_module  # noqa: E402
-from tests.configuration.canonical_fixtures import install_runtime_overrides  # noqa: E402
+from tests.support.canonical_fixtures import install_runtime_overrides  # noqa: E402
 
 
 pytestmark = pytest.mark.no_database
@@ -32,17 +32,21 @@ GO = {"analysis.technical_authority.consumer_enabled": True}
 
 def _cfg(*, auto_trade=True, consumer=True, kafka=True, brokers=("kafka:9092",)):
   return SimpleNamespace(
-    runtime=SimpleNamespace(auto_trade=SimpleNamespace(enabled=auto_trade)),
+    auto_algo=SimpleNamespace(
+      enabled=auto_trade,
+      actionability=SimpleNamespace(
+        scanner_gates=SimpleNamespace(use_quality_ranking=True),
+      ),
+    ),
     analysis=SimpleNamespace(
       technical_authority=SimpleNamespace(
         consumer_enabled=consumer,
         consumer_group="apexvoid-algo-bot-analysis-opportunity-v1",
       ),
     ),
-    actionability=SimpleNamespace(
-      scanner_gates=SimpleNamespace(use_quality_ranking=True),
+    runtime=SimpleNamespace(
+      kafka=SimpleNamespace(enabled=kafka, brokers=list(brokers)),
     ),
-    transport=SimpleNamespace(kafka=SimpleNamespace(enabled=kafka, brokers=list(brokers))),
   )
 
 
@@ -52,7 +56,7 @@ def test_go_mode_with_consumer_and_kafka_passes():
 
 def test_go_mode_rejects_legacy_quality_ranking():
   config = _cfg()
-  config.actionability.scanner_gates.use_quality_ranking = False
+  config.auto_algo.actionability.scanner_gates.use_quality_ranking = False
   with pytest.raises(RuntimeError, match="use_quality_ranking=true"):
     require_live_go_consumer(config)
 
@@ -89,7 +93,7 @@ def test_gate_reads_the_real_config_model_paths(monkeypatch):
     require_live_go_consumer(config_module.runtime_config)
   install_runtime_overrides(monkeypatch, GO)
   require_live_go_consumer(config_module.runtime_config)
-  install_runtime_overrides(monkeypatch, {"transport.kafka.enabled": False})
+  install_runtime_overrides(monkeypatch, {"runtime.kafka.enabled": False})
   with pytest.raises(RuntimeError, match="Kafka transport"):
     require_live_go_consumer(config_module.runtime_config)
 
@@ -119,7 +123,7 @@ def _startup_doubles(monkeypatch) -> dict[str, object]:
       {"analysis.technical_authority.consumer_enabled": False},
       "Live Go analysis consumer required",
     ),
-    ({**GO, "transport.kafka.enabled": False}, "Kafka transport"),
+    ({**GO, "runtime.kafka.enabled": False}, "Kafka transport"),
   ],
   ids=["consumer_disabled", "kafka_disabled"],
 )

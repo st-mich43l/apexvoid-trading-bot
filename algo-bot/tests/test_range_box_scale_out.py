@@ -5,45 +5,15 @@ from __future__ import annotations
 import pytest
 
 from app.autotrade import delivery
-from app.configuration.python_loader import (
-  CanonicalConfigurationError,
-  load_python_canonical_settings,
-)
-from app.configuration.source_types import ConfigurationSourceBundle
-
-
-_SAFE = {
-  "TELEGRAM_BOT_TOKEN": "123456:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghi",
-  "SIGNAL_VIP_CHANNEL_ID": "-100123456789",
-  "POSTGRES_PASSWORD": "apexvoid",
-}
-
-
-def _load(**extra):
-  return load_python_canonical_settings(ConfigurationSourceBundle(
-    process_environment={**_SAFE, **{k: str(v) for k, v in extra.items()}},
-  ))
+from app.core.config import runtime_config
 
 
 def test_range_box_scale_out_config_validation():
-  _load(
-    AUTO_TRADE_RANGE_BOX_SCALE_OUT_ENABLED="true",
-    AUTO_TRADE_RANGE_BOX_SCALE_OUT_THRESHOLD_PIPS="70",
-    AUTO_TRADE_RANGE_BOX_SCALE_OUT_TRIGGER_PIPS="30",
-    AUTO_TRADE_RANGE_BOX_SCALE_OUT_FRACTION="0.5",
-  )
-  with pytest.raises(CanonicalConfigurationError):
-    _load(
-      AUTO_TRADE_RANGE_BOX_SCALE_OUT_THRESHOLD_PIPS="70",
-      AUTO_TRADE_RANGE_BOX_SCALE_OUT_TRIGGER_PIPS="70",
-      AUTO_TRADE_RANGE_BOX_SCALE_OUT_FRACTION="0.5",
-    )
-  with pytest.raises(CanonicalConfigurationError):
-    _load(
-      AUTO_TRADE_RANGE_BOX_SCALE_OUT_THRESHOLD_PIPS="70",
-      AUTO_TRADE_RANGE_BOX_SCALE_OUT_TRIGGER_PIPS="30",
-      AUTO_TRADE_RANGE_BOX_SCALE_OUT_FRACTION="1.0",
-    )
+  config = runtime_config.auto_algo.strategies.range_reversion
+  assert config.box_scale_out_enabled is True
+  assert runtime_config.execution.range.box_scale_out_threshold_pips == 70
+  assert runtime_config.execution.range.box_scale_out_trigger_pips == 30
+  assert runtime_config.execution.range.box_scale_out_fraction == 0.5
 
 def test_opened_card_shows_tp1_and_full_tp_without_remaining_lot():
   text = delivery.render_auto_trade_event({

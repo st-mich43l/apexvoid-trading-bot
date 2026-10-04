@@ -14,7 +14,7 @@ Python trigger detector.
 
 from __future__ import annotations
 from app.core.config import runtime_config
-from tests.configuration.canonical_fixtures import install_runtime_overrides, leaf
+from tests.support.canonical_fixtures import install_runtime_overrides, leaf
 
 from dataclasses import replace
 import time
@@ -63,6 +63,17 @@ def _no_news_by_default(monkeypatch):
   # must fail-open (no event) so tests can exercise every other gate.
   monkeypatch.setattr(
     worker, "event_in_window", AsyncMock(return_value=None),
+  )
+
+
+@pytest.fixture(autouse=True)
+def _native_xau_test_envelope(monkeypatch):
+  # These fixtures deliberately exercise wide structural reaction geometry.
+  # Production remains on the native XAU 50-60 pip envelope; the generic
+  # publication contract tests must not be rejected before they reach the
+  # lifecycle assertions.
+  install_runtime_overrides(
+    monkeypatch, {"instruments.XAU.stop_envelope.max_pips": 100},
   )
 
 

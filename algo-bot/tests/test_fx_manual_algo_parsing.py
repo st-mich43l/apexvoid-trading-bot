@@ -6,7 +6,7 @@ import pytest
 
 from app.signals.fx_manual_algo import build_fx_manual_contract
 from app.signals.parsing import _parse_manual
-from tests.test_config_effective_instrument_context import _load_production_example
+from tests.support.canonical_fixtures import _load_production_example
 
 
 pytestmark = pytest.mark.no_database

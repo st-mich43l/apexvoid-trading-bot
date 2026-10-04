@@ -20,8 +20,8 @@ from app.autotrade import go_opportunity_policy as pol
 from app.autotrade import setup_card
 from app.autotrade.multi_match import deserialize_matches, strategy_matches_key
 from app.autotrade.setup_card import format_plan_published_root_card
-from tests.configuration.canonical_fixtures import install_runtime_overrides
-from tests.test_config_effective_instrument_context import _load_production_example
+from tests.support.canonical_fixtures import install_runtime_overrides
+from tests.support.canonical_fixtures import _load_production_example
 from tests.test_go_full_chain import (  # noqa: F401 - fixtures + helpers
   _freeze_technique_killzone_hour,
   _no_news_by_default,
@@ -77,6 +77,14 @@ async def deliver_and_publish(h, prod, monkeypatch):
     ),
   )
   live_inputs(monkeypatch, bid=4293.0, ask=4293.2)                    # inside the replayed zone 4291.21-4296.87
+  install_runtime_overrides(
+    monkeypatch, {
+      "instruments.XAU.stop_envelope.max_pips": 100,
+      "instruments.XAU.targeting.mode": "fixed_rr",
+      "instruments.XAU.auto_entry.mode": "single_best",
+      "execution.zone_scaling.fill_enabled": False,
+    },
+  )
   await h.activate()
   await h._ensure()
   now = int(h.clock.now)

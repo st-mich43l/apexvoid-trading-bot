@@ -6,6 +6,7 @@ from decimal import Decimal, ROUND_HALF_UP
 
 from app.core.config import runtime_config
 from app.core.symbols import digits_for
+from app.runtime.instruments import for_instrument, live_instruments
 
 
 def uses_entry_price_display(
@@ -19,7 +20,7 @@ def uses_entry_price_display(
     return False
   if entry_end is None:
     return True
-  pip = runtime_config.for_instrument(symbol).units.pip_size
+  pip = for_instrument(runtime_config, symbol).units.pip_size
   return abs(float(entry) - float(entry_end)) <= pip * 0.01
 
 
@@ -31,9 +32,9 @@ def fx_manual_symbols() -> tuple[str, ...]:
   fixed-R/R policy is an FX manual book.
   """
   symbols: list[str] = []
-  for instrument_id in runtime_config.live_instruments():
+  for instrument_id in live_instruments(runtime_config):
     try:
-      effective = runtime_config.for_instrument(instrument_id)
+      effective = for_instrument(runtime_config, instrument_id)
     except Exception:
       continue
     if (
@@ -52,7 +53,7 @@ def round_price(symbol: str, price: float) -> float:
 
 def close_ratio_weights(symbol: str) -> list[int]:
   """Percent weights (sum 100) from the explicit manual exit profile."""
-  manual = runtime_config.for_instrument(symbol).manual
+  manual = for_instrument(runtime_config, symbol).manual
   ratios = [float(value) for value in manual.target_close_ratios]
   if not ratios:
     return [100]
@@ -64,7 +65,7 @@ def close_ratio_weights(symbol: str) -> list[int]:
 
 
 def default_stop_pips(symbol: str) -> float:
-  effective = runtime_config.for_instrument(symbol)
+  effective = for_instrument(runtime_config, symbol)
   reaction = effective.execution.reaction
   min_pips = float(reaction.stop_min_pips)
   max_pips = float(reaction.stop_max_pips)
@@ -84,7 +85,7 @@ def build_fx_manual_contract(
   """Return SL, 1R/1.5R/2R TPs, and partial weights for one FX /algo entry."""
   action = action.upper()
   symbol = symbol.upper()
-  pip = runtime_config.for_instrument(symbol).units.pip_size
+  pip = for_instrument(runtime_config, symbol).units.pip_size
   entry = round_price(symbol, entry)
   if sl is None:
     stop_pips = default_stop_pips(symbol)
@@ -101,7 +102,7 @@ def build_fx_manual_contract(
   if tps is None:
     multiples = [
       float(value)
-      for value in runtime_config.for_instrument(symbol).targeting.target_r_multiples
+      for value in for_instrument(runtime_config, symbol).targeting.target_r_multiples
     ]
     if not multiples:
       multiples = [1.0, 2.0]

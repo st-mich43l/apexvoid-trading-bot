@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from types import SimpleNamespace
 
-from tests.configuration.canonical_fixtures import (
+from tests.support.canonical_fixtures import (
   install_runtime_overrides,
   leaf,
   map_strategy_cfg,

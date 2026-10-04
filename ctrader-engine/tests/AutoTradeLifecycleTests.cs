@@ -6,7 +6,6 @@ public sealed class AutoTradeLifecycleTests
 {
   [Theory]
   [InlineData("warning", null)]
-  [InlineData("config_health", null)]
   [InlineData("account_capability", null)]
   [InlineData("ready", null)]
   [InlineData("range_flip_attempted", null)]

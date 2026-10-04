@@ -1,10 +1,8 @@
 # Configuration
 
-`config/apexvoid.yml` is the production root and
-`config/apexvoid.demo-eval.yml` is the optional demo root. Each root resolves
-the same categorized YAML files and one environment overlay. Go, Python, and
-.NET load that tree directly; there is no generated runtime manifest or
-second non-secret configuration file.
+`config/apexvoid.yml` is the production root and `config/apexvoid.demo.yml` is
+the optional demo root. Each root includes the same native YAML categories and
+one environment overlay. Go, Python, and .NET load that tree directly.
 
 ## Categories
 
@@ -30,10 +28,10 @@ deployment environment.
 
 ```bash
 docker compose config -q
-PYTHONPATH=algo-bot python -m app.configuration.validate config/apexvoid.yml
-PYTHONPATH=algo-bot python -m app.configuration.validate config/apexvoid.demo-eval.yml
+PYTHONPATH=algo-bot python config/scripts/resolve_reference.py --environment production
+PYTHONPATH=algo-bot python config/scripts/resolve_reference.py --environment demo
 ```
 
-Validation must reject malformed roots, duplicate category ownership, missing
-required values, unknown fields, and secrets in YAML. Update the owning
-category and shared schema together when adding a field.
+The loader rejects malformed roots, include cycles, missing required sections,
+and invalid instrument declarations. Update the owning YAML category and the
+native schema together when adding a field.

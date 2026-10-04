@@ -20,8 +20,9 @@ free -h                                     # RAM not pinned
 Then DM the bot `active` — a reply confirms the poll loop is alive.
 
 All services resolve the mounted categorized YAML directly from
-`APEXVOID_CONFIG_FILE`. There is no generated runtime manifest or compiler
-container. Validate the selected root with `python -m app.configuration.validate`
+`APEXVOID_CONFIG_FILE`. Each service reads the native YAML tree directly; no
+generated runtime state or compiler is required.
+container. Validate the selected root with `python -m app.core.config.validate`
 before deployment.
 
 Multi-symbol: production **live** instruments are XAU, EURUSD, GBPUSD,

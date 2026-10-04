@@ -39,7 +39,7 @@ _JOURNAL_TTL_SECONDS = 3 * 24 * 3600
 
 def _current_trade_date() -> str:
   """Same local-midnight boundary as ``store._current_trade_date()``."""
-  tz = ZoneInfo(runtime_config.delivery.presentation.seq_reset_tz)
+  tz = ZoneInfo(runtime_config.telegram.presentation.seq_reset_tz)
   return datetime.now(tz).date().isoformat()
 
 
@@ -51,7 +51,7 @@ async def record_message_id(chat_id: object, message_id: object) -> None:
   """Journal one message id for today's owner-DM sweep. No-op unless enabled
   and ``chat_id`` matches the configured owner.
   """
-  cfg = runtime_config.delivery.telegram
+  cfg = runtime_config.telegram
   if not cfg.owner_dm_daily_wipe_enabled:
     return
   owner_id = cfg.telegram_owner_id
@@ -87,7 +87,7 @@ async def sweep_owner_dm(trade_date: str) -> int:
   """
   from app.bot.client import delete_message
 
-  owner_id = runtime_config.delivery.telegram.telegram_owner_id
+  owner_id = runtime_config.telegram.telegram_owner_id
   ids = await _pop_journal(trade_date)
   if not owner_id or not ids:
     return 0
@@ -114,12 +114,12 @@ async def owner_dm_daily_wipe_loop() -> None:
   would otherwise immediately sweep the CURRENT, still-accumulating day.
   Always targets the next upcoming midnight instead.
   """
-  if not runtime_config.delivery.telegram.owner_dm_daily_wipe_enabled:
+  if not runtime_config.telegram.owner_dm_daily_wipe_enabled:
     log.info("Owner DM daily wipe disabled")
     return
   while True:
     try:
-      tz = ZoneInfo(runtime_config.delivery.presentation.seq_reset_tz)
+      tz = ZoneInfo(runtime_config.telegram.presentation.seq_reset_tz)
       now = datetime.now(tz)
       next_midnight = (now + timedelta(days=1)).replace(
         hour=0, minute=0, second=0, microsecond=0,
@@ -172,7 +172,7 @@ async def owner_dm_session_middleware(make_request, bot, method):
 async def owner_dm_incoming_middleware(handler, event, data):
   """``dp.message`` outer middleware - journals the owner's own messages."""
   try:
-    cfg = runtime_config.delivery.telegram
+    cfg = runtime_config.telegram
     chat = getattr(event, "chat", None)
     from_user = getattr(event, "from_user", None)
     if (

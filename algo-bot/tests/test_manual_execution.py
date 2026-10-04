@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from app.core.config import runtime_config
-from tests.configuration.canonical_fixtures import install_runtime_overrides, leaf
+from tests.support.canonical_fixtures import install_runtime_overrides, leaf
 from app.persistence import redis_state, store
 from app.signals import broadcast, manual_execution
 from app.signals.manual_intent import ManualTradeIntent
@@ -109,7 +109,7 @@ def test_intent_to_candidate_payload_never_emits_zero_or_negative_pips():
 
 @pytest.mark.no_database
 def test_intent_to_candidate_payload_fx_includes_volume_multiplier(monkeypatch):
-  from tests.test_config_effective_instrument_context import _load_production_example
+  from tests.support.canonical_fixtures import _load_production_example
 
   cfg = _load_production_example().config
   for target in (
@@ -150,7 +150,7 @@ def test_xau_manual_tp1_fraction_adapts_to_any_tp_count(
   targets,
   expected,
 ):
-  from tests.test_config_effective_instrument_context import _load_production_example
+  from tests.support.canonical_fixtures import _load_production_example
 
   cfg = _load_production_example().config
   for target in (
@@ -419,7 +419,7 @@ async def _algo_signal(**overrides) -> int:
     rec["id"], intent_id=f"manual:{rec['id']}:0", status="armed", revision=0,
   )
   await store.insert_signal_post(
-    rec["id"], runtime_config.delivery.telegram.telegram_channel_id, 9000 + rec["id"], "vip",
+    rec["id"], runtime_config.telegram.telegram_channel_id, 9000 + rec["id"], "vip",
   )
   return rec["id"]
 

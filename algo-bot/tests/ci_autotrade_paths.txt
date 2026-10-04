@@ -3,7 +3,6 @@
 # characterization suites that still encode retired product.
 tests/test_trade_plan_v8_telegram_events.py
 tests/test_trade_plan_v8_contract.py
-tests/test_trade_plan_contract_mode.py
 tests/test_trade_plan_builder.py
 tests/test_scalp_micro_grid.py
 tests/test_trade_plan_stream.py
@@ -29,7 +28,6 @@ tests/test_stop_bounds_from_go_envelope.py
 tests/test_go_stop_widening.py
 tests/test_go_live_opportunities.py
 tests/test_xau_risk_targeted_entry.py
-tests/test_config_v3_cross_language_fixture.py
 tests/test_legs_achieved_pips.py
 tests/test_telegram_single_root_card.py
 tests/test_worker_terminal_card_cleanup.py
@@ -46,7 +44,6 @@ tests/test_analysis_consumer.py
 tests/test_analysis_opportunity_repository.py
 tests/test_analysis_consumer_persistence.py
 tests/test_capture_bars.py
-tests/test_technical_authority_config.py
 tests/test_go_only_startup_gate.py
 tests/test_analysis_authority_boundary.py
 tests/test_go_opportunity_policy.py

@@ -133,11 +133,11 @@ def _filter_events(rows: list[dict]) -> list[dict]:
   currencies = {
     value.upper()
     for value in _configured_values(
-      runtime_config.market_data.calendar.currencies
+      runtime_config.analysis.calendar.currencies
     )
   }
   oil_keywords = _configured_values(
-    runtime_config.market_data.calendar.oil_keywords,
+    runtime_config.analysis.calendar.oil_keywords,
     lowercase=True,
   )
   return [
@@ -154,7 +154,7 @@ async def _fetch_feed(url: str, cache_path: Path) -> Any | None:
   try:
     timeout = aiohttp.ClientTimeout(total=15)
     headers = {
-      "User-Agent": runtime_config.market_data.calendar.user_agent
+      "User-Agent": runtime_config.analysis.calendar.user_agent
     }
     async with aiohttp.ClientSession(
       timeout=timeout,
@@ -231,7 +231,7 @@ def _local_day_window(now: datetime) -> tuple[int, int]:
 
 def _is_oil_event(event: dict) -> bool:
   keywords = _configured_values(
-    runtime_config.market_data.calendar.oil_keywords,
+    runtime_config.analysis.calendar.oil_keywords,
     lowercase=True,
   )
   return any(keyword in event["title"].lower() for keyword in keywords)
@@ -269,7 +269,7 @@ async def _post_brief(now: datetime) -> None:
   start, end = _local_day_window(now)
   text = _format_brief(
     await events_between(start, end),
-    ZoneInfo(runtime_config.delivery.presentation.seq_reset_tz),
+    ZoneInfo(runtime_config.telegram.presentation.seq_reset_tz),
   )
   if text is not None:
     for target in channels_for("XAU", "both"):
@@ -281,20 +281,20 @@ async def _post_brief(now: datetime) -> None:
 
 
 async def _sync_day(now: datetime | None = None) -> None:
-  tz = ZoneInfo(runtime_config.delivery.presentation.seq_reset_tz)
+  tz = ZoneInfo(runtime_config.telegram.presentation.seq_reset_tz)
   now = now.astimezone(tz) if now else datetime.now(tz)
   day = now.date().isoformat()
   if await get_meta("last_sync_date") != day:
     payloads = []
     feeds = [
       (
-        runtime_config.market_data.calendar.feed_thisweek,
+        runtime_config.analysis.calendar.feed_thisweek,
         _CACHE_THISWEEK,
       ),
     ]
     if now.weekday() >= 3:
       feeds.append((
-        runtime_config.market_data.calendar.feed_nextweek,
+        runtime_config.analysis.calendar.feed_nextweek,
         _CACHE_NEXTWEEK,
       ))
     can_fetch = await get_meta("last_fetch_date") != day
@@ -322,15 +322,15 @@ async def _sync_day(now: datetime | None = None) -> None:
 
 async def calendar_sync_loop() -> None:
   """Run at most one calendar sync per local day at the configured hour."""
-  if not runtime_config.market_data.calendar.enabled:
+  if not runtime_config.analysis.calendar.enabled:
     log.info("Economic calendar disabled")
     return
   while True:
     try:
-      tz = ZoneInfo(runtime_config.delivery.presentation.seq_reset_tz)
+      tz = ZoneInfo(runtime_config.telegram.presentation.seq_reset_tz)
       now = datetime.now(tz)
       target = now.replace(
-        hour=runtime_config.market_data.calendar.news_brief_hour,
+        hour=runtime_config.analysis.calendar.news_brief_hour,
         minute=0,
         second=0,
         microsecond=0,

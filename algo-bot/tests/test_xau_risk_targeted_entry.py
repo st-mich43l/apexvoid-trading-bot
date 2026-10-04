@@ -10,19 +10,17 @@ front; the stop envelope (min 50 / max 60) remains the backstop.
 
 from __future__ import annotations
 
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-from tests.configuration.canonical_fixtures import execution_cfg
+from app.core.config import runtime_config
+from tests.support.canonical_fixtures import execution_cfg
 
 from app.autotrade.execution_policy import (
   _planned_entry_price,
   evaluate_execution_policy,
 )
-from app.configuration.python_loader import load_python_canonical_settings
-from app.configuration.python_sources import load_python_runtime_source_bundle
 from app.autotrade.protective_stop import plan_go_invalidation_stop
 from app.autotrade.execution_route import (
   ROUTE_MARKET_WITH_LIMIT_SCALE,
@@ -36,11 +34,7 @@ pytestmark = pytest.mark.no_database
 
 
 def _production_cfg(monkeypatch):
-  config_file = Path(__file__).resolve().parents[2] / "config" / "apexvoid.yml"
-  monkeypatch.setenv("APEXVOID_CONFIG_FILE", str(config_file))
-  return load_python_canonical_settings(
-    load_python_runtime_source_bundle(),
-  ).config
+  return runtime_config
 
 
 def test_risk_targeted_entry_lands_at_exactly_target_pips_when_reachable():

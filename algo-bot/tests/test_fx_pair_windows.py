@@ -10,7 +10,7 @@ from app.autotrade.killzone import (
   reaction_require_publish_window,
   session_quality_minimum_confluence,
 )
-from tests.test_config_effective_instrument_context import _load_production_example
+from tests.support.canonical_fixtures import _load_production_example
 
 
 pytestmark = pytest.mark.no_database

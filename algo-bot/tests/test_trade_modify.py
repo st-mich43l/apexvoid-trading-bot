@@ -9,7 +9,7 @@ import pytest
 from app.persistence import redis_state, store
 from app.signals import manual_execution, trade_ops
 from app.signals.parsing import _parse_modify_body, _seq_token
-from tests.configuration.canonical_fixtures import install_runtime_overrides
+from tests.support.canonical_fixtures import install_runtime_overrides
 
 
 def test_seq_token_accepts_trailing_modify_body():

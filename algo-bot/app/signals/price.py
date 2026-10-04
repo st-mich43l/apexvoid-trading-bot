@@ -37,7 +37,7 @@ async def get_xau_bars(
         "startDate": start_date,
         "format": "csv",
       },
-      headers={"Authorization": f"Token {runtime_config.market_data.tiingo.api_key}"},
+      headers={"Authorization": f"Token {runtime_config.analysis.tiingo.api_key}"},
       timeout=timeout,
     ) as response:
       if response.status == 429:

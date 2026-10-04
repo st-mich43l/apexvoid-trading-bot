@@ -1,12 +1,8 @@
 import asyncio
 import json
-from pathlib import Path
 from unittest.mock import AsyncMock
 from app.core.config import runtime_config
-from app.configuration.python_loader import load_python_canonical_settings
-from app.configuration.python_sources import load_python_runtime_source_bundle
-from app.configuration.source_policy import PythonConfigurationSourcePolicy
-from tests.configuration.canonical_fixtures import install_runtime_overrides, leaf
+from tests.support.canonical_fixtures import install_runtime_overrides, leaf
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
@@ -317,12 +313,7 @@ def test_render_box_open_and_full_tp_as_shareable_cards():
 
 @pytest.mark.no_database
 def test_fx_delivery_uses_symbol_pips_and_price_digits(monkeypatch):
-  config_file = Path(__file__).resolve().parents[2] / "config" / "apexvoid.yml"
-  policy = PythonConfigurationSourcePolicy(config_file=str(config_file))
-  production = load_python_canonical_settings(
-    load_python_runtime_source_bundle(policy=policy),
-  ).config
-  install_runtime_overrides(monkeypatch, base=production)
+  install_runtime_overrides(monkeypatch, base=runtime_config)
 
   opened = delivery.render_auto_trade_event({
     "type": "opened",
@@ -1751,6 +1742,9 @@ async def test_opened_event_replies_to_stored_forming_message():
 async def test_rejected_event_retains_root_card_and_sends_nothing(monkeypatch):
   # One forming card per setup: reject leaves the root body intact and
   # sends nothing new (single-root retain mode).
+  install_runtime_overrides(
+    monkeypatch, {"telegram.delete_root_on_terminal": False},
+  )
   client = redis_state.get_client()
   match_id = "supply:M5:4062.49:4066.18:sweep"
   await client.set(

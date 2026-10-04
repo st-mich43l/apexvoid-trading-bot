@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from app.core.config import runtime_config
-from tests.configuration.canonical_fixtures import install_runtime_overrides, leaf
+from tests.support.canonical_fixtures import install_runtime_overrides, leaf
 from app.persistence import redis_state, store
 from app.signals.manual_intent import build_intent, publish_intent
 
@@ -28,7 +28,7 @@ def _signal(**overrides) -> dict:
 
 
 def _end_of_trade_day(trade_date: str) -> int:
-  tz = ZoneInfo(runtime_config.delivery.presentation.seq_reset_tz)
+  tz = ZoneInfo(runtime_config.telegram.presentation.seq_reset_tz)
   day = datetime.fromisoformat(trade_date).date()
   return int(datetime.combine(day + timedelta(days=1), time.min, tzinfo=tz).timestamp())
 
@@ -66,7 +66,7 @@ def test_build_intent_reads_personal_trade_flag_from_signal():
 def test_build_intent_expires_at_end_of_trade_day_local_tz():
   intent = build_intent(_signal(trade_date="2024-03-01"))
 
-  tz = ZoneInfo(runtime_config.delivery.presentation.seq_reset_tz)
+  tz = ZoneInfo(runtime_config.telegram.presentation.seq_reset_tz)
   expiry = datetime.fromtimestamp(intent.expires_at, tz=tz)
   assert expiry == datetime(2024, 3, 2, 0, 0, tzinfo=tz)
 
@@ -77,7 +77,7 @@ def test_build_intent_falls_back_to_today_when_trade_date_missing():
 
   intent = build_intent(signal)
 
-  tz = ZoneInfo(runtime_config.delivery.presentation.seq_reset_tz)
+  tz = ZoneInfo(runtime_config.telegram.presentation.seq_reset_tz)
   today = datetime.now(tz).date()
   assert intent.expires_at == _end_of_trade_day(today.isoformat())
 

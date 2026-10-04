@@ -1,6 +1,6 @@
 # Demo evaluation auto-trade
 
-`AUTO_TRADE_PROFILE=demo_eval` maximizes valid structure-based execution on a
+`ApexVoid environment selector=demo` maximizes valid structure-based execution on a
 broker-confirmed demo account. It does not relax quote freshness, order
 geometry, ownership, idempotency, stop, or target validation. A live account
 is fatal and no order is submitted.
@@ -8,7 +8,7 @@ is fatal and no order is submitted.
 ## Required environment
 
 ```dotenv
-AUTO_TRADE_PROFILE=demo_eval
+ApexVoid environment selector=demo
 AUTO_TRADE_ENABLED=true
 AUTO_TRADE_DRY_RUN=false
 AUTO_TRADE_REQUIRE_DEMO_ACCOUNT=true
@@ -75,7 +75,7 @@ AUTO_TRADE_MAX_ACTIVE_POSITIONS_PER_SYMBOL=0
 ```
 
 Explicit environment values win over profile defaults, except
-`AUTO_TRADE_REQUIRE_DEMO_ACCOUNT=false`, which is invalid for `demo_eval`.
+`AUTO_TRADE_REQUIRE_DEMO_ACCOUNT=false`, which is invalid for `demo`.
 `AUTO_TRADE_EXPECTED_BROKER=fpmarkets` accepts the broker-reported
 `FP Markets` spelling after normalized identity comparison.
 
@@ -111,7 +111,7 @@ docker compose ps bot ctrader-engine
 docker compose logs --since=10m bot ctrader-engine
 ```
 
-Expected startup output reports `profile=demo_eval`, a demo account, account
+Expected startup output reports `profile=demo`, a demo account, account
 hedging capability, the resolved exposure policy, and config health. A
 broker-confirmed live account reports `config_fatal` and terminates the
 executor.
@@ -178,7 +178,7 @@ sed -i 's/^AUTO_TRADE_ENABLED=.*/AUTO_TRADE_ENABLED=false/' .env
 docker compose up -d --build --no-deps bot ctrader-engine
 ```
 
-Switching to `AUTO_TRADE_PROFILE=conservative` restores the prior flat exposure
+Switching to `ApexVoid environment selector=conservative` restores the prior flat exposure
 policy defaults. Existing broker positions remain owned and reconciled; the
 profile change does not close them automatically.
 

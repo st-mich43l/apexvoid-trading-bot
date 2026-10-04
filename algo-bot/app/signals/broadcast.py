@@ -190,7 +190,7 @@ async def broadcast_entry(
     # new tier) so render_entry/post_result keep the daily #seq line, full
     # pip detail, and the inline Close button exactly as today - only the
     # sending bot and destination chat id change.
-    owner_id = runtime_config.delivery.telegram.telegram_owner_id
+    owner_id = runtime_config.telegram.telegram_owner_id
     if owner_id and int(owner_id) not in delivered:
       text = (
         render_fn("vip") if render_fn else render_entry(sig, "vip")

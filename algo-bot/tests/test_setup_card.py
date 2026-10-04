@@ -4,7 +4,7 @@ Prompt P4).
 
 from __future__ import annotations
 from app.core.config import runtime_config
-from tests.configuration.canonical_fixtures import install_runtime_overrides, leaf
+from tests.support.canonical_fixtures import install_runtime_overrides, leaf
 
 import asyncio
 import os
@@ -1228,9 +1228,9 @@ def test_root_card_shows_target_prices_with_pip_offsets():
     target_prices=(4050.73, 4052.73, 4054.73),
   )
   # XAU rounds to a whole number for display (4050.73 -> 4,051, etc.).
-  assert "💰 TP1:   <b>4,051</b>  ·  <b>+20</b>" in text
-  assert "💰 TP2:   <b>4,053</b>  ·  <b>+40</b>" in text
-  assert "💰 TP3:   <b>4,055</b>  ·  <b>+60</b>" in text
+  assert "💰 TP1:   <b>4,051</b>  ·  <b>1.0R</b>" in text
+  assert "💰 TP2:   <b>4,053</b>  ·  <b>2.0R</b>" in text
+  assert "💰 TP3:   <b>4,055</b>  ·  <b>3.0R</b>" in text
 
 
 def test_root_card_target_r_multiple_lookup_never_crashes_on_unknown_symbol():
@@ -1284,8 +1284,8 @@ def test_fx_root_card_shows_target_levels_with_instrument_digits(monkeypatch):
     stop_price=1.36380,
     target_prices=(1.36620, 1.36820, 1.37020),
   )
-  assert "💰 TP1:   <b>1.3662</b>  ·  <b>+20</b>" in text
-  assert "💰 TP2:   <b>1.3682</b>  ·  <b>+40</b>" in text
+  assert "💰 TP1:   <b>1.3662</b>  ·  <b>1.0R</b>" in text
+  assert "💰 TP2:   <b>1.3682</b>  ·  <b>2.0R</b>" in text
   assert "💰 TP3:   <b>1.3702</b>  ·  <b>+60</b>" in text
   assert "1.36 " not in text  # must not collapse FX to 2dp
 

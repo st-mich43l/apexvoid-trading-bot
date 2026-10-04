@@ -70,7 +70,7 @@ def test_xau_scalp_auto_route_is_single_leg_market(
   direction: str,
   quote: float,
 ):
-  from tests.test_config_effective_instrument_context import (
+  from tests.support.canonical_fixtures import (
     _load_production_example,
   )
 

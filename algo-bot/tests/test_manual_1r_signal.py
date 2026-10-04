@@ -97,7 +97,7 @@ def test_1r_single_price_entry_is_unaffected_by_collapse():
 class TestFxManual1R:
   @pytest.fixture(autouse=True)
   def _production_config(self, monkeypatch):
-    from tests.test_config_effective_instrument_context import (
+    from tests.support.canonical_fixtures import (
       _load_production_example,
     )
 

@@ -43,7 +43,7 @@ from app.autotrade.zone_watch import (
   transition_zone_watch,
 )
 from app.persistence import redis_state
-from tests.configuration.canonical_fixtures import install_runtime_overrides
+from tests.support.canonical_fixtures import install_runtime_overrides
 from tests.test_go_opportunity_policy import Harness, golden
 from tests.test_publish_trade_plan_v8 import (  # noqa: F401 - autouse fixtures
   _freeze_technique_killzone_hour,
@@ -56,7 +56,10 @@ pytestmark = pytest.mark.real_redis
 def live_inputs(monkeypatch, *, bid=4354.1, ask=4354.3, news=None):
   """The market inputs the live worker cycle would read, pinned like the repo's own worker tests."""
   install_runtime_overrides(
-    monkeypatch, {"strategies.matching.multiple_matches_enabled": True},
+    monkeypatch, {
+      "strategies.matching.multiple_matches_enabled": True,
+      "instruments.XAU.stop_envelope.max_pips": 65,
+    },
     legacy_overrides={
       "auto_trade_enabled": True, "auto_trade_symbols": "XAU",
       "auto_trade_strategy_match_enabled": True, "auto_trade_news_guard_minutes": 0,
@@ -93,6 +96,14 @@ def prod(monkeypatch, event_loop):
 def h(sql, monkeypatch, prod):
   install_runtime_overrides(monkeypatch, {"analysis.technical_authority.consumer_enabled": True})
   live_inputs(monkeypatch)
+  # The shared executor fixture is intentionally the historical single-entry
+  # contract.  Keep that fixture explicit in native paths; production XAU
+  # remains fixed-RR with zone scaling enabled.
+  install_runtime_overrides(monkeypatch, {
+    "execution.zone_scaling.fill_enabled": False,
+    "instruments.XAU.targeting.mode": "ladder_pips",
+    "instruments.XAU.stop_envelope.min_pips": 40,
+  })
   return Harness(sql, monkeypatch)
 
 
@@ -405,6 +416,9 @@ _REAL_PUBLISH_WINDOW = killzone.evaluate_reaction_publish_window     # captured 
 
 
 def _outside_publish_window(mp):
+  install_runtime_overrides(
+    mp, {"execution.technique.reaction_require_publish_window": True},
+  )
   mp.setattr(killzone, "evaluate_reaction_publish_window",
              lambda *, ts=None, hour=None, cfg=None, require=True: _REAL_PUBLISH_WINDOW(ts=None, hour=3, cfg=cfg, require=require))
 

@@ -29,7 +29,7 @@ const RootFileEnv = "APEXVOID_CONFIG_FILE"
 // scope for what analysis-engine reads today.
 type stringMap = map[string]any
 
-// Document is a resolved Configuration V3 document — every category's
+// Document is the resolved native YAML document — every category's
 // data, merged and overlaid, addressable by dotted path.
 type Document struct {
 	raw stringMap

@@ -33,7 +33,7 @@ from app.autotrade.multi_match import deserialize_matches, strategy_matches_key
 from app.autotrade.setup_lifecycle import EXPIRED, INVALIDATED, PLAN_PUBLISHED, load_setup
 from app.autotrade.trade_plan_stream import read_plan_state
 from app.persistence import redis_state
-from tests.configuration.canonical_fixtures import install_runtime_overrides
+from tests.support.canonical_fixtures import install_runtime_overrides
 from tests.test_analysis_client_models import _invalidated
 from tests.test_go_opportunity_policy import Harness, _outcome, _spot, golden
 from tests.test_publish_trade_plan_v8 import (  # noqa: F401 - autouse fixtures
@@ -64,7 +64,10 @@ def real_redis_client(monkeypatch, event_loop):
 
 @pytest.fixture
 def h(sql, monkeypatch, real_redis_client):
-  install_runtime_overrides(monkeypatch, {"analysis.technical_authority.consumer_enabled": True})
+  install_runtime_overrides(monkeypatch, {
+    "analysis.technical_authority.consumer_enabled": True,
+    "instruments.XAU.stop_envelope.max_pips": 65,
+  })
   return Harness(sql, monkeypatch)
 
 

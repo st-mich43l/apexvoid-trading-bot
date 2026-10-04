@@ -131,7 +131,7 @@ def test_explicit_setup_overrides_default():
 def test_gbpjpy_frontload_weights_from_manual_profile(monkeypatch):
   from app.core import symbols
   from app.signals import fx_manual_algo
-  from tests.test_config_effective_instrument_context import _load_production_example
+  from tests.support.canonical_fixtures import _load_production_example
 
   config = _load_production_example().config
   monkeypatch.setattr(

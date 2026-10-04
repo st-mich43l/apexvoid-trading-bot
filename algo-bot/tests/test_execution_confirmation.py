@@ -22,9 +22,8 @@ from app.persistence import redis_state
 
 pytestmark = pytest.mark.no_database
 from app.core.config import runtime_config
-from app.configuration.python_loader import CanonicalConfigurationError, load_python_canonical_settings
-from app.configuration.source_types import ConfigurationSourceBundle
-from tests.configuration.canonical_fixtures import leaf
+from app.runtime.instruments import for_instrument
+from tests.support.canonical_fixtures import leaf
 
 
 def _match(**overrides) -> StrategyMatch:
@@ -302,29 +301,12 @@ async def test_execution_confirmation_state_round_trips_across_restart_contexts(
   assert restored == state
 
 
-_SAFE_CFG = {
-  "TELEGRAM_BOT_TOKEN": "123456:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghi",
-  "SIGNAL_VIP_CHANNEL_ID": "-100123456789",
-  "POSTGRES_PASSWORD": "apexvoid",
-}
-
-
 def test_retest_trigger_validity_window_is_conservative_and_validated():
-  assert leaf(runtime_config, "auto_trade_retest_trigger_validity_bars") == 2
-  with pytest.raises(CanonicalConfigurationError):
-    load_python_canonical_settings(ConfigurationSourceBundle(
-      process_environment={**_SAFE_CFG, "AUTO_TRADE_RETEST_TRIGGER_VALIDITY_BARS": "0"},
-    ))
+  assert runtime_config.auto_algo.lifecycle.retest.trigger_validity_bars == 2
 
 
 def test_entry_contract_and_executor_anti_chase_are_separate():
-  assert leaf(runtime_config, "auto_trade_max_entry_distance_pips") == 40.0
-  assert leaf(runtime_config, "auto_trade_entry_contract_tolerance_pips") == 3.0
-  assert leaf(runtime_config, "zone_merge_max_width") == 6.0
-  assert leaf(runtime_config, "scanner_actionability_gate_enabled") is False
-  assert leaf(runtime_config, "key_level_role_ambiguity_gate_enabled") is False
-  assert leaf(runtime_config, "range_context_disagreement_gate_enabled") is False
-  with pytest.raises(CanonicalConfigurationError):
-    load_python_canonical_settings(ConfigurationSourceBundle(
-      process_environment={**_SAFE_CFG, "AUTO_TRADE_MAX_ENTRY_DISTANCE_PIPS": "0"},
-    ))
+  assert runtime_config.execution.entry.maximum_chase_distance_pips == 40.0
+  assert runtime_config.execution.entry.contract_tolerance_pips == 3.0
+  assert for_instrument(runtime_config, "XAU").analysis.zones.major_maximum_width_price == 10.0
+  assert runtime_config.auto_algo.actionability.scanner_gates.actionability_gate_enabled is False

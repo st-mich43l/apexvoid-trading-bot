@@ -230,6 +230,7 @@ def _build_entry(
       zone_low=Decimal(str(measured.get("planned_entry_zone_low", match.entry_low))),
       zone_high=Decimal(str(measured.get("planned_entry_zone_high", match.entry_high))),
       legs=legs,
+      price_side="ask" if direction == "BUY" else "bid",
       max_spread_ticks=max_spread_ticks,
       max_slippage_ticks=max_slippage_ticks,
     )

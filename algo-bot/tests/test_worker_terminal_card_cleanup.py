@@ -15,7 +15,7 @@ at all.
 
 from __future__ import annotations
 from app.core.config import runtime_config
-from tests.configuration.canonical_fixtures import leaf
+from tests.support.canonical_fixtures import install_runtime_overrides, leaf
 
 import json
 
@@ -69,6 +69,9 @@ def _match(setup_id: str) -> StrategyMatch:
 async def test_plan_build_incomplete_cancels_and_clears_orphan_card(
   monkeypatch,
 ):
+  install_runtime_overrides(
+    monkeypatch, {"telegram.delete_root_on_terminal": False},
+  )
   client = redis_state.get_client()
   setup_id = "worker-cancel-1"
   match = _match(setup_id)
