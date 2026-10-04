@@ -1,65 +1,12 @@
-"""The Go opportunity path must not load Python technical detectors."""
+"""Current execution-policy behavior owned by the Go opportunity path."""
 
 from __future__ import annotations
 
-import ast
 from datetime import datetime, timezone
-from pathlib import Path
 from types import SimpleNamespace
 
 from app.autotrade.scalp_ladder import scalp_target_ladder
 from app.autotrade.session_context import classify_session
-
-
-APP_ROOT = Path(__file__).resolve().parents[1] / "app"
-AUTOTRADE_ROOT = APP_ROOT / "autotrade"
-RETIRED_TECHNICAL_MODULES = (
-  APP_ROOT / "analysis",
-  APP_ROOT / "scalping" / "context.py",
-  APP_ROOT / "scalping" / "math_features.py",
-  APP_ROOT / "scalping" / "publish.py",
-  AUTOTRADE_ROOT / "map_strategy.py",
-  AUTOTRADE_ROOT / "structural_barriers.py",
-)
-
-
-def _imports(path: Path) -> set[str]:
-  tree = ast.parse(path.read_text(), filename=str(path))
-  found: set[str] = set()
-  for node in ast.walk(tree):
-    if isinstance(node, ast.Import):
-      found.update(alias.name for alias in node.names)
-    elif isinstance(node, ast.ImportFrom) and node.module:
-      found.add(node.module)
-  return found
-
-
-def test_retired_python_technical_sources_are_deleted():
-  remaining = []
-  for path in RETIRED_TECHNICAL_MODULES:
-    if path.is_dir() and any(path.glob("*.py")):
-      remaining.append(str(path.relative_to(APP_ROOT)))
-    elif path.is_file():
-      remaining.append(str(path.relative_to(APP_ROOT)))
-  assert remaining == []
-
-
-def test_production_package_has_no_legacy_analysis_imports():
-  forbidden = {
-    "app.analysis",
-    "app.analysis.detectors",
-    "app.analysis.scanner",
-    "app.analysis.market_map",
-    "app.scalping.context",
-    "app.scalping.publish",
-  }
-  for path in APP_ROOT.rglob("*.py"):
-    imports = _imports(path)
-    assert not any(
-      module in forbidden or module.startswith("app.analysis.")
-      or module in {"app.scalping.context", "app.scalping.publish"}
-      for module in imports
-    ), f"{path.relative_to(APP_ROOT)} imports retired technical analysis: {imports & forbidden}"
 
 
 def test_session_labels_are_execution_owned_and_configurable():

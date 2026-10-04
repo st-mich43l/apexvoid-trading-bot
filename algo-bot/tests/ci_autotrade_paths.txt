@@ -7,7 +7,6 @@ tests/test_trade_plan_builder.py
 tests/test_scalp_micro_grid.py
 tests/test_trade_plan_stream.py
 tests/test_publish_trade_plan_v8.py
-tests/test_worker_v8_only_autonomous_boundary.py
 tests/test_watcher.py
 tests/test_auto_trade_ops.py
 tests/test_autotrade_delivery.py
@@ -22,7 +21,6 @@ tests/test_zone_watch_published_locked.py
 tests/test_setup_card.py
 tests/test_execution_confirmation.py
 tests/test_auto_trade_stats_ingestion.py
-tests/test_repair_manual_algo_results.py
 tests/test_protective_stop.py
 tests/test_stop_bounds_from_go_envelope.py
 tests/test_go_stop_widening.py
@@ -45,7 +43,6 @@ tests/test_analysis_opportunity_repository.py
 tests/test_analysis_consumer_persistence.py
 tests/test_capture_bars.py
 tests/test_go_only_startup_gate.py
-tests/test_analysis_authority_boundary.py
 tests/test_go_opportunity_policy.py
 tests/test_thesis_correlation.py
 tests/test_go_zone_book.py

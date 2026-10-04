@@ -18,20 +18,20 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/zone"
 )
 
-func restoredContext(direction market.Direction, candles []market.Candle) *analysiscontext.MarketContext {
+func strategyContext(direction market.Direction, candles []market.Candle) *analysiscontext.MarketContext {
 	return &analysiscontext.MarketContext{
 		Symbol: "XAU", Bias: analysiscontext.BiasContext{Direction: direction}, Volatility: analysiscontext.VolatilityContext{ATR: 1},
 		Timeframes: map[market.Timeframe]*analysiscontext.TimeframeContext{market.M5: {Timeframe: market.M5, Candles: candles, Regime: regime.State{Kind: "trend"}}},
 	}
 }
 
-func TestRestoredSnapBackRequiresLocationGrabAndReaction(t *testing.T) {
+func TestSnapBackRequiresLocationGrabAndReaction(t *testing.T) {
 	s, err := snapback.New(strategy.Config{ID: snapback.ID, Version: "v2", Parameters: snapBackParams()})
 	if err != nil {
 		t.Fatal(err)
 	}
 	candles := []market.Candle{{Time: 1000, Open: 99.2, High: 100.8, Low: 98.5, Close: 100.5}}
-	ctx := restoredContext(market.Buy, candles)
+	ctx := strategyContext(market.Buy, candles)
 	tf := ctx.Timeframes[market.M5]
 	tf.Structure.Swings = []structure.Swing{{ID: "low", Kind: structure.SwingLow, Price: 96, Time: 700}}
 	tf.Zones.Zones = []zone.Zone{{ID: "demand", Side: zone.Demand, Kind: zone.KindDemand, Low: 99, High: 100, OriginTime: 600, State: zone.StateFresh, Strength: .8, TouchCount: 2}}
@@ -42,7 +42,7 @@ func TestRestoredSnapBackRequiresLocationGrabAndReaction(t *testing.T) {
 	tf.Liquidity.Pools = []liquidity.Pool{{ID: "eq-low", Side: liquidity.LiquiditySellSide, Source: "equal_low", Low: 99.1, High: 99.2, SweptAt: &swept, ReclaimedAt: &reclaimed, CreatedAt: 500, TouchCount: 3}}
 	got := s.Evaluate(ctx)
 	if len(got) != 1 || got[0].StructuralID != "snap:demand" || got[0].Reaction == nil {
-		t.Fatalf("qualified legacy snap back missing: %+v", got)
+		t.Fatalf("qualified snap back missing: %+v", got)
 	}
 	tf.Fib.Range = &fib.DealingRange{Zone: "premium"}
 	if got := s.Evaluate(ctx); len(got) != 0 {
@@ -50,14 +50,14 @@ func TestRestoredSnapBackRequiresLocationGrabAndReaction(t *testing.T) {
 	}
 }
 
-func TestRestoredFadeEqualLevelAndChopRules(t *testing.T) {
+func TestFadeEqualLevelAndChopRules(t *testing.T) {
 	params := map[string]any{"proximal_band_atr": .5, "invalidation_buffer_atr": .25, "target_r": 2.0, "expiry_hours": 4.0, "chop_edge_fraction": .25, "strict_premium_discount": true, "reaction_lookback_bars": 3.0, "engulfing_minimum_range_atr": .5}
 	s, err := fadescalp.New(strategy.Config{ID: fadescalp.ID, Version: "v2", Parameters: params})
 	if err != nil {
 		t.Fatal(err)
 	}
 	swept, reclaimed := int64(1000), int64(1000)
-	ctx := restoredContext(market.Buy, []market.Candle{{Time: 1000, Open: 99.2, High: 100.8, Low: 98.5, Close: 100.5}})
+	ctx := strategyContext(market.Buy, []market.Candle{{Time: 1000, Open: 99.2, High: 100.8, Low: 98.5, Close: 100.5}})
 	tf := ctx.Timeframes[market.M5]
 	tf.Liquidity.Pools = []liquidity.Pool{
 		{ID: "swing", Side: liquidity.LiquiditySellSide, Source: "swing_low", Low: 99.1, High: 99.2, SweptAt: &swept, ReclaimedAt: &reclaimed, CreatedAt: 500},
@@ -86,12 +86,12 @@ func TestRestoredFadeEqualLevelAndChopRules(t *testing.T) {
 	}
 }
 
-func TestRestoredMomentumUsesStructuralBreakAndZone(t *testing.T) {
+func TestMomentumUsesStructuralBreakAndZone(t *testing.T) {
 	s, err := momentumride.New(strategy.Config{ID: momentumride.ID, Version: "v2", Parameters: momentumRideParams()})
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx := restoredContext(market.Buy, []market.Candle{{Time: 900, Open: 99, High: 100, Low: 98.8, Close: 99.8}, {Time: 1000, Open: 100, High: 102, Low: 99.9, Close: 101.8}})
+	ctx := strategyContext(market.Buy, []market.Candle{{Time: 900, Open: 99, High: 100, Low: 98.8, Close: 99.8}, {Time: 1000, Open: 100, High: 102, Low: 99.9, Close: 101.8}})
 	tf := ctx.Timeframes[market.M5]
 	tf.Momentum = momentum.Result{State: momentum.Bull, Velocity: .3, Acceleration: .01}
 	tf.Structure.Swings = []structure.Swing{{ID: "broken-high", Kind: structure.SwingHigh, Price: 100, Time: 800}}
@@ -112,14 +112,14 @@ func TestRestoredMomentumUsesStructuralBreakAndZone(t *testing.T) {
 	}
 }
 
-func TestLegacyParityScoreWinsAnchorSelection(t *testing.T) {
-	ctx := restoredContext(market.Buy, []market.Candle{{Time: 1000, Open: 99, High: 101, Low: 98, Close: 100}})
+func TestZoneQualityScoreWinsAnchorSelection(t *testing.T) {
+	ctx := strategyContext(market.Buy, []market.Candle{{Time: 1000, Open: 99, High: 101, Low: 98, Close: 100}})
 	ctx.Timeframes[market.M5].Zones.Zones = []zone.Zone{
-		{ID: "go-strong", Side: zone.Demand, Low: 99, High: 100, State: zone.StateFresh, Strength: 99, LegacyScore: 1},
-		{ID: "python-strong", Side: zone.Demand, Low: 99.2, High: 100.2, State: zone.StateFresh, Strength: .1, LegacyScore: 5},
+		{ID: "low-quality", Side: zone.Demand, Low: 99, High: 100, State: zone.StateFresh, Strength: 99, LegacyScore: 1},
+		{ID: "high-quality", Side: zone.Demand, Low: 99.2, High: 100.2, State: zone.StateFresh, Strength: .1, LegacyScore: 5},
 	}
 	zones := strategyutil.LiveZones(ctx.Timeframes[market.M5], market.Buy, 100, 1, 2)
-	if len(zones) != 2 || zones[0].ID != "python-strong" {
-		t.Fatalf("legacy source score must select the Python strong anchor first: %+v", zones)
+	if len(zones) != 2 || zones[0].ID != "high-quality" {
+		t.Fatalf("zone quality score must select the strong anchor first: %+v", zones)
 	}
 }

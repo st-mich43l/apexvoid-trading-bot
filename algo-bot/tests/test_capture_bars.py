@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from app.scripts import capture_bars
+from tools import capture_bars
 
 pytestmark = pytest.mark.no_database
 
