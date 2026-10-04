@@ -34,7 +34,7 @@ Validate before deployment:
 
 ```bash
 docker compose config -q
-PYTHONPATH=algo-bot python config/scripts/config_check.py
+PYTHONPATH=algo-bot python config/scripts/resolve_reference.py --all
 ```
 
 ## Production rollout

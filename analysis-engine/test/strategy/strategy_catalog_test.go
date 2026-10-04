@@ -79,7 +79,7 @@ func assertOne(t *testing.T, instance strategy.Strategy, marketCtx *analysiscont
 	}
 }
 
-func TestS11MissingStrategiesKnownQualifyingFixtures(t *testing.T) {
+func TestStrategiesKnownQualifyingFixtures(t *testing.T) {
 	const base = int64(1_700_000_000)
 	t.Run("ifvg", func(t *testing.T) {
 		s, err := ifvg.New(cfg(ifvg.ID, map[string]any{"epsilon_atr_fraction": 0.05, "maximum_zone_atr": 3.0, "entry_max_width_price": 5.0, "reaction_lookback_bars": 3.0, "engulfing_minimum_range_atr": 0.5, "minimum_strength": .4, "minimum_gap_atr": .5, "invalidation_buffer_atr": .5, "minimum_target_distance_atr": 1.0, "expiry_hours": 4.0}))
@@ -181,7 +181,7 @@ func TestS11MissingStrategiesKnownQualifyingFixtures(t *testing.T) {
 	})
 }
 
-func TestS11BreakoutRetestsRejectDeepFailedReentry(t *testing.T) {
+func TestBreakoutRetestsRejectDeepFailedReentry(t *testing.T) {
 	box, err := boxbreakout.New(cfg(boxbreakout.ID, map[string]any{"box_bars": 5.0, "maximum_width_atr": 2.0, "retest_tolerance_atr": .2, "invalidation_buffer_atr": .25, "target_r": 2.0, "expiry_hours": 4.0}))
 	if err != nil {
 		t.Fatal(err)
@@ -202,7 +202,7 @@ func TestS11BreakoutRetestsRejectDeepFailedReentry(t *testing.T) {
 	}
 }
 
-func TestS11BreakoutRetestsAllowDelayedHoldBeforeRetest(t *testing.T) {
+func TestBreakoutRetestsAllowDelayedHoldBeforeRetest(t *testing.T) {
 	box, err := boxbreakout.New(cfg(boxbreakout.ID, map[string]any{"box_bars": 5.0, "retest_window_bars": 3.0, "maximum_width_atr": 2.0, "retest_tolerance_atr": .2, "invalidation_buffer_atr": .25, "target_r": 2.0, "expiry_hours": 4.0}))
 	if err != nil {
 		t.Fatal(err)
@@ -234,7 +234,7 @@ func TestS11BreakoutRetestsAllowDelayedHoldBeforeRetest(t *testing.T) {
 	}
 }
 
-func TestS11IFVGDeduplicatesRepeatedCanonicalZone(t *testing.T) {
+func TestIFVGDeduplicatesRepeatedCanonicalZone(t *testing.T) {
 	s, err := ifvg.New(cfg(ifvg.ID, map[string]any{"epsilon_atr_fraction": 0.05, "maximum_zone_atr": 3.0, "entry_max_width_price": 5.0, "reaction_lookback_bars": 3.0, "engulfing_minimum_range_atr": 0.5, "minimum_strength": .4, "minimum_gap_atr": .5, "invalidation_buffer_atr": .5, "minimum_target_distance_atr": 1.0, "expiry_hours": 4.0}))
 	if err != nil {
 		t.Fatal(err)
@@ -249,7 +249,7 @@ func TestS11IFVGDeduplicatesRepeatedCanonicalZone(t *testing.T) {
 	}
 }
 
-func TestS11RangeEdgeTriggerCannotDefineItsOwnRange(t *testing.T) {
+func TestRangeEdgeTriggerCannotDefineItsOwnRange(t *testing.T) {
 	s, err := rangeedge.New(cfg(rangeedge.ID, rangeEdgeParams()))
 	if err != nil {
 		t.Fatal(err)
@@ -261,7 +261,7 @@ func TestS11RangeEdgeTriggerCannotDefineItsOwnRange(t *testing.T) {
 	}
 }
 
-func TestS11MissingStrategiesRejectMissingConfiguration(t *testing.T) {
+func TestStrategiesRejectMissingConfiguration(t *testing.T) {
 	factories := []struct {
 		name    string
 		id      strategy.StrategyID
@@ -278,7 +278,7 @@ func TestS11MissingStrategiesRejectMissingConfiguration(t *testing.T) {
 	}
 }
 
-func TestS11IFVGIgnoresAGapThatIsASliverOfATR(t *testing.T) {
+func TestIFVGIgnoresAGapThatIsASliverOfATR(t *testing.T) {
 	s, err := ifvg.New(cfg(ifvg.ID, map[string]any{"epsilon_atr_fraction": 0.05, "maximum_zone_atr": 3.0, "entry_max_width_price": 5.0, "reaction_lookback_bars": 3.0, "engulfing_minimum_range_atr": 0.5, "minimum_strength": .4, "minimum_gap_atr": .5, "invalidation_buffer_atr": .5, "minimum_target_distance_atr": 1.0, "expiry_hours": 4.0}))
 	if err != nil {
 		t.Fatal(err)

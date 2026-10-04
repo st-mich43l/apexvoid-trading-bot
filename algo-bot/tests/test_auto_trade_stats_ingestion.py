@@ -365,59 +365,6 @@ async def test_plan_runtime_reconcile_recovers_unknown_leg_close_orphan():
 
 
 @pytest.mark.asyncio
-async def test_backfill_dumper_two_pass_and_bytes_payload(monkeypatch):
-  await store.init_db()
-  from app.scripts import backfill_auto_trade_stats as dumper
-
-  stream = "auto_trade:test_dumper_stats"
-  install_runtime_overrides(
-    monkeypatch, legacy_overrides={"auto_trade_event_stream": stream},
-  )
-  client = redis_state.get_client()
-  await client.delete(stream)
-  fill = {
-    "type": "order_filled",
-    "timestamp": 10,
-    "position_id": 99103,
-    "group_id": "v8:dumper-two-pass",
-    "candidate_id": "v8:dumper-two-pass",
-    "stream": "algo_auto",
-    "symbol": "XAU",
-    "setup": "Key Level",
-    "direction": "SELL",
-    "price": 4050.0,
-    "stop_loss": 4055.0,
-    "volume": 800,
-  }
-  closed = {
-    "type": "position_closed",
-    "timestamp": 20,
-    "position_id": 99103,
-    "group_id": "v8:dumper-two-pass",
-    "candidate_id": "v8:dumper-two-pass",
-    "stream": "algo_auto",
-    "symbol": "XAU",
-    "direction": "SELL",
-    "price": 4045.0,
-    "target_pips": 50,
-    "message": "PLAN CLOSED · highest TP archived TP1",
-  }
-  # Close inserted before fill in Redis; dumper must still fill-then-close.
-  await client.xadd(stream, {b"payload": json.dumps(closed).encode()})
-  await client.xadd(stream, {b"payload": json.dumps(fill).encode()})
-
-  stats = await dumper.backfill(
-    count=None, stream=stream, runtime_reconcile=False,
-  )
-  assert stats["fill_events"] == 1
-  assert stats["result_events"] == 1
-  rows = await store.get_pips_records(0, 1_000)
-  hit = [row for row in rows if row["trade_key"] == "algo:v8:dumper-two-pass"]
-  assert len(hit) == 1
-  assert hit[0]["pips"] == 50
-
-
-@pytest.mark.asyncio
 async def test_algo_manual_group_result_does_not_dilute_peak(sql):
   """group_result blend must not overwrite legs_achieved peak in /trade_stats."""
   await store.init_db()

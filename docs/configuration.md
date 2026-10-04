@@ -28,8 +28,7 @@ deployment environment.
 
 ```bash
 docker compose config -q
-PYTHONPATH=algo-bot python config/scripts/resolve_reference.py --environment production
-PYTHONPATH=algo-bot python config/scripts/resolve_reference.py --environment demo
+PYTHONPATH=algo-bot python config/scripts/resolve_reference.py --all
 ```
 
 The loader rejects malformed roots, include cycles, missing required sections,
