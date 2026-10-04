@@ -166,6 +166,11 @@ class EffectiveInstrument:
     for sequence_key in ("target_r_multiples", "close_ratios"):
       if sequence_key in targeting and targeting[sequence_key] is not None:
         targeting[sequence_key] = tuple(targeting[sequence_key])
+    # These are optional native targeting leaves.  Keep the resolved view
+    # total for callers that legitimately ask whether trailing is configured;
+    # absence means disabled, not a malformed instrument declaration.
+    targeting.setdefault("trail_after_r", None)
+    targeting.setdefault("trail_to_r", None)
     if "mode" in targeting:
       targeting["mode"] = InstrumentTargetMode(str(targeting["mode"]))
     self.targeting = ConfigNode(targeting)
