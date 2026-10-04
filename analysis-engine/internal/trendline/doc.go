@@ -1,5 +1,5 @@
 // Package trendline owns causal Trendline V2 construction and its
-// read-only live-interaction classifier — Phase S4's fourth and largest
+// read-only live-interaction classifier
 // shared technical primitive (apexvoid-bot-prompts/rebuild-strategies.md
 // §23-26).
 //
@@ -60,5 +60,5 @@
 // promotion those packages already established for needing
 // structure.Swing directly — see
 // docs/architecture/dependency-rules.md's "zone promoted above
-// structure" amendment, extended through Phase S4's own domains.
+// structure" amendment, extended through the shared technical domains.
 package trendline

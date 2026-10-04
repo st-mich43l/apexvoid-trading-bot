@@ -2,39 +2,22 @@
 # readable by every service. Answers "what opportunity exists?", never
 # "should ApexVoid act on it?" (that's auto-algo.yml — see its own header).
 #
-# market_data.* (calendar/session/feed/scanner/spot inputs) is folded in
-# here too: the new architecture's own category list never names a home
-# for it (see docs/configuration-v3-migration-audit.md §9, an open
-# question for the owner) — analysis.yml is the closest fit since these
-# are all analysis *inputs*, not execution or delivery concerns.
+# market_data.* (calendar/session/feed/scanner/spot inputs) is folded in here
+# because these are analysis inputs, not execution or delivery concerns.
 analysis:
   # Go is live. The Kafka opportunity lifecycle is the sole automatic
   # technical-analysis path; Python only applies execution-time policy.
   technical_authority:
     consumer_enabled: true
     consumer_group: apexvoid-algo-bot-analysis-opportunity-v1
-    # S14B live-freshness limits. A NEW live plan needs a confirmed observation
+    # Live-freshness limits. A new live plan needs a confirmed observation
     # no older than max_event_age_seconds and a Kafka publish->consume gap no
     # larger than max_delivery_lag_seconds; older events only rebuild the ledger.
     max_event_age_seconds: 900
     max_delivery_lag_seconds: 300
-  # Canonical ATR decision (rebuild-configuration-architecture.md §4):
-  # the Go migration audit (docs/go-analysis-migration-audit.md §2.1) found
-  # TWO live ATR formulas today — a simple rolling mean
-  # (app/analysis/math_utils.py::atr_series, used pervasively throughout
-  # the canonical _analyze_tf pipeline) and pandas_ta's Wilder/RMA
-  # smoothing (app/analysis/indicators.py::atr, used only by
-  # detectors.py's IndicatorSet and one worker.py call site) — diverging
-  # ~6.7% on real XAU M5 data. `simple` is both this prompt's own example
-  # value AND the one the prior audit found already pervasive/canonical
-  # in practice, so it is set explicitly here rather than left ambiguous.
-  # This YAML value alone does not yet change runtime behavior — detectors.py
-  # still reads the Wilder formula today; making every consumer (detectors,
-  # structure, zones, scalping, worker) read this one canonical value is a
-  # real code change for a later stage, tracked against this setting.
-  # §23 requires this to become real before cutover, not stay decorative —
-  # see docs/configuration-v3-migration-audit.md's C2 update for the
-  # consumer-by-consumer plan and the required parity coverage.
+  # The Go engine uses the canonical simple ATR series for this analysis
+  # context. Keep the algorithm explicit so all consumers share the same
+  # contract.
   indicators:
     atr:
       algorithm: simple
@@ -89,17 +72,16 @@ analysis:
   # `confluence_zone` is the one compositional exception, so this has 20
   # entries: 19 independent strategies plus Confluence Zone.
   #
-  # Phase S7 implemented and enabled the first 7: key_level, session_level,
+  # Enabled strategies include key_level, session_level,
   # supply, demand, order_block, fvg, flip_zone. Each strategy owns its own
   # threshold parsing (internal/strategy/<name>'s own parseConfig) — the
-  # registry itself treats these as opaque raw parameters (source task §51).
+  # registry itself treats these as opaque raw parameters.
   # None
   # These parameter names have no old-Python-detector precedent — the
-  # legacy monolithic detectors never parametrized per-setup invalidation/
+  # Earlier detector implementations did not parametrize per-setup invalidation/
   # target/expiry this way — so every value below is a genuine initial
   # calibration, not an empirically-tuned or ported constant. They are
-  # flagged as a research/tuning item in docs/analysis-engine-v2-migration.md,
-  # not silently presented as final:
+  # Treat these values as explicit strategy configuration:
   #   minimum_strength/minimum_touches — floors zone.Zone.Strength (or, for
   #     key_level, keylevel.Level.Touches/Strength) below which a setup is
   #     not tradeable at all.
@@ -376,19 +358,11 @@ analysis:
       target_r: 2.0
       expiry_hours: 2.0
 
-  # Analysis Engine V2. Go-only today
-  # (analysis-engine/internal/marketdata, .../structure, .../liquidity) — no
-  # Python consumer exists for these leaves, unlike every other key in this
-  # file. Depth/thresholds below are grounded in real prior art already
-  # shipped and running in production this session (PRs #574/#578/#579's
-  # hold-based zone validity, technique_geometry.py's epsilon(), and
-  # zones.py::displacement()'s k/body_frac) rather than fresh guesses.
-  # Promotion thresholds (structure.swing.promotion.*) have no Python
-  # precedent (the layer hierarchy is a genuine V2 concept) and are an
-  # initial calibration, not empirically tuned — flagged as a research item
-  # in docs/analysis-engine-v2-migration.md, not silently presented as final.
+  # Analysis Engine owns these market-state inputs. Depth and thresholds are
+  # shared technical configuration, not execution policy.
+  # Promotion thresholds describe the structure hierarchy used by Go.
   history:
-    # Stored history depth per timeframe (source task §5) — NOT the
+    # Stored history depth per timeframe — NOT the
     # calculation lookback any one algorithm uses (§6); MarketHistory keeps
     # this much, structure/liquidity request a narrower window at read time.
     depth:
@@ -412,7 +386,7 @@ analysis:
     swing:
       # A confirmed pivot whose excursion (in ATR) is below this floor is
       # not promoted to a Swing at all — not every fractal is meaningful
-      # (source task §12).
+      # not every fractal is meaningful.
       minimum_excursion_atr: 0.5
       promotion:
         internal_atr: 1.0
@@ -423,14 +397,12 @@ analysis:
       # live, tested "same price level" tolerance for zone/level identity.
       tolerance_atr: 0.05
     break:
-      # Matches this session's PR #574 invalidation_tolerance_atr exactly —
-      # the real, live threshold XAU technique zones use today to decide a
-      # close is genuinely beyond a level, not noise.
+      # Minimum close penetration beyond a level before invalidation.
       minimum_penetration_atr: 0.5
       # Matches zones.py::displacement()'s k=1.5 / body_frac=0.55 exactly.
       displacement_range_atr: 1.5
       displacement_body_dominance: 0.55
-      # Matches PR #574's sweep_reclaim_bars=6 exactly.
+      # Number of bars in which a sweep may be reclaimed.
       sweep_reclaim_bars: 6
       failed_break_reclaim_bars: 3
 
@@ -438,8 +410,7 @@ analysis:
     version: v1
     # Same epsilon as structure.equal_level.tolerance_atr — one canonical
     # "same price level" tolerance across structure and liquidity, not two
-    # independently-drifting ones (the exact class of bug PR #574-580 spent
-    # this session fixing in the Python system).
+    # independently-drifting ones.
     equal_level_tolerance_atr: 0.05
     pool_minimum_touches: 2
     sweep_reclaim_bars: 6
@@ -448,7 +419,6 @@ analysis:
     # V2 keeps A/B anchors immutable, requires a later causal validation, and
     # turns this band into an interaction watch rather than an automatic fill.
     version: v2
-    shadow_v1: true
     validation_touch_tolerance_atr: 0.30
     interaction_band_atr: 0.20
     invalidation_penetration_atr: 0.50
@@ -462,11 +432,7 @@ analysis:
     exhaustion_validation_touches: 4
     chop_minimum_validation_touches: 2
     chop_require_htf_aligned: true
-    # Phase S4 — internal/trendline. These six existed only as Python
-    # getattr() fallback-default names in trendline_v2.py::_settings
-    # (never a real trading-bot.yml OR YAML leaf before this phase) —
-    # added here at those same real fallback values, closing the gap
-    # rather than inventing new numbers.
+    # Trendline geometry defaults used by the structural analysis pipeline.
     minimum_slope_atr: 0.02
     maximum_slope_atr: 0.15
     minimum_touch_spacing_bars: 3
@@ -492,7 +458,7 @@ analysis:
     # PR-D: filter technique instances via validate_technique_instance predicates.
     validation_enabled: true
     # Canonical zone lifecycle inputs shared by the Go zone domain and the
-    # legacy research validator during the migration window.
+    # structural validator and opportunity lifecycle.
     retest_max_touches: 30
     invalidation_tolerance_atr: 0.5
     sweep_reclaim_bars: 6
@@ -540,10 +506,7 @@ analysis:
   measurements:
     max_merged_zone_atr: 3.0
 
-  # Phase S4 — internal/keylevel. No old trading-bot.yml OR Python-
-  # schema-default precedent at all (levels.py reads these as plain
-  # function-argument defaults, never a config leaf) — values are those
-  # real function defaults, ported explicitly rather than invented.
+  # Key-level clustering defaults used by the structural analysis pipeline.
   key_levels:
     # key_levels()'s level_cluster_atr.
     cluster_atr: 0.5
@@ -563,10 +526,7 @@ analysis:
     velocity_bull_threshold: 0.15
     velocity_bear_threshold: -0.15
 
-  # Phase S4 — internal/fib. No old trading-bot.yml OR Python-schema-
-  # default precedent at all (fibonacci.py/dealing_range.py read these as
-  # plain function-argument defaults, never a config leaf) — values are
-  # those real function defaults, ported explicitly rather than invented.
+  # Fibonacci and dealing-range geometry defaults.
   fibonacci:
     # nearest_fib()'s epsilon_atr.
     epsilon_atr: 0.15
@@ -641,9 +601,7 @@ analysis:
     asia_start: 22
     london_start: 7
     ny_start: 13
-    # Trading-day boundary for PDH/PDL (Phase S4, internal/session) —
-    # session_liquidity.py::_daily_rollover's real Python default, not
-    # invented.
+    # Trading-day boundary for PDH/PDL.
     daily_rollover_utc_hour: 21
 
   spot:

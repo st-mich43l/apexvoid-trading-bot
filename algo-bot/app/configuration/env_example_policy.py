@@ -36,19 +36,19 @@ class DeploymentEnvVar:
 
 # Non-catalog deployment variables. The compose-managed Postgres password is
 # owned by the database service, not the algo-bot configuration catalog.
-# APEXVOID_CONFIG_AUTHORITY was removed in Phase 2I-B: leftover values are
+# APEXVOID_CONFIG_AUTHORITY is retired: leftover values are
 # unmanaged unknown environment variables and do not alter runtime behavior.
 #
-# Configuration V3 (docs/configuration.md, Stage C3): APEXVOID_CONFIG_FILE
-# is the one non-secret configuration bootstrap ENV variable (rebuild-
-# configuration-architecture.md §12/§31) — every setting it used to sit
+# Categorized configuration (docs/configuration.md): APEXVOID_CONFIG_FILE
+# is the one non-secret configuration bootstrap ENV variable — every setting
+# it used to sit
 # alongside here (runtime.profile/AUTO_TRADE_PROFILE, strategies.
 # mapped_zone.enabled/AUTO_TRADE_MAPPED_ZONE_ENABLED, actionability.gates.
 # market_map_guard_enabled/AUTO_TRADE_MARKET_MAP_GUARD_ENABLED,
 # bootstrap.logging.*/LOG_DIR etc., bootstrap.redis.url/REDIS_URL,
 # delivery.telegram.telegram_channel_id/SIGNAL_VIP_CHANNEL_ID) now lives
 # in config/*.yml instead and was removed from ENV_EXAMPLE_CATALOG_PATHS
-# below — see docs/configuration-v3-migration-audit.md's Stage C3 section.
+# below — see docs/configuration.md.
 EXTRA_DEPLOYMENT_ENV: tuple[DeploymentEnvVar, ...] = (
   DeploymentEnvVar(
     "APEXVOID_CONFIG_FILE",
@@ -66,7 +66,7 @@ EXTRA_DEPLOYMENT_ENV: tuple[DeploymentEnvVar, ...] = (
 
 # Catalog canonical paths that appear in the minimal example, in file order.
 # Non-secret tuning/bootstrap paths that now live in config/*.yml only
-# (Stage C3) are deliberately absent — see EXTRA_DEPLOYMENT_ENV's comment.
+# are deliberately absent — see EXTRA_DEPLOYMENT_ENV's comment.
 ENV_EXAMPLE_CATALOG_PATHS: tuple[str, ...] = (
   "bootstrap.telegram.bot_token",
   "bootstrap.postgres.url",

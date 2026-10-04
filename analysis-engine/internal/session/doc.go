@@ -4,7 +4,7 @@
 //
 // Ported from algo-bot/app/analysis/session_liquidity.py
 // (session_levels/previous_week_levels and their private helpers), per
-// Phase S4's plan (apexvoid-bot-prompts/rebuild-strategies.md §23-26).
+// The session domain provides time-window context for downstream strategies.
 // Production combines
 // session_levels(df, cfg) (Asia/London/NY extremes + PDH/PDL) with
 // previous_week_levels(df) (PWH/PWL) into one flat list before scoring
@@ -26,7 +26,7 @@
 // equivalent — session_liquidity.py never classifies "now," only past
 // session extremes. It is new logic here, added because
 // context.SessionContext{Name string} has been an honest empty
-// placeholder since Phase S3's own foundation task specifically pending
+// placeholder while the domain was being introduced
 // this work (see context/market.go's SessionContext doc comment, updated
 // alongside this package).
 //

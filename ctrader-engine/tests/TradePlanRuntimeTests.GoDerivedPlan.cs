@@ -4,10 +4,10 @@ using ApexVoid.CTraderFeed;
 namespace CTraderFeed.Tests;
 
 /// <summary>
-/// S14D: the executor half of the Go-origin chain. The plan bytes are the exact
+/// The executor half of the Go-origin chain. The plan bytes are the exact
 /// TradePlan V8 that Python's real worker published from a Go Kafka event
 /// (contracts/autotrade/go-derived-plan-xau-supply.json, produced and drift-guarded by
-/// algo-bot/tests/test_s14d_go_full_chain.py). They go through the unchanged
+/// algo-bot/tests/test_go_full_chain.py). They go through the unchanged
 /// TradePlanRuntime against a broker simulator with forced fills and injected broker
 /// failures. The events the executor emits are the fixture the Python delivery suite
 /// replays (contracts/autotrade/go-derived-plan-executor-events.json); regenerate both

@@ -7,49 +7,20 @@ V1 identity map for test convenience only; production code uses dotted paths.
 
 from __future__ import annotations
 
-import json
 import sys
 from functools import lru_cache
 from typing import Any, Iterable, Mapping
 
 from app.configuration.catalog import iter_catalog_entries
-from app.configuration.generate import REPOSITORY_ROOT
 from app.configuration.models.python_runtime import PythonRuntimeConfig
 from app.core import config as config_module
 
 
 @lru_cache(maxsize=1)
 def _short_name_to_path() -> Mapping[str, tuple[str, ...]]:
-  """Map historical flat names and unique path leaves to canonical paths.
-
-  Loads the frozen Catalog V1 legacy map for test convenience only. Production
-  code never imports this mapping.
-  """
+  """Map unique leaf names to canonical paths for test convenience."""
   mapping: dict[str, tuple[str, ...]] = {}
   ambiguous: set[str] = set()
-  legacy_map_path = (
-    REPOSITORY_ROOT
-    / "docs/configuration/history/artifacts"
-    / "legacy-map.historical.json"
-  )
-  if legacy_map_path.exists():
-    for name, path in json.loads(legacy_map_path.read_text()).get("map", {}).items():
-      mapping[str(name)] = tuple(str(path).split("."))
-  identity_path = (
-    REPOSITORY_ROOT
-    / "docs/configuration/history/artifacts"
-    / "catalog-v1-to-v2-identity-map.historical.json"
-  )
-  if identity_path.exists():
-    for row in json.loads(identity_path.read_text())["entries"]:
-      path = tuple(str(row["canonical_path"]).split("."))
-      old = str(row["old_item_id"])
-      if old.startswith("python.settings."):
-        short = old[len("python.settings."):]
-        if short in mapping and mapping[short] != path:
-          ambiguous.add(short)
-        else:
-          mapping[short] = path
   for entry in iter_catalog_entries():
     leaf = entry.path.split(".")[-1]
     path = tuple(entry.path.split("."))
@@ -57,10 +28,18 @@ def _short_name_to_path() -> Mapping[str, tuple[str, ...]]:
       ambiguous.add(leaf)
     elif leaf not in mapping:
       mapping[leaf] = path
+    # Keep test fixtures convenient for callers that still use the
+    # environment-shaped name. This is test-only resolution; production
+    # configuration accepts canonical dotted paths only.
+    env_name = getattr(entry, "canonical_env", None)
+    if env_name:
+      env_key = env_name.lower()
+      if env_key in mapping and mapping[env_key] != path:
+        ambiguous.add(env_key)
+      elif env_key not in mapping:
+        mapping[env_key] = path
   for name in ambiguous:
-    # Prefer the historical flat-name mapping over ambiguous leaf collisions.
-    if name not in json.loads(legacy_map_path.read_text()).get("map", {}):
-      mapping.pop(name, None)
+    mapping.pop(name, None)
   return mapping
 
 

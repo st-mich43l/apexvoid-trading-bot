@@ -4,7 +4,7 @@ using ApexVoid.CTraderFeed;
 namespace CTraderFeed.Tests;
 
 /// <summary>
-/// S14B: the executor honours the cancel intent Python writes at
+/// The executor honours the cancel intent Python writes at
 /// execution:plan_cancel:{plan_id} when a Go-derived plan's opportunity is
 /// invalidated/expired or explicitly cancelled. Covers every
 /// stage a plan can be in: never submitted, resting orders, partially
@@ -15,7 +15,7 @@ public sealed partial class TradePlanRuntimeTests
 {
   private const string PlanId = "v8:plan-1";
 
-  // Shared with algo-bot/tests/test_s14b_plan_cancel_contract.py.
+  // Shared with algo-bot/tests/test_go_plan_cancel_contract.py.
   private static readonly JsonElement CancelContract = LoadCancelContract();
 
   private static JsonElement LoadCancelContract()

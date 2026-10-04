@@ -25,14 +25,9 @@ singleton, flat facade, or runtime legacy selector.
 | [cross-service-runtime-manifest.md](cross-service-runtime-manifest.md) | `ResolvedRuntimeManifest` shared with cTrader |
 | [manifest-authority-cutover.md](manifest-authority-cutover.md) | Production `CTRADER_CONFIGURATION_SOURCE=manifest` |
 | [effective-instrument-context.md](effective-instrument-context.md) | Per-symbol typed runtime view |
-| [adr-canonical-only-python-configuration.md](adr-canonical-only-python-configuration.md) | Canonical-only ADR |
 | [config-authority-runbook.md](config-authority-runbook.md) | Operator authority checks |
 | [config-catalog.generated.md](config-catalog.generated.md) | Generated catalog |
 | [environment-reference.generated.md](environment-reference.generated.md) | Generated ENV reference |
-
-`configuration/history/artifacts/` retains the raw JSON fixtures the Catalog
-V2 migration tests still read; the narrative phase ledgers themselves have
-been retired now that the migration is complete.
 
 ## Fingerprints
 
@@ -41,8 +36,8 @@ been retired now that the migration is complete.
 - **configuration_document_fingerprint** — contract fields plus descriptions
   and evidence notes for documentation freshness.
 
-`catalog_fingerprint()` remains as a compatibility alias of the contract
-fingerprint.
+`catalog_fingerprint()` remains an alias of the contract fingerprint for
+callers that still use the older helper name.
 
 ## Artifacts and commands
 

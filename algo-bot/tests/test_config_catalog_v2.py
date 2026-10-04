@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import ast
-import json
 import os
 from pathlib import Path
 
@@ -20,7 +19,7 @@ os.environ.setdefault(
   "postgresql://apexvoid:apexvoid@localhost:55432/signals",
 )
 
-from app.configuration.catalog import iter_catalog_entries, infer_ctrader_type
+from app.configuration.catalog import iter_catalog_entries
 from app.configuration.catalog_validation import validate_active_catalog
 from app.configuration.configuration_integrity_gate import (
   evaluate_configuration_integrity,
@@ -103,24 +102,15 @@ BASELINE = {
   # cleanup; deployment-owned YAML fields remain config-file-only below.
   # 2026-10-02 Go behavioral completion removed the obsolete Python-only
   # displacement override lookback after Go became the sole technical owner.
-  "entries": 688,
-  "configurable": 581,
+  "entries": 687,
+  "configurable": 580,
   "protocol": 10,
   "algorithm": 97,
-  "owners": {"python": 538, "shared": 100, "ctrader": 50},
-  "projection": 638,
-  "env": 572,
+  "owners": {"python": 537, "shared": 100, "ctrader": 50},
+  "projection": 637,
+  "env": 571,
   "deprecated_aliases": 21,
 }
-
-# Paths removed from the live catalog after the v1 parity snapshot was frozen.
-# Historical leaf_types still list them; skip rather than rewriting history.
-_INTENTIONAL_POST_V1_REMOVED_PATHS = frozenset({
-  "analysis.measurements.regime_chop_alert_share",
-  "execution.policy.displacement_override_lookback_bars",
-  "strategies.trend.pullback_enabled",
-})
-
 
 def _load(**env: str):
   process = {
@@ -213,38 +203,10 @@ def test_profile_assignments_unchanged():
   assert len(PROFILES["demo_eval"].assignments) == 48
 
 
-def test_all_resolved_values_unchanged():
+def test_resolved_values_are_deterministic():
   first = _load().config.model_dump()
   second = _load().config.model_dump()
   assert first == second
-  hist = json.loads((
-    REPOSITORY_ROOT
-    / "docs/configuration/history/artifacts"
-    / "catalog-v1-parity-before-v2.historical.json"
-  ).read_text())
-  for path, expected_type in hist["leaf_types"].items():
-    if path in _INTENTIONAL_POST_V1_REMOVED_PATHS:
-      continue
-    cur = _load().config
-    for part in path.split("."):
-      cur = getattr(cur, part)
-    assert type(cur).__name__ == expected_type, path
-
-
-def test_all_resolved_types_unchanged():
-  hist = json.loads((
-    REPOSITORY_ROOT
-    / "docs/configuration/history/artifacts"
-    / "catalog-v1-parity-before-v2.historical.json"
-  ).read_text())
-  result = _load()
-  for path, expected in hist["leaf_types"].items():
-    if path in _INTENTIONAL_POST_V1_REMOVED_PATHS:
-      continue
-    cur = result.config
-    for part in path.split("."):
-      cur = getattr(cur, part)
-    assert type(cur).__name__ == expected, path
 
 
 def test_source_precedence_unchanged():
@@ -292,7 +254,7 @@ def test_validation_categories_unchanged():
   }
 
 
-def test_generator_contains_no_phase_migration_builders():
+def test_generator_contains_no_retired_artifact_builders():
   source = (
     REPOSITORY_ROOT / "algo-bot/app/configuration/generate.py"
   ).read_text()
@@ -301,7 +263,6 @@ def test_generator_contains_no_phase_migration_builders():
     "_consumer_migration_artifact",
     "PHASE_2E_ROOTS",
     "DERIVED_LEGACY_PROPERTIES",
-    "phase2i",
   ):
     assert symbol not in source
 
@@ -309,20 +270,6 @@ def test_generator_contains_no_phase_migration_builders():
 def test_generator_emits_only_evergreen_artifacts():
   rendered = {str(path) for path in render_artifacts()}
   assert "contracts/configuration/configuration-architecture.generated.json" in rendered
-  assert not any("phase-2i" in path for path in rendered)
-  assert not any("legacy-map" in path for path in rendered)
-
-
-def test_duplicate_phase2i_artifacts_are_not_generated():
-  rendered = {str(path) for path in render_artifacts()}
-  assert "contracts/configuration/canonical-only-surface-phase-2i-b.generated.json" not in rendered
-  assert "contracts/configuration/canonical-only-surface-phase-2i-final.generated.json" not in rendered
-
-
-def test_historical_artifacts_are_not_runtime_dependencies():
-  for path in (REPOSITORY_ROOT / "algo-bot/app").rglob("*.py"):
-    text = path.read_text()
-    assert "docs/configuration/history/artifacts" not in text
 
 
 def test_active_catalog_validation_reports_success():
@@ -360,68 +307,3 @@ def test_contract_and_document_fingerprints_differ():
   document = configuration_document_fingerprint()
   assert contract == catalog_fingerprint()
   assert contract != document
-
-
-# Defaults deliberately changed after the v1 snapshot was frozen - each one
-# is a documented, evidenced behavior fix, not a silent v1->v2 migration
-# drift. The frozen historical file is never edited to match; this table is
-# the record of intentional post-v1 divergence.
-_INTENTIONAL_POST_V1_DEFAULT_CHANGES = {
-  # 04 Aug 2026 incident: a major breaker/flip demand zone still being
-  # actively retested lost its opposing-barrier status after its 2nd
-  # touch (max_touches=2), letting a SELL through with no real room-check
-  # against it - see analysis.py's max_touches config_field description.
-  "analysis.market_map.max_touches",
-  # Contract surface moved to V8-only after TradePlan V8 cutover.
-  "contract.mode",
-  "contract.versions.trade_plan",
-  # Pre-existing live defaults already shipped before HFS quality work.
-  "execution.entry.poll_ms",
-  "execution.reaction.market_fraction",
-  "execution.reaction.scale_fraction",
-  # 2026-09-16: 0.5 -> 0.1. At 0.5x ATR the reaction zone_scale/
-  # market_with_limit_scale 2nd leg sat far enough from the 1st that the
-  # furthest-leg stop distance routinely exceeded the reaction stop
-  # envelope (observed 75-79 pips vs a 60-pip cap on live XAU Key Level
-  # candidates), silently killing good setups regardless of confluence,
-  # bias, or opposing-zone clearance.
-  "execution.reaction.scale_step_atr",
-  "execution.stops.reaction.room_floor_pips",
-  "execution.zone_scaling.first_leg_fraction",
-  # 2026-09-16: 0.5 -> 0.1, same incident as execution.reaction.scale_step_atr
-  # above (this is the zone_split ladder's own leg-2-spacing knob).
-  "execution.zone_scaling.scale_step_atr",
-  "risk.tiers.b_multiplier",
-  # The range risk cap was reduced to the current conservative value after
-  # the v1 parity snapshot was frozen.
-  "risk.sizing.range_max_risk_multiplier",
-  # 12 Aug 2026 HFS quality dig: Impulse bleed on late chase / wide stops /
-  # mid-range location; tighten chase and pullback location gates.
-  "strategies.scalping.activation.maximum_chase_pips",
-  "strategies.scalping.stop.maximum_pips",
-  "strategies.scalping.location.pullback_buy_maximum_position",
-  "strategies.scalping.location.pullback_sell_minimum_position",
-}
-
-
-def test_entry_behavior_types_match_v1_parity():
-  hist = {
-    e["path"]: e
-    for e in json.loads((
-      REPOSITORY_ROOT
-      / "docs/configuration/history/artifacts"
-      / "catalog-v1-parity-before-v2.historical.json"
-    ).read_text())["entry_behavior"]
-  }
-  for entry in iter_catalog_entries():
-    prior = hist.get(entry.path)
-    if prior is None:
-      # Entry introduced after the v1 snapshot was frozen - nothing to
-      # compare parity against.
-      continue
-    assert entry.type == prior["type"], entry.path
-    assert entry.canonical_env == prior["canonical_env"], entry.path
-    assert list(entry.deprecated_aliases) == prior["deprecated_aliases"]
-    if entry.path not in _INTENTIONAL_POST_V1_DEFAULT_CHANGES:
-      assert entry.default == prior["default"]
-    assert infer_ctrader_type(entry) == prior["ctrader_type"]

@@ -1,4 +1,4 @@
-# Supply (Phase S7)
+# Supply
 
 ## Strategy ID / version
 

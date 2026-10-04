@@ -1,5 +1,5 @@
 // Package strategy defines the shared strategy engineering contract — not
-// shared trading behavior. See docs/adr/003-independent-strategy-model.md:
+// shared trading behavior. The dependency rules enforce this boundary:
 // the legacy generic "reaction" family (supply/demand/key_level/
 // trendline/liquidity sharing entry/confirmation/invalidation/quality/
 // targeting/expiry logic) is rejected. Every strategy under

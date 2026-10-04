@@ -16,9 +16,9 @@ Default policy is **disabled**. Do not enable until shadow + paper holdout are g
 
 ## Promotion checklist
 
-1. Phase 1 audit reviewed (`PHASE1_AUDIT.md`)
+1. Current scalping configuration and outcome telemetry reviewed
 2. PR A features unit-tested
-3. Replay lab ([REPLAY_LAB.md](REPLAY_LAB.md)): development + validation positive expectancy; **holdout untouched during tuning**
+3. Development and validation outcome data reviewed; **holdout untouched during tuning**
 4. Shadow density + block reasons reviewed (`math_shadow` Redis last key; per-opp `measured.math_liquidity_sweep` on range_sweep)
 5. Paper MAE/MFE acceptable
 6. Enable one strategy only at reduced risk; keep Impulse Pullback off until validated

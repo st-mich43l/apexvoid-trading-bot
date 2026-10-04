@@ -26,7 +26,7 @@ func repoPath(t *testing.T, parts ...string) string {
 }
 
 func capturePath(t *testing.T) string {
-	return repoPath(t, "contracts", "analysis", "replay", "xau-production-capture-20260921.json")
+	return repoPath(t, "analysis-engine", "testdata", "replay-xau-production-capture-20260921.json")
 }
 
 func writeCapture(t *testing.T, body string) string {
@@ -271,8 +271,8 @@ func TestRealCaptureReplayIsDeterministicAndMatchesTheCommittedGolden(t *testing
 		}
 	}
 	meta := replayMeta{
-		Description:       "S14C Go replay of the committed real XAU capture (regenerate with UPDATE_GOLDEN=1 go test ./test/replaycapture)",
-		Capture:           "xau-production-capture-20260921.json",
+		Description:       "Go replay of the committed real XAU capture (regenerate with UPDATE_GOLDEN=1 go test ./test/replaycapture)",
+		Capture:           "replay-xau-production-capture-20260921.json",
 		TotalDiscovered:   len(result.Discovered),
 		TotalEnvelopesSHA: hex.EncodeToString(all.Sum(nil)),
 		GoldenCount:       confirmed,
@@ -280,8 +280,8 @@ func TestRealCaptureReplayIsDeterministicAndMatchesTheCommittedGolden(t *testing
 		Timeframes:        result.Timeframes,
 		Events:            result.Events,
 	}
-	goldenPath := repoPath(t, "contracts", "analysis", "replay", "go-supply-demand-confirmed-envelopes-xau-20260921.jsonl")
-	metaPath := repoPath(t, "contracts", "analysis", "replay", "go-replay-xau-20260921.meta.json")
+	goldenPath := repoPath(t, "analysis-engine", "testdata", "replay-go-supply-demand-confirmed-envelopes-xau-20260921.jsonl")
+	metaPath := repoPath(t, "analysis-engine", "testdata", "replay-go-xau-20260921.meta.json")
 	if os.Getenv("UPDATE_GOLDEN") == "1" {
 		if err := os.WriteFile(goldenPath, golden.Bytes(), 0o644); err != nil {
 			t.Fatal(err)

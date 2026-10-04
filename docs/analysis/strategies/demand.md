@@ -1,4 +1,4 @@
-# Demand (Phase S7)
+# Demand
 
 ## Strategy ID / version
 

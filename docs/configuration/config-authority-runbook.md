@@ -3,7 +3,7 @@
 Python configuration is **canonical-only**. There is no authority selector and
 no legacy Settings rollback path.
 
-See also: `adr-canonical-only-python-configuration.md`.
+See also: [configuration architecture](configuration-architecture.md).
 
 ## Preconditions
 
@@ -71,7 +71,7 @@ exists.
 
 ```
 python -m app.configuration.diagnostic_cli --check
-python -m app.configuration.phase2i_completion_gate --check
+python -m app.configuration.generate --check
 ```
 
 ## Deprecated ENV aliases
@@ -82,4 +82,4 @@ conflicts fail closed).
 
 ## Evergreen integrity
 
-Use `python -m app.configuration.configuration_integrity_gate --check`. Phase 2I completion gate is historical.
+Use `python -m app.configuration.configuration_integrity_gate --check`.

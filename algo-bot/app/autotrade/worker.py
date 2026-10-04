@@ -3509,7 +3509,7 @@ async def _handle_event(
           return publication_result
         try:
           # TradePlan V8 is the sole autonomous order path, per
-          # docs/adr-trade-plan-v8-cutover.md - the V6 candidate path is
+          # docs/autotrade-execution-integrity.md - the V6 candidate path is
           # removed entirely for autonomous publication (not gated behind a
           # mode) so a confirmed setup can never arm both a TradePlan and a V6
           # candidate for the same thesis. Existing open V6 positions are

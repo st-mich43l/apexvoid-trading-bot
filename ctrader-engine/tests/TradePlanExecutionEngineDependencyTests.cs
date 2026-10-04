@@ -3,7 +3,7 @@ namespace CTraderFeed.Tests;
 /// <summary>
 /// Proves the TradePlan execution path (TradePlanExecutionEngine.cs, TradePlan.cs)
 /// never references the legacy dual-planning symbols named in
-/// docs/adr-trade-plan-v8-cutover.md - a source-text check rather than a
+/// docs/autotrade-execution-integrity.md - a source-text check rather than a
 /// runtime mock, so a future edit that adds a call site fails this test
 /// immediately regardless of which code path exercises it.
 /// </summary>
@@ -100,8 +100,8 @@ public sealed class TradePlanExecutionEngineDependencyTests
   public void GuardListCoversEveryDualPlanningSymbolNamedInTheAdr()
   {
     // A canary against silently trimming the forbidden list itself -
-    // matches the exact symbol list docs/adr-trade-plan-v8-cutover.md and
-    // the original architecture report identified as dual-planning.
+    // matches the exact dual-planning guard list from the execution
+    // integrity contract.
     Assert.Equal(7, ForbiddenSymbols.Length);
     Assert.Contains("ResolveExecutionRoute", ForbiddenSymbols);
     Assert.Contains("StructureStopPlanner", ForbiddenSymbols);

@@ -85,7 +85,7 @@ def test_rejects_unknown_topic_and_bad_json():
     parse_analysis_event(OpportunityTopic, "not-json")
 
 
-# ---- S13B technical_context (additive V1 block) ---------------------------------
+# ---- technical_context (additive V1 block) ---------------------------------------
 
 GOLDEN = "contracts/analysis/examples/opportunity-v1-technical-context.json"
 

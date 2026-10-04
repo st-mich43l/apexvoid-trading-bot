@@ -87,7 +87,7 @@ public sealed class AutoTradeEngine(
   // the unrelated _heartbeat field below (CandidateLeaseHeartbeat, a
   // Redis-lease liveness signal for multi-worker candidate ownership).
   private readonly Action _sessionHeartbeat = sessionHeartbeat ?? (() => { });
-  // TradePlan V8 broker-execution runtime (docs/adr-trade-plan-v8-cutover.md) -
+  // TradePlan V8 broker-execution runtime (docs/autotrade-execution-integrity.md) -
   // composed into this engine's own session loop (see PollTradePlansAsync)
   // rather than given a separate RunSessionAsync/reconcile/heartbeat of its
   // own, so it shares this engine's readiness/gate machinery instead of
@@ -1540,7 +1540,7 @@ public sealed class AutoTradeEngine(
       // TradePlan is the sole autonomous order path in this mode - reject any
       // new V6 autonomous candidate before planning or broker calls, as
       // defense-in-depth alongside Python no longer publishing them (see
-      // docs/adr-trade-plan-v8-cutover.md). Manual /algo candidates are
+      // docs/autotrade-execution-integrity.md). Manual /algo candidates are
       // explicitly exempt - they are the owner's direct decision, not
       // autonomous analysis output.
       return await RejectAsync(

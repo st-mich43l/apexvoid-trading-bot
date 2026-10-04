@@ -1,4 +1,4 @@
-"""S14B: withdraw unexecuted Go-derived work when the reason to trade it is gone.
+"""Withdraw unexecuted Go-derived work when the reason to trade it is gone.
 
 Kafka invalidation/expiry or an operator cancellation must not leave a Go-derived
 plan alive somewhere between "match in Redis" and "order at the broker". Three
@@ -14,7 +14,7 @@ stages, each with a defined owner and outcome:
                                      protective stop and normal TP/BE management.
 * open position                      never closed by a cancellation or an
                                      invalidation; ownership governs plan
-                                     *creation*, not management (S13B).
+                                     *creation*, not management.
 
 The intent is a tombstone, written even when no plan exists yet, so a plan that
 is being published concurrently (or redelivered) is cancelled on arrival. Python

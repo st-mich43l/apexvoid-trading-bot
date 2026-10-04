@@ -60,7 +60,7 @@ func loadRealXAUFixture(t *testing.T) []market.Candle {
 // through the real Engine.Dispatch path with NO fakes, NO mocks, and NO
 // hand-tuned fixture — the same path this test module's other engine/
 // integration tests use synthetic bars for, deliberately using real data
-// here instead because Phase S8 wiring bugs (both found and fixed this
+// here instead because strategy-wiring bugs (both found and fixed in
 // phase: an opportunity.Book identity-collision false positive, and a
 // key_level dedup-identity bug) only ever surfaced against real data, not
 // against small hand-built fixtures.
@@ -195,7 +195,7 @@ func TestEngine_BootstrapBuildsStateWithoutRepublishingHistory(t *testing.T) {
 	}
 }
 
-// TestEngine_EveryLiveOpportunityCarriesCausalTechnicalFacts proves the S13B
+// TestEngine_EveryLiveOpportunityCarriesCausalTechnicalFacts proves the
 // policy inputs are the engine's own, causal facts and not placeholders: for
 // every opportunity produced from real production XAU data, ATR is exactly the
 // canonical ATR of the candles up to and including the observed bar, the

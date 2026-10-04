@@ -754,7 +754,7 @@ async def test_order_filled_replies_using_v8_plan_id_without_head_fill(monkeypat
   body = calls[0][0]
   # Terse, Manual-Algo-style fill line - the entry/SL/targets were already
   # advertised on the root card, so the fill reply doesn't repeat the raw
-  # engine message (Phase S12 unification). "leg pending" survives because
+  # engine message. "leg pending" survives because
   # the source message says L2 is still pending.
   assert body == "🟢 active — order filled · leg pending"
   # Reply keeps ORDER FILLED; SETUP FORMING head becomes ORDER ACTIVATED.

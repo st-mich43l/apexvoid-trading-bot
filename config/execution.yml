@@ -1,7 +1,7 @@
 # Execution/broker mechanics and risk-execution behavior — owned logically
 # by ctrader-engine. Market interpretation never belongs here; the
 # executor stays mechanical. Direct copy of the old trading-bot.yml's
-# `execution.*` block — see docs/configuration-v3-migration-audit.md §5.
+# `execution.*` block contains the TradePlan and broker-execution contract.
 execution:
   technique:
     # Enforce strict PD + hard SL cap; killzone clock and sweep/body off.

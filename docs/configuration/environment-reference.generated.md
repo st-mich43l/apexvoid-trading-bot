@@ -2,8 +2,8 @@
 
 > Generated from the canonical configuration catalog (`app.configuration.environment_contract`). Do not edit manually.
 
-- Contract fingerprint: `c416f680bced2bc885e143326037078c044036c6462568cfd8bd0a1ebbeb0e89`
-- Environment-bound fields: `572`
+- Contract fingerprint: `3c41e26c0c1f9ab927b1b43a39322e9c5635955e7d9b08368bb7ad9cc372b42e`
+- Environment-bound fields: `571`
 - Deprecated aliases: `21`
 
 Secret values are never emitted; secret defaults render as `<redacted>`.
@@ -546,7 +546,6 @@ Secret values are never emitted; secret defaults render as `<redacted>`.
 | `TL_MIN_VALIDATION_TOUCHES` | `analysis.trendlines.minimum_validation_touches` | `int` | no | no | — | `1` |
 | `TL_MIN_VALIDATION_TOUCH_SPACING` | `analysis.trendlines.minimum_validation_touch_spacing_bars` | `int` | no | no | — | `5` |
 | `TL_PIERCE_TOL_ATR` | `analysis.trendlines.pierce_tolerance_atr` | `float` | no | no | — | `0.5` |
-| `TL_SHADOW_V1` | `analysis.trendlines.shadow_v1` | `bool` | no | no | — | `False` |
 | `TL_TOL_ATR` | `analysis.trendlines.tolerance_atr` | `float` | no | no | — | `0.3` |
 | `TL_VALIDATION_REACTION_BARS` | `analysis.trendlines.validation_reaction_bars` | `int` | no | no | — | `2` |
 | `TL_VALIDATION_TOUCH_TOL_ATR` | `analysis.trendlines.validation_touch_tolerance_atr` | `float` | no | no | — | `0.3` |

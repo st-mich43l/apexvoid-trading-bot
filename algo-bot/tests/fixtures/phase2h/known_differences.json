@@ -1,9 +1,0 @@
-{
-  "AUTO_TRADE_MAPPED_ZONE_ENABLED": "false",
-  "AUTO_TRADE_MARKET_MAP_GUARD_ENABLED": "follows_mapped_zone",
-  "description": "Known intentional differences between the demo_eval profile resolution and the values the compose anchor injected for the bot.",
-  "notes": [
-    "The demo_eval profile enables strategies.mapped_zone.enabled; compose pins AUTO_TRADE_MAPPED_ZONE_ENABLED=false so the mapped-zone execution route stays off in production.",
-    "AUTO_TRADE_MARKET_MAP_GUARD_ENABLED is not set explicitly by the anchor and follows mapped-zone via the market_map_guard_inherits_mapped_zone compatibility rule; it therefore also resolves to false."
-  ]
-}

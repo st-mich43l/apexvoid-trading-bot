@@ -78,7 +78,7 @@ public sealed record AutoTradeOptions(
   int CandidateContractVersion = 6,
   // Cross-service contract handshake. Must match Python's
   // AUTO_TRADE_CONTRACT_MODE exactly (checked in AutoTradeConfigHealth) -
-  // see docs/adr-trade-plan-v8-cutover.md. "v8_only" is the sole
+  // see docs/autotrade-execution-integrity.md. "v8_only" is the sole
   // autonomous contract in real deployments (FromEnvironment resolves its
   // own default to "v8_only", below). This bare record default stays
   // "legacy_v6" deliberately: ProcessCandidateAsync rejects every

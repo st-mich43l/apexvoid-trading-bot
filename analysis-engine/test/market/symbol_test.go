@@ -34,7 +34,7 @@ func TestGeometryPipsBetween(t *testing.T) {
 	}
 	// 4360.55 -> 4358.38 is 2.17 price, i.e. 21.7 pips at pip_size 0.1 —
 	// matches the live XAU key-level band width seen in production
-	// (docs/go-analysis-migration-audit.md's own worked ATR example).
+	// (the canonical ATR example).
 	got := xau.PipsBetween(4360.55, 4358.38)
 	want := 21.7
 	if diff := got - want; diff > 1e-9 || diff < -1e-9 {

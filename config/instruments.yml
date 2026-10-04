@@ -1,15 +1,12 @@
 # Instrument-specific market geometry and rollout — owned exclusively
 # here. Unknown instruments must fail closed; no hardcoded XAU or FX
-# geometry may remain in runtime code once a service reads this file
-# directly (Stage C3+).
+# geometry may remain in runtime code once a service reads this file directly.
 #
 # The pack-inheritance mechanism (instruments.<SYM>.pack: <name>; the pack
 # merges under the instrument; the instrument's own leaves always win on a
 # shared key) is preserved exactly as-is from the old trading-bot.yml —
-# see docs/configuration-v3-migration-audit.md §5/§9: flattening every
-# symbol to its fully-resolved geometry is a legitimate later
-# simplification, not done in this pass, since it would itself be a real
-# design change (losing pack reuse), not a pure file split.
+# Pack inheritance keeps shared geometry in one place while allowing
+# instrument-specific overrides.
 #
 # Per-instrument `manual.*` leaves (entry_mode, risk_reference,
 # risk_multiplier, target_close_ratios/tp1_close_fraction) stay here too,
@@ -477,9 +474,8 @@ instruments:
     # Technique: structure fixed_rr from pack (1R/2R/3R/4R 40/20/20/20 + BE
     # after 1R, entry-targeted risk band 50-60p). Manual stays zone_ladder.
     # M1 scalping keeps strategies.scalping discovery book.
-    # Withdrew min_sell_zone_score:10 (PR #449) - nearest-zone gap was ~1pt
-    # on n=26, inverted in 4/8 SELL cells, and the floor sat above most
-    # winning sample z scores. Field stays at default 0 (off).
+    # The sell-side score floor remains disabled; sparse zones are filtered by
+    # the current strategy and execution-policy gates.
     broker_symbol: XAU
     canonical_symbol: XAU
     aliases:

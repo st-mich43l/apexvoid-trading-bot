@@ -1,6 +1,6 @@
 """TradePlan V8 builder - translates an already-confirmed StrategyMatch.
 
-Per docs/adr-trade-plan-v8-cutover.md this is a pure reshape of what
+This is a pure reshape of what
 `evaluate_execution_policy` (the same route/stop planner the V6 path already
 calls) already decided - never a second, independently-derived route or
 stop, and never a direction-derived shortcut (BUY => bias up, BUY => demand).
@@ -358,9 +358,10 @@ def test_single_limit_route_produces_single_limit_entry():
 
 
 def test_zone_split_route_produces_limit_ladder_with_two_legs():
-  cfg = execution_cfg(
-    auto_trade_zone_fill_enabled=True, auto_trade_zone_fill_min_atr=0.1,
-  )
+  cfg = execution_cfg(**{
+    "execution.zone_scaling.fill_enabled": True,
+    "execution.zone_scaling.fill_min_atr": 0.1,
+  })
   match = _match(entry_low=4088.10, entry_high=4090.00)
   plan = _build(match, cfg=cfg, spot_price=4089.0, executable_quote=4089.0)
 
@@ -373,15 +374,15 @@ def test_zone_split_route_produces_limit_ladder_with_two_legs():
 def test_key_level_reaction_emits_market_with_limit_scale():
   from app.autotrade.execution_policy import evaluate_execution_policy
 
-  cfg = execution_cfg(
-    auto_trade_zone_fill_enabled=True,
-    auto_trade_zone_fill_min_atr=0.1,
-    auto_trade_reaction_scale_enabled=True,
-    auto_trade_reaction_market_fraction=0.80,
-    auto_trade_reaction_scale_fraction=0.20,
-    auto_trade_reaction_scale_step_atr=0.5,
-    auto_trade_reaction_scale_invalid_policy="single_market",
-  )
+  cfg = execution_cfg(**{
+    "execution.zone_scaling.fill_enabled": True,
+    "execution.zone_scaling.fill_min_atr": 0.1,
+    "strategies.reaction.scale_enabled": True,
+    "execution.reaction.market_fraction": 0.80,
+    "execution.reaction.scale_fraction": 0.20,
+    "execution.reaction.scale_step_atr": 0.5,
+    "execution.reaction.scale_invalid_policy": "single_market",
+  })
   match = _match(
     strategy="Key Level",
     family="key_level",
@@ -407,13 +408,13 @@ def test_key_level_reaction_emits_market_with_limit_scale():
 
 
 def test_demand_zone_reaction_does_not_emit_market_with_limit_scale():
-  cfg = execution_cfg(
-    auto_trade_zone_fill_enabled=True,
-    auto_trade_zone_fill_min_atr=0.1,
-    auto_trade_reaction_scale_enabled=True,
-    auto_trade_zone_scale_first_leg_fraction=0.70,
-    auto_trade_zone_scale_step_atr=0.5,
-  )
+  cfg = execution_cfg(**{
+    "execution.zone_scaling.fill_enabled": True,
+    "execution.zone_scaling.fill_min_atr": 0.1,
+    "strategies.reaction.scale_enabled": True,
+    "execution.zone_scaling.first_leg_fraction": 0.70,
+    "execution.zone_scaling.scale_step_atr": 0.5,
+  })
   match = _match(
     strategy="Demand Zone Reaction",
     family="supply_demand",

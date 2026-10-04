@@ -54,7 +54,7 @@ technical facts required by the policy adapter.
 All strategies read the Go-owned `MarketContext`: canonical ATR, structure and
 protected levels, liquidity pools/sweeps, zone geometry and lifecycle,
 trendlines, key levels, session state, dealing range/fibonacci, regime, MAD
-context, and candle evidence. The former `legacyzone` compatibility rebuild is
+context, and candle evidence. The technique-zone builder is
 not used by the live worker. The Python technical import inventory is enforced
 in CI; presentation, manual, accounting, and research modules are not
 automatic technical authorities.

@@ -1,4 +1,4 @@
-# Fair Value Gap (Phase S7)
+# Fair Value Gap
 
 ## Strategy ID / version
 

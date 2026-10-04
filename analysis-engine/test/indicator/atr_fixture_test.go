@@ -11,11 +11,8 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 )
 
-// Golden-master parity against real Python output — rebuild-analysis-
-// engine.md §15/§31: "If Go produces a different result than Python, do
-// NOT simply adjust the fixture." Regenerate the fixture (via
-// scripts/export_atr_fixtures.py) only when the Python formula itself
-// changes, never to make a Go bug disappear.
+// Golden-master coverage for the canonical ATR formulas. Update the fixture
+// only when the formula contract changes, never to hide a Go defect.
 
 type fixtureCandle struct {
 	Open   float64 `json:"open"`

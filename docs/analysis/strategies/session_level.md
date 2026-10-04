@@ -1,4 +1,4 @@
-# Session Level (Phase S7)
+# Session Level
 
 ## Strategy ID / version
 

@@ -427,7 +427,6 @@
       "minimum_validation_favorable_excursion_atr": 0.1,
       "minimum_validation_touch_spacing_bars": 5,
       "minimum_validation_touches": 1,
-      "shadow_v1": true,
       "validation_reaction_bars": 2,
       "validation_touch_tolerance_atr": 0.3,
       "version": "v2"

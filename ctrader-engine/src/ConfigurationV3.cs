@@ -1,8 +1,8 @@
 namespace ApexVoid.CTraderFeed;
 
 /// <summary>
-/// Configuration V3 direct reader for .NET — Stage C5 of
-/// docs/configuration-v3-migration-audit.md. Reads config/apexvoid.yml
+/// Configuration V3 direct reader for .NET.
+/// docs/configuration.md. Reads config/apexvoid.yml
 /// (or config/apexvoid.demo-eval.yml) and its categorized includes plus
 /// one environment overlay, following the exact same §14 include/merge/
 /// overlay spec as <c>algo-bot/app/configuration/v3_root.py</c> and
@@ -10,8 +10,8 @@ namespace ApexVoid.CTraderFeed;
 /// three independent implementations of one spec (cross-language parity,
 /// §38).
 ///
-/// <para><b>This module is a bounded proof of pattern, not a cutover.</b>
-/// Unlike Stage C3 (Python, fully wired live for local/dev) and Stage C4
+/// <para><b>This module is a bounded proof of pattern, not a live-path change.</b>
+/// Unlike the Python compatibility projection
 /// (Go, fully wired — the old manifest reader was deleted, not kept
 /// alongside this one), this .NET reader is deliberately NOT wired into
 /// <see cref="AutoTradeOptions"/>, <see cref="ResolvedRuntimeManifest"/>,
@@ -22,8 +22,8 @@ namespace ApexVoid.CTraderFeed;
 /// <item><description><c>ResolvedRuntimeManifest</c>/<c>ResolvedAutoTradeProjection</c>
 /// carry well over a hundred fields feeding real order-execution decisions
 /// (stop distances, sizing, scale-in/add policy, spread guards, ...).
-/// Python's cutover (Stage C3) earned trust with an exact 890/890-leaf
-/// parity test against the real Pydantic model via the real resolver
+/// The shared fixture earns trust through exact parity against the real
+/// resolver
 /// pipeline. Reaching that same rigor for this surface, in C#, without a
 /// reflection-based deserializer (AOT forbids one — see
 /// <c>ResolvedRuntimeManifestLoader</c>'s own comment on the exact crash:
@@ -32,7 +32,7 @@ namespace ApexVoid.CTraderFeed;
 /// rush through to hit a stage count.</description></item>
 /// <item><description>This is the one runtime in the whole migration that
 /// executes real broker orders with real money. §41 of
-/// rebuild-configuration-architecture.md is explicit that safety on this
+/// the configuration contract is explicit that safety on this
 /// path outranks finishing the stage sequence.</description></item>
 /// </list>
 /// <para>What this module DOES prove, with real tests against the real
@@ -41,14 +41,14 @@ namespace ApexVoid.CTraderFeed;
 /// (<see cref="ConfigDocument.GeometryFor"/>) — mirroring Go's narrowly-
 /// scoped proof exactly — produces the same pip_size/price_digits every
 /// other language reads for every live instrument. That is the honest
-/// scope of "Stage C5 done": the reader exists and is proven, wiring it to
+/// scope of this reader: it exists and is proven, wiring it to
 /// replace the live path is future work, not done here.</para>
 /// </summary>
 public static class ConfigurationV3
 {
   /// <summary>
   /// The one non-secret configuration bootstrap environment variable
-  /// (rebuild-configuration-architecture.md §12) — the same name Python's
+  /// (docs/configuration.md) — the same name Python's
   /// <c>CONFIG_FILE_ENV</c>, Go's <c>config.RootFileEnv</c>, and this
   /// repo's docker-compose.yml already use. Not read by anything live in
   /// this project yet (see the module-level remarks above).
@@ -72,7 +72,7 @@ public sealed class ConfigDocument
 
   /// <summary>
   /// The full resolved document tree. Internal — exposed only for the
-  /// Stage C6 cross-language fixture parity test
+  /// Cross-language fixture parity test
   /// (<c>ConfigurationV3Tests.ResolveDocumentMatchesCanonicalFixture</c>,
   /// via <c>InternalsVisibleTo("CTraderFeed.Tests")</c>), which is the one
   /// legitimate reason to compare the whole document rather than reading
@@ -315,7 +315,7 @@ public sealed class ConfigDocument
   /// <summary>
   /// Returns every instrument declared with <c>rollout: live</c> — the
   /// single source Configuration V3 wants for "which symbols are live"
-  /// (rebuild-configuration-architecture.md §3), never a second,
+  /// (docs/configuration.md), never a second,
   /// separately maintained list. Mirrors Go's <c>Document.LiveInstruments</c>.
   /// </summary>
   public IReadOnlyList<string> LiveInstruments()

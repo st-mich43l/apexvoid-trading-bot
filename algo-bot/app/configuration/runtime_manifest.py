@@ -24,8 +24,6 @@ from app.configuration.ctrader_option_classification import (
   FEED_OPTIONS_CLASSIFICATION,
   _manifest_key,
   assert_complete_classification,
-  classification_counts,
-  migration_entries,
 )
 
 
@@ -758,19 +756,3 @@ def verify_manifest_matches_resolution(
   if actual.get("live_instruments") != expected.get("live_instruments"):
     raise RuntimeManifestError("live instrument list mismatch versus mounted manifest")
   return actual
-
-
-def env_migration_document() -> dict[str, Any]:
-  assert_complete_classification()
-  counts = classification_counts()
-  if counts.get("unclassified", 0):
-    raise RuntimeManifestError("unclassified cTrader options remain")
-  return {
-    "manifest_version": MANIFEST_VERSION,
-    "counts": {
-      **counts,
-      "unclassified": 0,
-      "total": sum(counts.values()),
-    },
-    "entries": migration_entries(),
-  }

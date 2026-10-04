@@ -9,7 +9,7 @@ namespace CTraderFeed.Tests;
 /// just pure decision logic: a real TradePlan JSON payload goes in via
 /// the execution:trade_plans stream, and a real market order comes out via
 /// ICTraderTradeClient, with fill/target/BE tracking and restart recovery -
-/// see docs/adr-trade-plan-v8-cutover.md Sections F/H/I/J/K.
+/// see docs/autotrade-execution-integrity.md.
 /// </summary>
 public sealed partial class TradePlanRuntimeTests
 {

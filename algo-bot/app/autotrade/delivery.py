@@ -800,7 +800,7 @@ def _format_strategy_route(event: dict) -> str | None:
   if status != "candidate_published":
     return None
   # "READY" is reserved for the executor accepting and arming a plan
-  # (see docs/adr-trade-plan-v8-cutover.md) - Python publishing a
+  # (see docs/autotrade-execution-integrity.md) - Python publishing a
   # candidate is not that, so this must not read "ready".
   headline = "🟢 <b>Algo bot PLAN PUBLISHED</b>"
   measured = event.get("measured") or {}

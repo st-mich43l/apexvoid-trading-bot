@@ -12,7 +12,7 @@ Both services must resolve the same value; config-health treats
 fields (see `compare_manifests` in `app/autotrade/config_health.py` and
 `AutoTradeConfigHealth.Compare` in `ctrader-engine/src/AutoTradeConfigHealth.cs`),
 so a mismatch fails closed rather than silently running two different paths.
-See `docs/adr-trade-plan-v8-cutover.md`.
+See `docs/autotrade-execution-integrity.md`.
 
 | Mode | Behavior |
 |---|---|

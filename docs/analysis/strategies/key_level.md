@@ -1,4 +1,4 @@
-# Key Level (Phase S7; ported to the legacy Python thesis 2026-09-28)
+# Key Level
 
 ## Strategy ID / version
 
@@ -153,7 +153,7 @@ level clustering (`levels.py`) was `TECHNIQUE_ONLY` even in the legacy
 audit; this strategy is a genuinely new, explicit tradeability layer on
 top of it.
 
-## Real bug found via Phase S8 replay (dedup identity)
+## Deduplication identity
 
 `internal/keylevel` re-clusters from the current swing window on every
 closed bar, so `levelPrice` can differ by a tiny amount between two
@@ -195,4 +195,4 @@ scope reduction there). Full real-capture replay (`test/replaycapture`)
 discovers 1731 total candidates across all strategies against the
 committed XAU capture, versus 1702 before this port (+29, `key_level`'s
 own share of that difference not isolated here) — golden regenerated
-2026-09-28, `contracts/analysis/replay/go-replay-xau-20260921.meta.json`.
+2026-09-28, `analysis-engine/testdata/replay-go-xau-20260921.meta.json`.

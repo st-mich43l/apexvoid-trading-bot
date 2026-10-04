@@ -62,7 +62,7 @@ The producer is independent from Redis ingestion. A Kafka outage must not
 stop the Analysis Engine from loading bars or advancing technical state. The
 engine queues lifecycle transitions off its bar-ingestion path and retries
 publication; see `internal/engine/publisher.go` and the documented in-memory
-queue limitation in `docs/analysis-engine-v2-migration.md`.
+queue limitation in `internal/engine/publisher.go`.
 
 ADR-009 defines at-least-once handling for future Kafka consumers. It does
 not make Kafka a source of market candles.

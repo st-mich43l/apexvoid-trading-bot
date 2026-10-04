@@ -1,4 +1,4 @@
-# Order Block (Phase S7)
+# Order Block
 
 ## Strategy ID / version
 

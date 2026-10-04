@@ -1,16 +1,11 @@
 """Configuration V3 root-document resolution and un-consolidation.
 
-Stage C3 (docs/configuration-v3-migration-audit.md): the categorized YAML
-under `config/` (apexvoid.yml + its includes + one environment overlay)
-becomes the real, live source `load_config_file` reads — not a second,
-parallel, unwired system. This module owns exactly two things:
+The categorized YAML under `config/` (apexvoid.yml plus its includes and one
+environment overlay) is resolved into the typed runtime configuration. This
+module owns exactly two things:
 
-  1. `resolve_v3_document(root_path)` — implement rebuild-configuration-
-     architecture.md's §14 include/merge/overlay spec for real, against
-     the actual root file on disk (this is the production twin of
-     config/scripts/resolve_reference.py's reference implementation;
-     that script stays as the standalone reference/fixture generator,
-     this module is what the running application actually calls).
+  1. `resolve_v3_document(root_path)` — resolve includes and environment
+     overlays against the actual root file on disk.
   2. `unconsolidate(resolved)` — translate the resolved V3 document (its
      `runtime`/`transport`/`database`/`analysis`/`auto_algo`/
      `manual_algo`/`execution`/`telegram`/`journal`/`instruments`/
@@ -26,7 +21,7 @@ Un-consolidating rather than rewriting every consumer to the new category
 names is a deliberate choice, not a shortcut: it makes the categorized
 YAML the real source of truth for a live process while keeping the
 blast radius to one function instead of every module that imports
-`runtime_config`. See the audit's Stage C3 section for the reasoning.
+`runtime_config`.
 
 `config_file.py::load_config_file` calls into this module when the file
 it's given is a V3 root document (has an `includes:` key); a plain
@@ -176,8 +171,7 @@ _DIRECT_CATEGORY_RENAME = {
 }
 
 # auto_algo.* fans out to five different old root groups depending on the
-# leaf's own first path segment — mirrors docs/configuration-v3-migration-
-# audit.md's Stage C1 category table exactly, in reverse.
+# leaf's own first path segment, in reverse.
 _AUTO_ALGO_SUBTREE_TO_OLD_ROOT = {
   "actionability": "actionability",
   "lifecycle": "lifecycle",
@@ -210,7 +204,7 @@ def _unconsolidate_auto_algo(auto_algo: dict[str, Any]) -> dict[str, dict[str, A
 
 
 def _unconsolidate_telegram(telegram: dict[str, Any]) -> dict[str, Any]:
-  # Inverse of Stage C1's flatten (telegram.yml's own header comment):
+  # Inverse of the categorized configuration flattening:
   # delivery.telegram.{delete_root_on_terminal, owner_dm_daily_wipe_enabled,
   # public_show_pips, telegram_channel_id, signal_public_channel_id} were
   # promoted to this file's top level; everything else keeps its old
@@ -239,8 +233,7 @@ def _unconsolidate_overrides(overrides: dict[str, Any]) -> dict[str, Any]:
   renamed their category root while un-dotting (auto_algo.actionability.*
   etc.) are mapped back to their real old dotted path here, the same
   reverse-mapping this module applies everywhere else — see
-  config/scripts/verify_stage_c2_parity.py's DIVERGENCES table for the
-  authoritative list of which leaves these are.
+  canonical category mapping.
   """
   flat_new = _flatten(overrides)
   out: dict[str, Any] = {}
@@ -363,10 +356,9 @@ def unconsolidate(resolved: dict[str, Any]) -> dict[str, Any]:
   # real consumers (app/autotrade/config_health.py, lifecycle.py,
   # delivery.py) read runtime_config.runtime.profile for diagnostics and
   # do exact string comparisons against "demo_eval"/"conservative". This
-  # is the one place old naming and new naming genuinely differ (Stage
-  # C1's environments/production.yml corresponds to the old profile name
-  # "conservative", not "production" — see docs/configuration-v3-
-  # migration-audit.md §9) and must be bridged explicitly, not silently
+  # is the one place old naming and new naming genuinely differ:
+  # environments/production.yml corresponds to the old profile name
+  # "conservative", not "production", and must be bridged explicitly, not silently
   # left to whatever the schema default happens to be.
   environment = runtime.get("environment")
   profile_by_environment = {"production": "conservative", "demo_eval": "demo_eval"}
@@ -414,8 +406,7 @@ def unconsolidate(resolved: dict[str, Any]) -> dict[str, Any]:
     out["contract"] = contract
 
   # analysis.yml's market_data.* leaves (calendar/scanner/sessions/spot/
-  # watcher) live inside the resolved "analysis" category (Stage C1's own
-  # choice — see that file's header comment) but belong under the old
+  # watcher) live inside the resolved "analysis" category but belong under the old
   # top-level "market_data" group, not "analysis".
   if "analysis" in out:
     analysis = out["analysis"]
@@ -424,7 +415,7 @@ def unconsolidate(resolved: dict[str, Any]) -> dict[str, Any]:
       if key in analysis:
         market_data[key] = analysis.pop(key)
     # analysis.indicators / analysis.strategies / analysis.zones.merge_overlap / analysis.
-    # measurements.* are Stage C2 additions with no old catalog leaf at
+    # measurements.* are additions with no old catalog leaf at
     # all (either brand new — indicators.atr.algorithm didn't exist as a
     # concept — or newly surfaced from a Python-only default, §8/§9);
     # the old ApexVoidConfig schema has no home for them, so they are
@@ -449,22 +440,22 @@ def unconsolidate(resolved: dict[str, Any]) -> dict[str, Any]:
 
   if "journal" in resolved:
     # No old top-level "journal" group exists in ApexVoidConfig at all —
-    # this is a genuinely new category (Stage C1's own note: nothing in
+    # this is a genuinely new category: nothing in
     # the old system reads a journal.* setting, the whole file records
     # already-always-on observed behavior). Nothing to un-consolidate
     # onto; dropped deliberately, not silently — same reasoning as the
-    # analysis Stage C2 additions above.
+    # analysis additions above.
     pass
 
   return _restore_csv_string_types(out)
 
 
 def _restore_csv_string_types(old_shape: dict[str, Any]) -> dict[str, Any]:
-  """Stage C2 (§10) converted several old CSV-string catalog leaves to
+  """The categorized configuration converts several old CSV-string catalog leaves to
   native YAML lists. The Pydantic catalog still types those specific
   leaves `str` (app/configuration/models/*.py — changing that too is real
   code-level V3 adoption for consumers that still `.split(",")` them,
-  tracked as later Stage C3 work, not silently bundled in here). Un-
+  tracked as a separate consumer migration, not silently bundled in here). Un-
   consolidation must hand the old validation pipeline a string or it
   fails closed with a type error — rejoin any list-valued leaf the
   catalog still expects as a string, using the catalog's own type label
@@ -498,7 +489,7 @@ def _restore_csv_string_types(old_shape: dict[str, Any]) -> dict[str, Any]:
   # dicts applied against the same catalog paths at override time — a
   # list value there hits the identical str-typed-leaf problem (found
   # live: instruments.USDJPY.overrides["risk.exposure.defended_levels"]
-  # after Stage C2's §10 conversion of that leaf to a float list).
+  # after conversion of that leaf to a float list).
   for section in ("instruments", "instrument_packs"):
     block = old_shape.get(section)
     if not isinstance(block, dict):

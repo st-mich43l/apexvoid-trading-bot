@@ -67,8 +67,5 @@ Local `docker-compose.yml` follows the same pattern with `.env` +
 python -m app.configuration.diagnostic_cli --check \
   --config-file ./config/trading-bot.yml --show-sources
 
-python -m app.configuration.migrate_env_to_config \
-  --env-file .env --output-dir ./config
-
 python -m app.configuration.generate --check
 ```
