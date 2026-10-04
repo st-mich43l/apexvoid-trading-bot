@@ -317,7 +317,7 @@ def test_render_box_open_and_full_tp_as_shareable_cards():
 
 @pytest.mark.no_database
 def test_fx_delivery_uses_symbol_pips_and_price_digits(monkeypatch):
-  config_file = Path(__file__).resolve().parents[2] / "config" / "trading-bot.yml"
+  config_file = Path(__file__).resolve().parents[2] / "config" / "apexvoid.yml"
   policy = PythonConfigurationSourcePolicy(config_file=str(config_file))
   production = load_python_canonical_settings(
     load_python_runtime_source_bundle(policy=policy),

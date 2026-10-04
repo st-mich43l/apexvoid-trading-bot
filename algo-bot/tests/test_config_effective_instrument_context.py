@@ -36,7 +36,7 @@ from app.configuration.source_policy import PythonConfigurationSourcePolicy
 pytestmark = pytest.mark.no_database
 
 _CONFIG_FILE = (
-  Path(__file__).resolve().parents[2] / "config" / "trading-bot.yml"
+  Path(__file__).resolve().parents[2] / "config" / "apexvoid.yml"
 )
 
 

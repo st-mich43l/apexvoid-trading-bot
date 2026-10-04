@@ -410,7 +410,7 @@ class ExecutionTechniqueConfig(FrozenConfigModel):
       risk=RiskClassification.EXECUTION_SAFETY,
       description=(
         'When true with enforce, block non-scalp publish/activation outside '
-        'reaction_publish_windows. Prod trading-bot.yml defaults this off; '
+        'reaction_publish_windows. Production YAML defaults this off; '
         'structure and strategy technique decide regardless of UTC hour.'
       ),
       default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, True),),
@@ -426,7 +426,7 @@ class ExecutionTechniqueConfig(FrozenConfigModel):
       risk=RiskClassification.EXECUTION_SAFETY,
       description=(
         'When true with enforce, block M1 scalping publish/activation outside '
-        'killzone. Prod trading-bot.yml defaults this off; discovery permits '
+        'killzone. Production YAML defaults this off; discovery permits '
         'are structure/technique-driven regardless.'
       ),
       default_contexts=(ContextDefault(DefaultContext.PYTHON_SCHEMA, True),),

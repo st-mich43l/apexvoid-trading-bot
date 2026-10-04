@@ -164,7 +164,7 @@ public sealed class FeedRunner(
       }
       else
       {
-        // Multi-instrument feed path (manifest mode / fixtures).
+        // Multi-instrument feed path from the shared YAML instrument registry.
         var resolved = new List<(InstrumentRuntime Runtime, SymbolInfo Symbol)>();
         foreach (var runtime in feedRuntimes)
         {

@@ -497,7 +497,7 @@ analysis:
   # zones.merge_max_width / zones.confluence.merge_gap_price removed below.
   # §8/§9: newly surfaced explicitly — previously only a Python schema
   # default (AnalysisZonesConfig.merge_overlap / AnalysisMeasurementsConfig.
-  # max_merged_zone_atr), never a settable trading-bot.yml leaf; value
+  # max_merged_zone_atr), never a settable configuration leaf; value
   # unchanged (0.5 / 3.0, the real current schema default in both cases).
   zones:
     version: v1
@@ -558,7 +558,7 @@ analysis:
   # must declare both explicitly (schema should make them required, not
   # defaulted, once a real loader exists).
 
-  # --- market_data.* from the old trading-bot.yml, unchanged values ---
+  # --- market-data inputs retained in the analysis category ---
   calendar:
     currencies:
       - USD

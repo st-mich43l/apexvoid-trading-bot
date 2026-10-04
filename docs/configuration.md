@@ -1,13 +1,15 @@
 # Configuration
 
-The canonical source is `config/apexvoid.yml`. It includes the categorized
-files in `config/` and the selected environment overlay under
-`config/environments/`. The Python configuration compiler resolves that source
-into the runtime manifest used by the services.
+`config/apexvoid.yml` is the production root and
+`config/apexvoid.demo-eval.yml` is the optional demo root. Each root resolves
+the same categorized YAML files and one environment overlay. Go, Python, and
+.NET load that tree directly; there is no generated runtime manifest or
+second non-secret configuration file.
 
 ## Categories
 
-- `runtime.yml`: service identity, timezone, logging, and runtime settings.
+- `runtime.yml`: service identity, timezone, logging, feed retention, and
+  runtime bootstrap policy.
 - `transport.yml`, `database.yml`, `telegram.yml`, `journal.yml`: service
   connections and delivery.
 - `instruments.yml`: symbols, broker names, price geometry, and lookbacks.
@@ -22,15 +24,18 @@ Analysis settings are consumed by Analysis Engine for technical facts and
 strategy evaluation. Algo Bot settings govern execution-time eligibility,
 account policy, sizing, and TradePlan creation. cTrader settings govern feed
 and broker execution. Keep secrets in the deployment secret store; do not add
-secrets to the categorized YAML.
+secrets to the categorized YAML. `APEXVOID_CONFIG_FILE` is the only
+application configuration selector; secret credentials may remain in the
+deployment environment.
 
 ## Validation
 
 ```bash
 docker compose config -q
-PYTHONPATH=algo-bot python -m app.configuration.generate --check
+PYTHONPATH=algo-bot python -m app.configuration.validate config/apexvoid.yml
+PYTHONPATH=algo-bot python -m app.configuration.validate config/apexvoid.demo-eval.yml
 ```
 
-The generated files under `contracts/configuration/` are checked by the
-configuration integrity and cross-language tests. Update source models and
-regenerate them together when a configuration contract changes.
+Validation must reject malformed roots, duplicate category ownership, missing
+required values, unknown fields, and secrets in YAML. Update the owning
+category and shared schema together when adding a field.

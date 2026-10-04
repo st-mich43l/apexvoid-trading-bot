@@ -32,7 +32,7 @@ type Result struct {
 type Options struct {
 	// DeriveH4 builds H4 from H1 (UTC-aligned) when the capture has none. Off by
 	// default because the production feed delivers no H4 at all
-	// (config/trading-bot.yml: the live trendbar subscription supports only
+	// (config/instruments.yml: the live trendbar subscription supports only
 	// M1/M5/M15/M30/H1), so the faithful replay has H1 as its only higher
 	// timeframe. Turn it on only to explore what H4 would add.
 	DeriveH4 bool

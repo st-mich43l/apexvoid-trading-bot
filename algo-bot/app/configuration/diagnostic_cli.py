@@ -4,7 +4,7 @@ Usage::
 
   python -m app.configuration.diagnostic_cli --check
   python -m app.configuration.diagnostic_cli --check \\
-    --config-file ./config/trading-bot.yml --show-sources
+    --config-file ./config/apexvoid.yml --show-sources
 
 Successful status: CANONICAL_CONFIGURATION_VALID
 

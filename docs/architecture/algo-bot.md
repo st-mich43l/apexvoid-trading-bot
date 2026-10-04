@@ -22,7 +22,7 @@ Analysis Engine issue, not a reason to rerun a detector in Python.
 - `app/analysis_client/`: validated Go opportunity consumer and lifecycle store.
 - `app/autotrade/`: eligibility, policy, duplicate guards, sizing, risk,
   TradePlan construction, and execution-event handling.
-- `app/configuration/`: canonical config resolver and runtime manifest.
+- `app/configuration/`: typed configuration loader and validation.
 - `app/bot/`: Telegram commands and notifications.
 - `app/persistence/`: PostgreSQL and Redis state.
 - `app/scalping/`: scalping outcome/accounting helpers.
