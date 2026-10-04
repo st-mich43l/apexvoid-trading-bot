@@ -477,7 +477,10 @@ instruments:
     # M1 scalping keeps strategies.scalping discovery book.
     # The sell-side score floor remains disabled; sparse zones are filtered by
     # the current strategy and execution-policy gates.
-    broker_symbol: XAU
+    # cTrader exposes gold as XAUUSD on the live account.  Keep XAU as the
+    # canonical/internal symbol, but always use the broker-facing name for
+    # feed subscriptions and order routing.
+    broker_symbol: XAUUSD
     canonical_symbol: XAU
     aliases:
       - XAUUSD
