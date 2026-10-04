@@ -550,13 +550,15 @@
         "same_direction_stack_size_fraction": 0.6
       },
       "sizing": {
+        "add_max_group_risk_pct": 3.0,
         "add_require_risk_free": false,
         "add_risk_fraction": 0.5,
         "equity_table_version": "owner_equity_v1",
         "mode": "equity_table",
         "one_sided_range_risk_multiplier": 0.5,
         "post_impulse_risk_multiplier": 0.5,
-        "range_max_risk_multiplier": 1.5
+        "range_max_risk_multiplier": 1.5,
+        "risk_pct": 2.0
       },
       "tiers": {
         "a_multiplier": 1.0,
@@ -792,10 +794,16 @@
       "stop_max_pips": 60,
       "stop_min_pips": 40
     },
+    "reaction_risk_leg": {
+      "enabled": true
+    },
     "scaling": {
       "add": {
         "level_buffer_atr": 1.0,
         "min_stop_pips": 30,
+        "pullback_enabled": false,
+        "pullback_max_retrace": 0.7,
+        "pullback_min_retrace": 0.2,
         "size_ratio": 0.5,
         "stop_buffer_atr": 0.3
       }
@@ -1342,6 +1350,12 @@
     "environment": "production",
     "execution_contract": {
       "mode": "v8_only"
+    },
+    "feed": {
+      "backfill_bars": 2000,
+      "bar_quality_lookback": 6,
+      "bars_channel": "bars:new",
+      "bars_window_max": 2000
     },
     "logging": {
       "directory": "/var/log/apexvoid",
