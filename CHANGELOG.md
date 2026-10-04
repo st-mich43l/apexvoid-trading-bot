@@ -159,7 +159,7 @@ dated section after deployment.
   publication graph. Algo Bot still owns execution policy, risk, lifecycle
   management and TradePlan V8 publication, with a final non-Go provenance
   fence at that boundary.
-- Go is the sole automatic technical-opportunity source. `config/trading-bot.yml`
+- Go is the sole automatic technical-opportunity source. `config/apexvoid.yml`
   sets the live Kafka consumer on, and automatic startup requires that path plus
   Kafka (`app/analysis_client/startup_gate.py`; Manual-Algo-only deployments
   with `runtime.auto_trade.enabled=false` are not gated). The consumer has no
@@ -207,7 +207,7 @@ dated section after deployment.
   `contracts/configuration/environment-usage.generated.json` (drops the
   two deleted scripts' env-var references) — running the full generator
   also incidentally caught up `runtime-manifest-example.generated.json`
-  to `config/trading-bot.yml`'s already-current `backfill_bars`/
+  to `config/apexvoid.yml`'s already-current `backfill_bars`/
   `bars_window_max: 2000` (stale since `fde92eb`, unrelated to this
   change), fixing 3 pre-existing `pytest` failures
   (`test_config_catalog_v2.py`, `test_config_runtime_manifest.py`) as a
@@ -248,7 +248,7 @@ dated section after deployment.
   domain (`test/config`, `test/indicator`, `test/market`), matching this
   migration's own domain-boundary convention. Each moved test became a
   black-box `<pkg>_test` package against its package's exported API; the
-  one test that read an unexported field (`Document.raw`, in the Stage C6
+  one test that read an unexported field (`Document.raw`, in the configuration rollout6
   fixture-parity test) now uses a new exported `Document.Raw()` accessor
   added for exactly that purpose, and the one test that constructed a
   `Document` via an unexported struct literal was rewritten to build it
@@ -257,12 +257,12 @@ dated section after deployment.
   `go build`/`go test ./... -race` (whole suite) clean, all 28 subtests
   passing. See `docs/configuration-v3-migration-audit.md`'s "Go test
   layout" note for the full rationale.
-- Configuration V3 Stage C6: automated cross-language parity. One test
+- Configuration V3 configuration rollout6: automated cross-language parity. One test
   per language (`algo-bot/tests/test_config_v3_cross_language_fixture.py`,
   `analysis-engine/internal/config/v3_fixture_parity_test.go`,
   `ctrader-engine/tests/ConfigurationV3Tests.cs`'s
   `ResolveDocumentMatchesCanonicalFixture`) proves that language's real
-  V3 reader (Stage C3/C4/C5) reproduces
+  V3 reader (configuration rollout3/C4/C5) reproduces
   `contracts/configuration/examples/resolved-production-v3.json` — the
   canonical fixture `config/scripts/resolve_reference.py` already
   generates and schema-validates — when resolving the real
@@ -281,7 +281,7 @@ dated section after deployment.
   sandbox has no reachable Postgres/Redis, so an unfiltered full run
   shows many more `ERROR`s than that baseline, all infra-unavailability,
   not caused by this change).
-- Configuration V3 Stage C5 (.NET): `ctrader-engine/src/ConfigurationV3.cs`
+- Configuration V3 configuration rollout5 (.NET): `ctrader-engine/src/ConfigurationV3.cs`
   + `MinimalYamlParser.cs` are a third independent reader for the same
   §14 include/merge/overlay spec, hand-rolled (no reflection, AOT-safe by
   construction — `CTraderFeed.csproj` publishes Native AOT/trimmed/self-
@@ -289,7 +289,7 @@ dated section after deployment.
   this parser has nothing analogous to trigger). `GeometryFor`/
   `LiveInstruments` mirror Go's narrow proof-of-pattern scope exactly (4
   fields). **Deliberately NOT wired into the live path** —
-  `AutoTradeOptions`/`ResolvedRuntimeManifest`/`ManifestRuntimeFactory`
+  `AutoTradeOptions`/`generated runtime state`/`ManifestRuntimeFactory`
   are untouched and still drive real broker order execution exactly as
   before. `ResolvedAutoTradeProjection` alone carries 100+ live fields;
   reaching Python's 890/890-leaf verification rigor for that surface by
@@ -297,7 +297,7 @@ dated section after deployment.
   rushed here — this is the one runtime in the migration placing real
   orders with real money (§41). 24 new tests
   (`ctrader-engine/tests/ConfigurationV3Tests.cs`) read the real
-  `config/apexvoid.yml`/`apexvoid.demo-eval.yml` directly, confirm
+  `config/apexvoid.yml`/`apexvoid.demo.yml` directly, confirm
   correct pip size/digits for all 5 live instruments, include-graph
   error handling matching the Go/Python suites, and parser-level
   coverage of the YAML subset `config/*.yml` actually uses (block
@@ -306,53 +306,53 @@ dated section after deployment.
   is, in its entirety, an intentionally empty `{}`). Full suite: 738
   passed, 45 pre-existing `REAL_REDIS_URL`-required failures (unchanged
   baseline), 0 new failures.
-- Configuration V3 Stage C4 (Go): `analysis-engine/internal/config` now
+- Configuration V3 configuration rollout4 (Go): `analysis-engine/internal/config` now
   reads `config/apexvoid.yml` directly (`gopkg.in/yaml.v3`, a real
   include/merge/overlay implementation matching §14 — the same spec
   Python's `v3_root.py` and `config/scripts/resolve_reference.py` already
   implement). `GeometryFor`/`LiveInstruments` replace the old
-  `ResolvedRuntimeManifest`-JSON reader entirely — `manifest.go`/
+  `generated runtime state`-JSON reader entirely — `manifest.go`/
   `geometry.go`/`manifest_test.go`/the manifest-example testdata fixture
   deleted, not kept as a fallback (no manifest-or-YAML mode selection).
-  13 new tests read the real `config/apexvoid.yml`/`apexvoid.demo-eval.yml`
+  13 new tests read the real `config/apexvoid.yml`/`apexvoid.demo.yml`
   directly and confirm correct pip size/digits for all 5 live instruments
   plus include-graph error handling. `gofmt`/`go vet`/`go build`/
   `go test`/`go test -race` all clean. analysis-engine still isn't wired
   to Redis or any live decision path, so this is the lowest-risk of the
   three languages' cutovers by construction — confirmed before deleting
   the old reader.
-- Configuration V3 Stage C3 for Python (see `docs/configuration-v3-migration-audit.md`'s
-  Stage C3 update) — a real, wired cutover, not another shadow layer.
+- Configuration V3 configuration rollout3 for Python (see `docs/configuration-v3-migration-audit.md`'s
+  configuration rollout3 update) — a real, wired cutover, not another shadow layer.
   `algo-bot/app/configuration/v3_root.py` resolves `config/apexvoid.yml`'s
   include/overlay chain for real and un-consolidates it back into the
   exact shape `ApexVoidConfig` already expects; `config_file.py` uses it
   automatically whenever `APEXVOID_CONFIG_FILE` points at a V3 root
   document (detected by an `includes:` key), and is a no-op otherwise —
-  inert wherever `APEXVOID_CONFIG_FILE` still points at `trading-bot.yml`,
+  inert wherever `APEXVOID_CONFIG_FILE` still points at `apexvoid.yml`,
   including actual ansible-driven production, which this repo does not
   control and which is unaffected until that separate deployment config
   is updated. Proven byte-for-byte identical to the old resolver for
   production (890/890 leaves, permanent regression test:
   `tests/test_config_v3_parity.py`). Found and fixed one real bug along
   the way: the old resolver's CONFIG_FILE layer silently defeated 7 of
-  the `demo_eval` profile's own 48 assignments whenever `trading-bot.yml`
+  the `demo` profile's own 48 assignments whenever `apexvoid.yml`
   also declared an explicit value for that field (which it did for all
   7) — production/`conservative` is unaffected (empty assignment list,
-  hence the 890/890 exact match), but local/dev's `demo_eval` profile now
+  hence the 890/890 exact match), but local/dev's `demo` profile now
   actually gets the behavior it was always supposed to.
   `docker-compose.yml`'s `bot` service now points at the new
-  `config/apexvoid.demo-eval.yml` (mounts all of `./config`) instead of
-  `trading-bot.yml`, with `AUTO_TRADE_PROFILE`/
+  `config/apexvoid.demo.yml` (mounts all of `./config`) instead of
+  `apexvoid.yml`, with `ApexVoid environment selector`/
   `AUTO_TRADE_MAPPED_ZONE_ENABLED`/`AUTO_TRADE_MARKET_MAP_GUARD_ENABLED`/
   `LOG_DIR`/`LOG_RETENTION_DAYS`/`LOG_FILE_ENABLED`/
   `APEXVOID_RUNTIME_MANIFEST_FILE` (confirmed zero real consumers in
   `bot`) removed from its environment. `.env.example` regenerated via the
   project's own generator (not hand-edited) to contain only
-  `APEXVOID_CONFIG_FILE` and real secrets. `config-compiler`/
+  `APEXVOID_CONFIG_FILE` and real secrets. `configuration generator`/
   `ctrader-engine` unchanged — .NET still depends on
-  `ResolvedRuntimeManifest` until Stage C5.
-- Configuration V3 Stage C2 (see `docs/configuration-v3-migration-audit.md`'s
-  Stage C2 update). Cleaned the Stage C1 categorized YAML itself: removed
+  `generated runtime state` until configuration rollout5.
+- Configuration V3 configuration rollout2 (see `docs/configuration-v3-migration-audit.md`'s
+  configuration rollout2 update). Cleaned the configuration rollout1 categorized YAML itself: removed
   three global price-denominated geometry defaults that were byte-identical
   to XAU's own instrument-pack values (`analysis.zones.merge_max_width`/
   `confluence.merge_gap_price`, `auto_algo.risk.exposure.
@@ -371,11 +371,11 @@ dated section after deployment.
   resolver (`config/scripts/resolve_reference.py`) that produces and
   validates `contracts/configuration/examples/resolved-production-v3.json`.
   `config/scripts/verify_stage_c2_parity.py` documents and verifies all 26
-  individual divergences from Stage C1; `config/scripts/config_check.py`
-  runs everything as one command. `config/trading-bot.yml` and the
-  generated `ResolvedRuntimeManifest` remain the sole live, unmodified
+  individual divergences from configuration rollout1; `config/scripts/config_check.py`
+  runs everything as one command. `config/apexvoid.yml` and the
+  generated `generated runtime state` remain the sole live, unmodified
   authority — no Python/Go/.NET runtime code changed, nothing here can
-  affect production. Stage C3 onward (direct readers replacing the live
+  affect production. configuration rollout3 onward (direct readers replacing the live
   path, cross-language parity, cutover, deletion) explicitly deferred —
   see the audit's "What this update does not do, and why."
 - Renamed the XAU instrument pack/policy from `xau_fixed_2r_v1` to
@@ -389,7 +389,7 @@ dated section after deployment.
   `fx_jpy_cross_v1` → `fx_jpy_cross_fixed_2r_v1` — the FX policy shape
   itself (`fx_fixed_2r_v1`/`fx_fixed_2r_frontload_v1`) was already
   accurate and is unchanged. Pure rename, no targeting/risk behavior
-  change; `config/trading-bot.yml`, `app/configuration/models/
+  change; `config/apexvoid.yml`, `app/configuration/models/
   instruments.py`, generated manifest artifacts, and docs updated
   together.
 
@@ -408,23 +408,23 @@ dated section after deployment.
   Python output. Python remains the authoritative, unmodified reference
   implementation — nothing here changes live behavior.
 - Started the Configuration V3 migration (see
-  `apexvoid-bot-prompts/rebuild-configuration-architecture.md`). Stage C0
+  `apexvoid-bot-prompts/rebuild-configuration-architecture.md`). configuration rollout0
   audit (`docs/configuration-v3-migration-audit.md`) inventories every
   configuration source across Python/Go/.NET/deployment: 561 non-secret
   Python catalog fields are ENV-overridable today (precedence:
-  ENV > CONFIG_FILE YAML), 3 (`AUTO_TRADE_PROFILE`,
+  ENV > CONFIG_FILE YAML), 3 (`ApexVoid environment selector`,
   `AUTO_TRADE_MAPPED_ZONE_ENABLED`, `AUTO_TRADE_MARKET_MAP_GUARD_ENABLED`)
   are actually wired in `docker-compose.yml`/`.env.example` today, and
   .NET's `ctrader-engine` has a full second, independent ENV-based config
   system (`AutoTradeOptions.EnvironmentResolver`) kept alive only for
-  parity-checking against the manifest path. Stage C1: `config/trading-bot.yml`
+  parity-checking against the manifest path. configuration rollout1: `config/apexvoid.yml`
   (898 lines, single file) split into `config/apexvoid.yml` (root) plus 10
   categorized files and 2 environment overlays, every one of the 550
   resulting leaf values mechanically parity-checked against the old file's
   effective value (`config/scripts/verify_stage_c1_parity.py`, all match).
-  `config/trading-bot.yml` and the generated `ResolvedRuntimeManifest`
+  `config/apexvoid.yml` and the generated `generated runtime state`
   remain the live, unmodified authority — no runtime reads the new files
-  yet (that's Stage C3/C4/C5); nothing here changes live behavior.
+  yet (that's configuration rollout3/C4/C5); nothing here changes live behavior.
 
 ### Fixed
 - Every executable card carried a "→ Executor owns mechanical entry and
@@ -750,7 +750,7 @@ dated section after deployment.
   `main.py`) sweeps and clears the just-completed day's journal at each
   local midnight. New `delivery.telegram.owner_dm_daily_wipe_enabled`
   config field.
-- Turned the owner DM daily wipe above on for production: `config/trading-bot.yml`
+- Turned the owner DM daily wipe above on for production: `config/apexvoid.yml`
   now sets `delivery.telegram.owner_dm_daily_wipe_enabled: true` (owner
   request). The Python schema default stays `false` as a safe fallback;
   this is a plain config value change, synced to `ansible-library`'s
@@ -1393,7 +1393,7 @@ dated section after deployment.
 - Docs: refreshed ``docs/deployment.md`` for current compose boot order,
   local vs Ansible shapes, host dirs, manifest authority, multi-symbol
   smoke checks, and technique-pack defaults aligned with
-  ``config/trading-bot.yml``.
+  ``config/apexvoid.yml``.
 - Docs: refreshed overview-linked pages for multi-symbol reality, added
   ``docs/README.md`` index, brought ``schema.sql`` / bot-commands in line with
   ``store.init_db`` (charts, auto-trade ledger, ``/trade_modify``). Completed
@@ -1563,7 +1563,7 @@ dated section after deployment.
   drowning out everything else. The decision is still recorded via
   ``_record_policy_telemetry`` regardless of log level, so no observability
   is lost.
-- FX instrument declarations in ``config/trading-bot.yml`` now use the
+- FX instrument declarations in ``config/apexvoid.yml`` now use the
   ``instrument_packs`` mechanism (already implemented, previously unused —
   every live pair was a full ~65-line block instead of a `pack:` reference).
   EURUSD/GBPUSD declare ``pack: fx_usd_major_v1``; GBPJPY/USDJPY declare a
@@ -1944,7 +1944,7 @@ dated section after deployment.
   diagnostics, and reproducible Python/.NET verification commands. Legacy
   `Settings` remains authoritative and no production consumer is migrated.
 - Non-authoritative Phase 2C configuration shadow loading: immutable
-  `conservative`/`demo_eval` profiles, deterministic source precedence,
+  `conservative`/`demo` profiles, deterministic source precedence,
   per-layer alias conflict detection, field provenance, legacy compatibility
   rules, four-fixture 316/316 parity checks, redacted diagnostics, and an
   offline shadow CLI. Legacy `Settings` remains the only active runtime loader.
@@ -2447,7 +2447,7 @@ dated section after deployment.
   PLACED`, `POSITION OPENED`, `DRY-RUN ONLY`, and machine-readable rejection)
   plus fatal Python/C# config-manifest checks for execution mode and Redis
   stream split-brain.
-- Added the explicit `demo_eval` auto-trade profile, independent
+- Added the explicit `demo` auto-trade profile, independent
   same-direction strategy groups, two-sided range analysis, multi-match
   tracking, unified scanner/private `RangeContext`, complete candidate
   lifecycle history, and Python/C# startup contract health manifests.

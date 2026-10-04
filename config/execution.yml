@@ -64,6 +64,7 @@ execution:
     thesis_lock_enabled: true
 
   policy:
+    execution_cost_pips: 1.0
     execution_zone_max_width_atr: 2.0
     execution_zone_max_width_pips: 100.0
     group_close_allocation: pro_rata
@@ -95,6 +96,7 @@ execution:
     scale_step_atr: 0.1
     stop_max_pips: 60
     stop_min_pips: 40
+    risk_targeted_entry_enabled: true
 
   reaction_risk_leg:
     enabled: true
@@ -151,6 +153,7 @@ execution:
   zone_scaling:
     fill_enabled: true
     fill_fallback_enabled: true
+    fill_min_atr: 0.5
     first_leg_fraction: 0.8
     # Same XAU reaction-ladder incident as execution.reaction above.
     scale_step_atr: 0.1
@@ -161,10 +164,17 @@ execution:
 manual_algo:
   runtime:
     enabled: true
+    dry_run: true
     owner_execution_dm_enabled: false
 
   sizing:
     fx_volume_multiplier: 1.5
+
+  streams:
+    intents: manual_trade:intents
+    manual_trade_command_stream: manual_trade:commands
+    manual_trade_command_stream_maxlen: 1000
+    manual_trade_intent_stream_maxlen: 1000
 
 journal:
   enabled: true

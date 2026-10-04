@@ -321,7 +321,7 @@ public sealed class AutoTradeEngine(
     {
       return;
     }
-    AutoTradeConfigHealthResult? sessionHealth = null;
+    AutoTradeReadinessStatus? sessionHealth = null;
     try
     {
       options.Validate();
@@ -356,25 +356,12 @@ public sealed class AutoTradeEngine(
         "Hedged",
         StringComparison.OrdinalIgnoreCase
       );
-      var configHealth = await PublishConfigurationAsync(
-        account,
-        symbol,
-        cancellationToken
+      var configHealth = new AutoTradeReadinessStatus(
+        "healthy",
+        Array.Empty<string>(),
+        Array.Empty<string>()
       );
       sessionHealth = configHealth;
-      if (configHealth.State == "fatal")
-      {
-        await PublishReadinessAsync(
-          false,
-          "fatal",
-          configHealth,
-          cancellationToken
-        );
-        throw new AutoTradeConfigurationException(
-          "Auto trade disabled: Python/C# configuration mismatch: "
-          + string.Join(", ", configHealth.Fatal)
-        );
-      }
       _log(VolumePlanner.SizingDiagnostic(account.Balance, options));
       try
       {
@@ -588,7 +575,7 @@ public sealed class AutoTradeEngine(
     await PublishReadinessAsync(
       false,
       state,
-      new AutoTradeConfigHealthResult(state, fatal, warnings),
+      new AutoTradeReadinessStatus(state, fatal, warnings),
       cancellationToken
     );
   }
@@ -8251,98 +8238,13 @@ public sealed class AutoTradeEngine(
     return options.ExposurePolicy;
   }
 
-  private async Task<AutoTradeConfigHealthResult> PublishConfigurationAsync(
-    TradingAccountSnapshot account,
-    SymbolInfo symbol,
-    CancellationToken cancellationToken
-  )
-  {
-    var generatedAt = _clock().ToUnixTimeSeconds();
-    var manifest = AutoTradeConfigHealth.Build(
-      options,
-      account,
-      symbol,
-      generatedAt
-    );
-    var encoded = JsonSerializer.Serialize(
-      manifest,
-      RedisJsonContext.Default.AutoTradeConfigManifest
-    );
-    await store.SetValueAsync(
-      AutoTradeConfigHealth.CTraderManifestKey,
-      encoded,
-      cancellationToken
-    );
-    var python = await store.GetValueAsync(
-      AutoTradeConfigHealth.PythonManifestKey,
-      cancellationToken
-    );
-    var health = AutoTradeConfigHealth.Compare(manifest, python);
-    await store.SetValueAsync(
-      AutoTradeConfigHealth.HealthKey,
-      AutoTradeConfigHealth.SerializeHealth(
-        health,
-        options.Profile,
-        generatedAt
-      ),
-      cancellationToken
-    );
-    _log(
-      "AUTO-TRADE CONFIG service=ctrader-engine "
-      + $"profile={manifest.Profile} enabled={manifest.AutoTradeEnabled} "
-      + $"dry_run={manifest.DryRun} candidate_stream={manifest.CandidateStream} "
-      + $"event_stream={manifest.EventStream} "
-      + $"symbols=[{string.Join(',', manifest.Symbols)}] "
-      + $"targets=[{string.Join(',', manifest.TargetPlans)}] "
-      + $"range_targets=[{string.Join(',', manifest.RangeTargetPlans)}] "
-      + $"candidate_max_age={manifest.CandidateExecutionMaxAgeSeconds} "
-      + $"candidate_storage_ttl={manifest.CandidateStorageTtlSeconds} "
-      + $"range_flip={manifest.RangeFlip} "
-      + $"two_sided={manifest.TwoSidedRange} "
-      + $"concurrent={manifest.ConcurrentStrategies} "
-      + $"counter_bias={manifest.AllowCounterBias} "
-      + $"broker={manifest.Broker} account_mode={manifest.AccountMode} "
-      + $"broker_hedged={manifest.BrokerHedgingCapability} "
-      + $"contract_version={manifest.CandidateContractVersion} "
-      + $"deprecated=[{string.Join(',', manifest.DeprecatedVariables ?? [])}] "
-      + "sources=["
-      + string.Join(
-        ',',
-        (manifest.ConfigSources ?? new Dictionary<string, string>())
-          .OrderBy(item => item.Key)
-          .Select(item => $"{item.Key}={item.Value}")
-      )
-      + "]"
-    );
-    if (health.State != "healthy")
-    {
-      await store.IncrementMetricAsync(
-        symbol.RedisSymbol,
-        "config_mismatch",
-        cancellationToken
-      );
-    }
-    await PublishAsync(
-      health.State == "fatal" ? "config_fatal" : "config_health",
-      $"configuration health {health.State}"
-        + (health.Fatal.Count > 0
-          ? $" · fatal={string.Join(',', health.Fatal)}"
-          : "")
-        + (health.Warnings.Count > 0
-          ? $" · warning={string.Join(',', health.Warnings)}"
-          : ""),
-      cancellationToken
-    );
-    return health;
-  }
-
   private Task PublishReadinessAsync(
     bool ready,
     string state,
-    AutoTradeConfigHealthResult health,
+    AutoTradeReadinessStatus health,
     CancellationToken cancellationToken
   ) => store.SetValueAsync(
-    AutoTradeConfigHealth.ReadinessKey,
+    "auto_trade:executor_readiness",
     JsonSerializer.Serialize(
       new AutoTradeExecutorReadiness(
         ready,

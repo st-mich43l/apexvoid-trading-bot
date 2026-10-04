@@ -74,7 +74,7 @@ async def analysis_opportunity_consumer_loop() -> None:
   analysis_config = runtime_config.analysis.technical_authority
   if not analysis_config.consumer_enabled:
     raise RuntimeError("live Go analysis consumer is disabled")
-  kafka = runtime_config.transport.kafka
+  kafka = runtime_config.runtime.kafka
   if not kafka.enabled:
     raise RuntimeError("analysis opportunity consumer enabled but Kafka transport is disabled")
   try:

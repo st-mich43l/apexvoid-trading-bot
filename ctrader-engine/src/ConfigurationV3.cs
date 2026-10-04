@@ -3,26 +3,16 @@ namespace ApexVoid.CTraderFeed;
 /// <summary>
 /// Direct YAML configuration reader for .NET.
 /// docs/configuration.md. Reads config/apexvoid.yml
-/// (or config/apexvoid.demo-eval.yml) and its categorized includes plus
-/// one environment overlay, following the exact same §14 include/merge/
-/// overlay spec as <c>algo-bot/app/configuration/v3_root.py</c> and
-/// <c>analysis-engine/internal/config/v3_document.go</c>.
+/// (or config/apexvoid.demo.yml) and its categorized includes plus one
+/// environment overlay. The three services resolve the same native YAML
+/// document independently.
 ///
 /// <para><b>This is the live direct YAML reader.</b> The typed runtime
 /// factory reads this same resolved document directly for broker execution.
 /// Secrets remain environment inputs only.</para>
 /// <list type="bullet">
-/// <item><description><c>ResolvedRuntimeManifest</c>/<c>ResolvedAutoTradeProjection</c>
-/// carry well over a hundred fields feeding real order-execution decisions
-/// (stop distances, sizing, scale-in/add policy, spread guards, ...).
-/// The shared fixture earns trust through exact parity against the real
-/// resolver
-/// pipeline. Reaching that same rigor for this surface, in C#, without a
-/// reflection-based deserializer (AOT forbids one — see
-/// <c>ResolvedRuntimeManifestLoader</c>'s own comment on the exact crash:
-/// "Reflection-based serialization has been disabled"), is a
-/// multi-hundred-field hand-mapping exercise on its own, not something to
-/// rush through to hit a stage count.</description></item>
+/// <item><description>No generated cross-service configuration artifact is
+/// involved in this reader.</description></item>
 /// <item><description>This is the one runtime in the whole migration that
 /// executes real broker orders with real money. §41 of
 /// the configuration contract is explicit that safety on this
@@ -68,8 +58,7 @@ public sealed class ConfigDocument
   /// Reads a V3 root file (config/apexvoid.yml-shaped: a <c>version: 3</c>
   /// document with an <c>includes:</c> list) and resolves its include
   /// graph plus environment overlay, exactly mirroring
-  /// <c>app/configuration/v3_root.py::resolve_v3_document</c> and
-  /// <c>analysis-engine/internal/config/v3_document.go::ResolveDocument</c>.
+/// the native YAML readers in the Python and Go services.
   /// </summary>
   public static ConfigDocument Resolve(string rootPath)
   {

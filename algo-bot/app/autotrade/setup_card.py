@@ -507,7 +507,7 @@ def should_delete_root_on_terminal() -> bool:
   (owner's explicit choice, accepting the reply-thread tradeoff) instead
   of leaving it permanently off.
   """
-  return runtime_config.delivery.telegram.delete_root_on_terminal
+  return runtime_config.telegram.delete_root_on_terminal
 
 
 def forming_status_key(setup_id: str) -> str:
@@ -739,7 +739,7 @@ async def save_forming_card_status(
   priority = CARD_STATUS_PRIORITY.get(state, 0)
   effective_ttl = ttl or max(
     _FORMING_CARD_MIN_TTL_SECONDS,
-    runtime_config.lifecycle.candidate.storage_ttl_seconds,
+    runtime_config.auto_algo.lifecycle.candidate.storage_ttl_seconds,
   )
   payload = json.dumps(
     {
@@ -840,7 +840,7 @@ async def load_forming_card(client, setup_id: str) -> dict | None:
     # the default owner chat every existing card was sent to.
     try:
       return {
-        "chat_id": runtime_config.delivery.telegram.telegram_owner_id,
+        "chat_id": runtime_config.telegram.telegram_owner_id,
         "message_id": int(text),
       }
     except (TypeError, ValueError):
@@ -852,7 +852,7 @@ async def load_forming_card(client, setup_id: str) -> dict | None:
     return {
       "chat_id": (
         data.get("chat_id")
-        or runtime_config.delivery.telegram.telegram_owner_id
+        or runtime_config.telegram.telegram_owner_id
       ),
       "message_id": int(message_id),
       "text": str(data.get("text") or ""),
@@ -872,7 +872,7 @@ async def save_forming_card(
 ) -> None:
   effective_ttl = ttl or max(
     _FORMING_CARD_MIN_TTL_SECONDS,
-    runtime_config.lifecycle.candidate.storage_ttl_seconds,
+    runtime_config.auto_algo.lifecycle.candidate.storage_ttl_seconds,
   )
   payload = json.dumps(
     {"chat_id": chat_id, "message_id": message_id, "text": text},
@@ -1918,7 +1918,7 @@ def _configured_target_r_multiples(
   distance the ladder itself was built from - same "authoritative source,
   never re-derived from card prices" principle as the fixed_rr branch.
   """
-  from app.configuration.effective_instrument import EffectiveInstrumentError
+  from app.runtime.instruments import EffectiveInstrumentError
   from app.core.instrument_geometry import technique_fixed_rr_targeting
 
   try:
@@ -2227,7 +2227,7 @@ async def ensure_plan_published_root_card(
   owner_id = (
     chat_id
     if chat_id is not None
-    else runtime_config.delivery.telegram.telegram_owner_id
+    else runtime_config.telegram.telegram_owner_id
   )
   if not owner_id:
     log.info(
@@ -2535,7 +2535,7 @@ async def ensure_root_card_for_setup_id(
   owner_id = (
     chat_id
     if chat_id is not None
-    else runtime_config.delivery.telegram.telegram_owner_id
+    else runtime_config.telegram.telegram_owner_id
   )
   if not owner_id:
     return None

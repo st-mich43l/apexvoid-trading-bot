@@ -21,6 +21,7 @@ from app.signals.manual_execution import (
   request_close_auto_position,
 )
 from app.core.config import runtime_config
+from app.runtime.instruments import for_instrument, live_instruments
 from app.persistence import redis_state
 from app.persistence.store import (
   get_all_signals,
@@ -253,7 +254,7 @@ async def handle_algo_funnel(msg: Message) -> None:
     return
   raw = _command_args(msg).strip()
   symbol = raw.split()[0].upper() if raw else (
-    runtime_config.market_data.scanner.symbols.split(",")[0].strip().upper()
+    runtime_config.analysis.scanner.symbols.split(",")[0].strip().upper()
   )
   try:
     text = await auto_trade_funnel_text(symbol)
@@ -275,7 +276,7 @@ async def handle_algo_setups(msg: Message) -> None:
     return
   raw = _command_args(msg).strip()
   symbol = raw.split()[0].upper() if raw else (
-    runtime_config.market_data.scanner.symbols.split(",")[0].strip().upper()
+    runtime_config.analysis.scanner.symbols.split(",")[0].strip().upper()
   )
   try:
     text = await current_market_setups_text(symbol)
@@ -298,7 +299,7 @@ async def handle_scan_report(msg: Message) -> None:
   raw = _command_args(msg)
   symbol, rest = _take_symbol(raw, default=None)
   symbol = (
-    symbol or runtime_config.market_data.scanner.symbols.split(",")[0]
+    symbol or runtime_config.analysis.scanner.symbols.split(",")[0]
   ).strip().upper()
   hours = 24.0
   if rest.strip():
@@ -306,7 +307,7 @@ async def handle_scan_report(msg: Message) -> None:
       hours = max(1.0, float(rest.strip().split()[0]))
     except ValueError:
       pass
-  tf = runtime_config.market_data.scanner.execution_timeframe.upper()
+  tf = runtime_config.analysis.scanner.execution_timeframe.upper()
   client = redis_state.get_client()
   # Owner-only compatibility command.  The automatic path consumes Go
   # opportunities and never imports the Python detector graph.
@@ -443,14 +444,14 @@ async def handle_help(msg: Message) -> None:
 
 def _trade_symbol_catalog(selected: str | None = None) -> str:
   """Render the configured manual-trade surface from the runtime registry."""
-  live = tuple(runtime_config.live_instruments())
+  live = tuple(live_instruments(runtime_config))
   if selected is not None:
     live = tuple(item for item in live if item == selected)
   if not live:
     return "⛔ No live manual-trade symbol matches this request."
   lines = ["🧭 <b>ApexVoid trade symbols</b>"]
   for instrument_id in live:
-    effective = runtime_config.for_instrument(instrument_id)
+    effective = for_instrument(runtime_config, instrument_id)
     identity = effective.identity
     manual = getattr(effective, "manual", None)
     if manual is not None and not bool(getattr(manual, "enabled", True)):
@@ -497,12 +498,12 @@ async def handle_trade(msg: Message) -> None:
       "⚠️ Unknown symbol. Use <code>/trade</code> to list configured books."
     )
     return
-  if symbol not in runtime_config.live_instruments():
+  if symbol not in live_instruments(runtime_config):
     await msg.answer(
       f"⛔ {escape(symbol)} is configured but not live for manual execution."
     )
     return
-  effective = runtime_config.for_instrument(symbol)
+  effective = for_instrument(runtime_config, symbol)
   manual = getattr(effective, "manual", None)
   if manual is not None and not bool(getattr(manual, "enabled", True)):
     await msg.answer(f"⛔ Manual trading is disabled for {escape(symbol)}.")
@@ -993,7 +994,7 @@ async def handle_trade_untagged(msg: Message) -> None:
   if not signals:
     await msg.answer("✅ No untagged signals.")
     return
-  tz = ZoneInfo(runtime_config.delivery.presentation.seq_reset_tz)
+  tz = ZoneInfo(runtime_config.telegram.presentation.seq_reset_tz)
   lines = [f"📋 <b>Untagged signals ({len(signals)})</b>"]
   for signal in signals:
     signal_id = signal["id"]
@@ -1071,7 +1072,7 @@ async def handle_trade_stats(msg: Message) -> None:
   records = await get_pips_records(start_ts, end_ts, symbol)
   signals = await get_all_signals(symbol)
   label = f"{symbol} {period}" if symbol else period
-  sessions = runtime_config.market_data.sessions
+  sessions = runtime_config.analysis.sessions
   # asia_start/london_start/ny_start are fixed UTC session-open hours
   # (22/7/13) -- not seq_reset_tz, which is the viewer-local day boundary
   # and unrelated to global market session classification.

@@ -609,3 +609,4 @@ analysis:
 
   watcher:
     interval_seconds: 120
+    ctrader_stale_seconds: 180

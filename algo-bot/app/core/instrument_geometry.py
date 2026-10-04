@@ -5,12 +5,12 @@ XAU values are dollars. FX must not inherit them — 6.0 on EURUSD is 60k pips.
 
 from __future__ import annotations
 
-from app.configuration.models.instruments import InstrumentTargetMode
 from app.core.config import runtime_config
+from app.runtime.instruments import InstrumentTargetMode, for_instrument
 
 
 def _effective(symbol: str):
-  return runtime_config.for_instrument(symbol)
+  return for_instrument(runtime_config, symbol)
 
 
 def instrument_runtime(symbol: str):
@@ -32,10 +32,7 @@ def _instrument_targeting(symbol: str, cfg=None):
   targeting = getattr(source, "targeting", None)
   if targeting is not None:
     return targeting
-  resolver = getattr(source, "for_instrument", None)
-  if not callable(resolver):
-    return None
-  return resolver(symbol).targeting
+  return for_instrument(source, symbol).targeting
 
 
 def fixed_reward_risk(symbol: str, cfg=None) -> float | None:

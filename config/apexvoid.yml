@@ -1,4 +1,4 @@
-# ApexVoid root configuration entrypoint (Configuration V3).
+# ApexVoid root configuration entrypoint.
 #
 # All runtimes (analysis-engine / algo-bot / ctrader-engine) start here.
 # APEXVOID_CONFIG_FILE must point at this file — see docs/configuration.md.

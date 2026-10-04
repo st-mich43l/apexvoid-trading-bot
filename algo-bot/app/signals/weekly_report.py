@@ -7,6 +7,7 @@ from html import escape
 from zoneinfo import ZoneInfo
 
 from app.core.config import runtime_config
+from app.runtime.instruments import enabled_instruments
 from app.persistence.store import (
   get_all_signals,
   get_meta,
@@ -149,11 +150,11 @@ async def _send_recap(text: str, channel_id: int) -> None:
 
 
 async def _weekly_report_tick(now: datetime | None = None) -> bool:
-  tz = ZoneInfo(runtime_config.delivery.presentation.seq_reset_tz)
+  tz = ZoneInfo(runtime_config.telegram.presentation.seq_reset_tz)
   now = now.astimezone(tz) if now else datetime.now(tz)
   if (
-    now.weekday() != runtime_config.delivery.reports.weekly.day_of_week
-    or now.hour < runtime_config.delivery.reports.weekly.utc_hour
+    now.weekday() != runtime_config.telegram.reports.weekly.day_of_week
+    or now.hour < runtime_config.telegram.reports.weekly.utc_hour
   ):
     return False
 
@@ -162,13 +163,13 @@ async def _weekly_report_tick(now: datetime | None = None) -> bool:
   if await get_meta(_META_KEY) == week_key:
     return False
 
-  for symbol in runtime_config.enabled_instruments():
+  for symbol in enabled_instruments(runtime_config):
     records = await get_pips_records(
       int(start.timestamp()),
       int(end.timestamp()) - 1,
       symbol,
     )
-    if not records and runtime_config.delivery.reports.weekly.skip_empty:
+    if not records and runtime_config.telegram.reports.weekly.skip_empty:
       continue
     stats = build_stats(
       records,
@@ -177,9 +178,9 @@ async def _weekly_report_tick(now: datetime | None = None) -> bool:
       # (22/7/13) -- not seq_reset_tz, which is the viewer-local day/week
       # boundary and unrelated to global market session classification.
       "UTC",
-      runtime_config.market_data.sessions.asia_start,
-      runtime_config.market_data.sessions.london_start,
-      runtime_config.market_data.sessions.ny_start,
+      runtime_config.analysis.sessions.asia_start,
+      runtime_config.analysis.sessions.london_start,
+      runtime_config.analysis.sessions.ny_start,
     )
     text = format_weekly_recap(stats, symbol, start, end)
     for target in channels_for(symbol, "vip"):
@@ -191,7 +192,7 @@ async def _weekly_report_tick(now: datetime | None = None) -> bool:
 
 async def weekly_report_loop() -> None:
   """Check every 30 minutes and post at most once per closed week."""
-  if not runtime_config.delivery.reports.weekly.enabled:
+  if not runtime_config.telegram.reports.weekly.enabled:
     log.info("Weekly performance recap disabled")
     return
   while True:

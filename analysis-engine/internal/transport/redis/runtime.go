@@ -58,7 +58,7 @@ func NewRuntime(cfg Config, series []Series, dispatch Dispatch, health *Health, 
 	}
 	options, err := redisv9.ParseURL(cfg.URL)
 	if err != nil {
-		return nil, fmt.Errorf("redis: parse transport.redis.url: %w", err)
+		return nil, fmt.Errorf("redis: parse runtime.redis.url: %w", err)
 	}
 	return NewRuntimeWithClient(redisv9.NewClient(options), cfg, series, dispatch, health, metrics)
 }

@@ -787,7 +787,7 @@ async def publish_ranked_cycle(
           owner_key,
           json.dumps(owner, separators=(",", ":"), sort_keys=True),
           ex=max(
-            86400, runtime_config.lifecycle.candidate.storage_ttl_seconds,
+            86400, runtime_config.auto_algo.lifecycle.candidate.storage_ttl_seconds,
           ),
           nx=True,
         )

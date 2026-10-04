@@ -5,7 +5,7 @@ Rollout is runtime policy, not a silent mapping onto global dry-run.
 
 from __future__ import annotations
 
-from app.configuration.models.instruments import InstrumentRollout
+from app.runtime.instruments import InstrumentRollout
 
 
 def permits_feed(rollout: InstrumentRollout) -> bool:

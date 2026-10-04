@@ -49,6 +49,24 @@ def _instrument_context(symbol: str, cfg: Any) -> Any:
     # Configuration has already been validated at startup. Do not silently
     # fall back to root/XAU policy if a live instrument cannot be resolved.
     return resolver(symbol)
+  if symbol and hasattr(cfg, "instruments"):
+    from app.runtime.instruments import for_instrument
+
+    return for_instrument(cfg, symbol)
+  if hasattr(cfg, "units") and hasattr(cfg, "execution"):
+    return cfg
+  # Native root YAML keeps execution policy under ``auto_algo`` while a
+  # symbol-less unit-test/configured policy evaluation still needs the shared
+  # strategy, actionability and risk branches.  Present that one native tree
+  # as a narrow execution context; do not reintroduce a flat config model.
+  if not symbol and hasattr(cfg, "auto_algo"):
+    auto_algo = cfg.auto_algo
+    return SimpleNamespace(
+      execution=cfg.execution,
+      strategies=auto_algo.strategies,
+      actionability=auto_algo.actionability,
+      risk=auto_algo.risk,
+    )
   return cfg
 
 
@@ -57,7 +75,14 @@ def _instrument_digits(symbol: str, cfg: Any) -> int:
   units = getattr(context, "units", None)
   if units is not None:
     return int(units.price_digits)
-  return int(context.contract.instrument.price_digits or 2)
+  # A policy unit-test or a caller evaluating a symbol-less match may pass a
+  # small execution config rather than an instrument view.  Native YAML has
+  # no root ``contract.instrument`` object; use the explicitly resolved
+  # instrument when available and retain the broker-safe two-decimal default
+  # for symbol-less policy evaluation.
+  contract = getattr(context, "contract", None)
+  instrument = getattr(contract, "instrument", None)
+  return int(getattr(instrument, "price_digits", 2) or 2)
 
 
 def _planned_entry_price(symbol: str, value: float) -> float:
@@ -407,7 +432,10 @@ def resolve_guard_mode(cfg: Any | None = None) -> str:
   """
   if cfg is None:
     cfg = _default_runtime_cfg()
-  mode = str(cfg.actionability.structural_guard.guard_mode)
+  actionability = getattr(cfg, "actionability", None)
+  if actionability is None and hasattr(cfg, "auto_algo"):
+    actionability = cfg.auto_algo.actionability
+  mode = str(actionability.structural_guard.guard_mode)
   mode = mode.strip().lower()
   return mode if mode in _GUARD_MODES else GUARD_MODE_BALANCED
 
@@ -1664,7 +1692,14 @@ def risk_multiplier_for_tier(tier: str, cfg: Any | None = None, *, post_impulse:
   """
   if cfg is None:
     cfg = _default_runtime_cfg()
-  sizing = cfg.risk.sizing
+  # Strategy-match construction may call this helper with the root native
+  # document, while execution-policy calls pass an instrument view.  Both
+  # are valid native shapes; resolve the owning YAML section explicitly
+  # instead of relying on the removed flattened settings facade.
+  risk = getattr(cfg, "risk", None)
+  if risk is None:
+    risk = cfg.auto_algo.risk
+  sizing = risk.sizing
   if range_scalp:
     scalp = float(sizing.range_max_risk_multiplier)
     return scalp if math.isfinite(scalp) and scalp > 0 else 1.5

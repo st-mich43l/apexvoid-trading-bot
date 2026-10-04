@@ -20,6 +20,7 @@ import math
 from typing import Any, Awaitable, Callable
 
 from app.persistence import redis_state
+from app.runtime.instruments import enabled_instruments, for_instrument, live_instruments
 from app.analysis_client.provenance import GO_ORIGIN_TAG
 from app.autotrade.go_plan_cancel import read_plan_cancel, register_go_plan
 from app.autotrade.go_live_opportunities import go_live_opportunity_ids
@@ -421,14 +422,10 @@ def classify_execution_zone(
 
 def _symbols() -> set[str]:
   # rollout=live is the go-live switch; do not require a second CSV edit.
-  live = {item.upper() for item in runtime_config.live_instruments()}
+  live = {item.upper() for item in live_instruments(runtime_config)}
   if live:
     return live
-  return {
-    item.strip().upper()
-    for item in runtime_config.contract.instrument.symbols.split(",")
-    if item.strip()
-  }
+  return {item.upper() for item in enabled_instruments(runtime_config)}
 
 
 def _parse_bar_event(data: object) -> tuple[str, str, str] | None:
@@ -478,7 +475,7 @@ async def _load_spot(client: Any, symbol: str) -> AutoTradeSpot | None:
     price=price,
     ts=ts,
     fresh=0 <= now - ts <= max(
-      1, runtime_config.market_data.spot.maximum_age_seconds,
+      1, runtime_config.analysis.spot.maximum_age_seconds,
     ),
     bid=bid,
     ask=ask,
@@ -489,7 +486,7 @@ async def _load_strategy_match(
   client: Any,
   symbol: str,
 ) -> StrategyMatch | None:
-  if not runtime_config.runtime.auto_trade.strategy_match_enabled:
+  if not runtime_config.auto_algo.strategy_match_enabled:
     return None
   key = strategy_match_key(symbol)
   raw = await client.get(key)
@@ -528,9 +525,9 @@ async def _load_strategy_matches(
   client: Any,
   symbol: str,
 ) -> list[StrategyMatch]:
-  if not runtime_config.runtime.auto_trade.strategy_match_enabled:
+  if not runtime_config.auto_algo.strategy_match_enabled:
     return []
-  if not runtime_config.strategies.matching.multiple_matches_enabled:
+  if not runtime_config.auto_algo.strategies.matching.multiple_matches_enabled:
     match = await _load_strategy_match(client, symbol)
     return [] if match is None else [match]
   raw = await client.get(strategy_matches_key(symbol))
@@ -699,7 +696,7 @@ async def _record_private_route(
     structural_zone_id=structural_id,
     issued_at=int(_intent_freshness(event_ts, now)),
     expires_at=(
-      now + max(300, runtime_config.lifecycle.candidate.storage_ttl_seconds)
+      now + max(300, runtime_config.auto_algo.lifecycle.candidate.storage_ttl_seconds)
     ),
     current_price=spot_price,
     entry_low=entry_low,
@@ -828,7 +825,7 @@ async def _reconcile_legacy_mapped_thesis_claims(client: Any) -> None:
     thesis_id = plan.get("ThesisId") or plan.get("thesis_id")
     reaction_id = plan.get("ReactionId") or plan.get("reaction_id")
     zone_id = plan.get("ZoneId") or plan.get("zone_id") or plan.get("StructuralZoneId")
-    symbol = str(plan.get("Symbol") or plan.get("symbol") or runtime_config.contract.instrument.canonical_symbol).upper()
+    symbol = str(plan.get("Symbol") or plan.get("symbol") or "XAU").upper()
     direction = str(plan.get("Direction") or plan.get("direction") or "").upper()
     strategy = str(plan.get("Setup") or plan.get("setup") or "Mapped Zone Reaction")
     family = str(
@@ -907,7 +904,7 @@ async def _event_cluster_guard(symbol: str, now: int) -> dict | None:
   whichever event is nearer to `now` instead. Off by default
   (event_cluster_guard_enabled); currently only turned on for GBPJPY.
   """
-  gates = runtime_config.actionability.gates
+  gates = runtime_config.auto_algo.actionability.gates
   if not gates.event_cluster_guard_enabled:
     return None
   currencies = _instrument_currencies(symbol)
@@ -939,7 +936,7 @@ async def _news_guard_hit(symbol: str, now: int) -> dict | None:
   if cluster_hit is not None:
     return cluster_hit
   return await event_in_window(
-    now, max(0, runtime_config.actionability.gates.news_guard_minutes) * 60,
+    now, max(0, runtime_config.auto_algo.actionability.gates.news_guard_minutes) * 60,
   )
 
 
@@ -956,6 +953,10 @@ async def _record_v8_build_rejected(
   measured: dict[str, Any],
 ) -> None:
   """Hard TradePlan reject: metric + terminalize setup so it does not keep watching."""
+  log.info(
+    "v8 build rejected symbol=%s setup_id=%s reason=%s message=%s",
+    symbol, match.match_id, reason_code, message,
+  )
   await _record_gate_reject(client, symbol, f"v8_{reason_code}")
   terminal_state = (
     EXPIRED
@@ -1930,7 +1931,7 @@ async def _publish_trade_plan_v8(
       trigger_bar_ts = int(trigger.bar_ts)
       validity_bars = max(
         1,
-        int(runtime_config.lifecycle.retest.trigger_validity_bars),
+        int(runtime_config.auto_algo.lifecycle.retest.trigger_validity_bars),
       )
       trigger_deadline = trigger_bar_ts + 60 + validity_bars * 60
       if quote_ts > trigger_deadline:
@@ -2136,7 +2137,7 @@ async def _publish_trade_plan_v8(
   if policy.m5_authoritative_contract and confirmation.source == M1_RETEST:
     validity_bars = max(
       1,
-      int(runtime_config.lifecycle.retest.trigger_validity_bars),
+      int(runtime_config.auto_algo.lifecycle.retest.trigger_validity_bars),
     )
     trigger_expiry = confirmation.bar_ts + 60 + validity_bars * 60
     execution_match = replace(
@@ -2189,7 +2190,7 @@ async def _publish_trade_plan_v8(
       symbol,
     ),
     min_capped_target_pips=float(
-      runtime_config.actionability.target_room.minimum_capped_target_pips
+      runtime_config.auto_algo.actionability.target_room.minimum_capped_target_pips
     ),
     execution_cost_pips=float(runtime_config.execution.policy.execution_cost_pips),
     room_reference_source=room_reference_source,
@@ -2223,7 +2224,7 @@ async def _publish_trade_plan_v8(
     except (TypeError, ValueError):
       room_pips = 0.0
     min_room = float(
-      runtime_config.actionability.target_room.minimum_capped_target_pips or 15
+      runtime_config.auto_algo.actionability.target_room.minimum_capped_target_pips or 15
     )
     soft_codes = {
       "opposing_entry_overlap",
@@ -2376,7 +2377,7 @@ async def _publish_trade_plan_v8(
       instrument_geometry.opposing_minimum_separation_price(symbol)
     ),
     same_direction_size_fraction=float(
-      runtime_config.risk.position_limits.same_direction_stack_size_fraction
+      runtime_config.auto_algo.risk.position_limits.same_direction_stack_size_fraction
     ),
     # Active opposite position must not block scalping / Range Edge when native
     # min room already fitted (owner 2026-08-06).
@@ -2546,7 +2547,7 @@ async def _publish_trade_plan_v8(
       now_ts=None,
       same_direction_stack=same_direction_stack,
       same_direction_size_fraction=float(
-        runtime_config.risk.position_limits.same_direction_stack_size_fraction
+        runtime_config.auto_algo.risk.position_limits.same_direction_stack_size_fraction
       ),
       be_after_target_index=0,
       approved_measured=gate_measured,
@@ -2941,13 +2942,13 @@ async def _admit_strategy_intent_for_cycle(
   if existing.already_published:
     # the TradePlan runtime will reconcile the existing plan when it runs; admit as-is.
     return None
-  if not runtime_config.runtime.auto_trade.enabled:
+  if not runtime_config.auto_algo.enabled:
     return _AdmissionFailure(
       reason_code="auto_trade_disabled",
       terminal=True,
       message="autonomous execution is disabled",
     )
-  if not runtime_config.runtime.auto_trade.strategy_match_enabled:
+  if not runtime_config.auto_algo.strategy_match_enabled:
     return _AdmissionFailure(
       reason_code="strategy_match_disabled",
       terminal=True,
@@ -2985,7 +2986,7 @@ async def _admit_strategy_intent_for_cycle(
           "market_map_id": eligibility.market_map_id,
         },
       )
-  if match.confluence < max(1, runtime_config.actionability.gates.min_confluence):
+  if match.confluence < max(1, runtime_config.auto_algo.actionability.gates.min_confluence):
     return _AdmissionFailure(
       reason_code="confluence_below_minimum",
       terminal=True,
@@ -3277,7 +3278,7 @@ async def _handle_event(
   # standing opposing zone before letting it publish.
   frames = await _load_frames(source, symbol)
   strategy_matches = list(scanner_strategy_matches)
-  if runtime_config.strategies.matching.multiple_matches_enabled and strategy_matches:
+  if runtime_config.auto_algo.strategies.matching.multiple_matches_enabled and strategy_matches:
     strategy_matches, _ = dedupe_matches(
       strategy_matches,
       atr=strategy_matches[0].atr,
@@ -3462,7 +3463,7 @@ async def _handle_event(
     # removed stale/non-executable opportunities from the decision set. Go's
     # full-book arbitration remains provenance telemetry; it cannot veto a
     # fresh executable intent with an old technical opportunity.
-    gates = runtime_config.actionability.scanner_gates
+    gates = runtime_config.auto_algo.actionability.scanner_gates
     arbitration = arbitrate_execution_intents(
       arbitrable,
       conflict_margin=float(gates.conflict_margin),

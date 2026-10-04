@@ -52,7 +52,7 @@ async def _get_pool() -> asyncpg.Pool:
   global _pool
   if _pool is None:
     _pool = await asyncpg.create_pool(
-      runtime_config.bootstrap.postgres.url,
+      runtime_config.runtime.postgres.url,
       min_size=1,
       max_size=10,
       command_timeout=30,
@@ -129,7 +129,7 @@ def _rowcount(status: str) -> int:
 
 
 def _current_trade_date() -> str:
-  tz = ZoneInfo(runtime_config.delivery.presentation.seq_reset_tz)
+  tz = ZoneInfo(runtime_config.telegram.presentation.seq_reset_tz)
   return datetime.now(tz).date().isoformat()
 
 
@@ -581,7 +581,7 @@ async def init_db() -> None:
       -- that collides on *either* unique constraint (PK or message_id).
       ON CONFLICT DO NOTHING
       """,
-      runtime_config.delivery.telegram.telegram_channel_id,
+      runtime_config.telegram.telegram_channel_id,
     )
 
     await db.execute(

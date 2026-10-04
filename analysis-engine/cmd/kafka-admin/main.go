@@ -29,7 +29,7 @@ func main() {
 		fatal("load Kafka configuration", err)
 	}
 	if !cfg.Enabled {
-		fatal("provision topics", fmt.Errorf("transport.kafka.enabled=false"))
+		fatal("provision topics", fmt.Errorf("runtime.kafka.enabled=false"))
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()

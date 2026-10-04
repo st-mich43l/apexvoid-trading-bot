@@ -141,7 +141,7 @@ async def sweep_expired_setups_once(client: Any, *, now: int | None = None) -> i
 
 
 async def setup_expiry_sweeper_loop() -> None:
-  if not runtime_config.runtime.auto_trade.enabled:
+  if not runtime_config.auto_algo.enabled:
     return
   client = redis_state.get_client()
   log.info("ApexVoid Algo setup-expiry sweeper started")

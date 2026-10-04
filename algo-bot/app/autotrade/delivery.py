@@ -26,6 +26,7 @@ from app.autotrade.volume_pips import (
 )
 from app.persistence import redis_state
 from app.core.config import runtime_config
+from app.runtime.instruments import for_instrument, live_instruments
 from app.bot.client import (
   delete_scanner_message,
   edit_scanner_message_text,
@@ -274,9 +275,9 @@ def _format_event_price(
   precision = digits
   if precision is None:
     precision = (
-      int(runtime_config.for_instrument(symbol).units.price_digits)
+      int(for_instrument(runtime_config, symbol).units.price_digits)
       if symbol
-      else int(runtime_config.contract.instrument.price_digits)
+      else int(for_instrument(runtime_config, "XAU").units.price_digits)
     )
   spec = f",.{max(0, precision)}f" if grouped else f".{max(0, precision)}f"
   return f"{value:{spec}}"
@@ -2311,7 +2312,7 @@ async def _resolve_reply_message_id(
 ) -> tuple[int | None, str]:
   event_type = str(event.get("type") or "")
   thread_to_card = (
-    runtime_config.delivery.lifecycle.thread_lifecycle
+    runtime_config.telegram.lifecycle.thread_lifecycle
     and (event_type in _FORMING_REPLY_TYPES or event_type in _FORMING_REPLY_PREFERRED_TYPES)
   )
   if thread_to_card:
@@ -2720,13 +2721,14 @@ async def auto_trade_status_text() -> str:
   except Exception:
     log.exception("algo_status manual algo pending count failed")
     manual_pending = 0
-  primary_symbol = next(
-    (
-      item.strip().upper()
-      for item in runtime_config.contract.instrument.symbols.split(",")
-      if item.strip()
-    ),
-    "XAU",
+  live_symbols = live_instruments(runtime_config)
+  # XAU remains the operator's primary status instrument.  The status card
+  # must not silently switch to the alphabetically first FX pair merely
+  # because the native instrument registry now contains every live pair.
+  primary_symbol = (
+    "XAU"
+    if "XAU" in live_symbols
+    else next(iter(live_symbols), "XAU")
   )
   config_health = await _json_key(client, CONFIG_HEALTH_KEY)
   readiness = await _json_key(client, EXECUTOR_READINESS_KEY)
@@ -2751,22 +2753,22 @@ async def auto_trade_status_text() -> str:
         break
   mode = (
     "disabled"
-    if not runtime_config.runtime.auto_trade.enabled
+    if not runtime_config.auto_algo.enabled
     else "dry run"
-    if runtime_config.runtime.auto_trade.dry_run
+    if runtime_config.auto_algo.dry_run
     else "demo trading"
   )
   state = "paused" if paused else "running"
   profile = str(
     (config_health or {}).get("profile")
-    or runtime_config.runtime.profile
+    or runtime_config.runtime.environment
     or "conservative"
   )
   selected_text = "none"
   execution_state = "-"
   why = ""
   regime = ""
-  if runtime_config.runtime.auto_trade.enabled:
+  if runtime_config.auto_algo.enabled:
     execution_state = "waiting"
     raw = await client.get(f"auto_trade:last_gate:{primary_symbol}")
     if raw:
@@ -2908,7 +2910,7 @@ async def auto_trade_status_text() -> str:
     lines.append(f"🧵 Route: {escape(route_line)}")
   if why:
     lines.append(f"❓ Why: {escape(why)}")
-  if runtime_config.runtime.auto_trade.enabled:
+  if runtime_config.auto_algo.enabled:
     # Supervisor marks programming bugs as fatal (Redis blips stay retrying).
     try:
       fatals = await redis_state.list_fatal_components()
@@ -2944,9 +2946,9 @@ async def _today_algo_scorecard_line() -> str | None:
       # (22/7/13) -- not seq_reset_tz, which is the viewer-local day
       # boundary and unrelated to global market session classification.
       "UTC",
-      runtime_config.market_data.sessions.asia_start,
-      runtime_config.market_data.sessions.london_start,
-      runtime_config.market_data.sessions.ny_start,
+      runtime_config.analysis.sessions.asia_start,
+      runtime_config.analysis.sessions.london_start,
+      runtime_config.analysis.sessions.ny_start,
     )
   except Exception:
     log.exception("algo_status today scorecard failed")
@@ -3288,7 +3290,7 @@ async def _auto_trade_owner_events_loop(*, chat_id: int) -> None:
   cursor = await client.get(_CURSOR_KEY)
   if not cursor:
     latest = await client.xrevrange(
-      runtime_config.contract.streams.events,
+      runtime_config.runtime.redis_streams.events,
       count=1,
     )
     cursor = latest[0][0] if latest else "0-0"
@@ -3302,7 +3304,7 @@ async def _auto_trade_owner_events_loop(*, chat_id: int) -> None:
   while True:
     try:
       batches = await client.xread(
-        {runtime_config.contract.streams.events: cursor},
+        {runtime_config.runtime.redis_streams.events: cursor},
         count=20,
         block=5000,
       )
@@ -3336,10 +3338,10 @@ async def _auto_trade_owner_events_loop(*, chat_id: int) -> None:
 
 async def auto_trade_events_loop() -> None:
   if (
-    not runtime_config.runtime.auto_trade.enabled
-    or not runtime_config.delivery.telegram.telegram_owner_id
+    not runtime_config.auto_algo.enabled
+    or not runtime_config.telegram.telegram_owner_id
   ):
     return
   await _auto_trade_owner_events_loop(
-    chat_id=runtime_config.delivery.telegram.telegram_owner_id
+    chat_id=runtime_config.telegram.telegram_owner_id
   )

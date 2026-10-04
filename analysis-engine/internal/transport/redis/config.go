@@ -16,13 +16,13 @@ type Config struct {
 
 func (c Config) Validate() error {
 	if strings.TrimSpace(c.URL) == "" {
-		return fmt.Errorf("redis: transport.redis.url is required")
+		return fmt.Errorf("redis: runtime.redis.url is required")
 	}
 	if strings.TrimSpace(c.BarsChannel) == "" {
-		return fmt.Errorf("redis: transport.redis.bars_channel is required")
+		return fmt.Errorf("redis: runtime.redis.bars_channel is required")
 	}
 	if c.ReconciliationInterval <= 0 {
-		return fmt.Errorf("redis: transport.redis.reconciliation_interval_seconds must be positive")
+		return fmt.Errorf("redis: runtime.redis.reconciliation_interval_seconds must be positive")
 	}
 	return nil
 }
