@@ -76,10 +76,15 @@ async def deliver_and_publish(h, prod, monkeypatch):
       update={"instruments": production.instruments},
     ),
   )
-  install_runtime_overrides(
-    monkeypatch, {"instruments.XAU.stop_envelope.max_pips": 100},
-  )
   live_inputs(monkeypatch, bid=4293.0, ask=4293.2)                    # inside the replayed zone 4291.21-4296.87
+  install_runtime_overrides(
+    monkeypatch, {
+      "instruments.XAU.stop_envelope.max_pips": 100,
+      "instruments.XAU.targeting.mode": "fixed_rr",
+      "instruments.XAU.auto_entry.mode": "single_best",
+      "execution.zone_scaling.fill_enabled": False,
+    },
+  )
   await h.activate()
   await h._ensure()
   now = int(h.clock.now)

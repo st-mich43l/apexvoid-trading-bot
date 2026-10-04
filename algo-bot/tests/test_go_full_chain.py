@@ -96,6 +96,14 @@ def prod(monkeypatch, event_loop):
 def h(sql, monkeypatch, prod):
   install_runtime_overrides(monkeypatch, {"analysis.technical_authority.consumer_enabled": True})
   live_inputs(monkeypatch)
+  # The shared executor fixture is intentionally the historical single-entry
+  # contract.  Keep that fixture explicit in native paths; production XAU
+  # remains fixed-RR with zone scaling enabled.
+  install_runtime_overrides(monkeypatch, {
+    "execution.zone_scaling.fill_enabled": False,
+    "instruments.XAU.targeting.mode": "ladder_pips",
+    "instruments.XAU.stop_envelope.min_pips": 40,
+  })
   return Harness(sql, monkeypatch)
 
 
@@ -408,6 +416,9 @@ _REAL_PUBLISH_WINDOW = killzone.evaluate_reaction_publish_window     # captured 
 
 
 def _outside_publish_window(mp):
+  install_runtime_overrides(
+    mp, {"execution.technique.reaction_require_publish_window": True},
+  )
   mp.setattr(killzone, "evaluate_reaction_publish_window",
              lambda *, ts=None, hour=None, cfg=None, require=True: _REAL_PUBLISH_WINDOW(ts=None, hour=3, cfg=cfg, require=require))
 
