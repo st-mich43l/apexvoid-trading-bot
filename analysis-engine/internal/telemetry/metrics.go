@@ -18,7 +18,7 @@ import (
 	"time"
 )
 
-// Phase names the pipeline stage being timed — source task §57's exact
+// Phase names the pipeline stage being timed.
 // list.
 type Phase string
 
@@ -36,7 +36,7 @@ const (
 	PhaseSnapshot   Phase = "snapshot_ms"
 	PhaseEventTotal Phase = "event_total_ms"
 
-	// PhaseStrategy and PhaseOpportunity are a Phase S8 amendment (Wire
+	// PhaseStrategy and PhaseOpportunity are the strategy and opportunity
 	// engine strategy evaluation) to this originally-frozen list — the
 	// same "one phase per pipeline step" convention every domain above
 	// already follows. PhaseStrategy times internal/strategy.Registry.
@@ -70,7 +70,7 @@ const (
 	// never silently folded into the ordinary/benign duplicate count.
 	CounterConflictEvents Counter = "conflict_events"
 
-	// Opportunity lifecycle transition counters — a Phase S8 amendment,
+	// Opportunity lifecycle transition counters,
 	// one counter per internal/opportunity.TransitionKind an operator can
 	// observe (TransitionNoop is deliberately not counted: it carries no
 	// new information by construction).
@@ -80,7 +80,7 @@ const (
 	CounterOpportunitiesInvalidated Counter = "opportunities_invalidated"
 	CounterOpportunitiesExpired     Counter = "opportunities_expired"
 
-	// Opportunity Kafka publication counters — a Phase S9 amendment.
+	// Opportunity Kafka publication counters.
 	// Enqueued and (Succeeded + Failed-before-eventual-success) will not
 	// match 1:1 during an outage: OpportunityPublisher retries a failed
 	// job indefinitely rather than dropping it (see its own doc comment),

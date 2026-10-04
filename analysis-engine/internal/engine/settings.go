@@ -70,10 +70,10 @@ type Settings struct {
 	// ConfigVersion/ConfigFingerprint are the resolved document's own
 	// whole-document provenance (ConfigProvenanceFromConfig — the SAME
 	// value already used for Kafka envelope provenance), computed once
-	// here rather than per event. Phase S8 uses these to overwrite each
+	// here rather than per event. The worker uses these to overwrite each
 	// Candidate's own Provenance.ConfigVersion/ConfigFingerprint before it
 	// reaches the OpportunityBook, replacing the narrower per-strategy-
-	// parameters placeholder every Phase S7 strategy computes itself (a
+	// parameters placeholder every strategy computes itself (a
 	// strategy has no *config.Document access — see each strategy's own
 	// configFingerprint doc comment for why that placeholder existed).
 	ConfigVersion     int

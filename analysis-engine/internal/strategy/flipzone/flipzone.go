@@ -1,4 +1,4 @@
-// Package flipzone implements FlipZoneStrategy — Phase S7
+// Package flipzone implements FlipZoneStrategy.
 // (apexvoid-bot-prompts/rebuild-strategies.md §22), consuming the
 // canonical Flip primitive internal/zone already builds: a specific
 // structural role change (a broken level accepted and re-tested from the

@@ -43,7 +43,7 @@ public sealed record TradePlanBreakEvenResult(
 /// live broker-observed inputs (quote, spread, fill price, account
 /// balance, tick size) - none of them classify regime, select a strategy,
 /// resolve an execution route, or compute a structural stop. See
-/// docs/adr-trade-plan-v8-cutover.md. The dependency boundary (this file
+/// docs/autotrade-execution-integrity.md. The dependency boundary (this file
 /// never calls StructureStopPlanner, ResolveExecutionRoute,
 /// BuildOpposingZoneContext, StructuralStopIdentityMatches, or
 /// PlansMatchWithinTolerance) is enforced by
@@ -568,7 +568,7 @@ public static class TradePlanExecutionEngine
   /// buffer, SELL desired = fill - buffer; never worsens an existing stop
   /// (BUY: max(current, desired), SELL: min(current, desired)). Uses only
   /// the broker-confirmed fill price - never the declared entry zone/order
-  /// price - per docs/adr-trade-plan-v8-cutover.md.
+  /// price - per docs/autotrade-execution-integrity.md.
   /// </summary>
   public static TradePlanBreakEvenResult CalculateBreakEven(
     TradePlan plan,

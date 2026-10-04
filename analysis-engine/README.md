@@ -1,77 +1,45 @@
-# analysis-engine
+# Analysis Engine
 
-Go owner of ApexVoid's deterministic automatic market-analysis domain, per
-`apexvoid-bot-prompts/rebuild-analysis-engine.md`. The live Go service owns
-technical facts, strategy detection, opportunity lifecycle, arbitration,
-zones, levels, structure, regime, MAD, and candle evidence. `algo-bot/`
-remains the execution-policy/control plane (freshness, quote, account,
-exposure, TradePlan, Telegram), while `ctrader-engine/` remains the broker
-execution service. The Python technical detector graph is no longer a live
-automatic authority; its import reachability is enforced by
-`algo-bot/s13_legacy_classification.py`.
+The Go analysis engine is ApexVoid's sole automatic technical authority. It
+reads closed market bars from Redis, builds causal market state, evaluates the
+configured strategies, maintains opportunity lifecycle and arbitration, and
+publishes opportunity events to Kafka.
 
-Read **`docs/go-analysis-migration-audit.md`** first — the computation
-graph, every duplicate/divergent calculation found in Python so far, and
-why each package boundary here is drawn where it is.
+It does not own account equity, sizing, exposure, Telegram, broker access, or
+TradePlan publication.
 
-## Status (Go automatic path live; S13 retirement audit active)
+## Runtime flow
 
-The live path includes:
-
-- canonical V3 configuration, market history, ATR, structure and liquidity;
-- zone construction/lifecycle and all 20 configured Go strategy factories;
-- technical opportunity Kafka publication, lifecycle, arbitration and
-  technical context (including candle-confirmation evidence);
-- Redis market-data ingestion, production telemetry, replay and parity tests.
-
-The remaining Python modules are either unreachable technical compatibility
-code or intentionally retained execution/accounting/manual/presentation
-code. The S13 classifier must remain green before any technical module is
-deleted. Known calibration and long-window Python-vs-Go comparison gaps are
-tracked in `docs/analysis-engine-v2-migration.md`.
-
-## Working on this module
-
-Tests are centralized under `test/`, one subdirectory per package domain
-(`test/config/`, `test/indicator/`, `test/market/`) rather than colocated
-as `internal/<pkg>/*_test.go` — each is a black-box `<pkg>_test` package
-testing its package's exported API only (see
-`docs/configuration-v3-migration-audit.md`'s "Go test layout" note for
-why, and what that meant for the one test that needed unexported access).
-Add new tests there, under the matching domain, not back inside
-`internal/`.
-
-When Go is unavailable on a host, use the same `golang:1.23-alpine` Docker
-image used by CI. `test/config` reads the real `config/apexvoid.yml` two
-directories up, so mount the **whole repository**, not just
-`analysis-engine/`:
-
-```bash
-docker run --rm -v "$(pwd)":/src -w /src/analysis-engine golang:1.23-alpine \
-  sh -c "gofmt -l . && go build ./... && go vet ./... && go test ./..."
-
-# race detector needs cgo:
-docker run --rm -v "$(pwd)":/src -w /src/analysis-engine golang:1.23-alpine \
-  sh -c "apk add --no-cache gcc musl-dev && go test -race ./..."
+```text
+Redis closed bars → market state → technical facts → strategies
+  → opportunity lifecycle/arbitration → Kafka analysis events
 ```
 
-(Run from the repository root, not from inside `analysis-engine/`.)
+The service entrypoint is `cmd/analysis-engine`. `cmd/replay` drives the same
+engine over deterministic captures. `cmd/kafka-admin` is the Kafka topic/admin
+utility.
 
-## Fixtures (`testdata/`)
+## Package layout
 
-- `atr_fixtures.json` — golden-master cases (real XAU M5 bars plus
-  warmup/flat/gap edge cases) comparing Go's `TrueRange`/`SimpleATR`/
-  `WilderATR` against the same Python functions' real output.
-  Regenerate with `scripts/export_atr_fixtures.py` (run from `algo-bot/`,
-  needs its venv) — **only when the Python formula itself changes**, never
-  to make a failing Go test pass (source prompt §31: "do NOT simply adjust
-  the fixture").
-- `raw_xau_m5_snapshot.jsonl` — the real bar data the ATR fixtures above
-  are built from (a `bars:XAU:M5` Redis snapshot, 2026-09-22).
+- `internal/marketdata`, `market`, `indicator`: bar history and measurements.
+- `internal/structure`, `liquidity`, `techniquezone`, `zone`, `trendline`,
+  `context`: technical state and zone construction.
+- `internal/strategy`: independent strategy implementations and registry.
+- `internal/opportunity`, `arbitration`, `state`, `engine`: lifecycle and
+  orchestration.
+- `internal/transport`: Redis input and Kafka output.
+- `test/`: domain, contract, integration, architecture, and replay tests.
+- `testdata/`: reusable behavioral and replay fixtures.
 
-`test/config`'s tests have no `testdata/` fixture of their own — they
-read `../../../config/apexvoid.yml` and `.../apexvoid.demo-eval.yml`
-directly (the real files, not a copy), the same choice
-`algo-bot/tests/test_config_v3_parity.py` makes and for the same reason:
-the point is proving parity against what every other language actually
-reads, not a fixture that could quietly drift from it.
+## Development
+
+```bash
+go build ./...
+go vet ./...
+go test ./...
+go test -race ./test/engine ./test/liquidity ./test/strategy
+```
+
+Keep strategy packages independent of Redis, Kafka, Postgres, Telegram, and
+broker code. Add behavior-protecting fixtures under `testdata/` when a replay
+or contract case needs durable coverage.

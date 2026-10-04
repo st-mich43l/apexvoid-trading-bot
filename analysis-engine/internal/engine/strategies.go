@@ -24,7 +24,7 @@ import (
 	strategytrendline "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/trendline"
 )
 
-// strategyFactories is Phase S8's composition root — the one place in
+// strategyFactories is the composition root — the one place in
 // this module that imports a concrete strategy subpackage. internal/
 // strategy's own Registry deliberately never does this (see registry.go's
 // doc comment: "the registry itself never imports a strategy
@@ -37,7 +37,7 @@ import (
 // catalog entry with `enabled: true` here and no matching key below fails
 // analysis-engine startup via strategy.NewRegistry's own fail-closed rule
 // ("enabled but has no registered implementation"), never silently
-// becomes a no-op. Adding a Phase S7-style strategy package later means
+// becomes a no-op. Adding a strategy package later means
 // adding one line here, nothing else in this file changes.
 var strategyFactories = map[strategy.StrategyID]strategy.Factory{
 	supply.ID:              supply.New,

@@ -65,7 +65,6 @@ analysis:
     # V2 keeps A/B anchors immutable, requires a later causal validation, and
     # turns this band into an interaction watch rather than an automatic fill.
     version: v2
-    shadow_v1: true
     validation_touch_tolerance_atr: 0.30
     interaction_band_atr: 0.20
     invalidation_penetration_atr: 0.50
@@ -90,7 +89,7 @@ analysis:
     # PR-D: filter technique instances via validate_technique_instance predicates.
     validation_enabled: true
   flip_zone:
-    # Shared structure-break acceptance: the Go zone builder and the legacy
+    # Shared structure-break acceptance: zone construction and the execution
     # projection must require the same two closed bars.
     accept_bars: 2
   zones:
@@ -684,9 +683,8 @@ instruments:
     # Technique: structure fixed_rr from pack (1R/2R/3R/4R 40/20/20/20 + BE
     # after 1R, entry-targeted risk band 50-60p). Manual stays zone_ladder.
     # M1 scalping keeps strategies.scalping discovery book.
-    # Withdrew min_sell_zone_score:10 (PR #449) — nearest-zone gap was ~1pt
-    # on n=26, inverted in 4/8 SELL cells, and the floor sat above most
-    # winning sample z scores. Field stays at default 0 (off).
+    # The sell-side score floor remains disabled; sparse zones are filtered by
+    # the current strategy and execution-policy gates.
     broker_symbol: XAU
     canonical_symbol: XAU
     aliases:

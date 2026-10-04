@@ -51,7 +51,7 @@ def _build_client() -> redis.Redis:
   )
 
 
-# S14A: a shadow dry run installs an in-memory overlay for the *current asyncio
+# A dry run installs an in-memory overlay for the *current asyncio
 # context only* (tasks it spawns inherit it; concurrent live tasks do not see
 # it), so any helper that reaches for the shared client cannot write to the
 # production Redis while a dry run is in flight.

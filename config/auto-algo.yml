@@ -3,12 +3,8 @@
 # opportunity exists?" — that boundary is preserved deliberately, per the
 # new architecture's own §5). Market-analysis formulas never belong here.
 #
-# Consolidates FOUR old trading-bot.yml top-level keys:
-# `actionability.*`, `lifecycle.*`, `risk.*`, `strategies.*`, plus the
-# auto-trade/scanner enable toggles that used to live under the OLD
-# top-level `runtime:` key — see docs/configuration-v3-migration-audit.md
-# §5's naming-collision note: that old `runtime.*` is NOT the same thing
-# as the new runtime.yml file.
+# Owns the automatic execution-policy groups: actionability, lifecycle, risk,
+# strategies, and scanner enablement.
 auto_algo:
   enabled: true
   dry_run: false
@@ -126,7 +122,7 @@ auto_algo:
     # the old trading-bot.yml's own `strategies.scalping.*` shape exactly
     # (a prior draft of this file nested it under `technique` by mistake;
     # caught by the parity-check script comparing every leaf against the
-    # old file — see docs/configuration-v3-migration-audit.md).
+    # The categorized configuration remains the source of truth.
     scalping:
       # M1-event-driven scalping: M5 owns setup structure; closed M1 owns
       # execution confirmation. Publish TradePlan when activation + risk pass.

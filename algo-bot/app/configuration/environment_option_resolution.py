@@ -1,6 +1,6 @@
 """Catalog-driven environment-option resolution with explicit alias conflicts.
 
-Phase 2H moves the historical ``app.core.environment_options`` behavior into the
+This module keeps the historical environment-option behavior in the
 configuration package and derives it from the canonical catalog instead of a
 hand-maintained alias registry. Pydantic ``AliasChoices`` stops at the first
 present name, which makes a shadowed, contradictory legacy variable invisible;
@@ -227,5 +227,4 @@ def canonical_option_health(
     for option in resolve_environment_options(environment)
     if option.canonical_name.startswith("AUTO_TRADE_")
   ]
-
 

@@ -1,12 +1,12 @@
 // Package market holds the core OHLC domain types the rest of the analysis
 // engine is built on: Candle, the bounded CandleWindow ring buffer, and
-// per-instrument geometry. See docs/go-analysis-migration-audit.md for the
-// Python modules these mirror and why.
+// per-instrument geometry. These types are independent of service adapters so
+// the same calculations work in live processing and replay.
 package market
 
 // Candle is one closed OHLC bar. Time is a Unix second timestamp (the same
 // unit `bars:{SYMBOL}:{TF}` scores use in Redis today — see
-// app/analysis/ohlc_source.py), not a time.Time, so a CandleWindow can stay
+// Redis), not a time.Time, so a CandleWindow can stay
 // a flat, allocation-free slice of value types.
 type Candle struct {
 	Time   int64

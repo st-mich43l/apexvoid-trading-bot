@@ -245,7 +245,7 @@ reply target falls back to a standalone card.
 ## TradePlan Stream (execution:*)
 
 Deliberately a separate namespace from `auto_trade:*` above - see
-`docs/adr-trade-plan-v8-cutover.md`. A TradePlan must never be
+`docs/autotrade-execution-integrity.md`. A TradePlan must never be
 reinterpreted as a V6 `TradeCandidate` or vice versa, so the two contracts
 never share a key prefix or a stream.
 
@@ -258,15 +258,15 @@ execution:plan_claim:{plan_id}     executor claim, 24-hour TTL
 execution:plan_runtime:{plan_id}   C# open runtime state
 execution:plan_recovery:{plan_id}  C# recovery copy while runtime state is open
 execution:plan_ack:{plan_id}       latest structured executor acknowledgement
-execution:plan_cancel:{plan_id}    cancel intent written by Python (S14B), 7-day TTL
+execution:plan_cancel:{plan_id}    cancel intent written by Algo Bot, 7-day TTL
 execution:plan_cancel_ack:{plan_id} executor's report of applying the intent, 7-day TTL
-analysis:go_plans                  hash plan_id -> Go-derived plan index (S14B)
+analysis:go_plans                  hash plan_id -> Go-derived plan index
 execution:plan_rejection:{id}      durable malformed/unsupported stream record
 execution:trade_plan_runtime_ids   tracked C# runtime plan IDs
 execution:trade_plan_cursor        last durably handled stream ID
 ```
 
-### Plan cancel intent (S14B)
+### Plan cancel intent
 
 `execution:plan_cancel:{plan_id}` is a Python-written *tombstone*: it may exist
 before the plan does. It is written (`SET NX`, first reason wins) when a

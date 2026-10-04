@@ -125,7 +125,7 @@ var ReactionPatterns = map[string]bool{
 
 // TechnicalContext is the engine-owned technical facts an execution policy
 // needs to evaluate a Candidate without re-running any detector or recomputing
-// ATR from raw OHLC (S13B). Strategies never set it: SymbolWorker assigns it at
+// ATR from raw OHLC. Strategies never set it: SymbolWorker assigns it at
 // the same observation boundary as ObservedTimeframe, from the exact closed bar
 // that first made the setup actionable, so every value is causal at that bar.
 //
@@ -237,7 +237,7 @@ type TechnicalContext struct {
 	// available; it never licenses a consumer to recompute Python detectors.
 	MAD *MADContext
 	// Confluence is the engine's named factor/V1/V2 technical score. It is
-	// optional for compatibility with retained pre-S13C events.
+	// optional for compatibility with retained older events.
 	Confluence *ConfluenceContext
 }
 

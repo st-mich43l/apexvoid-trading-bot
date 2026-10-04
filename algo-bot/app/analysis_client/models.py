@@ -1,4 +1,4 @@
-"""Strict S12 decoder for the versioned Go Analysis Engine contracts."""
+"""Strict decoder for the versioned Go Analysis Engine contracts."""
 
 from __future__ import annotations
 
@@ -61,7 +61,7 @@ class Quality(FrozenConfigModel):
 
 
 class StopEnvelope(FrozenConfigModel):
-  """Engine-owned stop-distance risk policy (Phase 4).
+  """Engine-owned stop-distance risk policy.
 
   desired_minimum_pips is a single-leg recommendation, not a final
   decision — see contracts/analysis/opportunity-v1.schema.json's own doc
@@ -245,7 +245,7 @@ class ConfluenceContext(FrozenConfigModel):
 class TechnicalContext(FrozenConfigModel):
   """Engine-owned policy inputs for the bar that made the setup actionable.
 
-  Additive V1 block (S13B). Absent => policy inputs are unavailable and the
+  Additive contract block. Absent => policy inputs are unavailable and the
   consumer must fail closed; it never substitutes a Python recomputation.
   """
 
@@ -342,7 +342,7 @@ class AnalysisOpportunityArbitration(FrozenConfigModel):
   status: str
   reason_code: str
   conflicting_with: list[str] = Field(default_factory=list)
-  # Cross-strategy thesis correlation (Phase 3): present only when this
+  # Cross-strategy thesis correlation: present only when this
   # opportunity shares its real-world structural identity with at least
   # one other live candidate. See go_opportunity_policy's own handling for
   # how this replaces the Python-side ATR-bucket heuristic.

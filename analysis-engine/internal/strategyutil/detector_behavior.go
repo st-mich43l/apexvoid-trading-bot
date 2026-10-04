@@ -108,7 +108,7 @@ func EntryBandForLevel(level keylevel.Level, atr, proximalATR float64) (float64,
 	return float64(level.Price) - half, float64(level.Price) + half
 }
 
-// GrabForBand applies the frozen Python liquidity_grabs contract to the
+// GrabForBand applies the liquidity-grab contract to the
 // canonical pools. A sweep is a wick through the pool band, and the same
 // candle may also reclaim it. A clean reclaim is B unless the reclaim candle
 // has the required directional displacement, in which case it is A. A
@@ -116,7 +116,7 @@ func EntryBandForLevel(level keylevel.Level, atr, proximalATR float64) (float64,
 //
 // This is intentionally detector-level rather than a projection of
 // Pool.SweptAt/ReclaimedAt. Those fields are useful lifecycle facts, but the
-// Python detector examines every candle against every pool and can find a
+// The detector examines every candle against every pool and can find a
 // valid grab even when a pool was constructed before the current candle.
 func GrabForBand(tf *analysiscontext.TimeframeContext, direction market.Direction, low, high, pipSize float64) *LiquidityGrab {
 	if tf == nil {
@@ -169,7 +169,7 @@ func directional(candle market.Candle, direction market.Direction) bool {
 	return direction == market.Buy && candle.IsBullish() || direction == market.Sell && candle.IsBearish()
 }
 
-// hasReactionDisplacement mirrors the legacy leg contract at the strategy
+// hasReactionDisplacement applies the displacement leg contract at the strategy
 // boundary. A displacement may start on the reclaim candle (the important
 // same-bar case), or on one of the next three bars. Canonical structure
 // displacement breaks are accepted as additional evidence; the candle-body

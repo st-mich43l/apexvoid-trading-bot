@@ -72,7 +72,7 @@ class DryRunWriteError(RuntimeError):
   """A shadow dry run tried to write to PostgreSQL."""
 
 
-# S14A: inside a shadow dry run (context-local, like the Redis override) the
+# Inside a dry-run context (context-local, like the Redis override) the
 # connection only serves plain SELECT/WITH statements; everything else raises.
 _readonly_db: ContextVar[bool] = ContextVar("store_readonly_db", default=False)
 
@@ -610,7 +610,7 @@ async def init_db() -> None:
       )
       """
     )
-    # Go Analysis Engine opportunity lifecycle ledger (S12). Kafka delivery
+    # Go Analysis Engine opportunity lifecycle ledger. Kafka delivery
     # is at-least-once, so event_id is the durable delivery fence and the
     # opportunity row is a terminal tombstone that prevents late recreation.
     await db.execute(

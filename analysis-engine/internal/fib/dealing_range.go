@@ -8,7 +8,7 @@ import (
 // Config aggregates every fib-domain tunable — same "one coherent
 // struct" convention structure.Settings/zone.Config already establish.
 // This domain has no config.analysis.yml precedent to speak of before
-// Phase S4 — all four leaves are newly surfaced at their real Python
+// The four leaves use the canonical dealing-range defaults.
 // function-default values (see config/analysis.yml's own comments).
 type Config struct {
 	// EpsilonATR is nearest_fib's epsilon_atr (default 0.15): how close

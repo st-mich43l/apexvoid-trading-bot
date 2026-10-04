@@ -23,11 +23,8 @@ from app.configuration.models.python_runtime import PythonRuntimeConfig
 from app.configuration.profiles import PROFILES
 from app.configuration.profiles import profile_fingerprint
 from app.configuration.deployment_contract import deployment_contract_document
-from app.configuration.runtime_manifest import (
-  build_resolved_runtime_manifest,
-  env_migration_document,
-  serialize_manifest_bytes,
-)
+from app.configuration.runtime_manifest import build_resolved_runtime_manifest
+from app.configuration.runtime_manifest import serialize_manifest_bytes
 from app.configuration.instrument_runtime_scope import assert_scope_audit_complete
 from app.configuration.source_types import SOURCE_PRECEDENCE
 
@@ -331,7 +328,6 @@ def render_artifacts() -> dict[Path, bytes]:
   runtime_manifest = build_resolved_runtime_manifest(
     config_file=str(config_file) if config_file.is_file() else None,
   )
-  migration = env_migration_document()
   scope_audit = assert_scope_audit_complete()
   return {
     Path("contracts/configuration/environment-usage.generated.json"):
@@ -379,11 +375,6 @@ def render_artifacts() -> dict[Path, bytes]:
           "Top-level feed/auto_trade are XAU compatibility projections. "
           "Prefer instrument_runtimes.<ID> for multi-symbol consumers."
         ),
-      }),
-    Path("contracts/configuration/runtime-manifest-env-migration.generated.json"):
-      _json_bytes({
-        **_header(contract_fingerprint),
-        **migration,
       }),
     Path("contracts/configuration/runtime-manifest-example.generated.json"):
       serialize_manifest_bytes(runtime_manifest),

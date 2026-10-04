@@ -1,4 +1,4 @@
-// Package keylevel implements KeyLevelStrategy — Phase S7
+// Package keylevel implements KeyLevelStrategy.
 // (apexvoid-bot-prompts/rebuild-strategies.md §25), consuming the
 // canonical key-level clustering primitive internal/keylevel already
 // builds (price-clustered swings + round-number levels + wick-touch

@@ -1,26 +1,17 @@
 # Service identity, runtime mode, and logging — owned exclusively here.
-# See docs/configuration-v3-migration-audit.md §5/§9 for where each leaf
-# below came from and the naming-collision note on `runtime.*`: the OLD
-# config/trading-bot.yml also had a top-level `runtime:` key, but it meant
-# auto-trade/scanner enable toggles — those moved to auto-algo.yml's
-# `auto_algo.enabled`/`auto_algo.scanner.enabled`, not here. This file is
-# only ever service identity / mode / logging, per the new architecture's
-# own category definition.
+# This file owns service identity, mode, and logging.
 runtime:
   # Not a distinct setting in the current system (no runtime.environment
   # concept exists yet) — this mirrors AUTO_TRADE_PROFILE's current live
   # value ("conservative" == production, the empty-override profile; see
-  # environments/production.yml). "demo_eval" is the other live profile
-  # name today; see docs/configuration-v3-migration-audit.md §9 on why
-  # Stage C1 keeps that name rather than inventing development/paper.
+  # environments/production.yml). "demo_eval" is the other live profile.
   environment: production
 
   # The only real timezone value anywhere in the current system today is
   # delivery.presentation.seq_reset_tz (kept, unchanged, in telegram.yml —
   # it is specifically Telegram sequence-reset scoped). Recorded here too
   # as the service-wide operational timezone since every session/killzone
-  # boundary in the system is computed against it in practice. Consolidating
-  # these into one value is a Stage C2+ decision (see the audit's §9).
+  # boundary in the system is computed against it in practice.
   timezone: Asia/Ho_Chi_Minh
 
   # Currently ENV/code-default only (app/configuration/models/bootstrap.py

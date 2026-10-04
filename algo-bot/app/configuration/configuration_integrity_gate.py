@@ -39,7 +39,7 @@ BASELINE = {
   # analysis.candle_confirmation.* (all ConfigOwner.PYTHON,
   # ConfigKind.ALGORITHM_CONSTANT, canonical_env=None, shadow-only).
   # 2026-09 MAD v2: +7 new leaf fields under execution.mad.{expand,manip,accum}.
-  # 2026-09 Key Level structural repair Phase 2: +1
+  # Key Level structural repair: +1
   # (actionability.target_room.structural_barrier_book_enabled).
   # 2026-09-15 XAU auto algo risk-band rework: +1
   # (execution.reaction.risk_targeted_entry_enabled).
@@ -65,19 +65,13 @@ BASELINE = {
   # (actionability.entry_location.with_bias_pd_exempt).
   # Reconciled with the current typed model after the merged FX/config
   # cleanup; deployment-owned YAML fields remain config-file-only.
-  # 2026-10-02 Go authority completion removed the four obsolete runtime
-  # selectors: authority mode, arbitration mode, thesis-correlation mode and
-  # stop-envelope mode. The corresponding environment surface lost three
-  # entries because one selector was config-file-only.
-  # 2026-10-02 Go behavioral completion removed the obsolete Python-only
-  # displacement override lookback after Go became the sole technical owner.
-  "catalog_entry_count": 688,
-  "configurable_count": 581,
+  "catalog_entry_count": 687,
+  "configurable_count": 580,
   "protocol_constant_count": 10,
   "algorithm_constant_count": 97,
-  "python_projection_count": 638,
+  "python_projection_count": 637,
   "ctrader_only_count": 50,
-  "environment_entry_count": 572,
+  "environment_entry_count": 571,
   "deprecated_alias_count": 21,
   "shared_count": 100,
 }
@@ -94,13 +88,9 @@ FORBIDDEN_GENERATOR_SYMBOLS = (
   "PHASE_2F_ROOTS",
   "PHASE_2G_ROOTS",
   "DERIVED_LEGACY_PROPERTIES",
-  "phase2i_inventory",
-  "phase2i_completion_gate",
 )
 
 FORBIDDEN_ACTIVE_ARTIFACTS = (
-  "contracts/configuration/canonical-only-surface-phase-2i-b.generated.json",
-  "contracts/configuration/canonical-only-surface-phase-2i-final.generated.json",
   "contracts/configuration/legacy-map.generated.json",
   "contracts/configuration/legacy-usage.generated.json",
 )
@@ -196,13 +186,6 @@ def evaluate_configuration_integrity(
     if active_path.exists():
       blockers.append(f"stale_active_file:{artifact}")
 
-  for name in (
-    "phase2i_inventory.py",
-    "phase2i_completion_gate.py",
-  ):
-    if (root / "algo-bot/app/configuration" / name).exists():
-      blockers.append(f"phase_module_active:{name}")
-
   stale = _generated_artifacts_current()
   if stale:
     blockers.append(f"stale_artifacts={len(stale)}")
@@ -228,7 +211,7 @@ def evaluate_configuration_integrity(
       continue
     text = path.read_text(encoding="utf-8")
     if "contracts/configuration" in text and ".generated.json" in text:
-      if "configuration_integrity_gate" in rel or "phase2i" in rel:
+      if "configuration_integrity_gate" in rel:
         continue
       blockers.append(f"production_generated_json_read:{rel}")
 

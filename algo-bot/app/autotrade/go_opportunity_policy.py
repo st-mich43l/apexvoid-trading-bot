@@ -161,7 +161,7 @@ def _thesis_id(symbol: str, family: str, direction: str, zone_id: str) -> str:
   re-confirmed on later bars (the real replay shows up to 7 re-confirmations per
   zone, each under its own opportunity id) is ONE thesis, and the plan builder's
   active-thesis claim stops a second executable plan for it. Keying this on the
-  opportunity id (the S13C behaviour) let every re-confirmation publish its own plan."""
+  opportunity id let every re-confirmation publish its own plan."""
   from app.autotrade.strategy_identity import thesis_id
 
   return thesis_id(
@@ -297,7 +297,7 @@ def build_strategy_match(
   )
   reasons = evidence_codes
   go_confluence = tech.confluence
-  # Retained pre-S13C events have no confluence block. New Go events always
+  # Retained older events have no confluence block. New Go events always
   # carry it, so this fallback is compatibility decoding, never a Python
   # technical recomputation.
   confluence = len(reasons) if go_confluence is None else int(go_confluence.selected_stars)
@@ -593,7 +593,7 @@ class GoOpportunityPolicy:
         await transition_setup(client, match_id, target, reason_code=f"go_{payload.reason_code.lower()}")
       except SetupLifecycleError:
         log.exception("Go terminal could not advance setup %s to %s", match_id, target)
-    # S14B: an invalidated/expired opportunity must not keep a queued or
+    # An invalidated/expired opportunity must not keep a queued or
     # unfilled plan alive. The cancel intent is a tombstone (also stops a plan
     # being published concurrently); open positions are never touched.
     if len(kept) != len(matches) or record is not None:
