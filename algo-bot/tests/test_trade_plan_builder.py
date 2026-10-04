@@ -83,7 +83,15 @@ def _build(match: StrategyMatch, **overrides):
     "pip_size": Decimal("0.1"),
     "spot_price": match.current_price,
     "regime": "trend",
-    "cfg": None,
+    # These tests exercise the generic builder contract, not the production
+    # XAU fixed-RR/zone-scale overlay. Keep the native YAML path explicit so
+    # the production policy remains unchanged while generic target and route
+    # assertions stay deterministic.
+    "cfg": execution_cfg(**{
+      "execution.zone_scaling.fill_enabled": False,
+      "instruments.instrument_packs.xau_fixed_4r_v1.targeting.mode": "ladder_pips",
+      "instruments.instrument_packs.xau_fixed_4r_v1.stop_envelope.max_pips": 100,
+    }),
     "executable_quote": match.current_price,
     "max_volume": 1000,
   }

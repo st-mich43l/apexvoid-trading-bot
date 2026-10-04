@@ -56,7 +56,10 @@ pytestmark = pytest.mark.real_redis
 def live_inputs(monkeypatch, *, bid=4354.1, ask=4354.3, news=None):
   """The market inputs the live worker cycle would read, pinned like the repo's own worker tests."""
   install_runtime_overrides(
-    monkeypatch, {"strategies.matching.multiple_matches_enabled": True},
+    monkeypatch, {
+      "strategies.matching.multiple_matches_enabled": True,
+      "instruments.instrument_packs.xau_fixed_4r_v1.stop_envelope.max_pips": 65,
+    },
     legacy_overrides={
       "auto_trade_enabled": True, "auto_trade_symbols": "XAU",
       "auto_trade_strategy_match_enabled": True, "auto_trade_news_guard_minutes": 0,

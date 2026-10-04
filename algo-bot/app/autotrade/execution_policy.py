@@ -55,6 +55,18 @@ def _instrument_context(symbol: str, cfg: Any) -> Any:
     return for_instrument(cfg, symbol)
   if hasattr(cfg, "units") and hasattr(cfg, "execution"):
     return cfg
+  # Native root YAML keeps execution policy under ``auto_algo`` while a
+  # symbol-less unit-test/configured policy evaluation still needs the shared
+  # strategy, actionability and risk branches.  Present that one native tree
+  # as a narrow execution context; do not reintroduce a flat config model.
+  if not symbol and hasattr(cfg, "auto_algo"):
+    auto_algo = cfg.auto_algo
+    return SimpleNamespace(
+      execution=cfg.execution,
+      strategies=auto_algo.strategies,
+      actionability=auto_algo.actionability,
+      risk=auto_algo.risk,
+    )
   return cfg
 
 
@@ -420,7 +432,10 @@ def resolve_guard_mode(cfg: Any | None = None) -> str:
   """
   if cfg is None:
     cfg = _default_runtime_cfg()
-  mode = str(cfg.actionability.structural_guard.guard_mode)
+  actionability = getattr(cfg, "actionability", None)
+  if actionability is None and hasattr(cfg, "auto_algo"):
+    actionability = cfg.auto_algo.actionability
+  mode = str(actionability.structural_guard.guard_mode)
   mode = mode.strip().lower()
   return mode if mode in _GUARD_MODES else GUARD_MODE_BALANCED
 

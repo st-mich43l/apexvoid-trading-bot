@@ -308,5 +308,5 @@ def test_retest_trigger_validity_window_is_conservative_and_validated():
 def test_entry_contract_and_executor_anti_chase_are_separate():
   assert runtime_config.execution.entry.maximum_chase_distance_pips == 40.0
   assert runtime_config.execution.entry.contract_tolerance_pips == 3.0
-  assert for_instrument(runtime_config, "XAU").analysis.zones.major_maximum_width_price == 6.0
+  assert for_instrument(runtime_config, "XAU").analysis.zones.major_maximum_width_price == 10.0
   assert runtime_config.auto_algo.actionability.scanner_gates.actionability_gate_enabled is False

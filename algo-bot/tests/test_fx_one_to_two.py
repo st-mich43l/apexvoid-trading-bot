@@ -14,6 +14,8 @@ from app.runtime.instruments import InstrumentTargetMode
 from app.core.instrument_geometry import fixed_reward_risk
 from app.core.config import runtime_config
 
+FX_FIXED_2R_V1_POLICY = "fx_fixed_2r_v1"
+
 
 pytestmark = pytest.mark.no_database
 
@@ -601,4 +603,4 @@ def test_xau_gets_a_smaller_opposing_barrier_buffer_than_fx():
   eurusd = cfg.for_instrument("EURUSD")
   assert xau.actionability.target_room.barrier_buffer_atr == pytest.approx(0.15)
   assert eurusd.actionability.target_room.barrier_buffer_atr == pytest.approx(0.5)
-  assert cfg.actionability.target_room.barrier_buffer_atr == pytest.approx(0.5)
+  assert cfg.auto_algo.actionability.target_room.barrier_buffer_atr == pytest.approx(0.5)

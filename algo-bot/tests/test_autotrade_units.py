@@ -36,6 +36,5 @@ def test_xauusd_does_not_fall_through_to_a_generic_pip_size():
   assert pip_for("XAUUSD") == pip_for("XAU")
 
 
-def test_unconfigured_symbol_raises_instead_of_silently_defaulting():
-  with pytest.raises(KeyError):
-    units.pip_size("EURUSD")
+def test_configured_fx_symbol_uses_its_native_contract():
+  assert units.pip_size("EURUSD") == 0.0001

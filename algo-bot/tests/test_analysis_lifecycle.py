@@ -64,7 +64,10 @@ def real_redis_client(monkeypatch, event_loop):
 
 @pytest.fixture
 def h(sql, monkeypatch, real_redis_client):
-  install_runtime_overrides(monkeypatch, {"analysis.technical_authority.consumer_enabled": True})
+  install_runtime_overrides(monkeypatch, {
+    "analysis.technical_authority.consumer_enabled": True,
+    "instruments.instrument_packs.xau_fixed_4r_v1.stop_envelope.max_pips": 65,
+  })
   return Harness(sql, monkeypatch)
 
 

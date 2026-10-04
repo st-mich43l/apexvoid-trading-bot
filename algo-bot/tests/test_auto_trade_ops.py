@@ -1742,6 +1742,9 @@ async def test_opened_event_replies_to_stored_forming_message():
 async def test_rejected_event_retains_root_card_and_sends_nothing(monkeypatch):
   # One forming card per setup: reject leaves the root body intact and
   # sends nothing new (single-root retain mode).
+  install_runtime_overrides(
+    monkeypatch, {"telegram.delete_root_on_terminal": False},
+  )
   client = redis_state.get_client()
   match_id = "supply:M5:4062.49:4066.18:sweep"
   await client.set(

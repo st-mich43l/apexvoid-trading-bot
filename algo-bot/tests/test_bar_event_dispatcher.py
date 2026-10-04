@@ -238,10 +238,10 @@ async def test_dispatch_runs_nothing_with_auto_trade_disabled(monkeypatch):
     dispatcher,
     "runtime_config",
     SimpleNamespace(
-      runtime=SimpleNamespace(
-        scanner=SimpleNamespace(enabled=True),
-        auto_trade=SimpleNamespace(enabled=False),
-      )
+      auto_algo=SimpleNamespace(enabled=False),
+      analysis=SimpleNamespace(
+        ctrader_feed=SimpleNamespace(bars_channel="bars:new"),
+      ),
     ),
   )
   worker = AsyncMock()
