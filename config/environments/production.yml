@@ -6,9 +6,8 @@
 # AUTO_TRADE_PROFILE default in ansible) means "run the base config
 # exactly as declared, with no profile-specific overrides." This file is
 # deliberately empty for the same reason — production's own values already
-# ARE the base runtime.yml/transport.yml/database.yml/instruments.yml/
-# analysis.yml/auto-algo.yml/manual-algo.yml/execution.yml/telegram.yml/
-# journal.yml, unmodified.
+# ARE the base runtime.yml/instruments.yml/analysis.yml/auto-algo.yml/
+# execution.yml/telegram.yml, unmodified.
 #
 # config/apexvoid.yml includes this file (not demo_eval.yml) by default —
 # switching environments means swapping which environments/*.yml the root

@@ -70,8 +70,8 @@ not make Kafka a source of market candles.
 ## Configuration and operations
 
 All broker addresses, client IDs, names, and topic specifications are in
-`config/transport.yml`, resolved through Configuration V3. No topic or Redis
-topology is supplied through environment variables.
+`config/runtime.yml`, resolved through the root include list. No topic or
+Redis topology is supplied through environment variables.
 
 `kafka-init` reads that configuration and creates/verifies topics
 idempotently. The KRaft broker uses the persistent `kafkadata` volume and is

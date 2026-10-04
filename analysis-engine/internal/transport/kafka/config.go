@@ -11,7 +11,7 @@ import (
 // (see that file's own doc comment: engine is the sole config.Document
 // reader in this module; every other package, including this one, takes
 // plain Go values). No field here has a hidden default: every value is
-// explicit YAML (config/transport.yml's transport.kafka.*) or a
+// explicit YAML (config/runtime.yml's transport.kafka.*) or a
 // documented protocol constant elsewhere in this package (source task
 // §70 — "no hidden Kafka defaults").
 type Config struct {
