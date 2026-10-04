@@ -15,8 +15,8 @@ def _enable_handlers(monkeypatch) -> None:
     "runtime_config",
     SimpleNamespace(
       auto_algo=SimpleNamespace(enabled=True),
-      analysis=SimpleNamespace(
-        ctrader_feed=SimpleNamespace(bars_channel="bars:new"),
+      runtime=SimpleNamespace(
+        feed=SimpleNamespace(bars_channel="bars:new"),
       ),
     ),
   )
@@ -239,8 +239,8 @@ async def test_dispatch_runs_nothing_with_auto_trade_disabled(monkeypatch):
     "runtime_config",
     SimpleNamespace(
       auto_algo=SimpleNamespace(enabled=False),
-      analysis=SimpleNamespace(
-        ctrader_feed=SimpleNamespace(bars_channel="bars:new"),
+      runtime=SimpleNamespace(
+        feed=SimpleNamespace(bars_channel="bars:new"),
       ),
     ),
   )
@@ -263,19 +263,18 @@ async def test_dispatch_runs_nothing_with_auto_trade_disabled(monkeypatch):
 async def test_dispatcher_loop_still_reconciles_legacy_thesis_claims(monkeypatch):
   """The startup thesis-claim reconcile is execution housekeeping, not scanner work."""
   _enable_handlers(monkeypatch)
-  monkeypatch.setattr(
-    dispatcher.runtime_config,
-    "market_data",
-    SimpleNamespace(ctrader_feed=SimpleNamespace(bars_channel="bars:new")),
-    raising=False,
-  )
+  dispatcher.runtime_config.runtime.feed.bars_channel = "bars:new"
   reconcile = AsyncMock()
   monkeypatch.setattr(
     "app.autotrade.worker._reconcile_legacy_mapped_thesis_claims", reconcile,
   )
 
   class _PubSub:
+    def __init__(self):
+      self.subscribed = []
+
     async def subscribe(self, *_a):
+      self.subscribed.extend(_a)
       return None
 
     async def unsubscribe(self, *_a):
@@ -288,9 +287,11 @@ async def test_dispatcher_loop_still_reconciles_legacy_thesis_claims(monkeypatch
       if False:  # pragma: no cover - an empty async generator
         yield None
 
-  client = SimpleNamespace(pubsub=lambda: _PubSub())
+  pubsub = _PubSub()
+  client = SimpleNamespace(pubsub=lambda: pubsub)
   monkeypatch.setattr(dispatcher.redis_state, "get_client", lambda: client)
 
   await dispatcher.bar_event_dispatcher_loop()
 
   reconcile.assert_awaited_once_with(client)
+  assert pubsub.subscribed == ["bars:new"]

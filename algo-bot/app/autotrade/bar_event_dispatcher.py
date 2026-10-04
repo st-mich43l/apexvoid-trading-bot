@@ -142,7 +142,7 @@ async def bar_event_dispatcher_loop() -> None:
     except Exception:
       log.exception("legacy mapped thesis claim reconcile failed")
   channel = str(
-    getattr(runtime_config.analysis.ctrader_feed, "bars_channel", None)
+    getattr(runtime_config.runtime.feed, "bars_channel", None)
     or "bars:new"
   )
   pubsub = client.pubsub()
