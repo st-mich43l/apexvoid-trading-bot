@@ -547,6 +547,7 @@ public sealed record AutoTradeOptions(
   };
   }
 
+  #if false // Removed legacy generated-manifest loader; direct YAML is authoritative.
   public static AutoTradeOptions FromRuntimeManifest(
     ResolvedRuntimeManifest manifest,
     CTraderAccountOptions account
@@ -771,6 +772,8 @@ public sealed record AutoTradeOptions(
       )
     );
   }
+
+  #endif
 
   public void Validate()
   {
