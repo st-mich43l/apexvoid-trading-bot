@@ -58,7 +58,7 @@ def live_inputs(monkeypatch, *, bid=4354.1, ask=4354.3, news=None):
   install_runtime_overrides(
     monkeypatch, {
       "strategies.matching.multiple_matches_enabled": True,
-      "instruments.instrument_packs.xau_fixed_4r_v1.stop_envelope.max_pips": 65,
+      "instruments.XAU.stop_envelope.max_pips": 65,
     },
     legacy_overrides={
       "auto_trade_enabled": True, "auto_trade_symbols": "XAU",

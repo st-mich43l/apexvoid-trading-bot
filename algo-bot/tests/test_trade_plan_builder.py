@@ -89,8 +89,8 @@ def _build(match: StrategyMatch, **overrides):
     # assertions stay deterministic.
     "cfg": execution_cfg(**{
       "execution.zone_scaling.fill_enabled": False,
-      "instruments.instrument_packs.xau_fixed_4r_v1.targeting.mode": "ladder_pips",
-      "instruments.instrument_packs.xau_fixed_4r_v1.stop_envelope.max_pips": 100,
+      "instruments.XAU.targeting.mode": "ladder_pips",
+      "instruments.XAU.stop_envelope.max_pips": 100,
     }),
     "executable_quote": match.current_price,
     "max_volume": 1000,

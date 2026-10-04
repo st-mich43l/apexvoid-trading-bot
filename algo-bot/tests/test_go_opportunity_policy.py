@@ -472,7 +472,7 @@ class Harness:
 def h(sql, monkeypatch):
   install_runtime_overrides(monkeypatch, {
     "analysis.technical_authority.consumer_enabled": True,
-    "instruments.instrument_packs.xau_fixed_4r_v1.stop_envelope.max_pips": 65,
+    "instruments.XAU.stop_envelope.max_pips": 65,
   })
   return Harness(sql, monkeypatch)
 
