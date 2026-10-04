@@ -118,6 +118,11 @@ type Zone struct {
 
 	Strength float64
 
+	// LegacyScore is the explicit source-quality score carried by the frozen
+	// Python parity detector. Strength remains the canonical Go score; legacy
+	// strategies prefer this field when selecting a parity anchor.
+	LegacyScore float64 `json:"legacy_score,omitempty"`
+
 	// State is the structural lifecycle at the latest candle supplied to
 	// the zone update. Relevance is deliberately separate: a valid zone
 	// can be remote without being invalidated.

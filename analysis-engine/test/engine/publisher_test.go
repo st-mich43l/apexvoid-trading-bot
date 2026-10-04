@@ -453,6 +453,50 @@ func TestOpportunityPublisher_NilClientProducesANilPublisherThatNeverPanics(t *t
 	pub.Run(ctx) // must return immediately, not block until ctx expires
 }
 
+func TestDurablePublisherRetainsColdStartOutboxUntilClientAttached(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "publication-ledger.json")
+	pub, err := engine.NewDurableOpportunityPublisher(nil, nil, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	candidate := fakeCandidate("opp-cold-start")
+	pub.Enqueue("XAU", kafka.AlgorithmVersion{}, opportunity.Transition{
+		Kind: opportunity.TransitionCreated, Record: opportunity.Record{Candidate: candidate},
+	})
+
+	client := &fakeKafkaClient{}
+	restarted, err := engine.NewDurableOpportunityPublisher(client, nil, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go restarted.Run(ctx)
+	waitFor(t, 2*time.Second, func() bool {
+		opps, _, _ := client.snapshot()
+		return len(opps) == 1 && opps[0].ID == candidate.ID
+	})
+}
+
+func TestDurablePublisherDrainsAfterColdStartClientAttachment(t *testing.T) {
+	pub, err := engine.NewDurableOpportunityPublisher(nil, nil, filepath.Join(t.TempDir(), "publication-ledger.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &fakeKafkaClient{}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go pub.Run(ctx)
+	pub.Enqueue("XAU", kafka.AlgorithmVersion{}, opportunity.Transition{
+		Kind: opportunity.TransitionCreated, Record: opportunity.Record{Candidate: fakeCandidate("opp-attached")},
+	})
+	pub.SetClient(client)
+	waitFor(t, 3*time.Second, func() bool {
+		opps, _, _ := client.snapshot()
+		return len(opps) == 1 && opps[0].ID == "opp-attached"
+	})
+}
+
 func TestOpportunityPublisher_SuppressesTerminalWithoutPublishedCreation(t *testing.T) {
 	client := &fakeKafkaClient{}
 	pub := engine.NewOpportunityPublisher(client, nil)

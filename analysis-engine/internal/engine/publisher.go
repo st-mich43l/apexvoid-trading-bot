@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"sync"
@@ -115,6 +116,9 @@ func (p *OpportunityPublisher) Flush() {
 // OpportunityKafkaClient var first and leave that var unset when the
 // concrete pointer is nil, as cmd/analysis-engine/main.go does.
 func NewOpportunityPublisher(client OpportunityKafkaClient, recorder *telemetry.Recorder) *OpportunityPublisher {
+	if client == nil {
+		return nil
+	}
 	publisher, _ := NewDurableOpportunityPublisher(client, recorder, "")
 	return publisher
 }
@@ -123,9 +127,6 @@ func NewOpportunityPublisher(client OpportunityKafkaClient, recorder *telemetry.
 // ledger and pending outbox from path. The empty path keeps the same in-memory
 // behavior used by small unit tests; production supplies a persistent path.
 func NewDurableOpportunityPublisher(client OpportunityKafkaClient, recorder *telemetry.Recorder, path string) (*OpportunityPublisher, error) {
-	if client == nil {
-		return nil, nil
-	}
 	if recorder == nil {
 		recorder = telemetry.NewRecorder()
 	}
@@ -143,6 +144,24 @@ func NewDurableOpportunityPublisher(client OpportunityKafkaClient, recorder *tel
 		}
 	}
 	return &OpportunityPublisher{client: client, telemetry: recorder, notify: make(chan struct{}, 1), store: store}, nil
+}
+
+// SetClient attaches or replaces Kafka without replacing the durable ledger.
+// Redis/analysis can therefore continue recording lifecycle events while a
+// producer is being re-established during a broker cold start.
+func (p *OpportunityPublisher) SetClient(client OpportunityKafkaClient) {
+	if p == nil {
+		return
+	}
+	p.mu.Lock()
+	p.client = client
+	p.mu.Unlock()
+	if client != nil {
+		select {
+		case p.notify <- struct{}{}:
+		default:
+		}
+	}
 }
 
 // DiscardStaleLifecycleJobs drops queued historical creation events that are
@@ -556,6 +575,12 @@ func (p *OpportunityPublisher) ackFront(job publishJob) {
 // Phase 2 arbitration job (job.Arbitration set) publishes
 // analysis.opportunity.arbitration.v1 instead, independent of Transition.
 func (p *OpportunityPublisher) publishOne(ctx context.Context, job publishJob) error {
+	p.mu.Lock()
+	client := p.client
+	p.mu.Unlock()
+	if client == nil {
+		return fmt.Errorf("opportunity publisher: Kafka client unavailable")
+	}
 	correlationID := job.EventID
 	if job.Arbitration != nil {
 		a := job.Arbitration
@@ -566,15 +591,15 @@ func (p *OpportunityPublisher) publishOne(ctx context.Context, job publishJob) e
 			ThesisID:        a.Decision.ThesisID, MergedWith: a.Decision.MergedWith,
 			DecidedAt: a.DecidedAt,
 		}
-		return p.client.PublishArbitrationDecision(ctx, job.EventID, correlationID, "", job.Symbol, payload, time.Unix(a.DecidedAt, 0))
+		return client.PublishArbitrationDecision(ctx, job.EventID, correlationID, "", job.Symbol, payload, time.Unix(a.DecidedAt, 0))
 	}
 	switch job.Transition.Kind {
 	case opportunity.TransitionCreated:
 		candidate := job.Transition.Record.Candidate
 		if job.RecoveredAt != 0 {
-			return p.client.PublishRecoveredOpportunity(ctx, job.EventID, correlationID, "", candidate, job.Algorithm, time.Now().UTC(), time.Unix(job.RecoveredAt, 0))
+			return client.PublishRecoveredOpportunity(ctx, job.EventID, correlationID, "", candidate, job.Algorithm, time.Now().UTC(), time.Unix(job.RecoveredAt, 0))
 		}
-		return p.client.PublishOpportunity(ctx, job.EventID, correlationID, "", candidate, job.Algorithm, time.Unix(candidate.CreatedAt, 0))
+		return client.PublishOpportunity(ctx, job.EventID, correlationID, "", candidate, job.Algorithm, time.Unix(candidate.CreatedAt, 0))
 	case opportunity.TransitionInvalidated, opportunity.TransitionExpired:
 		record := job.Transition.Record
 		var reason string
@@ -586,7 +611,7 @@ func (p *OpportunityPublisher) publishOne(ctx context.Context, job publishJob) e
 			OpportunityID: record.Candidate.ID, Symbol: string(record.Candidate.Symbol),
 			Strategy: string(record.Candidate.Strategy), ReasonCode: reason, InvalidatedAt: at,
 		}
-		return p.client.PublishOpportunityInvalidated(ctx, job.EventID, correlationID, "", record.Candidate.Symbol, payload, time.Unix(at, 0))
+		return client.PublishOpportunityInvalidated(ctx, job.EventID, correlationID, "", record.Candidate.Symbol, payload, time.Unix(at, 0))
 	default:
 		return nil
 	}

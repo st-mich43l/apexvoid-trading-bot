@@ -75,7 +75,11 @@ func TestRestoredFadeEqualLevelAndChopRules(t *testing.T) {
 	if got := s.Evaluate(ctx); len(got) != 0 {
 		t.Fatal("chop fade away from the strict range edge must reject")
 	}
-	*tf.Liquidity.Pools[1].ReclaimedAt = 1001 // no matching displacement candle => B
+	// A clean same-bar reclaim with a sub-Grade-A body is B even when the
+	// persisted lifecycle timestamp is changed. The detector must inspect the
+	// actual candle, not blindly trust ReclaimedAt.
+	tf.Candles[0].Open = 99.9
+	tf.Candles[0].Close = 100.1
 	tf.Regime = regime.State{Kind: "chop", RangeLow: 99, RangeHigh: 110}
 	if got := s.Evaluate(ctx); len(got) != 0 {
 		t.Fatal("chop fade requires Grade A, not B")
@@ -105,5 +109,17 @@ func TestRestoredMomentumUsesStructuralBreakAndZone(t *testing.T) {
 	tf.Structure.Swings = nil
 	if got := s.Evaluate(ctx); len(got) != 0 {
 		t.Fatal("three-candle continuity cannot replace a broken structural swing")
+	}
+}
+
+func TestLegacyParityScoreWinsAnchorSelection(t *testing.T) {
+	ctx := restoredContext(market.Buy, []market.Candle{{Time: 1000, Open: 99, High: 101, Low: 98, Close: 100}})
+	ctx.Timeframes[market.M5].Zones.Zones = []zone.Zone{
+		{ID: "go-strong", Side: zone.Demand, Low: 99, High: 100, State: zone.StateFresh, Strength: 99, LegacyScore: 1},
+		{ID: "python-strong", Side: zone.Demand, Low: 99.2, High: 100.2, State: zone.StateFresh, Strength: .1, LegacyScore: 5},
+	}
+	zones := strategyutil.LiveZones(ctx.Timeframes[market.M5], market.Buy, 100, 1, 2)
+	if len(zones) != 2 || zones[0].ID != "python-strong" {
+		t.Fatalf("legacy source score must select the Python strong anchor first: %+v", zones)
 	}
 }
