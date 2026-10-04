@@ -37,7 +37,8 @@ only when the operator request is eligible.
 ## Source and deployment
 
 `config/apexvoid.yml` and its includes define the categorized configuration.
-The compiler emits the resolved runtime manifest consumed by the services.
+Each service resolves the selected categorized YAML root directly into its
+own typed runtime options.
 Compose and production deployment templates are in `docker-compose.yml` and
 `deployment-template/`.
 

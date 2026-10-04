@@ -4,7 +4,7 @@
 #
 # The pack-inheritance mechanism (instruments.<SYM>.pack: <name>; the pack
 # merges under the instrument; the instrument's own leaves always win on a
-# shared key) is preserved exactly as-is from the old trading-bot.yml —
+# shared key) is preserved as the explicit pack-inheritance rule —
 # Pack inheritance keeps shared geometry in one place while allowing
 # instrument-specific overrides.
 #

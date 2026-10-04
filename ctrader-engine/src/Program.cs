@@ -43,84 +43,17 @@ public static class Program
       return 2;
     }
 
-    var configurationSource = RuntimeManifestBootstrap.ReadSource();
-    var parityMode = RuntimeManifestBootstrap.ReadParityMode();
-    FeedOptions options;
-    AutoTradeOptions autoTradeOptions;
-    InstrumentRuntimeRegistry instrumentRegistry;
-    string? manifestFingerprint = null;
-    string parityState = "skipped";
-    int loadedManifestVersion = 0;
-    string manifestValidation = "n/a";
-    string compatibility = "none";
-
-    if (configurationSource == CtraderConfigurationSource.Environment)
-    {
-      // Legacy XAU compatibility path — may read full trading ENV.
-      options = FeedOptions.FromEnvironment();
-      autoTradeOptions = AutoTradeOptions.FromEnvironment();
-      instrumentRegistry = InstrumentRuntimeRegistry.FromXauCompatibility(
-        options,
-        autoTradeOptions
-      );
-      if (parityMode != CtraderManifestParityMode.Off)
-      {
-        var manifestPath = RuntimeManifestBootstrap.RequireManifestPath();
-        var manifest = ResolvedRuntimeManifestLoader.Load(manifestPath);
-        loadedManifestVersion = manifest.ManifestVersion;
-        manifestFingerprint = manifest.EffectiveConfigurationFingerprint;
-        var account = CTraderAccountOptions.FromFeedOptions(options);
-        var manifestRuntime = ManifestRuntimeFactory.Create(manifest, account);
-        var parity = RuntimeManifestParity.Compare(
-          options,
-          autoTradeOptions,
-          manifestRuntime.Feed,
-          manifestRuntime.AutoTrade
-        );
-        parityState = parity.HasFatal ? "mismatch" : "matched";
-        RuntimeManifestParity.ApplyParityMode(
-          parity,
-          parityMode,
-          message => Console.Error.WriteLine(message)
-        );
-      }
-    }
-    else
-    {
-      // Manifest authority: no legacy trading ENV reads.
-      if (parityMode != CtraderManifestParityMode.Off)
-      {
-        throw new InvalidOperationException(
-          "CTRADER_MANIFEST_PARITY_MODE must be off when "
-          + "CTRADER_CONFIGURATION_SOURCE=manifest "
-          + "(ENV-versus-manifest parity requires legacy trading ENV; "
-          + "manifest schema/fingerprint validation remains enforced)"
-        );
-      }
-      var account = CTraderAccountOptions.FromEnvironment();
-      var manifestPath = RuntimeManifestBootstrap.RequireManifestPath();
-      var manifest = ResolvedRuntimeManifestLoader.Load(manifestPath);
-      var runtime = ManifestRuntimeFactory.Create(manifest, account);
-      options = runtime.Feed;
-      autoTradeOptions = runtime.AutoTrade;
-      instrumentRegistry = runtime.Instruments;
-      loadedManifestVersion = runtime.ManifestVersion;
-      manifestFingerprint = runtime.EffectiveFingerprint;
-      manifestValidation = "enforced";
-      compatibility = runtime.CompatibilityMode;
-      parityState = "off";
-    }
-
+    var configPath = Environment.GetEnvironmentVariable(ConfigurationV3.RootFileEnv)
+      ?? "/config/apexvoid.yml";
+    var nativeRuntime = NativeRuntimeFactory.Load(configPath);
+    var options = nativeRuntime.Feed;
+    var autoTradeOptions = nativeRuntime.AutoTrade;
+    var instrumentRegistry = nativeRuntime.Instruments;
     Console.WriteLine(
-      "runtime_manifest_loaded "
-      + $"manifest_version={(loadedManifestVersion == 0 ? "-" : loadedManifestVersion.ToString())} "
-      + $"fingerprint={(manifestFingerprint is null ? "-" : manifestFingerprint[..12])} "
-      + $"source={configurationSource.ToString().ToLowerInvariant()} "
-      + $"parity={parityMode.ToString().ToLowerInvariant()} "
-      + $"manifest_validation={manifestValidation} "
-      + $"manifest_compatibility={compatibility} "
-      + $"instruments={string.Join(',', autoTradeOptions.EffectiveSymbols)} "
-      + $"parity_state={parityState}"
+      "yaml_runtime_loaded "
+      + $"root={configPath} "
+      + $"environment={nativeRuntime.Document.RequiredString("runtime.environment")} "
+      + $"instruments={string.Join(',', autoTradeOptions.EffectiveSymbols)}"
     );
 
     await using var redis = await StackExchangeRedisSeriesCommands.ConnectAsync(

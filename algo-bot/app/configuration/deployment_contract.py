@@ -14,7 +14,7 @@ from app.configuration.models.root import ApexVoidConfig
 from app.configuration.source_types import SOURCE_PRECEDENCE
 
 
-# Bootstrap ENV keys that remain outside trading-bot.yml.
+# Bootstrap ENV keys that remain outside categorized YAML.
 _BOOTSTRAP_ENV = (
   CONFIG_FILE_ENV,
   "AUTO_TRADE_PROFILE",

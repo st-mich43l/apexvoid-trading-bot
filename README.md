@@ -26,7 +26,7 @@ journal, and persistence. Manual signals remain an operator-controlled path.
   TradePlan construction, Telegram, journal, and manual algo.
 - `ctrader-engine/`: .NET cTrader feed, Redis bar sink, TradePlan execution,
   and position lifecycle.
-- `config/`: categorized YAML source used by the configuration compiler.
+- `config/`: the categorized YAML source loaded directly by all services.
 - `contracts/`: active cross-service schemas and generated configuration
   contracts.
 - `deployment-template/`: production Compose/Ansible templates.
