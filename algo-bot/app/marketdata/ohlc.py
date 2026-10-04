@@ -27,17 +27,30 @@ def window_for_timeframe(
 ) -> int:
   """Resolve the configured closed-bar lookback for one timeframe."""
   cfg = runtime_config if root is None else root
-  lookbacks = cfg.market_data.lookbacks
+  lookbacks = getattr(cfg, "market_data", None)
+  if lookbacks is not None:
+    lookbacks = lookbacks.lookbacks
+  else:
+    # Native YAML keeps shared analysis inputs below ``analysis``.  Per-
+    # instrument lookbacks are applied by instrument composition where a
+    # symbol is known; this helper has historically been symbol-less, so use
+    # the shared scanner window as its safe fallback.
+    scanner = cfg.analysis.scanner
+    lookbacks = None
   key = tf.upper()
-  if key == "H1":
+  if lookbacks is not None and key == "H1":
     return max(50, int(lookbacks.h1_bars))
-  if key == "M15":
+  if lookbacks is not None and key == "M15":
     return max(50, int(lookbacks.m15_bars))
-  if key == "M5":
+  if lookbacks is not None and key == "M5":
     return max(50, int(lookbacks.m5_bars))
-  if key == "M1":
+  if lookbacks is not None and key == "M1":
     return max(50, int(lookbacks.m1_bars))
-  fallback = cfg.market_data.scanner.window
+  fallback = (
+    cfg.market_data.scanner.window
+    if hasattr(cfg, "market_data")
+    else scanner.window
+  )
   return max(50, int(default if default is not None else fallback))
 
 
