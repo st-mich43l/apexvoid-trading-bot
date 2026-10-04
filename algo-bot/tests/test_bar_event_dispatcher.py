@@ -14,10 +14,10 @@ def _enable_handlers(monkeypatch) -> None:
     dispatcher,
     "runtime_config",
     SimpleNamespace(
-      runtime=SimpleNamespace(
-        scanner=SimpleNamespace(enabled=True),
-        auto_trade=SimpleNamespace(enabled=True),
-      )
+      auto_algo=SimpleNamespace(enabled=True),
+      analysis=SimpleNamespace(
+        ctrader_feed=SimpleNamespace(bars_channel="bars:new"),
+      ),
     ),
   )
 

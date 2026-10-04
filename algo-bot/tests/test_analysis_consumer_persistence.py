@@ -57,7 +57,7 @@ def test_kafka_log_dir_is_on_the_named_volume():
 def test_analysis_engine_outbox_is_on_a_named_volume():
   compose = _compose()
   config = yaml.safe_load((ROOT / "config" / "runtime.yml").read_text())
-  outbox = config["transport"]["kafka"]["outbox_path"]
+  outbox = config["runtime"]["kafka"]["outbox_path"]
   engine = compose["services"]["analysis-engine"]
   volume = _volume_for(outbox, _named_mounts(engine))
   assert volume is not None, f"publication ledger {outbox} is in the container layer and dies on recreate"

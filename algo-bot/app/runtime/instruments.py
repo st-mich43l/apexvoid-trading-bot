@@ -157,6 +157,11 @@ class EffectiveInstrument:
       volume_units_per_lot=int(contract.get("volume_units_per_lot") or round(contract_units * 100)),
       max_lots=float(contract.get("max_lots", 10.0)),
     )
+    # Keep the native contract block available to callers that need a
+    # broker-facing field (for example price digits) while ``units`` remains
+    # the typed execution surface.  This is a view of YAML, not another
+    # configuration source.
+    self.contract = ConfigNode(contract)
     targeting = dict(raw.get("targeting", {}) or {})
     if "mode" in targeting:
       targeting["mode"] = InstrumentTargetMode(str(targeting["mode"]))

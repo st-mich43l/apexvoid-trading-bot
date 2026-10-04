@@ -2721,12 +2721,14 @@ async def auto_trade_status_text() -> str:
   except Exception:
     log.exception("algo_status manual algo pending count failed")
     manual_pending = 0
-  primary_symbol = next(
-    (
-      item.strip().upper()
-      for item in live_instruments(runtime_config)
-    ),
-    "XAU",
+  live_symbols = live_instruments(runtime_config)
+  # XAU remains the operator's primary status instrument.  The status card
+  # must not silently switch to the alphabetically first FX pair merely
+  # because the native instrument registry now contains every live pair.
+  primary_symbol = (
+    "XAU"
+    if "XAU" in live_symbols
+    else next(iter(live_symbols), "XAU")
   )
   config_health = await _json_key(client, CONFIG_HEALTH_KEY)
   readiness = await _json_key(client, EXECUTOR_READINESS_KEY)
