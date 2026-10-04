@@ -90,7 +90,7 @@ FVG validity · market bias · BOS/CHoCH · liquidity sweep quality · strategy 
 mechanics (`StopTrailPlanner`, `TradePlanExecutionEngine`,
 `AutoTradeEngine`, `ProtectiveStop`-equivalents, `VolumePlanner`,
 `ExposurePolicy`) and configuration/feed plumbing
-(`ResolvedRuntimeManifest*`, `CTraderOpenApiFeedClient`,
+(`native YAML configuration`, `CTraderOpenApiFeedClient`,
 `InstrumentRuntimeRegistry`). No file computes FVG/BOS/swing/zone
 geometry from raw candles — the engine consumes a TradePlan's already-decided
 entry/stop/target geometry and executes it. **No violations found.**

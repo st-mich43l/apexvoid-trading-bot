@@ -11,7 +11,7 @@ os.environ.setdefault(
 os.environ.setdefault("TELEGRAM_CHAT_ID", "-100123456789")
 
 from app.core.config import runtime_config
-from tests.configuration.canonical_fixtures import install_runtime_overrides, leaf
+from tests.support.canonical_fixtures import install_runtime_overrides, leaf
 from app.signals import broadcast, trade_ops
 from app.persistence import store
 from app.core import symbols
@@ -318,7 +318,7 @@ def test_manual_entry_card_preserves_unknown_setup_label_safely():
 
 @pytest.mark.no_database
 def test_fx_manual_algo_entry_card_uses_entry_price_not_zone(monkeypatch):
-  from tests.test_config_effective_instrument_context import _load_production_example
+  from tests.support.canonical_fixtures import _load_production_example
 
   cfg = _load_production_example().config
   for target in (

@@ -12,7 +12,7 @@ from dataclasses import replace
 from decimal import Decimal
 from types import SimpleNamespace
 
-from tests.configuration.canonical_fixtures import execution_cfg
+from tests.support.canonical_fixtures import execution_cfg
 
 import pytest
 

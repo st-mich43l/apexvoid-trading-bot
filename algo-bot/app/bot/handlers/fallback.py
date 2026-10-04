@@ -12,6 +12,7 @@ from aiogram.types import Message
 from app.signals.broadcast import broadcast_entry
 from app.autotrade.config_health import CONFIG_HEALTH_KEY
 from app.core.config import runtime_config
+from app.runtime.instruments import for_instrument, live_instruments
 from app.persistence import redis_state
 from app.persistence.store import (
   event_in_window,
@@ -125,11 +126,11 @@ async def submit_manual_signal(msg: Message, text: str) -> bool:
     return False
   symbol = str(sig.get("symbol") or "XAU").upper()
   try:
-    effective = runtime_config.for_instrument(symbol)
+    effective = for_instrument(runtime_config, symbol)
   except Exception:
     await msg.answer(f"⛔ {escape(symbol)} is not a configured trade symbol.")
     return True
-  if symbol not in runtime_config.live_instruments():
+  if symbol not in live_instruments(runtime_config):
     await msg.answer(
       f"⛔ {escape(symbol)} is configured but not live for manual execution."
     )
@@ -143,9 +144,9 @@ async def submit_manual_signal(msg: Message, text: str) -> bool:
   now = int(time.time())
   event = await event_in_window(
     now,
-    int(runtime_config.market_data.calendar.event_guard_hours * 3600),
+    int(runtime_config.analysis.calendar.event_guard_hours * 3600),
   )
-  if event and runtime_config.market_data.calendar.news_guard_block:
+  if event and runtime_config.analysis.calendar.news_guard_block:
     await msg.answer(
       f"⚠️ Signal not posted: {escape(event['title'])} "
       f"{_event_guard_timing(event['ts_utc'], now)} — expect volatility"
@@ -227,13 +228,13 @@ async def _handle_pips(msg: Message, text: str, has_photo: bool) -> None:
 
 @router.channel_post(F.photo)
 async def handle_profit_screenshot(msg: Message) -> None:
-  if not runtime_config.delivery.presentation.auto_book_bare_pips:
+  if not runtime_config.telegram.presentation.auto_book_bare_pips:
     return
   await _handle_pips(msg, msg.caption or "", has_photo=True)
 
 
 @router.channel_post(F.text)
 async def handle_profit_text(msg: Message) -> None:
-  if not runtime_config.delivery.presentation.auto_book_bare_pips:
+  if not runtime_config.telegram.presentation.auto_book_bare_pips:
     return
   await _handle_pips(msg, msg.text or "", has_photo=False)

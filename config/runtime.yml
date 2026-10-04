@@ -1,28 +1,18 @@
 # Service identity, runtime mode, and logging — owned exclusively here.
 # This file owns service identity, mode, and logging.
 runtime:
-  # Not a distinct setting in the current system (no runtime.environment
-  # concept exists yet) — this mirrors AUTO_TRADE_PROFILE's current live
-  # value ("conservative" == production, the empty-override profile; see
-  # environments/production.yml). "demo_eval" is the other live profile.
+  # Service environment selected by the root YAML entrypoint.
   environment: production
 
   # The only real timezone value anywhere in the current system today is
-  # delivery.presentation.seq_reset_tz (kept, unchanged, in telegram.yml —
+  # telegram.presentation.seq_reset_tz (kept in telegram.yml —
   # it is specifically Telegram sequence-reset scoped). Recorded here too
   # as the service-wide operational timezone since every session/killzone
   # boundary in the system is computed against it in practice.
   timezone: Asia/Ho_Chi_Minh
 
-  # Currently ENV/code-default only (app/configuration/models/bootstrap.py
-  # BootstrapLoggingConfig; ctrader-engine/src/DailyFileLog.cs reads the
-  # same ENV names directly) — populated here with today's real defaults,
-  # not invented values. LOG_DIR/LOG_RETENTION_DAYS/LOG_FILE_ENABLED are
-  # shared_with_ctrader in the catalog (same ENV name, same default, both
-  # languages) — file_name genuinely differs per service today (Python's
-  # is actually a hardcoded constant, DEFAULT_LOG_FILE_NAME in
-  # app/core/logging_setup.py, not wired to the catalog at all; .NET's is
-  # the catalog's ctrader_file_name / LOG_FILE_NAME).
+  # These are application defaults. Deployment-only paths and credentials
+  # remain environment-specific infrastructure settings.
   logging:
     directory: /var/log/apexvoid
     retention_days: 14
@@ -50,12 +40,8 @@ runtime:
     bars_window_max: 2000
     bar_quality_lookback: 6
     bars_channel: bars:new
-
-# Shared transport and persistence topology. Keeping these infrastructure
-# sections in the runtime document means every service has one operational
-# YAML file to load while the native section names remain stable for the Go,
-# Python, and .NET readers.
-transport:
+  # Shared transport and persistence topology. All service infrastructure
+  # settings live below runtime so every reader consumes the same native tree.
   redis:
     url: redis://redis:6379/0
     bars_channel: bars:new
@@ -105,7 +91,6 @@ transport:
         replication_factor: 1
         retention_ms: 604800000
 
-database:
   postgres:
     host: postgres
     port: 5432

@@ -43,7 +43,7 @@ from app.autotrade.zone_watch import (
   transition_zone_watch,
 )
 from app.persistence import redis_state
-from tests.configuration.canonical_fixtures import install_runtime_overrides
+from tests.support.canonical_fixtures import install_runtime_overrides
 from tests.test_go_opportunity_policy import Harness, golden
 from tests.test_publish_trade_plan_v8 import (  # noqa: F401 - autouse fixtures
   _freeze_technique_killzone_hour,

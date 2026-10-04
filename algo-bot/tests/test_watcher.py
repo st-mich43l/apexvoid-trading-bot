@@ -13,7 +13,7 @@ os.environ.setdefault(
 os.environ.setdefault("TELEGRAM_CHAT_ID", "-100123456789")
 
 from app.core.config import runtime_config
-from tests.configuration.canonical_fixtures import install_runtime_overrides, leaf
+from tests.support.canonical_fixtures import install_runtime_overrides, leaf
 from app.signals import broadcast, watcher
 from app.persistence import redis_state
 from app.signals.pips_format import pips_between, rr_entry, sl_result_pips

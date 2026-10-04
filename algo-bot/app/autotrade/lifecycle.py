@@ -115,7 +115,7 @@ async def emit_lifecycle(
     "previous_state": previous,
     "reason_code": reason_code,
     "message": message,
-    "configuration_profile": runtime_config.runtime.profile,
+    "environment": runtime_config.runtime.environment,
     "account_type": account_type,
     "broker": broker,
     "measured": measured or {},
@@ -126,12 +126,12 @@ async def emit_lifecycle(
   pipe.ltrim(lifecycle_key(candidate), -100, -1)
   pipe.expire(
     lifecycle_key(candidate),
-    max(86400, runtime_config.lifecycle.candidate.storage_ttl_seconds),
+    max(86400, runtime_config.auto_algo.lifecycle.candidate.storage_ttl_seconds),
   )
   pipe.set(
     state_key,
     state,
-    ex=max(86400, runtime_config.lifecycle.candidate.storage_ttl_seconds),
+    ex=max(86400, runtime_config.auto_algo.lifecycle.candidate.storage_ttl_seconds),
   )
   pipe.set(f"auto_trade:last_lifecycle:{symbol.upper()}", encoded)
   pipe.xadd(
@@ -167,12 +167,12 @@ async def emit_lifecycle(
       )
   if publish_status:
     pipe.xadd(
-      runtime_config.contract.streams.events,
+      runtime_config.runtime.redis_streams.events,
       {"payload": json.dumps({
         "type": state,
         **event,
       }, separators=(",", ":"), sort_keys=True)},
-      maxlen=max(100, runtime_config.contract.streams.candidate_maximum_length),
+      maxlen=max(100, runtime_config.runtime.redis_streams.candidate_maximum_length),
       approximate=True,
     )
   await pipe.execute()

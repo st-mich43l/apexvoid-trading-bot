@@ -10,165 +10,15 @@ import pytest
 from app.autotrade.execution_policy import evaluate_execution_policy
 from app.autotrade.strategy_match import STRATEGY_MATCH_VERSION, StrategyMatch
 from app.autotrade.trade_plan_builder import build_trade_plan_from_strategy_match
-from app.configuration.models.instruments import (
-  FX_FIXED_2R_V1_POLICY,
-  InstrumentConfig,
-  InstrumentTargetMode,
-  InstrumentTargetingConfig,
-)
+from app.runtime.instruments import InstrumentTargetMode
 from app.core.instrument_geometry import fixed_reward_risk
-from tests.test_config_effective_instrument_context import _load_production_example
+from app.core.config import runtime_config
 
 
 pytestmark = pytest.mark.no_database
 
 _FX_TARGET_R_MULTIPLES = (1.0, 2.0)
 _FX_CLOSE_RATIOS = (0.5, 0.5)
-
-
-def _targeting(reward_risk: float = 2.0) -> dict[str, object]:
-  levels = tuple(
-    value * reward_risk / 2.0 for value in _FX_TARGET_R_MULTIPLES
-  )
-  return {
-    "mode": "fixed_rr",
-    "reward_risk": reward_risk,
-    "target_r_multiples": levels,
-    "close_ratios": _FX_CLOSE_RATIOS,
-    "breakeven_after_r": 1.0 * reward_risk / 2.0,
-    "entry_clips": 2,
-  }
-
-
-def test_fixed_rr_targeting_requires_ratio_and_matching_policy():
-  with pytest.raises(ValueError, match="requires reward_risk"):
-    InstrumentTargetingConfig(mode="fixed_rr")
-  with pytest.raises(ValueError, match="must not set fixed-RR fields"):
-    InstrumentTargetingConfig(mode="ladder_pips", reward_risk=2.0)
-  with pytest.raises(ValueError, match="requires target_r_multiples"):
-    InstrumentTargetingConfig(mode="fixed_rr", reward_risk=2.0)
-  with pytest.raises(ValueError, match="must sum to 1.0"):
-    InstrumentTargetingConfig(
-      mode="fixed_rr",
-      reward_risk=2.0,
-      target_r_multiples=_FX_TARGET_R_MULTIPLES,
-      close_ratios=(0.2, 0.2),
-    )
-  with pytest.raises(ValueError, match="must be set together"):
-    InstrumentTargetingConfig(
-      mode="fixed_rr",
-      reward_risk=2.0,
-      target_r_multiples=_FX_TARGET_R_MULTIPLES,
-      close_ratios=_FX_CLOSE_RATIOS,
-      trail_after_r=1.5,
-    )
-  with pytest.raises(
-    ValueError, match="breakeven_after_r and trail_after_r are mutually exclusive"
-  ):
-    InstrumentTargetingConfig(
-      mode="fixed_rr",
-      reward_risk=2.0,
-      target_r_multiples=_FX_TARGET_R_MULTIPLES,
-      close_ratios=_FX_CLOSE_RATIOS,
-      breakeven_after_r=1.0,
-      trail_after_r=1.5,
-      trail_to_r=1.0,
-    )
-  with pytest.raises(
-    ValueError, match="breakeven_after_r must equal one of target_r_multiples"
-  ):
-    InstrumentTargetingConfig(
-      mode="fixed_rr",
-      reward_risk=2.0,
-      target_r_multiples=_FX_TARGET_R_MULTIPLES,
-      close_ratios=_FX_CLOSE_RATIOS,
-      breakeven_after_r=1.5,
-    )
-  with pytest.raises(ValueError, match="fixed_rr targeting requires policy in"):
-    InstrumentConfig(
-      enabled=False,
-      canonical_symbol="TESTFX",
-      broker_symbol="TESTFX",
-      policy="xau_current_v1",
-      targeting=_targeting(),
-    )
-
-
-def test_fx_policy_is_locked_to_uniform_two_r_breakeven_contract():
-  with pytest.raises(ValueError, match="targeting.reward_risk must be 2.0"):
-    InstrumentConfig(
-      enabled=False,
-      canonical_symbol="TESTFX",
-      broker_symbol="TESTFX",
-      policy=FX_FIXED_2R_V1_POLICY,
-      targeting=_targeting(1.5),
-    )
-  with pytest.raises(
-    ValueError, match="targeting.target_r_multiples must be \\(1.0, 2.0\\)"
-  ):
-    InstrumentConfig(
-      enabled=False,
-      canonical_symbol="TESTFX",
-      broker_symbol="TESTFX",
-      policy=FX_FIXED_2R_V1_POLICY,
-      targeting={
-        "mode": "fixed_rr",
-        "reward_risk": 2.0,
-        "target_r_multiples": (1.0, 1.5, 2.0),
-        "close_ratios": (0.25, 0.25, 0.50),
-        "breakeven_after_r": 1.0,
-        "entry_clips": 2,
-      },
-    )
-  with pytest.raises(
-    ValueError, match="targeting.close_ratios must be \\(0.5, 0.5\\)"
-  ):
-    InstrumentConfig(
-      enabled=False,
-      canonical_symbol="TESTFX",
-      broker_symbol="TESTFX",
-      policy=FX_FIXED_2R_V1_POLICY,
-      targeting={
-        "mode": "fixed_rr",
-        "reward_risk": 2.0,
-        "target_r_multiples": _FX_TARGET_R_MULTIPLES,
-        "close_ratios": (0.4, 0.6),
-        "breakeven_after_r": 1.0,
-        "entry_clips": 2,
-      },
-    )
-  with pytest.raises(
-    ValueError, match="targeting.close_ratios must be \\(0.5, 0.5\\)"
-  ):
-    InstrumentConfig(
-      enabled=False,
-      canonical_symbol="GBPJPY",
-      broker_symbol="GBPJPY",
-      policy="fx_fixed_2r_frontload_v1",
-      targeting={
-        "mode": "fixed_rr",
-        "reward_risk": 2.0,
-        "target_r_multiples": _FX_TARGET_R_MULTIPLES,
-        "close_ratios": (0.4, 0.6),
-        "breakeven_after_r": 1.0,
-        "entry_clips": 2,
-      },
-    )
-  with pytest.raises(ValueError, match="targeting.entry_clips must be 2"):
-    InstrumentConfig(
-      enabled=False,
-      canonical_symbol="TESTFX",
-      broker_symbol="TESTFX",
-      policy=FX_FIXED_2R_V1_POLICY,
-      targeting={
-        "mode": "fixed_rr",
-        "reward_risk": 2.0,
-        "target_r_multiples": _FX_TARGET_R_MULTIPLES,
-        "close_ratios": _FX_CLOSE_RATIOS,
-        "breakeven_after_r": 1.0,
-        "entry_clips": 5,
-      },
-    )
 
 
 def _fx_match(symbol: str = "EURUSD") -> StrategyMatch:
@@ -239,7 +89,7 @@ def test_fx_auto_plan_uses_single_market_watch_entry():
   # FX's pack overrides a technique policy's zone_scale declaration: one
   # best in-zone market fill, no shallow/deep ladder, even when the zone
   # would otherwise qualify for scaling.
-  cfg = _load_production_example().config
+  cfg = runtime_config
   match = replace(
     _fx_match(),
     strategy="FVG",
@@ -317,7 +167,7 @@ def test_fx_single_best_entry_has_one_or_zero_declared_legs(
 
 
 def test_fx_targeting_is_explicit_configuration_not_symbol_detection():
-  cfg = _load_production_example().config
+  cfg = runtime_config
   # Uniform 50/50 across FX pairs — front-load retired.
   for symbol in ("EURUSD", "USDJPY", "GBPJPY"):
     effective = cfg.for_instrument(symbol)
@@ -342,7 +192,7 @@ def test_fx_targeting_is_explicit_configuration_not_symbol_detection():
 def test_fx_reaction_stop_envelopes_diverge_while_gold_uses_structure_band():
   from app.autotrade.protective_stop import stop_bounds_for_reaction_room
 
-  cfg = _load_production_example().config
+  cfg = runtime_config
   eurusd_min, eurusd_max, eurusd_measured = stop_bounds_for_reaction_room(
     strategy="Key Level",
     primary_tp_pips=50,
@@ -401,7 +251,7 @@ def test_fx_auto_reaction_books_pack_volume_multiplier():
   """
   from tests.test_execution_pipeline_integrity import _policy_match
 
-  cfg = _load_production_example().config
+  cfg = runtime_config
   fx_match = _fx_match("EURUSD")
   fx = evaluate_execution_policy(
     fx_match,
@@ -451,7 +301,7 @@ def test_fx_auto_reaction_books_pack_volume_multiplier():
 
 
 def test_fx_fixed_rr_builds_one_r_two_r_with_breakeven():
-  cfg = _load_production_example().config
+  cfg = runtime_config
   match = _fx_match()
   evaluation = evaluate_execution_policy(
     match,
@@ -505,7 +355,7 @@ def test_fx_fixed_rr_builds_one_r_two_r_with_breakeven():
 
 
 def test_fixed_rr_falls_back_to_one_r_when_two_r_does_not_fit():
-  cfg = _load_production_example().config
+  cfg = runtime_config
   match = _fx_match()
   evaluation = evaluate_execution_policy(
     match,
@@ -545,7 +395,7 @@ def test_fixed_rr_falls_back_to_one_r_when_two_r_does_not_fit():
 
 
 def test_fixed_rr_rejects_when_opposing_room_cannot_hold_one_r():
-  cfg = _load_production_example().config
+  cfg = runtime_config
   match = _fx_match()
   sink_calls: list[tuple[str, str, dict[str, str]]] = []
 
@@ -576,7 +426,7 @@ def test_fixed_rr_rejects_when_opposing_room_cannot_hold_one_r():
 
 
 def test_fixed_rr_one_r_fallback_is_symmetric_for_sell():
-  cfg = _load_production_example().config
+  cfg = runtime_config
   match = replace(
     _fx_match("GBPJPY"),
     match_id="gbpjpy-fallback-sell",
@@ -616,7 +466,7 @@ def test_fixed_rr_one_r_fallback_is_symmetric_for_sell():
 
 
 def test_gbpjpy_sell_uses_uniform_two_r_contract():
-  cfg = _load_production_example().config
+  cfg = runtime_config
   match = replace(
     _fx_match("GBPJPY"),
     match_id="gbpjpy-fixed-rr-match",
@@ -675,7 +525,7 @@ def test_xau_technique_uses_the_owner_requested_r_ladder():
   (1R/2R/3R/4R) - the uniform-across-fixed_rr contract is now per-policy,
   not global.
   """
-  cfg = _load_production_example().config
+  cfg = runtime_config
   xau = cfg.for_instrument("XAU")
   assert xau.targeting.target_r_multiples == (1.0, 2.0, 3.0, 4.0)
   assert xau.targeting.close_ratios == (0.4, 0.2, 0.2, 0.2)
@@ -701,7 +551,7 @@ def test_root_card_r_multiples_use_the_configured_ladder_not_card_prices(
   from app.autotrade import setup_card
   from app.core import instrument_geometry
 
-  cfg = _load_production_example().config
+  cfg = runtime_config
   monkeypatch.setattr(instrument_geometry, "runtime_config", cfg)
 
   gbpjpy_match = replace(
@@ -746,7 +596,7 @@ def test_xau_gets_a_smaller_opposing_barrier_buffer_than_fx():
   # away 40-115+ pips of real opposing-structure room on XAU (measured in
   # prod), comparable to or larger than XAU's own 25-100 pip stop
   # envelope. XAU overrides to 0.15; FX keeps the global 0.5 default.
-  cfg = _load_production_example().config
+  cfg = runtime_config
   xau = cfg.for_instrument("XAU")
   eurusd = cfg.for_instrument("EURUSD")
   assert xau.actionability.target_room.barrier_buffer_atr == pytest.approx(0.15)

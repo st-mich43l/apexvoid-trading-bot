@@ -25,7 +25,7 @@ container, generated manifest, or runtime configuration volume.
 ## Configuration and secrets
 
 Keep non-secret behavior in `config/*.yml`. Set `APEXVOID_CONFIG_FILE` to
-`/config/apexvoid.yml` in production or `/config/apexvoid.demo-eval.yml` for a
+`/config/apexvoid.yml` in production or `/config/apexvoid.demo.yml` for a
 deliberate demo deployment. Secrets remain in `.env` locally or the Ansible
 secret store: Telegram token, cTrader credentials/tokens, and database
 password/DSN.
@@ -34,8 +34,7 @@ Validate before deployment:
 
 ```bash
 docker compose config -q
-PYTHONPATH=algo-bot python -m app.configuration.validate config/apexvoid.yml
-PYTHONPATH=algo-bot python -m app.configuration.validate config/apexvoid.demo-eval.yml
+PYTHONPATH=algo-bot python config/scripts/config_check.py
 ```
 
 ## Production rollout

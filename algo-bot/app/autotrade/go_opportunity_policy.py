@@ -469,7 +469,7 @@ class GoOpportunityPolicy:
     if self._multiple is not None:
       return self._multiple()
     from app.core.config import runtime_config
-    return bool(runtime_config.strategies.matching.multiple_matches_enabled)
+    return bool(runtime_config.auto_algo.strategies.matching.multiple_matches_enabled)
 
   def _freshness_limits(self) -> FreshnessLimits:
     if self._limits is not None:

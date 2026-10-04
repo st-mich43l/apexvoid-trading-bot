@@ -55,7 +55,7 @@ async def dispatch_closed_bar(
       log.exception("dispatcher %s tick failed symbol=%s", name, symbol)
 
   try:
-    if runtime_config.runtime.auto_trade.enabled:
+    if runtime_config.auto_algo.enabled:
       from app.autotrade.worker import _handle_event as worker_handle
       await _run("worker", worker_handle(data, source=source, client=client))
   finally:
@@ -135,14 +135,14 @@ class _PerSymbolBarDispatcher:
 
 async def bar_event_dispatcher_loop() -> None:
   client = redis_state.get_client()
-  if runtime_config.runtime.auto_trade.enabled:
+  if runtime_config.auto_algo.enabled:
     try:
       from app.autotrade.worker import _reconcile_legacy_mapped_thesis_claims
       await _reconcile_legacy_mapped_thesis_claims(client)
     except Exception:
       log.exception("legacy mapped thesis claim reconcile failed")
   channel = str(
-    getattr(runtime_config.market_data.ctrader_feed, "bars_channel", None)
+    getattr(runtime_config.analysis.ctrader_feed, "bars_channel", None)
     or "bars:new"
   )
   pubsub = client.pubsub()

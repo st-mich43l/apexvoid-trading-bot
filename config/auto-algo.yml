@@ -42,14 +42,27 @@ auto_algo:
       market_map_guard_enabled: false
       min_confluence: 2
       news_guard_minutes: 30
+      event_cluster_guard_enabled: false
+      event_cluster_span_hours: 48
+      event_cluster_guard_minutes: 180
       opposing_barrier_veto_enabled: true
+      proximal_band_atr: 0.5
       range_context_disagreement_gate_enabled: false
     key_level_role:
       enabled: false
     overlapping_zones:
       veto_enabled: true
+    target_room:
+      barrier_buffer_atr: 0.5
+      structural_barrier_book_enabled: true
+      minimum_capped_target_pips: 15.0
+      scalp_barrier_buffer_atr: 0.15
+      scalp_minimum_capped_target_pips: 8.0
     scanner_gates:
       actionability_gate_enabled: false
+      conflict_margin: 1.0
+      conflict_margin_quality: 0.15
+      use_quality_ranking: true
       zone_width_gate_enabled: false
     structural_guard:
       guard_mode: observe
@@ -64,6 +77,8 @@ auto_algo:
     mapped_zone:
       reaction_rearm_atr: 0.5
       reaction_rearm_bars: 3
+    retest:
+      trigger_validity_bars: 2
     reconciliation:
       absence_recheck_seconds: 3
       missing_confirmations: 2
@@ -81,7 +96,7 @@ auto_algo:
       non_hedged_opposite_policy: broker_netting
       # §8/§9: newly surfaced (RiskExposureConfig.allow_hedged_xau /
       # .require_flat_for_range Python schema defaults, unchanged values)
-      # — previously only reachable via the demo_eval profile override
+      # — previously only reachable via the demo profile override
       # (which happened to set both to the exact same values as the
       # default), never a base configuration leaf. The schema caught
       # this: an overlay setting a leaf with no base value is exactly the
@@ -116,10 +131,28 @@ auto_algo:
 
   strategies:
     technique:
+      confluence:
+        enabled: true
+      sd:
+        enabled: true
+      ob:
+        enabled: true
       fvg:
+        enabled: true
         # Proximal entry width for FVG/iFVG/imbalance (price). Full gap stays
         # structural; every strategy clips tradeable entry to this band.
         entry_max_width_price: 5.0
+      ifvg:
+        enabled: true
+      crt:
+        enabled: true
+    zone:
+      demand:
+        enabled: true
+      supply:
+        enabled: true
+      flip:
+        enabled: true
     # `scalping` is a sibling of `technique`, not nested under it — matching
     # the categorized strategy shape exactly
     # (a prior draft of this file nested it under `technique` by mistake;
@@ -214,7 +247,7 @@ auto_algo:
       box_scale_out_enabled: true
       # §8/§9: newly surfaced (StrategiesRangeReversionConfig.enabled
       # Python schema default, unchanged value True) — same
-      # only-reachable-via-demo_eval-override gap as risk.exposure above.
+      # only-reachable-via-demo-override gap as risk.exposure above.
       enabled: true
       flip_enabled: true
       range_edge:

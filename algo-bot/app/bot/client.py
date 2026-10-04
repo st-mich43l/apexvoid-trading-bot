@@ -27,7 +27,7 @@ from app.core.config import runtime_config
 log = logging.getLogger(__name__)
 
 bot = Bot(
-  token=runtime_config.bootstrap.telegram.bot_token,
+  token=runtime_config.telegram.bot_token,
   default=DefaultBotProperties(parse_mode=ParseMode.HTML),
 )
 # Owner end-of-day DM wipe (opt-in, see owner_dm_journal) journals every
@@ -35,8 +35,8 @@ bot = Bot(
 bot.session.middleware(owner_dm_session_middleware)
 scanner_bot = Bot(
   token=(
-    runtime_config.delivery.telegram.scanner_telegram_bot_token
-    or runtime_config.bootstrap.telegram.bot_token
+    runtime_config.telegram.scanner_telegram_bot_token
+    or runtime_config.telegram.bot_token
   ),
   default=DefaultBotProperties(parse_mode=ParseMode.HTML),
 )
@@ -108,11 +108,11 @@ async def setup_commands(target_bot: Bot) -> None:
     [],
     scope=BotCommandScopeDefault(),
   )
-  if runtime_config.delivery.telegram.telegram_owner_id:
+  if runtime_config.telegram.telegram_owner_id:
     await target_bot.set_my_commands(
       OWNER_COMMANDS,
       scope=BotCommandScopeChat(
-        chat_id=runtime_config.delivery.telegram.telegram_owner_id
+        chat_id=runtime_config.telegram.telegram_owner_id
       ),
     )
 
@@ -122,11 +122,11 @@ async def setup_scanner_commands(target_bot: Bot) -> None:
     SCANNER_PUBLIC_COMMANDS,
     scope=BotCommandScopeDefault(),
   )
-  if runtime_config.delivery.telegram.telegram_owner_id:
+  if runtime_config.telegram.telegram_owner_id:
     await target_bot.set_my_commands(
       SCANNER_OWNER_COMMANDS,
       scope=BotCommandScopeChat(
-        chat_id=runtime_config.delivery.telegram.telegram_owner_id
+        chat_id=runtime_config.telegram.telegram_owner_id
       ),
     )
 
@@ -246,7 +246,7 @@ async def _send_message_with_retry(
     try:
       return await target_bot.send_message(
         chat_id=(
-          chat_id or runtime_config.delivery.telegram.telegram_channel_id
+          chat_id or runtime_config.telegram.telegram_channel_id
         ),
         text=text,
         reply_to_message_id=reply_to,

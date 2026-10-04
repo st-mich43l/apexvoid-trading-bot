@@ -774,7 +774,7 @@ def render_result(
     seq = f"#{result['seq']} " if tier == "vip" else ""
     if (
       tier == "public"
-      and not runtime_config.delivery.telegram.public_show_pips
+      and not runtime_config.telegram.public_show_pips
     ):
       return f"🎯 TP{result['tp_number']} hit"
     return (
@@ -785,7 +785,7 @@ def render_result(
     seq = f"#{result['seq']} " if tier == "vip" else ""
     if (
       tier == "public"
-      and not runtime_config.delivery.telegram.public_show_pips
+      and not runtime_config.telegram.public_show_pips
     ):
       return f"🎯 TP{result['tp_number']} reached · no volume booked"
     return (
@@ -820,14 +820,14 @@ def render_result(
         if net > 0:
           detail = (
             f"+{net} pips win{_win_wings(net)}"
-            if runtime_config.delivery.telegram.public_show_pips
+            if runtime_config.telegram.public_show_pips
             else "win"
           )
           return f"✅ {tp_label}closed — {detail}"
         if net < 0:
           detail = (
             f"{net} pips loss"
-            if runtime_config.delivery.telegram.public_show_pips
+            if runtime_config.telegram.public_show_pips
             else "loss"
           )
           return f"🛑 {tp_label}closed — {detail}"
@@ -842,7 +842,7 @@ def render_result(
       )
     if (
       tier == "public"
-      and not runtime_config.delivery.telegram.public_show_pips
+      and not runtime_config.telegram.public_show_pips
     ):
       return f"🎯 {tp_label}partial booked"
     net_so_far = row.get("net")
@@ -1029,7 +1029,7 @@ async def post_result(result: dict, symbol: str) -> str:
     if not is_final_close:
       return base
     show_pips = (
-      tier == "vip" or runtime_config.delivery.telegram.public_show_pips
+      tier == "vip" or runtime_config.telegram.public_show_pips
     )
     if not show_pips:
       return base

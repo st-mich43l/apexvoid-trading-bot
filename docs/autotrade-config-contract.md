@@ -31,7 +31,7 @@ execution cannot silently use different brokers when one access token grants
 multiple cTrader accounts.
 
 ```text
-AUTO_TRADE_PROFILE
+ApexVoid environment selector
 AUTO_TRADE_ENABLED
 AUTO_TRADE_DRY_RUN
 AUTO_TRADE_CANDIDATE_STREAM
@@ -127,12 +127,12 @@ demo executor.
 
 ## Structural execution policy
 
-Python resolves the structural policy once from `AUTO_TRADE_PROFILE`; the C#
+Python resolves the structural policy once from `ApexVoid environment selector`; the C#
 manifest publishes the same resolved values:
 
 | Profile | Structural guard | Zone cooldown | Zone reconciliation |
 |---|---|---|---|
-| `demo_eval` | `observe` | disabled | `shadow` |
+| `demo` | `observe` | disabled | `shadow` |
 | `conservative` | `balanced` | enabled | `enforce` |
 | non-demo/live-like | `strict` unless explicit | enabled | `enforce` unless explicit |
 

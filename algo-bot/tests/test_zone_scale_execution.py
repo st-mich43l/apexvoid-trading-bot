@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from tests.configuration.canonical_fixtures import execution_cfg
+from tests.support.canonical_fixtures import execution_cfg
 
 import pytest
 

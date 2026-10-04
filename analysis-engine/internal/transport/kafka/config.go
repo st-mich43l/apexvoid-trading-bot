@@ -11,14 +11,14 @@ import (
 // (see that file's own doc comment: engine is the sole config.Document
 // reader in this module; every other package, including this one, takes
 // plain Go values). No field here has a hidden default: every value is
-// explicit YAML (config/runtime.yml's transport.kafka.*) or a
+// explicit YAML (config/runtime.yml's runtime.kafka.*) or a
 // documented protocol constant elsewhere in this package (source task
 // §70 — "no hidden Kafka defaults").
 type Config struct {
 	Enabled bool
 
 	Brokers    []string
-	ClientID   string // transport.kafka.client_id.analysis_engine
+	ClientID   string // runtime.kafka.client_id.analysis_engine
 	OutboxPath string
 
 	Topics     Topics
@@ -56,18 +56,18 @@ func (c Config) Validate() error {
 		return nil
 	}
 	if len(c.Brokers) == 0 {
-		return fmt.Errorf("kafka: transport.kafka.enabled=true requires at least one broker")
+		return fmt.Errorf("kafka: runtime.kafka.enabled=true requires at least one broker")
 	}
 	for i, b := range c.Brokers {
 		if strings.TrimSpace(b) == "" {
-			return fmt.Errorf("kafka: transport.kafka.brokers[%d] is empty", i)
+			return fmt.Errorf("kafka: runtime.kafka.brokers[%d] is empty", i)
 		}
 	}
 	if err := validateClientID(c.ClientID); err != nil {
 		return err
 	}
 	if strings.TrimSpace(c.OutboxPath) == "" {
-		return fmt.Errorf("kafka: transport.kafka.outbox_path is required")
+		return fmt.Errorf("kafka: runtime.kafka.outbox_path is required")
 	}
 	topics := map[string]string{
 		"analysis_opportunity":             c.Topics.AnalysisOpportunity,
@@ -78,10 +78,10 @@ func (c Config) Validate() error {
 	for _, name := range []string{"analysis_opportunity", "analysis_opportunity_invalidated", "analysis_opportunity_arbitration"} {
 		value := topics[name]
 		if strings.TrimSpace(value) == "" {
-			return fmt.Errorf("kafka: transport.kafka.topics.%s is required", name)
+			return fmt.Errorf("kafka: runtime.kafka.topics.%s is required", name)
 		}
 		if other, dup := seen[value]; dup {
-			return fmt.Errorf("kafka: transport.kafka.topics.%s and topics.%s both name %q — every logical topic must be distinct", name, other, value)
+			return fmt.Errorf("kafka: runtime.kafka.topics.%s and topics.%s both name %q — every logical topic must be distinct", name, other, value)
 		}
 		seen[value] = name
 	}
@@ -91,11 +91,11 @@ func (c Config) Validate() error {
 func validateClientID(id string) error {
 	trimmed := strings.TrimSpace(id)
 	if trimmed == "" {
-		return fmt.Errorf("kafka: transport.kafka.client_id.analysis_engine is required")
+		return fmt.Errorf("kafka: runtime.kafka.client_id.analysis_engine is required")
 	}
 	for _, r := range trimmed {
 		if r <= ' ' || r == '/' || r > '~' {
-			return fmt.Errorf("kafka: transport.kafka.client_id.analysis_engine %q contains an invalid character", id)
+			return fmt.Errorf("kafka: runtime.kafka.client_id.analysis_engine %q contains an invalid character", id)
 		}
 	}
 	return nil

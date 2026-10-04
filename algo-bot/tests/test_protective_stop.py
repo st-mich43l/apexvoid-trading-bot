@@ -5,7 +5,7 @@ from __future__ import annotations
 from decimal import Decimal
 from types import SimpleNamespace
 
-from tests.configuration.canonical_fixtures import execution_cfg, install_runtime_overrides
+from tests.support.canonical_fixtures import execution_cfg, install_runtime_overrides
 
 import pytest
 

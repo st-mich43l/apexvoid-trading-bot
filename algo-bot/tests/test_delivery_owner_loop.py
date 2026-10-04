@@ -17,7 +17,7 @@ pytestmark = [pytest.mark.asyncio, pytest.mark.no_database]
 
 async def test_owner_entries_advance_cursor_when_fill_stays_flooded(monkeypatch):
   client = redis_state.get_client()
-  stream = runtime_config.contract.streams.events
+  stream = runtime_config.runtime.redis_streams.events
   entry_id = await client.xadd(
     stream,
     {"payload": json.dumps({"type": "order_filled", "match_id": "x"})},
@@ -51,7 +51,7 @@ async def test_owner_entries_advance_cursor_when_fill_stays_flooded(monkeypatch)
 
 async def test_owner_loop_flood_backoff_is_short(monkeypatch):
   client = redis_state.get_client()
-  stream = runtime_config.contract.streams.events
+  stream = runtime_config.runtime.redis_streams.events
   await client.xadd(stream, {"payload": json.dumps({"type": "opened"})})
   await client.set(delivery._CURSOR_KEY, "0-0")
 

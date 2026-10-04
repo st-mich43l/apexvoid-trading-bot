@@ -20,8 +20,8 @@ from app.autotrade import go_opportunity_policy as pol
 from app.autotrade import setup_card
 from app.autotrade.multi_match import deserialize_matches, strategy_matches_key
 from app.autotrade.setup_card import format_plan_published_root_card
-from tests.configuration.canonical_fixtures import install_runtime_overrides
-from tests.test_config_effective_instrument_context import _load_production_example
+from tests.support.canonical_fixtures import install_runtime_overrides
+from tests.support.canonical_fixtures import _load_production_example
 from tests.test_go_full_chain import (  # noqa: F401 - fixtures + helpers
   _freeze_technique_killzone_hour,
   _no_news_by_default,

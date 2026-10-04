@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from tests.configuration.canonical_fixtures import install_runtime_overrides
+from tests.support.canonical_fixtures import install_runtime_overrides
 
 from app.bot.handlers import dm
 

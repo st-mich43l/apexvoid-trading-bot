@@ -8,7 +8,7 @@ import json
 from dataclasses import replace
 from types import SimpleNamespace
 
-from tests.configuration.canonical_fixtures import execution_cfg, install_runtime_overrides, leaf
+from tests.support.canonical_fixtures import execution_cfg, install_runtime_overrides, leaf
 from unittest.mock import AsyncMock
 
 import fakeredis

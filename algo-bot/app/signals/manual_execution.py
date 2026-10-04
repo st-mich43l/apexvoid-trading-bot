@@ -26,6 +26,7 @@ command poll to execute against the real broker.
 import asyncio
 import json
 import logging
+from app.runtime.instruments import for_instrument, live_instruments
 from typing import Any
 
 from app.bot.client import send_scanner_with_retry, send_with_retry
@@ -127,9 +128,9 @@ def _entry_event_text(
 
 def _manual_algo_symbols() -> tuple[str, ...]:
   symbols: list[str] = []
-  for instrument_id in runtime_config.live_instruments() or ():
+  for instrument_id in live_instruments(runtime_config) or ():
     try:
-      manual = runtime_config.for_instrument(instrument_id).manual
+      manual = for_instrument(runtime_config, instrument_id).manual
     except Exception:
       continue
     if manual.enabled and manual.algo_enabled:
@@ -250,10 +251,10 @@ def _target_text(event: dict, symbol: str) -> str:
 
 async def _send_executor_truth(text: str) -> None:
   """Operational truth from the Auto Algo / scanner bot (rejects, dry-run)."""
-  if runtime_config.delivery.telegram.telegram_owner_id:
+  if runtime_config.telegram.telegram_owner_id:
     await send_scanner_with_retry(
       text,
-      chat_id=runtime_config.delivery.telegram.telegram_owner_id,
+      chat_id=runtime_config.telegram.telegram_owner_id,
     )
 
 
@@ -264,10 +265,10 @@ async def _send_owner_command_ack(text: str) -> None:
   ack already replies there. Broker confirm must not also DM via the
   scanner bot (duplicate "Auto Algo" reply).
   """
-  if runtime_config.delivery.telegram.telegram_owner_id:
+  if runtime_config.telegram.telegram_owner_id:
     await send_with_retry(
       text,
-      chat_id=runtime_config.delivery.telegram.telegram_owner_id,
+      chat_id=runtime_config.telegram.telegram_owner_id,
     )
 
 
@@ -412,7 +413,7 @@ def _intent_to_candidate_payload(intent: ManualTradeIntent) -> dict:
     max(1, pips_format.pips_between(sig, tp))
     for tp in intent.tps
   ]
-  effective = runtime_config.for_instrument(intent.symbol)
+  effective = for_instrument(runtime_config, intent.symbol)
   manual = effective.manual
   if not manual.enabled:
     raise ValueError(f"manual trading is disabled for {intent.symbol}")
@@ -468,9 +469,9 @@ def _intent_to_candidate_payload(intent: ManualTradeIntent) -> dict:
 async def _publish_intent(client, intent: ManualTradeIntent) -> None:
   candidate = _intent_to_candidate_payload(intent)
   await client.xadd(
-    runtime_config.contract.streams.candidates,
+    runtime_config.runtime.redis_streams.candidates,
     {"payload": json.dumps(candidate, separators=(",", ":"))},
-    maxlen=max(100, runtime_config.contract.streams.candidate_maximum_length),
+    maxlen=max(100, runtime_config.runtime.redis_streams.candidate_maximum_length),
     approximate=True,
   )
 
@@ -1163,7 +1164,7 @@ async def reconcile_events_loop() -> None:
   client = redis_state.get_client()
   cursor = await client.get(_EVENT_CURSOR_KEY)
   if not cursor:
-    latest = await client.xrevrange(runtime_config.contract.streams.events, count=1)
+    latest = await client.xrevrange(runtime_config.runtime.redis_streams.events, count=1)
     cursor = latest[0][0] if latest else "0-0"
     await client.set(_EVENT_CURSOR_KEY, cursor)
   log.info(
@@ -1175,7 +1176,7 @@ async def reconcile_events_loop() -> None:
   while True:
     try:
       batches = await client.xread(
-        {runtime_config.contract.streams.events: cursor},
+        {runtime_config.runtime.redis_streams.events: cursor},
         count=20,
         block=5000,
       )

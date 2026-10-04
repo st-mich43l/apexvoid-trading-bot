@@ -21,8 +21,7 @@ class InstrumentRuntimeView:
   risk: Any
   lifecycle: Any
   policy_name: str
-  delivery: Any
-  contract: Any
+  telegram: Any
   runtime: Any
   manual_algo: Any
   instruments: Any
@@ -43,7 +42,9 @@ def instrument_runtime_view(
     from app.core.config import runtime_config
 
     root = runtime_config
-  effective = root.for_instrument(symbol)
+  from app.runtime.instruments import for_instrument
+
+  effective = for_instrument(root, symbol)
   return InstrumentRuntimeView(
     identity=effective.identity,
     units=effective.units,
@@ -56,8 +57,7 @@ def instrument_runtime_view(
     risk=effective.risk,
     lifecycle=effective.lifecycle,
     policy_name=effective.policy_name,
-    delivery=root.delivery,
-    contract=root.contract,
+    telegram=root.telegram,
     runtime=root.runtime,
     manual_algo=root.manual_algo,
     instruments=root.instruments,

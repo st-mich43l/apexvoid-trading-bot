@@ -61,10 +61,10 @@ async def publish_trade_plan(client: Any, plan: TradePlan) -> str:
   state_key = plan_state_key(plan.plan_id)
   dedup_key = plan_dedup_key(plan.plan_id)
   dedup_ttl = max(
-    86400, int(runtime_config.lifecycle.candidate.storage_ttl_seconds),
+    86400, int(runtime_config.auto_algo.lifecycle.candidate.storage_ttl_seconds),
   )
-  stream = runtime_config.contract.streams.trade_plans
-  maxlen = max(100, runtime_config.contract.streams.candidate_maximum_length)
+  stream = runtime_config.runtime.redis_streams.trade_plans
+  maxlen = max(100, runtime_config.runtime.redis_streams.candidate_maximum_length)
   try:
     event_id = await client.eval(
       _PUBLISH_PLAN_LUA,

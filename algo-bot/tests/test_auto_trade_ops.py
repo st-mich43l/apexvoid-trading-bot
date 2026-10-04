@@ -1,12 +1,8 @@
 import asyncio
 import json
-from pathlib import Path
 from unittest.mock import AsyncMock
 from app.core.config import runtime_config
-from app.configuration.python_loader import load_python_canonical_settings
-from app.configuration.python_sources import load_python_runtime_source_bundle
-from app.configuration.source_policy import PythonConfigurationSourcePolicy
-from tests.configuration.canonical_fixtures import install_runtime_overrides, leaf
+from tests.support.canonical_fixtures import install_runtime_overrides, leaf
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
@@ -317,12 +313,7 @@ def test_render_box_open_and_full_tp_as_shareable_cards():
 
 @pytest.mark.no_database
 def test_fx_delivery_uses_symbol_pips_and_price_digits(monkeypatch):
-  config_file = Path(__file__).resolve().parents[2] / "config" / "apexvoid.yml"
-  policy = PythonConfigurationSourcePolicy(config_file=str(config_file))
-  production = load_python_canonical_settings(
-    load_python_runtime_source_bundle(policy=policy),
-  ).config
-  install_runtime_overrides(monkeypatch, base=production)
+  install_runtime_overrides(monkeypatch, base=runtime_config)
 
   opened = delivery.render_auto_trade_event({
     "type": "opened",

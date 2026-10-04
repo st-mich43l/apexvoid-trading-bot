@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.configuration.models.instruments import InstrumentRollout
+from app.runtime.instruments import InstrumentRollout
 from app.core.config import runtime_config
 from app.core.symbols import pip_for
 from app.runtime.instrument_registry import (
@@ -53,4 +53,3 @@ def test_registry_rejects_unknown_symbol():
   registry = build_instrument_runtime_registry(runtime_config)
   with pytest.raises(InstrumentRuntimeError, match="unknown"):
     registry.get("NOPE")
-

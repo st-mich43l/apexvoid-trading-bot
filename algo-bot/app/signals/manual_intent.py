@@ -50,7 +50,7 @@ def _end_of_trade_day(trade_date: str | None) -> int:
   moment its ``daily_seq`` would roll over to the next trading day, rather
   than on some unrelated UTC-midnight or wall-clock boundary.
   """
-  tz = ZoneInfo(runtime_config.delivery.presentation.seq_reset_tz)
+  tz = ZoneInfo(runtime_config.telegram.presentation.seq_reset_tz)
   day = date.fromisoformat(trade_date) if trade_date else datetime.now(tz).date()
   end_of_day = datetime.combine(day + timedelta(days=1), time.min, tzinfo=tz)
   return int(end_of_day.timestamp())

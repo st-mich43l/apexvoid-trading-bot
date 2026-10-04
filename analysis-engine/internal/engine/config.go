@@ -831,49 +831,49 @@ func getBool(doc *config.Document, path string) (bool, error) {
 	return b, nil
 }
 
-// KafkaConfigFromConfig reads transport.kafka.* into kafka.Config — the
+// KafkaConfigFromConfig reads runtime.kafka.* into kafka.Config — the
 // Kafka transport task's own addition to this file, following the exact
 // same discipline as every function above it (Kafka transport task).
 // internal/transport/kafka itself never reads config.Document; this is
 // the one and only place that translates YAML into kafka.Config.
 func KafkaConfigFromConfig(doc *config.Document) (kafka.Config, error) {
-	enabled, err := getBool(doc, "transport.kafka.enabled")
+	enabled, err := getBool(doc, "runtime.kafka.enabled")
 	if err != nil {
 		return kafka.Config{}, err
 	}
-	brokersRaw, ok := doc.Get("transport.kafka.brokers")
+	brokersRaw, ok := doc.Get("runtime.kafka.brokers")
 	if !ok {
-		return kafka.Config{}, fmt.Errorf("engine: missing required config %q", "transport.kafka.brokers")
+		return kafka.Config{}, fmt.Errorf("engine: missing required config %q", "runtime.kafka.brokers")
 	}
 	brokersList, ok := brokersRaw.([]any)
 	if !ok {
-		return kafka.Config{}, fmt.Errorf("engine: config %q is not a list (got %T)", "transport.kafka.brokers", brokersRaw)
+		return kafka.Config{}, fmt.Errorf("engine: config %q is not a list (got %T)", "runtime.kafka.brokers", brokersRaw)
 	}
 	brokers := make([]string, 0, len(brokersList))
 	for i, b := range brokersList {
 		s, ok := b.(string)
 		if !ok {
-			return kafka.Config{}, fmt.Errorf("engine: transport.kafka.brokers[%d] is not a string (got %T)", i, b)
+			return kafka.Config{}, fmt.Errorf("engine: runtime.kafka.brokers[%d] is not a string (got %T)", i, b)
 		}
 		brokers = append(brokers, s)
 	}
-	clientID, err := getString(doc, "transport.kafka.client_id.analysis_engine")
+	clientID, err := getString(doc, "runtime.kafka.client_id.analysis_engine")
 	if err != nil {
 		return kafka.Config{}, err
 	}
-	outboxPath, err := getString(doc, "transport.kafka.outbox_path")
+	outboxPath, err := getString(doc, "runtime.kafka.outbox_path")
 	if err != nil {
 		return kafka.Config{}, err
 	}
-	analysisOpportunity, err := getString(doc, "transport.kafka.topics.analysis_opportunity")
+	analysisOpportunity, err := getString(doc, "runtime.kafka.topics.analysis_opportunity")
 	if err != nil {
 		return kafka.Config{}, err
 	}
-	analysisOpportunityInvalidated, err := getString(doc, "transport.kafka.topics.analysis_opportunity_invalidated")
+	analysisOpportunityInvalidated, err := getString(doc, "runtime.kafka.topics.analysis_opportunity_invalidated")
 	if err != nil {
 		return kafka.Config{}, err
 	}
-	analysisOpportunityArbitration, err := getString(doc, "transport.kafka.topics.analysis_opportunity_arbitration")
+	analysisOpportunityArbitration, err := getString(doc, "runtime.kafka.topics.analysis_opportunity_arbitration")
 	if err != nil {
 		return kafka.Config{}, err
 	}
@@ -919,15 +919,15 @@ func OpportunityReplayMaxAgeFromConfig(doc *config.Document) (time.Duration, err
 // RedisConfigFromConfig resolves the market-data transport. Redis owns bars,
 // spot state and catch-up; no domain package reads this topology directly.
 func RedisConfigFromConfig(doc *config.Document) (redistransport.Config, error) {
-	url, err := getString(doc, "transport.redis.url")
+	url, err := getString(doc, "runtime.redis.url")
 	if err != nil {
 		return redistransport.Config{}, err
 	}
-	channel, err := getString(doc, "transport.redis.bars_channel")
+	channel, err := getString(doc, "runtime.redis.bars_channel")
 	if err != nil {
 		return redistransport.Config{}, err
 	}
-	seconds, err := getInt(doc, "transport.redis.reconciliation_interval_seconds")
+	seconds, err := getInt(doc, "runtime.redis.reconciliation_interval_seconds")
 	if err != nil {
 		return redistransport.Config{}, err
 	}
@@ -939,19 +939,19 @@ func RedisConfigFromConfig(doc *config.Document) (redistransport.Config, error) 
 }
 
 func kafkaTopicSpecsFromConfig(doc *config.Document) (map[string]kafka.TopicSpec, error) {
-	raw, ok := doc.Get("transport.kafka.topic_specs")
+	raw, ok := doc.Get("runtime.kafka.topic_specs")
 	if !ok {
-		return nil, fmt.Errorf("engine: missing required config %q", "transport.kafka.topic_specs")
+		return nil, fmt.Errorf("engine: missing required config %q", "runtime.kafka.topic_specs")
 	}
 	entries, ok := raw.(map[string]any)
 	if !ok {
-		return nil, fmt.Errorf("engine: config %q is not a mapping (got %T)", "transport.kafka.topic_specs", raw)
+		return nil, fmt.Errorf("engine: config %q is not a mapping (got %T)", "runtime.kafka.topic_specs", raw)
 	}
 	result := make(map[string]kafka.TopicSpec, len(entries))
 	for name, value := range entries {
 		mapping, ok := value.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf("engine: config transport.kafka.topic_specs.%s is not a mapping (got %T)", name, value)
+			return nil, fmt.Errorf("engine: config runtime.kafka.topic_specs.%s is not a mapping (got %T)", name, value)
 		}
 		partitions, err := topicSpecInt(mapping, "partitions", name)
 		if err != nil {
@@ -973,7 +973,7 @@ func kafkaTopicSpecsFromConfig(doc *config.Document) (map[string]kafka.TopicSpec
 func topicSpecInt(mapping map[string]any, key, topic string) (int, error) {
 	value, ok := mapping[key]
 	if !ok {
-		return 0, fmt.Errorf("engine: missing required config transport.kafka.topic_specs.%s.%s", topic, key)
+		return 0, fmt.Errorf("engine: missing required config runtime.kafka.topic_specs.%s.%s", topic, key)
 	}
 	switch typed := value.(type) {
 	case int:
@@ -983,7 +983,7 @@ func topicSpecInt(mapping map[string]any, key, topic string) (int, error) {
 	case float64:
 		return int(typed), nil
 	default:
-		return 0, fmt.Errorf("engine: config transport.kafka.topic_specs.%s.%s is not an integer (got %T)", topic, key, value)
+		return 0, fmt.Errorf("engine: config runtime.kafka.topic_specs.%s.%s is not an integer (got %T)", topic, key, value)
 	}
 }
 

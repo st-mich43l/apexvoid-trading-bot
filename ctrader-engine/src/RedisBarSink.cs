@@ -1279,8 +1279,6 @@ internal sealed record RedisSpot(
 [JsonSerializable(typeof(ManualTradeCommand))]
 [JsonSerializable(typeof(ZoneCooldownRecord))]
 [JsonSerializable(typeof(RefreshTokenDocument))]
-[JsonSerializable(typeof(AutoTradeConfigManifest))]
-[JsonSerializable(typeof(AutoTradeConfigHealthDocument))]
 [JsonSerializable(typeof(AutoTradeExecutorReadiness))]
 [JsonSerializable(typeof(AutoTradeExecutorSnapshot))]
 [JsonSerializable(typeof(AutoTradeGroupPlan))]

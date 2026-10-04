@@ -2,21 +2,12 @@ name: apexvoid-trading-bot
 
 # Local/dev compose. Secrets and shared cTrader ENV live in `.env`.
 #
-# Configuration V3 (docs/configuration.md): `bot`'s non-secret tuning now
-# comes entirely from config/apexvoid.demo-eval.yml (the categorized
-# config/*.yml files + config/environments/demo_eval.yml, mounted whole
+# Native YAML configuration (docs/configuration.md): `bot`'s non-secret tuning now
+# comes entirely from config/apexvoid.demo.yml (the categorized
+# config/*.yml files + config/environments/demo.yml, mounted whole
 # below) and not any of the ENV tuning
-# variables this file used to set (AUTO_TRADE_PROFILE/
-# AUTO_TRADE_MAPPED_ZONE_ENABLED/AUTO_TRADE_MARKET_MAP_GUARD_ENABLED/
-# LOG_DIR/LOG_RETENTION_DAYS/LOG_FILE_ENABLED all removed from `bot`'s own
-# environment — see docs/configuration.md
-# section for the parity proof and one real, well-evidenced behavior
-# fix this cutover produces for local/dev specifically: those ENV
-# defaults and explicit YAML values are never silently
-# defeating several of the demo_eval profile's own intended overrides
-# (config-file/process-env precedence beating the profile layer) —
-# config/environments/demo_eval.yml is the one place that intent is
-# expressed, and nothing outranks it anymore.
+# tuning variables this file used to set. Application behavior is declared in
+# config/environments/demo.yml and loaded directly by each service.
 #
 # each service resolves the same categorized YAML tree directly; cTrader and the
 # execution services.
@@ -170,7 +161,7 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
-      APEXVOID_CONFIG_FILE: /config/apexvoid.demo-eval.yml
+      APEXVOID_CONFIG_FILE: /config/apexvoid.demo.yml
     depends_on:
       postgres:
         condition: service_healthy

@@ -6923,87 +6923,6 @@ public sealed partial class AutoTradeEngineTests
   }
 
   [Fact]
-  public async Task DemoEvalFatalContractMismatchStopsBeforeAnyOrder()
-  {
-    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-    var store = new FakeAutoTradeStore(CandidateJson());
-    store.Values[AutoTradeConfigHealth.PythonManifestKey] =
-      """
-      {
-        "candidate_stream":"different:candidates",
-        "redis_database":0,
-        "redis_fingerprint":"different",
-        "canonical_symbol":"XAU",
-        "pip_size":0.1,
-        "candidate_contract_version":4,
-        "target_plans":[30,60,90,120,200],
-        "range_target_plans":[20,30,40,50,70]
-      }
-      """;
-    var client = new FakeTradingClient();
-    var engine = new AutoTradeEngine(
-      DemoEvalOptions(), store, () => Now, _ => { }
-    );
-
-    var error = await Assert.ThrowsAsync<AutoTradeConfigurationException>(
-      () => engine.RunSessionAsync(client, Symbol, cts.Token)
-    );
-
-    Assert.Contains("configuration mismatch", error.Message);
-    Assert.Empty(client.Orders);
-    Assert.Contains(store.Events, item => item.Type == "config_fatal");
-    Assert.Contains("config_mismatch", store.Metrics);
-  }
-
-  [Fact]
-  public async Task WarningOnlyConfigurationPublishesReadyExecutor()
-  {
-    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-    var options = DemoEvalOptions() with
-    {
-      CandidateMaxAgeSeconds = 420,
-      CandidateStorageTtlSeconds = 604800,
-      Symbols = ["XAU"],
-    };
-    var store = new FakeAutoTradeStore(CandidateJson());
-    var client = new FakeTradingClient
-    {
-      Account = ValidAccount() with { AccountType = "Netted" },
-    };
-    var manifest = AutoTradeConfigHealth.Build(
-      options,
-      client.Account,
-      Symbol,
-      Now.ToUnixTimeSeconds()
-    );
-    store.Values[AutoTradeConfigHealth.PythonManifestKey] =
-      JsonSerializer.Serialize(
-        manifest,
-        new JsonSerializerOptions
-        {
-          PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-        }
-      );
-    var engine = new AutoTradeEngine(options, store, () => Now, _ => { });
-
-    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
-    await WaitForEventAsync(store, "ready");
-
-    var readiness = JsonDocument.Parse(
-      store.Values[AutoTradeConfigHealth.ReadinessKey]
-    ).RootElement;
-    Assert.True(readiness.GetProperty("ready").GetBoolean());
-    Assert.Equal("ready", readiness.GetProperty("state").GetString());
-    Assert.Contains(
-      readiness.GetProperty("warnings").EnumerateArray(),
-      item => item.GetString() == "broker_non_hedged"
-    );
-
-    cts.Cancel();
-    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
-  }
-
-  [Fact]
   public async Task TransientSessionFaultPublishesDegradedRetryingNotFatal()
   {
     // P1-6: a Redis/network/broker transient error is actively retried by
@@ -7018,7 +6937,7 @@ public sealed partial class AutoTradeEngineTests
     );
 
     var readiness = JsonDocument.Parse(
-      store.Values[AutoTradeConfigHealth.ReadinessKey]
+      store.Values["auto_trade:executor_readiness"]
     ).RootElement;
     Assert.False(readiness.GetProperty("ready").GetBoolean());
     Assert.Equal("degraded_retrying", readiness.GetProperty("state").GetString());
@@ -7041,7 +6960,7 @@ public sealed partial class AutoTradeEngineTests
     );
 
     var readiness = JsonDocument.Parse(
-      store.Values[AutoTradeConfigHealth.ReadinessKey]
+      store.Values["auto_trade:executor_readiness"]
     ).RootElement;
     Assert.False(readiness.GetProperty("ready").GetBoolean());
     Assert.Equal("fatal", readiness.GetProperty("state").GetString());
@@ -7077,29 +6996,6 @@ public sealed partial class AutoTradeEngineTests
     Assert.DoesNotContain(
       store.Values.Keys,
       key => key == "auto_trade:lifecycle_state:service"
-    );
-    Assert.Contains("lifecycle_telemetry_no_transition", store.Metrics);
-
-    cts.Cancel();
-    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
-  }
-
-  [Fact]
-  public async Task ConfigHealthDoesNotSetServiceManagingLifecycle()
-  {
-    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-    var store = new FakeAutoTradeStore(CandidateJson());
-    var client = new FakeTradingClient();
-    var engine = new AutoTradeEngine(Options(), store, () => Now, _ => { });
-
-    var run = engine.RunSessionAsync(client, Symbol, cts.Token);
-    await WaitForEventAsync(store, "ready");
-
-    Assert.Contains(store.Events, item => item.Type == "config_health");
-    Assert.Contains(store.Events, item => item.Type == "account_capability");
-    Assert.DoesNotContain(
-      store.Values,
-      pair => pair.Key == "auto_trade:lifecycle_state:service"
     );
     Assert.Contains("lifecycle_telemetry_no_transition", store.Metrics);
 

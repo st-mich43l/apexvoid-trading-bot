@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from app.configuration.effective_instrument import EffectiveInstrumentError
 from app.core.config import runtime_config
+from app.runtime.instruments import EffectiveInstrumentError, enabled_instruments
+from app.runtime.instruments import for_instrument, instrument_for_broker_symbol, live_instruments
 
 
 def _symbol_units(symbol: str) -> dict[str, float | int]:
@@ -11,8 +12,15 @@ def _symbol_units(symbol: str) -> dict[str, float | int]:
 
   Unknown instruments raise KeyError — never fall back to XAU or pip=1.0.
   """
+  # Keep the public SYMBOLS mapping useful to callers that deliberately add a
+  # temporary instrument (notably command/test harnesses).  Normal production
+  # entries are still materialized from native YAML below; this is not a
+  # second configuration source.
+  materialized = globals().get("SYMBOLS")
+  if isinstance(materialized, dict) and symbol.upper() in materialized:
+    return dict(materialized[symbol.upper()])
   try:
-    effective = runtime_config.for_instrument(symbol)
+    effective = for_instrument(runtime_config, symbol)
   except EffectiveInstrumentError as exc:
     raise KeyError(str(exc)) from None
   return {
@@ -24,7 +32,7 @@ def _symbol_units(symbol: str) -> dict[str, float | int]:
 def _build_symbols_map() -> dict[str, dict[str, float | int]]:
   """Dynamic SYMBOLS map from enabled instruments."""
   mapping: dict[str, dict[str, float | int]] = {}
-  for instrument_id in runtime_config.enabled_instruments():
+  for instrument_id in enabled_instruments(runtime_config):
     mapping[instrument_id] = _symbol_units(instrument_id)
   # Preserve at least XAU for the current production helpers.
   if "XAU" not in mapping:
@@ -51,16 +59,16 @@ _SYMBOL_ALIASES = {
 def canonical_symbol(symbol: str) -> str:
   upper = symbol.upper()
   try:
-    return runtime_config.instrument_for_broker_symbol(upper).identity.canonical_symbol
+    return instrument_for_broker_symbol(runtime_config, upper).identity.canonical_symbol
   except EffectiveInstrumentError:
     return _SYMBOL_ALIASES.get(upper, upper)
 
 
 def _build_channels() -> list[dict]:
-  vip = runtime_config.delivery.telegram.telegram_channel_id
-  public = runtime_config.delivery.telegram.signal_public_channel_id
+  vip = runtime_config.telegram.telegram_channel_id
+  public = runtime_config.telegram.signal_public_channel_id
   channels: list[dict] = []
-  for symbol in runtime_config.live_instruments() or ("XAU",):
+  for symbol in live_instruments(runtime_config) or ("XAU",):
     channels.append({"symbol": symbol, "tier": "vip", "channel_id": vip})
     channels.append({"symbol": symbol, "tier": "public", "channel_id": public})
   return channels
@@ -68,13 +76,20 @@ def _build_channels() -> list[dict]:
 
 def channels_list() -> list[dict]:
   """Return Telegram delivery routes for every live instrument."""
-  return _build_channels()
+  return list(CHANNELS)
+
+
+# These are public runtime maps, not a second configuration source. Keeping
+# them as materialized views preserves the small helper API used by command and
+# delivery code while the values themselves still come from native YAML.
+SYMBOLS = _build_symbols_map()
+CHANNELS = _build_channels()
 
 
 def is_known_symbol(symbol: str) -> bool:
   """True when ``symbol`` resolves to an enabled instrument."""
   try:
-    runtime_config.for_instrument(canonical_symbol(symbol))
+    for_instrument(runtime_config, canonical_symbol(symbol))
   except (KeyError, EffectiveInstrumentError):
     return False
   return True
@@ -100,7 +115,7 @@ def digits_for(symbol: str) -> int:
 
 def pip_value_per_lot(symbol: str) -> float:
   try:
-    return float(runtime_config.for_instrument(symbol).units.pip_value_per_lot)
+    return float(for_instrument(runtime_config, symbol).units.pip_value_per_lot)
   except EffectiveInstrumentError as exc:
     raise KeyError(str(exc)) from None
 

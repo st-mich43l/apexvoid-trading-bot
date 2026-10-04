@@ -67,7 +67,7 @@ def validate_capture(document: dict) -> dict[str, int]:
 def _host() -> str:
   try:
     from app.core.config import runtime_config
-    parsed = urlparse(str(runtime_config.bootstrap.redis.url))
+    parsed = urlparse(str(runtime_config.runtime.redis.url))
     return f"{parsed.hostname or 'unknown'}:{parsed.port or ''}".rstrip(":")
   except Exception:  # noqa: BLE001 - provenance only
     return "unknown"

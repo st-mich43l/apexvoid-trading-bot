@@ -1,10 +1,7 @@
 import asyncio
 import logging
 
-from app.core.config import (
-  active_configuration_startup_message,
-  runtime_config,
-)
+from app.core.config import runtime_config
 from app.core.logging_setup import configure_logging
 from app.bot.wiring import (
   bot,
@@ -35,13 +32,17 @@ from app.signals.manual_execution import bridge_intents_loop, reconcile_events_l
 from app.persistence import redis_state
 
 _log_info = configure_logging(
-  level=runtime_config.bootstrap.logging.level,
-  log_dir=runtime_config.bootstrap.logging.directory,
-  retention_days=runtime_config.bootstrap.logging.retention_days,
-  enable_file=runtime_config.bootstrap.logging.file_enabled,
+  level=runtime_config.runtime.logging.level,
+  log_dir=runtime_config.runtime.logging.directory,
+  retention_days=runtime_config.runtime.logging.retention_days,
+  enable_file=runtime_config.runtime.logging.file_enabled,
 )
 log = logging.getLogger("bot")
-log.info(active_configuration_startup_message())
+log.info(
+  "configuration_loaded environment=%s source=%s",
+  runtime_config.runtime.environment,
+  runtime_config.runtime.environment,
+)
 if _log_info.get("file"):
   log.info(
     "file logging enabled path=%s retention_days=%s",
@@ -73,13 +74,13 @@ async def main() -> None:
   log.info(
     "AUTO-TRADE CONFIG service=algo-bot profile=%s enabled=%s dry_run=%s "
     "candidate_stream=%s event_stream=%s",
-    runtime_config.runtime.profile,
-    runtime_config.runtime.auto_trade.enabled,
-    runtime_config.runtime.auto_trade.dry_run,
-    runtime_config.contract.streams.candidates,
-    runtime_config.contract.streams.events,
+    runtime_config.runtime.environment,
+    runtime_config.auto_algo.enabled,
+    runtime_config.auto_algo.dry_run,
+    runtime_config.runtime.redis_streams.candidates,
+    runtime_config.runtime.redis_streams.events,
   )
-  if runtime_config.runtime.auto_trade.enabled:
+  if runtime_config.auto_algo.enabled:
     # Repair pre-existing orphaned/stale state before any background task
     # starts reading it, so nothing races startup reconciliation.
     await reconcile_startup_state(redis_state.get_client())
@@ -91,9 +92,9 @@ async def main() -> None:
   start_telegram_actor()
   scanner_polling = None
   if (
-    runtime_config.delivery.telegram.scanner_telegram_bot_token
-    and runtime_config.delivery.telegram.scanner_telegram_bot_token
-    != runtime_config.bootstrap.telegram.bot_token
+    runtime_config.telegram.scanner_telegram_bot_token
+    and runtime_config.telegram.scanner_telegram_bot_token
+    != runtime_config.telegram.bot_token
   ):
     await setup_scanner_commands(scanner_bot)
     scanner_polling = asyncio.create_task(scanner_dp.start_polling(
@@ -117,11 +118,11 @@ async def main() -> None:
   _spawn_supervised("auto_trade_stats_ingestion_loop", auto_trade_stats_ingestion_loop)
   _spawn_supervised("bridge_intents_loop", bridge_intents_loop)
   _spawn_supervised("reconcile_events_loop", reconcile_events_loop)
-  if runtime_config.runtime.auto_trade.enabled:
+  if runtime_config.auto_algo.enabled:
     from app.analysis_client.consumer import analysis_opportunity_consumer_loop
     _spawn_supervised("analysis_opportunity_consumer_loop", analysis_opportunity_consumer_loop)
   log.info("DB ready (PostgreSQL)")
-  if not runtime_config.delivery.telegram.telegram_owner_id:
+  if not runtime_config.telegram.telegram_owner_id:
     log.warning(
       "TELEGRAM_OWNER_ID not set — owner-only DM commands are DISABLED. "
       "Set it to enable the DM interface."
