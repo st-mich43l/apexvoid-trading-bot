@@ -49,6 +49,12 @@ def _instrument_context(symbol: str, cfg: Any) -> Any:
     # Configuration has already been validated at startup. Do not silently
     # fall back to root/XAU policy if a live instrument cannot be resolved.
     return resolver(symbol)
+  if symbol and hasattr(cfg, "instruments"):
+    from app.runtime.instruments import for_instrument
+
+    return for_instrument(cfg, symbol)
+  if hasattr(cfg, "units") and hasattr(cfg, "execution"):
+    return cfg
   return cfg
 
 
@@ -1664,7 +1670,14 @@ def risk_multiplier_for_tier(tier: str, cfg: Any | None = None, *, post_impulse:
   """
   if cfg is None:
     cfg = _default_runtime_cfg()
-  sizing = cfg.risk.sizing
+  # Strategy-match construction may call this helper with the root native
+  # document, while execution-policy calls pass an instrument view.  Both
+  # are valid native shapes; resolve the owning YAML section explicitly
+  # instead of relying on the removed flattened settings facade.
+  risk = getattr(cfg, "risk", None)
+  if risk is None:
+    risk = cfg.auto_algo.risk
+  sizing = risk.sizing
   if range_scalp:
     scalp = float(sizing.range_max_risk_multiplier)
     return scalp if math.isfinite(scalp) and scalp > 0 else 1.5

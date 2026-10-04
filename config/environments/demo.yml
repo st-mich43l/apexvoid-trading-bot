@@ -1,18 +1,9 @@
-# demo_eval environment overlay.
+# Development environment overlay.
 #
-# Direct transcription of the current app/configuration/profiles.py
-# DEMO_EVAL_PROFILE assignment list (48 dotted-path overrides), converted
-# to the new nested category layout — see
-# This overlay keeps the
-# "demo_eval" name rather than the new architecture's own development/
-# paper example names: it is a real, currently load-bearing name
-# (AUTO_TRADE_PROFILE=demo_eval in docker-compose.yml/.env.example today),
-# not a placeholder. A few of these values happen to already equal the
-# base file's value (e.g. execution.mapped_zone.hard_entry_drift_pips) —
-# transcribed faithfully anyway rather than silently dropped as
-# "redundant," since this file's job is exact parity with the
-# profile as it exists today, not a cleanup of it.
+# Values here intentionally differ from production where local execution
+# requires broader observation and testing behavior.
 runtime:
+  environment: demo
   broker:
     require_demo: true
 
@@ -67,13 +58,7 @@ auto_algo:
     exposure:
       allow_concurrent_strategies: true
       # allow_hedged_xau/require_flat_for_range now have
-      # a real base value in config/auto-algo.yml (surfaced from their
-      # Python schema default per §8 — the JSON Schema validator caught
-      # this exact gap: an overlay setting a leaf the base schema didn't
-      # know about). This overlay's own values below genuinely differ
-      # from production's (true/false here vs. false/true in the base) —
-      # that's real, intentional demo_eval behavior, not the same "hidden
-      # default" issue anymore.
+      # These development values intentionally differ from production.
       allow_hedged_xau: true
       non_hedged_opposite_policy: broker_netting
       require_flat_for_range: false
@@ -91,10 +76,7 @@ auto_algo:
       multiple_matches_enabled: true
       track_all_structural_matches: true
     range_reversion:
-      # `enabled` now has a base value too (see risk.exposure's
-      # comment above); this overlay's value happens to equal the base
-      # default (true either way), transcribed faithfully rather than
-      # dropped as redundant, same policy as the rest of this file.
+      # Keep this explicit so the development behavior is visible here.
       enabled: true
       flip_enabled: true
       two_sided_enabled: true

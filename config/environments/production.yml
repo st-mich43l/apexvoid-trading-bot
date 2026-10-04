@@ -1,15 +1,3 @@
-# production environment overlay.
-#
-# Direct transcription of app/configuration/profiles.py's
-# CONSERVATIVE_PROFILE — which today has an EMPTY assignment list. That is
-# not an oversight: "conservative" (the live production profile,
-# AUTO_TRADE_PROFILE default in ansible) means "run the base config
-# exactly as declared, with no profile-specific overrides." This file is
-# deliberately empty for the same reason — production's own values already
-# ARE the base runtime.yml/instruments.yml/analysis.yml/auto-algo.yml/
-# execution.yml/telegram.yml, unmodified.
-#
-# config/apexvoid.yml includes this file (not demo_eval.yml) by default —
-# switching environments means swapping which environments/*.yml the root
-# file's `includes:` list points at, per §10/§12 of the new architecture.
+# Production environment overlay. The base YAML contains the production
+# defaults; this file is intentionally empty and remains an explicit include.
 {}

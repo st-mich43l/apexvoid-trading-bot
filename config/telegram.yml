@@ -45,5 +45,5 @@ telegram:
   # Example local VIP channel id (production uses ansible / env secrets;
   # SIGNAL_VIP_CHANNEL_ID in .env.example is the non-secret ENV override
   # path for this today).
-  telegram_channel_id: '-100123456789'
-  signal_public_channel_id: '-1004468199035'
+  telegram_channel_id: -100123456789
+  signal_public_channel_id: -1004468199035

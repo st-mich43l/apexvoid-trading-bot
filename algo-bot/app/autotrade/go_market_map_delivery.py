@@ -21,7 +21,7 @@ def market_map_telegram_key(symbol: str) -> str:
 
 
 async def send_current_market_map(symbol: str, now: datetime | None = None) -> bool:
-  if not runtime_config.delivery.telegram.telegram_owner_id:
+  if not runtime_config.telegram.telegram_owner_id:
     return False
   client = redis_state.get_client()
   market_map = await load_go_market_map(symbol, client)
@@ -36,12 +36,12 @@ async def send_current_market_map(symbol: str, now: datetime | None = None) -> b
       log.info("previous Go market map delete failed symbol=%s", symbol, exc_info=True)
   sent = await send_scanner_with_retry(
     render_go_market_map(market_map, symbol),
-    chat_id=int(runtime_config.delivery.telegram.telegram_owner_id),
+    chat_id=int(runtime_config.telegram.telegram_owner_id),
   )
   await client.set(
     key,
     json.dumps({
-      "chat_id": int(runtime_config.delivery.telegram.telegram_owner_id),
+      "chat_id": int(runtime_config.telegram.telegram_owner_id),
       "message_id": int(sent.message_id),
       "updated_at": int((now or datetime.now(timezone.utc)).timestamp()),
     }, separators=(",", ":")),

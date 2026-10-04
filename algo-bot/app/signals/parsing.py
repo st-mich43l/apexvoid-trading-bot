@@ -6,6 +6,7 @@ from typing import Optional
 from zoneinfo import ZoneInfo
 
 from app.core.config import runtime_config
+from app.runtime.instruments import enabled_instruments, for_instrument, live_instruments
 from app.persistence.store import get_all_signals, get_open_signals, get_signal_by_post
 from app.core.symbols import (
   channel_for_symbol,
@@ -140,11 +141,11 @@ def _zone_ladder_manual_symbol_pattern() -> str:
   to `/trade` have already been canonicalized before this parser runs.
   """
   symbols: list[str] = []
-  for instrument_id in runtime_config.live_instruments():
+  for instrument_id in live_instruments(runtime_config):
     if instrument_id.upper() == "XAU":
       continue
     try:
-      manual = runtime_config.for_instrument(instrument_id).manual
+      manual = for_instrument(runtime_config, instrument_id).manual
     except Exception:
       continue
     if manual.entry_mode.value == "zone_ladder":
@@ -356,7 +357,7 @@ def _parse_manual(text: str) -> Optional[dict]:
     # picked levels made some trades read as scalps. Only the default when
     # no tp is typed; see InstrumentManualConfig.target_r_multiples.
     r_multiples = (
-      runtime_config.for_instrument(symbol).manual.target_r_multiples
+      for_instrument(runtime_config, symbol).manual.target_r_multiples
       or MANUAL_ALGO_DEFAULT_TARGET_R_MULTIPLES
     )
     tps = [
@@ -403,7 +404,7 @@ def _period_range(period: str) -> tuple[int, int]:
 
 
 def _stats_range(period: str) -> tuple[int, int]:
-  tz = ZoneInfo(runtime_config.delivery.presentation.seq_reset_tz)
+  tz = ZoneInfo(runtime_config.telegram.presentation.seq_reset_tz)
   now = datetime.now(tz)
   today = now.replace(hour=0, minute=0, second=0, microsecond=0)
   if period == "today":
@@ -418,22 +419,22 @@ def _stats_range(period: str) -> tuple[int, int]:
 
 
 def _is_owner(msg) -> bool:
-  if not runtime_config.delivery.telegram.telegram_owner_id:
+  if not runtime_config.telegram.telegram_owner_id:
     return False
   return (
     msg.from_user is not None
     and msg.from_user.id
-    == runtime_config.delivery.telegram.telegram_owner_id
+    == runtime_config.telegram.telegram_owner_id
   )
 
 
 def _is_owner_cb(cb) -> bool:
-  if not runtime_config.delivery.telegram.telegram_owner_id:
+  if not runtime_config.telegram.telegram_owner_id:
     return False
   return (
     cb.from_user is not None
     and cb.from_user.id
-    == runtime_config.delivery.telegram.telegram_owner_id
+    == runtime_config.telegram.telegram_owner_id
   )
 
 
@@ -467,7 +468,7 @@ def _seq_token(value: str) -> int | None:
 
 
 def _today_str() -> str:
-  tz = ZoneInfo(runtime_config.delivery.presentation.seq_reset_tz)
+  tz = ZoneInfo(runtime_config.telegram.presentation.seq_reset_tz)
   return datetime.now(tz).date().isoformat()
 
 

@@ -7,7 +7,7 @@ import (
 )
 
 // GeometryFor builds a market.Geometry for symbol directly from the
-// resolved V3 document's instruments.yml content — instruments.instruments.
+// resolved native document's instruments.yml content — instruments.instruments.
 // <symbol>, with instrument_packs.<pack> merged underneath it when the
 // instrument declares one (the instrument's own leaves always win on a
 // shared key, exactly matching instrument_packs.py's own merge rule and
@@ -43,7 +43,7 @@ func (d *Document) GeometryFor(symbol string) (market.Geometry, error) {
 }
 
 // LiveInstruments returns every instrument declared with rollout: live —
-// the single source Configuration V3 wants for "which symbols are live"
+// the single source configuration uses for "which symbols are live"
 // (docs/configuration.md), never a second, separately
 // maintained list.
 func (d *Document) LiveInstruments() ([]string, error) {

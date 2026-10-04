@@ -332,7 +332,7 @@ async def analyse_chart_image(
     image_data: Single image (bytes/BytesIO) or a list of images for MTF analysis.
     media_type: MIME type — Telegram photos are always image/jpeg.
   """
-  if not runtime_config.delivery.presentation.anthropic_api_key:
+  if not runtime_config.telegram.presentation.anthropic_api_key:
     return "⚠️ <b>Chart analysis unavailable</b> — ANTHROPIC_API_KEY not configured."
 
   if not isinstance(image_data, list):
@@ -354,7 +354,7 @@ async def analyse_chart_image(
   content.append({"type": "text", "text": user_prompt})
 
   client = anthropic.AsyncAnthropic(
-    api_key=runtime_config.delivery.presentation.anthropic_api_key
+    api_key=runtime_config.telegram.presentation.anthropic_api_key
   )
   try:
     response = await client.messages.create(
