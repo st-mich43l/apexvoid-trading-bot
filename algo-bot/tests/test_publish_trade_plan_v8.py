@@ -67,6 +67,17 @@ def _no_news_by_default(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _native_xau_test_envelope(monkeypatch):
+  # These fixtures deliberately exercise wide structural reaction geometry.
+  # Production remains on the native XAU 50-60 pip envelope; the generic
+  # publication contract tests must not be rejected before they reach the
+  # lifecycle assertions.
+  install_runtime_overrides(
+    monkeypatch, {"instruments.XAU.stop_envelope.max_pips": 100},
+  )
+
+
+@pytest.fixture(autouse=True)
 def _freeze_technique_killzone_hour(monkeypatch):
   """Publish suite stays under technique.enforce; freeze UTC hour to NY open."""
   from app.autotrade import killzone as kz
