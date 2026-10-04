@@ -155,3 +155,21 @@ execution:
     # Same XAU reaction-ladder incident as execution.reaction above.
     scale_step_atr: 0.1
     scale_undersized_policy: single_entry
+
+# Operator workflow and journaling are execution-adjacent policies. They live
+# in this file so the root has one execution policy include.
+manual_algo:
+  runtime:
+    enabled: true
+    owner_execution_dm_enabled: false
+
+  sizing:
+    fx_volume_multiplier: 1.5
+
+journal:
+  enabled: true
+  persist:
+    trade_plan: true
+    analysis_snapshot: true
+    execution_events: true
+    math_telemetry: true

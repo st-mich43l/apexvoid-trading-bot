@@ -102,8 +102,6 @@ def _startup_doubles(monkeypatch) -> dict[str, object]:
     "setup_commands": AsyncMock(),
     "start_telegram_actor": Mock(),
     "_spawn_supervised": Mock(),
-    "verify_mounted_runtime_manifest_or_raise": Mock(),
-    "publish_python_manifest": AsyncMock(return_value={"state": "ok"}),
   }
   for name, double in doubles.items():
     monkeypatch.setattr(main, name, double)
