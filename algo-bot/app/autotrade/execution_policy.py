@@ -63,7 +63,14 @@ def _instrument_digits(symbol: str, cfg: Any) -> int:
   units = getattr(context, "units", None)
   if units is not None:
     return int(units.price_digits)
-  return int(context.contract.instrument.price_digits or 2)
+  # A policy unit-test or a caller evaluating a symbol-less match may pass a
+  # small execution config rather than an instrument view.  Native YAML has
+  # no root ``contract.instrument`` object; use the explicitly resolved
+  # instrument when available and retain the broker-safe two-decimal default
+  # for symbol-less policy evaluation.
+  contract = getattr(context, "contract", None)
+  instrument = getattr(contract, "instrument", None)
+  return int(getattr(instrument, "price_digits", 2) or 2)
 
 
 def _planned_entry_price(symbol: str, value: float) -> float:

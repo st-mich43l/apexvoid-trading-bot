@@ -61,6 +61,17 @@ class ConfigNode:
   def __contains__(self, key: object) -> bool:
     return key in self._values
 
+  def for_instrument(self, symbol: str):
+    """Resolve an instrument from the native document.
+
+    Instrument composition is implemented in ``app.runtime.instruments``;
+    keeping this small convenience on the root config preserves the public
+    runtime API without bringing a second configuration model back.
+    """
+    from app.runtime.instruments import for_instrument
+
+    return for_instrument(self, symbol)
+
   def __bool__(self) -> bool:
     return bool(self._values)
 
