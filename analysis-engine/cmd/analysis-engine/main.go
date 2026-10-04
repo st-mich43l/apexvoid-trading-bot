@@ -75,9 +75,10 @@ func run(configPath string) error {
 		return fmt.Errorf("loading opportunity replay freshness: %w", err)
 	}
 	kafkaHealth := kafka.NewHealth(kafkaCfg.Enabled)
+	var provenance kafka.ConfigProvenance
 	var producer *kafka.Producer
 	if kafkaCfg.Enabled {
-		provenance, err := engine.ConfigProvenanceFromConfig(doc)
+		provenance, err = engine.ConfigProvenanceFromConfig(doc)
 		if err != nil {
 			return fmt.Errorf("reading Kafka configuration provenance: %w", err)
 		}
@@ -86,19 +87,17 @@ func run(configPath string) error {
 			log.Warn("Kafka producer unavailable; Redis market ingestion continues", "error", err)
 		}
 	}
+	var producerMu sync.Mutex
 	defer func() {
-		if producer != nil {
+		producerMu.Lock()
+		current := producer
+		producerMu.Unlock()
+		if current != nil {
 			shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			_ = producer.Close(shutdown)
+			_ = current.Close(shutdown)
 		}
 	}()
-	// producer is a *kafka.Producer that may be a nil pointer; passing it
-	// directly into NewOpportunityPublisher's interface parameter would
-	// produce a non-nil interface wrapping a nil pointer (the classic Go
-	// "typed nil" trap), defeating NewOpportunityPublisher's own `client
-	// == nil` check. var client stays a genuinely nil interface unless
-	// producer is real.
 	var client engine.OpportunityKafkaClient
 	if producer != nil {
 		client = producer
@@ -110,6 +109,35 @@ func run(configPath string) error {
 	publisher.DiscardStaleLifecycleJobs(time.Now().UTC(), replayMaxAge)
 	e.SetPublisher(publisher)
 	go publisher.Run(ctx)
+	if kafkaCfg.Enabled && producer == nil {
+		// NewProducer performs a bounded broker ping. A Kafka container can
+		// legitimately become ready after analysis/Redis during a compose
+		// rollout; keep the durable publisher alive and attach the producer
+		// when that broker becomes reachable instead of dropping the startup
+		// backlog with a permanently nil transport.
+		go func() {
+			ticker := time.NewTicker(5 * time.Second)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+				}
+				candidate, connectErr := kafka.NewProducer(ctx, kafkaCfg, provenance, kafka.NewMetrics(), kafkaHealth)
+				if connectErr != nil {
+					log.Warn("Kafka producer still unavailable; durable outbox retained", "error", connectErr)
+					continue
+				}
+				producerMu.Lock()
+				producer = candidate
+				producerMu.Unlock()
+				publisher.SetClient(candidate)
+				log.Info("Kafka producer attached after cold start")
+				return
+			}
+		}()
+	}
 
 	series := make([]redistransport.Series, 0)
 	barrierConfigs := make(map[market.Symbol]barrier.Config, len(live))
