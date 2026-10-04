@@ -1,23 +1,16 @@
 namespace ApexVoid.CTraderFeed;
 
 /// <summary>
-/// Configuration V3 direct reader for .NET.
+/// Direct YAML configuration reader for .NET.
 /// docs/configuration.md. Reads config/apexvoid.yml
 /// (or config/apexvoid.demo-eval.yml) and its categorized includes plus
 /// one environment overlay, following the exact same §14 include/merge/
 /// overlay spec as <c>algo-bot/app/configuration/v3_root.py</c> and
-/// <c>analysis-engine/internal/config/v3_document.go</c> — the third of
-/// three independent implementations of one spec (cross-language parity,
-/// §38).
+/// <c>analysis-engine/internal/config/v3_document.go</c>.
 ///
-/// <para><b>This is the live direct YAML reader.</b>
-/// The typed runtime factory reads this same resolved document directly.
-/// (Go, fully wired — the old manifest reader was deleted, not kept
-/// alongside this one), this .NET reader is deliberately NOT wired into
-/// <see cref="AutoTradeOptions"/>, <see cref="ResolvedRuntimeManifest"/>,
-/// or <see cref="ManifestRuntimeFactory"/>. Those still read the compiled
-/// JSON manifest / environment variables exactly as before, and that path
-/// is what places real orders. Reasons this stays unwired for now:</para>
+/// <para><b>This is the live direct YAML reader.</b> The typed runtime
+/// factory reads this same resolved document directly for broker execution.
+/// Secrets remain environment inputs only.</para>
 /// <list type="bullet">
 /// <item><description><c>ResolvedRuntimeManifest</c>/<c>ResolvedAutoTradeProjection</c>
 /// carry well over a hundred fields feeding real order-execution decisions
@@ -35,14 +28,6 @@ namespace ApexVoid.CTraderFeed;
 /// the configuration contract is explicit that safety on this
 /// path outranks finishing the stage sequence.</description></item>
 /// </list>
-/// <para>What this module DOES prove, with real tests against the real
-/// config files: the include graph resolves correctly, the environment
-/// overlay applies last and deep-merges only mappings, and a geometry read
-/// (<see cref="ConfigDocument.GeometryFor"/>) — mirroring Go's narrowly-
-/// scoped proof exactly — produces the same pip_size/price_digits every
-/// other language reads for every live instrument. That is the honest
-/// scope of this reader: it exists and is proven, wiring it to
-/// replace the live path is future work, not done here.</para>
 /// </summary>
 public static class ConfigurationV3
 {
