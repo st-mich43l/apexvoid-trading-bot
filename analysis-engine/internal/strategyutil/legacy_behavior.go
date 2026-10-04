@@ -12,6 +12,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/keylevel"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/liquidity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/zone"
 )
 
@@ -68,6 +69,9 @@ func LiveZones(tf *analysiscontext.TimeframeContext, direction market.Direction,
 		out = append(out, z)
 	}
 	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].LegacyScore != out[j].LegacyScore {
+			return out[i].LegacyScore > out[j].LegacyScore
+		}
 		if out[i].Strength != out[j].Strength {
 			return out[i].Strength > out[j].Strength
 		}
@@ -104,10 +108,16 @@ func EntryBandForLevel(level keylevel.Level, atr, proximalATR float64) (float64,
 	return float64(level.Price) - half, float64(level.Price) + half
 }
 
-// GrabForBand maps Go's canonical swept/reclaimed pools onto the Python A/B
-// grab contract.  A requires a directional displacement body on the reclaim
-// bar; a clean reclaim without displacement is B.  An unreclaimed/marginal
-// sweep is deliberately not returned (Python grade C was ineligible).
+// GrabForBand applies the frozen Python liquidity_grabs contract to the
+// canonical pools. A sweep is a wick through the pool band, and the same
+// candle may also reclaim it. A clean reclaim is B unless the reclaim candle
+// has the required directional displacement, in which case it is A. A
+// marginal close is C and is deliberately ineligible to the strategies.
+//
+// This is intentionally detector-level rather than a projection of
+// Pool.SweptAt/ReclaimedAt. Those fields are useful lifecycle facts, but the
+// Python detector examines every candle against every pool and can find a
+// valid grab even when a pool was constructed before the current candle.
 func GrabForBand(tf *analysiscontext.TimeframeContext, direction market.Direction, low, high, pipSize float64) *LiquidityGrab {
 	if tf == nil {
 		return nil
@@ -119,20 +129,73 @@ func GrabForBand(tf *analysiscontext.TimeframeContext, direction market.Directio
 		if direction == market.Sell {
 			want = liquidity.LiquidityBuySide
 		}
-		if pool.Side != want || pool.SweptAt == nil || pool.ReclaimedAt == nil {
+		if pool.Side != want {
 			continue
 		}
 		tolerance := math.Max(math.Abs(float64(pool.High-pool.Low))/2, math.Max(high-low, pipSize))
 		if level < low-tolerance || level > high+tolerance {
 			continue
 		}
-		grade := "B"
-		if reclaim := candleAt(tf.Candles, *pool.ReclaimedAt); reclaim != nil && reclaim.Range() > 0 && reclaim.Body() >= .5*reclaim.Range() && ((direction == market.Buy && reclaim.IsBullish()) || (direction == market.Sell && reclaim.IsBearish())) {
-			grade = "A"
+		for candleIndex := len(tf.Candles) - 1; candleIndex >= 0; candleIndex-- {
+			candle := tf.Candles[candleIndex]
+			tol := math.Max(candle.Range()*0.1, 0)
+			swept := (pool.Side == liquidity.LiquidityBuySide && candle.High > float64(pool.High)) ||
+				(pool.Side == liquidity.LiquiditySellSide && candle.Low < float64(pool.Low))
+			if !swept {
+				continue
+			}
+			clean := (direction == market.Buy && candle.Close > level) || (direction == market.Sell && candle.Close < level)
+			marginal := (direction == market.Buy && candle.Close >= level-tol) || (direction == market.Sell && candle.Close <= level+tol)
+			if !clean && !marginal {
+				continue
+			}
+			grade := "C"
+			if clean {
+				grade = "B"
+				if candle.Range() > 0 && candle.Body() >= .5*candle.Range() && directional(candle, direction) && hasReactionDisplacement(tf, candleIndex, direction, 3) {
+					grade = "A"
+				}
+			}
+			if grade == "C" {
+				continue
+			}
+			return &LiquidityGrab{Pool: pool, Grade: grade}
 		}
-		return &LiquidityGrab{Pool: pool, Grade: grade}
 	}
 	return nil
+}
+
+func directional(candle market.Candle, direction market.Direction) bool {
+	return direction == market.Buy && candle.IsBullish() || direction == market.Sell && candle.IsBearish()
+}
+
+// hasReactionDisplacement mirrors the legacy leg contract at the strategy
+// boundary. A displacement may start on the reclaim candle (the important
+// same-bar case), or on one of the next three bars. Canonical structure
+// displacement breaks are accepted as additional evidence; the candle-body
+// test keeps the fallback causal and independent of a detector rerun.
+func hasReactionDisplacement(tf *analysiscontext.TimeframeContext, index int, direction market.Direction, window int) bool {
+	end := index + window
+	if end >= len(tf.Candles) {
+		end = len(tf.Candles) - 1
+	}
+	for i := index; i <= end; i++ {
+		c := tf.Candles[i]
+		if c.Range() > 0 && c.Body()/c.Range() >= .5 && directional(c, direction) {
+			return true
+		}
+	}
+	for _, brk := range tf.Structure.Breaks {
+		if brk.Type != structure.BreakDisplacement || brk.Direction != direction {
+			continue
+		}
+		for i := index; i <= end; i++ {
+			if tf.Candles[i].Time == brk.Time || tf.Candles[i].Time == brk.ConfirmedAt {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func StructuralDirection(ctx *analysiscontext.MarketContext) market.Direction {

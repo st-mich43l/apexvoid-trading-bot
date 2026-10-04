@@ -58,14 +58,17 @@ func (s *Strategy) ID() strategy.StrategyID                { return ID }
 func (s *Strategy) RequiredTimeframes() []market.Timeframe { return []market.Timeframe{market.M5} }
 
 type contact struct {
-	index int
-	price float64
-	wick  bool
+	index    int
+	price    float64
+	wick     bool
+	bodyHold bool
 }
 type barrier struct {
-	side                                  string
-	level, low, high                      float64
-	touches, wicks, accepted, first, last int
+	side                                             string
+	level, low, high                                 float64
+	touches, wicks, bodyHolds, accepted, first, last int
+	score                                            float64
+	grade                                            string
 }
 
 func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Candidate {
@@ -80,7 +83,7 @@ func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Ca
 	}
 	barriers := buildBarriers(tf.Candles[windowStart:], windowStart, atr, s)
 	last := tf.Candles[len(tf.Candles)-1]
-	lower, upper := bestRange(barriers, last.Close, atr, s)
+	lower, upper := bestRange(barriers, last.Close, atr, s, tf.Candles)
 	if lower == nil || upper == nil {
 		return nil
 	}
@@ -127,12 +130,13 @@ func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Ca
 		if direction == market.Buy && eq <= reference || direction == market.Sell && eq >= reference {
 			continue
 		}
-		quality := strategyutil.Clamp01(.25 + .1*math.Min(float64(b.touches), 4) + .1*math.Min(float64(b.wicks), 3) + .15*boolValue(gradeA))
+		quality := strategyutil.Clamp01(.25 + .06*math.Min(b.score, 10) + .15*boolValue(gradeA))
 		grade := "none"
 		if grab != nil {
 			grade = grab.Grade
 		}
-		evidence := []string{"legacy_range_barrier", "barrier_touch_episode", "wick_rejection_history", "accepted_close_valid", "structural_reaction_" + rc.Pattern, "liquidity_grab_grade_" + grade}
+		rangeState := stateForRange(lower, upper, tf.Candles, atr, s)
+		evidence := []string{"legacy_range_barrier", "barrier_touch_episode", "wick_rejection_history", "legacy_barrier_score", "range_state_" + rangeState, "accepted_close_valid", "structural_reaction_" + rc.Pattern, "liquidity_grab_grade_" + grade}
 		cand, err := strategyutil.Candidate(strategyutil.CandidateSpec{ID: string(ID), Version: Version, SetupKey: zoneID, Symbol: ctx.Symbol, Direction: direction, EntryLow: b.low, EntryHigh: b.high, Invalidation: invalid, InvalidationLabel: "range_edge_accepted_break", Target: eq, TargetLabel: "range_equilibrium", Evidence: evidence, Quality: opportunity.StrategyQuality{Overall: quality, Components: map[string]float64{"touch_history": strategyutil.Clamp01(float64(b.touches) / 4), "wick_history": strategyutil.Clamp01(float64(b.wicks) / 3), "room": strategyutil.Clamp01(math.Abs(b.level-eq) / (s.minimumRoomATR * atr))}}, FormedAt: tf.Candles[b.first].Time, ConfirmedAt: rc.ConfirmationBarTime, ExpiryHours: s.expiryHours, Fingerprint: s.fingerprint})
 		if err != nil {
 			continue
@@ -154,8 +158,18 @@ func buildBarriers(candles []market.Candle, offset int, atr float64, s *Strategy
 		}
 		lower := math.Min(c.Open, c.Close) - c.Low
 		upper := c.High - math.Max(c.Open, c.Close)
-		contacts["support"] = append(contacts["support"], contact{offset + i, c.Low, lower/c.Range() >= s.minimumWickFraction && c.Close > c.Low})
-		contacts["resistance"] = append(contacts["resistance"], contact{offset + i, c.High, upper/c.Range() >= s.minimumWickFraction && c.Close < c.High})
+		lowerWick := lower/c.Range() >= s.minimumWickFraction && c.Close > c.Low
+		upperWick := upper/c.Range() >= s.minimumWickFraction && c.Close < c.High
+		lowerBody := c.Close <= c.Low+c.Range()*.15 && c.Close >= c.Open
+		upperBody := c.Close >= c.High-c.Range()*.15 && c.Close <= c.Open
+		microLow := i > 0 && i+1 < len(candles) && c.Low < candles[i-1].Low && c.Low < candles[i+1].Low
+		microHigh := i > 0 && i+1 < len(candles) && c.High > candles[i-1].High && c.High > candles[i+1].High
+		if lowerWick || microLow {
+			contacts["support"] = append(contacts["support"], contact{offset + i, c.Low, lowerWick, lowerBody})
+		}
+		if upperWick || microHigh {
+			contacts["resistance"] = append(contacts["resistance"], contact{offset + i, c.High, upperWick, upperBody})
+		}
 	}
 	tol, half := s.clusterATR*atr, s.entryATR*atr
 	var out []barrier
@@ -178,11 +192,14 @@ func buildBarriers(candles []market.Candle, offset int, atr float64, s *Strategy
 				}
 			}
 			if len(episodes) >= 2 {
-				level, wicks := 0.0, 0
+				level, wicks, bodyHolds := 0.0, 0, 0
 				for _, e := range episodes {
 					level += e.price
 					if e.wick {
 						wicks++
+					}
+					if e.bodyHold {
+						bodyHolds++
 					}
 				}
 				level /= float64(len(episodes))
@@ -199,7 +216,18 @@ func buildBarriers(candles []market.Candle, offset int, atr float64, s *Strategy
 						run = 0
 					}
 				}
-				out = append(out, barrier{side, level, level - half, level + half, len(episodes), wicks, accepted, episodes[0].index, episodes[len(episodes)-1].index})
+				score := math.Min(5, float64(len(episodes)))*1.2 + math.Min(4, float64(wicks)) + math.Min(3, float64(bodyHolds))*.5
+				if episodes[len(episodes)-1].index >= offset+len(candles)-3 {
+					score += 1
+				}
+				score -= math.Max(0, float64(accepted)) * 2
+				grade := "C"
+				if score >= 8 && len(episodes) >= 3 && wicks >= 2 {
+					grade = "A"
+				} else if score >= 4 && len(episodes) >= 2 {
+					grade = "B"
+				}
+				out = append(out, barrier{side, level, level - half, level + half, len(episodes), wicks, bodyHolds, accepted, episodes[0].index, episodes[len(episodes)-1].index, math.Max(0, math.Round(score*1000)/1000), grade})
 			}
 			start = end
 		}
@@ -207,7 +235,7 @@ func buildBarriers(candles []market.Candle, offset int, atr float64, s *Strategy
 	return out
 }
 
-func bestRange(barriers []barrier, price, atr float64, s *Strategy) (*barrier, *barrier) {
+func bestRange(barriers []barrier, price, atr float64, s *Strategy, candles []market.Candle) (*barrier, *barrier) {
 	var bestLow, bestHigh *barrier
 	bestScore := math.Inf(1)
 	for i := range barriers {
@@ -219,10 +247,26 @@ func bestRange(barriers []barrier, price, atr float64, s *Strategy) (*barrier, *
 				continue
 			}
 			width := barriers[j].level - barriers[i].level
-			if width < s.minimumWidthATR*atr || width > s.maximumWidthATR*atr {
+			minimumWidth := math.Max(s.minimumWidthATR, 2*s.minimumRoomATR) * atr
+			if width < minimumWidth || width > s.maximumWidthATR*atr {
 				continue
 			}
-			score := math.Abs(price - (barriers[i].level+barriers[j].level)/2)
+			if barriers[i].accepted >= s.breakCloses || barriers[j].accepted >= s.breakCloses || barriers[i].grade == "C" || barriers[j].grade == "C" {
+				continue
+			}
+			eq := (barriers[i].level + barriers[j].level) / 2
+			room := math.Min(eq-barriers[i].level, barriers[j].level-eq) / atr
+			if room < s.minimumRoomATR {
+				continue
+			}
+			stateRank := 2.0
+			switch stateForRange(&barriers[i], &barriers[j], candles, atr, s) {
+			case "confirmed_range":
+				stateRank = 0
+			case "post_impulse_range":
+				stateRank = 1
+			}
+			score := stateRank*1000 + math.Abs(price-eq) - .01*(barriers[i].score+barriers[j].score)
 			if score < bestScore {
 				lowCopy, highCopy := barriers[i], barriers[j]
 				bestLow, bestHigh, bestScore = &lowCopy, &highCopy, score
@@ -230,6 +274,65 @@ func bestRange(barriers []barrier, price, atr float64, s *Strategy) (*barrier, *
 		}
 	}
 	return bestLow, bestHigh
+}
+
+// stateForRange mirrors the market-state portion of scalp_ranges.py. The
+// strategy remains non-executing until reaction confirmation, but its
+// candidate now records whether the selected geometry is confirmed,
+// post-impulse, or merely provisional.
+func stateForRange(lower, upper *barrier, candles []market.Candle, atr float64, s *Strategy) string {
+	if lower == nil || upper == nil || atr <= 0 {
+		return "no_range"
+	}
+	inside := 0
+	start := len(candles) - 24
+	if start < 0 {
+		start = 0
+	}
+	for _, c := range candles[start:] {
+		if c.Close >= lower.level && c.Close <= upper.level {
+			inside++
+		}
+	}
+	if inside < 3 {
+		return "provisional_range"
+	}
+	if recentPostImpulse(candles, atr, lower.level, upper.level) {
+		return "post_impulse_range"
+	}
+	return "confirmed_range"
+}
+
+func recentPostImpulse(candles []market.Candle, atr, lower, upper float64) bool {
+	if len(candles) < 8 || atr <= 0 {
+		return false
+	}
+	start := len(candles) - 36
+	if start < 0 {
+		start = 0
+	}
+	minClose, maxClose := candles[start].Close, candles[start].Close
+	for _, c := range candles[start:] {
+		minClose = math.Min(minClose, c.Close)
+		maxClose = math.Max(maxClose, c.Close)
+	}
+	if (maxClose-minClose)/atr < 3 {
+		return false
+	}
+	recentStart := len(candles) - 6
+	if recentStart < 0 {
+		recentStart = 0
+	}
+	minPrice, maxPrice := candles[recentStart].Low, candles[recentStart].High
+	inside := 0
+	for _, c := range candles[recentStart:] {
+		minPrice = math.Min(minPrice, c.Low)
+		maxPrice = math.Max(maxPrice, c.High)
+		if c.Close >= lower && c.Close <= upper {
+			inside++
+		}
+	}
+	return (maxPrice-minPrice)/atr <= 2.2 && inside >= 4
 }
 
 func maxInt(a, b int) int {

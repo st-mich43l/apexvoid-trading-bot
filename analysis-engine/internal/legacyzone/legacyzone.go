@@ -1067,6 +1067,8 @@ type Instance struct {
 	StructuralHigh float64
 	BodyFrac       float64
 	HasBOS         bool
+	// Score carries the legacy source-quality score into the parity instance.
+	Score float64
 	// H1Time is the H1 candle a CRT instance is built on (open time).
 	H1Time int64
 }
@@ -1214,6 +1216,7 @@ func instanceFromZone(z Zone, technique string, entryMax float64) Instance {
 	inst := Instance{
 		Technique: technique, Side: zoneSideToTradeSide(z.Side), Low: z.Low(), High: z.High(),
 		Sources: append([]string(nil), sources...), OriginIndex: z.OriginIndex, Touches: z.Touches, Mitigated: z.Mitigated,
+		Score: sourceQuality(z),
 	}
 	if (technique == "supply_demand" || technique == "order_block" || technique == "fvg") && entryMax > 0 {
 		if clipped, ok := optimizeTechniqueEntry(z, entryMax); ok {
