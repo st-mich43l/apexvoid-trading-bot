@@ -97,7 +97,7 @@ class StrategyMatch:
   # - populated from the DetectionResult/DetectionContext that produced this
   # match so the builder never has to derive bias/kind/timeframe from
   # direction (BUY => demand, BUY => bias up are exactly the forbidden
-  # shortcuts per docs/adr-trade-plan-v8-cutover.md). Additive, defaulted
+  # shortcuts per docs/autotrade-execution-integrity.md). Additive, defaulted
   # fields so older cached matches still round-trip.
   structural_kind: str | None = None
   structural_timeframe: str | None = None
@@ -790,7 +790,7 @@ def strategy_range_id(symbol: str, lower: float, upper: float) -> str:
 
 
 def _identity_ok(match: StrategyMatch) -> bool:
-  # S13C: a Go-origin match's identity is its Go opportunity id, verbatim
+  # A Go-origin match's identity is its Go opportunity id, verbatim
   # (app.autotrade.go_opportunity_policy.match_id_for). It is checked here, at
   # the same integrity boundary as legacy identities, rather than forcing Go
   # matches through the legacy structural-thesis hash.

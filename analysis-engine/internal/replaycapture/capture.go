@@ -1,7 +1,7 @@
 // Package replaycapture turns one immutable, real multi-timeframe closed-bar
 // capture into the chronological event stream a live feed would have
 // delivered, and encodes discovered opportunities exactly as the Kafka
-// producer would (S14C). It exists so the Go engine and the legacy Python
+// producer would. It exists so the Go engine and the policy
 // detectors can be replayed from the *same* bytes; it never invents a bar.
 //
 // Rules that keep the replay honest:
@@ -27,7 +27,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/marketdata"
 )
 
-// Capture mirrors contracts/analysis/replay/*.json.
+// Capture mirrors the committed replay capture fixtures.
 type Capture struct {
 	Version     int                    `json:"version"`
 	Description string                 `json:"description"`

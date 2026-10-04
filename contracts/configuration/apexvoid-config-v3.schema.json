@@ -648,9 +648,6 @@
                 "v2"
               ]
             },
-            "shadow_v1": {
-              "type": "boolean"
-            },
             "validation_touch_tolerance_atr": {
               "type": "number"
             },
@@ -727,7 +724,6 @@
             "minimum_validation_favorable_excursion_atr",
             "minimum_validation_touch_spacing_bars",
             "minimum_validation_touches",
-            "shadow_v1",
             "validation_reaction_bars",
             "validation_touch_tolerance_atr",
             "version"

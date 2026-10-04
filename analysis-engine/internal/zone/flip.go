@@ -13,7 +13,7 @@ import (
 // beyond the level, starting at the break's own index) is re-anchored as
 // a zone on the new side. The "level" here is the swing
 // structure.StructureBreak.BrokenSwingID references — this package has
-// no separate key-level primitive yet (that is Phase S4's
+// no separate key-level primitive yet
 // analysis.strategies.key_level scope), so a broken swing's own price is
 // the level, not a second independently-tracked list. Band width is an
 // ATR-tolerance floor widened by the break candle's own body (matching

@@ -1,6 +1,6 @@
 """Build TradePlan V8 from an already-confirmed StrategyMatch.
 
-Per docs/adr-trade-plan-v8-cutover.md, this is a pure translation, not a
+This is a pure translation, not a
 second decision: `StrategyMatch` already carries Python's confirmed
 strategy/direction/entry-zone/structural-invalidation-price/target-pip-ladder
 (the scanner "owns the complete price-action decision", per

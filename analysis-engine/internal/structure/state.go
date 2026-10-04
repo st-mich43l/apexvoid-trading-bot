@@ -31,8 +31,7 @@ type StructureState struct {
 // must be index-aligned and the same length; atrSeries must come from
 // indicator.CanonicalATR, never an independently-chosen formula (§27).
 //
-// Scope note (recorded in docs/analysis-engine-v2-migration.md, not
-// hidden here): break detection re-scans the full given candle window
+// Scope note: break detection re-scans the full given candle window
 // against each layer's CURRENT (fully-formed) protected level, rather
 // than interleaving break detection bar-by-bar as the trend read itself
 // evolves. A genuinely incremental, event-interleaved version (detecting

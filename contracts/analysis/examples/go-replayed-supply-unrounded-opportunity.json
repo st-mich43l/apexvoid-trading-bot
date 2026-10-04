@@ -1,5 +1,5 @@
 {
-  "_provenance": "One real Go opportunity replayed from the committed real XAU capture (S14C: contracts/analysis/replay/xau-production-capture-20260921.json). Unrounded prices; used to prove the trading contract keeps full precision.",
+  "_provenance": "One real Go opportunity replayed from the committed XAU capture in analysis-engine/testdata. Unrounded prices; used to prove the trading contract keeps full precision.",
   "config_fingerprint": "<config-fingerprint>",
   "config_version": 3,
   "correlation_id": "replay-opp_f087bc21415787fdb916cda245d8a89e2c846b5fb5cd3c8bb231935cffcc8de7",

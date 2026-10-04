@@ -1,15 +1,8 @@
 package zone
 
-// RelevanceConfig mirrors config/analysis.yml's
-// analysis.zone_relevance.{immediate_atr,nearby_atr,remote_atr} leaves —
-// ported from algo-bot/app/autotrade/zone_relevance.py's
-// AnalysisZoneRelevanceConfig defaults (0.25/1.25/3.0), which exist today
-// only as a Python schema default, not yet a YAML leaf; this is the
-// first place these values become config-driven. Callers must enforce
-// ImmediateATR < NearbyATR < RemoteATR (Python's own validated
-// invariant) — this package does not re-validate it, matching every
-// other *Config type in this domain (config/scripts/config_check.py is
-// the enforcement point, not runtime code).
+// RelevanceConfig mirrors the zone-relevance leaves in config/analysis.yml.
+// Callers must enforce ImmediateATR < NearbyATR < RemoteATR; this package
+// keeps the value object deliberately free of policy side effects.
 type RelevanceConfig struct {
 	ImmediateATR float64
 	NearbyATR    float64

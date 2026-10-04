@@ -1,4 +1,4 @@
-// Package fvg implements FVGStrategy — Phase S7
+// Package fvg implements FVGStrategy.
 // (apexvoid-bot-prompts/rebuild-strategies.md §18), consuming the
 // canonical FVG primitive internal/zone already builds (gap bounds,
 // direction, origin, fill percentage, mitigation — the primitive owns

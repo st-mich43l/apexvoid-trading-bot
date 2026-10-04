@@ -1,4 +1,4 @@
-"""Capture real closed bars from Redis into the immutable S14C replay format.
+"""Capture real closed bars from Redis into the immutable replay format.
 
 Read-only: it issues ZREVRANGE reads through ``RedisOHLCSource`` and writes one
 JSON file. Nothing is modified in Redis. Run it on the host that owns the feed:
@@ -87,7 +87,7 @@ async def capture(symbol: str, counts: dict[str, int], client=None, *, now: date
   stamp = (now or datetime.now(timezone.utc)).strftime("%Y-%m-%dT%H:%M:%SZ")
   return {
     "version": 1,
-    "description": "Real closed-bar capture for the S14C Go-vs-Python policy replay. Nothing here is synthetic or edited.",
+    "description": "Real closed-bar capture for deterministic policy replay. Nothing here is synthetic or edited.",
     "symbol": symbol.upper(),
     "provenance": {
       "source": "Redis bars:{SYMBOL}:{TF} read through app.marketdata.ohlc.RedisOHLCSource (closed bars only)",

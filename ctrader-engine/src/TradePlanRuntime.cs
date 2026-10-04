@@ -846,7 +846,7 @@ public sealed class TradePlanRuntime(
     $"execution:plan_owner:{token}";
   private static string PlanAcknowledgementKey(string planId) =>
     $"execution:plan_ack:{planId}";
-  // S14B: Python writes a cancel intent here when a Go-derived plan's
+  // Python writes a cancel intent here when a Go-derived plan's
   // opportunity was invalidated/expired or its authority scope was rolled
   // back (a tombstone: it may exist before the plan does). The executor
   // reports what it did in the ack key. See docs/redis-contract.md.
@@ -3985,7 +3985,7 @@ public sealed class TradePlanRuntime(
   private readonly HashSet<string> _cancelIntentsSettled = new(StringComparer.Ordinal);
 
   /// <summary>
-  /// S14B: honours the cancel intent Python writes when a Go-derived plan's
+  /// Honours the cancel intent Python writes when a Go-derived plan's
   /// opportunity was invalidated/expired or its authority scope was rolled
   /// back. Outcome by how far the plan got:
   ///   - not yet submitted           -> cancelled, no broker call, never submits
@@ -4193,7 +4193,7 @@ public sealed class TradePlanRuntime(
     TradePlanRuntimeState state,
     string reason,
     CancellationToken cancellationToken,
-    // A cancel intent (S14B) is not the after-TP policy: the opportunity
+    // A cancel intent is not the after-TP policy: the opportunity
     // behind these entries is gone, so resting legs come off regardless of
     // UnfilledLegAfterTpPolicy.
     bool force = false

@@ -2039,7 +2039,7 @@ def format_plan_published_root_card(
   risk_reference: float | None = None,
 ) -> str:
   """Root card after publish, in the shared Manual/Auto Algo card design
-  (Phase S12) below its own headline/status-slot/direction line.
+  below its own headline/status-slot/direction line.
 
   Lines [0..2] (headline, status slot, direction/strategy/stars) are left
   exactly as every other piece of this card's lifecycle-editing machinery

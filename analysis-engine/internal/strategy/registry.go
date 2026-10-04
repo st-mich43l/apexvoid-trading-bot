@@ -22,7 +22,7 @@ type Config struct {
 
 // Factory constructs one concrete, enabled strategy from its own V3 config.
 // Implementations are registered by the composition root once they exist in
-// Phase S7; the registry itself never imports a strategy subpackage.
+// The registry itself never imports a strategy subpackage.
 type Factory func(Config) (Strategy, error)
 
 // Evaluation is the deterministic result of handling one closed bar. A
@@ -108,7 +108,7 @@ func ValidateConfigs(configs []Config) error {
 }
 
 // NewRegistry validates the complete configured catalog, then constructs only
-// enabled strategies. An enabled catalog entry without a Phase S7 factory is
+// enabled strategies. An enabled catalog entry without a factory is
 // a startup error, never a silently inactive strategy.
 func NewRegistry(configs []Config, factories map[StrategyID]Factory) (*Registry, error) {
 	if err := ValidateConfigs(configs); err != nil {
@@ -166,7 +166,7 @@ func (r *Registry) EnabledIDs() []StrategyID {
 
 // Evaluate runs only strategies that declared the timeframe which just
 // closed. It does not write the OpportunityBook: lifecycle observation and
-// publication are deliberately separate Phase S8/S9 responsibilities.
+// publication are deliberately separate responsibilities.
 func (r *Registry) Evaluate(ctx *analysiscontext.MarketContext, closed market.Timeframe) (Evaluation, error) {
 	if r == nil {
 		return Evaluation{}, fmt.Errorf("strategy: nil registry")

@@ -1,4 +1,4 @@
-// Package orderblock implements OrderBlockStrategy — Phase S7
+// Package orderblock implements OrderBlockStrategy.
 // (apexvoid-bot-prompts/rebuild-strategies.md §20), consuming the
 // canonical Order Block primitive internal/zone already builds (origin
 // candle/displacement/structure-break relationship — not "last bearish

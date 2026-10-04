@@ -133,8 +133,8 @@
     "zone_reconcile_mode": "shadow",
     "zone_scale_undersized_policy": "single_entry"
   },
-  "contract_fingerprint": "c416f680bced2bc885e143326037078c044036c6462568cfd8bd0a1ebbeb0e89",
-  "effective_configuration_fingerprint": "5503b10ce54226a5fa8ad6814d4c597357e06de69a3d5ea28f375702dd289ac0",
+  "contract_fingerprint": "3c41e26c0c1f9ab927b1b43a39322e9c5635955e7d9b08368bb7ad9cc372b42e",
+  "effective_configuration_fingerprint": "9c030e2e44570575e814376bff47553624711b00dc2015c07c6a90f7db65d1fc",
   "feed": {
     "backfill_bars": 2000,
     "bar_quality_lookback": 6,

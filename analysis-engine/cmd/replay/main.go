@@ -47,9 +47,9 @@ type jsonBar struct {
 
 func main() {
 	barsPath := flag.String("bars", "", "path to a JSONL file of bars ({\"t\":...,\"o\":...,\"h\":...,\"l\":...,\"c\":...,\"v\":...} per line), oldest first")
-	capturePath := flag.String("capture", "", "S14C: path to a multi-timeframe real capture (contracts/analysis/replay/*.json); replaces -bars, dispatches every timeframe in causal close order")
-	envelopesOut := flag.String("envelopes-out", "", "S14C, with -capture: write every discovered opportunity as a deterministic analysis.opportunity.v1 envelope (JSONL) to this path")
-	deriveH4 := flag.Bool("derive-h4", false, "S14C, with -capture: derive H4 from H1 (UTC-aligned). Off by default: the production feed delivers no H4, so the faithful replay has H1 only")
+	capturePath := flag.String("capture", "", "path to a multi-timeframe capture (analysis-engine/testdata/*.json); replaces -bars, dispatches every timeframe in causal close order")
+	envelopesOut := flag.String("envelopes-out", "", "With -capture, write every discovered opportunity as a deterministic analysis.opportunity.v1 envelope (JSONL) to this path")
+	deriveH4 := flag.Bool("derive-h4", false, "With -capture, derive H4 from H1 (UTC-aligned). Off by default: the production feed delivers no H4, so the faithful replay has H1 only")
 	configPath := flag.String("config", "", "path to config/apexvoid.yml (Configuration V3 root)")
 	symbol := flag.String("symbol", "XAU", "symbol these bars belong to")
 	timeframe := flag.String("timeframe", "M5", "timeframe these bars belong to")
@@ -148,7 +148,7 @@ func run(barsPath, configPath string, symbol market.Symbol, tf market.Timeframe,
 	fmt.Printf("  version: structure=%s liquidity=%s zone=%s\n", snap.Version.StructureVersion, snap.Version.LiquidityVersion, snap.Version.ZoneVersion)
 	fmt.Printf("  discovered opportunities: %d\n", len(discovered))
 	printStrategyCounts("discovered by strategy", discovered)
-	fmt.Printf("  live opportunities (Phase S8): %d\n", len(snap.Opportunities))
+	fmt.Printf("  live opportunities: %d\n", len(snap.Opportunities))
 	if verbose {
 		for _, opp := range snap.Opportunities {
 			fmt.Printf("    - %s %s %s entry=[%.5f,%.5f] invalidation=%.5f quality=%.2f\n",
@@ -297,7 +297,7 @@ func readBars(path string) ([]market.Candle, error) {
 }
 
 // runCapture replays a real multi-timeframe capture through the same
-// Engine.Dispatch path a live feed uses (S14C) and optionally exports every
+// Engine.Dispatch path a live feed uses and optionally exports every
 // discovered opportunity as a deterministic Kafka-shaped envelope, so the
 // Python consumer/adapter can be exercised on exactly what Go would publish.
 func runCapture(capturePath, configPath string, symbol market.Symbol, primary market.Timeframe, envelopesOut string, deriveH4 bool) error {

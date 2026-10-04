@@ -38,7 +38,7 @@ type SymbolWorker struct {
 	settings  Settings
 	telemetry *telemetry.Recorder
 	registry  *strategy.Registry
-	publisher *OpportunityPublisher // nil = no Kafka opportunity publication (Phase S9)
+	publisher *OpportunityPublisher // nil = no Kafka opportunity publication
 	algo      kafka.AlgorithmVersion
 	// lastArbitration is the previous Arbitrate() result for this symbol,
 	// keyed by opportunity ID - Phase 2's diff base so only a changed
@@ -53,7 +53,7 @@ type SymbolWorker struct {
 }
 
 // NewSymbolWorker returns a worker for symbol with an empty SymbolState
-// bounded per settings.HistoryDepths. Phase S8: also constructs this
+// bounded per settings.HistoryDepths. It also constructs this
 // symbol's own strategy.Registry from settings.Strategies and this
 // module's fixed strategyFactories composition root (strategies.go) —
 // once, here, not on every Apply, since a Registry's constructed
@@ -193,7 +193,7 @@ func (w *SymbolWorker) ApplyWithResult(event marketdata.BarEvent) (AnalysisSnaps
 	w.rebuildContext()
 	doneCtx()
 
-	// Phase S8: run every enabled strategy that declared event.Timeframe
+	// Run every enabled strategy that declared event.Timeframe
 	// as a dependency against the just-rebuilt canonical context, then
 	// feed whatever Candidates it returns through this symbol's own
 	// Opportunity lifecycle. A Registry/Book error here is a real
@@ -223,7 +223,7 @@ func (w *SymbolWorker) ApplyWithResult(event marketdata.BarEvent) (AnalysisSnaps
 		// Overwrite the strategy's own narrower per-strategy-parameters
 		// placeholder (see e.g. supply.configFingerprint's doc comment)
 		// with the real whole-resolved-document provenance — this is the
-		// enrichment Phase S7's own strategies documented Phase S8 as
+		// enrichment that concrete strategies require as
 		// expected to perform, now that engine (which alone reaches
 		// *config.Document) is the one applying it.
 		evaluation.Candidates[i].Provenance.ConfigVersion = w.settings.ConfigVersion
@@ -281,7 +281,7 @@ func (w *SymbolWorker) ApplyWithResult(event marketdata.BarEvent) (AnalysisSnaps
 // telemetry.CounterOpportunitiesCreated's doc comment) and, for a
 // publishable transition (source task §81: Created/Invalidated/Expired —
 // Transition.ShouldPublish()), hands it to the shared OpportunityPublisher
-// for background Kafka delivery (Phase S9). Enqueue is a fast, lock-only
+// for background Kafka delivery. Enqueue is a fast, lock-only
 // append — see OpportunityPublisher's own doc comment for why the actual
 // network call never happens on this path — and is a no-op on a nil
 // w.publisher (Kafka disabled/absent).
@@ -356,7 +356,7 @@ func (w *SymbolWorker) techniqueZones(original zone.ZoneState) zone.ZoneState {
 }
 
 // technicalContext assembles the policy-input facts for the bar that just
-// closed (S13B): the canonical ATR of that bar's own timeframe, that bar's
+// closed: the canonical ATR of that bar's own timeframe, that bar's
 // close as the geometric reference, and the engine's structural bias. Returns
 // nil — never a placeholder — when the ATR series is not yet available, so a
 // consumer sees "unavailable" and fails closed instead of guessing.

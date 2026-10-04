@@ -1,7 +1,7 @@
 // Package keylevel owns price-clustered key levels (reaction clusters +
 // round-number levels, deduped and optionally wick-touch re-enriched)
 // and the pure closed-bar role classifier (support/resistance/broken) —
-// Phase S4's third shared technical primitive
+// shared technical primitive
 // (apexvoid-bot-prompts/rebuild-strategies.md §23-26).
 //
 // Ported from algo-bot/app/analysis/levels.py (Cluster) and
@@ -34,5 +34,5 @@
 // liquidity/fib at rank 3, the same promotion those packages already
 // established for needing structure.Swing directly — see
 // docs/architecture/dependency-rules.md's "zone promoted above
-// structure" amendment, extended through Phase S4.
+// structure" amendment, extended through the shared technical domains.
 package keylevel

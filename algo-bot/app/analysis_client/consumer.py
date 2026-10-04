@@ -1,4 +1,4 @@
-"""Manual-commit Kafka consumer for Go Analysis Engine opportunities (S12A)."""
+"""Manual-commit Kafka consumer for Analysis Engine opportunities."""
 
 from __future__ import annotations
 

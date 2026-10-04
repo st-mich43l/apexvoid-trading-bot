@@ -276,9 +276,8 @@ func cloneRecord(record Record) Record {
 // SetupKey hash) is the one thing it must catch; drift in the technical
 // content of a still-valid, repeatedly-evaluated setup is not a
 // collision. It deliberately does NOT compare Entry/Invalidation/
-// CreatedAt (a Phase S8 fix — see docs/analysis-engine-v2-migration.md's
-// known-limitations entry for the real bug this fixed): those fields are
-// legitimately ATR-relative or touch/swing-anchored in every Phase S7
+// CreatedAt: those fields are
+// legitimately ATR-relative or touch/swing-anchored in every strategy
 // strategy, so they recompute to a slightly different value on almost
 // every re-evaluation of the SAME real-world setup even though its
 // DeterministicID (built only from Strategy/Version/Symbol/Direction/
@@ -286,7 +285,7 @@ func cloneRecord(record Record) Record {
 // FIRST-seen Candidate's content into the stored Record and never
 // overwrites it on a later Created/Active/Duplicate observation (see the
 // switch below), so this check only ever needs to protect that identity,
-// not demand byte-for-byte content stability Phase S7's own strategies
+// not demand byte-for-byte content stability that strategies
 // were never designed to produce.
 func sameSemanticOpportunity(a, b Candidate) bool {
 	return a.Strategy == b.Strategy && a.StrategyVersion == b.StrategyVersion &&

@@ -7,7 +7,7 @@ namespace ApexVoid.CTraderFeed;
 // consume. Python is the sole author of every value here; the executor
 // parses and validates shape (ValidateTradePlan below) but never recomputes
 // a route or a stop to compare against these values. See
-// docs/adr-trade-plan-v8-cutover.md.
+// docs/autotrade-execution-integrity.md.
 
 public static class TradePlanContract
 {

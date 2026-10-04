@@ -3,7 +3,7 @@
 V6 (`TradeCandidate`, `auto_trade_candidate_contract_version = 6`) let both
 Python and C# resolve an execution route and compute a protective stop, then
 cross-validate the two independently derived answers. TradePlan V8 is the
-live contract (see `docs/adr-trade-plan-v8-cutover.md`): Python declares a
+live contract: Python declares a
 single, complete, versioned plan — exact entry instruction, absolute stop,
 and absolute targets; C# consumes the plan and never recomputes any of it.
 

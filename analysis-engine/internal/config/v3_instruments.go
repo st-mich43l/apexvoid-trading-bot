@@ -44,7 +44,7 @@ func (d *Document) GeometryFor(symbol string) (market.Geometry, error) {
 
 // LiveInstruments returns every instrument declared with rollout: live —
 // the single source Configuration V3 wants for "which symbols are live"
-// (rebuild-configuration-architecture.md §3), never a second, separately
+// (docs/configuration.md), never a second, separately
 // maintained list.
 func (d *Document) LiveInstruments() ([]string, error) {
 	instruments, err := d.Section("instruments")

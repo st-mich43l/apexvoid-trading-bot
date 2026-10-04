@@ -3,9 +3,9 @@ package engine
 import (
 	"fmt"
 
-	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/legacyzone"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/techniquezone"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/zone"
 )
 
@@ -15,14 +15,14 @@ import (
 // never called at runtime.
 type TechniqueZoneSettings struct {
 	WindowBars int
-	Technique  legacyzone.TechniqueSettings
+	Technique  techniquezone.TechniqueSettings
 }
 
 func productionTechniqueZoneSettings() TechniqueZoneSettings {
-	return TechniqueZoneSettings{WindowBars: 400, Technique: legacyzone.ProductionTechniqueSettings()}
+	return TechniqueZoneSettings{WindowBars: 400, Technique: techniquezone.ProductionTechniqueSettings()}
 }
 
-var techniqueChain = legacyzone.ProductionChainSettings()
+var techniqueChain = techniquezone.ProductionChainSettings()
 
 // techniqueZoneState replaces the trade-qualification population for the
 // technique families whose geometry has exact frozen-Python parity. The V2
@@ -36,7 +36,7 @@ func techniqueZoneState(candles []market.Candle, original zone.ZoneState, s Tech
 	if len(bars) > s.WindowBars {
 		bars = bars[len(bars)-s.WindowBars:]
 	}
-	instances := legacyzone.TechniqueInstances(bars, techniqueChain, s.Technique)
+	instances := techniquezone.TechniqueInstances(bars, techniqueChain, s.Technique)
 	out := zone.ZoneState{ATR: original.ATR}
 	for _, z := range original.Zones {
 		switch z.Kind {
@@ -51,7 +51,7 @@ func techniqueZoneState(candles []market.Candle, original zone.ZoneState, s Tech
 	return out
 }
 
-func techniqueInstanceZone(in legacyzone.Instance, bars []market.Candle) zone.Zone {
+func techniqueInstanceZone(in techniquezone.Instance, bars []market.Candle) zone.Zone {
 	kind := zone.KindSupply
 	switch in.Technique {
 	case "supply_demand":

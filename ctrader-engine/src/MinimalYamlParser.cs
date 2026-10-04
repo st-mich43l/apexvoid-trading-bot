@@ -16,7 +16,7 @@ namespace ApexVoid.CTraderFeed;
 /// trimming without careful, easy-to-get-wrong configuration — this
 /// project has already hit an AOT-only configuration-loader failure once
 /// before that a normal (non-AOT) <c>dotnet test</c> run did not catch
-/// (rebuild-configuration-architecture.md §39). A hand-written recursive-
+/// (docs/configuration.md). A hand-written recursive-
 /// descent parser over plain strings/collections has nothing for the
 /// trimmer to remove and nothing that needs a source generator.
 /// </summary>

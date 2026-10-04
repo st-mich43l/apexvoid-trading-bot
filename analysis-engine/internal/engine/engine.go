@@ -27,7 +27,7 @@ type Engine struct {
 	workers   map[market.Symbol]*SymbolWorker
 	settings  map[market.Symbol]Settings
 	telemetry *telemetry.Recorder
-	publisher *OpportunityPublisher // nil = no Kafka opportunity publication (Phase S9)
+	publisher *OpportunityPublisher // nil = no Kafka opportunity publication
 }
 
 // NewEngine returns an Engine tracking no symbols yet. recorder may be
@@ -45,9 +45,7 @@ func NewEngine(recorder *telemetry.Recorder) *Engine {
 
 // Register adds symbol with its own Settings (a symbol's history depths/
 // structure/liquidity config may differ once per-instrument overrides
-// exist — config/instruments.yml already has this shape for other
-// domains, per-symbol Analysis Engine V2 overrides are not implemented
-// this task, see docs/analysis-engine-v2-migration.md). Registering an
+// exist. Registering an
 // already-tracked symbol replaces its worker (and therefore its state) —
 // callers that want to preserve state across a settings change must not
 // call Register a second time.
@@ -66,7 +64,7 @@ func (e *Engine) Register(symbol market.Symbol, settings Settings) error {
 	return nil
 }
 
-// SetPublisher wires opportunity Kafka publication (Phase S9) — call
+// SetPublisher wires opportunity Kafka publication — call
 // before Register-ing any symbol that should publish, since Register
 // reads the current publisher once at worker-construction time, not on
 // every event. pub may be nil (the default) to disable publication

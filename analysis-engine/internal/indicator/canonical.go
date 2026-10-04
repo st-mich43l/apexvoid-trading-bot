@@ -6,9 +6,8 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 )
 
-// Algorithm selects which of the two ATR formulas this package ports is
-// canonical, matching config/analysis.yml's analysis.indicators.atr.algorithm
-// enum exactly.
+// Algorithm selects the canonical ATR formula from
+// config/analysis.yml's analysis.indicators.atr.algorithm enum.
 type Algorithm string
 
 const (
@@ -19,7 +18,7 @@ const (
 // CanonicalATR computes ATR using ONE, config-selected algorithm — never a
 // second, independently-chosen formula elsewhere in the pipeline (source
 // task §27). This is the direct fix for the real, measured production bug
-// docs/go-analysis-migration-audit.md §2.1 documents: the two ATR formulas
+// The two ATR formulas
 // diverge ~6.7% on real XAU M5 data, and the legacy Python system computed
 // zone/level/swing geometry on one and detector confirmation geometry on
 // the other, in the same detection pass, for the same candles. Structure

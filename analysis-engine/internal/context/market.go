@@ -127,7 +127,7 @@ type BiasContext struct {
 // DTO with different semantics.
 //
 // SessionContext (source task §39) was the same kind of honest
-// placeholder until Phase S4's session domain — it now carries the real
+// placeholder until the session domain was introduced — it now carries the real
 // session.State for the primary timeframe (see Build).
 type RegimeContext = regime.State
 
