@@ -38,7 +38,7 @@ func cfg(id strategy.StrategyID, params map[string]any) strategy.Config {
 }
 
 func rangeEdgeParams() map[string]any {
-	return map[string]any{"lookback_bars": 5.0, "minimum_touches": 2.0, "minimum_wick_rejections": 1.0, "break_closes": 2.0, "cluster_atr": .25, "entry_tolerance_atr": .2, "minimum_wick_fraction": .25, "minimum_width_atr": 1.0, "maximum_width_atr": 6.0, "minimum_room_atr": .75, "invalidation_buffer_atr": .25, "expiry_hours": 4.0, "reaction_lookback_bars": 3.0, "engulfing_minimum_range_atr": .5}
+	return map[string]any{"lookback_bars": 5.0, "minimum_touches": 2.0, "minimum_wick_rejections": 1.0, "minimum_inside_closes": 3.0, "inside_lookback_bars": 24.0, "recent_breakout_lookback_bars": 12.0, "fallback_minimum_confirmations": 1.0, "fallback_enabled": true, "provisional_enabled": true, "post_impulse_enabled": true, "fallback_min_width_atr": .8, "fallback_max_width_atr": 8.0, "fallback_wick_fraction": .25, "post_impulse_min_displacement_atr": 3.0, "post_impulse_max_contraction_atr": 2.2, "post_impulse_min_inside_closes": 4.0, "post_impulse_lookback_bars": 36.0, "post_impulse_recent_bars": 6.0, "cluster_atr": .25, "cluster_min_abs": 0.0, "cluster_pip_mult": 2.0, "entry_tolerance_atr": .2, "maximum_edge_width_atr": .75, "minimum_wick_fraction": .25, "minimum_width_atr": 1.0, "maximum_width_atr": 6.0, "minimum_room_atr": .75, "invalidation_buffer_atr": .25, "recent_breakout_buffer_atr": .15, "recent_breakout_min_span_atr": .8, "expiry_hours": 4.0, "reaction_lookback_bars": 3.0, "engulfing_minimum_range_atr": .5}
 }
 
 func snapBackParams() map[string]any {

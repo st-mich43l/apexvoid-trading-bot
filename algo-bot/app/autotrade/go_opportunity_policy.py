@@ -117,6 +117,7 @@ REVIEWED_SCOPES: dict[str, ScopeProfile] = {
   "trendline": ScopeProfile("trendline", "Trendline", "trendline", None, frozenset({"M5"}), "go_m5_trendline", requires_reaction=True, evidence_prefixes=("m5_trendline_",)),
   "range_edge": ScopeProfile("range_edge", "Range Edge Scalp", "range_edge", None, frozenset({"M5"}), "go_m5_range_edge", requires_reaction=True, evidence_prefixes=("legacy_range_barrier", "barrier_touch_episode")),
   "box_breakout": ScopeProfile("box_breakout", "Box Breakout", "box_breakout", None, frozenset({"M5"}), "go_m5_box_breakout", evidence_prefixes=("m5_box_compression", "m5_breakout_accepted", "m5_box_retest")),
+  "break_retest": ScopeProfile("break_retest", "Break & Retest", "break_retest", None, frozenset({"M5"}), "go_m5_break_retest", evidence_prefixes=("m5_trendline_break", "m5_key_level_break", "m5_trendline_retest", "m5_key_level_retest", "m5_retest_holds", "m5_retest_rejection")),
   "momentum_ride": ScopeProfile("momentum_ride", "Momentum Ride", "momentum_ride", None, frozenset({"M5"}), "go_m5_momentum", evidence_prefixes=("legacy_structural_impulse_break", "broken_swing_")),
   "snap_back": ScopeProfile("snap_back", "Snap-Back", "snap_back", None, frozenset({"M5"}), "go_m5_snap_back", requires_reaction=True, evidence_prefixes=("legacy_snap_extension_", "liquidity_grab_grade_")),
   "fade_scalp": ScopeProfile("fade_scalp", "Fade Scalp", "fade_scalp", None, frozenset({"M5"}), "go_m5_equal_level_fade", requires_reaction=True, evidence_prefixes=("equal_level_", "liquidity_grab_grade_")),

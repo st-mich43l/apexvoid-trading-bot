@@ -100,10 +100,9 @@ STRATEGY_NAMES: tuple[StrategyName, ...] = (
   _name(TRENDLINE, CANONICAL_FAMILY_REACTION, "trendline_reaction", aliases=("trendline reaction",)),
   _name(RANGE_EDGE_SCALP, CANONICAL_FAMILY_RANGE, "range_edge_scalp"),
   _name(BOX_BREAKOUT, CANONICAL_FAMILY_BREAKOUT_RETEST, "box_breakout"),
-  # Retired automatic thesis: Box Breakout owns the M5 continuation role and
-  # Breakout Retest Scalp owns the M5-context/M1-trigger role. Keep the label
-  # resolvable for historical journals and manual positions only.
-  _name(BREAK_AND_RETEST, CANONICAL_FAMILY_BREAKOUT_RETEST, retired=True),
+  # Independent M5 structural thesis restored by the Go analysis engine.
+  # Box Breakout and Breakout Retest Scalp remain separate strategies.
+  _name(BREAK_AND_RETEST, CANONICAL_FAMILY_BREAKOUT_RETEST),
   _name(TREND_PULLBACK, CANONICAL_FAMILY_TREND_PULLBACK, retired=True),
   _name(MOMENTUM_RIDE, CANONICAL_FAMILY_MOMENTUM, "momentum_ride"),
   _name(SNAP_BACK, CANONICAL_FAMILY_LIQUIDITY, "snap_back"),

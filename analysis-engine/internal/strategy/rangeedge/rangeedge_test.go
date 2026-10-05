@@ -13,7 +13,7 @@ func testBar(at int64, open, high, low, close float64) market.Candle {
 }
 
 func params() map[string]any {
-	return map[string]any{"lookback_bars": 8.0, "minimum_touches": 2.0, "minimum_wick_rejections": 1.0, "break_closes": 2.0, "cluster_atr": .3, "entry_tolerance_atr": .25, "minimum_wick_fraction": .25, "minimum_width_atr": 1.0, "maximum_width_atr": 6.0, "minimum_room_atr": .75, "invalidation_buffer_atr": .25, "expiry_hours": 4.0, "reaction_lookback_bars": 3.0, "engulfing_minimum_range_atr": .5}
+	return map[string]any{"lookback_bars": 8.0, "minimum_touches": 2.0, "minimum_wick_rejections": 1.0, "minimum_inside_closes": 3.0, "inside_lookback_bars": 24.0, "recent_breakout_lookback_bars": 12.0, "fallback_minimum_confirmations": 1.0, "fallback_enabled": true, "provisional_enabled": true, "post_impulse_enabled": true, "fallback_min_width_atr": .8, "fallback_max_width_atr": 8.0, "fallback_wick_fraction": .25, "post_impulse_min_displacement_atr": 3.0, "post_impulse_max_contraction_atr": 2.2, "post_impulse_min_inside_closes": 4.0, "post_impulse_lookback_bars": 36.0, "post_impulse_recent_bars": 6.0, "cluster_atr": .3, "cluster_min_abs": 0.0, "cluster_pip_mult": 2.0, "entry_tolerance_atr": .25, "maximum_edge_width_atr": .75, "minimum_wick_fraction": .25, "minimum_width_atr": 1.0, "maximum_width_atr": 6.0, "minimum_room_atr": .75, "invalidation_buffer_atr": .25, "recent_breakout_buffer_atr": .15, "recent_breakout_min_span_atr": .8, "expiry_hours": 4.0, "reaction_lookback_bars": 3.0, "engulfing_minimum_range_atr": .5}
 }
 
 func rangeBars() []market.Candle {
@@ -30,10 +30,11 @@ func rangeBars() []market.Candle {
 }
 
 func TestLegacyRangeBarrierTouchHistoryAndTargets(t *testing.T) {
-	s, err := New(strategy.Config{ID: ID, Version: Version, Parameters: params()})
+	created, err := New(strategy.Config{ID: ID, Version: Version, Parameters: params()})
 	if err != nil {
 		t.Fatal(err)
 	}
+	s := created.(*Strategy)
 	bars := rangeBars()
 	ctx := &analysiscontext.MarketContext{Symbol: "XAU", Volatility: analysiscontext.VolatilityContext{ATR: 1}, Timeframes: map[market.Timeframe]*analysiscontext.TimeframeContext{market.M5: {Timeframe: market.M5, Candles: bars}}}
 	got := s.Evaluate(ctx)
@@ -56,5 +57,44 @@ func TestLegacyRangeAcceptedCloseInvalidatesBarrier(t *testing.T) {
 	ctx := &analysiscontext.MarketContext{Symbol: "XAU", Volatility: analysiscontext.VolatilityContext{ATR: 1}, Timeframes: map[market.Timeframe]*analysiscontext.TimeframeContext{market.M5: {Timeframe: market.M5, Candles: bars}}}
 	if got := s.Evaluate(ctx); len(got) != 0 {
 		t.Fatalf("two accepted closes through the edge must reject: %+v", got)
+	}
+}
+
+func TestRangeEdgeEntryMustBeNearTheSelectedEdge(t *testing.T) {
+	if !entryWithinDistance(100.5, 100, 101, market.Buy, 1, 2) {
+		t.Fatal("price inside a buy edge should be valid")
+	}
+	if !entryWithinDistance(102.5, 100, 101, market.Buy, 1, 2) {
+		t.Fatal("buy price within the maximum ATR distance should be valid")
+	}
+	if entryWithinDistance(104, 100, 101, market.Buy, 1, 2) {
+		t.Fatal("stale buy edge must be rejected")
+	}
+	if !entryWithinDistance(99.5, 100, 101, market.Sell, 1, 2) {
+		t.Fatal("sell price within the maximum ATR distance should be valid")
+	}
+	if entryWithinDistance(97, 100, 101, market.Sell, 1, 2) {
+		t.Fatal("stale sell edge must be rejected")
+	}
+}
+
+func TestRangeStateGates(t *testing.T) {
+	created, err := New(strategy.Config{ID: ID, Version: Version, Parameters: params()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := created.(*Strategy)
+	lower := &barrier{side: "support", level: 99, wicks: 2, score: 5, executable: true}
+	upper := &barrier{side: "resistance", level: 101, wicks: 2, score: 5, executable: true}
+	bars := []market.Candle{
+		testBar(1, 99.5, 100, 99, 99.6), testBar(2, 99.6, 100, 99.1, 99.7),
+		testBar(3, 100, 101, 99.5, 100.4), testBar(4, 100.4, 101, 100, 100.3),
+	}
+	if got := stateForRange(lower, upper, bars, 1, s); got != "confirmed_range" {
+		t.Fatalf("expected confirmed range, got %s", got)
+	}
+	lower.accepted = 2
+	if got := stateForRange(lower, upper, bars, 1, s); got != "broken_range" {
+		t.Fatalf("accepted edge should be broken, got %s", got)
 	}
 }

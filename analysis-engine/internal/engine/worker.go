@@ -219,6 +219,7 @@ func (w *SymbolWorker) ApplyWithResult(event marketdata.BarEvent) (AnalysisSnaps
 	) {
 		w.observeTransition(invalidated, symbolLabel, tfLabel, event.PublishesOpportunity())
 	}
+	var enriched []opportunity.Candidate
 	for i := range evaluation.Candidates {
 		// Overwrite the strategy's own narrower per-strategy-parameters
 		// placeholder (see e.g. supply.configFingerprint's doc comment)
@@ -254,6 +255,7 @@ func (w *SymbolWorker) ApplyWithResult(event marketdata.BarEvent) (AnalysisSnaps
 			stopConfig.InstrumentConfigured = true
 		}
 		candidate.StopEnvelope = computeStopEnvelope(candidate, w.settings.Geometry, stopConfig)
+		enriched = append(enriched, candidate)
 		observed, obsErr := w.state.Opportunities.Observe(candidate, event.Candle.Time)
 		if obsErr != nil {
 			doneOpp()
@@ -265,6 +267,9 @@ func (w *SymbolWorker) ApplyWithResult(event marketdata.BarEvent) (AnalysisSnaps
 		w.observeTransition(expired, symbolLabel, tfLabel, event.PublishesOpportunity())
 	}
 	doneOpp()
+	if w.settings.OnEvaluation != nil && len(evaluation.Evaluated) > 0 {
+		w.settings.OnEvaluation(Evaluation{Symbol: w.state.Symbol, Timeframe: event.Timeframe, BarTime: event.Candle.Time, Candidates: enriched, Context: &w.state.Context})
+	}
 
 	doneArb := w.telemetry.Time(telemetry.PhaseArbitration, symbolLabel, tfLabel)
 	w.arbitrate(event.Candle.Time, event.Candle.Close, event.PublishesOpportunity())

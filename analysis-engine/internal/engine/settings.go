@@ -5,12 +5,14 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/candle"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/config"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/confluence"
+	analysiscontext "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/context"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/fib"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/keylevel"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/liquidity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/mad"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/momentum"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/regime"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/session"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy"
@@ -86,6 +88,24 @@ type Settings struct {
 	// is the safe default; a live feed that streams the forming bar sets
 	// this true at construction.
 	AllowReplaceForming bool
+
+	// OnEvaluation, when set, receives every strategy candidate produced by
+	// one closed bar after the engine has attached its technical/confluence
+	// context and before the lifecycle de-duplicates it. It observes only; it
+	// can neither change nor suppress a candidate. Production leaves it nil;
+	// replay and detector-parity tooling use it to see per-bar detections.
+	OnEvaluation func(Evaluation)
+}
+
+// Evaluation is the per-bar strategy output delivered to Settings.OnEvaluation.
+type Evaluation struct {
+	Symbol     market.Symbol
+	Timeframe  market.Timeframe
+	BarTime    int64
+	Candidates []opportunity.Candidate
+	// Context is the canonical context the strategies just read. Observers
+	// must treat it as read-only.
+	Context *analysiscontext.MarketContext
 }
 
 // LoadSettings reads every Analysis Engine V2 config leaf this package

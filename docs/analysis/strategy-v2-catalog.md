@@ -2,8 +2,8 @@
 
 This is the canonical list of automatic technical theses. Each entry has one
 Go package, one versioned configuration entry in `config/analysis.yml`, and a
-strategy-specific specification under [`strategies/`](strategies/). All 20
-entries are enabled in the live Go opportunity stream as of 2026-10-01.
+strategy-specific specification under [`strategies/`](strategies/). All 21
+entries are enabled in the live Go opportunity stream as of 2026-10-05.
 
 The Analysis Engine publishes technical opportunities only. Algo Bot remains
 responsible for freshness, quote/spread checks, account and exposure policy,
@@ -26,6 +26,7 @@ single approved exception and consumes only canonical zone facts.
 | `trendline` | `strategy/trendline` | causal trendline anchors and interaction state | [trendline](strategies/trendline.md) |
 | `range_edge` | `strategy/rangeedge` | M5 range context and edge rejection | [range edge](strategies/range_edge.md) |
 | `box_breakout` | `strategy/boxbreakout` | M5 compression box, accepted break, retest | [box breakout](strategies/box_breakout.md) |
+| `break_retest` | `strategy/breakretest` | M5 broken trendline or key level, retest, hold, rejection | [break & retest](strategies/break_retest.md) |
 | `momentum_ride` | `strategy/momentumride` | M5 displacement sequence and opposing liquidity | [momentum ride](strategies/momentum_ride.md) |
 | `snap_back` | `strategy/snapback` | canonical key level, extension, reversal close | [snap-back](strategies/snap_back.md) |
 | `fade_scalp` | `strategy/fadescalp` | equal-level sweep/reclaim, PD, reaction, chop edge | [fade scalp](strategies/fade_scalp.md) |
@@ -68,9 +69,10 @@ strategy packages carry their focused positive/negative and causal tests.
 Cross-service Python, Go, C#, contract, and deployment checks remain required
 for every production change.
 
-## Retired automatic theses
+## Breakout strategy boundaries
 
-Non-scalp `Break & Retest` is historical/manual only. `box_breakout` owns
-the M5 compression/break/retest thesis, while `scalp_breakout_retest` owns the
-distinct M5-context/M1-confirmation thesis. Neither retired label is a registry
-ID, Go opportunity source, or automatic execution-policy adapter.
+`break_retest` owns a broken canonical M5 trendline or key level followed by a
+same-side retest and current rejection. `box_breakout` owns M5 compression,
+accepted box break and retest. `scalp_breakout_retest` owns the distinct
+M5-context/M1-confirmation thesis. They are separate registry IDs and adapters;
+one detector must not be substituted for another.
