@@ -350,25 +350,6 @@ def test_xauusd_alias_still_blocks_xau_same_direction():
   assert decision.reason_code == "same_direction_active_before_tp2"
 
 
-def test_missing_symbol_exposure_does_not_lock_other_instruments():
-  """V6 rows without a string symbol must not become a global SELL lock."""
-  decision = evaluate_entry_against_exposure(
-    direction="SELL",
-    entry_price=1.1640,
-    exposures=[
-      ActiveExposure(
-        direction="SELL",
-        entry_price=215.91,
-        source="v6_position",
-        symbol=None,
-        position_id=40539792,
-      )
-    ],
-    candidate_symbol="EURUSD",
-  )
-  assert decision.block is False
-
-
 @pytest.mark.asyncio
 async def test_load_active_exposures_filters_by_symbol():
   class FakeRedis:
@@ -413,27 +394,33 @@ async def test_load_active_exposures_filters_by_symbol():
   assert gbp[0].plan_id == "v8:gbp"
 
 
+
+def test_missing_symbol_exposure_does_not_lock_other_instruments():
+  """Rows without a string symbol must not become a global SELL lock."""
+  decision = evaluate_entry_against_exposure(
+    direction="SELL",
+    entry_price=1.1640,
+    exposures=[
+      ActiveExposure(
+        direction="SELL",
+        entry_price=215.91,
+        source="v8_plan",
+        symbol=None,
+        plan_id="v8:no-symbol",
+      )
+    ],
+    candidate_symbol="EURUSD",
+  )
+  assert decision.block is False
+
+
 @pytest.mark.asyncio
-async def test_load_active_exposures_batches_position_and_plan_payloads():
+async def test_load_active_exposures_batches_plan_payloads():
   class CountingRedis:
     def __init__(self):
       self.get_calls: list[str] = []
       self.mget_calls: list[list[str]] = []
       self.values = {
-        "auto_trade:position:47": json.dumps({
-          "PositionId": 47,
-          "Symbol": "XAU",
-          "Direction": "BUY",
-          "EntryPrice": 4100.0,
-          "RemainingVolume": 100,
-        }).encode(),
-        "auto_trade:position:48": json.dumps({
-          "PositionId": 48,
-          "Symbol": "EURUSD",
-          "Direction": "SELL",
-          "EntryPrice": 1.17,
-          "RemainingVolume": 100,
-        }).encode(),
         "execution:plan_runtime:v8:gbp": json.dumps({
           "PlanId": "v8:gbp",
           "Symbol": "GBPJPY",
@@ -454,10 +441,6 @@ async def test_load_active_exposures_batches_position_and_plan_payloads():
         }).encode(),
       }
 
-    async def smembers(self, key: str):
-      assert key == "auto_trade:positions"
-      return {b"47", b"48"}
-
     async def get(self, key: str):
       self.get_calls.append(key)
       if key == "execution:trade_plan_runtime_ids":
@@ -471,9 +454,7 @@ async def test_load_active_exposures_batches_position_and_plan_payloads():
   client = CountingRedis()
   exposures = await load_active_exposures(client)
 
-  assert {item.symbol for item in exposures} == {
-    "XAU", "EURUSD", "GBPJPY", "USDJPY",
-  }
+  assert {item.symbol for item in exposures} == {"GBPJPY", "USDJPY"}
   assert client.get_calls == ["execution:trade_plan_runtime_ids"]
-  assert len(client.mget_calls) == 2
+  assert len(client.mget_calls) == 1
   assert {len(keys) for keys in client.mget_calls} == {2}

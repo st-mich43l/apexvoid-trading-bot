@@ -1,7 +1,6 @@
 """execution:trade_plans stream plumbing for TradePlan V8.
 
-Key namespace (kept separate from the V6 auto_trade:* namespace so the two
-contracts never collide or get silently reinterpreted as each other):
+Key namespace:
 
   execution:trade_plans          - XADD stream of published TradePlan V8 JSON
   execution:plan:{plan_id}       - full plan JSON, TTL-bound
@@ -64,7 +63,7 @@ async def publish_trade_plan(client: Any, plan: TradePlan) -> str:
     86400, int(runtime_config.auto_algo.lifecycle.candidate.storage_ttl_seconds),
   )
   stream = runtime_config.runtime.redis_streams.trade_plans
-  maxlen = max(100, runtime_config.runtime.redis_streams.candidate_maximum_length)
+  maxlen = max(100, runtime_config.runtime.redis_streams.stream_maximum_length)
   try:
     event_id = await client.eval(
       _PUBLISH_PLAN_LUA,

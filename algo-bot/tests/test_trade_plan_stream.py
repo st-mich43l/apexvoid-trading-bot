@@ -84,19 +84,6 @@ async def test_read_trade_plan_returns_none_for_unknown_id():
 
 
 @pytest.mark.asyncio
-async def test_publishing_never_touches_the_v6_candidate_stream():
-  # TradePlan publication must be fully isolated from the V6 auto_trade:candidates
-  # stream - a shared stream would let a TradePlan plan accidentally trigger the
-  # legacy candidate consumer.
-  client = redis_state.get_client()
-  plan = _plan(plan_id="plan-stream-isolation")
-
-  await publish_trade_plan(client, plan)
-
-  assert await client.xlen("auto_trade:candidates") == 0
-
-
-@pytest.mark.asyncio
 async def test_dedup_tombstone_prevents_republish_after_payload_expiry():
   client = redis_state.get_client()
   plan = _plan(plan_id="plan-stream-durable-dedup")

@@ -2640,7 +2640,7 @@ async def test_pause_resume_and_status(monkeypatch):
   assert "demo trading" in text
   assert "paused" in text
   assert "Algo bot" in text
-  assert "Open <b>0</b> · groups <b>0</b> · today <b>0</b>" in text
+  assert "Open <b>0</b> · groups <b>0</b>" in text
   assert "Range Box Scalp · BUY · M1 · waiting rejection" in text
   assert len(text) < 900
   assert "auto trader" not in text.lower()
@@ -2806,29 +2806,6 @@ async def test_status_shows_live_price_and_spread(monkeypatch):
 
   assert "XAU <b>4,071.85</b>/<b>4,072.15</b>" in text
   assert "spread 3.0p" in text
-
-
-@pytest.mark.asyncio
-async def test_status_shows_cooldown_for_confirmed_stop_loss(monkeypatch):
-  install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_enabled": True})
-  install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_dry_run": False})
-  client = redis_state.get_client()
-  await client.set(
-    "auto_trade:zone:cooldown:XAU:SELL",
-    json.dumps({
-      "reason": "stop_loss",
-      "confidence": "confirmed",
-      "entry_price": 4070.0,
-      "stop_price": 4075.0,
-      "closed_at": 1,
-    }),
-    ex=900,
-  )
-
-  text = await delivery.auto_trade_status_text()
-
-  assert "Cooldown <b>SELL</b>" in text
-  assert "15m left" in text
 
 
 @pytest.mark.asyncio

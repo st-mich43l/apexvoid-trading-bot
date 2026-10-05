@@ -8,13 +8,6 @@ from app.autotrade import delivery
 from app.core.config import runtime_config
 
 
-def test_range_box_scale_out_config_validation():
-  config = runtime_config.auto_algo.strategies.range_reversion
-  assert config.box_scale_out_enabled is True
-  assert runtime_config.execution.range.box_scale_out_threshold_pips == 70
-  assert runtime_config.execution.range.box_scale_out_trigger_pips == 30
-  assert runtime_config.execution.range.box_scale_out_fraction == 0.5
-
 def test_opened_card_shows_tp1_and_full_tp_without_remaining_lot():
   text = delivery.render_auto_trade_event({
     "type": "opened",

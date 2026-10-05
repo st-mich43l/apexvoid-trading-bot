@@ -18,24 +18,13 @@ public sealed partial class TradePlanRuntimeTests
     MinVolume: 100, StepVolume: 100, MaxVolume: 100_000, LotSize: 10_000
   );
 
-  private static AutoTradeOptions Options(string contractMode = "v8_only") => new(
+  private static AutoTradeOptions Options() => new(
     Enabled: true,
     DryRun: false,
     ExpectedBroker: "Fusion",
-    StopLossDistance: 6.5m,
-    TargetsPips: [30, 60, 90, 120, 200],
-    TargetWeights: [20, 20, 20, 20, 20],
-    BreakEvenBufferTicks: 3,
-    CandidateMaxAgeSeconds: 90,
-    SpotMaxAgeSeconds: 5,
-    MaxSpreadPips: 5,
-    MaxEntryDistancePips: 10,
-    MinConfluence: 2,
     PollMilliseconds: 10,
-    CandidateStream: "auto_trade:candidates",
     EventStream: "auto_trade:events",
     Label: "apexvoid-auto",
-    ContractMode: contractMode,
     // Off by default here: most of this file's tests assert exact leg
     // counts/client-order-ids/volumes for the plan's own declared ladder
     // and were not written with the 2026-09-16 risk leg in mind. See
@@ -810,7 +799,7 @@ public sealed partial class TradePlanRuntimeTests
     // BE stop is L2's own (deeper, better) fill + buffer, not a blend
     // dragged toward L1's shallower fill.
     var expectedStop = decimal.Round(
-      l2Fill + Options().BreakEvenBufferTicks * 0.01m, 2, MidpointRounding.AwayFromZero
+      l2Fill + 3 * 0.01m, 2, MidpointRounding.AwayFromZero
     );
     Assert.Single(
       client.StopAmendments, item => item.StopLoss == expectedStop
@@ -965,7 +954,7 @@ public sealed partial class TradePlanRuntimeTests
     // `openLegs` still finds open.
     var expectedStop = decimal.Round(
       (l1Fill * l1Volume + l2Fill * l2Volume) / (decimal)(l1Volume + l2Volume)
-        + Options().BreakEvenBufferTicks * 0.01m,
+        + 3 * 0.01m,
       2,
       MidpointRounding.AwayFromZero
     );
@@ -2695,7 +2684,7 @@ public sealed partial class TradePlanRuntimeTests
     store.EnqueuePlan(PlanJson());
     var client = new FakeTradePlanTradingClient();
     var runtime = new TradePlanRuntime(
-      Options("v8_only") with { DryRun = true },
+      Options() with { DryRun = true },
       store,
       () => DateTimeOffset.UtcNow,
       _ => { }
@@ -2708,23 +2697,6 @@ public sealed partial class TradePlanRuntimeTests
     Assert.Empty(client.MarketOrders);
     var state = Assert.Single(runtime.TrackedStates);
     Assert.Equal(TradePlanRuntimeStage.Received, state.Stage);
-  }
-
-  [Fact]
-  public void LegacyV6ModeNeverReadsTheTradePlanStream()
-  {
-    var store = new FakeTradePlanStore();
-    store.EnqueuePlan(PlanJson());
-    var client = new FakeTradePlanTradingClient();
-    var runtime = new TradePlanRuntime(
-      Options("legacy_v6"), store, () => DateTimeOffset.UtcNow, _ => { }
-    );
-
-    // legacy_v6 gating lives in AutoTradeEngine (it never calls PollAsync in
-    // that mode) - this test proves PollAsync itself is harmless to call,
-    // not that AutoTradeEngine skips it (see AutoTradeEngineTests for that).
-    // Directly assert ShouldSubmitOrders semantics via ContractMode instead.
-    Assert.Equal("legacy_v6", Options("legacy_v6").ContractMode);
   }
 
   [Fact]
@@ -4603,8 +4575,6 @@ public sealed partial class TradePlanRuntimeTests
       _strings.TryGetValue(key, out var value) ? value : null;
     public void FailSetOnce(string key) => _failSetOnce.Add(key);
 
-    public Task<string> GetCursorAsync(CancellationToken ct) => Task.FromResult("0-0");
-    public Task SetCursorAsync(string cursor, CancellationToken ct) => Task.CompletedTask;
     public Task<string> GetCommandCursorAsync(CancellationToken ct) => Task.FromResult("0-0");
     public Task SetCommandCursorAsync(string cursor, CancellationToken ct) => Task.CompletedTask;
 
@@ -4669,65 +4639,5 @@ public sealed partial class TradePlanRuntimeTests
       return Task.CompletedTask;
     }
 
-    // --- V6-only surface this test double never exercises but the
-    // interface requires (no default body) - trivial stubs only. ---
-    public Task SavePositionAsync(AutoTradePositionState state, CancellationToken ct) =>
-      Task.CompletedTask;
-    public Task<AutoTradePositionState?> GetPositionAsync(long positionId, CancellationToken ct) =>
-      Task.FromResult<AutoTradePositionState?>(null);
-    public Task<IReadOnlyList<long>> GetTrackedPositionIdsAsync(CancellationToken ct) =>
-      Task.FromResult<IReadOnlyList<long>>([]);
-    public Task DeletePositionAsync(long positionId, CancellationToken ct) =>
-      Task.CompletedTask;
-    public Task<long> GetDailyTradeCountAsync(DateOnly date, CancellationToken ct) =>
-      Task.FromResult(0L);
-    public Task<long> IncrementDailyTradeCountAsync(DateOnly date, CancellationToken ct) =>
-      Task.FromResult(1L);
-    public Task<bool> IsPausedAsync(CancellationToken ct) => Task.FromResult(false);
-    public Task IncrementGateRejectAsync(
-      string symbol, string condition, CancellationToken ct
-    ) => Task.CompletedTask;
-    public Task IncrementAddRejectAsync(
-      string symbol, string mode, string condition, CancellationToken ct
-    ) => Task.CompletedTask;
-    public Task RecordZoneCooldownAsync(
-      string symbol, string direction, ZoneCooldownRecord record, int ttlMinutes,
-      CancellationToken ct
-    ) => Task.CompletedTask;
-    public Task SaveGroupPlanAsync(
-      AutoTradeGroupPlan plan, TimeSpan ttl, CancellationToken ct
-    ) => Task.CompletedTask;
-    public Task DeleteGroupPlanAsync(string groupId, CancellationToken ct) =>
-      Task.CompletedTask;
-
-    // --- Unused V6 candidate-lease surface: default-interface members cover
-    // everything this test double never exercises. ---
-    public Task<CandidateClaimResult> TryClaimCandidateAsync(
-      string candidateId, string streamEventId, TimeSpan leaseDuration,
-      CancellationToken ct, CandidateClaimPolicy? policy = null
-    ) => throw new NotSupportedException();
-
-    public Task<bool> RenewCandidateLeaseAsync(
-      string candidateId, string streamEventId, string leaseToken,
-      TimeSpan leaseDuration, CancellationToken ct
-    ) => throw new NotSupportedException();
-
-    public Task<bool> TransitionCandidateStateAsync(
-      string candidateId, string streamEventId, string leaseToken, string newState,
-      CancellationToken ct, string? lastError = null
-    ) => throw new NotSupportedException();
-
-    public Task<string?> GetCandidateStatusAsync(string candidateId, CancellationToken ct) =>
-      Task.FromResult<string?>(null);
-
-    public Task<bool> CompleteCandidateAsync(
-      string candidateId, string streamEventId, string leaseToken, string outcome,
-      CancellationToken ct
-    ) => throw new NotSupportedException();
-
-    public Task<bool> ReleaseCandidateAsync(
-      string candidateId, string streamEventId, string leaseToken,
-      CancellationToken ct, string? lastError = null
-    ) => throw new NotSupportedException();
   }
 }

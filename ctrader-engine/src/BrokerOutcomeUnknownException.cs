@@ -45,24 +45,3 @@ public sealed class CandidateIntegrityException : Exception
 
   public string Reason { get; }
 }
-
-// How a candidate's broker interaction ended. Only `Rejected` is terminal and
-// cursor-advancing; `Unknown` always routes into reconciliation.
-public enum BrokerSideEffectOutcome
-{
-  NotAttempted,
-  Rejected,
-  Accepted,
-  Unknown,
-}
-
-// Typed result of deterministic broker reconciliation for a recovery-required
-// candidate. A single empty snapshot is never ConfirmedAbsent.
-public enum BrokerRecoveryDisposition
-{
-  AdoptedPosition,
-  AdoptedPendingOrder,
-  ConfirmedAbsent,
-  StillUnknown,
-  Conflict,
-}

@@ -19,20 +19,9 @@ public sealed class EquityZoneLadderGroupE2ETests
     Enabled: true,
     DryRun: false,
     ExpectedBroker: "Fusion",
-    StopLossDistance: 6.5m,
-    TargetsPips: [30, 60, 90, 120, 200],
-    TargetWeights: [20, 20, 20, 20, 20],
-    BreakEvenBufferTicks: 6,
-    CandidateMaxAgeSeconds: 90,
-    SpotMaxAgeSeconds: 5,
-    MaxSpreadPips: 5,
-    MaxEntryDistancePips: 40,
-    MinConfluence: 2,
     PollMilliseconds: 10,
-    CandidateStream: "auto_trade:candidates",
     EventStream: "auto_trade:events",
     Label: "apexvoid-auto",
-    ContractMode: "v8_only",
     PipSize: 0.1m,
     PipValuePerLot: 10m,
     ContractSize: 100m,
@@ -463,8 +452,6 @@ public sealed class EquityZoneLadderGroupE2ETests
     public void EnqueuePlan(string json) =>
       _stream.Add(new TradeStreamEntry($"{_nextStreamId++}-0", json));
 
-    public Task<string> GetCursorAsync(CancellationToken ct) => Task.FromResult("0-0");
-    public Task SetCursorAsync(string cursor, CancellationToken ct) => Task.CompletedTask;
     public Task<string> GetCommandCursorAsync(CancellationToken ct) => Task.FromResult("0-0");
     public Task SetCommandCursorAsync(string cursor, CancellationToken ct) => Task.CompletedTask;
     public Task<string> GetTradePlanCursorAsync(CancellationToken ct) =>
@@ -523,61 +510,5 @@ public sealed class EquityZoneLadderGroupE2ETests
       return Task.CompletedTask;
     }
 
-    public Task SavePositionAsync(AutoTradePositionState state, CancellationToken ct) =>
-      Task.CompletedTask;
-    public Task<AutoTradePositionState?> GetPositionAsync(long positionId, CancellationToken ct) =>
-      Task.FromResult<AutoTradePositionState?>(null);
-    public Task<IReadOnlyList<long>> GetTrackedPositionIdsAsync(CancellationToken ct) =>
-      Task.FromResult<IReadOnlyList<long>>([]);
-    public Task DeletePositionAsync(long positionId, CancellationToken ct) =>
-      Task.CompletedTask;
-    public Task<long> GetDailyTradeCountAsync(DateOnly date, CancellationToken ct) =>
-      Task.FromResult(0L);
-    public Task<long> IncrementDailyTradeCountAsync(DateOnly date, CancellationToken ct) =>
-      Task.FromResult(1L);
-    public Task<bool> IsPausedAsync(CancellationToken ct) => Task.FromResult(false);
-    public Task IncrementGateRejectAsync(
-      string symbol, string condition, CancellationToken ct
-    ) => Task.CompletedTask;
-    public Task IncrementAddRejectAsync(
-      string symbol, string mode, string condition, CancellationToken ct
-    ) => Task.CompletedTask;
-    public Task RecordZoneCooldownAsync(
-      string symbol, string direction, ZoneCooldownRecord record, int ttlMinutes,
-      CancellationToken ct
-    ) => Task.CompletedTask;
-    public Task SaveGroupPlanAsync(
-      AutoTradeGroupPlan plan, TimeSpan ttl, CancellationToken ct
-    ) => Task.CompletedTask;
-    public Task DeleteGroupPlanAsync(string groupId, CancellationToken ct) =>
-      Task.CompletedTask;
-
-    public Task<CandidateClaimResult> TryClaimCandidateAsync(
-      string candidateId, string streamEventId, TimeSpan leaseDuration,
-      CancellationToken ct, CandidateClaimPolicy? policy = null
-    ) => throw new NotSupportedException();
-
-    public Task<bool> RenewCandidateLeaseAsync(
-      string candidateId, string streamEventId, string leaseToken,
-      TimeSpan leaseDuration, CancellationToken ct
-    ) => throw new NotSupportedException();
-
-    public Task<bool> TransitionCandidateStateAsync(
-      string candidateId, string streamEventId, string leaseToken, string newState,
-      CancellationToken ct, string? lastError = null
-    ) => throw new NotSupportedException();
-
-    public Task<string?> GetCandidateStatusAsync(string candidateId, CancellationToken ct) =>
-      Task.FromResult<string?>(null);
-
-    public Task<bool> CompleteCandidateAsync(
-      string candidateId, string streamEventId, string leaseToken, string outcome,
-      CancellationToken ct
-    ) => throw new NotSupportedException();
-
-    public Task<bool> ReleaseCandidateAsync(
-      string candidateId, string streamEventId, string leaseToken,
-      CancellationToken ct, string? lastError = null
-    ) => throw new NotSupportedException();
   }
 }

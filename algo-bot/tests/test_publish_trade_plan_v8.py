@@ -984,32 +984,6 @@ async def test_midpoint_inside_does_not_override_executable_quote_outside(
 
 
 @pytest.mark.asyncio
-async def test_publish_no_longer_reads_contract_mode_at_all(monkeypatch):
-  # _publish_trade_plan_v8 must not gate on AUTO_TRADE_CONTRACT_MODE - TradePlan is
-  # the sole autonomous path, unconditionally, not a mode. Force the
-  # setting to a value that would have disabled TradePlan under the old gate (and
-  # is now rejected by Settings validation, but this function doesn't
-  # validate - it just must not branch on it) to prove the gate is gone.
-  install_runtime_overrides(monkeypatch, overrides={"contract.mode": "legacy_v6"})
-  client = redis_state.get_client()
-  match = _match(match_id="match-v8-2", thesis_id="thesis-v8-2")
-  await _confirm_setup(client, match)
-  spot = worker.AutoTradeSpot(
-    price=4089.0, ts=int(time.time()), fresh=True, bid=4088.9, ask=4089.1,
-  )
-
-  plan_id = await _publish_nonreaction_after_m1(
-    client,
-    spot,
-    match,
-  )
-
-  assert plan_id is not None
-  record = await load_setup(client, "match-v8-2")
-  assert record.state == PLAN_PUBLISHED
-
-
-@pytest.mark.asyncio
 async def test_second_setup_for_same_thesis_is_rejected_not_duplicated():
   client = redis_state.get_client()
   spot = worker.AutoTradeSpot(

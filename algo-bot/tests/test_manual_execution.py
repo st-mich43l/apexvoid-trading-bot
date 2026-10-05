@@ -1,5 +1,7 @@
 import asyncio
 import json
+import time
+from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -34,210 +36,43 @@ def _intent(**overrides) -> ManualTradeIntent:
 
 
 # ---------------------------------------------------------------------------
-# _intent_to_candidate_payload
-# ---------------------------------------------------------------------------
-
-@pytest.mark.no_database
-def test_intent_to_candidate_payload_sell_uses_entry_low_reference_edge():
-  payload = manual_execution._intent_to_candidate_payload(_intent())
-
-  assert payload["version"] == 3
-  assert payload["candidate_id"] == "manual:47:0"
-  assert payload["symbol"] == "XAU"
-  assert payload["timeframe"] == "M1"
-  assert payload["setup"] == "golden-fib"
-  assert payload["mode"] == "manual_algo"
-  assert payload["direction"] == "SELL"
-  assert payload["entry_zone"] == {"low": 4100.0, "high": 4105.0}
-  assert payload["manual_stop_loss"] == 4110.0
-  assert payload["manual_expires_at"] is None
-  assert payload["confluence"] == 2
-  # SELL reference edge = entry_low (4100.0, matches pips_format.rr_entry's
-  # own SELL -> entry convention): |4100-4095|=5 -> 50p, |4100-4090|=10 ->
-  # 100p, |4100-4080|=20 -> 200p.
-  assert payload["targets_pips"] == [50, 100, 200]
-  assert payload["manual_take_profits"] == [4095.0, 4090.0, 4080.0]
-  assert payload["manual_target_weights"] == [33, 33, 34]
-  assert payload["manual_single_entry"] is False
-  assert payload["risk_multiplier"] == 1.0
-  assert payload["group_id"] == "manual:47:0"
-  assert payload["strategy_family"] == "manual"
-  assert payload["parent_group_id"] is None
-  assert payload["current_price"] == pytest.approx(4100.0)
-  assert payload["key_level"] == pytest.approx(4100.0)
-
-
-@pytest.mark.no_database
-def test_intent_to_candidate_payload_buy_uses_entry_high_reference_edge():
-  payload = manual_execution._intent_to_candidate_payload(_intent(
-    direction="BUY",
-    entry_low=1999.5,
-    entry_high=2000.5,
-    sl=1994.0,
-    tps=(2010.0, 2020.0),
-    setup_type=None,
-    confluence=None,
-  ))
-
-  assert payload["direction"] == "BUY"
-  # Untagged manual signals default confluence to 1, exempt from the
-  # global MinConfluence gate on the C# side (see AutoTradeEngine.cs).
-  assert payload["confluence"] == 1
-  assert payload["setup"] == "key-level"
-  # BUY reference edge = entry_high (2000.5): |2000.5-2010|=9.5 -> 95p,
-  # |2000.5-2020|=19.5 -> 195p.
-  assert payload["targets_pips"] == [95, 195]
-  assert payload["manual_target_weights"] == [50, 50]
-  assert payload["current_price"] == pytest.approx(2000.5)
-  assert payload["key_level"] == pytest.approx(2000.5)
-
-
-@pytest.mark.no_database
-def test_intent_to_candidate_payload_never_emits_zero_or_negative_pips():
-  # A TP exactly at the reference edge would otherwise round to 0, which
-  # AutoTradeEngine.cs's manual-algo target-contract validation rejects.
-  payload = manual_execution._intent_to_candidate_payload(_intent(
-    direction="SELL",
-    entry_low=4100.0,
-    entry_high=4105.0,
-    tps=(4100.02,),
-  ))
-
-  assert payload["targets_pips"] == [1]
-  assert payload["manual_target_weights"] == [100]
-
-
-@pytest.mark.no_database
-def test_intent_to_candidate_payload_fx_includes_volume_multiplier(monkeypatch):
-  from tests.support.canonical_fixtures import _load_production_example
-
-  cfg = _load_production_example().config
-  for target in (
-    "app.signals.manual_execution.runtime_config",
-    "app.signals.fx_manual_algo.runtime_config",
-    "app.core.symbols.runtime_config",
-    "app.signals.pips_format.runtime_config",
-  ):
-    monkeypatch.setattr(target, cfg, raising=False)
-
-  payload = manual_execution._intent_to_candidate_payload(_intent(
-    symbol="EURUSD",
-    entry_low=1.15007,
-    entry_high=1.15007,
-    sl=1.14867,
-    tps=(1.15147, 1.15217, 1.15287),
-  ))
-
-  assert payload["manual_single_entry"] is True
-  assert payload["manual_target_weights"] == [25, 25, 50]
-  assert payload["risk_multiplier"] == pytest.approx(
-    float(cfg.manual_algo.sizing.fx_volume_multiplier),
-  )
-
-
-@pytest.mark.no_database
-@pytest.mark.parametrize(
-  ("targets", "expected"),
-  [
-    ((4095.0,), [100]),
-    ((4095.0, 4090.0), [40, 60]),
-    ((4095.0, 4090.0, 4085.0), [40, 30, 30]),
-    ((4095.0, 4090.0, 4085.0, 4080.0, 4075.0), [40, 15, 15, 15, 15]),
-  ],
-)
-def test_xau_manual_tp1_fraction_adapts_to_any_tp_count(
-  monkeypatch,
-  targets,
-  expected,
-):
-  from tests.support.canonical_fixtures import _load_production_example
-
-  cfg = _load_production_example().config
-  for target in (
-    "app.signals.manual_execution.runtime_config",
-    "app.core.symbols.runtime_config",
-    "app.signals.pips_format.runtime_config",
-  ):
-    monkeypatch.setattr(target, cfg, raising=False)
-
-  payload = manual_execution._intent_to_candidate_payload(_intent(tps=targets))
-
-  assert payload["manual_target_weights"] == expected
-  assert payload["manual_single_entry"] is False
-  assert payload["risk_multiplier"] == 1.0
-
-
-@pytest.mark.no_database
-def test_intent_single_entry_override_forces_single_entry_on_zone_ladder_xau():
-  # Baseline (no override): XAU is configured zone_ladder, so the default
-  # path (test above / test_intent_to_candidate_payload_sell_uses_entry_low_
-  # reference_edge) already asserts manual_single_entry is False. The owner
-  # /1r suffix must force it True regardless, without touching the
-  # instrument's own configured entry_mode.
-  payload = manual_execution._intent_to_candidate_payload(
-    _intent(tps=(4095.0,), single_entry_override=True)
-  )
-
-  assert payload["manual_single_entry"] is True
-  assert payload["manual_target_weights"] == [100]
-
-
-# ---------------------------------------------------------------------------
 # bridge_intents_loop / _process_intent_entries
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_process_intent_entries_publishes_candidate_shaped_payload(monkeypatch):
-  install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_stream": "auto_trade:test"})
-  install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_stream_maxlen": 100})
+async def test_published_intent_is_a_tradeplan_v8_on_the_plan_stream():
+  from app.autotrade.trade_plan_stream import read_trade_plan
+
   client = redis_state.get_client()
-  intent_payload = {
-    "intent_id": "manual:5:0",
-    "manual_signal_id": 5,
-    "revision": 0,
-    "direction": "SELL",
-    "symbol": "XAU",
-    "entry_low": 4100.0,
-    "entry_high": 4105.0,
-    "sl": 4110.0,
-    "tps": [4095.0, 4090.0, 4080.0],
-    "created_at": 1_800_000_000,
-    "expires_at": None,
-    "setup_type": "golden-fib",
-    "confluence": 2,
-    "execution_mode": "algo",
-  }
-  entries = [("101-0", {"payload": json.dumps(intent_payload)})]
+  intent = _intent(intent_id="manual:5:0", manual_signal_id=5, created_at=int(time.time()))
 
-  cursor = await manual_execution._process_intent_entries(
-    client, entries, cursor="0-0",
-  )
+  await manual_execution._publish_intent(client, intent)
 
-  assert cursor == "101-0"
-  candidates = await client.xrange("auto_trade:test")
-  assert len(candidates) == 1
-  candidate = json.loads(candidates[0][1]["payload"])
-  assert candidate["candidate_id"] == "manual:5:0"
-  assert candidate["mode"] == "manual_algo"
-  assert candidate["manual_stop_loss"] == 4110.0
-  assert candidate["targets_pips"] == [50, 100, 200]
-  assert await client.get(manual_execution._INTENT_BRIDGE_CURSOR_KEY) == "101-0"
+  plan = await read_trade_plan(client, "manual:5:0")
+  assert plan is not None
+  assert plan.analysis.strategy_family == "manual"
+  assert plan.stop.price == Decimal("4110.00")
+  assert await client.xlen(runtime_config.runtime.redis_streams.trade_plans) >= 1
 
 
 @pytest.mark.asyncio
-async def test_process_intent_entries_skips_malformed_payload_but_advances_cursor(
-  monkeypatch,
-):
-  install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_stream": "auto_trade:test2"})
+async def test_an_invalid_owner_intent_is_rejected_not_published(monkeypatch):
+  from app.autotrade.trade_plan_stream import read_trade_plan
+
   client = redis_state.get_client()
-  entries = [("55-0", {"payload": "not json"})]
+  status = AsyncMock()
+  truth = AsyncMock()
+  monkeypatch.setattr(manual_execution, "set_execution_status", status)
+  monkeypatch.setattr(manual_execution, "_send_executor_truth", truth)
+  # A SELL whose stop sits below the zone is not a valid plan.
+  intent = _intent(intent_id="manual:7:0", manual_signal_id=7, sl=4090.0, created_at=int(time.time()))
 
-  cursor = await manual_execution._process_intent_entries(
-    client, entries, cursor="0-0",
-  )
+  await manual_execution._publish_intent(client, intent)
 
-  assert cursor == "55-0"
-  assert await client.xrange("auto_trade:test2") == []
+  assert await read_trade_plan(client, "manual:7:0") is None
+  status.assert_awaited_once()
+  assert status.await_args.args[:2] == (7, "rejected")
+  truth.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -294,12 +129,12 @@ def test_is_manual_algo_event_filters_autonomous_stream():
     "candidate_id": "cand:1",
   }) is False
   assert manual_execution._is_manual_algo_event({
-    "type": "manual_limit_placed",
+    "type": "v8_order_submitted",
     "stream": "algo_manual",
     "symbol": "EURUSD",
   }) is True
   assert manual_execution._is_manual_algo_event({
-    "type": "take_profit",
+    "type": "tp_booked",
     "candidate_id": "manual:5:0",
     "symbol": "USDJPY",
   }) is True
@@ -331,7 +166,7 @@ async def test_enqueue_event_prefers_db_symbol_over_bad_xau_stamp(monkeypatch):
   monkeypatch.setattr(manual_execution, "_ensure_symbol_worker", capture_ensure)
 
   await manual_execution._enqueue_event({
-    "type": "manual_limit_placed",
+    "type": "v8_order_submitted",
     "stream": "algo_manual",
     "candidate_id": "manual:103:0",
     "symbol": "XAU",
@@ -354,44 +189,25 @@ async def test_reconcile_events_loop_is_a_no_op_when_disabled():
 
 
 @pytest.mark.asyncio
-@pytest.mark.no_database
-async def test_manual_intent_bypasses_worker_strategy_gates(
-  monkeypatch,
-):
-  install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_stream": "auto_trade:test3"})
-  install_runtime_overrides(monkeypatch, legacy_overrides={"auto_trade_stream_maxlen": 100})
-  install_runtime_overrides(monkeypatch, legacy_overrides={"telegram_owner_id": 4242})
+async def test_manual_intent_never_touches_the_autonomous_worker_gates(monkeypatch):
+  """An owner /algo plan is published directly: no scanner/analysis policy."""
+  from app.autotrade import worker
+  from app.autotrade.trade_plan_stream import read_trade_plan
+
   sent = AsyncMock()
   monkeypatch.setattr(manual_execution, "send_scanner_with_retry", sent)
+  monkeypatch.setattr(worker, "_publish_trade_plan_v8", AsyncMock(side_effect=AssertionError))
   client = redis_state.get_client()
-  intent_payload = {
-    "intent_id": "manual:9:0",
-    "manual_signal_id": 9,
-    "revision": 0,
-    "direction": "BUY",
-    "symbol": "XAU",
-    "entry_low": 4116.5,
-    "entry_high": 4117.0,
-    "sl": 4111.5,
-    "tps": [4130.0],
-    "created_at": 1_800_000_000,
-    "expires_at": None,
-    "setup_type": None,
-    "confluence": 1,
-    "execution_mode": "algo",
-  }
-  entries = [("201-0", {"payload": json.dumps(intent_payload)})]
-
-  cursor = await manual_execution._process_intent_entries(
-    client, entries, cursor="0-0",
+  intent = _intent(
+    intent_id="manual:9:0", manual_signal_id=9, direction="BUY",
+    entry_low=4116.5, entry_high=4117.0, sl=4111.5, tps=(4130.0,),
+    setup_type=None, confluence=1, created_at=int(time.time()),
   )
 
-  assert cursor == "201-0"
-  candidates = await client.xrange("auto_trade:test3")
-  assert len(candidates) == 1
-  candidate = json.loads(candidates[0][1]["payload"])
-  assert candidate["mode"] == "manual_algo"
-  assert candidate["bypass_analysis_gates"] is True
+  await manual_execution._publish_intent(client, intent)
+
+  plan = await read_trade_plan(client, "manual:9:0")
+  assert plan is not None and plan.analysis.direction == "BUY"
   sent.assert_not_awaited()
 
 
@@ -443,7 +259,7 @@ async def test_handle_event_fill_marks_filled_records_broker_fields_and_activate
   positions: dict[int, int] = {}
 
   event = {
-    "type": "manual_opened",
+    "type": "order_filled",
     "position_id": 555,
     "candidate_id": f"manual:{sid}:0",
     "setup": "Manual Algo",
@@ -489,7 +305,7 @@ async def test_fill_event_never_reposts_entry_card_even_when_fill_differs_from_z
   positions: dict[int, int] = {}
 
   event = {
-    "type": "manual_opened",
+    "type": "order_filled",
     "position_id": 309,
     "candidate_id": f"manual:{sid}:0",
     "setup": "Key Level",
@@ -506,20 +322,15 @@ async def test_fill_event_never_reposts_entry_card_even_when_fill_differs_from_z
 
 
 @pytest.mark.asyncio
-async def test_limit_placed_event_is_the_first_broker_confirmation(monkeypatch):
+async def test_order_submitted_event_marks_the_signal_pending(monkeypatch):
   sid = await _algo_signal()
   truth = AsyncMock()
   monkeypatch.setattr(manual_execution, "_send_executor_truth", truth)
-  install_runtime_overrides(monkeypatch, legacy_overrides={"manual_algo_owner_execution_dm_enabled": True})
   event = {
-    "type": "manual_limit_placed",
+    "type": "v8_order_submitted",
     "stream": "algo_manual",
     "candidate_id": f"manual:{sid}:0",
     "direction": "SELL",
-    "entry_low": 4100.0,
-    "entry_high": 4105.0,
-    "stop_loss": 4110.0,
-    "target_prices": [4095.0, 4090.0, 4080.0],
     "order_id": 777,
   }
 
@@ -529,11 +340,7 @@ async def test_limit_placed_event_is_the_first_broker_confirmation(monkeypatch):
 
   row = await store.get_manual_signal(sid)
   assert row["execution_status"] == "pending"
-  truth.assert_awaited_once()
-  text = truth.await_args.args[0]
-  assert "LIMIT ORDER PLACED" in text
-  assert "777" in text
-  assert f"manual:{sid}:0" in text
+  truth.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -548,7 +355,7 @@ async def test_limit_placed_never_posts_to_channel(monkeypatch):
   truth = AsyncMock()
   monkeypatch.setattr(manual_execution, "_send_executor_truth", truth)
   event = {
-    "type": "manual_limit_placed",
+    "type": "v8_order_submitted",
     "stream": "algo_manual",
     "candidate_id": f"manual:{sid}:0",
     "direction": "SELL",
@@ -582,7 +389,7 @@ async def test_fill_event_owner_dm_is_off_by_default(monkeypatch):
   positions: dict[int, int] = {}
 
   event = {
-    "type": "manual_opened",
+    "type": "order_filled",
     "position_id": 555,
     "candidate_id": f"manual:{sid}:0",
     "setup": "Manual Algo",
@@ -606,7 +413,7 @@ async def test_manual_rejection_reports_machine_reason(monkeypatch):
   truth = AsyncMock()
   monkeypatch.setattr(manual_execution, "_send_executor_truth", truth)
   event = {
-    "type": "rejected",
+    "type": "plan_rejected",
     "stream": "algo_manual",
     "candidate_id": f"manual:{sid}:0",
     "reason_code": "broker_account_not_hedged_for_opposite_manual_order",
@@ -632,7 +439,7 @@ async def test_handle_event_skips_opened_event_without_manual_algo_setup(monkeyp
   positions: dict[int, int] = {}
 
   event = {
-    "type": "manual_opened",
+    "type": "order_filled",
     "position_id": 888,
     "candidate_id": "manual:1:0",
     "setup": "Box Breakout",
@@ -650,7 +457,7 @@ async def test_handle_event_skips_events_for_unknown_positions(monkeypatch):
   positions: dict[int, int] = {}
 
   event = {
-    "type": "take_profit", "position_id": 777, "price": 4001.0, "target_pips": 30,
+    "type": "tp_booked", "position_id": 777, "price": 4001.0, "target_pips": 30,
   }
   await manual_execution._handle_event(client, event, positions)
 
@@ -667,7 +474,7 @@ async def test_handle_event_take_profit_books_equal_weight_partial_leg(monkeypat
   positions = {555: sid}
 
   # Configured targets [50, 100, 200]p; 50 is not the max -> partial 1/3.
-  event = {"type": "take_profit", "position_id": 555, "price": 4095.0, "target_pips": 50}
+  event = {"type": "tp_booked", "position_id": 555, "price": 4095.0, "target_pips": 50}
   await manual_execution._handle_event(client, event, positions)
 
   row = await store.get_manual_signal(sid)
@@ -694,7 +501,7 @@ async def test_multi_leg_same_tp_only_fans_out_furthest_once(monkeypatch):
     await manual_execution._handle_event(
       client,
       {
-        "type": "take_profit",
+        "type": "tp_booked",
         "position_id": position_id,
         "candidate_id": f"manual:{sid}:0",
         "price": 4095.0,
@@ -721,7 +528,7 @@ async def test_multi_leg_further_tp_still_fans_out(monkeypatch):
   await manual_execution._handle_event(
     client,
     {
-      "type": "take_profit",
+      "type": "tp_booked",
       "position_id": 555,
       "price": 4095.0,
       "target_pips": 50,
@@ -732,7 +539,7 @@ async def test_multi_leg_further_tp_still_fans_out(monkeypatch):
   await manual_execution._handle_event(
     client,
     {
-      "type": "take_profit",
+      "type": "tp_booked",
       "position_id": 556,
       "price": 4090.0,
       "target_pips": 100,
@@ -778,7 +585,7 @@ async def test_multi_leg_lower_ordinal_from_a_different_leg_still_books(
   await manual_execution._handle_event(
     client,
     {
-      "type": "take_profit",
+      "type": "tp_booked",
       "position_id": 555,
       "price": 4080.0,
       "target_pips": 200,
@@ -791,7 +598,7 @@ async def test_multi_leg_lower_ordinal_from_a_different_leg_still_books(
   await manual_execution._handle_event(
     client,
     {
-      "type": "take_profit",
+      "type": "tp_booked",
       "position_id": 556,
       "price": 4095.0,
       "target_pips": 50,
@@ -811,7 +618,7 @@ async def test_multi_leg_lower_ordinal_from_a_different_leg_still_books(
   await manual_execution._handle_event(
     client,
     {
-      "type": "take_profit",
+      "type": "tp_booked",
       "position_id": 555,
       "price": 4080.0,
       "target_pips": 200,
@@ -842,7 +649,7 @@ async def test_take_profit_unresolved_ordinal_is_dropped_not_spammed(monkeypatch
   # Configured targets [50, 100, 200]p (see _algo_signal defaults) - 5 is
   # below every configured ordinal, same shape as a stale/mismatched
   # target_pips that cannot resolve to TP1/TP2/TP3.
-  event = {"type": "take_profit", "position_id": 555, "price": 4099.5, "target_pips": 5}
+  event = {"type": "tp_booked", "position_id": 555, "price": 4099.5, "target_pips": 5}
   await manual_execution._handle_event(client, event, positions)
 
   row = await store.get_manual_signal(sid)
@@ -862,7 +669,7 @@ async def test_multi_leg_same_sl_move_only_fans_out_furthest_once(monkeypatch):
     await manual_execution._handle_event(
       client,
       {
-        "type": "stop_moved",
+        "type": "sl_moved",
         "position_id": position_id,
         "candidate_id": f"manual:{sid}:0",
         "price": 4103.06,
@@ -887,7 +694,7 @@ async def test_multi_leg_further_sl_move_still_fans_out(monkeypatch):
   await manual_execution._handle_event(
     client,
     {
-      "type": "stop_moved",
+      "type": "sl_moved",
       "position_id": 555,
       "candidate_id": f"manual:{sid}:0",
       "price": 4103.06,
@@ -898,7 +705,7 @@ async def test_multi_leg_further_sl_move_still_fans_out(monkeypatch):
   await manual_execution._handle_event(
     client,
     {
-      "type": "stop_moved",
+      "type": "sl_moved",
       "position_id": 556,
       "candidate_id": f"manual:{sid}:0",
       "price": 4095.0,
@@ -968,57 +775,6 @@ async def test_take_profit_skips_when_tp_already_reached(monkeypatch):
 
   execute.assert_not_awaited()
   post.assert_not_awaited()
-
-
-@pytest.mark.asyncio
-@pytest.mark.no_database
-async def test_manual_tp_reached_is_notify_only(monkeypatch):
-  notify = AsyncMock(return_value={
-    "action": "tp_reached",
-    "ok": True,
-    "sid": 7,
-    "seq": 7,
-    "tp_number": 4,
-    "pips": 130,
-  })
-  post = AsyncMock()
-  monkeypatch.setattr("app.signals.trade_ops.do_tp_reached", notify)
-  monkeypatch.setattr("app.signals.trade_ops.post_result", post)
-  sig = {
-    "id": 7,
-    "action": "SELL",
-    "symbol": "XAU",
-    "entry": 4100.0,
-    "entry_end": 4105.0,
-    "sl": 4110.0,
-    "tps": [4097.0, 4094.0, 4090.0, 4087.0, 4080.0],
-  }
-  monkeypatch.setattr(manual_execution, "get_manual_signal", AsyncMock(return_value=sig))
-  monkeypatch.setattr(
-    manual_execution,
-    "get_signal_by_execution_intent_id",
-    AsyncMock(return_value=sig),
-  )
-
-  await manual_execution._handle_event(
-    None,
-    {
-      "type": "manual_tp_reached",
-      "stream": "algo_manual",
-      "candidate_id": "manual:7:0",
-      "position_id": 555,
-      "target_pips": 130,
-    },
-    {555: 7},
-  )
-
-  notify.assert_awaited_once_with({
-    "sid": 7,
-    "symbol": "XAU",
-    "tp_number": 4,
-    "pips": 130,
-  })
-  post.assert_awaited_once()
 
 
 @pytest.mark.no_database
@@ -1122,7 +878,7 @@ async def test_handle_event_take_profit_closes_in_full_on_last_configured_target
   # even though this is the ladder's FIRST take_profit event for this
   # signal - proving finality is judged against the configured ladder, not
   # an event-count.
-  event = {"type": "take_profit", "position_id": 555, "price": 4080.0, "target_pips": 200}
+  event = {"type": "tp_booked", "position_id": 555, "price": 4080.0, "target_pips": 200}
   await manual_execution._handle_event(client, event, positions)
 
   row = await store.get_manual_signal(sid)
@@ -1133,50 +889,69 @@ async def test_handle_event_take_profit_closes_in_full_on_last_configured_target
 
 
 @pytest.mark.asyncio
-async def test_handle_event_position_closed_full_close_defers_to_group_result(
+async def test_position_closed_with_no_volume_left_is_the_terminal_group_result(
   monkeypatch,
 ):
-  """A leg closing completely (remaining_volume=0) must NOT finalize the
-  signal by itself - a manual /algo signal can be several independent
-  entry legs sharing one group, and only AutoTradeEngine.cs's own
-  group_result event (fired once every leg is done) knows the true,
-  correctly volume-weighted final result. See finalize_manual_group.
-  """
+  """TradePlan V8 reports a group's final close as one position_closed with
+  nothing left open; that is the authoritative close of the manual signal."""
   send = _mock_send(monkeypatch)
   sid = await _algo_signal()  # SELL entry=4100/4105 sl=4110
   await store.set_execution_fill(sid, broker_position_id=555, broker_fill_price=4100.0)
   client = redis_state.get_client()
   positions = {555: sid}
 
-  event = {
+  await manual_execution._handle_event(client, {
     "type": "position_closed",
     "position_id": 555,
     "candidate_id": f"manual:{sid}:0",
     "price": 4110.0,
     "remaining_volume": 0,
-    "leg_realized_pips": -100,
-    "volume": 1000,
-    "group_initial_volume": 1000,
-  }
-  await manual_execution._handle_event(client, event, positions)
-
-  row = await store.get_manual_signal(sid)
-  assert row["status"] == "open"
-  assert 555 not in positions
-  send.assert_not_awaited()
-
-  group_event = {
-    "type": "group_result",
-    "position_id": 555,
-    "candidate_id": f"manual:{sid}:0",
     "group_realized_pips": -100,
-  }
-  await manual_execution._handle_event(client, group_event, positions)
+  }, positions)
 
   row = await store.get_manual_signal(sid)
   assert row["status"] == "closed"
   assert row["result_pips"] == -100
+  assert 555 not in positions
   send.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_position_closed_with_volume_left_is_a_partial_leg_close(monkeypatch):
+  send = _mock_send(monkeypatch)
+  sid = await _algo_signal()
+  await store.set_execution_fill(sid, broker_position_id=555, broker_fill_price=4100.0)
+  client = redis_state.get_client()
+  positions = {555: sid}
+
+  await manual_execution._handle_event(client, {
+    "type": "position_closed",
+    "position_id": 555,
+    "candidate_id": f"manual:{sid}:0",
+    "price": 4095.0,
+    "remaining_volume": 500,
+    "leg_realized_pips": 50,
+    "volume": 500,
+    "group_initial_volume": 1000,
+  }, positions)
+
+  row = await store.get_manual_signal(sid)
+  assert row["status"] == "open"
+  assert positions == {555: sid}
+
+
+@pytest.mark.asyncio
+async def test_request_cancel_writes_a_plan_cancel_intent():
+  from app.autotrade.go_plan_cancel import read_plan_cancel
+
+  client = redis_state.get_client()
+
+  await manual_execution.request_cancel("manual:9:0")
+
+  intent = await read_plan_cancel(client, "manual:9:0")
+  assert intent is not None
+  assert intent["plan_id"] == "manual:9:0"
+  assert intent["source"] == "owner"
 
 
 @pytest.mark.no_database
@@ -1224,7 +999,7 @@ async def test_handle_event_group_result_keeps_peak_tp_not_shallow_blend(
   await manual_execution._handle_event(
     client,
     {
-      "type": "group_result",
+      "type": "position_closed", "remaining_volume": 0,
       "candidate_id": f"manual:{sid}:0",
       "group_realized_pips": 130,
     },
@@ -1265,17 +1040,8 @@ async def test_final_close_declutters_interim_replies_and_shows_realized_rr(
   await manual_execution._handle_event(
     client,
     {
-      "type": "take_profit", "position_id": 555, "price": 4095.0,
+      "type": "tp_booked", "position_id": 555, "price": 4095.0,
       "target_pips": 50, "candidate_id": f"manual:{sid}:0",
-    },
-    positions,
-  )
-  # TP3 is reached but never booked (no leg's own ladder owns it).
-  await manual_execution._handle_event(
-    client,
-    {
-      "type": "manual_tp_reached", "position_id": 555,
-      "target_pips": 200, "candidate_id": f"manual:{sid}:0",
     },
     positions,
   )
@@ -1285,7 +1051,7 @@ async def test_final_close_declutters_interim_replies_and_shows_realized_rr(
   await manual_execution._handle_event(
     client,
     {
-      "type": "group_result",
+      "type": "position_closed", "remaining_volume": 0,
       "position_id": 555,
       "candidate_id": f"manual:{sid}:0",
       "group_realized_pips": 160,
@@ -1294,7 +1060,7 @@ async def test_final_close_declutters_interim_replies_and_shows_realized_rr(
   )
 
   deleted.assert_awaited_once()
-  assert len(deleted.await_args.args[0]) == 2
+  assert len(deleted.await_args.args[0]) == 1
   send.assert_awaited_once()
   text = send.await_args.args[0]
   assert "closed" in text
@@ -1318,7 +1084,7 @@ async def test_realized_rr_uses_the_booking_legs_own_entry_price(monkeypatch):
   await manual_execution._handle_event(
     client,
     {
-      "type": "take_profit", "position_id": 555, "price": 4095.0,
+      "type": "tp_booked", "position_id": 555, "price": 4095.0,
       "target_pips": 50, "candidate_id": f"manual:{sid}:0",
       "leg_realized_pips": 30, "leg_entry_price": 4098.0,
     },
@@ -1331,7 +1097,7 @@ async def test_realized_rr_uses_the_booking_legs_own_entry_price(monkeypatch):
   await manual_execution._handle_event(
     client,
     {
-      "type": "group_result",
+      "type": "position_closed", "remaining_volume": 0,
       "position_id": 555,
       "candidate_id": f"manual:{sid}:0",
       "group_realized_pips": 30,
@@ -1409,7 +1175,7 @@ async def test_handle_take_profit_falls_back_to_broker_fill_without_leg_pips(
   client = redis_state.get_client()
   positions = {555: sid}
   event = {
-    "type": "take_profit",
+    "type": "tp_booked",
     "position_id": 555,
     "price": 4095.0,
     "target_pips": 50,
@@ -1442,7 +1208,7 @@ async def test_handle_take_profit_uses_the_booking_legs_own_pips(monkeypatch):
   client = redis_state.get_client()
   positions = {555: sid}
   event = {
-    "type": "take_profit",
+    "type": "tp_booked",
     "position_id": 555,
     "price": 4095.0,
     "target_pips": 50,
@@ -1511,82 +1277,6 @@ async def test_handle_event_position_closed_without_price_marks_error_not_silent
 
 
 @pytest.mark.asyncio
-async def test_handle_event_manual_closed_applies_owner_requested_fraction(monkeypatch):
-  send = _mock_send(monkeypatch)
-  sid = await _algo_signal()
-  await store.set_execution_fill(sid, broker_position_id=555, broker_fill_price=4100.0)
-  client = redis_state.get_client()
-  positions = {555: sid}
-  await manual_execution.request_close(sid, f"manual:{sid}:0", frac=0.5)
-
-  # This leg still has volume left (a genuine partial /trade_close 50%) -
-  # its own leg_realized_pips/volume/group_initial_volume drive the ledger
-  # entry, matching the "actual executed fraction" AutoTradeEngine.cs
-  # reports rather than remembering the originally-requested one.
-  event = {
-    "type": "manual_closed",
-    "position_id": 555,
-    "candidate_id": f"manual:{sid}:0",
-    "price": 4095.0,
-    "remaining_volume": 300,
-    "leg_realized_pips": 50,
-    "volume": 300,
-    "group_initial_volume": 600,
-  }
-  await manual_execution._handle_event(client, event, positions)
-
-  row = await store.get_manual_signal(sid)
-  legs = row["legs"]
-  assert legs[0]["frac"] == pytest.approx(0.5)
-  assert legs[0]["pips"] == 50
-  assert row["status"] == "open"
-  assert 555 in positions
-  send.assert_awaited_once()
-
-
-@pytest.mark.asyncio
-async def test_handle_event_manual_closed_full_close_defers_to_group_result(
-  monkeypatch,
-):
-  send = _mock_send(monkeypatch)
-  sid = await _algo_signal()
-  await store.set_execution_fill(sid, broker_position_id=555, broker_fill_price=4100.0)
-  client = redis_state.get_client()
-  positions = {555: sid}
-  await manual_execution.request_close(sid, f"manual:{sid}:0", frac=None)
-
-  event = {
-    "type": "manual_closed",
-    "position_id": 555,
-    "candidate_id": f"manual:{sid}:0",
-    "price": 4095.0,
-    "remaining_volume": 0,
-    "leg_realized_pips": 50,
-    "volume": 600,
-    "group_initial_volume": 600,
-  }
-  await manual_execution._handle_event(client, event, positions)
-
-  row = await store.get_manual_signal(sid)
-  assert row["status"] == "open"
-  assert 555 not in positions
-  send.assert_not_awaited()
-
-  group_event = {
-    "type": "group_result",
-    "position_id": 555,
-    "candidate_id": f"manual:{sid}:0",
-    "group_realized_pips": 50,
-  }
-  await manual_execution._handle_event(client, group_event, positions)
-
-  row = await store.get_manual_signal(sid)
-  assert row["status"] == "closed"
-  assert row["result_pips"] == 50
-  send.assert_awaited_once()
-
-
-@pytest.mark.asyncio
 async def test_handle_event_manual_sl_moved_updates_stop(monkeypatch):
   send = _mock_send(monkeypatch)
   sid = await _algo_signal()
@@ -1610,7 +1300,7 @@ async def test_handle_event_manual_cancelled_cancels_armed_signal(monkeypatch):
   client = redis_state.get_client()
   positions: dict[int, int] = {}
 
-  event = {"type": "manual_cancelled", "candidate_id": f"manual:{sid}:0"}
+  event = {"type": "plan_cancelled", "candidate_id": f"manual:{sid}:0"}
   await manual_execution._handle_event(client, event, positions)
 
   row = await store.get_manual_signal(sid)
@@ -1645,7 +1335,7 @@ async def test_handle_event_manual_cancelled_hard_deletes_when_pending_delete(
 
   await manual_execution._handle_event(
     client,
-    {"type": "manual_cancelled", "candidate_id": intent},
+    {"type": "plan_cancelled", "candidate_id": intent},
     {},
   )
 
@@ -1664,7 +1354,7 @@ async def test_handle_event_manual_expired_releases_watcher_ownership(monkeypatc
 
   await manual_execution._handle_event(
     client,
-    {"type": "manual_expired", "candidate_id": f"manual:{sid}:0"},
+    {"type": "plan_expired", "candidate_id": f"manual:{sid}:0"},
     {},
   )
 
@@ -1684,7 +1374,7 @@ async def test_handle_event_stop_moved_fans_out_manual_algo_be_move(monkeypatch)
   positions = {555: sid}
 
   event = {
-    "type": "stop_moved",
+    "type": "sl_moved",
     "position_id": 555,
     "candidate_id": f"manual:{sid}:0",
     "price": 4103.06,
@@ -1704,7 +1394,7 @@ async def test_handle_event_stop_moved_ignores_autonomous_positions(monkeypatch)
   send = _mock_send(monkeypatch)
   client = redis_state.get_client()
 
-  event = {"type": "stop_moved", "position_id": 999, "price": 4108.0}
+  event = {"type": "sl_moved", "position_id": 999, "price": 4108.0}
   await manual_execution._handle_event(client, event, {})
 
   send.assert_not_awaited()
@@ -1724,7 +1414,7 @@ async def test_handle_event_resolves_signal_via_candidate_id_after_cache_miss(
   positions: dict[int, int] = {}
 
   event = {
-    "type": "take_profit",
+    "type": "tp_booked",
     "position_id": 555,
     "price": 4080.0,
     "target_pips": 200,
@@ -1760,19 +1450,6 @@ async def test_handle_event_command_error_marks_execution_status_error(monkeypat
 # ---------------------------------------------------------------------------
 # request_cancel / request_close / request_move_sl
 # ---------------------------------------------------------------------------
-
-@pytest.mark.asyncio
-async def test_request_cancel_xadds_cancel_pending_command(monkeypatch):
-  install_runtime_overrides(monkeypatch, legacy_overrides={"manual_trade_command_stream": "manual_trade:cmd1",})
-  client = redis_state.get_client()
-
-  await manual_execution.request_cancel("manual:9:0")
-
-  entries = await client.xrange("manual_trade:cmd1")
-  assert len(entries) == 1
-  payload = json.loads(entries[0][1]["payload"])
-  assert payload == {"type": "cancel_pending", "intent_id": "manual:9:0"}
-
 
 @pytest.mark.asyncio
 async def test_request_close_xadds_close_command_by_intent_id(monkeypatch):
@@ -1818,32 +1495,31 @@ async def test_request_close_auto_position_xadds_close_position_command(monkeypa
 # list_open_algo_auto_positions
 # ---------------------------------------------------------------------------
 
+async def _seed_runtime_plans(client, plans: dict[str, dict]) -> None:
+  await client.set("execution:trade_plan_runtime_ids", ",".join(plans))
+  for plan_id, state in plans.items():
+    await client.set(f"execution:plan_runtime:{plan_id}", json.dumps(state))
+
+
+def _leg(position_id, fill, remaining):
+  return {"LegId": "L1", "BrokerPositionId": position_id, "FillPrice": fill,
+          "RemainingVolume": remaining}
+
+
 @pytest.mark.asyncio
-async def test_list_open_algo_auto_positions_filters_stream_symbol_and_remaining():
-  # Only the genuinely open algo_auto XAU position should survive: the
-  # algo_manual one belongs to /trade_close instead, the GBPJPY one is a
-  # different instrument, and the zero-remaining one is already flat.
+async def test_list_open_algo_auto_positions_filters_manual_symbol_and_remaining():
+  # Only the genuinely open autonomous XAU leg survives: the manual /algo plan
+  # belongs to /trade_close, the GBPJPY leg is another instrument, and the
+  # zero-remaining leg is already flat.
   client = redis_state.get_client()
-  await client.sadd(
-    "auto_trade:positions", "101", "102", "103", "104",
-  )
-  await client.set("auto_trade:position:101", json.dumps({
-    "position_id": 101, "symbol": "XAU", "direction": 0,
-    "entry_price": 4350.0, "remaining_volume": 500, "stream": "algo_auto",
-    "setup": "key-level",
-  }))
-  await client.set("auto_trade:position:102", json.dumps({
-    "position_id": 102, "symbol": "XAU", "direction": 1,
-    "entry_price": 4360.0, "remaining_volume": 300, "stream": "algo_manual",
-  }))
-  await client.set("auto_trade:position:103", json.dumps({
-    "position_id": 103, "symbol": "GBPJPY", "direction": 0,
-    "entry_price": 215.0, "remaining_volume": 400, "stream": "algo_auto",
-  }))
-  await client.set("auto_trade:position:104", json.dumps({
-    "position_id": 104, "symbol": "XAU", "direction": 1,
-    "entry_price": 4370.0, "remaining_volume": 0, "stream": "algo_auto",
-  }))
+  await _seed_runtime_plans(client, {
+    "v8:auto-xau": {"PlanId": "v8:auto-xau", "Symbol": "XAU", "Direction": "BUY",
+                    "Legs": [_leg(101, 4350.0, 500), _leg(104, 4351.0, 0)]},
+    "manual:5:0": {"PlanId": "manual:5:0", "Symbol": "XAU", "Direction": "SELL",
+                   "Legs": [_leg(102, 4360.0, 300)]},
+    "v8:auto-gbpjpy": {"PlanId": "v8:auto-gbpjpy", "Symbol": "GBPJPY", "Direction": "BUY",
+                       "Legs": [_leg(103, 215.0, 400)]},
+  })
 
   rows = await manual_execution.list_open_algo_auto_positions("XAU")
 
@@ -1856,15 +1532,10 @@ async def test_list_open_algo_auto_positions_filters_stream_symbol_and_remaining
 @pytest.mark.asyncio
 async def test_list_open_algo_auto_positions_no_symbol_returns_all_symbols():
   client = redis_state.get_client()
-  await client.sadd("auto_trade:positions", "201", "202")
-  await client.set("auto_trade:position:201", json.dumps({
-    "position_id": 201, "symbol": "XAU", "direction": 0,
-    "entry_price": 4350.0, "remaining_volume": 500, "stream": "algo_auto",
-  }))
-  await client.set("auto_trade:position:202", json.dumps({
-    "position_id": 202, "symbol": "GBPJPY", "direction": 1,
-    "entry_price": 215.0, "remaining_volume": 200, "stream": "algo_auto",
-  }))
+  await _seed_runtime_plans(client, {
+    "v8:a": {"PlanId": "v8:a", "Symbol": "XAU", "Direction": "BUY", "Legs": [_leg(201, 4350.0, 500)]},
+    "v8:b": {"PlanId": "v8:b", "Symbol": "GBPJPY", "Direction": "SELL", "Legs": [_leg(202, 215.0, 200)]},
+  })
 
   rows = await manual_execution.list_open_algo_auto_positions()
 

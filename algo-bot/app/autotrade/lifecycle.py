@@ -172,7 +172,7 @@ async def emit_lifecycle(
         "type": state,
         **event,
       }, separators=(",", ":"), sort_keys=True)},
-      maxlen=max(100, runtime_config.runtime.redis_streams.candidate_maximum_length),
+      maxlen=max(100, runtime_config.runtime.redis_streams.stream_maximum_length),
       approximate=True,
     )
   await pipe.execute()

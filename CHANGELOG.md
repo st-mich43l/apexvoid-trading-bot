@@ -12,6 +12,31 @@ dated section after deployment.
 
 ## Unreleased
 
+### Removed
+- The V6 `TradeCandidate` execution path is gone; TradePlan V8 is the only
+  order contract. cTrader Engine's `AutoTradeEngine` is now a thin session
+  shell (broker session, plan polling, adoption, owner commands) and ~15k lines
+  of candidate processing, scale-in, range-box, flip, group-plan, lease and
+  recovery code were deleted with their tests. Python lost the candidate
+  publisher (`candidate_publish`/`candidate_execution_state`; the cycle lock and
+  ranked publication live on in `cycle_publish`), the V6 position/group-plan
+  readers, and the zone-cooldown status line. Redis keys
+  `auto_trade:candidates`, `auto_trade:position*`, `auto_trade:group_plans`,
+  `auto_trade:daily:*` and the `runtime.execution_contract.mode`,
+  `candidate_version` and ~45 other V6-only config leaves no longer exist.
+
+### Changed
+- Owner-armed manual `/algo` signals now execute as TradePlan V8
+  (`app/signals/manual_plan.py`): the owner's exact zone, stop and take profits
+  are declared as absolute prices (80/20 shallow/deep ladder, single limit for
+  FX or `/1r`, break-even after TP1, stop to the owner's TP1 after TP2).
+  `/trade_close`, `/trade_close_auto`, `/trade_sl`, `/auto_close_all` and
+  `/trade_cancel` act on the V8 plan runtime; manual events are labelled
+  `algo_manual` and exempt from the autonomous exposure rules. Differences from
+  V6: sizing is the V8 equity table (the V6 per-signal volume multiplier is
+  `risk.risk_multiplier`), the fixed risk leg is XAU-only, and the owner's
+  `/auto_pause` now holds V8 submissions.
+
 ### Fixed
 - Autonomous opposite-direction exposure is now owned per instrument in
   `instruments.yml` (`exposure.opposite_position`): FX never allows an opposite

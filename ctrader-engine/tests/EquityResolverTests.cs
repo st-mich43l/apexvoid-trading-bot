@@ -122,8 +122,8 @@ public sealed class EquityResolverTests
       pendingOrderCount: 0
     );
     var snapshot = new AutoTradeExecutorSnapshot(
-      "XAU", "demo_eval", "HedgedConcurrent",
-      Demo: true, Hedged: true, Ready: true,
+      "XAU", "demo_eval",
+      Demo: true, Ready: true,
       PositionIds: [], PendingOrderIds: [], GroupIds: [],
       UpdatedAt: 1_720_000_100,
       AccountBalance: resolved.AccountBalance,

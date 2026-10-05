@@ -426,17 +426,7 @@ public sealed class ReconnectTests
     Enabled: true,
     DryRun: true,
     ExpectedBroker: "Fusion",
-    StopLossDistance: 6.5m,
-    TargetsPips: [30, 60, 90, 120, 200],
-    TargetWeights: [20, 20, 20, 20, 20],
-    BreakEvenBufferTicks: 3,
-    CandidateMaxAgeSeconds: 90,
-    SpotMaxAgeSeconds: 5,
-    MaxSpreadPips: 5,
-    MaxEntryDistancePips: 10,
-    MinConfluence: 2,
     PollMilliseconds: 10,
-    CandidateStream: "auto_trade:candidates",
     EventStream: "auto_trade:events",
     Label: "apexvoid-auto"
   );
@@ -644,12 +634,6 @@ internal sealed class FaultAutoTradeStore : IAutoTradeStore
   public Action<AutoTradeEvent>? OnEvent { get; init; }
   public int CandidateReads { get; private set; }
 
-  public Task<string> GetCursorAsync(CancellationToken cancellationToken) =>
-    Task.FromResult("0-0");
-
-  public Task SetCursorAsync(string cursor, CancellationToken cancellationToken) =>
-    Task.CompletedTask;
-
   public Task<string> GetCommandCursorAsync(CancellationToken cancellationToken) =>
     Task.FromResult("0-0");
 
@@ -667,84 +651,6 @@ internal sealed class FaultAutoTradeStore : IAutoTradeStore
     return Task.FromResult<IReadOnlyList<TradeStreamEntry>>([]);
   }
 
-  public Task<CandidateClaimResult> TryClaimCandidateAsync(
-    string candidateId,
-    string streamEventId,
-    TimeSpan leaseDuration,
-    CancellationToken cancellationToken,
-    CandidateClaimPolicy? policy = null
-  ) => Task.FromResult(CandidateClaimResult.Conflict());
-
-  public Task<bool> RenewCandidateLeaseAsync(
-    string candidateId,
-    string streamEventId,
-    string leaseToken,
-    TimeSpan leaseDuration,
-    CancellationToken cancellationToken
-  ) => Task.FromResult(false);
-
-  public Task<bool> TransitionCandidateStateAsync(
-    string candidateId,
-    string streamEventId,
-    string leaseToken,
-    string newState,
-    CancellationToken cancellationToken,
-    string? lastError = null
-  ) => Task.FromResult(false);
-
-  public Task<string?> GetCandidateStatusAsync(
-    string candidateId,
-    CancellationToken cancellationToken
-  ) => Task.FromResult<string?>(null);
-
-  public Task<bool> CompleteCandidateAsync(
-    string candidateId,
-    string streamEventId,
-    string leaseToken,
-    string outcome,
-    CancellationToken cancellationToken
-  ) => Task.FromResult(false);
-
-  public Task<bool> ReleaseCandidateAsync(
-    string candidateId,
-    string streamEventId,
-    string leaseToken,
-    CancellationToken cancellationToken,
-    string? lastError = null
-  ) => Task.FromResult(false);
-
-  public Task SavePositionAsync(
-    AutoTradePositionState state,
-    CancellationToken cancellationToken
-  ) => Task.CompletedTask;
-
-  public Task<AutoTradePositionState?> GetPositionAsync(
-    long positionId,
-    CancellationToken cancellationToken
-  ) => Task.FromResult<AutoTradePositionState?>(null);
-
-  public Task<IReadOnlyList<long>> GetTrackedPositionIdsAsync(
-    CancellationToken cancellationToken
-  ) => Task.FromResult<IReadOnlyList<long>>([]);
-
-  public Task DeletePositionAsync(
-    long positionId,
-    CancellationToken cancellationToken
-  ) => Task.CompletedTask;
-
-  public Task<long> GetDailyTradeCountAsync(
-    DateOnly date,
-    CancellationToken cancellationToken
-  ) => Task.FromResult(0L);
-
-  public Task<long> IncrementDailyTradeCountAsync(
-    DateOnly date,
-    CancellationToken cancellationToken
-  ) => Task.FromResult(1L);
-
-  public Task<bool> IsPausedAsync(CancellationToken cancellationToken) =>
-    Task.FromResult(false);
-
   public Task PublishAutoTradeEventAsync(
     string stream,
     AutoTradeEvent tradeEvent,
@@ -756,37 +662,6 @@ internal sealed class FaultAutoTradeStore : IAutoTradeStore
     return Task.CompletedTask;
   }
 
-  public Task IncrementGateRejectAsync(
-    string symbol,
-    string condition,
-    CancellationToken cancellationToken
-  ) => Task.CompletedTask;
-
-  public Task IncrementAddRejectAsync(
-    string symbol,
-    string mode,
-    string condition,
-    CancellationToken cancellationToken
-  ) => Task.CompletedTask;
-
-  public Task RecordZoneCooldownAsync(
-    string symbol,
-    string direction,
-    ZoneCooldownRecord record,
-    int ttlMinutes,
-    CancellationToken cancellationToken
-  ) => Task.CompletedTask;
-
-  public Task SaveGroupPlanAsync(
-    AutoTradeGroupPlan plan,
-    TimeSpan ttl,
-    CancellationToken cancellationToken
-  ) => Task.CompletedTask;
-
-  public Task DeleteGroupPlanAsync(
-    string groupId,
-    CancellationToken cancellationToken
-  ) => Task.CompletedTask;
 }
 
 internal sealed class RecordingSink : IBarSink
