@@ -1,4 +1,4 @@
-"""Per-instrument price geometry (merge widths, round step, opposing gap).
+"""Per-instrument price geometry (merge widths, round step, exposure policy).
 
 XAU values are dollars. FX must not inherit them — 6.0 on EURUSD is 60k pips.
 """
@@ -91,10 +91,13 @@ def round_step(symbol: str) -> float:
   return float(analysis_runtime(symbol).levels.round_step)
 
 
-def opposing_minimum_separation_price(symbol: str) -> float:
-  return float(
-    _effective(symbol).risk.exposure.opposing_minimum_separation_price
-  )
+def opposite_position_policy(symbol: str):
+  """Instrument-owned opposite-exposure policy (``OppositePositionPolicy``).
+
+  Raises ``EffectiveInstrumentError`` when the instrument does not declare
+  ``exposure.opposite_position`` -- callers must fail closed.
+  """
+  return _effective(symbol).opposite_position
 
 
 def structural_barrier_buffer_atr(symbol: str) -> float:

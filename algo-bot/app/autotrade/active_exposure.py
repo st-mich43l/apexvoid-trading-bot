@@ -1,8 +1,11 @@
 """Active open-trade exposure gates for new autonomous plans.
 
 When an order is already active **on the same instrument**:
-- opposing direction within ``min_price_separation`` (absolute |Δprice|) is
-  blocked (SELL @ 4063 → BUY blocked between 4048 and 4078 when separation is 15)
+- opposite direction is decided by ``evaluate_opposite_exposure`` from the
+  instrument-owned ``exposure.opposite_position`` policy (config/
+  instruments.yml): FX never allows it, XAU allows it only at >= 150 pips
+  from every existing opposite group. Strategy, family and scalp status are
+  never consulted.
 - same-direction non-scalp adds are allowed only after every open same-dir
   plan has **booked** TP2 (``HighestBookedTargetIndex >= 1``) **and** the new
   candidate is Tier A; size stays ``same_direction_size_fraction`` (default 60%)
@@ -21,7 +24,10 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Any
+
+from app.runtime.instruments import OppositePositionPolicy
 
 log = logging.getLogger(__name__)
 
@@ -454,26 +460,138 @@ def _exposures_for_candidate(
   return filter_exposures_for_symbol(exposures, candidate_symbol)
 
 
+FX_OPPOSITE_NOT_ALLOWED = "fx_opposite_position_not_allowed"
+XAU_OPPOSITE_TOO_CLOSE = "xau_opposite_position_too_close"
+XAU_OPPOSITE_SEPARATION_SATISFIED = "xau_opposite_position_separation_satisfied"
+
+
+@dataclass(frozen=True)
+class OppositeExposureDecision:
+  """Outcome of the instrument-owned opposite-direction exposure rule."""
+
+  allowed: bool
+  reason_code: str | None = None
+  message: str = ""
+  measured: dict[str, Any] | None = None
+
+
+def _pips_between(entry_a: float, entry_b: float, pip_size: float) -> tuple[float, float]:
+  """Return (price distance, pip distance); Decimal keeps 150.0 exact."""
+  price = abs(Decimal(str(entry_a)) - Decimal(str(entry_b)))
+  pips = price / Decimal(str(pip_size))
+  return float(price), float(pips)
+
+
+def evaluate_opposite_exposure(
+  symbol: str,
+  incoming_direction: str,
+  incoming_entry_reference: float,
+  active_exposures: list[ActiveExposure],
+  instrument_policy: OppositePositionPolicy,
+) -> OppositeExposureDecision:
+  """Decide whether an autonomous opposite-direction group may be opened.
+
+  ``instrument_policy`` is the only classifier: ``allowed=False`` (FX) blocks
+  any opposite exposure at any distance; ``allowed=True`` (XAU) requires the
+  incoming entry to be at least ``minimum_separation_pips`` (inclusive) from
+  EVERY opposite group. The incoming reference is the executable quote; each
+  existing exposure contributes its recorded/broker fill price once filled,
+  or its planned entry reference while pending (see ``_payload_entry_price``).
+  """
+  wanted = normalize_direction(incoming_direction)
+  entry = _as_float(incoming_entry_reference)
+  canonical = normalize_symbol(symbol)
+  if wanted is None or entry is None or entry <= 0 or canonical is None:
+    return OppositeExposureDecision(allowed=True)
+  opposite = "SELL" if wanted == "BUY" else "BUY"
+  opposing = [
+    item
+    for item in filter_exposures_for_symbol(active_exposures, canonical)
+    if item.direction == opposite
+  ]
+  if not opposing:
+    return OppositeExposureDecision(allowed=True)
+
+  def _measured(active: ActiveExposure) -> dict[str, Any]:
+    price, pips = _pips_between(entry, active.entry_price, instrument_policy.pip_size)
+    return {
+      "symbol": canonical,
+      "incoming_direction": wanted,
+      "incoming_entry": entry,
+      "existing_direction": active.direction,
+      "existing_entry": active.entry_price,
+      "distance_price": price,
+      "distance_pips": pips,
+      "minimum_separation_pips": instrument_policy.minimum_separation_pips,
+      "existing_plan_id": active.plan_id,
+      "existing_group_id": active.group_id,
+      "existing_position_id": active.position_id,
+      "existing_source": active.source,
+      "policy": "allowed" if instrument_policy.allowed else "blocked",
+    }
+
+  if not instrument_policy.allowed:
+    # Nearest group makes the evidence most useful; distance never decides.
+    nearest = min(
+      opposing,
+      key=lambda item: abs(Decimal(str(entry)) - Decimal(str(item.entry_price))),
+    )
+    measured = _measured(nearest)
+    return OppositeExposureDecision(
+      allowed=False,
+      reason_code=FX_OPPOSITE_NOT_ALLOWED,
+      message=(
+        f"{canonical} {wanted} blocked: active {nearest.direction} exposure "
+        "exists and this instrument never allows opposite positions"
+      ),
+      measured=measured,
+    )
+
+  minimum = float(instrument_policy.minimum_separation_pips or 0.0)
+  nearest = min(
+    opposing,
+    key=lambda item: abs(Decimal(str(entry)) - Decimal(str(item.entry_price))),
+  )
+  measured = _measured(nearest)
+  if Decimal(str(measured["distance_pips"])) < Decimal(str(minimum)):
+    return OppositeExposureDecision(
+      allowed=False,
+      reason_code=XAU_OPPOSITE_TOO_CLOSE,
+      message=(
+        f"{canonical} {wanted} entry {entry:.2f} is "
+        f"{measured['distance_pips']:.1f} pips from active {nearest.direction} "
+        f"@ {nearest.entry_price:.2f}; require >= {minimum:.0f} pips"
+      ),
+      measured=measured,
+    )
+  return OppositeExposureDecision(
+    allowed=True,
+    reason_code=XAU_OPPOSITE_SEPARATION_SATISFIED,
+    message=(
+      f"{canonical} {wanted} entry is {measured['distance_pips']:.1f} pips from "
+      f"every opposite group (min {minimum:.0f})"
+    ),
+    measured=measured,
+  )
+
+
 def evaluate_entry_against_exposure(
   *,
   direction: str,
   entry_price: float,
   exposures: list[ActiveExposure],
-  min_price_separation: float = 15.0,
   same_direction_size_fraction: float = 0.60,
-  ignore_opposing_active: bool = False,
   allow_same_direction_stack: bool = False,
   candidate_tier: str | None = None,
   candidate_symbol: str | None = None,
 ) -> ExposureDecision:
-  """Apply opposing-distance and same-direction rules.
+  """Apply the same-direction stacking rules.
+
+  Opposite-direction exposure is NOT decided here; call
+  ``evaluate_opposite_exposure`` first (instrument-policy driven).
 
   ``candidate_symbol``: only exposures on that instrument count. Omit only
   in tests that model a single-book.
-
-  ``ignore_opposing_active``: scalp with fitted native min room may open
-  even while an opposite position is already activated — opposing price
-  separation is soft telemetry then, not a hard block.
 
   ``allow_same_direction_stack``: scalps pass True to stack without waiting
   for TP2 / Tier A. Non-scalp (False) may stack at
@@ -483,54 +601,8 @@ def evaluate_entry_against_exposure(
   wanted = normalize_direction(direction)
   if wanted is None or entry_price <= 0:
     return ExposureDecision(block=False)
-  opposite = "SELL" if wanted == "BUY" else "BUY"
-  separation = max(0.0, float(min_price_separation))
   tier = str(candidate_tier or "").strip().upper() or None
   exposures = _exposures_for_candidate(exposures, candidate_symbol)
-
-  for active in exposures:
-    if active.direction != opposite:
-      continue
-    distance = abs(float(entry_price) - float(active.entry_price))
-    if distance < separation:
-      measured = {
-        "active_direction": active.direction,
-        "active_entry_price": active.entry_price,
-        "active_symbol": active.symbol,
-        "candidate_entry_price": entry_price,
-        "candidate_symbol": normalize_symbol(candidate_symbol),
-        "price_distance": distance,
-        "min_price_separation": separation,
-        "active_source": active.source,
-        "active_plan_id": active.plan_id,
-        "active_group_id": active.group_id,
-        "active_position_id": active.position_id,
-      }
-      if ignore_opposing_active:
-        return ExposureDecision(
-          block=False,
-          reason_code="opposing_active_too_close_ignored_scalp",
-          message=(
-            f"{wanted} scalp entry {entry_price:.2f} is {distance:.2f} from "
-            f"active {active.direction} @ {active.entry_price:.2f}; "
-            "fitted native room ignores opposing-active separation"
-          ),
-          measured={
-            **measured,
-            "ignore_opposing_active": True,
-            "preference_telemetry": True,
-          },
-        )
-      return ExposureDecision(
-        block=True,
-        reason_code="opposing_active_too_close",
-        message=(
-          f"{wanted} entry {entry_price:.2f} is only {distance:.2f} from "
-          f"active {active.direction} @ {active.entry_price:.2f}; "
-          f"require >= {separation:.0f} price separation"
-        ),
-        measured=measured,
-      )
 
   same = [item for item in exposures if item.direction == wanted]
   if not same:
