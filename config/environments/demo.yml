@@ -38,7 +38,6 @@ auto_algo:
     counter_bias:
       allowed: true
     gates:
-      market_map_guard_enabled: true
       opposing_barrier_veto_enabled: false
     overlapping_zones:
       veto_enabled: false
@@ -49,37 +48,22 @@ auto_algo:
 
   lifecycle:
     candidate:
-      execution_maximum_age_seconds: 420
       storage_ttl_seconds: 604800
-    zone:
-      cooldown_enabled: false
 
   risk:
-    exposure:
-      allow_concurrent_strategies: true
-      # allow_hedged_xau/require_flat_for_range now have
-      # These development values intentionally differ from production.
-      allow_hedged_xau: true
-      non_hedged_opposite_policy: broker_netting
-      require_flat_for_range: false
     position_limits:
       max_tracked_candidates: 0
       maximum_per_symbol: 0
 
   strategies:
-    breakout:
-      breakout_enabled: true
     mapped_zone:
       counter_bias_enabled: true
       enabled: true
     matching:
       multiple_matches_enabled: true
-      track_all_structural_matches: true
     range_reversion:
       # Keep this explicit so the development behavior is visible here.
       enabled: true
-      flip_enabled: true
-      two_sided_enabled: true
     reaction:
       demand:
         enabled: true
@@ -94,7 +78,5 @@ auto_algo:
         enabled: true
       trendline:
         enabled: true
-    selection:
-      retest_enabled: true
     trend:
       enabled: true

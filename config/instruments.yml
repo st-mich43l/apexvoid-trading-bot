@@ -435,22 +435,7 @@ instruments:
       # 1000/rate convention as GBPJPY's pip_value_per_lot. Drifts with the
       # rate; revisit if USDJPY moves far from this level.
       pip_value_per_lot: 6.27
-    # 2026 dig: Japan/US intervention when USDJPY breached 160. Guard is
-    # direction-aware (hard-block BUY only) with a 30-pip buffer - the prior
-    # symmetric 100-pip band sterilized every plan at ~159.4 including SELLs
-    # (0 publishes / 110+ activations on 2026-08-25).
-    # §10/§11: defended_levels as a native float list, not a comma-
-    # compatible string — matches this prompt's own §19 example shape.
-    # The Python field is currently `str` (comma-parsed internally,
-    # app/configuration/models/risk.py); updating it to list[float] is a
-    # C3 schema change tracked against this value, not done silently here.
     overrides:
-      auto_algo:
-        risk:
-          exposure:
-            defended_levels:
-              - 160.0
-            defended_level_buffer_price: 0.30
       execution:
         technique:
           selective_session_min_confluence: 3

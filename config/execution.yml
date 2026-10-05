@@ -45,13 +45,11 @@ execution:
     reaction_trigger_maximum_age_bars: 2
 
   broker_recovery:
-    absence_confirmations: 2
 
   entry:
     contract_tolerance_pips: 3.0
     inside_zone_market_entry_enabled: true
     max_spread_pips: 5
-    maximum_chase_distance_pips: 40.0
     poll_ms: 250
 
   mapped_zone:
@@ -67,16 +65,10 @@ execution:
     execution_cost_pips: 1.0
     execution_zone_max_width_atr: 2.0
     execution_zone_max_width_pips: 100.0
-    group_close_allocation: pro_rata
     label: apexvoid-auto
-    max_tranches: 2
     structural_reaction_lookback_bars: 3
 
   range:
-    box_move_sl_to_be_after_scale_out: false
-    box_scale_out_fraction: 0.5
-    box_scale_out_threshold_pips: 70
-    box_scale_out_trigger_pips: 30
     hard_entry_drift_pips: 20.0
     max_entry_drift_atr: 1.0
     min_entry_drift_pips: 10.0
@@ -103,12 +95,7 @@ execution:
 
   scaling:
     add:
-      level_buffer_atr: 1.0
       min_stop_pips: 30
-      pullback_enabled: false
-      pullback_min_retrace: 0.20
-      pullback_max_retrace: 0.70
-      size_ratio: 0.5
       stop_buffer_atr: 0.3
 
   stops:
@@ -122,13 +109,6 @@ execution:
     wick_stop_buffer_atr: 0.15
 
   targeting:
-    default_ladder_pips:
-      - 30
-      - 60
-      - 90
-      - 120
-      - 200
-    post_fill_target_fallback: fill_relative
     range_ladder_pips:
       - 15
       - 20
@@ -136,12 +116,6 @@ execution:
       - 40
       - 50
       - 70
-    tp_weights:
-      - '20'
-      - '20'
-      - '20'
-      - '20'
-      - '20'
     unfilled_leg_after_tp_policy: cancel
 
   trend:
@@ -157,7 +131,6 @@ execution:
     first_leg_fraction: 0.8
     # Same XAU reaction-ladder incident as execution.reaction above.
     scale_step_atr: 0.1
-    scale_undersized_policy: single_entry
 
 # Operator workflow and journaling are execution-adjacent policies. They live
 # in this file so the root has one execution policy include.

@@ -1,11 +1,8 @@
 """TradePlan V8 — Python's sole trade-planning contract.
 
-V6 (`TradeCandidate`, `auto_trade_candidate_contract_version = 6`) let both
-Python and C# resolve an execution route and compute a protective stop, then
-cross-validate the two independently derived answers. TradePlan V8 is the
-live contract: Python declares a
-single, complete, versioned plan — exact entry instruction, absolute stop,
-and absolute targets; C# consumes the plan and never recomputes any of it.
+Python declares a single, complete, versioned plan — exact entry instruction,
+absolute stop, and absolute targets; C# consumes the plan and never
+recomputes any of it.
 
 There is no `planned_*` / `final_*` / `base_*` field family here, and no
 counterpart in `ctrader-engine` that independently derives a route or a stop

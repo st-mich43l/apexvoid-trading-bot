@@ -201,214 +201,9 @@ public sealed record TradeExecution(
   long? RemainingVolume = null
 );
 
-public sealed record TradeCandidateZone(
-  decimal Low,
-  decimal High
-);
-
-public sealed record TradeCandidate(
-  int Version,
-  string CandidateId,
-  string Symbol,
-  string Timeframe,
-  string Setup,
-  string Mode,
-  string Direction,
-  string TriggerTs,
-  long CreatedAt,
-  long? SpotTs,
-  decimal CurrentPrice,
-  decimal KeyLevel,
-  TradeCandidateZone EntryZone,
-  int Confluence,
-  IReadOnlyList<string> Reasons,
-  long? BarTs = null,
-  decimal? Atr = null,
-  decimal? StructureSwing = null,
-  string? DisplacementDirection = null,
-  int? DisplacementAgeBars = null,
-  string? BosDirection = null,
-  long? BosTs = null,
-  decimal? OpposingLevelDistanceAtr = null,
-  string? RangeId = null,
-  decimal? RangeLow = null,
-  decimal? RangeHigh = null,
-  int? FullTakeProfitPips = null,
-  IReadOnlyList<int>? TargetsPips = null,
-  string? Regime = null,
-  decimal? OpposingZoneLow = null,
-  decimal? OpposingZoneHigh = null,
-  decimal? ManualStopLoss = null,
-  long? ManualExpiresAt = null,
-  bool BypassAnalysisGates = false,
-  decimal? SweepLow = null,
-  decimal? SweepHigh = null,
-  // Pullback scale-in add (ScaleInTriggerPlanner P1-P4) - see scale_context.py.
-  // CounterBosTs/ExtremeTs are raw timestamps gated against a group's own
-  // GroupOpenedAt by ValidateAddTriggers (AutoTradeEngine.cs), the same
-  // pattern BosTs already uses; AddZoneLow/High reuse OpposingZoneLow/High
-  // (the nearest zone on the trade-direction side is the same lookup for
-  // both purposes) and only the side label is new.
-  long? CounterBosTs = null,
-  decimal? ExtremePrice = null,
-  long? ExtremeTs = null,
-  string? AddZoneSide = null,
-  bool RejectionConfirmed = false,
-  string? MatchId = null,
-  string? GroupId = null,
-  string? StrategyFamily = null,
-  IReadOnlyList<decimal>? ManualTakeProfits = null,
-  string? ZoneId = null,
-  string? TriggerId = null,
-  string? ParentGroupId = null,
-  string? StructuralSource = null,
-  string? Bias = null,
-  string? RelationshipToBias = null,
-  string? ReactionId = null,
-  string? ThesisId = null,
-  string? StructuralZoneId = null,
-  decimal? StructuralZoneLow = null,
-  decimal? StructuralZoneHigh = null,
-  string? OrderTypePreference = null,
-  string? EntryDistribution = null,
-  decimal? RiskMultiplier = null,
-  string? TargetModel = null,
-  decimal? AbsoluteTargetPrice = null,
-  string? TargetReferencePrice = null,
-  [property: JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
-  decimal? PlannedStopEntryPrice = null,
-  [property: JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
-  decimal? PlannedStopPrice = null,
-  [property: JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
-  decimal? PlannedStopDistance = null,
-  [property: JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
-  decimal? PlannedStopPips = null,
-  [property: JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
-  decimal? PlannedStopRawPrice = null,
-  bool? PlannedStopClamped = null,
-  string? StopSource = null,
-  int? StopPlanVersion = null,
-  [property: JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
-  decimal? PlannedBaseStopPrice = null,
-  [property: JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
-  decimal? PlannedBaseStopPips = null,
-  [property: JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
-  decimal? PlannedFinalStopPrice = null,
-  [property: JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
-  decimal? PlannedFinalStopDistance = null,
-  [property: JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
-  decimal? PlannedFinalStopPips = null,
-  string? StopAdjustment = null,
-  string? StopAdjustmentZoneId = null,
-  [property: JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
-  decimal? StopAdjustmentZoneLow = null,
-  [property: JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
-  decimal? StopAdjustmentZoneHigh = null,
-  // Exact identity of the opposing zone Python evaluated. Required whenever
-  // the stop was pushed beyond that zone.
-  string? OpposingZoneId = null,
-  // Route Python resolved and the entry it priced the stop against. The
-  // executor rejects route drift and material entry drift before submitting.
-  string? PlannedExecutionRoute = null,
-  [property: JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
-  decimal? PlannedEntryPrice = null,
-  IReadOnlyList<decimal>? PlannedLegEntryPrices = null,
-  int? EntryPlanVersion = null,
-  IReadOnlyList<int>? ManualTargetWeights = null,
-  bool ManualSingleEntry = false,
-  // Observed scoring telemetry. This is deliberately additive: the V6
-  // executor still gates on Confluence, while outcome persistence records
-  // both scorer variants for shadow-mode comparison.
-  int? ConfluenceV1 = null,
-  int? ConfluenceV2 = null,
-  double? ConfluenceV2Raw = null,
-  string? ConfluenceScoringVersion = null
-);
-
 public sealed record TradeStreamEntry(
   string Id,
   string Payload
-);
-
-public sealed record AutoTradePositionState(
-  string CandidateId,
-  long PositionId,
-  long SymbolId,
-  TradeDirection Direction,
-  decimal EntryPrice,
-  long InitialVolume,
-  long RemainingVolume,
-  IReadOnlyList<long> Slices,
-  IReadOnlyList<int> TargetsPips,
-  int NextTargetIndex,
-  long OpenedAt,
-  decimal? CurrentStopLoss = null,
-  IReadOnlyList<int>? TargetOrdinals = null,
-  string? GroupId = null,
-  int TrancheIndex = 1,
-  decimal GroupBookedPnl = 0m,
-  decimal InitialTrancheBookedPnl = 0m,
-  long GroupOpenedAt = 0,
-  long LastTrancheBarTs = 0,
-  int GroupTrancheCount = 1,
-  bool HadAdds = false,
-  decimal? InitialStopLoss = null,
-  int ZoneLeg = 0,
-  decimal GroupRealizedPipVolume = 0m,
-  decimal InitialRealizedPipVolume = 0m,
-  long GroupInitialVolume = 0,
-  long InitialTrancheVolume = 0,
-  string? Setup = null,
-  string? Regime = null,
-  int? Confluence = null,
-  string? RangeId = null,
-  decimal? RangeLow = null,
-  decimal? RangeHigh = null,
-  decimal? RangeExitPrice = null,
-  string Stream = "algo_auto",
-  string? MatchId = null,
-  string? StrategyFamily = null,
-  IReadOnlyList<decimal>? TargetPrices = null,
-  string? ZoneId = null,
-  string? TriggerId = null,
-  string? ParentGroupId = null,
-  string? StructuralSource = null,
-  string? ReactionId = null,
-  string? ThesisId = null,
-  bool RangeBoxScaleOutBooked = false,
-  long? RangeBoxScaleOutVolume = null,
-  decimal? RangeBoxScaleOutPrice = null,
-  decimal? RangeBoxScaleOutPips = null,
-  long? RangeBoxScaleOutAt = null,
-  string? StructuralZoneId = null,
-  decimal? StructuralZoneLow = null,
-  decimal? StructuralZoneHigh = null,
-  decimal? RiskMultiplier = null,
-  string? TargetModel = null,
-  decimal? AbsoluteTargetPrice = null,
-  long FillSourceQuoteTimestamp = 0,
-  long FillSourceQuoteSequence = 0,
-  // Canonical Redis instrument (XAU / EURUSD / GBPJPY). Python exposure
-  // gates filter by this string — SymbolId alone cannot isolate books.
-  string? Symbol = null,
-  // Manual XAU ladders are sized as one owner intent from the shallow
-  // (worst-case) entry. Mid/deep clips keep their own actual fill for PnL,
-  // but lifecycle risk metadata must retain this group-level initial stop
-  // distance instead of shrinking it as deeper clips fill.
-  decimal? InitialRiskStopPips = null,
-  // Manual ladders can omit broker-untradeable middle targets. Keep those
-  // levels durable once price has reached them so notification-only progress
-  // and trailing are emitted exactly once across restarts.
-  IReadOnlyList<int>? ReachedTargetOrdinals = null
-);
-
-public sealed record RedisClaimPayload(
-  string? CandidateId = null,
-  string? State = null,
-  string? ReactionId = null,
-  string? ThesisId = null,
-  string? GroupId = null,
-  bool RearmReady = false
 );
 
 // One owner-override command for an already-armed/filled manual-algo
@@ -422,20 +217,6 @@ public sealed record ManualTradeCommand(
   long? PositionId = null,
   decimal? Price = null,
   decimal? Frac = null
-);
-
-// Close-reason-aware marker read by worker.py.  Only reason=stop_loss with
-// confidence=confirmed is enforceable; reconciliation_unknown/manual/external
-// closes are warning-only and must not silently become a 60-minute veto.
-public sealed record ZoneCooldownRecord(
-  string Reason,
-  string Confidence,
-  decimal EntryPrice,
-  decimal StopPrice,
-  long ClosedAt,
-  string? GroupId = null,
-  string? ZoneId = null,
-  string? Strategy = null
 );
 
 public sealed record AutoTradeEvent(
@@ -658,9 +439,7 @@ public sealed record AutoTradeExecutorReadiness(
 public sealed record AutoTradeExecutorSnapshot(
   string Symbol,
   string Profile,
-  string ExposurePolicy,
   bool Demo,
-  bool Hedged,
   bool Ready,
   IReadOnlyList<long> PositionIds,
   IReadOnlyList<long> PendingOrderIds,
@@ -672,16 +451,4 @@ public sealed record AutoTradeExecutorSnapshot(
   decimal AccountBalance = 0m,
   decimal AccountEquity = 0m,
   string AccountEquitySource = ""
-);
-
-// Durable, restart-surviving confirmation progress for a tracked position
-// that a broker snapshot did not report. A single missing snapshot is never
-// enough to terminalise a position - it must be independently confirmed
-// missing across at least AutoTradeOptions.PositionMissingConfirmations
-// reconcile passes, each separated by at least
-// AutoTradeOptions.PositionMissingRecheckSeconds.
-public sealed record PositionMissingRecord(
-  int Confirmations,
-  long FirstMissingAt,
-  long LastCheckedAt
 );

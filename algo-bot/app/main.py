@@ -73,11 +73,10 @@ async def main() -> None:
   await redis_state.wait_until_ready()
   log.info(
     "AUTO-TRADE CONFIG service=algo-bot profile=%s enabled=%s dry_run=%s "
-    "candidate_stream=%s event_stream=%s",
+    "event_stream=%s",
     runtime_config.runtime.environment,
     runtime_config.auto_algo.enabled,
     runtime_config.auto_algo.dry_run,
-    runtime_config.runtime.redis_streams.candidates,
     runtime_config.runtime.redis_streams.events,
   )
   if runtime_config.auto_algo.enabled:

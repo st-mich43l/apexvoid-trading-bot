@@ -2705,16 +2705,6 @@ async def auto_trade_status_text() -> str:
   """Compact owner status — a few operator details, Telegram 4096-safe."""
   client = redis_state.get_client()
   paused = await client.get(_PAUSED_KEY) == "1"
-  date_key = datetime.now(timezone.utc).strftime("%Y%m%d")
-  daily = int(await client.get(f"auto_trade:daily:{date_key}:trades") or 0)
-  # The executor already maintains this active-position set.  Counting it is
-  # O(1); SCAN over the full Redis keyspace became seconds of avoidable work
-  # once multi-symbol bars/telemetry grew into tens of thousands of keys.
-  scard = getattr(client, "scard", None)
-  if callable(scard):
-    position_count = int(await scard("auto_trade:positions") or 0)
-  else:
-    position_count = len(await client.smembers("auto_trade:positions"))
   try:
     from app.persistence.store import count_pending_algo_signals
     manual_pending = await count_pending_algo_signals()
@@ -2739,18 +2729,6 @@ async def auto_trade_status_text() -> str:
     client, f"auto_trade:last_route_outcome:{primary_symbol}"
   )
   spot = await _json_key(client, f"price:{primary_symbol}:spot")
-  cooldown_line = None
-  for direction in ("BUY", "SELL"):
-    cooldown_key = f"auto_trade:zone:cooldown:{primary_symbol}:{direction}"
-    cooldown = await _json_key(client, cooldown_key)
-    if (
-      cooldown.get("reason") == "stop_loss"
-      and cooldown.get("confidence") == "confirmed"
-    ):
-      ttl = await client.ttl(cooldown_key)
-      if isinstance(ttl, int) and ttl > 0:
-        cooldown_line = f"🧊 Cooldown <b>{direction}</b> · {max(1, ttl // 60)}m left"
-        break
   mode = (
     "disabled"
     if not runtime_config.auto_algo.enabled
@@ -2835,12 +2813,14 @@ async def auto_trade_status_text() -> str:
   ready = bool((readiness or {}).get("ready"))
   group_ids = executor.get("group_ids") if isinstance(executor, dict) else None
   group_count = len(group_ids) if isinstance(group_ids, list) else 0
+  position_ids = executor.get("position_ids") if isinstance(executor, dict) else None
+  position_count = len(position_ids) if isinstance(position_ids, list) else 0
   state_icon = "⏸️" if paused else "▶️"
   lines = [
     "🤖 <b>Algo bot</b>",
     f"{state_icon} {escape(mode)} · <b>{state}</b> · {escape(profile)}",
     f"📊 Open <b>{position_count}</b> · groups <b>{group_count}</b> · "
-    f"today <b>{daily}</b> · algo <b>{manual_pending}</b>",
+    f"algo <b>{manual_pending}</b>",
   ]
   if isinstance(executor, dict):
     try:
@@ -2889,8 +2869,6 @@ async def auto_trade_status_text() -> str:
   if regime:
     health_bits.insert(0, f"🧭 Regime <b>{escape(regime)}</b>")
   lines.append(" · ".join(health_bits))
-  if cooldown_line:
-    lines.append(cooldown_line)
   engine_updated_at = executor.get("updated_at") if isinstance(executor, dict) else None
   if engine_updated_at:
     try:
