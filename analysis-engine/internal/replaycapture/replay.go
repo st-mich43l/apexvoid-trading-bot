@@ -36,6 +36,9 @@ type Options struct {
 	// M1/M5/M15/M30/H1), so the faithful replay has H1 as its only higher
 	// timeframe. Turn it on only to explore what H4 would add.
 	DeriveH4 bool
+	// OnEvaluation observes each closed bar's strategy candidates (see
+	// engine.Settings.OnEvaluation). Nil by default.
+	OnEvaluation func(engine.Evaluation)
 }
 
 // Replay dispatches a capture through the exact engine path a live feed uses
@@ -49,6 +52,7 @@ func Replay(doc *config.Document, capture *Capture, primary market.Timeframe, op
 	if err := engine.ApplyInstrument(&settings, doc, string(capture.Symbol)); err != nil {
 		return nil, err
 	}
+	settings.OnEvaluation = opts.OnEvaluation
 	byTF := make(map[market.Timeframe][]market.Candle)
 	for name := range capture.Timeframes {
 		tf := market.Timeframe(name)

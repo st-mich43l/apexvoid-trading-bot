@@ -200,7 +200,7 @@ auto_algo:
         min_touches_per_side: 2
         touch_tol_atr: 0.20
     breakout:
-      break_retest_enabled: false
+      break_retest_enabled: true
     mapped_zone:
       counter_bias_enabled: true
       enabled: false
