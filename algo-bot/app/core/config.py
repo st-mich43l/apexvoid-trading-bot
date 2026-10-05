@@ -83,6 +83,12 @@ def _apply_secrets(document: dict[str, Any]) -> None:
     telegram.setdefault("bot_token", os.getenv("TELEGRAM_BOT_TOKEN"))
     telegram.setdefault("scanner_telegram_bot_token", os.getenv("SCANNER_TELEGRAM_BOT_TOKEN"))
     telegram.setdefault("telegram_owner_id", _optional_int(os.getenv("TELEGRAM_OWNER_ID")))
+    # Channel ids are deployment identity, not tuning: the YAML carries only a
+    # placeholder VIP id, so the real one must come from the environment.
+    if vip := _optional_int(os.getenv("SIGNAL_VIP_CHANNEL_ID")):
+      telegram["telegram_channel_id"] = vip
+    if public := _optional_int(os.getenv("SIGNAL_PUBLIC_CHANNEL_ID")):
+      telegram["signal_public_channel_id"] = public
     presentation = telegram.setdefault("presentation", {})
     if isinstance(presentation, dict):
       presentation.setdefault("seq_reset_tz", document.get("runtime", {}).get("timezone", "UTC"))
