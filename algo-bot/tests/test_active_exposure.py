@@ -1,4 +1,4 @@
-"""Active exposure gates: opposing distance + TradePlan PascalCase Redis payloads."""
+"""Active exposure gates: same-direction stacking + TradePlan PascalCase Redis payloads."""
 
 from __future__ import annotations
 
@@ -15,7 +15,9 @@ from app.autotrade.active_exposure import (
 pytestmark = pytest.mark.no_database
 
 
-def test_opposing_blocks_when_absolute_distance_too_near():
+def test_same_direction_evaluator_does_not_decide_opposite_exposure():
+  """Opposite exposure is owned by evaluate_opposite_exposure (instrument
+  policy); the same-direction evaluator must neither block nor bypass it."""
   decision = evaluate_entry_against_exposure(
     direction="BUY",
     entry_price=4051.93,
@@ -27,52 +29,9 @@ def test_opposing_blocks_when_absolute_distance_too_near():
         plan_id="sell-near",
       )
     ],
-    min_price_separation=15.0,
-  )
-  assert decision.block is True
-  assert decision.reason_code == "opposing_active_too_close"
-  assert decision.measured is not None
-  assert decision.measured["price_distance"] == pytest.approx(2.27)
-
-
-def test_scalp_ignores_opposing_active_when_fitted_room():
-  """Owner: active opposite position does not block scalp with min room."""
-  decision = evaluate_entry_against_exposure(
-    direction="BUY",
-    entry_price=4051.93,
-    exposures=[
-      ActiveExposure(
-        direction="SELL",
-        entry_price=4054.20,
-        source="v8_plan",
-        plan_id="sell-active",
-      )
-    ],
-    min_price_separation=15.0,
-    ignore_opposing_active=True,
   )
   assert decision.block is False
-  assert decision.reason_code == "opposing_active_too_close_ignored_scalp"
-  assert decision.measured is not None
-  assert decision.measured["ignore_opposing_active"] is True
-  assert decision.measured["preference_telemetry"] is True
-
-
-def test_opposing_allows_when_far_enough():
-  decision = evaluate_entry_against_exposure(
-    direction="BUY",
-    entry_price=4051.93,
-    exposures=[
-      ActiveExposure(
-        direction="SELL",
-        entry_price=4096.0,
-        source="v8_plan",
-        plan_id="sell-far",
-      )
-    ],
-    min_price_separation=15.0,
-  )
-  assert decision.block is False
+  assert decision.reason_code is None
   assert decision.same_direction_stack is False
 
 

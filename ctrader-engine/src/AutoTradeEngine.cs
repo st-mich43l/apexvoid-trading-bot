@@ -178,8 +178,15 @@ public sealed class AutoTradeEngine(
       _clock,
       _log,
       resolveBoundSymbol: ResolveBoundSymbol,
-      resolveUnits: ResolveInstrumentUnits
+      resolveUnits: ResolveInstrumentUnits,
+      resolveOppositePolicy: ResolveOppositePolicy
     );
+
+  private OppositePositionPolicy? ResolveOppositePolicy(string canonical) =>
+    InstrumentRegistry is not null
+    && InstrumentRegistry.TryGet(canonical, out var runtime)
+      ? runtime.Execution.OppositePosition
+      : null;
 
   private SymbolInfo? ResolveBoundSymbol(string canonical)
   {

@@ -539,7 +539,8 @@ public sealed class TradePlanRuntime(
   Func<DateTimeOffset> clock,
   Action<string> log,
   Func<string, SymbolInfo?>? resolveBoundSymbol = null,
-  Func<string, (decimal PipSize, decimal PipValuePerLot)>? resolveUnits = null
+  Func<string, (decimal PipSize, decimal PipValuePerLot)>? resolveUnits = null,
+  Func<string, OppositePositionPolicy?>? resolveOppositePolicy = null
 )
 {
   private readonly Dictionary<string, TradePlan> _plansById = new();
@@ -2153,6 +2154,27 @@ public sealed class TradePlanRuntime(
       );
       return;
     }
+    // Second fence for the instrument-owned opposite-exposure rule. Runs
+    // before the first broker mutation of this plan (a ladder already
+    // submitting its legs is never torn down by it) and judges tracked
+    // runtime state plus actual broker positions/orders, not Python's verdict.
+    if (state.SubmittedLegCount == 0)
+    {
+      var fence = await CheckOppositeExposureAsync(
+        client, symbol, plan, quote, cancellationToken
+      );
+      if (fence is null)
+      {
+        return;
+      }
+      if (!fence.Allowed)
+      {
+        await RejectForOppositeExposureAsync(
+          plan, state, fence, cancellationToken
+        );
+        return;
+      }
+    }
     try
     {
       await SubmitEntryAsync(
@@ -2179,6 +2201,124 @@ public sealed class TradePlanRuntime(
         + $"exception={exception.GetType().Name} message={exception.Message}"
       );
     }
+  }
+
+  // Null = could not establish broker truth this poll; the plan stays
+  // Received and is retried (fail closed without rejecting).
+  private async Task<OppositeExposureVerdict?> CheckOppositeExposureAsync(
+    ICTraderTradeClient client,
+    SymbolInfo symbol,
+    TradePlan plan,
+    SpotPrice quote,
+    CancellationToken cancellationToken
+  )
+  {
+    TradingReconcileSnapshot snapshot;
+    try
+    {
+      snapshot = await client.ReconcileAccountAsync(cancellationToken);
+    }
+    catch (Exception exception) when (
+      exception is not OperationCanceledException
+    )
+    {
+      log(
+        "v8 opposite exposure check deferred "
+        + $"id={plan.PlanId} symbol={plan.Symbol} "
+        + $"reason=broker_state_unavailable exception={exception.GetType().Name}"
+      );
+      return null;
+    }
+    var groups = OppositeExposureFence.CollectOppositeGroups(
+      plan.Analysis.Direction,
+      plan.Symbol,
+      symbol.SymbolId,
+      _statesById.Values.Where(item => CountsAgainstIncoming(item, plan)),
+      snapshot.Positions,
+      snapshot.PendingOrders
+    );
+    if (groups.Count == 0)
+    {
+      return OppositeExposureVerdict.Clear;
+    }
+    var policy = resolveOppositePolicy?.Invoke(plan.Symbol);
+    if (policy is null)
+    {
+      // Opposite exposure exists but this instrument declares no policy:
+      // never guess, never fall back to broker netting.
+      log(
+        "v8 opposite exposure policy unavailable "
+        + $"id={plan.PlanId} symbol={plan.Symbol} groups={groups.Count}"
+      );
+      return new OppositeExposureVerdict(
+        false,
+        "opposite_exposure_policy_unavailable",
+        $"{plan.Symbol} declares no exposure.opposite_position policy",
+        groups[0]
+      );
+    }
+    var entryReference = plan.Entry.Type is TradePlanContract.EntryTypeMarket
+      or TradePlanContract.EntryTypeMarketWatch
+        ? (plan.Analysis.Direction == "BUY" ? quote.Ask : quote.Bid)
+        : IntendedEntryPriceFrom(plan) ?? 0m;
+    return OppositeExposureFence.Evaluate(
+      plan.Symbol, plan.Analysis.Direction, entryReference, groups, policy
+    );
+  }
+
+  // A plan that has only been received (nothing at the broker yet) blocks an
+  // incoming plan only when it arrived first - otherwise two opposite pending
+  // plans would reject each other and evaluation order would pick the winner.
+  // Plans with any broker footprint always count.
+  private bool CountsAgainstIncoming(TradePlanRuntimeState other, TradePlan incoming)
+  {
+    if (string.Equals(other.PlanId, incoming.PlanId, StringComparison.Ordinal))
+    {
+      return false;
+    }
+    var hasBrokerFootprint =
+      other.Stage != TradePlanRuntimeStage.Received
+      || other.SubmittedLegCount > 0
+      || other.TotalFilledVolume > 0;
+    if (hasBrokerFootprint || !_plansById.TryGetValue(other.PlanId, out var otherPlan))
+    {
+      return true;
+    }
+    return otherPlan.CreatedAt != incoming.CreatedAt
+      ? otherPlan.CreatedAt < incoming.CreatedAt
+      : string.CompareOrdinal(otherPlan.PlanId, incoming.PlanId) < 0;
+  }
+
+  private async Task RejectForOppositeExposureAsync(
+    TradePlan plan,
+    TradePlanRuntimeState state,
+    OppositeExposureVerdict verdict,
+    CancellationToken cancellationToken
+  )
+  {
+    var code = verdict.ReasonCode ?? "opposite_exposure_blocked";
+    await PersistPlanExecutionStateAsync(
+      plan.PlanId, "rejected", null, cancellationToken, code
+    );
+    await PublishEventAsync(
+      "plan_rejected",
+      $"TradePlan V8 rejected: {verdict.Message}",
+      plan,
+      cancellationToken,
+      reasonCode: code
+    );
+    await ForgetPlanAsync(state.PlanId, cancellationToken);
+    var nearest = verdict.Nearest;
+    log(
+      "v8 plan rejected opposite_exposure "
+      + $"id={plan.PlanId} symbol={plan.Symbol} "
+      + $"incoming_direction={plan.Analysis.Direction} reason_code={code} "
+      + $"existing_source={nearest?.Source ?? "-"} "
+      + $"existing_group={nearest?.GroupId ?? "-"} "
+      + $"existing_direction={nearest?.Direction ?? "-"} "
+      + $"existing_entry={nearest?.EntryPrice.ToString(CultureInfo.InvariantCulture) ?? "-"} "
+      + $"distance_pips={verdict.DistancePips?.ToString("0.0", CultureInfo.InvariantCulture) ?? "-"}"
+    );
   }
 
   // EvaluateArmedPlansAsync removed — Armed is not part of the runtime.

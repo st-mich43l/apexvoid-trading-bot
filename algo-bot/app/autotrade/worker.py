@@ -20,7 +20,12 @@ import math
 from typing import Any, Awaitable, Callable
 
 from app.persistence import redis_state
-from app.runtime.instruments import enabled_instruments, for_instrument, live_instruments
+from app.runtime.instruments import (
+  EffectiveInstrumentError,
+  enabled_instruments,
+  for_instrument,
+  live_instruments,
+)
 from app.analysis_client.provenance import GO_ORIGIN_TAG
 from app.autotrade.go_plan_cancel import read_plan_cancel, register_go_plan
 from app.autotrade.go_live_opportunities import go_live_opportunity_ids
@@ -47,7 +52,9 @@ from app.autotrade.execution_policy import (
   evaluate_execution_policy,
 )
 from app.autotrade.active_exposure import (
+  XAU_OPPOSITE_SEPARATION_SATISFIED,
   evaluate_entry_against_exposure,
+  evaluate_opposite_exposure,
   load_active_exposures,
 )
 from app.autotrade.entry_overlap import release_entry_zone, reserve_entry_zone
@@ -2358,9 +2365,55 @@ async def _publish_trade_plan_v8(
     return None
 
   exposures = await load_active_exposures(client)
-  scalp_ignores_opposing_active = match_bypasses_opposing_structure(
-    match_for_plan,
+  # Opposite-direction exposure is owned by the instrument policy
+  # (config/instruments.yml exposure.opposite_position), never by strategy,
+  # family or scalp status. FX: always blocked. XAU: >= 150 pips from every
+  # opposite group. A missing/invalid policy fails closed.
+  try:
+    opposite_policy = instrument_geometry.opposite_position_policy(symbol)
+  except EffectiveInstrumentError as exc:
+    await _release_claims()
+    await _record_v8_build_rejected(
+      client,
+      symbol,
+      match,
+      "opposite_exposure_policy_unavailable",
+      str(exc),
+      {"symbol": symbol},
+    )
+    return None
+  opposite = evaluate_opposite_exposure(
+    symbol,
+    match_for_plan.direction,
+    float(entry_reference),
+    exposures,
+    opposite_policy,
   )
+  if not opposite.allowed:
+    await _release_claims()
+    log.info(
+      "v8 opposite exposure blocked symbol=%s match_id=%s reason=%s %s",
+      symbol,
+      match.match_id[:12],
+      opposite.reason_code,
+      opposite.message,
+    )
+    await _record_v8_build_rejected(
+      client,
+      symbol,
+      match,
+      str(opposite.reason_code),
+      opposite.message,
+      dict(opposite.measured or {}),
+    )
+    return None
+  if opposite.reason_code == XAU_OPPOSITE_SEPARATION_SATISFIED:
+    log.info(
+      "v8 opposite exposure separated symbol=%s match_id=%s %s",
+      symbol,
+      match.match_id[:12],
+      opposite.message,
+    )
   candidate_is_scalp = is_scalp_strategy(
     str(getattr(match_for_plan, "strategy", "") or ""),
     family=str(getattr(match_for_plan, "strategy_family", "") or "") or None,
@@ -2373,17 +2426,12 @@ async def _publish_trade_plan_v8(
     entry_price=float(entry_reference),
     exposures=exposures,
     candidate_symbol=symbol,
-    min_price_separation=float(
-      instrument_geometry.opposing_minimum_separation_price(symbol)
-    ),
     same_direction_size_fraction=float(
       runtime_config.auto_algo.risk.position_limits.same_direction_stack_size_fraction
     ),
-    # Active opposite position must not block scalping / Range Edge when native
-    # min room already fitted (owner 2026-08-06).
-    ignore_opposing_active=scalp_ignores_opposing_active,
     # Non-scalp may same-dir stack at 60% only after every open plan has
     # booked TP2 and the candidate is Tier A. Scalps may stack freely.
+    # (Same-direction behavior is unchanged by the opposite-exposure policy.)
     allow_same_direction_stack=candidate_is_scalp,
     candidate_tier=str(getattr(match_for_plan, "tier", "") or ""),
   )
@@ -2393,18 +2441,11 @@ async def _publish_trade_plan_v8(
       client,
       symbol,
       match,
-      str(exposure.reason_code or "opposing_active_too_close"),
+      str(exposure.reason_code or "same_direction_exposure_blocked"),
       exposure.message,
       dict(exposure.measured or {}),
     )
     return None
-  if exposure.reason_code == "opposing_active_too_close_ignored_scalp":
-    log.info(
-      "v8 scalp ignores opposing-active separation symbol=%s match_id=%s %s",
-      symbol,
-      match.match_id[:12],
-      exposure.message,
-    )
   same_direction_stack = bool(exposure.same_direction_stack)
   if same_direction_stack:
     log.info(

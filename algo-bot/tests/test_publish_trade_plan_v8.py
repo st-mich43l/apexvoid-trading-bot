@@ -1087,3 +1087,219 @@ async def test_nonreaction_non_qualifying_m1_still_publishes_on_zone_presence():
   assert plan.provenance.confirmation_source == "m5_authoritative"
   record = await load_setup(client, "match-v8-5")
   assert record.state == PLAN_PUBLISHED
+
+
+# --- instrument-owned opposite-direction exposure (worker integration) --------
+
+
+async def _seed_live_plan(
+  client, *, symbol: str, direction: str, entry: float,
+  stage: str = "FullyOpen", group_stage: str = "fully_open", plan_id: str = "v8:active-1",
+) -> None:
+  import json
+
+  await client.set("execution:trade_plan_runtime_ids", plan_id)
+  await client.set(
+    f"execution:plan_runtime:{plan_id}",
+    json.dumps({
+      "PlanId": plan_id,
+      "SetupId": "setup-active",
+      "Symbol": symbol,
+      "Direction": direction,
+      "Stage": stage,
+      "GroupStage": group_stage,
+      "GroupWeightedFillPrice": entry,
+      "IntendedEntryPrice": entry,
+      "TotalFilledVolume": 10,
+      "RemainingVolume": 10,
+    }),
+  )
+
+
+@pytest.fixture
+def rejections(monkeypatch):
+  seen: list[tuple[str, str, dict]] = []
+  real = worker._record_v8_build_rejected
+
+  async def spy(client, symbol, match, reason_code, message, measured):
+    seen.append((reason_code, message, dict(measured)))
+    return await real(client, symbol, match, reason_code, message, measured)
+
+  monkeypatch.setattr(worker, "_record_v8_build_rejected", spy)
+  return seen
+
+
+def _xau_spot() -> "worker.AutoTradeSpot":
+  return worker.AutoTradeSpot(
+    price=4089.0, ts=int(time.time()), fresh=True, bid=4088.9, ask=4089.1,
+  )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+  "strategy",
+  ["Momentum Ride", "Range Edge Scalp", "Fade Scalp", "Snap Back", "Breakout"],
+)
+async def test_xau_opposite_too_close_blocks_for_every_strategy(strategy, rejections):
+  client = redis_state.get_client()
+  await _seed_live_plan(client, symbol="XAU", direction="SELL", entry=4100.0)
+  match = _match(match_id=f"match-opp-{strategy}", strategy=strategy)
+  await _confirm_setup(client, match)
+
+  plan_id = await _publish_nonreaction_after_m1(client, _xau_spot(), match)
+
+  assert plan_id is None
+  codes = [code for code, _msg, _measured in rejections]
+  assert "xau_opposite_position_too_close" in codes
+  measured = next(m for c, _msg, m in rejections if c == "xau_opposite_position_too_close")
+  assert measured["distance_pips"] == pytest.approx(109.0)
+  assert measured["incoming_entry"] == pytest.approx(4089.1)
+  assert measured["existing_entry"] == pytest.approx(4100.0)
+
+
+@pytest.mark.asyncio
+async def test_xau_opposite_exactly_150_pips_is_admitted(rejections):
+  client = redis_state.get_client()
+  await _seed_live_plan(client, symbol="XAUUSD", direction="SELL", entry=4104.1)
+  match = _match(match_id="match-opp-150")
+  await _confirm_setup(client, match)
+
+  plan_id = await _publish_nonreaction_after_m1(client, _xau_spot(), match)
+
+  assert plan_id is not None
+  assert not [c for c, _m, _x in rejections if "opposite" in c]
+
+
+@pytest.mark.asyncio
+async def test_xau_opposite_149_9_pips_is_blocked(rejections):
+  client = redis_state.get_client()
+  await _seed_live_plan(client, symbol="XAU", direction="SELL", entry=4104.09)
+  match = _match(match_id="match-opp-1499")
+  await _confirm_setup(client, match)
+
+  assert await _publish_nonreaction_after_m1(client, _xau_spot(), match) is None
+  assert [c for c, _m, _x in rejections] == ["xau_opposite_position_too_close"]
+
+
+@pytest.mark.asyncio
+async def test_xau_same_direction_behaviour_is_unchanged(rejections):
+  """Same-direction stays on its own TP2 / Tier A rule, untouched by policy."""
+  client = redis_state.get_client()
+  await _seed_live_plan(client, symbol="XAU", direction="BUY", entry=4080.0)
+  match = _match(match_id="match-same-dir", tier="B")
+  await _confirm_setup(client, match)
+
+  assert await _publish_nonreaction_after_m1(client, _xau_spot(), match) is None
+  assert [c for c, _m, _x in rejections] == ["same_direction_active_before_tp2"]
+
+
+@pytest.mark.asyncio
+async def test_missing_policy_fails_closed(monkeypatch, rejections):
+  from app.runtime.instruments import EffectiveInstrumentError
+
+  def _boom(symbol):
+    raise EffectiveInstrumentError("XAU is missing exposure.opposite_position policy")
+
+  monkeypatch.setattr(worker.instrument_geometry, "opposite_position_policy", _boom)
+  client = redis_state.get_client()
+  match = _match(match_id="match-no-policy")
+  await _confirm_setup(client, match)
+
+  assert await _publish_nonreaction_after_m1(client, _xau_spot(), match) is None
+  assert [c for c, _m, _x in rejections] == ["opposite_exposure_policy_unavailable"]
+
+
+def _gbpusd_match(**overrides) -> StrategyMatch:
+  base = dict(
+    symbol="GBPUSD",
+    key_level=1.2500,
+    entry_low=1.2495,
+    entry_high=1.2505,
+    current_price=1.2500,
+    atr=0.0012,
+    structure_swing=1.2480,
+    structural_zone_id="zone-gbpusd-1",
+    structural_zone_low=1.2495,
+    structural_zone_high=1.2505,
+    targets_pips=(15, 30),
+  )
+  base.update(overrides)
+  if base.get("direction") == "SELL":
+    # Supply zone: swing sits above the zone, kind flips with the side.
+    base["structure_swing"] = 1.2520
+    base["structural_kind"] = "supply"
+    base["htf_bias"] = "down"
+  return _match(**base)
+
+
+def _gbpusd_spot() -> "worker.AutoTradeSpot":
+  return worker.AutoTradeSpot(
+    price=1.2500, ts=int(time.time()), fresh=True, bid=1.2499, ask=1.2501,
+  )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+  ("active_direction", "incoming_direction", "strategy"),
+  [
+    ("SELL", "BUY", "Range Edge Scalp"),   # scenario A
+    ("BUY", "SELL", "Fade Scalp"),         # scenario B
+    ("SELL", "BUY", "Momentum Ride"),
+    ("BUY", "SELL", "Breakout"),
+  ],
+)
+@pytest.mark.parametrize("active_entry", (1.2501, 1.2000, 1.3500))
+async def test_fx_opposite_never_publishes_regardless_of_distance_or_strategy(
+  active_direction, incoming_direction, strategy, active_entry, rejections,
+):
+  client = redis_state.get_client()
+  await _seed_live_plan(
+    client, symbol="GBPUSD", direction=active_direction, entry=active_entry,
+  )
+  match = _gbpusd_match(
+    match_id=f"match-gbp-{incoming_direction}-{strategy}-{active_entry}",
+    direction=incoming_direction,
+    strategy=strategy,
+  )
+  await _confirm_setup(client, match)
+
+  plan_id = await worker._publish_trade_plan_v8(
+    client, "GBPUSD", _gbpusd_spot(), match, frames={},
+  )
+
+  assert plan_id is None
+  codes = [code for code, _msg, _measured in rejections]
+  assert codes == ["fx_opposite_position_not_allowed"], codes
+  # Nothing may reach the executor stream for a blocked setup.
+  assert await client.xlen("execution:trade_plans") == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("direction", ("BUY", "SELL"))
+async def test_fx_control_same_setups_publish_without_active_exposure(direction, rejections):
+  """Control: the FX opposite-block tests fail for the policy, not the fixture."""
+  client = redis_state.get_client()
+  match = _gbpusd_match(match_id=f"match-gbp-control-{direction}", direction=direction)
+  await _confirm_setup(client, match)
+
+  plan_id = await worker._publish_trade_plan_v8(
+    client, "GBPUSD", _gbpusd_spot(), match, frames={},
+  )
+
+  assert plan_id is not None, rejections
+  assert not rejections
+
+
+@pytest.mark.asyncio
+async def test_fx_same_direction_unchanged_by_opposite_policy(rejections):
+  client = redis_state.get_client()
+  await _seed_live_plan(client, symbol="GBPUSD", direction="BUY", entry=1.2400)
+  match = _gbpusd_match(match_id="match-gbp-same-dir", direction="BUY", tier="B")
+  await _confirm_setup(client, match)
+
+  plan_id = await worker._publish_trade_plan_v8(
+    client, "GBPUSD", _gbpusd_spot(), match, frames={},
+  )
+
+  assert plan_id is None
+  assert [c for c, _m, _x in rejections] == ["same_direction_active_before_tp2"]
