@@ -9,9 +9,11 @@ import (
 	"sort"
 
 	analysiscontext "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/context"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/fib"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/keylevel"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/liquidity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/regime"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/zone"
 )
@@ -21,23 +23,50 @@ type LiquidityGrab struct {
 	Grade string
 }
 
+// dealingRange is the premium/discount read the frozen detector contract gates
+// on: the detector-contract frame's range when the engine computed one,
+// otherwise the canonical dealing range.
+func dealingRange(tf *analysiscontext.TimeframeContext) *fib.DealingRange {
+	if tf == nil {
+		return nil
+	}
+	if tf.Legacy != nil {
+		return tf.Legacy.Range
+	}
+	return tf.Fib.Range
+}
+
+// regimeOf is the regime the frozen detector contract gates on.
+func regimeOf(tf *analysiscontext.TimeframeContext) regime.State {
+	if tf.Legacy != nil {
+		return tf.Legacy.Regime
+	}
+	return tf.Regime
+}
+
+// InChop reports the frozen detector contract's chop state for the timeframe.
+func InChop(tf *analysiscontext.TimeframeContext) bool {
+	return tf != nil && regimeOf(tf).Kind == "chop"
+}
+
 func PremiumDiscountAllows(tf *analysiscontext.TimeframeContext, direction market.Direction, strict bool) bool {
-	if tf == nil || tf.Fib.Range == nil {
+	dealing := dealingRange(tf)
+	if dealing == nil {
 		return true
 	}
-	if tf.Fib.Range.Zone == "eq" {
+	if dealing.Zone == "eq" {
 		return false
 	}
 	if direction == market.Buy {
 		if strict {
-			return tf.Fib.Range.Zone == "discount"
+			return dealing.Zone == "discount"
 		}
-		return tf.Fib.Range.Zone != "premium"
+		return dealing.Zone != "premium"
 	}
 	if strict {
-		return tf.Fib.Range.Zone == "premium"
+		return dealing.Zone == "premium"
 	}
-	return tf.Fib.Range.Zone != "discount"
+	return dealing.Zone != "discount"
 }
 
 func LiveZones(tf *analysiscontext.TimeframeContext, direction market.Direction, price, atr, maximumDistanceATR float64) []zone.Zone {
@@ -202,23 +231,27 @@ func StructuralDirection(ctx *analysiscontext.MarketContext) market.Direction {
 	if ctx == nil {
 		return ""
 	}
+	if ctx.Legacy != nil {
+		return ctx.Legacy.Direction()
+	}
 	return ctx.Bias.Direction
 }
 
 func ChopEdgeAllows(tf *analysiscontext.TimeframeContext, direction market.Direction, low, high, edgeFraction float64) bool {
-	if tf == nil || tf.Regime.Kind != "chop" {
+	if !InChop(tf) {
 		return true
 	}
-	height := tf.Regime.RangeHigh - tf.Regime.RangeLow
-	if height <= 0 {
+	state := regimeOf(tf)
+	height := state.RangeHigh - state.RangeLow
+	if height <= legacyEpsilon {
 		return false
 	}
-	edgeFraction = math.Max(0, math.Min(.5, edgeFraction))
+	edge := height * math.Max(0, math.Min(.5, edgeFraction))
 	mid := (low + high) / 2
-	if direction == market.Buy {
-		return mid <= tf.Regime.RangeLow+height*edgeFraction
+	if direction == market.Sell {
+		return mid >= state.RangeHigh-edge-legacyEpsilon
 	}
-	return mid >= tf.Regime.RangeHigh-height*edgeFraction
+	return mid <= state.RangeLow+edge+legacyEpsilon
 }
 
 func distanceToBand(price, low, high float64) float64 {

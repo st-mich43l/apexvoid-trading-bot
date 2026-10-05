@@ -21,8 +21,10 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/snapback"
 	strategytrendline "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/trendline"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/techniquezone"
 	technicaltrendline "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/trendline"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/zone"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/test/legacyfixture"
 )
 
 func bar(t int64, open, high, low, close float64) market.Candle {
@@ -37,16 +39,31 @@ func cfg(id strategy.StrategyID, params map[string]any) strategy.Config {
 	return strategy.Config{ID: id, Version: "v2", Enabled: true, Parameters: params}
 }
 
+func detectorParams(own map[string]any) map[string]any { return legacyfixture.Params(own) }
+
 func rangeEdgeParams() map[string]any {
-	return map[string]any{"lookback_bars": 5.0, "minimum_touches": 2.0, "minimum_wick_rejections": 1.0, "minimum_inside_closes": 3.0, "inside_lookback_bars": 24.0, "recent_breakout_lookback_bars": 12.0, "fallback_minimum_confirmations": 1.0, "fallback_enabled": true, "provisional_enabled": true, "post_impulse_enabled": true, "fallback_min_width_atr": .8, "fallback_max_width_atr": 8.0, "fallback_wick_fraction": .25, "post_impulse_min_displacement_atr": 3.0, "post_impulse_max_contraction_atr": 2.2, "post_impulse_min_inside_closes": 4.0, "post_impulse_lookback_bars": 36.0, "post_impulse_recent_bars": 6.0, "cluster_atr": .25, "cluster_min_abs": 0.0, "cluster_pip_mult": 2.0, "entry_tolerance_atr": .2, "maximum_edge_width_atr": .75, "minimum_wick_fraction": .25, "minimum_width_atr": 1.0, "maximum_width_atr": 6.0, "minimum_room_atr": .75, "invalidation_buffer_atr": .25, "recent_breakout_buffer_atr": .15, "recent_breakout_min_span_atr": .8, "expiry_hours": 4.0, "reaction_lookback_bars": 3.0, "engulfing_minimum_range_atr": .5}
+	return detectorParams(map[string]any{"lookback_bars": 48.0, "minimum_touches": 2.0, "minimum_wick_rejections": 1.0, "break_closes": 2.0, "minimum_room_atr": .75, "invalidation_buffer_atr": .25, "expiry_hours": 4.0})
 }
 
 func snapBackParams() map[string]any {
-	return map[string]any{"extension_atr": 2.0, "invalidation_buffer_atr": .25, "target_r": 2.0, "expiry_hours": 4.0, "maximum_entry_atr": 2.0, "proximal_band_atr": .5, "extension_source": "impulse", "strict_premium_discount": true, "reaction_lookback_bars": 3.0, "engulfing_minimum_range_atr": .5}
+	return detectorParams(map[string]any{"extension_atr": 1.5, "invalidation_buffer_atr": .25, "target_r": 2.0, "expiry_hours": 4.0, "extension_source": "impulse", "strict_premium_discount": true})
 }
 
 func momentumRideParams() map[string]any {
-	return map[string]any{"minimum_body_fraction": .6, "maximum_overlap_fraction": .35, "invalidation_buffer_atr": .25, "minimum_target_distance_atr": 1.0, "expiry_hours": 4.0, "maximum_entry_atr": 2.0, "proximal_band_atr": .5, "require_momentum_va": true, "momentum_opposition_tolerance": .15}
+	return detectorParams(map[string]any{"minimum_body_fraction": .6, "maximum_overlap_fraction": .35, "invalidation_buffer_atr": .25, "minimum_target_distance_atr": 1.0, "expiry_hours": 4.0, "require_momentum_va": false, "momentum_opposition_tolerance": .15})
+}
+
+// rangeEdgeContext is a lower-edge rejection inside a confirmed range, built on
+// the detector-contract frame the range-edge detector reads.
+func rangeEdgeContext(last market.Candle) *analysiscontext.MarketContext {
+	bars := legacyfixture.Bars(10, 100.5)
+	bars[9] = last
+	edge := func(side string, level float64) techniquezone.ScalpBarrier {
+		return techniquezone.ScalpBarrier{Side: side, Level: level, Low: level - .3, High: level + .3, Touches: 4, WickRejections: 3, LastTouchIndex: 9, FirstTouchIndex: 1, Score: 10.5, Grade: "A", ConfidenceGrade: "A"}
+	}
+	return legacyfixture.Context(bars, 1, func(f *analysiscontext.LegacyFrame, _ *analysiscontext.LegacyRead) {
+		f.ScalpRange = &techniquezone.ScalpRange{Lower: edge("support", 98), Upper: edge("resistance", 103), Equilibrium: 100.5, State: techniquezone.RangeStateConfirmed}
+	})
 }
 
 func assertOne(t *testing.T, instance strategy.Strategy, marketCtx *analysiscontext.MarketContext) {
@@ -101,8 +118,7 @@ func TestStrategiesKnownQualifyingFixtures(t *testing.T) {
 		if e != nil {
 			t.Fatal(e)
 		}
-		bars := []market.Candle{bar(1, 101, 102, 100, 100.5), bar(2, 101, 102, 99.9, 100.5), bar(3, 101, 102, 100.5, 101), bar(4, 101, 102, 99.8, 100.6), bar(5, 100.5, 101, 100.2, 100.7), bar(6, 100.5, 101, 99.9, 100.7)}
-		assertOne(t, s, ctx(map[market.Timeframe]*analysiscontext.TimeframeContext{market.M5: {Timeframe: market.M5, Candles: bars, Structure: structure.StructureState{Internal: structure.LayerState{Trend: structure.TrendRange}}}}))
+		assertOne(t, s, rangeEdgeContext(market.Candle{Time: 3000, Open: 98.3, High: 98.9, Low: 97.8, Close: 98.6}))
 	})
 	t.Run("liquidity_sweep", func(t *testing.T) {
 		s, e := liquiditysweep.New(cfg(liquiditysweep.ID, map[string]any{"minimum_rejection_body_atr": .3, "invalidation_buffer_atr": .25, "target_r": 2.0, "expiry_hours": 4.0}))
@@ -254,9 +270,10 @@ func TestRangeEdgeTriggerCannotDefineItsOwnRange(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	bars := []market.Candle{bar(1, 101, 102, 100, 101), bar(2, 101, 102, 100, 101), bar(3, 101, 102, 100, 101), bar(4, 101, 102, 100, 101), bar(5, 101, 102, 100, 101), bar(6, 100, 100.5, 95, 95.5)}
-	marketCtx := ctx(map[market.Timeframe]*analysiscontext.TimeframeContext{market.M5: {Timeframe: market.M5, Candles: bars, Structure: structure.StructureState{Internal: structure.LayerState{Trend: structure.TrendRange}}}})
-	if got := s.Evaluate(marketCtx); len(got) != 0 {
+	// The established range is 98-103. A trigger bar that crashes through the
+	// lower edge to 95.5 is a break of the range, not an entry at its edge.
+	broke := rangeEdgeContext(market.Candle{Time: 3000, Open: 100, High: 100.5, Low: 95, Close: 95.5})
+	if got := s.Evaluate(broke); len(got) != 0 {
 		t.Fatalf("trigger candle was allowed to redefine the established range: %+v", got)
 	}
 }

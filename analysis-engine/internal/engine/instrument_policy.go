@@ -41,12 +41,27 @@ func ApplyInstrument(settings *Settings, doc *config.Document, symbol string) er
 			return fmt.Errorf("instrument %s: fvg_entry_max_width_price must be a number, got %T", symbol, entryMax)
 		}
 	}
+	settings.LegacyRead.PipSize = geometry.PipSize
+	settings.LegacyRead.RoundStep = settings.KeyLevel.RoundStep
+	if roundStep, ok, err := doc.InstrumentValue(symbol, "price_scale", "round_step"); err != nil {
+		return err
+	} else if ok {
+		switch v := roundStep.(type) {
+		case float64:
+			settings.LegacyRead.RoundStep = v
+		case int:
+			settings.LegacyRead.RoundStep = float64(v)
+		default:
+			return fmt.Errorf("instrument %s: round_step must be a number, got %T", symbol, roundStep)
+		}
+	}
 	settings.DefendedLevels = levels
 	settings.DefendedLevelBuffer = buffer
 	if err := applyTechniqueGeometry(settings, doc, symbol); err != nil {
 		return err
 	}
 	applyParityCRT(settings)
+	applyLegacyDetector(settings)
 	return applyKeyLevelOverrides(settings, doc, symbol)
 }
 
@@ -185,4 +200,38 @@ func (s Settings) BlockedByDefendedLevel(c opportunity.Candidate) (float64, bool
 		}
 	}
 	return 0, false
+}
+
+// legacyDetectorStrategies are the strategies whose decision is the frozen
+// detector contract's and which therefore share its thresholds.
+var legacyDetectorStrategies = map[string]bool{
+	"snap_back": true, "fade_scalp": true, "momentum_ride": true, "break_retest": true, "range_edge": true,
+}
+
+// applyLegacyDetector injects the shared frozen-detector thresholds, the
+// instrument scale and the shared confluence/fibonacci contract into the
+// detector-contract strategies' parameters. It is idempotent.
+func applyLegacyDetector(settings *Settings) {
+	for i := range settings.Strategies {
+		if !legacyDetectorStrategies[string(settings.Strategies[i].ID)] {
+			continue
+		}
+		params := make(map[string]any, len(settings.Strategies[i].Parameters)+len(settings.LegacyDetector)+10)
+		for k, v := range settings.Strategies[i].Parameters {
+			params[k] = v
+		}
+		for k, v := range settings.LegacyDetector {
+			params[k] = v
+		}
+		params["pip_size"] = settings.LegacyRead.PipSize
+		params["fvg_entry_max_width_price"] = settings.TechniqueZones.Technique.FVGEntryMaxWidthPrice
+		params["confluence_scoring_version"] = settings.Confluence.ScoringVersion
+		params["confluence_star_three_ratio"] = settings.Confluence.StarThreeRatio
+		params["confluence_star_two_ratio"] = settings.Confluence.StarTwoRatio
+		params["confluence_zone_quality_weight"] = settings.Confluence.ZoneQualityWeight
+		params["confluence_mad_score_weight"] = settings.Confluence.MADScoreWeight
+		params["fibonacci_confluence_weight"] = settings.Confluence.FibonacciWeight
+		params["fibonacci_epsilon_atr"] = settings.Fib.EpsilonATR
+		settings.Strategies[i].Parameters = params
+	}
 }

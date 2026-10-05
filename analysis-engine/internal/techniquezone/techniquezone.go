@@ -65,6 +65,9 @@ type Zone struct {
 	Sources     []string
 	BreakKind   string // "" when None
 	BreakIndex  int    // -1 when None
+	// Score/ScoreReasons are filled only by ScoreZones (zones.score_zones).
+	Score        float64
+	ScoreReasons []string
 }
 
 func (z Zone) Low() float64  { return z.Bottom }
@@ -421,11 +424,11 @@ func KeyLevels(swings []Swing, atr []float64, clusterATR, roundStep float64, min
 	var levels []Level
 	for _, c := range clusters {
 		if len(c) >= minTouches {
-			sum := 0.0
-			for _, s := range c {
-				sum += s.Price
+			prices := make([]float64, len(c))
+			for i, s := range c {
+				prices[i] = s.Price
 			}
-			levels = append(levels, Level{Price: sum / float64(len(c)), Kind: "reaction", Touches: len(c), Band: tolerance, Strength: float64(len(c))})
+			levels = append(levels, Level{Price: pySum(prices...) / float64(len(c)), Kind: "reaction", Touches: len(c), Band: tolerance, Strength: float64(len(c))})
 		}
 	}
 	levels = append(levels, roundLevels(swings, atr, roundStep, tolerance, minTouches)...)

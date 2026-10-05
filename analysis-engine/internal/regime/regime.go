@@ -7,6 +7,7 @@ package regime
 import (
 	"fmt"
 	"math"
+	"sort"
 
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
@@ -75,7 +76,7 @@ func Classify(candles []market.Candle, atrSeries []float64, swings []structure.S
 	if rangeHigh <= rangeLow {
 		return State{Kind: "trend", RangeHigh: close, RangeLow: close, HeightATR: math.Inf(1), Reasons: []string{"invalid dealing range"}, Coiling: coiling, LegacyKind: "trend", NewKind: "trend"}
 	}
-	atr := lastATR(atrSeries)
+	atr := atrScalar(atrSeries)
 	height := math.Max(0, rangeHigh-rangeLow)
 	heightATR := math.Inf(1)
 	if atr > 0 {
@@ -287,13 +288,31 @@ func atrAt(series []float64, index int) float64 {
 	}
 	return series[index]
 }
-func lastATR(series []float64) float64 {
-	for i := len(series) - 1; i >= 0; i-- {
-		if isFinite(series[i]) && series[i] > 0 {
-			return series[i]
+
+// atrScalar ports math_utils.atr_scalar: the median of the finite ATR series,
+// falling back to 1.0 when the series is empty or the median is not positive.
+// The legacy regime therefore measures range height against the typical ATR of
+// the window, not against the latest bar's ATR.
+func atrScalar(series []float64) float64 {
+	finite := make([]float64, 0, len(series))
+	for _, v := range series {
+		if isFinite(v) {
+			finite = append(finite, v)
 		}
 	}
-	return 0
+	if len(finite) == 0 {
+		return 1
+	}
+	sort.Float64s(finite)
+	mid := len(finite) / 2
+	median := finite[mid]
+	if len(finite)%2 == 0 {
+		median = (finite[mid-1] + finite[mid]) / 2
+	}
+	if !isFinite(median) || median <= 0 {
+		return 1
+	}
+	return median
 }
 func lastClose(candles []market.Candle) float64 {
 	if len(candles) == 0 || !isFinite(candles[len(candles)-1].Close) {

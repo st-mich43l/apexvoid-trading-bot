@@ -58,3 +58,24 @@ func TestClassifyPreservesPythonChopReasonsAndRangeGeometry(t *testing.T) {
 		t.Fatalf("expected both range-height and held-range reasons, got %v", state.Reasons)
 	}
 }
+
+// Python's atr_scalar is the median of the ATR series, not its last value, so
+// the chop range-height test is measured against the typical ATR of the window.
+func TestClassifyMeasuresRangeHeightAgainstTheMedianATR(t *testing.T) {
+	cfg := regime.Config{ChopFilterEnabled: true, ChopLookback: 3, ChopRangeATR: 4, CoilContract: .8}
+	candles := []market.Candle{candle(1, 100, 101, 99, 100), candle(2, 100, 101, 99, 100), candle(3, 100, 101, 99, 100)}
+	// Range height 6. The median ATR is 2 (height 3 ATR < 4: chop); the last
+	// ATR is 1 (height 6 ATR >= 4: trend). Only the median is the frozen rule.
+	state := regime.Classify(candles, []float64{2, 2, 2, 1}, nil, "up", 106, 100, true, cfg)
+	if state.HeightATR != 3 || state.Kind != "chop" {
+		t.Fatalf("height must use the median ATR: kind=%s height=%v", state.Kind, state.HeightATR)
+	}
+	state = regime.Classify(candles, []float64{0, 0, 0}, nil, "up", 106, 100, true, cfg)
+	if state.HeightATR != 6 {
+		t.Fatalf("a non-positive median falls back to 1.0, got height %v", state.HeightATR)
+	}
+	state = regime.Classify(candles, nil, nil, "up", 106, 100, true, cfg)
+	if state.HeightATR != 6 {
+		t.Fatalf("an empty series falls back to 1.0, got height %v", state.HeightATR)
+	}
+}

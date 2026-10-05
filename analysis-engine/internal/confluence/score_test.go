@@ -38,3 +38,28 @@ func TestEvaluateDoesNotTurnNegativeMADIntoBonus(t *testing.T) {
 		t.Fatalf("negative MAD changed score: bonus=%v raw=%v", score.MADBonus, score.V2Raw)
 	}
 }
+
+// Python normalises a zone score by _ZONE_SCORE_MAX (24.5) but cuts it at the
+// factor-scale star ratios 8/20.5 and 12/20.5 (_STAR_TWO/THREE_RATIO), the same
+// ratios the factor branch uses. A cut at 8/24.5 and 12/24.5 over-awards stars.
+func TestEvaluateZoneScoreUsesFactorScaleStarRatios(t *testing.T) {
+	cfg := DefaultConfig()
+	cases := []struct {
+		name  string
+		zone  ZoneQuality
+		fib   bool
+		stars int
+	}{
+		{"below the two-star cut", ZoneQuality{Score: 9.55}, false, 1}, // 9.55/24.5 = .390 < 8/20.5 = .3902
+		{"fib touch lifts it over", ZoneQuality{Score: 9.55}, true, 2}, // 12.05/24.5 = .492
+		{"just below three stars", ZoneQuality{Score: 14.3}, false, 2}, // .5837 < 12/20.5 = .5854
+		{"three stars", ZoneQuality{Score: 14.35}, false, 3},           // .5857
+		{"a touched zone is capped at two", ZoneQuality{Score: 20, Touches: 1}, false, 2},
+	}
+	for _, tc := range cases {
+		got := Evaluate(tc.zone, Factors{FibTouch: tc.fib}, cfg, 0).V1Stars
+		if got != tc.stars {
+			t.Fatalf("%s: stars = %d, want %d", tc.name, got, tc.stars)
+		}
+	}
+}

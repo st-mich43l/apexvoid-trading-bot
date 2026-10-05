@@ -1,9 +1,13 @@
 # Fade Scalp Strategy V2
 
-`fade_scalp` is the independent equal-level sweep reversal thesis. BUY requires
-an equal-low pool; SELL requires an equal-high pool. The pool must have a clean
-A/B sweep and reclaim, valid premium/discount location, and a shared closed-bar
-structural reaction. In chop, the setup must be at the correct range edge and
-the grab must be Grade A. Swing-only pools and Grade-C/unreclaimed sweeps never
-qualify. The opportunity carries pool identity, grab grade, reaction pattern,
-touch/confirmation timestamps and an opposing-liquidity target.
+`fade_scalp` is the independent equal-level sweep reversal thesis. It runs on
+the engine's detector-contract frame. BUY requires an equal-low pool (a
+sell-side pool with at least two touches); SELL an equal-high pool. The pool
+must have a graded A/B sweep, the compat entry zone around the level must show
+the shared closed-bar structural reaction, and the strict premium/discount
+location must allow the direction. In chop the setup must sit at the correct
+edge of the range and the grab must be Grade A. Swing-only (single-touch) pools
+and Grade-C sweeps never qualify. When several levels qualify, the highest
+confluence wins, then the nearest. The candidate carries the pool identity, grab
+grade, reaction pattern, touch/confirmation timestamps and the nearest opposing
+pool as its target.

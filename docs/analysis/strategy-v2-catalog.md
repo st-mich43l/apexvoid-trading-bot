@@ -76,3 +76,17 @@ same-side retest and current rejection. `box_breakout` owns M5 compression,
 accepted box break and retest. `scalp_breakout_retest` owns the distinct
 M5-context/M1-confirmation thesis. They are separate registry IDs and adapters;
 one detector must not be substituted for another.
+
+## Detector-contract strategies
+
+`break_retest`, `range_edge`, `snap_back`, `momentum_ride` and `fade_scalp`
+reproduce the frozen Python detectors' decisions. They read the engine's
+detector-contract frame (swings, structure, levels, scored zones, liquidity
+pools and grabs, sessions, trendlines, the scalp range, regime and
+higher-timeframe bias computed over the frozen bounded windows) and share one
+qualification step: clipped entry band, valid-side level, entry distance,
+fibonacci touch and the confluence floor. Their confluence is the detector's own
+and is published as the candidate's technical confluence. The permanent golden
+test in `analysis-engine/test/detectorparity` replays the committed XAU, GBPUSD
+and USDJPY captures and requires every decision to match the frozen oracle bar
+by bar.

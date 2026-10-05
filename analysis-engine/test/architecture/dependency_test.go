@@ -86,12 +86,13 @@ var rank = map[string]int{
 	"regime":        3,
 	"techniquezone": 4,
 
-	"context": 4,
+	"context": 5,
 
 	"opportunity": 5,
 
 	"strategy":    6,
-	"confluence":  6,
+	"legacyread":  6,
+	"confluence":  5,
 	"state":       6,
 	"arbitration": 6,
 
