@@ -488,6 +488,35 @@ def resolve_execution_route_plan(
       (side == "SELL" and geometry == "below")
       or (side == "BUY" and geometry == "above")
     )
+    # Non-M1 XAU range scalps still use the Manual Algo entry contract:
+    # execute the shallow/current leg and leave a deeper limit working over
+    # the untraded part of the zone.  The old scalp short-circuit returned a
+    # single market leg before ``manual_xau_ladder`` could be used, which is
+    # why production Range Edge plans carried ``leg_ratios`` metadata but an
+    # empty ``entry.legs`` array.  M1 chase scalps deliberately remain
+    # single-market and are excluded by ``manual_xau_ladder``.
+    if manual_xau_ladder and split_ok:
+      remaining_far = low if side == "BUY" else high
+      l2_price = _round_price(
+        (quote + remaining_far) / 2.0,
+        digits,
+      )
+      if side == "BUY":
+        l2_price = min(high, max(low, l2_price))
+      else:
+        l2_price = max(low, min(high, l2_price))
+      l1_price = _round_price(quote, digits)
+      if l1_price != l2_price:
+        return ExecutionRoutePlan(
+          ROUTE_MARKET_WITH_LIMIT_SCALE,
+          l1_price,
+          (l1_price, l2_price),
+          geometry,
+          "scalp: XAU Manual Algo shallow/deep ladder",
+          True,
+          planned_leg_volume_ratios=manual_xau_ratios,
+          immediate_market=True,
+        )
     # Scalp: single-leg market only (no micro-grid) - fast, simple
     # execution matters more than entry-price optimality for a scalp.
     # 2026-09-08 (owner-reported bad technique entries): technique
