@@ -91,6 +91,34 @@ def test_key_session_trendline_use_market_with_limit_scale(strategy):
   assert evaluation.measured["planned_leg_volume_ratios"] == pytest.approx([0.80, 0.20])
 
 
+def test_range_edge_xau_scalp_emits_manual_shallow_deep_ladder():
+  # Range Edge is a range scalp, but unlike the M1 chase scalps it owns a
+  # confirmed XAU zone. It must publish the same market-L1/deeper-limit-L2
+  # contract as Manual Algo; the old scalp short-circuit discarded both
+  # entry legs and emitted a single market plan.
+  evaluation = evaluate_execution_policy(
+    _policy_match(
+      strategy="Range Edge Scalp",
+      symbol="XAU",
+      direction="BUY",
+      entry_low=4150.57,
+      entry_high=4151.91,
+      current_price=4152.21,
+      atr=1.0,
+    ),
+    spot_price=4152.21,
+    executable_quote=4152.21,
+    regime="range",
+    pip_size=0.1,
+    cfg=_cfg(),
+  )
+  assert evaluation.allowed
+  measured = evaluation.measured
+  assert measured["planned_execution_route"] == "market_with_limit_scale"
+  assert measured["planned_leg_entry_prices"] == pytest.approx([4152.21, 4151.39])
+  assert measured["planned_leg_volume_ratios"] == pytest.approx([0.80, 0.20])
+
+
 @pytest.mark.parametrize(
   "strategy",
   [
