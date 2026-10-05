@@ -290,9 +290,8 @@ def test_fx_block_is_identical_for_every_strategy(strategy, symbol):
 
 
 class _FakeRedis:
-  def __init__(self, plans: dict[str, dict], positions: dict[int, dict] | None = None):
+  def __init__(self, plans: dict[str, dict]):
     self._plans = plans
-    self._positions = positions or {}
 
   async def get(self, key: str):
     if key == "execution:trade_plan_runtime_ids":
@@ -300,12 +299,7 @@ class _FakeRedis:
     plan_id = key.removeprefix("execution:plan_runtime:")
     if plan_id in self._plans:
       return json.dumps(self._plans[plan_id]).encode()
-    if key.startswith("auto_trade:position:"):
-      return json.dumps(self._positions[int(key.rsplit(":", 1)[1])]).encode()
     return None
-
-  async def smembers(self, key: str):
-    return {str(pid).encode() for pid in self._positions}
 
 
 def _plan_state(symbol, direction, stage, group_stage, **extra) -> dict:
@@ -412,23 +406,3 @@ async def test_xau_multi_leg_ladder_is_one_group_at_recorded_group_price():
   assert evaluate_opposite_exposure(
     "XAU", "SELL", 4315.0, exposures, XAU_POLICY
   ).allowed is True
-
-
-@pytest.mark.asyncio
-async def test_v6_position_exposure_blocks_fx_opposite():
-  redis = _FakeRedis(
-    {},
-    positions={
-      7: {
-        "symbol": "EURUSD", "direction": "BUY", "entry_price": 1.1000,
-        "remaining_volume": 100,
-      }
-    },
-  )
-  exposures = await load_active_exposures(redis, symbol="EURUSD")
-  decision = evaluate_opposite_exposure(
-    "EURUSD", "SELL", 1.2000, exposures,
-    instrument_geometry.opposite_position_policy("EURUSD"),
-  )
-  assert decision.allowed is False
-  assert decision.measured["existing_position_id"] == 7

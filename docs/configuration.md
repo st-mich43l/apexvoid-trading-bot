@@ -41,8 +41,8 @@ refuses the order if exposure is present). Algo Bot (`evaluate_opposite_exposure
 and cTrader Engine (`OppositeExposureFence`, run before the first broker
 mutation of a plan against tracked plan state plus real broker positions and
 pending orders) enforce the same rule independently. Same-direction stacking is
-a separate rule and is unchanged. `allow_hedged_xau` and
-`non_hedged_opposite_policy` only steer the manual/V6 candidate path.
+a separate rule and is unchanged. Manual `/algo` plans are exempt (owner
+instruction).
 
 ## Validation
 

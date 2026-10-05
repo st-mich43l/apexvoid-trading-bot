@@ -268,7 +268,7 @@ async def test_manual_cancelled_pending_modify_rearms_and_replaces(monkeypatch):
 
   await manual_execution._handle_event(
     redis_state.get_client(),
-    {"type": "manual_cancelled", "candidate_id": intent},
+    {"type": "plan_cancelled", "candidate_id": intent},
     {},
   )
 

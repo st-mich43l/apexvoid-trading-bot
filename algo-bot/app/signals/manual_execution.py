@@ -26,10 +26,12 @@ command poll to execute against the real broker.
 import asyncio
 import json
 import logging
-from app.runtime.instruments import for_instrument, live_instruments
+import time
 from typing import Any
 
 from app.bot.client import send_scanner_with_retry, send_with_retry
+from app.autotrade.go_plan_cancel import request_plan_cancel
+from app.autotrade.trade_plan_stream import publish_trade_plan
 from app.core.config import runtime_config
 from app.persistence import redis_state
 from app.persistence.store import (
@@ -39,8 +41,9 @@ from app.persistence.store import (
   set_execution_status,
 )
 from app.signals import pips_format
-from app.signals.fx_manual_algo import uses_entry_price_display
+from app.runtime.instruments import for_instrument, live_instruments
 from app.signals.manual_intent import ManualTradeIntent
+from app.signals.manual_plan import build_manual_trade_plan, is_manual_plan_id
 from app.autotrade.active_exposure import _mget_or_get, normalize_direction, normalize_symbol
 
 log = logging.getLogger(__name__)
@@ -58,7 +61,6 @@ _symbol_worker_tasks: dict[str, asyncio.Task[None]] = {}
 # owner-DM card (app.autotrade.delivery._format_opened); a manually-typed
 # /algo signal is still fundamentally a manual signal and should not
 # duplicate that card, only the channel update this loop drives.
-_FILL_EVENT_TYPE = "manual_opened"
 
 
 def _pending_delete_key(intent_id: str) -> str:
@@ -110,22 +112,6 @@ def _price(value: object, symbol: str = "XAU") -> str:
   return f"{float(value):,.{digits}f}".rstrip("0").rstrip(".")
 
 
-def _entry_event_text(
-  event: dict,
-  *,
-  symbol: str,
-  entry_low: object,
-  entry_high: object,
-) -> str:
-  if entry_low is not None and entry_high is not None:
-    low = float(entry_low)
-    high = float(entry_high)
-    if uses_entry_price_display(symbol, low, high):
-      return _price(low, symbol)
-    return f"{_price(low, symbol)}-{_price(high, symbol)}"
-  return _price(event.get("price"), symbol)
-
-
 def _manual_algo_symbols() -> tuple[str, ...]:
   symbols: list[str] = []
   for instrument_id in live_instruments(runtime_config) or ():
@@ -165,10 +151,9 @@ def _ensure_manual_algo_workers() -> None:
 
 
 def _is_manual_algo_event(event: dict) -> bool:
-  if event.get("stream") == "algo_manual":
-    return True
-  candidate_id = str(event.get("candidate_id") or "")
-  return candidate_id.startswith("manual:")
+  return event.get("stream") == "algo_manual" or is_manual_plan_id(
+    event.get("candidate_id")
+  )
 
 
 def _event_route_symbol(event: dict) -> str | None:
@@ -244,11 +229,6 @@ async def _symbol_from_manual_candidate(event: dict) -> str | None:
 
 
 
-def _target_text(event: dict, symbol: str) -> str:
-  targets = event.get("target_prices") or []
-  return " / ".join(_price(value, symbol) for value in targets) or "n/a"
-
-
 async def _send_executor_truth(text: str) -> None:
   """Operational truth from the Auto Algo / scanner bot (rejects, dry-run)."""
   if runtime_config.telegram.telegram_owner_id:
@@ -272,19 +252,11 @@ async def _send_owner_command_ack(text: str) -> None:
     )
 
 
-async def _handle_limit_placed(event: dict) -> None:
-  """Record the broker's limit-order acceptance. Owner-DM only (off by
-  default) - no VIP/public channel post.
+async def _handle_order_submitted(event: dict) -> None:
+  """Record the broker's acceptance of the plan's resting order(s).
 
-  A manual /algo signal's entry can be several independent legs (shallow/
-  mid/deep), and AutoTradeEngine.cs publishes one manual_limit_placed event
-  per leg - a channel post here fired once per leg with no dedup (unlike
-  the fill/TP paths, which gate on state transitions), spamming an
-  identical "limit placed - waiting for fill" card 2-3x for one signal.
-  Owner-reported 2026-08-20: remove the channel post outright; the real
-  "🟢 active" card on fill (_handle_fill_event/do_active, gated on the
-  first fill_state transition) already tells the channel the position is
-  live without a pre-fill placeholder.
+  Owner-DM only (off by default); never a channel post - the real "active"
+  card is driven by the first fill (_handle_fill_event).
   """
   candidate_id = str(event.get("candidate_id") or "")
   if not candidate_id:
@@ -293,23 +265,6 @@ async def _handle_limit_placed(event: dict) -> None:
   if sig is None:
     return
   await set_execution_status(sig["id"], "pending")
-  symbol = sig.get("symbol", "XAU")
-  entry = _entry_event_text(
-    event,
-    symbol=symbol,
-    entry_low=event.get("entry_low"),
-    entry_high=event.get("entry_high"),
-  )
-  if runtime_config.manual_algo.runtime.owner_execution_dm_enabled:
-    await _send_executor_truth(
-      "✅ <b>LIMIT ORDER PLACED</b>\n"
-      f"Direction: <b>{event.get('direction') or 'n/a'}</b>\n"
-      f"Entry: <code>{entry}</code>\n"
-      f"SL: <code>{_price(event.get('stop_loss'), symbol)}</code>\n"
-      f"TPs: <code>{_target_text(event, symbol)}</code>\n"
-      f"Order ID: <code>{event.get('order_id') or 'n/a'}</code>\n"
-      f"Candidate ID: <code>{candidate_id}</code>"
-    )
 
 
 async def _handle_execution_rejected(event: dict) -> None:
@@ -326,167 +281,22 @@ async def _handle_execution_rejected(event: dict) -> None:
   )
 
 
-async def _handle_dry_run(event: dict) -> None:
-  candidate_id = str(event.get("candidate_id") or "")
-  if candidate_id:
-    sig = await get_signal_by_execution_intent_id(candidate_id)
-    if sig is not None:
-      await set_execution_status(sig["id"], "dry_run")
-  await _send_executor_truth(
-    "🧪 <b>DRY-RUN ONLY</b>\n"
-    "No broker order submitted"
-  )
-
-
-def _percentage_weights_from_ratios(ratios: tuple[float, ...]) -> list[int]:
-  raw = [int(round(float(ratio) * 100)) for ratio in ratios]
-  if raw:
-    raw[-1] += 100 - sum(raw)
-  return raw
-
-
-def _manual_target_weights(effective: Any, target_count: int) -> list[int]:
-  """Resolve a valid 100% split for any owner-supplied TP count."""
-  if target_count <= 0:
-    raise ValueError("manual /algo requires at least one take profit")
-  if target_count == 1:
-    return [100]
-
-  close_ratios = tuple(
-    float(item) for item in effective.manual.target_close_ratios
-  )
-  if close_ratios and len(close_ratios) == target_count:
-    weights = _percentage_weights_from_ratios(close_ratios)
-    if all(weight > 0 for weight in weights) and sum(weights) == 100:
-      return weights
-
-  first_fraction = effective.manual.tp1_close_fraction
-  if first_fraction is not None:
-    first = int(round(float(first_fraction) * 100))
-    first = max(1, min(99, first))
-    remaining = 100 - first
-    later_count = target_count - 1
-    later = remaining // later_count
-    weights = [first, *([later] * later_count)]
-    weights[-1] += remaining - (later * later_count)
-    if all(weight > 0 for weight in weights):
-      return weights
-
-  equal = 100 // target_count
-  weights = [equal] * target_count
-  weights[-1] += 100 - sum(weights)
-  if any(weight <= 0 for weight in weights):
-    raise ValueError("manual /algo supports at most 100 take profits")
-  return weights
-
-
-def _intent_to_candidate_payload(intent: ManualTradeIntent) -> dict:
-  """Build the TradeCandidate-shaped dict AutoTradeEngine.cs consumes.
-
-  ``version=3``/``mode="manual_algo"`` is exactly what
-  ``IsManualAlgoCandidate`` (ctrader-engine/src/AutoTradeEngine.cs) checks.
-  ``candidate_id`` is the intent_id verbatim, reusing the exact SETNX
-  candidate-claim idempotency machinery every other candidate type already
-  gets for free.
-
-  The reference edge for both ``key_level``/``current_price`` and the
-  ``targets_pips`` pip-distance conversion is ``pips_format.rr_entry``'s own
-  BUY -> entry_high / SELL -> entry_low convention (the exact same "worst
-  realistic fill" edge already used for R:R on every manually-typed signal,
-  see ``app.signals.broadcast.render_entry``) - and, by construction, the
-  SAME edge AutoTradeEngine.cs's manual-algo path resolves its resting limit
-  order to when price is still outside the zone at arm-time
-  (ZoneFillPlanner's proximal-edge pattern: zone.High for Buy, zone.Low for
-  Sell). When price is already inside the zone at arm-time the real limit
-  order fills at the live price instead of this edge, so some slippage
-  between this pip estimate and the real fill is expected and accepted -
-  the same tolerance every other candidate type already has.
-  """
-  sig = {
-    "action": intent.direction,
-    "entry": intent.entry_low,
-    "entry_end": intent.entry_high,
-    "symbol": intent.symbol,
-  }
-  reference_entry = pips_format.rr_entry(sig)
-  targets_pips = [
-    max(1, pips_format.pips_between(sig, tp))
-    for tp in intent.tps
-  ]
-  effective = for_instrument(runtime_config, intent.symbol)
-  manual = effective.manual
-  if not manual.enabled:
-    raise ValueError(f"manual trading is disabled for {intent.symbol}")
-  if not manual.algo_enabled:
-    raise ValueError(f"manual /algo is disabled for {intent.symbol}")
-  target_weights = _manual_target_weights(effective, len(targets_pips))
-  payload = {
-    "version": 3,
-    "candidate_id": intent.intent_id,
-    "symbol": intent.symbol,
-    "timeframe": "M1",
-    # Manual /algo without an explicit tag is key-level (same default as
-    # parsing.DEFAULT_SETUP_TYPE) — never the opaque "Manual Algo" label.
-    "setup": intent.setup_type or "key-level",
-    "mode": "manual_algo",
-    # Owner-authored /algo orders bypass scanner/analysis policy by contract.
-    # The executor still applies broker-mechanical checks.
-    "bypass_analysis_gates": True,
-    "direction": intent.direction,
-    "trigger_ts": str(intent.created_at),
-    "created_at": intent.created_at,
-    "spot_ts": None,
-    # TradeCandidate.CurrentPrice/KeyLevel are non-nullable decimals on the
-    # C# side (unlike SpotTs) - reference_entry is a reasonable stand-in and
-    # not load-bearing anywhere in AutoTradeEngine.cs's processing (only the
-    # live spot quote from ObserveSpotAsync drives actual entry decisions).
-    "current_price": reference_entry,
-    "key_level": reference_entry,
-    "entry_zone": {"low": intent.entry_low, "high": intent.entry_high},
-    "confluence": intent.confluence or 1,
-    "reasons": ["manual /algo signal"],
-    "manual_stop_loss": intent.sl,
-    "manual_expires_at": intent.expires_at,
-    "targets_pips": targets_pips,
-    "manual_take_profits": list(intent.tps),
-    "manual_target_weights": target_weights,
-    "manual_single_entry": (
-      manual.entry_mode.value == "single" or intent.single_entry_override
-    ),
-    "risk_multiplier": float(manual.risk_multiplier),
-    "group_id": intent.intent_id,
-    "strategy_family": "manual",
-    "zone_id": f"manual-zone:{intent.manual_signal_id}",
-    "trigger_id": intent.intent_id,
-    "parent_group_id": None,
-    "structural_source": "owner_instruction",
-    "bias": "neutral",
-    "relationship_to_bias": "neutral",
-  }
-  return payload
-
-
 async def _publish_intent(client, intent: ManualTradeIntent) -> None:
-  candidate = _intent_to_candidate_payload(intent)
-  await client.xadd(
-    runtime_config.runtime.redis_streams.candidates,
-    {"payload": json.dumps(candidate, separators=(",", ":"))},
-    maxlen=max(100, runtime_config.runtime.redis_streams.candidate_maximum_length),
-    approximate=True,
-  )
-
-
-async def _process_intent_entries(client, entries, *, cursor: str) -> str:
-  for entry_id, fields in entries:
-    try:
-      payload = json.loads(fields["payload"])
-      intent = ManualTradeIntent(**payload)
-      await _publish_intent(client, intent)
-    except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
-      log.warning("Invalid manual trade intent %s: %s", entry_id, exc)
-    cursor = entry_id
-    await client.set(_INTENT_BRIDGE_CURSOR_KEY, cursor)
-  return cursor
+  """Publish the owner's /algo intent as a TradePlan V8 (the only order path)."""
+  try:
+    plan = build_manual_trade_plan(intent)
+  except ValueError as exc:
+    log.warning("Manual /algo intent %s rejected: %s", intent.intent_id, exc)
+    await set_execution_status(
+      intent.manual_signal_id, "rejected", error=str(exc),
+    )
+    await _send_executor_truth(
+      "⛔ <b>ORDER REJECTED</b>\n"
+      f"Reason: <code>{exc}</code>\n"
+      "No broker order submitted"
+    )
+    return
+  await publish_trade_plan(client, plan)
 
 
 async def _dispatch_intent_entries(client, entries, *, cursor: str) -> str:
@@ -585,9 +395,7 @@ async def _handle_fill_event(
 ) -> None:
   from app.signals import trade_ops  # local import breaks the module cycle
 
-  if event.get("stream") != "algo_manual" and not str(
-    event.get("candidate_id") or ""
-  ).startswith("manual:"):
+  if not _is_manual_algo_event(event):
     return
   candidate_id = event.get("candidate_id")
   position_id = event.get("position_id")
@@ -770,31 +578,6 @@ async def _handle_take_profit(event: dict, signal_id: int) -> None:
   await trade_ops.post_result(result, sig.get("symbol", "XAU"))
 
 
-async def _handle_tp_reached(event: dict, signal_id: int) -> None:
-  """Fan out a ladder level that was reached but could not be booked."""
-  from app.signals import trade_ops
-
-  sig = await get_manual_signal(signal_id)
-  target_pips = event.get("target_pips")
-  if sig is None or target_pips is None:
-    return
-  reached = _tp_ordinal_reached(sig, target_pips)
-  if not reached:
-    log.warning(
-      "manual-algo tp_reached could not resolve target signal=%s target_pips=%s",
-      signal_id,
-      target_pips,
-    )
-    return
-  result = await trade_ops.do_tp_reached({
-    "sid": signal_id,
-    "symbol": sig.get("symbol", "XAU"),
-    "tp_number": reached,
-    "pips": int(target_pips),
-  })
-  await trade_ops.post_result(result, sig.get("symbol", "XAU"))
-
-
 async def _handle_position_closed(event: dict, signal_id: int) -> None:
   """A broker-detected close (stop loss, or an unconfirmed disappearance)
   for ONE entry leg. A manual /algo signal's entry can be several
@@ -883,50 +666,29 @@ async def _handle_group_result(event: dict, signal_id: int) -> None:
   """
   from app.signals import trade_ops
 
-  pips = event.get("group_realized_pips")
-  if pips is None:
-    log.error("group_result event missing group_realized_pips for signal %s", signal_id)
-    return
   sig = await get_manual_signal(signal_id)
   symbol = (sig or {}).get("symbol", "XAU")
+  pips = event.get("group_realized_pips")
+  if pips is None:
+    # V8's terminal position_closed does not always carry the volume-weighted
+    # group blend; fall back to the close price against the signal's entry.
+    price = event.get("price")
+    if sig is None or price is None:
+      log.error(
+        "group close event has no group_realized_pips or price for signal %s",
+        signal_id,
+      )
+      await set_execution_status(
+        signal_id, "error", error="position_closed event missing price",
+      )
+      return
+    pips = pips_format.signed_result_pips(sig, float(price))
   resolved = await _resolve_group_close_pips(signal_id, float(pips))
   result = await trade_ops._execute_group_close(
     signal_id, symbol, resolved,
     entry_price=event.get("leg_entry_price"),
   )
   await trade_ops.post_result(result, symbol)
-
-
-async def _handle_manual_closed(
-  event: dict,
-  signal_id: int,
-) -> None:
-  """The owner-confirmed counterpart to ``_handle_position_closed`` (one
-  entry leg closed via /trade_close or /auto_close_all rather than a
-  broker-detected stop). Same reasoning: only a genuine partial (this leg
-  itself still has volume left) is booked here; a leg finishing completely
-  is left to ``_handle_group_result``.
-  """
-  from app.signals import trade_ops
-
-  sig = await get_manual_signal(signal_id)
-  if sig is None:
-    return
-  price = event.get("price")
-  if price is None:
-    log.error("manual_closed event missing price for signal %s", signal_id)
-    await set_execution_status(
-      signal_id, "error", error="close command missing execution price",
-    )
-    return
-  if not (event.get("remaining_volume") or 0) > 0:
-    return
-  pips, frac = _leg_close_pips_and_frac(sig, event, float(price))
-  result = await trade_ops._execute_close(
-    signal_id, sig.get("symbol", "XAU"), pips, frac,
-    entry_price=event.get("leg_entry_price"),
-  )
-  await trade_ops.post_result(result, sig.get("symbol", "XAU"))
 
 
 async def _handle_manual_sl_moved(event: dict, signal_id: int) -> None:
@@ -1075,67 +837,50 @@ async def _handle_event(
   event: dict,
   positions: dict[int, int],
 ) -> None:
+  """Route a TradePlan V8 lifecycle event for a manual plan to its handler.
+
+  Manual plans use the same V8 events as every other plan (``plan_id`` ==
+  ``intent_id`` == ``candidate_id``); the engine labels them ``algo_manual``.
+  """
   event_type = event.get("type")
-  is_manual = event.get("stream") == "algo_manual"
-  if event_type == "manual_limit_placed" and is_manual:
-    await _handle_limit_placed(event)
-    return
-  if event_type == "dry_run" and is_manual:
-    await _handle_dry_run(event)
-    return
-  if event_type == "rejected" and is_manual:
+  if event_type == "plan_rejected":
     await _handle_execution_rejected(event)
     return
-  if event_type == _FILL_EVENT_TYPE:
+  if event_type == "v8_order_submitted":
+    await _handle_order_submitted(event)
+    return
+  if event_type == "order_filled":
     await _handle_fill_event(event, positions)
     return
-  if event_type == "manual_cancelled":
+  if event_type == "plan_cancelled":
     await _handle_manual_cancelled(event)
     return
-  if event_type == "manual_expired":
+  if event_type == "plan_expired":
     await _handle_manual_expired(event)
     return
   if event_type == "manual_command_error":
     await _handle_command_error(event, positions)
     return
-  if event_type in {"stop_moved", "sl_moved"}:
-    signal_id = await _resolve_signal_id(event, positions)
-    if signal_id is None:
-      return  # autonomous position; delivery.py owns channel fan-out
-    await _handle_stop_moved(event, signal_id)
-    return
-  if event_type == "group_result":
-    # No _resolve_signal_id positions-cache entry: group_result carries no
-    # position_id of its own semantic weight (just whichever leg happened
-    # to trigger it), so route by candidate_id/execution_intent_id only.
-    signal_id = await _resolve_signal_id(event, positions)
-    if signal_id is None:
-      return
-    await _handle_group_result(event, signal_id)
-    return
   signal_id = await _resolve_signal_id(event, positions)
   if signal_id is None:
     return  # not a manual-algo position this loop is tracking
-  if event_type == "take_profit":
-    await _handle_take_profit(event, signal_id)
-  elif event_type == "manual_tp_reached":
-    await _handle_tp_reached(event, signal_id)
-  elif event_type == "position_closed":
-    await _handle_position_closed(event, signal_id)
-    if not (event.get("remaining_volume") or 0) > 0:
-      position_id = event.get("position_id")
-      if position_id is not None:
-        positions.pop(int(position_id), None)
-  elif event_type == "manual_closed":
-    await _handle_manual_closed(event, signal_id)
-    if not (event.get("remaining_volume") or 0) > 0:
-      position_id = event.get("position_id")
-      if position_id is not None:
-        positions.pop(int(position_id), None)
+  if event_type == "sl_moved":
+    await _handle_stop_moved(event, signal_id)
   elif event_type == "manual_sl_moved":
     await _handle_manual_sl_moved(event, signal_id)
-  # Any other type (e.g. manual_planned) is informational
-  # only for this loop's purposes.
+  elif event_type == "tp_booked":
+    await _handle_take_profit(event, signal_id)
+  elif event_type == "position_closed":
+    # V8 reports the group's terminal close as a single position_closed with
+    # no volume left; anything with volume left is a partial leg close.
+    if (event.get("remaining_volume") or 0) > 0:
+      await _handle_position_closed(event, signal_id)
+    else:
+      await _handle_group_result(event, signal_id)
+      position_id = event.get("position_id")
+      if position_id is not None:
+        positions.pop(int(position_id), None)
+  # Any other type is informational only for this loop's purposes.
 
 
 async def _process_event_entries(
@@ -1210,8 +955,18 @@ async def request_close_all() -> None:
 
 
 async def request_cancel(intent_id: str) -> None:
-  """/trade_cancel on an armed (not yet filled) manual algo signal."""
-  await _xadd_command({"type": "cancel_pending", "intent_id": intent_id})
+  """/trade_cancel on an armed (not yet filled) manual algo signal.
+
+  Withdraws the plan through the same single-writer cancel intent every plan
+  uses; cTrader Engine cancels the resting legs and publishes ``plan_cancelled``.
+  """
+  await request_plan_cancel(
+    redis_state.get_client(),
+    intent_id,
+    reason="owner cancelled the armed /algo signal",
+    source="owner",
+    requested_at=int(time.time()),
+  )
 
 
 async def request_close(
@@ -1241,68 +996,61 @@ async def request_close(
 
 
 async def list_open_algo_auto_positions(symbol: str | None = None) -> list[dict]:
-  """Open, fully-autonomous (Stream == "algo_auto") broker positions.
+  """Open broker legs of live, fully-autonomous (non-manual) TradePlans.
 
-  /trade_close_auto has no owner-typed signal id to resolve from (unlike
-  /trade_close's manual_signals lookup) - the owner picks a broker
-  position_id directly, so this surfaces the live candidates from the same
-  auto_trade:positions/auto_trade:position:{id} snapshots
-  app.autotrade.active_exposure already reads for exposure gating, filtered
-  to algo_auto only (manual /algo positions keep using /trade_close).
+  /trade_close_auto has no owner-typed signal id to resolve from - the owner
+  picks a broker position_id directly - so this surfaces the live legs from
+  the TradePlan runtime state (``execution:plan_runtime:*``) that
+  cTrader Engine persists, excluding manual /algo plans (those keep using
+  /trade_close).
   """
   client = redis_state.get_client()
-  raw_ids = await client.smembers("auto_trade:positions")
+  raw_ids = await client.get("execution:trade_plan_runtime_ids")
   if not raw_ids:
     return []
-  position_ids: list[int] = []
-  for raw_id in raw_ids:
-    token = raw_id.decode() if isinstance(raw_id, bytes) else str(raw_id)
-    try:
-      position_ids.append(int(token))
-    except (TypeError, ValueError):
-      continue
-  if not position_ids:
-    return []
-  raw_positions = await _mget_or_get(
-    client,
-    [f"auto_trade:position:{position_id}" for position_id in position_ids],
+  plan_ids = [
+    item for item in (raw_ids.decode() if isinstance(raw_ids, bytes) else str(raw_ids)).split(",")
+    if item.strip() and not is_manual_plan_id(item.strip())
+  ]
+  raw_states = await _mget_or_get(
+    client, [f"execution:plan_runtime:{plan_id}" for plan_id in plan_ids],
   )
   wanted = normalize_symbol(symbol) if symbol else None
   out: list[dict] = []
-  for position_id, raw in zip(position_ids, raw_positions, strict=False):
+  for raw in raw_states:
     if not raw:
       continue
     try:
       payload = json.loads(raw.decode() if isinstance(raw, bytes) else str(raw))
     except (TypeError, ValueError, json.JSONDecodeError):
       continue
-    if not isinstance(payload, dict) or payload.get("stream") != "algo_auto":
+    if not isinstance(payload, dict):
       continue
-    remaining = payload.get("remaining_volume")
-    if remaining is None or float(remaining) <= 0:
-      continue
-    row_symbol = normalize_symbol(payload.get("symbol"))
+    row_symbol = normalize_symbol(payload.get("Symbol") or payload.get("symbol"))
     if wanted is not None and row_symbol != wanted:
       continue
-    out.append({
-      "position_id": position_id,
-      "symbol": row_symbol,
-      "direction": normalize_direction(payload.get("direction")),
-      "entry_price": payload.get("entry_price"),
-      "remaining_volume": remaining,
-      "setup": payload.get("setup"),
-    })
+    direction = normalize_direction(payload.get("Direction") or payload.get("direction"))
+    for leg in payload.get("Legs") or payload.get("legs") or []:
+      position_id = leg.get("BrokerPositionId") or leg.get("broker_position_id")
+      remaining = leg.get("RemainingVolume") or leg.get("remaining_volume") or 0
+      if position_id is None or float(remaining) <= 0:
+        continue
+      out.append({
+        "position_id": int(position_id),
+        "symbol": row_symbol,
+        "direction": direction,
+        "entry_price": leg.get("FillPrice") or leg.get("fill_price"),
+        "remaining_volume": remaining,
+        "setup": payload.get("PlanId") or payload.get("plan_id"),
+      })
   return out
 
 
 async def request_close_auto_position(position_id: int) -> None:
-  """/trade_close_auto: close ONE fully-autonomous (algo_auto) broker
-  position immediately, by its own position_id - before this, the only
-  owner control for an algo_auto position was /auto_close_all (flattens
-  every open position). AutoTradeEngine.cs's HandleCloseAutoPositionCommandAsync
-  refuses anything whose Stream isn't "algo_auto", so this can never be
-  used to bypass /trade_close's own intent_id/group-aware path for a
-  manual /algo signal.
+  """/trade_close_auto: close ONE fully-autonomous broker leg immediately,
+  by its own position_id. cTrader Engine refuses a leg that belongs to a
+  manual /algo plan, so this can never bypass /trade_close's own
+  intent_id/group-aware path for a manual signal.
   """
   await _xadd_command({"type": "close_position", "position_id": position_id})
 

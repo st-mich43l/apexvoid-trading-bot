@@ -36,7 +36,7 @@ from app.autotrade.go_opportunity_policy import (
 from app.autotrade.go_zone_book import opposing_entries_for_go_match
 from app.autotrade import units
 from app.core import instrument_geometry
-from app.autotrade.candidate_publish import (
+from app.autotrade.cycle_publish import (
   acquire_owned_lock,
   autonomous_cycle_owner_key,
   publish_ranked_cycle,
@@ -145,12 +145,9 @@ from app.autotrade.reaction_identity import (
   mapped_group_id,
   parse_thesis_claim,
   thesis_claim_key,
-  thesis_claim_payload,
-  thesis_state_blocks_new_initial,
 )
 from app.autotrade.range_context import WORKER_SNAPSHOT_TTL_SECONDS
 from app.core.config import runtime_config
-from app.runtime.instrument_config import instrument_runtime_view
 from app.runtime.price_identity import price_token
 from app.persistence.store import event_in_window, nearest_currency_event
 from app.marketdata.ohlc import RedisOHLCSource, window_for_timeframe
@@ -810,74 +807,6 @@ async def _mark_thesis_terminal_waiting_exit(
     claim["active_reaction_id"] = reaction_id
   await _save_thesis_claim(client, thesis_id, claim)
   await increment_metric(client, "mapped_thesis_terminal", symbol=claim.get("symbol"))
-
-
-async def _reconcile_legacy_mapped_thesis_claims(client: Any) -> None:
-  """Create thesis claims for open mapped groups that predate the lock."""
-  if not _thesis_lock_enabled():
-    return
-  pattern = "auto_trade:group_plan:*"
-  async for raw_key in client.scan_iter(match=pattern, count=50):
-    key = raw_key.decode() if isinstance(raw_key, bytes) else str(raw_key)
-    raw = await client.get(key)
-    if raw is None:
-      continue
-    try:
-      text = raw.decode() if isinstance(raw, bytes) else str(raw)
-      plan = json.loads(text)
-    except (TypeError, ValueError, json.JSONDecodeError):
-      continue
-    if not isinstance(plan, dict):
-      continue
-    thesis_id = plan.get("ThesisId") or plan.get("thesis_id")
-    reaction_id = plan.get("ReactionId") or plan.get("reaction_id")
-    zone_id = plan.get("ZoneId") or plan.get("zone_id") or plan.get("StructuralZoneId")
-    symbol = str(plan.get("Symbol") or plan.get("symbol") or "XAU").upper()
-    direction = str(plan.get("Direction") or plan.get("direction") or "").upper()
-    strategy = str(plan.get("Setup") or plan.get("setup") or "Mapped Zone Reaction")
-    family = str(
-      plan.get("StrategyFamily") or plan.get("strategy_family") or "mapped_zone"
-    )
-    if family not in {"mapped_zone", "mapped_zone_reaction"} and "mapped" not in strategy.casefold():
-      continue
-    if not thesis_id and reaction_id and zone_id and direction:
-      from app.autotrade.reaction_identity import mapped_thesis_id
-      thesis_id = mapped_thesis_id(
-        symbol=symbol,
-        strategy=strategy if strategy else "Mapped Zone Reaction",
-        direction=direction,
-        structural_zone_id=str(zone_id),
-      )
-    if not thesis_id:
-      await increment_metric(client, "legacy_group_thesis_unattributed", symbol=symbol)
-      continue
-    existing = await _load_thesis_claim(client, str(thesis_id))
-    if existing is not None and thesis_state_blocks_new_initial(existing.get("state")):
-      continue
-    if existing is not None and str(existing.get("state") or "") in ACTIVE_THESIS_STATES:
-      continue
-    now = int(datetime.now(timezone.utc).timestamp())
-    body = thesis_claim_payload(
-      thesis_id=str(thesis_id),
-      strategy=strategy,
-      strategy_family="mapped_zone",
-      symbol=symbol,
-      direction=direction or "BUY",
-      structural_zone_id=str(zone_id or ""),
-      structural_zone_low=None,
-      structural_zone_high=None,
-      active_reaction_id=str(reaction_id or ""),
-      candidate_id=str(plan.get("CandidateId") or plan.get("candidate_id") or ""),
-      group_id=str(plan.get("GroupId") or plan.get("group_id") or ""),
-      state="managing",
-      claimed_at=now,
-      touch_bar_ts="",
-      confirmation_bar_ts="",
-      thesis_cycle=1,
-    )
-    claimed = await client.set(thesis_claim_key(str(thesis_id)), body, nx=True)
-    if claimed:
-      await increment_metric(client, "legacy_group_thesis_recovered", symbol=symbol)
 
 
 def _strategy_mode_enabled(match: StrategyMatch) -> bool:

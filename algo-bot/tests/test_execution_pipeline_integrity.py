@@ -19,14 +19,9 @@ from app.autotrade.arbitration import (
   ExecutionIntent,
   arbitrate_execution_intents,
 )
-from app.autotrade.candidate_execution_state import (
-  parse_candidate_execution_record,
-  STATE_PUBLISHED,
-)
-from app.autotrade.candidate_publish import (
+from app.autotrade.cycle_publish import (
   acquire_owned_lock,
   autonomous_cycle_owner_key,
-  publish_candidate_atomic,
   publish_ranked_cycle,
   release_owned_lock,
 )
@@ -169,58 +164,6 @@ def test_quality_ranking_falls_back_to_confluence_when_quality_is_missing():
 
   assert [item.intent_id for item in result.ordered] == ["buy"]
   assert result.reason_code == "ranked_single_direction"
-
-
-@pytest.mark.asyncio
-async def test_failed_tier_a_admission_cannot_suppress_executable_tier_b():
-  """TradePlan-cutover: a terminal top intent must not suppress the lower-ranked
-  intent's own attempt. The cross-engine flow is:
-
-  1. _handle_event only enqueues admitted intents in ``arbitrable``.
-  2. arbitrate_execution_intents orders admitted intents by rank.
-  3. publish_ranked_cycle walks that order; a top-ranked ``terminal_reject``
-     publication result must expose the next-ranked intent to the publisher.
-  """
-  client = redis_state.get_client()
-  top = _intent("buy-a", direction="BUY", confluence=4, tier="A")
-  lower = _intent("sell-b", direction="SELL", confluence=3, tier="B")
-  # Admission has already filtered ``top`` down to a single-direction list
-  # (the tier-A intent failed admission and is not in ``arbitrable``).
-  arbitrable = [lower]
-  arbitration = arbitrate_execution_intents(arbitrable)
-  assert [item.intent_id for item in arbitration.ordered] == ["sell-b"]
-
-  attempted: list[str] = []
-
-  async def publisher(intent):
-    attempted.append(intent.intent_id)
-    if intent.intent_id == top.intent_id:
-      return CandidatePublicationResult.terminal_reject("news_window_active")
-    atomic = await publish_candidate_atomic(
-      client,
-      stream="auto_trade:test:tier-a-terminal",
-      candidate_id="candidate-sell-b",
-      payload=json.dumps({"intent_id": intent.intent_id}),
-      ttl=300,
-      maxlen=100,
-      ownership_key=autonomous_cycle_owner_key("XAU", "tier-a-terminal-cycle"),
-      ownership_payload="candidate-sell-b",
-      ownership_ttl=300,
-    )
-    assert atomic.published
-    return CandidatePublicationResult.published("candidate-sell-b")
-
-  # publish_ranked_cycle enforces the terminal-reject → fallback contract.
-  result = await publish_ranked_cycle(
-    client,
-    symbol="XAU",
-    cycle_id="tier-a-terminal-cycle",
-    ordered=(top, lower),
-    publisher=publisher,
-  )
-
-  assert result.candidate_id == "candidate-sell-b"
-  assert attempted == [top.intent_id, lower.intent_id]
 
 
 def _policy_match(**overrides):
@@ -590,54 +533,6 @@ async def test_required_limit_side_gate_uses_execution_policy(
 
 
 @pytest.mark.asyncio
-async def test_candidate_claim_and_stream_append_are_single_winner():
-  client = redis_state.get_client()
-
-  results = await asyncio.gather(*[
-    publish_candidate_atomic(
-      client,
-      stream="auto_trade:test:atomic",
-      candidate_id="candidate-atomic",
-      payload='{"candidate_id":"candidate-atomic"}',
-      ttl=300,
-      maxlen=100,
-    )
-    for _ in range(12)
-  ])
-
-  assert sum(1 for published, _ in results if published) == 1
-  assert await client.xlen("auto_trade:test:atomic") == 1
-  assert parse_candidate_execution_record(
-    await client.get("auto_trade:candidate:candidate-atomic")
-  ).state == STATE_PUBLISHED
-
-
-@pytest.mark.asyncio
-async def test_one_cycle_owner_allows_only_one_distinct_candidate():
-  client = redis_state.get_client()
-  owner_key = autonomous_cycle_owner_key("XAU", "closed-m1-1000")
-
-  results = await asyncio.gather(*[
-    publish_candidate_atomic(
-      client,
-      stream="auto_trade:test:cycle",
-      candidate_id=f"candidate-cycle-{index}",
-      payload=json.dumps({"candidate_id": f"candidate-cycle-{index}"}),
-      ttl=300,
-      maxlen=100,
-      ownership_key=owner_key,
-      ownership_payload=f"candidate-cycle-{index}",
-      ownership_ttl=300,
-    )
-    for index in range(12)
-  ])
-
-  assert sum(item.published for item in results) == 1
-  assert await client.xlen("auto_trade:test:cycle") == 1
-  assert sum(item.status == "conflict" for item in results) == 11
-
-
-@pytest.mark.asyncio
 async def test_ranked_v8_publication_persists_full_cycle_owner_record():
   client = redis_state.get_client()
   intent = replace(
@@ -707,142 +602,6 @@ async def test_busy_top_route_blocks_lower_ranked_intent():
 
 
 @pytest.mark.asyncio
-async def test_two_workers_preserve_highest_ranked_publication():
-  client = redis_state.get_client()
-  top = _intent("top-concurrent", direction="BUY", confluence=4)
-  lower = _intent("lower-concurrent", direction="BUY", confluence=3)
-  entered = asyncio.Event()
-  release = asyncio.Event()
-
-  async def publisher(intent):
-    assert intent.intent_id == top.intent_id
-    entered.set()
-    await release.wait()
-    atomic = await publish_candidate_atomic(
-      client,
-      stream="auto_trade:test:ranked-workers",
-      candidate_id="candidate-top-concurrent",
-      payload=json.dumps({"intent_id": intent.intent_id}),
-      ttl=300,
-      maxlen=100,
-      ownership_key=autonomous_cycle_owner_key("XAU", "workers-cycle"),
-      ownership_payload="candidate-top-concurrent",
-      ownership_ttl=300,
-    )
-    return (
-      CandidatePublicationResult.published("candidate-top-concurrent")
-      if atomic.published
-      else CandidatePublicationResult.blocked("cycle_conflict")
-    )
-
-  first = asyncio.create_task(publish_ranked_cycle(
-    client,
-    symbol="XAU",
-    cycle_id="workers-cycle",
-    ordered=(top, lower),
-    publisher=publisher,
-  ))
-  await entered.wait()
-  second = asyncio.create_task(publish_ranked_cycle(
-    client,
-    symbol="XAU",
-    cycle_id="workers-cycle",
-    ordered=(top, lower),
-    publisher=publisher,
-  ))
-  await asyncio.sleep(0)
-  release.set()
-  results = await asyncio.gather(first, second)
-
-  assert sum(result.status == "published" for result in results) == 1
-  assert sum(result.status == "route_in_progress" for result in results) == 1
-  assert await client.xlen("auto_trade:test:ranked-workers") == 1
-  payload = json.loads((await client.xrange(
-    "auto_trade:test:ranked-workers",
-  ))[0][1]["payload"])
-  assert payload["intent_id"] == top.intent_id
-
-
-@pytest.mark.asyncio
-async def test_duplicate_cycle_delivery_keeps_original_winner():
-  client = redis_state.get_client()
-  top = _intent("top-duplicate", direction="BUY", confluence=4)
-  lower = _intent("lower-duplicate", direction="BUY", confluence=3)
-
-  async def publisher(intent):
-    atomic = await publish_candidate_atomic(
-      client,
-      stream="auto_trade:test:duplicate-cycle",
-      candidate_id=f"candidate-{intent.intent_id}",
-      payload=json.dumps({"intent_id": intent.intent_id}),
-      ttl=300,
-      maxlen=100,
-      ownership_key=autonomous_cycle_owner_key("XAU", "duplicate-cycle"),
-      ownership_payload=f"candidate-{intent.intent_id}",
-      ownership_ttl=300,
-    )
-    return (
-      CandidatePublicationResult.published(f"candidate-{intent.intent_id}")
-      if atomic.published
-      else CandidatePublicationResult.blocked("cycle_conflict")
-    )
-
-  first = await publish_ranked_cycle(
-    client,
-    symbol="XAU",
-    cycle_id="duplicate-cycle",
-    ordered=(top, lower),
-    publisher=publisher,
-  )
-  second = await publish_ranked_cycle(
-    client,
-    symbol="XAU",
-    cycle_id="duplicate-cycle",
-    ordered=(top, lower),
-    publisher=publisher,
-  )
-
-  assert first.candidate_id == "candidate-top-duplicate"
-  assert second.status == "cycle_conflict"
-  assert await client.xlen("auto_trade:test:duplicate-cycle") == 1
-
-
-@pytest.mark.asyncio
-async def test_true_terminal_top_rejection_allows_ranked_fallback():
-  client = redis_state.get_client()
-  top = _intent("top-terminal", direction="BUY", confluence=4)
-  lower = _intent("lower-valid", direction="BUY", confluence=3)
-
-  async def publisher(intent):
-    if intent.intent_id == top.intent_id:
-      return CandidatePublicationResult.terminal_reject("zone_invalidated")
-    atomic = await publish_candidate_atomic(
-      client,
-      stream="auto_trade:test:terminal-fallback",
-      candidate_id="candidate-lower-valid",
-      payload=json.dumps({"intent_id": intent.intent_id}),
-      ttl=300,
-      maxlen=100,
-      ownership_key=autonomous_cycle_owner_key("XAU", "terminal-fallback"),
-      ownership_payload="candidate-lower-valid",
-      ownership_ttl=300,
-    )
-    assert atomic.published
-    return CandidatePublicationResult.published("candidate-lower-valid")
-
-  result = await publish_ranked_cycle(
-    client,
-    symbol="XAU",
-    cycle_id="terminal-fallback",
-    ordered=(top, lower),
-    publisher=publisher,
-  )
-
-  assert result.candidate_id == "candidate-lower-valid"
-  assert await client.xlen("auto_trade:test:terminal-fallback") == 1
-
-
-@pytest.mark.asyncio
 async def test_expired_owner_cannot_delete_successor_lock():
   client = redis_state.get_client()
   key = "auto_trade:route_lock:XAU:owned-release"
@@ -854,109 +613,6 @@ async def test_expired_owner_cannot_delete_successor_lock():
 
   assert not released
   assert await client.get(key) == "successor-token"
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("claim_kind", ["reaction", "thesis"])
-async def test_test_fallback_rolls_back_claim_when_xadd_crashes(claim_kind):
-  client = fakeredis.FakeAsyncRedis(decode_responses=True)
-  client._apexvoid_allow_non_atomic_test_fallback = True
-  client.xadd = AsyncMock(side_effect=RuntimeError("crash before XADD"))
-  kwargs = {
-    f"{claim_kind}_key": f"claim:{claim_kind}:1",
-    f"{claim_kind}_payload": '{"state":"candidate_published"}',
-    f"{claim_kind}_ttl": 300,
-  }
-
-  with pytest.raises(RuntimeError, match="crash before XADD"):
-    await publish_candidate_atomic(
-      client,
-      stream="auto_trade:test:crash",
-      candidate_id=f"candidate-crash-{claim_kind}",
-      payload="{}",
-      ttl=300,
-      maxlen=100,
-      **kwargs,
-    )
-
-  assert await client.get(f"claim:{claim_kind}:1") is None
-  assert await client.get(
-    f"auto_trade:candidate:candidate-crash-{claim_kind}"
-  ) is None
-
-
-@pytest.mark.asyncio
-async def test_successful_publication_keeps_reaction_and_thesis_chain():
-  client = redis_state.get_client()
-
-  result = await publish_candidate_atomic(
-    client,
-    stream="auto_trade:test:ownership",
-    candidate_id="candidate-ownership",
-    payload="{}",
-    ttl=300,
-    maxlen=100,
-    reaction_key="claim:reaction:success",
-    reaction_payload='{"state":"claimed"}',
-    reaction_ttl=300,
-    thesis_key="claim:thesis:success",
-    thesis_payload='{"state":"candidate_published"}',
-    thesis_ttl=300,
-  )
-
-  assert result.published
-  assert await client.get("claim:reaction:success") == '{"state":"claimed"}'
-  assert (
-    await client.get("claim:thesis:success")
-    == '{"state":"candidate_published"}'
-  )
-
-
-@pytest.mark.asyncio
-async def test_eval_failure_fails_closed_without_production_fallback():
-  client = fakeredis.FakeAsyncRedis(decode_responses=True)
-  client.eval = AsyncMock(side_effect=RuntimeError("EVAL unavailable"))
-
-  result = await publish_candidate_atomic(
-    client,
-    stream="auto_trade:test:production-failure",
-    candidate_id="candidate-production-failure",
-    payload="{}",
-    ttl=300,
-    maxlen=100,
-  )
-
-  assert not result.published
-  assert result.status == "atomic_publish_unavailable"
-  assert await client.xlen("auto_trade:test:production-failure") == 0
-  readiness = json.loads(await client.get("auto_trade:publication_readiness"))
-  assert readiness == {
-    "ready": False,
-    "reason_code": "atomic_publish_unavailable",
-  }
-
-
-@pytest.mark.asyncio
-async def test_eval_failure_uses_only_explicit_test_fallback():
-  client = fakeredis.FakeAsyncRedis(decode_responses=True)
-  client.eval = AsyncMock(side_effect=RuntimeError("EVAL unavailable"))
-
-  result = await publish_candidate_atomic(
-    client,
-    stream="auto_trade:test:explicit-fallback",
-    candidate_id="candidate-explicit-fallback",
-    payload="{}",
-    ttl=300,
-    maxlen=100,
-    allow_non_atomic_test_fallback=True,
-  )
-
-  assert result.published
-  assert result.status == "published"
-  assert await client.xlen("auto_trade:test:explicit-fallback") == 1
-  assert parse_candidate_execution_record(
-    await client.get("auto_trade:candidate:candidate-explicit-fallback")
-  ).state == STATE_PUBLISHED
 
 
 def test_all_selected_publication_failures_keep_exact_publisher_evidence():
@@ -1214,3 +870,87 @@ async def test_new_terminal_transition_replaces_old_terminal_reason():
     "auto_trade:route_outcome:XAU:route-terminal-update"
   ))
   assert route["terminal_reason_code"] == "zone_invalidated"
+
+
+# --- ranked cycle publication (publisher-agnostic) ---------------------------------
+
+
+@pytest.mark.asyncio
+async def test_terminal_top_rejection_exposes_the_next_ranked_intent():
+  """A terminal reject on the top-ranked intent must not suppress the next one."""
+  client = redis_state.get_client()
+  top = _intent("top-terminal", direction="BUY", confluence=4)
+  lower = _intent("lower-valid", direction="BUY", confluence=3)
+  attempted: list[str] = []
+
+  async def publisher(intent):
+    attempted.append(intent.intent_id)
+    if intent.intent_id == top.intent_id:
+      return CandidatePublicationResult.terminal_reject("zone_invalidated")
+    return CandidatePublicationResult.published("plan-lower-valid")
+
+  result = await publish_ranked_cycle(
+    client, symbol="XAU", cycle_id="terminal-fallback",
+    ordered=(top, lower), publisher=publisher,
+  )
+
+  assert result.candidate_id == "plan-lower-valid"
+  assert attempted == [top.intent_id, lower.intent_id]
+
+
+@pytest.mark.asyncio
+async def test_a_repeated_cycle_keeps_the_original_winner():
+  client = redis_state.get_client()
+  top = _intent("top-duplicate", direction="BUY", confluence=4)
+  lower = _intent("lower-duplicate", direction="BUY", confluence=3)
+  published: list[str] = []
+
+  async def publisher(intent):
+    published.append(intent.intent_id)
+    return CandidatePublicationResult.published(f"plan-{intent.intent_id}")
+
+  first = await publish_ranked_cycle(
+    client, symbol="XAU", cycle_id="duplicate-cycle",
+    ordered=(top, lower), publisher=publisher,
+  )
+  second = await publish_ranked_cycle(
+    client, symbol="XAU", cycle_id="duplicate-cycle",
+    ordered=(top, lower), publisher=publisher,
+  )
+
+  assert first.candidate_id == "plan-top-duplicate"
+  assert second.status == "cycle_conflict"
+  assert published == ["top-duplicate"]
+
+
+@pytest.mark.asyncio
+async def test_two_workers_in_one_cycle_publish_exactly_once():
+  client = redis_state.get_client()
+  top = _intent("top-concurrent", direction="BUY", confluence=4)
+  lower = _intent("lower-concurrent", direction="BUY", confluence=3)
+  entered = asyncio.Event()
+  release = asyncio.Event()
+  published: list[str] = []
+
+  async def publisher(intent):
+    published.append(intent.intent_id)
+    entered.set()
+    await release.wait()
+    return CandidatePublicationResult.published("plan-top-concurrent")
+
+  first = asyncio.create_task(publish_ranked_cycle(
+    client, symbol="XAU", cycle_id="workers-cycle",
+    ordered=(top, lower), publisher=publisher,
+  ))
+  await entered.wait()
+  second = asyncio.create_task(publish_ranked_cycle(
+    client, symbol="XAU", cycle_id="workers-cycle",
+    ordered=(top, lower), publisher=publisher,
+  ))
+  await asyncio.sleep(0)
+  release.set()
+  results = await asyncio.gather(first, second)
+
+  assert sum(result.status == "published" for result in results) == 1
+  assert sum(result.status == "route_in_progress" for result in results) == 1
+  assert published == ["top-concurrent"]

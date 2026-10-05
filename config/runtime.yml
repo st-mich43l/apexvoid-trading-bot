@@ -29,9 +29,6 @@ runtime:
     expected_broker: fpmarkets
     require_demo: true
 
-  execution_contract:
-    mode: v8_only
-
   # Shared market-feed process settings. Symbol identity and timeframes are
   # instrument-owned in instruments.yml; these are the connection-wide
   # retention/quality settings used by ctrader-engine.
@@ -48,11 +45,9 @@ runtime:
     reconciliation_interval_seconds: 30
 
   redis_streams:
-    candidates: auto_trade:candidates
     events: auto_trade:events
     trade_plans: execution:trade_plans
-    candidate_maximum_length: 1000
-    candidate_version: 6
+    stream_maximum_length: 1000
 
   kafka:
     enabled: true

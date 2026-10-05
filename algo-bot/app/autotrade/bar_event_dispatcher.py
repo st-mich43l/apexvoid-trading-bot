@@ -135,12 +135,6 @@ class _PerSymbolBarDispatcher:
 
 async def bar_event_dispatcher_loop() -> None:
   client = redis_state.get_client()
-  if runtime_config.auto_algo.enabled:
-    try:
-      from app.autotrade.worker import _reconcile_legacy_mapped_thesis_claims
-      await _reconcile_legacy_mapped_thesis_claims(client)
-    except Exception:
-      log.exception("legacy mapped thesis claim reconcile failed")
   channel = str(
     getattr(runtime_config.runtime.feed, "bars_channel", None)
     or "bars:new"

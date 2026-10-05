@@ -7,10 +7,10 @@ namespace CTraderFeed.Tests;
 
 /// <summary>
 /// The single reviewed XAU ladder specification (contracts/autotrade/xau-ladder-spec.json),
-/// C# half. The same hand-computed cases run against Manual Algo (AutoTradeEngine) and the Auto
-/// Algo executor's independently-declared risk leg (TradePlanRuntime); the Python calculator is
-/// held to them by algo-bot/tests/test_ladder_spec.py. The methods under test are private,
-/// so they are reached by reflection: this pins behaviour without widening production visibility.
+/// C# half. The hand-computed risk-leg cases run against the executor's independently-declared
+/// risk leg (TradePlanRuntime); the Python calculators (manual /algo entry legs, risk leg) are
+/// held to the same cases by algo-bot/tests/test_ladder_spec.py. The methods under test are
+/// private, so they are reached by reflection: this pins behaviour without widening visibility.
 /// </summary>
 public sealed class LadderSpecParityTests
 {
@@ -58,9 +58,6 @@ public sealed class LadderSpecParityTests
     type.GetField(name, BindingFlags.NonPublic | BindingFlags.Static)?.GetValue(null)
       ?? throw new MissingFieldException(type.Name, name);
 
-  public static IEnumerable<object[]> EntryCases() =>
-    Spec.GetProperty("entry_price_cases").EnumerateArray().Select(c => new object[] { c.GetProperty("name").GetString()! });
-
   public static IEnumerable<object[]> RiskPriceCases() =>
     Spec.GetProperty("risk_price_cases").EnumerateArray().Select(c => new object[] { c.GetProperty("name").GetString()! });
 
@@ -68,35 +65,21 @@ public sealed class LadderSpecParityTests
     Spec.GetProperty("risk_volume_cases").EnumerateArray().Select(c => new object[] { c.GetProperty("equity").GetString()! });
 
   [Theory]
-  [MemberData(nameof(EntryCases))]
-  public void ManualAlgoEntryLegPricesMatchTheSpec(string name)
-  {
-    var c = Spec.GetProperty("entry_price_cases").EnumerateArray().Single(x => x.GetProperty("name").GetString() == name);
-    var zone = new TradeCandidateZone(D(c, "zone_low"), D(c, "zone_high"));
-    var result = ((decimal Shallow, decimal Deep))Method(typeof(AutoTradeEngine), "ManualEntryLegPrices")
-      .Invoke(null, [zone, Dir(c), D(c, "stop"), Symbol()])!;
-    Assert.Equal(D(c, "shallow"), result.Shallow);
-    Assert.Equal(D(c, "deep"), result.Deep);
-  }
-
-  [Theory]
   [MemberData(nameof(RiskPriceCases))]
-  public void RiskLegPriceMatchesTheSpecInManualAndAutoAlgo(string name)
+  public void RiskLegPriceMatchesTheSpec(string name)
   {
     var c = Spec.GetProperty("risk_price_cases").EnumerateArray().Single(x => x.GetProperty("name").GetString() == name);
     object[] args = [Dir(c), D(c, "stop"), PipSize(), Symbol()];
-    Assert.Equal(D(c, "price"), (decimal)Method(typeof(AutoTradeEngine), "ManualAlgoRiskLegPrice").Invoke(null, args)!);
     Assert.Equal(D(c, "price"), (decimal)Method(typeof(TradePlanRuntime), "ReactionRiskLegPrice").Invoke(null, args)!);
   }
 
   [Theory]
   [MemberData(nameof(RiskVolumeCases))]
-  public void RiskLegVolumeMatchesTheSpecInManualAndAutoAlgo(string equityText)
+  public void RiskLegVolumeMatchesTheSpec(string equityText)
   {
     var c = Spec.GetProperty("risk_volume_cases").EnumerateArray().Single(x => x.GetProperty("equity").GetString() == equityText);
     object[] args = [D(c, "equity"), Symbol()];
     var expected = c.GetProperty("volume").GetInt64();
-    Assert.Equal(expected, (long)Method(typeof(AutoTradeEngine), "ManualAlgoRiskLegVolume").Invoke(null, args)!);
     Assert.Equal(expected, (long)Method(typeof(TradePlanRuntime), "ReactionRiskLegVolume").Invoke(null, args)!);
   }
 
@@ -112,19 +95,13 @@ public sealed class LadderSpecParityTests
   }
 
   [Fact]
-  public void EveryLadderConstantMatchesTheSpecInBothPlaces()
+  public void EveryRiskLegConstantMatchesTheSpec()
   {
     var risk = Spec.GetProperty("risk_leg");
-    foreach (var (type, prefix) in new[] { (typeof(AutoTradeEngine), "ManualAlgoRiskLeg"), (typeof(TradePlanRuntime), "ReactionRiskLeg") })
-    {
-      Assert.Equal(D(risk, "lots_default"), (decimal)Const(type, prefix + "LotsDefault")!);
-      Assert.Equal(D(risk, "lots_below_equity_floor"), (decimal)Const(type, prefix + "LotsBelowEquityFloor")!);
-      Assert.Equal(D(risk, "equity_floor"), (decimal)Const(type, prefix + "EquityFloor")!);
-      Assert.Equal(D(risk, "pips_from_stop"), (decimal)Const(type, prefix + "PipsFromStop")!);
-    }
+    Assert.Equal(D(risk, "lots_default"), (decimal)Const(typeof(TradePlanRuntime), "ReactionRiskLegLotsDefault")!);
+    Assert.Equal(D(risk, "lots_below_equity_floor"), (decimal)Const(typeof(TradePlanRuntime), "ReactionRiskLegLotsBelowEquityFloor")!);
+    Assert.Equal(D(risk, "equity_floor"), (decimal)Const(typeof(TradePlanRuntime), "ReactionRiskLegEquityFloor")!);
+    Assert.Equal(D(risk, "pips_from_stop"), (decimal)Const(typeof(TradePlanRuntime), "ReactionRiskLegPipsFromStop")!);
     Assert.Equal(risk.GetProperty("leg_id").GetString(), (string)Const(typeof(TradePlanRuntime), "ReactionRiskLegId")!);
-    var ratios = (IReadOnlyList<decimal>)typeof(AutoTradeEngine)
-      .GetField("ManualEntryLegRatios", BindingFlags.NonPublic | BindingFlags.Static)!.GetValue(null)!;
-    Assert.Equal(Spec.GetProperty("entry_leg_ratios").EnumerateArray().Select(e => decimal.Parse(e.GetString()!, CultureInfo.InvariantCulture)), ratios);
   }
 }

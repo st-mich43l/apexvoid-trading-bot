@@ -254,11 +254,6 @@ def _payload_remaining(payload: dict[str, Any]) -> float | None:
   return None
 
 
-def _is_scale_in_child(payload: dict[str, Any]) -> bool:
-  parent = _payload_get(payload, "parent_group_id", "ParentGroupId")
-  return bool(str(parent or "").strip())
-
-
 async def _mget_or_get(client: Any, keys: list[str]) -> list[Any]:
   """Read a Redis key batch in one round-trip when the client supports it.
 
@@ -280,7 +275,7 @@ async def load_active_exposures(
   *,
   symbol: str | None = None,
 ) -> list[ActiveExposure]:
-  """Load open V6 positions plus live V8 plans, including pending/submitted.
+  """Load live TradePlan runtime exposure, including pending/submitted plans.
 
   Received/Submitted plans occupy the symbol before the first fill. Omitting
   them let two GBPJPY Key Level sells publish 5s apart (2026-08-17).
@@ -288,9 +283,7 @@ async def load_active_exposures(
   Pass ``symbol`` to keep only that instrument's book (scalping reconcile / any
   per-symbol caller). Omit only when the caller will filter next.
   """
-  exposures: list[ActiveExposure] = []
-  exposures.extend(await _load_v6_position_exposures(client))
-  exposures.extend(await _load_trade_plan_exposures(client))
+  exposures = await _load_trade_plan_exposures(client)
   return filter_exposures_for_symbol(exposures, symbol)
 
 
@@ -313,56 +306,6 @@ def filter_exposures_for_symbol(
     if active is None or active != wanted:
       continue
     out.append(item)
-  return out
-
-
-async def _load_v6_position_exposures(client: Any) -> list[ActiveExposure]:
-  raw_ids = await client.smembers("auto_trade:positions")
-  if not raw_ids:
-    return []
-  position_ids: list[int] = []
-  for raw_id in raw_ids:
-    token = raw_id.decode() if isinstance(raw_id, bytes) else str(raw_id)
-    try:
-      position_ids.append(int(token))
-    except (TypeError, ValueError):
-      continue
-  raw_positions = await _mget_or_get(
-    client,
-    [f"auto_trade:position:{position_id}" for position_id in position_ids],
-  )
-  out: list[ActiveExposure] = []
-  for position_id, raw in zip(position_ids, raw_positions, strict=False):
-    if not raw:
-      continue
-    try:
-      payload = json.loads(
-        raw.decode() if isinstance(raw, bytes) else str(raw)
-      )
-    except (TypeError, ValueError, json.JSONDecodeError):
-      continue
-    if not isinstance(payload, dict) or _is_scale_in_child(payload):
-      continue
-    remaining = _payload_remaining(payload)
-    if remaining is not None and remaining <= 0:
-      continue
-    direction = normalize_direction(
-      _payload_get(payload, "direction", "Direction")
-    )
-    entry = _payload_entry_price(payload)
-    if direction is None or entry is None:
-      continue
-    out.append(ActiveExposure(
-      direction=direction,
-      entry_price=entry,
-      source="v6_position",
-      symbol=_payload_symbol(payload),
-      group_id=str(
-        _payload_get(payload, "group_id", "GroupId") or ""
-      ) or None,
-      position_id=position_id,
-      remaining_volume=remaining,
-    ))
   return out
 
 
