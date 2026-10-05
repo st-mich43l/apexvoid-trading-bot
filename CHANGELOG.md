@@ -13,15 +13,30 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
-- Restored the independent Go `break_retest` strategy and completed the
-  Range Edge barrier/state gates, including the legacy two-wick primary gate,
-  configurable inside-close/fallback settings, and directional maximum-entry
-  distance validation.
+- Restored the independent Go `break_retest` strategy and completed Range
+  Edge, and proved all five detector-contract strategies (`break_retest`,
+  `range_edge`, `snap_back`, `momentum_ride`, `fade_scalp`) against the frozen
+  Python oracle (`1c9f323`): every decision on the committed XAU, GBPUSD and
+  USDJPY captures now agrees on presence, direction, entry band, confluence
+  stars and touch/confirmation bars.
+- Fixed parity bugs found by that comparison: the regime range-height test used
+  the last ATR instead of the median; the zone-score confluence path cut stars
+  at the wrong ratios (11 of 193 sampled XAU demand/supply opportunities drop
+  from two to one star, as the frozen detector computed them); `snap_back` used
+  an extension of 2.0 ATR instead of the frozen 1.5; `momentum_ride` required an
+  opposing-liquidity target the frozen detector never required.
 
 ### Added
-- Added XAU/GBPUSD/USDJPY detector replay coverage for Break & Retest, Range
-  Edge, Snap Back, Momentum Ride and Fade Scalp, with a frozen-oracle semantic
-  fixture for the XAU Range Edge case.
+- `internal/legacyread`: the detector-contract read (frozen bounded windows,
+  legacy swings/structure, scored zones, liquidity pools and grabs, sessions,
+  trendlines, scalp barriers/ranges, regime, momentum and higher-timeframe
+  bias), computed from the canonical closed candles and configured under
+  `analysis.legacy_read`.
+- A permanent detector golden generated from the frozen oracle and a Go test
+  that replays the captures and compares every closed bar
+  (`analysis-engine/test/detectorparity`), plus unit coverage for the ported
+  primitives (compensated sums, pandas-compatible ATR, zone scoring, liquidity
+  grabs, scalp structure) and for every detector scenario.
 
 ### Removed
 - The V6 `TradeCandidate` execution path is gone; TradePlan V8 is the only

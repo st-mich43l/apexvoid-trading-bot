@@ -290,6 +290,11 @@ type Candidate struct {
 	// Reaction is assigned by a strategy ONLY when its own confirmed thesis
 	// is observed; worker copies it into technical context at publication.
 	Reaction *ReactionConfirmation
+	// DetectorConfluence is the strategy's own authoritative confluence when
+	// its decision is the frozen detector contract's (the detector itself
+	// scores and gates on it). SymbolWorker keeps it as the published
+	// technical confluence instead of re-deriving one from the V2 zone book.
+	DetectorConfluence *ConfluenceContext
 	// StopEnvelope is nil until SymbolWorker attaches it (Phase 4) — the
 	// technical stop-distance floor/cap this strategy family's own risk
 	// policy allows, computed from this candidate's own target geometry.

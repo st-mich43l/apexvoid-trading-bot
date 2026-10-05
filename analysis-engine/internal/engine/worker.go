@@ -9,6 +9,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/fib"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/indicator"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/keylevel"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/legacyread"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/liquidity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/mad"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
@@ -44,6 +45,11 @@ type SymbolWorker struct {
 	// keyed by opportunity ID - Phase 2's diff base so only a changed
 	// decision is republished (see arbitrate's own doc comment).
 	lastArbitration map[string]arbitration.Decision
+
+	// legacyFrames caches each timeframe's detector-contract read by its
+	// latest closed bar.
+	legacyFrames map[market.Timeframe]legacyFrameCache
+	legacyWeekly legacyWeeklyCache
 
 	// techniqueZoneAt/state cache the parity-tested technique population by
 	// its latest primary closed bar. Other timeframe events reuse it.
@@ -247,6 +253,9 @@ func (w *SymbolWorker) ApplyWithResult(event marketdata.BarEvent) (AnalysisSnaps
 		candidate.Technical = w.technicalContext(event, candidate.Strategy, candidate.Direction, candidate.Entry.Low, candidate.Entry.High, candidate.Reaction)
 		if candidate.Technical != nil {
 			candidate.Technical.Confluence = w.confluenceContext(event, candidate, candidate.Technical)
+			if candidate.DetectorConfluence != nil {
+				candidate.Technical.Confluence = candidate.DetectorConfluence
+			}
 		}
 		stopConfig := w.settings.StopEnvelope
 		if w.settings.InstrumentStopEnvelopeConfigured {
@@ -344,6 +353,72 @@ func (w *SymbolWorker) rebuildContext() {
 		}
 	}
 	w.state.Context = context.Build(w.state.Symbol, w.settings.PrimaryTimeframe, perTF)
+	w.attachLegacyRead()
+}
+
+// attachLegacyRead computes the detector-contract read for every timeframe the
+// settings give a window for. A timeframe's expensive stage-one frame is reused
+// while its last closed bar and the highest timeframe's last closed bar (the
+// source of the prior-week levels) are unchanged; the cheap multi-timeframe
+// zone scoring is recomputed from the staged frames.
+func (w *SymbolWorker) attachLegacyRead() {
+	if w.legacyFrames == nil {
+		w.legacyFrames = make(map[market.Timeframe]legacyFrameCache)
+	}
+	cfg := w.settings.LegacyRead
+	var highest market.Timeframe
+	highestMinutes := 0
+	for tf := range cfg.WindowBars {
+		frameContext := w.state.Context.Timeframes[tf]
+		if frameContext == nil || len(frameContext.Candles) == 0 {
+			continue
+		}
+		if minutes, _ := tf.Minutes(); minutes > highestMinutes {
+			highest, highestMinutes = tf, minutes
+		}
+	}
+	if highestMinutes == 0 {
+		return
+	}
+	highestCandles := w.state.Context.Timeframes[highest].Candles
+	weeklyKey := highestCandles[len(highestCandles)-1].Time
+	if !w.legacyWeekly.valid || w.legacyWeekly.key != weeklyKey {
+		w.legacyWeekly = legacyWeeklyCache{key: weeklyKey, valid: true, levels: legacyread.Weekly(highestCandles, highest, cfg)}
+	}
+	weekly := w.legacyWeekly.levels
+	staged := make(map[market.Timeframe]legacyread.Staged, len(cfg.WindowBars))
+	for tf := range cfg.WindowBars {
+		frameContext := w.state.Context.Timeframes[tf]
+		if frameContext == nil || len(frameContext.Candles) == 0 {
+			continue
+		}
+		last := frameContext.Candles[len(frameContext.Candles)-1].Time
+		cached, ok := w.legacyFrames[tf]
+		if !ok || cached.lastTime != last || cached.length != len(frameContext.Candles) || cached.weeklyKey != weeklyKey {
+			cached = legacyFrameCache{lastTime: last, length: len(frameContext.Candles), weeklyKey: weeklyKey, staged: legacyread.Stage(frameContext.Candles, tf, weekly, cfg)}
+			w.legacyFrames[tf] = cached
+		}
+		staged[tf] = cached.staged
+	}
+	frames := legacyread.Complete(staged)
+	for tf, frame := range frames {
+		w.state.Context.Timeframes[tf].Legacy = frame
+	}
+	read := legacyread.Read(frames, w.settings.PrimaryTimeframe, cfg)
+	w.state.Context.Legacy = &read
+}
+
+type legacyWeeklyCache struct {
+	key    int64
+	valid  bool
+	levels []session.Level
+}
+
+type legacyFrameCache struct {
+	lastTime  int64
+	length    int
+	weeklyKey int64
+	staged    legacyread.Staged
 }
 
 func (w *SymbolWorker) techniqueZones(original zone.ZoneState) zone.ZoneState {

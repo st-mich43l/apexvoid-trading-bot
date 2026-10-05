@@ -39,14 +39,16 @@ type MarketContext struct {
 
 	Timeframes map[market.Timeframe]*TimeframeContext
 
-	Structure  StructureContext
-	Liquidity  LiquidityContext
-	Zones      ZoneContext
-	Trendline  TrendlineContext
-	KeyLevel   KeyLevelContext
-	Fib        FibContext
-	Bias       BiasContext
-	Regime     RegimeContext
+	Structure StructureContext
+	Liquidity LiquidityContext
+	Zones     ZoneContext
+	Trendline TrendlineContext
+	KeyLevel  KeyLevelContext
+	Fib       FibContext
+	Bias      BiasContext
+	Regime    RegimeContext
+	// Legacy is the detector-contract read; nil until the engine computes it.
+	Legacy     *LegacyRead
 	Volatility VolatilityContext
 	Session    SessionContext
 	MAD        mad.Snapshot
@@ -71,6 +73,8 @@ type TimeframeContext struct {
 	MAD       mad.Snapshot
 	Momentum  momentum.Result
 	Geometry  market.Geometry
+	// Legacy is this timeframe's detector-contract read; nil until computed.
+	Legacy *LegacyFrame
 }
 
 // StructureContext is MarketContext's primary-timeframe structural view —
