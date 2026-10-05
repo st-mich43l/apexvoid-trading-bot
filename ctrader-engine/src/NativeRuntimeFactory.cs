@@ -239,7 +239,8 @@ public static class NativeRuntimeFactory
           (decimal)geometry.PipSize,
           RequiredDecimal(section, "contract.contract_units_per_lot", symbol),
           [geometry.CanonicalSymbol],
-          pipValue
+          pipValue,
+          OppositePositionPolicy.Parse(symbol, section, (decimal)geometry.PipSize)
         )
       });
     }

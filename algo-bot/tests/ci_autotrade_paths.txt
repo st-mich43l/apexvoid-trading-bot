@@ -16,6 +16,7 @@ tests/test_bar_event_dispatcher.py
 tests/test_worker_idle_m1.py
 tests/test_ohlc_bar_cache.py
 tests/test_active_exposure.py
+tests/test_opposite_exposure_policy.py
 tests/test_entry_overlap.py
 tests/test_zone_watch_published_locked.py
 tests/test_setup_card.py

@@ -4337,11 +4337,13 @@ public sealed partial class TradePlanRuntimeTests
       string comment = "v8|seed",
       string clientOrderId = "",
       decimal entryPrice = 4089.0m,
-      decimal? stopLoss = null
+      decimal? stopLoss = null,
+      long? symbolId = null,
+      string label = "apexvoid-auto"
     ) =>
       _positions.Add(new TradingPosition(
-        positionId, Symbol.SymbolId, direction, volume, entryPrice, stopLoss,
-        "apexvoid-auto", comment, clientOrderId
+        positionId, symbolId ?? Symbol.SymbolId, direction, volume, entryPrice,
+        stopLoss, label, comment, clientOrderId
       ));
 
     public void RemovePosition(long positionId) =>
@@ -4381,11 +4383,18 @@ public sealed partial class TradePlanRuntimeTests
       CancellationToken ct
     ) => Task.FromResult<IReadOnlyList<TradingPendingOrder>>(PendingOrders.ToArray());
 
+    // 1-based ReconcileAccountAsync call that throws once (0 = never).
+    public int FailReconcileAccountOnCall { get; set; }
+
     public Task<TradingReconcileSnapshot> ReconcileAccountAsync(
       CancellationToken ct
     )
     {
       ReconcileAccountCalls++;
+      if (FailReconcileAccountOnCall == ReconcileAccountCalls)
+      {
+        throw new InvalidOperationException("broker reconcile unavailable");
+      }
       return Task.FromResult(new TradingReconcileSnapshot(
         _positions.ToArray(), PendingOrders.ToArray()
       ));
