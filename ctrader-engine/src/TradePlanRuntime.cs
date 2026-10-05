@@ -38,13 +38,12 @@ internal sealed class AccountReconcileSnapshotCycle(
 // piece TradePlanExecutionEngine.cs's own doc comment named as "not yet
 // wired... a later phase" - that phase is this file.
 //
-// Deliberately a separate file/class from AutoTradeEngine.cs (which still
-// legitimately calls ResolveExecutionRoute/StructureStopPlanner for the V6
-// path elsewhere in the same class) so TradePlanExecutionEngineDependencyTests
-// can scan every TradePlan runtime source file for those forbidden symbols without
-// tripping over V6 code that must keep calling them. AutoTradeEngine composes
-// this class into its own RunSessionAsync loop (see PollTradePlansAsync)
-// rather than this class owning its own session/reconcile/heartbeat loop.
+// Deliberately a separate file/class from AutoTradeEngine.cs (the session
+// shell) so TradePlanExecutionEngineDependencyTests can scan every TradePlan
+// runtime source file for forbidden analysis/route/stop symbols. AutoTradeEngine
+// composes this class into its own RunSessionAsync loop (see
+// PollTradePlansSafelyAsync) rather than this class owning its own
+// session/reconcile/heartbeat loop.
 
 public enum TradePlanRuntimeStage
 {
@@ -533,7 +532,7 @@ public static class TradePlanJson
   }
 }
 
-public sealed class TradePlanRuntime(
+public sealed partial class TradePlanRuntime(
   AutoTradeOptions options,
   IAutoTradeStore store,
   Func<DateTimeOffset> clock,
@@ -697,7 +696,7 @@ public sealed class TradePlanRuntime(
   // Incoming scalps still stack — matching evaluate_entry_against_exposure.
   private bool HasBlockingSameDirectionLivePlan(TradePlan incoming)
   {
-    if (IsScalpPlan(incoming))
+    if (IsScalpPlan(incoming) || IsManualPlan(incoming))
     {
       return false;
     }
@@ -1776,7 +1775,7 @@ public sealed class TradePlanRuntime(
         TargetPips: targetPips,
         Volume: volume,
         StopLoss: plan.Stop.Price,
-        Stream: "algo_auto",
+        Stream: IsManualPlan(plan) ? "algo_manual" : "algo_auto",
         GroupId: plan.PlanId,
         PreviousState: previousState,
         State: state,
@@ -2154,6 +2153,13 @@ public sealed class TradePlanRuntime(
       );
       return;
     }
+    // Owner /auto_pause: new orders wait (the plan stays Received and simply
+    // expires if the pause outlasts it); open positions keep being managed.
+    if (await IsExecutorPausedAsync(cancellationToken))
+    {
+      log($"v8 paused: holding id={plan.PlanId}");
+      return;
+    }
     // Second fence for the instrument-owned opposite-exposure rule. Runs
     // before the first broker mutation of this plan (a ladder already
     // submitting its legs is never torn down by it) and judges tracked
@@ -2213,6 +2219,12 @@ public sealed class TradePlanRuntime(
     CancellationToken cancellationToken
   )
   {
+    // Owner-authored /algo plans are a direct instruction, not analysis
+    // output: the autonomous opposite-exposure rule does not apply to them.
+    if (IsManualPlan(plan))
+    {
+      return OppositeExposureVerdict.Clear;
+    }
     TradingReconcileSnapshot snapshot;
     try
     {
@@ -2323,9 +2335,12 @@ public sealed class TradePlanRuntime(
 
   // EvaluateArmedPlansAsync removed — Armed is not part of the runtime.
 
-  private bool ShouldSubmitOrders =>
-    options.ContractMode is "v8_only"
-    && !options.DryRun;
+  private bool ShouldSubmitOrders => !options.DryRun;
+
+  private async Task<bool> IsExecutorPausedAsync(CancellationToken cancellationToken) =>
+    await store.GetStringAsync(ExecutorPausedKey, cancellationToken) == "1";
+
+  private const string ExecutorPausedKey = "auto_trade:paused";
 
   private async Task SubmitEntryAsync(
     ICTraderTradeClient client,
@@ -3897,6 +3912,7 @@ public sealed class TradePlanRuntime(
         cancellationToken,
         positionId: state.PositionId,
         price: partialExit,
+        remainingVolume: legs.Sum(leg => leg.RemainingVolume),
         eventKey: "group_partial_manual_close",
         previousState: previousGroupStage,
         state: TradePlanGroupStages.PartiallyClosed,

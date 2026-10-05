@@ -126,7 +126,7 @@ Redis is allowed to lose this data on restart. `ctrader-engine` backfills the
 configured window from cTrader on startup or reconnect. Deep historical
 backtesting storage is a separate future sink, not this Redis contract.
 
-## Auto-Trade Candidate Stream
+## Auto-Trade Inputs
 
 All fields ending in `*_pips` that cross Redis between the Python gate and the
 C# engine are denominated in **0.1 price units for XAUUSD**, independent of the
@@ -134,34 +134,11 @@ broker-reported `pipPosition`. Python resolves that unit from its shared
 auto-trade units module and C# from `AUTO_TRADE_XAU_PIP_SIZE`; broker metadata is
 diagnostic only and must never drive price-to-pip conversion.
 
-When enabled, the Algo worker appends private strategy candidates and completed
-scanner strategy matches to:
-
-```text
-XADD auto_trade:candidates MAXLEN ~ 1000 * payload <json>
-```
-
-The private strategies read raw `bars:XAU:M1`, `bars:XAU:M5`,
-`bars:XAU:M15`, and `price:XAU:spot` data. The scanner bridge reads a
-short-lived typed match from `auto_trade:strategy_match:{symbol}` (primary)
-and the multi-match list from `auto_trade:strategy_matches:{symbol}`. It never
-parses Telegram text. Scanner detectors already decide which strategy matches;
-the worker does not reclassify it by regime or demand another setup
-confirmation. When a confirmed reaction has already left its entry zone, the
-worker may require a fresh, episode-scoped M1 timing trigger on a later retest.
-Candidate payloads include `tier`, `risk_multiplier`, `family`, and
-`range_state` for observability.
-
-Generic scanner matches become `auto_strategy_match` v4 candidates with their
-detector setup name, M5 source, structure stop context, and target ladder.
-`Range Edge Scalp` remains one strategy and uses the existing
-`auto_box_scalp` v3 candidate with stable range bounds and one 50- or 70-pip
-full-position target. Publishing fails closed when the spot is absent/stale,
-structure-stop context is unavailable, or a high-impact event is guarded.
-Candidate claims and outcomes use `auto_trade:executor:candidate:{id}` for
-restart-safe idempotency; the stream cursor is `auto_trade:cursor`. Raw
-Telegram cards and legacy untyped scanner payloads are never accepted for
-execution.
+The Algo worker reads raw `bars:XAU:M1`, `bars:XAU:M5`, `bars:XAU:M15`, and
+`price:XAU:spot` data, plus the Go Analysis Engine's opportunities, and
+publishes one TradePlan V8 per admitted setup (see "TradePlan Stream"). The
+worker never parses Telegram text, and a candidate is never published to a
+separate stream: TradePlan is the only execution contract.
 
 The strategy-match contract has its own version and TTL:
 
@@ -199,18 +176,14 @@ metadata; it is telemetry, not an execution input.
 
 ## Auto-Trade State And Events
 
-Open executor state is stored at `auto_trade:position:{position_id}`, with the
-tracked IDs in the `auto_trade:positions` set. This holds initial/remaining
-native volume, the position-specific broker-valid weighted slices and targets,
-their original TP ordinals, target progress, direction, fill, and latest managed
-stop. It allows cTrader reconciliation to resume partial TPs and monotonic
-trailing after restart while
-preserving legacy plans encoded in existing position comments, and removes
-state for positions closed by broker SL or manually.
+Live position state lives in the TradePlan runtime
+(`execution:plan_runtime:{plan_id}`, see "TradePlan Stream"); there is no
+separate per-position key. cTrader Engine also publishes a per-symbol operator
+snapshot at `auto_trade:executor_snapshot:{SYMBOL}` (its broker positions and
+resting orders, live plan ids, and account equity) that `/algo_status` reads.
 
-UTC daily entry counts use `auto_trade:daily:{yyyyMMdd}:trades`. The owner kill
-switch is `auto_trade:paused`; `1` blocks new entries but does not stop existing
-position management.
+The owner kill switch is `auto_trade:paused`; `1` holds new entries (autonomous
+and manual) but does not stop existing position management.
 
 Executor lifecycle events are appended as JSON payloads to
 `auto_trade:events`. The Python bot persists its delivery cursor at
@@ -244,10 +217,10 @@ reply target falls back to a standalone card.
 
 ## TradePlan Stream (execution:*)
 
-Deliberately a separate namespace from `auto_trade:*` above - see
-`docs/autotrade-execution-integrity.md`. A TradePlan must never be
-reinterpreted as a V6 `TradeCandidate` or vice versa, so the two contracts
-never share a key prefix or a stream.
+The only execution contract - see `docs/autotrade-execution-integrity.md`.
+Owner-armed manual `/algo` signals use the same stream: the bot converts each
+`manual_trade:intents` entry into a TradePlan whose `plan_id` is the intent id
+(`manual:{signal_id}:{revision}`) and whose analysis family is `manual`.
 
 ```text
 execution:trade_plans              XADD stream of published TradePlan V8 JSON
@@ -286,7 +259,7 @@ writer. Field lists, sources and outcomes are pinned in
 
 Python atomically checks/sets the dedup tombstone, writes the short-lived plan
 payload and `published` state, then appends exactly one stream entry. The
-tombstone TTL is `max(24h, AUTO_TRADE_CANDIDATE_STORAGE_TTL_SECONDS)`, seven
+tombstone TTL is `max(24h, auto_algo.lifecycle.candidate.storage_ttl_seconds)`, seven
 days by default, so deleting or expiring the payload cannot re-publish the same
 deterministic plan ID. Existing pre-tombstone payloads are backfilled on retry.
 

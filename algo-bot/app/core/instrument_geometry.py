@@ -114,27 +114,6 @@ def structural_barrier_buffer_atr(symbol: str) -> float:
   return float(_effective(symbol).actionability.target_room.barrier_buffer_atr)
 
 
-def defended_levels(symbol: str) -> tuple[float, ...]:
-  """Macro-significant price levels this instrument treats as an elevated
-  reversal-risk zone (e.g. a central-bank-defended level). Empty when
-  unconfigured -- most instruments have no such level."""
-  raw = str(_effective(symbol).risk.exposure.defended_levels or "")
-  levels = []
-  for part in raw.split(","):
-    token = part.strip()
-    if not token:
-      continue
-    try:
-      levels.append(float(token))
-    except ValueError:
-      continue
-  return tuple(levels)
-
-
-def defended_level_buffer_price(symbol: str) -> float:
-  return float(_effective(symbol).risk.exposure.defended_level_buffer_price)
-
-
 def pip_value_per_lot(symbol: str) -> float:
   return float(_effective(symbol).units.pip_value_per_lot)
 
