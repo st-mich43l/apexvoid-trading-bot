@@ -68,6 +68,13 @@ async def main() -> None:
   # Composition-root Telegram edit callback — worker never imports bot.client.
   configure_forming_card_edit_fn(edit_scanner_message_text)
   await init_db()
+  if runtime_config.telegram.telegram_channel_id == -100123456789:
+    # The YAML ships a placeholder VIP id; every channel post would fail with
+    # "chat not found" and manual signals would never arm.
+    log.error(
+      "telegram.telegram_channel_id is the sample placeholder; "
+      "set SIGNAL_VIP_CHANNEL_ID"
+    )
   # Compose can report Redis healthy then briefly drop DNS while recreating the
   # container; wait for a real PING before anything else touches the client.
   await redis_state.wait_until_ready()

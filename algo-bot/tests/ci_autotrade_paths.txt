@@ -56,3 +56,4 @@ tests/test_ladder_spec.py
 tests/test_go_precision_and_card.py
 tests/test_xau_ladder.py
 tests/test_arbitration_executable_intents.py
+tests/test_channel_env_override.py
