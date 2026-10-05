@@ -45,6 +45,54 @@ class InstrumentUnits:
     return int(round(self.max_lots * self.volume_units_per_lot))
 
 
+@dataclass(frozen=True, slots=True)
+class OppositePositionPolicy:
+  """Instrument-owned rule for autonomous opposite-direction exposure.
+
+  ``allowed=False`` blocks any opposite exposure on the symbol regardless of
+  distance. ``allowed=True`` requires ``minimum_separation_pips`` (inclusive)
+  between the incoming entry and EVERY existing opposite group.
+  """
+
+  symbol: str
+  allowed: bool
+  minimum_separation_pips: float | None
+  pip_size: float
+
+
+def _opposite_position_policy(
+  instrument_id: str,
+  exposure: Any,
+  pip_size: float,
+) -> OppositePositionPolicy:
+  """Parse ``exposure.opposite_position``; missing/invalid fails closed."""
+  node = _plain(exposure) if exposure is not None else None
+  policy = node.get("opposite_position") if isinstance(node, Mapping) else None
+  if not isinstance(policy, Mapping):
+    raise EffectiveInstrumentError(
+      f"{instrument_id} is missing exposure.opposite_position policy"
+    )
+  allowed = policy.get("allowed")
+  if not isinstance(allowed, bool):
+    raise EffectiveInstrumentError(
+      f"{instrument_id} exposure.opposite_position.allowed must be a boolean"
+    )
+  minimum = policy.get("minimum_separation_pips")
+  if allowed:
+    if isinstance(minimum, bool) or not isinstance(minimum, (int, float)) or minimum <= 0:
+      raise EffectiveInstrumentError(
+        f"{instrument_id} allows opposite positions and needs a positive "
+        "exposure.opposite_position.minimum_separation_pips"
+      )
+    return OppositePositionPolicy(instrument_id, True, float(minimum), pip_size)
+  if minimum is not None:
+    raise EffectiveInstrumentError(
+      f"{instrument_id} blocks opposite positions; "
+      "minimum_separation_pips must not be declared"
+    )
+  return OppositePositionPolicy(instrument_id, False, None, pip_size)
+
+
 def _plain(value: Any) -> Any:
   if isinstance(value, ConfigNode):
     return {key: _plain(item) for key, item in value.items()}
@@ -188,6 +236,7 @@ class EffectiveInstrument:
     self.policy_name = str(raw.get("policy") or ("xau_fixed_4r_v1" if instrument_id == "XAU" else "fx_fixed_2r_v1"))
     self.rollout = rollout
     self._raw = raw
+    self._exposure = raw.get("exposure")
 
     analysis = _plain(getattr(runtime, "analysis"))
     execution = _plain(getattr(runtime, "execution"))
@@ -225,7 +274,6 @@ class EffectiveInstrument:
           _put(analysis, f"market_map.{key}", market_map[key])
       _put(analysis, "zones.confluence.merge_gap_price", scale.get("zone_merge_gap_price"))
       _put(analysis, "zones.merge_max_width", scale.get("zone_merge_max_width"))
-      _put(auto_algo, "risk.exposure.opposing_minimum_separation_price", scale.get("opposing_minimum_separation_price"))
       _put(auto_algo, "strategies.technique.fvg.entry_max_width_price", scale.get("fvg_entry_max_width_price"))
     lookbacks = _get(raw, "market_data.lookbacks", {})
     zones = _get(raw, "analysis.zones", _get(analysis, "zones", {}))
@@ -239,6 +287,13 @@ class EffectiveInstrument:
 
   def is_live(self) -> bool:
     return self.rollout is InstrumentRollout.LIVE
+
+  @property
+  def opposite_position(self) -> OppositePositionPolicy:
+    """Autonomous opposite-exposure policy; raises when undeclared/invalid."""
+    return _opposite_position_policy(
+      self.instrument_id, self._exposure, self.units.pip_size
+    )
 
   @property
   def instrument_id(self) -> str:
@@ -278,6 +333,7 @@ __all__ = [
   "InstrumentRollout",
   "InstrumentEntryMode",
   "InstrumentTargetMode",
+  "OppositePositionPolicy",
   "enabled_instruments",
   "for_instrument",
   "instrument_for_broker_symbol",

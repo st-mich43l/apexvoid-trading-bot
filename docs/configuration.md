@@ -24,6 +24,26 @@ secrets to the categorized YAML. `APEXVOID_CONFIG_FILE` is the only
 application configuration selector; secret credentials may remain in the
 deployment environment.
 
+## Autonomous opposite-direction exposure
+
+Each instrument (usually through its pack) owns one rule in `instruments.yml`
+under `exposure.opposite_position`; strategy names, families and scalp status
+are never consulted.
+
+| Instrument class | Config | Behavior |
+| --- | --- | --- |
+| FX (EURUSD, GBPUSD, GBPJPY, USDJPY, any new pair) | `allowed: false` | Any opposite exposure on the symbol blocks the plan at any distance (`fx_opposite_position_not_allowed`). |
+| XAU (`XAU`, `XAUUSD`, `GOLD`) | `allowed: true`, `minimum_separation_pips: 150` | Entry must be at least 150 pips (inclusive; `pip_size` 0.1, so 15.0 price) from EVERY existing opposite group, else `xau_opposite_position_too_close`. |
+
+A missing or invalid policy fails closed: Algo Bot rejects with
+`opposite_exposure_policy_unavailable` and cTrader Engine refuses to start (or
+refuses the order if exposure is present). Algo Bot (`evaluate_opposite_exposure`)
+and cTrader Engine (`OppositeExposureFence`, run before the first broker
+mutation of a plan against tracked plan state plus real broker positions and
+pending orders) enforce the same rule independently. Same-direction stacking is
+a separate rule and is unchanged. `allow_hedged_xau` and
+`non_hedged_opposite_policy` only steer the manual/V6 candidate path.
+
 ## Validation
 
 ```bash

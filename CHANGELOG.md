@@ -13,6 +13,16 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Autonomous opposite-direction exposure is now owned per instrument in
+  `instruments.yml` (`exposure.opposite_position`): FX never allows an opposite
+  position on the same symbol at any distance, and XAU allows one only when the
+  entry is at least 150 pips (inclusive) from every existing opposite group.
+  Strategy, family and scalp status no longer bypass it; the scalp bypass and
+  its `opposing_active_too_close_ignored_scalp` reason, and the price-based
+  `opposing_minimum_separation_price` leaves, are removed. cTrader Engine
+  independently enforces the same rule before any broker order, against tracked
+  plan state plus actual broker positions and pending orders. New reject codes:
+  `fx_opposite_position_not_allowed`, `xau_opposite_position_too_close`.
 - Algo Bot now arbitrates only fresh, execution-admitted Go opportunities, so
   stale full-book Go arbitration cannot suppress an executable setup. Close
   opposite-side quality ties use Go's unique with-bias direction.
