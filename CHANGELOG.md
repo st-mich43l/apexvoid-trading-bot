@@ -12,6 +12,17 @@ dated section after deployment.
 
 ## Unreleased
 
+### Fixed
+- Restored the independent Go `break_retest` strategy and completed the
+  Range Edge barrier/state gates, including the legacy two-wick primary gate,
+  configurable inside-close/fallback settings, and directional maximum-entry
+  distance validation.
+
+### Added
+- Added XAU/GBPUSD/USDJPY detector replay coverage for Break & Retest, Range
+  Edge, Snap Back, Momentum Ride and Fade Scalp, with a frozen-oracle semantic
+  fixture for the XAU Range Edge case.
+
 ### Removed
 - The V6 `TradeCandidate` execution path is gone; TradePlan V8 is the only
   order contract. cTrader Engine's `AutoTradeEngine` is now a thin session

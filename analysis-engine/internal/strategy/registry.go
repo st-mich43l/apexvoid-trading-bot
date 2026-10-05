@@ -69,6 +69,7 @@ var knownIDs = []StrategyID{
 	"trendline",
 	"range_edge",
 	"box_breakout",
+	"break_retest",
 	"momentum_ride",
 	"snap_back",
 	"fade_scalp",
