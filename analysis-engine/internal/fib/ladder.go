@@ -1,6 +1,9 @@
 package fib
 
-import "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
+import (
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
+)
 
 // LevelKind distinguishes a retracement level (inside the swing range)
 // from an extension level (projected past it).
@@ -91,4 +94,15 @@ func NearestLevel(levels []Level, price, atr market.Price, epsilonATR float64, k
 		}
 	}
 	return best, found
+}
+
+// LadderForPrice ports fib_from_swings: the ladder (with extensions) of the
+// swing pair bracketing price, or of the most recent opposing pair, nil when
+// there is no usable pair.
+func LadderForPrice(swings []structure.Swing, price float64) []Level {
+	low, high, ok := swingRangePair(swings, price)
+	if !ok {
+		return nil
+	}
+	return Ladder(market.Price(low), market.Price(high), true)
 }

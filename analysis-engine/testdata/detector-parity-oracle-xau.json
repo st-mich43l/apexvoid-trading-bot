@@ -1,0 +1,16 @@
+{
+  "symbol": "XAU",
+  "timeframe": "M5",
+  "bar": 1789998600,
+  "strategy": "range_edge",
+  "direction": "BUY",
+  "entry_low": 4341.954821428571,
+  "entry_high": 4345.095178571428,
+  "key_level": 4343.525,
+  "confirmation": "wick_rejection",
+  "touch_bar": "2026-09-21T11:10:00+00:00",
+  "confirmation_bar": "2026-09-21T13:45:00+00:00",
+  "source_touches": 2,
+  "source_score": 6.65,
+  "oracle_commit": "1c9f32303b7e9f15fc8e3767b5045ac1e8a37adc"
+}

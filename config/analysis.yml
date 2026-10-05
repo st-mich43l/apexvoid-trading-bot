@@ -40,6 +40,66 @@ analysis:
     accept_bars: 2
     max_age_bars: 6
 
+  # Detector-contract read: the bounded closed-bar windows and swing parameters
+  # the frozen detectors evaluated direction, premium/discount and chop on.
+  # Strategies that reproduce a frozen detector decision gate on this read; the
+  # hierarchical structure above keeps owning every other consumer. The values
+  # are the frozen production values (market_data.lookbacks, swing_fractal_n,
+  # zigzag_*, scanner.htf, counter-trend policy and the H1 warm-up floor).
+  legacy_read:
+    window_bars:
+      M5: 150
+      M15: 250
+      H1: 400
+    swing:
+      fractal_n: 2
+      zigzag_pct: 0.0
+      zigzag_atr_mult: 1.0
+    level:
+      cluster_atr: 0.5
+      min_touches: 2
+      max_cluster_span_multiple: 2.0
+    displacement:
+      atr_mult: 1.5
+      body_fraction: 0.6
+    zone:
+      width: body
+      merge_overlap: 0.5
+      max_merged_zone_atr: 3.0
+      flip_accept_bars: 2
+      flip_max_break_age_bars: 48
+      flip_band_body_fraction: 0.5
+    liquidity:
+      equal_tol_atr: 0.15
+      inducement_band_atr: 0.3
+      sweep_body_fraction: 0.5
+      sweep_react_bars: 3
+    # Default arguments of the frozen compat helpers (structure.entry_zone and
+    # its compat order-block/flip zones). The oracle ran them with these
+    # defaults on every instrument (pip 0.1 and round step 5.0 included), so
+    # they are not the instrument's own scale.
+    compat:
+      pip_size: 0.1
+      displacement_body_fraction: 0.55
+      displacement_atr_mult: 1.5
+      fractal_n: 2
+      atr_length: 14
+      level_cluster_atr: 0.5
+      round_step: 5.0
+      max_cluster_span_multiple: 2.0
+    # Shared decision thresholds of the frozen detectors (DetectorSettings).
+    detector:
+      maximum_entry_atr: 2.0
+      maximum_zone_width_atr: 1.5
+      proximal_band_atr: 0.5
+      confluence_floor: 2
+      fibonacci_enabled: true
+      reaction_lookback_bars: 3
+      engulfing_minimum_range_atr: 0.5
+    htf_order: "H1,M15"
+    min_primary_htf_warmup_bars: 50
+    allow_counter_trend: true
+
   # MAD-0 Asia phase classifier. These are descriptive technical inputs and
   # never execution gates; the Go engine owns the resulting phase context.
   mad:
@@ -100,7 +160,7 @@ analysis:
   #   expiry_hours — this strategy's own technical SETUP_EXPIRED window,
   #     distinct from Algo Bot's own execution-age policy; 24h is one
   #     trading day.
-  # All 20 registry entries have concrete Go factories. Every
+  # All 21 registry entries have concrete Go factories. Every
   # strategy is enabled for the live Kafka opportunity stream; Algo Bot
   # consumes those events and applies execution policy before publishing V8.
   strategies:
@@ -266,17 +326,35 @@ analysis:
       lookback_bars: 48
       minimum_touches: 2
       minimum_wick_rejections: 1
+      minimum_inside_closes: 3
+      inside_lookback_bars: 24
+      recent_breakout_lookback_bars: 12
+      fallback_enabled: true
+      fallback_minimum_confirmations: 1
+      provisional_enabled: true
+      post_impulse_enabled: true
+      fallback_min_width_atr: 0.8
+      fallback_max_width_atr: 8.0
+      fallback_wick_fraction: 0.25
+      post_impulse_min_displacement_atr: 3.0
+      post_impulse_max_contraction_atr: 2.2
+      post_impulse_min_inside_closes: 4
+      post_impulse_lookback_bars: 36
+      post_impulse_recent_bars: 6
       break_closes: 2
       cluster_atr: 0.25
+      cluster_min_abs: 0.0
+      cluster_pip_mult: 2.0
       entry_tolerance_atr: 0.25
+      maximum_edge_width_atr: 0.75
       minimum_wick_fraction: 0.25
       minimum_width_atr: 1.0
       maximum_width_atr: 6.0
       minimum_room_atr: 0.75
       invalidation_buffer_atr: 0.25
+      recent_breakout_buffer_atr: 0.15
+      recent_breakout_min_span_atr: 0.8
       expiry_hours: 4.0
-      reaction_lookback_bars: 3
-      engulfing_minimum_range_atr: 0.5
     box_breakout:
       version: v2
       enabled: true
@@ -284,6 +362,16 @@ analysis:
       maximum_width_atr: 2.0
       retest_tolerance_atr: 0.2
       retest_window_bars: 3
+      invalidation_buffer_atr: 0.25
+      target_r: 2.0
+      expiry_hours: 8.0
+    break_retest:
+      version: v2
+      enabled: true
+      breakout_accept_bars: 2
+      trendline_tolerance_atr: 0.30
+      momentum_body_fraction: 0.60
+      strict_premium_discount: false
       invalidation_buffer_atr: 0.25
       target_r: 2.0
       expiry_hours: 8.0
@@ -295,34 +383,26 @@ analysis:
       invalidation_buffer_atr: 0.25
       minimum_target_distance_atr: 1.0
       expiry_hours: 4.0
-      maximum_entry_atr: 2.0
-      proximal_band_atr: 0.5
       require_momentum_va: false
       momentum_opposition_tolerance: 0.15
     snap_back:
       version: v2
       enabled: true
-      extension_atr: 2.0
+      # Frozen production snap_atr_mult.
+      extension_atr: 1.5
       invalidation_buffer_atr: 0.25
       target_r: 2.0
       expiry_hours: 4.0
-      maximum_entry_atr: 2.0
-      proximal_band_atr: 0.5
       extension_source: impulse
       strict_premium_discount: true
-      reaction_lookback_bars: 3
-      engulfing_minimum_range_atr: 0.5
     fade_scalp:
       version: v2
       enabled: true
-      proximal_band_atr: 0.5
       invalidation_buffer_atr: 0.25
       target_r: 2.0
       expiry_hours: 4.0
       chop_edge_fraction: 0.25
       strict_premium_discount: true
-      reaction_lookback_bars: 3
-      engulfing_minimum_range_atr: 0.5
     liquidity_sweep:
       version: v2
       enabled: true

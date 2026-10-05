@@ -97,7 +97,9 @@ func Evaluate(zone ZoneQuality, factors Factors, cfg Config, madBonus float64) S
 		if factors.FibTouch {
 			zoneScore += cfg.FibonacciWeight
 		}
-		v1 = starsFromRatio(zoneScore/zoneScoreMax, 8.0/zoneScoreMax, 12.0/zoneScoreMax)
+		// Python normalises the zone score by its own maximum but cuts it at the
+		// factor-scale star ratios (_STAR_*_RATIO), exactly as for factors.
+		v1 = starsFromRatio(zoneScore/zoneScoreMax, 8.0/factorScoreMax, 12.0/factorScoreMax)
 	}
 	if zone.Touches > 0 {
 		if v1 > 2 {

@@ -5,10 +5,10 @@ The Go analysis engine has a one-way dependency graph:
 ```text
 market / telemetry
   → indicator / marketdata / config
-  → structure / techniquezone / zone / liquidity / context
-  → strategy / confluence / regime / session
-  → opportunity / arbitration / state
-  → transport
+  → structure / techniquezone / zone / liquidity
+  → context / confluence / opportunity
+  → strategy / legacyread / strategyutil / state / arbitration
+  → concrete strategies / transport
   → engine
 ```
 

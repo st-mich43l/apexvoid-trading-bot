@@ -3,6 +3,7 @@ package engine
 import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/boxbreakout"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/breakretest"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/confluencezone"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/crt"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/demand"
@@ -53,6 +54,7 @@ var strategyFactories = map[strategy.StrategyID]strategy.Factory{
 	confluencezone.ID:      confluencezone.New,
 	rangeedge.ID:           rangeedge.New,
 	boxbreakout.ID:         boxbreakout.New,
+	breakretest.ID:         breakretest.New,
 	momentumride.ID:        momentumride.New,
 	snapback.ID:            snapback.New,
 	fadescalp.ID:           fadescalp.New,

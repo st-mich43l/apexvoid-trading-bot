@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/arbitration"
@@ -14,6 +15,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/fib"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/indicator"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/keylevel"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/legacyread"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/liquidity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/mad"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
@@ -22,6 +24,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/session"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/techniquezone"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/transport/kafka"
 	redistransport "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/transport/redis"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/trendline"
@@ -1062,4 +1065,192 @@ func MomentumConfigFromConfig(doc *config.Document) (momentum.Config, error) {
 		return momentum.Config{}, fmt.Errorf("engine: analysis.momentum thresholds must satisfy bear < 0 < bull, got bull=%v bear=%v", bull, bear)
 	}
 	return momentum.Config{Lookback: int(lookback), BullThreshold: bull, BearThreshold: bear}, nil
+}
+
+// LegacyReadConfigFromConfig reads analysis.legacy_read.* — the bounded
+// detector-contract windows and construction parameters — and assembles the
+// rest of the read's configuration from the shared fib, regime, momentum,
+// session and trendline leaves. Instrument-scale values (pip size, round step)
+// are applied per instrument by ApplyInstrument.
+func LegacyReadConfigFromConfig(doc *config.Document, atr ATRSettings, fibConfig fib.Config, regimeConfig regime.Config, momentumConfig momentum.Config, sessionConfig session.Config, trendlineConfig trendline.Config) (legacyread.Config, error) {
+	cfg := legacyread.Config{
+		ATRLength: atr.Length, Fib: fibConfig, Regime: regimeConfig, Momentum: momentumConfig,
+		Session: sessionConfig, Trendline: trendlineConfig, WindowBars: map[market.Timeframe]int{},
+	}
+	floats := map[string]*float64{
+		"swing.zigzag_pct": &cfg.ZigzagPct, "swing.zigzag_atr_mult": &cfg.ZigzagATRMult,
+		"level.cluster_atr": &cfg.LevelClusterATR, "level.max_cluster_span_multiple": &cfg.MaximumClusterSpanMultiple,
+		"displacement.atr_mult": &cfg.DisplacementATRMult, "displacement.body_fraction": &cfg.MomentumBodyFraction,
+		"zone.merge_overlap": &cfg.ZoneMergeOverlap, "zone.max_merged_zone_atr": &cfg.MaximumMergedZoneATR,
+		"zone.flip_band_body_fraction": &cfg.FlipBandBodyFraction,
+		"liquidity.equal_tol_atr":      &cfg.EqualToleranceATR, "liquidity.inducement_band_atr": &cfg.InducementBandATR,
+		"liquidity.sweep_body_fraction": &cfg.SweepBodyFraction,
+	}
+	ints := map[string]*int{
+		"swing.fractal_n": &cfg.FractalN, "min_primary_htf_warmup_bars": &cfg.MinPrimaryHTFWarmupBars,
+		"level.min_touches": &cfg.LevelMinimumTouches, "zone.flip_accept_bars": &cfg.FlipAcceptBars,
+		"zone.flip_max_break_age_bars": &cfg.FlipMaximumBreakAgeBars, "liquidity.sweep_react_bars": &cfg.SweepReactBars,
+	}
+	var err error
+	if cfg.Scalp, err = ScalpConfigFromConfig(doc); err != nil {
+		return legacyread.Config{}, err
+	}
+	if cfg.Compat, err = compatConfigFromConfig(doc); err != nil {
+		return legacyread.Config{}, err
+	}
+	for key, dst := range floats {
+		if *dst, err = getFloat(doc, "analysis.legacy_read."+key); err != nil {
+			return legacyread.Config{}, err
+		}
+	}
+	for key, dst := range ints {
+		if *dst, err = getInt(doc, "analysis.legacy_read."+key); err != nil {
+			return legacyread.Config{}, err
+		}
+	}
+	if cfg.AllowCounterTrend, err = getBool(doc, "analysis.legacy_read.allow_counter_trend"); err != nil {
+		return legacyread.Config{}, err
+	}
+	if cfg.ZoneWidth, err = getString(doc, "analysis.legacy_read.zone.width"); err != nil {
+		return legacyread.Config{}, err
+	}
+	order, err := getString(doc, "analysis.legacy_read.htf_order")
+	if err != nil {
+		return legacyread.Config{}, err
+	}
+	for _, name := range strings.Split(order, ",") {
+		tf, err := market.ParseTimeframe(strings.TrimSpace(name))
+		if err != nil {
+			return legacyread.Config{}, fmt.Errorf("engine: analysis.legacy_read.htf_order: %w", err)
+		}
+		cfg.HTFOrder = append(cfg.HTFOrder, tf)
+	}
+	section, err := doc.Section("analysis.legacy_read.window_bars")
+	if err != nil {
+		return legacyread.Config{}, err
+	}
+	for key := range section {
+		tf, err := market.ParseTimeframe(key)
+		if err != nil {
+			return legacyread.Config{}, fmt.Errorf("engine: analysis.legacy_read.window_bars.%s: %w", key, err)
+		}
+		if cfg.WindowBars[tf], err = getInt(doc, "analysis.legacy_read.window_bars."+key); err != nil {
+			return legacyread.Config{}, err
+		}
+	}
+	if cfg.ATRLength < 1 || cfg.FractalN < 1 || cfg.ZigzagPct < 0 || cfg.ZigzagATRMult < 0 || cfg.MinPrimaryHTFWarmupBars < 0 || len(cfg.HTFOrder) == 0 || len(cfg.WindowBars) == 0 ||
+		cfg.LevelClusterATR <= 0 || cfg.LevelMinimumTouches < 1 || cfg.MaximumClusterSpanMultiple < 0 || cfg.DisplacementATRMult <= 0 ||
+		cfg.MomentumBodyFraction < 0 || cfg.MomentumBodyFraction > 1 || (cfg.ZoneWidth != "body" && cfg.ZoneWidth != "range") ||
+		cfg.ZoneMergeOverlap < 0 || cfg.ZoneMergeOverlap > 1 || cfg.MaximumMergedZoneATR < 0 || cfg.FlipAcceptBars < 1 ||
+		cfg.FlipMaximumBreakAgeBars < 0 || cfg.FlipBandBodyFraction < 0 || cfg.FlipBandBodyFraction > 1 ||
+		cfg.EqualToleranceATR < 0 || cfg.InducementBandATR < 0 || cfg.SweepBodyFraction < 0 || cfg.SweepBodyFraction > 1 || cfg.SweepReactBars < 0 {
+		return legacyread.Config{}, fmt.Errorf("engine: analysis.legacy_read has an invalid value")
+	}
+	for tf, bars := range cfg.WindowBars {
+		if bars < 50 {
+			return legacyread.Config{}, fmt.Errorf("engine: analysis.legacy_read.window_bars.%s must be at least 50", tf)
+		}
+	}
+	return cfg, nil
+}
+
+// LegacyDetectorParametersFromConfig reads analysis.legacy_read.detector.*, the
+// shared decision thresholds of the frozen detectors, as strategy parameters.
+func LegacyDetectorParametersFromConfig(doc *config.Document) (map[string]any, error) {
+	params := map[string]any{}
+	for key, name := range map[string]string{
+		"maximum_entry_atr": "maximum_entry_atr", "maximum_zone_width_atr": "maximum_zone_width_atr", "proximal_band_atr": "proximal_band_atr",
+		"engulfing_minimum_range_atr": "engulfing_minimum_range_atr",
+	} {
+		value, err := getFloat(doc, "analysis.legacy_read.detector."+key)
+		if err != nil {
+			return nil, err
+		}
+		params[name] = value
+	}
+	for _, key := range []string{"confluence_floor", "reaction_lookback_bars"} {
+		value, err := getInt(doc, "analysis.legacy_read.detector."+key)
+		if err != nil {
+			return nil, err
+		}
+		params[key] = float64(value)
+	}
+	enabled, err := getBool(doc, "analysis.legacy_read.detector.fibonacci_enabled")
+	if err != nil {
+		return nil, err
+	}
+	params["fibonacci_enabled"] = enabled
+	return params, nil
+}
+
+// ScalpConfigFromConfig reads the range-edge structure leaves from
+// analysis.strategies.range_edge, the one source of truth shared by the
+// structure builder and the strategy. Instrument-scale values are applied per
+// instrument.
+func ScalpConfigFromConfig(doc *config.Document) (techniquezone.ScalpConfig, error) {
+	var cfg techniquezone.ScalpConfig
+	base := "analysis.strategies.range_edge."
+	floats := map[string]*float64{
+		"cluster_atr": &cfg.ClusterATR, "cluster_min_abs": &cfg.ClusterMinAbs, "cluster_pip_mult": &cfg.ClusterPipMult,
+		"minimum_wick_fraction": &cfg.MinimumWickFraction, "entry_tolerance_atr": &cfg.EntryToleranceATR,
+		"maximum_edge_width_atr": &cfg.MaximumEdgeWidthATR, "minimum_width_atr": &cfg.MinimumWidthATR,
+		"maximum_width_atr": &cfg.MaximumWidthATR, "minimum_room_atr": &cfg.MinimumRoomATR,
+		"recent_breakout_buffer_atr": &cfg.RecentBreakoutBufferATR, "recent_breakout_min_span_atr": &cfg.RecentBreakoutMinSpanATR,
+		"fallback_min_width_atr": &cfg.FallbackMinWidthATR, "fallback_max_width_atr": &cfg.FallbackMaxWidthATR,
+		"fallback_wick_fraction": &cfg.FallbackWickFraction, "post_impulse_min_displacement_atr": &cfg.PostImpulseMinDisplaceATR,
+		"post_impulse_max_contraction_atr": &cfg.PostImpulseMaxContractATR,
+	}
+	ints := map[string]*int{
+		"lookback_bars": &cfg.Lookback, "minimum_touches": &cfg.MinimumTouches, "break_closes": &cfg.BreakCloses,
+		"minimum_inside_closes": &cfg.MinimumInsideCloses, "inside_lookback_bars": &cfg.InsideLookbackBars,
+		"recent_breakout_lookback_bars": &cfg.RecentBreakoutLookback, "fallback_minimum_confirmations": &cfg.FallbackMinConfirmations,
+		"post_impulse_min_inside_closes": &cfg.PostImpulseMinInside, "post_impulse_lookback_bars": &cfg.PostImpulseLookbackBars,
+		"post_impulse_recent_bars": &cfg.PostImpulseRecentBars,
+	}
+	bools := map[string]*bool{
+		"fallback_enabled": &cfg.FallbackEnabled, "provisional_enabled": &cfg.ProvisionalEnabled, "post_impulse_enabled": &cfg.PostImpulseEnabled,
+	}
+	var err error
+	for key, dst := range floats {
+		if *dst, err = getFloat(doc, base+key); err != nil {
+			return cfg, err
+		}
+	}
+	for key, dst := range ints {
+		if *dst, err = getInt(doc, base+key); err != nil {
+			return cfg, err
+		}
+	}
+	for key, dst := range bools {
+		if *dst, err = getBool(doc, base+key); err != nil {
+			return cfg, err
+		}
+	}
+	return cfg, nil
+}
+
+// compatConfigFromConfig reads analysis.legacy_read.compat.*: the default
+// arguments of the frozen compat helpers (see techniquezone.CompatConfig).
+func compatConfigFromConfig(doc *config.Document) (techniquezone.CompatConfig, error) {
+	var cfg techniquezone.CompatConfig
+	base := "analysis.legacy_read.compat."
+	var err error
+	for key, dst := range map[string]*float64{
+		"pip_size": &cfg.PipSize, "displacement_body_fraction": &cfg.DisplacementBodyFraction, "displacement_atr_mult": &cfg.DisplacementATRMult,
+		"level_cluster_atr": &cfg.LevelClusterATR, "round_step": &cfg.RoundStep, "max_cluster_span_multiple": &cfg.MaximumClusterSpanMultiple,
+	} {
+		if *dst, err = getFloat(doc, base+key); err != nil {
+			return cfg, err
+		}
+	}
+	for key, dst := range map[string]*int{"fractal_n": &cfg.FractalN, "atr_length": &cfg.ATRLength} {
+		if *dst, err = getInt(doc, base+key); err != nil {
+			return cfg, err
+		}
+	}
+	if cfg.PipSize <= 0 || cfg.DisplacementBodyFraction < 0 || cfg.DisplacementBodyFraction > 1 || cfg.DisplacementATRMult <= 0 ||
+		cfg.LevelClusterATR <= 0 || cfg.RoundStep <= 0 || cfg.MaximumClusterSpanMultiple < 0 || cfg.FractalN < 1 || cfg.ATRLength < 1 {
+		return cfg, fmt.Errorf("engine: analysis.legacy_read.compat has an invalid value")
+	}
+	return cfg, nil
 }

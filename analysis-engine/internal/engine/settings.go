@@ -5,12 +5,15 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/candle"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/config"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/confluence"
+	analysiscontext "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/context"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/fib"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/keylevel"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/legacyread"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/liquidity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/mad"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/momentum"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/regime"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/session"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy"
@@ -24,17 +27,21 @@ import (
 // single point where config (rank 1) becomes reachable by the domain
 // packages engine wires together (see config.go's own doc comment).
 type Settings struct {
-	Candle           candle.Config
-	Confluence       confluence.Config
-	ATR              ATRSettings
-	Structure        structure.Settings
-	Liquidity        liquidity.Config
-	Zone             zone.Config
-	Trendline        trendline.Config
-	KeyLevel         keylevel.Config
-	Session          session.Config
-	Fib              fib.Config
-	Momentum         momentum.Config
+	Candle     candle.Config
+	Confluence confluence.Config
+	ATR        ATRSettings
+	Structure  structure.Settings
+	Liquidity  liquidity.Config
+	Zone       zone.Config
+	Trendline  trendline.Config
+	KeyLevel   keylevel.Config
+	Session    session.Config
+	Fib        fib.Config
+	Momentum   momentum.Config
+	LegacyRead legacyread.Config
+	// LegacyDetector are the shared frozen-detector thresholds injected into the
+	// detector-contract strategies' parameters.
+	LegacyDetector   map[string]any
 	Regime           regime.Config
 	MAD              mad.Config
 	Arbitration      arbitration.Config
@@ -86,6 +93,24 @@ type Settings struct {
 	// is the safe default; a live feed that streams the forming bar sets
 	// this true at construction.
 	AllowReplaceForming bool
+
+	// OnEvaluation, when set, receives every strategy candidate produced by
+	// one closed bar after the engine has attached its technical/confluence
+	// context and before the lifecycle de-duplicates it. It observes only; it
+	// can neither change nor suppress a candidate. Production leaves it nil;
+	// replay and detector-parity tooling use it to see per-bar detections.
+	OnEvaluation func(Evaluation)
+}
+
+// Evaluation is the per-bar strategy output delivered to Settings.OnEvaluation.
+type Evaluation struct {
+	Symbol     market.Symbol
+	Timeframe  market.Timeframe
+	BarTime    int64
+	Candidates []opportunity.Candidate
+	// Context is the canonical context the strategies just read. Observers
+	// must treat it as read-only.
+	Context *analysiscontext.MarketContext
 }
 
 // LoadSettings reads every Analysis Engine V2 config leaf this package
@@ -133,11 +158,19 @@ func LoadSettings(doc *config.Document, primary market.Timeframe, allowReplaceFo
 	if err != nil {
 		return Settings{}, err
 	}
+	legacyDetector, err := LegacyDetectorParametersFromConfig(doc)
+	if err != nil {
+		return Settings{}, err
+	}
 	arbitrationConfig, err := ArbitrationConfigFromConfig(doc)
 	if err != nil {
 		return Settings{}, err
 	}
 	regimeConfig, err := RegimeConfigFromConfig(doc)
+	if err != nil {
+		return Settings{}, err
+	}
+	legacyReadConfig, err := LegacyReadConfigFromConfig(doc, atr, fibConfig, regimeConfig, momentumConfig, sessionConfig, trendlineConfig)
 	if err != nil {
 		return Settings{}, err
 	}
@@ -163,7 +196,7 @@ func LoadSettings(doc *config.Document, primary market.Timeframe, allowReplaceFo
 	}
 	settings := Settings{
 		Candle: candle.DefaultConfig(), Confluence: confluenceConfig, ATR: atr, Structure: structureSettings, Liquidity: liquidityConfig, Zone: zoneConfig,
-		Trendline: trendlineConfig, KeyLevel: keyLevelConfig, Session: sessionConfig, Fib: fibConfig, Momentum: momentumConfig,
+		Trendline: trendlineConfig, KeyLevel: keyLevelConfig, Session: sessionConfig, Fib: fibConfig, Momentum: momentumConfig, LegacyRead: legacyReadConfig, LegacyDetector: legacyDetector,
 		Arbitration: arbitrationConfig, Regime: regimeConfig, MAD: madConfig, TechniqueZones: productionTechniqueZoneSettings(), StopEnvelope: stopEnvelopeConfig, Strategies: strategyConfigs,
 		HistoryDepths: depths, PrimaryTimeframe: primary,
 		AllowReplaceForming: allowReplaceForming,
@@ -174,5 +207,8 @@ func LoadSettings(doc *config.Document, primary market.Timeframe, allowReplaceFo
 	// before a symbol is attached. ApplyInstrument replaces the two geometry
 	// values with the concrete instrument values in production.
 	applyParityCRT(&settings)
+	settings.LegacyRead.PipSize = settings.TechniqueZones.Technique.PipSize
+	settings.LegacyRead.RoundStep = settings.KeyLevel.RoundStep
+	applyLegacyDetector(&settings)
 	return settings, nil
 }
