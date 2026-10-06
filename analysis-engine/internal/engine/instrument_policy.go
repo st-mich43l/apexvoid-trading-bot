@@ -149,6 +149,14 @@ func applyKeyLevelOverrides(settings *Settings, doc *config.Document, symbol str
 	if !hasTouches && !hasExplicit {
 		return nil
 	}
+	if hasTouches {
+		switch v := touches.(type) {
+		case int:
+			settings.LegacyRead.FrameLevelMinimumTouches = v
+		case float64:
+			settings.LegacyRead.FrameLevelMinimumTouches = int(v)
+		}
+	}
 	for i := range settings.Strategies {
 		if settings.Strategies[i].ID != "key_level" {
 			continue
@@ -212,6 +220,8 @@ func (s Settings) BlockedByDefendedLevel(c opportunity.Candidate) (float64, bool
 // detector contract's and which therefore share its thresholds.
 var legacyDetectorStrategies = map[string]bool{
 	"snap_back": true, "fade_scalp": true, "momentum_ride": true, "break_retest": true, "range_edge": true, "key_level": true, "liquidity_sweep": true,
+	// The technique publishers (technique_detectors.py) qualify through the same contract.
+	"supply": true, "demand": true, "order_block": true, "fvg": true, "ifvg": true, "crt": true, "confluence_zone": true,
 }
 
 // applyLegacyDetector injects the shared frozen-detector thresholds, the
@@ -239,6 +249,7 @@ func applyLegacyDetector(settings *Settings) {
 		params["fibonacci_confluence_weight"] = settings.Confluence.FibonacciWeight
 		params["fibonacci_epsilon_atr"] = settings.Fib.EpsilonATR
 		params["price_digits"] = float64(settings.Geometry.PriceDigits)
+		params["technique_retest_max_touches"] = float64(settings.TechniqueZones.Technique.RetestMaxTouches)
 		settings.Strategies[i].Parameters = params
 	}
 }

@@ -41,17 +41,25 @@ type LegacyFrame struct {
 	Legs          []techniquezone.Leg
 	// Zones is the merged, mitigation-stamped and multi-timeframe-scored zone
 	// population; OrderBlocks is its order-block view.
-	Zones       []techniquezone.Zone
-	OrderBlocks []techniquezone.Zone
-	Pools       []techniquezone.Pool
-	Grabs       []techniquezone.Grab
-	Sessions    []techniquezone.SessionRef
-	Trendlines  []trendline.Trendline
+	Zones []techniquezone.Zone
+	// TechniqueZones are the unmerged supply/demand, order-block and FVG zones,
+	// mitigation-stamped and scored like Zones: the population the technique
+	// instances are collected from.
+	TechniqueZones []techniquezone.Zone
+	OrderBlocks    []techniquezone.Zone
+	Pools          []techniquezone.Pool
+	Grabs          []techniquezone.Grab
+	Sessions       []techniquezone.SessionRef
+	Trendlines     []trendline.Trendline
 	// Barriers/ScalpRange are the scalp structure: micro barriers and the best
 	// local range with its state.
-	Barriers                               []techniquezone.ScalpBarrier
-	ScalpRange                             *techniquezone.ScalpRange
-	ScalpState                             string
+	Barriers   []techniquezone.ScalpBarrier
+	ScalpRange *techniquezone.ScalpRange
+	ScalpState string
+	// Techniques lazily yields the technique instances (supply/demand, order
+	// block, FVG, iFVG and CRT) the frozen detectors publish from. Only the
+	// execution timeframe's frame carries it; it is computed on first use.
+	Techniques                             func() []techniquezone.Instance
 	Range                                  *fib.DealingRange
 	FibLadder                              []fib.Level
 	Regime                                 regime.State

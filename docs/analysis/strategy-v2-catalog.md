@@ -92,6 +92,31 @@ test in `analysis-engine/test/detectorparity` replays the committed XAU, GBPUSD
 and USDJPY captures and requires every decision to match the frozen oracle bar
 by bar.
 
+## Technique publishers (zone family)
+
+Supply, Demand, Order Block, FVG, iFVG, CRT and Confluence Zone publish the
+confirmed reaction of the frozen Python technique publishers
+(`technique_detectors.py`) rather than judging resting zones themselves. The
+engine collects the same technique instances the frozen analysis did — the
+unmerged supply/demand, order-block and FVG zones, mitigation-stamped and scored
+(`LegacyFrame.TechniqueZones`), the iFVG inversions discovered from the FVGs, and
+the CRT ranges the H1 frame and the execution window produce — and
+`strategyutil.TechniqueSource` reproduces `_technique_reaction` and
+`confluence_zone_reaction` over them: instances covered by a confluence band
+(two or more distinct techniques overlapping by at least half, merged up to three
+ATR wide) are left to Confluence Zone, each remaining instance is qualified by
+the structural reaction and the shared confluence floor, and the single best per
+publisher (most stars, nearest entry) is published. Resting-zone observations
+are unchanged and are never confirmed.
+
+`test/techniqueparity` replays the committed XAU, EURUSD, GBPUSD, GBPJPY and
+USDJPY captures and requires every decision to match the frozen oracle bar by
+bar (2,957 decisions: presence, direction, entry band, confluence stars). One bar
+differs, deliberately: the frozen publishers match the confirming sweep grab with
+a hard-coded 0.1 pip tolerance on every instrument (they call `_zone_grabs_for`
+without its `pip_size`); that is XAU's real pip, so XAU is exact, but it is ten
+times too wide on a 0.01-pip pair, and Go uses the instrument's own pip size.
+
 ## XAU execution containment
 
 An instrument may *observe* a strategy without trading it:

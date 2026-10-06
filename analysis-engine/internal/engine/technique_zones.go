@@ -2,7 +2,9 @@ package engine
 
 import (
 	"fmt"
+	"sync"
 
+	analysiscontext "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/context"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/techniquezone"
@@ -88,4 +90,46 @@ func techniqueInstanceZone(in techniquezone.Instance, bars []market.Candle) zone
 		OriginTime: originTime, CreatedAt: originTime, TouchCount: in.Touches,
 		Strength: 1, LegacyScore: in.Score, State: state, Relevance: zone.Immediate,
 	}
+}
+
+// techniqueInstanceSource returns the lazily computed technique instances the
+// frozen technique detectors publish from (collect_technique_instances): the
+// zone-chain techniques collected from the execution frame's scored unmerged
+// zones, plus the CRT instances the H1 frame and the execution window produce.
+// The result is memoised for the frame's one closed-bar evaluation.
+func techniqueInstanceSource(exec *analysiscontext.LegacyFrame, h1 *analysiscontext.LegacyFrame, settings Settings) func() []techniquezone.Instance {
+	var once sync.Once
+	var instances []techniquezone.Instance
+	return func() []techniquezone.Instance {
+		once.Do(func() {
+			bars := exec.Bars
+			if len(bars) < 10 {
+				return
+			}
+			execATR := techniquezone.ATRScalar(exec.ATR, 1)
+			instances = techniquezone.InstancesFromScoredZones(exec.TechniqueZones, bars, execATR, settings.TechniqueZones.Technique)
+			if h1 == nil || len(h1.Bars) == 0 {
+				return
+			}
+			crt := techniquezone.ProductionCRTSettings()
+			crt.MinATR = crtMinimumH1RangeATR(settings, crt.MinATR)
+			crt.EntryMaxWidthPrice = settings.TechniqueZones.Technique.FVGEntryMaxWidthPrice
+			h1ATR := techniquezone.ATRScalar(h1.ATR, 1)
+			instances = append(instances, techniquezone.CollectCRT(h1.Bars, bars, h1ATR, execATR, crt, settings.TechniqueZones.Technique)...)
+		})
+		return instances
+	}
+}
+
+// crtMinimumH1RangeATR reads the CRT strategy's own impulse threshold.
+func crtMinimumH1RangeATR(settings Settings, fallback float64) float64 {
+	for _, cfg := range settings.Strategies {
+		if cfg.ID != "crt" {
+			continue
+		}
+		if value, ok := cfg.Parameters["minimum_h1_range_atr"].(float64); ok && value > 0 {
+			return value
+		}
+	}
+	return fallback
 }

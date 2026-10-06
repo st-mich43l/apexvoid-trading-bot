@@ -98,7 +98,7 @@ func assertOne(t *testing.T, instance strategy.Strategy, marketCtx *analysiscont
 func TestStrategiesKnownQualifyingFixtures(t *testing.T) {
 	const base = int64(1_700_000_000)
 	t.Run("ifvg", func(t *testing.T) {
-		s, err := ifvg.New(cfg(ifvg.ID, map[string]any{"epsilon_atr_fraction": 0.05, "maximum_zone_atr": 3.0, "entry_max_width_price": 5.0, "reaction_lookback_bars": 3.0, "engulfing_minimum_range_atr": 0.5, "minimum_strength": .4, "minimum_gap_atr": .5, "invalidation_buffer_atr": .5, "minimum_target_distance_atr": 1.0, "expiry_hours": 4.0}))
+		s, err := ifvg.New(cfg(ifvg.ID, detectorParams(map[string]any{"epsilon_atr_fraction": 0.05, "maximum_zone_atr": 3.0, "entry_max_width_price": 5.0, "reaction_lookback_bars": 3.0, "engulfing_minimum_range_atr": 0.5, "minimum_strength": .4, "minimum_gap_atr": .5, "invalidation_buffer_atr": .5, "minimum_target_distance_atr": 1.0, "expiry_hours": 4.0})))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -129,7 +129,7 @@ func TestStrategiesKnownQualifyingFixtures(t *testing.T) {
 		}
 	})
 	t.Run("crt", func(t *testing.T) {
-		s, e := crt.New(cfg(crt.ID, map[string]any{"minimum_h1_range_atr": 1.5, "invalidation_buffer_atr": .25, "expiry_hours": 4.0, "technique_window_bars": 400.0, "entry_max_width_price": 5.0, "pip_size": .1, "reaction_lookback_bars": 3.0, "engulfing_minimum_range_atr": .5}))
+		s, e := crt.New(cfg(crt.ID, detectorParams(map[string]any{"minimum_h1_range_atr": 1.5, "invalidation_buffer_atr": .25, "expiry_hours": 4.0, "technique_window_bars": 400.0, "entry_max_width_price": 5.0, "pip_size": .1, "reaction_lookback_bars": 3.0, "engulfing_minimum_range_atr": .5})))
 		if e != nil {
 			t.Fatal(e)
 		}
@@ -138,7 +138,7 @@ func TestStrategiesKnownQualifyingFixtures(t *testing.T) {
 		}
 	})
 	t.Run("confluence_zone", func(t *testing.T) {
-		s, e := confluencezone.New(cfg(confluencezone.ID, map[string]any{"reaction_lookback_bars": 3.0, "engulfing_minimum_range_atr": 0.5, "minimum_facts": 2.0, "invalidation_buffer_atr": .5, "minimum_target_distance_atr": 1.0, "expiry_hours": 4.0}))
+		s, e := confluencezone.New(cfg(confluencezone.ID, detectorParams(map[string]any{"reaction_lookback_bars": 3.0, "engulfing_minimum_range_atr": 0.5, "minimum_facts": 2.0, "invalidation_buffer_atr": .5, "minimum_target_distance_atr": 1.0, "expiry_hours": 4.0})))
 		if e != nil {
 			t.Fatal(e)
 		}
@@ -201,7 +201,7 @@ func TestBreakoutRetestsAllowDelayedHoldBeforeRetest(t *testing.T) {
 }
 
 func TestIFVGDeduplicatesRepeatedCanonicalZone(t *testing.T) {
-	s, err := ifvg.New(cfg(ifvg.ID, map[string]any{"epsilon_atr_fraction": 0.05, "maximum_zone_atr": 3.0, "entry_max_width_price": 5.0, "reaction_lookback_bars": 3.0, "engulfing_minimum_range_atr": 0.5, "minimum_strength": .4, "minimum_gap_atr": .5, "invalidation_buffer_atr": .5, "minimum_target_distance_atr": 1.0, "expiry_hours": 4.0}))
+	s, err := ifvg.New(cfg(ifvg.ID, detectorParams(map[string]any{"epsilon_atr_fraction": 0.05, "maximum_zone_atr": 3.0, "entry_max_width_price": 5.0, "reaction_lookback_bars": 3.0, "engulfing_minimum_range_atr": 0.5, "minimum_strength": .4, "minimum_gap_atr": .5, "invalidation_buffer_atr": .5, "minimum_target_distance_atr": 1.0, "expiry_hours": 4.0})))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -246,7 +246,7 @@ func TestStrategiesRejectMissingConfiguration(t *testing.T) {
 }
 
 func TestIFVGIgnoresAGapThatIsASliverOfATR(t *testing.T) {
-	s, err := ifvg.New(cfg(ifvg.ID, map[string]any{"epsilon_atr_fraction": 0.05, "maximum_zone_atr": 3.0, "entry_max_width_price": 5.0, "reaction_lookback_bars": 3.0, "engulfing_minimum_range_atr": 0.5, "minimum_strength": .4, "minimum_gap_atr": .5, "invalidation_buffer_atr": .5, "minimum_target_distance_atr": 1.0, "expiry_hours": 4.0}))
+	s, err := ifvg.New(cfg(ifvg.ID, detectorParams(map[string]any{"epsilon_atr_fraction": 0.05, "maximum_zone_atr": 3.0, "entry_max_width_price": 5.0, "reaction_lookback_bars": 3.0, "engulfing_minimum_range_atr": 0.5, "minimum_strength": .4, "minimum_gap_atr": .5, "invalidation_buffer_atr": .5, "minimum_target_distance_atr": 1.0, "expiry_hours": 4.0})))
 	if err != nil {
 		t.Fatal(err)
 	}

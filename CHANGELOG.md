@@ -41,12 +41,29 @@ dated section after deployment.
   unit cases. The Python adapter accepts the new evidence codes
   (`m5_breakout_level_*`, `m5_breakout_accepted`, `m5_breakout_retest_confirmed`,
   `m1_execution_confirmed`) with no Python recomputation.
+- Supply, Demand, Order Block, FVG, iFVG, CRT and Confluence Zone now publish the
+  frozen Python technique publishers' confirmed reaction instead of their own
+  resting-zone judgement. The engine exposes the technique instances (scored
+  unmerged zones, iFVG inversions, CRT ranges) on the execution frame, and
+  `strategyutil.TechniqueSource` ports `_technique_reaction`, the confluence-band
+  merge and `confluence_zone_reaction`. Proven bar by bar on 2,957 decisions over
+  the XAU, EURUSD, GBPUSD, GBPJPY and USDJPY captures (`test/techniqueparity`,
+  oracle `1c9f323`); the one divergence is the frozen oracle's hard-coded 0.1 pip
+  sweep-grab tolerance, which is not copied for 0.01-pip pairs. Before, on XAU
+  only 3/28 FVG, 34/91 iFVG, 127/183 supply-demand and 4/4 order-block decisions
+  coincided with the oracle, with 11 to 97 extra firings each. Confirmed XAU
+  supply/demand opportunities on the replay capture fall from 193 to 147.
+- Fixed a GBPJPY frame mismatch found by that comparison: the instrument's
+  `analysis.levels.minimum_key_touches: 3` reached only the Key Level strategy, not
+  the key levels the zones are scored against; it now applies to both, as in the
+  frozen analysis.
 - XAU now observes but does not trade `ifvg` and `liquidity_sweep`
   (instrument-owned `overrides.execution.go_opportunity.observe_only_strategies`):
   Go still produces them, Algo Bot records `execution_contained` and builds no
   plan, and the engine leaves them out of arbitration. Both lost on XAU in both
   independent windows reviewed; Liquidity Sweep has no Python predecessor to
-  prove against. Remove a name to re-enable it.
+  prove against, and iFVG now matches the oracle but matching is not evidence that
+  it earns on XAU. Remove a name to re-enable it.
 - Range Sweep v3 is the Go port of the frozen XAU M5-setup/M1-confirm scalp lane
   (range width gate, dealing-range position, edge-touch sweep and reclaim,
   structural stop, scalp stop/target book), sharing one scalp context with
