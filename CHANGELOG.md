@@ -41,12 +41,31 @@ dated section after deployment.
   unit cases. The Python adapter accepts the new evidence codes
   (`m5_breakout_level_*`, `m5_breakout_accepted`, `m5_breakout_retest_confirmed`,
   `m1_execution_confirmed`) with no Python recomputation.
-- XAU now observes but does not trade `ifvg`, `liquidity_sweep` and `range_sweep`
+- XAU now observes but does not trade `ifvg` and `liquidity_sweep`
   (instrument-owned `overrides.execution.go_opportunity.observe_only_strategies`):
   Go still produces them, Algo Bot records `execution_contained` and builds no
-  plan, and the engine leaves them out of arbitration. iFVG and Liquidity Sweep
-  lost on XAU in both independent windows reviewed; Range Sweep is a simplified
-  port without the Python gates. Remove a name to re-enable it.
+  plan, and the engine leaves them out of arbitration. Both lost on XAU in both
+  independent windows reviewed; Liquidity Sweep has no Python predecessor to
+  prove against. Remove a name to re-enable it.
+- Range Sweep v3 is the Go port of the frozen XAU M5-setup/M1-confirm scalp lane
+  (range width gate, dealing-range position, edge-touch sweep and reclaim,
+  structural stop, scalp stop/target book), sharing one scalp context with
+  Breakout Retest (`strategyutil/scalpcontext.go`). Proven on real and
+  Python-generated synthetic M1 captures (`test/scalpparity`, 0 mismatches), so
+  it executes on XAU again. Range Sweep stays XAU-only.
+- Liquidity Sweep v3 is rebuilt on the frozen frame's liquidity grabs and pools
+  through the shared detector-contract qualification instead of the former
+  simplified sweep test. It stays contained on XAU.
+- Auto-algo XAU orders with a tight structural zone now get a separate-leg
+  ladder: `widen_tight_xau_zone` stretches a zone narrower than the configured
+  minimum (capped at half the stop distance) so the entry still splits into two
+  distinct limit legs instead of collapsing to one order. FX and legacy routes
+  are unchanged.
+- Fixed manual /algo pending orders surviving the end of the trade day: the
+  executor now withdraws every resting entry leg of a `cancel_on_expiry` plan
+  once its entry validity ends (keeping any filled position), and retires the
+  plan when nothing is open. Previously `plan_expired` only blocked new
+  submissions, so unfilled ladder legs stayed on the book.
 - Restored the independent Go `break_retest` strategy and completed Range
   Edge, and proved all five detector-contract strategies (`break_retest`,
   `range_edge`, `snap_back`, `momentum_ride`, `fade_scalp`) against the frozen

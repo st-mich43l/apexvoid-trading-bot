@@ -411,19 +411,38 @@ analysis:
       chop_edge_fraction: 0.25
       strict_premium_discount: true
     liquidity_sweep:
-      version: v2
+      version: v3
       enabled: true
+      # A sweep counts only as the frozen detector contract defined a liquidity
+      # event: a lone-extreme pool of the frozen window (equal levels are Fade
+      # Scalp's) cleared by the frozen equal-level band, closed back through with
+      # frozen grab grade A or B, the reversal's premium/discount location and the
+      # shared confluence floor.
+      strict_premium_discount: true
       minimum_rejection_body_atr: 0.3
       invalidation_buffer_atr: 0.25
       target_r: 2.0
       expiry_hours: 8.0
+    # Range Sweep Scalp — the Python discover_range_sweep of the profitable XAU
+    # week: the last 24 closed M5 bars form the range (at least 25 pips wide), a
+    # closed M1 bar touches or pierces an edge within the scalp buffer and closes
+    # back inside in the trade direction, and the dealing-range position agrees
+    # with the edge. Stop/target/spread and the location and trigger-age leaves
+    # are the shared auto_algo.strategies.scalping.* book, injected per
+    # instrument. XAU only: the frozen scalp lane hosted gold only.
     range_sweep:
-      version: v2
+      version: v3
       enabled: true
-      range_bars: 24
-      minimum_sweep_atr: 0.1
-      invalidation_buffer_atr: 0.2
-      expiry_hours: 2.0
+      symbols: [XAU]
+      setup_window_bars: 120
+      dealing_window_bars: 120
+      confirmation_window_bars: 60
+      context_max_age_seconds: 420
+      context_atr_bars: 14
+      active_range_bars: 24
+      expiry_minutes: 15
+      minimum_range_width_pips: 25
+      reward_risk_ladder: [2.0, 1.0]
     impulse_pullback:
       version: v2
       enabled: true
