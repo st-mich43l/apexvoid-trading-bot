@@ -4174,11 +4174,22 @@ public sealed partial class TradePlanRuntime(
       var raw = await store.GetStringAsync(
         PlanCancelKey(initial.PlanId), cancellationToken
       );
+      string source;
+      string reason;
       if (string.IsNullOrWhiteSpace(raw))
       {
-        continue;
+        // No explicit withdrawal: a plan whose validity has ended must not
+        // leave entry orders resting at the broker (cancel_on_expiry).
+        if (!HasExpiredWithRestingEntries(plan, initial))
+        {
+          continue;
+        }
+        (source, reason) = (PlanExpiredCancelSource, "entry validity ended");
       }
-      var (source, reason) = ParseCancelIntent(raw);
+      else
+      {
+        (source, reason) = ParseCancelIntent(raw);
+      }
       var state = initial;
       var legs = (state.Legs ?? []).ToList();
       bool StillResting(TradePlanLegRuntimeState leg) =>
@@ -4242,7 +4253,26 @@ public sealed partial class TradePlanRuntime(
       }
       var hasPosition = legs.Any(leg => leg.BrokerPositionId is not null);
       string outcome;
-      if (!hasPosition)
+      if (!hasPosition && source == PlanExpiredCancelSource)
+      {
+        await PersistPlanExecutionStateAsync(
+          plan.PlanId, "expired", null, cancellationToken, "plan_expired"
+        );
+        await PublishEventAsync(
+          "plan_expired",
+          $"TradePlan V8 expired {plan.Analysis.Direction} · "
+            + "resting entry orders withdrawn when the plan's validity ended",
+          plan,
+          cancellationToken
+        );
+        await ForgetPlanAsync(state.PlanId, cancellationToken);
+        outcome = hadResting ? "cancelled_pending_orders" : "cancelled_unsubmitted";
+        log(
+          $"v8 plan expired id={plan.PlanId} reason=cancel_on_expiry "
+          + $"outcome={outcome}"
+        );
+      }
+      else if (!hasPosition)
       {
         await PersistPlanExecutionStateAsync(
           plan.PlanId, "cancelled", null, cancellationToken,
@@ -4291,6 +4321,25 @@ public sealed partial class TradePlanRuntime(
       _cancelIntentsSettled.Add(plan.PlanId);
     }
   }
+
+  private const string PlanExpiredCancelSource = "plan_expired";
+
+  /// <summary>
+  /// True when the plan asked for cancel_on_expiry, its entry validity has
+  /// ended and at least one entry order is still resting at the broker. Legs
+  /// that already filled are positions and stay managed; only the unfilled
+  /// remainder is withdrawn.
+  /// </summary>
+  private bool HasExpiredWithRestingEntries(
+    TradePlan plan, TradePlanRuntimeState state
+  ) =>
+    plan.ExecutionPolicy.CancelOnExpiry
+    && clock().ToUnixTimeSeconds() >= plan.Entry.ExpiresAt
+    && (state.Legs ?? []).Any(leg =>
+      leg.BrokerOrderId is not null
+      && leg.BrokerPositionId is null
+      && leg.Stage is not TradePlanLegStages.Cancelled
+    );
 
   private static (string Source, string Reason) ParseCancelIntent(string raw)
   {

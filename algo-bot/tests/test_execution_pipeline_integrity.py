@@ -384,13 +384,12 @@ def test_market_route_publishes_the_quote_as_planned_entry():
   "strategy",
   ["Key Level", "Trendline"],
 )
-def test_reaction_family_falls_back_to_a_concrete_market_route_when_narrow(
+def test_reaction_family_on_a_narrow_xau_zone_gets_a_separate_leg_ladder(
   strategy,
 ):
-  """Reaction families now prefer a DCA-into-zone scale ladder (owner spec),
-  but with zone-fill disabled (this test's default cfg), a reaction family
-  must still resolve to a concrete single market fill - never an
-  unresolved `either` - exactly like before this change.
+  """A narrow XAU zone used to collapse a reaction family to ONE market fill.
+  XAU orders are a separate-leg ladder: the zone is widened toward the stop to
+  the minimum ladder width, L1 fills at the market and L2 rests deeper.
   """
   evaluation = evaluate_execution_policy(
     _policy_match(strategy=strategy),
@@ -403,8 +402,9 @@ def test_reaction_family_falls_back_to_a_concrete_market_route_when_narrow(
   assert evaluation.allowed
   assert evaluation.measured["order_type_preference"] == "limit"
   assert evaluation.measured["entry_distribution"] == "zone_scale"
-  assert evaluation.measured["planned_execution_route"] == "market"
-  assert evaluation.measured["planned_leg_entry_prices"] == []
+  assert evaluation.measured["planned_execution_route"] == "market_with_limit_scale"
+  legs = evaluation.measured["planned_leg_entry_prices"]
+  assert len(legs) == 2 and legs[0] != legs[1]
 
 
 def test_reward_risk_is_measured_against_the_final_absolute_stop():

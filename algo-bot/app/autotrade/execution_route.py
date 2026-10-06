@@ -129,6 +129,42 @@ def zone_split_qualifies(
   return width >= max(0.0, zone_fill_min_atr) * atr
 
 
+def widen_tight_xau_zone(
+  *,
+  side: str,
+  low: float,
+  high: float,
+  atr: float,
+  zone_fill_min_atr: float,
+  stop: float | None,
+) -> tuple[float, float]:
+  """Give a too-tight XAU entry zone the minimum width a shallow/deep ladder needs.
+
+  XAU orders are a separate-leg ladder (shallow near edge, deep inside the
+  zone). A zone narrower than ``zone_fill_min_atr`` ATR cannot be split, so the
+  order used to collapse to ONE leg (73-100 % of Confluence Zone, CRT,
+  Trendline, Flip Zone and Box/Break & Retest zones are that tight). The zone's
+  distal edge is moved toward the stop until the zone is the minimum width, but
+  never past halfway to the stop (the Manual Algo rule for a degenerate zone:
+  the deep leg is never beyond halfway to it). The near edge never moves; a zone
+  already wide enough, or one with no stop to bound it, is returned unchanged.
+  """
+  if stop is None or atr <= 0 or zone_fill_min_atr <= 0:
+    return low, high
+  minimum = zone_fill_min_atr * atr
+  if high - low >= minimum:
+    return low, high
+  if side == "BUY":
+    if stop >= low:
+      return low, high
+    room = (high - stop) / 2.0
+    return min(low, high - min(minimum, room)), high
+  if stop <= high:
+    return low, high
+  room = (stop - low) / 2.0
+  return low, max(high, low + min(minimum, room))
+
+
 def _scale_ladder_legs(
   *,
   side: str,
@@ -314,6 +350,11 @@ def resolve_execution_route_plan(
   quote = float(executable_quote)
   low = float(min(zone_low, zone_high))
   high = float(max(zone_low, zone_high))
+  if manual_xau_ladder and zone_fill_enabled:
+    low, high = widen_tight_xau_zone(
+      side=side, low=low, high=high, atr=atr,
+      zone_fill_min_atr=zone_fill_min_atr, stop=structural_stop,
+    )
   split_ok = zone_split_qualifies(
     zone_low=low,
     zone_high=high,

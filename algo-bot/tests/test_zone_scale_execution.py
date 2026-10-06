@@ -325,10 +325,11 @@ def test_scale_ladder_never_places_the_second_leg_past_the_far_edge():
   assert plan.planned_leg_entry_prices[1] == pytest.approx(4035.35)
 
 
-def test_narrow_zone_falls_back_to_a_single_entry_at_that_price():
-  # Zone width 0.3 with ATR=1.0 -> 0.3 < 0.5*ATR qualification floor, so the
-  # ladder is unavailable; must act like a single entry at the computed
-  # price rather than reject or silently keep waiting.
+def test_narrow_xau_zone_is_widened_to_the_minimum_ladder_width_toward_the_stop():
+  # Zone width 0.3 with ATR=1.0 is below the 0.5*ATR a ladder needs. XAU does
+  # not collapse to one entry: the distal edge moves toward the stop (never past
+  # halfway to it) until the zone is 0.5 ATR wide, then the Manual Algo
+  # shallow/deep ladder applies with separate legs.
   evaluation = evaluate_execution_policy(
     _policy_match(entry_low=4035.0, entry_high=4035.3),
     spot_price=4035.15,
@@ -338,8 +339,44 @@ def test_narrow_zone_falls_back_to_a_single_entry_at_that_price():
     cfg=_cfg(),
   )
   assert evaluation.allowed
-  assert evaluation.measured["planned_execution_route"] == "market"
-  assert evaluation.measured["planned_leg_entry_prices"] == []
+  legs = evaluation.measured["planned_leg_entry_prices"]
+  assert len(legs) == 2 and legs[0] != legs[1]
+  assert evaluation.measured["planned_leg_volume_ratios"] == pytest.approx([0.8, 0.2])
+
+
+def test_narrow_zone_still_falls_back_to_a_single_entry_off_the_xau_ladder():
+  # The widening is the XAU Manual Algo contract only; a route that does not
+  # adopt it (FX: manual_xau_ladder False) keeps the single entry.
+  plan = resolve_execution_route_plan(
+    direction="BUY",
+    order_type_preference="limit",
+    entry_distribution="zone_scale",
+    executable_quote=4035.15,
+    zone_low=4035.0,
+    zone_high=4035.3,
+    atr=1.0,
+    zone_fill_enabled=True,
+    zone_fill_min_atr=0.5,
+    structural_stop=4033.0,
+    manual_xau_ladder=False,
+  )
+  assert plan.planned_leg_entry_prices == ()
+
+
+def test_widen_tight_xau_zone_bounds():
+  from app.autotrade.execution_route import widen_tight_xau_zone
+
+  # BUY: the near edge (high) never moves; the far edge goes to high - 0.5 ATR.
+  assert widen_tight_xau_zone(side="BUY", low=100.0, high=100.3, atr=4.0, zone_fill_min_atr=0.5, stop=96.0) == (98.3, 100.3)
+  # Never past halfway to the stop.
+  assert widen_tight_xau_zone(side="BUY", low=100.0, high=100.3, atr=4.0, zone_fill_min_atr=0.5, stop=99.3) == (99.8, 100.3)
+  # SELL mirrors.
+  assert widen_tight_xau_zone(side="SELL", low=100.0, high=100.3, atr=4.0, zone_fill_min_atr=0.5, stop=104.3) == (100.0, 102.0)
+  # A zone already wide enough, or no stop to bound it, is unchanged.
+  assert widen_tight_xau_zone(side="BUY", low=98.0, high=100.3, atr=4.0, zone_fill_min_atr=0.5, stop=96.0) == (98.0, 100.3)
+  assert widen_tight_xau_zone(side="BUY", low=100.0, high=100.3, atr=4.0, zone_fill_min_atr=0.5, stop=None) == (100.0, 100.3)
+  # A degenerate zone gets the same minimum width.
+  assert widen_tight_xau_zone(side="BUY", low=100.0, high=100.0, atr=4.0, zone_fill_min_atr=0.5, stop=96.0) == (98.0, 100.0)
 
 
 def test_first_leg_fraction_and_step_are_configurable():
