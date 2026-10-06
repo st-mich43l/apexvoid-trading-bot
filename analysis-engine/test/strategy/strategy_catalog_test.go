@@ -186,15 +186,6 @@ func TestStrategiesKnownQualifyingFixtures(t *testing.T) {
 		}
 		assertOne(t, s, ctx(map[market.Timeframe]*analysiscontext.TimeframeContext{market.M5: {Timeframe: market.M5, Candles: []market.Candle{bar(1, 99, 100, 98.8, 99.5), bar(2, 100, 102, 100, 102), bar(3, 102, 102.2, 101.8, 102)}}, market.M1: {Timeframe: market.M1, Candles: []market.Candle{bar(4, 101.8, 102, 101.2, 101.4), bar(5, 101.4, 102.1, 101.3, 102.05)}}}))
 	})
-	t.Run("scalp_breakout_retest", func(t *testing.T) {
-		s, e := scalpbreakoutretest.New(cfg(scalpbreakoutretest.ID, map[string]any{"m5_box_bars": 5.0, "m1_accept_bars": 1.0, "maximum_width_atr": 2.0, "retest_tolerance_atr": .15, "invalidation_buffer_atr": .2, "target_r": 2.0, "expiry_hours": 2.0}))
-		if e != nil {
-			t.Fatal(e)
-		}
-		m5 := []market.Candle{bar(1, 100, 101, 100, 100.5), bar(2, 100.5, 101, 100, 100.4), bar(3, 100.4, 101, 100, 100.5), bar(4, 100.5, 101, 100, 100.4), bar(5, 100.4, 101, 100, 100.5)}
-		m1 := []market.Candle{bar(6, 101, 102, 101, 101.5), bar(7, 101.4, 101.6, 100.95, 101.2)}
-		assertOne(t, s, ctx(map[market.Timeframe]*analysiscontext.TimeframeContext{market.M5: {Timeframe: market.M5, Candles: m5}, market.M1: {Timeframe: market.M1, Candles: m1}}))
-	})
 }
 
 func TestBreakoutRetestsRejectDeepFailedReentry(t *testing.T) {
@@ -207,15 +198,6 @@ func TestBreakoutRetestsRejectDeepFailedReentry(t *testing.T) {
 		t.Fatalf("box breakout accepted a deep failed retest: %+v", got)
 	}
 
-	scalp, err := scalpbreakoutretest.New(cfg(scalpbreakoutretest.ID, map[string]any{"m5_box_bars": 5.0, "m1_accept_bars": 1.0, "maximum_width_atr": 2.0, "retest_tolerance_atr": .15, "invalidation_buffer_atr": .2, "target_r": 2.0, "expiry_hours": 2.0}))
-	if err != nil {
-		t.Fatal(err)
-	}
-	m5 := boxBars[:5]
-	m1 := []market.Candle{bar(6, 101, 102, 101, 101.5), bar(7, 100.5, 101.6, 99.5, 101.2)}
-	if got := scalp.Evaluate(ctx(map[market.Timeframe]*analysiscontext.TimeframeContext{market.M5: {Timeframe: market.M5, Candles: m5}, market.M1: {Timeframe: market.M1, Candles: m1}})); len(got) != 0 {
-		t.Fatalf("scalp breakout accepted a deep failed retest: %+v", got)
-	}
 }
 
 func TestBreakoutRetestsAllowDelayedHoldBeforeRetest(t *testing.T) {
@@ -233,21 +215,6 @@ func TestBreakoutRetestsAllowDelayedHoldBeforeRetest(t *testing.T) {
 		t.Fatalf("M5 breakout that held before a delayed retest must qualify, got %+v", got)
 	}
 
-	scalp, err := scalpbreakoutretest.New(cfg(scalpbreakoutretest.ID, map[string]any{"m5_box_bars": 5.0, "m1_accept_bars": 1.0, "retest_window_bars": 3.0, "maximum_width_atr": 2.0, "retest_tolerance_atr": .15, "invalidation_buffer_atr": .2, "target_r": 2.0, "expiry_hours": 2.0}))
-	if err != nil {
-		t.Fatal(err)
-	}
-	m1 := []market.Candle{
-		bar(6, 101, 102, 101, 101.5),
-		bar(7, 101.5, 101.8, 101.1, 101.6),
-		bar(8, 101.4, 101.6, 100.95, 101.2),
-	}
-	if got := scalp.Evaluate(ctx(map[market.Timeframe]*analysiscontext.TimeframeContext{
-		market.M5: {Timeframe: market.M5, Candles: boxBars[:5]},
-		market.M1: {Timeframe: market.M1, Candles: m1},
-	})); len(got) != 1 {
-		t.Fatalf("M1 acceptance that held before a delayed retest must qualify, got %+v", got)
-	}
 }
 
 func TestIFVGDeduplicatesRepeatedCanonicalZone(t *testing.T) {

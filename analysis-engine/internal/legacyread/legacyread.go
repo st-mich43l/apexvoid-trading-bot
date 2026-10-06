@@ -167,6 +167,19 @@ func Stage(candles []market.Candle, tf market.Timeframe, weekly []session.Level,
 		}
 	}
 	frame.Zones = techniquezone.ScoreZones(out.unscored, out.input)
+
+	// The profitable-week structure (see LegacyFrame.SwingLevels).
+	frame.SwingLevels = techniquezone.KeyLevels(swings, atr, cfg.LevelClusterATR, cfg.RoundStep, cfg.LevelMinimumTouches, cfg.MaximumClusterSpanMultiple, nil)
+	contractBlocks := techniquezone.BreakerBlocks(techniquezone.OrderBlocks(bars, frame.Legs, techniquezone.BOSBreaks(frame.Breaks), cfg.ZoneWidth), bars)
+	contractFlips := techniquezone.FlipZones(frame.SwingLevels, frame.Breaks, bars, cfg.FlipAcceptBars, cfg.FlipMaximumBreakAgeBars, cfg.FlipBandBodyFraction)
+	contract := make([]techniquezone.Zone, 0, len(supplyDemand)+len(contractBlocks)+len(contractFlips)+len(gaps))
+	contract = append(contract, supplyDemand...)
+	contract = append(contract, contractBlocks...)
+	contract = append(contract, contractFlips...)
+	contract = append(contract, gaps...)
+	contractInput := out.input
+	contractInput.Levels = frame.SwingLevels
+	frame.ContractZones = techniquezone.ScoreZones(techniquezone.MarkMitigation(techniquezone.MergeZones(contract, cfg.ZoneMergeOverlap, maxWidth), bars, maxInt(0, len(bars)-1)), contractInput)
 	scalp := cfg.Scalp
 	scalp.PipSize, scalp.RoundStep = cfg.PipSize, cfg.RoundStep
 	lines := make([]techniquezone.ScalpLine, 0, len(frame.Trendlines))

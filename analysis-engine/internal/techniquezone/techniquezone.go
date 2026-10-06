@@ -641,6 +641,18 @@ func SupplyDemand(bars []market.Candle, legs []Leg) []Zone {
 	return zones
 }
 
+// BOSBreaks keeps only the breaks of kind BOS: the structure breaks an order
+// block was qualified by before 21 Sep 2026 (a CHoCH did not qualify one).
+func BOSBreaks(breaks []Break) []Break {
+	var out []Break
+	for _, b := range breaks {
+		if b.Kind == "BOS" {
+			out = append(out, b)
+		}
+	}
+	return out
+}
+
 func causingBOS(leg Leg, breaks []Break) (Break, bool) {
 	for _, b := range breaks {
 		if (b.Kind != "BOS" && b.Kind != "CHoCH") || b.Direction != leg.Direction {

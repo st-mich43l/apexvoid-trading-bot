@@ -2,197 +2,95 @@
 
 ## Strategy ID / version
 
-`key_level`, `v2`. Implemented in
+`key_level`, `v3`. Implemented in
 `analysis-engine/internal/strategy/keylevel`. Algorithm versions:
-`structure=v2`, `liquidity=v1`, `zone=v1` (now used directly — see
-"Formation / trigger / confirmation"), `config=3`.
+`structure=v2`, `liquidity=v1`, `zone=v1`, `config=3`.
 
 ## Purpose / thesis
 
-Ported from the legacy Python detector (`app/analysis/detectors.py::
-key_level_reaction`), not the simplified proximity-only v1 this package
-originally shipped with (see "2026-09 port" below): a sufficiently touched
-level is a standing reaction zone only once its **role** is actually
-classified — support/resistance from an explicit structural kind, or (the
-level primitive only ever emits `"reaction"`/`"round"`, never an explicit
-kind) a role inferred from price position, with a genuine opposing
-supply/demand zone overlapping the level's own band allowed to contradict
-that naive inference rather than being ignored. A level several
-consecutive closes have already accepted through is reported **BROKEN**
-and never re-traded here — Break & Retest/Trendline own that
-reinterpretation. A bare touch is a technical observation, not a trade:
-only a real, closed-bar rejection produces a Candidate, and a level where
-both candidate directions independently confirm in the same evaluation is
-a genuine contradiction, discarded entirely.
+Key Level is the strategy that produced the profitable XAU week of
+14–18 Sep 2026 (+567 pips, 6W/3L, 67 %). `v3` is the Python detector of that
+week, `app/analysis/detectors.py::key_level_reaction` at commit `a1c77584`,
+running on the same detector-contract frame as Snap Back, Fade Scalp,
+Momentum Ride, Range Edge and Break & Retest, so the same bars give the same
+level, role, direction, reaction and entry.
 
-## Supported instruments / timeframes
+Why a rewrite: the previous Go `v2` only looked like that detector. Replayed
+over the same real bars, `v2` reproduced the Python entry band on **1 of 638**
+XAU decisions (its reaction band was the level's own narrow band, not the wider
+proximal band), missed 194 of them, fired 495 times where Python was silent,
+and emitted several candidates on 24 % of bars (it kept one per level and left
+the choice to downstream arbitration).
 
-Any symbol; single timeframe `M5`.
+## Decision
 
-## Required regime / structure / liquidity / location
+1. Levels are walked nearest first; a level with fewer than
+   `minimum_touches` touches is skipped.
+2. The reaction band is the wider of the level's own band and the proximal band
+   (`proximal_band_atr · ATR`).
+3. The closed-bar **role** (`internal/keylevel.Role`, ported 1:1 from
+   `key_level_role.py`) decides the direction tried: support → BUY,
+   resistance → SELL; an ambiguous level is bought when price is above it, sold
+   when below and, when price is inside the band, tried both ways. An accepted
+   break (`breakout_accept_bars` consecutive closes beyond the band) is
+   `broken_*` and skipped — Break & Retest owns it. `require_explicit_role`
+   (an instrument override) skips ambiguous levels.
+4. A live opposing zone overlapping the band of an ambiguous level contradicts
+   the naive reading: both sides are tried over the widened window and the zone's
+   edge is the level the opposite side reacts off.
+5. A direction needs a confirmed structural reaction off the band
+   (`evaluate_structural_reaction`: sweep reclaim, CHoCH rejection, strong
+   reclaim, wick rejection, engulfing). A level both sides confirm is a
+   contradiction and yields nothing.
+6. The reaction passes the shared qualification (`_finish`): the level on the
+   right side of price, the entry no further than `maximum_entry_atr`, and
+   confluence at or above `confluence_floor`.
+7. Of every level that qualifies **one** candidate is kept: the highest
+   confluence stars, the nearest level winning ties.
 
-- `level.Touches >= minimum_touches` and `level.Strength >= minimum_strength`
-  (both stricter-only floors this platform already had before the port;
-  the legacy detector had no per-level strength gate of its own).
-- `|currentPrice - level.Price| / ATR <= proximity_atr` (likewise a
-  platform pre-filter, not present in the legacy detector, which relied on
-  confirmation alone to bound relevance).
-- `role` (`internal/keylevel.Role`, ported 1:1 from `key_level_role.py`)
-  is not `BrokenSupport`/`BrokenResistance`.
-- A real, closed-bar rejection (see below) confirms exactly one direction.
-- An opposing-side liquidity pool exists at the required distance, for the
-  confirmed direction's target.
-- `ctx.Volatility.ATR > 0` and at least one closed M5 candle exists.
+Key Level is never vetoed by the higher-timeframe bias; a counter-bias reaction
+trades with fewer stars (it loses the 4-point `htf_aligned` factor).
 
-## Formation / trigger / confirmation
+## Detector contract
 
-`internal/keylevel` owns level clustering (price-clustered swings +
-round-number levels + wick-touch enrichment); `internal/keylevel.Role`
-owns role classification from a closes series (ported 1:1 from
-`key_level_role.py`) — both existed before this port but the strategy
-itself never wired `Role` up, believing (per this doc's own prior text)
-that `MarketContext` exposed no raw candle feed. That was stale: every
-`TimeframeContext` has carried a `Candles []market.Candle` field
-("Strategies may inspect price action") since Analysis Engine V2, and 11
-other strategies (supply, demand, crt, trendline, ...) already read it.
-This strategy now does too, for two things the legacy detector needed and
-the v1 port skipped:
+`detector_contract: profit_week` reads the structure as it was in the profitable
+week: levels counted from fractal swings only, and order blocks qualified by a
+BOS break only. Two later Python changes (21 Sep: wick-touch episodes counted
+into a level's touches; CHoCH-caused order blocks) moved Key Level's decisions:
+over the same XAU bars the later detector gave a different decision on 121 of
+the 686 bars where either fired (18 %) — most often 3 stars where the
+profitable week gave 2, and 48 bars only it fired on. `current` selects the structure the other
+detectors read. The permanent parity test fails (121 mismatches on XAU)
+if `current` is selected.
 
-1. **Role.** `closes` from `Candles` classifies each level BROKEN /
-   AMBIGUOUS / (explicit) SUPPORT / RESISTANCE — `breakout_accept_bars`
-   consecutive closes beyond the band before a level is reported broken.
-   `key_levels()`'s own levels are always `kind` `"reaction"`/`"round"`,
-   never an explicit label, so role is in practice always BROKEN or
-   AMBIGUOUS for this strategy's own levels.
-2. **Opposing-zone contradiction** (`opposing.go`, ported from
-   `detectors.py::_opposing_zone_contradicts`). AMBIGUOUS role falls back
-   to a naive price-position guess (price above the level → support →
-   BUY; below → resistance → SELL). A real, unmitigated (not
-   `Invalidated`/`Mitigated`) opposing-side zone (`ctx.Timeframes[M5].
-   Zones.Zones`) overlapping the level's own band means that guess might
-   be wrong: rather than flip it outright, both directions are tried, the
-   reaction window widens to the opposing zone's own bounds, and real
-   confirmation decides.
-3. **Confirmation** (`confirmation.go`). Generalizes supply/demand's own
-   `confirmedRejection` (zone-specific) to an arbitrary `[low, high]` band
-   + direction, since a `Level` carries none of `zone.Zone`'s lifecycle
-   fields. A touch (the band and the bar's range overlap) followed by a
-   directional close outside the band — same bar or the immediately next
-   one — confirms; a stale historical touch never creates a delayed
-   confirmation. This is Key Level's own rejection-only shape, the same
-   confirmation sophistication supply/demand already have in this engine
-   — **not** a port of the legacy Python candle-pattern library
-   (engulfing/sweep-reclaim/CHoCH-aware grabs), which this port does not
-   attempt to replicate. A multi-bar reaction lookback (rather than
-   current-or-previous-bar only) is the main capability gap left against
-   the legacy detector's `evaluate_structural_reaction`.
+## Filters Go had that the profitable system did not
 
-If both directions confirm for the same level in the same evaluation,
-neither survives (see Purpose).
+`minimum_strength`, `proximity_atr` and the requirement of an opposing liquidity
+pool as a target were Go additions, not Python behavior. They are removed as
+gates. The reported target is the nearest opposing liquidity pool at least
+`minimum_target_distance_atr · ATR` away, else `fallback_target_r` times the
+risk beyond the entry; whether the available room suffices is the execution
+policy's decision, as it was.
 
-## Entry / invalidation / target
+## Candidate
 
-- **Entry**: the (possibly opposing-zone-widened) reaction band —
-  `levelPrice ± level.Band`, or wider when an opposing zone contradicted
-  the naive guess.
-- **Invalidation**: anchored to the level's own price for the level's own
-  direction, or to the opposing zone's own contradicting edge for the
-  direction that only exists because of it — support (Buy) →
-  `anchor - level.Band - invalidation_buffer_atr*ATR`; resistance (Sell) →
-  `anchor + level.Band + invalidation_buffer_atr*ATR`.
-- **Target**: nearest opposing-side liquidity pool at least
-  `minimum_target_distance_atr*ATR` from the (possibly widened) entry
-  band's far edge — unchanged by this port.
+Entry is the reaction band; invalidation is beyond its outer edge by
+`invalidation_buffer_atr · ATR`. `StructuralID` is the level
+(`keylevel:<kind>:<price>`), not the confirmation, so a re-confirmation of the
+same level is the same thesis. `DetectorConfluence` carries the stars and the
+machine-readable factors (`htf_aligned`, `touches`, `wick_rejection`,
+`displacement_grade`, `structural_agreement`, `session_context`, `fib_touch`,
+`choch`).
 
-## Expiry
+## Evidence
 
-`expiry_hours` after the confirming candle's own closed-bar time.
-
-## Failure cases / anti-patterns
-
-Insufficient touches, below-threshold strength, too far from current
-price, BROKEN role, no closed candle yet (a genuinely fresh symbol —
-"insufficient history"), no confirmed rejection yet (a resting
-observation), both directions independently confirming (genuine
-contradiction), no opposing liquidity for the confirmed direction, zero
-ATR.
-
-## Quality components / evidence codes
-
-`proximity_quality` (`1 - distanceATR/proximityLimitATR`), `touch_quality`
-(`Touches/5`, capped at 1), `strength_quality` (`level.Strength`) —
-unchanged by this port.
-
-Evidence codes: `m5_key_level_<kind>` (`reaction`/`round`),
-`m5_key_level_touches_sufficient`, `m5_key_level_role_<role>`
-(`support`/`resistance`/`ambiguous`), `m5_key_level_rejection_confirmed`,
-and (only when an opposing zone widened the reaction band)
-`m5_key_level_opposing_zone_widened`.
-
-## Bullish / bearish examples
-
-Price above the level with no opposing structure → Buy (naive support).
-Price below → Sell (naive resistance). A real opposing supply zone
-overlapping a level price sits above → both directions tried, entry
-widened to the zone's own edge, only the one that actually closes back
-outside the widened band confirms.
-
-## Valid / invalid examples
-
-Valid: as above, once confirmed by a real closed-bar rejection. Invalid:
-`Touches` below the configured floor, price > `proximity_atr` away, role
-BROKEN, no closed candle to derive a current price from, no confirmed
-rejection, both directions confirming
-(`test/strategy/keylevel/keylevel_test.go`).
-
-## Known old-engine false positive
-
-None specifically flagged for the reaction-to-key-level thesis itself in
-the catalog (row 1) beyond the general primitive/strategy split — the
-level clustering (`levels.py`) was `TECHNIQUE_ONLY` even in the legacy
-audit; this strategy is a genuinely new, explicit tradeability layer on
-top of it.
-
-## Deduplication identity
-
-`internal/keylevel` re-clusters from the current swing window on every
-closed bar, so `levelPrice` can differ by a tiny amount between two
-evaluations of what is really the same ongoing level. The original
-`setupKey` used `levelPrice` at raw 6-decimal precision, so that jitter
-produced a new `SetupKey` (and therefore a new deterministic opportunity
-ID) almost every evaluation — running against real XAU M5 data
-(`cmd/replay`) surfaced 147 "live" `key_level` opportunities across a
-300-bar/25-hour window for what was really a much smaller number of
-distinct levels.
-
-S11 removed that self-referential bucket. A reaction level now inherits a
-stable ID from its earliest canonical structural swing; a round level is
-anchored to its configured round price. Clustering, wick enrichment and small
-band/price changes preserve that ID. Direction remains part of the opportunity
-identity, so a genuine support/resistance role transition is still distinct.
-`setupKey` since the 2026-09 port also carries the confirming candle's own
-touch/confirmation bar times, so a later distinct reaction on the same
-level is its own opportunity rather than colliding with an earlier one.
-
-The same real 300-bar XAU M5 replay now discovers 18 `key_level`
-opportunities rather than the prior 147, while deterministic variation tests
-prove that ATR/band jitter preserves identity and distinct anchors remain
-distinct. This is structural identity repair, not an output-count cap.
-
-## 2026-09 port: role classification and opposing-zone awareness
-
-Owner-directed (2026-09-28): the v1 Go strategy above was a simplified,
-proximity-only rebuild — no role classification, no opposing-structure
-awareness, no closed-bar confirmation — documented at the time as a real
-platform limitation (`MarketContext` believed to expose no raw candle
-feed). That belief was stale; see "Formation / trigger / confirmation."
-This port wires up the already-existing, already-tested `internal/
-keylevel.Role` primitive and adds `opposing.go`/`confirmation.go`,
-faithfully reproducing the legacy detector's role-classification and
-opposing-zone-contradiction decision logic (not its deeper candle-pattern
-confirmation library — see the confirmation bullet above for the disclosed
-scope reduction there). Full real-capture replay (`test/replaycapture`)
-discovers 1731 total candidates across all strategies against the
-committed XAU capture, versus 1702 before this port (+29, `key_level`'s
-own share of that difference not isolated here) — golden regenerated
-2026-09-28, `analysis-engine/testdata/replay-go-xau-20260921.meta.json`.
+- `test/keylevelparity`: replays the committed real XAU, GBPUSD and USDJPY
+  captures (3 × 1351 closed M5 bars) and requires the same decision as the
+  Python detector on every bar — 1989 decisions, 0 mismatches — including
+  silence where Python was silent. The golden is produced by running the
+  Python (`generate_oracle_golden.py`), never by Go.
+- `internal/strategy/keylevel` unit tests: support BUY, resistance SELL,
+  broken support/resistance skipped, ambiguous resolution by price, opposing-zone
+  contradiction and widened window, both-sides discard, best-of-several (and the
+  nearest on a tie), counter-bias, entry too far, confluence floor, minimum
+  touches, explicit-role requirement, target selection, contract selection.
