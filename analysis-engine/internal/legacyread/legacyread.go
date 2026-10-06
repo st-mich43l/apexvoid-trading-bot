@@ -39,8 +39,13 @@ type Config struct {
 	MinPrimaryHTFWarmupBars int
 	AllowCounterTrend       bool
 
-	LevelClusterATR            float64
-	LevelMinimumTouches        int
+	LevelClusterATR     float64
+	LevelMinimumTouches int
+	// FrameLevelMinimumTouches is the instrument's analysis.levels.minimum_key_touches
+	// override, which the frozen analysis applied to every level it built (and so
+	// to the zones scored against them). Zero means no override. The profitable-
+	// week SwingLevels contract keeps LevelMinimumTouches.
+	FrameLevelMinimumTouches   int
 	MaximumClusterSpanMultiple float64
 	DisplacementATRMult        float64
 	MomentumBodyFraction       float64
@@ -72,8 +77,10 @@ type Config struct {
 type stageOne struct {
 	frame analysiscontext.LegacyFrame
 	input techniquezone.ScoreInputs
-	// unscored are the merged, mitigation-stamped zones.
-	unscored []techniquezone.Zone
+	// unscored are the merged, mitigation-stamped zones; techniqueUnscored the
+	// unmerged technique zones.
+	unscored          []techniquezone.Zone
+	techniqueUnscored []techniquezone.Zone
 }
 
 // Stage computes one timeframe's frame from its closed candles. weekly are the
@@ -113,7 +120,11 @@ func Stage(candles []market.Candle, tf market.Timeframe, weekly []session.Level,
 		})
 	}
 	frame.Trendlines = trendline.Build(bars, atr, canonical, cfg.Trendline)
-	frame.Levels = techniquezone.KeyLevels(swings, atr, cfg.LevelClusterATR, cfg.RoundStep, cfg.LevelMinimumTouches, cfg.MaximumClusterSpanMultiple, bars)
+	frameTouches := cfg.LevelMinimumTouches
+	if cfg.FrameLevelMinimumTouches > 0 {
+		frameTouches = cfg.FrameLevelMinimumTouches
+	}
+	frame.Levels = techniquezone.KeyLevels(swings, atr, cfg.LevelClusterATR, cfg.RoundStep, frameTouches, cfg.MaximumClusterSpanMultiple, bars)
 	frame.Legs = techniquezone.Displacement(bars, atr, cfg.DisplacementATRMult, cfg.MomentumBodyFraction)
 
 	supplyDemand := techniquezone.BreakerBlocks(techniquezone.SupplyDemand(bars, frame.Legs), bars)
@@ -167,6 +178,12 @@ func Stage(candles []market.Candle, tf market.Timeframe, weekly []session.Level,
 		}
 	}
 	frame.Zones = techniquezone.ScoreZones(out.unscored, out.input)
+	singles := make([]techniquezone.Zone, 0, len(supplyDemand)+len(orderBlocks)+len(gaps))
+	singles = append(singles, supplyDemand...)
+	singles = append(singles, orderBlocks...)
+	singles = append(singles, gaps...)
+	out.techniqueUnscored = techniquezone.MarkMitigation(techniquezone.AsSingleZones(singles), bars, maxInt(0, len(bars)-1))
+	frame.TechniqueZones = techniquezone.ScoreZones(out.techniqueUnscored, out.input)
 
 	// The profitable-week structure (see LegacyFrame.SwingLevels).
 	frame.SwingLevels = techniquezone.KeyLevels(swings, atr, cfg.LevelClusterATR, cfg.RoundStep, cfg.LevelMinimumTouches, cfg.MaximumClusterSpanMultiple, nil)
@@ -224,6 +241,11 @@ func Complete(staged map[market.Timeframe]Staged) map[market.Timeframe]*analysis
 			input.HTFZones = higher
 			frame.Zones = techniquezone.ScoreZones(frame.Zones, input)
 			frame.OrderBlocks = orderBlockView(frame.Zones)
+		}
+		if len(higher) > 0 && len(stage.techniqueUnscored) > 0 {
+			input := stage.input
+			input.HTFZones = higher
+			frame.TechniqueZones = techniquezone.ScoreZones(frame.TechniqueZones, input)
 		}
 		higher = append(higher, frame.Zones...)
 		copied := frame

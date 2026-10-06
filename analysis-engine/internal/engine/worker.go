@@ -401,6 +401,9 @@ func (w *SymbolWorker) attachLegacyRead() {
 		staged[tf] = cached.staged
 	}
 	frames := legacyread.Complete(staged)
+	if exec := frames[w.settings.PrimaryTimeframe]; exec != nil {
+		exec.Techniques = techniqueInstanceSource(exec, frames[market.H1], w.settings)
+	}
 	for tf, frame := range frames {
 		w.state.Context.Timeframes[tf].Legacy = frame
 	}

@@ -488,14 +488,14 @@ instruments:
       execution:
         # Analysis stays on for these strategies (the opportunities are still
         # produced, stored and decided with reason execution_contained) but no
-        # XAU TradePlan is built from them until each one is proven against the
-        # Python behavior it replaced. Phase 1 (2026-10): iFVG and Liquidity
-        # Sweep lost on XAU in both independent windows reviewed. Liquidity
-        # Sweep has no Python predecessor to prove against; iFVG is held until
-        # its decision parity with the frozen technique detector is shown.
-        # Range Sweep was proven against the frozen scalp lane (real and
-        # synthetic M1 captures, 0 mismatches) and executes again. Removing a
-        # name here re-enables its execution; nothing else changes.
+        # XAU TradePlan is built from them. Phase 1 (2026-10): iFVG and Liquidity
+        # Sweep lost on XAU in both independent windows reviewed. iFVG's decisions
+        # now match the frozen Python publisher bar for bar (test/techniqueparity),
+        # but matching Python is not evidence that it earns on XAU, so it stays
+        # contained until the owner re-enables it. Liquidity Sweep has no Python
+        # predecessor to prove against. Range Sweep was proven against the frozen
+        # scalp lane (real and synthetic M1 captures, 0 mismatches) and executes.
+        # Removing a name here re-enables its execution; nothing else changes.
         go_opportunity:
           observe_only_strategies:
             - ifvg

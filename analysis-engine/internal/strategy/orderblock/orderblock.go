@@ -50,6 +50,8 @@ type Config struct {
 	Reaction strategyutil.ReactionConfig
 	// Technique is the legacy Python technique validation (see strategyutil).
 	Technique strategyutil.TechniqueGeometry
+	// Legacy qualifies the confirmed reaction through the frozen detector contract.
+	Legacy strategyutil.LegacyDetectorSettings
 }
 
 // Strategy is OrderBlockStrategy.
@@ -100,6 +102,10 @@ func parseConfig(params map[string]any) (Config, error) {
 	if expiryHours <= 0 {
 		return Config{}, fmt.Errorf("expiry_hours must be > 0")
 	}
+	legacyConfig, err := strategyutil.ParseLegacyDetectorSettings(params)
+	if err != nil {
+		return Config{}, err
+	}
 	reactionConfig, err := strategyutil.ParseReactionConfig(params)
 	if err != nil {
 		return Config{}, err
@@ -110,7 +116,7 @@ func parseConfig(params map[string]any) (Config, error) {
 	}
 	return Config{
 		MinimumStrength: minimumStrength, MinimumZoneATR: minimumZone, InvalidationBufferATR: invalidationBuffer,
-		MinimumTargetDistanceATR: minimumTargetDistance, ExpiryHours: expiryHours, Reaction: reactionConfig, Technique: techniqueConfig,
+		MinimumTargetDistanceATR: minimumTargetDistance, ExpiryHours: expiryHours, Reaction: reactionConfig, Technique: techniqueConfig, Legacy: legacyConfig,
 	}, nil
 }
 
@@ -135,7 +141,22 @@ func (s *Strategy) RequiredTimeframes() []market.Timeframe {
 	return []market.Timeframe{s.timeframe}
 }
 
+// Evaluate emits the resting-zone observations and, separately, the confirmed
+// reaction the frozen publisher (technique_detectors) decides on the frame's
+// technique instances.
 func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate {
+	return append(s.resting(ctx), strategyutil.ConfirmedTechnique(ctx, s.cfg.Legacy, strategyutil.TechniqueOrderBlock, "", strategyutil.TechniqueSpec{
+		ID: string(ID), Version: Version, ZoneEvidence: "m5_order_block_confirmed", ConfirmedEvidence: "m5_order_block_rejection_confirmed",
+		InvalidationLabel: "order_block_invalidated", InvalidationBufferATR: s.cfg.InvalidationBufferATR,
+		MinimumTargetDistanceATR: s.cfg.MinimumTargetDistanceATR, ExpiryHours: s.cfg.ExpiryHours, Fingerprint: s.fingerprint,
+		Versions: opportunity.AnalysisProvenance{
+			StructureVersion: structureVersion, LiquidityVersion: liquidityVersion, ZoneVersion: zoneVersionUsed,
+			ConfigVersion: configVersion, ConfigFingerprint: s.fingerprint,
+		},
+	})...)
+}
+
+func (s *Strategy) resting(ctx *context.MarketContext) []opportunity.Candidate {
 	tfCtx, ok := ctx.Timeframes[s.timeframe]
 	if !ok {
 		return nil
@@ -227,21 +248,6 @@ func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate 
 			},
 		}
 		candidates = append(candidates, candidate)
-		if rc := strategyutil.ConfirmReaction(tfCtx, z.ID, direction, float64(z.Low), float64(z.High), atr, z.CreatedAt, s.cfg.Reaction); rc != nil &&
-			s.cfg.Technique.ProximalRetest(direction, float64(z.Low), float64(z.High), strategyutil.LastClose(tfCtx.Candles), atr) &&
-			strategyutil.WidthWithinATR(float64(z.Low), float64(z.High), atr, s.cfg.Technique.MaximumZoneATR) &&
-			strategyutil.BodyFractionAt(tfCtx.Candles, z.OriginTime) >= s.cfg.Technique.MomentumBodyFraction {
-			// The resting-zone opportunity remains a technical observation;
-			// only a distinct, causally identified reaction can enter Algo
-			// Bot's confirmed-zone policy.
-			confirmedBase := candidate
-			if clipLow, clipHigh, clipped := s.cfg.Technique.ClipEntry(direction, float64(z.Low), float64(z.High)); clipped {
-				confirmedBase.Entry = opportunity.EntryZone{Low: clipLow, High: clipHigh}
-			}
-			if confirmed, confirmErr := strategyutil.ConfirmedVariant(confirmedBase, rc, z.ID, z.CreatedAt, s.cfg.ExpiryHours, "m5_order_block_rejection_confirmed"); confirmErr == nil {
-				candidates = append(candidates, confirmed)
-			}
-		}
 	}
 	return candidates
 }

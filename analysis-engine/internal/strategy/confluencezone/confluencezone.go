@@ -24,6 +24,7 @@ type Strategy struct {
 	invalidationATR, targetATR, expiryHours float64
 	fingerprint                             string
 	reaction                                strategyutil.ReactionConfig
+	legacy                                  strategyutil.LegacyDetectorSettings
 }
 
 func New(c strategy.Config) (strategy.Strategy, error) {
@@ -53,11 +54,28 @@ func New(c strategy.Config) (strategy.Strategy, error) {
 	if e != nil {
 		return nil, e
 	}
-	return &Strategy{facts, invalid, target, expiry, strategyutil.Fingerprint(string(c.ID), c.Version, c.Parameters), reaction}, nil
+	legacy, e := strategyutil.ParseLegacyDetectorSettings(c.Parameters)
+	if e != nil {
+		return nil, e
+	}
+	return &Strategy{facts, invalid, target, expiry, strategyutil.Fingerprint(string(c.ID), c.Version, c.Parameters), reaction, legacy}, nil
 }
 func (s *Strategy) ID() strategy.StrategyID                { return ID }
 func (s *Strategy) RequiredTimeframes() []market.Timeframe { return []market.Timeframe{market.M5} }
+
+// Evaluate emits the resting overlap observation and, separately, the confirmed
+// reaction the frozen Confluence Zone publisher
+// (technique_detectors.confluence_zone_reaction) decides on the technique
+// instances: two or more distinct techniques merged into one band.
 func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Candidate {
+	return append(s.resting(ctx), strategyutil.ConfirmedTechnique(ctx, s.legacy, "confluence_zone", "", strategyutil.TechniqueSpec{
+		ID: string(ID), Version: Version, ZoneEvidence: "m5_distinct_zone_overlap", ConfirmedEvidence: "m5_confluence_reaction",
+		InvalidationLabel: "confluence_overlap_failed", InvalidationBufferATR: s.invalidationATR,
+		MinimumTargetDistanceATR: s.targetATR, ExpiryHours: s.expiryHours, Fingerprint: s.fingerprint,
+	})...)
+}
+
+func (s *Strategy) resting(ctx *analysiscontext.MarketContext) []opportunity.Candidate {
 	tf := ctx.Timeframes[market.M5]
 	bar, ok := strategyutil.LastBar(ctx, market.M5)
 	atr := ctx.Volatility.ATR
@@ -104,11 +122,6 @@ func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Ca
 		c, e := strategyutil.Candidate(strategyutil.CandidateSpec{ID: string(ID), Version: Version, SetupKey: "overlap:" + strings.Join(ids, "+"), Symbol: ctx.Symbol, Direction: direction, EntryLow: low, EntryHigh: high, Invalidation: invalid, InvalidationLabel: "confluence_overlap_failed", Target: float64(target), TargetLabel: "opposing_liquidity", Evidence: []string{"m5_distinct_zone_overlap", "m5_confluence_reaction"}, Quality: opportunity.StrategyQuality{Overall: q, Components: map[string]float64{"independent_facts": q, "location": 1}}, FormedAt: a.OriginTime, ConfirmedAt: bar.Time, ExpiryHours: s.expiryHours, Fingerprint: s.fingerprint})
 		if e == nil {
 			result := []opportunity.Candidate{c}
-			if rc := strategyutil.ConfirmReaction(tf, strings.Join(ids, "+"), direction, low, high, atr, a.CreatedAt, s.reaction); rc != nil {
-				if confirmed, confirmErr := strategyutil.ConfirmedVariant(c, rc, strings.Join(ids, "+"), a.OriginTime, s.expiryHours, "m5_confluence_rejection_confirmed"); confirmErr == nil {
-					result = append(result, confirmed)
-				}
-			}
 			return result
 		}
 	}
