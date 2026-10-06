@@ -105,3 +105,34 @@ func TestApplyInstrument_UsesResolvedPerInstrumentStopEnvelope(t *testing.T) {
 		}
 	}
 }
+
+func TestApplyInstrument_XAUObservesButDoesNotTradeTheContainedStrategies(t *testing.T) {
+	doc, err := config.ResolveDocument(filepath.Join("..", "..", "..", "config", "apexvoid.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	observed := func(symbol string) map[opportunity.StrategyID]bool {
+		settings, err := engine.LoadSettings(doc, "M5", false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := engine.ApplyInstrument(&settings, doc, symbol); err != nil {
+			t.Fatal(err)
+		}
+		return settings.ObserveOnly
+	}
+	xau := observed("XAU")
+	if len(xau) != 3 || !xau["ifvg"] || !xau["liquidity_sweep"] || !xau["range_sweep"] {
+		t.Fatalf("XAU observe-only = %v, want ifvg, liquidity_sweep, range_sweep", xau)
+	}
+	for _, kept := range []opportunity.StrategyID{"key_level", "scalp_breakout_retest", "fvg", "confluence_zone"} {
+		if xau[kept] {
+			t.Errorf("%s must keep executing on XAU", kept)
+		}
+	}
+	for _, symbol := range []string{"EURUSD", "GBPUSD", "GBPJPY", "USDJPY"} {
+		if got := observed(symbol); len(got) != 0 {
+			t.Errorf("%s observe-only = %v, want none: containment is XAU-only", symbol, got)
+		}
+	}
+}

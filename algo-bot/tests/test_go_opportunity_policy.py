@@ -544,6 +544,28 @@ async def test_unconfigured_scope_defaults_to_go_in_global_go_mode(h):
   assert await h.decisions() == [{"outcome": "match_written", "reason": "go_live", "mode": "go"}]
 
 
+@pytest.mark.no_database
+def test_xau_observes_but_does_not_trade_the_contained_strategies():
+  assert pol.observe_only_strategies("XAU") == {"ifvg", "liquidity_sweep", "range_sweep"}
+  # Containment is instrument-owned: the other instruments and every strategy
+  # not named (Key Level, Breakout Retest Scalp, ...) are untouched.
+  for symbol in ("EURUSD", "GBPUSD", "GBPJPY", "USDJPY"):
+    assert pol.observe_only_strategies(symbol) == frozenset()
+  assert not {"key_level", "scalp_breakout_retest", "fvg"} & pol.observe_only_strategies("XAU")
+
+
+@pytest.mark.asyncio
+async def test_a_contained_xau_strategy_is_recorded_but_never_becomes_a_match(h):
+  await h.activate()
+  raw = golden(int(h.clock.now))
+  raw["payload"]["strategy"] = "ifvg"
+  raw["payload"]["evidence"] = [{"code": "m5_ifvg_confirmed"}]
+  ev = parse_analysis_event(OpportunityTopic, json.dumps(raw))
+  assert await h.deliver(ev) == "not_adapted"
+  assert await redis_state.get_client().get(strategy_matches_key("XAU")) is None
+  assert await h.decisions() == [{"outcome": "not_adapted", "reason": "execution_contained", "mode": "go"}]
+
+
 @pytest.mark.asyncio
 async def test_live_go_writes_a_confirmed_setup_and_one_match_idempotently(h):
   await h.activate()

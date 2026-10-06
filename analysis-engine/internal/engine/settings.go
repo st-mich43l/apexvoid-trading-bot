@@ -94,6 +94,13 @@ type Settings struct {
 	// this true at construction.
 	AllowReplaceForming bool
 
+	// ObserveOnly names the strategies this instrument analyses but never trades
+	// (instruments.<SYMBOL>.overrides.execution.go_opportunity.
+	// observe_only_strategies, the same leaf Algo Bot's adapter reads). Their
+	// opportunities are still produced and published, but they take no part in
+	// arbitration: a contained setup must not suppress or hold an executable one.
+	ObserveOnly map[opportunity.StrategyID]bool
+
 	// OnEvaluation, when set, receives every strategy candidate produced by
 	// one closed bar after the engine has attached its technical/confluence
 	// context and before the lifecycle de-duplicates it. It observes only; it
@@ -210,5 +217,10 @@ func LoadSettings(doc *config.Document, primary market.Timeframe, allowReplaceFo
 	settings.LegacyRead.PipSize = settings.TechniqueZones.Technique.PipSize
 	settings.LegacyRead.RoundStep = settings.KeyLevel.RoundStep
 	applyLegacyDetector(&settings)
+	// Seed the Breakout Retest Scalp the same way so construction is fail-closed
+	// before a symbol is attached; ApplyInstrument sets the instrument scale.
+	if err := applyScalpBreakoutRetest(&settings, doc); err != nil {
+		return Settings{}, err
+	}
 	return settings, nil
 }

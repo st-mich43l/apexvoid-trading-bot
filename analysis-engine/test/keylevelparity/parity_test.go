@@ -17,6 +17,8 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/config"
@@ -129,6 +131,12 @@ func TestKeyLevelMatchesTheProfitableWeekPython(t *testing.T) {
 					failures = append(failures, fmt.Sprintf("%s bar %d: reaction bars Go %d/%d, Python %v/%v", symbol, bar, touch, confirm, expected.TouchBar, expected.ConfirmationBar))
 				case c.Reaction == nil || c.Reaction.Pattern != expected.ConfirmationTyp:
 					failures = append(failures, fmt.Sprintf("%s bar %d: reaction type differs from Python %s", symbol, bar, expected.ConfirmationTyp))
+				case !hasEvidence(c, "m5_key_level_role_"+expected.Role) || !hasEvidence(c, "m5_key_level_"+expected.StructuralKind):
+					failures = append(failures, fmt.Sprintf("%s bar %d: role/kind Go %v, Python %s/%s", symbol, bar, evidenceCodes(c), expected.Role, expected.StructuralKind))
+				case c.DetectorConfluence == nil || c.DetectorConfluence.Factors.Touches != expected.SourceTouches:
+					failures = append(failures, fmt.Sprintf("%s bar %d: level touches differ from Python %d", symbol, bar, expected.SourceTouches))
+				case !levelMatches(c, expected.KeyLevel, tick):
+					failures = append(failures, fmt.Sprintf("%s bar %d: level %s, Python %.5f", symbol, bar, c.StructuralID, expected.KeyLevel))
 				default:
 					totalMatched++
 				}
@@ -152,4 +160,37 @@ func TestKeyLevelMatchesTheProfitableWeekPython(t *testing.T) {
 
 func describe(c opportunity.Candidate) string {
 	return fmt.Sprintf("%s %.5f-%.5f", c.Direction, c.Entry.Low, c.Entry.High)
+}
+
+func evidenceCodes(c opportunity.Candidate) []string {
+	out := make([]string, len(c.Evidence))
+	for i, e := range c.Evidence {
+		out[i] = e.Code
+	}
+	return out
+}
+
+func hasEvidence(c opportunity.Candidate, code string) bool {
+	for _, e := range c.Evidence {
+		if e.Code == code {
+			return true
+		}
+	}
+	return false
+}
+
+// levelMatches compares the level Python reacted off. Its key_level is the level
+// price, except when an opposing zone widened the window and the opposite side
+// reacts off the zone's own edge, then it is that edge (the strategy's
+// structural identity stays the level itself).
+func levelMatches(c opportunity.Candidate, want, tick float64) bool {
+	parts := strings.Split(c.StructuralID, ":")
+	price, err := strconv.ParseFloat(parts[len(parts)-1], 64)
+	if err != nil {
+		return false
+	}
+	if math.Abs(price-want) <= tick/2+1e-9 {
+		return true
+	}
+	return hasEvidence(c, "m5_key_level_opposing_zone_widened") && (math.Abs(c.Entry.Low-want) <= tick+1e-9 || math.Abs(c.Entry.High-want) <= tick+1e-9)
 }

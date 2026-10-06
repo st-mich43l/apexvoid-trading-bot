@@ -79,8 +79,9 @@ one detector must not be substituted for another.
 
 ## Detector-contract strategies
 
-`break_retest`, `range_edge`, `snap_back`, `momentum_ride` and `fade_scalp`
-reproduce the frozen Python detectors' decisions. They read the engine's
+`break_retest`, `range_edge`, `snap_back`, `momentum_ride`, `fade_scalp` and
+`key_level` reproduce the frozen Python detectors' decisions (Key Level those of
+the profitable XAU week, 14–18 Sep 2026, see its page). They read the engine's
 detector-contract frame (swings, structure, levels, scored zones, liquidity
 pools and grabs, sessions, trendlines, the scalp range, regime and
 higher-timeframe bias computed over the frozen bounded windows) and share one
@@ -90,3 +91,17 @@ and is published as the candidate's technical confluence. The permanent golden
 test in `analysis-engine/test/detectorparity` replays the committed XAU, GBPUSD
 and USDJPY captures and requires every decision to match the frozen oracle bar
 by bar.
+
+## XAU execution containment
+
+An instrument may *observe* a strategy without trading it:
+`instruments.<SYMBOL>.overrides.execution.go_opportunity.observe_only_strategies`.
+Go still produces and publishes the strategy's opportunities, Algo Bot stores
+them and records the decision `execution_contained`, but no match (hence no
+TradePlan) is built, and the engine leaves them out of arbitration so a
+contained setup can never suppress or hold an executable one. XAU observes
+`ifvg`, `liquidity_sweep` and `range_sweep`: iFVG and Liquidity Sweep lost on XAU
+in both independent windows reviewed, and Range Sweep is a simplified port
+without the Python gates (range width, dealing-range position, edge-touch
+reclaim), so none of the three is proven. Removing a name re-enables its execution; nothing
+else changes. The other instruments contain nothing.
