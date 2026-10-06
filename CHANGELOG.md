@@ -26,8 +26,9 @@ dated section after deployment.
   fixed 2R, and room remains the execution policy's call). Its structure is the
   profitable week's (`detector_contract: profit_week`: levels counted from swings
   only, order blocks caused by BOS only); the two 21 Sep Python changes moved 18 %
-  of its decisions. Proven on 1989 decisions over the committed XAU, GBPUSD and
-  USDJPY captures with 0 mismatches (`test/keylevelparity`).
+  of its decisions. Proven on 3310 Python decisions over six committed real captures (XAU of the
+  profitable week and of the incident window, EURUSD, GBPUSD, GBPJPY, USDJPY) with
+  0 mismatches (`test/keylevelparity`).
 - **Breakout Retest Scalp** (`scalp_breakout_retest`, `v3`) is the Breakout Retest
   V2 engine that ran at the end of that week, replacing a 120-line box detector
   that had produced no trade since the migration: level sources (M5 structure
@@ -40,6 +41,12 @@ dated section after deployment.
   unit cases. The Python adapter accepts the new evidence codes
   (`m5_breakout_level_*`, `m5_breakout_accepted`, `m5_breakout_retest_confirmed`,
   `m1_execution_confirmed`) with no Python recomputation.
+- XAU now observes but does not trade `ifvg`, `liquidity_sweep` and `range_sweep`
+  (instrument-owned `overrides.execution.go_opportunity.observe_only_strategies`):
+  Go still produces them, Algo Bot records `execution_contained` and builds no
+  plan, and the engine leaves them out of arbitration. iFVG and Liquidity Sweep
+  lost on XAU in both independent windows reviewed; Range Sweep is a simplified
+  port without the Python gates. Remove a name to re-enable it.
 - Restored the independent Go `break_retest` strategy and completed Range
   Edge, and proved all five detector-contract strategies (`break_retest`,
   `range_edge`, `snap_back`, `momentum_ride`, `fade_scalp`) against the frozen
