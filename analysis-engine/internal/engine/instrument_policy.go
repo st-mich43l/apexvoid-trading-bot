@@ -62,6 +62,9 @@ func ApplyInstrument(settings *Settings, doc *config.Document, symbol string) er
 	}
 	applyParityCRT(settings)
 	applyLegacyDetector(settings)
+	if err := applyScalpBreakoutRetest(settings, doc); err != nil {
+		return err
+	}
 	return applyKeyLevelOverrides(settings, doc, symbol)
 }
 
@@ -205,7 +208,7 @@ func (s Settings) BlockedByDefendedLevel(c opportunity.Candidate) (float64, bool
 // legacyDetectorStrategies are the strategies whose decision is the frozen
 // detector contract's and which therefore share its thresholds.
 var legacyDetectorStrategies = map[string]bool{
-	"snap_back": true, "fade_scalp": true, "momentum_ride": true, "break_retest": true, "range_edge": true,
+	"snap_back": true, "fade_scalp": true, "momentum_ride": true, "break_retest": true, "range_edge": true, "key_level": true,
 }
 
 // applyLegacyDetector injects the shared frozen-detector thresholds, the
@@ -232,6 +235,42 @@ func applyLegacyDetector(settings *Settings) {
 		params["confluence_mad_score_weight"] = settings.Confluence.MADScoreWeight
 		params["fibonacci_confluence_weight"] = settings.Confluence.FibonacciWeight
 		params["fibonacci_epsilon_atr"] = settings.Fib.EpsilonATR
+		params["price_digits"] = float64(settings.Geometry.PriceDigits)
 		settings.Strategies[i].Parameters = params
 	}
+}
+
+// applyScalpBreakoutRetest gives the Breakout Retest Scalp its instrument scale
+// and the shared M1-scalp stop/target book (auto_algo.strategies.scalping.*),
+// the same leaves the stop envelope and the execution policy read, so the
+// setup is sized from one source. It is idempotent.
+func applyScalpBreakoutRetest(settings *Settings, doc *config.Document) error {
+	book := map[string]string{
+		"buffer_m1_atr_multiple":         "auto_algo.strategies.scalping.stop.buffer_m1_atr_multiple",
+		"buffer_minimum_spread_multiple": "auto_algo.strategies.scalping.stop.buffer_minimum_spread_multiple",
+		"stop_minimum_pips":              "auto_algo.strategies.scalping.stop.minimum_pips",
+		"stop_maximum_pips":              "auto_algo.strategies.scalping.stop.maximum_pips",
+		"minimum_net_target_pips":        "auto_algo.strategies.scalping.target.minimum_net_target_pips",
+		"maximum_spread_pips":            "auto_algo.strategies.scalping.policy.maximum_spread_pips",
+	}
+	for i := range settings.Strategies {
+		if settings.Strategies[i].ID != "scalp_breakout_retest" {
+			continue
+		}
+		params := make(map[string]any, len(settings.Strategies[i].Parameters)+len(book)+2)
+		for k, v := range settings.Strategies[i].Parameters {
+			params[k] = v
+		}
+		for key, path := range book {
+			value, err := getFloat(doc, path)
+			if err != nil {
+				return err
+			}
+			params[key] = value
+		}
+		params["pip_size"] = settings.Geometry.PipSize
+		params["price_digits"] = float64(settings.Geometry.PriceDigits)
+		settings.Strategies[i].Parameters = params
+	}
+	return nil
 }

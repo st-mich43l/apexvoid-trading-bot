@@ -13,6 +13,33 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Phase 1 — restored the XAU edge of the profitable week (14–18 Sep 2026).
+  **Key Level** (`v3`) is now the Python detector of that week
+  (`key_level_reaction` at `a1c77584`) on the detector-contract frame. Replayed
+  over the same real bars, the previous Go Key Level reproduced the Python entry
+  band on 1 of 638 XAU decisions, missed 194, fired 495 times where Python was
+  silent and emitted several candidates on 24 % of bars. It now keeps ONE
+  candidate per evaluation (highest confluence, nearest level on a tie), reacts
+  off the wider proximal band, resolves ambiguous levels and opposing zones as
+  Python did, and has no strength/proximity/target-room gate (none existed in
+  the profitable system; the target is the nearest opposing liquidity, else a
+  fixed 2R, and room remains the execution policy's call). Its structure is the
+  profitable week's (`detector_contract: profit_week`: levels counted from swings
+  only, order blocks caused by BOS only); the two 21 Sep Python changes moved 18 %
+  of its decisions. Proven on 1989 decisions over the committed XAU, GBPUSD and
+  USDJPY captures with 0 mismatches (`test/keylevelparity`).
+- **Breakout Retest Scalp** (`scalp_breakout_retest`, `v3`) is the Breakout Retest
+  V2 engine that ran at the end of that week, replacing a 120-line box detector
+  that had produced no trade since the migration: level sources (M5 structure
+  flips, M5 key levels, equal highs/lows, compression box), the
+  break → acceptance → retest → role-flip state machine, the five-component
+  quality ranking with the best episode per direction, M1 execution confirmation
+  of an M5 setup, and the structural stop and 1:2/1:1 corridor target. XAU only,
+  evaluated on every closed M1 bar. Proven on 1939 real XAU M1 cycles (26
+  opportunities, 0 mismatches, `test/scalpparity`) and 38 + 22 Python-generated
+  unit cases. The Python adapter accepts the new evidence codes
+  (`m5_breakout_level_*`, `m5_breakout_accepted`, `m5_breakout_retest_confirmed`,
+  `m1_execution_confirmed`) with no Python recomputation.
 - Restored the independent Go `break_retest` strategy and completed Range
   Edge, and proved all five detector-contract strategies (`break_retest`,
   `range_edge`, `snap_back`, `momentum_ride`, `fade_scalp`) against the frozen
