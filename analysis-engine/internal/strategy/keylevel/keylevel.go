@@ -1,54 +1,60 @@
-// Package keylevel implements KeyLevelStrategy.
-// (apexvoid-bot-prompts/rebuild-strategies.md §25), consuming the
-// canonical key-level clustering primitive internal/keylevel already
-// builds (price-clustered swings + round-number levels + wick-touch
-// enrichment — this strategy decides tradeability, the primitive already
-// decided what a key level IS).
+// Package keylevel implements Key Level, the strategy that produced the
+// profitable XAU week (14–18 Sep 2026: +567 pips, 6W/3L) in the Python era.
 //
-// Thesis (ported from the legacy Python detector, app/analysis/
-// detectors.py::key_level_reaction, not the simplified proximity-only
-// v1 this package originally shipped with — see docs/analysis/
-// strategies/key_level.md's "2026-09 port" section): a sufficiently
-// touched level is a standing reaction zone only once its role is
-// actually classified — support/resistance from an explicit structural
-// kind, or (key_levels() only ever emits "reaction"/"round", never an
-// explicit kind) a role inferred from price position, with a genuine
-// opposing supply/demand zone overlapping the level's own band allowed
-// to contradict that naive inference rather than being ignored (see
-// opposing.go). A level several consecutive closes have already accepted
-// through is reported BROKEN and skipped here — Break & Retest/Trendline
-// own that reinterpretation, Key Level must not re-trade it. A bare touch
-// is a technical observation, not a trade: only a real, closed-bar
-// rejection (confirmation.go) produces a Candidate, and a level where
-// BOTH candidate directions independently confirm in the same evaluation
-// is a genuine contradiction — discarded entirely, never a coin flip.
+// It is the frozen Python detector key_level_reaction, run on the same
+// detector-contract frame as the other legacy-contract strategies, so the same
+// bars give the same level, role, direction, reaction and entry:
 //
-// internal/keylevel.Level carries no support/resistance field itself
-// (that is internal/keylevel.Role's job, ported 1:1 from
-// key_level_role.py — see role.go's own doc comment); this package owns
-// turning that role, plus real closed-bar price action from
-// TimeframeContext.Candles, into a tradeable, confirmed opportunity.
+//  1. Levels are walked nearest first; one with fewer touches than the
+//     configured minimum is skipped.
+//  2. The level's reaction band is the wider of its own band and the proximal
+//     band (proximal_band_atr · ATR). Its closed-bar role (support,
+//     resistance, ambiguous, or broken after enough accepted closes) decides
+//     the directions tried: support BUY, resistance SELL, and for an ambiguous
+//     role the side price sits on, unless a live opposing zone overlaps the
+//     band — then both sides are tried over the widened window and the zone's
+//     edge is the level the opposite side reacts off. A broken level is
+//     Break & Retest's, never reinterpreted here.
+//  3. A direction needs a confirmed structural reaction off the band; a level
+//     where both sides confirm is a contradiction and yields nothing.
+//  4. The reaction passes the shared qualification (level on the right side of
+//     price, entry no further than max_entry_atr, confluence at or above the
+//     floor).
+//  5. Of all levels that qualify, ONE candidate is kept: the highest
+//     confluence, nearest level winning ties. The strategy owns that
+//     selection; nothing downstream has to choose between its levels.
+//
+// Key Level carries no strength, proximity or target-room filter of its own:
+// the frozen detector had none (its quality gates were confluence and the
+// execution policy), and each one measurably removed decisions the profitable
+// system took. The candidate's target is the nearest opposing liquidity when
+// there is one, else a fixed reward:risk beyond the entry; whether the room is
+// enough is the execution policy's decision, as it was.
 package keylevel
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"math"
 	"sort"
 
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/confluence"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/context"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/keylevel"
-	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/liquidity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/reaction"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategyutil"
-	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/zone"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/techniquezone"
 )
 
 const ID strategy.StrategyID = "key_level"
-const Version = "v2"
+const Version = "v3"
+
+const (
+	contractProfitWeek = "profit_week"
+	contractCurrent    = "current"
+)
 
 const (
 	structureVersion = "v2"
@@ -57,33 +63,28 @@ const (
 	configVersion    = 3
 )
 
-// Config is KeyLevel's own parsed technical configuration.
+// Config is Key Level's own parsed technical configuration.
 type Config struct {
 	MinimumTouches int
-	// MinimumStrength floors keylevel.Level.Strength. The legacy Python
-	// detector this package now ports has no equivalent per-level floor
-	// (its quality gates live downstream, in confluence/policy) — this
-	// stays as an additional, strictly-tighter-never-looser safety floor
-	// this platform already had, not a behavior this port removes.
-	MinimumStrength float64
-	// ProximityATR is how close (in ATR) current price must be to a level
-	// for it to be considered at all — likewise an additional pre-filter
-	// the legacy detector didn't need (it relied on confirmation alone to
-	// bound relevance); kept for the same reason as MinimumStrength.
-	ProximityATR             float64
+	// MinimumSellZoneScore is the optional floor on the nearest supply zone's
+	// score for a SELL (0 disables it); the frozen detector carried it as an
+	// instrument quality knob.
+	MinimumSellZoneScore     float64
 	InvalidationBufferATR    float64
 	MinimumTargetDistanceATR float64
+	FallbackTargetR          float64
 	ExpiryHours              float64
-	// Reaction is the shared legacy confirmation tuning (see strategyutil).
-	Reaction strategyutil.ReactionConfig
+	PriceDigits              int
 	// RequireExplicitRole skips levels whose support/resistance role is still
 	// ambiguous (legacy per-instrument Key Level quality rule).
 	RequireExplicitRole bool
-	// BreakoutAcceptBars is key_level_role.py's breakout_accept_bars —
-	// consecutive closed bars that must accept beyond a level's band
-	// before Role reports it BROKEN rather than the level's plain role.
-	// Legacy default (TREND_BREAKOUT_ACCEPT_BARS): 2.
+	// BreakoutAcceptBars is key_level_role.py's breakout_accept_bars.
 	BreakoutAcceptBars int
+	// Contract selects the structure Key Level reads: "profit_week" is the
+	// detector contract of 14–18 Sep 2026 (levels counted from swings, order
+	// blocks caused by a BOS), "current" the one the other detectors read.
+	Contract string
+	Detector strategyutil.LegacyDetectorSettings
 }
 
 // Strategy is KeyLevelStrategy.
@@ -101,95 +102,70 @@ func New(cfg strategy.Config) (strategy.Strategy, error) {
 	if err != nil {
 		return nil, fmt.Errorf("keylevel: %w", err)
 	}
-	return &Strategy{cfg: parsed, timeframe: market.M5, fingerprint: configFingerprint(cfg)}, nil
+	return &Strategy{cfg: parsed, timeframe: market.M5, fingerprint: strategyutil.Fingerprint(string(cfg.ID), cfg.Version, cfg.Parameters)}, nil
 }
 
 func parseConfig(params map[string]any) (Config, error) {
-	minimumTouches, err := requireInt(params, "minimum_touches")
-	if err != nil {
+	var cfg Config
+	var err error
+	if cfg.MinimumTouches, err = strategyutil.Int(params, "minimum_touches"); err != nil {
 		return Config{}, err
 	}
-	minimumStrength, err := requireFloat(params, "minimum_strength")
-	if err != nil {
+	if cfg.InvalidationBufferATR, err = strategyutil.Float(params, "invalidation_buffer_atr"); err != nil {
 		return Config{}, err
 	}
-	proximityATR, err := requireFloat(params, "proximity_atr")
-	if err != nil {
+	if cfg.MinimumTargetDistanceATR, err = strategyutil.Float(params, "minimum_target_distance_atr"); err != nil {
 		return Config{}, err
 	}
-	invalidationBuffer, err := requireFloat(params, "invalidation_buffer_atr")
-	if err != nil {
+	if cfg.FallbackTargetR, err = strategyutil.Float(params, "fallback_target_r"); err != nil {
 		return Config{}, err
 	}
-	minimumTargetDistance, err := requireFloat(params, "minimum_target_distance_atr")
-	if err != nil {
+	if cfg.ExpiryHours, err = strategyutil.Float(params, "expiry_hours"); err != nil {
 		return Config{}, err
 	}
-	expiryHours, err := requireFloat(params, "expiry_hours")
-	if err != nil {
+	if cfg.BreakoutAcceptBars, err = strategyutil.Int(params, "breakout_accept_bars"); err != nil {
 		return Config{}, err
 	}
-	breakoutAcceptBars, err := requireInt(params, "breakout_accept_bars")
-	if err != nil {
+	if cfg.PriceDigits, err = strategyutil.Int(params, "price_digits"); err != nil {
 		return Config{}, err
 	}
-	if minimumTouches < 1 {
-		return Config{}, fmt.Errorf("minimum_touches must be >= 1")
+	contract, ok := params["detector_contract"].(string)
+	if !ok || (contract != contractProfitWeek && contract != contractCurrent) {
+		return Config{}, fmt.Errorf("detector_contract must be %q or %q", contractProfitWeek, contractCurrent)
 	}
-	if proximityATR <= 0 {
-		return Config{}, fmt.Errorf("proximity_atr must be > 0")
-	}
-	if invalidationBuffer <= 0 {
-		return Config{}, fmt.Errorf("invalidation_buffer_atr must be > 0")
-	}
-	if expiryHours <= 0 {
-		return Config{}, fmt.Errorf("expiry_hours must be > 0")
-	}
-	if breakoutAcceptBars < 1 {
-		return Config{}, fmt.Errorf("breakout_accept_bars must be >= 1")
-	}
-	reactionConfig, err := strategyutil.ParseReactionConfig(params)
-	if err != nil {
-		return Config{}, err
+	cfg.Contract = contract
+	if _, present := params["minimum_sell_zone_score"]; present {
+		if cfg.MinimumSellZoneScore, err = strategyutil.Float(params, "minimum_sell_zone_score"); err != nil {
+			return Config{}, err
+		}
 	}
 	// Override-only parameter (set from an instrument's overrides, which the
 	// config schema cannot express as a base boolean): absent means false.
-	requireExplicitRole := false
 	if raw, present := params["require_explicit_role"]; present {
 		b, ok := raw.(bool)
 		if !ok {
 			return Config{}, fmt.Errorf("parameter \"require_explicit_role\" is not a boolean (got %T)", raw)
 		}
-		requireExplicitRole = b
+		cfg.RequireExplicitRole = b
 	}
-	return Config{
-		MinimumTouches: minimumTouches, MinimumStrength: minimumStrength, ProximityATR: proximityATR,
-		InvalidationBufferATR: invalidationBuffer, MinimumTargetDistanceATR: minimumTargetDistance,
-		ExpiryHours: expiryHours, BreakoutAcceptBars: breakoutAcceptBars, Reaction: reactionConfig, RequireExplicitRole: requireExplicitRole,
-	}, nil
-}
-
-func requireFloat(params map[string]any, key string) (float64, error) {
-	raw, ok := params[key]
-	if !ok {
-		return 0, fmt.Errorf("missing required parameter %q", key)
+	if cfg.Detector, err = strategyutil.ParseLegacyDetectorSettings(params); err != nil {
+		return Config{}, err
 	}
-	switch v := raw.(type) {
-	case float64:
-		return v, nil
-	case int:
-		return float64(v), nil
-	default:
-		return 0, fmt.Errorf("parameter %q is not numeric (got %T)", key, raw)
+	switch {
+	case cfg.MinimumTouches < 1:
+		return Config{}, fmt.Errorf("minimum_touches must be >= 1")
+	case cfg.InvalidationBufferATR <= 0:
+		return Config{}, fmt.Errorf("invalidation_buffer_atr must be > 0")
+	case cfg.FallbackTargetR <= 0:
+		return Config{}, fmt.Errorf("fallback_target_r must be > 0")
+	case cfg.ExpiryHours <= 0:
+		return Config{}, fmt.Errorf("expiry_hours must be > 0")
+	case cfg.BreakoutAcceptBars < 1:
+		return Config{}, fmt.Errorf("breakout_accept_bars must be >= 1")
+	case cfg.PriceDigits < 0:
+		return Config{}, fmt.Errorf("price_digits must be >= 0")
 	}
-}
-
-func requireInt(params map[string]any, key string) (int, error) {
-	v, err := requireFloat(params, key)
-	if err != nil {
-		return 0, err
-	}
-	return int(v), nil
+	return cfg, nil
 }
 
 func (s *Strategy) ID() strategy.StrategyID { return ID }
@@ -198,39 +174,43 @@ func (s *Strategy) RequiredTimeframes() []market.Timeframe {
 	return []market.Timeframe{s.timeframe}
 }
 
+// attempt is one direction's qualified reaction off one level.
+type attempt struct {
+	direction    market.Direction
+	levelPrice   float64
+	reactLow     float64
+	reactHigh    float64
+	confirmation *strategyutil.LegacyConfirmation
+	result       *strategyutil.LegacyResult
+	detector     *strategyutil.LegacyDetector
+	level        techniquezone.Level
+	role         keylevel.RoleKind
+	widened      bool
+}
+
 func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate {
-	tfCtx, ok := ctx.Timeframes[s.timeframe]
+	base, ok := strategyutil.NewLegacyDetectorForFrame(ctx, s.timeframe, s.cfg.Detector)
 	if !ok {
 		return nil
 	}
-	atr := ctx.Volatility.ATR
-	if atr <= 0 || len(tfCtx.Candles) == 0 {
-		return nil
+	frame, price, atr := base.Frame, base.Price, base.ATR
+	closes := make([]float64, len(frame.Bars))
+	for i, bar := range frame.Bars {
+		closes[i] = bar.Close
 	}
-	currentPrice := tfCtx.Candles[len(tfCtx.Candles)-1].Close
-	closes := make([]float64, len(tfCtx.Candles))
-	for i, c := range tfCtx.Candles {
-		closes[i] = c.Close
-	}
+	zoneBandFloor := math.Max(1e-9, s.cfg.Detector.ProximalBandATR*math.Max(0, atr))
+	levels, zones := s.structure(base)
 
-	var candidates []opportunity.Candidate
-	levels := append([]keylevel.Level(nil), tfCtx.KeyLevel.Levels...)
-	sort.Slice(levels, func(i, j int) bool {
-		return math.Abs(float64(levels[i].Price)-currentPrice) < math.Abs(float64(levels[j].Price)-currentPrice)
-	})
+	var best *attempt
 	for _, level := range levels {
-		if level.Touches < s.cfg.MinimumTouches || level.Strength < s.cfg.MinimumStrength {
+		if level.Touches < maxInt(1, s.cfg.MinimumTouches) {
 			continue
 		}
-		levelPrice := float64(level.Price)
-		distanceATR := math.Abs(currentPrice-levelPrice) / atr
-		if distanceATR > s.cfg.ProximityATR {
-			continue
-		}
-
-		band := level.Band
-		bandLow, bandHigh := market.Price(levelPrice-band), market.Price(levelPrice+band)
-		role := keylevel.Role(level.Kind.String(), bandLow, bandHigh, closes, s.cfg.BreakoutAcceptBars)
+		band := math.Max(level.Band, zoneBandFloor)
+		bandLow, bandHigh := level.Price-band, level.Price+band
+		role := keylevel.Role(level.Kind, market.Price(bandLow), market.Price(bandHigh), closes, s.cfg.BreakoutAcceptBars)
+		// An accepted role flip belongs to Break & Retest; Key Level never
+		// reinterprets it in the opposite direction.
 		if role == keylevel.RoleBrokenSupport || role == keylevel.RoleBrokenResistance {
 			continue
 		}
@@ -240,227 +220,252 @@ func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate 
 
 		reactLow, reactHigh := bandLow, bandHigh
 		var directions []market.Direction
-		var contraDirection *market.Direction
+		var contra market.Direction
 		var contraLevel float64
+		widened := false
 		switch {
 		case role == keylevel.RoleSupport:
 			directions = []market.Direction{market.Buy}
 		case role == keylevel.RoleResistance:
 			directions = []market.Direction{market.Sell}
-		case currentPrice > float64(bandHigh):
-			// No explicit role either way, but price sits above the level —
-			// deterministic support hypothesis, unless a real opposing
-			// (supply) zone overlapping this band contradicts it.
-			if opposing, found := opposingZoneContradicts(tfCtx.Zones.Zones, bandLow, bandHigh, zone.KindDemand); found {
+		case price > bandHigh:
+			if opposing, found := opposingZone(zones, bandLow, bandHigh, "supply"); found {
 				directions = []market.Direction{market.Buy, market.Sell}
-				reactLow, reactHigh = minPrice(bandLow, opposing.Low), maxPrice(bandHigh, opposing.High)
-				sell := market.Sell
-				contraDirection, contraLevel = &sell, float64(opposing.High)
+				reactLow, reactHigh = math.Min(bandLow, opposing.Low()), math.Max(bandHigh, opposing.High())
+				contra, contraLevel, widened = market.Sell, opposing.High(), true
 			} else {
 				directions = []market.Direction{market.Buy}
 			}
-		case currentPrice < float64(bandLow):
-			// Level sits above current price — deterministic resistance
-			// hypothesis, same caveat mirrored for an opposing demand zone.
-			if opposing, found := opposingZoneContradicts(tfCtx.Zones.Zones, bandLow, bandHigh, zone.KindSupply); found {
+		case price < bandLow:
+			if opposing, found := opposingZone(zones, bandLow, bandHigh, "demand"); found {
 				directions = []market.Direction{market.Sell, market.Buy}
-				reactLow, reactHigh = minPrice(bandLow, opposing.Low), maxPrice(bandHigh, opposing.High)
-				buy := market.Buy
-				contraDirection, contraLevel = &buy, float64(opposing.Low)
+				reactLow, reactHigh = math.Min(bandLow, opposing.Low()), math.Max(bandHigh, opposing.High())
+				contra, contraLevel, widened = market.Buy, opposing.Low(), true
 			} else {
 				directions = []market.Direction{market.Sell}
 			}
 		default:
-			// Price is inside the level's own band — direction comes from
-			// which side actually confirms a reaction, never a guess. If
-			// both sides independently confirm, that is a genuine
-			// contradiction (handled below), not a coin flip.
+			// Price is inside the level's own band: the direction comes from which
+			// side actually confirms, never a guess.
 			directions = []market.Direction{market.Buy, market.Sell}
 		}
 
-		var confirmedHere []opportunity.Candidate
+		var confirmed []attempt
 		for _, direction := range directions {
-			effectiveLevelPrice := levelPrice
-			if contraDirection != nil && direction == *contraDirection {
-				effectiveLevelPrice = contraLevel
+			if direction == market.Sell && s.cfg.MinimumSellZoneScore > 0 {
+				score, found := nearestSameSideZoneScore(zones, price, "supply")
+				if !found || score < s.cfg.MinimumSellZoneScore {
+					continue
+				}
 			}
-			reaction := strategyutil.ConfirmReaction(tfCtx, level.ID, direction, float64(reactLow), float64(reactHigh), atr, 0, s.cfg.Reaction)
-			if reaction == nil {
+			levelPrice := level.Price
+			if contra != "" && direction == contra {
+				levelPrice = contraLevel
+			}
+			d := base.WithDirection(direction)
+			conf := d.Reaction(reactLow, reactHigh, d.LevelGrab(level.Price, level.Band))
+			if conf == nil {
 				continue
 			}
-			invalidationBuffer := s.cfg.InvalidationBufferATR * atr
-			invalidationPrice := effectiveLevelPrice - band - invalidationBuffer
-			poolSide := liquidity.LiquidityBuySide
+			zoneSide := "demand"
 			if direction == market.Sell {
-				invalidationPrice = effectiveLevelPrice + band + invalidationBuffer
-				poolSide = liquidity.LiquiditySellSide
+				zoneSide = "supply"
 			}
-			// The entry is the reaction window, which an opposing zone can widen
-			// past the level's own band. A stop derived from the level alone then
-			// lands inside the entry (published as an invalid event); keep it
-			// beyond the outer edge of the whole window.
-			if direction == market.Buy {
-				invalidationPrice = math.Min(invalidationPrice, float64(reactLow)-invalidationBuffer)
-			} else {
-				invalidationPrice = math.Max(invalidationPrice, float64(reactHigh)+invalidationBuffer)
-			}
-			referencePrice := float64(reactHigh)
-			if direction == market.Sell {
-				referencePrice = float64(reactLow)
-			}
-			targetPool, ok := nearestPool(tfCtx.Liquidity.Pools, poolSide, referencePrice, s.cfg.MinimumTargetDistanceATR*atr, direction)
-			if !ok {
+			zone := techniquezone.Zone{Bottom: reactLow, Top: reactHigh, Side: zoneSide, Source: "level", BreakIndex: -1}
+			factors := strategyutil.FactorsForConfirmation(reactionFactors(conf.Type, d.HTFAligned(), level.Touches), conf.Type)
+			result := d.Finish(levelPrice, zone, factors, level.Kind, &reactLow, &reactHigh)
+			if result == nil {
 				continue
 			}
-			targetPrice := targetPool.High
-			if direction == market.Sell {
-				targetPrice = targetPool.Low
-			}
-
-			setupKey := fmt.Sprintf("keylevel:%s:%s:%d:%d", level.ID, direction, reaction.TouchBarTime, reaction.ConfirmationBarTime)
-			id, err := opportunity.DeterministicID(opportunity.Identity{
-				Strategy: ID, StrategyVersion: Version, Symbol: ctx.Symbol, Direction: direction, SetupKey: setupKey,
-			})
-			if err != nil {
-				continue
-			}
-
-			quality := computeQuality(level, distanceATR, s.cfg.ProximityATR)
-			evidence := []opportunity.Evidence{
-				{Code: "m5_key_level_" + level.Kind.String()},
-				{Code: "m5_key_level_touches_sufficient"},
-				{Code: "m5_key_level_role_" + role.String()},
-				{Code: "m5_key_level_rejection_confirmed"},
-			}
-			if contraDirection != nil {
-				evidence = append(evidence, opportunity.Evidence{Code: "m5_key_level_opposing_zone_widened"})
-			}
-
-			confirmedHere = append(confirmedHere, opportunity.Candidate{
-				ID: id, Strategy: ID, StrategyVersion: Version, Symbol: ctx.Symbol,
-				Direction: direction,
-				// reaction.ZoneID (the level's own ID), not the local
-				// setupKey — that also embeds this reaction's touch/
-				// confirmation bar times, which would make two
-				// confirmations of the SAME level look like different
-				// theses (see Candidate.StructuralID's own doc comment).
-				StructuralID: reaction.ZoneID,
-				Entry:        opportunity.EntryZone{Low: float64(reactLow), High: float64(reactHigh)},
-				Invalidation: market.PriceLevel{
-					Price: market.Price(invalidationPrice), Label: "key_level_invalidated",
-				},
-				Targets: []opportunity.Target{{
-					Price: market.PriceLevel{Price: targetPrice, Label: "nearest_opposing_liquidity"},
-				}},
-				Evidence:  evidence,
-				Quality:   quality,
-				FormedAt:  level.AnchorTime,
-				CreatedAt: reaction.ConfirmationBarTime,
-				ExpiresAt: reaction.ConfirmationBarTime + int64(s.cfg.ExpiryHours*3600),
-				Provenance: opportunity.AnalysisProvenance{
-					StructureVersion: structureVersion, LiquidityVersion: liquidityVersion, ZoneVersion: zoneVersionUsed,
-					ConfigVersion: configVersion, ConfigFingerprint: s.fingerprint,
-				},
-				Reaction: reaction,
+			confirmed = append(confirmed, attempt{
+				direction: direction, levelPrice: levelPrice, reactLow: reactLow, reactHigh: reactHigh,
+				confirmation: conf, result: result, detector: d, level: level, role: role, widened: widened,
 			})
 		}
-		// Zero confirmations: nothing to keep. Two (only reachable when both
-		// directions were tried): both sides independently confirmed a
-		// reaction off the same level in the same evaluation — a genuine
-		// contradiction, not something a quality score should tiebreak.
-		// Neither survives; this level produces no opportunity until price
-		// action resolves it.
-		if len(confirmedHere) == 1 {
-			candidates = append(candidates, confirmedHere[0])
+		// Zero confirmations: nothing to keep. Two (both sides confirmed off the
+		// same level in one evaluation): a contradiction, not a coin flip.
+		if len(confirmed) != 1 {
+			continue
+		}
+		if best == nil || confirmed[0].result.Stars > best.result.Stars {
+			chosen := confirmed[0]
+			best = &chosen
 		}
 	}
-	return candidates
-}
-
-func minPrice(a, b market.Price) market.Price {
-	if a < b {
-		return a
+	if best == nil {
+		return nil
 	}
-	return b
+	candidate, ok := s.candidate(ctx, base, best)
+	if !ok {
+		return nil
+	}
+	return []opportunity.Candidate{candidate}
 }
 
-func maxPrice(a, b market.Price) market.Price {
+// reactionFactors mirrors _reaction_factors: the evidence the confirmation
+// actually showed, mapped onto the common rubric. The session context is
+// always on, as the frozen scanner never narrowed it.
+func reactionFactors(confirmationType string, htfAligned bool, touches int) confluence.Factors {
+	return confluence.Factors{
+		HTFAligned:          htfAligned,
+		Touches:             touches,
+		WickRejection:       confirmationType == reaction.TypeWickRejection,
+		DisplacementGrade:   confirmationType == reaction.TypeEngulfing,
+		StructuralAgreement: confirmationType == reaction.TypeSweepReclaim || confirmationType == reaction.TypeStrongReclaim,
+		SessionContext:      true,
+	}
+}
+
+func (s *Strategy) candidate(ctx *context.MarketContext, d *strategyutil.LegacyDetector, a *attempt) (opportunity.Candidate, bool) {
+	atr := d.ATR
+	direction := a.direction
+	buffer := s.cfg.InvalidationBufferATR * atr
+	low, high := a.reactLow, a.reactHigh
+	invalidation, reference := low-buffer, high
+	if direction == market.Sell {
+		invalidation, reference = high+buffer, low
+	}
+	target, targetLabel, ok := s.target(d, direction, reference, invalidation, atr)
+	if !ok {
+		return opportunity.Candidate{}, false
+	}
+	levelID := fmt.Sprintf("keylevel:%s:%.*f", a.level.Kind, s.cfg.PriceDigits, a.level.Price)
+	conf := a.confirmation
+	setupKey := fmt.Sprintf("%s:%s:%d:%d", levelID, direction, conf.TouchTime, conf.ConfirmationTime)
+	evidence := []string{
+		"m5_key_level_" + a.level.Kind,
+		"m5_key_level_touches_sufficient",
+		"m5_key_level_role_" + a.role.String(),
+		"m5_key_level_rejection_confirmed",
+	}
+	if a.widened {
+		evidence = append(evidence, "m5_key_level_opposing_zone_widened")
+	}
+	stars := float64(a.result.Stars)
+	quality := opportunity.StrategyQuality{
+		Overall: strategyutil.Clamp01(stars / 3),
+		Components: map[string]float64{
+			"confluence":    strategyutil.Clamp01(stars / 3),
+			"touch_quality": strategyutil.Clamp01(float64(a.level.Touches) / 5),
+			"reaction":      1,
+		},
+	}
+	candidate, err := strategyutil.Candidate(strategyutil.CandidateSpec{
+		ID: string(ID), Version: Version, SetupKey: setupKey, Symbol: ctx.Symbol, Direction: direction,
+		EntryLow: low, EntryHigh: high, Invalidation: invalidation, InvalidationLabel: "key_level_invalidated",
+		Target: target, TargetLabel: targetLabel, Evidence: evidence, Quality: quality,
+		FormedAt: conf.TouchTime, ConfirmedAt: conf.ConfirmationTime, ExpiryHours: s.cfg.ExpiryHours, Fingerprint: s.fingerprint,
+	})
+	if err != nil {
+		return opportunity.Candidate{}, false
+	}
+	// The persistent identity of the thesis is the level, not this
+	// confirmation: a re-confirmation of the same level is the same thesis.
+	candidate.StructuralID = levelID
+	candidate.Reaction = &opportunity.ReactionConfirmation{
+		ZoneID: levelID, TouchBarTime: conf.TouchTime, ConfirmationBarTime: conf.ConfirmationTime,
+		ReactionType: "rejection", Pattern: conf.Type,
+	}
+	candidate.DetectorConfluence = a.result.ConfluenceContext()
+	candidate.Provenance = opportunity.AnalysisProvenance{
+		StructureVersion: structureVersion, LiquidityVersion: liquidityVersion, ZoneVersion: zoneVersionUsed,
+		ConfigVersion: configVersion, ConfigFingerprint: s.fingerprint,
+	}
+	return candidate, true
+}
+
+// target is the nearest unswept opposing liquidity at least the configured
+// distance from the entry; without one, a fixed reward:risk beyond it. Whether
+// the room is enough is the execution policy's decision, not a filter here.
+func (s *Strategy) target(d *strategyutil.LegacyDetector, direction market.Direction, reference, invalidation, atr float64) (float64, string, bool) {
+	want := "buy"
+	if direction == market.Sell {
+		want = "sell"
+	}
+	minimum := s.cfg.MinimumTargetDistanceATR * atr
+	best, bestDistance := 0.0, math.Inf(1)
+	for _, pool := range d.Frame.Pools {
+		if pool.Side != want {
+			continue
+		}
+		distance := pool.Level - reference
+		if direction == market.Sell {
+			distance = reference - pool.Level
+		}
+		if distance >= minimum && distance < bestDistance {
+			best, bestDistance = pool.Level, distance
+		}
+	}
+	if !math.IsInf(bestDistance, 1) {
+		return best, "nearest_opposing_liquidity", true
+	}
+	risk := math.Abs(reference - invalidation)
+	if risk <= 0 {
+		return 0, "", false
+	}
+	if direction == market.Sell {
+		return reference - s.cfg.FallbackTargetR*risk, "fixed_reward_risk", true
+	}
+	return reference + s.cfg.FallbackTargetR*risk, "fixed_reward_risk", true
+}
+
+// structure returns the levels (nearest first) and zones Key Level reads under
+// its configured detector contract.
+func (s *Strategy) structure(d *strategyutil.LegacyDetector) ([]techniquezone.Level, []techniquezone.Zone) {
+	levels, zones := d.Frame.Levels, d.Frame.Zones
+	if s.cfg.Contract == contractProfitWeek {
+		levels, zones = d.Frame.SwingLevels, d.Frame.ContractZones
+	}
+	ordered := append([]techniquezone.Level(nil), levels...)
+	sort.SliceStable(ordered, func(i, j int) bool {
+		return math.Abs(ordered[i].Price-d.Price) < math.Abs(ordered[j].Price-d.Price)
+	})
+	return ordered, zones
+}
+
+// opposingZone mirrors _opposing_zone_contradicts: the first live zone of the
+// given side overlapping the band. (The frozen detector scanned the scored
+// zones and then their order-block view, which repeats members of the first.)
+func opposingZone(zones []techniquezone.Zone, bandLow, bandHigh float64, side string) (techniquezone.Zone, bool) {
+	for _, z := range zones {
+		if z.Side != side || z.Mitigated {
+			continue
+		}
+		if z.Low() <= bandHigh && z.High() >= bandLow {
+			return z, true
+		}
+	}
+	return techniquezone.Zone{}, false
+}
+
+// nearestSameSideZoneScore mirrors _nearest_same_side_zone_score: the score of
+// the same-side zone containing price, else the one whose midpoint is nearest.
+func nearestSameSideZoneScore(zones []techniquezone.Zone, price float64, side string) (float64, bool) {
+	var best *techniquezone.Zone
+	bestDistance := math.Inf(1)
+	for i := range zones {
+		z := zones[i]
+		if z.Side != side {
+			continue
+		}
+		distance := 0.0
+		if !(z.Low() <= price && price <= z.High()) {
+			distance = math.Abs((z.Low()+z.High())/2 - price)
+		}
+		if best == nil || distance < bestDistance {
+			zone := z
+			best, bestDistance = &zone, distance
+		}
+	}
+	if best == nil {
+		return 0, false
+	}
+	return best.Score, true
+}
+
+func maxInt(a, b int) int {
 	if a > b {
 		return a
 	}
 	return b
-}
-
-func nearestPool(pools []liquidity.Pool, side liquidity.LiquiditySide, referencePrice, minimumDistance float64, direction market.Direction) (liquidity.Pool, bool) {
-	var matches []liquidity.Pool
-	for _, p := range pools {
-		if p.Side != side {
-			continue
-		}
-		mid := (float64(p.Low) + float64(p.High)) / 2
-		var distance float64
-		if direction == market.Buy {
-			distance = mid - referencePrice
-		} else {
-			distance = referencePrice - mid
-		}
-		if distance < minimumDistance {
-			continue
-		}
-		matches = append(matches, p)
-	}
-	if len(matches) == 0 {
-		return liquidity.Pool{}, false
-	}
-	sort.Slice(matches, func(i, j int) bool {
-		mi := (float64(matches[i].Low) + float64(matches[i].High)) / 2
-		mj := (float64(matches[j].Low) + float64(matches[j].High)) / 2
-		if direction == market.Buy {
-			return mi < mj
-		}
-		return mi > mj
-	})
-	return matches[0], true
-}
-
-// computeQuality is KeyLevel's own quality model — proximity is its own
-// dimension here (source task §40) because, unlike the zone-anchored
-// strategies, this primitive has no pre-computed Relevance to reuse.
-func computeQuality(level keylevel.Level, distanceATR, proximityLimitATR float64) opportunity.StrategyQuality {
-	proximityQuality := clamp01(1 - distanceATR/proximityLimitATR)
-	touchQuality := clamp01(float64(level.Touches) / 5.0)
-	strengthQuality := clamp01(level.Strength)
-	overall := (proximityQuality + touchQuality + strengthQuality) / 3
-	return opportunity.StrategyQuality{
-		Overall: overall,
-		Components: map[string]float64{
-			"proximity_quality": proximityQuality,
-			"touch_quality":     touchQuality,
-			"strength_quality":  strengthQuality,
-		},
-	}
-}
-
-func clamp01(v float64) float64 {
-	if v < 0 {
-		return 0
-	}
-	if v > 1 {
-		return 1
-	}
-	return v
-}
-
-func configFingerprint(cfg strategy.Config) string {
-	keys := make([]string, 0, len(cfg.Parameters))
-	for k := range cfg.Parameters {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	canonical := string(cfg.ID) + "\x00" + cfg.Version
-	for _, k := range keys {
-		canonical += "\x00" + k + "=" + fmt.Sprint(cfg.Parameters[k])
-	}
-	sum := sha256.Sum256([]byte(canonical))
-	return hex.EncodeToString(sum[:16])
 }

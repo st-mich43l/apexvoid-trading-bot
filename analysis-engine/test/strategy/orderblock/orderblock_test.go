@@ -1,6 +1,7 @@
 package orderblock_test
 
 import (
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/test/legacyfixture"
 	"testing"
 
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/context"
@@ -13,7 +14,7 @@ import (
 )
 
 func validParams() map[string]any {
-	return map[string]any{
+	return legacyfixture.Params(map[string]any{
 		"minimum_strength":            0.3,
 		"minimum_zone_atr":            0.5,
 		"invalidation_buffer_atr":     0.5,
@@ -25,7 +26,7 @@ func validParams() map[string]any {
 		"maximum_zone_atr":            3.0,
 		"entry_max_width_price":       5.0,
 		"momentum_body_fraction":      0.0,
-	}
+	})
 }
 
 func newStrategy(t *testing.T, params map[string]any) strategy.Strategy {

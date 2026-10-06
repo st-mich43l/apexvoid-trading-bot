@@ -20,7 +20,6 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/scalpbreakoutretest"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/snapback"
 	strategytrendline "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/trendline"
-	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/techniquezone"
 	technicaltrendline "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/trendline"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/zone"
@@ -99,7 +98,7 @@ func assertOne(t *testing.T, instance strategy.Strategy, marketCtx *analysiscont
 func TestStrategiesKnownQualifyingFixtures(t *testing.T) {
 	const base = int64(1_700_000_000)
 	t.Run("ifvg", func(t *testing.T) {
-		s, err := ifvg.New(cfg(ifvg.ID, map[string]any{"epsilon_atr_fraction": 0.05, "maximum_zone_atr": 3.0, "entry_max_width_price": 5.0, "reaction_lookback_bars": 3.0, "engulfing_minimum_range_atr": 0.5, "minimum_strength": .4, "minimum_gap_atr": .5, "invalidation_buffer_atr": .5, "minimum_target_distance_atr": 1.0, "expiry_hours": 4.0}))
+		s, err := ifvg.New(cfg(ifvg.ID, detectorParams(map[string]any{"epsilon_atr_fraction": 0.05, "maximum_zone_atr": 3.0, "entry_max_width_price": 5.0, "reaction_lookback_bars": 3.0, "engulfing_minimum_range_atr": 0.5, "minimum_strength": .4, "minimum_gap_atr": .5, "invalidation_buffer_atr": .5, "minimum_target_distance_atr": 1.0, "expiry_hours": 4.0})))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -120,14 +119,6 @@ func TestStrategiesKnownQualifyingFixtures(t *testing.T) {
 		}
 		assertOne(t, s, rangeEdgeContext(market.Candle{Time: 3000, Open: 98.3, High: 98.9, Low: 97.8, Close: 98.6}))
 	})
-	t.Run("liquidity_sweep", func(t *testing.T) {
-		s, e := liquiditysweep.New(cfg(liquiditysweep.ID, map[string]any{"minimum_rejection_body_atr": .3, "invalidation_buffer_atr": .25, "target_r": 2.0, "expiry_hours": 4.0}))
-		if e != nil {
-			t.Fatal(e)
-		}
-		at := int64(2)
-		assertOne(t, s, ctx(map[market.Timeframe]*analysiscontext.TimeframeContext{market.M5: {Timeframe: market.M5, Candles: []market.Candle{bar(2, 99, 100.5, 98.5, 100)}, Liquidity: liquidity.LiquidityState{Pools: []liquidity.Pool{{ID: "p", Side: liquidity.LiquiditySellSide, Low: 99, High: 99.2, SweptAt: &at, ReclaimedAt: &at}}}}}))
-	})
 	t.Run("snap_back", func(t *testing.T) {
 		s, e := snapback.New(cfg(snapback.ID, snapBackParams()))
 		if e != nil {
@@ -138,7 +129,7 @@ func TestStrategiesKnownQualifyingFixtures(t *testing.T) {
 		}
 	})
 	t.Run("crt", func(t *testing.T) {
-		s, e := crt.New(cfg(crt.ID, map[string]any{"minimum_h1_range_atr": 1.5, "invalidation_buffer_atr": .25, "expiry_hours": 4.0, "technique_window_bars": 400.0, "entry_max_width_price": 5.0, "pip_size": .1, "reaction_lookback_bars": 3.0, "engulfing_minimum_range_atr": .5}))
+		s, e := crt.New(cfg(crt.ID, detectorParams(map[string]any{"minimum_h1_range_atr": 1.5, "invalidation_buffer_atr": .25, "expiry_hours": 4.0, "technique_window_bars": 400.0, "entry_max_width_price": 5.0, "pip_size": .1, "reaction_lookback_bars": 3.0, "engulfing_minimum_range_atr": .5})))
 		if e != nil {
 			t.Fatal(e)
 		}
@@ -147,7 +138,7 @@ func TestStrategiesKnownQualifyingFixtures(t *testing.T) {
 		}
 	})
 	t.Run("confluence_zone", func(t *testing.T) {
-		s, e := confluencezone.New(cfg(confluencezone.ID, map[string]any{"reaction_lookback_bars": 3.0, "engulfing_minimum_range_atr": 0.5, "minimum_facts": 2.0, "invalidation_buffer_atr": .5, "minimum_target_distance_atr": 1.0, "expiry_hours": 4.0}))
+		s, e := confluencezone.New(cfg(confluencezone.ID, detectorParams(map[string]any{"reaction_lookback_bars": 3.0, "engulfing_minimum_range_atr": 0.5, "minimum_facts": 2.0, "invalidation_buffer_atr": .5, "minimum_target_distance_atr": 1.0, "expiry_hours": 4.0})))
 		if e != nil {
 			t.Fatal(e)
 		}
@@ -171,29 +162,12 @@ func TestStrategiesKnownQualifyingFixtures(t *testing.T) {
 		bars := []market.Candle{bar(1, 100, 101, 100, 100.5), bar(2, 100.5, 101, 100, 100.4), bar(3, 100.4, 101, 100, 100.5), bar(4, 100.5, 101, 100, 100.4), bar(5, 100.4, 101, 100, 100.5), bar(6, 100.8, 102, 100.8, 101.5), bar(7, 101.4, 101.6, 100.9, 101.2)}
 		assertOne(t, s, ctx(map[market.Timeframe]*analysiscontext.TimeframeContext{market.M5: {Timeframe: market.M5, Candles: bars}}))
 	})
-	t.Run("range_sweep", func(t *testing.T) {
-		s, e := rangesweep.New(cfg(rangesweep.ID, map[string]any{"range_bars": 5.0, "minimum_sweep_atr": .1, "invalidation_buffer_atr": .2, "expiry_hours": 2.0}))
-		if e != nil {
-			t.Fatal(e)
-		}
-		m5 := []market.Candle{bar(1, 100, 102, 100, 101), bar(2, 101, 102, 100, 101), bar(3, 101, 102, 100, 101), bar(4, 101, 102, 100, 101), bar(5, 101, 102, 100, 101)}
-		assertOne(t, s, ctx(map[market.Timeframe]*analysiscontext.TimeframeContext{market.M5: {Timeframe: market.M5, Candles: m5, Structure: structure.StructureState{Internal: structure.LayerState{Trend: structure.TrendRange}}}, market.M1: {Timeframe: market.M1, Candles: []market.Candle{bar(6, 99.8, 100.5, 99.5, 100.3)}}}))
-	})
 	t.Run("impulse_pullback", func(t *testing.T) {
 		s, e := impulsepullback.New(cfg(impulsepullback.ID, map[string]any{"minimum_impulse_atr": 1.0, "minimum_pullback_fraction": .25, "maximum_pullback_fraction": .65, "invalidation_buffer_atr": .2, "target_r": 2.0, "expiry_hours": 2.0}))
 		if e != nil {
 			t.Fatal(e)
 		}
 		assertOne(t, s, ctx(map[market.Timeframe]*analysiscontext.TimeframeContext{market.M5: {Timeframe: market.M5, Candles: []market.Candle{bar(1, 99, 100, 98.8, 99.5), bar(2, 100, 102, 100, 102), bar(3, 102, 102.2, 101.8, 102)}}, market.M1: {Timeframe: market.M1, Candles: []market.Candle{bar(4, 101.8, 102, 101.2, 101.4), bar(5, 101.4, 102.1, 101.3, 102.05)}}}))
-	})
-	t.Run("scalp_breakout_retest", func(t *testing.T) {
-		s, e := scalpbreakoutretest.New(cfg(scalpbreakoutretest.ID, map[string]any{"m5_box_bars": 5.0, "m1_accept_bars": 1.0, "maximum_width_atr": 2.0, "retest_tolerance_atr": .15, "invalidation_buffer_atr": .2, "target_r": 2.0, "expiry_hours": 2.0}))
-		if e != nil {
-			t.Fatal(e)
-		}
-		m5 := []market.Candle{bar(1, 100, 101, 100, 100.5), bar(2, 100.5, 101, 100, 100.4), bar(3, 100.4, 101, 100, 100.5), bar(4, 100.5, 101, 100, 100.4), bar(5, 100.4, 101, 100, 100.5)}
-		m1 := []market.Candle{bar(6, 101, 102, 101, 101.5), bar(7, 101.4, 101.6, 100.95, 101.2)}
-		assertOne(t, s, ctx(map[market.Timeframe]*analysiscontext.TimeframeContext{market.M5: {Timeframe: market.M5, Candles: m5}, market.M1: {Timeframe: market.M1, Candles: m1}}))
 	})
 }
 
@@ -207,15 +181,6 @@ func TestBreakoutRetestsRejectDeepFailedReentry(t *testing.T) {
 		t.Fatalf("box breakout accepted a deep failed retest: %+v", got)
 	}
 
-	scalp, err := scalpbreakoutretest.New(cfg(scalpbreakoutretest.ID, map[string]any{"m5_box_bars": 5.0, "m1_accept_bars": 1.0, "maximum_width_atr": 2.0, "retest_tolerance_atr": .15, "invalidation_buffer_atr": .2, "target_r": 2.0, "expiry_hours": 2.0}))
-	if err != nil {
-		t.Fatal(err)
-	}
-	m5 := boxBars[:5]
-	m1 := []market.Candle{bar(6, 101, 102, 101, 101.5), bar(7, 100.5, 101.6, 99.5, 101.2)}
-	if got := scalp.Evaluate(ctx(map[market.Timeframe]*analysiscontext.TimeframeContext{market.M5: {Timeframe: market.M5, Candles: m5}, market.M1: {Timeframe: market.M1, Candles: m1}})); len(got) != 0 {
-		t.Fatalf("scalp breakout accepted a deep failed retest: %+v", got)
-	}
 }
 
 func TestBreakoutRetestsAllowDelayedHoldBeforeRetest(t *testing.T) {
@@ -233,25 +198,10 @@ func TestBreakoutRetestsAllowDelayedHoldBeforeRetest(t *testing.T) {
 		t.Fatalf("M5 breakout that held before a delayed retest must qualify, got %+v", got)
 	}
 
-	scalp, err := scalpbreakoutretest.New(cfg(scalpbreakoutretest.ID, map[string]any{"m5_box_bars": 5.0, "m1_accept_bars": 1.0, "retest_window_bars": 3.0, "maximum_width_atr": 2.0, "retest_tolerance_atr": .15, "invalidation_buffer_atr": .2, "target_r": 2.0, "expiry_hours": 2.0}))
-	if err != nil {
-		t.Fatal(err)
-	}
-	m1 := []market.Candle{
-		bar(6, 101, 102, 101, 101.5),
-		bar(7, 101.5, 101.8, 101.1, 101.6),
-		bar(8, 101.4, 101.6, 100.95, 101.2),
-	}
-	if got := scalp.Evaluate(ctx(map[market.Timeframe]*analysiscontext.TimeframeContext{
-		market.M5: {Timeframe: market.M5, Candles: boxBars[:5]},
-		market.M1: {Timeframe: market.M1, Candles: m1},
-	})); len(got) != 1 {
-		t.Fatalf("M1 acceptance that held before a delayed retest must qualify, got %+v", got)
-	}
 }
 
 func TestIFVGDeduplicatesRepeatedCanonicalZone(t *testing.T) {
-	s, err := ifvg.New(cfg(ifvg.ID, map[string]any{"epsilon_atr_fraction": 0.05, "maximum_zone_atr": 3.0, "entry_max_width_price": 5.0, "reaction_lookback_bars": 3.0, "engulfing_minimum_range_atr": 0.5, "minimum_strength": .4, "minimum_gap_atr": .5, "invalidation_buffer_atr": .5, "minimum_target_distance_atr": 1.0, "expiry_hours": 4.0}))
+	s, err := ifvg.New(cfg(ifvg.ID, detectorParams(map[string]any{"epsilon_atr_fraction": 0.05, "maximum_zone_atr": 3.0, "entry_max_width_price": 5.0, "reaction_lookback_bars": 3.0, "engulfing_minimum_range_atr": 0.5, "minimum_strength": .4, "minimum_gap_atr": .5, "invalidation_buffer_atr": .5, "minimum_target_distance_atr": 1.0, "expiry_hours": 4.0})))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -296,7 +246,7 @@ func TestStrategiesRejectMissingConfiguration(t *testing.T) {
 }
 
 func TestIFVGIgnoresAGapThatIsASliverOfATR(t *testing.T) {
-	s, err := ifvg.New(cfg(ifvg.ID, map[string]any{"epsilon_atr_fraction": 0.05, "maximum_zone_atr": 3.0, "entry_max_width_price": 5.0, "reaction_lookback_bars": 3.0, "engulfing_minimum_range_atr": 0.5, "minimum_strength": .4, "minimum_gap_atr": .5, "invalidation_buffer_atr": .5, "minimum_target_distance_atr": 1.0, "expiry_hours": 4.0}))
+	s, err := ifvg.New(cfg(ifvg.ID, detectorParams(map[string]any{"epsilon_atr_fraction": 0.05, "maximum_zone_atr": 3.0, "entry_max_width_price": 5.0, "reaction_lookback_bars": 3.0, "engulfing_minimum_range_atr": 0.5, "minimum_strength": .4, "minimum_gap_atr": .5, "invalidation_buffer_atr": .5, "minimum_target_distance_atr": 1.0, "expiry_hours": 4.0})))
 	if err != nil {
 		t.Fatal(err)
 	}

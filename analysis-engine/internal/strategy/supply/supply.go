@@ -76,6 +76,8 @@ type Config struct {
 	Reaction strategyutil.ReactionConfig
 	// Technique is the legacy Python technique validation (see strategyutil).
 	Technique strategyutil.TechniqueGeometry
+	// Legacy qualifies the confirmed reaction through the frozen detector contract.
+	Legacy strategyutil.LegacyDetectorSettings
 }
 
 // Strategy is SupplyStrategy — see package doc comment for its thesis.
@@ -127,6 +129,10 @@ func parseConfig(params map[string]any) (Config, error) {
 	if expiryHours <= 0 {
 		return Config{}, fmt.Errorf("expiry_hours must be > 0")
 	}
+	legacyConfig, err := strategyutil.ParseLegacyDetectorSettings(params)
+	if err != nil {
+		return Config{}, err
+	}
 	reactionConfig, err := strategyutil.ParseReactionConfig(params)
 	if err != nil {
 		return Config{}, err
@@ -137,7 +143,7 @@ func parseConfig(params map[string]any) (Config, error) {
 	}
 	return Config{
 		MinimumStrength: minimumStrength, InvalidationBufferATR: invalidationBuffer,
-		MinimumTargetDistanceATR: minimumTargetDistance, ExpiryHours: expiryHours, Reaction: reactionConfig, Technique: techniqueConfig,
+		MinimumTargetDistanceATR: minimumTargetDistance, ExpiryHours: expiryHours, Reaction: reactionConfig, Technique: techniqueConfig, Legacy: legacyConfig,
 	}, nil
 }
 
@@ -162,9 +168,24 @@ func (s *Strategy) RequiredTimeframes() []market.Timeframe {
 	return []market.Timeframe{s.timeframe}
 }
 
-// Evaluate implements strategy.Strategy. Read-only: never mutates ctx
-// (source task §92).
+// Evaluate emits the resting-zone observations and, separately, the confirmed
+// reaction the frozen publisher (technique_detectors) decides on the frame's
+// technique instances.
 func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate {
+	return append(s.resting(ctx), strategyutil.ConfirmedTechnique(ctx, s.cfg.Legacy, strategyutil.TechniqueSupplyDemand, market.Sell, strategyutil.TechniqueSpec{
+		ID: string(ID), Version: Version, ZoneEvidence: "m5_supply_zone_confirmed", ConfirmedEvidence: "m5_supply_zone_rejection_confirmed",
+		InvalidationLabel: "supply_zone_invalidated", InvalidationBufferATR: s.cfg.InvalidationBufferATR,
+		MinimumTargetDistanceATR: s.cfg.MinimumTargetDistanceATR, ExpiryHours: s.cfg.ExpiryHours, Fingerprint: s.fingerprint,
+		Versions: opportunity.AnalysisProvenance{
+			StructureVersion: structureVersion, LiquidityVersion: liquidityVersion, ZoneVersion: zoneVersionUsed,
+			ConfigVersion: configVersion, ConfigFingerprint: s.fingerprint,
+		},
+	})...)
+}
+
+// resting is the resting-zone half of Evaluate. Read-only: never mutates ctx
+// (source task §92).
+func (s *Strategy) resting(ctx *context.MarketContext) []opportunity.Candidate {
 	tfCtx, ok := ctx.Timeframes[s.timeframe]
 	if !ok {
 		return nil
@@ -174,7 +195,6 @@ func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate 
 		return nil
 	}
 
-	lastClose := strategyutil.LastClose(tfCtx.Candles)
 	var candidates []opportunity.Candidate
 	for _, z := range tfCtx.Zones.Zones {
 		if z.Kind != zone.KindSupply {
@@ -235,31 +255,6 @@ func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate 
 			},
 		}
 		candidates = append(candidates, candidate)
-		if reaction := strategyutil.ConfirmReaction(tfCtx, z.ID, market.Sell, float64(z.Low), float64(z.High), atr, z.CreatedAt, s.cfg.Reaction); reaction != nil &&
-			s.cfg.Technique.ProximalRetest(market.Sell, entryLow, entryHigh, lastClose, atr) && strategyutil.WidthWithinATR(entryLow, entryHigh, atr, s.cfg.Technique.MaximumZoneATR) {
-			// The initial resting-zone opportunity remains a technical
-			// observation. Only a distinct, causally identified reaction can
-			// enter Algo Bot's confirmed-zone policy.
-			confirmed := candidate
-			if clipLow, clipHigh, clipped := s.cfg.Technique.ClipEntry(market.Sell, entryLow, entryHigh); clipped {
-				confirmed.Entry = opportunity.EntryZone{Low: clipLow, High: clipHigh}
-			}
-			confirmedID, identityErr := opportunity.DeterministicID(opportunity.Identity{
-				Strategy: ID, StrategyVersion: Version, Symbol: ctx.Symbol, Direction: market.Sell,
-				SetupKey: fmt.Sprintf("zone:%s:rejection:%d:%d", z.ID, reaction.TouchBarTime, reaction.ConfirmationBarTime),
-			})
-			if identityErr != nil {
-				continue
-			}
-			confirmed.ID = confirmedID
-			confirmed.FormedAt = z.CreatedAt
-			confirmed.CreatedAt = reaction.ConfirmationBarTime
-			confirmed.ExpiresAt = confirmed.CreatedAt + int64(s.cfg.ExpiryHours*3600)
-			confirmed.Reaction = reaction
-			confirmed.Evidence = append(append([]opportunity.Evidence(nil), candidate.Evidence...),
-				opportunity.Evidence{Code: "m5_supply_zone_rejection_confirmed"})
-			candidates = append(candidates, confirmed)
-		}
 	}
 	return candidates
 }

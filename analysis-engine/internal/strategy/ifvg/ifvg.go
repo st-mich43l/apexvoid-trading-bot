@@ -22,6 +22,7 @@ type Strategy struct {
 	fingerprint                                                             string
 	reaction                                                                strategyutil.ReactionConfig
 	technique                                                               strategyutil.TechniqueGeometry
+	legacy                                                                  strategyutil.LegacyDetectorSettings
 }
 
 func New(cfg strategy.Config) (strategy.Strategy, error) {
@@ -49,6 +50,9 @@ func New(cfg strategy.Config) (strategy.Strategy, error) {
 		return nil, err
 	}
 	s.technique = technique
+	if s.legacy, err = strategyutil.ParseLegacyDetectorSettings(cfg.Parameters); err != nil {
+		return nil, err
+	}
 	if s.minimumStrength < 0 || s.minimumGapATR < 0 || s.invalidationATR <= 0 || s.targetATR <= 0 || s.expiryHours <= 0 {
 		return nil, fmt.Errorf("ifvg: invalid non-positive strategy parameter")
 	}
@@ -58,7 +62,19 @@ func New(cfg strategy.Config) (strategy.Strategy, error) {
 func (s *Strategy) ID() strategy.StrategyID                { return ID }
 func (s *Strategy) RequiredTimeframes() []market.Timeframe { return []market.Timeframe{market.M5} }
 
+// Evaluate emits the resting inversion observations and, separately, the
+// confirmed reaction the frozen iFVG publisher
+// (technique_detectors.ifvg_technique_reaction) decides on the frame's
+// technique instances.
 func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Candidate {
+	return append(s.resting(ctx), strategyutil.ConfirmedTechnique(ctx, s.legacy, strategyutil.TechniqueIFVG, "", strategyutil.TechniqueSpec{
+		ID: string(ID), Version: Version, ZoneEvidence: "m5_ifvg_inversion_confirmed", ConfirmedEvidence: "m5_ifvg_rejection_confirmed",
+		InvalidationLabel: "ifvg_inversion_failed", InvalidationBufferATR: s.invalidationATR,
+		MinimumTargetDistanceATR: s.targetATR, ExpiryHours: s.expiryHours, Fingerprint: s.fingerprint,
+	})...)
+}
+
+func (s *Strategy) resting(ctx *analysiscontext.MarketContext) []opportunity.Candidate {
 	tf := ctx.Timeframes[market.M5]
 	bar, ok := strategyutil.LastBar(ctx, market.M5)
 	if tf == nil || !ok || ctx.Volatility.ATR <= 0 {
@@ -109,17 +125,6 @@ func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Ca
 			}
 			seenCandidates[candidate.ID] = struct{}{}
 			result = append(result, candidate)
-			if rc := strategyutil.ConfirmReaction(tf, z.ID, direction, float64(z.Low), float64(z.High), atr, z.CreatedAt, s.reaction); rc != nil &&
-				s.technique.ProximalRetest(direction, float64(z.Low), float64(z.High), strategyutil.LastClose(tf.Candles), atr) &&
-				strategyutil.WidthWithinATR(float64(z.Low), float64(z.High), atr, s.technique.MaximumZoneATR) {
-				confirmedBase := candidate
-				if clipLow, clipHigh, clipped := s.technique.ClipEntry(direction, float64(z.Low), float64(z.High)); clipped {
-					confirmedBase.Entry = opportunity.EntryZone{Low: clipLow, High: clipHigh}
-				}
-				if confirmed, confirmErr := strategyutil.ConfirmedVariant(confirmedBase, rc, z.ID, z.OriginTime, s.expiryHours, "m5_ifvg_rejection_confirmed"); confirmErr == nil {
-					result = append(result, confirmed)
-				}
-			}
 		}
 	}
 	return result

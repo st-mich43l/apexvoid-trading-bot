@@ -369,6 +369,65 @@ def test_range_sweep_adapter_marks_room_as_one_r_two_r_scalp_book():
   assert match.scalp_target_r_multiples == (1.0, 2.0)
 
 
+@pytest.mark.no_database
+def test_breakout_retest_scalp_v3_opportunity_is_accepted_without_python_recomputation():
+  """A real Go Breakout Retest Scalp V3 opportunity (XAU, 1:1 target, M5
+  structure flip confirmed on M1) goes through the adapter as emitted: the
+  evidence codes the Go strategy now publishes satisfy the strategy's own
+  evidence contract and its geometry reaches the match unchanged."""
+  raw = golden()
+  payload = raw["payload"]
+  payload.update({
+    "strategy": "scalp_breakout_retest",
+    "direction": "BUY",
+    "timeframe": "M1",
+    "entry": {"low": 4143.508, "high": 4145.572},
+    "invalidation": {"price": 4143.35},
+    "targets": [{"price": {"price": 4147.78}}],
+    "evidence": [
+      {"code": "m5_breakout_level_m1_swing_high"},
+      {"code": "m5_breakout_accepted"},
+      {"code": "m5_breakout_retest_confirmed"},
+      {"code": "m1_execution_confirmed"},
+    ],
+  })
+  payload["technical_context"].pop("confirmation", None)
+  event_payload = parse_analysis_event(OpportunityTopic, json.dumps(raw))
+  match = pol.build_strategy_match(
+    event_payload,
+    profile=pol.REVIEWED_SCOPES["scalp_breakout_retest"],
+    now=payload["created_at"] + 1,
+  )
+  assert match.structural_source == "go:scalp_breakout_retest"
+  assert match.direction == "BUY"
+  assert match.targets_pips == (22,)
+  assert match.absolute_target_price == 4147.78
+
+
+@pytest.mark.no_database
+def test_breakout_retest_scalp_without_its_own_evidence_is_rejected():
+  raw = golden()
+  payload = raw["payload"]
+  payload.update({
+    "strategy": "scalp_breakout_retest",
+    "direction": "BUY",
+    "timeframe": "M1",
+    "entry": {"low": 4143.5, "high": 4145.5},
+    "invalidation": {"price": 4143.0},
+    "targets": [{"price": {"price": 4148.0}}],
+    "evidence": [{"code": "m5_supply_zone_fresh"}],
+  })
+  payload["technical_context"].pop("confirmation", None)
+  event_payload = parse_analysis_event(OpportunityTopic, json.dumps(raw))
+  with pytest.raises(pol.AdapterRejection) as rejected:
+    pol.build_strategy_match(
+      event_payload,
+      profile=pol.REVIEWED_SCOPES["scalp_breakout_retest"],
+      now=payload["created_at"] + 1,
+    )
+  assert rejected.value.code == "strategy_evidence_mismatch"
+
+
 def _no_reaction_match(*, entry_low, entry_high, opportunity_id, scope="box_breakout"):
   profile = pol.REVIEWED_SCOPES[scope]
   raw = golden()
@@ -483,6 +542,28 @@ async def test_unconfigured_scope_defaults_to_go_in_global_go_mode(h):
   assert await h.deliver(event(now)) == "match_written"
   assert await redis_state.get_client().get(strategy_matches_key("XAU")) is not None
   assert await h.decisions() == [{"outcome": "match_written", "reason": "go_live", "mode": "go"}]
+
+
+@pytest.mark.no_database
+def test_xau_observes_but_does_not_trade_the_contained_strategies():
+  assert pol.observe_only_strategies("XAU") == {"ifvg", "liquidity_sweep"}
+  # Containment is instrument-owned: the other instruments and every strategy
+  # not named (Key Level, Breakout Retest Scalp, ...) are untouched.
+  for symbol in ("EURUSD", "GBPUSD", "GBPJPY", "USDJPY"):
+    assert pol.observe_only_strategies(symbol) == frozenset()
+  assert not {"key_level", "scalp_breakout_retest", "range_sweep", "fvg"} & pol.observe_only_strategies("XAU")
+
+
+@pytest.mark.asyncio
+async def test_a_contained_xau_strategy_is_recorded_but_never_becomes_a_match(h):
+  await h.activate()
+  raw = golden(int(h.clock.now))
+  raw["payload"]["strategy"] = "ifvg"
+  raw["payload"]["evidence"] = [{"code": "m5_ifvg_confirmed"}]
+  ev = parse_analysis_event(OpportunityTopic, json.dumps(raw))
+  assert await h.deliver(ev) == "not_adapted"
+  assert await redis_state.get_client().get(strategy_matches_key("XAU")) is None
+  assert await h.decisions() == [{"outcome": "not_adapted", "reason": "execution_contained", "mode": "go"}]
 
 
 @pytest.mark.asyncio

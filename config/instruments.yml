@@ -164,7 +164,11 @@ instrument_packs:
     # Gold retains the separately tuned scale-in and optional XAU-only risk leg.
     auto_entry:
       mode: scale
-    reaction_session: tokyo_london_ny
+    # XAU is not gated by the clock: Asia earned +1240 pips of the profitable week
+    # (London +296, NY +1569). The former `reaction_session: tokyo_london_ny` had no
+    # reader anywhere and is removed; the only wired session gates
+    # (execution.technique.reaction_require_killzone / reaction_require_publish_window /
+    # scalp_require_killzone) are off.
     stop_envelope:
       # Structure-first band replacing global reaction 40-60. Calibrate max
       # from live Key Level stop distances (pack leaf only).
@@ -480,3 +484,19 @@ instruments:
     canonical_symbol: XAU
     aliases:
       - XAUUSD
+    overrides:
+      execution:
+        # Analysis stays on for these strategies (the opportunities are still
+        # produced, stored and decided with reason execution_contained) but no
+        # XAU TradePlan is built from them. Phase 1 (2026-10): iFVG and Liquidity
+        # Sweep lost on XAU in both independent windows reviewed. iFVG's decisions
+        # now match the frozen Python publisher bar for bar (test/techniqueparity),
+        # but matching Python is not evidence that it earns on XAU, so it stays
+        # contained until the owner re-enables it. Liquidity Sweep has no Python
+        # predecessor to prove against. Range Sweep was proven against the frozen
+        # scalp lane (real and synthetic M1 captures, 0 mismatches) and executes.
+        # Removing a name here re-enables its execution; nothing else changes.
+        go_opportunity:
+          observe_only_strategies:
+            - ifvg
+            - liquidity_sweep

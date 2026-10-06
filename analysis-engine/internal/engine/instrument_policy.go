@@ -62,6 +62,12 @@ func ApplyInstrument(settings *Settings, doc *config.Document, symbol string) er
 	}
 	applyParityCRT(settings)
 	applyLegacyDetector(settings)
+	if err := applyScalpBreakoutRetest(settings, doc); err != nil {
+		return err
+	}
+	if err := applyObserveOnly(settings, doc, symbol); err != nil {
+		return err
+	}
 	return applyKeyLevelOverrides(settings, doc, symbol)
 }
 
@@ -143,6 +149,14 @@ func applyKeyLevelOverrides(settings *Settings, doc *config.Document, symbol str
 	if !hasTouches && !hasExplicit {
 		return nil
 	}
+	if hasTouches {
+		switch v := touches.(type) {
+		case int:
+			settings.LegacyRead.FrameLevelMinimumTouches = v
+		case float64:
+			settings.LegacyRead.FrameLevelMinimumTouches = int(v)
+		}
+	}
 	for i := range settings.Strategies {
 		if settings.Strategies[i].ID != "key_level" {
 			continue
@@ -205,7 +219,9 @@ func (s Settings) BlockedByDefendedLevel(c opportunity.Candidate) (float64, bool
 // legacyDetectorStrategies are the strategies whose decision is the frozen
 // detector contract's and which therefore share its thresholds.
 var legacyDetectorStrategies = map[string]bool{
-	"snap_back": true, "fade_scalp": true, "momentum_ride": true, "break_retest": true, "range_edge": true,
+	"snap_back": true, "fade_scalp": true, "momentum_ride": true, "break_retest": true, "range_edge": true, "key_level": true, "liquidity_sweep": true,
+	// The technique publishers (technique_detectors.py) qualify through the same contract.
+	"supply": true, "demand": true, "order_block": true, "fvg": true, "ifvg": true, "crt": true, "confluence_zone": true,
 }
 
 // applyLegacyDetector injects the shared frozen-detector thresholds, the
@@ -232,6 +248,94 @@ func applyLegacyDetector(settings *Settings) {
 		params["confluence_mad_score_weight"] = settings.Confluence.MADScoreWeight
 		params["fibonacci_confluence_weight"] = settings.Confluence.FibonacciWeight
 		params["fibonacci_epsilon_atr"] = settings.Fib.EpsilonATR
+		params["price_digits"] = float64(settings.Geometry.PriceDigits)
+		params["technique_retest_max_touches"] = float64(settings.TechniqueZones.Technique.RetestMaxTouches)
 		settings.Strategies[i].Parameters = params
 	}
+}
+
+// scalpBook are the shared M1-scalp stop/target leaves every strategy of the
+// M5-setup / M1-confirmation lane reads (auto_algo.strategies.scalping.*).
+var scalpBook = map[string]string{
+	"buffer_m1_atr_multiple":         "auto_algo.strategies.scalping.stop.buffer_m1_atr_multiple",
+	"buffer_minimum_spread_multiple": "auto_algo.strategies.scalping.stop.buffer_minimum_spread_multiple",
+	"stop_minimum_pips":              "auto_algo.strategies.scalping.stop.minimum_pips",
+	"stop_maximum_pips":              "auto_algo.strategies.scalping.stop.maximum_pips",
+	"minimum_net_target_pips":        "auto_algo.strategies.scalping.target.minimum_net_target_pips",
+	"maximum_spread_pips":            "auto_algo.strategies.scalping.policy.maximum_spread_pips",
+}
+
+// scalpLaneExtras are the leaves only one strategy of the lane reads.
+var scalpLaneExtras = map[string]map[string]string{
+	"scalp_breakout_retest": {},
+	"range_sweep": {
+		"buy_maximum_position":     "auto_algo.strategies.scalping.location.range_buy_maximum_position",
+		"sell_minimum_position":    "auto_algo.strategies.scalping.location.range_sell_minimum_position",
+		"trigger_maximum_age_bars": "auto_algo.strategies.scalping.activation.trigger_maximum_age_bars",
+	},
+}
+
+// applyScalpBreakoutRetest gives the M5-setup / M1-confirmation scalps (Breakout
+// Retest Scalp, Range Sweep) their instrument scale and the shared M1-scalp
+// stop/target book (auto_algo.strategies.scalping.*), the same leaves the stop
+// envelope and the execution policy read, so a setup is sized from one source.
+// It is idempotent.
+func applyScalpBreakoutRetest(settings *Settings, doc *config.Document) error {
+	for i := range settings.Strategies {
+		extras, isScalp := scalpLaneExtras[string(settings.Strategies[i].ID)]
+		if !isScalp {
+			continue
+		}
+		params := make(map[string]any, len(settings.Strategies[i].Parameters)+len(scalpBook)+len(extras)+2)
+		for k, v := range settings.Strategies[i].Parameters {
+			params[k] = v
+		}
+		for _, leaves := range []map[string]string{scalpBook, extras} {
+			for key, path := range leaves {
+				value, err := getFloat(doc, path)
+				if err != nil {
+					return err
+				}
+				params[key] = value
+			}
+		}
+		pip, digits := settings.Geometry.PipSize, settings.Geometry.PriceDigits
+		if pip <= 0 {
+			// Before a symbol is attached the canonical defaults stand in.
+			pip, digits = settings.LegacyRead.PipSize, 2
+		}
+		params["pip_size"] = pip
+		params["price_digits"] = float64(digits)
+		settings.Strategies[i].Parameters = params
+	}
+	return nil
+}
+
+// applyObserveOnly reads the instrument's observe-only strategy list.
+func applyObserveOnly(settings *Settings, doc *config.Document, symbol string) error {
+	raw, ok, err := doc.InstrumentOverride(symbol, "execution", "go_opportunity", "observe_only_strategies")
+	if err != nil {
+		return err
+	}
+	settings.ObserveOnly = nil
+	if !ok {
+		return nil
+	}
+	list, isList := raw.([]any)
+	if !isList {
+		return fmt.Errorf("instrument %s: observe_only_strategies must be a list, got %T", symbol, raw)
+	}
+	known := map[opportunity.StrategyID]bool{}
+	for _, id := range strategy.KnownIDs() {
+		known[id] = true
+	}
+	settings.ObserveOnly = make(map[opportunity.StrategyID]bool, len(list))
+	for _, item := range list {
+		name, isString := item.(string)
+		if !isString || !known[opportunity.StrategyID(name)] {
+			return fmt.Errorf("instrument %s: observe_only_strategies names unknown strategy %v", symbol, item)
+		}
+		settings.ObserveOnly[opportunity.StrategyID(name)] = true
+	}
+	return nil
 }

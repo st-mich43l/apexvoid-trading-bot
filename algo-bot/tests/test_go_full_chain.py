@@ -343,6 +343,13 @@ async def test_every_reviewed_go_strategy_reaches_tradeplan_v8(h, prod, scope):
   record = catalog_kafka_record(h.clock.now, scope)
   await consumer_for(h).process_record(record)
 
+  if scope in pol.observe_only_strategies("XAU"):
+    # XAU observes this strategy without trading it: the opportunity is
+    # consumed and decided, but no match and therefore no plan exists.
+    assert await prod.get(strategy_matches_key("XAU")) is None
+    assert await plans(prod) == []
+    return
+
   match = deserialize_matches(await prod.get(strategy_matches_key("XAU")))[0]
   assert match.structural_source == f"go:{scope}"
   assert "origin:go" in match.tags

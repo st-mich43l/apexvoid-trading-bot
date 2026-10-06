@@ -1,6 +1,7 @@
 package supply_test
 
 import (
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/test/legacyfixture"
 	"testing"
 
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/context"
@@ -13,7 +14,7 @@ import (
 )
 
 func validParams() map[string]any {
-	return map[string]any{
+	return legacyfixture.Params(map[string]any{
 		"minimum_strength":            0.3,
 		"invalidation_buffer_atr":     0.5,
 		"minimum_target_distance_atr": 1.0,
@@ -23,7 +24,7 @@ func validParams() map[string]any {
 		"epsilon_atr_fraction":        0.05,
 		"maximum_zone_atr":            3.0,
 		"entry_max_width_price":       5.0,
-	}
+	})
 }
 
 func newStrategy(t *testing.T, params map[string]any) strategy.Strategy {

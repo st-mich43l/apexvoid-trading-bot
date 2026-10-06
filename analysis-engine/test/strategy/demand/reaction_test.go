@@ -9,7 +9,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/zone"
 )
 
-func TestDemand_PublishesDistinctCausallyConfirmedReaction(t *testing.T) {
+func TestDemand_RestingZoneAloneNeverPublishesAConfirmedReaction(t *testing.T) {
 	s := newStrategy(t, validParams())
 	ctx := baseContext(1.0)
 	touched := freshDemandZone("zone1", 2020, 2022)
@@ -32,31 +32,16 @@ func TestDemand_PublishesDistinctCausallyConfirmedReaction(t *testing.T) {
 			Low:  2031, High: 2032,
 		}}},
 	}
+	// The resting zone is only an observation. A confirmed reaction is the
+	// frozen technique publisher's decision on the frame's technique instances
+	// (internal/strategyutil/technique_decision.go, proven bar by bar against the
+	// Python oracle in test/techniqueparity), so a context without that frame
+	// publishes no confirmation however the zone's bars look.
 	found := s.Evaluate(ctx)
-	if len(found) != 2 || found[0].Reaction != nil || found[1].Reaction == nil {
-		t.Fatalf("expected resting observation plus one confirmed reaction, got %+v", found)
+	if len(found) != 1 || found[0].Reaction != nil {
+		t.Fatalf("expected only the resting observation without a technique frame, got %+v", found)
 	}
-	confirmed := found[1]
-	if confirmed.ID == found[0].ID || confirmed.Reaction.ZoneID != "zone1" ||
-		confirmed.Reaction.TouchBarTime != 1200 || confirmed.Reaction.ConfirmationBarTime != 1200 ||
-		confirmed.Reaction.ReactionType != "rejection" {
-		t.Fatalf("confirmation must have a separate causal identity: %+v", confirmed)
-	}
-	if err := confirmed.Validate(); err != nil {
-		t.Fatalf("confirmed technical opportunity failed validation: %v", err)
-	}
-	if repeat := s.Evaluate(ctx); len(repeat) != 2 || repeat[1].ID != confirmed.ID {
-		t.Fatalf("replay must preserve reaction identity")
-	}
-	ctx.Timeframes[market.M5].Candles = append(candles, market.Candle{
-		Time: 1500, Open: 2022.5, High: 2024.2, Low: 2022.3, Close: 2024,
-	})
-	// The shared confirmation keeps seeing the same reaction for its lookback
-	// window; that must stay the SAME opportunity (the book deduplicates by
-	// ID), never a second reaction for the same touch.
-	for _, c := range s.Evaluate(ctx) {
-		if c.Reaction != nil && c.ID != confirmed.ID {
-			t.Fatalf("follow-through after an already confirmed touch must not create a second reaction: %+v", c.Reaction)
-		}
+	if repeat := s.Evaluate(ctx); len(repeat) != 1 || repeat[0].ID != found[0].ID {
+		t.Fatalf("replay must preserve the observation identity")
 	}
 }
