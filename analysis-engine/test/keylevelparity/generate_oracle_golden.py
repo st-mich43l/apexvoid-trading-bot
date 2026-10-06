@@ -33,6 +33,9 @@ CAPTURES = {
   "XAU": "replay-xau-production-capture-20260921.json",
   "GBPUSD": "replay-gbpusd-production-capture-20261005.json",
   "USDJPY": "replay-usdjpy-production-capture-20261005.json",
+  "EURUSD": "replay-eurusd-production-capture-20261006.json",
+  "GBPJPY": "replay-gbpjpy-production-capture-20261006.json",
+  "XAU_LATER": "replay-xau-m1-production-capture-20261006.json",
 }
 ENGINE = os.environ.get("ENGINE_DIR", "/engine")
 OUT = os.path.join(ENGINE, "testdata/key-level-oracle.json")
@@ -60,6 +63,7 @@ def run(symbol):
   from app.analysis.ohlc_source import window_for_timeframe
 
   raw = json.load(open(os.path.join(ENGINE, "testdata", CAPTURES[symbol])))
+  instrument = raw["symbol"]
   frames_all = {}
   for tf, rows in raw["timeframes"].items():
     if tf not in MINUTES:
@@ -69,7 +73,7 @@ def run(symbol):
       pd.to_datetime(df.pop("t").astype("int64"), unit="s", utc=True), name="time",
     )
     frames_all[tf] = df
-  settings = _detector_settings(symbol)
+  settings = _detector_settings(instrument)
   htf = _htf_tfs()
   look = {tf: window_for_timeframe(tf) for tf in ("M5", *[t.upper() for t in htf])}
   bars, decisions = [], {}
@@ -83,7 +87,7 @@ def run(symbol):
         frames[tf] = closed
     if len(frames.get("M5", [])) < look["M5"]:
       continue
-    ctx = build_context(symbol, "M5", frames, settings, htf, causal_structure=False)
+    ctx = build_context(instrument, "M5", frames, settings, htf, causal_structure=False)
     bar = int(ts.timestamp())
     bars.append(bar)
     result = D.key_level_reaction(ctx)

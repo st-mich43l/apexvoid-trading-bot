@@ -84,11 +84,16 @@ machine-readable factors (`htf_aligned`, `touches`, `wick_rejection`,
 
 ## Evidence
 
-- `test/keylevelparity`: replays the committed real XAU, GBPUSD and USDJPY
-  captures (3 × 1351 closed M5 bars) and requires the same decision as the
-  Python detector on every bar — 1989 decisions, 0 mismatches — including
-  silence where Python was silent. The golden is produced by running the
-  Python (`generate_oracle_golden.py`), never by Go.
+- `test/keylevelparity`: replays six committed real captures — XAU of the
+  profitable week (14–21 Sep), XAU of the incident window (28 Sep – 6 Oct),
+  EURUSD, GBPUSD, GBPJPY and USDJPY, 6 × 1351 closed M5 bars — and requires the
+  same decision as the Python detector on every bar: 3310 decisions, 0
+  mismatches, silence where Python was silent, and the same level, role, kind,
+  touches, direction, entry band, confluence stars and reaction bars. The
+  golden is produced by running the Python (`generate_oracle_golden.py`), never
+  by Go. (GBPJPY has no decisions: its instrument rule requires an explicit
+  support/resistance role, which the level primitive never produces, so Key Level
+  was already silent there in Python and stays so.)
 - `internal/strategy/keylevel` unit tests: support BUY, resistance SELL,
   broken support/resistance skipped, ambiguous resolution by price, opposing-zone
   contradiction and widened window, both-sides discard, best-of-several (and the
