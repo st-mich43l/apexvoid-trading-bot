@@ -641,6 +641,18 @@ func SupplyDemand(bars []market.Candle, legs []Leg) []Zone {
 	return zones
 }
 
+// BOSBreaks keeps only the breaks of kind BOS: the structure breaks an order
+// block was qualified by before 21 Sep 2026 (a CHoCH did not qualify one).
+func BOSBreaks(breaks []Break) []Break {
+	var out []Break
+	for _, b := range breaks {
+		if b.Kind == "BOS" {
+			out = append(out, b)
+		}
+	}
+	return out
+}
+
 func causingBOS(leg Leg, breaks []Break) (Break, bool) {
 	for _, b := range breaks {
 		if (b.Kind != "BOS" && b.Kind != "CHoCH") || b.Direction != leg.Direction {
@@ -1067,6 +1079,10 @@ type Instance struct {
 	HasBOS         bool
 	// Score carries the legacy source-quality score into the parity instance.
 	Score float64
+	// ZoneScore is the zone's multi-factor score (zones.score_zones) when the
+	// instance was built from scored zones, else zero: the frozen
+	// measured["score"] the technique publishers rate a reaction with.
+	ZoneScore float64
 	// H1Time is the H1 candle a CRT instance is built on (open time).
 	H1Time int64
 }
@@ -1214,7 +1230,7 @@ func instanceFromZone(z Zone, technique string, entryMax float64) Instance {
 	inst := Instance{
 		Technique: technique, Side: zoneSideToTradeSide(z.Side), Low: z.Low(), High: z.High(),
 		Sources: append([]string(nil), sources...), OriginIndex: z.OriginIndex, Touches: z.Touches, Mitigated: z.Mitigated,
-		Score: sourceQuality(z),
+		Score: sourceQuality(z), ZoneScore: z.Score,
 	}
 	if (technique == "supply_demand" || technique == "order_block" || technique == "fvg") && entryMax > 0 {
 		if clipped, ok := optimizeTechniqueEntry(z, entryMax); ok {
@@ -1383,6 +1399,17 @@ func CollectInstances(sdZones, obZones, fvgZones []Zone, bars []market.Candle, p
 		}
 	}
 	return out
+}
+
+// InstancesFromScoredZones collects the technique instances from the scored,
+// unmerged zones of one timeframe (the frozen technique_zones), as
+// collect_technique_instances does for the execution timeframe (without CRT).
+func InstancesFromScoredZones(scored []Zone, bars []market.Candle, atr float64, s TechniqueSettings) []Instance {
+	if len(bars) == 0 {
+		return nil
+	}
+	obV, sdV, fvgV := SourceViews(scored)
+	return CollectInstances(sdV, obV, fvgV, bars, bars[len(bars)-1].Close, atr, s)
 }
 
 // ---- production settings and the one-call pipeline ---------------------------

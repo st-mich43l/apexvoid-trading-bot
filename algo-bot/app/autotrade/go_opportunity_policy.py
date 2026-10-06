@@ -128,11 +128,27 @@ REVIEWED_SCOPES: dict[str, ScopeProfile] = {
   # detector after receiving the event.
   "range_sweep": ScopeProfile("range_sweep", "Range Sweep Scalp", "range_sweep", None, frozenset({"M1"}), "go_m5_m1_range_sweep", evidence_prefixes=("m5_range_context", "m1_edge_sweep", "m1_reclaim")),
   "impulse_pullback": ScopeProfile("impulse_pullback", "Impulse Pullback Scalp", "impulse_pullback", None, frozenset({"M1"}), "go_m5_m1_impulse_pullback", evidence_prefixes=("m5_qualified_impulse", "m1_bounded_pullback", "m1_continuation_trigger")),
-  "scalp_breakout_retest": ScopeProfile("scalp_breakout_retest", "Breakout Retest Scalp", "scalp_breakout_retest", None, frozenset({"M1"}), "go_m5_m1_breakout_retest", evidence_prefixes=("m5_prebreakout_box", "m1_breakout_accepted", "m1_retest_confirmed")),
+  "scalp_breakout_retest": ScopeProfile("scalp_breakout_retest", "Breakout Retest Scalp", "scalp_breakout_retest", None, frozenset({"M1"}), "go_m5_m1_breakout_retest", evidence_prefixes=("m5_prebreakout_box", "m5_breakout_level_", "m5_breakout_accepted", "m5_breakout_retest_confirmed", "m1_execution_confirmed")),
 }
 
 if frozenset(REVIEWED_SCOPES) != CATALOG_STRATEGY_IDS:
   raise RuntimeError("Go strategy catalog and Go-to-policy adapter registry are out of sync")
+
+
+def observe_only_strategies(symbol: str) -> frozenset[str]:
+  """Go strategies whose opportunities this instrument observes but never trades.
+
+  Instrument-owned (``instruments.<SYMBOL>.overrides.execution.go_opportunity.
+  observe_only_strategies``); empty when the instrument names none.
+  """
+  from app.core.instrument_geometry import instrument_runtime
+
+  try:
+    node = instrument_runtime(str(symbol).upper()).execution.go_opportunity
+    names = node.observe_only_strategies
+  except (AttributeError, KeyError):
+    return frozenset()
+  return frozenset(str(name) for name in (names or ()))
 
 
 class AdapterRejection(Exception):
@@ -511,6 +527,11 @@ class GoOpportunityPolicy:
     profile = REVIEWED_SCOPES.get(payload.strategy)
     if profile is None:
       await self._decide(event, "not_adapted", "scope_not_reviewed")
+      return "not_adapted"
+    if payload.strategy in observe_only_strategies(payload.symbol):
+      # Analysis stays on: the opportunity is produced, stored and decided, but
+      # no match (hence no TradePlan) is built for this instrument.
+      await self._decide(event, "not_adapted", "execution_contained", owner="go")
       return "not_adapted"
     # The live Kafka opportunity event is the technical-source boundary.
     if not self._multiple_enabled():

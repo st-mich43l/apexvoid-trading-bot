@@ -13,6 +13,76 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Phase 1 — restored the XAU edge of the profitable week (14–18 Sep 2026).
+  **Key Level** (`v3`) is now the Python detector of that week
+  (`key_level_reaction` at `a1c77584`) on the detector-contract frame. Replayed
+  over the same real bars, the previous Go Key Level reproduced the Python entry
+  band on 1 of 638 XAU decisions, missed 194, fired 495 times where Python was
+  silent and emitted several candidates on 24 % of bars. It now keeps ONE
+  candidate per evaluation (highest confluence, nearest level on a tie), reacts
+  off the wider proximal band, resolves ambiguous levels and opposing zones as
+  Python did, and has no strength/proximity/target-room gate (none existed in
+  the profitable system; the target is the nearest opposing liquidity, else a
+  fixed 2R, and room remains the execution policy's call). Its structure is the
+  profitable week's (`detector_contract: profit_week`: levels counted from swings
+  only, order blocks caused by BOS only); the two 21 Sep Python changes moved 18 %
+  of its decisions. Proven on 3310 Python decisions over six committed real captures (XAU of the
+  profitable week and of the incident window, EURUSD, GBPUSD, GBPJPY, USDJPY) with
+  0 mismatches (`test/keylevelparity`).
+- **Breakout Retest Scalp** (`scalp_breakout_retest`, `v3`) is the Breakout Retest
+  V2 engine that ran at the end of that week, replacing a 120-line box detector
+  that had produced no trade since the migration: level sources (M5 structure
+  flips, M5 key levels, equal highs/lows, compression box), the
+  break → acceptance → retest → role-flip state machine, the five-component
+  quality ranking with the best episode per direction, M1 execution confirmation
+  of an M5 setup, and the structural stop and 1:2/1:1 corridor target. XAU only,
+  evaluated on every closed M1 bar. Proven on 1939 real XAU M1 cycles (26
+  opportunities, 0 mismatches, `test/scalpparity`) and 38 + 22 Python-generated
+  unit cases. The Python adapter accepts the new evidence codes
+  (`m5_breakout_level_*`, `m5_breakout_accepted`, `m5_breakout_retest_confirmed`,
+  `m1_execution_confirmed`) with no Python recomputation.
+- Supply, Demand, Order Block, FVG, iFVG, CRT and Confluence Zone now publish the
+  frozen Python technique publishers' confirmed reaction instead of their own
+  resting-zone judgement. The engine exposes the technique instances (scored
+  unmerged zones, iFVG inversions, CRT ranges) on the execution frame, and
+  `strategyutil.TechniqueSource` ports `_technique_reaction`, the confluence-band
+  merge and `confluence_zone_reaction`. Proven bar by bar on 2,957 decisions over
+  the XAU, EURUSD, GBPUSD, GBPJPY and USDJPY captures (`test/techniqueparity`,
+  oracle `1c9f323`); the one divergence is the frozen oracle's hard-coded 0.1 pip
+  sweep-grab tolerance, which is not copied for 0.01-pip pairs. Before, on XAU
+  only 3/28 FVG, 34/91 iFVG, 127/183 supply-demand and 4/4 order-block decisions
+  coincided with the oracle, with 11 to 97 extra firings each. Confirmed XAU
+  supply/demand opportunities on the replay capture fall from 193 to 147.
+- Fixed a GBPJPY frame mismatch found by that comparison: the instrument's
+  `analysis.levels.minimum_key_touches: 3` reached only the Key Level strategy, not
+  the key levels the zones are scored against; it now applies to both, as in the
+  frozen analysis.
+- XAU now observes but does not trade `ifvg` and `liquidity_sweep`
+  (instrument-owned `overrides.execution.go_opportunity.observe_only_strategies`):
+  Go still produces them, Algo Bot records `execution_contained` and builds no
+  plan, and the engine leaves them out of arbitration. Both lost on XAU in both
+  independent windows reviewed; Liquidity Sweep has no Python predecessor to
+  prove against, and iFVG now matches the oracle but matching is not evidence that
+  it earns on XAU. Remove a name to re-enable it.
+- Range Sweep v3 is the Go port of the frozen XAU M5-setup/M1-confirm scalp lane
+  (range width gate, dealing-range position, edge-touch sweep and reclaim,
+  structural stop, scalp stop/target book), sharing one scalp context with
+  Breakout Retest (`strategyutil/scalpcontext.go`). Proven on real and
+  Python-generated synthetic M1 captures (`test/scalpparity`, 0 mismatches), so
+  it executes on XAU again. Range Sweep stays XAU-only.
+- Liquidity Sweep v3 is rebuilt on the frozen frame's liquidity grabs and pools
+  through the shared detector-contract qualification instead of the former
+  simplified sweep test. It stays contained on XAU.
+- Auto-algo XAU orders with a tight structural zone now get a separate-leg
+  ladder: `widen_tight_xau_zone` stretches a zone narrower than the configured
+  minimum (capped at half the stop distance) so the entry still splits into two
+  distinct limit legs instead of collapsing to one order. FX and legacy routes
+  are unchanged.
+- Fixed manual /algo pending orders surviving the end of the trade day: the
+  executor now withdraws every resting entry leg of a `cancel_on_expiry` plan
+  once its entry validity ends (keeping any filled position), and retires the
+  plan when nothing is open. Previously `plan_expired` only blocked new
+  submissions, so unfilled ladder legs stayed on the book.
 - Restored the independent Go `break_retest` strategy and completed Range
   Edge, and proved all five detector-contract strategies (`break_retest`,
   `range_edge`, `snap_back`, `momentum_ride`, `fade_scalp`) against the frozen

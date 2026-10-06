@@ -143,9 +143,10 @@ analysis:
   # calibration, not an empirically-tuned or ported constant. They are
   # Treat these values as explicit strategy configuration:
   #   minimum_strength/minimum_touches — floors zone.Zone.Strength (or, for
-  #     key_level, keylevel.Level.Touches/Strength) below which a setup is
-  #     not tradeable at all.
-  #   proximity_atr (key_level/session_level only — these primitives carry
+  #     session_level, the level's touches/strength) below which a setup is
+  #     not tradeable at all. (key_level carries only minimum_touches: the
+  #     profitable Python detector had no strength or proximity gate.)
+  #   proximity_atr (session_level only — the primitive carries
   #     no zone.Relevance equivalent) — how close, in ATR, current price
   #     must sit to the level for it to be a live setup; 1.0 sits in the
   #     same ballpark as zone_relevance.nearby_atr (1.25) above, since both
@@ -165,13 +166,19 @@ analysis:
   # consumes those events and applies execution policy before publishing V8.
   strategies:
     key_level:
-      version: v2
+      version: v3
       enabled: true
       minimum_touches: 2
-      minimum_strength: 0.4
-      proximity_atr: 1.0
+      # The structure Key Level reads: profit_week is the detector contract of
+      # 14–18 Sep 2026 (levels counted from fractal swings; order blocks caused
+      # by a BOS), the contract of the profitable XAU week. current is the one
+      # the other detectors read (wick touches counted, CHoCH order blocks).
+      detector_contract: profit_week
       invalidation_buffer_atr: 0.5
       minimum_target_distance_atr: 1.0
+      # Reported target when no opposing liquidity pool exists: a fixed reward:risk
+      # beyond the entry. Whether the room is enough is the execution policy's call.
+      fallback_target_r: 2.0
       expiry_hours: 24.0
       # Ported from the legacy Python detector's key_level_role.py::
       # classify_key_level_role (breakout_accept_bars) — consecutive
@@ -404,19 +411,38 @@ analysis:
       chop_edge_fraction: 0.25
       strict_premium_discount: true
     liquidity_sweep:
-      version: v2
+      version: v3
       enabled: true
+      # A sweep counts only as the frozen detector contract defined a liquidity
+      # event: a lone-extreme pool of the frozen window (equal levels are Fade
+      # Scalp's) cleared by the frozen equal-level band, closed back through with
+      # frozen grab grade A or B, the reversal's premium/discount location and the
+      # shared confluence floor.
+      strict_premium_discount: true
       minimum_rejection_body_atr: 0.3
       invalidation_buffer_atr: 0.25
       target_r: 2.0
       expiry_hours: 8.0
+    # Range Sweep Scalp — the Python discover_range_sweep of the profitable XAU
+    # week: the last 24 closed M5 bars form the range (at least 25 pips wide), a
+    # closed M1 bar touches or pierces an edge within the scalp buffer and closes
+    # back inside in the trade direction, and the dealing-range position agrees
+    # with the edge. Stop/target/spread and the location and trigger-age leaves
+    # are the shared auto_algo.strategies.scalping.* book, injected per
+    # instrument. XAU only: the frozen scalp lane hosted gold only.
     range_sweep:
-      version: v2
+      version: v3
       enabled: true
-      range_bars: 24
-      minimum_sweep_atr: 0.1
-      invalidation_buffer_atr: 0.2
-      expiry_hours: 2.0
+      symbols: [XAU]
+      setup_window_bars: 120
+      dealing_window_bars: 120
+      confirmation_window_bars: 60
+      context_max_age_seconds: 420
+      context_atr_bars: 14
+      active_range_bars: 24
+      expiry_minutes: 15
+      minimum_range_width_pips: 25
+      reward_risk_ladder: [2.0, 1.0]
     impulse_pullback:
       version: v2
       enabled: true
@@ -426,17 +452,66 @@ analysis:
       invalidation_buffer_atr: 0.2
       target_r: 2.0
       expiry_hours: 2.0
+    # Breakout Retest Scalp — the profitable-week (14–18 Sep 2026) Python
+    # "Breakout Retest V2" engine (app/scalping): M5 setup, M1 execution
+    # confirmation. Level sources are the setup window's swings, its M5 key
+    # levels, equal highs/lows and a compression box; every source runs through
+    # break → acceptance → retest → role flip, and the best-quality armed
+    # episode per direction wins. Values are the production values of that
+    # period (strategies.scalping.*), not retuned. XAU only: the frozen scalp
+    # lane hosted gold only.
     scalp_breakout_retest:
-      version: v2
+      version: v3
       enabled: true
-      m5_box_bars: 12
-      m1_accept_bars: 2
-      maximum_width_atr: 2.0
-      retest_tolerance_atr: 0.15
-      retest_window_bars: 3
-      invalidation_buffer_atr: 0.2
-      target_r: 2.0
-      expiry_hours: 2.0
+      symbols: [XAU]
+      setup_window_bars: 120
+      confirmation_window_bars: 60
+      confirmation_lookback_bars: 2
+      context_max_age_seconds: 420
+      context_atr_bars: 14
+      active_range_bars: 24
+      expiry_minutes: 15
+      # Compression-box path (strategies.scalping.breakout.*).
+      box_max_atr: 1.5
+      min_break_atr: 0.25
+      touch_tol_atr: 0.20
+      min_box_bars: 8
+      max_box_bars: 20
+      min_touches_per_side: 2
+      retest_lookback_bars: 5
+      require_retest_rejection: true
+      # Breakout Retest V2 state machine.
+      v2_enabled: true
+      breakout_cross_tolerance_atr: 0.0
+      breakout_margin_atr: 0.0
+      acceptance_bars: 1
+      acceptance_required_closes: 1
+      min_retest_delay_bars: 0
+      max_retest_delay_bars: 20
+      retest_front_run_atr: 0.0
+      max_retest_penetration_atr: 0.30
+      confirmation_mode: reclaim_close
+      min_quality_score: 0.0
+      enable_structure_flip: true
+      enable_m5_key_levels: true
+      enable_liquidity_level: true
+      swing_min_age_bars: 3
+      swing_max_age_bars: 240
+      swing_min_spacing_atr: 0.3
+      m5_structure_min_touches: 2
+      # Setup-window structure (AnalysisSettings defaults of the scalp lane).
+      micro_swing_lookback: 3
+      equal_tolerance_pip_fraction: 0.5
+      swing_fractal_n: 2
+      level_cluster_atr: 0.5
+      level_round_step: 5.0
+      level_minimum_touches: 2
+      level_max_cluster_span_multiple: 2.0
+      # The stop and target book (buffer multiples, stop min/max pips, minimum net
+      # target, maximum spread for the buffer floor) is the shared
+      # auto_algo.strategies.scalping.* book and is injected from there, so it has
+      # one source. Instrument pip size and price digits are injected per symbol.
+      reward_risk_ladder: [2.0, 1.0]
 
   # Analysis Engine owns these market-state inputs. Depth and thresholds are
   # shared technical configuration, not execution policy.

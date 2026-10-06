@@ -41,6 +41,9 @@ type LegacyDetectorSettings struct {
 	FibonacciEpsilonATR      float64
 	ReactionLookbackBars     int
 	EngulfingMinimumRangeATR float64
+	// RetestMaxTouches is technique_retest_max_touches: how many touches a
+	// technique zone may have taken and still publish (optional, default 30).
+	RetestMaxTouches int
 }
 
 // LegacyDetectorParameterKeys documents the parameters ParseLegacyDetectorSettings
@@ -76,6 +79,12 @@ func ParseLegacyDetectorSettings(params map[string]any) (LegacyDetectorSettings,
 	}
 	if s.ReactionLookbackBars, err = Int(params, "reaction_lookback_bars"); err != nil {
 		return s, err
+	}
+	s.RetestMaxTouches = 30
+	if _, present := params["technique_retest_max_touches"]; present {
+		if s.RetestMaxTouches, err = Int(params, "technique_retest_max_touches"); err != nil {
+			return s, err
+		}
 	}
 	version, ok := params["confluence_scoring_version"].(string)
 	if !ok || version == "" {
