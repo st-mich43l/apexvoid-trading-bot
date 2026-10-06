@@ -164,7 +164,11 @@ instrument_packs:
     # Gold retains the separately tuned scale-in and optional XAU-only risk leg.
     auto_entry:
       mode: scale
-    reaction_session: tokyo_london_ny
+    # XAU is not gated by the clock: Asia earned +1240 pips of the profitable week
+    # (London +296, NY +1569). The former `reaction_session: tokyo_london_ny` had no
+    # reader anywhere and is removed; the only wired session gates
+    # (execution.technique.reaction_require_killzone / reaction_require_publish_window /
+    # scalp_require_killzone) are off.
     stop_envelope:
       # Structure-first band replacing global reaction 40-60. Calibrate max
       # from live Key Level stop distances (pack leaf only).
