@@ -534,6 +534,15 @@ func measuredPointer(snapshot mad.Snapshot, key string) *float64 {
 // leaves the consumer's old winner/conflict_held status alive forever.
 func (w *SymbolWorker) arbitrate(now int64, reference float64, publish bool) {
 	live := w.state.Opportunities.Live()
+	if len(w.settings.ObserveOnly) > 0 {
+		executable := make([]opportunity.Candidate, 0, len(live))
+		for _, candidate := range live {
+			if !w.settings.ObserveOnly[candidate.Strategy] {
+				executable = append(executable, candidate)
+			}
+		}
+		live = executable
+	}
 	decisions := arbitration.ArbitrateInPlay(live, w.settings.Arbitration, reference)
 	fresh := make(map[string]arbitration.Decision, len(decisions))
 	var actionable, resting []arbitration.Decision

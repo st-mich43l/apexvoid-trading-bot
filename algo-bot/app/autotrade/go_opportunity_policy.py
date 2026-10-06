@@ -135,6 +135,22 @@ if frozenset(REVIEWED_SCOPES) != CATALOG_STRATEGY_IDS:
   raise RuntimeError("Go strategy catalog and Go-to-policy adapter registry are out of sync")
 
 
+def observe_only_strategies(symbol: str) -> frozenset[str]:
+  """Go strategies whose opportunities this instrument observes but never trades.
+
+  Instrument-owned (``instruments.<SYMBOL>.overrides.execution.go_opportunity.
+  observe_only_strategies``); empty when the instrument names none.
+  """
+  from app.core.instrument_geometry import instrument_runtime
+
+  try:
+    node = instrument_runtime(str(symbol).upper()).execution.go_opportunity
+    names = node.observe_only_strategies
+  except (AttributeError, KeyError):
+    return frozenset()
+  return frozenset(str(name) for name in (names or ()))
+
+
 class AdapterRejection(Exception):
   def __init__(self, code: str, message: str = ""):
     super().__init__(f"{code}: {message}" if message else code)
@@ -511,6 +527,11 @@ class GoOpportunityPolicy:
     profile = REVIEWED_SCOPES.get(payload.strategy)
     if profile is None:
       await self._decide(event, "not_adapted", "scope_not_reviewed")
+      return "not_adapted"
+    if payload.strategy in observe_only_strategies(payload.symbol):
+      # Analysis stays on: the opportunity is produced, stored and decided, but
+      # no match (hence no TradePlan) is built for this instrument.
+      await self._decide(event, "not_adapted", "execution_contained", owner="go")
       return "not_adapted"
     # The live Kafka opportunity event is the technical-source boundary.
     if not self._multiple_enabled():

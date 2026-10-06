@@ -65,6 +65,9 @@ func ApplyInstrument(settings *Settings, doc *config.Document, symbol string) er
 	if err := applyScalpBreakoutRetest(settings, doc); err != nil {
 		return err
 	}
+	if err := applyObserveOnly(settings, doc, symbol); err != nil {
+		return err
+	}
 	return applyKeyLevelOverrides(settings, doc, symbol)
 }
 
@@ -268,9 +271,43 @@ func applyScalpBreakoutRetest(settings *Settings, doc *config.Document) error {
 			}
 			params[key] = value
 		}
-		params["pip_size"] = settings.Geometry.PipSize
-		params["price_digits"] = float64(settings.Geometry.PriceDigits)
+		pip, digits := settings.Geometry.PipSize, settings.Geometry.PriceDigits
+		if pip <= 0 {
+			// Before a symbol is attached the canonical defaults stand in.
+			pip, digits = settings.LegacyRead.PipSize, 2
+		}
+		params["pip_size"] = pip
+		params["price_digits"] = float64(digits)
 		settings.Strategies[i].Parameters = params
+	}
+	return nil
+}
+
+// applyObserveOnly reads the instrument's observe-only strategy list.
+func applyObserveOnly(settings *Settings, doc *config.Document, symbol string) error {
+	raw, ok, err := doc.InstrumentOverride(symbol, "execution", "go_opportunity", "observe_only_strategies")
+	if err != nil {
+		return err
+	}
+	settings.ObserveOnly = nil
+	if !ok {
+		return nil
+	}
+	list, isList := raw.([]any)
+	if !isList {
+		return fmt.Errorf("instrument %s: observe_only_strategies must be a list, got %T", symbol, raw)
+	}
+	known := map[opportunity.StrategyID]bool{}
+	for _, id := range strategy.KnownIDs() {
+		known[id] = true
+	}
+	settings.ObserveOnly = make(map[opportunity.StrategyID]bool, len(list))
+	for _, item := range list {
+		name, isString := item.(string)
+		if !isString || !known[opportunity.StrategyID(name)] {
+			return fmt.Errorf("instrument %s: observe_only_strategies names unknown strategy %v", symbol, item)
+		}
+		settings.ObserveOnly[opportunity.StrategyID(name)] = true
 	}
 	return nil
 }
