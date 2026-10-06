@@ -546,12 +546,12 @@ async def test_unconfigured_scope_defaults_to_go_in_global_go_mode(h):
 
 @pytest.mark.no_database
 def test_xau_observes_but_does_not_trade_the_contained_strategies():
-  assert pol.observe_only_strategies("XAU") == {"ifvg", "liquidity_sweep", "range_sweep"}
+  assert pol.observe_only_strategies("XAU") == {"ifvg", "liquidity_sweep"}
   # Containment is instrument-owned: the other instruments and every strategy
   # not named (Key Level, Breakout Retest Scalp, ...) are untouched.
   for symbol in ("EURUSD", "GBPUSD", "GBPJPY", "USDJPY"):
     assert pol.observe_only_strategies(symbol) == frozenset()
-  assert not {"key_level", "scalp_breakout_retest", "fvg"} & pol.observe_only_strategies("XAU")
+  assert not {"key_level", "scalp_breakout_retest", "range_sweep", "fvg"} & pol.observe_only_strategies("XAU")
 
 
 @pytest.mark.asyncio

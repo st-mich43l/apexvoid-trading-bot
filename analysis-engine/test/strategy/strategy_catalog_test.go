@@ -20,7 +20,6 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/scalpbreakoutretest"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/snapback"
 	strategytrendline "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/trendline"
-	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/techniquezone"
 	technicaltrendline "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/trendline"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/zone"
@@ -120,14 +119,6 @@ func TestStrategiesKnownQualifyingFixtures(t *testing.T) {
 		}
 		assertOne(t, s, rangeEdgeContext(market.Candle{Time: 3000, Open: 98.3, High: 98.9, Low: 97.8, Close: 98.6}))
 	})
-	t.Run("liquidity_sweep", func(t *testing.T) {
-		s, e := liquiditysweep.New(cfg(liquiditysweep.ID, map[string]any{"minimum_rejection_body_atr": .3, "invalidation_buffer_atr": .25, "target_r": 2.0, "expiry_hours": 4.0}))
-		if e != nil {
-			t.Fatal(e)
-		}
-		at := int64(2)
-		assertOne(t, s, ctx(map[market.Timeframe]*analysiscontext.TimeframeContext{market.M5: {Timeframe: market.M5, Candles: []market.Candle{bar(2, 99, 100.5, 98.5, 100)}, Liquidity: liquidity.LiquidityState{Pools: []liquidity.Pool{{ID: "p", Side: liquidity.LiquiditySellSide, Low: 99, High: 99.2, SweptAt: &at, ReclaimedAt: &at}}}}}))
-	})
 	t.Run("snap_back", func(t *testing.T) {
 		s, e := snapback.New(cfg(snapback.ID, snapBackParams()))
 		if e != nil {
@@ -170,14 +161,6 @@ func TestStrategiesKnownQualifyingFixtures(t *testing.T) {
 		}
 		bars := []market.Candle{bar(1, 100, 101, 100, 100.5), bar(2, 100.5, 101, 100, 100.4), bar(3, 100.4, 101, 100, 100.5), bar(4, 100.5, 101, 100, 100.4), bar(5, 100.4, 101, 100, 100.5), bar(6, 100.8, 102, 100.8, 101.5), bar(7, 101.4, 101.6, 100.9, 101.2)}
 		assertOne(t, s, ctx(map[market.Timeframe]*analysiscontext.TimeframeContext{market.M5: {Timeframe: market.M5, Candles: bars}}))
-	})
-	t.Run("range_sweep", func(t *testing.T) {
-		s, e := rangesweep.New(cfg(rangesweep.ID, map[string]any{"range_bars": 5.0, "minimum_sweep_atr": .1, "invalidation_buffer_atr": .2, "expiry_hours": 2.0}))
-		if e != nil {
-			t.Fatal(e)
-		}
-		m5 := []market.Candle{bar(1, 100, 102, 100, 101), bar(2, 101, 102, 100, 101), bar(3, 101, 102, 100, 101), bar(4, 101, 102, 100, 101), bar(5, 101, 102, 100, 101)}
-		assertOne(t, s, ctx(map[market.Timeframe]*analysiscontext.TimeframeContext{market.M5: {Timeframe: market.M5, Candles: m5, Structure: structure.StructureState{Internal: structure.LayerState{Trend: structure.TrendRange}}}, market.M1: {Timeframe: market.M1, Candles: []market.Candle{bar(6, 99.8, 100.5, 99.5, 100.3)}}}))
 	})
 	t.Run("impulse_pullback", func(t *testing.T) {
 		s, e := impulsepullback.New(cfg(impulsepullback.ID, map[string]any{"minimum_impulse_atr": 1.0, "minimum_pullback_fraction": .25, "maximum_pullback_fraction": .65, "invalidation_buffer_atr": .2, "target_r": 2.0, "expiry_hours": 2.0}))

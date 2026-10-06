@@ -100,8 +100,10 @@ Go still produces and publishes the strategy's opportunities, Algo Bot stores
 them and records the decision `execution_contained`, but no match (hence no
 TradePlan) is built, and the engine leaves them out of arbitration so a
 contained setup can never suppress or hold an executable one. XAU observes
-`ifvg`, `liquidity_sweep` and `range_sweep`: iFVG and Liquidity Sweep lost on XAU
-in both independent windows reviewed, and Range Sweep is a simplified port
-without the Python gates (range width, dealing-range position, edge-touch
-reclaim), so none of the three is proven. Removing a name re-enables its execution; nothing
-else changes. The other instruments contain nothing.
+`ifvg` and `liquidity_sweep`: both lost on XAU in both independent windows
+reviewed. Liquidity Sweep has no Python predecessor to prove against, and iFVG
+is held until its decision parity with the frozen technique detector is shown.
+Range Sweep was contained earlier as an unproven simplified port; it is now the
+Go port of the frozen M5-setup/M1-confirm scalp lane (`test/scalpparity`: 5/5
+real M1 decisions and 124/124 synthetic decisions match) and executes. Removing
+a name re-enables its execution; nothing else changes. The other instruments contain nothing.

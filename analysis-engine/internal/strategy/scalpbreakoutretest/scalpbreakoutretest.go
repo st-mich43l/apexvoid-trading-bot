@@ -206,7 +206,7 @@ func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Ca
 	}
 	currentIndex := len(m5) - 1
 	currentPrice := m5[currentIndex].Close
-	buffer := math.Max(c.M1ATR*cfg.BufferM1ATRMultiple, cfg.PipSize*cfg.MaximumSpreadPips*cfg.BufferMinSpreadMultiple)
+	buffer := strategyutil.ScalpBuffer(c.M1ATR, cfg.BufferM1ATRMultiple, cfg.PipSize, cfg.MaximumSpreadPips, cfg.BufferMinSpreadMultiple)
 
 	var out []opportunity.Candidate
 	for _, direction := range []market.Direction{market.Buy, market.Sell} {
@@ -270,7 +270,7 @@ func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Ca
 			structural = (stopPrice - worst) / cfg.PipSize
 			room = c.SellRoomPips
 		}
-		stop, ok := stopPips(structural, cfg.StopMinimumPips, cfg.StopMaximumPips)
+		stop, ok := strategyutil.ScalpStopPips(structural, cfg.StopMinimumPips, cfg.StopMaximumPips)
 		if !ok {
 			continue
 		}
@@ -281,7 +281,7 @@ func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Ca
 		if direction == market.Buy && !(invalidation < zoneLow && zoneLow < zoneHigh) || direction == market.Sell && !(invalidation > zoneHigh && zoneHigh > zoneLow) {
 			continue
 		}
-		targetPrice, targetPips, ok := selectTarget(direction, worst, room, stop, cfg.MinimumNetTargetPips, cfg.PipSize, cfg.RewardRiskLadder)
+		targetPrice, targetPips, ok := strategyutil.ScalpTarget(direction, worst, room, stop, cfg.MinimumNetTargetPips, cfg.PipSize, cfg.RewardRiskLadder)
 		if !ok {
 			continue
 		}
@@ -369,37 +369,6 @@ func confirmM1Execution(m1 []market.Candle, direction market.Direction, level, t
 		}
 	}
 	return m1Confirmation{}, false
-}
-
-// stopPips mirrors strategies._stop_pips: a structural stop narrower than the
-// minimum is widened to it; one wider than the maximum is rejected (the setup
-// does not fit the risk model — shrinking it would falsify the stop).
-func stopPips(structural, minimum, maximum float64) (float64, bool) {
-	value := math.Abs(structural)
-	if value <= 0 || maximum < minimum || value > maximum {
-		return 0, false
-	}
-	return math.Max(value, minimum), true
-}
-
-// selectTarget mirrors strategies._select_target: the first reward:risk of the
-// ladder (1:2 then 1:1) whose target clears the minimum net target and fits
-// the available corridor room.
-func selectTarget(direction market.Direction, worst, roomPips, stop, minNet, pip float64, ladder []float64) (float64, float64, bool) {
-	if pip <= 0 || stop <= 0 {
-		return 0, 0, false
-	}
-	for _, rr := range ladder {
-		targetPips := stop * rr
-		if targetPips < minNet || targetPips > roomPips {
-			continue
-		}
-		if direction == market.Buy {
-			return worst + targetPips*pip, targetPips, true
-		}
-		return worst - targetPips*pip, targetPips, true
-	}
-	return 0, 0, false
 }
 
 type qualityInput struct {

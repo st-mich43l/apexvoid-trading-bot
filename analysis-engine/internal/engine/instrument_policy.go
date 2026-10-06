@@ -211,7 +211,7 @@ func (s Settings) BlockedByDefendedLevel(c opportunity.Candidate) (float64, bool
 // legacyDetectorStrategies are the strategies whose decision is the frozen
 // detector contract's and which therefore share its thresholds.
 var legacyDetectorStrategies = map[string]bool{
-	"snap_back": true, "fade_scalp": true, "momentum_ride": true, "break_retest": true, "range_edge": true, "key_level": true,
+	"snap_back": true, "fade_scalp": true, "momentum_ride": true, "break_retest": true, "range_edge": true, "key_level": true, "liquidity_sweep": true,
 }
 
 // applyLegacyDetector injects the shared frozen-detector thresholds, the
@@ -243,33 +243,50 @@ func applyLegacyDetector(settings *Settings) {
 	}
 }
 
-// applyScalpBreakoutRetest gives the Breakout Retest Scalp its instrument scale
-// and the shared M1-scalp stop/target book (auto_algo.strategies.scalping.*),
-// the same leaves the stop envelope and the execution policy read, so the
-// setup is sized from one source. It is idempotent.
+// scalpBook are the shared M1-scalp stop/target leaves every strategy of the
+// M5-setup / M1-confirmation lane reads (auto_algo.strategies.scalping.*).
+var scalpBook = map[string]string{
+	"buffer_m1_atr_multiple":         "auto_algo.strategies.scalping.stop.buffer_m1_atr_multiple",
+	"buffer_minimum_spread_multiple": "auto_algo.strategies.scalping.stop.buffer_minimum_spread_multiple",
+	"stop_minimum_pips":              "auto_algo.strategies.scalping.stop.minimum_pips",
+	"stop_maximum_pips":              "auto_algo.strategies.scalping.stop.maximum_pips",
+	"minimum_net_target_pips":        "auto_algo.strategies.scalping.target.minimum_net_target_pips",
+	"maximum_spread_pips":            "auto_algo.strategies.scalping.policy.maximum_spread_pips",
+}
+
+// scalpLaneExtras are the leaves only one strategy of the lane reads.
+var scalpLaneExtras = map[string]map[string]string{
+	"scalp_breakout_retest": {},
+	"range_sweep": {
+		"buy_maximum_position":     "auto_algo.strategies.scalping.location.range_buy_maximum_position",
+		"sell_minimum_position":    "auto_algo.strategies.scalping.location.range_sell_minimum_position",
+		"trigger_maximum_age_bars": "auto_algo.strategies.scalping.activation.trigger_maximum_age_bars",
+	},
+}
+
+// applyScalpBreakoutRetest gives the M5-setup / M1-confirmation scalps (Breakout
+// Retest Scalp, Range Sweep) their instrument scale and the shared M1-scalp
+// stop/target book (auto_algo.strategies.scalping.*), the same leaves the stop
+// envelope and the execution policy read, so a setup is sized from one source.
+// It is idempotent.
 func applyScalpBreakoutRetest(settings *Settings, doc *config.Document) error {
-	book := map[string]string{
-		"buffer_m1_atr_multiple":         "auto_algo.strategies.scalping.stop.buffer_m1_atr_multiple",
-		"buffer_minimum_spread_multiple": "auto_algo.strategies.scalping.stop.buffer_minimum_spread_multiple",
-		"stop_minimum_pips":              "auto_algo.strategies.scalping.stop.minimum_pips",
-		"stop_maximum_pips":              "auto_algo.strategies.scalping.stop.maximum_pips",
-		"minimum_net_target_pips":        "auto_algo.strategies.scalping.target.minimum_net_target_pips",
-		"maximum_spread_pips":            "auto_algo.strategies.scalping.policy.maximum_spread_pips",
-	}
 	for i := range settings.Strategies {
-		if settings.Strategies[i].ID != "scalp_breakout_retest" {
+		extras, isScalp := scalpLaneExtras[string(settings.Strategies[i].ID)]
+		if !isScalp {
 			continue
 		}
-		params := make(map[string]any, len(settings.Strategies[i].Parameters)+len(book)+2)
+		params := make(map[string]any, len(settings.Strategies[i].Parameters)+len(scalpBook)+len(extras)+2)
 		for k, v := range settings.Strategies[i].Parameters {
 			params[k] = v
 		}
-		for key, path := range book {
-			value, err := getFloat(doc, path)
-			if err != nil {
-				return err
+		for _, leaves := range []map[string]string{scalpBook, extras} {
+			for key, path := range leaves {
+				value, err := getFloat(doc, path)
+				if err != nil {
+					return err
+				}
+				params[key] = value
 			}
-			params[key] = value
 		}
 		pip, digits := settings.Geometry.PipSize, settings.Geometry.PriceDigits
 		if pip <= 0 {

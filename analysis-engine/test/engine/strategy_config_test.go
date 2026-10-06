@@ -21,9 +21,10 @@ func TestStrategyConfigsFromConfigEnablesTheCompleteCatalogForShadow(t *testing.
 	if len(configs) != 21 {
 		t.Fatalf("got %d strategy configs, want 21 approved V2 strategies", len(configs))
 	}
-	// Key Level and the Breakout Retest Scalp were rebuilt as the profitable-week
-	// Python detectors (Phase 1); every other strategy is still v2.
-	rebuilt := map[string]bool{"key_level": true, "scalp_breakout_retest": true}
+	// Key Level, the Breakout Retest Scalp and Range Sweep were rebuilt as the
+	// profitable-week Python detectors and Liquidity Sweep on the frozen detector
+	// contract's evidence (Phase 1); every other strategy is still v2.
+	rebuilt := map[string]bool{"key_level": true, "scalp_breakout_retest": true, "range_sweep": true, "liquidity_sweep": true}
 	for _, cfg := range configs {
 		want := "v2"
 		if rebuilt[string(cfg.ID)] {

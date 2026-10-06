@@ -490,12 +490,13 @@ instruments:
         # produced, stored and decided with reason execution_contained) but no
         # XAU TradePlan is built from them until each one is proven against the
         # Python behavior it replaced. Phase 1 (2026-10): iFVG and Liquidity
-        # Sweep lost on XAU in both independent windows reviewed; Range Sweep is
-        # a simplified Go port without the Python gates (range width, dealing
-        # range position, edge-touch reclaim). Removing a name here re-enables
-        # its execution; nothing else changes.
+        # Sweep lost on XAU in both independent windows reviewed. Liquidity
+        # Sweep has no Python predecessor to prove against; iFVG is held until
+        # its decision parity with the frozen technique detector is shown.
+        # Range Sweep was proven against the frozen scalp lane (real and
+        # synthetic M1 captures, 0 mismatches) and executes again. Removing a
+        # name here re-enables its execution; nothing else changes.
         go_opportunity:
           observe_only_strategies:
             - ifvg
             - liquidity_sweep
-            - range_sweep
