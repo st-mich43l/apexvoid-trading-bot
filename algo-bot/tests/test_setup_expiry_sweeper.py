@@ -144,5 +144,3 @@ async def test_sweep_is_a_noop_when_nothing_is_due():
   assert processed == 0
   record = await load_setup(client, "sweep-not-due")
   assert record.state == DISCOVERED
-
-

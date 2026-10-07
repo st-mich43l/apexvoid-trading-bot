@@ -11,5 +11,3 @@ def metric_key(symbol: str, name: str) -> str:
 
 async def incr(client: Any, symbol: str, name: str) -> None:
   await client.incr(metric_key(symbol, name))
-
-

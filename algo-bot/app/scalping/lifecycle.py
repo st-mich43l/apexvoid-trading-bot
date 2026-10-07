@@ -96,5 +96,3 @@ async def load_lifecycle(
 # Armed/discovered without fill must not linger and confuse ops / caps.
 _STALE_ARMED_STATES = frozenset({DISCOVERED, ARMED})
 _DEFAULT_STALE_ARMED_SEC = 15 * 60
-
-

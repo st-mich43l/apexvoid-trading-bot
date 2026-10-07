@@ -53,5 +53,3 @@ def test_auto_algos_entry_ladder_differs_from_manual_algos_and_is_pinned_as_such
   assert auto_l2 == 4087.50 and auto_l2 != manual_deep                # one ATR step
   _l1, auto_l2_far = execution_route._scale_ladder_legs(side="BUY", low=low, high=high, proximal=high, atr=10.0, scale_step_atr=1.0, digits=2)
   assert auto_l2_far == low and auto_l2_far != manual_deep            # capped at the far edge, not the midpoint
-
-

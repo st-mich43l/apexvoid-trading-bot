@@ -124,5 +124,3 @@ def test_pushed_stop_always_carries_the_exact_zone_identity():
   assert fields["stop_adjustment_zone_id"] == case["expected_adjustment_zone_id"]
   assert fields["stop_adjustment_zone_low"] == "3997"
   assert fields["stop_adjustment_zone_high"] == "3998.5"
-
-

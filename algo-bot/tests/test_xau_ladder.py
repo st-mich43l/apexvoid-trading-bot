@@ -23,5 +23,3 @@ def test_entry_leg_prices_degenerate_zone_uses_stop_midpoint():
   prices = xau_ladder.entry_leg_prices("BUY", 4390.0, 4390.0, 4384.0)
   assert prices.shallow == 4390.0
   assert prices.deep == 4387.0
-
-

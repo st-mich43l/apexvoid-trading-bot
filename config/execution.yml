@@ -101,4 +101,3 @@ manual_algo:
     manual_trade_command_stream: manual_trade:commands
     manual_trade_command_stream_maxlen: 1000
     manual_trade_intent_stream_maxlen: 1000
-

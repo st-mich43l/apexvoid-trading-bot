@@ -67,5 +67,3 @@ async def test_closed_bar_cache_refetches_when_need_grows():
   assert len(client.calls) == 2
   assert client.calls[0][2] == 0
   assert client.calls[1][2] == 2
-
-
