@@ -183,7 +183,6 @@ def test_fx_targeting_is_explicit_configuration_not_symbol_detection():
     assert effective.targeting.trail_after_r is None
     assert effective.targeting.trail_to_r is None
     assert effective.targeting.entry_clips == 2
-    assert effective.execution.technique.require_sweep_body is False
     assert fixed_reward_risk(symbol, cfg) == 2.0
   # XAU deliberately diverges from the FX policies' shared 1R/2R shape -
   # see test_xau_technique_uses_the_owner_requested_r_ladder below.

@@ -22,24 +22,6 @@ from app.autotrade import zone_watch as zw
 pytestmark = [pytest.mark.no_database, pytest.mark.real_redis]
 
 
-@pytest.fixture(autouse=True)
-def _freeze_technique_killzone_hour(monkeypatch):
-  """Cutover stays under technique.enforce; freeze UTC hour to NY open."""
-  from app.autotrade import killzone as kz
-
-  real = kz.evaluate_killzone_gate
-  real_win = kz.evaluate_reaction_publish_window
-
-  def _gated(*, ts=None, hour=None, cfg=None, require=True):
-    return real(ts=None, hour=14, cfg=cfg, require=require)
-
-  def _window(*, ts=None, hour=None, cfg=None, require=True):
-    return real_win(ts=None, hour=14, cfg=cfg, require=require)
-
-  monkeypatch.setattr(kz, "evaluate_killzone_gate", _gated)
-  monkeypatch.setattr(kz, "evaluate_reaction_publish_window", _window)
-
-
 @pytest_asyncio.fixture
 async def client():
   url = os.getenv("REAL_REDIS_URL")

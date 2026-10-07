@@ -2000,7 +2000,7 @@ async def _record_auto_trade_result(event: dict) -> None:
       session = "asia"
     try:
       from app.autotrade.killzone import classify_killzone
-      kz_name = classify_killzone(ts=closed_at).killzone_name
+      kz_name = classify_killzone(ts=closed_at)
     except Exception:
       kz_name = None
     booked_tp_count = None

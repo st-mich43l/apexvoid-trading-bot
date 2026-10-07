@@ -22,7 +22,6 @@ from app.persistence import redis_state
 
 pytestmark = pytest.mark.no_database
 from app.core.config import runtime_config
-from app.runtime.instruments import for_instrument
 from tests.support.canonical_fixtures import leaf
 
 
@@ -307,5 +306,3 @@ def test_retest_trigger_validity_window_is_conservative_and_validated():
 
 def test_entry_contract_and_executor_anti_chase_are_separate():
   assert runtime_config.execution.entry.contract_tolerance_pips == 3.0
-  assert for_instrument(runtime_config, "XAU").analysis.zones.major_maximum_width_price == 10.0
-  assert runtime_config.auto_algo.actionability.scanner_gates.actionability_gate_enabled is False

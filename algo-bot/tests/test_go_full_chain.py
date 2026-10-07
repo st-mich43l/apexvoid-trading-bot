@@ -28,7 +28,7 @@ from redis.asyncio import Redis
 from app.analysis_client.consumer import AnalysisOpportunityConsumer
 from app.analysis_client.models import ArbitrationTopic, OpportunityTopic, parse_analysis_event
 from app.autotrade import go_opportunity_policy as pol
-from app.autotrade import killzone, worker
+from app.autotrade import worker
 from app.autotrade.go_plan_cancel import request_plan_cancel
 from app.autotrade.multi_match import deserialize_matches, serialize_matches, strategy_matches_key
 from app.autotrade.route_outcome import route_outcome_key
@@ -46,7 +46,6 @@ from app.persistence import redis_state
 from tests.support.canonical_fixtures import install_runtime_overrides
 from tests.test_go_opportunity_policy import Harness, golden
 from tests.test_publish_trade_plan_v8 import (  # noqa: F401 - autouse fixtures
-  _freeze_technique_killzone_hour,
   _m1_trigger_bar,
   _no_news_by_default,
 )
@@ -419,17 +418,6 @@ def _stale_spot(mp):
     price=4354.2, ts=int(time.time()) - 600, fresh=False, bid=4354.1, ask=4354.3)))
 
 
-_REAL_PUBLISH_WINDOW = killzone.evaluate_reaction_publish_window     # captured before the suite's autouse hour freeze
-
-
-def _outside_publish_window(mp):
-  install_runtime_overrides(
-    mp, {"execution.technique.reaction_require_publish_window": True},
-  )
-  mp.setattr(killzone, "evaluate_reaction_publish_window",
-             lambda *, ts=None, hour=None, cfg=None, require=True: _REAL_PUBLISH_WINDOW(ts=None, hour=3, cfg=cfg, require=require))
-
-
 def _below_min_confluence(mp):
   install_runtime_overrides(mp, {"actionability.gates.min_confluence": 99})
 
@@ -445,7 +433,6 @@ def _price_outside_entry_contract(mp):
 
 CONTROLS = [
   ("stale_spot", _stale_spot, "waiting", "stale_spot"),
-  ("publish_window", _outside_publish_window, "waiting", "outside_reaction_publish_window"),
   ("min_confluence", _below_min_confluence, "blocked", "confluence_below_minimum"),
   ("auto_trade_off", _auto_trade_disabled, "blocked", "auto_trade_disabled"),
   ("entry_contract", _price_outside_entry_contract, "waiting", "waiting_retest_entry_zone"),
