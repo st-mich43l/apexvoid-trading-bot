@@ -1,8 +1,7 @@
 # Redis market-data contract
 
 Redis is ApexVoid's authoritative **operational market-data plane**, shared by
-`ctrader-engine`, Analysis Engine, the Python price-action scanner, and future
-dashboards. PostgreSQL remains the durable trade/accounting store. Kafka is
+`ctrader-engine`, Analysis Engine, Algo Bot and future dashboards. PostgreSQL remains the durable trade/accounting store. Kafka is
 reserved for durable business events and commands, never the bar/tick feed;
 see [ADR-010](adr/010-redis-market-data-kafka-events.md).
 
@@ -117,8 +116,8 @@ SET price:XAU:spot {"bid":4082.10,"ask":4082.30,"ts":4102444800}
 ```
 
 `ts` is UTC epoch seconds when the spot was observed by the feed. Consumers
-must treat this as live only while fresh; the scanner falls back to the closed
-bar price when it is absent or stale.
+must treat this as live only while fresh; Algo Bot falls back to the closed bar
+price when it is absent or stale.
 
 ## Persistence
 
@@ -140,35 +139,26 @@ publishes one TradePlan V8 per admitted setup (see "TradePlan Stream"). The
 worker never parses Telegram text, and a candidate is never published to a
 separate stream: TradePlan is the only execution contract.
 
-The strategy-match contract has its own version and TTL:
+Live Go opportunities are adapted into strategy matches, kept per symbol as one
+JSON list:
 
 ```text
-SETEX auto_trade:strategy_match:XAU 420 <json>
+SET auto_trade:strategy_matches:XAU <json-array>   # TTL follows the latest expiry
 ```
 
-It contains a stable `match_id`, detector strategy/mode, direction, entry zone,
-ATR, structure swing, targets, reasons, and source timestamp. Range-specific
-bounds exist only for `Range Edge Scalp`. Invalid, stale, symbol-mismatched, or
-malformed matches are removed or ignored. A fresh scanner match has priority
-over private strategies for that execution tick.
+Each entry carries a stable `match_id`, strategy/mode, direction, entry zone, ATR,
+structure swing, targets, reasons, quality, the Go thesis group and the source
+timestamp. Invalid, expired or symbol-mismatched entries are removed; a terminal
+Kafka event withdraws its match. Every live match competes in the decision cycle
+(see [execution](execution.md)).
 
-Mapped-zone execution exposes its evaluated geometry separately:
+Same-thesis entry corridors are reserved per symbol in one script:
 
 ```text
-SETEX auto_trade:map_strategy:actionable:XAU 3600 <json-array>
-INCRBY auto_trade:map_zone_rejected:XAU:degenerate_width <count>
+SET autotrade:entry_overlap:XAU <json-list> EX 2760   # 45-minute window + 60 s
 ```
 
-The snapshot is replaced on every M1 evaluation and contains only the exact
-side/lo/hi/tier/score/contains-price entries surviving the strategy's current
-side, quality, and minimum-width rules. The counter records collapsed bands
-filtered before selection. `auto_trade:market_map_display:XAU` keeps the last
-map actually rendered to the owner so stall reasons can identify a display/
-strategy divergence.
-
-Used box edges are disarmed until a closed M1 price crosses the box midpoint.
-Confirmed broken box IDs are retired for the configured TTL. The latest
-operator-facing M1 gate decision is stored at
+The latest operator-facing M1 gate decision is stored at
 `auto_trade:last_gate` and `auto_trade:last_gate:{symbol}`. It contains the gate
 state, M1 trigger, selected role-aware rail, opposite target, target room, spot
 freshness, loaded frame counts, `gate_source`, and active strategy-match
@@ -233,7 +223,6 @@ execution:plan_recovery:{plan_id}  C# recovery copy while runtime state is open
 execution:plan_ack:{plan_id}       latest structured executor acknowledgement
 execution:plan_cancel:{plan_id}    cancel intent written by Algo Bot, 7-day TTL
 execution:plan_cancel_ack:{plan_id} executor's report of applying the intent, 7-day TTL
-analysis:go_plans                  hash plan_id -> Go-derived plan index
 execution:plan_rejection:{id}      durable malformed/unsupported stream record
 execution:trade_plan_runtime_ids   tracked C# runtime plan IDs
 execution:trade_plan_cursor        last durably handled stream ID

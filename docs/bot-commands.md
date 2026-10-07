@@ -335,8 +335,7 @@ The raw `+/-N pips` text also triggers auto-edit on edited messages if the chann
 
 ## Environment Variables
 
-Secrets and bootstrap live in `.env`. Full generated contract:
-[`docs/configuration/environment-reference.generated.md`](configuration/environment-reference.generated.md).
+Secrets and bootstrap live in `.env` (see `.env.example` and [configuration](configuration.md)).
 
 | Variable | Required | Description |
 |---|---|---|
@@ -345,7 +344,7 @@ Secrets and bootstrap live in `.env`. Full generated contract:
 | `SIGNAL_PUBLIC_CHANNEL_ID` | optional | Public broadcast channel |
 | `TELEGRAM_OWNER_ID` | required for DMs | Numeric owner id; privileged DMs disabled when unset |
 | `DATABASE_URL` | yes | Postgres DSN for the `signals` database |
-| `REDIS_URL` | yes | Redis for bars / ZoneWatch / plans |
+| `REDIS_URL` | yes | Redis for bars / plans |
 | `ANTHROPIC_API_KEY` | optional | Claude vision chart analysis |
 | `LOG_DIR` / `LOG_RETENTION_DAYS` | optional | Host-mounted daily logs |
 
@@ -377,9 +376,10 @@ Owner-only DM commands (require `TELEGRAM_OWNER_ID`):
 |---|---|
 | `/algo_status` | Live auto-trade status card (positions, watches, gates) |
 | `/algo_funnel [SYMBOL]` | Discovery → activation funnel from `auto_trade:metrics:{SYMBOL}` with top block reasons per stage |
-| `/scan_report [SYMBOL] [hours]` | Scanner digest for the last N hours |
+| `/algo_setups [SYMBOL]` | Go's scored major zones near the live quote, nearest first |
+| `/scan_report [SYMBOL] [hours]` | Go opportunity lifecycle count for the last N hours |
 
-The funnel stages are: `detected → actionable → match_published → zonewatch_armed → activation_allowed → plan_published`.
+The funnel stages are: `detected → actionable → match_published → activation_allowed → plan_published`.
 
 ---
 

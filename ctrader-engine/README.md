@@ -25,5 +25,5 @@ dotnet test tests/CTraderFeed.Tests.csproj --nologo
 ```
 
 See [`../docs/redis-contract.md`](../docs/redis-contract.md),
-[`../docs/autotrade-execution-integrity.md`](../docs/autotrade-execution-integrity.md),
+[`../docs/execution.md`](../docs/execution.md),
 and [`../docs/configuration.md`](../docs/configuration.md).
