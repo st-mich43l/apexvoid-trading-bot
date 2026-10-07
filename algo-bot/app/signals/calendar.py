@@ -32,8 +32,10 @@ _CACHE_NEXTWEEK = Path("/data/ff_nextweek.json")
 _PIPS_PATTERN = re.compile(r"([+-])\s*(\d+)\s*pips?", re.IGNORECASE)
 
 
-def _configured_values(raw: str, *, lowercase: bool = False) -> set[str]:
-  values = {part.strip() for part in raw.split(",") if part.strip()}
+def _configured_values(raw: Any, *, lowercase: bool = False) -> set[str]:
+  """Set of non-empty values from a YAML list (or a comma-separated string)."""
+  parts = raw.split(",") if isinstance(raw, str) else list(raw or ())
+  values = {str(part).strip() for part in parts if str(part).strip()}
   return {value.lower() for value in values} if lowercase else values
 
 

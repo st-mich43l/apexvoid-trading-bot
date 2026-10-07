@@ -45,6 +45,7 @@ def _reset_db(event_loop, request):
       await conn.execute("DROP SCHEMA public CASCADE; CREATE SCHEMA public;")
     finally:
       await conn.close()
+    await store.init_db()
 
   event_loop.run_until_complete(_wipe())
   yield

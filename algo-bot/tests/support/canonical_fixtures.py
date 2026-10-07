@@ -53,6 +53,7 @@ _LEGACY_PATHS = {
   "scanner_telegram_bot_token": "telegram.scanner_telegram_bot_token",
   "signal_public_channel_id": "telegram.signal_public_channel_id",
   "public_show_pips": "telegram.public_show_pips",
+  "owner_dm_daily_wipe_enabled": "telegram.owner_dm_daily_wipe_enabled",
   "auto_trade_enabled": "auto_algo.enabled",
   "auto_trade_dry_run": "auto_algo.dry_run",
   "auto_trade_symbols": "analysis.scanner.symbols",

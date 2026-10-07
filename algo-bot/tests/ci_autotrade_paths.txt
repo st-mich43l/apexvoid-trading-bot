@@ -17,6 +17,9 @@ tests/test_worker_idle_m1.py
 tests/test_ohlc_bar_cache.py
 tests/test_active_exposure.py
 tests/test_opposite_exposure_policy.py
+tests/test_execution_pipeline_integrity.py
+tests/test_calendar.py
+tests/test_owner_dm_journal.py
 tests/test_manual_plan.py
 tests/test_entry_overlap.py
 tests/test_setup_card.py
