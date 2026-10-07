@@ -172,39 +172,4 @@ public sealed class InstrumentRuntimeRegistry
     _aliasToId[key] = instrumentId;
   }
 
-  private static IReadOnlyList<string> ReadIdentityAliases(
-    System.Text.Json.JsonElement runtime,
-    string instrumentId
-  )
-  {
-    if (
-      !runtime.TryGetProperty("identity", out var identity)
-      || !identity.TryGetProperty("aliases", out var aliases)
-    )
-    {
-      return [];
-    }
-    if (aliases.ValueKind != System.Text.Json.JsonValueKind.Array)
-    {
-      throw new InvalidOperationException(
-        $"instrument_runtimes.{instrumentId}.identity.aliases must be an array"
-      );
-    }
-    var resolved = new List<string>();
-    foreach (var alias in aliases.EnumerateArray())
-    {
-      if (alias.ValueKind != System.Text.Json.JsonValueKind.String)
-      {
-        throw new InvalidOperationException(
-          $"instrument_runtimes.{instrumentId}.identity.aliases must contain strings"
-        );
-      }
-      var value = alias.GetString();
-      if (!string.IsNullOrWhiteSpace(value))
-      {
-        resolved.Add(value.Trim());
-      }
-    }
-    return resolved;
-  }
 }

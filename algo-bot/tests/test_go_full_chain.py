@@ -361,6 +361,34 @@ async def test_every_reviewed_go_strategy_reaches_tradeplan_v8(h, prod, scope):
 
 
 @pytest.mark.asyncio
+async def test_two_opportunities_on_one_corridor_publish_one_plan_and_suppress_the_other(h, prod):
+  """Two Go opportunities on the same XAU sell corridor: one TradePlan, best first."""
+  await h.activate()
+  consumer = consumer_for(h)
+  await consumer.process_record(kafka_record(h.clock.now, "opp_a", offset=1))
+  await consumer.process_record(kafka_record(h.clock.now, "opp_b", offset=2))
+  assert {m.match_id for m in deserialize_matches(await prod.get(strategy_matches_key("XAU")))} == {
+    "go_opp_a", "go_opp_b",
+  }
+
+  await cycle(prod, n=3)
+
+  published = await plans(prod)
+  assert len(published) == 1
+  winner = published[0]["setup_id"]
+  loser = ({"go_opp_a", "go_opp_b"} - {winner}).pop()
+  assert (await route(prod, winner))["status"] == "candidate_published"
+  assert (await route(prod, loser))["reason_code"] in {
+    "same_thesis_suppressed", "entry_zone_overlap_same_direction",
+  }
+  # Kafka redelivers both records after the winner owns the corridor: still one plan.
+  await consumer.process_record(kafka_record(h.clock.now, "opp_a", offset=1))
+  await consumer.process_record(kafka_record(h.clock.now, "opp_b", offset=2))
+  await cycle(prod, n=3)
+  assert await prod.xlen(STREAM) == 1
+
+
+@pytest.mark.asyncio
 async def test_redelivery_and_repeated_cycles_never_duplicate_the_plan(h, prod):
   record = await go_event_delivered(h)
   await cycle(prod, n=3)

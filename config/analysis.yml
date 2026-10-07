@@ -38,7 +38,6 @@ analysis:
   breakout:
     buffer_atr: 0.10
     accept_bars: 2
-    max_age_bars: 6
 
   # Detector-contract read: the bounded closed-bar windows and swing parameters
   # the frozen detectors evaluated direction, premium/discount and chop on.
@@ -593,19 +592,6 @@ analysis:
     dedup_value_atr: 0.5
     dedup_slope_percent: 0.2
 
-  triggers:
-    m1:
-      # Prefer body/strong close for technique pack allowlist; wick-only is
-      # blocked at activation when execution.technique.require_sweep_body.
-      patterns:
-        - body_close
-        - strong_close
-        - engulfing
-        - wick_rejection
-        - pin_bar
-        - hammer
-      wick_fraction: 0.5
-
   techniques:
     # Canonical zone lifecycle inputs shared by the Go zone domain and the
     # structural validator and opportunity lifecycle.
@@ -623,38 +609,24 @@ analysis:
     accept_bars: 2
     band_body_fraction: 0.5
 
-  # Cross-strategy conflict-resolution decisiveness margin (internal/
-  # arbitration): a same-tier opposite-direction candidate must trail the
-  # top-ranked one by at least this much Quality.Overall (a [0,1] scale) to
-  # be treated as decisively weaker; otherwise the symbol holds rather than
-  # picking a side on a near-tie. Mirrors algo-bot's own
-  # actionability.scanner_gates.conflict_margin_quality default (0.15) -
-  # the two are today independently-tunable copies of the same concept,
+  # Go's arbitration groups same-structure opportunities into one thesis
+  # (the go_thesis_id Algo Bot consumes) and publishes winner/suppressed/
+  # conflict_held decisions as provenance telemetry. It never decides what
+  # trades: Algo Bot's execution cycle does, after quote, freshness and risk
+  # admission. A same-tier opposite-direction candidate must trail the top one
+  # by conflict_margin_quality of Quality.Overall ([0,1]) to count as decisively
+  # weaker in this telemetry.
   #
   # in_play_atr bounds the candidates watched around the current price. When
-  # any candidate is actually inside its entry zone, arbitration considers
-  # only those executable-now candidates; nearby resting zones are suppressed
-  # and cannot create a false BUY-vs-SELL conflict. If none is inside, the
-  # ATR window is used for the pending watch projection.
+  # any candidate is inside its entry zone, only those executable-now
+  # candidates are arbitrated; nearby resting zones are suppressed and cannot
+  # create a false BUY-vs-SELL conflict.
   arbitration:
     conflict_margin_quality: 0.15
     in_play_atr: 1.0
 
-  # Dimensionless zone-merge fields consumed live via
-  # app.analysis.detectors._detector_settings(symbol) ->
-  # detector_settings_from(instrument_runtime_view(symbol)) — already
-  # correctly instrument-scoped today, unrelated to the price-absolute
-  # zones.merge_max_width / zones.confluence.merge_gap_price removed below.
-  # §8/§9: newly surfaced explicitly — previously only a Python schema
-  # default (AnalysisZonesConfig.merge_overlap / AnalysisMeasurementsConfig.
-  # max_merged_zone_atr), never a settable configuration leaf; value
-  # unchanged (0.5 / 3.0, the real current schema default in both cases).
   zones:
     version: v1
-    merge_overlap: 0.5
-
-  measurements:
-    max_merged_zone_atr: 3.0
 
   # Key-level clustering defaults used by the structural analysis pipeline.
   key_levels:
@@ -737,14 +709,7 @@ analysis:
   # a distinct concept.
 
   scanner:
-    execution_timeframe: M5
-    # HTF context set: analysis semantics (which higher timeframes bias is
-    # read from), not a feed subscription list — stays here per §5.
-    htf:
-      - H1
-      - M15
-    # §3: scanner.symbols REMOVED — derives from instruments.yml
-    # (instruments.*.rollout == live), never a second symbol list.
+    # Symbols derive from instruments.yml (rollout == live); there is no second list.
     window: 500
 
   sessions:

@@ -63,8 +63,6 @@ _LEGACY_PATHS = {
   "auto_trade_strategy_match_max_age_seconds": "auto_algo.lifecycle.candidate.execution_maximum_age_seconds",
   "auto_trade_news_guard_minutes": "auto_algo.actionability.gates.news_guard_minutes",
   "auto_trade_mapped_zone_enabled": "auto_algo.strategies.mapped_zone.enabled",
-  "auto_trade_map_reaction_rearm_atr": "auto_algo.lifecycle.mapped_zone.reaction_rearm_atr",
-  "auto_trade_map_reaction_rearm_bars": "auto_algo.lifecycle.mapped_zone.reaction_rearm_bars",
   "auto_trade_map_thesis_lock_enabled": "execution.mapped_zone.thesis_lock_enabled",
   "auto_trade_max_entry_distance_pips": "execution.entry.maximum_chase_distance_pips",
   "auto_trade_tp_pips": "execution.targeting.default_ladder_pips",
@@ -169,30 +167,6 @@ def runtime_cfg(**overrides: Any) -> ConfigNode:
 
 
 def execution_cfg(**overrides: Any) -> ConfigNode:
-  return runtime_cfg(**overrides)
-
-
-def map_strategy_cfg(**overrides: Any) -> ConfigNode:
-  return runtime_cfg(**overrides)
-
-
-def scale_context_cfg(**overrides: Any) -> ConfigNode:
-  return runtime_cfg(**overrides)
-
-
-def trend_cfg(overrides: Mapping[str, Any] | None = None) -> ConfigNode:
-  return runtime_cfg(**(dict(overrides or {})))
-
-
-def market_map_cfg(**overrides: Any) -> ConfigNode:
-  return runtime_cfg(**overrides)
-
-
-def scalp_ranges_cfg(**overrides: Any) -> ConfigNode:
-  return runtime_cfg(**overrides)
-
-
-def actionability_cfg(**overrides: Any) -> ConfigNode:
   return runtime_cfg(**overrides)
 
 
