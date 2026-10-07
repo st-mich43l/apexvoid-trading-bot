@@ -213,6 +213,10 @@ analysis:
       epsilon_atr_fraction: 0.05
       maximum_zone_atr: 3.0
       entry_max_width_price: 5.0
+      # Also evaluate this timeframe's own supply/demand zones against the M5 bars
+      # (the frozen Python publishers read the M5 zone population only). The M5
+      # reaction confirmation, entry validity and stop rules are unchanged.
+      higher_timeframes: [M15]
     demand:
       version: v2
       enabled: true
@@ -228,6 +232,10 @@ analysis:
       epsilon_atr_fraction: 0.05
       maximum_zone_atr: 3.0
       entry_max_width_price: 5.0
+      # Also evaluate this timeframe's own supply/demand zones against the M5 bars
+      # (the frozen Python publishers read the M5 zone population only). The M5
+      # reaction confirmation, entry validity and stop rules are unchanged.
+      higher_timeframes: [M15]
     order_block:
       version: v2
       enabled: true

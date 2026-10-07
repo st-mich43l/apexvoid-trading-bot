@@ -57,8 +57,10 @@ type LegacyFrame struct {
 	ScalpRange *techniquezone.ScalpRange
 	ScalpState string
 	// Techniques lazily yields the technique instances (supply/demand, order
-	// block, FVG, iFVG and CRT) the frozen detectors publish from. Only the
-	// execution timeframe's frame carries it; it is computed on first use.
+	// block, FVG, iFVG and CRT) the frozen detectors publish from. The
+	// execution timeframe's frame yields all of them; every other frame yields
+	// only its own supply/demand instances (frame-relative OriginIndex), which a
+	// strategy may bind to the execution frame. Computed on first use.
 	Techniques                             func() []techniquezone.Instance
 	Range                                  *fib.DealingRange
 	FibLadder                              []fib.Level
