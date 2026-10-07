@@ -25,7 +25,7 @@ dated section after deployment.
 - Execution containment: `session_level` is observe-only on XAU (0 of 5 live
   trades won, -204 pips, all Asia) and `impulse_pullback` is observe-only on
   every instrument (net -49 pips over 11 live trades). Both stay analysed.
-- Removed about 130 config keys that nothing read, including the whole
+- Removed 158 config keys that nothing read, including the whole
   `execution.technique` kill-zone clock gate (every switch was off; session is
   context, never a gate), `multiple_matches_enabled`, `conflict_margin`,
   `use_quality_ranking` and the duplicated demo overrides. Removed ~9k lines of
