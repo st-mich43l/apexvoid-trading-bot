@@ -7,10 +7,6 @@ runtime:
   broker:
     require_demo: true
 
-telegram:
-  scanner_cards:
-    top_n: 0
-
 execution:
   mapped_zone:
     hard_entry_drift_pips: 20.0
@@ -37,10 +33,6 @@ auto_algo:
   actionability:
     counter_bias:
       allowed: true
-    gates:
-      opposing_barrier_veto_enabled: false
-    overlapping_zones:
-      veto_enabled: false
     structural_guard:
       guard_mode: observe
     zone_reconciliation:
@@ -50,14 +42,8 @@ auto_algo:
     candidate:
       storage_ttl_seconds: 604800
 
-  risk:
-    position_limits:
-      max_tracked_candidates: 0
-      maximum_per_symbol: 0
-
   strategies:
     mapped_zone:
-      counter_bias_enabled: true
       enabled: true
     matching:
       multiple_matches_enabled: true

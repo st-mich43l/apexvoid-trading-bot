@@ -585,8 +585,6 @@ analysis:
     minimum_validation_favorable_excursion_atr: 0.10
     maximum_wick_violations: 2
     exhaustion_validation_touches: 4
-    chop_minimum_validation_touches: 2
-    chop_require_htf_aligned: true
     # Trendline geometry defaults used by the structural analysis pipeline.
     minimum_slope_atr: 0.02
     maximum_slope_atr: 0.15
@@ -606,12 +604,9 @@ analysis:
         - wick_rejection
         - pin_bar
         - hammer
-      strong_close_pct: 0.2
       wick_fraction: 0.5
 
   techniques:
-    # PR-D: filter technique instances via validate_technique_instance predicates.
-    validation_enabled: true
     # Canonical zone lifecycle inputs shared by the Go zone domain and the
     # structural validator and opportunity lifecycle.
     retest_max_touches: 30
