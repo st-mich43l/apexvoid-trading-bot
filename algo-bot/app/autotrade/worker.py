@@ -564,79 +564,6 @@ def _band_distance_pips(
   )
 
 
-async def _record_private_route(
-  client: Any,
-  *,
-  symbol: str,
-  event_ts: str,
-  strategy: str,
-  family: str,
-  direction: str,
-  source: str,
-  structural_id: str,
-  entry_low: float,
-  entry_high: float,
-  spot_price: float | None,
-  status: str,
-  reason_code: str,
-  message: str,
-  candidate_id: str | None = None,
-  group_id: str | None = None,
-  retained: bool,
-  stage: str | None = None,
-  measured: dict[str, Any] | None = None,
-  preflight_reason_code: str | None = None,
-  arbitration_reason_code: str | None = None,
-  publication_reason_code: str | None = None,
-  terminal_reason_code: str | None = None,
-  winner_intent_id: str | None = None,
-  executor_event_id: str | None = None,
-) -> None:
-  now = int(datetime.now(timezone.utc).timestamp())
-  identity = PrivateRouteIdentity(
-    symbol=symbol.upper(),
-    match_id=_group_id(
-      symbol,
-      family,
-      direction,
-      structural_id,
-    ),
-    strategy=strategy,
-    family=family,
-    direction=direction.upper(),
-    structural_source=source,
-    structural_zone_id=structural_id,
-    issued_at=int(_intent_freshness(event_ts, now)),
-    expires_at=(
-      now + max(300, runtime_config.auto_algo.lifecycle.candidate.storage_ttl_seconds)
-    ),
-    current_price=spot_price,
-    entry_low=entry_low,
-    entry_high=entry_high,
-  )
-  await record_route_outcome(
-    client,
-    identity,
-    stage=(
-      stage
-      or ("stream_publish" if candidate_id else "candidate_claim")
-    ),
-    status=status,  # type: ignore[arg-type]
-    reason_code=reason_code,
-    message=message,
-    measured=measured,
-    candidate_id=candidate_id,
-    group_id=group_id,
-    executor_event_id=executor_event_id,
-    retained=retained,
-    preflight_reason_code=preflight_reason_code,
-    arbitration_reason_code=arbitration_reason_code,
-    publication_reason_code=publication_reason_code,
-    terminal_reason_code=terminal_reason_code,
-    winner_intent_id=winner_intent_id,
-    signal_source=source,
-    publish_status=False,
-  )
 
 
 def _strategy_group_id(match: StrategyMatch, *, thesis_cycle: int = 1) -> str:
@@ -1116,11 +1043,7 @@ async def _publish_trade_plan_v8(
 ) -> str | None:
   """Build and publish a TradePlan V8 from an already-CONFIRMED match.
 
-  Deliberately separate from _publish_strategy_match (the V6 path) rather
-  than sharing its body: V6's function is full of V6-only concerns
-  (candidate_id/group_id shaping, ZoneFillPlanner routing, ...) that must
-  not leak into the V8 contract. Python execution checks are shared only for
-  legacy matches. A Go-origin match carries its complete technical thesis;
+  A Go-origin match carries its complete technical thesis;
   Python does not run opposing-barrier, overlap, HTF, cooldown, target-room,
   or stop-rewrite logic against it. _adapt_counter_bias_target is deliberately
   NOT called here.
@@ -1172,8 +1095,8 @@ async def _publish_trade_plan_v8(
       publish_status=True,
     )
     return None
-  # Go is the live technical source; provenance and the Go-only match filter remain the protection
-  # against stale Python/ZoneWatch state. Everything after this point is
+  # Go is the live technical source; provenance and the Go-only match filter are
+  # the protection against stale non-Go state. Everything after this point is
   # execution-time quote, confirmation, risk and order validation.
   if GO_ORIGIN_TAG in match.tags:
     # A Go opportunity that was invalidated/expired leaves a cancel tombstone.
@@ -2741,26 +2664,6 @@ async def _admit_strategy_intent_for_cycle(
       terminal=True,
       message="intent symbol does not match worker symbol",
     )
-  if intent.source == "scanner_strategy_match":
-    eligibility = match.execution_eligibility
-    if eligibility is None:
-      return _AdmissionFailure(
-        reason_code="static_eligibility_missing",
-        terminal=True,
-        message="scanner match has no authoritative static eligibility",
-        stage="static_eligibility",
-      )
-    if not eligibility.allowed:
-      return _AdmissionFailure(
-        reason_code="static_eligibility_contract_violation",
-        terminal=True,
-        message="analysis-only scanner result reached the executable store",
-        stage="static_eligibility",
-        measured={
-          "scanner_reason_code": eligibility.reason_code,
-          "market_map_id": eligibility.market_map_id,
-        },
-      )
   if match.confluence < max(1, runtime_config.auto_algo.actionability.gates.min_confluence):
     return _AdmissionFailure(
       reason_code="confluence_below_minimum",
@@ -2997,12 +2900,12 @@ async def _handle_event(
   client = client or redis_state.get_client()
   source = source or RedisOHLCSource(client)
   spot = await _load_spot(client, symbol)
-  scanner_strategy_matches = await _load_strategy_matches(client, symbol)
+  live_matches = await _load_strategy_matches(client, symbol)
   # Go is the sole automatic technical-opportunity producer. This filter is
   # applied even for a ready-stream wake-up: a ZoneWatch or legacy Python
   # caller cannot smuggle a non-Go match through the explicit-match path.
-  scanner_strategy_matches = [
-    item for item in scanner_strategy_matches
+  live_matches = [
+    item for item in live_matches
     if GO_ORIGIN_TAG in item.tags
   ]
   # Execute only what Go still holds live. Go rebuilds its book under the
@@ -3011,18 +2914,18 @@ async def _handle_event(
   # from its published set. An unavailable set fails open, but a verified
   # live set also reconciles the retained projection so a stale winner cannot
   # remain looking executable in Redis.
-  if scanner_strategy_matches:
+  if live_matches:
     live_ids = await go_live_opportunity_ids(client, symbol)
     if live_ids is not None:
-      original_projection = scanner_strategy_matches
-      projected, scanner_strategy_matches = _reconcile_go_match_projection(
-        scanner_strategy_matches, live_ids,
+      original_projection = live_matches
+      projected, live_matches = _reconcile_go_match_projection(
+        live_matches, live_ids,
       )
-      scanner_strategy_matches = await _restore_reappeared_go_arbitration(
-        client, scanner_strategy_matches,
+      live_matches = await _restore_reappeared_go_arbitration(
+        client, live_matches,
       )
       restored_by_id = {
-        item.match_id: item for item in scanner_strategy_matches
+        item.match_id: item for item in live_matches
       }
       projected = [
         restored_by_id.get(item.match_id, item) for item in projected
@@ -3035,11 +2938,11 @@ async def _handle_event(
           ex=max(60, max(item.expires_at for item in projected) - now),
         )
   if ready_match_id is not None:
-    scanner_strategy_matches = [
-      item for item in scanner_strategy_matches
+    live_matches = [
+      item for item in live_matches
       if item.match_id == ready_match_id
     ]
-  if not scanner_strategy_matches:
+  if not live_matches:
     await _persist_idle_last_gate(
       client, symbol=symbol, event_ts=event_ts, spot=spot,
     )
@@ -3047,7 +2950,7 @@ async def _handle_event(
 
   # The Go event is the complete technical decision: do not call Python
   # regime, range, trendline, or scalp detectors on this path, and do not
-  # let scanner_strategy_matches (see above) ever carry a non-Go match
+  # let live_matches (see above) ever carry a non-Go match
   # here. OHLC is still loaded, same as the Python path (production
   # finding 2026-09-28: skipping it silently turned the execution-time
   # opposing-barrier/target-room recheck below into a no-op for every
@@ -3059,13 +2962,13 @@ async def _handle_event(
   frames = await _load_frames(source, symbol)
   # Every live match competes in arbitration: same-thesis opportunities are
   # resolved best-first there, not merged or first-come here.
-  strategy_matches = list(scanner_strategy_matches)
+  strategy_matches = list(live_matches)
   strategy_match = select_primary(strategy_matches)
   observed_gate_source = (
     "multi_strategy_match"
     if len(strategy_matches) > 1
     else "scanner_strategy_match"
-    if scanner_strategy_matches
+    if live_matches
     else "private_ohlc"
   )
   spot_price = spot.price if spot is not None and spot.fresh else None
@@ -3208,30 +3111,6 @@ async def _handle_event(
                 failure.reason_code,
               )
           await _consume_strategy_match(client, symbol, routed_match)
-      else:
-        # Private intents (range / trend) are recorded as unavailable and
-        # kept out of arbitration; the V6 candidate path is retired and no
-        # TradePlan equivalent publishes them.
-        await _record_private_route(
-          client,
-          symbol=symbol,
-          event_ts=event_ts,
-          strategy=intent.strategy,
-          family=intent.family,
-          direction=intent.direction,
-          source=intent.source,
-          structural_id=intent.structural_id,
-          entry_low=intent.entry_low,
-          entry_high=intent.entry_high,
-          spot_price=spot_price,
-          status="blocked",
-          reason_code="publication_unavailable",
-          message="private strategy has no active TradePlan publication path",
-          group_id=intent.proposed_group_id,
-          retained=False,
-          stage="publication",
-          terminal_reason_code="publication_unavailable",
-        )
     # Go owns every technical opportunity. Algo Bot owns execution policy, so
     # arbitration runs only after freshness, quote and route admission have
     # removed stale/non-executable opportunities from the decision set. Go's
@@ -3281,12 +3160,7 @@ async def _handle_event(
           )
           return publication_result
         try:
-          # TradePlan V8 is the sole autonomous order path, per
-          # docs/autotrade-execution-integrity.md - the V6 candidate path is
-          # removed entirely for autonomous publication (not gated behind a
-          # mode) so a confirmed setup can never arm both a TradePlan and a V6
-          # candidate for the same thesis. Existing open V6 positions are
-          # untouched; this only blocks new autonomous publication.
+          # TradePlan V8 is the only autonomous order path (docs/execution.md).
           published = await _publish_trade_plan_v8(
             client,
             symbol,

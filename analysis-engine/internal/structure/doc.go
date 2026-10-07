@@ -22,5 +22,5 @@
 // internal/context, never recomputing it.
 //
 // Dependency rule: structure MUST NOT import internal/opportunity or
-// internal/strategy (docs/architecture/dependency-rules.md).
+// internal/strategy (docs/architecture.md).
 package structure

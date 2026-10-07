@@ -97,7 +97,7 @@ class ActiveExposure:
   plan_id: str | None = None
   position_id: int | None = None
   remaining_volume: float | None = None
-  # None when unknown (V6 / pre-schema-3). Treated as not-yet-TP2 for unlock.
+  # None when unknown (pre-schema-3). Treated as not-yet-TP2 for unlock.
   highest_booked_target_index: int | None = None
 
 

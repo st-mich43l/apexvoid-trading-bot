@@ -31,7 +31,7 @@ func (s LiquiditySide) String() string {
 //
 // Layer reuses structure.StructureLayer — a pool anchored at a Major swing
 // carries different weight than one at a Micro swing (this is why
-// liquidity depends on structure in docs/architecture/dependency-rules.md,
+// liquidity depends on structure in docs/architecture.md,
 // an amendment made when this package was implemented, not part of the
 // original architecture freeze). This is deliberately a DIFFERENT concept
 // from the source task's own "Internal Liquidity"/"External Liquidity"

@@ -661,37 +661,6 @@ def _scalp_eligibility(match: StrategyMatch) -> ExecutionEligibility:
 
 
 @pytest.mark.asyncio
-async def test_scalp_match_without_eligibility_is_admission_rejected(monkeypatch):
-  # Reproduces the production incident: every HFS opportunity (strategy_mode
-  # "hfs_scalp", routed through the generic source="scanner_strategy_match"
-  # intent branch, exempted only for "mapped_zone_reaction") was built with
-  # execution_eligibility=None -- the classic scanner.py detection path is
-  # the only thing that ever populates it. 34 of 55 live HFS publishes on
-  # 2026-08-06 died to exactly this before ever reaching a stop/target check.
-  client = redis_state.get_client()
-  match = _reaction_match(
-    match_id="scalp-preflight-missing",
-    thesis_id="scalp-preflight-missing-thesis",
-    strategy="Impulse Pullback Scalp",
-    strategy_mode="scalp_m1",
-    execution_eligibility=None,
-  )
-  await _confirm_setup(client, match)
-  spot = worker.AutoTradeSpot(
-    price=4038.51, ts=int(time.time()), fresh=True, bid=4038.41, ask=4038.61,
-  )
-  install_runtime_overrides(monkeypatch, overrides={"runtime.auto_trade.enabled": True})
-  install_runtime_overrides(monkeypatch, overrides={"runtime.auto_trade.strategy_match_enabled": True})
-  intent = _intent_for_match(match)
-
-  failure = await worker._admit_strategy_intent_for_cycle(
-    client, intent, match, spot=spot,
-  )
-  assert failure is not None
-  assert failure.reason_code == "static_eligibility_missing"
-
-
-@pytest.mark.asyncio
 async def test_scalp_match_with_eligibility_is_admitted(monkeypatch):
   client = redis_state.get_client()
   match = _reaction_match(

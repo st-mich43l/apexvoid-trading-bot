@@ -11,7 +11,7 @@ import (
 // internal/config: turning "analysis.history.depth.*" into the
 // map[Timeframe]int this constructor takes is internal/engine's job (the
 // composition layer), not marketdata's — marketdata and config are
-// same-rank siblings in docs/architecture/dependency-rules.md's graph, and
+// same-rank siblings in docs/architecture.md's graph, and
 // neither may import the other.
 type MarketHistory struct {
 	Symbol     market.Symbol

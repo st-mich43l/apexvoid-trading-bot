@@ -96,7 +96,7 @@ class StrategyMatch:
   # - populated from the DetectionResult/DetectionContext that produced this
   # match so the builder never has to derive bias/kind/timeframe from
   # direction (BUY => demand, BUY => bias up are exactly the forbidden
-  # shortcuts per docs/autotrade-execution-integrity.md). Additive, defaulted
+  # shortcuts per docs/execution.md). Additive, defaulted
   # fields so older cached matches still round-trip.
   structural_kind: str | None = None
   structural_timeframe: str | None = None

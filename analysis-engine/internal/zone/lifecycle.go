@@ -26,10 +26,8 @@ type LifecycleConfig struct {
 	EpsilonATR float64
 }
 
-// State is this package's own zone lifecycle — deliberately simpler than
-// ZoneWatch's 7-state execution machine (see doc.go). Derived fresh from
-// TouchCount/NotInvalidated/IsSpent on every Update, never persisted
-// independently.
+// State is this package's own zone lifecycle. Derived fresh from
+// TouchCount/NotInvalidated on every Update, never persisted independently.
 type State uint8
 
 const (

@@ -1,4 +1,4 @@
-"""Scalp vs reaction funnel counters for ZoneWatch / trade lifecycle visibility.
+"""Scalp vs reaction funnel counters for trade lifecycle visibility.
 
 Reaction fills can vanish from short-TTL Redis event streams while M1
 scalping dominates the journal. These counters (and compact complete

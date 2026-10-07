@@ -6,7 +6,7 @@ package structure
 // ("only expose meaningful tunable parameters... prefer a coherent
 // model"). Values are read from config/analysis.yml's analysis.structure
 // section by internal/engine (structure has no config-package dependency
-// of its own — see docs/architecture/dependency-rules.md).
+// of its own — see docs/architecture.md).
 type Settings struct {
 	Version string // "v2" — see internal/engine's version-gate wiring; structure itself does not branch on this
 

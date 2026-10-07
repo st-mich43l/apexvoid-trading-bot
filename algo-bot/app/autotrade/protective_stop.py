@@ -266,7 +266,7 @@ def _plan_base_stop(
       "Structure invalidation is not on the losing side of entry"
     )
   raw_pips = raw_distance / pip
-  # V6 / PlanBase parity with StructureStopPlanner: clamp into the
+  # Parity with StructureStopPlanner: clamp into the
   # [min, max] envelope. Zone-scale group stops use plan_group_protective_stop
   # which rejects over-max instead of pulling the stop inward.
   stop_pips = min(
