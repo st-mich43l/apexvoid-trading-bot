@@ -44,6 +44,12 @@ type LegacyDetectorSettings struct {
 	// RetestMaxTouches is technique_retest_max_touches: how many touches a
 	// technique zone may have taken and still publish (optional, default 30).
 	RetestMaxTouches int
+	// HigherTimeframes lists the higher timeframes whose supply/demand zones a
+	// technique publisher also evaluates against the execution frame's closed
+	// bars (optional "higher_timeframes", default none). The frozen Python
+	// publishers read the execution frame only, so this is the one deliberate
+	// extension of the contract and is opt-in per strategy.
+	HigherTimeframes []market.Timeframe
 }
 
 // LegacyDetectorParameterKeys documents the parameters ParseLegacyDetectorSettings
@@ -86,6 +92,11 @@ func ParseLegacyDetectorSettings(params map[string]any) (LegacyDetectorSettings,
 			return s, err
 		}
 	}
+	if raw, present := params["higher_timeframes"]; present {
+		if s.HigherTimeframes, err = parseHigherTimeframes(raw); err != nil {
+			return s, err
+		}
+	}
 	version, ok := params["confluence_scoring_version"].(string)
 	if !ok || version == "" {
 		return s, fmt.Errorf("parameter %q must be a string", "confluence_scoring_version")
@@ -99,6 +110,35 @@ func ParseLegacyDetectorSettings(params map[string]any) (LegacyDetectorSettings,
 		return s, fmt.Errorf("invalid legacy detector parameters")
 	}
 	return s, nil
+}
+
+// parseHigherTimeframes reads the optional higher_timeframes list: distinct,
+// recognised timeframes strictly above the execution timeframe (M5).
+func parseHigherTimeframes(raw any) ([]market.Timeframe, error) {
+	items, ok := raw.([]any)
+	if !ok {
+		if typed, isStrings := raw.([]string); isStrings {
+			items = make([]any, len(typed))
+			for i, item := range typed {
+				items[i] = item
+			}
+		} else {
+			return nil, fmt.Errorf("parameter %q must be a list of timeframes", "higher_timeframes")
+		}
+	}
+	seen := map[market.Timeframe]bool{}
+	var out []market.Timeframe
+	for _, item := range items {
+		name, isString := item.(string)
+		tf := market.Timeframe(name)
+		minutes, known := tf.Minutes()
+		if !isString || !known || minutes <= 5 || seen[tf] {
+			return nil, fmt.Errorf("parameter %q must list distinct timeframes above M5, got %v", "higher_timeframes", item)
+		}
+		seen[tf] = true
+		out = append(out, tf)
+	}
+	return out, nil
 }
 
 // LegacyDetector is one detector evaluation's read-only inputs.

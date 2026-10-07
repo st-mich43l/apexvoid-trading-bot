@@ -1085,6 +1085,10 @@ type Instance struct {
 	ZoneScore float64
 	// H1Time is the H1 candle a CRT instance is built on (open time).
 	H1Time int64
+	// Timeframe names the higher timeframe the zone was built on ("M15");
+	// empty for an execution-frame instance. OriginIndex is always relative
+	// to the execution frame once a higher-timeframe instance is bound to it.
+	Timeframe string
 }
 
 func tEpsilon(s TechniqueSettings, atr float64) float64 {
