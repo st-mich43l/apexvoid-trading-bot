@@ -4450,6 +4450,44 @@ public sealed partial class TradePlanRuntime(
           + $"order={leg.BrokerOrderId} reason={reason}"
         );
       }
+      catch (CTraderOrderNotFoundException exception)
+      {
+        // The broker no longer has this order: it filled, or it was cancelled
+        // or expired on the broker side. Retrying the cancel can never succeed
+        // (it looped every poll for a manual plan whose legs the owner had
+        // cancelled in cTrader), so decide from the live positions instead:
+        // a position carrying this leg's client order id means it filled and
+        // reconcile adopts it; otherwise there is nothing left to cancel.
+        var positions = (await client.ReconcileAccountAsync(cancellationToken)).Positions;
+        var filled = positions.Any(position =>
+          !string.IsNullOrWhiteSpace(position.ClientOrderId)
+          && string.Equals(
+            position.ClientOrderId, leg.ClientOrderId, StringComparison.Ordinal
+          )
+        );
+        if (filled)
+        {
+          log(
+            $"v8 cancel unfilled leg found a fill id={plan.PlanId} leg={leg.LegId} "
+            + $"order={leg.BrokerOrderId}: {exception.Message}"
+          );
+          continue;
+        }
+        var idx = legs.FindIndex(item => item.LegId == leg.LegId);
+        if (idx >= 0)
+        {
+          legs[idx] = legs[idx] with
+          {
+            Stage = TradePlanLegStages.Cancelled,
+            BrokerOrderId = null,
+            LastError = "order_not_found_at_broker",
+          };
+        }
+        log(
+          $"v8 cancel unfilled leg already gone id={plan.PlanId} leg={leg.LegId} "
+          + $"order={leg.BrokerOrderId} reason={reason}"
+        );
+      }
       catch (Exception exception)
       {
         log(

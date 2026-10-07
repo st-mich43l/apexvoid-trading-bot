@@ -92,3 +92,12 @@ public interface ICTraderTradeClient
     CancellationToken cancellationToken
   ) => Task.FromResult<IReadOnlyList<ClosingDeal>>([]);
 }
+
+/// <summary>
+/// The broker has no such order: it already filled, was cancelled or expired
+/// before the request reached it. A cancel that fails this way cannot succeed
+/// on retry, so callers must resolve the leg from the position snapshot
+/// instead of re-sending the cancel.
+/// </summary>
+public sealed class CTraderOrderNotFoundException(string message)
+  : InvalidOperationException(message);
