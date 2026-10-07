@@ -31,8 +31,8 @@ Every strategy has exactly one status:
 |---|---|---|---|---|---|---|---|
 | `key_level` | key-level clusters, role, structure, reaction | Python `key_level_reaction` (a1c77584, the profitable XAU week) | `test/keylevelparity` golden | all | live | LEGACY_PARITY_PROVEN | 507 / 709 |
 | `confluence_zone` | overlapping canonical zones, reaction | `confluence_zone_reaction` (1c9f323) | `test/techniqueparity` golden, 5 symbols | all | live | LEGACY_PARITY_PROVEN | 270 / 400 |
-| `supply` | canonical supply zones, reaction, liquidity | `supply_demand_technique_reaction` (1c9f323) | `test/techniqueparity` golden, 5 symbols | all | live | LEGACY_PARITY_PROVEN | 128 / 168 |
-| `demand` | canonical demand zones, reaction, liquidity | `supply_demand_technique_reaction` (1c9f323) | `test/techniqueparity` golden, 5 symbols | all | live | LEGACY_PARITY_PROVEN | 141 / 188 |
+| `supply` | canonical supply zones, reaction, liquidity | `supply_demand_technique_reaction` (1c9f323) | `test/techniqueparity` golden, 5 symbols | all | live | LEGACY_PARITY_PROVEN (M5 zones; M15 zones are a Go-native addition, no oracle) | 128 / 168 |
+| `demand` | canonical demand zones, reaction, liquidity | `supply_demand_technique_reaction` (1c9f323) | `test/techniqueparity` golden, 5 symbols | all | live | LEGACY_PARITY_PROVEN (M5 zones; M15 zones are a Go-native addition, no oracle) | 141 / 188 |
 | `order_block` | canonical order-block zones, reaction | `order_block_technique_reaction` (1c9f323) | `test/techniqueparity` golden, 5 symbols | all | live | LEGACY_PARITY_PROVEN | 23 / 30 |
 | `fvg` | canonical FVG zones, reaction | `fvg_technique_reaction` (1c9f323) | `test/techniqueparity` golden, 5 symbols | all | live | LEGACY_PARITY_PROVEN | 99 / 120 |
 | `ifvg` | canonical inverted FVG zones, reaction | `ifvg_technique_reaction` (1c9f323) | `test/techniqueparity` golden, 5 symbols | all | **contained** (analysis only) | LEGACY_PARITY_PROVEN | 157 / 201 |

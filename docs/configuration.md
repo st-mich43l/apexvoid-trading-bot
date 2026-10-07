@@ -56,6 +56,11 @@ Analysis stays on, so the opportunity is produced, stored and decided with reaso
 re-enables execution; nothing else changes. Current containment is documented
 with its evidence in [strategies](strategies/README.md).
 
+`analysis.strategies.supply` and `demand` carry `higher_timeframes: [M15]`: the M15
+frame's own supply/demand zones are also evaluated against the M5 closed bars
+(see [supply](strategies/supply.md#higher-timeframe-zones)). Removing the key
+restores M5-only evaluation.
+
 ## Sessions
 
 Session is analysis context and a quality input, never a clock gate: no
