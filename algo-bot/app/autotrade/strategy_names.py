@@ -188,5 +188,3 @@ def names_for_family(family: str, *, include_retired: bool = True) -> frozenset[
     entry.canonical for entry in STRATEGY_NAMES
     if entry.family == family and (include_retired or not entry.retired)
   )
-
-

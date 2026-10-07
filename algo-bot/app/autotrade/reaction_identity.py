@@ -190,5 +190,3 @@ def _parse_claim_json(raw: object) -> dict[str, Any] | None:
 
 def dump_claim(payload: dict[str, Any]) -> str:
   return json.dumps(payload, separators=(",", ":"), sort_keys=True)
-
-

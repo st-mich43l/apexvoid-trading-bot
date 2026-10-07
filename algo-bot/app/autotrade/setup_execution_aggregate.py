@@ -69,5 +69,3 @@ STATUS_LINE_BY_PROJECTION_STATE = {
   ),
   "terminal": None,
 }
-
-

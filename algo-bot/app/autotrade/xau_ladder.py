@@ -58,5 +58,3 @@ def entry_leg_prices(
     shallow = low
     deep = shallow + (stop - shallow) / 2
   return EntryLegPrices(shallow=round_price(shallow, digits), deep=round_price(deep, digits))
-
-

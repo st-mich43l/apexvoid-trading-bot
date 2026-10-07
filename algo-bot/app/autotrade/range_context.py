@@ -145,5 +145,3 @@ def _barrier_payload(payload: dict[str, Any]) -> dict[str, Any]:
     **payload,
     "sources": tuple(str(item) for item in payload.get("sources", [])),
   }
-
-

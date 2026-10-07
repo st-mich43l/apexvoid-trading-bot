@@ -26,5 +26,3 @@ async def load_breakout_retest_watch(
   except (TypeError, ValueError, json.JSONDecodeError):
     return None
   return payload if isinstance(payload, dict) else None
-
-
