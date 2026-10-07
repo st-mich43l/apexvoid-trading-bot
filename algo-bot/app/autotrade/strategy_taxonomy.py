@@ -53,10 +53,6 @@ def is_technique_or_confluence(name: str) -> bool:
   return key in TECHNIQUE_STRATEGIES or key in CONFLUENCE_STRATEGIES
 
 
-def is_liquidity_strategy(name: str) -> bool:
-  return str(name or "") in LIQUIDITY_STRATEGIES
-
-
 def is_range_strategy(name: str) -> bool:
   return str(name or "") in RANGE_STRATEGIES
 

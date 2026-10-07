@@ -25,46 +25,17 @@ single writer of it and reports what it did in ``execution:plan_cancel_ack:*``.
 from __future__ import annotations
 
 import json
-import logging
-from dataclasses import dataclass, field
 from typing import Any
-
-from app.analysis_client.provenance import CATALOG_TAG, GO_ORIGIN_TAG
-from app.autotrade.multi_match import deserialize_matches, serialize_matches, strategy_matches_key
-from app.autotrade.setup_lifecycle import (
-  CANCELLED,
-  CONFIRMED,
-  DISCOVERED,
-  FORMING,
-  INVALIDATED,
-  PLAN_BUILT,
-  TOUCHED,
-  WATCHING,
-  SetupLifecycleError,
-  load_setup,
-  transition_setup,
-)
-
-log = logging.getLogger(__name__)
 
 PLAN_CANCEL_TTL_SECONDS = 7 * 86400
 # Shared with the executor: contracts/autotrade/plan-cancel-intent.json.
 SOURCE_INVALIDATED = "opportunity_invalidated"
 SOURCE_EXPIRED = "opportunity_expired"
 SOURCE_OPERATOR_CANCEL = "operator_cancel"
-GO_PLAN_REGISTRY_KEY = "analysis:go_plans"
-# Setup states in which withdrawal is still Python's to do (nothing published
-# yet). The lifecycle only allows pre-plan -> INVALIDATED and PLAN_BUILT ->
-# CANCELLED; a PLAN_PUBLISHED/ARMED setup belongs to the executor's plan now.
-_PRE_PLAN_STATES = frozenset({DISCOVERED, WATCHING, TOUCHED, FORMING, CONFIRMED})
 
 
 def plan_cancel_key(plan_id: str) -> str:
   return f"execution:plan_cancel:{plan_id}"
-
-
-def plan_cancel_ack_key(plan_id: str) -> str:
-  return f"execution:plan_cancel_ack:{plan_id}"
 
 
 def plan_id_for_match(match_id: str) -> str:
@@ -92,97 +63,3 @@ async def request_plan_cancel(
 async def read_plan_cancel(client: Any, plan_id: str) -> dict[str, Any] | None:
   raw = await client.get(plan_cancel_key(plan_id))
   return None if raw is None else json.loads(_text(raw))
-
-
-async def read_plan_cancel_ack(client: Any, plan_id: str) -> dict[str, Any] | None:
-  raw = await client.get(plan_cancel_ack_key(plan_id))
-  return None if raw is None else json.loads(_text(raw))
-
-
-def _go_scope(tags: Any) -> str | None:
-  scope = next((t[len(CATALOG_TAG):] for t in tags if t.startswith(CATALOG_TAG)), None)
-  return scope
-
-
-async def register_go_plan(client: Any, *, plan_id: str, match: Any, expires_at: int) -> None:
-  """Index a Go-derived plan *before* it is published, so a cancellation can always
-  find it. Registration failure aborts the publish (fail closed)."""
-  scope = _go_scope(match.tags)
-  await client.hset(GO_PLAN_REGISTRY_KEY, plan_id, json.dumps({
-    "plan_id": plan_id, "match_id": match.match_id, "symbol": match.symbol, "scope": scope,
-    "expires_at": int(expires_at),
-  }, separators=(",", ":"), sort_keys=True))
-
-
-async def registered_go_plans(client: Any, *, symbol: str | None = None, scope: str | None = None) -> list[dict[str, Any]]:
-  rows = await client.hgetall(GO_PLAN_REGISTRY_KEY)
-  plans = [json.loads(_text(v)) for v in rows.values()]
-  return sorted(
-    (p for p in plans if (symbol is None or p["symbol"] == symbol.upper()) and (scope is None or p["scope"] == scope)),
-    key=lambda p: p["plan_id"],
-  )
-
-
-@dataclass
-class WithdrawalReport:
-  symbol: str
-  scope: str | None
-  matches_removed: list[str] = field(default_factory=list)
-  setups_withdrawn: list[str] = field(default_factory=list)
-  plans_cancel_requested: list[str] = field(default_factory=list)
-  plans_already_requested: list[str] = field(default_factory=list)
-
-  def as_dict(self) -> dict[str, Any]:
-    return {
-      "symbol": self.symbol, "scope": self.scope, "matches_removed": self.matches_removed,
-      "setups_withdrawn": self.setups_withdrawn, "plans_cancel_requested": self.plans_cancel_requested,
-      "plans_already_requested": self.plans_already_requested,
-    }
-
-
-async def withdraw_go_scope(
-  client: Any, *, symbol: str, scope: str | None, reason: str, source: str, now: int, actor: str = "algo_bot",
-) -> WithdrawalReport:
-  """Withdraw every Go-derived match and unexecuted plan of a scope (or of every
-  Go scope of the symbol when ``scope`` is None). Idempotent and re-runnable: the
-  operator's recovery from a crash between the fence flip and this call."""
-  symbol = symbol.upper()
-  report = WithdrawalReport(symbol=symbol, scope=scope)
-  key = strategy_matches_key(symbol)
-  matches = deserialize_matches(await client.get(key))
-
-  def _selected(match: Any) -> bool:
-    if GO_ORIGIN_TAG not in match.tags:
-      return False
-    return scope is None or f"{CATALOG_TAG}{scope}" in match.tags
-
-  doomed = [m for m in matches if _selected(m)]
-  if doomed:
-    kept = [m for m in matches if not _selected(m)]
-    if kept:
-      await client.set(key, serialize_matches(kept), ex=max(60, max(m.expires_at for m in kept) - now))
-    else:
-      await client.delete(key)
-    report.matches_removed = [m.match_id for m in doomed]
-  for match in doomed:
-    record = await load_setup(client, match.match_id)
-    target = None
-    if record is not None:
-      target = INVALIDATED if record.state in _PRE_PLAN_STATES else CANCELLED if record.state == PLAN_BUILT else None
-    if target is not None:
-      try:
-        await transition_setup(client, match.match_id, target, reason_code=f"go_{source}")
-        report.setups_withdrawn.append(match.match_id)
-      except SetupLifecycleError:
-        log.exception("could not withdraw setup %s during Go withdrawal", match.match_id)
-    await _cancel(client, report, plan_id_for_match(match.match_id), reason, source, now)
-  for plan in await registered_go_plans(client, symbol=symbol, scope=scope):
-    await _cancel(client, report, plan["plan_id"], reason, source, now)
-  return report
-
-
-async def _cancel(client: Any, report: WithdrawalReport, plan_id: str, reason: str, source: str, now: int) -> None:
-  if plan_id in report.plans_cancel_requested or plan_id in report.plans_already_requested:
-    return
-  fresh = await request_plan_cancel(client, plan_id, reason=reason, source=source, requested_at=now)
-  (report.plans_cancel_requested if fresh else report.plans_already_requested).append(plan_id)

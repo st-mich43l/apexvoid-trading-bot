@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Iterable
+from typing import Iterable
 
 from app.autotrade.strategy_match import StrategyMatch
 

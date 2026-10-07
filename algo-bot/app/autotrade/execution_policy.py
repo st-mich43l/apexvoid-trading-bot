@@ -281,9 +281,6 @@ PREFERENCE_TELEMETRY_REASONS = frozenset({
   "entry_inside_ambiguous_zone",
 })
 
-def is_preference_telemetry(reason_code: str | None) -> bool:
-  return str(reason_code or "").strip() in PREFERENCE_TELEMETRY_REASONS
-
 
 @dataclass(frozen=True)
 class StructuralBarrier:
@@ -307,18 +304,6 @@ class StructuralBarrier:
 
 
 @dataclass(frozen=True)
-class StructuralSourceIdentity:
-  strategy: str
-  strategy_family: str
-  structural_source: str
-  zone_id: str | None
-  level_id: str | None
-  key_level: float | None
-  low: float
-  high: float
-
-
-@dataclass(frozen=True)
 class ExecutionGuardDecision:
   """Typed result of a structural-quality guard evaluation. ``hard_block``
   (not ``outcome`` alone) is the single source of truth for whether a
@@ -337,143 +322,6 @@ class ExecutionGuardDecision:
 # Compatibility for the first replay commit on this branch.  New code should
 # use the explicit public name above.
 GuardOutcome = ExecutionGuardDecision
-
-
-def classify_barrier_relationship(
-  *,
-  strategy: str,
-  direction: str,
-  entry_reference: float,
-  target_reference: float | None,
-  source_identity: StructuralSourceIdentity,
-  barrier: StructuralBarrier,
-) -> str:
-  """Classify a barrier relative to one concrete trade thesis.
-
-  The identity check is intentionally stronger than generic band overlap:
-  exact ids win, while legacy matches may identify their source by the
-  selected key level plus entry band.  This prevents an unrelated,
-  overlapping opposing zone from being incorrectly discarded as "own
-  source".
-  """
-  direction = direction.upper()
-  exact_id = bool(
-    (source_identity.zone_id and source_identity.zone_id == barrier.barrier_id)
-    or (
-      source_identity.level_id
-      and source_identity.level_id == barrier.barrier_id
-    )
-  )
-  source_overlap = (
-    barrier.low <= source_identity.high
-    and barrier.high >= source_identity.low
-  )
-  key_matches = (
-    source_identity.key_level is not None
-    and barrier.low <= source_identity.key_level <= barrier.high
-  )
-  side_supports = (
-    direction == "BUY" and barrier.side in {"demand", "support"}
-    or direction == "SELL" and barrier.side in {"supply", "resistance"}
-  )
-  if barrier.is_primary_source or exact_id or (
-    source_overlap and key_matches and side_supports
-  ):
-    return "primary_source"
-  if barrier.is_supporting_source or (
-    side_supports and barrier.low <= entry_reference <= barrier.high
-  ):
-    return "supportive"
-
-  if direction == "BUY":
-    if barrier.high < entry_reference:
-      return "behind_entry"
-    opposing = barrier.side in {"supply", "resistance"}
-    ahead = barrier.low > entry_reference
-  else:
-    if barrier.low > entry_reference:
-      return "behind_entry"
-    opposing = barrier.side in {"demand", "support"}
-    ahead = barrier.high < entry_reference
-
-  contains_entry = barrier.low <= entry_reference <= barrier.high
-  if contains_entry:
-    # Bug (since this function's introduction in 13414b7): both branches of
-    # this condition returned the same literal value, so a zone whose side
-    # couldn't be cleanly classified as opposing (barrier.side == "neutral",
-    # or not matching the opposing-side set at all -- already excluded from
-    # "supportive" above by the side_supports check) was hard-blocked
-    # exactly like a confirmed, cleanly-classified opposing zone. Only a
-    # genuinely opposing zone containing the entry is the 23 Jul incident
-    # this guard exists for (BUY filled inside an 8-touch SELL resistance
-    # band, unambiguously barrier.side == "supply"); a side-unclear zone is
-    # a materially weaker signal, same reasoning PR #223 already applied to
-    # neutral key levels.
-    return "overlapping_ambiguous" if opposing else "overlapping_neutral"
-  if opposing and ahead:
-    if target_reference is None:
-      return "opposing_ahead"
-    target_crosses = (
-      direction == "BUY" and target_reference >= barrier.low
-      or direction == "SELL" and target_reference <= barrier.high
-    )
-    return "opposing_ahead" if target_crosses else "irrelevant"
-  if barrier.side == "neutral" and ahead:
-    return "opposing_ahead"
-  return "irrelevant"
-
-
-def resolve_guard_mode(cfg: Any | None = None) -> str:
-  """Return the configured structural-guard mode.
-
-  Production reads the authority-neutral runtime config
-  (``actionability.structural_guard.guard_mode``); tests may inject a
-  canonical-shaped override.
-  """
-  if cfg is None:
-    cfg = _default_runtime_cfg()
-  actionability = getattr(cfg, "actionability", None)
-  if actionability is None and hasattr(cfg, "auto_algo"):
-    actionability = cfg.auto_algo.actionability
-  mode = str(actionability.structural_guard.guard_mode)
-  mode = mode.strip().lower()
-  return mode if mode in _GUARD_MODES else GUARD_MODE_BALANCED
-
-
-def classify_guard_severity(
-  guard: str,
-  condition: str,
-  reason: str,
-  *,
-  guard_mode: str,
-  hard_geometry: bool = False,
-) -> ExecutionGuardDecision:
-  """Map a detected structural condition to a typed, mode-aware outcome.
-
-  Preference / quality signals are always telemetry. ``hard_geometry`` marks
-  true zero-room contract failures that are not on the preference list.
-  """
-  if is_preference_telemetry(condition):
-    return ExecutionGuardDecision(
-      guard, OUTCOME_ALLOW_WITH_WARNING, condition, reason, False,
-    )
-  if hard_geometry:
-    return ExecutionGuardDecision(
-      guard, OUTCOME_BLOCK, condition, reason, True,
-    )
-  if guard_mode == GUARD_MODE_STRICT:
-    return ExecutionGuardDecision(
-      guard, OUTCOME_BLOCK, condition, reason, True,
-    )
-  if guard_mode == GUARD_MODE_OBSERVE:
-    return ExecutionGuardDecision(
-      guard, OUTCOME_ALLOW_WITH_WARNING, condition, reason, False,
-    )
-  # balanced: buffer/ATR-based "ahead of entry" and other soft conditions
-  # become warnings. Hard zero-room geometry already returned above.
-  return ExecutionGuardDecision(
-    guard, OUTCOME_ALLOW_WITH_WARNING, condition, reason, False,
-  )
 
 
 TIER_A = "A"
@@ -690,31 +538,6 @@ def policy_for(strategy: str, cfg: Any | None = None) -> ExecutionPolicy:
     permitted_regimes=base.permitted_regimes,
     entry_distribution=base.entry_distribution,
   )
-
-
-def planned_execution_route(
-  *,
-  order_type_preference: str,
-  entry_distribution: str,
-  allow_either: bool = True,
-) -> str:
-  """Legacy route-name helper for parity fixtures and non-strict candidates.
-
-  Strict autonomous publication must use resolve_execution_route_plan so
-  `either` is resolved to a concrete route before stop planning.
-  """
-  preference = (order_type_preference or "").strip().lower()
-  distribution = (entry_distribution or "").strip().lower()
-  if preference == "market":
-    return ROUTE_MARKET
-  if preference == "limit":
-    if distribution in {"zone_split", "zone_scale"}:
-      return ROUTE_ZONE_SPLIT
-    if distribution == "single":
-      return ROUTE_SINGLE_LIMIT
-  if allow_either:
-    return ROUTE_EITHER
-  return ROUTE_MARKET
 
 
 def evaluate_execution_policy(

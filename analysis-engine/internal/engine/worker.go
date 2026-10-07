@@ -1,8 +1,9 @@
 package engine
 
 import (
-	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/candle"
 	"sync"
+
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/candle"
 
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/arbitration"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/context"
@@ -87,26 +88,6 @@ func NewSymbolWorker(symbol market.Symbol, settings Settings, recorder *telemetr
 		state: ws, settings: settings, telemetry: recorder, registry: registry, publisher: publisher, algo: algo,
 		lastArbitration: make(map[string]arbitration.Decision),
 	}, nil
-}
-
-// Apply processes one closed-bar event through the full pipeline —
-// source task §42's dependency-aware update: ONLY the timeframe that just
-// closed gets a new structure.Update/liquidity.Update pass (each
-// timeframe's structure is self-contained, computed from its own candle
-// window — an M1 close never triggers H1 structure recomputation, because
-// H1's own Update is never called by an M1 event in the first place).
-// MarketContext is rebuilt after every accepted event, combining whatever
-// timeframes have been computed so far — cheap (map assembly, no
-// re-analysis), so it does not need its own dirty-tracking.
-//
-// A duplicate/out-of-order/invalid event still returns the current
-// snapshot (unchanged) rather than an error — source task §8's explicit-
-// outcome contract is satisfied by the AppendResult itself, already
-// surfaced via telemetry counters; Apply's return value staying a valid
-// snapshot either way keeps every caller's control flow uniform.
-func (w *SymbolWorker) Apply(event marketdata.BarEvent) (AnalysisSnapshot, error) {
-	snapshot, _, err := w.ApplyWithResult(event)
-	return snapshot, err
 }
 
 // ApplyWithResult is Apply with the MarketHistory append disposition made

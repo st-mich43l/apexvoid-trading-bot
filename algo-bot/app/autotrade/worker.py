@@ -27,7 +27,7 @@ from app.runtime.instruments import (
   live_instruments,
 )
 from app.analysis_client.provenance import GO_ORIGIN_TAG
-from app.autotrade.go_plan_cancel import read_plan_cancel, register_go_plan
+from app.autotrade.go_plan_cancel import read_plan_cancel
 from app.autotrade.go_live_opportunities import go_live_opportunity_ids
 from app.autotrade.go_opportunity_policy import (
   go_arbitration_key,
@@ -354,18 +354,6 @@ def _collect_fixed_rr_metric_sink(
   return _sink
 
 
-@dataclass(frozen=True)
-class ExecutionZoneClassification:
-  side: str
-  source: str
-  timeframe: str
-  width_pips: float
-  width_atr: float
-  execution_grade: bool
-  context_only: bool
-  invalid_geometry: bool
-
-
 _STOP_CONTRACT_FIELDS = (
   "planned_stop_entry_price",
   "planned_stop_price",
@@ -392,39 +380,6 @@ _STOP_CONTRACT_FIELDS = (
   "planned_leg_entry_prices",
   "entry_plan_version",
 )
-
-
-def classify_execution_zone(
-  zone: Any,
-  *,
-  atr: float,
-  pip_size: float,
-  cfg: Any,
-  timeframe: str = _HTF_TIMEFRAME,
-) -> ExecutionZoneClassification:
-  width = float(zone.high - zone.low)
-  invalid = (
-    not math.isfinite(width)
-    or width <= 0
-    or pip_size <= 0
-    or atr <= 0
-  )
-  width_pips = width / pip_size if pip_size > 0 else math.inf
-  width_atr = width / atr if atr > 0 else math.inf
-  exceeds = (
-    width_atr > float(cfg.execution.policy.execution_zone_max_width_atr)
-    or width_pips > float(cfg.execution.policy.execution_zone_max_width_pips)
-  )
-  return ExecutionZoneClassification(
-    side=zone.side,
-    source=zone.kind or "supply_demand",
-    timeframe=timeframe,
-    width_pips=round(width_pips, 3),
-    width_atr=round(width_atr, 3),
-    execution_grade=not invalid and not exceeds,
-    context_only=not invalid and exceeds,
-    invalid_geometry=invalid,
-  )
 
 
 def _symbols() -> set[str]:
@@ -2547,10 +2502,6 @@ async def _publish_trade_plan_v8(
         PLAN_BUILT,
         reason_code="v8_builder",
       )
-    if GO_ORIGIN_TAG in match.tags:
-      # Index before publishing: a cancellation must always be able to find every
-      # Go-derived plan. A failure here aborts the publish (fail closed).
-      await register_go_plan(client, plan_id=plan.plan_id, match=match, expires_at=plan.expires_at)
     await publish_trade_plan(client, plan)
     await transition_setup(
       client, setup_id, PLAN_PUBLISHED, reason_code="v8_stream_publish",
@@ -3602,183 +3553,3 @@ PUBLISH_STATUS_INVALIDATED = "invalidated"
 PUBLISH_STATUS_REJECTED = "rejected"
 
 
-@dataclass(frozen=True)
-class PublishResult:
-  """Outcome of one deterministic try_publish_executable_signal() pass.
-
-  ``status`` is one of the PUBLISH_STATUS_* constants above. ``measured``
-  carries whatever telemetry the underlying evaluation produced (route
-  outcome style); it is best-effort and may be empty when the setup never
-  reached a stage that records measurements.
-  """
-
-  status: str
-  plan_id: str
-  reason_code: str
-  zone_id: str
-  setup_id: str
-  measured: Mapping[str, Any] = field(default_factory=dict)
-  executable_quote: float | None = None
-  quote_side: str | None = None
-
-
-async def try_publish_executable_signal(
-  client: Any,
-  match: StrategyMatch,
-  *,
-  symbol: str,
-  event_ts: str | None = None,
-  source: RedisOHLCSource | None = None,
-) -> PublishResult:
-  """The one authoritative CONFIRMED-zone -> TradePlan V8 pass (ADR P0).
-
-  Runs the exact same evaluation `_handle_event` already performs for a
-  durable ready-stream wake-up (reload canonical setup, validate state,
-  validate a fresh side-aware quote, validate quote-in-zone, validate any
-  required M1 trigger, build+publish TradePlan V8 atomically) but does it
-  synchronously, in the caller's own processing cycle, instead of via a
-  Redis stream round-trip to a separate consumer task. Callers that already
-  know a match is CONFIRMED and structurally eligible (the scanner, right
-  after confirming it) should call this directly; a match that is not yet
-  executable simply comes back ``remained_watching`` and the caller falls
-  back to the durable `auto_trade:strategy_match_ready` queue for later
-  retries (still required for waiting-retest/M1-trigger semantics).
-
-  Never raises for an ordinary rejection/wait outcome - only reraises on an
-  unexpected internal failure, matching every other entry point in this
-  module.
-  """
-  setup_id = match.match_id
-  zone_id = str(match.confluence_zone_id or match.structural_zone_id or "")
-  plan_id = _v8_plan_id(match)
-  if GO_ORIGIN_TAG not in match.tags:
-    # This is the final data-plane fence. A stale Python/ZoneWatch match may
-    # still be present in Redis after a restart, but it can never become a new
-    # automatic plan while Go owns technical production.
-    await record_route_outcome(
-      client,
-      match,
-      stage="mode_check",
-      status="blocked",
-      reason_code="python_match_rejected_live_go",
-      message="Go-only automatic analysis rejects non-Go matches",
-      retained=False,
-      publish_status=False,
-    )
-    return PublishResult(
-      status=PUBLISH_STATUS_REJECTED,
-      plan_id=plan_id,
-      reason_code="python_match_rejected_live_go",
-      zone_id=zone_id,
-      setup_id=setup_id,
-    )
-  bar_event = f"{symbol}:{EXECUTION_TIMEFRAME}:{event_ts or match.event_ts}"
-
-  await _handle_event(bar_event, source=source, client=client, ready_match_id=setup_id)
-
-  plan_state = await read_plan_state(client, plan_id)
-  setup_after = await load_setup(client, setup_id)
-  measured: dict[str, Any] = {}
-  raw_route = await client.get(route_outcome_key(symbol, setup_id))
-  if raw_route:
-    try:
-      route_payload = json.loads(
-        raw_route.decode() if isinstance(raw_route, bytes) else raw_route,
-      )
-    except (TypeError, ValueError, json.JSONDecodeError):
-      route_payload = {}
-    if isinstance(route_payload, dict):
-      measured = route_payload.get("measured") or {}
-      reason_code = str(route_payload.get("reason_code") or "")
-    else:
-      reason_code = ""
-  else:
-    reason_code = ""
-
-  spot = await _load_spot(client, symbol)
-  executable_quote: float | None = None
-  quote_side: str | None = None
-  if spot is not None and spot.fresh:
-    quote_side = "ask" if match.direction == "BUY" else "bid"
-    executable_quote = spot.ask if match.direction == "BUY" else spot.bid
-
-  if plan_state == "published":
-    zone_id_for_lock = zone_id
-    if zone_id_for_lock:
-      try:
-        from app.autotrade.zone_watch import (
-          LOCKED_ZONE_WATCH_STATES,
-          TERMINAL_ZONE_WATCH_STATES,
-          load_zone_watch,
-          lock_zone_watch_published,
-        )
-
-        latest = await load_zone_watch(client, zone_id_for_lock)
-        if (
-          latest is not None
-          and latest.state not in TERMINAL_ZONE_WATCH_STATES
-          and latest.state not in LOCKED_ZONE_WATCH_STATES
-        ):
-          await lock_zone_watch_published(
-            client,
-            zone_id_for_lock,
-            plan_id=plan_id,
-            reason_code=reason_code or "execution_handoff_created",
-          )
-      except Exception:
-        log.exception(
-          "zone watch publish lock failed zone_id=%s plan_id=%s",
-          zone_id_for_lock,
-          plan_id,
-        )
-    return PublishResult(
-      status=PUBLISH_STATUS_EXECUTION_HANDOFF_CREATED,
-      plan_id=plan_id,
-      reason_code=reason_code or "execution_handoff_created",
-      zone_id=zone_id,
-      setup_id=setup_id,
-      measured=measured,
-      executable_quote=executable_quote,
-      quote_side=quote_side,
-    )
-  if setup_after is None:
-    return PublishResult(
-      status=PUBLISH_STATUS_REJECTED,
-      plan_id=plan_id,
-      reason_code="setup_missing",
-      zone_id=zone_id,
-      setup_id=setup_id,
-      measured=measured,
-    )
-  if setup_after.state == INVALIDATED:
-    return PublishResult(
-      status=PUBLISH_STATUS_INVALIDATED,
-      plan_id=plan_id,
-      reason_code=reason_code or "structure_invalidated",
-      zone_id=zone_id,
-      setup_id=setup_id,
-      measured=measured,
-      executable_quote=executable_quote,
-      quote_side=quote_side,
-    )
-  if setup_after.state in TERMINAL_STATES:
-    return PublishResult(
-      status=PUBLISH_STATUS_REJECTED,
-      plan_id=plan_id,
-      reason_code=reason_code or setup_after.state,
-      zone_id=zone_id,
-      setup_id=setup_id,
-      measured=measured,
-      executable_quote=executable_quote,
-      quote_side=quote_side,
-    )
-  return PublishResult(
-    status=PUBLISH_STATUS_REMAINED_WATCHING,
-    plan_id=plan_id,
-    reason_code=reason_code or "zone_watching_retest",
-    zone_id=zone_id,
-    setup_id=setup_id,
-    measured=measured,
-    executable_quote=executable_quote,
-    quote_side=quote_side,
-  )

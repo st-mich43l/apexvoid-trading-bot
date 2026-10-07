@@ -2229,56 +2229,6 @@ async def _forming_reply_message_id(
   return None, f"stored forming message is missing or expired ({key})"
 
 
-async def _apply_zone_watch_outcome_from_event(client, event: dict) -> None:
-  """Map fill/reject/expiry Telegram events onto ZoneWatch consume/rearm."""
-  event_type = str(event.get("type") or "")
-  zone_id = str(
-    event.get("zone_id")
-    or (event.get("measured") or {}).get("zone_id")
-    or event.get("confluence_zone_id")
-    or ""
-  ).strip()
-  if not zone_id:
-    return
-  plan_id = str(
-    event.get("candidate_id") or event.get("plan_id") or event.get("group_id") or ""
-  ).strip() or None
-  reason = str(event.get("reason_code") or event_type)
-  try:
-    from app.autotrade.zone_watch import apply_zone_watch_plan_outcome
-
-    if event_type in {"order_filled", "opened"}:
-      await apply_zone_watch_plan_outcome(
-        client,
-        zone_id,
-        outcome="fill",
-        reason_code=reason,
-        plan_id=plan_id,
-      )
-    elif event_type in {"plan_rejected", "rejected"}:
-      await apply_zone_watch_plan_outcome(
-        client,
-        zone_id,
-        outcome="reject",
-        reason_code=reason,
-        plan_id=plan_id,
-      )
-    elif event_type in {"expired", "cancelled"}:
-      await apply_zone_watch_plan_outcome(
-        client,
-        zone_id,
-        outcome=event_type,
-        reason_code=reason,
-        plan_id=plan_id,
-      )
-  except Exception:
-    log.exception(
-      "zone watch outcome apply failed type=%s zone_id=%s",
-      event_type,
-      zone_id,
-    )
-
-
 async def _reply_message_id(
   client,
   event: dict,
@@ -2590,7 +2540,6 @@ async def _deliver_auto_trade_event(
     )
   if profile == "internal":
     await _correlate_strategy_route(client, event)
-    await _apply_zone_watch_outcome_from_event(client, event)
   if (
     event.get("setup") == "Manual Algo"
     or event.get("stream") == "algo_manual"

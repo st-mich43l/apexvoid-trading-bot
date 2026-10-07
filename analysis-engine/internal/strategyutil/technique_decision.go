@@ -52,14 +52,6 @@ type TechniqueDecision struct {
 func (d *TechniqueDecision) EntryLow() float64  { return d.Result.Zone.Low() }
 func (d *TechniqueDecision) EntryHigh() float64 { return d.Result.Zone.High() }
 
-// Matches reports whether this decision is for the given instance.
-func (d *TechniqueDecision) Matches(technique, side string, originIndex int, low, high float64) bool {
-	if d == nil || d.Instance == nil || d.Instance.Technique != technique || d.Instance.Side != side || d.Instance.OriginIndex != originIndex {
-		return false
-	}
-	return math.Abs(d.Instance.Low-low) < 1e-9 && math.Abs(d.Instance.High-high) < 1e-9
-}
-
 // ConfluenceBand mirrors confluence_zone.ConfluenceBand: a price band where two
 // or more distinct techniques overlap on one side.
 type ConfluenceBand struct {

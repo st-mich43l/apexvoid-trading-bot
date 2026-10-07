@@ -6,7 +6,6 @@ never planned TP %, configured close %, estimated pips, or broker money PnL.
 
 from __future__ import annotations
 
-from typing import Sequence
 
 
 def round_pips(value: float) -> float:
@@ -53,19 +52,5 @@ def leg_pips(
   else:
     raw = (average_exit_price - average_entry_price) / pip_size
   return round_pips(raw)
-
-
-def trade_net_pips(
-  legs: Sequence[tuple[float, float]],
-  initial_filled_volume: float,
-) -> float:
-  """Volume-weighted net pips across partial legs.
-
-  tradeNetPips = SUM(legPips * actualClosedVolume) / initialFilledVolume
-  """
-  if initial_filled_volume <= 0:
-    return 0.0
-  pip_volume = sum(float(pips) * float(volume) for pips, volume in legs)
-  return round_pips(pip_volume / float(initial_filled_volume))
 
 

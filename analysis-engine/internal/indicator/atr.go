@@ -111,61 +111,6 @@ func AtrAt(series []float64, index int, fallback float64) float64 {
 	return v
 }
 
-// AtrScalar mirrors app/analysis/math_utils.py::atr_scalar: the MEDIAN of
-// the series' finite values (NaNs dropped first, matching pandas'
-// `.dropna().median()`), falling back the same way AtrAt does. This is
-// deliberately a median, not the latest value — do not "simplify" it to
-// series[len(series)-1] when porting a caller.
-func AtrScalar(series []float64, fallback float64) float64 {
-	if len(series) == 0 {
-		return fallback
-	}
-	clean := make([]float64, 0, len(series))
-	for _, v := range series {
-		if !math.IsNaN(v) {
-			clean = append(clean, v)
-		}
-	}
-	if len(clean) == 0 {
-		return fallback
-	}
-	v := median(clean)
-	if !isFinitePositive(v) {
-		return fallback
-	}
-	return v
-}
-
 func isFinitePositive(v float64) bool {
 	return !math.IsNaN(v) && !math.IsInf(v, 0) && v > 0
-}
-
-// median matches pandas' Series.median(): sorted-middle, averaging the two
-// middle values for an even-length input. Copies its input via the
-// caller (AtrScalar already passes a fresh slice) rather than sorting
-// in place on data the caller might still hold a reference to.
-func median(values []float64) float64 {
-	sorted := append([]float64(nil), values...)
-	insertionSort(sorted)
-	n := len(sorted)
-	if n%2 == 1 {
-		return sorted[n/2]
-	}
-	return (sorted[n/2-1] + sorted[n/2]) / 2
-}
-
-// insertionSort is enough here: AtrScalar's input is one ATR window
-// (bounded by the caller's lookback, not an unbounded series), so O(n^2)
-// never matters and this avoids importing sort for one call site — revisit
-// if a future caller feeds it something large.
-func insertionSort(values []float64) {
-	for i := 1; i < len(values); i++ {
-		v := values[i]
-		j := i - 1
-		for j >= 0 && values[j] > v {
-			values[j+1] = values[j]
-			j--
-		}
-		values[j+1] = v
-	}
 }

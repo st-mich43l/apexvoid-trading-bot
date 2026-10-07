@@ -7,8 +7,6 @@ from datetime import datetime, timedelta, timezone
 import json
 from typing import Any
 
-from app.scalping.models import ScalpDecision
-
 
 @dataclass
 class ScalpRiskState:
@@ -57,74 +55,6 @@ def risk_key(symbol: str) -> str:
   return f"scalp:risk:{symbol.upper()}"
 
 
-def risk_fraction(cfg: Any) -> float:
-  """Constant fraction — never scales with losses or inactivity."""
-  scalp_cfg = getattr(getattr(cfg, "strategies", None), "scalping", None)
-  risk = getattr(scalp_cfg, "risk", None)
-  try:
-    return float(getattr(risk, "risk_fraction_per_trade", 0.10) or 0.10)
-  except (TypeError, ValueError):
-    return 0.10
-
-
-def evaluate_risk(
-  state: ScalpRiskState,
-  cfg: Any,
-  *,
-  session: str,
-  now: int,
-) -> ScalpDecision:
-  scalp_cfg = getattr(getattr(cfg, "strategies", None), "scalping", None)
-  risk = getattr(scalp_cfg, "risk", None)
-  measured = {
-    "daily_trades": state.daily_trades,
-    "session_trades": state.session_trades,
-    "consecutive_losses": state.consecutive_losses,
-    "open_positions": state.open_positions,
-    "daily_r": state.daily_r,
-    "session_r": state.session_r,
-    "risk_fraction": risk_fraction(cfg),
-  }
-  max_open = int(getattr(risk, "maximum_concurrent_positions", 1) or 1)
-  if state.open_positions >= max_open:
-    return ScalpDecision(False, True, "scalp_max_concurrent_positions", 0.0, measured)
-
-  max_daily = int(getattr(risk, "maximum_daily_trades", 30) or 30)
-  if state.daily_trades >= max_daily:
-    return ScalpDecision(False, True, "scalp_daily_trade_cap", 0.0, measured)
-
-  max_session = int(getattr(risk, "maximum_session_trades", 12) or 12)
-  if state.session_trades >= max_session:
-    return ScalpDecision(False, True, "scalp_session_trade_cap", 0.0, measured)
-
-  max_losses = int(getattr(risk, "maximum_consecutive_losses", 3) or 3)
-  cooldown = int(getattr(risk, "cooldown_after_loss_minutes", 5) or 5) * 60
-  if state.consecutive_losses >= max_losses:
-    # Live 2026-08-12: old logic only blocked *during* cooldown, then allowed
-    # trading again with streak still ≥ max. Serve the full cooldown, then
-    # require the streak to be cleared (see apply_loss_streak_cooldown_reset).
-    cooled = (
-      state.last_loss_ts is None
-      or int(now) - int(state.last_loss_ts) >= cooldown
-    )
-    if not cooled:
-      return ScalpDecision(False, True, "scalp_loss_streak_cooldown", 0.0, measured)
-    return ScalpDecision(False, True, "scalp_loss_streak_active", 0.0, measured)
-
-  daily_limit = float(getattr(risk, "daily_loss_limit_r", 3.0) or 3.0)
-  if state.daily_r <= -abs(daily_limit):
-    return ScalpDecision(False, True, "scalp_daily_loss_limit", 0.0, measured)
-
-  session_limit = float(getattr(risk, "session_loss_limit_r", 2.0) or 2.0)
-  if state.session_r <= -abs(session_limit):
-    return ScalpDecision(False, True, "scalp_session_loss_limit", 0.0, measured)
-
-  if session == "rollover":
-    return ScalpDecision(False, True, "scalp_session_rollover_block", 0.0, measured)
-
-  return ScalpDecision(True, False, "scalp_risk_allowed", 1.0, measured)
-
-
 def _trading_day_key(now: int, cfg: Any) -> str:
   sessions = getattr(getattr(cfg, "market_data", None), "sessions", None)
   rollover = int(getattr(sessions, "daily_rollover_utc_hour", 21) or 21)
@@ -165,78 +95,6 @@ def apply_daily_reset(
 def _normalize_group_id(group_id: str | None) -> str | None:
   text = str(group_id or "").strip()
   return text or None
-
-
-def live_exposure_ids(exposures: list[Any]) -> set[str]:
-  """Stable ids from open V6 positions / V8 plan runtimes."""
-  ids: set[str] = set()
-  for item in exposures or []:
-    for raw in (
-      getattr(item, "group_id", None),
-      getattr(item, "plan_id", None),
-    ):
-      token = _normalize_group_id(None if raw is None else str(raw))
-      if token is not None:
-        ids.add(token)
-        if token.startswith("v8:"):
-          ids.add(token[3:])
-        else:
-          ids.add(f"v8:{token}")
-  return ids
-
-
-def reconcile_open_positions(
-  state: ScalpRiskState,
-  live_ids: set[str] | None,
-) -> ScalpRiskState:
-  """Drop ghost scalping concurrent when the broker/plan book no longer has them.
-
-  Live 2026-08-14: five-clip ``order_filled`` events each incremented
-  ``open_positions`` while one ``position_closed`` decremented once, then
-  ``scalp_max_concurrent_positions`` blocked real Impulse discoveries with
-  an empty ``auto_trade:positions`` set.
-  """
-  live = set(live_ids or ())
-  if state.open_group_ids:
-    state.open_group_ids = [
-      gid for gid in state.open_group_ids if gid in live
-    ]
-    state.open_positions = len(state.open_group_ids)
-    return state
-  if not live:
-    state.open_positions = 0
-  elif int(state.open_positions) > len(live):
-    state.open_positions = len(live)
-  return state
-
-
-def apply_loss_streak_cooldown_reset(
-  state: ScalpRiskState,
-  cfg: Any,
-  *,
-  now: int,
-) -> ScalpRiskState:
-  """After the cooldown window, clear the streak so trading can resume.
-
-  Wins also clear the streak via ``record_scalp_outcome``. This path covers
-  the case where the bot sat out the cooldown without a win.
-  """
-  risk = getattr(
-    getattr(getattr(cfg, "strategies", None), "scalping", None),
-    "risk",
-    None,
-  )
-  max_losses = int(getattr(risk, "maximum_consecutive_losses", 3) or 3)
-  cooldown = int(getattr(risk, "cooldown_after_loss_minutes", 5) or 5) * 60
-  if state.consecutive_losses < max_losses:
-    return state
-  if state.last_loss_ts is None:
-    return state
-  if int(now) - int(state.last_loss_ts) < cooldown:
-    return state
-  state.consecutive_losses = 0
-  state.last_loss_ts = None
-  return state
 
 
 @dataclass(frozen=True)
