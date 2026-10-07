@@ -38,8 +38,6 @@ auto_algo:
   strategies:
     mapped_zone:
       enabled: true
-    matching:
-      multiple_matches_enabled: true
     range_reversion:
       # Keep this explicit so the development behavior is visible here.
       enabled: true

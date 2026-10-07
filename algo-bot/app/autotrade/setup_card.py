@@ -2342,7 +2342,6 @@ async def load_strategy_match_for_root_card(
 ) -> StrategyMatch | None:
   """Load a StrategyMatch for root-card recovery (live matches or TradePlan)."""
   from app.autotrade.multi_match import deserialize_matches, strategy_matches_key
-  from app.autotrade.strategy_match import strategy_match_key
   from app.autotrade.trade_plan import TradePlan
   from app.autotrade.trade_plan_stream import plan_key
 
@@ -2355,11 +2354,6 @@ async def load_strategy_match_for_root_card(
   for match in deserialize_matches(multi_raw):
     if str(match.match_id) == setup_id:
       return match
-
-  legacy_raw = await client.get(strategy_match_key(symbol))
-  legacy = StrategyMatch.from_json(legacy_raw) if legacy_raw else None
-  if legacy is not None and str(legacy.match_id) == setup_id:
-    return legacy
 
   plan_id = setup_id if setup_id.startswith("v8:") else f"v8:{setup_id}"
   plan_raw = await client.get(plan_key(plan_id))

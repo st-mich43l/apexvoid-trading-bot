@@ -497,7 +497,7 @@ class Harness:
   def __init__(self, sql, monkeypatch):
     self.clock = Clock(now=time.time())
     self.repo = PostgresAnalysisOpportunityRepository()
-    self.policy = pol.GoOpportunityPolicy(self.repo, clock=self.clock, multiple_matches_enabled=lambda: True)
+    self.policy = pol.GoOpportunityPolicy(self.repo, clock=self.clock)
     self.sql = sql
     self.offset = 0
     self._ready = False
@@ -623,16 +623,8 @@ async def test_unreviewed_scope_and_missing_facts_are_recorded_and_dropped(h):
 
 
 @pytest.mark.asyncio
-async def test_single_match_key_ambiguity_fails_closed(h):
-  await h.activate()
-  h.policy = pol.GoOpportunityPolicy(h.repo, clock=h.clock, multiple_matches_enabled=lambda: False)
-  assert await h.deliver(event(int(h.clock.now))) == "not_adapted"
-  assert (await h.decisions())[-1]["reason"] == "multiple_matches_disabled"
-
-
-@pytest.mark.asyncio
 async def test_live_go_does_not_consult_a_legacy_store(h):
-  h.policy = pol.GoOpportunityPolicy(h.repo, clock=h.clock, multiple_matches_enabled=lambda: True)
+  h.policy = pol.GoOpportunityPolicy(h.repo, clock=h.clock)
   assert await h.deliver(event(int(h.clock.now))) == "match_written"
   assert (await h.decisions())[-1]["reason"] == "go_live"
 

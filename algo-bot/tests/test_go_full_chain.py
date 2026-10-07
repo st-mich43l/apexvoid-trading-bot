@@ -49,7 +49,6 @@ def live_inputs(monkeypatch, *, bid=4354.1, ask=4354.3, news=None):
   """The market inputs the live worker cycle would read, pinned like the repo's own worker tests."""
   install_runtime_overrides(
     monkeypatch, {
-      "strategies.matching.multiple_matches_enabled": True,
       "instruments.XAU.stop_envelope.max_pips": 65,
     },
     legacy_overrides={

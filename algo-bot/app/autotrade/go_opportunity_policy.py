@@ -14,9 +14,8 @@ Hard rules encoded here:
 * **Live Go source.** Kafka delivery is the technical-source boundary. No
   per-scope approval table is consulted by this path.
 * **Fail closed on missing facts.** No ``technical_context``, no observed
-  timeframe, unknown instrument, expired opportunity, non-directional
-  geometry, or ``multiple_matches_enabled`` off (which would make the shared
-  single-match key ambiguous between publishers) -> rejected with a reason.
+  timeframe, unknown instrument, expired opportunity or non-directional
+  geometry -> rejected with a reason.
 * **No auto-trade via Manual Algo's analysis-gate bypass.** Matches take the
   normal automatic path; nothing here touches ``bypass_analysis_gates``.
 
@@ -467,13 +466,11 @@ class GoOpportunityPolicy:
     *,
     client_factory: Callable[[], Any] | None = None,
     clock: Callable[[], float] = time.time,
-    multiple_matches_enabled: Callable[[], bool] | None = None,
     freshness_limits: Callable[[], FreshnessLimits] | None = None,
   ):
     self._repository = repository
     self._client_factory = client_factory
     self._clock = clock
-    self._multiple = multiple_matches_enabled
     self._limits = freshness_limits
 
   def _client(self):
@@ -481,12 +478,6 @@ class GoOpportunityPolicy:
       return self._client_factory()
     from app.persistence import redis_state
     return redis_state.get_client()
-
-  def _multiple_enabled(self) -> bool:
-    if self._multiple is not None:
-      return self._multiple()
-    from app.core.config import runtime_config
-    return bool(runtime_config.auto_algo.strategies.matching.multiple_matches_enabled)
 
   def _freshness_limits(self) -> FreshnessLimits:
     if self._limits is not None:
@@ -534,9 +525,6 @@ class GoOpportunityPolicy:
       await self._decide(event, "not_adapted", "execution_contained", owner="go")
       return "not_adapted"
     # The live Kafka opportunity event is the technical-source boundary.
-    if not self._multiple_enabled():
-      await self._decide(event, "not_adapted", "multiple_matches_disabled")
-      return "not_adapted"
     now = int(self._clock())
     client = self._client()
     # A redelivery after this opportunity was already adapted (e.g. the process

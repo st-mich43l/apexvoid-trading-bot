@@ -64,7 +64,6 @@ from app.autotrade.entry_overlap import (
 )
 from app.autotrade.strategy_match import (
   StrategyMatch,
-  strategy_match_key,
 )
 from app.autotrade.strategy_taxonomy import (
   is_breakout_retest_scalp_strategy,
@@ -444,54 +443,12 @@ async def _load_spot(client: Any, symbol: str) -> AutoTradeSpot | None:
   )
 
 
-async def _load_strategy_match(
-  client: Any,
-  symbol: str,
-) -> StrategyMatch | None:
-  if not runtime_config.auto_algo.strategy_match_enabled:
-    return None
-  key = strategy_match_key(symbol)
-  raw = await client.get(key)
-  if raw is None:
-    return None
-  match = StrategyMatch.from_json(raw)
-  now = int(datetime.now(timezone.utc).timestamp())
-  if (
-    match is None
-    or match.symbol != symbol.upper()
-    or now > match.expires_at
-  ):
-    if match is not None:
-      await record_route_outcome(
-        client,
-        match,
-        stage="scanner" if now > match.expires_at else "mode_check",
-        status="expired" if now > match.expires_at else "blocked",
-        reason_code=(
-          "match_expired" if now > match.expires_at else "symbol_mismatch"
-        ),
-        message=(
-          "StrategyMatch expired before execution"
-          if now > match.expires_at
-          else f"match symbol {match.symbol} does not match {symbol.upper()}"
-        ),
-        retained=False,
-        publish_status=False,
-      )
-    await client.delete(key)
-    return None
-  return match
-
-
 async def _load_strategy_matches(
   client: Any,
   symbol: str,
 ) -> list[StrategyMatch]:
   if not runtime_config.auto_algo.strategy_match_enabled:
     return []
-  if not runtime_config.auto_algo.strategies.matching.multiple_matches_enabled:
-    match = await _load_strategy_match(client, symbol)
-    return [] if match is None else [match]
   raw = await client.get(strategy_matches_key(symbol))
   matches = deserialize_matches(raw)
   now = int(datetime.now(timezone.utc).timestamp())
@@ -532,10 +489,7 @@ async def _load_strategy_matches(
       )
     else:
       await client.delete(strategy_matches_key(symbol))
-  if active:
-    return active
-  legacy = await _load_strategy_match(client, symbol)
-  return [] if legacy is None else [legacy]
+  return active
 
 
 async def _consume_strategy_match(
@@ -557,10 +511,6 @@ async def _consume_strategy_match(
       )
     else:
       await client.delete(multi_key)
-  legacy_key = strategy_match_key(symbol)
-  legacy = StrategyMatch.from_json(await client.get(legacy_key) or "")
-  if legacy is not None and legacy.match_id == match.match_id:
-    await client.delete(legacy_key)
 
 
 _MIN_COUNTER_BIAS_TARGET_PIPS = 15
