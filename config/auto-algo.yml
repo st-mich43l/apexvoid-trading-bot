@@ -128,8 +128,6 @@ auto_algo:
       break_retest_enabled: true
     mapped_zone:
       enabled: false
-    matching:
-      multiple_matches_enabled: true
     range_reversion:
       # §8/§9: newly surfaced (StrategiesRangeReversionConfig.enabled
       # Python schema default, unchanged value True) — same

@@ -23,7 +23,6 @@ from app.autotrade.strategy_taxonomy import is_m1_scalp_match
 
 
 STRATEGY_MATCH_VERSION = 1
-STRATEGY_MATCH_KEY_PREFIX = "auto_trade:strategy_match"
 
 
 @dataclass(frozen=True)
@@ -754,10 +753,6 @@ class StrategyMatch:
     except (KeyError, TypeError, ValueError, json.JSONDecodeError):
       return None
     return result if _valid_match(result) else None
-
-
-def strategy_match_key(symbol: str) -> str:
-  return f"{STRATEGY_MATCH_KEY_PREFIX}:{symbol.upper()}"
 
 
 def strategy_match_id(
