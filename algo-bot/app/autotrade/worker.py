@@ -57,7 +57,11 @@ from app.autotrade.active_exposure import (
   evaluate_opposite_exposure,
   load_active_exposures,
 )
-from app.autotrade.entry_overlap import release_entry_zone, reserve_entry_zone
+from app.autotrade.entry_overlap import (
+  ReservationUnavailable,
+  release_entry_zone,
+  reserve_entry_zone,
+)
 from app.autotrade.strategy_match import (
   StrategyMatch,
   strategy_match_key,
@@ -102,7 +106,6 @@ from app.autotrade.execution_confirmation import (
   ZONE_ACCESS_RETEST_ONLY,
 )
 from app.autotrade.multi_match import (
-  dedupe_matches,
   deserialize_matches,
   select_primary,
   serialize_matches,
@@ -2258,17 +2261,32 @@ async def _publish_trade_plan_v8(
       symbol, news_event.get("title", "unknown"),
     )
 
-  overlap_blocker = await reserve_entry_zone(
-    client,
-    symbol=symbol,
-    setup_id=setup_id,
-    strategy=str(match_for_plan.strategy),
-    direction=str(match_for_plan.direction),
-    low=float(match_for_plan.entry_low),
-    high=float(match_for_plan.entry_high),
-    atr=float(match_for_plan.atr or 0.0),
-    now=now_ts,
-  )
+  try:
+    overlap_blocker = await reserve_entry_zone(
+      client,
+      symbol=symbol,
+      setup_id=setup_id,
+      strategy=str(match_for_plan.strategy),
+      direction=str(match_for_plan.direction),
+      low=float(match_for_plan.entry_low),
+      high=float(match_for_plan.entry_high),
+      atr=float(match_for_plan.atr or 0.0),
+      now=now_ts,
+      quality=float(match_for_plan.quality_overall or 0.0),
+    )
+  except ReservationUnavailable:
+    await _release_claims()
+    await record_route_outcome(
+      client,
+      match,
+      stage="candidate_claim",
+      status="waiting",
+      reason_code="entry_zone_reservation_unavailable",
+      message="entry corridor reservation unavailable; intent retained",
+      retained=True,
+      publish_status=False,
+    )
+    return None
   if overlap_blocker is not None:
     await _release_claims()
     await _record_v8_build_rejected(
@@ -2983,8 +3001,11 @@ def _arbitration_followup(
   if intent.intent_id in attempted_intent_ids:
     return None
   suppressed = intent.intent_id not in ordered_ids
+  thesis_winner = arbitration.thesis_losers.get(intent.intent_id)
   reason_code = (
-    arbitration.reason_code
+    "same_thesis_suppressed"
+    if thesis_winner is not None
+    else arbitration.reason_code
     if not arbitration.ordered
     else "another_intent_won"
     if published_intent is not None
@@ -2994,7 +3015,9 @@ def _arbitration_followup(
   )
   status = "arbitration_suppressed" if suppressed else "waiting"
   message = (
-    "intent excluded by cross-engine direction arbitration"
+    f"a better-ranked opportunity on the same thesis ({thesis_winner}) was selected"
+    if thesis_winner is not None
+    else "intent excluded by direction arbitration"
     if suppressed
     else "intent did not obtain final atomic publication ownership"
   )
@@ -3247,15 +3270,9 @@ async def _handle_event(
   # rechecks whether Go's own confirmed geometry is already contained in a
   # standing opposing zone before letting it publish.
   frames = await _load_frames(source, symbol)
+  # Every live match competes in arbitration: same-thesis opportunities are
+  # resolved best-first there, not merged or first-come here.
   strategy_matches = list(scanner_strategy_matches)
-  if runtime_config.auto_algo.strategies.matching.multiple_matches_enabled and strategy_matches:
-    strategy_matches, _ = dedupe_matches(
-      strategy_matches,
-      atr=strategy_matches[0].atr,
-      cfg=None,
-    )
-  elif strategy_matches:
-    strategy_matches = [strategy_matches[0]]
   strategy_match = select_primary(strategy_matches)
   observed_gate_source = (
     "multi_strategy_match"
@@ -3290,7 +3307,6 @@ async def _handle_event(
         strategy=routed_match.strategy,
         direction=routed_match.direction,
         confluence=routed_match.confluence,
-        tier=routed_match.tier,
         freshness=_intent_freshness(
           routed_match.confirmation_bar_ts or routed_match.event_ts,
           routed_match.issued_at,
@@ -3315,6 +3331,7 @@ async def _handle_event(
         match_id=routed_match.match_id,
         reaction_id=routed_match.reaction_id,
         thesis_id=routed_match.thesis_id,
+        go_thesis_id=routed_match.go_thesis_id,
         current_price=spot_price,
         target_model=routed_match.target_model,
         targets_pips=routed_match.targets_pips,
@@ -3327,9 +3344,9 @@ async def _handle_event(
         proposed_group_id=group_id,
         cycle_id=str(event_ts or ""),
         quality_overall=routed_match.quality_overall,
+        structural_quality=routed_match.confluence_v2_raw,
+        atr=float(routed_match.atr or 0.0),
         bias_relationship=routed_match.bias_relationship,
-        arbitration_status=routed_match.arbitration_status,
-        arbitration_reason_code=routed_match.arbitration_reason_code,
         # Only an intent whose executable quote is inside its entry contract can
         # publish this cycle; the rest merely wait for a retest and must not
         # create a BUY-vs-SELL conflict with one that can.
@@ -3436,8 +3453,6 @@ async def _handle_event(
     gates = runtime_config.auto_algo.actionability.scanner_gates
     arbitration = arbitrate_execution_intents(
       arbitrable,
-      conflict_margin=float(gates.conflict_margin),
-      use_quality_ranking=bool(gates.use_quality_ranking),
       conflict_margin_quality=float(gates.conflict_margin_quality),
     )
 

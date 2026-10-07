@@ -59,9 +59,7 @@ auto_algo:
       scalp_minimum_capped_target_pips: 8.0
     scanner_gates:
       actionability_gate_enabled: false
-      conflict_margin: 1.0
       conflict_margin_quality: 0.15
-      use_quality_ranking: true
       zone_width_gate_enabled: false
     structural_guard:
       guard_mode: observe
