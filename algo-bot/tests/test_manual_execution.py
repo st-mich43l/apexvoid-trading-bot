@@ -1493,3 +1493,49 @@ def _leg(position_id, fill, remaining):
           "RemainingVolume": remaining}
 
 
+@pytest.mark.asyncio
+async def test_request_close_auto_position_xadds_close_position_command(monkeypatch):
+  install_runtime_overrides(monkeypatch, legacy_overrides={"manual_trade_command_stream": "manual_trade:cmd4",})
+  client = redis_state.get_client()
+
+  await manual_execution.request_close_auto_position(777)
+
+  entries = await client.xrange("manual_trade:cmd4")
+  payload = json.loads(entries[0][1]["payload"])
+  assert payload == {"type": "close_position", "position_id": 777}
+
+
+@pytest.mark.asyncio
+async def test_list_open_algo_auto_positions_filters_manual_symbol_and_remaining():
+  # Only the genuinely open autonomous XAU leg survives: the manual /algo plan
+  # belongs to /trade_close, the GBPJPY leg is another instrument, and the
+  # zero-remaining leg is already flat.
+  client = redis_state.get_client()
+  await _seed_runtime_plans(client, {
+    "v8:auto-xau": {"PlanId": "v8:auto-xau", "Symbol": "XAU", "Direction": "BUY",
+                    "Legs": [_leg(101, 4350.0, 500), _leg(104, 4351.0, 0)]},
+    "manual:5:0": {"PlanId": "manual:5:0", "Symbol": "XAU", "Direction": "SELL",
+                   "Legs": [_leg(102, 4360.0, 300)]},
+    "v8:auto-gbpjpy": {"PlanId": "v8:auto-gbpjpy", "Symbol": "GBPJPY", "Direction": "BUY",
+                       "Legs": [_leg(103, 215.0, 400)]},
+  })
+
+  rows = await manual_execution.list_open_algo_auto_positions("XAU")
+
+  assert [row["position_id"] for row in rows] == [101]
+  assert rows[0]["direction"] == "BUY"
+  assert rows[0]["entry_price"] == 4350.0
+  assert rows[0]["remaining_volume"] == 500
+
+
+@pytest.mark.asyncio
+async def test_list_open_algo_auto_positions_no_symbol_returns_all_symbols():
+  client = redis_state.get_client()
+  await _seed_runtime_plans(client, {
+    "v8:a": {"PlanId": "v8:a", "Symbol": "XAU", "Direction": "BUY", "Legs": [_leg(201, 4350.0, 500)]},
+    "v8:b": {"PlanId": "v8:b", "Symbol": "GBPJPY", "Direction": "SELL", "Legs": [_leg(202, 215.0, 200)]},
+  })
+
+  rows = await manual_execution.list_open_algo_auto_positions()
+
+  assert sorted(row["position_id"] for row in rows) == [201, 202]
