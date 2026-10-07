@@ -293,7 +293,6 @@ def _intent_for_match(match: StrategyMatch) -> ExecutionIntent:
     strategy=match.strategy,
     direction=match.direction,
     confluence=match.confluence,
-    tier=match.tier,
     freshness=60.0,
     distance_pips=0.0,
     symbol=match.symbol,

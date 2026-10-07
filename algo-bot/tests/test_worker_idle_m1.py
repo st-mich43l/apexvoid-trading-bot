@@ -147,7 +147,7 @@ def _capture_full_pass(monkeypatch) -> list[list[str]]:
     seen.append(sorted(item.match_id for item in matches))
     raise _ReachedFullPass
 
-  monkeypatch.setattr(worker, "dedupe_matches", capture)
+  monkeypatch.setattr(worker, "select_primary", capture)
   return seen
 
 

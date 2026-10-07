@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import asyncio
+import os
 
 import fakeredis
 import pytest
+from redis.asyncio import Redis
 
 from app.autotrade.entry_overlap import (
   PAD_ATR,
   WINDOW_SECONDS,
   EntryReservation,
+  ReservationUnavailable,
   find_overlap,
   release_entry_zone,
   reserve_entry_zone,
@@ -70,9 +73,16 @@ def _run(coro):
   return asyncio.run(coro)
 
 
+def _client(*, scripting_fallback=True):
+  """fakeredis has no Lua engine here; the explicit flag selects the test path."""
+  client = fakeredis.FakeAsyncRedis(decode_responses=True)
+  client._apexvoid_allow_non_atomic_test_fallback = scripting_fallback
+  return client
+
+
 def test_reserve_then_second_strategy_on_the_same_band_is_blocked():
   async def scenario():
-    client = fakeredis.FakeAsyncRedis(decode_responses=True)
+    client = _client()
     first = await reserve_entry_zone(
       client, symbol="XAU", setup_id="s1", strategy="order_block",
       direction="BUY", low=4179.59, high=4183.34, atr=3.5, now=T0,
@@ -90,7 +100,7 @@ def test_reserve_then_second_strategy_on_the_same_band_is_blocked():
 
 def test_blocked_candidate_does_not_reserve_its_own_zone():
   async def scenario():
-    client = fakeredis.FakeAsyncRedis(decode_responses=True)
+    client = _client()
     await reserve_entry_zone(
       client, symbol="XAU", setup_id="s1", strategy="a",
       direction="BUY", low=100.0, high=101.0, atr=0.5, now=T0,
@@ -110,7 +120,7 @@ def test_blocked_candidate_does_not_reserve_its_own_zone():
 
 def test_release_frees_the_zone_for_a_failed_plan():
   async def scenario():
-    client = fakeredis.FakeAsyncRedis(decode_responses=True)
+    client = _client()
     await reserve_entry_zone(
       client, symbol="XAU", setup_id="s1", strategy="a",
       direction="BUY", low=100.0, high=101.0, atr=0.5, now=T0,
@@ -126,7 +136,7 @@ def test_release_frees_the_zone_for_a_failed_plan():
 
 def test_symbols_do_not_share_reservations():
   async def scenario():
-    client = fakeredis.FakeAsyncRedis(decode_responses=True)
+    client = _client()
     await reserve_entry_zone(
       client, symbol="XAU", setup_id="s1", strategy="a",
       direction="BUY", low=100.0, high=101.0, atr=0.5, now=T0,
@@ -141,7 +151,7 @@ def test_symbols_do_not_share_reservations():
 
 def test_corrupt_stored_state_fails_open():
   async def scenario():
-    client = fakeredis.FakeAsyncRedis(decode_responses=True)
+    client = _client()
     await client.set("autotrade:entry_overlap:XAU", "not json")
     return await reserve_entry_zone(
       client, symbol="XAU", setup_id="s1", strategy="a",
@@ -168,7 +178,7 @@ _PRODUCTION_XAU = (
 
 def test_production_2026_09_30_xau_pileup_is_cut_and_the_winners_survive():
   async def scenario():
-    client = fakeredis.FakeAsyncRedis(decode_responses=True)
+    client = _client()
     admitted: list[tuple[str, int]] = []
     blocked: list[tuple[str, int]] = []
     for index, (ts, strategy, direction, low, high, atr, pips) in enumerate(_PRODUCTION_XAU):
@@ -184,3 +194,56 @@ def test_production_2026_09_30_xau_pileup_is_cut_and_the_winners_survive():
   assert ("fvg", 118) in admitted
   assert ("key_level", -49) in [(s, p) for s, p in blocked]
   assert ("order_block", -39) in [(s, p) for s, p in blocked]
+
+
+def test_reservation_fails_closed_when_it_cannot_run_atomically():
+  async def scenario():
+    client = _client(scripting_fallback=False)
+    return await reserve_entry_zone(
+      client, symbol="XAU", setup_id="s1", strategy="a",
+      direction="BUY", low=100.0, high=101.0, atr=0.5, now=T0,
+    )
+
+  with pytest.raises(ReservationUnavailable):
+    _run(scenario())
+
+
+@pytest.mark.real_redis
+@pytest.mark.asyncio
+async def test_real_redis_concurrent_reservations_have_exactly_one_winner():
+  """Two workers must never both conclude they own a corridor."""
+  configured = os.getenv("REAL_REDIS_URL")
+  if not configured:
+    pytest.fail("REAL_REDIS_URL is required")
+  client = Redis.from_url(f"{configured.rsplit('/', 1)[0]}/12", decode_responses=True)
+  await client.flushdb()
+  try:
+    results = await asyncio.gather(*(
+      reserve_entry_zone(
+        client, symbol="XAU", setup_id=f"s{i}", strategy=f"strategy_{i}",
+        direction="BUY", low=4183.0 + i * 0.1, high=4186.0, atr=3.0, now=T0,
+      )
+      for i in range(40)
+    ))
+    winners = [i for i, blocker in enumerate(results) if blocker is None]
+    assert len(winners) == 1
+    blockers = {blocker.setup_id for blocker in results if blocker is not None}
+    assert blockers == {f"s{winners[0]}"}
+
+    # A different symbol, the opposite direction and a far corridor stay free.
+    assert await reserve_entry_zone(
+      client, symbol="GBPUSD", setup_id="g", strategy="a",
+      direction="BUY", low=4183.0, high=4186.0, atr=3.0, now=T0,
+    ) is None
+    assert await reserve_entry_zone(
+      client, symbol="XAU", setup_id="sell", strategy="a",
+      direction="SELL", low=4183.0, high=4186.0, atr=3.0, now=T0,
+    ) is None
+    assert await reserve_entry_zone(
+      client, symbol="XAU", setup_id="far", strategy="a",
+      direction="BUY", low=4300.0, high=4302.0, atr=3.0, now=T0,
+    ) is None
+    assert 0 < await client.ttl("autotrade:entry_overlap:XAU") <= WINDOW_SECONDS + 60
+  finally:
+    await client.flushdb()
+    await client.aclose()

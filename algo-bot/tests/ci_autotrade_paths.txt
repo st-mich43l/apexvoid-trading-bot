@@ -45,7 +45,6 @@ tests/test_analysis_consumer_persistence.py
 tests/test_capture_bars.py
 tests/test_go_only_startup_gate.py
 tests/test_go_opportunity_policy.py
-tests/test_thesis_correlation.py
 tests/test_go_zone_book.py
 tests/test_analysis_freshness.py
 tests/test_analysis_lifecycle.py
