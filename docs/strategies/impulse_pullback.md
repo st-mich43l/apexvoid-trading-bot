@@ -12,7 +12,7 @@ TradePlan is published.
 
 - **Certification**: `OBSERVE_ONLY` ([matrix](README.md#certification)).
 - **Symbols**: all instruments.
-- **Execution**: Observe-only everywhere: net -49 pips over 11 live trades (XAU -29, GBPJPY -9, USDJPY -11) and no Python predecessor or parity proof. It is analysed and published, never traded.
+- **Execution**: Observe-only everywhere: net -49 pips over 11 live trades (XAU -29, GBPJPY -9, USDJPY -11) and it is not a port of the Python scalp-lane `discover_impulse_pullback`. It is analysed and published, never traded.
 - **Arbitration**: opportunities on the same symbol and direction that share a
   thesis group, a structure or an entry corridor compete; the best by quality,
   confluence, structural quality and freshness trades and the rest are
