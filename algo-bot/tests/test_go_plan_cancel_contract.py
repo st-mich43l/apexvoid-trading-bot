@@ -14,7 +14,6 @@ FIXTURE = json.loads((Path(__file__).resolve().parents[2] / "contracts/autotrade
 
 def test_keys_and_ttl_match_the_shared_contract():
   assert gpc.plan_cancel_key("v8:go_x") == FIXTURE["intent_key"].format(plan_id="v8:go_x")
-  assert gpc.plan_cancel_ack_key("v8:go_x") == FIXTURE["ack_key"].format(plan_id="v8:go_x")
   assert gpc.PLAN_CANCEL_TTL_SECONDS == FIXTURE["intent_ttl_seconds"]
 
 

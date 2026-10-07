@@ -23,10 +23,7 @@ from app.autotrade import worker
 from app.autotrade.go_plan_cancel import (
   plan_cancel_key,
   read_plan_cancel,
-  read_plan_cancel_ack,
-  registered_go_plans,
   request_plan_cancel,
-  withdraw_go_scope,
 )
 from app.autotrade.go_live_opportunities import go_live_opportunities_key
 from app.autotrade.multi_match import deserialize_matches, strategy_matches_key
@@ -311,7 +308,6 @@ async def test_a_match_racing_the_invalidation_cannot_become_a_plan(h, real_redi
   assert await publish(real_redis_client, match) is None
   assert (await _outcome(real_redis_client, match))["reason_code"] == "go_plan_withdrawn"
   assert await real_redis_client.xlen("execution:trade_plans") == 0
-  assert await registered_go_plans(real_redis_client) == []
 
 
 @pytest.mark.asyncio
@@ -325,73 +321,21 @@ async def test_after_a_full_invalidation_the_stale_in_memory_match_still_cannot_
 
 
 @pytest.mark.asyncio
-async def test_published_go_plan_is_registered_and_its_invalidation_requests_the_cancel(h, real_redis_client):
+async def test_published_go_plan_invalidation_requests_the_cancel(h, real_redis_client):
   await h.activate()
   await deliver(h, make_event(h.clock.now))
   match = deserialize_matches(await real_redis_client.get(CLIENT_KEY))[0]
   plan_id = await publish(real_redis_client, match)
   assert plan_id == "v8:go_opp_golden_supply_xau"
-  registry = await registered_go_plans(real_redis_client, symbol="XAU", scope="supply")
-  assert [(p["plan_id"], p["scope"], p["match_id"]) for p in registry] == [(plan_id, "supply", "go_opp_golden_supply_xau")]
   await deliver(h, terminal(h), topic=InvalidationTopic)
   assert (await read_plan_cancel(real_redis_client, plan_id))["source"] == "opportunity_invalidated"
   # Python never edits executor state: only the executor moves it, and reports back.
   assert await read_plan_state(real_redis_client, plan_id) == "published"
-  assert await read_plan_cancel_ack(real_redis_client, plan_id) is None
+  assert await real_redis_client.get(f"execution:plan_cancel_ack:{plan_id}") is None
   assert (await load_setup(real_redis_client, "go_opp_golden_supply_xau")).state == PLAN_PUBLISHED
 
 
-# ---- operator cancellation ------------------------------------------------------------
-
-@pytest.mark.asyncio
-async def test_explicit_withdraw_remains_rerunnable(h, real_redis_client, monkeypatch):
-  # Withdraw semantics need several published plans, and every fixture zone
-  # must contain the same spot quote, so they necessarily overlap. Admission
-  # overlap is covered by tests/test_entry_overlap.py.
-  async def _no_overlap(*_args, **_kwargs):
-    return None
-
-  monkeypatch.setattr("app.autotrade.worker.reserve_entry_zone", _no_overlap)
-  await h.activate()
-  now = int(h.clock.now)
-  await deliver(h, make_event(now, "opp-a", zone_id="zone-a"))
-  await deliver(h, make_event(now, "opp-b", zone_id="zone-b"))
-  first = next(m for m in deserialize_matches(await real_redis_client.get(CLIENT_KEY)) if m.match_id == "go_opp-a")
-  assert await publish(real_redis_client, first) == "v8:go_opp-a"
-
-  assert await deliver(
-    h, make_event(now, "opp-c", observed_ago=10, zone_id="zone-c")
-  ) == "match_written"
-  assert (await decision_rows(h))[-1]["reason"] == "go_live"
-  second = next(m for m in deserialize_matches(await real_redis_client.get(CLIENT_KEY)) if m.match_id == "go_opp-b")
-  assert await publish(real_redis_client, second) == "v8:go_opp-b"
-
-  # 2) withdraw: matches, unpublished setups and queued plans.
-  report = await withdraw_go_scope(real_redis_client, symbol="XAU", scope="supply", reason="operator cancel", source="operator_cancel", now=int(h.clock.now))
-  assert sorted(report.matches_removed) == ["go_opp-a", "go_opp-b", "go_opp-c"]
-  assert report.setups_withdrawn == ["go_opp-c"]             # published plans belong to the executor now
-  assert sorted(report.plans_cancel_requested) == ["v8:go_opp-a", "v8:go_opp-b", "v8:go_opp-c"]
-  assert await matches(real_redis_client) == []
-  assert (await load_setup(real_redis_client, "go_opp-c")).state == INVALIDATED
-  assert (await load_setup(real_redis_client, "go_opp-a")).state == PLAN_PUBLISHED
-  assert (await read_plan_cancel(real_redis_client, "v8:go_opp-a"))["source"] == "operator_cancel"
-
-  # Re-running (the operator's recovery from a crash mid-sequence) changes nothing.
-  again = await withdraw_go_scope(real_redis_client, symbol="XAU", scope="supply", reason="rerun", source="operator_cancel", now=int(h.clock.now))
-  assert again.matches_removed == [] and again.plans_cancel_requested == []
-  assert sorted(again.plans_already_requested) == ["v8:go_opp-a", "v8:go_opp-b"]
-  assert (await read_plan_cancel(real_redis_client, "v8:go_opp-a"))["reason"] == "operator cancel"
-
-@pytest.mark.asyncio
-async def test_withdrawal_is_scoped_to_the_named_scope(h, real_redis_client):
-  await h.activate()
-  await deliver(h, make_event(h.clock.now))
-  report = await withdraw_go_scope(real_redis_client, symbol="XAU", scope="demand", reason="x", source="operator_cancel", now=int(h.clock.now))
-  assert report.matches_removed == [] and report.plans_cancel_requested == []
-  assert await matches(real_redis_client) == ["go_opp_golden_supply_xau"]
-  everything = await withdraw_go_scope(real_redis_client, symbol="XAU", scope=None, reason="x", source="operator_cancel", now=int(h.clock.now))
-  assert everything.matches_removed == ["go_opp_golden_supply_xau"]
-
+# ---- plan identity ---------------------------------------------------------------------
 
 def test_plan_id_derivation_matches_the_worker():
   from app.autotrade.go_plan_cancel import plan_id_for_match

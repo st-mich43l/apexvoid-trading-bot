@@ -38,27 +38,3 @@ func TestAtrAt(t *testing.T) {
 		})
 	}
 }
-
-func TestAtrScalar(t *testing.T) {
-	cases := []struct {
-		name     string
-		series   []float64
-		fallback float64
-		want     float64
-	}{
-		{"empty falls back", nil, 9.0, 9.0},
-		{"all NaN falls back", []float64{math.NaN(), math.NaN()}, 9.0, 9.0},
-		{"odd length median", []float64{3.0, 1.0, 2.0}, 9.0, 2.0},
-		{"even length median averages middle two", []float64{1.0, 2.0, 3.0, 4.0}, 9.0, 2.5},
-		{"NaN dropped before median", []float64{1.0, math.NaN(), 3.0}, 9.0, 2.0},
-		{"non-positive median falls back", []float64{-1.0, -2.0, -3.0}, 9.0, 9.0},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			got := indicator.AtrScalar(c.series, c.fallback)
-			if got != c.want {
-				t.Errorf("got %v want %v", got, c.want)
-			}
-		})
-	}
-}

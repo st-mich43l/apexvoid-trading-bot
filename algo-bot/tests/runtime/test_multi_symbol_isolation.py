@@ -11,7 +11,6 @@ from app.runtime.instrument_registry import (
   InstrumentRuntimeError,
   build_instrument_runtime_registry,
 )
-from app.runtime.price_format import format_price
 from app.runtime.rollout_gates import (
   permits_analysis,
   permits_broker_execution,
@@ -23,22 +22,21 @@ from app.runtime.rollout_gates import (
 pytestmark = pytest.mark.no_database
 
 
-def test_registry_production_is_xau_live_only():
+def test_registry_production_live_instruments_are_the_declared_ones():
   registry = build_instrument_runtime_registry(runtime_config)
-  assert [ctx.instrument_id for ctx in registry.live_instruments()] == ["XAU"]
-  assert registry.scanner_symbols(compatibility_filter=["XAU"]) == ("XAU",)
+  assert sorted(ctx.instrument_id for ctx in registry.live_instruments()) == [
+    "EURUSD", "GBPJPY", "GBPUSD", "USDJPY", "XAU",
+  ]
   assert registry.get("XAUUSD").instrument_id == "XAU"
 
 
-def test_unknown_pip_and_price_fail_closed():
+def test_unknown_pip_fails_closed():
   with pytest.raises(KeyError):
     pip_for("NO_SUCH_SYMBOL")
-  with pytest.raises(KeyError):
-    format_price("NO_SUCH_SYMBOL", 1.23)
 
 
 def test_rollout_matrix_isolation():
-  # Synthetic contexts via mapping — production registry stays XAU-only.
+  # Synthetic contexts via mapping, independent of the production registry.
   assert permits_feed(InstrumentRollout.FEED_ONLY)
   assert not permits_analysis(InstrumentRollout.FEED_ONLY)
   assert not permits_candidate_publication(InstrumentRollout.FEED_ONLY)

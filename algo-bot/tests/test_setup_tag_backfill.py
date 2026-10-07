@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from app.persistence import redis_state, store
+from tests.support.manual_signals import close_manual_signal
 from app.bot import wiring
 
 
@@ -395,8 +396,8 @@ async def test_trade_untagged_lists_only_null_setup_newest_first(monkeypatch):
   newer = await store.store_manual_signal(
     300, "BUY", 4031, 4035, 4020, [4040], setup_type=None,
   )
-  await store.close_manual_signal(older["id"], 80)
-  await store.close_manual_signal(newer["id"], -30)
+  await close_manual_signal(older["id"], 80)
+  await close_manual_signal(newer["id"], -30)
   msg = _dm("/trade_untagged")
 
   await wiring.handle_trade_untagged(msg)
@@ -459,7 +460,7 @@ async def test_trade_tag_absolute_id_updates_closed_signal_and_backfill(monkeypa
   target = await store.store_manual_signal(
     200, "BUY", 4021, 4025, 4015, [4030], setup_type=None,
   )
-  await store.close_manual_signal(target["id"], 50)
+  await close_manual_signal(target["id"], 50)
   monkeypatch.setattr(
     wiring,
     "post_result",

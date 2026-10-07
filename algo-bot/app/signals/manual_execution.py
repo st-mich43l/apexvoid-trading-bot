@@ -44,7 +44,6 @@ from app.signals import pips_format
 from app.runtime.instruments import for_instrument, live_instruments
 from app.signals.manual_intent import ManualTradeIntent
 from app.signals.manual_plan import build_manual_trade_plan, is_manual_plan_id
-from app.autotrade.active_exposure import _mget_or_get, normalize_direction, normalize_symbol
 
 log = logging.getLogger(__name__)
 
@@ -226,7 +225,6 @@ async def _symbol_from_manual_candidate(event: dict) -> str | None:
     return None
   raw = sig.get("symbol")
   return str(raw or "XAU").upper()
-
 
 
 async def _send_executor_truth(text: str) -> None:
@@ -993,66 +991,6 @@ async def request_close(
     "intent_id": intent_id,
     "frac": frac,
   })
-
-
-async def list_open_algo_auto_positions(symbol: str | None = None) -> list[dict]:
-  """Open broker legs of live, fully-autonomous (non-manual) TradePlans.
-
-  /trade_close_auto has no owner-typed signal id to resolve from - the owner
-  picks a broker position_id directly - so this surfaces the live legs from
-  the TradePlan runtime state (``execution:plan_runtime:*``) that
-  cTrader Engine persists, excluding manual /algo plans (those keep using
-  /trade_close).
-  """
-  client = redis_state.get_client()
-  raw_ids = await client.get("execution:trade_plan_runtime_ids")
-  if not raw_ids:
-    return []
-  plan_ids = [
-    item for item in (raw_ids.decode() if isinstance(raw_ids, bytes) else str(raw_ids)).split(",")
-    if item.strip() and not is_manual_plan_id(item.strip())
-  ]
-  raw_states = await _mget_or_get(
-    client, [f"execution:plan_runtime:{plan_id}" for plan_id in plan_ids],
-  )
-  wanted = normalize_symbol(symbol) if symbol else None
-  out: list[dict] = []
-  for raw in raw_states:
-    if not raw:
-      continue
-    try:
-      payload = json.loads(raw.decode() if isinstance(raw, bytes) else str(raw))
-    except (TypeError, ValueError, json.JSONDecodeError):
-      continue
-    if not isinstance(payload, dict):
-      continue
-    row_symbol = normalize_symbol(payload.get("Symbol") or payload.get("symbol"))
-    if wanted is not None and row_symbol != wanted:
-      continue
-    direction = normalize_direction(payload.get("Direction") or payload.get("direction"))
-    for leg in payload.get("Legs") or payload.get("legs") or []:
-      position_id = leg.get("BrokerPositionId") or leg.get("broker_position_id")
-      remaining = leg.get("RemainingVolume") or leg.get("remaining_volume") or 0
-      if position_id is None or float(remaining) <= 0:
-        continue
-      out.append({
-        "position_id": int(position_id),
-        "symbol": row_symbol,
-        "direction": direction,
-        "entry_price": leg.get("FillPrice") or leg.get("fill_price"),
-        "remaining_volume": remaining,
-        "setup": payload.get("PlanId") or payload.get("plan_id"),
-      })
-  return out
-
-
-async def request_close_auto_position(position_id: int) -> None:
-  """/trade_close_auto: close ONE fully-autonomous broker leg immediately,
-  by its own position_id. cTrader Engine refuses a leg that belongs to a
-  manual /algo plan, so this can never bypass /trade_close's own
-  intent_id/group-aware path for a manual signal.
-  """
-  await _xadd_command({"type": "close_position", "position_id": position_id})
 
 
 async def request_move_sl(signal_id: int, position_id: int, price: float) -> None:

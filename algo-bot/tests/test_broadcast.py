@@ -48,16 +48,12 @@ async def _signal(tmp_path, monkeypatch, visibility="both"):
   return await store.get_manual_signal(record["id"])
 
 
-def test_channels_and_targets(dual_channels):
+def test_channels_for_visibility(dual_channels):
   both = symbols.channels_for("XAU", "both")
   vip = symbols.channels_for("XAU", "vip")
 
   assert [row["channel_id"] for row in both] == [VIP_ID, PUBLIC_ID]
   assert [row["channel_id"] for row in vip] == [VIP_ID]
-  assert symbols.targets_for({
-    "symbol": "XAU",
-    "visibility": "both",
-  }) == [VIP_ID, PUBLIC_ID]
 
 
 @pytest.mark.asyncio

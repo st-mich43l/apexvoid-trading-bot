@@ -134,45 +134,6 @@ class PostgresAnalysisOpportunityRepository:
         topic, partition, offset, reason[:1000], raw[:100000], int(time.time()),
       )
 
-  async def active_for_symbol(self, symbol: str, *, now: int | None = None) -> list[dict]:
-    now = int(time.time()) if now is None else now
-    async with store._connect() as db:
-      rows = await db.fetch(
-        """
-        SELECT * FROM analysis_opportunities
-        WHERE symbol = $1 AND state = 'active' AND (expires_at IS NULL OR expires_at >= $2)
-        ORDER BY created_at, opportunity_id
-        """,
-        symbol, now,
-      )
-    return [dict(row) for row in rows]
-
-  async def recent_for_symbol(
-    self,
-    symbol: str,
-    *,
-    timeframe: str | None = None,
-    since: int,
-  ) -> list[dict]:
-    """Return Go lifecycle rows for an owner report without re-running Python analysis."""
-    args: list[object] = [symbol.upper(), int(since)]
-    timeframe_clause = ""
-    if timeframe:
-      args.append(timeframe.upper())
-      timeframe_clause = "AND creation_envelope #>> '{payload,timeframe}' = $3"
-    async with store._connect() as db:
-      rows = await db.fetch(
-        f"""
-        SELECT opportunity_id, symbol, strategy, state, created_at, expires_at,
-               terminal_at, creation_envelope
-        FROM analysis_opportunities
-        WHERE symbol = $1 AND COALESCE(created_at, 0) >= $2
-          {timeframe_clause}
-        ORDER BY created_at DESC, opportunity_id
-        """,
-        *args,
-      )
-    return [dict(row) for row in rows]
 
   async def opportunity_state(self, opportunity_id: str) -> str | None:
     """Ledger state ('active'/'invalidated'/'expired') or None if unknown."""

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
-import hashlib
 import json
 from typing import Any
 
@@ -119,28 +118,6 @@ BR_REASON_OPPOSITE_STRUCTURE_BREAK = "opposite_structure_break"
 BR_REASON_EXPIRED = "expired"
 
 
-@dataclass(frozen=True)
-class BreakoutLevelCandidate:
-  """One candidate level a Breakout Retest episode can be built from.
-
-  Produced by compression-box detection, M1/M5 structural swings, or
-  liquidity levels (EQH/EQL, session highs/lows once wired). Consumed by the
-  generic breakout/acceptance/retest/confirmation engine in
-  microstructure.py - the engine itself never knows which source produced
-  the level.
-  """
-
-  level: float
-  side: str
-  source: str
-  subtype: str
-  timeframe: str
-  source_index: int | None = None
-  source_time: int | None = None
-  strength: float | None = None
-  metadata: dict[str, Any] = field(default_factory=dict)
-
-
 DISCOVERED = "discovered"
 ARMED = "armed"
 TOUCHED = "touched"
@@ -160,12 +137,6 @@ ACTIVE_STATES = frozenset({
 TERMINAL_STATES = frozenset({
   INVALIDATED, EXPIRED, MISSED, CANCELLED, COMPLETED,
 })
-
-
-def deterministic_id(*parts: object) -> str:
-  """Stable identity from structural parts (no wall-clock)."""
-  material = "|".join("" if part is None else str(part) for part in parts)
-  return hashlib.sha1(material.encode("utf-8")).hexdigest()[:24]
 
 
 @dataclass(frozen=True)
@@ -348,60 +319,6 @@ class ScalpScore:
   freshness: float
   cost: float
   penalties: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
-class MicroSwing:
-  kind: str
-  price: float
-  bar_ts: int
-  index: int
-
-
-@dataclass(frozen=True)
-class MicroStructure:
-  structure: str
-  swings: tuple[MicroSwing, ...]
-  last_break_direction: str | None
-  last_break_price: float | None
-  last_break_ts: int | None
-  equal_highs: tuple[float, ...]
-  equal_lows: tuple[float, ...]
-  measured: dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class ScalpSignal:
-  signal_id: str
-  opportunity_id: str
-  mode: str
-  decision: ScalpDecision
-  opportunity: ScalpOpportunity
-  created_at: int
-  measured: dict[str, Any] = field(default_factory=dict)
-
-  def to_json(self) -> str:
-    return json.dumps({
-      "signal_id": self.signal_id,
-      "opportunity_id": self.opportunity_id,
-      "mode": self.mode,
-      "decision": asdict(self.decision),
-      "opportunity": asdict(self.opportunity),
-      "created_at": self.created_at,
-      "measured": self.measured,
-    }, separators=(",", ":"), sort_keys=True)
-
-
-@dataclass(frozen=True)
-class PaperOutcome:
-  outcome: str
-  bars_held: int
-  mfe_pips: float
-  mae_pips: float
-  net_pips: float
-  exit_price: float | None
-  exit_reason: str
-  measured: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

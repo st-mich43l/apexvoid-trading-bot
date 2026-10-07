@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from app.persistence import store
+from tests.support.manual_signals import close_manual_signal
 from app.signals import manual_execution, trade_ops
 
 
@@ -355,7 +356,7 @@ async def test_do_close_falls_through_for_errored_algo_signal(monkeypatch):
 @pytest.mark.asyncio
 async def test_do_reopen_inherits_parent_algo_execution_mode():
   rec = await _algo_signal()
-  await store.close_manual_signal(rec["id"], -50)
+  await close_manual_signal(rec["id"], -50)
 
   result = await trade_ops.do_reopen({"sid": rec["id"], "symbol": "XAU"})
 
@@ -368,7 +369,7 @@ async def test_do_reopen_inherits_parent_algo_execution_mode():
 async def test_do_reopen_defaults_to_notify_for_a_notify_parent():
   await store.init_db()
   rec = await store.store_manual_signal(1, "SELL", 4100.0, 4105.0, 4110.0, [4095.0])
-  await store.close_manual_signal(rec["id"], -50)
+  await close_manual_signal(rec["id"], -50)
 
   result = await trade_ops.do_reopen({"sid": rec["id"], "symbol": "XAU"})
 

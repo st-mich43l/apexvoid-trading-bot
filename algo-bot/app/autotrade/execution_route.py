@@ -231,14 +231,6 @@ def _deeper_second_leg(
   )
 
 
-def _unique_prices(prices: list[float]) -> tuple[float, ...]:
-  out: list[float] = []
-  for price in prices:
-    if not out or price != out[-1]:
-      out.append(price)
-  return tuple(out)
-
-
 def _manual_xau_entry_legs(
   *,
   side: str,
@@ -269,39 +261,6 @@ def _manual_xau_entry_legs(
     _round_price(legs.shallow, digits),
     _round_price(legs.deep, digits),
   )
-
-
-def scalp_micro_grid_legs(
-  *,
-  side: str,
-  low: float,
-  high: float,
-  quote: float,
-  digits: int,
-  clips: int = SCALP_MICRO_CLIPS,
-) -> tuple[float, ...]:
-  """DCA price clips from live/proximal into the confirmed zone.
-
-  BUY steps down toward demand distal; SELL steps up toward supply distal.
-  L1 is the live quote when already inside (marketable); remaining legs rest
-  as limits so they only fill if M1 actually travels there.
-  """
-  count = max(2, int(clips))
-  if side == "BUY":
-    start = min(quote, high) if quote <= high else high
-    far = low
-    if start <= far:
-      return ()
-    step = (start - far) / (count - 1)
-    raw = [start - (step * index) for index in range(count)]
-  else:
-    start = max(quote, low) if quote >= low else low
-    far = high
-    if start >= far:
-      return ()
-    step = (far - start) / (count - 1)
-    raw = [start + (step * index) for index in range(count)]
-  return _unique_prices([_round_price(price, digits) for price in raw])
 
 
 def resolve_execution_route_plan(

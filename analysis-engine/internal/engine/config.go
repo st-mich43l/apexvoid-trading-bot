@@ -805,11 +805,6 @@ func getInt(doc *config.Document, path string) (int, error) {
 	}
 }
 
-func getInt64(doc *config.Document, path string) (int64, error) {
-	v, err := getInt(doc, path)
-	return int64(v), err
-}
-
 func getString(doc *config.Document, path string) (string, error) {
 	raw, ok := doc.Get(path)
 	if !ok {

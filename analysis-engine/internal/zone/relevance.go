@@ -78,16 +78,3 @@ func ClassifyRelevance(z Zone, mid, atr float64, cfg RelevanceConfig) Relevance 
 		return Dormant
 	}
 }
-
-// IsDead ports zone_relevance.py::is_dead_zone — true once a zone is
-// more than 2x RemoteATR away (a hysteresis-doubled band so oscillation
-// near the Remote boundary doesn't churn a zone in and out of
-// existence). A zero/negative atr means "never dead" — no ATR unit, no
-// meaningful distance, matching ClassifyRelevance's own fallback
-// reasoning.
-func IsDead(z Zone, mid, atr float64, cfg RelevanceConfig) bool {
-	if atr <= 0 {
-		return false
-	}
-	return distanceToZone(z, mid)/atr > 2*cfg.RemoteATR
-}

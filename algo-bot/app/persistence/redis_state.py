@@ -12,8 +12,7 @@ import asyncio
 import json
 import logging
 import time
-from collections.abc import Awaitable, Callable, Iterator
-from contextlib import contextmanager
+from collections.abc import Awaitable, Callable
 from contextvars import ContextVar
 from typing import Any
 
@@ -56,15 +55,6 @@ def _build_client() -> redis.Redis:
 # it), so any helper that reaches for the shared client cannot write to the
 # production Redis while a dry run is in flight.
 _client_override: ContextVar[Any] = ContextVar("redis_state_client_override", default=None)
-
-
-@contextmanager
-def client_override(client: Any) -> Iterator[None]:
-  token = _client_override.set(client)
-  try:
-    yield
-  finally:
-    _client_override.reset(token)
 
 
 def _get_client() -> redis.Redis:
@@ -386,24 +376,6 @@ async def tp_ordinal_already_booked(row_id: int, ordinal: int) -> bool:
 async def mark_tp_ordinal_booked(row_id: int, ordinal: int) -> None:
   client = _get_client()
   key = _tp_ordinals_key(row_id)
-  await client.sadd(key, ordinal)
-  await client.expire(key, _PROGRESS_TTL)
-
-
-def _tp_reached_ordinals_key(row_id: int) -> str:
-  return f"manual_signal:tp_reached:{row_id}"
-
-
-async def tp_ordinal_already_reached(row_id: int, ordinal: int) -> bool:
-  """Deduplicate notify-only TP progress separately from booked TPs."""
-  return bool(
-    await _get_client().sismember(_tp_reached_ordinals_key(row_id), ordinal)
-  )
-
-
-async def mark_tp_ordinal_reached(row_id: int, ordinal: int) -> None:
-  client = _get_client()
-  key = _tp_reached_ordinals_key(row_id)
   await client.sadd(key, ordinal)
   await client.expire(key, _PROGRESS_TTL)
 

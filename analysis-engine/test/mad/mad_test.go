@@ -78,7 +78,4 @@ func TestMADAffinityMatchesDirectionalPhaseRules(t *testing.T) {
 	if sell.Final <= 0 || sell.DirectionScore != 1 || buy.Final != 0 || buy.DirectionScore != 0 {
 		t.Fatalf("directional manipulation affinity mismatch: sell=%+v buy=%+v", sell, buy)
 	}
-	if mad.SoftBonus(mad.PhaseManip, "reaction") != .12 || mad.SoftBonus(mad.PhaseExpand, "reaction") != 0 {
-		t.Fatal("MAD soft bonus must remain phase/family-specific")
-	}
 }

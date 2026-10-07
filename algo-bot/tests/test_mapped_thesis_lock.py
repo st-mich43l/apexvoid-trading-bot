@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from types import SimpleNamespace
 
 from tests.support.canonical_fixtures import (
@@ -14,14 +13,9 @@ from tests.support.canonical_fixtures import (
 import pytest
 
 from app.autotrade.reaction_identity import (
-  advance_thesis_rearm_on_bar,
-  evaluate_thesis_rearm_for_publish,
   mapped_group_id,
-  mapped_reaction_id,
-  mapped_thesis_id,
   structural_zone_id,
   thesis_claim_key,
-  thesis_claim_payload,
 )
 from app.autotrade.strategy_match import StrategyMatch
 
@@ -126,110 +120,6 @@ def _match(
     confirmation_bar_ts=confirm,
     reaction_type="rejection",
   )
-
-
-def test_rearm_requires_outside_bars_then_reentry():
-  claim = json.loads(thesis_claim_payload(
-    thesis_id="t1",
-    strategy="Mapped Zone Reaction",
-    strategy_family="mapped_zone",
-    symbol="XAU",
-    direction="BUY",
-    structural_zone_id="z1",
-    structural_zone_low=4060.0,
-    structural_zone_high=4072.0,
-    active_reaction_id="r1",
-    candidate_id="c1",
-    group_id="g1",
-    state="terminal_waiting_exit",
-    claimed_at=1,
-    touch_bar_ts="t0",
-    confirmation_bar_ts="c0",
-  ))
-  # Inside zone — still waiting exit.
-  updated, _ = advance_thesis_rearm_on_bar(
-    claim,
-    bar_ts="b1",
-    bar_low=4065.0,
-    bar_high=4068.0,
-    close=4066.0,
-    atr=2.0,
-    rearm_atr=0.50,
-    rearm_bars=3,
-    now_ts=10,
-  )
-  assert updated["state"] == "terminal_waiting_exit"
-
-  # Leave by 0.30 ATR (< 0.50) — not enough.
-  updated, _ = advance_thesis_rearm_on_bar(
-    updated,
-    bar_ts="b2",
-    bar_low=4072.4,
-    bar_high=4072.6,
-    close=4072.5,
-    atr=2.0,
-    rearm_atr=0.50,
-    rearm_bars=3,
-    now_ts=20,
-  )
-  assert updated["state"] == "terminal_waiting_exit"
-
-  # Leave by >= 0.50 ATR for three unique bars.
-  for i, ts in enumerate(("b3", "b4", "b5"), start=1):
-    updated, metric = advance_thesis_rearm_on_bar(
-      updated,
-      bar_ts=ts,
-      bar_low=4074.0,
-      bar_high=4075.0,
-      close=4074.5,
-      atr=2.0,
-      rearm_atr=0.50,
-      rearm_bars=3,
-      now_ts=30 + i,
-    )
-  assert updated["state"] == "outside_zone"
-  assert updated["outside_bar_count"] == 3
-
-  # Duplicate bar does not double-count.
-  updated, _ = advance_thesis_rearm_on_bar(
-    updated,
-    bar_ts="b5",
-    bar_low=4074.0,
-    bar_high=4075.0,
-    close=4074.5,
-    atr=2.0,
-    rearm_atr=0.50,
-    rearm_bars=3,
-    now_ts=40,
-  )
-  assert updated["outside_bar_count"] == 3
-
-  # Re-enter → rearm_ready.
-  updated, metric = advance_thesis_rearm_on_bar(
-    updated,
-    bar_ts="b6",
-    bar_low=4068.0,
-    bar_high=4071.0,
-    close=4070.0,
-    atr=2.0,
-    rearm_atr=0.50,
-    rearm_bars=3,
-    now_ts=50,
-  )
-  assert updated["state"] == "rearm_ready"
-  assert updated["rearm_ready"] is True
-  assert metric == "mapped_thesis_rearm_ready"
-
-  decision = evaluate_thesis_rearm_for_publish(
-    updated,
-    new_touch_ts="t2",
-    new_confirmation_ts="c2",
-    price=4070.0,
-    atr=2.0,
-    rearm_atr=0.50,
-    rearm_bars=3,
-  )
-  assert decision.allowed is True
 
 
 def test_group_id_uses_thesis_cycle():

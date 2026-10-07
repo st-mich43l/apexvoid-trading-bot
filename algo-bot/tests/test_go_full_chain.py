@@ -35,13 +35,6 @@ from app.autotrade.route_outcome import route_outcome_key
 from app.autotrade.setup_lifecycle import CONFIRMED, PLAN_PUBLISHED, load_setup
 from app.autotrade.strategy_identity import structural_thesis_id
 from app.autotrade.trade_plan import TradePlan
-from app.autotrade.zone_watch import (
-  GRADE_A,
-  WATCHING_RETEST,
-  discover_zone_watch,
-  load_zone_watch,
-  transition_zone_watch,
-)
 from app.persistence import redis_state
 from tests.support.canonical_fixtures import install_runtime_overrides
 from tests.test_go_opportunity_policy import Harness, golden
@@ -264,12 +257,11 @@ async def test_kafka_event_becomes_a_real_v8_plan_with_full_provenance(h, prod, 
   assert plan["sizing"]["mode"] == "equity_table" and plan["risk"]["max_group_risk_percent"] and plan["risk"]["risk_percent"]
   assert plan["stop"]["type"] == "absolute" and plan["targets"]
   TradePlan.from_dict(plan).validate()                                # the executor's own contract validator
-  # setup lifecycle, dedup tombstone, executor state and the Go plan index
+  # setup lifecycle, dedup tombstone and executor state
   assert (await load_setup(prod, match.match_id)).state == PLAN_PUBLISHED
   assert await prod.get(f"execution:plan_state:{plan['plan_id']}") == "published"
   assert await prod.exists(f"execution:plan_dedup:{plan['plan_id']}")
   assert (await route(prod, match.match_id))["status"] == "candidate_published"
-  assert json.loads(await prod.hget("analysis:go_plans", plan["plan_id"]))["scope"] == "supply"
 
 
 @pytest.mark.asyncio

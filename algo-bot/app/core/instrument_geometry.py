@@ -118,12 +118,6 @@ def pip_value_per_lot(symbol: str) -> float:
   return float(_effective(symbol).units.pip_value_per_lot)
 
 
-def fvg_entry_max_width_price(symbol: str) -> float:
-  return float(
-    _effective(symbol).strategies.technique.fvg.entry_max_width_price
-  )
-
-
 def plan_max_volume(symbol: str) -> int:
   """Per-instrument cTrader volume ceiling for TradePlan.risk.max_volume.
 

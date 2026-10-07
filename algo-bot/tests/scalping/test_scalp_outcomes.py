@@ -16,7 +16,6 @@ from app.scalping.outcomes import (
   excursion_mfe_mae,
   finalize_live_outcome,
   legs_for_exit_path,
-  update_excursion_extremes,
   volume_weighted_r,
 )
 
@@ -140,51 +139,6 @@ def test_mfe_mae_signs_buy_and_sell():
   )
   assert mfe == pytest.approx(30.0)
   assert mae == pytest.approx(10.0)
-
-
-def test_mfe_keeps_accruing_after_breakeven_on_tp1_be_flat():
-  """tp1_be_flat whose price later reaches 1.9R records MFE ≈ 1.9×stop."""
-  stop = 10.0
-  pip = 0.1
-  entry = 2000.0
-  state = ExcursionState(
-    opportunity_id="opp",
-    episode_id="ep",
-    symbol="XAU",
-    archetype="impulse_pullback",
-    direction="BUY",
-    session="london",
-    htf_bias="down",
-    regime="chop",
-    entry_price=entry,
-    invalidation_price=entry - stop * pip,
-    stop_pips=stop,
-    planned_target_pips=20.0,
-    planned_rr=2.0,
-    group_id="g1",
-    match_id="m1",
-    opened_at=1,
-    pip_size=pip,
-    max_high=entry,
-    min_low=entry,
-  )
-  # TP1 at +1R, then BE, then price runs to 1.9R before flattening.
-  state = update_excursion_extremes(
-    state, bar_high=entry + 1.0 * stop * pip, bar_low=entry - 0.2 * stop * pip,
-  )
-  state = update_excursion_extremes(
-    state, bar_high=entry + 1.9 * stop * pip, bar_low=entry,
-  )
-  live = finalize_live_outcome(
-    state,
-    exit_path=EXIT_TP1_BE_FLAT,
-    realized_pips=5.0,  # half-book cash, irrelevant to MFE
-    closed_at=100,
-  )
-  assert live.exit_path == EXIT_TP1_BE_FLAT
-  assert live.realized_r == pytest.approx(0.5)
-  assert live.mfe_pips == pytest.approx(1.9 * stop)
-  assert live.mfe_pips != pytest.approx(0.0)
 
 
 def test_exit_path_classification_from_event_flags():

@@ -780,15 +780,6 @@ def strategy_match_id(
   return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
-def strategy_range_id(symbol: str, lower: float, upper: float) -> str:
-  digits = digits_for(symbol)
-  return (
-    f"{symbol.lower()}-strategy-range-"
-    f"{price_token(lower, digits=digits)}-"
-    f"{price_token(upper, digits=digits)}"
-  )
-
-
 def _identity_ok(match: StrategyMatch) -> bool:
   # A Go-origin match's identity is its Go opportunity id, verbatim
   # (app.autotrade.go_opportunity_policy.match_id_for). It is checked here, at

@@ -28,7 +28,6 @@ from app.autotrade.setup_lifecycle import (
   WATCHING,
   create_setup,
   load_setup,
-  rearm_setup,
   setup_expiry_index_key,
   transition_setup,
 )
@@ -147,27 +146,3 @@ async def test_sweep_is_a_noop_when_nothing_is_due():
   assert record.state == DISCOVERED
 
 
-@pytest.mark.asyncio
-async def test_rearm_clears_expires_at_so_sweeper_does_not_immediately_reexpire():
-  client = redis_state.get_client()
-  past = int(time.time()) - 10
-  await create_setup(
-    client, setup_id="sweep-rearm", thesis_id="thesis-1", symbol="XAU",
-    expires_at=past,
-  )
-  await transition_setup(client, "sweep-rearm", INVALIDATED)
-  assert await client.zscore(setup_expiry_index_key(), "sweep-rearm") is None
-
-  rearmed = await rearm_setup(
-    client, "sweep-rearm", rearm_condition="new structure formed",
-  )
-
-  assert rearmed.state == DISCOVERED
-  assert rearmed.expires_at is None
-  assert await client.zscore(setup_expiry_index_key(), "sweep-rearm") is None
-
-  # Even if the sweeper runs immediately after rearm, there is nothing due.
-  processed = await sweep_expired_setups_once(client)
-  assert processed == 0
-  record = await load_setup(client, "sweep-rearm")
-  assert record.state == DISCOVERED

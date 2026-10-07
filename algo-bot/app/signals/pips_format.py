@@ -88,11 +88,6 @@ def legs_achieved_pips(legs: list[dict]) -> int:
   return values[-1]
 
 
-def legs_net_pips(legs: list[dict]) -> int:
-  """Deprecated alias — history uses achieved TP/pips, not lot-weighted net."""
-  return legs_achieved_pips(legs)
-
-
 def legs_achieved_entry_price(legs: list[dict], action: str) -> float | None:
   """Entry price of the DEEPEST-filled leg — the risk-calc denominator.
 
