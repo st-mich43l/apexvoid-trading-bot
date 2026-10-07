@@ -30,13 +30,6 @@ auto_algo:
   dry_run: false
   strategy_match_enabled: true
 
-  actionability:
-    counter_bias:
-      allowed: true
-    structural_guard:
-      guard_mode: observe
-    zone_reconciliation:
-      mode: shadow
 
   lifecycle:
     candidate:

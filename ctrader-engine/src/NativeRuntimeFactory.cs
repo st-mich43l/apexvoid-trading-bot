@@ -196,9 +196,6 @@ public static class NativeRuntimeFactory
   private static bool OptionalBool(ConfigDocument c, string path, bool fallback) =>
     c.Get(path) is null ? fallback : c.RequiredBool(path);
 
-  private static int OptionalInt(ConfigDocument c, string path, int fallback) =>
-    c.Get(path) is null ? fallback : c.RequiredInt(path);
-
   private static decimal OptionalDecimal(ConfigDocument c, string path, decimal fallback) =>
     c.Get(path) is null ? fallback : c.RequiredDecimal(path);
 

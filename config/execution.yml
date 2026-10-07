@@ -36,7 +36,6 @@ execution:
     min_entry_drift_pips: 10.0
     min_rr: 1.0
     room_stop_floor_pips: 15
-    tp_buffer_pips: 3.0
 
   reaction:
     market_fraction: 0.8
@@ -70,13 +69,6 @@ execution:
     wick_stop_buffer_atr: 0.15
 
   targeting:
-    range_ladder_pips:
-      - 15
-      - 20
-      - 30
-      - 40
-      - 50
-      - 70
     unfilled_leg_after_tp_policy: cancel
 
   trend:
@@ -110,7 +102,3 @@ manual_algo:
     manual_trade_command_stream_maxlen: 1000
     manual_trade_intent_stream_maxlen: 1000
 
-journal:
-  enabled: true
-  persist:
-    trade_plan: true

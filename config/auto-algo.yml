@@ -10,12 +10,8 @@ auto_algo:
   dry_run: false
   strategy_match_enabled: true
 
-  scanner:
-    enabled: true
 
   actionability:
-    counter_bias:
-      allowed: true
     entry_location:
       # Enforce: block ZoneWatch at premium BUYs / discount SELLs (and extremes).
       # Must pair with execution.activation.mode=enforce for cutover to hard-stop.
@@ -37,25 +33,15 @@ auto_algo:
       event_cluster_span_hours: 48
       event_cluster_guard_minutes: 180
       proximal_band_atr: 0.5
-    key_level_role:
-      enabled: false
     target_room:
       barrier_buffer_atr: 0.5
       minimum_capped_target_pips: 15.0
     scanner_gates:
       conflict_margin_quality: 0.15
-    structural_guard:
-      guard_mode: observe
-    zone_reconciliation:
-      enabled: true
-      mode: shadow
 
   lifecycle:
     candidate:
       storage_ttl_seconds: 604800
-    mapped_zone:
-      reaction_rearm_atr: 0.5
-      reaction_rearm_bars: 3
     retest:
       trigger_validity_bars: 2
 
@@ -124,17 +110,8 @@ auto_algo:
         minimum_reward_risk: 1.10
         maximum_spread_pips: 5
       risk:
-        mode: live
-        risk_fraction_per_trade: 0.10
         risk_percent_per_trade: 0.5
         sizing_mode: equity_table
-        maximum_concurrent_positions: 1
-        maximum_session_trades: 12
-        maximum_daily_trades: 30
-        maximum_consecutive_losses: 3
-        cooldown_after_loss_minutes: 5
-        daily_loss_limit_r: 3.0
-        session_loss_limit_r: 2.0
       # ApexVoid Breakout Retest — M5 compression/structure setup with M1
       # confirmation. Each archetype owns its own detector and quality score.
       # See docs/scalping/OWN_BREAKOUT_TECHNIQUE.md
