@@ -594,6 +594,133 @@ public static class TradePlanExecutionEngine
   }
 
   /// <summary>
+  /// Manual Algo ladder TP1 stop: one shared group-economic breakeven (the
+  /// pre-V8 AutoTradeEngine rule). The profit already booked on TP1 funds
+  /// room for the runners, so the stop sits BELOW the remaining legs' VWAP
+  /// (above it for SELL) while the complete original group still locks the
+  /// configured buffer if it is hit. It never loosens a held stop and never
+  /// sits shallower than the plan's deepest declared entry when that entry is
+  /// on the losing side of the remaining VWAP. When the economic stop cannot
+  /// improve on the held one it falls back to the remaining volume's own
+  /// protected breakeven (owner-reported 2026-09-21, manual 407).
+  /// </summary>
+  public static TradePlanBreakEvenResult CalculateManualGroupBreakEven(
+    TradePlan plan,
+    IReadOnlyList<TradePlanLegRuntimeState> openLegs,
+    long groupInitialVolume,
+    decimal bookedPipVolume,
+    decimal pipSize,
+    decimal currentStop,
+    SymbolInfo symbol,
+    decimal? plannedDeepestEntry
+  )
+  {
+    var remainingVolume = openLegs.Sum(leg => leg.RemainingVolume);
+    if (
+      openLegs.Count == 0
+      || remainingVolume <= 0
+      || groupInitialVolume <= 0
+      || pipSize <= 0m
+      || openLegs.Any(leg => leg.FillPrice is null)
+    )
+    {
+      return CalculateBreakEven(
+        plan,
+        openLegs.Where(leg => leg.FillPrice is not null).Select(leg => leg.FillPrice!.Value)
+          .DefaultIfEmpty(currentStop).Average(),
+        currentStop,
+        symbol
+      );
+    }
+    var buy = plan.Analysis.Direction == "BUY";
+    var weightedEntry = openLegs.Sum(leg => leg.FillPrice!.Value * leg.RemainingVolume)
+      / remainingVolume;
+    var tickSize = StopTrailPlanner.RequireTickSize(symbol);
+    var bufferPrice = plan.Management.BeBufferTicks * tickSize;
+    var bufferPips = bufferPrice / pipSize;
+    var unfunded = bufferPips * groupInitialVolume - bookedPipVolume;
+    var desired = buy
+      ? weightedEntry + unfunded * pipSize / remainingVolume
+      : weightedEntry - unfunded * pipSize / remainingVolume;
+    if (
+      plannedDeepestEntry is decimal deepest
+      && (buy ? deepest < weightedEntry : deepest > weightedEntry)
+    )
+    {
+      desired = buy ? Math.Max(desired, deepest) : Math.Min(desired, deepest);
+    }
+    desired = buy ? Math.Max(desired, currentStop) : Math.Min(desired, currentStop);
+    desired = buy
+      ? decimal.Ceiling(desired / tickSize) * tickSize
+      : decimal.Floor(desired / tickSize) * tickSize;
+    desired = decimal.Round(desired, symbol.Digits, MidpointRounding.AwayFromZero);
+    var improves = buy ? desired > currentStop : desired < currentStop;
+    if (improves)
+    {
+      return new TradePlanBreakEvenResult(desired, desired, true);
+    }
+    return CalculateBreakEven(plan, weightedEntry, currentStop, symbol);
+  }
+
+  /// <summary>
+  /// Manual Algo stop after a booked target ordinal (1-based) beyond TP1
+  /// (the pre-V8 AutoTradeEngine rule). A multi-leg ladder goes to the actual
+  /// shallow entry after TP2, TP1 being reserved for the TP3 trail. Later
+  /// targets trail one target behind, except the second-to-last rung, which
+  /// trails two behind so the runner keeps room before its final target. The
+  /// final target has no trail. Returns null when there is no move to make.
+  /// </summary>
+  public static (decimal Stop, string Label)? PlanManualTrailStop(
+    TradePlan plan,
+    int completedOrdinal,
+    IReadOnlyList<TradePlanLegRuntimeState> legs,
+    SymbolInfo symbol
+  )
+  {
+    var total = plan.Targets.Count;
+    if (completedOrdinal < 2 || completedOrdinal >= total)
+    {
+      return null;
+    }
+    var buy = plan.Analysis.Direction == "BUY";
+    var entryLegs = legs.Where(leg => !TradePlanRuntime.IsReactionRiskLeg(leg.LegId)).ToArray();
+    if (completedOrdinal == 2 && entryLegs.Length > 1)
+    {
+      var filled = entryLegs.Where(leg => leg.FillPrice is not null).ToArray();
+      if (filled.Length == 0)
+      {
+        return null;
+      }
+      var shallow = entryLegs[0].FillPrice is decimal first
+        ? first
+        : buy
+          ? filled.Max(leg => leg.FillPrice!.Value)
+          : filled.Min(leg => leg.FillPrice!.Value);
+      return (
+        decimal.Round(shallow, symbol.Digits, MidpointRounding.AwayFromZero),
+        "shallow entry"
+      );
+    }
+    int? resolved = null;
+    if (completedOrdinal == total - 1 && completedOrdinal - 2 >= 1)
+    {
+      resolved = completedOrdinal - 2;
+    }
+    else if (completedOrdinal - 1 >= 1)
+    {
+      resolved = completedOrdinal - 1;
+    }
+    if (resolved is not int ordinal)
+    {
+      return null;
+    }
+    return (
+      decimal.Round(plan.Targets[ordinal - 1].Price, symbol.Digits, MidpointRounding.AwayFromZero),
+      $"TP{ordinal}"
+    );
+  }
+
+  /// <summary>
   /// Resolves the target whose absolute price should protect the runner.
   /// Explicit plan management wins; short ladders (≤2 targets, typical
   /// fixed_rr 1R/2R) never apply the legacy trail. Longer ladders keep the
