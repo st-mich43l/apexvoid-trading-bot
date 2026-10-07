@@ -1,4 +1,4 @@
-"""Discovery → activation funnel view over ``auto_trade:metrics:{symbol}``."""
+"""Opportunity → plan → fill funnel view over ``auto_trade:metrics:{symbol}``."""
 
 from __future__ import annotations
 
@@ -7,29 +7,24 @@ from typing import Any
 from app.persistence import redis_state
 
 
-FUNNEL_STAGES: tuple[tuple[str, str | None], ...] = (
-  ("detected", None),
-  ("actionable", "scanner_setup_actionable"),
-  ("match_published", "candidate_published"),
-  ("zonewatch_armed", "funnel_zone_discovered"),
-  ("activation_allowed", "activation_allowed"),
+FUNNEL_STAGES: tuple[tuple[str, str], ...] = (
+  ("checked", "strategy_match_checking"),
+  ("candidate_published", "strategy_match_candidate_published"),
   ("plan_published", "v8_plan_published"),
+  ("filled", "funnel_fill"),
 )
 
-STAGE_BLOCK_PREFIXES: dict[str, tuple[str, ...]] = {
-  "detected": ("structure_gated",),
-  "actionable": ("scanner_actionability_gated:",),
-  "match_published": ("strategy_match_blocked:",),
-  "zonewatch_armed": (
-    "static_eligibility_blocked",
-    "scanner_match_build_blocked:",
-  ),
-  "activation_allowed": ("activation_blocked:",),
-  "plan_published": (
-    "target_room_rejected",
-    "v8_plan_build_incomplete",
-  ),
-}
+# Where opportunities leave the funnel without a plan.
+EXIT_METRICS: tuple[tuple[str, str], ...] = (
+  ("waiting", "strategy_match_waiting"),
+  ("blocked", "strategy_match_blocked"),
+  ("arbitration_suppressed", "strategy_match_arbitration_suppressed"),
+  ("expired", "strategy_match_expired"),
+  ("target_room_rejected", "target_room_rejected"),
+)
+
+# Reason-coded counters (``strategy_match_blocked:{reason}``) listed under blocked.
+BLOCK_PREFIX = "strategy_match_blocked:"
 
 
 def _decode_metrics(raw: dict[Any, Any]) -> dict[str, int]:
@@ -43,48 +38,14 @@ def _decode_metrics(raw: dict[Any, Any]) -> dict[str, int]:
   return out
 
 
-def _detected_total(metrics: dict[str, int]) -> int:
-  return sum(count for name, count in metrics.items() if name.endswith("_detected"))
-
-
-def _stage_total(stage: str, metric_key: str | None, metrics: dict[str, int]) -> int:
-  if stage == "detected":
-    return _detected_total(metrics)
-  if metric_key is None:
-    return 0
-  return int(metrics.get(metric_key, 0))
-
-
-def _top_block_reasons(
-  metrics: dict[str, int],
-  prefixes: tuple[str, ...],
-  *,
-  limit: int = 5,
-) -> list[tuple[str, int]]:
-  scored: list[tuple[str, int]] = []
-  for key, count in metrics.items():
-    if count <= 0:
-      continue
-    for prefix in prefixes:
-      if prefix.endswith(":"):
-        if key.startswith(prefix):
-          scored.append((key[len(prefix):], count))
-          break
-      elif key == prefix:
-        scored.append((key, count))
-        break
-      elif key.startswith(f"{prefix}:"):
-        scored.append((key[len(prefix) + 1:], count))
-        break
+def _top_block_reasons(metrics: dict[str, int], *, limit: int = 5) -> list[tuple[str, int]]:
+  scored = [
+    (key[len(BLOCK_PREFIX):], count)
+    for key, count in metrics.items()
+    if key.startswith(BLOCK_PREFIX) and count > 0
+  ]
   scored.sort(key=lambda item: (-item[1], item[0]))
-  deduped: list[tuple[str, int]] = []
-  seen: set[str] = set()
-  for reason, count in scored:
-    if reason in seen:
-      continue
-    seen.add(reason)
-    deduped.append((reason, count))
-  return deduped[:limit]
+  return scored[:limit]
 
 
 async def auto_trade_funnel_text(symbol: str = "XAU") -> str:
@@ -96,20 +57,20 @@ async def auto_trade_funnel_text(symbol: str = "XAU") -> str:
   lines = [f"<b>Algo funnel — {sym}</b>", ""]
   previous = None
   for stage, metric_key in FUNNEL_STAGES:
-    total = _stage_total(stage, metric_key, metrics)
+    total = metrics.get(metric_key, 0)
     suffix = ""
     if previous is not None and previous > 0:
       suffix = f" ({100.0 * total / previous:.0f}% of prior)"
     lines.append(f"{stage}: <b>{total}</b>{suffix}")
-    blocks = _top_block_reasons(
-      metrics,
-      STAGE_BLOCK_PREFIXES.get(stage, ()),
-      limit=5,
-    )
-    if blocks:
-      lines.append("  top blocks:")
-      for reason, count in blocks:
-        lines.append(f"    • {reason}: {count}")
     if total > 0:
       previous = total
+  lines.append("")
+  lines.append("exits without a plan:")
+  for name, metric_key in EXIT_METRICS:
+    lines.append(f"  {name}: <b>{metrics.get(metric_key, 0)}</b>")
+  blocks = _top_block_reasons(metrics)
+  if blocks:
+    lines.append("  top blocks:")
+    for reason, count in blocks:
+      lines.append(f"    • {reason}: {count}")
   return "\n".join(lines)

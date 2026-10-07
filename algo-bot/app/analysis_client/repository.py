@@ -134,18 +134,6 @@ class PostgresAnalysisOpportunityRepository:
         topic, partition, offset, reason[:1000], raw[:100000], int(time.time()),
       )
 
-  async def active_for_symbol(self, symbol: str, *, now: int | None = None) -> list[dict]:
-    now = int(time.time()) if now is None else now
-    async with store._connect() as db:
-      rows = await db.fetch(
-        """
-        SELECT * FROM analysis_opportunities
-        WHERE symbol = $1 AND state = 'active' AND (expires_at IS NULL OR expires_at >= $2)
-        ORDER BY created_at, opportunity_id
-        """,
-        symbol, now,
-      )
-    return [dict(row) for row in rows]
 
   async def recent_for_symbol(
     self,

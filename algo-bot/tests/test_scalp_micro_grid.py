@@ -8,33 +8,11 @@ from app.autotrade.execution_route import (
   ROUTE_MARKET,
   ROUTE_MARKET_WITH_LIMIT_SCALE,
   ROUTE_ZONE_SPLIT,
-  SCALP_MICRO_CLIPS,
   resolve_execution_route_plan,
-  scalp_micro_grid_legs,
 )
 
 
 pytestmark = pytest.mark.no_database
-
-
-def test_buy_grid_steps_down_from_quote_to_distal():
-  legs = scalp_micro_grid_legs(
-    side="BUY", low=4000.0, high=4005.0, quote=4004.0, digits=2,
-  )
-  assert len(legs) == SCALP_MICRO_CLIPS
-  assert legs[0] == 4004.0
-  assert legs[-1] == 4000.0
-  assert legs == tuple(sorted(legs, reverse=True))
-
-
-def test_sell_grid_steps_up_from_quote_to_distal():
-  legs = scalp_micro_grid_legs(
-    side="SELL", low=4000.0, high=4005.0, quote=4001.0, digits=2,
-  )
-  assert len(legs) == SCALP_MICRO_CLIPS
-  assert legs[0] == 4001.0
-  assert legs[-1] == 4005.0
-  assert legs == tuple(sorted(legs))
 
 
 def test_scalp_route_is_single_leg_market_not_micro_grid():

@@ -116,7 +116,6 @@ def _worker_cycle(monkeypatch, *, now: int):
     monkeypatch,
     {
       "analysis.technical_authority.consumer_enabled": True,
-      "strategies.matching.multiple_matches_enabled": True,
       "analysis.scanner.window": 500,
     },
     legacy_overrides={
@@ -147,7 +146,7 @@ def _capture_full_pass(monkeypatch) -> list[list[str]]:
     seen.append(sorted(item.match_id for item in matches))
     raise _ReachedFullPass
 
-  monkeypatch.setattr(worker, "dedupe_matches", capture)
+  monkeypatch.setattr(worker, "select_primary", capture)
   return seen
 
 

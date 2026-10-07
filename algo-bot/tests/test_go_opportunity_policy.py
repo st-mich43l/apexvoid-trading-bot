@@ -30,7 +30,6 @@ from app.persistence import redis_state, store
 from tests.test_analysis_client_models import _invalidated
 from tests.support.canonical_fixtures import install_runtime_overrides
 from tests.test_publish_trade_plan_v8 import (  # noqa: F401 - autouse fixtures
-  _freeze_technique_killzone_hour,
   _m1_trigger_bar,
   _no_news_by_default,
 )
@@ -498,7 +497,7 @@ class Harness:
   def __init__(self, sql, monkeypatch):
     self.clock = Clock(now=time.time())
     self.repo = PostgresAnalysisOpportunityRepository()
-    self.policy = pol.GoOpportunityPolicy(self.repo, clock=self.clock, multiple_matches_enabled=lambda: True)
+    self.policy = pol.GoOpportunityPolicy(self.repo, clock=self.clock)
     self.sql = sql
     self.offset = 0
     self._ready = False
@@ -546,11 +545,14 @@ async def test_unconfigured_scope_defaults_to_go_in_global_go_mode(h):
 
 @pytest.mark.no_database
 def test_xau_observes_but_does_not_trade_the_contained_strategies():
-  assert pol.observe_only_strategies("XAU") == {"ifvg", "liquidity_sweep"}
+  assert pol.observe_only_strategies("XAU") == {
+    "ifvg", "liquidity_sweep", "session_level", "impulse_pullback",
+  }
   # Containment is instrument-owned: the other instruments and every strategy
-  # not named (Key Level, Breakout Retest Scalp, ...) are untouched.
+  # not named (Key Level, Breakout Retest Scalp, ...) are untouched. FX only
+  # contains impulse_pullback; the XAU-specific names keep trading there.
   for symbol in ("EURUSD", "GBPUSD", "GBPJPY", "USDJPY"):
-    assert pol.observe_only_strategies(symbol) == frozenset()
+    assert pol.observe_only_strategies(symbol) == {"impulse_pullback"}
   assert not {"key_level", "scalp_breakout_retest", "range_sweep", "fvg"} & pol.observe_only_strategies("XAU")
 
 
@@ -621,16 +623,8 @@ async def test_unreviewed_scope_and_missing_facts_are_recorded_and_dropped(h):
 
 
 @pytest.mark.asyncio
-async def test_single_match_key_ambiguity_fails_closed(h):
-  await h.activate()
-  h.policy = pol.GoOpportunityPolicy(h.repo, clock=h.clock, multiple_matches_enabled=lambda: False)
-  assert await h.deliver(event(int(h.clock.now))) == "not_adapted"
-  assert (await h.decisions())[-1]["reason"] == "multiple_matches_disabled"
-
-
-@pytest.mark.asyncio
 async def test_live_go_does_not_consult_a_legacy_store(h):
-  h.policy = pol.GoOpportunityPolicy(h.repo, clock=h.clock, multiple_matches_enabled=lambda: True)
+  h.policy = pol.GoOpportunityPolicy(h.repo, clock=h.clock)
   assert await h.deliver(event(int(h.clock.now))) == "match_written"
   assert (await h.decisions())[-1]["reason"] == "go_live"
 

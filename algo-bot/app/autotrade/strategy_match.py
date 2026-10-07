@@ -23,7 +23,6 @@ from app.autotrade.strategy_taxonomy import is_m1_scalp_match
 
 
 STRATEGY_MATCH_VERSION = 1
-STRATEGY_MATCH_KEY_PREFIX = "auto_trade:strategy_match"
 
 
 @dataclass(frozen=True)
@@ -97,7 +96,7 @@ class StrategyMatch:
   # - populated from the DetectionResult/DetectionContext that produced this
   # match so the builder never has to derive bias/kind/timeframe from
   # direction (BUY => demand, BUY => bias up are exactly the forbidden
-  # shortcuts per docs/autotrade-execution-integrity.md). Additive, defaulted
+  # shortcuts per docs/execution.md). Additive, defaulted
   # fields so older cached matches still round-trip.
   structural_kind: str | None = None
   structural_timeframe: str | None = None
@@ -756,10 +755,6 @@ class StrategyMatch:
     return result if _valid_match(result) else None
 
 
-def strategy_match_key(symbol: str) -> str:
-  return f"{STRATEGY_MATCH_KEY_PREFIX}:{symbol.upper()}"
-
-
 def strategy_match_id(
   symbol: str,
   source_tf: str,
@@ -778,15 +773,6 @@ def strategy_match_id(
     f"{price_token(entry_high, digits=digits)}"
   )
   return hashlib.sha256(raw.encode("utf-8")).hexdigest()
-
-
-def strategy_range_id(symbol: str, lower: float, upper: float) -> str:
-  digits = digits_for(symbol)
-  return (
-    f"{symbol.lower()}-strategy-range-"
-    f"{price_token(lower, digits=digits)}-"
-    f"{price_token(upper, digits=digits)}"
-  )
 
 
 def _identity_ok(match: StrategyMatch) -> bool:

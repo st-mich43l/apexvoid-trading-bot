@@ -37,9 +37,6 @@ func TestCandleWindowBelowCapacity(t *testing.T) {
 	if w.Len() != 2 {
 		t.Fatalf("Len() = %d, want 2", w.Len())
 	}
-	if w.Capacity() != 10 {
-		t.Fatalf("Capacity() = %d, want 10", w.Capacity())
-	}
 }
 
 func TestCandleWindowAtPanicsOutOfRange(t *testing.T) {

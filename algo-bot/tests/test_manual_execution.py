@@ -1222,7 +1222,6 @@ async def test_handle_take_profit_uses_the_booking_legs_own_pips(monkeypatch):
   assert row["legs"][0]["pips"] == 30
 
 
-
 @pytest.mark.asyncio
 async def test_handle_event_position_closing_sends_nothing(monkeypatch):
   """Owner-reported 2026-09-18: the provisional "confirming exit price..."
@@ -1479,18 +1478,6 @@ async def test_request_move_sl_xadds_move_sl_command(monkeypatch):
   assert payload == {"type": "move_sl", "position_id": 555, "price": 4108.5}
 
 
-@pytest.mark.asyncio
-async def test_request_close_auto_position_xadds_close_position_command(monkeypatch):
-  install_runtime_overrides(monkeypatch, legacy_overrides={"manual_trade_command_stream": "manual_trade:cmd4",})
-  client = redis_state.get_client()
-
-  await manual_execution.request_close_auto_position(777)
-
-  entries = await client.xrange("manual_trade:cmd4")
-  payload = json.loads(entries[0][1]["payload"])
-  assert payload == {"type": "close_position", "position_id": 777}
-
-
 # ---------------------------------------------------------------------------
 # list_open_algo_auto_positions
 # ---------------------------------------------------------------------------
@@ -1504,6 +1491,18 @@ async def _seed_runtime_plans(client, plans: dict[str, dict]) -> None:
 def _leg(position_id, fill, remaining):
   return {"LegId": "L1", "BrokerPositionId": position_id, "FillPrice": fill,
           "RemainingVolume": remaining}
+
+
+@pytest.mark.asyncio
+async def test_request_close_auto_position_xadds_close_position_command(monkeypatch):
+  install_runtime_overrides(monkeypatch, legacy_overrides={"manual_trade_command_stream": "manual_trade:cmd4",})
+  client = redis_state.get_client()
+
+  await manual_execution.request_close_auto_position(777)
+
+  entries = await client.xrange("manual_trade:cmd4")
+  payload = json.loads(entries[0][1]["payload"])
+  assert payload == {"type": "close_position", "position_id": 777}
 
 
 @pytest.mark.asyncio

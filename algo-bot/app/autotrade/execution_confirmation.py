@@ -107,7 +107,7 @@ _AUTHORITATIVE_REACTIONS = frozenset({
   # "confirmation_metadata_missing" despite being a real, shared-path
   # confirmation.
   "engulfing",
-  # Configured M1 trigger patterns (analysis.triggers.m1.patterns). Live
+  # M1 trigger patterns. Live
   # 2026-08-06 rejected body_close as confirmation_metadata_missing and
   # blocked algo TradePlan build even when touch/confirmation/zone ids
   # were present.
@@ -581,7 +581,7 @@ def scalp_zone_access(
 
   ``retest_only`` (Breakout Retest): executable only while quote sits inside
   the retest band — approach from either side waits; no break-without-retest
-  chase (see docs/scalping/OWN_BREAKOUT_TECHNIQUE.md).
+  chase (see docs/strategies/scalp_breakout_retest.md).
   """
   evidence = executable_quote_in_zone(
     direction, bid, ask, zone_low, zone_high, tolerance, pip_size=pip_size,

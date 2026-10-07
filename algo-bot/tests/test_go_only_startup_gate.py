@@ -34,9 +34,6 @@ def _cfg(*, auto_trade=True, consumer=True, kafka=True, brokers=("kafka:9092",))
   return SimpleNamespace(
     auto_algo=SimpleNamespace(
       enabled=auto_trade,
-      actionability=SimpleNamespace(
-        scanner_gates=SimpleNamespace(use_quality_ranking=True),
-      ),
     ),
     analysis=SimpleNamespace(
       technical_authority=SimpleNamespace(
@@ -52,13 +49,6 @@ def _cfg(*, auto_trade=True, consumer=True, kafka=True, brokers=("kafka:9092",))
 
 def test_go_mode_with_consumer_and_kafka_passes():
   require_live_go_consumer(_cfg())
-
-
-def test_go_mode_rejects_legacy_quality_ranking():
-  config = _cfg()
-  config.auto_algo.actionability.scanner_gates.use_quality_ranking = False
-  with pytest.raises(RuntimeError, match="use_quality_ranking=true"):
-    require_live_go_consumer(config)
 
 
 def test_disabled_consumer_fails_closed():

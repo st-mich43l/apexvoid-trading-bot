@@ -1,9 +1,26 @@
-"""Cross-engine arbitration for one autonomous execution cycle."""
+"""Arbitration for one autonomous execution cycle.
+
+Selection is best-first and deterministic. Opportunities that argue for the
+same trade (same symbol and direction, same thesis/structure or overlapping
+entry corridor) compete: exactly one executable winner is published and the
+rest are suppressed. The rank hierarchy is, in order:
+
+1. execution eligibility (can the quote enter the entry contract now)
+2. strategy quality (Go ``quality.overall``)
+3. confluence
+4. structural/source quality (detector confluence raw score)
+5. freshness of the confirmation
+6. intent id (deterministic tie-break)
+
+No strategy, family or source is favoured.
+"""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal
+
+from app.autotrade.entry_overlap import corridors_overlap
 
 
 PublicationStatus = Literal[
@@ -57,7 +74,6 @@ class ExecutionIntent:
   strategy: str
   direction: str
   confluence: int
-  tier: str
   freshness: float
   distance_pips: float
   symbol: str = "XAU"
@@ -69,6 +85,8 @@ class ExecutionIntent:
   match_id: str | None = None
   reaction_id: str | None = None
   thesis_id: str | None = None
+  # Go's cross-strategy thesis group (shared by opportunities on one structure).
+  go_thesis_id: str | None = None
   current_price: float | None = None
   target_model: str = "fill_relative"
   targets_pips: tuple[int, ...] = ()
@@ -76,25 +94,21 @@ class ExecutionIntent:
   target_reference_price: str = "broker_fill"
   proposed_group_id: str | None = None
   cycle_id: str | None = None
-  # Go's real per-instance StrategyQuality.Overall (see strategy_match.py's
-  # own doc comment). None only for a hypothetical non-Go source; every
-  # live source today ("go_analysis_engine") always sets this.
+  # Go's per-instance StrategyQuality.Overall in [0, 1].
   quality_overall: float | None = None
+  # Detector confluence raw score (structural/source quality), tie-break only.
+  structural_quality: float | None = None
+  # ATR used to pad entry corridors when deciding whether two intents share a
+  # thesis. Zero collapses the pad to exact zone intersection.
+  atr: float = 0.0
   # Go-owned HTF relationship, consumed here only after admission. This is an
   # execution tie-break, not a Python technical-analysis reconstruction.
   bias_relationship: str | None = None
-  # Go's cross-strategy arbitration decision for this intent's match
-  # (Phase 2, analysis.opportunity.arbitration.v1 — threaded from
-  # StrategyMatch.arbitration_status/arbitration_reason_code). None until
-  # Go publishes a decision for this opportunity.
-  arbitration_status: str | None = None
-  arbitration_reason_code: str | None = None
   # False when the executable quote is outside this intent's entry contract, so
   # it can only wait for a retest this cycle. A waiting intent must not create a
   # direction conflict with an intent that can execute now: the two-sided
   # picture "demand below price, supply above it, both waiting" is not a
-  # BUY-vs-SELL conflict. Defaults True so callers that do not know keep the
-  # legacy behavior of treating every intent as a live competitor.
+  # BUY-vs-SELL conflict.
   executable_now: bool = True
 
 
@@ -103,93 +117,88 @@ class ArbitrationResult:
   ordered: tuple[ExecutionIntent, ...]
   suppressed: tuple[ExecutionIntent, ...]
   reason_code: str
+  # Same-direction intents that lost to a better intent on the same thesis.
+  # Subset of ``suppressed``; mapped to the winning intent id.
+  thesis_losers: dict[str, str] = field(default_factory=dict)
 
 
-_SOURCE_PRIORITY = {
-  "scanner_strategy_match": 0,
-  "market_map_strategy": 1,
-  "private_trend": 2,
-  "private_range": 3,
-}
-
-
-def _rank(intent: ExecutionIntent, *, use_quality: bool) -> tuple:
-  if use_quality:
-    # Go's real per-instance quality when present; a scaled-down confluence
-    # fallback otherwise (only reachable for a hypothetical non-Go source —
-    # every live source today always sets quality_overall). The /10.0 keeps
-    # the fallback well below any real quality score's [0, 1] range rather
-    # than letting an int proxy silently dominate a real signal.
-    quality_key = -(
-      intent.quality_overall
-      if intent.quality_overall is not None
-      else float(intent.confluence) / 10.0
-    )
-  else:
-    quality_key = -intent.confluence
+def _rank(intent: ExecutionIntent) -> tuple:
   return (
-    0 if intent.tier.upper() == "A" else 1,
-    quality_key,
+    0 if intent.executable_now else 1,
+    -(intent.quality_overall or 0.0),
+    -intent.confluence,
+    -(intent.structural_quality or 0.0),
     -intent.freshness,
-    intent.distance_pips,
-    _SOURCE_PRIORITY.get(intent.source, 9),
     intent.intent_id,
   )
+
+
+def same_thesis(left: ExecutionIntent, right: ExecutionIntent) -> bool:
+  """True when two intents argue for the same trade.
+
+  Opposite directions never share a thesis. Same-direction intents do when they
+  carry the same Go thesis group or structural identity, or their entry corridors
+  overlap after an ATR pad.
+  """
+  if left.symbol != right.symbol or left.direction != right.direction:
+    return False
+  if left.go_thesis_id and left.go_thesis_id == right.go_thesis_id:
+    return True
+  if left.structural_id and left.structural_id == right.structural_id:
+    return True
+  if not (left.entry_high >= left.entry_low > 0 and right.entry_high >= right.entry_low > 0):
+    return False
+  return corridors_overlap(
+    left.entry_low, left.entry_high, right.entry_low, right.entry_high,
+    max(left.atr, right.atr),
+  )
+
+
+def _collapse_theses(
+  ranked: list[ExecutionIntent],
+) -> tuple[list[ExecutionIntent], dict[str, str]]:
+  """Keep the best-ranked intent of every same-thesis group.
+
+  ``ranked`` is already best-first, so an intent joins the group of the first
+  winner it shares a thesis with.
+  """
+  winners: list[ExecutionIntent] = []
+  losers: dict[str, str] = {}
+  for item in ranked:
+    owner = next((w for w in winners if same_thesis(w, item)), None)
+    if owner is None:
+      winners.append(item)
+    else:
+      losers[item.intent_id] = owner.intent_id
+  return winners, losers
 
 
 def arbitrate_execution_intents(
   intents: list[ExecutionIntent],
   *,
-  conflict_margin: float = 1.0,
-  use_quality_ranking: bool = False,
   conflict_margin_quality: float = 0.15,
 ) -> ArbitrationResult:
-  """Return one-direction publication order for this M1 confirmation cycle.
+  """Return the best-first publication order for one confirmation cycle.
 
-  At most one caller may publish. The ordered tail exists only as fallback
-  when a higher-ranked intent fails its own execution checks.
-
-  ``use_quality_ranking`` switches the rank/decisiveness signal from the
-  legacy evidence-code ``confluence`` count (constant per strategy family,
-  not a real per-instance signal) to Go's real ``quality_overall`` score.
-  Defaults off so existing behavior is reproduced exactly until the
-  rollout flag (``actionability.scanner_gates.use_quality_ranking``) is
-  flipped. ``conflict_margin`` stays confluence-integer-scaled;
-  ``conflict_margin_quality`` is the analogous margin on the [0, 1]
-  quality scale — the two are not interchangeable units.
+  At most one caller may publish. Every ordered intent belongs to a different
+  thesis and the tail exists only as fallback when a higher-ranked intent fails
+  its own execution checks. Directions that cannot be separated by
+  ``conflict_margin_quality`` (the quality gap) are held back unless exactly
+  one of them agrees with the higher-timeframe bias.
   """
   if not intents:
     return ArbitrationResult((), (), "no_intent")
-  ordered = sorted(
-    intents, key=lambda intent: _rank(intent, use_quality=use_quality_ranking),
-  )
+  ranked = sorted(intents, key=_rank)
   # The direction decision is made among intents that can execute right now;
-  # only when none can does it fall back to the whole set (the legacy rule).
-  # Waiting intents of the chosen direction still stay in ``ordered`` so their
-  # retest state keeps advancing and they can publish the moment price enters.
-  decision_pool = [item for item in ordered if item.executable_now] or ordered
+  # only when none can does it fall back to the whole set. Waiting intents of
+  # the chosen direction still stay in ``ordered`` so their retest state keeps
+  # advancing and they can publish the moment price enters.
+  decision_pool = [item for item in ranked if item.executable_now] or ranked
   top = decision_pool[0]
   opposing = [item for item in decision_pool if item.direction != top.direction]
   if opposing:
-    strongest_opposing = opposing[0]
-    same_tier = strongest_opposing.tier.upper() == top.tier.upper()
-    if (
-      use_quality_ranking
-      and top.quality_overall is not None
-      and strongest_opposing.quality_overall is not None
-    ):
-      decisive = (
-        not same_tier
-        or top.quality_overall - strongest_opposing.quality_overall
-          >= float(conflict_margin_quality)
-      )
-    else:
-      decisive = (
-        not same_tier
-        or top.confluence - strongest_opposing.confluence
-          >= max(1.0, float(conflict_margin))
-      )
-    if not decisive:
+    gap = (top.quality_overall or 0.0) - (opposing[0].quality_overall or 0.0)
+    if gap < float(conflict_margin_quality):
       aligned_directions = {
         item.direction
         for item in decision_pool
@@ -198,23 +207,16 @@ def arbitrate_execution_intents(
       if len(aligned_directions) == 1:
         aligned_direction = next(iter(aligned_directions))
         top = next(
-          item for item in decision_pool
-          if item.direction == aligned_direction
+          item for item in decision_pool if item.direction == aligned_direction
         )
       else:
-        return ArbitrationResult(
-          (),
-          tuple(ordered),
-          "opposite_direction_conflict",
-        )
-  selected_direction = tuple(
-    item for item in ordered if item.direction == top.direction
-  )
+        return ArbitrationResult((), tuple(ranked), "opposite_direction_conflict")
+  same_direction = [item for item in ranked if item.direction == top.direction]
+  winners, losers = _collapse_theses(same_direction)
   suppressed = tuple(
-    item for item in ordered if item.direction != top.direction
+    item for item in ranked
+    if item.direction != top.direction or item.intent_id in losers
   )
   return ArbitrationResult(
-    selected_direction,
-    suppressed,
-    "ranked_single_direction",
+    tuple(winners), suppressed, "ranked_single_direction", losers,
   )

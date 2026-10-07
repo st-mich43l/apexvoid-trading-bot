@@ -27,7 +27,7 @@ from app.runtime.instruments import (
   live_instruments,
 )
 from app.analysis_client.provenance import GO_ORIGIN_TAG
-from app.autotrade.go_plan_cancel import read_plan_cancel, register_go_plan
+from app.autotrade.go_plan_cancel import read_plan_cancel
 from app.autotrade.go_live_opportunities import go_live_opportunity_ids
 from app.autotrade.go_opportunity_policy import (
   go_arbitration_key,
@@ -57,10 +57,13 @@ from app.autotrade.active_exposure import (
   evaluate_opposite_exposure,
   load_active_exposures,
 )
-from app.autotrade.entry_overlap import release_entry_zone, reserve_entry_zone
+from app.autotrade.entry_overlap import (
+  ReservationUnavailable,
+  release_entry_zone,
+  reserve_entry_zone,
+)
 from app.autotrade.strategy_match import (
   StrategyMatch,
-  strategy_match_key,
 )
 from app.autotrade.strategy_taxonomy import (
   is_breakout_retest_scalp_strategy,
@@ -102,7 +105,6 @@ from app.autotrade.execution_confirmation import (
   ZONE_ACCESS_RETEST_ONLY,
 )
 from app.autotrade.multi_match import (
-  dedupe_matches,
   deserialize_matches,
   select_primary,
   serialize_matches,
@@ -351,18 +353,6 @@ def _collect_fixed_rr_metric_sink(
   return _sink
 
 
-@dataclass(frozen=True)
-class ExecutionZoneClassification:
-  side: str
-  source: str
-  timeframe: str
-  width_pips: float
-  width_atr: float
-  execution_grade: bool
-  context_only: bool
-  invalid_geometry: bool
-
-
 _STOP_CONTRACT_FIELDS = (
   "planned_stop_entry_price",
   "planned_stop_price",
@@ -389,39 +379,6 @@ _STOP_CONTRACT_FIELDS = (
   "planned_leg_entry_prices",
   "entry_plan_version",
 )
-
-
-def classify_execution_zone(
-  zone: Any,
-  *,
-  atr: float,
-  pip_size: float,
-  cfg: Any,
-  timeframe: str = _HTF_TIMEFRAME,
-) -> ExecutionZoneClassification:
-  width = float(zone.high - zone.low)
-  invalid = (
-    not math.isfinite(width)
-    or width <= 0
-    or pip_size <= 0
-    or atr <= 0
-  )
-  width_pips = width / pip_size if pip_size > 0 else math.inf
-  width_atr = width / atr if atr > 0 else math.inf
-  exceeds = (
-    width_atr > float(cfg.execution.policy.execution_zone_max_width_atr)
-    or width_pips > float(cfg.execution.policy.execution_zone_max_width_pips)
-  )
-  return ExecutionZoneClassification(
-    side=zone.side,
-    source=zone.kind or "supply_demand",
-    timeframe=timeframe,
-    width_pips=round(width_pips, 3),
-    width_atr=round(width_atr, 3),
-    execution_grade=not invalid and not exceeds,
-    context_only=not invalid and exceeds,
-    invalid_geometry=invalid,
-  )
 
 
 def _symbols() -> set[str]:
@@ -486,54 +443,12 @@ async def _load_spot(client: Any, symbol: str) -> AutoTradeSpot | None:
   )
 
 
-async def _load_strategy_match(
-  client: Any,
-  symbol: str,
-) -> StrategyMatch | None:
-  if not runtime_config.auto_algo.strategy_match_enabled:
-    return None
-  key = strategy_match_key(symbol)
-  raw = await client.get(key)
-  if raw is None:
-    return None
-  match = StrategyMatch.from_json(raw)
-  now = int(datetime.now(timezone.utc).timestamp())
-  if (
-    match is None
-    or match.symbol != symbol.upper()
-    or now > match.expires_at
-  ):
-    if match is not None:
-      await record_route_outcome(
-        client,
-        match,
-        stage="scanner" if now > match.expires_at else "mode_check",
-        status="expired" if now > match.expires_at else "blocked",
-        reason_code=(
-          "match_expired" if now > match.expires_at else "symbol_mismatch"
-        ),
-        message=(
-          "StrategyMatch expired before execution"
-          if now > match.expires_at
-          else f"match symbol {match.symbol} does not match {symbol.upper()}"
-        ),
-        retained=False,
-        publish_status=False,
-      )
-    await client.delete(key)
-    return None
-  return match
-
-
 async def _load_strategy_matches(
   client: Any,
   symbol: str,
 ) -> list[StrategyMatch]:
   if not runtime_config.auto_algo.strategy_match_enabled:
     return []
-  if not runtime_config.auto_algo.strategies.matching.multiple_matches_enabled:
-    match = await _load_strategy_match(client, symbol)
-    return [] if match is None else [match]
   raw = await client.get(strategy_matches_key(symbol))
   matches = deserialize_matches(raw)
   now = int(datetime.now(timezone.utc).timestamp())
@@ -574,10 +489,7 @@ async def _load_strategy_matches(
       )
     else:
       await client.delete(strategy_matches_key(symbol))
-  if active:
-    return active
-  legacy = await _load_strategy_match(client, symbol)
-  return [] if legacy is None else [legacy]
+  return active
 
 
 async def _consume_strategy_match(
@@ -599,10 +511,6 @@ async def _consume_strategy_match(
       )
     else:
       await client.delete(multi_key)
-  legacy_key = strategy_match_key(symbol)
-  legacy = StrategyMatch.from_json(await client.get(legacy_key) or "")
-  if legacy is not None and legacy.match_id == match.match_id:
-    await client.delete(legacy_key)
 
 
 _MIN_COUNTER_BIAS_TARGET_PIPS = 15
@@ -656,79 +564,6 @@ def _band_distance_pips(
   )
 
 
-async def _record_private_route(
-  client: Any,
-  *,
-  symbol: str,
-  event_ts: str,
-  strategy: str,
-  family: str,
-  direction: str,
-  source: str,
-  structural_id: str,
-  entry_low: float,
-  entry_high: float,
-  spot_price: float | None,
-  status: str,
-  reason_code: str,
-  message: str,
-  candidate_id: str | None = None,
-  group_id: str | None = None,
-  retained: bool,
-  stage: str | None = None,
-  measured: dict[str, Any] | None = None,
-  preflight_reason_code: str | None = None,
-  arbitration_reason_code: str | None = None,
-  publication_reason_code: str | None = None,
-  terminal_reason_code: str | None = None,
-  winner_intent_id: str | None = None,
-  executor_event_id: str | None = None,
-) -> None:
-  now = int(datetime.now(timezone.utc).timestamp())
-  identity = PrivateRouteIdentity(
-    symbol=symbol.upper(),
-    match_id=_group_id(
-      symbol,
-      family,
-      direction,
-      structural_id,
-    ),
-    strategy=strategy,
-    family=family,
-    direction=direction.upper(),
-    structural_source=source,
-    structural_zone_id=structural_id,
-    issued_at=int(_intent_freshness(event_ts, now)),
-    expires_at=(
-      now + max(300, runtime_config.auto_algo.lifecycle.candidate.storage_ttl_seconds)
-    ),
-    current_price=spot_price,
-    entry_low=entry_low,
-    entry_high=entry_high,
-  )
-  await record_route_outcome(
-    client,
-    identity,
-    stage=(
-      stage
-      or ("stream_publish" if candidate_id else "candidate_claim")
-    ),
-    status=status,  # type: ignore[arg-type]
-    reason_code=reason_code,
-    message=message,
-    measured=measured,
-    candidate_id=candidate_id,
-    group_id=group_id,
-    executor_event_id=executor_event_id,
-    retained=retained,
-    preflight_reason_code=preflight_reason_code,
-    arbitration_reason_code=arbitration_reason_code,
-    publication_reason_code=publication_reason_code,
-    terminal_reason_code=terminal_reason_code,
-    winner_intent_id=winner_intent_id,
-    signal_source=source,
-    publish_status=False,
-  )
 
 
 def _strategy_group_id(match: StrategyMatch, *, thesis_cycle: int = 1) -> str:
@@ -1208,11 +1043,7 @@ async def _publish_trade_plan_v8(
 ) -> str | None:
   """Build and publish a TradePlan V8 from an already-CONFIRMED match.
 
-  Deliberately separate from _publish_strategy_match (the V6 path) rather
-  than sharing its body: V6's function is full of V6-only concerns
-  (candidate_id/group_id shaping, ZoneFillPlanner routing, ...) that must
-  not leak into the V8 contract. Python execution checks are shared only for
-  legacy matches. A Go-origin match carries its complete technical thesis;
+  A Go-origin match carries its complete technical thesis;
   Python does not run opposing-barrier, overlap, HTF, cooldown, target-room,
   or stop-rewrite logic against it. _adapt_counter_bias_target is deliberately
   NOT called here.
@@ -1264,8 +1095,8 @@ async def _publish_trade_plan_v8(
       publish_status=True,
     )
     return None
-  # Go is the live technical source; provenance and the Go-only match filter remain the protection
-  # against stale Python/ZoneWatch state. Everything after this point is
+  # Go is the live technical source; provenance and the Go-only match filter are
+  # the protection against stale non-Go state. Everything after this point is
   # execution-time quote, confirmation, risk and order validation.
   if GO_ORIGIN_TAG in match.tags:
     # A Go opportunity that was invalidated/expired leaves a cancel tombstone.
@@ -1305,121 +1136,7 @@ async def _publish_trade_plan_v8(
     )
     return None
 
-  # Technique pack: pair reaction windows for non-scalp; scalping killzone for scalps.
-  from app.autotrade.killzone import (
-    evaluate_killzone_gate,
-    evaluate_reaction_publish_window,
-    reaction_require_killzone,
-    reaction_require_publish_window,
-    technique_enforce,
-  )
-
   inst = instrument_geometry.instrument_runtime(symbol)
-  tech = getattr(inst.execution, "technique", None)
-  enforce_pack = technique_enforce(inst)
-  spot_ts = int(getattr(spot, "ts", 0) or int(datetime.now(timezone.utc).timestamp()))
-  candidate_is_scalp = is_scalp_strategy(
-    str(getattr(match, "strategy", "") or ""),
-    family=str(getattr(match, "strategy_family", "") or getattr(match, "family", "") or "")
-    or None,
-    strategy_mode=str(getattr(match, "strategy_mode", "") or "") or None,
-  )
-  if candidate_is_scalp:
-    # Optional global scalping clock sterilizer (prod off). Pair session quality is
-    # assessed above, but it is deliberately not a time-of-day hard gate.
-    require_kz = False if tech is None else bool(
-      getattr(tech, "scalp_require_killzone", False),
-    )
-    from app.autotrade.session_context import classify_session
-
-    scalp_session = classify_session(spot_ts, inst)
-    kz = evaluate_killzone_gate(
-      ts=spot_ts,
-      cfg=inst,
-      require=require_kz and enforce_pack,
-    )
-    if not kz.allowed:
-      log.info(
-        "v8 publish blocked outside killzone symbol=%s match_id=%s "
-        "utc_hour=%s killzone=%s session=%s",
-        symbol,
-        match.match_id,
-        kz.utc_hour,
-        kz.killzone_name,
-        scalp_session,
-      )
-      await _record_v8_build_rejected(
-        client,
-        symbol,
-        match,
-        "outside_killzone",
-        "technique pack: executable publish blocked outside killzone",
-        {
-          "killzone_name": kz.killzone_name,
-          "utc_hour": kz.utc_hour,
-          "session": scalp_session,
-          **kz.measured,
-        },
-      )
-      return None
-  else:
-    # Optional clock sterilizer (prod off). Structure/technique decide.
-    win = evaluate_reaction_publish_window(
-      ts=spot_ts,
-      cfg=inst,
-      require=enforce_pack and reaction_require_publish_window(inst),
-    )
-    if not win.allowed:
-      log.info(
-        "v8 publish waiting outside_reaction_publish_window symbol=%s "
-        "match_id=%s utc_hour=%s",
-        symbol,
-        match.match_id,
-        win.utc_hour,
-      )
-      await record_route_outcome(
-        client,
-        match,
-        stage="technique",
-        status="waiting",
-        reason_code="outside_reaction_publish_window",
-        message="technique pack: non-scalp publish waits for pair session window",
-        measured=dict(win.measured),
-        retained=True,
-        publish_status=False,
-      )
-      return None
-    require_kz = reaction_require_killzone(
-      inst,
-      strategy=str(getattr(match, "strategy", "") or ""),
-    )
-    kz = evaluate_killzone_gate(
-      ts=spot_ts,
-      cfg=inst,
-      require=require_kz and enforce_pack,
-    )
-    if not kz.allowed:
-      log.info(
-        "v8 publish blocked outside killzone symbol=%s match_id=%s "
-        "utc_hour=%s killzone=%s",
-        symbol,
-        match.match_id,
-        kz.utc_hour,
-        kz.killzone_name,
-      )
-      await _record_v8_build_rejected(
-        client,
-        symbol,
-        match,
-        "outside_killzone",
-        "technique pack: executable publish blocked outside killzone",
-        {
-          "killzone_name": kz.killzone_name,
-          "utc_hour": kz.utc_hour,
-          **kz.measured,
-        },
-      )
-      return None
 
   setup_id = match.match_id
   setup_record = await load_setup(client, setup_id)
@@ -2258,17 +1975,32 @@ async def _publish_trade_plan_v8(
       symbol, news_event.get("title", "unknown"),
     )
 
-  overlap_blocker = await reserve_entry_zone(
-    client,
-    symbol=symbol,
-    setup_id=setup_id,
-    strategy=str(match_for_plan.strategy),
-    direction=str(match_for_plan.direction),
-    low=float(match_for_plan.entry_low),
-    high=float(match_for_plan.entry_high),
-    atr=float(match_for_plan.atr or 0.0),
-    now=now_ts,
-  )
+  try:
+    overlap_blocker = await reserve_entry_zone(
+      client,
+      symbol=symbol,
+      setup_id=setup_id,
+      strategy=str(match_for_plan.strategy),
+      direction=str(match_for_plan.direction),
+      low=float(match_for_plan.entry_low),
+      high=float(match_for_plan.entry_high),
+      atr=float(match_for_plan.atr or 0.0),
+      now=now_ts,
+      quality=float(match_for_plan.quality_overall or 0.0),
+    )
+  except ReservationUnavailable:
+    await _release_claims()
+    await record_route_outcome(
+      client,
+      match,
+      stage="candidate_claim",
+      status="waiting",
+      reason_code="entry_zone_reservation_unavailable",
+      message="entry corridor reservation unavailable; intent retained",
+      retained=True,
+      publish_status=False,
+    )
+    return None
   if overlap_blocker is not None:
     await _release_claims()
     await _record_v8_build_rejected(
@@ -2643,10 +2375,6 @@ async def _publish_trade_plan_v8(
         PLAN_BUILT,
         reason_code="v8_builder",
       )
-    if GO_ORIGIN_TAG in match.tags:
-      # Index before publishing: a cancellation must always be able to find every
-      # Go-derived plan. A failure here aborts the publish (fail closed).
-      await register_go_plan(client, plan_id=plan.plan_id, match=match, expires_at=plan.expires_at)
     await publish_trade_plan(client, plan)
     await transition_setup(
       client, setup_id, PLAN_PUBLISHED, reason_code="v8_stream_publish",
@@ -2936,26 +2664,6 @@ async def _admit_strategy_intent_for_cycle(
       terminal=True,
       message="intent symbol does not match worker symbol",
     )
-  if intent.source == "scanner_strategy_match":
-    eligibility = match.execution_eligibility
-    if eligibility is None:
-      return _AdmissionFailure(
-        reason_code="static_eligibility_missing",
-        terminal=True,
-        message="scanner match has no authoritative static eligibility",
-        stage="static_eligibility",
-      )
-    if not eligibility.allowed:
-      return _AdmissionFailure(
-        reason_code="static_eligibility_contract_violation",
-        terminal=True,
-        message="analysis-only scanner result reached the executable store",
-        stage="static_eligibility",
-        measured={
-          "scanner_reason_code": eligibility.reason_code,
-          "market_map_id": eligibility.market_map_id,
-        },
-      )
   if match.confluence < max(1, runtime_config.auto_algo.actionability.gates.min_confluence):
     return _AdmissionFailure(
       reason_code="confluence_below_minimum",
@@ -2983,8 +2691,11 @@ def _arbitration_followup(
   if intent.intent_id in attempted_intent_ids:
     return None
   suppressed = intent.intent_id not in ordered_ids
+  thesis_winner = arbitration.thesis_losers.get(intent.intent_id)
   reason_code = (
-    arbitration.reason_code
+    "same_thesis_suppressed"
+    if thesis_winner is not None
+    else arbitration.reason_code
     if not arbitration.ordered
     else "another_intent_won"
     if published_intent is not None
@@ -2994,7 +2705,9 @@ def _arbitration_followup(
   )
   status = "arbitration_suppressed" if suppressed else "waiting"
   message = (
-    "intent excluded by cross-engine direction arbitration"
+    f"a better-ranked opportunity on the same thesis ({thesis_winner}) was selected"
+    if thesis_winner is not None
+    else "intent excluded by direction arbitration"
     if suppressed
     else "intent did not obtain final atomic publication ownership"
   )
@@ -3187,12 +2900,12 @@ async def _handle_event(
   client = client or redis_state.get_client()
   source = source or RedisOHLCSource(client)
   spot = await _load_spot(client, symbol)
-  scanner_strategy_matches = await _load_strategy_matches(client, symbol)
+  live_matches = await _load_strategy_matches(client, symbol)
   # Go is the sole automatic technical-opportunity producer. This filter is
-  # applied even for a ready-stream wake-up: a ZoneWatch or legacy Python
-  # caller cannot smuggle a non-Go match through the explicit-match path.
-  scanner_strategy_matches = [
-    item for item in scanner_strategy_matches
+  # applied even for a ready-stream wake-up: no non-Go match can enter
+  # through the explicit-match path.
+  live_matches = [
+    item for item in live_matches
     if GO_ORIGIN_TAG in item.tags
   ]
   # Execute only what Go still holds live. Go rebuilds its book under the
@@ -3201,18 +2914,18 @@ async def _handle_event(
   # from its published set. An unavailable set fails open, but a verified
   # live set also reconciles the retained projection so a stale winner cannot
   # remain looking executable in Redis.
-  if scanner_strategy_matches:
+  if live_matches:
     live_ids = await go_live_opportunity_ids(client, symbol)
     if live_ids is not None:
-      original_projection = scanner_strategy_matches
-      projected, scanner_strategy_matches = _reconcile_go_match_projection(
-        scanner_strategy_matches, live_ids,
+      original_projection = live_matches
+      projected, live_matches = _reconcile_go_match_projection(
+        live_matches, live_ids,
       )
-      scanner_strategy_matches = await _restore_reappeared_go_arbitration(
-        client, scanner_strategy_matches,
+      live_matches = await _restore_reappeared_go_arbitration(
+        client, live_matches,
       )
       restored_by_id = {
-        item.match_id: item for item in scanner_strategy_matches
+        item.match_id: item for item in live_matches
       }
       projected = [
         restored_by_id.get(item.match_id, item) for item in projected
@@ -3225,11 +2938,11 @@ async def _handle_event(
           ex=max(60, max(item.expires_at for item in projected) - now),
         )
   if ready_match_id is not None:
-    scanner_strategy_matches = [
-      item for item in scanner_strategy_matches
+    live_matches = [
+      item for item in live_matches
       if item.match_id == ready_match_id
     ]
-  if not scanner_strategy_matches:
+  if not live_matches:
     await _persist_idle_last_gate(
       client, symbol=symbol, event_ts=event_ts, spot=spot,
     )
@@ -3237,7 +2950,7 @@ async def _handle_event(
 
   # The Go event is the complete technical decision: do not call Python
   # regime, range, trendline, or scalp detectors on this path, and do not
-  # let scanner_strategy_matches (see above) ever carry a non-Go match
+  # let live_matches (see above) ever carry a non-Go match
   # here. OHLC is still loaded, same as the Python path (production
   # finding 2026-09-28: skipping it silently turned the execution-time
   # opposing-barrier/target-room recheck below into a no-op for every
@@ -3247,21 +2960,15 @@ async def _handle_event(
   # rechecks whether Go's own confirmed geometry is already contained in a
   # standing opposing zone before letting it publish.
   frames = await _load_frames(source, symbol)
-  strategy_matches = list(scanner_strategy_matches)
-  if runtime_config.auto_algo.strategies.matching.multiple_matches_enabled and strategy_matches:
-    strategy_matches, _ = dedupe_matches(
-      strategy_matches,
-      atr=strategy_matches[0].atr,
-      cfg=None,
-    )
-  elif strategy_matches:
-    strategy_matches = [strategy_matches[0]]
+  # Every live match competes in arbitration: same-thesis opportunities are
+  # resolved best-first there, not merged or first-come here.
+  strategy_matches = list(live_matches)
   strategy_match = select_primary(strategy_matches)
   observed_gate_source = (
     "multi_strategy_match"
     if len(strategy_matches) > 1
     else "scanner_strategy_match"
-    if scanner_strategy_matches
+    if live_matches
     else "private_ohlc"
   )
   spot_price = spot.price if spot is not None and spot.fresh else None
@@ -3290,7 +2997,6 @@ async def _handle_event(
         strategy=routed_match.strategy,
         direction=routed_match.direction,
         confluence=routed_match.confluence,
-        tier=routed_match.tier,
         freshness=_intent_freshness(
           routed_match.confirmation_bar_ts or routed_match.event_ts,
           routed_match.issued_at,
@@ -3315,6 +3021,7 @@ async def _handle_event(
         match_id=routed_match.match_id,
         reaction_id=routed_match.reaction_id,
         thesis_id=routed_match.thesis_id,
+        go_thesis_id=routed_match.go_thesis_id,
         current_price=spot_price,
         target_model=routed_match.target_model,
         targets_pips=routed_match.targets_pips,
@@ -3327,9 +3034,9 @@ async def _handle_event(
         proposed_group_id=group_id,
         cycle_id=str(event_ts or ""),
         quality_overall=routed_match.quality_overall,
+        structural_quality=routed_match.confluence_v2_raw,
+        atr=float(routed_match.atr or 0.0),
         bias_relationship=routed_match.bias_relationship,
-        arbitration_status=routed_match.arbitration_status,
-        arbitration_reason_code=routed_match.arbitration_reason_code,
         # Only an intent whose executable quote is inside its entry contract can
         # publish this cycle; the rest merely wait for a retest and must not
         # create a BUY-vs-SELL conflict with one that can.
@@ -3404,30 +3111,6 @@ async def _handle_event(
                 failure.reason_code,
               )
           await _consume_strategy_match(client, symbol, routed_match)
-      else:
-        # Private intents (range / trend) are recorded as unavailable and
-        # kept out of arbitration; the V6 candidate path is retired and no
-        # TradePlan equivalent publishes them.
-        await _record_private_route(
-          client,
-          symbol=symbol,
-          event_ts=event_ts,
-          strategy=intent.strategy,
-          family=intent.family,
-          direction=intent.direction,
-          source=intent.source,
-          structural_id=intent.structural_id,
-          entry_low=intent.entry_low,
-          entry_high=intent.entry_high,
-          spot_price=spot_price,
-          status="blocked",
-          reason_code="publication_unavailable",
-          message="private strategy has no active TradePlan publication path",
-          group_id=intent.proposed_group_id,
-          retained=False,
-          stage="publication",
-          terminal_reason_code="publication_unavailable",
-        )
     # Go owns every technical opportunity. Algo Bot owns execution policy, so
     # arbitration runs only after freshness, quote and route admission have
     # removed stale/non-executable opportunities from the decision set. Go's
@@ -3436,8 +3119,6 @@ async def _handle_event(
     gates = runtime_config.auto_algo.actionability.scanner_gates
     arbitration = arbitrate_execution_intents(
       arbitrable,
-      conflict_margin=float(gates.conflict_margin),
-      use_quality_ranking=bool(gates.use_quality_ranking),
       conflict_margin_quality=float(gates.conflict_margin_quality),
     )
 
@@ -3479,12 +3160,7 @@ async def _handle_event(
           )
           return publication_result
         try:
-          # TradePlan V8 is the sole autonomous order path, per
-          # docs/autotrade-execution-integrity.md - the V6 candidate path is
-          # removed entirely for autonomous publication (not gated behind a
-          # mode) so a confirmed setup can never arm both a TradePlan and a V6
-          # candidate for the same thesis. Existing open V6 positions are
-          # untouched; this only blocks new autonomous publication.
+          # TradePlan V8 is the only autonomous order path (docs/execution.md).
           published = await _publish_trade_plan_v8(
             client,
             symbol,
@@ -3699,185 +3375,3 @@ PUBLISH_STATUS_PUBLISHED = PUBLISH_STATUS_EXECUTION_HANDOFF_CREATED
 PUBLISH_STATUS_REMAINED_WATCHING = "remained_watching"
 PUBLISH_STATUS_INVALIDATED = "invalidated"
 PUBLISH_STATUS_REJECTED = "rejected"
-
-
-@dataclass(frozen=True)
-class PublishResult:
-  """Outcome of one deterministic try_publish_executable_signal() pass.
-
-  ``status`` is one of the PUBLISH_STATUS_* constants above. ``measured``
-  carries whatever telemetry the underlying evaluation produced (route
-  outcome style); it is best-effort and may be empty when the setup never
-  reached a stage that records measurements.
-  """
-
-  status: str
-  plan_id: str
-  reason_code: str
-  zone_id: str
-  setup_id: str
-  measured: Mapping[str, Any] = field(default_factory=dict)
-  executable_quote: float | None = None
-  quote_side: str | None = None
-
-
-async def try_publish_executable_signal(
-  client: Any,
-  match: StrategyMatch,
-  *,
-  symbol: str,
-  event_ts: str | None = None,
-  source: RedisOHLCSource | None = None,
-) -> PublishResult:
-  """The one authoritative CONFIRMED-zone -> TradePlan V8 pass (ADR P0).
-
-  Runs the exact same evaluation `_handle_event` already performs for a
-  durable ready-stream wake-up (reload canonical setup, validate state,
-  validate a fresh side-aware quote, validate quote-in-zone, validate any
-  required M1 trigger, build+publish TradePlan V8 atomically) but does it
-  synchronously, in the caller's own processing cycle, instead of via a
-  Redis stream round-trip to a separate consumer task. Callers that already
-  know a match is CONFIRMED and structurally eligible (the scanner, right
-  after confirming it) should call this directly; a match that is not yet
-  executable simply comes back ``remained_watching`` and the caller falls
-  back to the durable `auto_trade:strategy_match_ready` queue for later
-  retries (still required for waiting-retest/M1-trigger semantics).
-
-  Never raises for an ordinary rejection/wait outcome - only reraises on an
-  unexpected internal failure, matching every other entry point in this
-  module.
-  """
-  setup_id = match.match_id
-  zone_id = str(match.confluence_zone_id or match.structural_zone_id or "")
-  plan_id = _v8_plan_id(match)
-  if GO_ORIGIN_TAG not in match.tags:
-    # This is the final data-plane fence. A stale Python/ZoneWatch match may
-    # still be present in Redis after a restart, but it can never become a new
-    # automatic plan while Go owns technical production.
-    await record_route_outcome(
-      client,
-      match,
-      stage="mode_check",
-      status="blocked",
-      reason_code="python_match_rejected_live_go",
-      message="Go-only automatic analysis rejects non-Go matches",
-      retained=False,
-      publish_status=False,
-    )
-    return PublishResult(
-      status=PUBLISH_STATUS_REJECTED,
-      plan_id=plan_id,
-      reason_code="python_match_rejected_live_go",
-      zone_id=zone_id,
-      setup_id=setup_id,
-    )
-  bar_event = f"{symbol}:{EXECUTION_TIMEFRAME}:{event_ts or match.event_ts}"
-
-  await _handle_event(bar_event, source=source, client=client, ready_match_id=setup_id)
-
-  plan_state = await read_plan_state(client, plan_id)
-  setup_after = await load_setup(client, setup_id)
-  measured: dict[str, Any] = {}
-  raw_route = await client.get(route_outcome_key(symbol, setup_id))
-  if raw_route:
-    try:
-      route_payload = json.loads(
-        raw_route.decode() if isinstance(raw_route, bytes) else raw_route,
-      )
-    except (TypeError, ValueError, json.JSONDecodeError):
-      route_payload = {}
-    if isinstance(route_payload, dict):
-      measured = route_payload.get("measured") or {}
-      reason_code = str(route_payload.get("reason_code") or "")
-    else:
-      reason_code = ""
-  else:
-    reason_code = ""
-
-  spot = await _load_spot(client, symbol)
-  executable_quote: float | None = None
-  quote_side: str | None = None
-  if spot is not None and spot.fresh:
-    quote_side = "ask" if match.direction == "BUY" else "bid"
-    executable_quote = spot.ask if match.direction == "BUY" else spot.bid
-
-  if plan_state == "published":
-    zone_id_for_lock = zone_id
-    if zone_id_for_lock:
-      try:
-        from app.autotrade.zone_watch import (
-          LOCKED_ZONE_WATCH_STATES,
-          TERMINAL_ZONE_WATCH_STATES,
-          load_zone_watch,
-          lock_zone_watch_published,
-        )
-
-        latest = await load_zone_watch(client, zone_id_for_lock)
-        if (
-          latest is not None
-          and latest.state not in TERMINAL_ZONE_WATCH_STATES
-          and latest.state not in LOCKED_ZONE_WATCH_STATES
-        ):
-          await lock_zone_watch_published(
-            client,
-            zone_id_for_lock,
-            plan_id=plan_id,
-            reason_code=reason_code or "execution_handoff_created",
-          )
-      except Exception:
-        log.exception(
-          "zone watch publish lock failed zone_id=%s plan_id=%s",
-          zone_id_for_lock,
-          plan_id,
-        )
-    return PublishResult(
-      status=PUBLISH_STATUS_EXECUTION_HANDOFF_CREATED,
-      plan_id=plan_id,
-      reason_code=reason_code or "execution_handoff_created",
-      zone_id=zone_id,
-      setup_id=setup_id,
-      measured=measured,
-      executable_quote=executable_quote,
-      quote_side=quote_side,
-    )
-  if setup_after is None:
-    return PublishResult(
-      status=PUBLISH_STATUS_REJECTED,
-      plan_id=plan_id,
-      reason_code="setup_missing",
-      zone_id=zone_id,
-      setup_id=setup_id,
-      measured=measured,
-    )
-  if setup_after.state == INVALIDATED:
-    return PublishResult(
-      status=PUBLISH_STATUS_INVALIDATED,
-      plan_id=plan_id,
-      reason_code=reason_code or "structure_invalidated",
-      zone_id=zone_id,
-      setup_id=setup_id,
-      measured=measured,
-      executable_quote=executable_quote,
-      quote_side=quote_side,
-    )
-  if setup_after.state in TERMINAL_STATES:
-    return PublishResult(
-      status=PUBLISH_STATUS_REJECTED,
-      plan_id=plan_id,
-      reason_code=reason_code or setup_after.state,
-      zone_id=zone_id,
-      setup_id=setup_id,
-      measured=measured,
-      executable_quote=executable_quote,
-      quote_side=quote_side,
-    )
-  return PublishResult(
-    status=PUBLISH_STATUS_REMAINED_WATCHING,
-    plan_id=plan_id,
-    reason_code=reason_code or "zone_watching_retest",
-    zone_id=zone_id,
-    setup_id=setup_id,
-    measured=measured,
-    executable_quote=executable_quote,
-    quote_side=quote_side,
-  )

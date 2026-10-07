@@ -56,14 +56,11 @@ runtime:
     client_id:
       analysis_engine: apexvoid-analysis-engine
       algo_bot: apexvoid-algo-bot
-      ctrader_engine: apexvoid-ctrader-engine
     outbox_path: /var/lib/apexvoid-analysis-engine/publication-ledger.json
     topics:
       analysis_opportunity: analysis.opportunity.v1
       analysis_opportunity_invalidated: analysis.opportunity.invalidated.v1
       analysis_opportunity_arbitration: analysis.opportunity.arbitration.v1
-      execution_trade_plan: execution.trade-plan.v1
-      execution_trade_event: execution.trade-event.v1
     topic_specs:
       analysis.opportunity.v1:
         partitions: 3

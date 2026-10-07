@@ -12,35 +12,39 @@ pytestmark = pytest.mark.no_database
 
 
 @pytest.mark.asyncio
-async def test_funnel_text_renders_stages_and_block_reasons():
+async def test_funnel_text_renders_stages_exits_and_block_reasons():
   client = redis_state.get_client()
-  key = "auto_trade:metrics:XAU"
   await client.hset(
-    key,
+    "auto_trade:metrics:XAU",
     mapping={
-      "key_level_reaction_detected": 100,
-      "zone_reaction_detected": 40,
-      "scanner_setup_actionable": 80,
-      "scanner_actionability_gated:opposing_entry_overlap": 12,
-      "scanner_actionability_gated:execution_cost_insufficient_room": 8,
-      "candidate_published": 25,
+      "strategy_match_checking": 100,
+      "strategy_match_candidate_published": 25,
+      "v8_plan_published": 20,
+      "funnel_fill": 10,
+      "strategy_match_waiting": 40,
+      "strategy_match_blocked": 30,
       "strategy_match_blocked:confluence_below_minimum": 5,
       "strategy_match_blocked:strategy_disabled": 3,
-      "funnel_zone_discovered": 20,
-      "static_eligibility_blocked": 4,
-      "activation_allowed": 10,
-      "activation_blocked:reaction_trigger_missing": 7,
-      "activation_blocked:quote_outside_zone": 2,
-      "v8_plan_published": 6,
+      "strategy_match_arbitration_suppressed": 12,
+      "strategy_match_expired": 7,
       "target_room_rejected": 2,
     },
   )
 
   text = await auto_trade_funnel_text("XAU")
+
   assert "Algo funnel — XAU" in text
-  assert "detected: <b>140</b>" in text
-  assert "actionable: <b>80</b>" in text
-  assert "match_published: <b>25</b>" in text
-  assert "activation_allowed: <b>10</b>" in text
-  assert "opposing_entry_overlap: 12" in text
-  assert "reaction_trigger_missing: 7" in text
+  assert "checked: <b>100</b>" in text
+  assert "candidate_published: <b>25</b> (25% of prior)" in text
+  assert "plan_published: <b>20</b> (80% of prior)" in text
+  assert "filled: <b>10</b> (50% of prior)" in text
+  assert "arbitration_suppressed: <b>12</b>" in text
+  assert "confluence_below_minimum: 5" in text
+
+
+@pytest.mark.asyncio
+async def test_funnel_text_is_zero_filled_without_metrics():
+  text = await auto_trade_funnel_text("EURUSD")
+
+  assert "Algo funnel — EURUSD" in text
+  assert "checked: <b>0</b>" in text

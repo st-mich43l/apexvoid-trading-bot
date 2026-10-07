@@ -188,17 +188,3 @@ def names_for_family(family: str, *, include_retired: bool = True) -> frozenset[
     entry.canonical for entry in STRATEGY_NAMES
     if entry.family == family and (include_retired or not entry.retired)
   )
-
-
-def strategy_for_detector(detector_id: str) -> StrategyName | None:
-  legacy_canonical = {
-    "demand_zone_reaction": ZONE_REACTION,
-    "supply_zone_reaction": ZONE_REACTION,
-    "flip_supply_zone_reaction": FLIP_ZONE,
-  }.get(detector_id)
-  if legacy_canonical is not None:
-    return BY_CANONICAL[legacy_canonical]
-  return next(
-    (entry for entry in STRATEGY_NAMES if entry.detector_id == detector_id),
-    None,
-  )

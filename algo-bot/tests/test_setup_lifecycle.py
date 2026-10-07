@@ -37,7 +37,6 @@ from app.autotrade.setup_lifecycle import (
   is_publishable_setup_state,
   load_setup,
   normalize_setup_state,
-  rearm_setup,
   release_active_thesis,
   setup_key,
   transition_setup,
@@ -230,27 +229,6 @@ async def test_transition_on_unknown_setup_id_raises():
 
   with pytest.raises(SetupLifecycleError, match="unknown setup_id"):
     await transition_setup(client, "does-not-exist", WATCHING)
-
-
-@pytest.mark.asyncio
-async def test_rearm_requires_condition_and_terminal_state():
-  client = redis_state.get_client()
-  await create_setup(client, setup_id="setup-6", thesis_id="thesis-6", symbol="XAU")
-
-  with pytest.raises(SetupLifecycleError, match="rearm_condition"):
-    await rearm_setup(client, "setup-6", rearm_condition="")
-
-  with pytest.raises(SetupLifecycleError, match="not invalidated/expired"):
-    await rearm_setup(client, "setup-6", rearm_condition="new structure formed")
-
-  await transition_setup(client, "setup-6", WATCHING)
-  await transition_setup(client, "setup-6", INVALIDATED)
-
-  rearmed = await rearm_setup(
-    client, "setup-6", rearm_condition="liquidity swept, fresh demand formed",
-  )
-  assert rearmed.state == DISCOVERED
-  assert rearmed.invalidation_condition is None
 
 
 @pytest.mark.asyncio

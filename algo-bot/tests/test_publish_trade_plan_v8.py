@@ -77,24 +77,6 @@ def _native_xau_test_envelope(monkeypatch):
   )
 
 
-@pytest.fixture(autouse=True)
-def _freeze_technique_killzone_hour(monkeypatch):
-  """Publish suite stays under technique.enforce; freeze UTC hour to NY open."""
-  from app.autotrade import killzone as kz
-
-  real = kz.evaluate_killzone_gate
-  real_win = kz.evaluate_reaction_publish_window
-
-  def _gated(*, ts=None, hour=None, cfg=None, require=True):
-    return real(ts=None, hour=14, cfg=cfg, require=require)
-
-  def _window(*, ts=None, hour=None, cfg=None, require=True):
-    return real_win(ts=None, hour=14, cfg=cfg, require=require)
-
-  monkeypatch.setattr(kz, "evaluate_killzone_gate", _gated)
-  monkeypatch.setattr(kz, "evaluate_reaction_publish_window", _window)
-
-
 def _eligibility(
   *,
   direction: str,
@@ -293,7 +275,6 @@ def _intent_for_match(match: StrategyMatch) -> ExecutionIntent:
     strategy=match.strategy,
     direction=match.direction,
     confluence=match.confluence,
-    tier=match.tier,
     freshness=60.0,
     distance_pips=0.0,
     symbol=match.symbol,
@@ -677,37 +658,6 @@ def _scalp_eligibility(match: StrategyMatch) -> ExecutionEligibility:
     planned_entry_price=match.current_price,
     calculated_at=int(time.time()),
   )
-
-
-@pytest.mark.asyncio
-async def test_scalp_match_without_eligibility_is_admission_rejected(monkeypatch):
-  # Reproduces the production incident: every HFS opportunity (strategy_mode
-  # "hfs_scalp", routed through the generic source="scanner_strategy_match"
-  # intent branch, exempted only for "mapped_zone_reaction") was built with
-  # execution_eligibility=None -- the classic scanner.py detection path is
-  # the only thing that ever populates it. 34 of 55 live HFS publishes on
-  # 2026-08-06 died to exactly this before ever reaching a stop/target check.
-  client = redis_state.get_client()
-  match = _reaction_match(
-    match_id="scalp-preflight-missing",
-    thesis_id="scalp-preflight-missing-thesis",
-    strategy="Impulse Pullback Scalp",
-    strategy_mode="scalp_m1",
-    execution_eligibility=None,
-  )
-  await _confirm_setup(client, match)
-  spot = worker.AutoTradeSpot(
-    price=4038.51, ts=int(time.time()), fresh=True, bid=4038.41, ask=4038.61,
-  )
-  install_runtime_overrides(monkeypatch, overrides={"runtime.auto_trade.enabled": True})
-  install_runtime_overrides(monkeypatch, overrides={"runtime.auto_trade.strategy_match_enabled": True})
-  intent = _intent_for_match(match)
-
-  failure = await worker._admit_strategy_intent_for_cycle(
-    client, intent, match, spot=spot,
-  )
-  assert failure is not None
-  assert failure.reason_code == "static_eligibility_missing"
 
 
 @pytest.mark.asyncio

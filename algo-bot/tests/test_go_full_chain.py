@@ -28,25 +28,17 @@ from redis.asyncio import Redis
 from app.analysis_client.consumer import AnalysisOpportunityConsumer
 from app.analysis_client.models import ArbitrationTopic, OpportunityTopic, parse_analysis_event
 from app.autotrade import go_opportunity_policy as pol
-from app.autotrade import killzone, worker
+from app.autotrade import worker
 from app.autotrade.go_plan_cancel import request_plan_cancel
 from app.autotrade.multi_match import deserialize_matches, serialize_matches, strategy_matches_key
 from app.autotrade.route_outcome import route_outcome_key
 from app.autotrade.setup_lifecycle import CONFIRMED, PLAN_PUBLISHED, load_setup
 from app.autotrade.strategy_identity import structural_thesis_id
 from app.autotrade.trade_plan import TradePlan
-from app.autotrade.zone_watch import (
-  GRADE_A,
-  WATCHING_RETEST,
-  discover_zone_watch,
-  load_zone_watch,
-  transition_zone_watch,
-)
 from app.persistence import redis_state
 from tests.support.canonical_fixtures import install_runtime_overrides
 from tests.test_go_opportunity_policy import Harness, golden
 from tests.test_publish_trade_plan_v8 import (  # noqa: F401 - autouse fixtures
-  _freeze_technique_killzone_hour,
   _m1_trigger_bar,
   _no_news_by_default,
 )
@@ -57,7 +49,6 @@ def live_inputs(monkeypatch, *, bid=4354.1, ask=4354.3, news=None):
   """The market inputs the live worker cycle would read, pinned like the repo's own worker tests."""
   install_runtime_overrides(
     monkeypatch, {
-      "strategies.matching.multiple_matches_enabled": True,
       "instruments.XAU.stop_envelope.max_pips": 65,
     },
     legacy_overrides={
@@ -265,12 +256,11 @@ async def test_kafka_event_becomes_a_real_v8_plan_with_full_provenance(h, prod, 
   assert plan["sizing"]["mode"] == "equity_table" and plan["risk"]["max_group_risk_percent"] and plan["risk"]["risk_percent"]
   assert plan["stop"]["type"] == "absolute" and plan["targets"]
   TradePlan.from_dict(plan).validate()                                # the executor's own contract validator
-  # setup lifecycle, dedup tombstone, executor state and the Go plan index
+  # setup lifecycle, dedup tombstone and executor state
   assert (await load_setup(prod, match.match_id)).state == PLAN_PUBLISHED
   assert await prod.get(f"execution:plan_state:{plan['plan_id']}") == "published"
   assert await prod.exists(f"execution:plan_dedup:{plan['plan_id']}")
   assert (await route(prod, match.match_id))["status"] == "candidate_published"
-  assert json.loads(await prod.hget("analysis:go_plans", plan["plan_id"]))["scope"] == "supply"
 
 
 @pytest.mark.asyncio
@@ -370,6 +360,34 @@ async def test_every_reviewed_go_strategy_reaches_tradeplan_v8(h, prod, scope):
 
 
 @pytest.mark.asyncio
+async def test_two_opportunities_on_one_corridor_publish_one_plan_and_suppress_the_other(h, prod):
+  """Two Go opportunities on the same XAU sell corridor: one TradePlan, best first."""
+  await h.activate()
+  consumer = consumer_for(h)
+  await consumer.process_record(kafka_record(h.clock.now, "opp_a", offset=1))
+  await consumer.process_record(kafka_record(h.clock.now, "opp_b", offset=2))
+  assert {m.match_id for m in deserialize_matches(await prod.get(strategy_matches_key("XAU")))} == {
+    "go_opp_a", "go_opp_b",
+  }
+
+  await cycle(prod, n=3)
+
+  published = await plans(prod)
+  assert len(published) == 1
+  winner = published[0]["setup_id"]
+  loser = ({"go_opp_a", "go_opp_b"} - {winner}).pop()
+  assert (await route(prod, winner))["status"] == "candidate_published"
+  assert (await route(prod, loser))["reason_code"] in {
+    "same_thesis_suppressed", "entry_zone_overlap_same_direction",
+  }
+  # Kafka redelivers both records after the winner owns the corridor: still one plan.
+  await consumer.process_record(kafka_record(h.clock.now, "opp_a", offset=1))
+  await consumer.process_record(kafka_record(h.clock.now, "opp_b", offset=2))
+  await cycle(prod, n=3)
+  assert await prod.xlen(STREAM) == 1
+
+
+@pytest.mark.asyncio
 async def test_redelivery_and_repeated_cycles_never_duplicate_the_plan(h, prod):
   record = await go_event_delivered(h)
   await cycle(prod, n=3)
@@ -419,17 +437,6 @@ def _stale_spot(mp):
     price=4354.2, ts=int(time.time()) - 600, fresh=False, bid=4354.1, ask=4354.3)))
 
 
-_REAL_PUBLISH_WINDOW = killzone.evaluate_reaction_publish_window     # captured before the suite's autouse hour freeze
-
-
-def _outside_publish_window(mp):
-  install_runtime_overrides(
-    mp, {"execution.technique.reaction_require_publish_window": True},
-  )
-  mp.setattr(killzone, "evaluate_reaction_publish_window",
-             lambda *, ts=None, hour=None, cfg=None, require=True: _REAL_PUBLISH_WINDOW(ts=None, hour=3, cfg=cfg, require=require))
-
-
 def _below_min_confluence(mp):
   install_runtime_overrides(mp, {"actionability.gates.min_confluence": 99})
 
@@ -445,7 +452,6 @@ def _price_outside_entry_contract(mp):
 
 CONTROLS = [
   ("stale_spot", _stale_spot, "waiting", "stale_spot"),
-  ("publish_window", _outside_publish_window, "waiting", "outside_reaction_publish_window"),
   ("min_confluence", _below_min_confluence, "blocked", "confluence_below_minimum"),
   ("auto_trade_off", _auto_trade_disabled, "blocked", "auto_trade_disabled"),
   ("entry_contract", _price_outside_entry_contract, "waiting", "waiting_retest_entry_zone"),

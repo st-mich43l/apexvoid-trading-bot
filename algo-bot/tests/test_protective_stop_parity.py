@@ -13,11 +13,9 @@ from pathlib import Path
 
 import pytest
 
-from app.autotrade.execution_policy import planned_execution_route
 from app.autotrade.protective_stop import (
   OpposingZoneStopContext,
   ProtectiveStopError,
-  opposing_zone_fingerprint,
   plan_protective_stop,
 )
 
@@ -100,33 +98,6 @@ def test_shared_stop_fixture_matches_python_planner(case):
     )
 
 
-@pytest.mark.parametrize("case", _cases("routes"), ids=_ids("routes"))
-def test_shared_route_fixture_matches_python_route_resolution(case):
-  assert planned_execution_route(
-    order_type_preference=case["order_type_preference"],
-    entry_distribution=case["entry_distribution"],
-  ) == case["expected_route"]
-
-
-@pytest.mark.parametrize(
-  "case",
-  _cases("zone_identities"),
-  ids=_ids("zone_identities"),
-)
-def test_shared_zone_identity_fixture_matches_python_fingerprint(case):
-  # The executor derives the same string from the trade direction, so the
-  # fixture states the direction and both sides map it to the zone's own side.
-  assert opposing_zone_fingerprint(
-    symbol=case["symbol"],
-    timeframe=case["timeframe"],
-    side="demand" if case["direction"] == "BUY" else "supply",
-    low=case["zone_low"],
-    high=case["zone_high"],
-    created_bar_ts=case["created_bar_ts"],
-    source=case["source"],
-  ) == case["expected_fingerprint"]
-
-
 def test_pushed_stop_always_carries_the_exact_zone_identity():
   fixture = _fixture()
   case = next(
@@ -153,47 +124,3 @@ def test_pushed_stop_always_carries_the_exact_zone_identity():
   assert fields["stop_adjustment_zone_id"] == case["expected_adjustment_zone_id"]
   assert fields["stop_adjustment_zone_low"] == "3997"
   assert fields["stop_adjustment_zone_high"] == "3998.5"
-
-
-def test_zone_fingerprint_separates_identical_geometry_from_different_origins():
-  first = opposing_zone_fingerprint(
-    symbol="XAU",
-    timeframe="M15",
-    side="demand",
-    low="3997",
-    high="3998.5",
-    created_bar_ts=1_720_000_000,
-    source="supply_demand",
-  )
-  same = opposing_zone_fingerprint(
-    symbol="xau",
-    timeframe="m15",
-    side="Demand",
-    low="3997.00",
-    high="3998.50",
-    created_bar_ts=1_720_000_000,
-    source="Supply_Demand",
-  )
-  later_bar = opposing_zone_fingerprint(
-    symbol="XAU",
-    timeframe="M15",
-    side="demand",
-    low="3997",
-    high="3998.5",
-    created_bar_ts=1_720_000_900,
-    source="supply_demand",
-  )
-  other_detector = opposing_zone_fingerprint(
-    symbol="XAU",
-    timeframe="M15",
-    side="demand",
-    low="3997",
-    high="3998.5",
-    created_bar_ts=1_720_000_000,
-    source="order_block",
-  )
-
-  assert first == same
-  assert first != later_bar
-  assert first != other_detector
-

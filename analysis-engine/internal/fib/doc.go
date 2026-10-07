@@ -24,7 +24,7 @@
 // zone/liquidity at rank 3 (mutually independent siblings), the same
 // promotion those two packages already established for needing
 // structure.Swing directly — see
-// docs/architecture/dependency-rules.md's "zone promoted above
+// docs/architecture.md's "zone promoted above
 // structure" amendment, extended to fib/keylevel/trendline.
 // lands each one.
 package fib

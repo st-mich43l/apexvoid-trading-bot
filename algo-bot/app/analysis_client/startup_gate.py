@@ -27,12 +27,6 @@ def require_live_go_consumer(runtime_config: Any) -> None:
       f"(effective consumer_enabled={analysis_config.consumer_enabled!r}). "
       "Python scanners must not be used as a fallback."
     )
-  scanner_gates = runtime_config.auto_algo.actionability.scanner_gates
-  if not getattr(scanner_gates, "use_quality_ranking", True):
-    raise RuntimeError(
-      "Live Go analysis requires scanner_gates.use_quality_ranking=true; "
-      "Python evidence-count ranking is not permitted."
-    )
   kafka = runtime_config.runtime.kafka
   if (
     not kafka.enabled

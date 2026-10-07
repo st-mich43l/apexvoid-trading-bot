@@ -1,5 +1,5 @@
 // Package architecture_test statically enforces the dependency direction
-// frozen in docs/architecture/dependency-rules.md — a lower layer
+// frozen in docs/architecture.md — a lower layer
 // importing a higher one is a build-time-discoverable violation, not
 // something a doc can only describe. See docs/adr/006 for why this test
 // lives under the centralized test/ tree rather than beside any one
@@ -20,7 +20,7 @@ import (
 const modulePrefix = "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/"
 
 // rank is this repo's frozen dependency order (lower imports only from a
-// strictly lower rank), per docs/architecture/dependency-rules.md:
+// strictly lower rank), per docs/architecture.md:
 //
 //	market / telemetry
 //	  -> indicator / marketdata / config
@@ -35,7 +35,7 @@ const modulePrefix = "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine
 //
 // liquidity/context's ranks and telemetry's leaf->rank-0 reclassification
 // are amendments made when Analysis Engine V2 was implemented — see
-// docs/architecture/dependency-rules.md's own notes on those changes.
+// docs/architecture.md's own notes on those changes.
 //
 // transport sitting BELOW engine (not above it, as the original
 // architecture freeze had it) is a third amendment, made implementing the
@@ -54,7 +54,7 @@ const modulePrefix = "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine
 // itself — cannot import transport (7), which is exactly source task
 // §1's "strategy -> kafka" forbidden edge, and matches this repo's
 // pre-existing "Strategies must NOT depend on: Kafka · Redis..." rule
-// (docs/architecture/dependency-rules.md's Strategy dependency rule,
+// (docs/architecture.md's Strategy dependency rule,
 // §52) enforced structurally instead of by a separate carve-out.
 //
 // Structural domains that need swing and structure facts sit above those

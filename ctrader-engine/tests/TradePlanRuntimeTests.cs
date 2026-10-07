@@ -4376,8 +4376,22 @@ public sealed partial class TradePlanRuntimeTests
     // order (a broker outage / rejection): the order stays live.
     public int FailCancelCalls { get; set; }
 
+    // Orders the broker answers ORDER_NOT_FOUND for (already cancelled or
+    // filled on its side): the order is not in the pending snapshot either.
+    public HashSet<long> OrderNotFoundOnCancel { get; } = [];
+    public int CancelAttempts { get; private set; }
+
     public Task CancelPendingOrderAsync(long orderId, CancellationToken ct)
     {
+      CancelAttempts++;
+      if (OrderNotFoundOnCancel.Contains(orderId))
+      {
+        PendingOrders.RemoveAll(order => order.OrderId == orderId);
+        throw new CTraderOrderNotFoundException(
+          "cTrader order error after ProtoOACancelOrderReq: ORDER_NOT_FOUND: "
+          + $"Order {orderId} not found"
+        );
+      }
       if (FailCancelCalls > 0)
       {
         FailCancelCalls--;

@@ -238,6 +238,81 @@ public sealed partial class TradePlanRuntimeTests
   }
 
   [Fact]
+  public async Task CancelIntentTreatsOrdersTheBrokerNoLongerHasAsCancelledInsteadOfRetryingForever()
+  {
+    // Production 2026-10-07: the owner cancelled a manual plan's legs in
+    // cTrader. Every poll re-sent the cancel, the broker answered
+    // ORDER_NOT_FOUND each time (13.5k attempts per leg in a day) and the plan
+    // never retired.
+    var store = new FakeTradePlanStore();
+    store.EnqueuePlan(LadderPlanJson);
+    var client = new FakeTradePlanTradingClient();
+    var runtime = NewRuntime(store);
+    await runtime.PollAsync(
+      client, Symbol, new SpotPrice("XAU", 4095.00m, 4095.20m, 1), CancellationToken.None
+    );
+    var orderIds = Assert.Single(runtime.TrackedStates).Legs!
+      .Select(leg => leg.BrokerOrderId!.Value).ToArray();
+    foreach (var orderId in orderIds)
+    {
+      client.OrderNotFoundOnCancel.Add(orderId);
+    }
+
+    await WriteCancelIntent(store);
+    await runtime.PollAsync(
+      client, Symbol, new SpotPrice("XAU", 4095.00m, 4095.20m, 2), CancellationToken.None
+    );
+    var attempts = client.CancelAttempts;
+    await runtime.PollAsync(
+      client, Symbol, new SpotPrice("XAU", 4095.00m, 4095.20m, 3), CancellationToken.None
+    );
+
+    Assert.Equal(2, attempts);                         // one attempt per leg, ever
+    Assert.Equal(attempts, client.CancelAttempts);
+    Assert.Empty(runtime.TrackedStates);
+    Assert.Equal("cancelled", store.Value($"execution:plan_state:{PlanId}"));
+    Assert.Equal("cancelled_pending_orders", Ack(store).GetProperty("outcome").GetString());
+  }
+
+  [Fact]
+  public async Task CancelIntentKeepsALegWhoseOrderFilledJustBeforeTheCancelReachedTheBroker()
+  {
+    // ORDER_NOT_FOUND is also what a fill looks like. The leg must not be
+    // written off while a position carries its client order id: reconcile
+    // adopts the fill and the plan keeps managing it.
+    var store = new FakeTradePlanStore();
+    store.EnqueuePlan(LadderPlanJson);
+    var client = new FakeTradePlanTradingClient();
+    var runtime = NewRuntime(store);
+    await runtime.PollAsync(
+      client, Symbol, new SpotPrice("XAU", 4095.00m, 4095.20m, 1), CancellationToken.None
+    );
+    var legs = Assert.Single(runtime.TrackedStates).Legs!;
+    var l1 = Assert.Single(legs, leg => leg.LegId == "L1");
+    client.OrderNotFoundOnCancel.Add(l1.BrokerOrderId!.Value);
+    client.FillPendingOrder(l1.BrokerOrderId!.Value);
+
+    await WriteCancelIntent(store, source: "opportunity_invalidated");
+    await runtime.PollAsync(
+      client, Symbol, new SpotPrice("XAU", 4089.20m, 4089.40m, 2), CancellationToken.None
+    );
+    Assert.Null(store.Value(AckKey(PlanId)));          // not acked while L1 is unresolved
+    await runtime.PollAsync(                           // reconcile adopts the fill, then the intent completes
+      client, Symbol, new SpotPrice("XAU", 4089.20m, 4089.40m, 3), CancellationToken.None
+    );
+
+    var state = Assert.Single(runtime.TrackedStates);
+    var keptL1 = Assert.Single(state.Legs!, leg => leg.LegId == "L1");
+    Assert.NotNull(keptL1.BrokerPositionId);
+    Assert.NotEqual(TradePlanLegStages.Cancelled, keptL1.Stage);
+    Assert.Empty(client.Closes);
+    var ack = Ack(store);
+    Assert.Equal("positions_kept", ack.GetProperty("outcome").GetString());
+    Assert.Equal(1, ack.GetProperty("open_legs").GetInt32());
+    Assert.Equal(1, ack.GetProperty("cancelled_legs").GetInt32());   // L2 only
+  }
+
+  [Fact]
   public async Task CancelIntentStopsASubmittingPlanFromSendingItsRemainingLeg()
   {
     // L1 accepted, L2 threw: the plan is Submitting and would resend L2 on

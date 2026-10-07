@@ -1112,10 +1112,14 @@ public sealed class CTraderOpenApiFeedClient : ICTraderFeedClient, ICTraderTrade
           }
           if (message is ProtoOAOrderErrorEvent orderError)
           {
-            throw new InvalidOperationException(
+            var orderErrorMessage =
               $"cTrader order error after {request.GetType().Name}: "
-              + $"{orderError.ErrorCode}: {orderError.Description}"
-            );
+              + $"{orderError.ErrorCode}: {orderError.Description}";
+            throw string.Equals(
+              orderError.ErrorCode, "ORDER_NOT_FOUND", StringComparison.Ordinal
+            )
+              ? new CTraderOrderNotFoundException(orderErrorMessage)
+              : new InvalidOperationException(orderErrorMessage);
           }
           if (message is T typed && predicate(typed))
           {

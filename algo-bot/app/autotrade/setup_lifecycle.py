@@ -1,7 +1,7 @@
 """Setup lifecycle state machine for TradePlan V8 analysis (Phase 2).
 
 This is a distinct state machine from `app/autotrade/lifecycle.py`'s
-`LIFECYCLE_STATES`, which tracks V6 execution progress
+`LIFECYCLE_STATES`, which tracks execution progress
 (order_planned/order_submitted/managing/...). This module tracks the
 *analysis* side: whether a structural reaction is still being watched,
 forming, confirmed, or has produced a plan. A CONFIRMED setup publishes
@@ -517,44 +517,6 @@ async def expire_setup(
     client, setup_id, EXPIRED, reason_code=reason_code,
   )
   return updated, "transitioned" if changed else "already_terminal"
-
-
-async def rearm_setup(
-  client: Any,
-  setup_id: str,
-  *,
-  rearm_condition: str,
-) -> SetupRecord:
-  """Explicitly return an INVALIDATED/EXPIRED setup to DISCOVERED.
-
-  This is the only way back into the graph from a terminal analysis state,
-  and it requires a caller-supplied, non-empty ``rearm_condition`` (e.g. "new
-  structure formed on the same level after a swept liquidity run") - never a
-  bare transition, so a rearm always leaves an audit trail of *why*.
-  """
-  if not rearm_condition:
-    raise SetupLifecycleError("rearm_setup requires a non-empty rearm_condition")
-  record = await load_setup(client, setup_id)
-  if record is None:
-    raise SetupLifecycleError(f"rearm_setup: unknown setup_id {setup_id!r}")
-  if record.state not in (INVALIDATED, EXPIRED):
-    raise SetupLifecycleError(
-      f"rearm_setup: {setup_id!r} is {record.state!r}, not invalidated/expired",
-    )
-  updated = replace(
-    record,
-    state=DISCOVERED,
-    invalidation_condition=None,
-    # The old expires_at belonged to the terminal instance being rearmed
-    # from; carrying it forward would re-add this setup_id to
-    # analysis:setup_expiry with a stale (often already-past) score and the
-    # sweeper would immediately re-expire it. A fresh expires_at is set the
-    # next time this setup transitions forward (e.g. into CONFIRMED).
-    expires_at=None,
-    updated_at=int(time.time()),
-  )
-  await _save(client, updated)
-  return updated
 
 
 async def claim_active_thesis(

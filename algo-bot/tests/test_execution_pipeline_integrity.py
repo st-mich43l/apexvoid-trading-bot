@@ -44,34 +44,14 @@ def _no_news_by_default(monkeypatch):
   )
 
 
-@pytest.fixture(autouse=True)
-def _freeze_technique_killzone_hour(monkeypatch):
-  from app.autotrade import killzone as kz
-
-  real = kz.evaluate_killzone_gate
-  real_win = kz.evaluate_reaction_publish_window
-
-  def _gated(*, ts=None, hour=None, cfg=None, require=True):
-    return real(ts=None, hour=14, cfg=cfg, require=require)
-
-  def _window(*, ts=None, hour=None, cfg=None, require=True):
-    return real_win(ts=None, hour=14, cfg=cfg, require=require)
-
-  monkeypatch.setattr(kz, "evaluate_killzone_gate", _gated)
-  monkeypatch.setattr(kz, "evaluate_reaction_publish_window", _window)
-
-
 def _intent(
   intent_id: str,
   *,
   direction: str,
   confluence: int = 3,
-  tier: str = "A",
   freshness: float = 100.0,
   distance_pips: float = 0.0,
   quality_overall: float | None = None,
-  arbitration_status: str | None = None,
-  arbitration_reason_code: str | None = None,
 ) -> ExecutionIntent:
   return ExecutionIntent(
     intent_id=intent_id,
@@ -79,12 +59,9 @@ def _intent(
     strategy="Liquidity Sweep",
     direction=direction,
     confluence=confluence,
-    tier=tier,
     freshness=freshness,
     distance_pips=distance_pips,
     quality_overall=quality_overall,
-    arbitration_status=arbitration_status,
-    arbitration_reason_code=arbitration_reason_code,
   )
 
 
@@ -101,69 +78,37 @@ def test_arbiter_suppresses_equal_opposite_direction_intents():
 
 def test_arbiter_orders_only_the_winning_direction():
   result = arbitrate_execution_intents([
-    _intent("buy-a", direction="BUY", confluence=4),
-    _intent("buy-b", direction="BUY", confluence=3),
-    _intent("sell-b", direction="SELL", confluence=2, tier="B"),
+    _intent("buy-a", direction="BUY", confluence=4, quality_overall=0.9),
+    _intent("buy-b", direction="BUY", confluence=3, quality_overall=0.8),
+    _intent("sell-b", direction="SELL", confluence=2, quality_overall=0.3),
   ])
 
   assert [item.intent_id for item in result.ordered] == ["buy-a", "buy-b"]
   assert [item.intent_id for item in result.suppressed] == ["sell-b"]
 
 
-def test_quality_ranking_off_by_default_reproduces_legacy_confluence_order():
-  # Equal confluence (old signal ties), different quality (real signal
-  # differs) - with the flag off, this must still gridlock exactly like
-  # today's production behavior, since quality is not consulted.
+def test_quality_decides_a_confluence_tie_between_opposite_directions():
   result = arbitrate_execution_intents([
     _intent("buy", direction="BUY", confluence=3, quality_overall=0.95),
     _intent("sell", direction="SELL", confluence=3, quality_overall=0.10),
   ])
-
-  assert result.ordered == ()
-  assert result.reason_code == "opposite_direction_conflict"
-
-
-def test_quality_ranking_resolves_a_confluence_tie_the_legacy_path_could_not():
-  result = arbitrate_execution_intents(
-    [
-      _intent("buy", direction="BUY", confluence=3, quality_overall=0.95),
-      _intent("sell", direction="SELL", confluence=3, quality_overall=0.10),
-    ],
-    use_quality_ranking=True,
-  )
 
   assert [item.intent_id for item in result.ordered] == ["buy"]
   assert [item.intent_id for item in result.suppressed] == ["sell"]
   assert result.reason_code == "ranked_single_direction"
 
 
-def test_quality_ranking_holds_when_quality_gap_is_within_margin():
+def test_opposite_directions_hold_when_quality_gap_is_within_margin():
   result = arbitrate_execution_intents(
     [
       _intent("buy", direction="BUY", confluence=3, quality_overall=0.80),
       _intent("sell", direction="SELL", confluence=3, quality_overall=0.75),
     ],
-    use_quality_ranking=True,
     conflict_margin_quality=0.15,
   )
 
   assert result.ordered == ()
   assert result.reason_code == "opposite_direction_conflict"
-
-
-def test_quality_ranking_falls_back_to_confluence_when_quality_is_missing():
-  # A hypothetical non-Go intent with no quality_overall must not crash the
-  # quality-ranking path, and must not be silently treated as quality 0.
-  result = arbitrate_execution_intents(
-    [
-      _intent("buy", direction="BUY", confluence=4, quality_overall=None),
-      _intent("sell", direction="SELL", confluence=2, quality_overall=None),
-    ],
-    use_quality_ranking=True,
-  )
-
-  assert [item.intent_id for item in result.ordered] == ["buy"]
-  assert result.reason_code == "ranked_single_direction"
 
 
 def _policy_match(**overrides):
@@ -619,13 +564,13 @@ def test_all_selected_publication_failures_keep_exact_publisher_evidence():
   from app.autotrade.worker import _arbitration_followup
 
   selected_a = _intent(
-    "buy-a", direction="BUY", confluence=4, tier="A",
+    "buy-a", direction="BUY", confluence=4, quality_overall=0.9,
   )
   selected_b = _intent(
-    "buy-b", direction="BUY", confluence=3, tier="B",
+    "buy-b", direction="BUY", confluence=3, quality_overall=0.8,
   )
   opposite = _intent(
-    "sell-b", direction="SELL", confluence=2, tier="B",
+    "sell-b", direction="SELL", confluence=2, quality_overall=0.3,
   )
   # TradePlan-cutover: arbitration works directly on admitted intents; the old
   # ``ExecutionPreflightDecision`` wrapper is gone.
@@ -656,8 +601,36 @@ def test_all_selected_publication_failures_keep_exact_publisher_evidence():
   ) == (
     "arbitration_suppressed",
     "selected_direction_exhausted",
-    "intent excluded by cross-engine direction arbitration",
+    "intent excluded by direction arbitration",
   )
+
+
+def test_same_thesis_loser_is_reported_as_same_thesis_suppressed():
+  from app.autotrade.worker import _arbitration_followup
+
+  band = {"entry_low": 100.0, "entry_high": 101.0, "atr": 1.0}
+  winner = ExecutionIntent(
+    intent_id="win", source="go_analysis_engine", strategy="Key Level",
+    direction="BUY", confluence=3, freshness=1.0, distance_pips=0.0,
+    quality_overall=0.9, **band,
+  )
+  loser = ExecutionIntent(
+    intent_id="lose", source="go_analysis_engine", strategy="Order Block",
+    direction="BUY", confluence=3, freshness=1.0, distance_pips=0.0,
+    quality_overall=0.7, **band,
+  )
+  arbitration = arbitrate_execution_intents([loser, winner])
+
+  assert [item.intent_id for item in arbitration.ordered] == ["win"]
+  status, reason, message = _arbitration_followup(
+    loser,
+    arbitration=arbitration,
+    published_intent=winner,
+    ordered_ids={"win"},
+    attempted_intent_ids={"win"},
+  )
+  assert (status, reason) == ("arbitration_suppressed", "same_thesis_suppressed")
+  assert "win" in message
 
 
 @pytest.mark.asyncio

@@ -22,7 +22,8 @@ async def test_creation_replay_and_terminal_tombstone_are_idempotent(sql):
   assert (await repository.apply(terminal, topic=InvalidationTopic, partition=0, offset=6)).disposition == "terminated"
   late = parse_analysis_event(OpportunityTopic, json.dumps(_opportunity(event_id="evt-create-late")))
   assert (await repository.apply(late, topic=OpportunityTopic, partition=0, offset=7)).disposition == "late_creation_rejected"
-  assert await repository.active_for_symbol("XAU", now=200) == []
+  row = await sql.row("SELECT state FROM analysis_opportunities WHERE opportunity_id = 'opp-1'")
+  assert row["state"] != "active"
 
 
 @pytest.mark.asyncio

@@ -1,9 +1,0 @@
-# Liquidity Sweep Strategy V2
-
-`liquidity_sweep` consumes a canonical liquidity pool swept and reclaimed on
-the current M5 close. The rejection body must clear its own ATR threshold.
-Entry is the reclaimed pool band, invalidation is beyond the sweep extreme and
-target is configured R. Identity is the pool ID. A sweep without same-bar
-reclaim, weak rejection or previously consumed objective rejects. This remains
-distinct from Snap-Back. It is enabled in the live Go opportunity stream; Algo
-Bot applies execution policy before any TradePlan is published.

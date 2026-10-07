@@ -70,15 +70,6 @@ func BenchmarkCanonicalATR_M5_1000(b *testing.B) {
 	}
 }
 
-func BenchmarkRollingSimpleATR_PerBar(b *testing.B) {
-	candles := randomCandles(b.N)
-	r := indicator.NewRollingSimpleATR(14)
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		r.Update(candles[i])
-	}
-}
-
 func BenchmarkDetectPivots_M5_1000(b *testing.B) {
 	candles := randomCandles(1000)
 	atr, _ := indicator.CanonicalATR(candles, 14, indicator.AlgorithmSimple)

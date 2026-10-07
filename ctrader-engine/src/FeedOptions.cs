@@ -24,13 +24,4 @@ public sealed record FeedOptions(
   TimeSpan TokenRefreshLead,
   TimeSpan TokenCheckInterval,
   string ExpectedBroker = "fpmarkets"
-)
-{
-  private static string RedisSymbolFromCTrader(string symbol)
-  {
-    var normalized = symbol.Replace("/", "", StringComparison.Ordinal).ToUpperInvariant();
-    return normalized.EndsWith("USD", StringComparison.Ordinal)
-      ? normalized[..^3]
-      : normalized;
-  }
-}
+);

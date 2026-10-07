@@ -17,9 +17,11 @@ tests/test_worker_idle_m1.py
 tests/test_ohlc_bar_cache.py
 tests/test_active_exposure.py
 tests/test_opposite_exposure_policy.py
+tests/test_execution_pipeline_integrity.py
+tests/test_calendar.py
+tests/test_owner_dm_journal.py
 tests/test_manual_plan.py
 tests/test_entry_overlap.py
-tests/test_zone_watch_published_locked.py
 tests/test_setup_card.py
 tests/test_execution_confirmation.py
 tests/test_auto_trade_stats_ingestion.py
@@ -31,13 +33,10 @@ tests/test_xau_risk_targeted_entry.py
 tests/test_legs_achieved_pips.py
 tests/test_telegram_single_root_card.py
 tests/test_worker_terminal_card_cleanup.py
-tests/test_scalp_risk_reconcile.py
 tests/test_autotrade_units.py
 tests/test_fx_one_to_two.py
 tests/test_import_all_modules.py
 tests/test_htf_walls_live_only.py
-tests/test_setups_report.py
-tests/test_zone_execution_cutover.py
 tests/test_analysis_client_models.py
 tests/test_analysis_consumer.py
 tests/test_analysis_opportunity_repository.py
@@ -45,7 +44,6 @@ tests/test_analysis_consumer_persistence.py
 tests/test_capture_bars.py
 tests/test_go_only_startup_gate.py
 tests/test_go_opportunity_policy.py
-tests/test_thesis_correlation.py
 tests/test_go_zone_book.py
 tests/test_analysis_freshness.py
 tests/test_analysis_lifecycle.py

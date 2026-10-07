@@ -26,10 +26,8 @@ type LifecycleConfig struct {
 	EpsilonATR float64
 }
 
-// State is this package's own zone lifecycle — deliberately simpler than
-// ZoneWatch's 7-state execution machine (see doc.go). Derived fresh from
-// TouchCount/NotInvalidated/IsSpent on every Update, never persisted
-// independently.
+// State is this package's own zone lifecycle. Derived fresh from
+// TouchCount/NotInvalidated on every Update, never persisted independently.
 type State uint8
 
 const (
@@ -137,27 +135,6 @@ func NotInvalidated(candles []market.Candle, fromIndex int, z Zone, atr float64,
 		i++
 	}
 	return true
-}
-
-// IsSpent is technique_geometry.py::zone_is_spent, ported exactly: an
-// untouched zone (touches == 0) is never spent — mitigation requires at
-// least one touch first. Exceeding cfg.RetestMaxTouches spends it
-// outright (a sanity cap). Otherwise a touched zone is spent iff it is
-// no longer NotInvalidated — touching alone never kills a zone, exactly
-// the PR #574 fix this whole file exists to encode. Kept as a single
-// bool gate matching Python's own validate_technique_instance use (a
-// simple valid/invalid check); DeriveState below inspects the same two
-// underlying facts separately, since spec §17 treats "structurally
-// broken" and "exhausted by retests" as different properties, not one
-// collapsed flag.
-func IsSpent(candles []market.Candle, fromIndex int, z Zone, touches int, atr float64, cfg LifecycleConfig) bool {
-	if touches <= 0 {
-		return false
-	}
-	if cfg.RetestMaxTouches > 0 && touches > cfg.RetestMaxTouches {
-		return true
-	}
-	return !NotInvalidated(candles, fromIndex, z, atr, cfg)
 }
 
 // DeriveState turns TouchCount plus the two independent spent reasons

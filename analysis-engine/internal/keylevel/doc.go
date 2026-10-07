@@ -33,6 +33,6 @@
 // context, opportunity, strategy, or transport — it joins zone/
 // liquidity/fib at rank 3, the same promotion those packages already
 // established for needing structure.Swing directly — see
-// docs/architecture/dependency-rules.md's "zone promoted above
+// docs/architecture.md's "zone promoted above
 // structure" amendment, extended through the shared technical domains.
 package keylevel

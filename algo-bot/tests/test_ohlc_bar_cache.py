@@ -8,8 +8,6 @@ import pytest
 
 from app.marketdata.ohlc import (
   RedisOHLCSource,
-  prefetch_closed_bar_windows,
-  prefetch_timeframes_for_closed_bar,
 )
 
 
@@ -69,21 +67,3 @@ async def test_closed_bar_cache_refetches_when_need_grows():
   assert len(client.calls) == 2
   assert client.calls[0][2] == 0
   assert client.calls[1][2] == 2
-
-
-def test_m1_closed_bar_does_not_prefetch_htf():
-  assert prefetch_timeframes_for_closed_bar("M1") == ()
-  assert prefetch_timeframes_for_closed_bar("m1") == ()
-  assert prefetch_timeframes_for_closed_bar("M5") == ("M1", "M5", "M15", "H1")
-
-
-@pytest.mark.asyncio
-async def test_prefetch_m1_does_not_call_window():
-  calls: list[str] = []
-
-  class _Source:
-    async def window(self, symbol, tf, n):
-      calls.append(tf)
-
-  await prefetch_closed_bar_windows(_Source(), "XAU", closed_tf="M1")
-  assert calls == []

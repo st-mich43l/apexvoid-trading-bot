@@ -228,7 +228,6 @@ async def _symbol_from_manual_candidate(event: dict) -> str | None:
   return str(raw or "XAU").upper()
 
 
-
 async def _send_executor_truth(text: str) -> None:
   """Operational truth from the Auto Algo / scanner bot (rejects, dry-run)."""
   if runtime_config.telegram.telegram_owner_id:

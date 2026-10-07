@@ -20,7 +20,6 @@
 # happens to also be named telegram.yml; the value/meaning is unchanged.
 telegram:
   lifecycle:
-    delete_on_terminal: true
     thread_lifecycle: true
 
   presentation:
@@ -32,9 +31,6 @@ telegram:
       enabled: true
       skip_empty: false
       utc_hour: 8
-
-  scanner_cards:
-    top_n: 3
 
   # 2026-09-17: was hardcoded off in code (should_delete_root_on_terminal)
   # since 2026-08-17 to avoid orphaning reply threads. Owner accepted that

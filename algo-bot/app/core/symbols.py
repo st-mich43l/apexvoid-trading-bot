@@ -174,16 +174,6 @@ def channels_for(symbol: str, visibility: str) -> list[dict]:
   return matched
 
 
-def targets_for(sig: dict) -> list[int]:
-  return [
-    int(channel["channel_id"])
-    for channel in channels_for(
-      sig["symbol"],
-      sig.get("visibility", "both"),
-    )
-  ]
-
-
 def channel_for_symbol(symbol: str) -> int:
   channels = channels_for(symbol, "vip")
   if not channels:
