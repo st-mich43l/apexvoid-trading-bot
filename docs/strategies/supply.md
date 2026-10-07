@@ -93,6 +93,29 @@ failed structurally), or `Relevance=Remote` (not currently near price),
 or no liquidity pool below (`test/strategy/supply/supply_test.go` covers
 all three).
 
+## Higher-timeframe zones
+
+The tradable path is the confirmed reaction: the frozen technique publisher
+reads the M5 frame's supply instances and a rejection on M5 bars (the resting
+zone above is an observation only; Algo Bot executes confirmed reactions).
+The frozen Python publishers read the M5 zone population alone. With
+`higher_timeframes: [M15]` (set in `config/analysis.yml`) the M15 frame's own
+supply zones, built by the same collection on M15 bars and ATR, are also
+evaluated against the M5 closed bars: same reaction confirmation, entry
+validity, entry clip and stop rules.
+
+- A higher-timeframe zone is anchored to the M5 bar of the same open time (an
+  origin older than the M5 window is dropped) and never joins the confluence
+  bands, so every M5 decision is unchanged: it is a second, separate candidate
+  (`technique:supply_demand:<side>:<origin>@M15`) carrying the extra evidence code
+  `htf_zone_m15`, and arbitration treats it like any other same-thesis
+  competitor.
+- This is the one deliberate extension of the frozen contract; there is no
+  Python oracle for it. Evidence: the replay of the 14-21 Sep and the 7 Oct XAU
+  captures keeps every previous envelope byte-identical (none removed or
+  changed) and adds M15 reactions only; that shows what is emitted, not whether
+  it earns. Remove `higher_timeframes` to turn it off.
+
 ## Status and execution
 
 - **Certification**: `LEGACY_PARITY_PROVEN` ([matrix](README.md#certification)).

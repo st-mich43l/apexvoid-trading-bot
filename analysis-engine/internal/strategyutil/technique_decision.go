@@ -181,6 +181,10 @@ func bandCovers(band ConfluenceBand, in techniquezone.Instance) bool {
 type TechniqueSource struct {
 	Detector  *LegacyDetector
 	Instances []techniquezone.Instance
+	// HigherInstances are higher-timeframe supply/demand instances bound to
+	// the execution frame (OriginIndex mapped by bar time). They never join the
+	// confluence bands, so the execution-frame decisions are unchanged.
+	HigherInstances []techniquezone.Instance
 	// RetestMaxTouches is technique_retest_max_touches.
 	RetestMaxTouches int
 }
@@ -193,10 +197,43 @@ func NewTechniqueSource(ctx *analysiscontext.MarketContext, tf market.Timeframe,
 		return nil, false
 	}
 	instances := base.Frame.Techniques()
-	if len(instances) == 0 {
+	higher := higherInstances(ctx, base.Frame.Bars, settings.HigherTimeframes)
+	if len(instances) == 0 && len(higher) == 0 {
 		return nil, false
 	}
-	return &TechniqueSource{Detector: base, Instances: instances, RetestMaxTouches: settings.RetestMaxTouches}, true
+	return &TechniqueSource{Detector: base, Instances: instances, HigherInstances: higher, RetestMaxTouches: settings.RetestMaxTouches}, true
+}
+
+// higherInstances binds each configured higher timeframe's supply/demand
+// instances to the execution frame. An instance whose origin bar is older than
+// the execution window cannot be anchored there and is dropped.
+func higherInstances(ctx *analysiscontext.MarketContext, execBars []market.Candle, timeframes []market.Timeframe) []techniquezone.Instance {
+	if len(execBars) == 0 {
+		return nil
+	}
+	var out []techniquezone.Instance
+	for _, tf := range timeframes {
+		frameContext := ctx.Timeframes[tf]
+		if frameContext == nil || frameContext.Legacy == nil || frameContext.Legacy.Techniques == nil {
+			continue
+		}
+		bars := frameContext.Legacy.Bars
+		for _, in := range frameContext.Legacy.Techniques() {
+			if in.OriginIndex < 0 || in.OriginIndex >= len(bars) {
+				continue
+			}
+			originTime := bars[in.OriginIndex].Time
+			index := sort.Search(len(execBars), func(i int) bool { return execBars[i].Time >= originTime })
+			if index >= len(execBars) || execBars[0].Time > originTime {
+				continue
+			}
+			bound := in
+			bound.OriginIndex = index
+			bound.Timeframe = string(tf)
+			out = append(out, bound)
+		}
+	}
+	return out
 }
 
 func instanceZone(in techniquezone.Instance) techniquezone.Zone {
@@ -256,6 +293,9 @@ func instanceID(in techniquezone.Instance, d *LegacyDetector) string {
 	} else if in.OriginIndex >= 0 && in.OriginIndex < len(d.Frame.Bars) {
 		origin = d.Frame.Bars[in.OriginIndex].Time
 	}
+	if in.Timeframe != "" {
+		return fmt.Sprintf("technique:%s:%s:%d@%s", in.Technique, in.Side, origin, in.Timeframe)
+	}
 	return fmt.Sprintf("technique:%s:%s:%d", in.Technique, in.Side, origin)
 }
 
@@ -286,6 +326,29 @@ func (s *TechniqueSource) Technique(technique string) *TechniqueDecision {
 			}
 		}
 		if covered {
+			continue
+		}
+		decision := s.publish(in)
+		if decision == nil {
+			continue
+		}
+		distance := decision.Detector.ZoneDistance(decision.Result.Zone)
+		if best == nil || decision.Result.Stars > best.Result.Stars || decision.Result.Stars == best.Result.Stars && distance < bestDistance {
+			best, bestDistance = decision, distance
+		}
+	}
+	return best
+}
+
+// HigherTechnique is Technique's counterpart for the bound higher-timeframe
+// instances: the best confirmed reaction among them, by the same rule. It is a
+// separate decision, never competing with the execution frame's, so enabling
+// higher timeframes can only add opportunities.
+func (s *TechniqueSource) HigherTechnique(technique string) *TechniqueDecision {
+	var best *TechniqueDecision
+	bestDistance := math.Inf(1)
+	for _, in := range s.HigherInstances {
+		if in.Technique != technique {
 			continue
 		}
 		decision := s.publish(in)
@@ -345,18 +408,20 @@ func ConfirmedTechnique(ctx *analysiscontext.MarketContext, legacy LegacyDetecto
 	if !ok {
 		return nil
 	}
-	var dec *TechniqueDecision
+	var decisions []*TechniqueDecision
 	if technique == "confluence_zone" {
-		dec = source.ConfluenceZone()
+		decisions = append(decisions, source.ConfluenceZone())
 	} else {
-		dec = source.Technique(technique)
+		decisions = append(decisions, source.Technique(technique), source.HigherTechnique(technique))
 	}
-	if dec == nil || direction != "" && dec.Direction != direction {
-		return nil
+	var out []opportunity.Candidate
+	for _, dec := range decisions {
+		if dec == nil || direction != "" && dec.Direction != direction {
+			continue
+		}
+		if candidate, ok := TechniqueCandidate(ctx, dec, spec); ok {
+			out = append(out, candidate)
+		}
 	}
-	candidate, ok := TechniqueCandidate(ctx, dec, spec)
-	if !ok {
-		return nil
-	}
-	return []opportunity.Candidate{candidate}
+	return out
 }

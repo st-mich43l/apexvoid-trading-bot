@@ -121,6 +121,31 @@ func techniqueInstanceSource(exec *analysiscontext.LegacyFrame, h1 *analysiscont
 	}
 }
 
+// higherTimeframeInstanceSource lazily yields the supply/demand instances of a
+// higher timeframe's own scored zones (same collection the execution frame
+// uses, on that frame's bars and ATR). OriginIndex is relative to that frame;
+// the strategy that binds them to the execution frame maps it by bar time.
+func higherTimeframeInstanceSource(frame *analysiscontext.LegacyFrame, tf market.Timeframe, settings Settings) func() []techniquezone.Instance {
+	var once sync.Once
+	var instances []techniquezone.Instance
+	return func() []techniquezone.Instance {
+		once.Do(func() {
+			if len(frame.Bars) < 10 {
+				return
+			}
+			atr := techniquezone.ATRScalar(frame.ATR, 1)
+			for _, in := range techniquezone.InstancesFromScoredZones(frame.TechniqueZones, frame.Bars, atr, settings.TechniqueZones.Technique) {
+				if in.Technique != "supply_demand" {
+					continue
+				}
+				in.Timeframe = string(tf)
+				instances = append(instances, in)
+			}
+		})
+		return instances
+	}
+}
+
 // crtMinimumH1RangeATR reads the CRT strategy's own impulse threshold.
 func crtMinimumH1RangeATR(settings Settings, fallback float64) float64 {
 	for _, cfg := range settings.Strategies {

@@ -12,6 +12,17 @@ dated section after deployment.
 
 ## Unreleased
 
+### Added
+- Supply and Demand also trade confirmed reactions at M15 zones. Until now the
+  technique publishers (frozen Python contract) read the M5 zone population only,
+  so a fresh M15 supply such as XAU 4109-4118 could never produce a sell setup.
+  `analysis.strategies.supply|demand.higher_timeframes: [M15]` makes the engine also
+  evaluate the M15 frame's own supply/demand zones against the M5 closed bars (same
+  reaction, entry and stop rules; separate candidate `technique:...@M15` with
+  evidence `htf_zone_m15`; no M5 decision changes). Replay of the 7 Oct XAU capture:
+  no envelope removed or changed, 108 added (63 supply, 45 demand). Remove the key to
+  turn it off.
+
 ### Changed
 - Manual `/algo` stop management is restored to its pre-V8 behavior (the V8
   migration had replaced it with BE+6 ticks per leg after TP1 and the TP1 price

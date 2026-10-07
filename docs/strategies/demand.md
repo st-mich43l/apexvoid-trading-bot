@@ -69,6 +69,29 @@ a Buy candidate with invalidation at 2019.5 and target 2032.
 Valid: as above. Invalid: `State=Invalidated`, `Relevance=Dormant`, or no
 buy-side liquidity above (`test/strategy/demand/demand_test.go`).
 
+## Higher-timeframe zones
+
+The tradable path is the confirmed reaction: the frozen technique publisher
+reads the M5 frame's demand instances and a rejection on M5 bars (the resting
+zone above is an observation only; Algo Bot executes confirmed reactions).
+The frozen Python publishers read the M5 zone population alone. With
+`higher_timeframes: [M15]` (set in `config/analysis.yml`) the M15 frame's own
+demand zones, built by the same collection on M15 bars and ATR, are also
+evaluated against the M5 closed bars: same reaction confirmation, entry
+validity, entry clip and stop rules.
+
+- A higher-timeframe zone is anchored to the M5 bar of the same open time (an
+  origin older than the M5 window is dropped) and never joins the confluence
+  bands, so every M5 decision is unchanged: it is a second, separate candidate
+  (`technique:supply_demand:<side>:<origin>@M15`) carrying the extra evidence code
+  `htf_zone_m15`, and arbitration treats it like any other same-thesis
+  competitor.
+- This is the one deliberate extension of the frozen contract; there is no
+  Python oracle for it. Evidence: the replay of the 14-21 Sep and the 7 Oct XAU
+  captures keeps every previous envelope byte-identical (none removed or
+  changed) and adds M15 reactions only; that shows what is emitted, not whether
+  it earns. Remove `higher_timeframes` to turn it off.
+
 ## Status and execution
 
 - **Certification**: `LEGACY_PARITY_PROVEN` ([matrix](README.md#certification)).

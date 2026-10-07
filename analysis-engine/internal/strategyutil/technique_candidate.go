@@ -3,6 +3,7 @@ package strategyutil
 import (
 	"fmt"
 	"math"
+	"strings"
 
 	analysiscontext "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/context"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
@@ -68,7 +69,7 @@ func TechniqueCandidate(ctx *analysiscontext.MarketContext, dec *TechniqueDecisi
 	candidate, err := Candidate(CandidateSpec{
 		ID: spec.ID, Version: spec.Version, SetupKey: setupKey, Symbol: ctx.Symbol, Direction: dec.Direction,
 		EntryLow: low, EntryHigh: high, Invalidation: invalidation, InvalidationLabel: spec.InvalidationLabel,
-		Target: target, TargetLabel: targetLabel, Evidence: []string{spec.ZoneEvidence, spec.ConfirmedEvidence},
+		Target: target, TargetLabel: targetLabel, Evidence: techniqueEvidence(dec, spec),
 		Quality: opportunity.StrategyQuality{
 			Overall:    Clamp01(stars / 3),
 			Components: map[string]float64{"confluence": Clamp01(stars / 3), "reaction": 1},
@@ -127,4 +128,14 @@ func nearestOpposingTarget(d *LegacyDetector, direction market.Direction, refere
 		return reference - techniqueFallbackTargetR*risk, "fixed_reward_risk", true
 	}
 	return reference + techniqueFallbackTargetR*risk, "fixed_reward_risk", true
+}
+
+// techniqueEvidence is the zone and confirmation evidence, plus the higher
+// timeframe the zone was built on when it is not the execution frame's.
+func techniqueEvidence(dec *TechniqueDecision, spec TechniqueSpec) []string {
+	evidence := []string{spec.ZoneEvidence, spec.ConfirmedEvidence}
+	if dec.Instance != nil && dec.Instance.Timeframe != "" {
+		evidence = append(evidence, "htf_zone_"+strings.ToLower(dec.Instance.Timeframe))
+	}
+	return evidence
 }

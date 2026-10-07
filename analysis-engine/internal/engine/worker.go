@@ -386,6 +386,9 @@ func (w *SymbolWorker) attachLegacyRead() {
 		exec.Techniques = techniqueInstanceSource(exec, frames[market.H1], w.settings)
 	}
 	for tf, frame := range frames {
+		if tf != w.settings.PrimaryTimeframe {
+			frame.Techniques = higherTimeframeInstanceSource(frame, tf, w.settings)
+		}
 		w.state.Context.Timeframes[tf].Legacy = frame
 	}
 	read := legacyread.Read(frames, w.settings.PrimaryTimeframe, cfg)
