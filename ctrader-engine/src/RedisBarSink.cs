@@ -399,50 +399,6 @@ public sealed class StackExchangeRedisSeriesCommands :
     1
   );
 
-  private async Task RecordEvaluationDimensionsAsync(
-    AutoTradeEvent tradeEvent
-  )
-  {
-    var prefix = $"auto_trade:evaluation:{tradeEvent.Symbol.ToUpperInvariant()}";
-    var state = tradeEvent.State ?? tradeEvent.Type;
-    var timestamp = DateTimeOffset.FromUnixTimeSeconds(tradeEvent.Timestamp);
-    var hour = timestamp.UtcDateTime.ToString("HH", CultureInfo.InvariantCulture);
-    var session = timestamp.Hour switch
-    {
-      < 7 => "asia",
-      < 13 => "london",
-      < 21 => "new_york",
-      _ => "rollover",
-    };
-    var dimensions = new List<(string Name, string? Value)>
-    {
-      ("strategy", tradeEvent.Setup),
-      ("strategy_family", tradeEvent.StrategyFamily),
-      ("direction", tradeEvent.Direction),
-      ("range_side", tradeEvent.RangeId is null ? null : tradeEvent.Direction),
-      ("detector", tradeEvent.MatchId is null ? null : tradeEvent.Setup),
-      ("execution_route", tradeEvent.Type),
-      ("rejection_reason", tradeEvent.ReasonCode),
-      ("structural_source", tradeEvent.StructuralSource),
-      ("structural_zone_id", tradeEvent.StructuralZoneId),
-      ("reaction_id", tradeEvent.ReactionId),
-      ("thesis_id", tradeEvent.ThesisId),
-      ("hour_utc", hour),
-      ("session_utc", session),
-    };
-    foreach (var (name, value) in dimensions)
-    {
-      if (!string.IsNullOrWhiteSpace(value))
-      {
-        await _db.HashIncrementAsync(
-          $"{prefix}:{name}",
-          $"{state}:{value}",
-          1
-        );
-      }
-    }
-  }
-
   public async ValueTask DisposeAsync()
   {
     await _connection.CloseAsync();

@@ -77,21 +77,6 @@ type AffinityScore struct {
 	Final          float64
 }
 
-// SoftBonus is the small family-specific MAD confluence bonus from the
-// Python detector.  It is telemetry/scoring only and must never be used as a
-// publish or execution veto.
-func SoftBonus(phase, family string) float64 {
-	p := normalize(phase)
-	f := normalize(family)
-	if p == PhaseAccum && (f == "range_scalp" || f == "range_edge" || f == "range_edge_mean_reversion") {
-		return 0.12
-	}
-	if p == PhaseManip && (f == "reaction" || f == "liquidity" || f == "structural_reaction" || f == "liquidity_sweep_reversal") {
-		return 0.12
-	}
-	return 0
-}
-
 // StrategyKey maps the registered Go strategy IDs to the same MAD affinity
 // vocabulary used by mad_gate_strategy_for_setup in Python.  The mapping is
 // explicit: substring guesses were a source of silent detector drift.

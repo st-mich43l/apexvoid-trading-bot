@@ -30,8 +30,7 @@ import re
 import time
 import asyncpg
 import logging
-from contextlib import asynccontextmanager, contextmanager
-from contextvars import ContextVar
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 from app.core.config import runtime_config
@@ -68,56 +67,11 @@ async def close_pool() -> None:
     _pool = None
 
 
-class DryRunWriteError(RuntimeError):
-  """A shadow dry run tried to write to PostgreSQL."""
-
-
-# Inside a dry-run context (context-local, like the Redis override) the
-# connection only serves plain SELECT/WITH statements; everything else raises.
-_readonly_db: ContextVar[bool] = ContextVar("store_readonly_db", default=False)
-
-
-@contextmanager
-def readonly_db():
-  token = _readonly_db.set(True)
-  try:
-    yield
-  finally:
-    _readonly_db.reset(token)
-
-
-class _ReadOnlyConnection:
-  _READ_PREFIXES = ("select", "with")
-
-  def __init__(self, conn):
-    self._conn = conn
-
-  def _check(self, query: str) -> None:
-    head = query.lstrip().lower()
-    if not head.startswith(self._READ_PREFIXES) or " for update" in head or "nextval" in head:
-      raise DryRunWriteError(f"shadow dry run attempted a non-read statement: {query.strip()[:80]!r}")
-
-  async def fetch(self, query, *args, **kwargs):
-    self._check(query)
-    return await self._conn.fetch(query, *args, **kwargs)
-
-  async def fetchrow(self, query, *args, **kwargs):
-    self._check(query)
-    return await self._conn.fetchrow(query, *args, **kwargs)
-
-  async def fetchval(self, query, *args, **kwargs):
-    self._check(query)
-    return await self._conn.fetchval(query, *args, **kwargs)
-
-  def __getattr__(self, name):
-    raise DryRunWriteError(f"shadow dry run may only read PostgreSQL (attempted {name!r})")
-
-
 @asynccontextmanager
 async def _connect():
   pool = await _get_pool()
   async with pool.acquire() as conn:
-    yield _ReadOnlyConnection(conn) if _readonly_db.get() else conn
+    yield conn
 
 
 def _rowcount(status: str) -> int:
@@ -1368,22 +1322,6 @@ def close_event_from_plan_runtime(
   }
 
 
-async def list_orphan_auto_trade_group_ids() -> list[str]:
-  """Fill groups that never got an ``auto_trade_results`` row."""
-  async with _connect() as db:
-    rows = await db.fetch(
-      """
-      SELECT f.group_id
-      FROM auto_trade_fills f
-      LEFT JOIN auto_trade_results r ON r.group_id = f.group_id
-      WHERE r.group_id IS NULL
-      GROUP BY f.group_id
-      ORDER BY MIN(f.filled_at) ASC
-      """
-    )
-  return [str(row["group_id"]) for row in rows]
-
-
 async def reconcile_orphan_auto_trade_result(
   group_id: str,
   runtime: dict,
@@ -1785,40 +1723,6 @@ async def _algo_manual_ledger_pips(trade_key: str) -> float | None:
   return None
 
 
-async def sync_algo_manual_results_from_signals() -> int:
-  """Rewrite algo_manual auto_trade_results from manual_signals ledger peaks."""
-  async with _connect() as db:
-    rows = await db.fetch(
-      """
-      SELECT r.group_id, r.trade_key, s.result_pips, s.legs
-      FROM auto_trade_results r
-      JOIN manual_signals s
-        ON r.trade_stream = 'algo_manual'
-       AND r.trade_key = ('manual:' || s.id::TEXT)
-      WHERE s.result_pips IS NOT NULL OR s.legs IS NOT NULL
-      """
-    )
-  updated = 0
-  for row in rows:
-    ledger = await _algo_manual_ledger_pips(str(row["trade_key"]))
-    if ledger is None:
-      continue
-    async with _connect() as db:
-      status = await db.execute(
-        """
-        UPDATE auto_trade_results
-        SET result_pips = $2
-        WHERE group_id = $1
-          AND correction_source IS NULL
-          AND result_pips IS DISTINCT FROM $2
-        """,
-        row["group_id"], float(ledger),
-      )
-    if status.endswith("1"):
-      updated += 1
-  return updated
-
-
 async def _record_auto_trade_result(event: dict) -> None:
   if (
     event.get("type") == "manual_closed"
@@ -2000,7 +1904,7 @@ async def _record_auto_trade_result(event: dict) -> None:
       session = "asia"
     try:
       from app.autotrade.killzone import classify_killzone
-      kz_name = classify_killzone(ts=closed_at).killzone_name
+      kz_name = classify_killzone(ts=closed_at)
     except Exception:
       kz_name = None
     booked_tp_count = None
@@ -2802,32 +2706,6 @@ async def get_signal_by_execution_intent_id(intent_token: str) -> dict | None:
       intent_token[:10],
     )
   return _decode_signal(row) if row else None
-
-
-async def close_manual_signal(row_id: int, result_pips: int) -> dict | None:
-  """Mark a signal as closed and record the pip result.
-
-  Returns:
-    The row dict as it was *before* the update (so ``channel_message_id``
-    is available for the channel reply), or ``None`` if the signal was not
-    found or was already closed/cancelled.
-  """
-  async with _connect() as db:
-    async with db.transaction():
-      row = await db.fetchrow(
-        "SELECT * FROM manual_signals WHERE id = $1 AND status = 'open' "
-        "FOR UPDATE",
-        row_id,
-      )
-      if row is None:
-        return None
-      closed_at = int(time.time())
-      await db.execute(
-        "UPDATE manual_signals SET status = 'closed', result_pips = $1, "
-        "closed_at = $2 WHERE id = $3",
-        result_pips, closed_at, row_id,
-      )
-  return dict(row)
 
 
 async def cancel_manual_signal(row_id: int) -> dict | None:

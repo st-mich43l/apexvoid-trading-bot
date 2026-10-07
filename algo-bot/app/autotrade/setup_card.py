@@ -29,10 +29,7 @@ from typing import Any, Awaitable, Callable
 
 from aiogram.exceptions import TelegramBadRequest
 
-from app.autotrade.setup_execution_aggregate import (
-  STATUS_LINE_BY_PROJECTION_STATE,
-  resolve_setup_execution_aggregate,
-)
+from app.autotrade.setup_execution_aggregate import STATUS_LINE_BY_PROJECTION_STATE
 from app.autotrade.setup_lifecycle import TERMINAL_STATES, load_setup
 from app.autotrade.strategy_match import StrategyMatch
 from app.autotrade.trade_card import (
@@ -1715,59 +1712,6 @@ async def kill_setup_card(
   await clear_forming_card(client, setup_id)
 
 
-async def assert_or_repair_forming_projection(
-  client,
-  setup_id: str,
-  *,
-  edit_fn: EditFn,
-) -> bool:
-  """P0-7: cross-check the aggregate's effective status against the
-  durable forming-status snapshot and the cached card text's lifecycle
-  line, repairing only the status line (never the setup body) when they
-  disagree.
-
-  Returns True if a repair was made, False if everything already agreed
-  (or there is nothing to repair - no card, or the setup is terminal).
-  """
-  aggregate = await resolve_setup_execution_aggregate(client, setup_id)
-  if aggregate.terminal or aggregate.status_line is None:
-    return False
-  card = await load_forming_card(client, setup_id)
-  if card is None or not card.get("text"):
-    return False
-  snapshot = await load_forming_card_status_snapshot(client, setup_id)
-  cached_lines = str(card["text"]).splitlines()
-  cached_slot = _head_index(cached_lines) + 1
-  cached_line = cached_lines[cached_slot] if len(cached_lines) > cached_slot else ""
-  if (
-    snapshot is not None
-    and snapshot.status_line == aggregate.status_line
-    and cached_line == aggregate.status_line
-  ):
-    return False
-  await save_forming_card_status(client, setup_id, aggregate.status_line)
-  repaired_text = apply_forming_card_status(
-    str(card["text"]), aggregate.status_line,
-  )
-  if repaired_text == card["text"]:
-    return False
-  try:
-    await edit_fn(card["chat_id"], card["message_id"], repaired_text)
-  except TelegramBadRequest as exc:
-    if "message is not modified" not in str(exc).casefold():
-      log.info(
-        "forming card projection repair failed setup_id=%s error=%s",
-        setup_id, exc,
-      )
-      return False
-  await save_forming_card(
-    client, setup_id, chat_id=card["chat_id"], message_id=card["message_id"],
-    text=repaired_text,
-  )
-  log.info("forming_card_projection_repaired setup_id=%s", setup_id)
-  return True
-
-
 PLAN_PUBLISHED_STATUS_LINE = STATUS_LINE_BY_PROJECTION_STATE["plan_published"]
 # Reserved status-slot placeholder so TERMINAL / later edits still replace
 # lines[1] without showing "PLAN PUBLISHED" on the forming card.
@@ -1859,41 +1803,6 @@ def forming_card_headline(
   """
   label = "IN ZONE · WAITING FILL" if in_zone else "SETUP FORMING"
   return f"🔎 <b>{escape(str(symbol))} {escape(str(tf))} · {label}</b>"
-
-
-def _format_candle_lines(match: StrategyMatch) -> tuple[str, str] | None:
-  """Candle Confirmation V2 (§45): two short lines, not a detailed block -
-  detailed candle_* metrics stay in telemetry only, never on the public
-  card. Shadow-only: this never changes what the card already shows above
-  (reaction_type/confirmation), it just adds context alongside it."""
-  label = getattr(match, "candle_primary_pattern", None)
-  score = getattr(match, "candle_final_score", None)
-  if not label or score is None or not math.isfinite(float(score)):
-    return None
-  return (
-    f"🕯 Confirmation: {escape(str(label))}",
-    f"🔥 Candle Quality: {float(score):.0%}",
-  )
-
-
-def _format_math_line(match: StrategyMatch) -> str | None:
-  parts: list[str] = []
-  fib = getattr(match, "math_fib_ratio", None)
-  if fib is not None and math.isfinite(float(fib)):
-    parts.append(f"fib {float(fib):g}")
-  vel = getattr(match, "math_velocity", None)
-  acc = getattr(match, "math_acceleration", None)
-  if vel is not None and math.isfinite(float(vel)):
-    if acc is not None and math.isfinite(float(acc)):
-      parts.append(f"v={float(vel):+.2f} · a={float(acc):+.2f}")
-    else:
-      parts.append(f"v={float(vel):+.2f}")
-  pd = getattr(match, "math_pd", None)
-  if pd is not None and math.isfinite(float(pd)):
-    parts.append(f"PD {float(pd):.2f}")
-  if not parts:
-    return None
-  return " · ".join(parts)
 
 
 def _configured_target_r_multiples(
@@ -2218,10 +2127,9 @@ async def ensure_plan_published_root_card(
 ) -> int | None:
   """Ensure the PLAN PUBLISHED root card exists after direct publication.
 
-  ZoneWatch cutover suppresses SETUP FORMING until publish, then expects the
-  first card to be PLAN PUBLISHED via scanner notify. Direct publish from the
-  M1 ZoneWatch loop never calls that notify path, so without this ensure the
-  owner can trade a setup with no Telegram root card at all — and later
+  SETUP FORMING is suppressed until publish, so the first card is PLAN
+  PUBLISHED. A direct publish never calls the forming notify path, so without
+  this ensure the owner can trade a setup with no Telegram root card at all — and later
   take_profit / stop_moved / position_closed replies have nothing to thread to.
   """
   owner_id = (
@@ -2433,7 +2341,6 @@ async def load_strategy_match_for_root_card(
 ) -> StrategyMatch | None:
   """Load a StrategyMatch for root-card recovery (live matches or TradePlan)."""
   from app.autotrade.multi_match import deserialize_matches, strategy_matches_key
-  from app.autotrade.strategy_match import strategy_match_key
   from app.autotrade.trade_plan import TradePlan
   from app.autotrade.trade_plan_stream import plan_key
 
@@ -2446,11 +2353,6 @@ async def load_strategy_match_for_root_card(
   for match in deserialize_matches(multi_raw):
     if str(match.match_id) == setup_id:
       return match
-
-  legacy_raw = await client.get(strategy_match_key(symbol))
-  legacy = StrategyMatch.from_json(legacy_raw) if legacy_raw else None
-  if legacy is not None and str(legacy.match_id) == setup_id:
-    return legacy
 
   plan_id = setup_id if setup_id.startswith("v8:") else f"v8:{setup_id}"
   plan_raw = await client.get(plan_key(plan_id))

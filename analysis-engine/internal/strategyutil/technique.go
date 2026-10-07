@@ -81,14 +81,6 @@ func (g TechniqueGeometry) ProximalRetest(direction market.Direction, low, high,
 	return math.Abs(price-proximal) <= e || (low-e <= price && price <= high+e)
 }
 
-// WidthWithinATR mirrors width_within_atr.
-func WidthWithinATR(low, high, atr, maxATR float64) bool {
-	if atr <= 0 {
-		return true
-	}
-	return high-low <= math.Max(0, maxATR)*atr
-}
-
 // ClipEntry mirrors optimize_technique_entry_zone: a wide zone keeps only its
 // proximal slice (supply keeps the lower edge, demand the upper edge).
 func (g TechniqueGeometry) ClipEntry(direction market.Direction, low, high float64) (float64, float64, bool) {
@@ -99,41 +91,4 @@ func (g TechniqueGeometry) ClipEntry(direction market.Direction, low, high float
 		return low, low + g.EntryMaxWidthPrice, true
 	}
 	return high - g.EntryMaxWidthPrice, high, true
-}
-
-// FVGNotFullyFilled mirrors fvg_not_fully_filled: no bar after the gap's
-// creation has traded through its far edge.
-func FVGNotFullyFilled(direction market.Direction, low, high float64, candles []market.Candle, createdAt int64) bool {
-	for _, c := range candles {
-		if c.Time <= createdAt {
-			continue
-		}
-		if direction == market.Buy && c.Low <= low {
-			return false
-		}
-		if direction == market.Sell && c.High >= high {
-			return false
-		}
-	}
-	return true
-}
-
-// BodyFractionAt returns the body/range fraction of the bar at time t (0 when
-// absent), as the legacy order-block momentum check measured it.
-func BodyFractionAt(candles []market.Candle, t int64) float64 {
-	for _, c := range candles {
-		if c.Time == t {
-			full := math.Max(c.High-c.Low, 1e-9)
-			return c.Body() / full
-		}
-	}
-	return 0
-}
-
-// LastClose is the latest closed bar's close, or 0 with no bars.
-func LastClose(candles []market.Candle) float64 {
-	if len(candles) == 0 {
-		return 0
-	}
-	return candles[len(candles)-1].Close
 }

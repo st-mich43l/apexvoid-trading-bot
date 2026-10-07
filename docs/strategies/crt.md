@@ -1,0 +1,19 @@
+# CRT Strategy V2
+
+`crt` treats the prior H1 impulse candle as an owned range. M5 must sweep one
+range edge and close back inside it; BUY enters between the reclaimed low and
+confirmation close, SELL mirrors at the high. Invalidation is beyond the sweep
+plus ATR buffer and target is the opposite H1 edge. Identity is the H1 anchor
+time. Insufficient H1 range or no reclaim rejects. It is enabled in the live Go
+opportunity stream; Algo Bot applies execution policy before any TradePlan is
+published.
+
+## Status and execution
+
+- **Certification**: `LEGACY_PARITY_PROVEN` ([matrix](README.md#certification)).
+- **Symbols**: all instruments.
+- **Execution**: Trades on every instrument.
+- **Arbitration**: opportunities on the same symbol and direction that share a
+  thesis group, a structure or an entry corridor compete; the best by quality,
+  confluence, structural quality and freshness trades and the rest are
+  suppressed ([execution](../execution.md#same-thesis-arbitration)).

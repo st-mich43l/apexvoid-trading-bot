@@ -4,7 +4,7 @@
 // Invalidated) and relevance (Immediate/Nearby/Remote/Dormant)
 // classification. FVG *detection* belongs here; FVG *trading strategy*
 // does not (that is internal/strategy/fvg, a package reading this output) —
-// see docs/architecture/dependency-rules.md.
+// see docs/architecture.md.
 //
 // Ported from algo-bot/app/analysis/zones.py and
 // technique_geometry.py's not_invalidated/zone_is_spent pair, per
@@ -25,18 +25,9 @@
 //     live barrier uses this package's own NotInvalidated — never a
 //     separate, re-derived liveness check.
 //
-// ZoneWatch (algo-bot/app/autotrade/zone_watch.py) is a DIFFERENT,
-// higher-layer concept and is deliberately NOT ported here. It is a
-// Redis-persisted, revision-CAS, execution-episode state machine
-// (Discovered/WatchingRetest/Evaluating/PublishedLocked/Consumed/
-// Invalidated/Expired) that belongs to Algo Bot's future consumption of
-// AnalysisOpportunity events (docs/architecture/algo-bot.md), not to
-// Analysis Engine's canonical geometry. Do not conflate zone.State (this
-// package's own, much simpler lifecycle) with ZoneWatch's state machine.
-//
 // Dependency rule: zone depends on structure (Swing, StructureBreak,
 // DetectDisplacement) and MUST NOT import liquidity, context,
 // opportunity, strategy, or transport — see
-// docs/architecture/dependency-rules.md's "zone promoted above
+// docs/architecture.md's "zone promoted above
 // structure, sibling to liquidity" amendment.
 package zone

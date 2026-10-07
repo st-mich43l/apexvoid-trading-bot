@@ -695,23 +695,6 @@ async def do_tp(ctx: dict) -> dict:
   }
 
 
-async def do_tp_reached(ctx: dict) -> dict:
-  """Notify a reached ladder level without pretending volume was booked."""
-  from app.persistence import redis_state
-
-  if await redis_state.tp_ordinal_already_reached(
-    ctx["sid"], int(ctx["tp_number"]),
-  ):
-    return {"action": "tp_reached", "ok": False, "error": "already_reached"}
-  result = await do_tp(ctx)
-  if result.get("ok"):
-    await redis_state.mark_tp_ordinal_reached(
-      ctx["sid"], int(ctx["tp_number"]),
-    )
-    result["action"] = "tp_reached"
-  return result
-
-
 def render_result(
   result: dict,
   symbol: str,

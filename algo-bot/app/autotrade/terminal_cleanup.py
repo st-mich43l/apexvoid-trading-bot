@@ -52,8 +52,7 @@ log = logging.getLogger("bot")
 
 # setup_lifecycle terminal state -> app.autotrade.lifecycle.LIFECYCLE_STATES.
 # LIFECYCLE_STATES has no "consumed" entry (a fully-executed setup reads as
-# "closed" in that vocabulary, matching the V6 execution lifecycle's own
-# terminal name).
+# "closed" in that vocabulary).
 _LIFECYCLE_STATE_BY_TERMINAL_STATE = {
   "expired": "expired",
   "invalidated": "invalidated",

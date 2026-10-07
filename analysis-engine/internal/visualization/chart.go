@@ -4,7 +4,7 @@
 // must never compute structure itself, the same discipline
 // internal/engine's own AnalysisSnapshot enforces at the service boundary.
 //
-// A leaf package (docs/architecture/dependency-rules.md): may import any
+// A leaf package (docs/architecture.md): may import any
 // core type; nothing core imports it.
 //
 // Deliberately stdlib-only (image/image/png), matching this module's

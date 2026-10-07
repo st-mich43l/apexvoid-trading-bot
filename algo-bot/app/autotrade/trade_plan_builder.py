@@ -6,7 +6,7 @@ strategy/direction/entry-zone/structural-invalidation-price/target-pip-ladder
 (the scanner "owns the complete price-action decision", per
 strategy_match.py's own docstring). This module reshapes that already-decided
 data into the V8 contract shape by calling the SAME `evaluate_execution_policy`
-function the V6 path already uses for route/stop planning
+function that owns route/stop planning
 (app/autotrade/execution_policy.py) - it does not classify regime, resolve a
 route from scratch, or compute a stop independently. `entry.type` is whatever
 `evaluate_execution_policy` resolved
@@ -56,9 +56,8 @@ from app.autotrade.trade_plan import (
 class TradePlanBuildRejected(Exception):
   """Raised when the underlying execution-policy evaluation blocks a plan.
 
-  Carries the same reason_code/message the V6 path already surfaces for the
-  identical check, so operators diagnosing "why didn't this become a plan"
-  see one consistent vocabulary regardless of contract mode.
+  Carries the reason_code/message of the failed check, so operators diagnosing
+  "why didn't this become a plan" see one consistent vocabulary.
   """
 
   def __init__(self, reason_code: str, message: str, measured: dict[str, Any]):
@@ -356,7 +355,7 @@ def build_trade_plan_from_strategy_match(
       {},
     )
   if not match.structural_zone_id:
-    # Fail closed rather than fall back to match_id: match_id (and the V6
+    # Fail closed rather than fall back to match_id: match_id (and the
     # structural_thesis_id it's derived from) is re-hashed on every new
     # confirmation timestamp, so using it as a thesis_id would silently
     # let repeated confirmations of the same structure each look like a

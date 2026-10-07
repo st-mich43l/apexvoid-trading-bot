@@ -18,10 +18,7 @@ from app.runtime.instruments import (
   enabled_instruments,
   for_instrument,
 )
-from app.runtime.rollout_gates import (
-  permits_analysis,
-  permits_broker_execution,
-)
+from app.runtime.rollout_gates import permits_broker_execution
 
 
 class InstrumentRuntimeError(ValueError):
@@ -50,27 +47,11 @@ class InstrumentRuntimeRegistry(FrozenConfigModel):
   def all(self) -> tuple[InstrumentRuntimeContext, ...]:
     return tuple(self.by_id[key] for key in sorted(self.by_id))
 
-  def analysis_instruments(self) -> tuple[InstrumentRuntimeContext, ...]:
-    return tuple(ctx for ctx in self.all() if permits_analysis(ctx.rollout))
 
   def live_instruments(self) -> tuple[InstrumentRuntimeContext, ...]:
     return tuple(
       ctx for ctx in self.all() if permits_broker_execution(ctx.rollout)
     )
-
-  def scanner_symbols(
-    self,
-    *,
-    compatibility_filter: Iterable[str] | None = None,
-  ) -> tuple[str, ...]:
-    """Deterministic analysis set: rollout ∩ CSV filter ∩ enabled runtimes."""
-    analysis = {
-      ctx.identity.canonical_symbol: ctx for ctx in self.analysis_instruments()
-    }
-    if compatibility_filter is None:
-      return tuple(sorted(analysis))
-    allowed = {item.strip().upper() for item in compatibility_filter if item.strip()}
-    return tuple(sorted(symbol for symbol in analysis if symbol in allowed))
 
 
 def _build_alias_map(

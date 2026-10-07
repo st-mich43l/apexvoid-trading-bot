@@ -17,5 +17,5 @@
 //
 // No production code lives here yet; this file exists to reserve the
 // package's boundary in the dependency graph
-// (docs/architecture/dependency-rules.md), not to implement anything.
+// (docs/architecture.md), not to implement anything.
 package marketdata

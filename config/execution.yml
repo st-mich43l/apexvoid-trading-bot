@@ -3,48 +3,12 @@
 # executor stays mechanical. This category contains the TradePlan and
 # broker-execution contract.
 execution:
-  technique:
-    # Enforce strict PD + hard SL cap; killzone clock and sweep/body off.
-    # Prod dig 2026-08-11: require_sweep_body was killing ~22 valid
-    # impulse_pullback candidates/hour (both directions,
-    # confirmed via scalping.strategies' "sweep gate rejection" diagnostic)
-    # with zero fills getting through - archetypes' own pattern match is
-    # the confirmation again, same as before the 2026-08-10 technique pack.
-    enforce: true
-    include_late_ny: true
-    london_window_hours: 3
-    ny_window_hours: 3
-    reaction_require_killzone: false
-    # Non-scalp: structure + strategy technique decide; do not sterilize by
-    # UTC publish windows. Weak volume/momentum hours are analysis rejects.
-    reaction_require_publish_window: false
-    # Scalp: structure + technique decide; do not sterilize by UTC killzone.
-    # Weak volume/momentum hours are rejected by analysis, not the clock.
-    scalp_require_killzone: false
-    # Pair focus is quality context, never a clock hard gate. FX overrides set
-    # 3 so selective (score 1) hours need a three-confluence strategy.
-    selective_session_min_confluence: 0
-    require_sweep_body: false
-    strict_premium_discount: true
-    # Strict PD only for reversal + range_reversion archetypes (not continuation).
-    # Measured asymmetry in trends: ~93% BUY allowed in downtrend vs ~4% SELL;
-    # applying strict PD to momentum/trend_pullback inverts their intended edge.
-    strict_premium_discount_archetypes:
-      - reversal
-      - range_reversion
-    # MAD is entry quality / structure analysis only — never block activation.
-    mad_hard_gate_enabled: false
-
   activation:
     # Enforce entry location while permitting a fresh M5-confirmed Key Level
     # or Reaction setup to execute inside its zone. Non-authoritative setups
     # still require their normal M1 confirmation.
     mode: enforce
-    m5_authoritative_fallback: quote_inside_fresh
-    m5_confirmation_maximum_age_bars: 6
-    reaction_trigger_maximum_age_bars: 2
 
-  broker_recovery:
 
   entry:
     contract_tolerance_pips: 3.0
@@ -53,8 +17,6 @@ execution:
     poll_ms: 250
 
   mapped_zone:
-    execute_tolerance_atr: 0.15
-    execute_tolerance_pips: 3.0
     hard_entry_drift_pips: 20.0
     max_entry_drift_atr: 1.0
     min_entry_drift_pips: 10.0
@@ -73,9 +35,7 @@ execution:
     max_entry_drift_atr: 1.0
     min_entry_drift_pips: 10.0
     min_rr: 1.0
-    min_target_pips: 15.0
     room_stop_floor_pips: 15
-    tp_buffer_pips: 3.0
 
   reaction:
     market_fraction: 0.8
@@ -109,13 +69,6 @@ execution:
     wick_stop_buffer_atr: 0.15
 
   targeting:
-    range_ladder_pips:
-      - 15
-      - 20
-      - 30
-      - 40
-      - 50
-      - 70
     unfilled_leg_after_tp_policy: cancel
 
   trend:
@@ -148,11 +101,3 @@ manual_algo:
     manual_trade_command_stream: manual_trade:commands
     manual_trade_command_stream_maxlen: 1000
     manual_trade_intent_stream_maxlen: 1000
-
-journal:
-  enabled: true
-  persist:
-    trade_plan: true
-    analysis_snapshot: true
-    execution_events: true
-    math_telemetry: true

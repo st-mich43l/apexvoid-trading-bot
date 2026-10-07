@@ -337,46 +337,6 @@ def excursion_mfe_mae(
   return float(mfe), float(mae)
 
 
-def update_excursion_extremes(
-  state: ExcursionState,
-  *,
-  bar_high: float,
-  bar_low: float,
-) -> ExcursionState:
-  """Accrue M1 extremes; keeps running after TP1 / BE until full close."""
-  high = float(bar_high)
-  low = float(bar_low)
-  return ExcursionState(
-    opportunity_id=state.opportunity_id,
-    episode_id=state.episode_id,
-    symbol=state.symbol,
-    archetype=state.archetype,
-    direction=state.direction,
-    session=state.session,
-    htf_bias=state.htf_bias,
-    regime=state.regime,
-    entry_price=state.entry_price,
-    invalidation_price=state.invalidation_price,
-    stop_pips=state.stop_pips,
-    planned_target_pips=state.planned_target_pips,
-    planned_rr=state.planned_rr,
-    group_id=state.group_id,
-    match_id=state.match_id,
-    opened_at=state.opened_at,
-    pip_size=state.pip_size,
-    max_high=max(state.max_high, high),
-    min_low=min(state.min_low, low),
-    bars_held=int(state.bars_held) + 1,
-    legs_filled=state.legs_filled,
-    ladder_ratios=state.ladder_ratios,
-    ladder_r_multiples=state.ladder_r_multiples,
-    expected_stop_pips=state.expected_stop_pips,
-    risk_denominator_source=state.risk_denominator_source,
-    planned_vs_realized_stop_ratio=state.planned_vs_realized_stop_ratio,
-    version=state.version,
-  )
-
-
 def ladder_from_opportunity(
   opportunity: ScalpOpportunity,
   *,
@@ -603,33 +563,6 @@ def apply_trace_event(trace: ExitTrace, event: dict[str, Any]) -> ExitTrace:
   )
 
 
-async def save_bind(
-  client: Any,
-  *,
-  match_id: str,
-  opportunity_id: str,
-  symbol: str,
-  signal_id: str | None = None,
-) -> None:
-  payload = {
-    "opportunity_id": opportunity_id,
-    "symbol": str(symbol).upper(),
-    "match_id": _strip_v8(match_id),
-    "signal_id": signal_id or "",
-  }
-  await client.set(
-    bind_key(match_id),
-    json.dumps(payload, separators=(",", ":"), sort_keys=True),
-    ex=OUTCOME_TTL_SECONDS,
-  )
-  if signal_id:
-    await client.set(
-      opportunity_index_key(symbol, opportunity_id),
-      signal_id,
-      ex=OUTCOME_TTL_SECONDS,
-    )
-
-
 async def load_bind(client: Any, match_or_group_id: str) -> dict[str, Any] | None:
   raw = await client.get(bind_key(match_or_group_id))
   if raw is None:
@@ -726,30 +659,6 @@ async def resolve_stop_pips_from_signal(
   if value is None or value <= 0:
     return None
   return value
-
-
-async def update_open_excursions_for_bar(
-  client: Any,
-  *,
-  symbol: str,
-  bar_high: float,
-  bar_low: float,
-) -> int:
-  """Update every open live-scalp excursion from the current M1 bar."""
-  raw_ids = await client.smembers(open_excursions_key(symbol))
-  if not raw_ids:
-    return 0
-  updated = 0
-  for token in raw_ids:
-    oid = token.decode() if isinstance(token, (bytes, bytearray)) else str(token)
-    state = await load_excursion(client, symbol, oid)
-    if state is None:
-      await client.srem(open_excursions_key(symbol), oid)
-      continue
-    nxt = update_excursion_extremes(state, bar_high=bar_high, bar_low=bar_low)
-    await save_excursion(client, nxt)
-    updated += 1
-  return updated
 
 
 async def reconcile_ledger_r(

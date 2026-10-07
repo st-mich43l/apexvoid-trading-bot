@@ -24,14 +24,11 @@ instrument_packs:
     # FX is one precise entry, never XAU's shallow/deep scale-in ladder.
     auto_entry:
       mode: single_best
-    reaction_session: london_ny
     stop_envelope:
       min_pips: 12
       max_pips: 20
       sl_distance: 0.0020
     activation:
-      # Fresh M1 confirmation remains mandatory; sweep/body is preferred.
-      require_sweep_body: false
       trigger_maximum_age_bars: 3
       max_spread_pips: 1
     price_scale:
@@ -78,21 +75,14 @@ instrument_packs:
       pip_size: 0.0001
       price_digits: 5
       volume_units_per_lot: 10000000
-    analysis:
-      zones:
-        major_maximum_width_price: 0.003
-        minimum_width_price: 0.0006
-        preferred_maximum_width_price: 0.0015
-        preferred_minimum_width_price: 0.0008
 
-  # Shared scaffolding for JPY-quoted crosses (GBPJPY, USDJPY): pip
-  # scale/digits, market-map radii, and the parts of targeting that do not
-  # vary by pair. Deliberately omits stop_envelope, policy, reaction_session,
-  # analysis.zones, targeting.close_ratios, contract.pip_value_per_lot, and
-  # the zone_merge_max_width/fvg_entry_max_width_price pair - each pair's real
-  # volatility/session/risk profile differs enough (see per-pair comments
-  # below) that sharing those would hide, not remove, real divergence. Every
-  # JPY-cross instrument must declare those as its own overrides.
+  # Shared scaffolding for JPY-quoted crosses (GBPJPY, USDJPY): pip scale and
+  # digits, market-map radii, and the parts of targeting that do not vary by
+  # pair. Deliberately omits stop_envelope, policy, targeting.close_ratios,
+  # contract.pip_value_per_lot and the zone_merge_max_width/
+  # fvg_entry_max_width_price pair: each pair's real volatility and risk
+  # profile differs enough that sharing those would hide, not remove, real
+  # divergence. Every JPY-cross instrument declares those as its own overrides.
   fx_jpy_cross_fixed_2r_v1:
     # Autonomous opposite-direction exposure on the same symbol is never
     # allowed for FX: no separation distance, strategy or scalp bypass.
@@ -103,8 +93,6 @@ instrument_packs:
     auto_entry:
       mode: single_best
     activation:
-      # Fresh M1 confirmation remains mandatory; sweep/body is preferred.
-      require_sweep_body: false
       trigger_maximum_age_bars: 3
     price_scale:
       round_step: 0.1
@@ -165,10 +153,8 @@ instrument_packs:
     auto_entry:
       mode: scale
     # XAU is not gated by the clock: Asia earned +1240 pips of the profitable week
-    # (London +296, NY +1569). The former `reaction_session: tokyo_london_ny` had no
-    # reader anywhere and is removed; the only wired session gates
-    # (execution.technique.reaction_require_killzone / reaction_require_publish_window /
-    # scalp_require_killzone) are off.
+    # (London +296, NY +1569). No session or kill-zone gate exists; session is
+    # analysis context and a quality input only.
     stop_envelope:
       # Structure-first band replacing global reaction 40-60. Calibrate max
       # from live Key Level stop distances (pack leaf only).
@@ -186,7 +172,6 @@ instrument_packs:
       max_pips: 60
       sl_distance: 10.0
     activation:
-      require_sweep_body: false
       trigger_maximum_age_bars: 3
       max_spread_pips: 5
     price_scale:
@@ -247,25 +232,14 @@ instrument_packs:
       pip_size: 0.1
       price_digits: 2
       volume_units_per_lot: 10000
-    analysis:
-      zones:
-        major_maximum_width_price: 10.0
-        minimum_width_price: 3.0
-        preferred_maximum_width_price: 6.0
-        preferred_minimum_width_price: 3.0
     # Dig 2026-09-05: barrier_buffer_atr's global default (0.5) is tuned for
     # FX, where an ATR multiple is a few pips. XAU's ATR is dollar-denominated
     # (M5/H1 ATR routinely $2-12+), so 0.5x buffered away 40-115+ pips of
     # opposing-structure room in production -- comparable to or larger than
-    # XAU's own stop envelope (25-100 pips) -- turning real, tradeable room
-    # into a false zero-room reject before the fixed_rr ladder ever ran.
-    # Owner's manual XAU trades routinely use 60-100 pip stops near the same
-    # structure and still run past it. 0.15 matches the existing
-    # scalp_barrier_buffer_atr precedent's order of magnitude.
-    # §11: nested structure, not a dotted key — targets auto-algo.yml's
-    # auto_algo.actionability.target_room.barrier_buffer_atr (this leaf has
-    # no base value in auto-algo.yml at all; it was always only a Python
-    # schema default before this override, same pattern as §8's examples).
+    # XAU's own stop envelope -- turning real, tradeable room into a false
+    # zero-room reject before the fixed_rr ladder ever ran. Owner's manual XAU
+    # trades routinely use 60-100 pip stops near the same structure and still
+    # run past it.
     overrides:
       auto_algo:
         actionability:
@@ -302,34 +276,25 @@ instruments:
     # EUR/USD earns its cleanest liquidity at the London and NY opens.
     overrides:
       execution:
-        technique:
-          selective_session_min_confluence: 3
+        go_opportunity:
+          observe_only_strategies:
+            - impulse_pullback
     # London/NY major: tight spread and 12-20 pip stop. Prefer the pack's 2R
     # ladder, with a 1R full-close fallback when opposing room is constrained.
 
   GBPUSD:
     pack: fx_usd_major_fixed_2r_v1
     rollout: live
-    # 2026-08-19: was a byte-for-byte EURUSD clone (only broker/canonical
-    # symbol differed) - geometry below is scaled ~1.3x off EURUSD's own
-    # pack instead, reflecting Cable's real higher volatility (commonly
-    # documented ATR(14) roughly 1.3-1.5x EURUSD's ~70 pips/day, well
-    # short of GBPJPY's own ~180 pips/day cross-pair extreme). No live
-    # broker feed/ATR for this pair yet to compute an exact figure from -
-    # revisit once real GBPUSD price history accumulates on this account.
-    analysis:
-      zones:
-        major_maximum_width_price: 0.004
-        minimum_width_price: 0.0008
-        preferred_maximum_width_price: 0.002
-        preferred_minimum_width_price: 0.001
+    # Geometry is scaled ~1.3x off EURUSD's own pack: Cable's real volatility
+    # is higher than EURUSD's and well short of GBPJPY's.
     broker_symbol: GBPUSD
     canonical_symbol: GBPUSD
     # Cable follows the same London/NY execution clock as EURUSD.
     overrides:
       execution:
-        technique:
-          selective_session_min_confluence: 3
+        go_opportunity:
+          observe_only_strategies:
+            - impulse_pullback
     # London/NY major, same active-session profile as EURUSD (unlike
     # London-only GBPJPY or Tokyo/NY USDJPY) - Cable's
     # wider production M5 volatility earns a 15-25 envelope, above
@@ -358,12 +323,6 @@ instruments:
     rollout: live
     manual:
       target_close_ratios: [0.40, 0.25, 0.35]
-    analysis:
-      zones:
-        major_maximum_width_price: 0.5
-        minimum_width_price: 0.12
-        preferred_maximum_width_price: 0.25
-        preferred_minimum_width_price: 0.12
     broker_symbol: GBPJPY
     canonical_symbol: GBPJPY
     contract:
@@ -395,13 +354,12 @@ instruments:
         levels:
           minimum_key_touches: 3
       execution:
-        technique:
-          selective_session_min_confluence: 3
+        go_opportunity:
+          observe_only_strategies:
+            - impulse_pullback
     # Policy name retained for registry continuity. Close-ratio front-load
     # retired: uniform 1R/2R 50/50 + breakeven_after_r=1.0 across fixed_rr.
     policy: fx_fixed_2r_frontload_v1
-    # Sterling's primary session is London; Tokyo/NY are deliberately quiet.
-    reaction_session: london
     stop_envelope:
       min_pips: 22
       max_pips: 35
@@ -426,12 +384,6 @@ instruments:
   USDJPY:
     pack: fx_jpy_cross_fixed_2r_v1
     rollout: live
-    analysis:
-      zones:
-        major_maximum_width_price: 0.3
-        minimum_width_price: 0.06
-        preferred_maximum_width_price: 0.15
-        preferred_minimum_width_price: 0.08
     broker_symbol: USDJPY
     canonical_symbol: USDJPY
     contract:
@@ -441,13 +393,12 @@ instruments:
       pip_value_per_lot: 6.27
     overrides:
       execution:
-        technique:
-          selective_session_min_confluence: 3
+        go_opportunity:
+          observe_only_strategies:
+            - impulse_pullback
     policy: fx_fixed_2r_v1
     # JPY quote volatility is materially above EURUSD even though this is a
     # major; production M5 ATR therefore uses an 18-28 pip envelope.
-    # Tokyo (JPY driver) + NY (USD driver); London is intentionally excluded.
-    reaction_session: tokyo_ny
     stop_envelope:
       min_pips: 18
       max_pips: 28
@@ -488,15 +439,23 @@ instruments:
       execution:
         # Analysis stays on for these strategies (the opportunities are still
         # produced, stored and decided with reason execution_contained) but no
-        # XAU TradePlan is built from them. Phase 1 (2026-10): iFVG and Liquidity
-        # Sweep lost on XAU in both independent windows reviewed. iFVG's decisions
-        # now match the frozen Python publisher bar for bar (test/techniqueparity),
-        # but matching Python is not evidence that it earns on XAU, so it stays
-        # contained until the owner re-enables it. Liquidity Sweep has no Python
-        # predecessor to prove against. Range Sweep was proven against the frozen
-        # scalp lane (real and synthetic M1 captures, 0 mismatches) and executes.
-        # Removing a name here re-enables its execution; nothing else changes.
+        # XAU TradePlan is built from them. Removing a name re-enables its
+        # execution; nothing else changes.
+        #   ifvg: matches the frozen Python publisher bar for bar, but lost on
+        #     XAU in both independent windows reviewed; parity is not evidence
+        #     that it earns on XAU.
+        #   liquidity_sweep: Go-native, no Python predecessor; 4 of 5 XAU
+        #     trades stopped out (-165 pips). Its v3 contract fires about
+        #     twice a week on XAU, too rarely to prove an edge.
+        #   session_level: Go-native, no Python predecessor; 0 of 5 XAU trades
+        #     won (-204 pips, all Asia). It stays live on FX where it earned.
+        #   impulse_pullback: Go-native, no Python predecessor; net negative
+        #     live on every instrument that ran it (-49 pips over 11 trades).
+        # range_sweep and scalp_breakout_retest were proven against the frozen
+        # scalp lane (real and synthetic M1 captures, 0 mismatches) and execute.
         go_opportunity:
           observe_only_strategies:
             - ifvg
             - liquidity_sweep
+            - session_level
+            - impulse_pullback

@@ -34,6 +34,6 @@
 // structure.Swing/StructureBreak (session_liquidity.py itself never
 // imports swings.py or structure.py), so it sits at rank 1 alongside
 // indicator/marketdata/config, not rank 3 with zone/liquidity/fib/
-// keylevel/trendline — see docs/architecture/dependency-rules.md's fifth
+// keylevel/trendline — see docs/architecture.md's fifth
 // amendment.
 package session

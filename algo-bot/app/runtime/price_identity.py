@@ -13,11 +13,6 @@ def pip_price_digits(pip_size: float) -> int:
   return min(12, pip_decimals + 1)
 
 
-def rounded_price(value: float, pip_size: float) -> float:
-  """Round a price to the broker-style tick precision for one pip size."""
-  return round(float(value), pip_price_digits(pip_size))
-
-
 def price_token(
   value: float,
   *,

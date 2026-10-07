@@ -15,25 +15,6 @@ const (
 	AppendConflict
 )
 
-func (r AppendResult) String() string {
-	switch r {
-	case AppendAccepted:
-		return "accepted"
-	case AppendDuplicate:
-		return "duplicate"
-	case AppendOutOfOrder:
-		return "out_of_order"
-	case AppendReplaced:
-		return "replaced"
-	case AppendRejectedInvalid:
-		return "rejected_invalid"
-	case AppendConflict:
-		return "conflict"
-	default:
-		return "unknown"
-	}
-}
-
 // TimeframeHistory is the bounded, causally-sequenced candle history for
 // one symbol+timeframe — the concrete type MarketHistory.Timeframes holds
 // one of per configured timeframe.
@@ -63,10 +44,6 @@ func NewTimeframeHistory(symbol market.Symbol, timeframe market.Timeframe, depth
 		allowReplace: allowReplace,
 	}
 }
-
-// Symbol and Timeframe identify which series this history holds.
-func (h *TimeframeHistory) Symbol() market.Symbol       { return h.symbol }
-func (h *TimeframeHistory) Timeframe() market.Timeframe { return h.timeframe }
 
 // Append validates c and applies the sequencing policy documented on
 // NewTimeframeHistory. Returns the concrete outcome plus an error only for
@@ -122,12 +99,7 @@ func (h *TimeframeHistory) Append(c market.Candle) (AppendResult, error) {
 
 // Len, Capacity: see market.CandleWindow — same semantics, this type is a
 // thin, policy-enforcing wrapper over it, not a reimplementation.
-func (h *TimeframeHistory) Len() int      { return h.window.Len() }
-func (h *TimeframeHistory) Capacity() int { return h.window.Capacity() }
-
-// Oldest returns the earliest retained candle. Panics if empty, matching
-// market.CandleWindow.At's own contract (callers already check Len()).
-func (h *TimeframeHistory) Oldest() market.Candle { return h.window.At(0) }
+func (h *TimeframeHistory) Len() int { return h.window.Len() }
 
 // Newest returns the most recently appended (or replaced) candle. Panics
 // if empty.
@@ -139,20 +111,6 @@ func (h *TimeframeHistory) Newest() market.Candle { return h.window.Last() }
 // full snapshot exists for callers that genuinely need the whole retained
 // window (e.g. visualization, a full-history research replay).
 func (h *TimeframeHistory) Snapshot() []market.Candle { return h.window.Snapshot() }
-
-// LatestN returns the newest min(n, Len()) candles, oldest-first — the
-// narrow calculation-window read every structure/liquidity/indicator call
-// should use instead of Snapshot's full stored depth (§6).
-func (h *TimeframeHistory) LatestN(n int) []market.Candle {
-	if n <= 0 {
-		return nil
-	}
-	full := h.window.Snapshot()
-	if n >= len(full) {
-		return full
-	}
-	return full[len(full)-n:]
-}
 
 // At returns the candle whose Time equals t, if retained. Append's
 // strictly-increasing-Time discipline (OutOfOrder is rejected, a same-
@@ -174,19 +132,4 @@ func (h *TimeframeHistory) At(t int64) (market.Candle, bool) {
 		return full[lo], true
 	}
 	return market.Candle{}, false
-}
-
-// Range returns every retained candle with fromTime <= Time <= toTime,
-// oldest-first.
-func (h *TimeframeHistory) Range(fromTime, toTime int64) []market.Candle {
-	full := h.window.Snapshot()
-	start := 0
-	for start < len(full) && full[start].Time < fromTime {
-		start++
-	}
-	end := start
-	for end < len(full) && full[end].Time <= toTime {
-		end++
-	}
-	return full[start:end]
 }

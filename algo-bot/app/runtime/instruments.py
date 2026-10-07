@@ -285,8 +285,6 @@ class EffectiveInstrument:
     self.lifecycle = ConfigNode(_get(auto_algo, "lifecycle", {}))
     self.strategies = ConfigNode(_get(auto_algo, "strategies", {}))
 
-  def is_live(self) -> bool:
-    return self.rollout is InstrumentRollout.LIVE
 
   @property
   def opposite_position(self) -> OppositePositionPolicy:
@@ -298,9 +296,6 @@ class EffectiveInstrument:
   @property
   def instrument_id(self) -> str:
     return str(self.identity.instrument_id)
-
-  def is_executable(self) -> bool:
-    return self.rollout in {InstrumentRollout.PAPER, InstrumentRollout.LIVE}
 
 
 def for_instrument(runtime: Any, symbol: str) -> EffectiveInstrument:

@@ -114,8 +114,8 @@ async def main() -> None:
   _spawn_supervised("weekly_report_loop", weekly_report_loop)
   _spawn_supervised("owner_dm_daily_wipe_loop", owner_dm_daily_wipe_loop)
   _spawn_supervised("bar_event_dispatcher_loop", bar_event_dispatcher_loop)
-  # ZoneWatch execution is retired from the automatic path. The durable Go
-  # opportunity consumer and the bar worker are the only automatic setup path.
+  # The durable Go opportunity consumer and the bar worker are the only
+  # automatic setup path.
   _spawn_supervised("setup_expiry_sweeper_loop", setup_expiry_sweeper_loop)
   # market_map_scan_loop removed from production startup 2026-09
   # (owner-directed Market Map purge): the periodic owner digest push is

@@ -6,7 +6,7 @@
 // good it looks by that strategy's own quality model.
 //
 // This package deliberately has NO dependency on internal/strategy — see
-// docs/architecture/dependency-rules.md's "the one correction" for why:
+// docs/architecture.md's "the one correction" for why:
 // strategy.Strategy.Evaluate returns []opportunity.Candidate, so
 // opportunity must sit below strategy in the dependency graph, not above
 // it as the source architecture task's own §51 literally (and, per that

@@ -50,9 +50,6 @@ func (w *CandleWindow) Push(c Candle) {
 // Len returns the number of candles currently held (<= capacity).
 func (w *CandleWindow) Len() int { return w.size }
 
-// Capacity returns the configured maximum window size.
-func (w *CandleWindow) Capacity() int { return w.capacity }
-
 // At returns the i-th candle, oldest-first (0 == oldest, Len()-1 == newest),
 // matching pandas' positional `df.iloc[i]` ordering used throughout the
 // Python engine. Panics on an out-of-range index — callers already bounds
