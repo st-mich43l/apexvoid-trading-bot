@@ -1,49 +1,53 @@
 # ApexVoid Trading Bot
 
-A self-hosted multi-symbol trading stack for cTrader.
-
-## Current automatic flow
+A self-hosted multi-symbol trading stack for cTrader (XAU, EURUSD, GBPUSD,
+GBPJPY, USDJPY). One service owns each decision:
 
 ```text
-cTrader market feed
-  → ctrader-engine writes closed bars to Redis
-  → analysis-engine (Go) computes technical facts, strategies, and opportunities
-  → Kafka opportunity lifecycle events
-  → algo-bot (Python) applies freshness, quote, session, exposure, and risk policy
-  → Redis TradePlan
-  → ctrader-engine validates and executes with cTrader
+cTrader feed → Redis closed bars → Go Analysis Engine → Kafka opportunities
+  → Python Algo Bot → TradePlan V8 (Redis) → cTrader Engine → broker
 ```
 
-The Go analysis engine is the sole automatic technical authority. Python does
-not scan markets or rebuild zones; it owns execution policy, sizing, Telegram,
-journal, and persistence. Manual signals remain an operator-controlled path.
+- **Go Analysis Engine** (`analysis-engine/`) computes market structure, liquidity,
+  zones and context from closed bars, runs 21 independent strategies, and
+  publishes the opportunity lifecycle on a Kafka bus. It is the sole technical
+  authority.
+- **Python Algo Bot** (`algo-bot/`) is the execution and control plane: it
+  consumes opportunities, applies freshness, quote, exposure and risk policy,
+  arbitrates same-thesis opportunities best-first, reserves the entry corridor
+  atomically, builds **TradePlan V8**, and runs Telegram, the journal and manual
+  `/algo`. It never scans markets or rebuilds zones.
+- **cTrader Engine** (`ctrader-engine/`, .NET) owns the cTrader feed, the Redis
+  bar sink and broker execution: it executes a TradePlan without recomputing it,
+  enforces the final exposure fence, honours cancel and expiry, and manages
+  stops and targets.
+- **Redis** carries the market feed, TradePlans and execution state; **PostgreSQL**
+  persists the opportunity ledger, plans, fills and journal.
 
-## Services
+`config/*.yml` is the one non-secret configuration authority; `.env` holds
+secrets and bootstrap only. `contracts/` holds the cross-service schemas and
+fixtures; `deployment-template/` the production Compose/Ansible templates.
 
-- `analysis-engine/`: Go market state, indicators, structure, zones, strategies,
-  opportunity lifecycle, arbitration, Kafka publication, and replay.
-- `algo-bot/`: Python Kafka consumer, execution policy, risk/exposure checks,
-  TradePlan construction, Telegram, journal, and manual algo.
-- `ctrader-engine/`: .NET cTrader feed, Redis bar sink, TradePlan execution,
-  and position lifecycle.
-- `config/`: the categorized YAML source loaded directly by all services.
-- `contracts/`: active cross-service schemas and generated configuration
-  contracts.
-- `deployment-template/`: production Compose/Ansible templates.
+## Documentation
 
-## Quick start
+- [Architecture](docs/architecture.md): ownership, planes, dependency rules
+- [Execution](docs/execution.md): the decision cycle, same-thesis arbitration, exposure, expiry, TradePlan
+- [Configuration](docs/configuration.md): files, secrets, reachability, containment
+- [Operations](docs/operations.md): deployment, checks, backups, incidents
+- [Strategies](docs/strategies/README.md): certification matrix and per-strategy specifications
+- Reference: [Redis contract](docs/redis-contract.md), [Kafka transport](docs/transport/kafka.md),
+  [bot commands](docs/bot-commands.md), [security](docs/security.md), [decisions](docs/adr/)
+
+## Development
 
 ```bash
 docker compose config -q
-docker compose up -d
+cd analysis-engine && go build ./... && go vet ./... && go test ./...
+cd algo-bot && PYTHONPATH=. pytest -q $(grep -E '^tests/' tests/ci_autotrade_paths.txt)
+cd ctrader-engine && dotnet test tests
 ```
 
-Run service tests from each service directory. The analysis engine also has a
-deterministic replay command and committed fixtures under `analysis-engine/testdata/`.
-
-## Configuration and documentation
-
-The canonical entrypoint is `config/apexvoid.yml`, with the included files in
-`config/` and environment overlays in `config/environments/`. Start with
-[`docs/architecture.md`](docs/architecture.md), [`docs/configuration.md`](docs/configuration.md),
-and [`docs/deployment.md`](docs/deployment.md).
+The analysis engine has a deterministic replay command (`cmd/replay`) and
+committed real-capture fixtures and parity goldens under
+`analysis-engine/testdata/`. Capture fresh bars read-only with
+`python -m tools.capture_bars` inside the bot container.

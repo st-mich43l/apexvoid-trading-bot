@@ -1,0 +1,19 @@
+# Trendline Strategy V2
+
+`trendline` consumes immutable causal M5 anchors and the canonical interaction
+classifier. A line needs the configured validation touches, a valid approach,
+and a reclaimed support/resistance close. Entry is the interaction band,
+invalidation is a close-violation buffer, and target is strategy-owned R.
+Identity is the anchor pair, never evaluation time. Broken/exhausted lines and
+testing without reclaim reject. It is enabled in the live Go opportunity
+stream; Algo Bot applies execution policy before any TradePlan is published.
+
+## Status and execution
+
+- **Certification**: `GO_NATIVE_VALIDATED` ([matrix](README.md#certification)).
+- **Symbols**: all instruments.
+- **Execution**: Trades on every instrument. Pinned by build, causality and interaction tests; no frozen publisher exists.
+- **Arbitration**: opportunities on the same symbol and direction that share a
+  thesis group, a structure or an entry corridor compete; the best by quality,
+  confluence, structural quality and freshness trades and the rest are
+  suppressed ([execution](../execution.md#same-thesis-arbitration)).

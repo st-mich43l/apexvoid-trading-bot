@@ -12,7 +12,38 @@ dated section after deployment.
 
 ## Unreleased
 
+### Changed
+- Phase 2 — same-thesis arbitration. Opportunities on one symbol and direction that
+  share a Go thesis group, a structural id or an ATR-padded entry corridor now
+  compete in the decision cycle and exactly one publishes, best-first on
+  execution eligibility, strategy quality, confluence, structural quality,
+  freshness and intent id (no tier, source priority or strategy-class
+  favouritism); the rest are suppressed as `same_thesis_suppressed`. The
+  pre-arbitration merge that kept a primary by strategy class is gone. The
+  45-minute entry-corridor reservation is one Redis script, so two workers cannot
+  both win a corridor, and it fails closed when the script cannot run.
+- Execution containment: `session_level` is observe-only on XAU (0 of 5 live
+  trades won, -204 pips, all Asia) and `impulse_pullback` is observe-only on
+  every instrument (net -49 pips over 11 live trades). Both stay analysed.
+- Removed about 130 config keys that nothing read, including the whole
+  `execution.technique` kill-zone clock gate (every switch was off; session is
+  context, never a gate), `multiple_matches_enabled`, `conflict_margin`,
+  `use_quality_ranking` and the duplicated demo overrides. Removed ~9k lines of
+  unreachable Python (ZoneWatch, range-context chain, mapped re-arm, scalp risk
+  engine, withdraw-scope tool), unused Go helpers and four unused C# members,
+  with the tests that only exercised them.
+- Documentation rewritten to the final system (`docs/{architecture,execution,
+  configuration,operations}.md`, `docs/strategies/`); migration, shadow, ZoneWatch
+  and scalp-lane notes deleted.
+
 ### Fixed
+- The economic-calendar sync raised `AttributeError` on every attempt in
+  production (the currency and oil keyword config became YAML lists while the
+  parser split comma strings).
+- A manual plan whose resting legs were cancelled directly in cTrader was
+  re-sent `ProtoOACancelOrderReq` on every poll (13.5k attempts per leg in 24 h)
+  and never retired. `ORDER_NOT_FOUND` is now terminal for the leg unless a
+  broker position carries its client order id, which reconcile then adopts.
 - Phase 1 — restored the XAU edge of the profitable week (14–18 Sep 2026).
   **Key Level** (`v3`) is now the Python detector of that week
   (`key_level_reaction` at `a1c77584`) on the detector-contract frame. Replayed
