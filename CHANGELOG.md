@@ -13,6 +13,13 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
+- Manual `/algo` stop management is restored to its pre-V8 behavior (the V8
+  migration had replaced it with BE+6 ticks per leg after TP1 and the TP1 price
+  after TP2, which stopped runners out earlier). TP1 moves the whole ladder to
+  one group-economic stop funded by the booked TP1 profit (below the remaining
+  legs' VWAP, never loosening a held stop, never shallower than the deepest
+  entry); TP2 moves it to the actual shallow entry; later targets trail one
+  behind, two behind at the second-to-last rung. Autonomous plans are unchanged.
 - Phase 2 — same-thesis arbitration. Opportunities on one symbol and direction that
   share a Go thesis group, a structural id or an ATR-padded entry corridor now
   compete in the decision cycle and exactly one publishes, best-first on

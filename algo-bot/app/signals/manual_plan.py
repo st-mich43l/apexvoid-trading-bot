@@ -239,8 +239,9 @@ def build_manual_trade_plan(
       be_after_target_id="TP1" if len(targets) > 1 else None,
       be_buffer_ticks=_BE_BUFFER_TICKS,
       never_worsen_stop=True,
-      # Owner rule: after TP2 every surviving leg's stop advances to the
-      # owner's own TP1 price (needs a target after TP2 to be valid).
+      # Declarative only. The executor manages manual plans with the Manual
+      # Algo ladder rules (group-economic stop after TP1, shallow entry after
+      # TP2, one-behind trail after that) and ignores these two fields.
       trail_after_target_id="TP2" if len(targets) >= 3 else None,
       trail_to_target_id="TP1" if len(targets) >= 3 else None,
     ),

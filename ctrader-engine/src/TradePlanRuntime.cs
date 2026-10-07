@@ -186,7 +186,11 @@ public sealed record TradePlanRuntimeState(
   // Python same-direction gates must see Received/Submitted plans, not only
   // FullyOpen fills (live 2026-08-17: two GBPJPY Key Level sells published
   // 5s apart while open_position_count was still 0).
-  decimal? IntendedEntryPrice = null
+  decimal? IntendedEntryPrice = null,
+  // Manual Algo only: sum over booked target slices of signed pips from the
+  // leg's own fill to the real close price, times the closed volume. The
+  // group-economic TP1 stop spends it as room for the runners.
+  decimal BookedPipVolume = 0m
 );
 
 public sealed record TradePlanRejectionRecord(
@@ -3300,6 +3304,7 @@ public sealed partial class TradePlanRuntime(
           continue;
         }
         var closedTotal = 0L;
+        var bookedPipVolumeAdded = 0m;
         var allSucceeded = true;
         TradeExecution? lastExecution = null;
         var legs = (state.Legs ?? []).ToList();
@@ -3318,6 +3323,18 @@ public sealed partial class TradePlanRuntime(
             );
             lastExecution = execution;
             closedTotal += execution.ExecutedVolume;
+            if (
+              openLegs[i].FillPrice is decimal legFill
+              && PipSizeFor(plan.Symbol) is var legPipSize and > 0m
+            )
+            {
+              var exitPrice = execution.ExecutionPrice;
+              bookedPipVolumeAdded += (
+                plan.Analysis.Direction == "BUY"
+                  ? exitPrice - legFill
+                  : legFill - exitPrice
+              ) / legPipSize * execution.ExecutedVolume;
+            }
             perLegCloses.Add(
               $"{openLegs[i].LegId} lot={FormatEventLot(execution.ExecutedVolume, symbol)}"
             );
@@ -3414,6 +3431,7 @@ public sealed partial class TradePlanRuntime(
             Legs = legs,
             NextTargetIndex = state.NextTargetIndex + 1,
             HighestBookedTargetIndex = bookedTargetIndex,
+            BookedPipVolume = state.BookedPipVolume + bookedPipVolumeAdded,
             GroupStage = remainingAfter <= 0
               ? TradePlanGroupStages.Closed
               : TradePlanGroupStages.PartiallyClosed,
@@ -3492,9 +3510,22 @@ public sealed partial class TradePlanRuntime(
           ? remainingReferenceLegs.Sum(leg => leg.FillPrice!.Value * leg.RemainingVolume)
             / remainingReferenceLegs.Sum(leg => leg.RemainingVolume)
           : beFill;
-        var be = TradePlanExecutionEngine.CalculateBreakEven(
-          plan, remainingWeightedFill, state.CurrentStop, symbol
-        );
+        // Manual Algo keeps its pre-V8 TP1 rule: one shared group-economic
+        // stop funded by the booked TP1 profit, not a per-leg BE+buffer.
+        var be = IsManualPlan(plan)
+          ? TradePlanExecutionEngine.CalculateManualGroupBreakEven(
+              plan,
+              openLegs,
+              (state.Legs ?? []).Sum(leg => leg.FilledVolume),
+              state.BookedPipVolume,
+              PipSizeFor(plan.Symbol),
+              state.CurrentStop,
+              symbol,
+              PlannedDeepestEntry(plan, state)
+            )
+          : TradePlanExecutionEngine.CalculateBreakEven(
+              plan, remainingWeightedFill, state.CurrentStop, symbol
+            );
         if (be.Improved && openLegs.Length > 0)
         {
           var beOk = true;
@@ -3534,11 +3565,19 @@ public sealed partial class TradePlanRuntime(
         }
       }
 
-      var trailToIndex = TradePlanExecutionEngine.ResolveTrailTargetIndex(
-        plan,
-        state.NextTargetIndex,
-        state.HighestBookedTargetIndex
-      );
+      if (IsManualPlan(plan))
+      {
+        state = await ApplyManualTrailAsync(
+          client, plan, state, byId, symbol, cancellationToken
+        );
+      }
+      var trailToIndex = IsManualPlan(plan)
+        ? -1
+        : TradePlanExecutionEngine.ResolveTrailTargetIndex(
+          plan,
+          state.NextTargetIndex,
+          state.HighestBookedTargetIndex
+        );
       if (trailToIndex >= 0 && trailToIndex < plan.Targets.Count)
       {
         state = await CancelUnfilledEntryLegsAsync(
@@ -4514,6 +4553,106 @@ public sealed partial class TradePlanRuntime(
     );
     await PersistStateAsync(next, cancellationToken);
     return next;
+  }
+
+  /// <summary>
+  /// The deepest entry the plan declared (lowest for BUY, highest for SELL),
+  /// RISK leg excluded. Cancelled legs keep their declared price, so this is
+  /// still known after unfilled legs are withdrawn at the first target.
+  /// </summary>
+  private static decimal? PlannedDeepestEntry(
+    TradePlan plan,
+    TradePlanRuntimeState state
+  )
+  {
+    var prices = (state.Legs ?? [])
+      .Where(leg => !IsReactionRiskLeg(leg.LegId))
+      .Select(leg => leg.FillPrice ?? leg.IntendedPrice)
+      .Where(price => price > 0m)
+      .ToArray();
+    if (prices.Length == 0)
+    {
+      return null;
+    }
+    return plan.Analysis.Direction == "BUY" ? prices.Min() : prices.Max();
+  }
+
+  /// <summary>
+  /// Manual Algo stop moves after TP2 and later targets (see
+  /// <see cref="TradePlanExecutionEngine.PlanManualTrailStop"/>). Keyed off
+  /// the highest booked target, so it is idempotent and never loosens a stop.
+  /// </summary>
+  private async Task<TradePlanRuntimeState> ApplyManualTrailAsync(
+    ICTraderTradeClient client,
+    TradePlan plan,
+    TradePlanRuntimeState state,
+    IReadOnlyDictionary<long, TradingPosition> byId,
+    SymbolInfo symbol,
+    CancellationToken cancellationToken
+  )
+  {
+    var move = TradePlanExecutionEngine.PlanManualTrailStop(
+      plan, state.HighestBookedTargetIndex + 1, state.Legs ?? [], symbol
+    );
+    if (move is not (decimal stop, string label))
+    {
+      return state;
+    }
+    var buy = plan.Analysis.Direction == "BUY";
+    if (buy ? stop <= state.CurrentStop : stop >= state.CurrentStop)
+    {
+      return state;
+    }
+    state = await CancelUnfilledEntryLegsAsync(
+      client, plan, state, "before_trail", cancellationToken
+    );
+    var openLegs = (state.Legs ?? [])
+      .Where(leg =>
+        leg.BrokerPositionId is long id
+        && byId.ContainsKey(id)
+        && leg.RemainingVolume > 0
+      )
+      .ToArray();
+    if (openLegs.Length == 0)
+    {
+      return state;
+    }
+    var ok = true;
+    foreach (var leg in openLegs)
+    {
+      try
+      {
+        await client.AmendPositionStopLossAsync(
+          leg.BrokerPositionId!.Value, stop, cancellationToken
+        );
+      }
+      catch (Exception exception)
+      {
+        ok = false;
+        log(
+          $"v8 manual trail amend failed id={plan.PlanId} leg={leg.LegId} "
+          + $"message={exception.Message}"
+        );
+      }
+    }
+    if (!ok)
+    {
+      return state;
+    }
+    state = state with { CurrentStop = stop };
+    await PersistStateAsync(state, cancellationToken);
+    log($"v8 manual stop trailed id={plan.PlanId} stop={stop} to={label}");
+    var ordinal = state.HighestBookedTargetIndex + 1;
+    await PublishEventAsync(
+      "sl_moved",
+      $"SL MOVED to {stop} (trail {label})",
+      plan,
+      cancellationToken,
+      positionId: state.PositionId,
+      price: stop,
+      eventKey: $"sl_trail_TP{ordinal}"
+    );
+    return state;
   }
 
   private static bool NeedsSubmittedReconcile(TradePlanRuntimeState state) =>
