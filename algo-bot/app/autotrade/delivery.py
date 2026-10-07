@@ -95,7 +95,7 @@ _FORMING_REPLY_TYPES = frozenset({
 # the setup's forming card when one exists, same as _FORMING_REPLY_TYPES -
 # but fall back to the pre-P4 position_id-based reply chain (_reply_message_id)
 # rather than going standalone, since a position with no setup_lifecycle
-# record (eg. an older V6 position) still needs its existing thread to work.
+# record (eg. an older position) still needs its existing thread to work.
 _FORMING_REPLY_PREFERRED_TYPES = frozenset({
   "stop_moved",
   "take_profit",
@@ -801,7 +801,7 @@ def _format_strategy_route(event: dict) -> str | None:
   if status != "candidate_published":
     return None
   # "READY" is reserved for the executor accepting and arming a plan
-  # (see docs/autotrade-execution-integrity.md) - Python publishing a
+  # (see docs/execution.md) - Python publishing a
   # candidate is not that, so this must not read "ready".
   headline = "🟢 <b>Algo bot PLAN PUBLISHED</b>"
   measured = event.get("measured") or {}
@@ -1071,7 +1071,7 @@ def render_auto_trade_event(
     "range_flip_attempted": "🔁 <b>Range flip attempted</b>",
     "range_flip_filled": "✅ <b>Range flip completed</b>",
     # TradePlan V8 lifecycle - distinct
-    # wording from the V6 labels above so a published plan is never
+    # wording from the labels above so a published plan is never
     # confused with a merely-confirmed setup ("Do not say READY when
     # Python only publishes a plan").
     "plan_armed": "🎯 <b>PLAN ARMED</b>",

@@ -2127,10 +2127,9 @@ async def ensure_plan_published_root_card(
 ) -> int | None:
   """Ensure the PLAN PUBLISHED root card exists after direct publication.
 
-  ZoneWatch cutover suppresses SETUP FORMING until publish, then expects the
-  first card to be PLAN PUBLISHED via scanner notify. Direct publish from the
-  M1 ZoneWatch loop never calls that notify path, so without this ensure the
-  owner can trade a setup with no Telegram root card at all — and later
+  SETUP FORMING is suppressed until publish, so the first card is PLAN
+  PUBLISHED. A direct publish never calls the forming notify path, so without
+  this ensure the owner can trade a setup with no Telegram root card at all — and later
   take_profit / stop_moved / position_closed replies have nothing to thread to.
   """
   owner_id = (

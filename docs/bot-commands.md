@@ -375,11 +375,11 @@ Owner-only DM commands (require `TELEGRAM_OWNER_ID`):
 | Command | Description |
 |---|---|
 | `/algo_status` | Live auto-trade status card (positions, watches, gates) |
-| `/algo_funnel [SYMBOL]` | Discovery → activation funnel from `auto_trade:metrics:{SYMBOL}` with top block reasons per stage |
+| `/algo_funnel [SYMBOL]` | Opportunity → plan → fill funnel from `auto_trade:metrics:{SYMBOL}` with the exits and top block reasons |
 | `/algo_setups [SYMBOL]` | Go's scored major zones near the live quote, nearest first |
 | `/scan_report [SYMBOL] [hours]` | Go opportunity lifecycle count for the last N hours |
 
-The funnel stages are: `detected → actionable → match_published → activation_allowed → plan_published`.
+The funnel stages are: `checked → candidate_published → plan_published → filled`, followed by the exits that never reach a plan (waiting, blocked, arbitration suppressed, expired, target room rejected).
 
 ---
 

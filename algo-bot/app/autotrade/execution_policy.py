@@ -999,9 +999,8 @@ def evaluate_execution_policy(
         {"stamped_risk_multiplier": raw_risk_multiplier},
         policy,
       )
-  # Never trust a stale Redis/zone-watch stamp for volume. Live Trend Pullback
-  # Tier B kept booking risk_multiplier=0.5 after the helper returned 1.0
-  # because analysis:zone_watch_candidate still held the pre-fix field.
+  # Never trust a stale stamped risk multiplier for volume: a match written
+  # before a policy fix would keep booking the old value.
   stamped_risk_multiplier = float(
     1.0 if raw_risk_multiplier is None else raw_risk_multiplier
   )

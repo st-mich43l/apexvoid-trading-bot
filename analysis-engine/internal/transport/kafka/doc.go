@@ -9,7 +9,7 @@
 // risk, TradePlan construction, broker execution, or Telegram (source
 // task §2) — Kafka is transport, never technical-analysis logic (§1).
 //
-// Dependency rank 7 (docs/architecture/dependency-rules.md's third
+// Dependency rank 7 (docs/architecture.md's third
 // amendment): strictly above opportunity(5)/strategy/confluence/state(6),
 // strictly below engine(8) — engine is the only package permitted to
 // import this one. structure/liquidity/zone/indicator/strategy must

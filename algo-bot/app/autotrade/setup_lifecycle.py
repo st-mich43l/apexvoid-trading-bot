@@ -1,7 +1,7 @@
 """Setup lifecycle state machine for TradePlan V8 analysis (Phase 2).
 
 This is a distinct state machine from `app/autotrade/lifecycle.py`'s
-`LIFECYCLE_STATES`, which tracks V6 execution progress
+`LIFECYCLE_STATES`, which tracks execution progress
 (order_planned/order_submitted/managing/...). This module tracks the
 *analysis* side: whether a structural reaction is still being watched,
 forming, confirmed, or has produced a plan. A CONFIRMED setup publishes

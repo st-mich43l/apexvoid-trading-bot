@@ -2149,7 +2149,7 @@ public sealed partial class TradePlanRuntime(
       // have fired, but places no orders. Left Received so the next poll
       // re-evaluates it.
       log(
-        $"v8 shadow: would submit id={plan.PlanId} entry_type={plan.Entry.Type}"
+        $"v8 dry run: would submit id={plan.PlanId} entry_type={plan.Entry.Type}"
       );
       return;
     }

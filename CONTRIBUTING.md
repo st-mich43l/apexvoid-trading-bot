@@ -57,10 +57,10 @@ Docs live under `docs/` and follow these conventions:
 - Inline commands use backticks; multi-line examples use fenced blocks
   with a language hint (```` ```bash ````, ```` ```python ````, etc.).
 - Prefer tables for structured reference material.
-- Cross-link documents with relative paths (`docs/deployment.md`).
+- Cross-link documents with relative paths (`docs/operations.md`).
 
-When changing deployment steps, update both `docs/deployment.md` and the
-"Quick Start" block in `README.md` if applicable.
+When changing deployment steps, update `docs/operations.md` (and the
+Development block in `README.md` if the commands change).
 
 Every behavior, configuration, deployment, or operator-facing change must also
 add a concise entry under `Unreleased` in `CHANGELOG.md` in the same pull

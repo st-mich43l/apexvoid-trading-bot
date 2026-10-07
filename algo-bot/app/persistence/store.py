@@ -31,7 +31,6 @@ import time
 import asyncpg
 import logging
 from contextlib import asynccontextmanager
-from contextvars import ContextVar
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 from app.core.config import runtime_config
@@ -68,47 +67,11 @@ async def close_pool() -> None:
     _pool = None
 
 
-class DryRunWriteError(RuntimeError):
-  """A shadow dry run tried to write to PostgreSQL."""
-
-
-# Inside a dry-run context (context-local, like the Redis override) the
-# connection only serves plain SELECT/WITH statements; everything else raises.
-_readonly_db: ContextVar[bool] = ContextVar("store_readonly_db", default=False)
-
-
-class _ReadOnlyConnection:
-  _READ_PREFIXES = ("select", "with")
-
-  def __init__(self, conn):
-    self._conn = conn
-
-  def _check(self, query: str) -> None:
-    head = query.lstrip().lower()
-    if not head.startswith(self._READ_PREFIXES) or " for update" in head or "nextval" in head:
-      raise DryRunWriteError(f"shadow dry run attempted a non-read statement: {query.strip()[:80]!r}")
-
-  async def fetch(self, query, *args, **kwargs):
-    self._check(query)
-    return await self._conn.fetch(query, *args, **kwargs)
-
-  async def fetchrow(self, query, *args, **kwargs):
-    self._check(query)
-    return await self._conn.fetchrow(query, *args, **kwargs)
-
-  async def fetchval(self, query, *args, **kwargs):
-    self._check(query)
-    return await self._conn.fetchval(query, *args, **kwargs)
-
-  def __getattr__(self, name):
-    raise DryRunWriteError(f"shadow dry run may only read PostgreSQL (attempted {name!r})")
-
-
 @asynccontextmanager
 async def _connect():
   pool = await _get_pool()
   async with pool.acquire() as conn:
-    yield _ReadOnlyConnection(conn) if _readonly_db.get() else conn
+    yield conn
 
 
 def _rowcount(status: str) -> int:

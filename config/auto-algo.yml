@@ -13,9 +13,8 @@ auto_algo:
 
   actionability:
     entry_location:
-      # Enforce: block ZoneWatch at premium BUYs / discount SELLs (and extremes).
-      # Must pair with execution.activation.mode=enforce for cutover to hard-stop.
-      # Technique pack: also forces detectors.strict_pd_gate via execution.technique.
+      # Enforce: block entries at premium BUYs / discount SELLs (and extremes).
+      # Pairs with execution.activation.mode=enforce.
       mode: enforce
       reversal:
         buy_maximum_position: 0.50

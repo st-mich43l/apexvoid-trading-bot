@@ -581,7 +581,7 @@ def scalp_zone_access(
 
   ``retest_only`` (Breakout Retest): executable only while quote sits inside
   the retest band — approach from either side waits; no break-without-retest
-  chase (see docs/scalping/OWN_BREAKOUT_TECHNIQUE.md).
+  chase (see docs/strategies/scalp_breakout_retest.md).
   """
   evidence = executable_quote_in_zone(
     direction, bid, ask, zone_low, zone_high, tolerance, pip_size=pip_size,
