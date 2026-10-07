@@ -82,7 +82,7 @@ Block, never treated as a flip).
 
 - **Certification**: `GO_NATIVE_VALIDATED` ([matrix](README.md#certification)).
 - **Symbols**: all instruments.
-- **Execution**: Trades on every instrument. There is no frozen publisher to prove against; behaviour is pinned by its own contract tests. One live XAU trade so far (a stop-out), too few to judge.
+- **Execution**: Trades on every instrument. The Python predecessor (`flip_*_zone_reaction`) is not reproduced: same bar and side on 4 of 91 oracle decisions. Behaviour is pinned by its own contract tests only. One live XAU trade so far (a stop-out), too few to judge.
 - **Arbitration**: opportunities on the same symbol and direction that share a
   thesis group, a structure or an entry corridor compete; the best by quality,
   confluence, structural quality and freshness trades and the rest are

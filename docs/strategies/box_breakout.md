@@ -12,7 +12,7 @@ before any TradePlan is published.
 
 - **Certification**: `GO_NATIVE_VALIDATED` ([matrix](README.md#certification)).
 - **Symbols**: all instruments.
-- **Execution**: Trades on every instrument. It and `scalp_breakout_retest` can retest the same broken box edge; same-thesis arbitration lets exactly one trade, so a breakout never executes twice.
+- **Execution**: Not parity with the Python `box_breakout` (dark by default there): same bar on 0 of 36 oracle decisions. Trades on every instrument. It and `scalp_breakout_retest` can retest the same broken box edge; same-thesis arbitration lets exactly one trade, so a breakout never executes twice.
 - **Arbitration**: opportunities on the same symbol and direction that share a
   thesis group, a structure or an entry corridor compete; the best by quality,
   confluence, structural quality and freshness trades and the rest are
