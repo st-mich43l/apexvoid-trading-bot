@@ -444,12 +444,12 @@ instruments:
         #   ifvg: matches the frozen Python publisher bar for bar, but lost on
         #     XAU in both independent windows reviewed; parity is not evidence
         #     that it earns on XAU.
-        #   liquidity_sweep: Go-native, no Python predecessor; 4 of 5 XAU
+        #   liquidity_sweep: Go-native, no live Python predecessor; 4 of 5 XAU
         #     trades stopped out (-165 pips). Its v3 contract fires about
         #     twice a week on XAU, too rarely to prove an edge.
-        #   session_level: Go-native, no Python predecessor; 0 of 5 XAU trades
+        #   session_level: not a port of Python's session_level_reaction; 0 of 5 XAU trades
         #     won (-204 pips, all Asia). It stays live on FX where it earned.
-        #   impulse_pullback: Go-native, no Python predecessor; net negative
+        #   impulse_pullback: not a port of Python's scalp-lane archetype; net negative
         #     live on every instrument that ran it (-49 pips over 11 trades).
         # range_sweep and scalp_breakout_retest were proven against the frozen
         # scalp lane (real and synthetic M1 captures, 0 mismatches) and execute.

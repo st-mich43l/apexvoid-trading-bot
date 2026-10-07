@@ -21,8 +21,10 @@ Every strategy has exactly one status:
 
 - `LEGACY_PARITY_PROVEN`: its decisions reproduce the frozen Python publisher on
   committed real captures (a golden generated from the oracle, never from Go).
-- `GO_NATIVE_VALIDATED`: no Python predecessor exists to prove against; the
-  behaviour is pinned by tests of its own contract.
+- `GO_NATIVE_VALIDATED`: pinned by tests of its own contract. It does **not** claim
+  parity: `liquidity_sweep` has no live Python predecessor, while `flip_zone`,
+  `session_level`, `trendline`, `box_breakout` and `impulse_pullback` do and are
+  measured against it in the matrix (parity not achieved).
 - `OBSERVE_ONLY`: analysed and published, never traded.
 
 | ID | Inputs | Legacy equivalent | Proof | Symbols | XAU execution | Status | XAU opportunities, Sep 14-21 / Sep 28-Oct 7 |
@@ -43,11 +45,11 @@ Every strategy has exactly one status:
 | `range_sweep` | M5 range, M1 edge excursion and reclaim | Python scalp lane (a1c77584) | `test/scalpparity` real and synthetic M1 captures, 0 mismatches | XAU only | live | LEGACY_PARITY_PROVEN | 3 (Oct 2-6 M1 capture) |
 | `scalp_breakout_retest` | M5 compression, M1 acceptance and retest | Python scalp lane (a1c77584) | `test/scalpparity` real and synthetic M1 captures, 0 mismatches | XAU only | live | LEGACY_PARITY_PROVEN | 8 (Oct 2-6 M1 capture) |
 | `flip_zone` | canonical flipped zones, structure, reaction | none (Go zone-domain concept) | 10 behavioural tests in `test/strategy/flipzone` | all | live | GO_NATIVE_VALIDATED | 66 / 107 |
-| `session_level` | canonical session levels, reaction | none (Go-native) | behavioural tests in `test/strategy/sessionlevel` | all | **contained** (analysis only) | GO_NATIVE_VALIDATED | 268 / 412 |
-| `trendline` | causal trendline anchors and interaction state | none (Go-native) | build, causality and interaction tests in `test/trendline` | all | live | GO_NATIVE_VALIDATED | 18 / 10 |
+| `session_level` | canonical session levels, reaction | `session_level_reaction` (1c9f323) | **no parity**: same bar on 227 of 316 oracle decisions, same entry on 163, and Go emits about 6x as many confirmed bar-states (1831); own tests: behavioural tests in `test/strategy/sessionlevel` | all | **contained** (analysis only) | GO_NATIVE_VALIDATED | 268 / 412 |
+| `trendline` | causal trendline anchors and interaction state | `trendline_reaction` (1c9f323) | **partial**: same bar and entry on 6 of 8 oracle decisions, 22 Go confirmed bar-states; 8 decisions is too few to judge; own tests: build, causality and interaction tests in `test/trendline` | all | live | GO_NATIVE_VALIDATED | 18 / 10 |
 | `liquidity_sweep` | lone-extreme pool sweep and reclaim, graded grab | none (Go-native) | contract tests in `internal/strategy/liquiditysweep` | all | **contained** (analysis only) | GO_NATIVE_VALIDATED | 2 / 2 |
-| `box_breakout` | M5 compression box, accepted break, retest | none (Go-native) | same-thesis arbitration test against `scalp_breakout_retest` | all | live | GO_NATIVE_VALIDATED | 1 / 4 |
-| `impulse_pullback` | M5 impulse, M1 bounded correction | none (Go-native) | none beyond the catalog fixture; net negative live | all instruments contained | **contained** (analysis only) | OBSERVE_ONLY | 2 + 11 on M1 (Oct 2-6 M1 capture) |
+| `box_breakout` | M5 compression box, accepted break, retest | `box_breakout` (1c9f323, dark by default in Python) | **no parity**: same bar on 0 of 36 oracle decisions; own tests: same-thesis arbitration test against `scalp_breakout_retest` | all | live | GO_NATIVE_VALIDATED | 1 / 4 |
+| `impulse_pullback` | M5 impulse, M1 bounded correction | `discover_impulse_pullback` (scalp lane, a1c77584), not ported | **not ported**: Go is a simpler thesis (93 lines) than the Python archetype's role, 4 ATR displacement, body dominance, corrective ratio and location gates; own tests: none beyond the catalog fixture; net negative live | all instruments contained | **contained** (analysis only) | OBSERVE_ONLY | 2 + 11 on M1 (Oct 2-6 M1 capture) |
 
 Proof is scoped to the committed captures (XAU, EURUSD, GBPUSD, GBPJPY, USDJPY for
 the technique goldens; XAU, GBPUSD, USDJPY for the detector golden; XAU M1 for the
@@ -65,7 +67,7 @@ each with the evidence behind it:
 | XAU | `ifvg` | matches Python bar for bar, but lost on XAU in both independent windows reviewed |
 | XAU | `liquidity_sweep` | 4 of 5 live XAU trades stopped out (-165 pips); fires about twice a week |
 | XAU | `session_level` | 0 of 5 live XAU trades won (-204 pips, all Asia); stays live on FX where it earned |
-| every instrument | `impulse_pullback` | net -49 pips over 11 live trades; no Python predecessor |
+| every instrument | `impulse_pullback` | net -49 pips over 11 live trades; not a port of the Python scalp archetype |
 
 Containment is reversible by removing the name. Nothing re-enables itself.
 
