@@ -2902,8 +2902,8 @@ async def _handle_event(
   spot = await _load_spot(client, symbol)
   live_matches = await _load_strategy_matches(client, symbol)
   # Go is the sole automatic technical-opportunity producer. This filter is
-  # applied even for a ready-stream wake-up: a ZoneWatch or legacy Python
-  # caller cannot smuggle a non-Go match through the explicit-match path.
+  # applied even for a ready-stream wake-up: no non-Go match can enter
+  # through the explicit-match path.
   live_matches = [
     item for item in live_matches
     if GO_ORIGIN_TAG in item.tags

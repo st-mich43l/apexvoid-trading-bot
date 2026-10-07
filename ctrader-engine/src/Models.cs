@@ -287,7 +287,7 @@ public sealed record AutoTradeEvent(
   // CandidateId carries plan_id, MatchId carries setup_id, ThesisId carries
   // thesis_id (all already-existing fields, reused rather than duplicated).
   // EntryType is the one genuinely new label TradePlan needs (market_watch/
-  // single_limit/limit_ladder has no V6 analogue).
+  // single_limit/limit_ladder is declared only by a TradePlan).
   string? EntryType = null,
   // Terminal close analytics for fixed_rr journal (Python store.py).
   bool? BreakEvenApplied = null,
