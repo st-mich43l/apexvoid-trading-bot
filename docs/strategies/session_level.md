@@ -84,7 +84,7 @@ closed rather than guessing a direction), or too far from current price
 
 - **Certification**: `GO_NATIVE_VALIDATED` ([matrix](README.md#certification)).
 - **Symbols**: all instruments.
-- **Execution**: Trades on FX (EURUSD +48, GBPJPY +67, USDJPY -17 pips live). On XAU it is observe-only after 0 of 5 live trades won (-204 pips, all in Asia). Session here is the thesis level, not a session filter.
+- **Execution**: Not a port of the Python `session_level_reaction`: it matches the oracle's bar on 227 of 316 decisions and emits about six times as many confirmed bar-states. Trades on FX (EURUSD +48, GBPJPY +67, USDJPY -17 pips live). On XAU it is observe-only after 0 of 5 live trades won (-204 pips, all in Asia). Session here is the thesis level, not a session filter.
 - **Arbitration**: opportunities on the same symbol and direction that share a
   thesis group, a structure or an entry corridor compete; the best by quality,
   confluence, structural quality and freshness trades and the rest are
