@@ -640,6 +640,36 @@ class TradePlanEntryLeg:
     )
 
 
+RISK_LEG_ID = "RISK"
+
+
+@dataclass(frozen=True)
+class TradePlanRiskLeg:
+  """The planner-declared "trade-off" risk leg: one extra resting limit order.
+
+  It sits close to the stop (a deep fill if price nearly invalidates the setup
+  before reversing) at a fixed lot size, outside the ladder's volume ratios. The
+  planner owns its price and size; the executor places exactly this and never
+  invents one.
+  """
+
+  price: Decimal
+  lots: Decimal
+
+  def to_dict(self) -> dict:
+    return {"price": str(self.price), "lots": str(self.lots)}
+
+  @classmethod
+  def from_dict(cls, data: Mapping[str, Any]) -> "TradePlanRiskLeg":
+    price = _decimal(_require(data, "price"), "entry.risk_leg.price")
+    lots = _decimal(_require(data, "lots"), "entry.risk_leg.lots")
+    if price <= 0:
+      raise TradePlanError(f"entry.risk_leg.price must be positive: {price}")
+    if lots <= 0:
+      raise TradePlanError(f"entry.risk_leg.lots must be positive: {lots}")
+    return cls(price=price, lots=lots)
+
+
 @dataclass(frozen=True)
 class TradePlanEntry:
   type: str
@@ -652,9 +682,10 @@ class TradePlanEntry:
   max_slippage_ticks: int | None = None
   order_price: Decimal | None = None
   legs: tuple[TradePlanEntryLeg, ...] = ()
+  risk_leg: TradePlanRiskLeg | None = None
 
   def to_dict(self) -> dict:
-    return {
+    payload = {
       "type": self.type,
       "zone_low": None if self.zone_low is None else str(self.zone_low),
       "zone_high": None if self.zone_high is None else str(self.zone_high),
@@ -666,6 +697,9 @@ class TradePlanEntry:
       "expires_at": self.expires_at,
       "legs": [leg.to_dict() for leg in self.legs],
     }
+    if self.risk_leg is not None:
+      payload["risk_leg"] = self.risk_leg.to_dict()
+    return payload
 
   @classmethod
   def from_dict(cls, data: Mapping[str, Any]) -> "TradePlanEntry":
@@ -728,6 +762,15 @@ class TradePlanEntry:
           "market_with_limit_scale L2 order_type must be limit",
         )
 
+    raw_risk_leg = data.get("risk_leg")
+    risk_leg = None
+    if raw_risk_leg is not None:
+      if entry_type not in (ENTRY_TYPE_LIMIT_LADDER, ENTRY_TYPE_MARKET_WITH_LIMIT_SCALE) or len(legs) < 2:
+        raise TradePlanError(
+          "entry.risk_leg requires a multi-leg limit_ladder or market_with_limit_scale entry",
+        )
+      risk_leg = TradePlanRiskLeg.from_dict(raw_risk_leg)
+
     return cls(
       type=entry_type,
       zone_low=zone_low_d,
@@ -739,6 +782,7 @@ class TradePlanEntry:
       order_price=order_price_d,
       expires_at=int(_require(data, "expires_at")),
       legs=legs,
+      risk_leg=risk_leg,
     )
 
   def entry_prices(self) -> tuple[Decimal, ...]:
@@ -1078,6 +1122,13 @@ class TradePlan:
     else:
       if any(self.stop.price <= price for price in entry_prices):
         raise TradePlanError("SELL stop.price must be above every entry price")
+
+    risk_leg = self.entry.risk_leg
+    if risk_leg is not None:
+      if direction == "BUY" and self.stop.price >= risk_leg.price:
+        raise TradePlanError("BUY stop.price must be below entry.risk_leg.price")
+      if direction != "BUY" and self.stop.price <= risk_leg.price:
+        raise TradePlanError("SELL stop.price must be above entry.risk_leg.price")
 
     if not self.targets:
       raise TradePlanError("plan must declare at least one target")

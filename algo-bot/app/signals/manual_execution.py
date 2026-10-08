@@ -43,6 +43,7 @@ from app.persistence.store import (
 from app.signals import pips_format
 from app.runtime.instruments import for_instrument, live_instruments
 from app.signals.manual_intent import ManualTradeIntent
+from app.autotrade.risk_leg import load_account_equity
 from app.signals.manual_plan import build_manual_trade_plan, is_manual_plan_id
 from app.autotrade.active_exposure import _mget_or_get, normalize_direction, normalize_symbol
 
@@ -283,7 +284,10 @@ async def _handle_execution_rejected(event: dict) -> None:
 async def _publish_intent(client, intent: ManualTradeIntent) -> None:
   """Publish the owner's /algo intent as a TradePlan V8 (the only order path)."""
   try:
-    plan = build_manual_trade_plan(intent)
+    plan = build_manual_trade_plan(
+      intent,
+      account_equity=await load_account_equity(client, intent.symbol),
+    )
   except ValueError as exc:
     log.warning("Manual /algo intent %s rejected: %s", intent.intent_id, exc)
     await set_execution_status(

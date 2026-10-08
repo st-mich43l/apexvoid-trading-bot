@@ -50,8 +50,16 @@ execution:
     stop_min_pips: 40
     risk_targeted_entry_enabled: true
 
+  # The XAU "trade-off" risk leg: one extra resting limit order near the stop at a
+  # fixed size. The planner declares it in the TradePlan (entry.risk_leg) and the
+  # card prints it; the executor places exactly that leg. Pinned by
+  # contracts/autotrade/xau-ladder-spec.json.
   reaction_risk_leg:
     enabled: true
+    lots: 0.05
+    lots_below_equity_floor: 0.02
+    equity_floor: 1000
+    pips_from_stop: 15
 
   scaling:
     add:

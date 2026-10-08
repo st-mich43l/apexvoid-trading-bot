@@ -406,6 +406,115 @@
           "config_fingerprint": "abc123"
         }
       }
+    },
+    {
+      "name": "limit_ladder_buy_with_risk_leg",
+      "plan": {
+        "version": 8,
+        "plan_id": "plan-003",
+        "thesis_id": "thesis-003",
+        "setup_id": "setup-003",
+        "symbol": "XAU",
+        "created_at": 1720000000,
+        "expires_at": 1720003600,
+        "analysis": {
+          "strategy": "Structural Zone Reaction",
+          "strategy_family": "structural_zone",
+          "direction": "BUY",
+          "context_timeframes": [
+            "M30",
+            "M15"
+          ],
+          "formation_timeframe": "M15",
+          "confirmation_timeframe": "M5",
+          "formation_bar_ts": 1719999000,
+          "confirmation_bar_ts": 1719999600,
+          "score": 0.65,
+          "confluence": 2,
+          "bias": "up",
+          "regime": "range",
+          "reasons": [
+            "demand_zone_ladder_fill"
+          ],
+          "tags": []
+        },
+        "source_structure": {
+          "structure_id": "demand:M15:4085.00:4089.50:1719990000",
+          "kind": "demand",
+          "timeframe": "M15",
+          "low": "4085.00",
+          "high": "4089.50",
+          "invalidation_price": "4079.00"
+        },
+        "entry": {
+          "type": "limit_ladder",
+          "zone_low": "4085.00",
+          "zone_high": "4089.50",
+          "expires_at": 1720003600,
+          "legs": [
+            {
+              "leg_id": "L1",
+              "price": "4089.50",
+              "volume_ratio": "0.60"
+            },
+            {
+              "leg_id": "L2",
+              "price": "4085.00",
+              "volume_ratio": "0.40"
+            }
+          ],
+          "risk_leg": {
+            "price": "4080.50",
+            "lots": "0.05"
+          }
+        },
+        "stop": {
+          "type": "absolute",
+          "price": "4079.00",
+          "source": "structural_invalidation",
+          "structure_id": "demand:M15:4085.00:4089.50:1719990000",
+          "reason": "below distal edge plus Python-defined buffer"
+        },
+        "targets": [
+          {
+            "target_id": "TP1",
+            "type": "absolute",
+            "price": "4097.00",
+            "close_ratio": "1.0"
+          }
+        ],
+        "risk": {
+          "risk_percent": "0.75",
+          "risk_multiplier": "1.0",
+          "max_volume": 100000,
+          "max_group_risk_percent": "2.0"
+        },
+        "management": {
+          "be_after_target_id": null,
+          "be_buffer_ticks": 6,
+          "never_worsen_stop": true
+        },
+        "sizing": {
+          "mode": "equity_table",
+          "table_version": "owner_equity_v1",
+          "entry_distribution": "zone_scale",
+          "leg_ratios": [
+            "0.60",
+            "0.40"
+          ]
+        },
+        "execution_policy": {
+          "allow_market": false,
+          "allow_limit": true,
+          "allow_partial_fill": true,
+          "cancel_on_expiry": true
+        },
+        "provenance": {
+          "analysis_engine_version": "v8.0.0",
+          "market_map_id": "map-2024-07-03-003",
+          "config_fingerprint": "abc123"
+        }
+      }
     }
   ],
   "invalid_plans": [
@@ -504,6 +613,39 @@
       "plan_overrides": {
         "base": "market_watch_buy",
         "management.trail_after_target_id": "TP3"
+      }
+    },
+    {
+      "name": "risk_leg_on_single_entry_rejected",
+      "error": "entry.risk_leg requires a multi-leg",
+      "plan_overrides": {
+        "base": "single_limit_sell",
+        "entry.risk_leg": {
+          "price": "4108.50",
+          "lots": "0.05"
+        }
+      }
+    },
+    {
+      "name": "risk_leg_beyond_the_stop_rejected",
+      "error": "entry.risk_leg.price",
+      "plan_overrides": {
+        "base": "limit_ladder_buy_with_risk_leg",
+        "entry.risk_leg": {
+          "price": "4078.00",
+          "lots": "0.05"
+        }
+      }
+    },
+    {
+      "name": "risk_leg_zero_lots_rejected",
+      "error": "must be positive",
+      "plan_overrides": {
+        "base": "limit_ladder_buy_with_risk_leg",
+        "entry.risk_leg": {
+          "price": "4080.50",
+          "lots": "0"
+        }
       }
     }
   ]
