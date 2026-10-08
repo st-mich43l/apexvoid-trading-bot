@@ -15,6 +15,7 @@ import math
 import time
 from typing import Any
 
+from app.autotrade.strategy_catalog import lookup_profile
 from app.autotrade.strategy_taxonomy import is_m1_scalp_match, is_m1_scalp_strategy
 from app.analysis_client.provenance import GO_ORIGIN_TAG
 
@@ -42,24 +43,6 @@ EXECUTION_CONFIRMATION_PHASES = frozenset({
 M5_AUTHORITATIVE = "m5_authoritative"
 M1_RETEST = "m1_retest"
 
-_REACTION_STRATEGIES = frozenset({
-  "Key Level",
-  "Session Level",
-  "Trendline",
-  "Mapped Zone Reaction",
-  "Liquidity Sweep",
-  "Snap-Back",
-  # Fade Scalp's family (range_reversion) is shared with Range Edge Scalp,
-  # whose hard M1 requirement is intentional (no separate M5 reaction
-  # exists for that setup) - registered here individually, by strategy
-  # name, so it gets the M1-optional treatment without touching Range Edge
-  # Scalp's family-level classification.
-  "Fade Scalp",
-})
-_CONTINUATION_STRATEGIES = frozenset({
-  "Momentum Ride",
-  "Breakout Continuation",
-})
 _M1_SCALP_TRIGGERS = frozenset({
   "sweep_reclaim",
   "impulse_pullback",
@@ -72,25 +55,6 @@ _M1_SCALP_TRIGGERS = frozenset({
 # legacy Python M5 confirmation label so a plan cannot appear technically
 # Python-confirmed after the Go-only cutover.
 GO_AUTHORITATIVE = "go_analysis_engine"
-# Product Reaction taxonomy is only Key/Session/Trendline (see
-# strategy_taxonomy.REACTION_STRATEGIES). Confirmation mechanics below are
-# M5-authoritative / M1-optional — not product "Reaction" naming.
-_M5_AUTHORITATIVE_REACTION_FAMILIES = frozenset({
-  "key_level",
-  "session_level",
-  "trendline",
-  "mapped_zone_reaction",
-  "liquidity_reversal",
-  "trend_pullback",
-})
-# Zone setups (family supply_demand) share the same confirmation timing
-# contract but must not live under a Reaction-named set.
-_ZONE_CONFIRMATION_FAMILIES = frozenset({
-  "supply_demand",
-})
-_M5_AUTHORITATIVE_FAMILIES = (
-  _M5_AUTHORITATIVE_REACTION_FAMILIES | _ZONE_CONFIRMATION_FAMILIES
-)
 _AUTHORITATIVE_REACTIONS = frozenset({
   "rejection_choch",
   "sweep_reclaim",
@@ -138,15 +102,15 @@ class ConfirmationPolicy:
   m1_required_on_retest: bool
   allow_same_cycle_publish: bool
   require_quote_inside_zone: bool
-  reaction_family: bool
-  zone_family: bool
+  level_reaction: bool
+  zone_reaction: bool
   metadata_valid: bool
   reason_code: str
 
   @property
   def m5_authoritative_contract(self) -> bool:
     """True for Reaction or Zone confirmation timing (not product taxonomy)."""
-    return self.reaction_family or self.zone_family
+    return self.level_reaction or self.zone_reaction
 
 
 @dataclass(frozen=True)
@@ -303,7 +267,8 @@ def _m5_confirmation_bar_ts(match: Any) -> Any:
 
 def confirmation_policy_for(match: Any) -> ConfirmationPolicy:
   strategy = str(getattr(match, "strategy", "") or "")
-  family = str(getattr(match, "family", "") or "").casefold()
+  profile = lookup_profile(strategy)
+  confirmation = None if profile is None else profile.confirmation
   # Go candidates are already closed-bar, strategy-specific confirmations.
   # Re-running Python's reaction/M1 detector here would create a second
   # technical authority and would reject valid Go candidates whose thesis is
@@ -315,8 +280,8 @@ def confirmation_policy_for(match: Any) -> ConfirmationPolicy:
       m1_required_on_retest=False,
       allow_same_cycle_publish=True,
       require_quote_inside_zone=False,
-      reaction_family=False,
-      zone_family=False,
+      level_reaction=False,
+      zone_reaction=False,
       metadata_valid=True,
       reason_code="go_strategy_confirmation",
     )
@@ -338,8 +303,8 @@ def confirmation_policy_for(match: Any) -> ConfirmationPolicy:
       # context, while a fresh closed M1 trigger owns execution.  Keeping it
       # out of the legacy reaction family prevents callers from treating it
       # as M5-authoritative.
-      reaction_family=False,
-      zone_family=False,
+      level_reaction=False,
+      zone_reaction=False,
       metadata_valid=True,
       reason_code="trendline_v2_fresh_m1_required",
     )
@@ -367,12 +332,12 @@ def confirmation_policy_for(match: Any) -> ConfirmationPolicy:
       m1_required_on_retest=False,
       allow_same_cycle_publish=metadata_valid,
       require_quote_inside_zone=True,
-      reaction_family=False,
-      zone_family=False,
+      level_reaction=False,
+      zone_reaction=False,
       metadata_valid=metadata_valid,
       reason_code="m1_scalp_authoritative" if metadata_valid else "confirmation_metadata_missing",
     )
-  if strategy in _CONTINUATION_STRATEGIES or family == "momentum_continuation":
+  if confirmation == "continuation":
     # Impulse/continuation is confirmed by the detector itself (strong body
     # break). Do not force the reversal-shaped zone-edge M1 gate.
     return ConfirmationPolicy(
@@ -380,30 +345,22 @@ def confirmation_policy_for(match: Any) -> ConfirmationPolicy:
       m1_required_on_retest=False,
       allow_same_cycle_publish=True,
       require_quote_inside_zone=False,
-      reaction_family=False,
-      zone_family=False,
+      level_reaction=False,
+      zone_reaction=False,
       metadata_valid=True,
       reason_code="momentum_continuation",
     )
-  zone_family = family in _ZONE_CONFIRMATION_FAMILIES
-  reaction_family = (
-    not zone_family
-    and (
-      strategy in _REACTION_STRATEGIES
-      or family in _M5_AUTHORITATIVE_REACTION_FAMILIES
-    )
-  )
-  m5_authoritative_family = zone_family or reaction_family or (
-    strategy in _REACTION_STRATEGIES or family in _M5_AUTHORITATIVE_FAMILIES
-  )
+  zone_reaction = confirmation == "zone_reaction"
+  level_reaction = confirmation == "level_reaction"
+  m5_authoritative_family = zone_reaction or level_reaction
   if not m5_authoritative_family:
     return ConfirmationPolicy(
       m5_authoritative=False,
       m1_required_on_retest=False,
       allow_same_cycle_publish=False,
       require_quote_inside_zone=False,
-      reaction_family=False,
-      zone_family=False,
+      level_reaction=False,
+      zone_reaction=False,
       metadata_valid=True,
       reason_code="non_reaction_m1_required",
     )
@@ -425,8 +382,8 @@ def confirmation_policy_for(match: Any) -> ConfirmationPolicy:
     m1_required_on_retest=False,
     allow_same_cycle_publish=metadata_valid,
     require_quote_inside_zone=True,
-    reaction_family=reaction_family,
-    zone_family=zone_family,
+    level_reaction=level_reaction,
+    zone_reaction=zone_reaction,
     metadata_valid=metadata_valid,
     reason_code=(
       "m5_authoritative"

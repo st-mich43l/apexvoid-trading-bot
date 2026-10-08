@@ -26,24 +26,13 @@ ROUTE_ZONE_SPLIT = "zone_split"
 ROUTE_MARKET_WITH_LIMIT_SCALE = "market_with_limit_scale"
 ROUTE_EITHER = "either"
 
-# Key Level / Session / Trendline only — Demand/Supply keep zone_scale → limit_ladder.
-REACTION_MARKET_SCALE_FAMILIES = frozenset({
-  "key_level",
-  "session_level",
-  "trendline",
-})
+def reaction_market_scale_eligible(*, strategy: str | None = None) -> bool:
+  """Key Level / Session Level / Trendline opt into market-with-limit-scale.
 
-
-def reaction_market_scale_eligible(
-  *,
-  strategy: str | None = None,
-  strategy_family: str | None = None,
-) -> bool:
-  if strategy and is_reaction_strategy(strategy):
-    return True
-  if strategy_family and strategy_family in REACTION_MARKET_SCALE_FAMILIES:
-    return True
-  return False
+  Demand/Supply keep zone_scale -> limit_ladder; each strategy's catalog row
+  decides, not a group it belongs to.
+  """
+  return bool(strategy) and is_reaction_strategy(str(strategy))
 
 
 @dataclass(frozen=True)
@@ -287,7 +276,6 @@ def resolve_execution_route_plan(
   reaction_scale_step_atr: float | None = None,
   reaction_scale_invalid_policy: str = "single_market",
   strategy: str | None = None,
-  strategy_family: str | None = None,
   entry_clips: int = SCALP_MICRO_CLIPS,
   structural_stop: float | None = None,
   target_risk_pips: float | None = None,
@@ -374,9 +362,7 @@ def resolve_execution_route_plan(
 
   reaction_scale_ok = (
     reaction_scale_enabled
-    and reaction_market_scale_eligible(
-      strategy=strategy, strategy_family=strategy_family,
-    )
+    and reaction_market_scale_eligible(strategy=strategy)
     and distribution in {"zone_scale", "reaction_scale", "either", ""}
   )
   reaction_step = (
@@ -465,10 +451,7 @@ def resolve_execution_route_plan(
       ),
     )
 
-  if is_scalp_strategy(
-    str(strategy or ""),
-    family=strategy_family,
-  ):
+  if is_scalp_strategy(str(strategy or "")):
     retest_only = is_breakout_retest_scalp_strategy(str(strategy or ""))
     if retest_only and geometry != "inside":
       return ExecutionRoutePlan(

@@ -210,7 +210,7 @@ reply target falls back to a standalone card.
 The only execution contract - see `docs/autotrade-execution-integrity.md`.
 Owner-armed manual `/algo` signals use the same stream: the bot converts each
 `manual_trade:intents` entry into a TradePlan whose `plan_id` is the intent id
-(`manual:{signal_id}:{revision}`) and whose analysis family is `manual`.
+(`manual:{signal_id}:{revision}`) and whose plan-kind label (`strategy_family`) is `manual`.
 
 ```text
 execution:trade_plans              XADD stream of published TradePlan V8 JSON
