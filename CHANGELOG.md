@@ -13,6 +13,14 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- XAU Break & Retest scales in. Production 2026-10-08: a retest band of 0.23
+  (4114.91-4115.14) was one market_watch order and the card printed "Entry Zone 4,115 -
+  4,115". Its band is a level (median 0.26 on XAU), so it never qualified for the
+  zone ladder. XAU now rests 80% at the near edge and 20% halfway to the structural
+  invalidation (Manual Algo's rule for a zone with no span to split, never beyond the
+  invalidation), with the same two prices on the card; FX keeps its single entry. The
+  Auto card of a limit-ladder plan prints its real resting prices (a single price as
+  "Entry Price", never "4,115 - 4,115").
 - The card price is now the order price. Production 2026-10-08 (XAU) placed two
   orders away from their cards: Range Edge SELL, card 4,125-4,127, ordered at 4124.19
   (the scalp momentum chase took the quote 6 pips past the zone) and stopped out in 8

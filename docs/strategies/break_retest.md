@@ -32,7 +32,13 @@ or the M1 scalp breakout detector.
 
 - **Certification**: `LEGACY_PARITY_PROVEN` ([matrix](README.md#certification)).
 - **Symbols**: all instruments.
-- **Execution**: Trades on every instrument.
+- **Execution**: Trades on every instrument. The retest band is a level, not a zone
+  (median 0.26 on XAU, every one of 6 in a week under 1.0). **FX** takes one precise
+  entry. **XAU** scales in like the zone strategies: 80% at the near edge of the
+  band, 20% resting halfway to the structural invalidation (the Manual Algo rule for
+  a zone with no span to split; never beyond the invalidation), and the card prints
+  the two resting prices instead of "4,115 - 4,115". A quote already past the deep
+  leg falls back to the single entry.
 - **Arbitration**: opportunities on the same symbol and direction that share a
   thesis group, a structure or an entry corridor compete; the best by quality,
   confluence, structural quality and freshness trades and the rest are
