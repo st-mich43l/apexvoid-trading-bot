@@ -19,18 +19,21 @@ pytestmark = pytest.mark.no_database
 
 def _evaluate(**overrides):
   quote = overrides.pop("quote", 4118.3)
+  direction = overrides.pop("direction", "BUY")
   symbol = overrides.get("symbol", "XAU")
+  buy = direction == "BUY"
   return evaluate_execution_policy(
     _policy_match(
       strategy="Break & Retest",
-      direction="BUY",
+      direction=direction,
       entry_low=4114.91,
       entry_high=4115.14,
       current_price=quote,
       atr=2.0,
-      structure_swing=4113.76,
-      go_invalidation_price=4113.76,
+      structure_swing=4113.76 if buy else 4116.29,
+      go_invalidation_price=4113.76 if buy else 4116.29,
       tags=(GO_ORIGIN_TAG,),
+      structural_kind="break_retest",
       targets_pips=(50,),
       **overrides,
     ),
@@ -42,22 +45,54 @@ def _evaluate(**overrides):
   )
 
 
-def test_a_thin_xau_retest_band_becomes_a_two_leg_ladder():
+def _pips(a: float, b: float) -> float:
+  return round(abs(a - b) / 0.1, 3)
+
+
+def test_a_thin_xau_retest_level_becomes_a_50_pip_manual_style_ladder():
   evaluation = _evaluate()
   assert evaluation.allowed, evaluation.reason_code
   measured = evaluation.measured
   assert measured["planned_execution_route"] == "zone_split"
-  legs = measured["planned_leg_entry_prices"]
-  assert len(legs) == 2
-  assert legs[0] == pytest.approx(4115.14)          # shallow: the near edge of the retest
-  assert legs[1] < legs[0] - 0.5                    # deep: inside the widened band, not the same price
+  # The band is widened to 50 pips toward the stop; Manual Algo's legs: shallow at the
+  # near edge, deep at the band's midpoint; 80/20.
+  assert _pips(measured["planned_entry_zone_low"], measured["planned_entry_zone_high"]) == pytest.approx(50.0, abs=0.01)
+  assert measured["planned_leg_entry_prices"] == pytest.approx([4115.14, 4112.64])
   assert measured["planned_leg_volume_ratios"] == pytest.approx([0.80, 0.20])
+  # The stop follows the band and stays inside the 50-60 pip envelope from the shallow leg.
+  risk = _pips(float(measured["planned_stop_price"]), 4115.14)
+  assert 50.0 <= risk <= 60.0, risk
+  assert float(measured["planned_stop_price"]) < measured["planned_entry_zone_low"]
 
 
-def test_the_ladder_also_applies_with_the_quote_already_in_the_band():
-  evaluation = _evaluate(quote=4115.0)
+def test_the_ladder_does_not_depend_on_where_the_quote_is():
+  for quote in (4118.3, 4115.0):
+    evaluation = _evaluate(quote=quote)
+    assert evaluation.allowed, evaluation.reason_code
+    assert evaluation.measured["planned_leg_entry_prices"] == pytest.approx([4115.14, 4112.64])
+
+
+def test_sell_mirrors_buy():
+  evaluation = _evaluate(direction="SELL")
   assert evaluation.allowed, evaluation.reason_code
-  assert len(evaluation.measured["planned_leg_entry_prices"]) == 2
+  measured = evaluation.measured
+  assert measured["planned_leg_entry_prices"] == pytest.approx([4114.91, 4117.41])
+  assert _pips(measured["planned_entry_zone_low"], measured["planned_entry_zone_high"]) == pytest.approx(50.0, abs=0.01)
+  risk = _pips(float(measured["planned_stop_price"]), 4114.91)
+  assert 50.0 <= risk <= 60.0, risk
+
+
+def test_the_width_gate_judges_go_band_not_the_widened_band():
+  # ATR 1.0: the widened 5.0 band would be 5 ATR (> the 2.5 ATR gate); Go's own 0.23 band passes.
+  evaluation = evaluate_execution_policy(
+    _policy_match(
+      strategy="Break & Retest", direction="BUY", entry_low=4114.91, entry_high=4115.14,
+      current_price=4118.3, atr=1.0, structure_swing=4113.76, go_invalidation_price=4113.76,
+      tags=(GO_ORIGIN_TAG,), structural_kind="break_retest", targets_pips=(50,),
+    ),
+    spot_price=4118.3, executable_quote=4118.3, regime="trend", pip_size=0.1, cfg=_cfg(),
+  )
+  assert evaluation.allowed, evaluation.reason_code
 
 
 def test_other_market_strategies_and_fx_keep_their_single_entry():

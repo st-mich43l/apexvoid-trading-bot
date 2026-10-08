@@ -252,39 +252,6 @@ def _manual_xau_entry_legs(
   )
 
 
-def _thin_zone_ladder(
-  *,
-  side: str,
-  low: float,
-  high: float,
-  quote: float,
-  digits: int,
-  structural_stop: float | None,
-) -> tuple[float, float] | None:
-  """Shallow/deep legs for a retest level too thin to split (XAU retest ladder).
-
-  Manual Algo's rule for a zone with no span to split: shallow at the near edge,
-  deep halfway to the stop and never past it. The stop is the structural
-  invalidation, so the deep leg never sits beyond the level that voids the setup.
-  A quote already past the deep leg would make both legs marketable at once, so
-  it keeps the single-entry fallback.
-  """
-  if structural_stop is None:
-    return None
-  shallow = high if side == "BUY" else low
-  if (side == "BUY" and structural_stop >= shallow) or (
-    side == "SELL" and structural_stop <= shallow
-  ):
-    return None
-  deep = shallow + (structural_stop - shallow) / 2.0
-  shallow_price, deep_price = _round_price(shallow, digits), _round_price(deep, digits)
-  if shallow_price == deep_price:
-    return None
-  if (side == "BUY" and quote <= deep_price) or (side == "SELL" and quote >= deep_price):
-    return None
-  return shallow_price, deep_price
-
-
 def resolve_execution_route_plan(
   *,
   direction: str,
@@ -314,7 +281,6 @@ def resolve_execution_route_plan(
   target_risk_pips: float | None = None,
   pip_size: float | None = None,
   manual_xau_ladder: bool = False,
-  thin_zone_ladder: bool = False,
 ) -> ExecutionRoutePlan:
   """Resolve a concrete route mirroring AutoTradeEngine.ResolveExecutionRoute.
 
@@ -615,20 +581,6 @@ def resolve_execution_route_plan(
       distribution == "either" and split_ok
     ):
       if not split_ok:
-        thin = _thin_zone_ladder(
-          side=side, low=low, high=high, quote=quote, digits=digits,
-          structural_stop=structural_stop if thin_zone_ladder else None,
-        )
-        if thin is not None:
-          return ExecutionRoutePlan(
-            ROUTE_ZONE_SPLIT,
-            thin[0],
-            thin,
-            geometry,
-            "execution policy: XAU retest ladder (thin zone, deep leg halfway to the stop)",
-            True,
-            planned_leg_volume_ratios=manual_xau_ratios,
-          )
         if zone_fill_fallback_enabled:
           return ExecutionRoutePlan(
             ROUTE_MARKET,
