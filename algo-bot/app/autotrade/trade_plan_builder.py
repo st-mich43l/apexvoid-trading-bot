@@ -24,11 +24,13 @@ Wired into worker.py's live publish path behind AUTO_TRADE_CONTRACT_MODE
 from __future__ import annotations
 
 import math
+from dataclasses import replace
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any, Mapping, Sequence
 
 from app.autotrade.execution_policy import evaluate_execution_policy
 from app.analysis_client.provenance import GO_ORIGIN_TAG
+from app.autotrade.risk_leg import plan_risk_leg
 from app.autotrade.strategy_match import StrategyMatch
 from app.autotrade.trade_plan import (
   ENTRY_TYPE_LIMIT_LADDER,
@@ -322,6 +324,7 @@ def build_trade_plan_from_strategy_match(
   approved_measured: Mapping[str, Any] | None = None,
   same_direction_stack: bool = False,
   same_direction_size_fraction: float = 0.60,
+  account_equity: float | None = None,
 ) -> TradePlan:
   """Translate a CONFIRMED StrategyMatch into a TradePlan V8.
 
@@ -656,6 +659,23 @@ def build_trade_plan_from_strategy_match(
       "app.autotrade.protective_stop.plan_protective_stop"
     ),
   )
+
+  # The planner owns the optional XAU risk leg: it is part of the plan and of
+  # the card, and the executor places exactly the legs the plan declares.
+  risk_leg = plan_risk_leg(
+    symbol=match.symbol,
+    direction=direction,
+    entry=entry,
+    stop_price=stop.price,
+    pip_size=pip_size,
+    digits=int(
+      getattr(getattr(cfg_resolved, "units", None), "price_digits", None) or 2
+    ),
+    account_equity=account_equity,
+    cfg=cfg_resolved,
+  )
+  if risk_leg is not None:
+    entry = replace(entry, risk_leg=risk_leg)
 
   closes_at_first_target = (
     len(targets) == 1
