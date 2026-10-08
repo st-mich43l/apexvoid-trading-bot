@@ -155,3 +155,22 @@ func TestApplyInstrument_ObservesTheM15StructureTimeframeOnEveryInstrument(t *te
 		}
 	}
 }
+
+func TestApplyInstrument_NormalisesMADToTheInstrumentsPipSize(t *testing.T) {
+	doc, err := config.ResolveDocument(filepath.Join("..", "..", "..", "config", "apexvoid.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for symbol, pip := range map[string]float64{"XAU": 0.1, "EURUSD": 0.0001, "GBPUSD": 0.0001, "GBPJPY": 0.01, "USDJPY": 0.01} {
+		settings, err := engine.LoadSettings(doc, "M5", false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := engine.ApplyInstrument(&settings, doc, symbol); err != nil {
+			t.Fatal(err)
+		}
+		if settings.MAD.PipSize != pip || settings.Geometry.PipSize != pip {
+			t.Errorf("%s: MAD pip %v / geometry pip %v, want %v", symbol, settings.MAD.PipSize, settings.Geometry.PipSize, pip)
+		}
+	}
+}

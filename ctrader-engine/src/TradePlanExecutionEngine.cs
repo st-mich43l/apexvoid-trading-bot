@@ -594,15 +594,16 @@ public static class TradePlanExecutionEngine
   }
 
   /// <summary>
-  /// Manual Algo ladder TP1 stop: one shared group-economic breakeven (the
-  /// pre-V8 AutoTradeEngine rule). The profit already booked on TP1 funds
-  /// room for the runners, so the stop sits BELOW the remaining legs' VWAP
-  /// (above it for SELL) while the complete original group still locks the
-  /// configured buffer if it is hit. It never loosens a held stop and never
-  /// sits shallower than the plan's deepest declared entry when that entry is
-  /// on the losing side of the remaining VWAP. When the economic stop cannot
-  /// improve on the held one it falls back to the remaining volume's own
-  /// protected breakeven (owner-reported 2026-09-21, manual 407).
+  /// Manual Algo ladder TP1 stop (the pre-V8 AutoTradeEngine rule): the whole
+  /// group's stop goes to the plan's DEEPEST declared entry (the deep edge of
+  /// the zone: highest for SELL, lowest for BUY), whether or not that leg
+  /// filled. Every fill is at or better than it, so the group is protected
+  /// without closing on the first retrace. It never loosens a held stop. Only
+  /// when no declared entry is known does it fall back to the group-economic
+  /// breakeven (the booked TP1 profit funds room below the remaining VWAP while
+  /// the complete original group still locks the configured buffer), and when
+  /// neither improves on the held stop, to the remaining volume's own protected
+  /// breakeven (owner-reported 2026-09-21, manual 407; 2026-10-08, manual 9).
   /// </summary>
   public static TradePlanBreakEvenResult CalculateManualGroupBreakEven(
     TradePlan plan,
@@ -642,12 +643,9 @@ public static class TradePlanExecutionEngine
     var desired = buy
       ? weightedEntry + unfunded * pipSize / remainingVolume
       : weightedEntry - unfunded * pipSize / remainingVolume;
-    if (
-      plannedDeepestEntry is decimal deepest
-      && (buy ? deepest < weightedEntry : deepest > weightedEntry)
-    )
+    if (plannedDeepestEntry is decimal deepest && deepest > 0m)
     {
-      desired = buy ? Math.Max(desired, deepest) : Math.Min(desired, deepest);
+      desired = deepest;
     }
     desired = buy ? Math.Max(desired, currentStop) : Math.Min(desired, currentStop);
     desired = buy
