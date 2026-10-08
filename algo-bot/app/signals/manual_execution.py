@@ -474,6 +474,37 @@ def _tp_ordinal_reached(sig: dict, target_pips: object) -> int:
   )
 
 
+def _archived_target_pips(event: dict) -> int:
+  """Pips the executor archived for a target: from the group's DEEPEST fill (the
+  risk leg included) to the target, 0 when the event carries none."""
+  value = event.get("target_pips")
+  if isinstance(value, bool) or not isinstance(value, (int, float)):
+    return 0
+  return int(round(value)) if value > 0 else 0
+
+
+def _deepest_entry_price(sig: dict, event: dict) -> float | None:
+  """The group's deepest fill behind an archived target.
+
+  A V8 ``tp_booked`` / terminal event does not carry ``leg_entry_price``, but its
+  ``target_pips`` is measured from that deepest fill to the exit price, so the fill
+  is the exit moved back by those pips (within a pip's rounding). Realized R is
+  measured against it, as the pre-V8 flow did.
+  """
+  explicit = event.get("leg_entry_price")
+  if explicit is not None:
+    return float(explicit)
+  pips = _archived_target_pips(event)
+  price = event.get("price")
+  if not pips or price is None:
+    return None
+  from app.core.symbols import pip_for
+
+  pip = pip_for(sig.get("symbol", "XAU"))
+  buy = str(sig.get("action") or "").upper() == "BUY"
+  return round(float(price) + (-pips if buy else pips) * pip, 5)
+
+
 def _stop_is_further(sig: dict, new_sl: float, current_sl: float) -> bool:
   """True when ``new_sl`` locks more profit than ``current_sl`` (direction-aware).
 
@@ -574,11 +605,18 @@ async def _handle_take_profit(event: dict, signal_id: int) -> None:
   # publishes it as leg_realized_pips on every take_profit event. Only
   # fall back to the conservative shallow-fill calc if an event predates
   # that field.
+  # A target is measured from the group's DEEPEST fill, risk leg included (owner
+  # 2026-10-08, manual 10: a SELL zone 4138-4141 with three filled legs showed
+  # "+51" because TP1 was measured from the first fill, 4138.01, not from the
+  # deepest, ~4141). The executor archives exactly that figure as target_pips.
   leg_pips = event.get("leg_realized_pips")
-  pips = (
-    round(float(leg_pips)) if leg_pips is not None
-    else pips_format.signed_result_pips(sig, float(price))
-  )
+  archived = _archived_target_pips(event)
+  if leg_pips is not None:
+    pips = round(float(leg_pips))
+  elif archived:
+    pips = archived
+  else:
+    pips = pips_format.signed_result_pips(sig, float(price))
   # The broker's real target ladder can collapse (BuildTargetPlan skips
   # middle targets when volume is too small for every configured exit), so
   # "is this the last leg" is decided by comparing against the LARGEST
@@ -593,7 +631,7 @@ async def _handle_take_profit(event: dict, signal_id: int) -> None:
   result = await trade_ops._execute_close(
     signal_id, sig.get("symbol", "XAU"), pips, frac,
     tp_number=reached,
-    entry_price=event.get("leg_entry_price"),
+    entry_price=_deepest_entry_price(sig, event),
   )
   await trade_ops.post_result(result, sig.get("symbol", "XAU"))
 
@@ -689,6 +727,11 @@ async def _handle_group_result(event: dict, signal_id: int) -> None:
   sig = await get_manual_signal(signal_id)
   symbol = (sig or {}).get("symbol", "XAU")
   pips = event.get("group_realized_pips")
+  if pips is None and _archived_target_pips(event):
+    # The group closed after archiving a target: the result is that target's
+    # pips from the deepest fill. A stop that later took the runners (the risk
+    # leg included) is not counted against it, only targets that were hit.
+    pips = _archived_target_pips(event)
   if pips is None:
     # V8's terminal position_closed does not always carry the volume-weighted
     # group blend; fall back to the close price against the signal's entry.
@@ -706,7 +749,7 @@ async def _handle_group_result(event: dict, signal_id: int) -> None:
   resolved = await _resolve_group_close_pips(signal_id, float(pips))
   result = await trade_ops._execute_group_close(
     signal_id, symbol, resolved,
-    entry_price=event.get("leg_entry_price"),
+    entry_price=_deepest_entry_price(sig or {}, event),
   )
   await trade_ops.post_result(result, symbol)
 
