@@ -1,5 +1,7 @@
 # Impulse Pullback Strategy V2
 
+**Contract.** Ported from the Python scalp lane's `discover_impulse_pullback`: 4 ATR displacement with 0.5 body dominance, a corrective pullback (below 0.7 of the impulse body, 25-75% retracement, confirmed extreme), an unmitigated M5 zone or nearby key level whose closed-bar role agrees, location in the dealing range, an M1 confirmation at the reference, the structural stop and the corridor target. XAU only. The real XAU capture contains no Python decision, so parity is proven on seeded synthetic captures only; XAU stays observe-only.
+
 `impulse_pullback` qualifies a directional M5 impulse, then requires an M1
 correction within configured retracement bounds and a continuation close.
 Entry is the continuation band, invalidation is behind the pullback extreme and

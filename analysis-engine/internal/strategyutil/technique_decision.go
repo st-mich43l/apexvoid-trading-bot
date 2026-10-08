@@ -46,6 +46,8 @@ type TechniqueDecision struct {
 	Result       *LegacyResult
 	// ID is the stable structural identity (instance or band).
 	ID string
+	// FormedAt/ConfirmedAt time a decision with no reaction (Confirmation nil).
+	FormedAt, ConfirmedAt int64
 }
 
 // EntryLow/EntryHigh are the published entry band: the proximal clip.

@@ -1,39 +1,31 @@
-// Package sessionlevel implements SessionLevelStrategy.
-// (apexvoid-bot-prompts/rebuild-strategies.md §26), consuming the
-// canonical session-extreme primitive internal/session already builds
-// (Asia/London/NY highs-lows, PDH/PDL, PWH/PWL, sweep status). This
-// strategy decides tradeability of a not-yet-swept session extreme; the
-// primitive already decided what the level IS and whether it has been
-// swept.
+// Package sessionlevel publishes the frozen session_level_reaction decision: a
+// confirmed reaction off an Asia/London/NY high or low, or the previous day's or
+// week's, qualified through the shared detector contract.
 //
-// Thesis: an unswept session extreme, close enough to current price to
-// matter, is a standing reaction level — a HIGH level (name suffix _H,
-// or PDH/PWH) implies resistance (sell reaction); a LOW level (_L, or
-// PDL/PWL) implies support (buy reaction). Like internal/strategy/keylevel,
-// this package derives a "current price" proxy from the primary
-// timeframe's own most recent Micro-layer swing, since MarketContext
-// exposes no raw price feed (see that package's own doc comment for the
-// full reasoning — the same limitation applies here).
+// A high implies resistance (sell reaction) and a low support (buy reaction). A
+// level price has since traded through stays valid only with a reclaim-type
+// confirmation. The session levels are the frame's, built by the frozen
+// session_liquidity rules over the bounded analysis window (not the layered
+// session primitive, which orders and expires them differently).
 package sessionlevel
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"math"
 	"sort"
 	"strings"
 
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/context"
-	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/liquidity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/reaction"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategyutil"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/techniquezone"
 )
 
 const ID strategy.StrategyID = "session_level"
-const Version = "v2"
+const Version = "v3"
 
 const (
 	structureVersion = "v2"
@@ -44,21 +36,17 @@ const (
 
 // Config is SessionLevel's own parsed technical configuration.
 type Config struct {
-	ProximityATR             float64
 	InvalidationBufferATR    float64
 	MinimumTargetDistanceATR float64
 	ExpiryHours              float64
-	// ProximalBandATR is the legacy reaction band around the level (Python
-	// actionability.gates.proximal_band_atr) a touch/confirmation is judged in.
-	ProximalBandATR float64
-	// Reaction is the shared legacy confirmation tuning (see strategyutil).
-	Reaction strategyutil.ReactionConfig
+	// Legacy qualifies the reaction through the frozen detector contract; its
+	// ProximalBandATR is the reaction band around the level.
+	Legacy strategyutil.LegacyDetectorSettings
 }
 
 // Strategy is SessionLevelStrategy.
 type Strategy struct {
 	cfg         Config
-	timeframe   market.Timeframe
 	fingerprint string
 }
 
@@ -70,269 +58,118 @@ func New(cfg strategy.Config) (strategy.Strategy, error) {
 	if err != nil {
 		return nil, fmt.Errorf("sessionlevel: %w", err)
 	}
-	return &Strategy{cfg: parsed, timeframe: market.M5, fingerprint: configFingerprint(cfg)}, nil
+	return &Strategy{cfg: parsed, fingerprint: strategyutil.Fingerprint(string(cfg.ID), cfg.Version, cfg.Parameters)}, nil
 }
 
 func parseConfig(params map[string]any) (Config, error) {
-	proximityATR, err := requireFloat(params, "proximity_atr")
-	if err != nil {
+	var out Config
+	var err error
+	for key, dst := range map[string]*float64{
+		"invalidation_buffer_atr":     &out.InvalidationBufferATR,
+		"minimum_target_distance_atr": &out.MinimumTargetDistanceATR,
+		"expiry_hours":                &out.ExpiryHours,
+	} {
+		if *dst, err = strategyutil.Float(params, key); err != nil {
+			return Config{}, err
+		}
+	}
+	if out.Legacy, err = strategyutil.ParseLegacyDetectorSettings(params); err != nil {
 		return Config{}, err
 	}
-	invalidationBuffer, err := requireFloat(params, "invalidation_buffer_atr")
-	if err != nil {
-		return Config{}, err
+	if out.InvalidationBufferATR <= 0 || out.ExpiryHours <= 0 || out.Legacy.ProximalBandATR <= 0 {
+		return Config{}, fmt.Errorf("invalidation_buffer_atr, expiry_hours and proximal_band_atr must be > 0")
 	}
-	minimumTargetDistance, err := requireFloat(params, "minimum_target_distance_atr")
-	if err != nil {
-		return Config{}, err
-	}
-	expiryHours, err := requireFloat(params, "expiry_hours")
-	if err != nil {
-		return Config{}, err
-	}
-	proximalBand, err := requireFloat(params, "proximal_band_atr")
-	if err != nil {
-		return Config{}, err
-	}
-	reactionConfig, err := strategyutil.ParseReactionConfig(params)
-	if err != nil {
-		return Config{}, err
-	}
-	if proximalBand <= 0 {
-		return Config{}, fmt.Errorf("proximal_band_atr must be > 0")
-	}
-	if proximityATR <= 0 {
-		return Config{}, fmt.Errorf("proximity_atr must be > 0")
-	}
-	if invalidationBuffer <= 0 {
-		return Config{}, fmt.Errorf("invalidation_buffer_atr must be > 0")
-	}
-	if expiryHours <= 0 {
-		return Config{}, fmt.Errorf("expiry_hours must be > 0")
-	}
-	return Config{
-		ProximityATR: proximityATR, InvalidationBufferATR: invalidationBuffer,
-		MinimumTargetDistanceATR: minimumTargetDistance, ExpiryHours: expiryHours,
-		ProximalBandATR: proximalBand, Reaction: reactionConfig,
-	}, nil
-}
-
-func requireFloat(params map[string]any, key string) (float64, error) {
-	raw, ok := params[key]
-	if !ok {
-		return 0, fmt.Errorf("missing required parameter %q", key)
-	}
-	switch v := raw.(type) {
-	case float64:
-		return v, nil
-	case int:
-		return float64(v), nil
-	default:
-		return 0, fmt.Errorf("parameter %q is not numeric (got %T)", key, raw)
-	}
+	return out, nil
 }
 
 func (s *Strategy) ID() strategy.StrategyID { return ID }
 
-func (s *Strategy) RequiredTimeframes() []market.Timeframe {
-	return []market.Timeframe{s.timeframe}
-}
+func (s *Strategy) RequiredTimeframes() []market.Timeframe { return []market.Timeframe{market.M5} }
 
+// Evaluate mirrors session_level_reaction: the session levels nearest to price
+// first, each judged for a reaction off its band, and the best-scored
+// qualifying one (the first on a tie) is published.
 func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate {
-	tfCtx, ok := ctx.Timeframes[s.timeframe]
+	base, ok := strategyutil.NewLegacyDetectorForFrame(ctx, market.M5, s.cfg.Legacy)
 	if !ok {
 		return nil
 	}
-	atr := ctx.Volatility.ATR
-	if atr <= 0 {
+	band := math.Max(1e-9, s.cfg.Legacy.ProximalBandATR*math.Max(0, base.ATR))
+	sessions := append([]techniquezone.SessionRef(nil), base.Frame.Sessions...)
+	sort.SliceStable(sessions, func(i, j int) bool {
+		return math.Abs(sessions[i].Price-base.Price) < math.Abs(sessions[j].Price-base.Price)
+	})
+	var best *strategyutil.TechniqueDecision
+	for _, session := range sessions {
+		direction, known := levelDirection(session.Name)
+		if !known {
+			continue
+		}
+		d := base.WithDirection(direction)
+		low, high := session.Price-band, session.Price+band
+		conf := d.Reaction(low, high, nil)
+		if conf == nil {
+			continue
+		}
+		if session.Swept && conf.Type != reaction.TypeSweepReclaim && conf.Type != reaction.TypeStrongReclaim && conf.Type != reaction.TypeRejectionCHoCH {
+			continue
+		}
+		side := "supply"
+		if direction == market.Buy {
+			side = "demand"
+		}
+		zone := techniquezone.Zone{Bottom: low, Top: high, Side: side, Source: "level", BreakIndex: -1}
+		if !d.EntryValid(zone) {
+			continue
+		}
+		factors := strategyutil.FactorsForConfirmation(strategyutil.ReactionFactors(conf.Type, d.HTFAligned(), 2), conf.Type)
+		result := d.Finish(session.Price, zone, factors, session.Name, &low, &high)
+		if result == nil {
+			continue
+		}
+		if best == nil || result.Stars > best.Result.Stars {
+			best = &strategyutil.TechniqueDecision{
+				Technique: "session_level", Direction: direction, Detector: d, Confirmation: conf, Result: result,
+				ID: fmt.Sprintf("session:%s:%.5f", session.Name, session.Price),
+			}
+		}
+	}
+	candidate, ok := strategyutil.TechniqueCandidate(ctx, best, strategyutil.TechniqueSpec{
+		ID: string(ID), Version: Version, ZoneEvidence: "session_level_" + strings.ToLower(sessionName(best)), ConfirmedEvidence: "session_level_reaction_confirmed",
+		InvalidationLabel: "session_level_invalidated", InvalidationBufferATR: s.cfg.InvalidationBufferATR,
+		MinimumTargetDistanceATR: s.cfg.MinimumTargetDistanceATR, ExpiryHours: s.cfg.ExpiryHours, Fingerprint: s.fingerprint,
+		Versions: opportunity.AnalysisProvenance{
+			StructureVersion: structureVersion, LiquidityVersion: liquidityVersion, ZoneVersion: zoneVersionUsed,
+			ConfigVersion: configVersion, ConfigFingerprint: s.fingerprint,
+		},
+	})
+	if !ok {
 		return nil
 	}
-	if len(tfCtx.Candles) == 0 {
-		return nil
-	}
-	// The legacy detector judged proximity against the real latest close, not
-	// against the last micro swing.
-	currentPrice := tfCtx.Candles[len(tfCtx.Candles)-1].Close
-
-	var candidates []opportunity.Candidate
-	for _, level := range tfCtx.Session.Levels {
-		direction, isHighLevel := levelDirection(level.Name)
-		if !direction.IsValid() {
-			continue
-		}
-		levelPrice := float64(level.Price)
-		distanceATR := math.Abs(currentPrice-levelPrice) / atr
-
-		var invalidationPrice float64
-		var poolSide liquidity.LiquiditySide
-		if isHighLevel {
-			invalidationPrice = levelPrice + s.cfg.InvalidationBufferATR*atr
-			poolSide = liquidity.LiquiditySellSide
-		} else {
-			invalidationPrice = levelPrice - s.cfg.InvalidationBufferATR*atr
-			poolSide = liquidity.LiquidityBuySide
-		}
-
-		referencePrice := levelPrice
-		targetPool, ok := nearestPool(tfCtx.Liquidity.Pools, poolSide, referencePrice, s.cfg.MinimumTargetDistanceATR*atr, direction)
-		if !ok {
-			continue
-		}
-		targetPrice := targetPool.High
-		if direction == market.Sell {
-			targetPrice = targetPool.Low
-		}
-
-		createdAt := tfCtx.Candles[len(tfCtx.Candles)-1].Time
-		expiresAt := createdAt + int64(s.cfg.ExpiryHours*3600)
-
-		setupKey := fmt.Sprintf("session:%s:%d", level.Name, level.Time)
-		id, err := opportunity.DeterministicID(opportunity.Identity{
-			Strategy: ID, StrategyVersion: Version, Symbol: ctx.Symbol, Direction: direction, SetupKey: setupKey,
-		})
-		if err != nil {
-			continue
-		}
-
-		quality := computeQuality(distanceATR, s.cfg.ProximityATR)
-
-		candidate := opportunity.Candidate{
-			ID: id, Strategy: ID, StrategyVersion: Version, Symbol: ctx.Symbol,
-			Direction:    direction,
-			StructuralID: setupKey,
-			Entry:        opportunity.EntryZone{Low: levelPrice - atr*0.05, High: levelPrice + atr*0.05},
-			Invalidation: market.PriceLevel{
-				Price: market.Price(invalidationPrice), Label: "session_level_invalidated",
-			},
-			Targets: []opportunity.Target{{
-				Price: market.PriceLevel{Price: targetPrice, Label: "nearest_opposing_liquidity"},
-			}},
-			Evidence: []opportunity.Evidence{
-				{Code: "session_level_" + strings.ToLower(level.Name)},
-				{Code: "session_level_unswept"},
-			},
-			Quality:   quality,
-			CreatedAt: createdAt, ExpiresAt: expiresAt,
-			Provenance: opportunity.AnalysisProvenance{
-				StructureVersion: structureVersion, LiquidityVersion: liquidityVersion, ZoneVersion: zoneVersionUsed,
-				ConfigVersion: configVersion, ConfigFingerprint: s.fingerprint,
-			},
-		}
-		// The resting-level opportunity is only for an unswept level price is
-		// close to; a swept level matters only through a confirmed reclaim.
-		if !level.Swept && distanceATR <= s.cfg.ProximityATR {
-			candidates = append(candidates, candidate)
-		}
-		band := s.cfg.ProximalBandATR * atr
-		if rc := strategyutil.ConfirmReaction(tfCtx, setupKey, direction, levelPrice-band, levelPrice+band, atr, level.Time, s.cfg.Reaction); rc != nil {
-			// A swept level stays valid only with a reclaim-type confirmation
-			// (legacy rule): a plain wick rejection or engulfing after the
-			// level was taken out is not a reaction off that level.
-			if level.Swept && rc.Pattern != "sweep_reclaim" && rc.Pattern != "strong_reclaim" && rc.Pattern != "rejection_choch" {
-				continue
-			}
-			confirmedBase := candidate
-			confirmedBase.Entry = opportunity.EntryZone{Low: levelPrice - band, High: levelPrice + band}
-			// The wider reaction band is the entry, so the stop sits beyond it.
-			if direction == market.Buy {
-				confirmedBase.Invalidation.Price = market.Price(levelPrice - band - s.cfg.InvalidationBufferATR*atr)
-			} else {
-				confirmedBase.Invalidation.Price = market.Price(levelPrice + band + s.cfg.InvalidationBufferATR*atr)
-			}
-			if confirmed, confirmErr := strategyutil.ConfirmedVariant(confirmedBase, rc, setupKey, level.Time, s.cfg.ExpiryHours, "session_level_reaction_confirmed"); confirmErr == nil {
-				candidates = append(candidates, confirmed)
-			}
-		}
-	}
-	return candidates
+	return []opportunity.Candidate{candidate}
 }
 
-// levelDirection reads the reaction direction straight off the level's
-// own canonical name — a HIGH-suffixed level (ASIA_H/LONDON_H/NY_H/PDH/
-// PWH) implies resistance (sell reaction); a LOW-suffixed level implies
-// support (buy reaction). The second return value is isHighLevel, which
-// the caller needs separately from Direction to pick the correct
-// invalidation side and liquidity pool side — Direction alone conflates
-// "valid" with "which side," so a Buy result cannot tell a real LOW
-// level apart from an unrecognized name (which never reaches here,
-// since Direction("").IsValid() is false). Returns ("", false) for any
-// name this strategy does not recognize (fail closed rather than guess).
+// sessionName is the level name inside the decision's identity.
+func sessionName(dec *strategyutil.TechniqueDecision) string {
+	if dec == nil {
+		return ""
+	}
+	parts := strings.Split(dec.ID, ":")
+	if len(parts) < 3 {
+		return ""
+	}
+	return parts[1]
+}
+
+// levelDirection reads the reaction direction off the level's name: a high
+// (ASIA_H, LONDON_H, NY_H, PDH, PWH) is resistance, a low support.
 func levelDirection(name string) (market.Direction, bool) {
 	switch {
 	case strings.HasSuffix(name, "_H"), name == "PDH", name == "PWH":
-		return market.Sell, true // isHighLevel
+		return market.Sell, true
 	case strings.HasSuffix(name, "_L"), name == "PDL", name == "PWL":
-		return market.Buy, false // isHighLevel
+		return market.Buy, true
 	default:
 		return "", false
 	}
-}
-
-func nearestPool(pools []liquidity.Pool, side liquidity.LiquiditySide, referencePrice, minimumDistance float64, direction market.Direction) (liquidity.Pool, bool) {
-	var matches []liquidity.Pool
-	for _, p := range pools {
-		if p.Side != side {
-			continue
-		}
-		mid := (float64(p.Low) + float64(p.High)) / 2
-		var distance float64
-		if direction == market.Buy {
-			distance = mid - referencePrice
-		} else {
-			distance = referencePrice - mid
-		}
-		if distance < minimumDistance {
-			continue
-		}
-		matches = append(matches, p)
-	}
-	if len(matches) == 0 {
-		return liquidity.Pool{}, false
-	}
-	sort.Slice(matches, func(i, j int) bool {
-		mi := (float64(matches[i].Low) + float64(matches[i].High)) / 2
-		mj := (float64(matches[j].Low) + float64(matches[j].High)) / 2
-		if direction == market.Buy {
-			return mi < mj
-		}
-		return mi > mj
-	})
-	return matches[0], true
-}
-
-// computeQuality is SessionLevel's own quality model — proximity is its
-// only real available dimension (an unswept session level carries no
-// touch/strength score the way key-level clustering does), so it uses a
-// single, honestly-scoped component rather than fabricating additional
-// dimensions with no real signal behind them.
-func computeQuality(distanceATR, proximityLimitATR float64) opportunity.StrategyQuality {
-	proximityQuality := clamp01(1 - distanceATR/proximityLimitATR)
-	return opportunity.StrategyQuality{
-		Overall:    proximityQuality,
-		Components: map[string]float64{"proximity_quality": proximityQuality},
-	}
-}
-
-func clamp01(v float64) float64 {
-	if v < 0 {
-		return 0
-	}
-	if v > 1 {
-		return 1
-	}
-	return v
-}
-
-func configFingerprint(cfg strategy.Config) string {
-	keys := make([]string, 0, len(cfg.Parameters))
-	for k := range cfg.Parameters {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	canonical := string(cfg.ID) + "\x00" + cfg.Version
-	for _, k := range keys {
-		canonical += "\x00" + k + "=" + fmt.Sprint(cfg.Parameters[k])
-	}
-	sum := sha256.Sum256([]byte(canonical))
-	return hex.EncodeToString(sum[:16])
 }

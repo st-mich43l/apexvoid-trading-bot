@@ -145,11 +145,6 @@ analysis:
   #     session_level, the level's touches/strength) below which a setup is
   #     not tradeable at all. (key_level carries only minimum_touches: the
   #     profitable Python detector had no strength or proximity gate.)
-  #   proximity_atr (session_level only — the primitive carries
-  #     no zone.Relevance equivalent) — how close, in ATR, current price
-  #     must sit to the level for it to be a live setup; 1.0 sits in the
-  #     same ballpark as zone_relevance.nearby_atr (1.25) above, since both
-  #     answer "is this currently close enough to matter."
   #   invalidation_buffer_atr — matches this file's own existing
   #     invalidation_tolerance_atr/invalidation_penetration_atr convention
   #     (0.5) for "how far beyond the setup's edge before a confirmed close
@@ -298,42 +293,40 @@ analysis:
       invalidation_buffer_atr: 0.25
       expiry_hours: 8.0
     flip_zone:
-      version: v2
+      version: v3
       enabled: true
-      minimum_strength: 0.4
       invalidation_buffer_atr: 0.5
       minimum_target_distance_atr: 1.0
       expiry_hours: 24.0
-      # Legacy Python reaction confirmation (shared by every technique).
-      reaction_lookback_bars: 3
-      engulfing_minimum_range_atr: 0.5
+      # key_level_role.classify_key_level_role: consecutive closes beyond the
+      # level's band that make a break accepted (the flip's required role).
+      breakout_accept_bars: 2
     session_level:
-      version: v2
+      version: v3
       enabled: true
-      proximity_atr: 1.0
+      # The frozen session_level_reaction: a reaction off a session / previous-day /
+      # previous-week high or low, within the shared reaction band, reaction
+      # confirmation and confluence floor (the legacy detector leaves are injected).
       invalidation_buffer_atr: 0.5
       minimum_target_distance_atr: 1.0
       expiry_hours: 24.0
-      # Legacy Python values: reaction band (actionability.gates.proximal_band_atr)
-      # and the shared reaction confirmation.
-      proximal_band_atr: 0.5
-      reaction_lookback_bars: 3
-      engulfing_minimum_range_atr: 0.5
     trendline:
-      version: v2
+      version: v3
       enabled: true
-      # Legacy Python trendline-V2 values (analysis.trendlines.minimum_validation_
-      # touches 1, interaction/close-violation/approach bands, 30-bar staleness).
+      # The frozen trendline_reaction (V2) gates (analysis.trendlines.*,
+      # execution.technique.trendline_*): forward validation, health, staleness,
+      # chop-regime quality, the live-interaction bands.
       minimum_validation_touches: 1
+      chop_minimum_validation_touches: 2
+      chop_require_htf_aligned: true
+      require_htf_aligned: false
+      reject_exhausted: true
       invalidation_buffer_atr: 0.25
-      target_r: 2.0
       expiry_hours: 12.0
       interaction_band_atr: 0.20
       close_violation_atr: 0.15
       approach_min_distance_atr: 0.10
       maximum_bars_since_last_touch: 30
-      reaction_lookback_bars: 3
-      engulfing_minimum_range_atr: 0.5
     range_edge:
       version: v2
       enabled: true
@@ -370,14 +363,13 @@ analysis:
       recent_breakout_min_span_atr: 0.8
       expiry_hours: 4.0
     box_breakout:
-      version: v2
+      version: v3
       enabled: true
-      box_bars: 12
-      maximum_width_atr: 2.0
-      retest_tolerance_atr: 0.2
-      retest_window_bars: 3
+      # The frozen box_breakout: an accepted break of the regime box, entered on the
+      # accepting displacement bar or on a rejecting retest of the broken edge,
+      # within this many bars of the acceptance (analysis.breakout.max_age_bars).
+      breakout_max_age_bars: 6
       invalidation_buffer_atr: 0.25
-      target_r: 2.0
       expiry_hours: 8.0
     break_retest:
       version: v2
@@ -450,15 +442,38 @@ analysis:
       expiry_minutes: 15
       minimum_range_width_pips: 25
       reward_risk_ladder: [2.0, 1.0]
+    # Impulse Pullback Scalp — the Python scalp lane's discover_impulse_pullback of the
+    # profitable XAU week: an M5 impulse (displacement of at least 4 ATR, body
+    # dominance 0.5) with a corrective pullback (< 0.7 of the impulse body), anchored
+    # to an unmitigated M5 zone or a nearby key level whose role agrees, confirmed by
+    # a closed M1 bar, with the shared stop/target book. XAU only.
     impulse_pullback:
-      version: v2
+      version: v3
       enabled: true
-      minimum_impulse_atr: 1.0
-      minimum_pullback_fraction: 0.25
-      maximum_pullback_fraction: 0.65
-      invalidation_buffer_atr: 0.2
-      target_r: 2.0
-      expiry_hours: 2.0
+      symbols: [XAU]
+      setup_window_bars: 120
+      dealing_window_bars: 120
+      confirmation_window_bars: 60
+      confirmation_lookback_bars: 2
+      context_max_age_seconds: 420
+      context_atr_bars: 14
+      active_range_bars: 24
+      expiry_minutes: 15
+      pullback_extreme_confirm_bars: 2
+      impulse_displacement_atr_multiple: 4.0
+      impulse_body_dominance: 0.5
+      pullback_corrective_ratio: 0.7
+      level_proximity_atr_multiple: 1.0
+      zone_maximum_atr_multiple: 1.5
+      breakout_accept_bars: 2
+      swing_fractal_n: 2
+      level_cluster_atr: 0.5
+      level_round_step: 5.0
+      level_minimum_touches: 2
+      level_max_cluster_span: 2.0
+      displacement_atr_multiple: 1.5
+      displacement_body_fraction: 0.6
+      reward_risk_ladder: [2.0, 1.0]
     # Breakout Retest Scalp — the profitable-week (14–18 Sep 2026) Python
     # "Breakout Retest V2" engine (app/scalping): M5 setup, M1 execution
     # confirmation. Level sources are the setup window's swings, its M5 key

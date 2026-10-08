@@ -201,3 +201,43 @@ func tailCandles(bars []market.Candle, n int) []market.Candle {
 	}
 	return bars
 }
+
+// M1Confirmation is the newest closed M1 bar that confirms an M5 setup.
+type M1Confirmation struct {
+	Close float64
+	Time  int64
+}
+
+// ConfirmM1Execution mirrors microstructure.confirm_m1_execution: among the
+// newest `lookback` closed M1 bars, the latest one that closes in the trade
+// direction and interacted with the level (wick within `tolerance` of it, close
+// back on the right side of it). M1 is a confirmation frame, never a source of
+// structure.
+func ConfirmM1Execution(m1 []market.Candle, direction market.Direction, level, tolerance float64, lookback int) (M1Confirmation, bool) {
+	if len(m1) == 0 {
+		return M1Confirmation{}, false
+	}
+	window := lookback
+	if window > len(m1) {
+		window = len(m1)
+	}
+	if window < 1 {
+		window = 1
+	}
+	tol := math.Max(0, tolerance)
+	for offset := 1; offset <= window; offset++ {
+		bar := m1[len(m1)-offset]
+		var directional, interacted bool
+		if direction == market.Buy {
+			directional = bar.Close > bar.Open
+			interacted = bar.Low <= level+tol && bar.Close > level
+		} else {
+			directional = bar.Close < bar.Open
+			interacted = bar.High >= level-tol && bar.Close < level
+		}
+		if directional && interacted {
+			return M1Confirmation{Close: bar.Close, Time: bar.Time}, true
+		}
+	}
+	return M1Confirmation{}, false
+}

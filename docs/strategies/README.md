@@ -22,9 +22,7 @@ Every strategy has exactly one status:
 - `LEGACY_PARITY_PROVEN`: its decisions reproduce the frozen Python publisher on
   committed real captures (a golden generated from the oracle, never from Go).
 - `GO_NATIVE_VALIDATED`: pinned by tests of its own contract. It does **not** claim
-  parity: `liquidity_sweep` has no live Python predecessor, while `flip_zone`,
-  `session_level`, `trendline`, `box_breakout` and `impulse_pullback` do and are
-  measured against it in the matrix (parity not achieved).
+  parity: `liquidity_sweep` has no live Python predecessor.
 - `OBSERVE_ONLY`: analysed and published, never traded.
 
 | ID | Inputs | Legacy equivalent | Proof | Symbols | XAU execution | Status | XAU opportunities, Sep 14-21 / Sep 28-Oct 7 |
@@ -44,12 +42,12 @@ Every strategy has exactly one status:
 | `fade_scalp` | equal-level sweep and reclaim, PD, chop edge | Python detector (1c9f323) | `test/detectorparity` golden | all | live | LEGACY_PARITY_PROVEN | 10 / 20 |
 | `range_sweep` | M5 range, M1 edge excursion and reclaim | Python scalp lane (a1c77584) | `test/scalpparity` real and synthetic M1 captures, 0 mismatches | XAU only | live | LEGACY_PARITY_PROVEN | 3 (Oct 2-6 M1 capture) |
 | `scalp_breakout_retest` | M5 compression, M1 acceptance and retest | Python scalp lane (a1c77584) | `test/scalpparity` real and synthetic M1 captures, 0 mismatches | XAU only | live | LEGACY_PARITY_PROVEN | 8 (Oct 2-6 M1 capture) |
-| `flip_zone` | canonical flipped zones, structure, reaction | none (Go zone-domain concept) | 10 behavioural tests in `test/strategy/flipzone` | all | live | GO_NATIVE_VALIDATED | 66 / 107 |
-| `session_level` | canonical session levels, reaction | `session_level_reaction` (1c9f323) | **no parity**: same bar on 227 of 316 oracle decisions, same entry on 163, and Go emits about 6x as many confirmed bar-states (1831); own tests: behavioural tests in `test/strategy/sessionlevel` | all | **contained** (analysis only) | GO_NATIVE_VALIDATED | 268 / 412 |
-| `trendline` | causal trendline anchors and interaction state | `trendline_reaction` (1c9f323) | **partial**: same bar and entry on 6 of 8 oracle decisions, 22 Go confirmed bar-states; 8 decisions is too few to judge; own tests: build, causality and interaction tests in `test/trendline` | all | live | GO_NATIVE_VALIDATED | 18 / 10 |
+| `flip_zone` | zones born of an accepted role flip, key-level role, reaction | `flip_demand_zone_reaction` / `flip_supply_zone_reaction` (1c9f323) | `test/legacyparity` golden, 5 symbols: 48 BUY and 43 SELL oracle decisions, identical (presence, direction, entry, stars) and silent elsewhere | all | live | LEGACY_PARITY_PROVEN | 34 / 16 |
+| `session_level` | session / previous-day / previous-week highs and lows, reaction | `session_level_reaction` (1c9f323) | `test/legacyparity` golden, 5 symbols: 316 oracle decisions, identical and silent elsewhere | all | **contained** (analysis only) | LEGACY_PARITY_PROVEN | 48 / 38 |
+| `trendline` | causal trendline anchors, health and live interaction, reaction | `trendline_reaction` V2 (1c9f323) | `test/legacyparity` golden, 5 symbols: 8 oracle decisions, identical and silent elsewhere (few decisions: the gate is narrow) | all | live | LEGACY_PARITY_PROVEN | 4 / 0 |
 | `liquidity_sweep` | lone-extreme pool sweep and reclaim, graded grab | none (Go-native) | contract tests in `internal/strategy/liquiditysweep` | all | **contained** (analysis only) | GO_NATIVE_VALIDATED | 2 / 2 |
-| `box_breakout` | M5 compression box, accepted break, retest | `box_breakout` (1c9f323, dark by default in Python) | **no parity**: same bar on 0 of 36 oracle decisions; own tests: same-thesis arbitration test against `scalp_breakout_retest` | all | live | GO_NATIVE_VALIDATED | 1 / 4 |
-| `impulse_pullback` | M5 impulse, M1 bounded correction | `discover_impulse_pullback` (scalp lane, a1c77584), not ported | **not ported**: Go is a simpler thesis (93 lines) than the Python archetype's role, 4 ATR displacement, body dominance, corrective ratio and location gates; own tests: none beyond the catalog fixture; net negative live | all instruments contained | **contained** (analysis only) | OBSERVE_ONLY | 2 + 11 on M1 (Oct 2-6 M1 capture) |
+| `box_breakout` | accepted break of the regime box, accepting-bar or retest entry | `box_breakout` (1c9f323; `box_breakout_enabled` is False in Python code, True in the deployed config) | `test/legacyparity` golden, 5 symbols: 36 oracle decisions, identical and silent elsewhere | all | live | LEGACY_PARITY_PROVEN | 10 / 6 |
+| `impulse_pullback` | M5 impulse, corrective pullback, structural reference and role, M1 confirmation | `discover_impulse_pullback` (scalp lane, a1c77584) | `test/scalpparity`: the real 33 h XAU capture holds **no** Python decision (0 of 1,939 cycles); 18 identical decisions and silence elsewhere on nine seeded synthetic M1 captures (labelled synthetic) | XAU | **contained** (analysis only; also contained on FX) | LEGACY_PARITY_PROVEN on synthetic data only | 2 + 11 on M1 (Oct 2-6 M1 capture, pre-port) |
 
 Proof is scoped to the committed captures (XAU, EURUSD, GBPUSD, GBPJPY, USDJPY for
 the technique goldens; XAU, GBPUSD, USDJPY for the detector golden; XAU M1 for the
@@ -66,8 +64,9 @@ each with the evidence behind it:
 |---|---|---|
 | XAU | `ifvg` | matches Python bar for bar, but lost on XAU in both independent windows reviewed |
 | XAU | `liquidity_sweep` | 4 of 5 live XAU trades stopped out (-165 pips); fires about twice a week |
-| XAU | `session_level` | 0 of 5 live XAU trades won (-204 pips, all Asia); stays live on FX where it earned |
-| every instrument | `impulse_pullback` | net -49 pips over 11 live trades; not a port of the Python scalp archetype |
+| XAU | `session_level` | 0 of 5 live XAU trades won (-204 pips, all Asia), taken before this port restored the frozen decisions; parity is not evidence of edge, so it stays contained; live on FX |
+| every instrument | `impulse_pullback` | net -49 pips over 11 live trades of the earlier simplified thesis; the port (XAU only) is proven on synthetic data only, not on the real capture, so it stays contained |
+| every instrument | any setup whose structure timeframe is `M15` (`observe_only_structure_timeframes`) | the M15 supply/demand extension has no Python predecessor and no execution record; detected and published, not traded |
 
 Containment is reversible by removing the name. Nothing re-enables itself.
 

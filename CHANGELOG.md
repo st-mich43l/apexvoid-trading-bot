@@ -69,6 +69,24 @@ dated section after deployment.
   and scalp-lane notes deleted.
 
 ### Fixed
+- Session Level, Flip Zone, Trendline and Box Breakout again publish the decision of
+  the frozen Python detectors they replaced (`session_level_reaction`,
+  `flip_demand/supply_zone_reaction`, `trendline_reaction` V2, `box_breakout`), only as
+  confirmed reactions through the shared detector contract. Measured before the fix on
+  the same bars, Go fired about six times as often as Python on Session Level (1,831
+  confirmed bar-states against 316 decisions, 163 identical) and matched 2 of 91 Flip
+  Zone decisions. `test/legacyparity` now replays five real captures against the
+  oracle `1c9f323`: 316 session-level, 91 flip-zone, 8 trendline and 36 box-breakout
+  decisions are identical in presence, direction, entry band and confluence stars, and
+  Go is silent everywhere the oracle is. Their configuration changes: the unused
+  `proximity_atr`, strength and box-geometry keys are gone and `breakout_accept_bars` /
+  `breakout_max_age_bars` / the trendline chop gates are explicit.
+- Impulse Pullback Scalp is ported from the Python scalp lane's
+  `discover_impulse_pullback` (it was a simpler thesis): 4 ATR displacement and 0.5
+  body dominance, corrective pullback, unmitigated M5 zone or key level with an agreeing
+  closed-bar role, dealing-range location, M1 confirmation, structural stop and
+  corridor target. XAU only. The real 33 h XAU capture holds no Python decision, so it is
+  proven on seeded synthetic M1 captures only (labelled synthetic) and stays contained.
 - The economic-calendar sync raised `AttributeError` on every attempt in
   production (the currency and oil keyword config became YAML lists while the
   parser split comma strings).
