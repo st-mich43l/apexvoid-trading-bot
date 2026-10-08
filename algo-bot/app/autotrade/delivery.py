@@ -45,7 +45,6 @@ from app.autotrade.setup_card import (
   load_telegram_root_message_id,
   parse_forming_card_symbol,
   ensure_forming_card_entry,
-  ensure_forming_card_risk_leg,
   published_plan_stop_price,
 )
 from app.autotrade.lifecycle import LIFECYCLE_STATES, emit_lifecycle
@@ -1845,9 +1844,6 @@ async def _mark_forming_card_position_activated(client, match_id: str) -> None:
       edit_fn=edit_scanner_message_text,
     )
     await ensure_forming_card_entry(
-      client, match_id, edit_fn=edit_scanner_message_text,
-    )
-    await ensure_forming_card_risk_leg(
       client, match_id, edit_fn=edit_scanner_message_text,
     )
   except Exception:

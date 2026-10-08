@@ -12,6 +12,11 @@ dated section after deployment.
 
 ## Unreleased
 
+### Changed
+- The Auto Algo root card no longer prints the "Risk leg" line added with the planner-declared
+  risk leg. The plan still declares the leg (`entry.risk_leg`) and the executor places it
+  unchanged; only the card text changes. Cards already published keep the line they have.
+
 ### Fixed
 - Arbitration and publication correctness (P1 audit, `docs/strategies/arbitration-quality-audit.md`).
   A Go invalidation or expiry now records its own `go_<reason>` route outcome; before, the

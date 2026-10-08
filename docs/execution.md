@@ -121,9 +121,9 @@ otherwise the leg is written off as already gone.
   50-60 pip envelope, targets are 1R/2R/3R/4R closing 40/20/20/20 with
   break-even after 1R, and unfilled legs are cancelled after TP. The optional
   XAU risk leg (0.02/0.05 lots by equity, 15 pips inside the stop) is declared
-  by the planner in `entry.risk_leg` and printed on the card as a "Risk leg"
-  line; the executor places exactly the legs the plan declares and never adds
-  one (production 2026-10-08: an executor-injected leg the card did not show).
+  by the planner in `entry.risk_leg` (the Auto Algo root card does not print it);
+  the executor places exactly the legs the plan declares and never adds one
+  (production 2026-10-08: an executor-injected leg the plan did not hold).
   `execution.reaction_risk_leg` holds its switch and sizing table, read by the
   planner; technical provenance never changes the leg set. Manual `/algo` keeps
   its own zone ladder (shallow at the near edge, deep at the midpoint).
