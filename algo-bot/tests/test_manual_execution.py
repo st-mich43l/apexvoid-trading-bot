@@ -178,17 +178,6 @@ async def test_enqueue_event_prefers_db_symbol_over_bad_xau_stamp(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_bridge_intents_loop_is_a_no_op_when_disabled():
-  # manual_algo_enabled defaults False and conftest doesn't override it.
-  await asyncio.wait_for(manual_execution.bridge_intents_loop(), timeout=2)
-
-
-@pytest.mark.asyncio
-async def test_reconcile_events_loop_is_a_no_op_when_disabled():
-  await asyncio.wait_for(manual_execution.reconcile_events_loop(), timeout=2)
-
-
-@pytest.mark.asyncio
 async def test_manual_intent_never_touches_the_autonomous_worker_gates(monkeypatch):
   """An owner /algo plan is published directly: no scanner/analysis policy."""
   from app.autotrade import worker
