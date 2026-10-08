@@ -677,3 +677,97 @@ def test_go_thesis_identity_is_stable_for_the_zone_not_the_confirmation_bar():
     symbol="XAU", strategy_family="supply_demand", direction="SELL", structural_id="zone:M5:supply:1789387500")
   assert pol._thesis_id("XAU", "supply_demand", "SELL", "zone-a") != pol._thesis_id("XAU", "supply_demand", "SELL", "zone-b")
   assert pol._thesis_id("XAU", "supply_demand", "SELL", "zone-a") != pol._thesis_id("XAU", "supply_demand", "BUY", "zone-a")
+
+
+# --- Execution containment, end to end ----------------------------------------
+
+XAU_OBSERVE_ONLY = {"ifvg", "liquidity_sweep", "session_level", "impulse_pullback"}
+
+
+def m15_structure_record(now: int, *, typed: bool = True, scope: str = "supply", offset: int = 1):
+  """A supply/demand reaction on an M15 zone, as Go publishes it after #742."""
+  record = catalog_kafka_record(now, scope, offset=offset)
+  raw = json.loads(record.value)
+  payload = raw["payload"]
+  payload["id"] = f"opp_{scope}_m15"
+  payload["evidence"] = [{"code": f"m5_{scope}_zone_confirmed"}, {"code": "htf_zone_m15"}]
+  if typed:
+    payload["structure_timeframe"] = "M15"
+  raw["event_id"] = f"evt-{scope}-m15"
+  record.value = json.dumps(raw).encode()
+  return record
+
+
+@pytest.mark.parametrize("scope", sorted(XAU_OBSERVE_ONLY))
+@pytest.mark.asyncio
+async def test_a_contained_xau_strategy_never_reaches_a_plan_through_the_worker(h, prod, scope):
+  """Go opportunity -> Kafka consumer -> worker cycles: observed, decided, never planned."""
+  await h.activate(scope=scope)
+  await h._ensure()
+  await consumer_for(h).process_record(catalog_kafka_record(h.clock.now, scope))
+  assert await prod.get(strategy_matches_key("XAU")) is None
+  assert (await h.decisions())[-1]["reason"] == "execution_contained"
+  await cycle(prod, n=3)
+  assert await plans(prod) == []
+
+
+@pytest.mark.asyncio
+async def test_the_m15_supply_demand_extension_is_observed_never_planned(h, prod):
+  await h.activate()
+  await h._ensure()
+  await consumer_for(h).process_record(m15_structure_record(h.clock.now))
+  assert await prod.get(strategy_matches_key("XAU")) is None
+  assert (await h.decisions())[-1]["reason"] == "execution_contained_structure_timeframe"
+  await cycle(prod, n=3)
+  assert await plans(prod) == []
+
+
+@pytest.mark.asyncio
+async def test_an_m15_event_without_the_typed_field_is_still_contained_by_its_evidence(h, prod):
+  """A rolling deploy can deliver an event the previous engine published."""
+  await h.activate()
+  await h._ensure()
+  await consumer_for(h).process_record(m15_structure_record(h.clock.now, typed=False))
+  assert await prod.get(strategy_matches_key("XAU")) is None
+  assert (await h.decisions())[-1]["reason"] == "execution_contained_structure_timeframe"
+
+
+@pytest.mark.asyncio
+async def test_ordinary_m5_supply_demand_still_becomes_a_plan(h, prod):
+  await h.activate(scope="supply")
+  await h._ensure()
+  await consumer_for(h).process_record(catalog_kafka_record(h.clock.now, "supply"))
+  match = deserialize_matches(await prod.get(strategy_matches_key("XAU")))[0]
+  assert not any(tag.startswith("go_structure_tf:") for tag in match.tags)
+  assert await worker._publish_trade_plan_v8(prod, "XAU", _spot(4354.1, 4354.3), match, frames={}) is not None
+
+
+@pytest.mark.parametrize("scope", ["ifvg", "supply"])
+@pytest.mark.asyncio
+async def test_a_match_stored_before_containment_cannot_become_a_plan(h, prod, monkeypatch, scope):
+  """Defence in depth: containment is re-checked at plan admission, so a match
+  that predates a config change (or arrived by any other route) is refused."""
+  await h.activate(scope=scope)
+  await h._ensure()
+  record = m15_structure_record(h.clock.now) if scope == "supply" else catalog_kafka_record(h.clock.now, scope)
+  with monkeypatch.context() as patch:
+    patch.setattr(pol, "containment_reason", lambda *args, **kwargs: None)
+    await consumer_for(h).process_record(record)
+  match = deserialize_matches(await prod.get(strategy_matches_key("XAU")))[0]
+  assert await worker._publish_trade_plan_v8(prod, "XAU", _spot(4354.1, 4354.3), match, frames={}) is None
+  assert (await route(prod, match.match_id))["reason_code"].startswith("execution_contained")
+  await cycle(prod, n=3)
+  assert await plans(prod) == []
+
+
+@pytest.mark.no_database
+def test_the_xau_live_versus_observe_only_matrix():
+  from app.autotrade import go_containment as containment
+
+  assert containment.observe_only_strategies("XAU") == XAU_OBSERVE_ONLY
+  live = set(pol.REVIEWED_SCOPES) - XAU_OBSERVE_ONLY
+  assert {"key_level", "scalp_breakout_retest", "range_sweep", "supply", "demand", "fvg", "order_block"} <= live
+  for symbol in ("XAU", "EURUSD", "GBPUSD", "GBPJPY", "USDJPY"):
+    assert containment.observe_only_structure_timeframes(symbol) == {"M15"}
+  for symbol in ("EURUSD", "GBPUSD", "GBPJPY", "USDJPY"):
+    assert containment.observe_only_strategies(symbol) == {"impulse_pullback"}

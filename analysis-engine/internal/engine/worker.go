@@ -521,10 +521,10 @@ func measuredPointer(snapshot mad.Snapshot, key string) *float64 {
 // leaves the consumer's old winner/conflict_held status alive forever.
 func (w *SymbolWorker) arbitrate(now int64, reference float64, publish bool) {
 	live := w.state.Opportunities.Live()
-	if len(w.settings.ObserveOnly) > 0 {
+	if len(w.settings.ObserveOnly) > 0 || len(w.settings.ObserveOnlyStructureTimeframes) > 0 {
 		executable := make([]opportunity.Candidate, 0, len(live))
 		for _, candidate := range live {
-			if !w.settings.ObserveOnly[candidate.Strategy] {
+			if !w.settings.ObserveOnly[candidate.Strategy] && !w.settings.ObserveOnlyStructureTimeframes[candidate.StructureTimeframe] {
 				executable = append(executable, candidate)
 			}
 		}

@@ -56,6 +56,14 @@ Analysis stays on, so the opportunity is produced, stored and decided with reaso
 re-enables execution; nothing else changes. Current containment is documented
 with its evidence in [strategies](strategies/README.md).
 
+A structure timeframe can be contained the same way:
+`...go_opportunity.observe_only_structure_timeframes` (all five instruments list
+`M15`, the unvalidated M15 supply/demand extension). Go publishes the timeframe a
+setup's structure was built on as the typed `structure_timeframe` field of
+`analysis.opportunity.v1` (omitted when it equals `timeframe`), and the same two
+leaves are enforced twice: when the opportunity becomes a match, and again at
+plan admission, so a match stored before a containment change cannot become a plan.
+
 `analysis.strategies.supply` and `demand` carry `higher_timeframes: [M15]`: the M15
 frame's own supply/demand zones are also evaluated against the M5 closed bars
 (see [supply](strategies/supply.md#higher-timeframe-zones)). Removing the key

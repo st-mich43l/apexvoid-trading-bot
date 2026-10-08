@@ -14,6 +14,7 @@
     },
     "symbol": { "type": "string" },
     "timeframe": { "type": "string", "enum": ["M1", "M3", "M5", "M15", "M30", "H1", "H4", "D1"], "description": "Additive V1 field: closed-bar timeframe that first made the opportunity actionable. Retained pre-S11 events may omit it." },
+    "structure_timeframe": { "type": "string", "enum": ["M1", "M3", "M5", "M15", "M30", "H1", "H4", "D1"], "description": "Additive V1 field: timeframe the setup's structure was built on when it is not `timeframe` (an M15 supply/demand zone reacted to on M5 bars). Omitted when the structure is on `timeframe`. Execution policy may contain a structure timeframe (instruments.<SYMBOL>.overrides.execution.go_opportunity.observe_only_structure_timeframes)." },
     "direction": { "type": "string", "enum": ["BUY", "SELL"] },
     "entry": {
       "type": "object",
