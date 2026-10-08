@@ -4556,25 +4556,35 @@ public sealed partial class TradePlanRuntime(
   }
 
   /// <summary>
-  /// The deepest entry the plan declared (lowest for BUY, highest for SELL),
-  /// RISK leg excluded. Cancelled legs keep their declared price, so this is
-  /// still known after unfilled legs are withdrawn at the first target.
+  /// The deepest entry the plan declared (lowest for BUY, highest for SELL): the
+  /// deep EDGE of the entry zone the owner typed (SELL 4138-4141 is 4141), or a
+  /// non-RISK leg's own price when that is deeper. The RISK leg is excluded: it
+  /// sits beyond the zone on purpose. Cancelled legs keep their declared price,
+  /// so this is still known after unfilled legs are withdrawn at the first target.
+  /// (Owner 2026-10-08, manual 10: the TP1 stop is the zone's deep edge, 4141; the
+  /// deepest non-RISK LEG was only 4139.5, which left the funded stop at 4142.73.)
   /// </summary>
   private static decimal? PlannedDeepestEntry(
     TradePlan plan,
     TradePlanRuntimeState state
   )
   {
+    var buy = plan.Analysis.Direction == "BUY";
     var prices = (state.Legs ?? [])
       .Where(leg => !IsReactionRiskLeg(leg.LegId))
       .Select(leg => leg.FillPrice ?? leg.IntendedPrice)
       .Where(price => price > 0m)
-      .ToArray();
-    if (prices.Length == 0)
+      .ToList();
+    var zoneEdge = buy ? plan.Entry.ZoneLow : plan.Entry.ZoneHigh;
+    if (zoneEdge is decimal edge && edge > 0m)
+    {
+      prices.Add(edge);
+    }
+    if (prices.Count == 0)
     {
       return null;
     }
-    return plan.Analysis.Direction == "BUY" ? prices.Min() : prices.Max();
+    return buy ? prices.Min() : prices.Max();
   }
 
   /// <summary>

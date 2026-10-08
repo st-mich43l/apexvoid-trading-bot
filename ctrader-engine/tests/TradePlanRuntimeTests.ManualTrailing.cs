@@ -181,6 +181,53 @@ public sealed partial class TradePlanRuntimeTests
     Assert.Equal(4096.00m, Assert.Single(runtime.TrackedStates).CurrentStop);
   }
 
+  // Manual 10 (2026-10-08), the real ladder: XAU SELL zone 4138-4141, stop 4143, L1 4138.0
+  // (market, filled 4138.01), L2 4139.5 (filled 4139.51), risk leg 4141.5 (filled 4141.94).
+  // After TP1 the stop must go to the zone's deep edge, 4141; production moved it to
+  // 4142.73 (above the zone) because the deepest non-risk LEG was only 4139.5, so the
+  // funded-economic stop was not capped.
+  [Fact]
+  public async Task ManualSellTp1MovesTheStopToTheDeepEdgeOfTheZoneEvenWithTheRiskLegFilled()
+  {
+    var json = ManualFourTargetLadderJson()
+      .Replace("\"direction\": \"BUY\"", "\"direction\": \"SELL\"")
+      .Replace("\"kind\": \"demand\"", "\"kind\": \"supply\"")
+      .Replace("4085.00", "4138.00").Replace("4089.50", "4141.00")
+      .Replace("4082.50", "4143.00")
+      .Replace("{\"leg_id\": \"L1\", \"price\": \"4089.10\"", "{\"leg_id\": \"L1\", \"price\": \"4138.00\"")
+      .Replace("{\"leg_id\": \"L2\", \"price\": \"4138.00\"", "{\"leg_id\": \"L2\", \"price\": \"4139.50\"")
+      .Replace("4096.00", "4133.00").Replace("4104.00", "4128.00").Replace("4110.00", "4123.00").Replace("4120.00", "4118.00");
+    var store = new FakeTradePlanStore();
+    store.EnqueuePlan(json);
+    var client = new FakeTradePlanTradingClient { AccountEquity = 1_300m, AccountBalance = 1_300m, NextMarketFillPrice = 4138.01m };
+    var runtime = new TradePlanRuntime(
+      Options() with { ReactionRiskLegEnabled = true }, store, () => DateTimeOffset.UtcNow, _ => { }
+    );
+
+    await runtime.PollAsync(
+      client, Symbol, new SpotPrice("XAU", 4138.01m, 4138.11m, 1), CancellationToken.None
+    );
+    var open = Assert.Single(runtime.TrackedStates);
+    var l2Order = Assert.Single(open.Legs!, leg => leg.LegId == "L2").BrokerOrderId!.Value;
+    var riskOrder = Assert.Single(open.Legs!, leg => leg.LegId == "RISK").BrokerOrderId!.Value;
+    client.FillPendingOrder(l2Order, fillPrice: 4139.51m);
+    client.FillPendingOrder(riskOrder, fillPrice: 4141.94m);
+    await runtime.PollAsync(
+      client, Symbol, new SpotPrice("XAU", 4141.94m, 4142.04m, 2), CancellationToken.None
+    );
+    Assert.All(Assert.Single(runtime.TrackedStates).Legs!, leg => Assert.NotNull(leg.BrokerPositionId));
+
+    await runtime.PollAsync(
+      client, Symbol, new SpotPrice("XAU", 4132.50m, 4132.60m, 3), CancellationToken.None
+    );
+
+    var afterTp1 = Assert.Single(runtime.TrackedStates);
+    Assert.True(afterTp1.BreakEvenApplied);
+    Assert.Equal(4141.00m, afterTp1.CurrentStop);
+    Assert.Contains(client.StopAmendments, amendment => amendment.StopLoss == 4141.00m);
+    Assert.DoesNotContain(client.StopAmendments, amendment => amendment.StopLoss > 4141.00m && amendment.StopLoss < 4143.00m);
+  }
+
   [Fact]
   public async Task AutonomousLaddersKeepPerLegBreakevenAfterTp1()
   {
