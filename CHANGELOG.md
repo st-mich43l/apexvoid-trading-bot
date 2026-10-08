@@ -69,6 +69,12 @@ dated section after deployment.
   and scalp-lane notes deleted.
 
 ### Fixed
+- MAD's sweep tolerance floor used the global FX pip size `0.0001` for every instrument; it
+  now uses the instrument's own (XAU 0.1, JPY crosses 0.01), as the frozen classifier did.
+  MAD is telemetry only (confluence scoring is v1) and every replay and parity golden is
+  unchanged. The XAU loss attribution behind this change is in
+  `docs/analysis/xau-loss-attribution-2026-10.md`: no Key Level or Range Edge rule is
+  changed because no defect is demonstrated.
 - Session Level, Flip Zone, Trendline and Box Breakout again publish the decision of
   the frozen Python detectors they replaced (`session_level_reaction`,
   `flip_demand/supply_zone_reaction`, `trendline_reaction` V2, `box_breakout`), only as
