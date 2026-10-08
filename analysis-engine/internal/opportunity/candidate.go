@@ -252,6 +252,12 @@ type Candidate struct {
 	// actionable. Strategies leave it empty; SymbolWorker assigns it at the
 	// observation boundary so multi-timeframe evaluations remain auditable.
 	ObservedTimeframe market.Timeframe
+	// StructureTimeframe is the timeframe the structure behind the setup was
+	// built on when it is not the observation timeframe (an M15 zone reacted to
+	// on M5 bars). Empty means the setup's structure is on ObservedTimeframe. It
+	// is typed provenance, so execution policy can contain a higher-timeframe
+	// extension without parsing evidence strings.
+	StructureTimeframe market.Timeframe
 
 	Direction market.Direction
 
@@ -337,6 +343,11 @@ func (c Candidate) Validate() error {
 	if c.ObservedTimeframe != "" {
 		if _, ok := c.ObservedTimeframe.Minutes(); !ok {
 			return fmt.Errorf("opportunity: observed timeframe is invalid")
+		}
+	}
+	if c.StructureTimeframe != "" {
+		if _, ok := c.StructureTimeframe.Minutes(); !ok {
+			return fmt.Errorf("opportunity: structure timeframe is invalid")
 		}
 	}
 	if !finite(c.Entry.Low) || !finite(c.Entry.High) || c.Entry.Low > c.Entry.High {

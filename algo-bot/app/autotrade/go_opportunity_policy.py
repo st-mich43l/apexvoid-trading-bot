@@ -46,6 +46,12 @@ from app.analysis_client.freshness import FreshnessLimits, evaluate_freshness
 from app.analysis_client.models import ArbitrationEnvelope, InvalidationEnvelope, OpportunityEnvelope
 from app.analysis_client.repository import LifecycleResult, PostgresAnalysisOpportunityRepository
 from app.autotrade import units
+from app.autotrade.go_containment import (
+  STRUCTURE_TIMEFRAME_TAG,
+  containment_reason,
+  observe_only_strategies,  # noqa: F401  (re-exported: the adapter's public containment read)
+  structure_timeframe_of,
+)
 from app.autotrade.go_plan_cancel import SOURCE_EXPIRED, SOURCE_INVALIDATED, plan_id_for_match, request_plan_cancel
 from app.autotrade.go_live_opportunities import go_live_opportunity_ids
 from app.autotrade.execution_policy import classify_tier, risk_multiplier_for_tier, strategy_family
@@ -132,22 +138,6 @@ REVIEWED_SCOPES: dict[str, ScopeProfile] = {
 
 if frozenset(REVIEWED_SCOPES) != CATALOG_STRATEGY_IDS:
   raise RuntimeError("Go strategy catalog and Go-to-policy adapter registry are out of sync")
-
-
-def observe_only_strategies(symbol: str) -> frozenset[str]:
-  """Go strategies whose opportunities this instrument observes but never trades.
-
-  Instrument-owned (``instruments.<SYMBOL>.overrides.execution.go_opportunity.
-  observe_only_strategies``); empty when the instrument names none.
-  """
-  from app.core.instrument_geometry import instrument_runtime
-
-  try:
-    node = instrument_runtime(str(symbol).upper()).execution.go_opportunity
-    names = node.observe_only_strategies
-  except (AttributeError, KeyError):
-    return frozenset()
-  return frozenset(str(name) for name in (names or ()))
 
 
 class AdapterRejection(Exception):
@@ -344,6 +334,10 @@ def build_strategy_match(
     f"{CATALOG_TAG}{profile.catalog_id}",
     f"go_opportunity:{payload.id}",
     f"kind:{profile.structural_kind}",
+    *(
+      (f"{STRUCTURE_TIMEFRAME_TAG}{structure_tf}",)
+      if (structure_tf := structure_timeframe_of(payload.structure_timeframe, evidence_codes)) else ()
+    ),
     "go_strategy_confirmed",
     f"go_strategy_mode:{profile.strategy_mode}",
     *(f"go_evidence:{code}" for code in evidence_codes),
@@ -519,10 +513,14 @@ class GoOpportunityPolicy:
     if profile is None:
       await self._decide(event, "not_adapted", "scope_not_reviewed")
       return "not_adapted"
-    if payload.strategy in observe_only_strategies(payload.symbol):
+    contained = containment_reason(
+      payload.symbol, payload.strategy,
+      structure_timeframe_of(payload.structure_timeframe, tuple(item.code for item in payload.evidence)),
+    )
+    if contained is not None:
       # Analysis stays on: the opportunity is produced, stored and decided, but
       # no match (hence no TradePlan) is built for this instrument.
-      await self._decide(event, "not_adapted", "execution_contained", owner="go")
+      await self._decide(event, "not_adapted", contained, owner="go")
       return "not_adapted"
     # The live Kafka opportunity event is the technical-source boundary.
     now = int(self._clock())

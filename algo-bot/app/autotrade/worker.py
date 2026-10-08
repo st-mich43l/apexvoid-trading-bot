@@ -27,6 +27,7 @@ from app.runtime.instruments import (
   live_instruments,
 )
 from app.analysis_client.provenance import GO_ORIGIN_TAG
+from app.autotrade.go_containment import match_containment_reason
 from app.autotrade.go_plan_cancel import read_plan_cancel
 from app.autotrade.go_live_opportunities import go_live_opportunity_ids
 from app.autotrade.go_opportunity_policy import (
@@ -1099,6 +1100,22 @@ async def _publish_trade_plan_v8(
   # the protection against stale non-Go state. Everything after this point is
   # execution-time quote, confirmation, risk and order validation.
   if GO_ORIGIN_TAG in match.tags:
+    # Containment is re-checked here, at the only place a plan is built, so a
+    # match stored before a containment change (or reaching the worker by any
+    # route other than match creation) still cannot become a plan.
+    contained = match_containment_reason(match)
+    if contained is not None:
+      await record_route_outcome(
+        client,
+        match,
+        stage="mode_check",
+        status="blocked",
+        reason_code=contained,
+        message="instrument observes this Go opportunity without trading it",
+        retained=False,
+        publish_status=False,
+      )
+      return None
     # A Go opportunity that was invalidated/expired leaves a cancel tombstone.
     # A match that raced the withdrawal
     # (already in this cycle's memory) must not become a fresh plan.
