@@ -146,6 +146,9 @@ def _instrument_volume_multiplier(instrument_cfg: Any) -> float:
 # `planned_entry_price`, `planned_leg_entry_prices`) shared with the executor.
 ENTRY_PLAN_VERSION = 1
 XAU_FVG_EXECUTION_MIN_PIPS = 30
+# A Break & Retest band is a level (median 0.26 on XAU). Its XAU entry band is widened to
+# 50 pips toward the stop and laid out like Manual Algo's zone ladder.
+XAU_RETEST_EXECUTION_MIN_PIPS = 50
 
 ROUTE_MARKET = "market"
 ROUTE_SINGLE_LIMIT = "single_limit"
@@ -170,18 +173,21 @@ def _execution_entry_zone(
   if (
     GO_ORIGIN_TAG not in tags
     or symbol not in {"XAU", "XAUUSD"}
-    or kind not in {"fvg", "ifvg"}
+    or kind not in {"fvg", "ifvg", "break_retest"}
     or pip_size <= 0
   ):
     return raw_low, raw_high, False
 
-  configured_max = float(
-    instrument_cfg.strategies.technique.fvg.entry_max_width_price
-  )
-  desired_width = min(
-    configured_max,
-    XAU_FVG_EXECUTION_MIN_PIPS * pip_size,
-  )
+  if kind == "break_retest":
+    desired_width = XAU_RETEST_EXECUTION_MIN_PIPS * pip_size
+  else:
+    configured_max = float(
+      instrument_cfg.strategies.technique.fvg.entry_max_width_price
+    )
+    desired_width = min(
+      configured_max,
+      XAU_FVG_EXECUTION_MIN_PIPS * pip_size,
+    )
   if raw_high - raw_low >= desired_width - 1e-12:
     return raw_low, raw_high, False
 
@@ -197,18 +203,33 @@ def _execution_entry_zone(
 
 def _band_extension_pips(
   match: Any, *, low: float, high: float, pip_size: float,
+  max_stop_pips: float | None = None,
 ) -> float:
-  """Pips the execution band extends past Go's zone on the stop side."""
+  """Pips the execution band extends past Go's zone on the stop side.
+
+  With ``max_stop_pips`` the extension is held so the stop, which moves out by the
+  same distance, stays inside the stop envelope's cap: the band may grow only as far
+  as the envelope leaves room beyond Go's own invalidation distance.
+  """
   if pip_size <= 0:
     return 0.0
   direction = str(getattr(match, "direction", "") or "").upper()
   if direction == "BUY":
     extension = float(getattr(match, "entry_low", low)) - low
+    shallow_gap = float(getattr(match, "entry_high", high)) - float(
+      getattr(match, "go_invalidation_price", 0.0) or 0.0
+    )
   elif direction == "SELL":
     extension = high - float(getattr(match, "entry_high", high))
+    shallow_gap = float(getattr(match, "go_invalidation_price", 0.0) or 0.0) - float(
+      getattr(match, "entry_low", low)
+    )
   else:
     return 0.0
-  return max(0.0, extension / pip_size)
+  pips = max(0.0, extension / pip_size)
+  if max_stop_pips is not None and getattr(match, "go_invalidation_price", None) is not None:
+    pips = min(pips, max(0.0, float(max_stop_pips) - shallow_gap / pip_size))
+  return pips
 
 
 OUTCOME_ALLOW = "allow"
@@ -459,8 +480,9 @@ def evaluate_execution_policy(
     policy.strategy
   )
   if retest_ladder:
-    # A level retest on gold scales in (shallow edge, then deeper) like the zone
-    # strategies; a thin retest band is widened by the ladder rule below.
+    # A level retest on gold scales in like the zone strategies: its band is widened
+    # to 50 pips (_execution_entry_zone) and laid out as Manual Algo's shallow/deep
+    # ladder, with the stop following the band inside the envelope cap.
     policy = replace(
       policy, order_type_preference="limit", entry_distribution="zone_scale",
     )
@@ -474,8 +496,15 @@ def evaluate_execution_policy(
     pip_size=pip,
   )
   confluence = int(getattr(match, "confluence", 0) or 0)
+  # The width gate judges the structure Go found; the XAU retest ladder widens the
+  # traded band on purpose, so measure it on Go's own band.
+  gate_width = (
+    float(getattr(match, "entry_high", high)) - float(getattr(match, "entry_low", low))
+    if retest_ladder
+    else high - low
+  )
   zone_width_atr = (
-    (high - low) / atr if atr > 0 and math.isfinite(atr) else float("inf")
+    gate_width / atr if atr > 0 and math.isfinite(atr) else float("inf")
   )
   targets = tuple(int(value) for value in getattr(match, "targets_pips", ()) or ())
   target_model = str(
@@ -590,7 +619,6 @@ def evaluate_execution_policy(
       SCALP_MICRO_CLIPS,
     )),
     manual_xau_ladder=manual_xau_ladder,
-    thin_zone_ladder=retest_ladder,
   )
   if not route_plan.valid:
     return ExecutionPolicyEvaluation(
@@ -789,6 +817,7 @@ def evaluate_execution_policy(
         widen_to_minimum=True,
         band_extension_pips=_band_extension_pips(
           match, low=low, high=high, pip_size=pip,
+          max_stop_pips=maximum_stop_pips if retest_ladder else None,
         ),
       )
     elif is_m1_scalp_strategy(strategy_name):
