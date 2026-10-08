@@ -7,6 +7,7 @@ tests/test_trade_plan_builder.py
 tests/test_scalp_micro_grid.py
 tests/test_range_edge_card_price.py
 tests/test_risk_leg.py
+tests/test_xau_retest_ladder.py
 tests/test_trade_plan_stream.py
 tests/test_publish_trade_plan_v8.py
 tests/test_watcher.py
