@@ -1,5 +1,7 @@
 # Box Breakout Strategy V2
 
+**Contract.** Restored to the frozen `box_breakout`: an accepted break of the regime box in the confirmation direction, within `breakout_max_age_bars` of the acceptance, entered on the accepting displacement bar or on a rejecting retest of the broken edge. It remains a separate M5 detector from `scalp_breakout_retest`. Proven on 36 oracle decisions (`test/legacyparity`). Python's code default is off; the deployed configuration enables it, and this change does not alter that.
+
 `box_breakout` is the M5 compression thesis, separate from the M1 scalp. A
 bounded-width box must be followed by an accepted close outside and a later M5
 retest that holds the broken edge. Entry is the retest band, invalidation is

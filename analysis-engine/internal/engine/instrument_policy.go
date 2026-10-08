@@ -221,7 +221,7 @@ func (s Settings) BlockedByDefendedLevel(c opportunity.Candidate) (float64, bool
 var legacyDetectorStrategies = map[string]bool{
 	"snap_back": true, "fade_scalp": true, "momentum_ride": true, "break_retest": true, "range_edge": true, "key_level": true, "liquidity_sweep": true,
 	// The technique publishers (technique_detectors.py) qualify through the same contract.
-	"supply": true, "demand": true, "order_block": true, "fvg": true, "ifvg": true, "crt": true, "confluence_zone": true,
+	"supply": true, "demand": true, "order_block": true, "fvg": true, "ifvg": true, "crt": true, "confluence_zone": true, "session_level": true, "flip_zone": true, "box_breakout": true, "trendline": true,
 }
 
 // applyLegacyDetector injects the shared frozen-detector thresholds, the
@@ -268,6 +268,10 @@ var scalpBook = map[string]string{
 // scalpLaneExtras are the leaves only one strategy of the lane reads.
 var scalpLaneExtras = map[string]map[string]string{
 	"scalp_breakout_retest": {},
+	"impulse_pullback": {
+		"buy_maximum_position":  "auto_algo.strategies.scalping.location.pullback_buy_maximum_position",
+		"sell_minimum_position": "auto_algo.strategies.scalping.location.pullback_sell_minimum_position",
+	},
 	"range_sweep": {
 		"buy_maximum_position":     "auto_algo.strategies.scalping.location.range_buy_maximum_position",
 		"sell_minimum_position":    "auto_algo.strategies.scalping.location.range_sell_minimum_position",

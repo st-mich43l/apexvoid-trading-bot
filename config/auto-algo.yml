@@ -93,6 +93,10 @@ auto_algo:
       location:
         range_buy_maximum_position: 0.35
         range_sell_minimum_position: 0.65
+        # Impulse Pullback Scalp: a BUY pullback in the lower 60% of the dealing
+        # range, a SELL in the upper 60%.
+        pullback_buy_maximum_position: 0.60
+        pullback_sell_minimum_position: 0.40
       activation:
         trigger_maximum_age_bars: 2
         maximum_chase_pips: 40

@@ -1,5 +1,7 @@
 # Session Level
 
+**Contract.** Restored to the frozen `session_level_reaction`: the frame's session levels (frozen `session_liquidity` rules), nearest to price first, a reaction off the level's reaction band, a swept level valid only with a reclaim-type confirmation, the shared entry-validity and confluence floor, and the best-scored qualifying level. Only confirmed reactions are emitted. Proven on 316 oracle decisions (`test/legacyparity`). XAU stays observe-only.
+
 ## Strategy ID / version
 
 `session_level`, `v2`. Implemented in

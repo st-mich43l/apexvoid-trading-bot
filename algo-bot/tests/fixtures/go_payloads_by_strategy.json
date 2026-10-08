@@ -1,0 +1,2897 @@
+{
+ "box_breakout": {
+  "algorithm_version": {
+   "liquidity": "v1",
+   "structure": "v2"
+  },
+  "created_at": 1790676300,
+  "direction": "BUY",
+  "entry": {
+   "high": 4150.32,
+   "low": 4146.66
+  },
+  "evidence": [
+   {
+    "code": "m5_box_compression"
+   },
+   {
+    "code": "m5_breakout_accepted"
+   }
+  ],
+  "expires_at": 1790705100,
+  "formed_at": 1790676300,
+  "id": "opp_cfa94894c1ca4f47a62b902382a3c47a62e75e65d35a850b51513942babc93e1",
+  "invalidation": {
+   "label": "box_reentry",
+   "price": 4145.75
+  },
+  "quality": {
+   "components": {
+    "confluence": 0.6666666666666666,
+    "reaction": 1
+   },
+   "overall": 0.6666666666666666
+  },
+  "stop_envelope": {
+   "cap_pips": 60,
+   "desired_minimum_pips": 50,
+   "floor_pips": 50,
+   "source": "strategy_default"
+  },
+  "strategy": "box_breakout",
+  "symbol": "XAU",
+  "targets": [
+   {
+    "price": {
+     "label": "box_measured_move",
+     "price": 4157.66
+    }
+   }
+  ],
+  "technical_context": {
+   "atr": 3.6971428571428726,
+   "bias": {
+    "direction": "BUY",
+    "layer": "intermediate"
+   },
+   "candle_evidence": {
+    "all_patterns": [
+     "sweep_reclaim",
+     "strong_close",
+     "body_close",
+     "strong_reclaim",
+     "displacement_candle",
+     "sweep_indecision_displacement"
+    ],
+    "base_score": 0.6376410772665312,
+    "direction": "BUY",
+    "displacement": {
+     "body_atr": 1.0521638330758183,
+     "body_dominance": 0.8020618556701105,
+     "close_location": 0.8474226804124276,
+     "engulfing": false,
+     "patterns": [
+      "strong_close",
+      "body_close",
+      "strong_reclaim",
+      "displacement_candle"
+     ],
+     "range_atr": 1.311823802163926,
+     "reclaim": true,
+     "reclaim_depth_atr": 0.9088098918084998,
+     "score": 0.7053161116998424
+    },
+    "final_score": 0.7576410772665312,
+    "indecision": {
+     "body_fraction": 0.8020618556701105,
+     "compression_score": 0.1801101236475463,
+     "doji": false,
+     "inside_bar": false,
+     "spinning_top": false
+    },
+    "primary_pattern": "sweep_reclaim",
+    "rejection": {
+     "body_fraction": 0.8020618556701105,
+     "close_location": 0.8474226804124276,
+     "patterns": [
+      "sweep_reclaim"
+     ],
+     "reclaim": true,
+     "reclaim_depth_atr": 0.9088098918084998,
+     "score": 0.462812960235673,
+     "sweep": true,
+     "sweep_penetration_atr": 0.20285935085007642,
+     "wick_fraction": 0.045360824742317146
+    },
+    "sequence": {
+     "bars": 3,
+     "patterns": [
+      "sweep_indecision_displacement"
+     ],
+     "score": 0.7256197557236007
+    },
+    "synergy_bonus": 0.12,
+    "version": 2
+   },
+   "confluence": {
+    "factors": {
+     "choch": false,
+     "displacement_grade": true,
+     "fib_touch": false,
+     "htf_aligned": false,
+     "session_context": true,
+     "structural_agreement": true,
+     "touches": 0,
+     "wick_rejection": false
+    },
+    "mad_bonus": 0,
+    "raw_factor_score": 8,
+    "selected_stars": 2,
+    "v1_stars": 2,
+    "v2_raw": 8,
+    "v2_stars": 1,
+    "version": "v1",
+    "zone_quality_score": 0
+   },
+   "higher_timeframes": [
+    {
+     "direction": "SELL",
+     "layer": "intermediate",
+     "reference_time": 1790675100,
+     "timeframe": "M15"
+    }
+   ],
+   "mad": {
+    "acceptance_closes": 1,
+    "affinity": 0,
+    "break_distance_atr": 0.503091190108347,
+    "confidence": 0,
+    "displacement_atr": 1.1982225656878636,
+    "phase": "unclear",
+    "range_quality_atr": 9.38562596599682,
+    "reason_code": "no_mad_signature",
+    "reclaim": false,
+    "sweep_side": "high",
+    "version": 2
+   },
+   "reference_price": 4150.02,
+   "reference_time": 1790676300
+  },
+  "timeframe": "M5"
+ },
+ "confluence_zone": {
+  "algorithm_version": {
+   "liquidity": "v1",
+   "structure": "v2"
+  },
+  "created_at": 1790622900,
+  "direction": "BUY",
+  "entry": {
+   "high": 4137.42,
+   "low": 4132.24
+  },
+  "evidence": [
+   {
+    "code": "m5_distinct_zone_overlap"
+   },
+   {
+    "code": "m5_confluence_reaction"
+   }
+  ],
+  "expires_at": 1790666100,
+  "formed_at": 1790622900,
+  "id": "opp_fd70319770cd242dbd9bf439849186d3f5ac6389f3165e155511c52d323c3b18",
+  "invalidation": {
+   "label": "confluence_overlap_failed",
+   "price": 4130.16
+  },
+  "quality": {
+   "components": {
+    "confluence": 1,
+    "reaction": 1
+   },
+   "overall": 1
+  },
+  "stop_envelope": {
+   "cap_pips": 60,
+   "desired_minimum_pips": 50,
+   "floor_pips": 50,
+   "source": "strategy_default"
+  },
+  "strategy": "confluence_zone",
+  "symbol": "XAU",
+  "targets": [
+   {
+    "price": {
+     "label": "nearest_opposing_liquidity",
+     "price": 4148.01
+    }
+   }
+  ],
+  "technical_context": {
+   "atr": 3.504285714285743,
+   "bias": {
+    "direction": "SELL",
+    "layer": "internal"
+   },
+   "candle_evidence": {
+    "all_patterns": [
+     "sweep_reclaim",
+     "strong_close",
+     "body_close",
+     "strong_reclaim",
+     "displacement_candle",
+     "morning_star",
+     "sweep_indecision_displacement"
+    ],
+    "base_score": 0.5742007051900573,
+    "direction": "BUY",
+    "displacement": {
+     "body_atr": 0.6477782307379912,
+     "body_dominance": 0.7827586206896584,
+     "close_location": 0.9551724137930743,
+     "engulfing": false,
+     "patterns": [
+      "strong_close",
+      "body_close",
+      "strong_reclaim",
+      "displacement_candle"
+     ],
+     "range_atr": 0.8275580921322321,
+     "reclaim": true,
+     "reclaim_depth_atr": 0.7761924174480892,
+     "score": 0.6821795151140359
+    },
+    "final_score": 0.6942007051900573,
+    "indecision": {
+     "body_fraction": 0.7827586206896584,
+     "compression_score": 0.48277619241735503,
+     "doji": false,
+     "inside_bar": false,
+     "spinning_top": false
+    },
+    "primary_pattern": "sweep_reclaim",
+    "rejection": {
+     "body_fraction": 0.7827586206896584,
+     "close_location": 0.9551724137930743,
+     "patterns": [
+      "sweep_reclaim"
+     ],
+     "reclaim": true,
+     "reclaim_depth_atr": 0.7761924174480892,
+     "score": 0.38508541867907004,
+     "sweep": true,
+     "sweep_penetration_atr": 0.014268242967846328,
+     "wick_fraction": 0.17241379310341584
+    },
+    "sequence": {
+     "bars": 3,
+     "patterns": [
+      "morning_star",
+      "sweep_indecision_displacement"
+     ],
+     "score": 0.6067771911400803
+    },
+    "synergy_bonus": 0.12,
+    "version": 2
+   },
+   "confirmation": {
+    "confirmation_bar_time": 1790622900,
+    "pattern": "strong_reclaim",
+    "reaction_type": "rejection",
+    "touch_bar_time": 1790622900,
+    "zone_id": "confluence:buy:order_block+supply_demand:4135.000000"
+   },
+   "confluence": {
+    "factors": {
+     "choch": false,
+     "displacement_grade": true,
+     "fib_touch": false,
+     "htf_aligned": false,
+     "session_context": false,
+     "structural_agreement": true,
+     "touches": 1,
+     "wick_rejection": true
+    },
+    "mad_bonus": 0,
+    "raw_factor_score": 10,
+    "selected_stars": 3,
+    "v1_stars": 3,
+    "v2_raw": 12.612244897959183,
+    "v2_stars": 2,
+    "version": "v1",
+    "zone_quality_score": 2.6122448979591835
+   },
+   "higher_timeframes": [
+    {
+     "direction": "SELL",
+     "layer": "internal",
+     "reference_time": 1790618400,
+     "timeframe": "H1"
+    },
+    {
+     "direction": "SELL",
+     "layer": "micro",
+     "reference_time": 1790622000,
+     "timeframe": "M15"
+    }
+   ],
+   "mad": {
+    "affinity": 0,
+    "confidence": 0,
+    "phase": "unclear",
+    "reason_code": "asia_range_missing",
+    "reclaim": false,
+    "version": 2
+   },
+   "reference_price": 4134.96,
+   "reference_time": 1790622900
+  },
+  "timeframe": "M5"
+ },
+ "crt": {
+  "algorithm_version": {
+   "liquidity": "v1",
+   "structure": "v2"
+  },
+  "created_at": 1790712600,
+  "direction": "SELL",
+  "entry": {
+   "high": 4175.71,
+   "low": 4170.71
+  },
+  "evidence": [
+   {
+    "code": "h1_impulse_range"
+   },
+   {
+    "code": "m5_range_sweep_reclaim"
+   }
+  ],
+  "expires_at": 1790741400,
+  "formed_at": 1790712600,
+  "id": "opp_962e1c7ebf5b990d62b4be4189715b65fee7cef9fa9a06aa17b1234c1099585b",
+  "invalidation": {
+   "label": "crt_reclaim_failed",
+   "price": 4176.74
+  },
+  "quality": {
+   "components": {
+    "confluence": 0.6666666666666666,
+    "reaction": 1
+   },
+   "overall": 0.6666666666666666
+  },
+  "stop_envelope": {
+   "cap_pips": 60,
+   "desired_minimum_pips": 50,
+   "floor_pips": 50,
+   "source": "strategy_default"
+  },
+  "strategy": "crt",
+  "symbol": "XAU",
+  "targets": [
+   {
+    "price": {
+     "label": "opposite_h1_range",
+     "price": 4144.1
+    }
+   }
+  ],
+  "technical_context": {
+   "atr": 3.0799999999999272,
+   "bias": {
+    "direction": "BUY",
+    "layer": "intermediate"
+   },
+   "candle_evidence": {
+    "all_patterns": [
+     "sweep_reclaim",
+     "strong_close",
+     "body_close",
+     "engulfing",
+     "strong_reclaim",
+     "displacement_candle"
+    ],
+    "base_score": 0.7221806611895935,
+    "direction": "SELL",
+    "displacement": {
+     "body_atr": 1.1720779220778434,
+     "body_dominance": 0.9972375690607131,
+     "close_location": 0.0027624309392869006,
+     "engulfing": true,
+     "engulfing_quality": 0.9972375690607131,
+     "patterns": [
+      "strong_close",
+      "body_close",
+      "engulfing",
+      "strong_reclaim",
+      "displacement_candle"
+     ],
+     "range_atr": 1.1753246753246676,
+     "reclaim": true,
+     "reclaim_depth_atr": 1.159090909090842,
+     "score": 0.9315266167993594
+    },
+    "final_score": 0.8421806611895934,
+    "indecision": {
+     "body_fraction": 0.9972375690607131,
+     "compression_score": 0.26542207792208283,
+     "doji": false,
+     "inside_bar": false,
+     "spinning_top": false
+    },
+    "primary_pattern": "sweep_reclaim",
+    "rejection": {
+     "body_fraction": 0.9972375690607131,
+     "close_location": 0.0027624309392869006,
+     "patterns": [
+      "sweep_reclaim"
+     ],
+     "reclaim": true,
+     "reclaim_depth_atr": 1.159090909090842,
+     "score": 0.40816172777494436,
+     "sweep": true,
+     "sweep_penetration_atr": 0.012987012987001481,
+     "wick_fraction": 0
+    },
+    "synergy_bonus": 0.12,
+    "version": 2
+   },
+   "confirmation": {
+    "confirmation_bar_time": 1790712600,
+    "pattern": "strong_reclaim",
+    "reaction_type": "rejection",
+    "touch_bar_time": 1790712600,
+    "zone_id": "technique:crt:sell:1790704800"
+   },
+   "confluence": {
+    "factors": {
+     "choch": false,
+     "displacement_grade": false,
+     "fib_touch": true,
+     "htf_aligned": false,
+     "session_context": false,
+     "structural_agreement": true,
+     "touches": 0,
+     "wick_rejection": true
+    },
+    "mad_bonus": 0,
+    "raw_factor_score": 8.5,
+    "selected_stars": 2,
+    "v1_stars": 2,
+    "v2_raw": 8.5,
+    "v2_stars": 1,
+    "version": "v1",
+    "zone_quality_score": 0
+   },
+   "higher_timeframes": [
+    {
+     "direction": "SELL",
+     "layer": "intermediate",
+     "reference_time": 1790708400,
+     "timeframe": "H1"
+    },
+    {
+     "direction": "BUY",
+     "layer": "micro",
+     "reference_time": 1790712000,
+     "timeframe": "M15"
+    }
+   ],
+   "mad": {
+    "acceptance_closes": 27,
+    "affinity": 0,
+    "break_distance_atr": 7.785714285714623,
+    "confidence": 0.7402597402597815,
+    "direction": "BUY",
+    "displacement_atr": 0.43831168831181677,
+    "phase": "expand",
+    "range_quality_atr": 11.266233766233974,
+    "reason_code": "asia_break_accepted",
+    "reclaim": false,
+    "sweep_side": "high",
+    "version": 2
+   },
+   "reference_price": 4172.14,
+   "reference_time": 1790712600
+  },
+  "timeframe": "M5"
+ },
+ "demand": {
+  "algorithm_version": {
+   "liquidity": "v1",
+   "structure": "v2"
+  },
+  "created_at": 1790632800,
+  "direction": "BUY",
+  "entry": {
+   "high": 4124.64,
+   "low": 4119.64
+  },
+  "evidence": [
+   {
+    "code": "m5_demand_zone_confirmed"
+   },
+   {
+    "code": "m5_demand_zone_rejection_confirmed"
+   }
+  ],
+  "expires_at": 1790719200,
+  "formed_at": 1790632800,
+  "id": "opp_9c4b3bbf2f1977c1b452c5f73ea28cdfded96abf61eb84330e3c562e103a048c",
+  "invalidation": {
+   "label": "demand_zone_invalidated",
+   "price": 4115.42
+  },
+  "quality": {
+   "components": {
+    "confluence": 0.6666666666666666,
+    "reaction": 1
+   },
+   "overall": 0.6666666666666666
+  },
+  "stop_envelope": {
+   "cap_pips": 60,
+   "desired_minimum_pips": 50,
+   "floor_pips": 50,
+   "source": "strategy_default"
+  },
+  "strategy": "demand",
+  "symbol": "XAU",
+  "targets": [
+   {
+    "price": {
+     "label": "nearest_opposing_liquidity",
+     "price": 4148.01
+    }
+   }
+  ],
+  "technical_context": {
+   "atr": 3.3507142857144054,
+   "bias": {
+    "direction": "SELL",
+    "layer": "internal"
+   },
+   "candle_evidence": {
+    "all_patterns": [
+     "sweep_reclaim",
+     "strong_close",
+     "body_close",
+     "strong_reclaim",
+     "displacement_candle"
+    ],
+    "base_score": 0.7416083916083247,
+    "direction": "BUY",
+    "displacement": {
+     "body_atr": 1.4205926241739646,
+     "body_dominance": 0.8321678321678333,
+     "close_location": 0.9877622377621302,
+     "engulfing": false,
+     "patterns": [
+      "strong_close",
+      "body_close",
+      "strong_reclaim",
+      "displacement_candle"
+     ],
+     "range_atr": 1.707098699637619,
+     "reclaim": true,
+     "reclaim_depth_atr": 0.4655723726282688,
+     "score": 0.8740093240092536
+    },
+    "final_score": 0.8616083916083247,
+    "indecision": {
+     "body_fraction": 0.8321678321678333,
+     "compression_score": 0,
+     "doji": false,
+     "inside_bar": false,
+     "spinning_top": false
+    },
+    "primary_pattern": "sweep_reclaim",
+    "rejection": {
+     "body_fraction": 0.8321678321678333,
+     "close_location": 0.9877622377621302,
+     "patterns": [
+      "sweep_reclaim"
+     ],
+     "reclaim": true,
+     "reclaim_depth_atr": 0.4655723726282688,
+     "score": 0.5430069930069316,
+     "sweep": true,
+     "sweep_penetration_atr": 1.2206352590066083,
+     "wick_fraction": 0.1555944055942969
+    },
+    "synergy_bonus": 0.12,
+    "version": 2
+   },
+   "confirmation": {
+    "confirmation_bar_time": 1790632800,
+    "pattern": "strong_reclaim",
+    "reaction_type": "rejection",
+    "touch_bar_time": 1790632800,
+    "zone_id": "technique:supply_demand:buy:1790611800"
+   },
+   "confluence": {
+    "factors": {
+     "choch": false,
+     "displacement_grade": true,
+     "fib_touch": false,
+     "htf_aligned": false,
+     "session_context": false,
+     "structural_agreement": true,
+     "touches": 2,
+     "wick_rejection": true
+    },
+    "mad_bonus": 0,
+    "raw_factor_score": 11,
+    "selected_stars": 2,
+    "v1_stars": 2,
+    "v2_raw": 13.448979591836736,
+    "v2_stars": 2,
+    "version": "v1",
+    "zone_quality_score": 2.4489795918367347
+   },
+   "higher_timeframes": [
+    {
+     "direction": "SELL",
+     "layer": "internal",
+     "reference_time": 1790625600,
+     "timeframe": "H1"
+    }
+   ],
+   "mad": {
+    "acceptance_closes": 0,
+    "affinity": 0,
+    "confidence": 0,
+    "displacement_atr": 1.4176081858878198,
+    "phase": "unclear",
+    "range_quality_atr": 1.707098699637619,
+    "reason_code": "no_mad_signature",
+    "reclaim": false,
+    "version": 2
+   },
+   "reference_price": 4121.2,
+   "reference_time": 1790632800
+  },
+  "timeframe": "M5"
+ },
+ "fade_scalp": {
+  "algorithm_version": {
+   "liquidity": "v1",
+   "structure": "v2"
+  },
+  "created_at": 1790645700,
+  "direction": "SELL",
+  "entry": {
+   "high": 4127.23,
+   "low": 4126.47
+  },
+  "evidence": [
+   {
+    "code": "equal_level_equal_high"
+   },
+   {
+    "code": "liquidity_grab_grade_B"
+   },
+   {
+    "code": "legacy_pd_location"
+   },
+   {
+    "code": "structural_reaction_sweep_reclaim"
+   }
+  ],
+  "expires_at": 1790660100,
+  "formed_at": 1790645700,
+  "id": "opp_8437440c31faadd4aecb8c7629252349cacd7bb22367d0b728c337bc0f02d8d2",
+  "invalidation": {
+   "label": "equal_level_reclaim_failed",
+   "price": 4128.65
+  },
+  "quality": {
+   "components": {
+    "liquidity_grade": 0.75,
+    "location": 1,
+    "reaction": 1
+   },
+   "overall": 0.65
+  },
+  "stop_envelope": {
+   "cap_pips": 60,
+   "desired_minimum_pips": 60,
+   "floor_pips": 50,
+   "source": "scalp_room"
+  },
+  "strategy": "fade_scalp",
+  "symbol": "XAU",
+  "targets": [
+   {
+    "price": {
+     "label": "fade_opposing_liquidity",
+     "price": 4111.41
+    }
+   }
+  ],
+  "technical_context": {
+   "atr": 6.66857142857147,
+   "bias": {
+    "direction": "SELL",
+    "layer": "intermediate"
+   },
+   "candle_evidence": {
+    "all_patterns": [
+     "sweep_reclaim",
+     "strong_close",
+     "body_close",
+     "engulfing",
+     "strong_reclaim",
+     "displacement_candle",
+     "sweep_indecision_displacement",
+     "compression_break"
+    ],
+    "base_score": 0.6730731688438476,
+    "direction": "SELL",
+    "displacement": {
+     "body_atr": 0.8247643530419829,
+     "body_dominance": 0.8972267536704571,
+     "close_location": 0.07340946166406519,
+     "engulfing": true,
+     "engulfing_quality": 0.9265905383359349,
+     "patterns": [
+      "strong_close",
+      "body_close",
+      "engulfing",
+      "strong_reclaim",
+      "displacement_candle"
+     ],
+     "range_atr": 0.9192373607540809,
+     "reclaim": true,
+     "reclaim_depth_atr": 0.2819194515851396,
+     "score": 0.8373502503420419
+    },
+    "final_score": 0.7930731688438476,
+    "indecision": {
+     "body_fraction": 0.8972267536704571,
+     "compression_score": 0.42547664952869946,
+     "doji": false,
+     "inside_bar": false,
+     "spinning_top": false
+    },
+    "primary_pattern": "sweep_reclaim",
+    "rejection": {
+     "body_fraction": 0.8972267536704571,
+     "close_location": 0.07340946166406519,
+     "patterns": [
+      "sweep_reclaim"
+     ],
+     "reclaim": true,
+     "reclaim_depth_atr": 0.2819194515851396,
+     "score": 0.5080517361919628,
+     "sweep": true,
+     "sweep_penetration_atr": 0.5698371893744882,
+     "wick_fraction": 0.029363784665477705
+    },
+    "sequence": {
+     "bars": 3,
+     "patterns": [
+      "sweep_indecision_displacement",
+      "compression_break"
+     ],
+     "score": 0.5754001413293592
+    },
+    "synergy_bonus": 0.12,
+    "version": 2
+   },
+   "confirmation": {
+    "confirmation_bar_time": 1790645700,
+    "pattern": "sweep_reclaim",
+    "reaction_type": "rejection",
+    "touch_bar_time": 1790645700,
+    "zone_id": "fade:equal_high:4126.63500000"
+   },
+   "confluence": {
+    "factors": {
+     "choch": false,
+     "displacement_grade": false,
+     "fib_touch": false,
+     "htf_aligned": true,
+     "session_context": false,
+     "structural_agreement": false,
+     "touches": 2,
+     "wick_rejection": true
+    },
+    "mad_bonus": 0,
+    "raw_factor_score": 9,
+    "selected_stars": 2,
+    "v1_stars": 2,
+    "v2_raw": 9,
+    "v2_stars": 1,
+    "version": "v1",
+    "zone_quality_score": 0
+   },
+   "higher_timeframes": [
+    {
+     "direction": "SELL",
+     "layer": "internal",
+     "reference_time": 1790640000,
+     "timeframe": "H1"
+    },
+    {
+     "direction": "SELL",
+     "layer": "micro",
+     "reference_time": 1790644500,
+     "timeframe": "M15"
+    }
+   ],
+   "mad": {
+    "acceptance_closes": 0,
+    "affinity": 0,
+    "confidence": 0,
+    "displacement_atr": 0.11546700942594307,
+    "phase": "unclear",
+    "range_quality_atr": 2.757712082262243,
+    "reason_code": "no_mad_signature",
+    "reclaim": false,
+    "version": 2
+   },
+   "reference_price": 4125.35,
+   "reference_time": 1790645700
+  },
+  "timeframe": "M5"
+ },
+ "flip_zone": {
+  "algorithm_version": {
+   "liquidity": "v1",
+   "structure": "v2"
+  },
+  "created_at": 1790640900,
+  "direction": "SELL",
+  "entry": {
+   "high": 4123.8,
+   "low": 4122.13
+  },
+  "evidence": [
+   {
+    "code": "m5_flip_zone_role_confirmed"
+   },
+   {
+    "code": "m5_flip_zone_rejection_confirmed"
+   }
+  ],
+  "expires_at": 1790727300,
+  "formed_at": 1790640900,
+  "id": "opp_5afe7eb4f33eca21bc66cdec18238d100077d8a535988d5d255f255eb47ec4fe",
+  "invalidation": {
+   "label": "flip_zone_invalidated",
+   "price": 4125.46
+  },
+  "quality": {
+   "components": {
+    "confluence": 1,
+    "reaction": 1
+   },
+   "overall": 1
+  },
+  "stop_envelope": {
+   "cap_pips": 60,
+   "desired_minimum_pips": 50,
+   "floor_pips": 50,
+   "source": "strategy_default"
+  },
+  "strategy": "flip_zone",
+  "symbol": "XAU",
+  "targets": [
+   {
+    "price": {
+     "label": "nearest_opposing_liquidity",
+     "price": 4111.41
+    }
+   }
+  ],
+  "technical_context": {
+   "atr": 3.2642857142857014,
+   "bias": {
+    "direction": "SELL",
+    "layer": "micro"
+   },
+   "candle_evidence": {
+    "all_patterns": [
+     "body_close",
+     "engulfing",
+     "strong_reclaim",
+     "displacement_candle",
+     "sweep_indecision_displacement"
+    ],
+    "base_score": 0.6336947621260935,
+    "direction": "SELL",
+    "displacement": {
+     "body_atr": 1.5347921225380876,
+     "body_dominance": 0.5985663082436529,
+     "close_location": 0.3751493428913224,
+     "engulfing": true,
+     "engulfing_quality": 0.6248506571086776,
+     "patterns": [
+      "body_close",
+      "engulfing",
+      "strong_reclaim",
+      "displacement_candle"
+     ],
+     "range_atr": 2.5641137855579634,
+     "reclaim": true,
+     "reclaim_depth_atr": 1.887089715536068,
+     "score": 0.5110513739545206
+    },
+    "final_score": 0.6936947621260936,
+    "indecision": {
+     "body_fraction": 0.5985663082436529,
+     "compression_score": 0,
+     "doji": false,
+     "inside_bar": false,
+     "spinning_top": false
+    },
+    "primary_pattern": "sweep_indecision_displacement",
+    "sequence": {
+     "bars": 3,
+     "patterns": [
+      "sweep_indecision_displacement"
+     ],
+     "score": 0.8544528608349247
+    },
+    "synergy_bonus": 0.06,
+    "version": 2
+   },
+   "confirmation": {
+    "confirmation_bar_time": 1790640900,
+    "pattern": "engulfing",
+    "reaction_type": "rejection",
+    "touch_bar_time": 1790640900,
+    "zone_id": "zone:supply:breaker:1790624100"
+   },
+   "confluence": {
+    "factors": {
+     "choch": false,
+     "displacement_grade": true,
+     "fib_touch": false,
+     "htf_aligned": true,
+     "session_context": true,
+     "structural_agreement": false,
+     "touches": 0,
+     "wick_rejection": false
+    },
+    "mad_bonus": 0,
+    "raw_factor_score": 9,
+    "selected_stars": 3,
+    "v1_stars": 3,
+    "v2_raw": 11.36734693877551,
+    "v2_stars": 2,
+    "version": "v1",
+    "zone_quality_score": 2.36734693877551
+   },
+   "higher_timeframes": [
+    {
+     "direction": "SELL",
+     "layer": "internal",
+     "reference_time": 1790636400,
+     "timeframe": "H1"
+    },
+    {
+     "direction": "SELL",
+     "layer": "micro",
+     "reference_time": 1790640000,
+     "timeframe": "M15"
+    }
+   ],
+   "mad": {
+    "acceptance_closes": 0,
+    "affinity": 0,
+    "confidence": 0,
+    "displacement_atr": 2.1750547045950275,
+    "phase": "unclear",
+    "range_quality_atr": 4.445076586433345,
+    "reason_code": "no_mad_signature",
+    "reclaim": false,
+    "version": 2
+   },
+   "reference_price": 4117.64,
+   "reference_time": 1790640900
+  },
+  "timeframe": "M5"
+ },
+ "fvg": {
+  "algorithm_version": {
+   "liquidity": "v1",
+   "structure": "v2"
+  },
+  "created_at": 1790636400,
+  "direction": "SELL",
+  "entry": {
+   "high": 4123.97,
+   "low": 4121.91
+  },
+  "evidence": [
+   {
+    "code": "m5_fvg_zone_confirmed"
+   },
+   {
+    "code": "m5_fvg_rejection_confirmed"
+   }
+  ],
+  "expires_at": 1790722800,
+  "formed_at": 1790635800,
+  "id": "opp_06ba48accd639e1cd4a50c9e04865ce9f3f181a64057936dcebf370b648e3265",
+  "invalidation": {
+   "label": "fvg_invalidated",
+   "price": 4125.44
+  },
+  "quality": {
+   "components": {
+    "confluence": 0.6666666666666666,
+    "reaction": 1
+   },
+   "overall": 0.6666666666666666
+  },
+  "stop_envelope": {
+   "cap_pips": 60,
+   "desired_minimum_pips": 50,
+   "floor_pips": 50,
+   "source": "strategy_default"
+  },
+  "strategy": "fvg",
+  "symbol": "XAU",
+  "targets": [
+   {
+    "price": {
+     "label": "nearest_opposing_liquidity",
+     "price": 4111.41
+    }
+   }
+  ],
+  "technical_context": {
+   "atr": 2.727142857142748,
+   "bias": {
+    "direction": "BUY",
+    "layer": "internal"
+   },
+   "candle_evidence": {
+    "all_patterns": [
+     "wick_rejection",
+     "shooting_star",
+     "pin_bar",
+     "strong_reclaim"
+    ],
+    "base_score": 0.41350881364970143,
+    "direction": "SELL",
+    "displacement": {
+     "body_atr": 0.10633839706651789,
+     "body_dominance": 0,
+     "close_location": 0.28643216080390527,
+     "engulfing": false,
+     "patterns": [
+      "strong_reclaim"
+     ],
+     "range_atr": 0.7297014143530136,
+     "reclaim": true,
+     "reclaim_depth_atr": 0.7443687794659587,
+     "score": 0.26401584599265837
+    },
+    "final_score": 0.49350881364970145,
+    "indecision": {
+     "body_fraction": 0.14572864321607812,
+     "compression_score": 0.5439366160293665,
+     "doji": false,
+     "inside_bar": false,
+     "spinning_top": false
+    },
+    "primary_pattern": "strong_reclaim",
+    "rejection": {
+     "body_fraction": 0.14572864321607812,
+     "close_location": 0.28643216080390527,
+     "patterns": [
+      "wick_rejection",
+      "shooting_star",
+      "pin_bar"
+     ],
+     "reclaim": true,
+     "reclaim_depth_atr": 0.7443687794659587,
+     "score": 0.6377482651352662,
+     "sweep": false,
+     "wick_fraction": 0.7135678391960947
+    },
+    "synergy_bonus": 0.08,
+    "version": 2
+   },
+   "confirmation": {
+    "confirmation_bar_time": 1790635800,
+    "pattern": "strong_reclaim",
+    "reaction_type": "rejection",
+    "touch_bar_time": 1790635800,
+    "zone_id": "technique:fvg:sell:1790636100"
+   },
+   "confluence": {
+    "factors": {
+     "choch": false,
+     "displacement_grade": true,
+     "fib_touch": true,
+     "htf_aligned": true,
+     "session_context": false,
+     "structural_agreement": true,
+     "touches": 0,
+     "wick_rejection": true
+    },
+    "mad_bonus": 0,
+    "raw_factor_score": 15.5,
+    "selected_stars": 2,
+    "v1_stars": 2,
+    "v2_raw": 16.96938775510204,
+    "v2_stars": 3,
+    "version": "v1",
+    "zone_quality_score": 1.469387755102041
+   },
+   "higher_timeframes": [
+    {
+     "direction": "SELL",
+     "layer": "internal",
+     "reference_time": 1790632800,
+     "timeframe": "H1"
+    },
+    {
+     "direction": "SELL",
+     "layer": "micro",
+     "reference_time": 1790635500,
+     "timeframe": "M15"
+    }
+   ],
+   "mad": {
+    "acceptance_closes": 0,
+    "affinity": 0,
+    "confidence": 0,
+    "displacement_atr": 0.12467260345736583,
+    "phase": "unclear",
+    "range_quality_atr": 4.077527501309709,
+    "reason_code": "no_mad_signature",
+    "reclaim": false,
+    "version": 2
+   },
+   "reference_price": 4121.94,
+   "reference_time": 1790636400
+  },
+  "timeframe": "M5"
+ },
+ "ifvg": {
+  "algorithm_version": {
+   "liquidity": "v1",
+   "structure": "v2"
+  },
+  "created_at": 1790622000,
+  "direction": "SELL",
+  "entry": {
+   "high": 4136.82,
+   "low": 4135.28
+  },
+  "evidence": [
+   {
+    "code": "m5_ifvg_inversion_confirmed"
+   },
+   {
+    "code": "m5_ifvg_rejection_confirmed"
+   }
+  ],
+  "expires_at": 1790708400,
+  "formed_at": 1790622000,
+  "id": "opp_5922d0ea4434266c83361b8bfffff598128c93435457db488bab218fe2411f55",
+  "invalidation": {
+   "label": "ifvg_inversion_failed",
+   "price": 4139.04
+  },
+  "quality": {
+   "components": {
+    "confluence": 1,
+    "reaction": 1
+   },
+   "overall": 1
+  },
+  "stop_envelope": {
+   "cap_pips": 60,
+   "desired_minimum_pips": 50,
+   "floor_pips": 50,
+   "source": "strategy_default"
+  },
+  "strategy": "ifvg",
+  "symbol": "XAU",
+  "targets": [
+   {
+    "price": {
+     "label": "nearest_opposing_liquidity",
+     "price": 4116.48
+    }
+   }
+  ],
+  "technical_context": {
+   "atr": 3.5992857142857377,
+   "candle_evidence": {
+    "all_patterns": [
+     "sweep_reclaim",
+     "body_close",
+     "strong_reclaim"
+    ],
+    "base_score": 0.38000000000000006,
+    "direction": "SELL",
+    "displacement": {
+     "body_atr": 1.1085532843817538,
+     "body_dominance": 0.5188556566969463,
+     "close_location": 0.4434330299089244,
+     "engulfing": false,
+     "patterns": [
+      "body_close",
+      "strong_reclaim"
+     ],
+     "range_atr": 2.1365350267911576,
+     "reclaim": true,
+     "reclaim_depth_atr": 0.4389759872990442,
+     "score": 0.4
+    },
+    "final_score": 0.5,
+    "indecision": {
+     "body_fraction": 0.5188556566969463,
+     "compression_score": 0,
+     "doji": false,
+     "inside_bar": false,
+     "spinning_top": false
+    },
+    "primary_pattern": "sweep_reclaim",
+    "rejection": {
+     "body_fraction": 0.5188556566969463,
+     "close_location": 0.4434330299089244,
+     "patterns": [
+      "sweep_reclaim"
+     ],
+     "reclaim": true,
+     "reclaim_depth_atr": 0.4389759872990442,
+     "score": 0.35,
+     "sweep": true,
+     "sweep_penetration_atr": 0.7501488390555654,
+     "wick_fraction": 0.037711313394129246
+    },
+    "synergy_bonus": 0.12,
+    "version": 2
+   },
+   "confirmation": {
+    "confirmation_bar_time": 1790622000,
+    "pattern": "strong_reclaim",
+    "reaction_type": "rejection",
+    "touch_bar_time": 1790622000,
+    "zone_id": "technique:ifvg:sell:1790622000"
+   },
+   "confluence": {
+    "factors": {
+     "choch": false,
+     "displacement_grade": false,
+     "fib_touch": true,
+     "htf_aligned": true,
+     "session_context": false,
+     "structural_agreement": true,
+     "touches": 0,
+     "wick_rejection": true
+    },
+    "mad_bonus": 0,
+    "raw_factor_score": 12.5,
+    "selected_stars": 3,
+    "v1_stars": 3,
+    "v2_raw": 12.5,
+    "v2_stars": 2,
+    "version": "v1",
+    "zone_quality_score": 0
+   },
+   "higher_timeframes": [
+    {
+     "direction": "SELL",
+     "layer": "internal",
+     "reference_time": 1790618400,
+     "timeframe": "H1"
+    },
+    {
+     "direction": "SELL",
+     "layer": "micro",
+     "reference_time": 1790621100,
+     "timeframe": "M15"
+    }
+   ],
+   "mad": {
+    "affinity": 0,
+    "confidence": 0,
+    "phase": "unclear",
+    "reason_code": "asia_range_missing",
+    "reclaim": false,
+    "version": 2
+   },
+   "reference_price": 4135.24,
+   "reference_time": 1790622000
+  },
+  "timeframe": "M5"
+ },
+ "impulse_pullback": {
+  "algorithm_version": {
+   "liquidity": "v1",
+   "structure": "v2"
+  },
+  "created_at": 1790045940,
+  "direction": "SELL",
+  "entry": {
+   "high": 4097.05,
+   "low": 4096.29
+  },
+  "evidence": [
+   {
+    "code": "m5_qualified_impulse"
+   },
+   {
+    "code": "m1_bounded_pullback"
+   },
+   {
+    "code": "m1_continuation_trigger"
+   }
+  ],
+  "expires_at": 1790046840,
+  "formed_at": 1790045700,
+  "id": "opp_411c8beceae3e8113d848e199119073cc4eb1687ff2b892f0f08c076a36e9357",
+  "invalidation": {
+   "label": "impulse_reference_lost",
+   "price": 4097.8
+  },
+  "quality": {
+   "components": {
+    "body_dominance": 0.6958393113342911,
+    "displacement": 0.8038494809690174
+   },
+   "overall": 0.8038494809690174
+  },
+  "stop_envelope": {
+   "cap_pips": 45,
+   "desired_minimum_pips": 15,
+   "floor_pips": 12,
+   "source": "scalp_stop_envelope"
+  },
+  "strategy": "impulse_pullback",
+  "symbol": "XAU",
+  "targets": [
+   {
+    "price": {
+     "label": "scalp_corridor",
+     "price": 4094.8
+    }
+   }
+  ],
+  "technical_context": {
+   "atr": 0.4635714285716079,
+   "bias": {
+    "direction": "BUY",
+    "layer": "intermediate"
+   },
+   "candle_evidence": {
+    "all_patterns": [
+     "strong_close",
+     "body_close",
+     "strong_reclaim",
+     "displacement_candle"
+    ],
+    "base_score": 0.4144623189109906,
+    "direction": "SELL",
+    "displacement": {
+     "body_atr": 0.7765793528495326,
+     "body_dominance": 0.5714285714279527,
+     "close_location": 0.253968253967979,
+     "engulfing": false,
+     "patterns": [
+      "strong_close",
+      "body_close",
+      "strong_reclaim",
+      "displacement_candle"
+     ],
+     "range_atr": 1.3590138674881536,
+     "reclaim": true,
+     "reclaim_depth_atr": 2.1787365177191966,
+     "score": 0.4144623189109906
+    },
+    "final_score": 0.4144623189109906,
+    "indecision": {
+     "body_fraction": 0.5714285714279527,
+     "compression_score": 0.15061633281990405,
+     "doji": false,
+     "inside_bar": true,
+     "spinning_top": false
+    },
+    "primary_pattern": "strong_reclaim",
+    "synergy_bonus": 0,
+    "version": 2
+   },
+   "confluence": {
+    "factors": {
+     "choch": false,
+     "displacement_grade": false,
+     "fib_touch": true,
+     "htf_aligned": true,
+     "session_context": true,
+     "structural_agreement": false,
+     "touches": 0,
+     "wick_rejection": false
+    },
+    "fib_level": {
+     "distance_atr": 0.001639445300246274,
+     "kind": "retracement",
+     "price": 4096.66924,
+     "ratio": 0.382
+    },
+    "mad_bonus": 0,
+    "raw_factor_score": 8.5,
+    "selected_stars": 2,
+    "v1_stars": 2,
+    "v2_raw": 8.5,
+    "v2_stars": 1,
+    "version": "v1",
+    "zone_quality_score": 0
+   },
+   "higher_timeframes": [
+    {
+     "direction": "SELL",
+     "layer": "internal",
+     "reference_time": 1790045100,
+     "timeframe": "M15"
+    }
+   ],
+   "mad": {
+    "acceptance_closes": 0,
+    "affinity": 0,
+    "confidence": 0,
+    "displacement_atr": 0.043143297381510556,
+    "phase": "unclear",
+    "range_quality_atr": 11.972265023108243,
+    "reason_code": "no_mad_signature",
+    "reclaim": false,
+    "version": 2
+   },
+   "reference_price": 4096.04,
+   "reference_time": 1790045940
+  },
+  "timeframe": "M1"
+ },
+ "key_level": {
+  "algorithm_version": {
+   "liquidity": "v1",
+   "structure": "v2"
+  },
+  "created_at": 1790624100,
+  "direction": "SELL",
+  "entry": {
+   "high": 4133.24,
+   "low": 4128.12
+  },
+  "evidence": [
+   {
+    "code": "m5_key_level_round"
+   },
+   {
+    "code": "m5_key_level_touches_sufficient"
+   },
+   {
+    "code": "m5_key_level_role_ambiguous"
+   },
+   {
+    "code": "m5_key_level_rejection_confirmed"
+   }
+  ],
+  "expires_at": 1790710500,
+  "formed_at": 1790624100,
+  "id": "opp_b99bdf5eb663e6a6b51560d93b6d2a3997fd72ac66df543498a9775c691675f7",
+  "invalidation": {
+   "label": "key_level_invalidated",
+   "price": 4135.42
+  },
+  "quality": {
+   "components": {
+    "confluence": 1,
+    "reaction": 1,
+    "touch_quality": 0.4
+   },
+   "overall": 1
+  },
+  "stop_envelope": {
+   "cap_pips": 60,
+   "desired_minimum_pips": 60,
+   "floor_pips": 50,
+   "source": "reaction_room"
+  },
+  "strategy": "key_level",
+  "symbol": "XAU",
+  "targets": [
+   {
+    "price": {
+     "label": "nearest_opposing_liquidity",
+     "price": 4116.48
+    }
+   }
+  ],
+  "technical_context": {
+   "atr": 4.129285714285808,
+   "bias": {
+    "direction": "SELL",
+    "layer": "internal"
+   },
+   "candle_evidence": {
+    "all_patterns": [
+     "wick_rejection",
+     "sweep_reclaim",
+     "strong_close",
+     "body_close",
+     "strong_reclaim"
+    ],
+    "base_score": 0.682828920118852,
+    "direction": "SELL",
+    "displacement": {
+     "body_atr": 0.45286282650056875,
+     "body_dominance": 0.3488805970149263,
+     "close_location": 0.003731343283494083,
+     "engulfing": false,
+     "patterns": [
+      "strong_close",
+      "body_close",
+      "strong_reclaim"
+     ],
+     "range_atr": 1.298045320878632,
+     "reclaim": true,
+     "reclaim_depth_atr": 0.9880643487285536,
+     "score": 0.5503320191982901
+    },
+    "final_score": 0.802828920118852,
+    "indecision": {
+     "body_fraction": 0.3488805970149263,
+     "compression_score": 0.18872167445085508,
+     "doji": false,
+     "inside_bar": false,
+     "spinning_top": false
+    },
+    "primary_pattern": "sweep_reclaim",
+    "rejection": {
+     "body_fraction": 0.3488805970149263,
+     "close_location": 0.003731343283494083,
+     "patterns": [
+      "wick_rejection",
+      "sweep_reclaim"
+     ],
+     "reclaim": true,
+     "reclaim_depth_atr": 0.9880643487285536,
+     "score": 0.8815742714996947,
+     "sweep": true,
+     "sweep_penetration_atr": 0.30513751946034695,
+     "wick_fraction": 0.6473880597015796
+    },
+    "synergy_bonus": 0.12,
+    "version": 2
+   },
+   "confirmation": {
+    "confirmation_bar_time": 1790624100,
+    "pattern": "strong_reclaim",
+    "reaction_type": "rejection",
+    "touch_bar_time": 1790624100,
+    "zone_id": "keylevel:round:4130.68"
+   },
+   "confluence": {
+    "factors": {
+     "choch": false,
+     "displacement_grade": false,
+     "fib_touch": true,
+     "htf_aligned": true,
+     "session_context": true,
+     "structural_agreement": true,
+     "touches": 2,
+     "wick_rejection": false
+    },
+    "mad_bonus": 0,
+    "raw_factor_score": 13.5,
+    "selected_stars": 3,
+    "v1_stars": 3,
+    "v2_raw": 13.5,
+    "v2_stars": 2,
+    "version": "v1",
+    "zone_quality_score": 0
+   },
+   "higher_timeframes": [
+    {
+     "direction": "SELL",
+     "layer": "internal",
+     "reference_time": 1790618400,
+     "timeframe": "H1"
+    },
+    {
+     "direction": "SELL",
+     "layer": "micro",
+     "reference_time": 1790622900,
+     "timeframe": "M15"
+    }
+   ],
+   "mad": {
+    "affinity": 0,
+    "confidence": 0,
+    "phase": "unclear",
+    "reason_code": "asia_range_missing",
+    "reclaim": false,
+    "version": 2
+   },
+   "reference_price": 4129.16,
+   "reference_time": 1790624100
+  },
+  "timeframe": "M5"
+ },
+ "order_block": {
+  "algorithm_version": {
+   "liquidity": "v1",
+   "structure": "v2"
+  },
+  "created_at": 1790632800,
+  "direction": "BUY",
+  "entry": {
+   "high": 4121.71,
+   "low": 4117.33
+  },
+  "evidence": [
+   {
+    "code": "m5_order_block_confirmed"
+   },
+   {
+    "code": "m5_order_block_rejection_confirmed"
+   }
+  ],
+  "expires_at": 1790719200,
+  "formed_at": 1790632800,
+  "id": "opp_540b886272dd0f2022327897e913cdafc9677c8ade27dda2694fccfae7425f96",
+  "invalidation": {
+   "label": "order_block_invalidated",
+   "price": 4115.47
+  },
+  "quality": {
+   "components": {
+    "confluence": 0.6666666666666666,
+    "reaction": 1
+   },
+   "overall": 0.6666666666666666
+  },
+  "stop_envelope": {
+   "cap_pips": 60,
+   "desired_minimum_pips": 50,
+   "floor_pips": 50,
+   "source": "strategy_default"
+  },
+  "strategy": "order_block",
+  "symbol": "XAU",
+  "targets": [
+   {
+    "price": {
+     "label": "nearest_opposing_liquidity",
+     "price": 4148.01
+    }
+   }
+  ],
+  "technical_context": {
+   "atr": 3.3507142857144054,
+   "bias": {
+    "direction": "SELL",
+    "layer": "internal"
+   },
+   "candle_evidence": {
+    "all_patterns": [
+     "sweep_reclaim",
+     "strong_close",
+     "body_close",
+     "strong_reclaim",
+     "displacement_candle"
+    ],
+    "base_score": 0.7416083916083247,
+    "direction": "BUY",
+    "displacement": {
+     "body_atr": 1.4205926241739646,
+     "body_dominance": 0.8321678321678333,
+     "close_location": 0.9877622377621302,
+     "engulfing": false,
+     "patterns": [
+      "strong_close",
+      "body_close",
+      "strong_reclaim",
+      "displacement_candle"
+     ],
+     "range_atr": 1.707098699637619,
+     "reclaim": true,
+     "reclaim_depth_atr": 1.1549776167127805,
+     "score": 0.8740093240092536
+    },
+    "final_score": 0.8616083916083247,
+    "indecision": {
+     "body_fraction": 0.8321678321678333,
+     "compression_score": 0,
+     "doji": false,
+     "inside_bar": false,
+     "spinning_top": false
+    },
+    "primary_pattern": "sweep_reclaim",
+    "rejection": {
+     "body_fraction": 0.8321678321678333,
+     "close_location": 0.9877622377621302,
+     "patterns": [
+      "sweep_reclaim"
+     ],
+     "reclaim": true,
+     "reclaim_depth_atr": 1.1549776167127805,
+     "score": 0.5430069930069316,
+     "sweep": true,
+     "sweep_penetration_atr": 0.5312300149220964,
+     "wick_fraction": 0.1555944055942969
+    },
+    "synergy_bonus": 0.12,
+    "version": 2
+   },
+   "confirmation": {
+    "confirmation_bar_time": 1790632800,
+    "pattern": "strong_reclaim",
+    "reaction_type": "rejection",
+    "touch_bar_time": 1790632800,
+    "zone_id": "technique:order_block:buy:1790611800"
+   },
+   "confluence": {
+    "factors": {
+     "choch": false,
+     "displacement_grade": true,
+     "fib_touch": true,
+     "htf_aligned": false,
+     "session_context": false,
+     "structural_agreement": true,
+     "touches": 2,
+     "wick_rejection": true
+    },
+    "mad_bonus": 0,
+    "raw_factor_score": 13.5,
+    "selected_stars": 2,
+    "v1_stars": 2,
+    "v2_raw": 14.96938775510204,
+    "v2_stars": 2,
+    "version": "v1",
+    "zone_quality_score": 1.469387755102041
+   },
+   "higher_timeframes": [
+    {
+     "direction": "SELL",
+     "layer": "internal",
+     "reference_time": 1790625600,
+     "timeframe": "H1"
+    }
+   ],
+   "mad": {
+    "acceptance_closes": 0,
+    "affinity": 0,
+    "confidence": 0,
+    "displacement_atr": 1.4176081858878198,
+    "phase": "unclear",
+    "range_quality_atr": 1.707098699637619,
+    "reason_code": "no_mad_signature",
+    "reclaim": false,
+    "version": 2
+   },
+   "reference_price": 4121.2,
+   "reference_time": 1790632800
+  },
+  "timeframe": "M5"
+ },
+ "range_edge": {
+  "algorithm_version": {
+   "liquidity": "v1",
+   "structure": "v2"
+  },
+  "created_at": 1790662800,
+  "direction": "SELL",
+  "entry": {
+   "high": 4147.21,
+   "low": 4144.1
+  },
+  "evidence": [
+   {
+    "code": "legacy_range_barrier"
+   },
+   {
+    "code": "barrier_touch_episode"
+   },
+   {
+    "code": "wick_rejection_history"
+   },
+   {
+    "code": "legacy_barrier_score"
+   },
+   {
+    "code": "range_state_post_impulse_range"
+   },
+   {
+    "code": "accepted_close_valid"
+   },
+   {
+    "code": "structural_reaction_strong_reclaim"
+   },
+   {
+    "code": "liquidity_grab_grade_none"
+   }
+  ],
+  "expires_at": 1790677200,
+  "formed_at": 1790661000,
+  "id": "opp_1e11eda5c2060504de2c752cb2e6cf1679d8cf9af00f6b071a0c4a1e295ee594",
+  "invalidation": {
+   "label": "range_edge_accepted_break",
+   "price": 4148.48
+  },
+  "quality": {
+   "components": {
+    "room": 1,
+    "touch_history": 0.75,
+    "wick_history": 1
+   },
+   "overall": 0.841
+  },
+  "stop_envelope": {
+   "cap_pips": 60,
+   "desired_minimum_pips": 60,
+   "floor_pips": 50,
+   "source": "scalp_room"
+  },
+  "strategy": "range_edge",
+  "symbol": "XAU",
+  "targets": [
+   {
+    "price": {
+     "label": "range_equilibrium",
+     "price": 4135.61
+    }
+   },
+   {
+    "price": {
+     "label": "opposite_range_edge",
+     "price": 4125.57
+    }
+   }
+  ],
+  "technical_context": {
+   "atr": 6.211428571428444,
+   "bias": {
+    "direction": "BUY",
+    "layer": "intermediate"
+   },
+   "candle_evidence": {
+    "all_patterns": [
+     "wick_rejection",
+     "strong_reclaim"
+    ],
+    "base_score": 0.3541152571973574,
+    "direction": "SELL",
+    "displacement": {
+     "body_atr": 0.2881784728610856,
+     "body_dominance": 0,
+     "close_location": 0.4817987152034186,
+     "engulfing": false,
+     "patterns": [
+      "strong_reclaim"
+     ],
+     "range_atr": 0.751839926402971,
+     "reclaim": true,
+     "reclaim_depth_atr": 0.5344986200551619,
+     "score": 0.2674749885004642
+    },
+    "final_score": 0.43411525719735744,
+    "indecision": {
+     "body_fraction": 0.3832976445396008,
+     "compression_score": 0.5301000459981431,
+     "doji": false,
+     "inside_bar": true,
+     "spinning_top": false
+    },
+    "primary_pattern": "strong_reclaim",
+    "rejection": {
+     "body_fraction": 0.3832976445396008,
+     "close_location": 0.4817987152034186,
+     "patterns": [
+      "wick_rejection"
+     ],
+     "reclaim": true,
+     "reclaim_depth_atr": 0.5344986200551619,
+     "score": 0.48407566024269727,
+     "sweep": false,
+     "wick_fraction": 0.5182012847965813
+    },
+    "synergy_bonus": 0.08,
+    "version": 2
+   },
+   "confirmation": {
+    "confirmation_bar_time": 1790662500,
+    "pattern": "strong_reclaim",
+    "reaction_type": "rejection",
+    "touch_bar_time": 1790662500,
+    "zone_id": "range:resistance:1790661000"
+   },
+   "confluence": {
+    "factors": {
+     "choch": false,
+     "displacement_grade": false,
+     "fib_touch": false,
+     "htf_aligned": false,
+     "session_context": false,
+     "structural_agreement": true,
+     "touches": 3,
+     "wick_rejection": true
+    },
+    "mad_bonus": 0,
+    "raw_factor_score": 9,
+    "selected_stars": 2,
+    "v1_stars": 2,
+    "v2_raw": 10.608163265306123,
+    "v2_stars": 2,
+    "version": "v1",
+    "zone_quality_score": 1.6081632653061224
+   },
+   "higher_timeframes": [
+    {
+     "direction": "SELL",
+     "layer": "internal",
+     "reference_time": 1790658000,
+     "timeframe": "H1"
+    },
+    {
+     "direction": "SELL",
+     "layer": "intermediate",
+     "reference_time": 1790661600,
+     "timeframe": "M15"
+    }
+   ],
+   "mad": {
+    "acceptance_closes": 0,
+    "affinity": 0,
+    "confidence": 0,
+    "displacement_atr": 0.7953081876725915,
+    "phase": "unclear",
+    "range_quality_atr": 5.586476540938448,
+    "reason_code": "no_mad_signature",
+    "reclaim": false,
+    "version": 2
+   },
+   "reference_price": 4143.89,
+   "reference_time": 1790662800
+  },
+  "timeframe": "M5"
+ },
+ "range_sweep": {
+  "algorithm_version": {
+   "liquidity": "v1",
+   "structure": "v2"
+  },
+  "created_at": 1790000220,
+  "direction": "SELL",
+  "entry": {
+   "high": 4103.22,
+   "low": 4100.97
+  },
+  "evidence": [
+   {
+    "code": "m5_range_context"
+   },
+   {
+    "code": "m1_edge_sweep"
+   },
+   {
+    "code": "m1_reclaim"
+   }
+  ],
+  "expires_at": 1790001120,
+  "formed_at": 1789999200,
+  "id": "opp_05d060cd8a8988453eec23c7821d690e2547ba7e8f4207b0f9860e37afb335db",
+  "invalidation": {
+   "label": "m1_sweep_extreme",
+   "price": 4103.35
+  },
+  "quality": {
+   "components": {
+    "reclaim": 1,
+    "sweep_depth": 0.08737864077658329
+   },
+   "overall": 0.08737864077658329
+  },
+  "stop_envelope": {
+   "cap_pips": 45,
+   "desired_minimum_pips": 24,
+   "floor_pips": 12,
+   "source": "scalp_stop_envelope"
+  },
+  "strategy": "range_sweep",
+  "symbol": "XAU",
+  "targets": [
+   {
+    "price": {
+     "label": "scalp_1to1",
+     "price": 4098.59
+    }
+   }
+  ],
+  "technical_context": {
+   "atr": 0.4400000000001195,
+   "candle_evidence": {
+    "all_patterns": [
+     "wick_rejection",
+     "strong_close",
+     "body_close",
+     "engulfing",
+     "strong_reclaim"
+    ],
+    "base_score": 0.3964483555243592,
+    "direction": "SELL",
+    "displacement": {
+     "body_atr": 0.3409090909081715,
+     "body_dominance": 0.5172413793091553,
+     "close_location": 0.13793103448265048,
+     "engulfing": true,
+     "engulfing_quality": 0.4973474801045394,
+     "patterns": [
+      "strong_close",
+      "body_close",
+      "engulfing",
+      "strong_reclaim"
+     ],
+     "range_atr": 0.6590909090906474,
+     "reclaim": true,
+     "reclaim_depth_atr": 1.9772727272719421,
+     "score": 0.410763679567434
+    },
+    "final_score": 0.4764483555243592,
+    "indecision": {
+     "body_fraction": 0.5172413793091553,
+     "compression_score": 0.5880681818183454,
+     "doji": false,
+     "inside_bar": false,
+     "spinning_top": false
+    },
+    "primary_pattern": "strong_reclaim",
+    "rejection": {
+     "body_fraction": 0.5172413793091553,
+     "close_location": 0.13793103448265048,
+     "patterns": [
+      "wick_rejection"
+     ],
+     "reclaim": true,
+     "reclaim_depth_atr": 1.9772727272719421,
+     "score": 0.3749753694597471,
+     "sweep": false,
+     "wick_fraction": 0.34482758620819426
+    },
+    "synergy_bonus": 0.08,
+    "version": 2
+   },
+   "confluence": {
+    "factors": {
+     "choch": false,
+     "displacement_grade": false,
+     "fib_touch": false,
+     "htf_aligned": false,
+     "session_context": true,
+     "structural_agreement": true,
+     "touches": 0,
+     "wick_rejection": false
+    },
+    "mad_bonus": 0,
+    "raw_factor_score": 5,
+    "selected_stars": 1,
+    "v1_stars": 1,
+    "v2_raw": 5,
+    "v2_stars": 1,
+    "version": "v1",
+    "zone_quality_score": 0
+   },
+   "mad": {
+    "affinity": 0,
+    "confidence": 0,
+    "phase": "unclear",
+    "reason_code": "asia_range_missing",
+    "reclaim": false,
+    "version": 2
+   },
+   "reference_price": 4102.35,
+   "reference_time": 1790000220
+  },
+  "timeframe": "M1"
+ },
+ "scalp_breakout_retest": {
+  "algorithm_version": {
+   "liquidity": "v1",
+   "structure": "v2"
+  },
+  "created_at": 1790013000,
+  "direction": "BUY",
+  "entry": {
+   "high": 4097.39,
+   "low": 4095.89
+  },
+  "evidence": [
+   {
+    "code": "m5_breakout_level_m5_swing_high"
+   },
+   {
+    "code": "m5_breakout_accepted"
+   },
+   {
+    "code": "m5_breakout_retest_confirmed"
+   },
+   {
+    "code": "m1_execution_confirmed"
+   }
+  ],
+  "expires_at": 1790013900,
+  "formed_at": 1790007000,
+  "id": "opp_c29236df56d1796f39a6679e14524255119bacbb27223b2da116d0eb59b94e0d",
+  "invalidation": {
+   "label": "m5_breakout_retest_failed",
+   "price": 4095.65
+  },
+  "quality": {
+   "components": {
+    "acceptance": 1,
+    "confirmation": 0.7,
+    "displacement": 0.7521105141971414,
+    "retest_quality": 1,
+    "retest_speed": 0
+   },
+   "overall": 0.7306331542591424
+  },
+  "stop_envelope": {
+   "cap_pips": 45,
+   "desired_minimum_pips": 17,
+   "floor_pips": 12,
+   "source": "scalp_stop_envelope"
+  },
+  "strategy": "scalp_breakout_retest",
+  "symbol": "XAU",
+  "targets": [
+   {
+    "price": {
+     "label": "scalp_1to1",
+     "price": 4099.13
+    }
+   }
+  ],
+  "technical_context": {
+   "atr": 0.4535714285713571,
+   "bias": {
+    "direction": "SELL",
+    "layer": "intermediate"
+   },
+   "candle_evidence": {
+    "all_patterns": [
+     "wick_rejection",
+     "strong_close",
+     "body_close",
+     "strong_reclaim"
+    ],
+    "base_score": 0.3891532743191635,
+    "direction": "BUY",
+    "displacement": {
+     "body_atr": 0.4629921259844051,
+     "body_dominance": 0.4565217391304778,
+     "close_location": 0.8260869565219111,
+     "engulfing": false,
+     "patterns": [
+      "strong_close",
+      "body_close",
+      "strong_reclaim"
+     ],
+     "range_atr": 1.0141732283466967,
+     "reclaim": true,
+     "reclaim_depth_atr": 1.9622047244094771,
+     "score": 0.3925225379437788
+    },
+    "final_score": 0.46915327431916354,
+    "indecision": {
+     "body_fraction": 0.4565217391304778,
+     "compression_score": 0.3661417322833146,
+     "doji": false,
+     "inside_bar": false,
+     "spinning_top": false
+    },
+    "primary_pattern": "strong_reclaim",
+    "rejection": {
+     "body_fraction": 0.4565217391304778,
+     "close_location": 0.8260869565219111,
+     "patterns": [
+      "wick_rejection"
+     ],
+     "reclaim": true,
+     "reclaim_depth_atr": 1.9622047244094771,
+     "score": 0.38409937888224055,
+     "sweep": false,
+     "wick_fraction": 0.3695652173914333
+    },
+    "synergy_bonus": 0.08,
+    "version": 2
+   },
+   "confluence": {
+    "factors": {
+     "choch": false,
+     "displacement_grade": false,
+     "fib_touch": true,
+     "htf_aligned": false,
+     "session_context": true,
+     "structural_agreement": true,
+     "touches": 0,
+     "wick_rejection": false
+    },
+    "fib_level": {
+     "distance_atr": 0.08818897637788643,
+     "kind": "retracement",
+     "price": 4096.6,
+     "ratio": 0.5
+    },
+    "mad_bonus": 0,
+    "raw_factor_score": 7.5,
+    "selected_stars": 1,
+    "v1_stars": 1,
+    "v2_raw": 7.5,
+    "v2_stars": 1,
+    "version": "v1",
+    "zone_quality_score": 0
+   },
+   "higher_timeframes": [
+    {
+     "direction": "SELL",
+     "layer": "internal",
+     "reference_time": 1790011800,
+     "timeframe": "M15"
+    }
+   ],
+   "mad": {
+    "affinity": 0,
+    "confidence": 0,
+    "phase": "unclear",
+    "reason_code": "asia_range_missing",
+    "reclaim": false,
+    "version": 2
+   },
+   "reference_price": 4096.78,
+   "reference_time": 1790013000
+  },
+  "timeframe": "M1"
+ },
+ "session_level": {
+  "algorithm_version": {
+   "liquidity": "v1",
+   "structure": "v2"
+  },
+  "created_at": 1790668800,
+  "direction": "SELL",
+  "entry": {
+   "high": 4143.47,
+   "low": 4139.81
+  },
+  "evidence": [
+   {
+    "code": "session_level_ny_h"
+   },
+   {
+    "code": "session_level_reaction_confirmed"
+   }
+  ],
+  "expires_at": 1790755200,
+  "formed_at": 1790668800,
+  "id": "opp_e81ba77cfacd891ea515c5afa2fccc0d0cc8e643e7e4aa3c7567031bf8a17e95",
+  "invalidation": {
+   "label": "session_level_invalidated",
+   "price": 4145.3
+  },
+  "quality": {
+   "components": {
+    "confluence": 1,
+    "reaction": 1
+   },
+   "overall": 1
+  },
+  "stop_envelope": {
+   "cap_pips": 60,
+   "desired_minimum_pips": 60,
+   "floor_pips": 50,
+   "source": "reaction_room"
+  },
+  "strategy": "session_level",
+  "symbol": "XAU",
+  "targets": [
+   {
+    "price": {
+     "label": "nearest_opposing_liquidity",
+     "price": 4124.61
+    }
+   }
+  ],
+  "technical_context": {
+   "atr": 3.4628571428571115,
+   "bias": {
+    "direction": "BUY",
+    "layer": "intermediate"
+   },
+   "candle_evidence": {
+    "all_patterns": [
+     "wick_rejection",
+     "shooting_star",
+     "pin_bar",
+     "sweep_reclaim",
+     "strong_close",
+     "body_close",
+     "strong_reclaim"
+    ],
+    "base_score": 0.5646792832269923,
+    "direction": "SELL",
+    "displacement": {
+     "body_atr": 0.1357260726073355,
+     "body_dominance": 0.14199395770398726,
+     "close_location": 0.13595166163134856,
+     "engulfing": false,
+     "patterns": [
+      "strong_close",
+      "body_close",
+      "strong_reclaim"
+     ],
+     "range_atr": 0.955858085808705,
+     "reclaim": true,
+     "reclaim_depth_atr": 0.7277227722773604,
+     "score": 0.4087183848200445
+    },
+    "final_score": 0.6846792832269923,
+    "indecision": {
+     "body_fraction": 0.14199395770398726,
+     "compression_score": 0.4025886963695594,
+     "doji": false,
+     "inside_bar": false,
+     "spinning_top": false
+    },
+    "primary_pattern": "sweep_reclaim",
+    "rejection": {
+     "body_fraction": 0.14199395770398726,
+     "close_location": 0.13595166163134856,
+     "patterns": [
+      "wick_rejection",
+      "shooting_star",
+      "pin_bar",
+      "sweep_reclaim"
+     ],
+     "reclaim": true,
+     "reclaim_depth_atr": 0.7277227722773604,
+     "score": 0.7986206308374139,
+     "sweep": true,
+     "sweep_penetration_atr": 0.09818481848189109,
+     "wick_fraction": 0.7220543806646642
+    },
+    "synergy_bonus": 0.12,
+    "version": 2
+   },
+   "confirmation": {
+    "confirmation_bar_time": 1790668800,
+    "pattern": "rejection_choch",
+    "reaction_type": "rejection",
+    "touch_bar_time": 1790668800,
+    "zone_id": "session:NY_H:4141.64000"
+   },
+   "confluence": {
+    "factors": {
+     "choch": true,
+     "displacement_grade": false,
+     "fib_touch": false,
+     "htf_aligned": true,
+     "session_context": true,
+     "structural_agreement": true,
+     "touches": 2,
+     "wick_rejection": false
+    },
+    "mad_bonus": 0,
+    "raw_factor_score": 13,
+    "selected_stars": 3,
+    "v1_stars": 3,
+    "v2_raw": 13,
+    "v2_stars": 2,
+    "version": "v1",
+    "zone_quality_score": 0
+   },
+   "higher_timeframes": [
+    {
+     "direction": "SELL",
+     "layer": "intermediate",
+     "reference_time": 1790667900,
+     "timeframe": "M15"
+    }
+   ],
+   "mad": {
+    "acceptance_closes": 0,
+    "affinity": 0,
+    "confidence": 0,
+    "displacement_atr": 1.19265676567661,
+    "phase": "unclear",
+    "range_quality_atr": 10.020627062706309,
+    "reason_code": "no_mad_signature",
+    "reclaim": false,
+    "version": 2
+   },
+   "reference_price": 4140.95,
+   "reference_time": 1790668800
+  },
+  "timeframe": "M5"
+ },
+ "snap_back": {
+  "algorithm_version": {
+   "liquidity": "v1",
+   "structure": "v2"
+  },
+  "created_at": 1790659800,
+  "direction": "SELL",
+  "entry": {
+   "high": 4130.75,
+   "low": 4125.75
+  },
+  "evidence": [
+   {
+    "code": "legacy_snap_extension_impulse"
+   },
+   {
+    "code": "legacy_pd_location"
+   },
+   {
+    "code": "liquidity_grab_grade_B"
+   },
+   {
+    "code": "structural_reaction_sweep_reclaim"
+   },
+   {
+    "code": "structural_source_supply_demand"
+   }
+  ],
+  "expires_at": 1790674200,
+  "formed_at": 1790613900,
+  "id": "opp_040a19c9774d119fe3b308cf063bf6aced20aa13676902059582abb6c3140d53",
+  "invalidation": {
+   "label": "snap_back_structure_failed",
+   "price": 4131.67
+  },
+  "quality": {
+   "components": {
+    "extension": 1,
+    "liquidity_grade": 0.75,
+    "reaction": 1
+   },
+   "overall": 0.509814783304878
+  },
+  "stop_envelope": {
+   "cap_pips": 60,
+   "desired_minimum_pips": 50,
+   "floor_pips": 50,
+   "source": "strategy_default"
+  },
+  "strategy": "snap_back",
+  "symbol": "XAU",
+  "targets": [
+   {
+    "price": {
+     "label": "snap_back_reversion",
+     "price": 4113.93
+    }
+   }
+  ],
+  "technical_context": {
+   "atr": 3.475714285714145,
+   "bias": {
+    "direction": "BUY",
+    "layer": "micro"
+   },
+   "candle_evidence": {
+    "all_patterns": [
+     "strong_close",
+     "body_close",
+     "strong_reclaim",
+     "displacement_candle"
+    ],
+    "base_score": 0.5722772277227709,
+    "direction": "SELL",
+    "displacement": {
+     "body_atr": 1.6284422523633615,
+     "body_dominance": 0.7004950495049388,
+     "close_location": 0.26732673267325174,
+     "engulfing": false,
+     "patterns": [
+      "strong_close",
+      "body_close",
+      "strong_reclaim",
+      "displacement_candle"
+     ],
+     "range_atr": 2.32470201397459,
+     "reclaim": true,
+     "reclaim_depth_atr": 1.855733662145522,
+     "score": 0.5722772277227709
+    },
+    "final_score": 0.5722772277227709,
+    "indecision": {
+     "body_fraction": 0.7004950495049388,
+     "compression_score": 0,
+     "doji": false,
+     "inside_bar": false,
+     "spinning_top": false
+    },
+    "primary_pattern": "strong_reclaim",
+    "synergy_bonus": 0,
+    "version": 2
+   },
+   "confirmation": {
+    "confirmation_bar_time": 1790659800,
+    "pattern": "sweep_reclaim",
+    "reaction_type": "rejection",
+    "touch_bar_time": 1790659800,
+    "zone_id": "zone:supply:order_block:1790613900"
+   },
+   "confluence": {
+    "factors": {
+     "choch": false,
+     "displacement_grade": false,
+     "fib_touch": true,
+     "htf_aligned": true,
+     "session_context": false,
+     "structural_agreement": true,
+     "touches": 0,
+     "wick_rejection": true
+    },
+    "mad_bonus": 0,
+    "raw_factor_score": 12.5,
+    "selected_stars": 3,
+    "v1_stars": 3,
+    "v2_raw": 15.683673469387756,
+    "v2_stars": 3,
+    "version": "v1",
+    "zone_quality_score": 3.183673469387755
+   },
+   "higher_timeframes": [
+    {
+     "direction": "SELL",
+     "layer": "internal",
+     "reference_time": 1790654400,
+     "timeframe": "H1"
+    },
+    {
+     "direction": "SELL",
+     "layer": "intermediate",
+     "reference_time": 1790658900,
+     "timeframe": "M15"
+    }
+   ],
+   "mad": {
+    "acceptance_closes": 0,
+    "affinity": 0,
+    "confidence": 0,
+    "displacement_atr": 1.622688039457358,
+    "phase": "unclear",
+    "range_quality_atr": 7.739416358405469,
+    "reason_code": "no_mad_signature",
+    "reclaim": false,
+    "version": 2
+   },
+   "reference_price": 4124.3,
+   "reference_time": 1790659800
+  },
+  "timeframe": "M5"
+ },
+ "supply": {
+  "algorithm_version": {
+   "liquidity": "v1",
+   "structure": "v2"
+  },
+  "created_at": 1790636100,
+  "direction": "SELL",
+  "entry": {
+   "high": 4122.24,
+   "low": 4117.24
+  },
+  "evidence": [
+   {
+    "code": "m5_supply_zone_confirmed"
+   },
+   {
+    "code": "m5_supply_zone_rejection_confirmed"
+   }
+  ],
+  "expires_at": 1790722500,
+  "formed_at": 1790635800,
+  "id": "opp_33af0d3d85031425bc30586284d3f68d27af8449ba3742e9317c9c87514f2da6",
+  "invalidation": {
+   "label": "supply_zone_invalidated",
+   "price": 4124.44
+  },
+  "quality": {
+   "components": {
+    "confluence": 0.6666666666666666,
+    "reaction": 1
+   },
+   "overall": 0.6666666666666666
+  },
+  "stop_envelope": {
+   "cap_pips": 60,
+   "desired_minimum_pips": 50,
+   "floor_pips": 50,
+   "source": "strategy_default"
+  },
+  "strategy": "supply",
+  "symbol": "XAU",
+  "targets": [
+   {
+    "price": {
+     "label": "nearest_opposing_liquidity",
+     "price": 4111.41
+    }
+   }
+  ],
+  "technical_context": {
+   "atr": 2.8164285714284625,
+   "bias": {
+    "direction": "BUY",
+    "layer": "internal"
+   },
+   "candle_evidence": {
+    "all_patterns": [
+     "wick_rejection",
+     "strong_reclaim"
+    ],
+    "base_score": 0.31998241058251753,
+    "direction": "SELL",
+    "displacement": {
+     "body_atr": 0.02130357595753576,
+     "body_dominance": 0.08695652173976083,
+     "close_location": 0.449275362318363,
+     "engulfing": false,
+     "patterns": [
+      "strong_reclaim"
+     ],
+     "range_atr": 0.24499112350988514,
+     "reclaim": true,
+     "reclaim_depth_atr": 0.25209231549583805,
+     "score": 0.18827986304841954
+    },
+    "final_score": 0.39998241058251754,
+    "indecision": {
+     "body_fraction": 0.08695652173976083,
+     "compression_score": 0.8468805478063218,
+     "doji": true,
+     "inside_bar": true,
+     "spinning_top": false
+    },
+    "primary_pattern": "strong_reclaim",
+    "rejection": {
+     "body_fraction": 0.08695652173976083,
+     "close_location": 0.449275362318363,
+     "patterns": [
+      "wick_rejection"
+     ],
+     "reclaim": true,
+     "reclaim_depth_atr": 0.25209231549583805,
+     "score": 0.5175362318836645,
+     "sweep": false,
+     "wick_fraction": 0.46376811594187617
+    },
+    "synergy_bonus": 0.08,
+    "version": 2
+   },
+   "confirmation": {
+    "confirmation_bar_time": 1790635800,
+    "pattern": "strong_reclaim",
+    "reaction_type": "rejection",
+    "touch_bar_time": 1790635800,
+    "zone_id": "technique:supply_demand:sell:1790626500"
+   },
+   "confluence": {
+    "factors": {
+     "choch": false,
+     "displacement_grade": false,
+     "fib_touch": true,
+     "htf_aligned": true,
+     "session_context": false,
+     "structural_agreement": true,
+     "touches": 4,
+     "wick_rejection": true
+    },
+    "mad_bonus": 0,
+    "raw_factor_score": 15.5,
+    "selected_stars": 2,
+    "v1_stars": 2,
+    "v2_raw": 16.724489795918366,
+    "v2_stars": 3,
+    "version": "v1",
+    "zone_quality_score": 1.2244897959183674
+   },
+   "higher_timeframes": [
+    {
+     "direction": "SELL",
+     "layer": "internal",
+     "reference_time": 1790632800,
+     "timeframe": "H1"
+    },
+    {
+     "direction": "SELL",
+     "layer": "micro",
+     "reference_time": 1790635500,
+     "timeframe": "M15"
+    }
+   ],
+   "mad": {
+    "acceptance_closes": 0,
+    "affinity": 0,
+    "confidence": 0,
+    "displacement_atr": 0.5361399949278183,
+    "phase": "unclear",
+    "range_quality_atr": 3.9482627441035887,
+    "reason_code": "no_mad_signature",
+    "reclaim": false,
+    "version": 2
+   },
+   "reference_price": 4121.53,
+   "reference_time": 1790636100
+  },
+  "timeframe": "M5"
+ },
+ "trendline": {
+  "algorithm_version": {
+   "liquidity": "v1",
+   "structure": "v2"
+  },
+  "created_at": 1789495200,
+  "direction": "BUY",
+  "entry": {
+   "high": 4295.61,
+   "low": 4294.1
+  },
+  "evidence": [
+   {
+    "code": "m5_trendline_causal_anchors"
+   },
+   {
+    "code": "m5_trendline_reaction_confirmed"
+   }
+  ],
+  "expires_at": 1789538400,
+  "formed_at": 1789495200,
+  "id": "opp_1f15be1c91422b96a35ff459282e9dbad75c2af8effa6d212ed6c8cf6b069f45",
+  "invalidation": {
+   "label": "trendline_close_violation",
+   "price": 4293.17
+  },
+  "quality": {
+   "components": {
+    "confluence": 1,
+    "reaction": 1
+   },
+   "overall": 1
+  },
+  "stop_envelope": {
+   "cap_pips": 60,
+   "desired_minimum_pips": 50,
+   "floor_pips": 50,
+   "source": "reaction_room"
+  },
+  "strategy": "trendline",
+  "symbol": "XAU",
+  "targets": [
+   {
+    "price": {
+     "label": "trendline_projection",
+     "price": 4296.35
+    }
+   }
+  ],
+  "technical_context": {
+   "atr": 3.5785714285713897,
+   "bias": {
+    "direction": "BUY",
+    "layer": "micro"
+   },
+   "candle_evidence": {
+    "all_patterns": [
+     "wick_rejection",
+     "sweep_reclaim",
+     "strong_close",
+     "body_close",
+     "strong_reclaim"
+    ],
+    "base_score": 0.51800998343455,
+    "direction": "BUY",
+    "displacement": {
+     "body_atr": 0.05868263473054973,
+     "body_dominance": 0.06666666666666667,
+     "close_location": 0.7365079365080053,
+     "engulfing": false,
+     "patterns": [
+      "strong_close",
+      "body_close",
+      "strong_reclaim"
+     ],
+     "range_atr": 0.8802395209582459,
+     "reclaim": true,
+     "reclaim_depth_atr": 0.32694610778445504,
+     "score": 0.3118760494883961
+    },
+    "final_score": 0.63800998343455,
+    "indecision": {
+     "body_fraction": 0.06666666666666667,
+     "compression_score": 0.44985029940109633,
+     "doji": true,
+     "inside_bar": false,
+     "spinning_top": false
+    },
+    "primary_pattern": "sweep_reclaim",
+    "rejection": {
+     "body_fraction": 0.06666666666666667,
+     "close_location": 0.7365079365080053,
+     "patterns": [
+      "wick_rejection",
+      "sweep_reclaim"
+     ],
+     "reclaim": true,
+     "reclaim_depth_atr": 0.32694610778445504,
+     "score": 0.8272108843537808,
+     "sweep": true,
+     "sweep_penetration_atr": 0.3213572854292977,
+     "wick_fraction": 0.6698412698413386
+    },
+    "synergy_bonus": 0.12,
+    "version": 2
+   },
+   "confirmation": {
+    "confirmation_bar_time": 1789495200,
+    "pattern": "strong_reclaim",
+    "reaction_type": "rejection",
+    "touch_bar_time": 1789495200,
+    "zone_id": "trendline:legacy:119:25:legacy:128:27"
+   },
+   "confluence": {
+    "factors": {
+     "choch": false,
+     "displacement_grade": false,
+     "fib_touch": true,
+     "htf_aligned": true,
+     "session_context": true,
+     "structural_agreement": true,
+     "touches": 4,
+     "wick_rejection": false
+    },
+    "mad_bonus": 0,
+    "raw_factor_score": 14.5,
+    "selected_stars": 3,
+    "v1_stars": 3,
+    "v2_raw": 14.5,
+    "v2_stars": 2,
+    "version": "v1",
+    "zone_quality_score": 0
+   },
+   "higher_timeframes": [
+    {
+     "direction": "BUY",
+     "layer": "momentum",
+     "reference_time": 1789491600,
+     "timeframe": "H1"
+    },
+    {
+     "direction": "BUY",
+     "layer": "internal",
+     "reference_time": 1789494300,
+     "timeframe": "M15"
+    }
+   ],
+   "mad": {
+    "acceptance_closes": 0,
+    "affinity": 0,
+    "confidence": 0,
+    "displacement_atr": 0.12015968063855104,
+    "phase": "unclear",
+    "range_quality_atr": 9.484231536926393,
+    "reason_code": "no_mad_signature",
+    "reclaim": false,
+    "version": 2
+   },
+   "reference_price": 4295.27,
+   "reference_time": 1789495200
+  },
+  "timeframe": "M5"
+ }
+}
