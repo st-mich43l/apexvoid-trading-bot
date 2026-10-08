@@ -5,9 +5,11 @@ import (
 	"math"
 	"strings"
 
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/confluence"
 	analysiscontext "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/context"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/reaction"
 )
 
 // TechniqueSpec is what one zone strategy contributes to a confirmed
@@ -63,8 +65,15 @@ func TechniqueCandidate(ctx *analysiscontext.MarketContext, dec *TechniqueDecisi
 			return opportunity.Candidate{}, false
 		}
 	}
+	// A reaction-less decision (a box breakout's accepted break) is identified
+	// and timed by the bar that produced it.
 	conf := dec.Confirmation
-	setupKey := fmt.Sprintf("zone:%s:rejection:%d:%d", dec.ID, conf.TouchTime, conf.ConfirmationTime)
+	formedAt, confirmedAt := dec.FormedAt, dec.ConfirmedAt
+	setupKey := fmt.Sprintf("zone:%s:break:%d", dec.ID, confirmedAt)
+	if conf != nil {
+		formedAt, confirmedAt = conf.TouchTime, conf.ConfirmationTime
+		setupKey = fmt.Sprintf("zone:%s:rejection:%d:%d", dec.ID, conf.TouchTime, conf.ConfirmationTime)
+	}
 	stars := float64(dec.Result.Stars)
 	candidate, err := Candidate(CandidateSpec{
 		ID: spec.ID, Version: spec.Version, SetupKey: setupKey, Symbol: ctx.Symbol, Direction: dec.Direction,
@@ -74,7 +83,7 @@ func TechniqueCandidate(ctx *analysiscontext.MarketContext, dec *TechniqueDecisi
 			Overall:    Clamp01(stars / 3),
 			Components: map[string]float64{"confluence": Clamp01(stars / 3), "reaction": 1},
 		},
-		FormedAt: conf.TouchTime, ConfirmedAt: conf.ConfirmationTime, ExpiryHours: spec.ExpiryHours, Fingerprint: spec.Fingerprint,
+		FormedAt: formedAt, ConfirmedAt: confirmedAt, ExpiryHours: spec.ExpiryHours, Fingerprint: spec.Fingerprint,
 	})
 	if err != nil {
 		return opportunity.Candidate{}, false
@@ -85,9 +94,11 @@ func TechniqueCandidate(ctx *analysiscontext.MarketContext, dec *TechniqueDecisi
 	if dec.Instance != nil && dec.Instance.Timeframe != "" {
 		candidate.StructureTimeframe = market.Timeframe(dec.Instance.Timeframe)
 	}
-	candidate.Reaction = &opportunity.ReactionConfirmation{
-		ZoneID: dec.ID, TouchBarTime: conf.TouchTime, ConfirmationBarTime: conf.ConfirmationTime,
-		ReactionType: "rejection", Pattern: conf.Type,
+	if conf != nil {
+		candidate.Reaction = &opportunity.ReactionConfirmation{
+			ZoneID: dec.ID, TouchBarTime: conf.TouchTime, ConfirmationBarTime: conf.ConfirmationTime,
+			ReactionType: "rejection", Pattern: conf.Type,
+		}
 	}
 	candidate.DetectorConfluence = dec.Result.ConfluenceContext()
 	candidate.Provenance = spec.Versions
@@ -141,4 +152,18 @@ func techniqueEvidence(dec *TechniqueDecision, spec TechniqueSpec) []string {
 		evidence = append(evidence, "htf_zone_"+strings.ToLower(dec.Instance.Timeframe))
 	}
 	return evidence
+}
+
+// ReactionFactors mirrors _reaction_factors: the evidence a confirmation
+// actually showed, mapped onto the common confluence rubric. The session
+// context is always on, as the frozen scanner never narrowed it.
+func ReactionFactors(confirmationType string, htfAligned bool, touches int) confluence.Factors {
+	return confluence.Factors{
+		HTFAligned:          htfAligned,
+		Touches:             touches,
+		WickRejection:       confirmationType == reaction.TypeWickRejection,
+		DisplacementGrade:   confirmationType == reaction.TypeEngulfing,
+		StructuralAgreement: confirmationType == reaction.TypeSweepReclaim || confirmationType == reaction.TypeStrongReclaim,
+		SessionContext:      true,
+	}
 }
