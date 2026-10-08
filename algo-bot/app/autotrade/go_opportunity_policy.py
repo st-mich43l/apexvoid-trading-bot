@@ -35,6 +35,7 @@ import math
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, replace
+from types import SimpleNamespace
 from typing import Any
 
 from app.analysis_client.provenance import (
@@ -51,6 +52,11 @@ from app.autotrade.go_containment import (
   containment_reason,
   observe_only_strategies,  # noqa: F401  (re-exported: the adapter's public containment read)
   structure_timeframe_of,
+)
+from app.autotrade.route_outcome import (
+  TERMINAL_ROUTE_STATUSES,
+  record_route_outcome,
+  route_outcome_key,
 )
 from app.autotrade.go_plan_cancel import SOURCE_EXPIRED, SOURCE_INVALIDATED, plan_id_for_match, request_plan_cancel
 from app.autotrade.go_live_opportunities import go_live_opportunity_ids
@@ -605,6 +611,8 @@ class GoOpportunityPolicy:
         await transition_setup(client, match_id, target, reason_code=f"go_{payload.reason_code.lower()}")
       except SetupLifecycleError:
         log.exception("Go terminal could not advance setup %s to %s", match_id, target)
+      else:
+        await self._record_terminal_outcome(client, record, target, payload.reason_code)
     # An invalidated/expired opportunity must not keep a queued or
     # unfilled plan alive. The cancel intent is a tombstone (also stops a plan
     # being published concurrently); open positions are never touched.
@@ -616,6 +624,43 @@ class GoOpportunityPolicy:
         requested_at=int(self._clock()), opportunity_id=payload.opportunity_id,
       )
     return "match_withdrawn"
+
+  async def _record_terminal_outcome(
+    self, client: Any, record: Any, target: str, go_reason: str,
+  ) -> None:
+    """Project Go's terminal reason onto the operator-visible route outcome.
+
+    The setup record keeps no reason, so without this the outcome stays at its last
+    waiting state until the next restart, when startup reconciliation rewrites it to a
+    generic ``startup_reconciliation`` (4,705 of 6,499 outcomes in four production
+    days). An outcome that already reads terminal (arbitration, an executor reject, a
+    fill) is left alone: the first terminal evidence stands.
+    """
+    try:
+      raw = await client.get(route_outcome_key(record.symbol, record.setup_id))
+      if raw:
+        previous = json.loads(raw.decode() if isinstance(raw, bytes) else str(raw))
+        if previous.get("status") in TERMINAL_ROUTE_STATUSES:
+          return
+      expired = target == EXPIRED
+      shim = SimpleNamespace(
+        match_id=record.setup_id, symbol=record.symbol,
+        issued_at=record.created_at, expires_at=record.expires_at or 0,
+      )
+      reason = f"go_{str(go_reason).lower()}"
+      await record_route_outcome(
+        client, shim,
+        stage="scanner" if expired else "entry_invalidation",
+        status="expired" if expired else "blocked",
+        reason_code=reason,
+        message=f"Go opportunity {'expired' if expired else 'invalidated'}: {go_reason}",
+        retained=False,
+        terminal_reason_code=reason,
+        publish_status=False,
+      )
+    except Exception:
+      # Observability only: never let it fail the terminal withdrawal.
+      log.exception("Go terminal route outcome projection failed setup=%s", record.setup_id)
 
   async def on_arbitration_decision(self, event: ArbitrationEnvelope) -> str:
     """Idempotent: republishing the same decision is a no-op write.

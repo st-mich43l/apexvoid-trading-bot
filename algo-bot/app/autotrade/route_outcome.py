@@ -80,6 +80,16 @@ class StrategyRouteOutcome:
     return json.dumps(asdict(self), separators=(",", ":"), sort_keys=True)
 
 
+# Statuses that already describe a finished setup: a later terminal event (a Go
+# invalidation, the expiry sweeper, startup reconciliation) must not overwrite them,
+# so the first terminal evidence is the one an operator reads.
+TERMINAL_ROUTE_STATUSES = frozenset({
+  "expired", "blocked", "executor_rejected",
+  "duplicate_suppressed", "arbitration_suppressed",
+  "order_filled",
+})
+
+
 def route_outcome_key(symbol: str, match_id: str) -> str:
   return f"auto_trade:route_outcome:{symbol.upper()}:{match_id}"
 

@@ -21,6 +21,7 @@ import time
 from typing import Any
 
 from app.autotrade.lifecycle import increment_metric
+from app.autotrade.route_outcome import TERMINAL_ROUTE_STATUSES
 from app.autotrade.setup_card import (
   forming_status_key,
   load_forming_card,
@@ -41,14 +42,7 @@ _SETUP_KEY_PREFIX = "analysis:setup:"
 _FORMING_MESSAGE_PREFIX = "auto_trade:forming_message:"
 _FORMING_STATUS_PREFIX = "auto_trade:forming_status:"
 
-# route_outcome.RouteStatus values that already correctly describe a
-# terminal setup - anything else on a terminal setup's route_outcome
-# snapshot is stale and needs finalize_terminal_setup's rewrite.
-_TERMINAL_CONSISTENT_ROUTE_STATUSES = frozenset({
-  "expired", "blocked", "executor_rejected",
-  "duplicate_suppressed", "arbitration_suppressed",
-  "order_filled",
-})
+_TERMINAL_CONSISTENT_ROUTE_STATUSES = TERMINAL_ROUTE_STATUSES
 
 
 async def _scan_keys(client: Any, pattern: str):
