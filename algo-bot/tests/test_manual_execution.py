@@ -777,6 +777,46 @@ async def test_take_profit_skips_when_tp_already_reached(monkeypatch):
   post.assert_not_awaited()
 
 
+@pytest.mark.asyncio
+@pytest.mark.no_database
+async def test_tp2_is_announced_when_slippage_leaves_its_realized_pips_just_short(monkeypatch):
+  """Manual 9 (2026-10-08): TP2 filled a hair short of its 100-pip target, the
+  event reported 99 pips, and it was read as the already-booked TP1 and dropped
+  without a notice. The executor's own target index decides the ordinal."""
+  execute = AsyncMock(return_value={"action": "tp", "ok": True})
+  post = AsyncMock()
+  monkeypatch.setattr("app.signals.trade_ops._execute_close", execute)
+  monkeypatch.setattr("app.signals.trade_ops.post_result", post)
+  monkeypatch.setattr(
+    manual_execution,
+    "get_manual_signal",
+    AsyncMock(return_value={
+      "id": 9, "action": "SELL", "symbol": "XAU", "entry": 4143.0, "entry_end": 4146.0,
+      "sl": 4148.0, "tps": [4138.0, 4133.0, 4128.0, 4123.0],
+    }),
+  )
+  await redis_state.mark_tp_ordinal_booked(9, 1)
+
+  await manual_execution._handle_take_profit(
+    {"price": 4133.4, "target_pips": 99, "position_id": 556, "highest_booked_target_index": 1},
+    9,
+  )
+
+  execute.assert_awaited_once()
+  assert execute.await_args.kwargs["tp_number"] == 2
+  post.assert_awaited_once()
+
+
+@pytest.mark.no_database
+def test_the_executors_target_index_decides_the_ordinal_only_when_it_is_valid():
+  sig = {"tps": [1.0, 2.0, 3.0]}
+  assert manual_execution._event_target_ordinal(sig, {"highest_booked_target_index": 0}) == 1
+  assert manual_execution._event_target_ordinal(sig, {"highest_booked_target_index": 2}) == 3
+  for bad in (None, -1, 3, True, "1"):
+    assert manual_execution._event_target_ordinal(sig, {"highest_booked_target_index": bad}) == 0
+  assert manual_execution._event_target_ordinal(sig, {}) == 0
+
+
 @pytest.mark.no_database
 def test_trade_result_renders_unbooked_tp_as_reached():
   from app.signals import trade_ops

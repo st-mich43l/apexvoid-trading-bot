@@ -438,6 +438,23 @@ async def _handle_fill_event(
   await trade_ops.post_result(result, sig.get("symbol", "XAU"))
 
 
+def _event_target_ordinal(sig: dict, event: dict) -> int:
+  """The TP ordinal the executor itself booked, 0 when the event does not say.
+
+  A V8 ``tp_booked`` event carries the 0-based ``highest_booked_target_index`` of
+  the target that just closed volume. That is exact, whereas ``target_pips`` is the
+  pips REALIZED from the group's best fill to the actual exit price: a TP2 that
+  fills a fraction of a pip short of its 100-pip target reports 99 and used to be
+  read as TP1, dropped as "already booked", and never announced (manual 9,
+  2026-10-08).
+  """
+  index = event.get("highest_booked_target_index")
+  total = len(sig.get("tps") or [])
+  if isinstance(index, bool) or not isinstance(index, int):
+    return 0
+  return index + 1 if 0 <= index < total else 0
+
+
 def _tp_ordinal_reached(sig: dict, target_pips: object) -> int:
   """Highest configured TP ordinal covered by ``target_pips`` (0 if none)."""
   if target_pips is None:
@@ -504,7 +521,7 @@ async def _handle_take_profit(event: dict, signal_id: int) -> None:
     pips_format.pips_between(sig, tp) for tp in sig.get("tps") or []
   ]
   target_pips = event.get("target_pips")
-  reached = _tp_ordinal_reached(sig, target_pips)
+  reached = _event_target_ordinal(sig, event) or _tp_ordinal_reached(sig, target_pips)
   if not reached:
     # target_pips did not match any configured TP ordinal (e.g. stale
     # `tps` after a /trade_modify re-arm, or an engine/DB pip-rounding
@@ -567,7 +584,11 @@ async def _handle_take_profit(event: dict, signal_id: int) -> None:
   # "is this the last leg" is decided by comparing against the LARGEST
   # configured pip distance, not by counting take_profit events seen.
   frac = None
-  if configured and target_pips is not None and int(target_pips) != max(configured):
+  if configured and (
+    reached < len(configured)
+    if _event_target_ordinal(sig, event)
+    else target_pips is not None and int(target_pips) != max(configured)
+  ):
     frac = round(1.0 / len(configured), 6)
   result = await trade_ops._execute_close(
     signal_id, sig.get("symbol", "XAU"), pips, frac,

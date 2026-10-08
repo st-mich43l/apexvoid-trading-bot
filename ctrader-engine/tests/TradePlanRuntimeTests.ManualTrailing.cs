@@ -147,6 +147,7 @@ public sealed partial class TradePlanRuntimeTests
     Assert.True(afterTp1.CurrentStop < vwap, $"stop {afterTp1.CurrentStop} must be below VWAP {vwap}");
     Assert.True(afterTp1.CurrentStop < l2Fill + 6 * 0.01m);
     Assert.True(afterTp1.CurrentStop >= 4082.50m);
+    Assert.Equal(l2Fill, afterTp1.CurrentStop);           // the deepest declared entry
     Assert.True(afterTp1.BookedPipVolume > 0m);
     Assert.All(
       client.StopAmendments.TakeLast(remaining.Length),
@@ -233,6 +234,33 @@ public sealed partial class TradePlanRuntimeTests
       currentStop: (decimal)heldStop,
       Symbol,
       plannedDeepestEntry: null
+    );
+
+    Assert.True(result.Improved);
+    Assert.Equal((decimal)expected, result.NewStop);
+  }
+
+  // Manual 9 (2026-10-08, XAU SELL, zone 4143-4146, stop 4148): only the shallow leg
+  // (4143.1) had filled when TP1 booked; the funded-economic stop was 4144.5. The
+  // owner's rule is the DEEP entry, whether or not that leg filled.
+  [Theory]
+  [InlineData("SELL", 4143.1, 4146.0, 4148.0, 4146.0)]
+  [InlineData("BUY", 4143.9, 4141.0, 4139.0, 4141.0)]
+  public void ManualTp1MovesTheGroupToTheDeepestDeclaredEntryEvenWhenOnlyTheShallowLegFilled(
+    string direction, double shallowFill, double deepestEntry, double heldStop, double expected
+  )
+  {
+    var plan = TradePlanJson.DeserializePlan(
+      ManualFourTargetLadderJson().Replace("\"direction\": \"BUY\"", $"\"direction\": \"{direction}\"")
+    );
+    var shallow = new TradePlanLegRuntimeState(
+      "L1", (decimal)shallowFill, 0m, 400, 0m, "L1", BrokerPositionId: 1, FillPrice: (decimal)shallowFill,
+      FilledVolume: 1_000, RemainingVolume: 600, Stage: TradePlanLegStages.Managing
+    );
+
+    var result = TradePlanExecutionEngine.CalculateManualGroupBreakEven(
+      plan, [shallow], groupInitialVolume: 1_000, bookedPipVolume: 50m * 400m, pipSize: 0.1m,
+      currentStop: (decimal)heldStop, Symbol, plannedDeepestEntry: (decimal)deepestEntry
     );
 
     Assert.True(result.Improved);
