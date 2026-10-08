@@ -305,6 +305,7 @@ public sealed record AutoTradeEvent(
   // volume. TargetPips is only the highest target ARCHIVED; this is the trade's
   // result, and the two differ whenever runners exit below the archived target.
   decimal? VolumeWeightedPips = null,
+  decimal? RiskPips = null,
   int? ConfluenceV1 = null,
   int? ConfluenceV2 = null,
   double? ConfluenceV2Raw = null,

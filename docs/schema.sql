@@ -100,7 +100,9 @@ CREATE TABLE IF NOT EXISTS auto_trade_results (
   corrected_at      BIGINT,
   -- Volume-weighted realized pips from the executor; result_pips is the
   -- highest TP archived. NULL for rows closed before the executor sent it.
-  realized_pips     DOUBLE PRECISION
+  realized_pips     DOUBLE PRECISION,
+  -- Pips from the group's deepest fill to its original stop: the R denominator.
+  risk_pips         DOUBLE PRECISION
 );
 CREATE INDEX IF NOT EXISTS idx_auto_trade_results_closed
   ON auto_trade_results(closed_at);
