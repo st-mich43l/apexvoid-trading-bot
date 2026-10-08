@@ -198,10 +198,10 @@ public sealed partial class TradePlanRuntimeTests
       .Replace("{\"leg_id\": \"L2\", \"price\": \"4138.00\"", "{\"leg_id\": \"L2\", \"price\": \"4139.50\"")
       .Replace("4096.00", "4133.00").Replace("4104.00", "4128.00").Replace("4110.00", "4123.00").Replace("4120.00", "4118.00");
     var store = new FakeTradePlanStore();
-    store.EnqueuePlan(json);
+    store.EnqueuePlan(WithRiskLeg(json));
     var client = new FakeTradePlanTradingClient { AccountEquity = 1_300m, AccountBalance = 1_300m, NextMarketFillPrice = 4138.01m };
     var runtime = new TradePlanRuntime(
-      Options() with { ReactionRiskLegEnabled = true }, store, () => DateTimeOffset.UtcNow, _ => { }
+      Options(), store, () => DateTimeOffset.UtcNow, _ => { }
     );
 
     await runtime.PollAsync(

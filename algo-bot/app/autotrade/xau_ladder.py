@@ -1,11 +1,12 @@
-"""XAU shallow/deep entry-leg prices.
+"""XAU shallow/deep entry-leg prices and the risk leg.
 
 The reviewed specification lives in ``contracts/autotrade/xau-ladder-spec.json``. The Auto
 Algo's XAU non-scalp zone ladder calls ``entry_leg_prices`` so its broker entry geometry is
 identical to Manual Algo's (``ctrader-engine/src/AutoTradeEngine.cs``,
-``ManualEntryLegPrices``): shallow at the near edge, deep at the zone midpoint. The executor
-owns the leg volumes and the optional XAU risk leg (``TradePlanRuntime.cs``); its C# parity
-test pins the same file.
+``ManualEntryLegPrices``): shallow at the near edge, deep at the zone midpoint. The planner
+declares the optional XAU risk leg (``risk_leg.py``) from ``risk_leg_price``/``risk_leg_lots``
+below; the executor places exactly that leg (``TradePlanRuntime.cs``) and its C# parity test
+pins the same file.
 
 All arithmetic is decimal, matching the C# ``decimal`` behaviour: prices are rounded to the
 instrument's digits, midpoints away from zero. Binary floats would round 4101.005 down.
@@ -58,3 +59,38 @@ def entry_leg_prices(
     shallow = low
     deep = shallow + (stop - shallow) / 2
   return EntryLegPrices(shallow=round_price(shallow, digits), deep=round_price(deep, digits))
+
+
+def risk_leg_price(
+  direction: str,
+  stop_loss: float | Decimal,
+  *,
+  pips_from_stop: float | Decimal,
+  pip_size: float | Decimal,
+  digits: int = XAU_DIGITS,
+) -> float:
+  """The risk leg's resting price: ``pips_from_stop`` inside the stop.
+
+  BUY rests above the stop, SELL below it. Rounded to ``digits``, midpoints away from zero,
+  exactly as the executor's decimal arithmetic does.
+  """
+  offset = _d(pips_from_stop) * _d(pip_size)
+  stop = _d(stop_loss)
+  price = stop + offset if direction.upper() == "BUY" else stop - offset
+  return round_price(price, digits)
+
+
+def risk_leg_lots(
+  equity: float | Decimal | None,
+  *,
+  lots: float | Decimal | str,
+  lots_below_equity_floor: float | Decimal | str,
+  equity_floor: float | Decimal | str,
+) -> Decimal:
+  """Fixed risk-leg size by account equity tier.
+
+  Unknown equity takes the smaller tier: the planner never guesses a larger exposure.
+  """
+  if equity is None or _d(equity) < _d(equity_floor):
+    return _d(lots_below_equity_floor)
+  return _d(lots)

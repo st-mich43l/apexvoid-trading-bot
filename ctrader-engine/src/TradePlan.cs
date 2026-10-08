@@ -198,6 +198,16 @@ public sealed record TradePlanEntryLeg(
   string? OrderType = null
 );
 
+// The planner-declared "trade-off" risk leg: one extra resting limit order near
+// the stop at a fixed size. The executor places exactly this and never invents
+// one (owner 2026-10-08: the algo bot defines it, the executor follows).
+public sealed record TradePlanRiskLeg(
+  [property: JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
+  decimal Price,
+  [property: JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
+  decimal Lots
+);
+
 public sealed record TradePlanEntry(
   string Type,
   long ExpiresAt,
@@ -211,7 +221,8 @@ public sealed record TradePlanEntry(
   int? MaxSlippageTicks = null,
   [property: JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
   decimal? OrderPrice = null,
-  IReadOnlyList<TradePlanEntryLeg>? Legs = null
+  IReadOnlyList<TradePlanEntryLeg>? Legs = null,
+  TradePlanRiskLeg? RiskLeg = null
 )
 {
   // Every price at which this entry could actually fill. Used only to
@@ -361,6 +372,19 @@ public static class TradePlanValidator
       throw new TradePlanContractException("entry has no resolvable prices");
     }
 
+    if (plan.Entry.RiskLeg is { } declaredRiskLeg)
+    {
+      var beyondStop = direction == "BUY"
+        ? plan.Stop.Price >= declaredRiskLeg.Price
+        : plan.Stop.Price <= declaredRiskLeg.Price;
+      if (beyondStop)
+      {
+        throw new TradePlanContractException(
+          $"{direction} stop.price must be {(direction == "BUY" ? "below" : "above")} entry.risk_leg.price"
+        );
+      }
+    }
+
     if (direction == "BUY")
     {
       if (entryPrices.Any(price => plan.Stop.Price >= price))
@@ -491,6 +515,27 @@ public static class TradePlanValidator
         "entry.type must be one of market/market_watch/single_limit/limit_ladder/"
         + $"market_with_limit_scale: {entry.Type}"
       );
+    }
+
+    if (entry.RiskLeg is { } riskLeg)
+    {
+      if (
+        entry.Type
+          is not (TradePlanContract.EntryTypeLimitLadder
+            or TradePlanContract.EntryTypeMarketWithLimitScale)
+        || (entry.Legs?.Count ?? 0) < 2
+      )
+      {
+        throw new TradePlanContractException(
+          "entry.risk_leg requires a multi-leg limit_ladder or market_with_limit_scale entry"
+        );
+      }
+      if (riskLeg.Price <= 0m || riskLeg.Lots <= 0m)
+      {
+        throw new TradePlanContractException(
+          "entry.risk_leg price and lots must be positive"
+        );
+      }
     }
 
     if (entry.Type == TradePlanContract.EntryTypeMarketWatch)

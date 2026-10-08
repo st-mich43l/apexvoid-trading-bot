@@ -29,11 +29,7 @@ public sealed record AutoTradeOptions(
   string UnfilledLegAfterTpPolicy = "cancel",
   // market_with_limit_scale: single_market collapses to 100% L1 market when
   // two valid legs cannot be formed; reject refuses the plan.
-  string ReactionScaleInvalidPolicy = "single_market",
-  // Same "trade-off" risk leg the owner's manual /algo ladder has always had,
-  // applied to every XAU multi-leg ladder plan. A kill switch, not a tuning
-  // knob - see TradePlanRuntime.ReactionRiskLeg* for the constants.
-  bool ReactionRiskLegEnabled = true
+  string ReactionScaleInvalidPolicy = "single_market"
 )
 {
   public IReadOnlyList<string> EffectiveSymbols =>

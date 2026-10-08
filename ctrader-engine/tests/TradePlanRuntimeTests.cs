@@ -18,18 +18,15 @@ public sealed partial class TradePlanRuntimeTests
     MinVolume: 100, StepVolume: 100, MaxVolume: 100_000, LotSize: 10_000
   );
 
+  // The risk leg exists only when a plan declares entry.risk_leg (WithRiskLeg);
+  // the executor never adds one.
   private static AutoTradeOptions Options() => new(
     Enabled: true,
     DryRun: false,
     ExpectedBroker: "Fusion",
     PollMilliseconds: 10,
     EventStream: "auto_trade:events",
-    Label: "apexvoid-auto",
-    // Off by default here: most of this file's tests assert exact leg
-    // counts/client-order-ids/volumes for the plan's own declared ladder
-    // and were not written with the 2026-09-16 risk leg in mind. See
-    // TradePlanRiskLegTests.cs for the risk leg's own coverage.
-    ReactionRiskLegEnabled: false
+    Label: "apexvoid-auto"
   );
 
   private static string PlanJson(
@@ -901,14 +898,14 @@ public sealed partial class TradePlanRuntimeTests
     }
     """;
     var store = new FakeTradePlanStore();
-    store.EnqueuePlan(planJson);
+    store.EnqueuePlan(WithRiskLeg(planJson));
     var client = new FakeTradePlanTradingClient
     {
       AccountEquity = 1_300m,
       AccountBalance = 1_300m,
     };
     var runtime = new TradePlanRuntime(
-      Options() with { ReactionRiskLegEnabled = true }, store, () => DateTimeOffset.UtcNow, _ => { }
+      Options(), store, () => DateTimeOffset.UtcNow, _ => { }
     );
 
     await runtime.PollAsync(
@@ -3995,15 +3992,21 @@ public sealed partial class TradePlanRuntimeTests
   }
 
   // ==========================================================================
-  // Reaction risk leg (owner-directed 2026-09-16) - same spirit as Manual
-  // Algo's own trade-off leg (ManualAlgoRiskLegPrice/Volume in
-  // AutoTradeEngine.cs) but a pure TradePlanRuntime addition: Python never
-  // plans or knows about this leg, exactly like it never knew about Manual
-  // Algo's. Every other test in this file uses Options() with the risk leg
-  // off (see that helper's comment) so this is the only place it's on.
+  // Risk leg (owner-directed 2026-09-16, planner-declared since 2026-10-08):
+  // the plan's entry.risk_leg is the only source; the executor places exactly
+  // that leg and never adds one. Plans in this file carry no risk leg unless a
+  // test adds it with WithRiskLeg.
   // ==========================================================================
 
   private static string MarketWithLimitScaleRiskLegPlanJson(
+    string direction = "BUY",
+    decimal stopPrice = 4079.00m,
+    decimal targetPrice = 4097.00m,
+    string symbol = "XAU",
+    decimal riskLots = 0.05m
+  ) => WithRiskLeg(MarketWithLimitScalePlanJsonWithoutRiskLeg(direction, stopPrice, targetPrice, symbol), riskLots);
+
+  private static string MarketWithLimitScalePlanJsonWithoutRiskLeg(
     string direction = "BUY",
     decimal stopPrice = 4079.00m,
     decimal targetPrice = 4097.00m,
@@ -4099,7 +4102,7 @@ public sealed partial class TradePlanRuntimeTests
     store.EnqueuePlan(MarketWithLimitScaleRiskLegPlanJson());
     var client = new FakeTradePlanTradingClient { AccountEquity = 1_300m, AccountBalance = 1_300m };
     var runtime = new TradePlanRuntime(
-      Options() with { ReactionRiskLegEnabled = true }, store, () => DateTimeOffset.UtcNow, _ => { }
+      Options(), store, () => DateTimeOffset.UtcNow, _ => { }
     );
 
     await runtime.PollAsync(
@@ -4111,7 +4114,7 @@ public sealed partial class TradePlanRuntimeTests
     var risk = Assert.Single(client.LimitOrders, o => o.ClientOrderId.EndsWith(":RISK"));
     // stop 4079.00 + 15 pips * 0.1 pip size = 4080.50 (BUY: entry side of stop).
     Assert.Equal(4080.50m, risk.LimitPrice);
-    // $1,300 equity clears the $1,000 floor -> the default 0.05 lots (500 @ 10k lot size).
+    // The plan declares 0.05 lots (500 @ 10k lot size).
     Assert.Equal(500, risk.Volume);
     Assert.Equal(TradeDirection.Buy, risk.Direction);
   }
@@ -4127,7 +4130,7 @@ public sealed partial class TradePlanRuntimeTests
     );
     var client = new FakeTradePlanTradingClient { AccountEquity = 1_300m, AccountBalance = 1_300m };
     var runtime = new TradePlanRuntime(
-      Options() with { ReactionRiskLegEnabled = true }, store, () => DateTimeOffset.UtcNow, _ => { }
+      Options(), store, () => DateTimeOffset.UtcNow, _ => { }
     );
 
     await runtime.PollAsync(
@@ -4141,13 +4144,16 @@ public sealed partial class TradePlanRuntimeTests
   }
 
   [Fact]
-  public async Task RiskLegVolumeDropsBelowTheThousandDollarEquityFloor()
+  public async Task RiskLegVolumeIsExactlyTheDeclaredLotsWhateverTheEquity()
   {
+    // The planner chooses the lots (0.02 below the $1,000 floor, see
+    // algo-bot test_risk_leg.py); the executor places what the plan says and never
+    // re-derives the size from its own equity.
     var store = new FakeTradePlanStore();
-    store.EnqueuePlan(MarketWithLimitScaleRiskLegPlanJson());
-    var client = new FakeTradePlanTradingClient { AccountEquity = 800m, AccountBalance = 800m };
+    store.EnqueuePlan(MarketWithLimitScaleRiskLegPlanJson(riskLots: 0.02m));
+    var client = new FakeTradePlanTradingClient { AccountEquity = 50_000m, AccountBalance = 50_000m };
     var runtime = new TradePlanRuntime(
-      Options() with { ReactionRiskLegEnabled = true }, store, () => DateTimeOffset.UtcNow, _ => { }
+      Options(), store, () => DateTimeOffset.UtcNow, _ => { }
     );
 
     await runtime.PollAsync(
@@ -4155,8 +4161,7 @@ public sealed partial class TradePlanRuntimeTests
     );
 
     var risk = Assert.Single(client.LimitOrders, o => o.ClientOrderId.EndsWith(":RISK"));
-    // Below the $1,000 floor -> 0.02 lots (200 @ 10k lot size), independent
-    // of whatever the main ladder's own equity-table sizing produced.
+    // Declared 0.02 lots = 200 @ 10k lot size, at $50,000 equity.
     Assert.Equal(200, risk.Volume);
   }
 
@@ -4167,7 +4172,7 @@ public sealed partial class TradePlanRuntimeTests
     store.EnqueuePlan(PlanJson());
     var client = new FakeTradePlanTradingClient { AccountEquity = 1_300m, AccountBalance = 1_300m };
     var runtime = new TradePlanRuntime(
-      Options() with { ReactionRiskLegEnabled = true }, store, () => DateTimeOffset.UtcNow, _ => { }
+      Options(), store, () => DateTimeOffset.UtcNow, _ => { }
     );
 
     await runtime.PollAsync(
@@ -4185,7 +4190,7 @@ public sealed partial class TradePlanRuntimeTests
     store.EnqueuePlan(MarketWithLimitScaleRiskLegPlanJson());
     var client = new FakeTradePlanTradingClient { AccountEquity = 1_300m, AccountBalance = 1_300m };
     var runtime = new TradePlanRuntime(
-      Options() with { ReactionRiskLegEnabled = true }, store, () => DateTimeOffset.UtcNow, _ => { }
+      Options(), store, () => DateTimeOffset.UtcNow, _ => { }
     );
 
     await runtime.PollAsync(
@@ -4202,21 +4207,20 @@ public sealed partial class TradePlanRuntimeTests
   }
 
   [Fact]
-  public async Task RiskLegIsNeverInjectedForNonXauSymbolsEvenWhenEnabled()
+  public async Task AnLadderPlanThatDeclaresNoRiskLegNeverGetsOne()
   {
-    // Owner 2026-09-17: fixed 0.05/0.02 lot sizing was tuned against XAU's
-    // own pip value - a USDJPY CRT trade this morning got a RISK leg it
-    // should never have had (reproduced against production), so the gate
-    // must be XAU-only regardless of ReactionRiskLegEnabled/entry shape.
+    // Production 2026-10-08: the executor used to add a RISK leg to every XAU
+    // ladder, so the broker held a leg neither the plan nor the card showed.
+    // The planner owns the leg; no declaration means no leg, on any symbol.
     var fxSymbol = new SymbolInfo(
       "USDJPY", "USDJPY", 10, Digits: 3, PipPosition: 2,
       MinVolume: 1_000, StepVolume: 1_000, MaxVolume: 100_000, LotSize: 100_000
     );
     var store = new FakeTradePlanStore();
-    store.EnqueuePlan(MarketWithLimitScaleRiskLegPlanJson(symbol: "USDJPY"));
+    store.EnqueuePlan(MarketWithLimitScalePlanJsonWithoutRiskLeg(symbol: "USDJPY"));
     var client = new FakeTradePlanTradingClient { AccountEquity = 1_300m, AccountBalance = 1_300m };
     var runtime = new TradePlanRuntime(
-      Options() with { ReactionRiskLegEnabled = true }, store, () => DateTimeOffset.UtcNow, _ => { }
+      Options(), store, () => DateTimeOffset.UtcNow, _ => { }
     );
 
     await runtime.PollAsync(
@@ -4225,6 +4229,36 @@ public sealed partial class TradePlanRuntimeTests
 
     Assert.DoesNotContain(client.LimitOrders, o => o.ClientOrderId.EndsWith(":RISK"));
     Assert.DoesNotContain(client.MarketOrders, o => o.ClientOrderId.EndsWith(":RISK"));
+
+    var xauStore = new FakeTradePlanStore();
+    xauStore.EnqueuePlan(MarketWithLimitScalePlanJsonWithoutRiskLeg());
+    var xauClient = new FakeTradePlanTradingClient { AccountEquity = 1_300m, AccountBalance = 1_300m };
+    var xauRuntime = new TradePlanRuntime(
+      Options(), xauStore, () => DateTimeOffset.UtcNow, _ => { }
+    );
+    await xauRuntime.PollAsync(
+      xauClient, Symbol, new SpotPrice("XAU", 4089.00m, 4089.10m, 1), CancellationToken.None
+    );
+    Assert.DoesNotContain(xauClient.LimitOrders, o => o.ClientOrderId.EndsWith(":RISK"));
+    Assert.Single(xauClient.LimitOrders);
+  }
+
+  [Fact]
+  public async Task ARiskLegOnASingleEntryIsRejectedNotPlaced()
+  {
+    var store = new FakeTradePlanStore();
+    store.EnqueuePlan(WithRiskLeg(PlanJson()));
+    var client = new FakeTradePlanTradingClient { AccountEquity = 1_300m, AccountBalance = 1_300m };
+    var runtime = new TradePlanRuntime(
+      Options(), store, () => DateTimeOffset.UtcNow, _ => { }
+    );
+
+    await runtime.PollAsync(
+      client, Symbol, new SpotPrice("XAU", 4089.05m, 4089.10m, 1), CancellationToken.None
+    );
+
+    Assert.Empty(client.LimitOrders);
+    Assert.Empty(client.MarketOrders);
   }
 
   [Fact]
