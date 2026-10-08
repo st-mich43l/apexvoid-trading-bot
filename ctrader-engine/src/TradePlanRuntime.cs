@@ -1687,7 +1687,8 @@ public sealed partial class TradePlanRuntime(
     decimal? groupRealizedPips = null,
     string? reasonCode = null,
     TradePlanRuntimeState? runtimeState = null,
-    int? highestBookedTargetIndex = null
+    int? highestBookedTargetIndex = null,
+    decimal? volumeWeightedPips = null
   ) => PublishEventCoreAsync(
     type,
     message,
@@ -1704,7 +1705,8 @@ public sealed partial class TradePlanRuntime(
     groupRealizedPips,
     reasonCode,
     runtimeState,
-    highestBookedTargetIndex
+    highestBookedTargetIndex,
+    volumeWeightedPips
   );
 
   private async Task PublishEventCoreAsync(
@@ -1723,7 +1725,8 @@ public sealed partial class TradePlanRuntime(
     decimal? groupRealizedPips,
     string? reasonCode = null,
     TradePlanRuntimeState? runtimeState = null,
-    int? highestBookedTargetIndex = null
+    int? highestBookedTargetIndex = null,
+    decimal? volumeWeightedPips = null
   )
   {
     if (!string.IsNullOrWhiteSpace(eventKey))
@@ -1791,6 +1794,7 @@ public sealed partial class TradePlanRuntime(
             : null),
         BreakEvenApplied: breakEvenApplied,
         HighestBookedTargetIndex: bookedIndex,
+        VolumeWeightedPips: volumeWeightedPips,
         TargetsTotal: plan.Targets.Count,
         PlannedRewardRisk: plannedRewardRisk,
         TargetRoomFallbackUsed: targetRoomFallbackUsed,
@@ -3423,7 +3427,13 @@ public sealed partial class TradePlanRuntime(
             : TradePlanGroupStages.PartiallyClosed,
           remainingVolume: remainingAfter,
           runtimeState: state,
-          highestBookedTargetIndex: bookedTargetIndex
+          highestBookedTargetIndex: bookedTargetIndex,
+          volumeWeightedPips: remainingAfter <= 0
+            ? VolumeWeightedPips(
+                plan, legs, state.BookedPipVolume + bookedPipVolumeAdded,
+                PipSizeFor(plan.Symbol), _ => null
+              )
+            : null
         );
         state = AggregateState(
           state with
@@ -4166,7 +4176,15 @@ public sealed partial class TradePlanRuntime(
       state: TradePlanGroupStages.Closed,
       groupRealizedPips: realizedPips,
       reasonCode: reasonCode,
-      runtimeState: next
+      runtimeState: next,
+      volumeWeightedPips: VolumeWeightedPips(
+        plan,
+        legs,
+        state.BookedPipVolume,
+        PipSizeFor(plan.Symbol),
+        leg => reasons.Where(item => item.Leg.LegId == leg.LegId).Select(item => item.ExitPrice).FirstOrDefault()
+          ?? exitHint
+      )
     );
     await PersistPlanExecutionStateAsync(
       plan.PlanId, "completed", null, cancellationToken, terminalReason
@@ -5246,6 +5264,44 @@ public sealed partial class TradePlanRuntime(
     )
       ? fills.Min()
       : fills.Max();
+  }
+
+  /// <summary>
+  /// The group's volume-weighted realized pips: the pips every target close already
+  /// booked (BookedPipVolume) plus each leg's still-open volume closed at its exit
+  /// price, over the whole filled volume. This is the trade's actual result in pips;
+  /// ArchivedTargetPips is only the highest target reached, which overstates a
+  /// trade whose remaining volume then stops out below it. Null when there is no
+  /// filled volume or a leg that still held volume has no known exit price.
+  /// </summary>
+  internal static decimal? VolumeWeightedPips(
+    TradePlan plan,
+    IReadOnlyList<TradePlanLegRuntimeState> legs,
+    decimal bookedPipVolume,
+    decimal pipSize,
+    Func<TradePlanLegRuntimeState, decimal?> exitPriceFor
+  )
+  {
+    var filled = legs.Sum(leg => leg.FilledVolume);
+    if (filled <= 0 || pipSize <= 0m)
+    {
+      return null;
+    }
+    var buy = string.Equals(plan.Analysis.Direction, "BUY", StringComparison.OrdinalIgnoreCase);
+    var pipVolume = bookedPipVolume;
+    foreach (var leg in legs)
+    {
+      if (leg.RemainingVolume <= 0)
+      {
+        continue;
+      }
+      if (leg.FillPrice is not decimal fill || exitPriceFor(leg) is not decimal exit)
+      {
+        return null;
+      }
+      pipVolume += (buy ? exit - fill : fill - exit) / pipSize * leg.RemainingVolume;
+    }
+    return decimal.Round(pipVolume / filled, 2, MidpointRounding.AwayFromZero);
   }
 
   private int? ArchivedTargetPips(
