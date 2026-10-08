@@ -643,13 +643,6 @@ public sealed partial class TradePlanRuntime(
   private static bool SameInstrumentKey(string left, string right) =>
     CanonicalInstrument(left) == CanonicalInstrument(right);
 
-  private static readonly HashSet<string> ScalpFamilies = new(
-    StringComparer.OrdinalIgnoreCase
-  )
-  {
-    "scalp", "range", "range_reversion",
-  };
-
   private static readonly HashSet<string> ScalpStrategies = new(
     StringComparer.OrdinalIgnoreCase
   )
@@ -665,9 +658,10 @@ public sealed partial class TradePlanRuntime(
     "Chop Zone Reaction",
   };
 
+  // Decided by the plan's own strategy, never by the legacy strategy_family label
+  // it also carries: every strategy that label ever grouped is listed below.
   private static bool IsScalpPlan(TradePlan plan) =>
-    ScalpFamilies.Contains(plan.Analysis.StrategyFamily ?? "")
-    || ScalpStrategies.Contains(plan.Analysis.Strategy ?? "");
+    ScalpStrategies.Contains(plan.Analysis.Strategy ?? "");
 
   private static decimal? IntendedEntryPriceFrom(TradePlan plan)
   {

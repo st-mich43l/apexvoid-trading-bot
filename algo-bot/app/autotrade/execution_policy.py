@@ -328,61 +328,9 @@ TIER_A = "A"
 TIER_B = "B"
 TIER_C = "C"
 
-FAMILY_RANGE_REVERSION = "range_reversion"
-FAMILY_TREND_PULLBACK = "trend_pullback"
-FAMILY_BREAKOUT_RETEST = "breakout_retest"
-FAMILY_MOMENTUM_CONTINUATION = "momentum_continuation"
-FAMILY_LIQUIDITY_REVERSAL = "liquidity_reversal"
-FAMILY_MAPPED_ZONE_REACTION = "mapped_zone_reaction"
-FAMILY_KEY_LEVEL = "key_level"
-FAMILY_SUPPLY_DEMAND = "supply_demand"
-FAMILY_SESSION_LEVEL = "session_level"
-FAMILY_TRENDLINE = "trendline"
-FAMILY_RANGE = "range"
-FAMILY_TREND = "trend"
-FAMILY_UNKNOWN = "unknown"
-
-_STRATEGY_FAMILY = {
-  "Range Box Scalp": FAMILY_RANGE_REVERSION,
-  "Range Edge Scalp": FAMILY_RANGE_REVERSION,
-  "One-Sided Range Reaction": FAMILY_RANGE_REVERSION,
-  "Fade Scalp": FAMILY_RANGE_REVERSION,
-  "Chop Zone Reaction": FAMILY_RANGE_REVERSION,
-  # M1 scalp live publishes through the same TradePlan builder; map to range
-  # reversion so policy/stop planning runs. Native scalp room unlocks
-  # opposing-structure bypass (strategy_taxonomy).
-  "Range Sweep Scalp": FAMILY_RANGE_REVERSION,
-  "Impulse Pullback Scalp": FAMILY_RANGE_REVERSION,
-  "Breakout Retest Scalp": FAMILY_RANGE_REVERSION,
-  "Momentum Chase Scalp": FAMILY_RANGE_REVERSION,
-  "Trend Pullback": FAMILY_TREND_PULLBACK,
-  "Break & Retest": FAMILY_BREAKOUT_RETEST,
-  "Box Breakout": FAMILY_BREAKOUT_RETEST,
-  "Breakout Continuation": FAMILY_MOMENTUM_CONTINUATION,
-  "Momentum Ride": FAMILY_MOMENTUM_CONTINUATION,
-  "Mapped Zone Reaction": FAMILY_MAPPED_ZONE_REACTION,
-  "Liquidity Sweep": FAMILY_LIQUIDITY_REVERSAL,
-  "Snap-Back": FAMILY_LIQUIDITY_REVERSAL,
-  "Key Level": FAMILY_KEY_LEVEL,
-  "Zone Reaction": FAMILY_SUPPLY_DEMAND,
-  "Flip Zone": FAMILY_SUPPLY_DEMAND,
-  "Supply Demand": FAMILY_SUPPLY_DEMAND,
-  "Order Block": FAMILY_SUPPLY_DEMAND,
-  "FVG": FAMILY_SUPPLY_DEMAND,
-  "iFVG": FAMILY_SUPPLY_DEMAND,
-  "CRT": FAMILY_SUPPLY_DEMAND,
-  "Confluence Zone": FAMILY_SUPPLY_DEMAND,
-  # Legacy display names (kept for open plans / historical events):
-  "Demand Zone Reaction": FAMILY_SUPPLY_DEMAND,
-  "Supply Zone Reaction": FAMILY_SUPPLY_DEMAND,
-  "Session Level": FAMILY_SESSION_LEVEL,
-  "Trendline": FAMILY_TRENDLINE,
-}
-
-
 @dataclass(frozen=True)
 class ExecutionPolicy:
-  family: str
+  strategy: str
   min_confluence: int
   max_entry_drift_atr: float
   max_entry_drift_pips: float
@@ -428,111 +376,42 @@ def preference_allow(
   )
 
 
-_DEFAULT_POLICIES: dict[str, ExecutionPolicy] = {
-  FAMILY_RANGE_REVERSION: ExecutionPolicy(
-    FAMILY_RANGE_REVERSION, 2, 0.35, 8.0, 1.0, 0.5, 1.10, 1.0,
-    "market", ("chop", "range", "unknown"),
-  ),
-  FAMILY_TREND_PULLBACK: ExecutionPolicy(
-    FAMILY_TREND_PULLBACK, 2, 0.75, 15.0, 2.0, 0.6, 1.15, 1.0,
-    "limit", ("trend", "breakout", "unknown"),
-  ),
-  FAMILY_BREAKOUT_RETEST: ExecutionPolicy(
-    FAMILY_BREAKOUT_RETEST, 2, 0.85, 18.0, 2.5, 0.7, 1.20, 1.0,
-    "market", ("trend", "breakout", "unknown"),
-  ),
-  FAMILY_MOMENTUM_CONTINUATION: ExecutionPolicy(
-    FAMILY_MOMENTUM_CONTINUATION, 2, 1.0, 20.0, 3.0, 0.8, 1.15, 1.0,
-    "market", ("trend", "breakout", "unknown"),
-  ),
-  FAMILY_LIQUIDITY_REVERSAL: ExecutionPolicy(
-    FAMILY_LIQUIDITY_REVERSAL, 2, 0.45, 10.0, 1.5, 0.55, 1.15, 1.0,
-    "market", ("chop", "range", "trend", "unknown"),
-  ),
-  FAMILY_MAPPED_ZONE_REACTION: ExecutionPolicy(
-    FAMILY_MAPPED_ZONE_REACTION, 2, 0.40, 10.0, 2.0, 0.6, 1.15, 1.0,
-    "market", ("chop", "range", "trend", "breakout", "unknown"),
-  ),
-  # Strict stop contracts require a concrete route. Key/Session/Trendline
-  # reaction families use market_with_limit_scale (L1 market 70% + L2 deeper
-  # limit 30%) when AUTO_TRADE_REACTION_SCALE_ENABLED. Demand/Supply keep the
-  # classic DCA limit_ladder zone_scale path and must not auto-select
-  # market_with_limit_scale.
-  FAMILY_KEY_LEVEL: ExecutionPolicy(
-    FAMILY_KEY_LEVEL, 2, 0.50, 12.0, 1.5, 0.55, 1.15, 1.0,
-    "limit", ("chop", "range", "trend", "breakout", "unknown"),
-    entry_distribution="zone_scale",
-  ),
-  FAMILY_SUPPLY_DEMAND: ExecutionPolicy(
-    FAMILY_SUPPLY_DEMAND, 2, 0.50, 12.0, 2.0, 0.55, 1.15, 1.0,
-    "limit", ("chop", "range", "trend", "breakout", "unknown"),
-    entry_distribution="zone_scale",
-  ),
-  FAMILY_SESSION_LEVEL: ExecutionPolicy(
-    FAMILY_SESSION_LEVEL, 2, 0.50, 12.0, 1.5, 0.55, 1.15, 1.0,
-    "limit", ("chop", "range", "trend", "breakout", "unknown"),
-    entry_distribution="zone_scale",
-  ),
-  FAMILY_TRENDLINE: ExecutionPolicy(
-    FAMILY_TRENDLINE, 2, 0.55, 14.0, 1.5, 0.55, 1.15, 1.0,
-    "limit", ("chop", "range", "trend", "breakout", "unknown"),
-    entry_distribution="zone_scale",
-  ),
-}
+def _profile_for(strategy: str):
+  """The strategy's own catalog row; unknown strategies are not admitted."""
+  from app.autotrade.strategy_catalog import lookup_profile
 
-
-def strategy_family(strategy: str) -> str:
-  from app.autotrade.strategy_registry import strategy_family as registry_family
-
-  return registry_family(strategy)
+  profile = lookup_profile(strategy)
+  if profile is None:
+    raise ValueError(f"unknown execution strategy: {strategy}")
+  return profile
 
 
 def policy_for(strategy: str, cfg: Any | None = None) -> ExecutionPolicy:
-  family = strategy_family(strategy)
-  if family == FAMILY_UNKNOWN:
-    raise ValueError(f"unknown execution strategy: {strategy}")
-  base = _DEFAULT_POLICIES[family]
+  profile = _profile_for(strategy)
+  base = profile.execution
   if cfg is None:
     cfg = _default_runtime_cfg()
-  range_drift = float(
-    cfg.execution.range.max_entry_drift_atr
-    if cfg.execution.range.max_entry_drift_atr is not None
-    else base.max_entry_drift_atr
-  )
-  trend_drift = float(
-    cfg.execution.trend.max_entry_drift_atr
-    if cfg.execution.trend.max_entry_drift_atr is not None
-    else base.max_entry_drift_atr
-  )
-  map_drift = float(
-    cfg.execution.mapped_zone.max_entry_drift_atr
-    if cfg.execution.mapped_zone.max_entry_drift_atr is not None
-    else base.max_entry_drift_atr
-  )
-  drift_overrides = {
-    FAMILY_RANGE_REVERSION: range_drift,
-    FAMILY_TREND_PULLBACK: trend_drift,
-    FAMILY_BREAKOUT_RETEST: trend_drift,
-    FAMILY_MOMENTUM_CONTINUATION: trend_drift,
-    FAMILY_MAPPED_ZONE_REACTION: map_drift,
-    FAMILY_KEY_LEVEL: map_drift,
-    FAMILY_SUPPLY_DEMAND: map_drift,
-    FAMILY_SESSION_LEVEL: map_drift,
-    FAMILY_TRENDLINE: trend_drift,
-  }
-  range_min_rr = float(
-    cfg.execution.range.min_rr
-    if cfg.execution.range.min_rr is not None
-    else base.min_reward_risk
-  )
+  section = base.drift_section
+  max_entry_drift_atr = base.max_entry_drift_atr
+  if section is not None:
+    configured_drift = getattr(cfg.execution, section).max_entry_drift_atr
+    if configured_drift is not None:
+      max_entry_drift_atr = float(configured_drift)
+  min_reward_risk = base.min_reward_risk
+  if base.min_rr_from_range_config:
+    min_reward_risk = float(
+      cfg.execution.range.min_rr
+      if cfg.execution.range.min_rr is not None
+      else base.min_reward_risk
+    )
   return ExecutionPolicy(
-    family=base.family,
+    strategy=profile.name,
     min_confluence=base.min_confluence,
-    max_entry_drift_atr=drift_overrides.get(family, base.max_entry_drift_atr),
+    max_entry_drift_atr=max_entry_drift_atr,
     max_entry_drift_pips=base.max_entry_drift_pips,
     max_zone_width_atr=base.max_zone_width_atr,
     min_target_room_atr=base.min_target_room_atr,
-    min_reward_risk=range_min_rr if family == FAMILY_RANGE_REVERSION else base.min_reward_risk,
+    min_reward_risk=min_reward_risk,
     risk_multiplier=base.risk_multiplier,
     order_type_preference=base.order_type_preference,
     permitted_regimes=base.permitted_regimes,
@@ -695,11 +574,6 @@ def evaluate_execution_policy(
       reaction_execution.scale_invalid_policy or "single_market"
     ),
     strategy=str(getattr(match, "strategy", "") or ""),
-    strategy_family=str(
-      getattr(match, "family", None)
-      or getattr(match, "strategy_family", None)
-      or strategy_family(str(getattr(match, "strategy", "") or ""))
-    ),
     entry_clips=int(getattr(
       getattr(instrument_cfg, "targeting", None),
       "entry_clips",
@@ -753,9 +627,6 @@ def evaluate_execution_policy(
   # invalidation geometry.
   range_scalp = is_scalp_strategy(
     str(getattr(match, "strategy", "") or ""),
-    family=str(getattr(match, "family", "") or strategy_family(
-      str(getattr(match, "strategy", "") or ""),
-    )),
     strategy_mode=str(getattr(match, "strategy_mode", "") or ""),
   )
   match_risk_multiplier = risk_multiplier_for_tier(
@@ -792,7 +663,6 @@ def evaluate_execution_policy(
         entry_distribution == "zone_scale"
         or is_scalp_strategy(
           strategy_name,
-          family=str(getattr(match, "family", "") or ""),
           strategy_mode=str(getattr(match, "strategy_mode", "") or ""),
         )
       )
@@ -1046,7 +916,7 @@ def evaluate_execution_policy(
   else:
     planned_leg_entry_prices = []
   measured = {
-    "policy_family": policy.family,
+    "policy_strategy": policy.strategy,
     "confluence": confluence,
     "min_confluence": policy.min_confluence,
     "zone_width_atr": round(zone_width_atr, 4),
@@ -1369,7 +1239,7 @@ def evaluate_execution_policy(
       policy,
     )
   max_risk_multiplier = 1.0
-  if policy.family == FAMILY_RANGE_REVERSION:
+  if _profile_for(policy.strategy).execution.range_risk_ceiling:
     max_risk_multiplier = float(
       instrument_cfg.risk.sizing.range_max_risk_multiplier or 2.0
     )
@@ -1484,15 +1354,12 @@ def classify_tier(
   one_sided: bool = False,
 ) -> str:
   """Tier A = full risk, Tier B = reduced risk, Tier C = preference telemetry."""
-  family = strategy_family(strategy)
   if confluence < 1:
     return TIER_C
   if range_state == "provisional_range" or fallback_edge or one_sided:
     return TIER_B if confluence >= 2 else TIER_C
   if post_impulse or range_state == "post_impulse_range":
     return TIER_B
-  if family == FAMILY_MOMENTUM_CONTINUATION and confluence >= 2:
-    return TIER_A if confluence >= 3 else TIER_B
   if confluence >= 3:
     return TIER_A
   if confluence >= 2:
@@ -1537,64 +1404,15 @@ def risk_multiplier_for_tier(tier: str, cfg: Any | None = None, *, post_impulse:
   return max(0.0, mult)
 
 
-def _family_min_drift_pips(cfg: Any, family: str) -> float | None:
-  """Canonical read of the per-family minimum entry-drift setting.
+def _section_drift_pips(cfg: Any, section: str | None, field: str) -> float | None:
+  """Read one drift setting from the execution section a strategy names.
 
-  Returns None when the family does not have a configured minimum (e.g.
-  outside the mapped ``_FAMILY_MIN_DRIFT_SETTING`` keys); the caller
-  substitutes ``0.0`` for that case, matching the retired
-  ``getattr(cfg, name, 0.0)`` fallback.
+  None when the strategy names no section (it then has no configured minimum
+  or hard cap and falls back to its own defaults).
   """
-  execution = cfg.execution
-  if family == FAMILY_RANGE_REVERSION:
-    return float(execution.range.min_entry_drift_pips)
-  if family in {
-    FAMILY_TREND_PULLBACK,
-    FAMILY_BREAKOUT_RETEST,
-    FAMILY_MOMENTUM_CONTINUATION,
-    FAMILY_TRENDLINE,
-  }:
-    return float(execution.trend.min_entry_drift_pips)
-  if family in {
-    FAMILY_MAPPED_ZONE_REACTION,
-    FAMILY_KEY_LEVEL,
-    FAMILY_SUPPLY_DEMAND,
-    FAMILY_SESSION_LEVEL,
-  }:
-    return float(execution.mapped_zone.min_entry_drift_pips)
-  return None
-
-
-def _family_hard_drift_pips(cfg: Any, family: str) -> float | None:
-  execution = cfg.execution
-  if family == FAMILY_RANGE_REVERSION:
-    return float(execution.range.hard_entry_drift_pips)
-  if family in {
-    FAMILY_TREND_PULLBACK,
-    FAMILY_BREAKOUT_RETEST,
-    FAMILY_MOMENTUM_CONTINUATION,
-    FAMILY_TRENDLINE,
-  }:
-    return float(execution.trend.hard_entry_drift_pips)
-  if family in {
-    FAMILY_MAPPED_ZONE_REACTION,
-    FAMILY_KEY_LEVEL,
-    FAMILY_SUPPLY_DEMAND,
-    FAMILY_SESSION_LEVEL,
-  }:
-    return float(execution.mapped_zone.hard_entry_drift_pips)
-  return None
-_FAMILY_HARD_DRIFT_DEFAULT = {
-  FAMILY_RANGE_REVERSION: 20.0,
-  FAMILY_TREND_PULLBACK: 30.0,
-  FAMILY_BREAKOUT_RETEST: 30.0,
-  FAMILY_MOMENTUM_CONTINUATION: 30.0,
-  FAMILY_MAPPED_ZONE_REACTION: 20.0,
-  FAMILY_KEY_LEVEL: 20.0,
-  FAMILY_SUPPLY_DEMAND: 20.0,
-  FAMILY_SESSION_LEVEL: 20.0,
-  FAMILY_TRENDLINE: 30.0,
-}
+  if section is None:
+    return None
+  return float(getattr(getattr(cfg.execution, section), field))
 
 
 def max_entry_drift_pips(
@@ -1623,22 +1441,25 @@ def max_entry_drift_pips(
   if cfg is None:
     cfg = _default_runtime_cfg()
   policy = policy_for(strategy, cfg)
-  family = strategy_family(strategy)
+  execution = _profile_for(strategy).execution
   pip = pip_size if pip_size > 0 else 0.1
   atr_pips = (atr / pip) * policy.max_entry_drift_atr if atr > 0 else 0.0
   configured = policy.max_entry_drift_pips
   # Do NOT fold AUTO_TRADE_MAX_ENTRY_DISTANCE_PIPS into adaptive drift.
   # Adaptive drift is observation tolerance; executor distance is a separate
   # hard publication gate (see entry_distance.measure_entry_distance).
-  family_min = _family_min_drift_pips(cfg, family)
-  configured_minimum = 0.0 if family_min is None else family_min
+  section_min = _section_drift_pips(cfg, execution.drift_section, "min_entry_drift_pips")
+  configured_minimum = 0.0 if section_min is None else section_min
   adaptive_floor = max(configured, configured_minimum, atr_pips)
   room_cap = float("inf")
   if remaining_target_room_pips is not None:
     room_cap = max(0.0, remaining_target_room_pips)
-  family_hard = _family_hard_drift_pips(cfg, family)
-  default_hard_cap = _FAMILY_HARD_DRIFT_DEFAULT.get(family, configured)
-  hard_cap = default_hard_cap if family_hard is None else family_hard
+  section_hard = _section_drift_pips(cfg, execution.drift_section, "hard_entry_drift_pips")
+  default_hard_cap = (
+    configured if execution.hard_drift_default_pips is None
+    else execution.hard_drift_default_pips
+  )
+  hard_cap = default_hard_cap if section_hard is None else section_hard
   limit = min(adaptive_floor, room_cap, hard_cap)
   measured = {
     "configured_pips": round(configured, 3),

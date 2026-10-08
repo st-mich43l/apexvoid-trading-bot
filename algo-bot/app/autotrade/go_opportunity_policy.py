@@ -54,7 +54,8 @@ from app.autotrade.go_containment import (
 )
 from app.autotrade.go_plan_cancel import SOURCE_EXPIRED, SOURCE_INVALIDATED, plan_id_for_match, request_plan_cancel
 from app.autotrade.go_live_opportunities import go_live_opportunity_ids
-from app.autotrade.execution_policy import classify_tier, risk_multiplier_for_tier, strategy_family
+from app.autotrade.execution_policy import classify_tier, risk_multiplier_for_tier
+from app.autotrade.strategy_catalog import lookup_profile
 from app.autotrade.multi_match import deserialize_matches, serialize_matches, strategy_matches_key
 from app.autotrade.setup_lifecycle import (
   EXPIRED,
@@ -308,7 +309,10 @@ def build_strategy_match(
   # technical recomputation.
   confluence = len(reasons) if go_confluence is None else int(go_confluence.selected_stars)
   legacy = profile.legacy_strategy
-  family = strategy_family(legacy)
+  # Record-compatibility label only (TradePlan V8 / persisted events carry it);
+  # no decision reads it. See strategy_catalog.
+  profile_row = lookup_profile(legacy)
+  family = profile_row.legacy_family_label if profile_row is not None else "unknown"
   tier = classify_tier(confluence=confluence, strategy=legacy)
   risk_multiplier = risk_multiplier_for_tier(tier)
   prices = [t.price.price for t in payload.targets]

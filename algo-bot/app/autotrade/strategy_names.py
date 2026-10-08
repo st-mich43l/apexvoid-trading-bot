@@ -10,22 +10,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 
-CANONICAL_FAMILY_REACTION = "reaction"
-CANONICAL_FAMILY_ZONE = "zone"
-CANONICAL_FAMILY_LIQUIDITY = "liquidity"
-CANONICAL_FAMILY_RANGE = "range"
-CANONICAL_FAMILY_SCALP = "scalp"
-CANONICAL_FAMILY_BREAKOUT_RETEST = "breakout_retest"
-CANONICAL_FAMILY_MOMENTUM = "momentum_continuation"
-CANONICAL_FAMILY_TREND_PULLBACK = "trend_pullback"
-CANONICAL_FAMILY_UNKNOWN = "unknown"
-
 # Detector IDs are kept here as strings to avoid importing the analysis
 # module (which would create an analysis/configuration import cycle).
 @dataclass(frozen=True)
 class StrategyName:
   canonical: str
-  family: str
   detector_id: str | None
   aliases: frozenset[str]
   retired: bool = False
@@ -33,7 +22,6 @@ class StrategyName:
 
 def _name(
   canonical: str,
-  family: str,
   detector_id: str | None = None,
   *,
   aliases: tuple[str, ...] = (),
@@ -41,7 +29,6 @@ def _name(
 ) -> StrategyName:
   return StrategyName(
     canonical=canonical,
-    family=family,
     detector_id=detector_id,
     aliases=frozenset(alias.casefold() for alias in aliases),
     retired=retired,
@@ -86,50 +73,50 @@ GOLDEN_FIBO = "Golden Fibo"
 
 
 STRATEGY_NAMES: tuple[StrategyName, ...] = (
-  _name(KEY_LEVEL, CANONICAL_FAMILY_REACTION, "key_level_reaction", aliases=("key-level", "key level reaction")),
-  _name(CONFLUENCE_ZONE, CANONICAL_FAMILY_ZONE, "confluence_zone_reaction", aliases=("confluence", "confulence")),
-  _name(SUPPLY_DEMAND, CANONICAL_FAMILY_ZONE, "supply_demand_technique_reaction", aliases=("supply demand reaction", "supply", "demand")),
-  _name(ORDER_BLOCK, CANONICAL_FAMILY_ZONE, "order_block_technique_reaction", aliases=("order block reaction", "ob")),
-  _name(FVG, CANONICAL_FAMILY_ZONE, "fvg_technique_reaction", aliases=("fvg reaction",)),
-  _name(IFVG, CANONICAL_FAMILY_ZONE, "ifvg_technique_reaction", aliases=("ifvg reaction",)),
-  _name(CRT, CANONICAL_FAMILY_ZONE, "crt_technique_reaction", aliases=("crt reaction",)),
-  _name(DEMAND_ZONE_REACTION, CANONICAL_FAMILY_ZONE, retired=True),
-  _name(SUPPLY_ZONE_REACTION, CANONICAL_FAMILY_ZONE, retired=True),
-  _name(FLIP_ZONE, CANONICAL_FAMILY_ZONE, "flip_demand_zone_reaction", aliases=("flip-zone",)),
-  _name(SESSION_LEVEL, CANONICAL_FAMILY_REACTION, "session_level_reaction", aliases=("session-level", "session level reaction")),
-  _name(TRENDLINE, CANONICAL_FAMILY_REACTION, "trendline_reaction", aliases=("trendline reaction",)),
-  _name(RANGE_EDGE_SCALP, CANONICAL_FAMILY_RANGE, "range_edge_scalp"),
-  _name(BOX_BREAKOUT, CANONICAL_FAMILY_BREAKOUT_RETEST, "box_breakout"),
+  _name(KEY_LEVEL, "key_level_reaction", aliases=("key-level", "key level reaction")),
+  _name(CONFLUENCE_ZONE, "confluence_zone_reaction", aliases=("confluence", "confulence")),
+  _name(SUPPLY_DEMAND, "supply_demand_technique_reaction", aliases=("supply demand reaction", "supply", "demand")),
+  _name(ORDER_BLOCK, "order_block_technique_reaction", aliases=("order block reaction", "ob")),
+  _name(FVG, "fvg_technique_reaction", aliases=("fvg reaction",)),
+  _name(IFVG, "ifvg_technique_reaction", aliases=("ifvg reaction",)),
+  _name(CRT, "crt_technique_reaction", aliases=("crt reaction",)),
+  _name(DEMAND_ZONE_REACTION, retired=True),
+  _name(SUPPLY_ZONE_REACTION, retired=True),
+  _name(FLIP_ZONE, "flip_demand_zone_reaction", aliases=("flip-zone",)),
+  _name(SESSION_LEVEL, "session_level_reaction", aliases=("session-level", "session level reaction")),
+  _name(TRENDLINE, "trendline_reaction", aliases=("trendline reaction",)),
+  _name(RANGE_EDGE_SCALP, "range_edge_scalp"),
+  _name(BOX_BREAKOUT, "box_breakout"),
   # Independent M5 structural thesis restored by the Go analysis engine.
   # Box Breakout and Breakout Retest Scalp remain separate strategies.
-  _name(BREAK_AND_RETEST, CANONICAL_FAMILY_BREAKOUT_RETEST),
-  _name(TREND_PULLBACK, CANONICAL_FAMILY_TREND_PULLBACK, retired=True),
-  _name(MOMENTUM_RIDE, CANONICAL_FAMILY_MOMENTUM, "momentum_ride"),
-  _name(SNAP_BACK, CANONICAL_FAMILY_LIQUIDITY, "snap_back"),
+  _name(BREAK_AND_RETEST),
+  _name(TREND_PULLBACK, retired=True),
+  _name(MOMENTUM_RIDE, "momentum_ride"),
+  _name(SNAP_BACK, "snap_back"),
   # Retired automatic thesis: Range Edge and Snap-Back own its former range
   # reversion roles without a second detector competing for the same move.
-  _name(FADE_SCALP, CANONICAL_FAMILY_RANGE, retired=True),
+  _name(FADE_SCALP, retired=True),
   # Legacy plan/report names.  They remain resolvable but are emitted by no
   # current detector, so they must not be mistaken for live sources.
-  _name(ZONE_REACTION, CANONICAL_FAMILY_ZONE, retired=True),
-  _name(DEMAND_ZONE, CANONICAL_FAMILY_ZONE, retired=True),
-  _name(SUPPLY_ZONE, CANONICAL_FAMILY_ZONE, retired=True),
-  _name(RANGE_BOX_SCALP, CANONICAL_FAMILY_RANGE, retired=True),
-  _name(ONE_SIDED_RANGE_REACTION, CANONICAL_FAMILY_RANGE, retired=True),
-  _name(CHOP_ZONE_REACTION, CANONICAL_FAMILY_RANGE, retired=True),
+  _name(ZONE_REACTION, retired=True),
+  _name(DEMAND_ZONE, retired=True),
+  _name(SUPPLY_ZONE, retired=True),
+  _name(RANGE_BOX_SCALP, retired=True),
+  _name(ONE_SIDED_RANGE_REACTION, retired=True),
+  _name(CHOP_ZONE_REACTION, retired=True),
   # No longer retired: the reviewed Go liquidity_sweep adapter
   # (go_opportunity_policy.REVIEWED_SCOPES) now publishes live matches under
   # exactly this display name, distinct from the still-live Python "Fade
-  # Scalp" M1 technique below (different execution_family: liquidity_reversal
-  # vs range_reversion).
-  _name(LIQUIDITY_SWEEP, CANONICAL_FAMILY_LIQUIDITY, "go:liquidity_sweep"),
-  _name(BREAKOUT_CONTINUATION, CANONICAL_FAMILY_MOMENTUM, retired=True),
-  _name(MAPPED_ZONE_REACTION, CANONICAL_FAMILY_UNKNOWN, retired=True),
-  _name(RANGE_SWEEP_SCALP, CANONICAL_FAMILY_SCALP, aliases=("range sweep", "hfs range sweep")),
-  _name(IMPULSE_PULLBACK_SCALP, CANONICAL_FAMILY_SCALP, aliases=("impulse pullback", "hfs impulse pullback")),
-  _name(BREAKOUT_RETEST_SCALP, CANONICAL_FAMILY_SCALP, aliases=("breakout retest", "breakout-retest")),
-  _name(MOMENTUM_CHASE_SCALP, CANONICAL_FAMILY_SCALP, aliases=("momentum", "hfs momentum chase"), retired=True),
-  _name(GOLDEN_FIBO, CANONICAL_FAMILY_UNKNOWN, aliases=("golden-fibo",), retired=True),
+  # Scalp" M1 technique below (a separate strategy with its own execution
+  # profile).
+  _name(LIQUIDITY_SWEEP, "go:liquidity_sweep"),
+  _name(BREAKOUT_CONTINUATION, retired=True),
+  _name(MAPPED_ZONE_REACTION, retired=True),
+  _name(RANGE_SWEEP_SCALP, aliases=("range sweep", "hfs range sweep")),
+  _name(IMPULSE_PULLBACK_SCALP, aliases=("impulse pullback", "hfs impulse pullback")),
+  _name(BREAKOUT_RETEST_SCALP, aliases=("breakout retest", "breakout-retest")),
+  _name(MOMENTUM_CHASE_SCALP, aliases=("momentum", "hfs momentum chase"), retired=True),
+  _name(GOLDEN_FIBO, aliases=("golden-fibo",), retired=True),
 )
 
 
@@ -182,9 +169,3 @@ def resolve_strategy(raw: str | None) -> StrategyName | None:
     None,
   ) or BY_ALIAS.get(key)
 
-
-def names_for_family(family: str, *, include_retired: bool = True) -> frozenset[str]:
-  return frozenset(
-    entry.canonical for entry in STRATEGY_NAMES
-    if entry.family == family and (include_retired or not entry.retired)
-  )
