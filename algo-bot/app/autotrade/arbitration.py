@@ -17,6 +17,7 @@ No strategy, family or source is favoured.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from typing import Literal
 
@@ -122,13 +123,27 @@ class ArbitrationResult:
   thesis_losers: dict[str, str] = field(default_factory=dict)
 
 
+def _score(value: float | None) -> float:
+  """A comparable score: None and non-finite values are unavailable (zero).
+
+  Sorting with a NaN key is not a total order, so one NaN would make the winner depend
+  on the order intents were delivered in (24 delivery orders of four intents gave 8
+  different results). Upstream validation already rejects a non-finite
+  ``quality_overall``; this keeps the comparison itself deterministic for every input.
+  """
+  if value is None:
+    return 0.0
+  number = float(value)
+  return number if math.isfinite(number) else 0.0
+
+
 def _rank(intent: ExecutionIntent) -> tuple:
   return (
     0 if intent.executable_now else 1,
-    -(intent.quality_overall or 0.0),
+    -_score(intent.quality_overall),
     -intent.confluence,
-    -(intent.structural_quality or 0.0),
-    -intent.freshness,
+    -_score(intent.structural_quality),
+    -_score(intent.freshness),
     intent.intent_id,
   )
 
@@ -197,7 +212,7 @@ def arbitrate_execution_intents(
   top = decision_pool[0]
   opposing = [item for item in decision_pool if item.direction != top.direction]
   if opposing:
-    gap = (top.quality_overall or 0.0) - (opposing[0].quality_overall or 0.0)
+    gap = _score(top.quality_overall) - _score(opposing[0].quality_overall)
     if gap < float(conflict_margin_quality):
       aligned_directions = {
         item.direction
