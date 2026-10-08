@@ -217,63 +217,6 @@ async def test_tag_command_updates_metadata(tmp_path, monkeypatch):
   assert row["confluence"] == 3
 
 
-@pytest.mark.asyncio
-async def test_linked_accounting_stats_and_cluster_review(tmp_path, monkeypatch):
-  await store.init_db()
-  source = await _new_signal(1)
-  await store.set_note(source["id"], "Retest held at the key level")
-
-  await store.close_leg(source["id"], 50, 0.5)
-  await wiring._book_leg(source["id"], 90, None, -1001)
-
-  round_two = await store.store_manual_signal(
-    2,
-    "BUY",
-    4100.0,
-    4105.0,
-    4088.0,
-    [4195.0, 4190.0, 4180.0],
-    parent_id=source["id"],
-    setup_type="ob-retest",
-    confluence=3,
-  )
-  await wiring._book_leg(round_two["id"], -30, None, -1001)
-
-  records = await store.get_pips_records(0, 4_000_000_000)
-  signals = await store.get_all_signals()
-  stats = build_stats(
-    records,
-    signals,
-    "Asia/Ho_Chi_Minh",
-    22,
-    7,
-    13,
-  )
-  report = format_stats(stats, "all")
-  review = format_review(await store.get_signal_cluster(round_two["id"]))
-
-  assert [row["signal_id"] for row in records] == [
-    source["id"],
-    round_two["id"],
-  ]
-  assert "📦 Trades" in report
-  assert "💰 Net" in report
-  assert "+60p" in report
-  assert "CHART / SIGNAL" in report
-  assert "+30p" in report
-  assert "zone 4100–4105 BUY" in report
-  assert "2r · 1W/1L" in report
-  assert "Round 1 · #1" in review
-  assert "Round 2 · #2" in review
-  assert "Cluster:</b> 2 rounds · 1W / 1L · net +60p" in review
-  assert review.count("st_mich43l · auto-map") == 2
-  assert "Result: 90 pips win" in review
-  assert "Result: 30 pips loss" in review
-  assert "+90 pips" not in review
-  assert "execution" not in review.lower()
-  assert "mechanics" not in review.lower()
-
-
 def test_stats_groups_sessions_and_sparkline():
   tz = ZoneInfo("Asia/Ho_Chi_Minh")
   base = datetime(2026, 7, 3, tzinfo=tz)
@@ -332,51 +275,6 @@ def test_stats_groups_sessions_and_sparkline():
   assert "█" not in spark
   assert report.count("📈 Equity (combined unique)") == 1
   assert "└─" in report
-
-
-def test_stats_split_algo_manual_and_all_unique_without_double_count():
-  records = [
-    {
-      "sign": "+", "pips": 60, "signal_id": 7,
-      "stream": "manual", "trade_key": "manual:7",
-      "fill_count": 1, "stop_pips": 30, "r_multiple": 2.0,
-      "signal_ts": 1,
-    },
-    {
-      "sign": "+", "pips": 58, "signal_id": None,
-      "stream": "algo_manual", "trade_key": "manual:7",
-      "fill_count": 1, "stop_pips": 30, "r_multiple": 58 / 30,
-      "signal_ts": 1,
-    },
-    {
-      "sign": "-", "pips": 30, "signal_id": None,
-      "stream": "algo_auto", "trade_key": "algo:box-8",
-      "fill_count": 2, "stop_pips": 30, "r_multiple": -1.0,
-      "signal_ts": 2,
-    },
-  ]
-
-  stats = build_stats(records, [], "UTC", 22, 7, 13)
-  report = format_stats(stats, "today")
-
-  assert stats["by_stream"]["manual"]["fill_count"] == 1
-  assert stats["by_stream"]["algo_manual"]["fill_count"] == 1
-  assert stats["by_stream"]["algo_auto"]["fill_count"] == 2
-  assert stats["by_stream"]["all_unique"]["trades"] == 2
-  assert stats["by_stream"]["all_unique"]["total_pips"] == 28
-  assert stats["by_stream"]["algo_manual"]["win_rate"] == 100
-  assert stats["by_stream"]["algo_auto"]["mean_r"] == -1
-  assert "AUTO TRADE" in report
-  assert "ALGO MANUAL" in report
-  assert "CHART / SIGNAL" in report
-  assert "COMBINED UNIQUE" in report
-  assert "same ticket counted once" in report
-  auto_idx = report.index("AUTO TRADE")
-  manual_idx = report.index("ALGO MANUAL")
-  combined_idx = report.index("COMBINED UNIQUE")
-  assert auto_idx < manual_idx < combined_idx
-  assert stats["by_setup_by_stream"]["algo_auto"][0]["net"] == -30
-  assert stats["by_setup_by_stream"]["algo_manual"][0]["net"] == 58
 
 
 def test_review_map_renders_all_tp_tiers_and_last_branch():

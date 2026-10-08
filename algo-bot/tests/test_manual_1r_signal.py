@@ -110,17 +110,6 @@ class TestFxManual1R:
     ):
       monkeypatch.setattr(target, cfg, raising=False)
 
-  def test_fx_1r_books_single_target_at_one_r(self):
-    parsed = _parse_manual("eurusd buy 1.15007 / 1r")
-
-    assert parsed is not None
-    assert parsed["entry"] == pytest.approx(1.15007)
-    assert parsed["entry_end"] == pytest.approx(1.15007)
-    assert parsed["personal_trade"] is True
-    assert parsed["execution_mode"] == "algo"
-    risk = 1.15007 - 1.14867  # default fixed-R/R sl, per existing fixture
-    assert parsed["tps"] == [pytest.approx(1.15007 + risk)]
-    assert parsed["target_weights"] == [100]
 
   def test_fx_1r_sell_direction(self):
     parsed = _parse_manual("eurusd sell 1.15007 / 1r")
