@@ -69,6 +69,15 @@ dated section after deployment.
   and scalp-lane notes deleted.
 
 ### Fixed
+- Manual Algo pips are measured from the group's DEEPEST fill again, the risk leg included
+  (owner, manual 10, 2026-10-08: a SELL zone 4138-4141 with three filled legs showed TP1
+  "+51" because it was measured from the first fill, 4138.01, instead of ~4141 for +80).
+  V8 `tp_booked` events carry that figure as `target_pips`; the handler ignored it and fell
+  back to the first-fill calculation. The terminal close now also takes the highest archived
+  target's pips when the executor sends no group blend, so a stop-out of the runners (the
+  risk leg included) after a hit target counts only the targets that were hit, never the
+  stop. Realized R uses the deepest fill derived from the same event. A plain stop-out with
+  no target is unchanged.
 - Manual Algo: TP2 was never announced when the exit filled a fraction of a pip short of
   the target (manual 9, 2026-10-08: the event reported 99 realized pips, was read as the
   already-booked TP1 and silently dropped). The ordinal now comes from the executor's own

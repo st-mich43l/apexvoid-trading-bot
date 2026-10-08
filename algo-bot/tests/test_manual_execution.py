@@ -807,6 +807,68 @@ async def test_tp2_is_announced_when_slippage_leaves_its_realized_pips_just_shor
   post.assert_awaited_once()
 
 
+_MANUAL_10 = {
+  "id": 10, "action": "SELL", "symbol": "XAU", "entry": 4138.0, "entry_end": 4141.0,
+  "sl": 4143.0, "tps": [4133.0, 4128.0, 4123.0, 4118.0], "broker_fill_price": 4138.01,
+}
+
+
+@pytest.mark.asyncio
+@pytest.mark.no_database
+async def test_a_target_is_measured_from_the_deepest_fill_not_the_first(monkeypatch):
+  """Manual 10 (2026-10-08): SELL 4138-4141, three legs filled, first fill 4138.01,
+  deepest (risk leg) 4141.0. TP1 at 4133 is +80 pips from the deepest fill; the
+  card read +51 because it was measured from the first fill."""
+  execute = AsyncMock(return_value={"action": "tp", "ok": True})
+  monkeypatch.setattr("app.signals.trade_ops._execute_close", execute)
+  monkeypatch.setattr("app.signals.trade_ops.post_result", AsyncMock())
+  monkeypatch.setattr(manual_execution, "get_manual_signal", AsyncMock(return_value=dict(_MANUAL_10)))
+
+  await manual_execution._handle_take_profit(
+    {"price": 4133.0, "target_pips": 80, "position_id": 42116127, "highest_booked_target_index": 0},
+    10,
+  )
+
+  assert execute.await_args.args[2] == 80
+  assert execute.await_args.kwargs["entry_price"] == pytest.approx(4141.0)
+  assert execute.await_args.kwargs["tp_number"] == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.no_database
+async def test_a_stop_out_after_a_target_closes_at_the_archived_target_pips(monkeypatch):
+  """Only targets that were hit count: the runners (risk leg included) stopped out
+  after TP1 close the signal at TP1's archived pips, never at a stop-derived figure."""
+  group = AsyncMock(return_value={"action": "close", "ok": True})
+  monkeypatch.setattr("app.signals.trade_ops._execute_group_close", group)
+  monkeypatch.setattr("app.signals.trade_ops.post_result", AsyncMock())
+  monkeypatch.setattr(manual_execution, "get_manual_signal", AsyncMock(return_value=dict(_MANUAL_10)))
+  monkeypatch.setattr(manual_execution, "_resolve_group_close_pips", AsyncMock(side_effect=lambda _sid, pips: round(pips)))
+
+  await manual_execution._handle_group_result(
+    {"type": "position_closed", "price": 4142.73, "remaining_volume": 0, "target_pips": 80},
+    10,
+  )
+
+  assert group.await_args.args[2] == 80
+  assert group.await_args.kwargs["entry_price"] == pytest.approx(4142.73 + 80 * 0.1)
+
+
+@pytest.mark.asyncio
+@pytest.mark.no_database
+async def test_a_plain_stop_out_with_no_target_still_measures_from_the_signals_fill(monkeypatch):
+  group = AsyncMock(return_value={"action": "close", "ok": True})
+  monkeypatch.setattr("app.signals.trade_ops._execute_group_close", group)
+  monkeypatch.setattr("app.signals.trade_ops.post_result", AsyncMock())
+  monkeypatch.setattr(manual_execution, "get_manual_signal", AsyncMock(return_value=dict(_MANUAL_10)))
+  monkeypatch.setattr(manual_execution, "_resolve_group_close_pips", AsyncMock(side_effect=lambda _sid, pips: round(pips)))
+
+  await manual_execution._handle_group_result({"type": "position_closed", "price": 4143.0, "remaining_volume": 0}, 10)
+
+  assert group.await_args.args[2] == -50                  # 4138.01 -> 4143.0
+  assert group.await_args.kwargs["entry_price"] is None
+
+
 @pytest.mark.no_database
 def test_the_executors_target_index_decides_the_ordinal_only_when_it_is_valid():
   sig = {"tps": [1.0, 2.0, 3.0]}
@@ -1206,8 +1268,9 @@ async def test_handle_event_position_closed_partial_close_uses_leg_fields_not_br
 async def test_handle_take_profit_falls_back_to_broker_fill_without_leg_pips(
   monkeypatch,
 ):
-  """Fallback path only: an event predating leg_realized_pips (e.g. mid-
-  deploy replay) still books using the stored broker_fill_price."""
+  """Fallback path only: an event with neither leg_realized_pips nor an archived
+  target_pips (e.g. mid-deploy replay) still books using the stored
+  broker_fill_price."""
   send = _mock_send(monkeypatch)
   sid = await _algo_signal()
   sig = await store.get_manual_signal(sid)
@@ -1218,7 +1281,7 @@ async def test_handle_take_profit_falls_back_to_broker_fill_without_leg_pips(
     "type": "tp_booked",
     "position_id": 555,
     "price": 4095.0,
-    "target_pips": 50,
+    "highest_booked_target_index": 0,
   }
   await manual_execution._handle_event(client, event, positions)
   # From fill 4104 → 4095 = +90 pips (zone-edge math would be +50).
