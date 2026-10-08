@@ -3,7 +3,8 @@
 Production 2026-10-08: the executor injected a third RISK leg (0.05 lot, stop -
 15 pips) that neither the plan nor the card showed, so the broker held more than
 the card said. The planner now owns the leg: ``entry.risk_leg`` in the plan, a
-"Risk leg" line on the card, and the executor places exactly that.
+executor places exactly that. The Auto Algo root card does not print the leg (owner
+2026-10-08).
 """
 
 from __future__ import annotations
@@ -17,10 +18,6 @@ import pytest
 
 from app.autotrade import risk_leg as risk_leg_module
 from app.autotrade.risk_leg import load_account_equity, plan_risk_leg
-from app.autotrade.setup_card import (
-  apply_forming_card_risk_leg,
-  format_risk_leg_line,
-)
 from app.autotrade.trade_plan import (
   ENTRY_TYPE_LIMIT_LADDER,
   ENTRY_TYPE_SINGLE_LIMIT,
@@ -145,16 +142,13 @@ async def test_equity_comes_from_the_executor_snapshot():
   assert await load_account_equity(Client("not json"), "XAU") is None
 
 
-def test_the_card_prints_the_risk_leg_under_the_entry_line_once():
-  line = format_risk_leg_line("XAU", 4130.01, 0.05, digits=2)
-  assert line == "🎯 Risk leg:  <b>4,130</b>  ·  0.05 lot"
-  card = "\n".join(["⚡️ Entry Zone:  <b>4,126 - 4,130</b>", "🛡 SL:     <b>4,132</b>  ·  risk <b>59 pips</b>"])
-  once = apply_forming_card_risk_leg(card, line)
-  assert once.splitlines() == ["⚡️ Entry Zone:  <b>4,126 - 4,130</b>", line, "🛡 SL:     <b>4,132</b>  ·  risk <b>59 pips</b>"]
-  assert apply_forming_card_risk_leg(once, line) == once
-  newer = format_risk_leg_line("XAU", 4130.51, 0.02, digits=2)
-  assert apply_forming_card_risk_leg(once, newer).count("Risk leg") == 1
-  assert apply_forming_card_risk_leg("no entry line here", line) == "no entry line here"
+def test_the_root_card_never_prints_the_risk_leg():
+  import app.autotrade.setup_card as setup_card
+
+  assert not hasattr(setup_card, "format_risk_leg_line")
+  assert "risk_leg" not in setup_card.format_plan_published_root_card.__code__.co_varnames
+  for name in ("apply_forming_card_risk_leg", "ensure_forming_card_risk_leg", "published_plan_risk_leg"):
+    assert not hasattr(setup_card, name)
 
 
 def test_module_exposes_the_leg_id_the_executor_keys_on():
