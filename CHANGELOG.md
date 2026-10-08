@@ -82,8 +82,9 @@ dated section after deployment.
   the target (manual 9, 2026-10-08: the event reported 99 realized pips, was read as the
   already-booked TP1 and silently dropped). The ordinal now comes from the executor's own
   `highest_booked_target_index`; realized pips are only the fallback for events without it.
-- Manual Algo: after TP1 the group's stop goes to the plan's deepest declared entry (deep
-  edge of the zone, filled or not), the pre-V8 rule, instead of the funded-economic stop
+- Manual Algo: after TP1 the group's stop goes to the zone's deep edge (SELL 4138-4141 -> 4141;
+  owner 2026-10-08, manual 10 stopped at 4142.73 because the deepest non-risk LEG was only
+  4139.5 and capped nothing), filled or not, the pre-V8 rule, instead of the funded-economic stop
   that landed at 4144.5 when only the shallow leg had filled (zone 4143-4146). The stop
   after TP2 stays the shallow entry. The funded-economic stop remains only as the fallback
   when no declared entry is known.
