@@ -101,6 +101,12 @@ type Settings struct {
 	// arbitration: a contained setup must not suppress or hold an executable one.
 	ObserveOnly map[opportunity.StrategyID]bool
 
+	// ObserveOnlyStructureTimeframes names the structure timeframes whose
+	// setups this instrument analyses but never trades
+	// (observe_only_structure_timeframes): a higher-timeframe extension stays
+	// out of arbitration and execution until it is validated.
+	ObserveOnlyStructureTimeframes map[market.Timeframe]bool
+
 	// OnEvaluation, when set, receives every strategy candidate produced by
 	// one closed bar after the engine has attached its technical/confluence
 	// context and before the lifecycle de-duplicates it. It observes only; it

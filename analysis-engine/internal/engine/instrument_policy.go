@@ -311,8 +311,29 @@ func applyScalpBreakoutRetest(settings *Settings, doc *config.Document) error {
 	return nil
 }
 
-// applyObserveOnly reads the instrument's observe-only strategy list.
+// applyObserveOnly reads the instrument's observe-only strategy list and its
+// observe-only structure timeframes.
 func applyObserveOnly(settings *Settings, doc *config.Document, symbol string) error {
+	settings.ObserveOnlyStructureTimeframes = nil
+	rawTimeframes, hasTimeframes, err := doc.InstrumentOverride(symbol, "execution", "go_opportunity", "observe_only_structure_timeframes")
+	if err != nil {
+		return err
+	}
+	if hasTimeframes {
+		items, isList := rawTimeframes.([]any)
+		if !isList {
+			return fmt.Errorf("instrument %s: observe_only_structure_timeframes must be a list, got %T", symbol, rawTimeframes)
+		}
+		settings.ObserveOnlyStructureTimeframes = make(map[market.Timeframe]bool, len(items))
+		for _, item := range items {
+			name, isString := item.(string)
+			tf := market.Timeframe(name)
+			if _, known := tf.Minutes(); !isString || !known {
+				return fmt.Errorf("instrument %s: observe_only_structure_timeframes names unknown timeframe %v", symbol, item)
+			}
+			settings.ObserveOnlyStructureTimeframes[tf] = true
+		}
+	}
 	raw, ok, err := doc.InstrumentOverride(symbol, "execution", "go_opportunity", "observe_only_strategies")
 	if err != nil {
 		return err
