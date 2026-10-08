@@ -83,13 +83,13 @@ public sealed partial class TradePlanRuntimeTests
     CurrentStop: 4142.0m, Legs: legs
   );
 
-  // Manual Algo's rule, now the executor's too: R divides the pips measured from the
-  // group's deepest fill (RISK leg included) by the risk from that same fill to the
-  // ORIGINAL stop, whatever the stop has since been trailed to.
+  // Manual Algo's rule, now the executor's too: R divides by the risk from the deepest
+  // NON-RISK fill to the ORIGINAL stop, whatever the stop has since been trailed to. The
+  // RISK leg never enters it (it still counts in the pips of an archived target).
   [Theory]
   [InlineData(false, false, 50.0)]   // only L1 4142.0 filled -> 4147.0 - 4142.0 = 50 pips
   [InlineData(true, false, 35.0)]    // L2 4143.5 is deeper -> 35 pips
-  [InlineData(true, true, 15.0)]     // RISK 4145.5 is deepest -> 15 pips
+  [InlineData(true, true, 35.0)]     // RISK 4145.5 is deepest overall but ignored -> still 35
   public void GroupRiskPipsIsMeasuredFromTheDeepestFillToTheOriginalStop(
     bool l2Filled, bool riskFilled, double expected
   )

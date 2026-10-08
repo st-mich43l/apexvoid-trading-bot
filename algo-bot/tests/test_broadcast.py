@@ -399,7 +399,7 @@ def test_vip_close_reports_losing_when_net_negative():
   }
 
   assert trade_ops.render_result(result, "XAU", "vip") == (
-    "🛑 #5 closed — losing -47 pips"
+    "🛑 #5 closed — losing 47 pips"
   )
   assert trade_ops.render_result(result, "XAU", "public") == (
     "🛑 closed — -47 pips loss"

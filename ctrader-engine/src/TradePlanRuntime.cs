@@ -5267,16 +5267,16 @@ public sealed partial class TradePlanRuntime(
   }
 
   /// <summary>
-  /// The pips of risk the result is measured against, always from the same fill the
-  /// result pips are measured from, to the ORIGINAL stop (never the trailed or
-  /// break-even stop). Realized R is pips / this - Manual Algo's convention
-  /// (trade_ops._achieved_rr).
+  /// The pips of risk realized R is divided by: from the group's fill to the ORIGINAL
+  /// stop (never the trailed or break-even stop). The RISK leg is never part of it -
+  /// it rests deliberately close to the stop, so counting it would shrink the
+  /// denominator and inflate R (Manual Algo's GroupDeepestEntryPrice excludes it
+  /// for the same reason; trade_ops._achieved_rr). It still counts in the pips of an
+  /// archived target, which is measured from the deepest fill including it.
   /// <list type="bullet">
-  /// <item>A result that archived a target is measured from the group's deepest fill,
-  /// RISK leg included (<see cref="GroupBestFillPrice"/>), so that is the risk basis.</item>
-  /// <item>A full stop with no target archived is measured from the weighted fill of
-  /// the non-RISK legs (<see cref="SignedExitPips"/>), so that is the risk basis, and a
-  /// clean stop-out reads -1R.</item>
+  /// <item>A target was archived: the deepest NON-RISK fill.</item>
+  /// <item>A full stop with no target: the weighted NON-RISK fill (the basis
+  /// <see cref="SignedExitPips"/> measures the loss from), so a clean stop-out reads -1R.</item>
   /// </list>
   /// </summary>
   internal static decimal? GroupRiskPips(
@@ -5287,11 +5287,24 @@ public sealed partial class TradePlanRuntime(
     {
       return null;
     }
-    decimal? fill = targetArchived
-      ? GroupBestFillPrice(plan, state)
-      : TradePlanJson.WeightedFillPrice(
-          (state.Legs ?? []).Where(leg => !IsReactionRiskLeg(leg.LegId)).ToArray()
-        ) ?? state.EntryFillPrice;
+    var legs = (state.Legs ?? []).Where(leg => !IsReactionRiskLeg(leg.LegId)).ToArray();
+    decimal? fill;
+    if (targetArchived)
+    {
+      var fills = legs
+        .Where(leg => leg.FillPrice is > 0 && leg.FilledVolume > 0)
+        .Select(leg => leg.FillPrice!.Value)
+        .ToArray();
+      fill = fills.Length == 0
+        ? state.EntryFillPrice
+        : string.Equals(plan.Analysis.Direction, "BUY", StringComparison.OrdinalIgnoreCase)
+          ? fills.Min()
+          : fills.Max();
+    }
+    else
+    {
+      fill = TradePlanJson.WeightedFillPrice(legs) ?? state.EntryFillPrice;
+    }
     if (fill is not decimal fillPrice || fillPrice <= 0m)
     {
       return null;

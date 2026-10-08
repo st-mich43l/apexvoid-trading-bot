@@ -159,7 +159,7 @@ def test_position_closed_near_stop_not_labeled_manual():
   compact = delivery._format_position_closed_compact_line(
     event, str(event["message"]),
   )
-  assert compact == "🛑 closed — losing -34 pips"
+  assert compact == "🛑 closed — losing 34 pips"
 
 
 def test_position_closed_break_even_message_uses_be_label():

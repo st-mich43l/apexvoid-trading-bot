@@ -619,7 +619,7 @@ async def test_realized_pips_recorded_beside_archived_target_result():
 
 
 @pytest.mark.asyncio
-async def test_journal_r_is_measured_from_the_deepest_fill_to_the_original_stop():
+async def test_journal_r_divides_by_the_deepest_non_risk_fills_risk():
   # Manual Algo's rule (trade_ops._achieved_rr): the result pips are measured from
   # the group's deepest fill, so the risk they are divided by is the distance from
   # that same fill to the original stop - not the fills' volume-weighted stop distance.
@@ -635,15 +635,15 @@ async def test_journal_r_is_measured_from_the_deepest_fill_to_the_original_stop(
     "type": "position_closed", "timestamp": 210, "position_id": 77041,
     "group_id": gid,
     "message": "PLAN CLOSED · highest TP archived TP1",
-    "target_pips": 85, "risk_pips": 15.0,
+    "target_pips": 85, "risk_pips": 35.0,
     "highest_booked_target_index": 0,
   })
   rows = await store.get_pips_records(0, 10**12)
   hit = [row for row in rows if row["trade_key"] == f"algo:{gid}"]
   assert len(hit) == 1
-  # 85 pips from the deepest fill over 15 pips of risk from that fill, not over the
-  # 50 pips the single 4142.0 fill alone carries.
-  assert hit[0]["r_multiple"] == pytest.approx(85.0 / 15.0)
+  # 85 pips (from the deepest fill, RISK leg included) over 35 pips of risk (deepest
+  # NON-RISK fill to the original stop; the RISK leg is never part of R).
+  assert hit[0]["r_multiple"] == pytest.approx(85.0 / 35.0)
 
   gid2 = "v8:no-risk-pips-yet"
   await store.record_auto_trade_event({

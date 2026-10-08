@@ -1764,7 +1764,7 @@ def _format_position_closed_compact_line(event: dict, message: str) -> str:
   if rounded > 0:
     return f"✅ {_MANAGE_CLOSE_MARKER} achieved +{rounded} pips{_wings(rounded)}{rr}"
   if rounded < 0:
-    return f"🛑 {_MANAGE_CLOSE_MARKER} losing {rounded} pips{rr}"
+    return f"🛑 {_MANAGE_CLOSE_MARKER} losing {abs(rounded)} pips{rr}"
   return f"➖ {_MANAGE_CLOSE_MARKER} breakeven{rr}"
 
 
