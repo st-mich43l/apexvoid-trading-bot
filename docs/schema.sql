@@ -97,7 +97,10 @@ CREATE TABLE IF NOT EXISTS auto_trade_results (
   utc_hour          INTEGER,
   symbol            TEXT             NOT NULL DEFAULT 'XAU',
   correction_source TEXT,
-  corrected_at      BIGINT
+  corrected_at      BIGINT,
+  -- Volume-weighted realized pips from the executor; result_pips is the
+  -- highest TP archived. NULL for rows closed before the executor sent it.
+  realized_pips     DOUBLE PRECISION
 );
 CREATE INDEX IF NOT EXISTS idx_auto_trade_results_closed
   ON auto_trade_results(closed_at);

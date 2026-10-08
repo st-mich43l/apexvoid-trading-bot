@@ -477,6 +477,11 @@ async def init_db() -> None:
       "ALTER TABLE auto_trade_results "
       "ADD COLUMN IF NOT EXISTS target_room_fallback_used BOOLEAN",
       "ALTER TABLE auto_trade_results ADD COLUMN IF NOT EXISTS exit_path TEXT",
+      # True volume-weighted realized pips from the executor. result_pips
+      # stays the highest-TP-archived figure (owner directive); this is the
+      # trade's actual result and is NULL for rows closed before it existed.
+      "ALTER TABLE auto_trade_results "
+      "ADD COLUMN IF NOT EXISTS realized_pips DOUBLE PRECISION",
     ):
       await db.execute(stmt)
 
@@ -1960,15 +1965,18 @@ async def _record_auto_trade_result(event: dict) -> None:
       booked_tp_count=booked_tp_count,
       break_even_applied=break_even_applied,
     )
+    realized_pips = _coerce_optional_float(event.get("volume_weighted_pips"))
     await db.execute(
       """
       INSERT INTO auto_trade_results (
         group_id, trade_key, trade_stream, result_pips, closed_at,
         setup_type, direction, session, killzone_name, stop_pips,
         booked_tp_count, utc_hour, symbol,
-        planned_reward_risk, target_room_fallback_used, exit_path
+        planned_reward_risk, target_room_fallback_used, exit_path,
+        realized_pips
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
+        $17
       )
       ON CONFLICT (group_id) DO UPDATE SET
         trade_key = excluded.trade_key,
@@ -1990,7 +1998,10 @@ async def _record_auto_trade_result(event: dict) -> None:
           excluded.target_room_fallback_used,
           auto_trade_results.target_room_fallback_used
         ),
-        exit_path = COALESCE(excluded.exit_path, auto_trade_results.exit_path)
+        exit_path = COALESCE(excluded.exit_path, auto_trade_results.exit_path),
+        realized_pips = COALESCE(
+          excluded.realized_pips, auto_trade_results.realized_pips
+        )
       WHERE auto_trade_results.correction_source IS NULL
       """,
       group_id, fill["trade_key"], fill["trade_stream"],
@@ -1999,6 +2010,7 @@ async def _record_auto_trade_result(event: dict) -> None:
       fill["stop_pips"], booked_tp_count, utc_hour,
       fill["symbol"] or "XAU",
       planned_reward_risk, target_room_fallback_used, exit_path,
+      realized_pips,
     )
 
 

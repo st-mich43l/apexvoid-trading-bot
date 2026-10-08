@@ -300,6 +300,11 @@ public sealed record AutoTradeEvent(
   decimal? PlannedRewardRisk = null,
   bool? TargetRoomFallbackUsed = null,
   string? ExitPath = null,
+  // The group's VOLUME-WEIGHTED realized pips at a terminal close: every target
+  // close and the stopped runners at their actual exit, over the whole filled
+  // volume. TargetPips is only the highest target ARCHIVED; this is the trade's
+  // result, and the two differ whenever runners exit below the archived target.
+  decimal? VolumeWeightedPips = null,
   int? ConfluenceV1 = null,
   int? ConfluenceV2 = null,
   double? ConfluenceV2Raw = null,
