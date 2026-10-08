@@ -24,7 +24,7 @@ func TestStrategyConfigsFromConfigEnablesTheCompleteCatalogForShadow(t *testing.
 	// Key Level, the Breakout Retest Scalp and Range Sweep were rebuilt as the
 	// profitable-week Python detectors and Liquidity Sweep on the frozen detector
 	// contract's evidence (Phase 1); every other strategy is still v2.
-	rebuilt := map[string]bool{"key_level": true, "session_level": true, "flip_zone": true, "box_breakout": true, "trendline": true, "scalp_breakout_retest": true, "range_sweep": true, "liquidity_sweep": true}
+	rebuilt := map[string]bool{"key_level": true, "session_level": true, "flip_zone": true, "box_breakout": true, "trendline": true, "impulse_pullback": true, "scalp_breakout_retest": true, "range_sweep": true, "liquidity_sweep": true}
 	for _, cfg := range configs {
 		want := "v2"
 		if rebuilt[string(cfg.ID)] {

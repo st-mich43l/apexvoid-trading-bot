@@ -79,13 +79,13 @@ def main():
   name = f"synthetic-xau-m1-capture-{SEED}.json"
   with open(os.path.join(ENGINE, "testdata", name), "w") as handle:
     json.dump(build(), handle, separators=(",", ":"))
-  cycles, breakouts, sweeps = lane.run(name)
+  cycles, breakouts, sweeps, impulses = lane.run(name)
   with open(os.path.join(ENGINE, "testdata", f"synthetic-scalp-oracle-{SEED}.json"), "w") as handle:
     json.dump({
       "oracle_commit": "a1c77584", "capture": name, "synthetic": True,
-      "cycles": cycles, "breakouts": breakouts, "range_sweeps": sweeps,
+      "cycles": cycles, "breakouts": breakouts, "range_sweeps": sweeps, "impulse_pullbacks": impulses,
     }, handle, separators=(",", ":"))
-  print(SEED, len(cycles), "cycles,", len(breakouts), "breakout,", len(sweeps), "range sweep")
+  print(SEED, len(cycles), "cycles,", len(breakouts), "breakout,", len(sweeps), "range sweep,", len(impulses), "impulse pullback")
 
 
 if __name__ == "__main__":

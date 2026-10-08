@@ -34,20 +34,21 @@ for key, value in {
   "POSTGRES_PASSWORD": "x",
 }.items():
   os.environ.setdefault(key, value)
-sys.path.insert(0, "/oracle/algo-bot")
+sys.path.insert(0, os.environ.get("ORACLE", "/oracle") + "/algo-bot")
 import pandas as pd
 
 from app.analysis.engine import AnalysisSettings, scalp_structure
 from app.runtime.instrument_config import instrument_runtime_view
 from app.runtime.price_identity import pip_price_digits
 from app.scalping.microstructure import build_micro_structure
-from app.scalping.strategies import discover_breakout_retest, discover_range_sweep
+from app.scalping.strategies import discover_breakout_retest, discover_impulse_pullback, discover_range_sweep
 from app.scalping.unified_context import build_scalp_context_and_micro, scalp_structure_payload
 
 ENGINE = os.environ.get("ENGINE_DIR", "/engine")
 CAPTURE = "replay-xau-m1-production-capture-20261006.json"
 OUT = os.path.join(ENGINE, "testdata/scalp-breakout-retest-oracle.json")
 OUT_RANGE_SWEEP = os.path.join(ENGINE, "testdata/range-sweep-oracle.json")
+OUT_IMPULSE = os.path.join(ENGINE, "testdata/impulse-pullback-oracle.json")
 MINUTES = {"M1": 1, "M5": 5, "M15": 15, "H1": 60}
 FIELDS = ("direction", "zone_low", "zone_high", "key_level", "invalidation", "target", "target_pips", "stop_pips",
           "source", "subtype", "quality", "confirmation_type", "break_time")
@@ -85,7 +86,7 @@ def run(capture):
   start = first
   while start > 0 and int(m1.index[start].timestamp()) % 300 != 0:
     start -= 1
-  context, cycles, opportunities, sweeps = None, [], [], []
+  context, cycles, opportunities, sweeps, impulses = None, [], [], [], []
   for i in range(start, len(m1)):
     bar_ts = int(m1.index[i].timestamp())
     price = float(m1["close"].iloc[i])
@@ -105,6 +106,16 @@ def run(capture):
     cycles.append(bar_ts)
     swept = discover_range_sweep(context, micro_m1, m1_window, cfg, pip_size=pip, now=bar_ts, spread_pips=0.0,
                                  idle_reasons=[], m5_df=m5_window, m5_micro=micro_m5)
+    pulled = discover_impulse_pullback(context, micro_m1, m1_window, cfg, pip_size=pip, now=bar_ts, spread_pips=0.0,
+                                       idle_reasons=[], m5_df=m5_window, m5_micro=micro_m5)
+    for opp in pulled:
+      impulses.append({
+        "bar": bar_ts, "direction": opp.direction, "zone_low": opp.zone_low, "zone_high": opp.zone_high,
+        "key_level": opp.key_level, "invalidation": opp.invalidation_price, "target": opp.expected_target_price,
+        "target_pips": opp.expected_target_pips, "stop_pips": opp.expected_stop_pips, "trigger_bar": opp.trigger_bar_ts,
+        "trigger_price": opp.trigger_price, "position": opp.location_position, "role": opp.key_level_role,
+        "level_kind": opp.measured.get("level_kind"), "retracement": opp.measured.get("retracement"),
+      })
     for opp in swept:
       sweeps.append({
         "bar": bar_ts, "direction": opp.direction, "zone_low": opp.zone_low, "zone_high": opp.zone_high,
@@ -121,11 +132,11 @@ def run(capture):
         "quality": v2.get("quality_score"), "confirmation_type": v2.get("confirmation_type"), "break_time": v2.get("break_time"),
       }
       opportunities.append({"bar": bar_ts, **{k: values[k] for k in FIELDS}})
-  return cycles, opportunities, sweeps
+  return cycles, opportunities, sweeps, impulses
 
 
 def main():
-  cycles, opportunities, sweeps = run(CAPTURE)
+  cycles, opportunities, sweeps, impulses = run(CAPTURE)
   golden = {
     "oracle_commit": "a1c77584",
     "oracle_description": (
@@ -146,6 +157,17 @@ def main():
   }
   with open(OUT_RANGE_SWEEP, "w") as handle:
     json.dump(range_golden, handle, separators=(",", ":"))
+  impulse_golden = {
+    "oracle_commit": "a1c77584",
+    "oracle_description": (
+      "Impulse Pullback Scalp as it ran at the end of the profitable week (14-18 Sep 2026): "
+      "discover_impulse_pullback driven as process_m1_bar drove it, spread 0."
+    ),
+    "capture": CAPTURE, "cycles": cycles, "opportunities": impulses,
+  }
+  with open(OUT_IMPULSE, "w") as handle:
+    json.dump(impulse_golden, handle, separators=(",", ":"))
+  print(len(impulses), "impulse pullback opportunities")
   print(len(cycles), "cycles,", len(opportunities), "breakout opportunities,", len(sweeps), "range sweep opportunities")
 
 
