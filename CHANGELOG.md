@@ -12,6 +12,16 @@ dated section after deployment.
 
 ## Unreleased
 
+### Fixed
+- The executor now reports the trade's true result. `position_closed` carries a new
+  `volume_weighted_pips` (pips already booked at target closes plus each leg's still-open
+  volume at its exit, over the whole filled volume) and the journal stores it as
+  `auto_trade_results.realized_pips`. Until now only the highest target reached was
+  recorded (`result_pips`, owner directive, unchanged), so a trade that booked TP1 on half
+  the volume and then stopped the runner at break-even was journaled at TP1's full pips and
+  no realized figure existed anywhere. `group_realized_pips`, `target_pips`, `result_pips`
+  and the cards are untouched; older rows have `realized_pips` NULL.
+
 ### Security
 - Execution containment is now enforced at plan admission as well as at match
   creation (`go_containment.py`), so a match stored before a containment change can

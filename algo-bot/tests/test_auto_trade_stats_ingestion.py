@@ -561,3 +561,58 @@ async def test_exit_path_and_planned_reward_risk_round_trip():
   assert hit2[0]["exit_path"] == "tp1_stop"
   assert hit2[0]["planned_reward_risk"] == pytest.approx(1.0)
   assert hit2[0]["target_room_fallback_used"] is True
+
+
+@pytest.mark.asyncio
+async def test_realized_pips_recorded_beside_archived_target_result():
+  # result_pips stays the highest TP archived (owner directive); the executor's
+  # volume-weighted figure is kept separately so a stopped runner is visible.
+  await store.init_db()
+  gid = "v8:realized-vs-archived"
+  await store.record_auto_trade_event({
+    "type": "order_filled",
+    "timestamp": 200,
+    "position_id": 77031,
+    "group_id": gid,
+    "candidate_id": gid,
+    "direction": "BUY",
+    "setup": "Trend Pullback",
+    "symbol": "XAU",
+    "price": 4000.0,
+    "stop_loss": 3995.0,
+    "volume": 800,
+  })
+  await store.record_auto_trade_event({
+    "type": "position_closed",
+    "timestamp": 210,
+    "position_id": 77031,
+    "group_id": gid,
+    "message": "PLAN CLOSED · highest TP archived TP1 · break-even",
+    "target_pips": 70,
+    "volume_weighted_pips": 35.0,
+    "break_even_applied": True,
+    "highest_booked_target_index": 0,
+  })
+  async with store._connect() as db:
+    row = await db.fetchrow(
+      "SELECT result_pips, realized_pips FROM auto_trade_results WHERE group_id = $1",
+      gid,
+    )
+  assert row["result_pips"] == pytest.approx(70.0)
+  assert row["realized_pips"] == pytest.approx(35.0)
+
+  # A later event without the field must not erase it; old events leave it NULL.
+  await store.record_auto_trade_event({
+    "type": "position_closed",
+    "timestamp": 211,
+    "position_id": 77031,
+    "group_id": gid,
+    "message": "PLAN CLOSED · highest TP archived TP1 · break-even",
+    "target_pips": 70,
+    "highest_booked_target_index": 0,
+  })
+  async with store._connect() as db:
+    kept = await db.fetchval(
+      "SELECT realized_pips FROM auto_trade_results WHERE group_id = $1", gid
+    )
+  assert kept == pytest.approx(35.0)

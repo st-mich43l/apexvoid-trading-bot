@@ -2822,6 +2822,15 @@ public sealed partial class TradePlanRuntimeTests
     Assert.Equal("stop_loss_or_take_profit", closed.ReasonCode);
     Assert.Contains("highest TP archived TP1", closed.Message, StringComparison.OrdinalIgnoreCase);
     Assert.Equal(4089.06m, closed.Price);
+    // Realized result, not the archived TP1: half the volume banked TP1 and
+    // the runner stopped at ~break-even, so the volume-weighted result is
+    // about half of TP1's pips - far below the archived (TP1) number.
+    Assert.NotNull(closed.VolumeWeightedPips);
+    Assert.InRange(
+      closed.VolumeWeightedPips!.Value,
+      closed.TargetPips!.Value * 0.3m,
+      closed.TargetPips.Value * 0.7m
+    );
   }
 
   [Fact]
@@ -2891,6 +2900,9 @@ public sealed partial class TradePlanRuntimeTests
     Assert.Equal(1, closed.HighestBookedTargetIndex);
     Assert.Equal(2.0m, closed.PlannedRewardRisk);
     Assert.Equal(false, closed.TargetRoomFallbackUsed);
+    // Both targets closed in full: realized equals the archived (highest) result
+    // only because nothing stopped out below it.
+    Assert.Equal(closed.TargetPips, (int?)decimal.Round(closed.VolumeWeightedPips!.Value));
   }
 
   [Fact]
