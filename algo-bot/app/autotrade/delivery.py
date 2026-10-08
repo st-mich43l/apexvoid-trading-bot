@@ -1704,15 +1704,18 @@ _MANAGE_CLOSE_MARKER = "closed —"
 
 def _achieved_rr_suffix(event: dict, pips: float) -> str:
   """" · +1.1R" / " · -1.2R" - same convention as Manual Algo's own close
-  line (trade_ops._achieved_rr), computed from the plan's own risk
-  distance (event["stop_pips"], the entry-to-stop distance captured at
-  plan build) instead of reconstructing it from entry/original-stop like
-  Manual has to.
+  line (trade_ops._achieved_rr): the pips divided by the risk measured from the
+  group's DEEPEST fill (RISK leg included) to the ORIGINAL stop - the same fill the
+  pips themselves are measured from. The executor publishes that as
+  ``risk_pips``; ``stop_pips`` (the plan's entry-to-stop distance) is only the
+  fallback for an event that predates it.
   """
-  stop_pips = _event_float(event, "stop_pips")
-  if stop_pips is None or stop_pips <= 0:
+  risk_pips = _event_float(event, "risk_pips")
+  if risk_pips is None or risk_pips <= 0:
+    risk_pips = _event_float(event, "stop_pips")
+  if risk_pips is None or risk_pips <= 0:
     return ""
-  return f" · {pips / stop_pips:+.1f}R"
+  return f" · {pips / risk_pips:+.1f}R"
 
 
 def _format_position_closed_compact_line(event: dict, message: str) -> str:

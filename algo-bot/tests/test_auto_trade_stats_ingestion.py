@@ -616,3 +616,48 @@ async def test_realized_pips_recorded_beside_archived_target_result():
       "SELECT realized_pips FROM auto_trade_results WHERE group_id = $1", gid
     )
   assert kept == pytest.approx(35.0)
+
+
+@pytest.mark.asyncio
+async def test_journal_r_is_measured_from_the_deepest_fill_to_the_original_stop():
+  # Manual Algo's rule (trade_ops._achieved_rr): the result pips are measured from
+  # the group's deepest fill, so the risk they are divided by is the distance from
+  # that same fill to the original stop - not the fills' volume-weighted stop distance.
+  await store.init_db()
+  gid = "v8:deep-fill-r"
+  await store.record_auto_trade_event({
+    "type": "order_filled", "timestamp": 200, "position_id": 77041,
+    "group_id": gid, "candidate_id": gid, "direction": "SELL",
+    "setup": "Trend Pullback", "symbol": "XAU", "price": 4142.0,
+    "stop_loss": 4147.0, "volume": 800,
+  })
+  await store.record_auto_trade_event({
+    "type": "position_closed", "timestamp": 210, "position_id": 77041,
+    "group_id": gid,
+    "message": "PLAN CLOSED · highest TP archived TP1",
+    "target_pips": 85, "risk_pips": 15.0,
+    "highest_booked_target_index": 0,
+  })
+  rows = await store.get_pips_records(0, 10**12)
+  hit = [row for row in rows if row["trade_key"] == f"algo:{gid}"]
+  assert len(hit) == 1
+  # 85 pips from the deepest fill over 15 pips of risk from that fill, not over the
+  # 50 pips the single 4142.0 fill alone carries.
+  assert hit[0]["r_multiple"] == pytest.approx(85.0 / 15.0)
+
+  gid2 = "v8:no-risk-pips-yet"
+  await store.record_auto_trade_event({
+    "type": "order_filled", "timestamp": 300, "position_id": 77051,
+    "group_id": gid2, "candidate_id": gid2, "direction": "SELL",
+    "setup": "Trend Pullback", "symbol": "XAU", "price": 4142.0,
+    "stop_loss": 4147.0, "volume": 800,
+  })
+  await store.record_auto_trade_event({
+    "type": "position_closed", "timestamp": 310, "position_id": 77051,
+    "group_id": gid2,
+    "message": "PLAN CLOSED · highest TP archived TP1",
+    "target_pips": 50, "highest_booked_target_index": 0,
+  })
+  old = [r for r in await store.get_pips_records(0, 10**12) if r["trade_key"] == f"algo:{gid2}"]
+  # An event from before the executor sent risk_pips keeps the previous denominator.
+  assert old[0]["r_multiple"] == pytest.approx(50.0 / 50.0)

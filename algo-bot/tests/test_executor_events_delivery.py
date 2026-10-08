@@ -107,3 +107,22 @@ async def test_events_reach_telegram_as_replies_under_the_one_root_card(sql, mon
   card = await setup_card.load_forming_card(client, MATCH_ID)
   assert card is not None and int(card["message_id"]) == 4001                          # still the single root card: no second thread
   assert not any(t.strip().startswith("SETUP") for t in texts)                         # no duplicate "forming" presentation
+
+
+def test_close_line_r_uses_the_deepest_fill_risk_when_the_executor_sends_it():
+  from app.autotrade import delivery
+
+  event = {
+    "type": "position_closed", "target_pips": 85, "risk_pips": 15.0,
+    "stop_pips": 50.0, "highest_booked_target_index": 0,
+  }
+  line = delivery._format_position_closed_compact_line(
+    event, "PLAN CLOSED · highest TP archived TP1",
+  )
+  assert "+85 pips" in line and "+5.7R" in line
+  # Without risk_pips the plan's stop distance is the fallback, as before.
+  del event["risk_pips"]
+  fallback = delivery._format_position_closed_compact_line(
+    event, "PLAN CLOSED · highest TP archived TP1",
+  )
+  assert "+1.7R" in fallback
