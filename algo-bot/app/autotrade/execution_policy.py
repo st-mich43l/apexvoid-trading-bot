@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from decimal import Decimal, ROUND_HALF_UP
 import math
 from types import SimpleNamespace
@@ -26,6 +26,7 @@ from app.autotrade.protective_stop import (
 )
 from app.autotrade.strategy_taxonomy import (
   is_m1_scalp_strategy,
+  is_xau_retest_ladder_strategy,
   is_reaction_strategy,
   is_scalp_strategy,
   is_technique_or_confluence,
@@ -454,6 +455,15 @@ def evaluate_execution_policy(
       {},
       None,
     )
+  retest_ladder = symbol.upper() in {"XAU", "XAUUSD"} and is_xau_retest_ladder_strategy(
+    policy.strategy
+  )
+  if retest_ladder:
+    # A level retest on gold scales in (shallow edge, then deeper) like the zone
+    # strategies; a thin retest band is widened by the ladder rule below.
+    policy = replace(
+      policy, order_type_preference="limit", entry_distribution="zone_scale",
+    )
   atr = float(getattr(match, "atr", 0.0) or 0.0)
   direction = str(getattr(match, "direction", "")).upper()
   go_origin = GO_ORIGIN_TAG in tuple(getattr(match, "tags", ()) or ())
@@ -580,6 +590,7 @@ def evaluate_execution_policy(
       SCALP_MICRO_CLIPS,
     )),
     manual_xau_ladder=manual_xau_ladder,
+    thin_zone_ladder=retest_ladder,
   )
   if not route_plan.valid:
     return ExecutionPolicyEvaluation(

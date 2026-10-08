@@ -26,6 +26,12 @@ BREAKOUT_RETEST_SCALP_STRATEGIES = frozenset({"Breakout Retest Scalp"})
 # Range Edge owns a confirmed zone, so a quote past its edge is a missed entry,
 # never a market chase at a price the card does not show (production 2026-10-08:
 # card 4,125-4,127, order at 4124.19, stopped out in 8 minutes).
+# XAU strategies that retest a level and so scale in like the zone strategies
+# (shallow at the near edge, deeper inside) instead of one market order. The
+# catalog keeps them market/single for FX, whose entry is one precise price.
+# Production 2026-10-08: a Break & Retest zone of 0.23 (4114.91-4115.14) was
+# entered as one market order and the card printed "Entry Zone 4,115 - 4,115".
+XAU_RETEST_LADDER_STRATEGIES = frozenset({"Break & Retest"})
 RETEST_ONLY_SCALP_STRATEGIES = BREAKOUT_RETEST_SCALP_STRATEGIES | frozenset(
   {"Range Edge Scalp"},
 )
@@ -59,6 +65,11 @@ def is_m1_scalp_strategy(name: str) -> bool:
 def is_breakout_retest_scalp_strategy(name: str) -> bool:
   """M1 breakout-retest scalps — enter inside the retest band only."""
   return str(name or "") in BREAKOUT_RETEST_SCALP_STRATEGIES
+
+
+def is_xau_retest_ladder_strategy(name: str) -> bool:
+  """Level-retest strategies that use the XAU shallow/deep ladder."""
+  return str(name or "") in XAU_RETEST_LADDER_STRATEGIES
 
 
 def is_retest_only_scalp_strategy(name: str) -> bool:

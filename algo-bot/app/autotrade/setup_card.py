@@ -412,6 +412,29 @@ def _is_targets_row(stripped: str) -> bool:
   )
 
 
+def format_plan_entry_line(
+  symbol: str, low: float, high: float, *, digits: int | None = None,
+) -> str:
+  """Entry line from the plan's own resting prices: a single price when both ends
+  print the same, else the span (never "4,115 - 4,115")."""
+  low_text = format_price(low, symbol, digits=digits)
+  if low_text == format_price(high, symbol, digits=digits):
+    return f"⚡️ Entry Price:  <b>{low_text}</b>"
+  return format_entry_line(symbol, low, high, digits=digits)
+
+
+def apply_forming_card_entry(text: str, entry_line: str) -> str:
+  """Replace the card's Entry line (zone or price) with ``entry_line``."""
+  if not text or not entry_line:
+    return text
+  lines = text.splitlines()
+  for index, line in enumerate(lines):
+    if line.strip().startswith("⚡️ Entry"):
+      lines[index] = entry_line
+      return "\n".join(lines)
+  return text
+
+
 def format_risk_leg_line(
   symbol: str, price: float, lots: float, *, digits: int | None = None,
 ) -> str:
@@ -1555,6 +1578,46 @@ async def edit_forming_card_targets(
   return True
 
 
+async def ensure_forming_card_entry(
+  client,
+  setup_id: str,
+  *,
+  edit_fn: EditFn,
+) -> bool:
+  """Print the real resting entry prices of a limit-ladder plan on the root card."""
+  span = await published_plan_entry_span(client, setup_id)
+  if span is None:
+    return False
+  card = await load_forming_card(client, setup_id)
+  if card is None or not card.get("text"):
+    return False
+  if int(card.get("message_id") or 0) <= 0:
+    return False
+  symbol = parse_forming_card_symbol(str(card["text"])) or "XAU"
+  line = format_plan_entry_line(
+    symbol, span[0], span[1], digits=card_price_digits(symbol),
+  )
+  text = apply_forming_card_entry(str(card["text"]), line)
+  if text == card["text"]:
+    return True
+  try:
+    await edit_fn(card["chat_id"], card["message_id"], text)
+  except TelegramBadRequest as exc:
+    if "message is not modified" not in str(exc).casefold():
+      log.info(
+        "forming card entry edit failed setup_id=%s error=%s", setup_id, exc,
+      )
+      return False
+  await save_forming_card(
+    client,
+    setup_id,
+    chat_id=card["chat_id"],
+    message_id=card["message_id"],
+    text=text,
+  )
+  return True
+
+
 async def ensure_forming_card_risk_leg(
   client,
   setup_id: str,
@@ -2021,6 +2084,7 @@ def format_plan_published_root_card(
   target_prices: tuple[float, ...] | None = None,
   risk_reference: float | None = None,
   risk_leg: Any = None,
+  entry_span: tuple[float, float] | None = None,
 ) -> str:
   """Root card after publish, in the shared Manual/Auto Algo card design
   below its own headline/status-slot/direction line.
@@ -2067,7 +2131,11 @@ def format_plan_published_root_card(
     "",
   ]
   card_digits = card_price_digits(symbol)
-  if match.entry_low is not None and match.entry_high is not None:
+  if entry_span is not None:
+    lines.append(format_plan_entry_line(
+      symbol, entry_span[0], entry_span[1], digits=card_digits,
+    ))
+  elif match.entry_low is not None and match.entry_high is not None:
     lines.append(
       format_entry_line(
         symbol, float(match.entry_low), float(match.entry_high),
@@ -2167,6 +2235,32 @@ async def published_plan_risk_reference(client, match_id: str) -> float | None:
   )
 
 
+async def published_plan_entry_span(
+  client, match_id: str,
+) -> tuple[float, float] | None:
+  """Low/high of the resting prices a published limit-ladder plan places.
+
+  Other entry types keep the structural zone on the card: a market leg's planned
+  price is only the quote at planning time, not a price the order waits at.
+  """
+  try:
+    from app.autotrade.setup_execution_aggregate import v8_plan_id
+    from app.autotrade.trade_plan import ENTRY_TYPE_LIMIT_LADDER
+    from app.autotrade.trade_plan_stream import read_trade_plan
+
+    plan = await read_trade_plan(client, v8_plan_id(match_id))
+    if plan is None or plan.entry.type != ENTRY_TYPE_LIMIT_LADDER:
+      return None
+    prices = [float(price) for price in plan.entry.entry_prices()]
+  except Exception:
+    log.exception(
+      "plan_published_root_card_entry_span_lookup_failed setup_id=%s", match_id,
+    )
+    return None
+  prices = [price for price in prices if math.isfinite(price)]
+  return (min(prices), max(prices)) if prices else None
+
+
 async def published_plan_risk_leg(client, match_id: str):
   """The published TradePlan's declared risk leg, or None."""
   try:
@@ -2252,6 +2346,7 @@ async def ensure_plan_published_root_card(
   risk_reference = await published_plan_risk_reference(client, match.match_id)
   target_prices = await published_plan_target_prices(client, match.match_id)
   risk_leg = await published_plan_risk_leg(client, match.match_id)
+  entry_span = await published_plan_entry_span(client, match.match_id)
 
   existing = await load_forming_card(client, match.match_id)
   had_live_card = (
@@ -2266,6 +2361,7 @@ async def ensure_plan_published_root_card(
       replacement = format_plan_published_root_card(
         match, stop_price=stop_price, target_prices=target_prices or None,
         risk_reference=risk_reference, risk_leg=risk_leg,
+        entry_span=entry_span,
       )
       existing_lines = existing_text.splitlines()
       upper_head = (
@@ -2319,6 +2415,9 @@ async def ensure_plan_published_root_card(
       target_prices=target_prices or None,
       edit_fn=resolved_edit,
     )
+    await ensure_forming_card_entry(
+      client, match.match_id, edit_fn=resolved_edit,
+    )
     await ensure_forming_card_risk_leg(
       client, match.match_id, edit_fn=resolved_edit,
     )
@@ -2329,7 +2428,7 @@ async def ensure_plan_published_root_card(
     match.match_id,
     format_plan_published_root_card(
       match, stop_price=stop_price, target_prices=target_prices or None,
-      risk_reference=risk_reference, risk_leg=risk_leg,
+      risk_reference=risk_reference, risk_leg=risk_leg, entry_span=entry_span,
     ),
     chat_id=int(owner_id),
     send_fn=resolved_send,
