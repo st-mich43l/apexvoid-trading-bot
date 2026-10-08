@@ -21,7 +21,6 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/snapback"
 	strategytrendline "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/trendline"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/techniquezone"
-	technicaltrendline "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/trendline"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/zone"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/test/legacyfixture"
 )
@@ -39,6 +38,19 @@ func cfg(id strategy.StrategyID, params map[string]any) strategy.Config {
 }
 
 func detectorParams(own map[string]any) map[string]any { return legacyfixture.Params(own) }
+
+func trendlineParams() map[string]any {
+	return detectorParams(map[string]any{
+		"minimum_validation_touches": 1.0, "chop_minimum_validation_touches": 2.0, "maximum_bars_since_last_touch": 30.0,
+		"chop_require_htf_aligned": true, "require_htf_aligned": false, "reject_exhausted": true,
+		"interaction_band_atr": 0.2, "close_violation_atr": 0.15, "approach_min_distance_atr": 0.1,
+		"invalidation_buffer_atr": .25, "expiry_hours": 4.0,
+	})
+}
+
+func boxBreakoutParams() map[string]any {
+	return detectorParams(map[string]any{"breakout_max_age_bars": 6.0, "invalidation_buffer_atr": .25, "expiry_hours": 4.0})
+}
 
 func rangeEdgeParams() map[string]any {
 	return detectorParams(map[string]any{"lookback_bars": 48.0, "minimum_touches": 2.0, "minimum_wick_rejections": 1.0, "break_closes": 2.0, "minimum_room_atr": .75, "invalidation_buffer_atr": .25, "expiry_hours": 4.0})
@@ -105,12 +117,15 @@ func TestStrategiesKnownQualifyingFixtures(t *testing.T) {
 		assertOne(t, s, ctx(map[market.Timeframe]*analysiscontext.TimeframeContext{market.M5: {Timeframe: market.M5, Candles: []market.Candle{bar(base, 100, 101, 99, 100)}, Zones: zone.ZoneState{Zones: []zone.Zone{{ID: "ifvg-1", Kind: zone.KindIFVG, Side: zone.Demand, Low: 99, High: 100, OriginTime: base - 300, Strength: .8, State: zone.StateFresh, Relevance: zone.Immediate}}}, Liquidity: liquidity.LiquidityState{Pools: []liquidity.Pool{{Side: liquidity.LiquidityBuySide, Low: 103, High: 104}}}}}))
 	})
 	t.Run("trendline", func(t *testing.T) {
-		s, err := strategytrendline.New(cfg(strategytrendline.ID, map[string]any{"interaction_band_atr": 0.2, "close_violation_atr": 0.15, "approach_min_distance_atr": 0.1, "maximum_bars_since_last_touch": 30.0, "reaction_lookback_bars": 3.0, "engulfing_minimum_range_atr": 0.5, "minimum_validation_touches": 2.0, "invalidation_buffer_atr": .25, "target_r": 2.0, "expiry_hours": 4.0}))
+		s, err := strategytrendline.New(cfg(strategytrendline.ID, trendlineParams()))
 		if err != nil {
 			t.Fatal(err)
 		}
-		line := technicaltrendline.Trendline{Kind: technicaltrendline.KindSupport, AnchorA: "a", AnchorB: "b", Intercept: 100, SpanBars: 2, ValidationTouches: []technicaltrendline.ValidationTouch{{Time: 1}, {Time: 2}}}
-		assertOne(t, s, ctx(map[market.Timeframe]*analysiscontext.TimeframeContext{market.M5: {Timeframe: market.M5, Candles: []market.Candle{bar(base-300, 102, 102.5, 101.5, 102), bar(base, 100, 100.5, 99.8, 100.2)}, Trendline: technicaltrendline.TrendlineState{Lines: []technicaltrendline.Trendline{line}}}}))
+		// The decision is the frozen trendline_reaction's, proven bar by bar in
+		// test/legacyparity; without a detector-contract frame nothing is published.
+		if got := s.Evaluate(ctx(map[market.Timeframe]*analysiscontext.TimeframeContext{market.M5: {Timeframe: market.M5, Candles: []market.Candle{bar(1, 102, 102.5, 101.5, 102), bar(2, 100, 100.5, 99.8, 100.2)}}})); len(got) != 0 {
+			t.Fatalf("trendline published without a detector frame: %+v", got)
+		}
 	})
 	t.Run("range_edge", func(t *testing.T) {
 		s, e := rangeedge.New(cfg(rangeedge.ID, rangeEdgeParams()))
@@ -155,12 +170,15 @@ func TestStrategiesKnownQualifyingFixtures(t *testing.T) {
 		}
 	})
 	t.Run("box_breakout", func(t *testing.T) {
-		s, e := boxbreakout.New(cfg(boxbreakout.ID, map[string]any{"box_bars": 5.0, "maximum_width_atr": 2.0, "retest_tolerance_atr": .2, "invalidation_buffer_atr": .25, "target_r": 2.0, "expiry_hours": 4.0}))
+		s, e := boxbreakout.New(cfg(boxbreakout.ID, boxBreakoutParams()))
 		if e != nil {
 			t.Fatal(e)
 		}
+		// Proven bar by bar against the frozen box_breakout in test/legacyparity.
 		bars := []market.Candle{bar(1, 100, 101, 100, 100.5), bar(2, 100.5, 101, 100, 100.4), bar(3, 100.4, 101, 100, 100.5), bar(4, 100.5, 101, 100, 100.4), bar(5, 100.4, 101, 100, 100.5), bar(6, 100.8, 102, 100.8, 101.5), bar(7, 101.4, 101.6, 100.9, 101.2)}
-		assertOne(t, s, ctx(map[market.Timeframe]*analysiscontext.TimeframeContext{market.M5: {Timeframe: market.M5, Candles: bars}}))
+		if got := s.Evaluate(ctx(map[market.Timeframe]*analysiscontext.TimeframeContext{market.M5: {Timeframe: market.M5, Candles: bars}})); len(got) != 0 {
+			t.Fatalf("box breakout published without a detector frame: %+v", got)
+		}
 	})
 	t.Run("impulse_pullback", func(t *testing.T) {
 		s, e := impulsepullback.New(cfg(impulsepullback.ID, map[string]any{"minimum_impulse_atr": 1.0, "minimum_pullback_fraction": .25, "maximum_pullback_fraction": .65, "invalidation_buffer_atr": .2, "target_r": 2.0, "expiry_hours": 2.0}))
@@ -169,35 +187,6 @@ func TestStrategiesKnownQualifyingFixtures(t *testing.T) {
 		}
 		assertOne(t, s, ctx(map[market.Timeframe]*analysiscontext.TimeframeContext{market.M5: {Timeframe: market.M5, Candles: []market.Candle{bar(1, 99, 100, 98.8, 99.5), bar(2, 100, 102, 100, 102), bar(3, 102, 102.2, 101.8, 102)}}, market.M1: {Timeframe: market.M1, Candles: []market.Candle{bar(4, 101.8, 102, 101.2, 101.4), bar(5, 101.4, 102.1, 101.3, 102.05)}}}))
 	})
-}
-
-func TestBreakoutRetestsRejectDeepFailedReentry(t *testing.T) {
-	box, err := boxbreakout.New(cfg(boxbreakout.ID, map[string]any{"box_bars": 5.0, "maximum_width_atr": 2.0, "retest_tolerance_atr": .2, "invalidation_buffer_atr": .25, "target_r": 2.0, "expiry_hours": 4.0}))
-	if err != nil {
-		t.Fatal(err)
-	}
-	boxBars := []market.Candle{bar(1, 100, 101, 100, 100.5), bar(2, 100.5, 101, 100, 100.4), bar(3, 100.4, 101, 100, 100.5), bar(4, 100.5, 101, 100, 100.4), bar(5, 100.4, 101, 100, 100.5), bar(6, 100.8, 102, 100.8, 101.5), bar(7, 100.5, 101.6, 99.5, 101.2)}
-	if got := box.Evaluate(ctx(map[market.Timeframe]*analysiscontext.TimeframeContext{market.M5: {Timeframe: market.M5, Candles: boxBars}})); len(got) != 0 {
-		t.Fatalf("box breakout accepted a deep failed retest: %+v", got)
-	}
-
-}
-
-func TestBreakoutRetestsAllowDelayedHoldBeforeRetest(t *testing.T) {
-	box, err := boxbreakout.New(cfg(boxbreakout.ID, map[string]any{"box_bars": 5.0, "retest_window_bars": 3.0, "maximum_width_atr": 2.0, "retest_tolerance_atr": .2, "invalidation_buffer_atr": .25, "target_r": 2.0, "expiry_hours": 4.0}))
-	if err != nil {
-		t.Fatal(err)
-	}
-	boxBars := []market.Candle{
-		bar(1, 100, 101, 100, 100.5), bar(2, 100.5, 101, 100, 100.4),
-		bar(3, 100.4, 101, 100, 100.5), bar(4, 100.5, 101, 100, 100.4),
-		bar(5, 100.4, 101, 100, 100.5), bar(6, 100.8, 102, 100.8, 101.5),
-		bar(7, 101.5, 102.1, 101.2, 101.7), bar(8, 101.4, 101.6, 100.95, 101.2),
-	}
-	if got := box.Evaluate(ctx(map[market.Timeframe]*analysiscontext.TimeframeContext{market.M5: {Timeframe: market.M5, Candles: boxBars}})); len(got) != 1 {
-		t.Fatalf("M5 breakout that held before a delayed retest must qualify, got %+v", got)
-	}
-
 }
 
 func TestIFVGDeduplicatesRepeatedCanonicalZone(t *testing.T) {

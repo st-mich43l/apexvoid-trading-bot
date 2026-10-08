@@ -1,148 +1,184 @@
-// Package trendline implements causal trendline reaction and reclaimed-break
-// setups over internal/trendline's immutable anchors and interaction state.
+// Package trendline publishes the frozen trendline_reaction (V2) decision: a
+// causally anchored line with forward validation, in good health, that the latest
+// closed bars reclaimed from the correct side, and that shows a confirmed
+// structural reaction within the shared confluence floor.
+//
+// The line's A/B anchors are immutable and its health (tentative, broken,
+// degraded, exhausted, stale) is judged on the frame's bounded window. A broken
+// line, a test without a reaction, or an entry outside the interaction band is
+// never published.
 package trendline
 
 import (
 	"fmt"
 	"math"
+	"sort"
 
 	analysiscontext "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/context"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategyutil"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/techniquezone"
 	technical "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/trendline"
 )
 
 const ID strategy.StrategyID = "trendline"
-const Version = "v2"
+const Version = "v3"
 
 type Strategy struct {
-	minimumTouches                        int
-	invalidationATR, targetR, expiryHours float64
-	fingerprint                           string
-	// Legacy Python trendline-V2 gates (config trendlines.*).
-	interactionBandATR, closeViolationATR, approachMinDistanceATR float64
-	maximumBarsSinceLastTouch                                     int
-	reaction                                                      strategyutil.ReactionConfig
+	minimumValidationTouches, chopMinimumValidationTouches, maximumBarsSinceLastTouch int
+	invalidationATR, expiryHours                                                      float64
+	interactionBandATR, closeViolationATR, approachMinDistanceATR                     float64
+	chopRequireHTFAligned, requireHTFAligned, rejectExhausted                         bool
+	legacy                                                                            strategyutil.LegacyDetectorSettings
+	fingerprint                                                                       string
 }
 
 func New(cfg strategy.Config) (strategy.Strategy, error) {
 	if cfg.ID != ID {
 		return nil, fmt.Errorf("trendline: wrong strategy ID %q", cfg.ID)
 	}
-	touches, err := strategyutil.Int(cfg.Parameters, "minimum_validation_touches")
-	if err != nil {
+	s := &Strategy{fingerprint: strategyutil.Fingerprint(string(cfg.ID), cfg.Version, cfg.Parameters)}
+	var err error
+	for key, dst := range map[string]*float64{
+		"invalidation_buffer_atr": &s.invalidationATR, "expiry_hours": &s.expiryHours,
+		"interaction_band_atr": &s.interactionBandATR, "close_violation_atr": &s.closeViolationATR,
+		"approach_min_distance_atr": &s.approachMinDistanceATR,
+	} {
+		if *dst, err = strategyutil.Float(cfg.Parameters, key); err != nil {
+			return nil, err
+		}
+	}
+	for key, dst := range map[string]*int{
+		"minimum_validation_touches": &s.minimumValidationTouches, "chop_minimum_validation_touches": &s.chopMinimumValidationTouches,
+		"maximum_bars_since_last_touch": &s.maximumBarsSinceLastTouch,
+	} {
+		if *dst, err = strategyutil.Int(cfg.Parameters, key); err != nil {
+			return nil, err
+		}
+	}
+	for key, dst := range map[string]*bool{
+		"chop_require_htf_aligned": &s.chopRequireHTFAligned, "require_htf_aligned": &s.requireHTFAligned, "reject_exhausted": &s.rejectExhausted,
+	} {
+		value, ok := cfg.Parameters[key].(bool)
+		if !ok {
+			return nil, fmt.Errorf("trendline: parameter %q must be boolean", key)
+		}
+		*dst = value
+	}
+	if s.legacy, err = strategyutil.ParseLegacyDetectorSettings(cfg.Parameters); err != nil {
 		return nil, err
 	}
-	invalid, err := strategyutil.Float(cfg.Parameters, "invalidation_buffer_atr")
-	if err != nil {
-		return nil, err
-	}
-	targetR, err := strategyutil.Float(cfg.Parameters, "target_r")
-	if err != nil {
-		return nil, err
-	}
-	expiry, err := strategyutil.Float(cfg.Parameters, "expiry_hours")
-	if err != nil {
-		return nil, err
-	}
-	band, err := strategyutil.Float(cfg.Parameters, "interaction_band_atr")
-	if err != nil {
-		return nil, err
-	}
-	closeViolation, err := strategyutil.Float(cfg.Parameters, "close_violation_atr")
-	if err != nil {
-		return nil, err
-	}
-	approach, err := strategyutil.Float(cfg.Parameters, "approach_min_distance_atr")
-	if err != nil {
-		return nil, err
-	}
-	maxBars, err := strategyutil.Int(cfg.Parameters, "maximum_bars_since_last_touch")
-	if err != nil {
-		return nil, err
-	}
-	reaction, err := strategyutil.ParseReactionConfig(cfg.Parameters)
-	if err != nil {
-		return nil, err
-	}
-	if touches < 1 || invalid <= 0 || targetR <= 0 || expiry <= 0 || band <= 0 || closeViolation <= 0 || approach < 0 || maxBars < 1 {
+	if s.minimumValidationTouches < 0 || s.invalidationATR <= 0 || s.expiryHours <= 0 || s.interactionBandATR <= 0 ||
+		s.closeViolationATR <= 0 || s.approachMinDistanceATR < 0 || s.maximumBarsSinceLastTouch < 1 {
 		return nil, fmt.Errorf("trendline: invalid parameters")
 	}
-	return &Strategy{
-		minimumTouches: touches, invalidationATR: invalid, targetR: targetR, expiryHours: expiry,
-		fingerprint:        strategyutil.Fingerprint(string(cfg.ID), cfg.Version, cfg.Parameters),
-		interactionBandATR: band, closeViolationATR: closeViolation, approachMinDistanceATR: approach,
-		maximumBarsSinceLastTouch: maxBars, reaction: reaction,
-	}, nil
+	return s, nil
 }
 
 func (s *Strategy) ID() strategy.StrategyID                { return ID }
 func (s *Strategy) RequiredTimeframes() []market.Timeframe { return []market.Timeframe{market.M5} }
 
+// Evaluate mirrors _trendline_reaction_v2: lines nearest to price first, each
+// gated on structure, then on the live interaction, then on a confirmed
+// reaction; the best-scored qualifying line (the first on a tie) is published.
 func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Candidate {
-	tf := ctx.Timeframes[market.M5]
-	bar, ok := strategyutil.LastBar(ctx, market.M5)
-	atr := ctx.Volatility.ATR
-	if tf == nil || !ok || atr <= 0 {
+	base, ok := strategyutil.NewLegacyDetectorForFrame(ctx, market.M5, s.legacy)
+	if !ok {
 		return nil
 	}
-	var out []opportunity.Candidate
-	for _, line := range tf.Trendline.Lines {
-		if !s.healthy(line, len(tf.Candles)) {
-			continue
-		}
-		interaction := technical.EvaluateInteraction(tf.Candles, line, atr, technical.Config{InteractionBandATR: s.interactionBandATR, CloseViolationATR: s.closeViolationATR, ApproachMinDistanceATR: s.approachMinDistanceATR})
+	bars := base.Frame.Bars
+	last := len(bars) - 1
+	band := math.Max(1e-9, s.interactionBandATR*math.Max(0, base.ATR))
+	lines := append([]technical.Trendline(nil), base.Frame.Trendlines...)
+	sort.SliceStable(lines, func(i, j int) bool {
+		return math.Abs(float64(technical.ValueAt(lines[i], last))-base.Price) < math.Abs(float64(technical.ValueAt(lines[j], last))-base.Price)
+	})
+	cfg := technical.Config{InteractionBandATR: s.interactionBandATR, CloseViolationATR: s.closeViolationATR, ApproachMinDistanceATR: s.approachMinDistanceATR}
+	var best *strategyutil.TechniqueDecision
+	for _, line := range lines {
 		direction := market.Buy
-		valid := interaction.State == technical.InteractionReclaimedSupport
+		side := "demand"
 		if line.Kind == technical.KindResistance {
-			direction, valid = market.Sell, interaction.State == technical.InteractionReclaimedResistance
-		}
-		if !valid {
+			direction, side = market.Sell, "supply"
+		} else if line.Kind != technical.KindSupport {
 			continue
 		}
-		entry := float64(interaction.LinePrice)
-		invalid := entry - s.invalidationATR*atr
-		if direction == market.Sell {
-			invalid = entry + s.invalidationATR*atr
+		d := base.WithDirection(direction)
+		if s.structurallyRejected(d, line, last) {
+			continue
 		}
-		risk := math.Abs(entry - invalid)
-		target := entry + s.targetR*risk
-		if direction == market.Sell {
-			target = entry - s.targetR*risk
+		interaction := technical.EvaluateInteraction(bars, line, base.ATR, cfg)
+		if interaction.State != technical.InteractionReclaimedSupport && interaction.State != technical.InteractionReclaimedResistance {
+			continue
 		}
-		candidate, err := strategyutil.Candidate(strategyutil.CandidateSpec{
-			ID: string(ID), Version: Version, SetupKey: fmt.Sprintf("trendline:%s:%s", line.AnchorA, line.AnchorB), Symbol: ctx.Symbol, Direction: direction,
-			EntryLow: float64(interaction.BandLow), EntryHigh: float64(interaction.BandHigh), Invalidation: invalid, InvalidationLabel: "trendline_close_violation",
-			Target: target, TargetLabel: "trendline_projection", Evidence: []string{"m5_trendline_causal_anchors", "m5_trendline_reclaimed"},
-			Quality:  opportunity.StrategyQuality{Overall: strategyutil.Clamp01(float64(len(line.ValidationTouches)) / 4), Components: map[string]float64{"validation_touches": strategyutil.Clamp01(float64(len(line.ValidationTouches)) / 4), "rejection": 1}},
-			FormedAt: bar.Time - int64(line.SpanBars)*300, ConfirmedAt: bar.Time, ExpiryHours: s.expiryHours, Fingerprint: s.fingerprint,
-		})
-		if err == nil {
-			out = append(out, candidate)
-			lineID := fmt.Sprintf("trendline:%s:%s", line.AnchorA, line.AnchorB)
-			if rc := strategyutil.ConfirmReaction(tf, lineID, direction, float64(interaction.BandLow), float64(interaction.BandHigh), atr, 0, s.reaction); rc != nil {
-				if confirmed, confirmErr := strategyutil.ConfirmedVariant(candidate, rc, lineID, candidate.FormedAt, s.expiryHours, "m5_trendline_reaction_confirmed"); confirmErr == nil {
-					out = append(out, confirmed)
-				}
+		conf := d.Reaction(float64(interaction.BandLow), float64(interaction.BandHigh), nil)
+		if conf == nil {
+			continue
+		}
+		linePrice := float64(interaction.LinePrice)
+		zone := techniquezone.Zone{Bottom: linePrice - band, Top: linePrice + band, Side: side, Source: "trendline", BreakIndex: -1}
+		if !d.EntryValid(zone) {
+			continue
+		}
+		touches := 2 + len(line.ValidationTouches)
+		factors := strategyutil.FactorsForConfirmation(strategyutil.ReactionFactors(conf.Type, d.HTFAligned(), touches), conf.Type)
+		low, high := float64(interaction.BandLow), float64(interaction.BandHigh)
+		result := d.Finish(linePrice, zone, factors, line.Kind.String(), &low, &high)
+		if result == nil {
+			continue
+		}
+		if best == nil || result.Stars > best.Result.Stars {
+			best = &strategyutil.TechniqueDecision{
+				Technique: "trendline", Direction: direction, Detector: d, Confirmation: conf, Result: result,
+				ID: fmt.Sprintf("trendline:%s:%s", line.AnchorA, line.AnchorB),
 			}
 		}
 	}
-	return out
+	candidate, ok := strategyutil.TechniqueCandidate(ctx, best, strategyutil.TechniqueSpec{
+		ID: string(ID), Version: Version, ZoneEvidence: "m5_trendline_causal_anchors", ConfirmedEvidence: "m5_trendline_reaction_confirmed",
+		InvalidationLabel: "trendline_close_violation", InvalidationBufferATR: s.invalidationATR, ExpiryHours: s.expiryHours, Fingerprint: s.fingerprint,
+		Target: func(dec *strategyutil.TechniqueDecision) (float64, string) {
+			// Two reward:risk beyond the entry, as the former strategy reported.
+			entry := dec.Result.Level
+			risk := math.Abs(entry - dec.Result.StructuralLow)
+			if dec.Direction == market.Sell {
+				risk = math.Abs(dec.Result.StructuralHigh - entry)
+				return entry - 2*risk, "trendline_projection"
+			}
+			return entry + 2*risk, "trendline_projection"
+		},
+	})
+	if !ok {
+		return nil
+	}
+	return []opportunity.Candidate{candidate}
 }
 
-// healthy is the legacy Python trendline-V2 structural gate: a line must have
-// forward validation, must not be tentative, broken, degraded or exhausted,
-// and must have been touched recently enough to still matter.
-func (s *Strategy) healthy(line technical.Trendline, candleCount int) bool {
-	switch line.State {
-	case technical.StateTentative, technical.StateBroken, technical.StateDegraded, technical.StateExhausted:
-		return false
+// structurallyRejected mirrors _trendline_v2_structural_rejection.
+func (s *Strategy) structurallyRejected(d *strategyutil.LegacyDetector, line technical.Trendline, last int) bool {
+	validations := len(line.ValidationTouches)
+	if line.State == technical.StateTentative || validations < s.minimumValidationTouches {
+		return true
 	}
-	if line.Exhausted || line.BrokenAt != nil || len(line.ValidationTouches) < s.minimumTouches {
-		return false
+	if line.State == technical.StateBroken || line.BrokenAt != nil || line.State == technical.StateDegraded {
+		return true
 	}
-	lastTouch := line.ValidationTouches[len(line.ValidationTouches)-1].BarIndex
-	return candleCount-1-lastTouch <= s.maximumBarsSinceLastTouch
+	if line.State == technical.StateExhausted || s.rejectExhausted && line.Exhausted {
+		return true
+	}
+	if validations > 0 && last-line.ValidationTouches[validations-1].BarIndex > s.maximumBarsSinceLastTouch {
+		return true
+	}
+	aligned := d.HTFAligned()
+	if s.requireHTFAligned && !aligned {
+		return true
+	}
+	if d.Frame.Regime.Kind == "chop" {
+		if validations < s.chopMinimumValidationTouches || s.chopRequireHTFAligned && !aligned {
+			return true
+		}
+	}
+	return false
 }
