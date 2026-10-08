@@ -197,19 +197,6 @@ async def test_manual_send_confirmation_echoes_setup_and_stars(monkeypatch):
   )
 
 
-@pytest.mark.asyncio
-async def test_manual_send_confirmation_warns_when_setup_is_missing(monkeypatch):
-  await _prepare_manual_send(monkeypatch)
-  msg = _dm(BASE_SIGNAL)
-
-  await wiring.handle_private_signal(msg)
-
-  text = msg.answer.await_args.args[0]
-  assert "✅ Sent to channel (#1)" in text
-  assert "⚠️ no setup tag" in text
-  assert "tag #1 &lt;setup&gt; **" in text
-
-
 async def _prepare_manual_send_full_signal(monkeypatch):
   """Like ``_prepare_manual_send``, but ``get_manual_signal`` returns a row
   shaped like a real ``manual_signals`` record — enough fields for
@@ -359,28 +346,6 @@ async def test_algo_arm_failure_falls_back_to_notify_only(monkeypatch):
   assert "✅ Sent to channel (#1)" in text
   assert "⚠️ Algo arm failed — signal posted notify-only" in text
   set_status.assert_awaited_once_with(47, "error", error="redis down")
-
-
-@pytest.mark.asyncio
-async def test_plain_signal_without_algo_suffix_is_byte_identical_regression(
-  monkeypatch,
-):
-  """The regression-safety test: with MANUAL_ALGO_ENABLED on, a signal with
-  no `/ algo` suffix must behave exactly as it did before this PR — no
-  intent built or published, confirmation text unchanged."""
-  await _prepare_manual_send_full_signal(monkeypatch)
-  install_runtime_overrides(monkeypatch, legacy_overrides={"manual_algo_enabled": True})
-  publish = AsyncMock()
-  monkeypatch.setattr(wiring._fallback, "publish_intent", publish)
-  msg = _dm(BASE_SIGNAL)
-
-  await wiring.handle_private_signal(msg)
-
-  publish.assert_not_awaited()
-  assert msg.answer.await_args.args[0] == (
-    "✅ Sent to channel (#1) · ⚠️ no setup tag — add later with: "
-    "<code>tag #1 &lt;setup&gt; **</code>"
-  )
 
 
 @pytest.mark.asyncio

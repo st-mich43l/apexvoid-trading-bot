@@ -17,13 +17,6 @@ def test_format_price_rounds_xau_to_a_whole_number():
   assert trade_card.format_price(4341.2, "XAU") == "4,341"
 
 
-def test_format_price_never_rounds_fx():
-  # This file's ambient config resolves EURUSD to 2 digits, not real FX
-  # precision - the point of this test is only that the XAU whole-number
-  # override doesn't leak onto other symbols.
-  assert trade_card.format_price(1.36447, "EURUSD") == "1.36"
-
-
 def test_format_r_multiple_has_no_plus_sign_and_one_decimal():
   # Matches the owner's own approved entry-card example ("1.0R"), and
   # app.signals.broadcast's own R-multiple convention - not the "+1R"

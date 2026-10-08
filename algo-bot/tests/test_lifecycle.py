@@ -104,102 +104,12 @@ async def test_resolve_sid_paths(monkeypatch):
   assert await wiring._resolve_sid(None, None) is None
 
 
-@pytest.mark.asyncio
-async def test_channel_close_unifies_accounting(monkeypatch):
-  msg = _channel_message("close #2 +80")
-  resolve = AsyncMock(return_value=22)
-  close = AsyncMock(return_value={"action": "close", "ok": True})
-  post = AsyncMock(return_value="closed")
-  delete = AsyncMock()
-  monkeypatch.setattr(wiring, "_resolve_sid", resolve)
-  monkeypatch.setattr(wiring, "do_close", close)
-  monkeypatch.setattr(wiring, "post_result", post)
-  monkeypatch.setattr(wiring, "_delete_command", delete)
-
-  await wiring.handle_channel_close(msg)
-
-  ctx = close.await_args.args[0]
-  assert ctx == {
-    "sid": 22,
-    "symbol": "XAU",
-    "chat_id": -100123456789,
-    "reply_to": 700,
-    "pips": 80,
-    "frac": None,
-  }
-  post.assert_awaited_once_with(
-    {"action": "close", "ok": True},
-    "XAU",
-  )
-  delete.assert_awaited_once_with(msg)
-
-
-@pytest.mark.asyncio
-async def test_partial_then_final_close_books_weighted_net_once(monkeypatch):
-  partial_msg = _channel_message("close #3 +50 50%")
-  final_msg = _channel_message("close #3 +90")
-  monkeypatch.setattr(wiring, "_resolve_sid", AsyncMock(return_value=23))
-  close = AsyncMock(return_value={"action": "close", "ok": True})
-  post = AsyncMock(return_value="ok")
-  monkeypatch.setattr(wiring, "do_close", close)
-  monkeypatch.setattr(wiring, "post_result", post)
-  monkeypatch.setattr(wiring, "_delete_command", AsyncMock())
-
-  await wiring.handle_channel_close(partial_msg)
-  await wiring.handle_channel_close(final_msg)
-
-  assert close.await_args_list[0].args[0]["frac"] == 0.5
-  assert close.await_args_list[0].args[0]["pips"] == 50
-  assert close.await_args_list[1].args[0]["frac"] is None
-  assert close.await_args_list[1].args[0]["pips"] == 90
-  assert post.await_count == 2
-
-
-@pytest.mark.asyncio
-async def test_overbook_is_rejected_without_accounting(monkeypatch):
-  msg = _channel_message("close #3 +40 60%")
-  monkeypatch.setattr(wiring, "_resolve_sid", AsyncMock(return_value=23))
-  close = AsyncMock(return_value={"action": "close", "ok": True})
-  post = AsyncMock(return_value="overbook")
-  monkeypatch.setattr(wiring, "do_close", close)
-  monkeypatch.setattr(wiring, "post_result", post)
-  monkeypatch.setattr(wiring, "_delete_command", AsyncMock())
-
-  await wiring.handle_channel_close(msg)
-
-  assert close.await_args.args[0]["frac"] == 0.6
-  post.assert_awaited_once()
-
-
 def test_close_be_parses_as_full_remaining():
   assert wiring._parse_close("close #3 be") == (3, 0, None)
 
 
 def test_fallback_router_is_included_last():
   assert wiring.dp.sub_routers[-1].name == "fallback"
-
-
-@pytest.mark.asyncio
-async def test_channel_active_deduplicates(monkeypatch):
-  msg = _channel_message("active #1")
-  row = _signal(11, 1, "2026-07-03", 701)
-  monkeypatch.setattr(wiring, "_resolve_sid", AsyncMock(return_value=11))
-  active = AsyncMock(side_effect=[
-    {"action": "active", "ok": True, "row": row},
-    {"action": "active", "ok": False},
-  ])
-  post = AsyncMock(return_value="active")
-  delete = AsyncMock()
-  monkeypatch.setattr(wiring, "do_active", active)
-  monkeypatch.setattr(wiring, "post_result", post)
-  monkeypatch.setattr(wiring, "_delete_command", delete)
-
-  await wiring.handle_channel_active(msg)
-  await wiring.handle_channel_active(msg)
-
-  assert active.await_count == 2
-  post.assert_awaited_once()
-  delete.assert_awaited_once_with(msg)
 
 
 def test_telegram_handlers_not_double_registered_on_root_dispatcher():

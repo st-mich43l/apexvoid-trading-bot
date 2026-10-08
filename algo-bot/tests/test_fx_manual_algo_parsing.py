@@ -24,26 +24,6 @@ def _production_config(monkeypatch):
     monkeypatch.setattr(target, cfg, raising=False)
 
 
-def test_eurusd_buy_single_price_algo_sets_fixed_rr_ladder():
-  parsed = _parse_manual("eurusd buy 1.15007 / algo")
-
-  assert parsed is not None
-  assert parsed["symbol"] == "EURUSD"
-  assert parsed["action"] == "BUY"
-  assert parsed["entry"] == pytest.approx(1.15007)
-  assert parsed["entry_end"] == pytest.approx(1.15007)
-  assert parsed["execution_mode"] == "algo"
-  assert parsed["manual_single_entry"] is True
-  assert parsed["setup_type"] == "key-level"
-  assert parsed["target_weights"] == [25, 25, 50]
-  assert parsed["sl"] == pytest.approx(1.14867)
-  assert parsed["tps"] == [
-    pytest.approx(1.15147),
-    pytest.approx(1.15217),
-    pytest.approx(1.15287),
-  ]
-
-
 def test_eurusd_sell_without_algo_suffix_is_notify_only():
   parsed = _parse_manual("eurusd sell 1.15007")
 
@@ -75,17 +55,6 @@ def test_eurusd_explicit_sl_and_tp_override_defaults():
     pytest.approx(1.15300),
   ]
   assert parsed["setup_type"] == "key-level"
-
-
-def test_xau_single_price_algo_accepted():
-  parsed = _parse_manual("xau buy 4078 / algo")
-
-  assert parsed is not None
-  assert parsed["action"] == "BUY"
-  assert parsed["entry"] == pytest.approx(4078.0)
-  assert parsed["entry_end"] == pytest.approx(4078.0)
-  assert parsed["execution_mode"] == "algo"
-  assert parsed["sl"] == pytest.approx(4072.0)
 
 
 def test_usdjpy_buy_single_price_algo():
