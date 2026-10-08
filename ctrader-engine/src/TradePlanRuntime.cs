@@ -1744,6 +1744,11 @@ public sealed partial class TradePlanRuntime(
     decimal? plannedRewardRisk = null;
     bool? targetRoomFallbackUsed = null;
     var isTerminalClose = type is "position_closed" or "group_result";
+    // R is always measured against the same fill the pips are: the group's
+    // deepest fill (RISK leg included) to the ORIGINAL stop - Manual Algo's rule.
+    var riskPips = isTerminalClose || type is "tp_booked" or "take_profit"
+      ? GroupRiskPips(plan, runtimeState, PipSizeFor(plan.Symbol), targetPips is not null)
+      : null;
     if (isTerminalClose)
     {
       breakEvenApplied = runtimeState?.BreakEvenApplied;
@@ -1789,6 +1794,7 @@ public sealed partial class TradePlanRuntime(
         BreakEvenApplied: breakEvenApplied,
         HighestBookedTargetIndex: bookedIndex,
         VolumeWeightedPips: volumeWeightedPips,
+        RiskPips: riskPips,
         TargetsTotal: plan.Targets.Count,
         PlannedRewardRisk: plannedRewardRisk,
         TargetRoomFallbackUsed: targetRoomFallbackUsed,
@@ -5258,6 +5264,53 @@ public sealed partial class TradePlanRuntime(
     )
       ? fills.Min()
       : fills.Max();
+  }
+
+  /// <summary>
+  /// The pips of risk realized R is divided by: from the group's fill to the ORIGINAL
+  /// stop (never the trailed or break-even stop). The RISK leg is never part of it -
+  /// it rests deliberately close to the stop, so counting it would shrink the
+  /// denominator and inflate R (Manual Algo's GroupDeepestEntryPrice excludes it
+  /// for the same reason; trade_ops._achieved_rr). It still counts in the pips of an
+  /// archived target, which is measured from the deepest fill including it.
+  /// <list type="bullet">
+  /// <item>A target was archived: the deepest NON-RISK fill.</item>
+  /// <item>A full stop with no target: the weighted NON-RISK fill (the basis
+  /// <see cref="SignedExitPips"/> measures the loss from), so a clean stop-out reads -1R.</item>
+  /// </list>
+  /// </summary>
+  internal static decimal? GroupRiskPips(
+    TradePlan plan, TradePlanRuntimeState? state, decimal pipSize, bool targetArchived
+  )
+  {
+    if (state is null || plan.Stop.Price <= 0m || pipSize <= 0m)
+    {
+      return null;
+    }
+    var legs = (state.Legs ?? []).Where(leg => !IsReactionRiskLeg(leg.LegId)).ToArray();
+    decimal? fill;
+    if (targetArchived)
+    {
+      var fills = legs
+        .Where(leg => leg.FillPrice is > 0 && leg.FilledVolume > 0)
+        .Select(leg => leg.FillPrice!.Value)
+        .ToArray();
+      fill = fills.Length == 0
+        ? state.EntryFillPrice
+        : string.Equals(plan.Analysis.Direction, "BUY", StringComparison.OrdinalIgnoreCase)
+          ? fills.Min()
+          : fills.Max();
+    }
+    else
+    {
+      fill = TradePlanJson.WeightedFillPrice(legs) ?? state.EntryFillPrice;
+    }
+    if (fill is not decimal fillPrice || fillPrice <= 0m)
+    {
+      return null;
+    }
+    var risk = Math.Abs(fillPrice - plan.Stop.Price) / pipSize;
+    return risk > 0m ? decimal.Round(risk, 1, MidpointRounding.AwayFromZero) : null;
   }
 
   /// <summary>

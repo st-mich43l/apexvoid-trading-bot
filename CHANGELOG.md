@@ -13,6 +13,19 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
+- Auto Algo now measures R the way Manual Algo does. The executor publishes `risk_pips` on
+  target and close events: the distance from the group's fill to the ORIGINAL stop, never the
+  RISK leg (which rests close to the stop and would inflate R; it still counts in the pips of
+  an archived target). When a target was archived it is the deepest non-RISK fill; for a full
+  stop with no target it is the weighted non-RISK fill, so a clean stop-out reads -1R. The
+  close line prints that R (`+85 pips · +2.4R`) and the journal's `r_multiple` uses it
+  (`auto_trade_results.risk_pips`, NULL for older rows, which keep the previous volume-weighted
+  stop distance). Until now the V8 executor never sent a stop distance, so auto close lines
+  carried no R. Pips, `result_pips` and cards' pips are unchanged.
+- Loss lines no longer print a doubled minus (`losing -47 pips` is now `losing 47 pips`), on
+  both the auto close line and the Manual Algo close card.
+
+### Changed
 - Strategy independence: no strategy family. A Confluence Zone overlap no longer removes a
   technique's candidate (`TechniqueSource.Technique` reads only the technique's own
   instances), so FVG, Order Block, Supply, Demand, iFVG and CRT publish their own setups

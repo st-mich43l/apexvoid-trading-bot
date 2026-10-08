@@ -107,3 +107,33 @@ async def test_events_reach_telegram_as_replies_under_the_one_root_card(sql, mon
   card = await setup_card.load_forming_card(client, MATCH_ID)
   assert card is not None and int(card["message_id"]) == 4001                          # still the single root card: no second thread
   assert not any(t.strip().startswith("SETUP") for t in texts)                         # no duplicate "forming" presentation
+
+
+def test_close_line_r_uses_the_deepest_fill_risk_when_the_executor_sends_it():
+  from app.autotrade import delivery
+
+  event = {
+    "type": "position_closed", "target_pips": 85, "risk_pips": 35.0,
+    "stop_pips": 50.0, "highest_booked_target_index": 0,
+  }
+  line = delivery._format_position_closed_compact_line(
+    event, "PLAN CLOSED · highest TP archived TP1",
+  )
+  assert "+85 pips" in line and "+2.4R" in line
+  # Without risk_pips the plan's stop distance is the fallback, as before.
+  del event["risk_pips"]
+  fallback = delivery._format_position_closed_compact_line(
+    event, "PLAN CLOSED · highest TP archived TP1",
+  )
+  assert "+1.7R" in fallback
+
+
+def test_loss_line_prints_the_pips_once_without_a_doubled_minus():
+  from app.autotrade import delivery
+
+  line = delivery._format_position_closed_compact_line(
+    {"type": "position_closed", "group_realized_pips": -47, "risk_pips": 47.0,
+     "reason_code": "stop_loss_or_take_profit", "stop_loss": 4147.0},
+    "PLAN CLOSED · no TP archived · losing -47 pips",
+  )
+  assert "losing 47 pips" in line and "losing -" not in line and "-1.0R" in line

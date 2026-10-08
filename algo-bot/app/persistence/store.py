@@ -482,6 +482,10 @@ async def init_db() -> None:
       # trade's actual result and is NULL for rows closed before it existed.
       "ALTER TABLE auto_trade_results "
       "ADD COLUMN IF NOT EXISTS realized_pips DOUBLE PRECISION",
+      # Pips of risk from the group's deepest fill to its original stop - the
+      # R denominator, the same fill result_pips is measured from.
+      "ALTER TABLE auto_trade_results "
+      "ADD COLUMN IF NOT EXISTS risk_pips DOUBLE PRECISION",
     ):
       await db.execute(stmt)
 
@@ -863,10 +867,13 @@ async def get_pips_records(
                  / NULLIF(SUM(COALESCE(f.volume, 0)), 0),
                0
              ) AS stop_pips,
-             journal_pips / NULLIF(
-               SUM(f.stop_pips * COALESCE(f.volume, 0))
-                 / NULLIF(SUM(COALESCE(f.volume, 0)), 0),
-               0
+             journal_pips / COALESCE(
+               NULLIF(r.risk_pips, 0),
+               NULLIF(
+                 SUM(f.stop_pips * COALESCE(f.volume, 0))
+                   / NULLIF(SUM(COALESCE(f.volume, 0)), 0),
+                 0
+               )
              ) AS r_multiple,
              r.planned_reward_risk,
              r.target_room_fallback_used,
@@ -894,7 +901,7 @@ async def get_pips_records(
       algo_params.append(symbol.upper())
     algo_query += (
       " GROUP BY r.group_id, r.closed_at, journal_pips, "
-      "r.trade_stream, r.trade_key, ms.id, "
+      "r.trade_stream, r.trade_key, ms.id, r.risk_pips, "
       "r.planned_reward_risk, r.target_room_fallback_used, r.exit_path "
       "ORDER BY r.closed_at ASC, r.group_id ASC"
     )
@@ -1966,6 +1973,9 @@ async def _record_auto_trade_result(event: dict) -> None:
       break_even_applied=break_even_applied,
     )
     realized_pips = _coerce_optional_float(event.get("volume_weighted_pips"))
+    risk_pips = _coerce_optional_float(event.get("risk_pips"))
+    if risk_pips is not None and risk_pips <= 0:
+      risk_pips = None
     await db.execute(
       """
       INSERT INTO auto_trade_results (
@@ -1973,10 +1983,10 @@ async def _record_auto_trade_result(event: dict) -> None:
         setup_type, direction, session, killzone_name, stop_pips,
         booked_tp_count, utc_hour, symbol,
         planned_reward_risk, target_room_fallback_used, exit_path,
-        realized_pips
+        realized_pips, risk_pips
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
-        $17
+        $17, $18
       )
       ON CONFLICT (group_id) DO UPDATE SET
         trade_key = excluded.trade_key,
@@ -2001,6 +2011,9 @@ async def _record_auto_trade_result(event: dict) -> None:
         exit_path = COALESCE(excluded.exit_path, auto_trade_results.exit_path),
         realized_pips = COALESCE(
           excluded.realized_pips, auto_trade_results.realized_pips
+        ),
+        risk_pips = COALESCE(
+          excluded.risk_pips, auto_trade_results.risk_pips
         )
       WHERE auto_trade_results.correction_source IS NULL
       """,
@@ -2010,7 +2023,7 @@ async def _record_auto_trade_result(event: dict) -> None:
       fill["stop_pips"], booked_tp_count, utc_hour,
       fill["symbol"] or "XAU",
       planned_reward_risk, target_room_fallback_used, exit_path,
-      realized_pips,
+      realized_pips, risk_pips,
     )
 
 
