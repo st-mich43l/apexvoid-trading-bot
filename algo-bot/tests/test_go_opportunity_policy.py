@@ -643,6 +643,58 @@ async def test_go_terminal_withdraws_the_match_and_invalidates_the_setup(h):
   assert (await load_setup(client, "go_opp_golden_supply_xau")).state == INVALIDATED
 
 
+def _terminal_event(h, reason: str):
+  return parse_analysis_event(InvalidationTopic, json.dumps(_invalidated(payload={
+    "opportunity_id": "opp_golden_supply_xau", "symbol": "XAU", "strategy": "supply",
+    "reason_code": reason, "invalidated_at": int(h.clock.now),
+  })))
+
+
+async def _route_outcome(match_id: str = "go_opp_golden_supply_xau") -> dict:
+  from app.autotrade.route_outcome import route_outcome_key
+
+  raw = await redis_state.get_client().get(route_outcome_key("XAU", match_id))
+  return json.loads(raw) if raw else {}
+
+
+@pytest.mark.asyncio
+async def test_go_invalidation_leaves_its_own_reason_on_the_route_outcome(h):
+  # Production 2026-10-04..08: the outcome stayed at its last waiting state and the next
+  # restart rewrote it to "startup_reconciliation" (4,705 of 6,499 outcomes).
+  await h.activate()
+  await h.deliver(event(int(h.clock.now)))
+  assert await h.deliver(_terminal_event(h, "ZONE_INVALIDATED"), InvalidationTopic) == "match_withdrawn"
+  outcome = await _route_outcome()
+  assert (outcome["status"], outcome["reason_code"]) == ("blocked", "go_zone_invalidated")
+  assert outcome["stage"] == "entry_invalidation"
+
+
+@pytest.mark.asyncio
+async def test_go_expiry_is_recorded_as_expired(h):
+  await h.activate()
+  await h.deliver(event(int(h.clock.now)))
+  await h.deliver(_terminal_event(h, "SETUP_EXPIRED"), InvalidationTopic)
+  outcome = await _route_outcome()
+  assert (outcome["status"], outcome["reason_code"]) == ("expired", "go_setup_expired")
+
+
+@pytest.mark.asyncio
+async def test_a_terminal_outcome_already_recorded_is_not_overwritten_by_go_terminal(h):
+  from types import SimpleNamespace
+
+  from app.autotrade.route_outcome import record_route_outcome
+
+  await h.activate()
+  await h.deliver(event(int(h.clock.now)))
+  shim = SimpleNamespace(match_id="go_opp_golden_supply_xau", symbol="XAU", issued_at=1, expires_at=2)
+  await record_route_outcome(
+    redis_state.get_client(), shim, stage="arbitration", status="arbitration_suppressed",
+    reason_code="same_thesis_suppressed", message="a better-ranked intent won", publish_status=False,
+  )
+  await h.deliver(_terminal_event(h, "ZONE_INVALIDATED"), InvalidationTopic)
+  assert (await _route_outcome())["reason_code"] == "same_thesis_suppressed"
+
+
 def _arbitration_event(**overrides):
   event = {
     "event_id": "evt-arb-1", "event_type": ArbitrationTopic,
