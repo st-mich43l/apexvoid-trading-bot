@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"sync"
 	"testing"
 
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/config"
@@ -44,31 +45,51 @@ func readJSON(t *testing.T, name string, into any) {
 
 // replayLane replays a capture through the Go engine and returns the
 // candidates of one strategy per closed M1 bar.
+var (
+	replayMu    sync.Mutex
+	replayCache = map[string]map[string]map[int64][]opportunity.Candidate{}
+)
+
+// replayLane returns the candidates one strategy produced on each closed M1 bar of
+// a capture. A capture is replayed through the engine once per test binary and
+// every strategy's candidates are kept, so the real and synthetic comparisons of
+// the three scalps share one replay instead of paying for one each.
 func replayLane(t *testing.T, capture, strategyID string) map[int64][]opportunity.Candidate {
 	t.Helper()
-	doc, err := config.ResolveDocument(filepath.Join("..", "..", "..", "config", "apexvoid.yml"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	c, err := replaycapture.Load(filepath.Join("..", "..", "testdata", capture))
-	if err != nil {
-		t.Fatal(err)
-	}
-	got := map[int64][]opportunity.Candidate{}
-	_, err = replaycapture.Replay(doc, c, market.M1, replaycapture.Options{OnEvaluation: func(e engine.Evaluation) {
-		if e.Timeframe != market.M1 {
-			return
+	replayMu.Lock()
+	defer replayMu.Unlock()
+	all, ok := replayCache[capture]
+	if !ok {
+		doc, err := config.ResolveDocument(filepath.Join("..", "..", "..", "config", "apexvoid.yml"))
+		if err != nil {
+			t.Fatal(err)
 		}
-		for _, candidate := range e.Candidates {
-			if string(candidate.Strategy) == strategyID {
-				got[e.BarTime] = append(got[e.BarTime], candidate)
+		c, err := replaycapture.Load(filepath.Join("..", "..", "testdata", capture))
+		if err != nil {
+			t.Fatal(err)
+		}
+		all = map[string]map[int64][]opportunity.Candidate{}
+		_, err = replaycapture.Replay(doc, c, market.M1, replaycapture.Options{OnEvaluation: func(e engine.Evaluation) {
+			if e.Timeframe != market.M1 {
+				return
 			}
+			for _, candidate := range e.Candidates {
+				id := string(candidate.Strategy)
+				if all[id] == nil {
+					all[id] = map[int64][]opportunity.Candidate{}
+				}
+				all[id][e.BarTime] = append(all[id][e.BarTime], candidate)
+			}
+		}})
+		if err != nil {
+			t.Fatal(err)
 		}
-	}})
-	if err != nil {
-		t.Fatal(err)
+		replayCache[capture] = all
 	}
-	return got
+	if got := all[strategyID]; got != nil {
+		return got
+	}
+	return map[int64][]opportunity.Candidate{}
 }
 
 // compareLane requires the same opportunities on the same bars. checkQuality
