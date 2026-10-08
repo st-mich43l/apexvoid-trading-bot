@@ -1,5 +1,7 @@
 # Flip Zone
 
+**Contract.** Restored to the frozen `flip_demand_zone_reaction` / `flip_supply_zone_reaction`: a zone carrying the flip source, unmitigated and entry-valid, anchored to a key level whose closed-bar role is broken resistance (BUY) or broken support (SELL), with a confirmed structural reaction. An ordinary zone touch is not a flip. Proven on 91 oracle decisions (`test/legacyparity`).
+
 ## Strategy ID / version
 
 `flip_zone`, `v2`. Implemented in

@@ -1,5 +1,7 @@
 # Trendline Strategy V2
 
+**Contract.** Restored to the frozen V2 `trendline_reaction`: immutable causal anchors, forward validation, health (not tentative, broken, degraded, exhausted or stale), chop-regime quality gates, a reclaimed live interaction and a confirmed reaction inside the interaction band. Proven on 8 oracle decisions (`test/legacyparity`); the gate is narrow, so the golden holds few decisions.
+
 `trendline` consumes immutable causal M5 anchors and the canonical interaction
 classifier. A line needs the configured validation touches, a valid approach,
 and a reclaimed support/resistance close. Entry is the interaction band,

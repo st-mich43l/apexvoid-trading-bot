@@ -339,36 +339,11 @@ func priceToken(price float64, digits int) string {
 	return fmt.Sprintf("%.*f", digits, price)
 }
 
-type m1Confirmation struct {
-	Close float64
-	Time  int64
-}
+type m1Confirmation = strategyutil.M1Confirmation
 
-// confirmM1Execution mirrors microstructure.confirm_m1_execution: among the
-// newest `lookback` closed M1 bars, the latest one that closes in the trade
-// direction and interacted with the level (wick within `tolerance` of it, close
-// back on the right side of it).
+// confirmM1Execution is microstructure.confirm_m1_execution (see strategyutil).
 func confirmM1Execution(m1 []market.Candle, direction market.Direction, level, tolerance float64, lookback int) (m1Confirmation, bool) {
-	if len(m1) == 0 {
-		return m1Confirmation{}, false
-	}
-	window := maxInt(1, minInt(lookback, len(m1)))
-	tol := math.Max(0, tolerance)
-	for offset := 1; offset <= window; offset++ {
-		bar := m1[len(m1)-offset]
-		var directional, interacted bool
-		if direction == market.Buy {
-			directional = bar.Close > bar.Open
-			interacted = bar.Low <= level+tol && bar.Close > level
-		} else {
-			directional = bar.Close < bar.Open
-			interacted = bar.High >= level-tol && bar.Close < level
-		}
-		if directional && interacted {
-			return m1Confirmation{Close: bar.Close, Time: bar.Time}, true
-		}
-	}
-	return m1Confirmation{}, false
+	return strategyutil.ConfirmM1Execution(m1, direction, level, tolerance, lookback)
 }
 
 type qualityInput struct {

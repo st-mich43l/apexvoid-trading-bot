@@ -442,15 +442,38 @@ analysis:
       expiry_minutes: 15
       minimum_range_width_pips: 25
       reward_risk_ladder: [2.0, 1.0]
+    # Impulse Pullback Scalp — the Python scalp lane's discover_impulse_pullback of the
+    # profitable XAU week: an M5 impulse (displacement of at least 4 ATR, body
+    # dominance 0.5) with a corrective pullback (< 0.7 of the impulse body), anchored
+    # to an unmitigated M5 zone or a nearby key level whose role agrees, confirmed by
+    # a closed M1 bar, with the shared stop/target book. XAU only.
     impulse_pullback:
-      version: v2
+      version: v3
       enabled: true
-      minimum_impulse_atr: 1.0
-      minimum_pullback_fraction: 0.25
-      maximum_pullback_fraction: 0.65
-      invalidation_buffer_atr: 0.2
-      target_r: 2.0
-      expiry_hours: 2.0
+      symbols: [XAU]
+      setup_window_bars: 120
+      dealing_window_bars: 120
+      confirmation_window_bars: 60
+      confirmation_lookback_bars: 2
+      context_max_age_seconds: 420
+      context_atr_bars: 14
+      active_range_bars: 24
+      expiry_minutes: 15
+      pullback_extreme_confirm_bars: 2
+      impulse_displacement_atr_multiple: 4.0
+      impulse_body_dominance: 0.5
+      pullback_corrective_ratio: 0.7
+      level_proximity_atr_multiple: 1.0
+      zone_maximum_atr_multiple: 1.5
+      breakout_accept_bars: 2
+      swing_fractal_n: 2
+      level_cluster_atr: 0.5
+      level_round_step: 5.0
+      level_minimum_touches: 2
+      level_max_cluster_span: 2.0
+      displacement_atr_multiple: 1.5
+      displacement_body_fraction: 0.6
+      reward_risk_ladder: [2.0, 1.0]
     # Breakout Retest Scalp — the profitable-week (14–18 Sep 2026) Python
     # "Breakout Retest V2" engine (app/scalping): M5 setup, M1 execution
     # confirmation. Level sources are the setup window's swings, its M5 key
