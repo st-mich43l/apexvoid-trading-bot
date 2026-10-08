@@ -117,12 +117,10 @@ def archetype_from_strategy(strategy: str | None) -> str | None:
 def funnel_bucket(
   strategy: str | None,
   *,
-  family: str | None = None,
   strategy_mode: str | None = None,
 ) -> str:
   if is_scalp_strategy(
     str(strategy or ""),
-    family=str(family or ""),
     strategy_mode=str(strategy_mode or ""),
   ):
     return BUCKET_SCALP
@@ -146,7 +144,6 @@ async def bump_funnel(
   symbol: str,
   stage: str,
   strategy: str | None = None,
-  family: str | None = None,
   strategy_mode: str | None = None,
   reason_code: str | None = None,
   once_key: str | None = None,
@@ -170,12 +167,8 @@ async def bump_funnel(
     except Exception:
       created = True
     if not created:
-      return funnel_bucket(
-        strategy, family=family, strategy_mode=strategy_mode,
-      )
-  bucket = funnel_bucket(
-    strategy, family=family, strategy_mode=strategy_mode,
-  )
+      return funnel_bucket(strategy, strategy_mode=strategy_mode)
+  bucket = funnel_bucket(strategy, strategy_mode=strategy_mode)
   key = funnel_key(symbol, bucket)
   try:
     pipe = client.pipeline()
@@ -262,7 +255,6 @@ async def emit_plan_complete_event(
   outcome: str,
   group_id: str | None = None,
   candidate_id: str | None = None,
-  family: str | None = None,
   strategy_mode: str | None = None,
   measured: dict[str, Any] | None = None,
 ) -> None:
@@ -284,7 +276,6 @@ async def emit_plan_complete_event(
     symbol=symbol,
     stage=stage,
     strategy=normalize_setup_type(strategy) or strategy,
-    family=family,
     strategy_mode=strategy_mode,
     reason_code=reason_code,
     once_key=once,

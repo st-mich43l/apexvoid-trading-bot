@@ -97,25 +97,46 @@ Details, reason codes and the Redis keys involved are in [docs/execution.md](doc
 
 ## Strategies
 
-Twenty-one independent strategies; none imports another. Each has one status:
-`LEGACY_PARITY_PROVEN` (reproduces the frozen Python publisher on committed real
-captures), `GO_NATIVE_VALIDATED` (no predecessor to prove against, pinned by its own
-contract tests) or `OBSERVE_ONLY` (analysed and published, never traded).
+Twenty-one independent strategies. Each has its own ID, version, thresholds,
+confirmation, quality, entry zone, invalidation, targets and lifecycle; none imports,
+calls, waits for or is suppressed by another, and there is no strategy family. They
+read one shared market-intelligence layer (structure, liquidity, zones, indicators);
+one opportunity lifecycle and one execution authority sit downstream. Certification
+and containment are separate per-strategy facts: `LEGACY_PARITY_PROVEN` (reproduces
+the frozen Python publisher on committed real captures), `GO_NATIVE_VALIDATED` (no
+predecessor, pinned by its own contract tests), and whether an instrument trades or
+only observes it.
 
-| Family | Strategies | Status |
-|---|---|---|
-| Key levels | `key_level` | parity proven |
-| Zones | `supply`, `demand`, `order_block`, `fvg`, `ifvg`, `crt`, `confluence_zone` | parity proven |
-| Breakouts and ranges | `break_retest`, `range_edge`, `snap_back`, `momentum_ride`, `fade_scalp` | parity proven |
-| M1 scalps (XAU only) | `range_sweep`, `scalp_breakout_retest` | parity proven |
-| Go-native | `flip_zone`, `trendline`, `box_breakout`, `session_level`, `liquidity_sweep` | validated |
-| Contained | `impulse_pullback` | observe-only |
+| Strategy ID | Technical thesis | Timeframes | Configuration | Parity / validation | Execution |
+|---|---|---|---|---|---|
+| `key_level` | Reaction at a clustered key level, with its role and structure | M5 | `strategies.key_level` (v3) | `LEGACY_PARITY_PROVEN` (profitable-week scalp lane, a1c77584) | live |
+| `confluence_zone` | Two or more distinct canonical zone techniques overlapping on one side, then a reaction; its own opportunity beside theirs | M5 | `strategies.confluence_zone` (v2) | `LEGACY_PARITY_PROVEN` | live |
+| `supply` | Reaction at a canonical supply zone | M5; M15 zones analysis-only | `strategies.supply` (v2) | `LEGACY_PARITY_PROVEN` (M5 zones; M15 has no oracle) | live |
+| `demand` | Reaction at a canonical demand zone | M5; M15 zones analysis-only | `strategies.demand` (v2) | `LEGACY_PARITY_PROVEN` (M5 zones; M15 has no oracle) | live |
+| `order_block` | Reaction at a canonical order-block zone | M5 | `strategies.order_block` (v2) | `LEGACY_PARITY_PROVEN` | live |
+| `fvg` | Reaction at a canonical fair value gap | M5 | `strategies.fvg` (v2) | `LEGACY_PARITY_PROVEN` | live |
+| `ifvg` | Reaction at an inverted fair value gap | M5 | `strategies.ifvg` (v2) | `LEGACY_PARITY_PROVEN` | XAU observe-only; live on FX |
+| `crt` | Closed H1 range, M5 sweep and reclaim | M5 (H1 range) | `strategies.crt` (v2) | `LEGACY_PARITY_PROVEN` | live |
+| `flip_zone` | Zone born of an accepted role flip, then a reaction | M5 | `strategies.flip_zone` (v3) | `LEGACY_PARITY_PROVEN` | live |
+| `session_level` | Session, previous-day and previous-week highs and lows, then a reaction | M5 | `strategies.session_level` (v3) | `LEGACY_PARITY_PROVEN` | XAU observe-only; live on FX |
+| `trendline` | Causal trendline with health and live interaction, then a reaction | M5 | `strategies.trendline` (v3) | `LEGACY_PARITY_PROVEN` (few decisions: the gate is narrow) | live |
+| `range_edge` | M5 range context, edge rejection | M5 | `strategies.range_edge` (v2) | `LEGACY_PARITY_PROVEN` | live |
+| `box_breakout` | Accepted break of the regime box, accepting-bar or retest entry | M5 | `strategies.box_breakout` (v3) | `LEGACY_PARITY_PROVEN` | live |
+| `break_retest` | Broken trendline or key level, same-side retest and hold | M5 | `strategies.break_retest` (v2) | `LEGACY_PARITY_PROVEN` | live |
+| `momentum_ride` | Displacement sequence against opposing liquidity | M5 | `strategies.momentum_ride` (v2) | `LEGACY_PARITY_PROVEN` | live |
+| `snap_back` | Extension from a key level or zone, graded liquidity grab | M5 | `strategies.snap_back` (v2) | `LEGACY_PARITY_PROVEN` | live |
+| `fade_scalp` | Equal-level sweep and reclaim, premium/discount, chop edge | M5 | `strategies.fade_scalp` (v2) | `LEGACY_PARITY_PROVEN` | live |
+| `liquidity_sweep` | Lone-extreme pool sweep and reclaim, graded grab | M5 | `strategies.liquidity_sweep` (v3) | `GO_NATIVE_VALIDATED` (no Python predecessor) | XAU observe-only; live on FX |
+| `range_sweep` | M5 range, M1 edge excursion and reclaim (XAU only) | M1 (M5 range) | `strategies.range_sweep` (v3) | `LEGACY_PARITY_PROVEN` | live (XAU) |
+| `impulse_pullback` | M5 impulse, corrective pullback, structural reference, M1 confirmation (XAU only) | M1 (M5 impulse) | `strategies.impulse_pullback` (v3) | `LEGACY_PARITY_PROVEN` on synthetic data only | observe-only on every instrument |
+| `scalp_breakout_retest` | M5 compression, M1 acceptance and retest (XAU only) | M1 (M5 compression) | `strategies.scalp_breakout_retest` (v3) | `LEGACY_PARITY_PROVEN` | live (XAU) |
 
-An instrument can observe a strategy without trading it. Today XAU observes `ifvg`,
-`liquidity_sweep` and `session_level`, and every instrument observes
-`impulse_pullback`, each on live evidence recorded in
-[docs/strategies/README.md](docs/strategies/README.md) with the full certification
-matrix, proof, replay coverage and a specification per strategy.
+Configuration keys live in [`config/analysis.yml`](config/analysis.yml). An instrument
+can observe a strategy without trading it (`observe_only_strategies` in
+[`config/instruments.yml`](config/instruments.yml)); each containment is recorded with
+its live evidence in [docs/strategies/README.md](docs/strategies/README.md), which also
+holds the full certification matrix, proof, replay coverage and a specification per
+strategy.
 
 ## Repository layout
 

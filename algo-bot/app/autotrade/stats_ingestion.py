@@ -127,7 +127,7 @@ async def _track_scalp_event(client, event: dict) -> None:
   strategy = normalize_setup_type(
     event.get("setup") or event.get("strategy") or event.get("setup_type")
   )
-  if funnel_bucket(strategy, family=event.get("strategy_family")) != BUCKET_SCALP:
+  if funnel_bucket(strategy) != BUCKET_SCALP:
     return
 
   symbol = str(event.get("symbol") or "XAU")
@@ -260,11 +260,6 @@ async def _emit_funnel_complete(client, event: dict) -> None:
       if event.get("candidate_id") is None
       else str(event.get("candidate_id"))
     ),
-    family=(
-      None
-      if event.get("strategy_family") is None
-      else str(event.get("strategy_family"))
-    ),
     measured={
       "event_type": event.get("type"),
       "group_realized_pips": event.get("group_realized_pips"),
@@ -272,7 +267,7 @@ async def _emit_funnel_complete(client, event: dict) -> None:
     },
   )
   # Keep scalping risk streak / R counters alive (was never wired before).
-  if funnel_bucket(strategy, family=event.get("strategy_family")) != BUCKET_SCALP:
+  if funnel_bucket(strategy) != BUCKET_SCALP:
     return
   symbol = str(event.get("symbol") or "XAU")
   group_id = (

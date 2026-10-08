@@ -569,7 +569,7 @@ def _band_distance_pips(
 
 def _strategy_group_id(match: StrategyMatch, *, thesis_cycle: int = 1) -> str:
   if match.thesis_id and (
-    match.reaction_id or match.family == "mapped_zone"
+    match.reaction_id
     or match.strategy_mode == "mapped_zone_reaction"
   ):
     return mapped_group_id(
@@ -646,7 +646,7 @@ async def _mark_thesis_terminal_waiting_exit(
 
 
 def _strategy_mode_enabled(match: StrategyMatch) -> bool:
-  from app.autotrade.strategy_registry import strategy_mode_enabled
+  from app.autotrade.strategy_catalog import strategy_mode_enabled
 
   return strategy_mode_enabled(match.strategy, runtime_config)
 
@@ -996,7 +996,6 @@ def _execution_quote_access(
   # as immediately executable for those families, matching activation.
   candidate_allows_chase = is_m1_scalp_strategy(str(match.strategy)) or is_scalp_strategy(
     str(match.strategy or ""),
-    family=str(getattr(match, "family", "") or "") or None,
     strategy_mode=str(getattr(match, "strategy_mode", "") or "") or None,
   )
   if candidate_allows_chase:
@@ -2094,7 +2093,6 @@ async def _publish_trade_plan_v8(
     )
   candidate_is_scalp = is_scalp_strategy(
     str(getattr(match_for_plan, "strategy", "") or ""),
-    family=str(getattr(match_for_plan, "strategy_family", "") or "") or None,
     strategy_mode=str(
       getattr(match_for_plan, "strategy_mode", "") or ""
     ) or None,
@@ -2454,7 +2452,7 @@ async def _publish_trade_plan_v8(
     status="candidate_published",
   )
   await increment_metric(client, "v8_plan_published", symbol=symbol)
-  if policy.reaction_family:
+  if policy.level_reaction:
     await increment_metric(
       client,
       (

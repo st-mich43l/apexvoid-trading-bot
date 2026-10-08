@@ -77,7 +77,7 @@ it never publishes unreserved.
 ## Exposure
 
 Opposite-direction exposure is decided per instrument from `instruments.yml`
-(`exposure.opposite_position`), never by strategy, family or scalp status:
+(`exposure.opposite_position`), never by strategy or scalp status:
 
 | Instrument | Rule |
 |---|---|

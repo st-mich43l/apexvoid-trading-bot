@@ -36,7 +36,7 @@ owning YAML file and its consumer together.
 ## Autonomous opposite-direction exposure
 
 Each instrument (usually through its pack) owns one rule under
-`exposure.opposite_position`; strategy names, families and scalp status are never
+`exposure.opposite_position`; strategy names and scalp status are never
 consulted.
 
 | Instrument class | Config | Behavior |

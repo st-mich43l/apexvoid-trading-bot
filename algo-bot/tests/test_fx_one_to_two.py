@@ -79,7 +79,6 @@ def test_fx_technique_route_uses_its_declared_zone_scale_policy(direction: str):
     zone_fill_enabled=True,
     digits=5,
     strategy="FVG",
-    strategy_family="zone",
     entry_clips=2,
   )
   assert plan.valid is True

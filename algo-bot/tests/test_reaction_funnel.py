@@ -18,8 +18,8 @@ pytestmark = pytest.mark.no_database
 def test_funnel_bucket_splits_scalp_and_reaction():
   assert funnel_bucket("Key Level") == BUCKET_REACTION
   assert funnel_bucket("Trendline") == BUCKET_REACTION
-  assert funnel_bucket("Impulse Pullback Scalp", family="scalp") == BUCKET_SCALP
-  assert funnel_bucket("Impulse Pullback Scalp", family="scalp") == BUCKET_SCALP
+  assert funnel_bucket("Impulse Pullback Scalp") == BUCKET_SCALP
+  assert funnel_bucket("Impulse Pullback Scalp") == BUCKET_SCALP
   assert funnel_bucket("Range Edge Scalp") == BUCKET_SCALP
 
 

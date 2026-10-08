@@ -309,11 +309,30 @@ func (s *TechniqueSource) Bands() []ConfluenceBand {
 	return BuildConfluenceBands(s.Instances, techniqueMaxMergedATR*math.Max(atr, pip))
 }
 
-// Technique mirrors _technique_reaction: the best confirmed reaction among the
-// technique's instances not already covered by a confluence band — highest
-// stars, nearest entry on a tie.
+// Technique is one technique's own decision: the best confirmed reaction among
+// its instances — highest stars, nearest entry on a tie. It reads only that
+// technique's instances, so a confluence band over the same price never removes
+// or alters it: Confluence Zone aggregates canonical facts into its own
+// opportunity beside it (strategy independence). The frozen Python publisher
+// instead skipped instances covered by a band; that parity-only rule is kept
+// in TechniqueExcludingConfluenceCoverage for the oracle golden.
 func (s *TechniqueSource) Technique(technique string) *TechniqueDecision {
-	bands := s.Bands()
+	return s.bestTechnique(technique, false)
+}
+
+// TechniqueExcludingConfluenceCoverage is the frozen Python
+// _technique_reaction exactly: instances covered by a confluence band are
+// skipped. It exists so test/techniqueparity can keep proving the historical
+// golden bar for bar. Production strategies must use Technique.
+func (s *TechniqueSource) TechniqueExcludingConfluenceCoverage(technique string) *TechniqueDecision {
+	return s.bestTechnique(technique, true)
+}
+
+func (s *TechniqueSource) bestTechnique(technique string, skipCovered bool) *TechniqueDecision {
+	var bands []ConfluenceBand
+	if skipCovered {
+		bands = s.Bands()
+	}
 	var best *TechniqueDecision
 	bestDistance := math.Inf(1)
 	for _, in := range s.Instances {

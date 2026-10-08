@@ -68,7 +68,7 @@ def _match(**overrides) -> StrategyMatch:
 def test_confirmation_policy_is_authoritative_only_with_complete_reaction_evidence():
   policy = confirmation_policy_for(_match())
 
-  assert policy.reaction_family is True
+  assert policy.level_reaction is True
   assert policy.metadata_valid is True
   assert policy.m5_authoritative is True
   assert policy.m1_required_on_retest is False
@@ -78,7 +78,7 @@ def test_confirmation_policy_is_authoritative_only_with_complete_reaction_eviden
   missing = confirmation_policy_for(
     replace(_match(), confirmation_bar_ts=None),
   )
-  assert missing.reaction_family is True
+  assert missing.level_reaction is True
   assert missing.metadata_valid is False
   assert missing.m5_authoritative is False
   assert missing.reason_code == "confirmation_metadata_missing"
@@ -93,7 +93,7 @@ def test_confirmation_policy_is_authoritative_only_with_complete_reaction_eviden
       confirmation_bar_ts=None,
     ),
   )
-  assert non_reaction.reaction_family is False
+  assert non_reaction.level_reaction is False
   assert non_reaction.m5_authoritative is True
   assert non_reaction.m1_required_on_retest is False
 
@@ -155,7 +155,7 @@ def test_m1_scalp_confirmation_allows_same_cycle_publish():
       confirmation_bar_ts="1785942720",
     ),
   )
-  assert policy.reaction_family is False
+  assert policy.level_reaction is False
   assert policy.metadata_valid is True
   assert policy.allow_same_cycle_publish is True
   assert policy.require_quote_inside_zone is True
@@ -182,8 +182,7 @@ def test_m1_scalp_confirmation_allows_same_cycle_publish():
   legacyish = confirmation_policy_for(
     replace(
       _match(),
-      strategy="Trend Pullback",
-      family="unknown_family",
+      strategy="Box Breakout",
       reaction_type=None,
       touch_bar_ts=None,
       confirmation_bar_ts=None,
@@ -194,10 +193,10 @@ def test_m1_scalp_confirmation_allows_same_cycle_publish():
 
 
 def test_supply_demand_is_zone_confirmation_not_reaction_family_set():
-  assert not hasattr(ec, "_REACTION_FAMILIES")
-  assert "supply_demand" in ec._ZONE_CONFIRMATION_FAMILIES
-  assert "supply_demand" not in ec._M5_AUTHORITATIVE_REACTION_FAMILIES
-  assert "supply_demand" in ec._M5_AUTHORITATIVE_FAMILIES
+  from app.autotrade.strategy_catalog import STRATEGY_BY_NAME
+
+  assert STRATEGY_BY_NAME["Supply Demand"].confirmation == "zone_reaction"
+  assert STRATEGY_BY_NAME["Key Level"].confirmation == "level_reaction"
 
   zone = confirmation_policy_for(
     replace(
@@ -209,8 +208,8 @@ def test_supply_demand_is_zone_confirmation_not_reaction_family_set():
     ),
   )
   # Confirmation contract still M5-authoritative; product taxonomy is Zone.
-  assert zone.reaction_family is False
-  assert zone.zone_family is True
+  assert zone.level_reaction is False
+  assert zone.zone_reaction is True
   assert zone.m5_authoritative_contract is True
   assert zone.require_quote_inside_zone is True
 

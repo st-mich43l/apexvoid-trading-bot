@@ -143,7 +143,7 @@ func observe(t *testing.T, doc *config.Document, symbol, capture string) (map[in
 			if technique == "confluence_zone" {
 				d = source.ConfluenceZone()
 			} else {
-				d = source.Technique(technique)
+				d = source.TechniqueExcludingConfluenceCoverage(technique)
 			}
 			if d != nil {
 				out[name] = decision{string(d.Direction), d.EntryLow(), d.EntryHigh(), d.Result.Stars}

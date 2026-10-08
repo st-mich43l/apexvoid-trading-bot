@@ -12,6 +12,27 @@ dated section after deployment.
 
 ## Unreleased
 
+### Changed
+- Strategy independence: no strategy family. A Confluence Zone overlap no longer removes a
+  technique's candidate (`TechniqueSource.Technique` reads only the technique's own
+  instances), so FVG, Order Block, Supply, Demand, iFVG and CRT publish their own setups
+  even where a band covers them. This is a deliberate departure from the frozen Python
+  oracle, whose golden is unchanged and still proven through
+  `TechniqueExcludingConfluenceCoverage`. Measured on the XAU M1 production capture (Oct 2-6): +124 opportunities
+  (1,663 to 1,787; `ifvg` +45, `order_block` +26, `demand` +25, `fvg` +13, `crt` +10,
+  `supply` +5; nine published supply/demand opportunities now carry a different instance of the same technique). Exposure is unchanged by design: same-thesis arbitration and the
+  45-minute / 1-ATR entry corridor still admit one trade per coinciding corridor, with
+  every strategy's attribution preserved.
+- Algo Bot: execution policy, tiering, entry-drift tolerance, confirmation contract and
+  behavior flags are now one explicit row per strategy (`strategy_catalog.py`) instead of
+  nine family policies; `strategy_registry.py` and the family fields of `strategy_names.py`
+  are gone. Output for 60 strategy names and aliases (policy values, 120 tier cases, drift
+  cases, flags) is identical to the family-era code (`test_strategy_independence`). The
+  telemetry key `policy_family` is now `policy_strategy`. The Go stop envelope and the
+  executor's `IsScalpPlan` likewise decide per strategy. `strategy_family` remains on
+  TradePlan V8 and persisted events as a record label only. Full list:
+  `docs/strategies/independence-audit.md`.
+
 ### Fixed
 - The executor now reports the trade's true result. `position_closed` carries a new
   `volume_weighted_pips` (pips already booked at target closes plus each leg's still-open

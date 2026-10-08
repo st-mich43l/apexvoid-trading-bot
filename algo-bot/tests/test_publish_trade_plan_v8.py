@@ -23,6 +23,8 @@ from unittest.mock import AsyncMock
 import pandas as pd
 import pytest
 
+from app.analysis_client.provenance import GO_ORIGIN_TAG
+
 from app.autotrade.execution_eligibility import (
   EXECUTION_ELIGIBILITY_VERSION,
   STATIC_ELIGIBLE,
@@ -1067,7 +1069,9 @@ def _xau_spot() -> "worker.AutoTradeSpot":
 async def test_xau_opposite_too_close_blocks_for_every_strategy(strategy, rejections):
   client = redis_state.get_client()
   await _seed_live_plan(client, symbol="XAU", direction="SELL", entry=4100.0)
-  match = _match(match_id=f"match-opp-{strategy}", strategy=strategy)
+  match = _match(
+    match_id=f"match-opp-{strategy}", strategy=strategy, tags=(GO_ORIGIN_TAG,),
+  )
   await _confirm_setup(client, match)
 
   plan_id = await _publish_nonreaction_after_m1(client, _xau_spot(), match)
@@ -1184,6 +1188,7 @@ async def test_fx_opposite_never_publishes_regardless_of_distance_or_strategy(
     match_id=f"match-gbp-{incoming_direction}-{strategy}-{active_entry}",
     direction=incoming_direction,
     strategy=strategy,
+    tags=(GO_ORIGIN_TAG,),
   )
   await _confirm_setup(client, match)
 
