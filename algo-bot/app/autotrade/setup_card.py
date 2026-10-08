@@ -272,7 +272,6 @@ def parse_forming_card_symbol(text: str) -> str | None:
 
 _OLD_STOP_LINE_PREFIX = "• <b>Stop:</b>"
 _NEW_STOP_LINE_PREFIX = "🛡 SL:"
-_RISK_LEG_LINE_PREFIX = "🎯 Risk leg:"
 _ENTRY_LINE_RE = re.compile(
   r"⚡️ Entry (?:Zone|Price):\s*<b>([\d,]+(?:\.\d+)?)"
   r"(?:\s*-\s*([\d,]+(?:\.\d+)?))?</b>"
@@ -433,37 +432,6 @@ def apply_forming_card_entry(text: str, entry_line: str) -> str:
       lines[index] = entry_line
       return "\n".join(lines)
   return text
-
-
-def format_risk_leg_line(
-  symbol: str, price: float, lots: float, *, digits: int | None = None,
-) -> str:
-  """"Risk leg: price · lots" - the extra order the plan declares near the stop."""
-  lots_text = f"{lots:.2f}".rstrip("0").rstrip(".")
-  return (
-    f"{_RISK_LEG_LINE_PREFIX}  <b>{format_price(price, symbol, digits=digits)}</b>"
-    f"  ·  {lots_text} lot"
-  )
-
-
-def apply_forming_card_risk_leg(text: str, risk_leg_line: str) -> str:
-  """Insert or replace the Risk leg line, directly under the Entry line."""
-  if not text or not risk_leg_line:
-    return text
-  lines = text.splitlines()
-  out: list[str] = []
-  placed = False
-  for line in lines:
-    if line.strip().startswith(_RISK_LEG_LINE_PREFIX):
-      if not placed:
-        out.append(risk_leg_line)
-        placed = True
-      continue
-    out.append(line)
-    if not placed and line.strip().startswith("⚡️ Entry"):
-      out.append(risk_leg_line)
-      placed = True
-  return "\n".join(out) if placed else text
 
 
 def apply_forming_card_targets(text: str, targets_line: str) -> str:
@@ -1618,47 +1586,6 @@ async def ensure_forming_card_entry(
   return True
 
 
-async def ensure_forming_card_risk_leg(
-  client,
-  setup_id: str,
-  *,
-  edit_fn: EditFn,
-) -> bool:
-  """Print the plan's declared risk leg on the root card (no-op without one)."""
-  risk_leg = await published_plan_risk_leg(client, setup_id)
-  if risk_leg is None:
-    return False
-  card = await load_forming_card(client, setup_id)
-  if card is None or not card.get("text"):
-    return False
-  if int(card.get("message_id") or 0) <= 0:
-    return False
-  symbol = parse_forming_card_symbol(str(card["text"])) or "XAU"
-  line = format_risk_leg_line(
-    symbol, float(risk_leg.price), float(risk_leg.lots),
-    digits=card_price_digits(symbol),
-  )
-  text = apply_forming_card_risk_leg(str(card["text"]), line)
-  if text == card["text"]:
-    return True
-  try:
-    await edit_fn(card["chat_id"], card["message_id"], text)
-  except TelegramBadRequest as exc:
-    if "message is not modified" not in str(exc).casefold():
-      log.info(
-        "forming card risk leg edit failed setup_id=%s error=%s", setup_id, exc,
-      )
-      return False
-  await save_forming_card(
-    client,
-    setup_id,
-    chat_id=card["chat_id"],
-    message_id=card["message_id"],
-    text=text,
-  )
-  return True
-
-
 async def ensure_forming_card_targets(
   client,
   setup_id: str,
@@ -2083,7 +2010,6 @@ def format_plan_published_root_card(
   stop_price: float | None = None,
   target_prices: tuple[float, ...] | None = None,
   risk_reference: float | None = None,
-  risk_leg: Any = None,
   entry_span: tuple[float, float] | None = None,
 ) -> str:
   """Root card after publish, in the shared Manual/Auto Algo card design
@@ -2142,10 +2068,6 @@ def format_plan_published_root_card(
         digits=card_digits,
       )
     )
-  if risk_leg is not None:
-    lines.append(format_risk_leg_line(
-      symbol, float(risk_leg.price), float(risk_leg.lots), digits=card_digits,
-    ))
   if stop_price is not None and math.isfinite(float(stop_price)):
     card_pip_size = _card_pip_size(symbol)
     if (
@@ -2261,21 +2183,6 @@ async def published_plan_entry_span(
   return (min(prices), max(prices)) if prices else None
 
 
-async def published_plan_risk_leg(client, match_id: str):
-  """The published TradePlan's declared risk leg, or None."""
-  try:
-    from app.autotrade.setup_execution_aggregate import v8_plan_id
-    from app.autotrade.trade_plan_stream import read_trade_plan
-
-    plan = await read_trade_plan(client, v8_plan_id(match_id))
-  except Exception:
-    log.exception(
-      "plan_published_root_card_risk_leg_lookup_failed setup_id=%s", match_id,
-    )
-    return None
-  return None if plan is None else plan.entry.risk_leg
-
-
 async def published_plan_target_prices(
   client, match_id: str,
 ) -> tuple[float, ...]:
@@ -2345,7 +2252,6 @@ async def ensure_plan_published_root_card(
   stop_price = await published_plan_stop_price(client, match.match_id)
   risk_reference = await published_plan_risk_reference(client, match.match_id)
   target_prices = await published_plan_target_prices(client, match.match_id)
-  risk_leg = await published_plan_risk_leg(client, match.match_id)
   entry_span = await published_plan_entry_span(client, match.match_id)
 
   existing = await load_forming_card(client, match.match_id)
@@ -2360,7 +2266,7 @@ async def ensure_plan_published_root_card(
       # (or wrong-direction) body must not stay as the Trend Pullback root.
       replacement = format_plan_published_root_card(
         match, stop_price=stop_price, target_prices=target_prices or None,
-        risk_reference=risk_reference, risk_leg=risk_leg,
+        risk_reference=risk_reference,
         entry_span=entry_span,
       )
       existing_lines = existing_text.splitlines()
@@ -2418,9 +2324,6 @@ async def ensure_plan_published_root_card(
     await ensure_forming_card_entry(
       client, match.match_id, edit_fn=resolved_edit,
     )
-    await ensure_forming_card_risk_leg(
-      client, match.match_id, edit_fn=resolved_edit,
-    )
     return int(existing["message_id"])
 
   message_id = await post_or_edit_forming_card(
@@ -2428,7 +2331,7 @@ async def ensure_plan_published_root_card(
     match.match_id,
     format_plan_published_root_card(
       match, stop_price=stop_price, target_prices=target_prices or None,
-      risk_reference=risk_reference, risk_leg=risk_leg, entry_span=entry_span,
+      risk_reference=risk_reference, entry_span=entry_span,
     ),
     chat_id=int(owner_id),
     send_fn=resolved_send,
