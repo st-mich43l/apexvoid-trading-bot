@@ -62,6 +62,41 @@ strategy family; it keeps its name on the wire.
 | R3 | `config.go` `StopEnvelopeConfig` (reaction / scalp / range / trend bundles) | four configured stop-distance bundles | Same: configured policy, selected per strategy by `strategyStopEnvelope`. | As R2. |
 | L1 | `TradePlanExecutionEngine.cs` `DegradeScalpLadderForMinVolume` (`StrategyFamily != "scalp"`) and `trade_plan_builder.py` `is_scalp_plan` (`match.family == "scalp"`) | Go plans never carry the label `scalp` (their label is `range_reversion`), so the min-volume ladder degrade and the scalp `risk_percent`/`sizing_mode` branches are unreachable for autonomous plans. | Making them strategy-driven would change scalp sizing and ladders on small accounts - an exposure change. | Owner decision: either enable them for the three M1 scalps (with a replay of sizing impact) or delete the dead branches. |
 
+## Quality comparability across strategies (arbitration input)
+
+Independent detection now sends more candidates into the same ranking, so what
+`quality.overall` means per strategy matters. `TestQualityScoresAcrossStrategiesAreMeasuredNotAssumed`
+measures it on all six committed production captures (confirmed candidates only,
+pooled; XAU, EURUSD, GBPUSD, GBPJPY, USDJPY).
+
+**Confirmed (measured, not a performance claim):**
+
+- `quality.overall` is `clamp01(stars / 3)` for the technique and level strategies
+  (`strategyutil/technique_candidate.go`, `keylevel/keylevel.go`). With the minimum of
+  two stars it can only be **0.67 or 1.00**: eleven of fourteen strategies that produced
+  confirmed candidates take exactly two values (`trendline` one). For them quality is
+  the star count again, not an independent measure.
+- `range_edge` (24 distinct values, median 0.85), `snap_back` (25, median 0.76) and
+  `fade_scalp` (4, median 0.65) use their own continuous scales.
+- Of 2,786 competing groups (two or more strategies, same symbol, direction, closed bar
+  and entry corridor with a 1 ATR pad), **47 %** tie at the top quality and are decided
+  by confluence, structural quality, freshness and finally the intent id. Of the 1,480
+  decided on quality alone, 265 went to a continuous-scale strategy (`range_edge` 219),
+  and 119 (8 %) would change winner if each score were first normalised inside its own
+  strategy.
+
+**What it means:** a two-star zone or level setup can never outrank a typical
+`range_edge` setup (0.85) however good it is, and half the contests are settled by a
+tie-break that carries no technical meaning. **What it does not show:** that the
+continuous strategies are better or worse. No realized outcome data exists for the
+captures, so whether the ordering helps or hurts expectancy is unproven.
+
+**Disposition:** HYPOTHESIS upgraded to a CONFIRMED_MECHANISM (P2). No change made; the
+rank order is an execution-policy decision. Proposal: calibrate each strategy's score
+to a common scale only after `realized_pips` (#750) has accumulated enough closed
+trades per strategy to fit it against outcomes, and keep any change behind
+out-of-sample replay.
+
 ## Preserved shared primitives
 
 Zone building and clipping (`techniquezone`), structure, liquidity, indicators, ATR /
