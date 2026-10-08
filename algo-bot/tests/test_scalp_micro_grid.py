@@ -26,7 +26,6 @@ def test_scalp_route_is_single_leg_market_not_micro_grid():
     atr=4.0,
     zone_fill_enabled=True,
     strategy="Range Sweep Scalp",
-    strategy_family="scalp",
   )
   assert plan.valid is True
   assert plan.route == ROUTE_MARKET
@@ -64,7 +63,6 @@ def test_xau_scalp_auto_route_is_single_leg_market(
     atr=4.0,
     zone_fill_enabled=True,
     strategy="Range Sweep Scalp",
-    strategy_family="scalp",
     entry_clips=xau.targeting.entry_clips,
   )
 
@@ -86,7 +84,6 @@ def test_scalp_chase_sell_books_full_market_not_five_legs_into_abandoned_zone():
     atr=4.0,
     zone_fill_enabled=True,
     strategy="Range Sweep Scalp",
-    strategy_family="scalp",
   )
   assert plan.valid is True
   assert plan.route == ROUTE_MARKET
@@ -108,7 +105,6 @@ def test_scalp_chase_buy_books_full_market_not_micro_grid():
     atr=4.0,
     zone_fill_enabled=True,
     strategy="Impulse Pullback Scalp",
-    strategy_family="scalp",
   )
   assert plan.route == ROUTE_MARKET
   assert plan.entry_geometry == "above"
@@ -134,7 +130,6 @@ def test_technique_fvg_uses_its_declared_zone_scale_policy():
     atr=4.0,
     zone_fill_enabled=True,
     strategy="FVG",
-    strategy_family="zone",
   )
   assert plan.valid is True
   assert plan.route == ROUTE_ZONE_SPLIT
@@ -153,7 +148,6 @@ def test_key_level_reaction_is_not_forced_onto_scalp_grid():
     atr=4.0,
     zone_fill_enabled=True,
     strategy="Key Level",
-    strategy_family="key_level",
   )
   assert plan.route == "market"
   assert plan.planned_leg_entry_prices == ()
@@ -170,7 +164,6 @@ def test_breakout_retest_outside_zone_uses_market_watch_not_immediate():
     atr=4.0,
     zone_fill_enabled=True,
     strategy="Breakout Retest Scalp",
-    strategy_family="scalp",
   )
   assert plan.valid is True
   assert plan.route == ROUTE_MARKET

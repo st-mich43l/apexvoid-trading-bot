@@ -7,41 +7,57 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
 )
 
-// Family classification mirrors algo-bot's strategy_taxonomy.py exactly,
-// but keyed on Go's own 20 catalog IDs (opportunity.Candidate.Strategy)
-// instead of the sprawling legacy display-name taxonomy with its many
-// aliases — Go only ever produces these 20 IDs, so it needs none of
-// that. Membership verified against a live catalog dump: REACTION_
-// STRATEGIES = {Key Level, Session Level, Trendline}; the scalp-room-
-// synced set is RANGE_STRATEGIES (Range Edge Scalp is the only Go-
-// catalog member) union M1_SCALP_STRATEGIES (Breakout Retest Scalp,
-// Impulse Pullback Scalp, Range Sweep Scalp — their own catalog IDs
-// below); every other catalog strategy (including Momentum Ride,
-// despite the name) falls to the plain trend-family default, exactly
-// as protective_stop.stop_bounds_for_strategy's own fallback does.
-var reactionFamilyStrategies = map[opportunity.StrategyID]bool{
-	"key_level": true, "session_level": true, "trendline": true,
-}
+// stopEnvelopeKind is which of the four configured stop-distance policies a
+// strategy is admitted under. Every strategy names its own kind below — there
+// is no strategy group that supplies it — and TestEveryStrategyDeclaresItsOwnStopEnvelope
+// fails if one of the 21 catalog IDs is missing. The values mirror algo-bot's
+// protective_stop.stop_bounds_for_strategy exactly, keyed on Go's catalog IDs
+// (opportunity.Candidate.Strategy): Key Level, Session Level and Trendline use
+// the reaction-room envelope; Range Sweep, Impulse Pullback and Scalp Breakout
+// Retest use strategies.scalping.stop.* directly (fixed min_rr 1.0); Range Edge
+// and Fade Scalp use execution.range.*; every other strategy (Momentum Ride
+// included, despite the name) takes the plain trend envelope, as the Python
+// fallback does.
+type stopEnvelopeKind int
 
-// m1ScalpStopStrategies use strategies.scalping.stop.* directly (fixed
-// min_rr=1.0) — algo-bot's own is_m1_scalp_strategy family.
-var m1ScalpStopStrategies = map[opportunity.StrategyID]bool{
-	"range_sweep": true, "impulse_pullback": true, "scalp_breakout_retest": true,
-}
+const (
+	stopEnvelopeTrend stopEnvelopeKind = iota
+	stopEnvelopeReactionRoom
+	stopEnvelopeM1Scalp
+	stopEnvelopeRangeRoom
+)
 
-// rangeRoomSyncedStrategies use execution.range.* — algo-bot's own
-// RANGE_STRATEGIES family (Go only ever emits range_edge from it).
-var rangeRoomSyncedStrategies = map[opportunity.StrategyID]bool{
-	"range_edge": true, "fade_scalp": true,
+var strategyStopEnvelope = map[opportunity.StrategyID]stopEnvelopeKind{
+	"key_level":             stopEnvelopeReactionRoom,
+	"confluence_zone":       stopEnvelopeTrend,
+	"supply":                stopEnvelopeTrend,
+	"demand":                stopEnvelopeTrend,
+	"order_block":           stopEnvelopeTrend,
+	"fvg":                   stopEnvelopeTrend,
+	"ifvg":                  stopEnvelopeTrend,
+	"crt":                   stopEnvelopeTrend,
+	"flip_zone":             stopEnvelopeTrend,
+	"session_level":         stopEnvelopeReactionRoom,
+	"trendline":             stopEnvelopeReactionRoom,
+	"range_edge":            stopEnvelopeRangeRoom,
+	"box_breakout":          stopEnvelopeTrend,
+	"break_retest":          stopEnvelopeTrend,
+	"momentum_ride":         stopEnvelopeTrend,
+	"snap_back":             stopEnvelopeTrend,
+	"fade_scalp":            stopEnvelopeRangeRoom,
+	"liquidity_sweep":       stopEnvelopeTrend,
+	"range_sweep":           stopEnvelopeM1Scalp,
+	"impulse_pullback":      stopEnvelopeM1Scalp,
+	"scalp_breakout_retest": stopEnvelopeM1Scalp,
 }
 
 // computeStopEnvelope mirrors algo-bot's stop_bounds_for_reaction_room
-// (protective_stop.py) for this candidate's own strategy family and
-// target geometry, translated one-for-one:
-//   - reaction family: floor = max(reaction_min_pips, reaction_room_floor),
+// (protective_stop.py) for this candidate's own strategy and target
+// geometry, translated one-for-one:
+//   - reaction-room kind: floor = max(reaction_min_pips, reaction_room_floor),
 //     cap = max(floor, min(reaction_max_pips, trend_max_pips)), min_rr = reaction_min_rr.
-//   - M1 scalp family: floor = scalp_min_pips, cap = max(floor, scalp_max_pips), min_rr = 1.0.
-//   - range-room-synced family (range_edge): floor = range_room_floor_pips,
+//   - M1 scalp kind: floor = scalp_min_pips, cap = max(floor, scalp_max_pips), min_rr = 1.0.
+//   - range-room kind (range_edge, fade_scalp): floor = range_room_floor_pips,
 //     cap = max(floor, trend_max_pips), min_rr = range_min_rr.
 //   - everything else: floor = trend_min_pips, cap = trend_max_pips, no
 //     per-instance pinning (algo-bot's own "strategy_default" fallback
@@ -56,18 +72,19 @@ func computeStopEnvelope(c opportunity.Candidate, geometry market.Geometry, cfg 
 	var source string
 	pinToTarget := true
 
-	switch {
-	case reactionFamilyStrategies[c.Strategy]:
+	kind := strategyStopEnvelope[c.Strategy]
+	switch kind {
+	case stopEnvelopeReactionRoom:
 		floorPips = math.Max(cfg.ReactionMinPips, cfg.ReactionRoomFloorPips)
 		capPips = math.Max(floorPips, math.Min(cfg.ReactionMaxPips, cfg.TrendMaxPips))
 		minRR = cfg.ReactionMinRR
 		source = "reaction_room"
-	case m1ScalpStopStrategies[c.Strategy]:
+	case stopEnvelopeM1Scalp:
 		floorPips = cfg.ScalpMinPips
 		capPips = math.Max(floorPips, cfg.ScalpMaxPips)
 		minRR = 1.0
 		source = "scalp_stop_envelope"
-	case rangeRoomSyncedStrategies[c.Strategy]:
+	case stopEnvelopeRangeRoom:
 		floorPips = cfg.RangeRoomFloorPips
 		capPips = math.Max(floorPips, cfg.TrendMaxPips)
 		minRR = cfg.RangeMinRR
@@ -79,14 +96,14 @@ func computeStopEnvelope(c opportunity.Candidate, geometry market.Geometry, cfg 
 		pinToTarget = false
 	}
 	// The resolved instrument envelope is the authoritative per-symbol
-	// policy.  Do not apply it to M1 scalp families: those deliberately use
+	// policy.  Do not apply it to the M1 scalp kind: those deliberately use
 	// the dedicated scalping.stop book.  Every other Go candidate must carry
 	// the same pair-specific bounds Python execution previously composed from
 	// instruments.yml (EURUSD 12-20, GBPUSD 15-25, GBPJPY 22-35, USDJPY
 	// 18-28, XAU 50-60).  Without this override Go silently fell back to the
 	// global 40-60 trend/reaction envelope and FX plans were rejected after
 	// trigger confirmation.
-	if cfg.InstrumentConfigured && !m1ScalpStopStrategies[c.Strategy] {
+	if cfg.InstrumentConfigured && kind != stopEnvelopeM1Scalp {
 		floorPips = cfg.InstrumentMinPips
 		capPips = cfg.InstrumentMaxPips
 	}

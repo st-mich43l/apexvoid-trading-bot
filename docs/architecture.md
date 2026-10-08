@@ -87,6 +87,14 @@ no London/NY window blocks a plan on any instrument. The MAD Asia-phase
 classifier (accumulation, manipulation, expansion) is likewise soft context
 stamped onto opportunities.
 
+Every strategy owns its own candidates: disabling one never changes another's, and a
+confluence overlap never removes a technique's setup (Confluence Zone publishes its own
+opportunity beside theirs). There is no strategy family anywhere in the stack. On the
+Algo Bot side each strategy's execution profile is its own row in
+`app/autotrade/strategy_catalog.py`; the `strategy_family` string on TradePlan V8 and
+persisted events is a record label that no decision reads. See the
+[independence audit](strategies/independence-audit.md).
+
 Every strategy is evaluated on every symbol it is configured for; the
 instrument decides execution (observe-only lists in `config/instruments.yml`),
 not the strategy code. [Strategies](strategies/README.md) holds the
@@ -99,7 +107,7 @@ holds admission, arbitration, exposure, TradePlan construction and event
 handling. `app/bot` and `app/signals` are Telegram, the journal and the manual
 workflow. `app/scalping` keeps outcome accounting only.
 
-Manual `/algo` plans carry `strategy_family=manual`, are labelled `algo_manual`
+Manual `/algo` plans carry the plan-kind label `strategy_family=manual` (a record label, not a strategy family), are labelled `algo_manual`
 and are exempt from the autonomous exposure rules: an owner instruction is a
 direct decision, not analysis output.
 

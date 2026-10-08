@@ -823,7 +823,7 @@ async def test_existing_v8_builder_fails_closed_if_htf_is_stripped(h):
   base = deserialize_matches(await client.get(strategy_matches_key("XAU")))[0]
   match = replace(base, htf_bias="")
   assert await worker._publish_trade_plan_v8(client, "XAU", _spot(4354.1, 4354.3), match, frames={"M1": _m1_trigger_bar()}) is None
-  # A Go-origin match's confirmation policy (GO_ORIGIN_TAG bypass) sets zone_family/
+  # A Go-origin match's confirmation policy (GO_ORIGIN_TAG bypass) sets zone_reaction/
   # require_quote_inside_zone False, so it skips the legacy M5-authoritative "preflight"
   # htf_bias check (v8_missing_htf_bias) a Python-detected match would hit there; it fails
   # closed one stage later, in trade_plan_builder's own htf_bias requirement — still no

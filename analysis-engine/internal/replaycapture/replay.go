@@ -39,6 +39,10 @@ type Options struct {
 	// OnEvaluation observes each closed bar's strategy candidates (see
 	// engine.Settings.OnEvaluation). Nil by default.
 	OnEvaluation func(engine.Evaluation)
+	// DisabledStrategies switches the named strategies off for this replay only
+	// (the configuration is not touched). Independence tests use it to prove a
+	// strategy's candidates do not depend on another strategy being enabled.
+	DisabledStrategies []string
 }
 
 // Replay dispatches a capture through the exact engine path a live feed uses
@@ -53,6 +57,18 @@ func Replay(doc *config.Document, capture *Capture, primary market.Timeframe, op
 		return nil, err
 	}
 	settings.OnEvaluation = opts.OnEvaluation
+	for _, id := range opts.DisabledStrategies {
+		found := false
+		for i := range settings.Strategies {
+			if string(settings.Strategies[i].ID) == id {
+				settings.Strategies[i].Enabled = false
+				found = true
+			}
+		}
+		if !found {
+			return nil, fmt.Errorf("disabled strategy %q is not configured", id)
+		}
+	}
 	byTF := make(map[market.Timeframe][]market.Candle)
 	for name := range capture.Timeframes {
 		tf := market.Timeframe(name)
