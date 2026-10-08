@@ -30,7 +30,10 @@ The first target is the equilibrium and the second the opposing edge.
 
 - **Certification**: `LEGACY_PARITY_PROVEN` ([matrix](README.md#certification)).
 - **Symbols**: all instruments.
-- **Execution**: Trades on every instrument.
+- **Execution**: Trades on every instrument. Enters only with the quote inside the
+  card's entry zone (plus the contract tolerance): a quote past the edge waits for
+  a retest and is never chased at the quote, so the order price is the price on the
+  card (production 2026-10-08: card 4,125-4,127, order at 4124.19).
 - **Arbitration**: opportunities on the same symbol and direction that share a
   thesis group, a structure or an entry corridor compete; the best by quality,
   confluence, structural quality and freshness trades and the rest are

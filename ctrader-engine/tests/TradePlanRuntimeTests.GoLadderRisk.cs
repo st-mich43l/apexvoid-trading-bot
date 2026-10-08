@@ -6,19 +6,37 @@ using ApexVoid.CTraderFeed;
 namespace CTraderFeed.Tests;
 
 /// <summary>
-/// The executor-injected XAU risk leg on Go-origin ladder plans, and the worst-case group
+/// The planner-declared XAU risk leg on Go-origin ladder plans, and the worst-case group
 /// risk it adds. Every number here comes from the orders the real TradePlanRuntime submits to the
 /// broker simulator, not from a re-derivation. Documents (and pins) that max_group_risk_percent is
 /// declarative today: the executor sizes from the owner's equity table and never reads it.
 /// </summary>
 public sealed partial class TradePlanRuntimeTests
 {
+  /// <summary>
+  /// Declares <c>entry.risk_leg</c> the way the planner does: 15 pips on the entry
+  /// side of the stop (BUY above it, SELL below it) at the given lots.
+  /// </summary>
+  private static string WithRiskLeg(string planJson, decimal lots = 0.05m, decimal? price = null)
+  {
+    var plan = JsonNode.Parse(planJson)!.AsObject();
+    var sell = plan["analysis"]!["direction"]!.GetValue<string>() == "SELL";
+    var stop = decimal.Parse(plan["stop"]!["price"]!.GetValue<string>(), CultureInfo.InvariantCulture);
+    var riskPrice = price ?? (sell ? stop - 1.5m : stop + 1.5m);
+    plan["entry"]!["risk_leg"] = new JsonObject
+    {
+      ["price"] = riskPrice.ToString(CultureInfo.InvariantCulture),
+      ["lots"] = lots.ToString(CultureInfo.InvariantCulture),
+    };
+    return plan.ToJsonString();
+  }
+
   private const decimal XauPipSize = 0.1m;
   private const decimal XauPipValuePerLot = 10m;
   private const decimal GoStop = 4358.75m;
   private static readonly SpotPrice LadderQuote = new("XAU", 4354.10m, 4354.30m, 1);
 
-  private static string GoLadderPlanJson(bool riskLegDisabled, decimal maxGroupRiskPercent = 2.0m, string entryType = "market_with_limit_scale")
+  private static string GoLadderPlanJson(bool riskLeg, decimal maxGroupRiskPercent = 2.0m, string entryType = "market_with_limit_scale", decimal riskLots = 0.05m)
   {
     var plan = JsonNode.Parse(ContractFile("go-derived-plan-xau-supply.json"))!.AsObject();
     plan["entry"] = JsonNode.Parse($$"""
@@ -31,24 +49,19 @@ public sealed partial class TradePlanRuntimeTests
       ]
     }
     """);
-    var tags = new JsonArray(plan["analysis"]!["tags"]!.AsArray().Select(t => (JsonNode?)JsonValue.Create(t!.GetValue<string>())).Where(t => t!.GetValue<string>() != "risk_leg:disabled").ToArray());
-    if (riskLegDisabled)
-    {
-      tags.Add("risk_leg:disabled");
-    }
-    plan["analysis"]!["tags"] = tags;
     plan["risk"]!["max_group_risk_percent"] = maxGroupRiskPercent.ToString(CultureInfo.InvariantCulture);
-    return plan.ToJsonString();
+    var json = plan.ToJsonString();
+    return riskLeg ? WithRiskLeg(json, riskLots) : json;
   }
 
   private static (FakeTradePlanStore Store, FakeTradePlanTradingClient Client, TradePlanRuntime Runtime, TickingClock Clock)
-    LadderChain(string planJson, decimal equity, bool riskLegOption = true)
+    LadderChain(string planJson, decimal equity)
   {
     var store = new FakeTradePlanStore();
     store.EnqueuePlan(planJson);
     var client = new FakeTradePlanTradingClient { AccountEquity = equity, AccountBalance = equity, NextMarketFillPrice = 4354.10m };
     var clock = new TickingClock();
-    var runtime = new TradePlanRuntime(Options() with { ReactionRiskLegEnabled = riskLegOption }, store, clock.Read, _ => { });
+    var runtime = new TradePlanRuntime(Options(), store, clock.Read, _ => { });
     return (store, client, runtime, clock);
   }
 
@@ -67,14 +80,14 @@ public sealed partial class TradePlanRuntimeTests
   }
 
   [Fact]
-  public async Task GoOriginPlanTaggedRiskLegDisabledPlacesOnlyTheDeclaredLadder()
+  public async Task PlanWithoutARiskLegPlacesOnlyTheDeclaredLadder()
   {
-    var (_, client, runtime, _) = LadderChain(GoLadderPlanJson(riskLegDisabled: true), equity: 2_000m);
+    var (_, client, runtime, _) = LadderChain(GoLadderPlanJson(riskLeg: false), equity: 2_000m);
 
     await runtime.PollAsync(client, Symbol, LadderQuote, CancellationToken.None);
 
     Assert.Single(client.MarketOrders);
-    var limit = Assert.Single(client.LimitOrders);                     // L2 only: no RISK leg even though the executor flag is on
+    var limit = Assert.Single(client.LimitOrders);                     // L2 only: the plan declares no RISK leg
     Assert.EndsWith(":L2", limit.ClientOrderId);
     Assert.DoesNotContain(runtime.TrackedStates.Single().Legs!, leg => TradePlanRuntime.IsReactionRiskLeg(leg.LegId));
   }
@@ -82,7 +95,7 @@ public sealed partial class TradePlanRuntimeTests
   [Fact]
   public async Task WithoutTheTagThePlanGetsTheInjectedRiskLegExactlyAsPythonOwnedPlansDoToday()
   {
-    var (_, client, runtime, _) = LadderChain(GoLadderPlanJson(riskLegDisabled: false), equity: 2_000m);
+    var (_, client, runtime, _) = LadderChain(GoLadderPlanJson(riskLeg: true), equity: 2_000m);
 
     await runtime.PollAsync(client, Symbol, LadderQuote, CancellationToken.None);
 
@@ -95,14 +108,6 @@ public sealed partial class TradePlanRuntimeTests
     Assert.True(GoEntryBid < client.LimitOrders.First(l => l.ClientOrderId.EndsWith(":L2", StringComparison.Ordinal)).LimitPrice && client.LimitOrders.First(l => l.ClientOrderId.EndsWith(":L2", StringComparison.Ordinal)).LimitPrice < risk.LimitPrice && risk.LimitPrice < GoStop);
   }
 
-  [Fact]
-  public async Task RiskLegFlagOffPlacesNoRiskLegOnAnyPlanRegardlessOfTheTag()
-  {
-    var (_, client, runtime, _) = LadderChain(GoLadderPlanJson(riskLegDisabled: false), equity: 2_000m, riskLegOption: false);
-    await runtime.PollAsync(client, Symbol, LadderQuote, CancellationToken.None);
-    Assert.Single(client.LimitOrders);
-  }
-
   public static IEnumerable<object[]> EquityGrid() =>
     new[] { 300m, 500m, 600m, 900m, 1_000m, 1_001m, 1_300m, 2_000m, 2_999m, 3_000m, 5_000m, 10_000m }.Select(e => new object[] { e });
 
@@ -110,8 +115,8 @@ public sealed partial class TradePlanRuntimeTests
   [MemberData(nameof(EquityGrid))]
   public async Task WorstCaseGroupRiskIsMeasuredFromTheOrdersActuallySubmittedAndEveryVolumeIsBrokerValid(decimal equity)
   {
-    var without = LadderChain(GoLadderPlanJson(riskLegDisabled: true), equity);
-    var with = LadderChain(GoLadderPlanJson(riskLegDisabled: false), equity);
+    var without = LadderChain(GoLadderPlanJson(riskLeg: false), equity);
+    var with = LadderChain(GoLadderPlanJson(riskLeg: true, riskLots: equity < 1_000m ? 0.02m : 0.05m), equity); // the planner's equity tier
     await without.Runtime.PollAsync(without.Client, Symbol, LadderQuote, CancellationToken.None);
     await with.Runtime.PollAsync(with.Client, Symbol, LadderQuote, CancellationToken.None);
 
@@ -138,7 +143,7 @@ public sealed partial class TradePlanRuntimeTests
   public async Task MaxGroupRiskPercentIsDeclarativeTheExecutorNeverReadsIt()
   {
     // Pins current behaviour so enforcing it later is a deliberate change: an absurdly tight cap does not stop the order.
-    var (_, client, runtime, _) = LadderChain(GoLadderPlanJson(riskLegDisabled: true, maxGroupRiskPercent: 0.0001m), equity: 2_000m);
+    var (_, client, runtime, _) = LadderChain(GoLadderPlanJson(riskLeg: false, maxGroupRiskPercent: 0.0001m), equity: 2_000m);
     await runtime.PollAsync(client, Symbol, LadderQuote, CancellationToken.None);
     Assert.Single(client.MarketOrders);
     var loss = WorstCaseLoss(client, GoStop);
@@ -148,15 +153,15 @@ public sealed partial class TradePlanRuntimeTests
   [Fact]
   public async Task PartialLadderFillAndRestartNeverResubmitAnyLegAndRiskLegFillsLater()
   {
-    var (store, client, runtime, clock) = LadderChain(GoLadderPlanJson(riskLegDisabled: false), equity: 2_000m);
+    var (store, client, runtime, clock) = LadderChain(GoLadderPlanJson(riskLeg: true), equity: 2_000m);
     await runtime.PollAsync(client, Symbol, LadderQuote, CancellationToken.None);
     var partial = Assert.Single(runtime.TrackedStates);
     Assert.Equal(TradePlanRuntimeStage.PartiallyOpen, partial.Stage);
     var ordersBefore = client.MarketOrders.Count + client.LimitOrders.Count;
 
     // Restart mid-ladder: the same plan is redelivered to a fresh executor process.
-    store.EnqueuePlan(GoLadderPlanJson(riskLegDisabled: false));
-    var restarted = new TradePlanRuntime(Options() with { ReactionRiskLegEnabled = true }, store, clock.Read, _ => { });
+    store.EnqueuePlan(GoLadderPlanJson(riskLeg: true));
+    var restarted = new TradePlanRuntime(Options(), store, clock.Read, _ => { });
     clock.Advance();
     await restarted.PollAsync(client, Symbol, LadderQuote, CancellationToken.None);
     Assert.Equal(ordersBefore, client.MarketOrders.Count + client.LimitOrders.Count);

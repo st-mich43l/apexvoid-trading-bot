@@ -63,11 +63,12 @@ from app.autotrade.entry_overlap import (
   release_entry_zone,
   reserve_entry_zone,
 )
+from app.autotrade.risk_leg import load_account_equity
 from app.autotrade.strategy_match import (
   StrategyMatch,
 )
 from app.autotrade.strategy_taxonomy import (
-  is_breakout_retest_scalp_strategy,
+  is_retest_only_scalp_strategy,
   is_m1_scalp_strategy,
   is_reaction_strategy,
   is_scalp_strategy,
@@ -1001,7 +1002,7 @@ def _execution_quote_access(
   if candidate_allows_chase:
     zone_access_mode = (
       ZONE_ACCESS_RETEST_ONLY
-      if is_breakout_retest_scalp_strategy(str(match.strategy))
+      if is_retest_only_scalp_strategy(str(match.strategy))
       else ZONE_ACCESS_MOMENTUM_CHASE
     )
     try:
@@ -2268,6 +2269,7 @@ async def _publish_trade_plan_v8(
       ),
       be_after_target_index=0,
       approved_measured=gate_measured,
+      account_equity=await load_account_equity(client, symbol),
     )
   except TradePlanBuildRejected as exc:
     await _release_claims()

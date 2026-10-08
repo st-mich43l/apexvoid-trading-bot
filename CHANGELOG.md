@@ -12,6 +12,24 @@ dated section after deployment.
 
 ## Unreleased
 
+### Fixed
+- The card price is now the order price. Production 2026-10-08 (XAU) placed two
+  orders away from their cards: Range Edge SELL, card 4,125-4,127, ordered at 4124.19
+  (the scalp momentum chase took the quote 6 pips past the zone) and stopped out in 8
+  minutes; Key Level SELL, card 4,126-4,130, held a third RISK leg the executor had
+  injected itself (0.05 lot at 4130.01) that neither the plan nor the card showed, so
+  real risk was 37.6 pips instead of 59. Range Edge now enters only with the quote
+  inside its card zone (like Breakout Retest) and otherwise waits for a retest. The
+  planner declares the XAU risk leg in the TradePlan (`entry.risk_leg`: price and
+  lots, from `execution.reaction_risk_leg`, equity from the executor snapshot, the
+  smaller tier when unknown), the card prints a "Risk leg" line, and the executor
+  places exactly the declared legs: the injection and `ReactionRiskLegEnabled` are
+  gone. Manual `/algo` ladders declare the same leg. Plans without `entry.risk_leg`
+  place none.
+  **Deploy order:** deploy algo-bot first, then ctrader-engine; an old executor given
+  a plan with `entry.risk_leg` ignores the field and keeps injecting its own leg, and
+  a new executor given an old plan places none.
+
 ### Changed
 - Auto Algo now measures R the way Manual Algo does. The executor publishes `risk_pips` on
   target and close events: the distance from the group's fill to the ORIGINAL stop, never the

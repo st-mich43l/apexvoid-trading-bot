@@ -58,29 +58,18 @@ public sealed class LadderSpecParityTests
     type.GetField(name, BindingFlags.NonPublic | BindingFlags.Static)?.GetValue(null)
       ?? throw new MissingFieldException(type.Name, name);
 
-  public static IEnumerable<object[]> RiskPriceCases() =>
-    Spec.GetProperty("risk_price_cases").EnumerateArray().Select(c => new object[] { c.GetProperty("name").GetString()! });
-
   public static IEnumerable<object[]> RiskVolumeCases() =>
     Spec.GetProperty("risk_volume_cases").EnumerateArray().Select(c => new object[] { c.GetProperty("equity").GetString()! });
 
-  [Theory]
-  [MemberData(nameof(RiskPriceCases))]
-  public void RiskLegPriceMatchesTheSpec(string name)
-  {
-    var c = Spec.GetProperty("risk_price_cases").EnumerateArray().Single(x => x.GetProperty("name").GetString() == name);
-    object[] args = [Dir(c), D(c, "stop"), PipSize(), Symbol()];
-    Assert.Equal(D(c, "price"), (decimal)Method(typeof(TradePlanRuntime), "ReactionRiskLegPrice").Invoke(null, args)!);
-  }
-
+  // The planner (algo-bot xau_ladder.py / risk_leg.py) decides the leg's price and
+  // lots from these cases; the executor places exactly the declared leg. What stays
+  // pinned here is the one executor-side conversion: declared lots -> broker volume.
   [Theory]
   [MemberData(nameof(RiskVolumeCases))]
-  public void RiskLegVolumeMatchesTheSpec(string equityText)
+  public void DeclaredRiskLegLotsConvertToTheSpecsBrokerVolume(string equityText)
   {
     var c = Spec.GetProperty("risk_volume_cases").EnumerateArray().Single(x => x.GetProperty("equity").GetString() == equityText);
-    object[] args = [D(c, "equity"), Symbol()];
-    var expected = c.GetProperty("volume").GetInt64();
-    Assert.Equal(expected, (long)Method(typeof(TradePlanRuntime), "ReactionRiskLegVolume").Invoke(null, args)!);
+    Assert.Equal(c.GetProperty("volume").GetInt64(), VolumePlanner.VolumeForLots(D(c, "lots"), Symbol()));
   }
 
   public static IEnumerable<object[]> EquityTableCases() =>
@@ -95,13 +84,9 @@ public sealed class LadderSpecParityTests
   }
 
   [Fact]
-  public void EveryRiskLegConstantMatchesTheSpec()
+  public void TheRiskLegIdMatchesTheSpec()
   {
     var risk = Spec.GetProperty("risk_leg");
-    Assert.Equal(D(risk, "lots_default"), (decimal)Const(typeof(TradePlanRuntime), "ReactionRiskLegLotsDefault")!);
-    Assert.Equal(D(risk, "lots_below_equity_floor"), (decimal)Const(typeof(TradePlanRuntime), "ReactionRiskLegLotsBelowEquityFloor")!);
-    Assert.Equal(D(risk, "equity_floor"), (decimal)Const(typeof(TradePlanRuntime), "ReactionRiskLegEquityFloor")!);
-    Assert.Equal(D(risk, "pips_from_stop"), (decimal)Const(typeof(TradePlanRuntime), "ReactionRiskLegPipsFromStop")!);
     Assert.Equal(risk.GetProperty("leg_id").GetString(), (string)Const(typeof(TradePlanRuntime), "ReactionRiskLegId")!);
   }
 }

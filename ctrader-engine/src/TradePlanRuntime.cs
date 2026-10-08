@@ -2502,31 +2502,22 @@ public sealed partial class TradePlanRuntime(
         },
       ];
     }
-    if (
-      options.ReactionRiskLegEnabled
-      // Owner 2026-09-17: XAU only. The fixed 0.05/0.02 lot sizing was
-      // tuned against XAU's pip value; applying it unchanged to FX pairs
-      // is a materially different risk (reproduced live on a USDJPY CRT
-      // trade that got a RISK leg it should never have had).
-      && string.Equals(plan.Symbol, "XAU", StringComparison.OrdinalIgnoreCase)
-      // An explicit risk_leg:disabled tag is the only opt-out. The leg is an
-      // execution-policy mechanism, not a Go/Python provenance decision.
-      && !PlanDisablesReactionRiskLeg(plan)
-      && (plan.Entry.Legs?.Count ?? 0) > 1
-      && plan.Entry.Type
-        is TradePlanContract.EntryTypeLimitLadder
-        or TradePlanContract.EntryTypeMarketWithLimitScale
-    )
+    if (plan.Entry.RiskLeg is { } declaredRiskLeg)
     {
-      var riskLegVolume = ReactionRiskLegVolume(equity.Equity, symbol);
+      // The planner owns the risk leg (price, size, whether there is one); the
+      // contract validation already guarantees a multi-leg ladder and positive
+      // price and lots. The executor places exactly the leg the plan declares.
+      var riskLegVolume = VolumePlanner.VolumeForLots(declaredRiskLeg.Lots, symbol);
       declaredLegs =
       [
         .. declaredLegs,
         new DeclaredLeg(
           ReactionRiskLegId,
-          ReactionRiskLegPrice(direction, absoluteStop, units.PipSize, symbol),
-          0m, // fixed equity-tiered size, not a share of the plan's own
-              // equity-table volume - see ReactionRiskLegVolume.
+          decimal.Round(
+            declaredRiskLeg.Price, symbol.Digits, MidpointRounding.AwayFromZero
+          ),
+          0m, // fixed size declared in lots, not a share of the plan's own
+              // equity-table volume.
           riskLegVolume,
           riskLegVolume / (decimal)symbol.LotSize,
           TradePlanContract.OrderTypeLimit
@@ -5031,53 +5022,17 @@ public sealed partial class TradePlanRuntime(
     );
   }
 
-  // Owner 2026-09-16: reaction-family "trade-off" risk leg - same spirit as
-  // Manual Algo's own (ManualAlgoRiskLegPrice/Volume in AutoTradeEngine.cs)
-  // but computed independently here, since TradePlan v8 is a fully
-  // separate execution path Manual Algo never touches. Resting
+  // Owner 2026-09-16: reaction-family "trade-off" risk leg - resting
   // deliberately close to the stop: if price nearly invalidates the setup
-  // before reversing, this leg still catches a much deeper (better) fill
-  // than L1/L2 ever would; if price keeps going instead, the small fixed
-  // size caps the extra loss. Equity-tiered off live account equity, not
-  // scaled from the plan's own equity-table sizing - a large account books
-  // the same small fixed size here as a smaller one above the floor,
-  // exactly like Manual Algo's. Purely a C# addition: Python never plans
-  // or knows about this leg, exactly like it never knew about Manual
-  // Algo's - see options.ReactionRiskLegEnabled for the kill switch.
-  public const string RiskLegDisabledTag = "risk_leg:disabled";
-
-  private static bool PlanDisablesReactionRiskLeg(TradePlan plan) =>
-    plan.Analysis.Tags?.Contains(RiskLegDisabledTag, StringComparer.Ordinal) ?? false;
-
+  // before reversing, this leg still catches a much deeper (better) fill than
+  // L1/L2 ever would; if price keeps going instead, the small fixed size caps
+  // the extra loss. Owner 2026-10-08: the PLANNER declares it (entry.risk_leg:
+  // price and lots, see algo-bot app/autotrade/risk_leg.py) and the card prints
+  // it; this runtime only places the declared leg under the fixed id below.
   private const string ReactionRiskLegId = "RISK";
-  private const decimal ReactionRiskLegLotsDefault = 0.05m;
-  private const decimal ReactionRiskLegLotsBelowEquityFloor = 0.02m;
-  private const decimal ReactionRiskLegEquityFloor = 1_000m;
-  private const decimal ReactionRiskLegPipsFromStop = 15m;
-
-  private static decimal ReactionRiskLegPrice(
-    TradeDirection direction,
-    decimal stopPrice,
-    decimal pipSize,
-    SymbolInfo symbol
-  ) => decimal.Round(
-    direction == TradeDirection.Buy
-      ? stopPrice + ReactionRiskLegPipsFromStop * pipSize
-      : stopPrice - ReactionRiskLegPipsFromStop * pipSize,
-    symbol.Digits,
-    MidpointRounding.AwayFromZero
-  );
-
-  private static long ReactionRiskLegVolume(decimal equity, SymbolInfo symbol) =>
-    VolumePlanner.VolumeForLots(
-      equity < ReactionRiskLegEquityFloor
-        ? ReactionRiskLegLotsBelowEquityFloor
-        : ReactionRiskLegLotsDefault,
-      symbol
-    );
 
   /// <summary>
-  /// True for the leg <see cref="ReactionRiskLegId"/> injected above - used
+  /// True for the leg <see cref="ReactionRiskLegId"/> the plan declares - used
   /// wherever a group's realized/loss pips must exclude this leg's own
   /// contribution unless a genuine TP was actually archived, mirroring
   /// AutoTradeEngine's IsManualRiskLeg/includeRiskLeg for Manual Algo.

@@ -12,9 +12,11 @@ decision, not analysis output).
 from __future__ import annotations
 
 import time
+from dataclasses import replace
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
+from app.autotrade.risk_leg import plan_risk_leg
 from app.autotrade.trade_plan import (
   ENTRY_TYPE_LIMIT_LADDER,
   ENTRY_TYPE_SINGLE_LIMIT,
@@ -124,6 +126,7 @@ def build_manual_trade_plan(
   intent: ManualTradeIntent,
   *,
   now_ts: int | None = None,
+  account_equity: float | None = None,
 ) -> TradePlan:
   """Translate one ManualTradeIntent into a validated TradePlan V8."""
   effective = for_instrument(runtime_config, intent.symbol)
@@ -179,6 +182,18 @@ def build_manual_trade_plan(
       ),
     )
     leg_ratios = MANUAL_LADDER_RATIOS
+    risk_leg = plan_risk_leg(
+      symbol=intent.symbol,
+      direction=direction,
+      entry=entry,
+      stop_price=stop_price,
+      pip_size=pip_size,
+      digits=digits,
+      account_equity=account_equity,
+      cfg=effective,
+    )
+    if risk_leg is not None:
+      entry = replace(entry, risk_leg=risk_leg)
 
   zone_low = Decimal(str(min(intent.entry_low, intent.entry_high)))
   zone_high = Decimal(str(max(intent.entry_low, intent.entry_high)))

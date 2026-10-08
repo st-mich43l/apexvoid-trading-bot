@@ -12,7 +12,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
 
 from app.autotrade.strategy_taxonomy import (
-  is_breakout_retest_scalp_strategy,
+  is_retest_only_scalp_strategy,
   is_reaction_strategy,
   is_scalp_strategy,
 )
@@ -452,14 +452,14 @@ def resolve_execution_route_plan(
     )
 
   if is_scalp_strategy(str(strategy or "")):
-    retest_only = is_breakout_retest_scalp_strategy(str(strategy or ""))
+    retest_only = is_retest_only_scalp_strategy(str(strategy or ""))
     if retest_only and geometry != "inside":
       return ExecutionRoutePlan(
         ROUTE_MARKET,
         _round_price(quote, digits),
         (),
         geometry,
-        "breakout retest: market_watch until quote inside retest band",
+        "retest-only scalp: market_watch until quote inside the card zone",
         True,
         immediate_market=False,
       )

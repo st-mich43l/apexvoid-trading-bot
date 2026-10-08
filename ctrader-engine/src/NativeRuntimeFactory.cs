@@ -103,8 +103,7 @@ public static class NativeRuntimeFactory
       Symbols: c.LiveInstruments(),
       EquityTableVersion: c.RequiredString("auto_algo.risk.sizing.equity_table_version"),
       UnfilledLegAfterTpPolicy: c.RequiredString("execution.targeting.unfilled_leg_after_tp_policy"),
-      ReactionScaleInvalidPolicy: c.RequiredString("execution.reaction.scale_invalid_policy"),
-      ReactionRiskLegEnabled: c.RequiredBool("execution.reaction_risk_leg.enabled")
+      ReactionScaleInvalidPolicy: c.RequiredString("execution.reaction.scale_invalid_policy")
     );
   }
 
