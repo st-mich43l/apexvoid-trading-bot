@@ -111,6 +111,27 @@ func TestOpportunityPayload_CarriesGoConfluenceContext(t *testing.T) {
 	}
 }
 
+func TestOpportunityPayload_CarriesTheStructureTimeframeOnlyWhenItDiffers(t *testing.T) {
+	candidate := testCandidate()
+	candidate.ObservedTimeframe = market.M5
+	version := kafka.AlgorithmVersion{Structure: "v2", Liquidity: "v1"}
+	raw, err := json.Marshal(kafka.OpportunityPayloadFromCandidate(candidate, version))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "structure_timeframe") {
+		t.Fatalf("an M5 structure must not carry the field: %s", raw)
+	}
+	candidate.StructureTimeframe = market.M15
+	raw, err = json.Marshal(kafka.OpportunityPayloadFromCandidate(candidate, version))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), `"structure_timeframe":"M15"`) {
+		t.Fatalf("an M15 structure must be typed in the payload: %s", raw)
+	}
+}
+
 func TestEnvelope_Validate_RejectsEachMissingRequiredField(t *testing.T) {
 	cases := map[string]func(*kafka.Envelope){
 		"event_id":       func(e *kafka.Envelope) { e.EventID = "" },

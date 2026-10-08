@@ -279,6 +279,11 @@ instruments:
         go_opportunity:
           observe_only_strategies:
             - impulse_pullback
+          # The M15 supply/demand extension (#742) is not part of the proven Python
+          # behavior: M15 zones are still detected and published, never traded, until
+          # their execution quality is validated.
+          observe_only_structure_timeframes:
+            - M15
     # London/NY major: tight spread and 12-20 pip stop. Prefer the pack's 2R
     # ladder, with a 1R full-close fallback when opposing room is constrained.
 
@@ -295,6 +300,11 @@ instruments:
         go_opportunity:
           observe_only_strategies:
             - impulse_pullback
+          # The M15 supply/demand extension (#742) is not part of the proven Python
+          # behavior: M15 zones are still detected and published, never traded, until
+          # their execution quality is validated.
+          observe_only_structure_timeframes:
+            - M15
     # London/NY major, same active-session profile as EURUSD (unlike
     # London-only GBPJPY or Tokyo/NY USDJPY) - Cable's
     # wider production M5 volatility earns a 15-25 envelope, above
@@ -357,6 +367,11 @@ instruments:
         go_opportunity:
           observe_only_strategies:
             - impulse_pullback
+          # The M15 supply/demand extension (#742) is not part of the proven Python
+          # behavior: M15 zones are still detected and published, never traded, until
+          # their execution quality is validated.
+          observe_only_structure_timeframes:
+            - M15
     # Policy name retained for registry continuity. Close-ratio front-load
     # retired: uniform 1R/2R 50/50 + breakeven_after_r=1.0 across fixed_rr.
     policy: fx_fixed_2r_frontload_v1
@@ -396,6 +411,11 @@ instruments:
         go_opportunity:
           observe_only_strategies:
             - impulse_pullback
+          # The M15 supply/demand extension (#742) is not part of the proven Python
+          # behavior: M15 zones are still detected and published, never traded, until
+          # their execution quality is validated.
+          observe_only_structure_timeframes:
+            - M15
     policy: fx_fixed_2r_v1
     # JPY quote volatility is materially above EURUSD even though this is a
     # major; production M5 ATR therefore uses an 18-28 pip envelope.
@@ -459,3 +479,8 @@ instruments:
             - liquidity_sweep
             - session_level
             - impulse_pullback
+          # The M15 supply/demand extension (#742) is not part of the proven Python
+          # behavior: M15 zones are still detected and published, never traded, until
+          # their execution quality is validated.
+          observe_only_structure_timeframes:
+            - M15

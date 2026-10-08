@@ -60,7 +60,7 @@ func opportunityPayloadFromCandidate(c opportunity.Candidate, algo AlgorithmVers
 	}
 	return OpportunityPayload{
 		TechnicalContext: technical, StopEnvelope: stopEnvelope,
-		ID: c.ID, Strategy: string(c.Strategy), Symbol: string(c.Symbol), Timeframe: string(c.ObservedTimeframe), Direction: string(c.Direction),
+		ID: c.ID, Strategy: string(c.Strategy), Symbol: string(c.Symbol), Timeframe: string(c.ObservedTimeframe), StructureTimeframe: string(c.StructureTimeframe), Direction: string(c.Direction),
 		Entry:        EntryZonePayload{Low: c.Entry.Low, High: c.Entry.High},
 		Invalidation: PriceLevelPayload{Price: float64(c.Invalidation.Price), Label: c.Invalidation.Label},
 		Targets:      targets, Evidence: evidence,

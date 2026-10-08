@@ -271,6 +271,9 @@ class AnalysisOpportunity(FrozenConfigModel):
   strategy: str = Field(min_length=1)
   symbol: str = Field(min_length=1)
   timeframe: str | None = None
+  # Typed provenance: the timeframe the structure was built on when it differs
+  # from ``timeframe`` (an M15 zone reacted to on M5 bars); None otherwise.
+  structure_timeframe: Literal["M1", "M3", "M5", "M15", "M30", "H1", "H4", "D1"] | None = None
   direction: Literal["BUY", "SELL"]
   entry: EntryZone
   invalidation: PriceLevel

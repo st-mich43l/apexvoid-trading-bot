@@ -82,6 +82,9 @@ func TechniqueCandidate(ctx *analysiscontext.MarketContext, dec *TechniqueDecisi
 	// The persistent identity of the thesis is the structure, not this
 	// confirmation: a re-confirmation of the same structure is the same thesis.
 	candidate.StructuralID = dec.ID
+	if dec.Instance != nil && dec.Instance.Timeframe != "" {
+		candidate.StructureTimeframe = market.Timeframe(dec.Instance.Timeframe)
+	}
 	candidate.Reaction = &opportunity.ReactionConfirmation{
 		ZoneID: dec.ID, TouchBarTime: conf.TouchTime, ConfirmationBarTime: conf.ConfirmationTime,
 		ReactionType: "rejection", Pattern: conf.Type,

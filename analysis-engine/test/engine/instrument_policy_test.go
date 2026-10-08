@@ -136,3 +136,22 @@ func TestApplyInstrument_ObservesButDoesNotTradeTheContainedStrategies(t *testin
 		}
 	}
 }
+
+func TestApplyInstrument_ObservesTheM15StructureTimeframeOnEveryInstrument(t *testing.T) {
+	doc, err := config.ResolveDocument(filepath.Join("..", "..", "..", "config", "apexvoid.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, symbol := range []string{"XAU", "EURUSD", "GBPUSD", "GBPJPY", "USDJPY"} {
+		settings, err := engine.LoadSettings(doc, "M5", false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := engine.ApplyInstrument(&settings, doc, symbol); err != nil {
+			t.Fatal(err)
+		}
+		if got := settings.ObserveOnlyStructureTimeframes; len(got) != 1 || !got[market.M15] {
+			t.Errorf("%s observe-only structure timeframes = %v, want only M15", symbol, got)
+		}
+	}
+}

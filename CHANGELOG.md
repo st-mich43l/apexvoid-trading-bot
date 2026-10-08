@@ -12,6 +12,20 @@ dated section after deployment.
 
 ## Unreleased
 
+### Security
+- Execution containment is now enforced at plan admission as well as at match
+  creation (`go_containment.py`), so a match stored before a containment change can
+  no longer become a TradePlan. Verified against production first: the deployed
+  build is `31b8e57` with a config identical to master, and every XAU fill of
+  `ifvg`, `liquidity_sweep` (last 5 Oct), `session_level` (6 Oct) and
+  `impulse_pullback` (7 Oct) predates the build that contained it (4a309b3 at
+  09:34 UTC 6 Oct; 943707a at 07:06 UTC 7 Oct); no contained strategy has filled since.
+- The M15 supply/demand extension is analysis-only: `observe_only_structure_timeframes: [M15]`
+  on every instrument, driven by a typed `structure_timeframe` field on
+  `analysis.opportunity.v1` instead of the `htf_zone_m15` evidence string (still read
+  as a fallback for events published by the previous engine during a rolling deploy).
+  Ordinary M5 supply/demand is unaffected.
+
 ### Added
 - Supply and Demand also trade confirmed reactions at M15 zones. Until now the
   technique publishers (frozen Python contract) read the M5 zone population only,

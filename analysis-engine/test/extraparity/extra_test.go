@@ -57,8 +57,8 @@ func TestExtra(t *testing.T) {
 			t.Fatal(err)
 		}
 		type gc struct {
-			dir      string
-			lo, hi   float64
+			dir       string
+			lo, hi    float64
 			confirmed bool
 		}
 		got := map[int64]map[string][]gc{}
