@@ -29,6 +29,9 @@ func ApplyInstrument(settings *Settings, doc *config.Document, symbol string) er
 	settings.InstrumentStopMaxPips = stopMaxPips
 	settings.InstrumentStopEnvelopeConfigured = true
 	settings.TechniqueZones.Technique.PipSize = geometry.PipSize
+	// MAD's sweep tolerance floor is one pip of the instrument (the frozen
+	// classifier received the symbol's own pip size), not the global default.
+	settings.MAD.PipSize = geometry.PipSize
 	if entryMax, ok, err := doc.InstrumentValue(symbol, "price_scale", "fvg_entry_max_width_price"); err != nil {
 		return err
 	} else if ok {

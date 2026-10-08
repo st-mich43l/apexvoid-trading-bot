@@ -69,6 +69,21 @@ dated section after deployment.
   and scalp-lane notes deleted.
 
 ### Fixed
+- Manual Algo: TP2 was never announced when the exit filled a fraction of a pip short of
+  the target (manual 9, 2026-10-08: the event reported 99 realized pips, was read as the
+  already-booked TP1 and silently dropped). The ordinal now comes from the executor's own
+  `highest_booked_target_index`; realized pips are only the fallback for events without it.
+- Manual Algo: after TP1 the group's stop goes to the plan's deepest declared entry (deep
+  edge of the zone, filled or not), the pre-V8 rule, instead of the funded-economic stop
+  that landed at 4144.5 when only the shallow leg had filled (zone 4143-4146). The stop
+  after TP2 stays the shallow entry. The funded-economic stop remains only as the fallback
+  when no declared entry is known.
+- MAD's sweep tolerance floor used the global FX pip size `0.0001` for every instrument; it
+  now uses the instrument's own (XAU 0.1, JPY crosses 0.01), as the frozen classifier did.
+  MAD is telemetry only (confluence scoring is v1) and every replay and parity golden is
+  unchanged. The XAU loss attribution behind this change is in
+  `docs/strategies/xau-loss-attribution-2026-10.md`: no Key Level or Range Edge rule is
+  changed because no defect is demonstrated.
 - Session Level, Flip Zone, Trendline and Box Breakout again publish the decision of
   the frozen Python detectors they replaced (`session_level_reaction`,
   `flip_demand/supply_zone_reaction`, `trendline_reaction` V2, `box_breakout`), only as
