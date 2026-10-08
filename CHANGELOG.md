@@ -13,6 +13,25 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Arbitration and publication correctness (P1 audit, `docs/strategies/arbitration-quality-audit.md`).
+  A Go invalidation or expiry now records its own `go_<reason>` route outcome; before, the
+  outcome stayed at its last waiting state and the next restart rewrote it to a generic
+  `startup_reconciliation` (4,705 of 6,499 outcomes in four production days). Ranking treats
+  a missing or non-finite score as unavailable, so the winner can no longer depend on delivery
+  order (one NaN among four intents gave 8 results in 24 orders). A retained
+  `required_limit_side_unavailable` state falls back to the next ranked intent instead of
+  blocking it. Production ranking, risk, containment and exposure are unchanged: none of the
+  alternative ranking models tested (per-strategy percentile, confluence-first) beat the
+  incumbent on identical eligible sets, and outcome-calibrated ranking has too little clean
+  broker data (19 trades with `realized_pips`).
+
+### Added
+- `algo-bot/tools/arbitration_eval.py` and `analysis-engine/test/replaycapture/dump_candidates_test.go`:
+  a deterministic offline replay that compares ranking models on identical eligible sets,
+  with the production 45-minute reservation, chronological dev / out-of-sample split and a
+  conservative hypothetical-outcome simulator (not broker P&L).
+
+### Fixed
 - XAU Break & Retest is a Manual-style ladder. Production 2026-10-08: a retest band of
   0.23 (4114.91-4115.14) was one market_watch order, risk 47 pips, and the card printed
   "Entry Zone 4,115 - 4,115". Its band is a level (median 0.26 on XAU), so it never

@@ -2731,7 +2731,12 @@ def _arbitration_followup(
   return status, reason_code, message
 
 
+# Waiting reasons that belong to one intent's own entry state, never to the market or
+# the account: a lower-ranked executable intent may still publish while this one waits.
+# (required_limit_side_unavailable: its limit is not on a valid broker side of the
+# quote. Not seen in 96 production hours; reached by code inspection and a unit test.)
 _WAITING_RETEST_PUBLICATION_REASONS = frozenset({
+  "required_limit_side_unavailable",
   "waiting_retest_entry_zone",
   "waiting_retest",
   "reaction_confirmation_handoff",

@@ -141,3 +141,5 @@ oracle; never from Go output.
 - [liquidity_sweep](liquidity_sweep.md)
 - [box_breakout](box_breakout.md)
 - [impulse_pullback](impulse_pullback.md)
+
+Audits: [independence](independence-audit.md), [arbitration and quality (P1)](arbitration-quality-audit.md).
