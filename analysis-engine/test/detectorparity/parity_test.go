@@ -23,7 +23,12 @@ import (
 // did, and each decision must agree on direction, entry band, confluence stars
 // and the touch/confirmation bars. The golden is never produced by Go.
 
-var covered = []string{"break_retest", "range_edge", "snap_back", "momentum_ride", "fade_scalp"}
+// break_retest left this list when it was rebuilt as the v3 technical contract
+// (docs/strategies/break_retest.md): it intentionally no longer reproduces the
+// frozen Python detector, so the oracle golden for it stays untouched and is
+// simply no longer a parity target. Its v2 decisions remain reproducible as the
+// frozen baseline in test/brreplay.
+var covered = []string{"range_edge", "snap_back", "momentum_ride", "fade_scalp"}
 
 type goldenDetector struct {
 	Direction       string  `json:"direction"`
