@@ -70,7 +70,7 @@ func ApplyInstrument(settings *Settings, doc *config.Document, symbol string) er
 	if err := applyTechniqueGeometry(settings, doc, symbol); err != nil {
 		return err
 	}
-	applyParityCRT(settings)
+	applyCRTGeometry(settings)
 	applyLegacyDetector(settings)
 	if err := applyScalpBreakoutRetest(settings, doc); err != nil {
 		return err
@@ -81,20 +81,29 @@ func ApplyInstrument(settings *Settings, doc *config.Document, symbol string) er
 	return applyKeyLevelOverrides(settings, doc, symbol)
 }
 
-// applyParityCRT supplies the per-instrument geometry required by the exact
-// Go port of Python CRT. This is unconditional behavior, not a mode switch.
-func applyParityCRT(settings *Settings) {
+// applyCRTGeometry supplies the per-instrument facts CRT v3 reads: the pip size
+// its sweep and reclaim thresholds are expressed in, the entry-width cap, and
+// the instrument's execution stop cap (0 until ApplyInstrument sets it). CRT
+// rejects a setup whose honest structural risk exceeds that cap instead of
+// tightening the stop into the sweep wick. The legacy reaction leaves are still
+// injected because the shared confluence rubric is parsed from them.
+func applyCRTGeometry(settings *Settings) {
 	for i := range settings.Strategies {
 		if settings.Strategies[i].ID != "crt" {
 			continue
 		}
-		params := make(map[string]any, len(settings.Strategies[i].Parameters)+5)
+		params := make(map[string]any, len(settings.Strategies[i].Parameters)+6)
 		for k, v := range settings.Strategies[i].Parameters {
 			params[k] = v
 		}
 		params["technique_window_bars"] = float64(settings.TechniqueZones.WindowBars)
 		params["entry_max_width_price"] = settings.TechniqueZones.Technique.FVGEntryMaxWidthPrice
 		params["pip_size"] = settings.TechniqueZones.Technique.PipSize
+		// Only a RESOLVED instrument stop cap is injected: before an instrument is
+		// applied it is zero, and zero must not read as "a cap of zero pips".
+		if settings.InstrumentStopMaxPips > 0 {
+			params["execution_stop_max_pips"] = settings.InstrumentStopMaxPips
+		}
 		params["reaction_lookback_bars"] = 3.0
 		params["engulfing_minimum_range_atr"] = 0.5
 		settings.Strategies[i].Parameters = params
