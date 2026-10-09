@@ -1,8 +1,10 @@
 package engine
 
 import (
+	"path/filepath"
 	"testing"
 
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/config"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
 )
@@ -59,6 +61,44 @@ func TestTheScalpBandNeverReachesTheStructuralStrategies(t *testing.T) {
 		got := computeStopEnvelope(goldCandidate(id), geometry, goldEnvelopeConfig(true))
 		if got == nil || got.FloorPips != 50 || got.CapPips != 70 {
 			t.Errorf("%s: envelope = %+v, want the instrument's 50-70", id, got)
+		}
+	}
+}
+
+// The real config, every instrument, every scalp: a scalp's envelope never exceeds
+// the scalping book's 45 pips, and on an instrument whose structural envelope is
+// swing-sized (gold) it is strictly tighter than the structural strategies'.
+func TestEveryScalpKeepsAScalpEnvelopeOnEveryInstrument(t *testing.T) {
+	doc, err := config.ResolveDocument(filepath.Join("..", "..", "..", "config", "apexvoid.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	scalps := []opportunity.StrategyID{"range_edge", "fade_scalp", "range_sweep", "impulse_pullback", "scalp_breakout_retest"}
+	for _, symbol := range []string{"XAU", "EURUSD", "GBPUSD", "GBPJPY", "USDJPY"} {
+		settings, err := LoadSettings(doc, "M5", false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := ApplyInstrument(&settings, doc, symbol); err != nil {
+			t.Fatal(err)
+		}
+		cfg := settings.StopEnvelope
+		cfg.InstrumentMinPips, cfg.InstrumentMaxPips, cfg.InstrumentConfigured = settings.InstrumentStopMinPips, settings.InstrumentStopMaxPips, true
+		if settings.InstrumentScalpStopConfigured {
+			cfg.InstrumentScalpMinPips, cfg.InstrumentScalpMaxPips, cfg.InstrumentScalpConfigured = settings.InstrumentScalpStopMinPips, settings.InstrumentScalpStopMaxPips, true
+		}
+		structural := computeStopEnvelope(goldCandidate("supply"), settings.Geometry, cfg)
+		for _, id := range scalps {
+			got := computeStopEnvelope(goldCandidate(id), settings.Geometry, cfg)
+			if got == nil {
+				t.Fatalf("%s %s: no envelope", symbol, id)
+			}
+			if got.CapPips > 45 {
+				t.Errorf("%s %s: cap %.0f exceeds the scalping book's 45", symbol, id, got.CapPips)
+			}
+			if symbol == "XAU" && !(got.CapPips < structural.CapPips && got.FloorPips < structural.FloorPips) {
+				t.Errorf("XAU %s: envelope %.0f-%.0f is not tighter than the structural %.0f-%.0f", id, got.FloorPips, got.CapPips, structural.FloorPips, structural.CapPips)
+			}
 		}
 	}
 }

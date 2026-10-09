@@ -35,6 +35,15 @@ dated section after deployment.
   `scalp_max_pips: 45` (the range-room floor and the scalping book's cap), and the Analysis Engine
   uses it for the range-room strategies (Range Edge, Fade Scalp) only; every other strategy, and FX
   (which declares none), keeps its envelope. Needs an Analysis Engine and Algo Bot restart to take effect.
+- A range scalp on XAU (Range Edge, Fade Scalp) books 1R and 2R (50/50, or 1R alone when the room
+  allows no more), not gold's 1R-4R structural ladder, and takes no trail. FX already ran 1R/2R and
+  is unchanged; structural gold strategies keep the 4R ladder.
+- A scalp's plan no longer carries the XAU risk leg: the leg rests 15 pips inside a 50-70 pip gold stop,
+  so on a 15-45 pip scalp stop it sat at or near the entry and added size. Applies to the two-leg
+  Range Edge and Fade Scalp plans; the M1 scalps are single-leg and were unaffected. A new walk over
+  all five scalps (Range Edge, Fade Scalp, Range Sweep, Impulse Pullback, Breakout Retest) pins their
+  gold stop envelope (<= 45), target ladder (<= 2R), no trail, no band expansion and no risk leg
+  (`tests/test_scalp_strategies_contract.py`, `stop_envelope_scalp_test.go`).
 
 ### Changed
 - CI gates the bot starting, not its business logic. `Autotrade Integrity` now runs: Python - the
