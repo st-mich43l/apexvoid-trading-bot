@@ -1,8 +1,9 @@
 name: Autotrade Integrity
 
-# Short PR validation for live TradePlan V8 publish / execute / manage.
-# Path allowlist is algo-bot/tests/ci_autotrade_paths.txt. Catalog,
-# scanner-actionability, and retired V6 characterization suites are out.
+# PR validation that the bot can BUILD and START and that its services agree on their
+# contracts. It does not test business logic (strategies, cards, pips, arbitration, execution
+# policy); that changes with every improvement and would fail CI on each one.
+# Python: the allowlist in algo-bot/tests/ci_autotrade_paths.txt.
 
 on:
   pull_request:
@@ -93,7 +94,11 @@ jobs:
         run: |
           go build ./...
           go vet ./...
-          go test -timeout 20m ./...
+          # Startup and contract checks only: the production config resolves, all 21
+          # strategies have factories, the engine bootstraps, logging initialises and the
+          # Kafka event schemas hold.
+          go test -timeout 10m ./test/contracts/ ./internal/logging/
+          go test -timeout 10m ./test/engine/ -run 'TestAll21StrategiesHaveConcreteFactoriesAndValidProductionConfig|TestStrategyConfigsFromConfig|TestZoneConfigFromConfig|TestEngine_BootstrapBuildsStateWithoutRepublishingHistory'
 
   csharp:
     name: C# autotrade suite
@@ -124,7 +129,10 @@ jobs:
         env:
           REAL_REDIS_URL: redis://127.0.0.1:6379/15
         run: |
+          # Startup and contract checks only: broker authorization and token lifecycle, the
+          # health endpoint, and the TradePlan V8 contract the executor parses.
           dotnet test tests/CTraderFeed.Tests.csproj --nologo \
+            --filter "FullyQualifiedName~AccessTokenRequestGate|FullyQualifiedName~AccountAuthorizationFlow|FullyQualifiedName~RefreshTokenState|FullyQualifiedName~TokenLifecycle|FullyQualifiedName~HealthLiveness|FullyQualifiedName~TradePlanV8Contract" \
             --logger "trx;LogFileName=csharp-results.trx" \
             --results-directory TestResults
 

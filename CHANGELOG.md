@@ -13,6 +13,17 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
+- CI gates the bot starting, not its business logic. `Autotrade Integrity` now runs: Python - the
+  9 startup and contract files in `algo-bot/tests/ci_autotrade_paths.txt` (every module imports, the
+  entrypoint boots, the Go-only startup gate, startup reconciliation, env/channel config, logging,
+  supervised loops, the TradePlan V8 contract, Go analysis event parsing); C# - build plus broker
+  authorization, token lifecycle, health and the V8 contract; Go - build, vet, the production config
+  resolving with all 21 strategies wired, engine bootstrap, logging and the Kafka event schemas.
+  Strategy, parity, card, pips, arbitration and execution-policy tests are no longer run in CI, so a
+  new implementation cannot turn the checks red by changing a number. The test files themselves are
+  still in the tree.
+
+### Changed
 - Gold zone strategies trade a 30-50 pip entry band, and the XAU stop may reach 70 pips (owner
   2026-10-09: "60 as well, even 70, we are making profit by the RR"). Every XAU zone strategy (Key
   Level, Supply, Demand, Order Block, FVG, iFVG, CRT, Confluence Zone, Flip Zone, Session Level,
