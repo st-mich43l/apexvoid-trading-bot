@@ -123,3 +123,109 @@ def test_the_builder_publishes_the_card_numbers_as_the_plan_and_the_risk_leg_fol
   assert [str(target.price) for target in plan.targets] == ["4153.0", "4159.0", "4165.0", "4171.0"]
   assert plan.entry.risk_leg is not None
   assert str(plan.entry.risk_leg.price) == "4142.5"
+
+
+# Production 2026-10-09 08:51 Key Level SELL ladder: legs 4188/4190, stop 4194 (60 pips), but TP1..TP4
+# spaced 52.4 pips (0.86R .. 3.48R) because the fixed-R targets were priced from the pre-snap risk.
+FIXED_RR_SELL = {
+  "planned_execution_route": "market_with_limit_scale",
+  "planned_stop_price": "4193.33",
+  "planned_entry_price": 4188.09,
+  "planned_entry_zone_low": 4188.09,
+  "planned_entry_zone_high": 4189.9,
+  "planned_leg_entry_prices": [4188.09, 4189.9],
+  "planned_leg_volume_ratios": [0.8, 0.2],
+  "planned_stop_entry_price": "4188.09",
+  "go_stop_envelope_floor_pips": 50.0,
+  "go_stop_envelope_cap_pips": 70.0,
+  "target_policy_mode": "fixed_rr",
+  "planned_target_r_multiples": ["1.0", "2.0", "3.0", "4.0"],
+  "planned_target_close_ratios": ["0.4", "0.2", "0.2", "0.2"],
+  "planned_target_prices": ["4182.85", "4177.61", "4172.37", "4167.13"],
+  "planned_target_pips": ["52.4", "104.8", "157.2", "209.6"],
+}
+
+
+def test_a_fixed_r_ladder_is_repriced_from_the_snapped_stop():
+  out = snap_measured_to_card_prices(
+    dict(FIXED_RR_SELL), direction="SELL", symbol="XAU", strategy="Key Level", pip_size=0.1,
+    targets_pips=(52, 105, 157, 210), reaction_stop_max_pips=70.0,
+  )
+  assert out["planned_stop_price"] == 4194.0
+  assert out["planned_leg_entry_prices"] == [4188.0, 4190.0]
+  assert out["planned_target_prices"] == ["4182.0", "4176.0", "4170.0", "4164.0"]
+  assert out["planned_target_pips"] == ["60.0", "120.0", "180.0", "240.0"]
+
+
+@pytest.mark.parametrize("direction,sign", [("BUY", 1), ("SELL", -1)])
+def test_the_built_plan_keeps_every_declared_r_multiple_of_its_own_risk(direction, sign):
+  buy = direction == "BUY"
+  base = 4143.0
+  measured = {
+    **FIXED_RR_SELL,
+    "planned_entry_price": base + 0.09 if buy else 4188.09,
+  }
+  if buy:
+    measured.update({
+      "planned_stop_price": "4137.2", "planned_entry_price": 4143.09,
+      "planned_entry_zone_low": 4141.3, "planned_entry_zone_high": 4143.09,
+      "planned_leg_entry_prices": [4143.09, 4141.3], "planned_stop_entry_price": "4143.09",
+      "planned_target_prices": ["4148.89", "4154.69", "4160.49", "4166.29"],
+    })
+  match = _match(
+    direction=direction, entry_low=4141.3 if buy else 4188.09, entry_high=4143.09 if buy else 4189.9,
+    structure_swing=4137.2 if buy else 4193.33, targets=(58, 116, 174, 232),
+    structural_kind="key_level", strategy="Key Level", family="key_level",
+  )
+  plan = build_trade_plan_from_strategy_match(
+    match, plan_id="p", setup_id="s", thesis_id="t", pip_size=Decimal("0.1"),
+    spot_price=float(measured["planned_entry_price"]), regime="trend", cfg=execution_cfg(),
+    executable_quote=float(measured["planned_entry_price"]), max_volume=1000, approved_measured=measured,
+    account_equity=2172.0,
+  )
+  nearest = max(leg.price for leg in plan.entry.legs) if buy else min(leg.price for leg in plan.entry.legs)
+  risk = abs(nearest - plan.stop.price)
+  assert risk > 0
+  for target, multiple in zip(plan.targets, (1, 2, 3, 4)):
+    reward = (target.price - nearest) * sign
+    assert abs(reward / risk - multiple) < Decimal("0.05"), (target.target_id, reward / risk)
+
+
+@pytest.mark.parametrize("buy", [True, False])
+def test_a_snapped_fixed_r_plan_is_exactly_1r_to_4r_of_its_own_risk(buy):
+  # Property over 3,000 random gold ladders per side: whatever the snap does to the stop and
+  # legs, TP1..TP4 stay exactly 1R..4R of the entry-to-stop distance the card prints.
+  import random
+
+  rng = random.Random(f"exact-r:{buy}")
+  sign = 1 if buy else -1
+  snapped = 0
+  for _ in range(3000):
+    entry = round(rng.uniform(4100, 4200), 2)
+    width = rng.choice([1.5, 2.2, 3.9, 5.0])
+    risk = rng.choice([5.1, 5.6, 6.0, 6.4, 7.0])
+    legs = [entry, round(entry - sign * width * 0.6, 2)]
+    measured = {
+      "planned_execution_route": "market_with_limit_scale",
+      "planned_stop_price": str(round(entry - sign * risk, 2)),
+      "planned_entry_price": entry,
+      "planned_entry_zone_low": min(legs),
+      "planned_entry_zone_high": max(legs),
+      "planned_leg_entry_prices": legs,
+      "go_stop_envelope_floor_pips": 50.0,
+      "go_stop_envelope_cap_pips": 70.0,
+      "target_policy_mode": "fixed_rr",
+      "planned_target_r_multiples": ["1.0", "2.0", "3.0", "4.0"],
+      "planned_target_close_ratios": ["0.4", "0.2", "0.2", "0.2"],
+      "planned_target_prices": [str(round(entry + sign * k * risk, 2)) for k in (1, 2, 3, 4)],
+    }
+    out = snap_measured_to_card_prices(
+      measured, direction="BUY" if buy else "SELL", symbol="XAU", strategy="Key Level",
+      pip_size=0.1, targets_pips=(56, 112, 168, 224), reaction_stop_max_pips=70.0,
+    )
+    anchor = float(out["planned_entry_price"])
+    stop_risk = abs(anchor - float(out["planned_stop_price"]))
+    snapped += "card_price_snap" in out
+    for multiple, price in zip((1, 2, 3, 4), out["planned_target_prices"]):
+      assert abs(abs(float(price) - anchor) / stop_risk - multiple) < 1e-9, (multiple, price, anchor)
+  assert snapped > 1000
