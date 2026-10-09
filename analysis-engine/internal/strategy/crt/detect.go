@@ -213,7 +213,7 @@ func (d *detector) scanAnchor(anchor Anchor) {
 			d.reject(ep.reason, anchor, i)
 			i = ep.resumeAt
 		case episodeConfirmed:
-			if age := d.asOf - ep.m; age <= d.cfg.ConfirmationMaxAgeBars {
+			if d.barsBetween(ep.m, d.asOf) <= d.cfg.ConfirmationMaxAgeBars {
 				if setup, reason := d.finalize(anchor, i0, ep); reason != "" {
 					d.reject(reason, anchor, ep.s0)
 				} else {
@@ -236,8 +236,7 @@ func (d *detector) runEpisode(anchor Anchor, i0, s0 int) episode {
 	// Reclaim: a completed close back inside the original range, on or after
 	// the sweep candle and inside the bounded window.
 	r := -1
-	limit := minInt(d.asOf, s0+cfg.ReclaimMaxBars)
-	for j := s0; j <= limit; j++ {
+	for j := s0; j <= d.asOf && d.barsBetween(s0, j) <= cfg.ReclaimMaxBars; j++ {
 		c := d.m5[j]
 		if c.Close > anchor.High {
 			return episode{kind: episodeVoid, reason: ReasonReclaimOvershoot, resumeAt: j + 1}
@@ -252,7 +251,7 @@ func (d *detector) runEpisode(anchor Anchor, i0, s0 int) episode {
 		}
 	}
 	if r < 0 {
-		if s0+cfg.ReclaimMaxBars > d.asOf {
+		if d.barsBetween(s0, d.asOf) < cfg.ReclaimMaxBars {
 			return episode{kind: episodePending}
 		}
 		// The excursion outlived the window: price accepted below the edge.
@@ -278,12 +277,13 @@ func (d *detector) runEpisode(anchor Anchor, i0, s0 int) episode {
 		return episode{kind: episodeConfirmed, s0: s0, r: r, m: r, extreme: extreme}
 	}
 
-	// Structure shift: a completed bullish candle closing beyond the most
-	// recent swing high that was confirmed before it, with real displacement.
+	// Structure shift: a completed bullish candle, strictly AFTER the reclaim
+	// candle, closing beyond the most recent in-range swing high that was
+	// confirmed before it, with real displacement. The reclaim and the shift are
+	// therefore always two different candles.
 	pip := cfg.PipSize
 	anyReference, sawBreakWithoutQuality := false, false
-	limitM := minInt(d.asOf, r+cfg.MSSMaxBars)
-	for j := r; j <= limitM; j++ {
+	for j := r + 1; j <= d.asOf && d.barsBetween(r, j) <= cfg.MSSMaxBars; j++ {
 		c := d.m5[j]
 		if c.Close < anchor.Low {
 			return episode{kind: episodeVoid, reason: ReasonReclaimLost, resumeAt: j}
@@ -313,11 +313,11 @@ func (d *detector) runEpisode(anchor Anchor, i0, s0 int) episode {
 			kind: episodeConfirmed, s0: s0, r: r, m: j, extreme: extreme, level: level, levelIndex: levelIndex,
 			shift: &StructureShift{
 				Level: level, LevelTime: d.m5[levelIndex].Time, BarTime: c.Time, Close: c.Close,
-				BodyRatio: body, DisplacementATR: displacement, CloseStrength: strength, BarsAfterReclaim: j - r,
+				BodyRatio: body, DisplacementATR: displacement, CloseStrength: strength, BarsAfterReclaim: d.barsBetween(r, j),
 			},
 		}
 	}
-	if r+cfg.MSSMaxBars > d.asOf {
+	if d.barsBetween(r, d.asOf) < cfg.MSSMaxBars {
 		return episode{kind: episodePending}
 	}
 	reason := ReasonMSSWindowExpired
@@ -344,10 +344,9 @@ func (d *detector) structureLevel(anchor Anchor, extreme, j int) (float64, int, 
 		if p < extreme-d.cfg.StructureLookbackBars {
 			break
 		}
-		if level := d.m5[p].High; level > anchor.Low {
+		if level := d.m5[p].High; level > anchor.Low && level < anchor.High {
 			return level, p, true
 		}
-		return 0, 0, false
 	}
 	return 0, 0, false
 }
@@ -401,15 +400,9 @@ func (d *detector) finalize(anchor Anchor, i0 int, ep episode) (*Setup, string) 
 			return nil, ReasonTargetAlreadyReached
 		}
 	}
-	// Nothing since the confirmation may have invalidated the thesis.
-	for k := m + 1; k <= d.asOf; k++ {
-		if d.m5[k].Close < anchor.Low {
-			return nil, ReasonInvalidatedAfterConfirm
-		}
-	}
-
 	// Manipulation extreme: the deepest low since the anchor closed through
-	// the confirmation. The stop must sit beyond it.
+	// the confirmation (earlier excursions that were voided included: price has
+	// already shown it can travel there). The stop must sit beyond it.
 	extremeIdx := i0
 	for k := i0; k <= m; k++ {
 		if d.m5[k].Low < d.m5[extremeIdx].Low {
@@ -417,6 +410,15 @@ func (d *detector) finalize(anchor Anchor, i0 int, ep episode) (*Setup, string) 
 		}
 	}
 	extreme := d.m5[extremeIdx].Low
+
+	// Nothing since the confirmation may have invalidated the thesis: a close
+	// back below the swept edge, or ANY trade (a wick) through the manipulation
+	// extreme, which is where the stop sits.
+	for k := m + 1; k <= d.asOf; k++ {
+		if d.m5[k].Close < anchor.Low || d.m5[k].Low < extreme {
+			return nil, ReasonInvalidatedAfterConfirm
+		}
+	}
 	pip := cfg.PipSize
 
 	depth := math.Max(pip, cfg.EntryDepthATR*atr)
@@ -477,7 +479,7 @@ func (d *detector) finalize(anchor Anchor, i0 int, ep episode) (*Setup, string) 
 			BarTime: reclaimBar.Time, Close: reclaimBar.Close, Depth: reclaimBar.Close - anchor.Low,
 			DepthATR: (reclaimBar.Close - anchor.Low) / atr, BarsAfterSweep: ep.r - s0,
 		},
-		Shift: ep.shift, ConfirmedAt: d.m5[m].Time, ConfirmationAge: d.asOf - m, DoubleRaidResolved: resolved,
+		Shift: ep.shift, ConfirmedAt: d.m5[m].Time, ConfirmationAge: d.barsBetween(m, d.asOf), DoubleRaidResolved: resolved,
 		EntryLow: lower, EntryHigh: upper, Stop: stop, Target: target, M5ATR: atr,
 		RiskPips: riskPips, RewardPips: rewardPips, TechnicalRR: rr, WickRejection: wick,
 	}
@@ -541,9 +543,9 @@ func resolveOpposing(a *Analysis) {
 	a.Setups = keep
 }
 
-func minInt(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
+// barsBetween is the whole number of M5 periods between two candles' open
+// times. Every age and window in this file is measured in time, never in slice
+// positions, so a gap in the feed ages a confirmation instead of hiding it.
+func (d *detector) barsBetween(from, to int) int {
+	return int((d.m5[to].Time - d.m5[from].Time) / m5Seconds)
 }
