@@ -59,9 +59,9 @@ def test_a_thin_xau_retest_level_becomes_a_50_pip_manual_style_ladder():
   assert _pips(measured["planned_entry_zone_low"], measured["planned_entry_zone_high"]) == pytest.approx(50.0, abs=0.01)
   assert measured["planned_leg_entry_prices"] == pytest.approx([4115.14, 4112.64])
   assert measured["planned_leg_volume_ratios"] == pytest.approx([0.80, 0.20])
-  # The stop follows the band and stays inside the 50-60 pip envelope from the shallow leg.
+  # The stop follows the band and stays inside the 50-70 pip envelope from the shallow leg.
   risk = _pips(float(measured["planned_stop_price"]), 4115.14)
-  assert 50.0 <= risk <= 60.0, risk
+  assert 50.0 <= risk <= 70.0, risk
   assert float(measured["planned_stop_price"]) < measured["planned_entry_zone_low"]
 
 
@@ -79,7 +79,7 @@ def test_sell_mirrors_buy():
   assert measured["planned_leg_entry_prices"] == pytest.approx([4114.91, 4117.41])
   assert _pips(measured["planned_entry_zone_low"], measured["planned_entry_zone_high"]) == pytest.approx(50.0, abs=0.01)
   risk = _pips(float(measured["planned_stop_price"]), 4114.91)
-  assert 50.0 <= risk <= 60.0, risk
+  assert 50.0 <= risk <= 70.0, risk
 
 
 def test_the_width_gate_judges_go_band_not_the_widened_band():

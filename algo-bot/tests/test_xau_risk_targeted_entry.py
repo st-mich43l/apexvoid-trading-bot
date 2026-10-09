@@ -122,8 +122,10 @@ def test_go_policy_keeps_go_stop_but_uses_python_execution_rr_ladder(monkeypatch
     cfg=_production_cfg(monkeypatch),
   )
   assert evaluation.allowed
-  assert evaluation.measured["planned_stop_price"] == "4142.00"
-  assert evaluation.measured["stop_source"] == "go_invalidation"
+  # Go's 20 pip zone is widened to the 30 pip XAU band, and Go's invalidation follows the
+  # band out by the same 10 pips (4142 -> 4143), keeping Go's zone-to-stop buffer.
+  assert evaluation.measured["planned_stop_price"] == "4143.00"
+  assert evaluation.measured["stop_source"] == "go_invalidation_widened"
   assert evaluation.measured["target_policy_mode"] == "fixed_rr"
   assert evaluation.measured["planned_target_r_multiples"] == [
     "1.0", "2.0", "3.0", "4.0",

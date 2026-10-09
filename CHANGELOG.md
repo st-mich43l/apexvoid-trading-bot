@@ -12,6 +12,20 @@ dated section after deployment.
 
 ## Unreleased
 
+### Changed
+- Gold zone strategies trade a 30-50 pip entry band, and the XAU stop may reach 70 pips (owner
+  2026-10-09: "60 as well, even 70, we are making profit by the RR"). Every XAU zone strategy (Key
+  Level, Supply, Demand, Order Block, FVG, iFVG, CRT, Confluence Zone, Flip Zone, Session Level,
+  Trendline, Break & Retest; not the M1 or range scalps, FX or the market strategies) has Go's zone
+  widened toward the stop to 30 pips when thinner, or trimmed to its 50 pips nearest the near edge when
+  wider, with the shallow leg at the near edge and the deep leg at the band midpoint, as before. When
+  a band is widened Go's invalidation follows it out by the same distance (so a 20 pip zone with a
+  50 pip stop becomes a 30 pip zone with a 60 pip stop); when it is trimmed the stop stays where Go
+  put it, so trimming never shrinks the risk. A zone whose stop lies more than 70 pips from the near
+  edge is still rejected. `instruments.yml` XAU `stop_envelope.max_pips` 60 -> 70 (also the Go stop
+  envelope cap; the Go replay golden changes only in `stop_envelope.cap_pips`). The root card prints
+  the band the plan holds.
+
 ### Fixed
 - Gold zone plans are placed on the numbers their card prints. Production 2026-10-09, Key Level BUY:
   the card read `Entry Zone 4,143 - 4,147` and `SL 4,141 · risk 56 pips` (4,147 to 4,141 reads as 60),

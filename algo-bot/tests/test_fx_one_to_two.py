@@ -236,7 +236,7 @@ def test_fx_reaction_stop_envelopes_diverge_while_gold_uses_structure_band():
   assert usdjpy_measured["fixed_rr_targeting"] is True
   assert (gbpjpy_min, gbpjpy_max) == (22, 35)
   assert gbpjpy_measured["fixed_rr_targeting"] is True
-  assert (gold_min, gold_max) == (50, 60)
+  assert (gold_min, gold_max) == (50, 70)
   assert gold_measured["fixed_rr_targeting"] is True
 
 
