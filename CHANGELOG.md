@@ -13,6 +13,13 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Gold fixed-R targets are priced from the stop and entry the card prints. The card-price snap (#759) moved
+  the stop away from the entry and rounded the legs, but a fixed-R plan kept TP1-TP4 priced from the
+  pre-snap risk, so a 60 pip stop carried targets spaced 52.4 pips: production 2026-10-09 08:51 Key Level
+  SELL read TP1 0.86R ... TP4 3.48R on a card that says 1R-4R (04:45 BUY: 0.78R ... 3.28R). The snap now
+  re-prices the declared R multiples from the snapped entry and stop, whole-number prices as before, and
+  keeps Go's exact prices when the ladder would collapse. Affects only plans whose stop or legs the snap
+  moved; two production plans since the #759 deploy.
 - The executor no longer opens a new entry on a stale quote. `SpotPrice` carries the broker tick time
   (the field Python's 5 s spot rule reads), but `TradePlanRuntime` evaluated whatever tick it saw last,
   and the last tick survives a feed stall or reconnect. `AutoTradeOptions.MaximumQuoteAgeSeconds`
