@@ -382,7 +382,7 @@ baseline in `test/brreplay`. Differences, all deliberate:
 Commands and outcomes are recorded in the pull request. The Break & Retest tests are:
 
 - `internal/strategy/breakretest`: fixtures that self-check their pivots, positive
-  BUY/SELL/trendline/FX-scale setups with every number asserted from OHLC, 16 negative
+  BUY/SELL/trendline/FX-scale setups with every number asserted from OHLC, 17 negative
   fixtures with the exact state and reason of each, a single touch, the old-break
   (stale retest) case, the acceptance-candle-is-not-the-retest case, a feed gap,
   malformed candles, too little history, the lifecycle prefix by prefix, identity,
