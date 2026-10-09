@@ -1,0 +1,199 @@
+{
+ "captures": [
+  {
+   "capture": "replay-xau-production-capture-20260921.json",
+   "symbol": "XAU",
+   "setups": [
+    {
+     "direction": "SELL",
+     "anchor_time": 1789988400,
+     "sweep_time": 1789992300,
+     "confirmed_at": 1789993200,
+     "first_observed_bar": 1789993200,
+     "entry_low": 4370.575833,
+     "entry_high": 4371.584167,
+     "stop": 4376.080417,
+     "target": 4341.96,
+     "risk_pips": 55.046,
+     "technical_rr": 5.1985
+    }
+   ],
+   "rejected_episodes_by_reason": {
+    "h1_range_below_minimum": 103,
+    "insufficient_m5_history": 1,
+    "mss_quality_insufficient": 1,
+    "mss_window_expired": 4,
+    "no_structure_reference": 1,
+    "reclaim_lost": 6,
+    "reclaim_window_expired": 2,
+    "risk_exceeds_execution_envelope": 2
+   }
+  },
+  {
+   "capture": "replay-xau-m1-production-capture-20261006.json",
+   "symbol": "XAU",
+   "setups": [],
+   "rejected_episodes_by_reason": {
+    "h1_range_below_minimum": 99,
+    "insufficient_m5_history": 1,
+    "reclaim_lost": 6,
+    "reclaim_window_expired": 5
+   }
+  },
+  {
+   "capture": "replay-eurusd-production-capture-20261006.json",
+   "symbol": "EURUSD",
+   "setups": [
+    {
+     "direction": "BUY",
+     "anchor_time": 1790845200,
+     "sweep_time": 1790848800,
+     "confirmed_at": 1790851800,
+     "first_observed_bar": 1790851800,
+     "entry_low": 1.12685,
+     "entry_high": 1.12705,
+     "stop": 1.126391,
+     "target": 1.13018,
+     "risk_pips": 6.589,
+     "technical_rr": 4.7502
+    },
+    {
+     "direction": "SELL",
+     "anchor_time": 1790946000,
+     "sweep_time": 1790952900,
+     "confirmed_at": 1790953500,
+     "first_observed_bar": 1790953500,
+     "entry_low": 1.12749,
+     "entry_high": 1.12769,
+     "stop": 1.128739,
+     "target": 1.12425,
+     "risk_pips": 12.489,
+     "technical_rr": 2.5943
+    }
+   ],
+   "rejected_episodes_by_reason": {
+    "h1_range_below_minimum": 76,
+    "insufficient_m5_history": 1,
+    "reclaim_lost": 5,
+    "reclaim_window_expired": 10
+   }
+  },
+  {
+   "capture": "replay-gbpusd-production-capture-20261005.json",
+   "symbol": "GBPUSD",
+   "setups": [
+    {
+     "direction": "SELL",
+     "anchor_time": 1790578800,
+     "sweep_time": 1790584800,
+     "confirmed_at": 1790589300,
+     "first_observed_bar": 1790589300,
+     "entry_low": 1.32663,
+     "entry_high": 1.32683,
+     "stop": 1.327544,
+     "target": 1.32352,
+     "risk_pips": 9.145,
+     "technical_rr": 3.4008
+    },
+    {
+     "direction": "SELL",
+     "anchor_time": 1790600400,
+     "sweep_time": 1790604600,
+     "confirmed_at": 1790606400,
+     "first_observed_bar": 1790606400,
+     "entry_low": 1.32698,
+     "entry_high": 1.32718,
+     "stop": 1.327698,
+     "target": 1.32453,
+     "risk_pips": 7.185,
+     "technical_rr": 3.4101
+    },
+    {
+     "direction": "BUY",
+     "anchor_time": 1790845200,
+     "sweep_time": 1790848800,
+     "confirmed_at": 1790850600,
+     "first_observed_bar": 1790850600,
+     "entry_low": 1.3199,
+     "entry_high": 1.3201,
+     "stop": 1.319105,
+     "target": 1.32279,
+     "risk_pips": 9.95,
+     "technical_rr": 2.7035
+    },
+    {
+     "direction": "SELL",
+     "anchor_time": 1790848800,
+     "sweep_time": 1790852400,
+     "confirmed_at": 1790853600,
+     "first_observed_bar": 1790853600,
+     "entry_low": 1.32255,
+     "entry_high": 1.32275,
+     "stop": 1.323098,
+     "target": 1.31928,
+     "risk_pips": 5.479,
+     "technical_rr": 5.9686
+    },
+    {
+     "direction": "SELL",
+     "anchor_time": 1790946000,
+     "sweep_time": 1790952900,
+     "confirmed_at": 1790954400,
+     "first_observed_bar": 1790954400,
+     "entry_low": 1.32461,
+     "entry_high": 1.32481,
+     "stop": 1.325798,
+     "target": 1.3211,
+     "risk_pips": 11.882,
+     "technical_rr": 2.954
+    }
+   ],
+   "rejected_episodes_by_reason": {
+    "h1_range_below_minimum": 72,
+    "insufficient_m5_history": 1,
+    "mss_window_expired": 1,
+    "no_structure_reference": 1,
+    "reclaim_lost": 9,
+    "reclaim_window_expired": 7
+   }
+  },
+  {
+   "capture": "replay-gbpjpy-production-capture-20261006.json",
+   "symbol": "GBPJPY",
+   "setups": [
+    {
+     "direction": "BUY",
+     "anchor_time": 1790841600,
+     "sweep_time": 1790845200,
+     "confirmed_at": 1790846100,
+     "first_observed_bar": 1790846100,
+     "entry_low": 209.181206,
+     "entry_high": 209.204794,
+     "stop": 209.126514,
+     "target": 209.653,
+     "risk_pips": 7.828,
+     "technical_rr": 5.7256
+    }
+   ],
+   "rejected_episodes_by_reason": {
+    "h1_range_below_minimum": 90,
+    "insufficient_m5_history": 1,
+    "reclaim_lost": 5,
+    "reclaim_window_expired": 9
+   }
+  },
+  {
+   "capture": "replay-usdjpy-production-capture-20261005.json",
+   "symbol": "USDJPY",
+   "setups": [],
+   "rejected_episodes_by_reason": {
+    "h1_range_below_minimum": 86,
+    "insufficient_m5_history": 1,
+    "mss_window_expired": 1,
+    "reclaim_lost": 3,
+    "reclaim_window_expired": 9
+   }
+  }
+ ],
+ "description": "CRT v3 technical decisions (pre-confluence) on the committed real captures; regenerate with UPDATE_GOLDEN=1 go test ./test/crtreplay -run Golden"
+}

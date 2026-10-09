@@ -225,9 +225,9 @@ func LoadSettings(doc *config.Document, primary market.Timeframe, allowReplaceFo
 		ConfigFingerprint:   configProvenance.Fingerprint,
 	}
 	// Seed CRT with the canonical defaults so construction remains fail-closed
-	// before a symbol is attached. ApplyInstrument replaces the two geometry
-	// values with the concrete instrument values in production.
-	applyParityCRT(&settings)
+	// before a symbol is attached. ApplyInstrument replaces the geometry values
+	// with the concrete instrument values in production.
+	applyCRTGeometry(&settings)
 	settings.LegacyRead.PipSize = settings.TechniqueZones.Technique.PipSize
 	settings.LegacyRead.RoundStep = settings.KeyLevel.RoundStep
 	applyLegacyDetector(&settings)
