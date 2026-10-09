@@ -25,7 +25,7 @@ func TestStrategyConfigsFromConfigEnablesTheCompleteCatalogForShadow(t *testing.
 	// profitable-week Python detectors and Liquidity Sweep on the frozen detector
 	// contract's evidence (Phase 1), and CRT was rebuilt as a causal H1 sweep, M5
 	// reclaim and structure shift (v3); every other strategy is still v2.
-	rebuilt := map[string]bool{"crt": true, "key_level": true, "session_level": true, "flip_zone": true, "box_breakout": true, "trendline": true, "impulse_pullback": true, "scalp_breakout_retest": true, "range_sweep": true, "liquidity_sweep": true}
+	rebuilt := map[string]bool{"crt": true, "key_level": true, "session_level": true, "flip_zone": true, "box_breakout": true, "trendline": true, "impulse_pullback": true, "scalp_breakout_retest": true, "range_sweep": true, "liquidity_sweep": true, "break_retest": true}
 	for _, cfg := range configs {
 		want := "v2"
 		if rebuilt[string(cfg.ID)] {

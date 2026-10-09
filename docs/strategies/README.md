@@ -37,7 +37,7 @@ Every strategy has exactly one status:
 | `fvg` | canonical FVG zones, reaction | `fvg_technique_reaction` (1c9f323) | `test/techniqueparity` golden, 5 symbols | all | live | LEGACY_PARITY_PROVEN | 99 / 120 |
 | `ifvg` | canonical inverted FVG zones, reaction | `ifvg_technique_reaction` (1c9f323) | `test/techniqueparity` golden, 5 symbols | all | **contained** (analysis only) | LEGACY_PARITY_PROVEN | 157 / 201 |
 | `crt` | closed H1 range, M5 sweep, reclaim and structure shift | none (v3 departs deliberately from `crt_technique_reaction`, see below) | `internal/strategy/crt` positive and negative fixtures; `test/crtreplay`: no future dependence on 6 captures bar for bar, technical invariants on every setup found, and a v3 golden | all | live (an honest stop beyond the instrument cap is refused) | GO_NATIVE_VALIDATED | 1 / 0 |
-| `break_retest` | broken trendline or key level, retest, hold | Python detector (1c9f323) | `test/detectorparity` golden, 473/473 decisions | all | live | LEGACY_PARITY_PROVEN | 8 / 12 |
+| `break_retest` | own M5 key level or trendline, accepted break, fresh retest and rejection | none (Go v3; the Python detector 1c9f323 was v2) | contract tests in `internal/strategy/breakretest`, `test/brreplay` | all | live | GO_NATIVE_VALIDATED | 1 / 2 (v2: 8 / 12) |
 | `range_edge` | M5 range context, edge rejection | Python detector (1c9f323) | `test/detectorparity` golden | all | live | LEGACY_PARITY_PROVEN | 28 / 50 |
 | `snap_back` | key level or zone, extension, graded grab | Python detector (1c9f323) | `test/detectorparity` golden | all | live | LEGACY_PARITY_PROVEN | 6 / 13 |
 | `momentum_ride` | displacement sequence, opposing liquidity | Python detector (1c9f323) | `test/detectorparity` golden | all | live | LEGACY_PARITY_PROVEN | 8 / 5 |
@@ -70,6 +70,22 @@ proves it bar for bar, and it still supplies the CRT instance Confluence Zone
 aggregates (see the unresolved risks in the CRT page). Replay: 127 v2 setups over the
 six captures become 1 published v3 setup, and 105 of those 127 had their stop inside the
 sweep wick.
+
+### Break & Retest v3 is not a port
+
+`break_retest` v3 is deliberately *not* the frozen Python detector. The frozen one
+took the first retest after the latest break at any age, attached a fixed 0.75
+quality and hard-coded evidence, tried trendlines before key levels, and set the
+stop inside the retest zone (`docs/strategies/break_retest.md`, "What v2 got wrong";
+reproduced on real engine contexts by `test/brreplay`: 42 of 59 replayed v2 setups
+were published more than two candles after their retest). v3 builds its own
+references from closed M5 pivots, accepts a break on measured force, requires a
+fresh retest strictly after the acceptance, and places the stop and target by
+structure. The oracle golden is untouched; `break_retest` simply left the
+`test/detectorparity` covered list, and v2 stays reproducible as the frozen baseline in
+`test/brreplay`. Replay: 59 v2 setups over the six captures become 22 v3 setups whose
+hypothetical outcome is *not* better (held-out mean R -0.73 over 17 fills against -0.23
+over 47): the change is a technical correction, with no improvement claim.
 
 ### Deliberate departure from the frozen Python oracle
 
@@ -117,15 +133,15 @@ The lifecycle is `CREATED → ACTIVE → DUPLICATE` for a still-valid thesis, en
 
 ## Breakout boundaries
 
-`break_retest` owns a broken canonical M5 trendline or key level followed by a
-same-side retest and current rejection. `box_breakout` owns M5 compression,
+`break_retest` owns its own M5 key level or trendline, an accepted break of it and
+the fresh retest and rejection that follows. `box_breakout` owns M5 compression,
 accepted box break and retest. `scalp_breakout_retest` owns the distinct
 M5-context/M1-confirmation thesis. They are separate IDs; when two of them retest
 the same corridor, same-thesis arbitration lets exactly one trade.
 
 ## Detector-contract strategies
 
-`break_retest`, `range_edge`, `snap_back`, `momentum_ride` and `fade_scalp`
+`range_edge`, `snap_back`, `momentum_ride` and `fade_scalp`
 reproduce frozen detector decisions on the detector-contract read
 (`internal/legacyread`): bounded M5/M15/H1 windows, the detector swing algorithm,
 scored zones, pools and grabs, regime and higher-timeframe bias. Regenerate their
