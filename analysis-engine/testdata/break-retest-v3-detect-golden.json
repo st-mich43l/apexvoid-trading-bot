@@ -15,36 +15,23 @@
     "entry_high": 4310.10437,
     "stop": 4315.282839,
     "target": 4294.66
-   },
-   {
-    "direction": "BUY",
-    "kind": "key_level",
-    "reference_id": "level:1789687200",
-    "break_start": 1789690200,
-    "accepted_at": 1789690500,
-    "touch_at": 1789695600,
-    "confirmed_at": 1789696200,
-    "entry_low": 4347.157648,
-    "entry_high": 4348.562352,
-    "stop": 4342.099414,
-    "target": 4365.64
    }
   ],
   "episodes_by_outcome": {
    "EXPIRED:confirmation_window_expired": 5,
-   "EXPIRED:retest_window_expired": 35,
-   "FALSE_BREAKOUT:break_not_accepted": 60,
-   "FALSE_BREAKOUT:break_quality_insufficient": 24,
-   "FALSE_BREAKOUT:break_reclaimed_before_retest": 18,
+   "EXPIRED:retest_window_expired": 23,
+   "FALSE_BREAKOUT:break_not_accepted": 59,
+   "FALSE_BREAKOUT:break_quality_insufficient": 25,
+   "FALSE_BREAKOUT:break_reclaimed_before_retest": 15,
    "RETEST_CONFIRMED:insufficient_target_room": 2,
-   "RETEST_CONFIRMED:no_opposing_structure": 19,
+   "RETEST_CONFIRMED:no_opposing_structure": 18,
    "RETEST_CONFIRMED:reward_risk_below_minimum": 2,
-   "RETEST_CONFIRMED:risk_exceeds_execution_envelope": 19,
-   "RETEST_FAILED:retest_closed_through": 23,
+   "RETEST_CONFIRMED:risk_exceeds_execution_envelope": 18,
+   "RETEST_FAILED:retest_closed_through": 21,
    "RETEST_WAITING": 4,
    "STRUCTURE_INVALIDATED:no_protected_structure": 2,
-   "STRUCTURE_INVALIDATED:protected_structure_lost": 3,
-   "published": 2
+   "STRUCTURE_INVALIDATED:protected_structure_lost": 22,
+   "published": 1
   }
  },
  {
@@ -67,19 +54,6 @@
    {
     "direction": "BUY",
     "kind": "key_level",
-    "reference_id": "level:1790736600",
-    "break_start": 1790767800,
-    "accepted_at": 1790768100,
-    "touch_at": 1790768700,
-    "confirmed_at": 1790769300,
-    "entry_low": 4184.282721,
-    "entry_high": 4185.350612,
-    "stop": 4180.48009,
-    "target": 4195.19
-   },
-   {
-    "direction": "BUY",
-    "kind": "key_level",
     "reference_id": "level:1790958000",
     "break_start": 1790966400,
     "accepted_at": 1790966700,
@@ -92,23 +66,22 @@
    }
   ],
   "episodes_by_outcome": {
-   "BREAK_PENDING": 1,
-   "EXPIRED:confirmation_window_expired": 10,
-   "EXPIRED:retest_window_expired": 22,
-   "FALSE_BREAKOUT:break_not_accepted": 68,
-   "FALSE_BREAKOUT:break_quality_insufficient": 45,
-   "FALSE_BREAKOUT:break_reclaimed_before_retest": 13,
+   "EXPIRED:confirmation_window_expired": 9,
+   "EXPIRED:retest_window_expired": 16,
+   "FALSE_BREAKOUT:break_not_accepted": 67,
+   "FALSE_BREAKOUT:break_quality_insufficient": 44,
+   "FALSE_BREAKOUT:break_reclaimed_before_retest": 10,
    "RETEST_CONFIRMED:insufficient_target_room": 1,
-   "RETEST_CONFIRMED:no_opposing_structure": 22,
-   "RETEST_CONFIRMED:reward_risk_below_minimum": 6,
-   "RETEST_CONFIRMED:risk_exceeds_execution_envelope": 19,
+   "RETEST_CONFIRMED:no_opposing_structure": 19,
+   "RETEST_CONFIRMED:reward_risk_below_minimum": 3,
+   "RETEST_CONFIRMED:risk_exceeds_execution_envelope": 17,
    "RETEST_CONFIRMED:target_already_reached": 1,
-   "RETEST_FAILED:retest_closed_through": 19,
+   "RETEST_FAILED:retest_closed_through": 16,
    "RETEST_TOUCHED": 1,
    "RETEST_WAITING": 3,
    "STRUCTURE_INVALIDATED:no_protected_structure": 3,
-   "STRUCTURE_INVALIDATED:protected_structure_lost": 9,
-   "published": 3
+   "STRUCTURE_INVALIDATED:protected_structure_lost": 27,
+   "published": 2
   }
  },
  {
@@ -129,32 +102,6 @@
     "target": 1.13642
    },
    {
-    "direction": "SELL",
-    "kind": "key_level",
-    "reference_id": "level:1790709300",
-    "break_start": 1790732700,
-    "accepted_at": 1790733000,
-    "touch_at": 1790734500,
-    "confirmed_at": 1790734800,
-    "entry_low": 1.133765,
-    "entry_high": 1.133965,
-    "stop": 1.13418,
-    "target": 1.13324
-   },
-   {
-    "direction": "SELL",
-    "kind": "key_level",
-    "reference_id": "level:1790922900",
-    "break_start": 1790946300,
-    "accepted_at": 1790946600,
-    "touch_at": 1790947500,
-    "confirmed_at": 1790947800,
-    "entry_low": 1.125339,
-    "entry_high": 1.125574,
-    "stop": 1.126196,
-    "target": 1.12323
-   },
-   {
     "direction": "BUY",
     "kind": "key_level",
     "reference_id": "level:1790932500",
@@ -166,65 +113,26 @@
     "entry_high": 1.12534,
     "stop": 1.12473,
     "target": 1.12612
-   },
-   {
-    "direction": "BUY",
-    "kind": "key_level",
-    "reference_id": "level:1791186300",
-    "break_start": 1791199500,
-    "accepted_at": 1791199800,
-    "touch_at": 1791200100,
-    "confirmed_at": 1791200700,
-    "entry_low": 1.12058,
-    "entry_high": 1.12078,
-    "stop": 1.119994,
-    "target": 1.12207
-   },
-   {
-    "direction": "BUY",
-    "kind": "trendline",
-    "reference_id": "line:1791195900:1791197700",
-    "break_start": 1791199500,
-    "accepted_at": 1791199800,
-    "touch_at": 1791200400,
-    "confirmed_at": 1791200700,
-    "entry_low": 1.12008,
-    "entry_high": 1.12028,
-    "stop": 1.119994,
-    "target": 1.12207
-   },
-   {
-    "direction": "BUY",
-    "kind": "key_level",
-    "reference_id": "level:1791186300",
-    "break_start": 1791203100,
-    "accepted_at": 1791203400,
-    "touch_at": 1791204000,
-    "confirmed_at": 1791204000,
-    "entry_low": 1.12058,
-    "entry_high": 1.12078,
-    "stop": 1.12019,
-    "target": 1.1217
    }
   ],
   "episodes_by_outcome": {
    "BREAK_PENDING": 1,
-   "EXPIRED:confirmation_window_expired": 14,
-   "EXPIRED:retest_window_expired": 25,
+   "EXPIRED:confirmation_window_expired": 12,
+   "EXPIRED:retest_window_expired": 24,
    "FALSE_BREAKOUT:break_not_accepted": 49,
    "FALSE_BREAKOUT:break_quality_insufficient": 26,
    "FALSE_BREAKOUT:break_reclaimed_before_retest": 8,
    "RETEST_CONFIRMED:insufficient_target_room": 2,
-   "RETEST_CONFIRMED:no_opposing_structure": 20,
+   "RETEST_CONFIRMED:no_opposing_structure": 17,
    "RETEST_CONFIRMED:reward_risk_below_minimum": 11,
    "RETEST_CONFIRMED:risk_exceeds_execution_envelope": 3,
    "RETEST_FAILED:invalidated_after_confirmation": 1,
-   "RETEST_FAILED:retest_closed_through": 13,
+   "RETEST_FAILED:retest_closed_through": 11,
    "RETEST_TOUCHED": 1,
    "RETEST_WAITING": 2,
    "STRUCTURE_INVALIDATED:no_protected_structure": 2,
-   "STRUCTURE_INVALIDATED:protected_structure_lost": 6,
-   "published": 7
+   "STRUCTURE_INVALIDATED:protected_structure_lost": 15,
+   "published": 2
   }
  },
  {
@@ -271,45 +179,6 @@
     "target": 1.32448
    },
    {
-    "direction": "BUY",
-    "kind": "key_level",
-    "reference_id": "level:1790822100",
-    "break_start": 1790837400,
-    "accepted_at": 1790837700,
-    "touch_at": 1790838000,
-    "confirmed_at": 1790838300,
-    "entry_low": 1.325587,
-    "entry_high": 1.325787,
-    "stop": 1.324779,
-    "target": 1.32724
-   },
-   {
-    "direction": "BUY",
-    "kind": "key_level",
-    "reference_id": "level:1790846400",
-    "break_start": 1790854800,
-    "accepted_at": 1790855100,
-    "touch_at": 1790859000,
-    "confirmed_at": 1790859000,
-    "entry_low": 1.322555,
-    "entry_high": 1.322755,
-    "stop": 1.320989,
-    "target": 1.32509
-   },
-   {
-    "direction": "BUY",
-    "kind": "key_level",
-    "reference_id": "level:1790922300",
-    "break_start": 1790947200,
-    "accepted_at": 1790947500,
-    "touch_at": 1790947800,
-    "confirmed_at": 1790948100,
-    "entry_low": 1.321845,
-    "entry_high": 1.322101,
-    "stop": 1.321727,
-    "target": 1.32354
-   },
-   {
     "direction": "SELL",
     "kind": "key_level",
     "reference_id": "level:1791157800",
@@ -324,19 +193,19 @@
    }
   ],
   "episodes_by_outcome": {
-   "EXPIRED:confirmation_window_expired": 11,
-   "EXPIRED:retest_window_expired": 24,
-   "FALSE_BREAKOUT:break_not_accepted": 82,
+   "EXPIRED:confirmation_window_expired": 10,
+   "EXPIRED:retest_window_expired": 19,
+   "FALSE_BREAKOUT:break_not_accepted": 83,
    "FALSE_BREAKOUT:break_quality_insufficient": 29,
-   "FALSE_BREAKOUT:break_reclaimed_before_retest": 11,
-   "RETEST_CONFIRMED:no_opposing_structure": 14,
-   "RETEST_CONFIRMED:reward_risk_below_minimum": 14,
+   "FALSE_BREAKOUT:break_reclaimed_before_retest": 10,
+   "RETEST_CONFIRMED:no_opposing_structure": 13,
+   "RETEST_CONFIRMED:reward_risk_below_minimum": 12,
    "RETEST_CONFIRMED:risk_exceeds_execution_envelope": 2,
    "RETEST_FAILED:retest_closed_through": 10,
-   "RETEST_WAITING": 4,
+   "RETEST_WAITING": 3,
    "STRUCTURE_INVALIDATED:no_protected_structure": 2,
-   "STRUCTURE_INVALIDATED:protected_structure_lost": 8,
-   "published": 7
+   "STRUCTURE_INVALIDATED:protected_structure_lost": 21,
+   "published": 4
   }
  },
  {
@@ -403,10 +272,23 @@
     "accepted_at": 1790938200,
     "touch_at": 1790938800,
     "confirmed_at": 1790939100,
-    "entry_low": 208.234276,
-    "entry_high": 208.261724,
+    "entry_low": 208.223776,
+    "entry_high": 208.251224,
     "stop": 208.032127,
     "target": 208.555
+   },
+   {
+    "direction": "BUY",
+    "kind": "trendline",
+    "reference_id": "line:1790952900:1790957100",
+    "break_start": 1790958600,
+    "accepted_at": 1790958900,
+    "touch_at": 1790959200,
+    "confirmed_at": 1790959200,
+    "entry_low": 208.769396,
+    "entry_high": 208.792604,
+    "stop": 208.705661,
+    "target": 208.955
    },
    {
     "direction": "SELL",
@@ -423,22 +305,22 @@
    }
   ],
   "episodes_by_outcome": {
-   "EXPIRED:confirmation_window_expired": 12,
-   "EXPIRED:retest_window_expired": 31,
-   "FALSE_BREAKOUT:break_not_accepted": 57,
-   "FALSE_BREAKOUT:break_quality_insufficient": 37,
+   "EXPIRED:confirmation_window_expired": 11,
+   "EXPIRED:retest_window_expired": 22,
+   "FALSE_BREAKOUT:break_not_accepted": 56,
+   "FALSE_BREAKOUT:break_quality_insufficient": 39,
    "FALSE_BREAKOUT:break_reclaimed_before_retest": 16,
    "RETEST_CONFIRMED:no_opposing_structure": 14,
    "RETEST_CONFIRMED:reward_risk_below_minimum": 8,
    "RETEST_CONFIRMED:risk_exceeds_execution_envelope": 2,
    "RETEST_CONFIRMED:target_already_reached": 1,
    "RETEST_FAILED:invalidated_after_confirmation": 1,
-   "RETEST_FAILED:retest_closed_through": 22,
+   "RETEST_FAILED:retest_closed_through": 18,
    "RETEST_TOUCHED": 2,
    "RETEST_WAITING": 1,
    "STRUCTURE_INVALIDATED:no_protected_structure": 2,
-   "STRUCTURE_INVALIDATED:protected_structure_lost": 10,
-   "published": 6
+   "STRUCTURE_INVALIDATED:protected_structure_lost": 21,
+   "published": 7
   }
  },
  {
@@ -446,17 +328,17 @@
   "symbol": "USDJPY",
   "setups": [
    {
-    "direction": "BUY",
+    "direction": "SELL",
     "kind": "key_level",
-    "reference_id": "level:1790587800",
-    "break_start": 1790590200,
-    "accepted_at": 1790590500,
-    "touch_at": 1790591100,
-    "confirmed_at": 1790591400,
-    "entry_low": 157.059228,
-    "entry_high": 157.085772,
-    "stop": 156.93788,
-    "target": 157.563
+    "reference_id": "level:1790588100",
+    "break_start": 1790596800,
+    "accepted_at": 1790597100,
+    "touch_at": 1790597400,
+    "confirmed_at": 1790597700,
+    "entry_low": 156.945626,
+    "entry_high": 156.969374,
+    "stop": 157.126791,
+    "target": 156.609
    },
    {
     "direction": "SELL",
@@ -470,19 +352,6 @@
     "entry_high": 157.393,
     "stop": 157.422,
     "target": 157.194
-   },
-   {
-    "direction": "SELL",
-    "kind": "key_level",
-    "reference_id": "level:1790670000",
-    "break_start": 1790704800,
-    "accepted_at": 1790705100,
-    "touch_at": 1790712000,
-    "confirmed_at": 1790712000,
-    "entry_low": 157.3565,
-    "entry_high": 157.3765,
-    "stop": 157.53904,
-    "target": 156.981
    },
    {
     "direction": "BUY",
@@ -565,19 +434,19 @@
   ],
   "episodes_by_outcome": {
    "EXPIRED:confirmation_window_expired": 13,
-   "EXPIRED:retest_window_expired": 30,
+   "EXPIRED:retest_window_expired": 26,
    "FALSE_BREAKOUT:break_not_accepted": 69,
-   "FALSE_BREAKOUT:break_quality_insufficient": 36,
-   "FALSE_BREAKOUT:break_reclaimed_before_retest": 13,
-   "RETEST_CONFIRMED:no_opposing_structure": 12,
-   "RETEST_CONFIRMED:reward_risk_below_minimum": 19,
+   "FALSE_BREAKOUT:break_quality_insufficient": 35,
+   "FALSE_BREAKOUT:break_reclaimed_before_retest": 10,
+   "RETEST_CONFIRMED:no_opposing_structure": 7,
+   "RETEST_CONFIRMED:reward_risk_below_minimum": 17,
    "RETEST_CONFIRMED:risk_exceeds_execution_envelope": 3,
    "RETEST_FAILED:invalidated_after_confirmation": 2,
-   "RETEST_FAILED:retest_closed_through": 27,
+   "RETEST_FAILED:retest_closed_through": 26,
    "RETEST_TOUCHED": 1,
    "STRUCTURE_INVALIDATED:no_protected_structure": 1,
-   "STRUCTURE_INVALIDATED:protected_structure_lost": 6,
-   "published": 9
+   "STRUCTURE_INVALIDATED:protected_structure_lost": 20,
+   "published": 8
   }
  }
 ]

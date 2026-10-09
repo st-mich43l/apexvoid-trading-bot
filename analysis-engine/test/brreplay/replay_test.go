@@ -508,7 +508,14 @@ func sameDecision(offline, analysed breakretest.Analysis) bool {
 		if off.State == on.State && off.Reason == on.Reason {
 			continue
 		}
-		if off.State == breakretest.StateCandidate && on.State == breakretest.StateRetestConfirmed && on.Reason == breakretest.ReasonConfluenceFloor {
+		// The engine applies the confluence floor while choosing among references
+		// broken in the same move; the offline decision does not. Both describe the
+		// same confirmed retest, so these outcomes are one class.
+		candidateClass := func(e breakretest.Episode) bool {
+			return e.State == breakretest.StateCandidate ||
+				e.State == breakretest.StateRetestConfirmed && (e.Reason == breakretest.ReasonConfluenceFloor || e.Reason == breakretest.ReasonSuperseded)
+		}
+		if candidateClass(off) && candidateClass(on) {
 			continue
 		}
 		return false

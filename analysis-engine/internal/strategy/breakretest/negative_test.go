@@ -1,6 +1,7 @@
 package breakretest
 
 import (
+	"math"
 	"testing"
 
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
@@ -202,5 +203,93 @@ func TestTooLittleHistoryProducesNothing(t *testing.T) {
 	}
 	if a := Detect(testConfig(), nil); len(a.Setups) != 0 || len(a.Episodes) != 0 {
 		t.Errorf("empty series produced output")
+	}
+}
+
+// shifted moves every candle from index i on later by seconds, leaving a feed gap.
+func shifted(bars []market.Candle, i int, seconds int64) []market.Candle {
+	out := append([]market.Candle(nil), bars...)
+	for k := i; k < len(out); k++ {
+		out[k].Time += seconds
+	}
+	return out
+}
+
+// Audit finding: the k accepted closes must be consecutive candles; a feed gap
+// inside the run is not an acceptance.
+func TestAcceptanceRunAcrossAFeedGapIsNotAccepted(t *testing.T) {
+	bars, m := bullishLevel(defaultLevel())
+	expectBuy(t, testConfig(), shifted(bars, m.accept, 1500), StateFalseBreakout, ReasonBreakNotAccepted)
+}
+
+// Audit finding: trading below the protected structure after its pivot but
+// before the retest loop starts (the base, the break run) already lost it.
+func TestProtectedStructureTradedBeforeTheBreakIsLost(t *testing.T) {
+	for _, which := range []string{"base", "break-1", "accept"} {
+		t.Run(which, func(t *testing.T) {
+			bars, m := bullishLevel(defaultLevel())
+			bars = append([]market.Candle(nil), bars...)
+			idx := map[string]int{"base": m.brk - 2, "break-1": m.brk - 1, "accept": m.accept}[which]
+			bars[idx].Low = 4105
+			expectBuy(t, testConfig(), bars, StateStructureInvalided, ReasonProtectedLost)
+		})
+	}
+}
+
+// Audit finding: the reference and its tolerance come from what was knowable
+// BEFORE the break candle. The break candle's own range must not decide whether
+// a level exists.
+func TestBreakCandleRangeDoesNotDecideWhetherAReferenceExists(t *testing.T) {
+	bars, m := bullishLevel(defaultLevel())
+	cfg := testConfig()
+	pre, ok := newATRWindow(bars, cfg.ATRLength, cfg.ATRWindowBars).at(m.brk - 1)
+	if !ok {
+		t.Fatal("no ATR")
+	}
+	// The two touches are 0.10 apart: a tolerance of 0.09 cannot cluster them.
+	cfg.LevelClusterPips, cfg.LevelClusterATR = 0.001, 0.09/pre
+	for _, wick := range []float64{0.3, 2.0, 6.0} {
+		wide := append([]market.Candle(nil), bars...)
+		wide[m.brk].High = math.Max(wide[m.brk].Open, wide[m.brk].Close) + wick
+		for _, ep := range Detect(cfg, wide).Episodes {
+			if ep.Direction == market.Buy && ep.Reference.Kind == KindKeyLevel && ep.Reference.Touches == 2 {
+				t.Fatalf("break-candle wick %.1f made a 0.10 spread cluster under a 0.09 tolerance: %+v", wick, ep.Reference)
+			}
+		}
+	}
+}
+
+// Audit finding: a gap between the second anchor and the break distorts a
+// per-candle line value; such a line is not a reference.
+func TestLineAcrossAGapAfterTheSecondAnchorIsNotAReference(t *testing.T) {
+	bars, m := bullishLine(0)
+	a := Detect(testConfig(), shifted(bars, m.brk-2, 1800))
+	for _, ep := range a.Episodes {
+		if ep.Reference.Kind == KindTrendline {
+			t.Fatalf("a line spanning a feed gap is a reference: %+v", ep.Reference)
+		}
+	}
+}
+
+// Audit finding: when the best-ranked reference fails the confluence floor a
+// weaker sibling that passes it must still be published.
+func TestAWeakerSiblingSurvivesWhenTheBestFailsTheFloor(t *testing.T) {
+	mk := func(id string, confirmed int64) Episode {
+		s := Setup{Direction: market.Buy, ConfirmedAt: confirmed, Reference: Reference{ID: id, Touches: 2}}
+		return Episode{Direction: market.Buy, Reference: s.Reference, BreakStart: 1, State: StateCandidate, Setup: &s}
+	}
+	episodes := []Episode{mk("best", 200), mk("weaker", 100)}
+	got := resolve(episodes, func(s Setup) bool { return s.Reference.ID != "best" })
+	if len(got.Setups) != 1 || got.Setups[0].Reference.ID != "weaker" {
+		t.Fatalf("setups = %+v", got.Setups)
+	}
+	for _, ep := range got.Episodes {
+		if ep.Reference.ID == "best" && (ep.State != StateRetestConfirmed || ep.Reason != ReasonConfluenceFloor) {
+			t.Errorf("best = %s/%s, want RETEST_CONFIRMED/%s", ep.State, ep.Reason, ReasonConfluenceFloor)
+		}
+	}
+	got = resolve([]Episode{mk("best", 200), mk("weaker", 100)}, nil)
+	if len(got.Setups) != 1 || got.Setups[0].Reference.ID != "best" {
+		t.Fatalf("unfiltered: %+v", got.Setups)
 	}
 }

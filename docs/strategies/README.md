@@ -37,7 +37,7 @@ Every strategy has exactly one status:
 | `fvg` | canonical FVG zones, reaction | `fvg_technique_reaction` (1c9f323) | `test/techniqueparity` golden, 5 symbols | all | live | LEGACY_PARITY_PROVEN | 99 / 120 |
 | `ifvg` | canonical inverted FVG zones, reaction | `ifvg_technique_reaction` (1c9f323) | `test/techniqueparity` golden, 5 symbols | all | **contained** (analysis only) | LEGACY_PARITY_PROVEN | 157 / 201 |
 | `crt` | closed H1 range, M5 sweep and reclaim | `crt_technique_reaction` (1c9f323) | `test/techniqueparity` golden, 5 symbols | all | live | LEGACY_PARITY_PROVEN | 11 / 5 |
-| `break_retest` | own M5 key level or trendline, accepted break, fresh retest and rejection | none (Go v3; the Python detector 1c9f323 was v2) | contract tests in `internal/strategy/breakretest`, `test/brreplay` | all | live | GO_NATIVE_VALIDATED | 2 / 3 (v2: 8 / 12) |
+| `break_retest` | own M5 key level or trendline, accepted break, fresh retest and rejection | none (Go v3; the Python detector 1c9f323 was v2) | contract tests in `internal/strategy/breakretest`, `test/brreplay` | all | live | GO_NATIVE_VALIDATED | 1 / 2 (v2: 8 / 12) |
 | `range_edge` | M5 range context, edge rejection | Python detector (1c9f323) | `test/detectorparity` golden | all | live | LEGACY_PARITY_PROVEN | 28 / 50 |
 | `snap_back` | key level or zone, extension, graded grab | Python detector (1c9f323) | `test/detectorparity` golden | all | live | LEGACY_PARITY_PROVEN | 6 / 13 |
 | `momentum_ride` | displacement sequence, opposing liquidity | Python detector (1c9f323) | `test/detectorparity` golden | all | live | LEGACY_PARITY_PROVEN | 8 / 5 |
@@ -69,8 +69,8 @@ references from closed M5 pivots, accepts a break on measured force, requires a
 fresh retest strictly after the acceptance, and places the stop and target by
 structure. The oracle golden is untouched; `break_retest` simply left the
 `test/detectorparity` covered list, and v2 stays reproducible as the frozen baseline in
-`test/brreplay`. Replay: 59 v2 setups over the six captures become 32 v3 setups whose
-hypothetical outcome is *not* better (held-out mean R -0.59 over 26 fills against -0.23
+`test/brreplay`. Replay: 59 v2 setups over the six captures become 22 v3 setups whose
+hypothetical outcome is *not* better (held-out mean R -0.73 over 17 fills against -0.23
 over 47): the change is a technical correction, with no improvement claim.
 
 ### Deliberate departure from the frozen Python oracle

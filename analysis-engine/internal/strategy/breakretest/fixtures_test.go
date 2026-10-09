@@ -180,7 +180,7 @@ type lineMarks struct {
 func (m lineMarks) lineAt(i int) float64 { return m.atB + m.slope*float64(i-m.anchorB) }
 
 // bullishLine is a BUY on a descending resistance line through two pivot highs
-// (4125.0 and 4119.0, thirty-two candles apart: about -0.19 per candle), broken
+// (4125.0 and 4119.0, forty candles apart: about -0.15 per candle), broken
 // upward with two accepted closes, retested at the line's value AT THE RETEST
 // CANDLE (not at the last candle), and confirmed by a bullish rejection.
 // extraBars appends quiet candles after the confirmation so the line's value at
@@ -198,7 +198,7 @@ func bullishLine(extraBars int) ([]market.Candle, lineMarks) {
 	m.anchorA = s.index()
 	// A V between the anchors: highs fall, then rise, so no pivot high sits
 	// between them and the two anchors are chronologically adjacent.
-	const down, up = 12, 18
+	const down, up = 14, 24
 	for k := 1; k <= down; k++ {
 		s.bar(4121+(4109.5-4121)*float64(k)/down, 0.5, 0.5)
 	}
