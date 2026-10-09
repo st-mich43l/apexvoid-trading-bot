@@ -173,6 +173,15 @@ instrument_packs:
       # 30-50 pip entry band every XAU zone strategy now trades.
       min_pips: 50
       max_pips: 70
+      # The 50-70 band above is for the structural zone strategies. A range
+      # scalp (Range Edge, Fade Scalp) is a scalp on gold too: it takes a stop
+      # sized to its own range - Go's invalidation, floored at the range-room
+      # floor (15, execution.range.room_stop_floor_pips) and capped at the
+      # scalping book's 45 (auto_algo scalping.stop.maximum_pips). 2026-10-09
+      # (owner): a Range Edge Scalp was filled with a 50 pip stop, the zone
+      # strategies' floor, where Go's invalidation was 23 pips from the entry.
+      scalp_min_pips: 15
+      scalp_max_pips: 45
       sl_distance: 10.0
     activation:
       trigger_maximum_age_bars: 3

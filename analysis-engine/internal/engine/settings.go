@@ -74,6 +74,14 @@ type Settings struct {
 	InstrumentStopMaxPips            float64
 	InstrumentStopEnvelopeConfigured bool
 
+	// InstrumentScalpStopMinPips/MaxPips are the instrument's optional
+	// scalp-sized band for its range scalps (stop_envelope.scalp_*_pips).
+	// Gold's 50-70 pip envelope belongs to the structural zone strategies; a
+	// range scalp trades a stop sized to its own range.
+	InstrumentScalpStopMinPips    float64
+	InstrumentScalpStopMaxPips    float64
+	InstrumentScalpStopConfigured bool
+
 	// ConfigVersion/ConfigFingerprint are the resolved document's own
 	// whole-document provenance (ConfigProvenanceFromConfig — the SAME
 	// value already used for Kafka envelope provenance), computed once

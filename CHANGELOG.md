@@ -27,6 +27,15 @@ dated section after deployment.
   `docs/strategies/arbitration-eval-results.json`; the earlier one is kept as `.p1-initial.json`.
   Keep Model A: no alternative ranking has independent evidence.
 
+- Range Edge Scalp (and Fade Scalp) on XAU no longer takes gold's 50-70 pip structural stop envelope.
+  Production 2026-10-09: a Range Edge Scalp SELL had Go's invalidation 23 pips from the entry, but the
+  Go stop envelope attached to every non-M1 strategy was the instrument's 50-70 band, so the stop was
+  widened to 50 pips (`go_invalidation_widened`) and the trade lost 50 pips; the same happened at
+  2026-10-08 12:25 (-50). The XAU instrument now declares `stop_envelope.scalp_min_pips: 15` /
+  `scalp_max_pips: 45` (the range-room floor and the scalping book's cap), and the Analysis Engine
+  uses it for the range-room strategies (Range Edge, Fade Scalp) only; every other strategy, and FX
+  (which declares none), keeps its envelope. Needs an Analysis Engine and Algo Bot restart to take effect.
+
 ### Changed
 - CI gates the bot starting, not its business logic. `Autotrade Integrity` now runs: Python - the
   9 startup and contract files in `algo-bot/tests/ci_autotrade_paths.txt` (every module imports, the
