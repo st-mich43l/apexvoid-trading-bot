@@ -33,6 +33,7 @@ from app.analysis_client.provenance import GO_ORIGIN_TAG
 from app.autotrade.card_prices import snap_measured_to_card_prices
 from app.autotrade.risk_leg import plan_risk_leg
 from app.autotrade.strategy_match import StrategyMatch
+from app.autotrade.strategy_taxonomy import is_scalp_strategy
 from app.autotrade.trade_plan import (
   ENTRY_TYPE_LIMIT_LADDER,
   ENTRY_TYPE_MARKET,
@@ -686,7 +687,13 @@ def build_trade_plan_from_strategy_match(
 
   # The planner owns the optional XAU risk leg: it is part of the plan and of
   # the card, and the executor places exactly the legs the plan declares.
-  risk_leg = plan_risk_leg(
+  # The risk leg is a swing-sized trade-off leg 15 pips inside a 50-70 pip gold
+  # stop. A scalp's stop is 15-45 pips, so the same leg would rest at or near the
+  # entry and add size to a trade whose point is a small, fixed risk.
+  risk_leg = None if is_scalp_strategy(
+    str(getattr(match, "strategy", "") or ""),
+    strategy_mode=str(getattr(match, "strategy_mode", "") or "") or None,
+  ) else plan_risk_leg(
     symbol=match.symbol,
     direction=direction,
     entry=entry,
