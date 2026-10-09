@@ -2160,10 +2160,11 @@ async def published_plan_risk_reference(client, match_id: str) -> float | None:
 async def published_plan_entry_span(
   client, match_id: str,
 ) -> tuple[float, float] | None:
-  """Low/high of the resting prices a published limit-ladder plan places.
+  """Low/high of the entry a published plan places: a limit ladder's resting prices, or
+  the band of a zone plan (market-with-limit-scale / market-watch).
 
-  Other entry types keep the structural zone on the card: a market leg's planned
-  price is only the quote at planning time, not a price the order waits at.
+  A market leg's planned price is only the quote at planning time, so it is never read
+  as a resting price; the zone band the planner set stands in for it.
   """
   try:
     from app.autotrade.setup_execution_aggregate import v8_plan_id
@@ -2171,7 +2172,14 @@ async def published_plan_entry_span(
     from app.autotrade.trade_plan_stream import read_trade_plan
 
     plan = await read_trade_plan(client, v8_plan_id(match_id))
-    if plan is None or plan.entry.type != ENTRY_TYPE_LIMIT_LADDER:
+    if plan is None:
+      return None
+    if plan.entry.type != ENTRY_TYPE_LIMIT_LADDER:
+      # A zone plan trades the band the planner set (30-50 pips on gold), which can
+      # differ from Go's structural zone; the card prints the band the plan holds.
+      if plan.entry.zone_low is not None and plan.entry.zone_high is not None:
+        low, high = float(plan.entry.zone_low), float(plan.entry.zone_high)
+        return (min(low, high), max(low, high)) if math.isfinite(low + high) else None
       return None
     prices = [float(price) for price in plan.entry.entry_prices()]
   except Exception:
