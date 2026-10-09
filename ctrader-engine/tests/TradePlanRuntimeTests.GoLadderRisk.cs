@@ -93,7 +93,7 @@ public sealed partial class TradePlanRuntimeTests
   }
 
   [Fact]
-  public async Task WithoutTheTagThePlanGetsTheInjectedRiskLegExactlyAsPythonOwnedPlansDoToday()
+  public async Task ADeclaredRiskLegIsPlacedExactlyAsDeclaredAndNothingElseIsAdded()
   {
     var (_, client, runtime, _) = LadderChain(GoLadderPlanJson(riskLeg: true), equity: 2_000m);
 

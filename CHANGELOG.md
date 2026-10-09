@@ -13,6 +13,14 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- The executor no longer opens a new entry on a stale quote. `SpotPrice` carries the broker tick time
+  (the field Python's 5 s spot rule reads), but `TradePlanRuntime` evaluated whatever tick it saw last,
+  and the last tick survives a feed stall or reconnect. `AutoTradeOptions.MaximumQuoteAgeSeconds`
+  (derived from `analysis.spot.maximum_age_seconds`, at least 15 s; no new config key) now defers entry
+  evaluation until a fresh tick; reconciliation, management of open positions, cancel intents, resting
+  orders and broker stops are unchanged. P3 execution audit: `docs/strategies/execution-audit-p3.md`,
+  reproducible with `algo-bot/tools/execution_audit.py` (read-only). New BUY/SELL mirror and plan
+  invariant tests cover 20 gold strategies. Needs an executor restart to take effect.
 - Go scalps are sized as scalps. The plan builder recognised a scalp plan only by family `scalp` or mode
   `scalp_m1`, which none of the five Go scalps carry (family `range_reversion`, mode `go_m5_*`), so they
   got the structural `risk_percent` 1.0 and could never take the configured scalp sizing mode. It now uses
