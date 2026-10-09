@@ -39,6 +39,19 @@ func cfg(id strategy.StrategyID, params map[string]any) strategy.Config {
 
 func detectorParams(own map[string]any) map[string]any { return legacyfixture.Params(own) }
 
+// crtParams is the CRT v3 parameter set (config/analysis.yml, XAU scale).
+func crtParams() map[string]any {
+	return detectorParams(map[string]any{
+		"minimum_h1_range_atr": 1.5, "atr_length": 14.0, "atr_window_bars": 140.0, "sweep_window_h1_periods": 1.0,
+		"minimum_sweep_pips": 2.0, "minimum_sweep_atr": 0.10, "minimum_reclaim_pips": 1.0, "minimum_reclaim_atr": 0.05, "reclaim_max_bars": 6.0,
+		"confirmation_mode": "mss", "structure_pivot_bars": 2.0, "structure_lookback_bars": 24.0, "mss_max_bars": 12.0,
+		"minimum_mss_body_ratio": 0.5, "minimum_mss_displacement_atr": 0.5, "minimum_mss_close_strength": 0.6, "displacement_grade_atr": 1.0,
+		"confirmation_max_age_bars": 2.0, "confirmation_buffer_pips": 0.0, "entry_model": "mss_retest", "entry_depth_atr": 0.5,
+		"entry_tolerance_atr": 0.1, "entry_max_width_price": 5.0, "invalidation_buffer_atr": 0.25, "minimum_target_room_atr": 0.55,
+		"minimum_reward_risk": 1.15, "expiry_hours": 4.0,
+	})
+}
+
 func impulsePullbackParams() map[string]any {
 	return map[string]any{
 		"pip_size": 0.1, "setup_window_bars": 120.0, "dealing_window_bars": 120.0, "confirmation_window_bars": 60.0, "confirmation_lookback_bars": 2.0,
@@ -157,12 +170,12 @@ func TestStrategiesKnownQualifyingFixtures(t *testing.T) {
 		}
 	})
 	t.Run("crt", func(t *testing.T) {
-		s, e := crt.New(cfg(crt.ID, detectorParams(map[string]any{"minimum_h1_range_atr": 1.5, "invalidation_buffer_atr": .25, "expiry_hours": 4.0, "technique_window_bars": 400.0, "entry_max_width_price": 5.0, "pip_size": .1, "reaction_lookback_bars": 3.0, "engulfing_minimum_range_atr": .5})))
+		s, e := crt.New(cfg(crt.ID, crtParams()))
 		if e != nil {
 			t.Fatal(e)
 		}
 		if got := s.Evaluate(ctx(map[market.Timeframe]*analysiscontext.TimeframeContext{market.H1: {Timeframe: market.H1, Candles: []market.Candle{bar(base-3600, 100, 103, 99, 102), bar(base, 102, 103, 101, 102)}}, market.M5: {Timeframe: market.M5, Candles: []market.Candle{bar(base-300, 100, 101, 99.5, 100), bar(base, 100, 101, 98.5, 100)}}})); len(got) != 0 {
-			t.Fatalf("parity CRT must reject insufficient history, got %+v", got)
+			t.Fatalf("CRT must reject insufficient history, got %+v", got)
 		}
 	})
 	t.Run("confluence_zone", func(t *testing.T) {
