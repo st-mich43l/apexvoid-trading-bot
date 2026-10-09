@@ -832,6 +832,31 @@ public sealed partial class TradePlanRuntime(
     return PositionCloseReason.Unknown;
   }
 
+  private bool _staleQuoteLogged;
+
+  private bool QuoteIsStale(SpotPrice quote)
+  {
+    var maximumAge = options.MaximumQuoteAgeSeconds;
+    if (maximumAge <= 0 || quote.Timestamp <= 0)
+    {
+      return false;
+    }
+    var age = clock().ToUnixTimeSeconds() - quote.Timestamp;
+    if (age <= maximumAge)
+    {
+      return false;
+    }
+    if (!_staleQuoteLogged)
+    {
+      _staleQuoteLogged = true;
+      log(
+        $"v8 quote stale symbol={quote.Symbol} age_s={age} max_s={maximumAge} "
+        + "- no new entry until a fresh tick"
+      );
+    }
+    return true;
+  }
+
   private static string PlanClaimKey(string planId) => $"execution:plan_claim:{planId}";
   private static string PlanStateKey(string planId) => $"execution:plan_runtime:{planId}";
   private static string PlanRecoveryKey(string planId) =>
@@ -896,7 +921,16 @@ public sealed partial class TradePlanRuntime(
     {
       return;
     }
-    await EvaluatePendingEntryPlansAsync(client, symbol, quote, cancellationToken);
+    // A tick that outlived a feed stall or a reconnect must not open new risk:
+    // the zone, slippage, spread and stop-geometry checks would all judge a price
+    // that is no longer there. Reconciliation and management of positions already
+    // open keep running exactly as before; resting orders and broker stops are
+    // untouched.
+    if (!QuoteIsStale(quote))
+    {
+      _staleQuoteLogged = false;
+      await EvaluatePendingEntryPlansAsync(client, symbol, quote, cancellationToken);
+    }
     await ReconcileSubmittedLegsAsync(
       client, symbol, cancellationToken, reconcileSnapshot
     );

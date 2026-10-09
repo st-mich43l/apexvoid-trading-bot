@@ -29,7 +29,11 @@ public sealed record AutoTradeOptions(
   string UnfilledLegAfterTpPolicy = "cancel",
   // market_with_limit_scale: single_market collapses to 100% L1 market when
   // two valid legs cannot be formed; reject refuses the plan.
-  string ReactionScaleInvalidPolicy = "single_market"
+  string ReactionScaleInvalidPolicy = "single_market",
+  // A live quote older than this opens no new entry (positions already open, resting
+  // orders and broker-side stops are untouched). 0 disables the check (record default,
+  // used by tests); the native runtime derives it from analysis.spot.maximum_age_seconds.
+  int MaximumQuoteAgeSeconds = 0
 )
 {
   public IReadOnlyList<string> EffectiveSymbols =>
@@ -84,6 +88,12 @@ public sealed record AutoTradeOptions(
       throw new AutoTradeConfigurationException(
         "Auto trade disabled: AUTO_TRADE_UNFILLED_LEG_AFTER_TP_POLICY "
         + "must be cancel or keep"
+      );
+    }
+    if (MaximumQuoteAgeSeconds < 0)
+    {
+      throw new AutoTradeConfigurationException(
+        "Auto trade disabled: maximum quote age must not be negative"
       );
     }
     if (ReactionScaleInvalidPolicy is not "single_market" and not "reject")
