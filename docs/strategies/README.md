@@ -36,7 +36,7 @@ Every strategy has exactly one status:
 | `order_block` | canonical order-block zones, reaction | `order_block_technique_reaction` (1c9f323) | `test/techniqueparity` golden, 5 symbols | all | live | LEGACY_PARITY_PROVEN | 23 / 30 |
 | `fvg` | canonical FVG zones, reaction | `fvg_technique_reaction` (1c9f323) | `test/techniqueparity` golden, 5 symbols | all | live | LEGACY_PARITY_PROVEN | 99 / 120 |
 | `ifvg` | canonical inverted FVG zones, reaction | `ifvg_technique_reaction` (1c9f323) | `test/techniqueparity` golden, 5 symbols | all | **contained** (analysis only) | LEGACY_PARITY_PROVEN | 157 / 201 |
-| `crt` | closed H1 range, M5 sweep and reclaim | `crt_technique_reaction` (1c9f323) | `test/techniqueparity` golden, 5 symbols | all | live | LEGACY_PARITY_PROVEN | 11 / 5 |
+| `crt` | closed H1 range, M5 sweep, reclaim and structure shift | none (v3 departs deliberately from `crt_technique_reaction`, see below) | `internal/strategy/crt` positive and negative fixtures; `test/crtreplay`: no future dependence on 6 captures bar for bar, technical invariants on every setup found, and a v3 golden | all | live (an honest stop beyond the instrument cap is refused) | GO_NATIVE_VALIDATED | 1 / 0 |
 | `break_retest` | own M5 key level or trendline, accepted break, fresh retest and rejection | none (Go v3; the Python detector 1c9f323 was v2) | contract tests in `internal/strategy/breakretest`, `test/brreplay` | all | live | GO_NATIVE_VALIDATED | 1 / 2 (v2: 8 / 12) |
 | `range_edge` | M5 range context, edge rejection | Python detector (1c9f323) | `test/detectorparity` golden | all | live | LEGACY_PARITY_PROVEN | 28 / 50 |
 | `snap_back` | key level or zone, extension, graded grab | Python detector (1c9f323) | `test/detectorparity` golden | all | live | LEGACY_PARITY_PROVEN | 6 / 13 |
@@ -56,6 +56,20 @@ the technique goldens; XAU, GBPUSD, USDJPY for the detector golden; XAU M1 for t
 scalp lane). Replay counts are opportunities created over real XAU bar history
 (M5 1500 bars Sep 14-21; M5 2000 bars Sep 28-Oct 7). Replay shows what a
 strategy emits, not whether it earns.
+
+### CRT v3 is not a port
+
+`crt` v3 is deliberately *not* the frozen `crt_technique_reaction`. The frozen
+discovery mixed an H1 candle position with M5 candles, accepted any one-tick pierce
+of the range, confirmed on any reaction touching the whole H1 range, and stopped
+inside the sweep wick (`docs/strategies/crt.md`, "What v2 got wrong"). v3 reads the
+anchor, sweep, reclaim and an M5 structure shift from closed candles by time, and
+places the stop beyond the real manipulation extreme. The frozen port
+(`techniquezone.DiscoverCRT` / `CollectCRT`) is unchanged, the oracle golden still
+proves it bar for bar, and it still supplies the CRT instance Confluence Zone
+aggregates (see the unresolved risks in the CRT page). Replay: 127 v2 setups over the
+six captures become 1 published v3 setup, and 105 of those 127 had their stop inside the
+sweep wick.
 
 ### Break & Retest v3 is not a port
 

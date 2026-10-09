@@ -12,6 +12,23 @@ dated section after deployment.
 
 ## Unreleased
 
+### Changed
+- CRT (`crt`) is rebuilt as v3: a fully closed H1 candle is the range, an M5 candle sweeps an edge by a
+  real threshold, an M5 close reclaims it, and an M5 structure shift (a close beyond the last confirmable
+  swing, with measured displacement) confirms it. The stop is placed beyond the actual manipulation
+  extreme and is never tightened: if that honest risk exceeds the instrument's execution stop cap the
+  setup is refused with an explicit reason (`risk_exceeds_execution_envelope`). The objective stays the
+  opposite H1 edge. Replaces the frozen Python-parity v2, which indexed M5 candles with an H1 position
+  (the same M5 episode read differently with 20 or 400 H1 candles loaded), accepted a one-tick pierce,
+  and put the stop inside the sweep wick in 105 of 127 replayed setups. Everything is read from closed
+  candles and related across timeframes by time; ATR is Wilder ATR(14) over a fixed trailing window so
+  no result depends on how much history is loaded. Candidate identity (`technique:crt:<side>:<anchor>`)
+  and the Algo Bot CRT scope contract (confirmed reaction, `h1_impulse_range` /
+  `m5_range_sweep_reclaim` evidence, confluence floor) are unchanged. Replay of the committed captures:
+  127 v2 setups, 1 published v3 setup (XAU 21 Sep SELL): v3 is far more selective by construction. See
+  `docs/strategies/crt.md` for the specification, the evidence and the unresolved risks. The analysis
+  engine needs a restart; no executor change.
+
 ### Fixed
 - Gold fixed-R targets are priced from the stop and entry the card prints. The card-price snap (#759) moved
   the stop away from the entry and rounded the legs, but a fixed-R plan kept TP1-TP4 priced from the
