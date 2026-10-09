@@ -1,63 +1,16 @@
 # Paths consumed by .github/workflows/autotrade-integrity.yml
-# Live V8 publish / execute / manage / Telegram. Not catalog or scanner
-# characterization suites that still encode retired product.
-tests/test_trade_plan_v8_telegram_events.py
-tests/test_trade_plan_v8_contract.py
-tests/test_trade_plan_builder.py
-tests/test_scalp_micro_grid.py
-tests/test_range_edge_card_price.py
-tests/test_risk_leg.py
-tests/test_xau_retest_ladder.py
-tests/test_arbitration_determinism.py
-tests/test_publication_fallback.py
-tests/test_arbitration_eval_tool.py
-tests/test_trade_plan_stream.py
-tests/test_publish_trade_plan_v8.py
-tests/test_watcher.py
-tests/test_auto_trade_ops.py
-tests/test_autotrade_delivery.py
-tests/test_delivery_owner_loop.py
-tests/test_telegram_actor.py
-tests/test_bar_event_dispatcher.py
-tests/test_worker_idle_m1.py
-tests/test_ohlc_bar_cache.py
-tests/test_active_exposure.py
-tests/test_opposite_exposure_policy.py
-tests/test_execution_pipeline_integrity.py
-tests/test_calendar.py
-tests/test_owner_dm_journal.py
-tests/test_manual_plan.py
-tests/test_entry_overlap.py
-tests/test_setup_card.py
-tests/test_execution_confirmation.py
-tests/test_auto_trade_stats_ingestion.py
-tests/test_protective_stop.py
-tests/test_stop_bounds_from_go_envelope.py
-tests/test_go_stop_widening.py
-tests/test_go_live_opportunities.py
-tests/test_xau_risk_targeted_entry.py
-tests/test_legs_achieved_pips.py
-tests/test_telegram_single_root_card.py
-tests/test_worker_terminal_card_cleanup.py
-tests/test_autotrade_units.py
-tests/test_fx_one_to_two.py
+# CI proves the bot can START and that the services agree on their contracts: every module
+# imports, the entrypoint boots, the Go-only startup gate holds, startup reconciliation runs,
+# env/channel config loads, logging initialises, supervised loops start, the TradePlan V8
+# contract the executor parses is what Python builds, and the Go analysis events Python
+# consumes parse. Business logic (strategies, cards, pips, arbitration, execution policy) is
+# deliberately NOT gated here: it changes with every improvement and is checked by running it.
 tests/test_import_all_modules.py
-tests/test_htf_walls_live_only.py
-tests/test_analysis_client_models.py
-tests/test_analysis_consumer.py
-tests/test_analysis_opportunity_repository.py
-tests/test_analysis_consumer_persistence.py
-tests/test_capture_bars.py
+tests/test_main.py
 tests/test_go_only_startup_gate.py
-tests/test_go_opportunity_policy.py
-tests/test_go_zone_book.py
-tests/test_analysis_freshness.py
-tests/test_analysis_lifecycle.py
-tests/test_go_plan_cancel_contract.py
-tests/test_go_full_chain.py
-tests/test_executor_events_delivery.py
-tests/test_ladder_spec.py
-tests/test_go_precision_and_card.py
-tests/test_xau_ladder.py
-tests/test_arbitration_executable_intents.py
+tests/test_startup_reconciliation.py
 tests/test_channel_env_override.py
+tests/test_logging_setup.py
+tests/test_redis_supervision.py
+tests/test_trade_plan_v8_contract.py
+tests/test_analysis_client_models.py

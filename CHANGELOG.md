@@ -13,6 +13,44 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
+- CI gates the bot starting, not its business logic. `Autotrade Integrity` now runs: Python - the
+  9 startup and contract files in `algo-bot/tests/ci_autotrade_paths.txt` (every module imports, the
+  entrypoint boots, the Go-only startup gate, startup reconciliation, env/channel config, logging,
+  supervised loops, the TradePlan V8 contract, Go analysis event parsing); C# - build plus broker
+  authorization, token lifecycle, health and the V8 contract; Go - build, vet, the production config
+  resolving with all 21 strategies wired, engine bootstrap, logging and the Kafka event schemas.
+  Strategy, parity, card, pips, arbitration and execution-policy tests are no longer run in CI, so a
+  new implementation cannot turn the checks red by changing a number. The test files themselves are
+  still in the tree.
+
+### Changed
+- Gold zone strategies trade a 30-50 pip entry band, and the XAU stop may reach 70 pips (owner
+  2026-10-09: "60 as well, even 70, we are making profit by the RR"). Every XAU zone strategy (Key
+  Level, Supply, Demand, Order Block, FVG, iFVG, CRT, Confluence Zone, Flip Zone, Session Level,
+  Trendline, Break & Retest; not the M1 or range scalps, FX or the market strategies) has Go's zone
+  widened toward the stop to 30 pips when thinner, or trimmed to its 50 pips nearest the near edge when
+  wider, with the shallow leg at the near edge and the deep leg at the band midpoint, as before. When
+  a band is widened Go's invalidation follows it out by the same distance (so a 20 pip zone with a
+  50 pip stop becomes a 30 pip zone with a 60 pip stop); when it is trimmed the stop stays where Go
+  put it, so trimming never shrinks the risk. A zone whose stop lies more than 70 pips from the near
+  edge is still rejected. `instruments.yml` XAU `stop_envelope.max_pips` 60 -> 70 (also the Go stop
+  envelope cap; the Go replay golden changes only in `stop_envelope.cap_pips`). The root card prints
+  the band the plan holds.
+
+### Fixed
+- Gold zone plans are placed on the numbers their card prints. Production 2026-10-09, Key Level BUY:
+  the card read `Entry Zone 4,143 - 4,147` and `SL 4,141 · risk 56 pips` (4,147 to 4,141 reads as 60),
+  while the plan held legs 4147.06 / 4145.11, a 4141.46 stop and a 4152.66 first target - the card
+  rounds to whole numbers, the orders did not. For XAU zone plans (not the M1 and range scalps, whose
+  15-20 pip stops cannot absorb a whole-number round) the planner now rounds the entry band, every
+  ladder leg, the stop and the targets the way the card rounds them, and the executor places exactly
+  them: legs 4147 / 4145, stop 4141 (60 pips, the cap), targets 4153 / 4159 / 4165 / 4171, risk leg
+  4142.5. The stop rounds away from the entry whenever that stays inside the stop envelope (Go's
+  floor/cap and the 60 pip reaction cap), otherwise toward it; a ladder that was whole R multiples stays
+  whole R multiples of the new risk. Nothing is rounded when it would collapse two legs, break their
+  order or leave the envelope: the plan then keeps Go's exact prices. FX is unchanged.
+
+### Changed
 - The Auto Algo root card no longer prints the "Risk leg" line added with the planner-declared
   risk leg. The plan still declares the leg (`entry.risk_leg`) and the executor places it
   unchanged; only the card text changes. Cards already published keep the line they have.

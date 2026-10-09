@@ -168,8 +168,11 @@ instrument_packs:
       # resulting risk lands near 50p in the first place, rather than
       # relying on this envelope alone to clamp a stop chosen from a
       # risk-blind entry.
+      # 2026-10-09 (owner): the stop may be 60, even 70 pips - gold earns on the
+      # reward/risk ladder, not on a tight stop - so the cap is 70. It pairs with the
+      # 30-50 pip entry band every XAU zone strategy now trades.
       min_pips: 50
-      max_pips: 60
+      max_pips: 70
       sl_distance: 10.0
     activation:
       trigger_maximum_age_bars: 3

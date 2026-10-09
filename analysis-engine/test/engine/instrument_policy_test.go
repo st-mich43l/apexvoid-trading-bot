@@ -91,7 +91,7 @@ func TestApplyInstrument_UsesResolvedPerInstrumentStopEnvelope(t *testing.T) {
 		{"GBPUSD", 15, 25},
 		{"GBPJPY", 22, 35},
 		{"USDJPY", 18, 28},
-		{"XAU", 50, 60},
+		{"XAU", 50, 70},
 	} {
 		settings, err := engine.LoadSettings(doc, "M5", false)
 		if err != nil {
