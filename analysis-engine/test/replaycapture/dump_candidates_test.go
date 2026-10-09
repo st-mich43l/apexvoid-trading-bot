@@ -12,6 +12,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/engine"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/replaycapture"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/transport/kafka"
 )
 
 // TestDumpCandidatesForOfflineArbitrationEvaluation writes every candidate the engine
@@ -52,6 +53,15 @@ func TestDumpCandidatesForOfflineArbitrationEvaluation(t *testing.T) {
 			if err != nil {
 				t.Error(err)
 				return
+			}
+			settings, err := engine.LoadSettings(doc, market.M5, false)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			envelopeOptions := replaycapture.EnvelopeOptions{
+				Algorithm:     kafka.AlgorithmVersion{Structure: settings.Structure.Version, Liquidity: settings.Liquidity.Version},
+				ConfigVersion: 3,
 			}
 			var rows []map[string]any
 			_, err = replaycapture.Replay(doc, capture, market.M5, replaycapture.Options{OnEvaluation: func(e engine.Evaluation) {
@@ -100,6 +110,12 @@ func TestDumpCandidatesForOfflineArbitrationEvaluation(t *testing.T) {
 						if tech.CandleEvidence != nil {
 							row["candle_score"] = tech.CandleEvidence.FinalScore
 						}
+					}
+					// The exact analysis.opportunity.v1 envelope the engine would publish for this
+					// candidate, so the offline evaluator can run Algo Bot's real admission on it
+					// instead of re-deriving eligibility.
+					if envelope, envErr := replaycapture.CreationEnvelope(c, envelopeOptions); envErr == nil {
+						row["envelope"] = json.RawMessage(envelope)
 					}
 					rows = append(rows, row)
 				}

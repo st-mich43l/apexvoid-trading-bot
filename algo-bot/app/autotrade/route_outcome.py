@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 import json
+import types
 from typing import Any, Literal
 
 
@@ -80,6 +81,47 @@ class StrategyRouteOutcome:
     return json.dumps(asdict(self), separators=(",", ":"), sort_keys=True)
 
 
+_OUTCOME_DEFAULTS: dict[str, Any] = {
+  "version": 2, "symbol": "", "match_id": "", "strategy": "", "strategy_family": "scanner",
+  "direction": "", "structural_source": "", "structural_id": "", "stage": "scanner",
+  "status": "detected", "reason_code": "", "message": "", "measured": {}, "detected_at": 0,
+  "checked_at": 0, "expires_at": 0, "candidate_id": None, "group_id": None,
+  "executor_event_id": None, "preflight_reason_code": None, "arbitration_reason_code": None,
+  "publication_reason_code": None, "terminal_reason_code": None, "current_stage": None,
+  "retained": None, "winner_intent_id": None, "signal_source": None,
+}
+
+
+def attribution_shim(
+  *,
+  match_id: str,
+  symbol: str,
+  issued_at: int,
+  expires_at: int,
+  sources: tuple[Any, ...] = (),
+) -> Any:
+  """A match-shaped object carrying every attribution field a route outcome reads.
+
+  ``sources`` are consulted in order - the live StrategyMatch, the durable SetupRecord, the
+  event that triggered the projection - and the first non-empty value of each field wins, so a
+  projection built from a thin source still names its strategy, direction and structure when
+  any richer source knows them. A field no source knows stays empty rather than invented."""
+  def pick(*names: str) -> str:
+    for source in sources:
+      for name in names:
+        value = getattr(source, name, None)
+        if value:
+          return str(value)
+    return ""
+
+  return types.SimpleNamespace(
+    match_id=match_id, symbol=symbol, issued_at=issued_at, expires_at=expires_at,
+    strategy=pick("strategy"), family=pick("family", "strategy_family"),
+    direction=pick("direction"), structural_source=pick("structural_source"),
+    structural_zone_id=pick("structural_zone_id", "source_structure_id", "zone_id"),
+  )
+
+
 # Statuses that already describe a finished setup: a later terminal event (a Go
 # invalidation, the expiry sweeper, startup reconciliation) must not overwrite them,
 # so the first terminal evidence is the one an operator reads.
@@ -88,6 +130,16 @@ TERMINAL_ROUTE_STATUSES = frozenset({
   "duplicate_suppressed", "arbitration_suppressed",
   "order_filled",
 })
+
+
+# Broker/executor evidence. An analysis-side terminal projection (a Go invalidation or expiry,
+# the expiry sweeper, startup reconciliation) must never overwrite it: the order, the fill or the
+# executor's rejection is what actually happened.
+AUTHORITATIVE_EXECUTION_STATUSES = frozenset({
+  "executor_rejected", "executor_received", "order_submitted", "order_filled",
+})
+# The stages analysis-side terminal projections write with.
+ANALYSIS_TERMINAL_STAGES = frozenset({"scanner", "entry_invalidation"})
 
 
 def route_outcome_key(symbol: str, match_id: str) -> str:
@@ -187,6 +239,16 @@ async def record_route_outcome(
       )
     except (TypeError, ValueError, json.JSONDecodeError):
       previous = {}
+  if (
+    stage in ANALYSIS_TERMINAL_STAGES
+    and previous.get("status") in AUTHORITATIVE_EXECUTION_STATUSES
+  ):
+    # Keep what the executor/broker established; an analysis-side invalidation arriving
+    # later (a redelivery, a restart, the sweeper) does not rewrite it.
+    return StrategyRouteOutcome(**{
+      name: previous.get(name, default)
+      for name, default in _OUTCOME_DEFAULTS.items()
+    })
   preflight_stages = {
     "mode_check", "policy", "spot_check", "counter_bias",
     "opposing_barrier", "overlap", "cooldown", "entry_invalidation",
@@ -223,16 +285,25 @@ async def record_route_outcome(
     version=2,
     symbol=str(getattr(match, "symbol", "")).upper(),
     match_id=str(getattr(match, "match_id", "")),
-    strategy=str(getattr(match, "strategy", "")),
-    strategy_family=str(getattr(match, "family", "") or "scanner"),
-    direction=str(getattr(match, "direction", "")).upper(),
+    # A caller that only knows the match id (a terminal projection holding a thin object)
+    # must not blank what an earlier outcome already recorded.
+    strategy=str(getattr(match, "strategy", "") or previous.get("strategy") or ""),
+    strategy_family=str(
+      getattr(match, "family", "") or previous.get("strategy_family") or "scanner"
+    ),
+    direction=str(getattr(match, "direction", "") or previous.get("direction") or "").upper(),
     structural_source=str(
-      getattr(match, "structural_source", "") or getattr(match, "strategy", "")
+      getattr(match, "structural_source", "")
+      or getattr(match, "strategy", "")
+      or previous.get("structural_source")
+      or ""
     ),
     structural_id=str(
       getattr(match, "structural_zone_id", "")
       or getattr(match, "zone_id", "")
       or getattr(match, "level_id", "")
+      or previous.get("structural_id")
+      or ""
     ),
     stage=stage,
     status=status,

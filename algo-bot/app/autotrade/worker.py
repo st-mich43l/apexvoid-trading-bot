@@ -36,6 +36,7 @@ from app.autotrade.go_opportunity_policy import (
 )
 from app.autotrade.go_zone_book import opposing_entries_for_go_match
 from app.autotrade import units
+from app.autotrade.execution_intent import execution_intent_for_match
 from app.core import instrument_geometry
 from app.autotrade.cycle_publish import (
   acquire_owned_lock,
@@ -536,36 +537,8 @@ def _group_id(*parts: object) -> str:
   return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
-def _intent_freshness(raw: object, fallback: int = 0) -> float:
-  text = str(raw or "").strip()
-  if text:
-    try:
-      value = float(text)
-      return value / 1000 if value > 1e12 else value
-    except ValueError:
-      try:
-        return datetime.fromisoformat(
-          text.replace("Z", "+00:00")
-        ).timestamp()
-      except ValueError:
-        pass
-  return float(fallback)
-
-
-def _band_distance_pips(
-  price: float | None,
-  low: float,
-  high: float,
-  symbol: str,
-) -> float:
-  if price is None or low <= price <= high:
-    return 0.0
-  return (
-    min(abs(price - low), abs(price - high))
-    / units.pip_size(symbol)
-  )
-
-
+# _intent_freshness / _band_distance_pips live in app.autotrade.execution_intent, the one
+# place a routed match becomes an ExecutionIntent (shared with the offline evaluation).
 
 
 def _strategy_group_id(match: StrategyMatch, *, thesis_cycle: int = 1) -> str:
@@ -2622,6 +2595,44 @@ class _AdmissionFailure:
   measured: dict[str, Any] = field(default_factory=dict)
 
 
+def static_admission_failure(match: StrategyMatch, *, symbol: str) -> _AdmissionFailure | None:
+  """The admission checks that need no Redis state: execution enabled, StrategyMatch routing
+  on, the strategy's own enable switch, the worker's symbol, the global confluence floor.
+  Shared by the live cycle and the offline arbitration evaluation."""
+  if not runtime_config.auto_algo.enabled:
+    return _AdmissionFailure(
+      reason_code="auto_trade_disabled",
+      terminal=True,
+      message="autonomous execution is disabled",
+    )
+  if not runtime_config.auto_algo.strategy_match_enabled:
+    return _AdmissionFailure(
+      reason_code="strategy_match_disabled",
+      terminal=True,
+      message="StrategyMatch routing is disabled",
+    )
+  if not _strategy_mode_enabled(match):
+    return _AdmissionFailure(
+      reason_code="strategy_disabled",
+      terminal=True,
+      message=f"{match.strategy} execution is disabled",
+    )
+  if match.symbol != symbol.upper():
+    return _AdmissionFailure(
+      reason_code="symbol_mismatch",
+      terminal=True,
+      message="intent symbol does not match worker symbol",
+    )
+  if match.confluence < max(1, runtime_config.auto_algo.actionability.gates.min_confluence):
+    return _AdmissionFailure(
+      reason_code="confluence_below_minimum",
+      terminal=True,
+      message="strategy confluence is below the global minimum",
+      measured={"confluence": match.confluence},
+    )
+  return None
+
+
 async def _admit_strategy_intent_for_cycle(
   client: Any,
   intent: ExecutionIntent,
@@ -2657,38 +2668,7 @@ async def _admit_strategy_intent_for_cycle(
   if existing.already_published:
     # the TradePlan runtime will reconcile the existing plan when it runs; admit as-is.
     return None
-  if not runtime_config.auto_algo.enabled:
-    return _AdmissionFailure(
-      reason_code="auto_trade_disabled",
-      terminal=True,
-      message="autonomous execution is disabled",
-    )
-  if not runtime_config.auto_algo.strategy_match_enabled:
-    return _AdmissionFailure(
-      reason_code="strategy_match_disabled",
-      terminal=True,
-      message="StrategyMatch routing is disabled",
-    )
-  if not _strategy_mode_enabled(match):
-    return _AdmissionFailure(
-      reason_code="strategy_disabled",
-      terminal=True,
-      message=f"{match.strategy} execution is disabled",
-    )
-  if match.symbol != intent.symbol.upper():
-    return _AdmissionFailure(
-      reason_code="symbol_mismatch",
-      terminal=True,
-      message="intent symbol does not match worker symbol",
-    )
-  if match.confluence < max(1, runtime_config.auto_algo.actionability.gates.min_confluence):
-    return _AdmissionFailure(
-      reason_code="confluence_below_minimum",
-      terminal=True,
-      message="strategy confluence is below the global minimum",
-      measured={"confluence": match.confluence},
-    )
-  return None
+  return static_admission_failure(match, symbol=intent.symbol)
 
 
 def _arbitration_followup(
@@ -3009,56 +2989,12 @@ async def _handle_event(
       intent_id = f"strategy:{routed_match.match_id}"
       intent_matches[intent_id] = routed_match
       group_id = _strategy_group_id(routed_match)
-      intent = ExecutionIntent(
-        intent_id=intent_id,
-        source=(
-          "market_map_strategy"
-          if routed_match.strategy_mode == "mapped_zone_reaction"
-          else "go_analysis_engine"
-        ),
-        strategy=routed_match.strategy,
-        direction=routed_match.direction,
-        confluence=routed_match.confluence,
-        freshness=_intent_freshness(
-          routed_match.confirmation_bar_ts or routed_match.event_ts,
-          routed_match.issued_at,
-        ),
-        distance_pips=_band_distance_pips(
-          spot_price,
-          routed_match.entry_low,
-          routed_match.entry_high,
-          symbol,
-        ),
-        symbol=symbol.upper(),
-        timeframe=routed_match.source_tf,
-        family=routed_match.family,
-        entry_low=routed_match.entry_low,
-        entry_high=routed_match.entry_high,
-        structural_id=str(
-          routed_match.structural_zone_id
-          or routed_match.zone_id
-          or routed_match.level_id
-          or routed_match.match_id
-        ),
-        match_id=routed_match.match_id,
-        reaction_id=routed_match.reaction_id,
-        thesis_id=routed_match.thesis_id,
-        go_thesis_id=routed_match.go_thesis_id,
-        current_price=spot_price,
-        target_model=routed_match.target_model,
-        targets_pips=routed_match.targets_pips,
-        absolute_target_price=(
-          routed_match.absolute_target_price
-          if routed_match.absolute_target_price is not None
-          else routed_match.target_price
-        ),
-        target_reference_price=routed_match.target_reference_price,
+      intent = execution_intent_for_match(
+        routed_match,
+        symbol=symbol,
+        spot_price=spot_price,
         proposed_group_id=group_id,
         cycle_id=str(event_ts or ""),
-        quality_overall=routed_match.quality_overall,
-        structural_quality=routed_match.confluence_v2_raw,
-        atr=float(routed_match.atr or 0.0),
-        bias_relationship=routed_match.bias_relationship,
         # Only an intent whose executable quote is inside its entry contract can
         # publish this cycle; the rest merely wait for a retest and must not
         # create a BUY-vs-SELL conflict with one that can.

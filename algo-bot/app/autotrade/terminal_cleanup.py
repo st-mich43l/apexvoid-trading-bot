@@ -33,12 +33,11 @@ that one call site.
 from __future__ import annotations
 
 import logging
-import types
 from typing import Any
 
 from app.autotrade.execution_confirmation import execution_confirmation_key
 from app.autotrade.lifecycle import emit_lifecycle
-from app.autotrade.route_outcome import record_route_outcome
+from app.autotrade.route_outcome import attribution_shim, record_route_outcome
 from app.autotrade.setup_card import kill_setup_card
 from app.autotrade.setup_lifecycle import (
   TERMINAL_STATES,
@@ -111,11 +110,12 @@ async def finalize_terminal_setup(
     client, symbol=record.symbol, thesis_id=record.thesis_id, setup_id=setup_id,
   )
 
-  shim = types.SimpleNamespace(
+  shim = attribution_shim(
     match_id=setup_id,
     symbol=record.symbol,
     issued_at=record.created_at,
     expires_at=record.expires_at or 0,
+    sources=(record,),
   )
   try:
     await record_route_outcome(

@@ -80,13 +80,20 @@ async def _reconcile_canonical_setups(client: Any) -> None:
           except (TypeError, ValueError, json.JSONDecodeError):
             needs_repair = True
         if needs_repair:
+          # Restore the original terminal reason when the setup recorded it (a Go reason);
+          # a setup that never did - one that became terminal before the reason was stored -
+          # keeps the generic reason, and is counted as unrecoverable instead of being given
+          # an invented one.
+          reason = record.terminal_reason or "startup_reconciliation"
           await finalize_terminal_setup(
             client, setup_id,
             terminal_state=record.state,
-            reason_code="startup_reconciliation",
+            reason_code=reason,
             source="startup_reconciliation",
           )
           await increment_metric(client, "route_projection_repaired")
+          if record.terminal_reason is None:
+            await increment_metric(client, "terminal_reason_unrecoverable")
         continue
 
       if record.expires_at is None or record.state in PUBLICATION_WON_STATES:

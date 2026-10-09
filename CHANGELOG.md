@@ -12,6 +12,21 @@ dated section after deployment.
 
 ## Unreleased
 
+### Fixed
+- P1 finalization (no production ranking, risk, containment, enablement or geometry change). A Go
+  invalidation or expiry keeps its strategy, direction and `go_<reason>` attribution on the route
+  outcome and on the setup record (new optional fields, old records still load); a redelivered
+  terminal event retries a failed projection; an executor or broker outcome is never overwritten by
+  an analysis-terminal stage; startup reconciliation keeps the recorded Go reason instead of
+  `startup_reconciliation`.
+- `tools/arbitration_eval.py` (offline only) takes eligibility from the production registry and
+  admission code instead of parsing source (supply/demand were wrongly treated as tradable), the
+  simulator is strictly causal (open positions at the end of data are censored, not settled at the
+  last close), and the reproduction claim is split into function, pipeline and historical-decision
+  equivalence with explicit denominators. The corrected result replaces
+  `docs/strategies/arbitration-eval-results.json`; the earlier one is kept as `.p1-initial.json`.
+  Keep Model A: no alternative ranking has independent evidence.
+
 ### Changed
 - CI gates the bot starting, not its business logic. `Autotrade Integrity` now runs: Python - the
   9 startup and contract files in `algo-bot/tests/ci_autotrade_paths.txt` (every module imports, the
