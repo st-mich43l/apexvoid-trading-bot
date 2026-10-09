@@ -287,11 +287,64 @@ analysis:
       maximum_zone_atr: 3.0
       entry_max_width_price: 5.0
     crt:
-      version: v2
+      # v3 (docs/strategies/crt.md): a fully closed H1 candle is the range; an M5
+      # candle sweeps one edge, an M5 close reclaims it, a later M5 close shifts
+      # structure; the stop sits beyond the manipulation extreme and the target is
+      # the opposite H1 edge. Everything is read from closed candles and related
+      # across timeframes by TIME. These are tunable parameters whose defaults were
+      # checked against the committed captures, not universal constants.
+      version: v3
       enabled: true
+      # Anchor. Baseline kept from v2. ATR is Wilder ATR(atr_length) computed over a
+      # fixed trailing window so the result cannot depend on how much history loaded.
       minimum_h1_range_atr: 1.5
+      atr_length: 14
+      atr_window_bars: 140
+      # The sweep must start inside this many H1 periods after the anchor closes (1 =
+      # the next H1 candle, the CRT "manipulation" candle). A wider window is explicit.
+      sweep_window_h1_periods: 1
+      # Sweep threshold = max(pips x instrument pip size, ATR(M5) multiple); reclaim
+      # buffer likewise. Prices are never compared in another instrument's pips.
+      minimum_sweep_pips: 2.0
+      minimum_sweep_atr: 0.10
+      minimum_reclaim_pips: 1.0
+      minimum_reclaim_atr: 0.05
+      # M5 candles after the sweep candle in which a close back inside must occur
+      # (v2's reclaim window, kept).
+      reclaim_max_bars: 6
+      # "mss" confirms on an M5 structure shift after the reclaim. "sweep_reclaim"
+      # (a reclaim alone) is the historical baseline and exists for offline
+      # comparison only; it is never selected here.
+      confirmation_mode: mss
+      structure_pivot_bars: 2
+      structure_lookback_bars: 24
+      mss_max_bars: 12
+      minimum_mss_body_ratio: 0.5
+      minimum_mss_displacement_atr: 0.5
+      minimum_mss_close_strength: 0.6
+      displacement_grade_atr: 1.0
+      confirmation_buffer_pips: 0.0
+      # A confirmation older than this many M5 candles is stale (the Algo Bot treats
+      # a reaction older than structural_reaction_lookback_bars - 1 as not current).
+      confirmation_max_age_bars: 2
+      # Where the resting entry sits: a band centred on the reclaimed H1 edge
+      # (reclaim_retest) or the retest of the swing the shift broke (mss_retest).
+      # reclaim_retest is the default because it bounds the honest risk by the sweep
+      # depth: on the committed captures the broken swing sits 2+ ATR above the edge
+      # and mss_retest risk was 134-210 pips on every confirmed XAU episode against a
+      # 70 pip cap (docs/strategies/crt.md). The structure shift is the confirmation,
+      # not the entry location. entry_depth_atr only shapes mss_retest.
+      entry_model: reclaim_retest
+      entry_depth_atr: 0.5
+      entry_tolerance_atr: 0.1
+      # Stop = manipulation extreme - this ATR buffer (never tightened into the wick).
       invalidation_buffer_atr: 0.25
-      expiry_hours: 8.0
+      # Mirrors the CRT execution profile in algo-bot strategy_catalog (min target
+      # room 0.55 ATR, min reward/risk 1.15) so the detector does not publish what
+      # execution policy would refuse. The instrument stop cap is injected per symbol.
+      minimum_target_room_atr: 0.55
+      minimum_reward_risk: 1.15
+      expiry_hours: 4.0
     flip_zone:
       version: v3
       enabled: true
