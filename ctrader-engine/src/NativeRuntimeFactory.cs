@@ -103,7 +103,14 @@ public static class NativeRuntimeFactory
       Symbols: c.LiveInstruments(),
       EquityTableVersion: c.RequiredString("auto_algo.risk.sizing.equity_table_version"),
       UnfilledLegAfterTpPolicy: c.RequiredString("execution.targeting.unfilled_leg_after_tp_policy"),
-      ReactionScaleInvalidPolicy: c.RequiredString("execution.reaction.scale_invalid_policy")
+      ReactionScaleInvalidPolicy: c.RequiredString("execution.reaction.scale_invalid_policy"),
+      // Python refuses a spot older than analysis.spot.maximum_age_seconds when it
+      // builds a plan. The executor allows three times that (and at least 15s) for
+      // its own poll and sizing delay before it stops acting on the last tick.
+      MaximumQuoteAgeSeconds: Math.Max(
+        15,
+        (int)OptionalDecimal(c, "analysis.spot.maximum_age_seconds", 5m) * 3
+      )
     );
   }
 
