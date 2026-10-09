@@ -13,6 +13,12 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Go scalps are sized as scalps. The plan builder recognised a scalp plan only by family `scalp` or mode
+  `scalp_m1`, which none of the five Go scalps carry (family `range_reversion`, mode `go_m5_*`), so they
+  got the structural `risk_percent` 1.0 and could never take the configured scalp sizing mode. It now uses
+  the strategy taxonomy. Lots are unchanged under the current `equity_table` sizing. Audit:
+  `docs/strategies/scalp-sizing-and-enablement-audit.md` (unenforced `max_group_risk_percent`, shared
+  `scalping.mode` and `technique.sd.enabled` switches).
 - P1 finalization (no production ranking, risk, containment, enablement or geometry change). A Go
   invalidation or expiry keeps its strategy, direction and `go_<reason>` attribution on the route
   outcome and on the setup record (new optional fields, old records still load); a redelivered
