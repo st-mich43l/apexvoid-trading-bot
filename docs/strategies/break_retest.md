@@ -75,6 +75,9 @@ REFERENCE_VALID --close beyond by buffer--> BREAK_PENDING --k accepted closes-->
         +---   (the exact reason is recorded)  <-------------------------------+
 ```
 
+A valid reference that has not been broken yet (`REFERENCE_VALID`) is not an episode
+and is not reported; episodes start at the first beyond-candle.
+
 `RETEST_CONFIRMED` that is refused keeps its reason (`risk_exceeds_execution_envelope`,
 `confirmation_stale`, `confluence_below_floor`, ...), so a rejected setup is never
 silent. Every episode is reported (`Analysis.Episodes`) with its state, reason and the
@@ -97,7 +100,7 @@ candle `b`** (`conf < b`), within `reference_lookback_bars` = 120.
 - **Trendline** (`line:<anchor A open>:<anchor B open>`): two chronologically adjacent
   pivot highs at least `line_min_span_bars` = 6 candles apart whose slope is between
   0.01 and 0.10 ATR per candle (a flatter line is a level), with no market-closure gap
-  inside the span. The line is evaluated **at each candle's own index**,
+  inside the span or between the second anchor and the break. The line is evaluated **at each candle's own index**,
   `v(i) = P_B + slope * (i - i_B)`, never at the last candle. Between anchor B and the
   break no close may be above `v + buffer` and no wick above `v + 0.25 ATR`. `Touches`
   is 2 plus the later pivot highs within the cluster tolerance of the line.
@@ -108,9 +111,11 @@ below `v + buffer` (price was really below a resistance).
 ### 2. Accepted break
 
 `b` is the *first* beyond-candle: `C_b > v(b) + buffer`, where
-`buffer = max(1 pip, 0.05 ATR_b)`. The break is **accepted** after
+`buffer = max(1 pip, 0.05 ATR_{b-1})` (the ATR as of the candle BEFORE the break, so the
+break candle's own range never decides whether a reference exists). The break is **accepted** after
 `breakout_accept_bars` = 2 consecutive closes beyond `v + buffer`; a candle of the run
-that closes back is a `FALSE_BREAKOUT` (`break_not_accepted`). The first beyond-candle
+that closes back, or that does not follow the previous candle by exactly one period (a
+feed gap), is a `FALSE_BREAKOUT` (`break_not_accepted`). The first beyond-candle
 must carry real force, all measured:
 
 - `body_ratio = |C-O| / (H-L) >= 0.5`
@@ -126,11 +131,13 @@ Strictly after the acceptance candle `a`, within `retest_max_bars` = 24 periods:
 
 - **Touch**: a candle with `L <= v(i) + max(1 pip, 0.15 ATR_b)`. The acceptance run's
   own candles never count.
-- **Failure before the touch**: a close below `v(i) - max(2 pips, 0.3 ATR_b)` is a
-  `FALSE_BREAKOUT` (`break_reclaimed_before_retest`); after the touch it is
-  `RETEST_FAILED` (`retest_closed_through`).
-- **Protected structure**: any trade below it before the confirmation is
-  `STRUCTURE_INVALIDATED` (`protected_structure_lost`). The protected structure is the
+- **Failure on or before the first touch**: a close below `v(i) - max(2 pips, 0.3 ATR_b)`
+  on the candle that first touches the level, or earlier, is a `FALSE_BREAKOUT`
+  (`break_reclaimed_before_retest`: the break never held); once a touch has been made, a
+  later close through is `RETEST_FAILED` (`retest_closed_through`).
+- **Protected structure**: any trade below it after its pivot and before the
+  confirmation (the base, the break run and the retest alike) is `STRUCTURE_INVALIDATED`
+  (`protected_structure_lost`). The protected structure is the
   most recent confirmed pivot **low** before `b` (`protected_structure: last_pivot`) or
   the lowest low from `pre_break_bars` before `b` to the acceptance
   (`break_origin`); it must be below the reference.
@@ -175,8 +182,9 @@ With `ATR_c` at the confirmation candle `c`:
   `ExpiresAt = CreatedAt + 4 h`.
 - At most one candidate per direction per evaluation: two references broken in the
   same move are one trade (freshest confirmation, then stronger break displacement,
-  then more touches, then reference id); the others stay on record as
-  `superseded_by_stronger_reference`.
+  then more touches, then reference id). The confluence floor is applied while choosing,
+  so a best-ranked reference that fails it never hides a weaker sibling that passes; the
+  others stay on record as `superseded_by_stronger_reference` or `confluence_below_floor`.
 
 ## Quality and arbitration
 
@@ -211,7 +219,7 @@ recorded as `confluence_below_floor`.
 | A single touch | no reference, no episode |
 | One close beyond, then back | `FALSE_BREAKOUT / break_not_accepted` |
 | Wick-heavy or small-body break | `FALSE_BREAKOUT / break_quality_insufficient` |
-| Closes back below the level before any touch | `FALSE_BREAKOUT / break_reclaimed_before_retest` |
+| Closes back below the level on or before the first touch | `FALSE_BREAKOUT / break_reclaimed_before_retest` |
 | Touch candle is part of the acceptance run | not a retest (waiting) |
 | Retest more than 24 periods after the acceptance | `EXPIRED / retest_window_expired` |
 | Touch but no rejection within 3 candles | `EXPIRED / confirmation_window_expired` |
@@ -310,38 +318,38 @@ is marked to the close after 8 hours. They are never realised performance.
 
 | Capture | v2 setups (retest >2 candles old) | v3 breaks started | accepted | retest touched | retest confirmed | v3 published |
 |---|---|---|---|---|---|---|
-| XAU 14-21 Sep (development) | 8 (6) | 218 | 132 | 75 | 44 | 2 |
-| XAU 28 Sep-6 Oct (held out) | 12 (5) | 246 | 129 | 87 | 52 | 3 |
-| EURUSD 6 Oct | 12 (10) | 191 | 113 | 75 | 44 | 7 |
-| GBPUSD 5 Oct | 12 (10) | 218 | 105 | 63 | 37 | 7 |
-| GBPJPY 6 Oct | 4 (4) | 222 | 126 | 72 | 32 | 5 |
-| USDJPY 5 Oct | 11 (7) | 241 | 135 | 89 | 45 | 8 |
-| **Total** | **59 (42)** | **1,336** | **740** | **461** | **254** | **32** |
+| XAU 14-21 Sep (development) | 8 (6) | 217 | 111 | 69 | 41 | 1 |
+| XAU 28 Sep-6 Oct (held out) | 12 (5) | 239 | 103 | 72 | 43 | 2 |
+| EURUSD 6 Oct | 12 (10) | 187 | 98 | 63 | 36 | 2 |
+| GBPUSD 5 Oct | 12 (10) | 218 | 88 | 55 | 31 | 4 |
+| GBPJPY 6 Oct | 4 (4) | 221 | 110 | 66 | 33 | 6 |
+| USDJPY 5 Oct | 11 (7) | 238 | 119 | 80 | 37 | 7 |
+| **Total** | **59 (42)** | **1,320** | **629** | **405** | **221** | **22** |
 
-Where the 1,336 v3 episodes ended: break not accepted 385; weak break 197; retest
-window expired 167; retest closed through 114; no opposing structure 101; closed back
-before any retest 79; no rejection in the window 65; reward/risk below the minimum 60;
-honest stop beyond the execution cap 48; protected structure lost 42; no protected
-structure 12; too little room 5; invalidated after confirmation 4; target already
-reached 4; published 32; still in progress when the capture ended 21.
+Where the 1,320 v3 episodes ended: break not accepted 383; weak break 198; retest
+window expired 130; protected structure lost 126; retest closed through 102; no opposing
+structure 88; closed back before the first retest 69; no rejection in the window 60;
+reward/risk below the minimum 53; honest stop beyond the execution cap 45; no protected
+structure 12; too little room 5; invalidated after confirmation 4; target already reached
+4; published 22; still in progress when the capture ended 19.
 
 Hypothetical outcomes (filled orders only):
 
 | | n (filled) | target / stop | mean R | mean MFE / MAE | median planned R:R | median zone | median risk |
 |---|---|---|---|---|---|---|---|
-| v2, all | 59 (55) | 13 / 42 | -0.29 | 2.20R / 1.64R | 2.00 | 0.07-0.6 ATR | 3.5-19 pips |
-| v3, all | 32 (28) | 5 / 23 | -0.51 | 1.16R / 1.10R | 2.02 | 0.30-0.55 ATR | 7.7 pips FX, 64 pips XAU |
-| v2, held out | 51 (47) | 12 / 35 | -0.23 | 1.74R / 1.55R | 2.00 | | |
-| v3, held out | 30 (26) | 4 / 22 | -0.59 | 1.09R / 1.11R | 1.64 | | |
-| v3, XAU | 5 (5) | 2 / 3 | +0.26 | 2.41R / 0.99R | 2.26 | | 49-65 pips |
-| v3, FX | 27 (23) | 3 / 20 | -0.67 | 0.89R / 1.12R | 1.59 | | |
+| v2, all | 59 (55) | 13 / 42 | -0.29 | 2.20R / 1.64R | 2.00 | 0.28 ATR | 3.8 pips (XAU 15.5) |
+| v3, all | 22 (18) | 3 / 15 | -0.57 | 0.99R / 1.11R | 1.73 | 0.48 ATR | 8.1 pips |
+| v2, held out | 51 (47) | 12 / 35 | -0.23 | 1.74R / 1.55R | 2.00 | 0.33 ATR | 3.5 pips |
+| v3, held out | 21 (17) | 2 / 15 | -0.73 | 0.86R / 1.17R | 1.59 | 0.48 ATR | 7.6 pips |
+| v3, XAU | 3 (3) | 1 / 2 | +0.09 | 1.30R / 0.89R | 2.26 | 0.30 ATR | 52-63 pips |
+| v3, FX | 19 (15) | 2 / 13 | -0.70 | 0.92R / 1.16R | 1.59 | 0.49 ATR | 7.2 pips |
 
-**What this does and does not show.** v3 publishes about half as many setups as v2 and
-each is a structurally real, fresh, accepted-break retest with a stop beyond real
+**What this does and does not show.** v3 publishes well under half as many setups as v2
+and each is a structurally real, fresh, accepted-break retest with a stop beyond real
 structure; none has a stale retest, a hard-coded factor or a stop inside the retest.
 It does **not** show that v3 earns more: on these captures its hypothetical outcome is
-*worse* than v2's (held-out mean R -0.59 over 26 fills against -0.23 over 47), both are
-negative, the samples are small (2 to 8 setups per capture), the captures are one or two
+*worse* than v2's (held-out mean R -0.73 over 17 fills against -0.23 over 47), both are
+negative, the samples are tiny (1 to 7 v3 setups per capture), the captures are one or two
 weeks of one market regime, and the proxy ignores the Algo Bot's execution rules. **No
 profitability or improvement claim is made, and the held-out proxy is a reason to review
 the strategy's live enablement before this ships**; enabling or disabling a strategy is
@@ -349,15 +357,15 @@ the owner's decision and this change does not take it.
 
 Alternatives measured (`BR_FUNNEL=1 go test ./test/brreplay -run Funnel -v`; offline,
 distinct episodes reaching a publishable state, **before** the confluence floor, in the
-capture order above): the production configuration 2+3+7+7+6+9 = 34 (32 after the
-floor); `protected_structure: break_origin` 50 (its stop is the launch candle's low, a
-weaker structure; 61 with the cap removed); no execution cap 40; one accepted close
-instead of two 41, three closes 31; three level touches 19; no break-force gates 49;
-a 288 candle target lookback 36; a 0.5 ATR target swing 34; a five candle
-confirmation window 40. The defaults are the structurally conservative choice in each
-case, not the one with the best outcome. With the production protected structure the
-honest XAU stop is 49-65 pips (all five published XAU setups fit the 70 pip cap) and 48
-episodes over the six captures were refused for exceeding the cap.
+capture order above): the production configuration 1+2+2+4+7+8 = 24 (22 after the
+floor); `protected_structure: break_origin` 49 (its stop is the launch candle's low, a
+weaker structure; 60 with the cap removed); no execution cap 29; one accepted close
+instead of two 27, three closes 21; three level touches 13; no break-force gates 39; a
+288 candle target lookback 24; a 0.5 ATR target swing 24; a five candle confirmation
+window 29. The defaults are the structurally conservative choice in each case, not the
+one with the best outcome. With the production protected structure the honest XAU risk is
+52-63 pips (all three published XAU setups fit the 70 pip cap) and 45 episodes over the
+six captures were refused for exceeding the cap.
 
 ## Intentional differences from Python parity
 
@@ -396,3 +404,60 @@ Commands and outcomes are recorded in the pull request. The Break & Retest tests
   on real engine contexts, and the replay certification above.
 - Existing suites that cover the wiring: `test/engine`, `test/strategy`,
   `test/architecture` (rank table, no cycles), `internal/strategy` (independence).
+
+## Independent certification
+
+A reviewer who did not write the detector audited the committed code in a separate
+worktree against this page, wrote adversarial and fuzz tests (about 44,000 evaluations
+and 1,100 setups over mutated and reflected fixtures) and ran them. Their findings, and
+what was done (each has a regression test in `negative_test.go`):
+
+| # | Finding | Severity | Resolution |
+|---|---|---|---|
+| 1 | The k accepted closes were counted by slice index, so a feed gap inside the run still counted as "consecutive" (13 hits in the fuzz) | Medium-high | Fixed: the run must follow one period per candle, otherwise `break_not_accepted` |
+| 2 | Trading below the protected structure between its pivot and the retest loop (the base, the break run) was never checked, so a setup could publish with a stop above an already-traded low (12 hits) | Medium | Fixed: any lower low after the pivot, through the acceptance, is `protected_structure_lost` |
+| 3 | The cluster tolerance and break buffer used the ATR *including the break candle*, so the break candle's own wick decided whether a level existed | Low-medium | Fixed: both use the ATR as of the candle before the break |
+| 4 | A candle that first touches the level and closes through it ended as `FALSE_BREAKOUT`, while this page said `RETEST_FAILED` | Low | Page corrected: on the first touch the break never held; `RETEST_FAILED` follows an earlier touch |
+| 5 | A line was evaluated by slice index across a gap between the second anchor and the break | Low | Fixed: such a line is not a reference |
+| 6 | `REFERENCE_VALID` was declared but never emitted | Low | Documented: a valid unbroken reference is not an episode |
+| 7 | The one-per-direction choice happened before the confluence floor, so a failing best reference hid a weaker sibling that passes | Low | Fixed: the floor is applied while choosing |
+
+What the audit tried and could not break: Wilder ATR against an independent
+implementation, the buffer and pivot-confirmation boundaries (a pivot confirmed on the
+break candle is excluded), 311 setups exactly mirrored over 400 reflected series with
+identical states and reasons, no duplicate episode keys, no vanishing episodes and no
+regressing or changing terminal states as evaluation advanced, no published setup that
+was stale, over the cap, mis-ordered, retested at or before the acceptance, outside its
+windows or hit through its stop, `risk - 1e-6` refused and `risk == cap` accepted with an
+unchanged stop, retests 30 periods late expired, no dependence on loaded history, and no
+import of another strategy package. The auditor also noted that the in-package prefix
+tests are weaker than they look (`DetectAsOf` slices before the garbage is applied); the
+real-capture test and the cross-evaluation stability fuzz are the stronger checks.
+
+Verdict after the fixes (the auditor's blocking findings 1 to 3 are resolved):
+**certifiable as a technical contract**, with the unresolved risks below. This is not a
+statement about profitability.
+
+## Unresolved risks
+
+- **Outcomes.** The hypothetical outcome of v3 on the captures is not better than v2's
+  (see the table above) and the samples are tiny. Reviewing the live enablement of
+  `break_retest` before this ships is the owner's decision; nothing here changes it.
+- **No target, no setup.** 88 of 221 confirmed retests ended in `no_opposing_structure`:
+  a breakout to fresh highs has no swing above it to target. That is the contract's
+  honesty, but it removes the cleanest continuation breakouts. A measured-move
+  objective would be a separate, evidence-backed decision.
+- **XAU envelope.** With the structural protected stop the honest XAU risk is 52-63
+  pips on the three published setups and 45 episodes over the captures were refused for
+  exceeding the cap.
+- **Trendline entry drift.** A line's entry band is centred on the line at the
+  confirmation candle and does not follow the line afterwards; `line_max_slope_atr`
+  bounds the drift.
+- **Defaults are uncalibrated judgements** (every threshold is a parameter); the
+  protected-structure model and the target lookback were chosen for their structural
+  meaning, not their outcomes.
+- **`published_overall_quality`** is a configurable constant (default 0.75); changing it
+  is an arbitration change.
+- **A missing `execution_stop_max_pips` disables the cap pre-check** (the engine
+  injects the resolved instrument cap; the Algo Bot still rejects an over-envelope stop).
+- **A duplicate timestamp anywhere in the loaded window fails the evaluation closed.**

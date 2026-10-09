@@ -35,8 +35,15 @@ func DetectAsOf(cfg Config, bars []market.Candle, e int) Analysis {
 // window. DetectAsOf hands it exactly the trailing requiredHistory candles;
 // tests hand it more to prove that is enough.
 func analyseWindow(cfg Config, window []market.Candle) Analysis {
+	return resolve(detectRaw(cfg, window), nil)
+}
+
+// detectRaw is every episode of the window as of its last candle, with every
+// CANDIDATE still a candidate: nothing is yet chosen between references broken in
+// the same move.
+func detectRaw(cfg Config, window []market.Candle) []Episode {
 	if len(window) == 0 || !validSeries(window) {
-		return Analysis{}
+		return nil
 	}
 	var episodes []Episode
 	for _, side := range []market.Direction{market.Buy, market.Sell} {
@@ -49,7 +56,39 @@ func analyseWindow(cfg Config, window []market.Candle) Analysis {
 			episodes = append(episodes, toOriginal(ep, side))
 		}
 	}
-	episodes = chooseOnePerDirection(episodes)
+	return episodes
+}
+
+// resolve keeps at most one candidate per direction: two references broken in the
+// same move are one trade. Candidates are ranked (freshest confirmation, then
+// stronger measured break, then more touches, then reference id) and the first one
+// that passes accept (nil accepts all) wins; a candidate accept refuses is recorded
+// as confluence_below_floor, the others as superseded_by_stronger_reference. Because
+// the ranking is applied BEFORE the confluence floor would otherwise hide it, a
+// weaker sibling that passes the floor is still published when the best fails it.
+func resolve(episodes []Episode, accept func(Setup) bool) Analysis {
+	byDirection := map[market.Direction][]int{}
+	for i, ep := range episodes {
+		if ep.Setup != nil {
+			byDirection[ep.Direction] = append(byDirection[ep.Direction], i)
+		}
+	}
+	for _, idx := range byDirection {
+		sort.SliceStable(idx, func(x, y int) bool { return better(*episodes[idx[x]].Setup, *episodes[idx[y]].Setup) })
+		chosen := false
+		for _, i := range idx {
+			ok := accept == nil || accept(*episodes[i].Setup)
+			if ok && !chosen {
+				chosen = true
+				continue
+			}
+			reason := ReasonSuperseded
+			if !ok {
+				reason = ReasonConfluenceFloor
+			}
+			episodes[i].Setup, episodes[i].State, episodes[i].Reason = nil, StateRetestConfirmed, reason
+		}
+	}
 	sort.SliceStable(episodes, func(i, j int) bool {
 		if episodes[i].BreakStart != episodes[j].BreakStart {
 			return episodes[i].BreakStart < episodes[j].BreakStart
@@ -66,34 +105,6 @@ func analyseWindow(cfg Config, window []market.Candle) Analysis {
 		}
 	}
 	return out
-}
-
-// chooseOnePerDirection keeps at most one candidate per direction: two
-// references broken in the same move are one trade. The freshest confirmation
-// wins, then the stronger measured break, then the better-touched reference,
-// then the reference ID for determinism. The losers stay on record.
-func chooseOnePerDirection(episodes []Episode) []Episode {
-	best := map[market.Direction]int{}
-	for i, ep := range episodes {
-		if ep.Setup == nil {
-			continue
-		}
-		j, seen := best[ep.Direction]
-		if !seen || better(*ep.Setup, *episodes[j].Setup) {
-			best[ep.Direction] = i
-		}
-	}
-	for i := range episodes {
-		if episodes[i].Setup == nil {
-			continue
-		}
-		if best[episodes[i].Direction] != i {
-			episodes[i].Setup = nil
-			episodes[i].State = StateRetestConfirmed
-			episodes[i].Reason = ReasonSuperseded
-		}
-	}
-	return episodes
 }
 
 func better(a, b Setup) bool {
@@ -172,12 +183,16 @@ func (d *detector) run() []Episode {
 		first--
 	}
 	for b := first; b <= d.e; b++ {
-		atrB, ok := d.atr.at(b)
-		if !ok {
+		atrB, okB := d.atr.at(b)
+		// The reference and the break buffer are built from what was knowable
+		// BEFORE the break candle: ATR as of the candle before it, so the break
+		// candle's own range can never decide whether a reference exists.
+		atrPre, okPre := d.atr.at(b - 1)
+		if !okB || !okPre {
 			continue
 		}
-		for _, r := range d.referencesBrokenAt(b, atrB) {
-			if ep, ok := d.episode(r, b, atrB); ok {
+		for _, r := range d.referencesBrokenAt(b, atrPre) {
+			if ep, ok := d.episode(r, b, atrB, atrPre); ok {
 				out = append(out, ep)
 			}
 		}
@@ -243,6 +258,9 @@ func (d *detector) referencesBrokenAt(b int, atr float64) []ref {
 		slope := (c.price - a.price) / float64(span)
 		if s := math.Abs(slope) / atr; s < d.cfg.LineMinSlopeATR || s > d.cfg.LineMaxSlopeATR {
 			continue
+		}
+		if d.bars[b].Time-d.bars[c.index].Time > int64(math.Round(float64(b-c.index)*float64(m5Seconds)*d.cfg.LineMaxGapRatio)) {
+			continue // a gap between the second anchor and the break distorts the per-candle value
 		}
 		anchor, second := a, c
 		value := func(i int) float64 { return second.price + slope*float64(i-second.index) }
@@ -323,14 +341,14 @@ func canJoin(cluster []pivot, p pivot, tol, maxSpan float64) bool {
 }
 
 // episode runs one break attempt through the lifecycle up to the evaluated bar.
-func (d *detector) episode(r ref, b int, atrB float64) (Episode, bool) {
+func (d *detector) episode(r ref, b int, atrB, atrPre float64) (Episode, bool) {
 	cfg, bars, e := d.cfg, d.bars, d.e
 	ep := Episode{Reference: r.Reference, BreakStart: bars[b].Time, State: StateBreakPending, EndedAt: bars[b].Time}
 	terminal := func(state State, reason string, i int) (Episode, bool) {
 		ep.State, ep.Reason, ep.EndedAt = state, reason, bars[i].Time
 		return ep, true
 	}
-	buf := d.breakBuffer(atrB)
+	buf := d.breakBuffer(atrPre)
 
 	// Acceptance: k consecutive closes beyond the reference by the buffer.
 	k := cfg.BreakoutAcceptBars
@@ -338,7 +356,9 @@ func (d *detector) episode(r ref, b int, atrB float64) (Episode, bool) {
 		if i > e {
 			return ep, true // still BREAK_PENDING
 		}
-		if i > b && bars[i].Close <= r.value(i)+buf {
+		// k CONSECUTIVE closes: every candle of the run follows the previous one
+		// by exactly one period, so a feed gap inside the run is not acceptance.
+		if i > b && (bars[i].Close <= r.value(i)+buf || bars[i].Time-bars[i-1].Time != m5Seconds) {
 			return terminal(StateFalseBreakout, ReasonBreakNotAccepted, i)
 		}
 	}
@@ -352,9 +372,17 @@ func (d *detector) episode(r ref, b int, atrB float64) (Episode, bool) {
 	if brk.BodyRatio < cfg.MinBreakBodyRatio || brk.CloseStrength < cfg.MinBreakCloseStrength || brk.DisplacementATR < cfg.MinBreakDisplacement {
 		return terminal(StateFalseBreakout, ReasonBreakQuality, a)
 	}
-	protected, ok := d.protectedStructure(b, a, r.value(b))
+	protected, protectedAt, ok := d.protectedStructure(b, a, r.value(b))
 	if !ok {
 		return terminal(StateStructureInvalided, ReasonNoProtected, a)
+	}
+	// Anything that traded below the protected structure between its pivot and
+	// the acceptance (the pivot's own right-hand candles, the base, the break run)
+	// already lost it.
+	for i := protectedAt + 1; i <= a; i++ {
+		if bars[i].Low < protected {
+			return terminal(StateStructureInvalided, ReasonProtectedLost, i)
+		}
 	}
 
 	failBuf := math.Max(cfg.BreakFailPips*d.pip, cfg.BreakFailATR*atrB)
@@ -405,30 +433,31 @@ func (d *detector) rejects(c market.Candle, level float64) bool {
 }
 
 // protectedStructure is the low whose loss means the break failed.
-func (d *detector) protectedStructure(b, a int, level float64) (float64, bool) {
-	var price float64
+func (d *detector) protectedStructure(b, a int, level float64) (price float64, at int, ok bool) {
 	switch d.cfg.ProtectedStructure {
 	case ProtectedBreakOrigin:
 		from := b - d.cfg.PreBreakBars
 		if from < 0 {
 			from = 0
 		}
-		price = math.Inf(1)
+		price, at = math.Inf(1), from
 		for i := from; i <= a; i++ {
-			price = math.Min(price, d.bars[i].Low)
-		}
-	default:
-		latest := -1
-		for _, p := range d.pl {
-			if p.conf < b && d.barsBetween(p.index, b) <= d.cfg.ReferenceLookback && p.index > latest {
-				latest, price = p.index, p.price
+			if d.bars[i].Low < price {
+				price, at = d.bars[i].Low, i
 			}
 		}
-		if latest < 0 {
-			return 0, false
+	default:
+		at = -1
+		for _, p := range d.pl {
+			if p.conf < b && d.barsBetween(p.index, b) <= d.cfg.ReferenceLookback && p.index > at {
+				at, price = p.index, p.price
+			}
+		}
+		if at < 0 {
+			return 0, 0, false
 		}
 	}
-	return price, price < level
+	return price, at, price < level
 }
 
 // finish turns a confirmed retest into a candidate, or records exactly why the

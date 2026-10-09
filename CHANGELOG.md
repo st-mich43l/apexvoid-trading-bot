@@ -3412,7 +3412,7 @@ dated section after deployment.
   replaces `trendline_tolerance_atr`, `momentum_body_fraction`, `strict_premium_discount` and `target_r`
   with the parameters documented in `docs/strategies/break_retest.md`. `break_retest` leaves the
   detector-parity target list (the oracle golden is untouched). Replay of the committed captures: 59 v2
-  setups, 32 v3 setups; their hypothetical outcome is not better (held-out mean R -0.59 over 26 fills
+  setups, 22 v3 setups; their hypothetical outcome is not better (held-out mean R -0.73 over 17 fills
   against -0.23 over 47), so this is a technical correction with no improvement claim and its live
   enablement deserves review. The analysis engine needs a restart; no executor change.
 

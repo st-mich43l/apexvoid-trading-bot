@@ -73,27 +73,28 @@ func (s *Strategy) Analyze(ctx *analysiscontext.MarketContext) (Analysis, []oppo
 	if m5 == nil || len(m5.Candles) == 0 {
 		return Analysis{}, nil
 	}
-	analysis := Detect(s.cfg, m5.Candles)
+	window := m5.Candles
+	if need := s.cfg.requiredHistory(); len(window) > need {
+		window = window[len(window)-need:]
+	}
+	built := map[string]opportunity.Candidate{}
+	key := func(setup Setup) string {
+		return fmt.Sprintf("%s/%s/%d/%d", setup.Direction, setup.Reference.ID, setup.Break.StartTime, setup.ConfirmedAt)
+	}
+	// The confluence floor is applied while choosing among references broken in
+	// the same move, so a stronger sibling that fails it never hides a weaker one
+	// that passes.
+	analysis := resolve(detectRaw(s.cfg, window), func(setup Setup) bool {
+		candidate, ok := s.candidate(ctx, m5, setup)
+		if ok {
+			built[key(setup)] = candidate
+		}
+		return ok
+	})
 	var candidates []opportunity.Candidate
-	for i := range analysis.Episodes {
-		ep := &analysis.Episodes[i]
-		if ep.Setup == nil {
-			continue
-		}
-		candidate, ok := s.candidate(ctx, m5, *ep.Setup)
-		if !ok {
-			ep.State, ep.Reason, ep.Setup = StateRetestConfirmed, ReasonConfluenceFloor, nil
-			continue
-		}
-		candidates = append(candidates, candidate)
+	for _, setup := range analysis.Setups {
+		candidates = append(candidates, built[key(setup)])
 	}
-	kept := analysis.Setups[:0:0]
-	for _, ep := range analysis.Episodes {
-		if ep.Setup != nil {
-			kept = append(kept, *ep.Setup)
-		}
-	}
-	analysis.Setups = kept
 	return analysis, candidates
 }
 
