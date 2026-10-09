@@ -28,6 +28,13 @@ func ApplyInstrument(settings *Settings, doc *config.Document, symbol string) er
 	settings.InstrumentStopMinPips = stopMinPips
 	settings.InstrumentStopMaxPips = stopMaxPips
 	settings.InstrumentStopEnvelopeConfigured = true
+	scalpMin, scalpMax, scalpOK, err := doc.ScalpStopEnvelopeFor(symbol)
+	if err != nil {
+		return fmt.Errorf("loading scalp stop envelope for %s: %w", symbol, err)
+	}
+	settings.InstrumentScalpStopMinPips = scalpMin
+	settings.InstrumentScalpStopMaxPips = scalpMax
+	settings.InstrumentScalpStopConfigured = scalpOK
 	settings.TechniqueZones.Technique.PipSize = geometry.PipSize
 	// MAD's sweep tolerance floor is one pip of the instrument (the frozen
 	// classifier received the symbol's own pip size), not the global default.
