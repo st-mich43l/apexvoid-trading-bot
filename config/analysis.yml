@@ -372,15 +372,67 @@ analysis:
       invalidation_buffer_atr: 0.25
       expiry_hours: 8.0
     break_retest:
-      version: v2
+      version: v3
       enabled: true
+      # Break & Retest v3 technical contract (docs/strategies/break_retest.md).
+      # Every value is a tunable default validated against captures, not a claimed
+      # constant. Distances are max(pips x pip size, ATR multiple); ATR is the
+      # Wilder ATR(14) over a fixed trailing window of M5 candles.
+      atr_length: 14
+      atr_window_bars: 140
+      # Reference structures: fractal pivots, key levels (>= 2 same-side touches
+      # within a cluster band) and two-pivot lines. A reference only uses pivots
+      # confirmed strictly before the break.
+      pivot_bars: 2
+      reference_lookback_bars: 120
+      episode_lookback_bars: 48
+      level_min_touches: 2
+      level_cluster_pips: 2.0
+      level_cluster_atr: 0.4
+      level_span_multiple: 2.0
+      line_min_span_bars: 6
+      line_min_slope_atr: 0.01
+      line_max_slope_atr: 0.10
+      line_wick_atr: 0.25
+      line_max_gap_ratio: 1.5
+      pre_break_bars: 3
+      # Accepted break: k consecutive closes beyond the structure by the buffer,
+      # with measured force on the first beyond-candle.
       breakout_accept_bars: 2
-      trendline_tolerance_atr: 0.30
-      momentum_body_fraction: 0.60
-      strict_premium_discount: false
+      break_buffer_pips: 1.0
+      break_buffer_atr: 0.05
+      minimum_break_body_ratio: 0.5
+      minimum_break_close_strength: 0.6
+      minimum_break_displacement_atr: 0.5
+      displacement_grade_atr: 1.0
+      break_fail_pips: 2.0
+      break_fail_atr: 0.30
+      # Retest: strictly after the acceptance, bounded, then a rejection candle
+      # within a short window; fresh only for a few candles after it.
+      retest_max_bars: 24
+      retest_touch_pips: 1.0
+      retest_touch_atr: 0.15
+      confirmation_window_bars: 3
+      confirmation_max_age_bars: 2
+      rejection_close_strength: 0.6
+      rejection_wick_ratio: 0.25
+      rejection_body_ratio: 0.6
+      # Geometry: stop beyond min(retest extreme, protected structure); target is
+      # the nearest credible opposing swing with room.
+      protected_structure: last_pivot
+      entry_tolerance_pips: 1.0
+      entry_tolerance_atr: 0.15
+      maximum_entry_distance_atr: 1.5
       invalidation_buffer_atr: 0.25
-      target_r: 2.0
-      expiry_hours: 8.0
+      target_lookback_bars: 96
+      target_swing_bars: 12
+      target_swing_atr: 1.0
+      minimum_target_room_atr: 0.55
+      minimum_reward_risk: 1.15
+      expiry_hours: 4.0
+      # Quality.Overall exactly as live arbitration has always seen it; the
+      # measured quality is published in Quality.Components only.
+      published_overall_quality: 0.75
     momentum_ride:
       version: v2
       enabled: true
