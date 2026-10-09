@@ -241,3 +241,36 @@ func (d *Document) StopEnvelopeFor(symbol string) (minPips, maxPips float64, err
 	}
 	return minPips, maxPips, nil
 }
+
+// ScalpStopEnvelopeFor is the optional scalp-sized stop band an instrument
+// declares for its range scalps (Range Edge, Fade Scalp) as
+// stop_envelope.scalp_min_pips / scalp_max_pips. ok is false when the
+// instrument declares none, and the strategy then uses the instrument's
+// stop_envelope like every other non-M1 strategy. Both leaves or neither.
+func (d *Document) ScalpStopEnvelopeFor(symbol string) (minPips, maxPips float64, ok bool, err error) {
+	merged, err := d.mergedInstrument(symbol)
+	if err != nil {
+		return 0, 0, false, err
+	}
+	envelope, found := merged["stop_envelope"].(stringMap)
+	if !found {
+		return 0, 0, false, nil
+	}
+	_, hasMin := envelope["scalp_min_pips"]
+	_, hasMax := envelope["scalp_max_pips"]
+	if !hasMin && !hasMax {
+		return 0, 0, false, nil
+	}
+	minPips, err = numberField(envelope, "scalp_min_pips")
+	if err != nil {
+		return 0, 0, false, fmt.Errorf("config: instrument %q stop_envelope: %w", symbol, err)
+	}
+	maxPips, err = numberField(envelope, "scalp_max_pips")
+	if err != nil {
+		return 0, 0, false, fmt.Errorf("config: instrument %q stop_envelope: %w", symbol, err)
+	}
+	if !(minPips > 0) || !(maxPips >= minPips) {
+		return 0, 0, false, fmt.Errorf("config: instrument %q stop_envelope must satisfy 0 < scalp_min_pips <= scalp_max_pips, got %.3f-%.3f", symbol, minPips, maxPips)
+	}
+	return minPips, maxPips, true, nil
+}

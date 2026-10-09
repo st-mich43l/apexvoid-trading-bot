@@ -107,6 +107,15 @@ func computeStopEnvelope(c opportunity.Candidate, geometry market.Geometry, cfg 
 		floorPips = cfg.InstrumentMinPips
 		capPips = cfg.InstrumentMaxPips
 	}
+	// A range scalp on an instrument whose structural envelope is a
+	// swing-sized 50-70 pips (gold) is still a scalp: it takes the band the
+	// instrument declares for scalps, not the zone strategies' envelope.
+	// Production 2026-10-09: a Range Edge Scalp on XAU, Go invalidation 7.6
+	// pips beyond the zone, was widened to a 50 pip stop.
+	if kind == stopEnvelopeRangeRoom && cfg.InstrumentScalpConfigured {
+		floorPips = cfg.InstrumentScalpMinPips
+		capPips = cfg.InstrumentScalpMaxPips
+	}
 	if floorPips <= 0 {
 		return nil
 	}

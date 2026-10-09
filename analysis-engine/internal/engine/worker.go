@@ -244,6 +244,11 @@ func (w *SymbolWorker) ApplyWithResult(event marketdata.BarEvent) (AnalysisSnaps
 			stopConfig.InstrumentMaxPips = w.settings.InstrumentStopMaxPips
 			stopConfig.InstrumentConfigured = true
 		}
+		if w.settings.InstrumentScalpStopConfigured {
+			stopConfig.InstrumentScalpMinPips = w.settings.InstrumentScalpStopMinPips
+			stopConfig.InstrumentScalpMaxPips = w.settings.InstrumentScalpStopMaxPips
+			stopConfig.InstrumentScalpConfigured = true
+		}
 		candidate.StopEnvelope = computeStopEnvelope(candidate, w.settings.Geometry, stopConfig)
 		enriched = append(enriched, candidate)
 		observed, obsErr := w.state.Opportunities.Observe(candidate, event.Candle.Time)

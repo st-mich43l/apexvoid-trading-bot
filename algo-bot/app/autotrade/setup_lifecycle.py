@@ -197,6 +197,17 @@ class SetupRecord:
   invalidation_condition: str | None = None
   created_at: int = field(default_factory=lambda: int(time.time()))
   updated_at: int = field(default_factory=lambda: int(time.time()))
+  # Attribution of the setup, copied from the match when it is created so a terminal
+  # projection (a Go invalidation, the expiry sweeper, startup reconciliation) can name
+  # the strategy and direction without the live match. All optional: records written
+  # before these fields existed load as None and are never treated as an error.
+  strategy: str | None = None
+  strategy_family: str | None = None
+  direction: str | None = None
+  structural_source: str | None = None
+  # Why the setup became terminal, when the terminal source knows it (a Go reason
+  # ``go_<reason>``). Lets a restart restore the original reason instead of a generic one.
+  terminal_reason: str | None = None
 
   def to_dict(self) -> dict:
     return {
@@ -215,6 +226,11 @@ class SetupRecord:
       "invalidation_condition": self.invalidation_condition,
       "created_at": self.created_at,
       "updated_at": self.updated_at,
+      "strategy": self.strategy,
+      "strategy_family": self.strategy_family,
+      "direction": self.direction,
+      "structural_source": self.structural_source,
+      "terminal_reason": self.terminal_reason,
     }
 
   @classmethod
@@ -235,6 +251,11 @@ class SetupRecord:
       invalidation_condition=data.get("invalidation_condition"),
       created_at=int(data.get("created_at", time.time())),
       updated_at=int(data.get("updated_at", time.time())),
+      strategy=data.get("strategy"),
+      strategy_family=data.get("strategy_family"),
+      direction=data.get("direction"),
+      structural_source=data.get("structural_source"),
+      terminal_reason=data.get("terminal_reason"),
     )
 
 
@@ -301,6 +322,10 @@ async def create_setup(
   formation_timeframe: str | None = None,
   expires_at: int | None = None,
   invalidation_condition: str | None = None,
+  strategy: str | None = None,
+  strategy_family: str | None = None,
+  direction: str | None = None,
+  structural_source: str | None = None,
 ) -> tuple[SetupRecord, bool]:
   """Create a new setup in DISCOVERED, or return the existing one.
 
@@ -322,6 +347,10 @@ async def create_setup(
     formation_timeframe=formation_timeframe,
     expires_at=expires_at,
     invalidation_condition=invalidation_condition,
+    strategy=strategy,
+    strategy_family=strategy_family,
+    direction=direction,
+    structural_source=structural_source,
   )
   await _save(client, record)
   return record, True
@@ -365,6 +394,10 @@ async def advance_setup_to_confirmed(
     source_structure_id=str(structural_id),
     formation_timeframe=getattr(match, "structural_timeframe", None) or timeframe,
     expires_at=getattr(match, "expires_at", None),
+    strategy=str(getattr(match, "strategy", "") or "") or None,
+    strategy_family=str(family) or None,
+    direction=direction.upper() or None,
+    structural_source=str(getattr(match, "structural_source", "") or "") or None,
   )
   if record.state not in _PRE_CONFIRMED_CHAIN:
     return setup_id, thesis
