@@ -134,6 +134,7 @@ _LABEL_CARRIERS = {
   "autotrade/route_outcome.py",
   "autotrade/worker.py",
   "autotrade/arbitration.py",
+  "autotrade/execution_intent.py",
   "autotrade/reaction_identity.py",
   "autotrade/strategy_identity.py",
   "signals/manual_plan.py",

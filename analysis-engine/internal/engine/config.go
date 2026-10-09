@@ -671,6 +671,11 @@ type StopEnvelopeConfig struct {
 	InstrumentMinPips    float64
 	InstrumentMaxPips    float64
 	InstrumentConfigured bool
+	// InstrumentScalp* is the instrument's own band for the range-room
+	// scalps (Range Edge, Fade Scalp), when it declares one.
+	InstrumentScalpMinPips    float64
+	InstrumentScalpMaxPips    float64
+	InstrumentScalpConfigured bool
 }
 
 // StopEnvelopeConfigFromConfig reads execution.{reaction,range,trend,stops}.*

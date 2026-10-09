@@ -258,7 +258,11 @@ class EffectiveInstrument:
         "execution.reaction.stop_min_pips": envelope.get("min_pips"),
         "execution.reaction.stop_max_pips": envelope.get("max_pips"),
         "execution.stops.reaction.room_floor_pips": envelope.get("min_pips"),
-        "execution.range.room_stop_floor_pips": envelope.get("min_pips"),
+        "execution.range.room_stop_floor_pips": (
+          envelope.get("scalp_min_pips")
+          if envelope.get("scalp_min_pips") is not None
+          else envelope.get("min_pips")
+        ),
         "execution.stops.trend.minimum_pips": envelope.get("min_pips"),
         "execution.trend.stop_max_pips": envelope.get("max_pips"),
         "execution.stops.sl_distance": envelope.get("sl_distance"),

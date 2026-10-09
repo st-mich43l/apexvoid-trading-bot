@@ -106,12 +106,17 @@ async def test_contract_keeps_full_precision_while_the_card_shows_the_instrument
   # caps its adverse low at the policy-planned quote and retains the better
   # technical high; it cannot silently accept a worse fill across the band.
   assert plan["source_structure"]["low"] == str(Decimal(repr(go["entry"]["low"]))) == "4291.21"
-  assert plan["entry"]["zone_low"] == "4293.0"
-  assert plan["entry"]["zone_high"] == str(Decimal(repr(go["entry"]["high"]))) == "4296.87"
+  # The executed band is the planner's: on gold it is rounded to the numbers the card prints,
+  # lies inside Go's band (give or take that rounding) and never widens the technical zone.
+  band_low, band_high = float(plan["entry"]["zone_low"]), float(plan["entry"]["zone_high"])
+  assert band_low == round(band_low) and band_high == round(band_high)
+  assert go["entry"]["low"] - 0.5 <= band_low < band_high <= go["entry"]["high"] + 0.5
+  assert plan["source_structure"]["high"] == str(Decimal(repr(go["entry"]["high"]))) == "4296.87"
   assert plan["source_structure"]["invalidation_price"] == str(Decimal(repr(go["invalidation"]["price"]))) == "4298.970714285714"
   assert match.absolute_target_price == go["targets"][0]["price"]["price"] == 4284.159928571428      # the match keeps Go's exact target
-  # the stop the executor places is the planner's tick-aligned price, not a blanket rounding of the contract
-  assert Decimal(plan["stop"]["price"]).as_tuple().exponent >= -2
+  # the stop the executor places is the planner's price on the card's numbers, beyond Go's band
+  assert float(plan["stop"]["price"]) == round(float(plan["stop"]["price"]))
+  assert float(plan["stop"]["price"]) > float(plan["entry"]["zone_high"])
   # ...and Go's own target is NOT what gets executed: the plan's TP is the builder's (recorded, not hidden)
   assert plan["targets"][0]["price"] != str(Decimal(repr(go["targets"][0]["price"]["price"])))
   assert len(plan["targets"]) == 4
@@ -119,12 +124,18 @@ async def test_contract_keeps_full_precision_while_the_card_shows_the_instrument
     "0.4", "0.2", "0.2", "0.2",
   ]
 
+  # The card is rendered with the span the published plan holds, exactly as production does.
+  entry_span = await setup_card.published_plan_entry_span(prod, match.match_id)
   card = format_plan_published_root_card(
     match, stop_price=float(plan["stop"]["price"]), target_prices=tuple(float(t["price"]) for t in plan["targets"]),
+    entry_span=entry_span,
   )
   for raw in ("4291.21", "4296.87", "4298.97", "4284.159", "4.2014"):
     assert raw not in card                                                                 # no raw contract digits on the card
-  assert "4,291 - 4,297" in card and "4,299" in card                                       # the existing Manual Algo whole-point XAU display
+  # Whole-point XAU display, and the card prints exactly the plan's own numbers.
+  from app.autotrade.trade_card import format_price
+  assert format_price(band_low, "XAU") in card and format_price(band_high, "XAU") in card
+  assert format_price(float(plan["stop"]["price"]), "XAU") in card
 
 
 @pytest.mark.asyncio

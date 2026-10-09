@@ -103,6 +103,15 @@ func TestApplyInstrument_UsesResolvedPerInstrumentStopEnvelope(t *testing.T) {
 		if !settings.InstrumentStopEnvelopeConfigured || settings.InstrumentStopMinPips != want.minPips || settings.InstrumentStopMaxPips != want.maxPips {
 			t.Fatalf("%s stop envelope = configured:%v %.1f-%.1f, want %.1f-%.1f", want.symbol, settings.InstrumentStopEnvelopeConfigured, settings.InstrumentStopMinPips, settings.InstrumentStopMaxPips, want.minPips, want.maxPips)
 		}
+		// Only gold declares a scalp band for its range scalps; FX's envelope is
+		// already scalp-sized.
+		wantScalp := want.symbol == "XAU"
+		if settings.InstrumentScalpStopConfigured != wantScalp {
+			t.Fatalf("%s scalp stop band configured = %v, want %v", want.symbol, settings.InstrumentScalpStopConfigured, wantScalp)
+		}
+		if wantScalp && (settings.InstrumentScalpStopMinPips != 15 || settings.InstrumentScalpStopMaxPips != 45) {
+			t.Fatalf("XAU scalp stop band = %.1f-%.1f, want 15-45", settings.InstrumentScalpStopMinPips, settings.InstrumentScalpStopMaxPips)
+		}
 	}
 }
 

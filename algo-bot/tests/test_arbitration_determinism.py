@@ -147,3 +147,41 @@ def test_missing_quality_is_treated_as_unavailable_in_the_conflict_margin_too():
   sell = intent(1, direction="SELL", quality_overall=0.1)
   assert arbitrate_execution_intents([buy, sell]).reason_code in {"opposite_direction_conflict", "ranked_single_direction"}
   assert len({outcome(arbitrate_execution_intents(list(order))) for order in itertools.permutations([buy, sell])}) == 1
+
+
+def test_random_non_finite_inputs_never_make_selection_or_conflict_resolution_order_dependent():
+  """Property check over every numeric field arbitration reads, in both the ranking and the
+  opposite-direction conflict (the quality gap) and the thesis corridor (ATR, entry band)."""
+  import random
+
+  rng = random.Random(20261009)
+  optional = ("quality_overall", "structural_quality")
+  floats = ("freshness", "atr", "entry_low", "entry_high", "distance_pips")
+  non_finite = [float("nan"), float("inf"), float("-inf")]
+  conflicts = 0
+  for _ in range(600):
+    count = rng.randint(2, 5)
+    values = [
+      dict(
+        intent_id=f"i{index}", source="go", strategy="s", direction=rng.choice(["BUY", "SELL"]), confluence=2,
+        freshness=100.0, distance_pips=0.0, symbol="XAU", entry_low=100.0 + rng.choice([0, 1, 5]),
+        entry_high=102.0 + rng.choice([0, 1, 5]), structural_id=f"z{rng.randint(0, 3)}",
+        quality_overall=rng.choice([0.5, 0.7, 0.9]), structural_quality=5.0, atr=1.0,
+        executable_now=rng.random() < 0.8, bias_relationship=rng.choice([None, "with_bias"]),
+      )
+      for index in range(count)
+    ]
+    for _ in range(rng.randint(1, 2)):
+      target = values[rng.randrange(count)]
+      if rng.random() < 0.4:
+        target[rng.choice(optional)] = rng.choice([None, *non_finite])
+      else:
+        target[rng.choice(floats)] = rng.choice(non_finite)
+    intents = [ExecutionIntent(**value) for value in values]
+    results = every_delivery_order(intents) if count <= 4 else {
+      outcome(arbitrate_execution_intents(list(order)))
+      for order in itertools.islice(itertools.permutations(intents), 30)
+    }
+    conflicts += any(r[2] == "opposite_direction_conflict" for r in results)
+    assert len(results) == 1, values
+  assert conflicts > 0       # the conflict path was exercised, not only the ranking

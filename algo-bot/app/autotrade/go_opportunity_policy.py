@@ -54,6 +54,7 @@ from app.autotrade.go_containment import (
   structure_timeframe_of,
 )
 from app.autotrade.route_outcome import (
+  attribution_shim,
   TERMINAL_ROUTE_STATUSES,
   record_route_outcome,
   route_outcome_key,
@@ -598,6 +599,9 @@ class GoOpportunityPolicy:
     match_id = match_id_for(payload.opportunity_id)
     key = strategy_matches_key(payload.symbol)
     matches = deserialize_matches(await client.get(key))
+    # The match being withdrawn is the richest source of the setup's attribution
+    # (strategy, direction, structure); keep it for the route outcome.
+    withdrawn = next((m for m in matches if m.match_id == match_id), None)
     kept = [m for m in matches if m.match_id != match_id]
     if len(kept) != len(matches):
       if kept:
@@ -605,14 +609,32 @@ class GoOpportunityPolicy:
       else:
         await client.delete(key)
     record = await load_setup(client, match_id)
+    go_reason = f"go_{payload.reason_code.lower()}"
+    profile = REVIEWED_SCOPES[payload.strategy]
+    # What the invalidation event itself knows, in the legacy vocabulary the outcome uses.
+    event_source = SimpleNamespace(strategy=profile.legacy_strategy, structural_source=f"go:{profile.catalog_id}")
     if record is not None and record.state not in _TERMINAL_OR_LIVE:
       target = EXPIRED if payload.reason_code.upper() == "SETUP_EXPIRED" else INVALIDATED
       try:
-        await transition_setup(client, match_id, target, reason_code=f"go_{payload.reason_code.lower()}")
+        # The reason is stored on the setup itself, so a projection that fails here - or a
+        # restart before it is retried - can still restore the original Go reason.
+        record, _changed = await transition_setup(
+          client, match_id, target, reason_code=go_reason, terminal_reason=go_reason,
+        )
       except SetupLifecycleError:
         log.exception("Go terminal could not advance setup %s to %s", match_id, target)
       else:
-        await self._record_terminal_outcome(client, record, target, payload.reason_code)
+        await self._record_terminal_outcome(client, record, target, payload.reason_code, withdrawn, event_source)
+    elif (
+      record is not None
+      and record.state in {INVALIDATED, EXPIRED}
+      and record.terminal_reason in (None, go_reason)
+    ):
+      # Already terminal: a redelivery after the transition succeeded but the route-outcome
+      # projection failed. The projection is retried on its own (it is idempotent and never
+      # replaces terminal or broker evidence). A setup that is live or executed
+      # (plan_built, plan_published, cancelled) keeps the outcome its execution established.
+      await self._record_terminal_outcome(client, record, record.state, payload.reason_code, withdrawn, event_source)
     # An invalidated/expired opportunity must not keep a queued or
     # unfilled plan alive. The cancel intent is a tombstone (also stops a plan
     # being published concurrently); open positions are never touched.
@@ -627,6 +649,7 @@ class GoOpportunityPolicy:
 
   async def _record_terminal_outcome(
     self, client: Any, record: Any, target: str, go_reason: str,
+    withdrawn: Any = None, payload: Any = None,
   ) -> None:
     """Project Go's terminal reason onto the operator-visible route outcome.
 
@@ -635,6 +658,10 @@ class GoOpportunityPolicy:
     generic ``startup_reconciliation`` (4,705 of 6,499 outcomes in four production
     days). An outcome that already reads terminal (arbitration, an executor reject, a
     fill) is left alone: the first terminal evidence stands.
+
+    The projection keeps the opportunity's attribution: strategy, direction, structural
+    identity and family come from the withdrawn match, else the durable setup record, else
+    the invalidation event, else the previous outcome - never from an empty object.
     """
     try:
       raw = await client.get(route_outcome_key(record.symbol, record.setup_id))
@@ -643,9 +670,10 @@ class GoOpportunityPolicy:
         if previous.get("status") in TERMINAL_ROUTE_STATUSES:
           return
       expired = target == EXPIRED
-      shim = SimpleNamespace(
+      shim = attribution_shim(
         match_id=record.setup_id, symbol=record.symbol,
         issued_at=record.created_at, expires_at=record.expires_at or 0,
+        sources=tuple(source for source in (withdrawn, record, payload) if source is not None),
       )
       reason = f"go_{str(go_reason).lower()}"
       await record_route_outcome(

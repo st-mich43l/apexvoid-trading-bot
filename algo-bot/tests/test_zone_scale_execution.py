@@ -91,32 +91,45 @@ def test_key_session_trendline_use_market_with_limit_scale(strategy):
   assert evaluation.measured["planned_leg_volume_ratios"] == pytest.approx([0.80, 0.20])
 
 
-def test_range_edge_xau_scalp_emits_manual_shallow_deep_ladder():
-  # Range Edge is a range scalp, but unlike the M1 chase scalps it owns a
-  # confirmed XAU zone. It must publish the same market-L1/deeper-limit-L2
-  # contract as Manual Algo; the old scalp short-circuit discarded both
-  # entry legs and emitted a single market plan.
-  evaluation = evaluate_execution_policy(
+def _range_edge_xau(quote: float):
+  return evaluate_execution_policy(
     _policy_match(
       strategy="Range Edge Scalp",
       symbol="XAU",
       direction="BUY",
       entry_low=4150.57,
       entry_high=4151.91,
-      current_price=4152.21,
+      current_price=quote,
       atr=1.0,
     ),
-    spot_price=4152.21,
-    executable_quote=4152.21,
+    spot_price=quote,
+    executable_quote=quote,
     regime="range",
     pip_size=0.1,
     cfg=_cfg(),
   )
+
+
+def test_range_edge_xau_scalp_emits_manual_shallow_deep_ladder():
+  # Range Edge is a range scalp, but unlike the M1 chase scalps it owns a
+  # confirmed XAU zone. With the quote inside the card zone it publishes the
+  # same market-L1/deeper-limit-L2 contract as Manual Algo; the old scalp
+  # short-circuit discarded both entry legs and emitted a single market plan.
+  evaluation = _range_edge_xau(4151.70)
   assert evaluation.allowed
   measured = evaluation.measured
   assert measured["planned_execution_route"] == "market_with_limit_scale"
-  assert measured["planned_leg_entry_prices"] == pytest.approx([4152.21, 4151.39])
+  assert measured["planned_leg_entry_prices"] == pytest.approx([4151.70, 4151.14])
   assert measured["planned_leg_volume_ratios"] == pytest.approx([0.80, 0.20])
+
+
+def test_range_edge_xau_scalp_never_chases_a_quote_outside_its_card_zone():
+  # Production 2026-10-08: a quote past the zone was booked as a market chase. Range Edge is a
+  # retest-only scalp (PR #755): outside the card zone it waits, with no ladder legs.
+  measured = _range_edge_xau(4152.21).measured
+  assert measured["planned_execution_route"] == "market"
+  assert measured["planned_leg_entry_prices"] == []
+  assert "retest-only" in measured["routing_reason"]
 
 
 @pytest.mark.parametrize(
