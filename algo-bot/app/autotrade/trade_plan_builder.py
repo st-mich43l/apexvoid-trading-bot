@@ -763,9 +763,16 @@ def build_trade_plan_from_strategy_match(
     trail_to_target_id=trail_to_target_id,
   )
 
+  # Decided by the strategy itself (the taxonomy), like every other scalp gate. The
+  # legacy family label and the "scalp_m1" mode string alone missed all five Go
+  # scalps: they carry family "range_reversion" and a "go_m5_*" mode, so a
+  # configured scalp sizing mode and the scalp risk percent never reached them.
   is_scalp_plan = (
-    str(match.family or "").casefold() == "scalp"
-    or str(match.strategy_mode or "").casefold() == "scalp_m1"
+    is_scalp_strategy(
+      str(getattr(match, "strategy", "") or ""),
+      strategy_mode=str(match.strategy_mode or "") or None,
+    )
+    or str(match.family or "").casefold() == "scalp"
   )
   scalp_risk = getattr(
     getattr(getattr(cfg_resolved, "strategies", None), "scalping", None),
