@@ -12,6 +12,19 @@ dated section after deployment.
 
 ## Unreleased
 
+### Fixed
+- Gold zone plans are placed on the numbers their card prints. Production 2026-10-09, Key Level BUY:
+  the card read `Entry Zone 4,143 - 4,147` and `SL 4,141 · risk 56 pips` (4,147 to 4,141 reads as 60),
+  while the plan held legs 4147.06 / 4145.11, a 4141.46 stop and a 4152.66 first target - the card
+  rounds to whole numbers, the orders did not. For XAU zone plans (not the M1 and range scalps, whose
+  15-20 pip stops cannot absorb a whole-number round) the planner now rounds the entry band, every
+  ladder leg, the stop and the targets the way the card rounds them, and the executor places exactly
+  them: legs 4147 / 4145, stop 4141 (60 pips, the cap), targets 4153 / 4159 / 4165 / 4171, risk leg
+  4142.5. The stop rounds away from the entry whenever that stays inside the stop envelope (Go's
+  floor/cap and the 60 pip reaction cap), otherwise toward it; a ladder that was whole R multiples stays
+  whole R multiples of the new risk. Nothing is rounded when it would collapse two legs, break their
+  order or leave the envelope: the plan then keeps Go's exact prices. FX is unchanged.
+
 ### Changed
 - The Auto Algo root card no longer prints the "Risk leg" line added with the planner-declared
   risk leg. The plan still declares the leg (`entry.risk_leg`) and the executor places it

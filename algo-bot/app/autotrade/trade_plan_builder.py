@@ -30,6 +30,7 @@ from typing import Any, Mapping, Sequence
 
 from app.autotrade.execution_policy import evaluate_execution_policy
 from app.analysis_client.provenance import GO_ORIGIN_TAG
+from app.autotrade.card_prices import snap_measured_to_card_prices
 from app.autotrade.risk_leg import plan_risk_leg
 from app.autotrade.strategy_match import StrategyMatch
 from app.autotrade.trade_plan import (
@@ -132,6 +133,14 @@ def _is_approved_policy_measured(measured: Mapping[str, Any]) -> bool:
   has_route = bool(measured.get("planned_execution_route"))
   has_entry = measured.get("planned_entry_price") is not None
   return bool(has_stop and (has_route or has_entry))
+
+
+def _reaction_stop_max_pips(cfg: Any | None) -> float | None:
+  try:
+    value = _resolve_cfg(cfg).execution.reaction.stop_max_pips
+    return float(value) if value else None
+  except (AttributeError, TypeError, ValueError):
+    return None
 
 
 def _build_entry(
@@ -444,6 +453,18 @@ def build_trade_plan_from_strategy_match(
       measured,
     )
 
+  # The card price is the order price: on gold the planner decides the final numbers
+  # the card prints, and the executor places exactly them (see card_prices).
+  measured = snap_measured_to_card_prices(
+    measured,
+    direction=direction,
+    symbol=match.symbol,
+    strategy=match.strategy,
+    pip_size=pip,
+    targets_pips=tuple(int(value) for value in match.targets_pips or ()),
+    reaction_stop_max_pips=_reaction_stop_max_pips(cfg),
+  )
+
   policy_target_prices = tuple(
     Decimal(str(price))
     for price in (measured.get("planned_target_prices") or ())
@@ -481,6 +502,9 @@ def build_trade_plan_from_strategy_match(
       entry_reference + sign * (Decimal(pips) * pip_size)
       for pips in match.targets_pips
     )
+    snapped_targets = measured.get("card_price_snap_target_prices")
+    if snapped_targets and len(snapped_targets) == len(target_values):
+      target_values = tuple(Decimal(str(price)) for price in snapped_targets)
   if len(ratios) != len(target_values):
     raise TradePlanBuildRejected(
       "target_ratio_mismatch",
