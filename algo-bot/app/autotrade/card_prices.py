@@ -45,6 +45,42 @@ def _floats(values: Any) -> list[float] | None:
   return out if all(math.isfinite(value) for value in out) else None
 
 
+_UNSAFE = object()
+
+
+def _snapped_policy_targets(
+  measured: dict[str, Any],
+  *,
+  buy: bool,
+  entry: float,
+  stop: float,
+  pip_size: float,
+) -> tuple[list[float], list[float]] | object | None:
+  """Targets of a fixed-R plan re-priced from the snapped entry and stop.
+
+  None when the plan carries no policy targets. ``_UNSAFE`` when the snapped ladder
+  would collapse or reorder, in which case the caller keeps Go's exact prices.
+  """
+  raw = measured.get("planned_target_r_multiples")
+  if not raw or measured.get("target_policy_mode") != "fixed_rr":
+    return None
+  try:
+    multiples = [float(value) for value in raw]
+  except (TypeError, ValueError):
+    return _UNSAFE
+  risk = abs(entry - stop)
+  if risk <= 0 or any(not math.isfinite(m) or m <= 0 for m in multiples):
+    return _UNSAFE
+  sign = 1.0 if buy else -1.0
+  prices = [float(_card_round(entry + sign * m * risk)) for m in multiples]
+  if any((price - entry) * sign <= 0 for price in prices):
+    return _UNSAFE
+  if prices != sorted(prices, reverse=not buy) or len(set(prices)) != len(prices):
+    return _UNSAFE
+  pips = [round((price - entry) * sign / pip_size, 3) for price in prices]
+  return prices, pips
+
+
 def snap_measured_to_card_prices(
   measured: dict[str, Any],
   *,
@@ -170,6 +206,20 @@ def snap_measured_to_card_prices(
 
   out = dict(measured)
   out.update(prices_changed)
+  # A fixed-R plan prices its targets from the risk it measured BEFORE the snap, so a stop
+  # moved away from the entry (or a leg moved by the rounding) leaves TP1..TP4 at the old
+  # risk: production 2026-10-09 08:51 Key Level SELL, legs 4188/4190, stop 4194 (60 pips)
+  # but targets spaced 52.4 pips, TP1 at 0.86R and TP4 at 3.48R on a card that says 1R-4R.
+  # Re-price them from the snapped entry and stop, keeping the declared R multiples.
+  policy_targets = _snapped_policy_targets(
+    measured, buy=buy, entry=snapped_entry, stop=chosen, pip_size=pip_size,
+  )
+  if policy_targets is _UNSAFE:
+    return measured
+  if policy_targets is not None:
+    target_prices_fixed, target_pips_fixed = policy_targets
+    out["planned_target_prices"] = [format(Decimal(str(p)), "f") for p in target_prices_fixed]
+    out["planned_target_pips"] = [format(Decimal(str(p)), "f") for p in target_pips_fixed]
   out["planned_stop_pips"] = format(Decimal(str(round(new_risk, 3))), "f")
   out["planned_final_stop_pips"] = out["planned_stop_pips"]
   out["planned_stop_distance"] = format(
