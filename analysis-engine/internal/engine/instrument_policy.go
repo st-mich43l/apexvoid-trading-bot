@@ -99,7 +99,11 @@ func applyCRTGeometry(settings *Settings) {
 		params["technique_window_bars"] = float64(settings.TechniqueZones.WindowBars)
 		params["entry_max_width_price"] = settings.TechniqueZones.Technique.FVGEntryMaxWidthPrice
 		params["pip_size"] = settings.TechniqueZones.Technique.PipSize
-		params["execution_stop_max_pips"] = settings.InstrumentStopMaxPips
+		// Only a RESOLVED instrument stop cap is injected: before an instrument is
+		// applied it is zero, and zero must not read as "a cap of zero pips".
+		if settings.InstrumentStopMaxPips > 0 {
+			params["execution_stop_max_pips"] = settings.InstrumentStopMaxPips
+		}
 		params["reaction_lookback_bars"] = 3.0
 		params["engulfing_minimum_range_atr"] = 0.5
 		settings.Strategies[i].Parameters = params

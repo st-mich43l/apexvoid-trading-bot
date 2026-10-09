@@ -113,13 +113,16 @@ range, including one that predates the sweep.
 
 ### 4. Structure shift (the confirmation)
 
-`confirmation_mode: mss`. After the reclaim (on the reclaim candle or up to
-`mss_max_bars` = 12 candles later):
+`confirmation_mode: mss`. The shift must be a candle **strictly after** the reclaim
+candle (so sweep/reclaim and structure shift are never one candle), within
+`mss_max_bars` = 12 candle periods of it (measured in time, so a gap in the feed
+expires the window instead of stretching it):
 
 - **Reference swing**: the most recent M5 swing high (strict fractal over
   `structure_pivot_bars` = 2 candles each side) that lies *before the
   manipulation extreme*, within `structure_lookback_bars` (24), inside the
-  anchor range, and **confirmable before the deciding candle** (its right-hand
+  anchor range (`L_A < swing < H_A`; a more recent swing outside the range is skipped,
+  it does not hide an older in-range one), and **confirmable before the deciding candle** (its right-hand
   candles all closed before it). A swing is never chosen with future candles.
 - The **shift candle** `j` closes above it: `close[j] > swing + confirmation_buffer`,
   is bullish, and shows real displacement:
@@ -190,12 +193,14 @@ policy would refuse.
 
 Also rejected: the objective already touched on the way (`target_already_reached`),
 price already through the entry (`price_through_entry`), the thesis invalidated
-after the confirmation (`invalidated_after_confirmation`), and a degenerate band.
+after the confirmation (`invalidated_after_confirmation`: a close back below the swept
+edge, **or any trade, a wick included, through the manipulation extreme**, where the stop
+sits), and a degenerate band.
 
 ## Freshness, identity and expiry
 
-A confirmation older than `confirmation_max_age_bars` (2 M5 candles) is stale and
-silent: the Algo Bot refuses a reaction older than
+A confirmation older than `confirmation_max_age_bars` (2 M5 periods, **measured from
+candle open times, not slice positions**, so a feed gap ages it) is stale and silent: the Algo Bot refuses a reaction older than
 `structural_reaction_lookback_bars - 1`, so publishing it would only be rejected
 downstream. A fresh episode re-evaluated on each of its fresh bars is the *same*
 candidate (same ID), so it never repeats a trade.
@@ -346,11 +351,11 @@ on geometry (risk against the instrument cap), not on outcomes.
 |---|---|---|---|---|
 | XAU 14-21 Sep (profit week) | 15 | 13 | 1 | 1 |
 | XAU 28 Sep-6 Oct (incident window) | 15 | 15 | 0 | 0 |
-| EURUSD 6 Oct | 19 | 19 | 1 | 0 |
+| EURUSD 6 Oct | 19 | 19 | 2 | 0 |
 | GBPUSD 5 Oct | 2 | 1 | 5 | 0 |
 | GBPJPY 6 Oct | 30 | 25 | 1 | 0 |
 | USDJPY 5 Oct | 46 | 32 | 0 | 0 |
-| **Total** | **127** | **105 (83%)** | **8** | **1** |
+| **Total** | **127** | **105 (83%)** | **9** | **1** |
 
 Why the 126 other v2 setups were not published by v3 (measured, per v2 setup): 50 relied
 on a sweep v3 does not recognise (34 happened more than one H1 candle after the anchor
@@ -358,7 +363,7 @@ closed, 16 pierced the edge by less than the sweep threshold); 33 swept a range 
 ATR (measured at the anchor, not at evaluation time); 28 lost the reclaim (a close back
 beyond the edge before any structure shift); 12 never reclaimed within 6 candles; 2
 reclaimed but never shifted structure; 1 was confirmed but its honest stop exceeded the
-XAU cap. Of the 8 v3 technical setups, 7 were refused by the confluence floor: the shared rubric
+XAU cap. Of the 9 v3 technical setups, 8 were refused by the confluence floor: the shared rubric
 (version v1) needs two of {HTF alignment, a rejection wick, a 1 ATR displacement} on top of the
 structure shift to reach 2 stars, and these had fewer. That is the same floor the Algo Bot
 applies (`min_confluence=2`).
@@ -366,13 +371,15 @@ applies (`min_confluence=2`).
 Funnel over the six captures (distinct episodes, from the first bar;
 `CRT_FUNNEL=1 go test ./test/crtreplay -run Funnel -v`). Sweep and reclaim of a 1.5 ATR
 range inside the window, with no structure shift (the historical baseline mode): 59 fresh
-episodes. Requiring the structure shift keeps 10 (XAU 3, EURUSD 1, GBPUSD 5, GBPJPY 1): the
-others lost the reclaim before any shift (33), reached the end of the shift window (10), or
-broke the swing without displacement (1). Against the execution stop cap the three confirmed
+episodes. Requiring the structure shift keeps 11 (XAU 3, EURUSD 2, GBPUSD 5, GBPJPY 1). The
+production configuration's refusals over the six captures, in distinct episodes, are: reclaim
+lost before any shift 34, shift window expired 6, no usable in-range swing 2, swing broken
+without displacement 1 (the reclaim-lost count also includes episodes the baseline mode
+does not count, so these do not partition the 59). Against the execution stop cap the three confirmed
 XAU episodes carry an honest risk of 130, 81 and 55 pips with `reclaim_retest` (190, 210 and
 135 pips with `mss_retest`), so only the 21 Sep SELL fits the 70 pip cap; with the default
 one-hour window no FX episode exceeds its cap. With a three-hour sweep window the published-technical count rises to 18
-(XAU 3, EURUSD 4, GBPUSD 5, GBPJPY 4, USDJPY 2), and refusals for risk to 11.
+(XAU 3, EURUSD 5, GBPUSD 5, GBPJPY 3, USDJPY 2), and refusals for risk to 10.
 
 **What this does and does not show.** v3 produces far fewer setups than v2 by
 construction. Simulated outcomes cannot be compared: v3 published a single order and it was
@@ -399,6 +406,29 @@ future candles, malformed candles, configuration, candidate contract), `test/crt
 requires the engine's decision to equal the offline decision on every evaluation: 0
 mismatches over 9,000 evaluations), and the reproduction of the v2 defect
 (`test/techniquezone/crt_index_defect_test.go`).
+
+## Independent certification
+
+A reviewer who did not write the detector audited the committed code against this page
+in a separate worktree, wrote adversarial tests, and ran them. Their findings and what was
+done (every fix has a regression test in `internal/strategy/crt/audit_test.go`):
+
+| # | Finding | Severity | Resolution |
+|---|---|---|---|
+| 1 | A wick through the stop on a candle **after** the confirmation was never seen, so a setup whose stop had already traded could publish (4 of 1,199 fuzzed setups) | High | Fixed: any later trade through the manipulation extreme, or a close below the swept edge, is `invalidated_after_confirmation` |
+| 2 | Freshness, the reclaim window and the shift window counted slice positions, so a 55 minute feed gap left a confirmation "fresh" | Medium | Fixed: every age and window is measured from candle open times |
+| 3 | One candle could be the sweep, the reclaim and the structure shift | Medium | Fixed: the shift is strictly after the reclaim candle (the page now says so) |
+| 4 | A more recent swing high above the anchor range hid an older valid in-range swing | Low | Fixed: out-of-range swings are skipped |
+| 5 | A duplicate timestamp anywhere in the loaded window fails the whole evaluation closed; comparisons carry no epsilon; `execution_stop_max_pips: 0` silently disabled the envelope; the stop uses the deepest low since the anchor closed, including voided earlier excursions | Low | Documented or fixed: the config now rejects a zero cap (the engine only injects a resolved cap); the fail-closed and conservative-stop behaviours are intended and stated here |
+
+What the audit tried and could not break, with 400 randomised scenarios (200 reflected),
+8,237 evaluations and 331 setups: prefix invariance and no future leak (replacing every
+candle after the evaluated one, and every not-yet-closed H1 candle, with garbage changes
+nothing), BUY/SELL mirror symmetry within 1e-9, anchor closure, the envelope rejecting
+instead of clamping, double-raid handling, and stable-versus-distinct identities.
+
+Verdict after the fixes: **certifiable as a technical contract**, with the unresolved
+risks below. It is not a statement about profitability.
 
 ## Unresolved risks
 

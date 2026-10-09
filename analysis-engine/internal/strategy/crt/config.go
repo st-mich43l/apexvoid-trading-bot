@@ -125,6 +125,9 @@ func parseConfig(params map[string]any) (Config, error) {
 		if err != nil {
 			return c, fmt.Errorf("crt: %w", err)
 		}
+		if !(v > 0) {
+			return c, fmt.Errorf("crt: execution_stop_max_pips must be > 0 when set (omit it to disable the pre-check)")
+		}
 		c.ExecutionStopMaxPips = v
 	}
 	return c, c.validate()
