@@ -34,6 +34,10 @@ from app.autotrade.strategy_taxonomy import (
   match_bypasses_opposing_structure,
 )
 
+# A scalp never targets past this many R (M1 scalps: scalp_rr; range scalps: the
+# fixed_rr ladder trimmed to it).
+SCALP_MAX_TARGET_R = 2.0
+
 GUARD_MODE_OBSERVE = "observe"
 GUARD_MODE_BALANCED = "balanced"
 GUARD_MODE_STRICT = "strict"
@@ -1192,6 +1196,23 @@ def evaluate_execution_policy(
     target_close_ratios = tuple(
       float(value) for value in fixed_targeting.close_ratios
     )
+    # A scalp books 1R and 2R, never the swing ladder gold's structural
+    # strategies run (1R-4R). Production 2026-10-09: a Range Edge Scalp carried
+    # XAU's four targets on a scalp. FX's single 2R target is already within the
+    # cap and is left alone.
+    scalp_ladder_trimmed = False
+    if is_scalp_strategy(
+      str(getattr(match, "strategy", "") or ""),
+      strategy_mode=str(getattr(match, "strategy_mode", "") or ""),
+    ):
+      kept = tuple(
+        value for value in target_r_multiples
+        if value <= SCALP_MAX_TARGET_R + 1e-9
+      )
+      if kept and len(kept) < len(target_r_multiples):
+        target_r_multiples = kept
+        target_close_ratios = (0.5, 0.5) if len(kept) == 2 else (1.0,)
+        scalp_ladder_trimmed = True
     target_values, target_pips_values = _fixed_target_geometry(
       target_r_multiples,
     )
@@ -1284,6 +1305,7 @@ def evaluate_execution_policy(
     trail_to_r = getattr(fixed_targeting, "trail_to_r", None)
     if (
       not fallback_used
+      and not scalp_ladder_trimmed
       and trail_after_r is not None
       and trail_to_r is not None
     ):

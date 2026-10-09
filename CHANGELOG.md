@@ -35,6 +35,9 @@ dated section after deployment.
   `scalp_max_pips: 45` (the range-room floor and the scalping book's cap), and the Analysis Engine
   uses it for the range-room strategies (Range Edge, Fade Scalp) only; every other strategy, and FX
   (which declares none), keeps its envelope. Needs an Analysis Engine and Algo Bot restart to take effect.
+- A range scalp on XAU (Range Edge, Fade Scalp) books 1R and 2R (50/50, or 1R alone when the room
+  allows no more), not gold's 1R-4R structural ladder, and takes no trail. FX already ran 1R/2R and
+  is unchanged; structural gold strategies keep the 4R ladder.
 
 ### Changed
 - CI gates the bot starting, not its business logic. `Autotrade Integrity` now runs: Python - the

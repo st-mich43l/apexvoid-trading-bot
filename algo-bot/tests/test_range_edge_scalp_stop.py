@@ -82,3 +82,33 @@ def test_the_xau_instrument_declares_a_scalp_band_and_python_reads_it():
   # The structural gold envelope the zone strategies use is unchanged.
   assert xau.execution.reaction.stop_min_pips == 50
   assert xau.execution.reaction.stop_max_pips == 70
+
+
+def test_a_range_scalp_on_gold_books_one_and_two_r_not_the_four_r_ladder():
+  evaluation = _evaluate(_go_match("Range Edge Scalp", floor=15, cap=45, desired=23))
+  assert evaluation.allowed, evaluation.message
+  measured = evaluation.measured
+  assert measured["planned_target_r_multiples"] == ["1.0", "2.0"]
+  assert measured["planned_target_close_ratios"] == ["0.5", "0.5"]
+  risk = float(measured["planned_stop_pips"])
+  assert [float(p) for p in measured["planned_target_pips"]] == pytest.approx(
+    [risk, 2 * risk], abs=0.1,
+  )
+  assert not measured.get("planned_trail_after_target_id")
+
+
+def test_a_structural_gold_strategy_keeps_the_four_r_ladder():
+  evaluation = _evaluate(_go_match("Supply Zone Reaction", floor=50, cap=70, desired=50))
+  assert evaluation.allowed, evaluation.message
+  assert evaluation.measured["planned_target_r_multiples"] == ["1.0", "2.0", "3.0", "4.0"]
+
+
+def test_a_range_scalp_with_room_for_only_one_r_books_one_r():
+  evaluation = evaluate_execution_policy(
+    _go_match("Range Edge Scalp", floor=15, cap=45, desired=23),
+    spot_price=4176.57, executable_quote=4176.57, regime="range", pip_size=0.1,
+    cfg=_cfg(), available_target_room_pips=30.0,
+  )
+  assert evaluation.allowed, evaluation.message
+  assert evaluation.measured["planned_target_r_multiples"] == ["1.0"]
+  assert evaluation.measured["planned_target_close_ratios"] == ["1.0"]
