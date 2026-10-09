@@ -116,3 +116,41 @@ def test_a_scalp_plan_carries_no_swing_risk_leg_but_a_structural_one_does():
     plan = _two_leg_plan(name, "range_reversion")
     assert len(plan.entry.legs) == 2
     assert plan.entry.risk_leg is None, name
+
+
+@pytest.mark.parametrize("name,family", [
+  ("Range Edge Scalp", "range_reversion"),
+  ("Fade Scalp", "range_reversion"),
+  ("Range Sweep Scalp", "range_reversion"),
+  ("Impulse Pullback Scalp", "range_reversion"),
+  ("Breakout Retest Scalp", "range_reversion"),
+])
+def test_every_go_scalp_is_a_scalp_plan_for_sizing(name, family):
+  # Go scalps carry family "range_reversion" and a go_m5_* mode; the plan builder
+  # used to key on family == "scalp" and so sized all five as non-scalps.
+  plan = _two_leg_plan(name, family)
+  assert plan.risk.risk_percent == Decimal("0.5"), plan.risk.risk_percent
+
+
+def test_a_structural_strategy_keeps_the_one_percent_risk_field():
+  assert _two_leg_plan("Key Level", "key_level").risk.risk_percent == Decimal("1.0")
+
+
+def test_the_only_shared_enable_switches_are_the_known_ones():
+  # Pinned so a new shared switch is a decision, not an accident. Every other
+  # reviewed strategy has its own switch; the Go side has one per strategy and
+  # per-instrument containment (observe_only_strategies) switches any one off.
+  from collections import defaultdict
+
+  from app.autotrade import strategy_catalog as catalog
+
+  by_switch = defaultdict(set)
+  for scope in pol.REVIEWED_SCOPES.values():
+    profile = catalog.lookup_profile(scope.legacy_strategy)
+    assert profile is not None, scope.catalog_id
+    by_switch[profile.enable_setting].add(scope.catalog_id)
+  shared = {switch: ids for switch, ids in by_switch.items() if len(ids) > 1}
+  assert shared == {
+    "auto_algo.strategies.scalping.mode": {"impulse_pullback", "range_sweep", "scalp_breakout_retest"},
+    "auto_algo.strategies.technique.sd.enabled": {"supply", "demand"},
+  }
