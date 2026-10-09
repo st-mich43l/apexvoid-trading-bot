@@ -3396,6 +3396,26 @@ dated section after deployment.
 - `watcher`: attach the owner Close/partial-close button to VIP SL-hit alerts
   and book those closes with negative pips instead of TP-style profit pips.
 
+### Changed
+- Break & Retest (`break_retest`) is rebuilt as v3. It now owns its breakout structures (an M5 key level
+  of at least two clustered pivot touches, or a line through two pivots evaluated at each candle's own
+  position, both built only from pivots confirmed before the break), accepts a break only after two
+  closes beyond it by a buffer with a measured body, close strength and displacement, and requires a
+  fresh retest strictly after the acceptance (inside 24 candles, rejected within 3, published for 2).
+  The stop sits beyond the retest and the protected swing, is never tightened (a stop over the
+  instrument cap is refused with `risk_exceeds_execution_envelope`), and the target is the nearest
+  credible opposing swing with room. Replaces the Python-parity v2, which took the first retest after
+  the latest break at any age (42 of 59 replayed setups were published more than 2 candles after their
+  retest), carried a fixed 0.75 quality and unconditional evidence, tried trendlines before key
+  levels, and put the stop inside the retest zone. `Quality.Overall` stays 0.75 so arbitration is
+  unchanged; the measured quality is published in `Quality.Components`. Config: `break_retest` v3
+  replaces `trendline_tolerance_atr`, `momentum_body_fraction`, `strict_premium_discount` and `target_r`
+  with the parameters documented in `docs/strategies/break_retest.md`. `break_retest` leaves the
+  detector-parity target list (the oracle golden is untouched). Replay of the committed captures: 59 v2
+  setups, 32 v3 setups; their hypothetical outcome is not better (held-out mean R -0.59 over 26 fills
+  against -0.23 over 47), so this is a technical correction with no improvement claim and its live
+  enablement deserves review. The analysis engine needs a restart; no executor change.
+
 ## 2026-07-15
 
 This baseline summarizes the production changes merged from 2026-07-10 through
