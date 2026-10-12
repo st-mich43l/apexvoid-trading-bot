@@ -161,9 +161,10 @@ risk           = entry_high - stop
   beyond whatever the retest itself traded to. It is **never tightened** and a stop
   beyond the instrument's execution cap is refused (`risk_exceeds_execution_envelope`),
   not clipped.
-- The target is the nearest credible opposing swing: a confirmed pivot high (SELL:
-  low) above everything price traded since the inversion and above the entry, heading
-  a swing of at least `target_swing_atr`. The nearest decides; no target is
+- The target is the nearest credible opposing swing: a pivot high (SELL: low) that was
+  already confirmed when the rejection was (a later pivot cannot move the target of a
+  setup that was published), above everything price traded since the inversion and
+  above the entry, heading a swing of at least `target_swing_atr`. The nearest decides; no target is
   manufactured. `no_opposing_structure` / `insufficient_target_room` are refusals.
 - Published only when `reward / risk >= minimum_reward_risk` (1.15), the room is at
   least `minimum_target_room_atr` (0.55), the target has not been reached since the
@@ -303,7 +304,7 @@ expectancy is exactly why XAU execution needs the owner's explicit approval.
 How the v3 funnel behaves (distinct inversion episodes, all six captures): of 779
 inversions started, 378 reach a retest touch, 196 a rejection, 70 are published; the
 terminal reasons are dominated by `inversion_close_inside_buffer`, `confirmation_window_expired`,
-`retest_closed_through` and `target_already_reached` (a retest that came too late). The
+`retest_closed_through` and `reward_risk_below_minimum`. The
 v2 setups v3 does not publish are mostly `gap_below_minimum` (the confirmed path never
 applied the width filter).
 

@@ -461,7 +461,9 @@ func (d *detector) target(j, confirm int, entryHigh, atrC float64) (price float6
 	}
 	closest := math.Inf(1)
 	for _, p := range d.ph {
-		if d.barsBetween(p.index, confirm) > cfg.TargetLookbackBars || p.price <= floor {
+		// A pivot counts only when it was confirmed by the time the rejection was: a
+		// later one would move the target of a setup that was already published.
+		if p.conf > confirm || d.barsBetween(p.index, confirm) > cfg.TargetLookbackBars || p.price <= floor {
 			continue
 		}
 		low := math.Inf(1)
