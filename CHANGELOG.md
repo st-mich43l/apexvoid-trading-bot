@@ -13,6 +13,26 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
+- Session Level (`session_level`) is rebuilt as an independent Go contract (v4, `docs/strategies/session_level.md`).
+  It builds its own levels from the candles of a period that has COMPLETED and really covers it (Asia, London, New
+  York from M5; the previous trading day and week from H1, with the 21:00 UTC rollover), refuses a period with a
+  hole, a missing start or end or too little coverage, never replaces an incomplete newer occurrence with an
+  older one, and judges two reaction models inside the one strategy: a qualified first-touch rejection (a fresh
+  approach, a touch within tolerance, a rejection candle that closes back above the level inside a bounded window)
+  and a liquidity sweep and reclaim (a sweep after the level became available, reclaimed by the rejection candle
+  within 6 candles; two closes beyond the breakout buffer are an accepted break, not a reversal). The touch count
+  is counted from the candles (the hard-coded 2 is gone; none is claimed when the history cannot show it), the
+  stop sits beyond the level and the reaction's whole extreme (the sweep wick included) and is refused, never
+  tightened, over the instrument cap, and the target is the nearest credible opposing swing or unreached level.
+  Measured components are published and `Quality.Overall` stays on the stars/3 scale. Expiry 24 h -> 4 h.
+  **Session Level trades on FX, so this changes live FX behaviour** (164 setups on the four FX captures become
+  27, with no proven change in expectancy); XAU stays observe-only, and its hypothetical XAU replay leans
+  negative. `test/slreplay` reproduces the v3 weaknesses on the real captures with an independent audit and
+  replays the five losing XAU trades; a new `replay-xau-production-capture-20261012.json` (read-only from
+  production) adds an out-of-sample XAU window. The frozen Python detector in `test/legacyparity` is now
+  measured only. Regenerates the XAU replay meta.
+
+### Changed
 - iFVG is rebuilt as an independent Go contract (v3, `docs/strategies/ifvg.md`). It owns its fair-value
   gap (three consecutive closed M5 candles, a displacement candle between them, at least 0.5 ATR wide),
   accepts an inversion only on a candle that CLOSES through the gap by a buffer with a measured body,
