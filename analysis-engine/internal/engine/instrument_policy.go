@@ -74,6 +74,7 @@ func ApplyInstrument(settings *Settings, doc *config.Document, symbol string) er
 	applyLegacyDetector(settings)
 	applyBreakRetestGeometry(settings)
 	applyIFVGGeometry(settings)
+	applySessionLevelGeometry(settings)
 	if err := applyScalpBreakoutRetest(settings, doc); err != nil {
 		return err
 	}
@@ -152,6 +153,33 @@ func applyIFVGGeometry(settings *Settings) {
 			params[k] = v
 		}
 		params["execution_stop_max_pips"] = settings.InstrumentStopMaxPips
+		settings.Strategies[i].Parameters = params
+	}
+}
+
+// applySessionLevelGeometry gives Session Level the facts its levels and geometry
+// are expressed in: the UTC session grid and the daily rollover (analysis.sessions,
+// the same leaves the session domain reads; the instrument's pip size arrives with
+// the shared detector leaves), and the resolved instrument stop cap so a structure-based stop that exceeds the execution
+// envelope is refused by the detector (never tightened inside the sweep wick). It is
+// idempotent. Only a RESOLVED cap is injected: before an instrument is applied the
+// cap is zero, and zero must not read as "a cap of zero pips".
+func applySessionLevelGeometry(settings *Settings) {
+	for i := range settings.Strategies {
+		if settings.Strategies[i].ID != "session_level" {
+			continue
+		}
+		params := make(map[string]any, len(settings.Strategies[i].Parameters)+5)
+		for k, v := range settings.Strategies[i].Parameters {
+			params[k] = v
+		}
+		params["asia_start_hour"] = float64(settings.Session.AsiaStartHour)
+		params["london_start_hour"] = float64(settings.Session.LondonStartHour)
+		params["ny_start_hour"] = float64(settings.Session.NYStartHour)
+		params["daily_rollover_utc_hour"] = float64(settings.Session.DailyRolloverUTCHour)
+		if settings.InstrumentStopMaxPips > 0 {
+			params["execution_stop_max_pips"] = settings.InstrumentStopMaxPips
+		}
 		settings.Strategies[i].Parameters = params
 	}
 }
