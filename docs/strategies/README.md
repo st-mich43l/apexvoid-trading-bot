@@ -119,6 +119,11 @@ each with the evidence behind it:
 
 Containment is reversible by removing the name. Nothing re-enables itself.
 
+**Pending owner decision.** `ifvg` (v3) and `session_level` (v4) were rebuilt and certified
+technically; whether to take them off XAU's list is the owner's call, with the evidence, the
+patch and the rollback in [xau-enablement-2026-10](xau-enablement-2026-10.md). The table above
+describes the configuration as it is today.
+
 ## Common candidate contract
 
 Every strategy emits a deterministic identity, direction, entry zone, technical
