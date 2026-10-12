@@ -1,0 +1,33 @@
+diff --git a/config/instruments.yml b/config/instruments.yml
+index 693885c..3290a79 100644
+--- a/config/instruments.yml
++++ b/config/instruments.yml
+@@ -473,23 +473,21 @@ instruments:
+         # produced, stored and decided with reason execution_contained) but no
+         # XAU TradePlan is built from them. Removing a name re-enables its
+         # execution; nothing else changes.
+-        #   ifvg: matches the frozen Python publisher bar for bar, but lost on
+-        #     XAU in both independent windows reviewed; parity is not evidence
+-        #     that it earns on XAU.
+         #   liquidity_sweep: Go-native, no live Python predecessor; 4 of 5 XAU
+         #     trades stopped out (-165 pips). Its v3 contract fires about
+         #     twice a week on XAU, too rarely to prove an edge.
+-        #   session_level: not a port of Python's session_level_reaction; 0 of 5 XAU trades
+-        #     won (-204 pips, all Asia). It stays live on FX where it earned.
+         #   impulse_pullback: not a port of Python's scalp-lane archetype; net negative
+         #     live on every instrument that ran it (-49 pips over 11 trades).
++        # ifvg (v3) and session_level (v4) were rebuilt as technically certified Go
++        # contracts (docs/strategies/xau-enablement-2026-10.md) and left this list in
++        # the same change. Rollback is restoring the two names here: containment is
++        # read at match creation and again at plan admission, so it stops NEW plans
++        # only; it does not cancel, modify or close anything already published or open.
+         # range_sweep and scalp_breakout_retest were proven against the frozen
+         # scalp lane (real and synthetic M1 captures, 0 mismatches) and execute.
+         go_opportunity:
+           observe_only_strategies:
+-            - ifvg
+             - liquidity_sweep
+-            - session_level
+             - impulse_pullback
+           # The M15 supply/demand extension (#742) is not part of the proven Python
+           # behavior: M15 zones are still detected and published, never traded, until

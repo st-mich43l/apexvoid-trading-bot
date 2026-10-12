@@ -12,6 +12,18 @@ dated section after deployment.
 
 ## Unreleased
 
+### Added
+- XAU enablement review for `ifvg` (v3) and `session_level` (v4) (`docs/strategies/xau-enablement-2026-10.md`):
+  the certification checklist, an out-of-sample XAU replay of both strategies (new capture
+  `replay-xau-production-capture-20261012.json`), the safety and rollback verification
+  (`algo-bot/tests/test_xau_enablement_chain.py`: with the proposed list simulated, both reach a valid
+  TradePlan V8, a candidate without a confirmed reaction cannot execute, the other XAU containment and FX are
+  unchanged, and restoring the two names re-contains new matches without cancelling or altering a published
+  plan) and the applyable patch that removes the two names from XAU's `observe_only_strategies`. **The patch is
+  NOT applied: `config/instruments.yml` is unchanged and XAU execution of both strategies stays contained until
+  the owner decides.** `session_level`'s XAU replay leans negative (14 filled setups, mean -0.64 R) and
+  `ifvg`'s is indistinguishable from zero (24 filled, -0.04 R); neither is evidence of an edge.
+
 ### Changed
 - Session Level (`session_level`) is rebuilt as an independent Go contract (v4, `docs/strategies/session_level.md`).
   It builds its own levels from the candles of a period that has COMPLETED and really covers it (Asia, London, New
