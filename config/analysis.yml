@@ -396,14 +396,78 @@ analysis:
       # level's band that make a break accepted (the flip's required role).
       breakout_accept_bars: 2
     session_level:
-      version: v3
+      version: v4
       enabled: true
-      # The frozen session_level_reaction: a reaction off a session / previous-day /
-      # previous-week high or low, within the shared reaction band, reaction
-      # confirmation and confluence floor (the legacy detector leaves are injected).
-      invalidation_buffer_atr: 0.5
-      minimum_target_distance_atr: 1.0
-      expiry_hours: 24.0
+      # Session Level v4 technical contract (docs/strategies/session_level.md). Every
+      # value is a tunable default validated against captures, not a claimed
+      # constant. Distances are max(pips x pip size, ATR multiple); ATR is the Wilder
+      # ATR(14) over a fixed trailing window of M5 candles. The session hours and the
+      # daily rollover are injected from analysis.sessions.
+      atr_length: 14
+      atr_window_bars: 140
+      pivot_bars: 2
+      # Touches and sweeps older than this many M5 periods are not evaluated.
+      episode_lookback_bars: 48
+      # Period completeness: a level exists only when the candles of its defining
+      # period really cover it. The tolerances absorb the daily 21:00-22:00 UTC
+      # break and the weekend open; a hole or a short period refuses the level.
+      session_start_tolerance_minutes: 90
+      session_end_tolerance_minutes: 90
+      session_max_gap_minutes: 60
+      session_minimum_coverage: 0.8
+      period_start_tolerance_minutes: 120
+      period_end_tolerance_minutes: 120
+      period_max_gap_minutes: 150
+      period_minimum_coverage: 0.85
+      # How long after its period completes a level stays current. A later period
+      # supersedes it; an older one is never a fallback for an incomplete newer one.
+      session_max_age_hours: 30
+      day_max_age_hours: 72
+      week_max_age_hours: 168
+      # First touch: a fresh approach (a close this far above the level within the
+      # lookback), a touch within tolerance, and at most this many earlier touches.
+      touch_tolerance_pips: 2
+      touch_tolerance_atr: 0.10
+      approach_lookback_bars: 24
+      approach_min_distance_atr: 0.5
+      touch_separation_bars: 3
+      maximum_prior_touches: 1
+      hold_buffer_pips: 1
+      hold_buffer_atr: 0.05
+      fail_buffer_pips: 3
+      fail_buffer_atr: 0.25
+      # Sweep and reclaim: trading beyond the level by the threshold is a sweep; a
+      # rejection candle closing back above the reclaim buffer within the window is
+      # the reclaim; this many closes beyond the breakout buffer is an accepted break.
+      sweep_threshold_pips: 3
+      sweep_threshold_atr: 0.10
+      reclaim_buffer_pips: 1
+      reclaim_buffer_atr: 0.05
+      reclaim_max_bars: 6
+      breakout_accept_closes: 2
+      breakout_buffer_pips: 2
+      breakout_buffer_atr: 0.15
+      # The rejection candle.
+      rejection_close_strength: 0.6
+      rejection_wick_ratio: 0.25
+      rejection_body_ratio: 0.6
+      displacement_grade_atr: 1.0
+      confirmation_window_bars: 3
+      confirmation_max_age_bars: 2
+      max_episodes_per_level: 3
+      # Geometry: the stop sits beyond the level and the reaction's whole adverse
+      # extreme (a sweep wick included) and is never tightened inside it.
+      entry_band_atr: 0.5
+      entry_tolerance_pips: 1
+      entry_tolerance_atr: 0.15
+      maximum_entry_distance_atr: 1.5
+      invalidation_buffer_atr: 0.25
+      target_lookback_bars: 96
+      target_swing_bars: 12
+      target_swing_atr: 1.0
+      minimum_target_room_atr: 0.55
+      minimum_reward_risk: 1.15
+      expiry_hours: 4.0
     trendline:
       version: v3
       enabled: true
