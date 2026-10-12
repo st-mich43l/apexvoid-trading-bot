@@ -26,10 +26,16 @@ func TestStrategyConfigsFromConfigEnablesTheCompleteCatalogForShadow(t *testing.
 	// contract's evidence (Phase 1), and CRT was rebuilt as a causal H1 sweep, M5
 	// reclaim and structure shift (v3); every other strategy is still v2.
 	rebuilt := map[string]bool{"crt": true, "key_level": true, "session_level": true, "flip_zone": true, "box_breakout": true, "trendline": true, "impulse_pullback": true, "scalp_breakout_retest": true, "range_sweep": true, "liquidity_sweep": true, "break_retest": true, "ifvg": true}
+	// Session Level was rebuilt a second time (v4: complete periods, two bounded
+	// reaction models, honest geometry).
+	v4 := map[string]bool{"session_level": true}
 	for _, cfg := range configs {
 		want := "v2"
 		if rebuilt[string(cfg.ID)] {
 			want = "v3"
+		}
+		if v4[string(cfg.ID)] {
+			want = "v4"
 		}
 		if cfg.Version != want {
 			t.Errorf("%s: version=%q, want %s", cfg.ID, cfg.Version, want)

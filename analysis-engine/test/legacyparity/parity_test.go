@@ -42,7 +42,12 @@ var pairing = map[string]struct {
 
 // measuredOnly lists the detectors whose parity is reported but not asserted; it is
 // empty when every replaced detector is proven.
-var measuredOnly = map[string]bool{}
+//
+// session_level_reaction is measured only: Session Level was rebuilt as v4 (complete
+// periods, two bounded reaction models, honest geometry; docs/strategies/session_level.md),
+// which deliberately no longer reproduces the frozen detector's decisions. The frozen
+// oracle golden is untouched and the divergence stays visible in the log.
+var measuredOnly = map[string]bool{"session_level_reaction": true}
 
 type goldenDecision struct {
 	Direction       string  `json:"direction"`
@@ -223,7 +228,7 @@ func TestLegacyStrategiesMatchTheFrozenPythonOracleBarByBar(t *testing.T) {
 					break
 				}
 				if measuredOnly[name] {
-					t.Logf("not yet restored: %s", m)
+					t.Logf("measured only (parity not asserted): %s", m)
 				} else {
 					t.Error(m)
 				}
