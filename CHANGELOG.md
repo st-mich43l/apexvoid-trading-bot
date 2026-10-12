@@ -13,6 +13,19 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
+- iFVG is rebuilt as an independent Go contract (v3, `docs/strategies/ifvg.md`). It owns its fair-value
+  gap (three consecutive closed M5 candles, a displacement candle between them, at least 0.5 ATR wide),
+  accepts an inversion only on a candle that CLOSES through the gap by a buffer with a measured body,
+  close location and displacement (a wick or a hairline close is not an inversion), requires a fresh retest
+  strictly after the inversion and a rejection candle that closes back on the new side, and puts the stop
+  beyond the gap's far bound and the retest extreme (refused, never tightened, over the instrument cap). The
+  resting observation, the canonical zone strength and the fabricated quality components are gone; measured
+  components are published and `Quality.Overall` stays on the stars/3 scale. Expiry 24 h -> 4 h. **iFVG trades
+  on FX, so this changes live FX behaviour** (764 confirmed setups on the four FX captures become 49, with no
+  proven change in expectancy); XAU stays observe-only. `test/ifvgreplay` reproduces the v2 weaknesses on the
+  real captures. Replaces the v2 fixtures in `test/strategy`; regenerates the XAU replay meta.
+
+### Changed
 - CRT (`crt`) is rebuilt as v3: a fully closed H1 candle is the range, an M5 candle sweeps an edge by a
   real threshold, an M5 close reclaims it, and an M5 structure shift (a close beyond the last confirmable
   swing, with measured displacement) confirms it. The stop is placed beyond the actual manipulation
