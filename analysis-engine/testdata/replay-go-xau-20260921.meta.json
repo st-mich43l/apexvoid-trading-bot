@@ -1,8 +1,8 @@
 {
   "description": "Go replay of the committed real XAU capture (regenerate with UPDATE_GOLDEN=1 go test ./test/replaycapture)",
   "capture": "replay-xau-production-capture-20260921.json",
-  "total_discovered": 1670,
-  "total_envelopes_sha256": "13285afab97f5ac6fa488796b652fc31123cb8d0be320f8634aa86c0d8583f63",
+  "total_discovered": 1487,
+  "total_envelopes_sha256": "ff43b652514286c4974a4485cbe624a1db6022334dd4960802d63cd423ddf2f0",
   "golden_supply_demand_confirmed_count": 263,
   "h4_derived_from_h1_utc_aligned": false,
   "timeframes_dispatched": 3,
