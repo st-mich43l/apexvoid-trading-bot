@@ -67,10 +67,13 @@ type Setup struct {
 	ProtectedFar, Stop float64
 	Target             float64
 
-	ATR           float64
-	RiskPips      float64
-	RewardRisk    float64
-	TargetRoomATR float64
+	ATR      float64
+	RiskPips float64
+	// RewardRisk is reward over the risk the execution layer will run (the technical
+	// risk widened to the instrument floor); TechnicalRewardRisk over the stop itself.
+	RewardRisk          float64
+	TechnicalRewardRisk float64
+	TargetRoomATR       float64
 
 	// Measured quality components.
 	IndependentFacts int

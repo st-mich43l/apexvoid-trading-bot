@@ -338,3 +338,12 @@ Part C adds the replay certification.
 - Stars and the zone score come from the chain's multi-factor scoring at the evaluated candle (they are known when the
   decision is made), not as of the touch.
 - CRT instances embed their own reaction and never count as facts.
+- The candle atoms make the independence rule depend on the zone chain's three-candle base: two legs separated by two or
+  fewer pullback candles are one source (the second zone's base contains the first leg), three or more are two. The
+  cliff is that of the chain's own supply/demand construction; the cases it merges that were inspected on real bars
+  (an FVG and an iFVG made by one impulse candle, an FVG cut from a zone's base, a flag) are one event.
+- The structure population is every instance not spent or invalidated in the engine's 400-candle window, wherever price
+  is, so a displacement rejection (`strong_reclaim`) is a real, common pattern (it was nearly unreachable while facts had to
+  be at the price at the evaluated candle); `entry_too_far` is its only distance protection.
+- `Setup.RewardRisk` and the `target_room_r` component are reward over the risk the execution layer will run (the stop
+  widened to the instrument floor); `technical_reward_risk` is reward over the stop itself.

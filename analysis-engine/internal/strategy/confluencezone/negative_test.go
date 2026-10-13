@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structuralconfluence"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/techniquezone"
 )
 
 // Every negative fixture asserts that nothing is published AND that the specific
@@ -355,4 +356,63 @@ func TestRewardRiskIsMeasuredAgainstTheStopTheExecutionLayerWillUse(t *testing.T
 	floored := Detect(testConfig(t, map[string]any{"execution_stop_min_pips": 200.0}), input(rejection(), twoDemand(), buyPool(4125)))
 	rejects(t, "floored risk", floored, ReasonRewardRisk)
 	only(t, Detect(testConfig(t, map[string]any{"execution_stop_min_pips": 50.0}), input(rejection(), twoDemand(), buyPool(4125))))
+}
+
+// A confirmation is one opportunity however many candles later it is evaluated. Facts
+// are judged as of each touch, so a third structure that exists as of the touch on
+// candle 28 only supports that touch, not the one on 29: the setup chosen for the confirming candle 29
+// must not change when the evaluated candle moves on and the earlier touch ages out of
+// the evaluated candle's window.
+func TestAConfirmationKeepsItsEpisodeWhenTheEvaluationMovesOn(t *testing.T) {
+	bars := rejection()
+	for i := 30; i < 32; i++ {
+		bars = append(bars, bar(i, 4105.5, 4106.2, 4105.2, 4105.8))
+	}
+	// Two more structures that exist as of the touch on 28 only (candle 28 itself
+	// consumes them): that touch has three independent sources, the one on 29 two.
+	c1 := fact("C1", structuralconfluence.Buy, 4103, 4106, factsReady, "c1")
+	c2 := fact("C2", structuralconfluence.Buy, 4103, 4106, factsReady, "c2")
+	base := twoDemand()
+	var episodes []string
+	for last := 29; last <= 31; last++ {
+		in := input(bars[:last+1], base, buyPool(4125))
+		in.FactsAt = func(ti int) []structuralconfluence.Fact {
+			if ti == 28 {
+				return append(append([]structuralconfluence.Fact(nil), base...), c1, c2)
+			}
+			return base
+		}
+		a := Detect(testConfig(t, nil), in)
+		var got *Setup
+		for i := range a.Setups {
+			if a.Setups[i].ConfirmTime == bars[29].Time {
+				got = &a.Setups[i]
+				break
+			}
+		}
+		if got == nil {
+			t.Fatalf("evaluated at candle %d: the confirmation on 29 is missing: %+v", last, a.Rejections)
+		}
+		episodes = append(episodes, got.Region.EpisodeID)
+	}
+	if episodes[0] != episodes[1] || episodes[1] != episodes[2] {
+		t.Fatalf("the confirmation on candle 29 changed episode as the evaluation moved on: %v", episodes)
+	}
+}
+
+func TestAPoolKnowsItsOwnLatestMemberSwing(t *testing.T) {
+	// A later swing near the pool's level that is not a member must not hide a sweep.
+	in := input(rejection(), twoDemand())
+	pool := techniquezone.Pool{Side: "buy", Level: 4108, Band: 0.5, Touches: 2, LastIndex: 3}
+	in.Pools = []techniquezone.Pool{pool}
+	// Candles 1-26 traded to 4110.5 after the pool's last member (candle 3): swept.
+	in.Swings = []techniquezone.Swing{{Index: 28, Kind: "high", Price: 4108.5}} // a neighbour, not a member
+	if unswept(pool, in) {
+		t.Fatal("a nearby later swing masked the sweep of the pool")
+	}
+	// The same pool with a member after the traded range is unswept.
+	pool.LastIndex = 28
+	if !unswept(pool, in) {
+		t.Fatal("a pool with no candle beyond it since its latest member is unswept")
+	}
 }
