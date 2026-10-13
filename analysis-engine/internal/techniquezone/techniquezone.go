@@ -1058,6 +1058,13 @@ type TechniqueSettings struct {
 	InvalidationToleranceATR float64
 	SweepReclaimBars         int
 	MaxBreakEpisodes         int
+	// IgnoreProximity drops the retest-proximity test (price must be at the zone
+	// now) from the instance validation: a structure is then judged only on what it
+	// is (not spent, not invalidated, sized, unfilled), never on where price is at
+	// this moment. Strategies that read structures as facts independent of the
+	// current candle (Confluence Zone v3) use it; every frozen publisher keeps the
+	// default false.
+	IgnoreProximity bool
 }
 
 // Instance mirrors technique_geometry.TechniqueInstance for the techniques
@@ -1307,7 +1314,7 @@ func validateInstance(in Instance, bars []market.Candle, price, atr float64, s T
 	if !notInvalidated(in.Side, in.Low, in.High, bars, in.OriginIndex, atr, s) {
 		return false
 	}
-	if !proximalRetest(in.Side, in.Low, in.High, price, atr, s) {
+	if !s.IgnoreProximity && !proximalRetest(in.Side, in.Low, in.High, price, atr, s) {
 		return false
 	}
 	maxATR := s.MaxZoneATR
@@ -1414,6 +1421,33 @@ func InstancesFromScoredZones(scored []Zone, bars []market.Candle, atr float64, 
 	}
 	obV, sdV, fvgV := SourceViews(scored)
 	return CollectInstances(sdV, obV, fvgV, bars, bars[len(bars)-1].Close, atr, s)
+}
+
+// InstancesFromScoredZonesAsOf collects the instances as the zone chain would have
+// judged them after the candle before bars[asOf] had closed: only zones anchored
+// before asOf, their mitigation re-counted on bars[:asOf], and every spent,
+// invalidated, mis-sized or filled test run on that prefix (the price test is the
+// caller's choice through s.IgnoreProximity). A structure that a LATER candle
+// swept, filled or closed through is therefore still the structure it was when a
+// reaction touched it, and nothing the touch candle (or any later one) did can
+// remove it. asOf == len(bars) is the present: it equals InstancesFromScoredZones.
+// atr is the frame's ATR series.
+func InstancesFromScoredZonesAsOf(scored []Zone, bars []market.Candle, atr []float64, asOf int, s TechniqueSettings) []Instance {
+	if asOf < 2 || asOf > len(bars) || asOf > len(atr) {
+		return nil
+	}
+	prefix := bars[:asOf]
+	zones := make([]Zone, 0, len(scored))
+	for _, z := range scored {
+		if z.OriginIndex >= asOf {
+			continue
+		}
+		z.Touches, z.Mitigated = 0, false
+		zones = append(zones, z)
+	}
+	marked := MarkMitigation(zones, prefix, maxInt(0, len(prefix)-1))
+	obV, sdV, fvgV := SourceViews(marked)
+	return CollectInstances(sdV, obV, fvgV, prefix, prefix[len(prefix)-1].Close, ATRScalar(atr[:asOf], 1), s)
 }
 
 // ---- production settings and the one-call pipeline ---------------------------

@@ -12,6 +12,24 @@ dated section after deployment.
 
 ## Unreleased
 
+### Changed
+- Confluence Zone (`confluence_zone`) is rebuilt as v3 (`docs/strategies/confluence_zone.md`,
+  `docs/strategies/confluence-zone-v3-technical-spec.md`), replacing the Python-parity v2 whose forensic audit
+  (`docs/strategies/confluence-zone-xau-forensic-audit.md`) found that `minimum_facts = 2` counted labels, the entry
+  was the union of the members, a member could be created by the reacting candle, two quality factors were
+  constants and the target could be an invented 2R. v3 requires `minimum_facts` **independent** sources (structures
+  cut from one displacement, gap or inversion are one), trades the region they actually overlap, admits only
+  structures confirmable before the touch candle opened, confirms from measured candle facts (never colour), reports
+  only measured quality factors, sets the stop beyond the supporting structures' full extent and the reaction's
+  adverse extreme and **refuses** (never tightens) one over the instrument's execution cap, and publishes no target
+  unless real, unswept opposing liquidity with room exists (reward:risk is judged against the stop the execution layer
+  will use). Structures that share a source candle are one source. New required parameters in `config/analysis.yml`;
+  `execution_stop_max_pips` and `execution_stop_min_pips` are injected per instrument. The strategy reads the zone
+  chain's structures as facts independent of where price is now and as they stood before the touch candle
+  (`LegacyFrame.StructuralInstancesAsOf`: the same instances without the retest-proximity test, judged on the earlier
+  candles; the frozen publishers' `Techniques` are unchanged). `Quality.Overall` keeps its scale (stars out of three) and no arbitration, risk, sizing, ladder,
+  exposure or enablement setting changes. Opportunity IDs change with the version, and an opportunity is the side and the confirming candle (one confirmation is one opportunity, whichever touch or supporting set it is seen through). **Not deployed.**
+
 ### Added
 - Confluence Zone v3, part A: the structural confluence engine (`analysis-engine/internal/structuralconfluence`,
   `docs/strategies/confluence-zone-v3-technical-spec.md`). A pure library, **not yet wired into any strategy, so

@@ -184,15 +184,42 @@ analysis:
       reaction_lookback_bars: 3
       engulfing_minimum_range_atr: 0.5
     confluence_zone:
-      version: v2
+      version: v3
       enabled: true
+      # Confluence Zone v3 technical contract (docs/strategies/confluence-zone-v3-technical-spec.md).
+      # Every value is a tunable default validated against captures, not a claimed
+      # constant; the close-strength, wick and displacement values are the ones iFVG v3 uses.
+      #
+      # The number of INDEPENDENT sources (not labels) that must support every price of
+      # the region. Structures cut from one displacement, one gap or one inversion are one
+      # source. A region must be strictly wider than max(pips x pip size, ATR multiple).
       minimum_facts: 2
-      invalidation_buffer_atr: 0.5
-      minimum_target_distance_atr: 1.0
-      expiry_hours: 12.0
-      # Legacy Python reaction confirmation (shared by every technique).
+      minimum_overlap_pips: 1.0
+      minimum_overlap_atr: 0.05
+      # The reaction: a touch and a confirming candle within this many closed candles; a
+      # sweep of the region's far edge of at least this depth and a close back inside; a
+      # rejecting wick and a close away from the region; or a displacement candle that
+      # closes through it. Measured from the candle, never from its colour.
       reaction_lookback_bars: 3
       engulfing_minimum_range_atr: 0.5
+      minimum_sweep_pips: 1.0
+      minimum_sweep_atr: 0.05
+      minimum_reclaim_atr: 0.0
+      rejection_wick_ratio: 0.25
+      rejection_close_strength: 0.6
+      # The smallest candle (ATR) that can show a rejection: a doji inside a region shows nothing.
+      minimum_rejection_range_atr: 0.25
+      displacement_body_ratio: 0.6
+      displacement_range_atr: 0.5
+      displacement_grade_atr: 1.0
+      # Geometry: the stop sits beyond the supporting structures' full extent (not just their
+      # tradable slice) and the reaction's own extreme; the instrument's execution stop cap
+      # is injected and a stop beyond it is refused, never tightened, and its floor is used
+      # for reward:risk (the execution layer widens a tighter stop to it). The target is the nearest opposing liquidity with room.
+      invalidation_buffer_atr: 0.5
+      minimum_target_distance_atr: 1.0
+      minimum_reward_risk: 1.15
+      expiry_hours: 12.0
     supply:
       version: v2
       enabled: true
