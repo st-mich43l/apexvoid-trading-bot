@@ -30,7 +30,7 @@ Every strategy has exactly one status:
 | ID | Inputs | Legacy equivalent | Proof | Symbols | XAU execution | Status | XAU opportunities, Sep 14-21 / Sep 28-Oct 7 |
 |---|---|---|---|---|---|---|---|
 | `key_level` | key-level clusters, role, structure, reaction | Python `key_level_reaction` (a1c77584, the profitable XAU week) | `test/keylevelparity` golden | all | live | LEGACY_PARITY_PROVEN | 507 / 709 |
-| `confluence_zone` | overlapping canonical zones, reaction | `confluence_zone_reaction` (1c9f323) | `test/techniqueparity` golden, 5 symbols | all | live | LEGACY_PARITY_PROVEN | 270 / 400 |
+| `confluence_zone` | at least `minimum_facts` independent canonical structures supporting one price region, measured reaction | none (Go v3; the Python publisher 1c9f323 was v2, see [confluence_zone](confluence_zone.md)) | contract tests in `internal/structuralconfluence` and `internal/strategy/confluencezone`, `test/czreplay` ([certification](confluence-zone-v3-certification.md)) | all | live (XAU containment recommended, see certification) | GO_NATIVE_VALIDATED | 23 / 20 (v2: 83 / 58) |
 | `supply` | canonical supply zones, reaction, liquidity | `supply_demand_technique_reaction` (1c9f323) | `test/techniqueparity` golden, 5 symbols | all | live | LEGACY_PARITY_PROVEN (M5 zones; M15 zones are a Go-native addition, no oracle) | 128 / 168 |
 | `demand` | canonical demand zones, reaction, liquidity | `supply_demand_technique_reaction` (1c9f323) | `test/techniqueparity` golden, 5 symbols | all | live | LEGACY_PARITY_PROVEN (M5 zones; M15 zones are a Go-native addition, no oracle) | 141 / 188 |
 | `order_block` | canonical order-block zones, reaction | `order_block_technique_reaction` (1c9f323) | `test/techniqueparity` golden, 5 symbols | all | live | LEGACY_PARITY_PROVEN | 23 / 30 |
@@ -86,6 +86,19 @@ structure. The oracle golden is untouched; `break_retest` simply left the
 `test/brreplay`. Replay: 59 v2 setups over the six captures become 22 v3 setups whose
 hypothetical outcome is *not* better (held-out mean R -0.73 over 17 fills against -0.23
 over 47): the change is a technical correction, with no improvement claim.
+
+### Confluence Zone v3 is not a port
+
+`confluence_zone` v3 is deliberately *not* the frozen `confluence_zone_reaction`. The frozen publisher counted technique
+*labels* as facts, published the union of its members as the entry, let a member be created by the reacting candle,
+hard-coded two quality factors true and invented a 2R target (`docs/strategies/confluence-zone-xau-forensic-audit.md`).
+v3 requires independent sources (structures sharing a displacement, gap, inversion or source candle are one), trades the
+region they actually overlap as of the touch, measures the confirmation from the candle, sets the stop beyond the
+structures' full extent and refuses it beyond the execution cap, and publishes only a real, unswept opposing-liquidity
+target. The frozen `TechniqueSource.ConfluenceZone` is unchanged and still proves the oracle golden bar for bar. Replay:
+the six captures' v2 decisions (about 190 per symbol) become 18-59 v3 decisions per capture, removing v2's winners and
+losers in nearly the same proportion: the change is a technical correction, with no improvement claim
+([certification](confluence-zone-v3-certification.md)).
 
 ### Deliberate departure from the frozen Python oracle
 
