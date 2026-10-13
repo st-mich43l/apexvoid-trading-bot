@@ -86,15 +86,25 @@ func (s *Strategy) Analyze(ctx *analysiscontext.MarketContext) (Analysis, []oppo
 	if ctx == nil {
 		return Analysis{}, nil
 	}
-	source, ok := strategyutil.NewTechniqueSource(ctx, market.M5, s.legacy)
+	d, ok := strategyutil.NewLegacyDetectorForFrame(ctx, market.M5, s.legacy)
 	if !ok {
 		return Analysis{}, nil
 	}
-	d := source.Detector
 	frame := d.Frame
+	// The structures are read as facts independent of the current candle: every
+	// instance that is not spent or invalidated, wherever price is now. (The frozen
+	// publishers' Techniques also require price to be at the zone this moment, which
+	// would make a structure vanish the candle after it rejected price.)
+	instances := frame.StructuralInstances
+	if instances == nil {
+		instances = frame.Techniques
+	}
+	if instances == nil {
+		return Analysis{}, nil
+	}
 	facts := structuralconfluence.DeriveFacts(structuralconfluence.Frame{
 		Bars: frame.Bars, Legs: frame.Legs, Breaks: frame.Breaks, Swings: frame.Swings, PeriodSeconds: periodSeconds,
-	}, source.Instances)
+	}, instances())
 	analysis := Detect(s.cfg, Input{Bars: frame.Bars, ATR: d.ATR, PeriodSeconds: periodSeconds, Facts: facts, Pools: frame.Pools})
 
 	var candidates []opportunity.Candidate

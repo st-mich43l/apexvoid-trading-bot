@@ -1058,6 +1058,13 @@ type TechniqueSettings struct {
 	InvalidationToleranceATR float64
 	SweepReclaimBars         int
 	MaxBreakEpisodes         int
+	// IgnoreProximity drops the retest-proximity test (price must be at the zone
+	// now) from the instance validation: a structure is then judged only on what it
+	// is (not spent, not invalidated, sized, unfilled), never on where price is at
+	// this moment. Strategies that read structures as facts independent of the
+	// current candle (Confluence Zone v3) use it; every frozen publisher keeps the
+	// default false.
+	IgnoreProximity bool
 }
 
 // Instance mirrors technique_geometry.TechniqueInstance for the techniques
@@ -1307,7 +1314,7 @@ func validateInstance(in Instance, bars []market.Candle, price, atr float64, s T
 	if !notInvalidated(in.Side, in.Low, in.High, bars, in.OriginIndex, atr, s) {
 		return false
 	}
-	if !proximalRetest(in.Side, in.Low, in.High, price, atr, s) {
+	if !s.IgnoreProximity && !proximalRetest(in.Side, in.Low, in.High, price, atr, s) {
 		return false
 	}
 	maxATR := s.MaxZoneATR

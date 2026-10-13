@@ -121,6 +121,27 @@ func techniqueInstanceSource(exec *analysiscontext.LegacyFrame, h1 *analysiscont
 	}
 }
 
+// structuralInstanceSource lazily yields the execution frame's zone-chain
+// instances (without CRT) judged only on what they are, not on where price is: the
+// facts Confluence Zone reads. It is the instance collection above with the
+// retest-proximity test off; the frozen publishers never see it.
+func structuralInstanceSource(exec *analysiscontext.LegacyFrame, settings Settings) func() []techniquezone.Instance {
+	var once sync.Once
+	var instances []techniquezone.Instance
+	return func() []techniquezone.Instance {
+		once.Do(func() {
+			bars := exec.Bars
+			if len(bars) < 10 {
+				return
+			}
+			technique := settings.TechniqueZones.Technique
+			technique.IgnoreProximity = true
+			instances = techniquezone.InstancesFromScoredZones(exec.TechniqueZones, bars, techniquezone.ATRScalar(exec.ATR, 1), technique)
+		})
+		return instances
+	}
+}
+
 // higherTimeframeInstanceSource lazily yields the supply/demand instances of a
 // higher timeframe's own scored zones (same collection the execution frame
 // uses, on that frame's bars and ATR). OriginIndex is relative to that frame;
