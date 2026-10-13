@@ -90,6 +90,10 @@ var rank = map[string]int{
 
 	"opportunity": 5,
 
+	// Pure geometry and provenance of confluence regions (Confluence Zone v3):
+	// reads the zone chain's instances, owns no strategy thesis.
+	"structuralconfluence": 5,
+
 	"strategy":    6,
 	"legacyread":  6,
 	"confluence":  5,
