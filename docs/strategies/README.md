@@ -35,7 +35,7 @@ Every strategy has exactly one status:
 | `demand` | canonical demand zones, reaction, liquidity | `supply_demand_technique_reaction` (1c9f323) | `test/techniqueparity` golden, 5 symbols | all | live | LEGACY_PARITY_PROVEN (M5 zones; M15 zones are a Go-native addition, no oracle) | 141 / 188 |
 | `order_block` | canonical order-block zones, reaction | `order_block_technique_reaction` (1c9f323) | `test/techniqueparity` golden, 5 symbols | all | live | LEGACY_PARITY_PROVEN | 23 / 30 |
 | `fvg` | canonical FVG zones, reaction | `fvg_technique_reaction` (1c9f323) | `test/techniqueparity` golden, 5 symbols | all | live | LEGACY_PARITY_PROVEN | 99 / 120 |
-| `ifvg` | own M5 fair-value gap, its closing-price inversion, a fresh retest and rejection | none (Go v3; the Python publisher 1c9f323 was v2, see [ifvg](ifvg.md)) | contract tests in `internal/strategy/ifvg`, `test/ifvgreplay` (defect reproduction on the real captures, no future dependence, invariants, golden) | all | **contained** (analysis only) on XAU; live on FX | GO_NATIVE_VALIDATED | 7 / 14 (v2 confirmed: 110 / 120) |
+| `ifvg` | own M5 fair-value gap, its closing-price inversion, a fresh retest and rejection | none (Go v3; the Python publisher 1c9f323 was v2, see [ifvg](ifvg.md)) | contract tests in `internal/strategy/ifvg`, `test/ifvgreplay` (defect reproduction on the real captures, no future dependence, invariants, golden) | all | live (XAU enabled 13 Oct 2026; FX unchanged) | GO_NATIVE_VALIDATED | 7 / 14 (v2 confirmed: 110 / 120) |
 | `crt` | closed H1 range, M5 sweep, reclaim and structure shift | none (v3 departs deliberately from `crt_technique_reaction`, see below) | `internal/strategy/crt` positive and negative fixtures; `test/crtreplay`: no future dependence on 6 captures bar for bar, technical invariants on every setup found, and a v3 golden | all | live (an honest stop beyond the instrument cap is refused) | GO_NATIVE_VALIDATED | 1 / 0 |
 | `break_retest` | own M5 key level or trendline, accepted break, fresh retest and rejection | none (Go v3; the Python detector 1c9f323 was v2) | contract tests in `internal/strategy/breakretest`, `test/brreplay` | all | live | GO_NATIVE_VALIDATED | 1 / 2 (v2: 8 / 12) |
 | `range_edge` | M5 range context, edge rejection | Python detector (1c9f323) | `test/detectorparity` golden | all | live | LEGACY_PARITY_PROVEN | 28 / 50 |
@@ -45,7 +45,7 @@ Every strategy has exactly one status:
 | `range_sweep` | M5 range, M1 edge excursion and reclaim | Python scalp lane (a1c77584) | `test/scalpparity` real and synthetic M1 captures, 0 mismatches | XAU only | live | LEGACY_PARITY_PROVEN | 3 (Oct 2-6 M1 capture) |
 | `scalp_breakout_retest` | M5 compression, M1 acceptance and retest | Python scalp lane (a1c77584) | `test/scalpparity` real and synthetic M1 captures, 0 mismatches | XAU only | live | LEGACY_PARITY_PROVEN | 8 (Oct 2-6 M1 capture) |
 | `flip_zone` | zones born of an accepted role flip, key-level role, reaction | `flip_demand_zone_reaction` / `flip_supply_zone_reaction` (1c9f323) | `test/legacyparity` golden, 5 symbols: 48 BUY and 43 SELL oracle decisions, identical (presence, direction, entry, stars) and silent elsewhere | all | live | LEGACY_PARITY_PROVEN | 34 / 16 |
-| `session_level` | completed Asia / London / NY and previous-day / previous-week highs and lows, first-touch rejection or sweep and reclaim | none (Go v4; the Python publisher 1c9f323 was v3, see [session_level](session_level.md)) | contract tests in `internal/strategy/sessionlevel`, `test/slreplay` (defect reproduction with an independent audit, the five losing XAU trades, no future dependence, invariants, golden) | all | **contained** (analysis only) on XAU; live on FX | GO_NATIVE_VALIDATED | 6 / 3 (v3: 48 / 38) |
+| `session_level` | completed Asia / London / NY and previous-day / previous-week highs and lows, first-touch rejection or sweep and reclaim | none (Go v4; the Python publisher 1c9f323 was v3, see [session_level](session_level.md)) | contract tests in `internal/strategy/sessionlevel`, `test/slreplay` (defect reproduction with an independent audit, the five losing XAU trades, no future dependence, invariants, golden) | all | live (XAU enabled 13 Oct 2026; FX unchanged) | GO_NATIVE_VALIDATED | 6 / 3 (v3: 48 / 38) |
 | `trendline` | causal trendline anchors, health and live interaction, reaction | `trendline_reaction` V2 (1c9f323) | `test/legacyparity` golden, 5 symbols: 8 oracle decisions, identical and silent elsewhere (few decisions: the gate is narrow) | all | live | LEGACY_PARITY_PROVEN | 4 / 0 |
 | `liquidity_sweep` | lone-extreme pool sweep and reclaim, graded grab | none (Go-native) | contract tests in `internal/strategy/liquiditysweep` | all | **contained** (analysis only) | GO_NATIVE_VALIDATED | 2 / 2 |
 | `box_breakout` | accepted break of the regime box, accepting-bar or retest entry | `box_breakout` (1c9f323; `box_breakout_enabled` is False in Python code, True in the deployed config) | `test/legacyparity` golden, 5 symbols: 36 oracle decisions, identical and silent elsewhere | all | live | LEGACY_PARITY_PROVEN | 10 / 6 |
@@ -111,18 +111,13 @@ each with the evidence behind it:
 
 | Instrument | Observe-only | Evidence |
 |---|---|---|
-| XAU | `ifvg` | matches Python bar for bar, but lost on XAU in both independent windows reviewed |
 | XAU | `liquidity_sweep` | 4 of 5 live XAU trades stopped out (-165 pips); fires about twice a week |
-| XAU | `session_level` | 0 of 5 live XAU trades won (-204 pips, all Asia), taken on the v3 detector; v4 refuses all five for reasons the candles show ([session_level](session_level.md)), but its hypothetical XAU replay leans negative, so it stays contained; live on FX |
 | every instrument | `impulse_pullback` | net -49 pips over 11 live trades of the earlier simplified thesis; the port (XAU only) is proven on synthetic data only, not on the real capture, so it stays contained |
 | every instrument | any setup whose structure timeframe is `M15` (`observe_only_structure_timeframes`) | the M15 supply/demand extension has no Python predecessor and no execution record; detected and published, not traded |
 
 Containment is reversible by removing the name. Nothing re-enables itself.
 
-**Pending owner decision.** `ifvg` (v3) and `session_level` (v4) were rebuilt and certified
-technically; whether to take them off XAU's list is the owner's call, with the evidence, the
-patch and the rollback in [xau-enablement-2026-10](xau-enablement-2026-10.md). The table above
-describes the configuration as it is today.
+**Enabled on XAU (13 Oct 2026, owner's decision).** `ifvg` (v3) and `session_level` (v4) were taken off XAU's list after technical certification; the hypothetical XAU replay is not evidence of an edge (iFVG about zero, Session Level negative), see [xau-enablement-2026-10](xau-enablement-2026-10.md). Rollback: restore the two names.
 
 ## Common candidate contract
 

@@ -12,6 +12,13 @@ dated section after deployment.
 
 ## Unreleased
 
+### Changed
+- XAU now executes `ifvg` (v3) and `session_level` (v4): both names are removed from
+  `instruments.XAU.overrides.execution.go_opportunity.observe_only_strategies` (owner's decision, 13 Oct 2026;
+  `liquidity_sweep`, `impulse_pullback` and the M15 structure containment stay). The hypothetical XAU replay is
+  not evidence of an edge (iFVG about zero, Session Level negative: `docs/strategies/xau-enablement-2026-10.md`).
+  Rollback: restore the two names; it stops new plans only. No sizing, risk or exposure change.
+
 ### Added
 - XAU enablement review for `ifvg` (v3) and `session_level` (v4) (`docs/strategies/xau-enablement-2026-10.md`):
   the certification checklist, an out-of-sample XAU replay of both strategies (new capture
