@@ -226,7 +226,7 @@ func (s *Strategy) build(ctx *analysiscontext.MarketContext, base *strategyutil.
 	direction := strings.ToLower(string(setup.Direction))
 	candidate, err := strategyutil.Candidate(strategyutil.CandidateSpec{
 		ID: string(ID), Version: Version,
-		SetupKey: fmt.Sprintf("confluence:%s:%d", setup.Region.EpisodeID, setup.ConfirmTime),
+		SetupKey: setupKey(setup),
 		Symbol:   ctx.Symbol, Direction: setup.Direction,
 		EntryLow: setup.EntryLow, EntryHigh: setup.EntryHigh,
 		Invalidation: setup.Stop, InvalidationLabel: "confluence_overlap_failed",
@@ -252,6 +252,19 @@ func (s *Strategy) build(ctx *analysiscontext.MarketContext, base *strategyutil.
 	}
 	candidate.DetectorConfluence = result.ConfluenceContext()
 	return built{candidate: candidate, score: score}, ""
+}
+
+// setupKey is the identity of a confirmed opportunity: the side and the confirming
+// candle. One confirmation is one reaction however many touches of the region it
+// has and however the structures supporting it are counted at the moment of the
+// evaluation (a touch two candles back and the confirming candle itself can see
+// slightly different supports for the same price band), and at most one candidate
+// per direction is published, so the identity must not move with the episode that
+// happens to be selected; keying it on the episode published one confirmation under
+// two opportunity IDs on real GBPUSD data. The episode stays the thesis identity
+// (StructuralID), shared with the resting observation of the same region.
+func setupKey(setup Setup) string {
+	return fmt.Sprintf("confluence:%s:%d", strings.ToLower(string(setup.Direction)), setup.ConfirmTime)
 }
 
 func (s *Strategy) restingCandidate(ctx *analysiscontext.MarketContext, d *strategyutil.LegacyDetector, analysis Analysis, r Resting) (opportunity.Candidate, bool) {

@@ -259,11 +259,16 @@ overlap can never be executed. A resting observation claims no reaction in its e
 (`m5_distinct_zone_overlap`, `m5_confluence_independent_facts`; a confirmation adds `m5_confluence_reaction`) -
 v2's resting candidate named `m5_confluence_reaction` and a confirmation time it did not have.
 
-The thesis identity (`StructuralID`, `Reaction.ZoneID`) is the **episode** (section 3). The opportunity ID is a function
-of the episode and the **confirmation** time, not of the touch, the evaluation time or the order of any input list.
-A re-evaluation of the same confirmation on the next candle is the same opportunity; a later fact joining the same
-price does not rename or revive an earlier episode; a genuinely new reaction is a new opportunity on the same
-structures.
+The thesis identity (`StructuralID`, `Reaction.ZoneID`) is the **episode** (section 3). The opportunity ID (`SetupKey`) is a function
+of the **side and the confirming candle**, not of the episode, the touch, the evaluation time or the order of any input
+list. One confirmation is one reaction: the touches within its window can see slightly different supporting structures
+over the same price band (different episodes), and keying the ID on the episode published one confirmation under two
+IDs, with an identical entry, stop and target, on real GBPUSD data (found by the replay invariant
+`TestOneConfirmationIsNeverRenamedBetweenEvaluations`). A re-evaluation of the same confirmation on the next candle is
+the same opportunity, even if the episode selected for it changes (its thesis identity and geometry are then updated);
+a later fact joining the same price does not revive an earlier episode; a genuinely new confirming candle is a new
+opportunity on the same structures. At most one confirmed candidate per direction is published, so one ID per
+(side, confirmation) is never ambiguous.
 
 ## 9. Configuration
 

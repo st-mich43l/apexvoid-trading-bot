@@ -72,7 +72,8 @@ page is the summary.
    than the required room blocks the trade, and reward:risk is judged against the stop the
    execution layer will use.
 9. **Identity.** The thesis is the confluence episode (side + supporting facts as of the
-   touch); the opportunity is the episode and the confirmation time. Reordering inputs,
+   touch); the opportunity is the side and the confirming candle (one confirmation is one opportunity,
+   whichever touch or supporting set it is seen through). Reordering inputs,
    re-evaluating on the next candle or a later structure joining the price changes
    nothing.
 
