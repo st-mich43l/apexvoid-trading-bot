@@ -12,6 +12,17 @@ dated section after deployment.
 
 ## Unreleased
 
+### Added
+- Confluence Zone v3, part A: the structural confluence engine (`analysis-engine/internal/structuralconfluence`,
+  `docs/strategies/confluence-zone-v3-technical-spec.md`). A pure library, **not yet wired into any strategy, so
+  no live behaviour changes**: it derives a provenance-carrying fact (displacement leg, structure break, gap,
+  inversion) and a closed-candle availability time for every supply/demand, order-block, FVG and iFVG instance;
+  groups facts that are one underlying event (transitively); and finds, by an exact interval sweep, the regions
+  every price of which is supported by at least `minimum_facts` independent groups at a given instant, with a
+  stable episode identity that does not depend on input order. `techniquezone.provenance.go` exposes the
+  matching rules of the zone chain's own constructors. New committed real capture
+  `replay-xau-production-capture-20261013.json`.
+
 ### Changed
 - XAU now executes `ifvg` (v3) and `session_level` (v4): both names are removed from
   `instruments.XAU.overrides.execution.go_opportunity.observe_only_strategies` (owner's decision, 13 Oct 2026;
