@@ -54,6 +54,18 @@ re-run each constructor's own rule, so a derivation that the chain could not hav
 
 A reaction whose touch candle opens at time *t* may use only facts with `AvailableAt <= t`.
 
+### Population: structures are facts, not "where price is now"
+
+The frozen publishers' instances (`LegacyFrame.Techniques`) are the structures *price is at this moment* (a zone drops
+out of the list the candle after price leaves it). That makes a structure vanish the candle after it rejected price and
+would let the supporting set of one episode change between two evaluations of the same confirmation. v3 reads
+`LegacyFrame.StructuralInstances` instead: the same supply/demand, order-block, FVG and iFVG instances with the
+retest-proximity test off (`TechniqueSettings.IgnoreProximity`, default false, set only by this source). A structure is
+still dropped when it is spent, invalidated, mis-sized or a filled FVG; whether price is *at* it is the reaction's
+business (the touch) and the entry's (`price_through_entry`, `entry_too_far`). Strategies that read `Techniques` are
+unaffected (`TestCertification` asserts the other strategies' candidates are byte-identical to master's on six real
+captures; `TestStructuresAreFactsIndependentOfWhereThePriceIsNow` shows the frozen instances are always a subset).
+
 ## 2. Independence
 
 Two labels are not two confirmations. Every fact carries **provenance atoms**, the identities of the underlying

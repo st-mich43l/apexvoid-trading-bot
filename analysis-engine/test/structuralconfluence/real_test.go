@@ -1,11 +1,13 @@
 package structuralconfluence_test
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
 
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structuralconfluence"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/techniquezone"
 )
 
 // These are the structures the production engine actually held on real XAU M5
@@ -215,4 +217,43 @@ func TestRealFactsAreCausalAtEveryBar(t *testing.T) {
 			t.Fatalf("%s changed when future candles were appended", f.ID)
 		}
 	}
+}
+
+func instanceKey(in techniquezone.Instance) string {
+	return fmt.Sprintf("%s|%s|%d|%.6f|%.6f", in.Technique, in.Side, in.OriginIndex, in.Low, in.High)
+}
+
+func TestStructuresAreFactsIndependentOfWhereThePriceIsNow(t *testing.T) {
+	// The frozen publishers' instances are only the structures price is at this
+	// moment; the structural instances are every structure that is not spent or
+	// invalidated. The first is always a subset of the second, and the second is
+	// strictly larger once price has moved away from a zone.
+	bars := loadM5(t, capture)
+	chainSettings := techniquezone.ProductionChainSettings()
+	proximal := techniquezone.ProductionTechniqueSettings()
+	anywhere := proximal
+	anywhere.IgnoreProximity = true
+	larger, checked := 0, 0
+	for _, stamp := range []string{"2026-10-05 14:15", "2026-10-06 03:20", "2026-10-09 13:10", "2026-10-09 17:25", "2026-10-12 17:40", "2026-10-13 01:15", "2026-10-13 02:00"} {
+		w := windowAt(t, bars, stamp)
+		near := techniquezone.TechniqueInstances(w, chainSettings, proximal)
+		all := techniquezone.TechniqueInstances(w, chainSettings, anywhere)
+		in := map[string]bool{}
+		for _, a := range all {
+			in[instanceKey(a)] = true
+		}
+		for _, n := range near {
+			if !in[instanceKey(n)] {
+				t.Fatalf("%s: %s is at the price now but missing from the structural instances", stamp, instanceKey(n))
+			}
+		}
+		if len(all) > len(near) {
+			larger++
+		}
+		checked++
+	}
+	if larger == 0 {
+		t.Fatal("price proximity never excluded a structure on seven real windows: the test exercises nothing")
+	}
+	t.Logf("%d of %d windows hold structures price is not at", larger, checked)
 }

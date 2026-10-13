@@ -23,7 +23,9 @@ dated section after deployment.
   only measured quality factors, sets the stop beyond the supporting structure and the reaction's adverse extreme and
   **refuses** (never tightens) one over the instrument's execution cap, and publishes no target unless real opposing
   liquidity with room exists. New required parameters in `config/analysis.yml`; `execution_stop_max_pips` is injected
-  per instrument. `Quality.Overall` keeps its scale (stars out of three) and no arbitration, risk, sizing, ladder,
+  per instrument. The strategy reads the zone chain's structures as facts independent of where price is now
+  (`LegacyFrame.StructuralInstances`, the same instances without the retest-proximity test; the frozen publishers'
+  `Techniques` are unchanged). `Quality.Overall` keeps its scale (stars out of three) and no arbitration, risk, sizing, ladder,
   exposure or enablement setting changes. Opportunity IDs change with the version. **Not deployed.**
 
 ### Added

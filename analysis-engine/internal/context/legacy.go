@@ -61,7 +61,14 @@ type LegacyFrame struct {
 	// execution timeframe's frame yields all of them; every other frame yields
 	// only its own supply/demand instances (frame-relative OriginIndex), which a
 	// strategy may bind to the execution frame. Computed on first use.
-	Techniques                             func() []techniquezone.Instance
+	Techniques func() []techniquezone.Instance
+	// StructuralInstances lazily yields the same execution-frame supply/demand,
+	// order-block, FVG and iFVG instances without the retest-proximity test: every
+	// structure that is not spent or invalidated, wherever price is now. A structure
+	// is a fact independent of the current candle; whether price is at it is the
+	// reaction's business. Nil when the frame has none; strategies that read
+	// Techniques are unaffected by it.
+	StructuralInstances                    func() []techniquezone.Instance
 	Range                                  *fib.DealingRange
 	FibLadder                              []fib.Level
 	Regime                                 regime.State
