@@ -97,6 +97,8 @@ func TestNearestValidOpposingLiquidityIsTheTarget(t *testing.T) {
 		for _, l := range c.levels {
 			in.Pools = append(in.Pools, buyPool(l))
 		}
+		// The member swings are recent (candle 28), so the earlier range does not sweep them.
+		in.Swings = poolSwingsAt(28, in.Pools)
 		if got := only(t, Detect(cfg, in)).Target; !near(got, c.want) {
 			t.Fatalf("levels %v: target %v, want %v", c.levels, got, c.want)
 		}
@@ -121,6 +123,7 @@ func TestSupplyIsTheExactMirrorOfDemand(t *testing.T) {
 	}
 	in := input(bars, facts)
 	in.Pools = append(in.Pools, poolSell(mirror(4125)))
+	in.Swings = poolSwings(in.Pools)
 	sell := only(t, Detect(cfg, in))
 	if sell.Direction != market.Sell || sell.Reaction.Pattern != buy.Reaction.Pattern {
 		t.Fatalf("%s %s", sell.Direction, sell.Reaction.Pattern)

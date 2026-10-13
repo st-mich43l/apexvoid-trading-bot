@@ -55,18 +55,22 @@ page is the summary.
    union, never zero-width, and not required to be one common intersection of every
    fact. A is 4100-4105, B is 4103-4108: the region is 4103-4105; a reaction at 4101 is
    not a reaction at the overlap.
-4. **Causality.** The region is evaluated as of the touch candle's open: a structure
-   created by the reacting candle, or later, cannot support it.
+4. **Causality.** The region is evaluated as of the touch candle's open, on the structures
+   as they stood before that candle (not spent, invalidated or filled by it): a structure
+   created by the reacting candle, or later, cannot support it, and one the reacting
+   candle swept is still the structure it was.
 5. **Reaction.** A touch and a confirming candle inside a three-candle window, measured
    from the candle (rejecting wick, close location, sweep depth, displacement), not from
    its colour; refused if price was accepted through the region, if the reaction failed
    afterwards, or if price has run through or away from the entry.
 6. **Quality.** Every factor is a measurement; an unavailable one is omitted.
-7. **Stop.** Beyond the whole supporting structure *and* the reaction's own adverse
-   extreme, plus a buffer; refused (never tightened) beyond the instrument's execution
-   cap.
-8. **Target.** The nearest unswept opposing liquidity with room; none is invented, a
-   defended opposing confluence nearer than the required room blocks the trade.
+7. **Stop.** Beyond the whole supporting structures' full extent *and* the reaction's own
+   adverse extreme, plus a buffer; refused (never tightened) beyond the instrument's
+   execution cap; a stop a later wick already traded to is never published.
+8. **Target.** The nearest unswept opposing liquidity with room (a pool price has already
+   traded beyond is not a target); none is invented, a defended opposing confluence nearer
+   than the required room blocks the trade, and reward:risk is judged against the stop the
+   execution layer will use.
 9. **Identity.** The thesis is the confluence episode (side + supporting facts as of the
    touch); the opportunity is the episode and the confirmation time. Reordering inputs,
    re-evaluating on the next candle or a later structure joining the price changes

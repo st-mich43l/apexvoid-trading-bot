@@ -7,6 +7,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/reaction"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structuralconfluence"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/techniquezone"
 )
 
 const (
@@ -81,7 +82,7 @@ func Detect(cfg Config, in Input) Analysis {
 			if r, ok := regionsAt[ti]; ok {
 				return r
 			}
-			r, _ := structuralconfluence.Find(in.Facts, run.side, in.Bars[ti].Time, params)
+			r, _ := structuralconfluence.Find(in.factsAt(ti), run.side, in.Bars[ti].Time, params)
 			regionsAt[ti] = r
 			return r
 		}
@@ -115,7 +116,7 @@ func Detect(cfg Config, in Input) Analysis {
 					if accepted[r.EpisodeID+"|"+itoa(int64(ci))] {
 						continue
 					}
-					setup, reason := v.evaluate(cfg, run.direction, r, in, ti, ci)
+					setup, reason := v.evaluate(cfg, run.direction, r, in, in.factsAt(ti), ti, ci)
 					if reason != "" {
 						note(r, reason, ti, ci)
 						continue
@@ -197,7 +198,7 @@ func newView(sell bool, in Input, opposing []structuralconfluence.Region) *view 
 		want = "sell"
 	}
 	for _, p := range in.Pools {
-		if p.Side == want {
+		if p.Side == want && unswept(p, in) {
 			v.targets = append(v.targets, v.p(p.Level))
 		}
 	}
@@ -211,6 +212,36 @@ func newView(sell bool, in Input, opposing []structuralconfluence.Region) *view 
 	}
 	v.price = v.bars[len(v.bars)-1].Close
 	return v
+}
+
+// poolMemberTolerance is how many pool bands a member swing may sit from the
+// pool's level (a cluster averages swings within a few bands of one another).
+const poolMemberTolerance = 3.0
+
+// unswept reports whether the pool still holds its liquidity: no candle after its
+// latest member swing has traded beyond it. A pool whose member swings cannot be
+// found among the frame's swings cannot be shown to be unswept and is not a target.
+func unswept(p techniquezone.Pool, in Input) bool {
+	kind := "high"
+	if p.Side == "sell" {
+		kind = "low"
+	}
+	latest := -1
+	tolerance := math.Max(poolMemberTolerance*p.Band, epsilon)
+	for _, sw := range in.Swings {
+		if sw.Kind == kind && math.Abs(sw.Price-p.Level) <= tolerance && sw.Index > latest {
+			latest = sw.Index
+		}
+	}
+	if latest < 0 {
+		return false
+	}
+	for k := latest + 1; k < len(in.Bars); k++ {
+		if p.Side == "buy" && in.Bars[k].High > p.Level+p.Band || p.Side == "sell" && in.Bars[k].Low < p.Level-p.Band {
+			return false
+		}
+	}
+	return true
 }
 
 func (v *view) p(price float64) float64 {
@@ -229,13 +260,16 @@ func (v *view) candle(c market.Candle) market.Candle {
 }
 
 // supportFar is the far edge of the supporting structures in view coordinates:
-// the lowest low for a long, the (negated) highest high for a short.
+// the lowest low for a long, the (negated) highest high for a short, of their
+// STRUCTURAL bounds. The entry is the overlap of their tradable slices, but what
+// invalidates the thesis is the structure itself failing: a stop inside a zone
+// that is still valid would be a stop inside the structure it claims to protect.
 func (v *view) supportFar(support []structuralconfluence.Fact) float64 {
 	far := math.Inf(1)
 	for _, f := range support {
-		edge := f.Low
+		edge := f.StructuralLow
 		if v.sell {
-			edge = -f.High
+			edge = -f.StructuralHigh
 		}
 		far = math.Min(far, edge)
 	}
@@ -267,11 +301,11 @@ func supportFacts(facts []structuralconfluence.Fact, ids []string) []structuralc
 
 // evaluate decides one (region, touch, confirmation) in view coordinates and
 // returns either a setup (in real prices) or the reason it is not one.
-func (v *view) evaluate(cfg Config, direction market.Direction, r structuralconfluence.Region, in Input, ti, ci int) (Setup, string) {
+func (v *view) evaluate(cfg Config, direction market.Direction, r structuralconfluence.Region, in Input, facts []structuralconfluence.Fact, ti, ci int) (Setup, string) {
 	atr, pip := in.ATR, cfg.PipSize
 	lo, hi := v.region(r)
 	last := len(v.bars) - 1
-	support := supportFacts(in.Facts, r.Support)
+	support := supportFacts(facts, r.Support)
 	far := v.supportFar(support)
 
 	// Price must not have been accepted below the region between the touch and
@@ -296,6 +330,13 @@ func (v *view) evaluate(cfg Config, direction market.Direction, r structuralconf
 	geo, reason := v.geometry(cfg, lo, hi, far, rx.Adverse, ti, last, atr, pip)
 	if reason != "" {
 		return Setup{}, reason
+	}
+	// The stop must still stand: a candle after the confirmation that traded to it has
+	// already invalidated the thesis, whatever it closed at.
+	for k := ci + 1; k <= last; k++ {
+		if v.bars[k].Low <= geo.stop+epsilon {
+			return Setup{}, ReasonFailedAfter
+		}
 	}
 	// Entry validity: price has neither run through the entry band nor away from it.
 	if v.price < geo.entryLow-epsilon {
@@ -373,13 +414,16 @@ func (v *view) geometry(cfg Config, lo, hi, far, adverse float64, ti, last int, 
 	}
 	g.target = nearest
 	g.reward = g.target - ref
-	if g.reward/g.risk < cfg.MinimumRewardRisk-1e-12 {
+	// The execution layer widens a stop tighter than the instrument's floor, so the
+	// reward:risk the trade really has is measured against that stop.
+	effective := math.Max(g.risk, cfg.ExecutionStopMinPips*pip)
+	if g.reward/effective < cfg.MinimumRewardRisk-1e-12 {
 		return g, ReasonRewardRisk
 	}
 	// A confluence defended the other way, closer than the room the trade needs,
 	// blocks it.
 	for _, edge := range v.blockers {
-		if edge > ref && edge < g.target && edge-ref < cfg.MinimumRewardRisk*g.risk {
+		if edge > ref && edge < g.target && edge-ref < cfg.MinimumRewardRisk*effective {
 			return g, ReasonBlockedByStructure
 		}
 	}
@@ -404,7 +448,7 @@ func (r reactionView) real(v *view) Reaction {
 //     sweep minimum and the candle closes back inside (or above) the region by
 //     the reclaim minimum;
 //   - wick_rejection: the wick reaches the region without sweeping its far edge,
-//     and the candle closes away from the region;
+//     and the candle closes in the upper half of the region or above it;
 //   - strong_reclaim: a displacement candle (a strong bullish body of real range)
 //     closes through the region.
 //
@@ -430,10 +474,13 @@ func (v *view) measure(cfg Config, ti, ci int, lo, hi, atr float64) (reactionVie
 	sweepMin := math.Max(cfg.MinimumSweepPips*pip, cfg.MinimumSweepATR*atr)
 	wickOK := rx.WickRatio >= cfg.RejectionWickRatio-epsilon
 	closeOK := rx.CloseStrength >= cfg.RejectionCloseStrength-epsilon
+	// A rejection needs a candle with real range: a doji inside the region shows
+	// nothing, whatever its proportions.
+	bigEnough := rx.RangeATR >= cfg.MinimumRejectionRangeATR-epsilon
 	switch {
-	case c.Low <= lo-sweepMin+epsilon && wickOK && closeOK && c.Close >= lo+cfg.MinimumReclaimATR*atr-epsilon:
+	case c.Low <= lo-sweepMin+epsilon && wickOK && closeOK && bigEnough && c.Close >= lo+cfg.MinimumReclaimATR*atr-epsilon:
 		rx.Pattern = reaction.TypeSweepReclaim
-	case c.Low > lo-sweepMin+epsilon && c.Low <= hi+epsilon && wickOK && closeOK && c.Close >= lo-epsilon:
+	case c.Low > lo-sweepMin+epsilon && c.Low <= hi+epsilon && wickOK && closeOK && bigEnough && c.Close >= (lo+hi)/2-epsilon:
 		rx.Pattern = reaction.TypeWickRejection
 	case c.Close > c.Open && rx.BodyRatio >= cfg.DisplacementBodyRatio-epsilon && rx.RangeATR >= cfg.DisplacementRangeATR-epsilon && closeOK && c.Close > hi+epsilon:
 		rx.Pattern = reaction.TypeStrongReclaim

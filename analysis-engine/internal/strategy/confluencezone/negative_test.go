@@ -230,11 +230,17 @@ func TestStopBeyondTheExecutionEnvelopeIsRefusedNeverTightened(t *testing.T) {
 func TestTargetRoom(t *testing.T) {
 	cfg := testConfig(t, nil)
 	rejects(t, "no pool", Detect(cfg, input(rejection(), twoDemand())), ReasonNoLiquidity)
-	rejects(t, "only a pool too close", Detect(cfg, input(rejection(), twoDemand(), buyPool(4107))), ReasonInsufficientRoom)
+	recent := input(rejection(), twoDemand(), buyPool(4107))
+	recent.Swings = poolSwingsAt(28, recent.Pools)
+	rejects(t, "only a pool too close", Detect(cfg, recent), ReasonInsufficientRoom)
 	// 4110 is one ATR away but only 5 against 7.5 risk: 0.67 R.
-	rejects(t, "reward risk", Detect(cfg, input(rejection(), twoDemand(), buyPool(4110))), ReasonRewardRisk)
+	low := input(rejection(), twoDemand(), buyPool(4110))
+	low.Swings = poolSwingsAt(28, low.Pools)
+	rejects(t, "reward risk", Detect(cfg, low), ReasonRewardRisk)
 	// A pool the price has already traded through since the touch is spent.
-	rejects(t, "already swept", Detect(cfg, input(rejection(), twoDemand(), buyPool(4105.9))), ReasonNoLiquidity)
+	swept := input(rejection(), twoDemand(), buyPool(4105.9))
+	swept.Swings = poolSwingsAt(28, swept.Pools)
+	rejects(t, "already swept by the reaction", Detect(cfg, swept), ReasonNoLiquidity)
 }
 
 func TestTargetBlockedByAnOpposingConfluence(t *testing.T) {
@@ -299,3 +305,54 @@ func TestPriceHasRunThroughOrAwayFromTheEntry(t *testing.T) {
 }
 
 func nan() float64 { var z float64; return z / z }
+
+// Cases an independent review found (docs/strategies/confluence-zone-v3-certification.md).
+
+func TestAStopAlreadyTradedThroughByAWickIsNeverPublished(t *testing.T) {
+	// The confirming candle is 28 (stop 4097.5); candle 29 wicks to 4090 and closes back at 4104.8.
+	bars := approach()
+	bars[28] = bar(28, 4104.5, 4106, 4102, 4105.5)
+	bars[29] = bar(29, 4104, 4106, 4090, 4104.8)
+	rejects(t, "stop traded through", Detect(testConfig(t, nil), input(bars, twoDemand(), buyPool(4125))), ReasonFailedAfter)
+}
+
+func TestTheStopIsBeyondTheStructureNotJustItsTradableSlice(t *testing.T) {
+	// A is a wide zone 4090-4105 whose tradable slice is 4100-4105; B overlaps its slice.
+	a := fact("A", structuralconfluence.Buy, 4100, 4105, factsReady, "a")
+	a.StructuralLow, a.StructuralHigh = 4090, 4105
+	facts := []structuralconfluence.Fact{a, fact("B", structuralconfluence.Buy, 4103, 4108, factsReady, "b")}
+	s := only(t, Detect(testConfig(t, nil), input(rejection(), facts, buyPool(4130))))
+	if !near(s.ProtectedFar, 4090) || !near(s.Stop, 4090-2.5) {
+		t.Fatalf("far %v stop %v: the stop must be beyond the structure's own far edge", s.ProtectedFar, s.Stop)
+	}
+	// And a structure that wide is refused when its honest stop is over the cap.
+	refused := Detect(testConfig(t, map[string]any{"execution_stop_max_pips": 100.0}), input(rejection(), facts, buyPool(4130)))
+	rejects(t, "structure beyond the cap", refused, ReasonRiskEnvelope)
+}
+
+func TestAPoolThePriceHasAlreadyTradedBeyondIsNotATarget(t *testing.T) {
+	// 4108 had member swing on candle 0 and candles 1-26 traded to 4110.5: swept.
+	rejects(t, "swept pool", Detect(testConfig(t, nil), input(rejection(), twoDemand(), buyPool(4108))), ReasonNoLiquidity)
+	// A pool no member swing can be found for cannot be shown unswept.
+	unverifiable := input(rejection(), twoDemand(), buyPool(4125))
+	unverifiable.Swings = nil
+	rejects(t, "no member swing", Detect(testConfig(t, nil), unverifiable), ReasonNoLiquidity)
+}
+
+func TestARejectionNeedsARealCandleThatClosesAwayFromTheRegion(t *testing.T) {
+	cfg := testConfig(t, nil)
+	// A doji wholly inside the region with textbook proportions: 0.04 ATR of range.
+	micro := withLast(4104.0, 4104.1, 4103.9, 4104.09)
+	rejects(t, "micro candle", Detect(cfg, input(micro, twoDemand(), buyPool(4125))), ReasonNoConfirmation)
+	// A real candle that closes in the lower half of the region.
+	inside := withLast(4104.2, 4104.4, 4102.95, 4103.9)
+	rejects(t, "closes inside the lower half", Detect(cfg, input(inside, twoDemand(), buyPool(4125))), ReasonNoConfirmation)
+}
+
+func TestRewardRiskIsMeasuredAgainstTheStopTheExecutionLayerWillUse(t *testing.T) {
+	// Honest risk is 75 pips; the execution layer floors a stop at 200 pips, which
+	// leaves 20 against 20: 1.0 R, under the 1.15 minimum.
+	floored := Detect(testConfig(t, map[string]any{"execution_stop_min_pips": 200.0}), input(rejection(), twoDemand(), buyPool(4125)))
+	rejects(t, "floored risk", floored, ReasonRewardRisk)
+	only(t, Detect(testConfig(t, map[string]any{"execution_stop_min_pips": 50.0}), input(rejection(), twoDemand(), buyPool(4125))))
+}

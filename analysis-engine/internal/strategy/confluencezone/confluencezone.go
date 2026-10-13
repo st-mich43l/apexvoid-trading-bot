@@ -91,21 +91,37 @@ func (s *Strategy) Analyze(ctx *analysiscontext.MarketContext) (Analysis, []oppo
 		return Analysis{}, nil
 	}
 	frame := d.Frame
-	// The structures are read as facts independent of the current candle: every
-	// instance that is not spent or invalidated, wherever price is now. (The frozen
-	// publishers' Techniques also require price to be at the zone this moment, which
-	// would make a structure vanish the candle after it rejected price.)
-	instances := frame.StructuralInstances
-	if instances == nil {
-		instances = frame.Techniques
-	}
-	if instances == nil {
+	// The structures are read as facts independent of the current candle and of where
+	// price is now: every instance not spent, invalidated, mis-sized or filled, judged
+	// on the candles before the one a reaction touched (StructuralInstancesAsOf). A
+	// structure the reacting candle swept, filled or closed through is therefore still
+	// the structure it was, and the supporting set of one confirmation cannot change
+	// between two evaluations. (The frozen publishers' Techniques also require price
+	// to be at the zone this moment, and are judged on the present.)
+	var factsAt func(asOf int) []structuralconfluence.Fact
+	chainFrame := structuralconfluence.Frame{Bars: frame.Bars, Legs: frame.Legs, Breaks: frame.Breaks, Swings: frame.Swings, PeriodSeconds: periodSeconds}
+	switch {
+	case frame.StructuralInstancesAsOf != nil:
+		cache := map[int][]structuralconfluence.Fact{}
+		factsAt = func(asOf int) []structuralconfluence.Fact {
+			if got, ok := cache[asOf]; ok {
+				return got
+			}
+			got := structuralconfluence.DeriveFacts(chainFrame, frame.StructuralInstancesAsOf(asOf))
+			cache[asOf] = got
+			return got
+		}
+	case frame.Techniques != nil:
+		present := structuralconfluence.DeriveFacts(chainFrame, frame.Techniques())
+		factsAt = func(int) []structuralconfluence.Fact { return present }
+	default:
 		return Analysis{}, nil
 	}
-	facts := structuralconfluence.DeriveFacts(structuralconfluence.Frame{
-		Bars: frame.Bars, Legs: frame.Legs, Breaks: frame.Breaks, Swings: frame.Swings, PeriodSeconds: periodSeconds,
-	}, instances())
-	analysis := Detect(s.cfg, Input{Bars: frame.Bars, ATR: d.ATR, PeriodSeconds: periodSeconds, Facts: facts, Pools: frame.Pools})
+	now := factsAt(len(frame.Bars))
+	analysis := Detect(s.cfg, Input{
+		Bars: frame.Bars, ATR: d.ATR, PeriodSeconds: periodSeconds, Facts: now, Pools: frame.Pools, Swings: frame.Swings,
+		FactsAt: factsAt,
+	})
 
 	var candidates []opportunity.Candidate
 	for _, resting := range analysis.Resting {

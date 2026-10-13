@@ -54,22 +54,24 @@ re-run each constructor's own rule, so a derivation that the chain could not hav
 
 A reaction whose touch candle opens at time *t* may use only facts with `AvailableAt <= t`.
 
-### Population: structures are facts, not "where price is now"
+### Population: structures are facts, as they stood before the touch
 
-The frozen publishers' instances (`LegacyFrame.Techniques`) are the structures *price is at this moment* (a zone drops
-out of the list the candle after price leaves it). That makes a structure vanish the candle after it rejected price and
-would let the supporting set of one episode change between two evaluations of the same confirmation. v3 reads
-`LegacyFrame.StructuralInstances` instead: the same supply/demand, order-block, FVG and iFVG instances with the
-retest-proximity test off (`TechniqueSettings.IgnoreProximity`, default false, set only by this source). A structure is
-still dropped when it is spent, invalidated, mis-sized or a filled FVG; whether price is *at* it is the reaction's
-business (the touch) and the entry's (`price_through_entry`, `entry_too_far`). Strategies that read `Techniques` are
-unaffected (`TestCertification` asserts the other strategies' candidates are byte-identical to master's on six real
-captures; `TestStructuresAreFactsIndependentOfWhereThePriceIsNow` shows the frozen instances are always a subset).
+The frozen publishers' instances (`LegacyFrame.Techniques`) are the structures *price is at this moment*, judged on the
+present: a zone drops out the candle after price leaves it, an FVG the reacting candle swept is "filled" and gone, and the
+supporting set of one confirmation changes between two evaluations. v3 reads
+`LegacyFrame.StructuralInstancesAsOf(i)` instead: the same supply/demand, order-block, FVG and iFVG instances with the
+retest-proximity test off (`TechniqueSettings.IgnoreProximity`, default false, set only by this source), judged **on the
+candles before candle `i`** (`techniquezone.InstancesFromScoredZonesAsOf`: only zones anchored before `i`, mitigation
+re-counted on the prefix, spent / invalidated / mis-sized / filled tested on the prefix). A reaction touching candle `i`
+therefore uses exactly the structures that existed, intact, when it opened, whatever that candle or any later one did to
+them, and the same confirmation yields the same facts, episode, entry and stop on every later evaluation. Whether price is
+*at* a structure is the reaction's business (the touch) and the entry's (`price_through_entry`, `entry_too_far`).
+Strategies that read `Techniques` are unaffected (`TestCertification` asserts the other strategies' candidates are
+byte-identical to master's on six real captures).
 
 ## 2. Independence
 
-Two labels are not two confirmations. Every fact carries **provenance atoms**, the identities of the underlying
-events it derives from:
+Two labels are not two confirmations. Every fact carries **provenance atoms**, the identities of the underlying events and source candles it derives from:
 
 | Atom | Meaning |
 |---|---|
@@ -77,13 +79,19 @@ events it derives from:
 | `break:<dir>:<openTime>` | a structure break |
 | `gap:<olderBarOpenTime>` | one three-candle FVG episode |
 | `inversion:<openTime>` | one inversion episode |
+| `candle:<openTime>` | one source candle |
 
 | Source | Atoms |
 |---|---|
-| supply/demand | its leg |
-| order block | its leg, its break |
-| FVG | its gap; the leg that contains the gap's middle candle, if any |
-| iFVG | its parent gap and that gap's leg; its inversion; the leg that contains the inversion candle |
+| supply/demand | its leg and every candle it was cut from: the three before the leg and the leg's own candles |
+| order block | its leg, its break, its origin candle and the leg's candles |
+| FVG | its gap, its three candles, and the leg that contains the gap's middle candle, if any |
+| iFVG | its parent gap and the gap's three candles and leg; its inversion and its inversion candle; the leg that contains the inversion candle |
+
+The candle atoms close a gap the first version had: a structure can share a *candle* with another without a qualified
+displacement leg linking them. An FVG whose middle candle is the very candle that inverts a gap into an iFVG (one impulse,
+two labels), an FVG cut from the three candles of a supply/demand base, and a second zone whose base is the first zone's
+leg were each counted as two sources until an independent review reproduced them on real bars.
 
 Facts that share any atom are **one source**. Dependence is transitive (A and C share *x*, C and B share *y*:
 A, B, C are one event), computed by union-find, so an intermediate parent cannot hide it. A supply/demand zone
@@ -115,6 +123,10 @@ between consecutive bounds, collects the facts covering all of it, counts their 
 contiguous qualifying intervals: O(n² log n) for n facts, deterministic, no subset enumeration. Each segment keeps
 its own supporting facts, so a region can be supported by a different subset in each part (`Region.Segments`).
 
+A region can therefore be wider than any pairwise overlap (a zone tiled from below by one structure and from above by
+another, each overlapping a third): that is intended. Every price of it is supported by at least `minimum_facts`
+independent sources; it is the *supported area*, not "the intersection of two particular structures".
+
 Rejections are returned with a reason: `single_independent_origin` (overlapping facts, fewer than the required
 groups), `overlap_too_narrow` (a supported region not wider than `minimum_width`),
 `provenance_unverified`, `structure_not_yet_available`.
@@ -145,7 +157,10 @@ of a BUY by construction and a randomized test proves it. For a long, region `[l
 | Pattern | Measured conditions |
 |---|---|
 | `sweep_reclaim` | `sweep_depth >= max(minimum_sweep_pips x pip, minimum_sweep_atr x ATR)`, `wick_ratio >= rejection_wick_ratio`, `close_strength >= rejection_close_strength`, `C >= lo + minimum_reclaim_atr x ATR` |
-| `wick_rejection` | no sweep of that depth, the wick reaches the region (`L <= hi`), `wick_ratio` and `close_strength` as above, `C >= lo` |
+
+The first two also need `range >= minimum_rejection_range_atr x ATR`: a doji inside a region shows nothing, whatever its
+proportions.
+| `wick_rejection` | no sweep of that depth, the wick reaches the region (`L <= hi`), `wick_ratio` and `close_strength` as above, and the close in the upper half of the region or above it (`C >= (lo + hi) / 2`) |
 | `strong_reclaim` | a bullish body, `body_ratio >= displacement_body_ratio`, `range >= displacement_range_atr x ATR`, `close_strength` as above, `C > hi` (the candle closes through the region) |
 
 The colour of the body is **not** part of the first two tests, only where the candle rejected and where it closed:
@@ -157,8 +172,9 @@ body, not the region's boundary.
 A reaction is **refused** when:
 
 - price closed below the region between the touch and the confirming candle (`price_accepted_through_region`);
-- any later closed candle closes beyond the extreme the reaction itself traded to (`reaction_failed_after_confirmation`),
-  so a rejection that has already failed is never published or filled;
+- any later closed candle closes beyond the extreme the reaction itself traded to, or trades to the stop
+  (`reaction_failed_after_confirmation`), so a rejection that has already failed, or a stop already hit by a wick, is never
+  published or filled;
 - the entry is no longer valid: price has closed below the entry band (`price_through_entry`) or has run more than
   `maximum_entry_atr` ATR above it (`entry_too_far`).
 
@@ -203,7 +219,7 @@ when wider. The stop is
     long :  min(protected_far_edge, adverse_reaction_extreme) - max(pip, invalidation_buffer_atr x ATR)
     short:  max(protected_far_edge, adverse_reaction_extreme) + max(pip, invalidation_buffer_atr x ATR)
 
-where the *protected far edge* is the lowest low (highest high) among the structures that support the region and the
+where the *protected far edge* is the lowest **structural** low (highest structural high) among the structures that support the region (not just the tradable slice the entry overlaps: a stop inside a zone that is still valid would sit inside the structure it claims to protect) and the
 *adverse reaction extreme* is the lowest low (highest high) the reaction traded to between the touch and the
 confirming candle. The entry (confluence) and the stop (invalidation) deliberately do not share boundaries: the
 region may be narrower than the structures that make it, and the structure, not the region, is what failing
@@ -213,12 +229,15 @@ randomized test checks it on every published setup).
 The instrument's execution stop cap (`instruments.<symbol>.stop_envelope.max_pips`, injected as
 `execution_stop_max_pips`) is a gate, not a target: risk is measured from the proximal edge of the entry band to the
 stop, and a setup over the cap is **refused** (`stop_exceeds_execution_envelope`). The stop is never clamped into
-the wick and the envelope, the volume and the ladder are untouched.
+the wick and the envelope, the volume and the ladder are untouched. The instrument's floor (`execution_stop_min_pips`) is
+used only to judge reward:risk: the execution layer widens a tighter stop to it, so the trade's reward:risk is measured
+against that stop, not the technical one.
 
 ## 7. Target
 
 The target is the nearest **unswept** opposing liquidity pool strictly beyond everything price has traded since the
-touch and at least `minimum_target_distance_atr` from the entry. There is no fallback: v2 invented
+touch (a pool is unswept only if no candle after its latest member swing has traded beyond it; one whose member swings
+cannot be found cannot be shown unswept and is not a target) and at least `minimum_target_distance_atr` from the entry. There is no fallback: v2 invented
 `fixed_reward_risk` (entry + 2 x risk) when no pool qualified and labelled the result as opposing liquidity; v3
 publishes nothing instead (`no_opposing_liquidity`, `insufficient_target_room`). Further tests:
 
@@ -261,6 +280,7 @@ and part C shows how the result moves when they change.
 | `minimum_reclaim_atr` | 0.0 | the close must be at least this far back inside after a sweep |
 | `rejection_wick_ratio`, `rejection_close_strength` | 0.25, 0.6 | the rejecting wick and where the candle closes |
 | `displacement_body_ratio`, `displacement_range_atr`, `displacement_grade_atr` | 0.6, 0.5, 1.0 | the displacement rejection and the displacement factor |
+| `minimum_rejection_range_atr` | 0.25 | the smallest candle, in ATR, that can show a rejection |
 | `invalidation_buffer_atr` | 0.5 | unchanged from v2 |
 | `minimum_target_distance_atr`, `minimum_reward_risk` | 1.0, 1.15 | target room (the reward:risk is iFVG v3's) |
 | `expiry_hours` | 12 | unchanged from v2 |
@@ -283,7 +303,7 @@ The shared detector leaves (`maximum_entry_atr`, the confluence floor and star r
 - `test/structuralconfluence`: the same on real XAU bars (the 13 Oct 2026 production capture), reproducing the
   facts of the v2 trades: 12 Oct (supply/demand + order block: one leg), 13 Oct (FVG + iFVG: one down leg),
   9 Oct 17:10 (the demand zone is created by the very candle that reacted), 5 Oct 14:05 (the iFVG is born on the
-  rejection candle) and 9 Oct 13:10 (three separate origins; the supported region is narrower than the union).
+  rejection candle) and 9 Oct 13:10 (two sources, the FVG and the iFVG being one impulse candle; the supported region is narrower than the union).
   Plus that extra warm-up history and appended future candles do not change a fact.
 
 - `internal/strategy/confluencezone`: positive fixtures (two independent demand structures, the exact SELL mirror,
@@ -305,3 +325,16 @@ The shared detector leaves (`maximum_entry_atr`, the confluence floor and star r
   configuration fails closed).
 
 Part C adds the replay certification.
+
+## 11. Known limits
+
+- iFVG facts carry no zone-chain score and no touch count (the chain does not score an inverted gap), so those two quality
+  inputs are constant for them; the region score is the best *scored* supporting structure plus the independence bump.
+- A liquidity pool carries no formation index; its member swings are recovered from the frame's swings (within three pool
+  bands of its level), and a pool whose members cannot be found is not a target.
+- The zone chain's structure code is the frozen one: its swings and breaks are decided on the whole window, not
+  causally. v3 does not trust it: an order block is confirmable only when the swing its break closed beyond is a confirmed
+  fractal swing, and a supply/demand zone only when its leg is complete.
+- Stars and the zone score come from the chain's multi-factor scoring at the evaluated candle (they are known when the
+  decision is made), not as of the touch.
+- CRT instances embed their own reaction and never count as facts.

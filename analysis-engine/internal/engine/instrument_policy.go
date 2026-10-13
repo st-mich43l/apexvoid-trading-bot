@@ -159,7 +159,8 @@ func applyIFVGGeometry(settings *Settings) {
 }
 
 // applyConfluenceZoneGeometry gives Confluence Zone v3 the resolved instrument stop
-// cap, so a stop beyond the supporting structures and the reaction's own extreme
+// cap and floor (the execution layer widens a stop tighter than the floor, so
+// reward:risk is judged against that stop), so a stop beyond the supporting structures and the reaction's own extreme
 // that exceeds the execution envelope is refused by the detector (never tightened
 // into the structure or the wick). It is idempotent. Only a RESOLVED cap is
 // injected: before an instrument is applied the cap is zero, and zero must not
@@ -177,6 +178,9 @@ func applyConfluenceZoneGeometry(settings *Settings) {
 			params[k] = v
 		}
 		params["execution_stop_max_pips"] = settings.InstrumentStopMaxPips
+		if settings.InstrumentStopMinPips > 0 {
+			params["execution_stop_min_pips"] = settings.InstrumentStopMinPips
+		}
 		settings.Strategies[i].Parameters = params
 	}
 }

@@ -47,7 +47,7 @@ func scenario(r *rand.Rand) Input {
 		}
 		pools = append(pools, techniquezone.Pool{Side: side, Level: price - 40 + r.Float64()*80})
 	}
-	return Input{Bars: bars, ATR: 2 + r.Float64()*4, PeriodSeconds: 300, Facts: facts, Pools: pools}
+	return Input{Bars: bars, ATR: 2 + r.Float64()*4, PeriodSeconds: 300, Facts: facts, Pools: pools, Swings: poolSwingsAt(10+r.Intn(n-10), pools)}
 }
 
 func propertyConfig(t *testing.T) Config {
@@ -80,6 +80,16 @@ func TestEverySetupSatisfiesTheTechnicalContract(t *testing.T) {
 			}
 			if !(target > entryHigh) || s.RewardRisk < cfg.MinimumRewardRisk-1e-9 {
 				t.Fatalf("trial %d: target %v entry high %v rr %v", trial, target, entryHigh, s.RewardRisk)
+			}
+			// The target is a pool that no candle since its latest member swing has traded beyond.
+			backed := false
+			for _, p := range in.Pools {
+				if math.Abs(p.Level-s.Target) < 1e-9 && unswept(p, in) {
+					backed = true
+				}
+			}
+			if !backed {
+				t.Fatalf("trial %d: target %v is not an unswept pool", trial, s.Target)
 			}
 			if s.RiskPips > cfg.ExecutionStopMaxPips+1e-6 {
 				t.Fatalf("trial %d: risk %v pips over the cap", trial, s.RiskPips)
@@ -186,6 +196,11 @@ func TestExtraOlderHistoryDoesNotChangeTheDecision(t *testing.T) {
 		cut := 10
 		trimmed := in
 		trimmed.Bars = in.Bars[cut:]
+		trimmed.Swings = nil
+		for _, sw := range in.Swings {
+			sw.Index -= cut
+			trimmed.Swings = append(trimmed.Swings, sw)
+		}
 		short := Detect(cfg, trimmed)
 		// Compare what was decided about candles the shorter series contains.
 		var a, b []Setup
@@ -236,6 +251,17 @@ func TestBuyAndSellAreExactMirrorImagesOnRandomMarkets(t *testing.T) {
 			}
 			mir.Facts[i] = x
 		}
+		mir.Swings = make([]techniquezone.Swing, len(in.Swings))
+		for i, sw := range in.Swings {
+			x := sw
+			x.Price = m(sw.Price)
+			if sw.Kind == "high" {
+				x.Kind = "low"
+			} else {
+				x.Kind = "high"
+			}
+			mir.Swings[i] = x
+		}
 		mir.Pools = make([]techniquezone.Pool, len(in.Pools))
 		for i, p := range in.Pools {
 			x := p
@@ -251,13 +277,23 @@ func TestBuyAndSellAreExactMirrorImagesOnRandomMarkets(t *testing.T) {
 		if len(a.Setups) != len(b.Setups) {
 			t.Fatalf("trial %d: %d setups vs %d in the mirrored market", trial, len(a.Setups), len(b.Setups))
 		}
-		for i := range a.Setups {
-			x, y := a.Setups[i], b.Setups[i]
-			if x.Direction == y.Direction || x.Reaction.Pattern != y.Reaction.Pattern ||
+		// The two markets order ties by episode hash, which names the side: match each
+		// setup with its mirror by direction and confirmation instead of by position.
+		for _, x := range a.Setups {
+			var y *Setup
+			for k := range b.Setups {
+				if b.Setups[k].Direction != x.Direction && b.Setups[k].ConfirmTime == x.ConfirmTime && math.Abs(b.Setups[k].EntryLow-m(x.EntryHigh)) < 1e-6 {
+					y = &b.Setups[k]
+				}
+			}
+			if y == nil {
+				t.Fatalf("trial %d: no mirrored counterpart of %+v", trial, x)
+			}
+			if x.Reaction.Pattern != y.Reaction.Pattern ||
 				math.Abs(x.Stop-m(y.Stop)) > 1e-6 || math.Abs(x.Target-m(y.Target)) > 1e-6 ||
 				math.Abs(x.EntryLow-m(y.EntryHigh)) > 1e-6 || math.Abs(x.EntryHigh-m(y.EntryLow)) > 1e-6 ||
 				math.Abs(x.RiskPips-y.RiskPips) > 1e-6 || math.Abs(x.RewardRisk-y.RewardRisk) > 1e-6 {
-				t.Fatalf("trial %d: setup %d is not the mirror image: %+v vs %+v", trial, i, x, y)
+				t.Fatalf("trial %d: not the mirror image: %+v vs %+v", trial, x, *y)
 			}
 			compared++
 		}

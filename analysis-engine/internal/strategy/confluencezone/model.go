@@ -124,6 +124,23 @@ type Input struct {
 	Bars          []market.Candle
 	ATR           float64
 	PeriodSeconds int64
-	Facts         []structuralconfluence.Fact
-	Pools         []techniquezone.Pool
+	// Facts are the structures as of now (the evaluated candle), for the regions
+	// price is at and the opposing confluences.
+	Facts []structuralconfluence.Fact
+	// FactsAt, when set, yields the structures as they stood BEFORE the candle at
+	// the given index opened: what a reaction touching that candle could rely on.
+	// A structure the touch candle, or any later one, spent, filled or swept is
+	// therefore still the structure it was. When nil, Facts are used for every touch.
+	FactsAt func(index int) []structuralconfluence.Fact
+	Pools   []techniquezone.Pool
+	// Swings are the frame's confirmed swings: a liquidity pool is unswept only if
+	// no candle since its latest member swing has traded beyond it.
+	Swings []techniquezone.Swing
+}
+
+func (in Input) factsAt(index int) []structuralconfluence.Fact {
+	if in.FactsAt != nil {
+		return in.FactsAt(index)
+	}
+	return in.Facts
 }

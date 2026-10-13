@@ -19,7 +19,7 @@ func testParams(extra map[string]any) map[string]any {
 	params := map[string]any{
 		"minimum_facts": 2.0, "minimum_overlap_pips": 1.0, "minimum_overlap_atr": 0.05,
 		"reaction_lookback_bars": 3.0, "minimum_sweep_pips": 1.0, "minimum_sweep_atr": 0.05, "minimum_reclaim_atr": 0.0,
-		"rejection_wick_ratio": 0.25, "rejection_close_strength": 0.6, "displacement_body_ratio": 0.6,
+		"rejection_wick_ratio": 0.25, "rejection_close_strength": 0.6, "minimum_rejection_range_atr": 0.25, "displacement_body_ratio": 0.6,
 		"displacement_range_atr": 0.5, "displacement_grade_atr": 1.0, "invalidation_buffer_atr": 0.5,
 		"minimum_target_distance_atr": 1.0, "minimum_reward_risk": 1.15, "expiry_hours": 12.0,
 		"pip_size": 0.1, "maximum_entry_atr": 2.0, "fvg_entry_max_width_price": 5.0,
@@ -86,7 +86,24 @@ func twoDemand() []structuralconfluence.Fact {
 func buyPool(level float64) techniquezone.Pool { return techniquezone.Pool{Side: "buy", Level: level} }
 
 func input(bars []market.Candle, facts []structuralconfluence.Fact, pools ...techniquezone.Pool) Input {
-	return Input{Bars: bars, ATR: atrXAU, PeriodSeconds: 300, Facts: facts, Pools: pools}
+	return Input{Bars: bars, ATR: atrXAU, PeriodSeconds: 300, Facts: facts, Pools: pools, Swings: poolSwings(pools)}
+}
+
+// poolSwings gives every pool its member swing on the first candle, so a pool is
+// unswept exactly when no later candle has traded beyond it.
+func poolSwings(pools []techniquezone.Pool) []techniquezone.Swing { return poolSwingsAt(0, pools) }
+
+// poolSwingsAt puts every pool's member swing on the given candle.
+func poolSwingsAt(index int, pools []techniquezone.Pool) []techniquezone.Swing {
+	var out []techniquezone.Swing
+	for _, p := range pools {
+		kind := "high"
+		if p.Side == "sell" {
+			kind = "low"
+		}
+		out = append(out, techniquezone.Swing{Index: index, Kind: kind, Price: p.Level})
+	}
+	return out
 }
 
 func only(t *testing.T, a Analysis) Setup {

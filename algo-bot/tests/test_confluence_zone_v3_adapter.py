@@ -61,7 +61,10 @@ def test_a_reconfirmation_of_one_episode_is_one_thesis():
   first = copy.deepcopy(PAYLOAD)
   again = copy.deepcopy(PAYLOAD)
   again["id"] = "opp_" + "0" * 64  # a new opportunity id for a later confirmation of the same episode
-  again["technical_context"]["confirmation"]["confirmation_bar_time"] += 0
+  again["technical_context"]["confirmation"]["confirmation_bar_time"] += 300  # a later confirmation of the same episode
+  for key in ("created_at", "expires_at"):
+    again[key] += 300
+  again["technical_context"]["reference_time"] += 300
   assert _match(first).thesis_id == _match(again).thesis_id
   other = copy.deepcopy(PAYLOAD)
   other["id"] = "opp_" + "1" * 64

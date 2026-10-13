@@ -2,7 +2,9 @@ package structuralconfluence
 
 import (
 	"reflect"
+	"sort"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
@@ -36,8 +38,14 @@ func TestSupplyDemandIsAnchoredOnItsLeg(t *testing.T) {
 		t.Fatalf("facts %+v", facts)
 	}
 	f := facts[0]
-	if !reflect.DeepEqual(f.Atoms, []string{"leg:up:" + itoa(tm(10))}) {
-		t.Fatalf("atoms %v", f.Atoms)
+	// Its leg, and every candle it was cut from: the three before the leg and the leg.
+	wantAtoms := []string{"leg:up:" + itoa(tm(10))}
+	for i := 7; i <= 14; i++ {
+		wantAtoms = append(wantAtoms, "candle:"+itoa(tm(i)))
+	}
+	sort.Strings(wantAtoms)
+	if !reflect.DeepEqual(f.Atoms, wantAtoms) {
+		t.Fatalf("atoms %v, want %v", f.Atoms, wantAtoms)
 	}
 	// The zone is confirmable once the leg that created it is complete: the close
 	// of the leg's last candle.
@@ -131,8 +139,13 @@ func TestFVGInsideTheDisplacementIsTheSameEventAsItsLeg(t *testing.T) {
 	}
 	// The same gap with no displacement leg around it is its own source.
 	facts = DeriveFacts(frameOf(bars, nil, nil, nil), []techniquezone.Instance{fvg})
-	if len(facts) != 1 || !facts[0].Verified || len(facts[0].Atoms) != 1 {
+	if len(facts) != 1 || !facts[0].Verified {
 		t.Fatalf("%+v", facts)
+	}
+	for _, a := range facts[0].Atoms {
+		if strings.HasPrefix(a, "leg:") {
+			t.Fatalf("a gap in no displacement has no leg: %v", facts[0].Atoms)
+		}
 	}
 }
 
@@ -252,3 +265,66 @@ func TestDeriveFactsIsOrderIndependentAndDeduplicates(t *testing.T) {
 }
 
 func itoa(v int64) string { return strconv.FormatInt(v, 10) }
+
+// The three source-candle cases an independent review found: structures that share a
+// candle are one event even when no qualified displacement leg links them.
+
+func TestAnFVGAndAnIFVGSharingTheImpulseCandleAreOneSource(t *testing.T) {
+	// A bearish gap [100, 101] formed by candles 6-8 is inverted by candle 12 closing
+	// above it; candle 12 is also the middle candle of the bullish gap [101.2, 101.8]
+	// closed by candle 13. No qualified leg contains it: one impulse candle, two labels.
+	bars := plainBars(30)
+	bars[6].Low = 101.0
+	bars[8].High = 100.0
+	for _, i := range []int{9, 10, 11} {
+		bars[i].Close = 100.5
+	}
+	bars[11].High = 101.2
+	bars[12].Close, bars[12].High = 102, 102.4
+	bars[13].Low = 101.8
+	frame := frameOf(bars, nil, nil, nil)
+	ifvg := techniquezone.Instance{Technique: SourceIFVG, Side: Buy, Low: 100, High: 101, OriginIndex: 12}
+	fvg := techniquezone.Instance{Technique: SourceFVG, Side: Buy, Low: 101.2, High: 101.8, OriginIndex: 13}
+	facts := DeriveFacts(frame, []techniquezone.Instance{ifvg, fvg})
+	for _, f := range facts {
+		if !f.Verified {
+			t.Fatalf("%+v", f)
+		}
+	}
+	if IndependentCount(facts) != 1 {
+		t.Fatalf("one impulse candle that inverts a gap and forms another is one source: %+v", facts)
+	}
+}
+
+func TestAnFVGInsideASupplyDemandBaseIsOneSource(t *testing.T) {
+	bars := gapBars(2, 4, 100, 101) // a bullish gap of candles 2,3,4
+	// A supply/demand zone whose three base candles are 2,3,4 (leg starts at 5).
+	legs := []techniquezone.Leg{{Start: 5, End: 8, Direction: "up"}}
+	frame := frameOf(bars, legs, nil, nil)
+	fvg := techniquezone.Instance{Technique: SourceFVG, Side: Buy, Low: 100, High: 101, OriginIndex: 4}
+	sd := techniquezone.Instance{Technique: SourceSupplyDemand, Side: Buy, Low: 99, High: 102, OriginIndex: 4}
+	facts := DeriveFacts(frame, []techniquezone.Instance{fvg, sd})
+	if IndependentCount(facts) != 1 {
+		t.Fatalf("an FVG cut from the candles of a zone's base is that zone's event: %+v", facts)
+	}
+}
+
+func TestASecondZoneWhoseBaseIsTheFirstLegIsOneSource(t *testing.T) {
+	// A flag: leg 1 (candles 5-8), one pause candle (9), leg 2 (candles 11-14). The
+	// second zone's three base candles are 8, 9, 10: they include leg 1's last candle.
+	bars := plainBars(30)
+	legs := []techniquezone.Leg{{Start: 5, End: 8, Direction: "up"}, {Start: 11, End: 14, Direction: "up"}}
+	frame := frameOf(bars, legs, nil, nil)
+	first := techniquezone.Instance{Technique: SourceSupplyDemand, Side: Buy, Low: 98, High: 100, OriginIndex: 4}
+	second := techniquezone.Instance{Technique: SourceSupplyDemand, Side: Buy, Low: 99, High: 101, OriginIndex: 10}
+	facts := DeriveFacts(frame, []techniquezone.Instance{first, second})
+	if IndependentCount(facts) != 1 {
+		t.Fatalf("a zone based on the previous leg is not independent of it: %+v", facts)
+	}
+	// Leg 2 starting a candle later leaves the bases disjoint: independent.
+	legs[1] = techniquezone.Leg{Start: 12, End: 15, Direction: "up"}
+	second.OriginIndex = 11
+	if n := IndependentCount(DeriveFacts(frameOf(bars, legs, nil, nil), []techniquezone.Instance{first, second})); n != 2 {
+		t.Fatalf("separate legs with disjoint bases are independent, got %d", n)
+	}
+}

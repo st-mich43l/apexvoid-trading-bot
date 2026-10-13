@@ -17,7 +17,7 @@ func confluenceZoneParams() map[string]any {
 	return legacyfixture.Params(map[string]any{
 		"minimum_facts": 2.0, "minimum_overlap_pips": 1.0, "minimum_overlap_atr": 0.05, "reaction_lookback_bars": 3.0,
 		"minimum_sweep_pips": 1.0, "minimum_sweep_atr": 0.05, "minimum_reclaim_atr": 0.0, "rejection_wick_ratio": 0.25,
-		"rejection_close_strength": 0.6, "displacement_body_ratio": 0.6, "displacement_range_atr": 0.5, "displacement_grade_atr": 1.0,
+		"rejection_close_strength": 0.6, "minimum_rejection_range_atr": 0.25, "displacement_body_ratio": 0.6, "displacement_range_atr": 0.5, "displacement_grade_atr": 1.0,
 		"invalidation_buffer_atr": 0.5, "minimum_target_distance_atr": 1.0, "minimum_reward_risk": 1.15, "expiry_hours": 12.0,
 	})
 }
@@ -47,6 +47,7 @@ func czContext(bars []market.Candle, structure string, mutate func(*analysiscont
 		f.Structure = structure
 		f.Legs = []techniquezone.Leg{{Start: 5, End: 8, Direction: "up"}, {Start: 12, End: 14, Direction: "up"}}
 		f.Pools = []techniquezone.Pool{{Side: "buy", Level: 4125}}
+		f.Swings = []techniquezone.Swing{{Index: 0, Kind: "high", Price: 4125}}
 		instances := []techniquezone.Instance{
 			{Technique: "supply_demand", Side: "buy", Low: 4100, High: 4105, OriginIndex: 4, ZoneScore: 9.5},
 			{Technique: "supply_demand", Side: "buy", Low: 4103, High: 4108, OriginIndex: 11, ZoneScore: 9},
