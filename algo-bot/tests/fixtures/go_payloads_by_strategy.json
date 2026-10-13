@@ -164,36 +164,57 @@
    "liquidity": "v1",
    "structure": "v2"
   },
-  "created_at": 1790622900,
+  "created_at": 1789424700,
   "direction": "BUY",
   "entry": {
-   "high": 4137.42,
-   "low": 4132.24
+   "high": 4296.4,
+   "low": 4294.73
   },
   "evidence": [
    {
     "code": "m5_distinct_zone_overlap"
    },
    {
+    "code": "m5_confluence_independent_facts"
+   },
+   {
     "code": "m5_confluence_reaction"
    }
   ],
-  "expires_at": 1790666100,
-  "formed_at": 1790622900,
-  "id": "opp_fd70319770cd242dbd9bf439849186d3f5ac6389f3165e155511c52d323c3b18",
+  "expires_at": 1789467900,
+  "formed_at": 1789424700,
+  "id": "opp_1c44a79d60bef5c1d130fb2af0abc9db03ba8bb0d020dceb0a3fe0e73bfcf2ee",
   "invalidation": {
    "label": "confluence_overlap_failed",
-   "price": 4130.16
+   "price": 4291.39
   },
   "quality": {
    "components": {
-    "confluence": 1,
-    "reaction": 1
+    "confluence_stars": 2,
+    "displacement_strength": 0.1195934546748072,
+    "htf_alignment": 1,
+    "independent_fact_count": 2,
+    "independent_source_count": 2,
+    "overlap_integrity": 0.07784431137730752,
+    "overlap_width_atr": 0.6052153615363053,
+    "overlap_width_pips": 16.700000000000728,
+    "reaction_freshness_bars": 0,
+    "reclaim_depth_atr": 0.37690058443009494,
+    "rejection_close_strength": 0.8424242424243944,
+    "rejection_wick_ratio": 0.8424242424243944,
+    "source_age_bars": 23,
+    "source_dependency_count": 0,
+    "source_integrity": 0.5,
+    "structural_alignment": 1,
+    "sweep_depth_atr": 0.6305836701035887,
+    "target_room_atr": 7.737334113053758,
+    "target_room_r": 4.261754215296718,
+    "technical_risk_pips": 50.096741673578435
    },
-   "overall": 1
+   "overall": 0.6666666666666666
   },
   "stop_envelope": {
-   "cap_pips": 60,
+   "cap_pips": 70,
    "desired_minimum_pips": 50,
    "floor_pips": 50,
    "source": "strategy_default"
@@ -204,128 +225,121 @@
    {
     "price": {
      "label": "nearest_opposing_liquidity",
-     "price": 4148.01
+     "price": 4317.75
     }
    }
   ],
   "technical_context": {
-   "atr": 3.504285714285743,
+   "atr": 2.3757142857143014,
    "bias": {
     "direction": "SELL",
-    "layer": "internal"
+    "layer": "intermediate"
    },
    "candle_evidence": {
     "all_patterns": [
+     "wick_rejection",
+     "hammer",
+     "pin_bar",
      "sweep_reclaim",
-     "strong_close",
-     "body_close",
-     "strong_reclaim",
-     "displacement_candle",
-     "morning_star",
-     "sweep_indecision_displacement"
+     "strong_reclaim"
     ],
-    "base_score": 0.5742007051900573,
+    "base_score": 0.5708733434335205,
     "direction": "BUY",
     "displacement": {
-     "body_atr": 0.6477782307379912,
-     "body_dominance": 0.7827586206896584,
-     "close_location": 0.9551724137930743,
+     "body_atr": 0.1389055923030352,
+     "body_dominance": 0,
+     "close_location": 0.8424242424243944,
      "engulfing": false,
      "patterns": [
-      "strong_close",
-      "body_close",
-      "strong_reclaim",
-      "displacement_candle"
+      "strong_reclaim"
      ],
-     "range_atr": 0.8275580921322321,
+     "range_atr": 1.3890559230307349,
      "reclaim": true,
-     "reclaim_depth_atr": 0.7761924174480892,
-     "score": 0.6821795151140359
+     "reclaim_depth_atr": 0.4377630787736659,
+     "score": 0.3670399879735523
     },
-    "final_score": 0.6942007051900573,
+    "final_score": 0.6908733434335205,
     "indecision": {
-     "body_fraction": 0.7827586206896584,
-     "compression_score": 0.48277619241735503,
-     "doji": false,
+     "body_fraction": 0.09999999999997244,
+     "compression_score": 0.13184004810579075,
+     "doji": true,
      "inside_bar": false,
      "spinning_top": false
     },
     "primary_pattern": "sweep_reclaim",
     "rejection": {
-     "body_fraction": 0.7827586206896584,
-     "close_location": 0.9551724137930743,
+     "body_fraction": 0.09999999999997244,
+     "close_location": 0.8424242424243944,
      "patterns": [
+      "wick_rejection",
+      "hammer",
+      "pin_bar",
       "sweep_reclaim"
      ],
      "reclaim": true,
-     "reclaim_depth_atr": 0.7761924174480892,
-     "score": 0.38508541867907004,
+     "reclaim_depth_atr": 0.4377630787736659,
+     "score": 0.8766233766234727,
      "sweep": true,
-     "sweep_penetration_atr": 0.014268242967846328,
-     "wick_fraction": 0.17241379310341584
-    },
-    "sequence": {
-     "bars": 3,
-     "patterns": [
-      "morning_star",
-      "sweep_indecision_displacement"
-     ],
-     "score": 0.6067771911400803
+     "sweep_penetration_atr": 0.7324113048706189,
+     "wick_fraction": 0.8424242424243944
     },
     "synergy_bonus": 0.12,
     "version": 2
    },
    "confirmation": {
-    "confirmation_bar_time": 1790622900,
-    "pattern": "strong_reclaim",
+    "confirmation_bar_time": 1789424700,
+    "pattern": "sweep_reclaim",
     "reaction_type": "rejection",
-    "touch_bar_time": 1790622900,
-    "zone_id": "confluence:buy:order_block+supply_demand:4135.000000"
+    "touch_bar_time": 1789424700,
+    "zone_id": "cz3:buy:beb6047bee0774e0"
    },
    "confluence": {
     "factors": {
      "choch": false,
-     "displacement_grade": true,
+     "displacement_grade": false,
      "fib_touch": false,
-     "htf_aligned": false,
+     "htf_aligned": true,
      "session_context": false,
      "structural_agreement": true,
-     "touches": 1,
+     "touches": 3,
      "wick_rejection": true
     },
     "mad_bonus": 0,
-    "raw_factor_score": 10,
-    "selected_stars": 3,
-    "v1_stars": 3,
-    "v2_raw": 12.612244897959183,
+    "raw_factor_score": 13,
+    "selected_stars": 2,
+    "v1_stars": 2,
+    "v2_raw": 14.877551020408163,
     "v2_stars": 2,
     "version": "v1",
-    "zone_quality_score": 2.6122448979591835
+    "zone_quality_score": 1.8775510204081634
    },
    "higher_timeframes": [
     {
      "direction": "SELL",
      "layer": "internal",
-     "reference_time": 1790618400,
+     "reference_time": 1789416000,
      "timeframe": "H1"
     },
     {
      "direction": "SELL",
      "layer": "micro",
-     "reference_time": 1790622000,
+     "reference_time": 1789424100,
      "timeframe": "M15"
     }
    ],
    "mad": {
+    "acceptance_closes": 0,
     "affinity": 0,
     "confidence": 0,
+    "displacement_atr": 1.6247745039084502,
     "phase": "unclear",
-    "reason_code": "asia_range_missing",
+    "range_quality_atr": 3.173782321106398,
+    "reason_code": "no_mad_signature",
     "reclaim": false,
     "version": 2
    },
-   "reference_price": 4134.96,
-   "reference_time": 1790622900
+   "reference_price": 4295.77,
+   "reference_time": 1789424700
   },
   "timeframe": "M5"
  },

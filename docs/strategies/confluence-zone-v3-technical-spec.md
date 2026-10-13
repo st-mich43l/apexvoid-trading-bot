@@ -1,9 +1,10 @@
 # Confluence Zone v3: technical specification
 
-Status: **in construction.** Part A (this section set: structural facts, independence, regions, causal
-availability) is implemented in `analysis-engine/internal/structuralconfluence` and is **not yet wired into the
-strategy**. Parts B (confirmation, invalidation, target, strategy wiring) and C (replay certification) follow in
-their own pull requests and complete this page.
+Status: **parts A and B implemented** (A: `analysis-engine/internal/structuralconfluence`, the facts, independence,
+regions and causal availability; B: `analysis-engine/internal/strategy/confluencezone`, the reaction, the honest
+stop, the target and the strategy itself). **Part C**, the replay certification, completes this page in its own
+pull request. Nothing here is deployed or enabled by being merged: Confluence Zone's enablement, containment, risk
+and arbitration settings are unchanged.
 
 The contract this strategy answers:
 
@@ -113,7 +114,150 @@ function of the set, so reordering, duplicating or re-delivering facts cannot ch
 **as of the touch**: `Find(facts, side, touchOpenTime, …)` admits only facts confirmable at that instant, so a
 later fact joining the same price does not rename an episode that was already established, and cannot revive it.
 
-## 4. Verification
+## 4. Reaction: measured at the supported region
+
+A reaction is a (touch, confirmation) pair of closed candles inside the reaction window
+(`reaction_lookback_bars`, three candles, measured in **time**, so a gap in the data never makes an old candle
+fresh). Regions are evaluated **as of the touch** (section 3): the touch candle must reach a region supported by
+facts confirmable before it opened. The touch may be the confirming candle itself.
+
+Both sides are decided by one long-side routine on mirrored prices (p -> -p), so a SELL is the exact mirror image
+of a BUY by construction and a randomized test proves it. For a long, region `[lo, hi]`, candle `O H L C`,
+`range = H - L`:
+
+    wick_ratio     = (min(O, C) - L) / range          the rejecting wick
+    close_strength = (C - L) / range                  1 = closed at the high
+    body_ratio     = |C - O| / range
+    sweep_depth    = lo - L                            positive when the wick went through the far edge
+
+| Pattern | Measured conditions |
+|---|---|
+| `sweep_reclaim` | `sweep_depth >= max(minimum_sweep_pips x pip, minimum_sweep_atr x ATR)`, `wick_ratio >= rejection_wick_ratio`, `close_strength >= rejection_close_strength`, `C >= lo + minimum_reclaim_atr x ATR` |
+| `wick_rejection` | no sweep of that depth, the wick reaches the region (`L <= hi`), `wick_ratio` and `close_strength` as above, `C >= lo` |
+| `strong_reclaim` | a bullish body, `body_ratio >= displacement_body_ratio`, `range >= displacement_range_atr x ATR`, `close_strength` as above, `C > hi` (the candle closes through the region) |
+
+The colour of the body is **not** part of the first two tests, only where the candle rejected and where it closed:
+a bearish-bodied candle with a long lower wick closing near its high is a demand rejection, a bullish-bodied one
+that closes at its low is not. (The frozen publisher confirmed a grab candle whatever its direction; 22 of 177 XAU
+confirmations in the audit were opposite-coloured.) Engulfing is not supported: it rejects the previous candle's
+body, not the region's boundary.
+
+A reaction is **refused** when:
+
+- price closed below the region between the touch and the confirming candle (`price_accepted_through_region`);
+- any later closed candle closes beyond the extreme the reaction itself traded to (`reaction_failed_after_confirmation`),
+  so a rejection that has already failed is never published or filled;
+- the entry is no longer valid: price has closed below the entry band (`price_through_entry`) or has run more than
+  `maximum_entry_atr` ATR above it (`entry_too_far`).
+
+## 5. Quality evidence
+
+Nothing is true because a candidate was emitted. The shared confluence rubric is scored from measurements:
+
+| Factor | Measured as |
+|---|---|
+| `htf_aligned` | the engine's higher-timeframe read for the direction |
+| `touches` | the largest touch count among the supporting structures |
+| `wick_rejection` | the confirming candle's `wick_ratio >= rejection_wick_ratio` (false for a displacement candle with no wick) |
+| `displacement_grade` | the confirming candle's body (`body_ratio x range / ATR`) `>= displacement_grade_atr` |
+| `structural_agreement` | the engine's own M5 structure is `up` for a BUY, `down` for a SELL |
+| `choch` | a change of character in the direction within the reaction window |
+| `fib_touch` | the entry level touches a fibonacci level (engine computation, unchanged) |
+
+v2 hard-coded `wick_rejection` and `structural_agreement` to true on every decision (177 of 177 XAU, 790 of 790 FX
+in the audit) and its `reaction` component to 1. A measurement that is unavailable is **omitted** (an unknown
+structure publishes no `structural_alignment`), never replaced by a neutral number.
+
+`Quality.Overall` keeps the scale live arbitration has always seen: the confluence stars out of three, from the
+unchanged `confluence.Evaluate`. The region's zone score is the best supporting structure's score plus the frozen
+contract's +2.5 for **every additional independent source** (v2 paid it per label, so a supply zone and an order
+block of one leg earned it twice). No new live scoring formula was introduced and no arbitration input changed;
+the measured components are in `Quality.Components` for the journal and the replay:
+
+`independent_fact_count` (independent sources supporting every price of the region),
+`independent_source_count`, `source_dependency_count` (supporting facts minus independent sources),
+`overlap_width_atr`, `overlap_width_pips`, `overlap_integrity` (the share of the region price had not already
+closed through before the touch), `source_integrity` (the share of supporting structures untouched),
+`source_age_bars` (since the newest supporting structure became confirmable, at the touch),
+`reaction_freshness_bars`, `rejection_wick_ratio`, `rejection_close_strength`, `displacement_strength` (body in ATR),
+`reclaim_depth_atr`, `sweep_depth_atr`, `structural_alignment` and `htf_alignment` (only when readable),
+`target_room_r`, `target_room_atr`, `technical_risk_pips`, `confluence_stars`.
+
+## 6. Invalidation
+
+The entry band is the supported region, clipped to the instrument's proximal slice (`fvg_entry_max_width_price`)
+when wider. The stop is
+
+    long :  min(protected_far_edge, adverse_reaction_extreme) - max(pip, invalidation_buffer_atr x ATR)
+    short:  max(protected_far_edge, adverse_reaction_extreme) + max(pip, invalidation_buffer_atr x ATR)
+
+where the *protected far edge* is the lowest low (highest high) among the structures that support the region and the
+*adverse reaction extreme* is the lowest low (highest high) the reaction traded to between the touch and the
+confirming candle. The entry (confluence) and the stop (invalidation) deliberately do not share boundaries: the
+region may be narrower than the structures that make it, and the structure, not the region, is what failing
+invalidates. By construction the stop is beyond the whole entry band, the protected edge and the adverse wick (a
+randomized test checks it on every published setup).
+
+The instrument's execution stop cap (`instruments.<symbol>.stop_envelope.max_pips`, injected as
+`execution_stop_max_pips`) is a gate, not a target: risk is measured from the proximal edge of the entry band to the
+stop, and a setup over the cap is **refused** (`stop_exceeds_execution_envelope`). The stop is never clamped into
+the wick and the envelope, the volume and the ladder are untouched.
+
+## 7. Target
+
+The target is the nearest **unswept** opposing liquidity pool strictly beyond everything price has traded since the
+touch and at least `minimum_target_distance_atr` from the entry. There is no fallback: v2 invented
+`fixed_reward_risk` (entry + 2 x risk) when no pool qualified and labelled the result as opposing liquidity; v3
+publishes nothing instead (`no_opposing_liquidity`, `insufficient_target_room`). Further tests:
+
+- `reward / risk >= minimum_reward_risk` (`reward_risk_below_minimum`), risk and reward measured from the same
+  proximal reference;
+- no **defended** opposing structure nearer than the room the trade needs: an opposing region supported, by the same
+  standard, by `minimum_facts` independent sources whose near edge lies closer than `minimum_reward_risk x risk` blocks
+  the target (`target_blocked_by_opposing_structure`);
+- pools are computed from the closed candles of the evaluated prefix, so no target is derived from a future bar.
+
+The TradePlan ladder and position management are the Algo Bot's and are not touched.
+
+## 8. Lifecycle and identity
+
+`Evaluate` emits, per direction, at most one confirmed candidate (the highest stars) and the resting observations of
+regions price is at. A confirmed candidate carries `Reaction` with the touch and confirmation times and the pattern;
+the Algo Bot's adapter still requires it (`requires_reaction`) and rejects a candidate without one, so a resting
+overlap can never be executed. A resting observation claims no reaction in its evidence
+(`m5_distinct_zone_overlap`, `m5_confluence_independent_facts`; a confirmation adds `m5_confluence_reaction`) -
+v2's resting candidate named `m5_confluence_reaction` and a confirmation time it did not have.
+
+The thesis identity (`StructuralID`, `Reaction.ZoneID`) is the **episode** (section 3). The opportunity ID is a function
+of the episode and the **confirmation** time, not of the touch, the evaluation time or the order of any input list.
+A re-evaluation of the same confirmation on the next candle is the same opportunity; a later fact joining the same
+price does not rename or revive an earlier episode; a genuinely new reaction is a new opportunity on the same
+structures.
+
+## 9. Configuration
+
+`config/analysis.yml` `strategies.confluence_zone` (version `v3`). Every coefficient is required (no code
+default). The close-strength, wick and displacement values are the ones iFVG v3 uses; none was fitted to a trade,
+and part C shows how the result moves when they change.
+
+| Key | Value | Meaning |
+|---|---|---|
+| `minimum_facts` | 2 | independent sources that must support every price of the region (>= 2) |
+| `minimum_overlap_pips`, `minimum_overlap_atr` | 1.0, 0.05 | a region must be strictly wider than the larger |
+| `reaction_lookback_bars` | 3 | touch and confirmation window (confirming candle at most 2 candles old) |
+| `minimum_sweep_pips`, `minimum_sweep_atr` | 1.0, 0.05 | the depth that makes a wick a sweep |
+| `minimum_reclaim_atr` | 0.0 | the close must be at least this far back inside after a sweep |
+| `rejection_wick_ratio`, `rejection_close_strength` | 0.25, 0.6 | the rejecting wick and where the candle closes |
+| `displacement_body_ratio`, `displacement_range_atr`, `displacement_grade_atr` | 0.6, 0.5, 1.0 | the displacement rejection and the displacement factor |
+| `invalidation_buffer_atr` | 0.5 | unchanged from v2 |
+| `minimum_target_distance_atr`, `minimum_reward_risk` | 1.0, 1.15 | target room (the reward:risk is iFVG v3's) |
+| `expiry_hours` | 12 | unchanged from v2 |
+
+The shared detector leaves (`maximum_entry_atr`, the confluence floor and star ratios, `fvg_entry_max_width_price`,
+`pip_size`) are injected by the engine as before, and `execution_stop_max_pips` is injected per instrument
+(`applyConfluenceZoneGeometry`, the same mechanism as iFVG v3).
+
+## 10. Verification
 
 - `internal/structuralconfluence`: the required negative example, shared boundaries, strict minimum width,
   extended chains, contiguous support with varying subsets, nested intersections, disjoint regions, one origin
@@ -130,5 +274,22 @@ later fact joining the same price does not rename an episode that was already es
   rejection candle) and 9 Oct 13:10 (three separate origins; the supported region is narrower than the union).
   Plus that extra warm-up history and appended future candles do not change a fact.
 
-Parts B and C add: the measured reaction at the region, the structural stop and target, the strategy wiring and
-the replay certification.
+- `internal/strategy/confluencezone`: positive fixtures (two independent demand structures, the exact SELL mirror,
+  three facts over two origins, nested and disjoint regions, a sweep reclaim, a wick rejection, a displacement
+  reclaim, a fresh retest, the nearest valid target, XAU and EURUSD precision) and negative fixtures that each assert
+  the specific reason: one origin, a duplicated ID, two labels of one leg, an FVG with its own iFVG, a dependency
+  through an intermediate parent, a structure created on or after the reaction candle, an unverified fact, a shared
+  boundary, an overlap narrower than the minimum, a reaction at the union boundary but outside the overlap, a weak
+  confirmation, colour-independent direction, conflicting directions, a later member that must not rename an
+  episode, a failed reaction, price accepted through the region, the stop envelope, target room (none, too close,
+  below reward:risk, already swept, blocked by an opposing confluence), duplicate and out-of-order candles, a missing
+  ATR, too little history, a gap in the data and a price that has run through or away from the entry. Randomized
+  properties over 1,500+ markets: every published setup satisfies the whole contract (stop beyond the adverse
+  extreme, the structure and the entry; target beyond the entry with the required reward:risk; supporting facts
+  confirmable before the touch; nothing closed beyond the reaction since); reordering or duplicating the inputs does
+  not change the analysis; older history does not change a decision; BUY and SELL are exact mirror images.
+- `test/strategy`: the strategy through the engine's context (candidate fields, measured factors, resting
+  observation never a confirmation, one opportunity across repeated evaluations, one-origin refusal, missing
+  configuration fails closed).
+
+Part C adds the replay certification.

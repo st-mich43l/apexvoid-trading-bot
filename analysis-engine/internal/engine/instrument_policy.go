@@ -74,6 +74,7 @@ func ApplyInstrument(settings *Settings, doc *config.Document, symbol string) er
 	applyLegacyDetector(settings)
 	applyBreakRetestGeometry(settings)
 	applyIFVGGeometry(settings)
+	applyConfluenceZoneGeometry(settings)
 	applySessionLevelGeometry(settings)
 	if err := applyScalpBreakoutRetest(settings, doc); err != nil {
 		return err
@@ -146,6 +147,29 @@ func applyIFVGGeometry(settings *Settings) {
 	}
 	for i := range settings.Strategies {
 		if settings.Strategies[i].ID != "ifvg" {
+			continue
+		}
+		params := make(map[string]any, len(settings.Strategies[i].Parameters)+1)
+		for k, v := range settings.Strategies[i].Parameters {
+			params[k] = v
+		}
+		params["execution_stop_max_pips"] = settings.InstrumentStopMaxPips
+		settings.Strategies[i].Parameters = params
+	}
+}
+
+// applyConfluenceZoneGeometry gives Confluence Zone v3 the resolved instrument stop
+// cap, so a stop beyond the supporting structures and the reaction's own extreme
+// that exceeds the execution envelope is refused by the detector (never tightened
+// into the structure or the wick). It is idempotent. Only a RESOLVED cap is
+// injected: before an instrument is applied the cap is zero, and zero must not
+// read as "a cap of zero pips".
+func applyConfluenceZoneGeometry(settings *Settings) {
+	if settings.InstrumentStopMaxPips <= 0 {
+		return
+	}
+	for i := range settings.Strategies {
+		if settings.Strategies[i].ID != "confluence_zone" {
 			continue
 		}
 		params := make(map[string]any, len(settings.Strategies[i].Parameters)+1)

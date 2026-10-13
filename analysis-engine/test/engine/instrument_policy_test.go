@@ -9,6 +9,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/engine"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/confluencezone"
 )
 
 func defendedCandidate(direction market.Direction, low, high float64) opportunity.Candidate {
@@ -180,6 +181,43 @@ func TestApplyInstrument_NormalisesMADToTheInstrumentsPipSize(t *testing.T) {
 		}
 		if settings.MAD.PipSize != pip || settings.Geometry.PipSize != pip {
 			t.Errorf("%s: MAD pip %v / geometry pip %v, want %v", symbol, settings.MAD.PipSize, settings.Geometry.PipSize, pip)
+		}
+	}
+}
+
+func TestApplyInstrument_GivesConfluenceZoneTheInstrumentsStopCapAndAValidConfig(t *testing.T) {
+	doc, err := config.ResolveDocument(filepath.Join("..", "..", "..", "config", "apexvoid.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for symbol, pip := range map[string]float64{"XAU": 0.1, "EURUSD": 0.0001, "GBPUSD": 0.0001, "GBPJPY": 0.01, "USDJPY": 0.01} {
+		settings, err := engine.LoadSettings(doc, "M5", false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := engine.ApplyInstrument(&settings, doc, symbol); err != nil {
+			t.Fatal(err)
+		}
+		var found bool
+		for _, cfg := range settings.Strategies {
+			if cfg.ID != "confluence_zone" {
+				continue
+			}
+			found = true
+			parsed, err := confluencezone.ParseConfig(cfg.Parameters)
+			if err != nil {
+				t.Fatalf("%s: confluence_zone v3 configuration: %v", symbol, err)
+			}
+			if cfg.Version != "v3" || parsed.MinimumFacts != 2 || parsed.PipSize != pip {
+				t.Fatalf("%s: version %s facts %d pip %v", symbol, cfg.Version, parsed.MinimumFacts, parsed.PipSize)
+			}
+			// The cap the strategy refuses beyond is the instrument's own execution cap.
+			if parsed.ExecutionStopMaxPips != settings.InstrumentStopMaxPips || parsed.ExecutionStopMaxPips <= 0 {
+				t.Fatalf("%s: stop cap %v, want the instrument's %v", symbol, parsed.ExecutionStopMaxPips, settings.InstrumentStopMaxPips)
+			}
+		}
+		if !found {
+			t.Fatalf("%s: confluence_zone is not configured", symbol)
 		}
 	}
 }
