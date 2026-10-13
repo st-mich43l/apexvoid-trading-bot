@@ -121,6 +121,29 @@ func techniqueInstanceSource(exec *analysiscontext.LegacyFrame, h1 *analysiscont
 	}
 }
 
+// structuralInstanceSource yields the execution frame's zone-chain instances
+// (without CRT) judged only on what they are as of a given candle, never on where
+// price is: the facts Confluence Zone reads. It is the instance collection above
+// with the retest-proximity test off and the judgement re-run on the candles before
+// asOf; the frozen publishers never see it. Results are memoised per asOf for the
+// frame's one closed-bar evaluation.
+func structuralInstanceSource(exec *analysiscontext.LegacyFrame, settings Settings) func(int) []techniquezone.Instance {
+	var mu sync.Mutex
+	cache := map[int][]techniquezone.Instance{}
+	return func(asOf int) []techniquezone.Instance {
+		mu.Lock()
+		defer mu.Unlock()
+		if got, ok := cache[asOf]; ok {
+			return got
+		}
+		technique := settings.TechniqueZones.Technique
+		technique.IgnoreProximity = true
+		got := techniquezone.InstancesFromScoredZonesAsOf(exec.TechniqueZones, exec.Bars, exec.ATR, asOf, technique)
+		cache[asOf] = got
+		return got
+	}
+}
+
 // higherTimeframeInstanceSource lazily yields the supply/demand instances of a
 // higher timeframe's own scored zones (same collection the execution frame
 // uses, on that frame's bars and ATR). OriginIndex is relative to that frame;

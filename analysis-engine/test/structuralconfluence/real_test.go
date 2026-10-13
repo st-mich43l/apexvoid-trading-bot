@@ -1,11 +1,13 @@
 package structuralconfluence_test
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
 
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structuralconfluence"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/techniquezone"
 )
 
 // These are the structures the production engine actually held on real XAU M5
@@ -135,11 +137,13 @@ func TestRealOct5IFVGWasBornOnTheReactionCandle(t *testing.T) {
 	}
 }
 
-func TestRealOct9ThreeSeparateOriginsAreThreeSources(t *testing.T) {
-	// 9 Oct 13:10 is the one v2 trade whose three facts had three origins.
+func TestRealOct9TwoSeparateOriginsAreTwoSources(t *testing.T) {
+	// 9 Oct 13:10: v2 counted three facts. The FVG and the iFVG are cut from one
+	// impulse candle (12:45 inverts the old gap and is the middle of the new one), so
+	// there are two sources: that impulse and the supply zone of the 10:55 leg.
 	facts := factsAt(t, loadM5(t, capture), "2026-10-09 13:10")
-	if structuralconfluence.IndependentCount(facts) != 3 {
-		t.Fatalf("want three independent sources, got %d: %+v", structuralconfluence.IndependentCount(facts), facts)
+	if n := structuralconfluence.IndependentCount(facts); n != 2 {
+		t.Fatalf("want two independent sources, got %d: %+v", n, facts)
 	}
 	touch := at(t, "2026-10-09 13:05")
 	regions, _ := structuralconfluence.Find(facts, structuralconfluence.Sell, touch, minimumTwo)
@@ -148,7 +152,7 @@ func TestRealOct9ThreeSeparateOriginsAreThreeSources(t *testing.T) {
 	}
 	r := regions[0]
 	// v2 published the 44.7-pip union [4178.77, 4183.24]; the supported region is
-	// where at least two of the three structures overlap.
+	// where the two independent sources overlap.
 	if r.Low != 4179.75 || r.High != 4181.85 || r.MinGroups < 2 {
 		t.Fatalf("region [%v,%v] min %d", r.Low, r.High, r.MinGroups)
 	}
@@ -214,5 +218,106 @@ func TestRealFactsAreCausalAtEveryBar(t *testing.T) {
 		if match.AvailableAt != f.AvailableAt || !reflect.DeepEqual(match.Atoms, f.Atoms) {
 			t.Fatalf("%s changed when future candles were appended", f.ID)
 		}
+	}
+}
+
+func instanceKey(in techniquezone.Instance) string {
+	return fmt.Sprintf("%s|%s|%d|%.6f|%.6f", in.Technique, in.Side, in.OriginIndex, in.Low, in.High)
+}
+
+func TestStructuresAreFactsIndependentOfWhereThePriceIsNow(t *testing.T) {
+	// The frozen publishers' instances are only the structures price is at this
+	// moment; the structural instances are every structure that is not spent or
+	// invalidated. The first is always a subset of the second, and the second is
+	// strictly larger once price has moved away from a zone.
+	bars := loadM5(t, capture)
+	chainSettings := techniquezone.ProductionChainSettings()
+	proximal := techniquezone.ProductionTechniqueSettings()
+	anywhere := proximal
+	anywhere.IgnoreProximity = true
+	larger, checked := 0, 0
+	for _, stamp := range []string{"2026-10-05 14:15", "2026-10-06 03:20", "2026-10-09 13:10", "2026-10-09 17:25", "2026-10-12 17:40", "2026-10-13 01:15", "2026-10-13 02:00"} {
+		w := windowAt(t, bars, stamp)
+		near := techniquezone.TechniqueInstances(w, chainSettings, proximal)
+		all := techniquezone.TechniqueInstances(w, chainSettings, anywhere)
+		in := map[string]bool{}
+		for _, a := range all {
+			in[instanceKey(a)] = true
+		}
+		for _, n := range near {
+			if !in[instanceKey(n)] {
+				t.Fatalf("%s: %s is at the price now but missing from the structural instances", stamp, instanceKey(n))
+			}
+		}
+		if len(all) > len(near) {
+			larger++
+		}
+		checked++
+	}
+	if larger == 0 {
+		t.Fatal("price proximity never excluded a structure on seven real windows: the test exercises nothing")
+	}
+	t.Logf("%d of %d windows hold structures price is not at", larger, checked)
+}
+
+// factsAnywhere derives the facts exactly as the strategy reads them: every structure
+// not spent or invalidated, wherever price is.
+func factsAnywhere(t *testing.T, bars []market.Candle, stamp string) []structuralconfluence.Fact {
+	t.Helper()
+	w := windowAt(t, bars, stamp)
+	frame, _ := chain(w)
+	settings := techniquezone.ProductionTechniqueSettings()
+	settings.IgnoreProximity = true
+	return structuralconfluence.DeriveFacts(frame, techniquezone.TechniqueInstances(w, techniquezone.ProductionChainSettings(), settings))
+}
+
+func findFact(facts []structuralconfluence.Fact, source, side string, originOpen int64) (structuralconfluence.Fact, bool) {
+	for _, f := range facts {
+		if f.Source == source && f.Side == side && f.FormedAt == originOpen {
+			return f, true
+		}
+	}
+	return structuralconfluence.Fact{}, false
+}
+
+// Three cases an independent review found on real bars: structures that share a
+// source candle were counted as two sources because no qualified leg linked them.
+func TestRealStructuresSharingASourceCandleAreOneSource(t *testing.T) {
+	bars := loadM5(t, capture)
+
+	// 7 Oct 18:00: the impulse candle is the middle of a bullish FVG and the candle
+	// that inverts a bearish gap into an iFVG.
+	facts := factsAnywhere(t, bars, "2026-10-07 18:10")
+	var fvg, ifvg *structuralconfluence.Fact
+	for i := range facts {
+		f := &facts[i]
+		if f.Side == structuralconfluence.Buy && f.Source == structuralconfluence.SourceFVG && f.StructuralLow == 4110.60 {
+			fvg = f
+		}
+		if f.Side == structuralconfluence.Buy && f.Source == structuralconfluence.SourceIFVG && f.StructuralLow == 4113.03 {
+			ifvg = f
+		}
+	}
+	if fvg == nil || ifvg == nil {
+		t.Fatalf("7 Oct facts missing: %+v", facts)
+	}
+	if !structuralconfluence.Dependent(*fvg, *ifvg) {
+		t.Fatalf("an FVG and an iFVG made by one impulse candle must be one source: %v / %v", fvg.Atoms, ifvg.Atoms)
+	}
+
+	// 5 Oct 02:10: an FVG cut from the three candles of a supply zone's base.
+	facts = factsAnywhere(t, bars, "2026-10-05 02:20")
+	f1, ok1 := findFact(facts, structuralconfluence.SourceFVG, structuralconfluence.Sell, 1790952900)
+	f2, ok2 := findFact(facts, structuralconfluence.SourceSupplyDemand, structuralconfluence.Sell, 1790952900)
+	if !ok1 || !ok2 || !structuralconfluence.Dependent(f1, f2) {
+		t.Fatalf("5 Oct: the FVG and the supply zone share three candles (found %v %v)", ok1, ok2)
+	}
+
+	// 6 Oct 19:15: a flag, whose second zone is based on the first leg.
+	facts = factsAnywhere(t, bars, "2026-10-06 19:30")
+	z1, ok1 := findFact(facts, structuralconfluence.SourceSupplyDemand, structuralconfluence.Sell, 1791289200)
+	z2, ok2 := findFact(facts, structuralconfluence.SourceSupplyDemand, structuralconfluence.Sell, 1791290100)
+	if !ok1 || !ok2 || !structuralconfluence.Dependent(z1, z2) {
+		t.Fatalf("6 Oct: a zone based on the previous leg is not independent of it (found %v %v)", ok1, ok2)
 	}
 }

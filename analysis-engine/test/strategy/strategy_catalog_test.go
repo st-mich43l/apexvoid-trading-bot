@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	analysiscontext "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/context"
-	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/liquidity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy"
@@ -21,7 +20,6 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/snapback"
 	strategytrendline "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/trendline"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/techniquezone"
-	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/zone"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/test/legacyfixture"
 )
 
@@ -170,14 +168,6 @@ func TestStrategiesKnownQualifyingFixtures(t *testing.T) {
 		if got := s.Evaluate(ctx(map[market.Timeframe]*analysiscontext.TimeframeContext{market.H1: {Timeframe: market.H1, Candles: []market.Candle{bar(base-3600, 100, 103, 99, 102), bar(base, 102, 103, 101, 102)}}, market.M5: {Timeframe: market.M5, Candles: []market.Candle{bar(base-300, 100, 101, 99.5, 100), bar(base, 100, 101, 98.5, 100)}}})); len(got) != 0 {
 			t.Fatalf("CRT must reject insufficient history, got %+v", got)
 		}
-	})
-	t.Run("confluence_zone", func(t *testing.T) {
-		s, e := confluencezone.New(cfg(confluencezone.ID, detectorParams(map[string]any{"reaction_lookback_bars": 3.0, "engulfing_minimum_range_atr": 0.5, "minimum_facts": 2.0, "invalidation_buffer_atr": .5, "minimum_target_distance_atr": 1.0, "expiry_hours": 4.0})))
-		if e != nil {
-			t.Fatal(e)
-		}
-		zones := []zone.Zone{{ID: "a", Kind: zone.KindDemand, Side: zone.Demand, Low: 99, High: 100, OriginTime: 1, State: zone.StateFresh}, {ID: "b", Kind: zone.KindFVG, Side: zone.Demand, Low: 99.5, High: 100.5, OriginTime: 2, State: zone.StateFresh}}
-		assertOne(t, s, ctx(map[market.Timeframe]*analysiscontext.TimeframeContext{market.M5: {Timeframe: market.M5, Candles: []market.Candle{bar(3, 100, 101, 99.6, 100)}, Zones: zone.ZoneState{Zones: zones}, Liquidity: liquidity.LiquidityState{Pools: []liquidity.Pool{{Side: liquidity.LiquidityBuySide, Low: 103, High: 104}}}}}))
 	})
 	t.Run("momentum_ride", func(t *testing.T) {
 		s, e := momentumride.New(cfg(momentumride.ID, momentumRideParams()))

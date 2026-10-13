@@ -14,6 +14,9 @@ type Pool struct {
 	Level   float64
 	Band    float64
 	Touches int
+	// LastIndex is the bar index of the latest swing that belongs to the pool (0 when
+	// unknown): a candle after it that trades beyond the pool has swept it.
+	LastIndex int
 }
 
 // Grab mirrors types.Grab: a wick through a pool with the grade of the close
@@ -53,7 +56,7 @@ func LiquidityPools(swings []Swing, bars []market.Candle, equalTolATR float64, a
 				extreme = swing
 			}
 		}
-		pools = appendLoneExtreme(pools, Pool{Side: "buy", Level: extreme.Price, Band: band, Touches: 1})
+		pools = appendLoneExtreme(pools, Pool{Side: "buy", Level: extreme.Price, Band: band, Touches: 1, LastIndex: extreme.Index})
 	}
 	if len(lows) > 0 {
 		extreme := lows[0]
@@ -62,7 +65,7 @@ func LiquidityPools(swings []Swing, bars []market.Candle, equalTolATR float64, a
 				extreme = swing
 			}
 		}
-		pools = appendLoneExtreme(pools, Pool{Side: "sell", Level: extreme.Price, Band: band, Touches: 1})
+		pools = appendLoneExtreme(pools, Pool{Side: "sell", Level: extreme.Price, Band: band, Touches: 1, LastIndex: extreme.Index})
 	}
 	sort.SliceStable(pools, func(i, j int) bool {
 		if pools[i].Level != pools[j].Level {
@@ -80,10 +83,14 @@ func clusterPools(swings []Swing, side string, band, maxClusterSpanMultiple floa
 			continue
 		}
 		prices := make([]float64, len(cluster))
+		last := 0
 		for i, swing := range cluster {
 			prices[i] = swing.Price
+			if swing.Index > last {
+				last = swing.Index
+			}
 		}
-		pools = append(pools, Pool{Side: side, Level: pySum(prices...) / float64(len(cluster)), Band: band, Touches: len(cluster)})
+		pools = append(pools, Pool{Side: side, Level: pySum(prices...) / float64(len(cluster)), Band: band, Touches: len(cluster), LastIndex: last})
 	}
 	return pools
 }
