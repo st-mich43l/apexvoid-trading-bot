@@ -27,9 +27,9 @@ and every intentional difference from the Python detector.
   (`fvg_entry_max_width_price`) and the execution stop cap
   (`execution_stop_max_pips`) come from the instrument configuration.
 - **Execution**: unchanged by this document. The Algo Bot's `ifvg` scope needs a
-  confirmed reaction and an `m5_ifvg_` evidence code; both are carried. On XAU the
-  strategy stays observe-only until the separate enablement change
-  (`config/instruments.yml`); on FX it trades, so **this contract replaces the FX
+  confirmed reaction and an `m5_ifvg_` evidence code; both are carried. XAU execution was
+  enabled on 13 Oct 2026 by the owner's decision (`config/instruments.yml`,
+  [xau-enablement-2026-10](xau-enablement-2026-10.md)); on FX it trades, so **this contract replaces the FX
   iFVG decision too** (see [FX behaviour change](#fx-behaviour-change)).
 - **Not deployed**: nothing here enables or disables a strategy.
 

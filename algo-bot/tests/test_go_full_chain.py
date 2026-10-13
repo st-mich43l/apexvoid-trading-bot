@@ -691,7 +691,7 @@ def test_go_thesis_identity_is_stable_for_the_zone_not_the_confirmation_bar():
 
 # --- Execution containment, end to end ----------------------------------------
 
-XAU_OBSERVE_ONLY = {"ifvg", "liquidity_sweep", "session_level", "impulse_pullback"}
+XAU_OBSERVE_ONLY = {"liquidity_sweep", "impulse_pullback"}
 
 
 def m15_structure_record(now: int, *, typed: bool = True, scope: str = "supply", offset: int = 1):
@@ -752,7 +752,7 @@ async def test_ordinary_m5_supply_demand_still_becomes_a_plan(h, prod):
   assert await worker._publish_trade_plan_v8(prod, "XAU", _spot(4354.1, 4354.3), match, frames={}) is not None
 
 
-@pytest.mark.parametrize("scope", ["ifvg", "supply"])
+@pytest.mark.parametrize("scope", ["liquidity_sweep", "supply"])
 @pytest.mark.asyncio
 async def test_a_match_stored_before_containment_cannot_become_a_plan(h, prod, monkeypatch, scope):
   """Defence in depth: containment is re-checked at plan admission, so a match

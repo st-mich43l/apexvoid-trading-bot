@@ -1,6 +1,6 @@
 # XAU enablement review: `ifvg` (v3) and `session_level` (v4)
 
-**Status: awaiting the owner's decision. Nothing is enabled, merged or deployed.**
+**Status: enabled on 13 Oct 2026 at the owner's explicit instruction, against the recommendation to keep `session_level` contained. The evidence below is unchanged.**
 `config/instruments.yml` is **unchanged** by this document's pull request: the edit that
 would take `ifvg` and `session_level` off XAU's `observe_only_strategies` list is
 prepared as an applyable patch ([`xau-enablement-2026-10.patch`](xau-enablement-2026-10.patch),

@@ -131,10 +131,10 @@ func TestApplyInstrument_ObservesButDoesNotTradeTheContainedStrategies(t *testin
 		return settings.ObserveOnly
 	}
 	xau := observed("XAU")
-	if len(xau) != 4 || !xau["ifvg"] || !xau["liquidity_sweep"] || !xau["session_level"] || !xau["impulse_pullback"] {
-		t.Fatalf("XAU observe-only = %v, want ifvg, liquidity_sweep, session_level, impulse_pullback", xau)
+	if len(xau) != 2 || !xau["liquidity_sweep"] || !xau["impulse_pullback"] {
+		t.Fatalf("XAU observe-only = %v, want liquidity_sweep, impulse_pullback", xau)
 	}
-	for _, kept := range []opportunity.StrategyID{"key_level", "scalp_breakout_retest", "range_sweep", "fvg", "confluence_zone"} {
+	for _, kept := range []opportunity.StrategyID{"ifvg", "session_level", "key_level", "scalp_breakout_retest", "range_sweep", "fvg", "confluence_zone"} {
 		if xau[kept] {
 			t.Errorf("%s must keep executing on XAU", kept)
 		}

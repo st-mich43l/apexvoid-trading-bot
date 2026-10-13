@@ -31,9 +31,9 @@ Python detector.
   (`execution_stop_max_pips`) from the instrument configuration
   (`applySessionLevelGeometry`).
 - **Execution**: unchanged by this document. The Algo Bot's `session_level` scope needs a
-  confirmed reaction and a `session_level_` evidence code; both are carried. On XAU the
-  strategy stays observe-only until the separate enablement change
-  (`config/instruments.yml`); on FX it trades, so **this contract replaces the FX
+  confirmed reaction and a `session_level_` evidence code; both are carried. XAU execution was
+  enabled on 13 Oct 2026 by the owner's decision (`config/instruments.yml`,
+  [xau-enablement-2026-10](xau-enablement-2026-10.md)); on FX it trades, so **this contract replaces the FX
   Session Level decision too** (see [FX behaviour change](#fx-behaviour-change)).
 - **Not deployed**: nothing here enables or disables a strategy.
 

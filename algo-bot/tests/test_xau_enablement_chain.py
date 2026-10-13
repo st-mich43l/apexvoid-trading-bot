@@ -1,10 +1,9 @@
 """XAU enablement certification for ``ifvg`` (v3) and ``session_level`` (v4).
 
-``config/instruments.yml`` is NOT changed by this file. The tests simulate the
-proposed configuration (XAU observes only ``liquidity_sweep`` and
-``impulse_pullback``) with a runtime override, so every behaviour the enablement
-would switch on, and the rollback that would switch it off again, is exercised on
-real PostgreSQL and a real Redis before anyone edits the live list.
+``config/instruments.yml`` now carries the enabled list (XAU observes only
+``liquidity_sweep`` and ``impulse_pullback``). The tests pin that list, and use a
+runtime override to exercise the rollback (restoring the two names) on real
+PostgreSQL and a real Redis.
 
 Covered: both strategies reach an executable TradePlan V8 through the real consumer,
 the reviewed policy, the worker and plan admission; an observation without a
@@ -52,7 +51,7 @@ def simulate(monkeypatch, names):
 @pytest.mark.no_database
 def test_the_proposed_list_removes_exactly_the_two_rebuilt_strategies(monkeypatch):
   assert set(CURRENT) - set(PROPOSED) == set(REBUILT)
-  assert containment.observe_only_strategies("XAU") == set(CURRENT)         # today's file
+  assert containment.observe_only_strategies("XAU") == set(PROPOSED)        # the enabled file
   simulate(monkeypatch, PROPOSED)
   assert containment.observe_only_strategies("XAU") == {"liquidity_sweep", "impulse_pullback"}
   assert containment.observe_only_strategies("XAUUSD") == containment.observe_only_strategies("XAU")
