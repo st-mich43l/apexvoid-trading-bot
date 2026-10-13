@@ -1423,6 +1423,33 @@ func InstancesFromScoredZones(scored []Zone, bars []market.Candle, atr float64, 
 	return CollectInstances(sdV, obV, fvgV, bars, bars[len(bars)-1].Close, atr, s)
 }
 
+// InstancesFromScoredZonesAsOf collects the instances as the zone chain would have
+// judged them after the candle before bars[asOf] had closed: only zones anchored
+// before asOf, their mitigation re-counted on bars[:asOf], and every spent,
+// invalidated, mis-sized or filled test run on that prefix (the price test is the
+// caller's choice through s.IgnoreProximity). A structure that a LATER candle
+// swept, filled or closed through is therefore still the structure it was when a
+// reaction touched it, and nothing the touch candle (or any later one) did can
+// remove it. asOf == len(bars) is the present: it equals InstancesFromScoredZones.
+// atr is the frame's ATR series.
+func InstancesFromScoredZonesAsOf(scored []Zone, bars []market.Candle, atr []float64, asOf int, s TechniqueSettings) []Instance {
+	if asOf < 2 || asOf > len(bars) || asOf > len(atr) {
+		return nil
+	}
+	prefix := bars[:asOf]
+	zones := make([]Zone, 0, len(scored))
+	for _, z := range scored {
+		if z.OriginIndex >= asOf {
+			continue
+		}
+		z.Touches, z.Mitigated = 0, false
+		zones = append(zones, z)
+	}
+	marked := MarkMitigation(zones, prefix, maxInt(0, len(prefix)-1))
+	obV, sdV, fvgV := SourceViews(marked)
+	return CollectInstances(sdV, obV, fvgV, prefix, prefix[len(prefix)-1].Close, ATRScalar(atr[:asOf], 1), s)
+}
+
 // ---- production settings and the one-call pipeline ---------------------------
 
 // ChainSettings are the detector settings for the zone-construction chain.

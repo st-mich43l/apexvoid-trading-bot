@@ -207,12 +207,15 @@ analysis:
       minimum_reclaim_atr: 0.0
       rejection_wick_ratio: 0.25
       rejection_close_strength: 0.6
+      # The smallest candle (ATR) that can show a rejection: a doji inside a region shows nothing.
+      minimum_rejection_range_atr: 0.25
       displacement_body_ratio: 0.6
       displacement_range_atr: 0.5
       displacement_grade_atr: 1.0
-      # Geometry: the stop sits beyond the supporting structures and the reaction's own
-      # extreme; the instrument's execution stop cap is injected and a stop beyond it is
-      # refused, never tightened. The target is the nearest opposing liquidity with room.
+      # Geometry: the stop sits beyond the supporting structures' full extent (not just their
+      # tradable slice) and the reaction's own extreme; the instrument's execution stop cap
+      # is injected and a stop beyond it is refused, never tightened, and its floor is used
+      # for reward:risk (the execution layer widens a tighter stop to it). The target is the nearest opposing liquidity with room.
       invalidation_buffer_atr: 0.5
       minimum_target_distance_atr: 1.0
       minimum_reward_risk: 1.15

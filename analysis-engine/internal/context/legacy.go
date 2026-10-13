@@ -62,13 +62,14 @@ type LegacyFrame struct {
 	// only its own supply/demand instances (frame-relative OriginIndex), which a
 	// strategy may bind to the execution frame. Computed on first use.
 	Techniques func() []techniquezone.Instance
-	// StructuralInstances lazily yields the same execution-frame supply/demand,
-	// order-block, FVG and iFVG instances without the retest-proximity test: every
-	// structure that is not spent or invalidated, wherever price is now. A structure
-	// is a fact independent of the current candle; whether price is at it is the
-	// reaction's business. Nil when the frame has none; strategies that read
-	// Techniques are unaffected by it.
-	StructuralInstances                    func() []techniquezone.Instance
+	// StructuralInstancesAsOf yields the same execution-frame supply/demand,
+	// order-block, FVG and iFVG instances without the retest-proximity test, as the
+	// zone chain would have judged them after the candle before Bars[asOf] closed
+	// (asOf == len(Bars) is the present). A structure is a fact independent of the
+	// current candle and of where price is now; whether price is at it, and what
+	// later candles did to it, are the reaction's business. Nil when the frame has
+	// none; strategies that read Techniques are unaffected by it.
+	StructuralInstancesAsOf                func(asOf int) []techniquezone.Instance
 	Range                                  *fib.DealingRange
 	FibLadder                              []fib.Level
 	Regime                                 regime.State

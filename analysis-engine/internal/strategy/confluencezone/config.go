@@ -2,6 +2,7 @@ package confluencezone
 
 import (
 	"fmt"
+	"sort"
 
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategyutil"
 )
@@ -35,6 +36,8 @@ type Config struct {
 	// candle closes in its range (1 = at the extreme away from the region).
 	RejectionWickRatio     float64
 	RejectionCloseStrength float64
+	// The smallest candle, in ATR, that can show a rejection.
+	MinimumRejectionRangeATR float64
 	// A displacement rejection (the candle closes through the region): body as a
 	// fraction of range, and range in ATR. DisplacementGradeATR is the body that
 	// earns the displacement factor.
@@ -55,6 +58,10 @@ type Config struct {
 	// ExecutionStopMaxPips is the instrument's execution stop cap; a stop beyond it
 	// is refused, never tightened. 0 disables the pre-check.
 	ExecutionStopMaxPips float64
+	// ExecutionStopMinPips is the instrument's execution stop floor: the execution
+	// layer widens a tighter stop to it, so reward:risk is measured against at
+	// least this much risk. 0 disables the adjustment.
+	ExecutionStopMinPips float64
 }
 
 func parseConfig(params map[string]any) (Config, error) {
@@ -64,12 +71,19 @@ func parseConfig(params map[string]any) (Config, error) {
 		"minimum_sweep_pips": &c.MinimumSweepPips, "minimum_sweep_atr": &c.MinimumSweepATR,
 		"minimum_reclaim_atr": &c.MinimumReclaimATR, "rejection_wick_ratio": &c.RejectionWickRatio,
 		"rejection_close_strength": &c.RejectionCloseStrength, "displacement_body_ratio": &c.DisplacementBodyRatio,
-		"displacement_range_atr": &c.DisplacementRangeATR, "displacement_grade_atr": &c.DisplacementGradeATR,
+		"minimum_rejection_range_atr": &c.MinimumRejectionRangeATR, "displacement_range_atr": &c.DisplacementRangeATR, "displacement_grade_atr": &c.DisplacementGradeATR,
 		"invalidation_buffer_atr": &c.InvalidationBufferATR, "minimum_target_distance_atr": &c.MinimumTargetATR,
 		"minimum_reward_risk": &c.MinimumRewardRisk, "expiry_hours": &c.ExpiryHours, "pip_size": &c.PipSize,
 		"maximum_entry_atr": &c.MaximumEntryATR,
 	}
-	for key, dst := range floats {
+	// Sorted, so an error names the same key on every run.
+	floatKeys := make([]string, 0, len(floats))
+	for key := range floats {
+		floatKeys = append(floatKeys, key)
+	}
+	sort.Strings(floatKeys)
+	for _, key := range floatKeys {
+		dst := floats[key]
 		value, err := strategyutil.Float(params, key)
 		if err != nil {
 			return c, fmt.Errorf("confluence_zone: %w", err)
@@ -77,7 +91,8 @@ func parseConfig(params map[string]any) (Config, error) {
 		*dst = value
 	}
 	ints := map[string]*int{"minimum_facts": &c.MinimumFacts, "reaction_lookback_bars": &c.ReactionLookback}
-	for key, dst := range ints {
+	for _, key := range []string{"minimum_facts", "reaction_lookback_bars"} {
+		dst := ints[key]
 		value, err := strategyutil.Int(params, key)
 		if err != nil {
 			return c, fmt.Errorf("confluence_zone: %w", err)
@@ -101,6 +116,16 @@ func parseConfig(params map[string]any) (Config, error) {
 		}
 		c.ExecutionStopMaxPips = v
 	}
+	if _, present := params["execution_stop_min_pips"]; present {
+		v, err := strategyutil.Float(params, "execution_stop_min_pips")
+		if err != nil {
+			return c, fmt.Errorf("confluence_zone: %w", err)
+		}
+		if v < 0 {
+			return c, fmt.Errorf("confluence_zone: execution_stop_min_pips must be >= 0")
+		}
+		c.ExecutionStopMinPips = v
+	}
 	return c, c.validate()
 }
 
@@ -115,7 +140,7 @@ func (c Config) validate() error {
 		"minimum_overlap_pips": c.MinimumOverlapPips, "minimum_overlap_atr": c.MinimumOverlapATR,
 		"minimum_sweep_pips": c.MinimumSweepPips, "minimum_sweep_atr": c.MinimumSweepATR,
 		"minimum_reclaim_atr": c.MinimumReclaimATR, "displacement_range_atr": c.DisplacementRangeATR,
-		"displacement_grade_atr": c.DisplacementGradeATR, "minimum_reward_risk": c.MinimumRewardRisk,
+		"displacement_grade_atr": c.DisplacementGradeATR, "minimum_reward_risk": c.MinimumRewardRisk, "minimum_rejection_range_atr": c.MinimumRejectionRangeATR,
 		"fvg_entry_max_width_price": c.EntryMaxWidthPrice,
 	} {
 		if v < 0 {

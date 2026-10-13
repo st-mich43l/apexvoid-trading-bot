@@ -389,7 +389,7 @@ func (w *SymbolWorker) attachLegacyRead() {
 	frames := legacyread.Complete(staged)
 	if exec := frames[w.settings.PrimaryTimeframe]; exec != nil {
 		exec.Techniques = techniqueInstanceSource(exec, frames[market.H1], w.settings)
-		exec.StructuralInstances = structuralInstanceSource(exec, w.settings)
+		exec.StructuralInstancesAsOf = structuralInstanceSource(exec, w.settings)
 	}
 	for tf, frame := range frames {
 		if tf != w.settings.PrimaryTimeframe {

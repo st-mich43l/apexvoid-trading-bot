@@ -96,7 +96,9 @@ func (f Frame) derive(in techniquezone.Instance) Fact {
 		if !ok {
 			return unverified(UnverifiedSupplyDemandLeg)
 		}
+		// The zone is cut from the three candles before the leg and from the leg itself.
 		atoms = append(atoms, f.legAtom(leg))
+		atoms = append(atoms, f.candleAtoms(maxInt(0, leg.Start-3), leg.End)...)
 		times = append(times, f.open(in.OriginIndex), f.open(leg.Start), f.open(leg.End))
 		available = leg.End
 
@@ -114,6 +116,8 @@ func (f Frame) derive(in techniquezone.Instance) Fact {
 			confirmed = swing.Index
 		}
 		atoms = append(atoms, f.legAtom(leg), fmt.Sprintf("break:%s:%d", brk.Direction, f.open(brk.Index)))
+		atoms = append(atoms, f.candleAtoms(in.OriginIndex, in.OriginIndex)...)
+		atoms = append(atoms, f.candleAtoms(leg.Start, leg.End)...)
 		times = append(times, f.open(in.OriginIndex), f.open(leg.Start), f.open(leg.End), f.open(brk.Index), f.open(swing.Index))
 		// The block exists once the leg is complete AND the break it was caused by
 		// is confirmable: the break closes beyond a swing that is itself only a
@@ -126,6 +130,7 @@ func (f Frame) derive(in techniquezone.Instance) Fact {
 			return unverified(UnverifiedGap)
 		}
 		atoms = append(atoms, f.gapAtom(gap))
+		atoms = append(atoms, f.candleAtoms(gap.Older, gap.Newest)...)
 		if leg, found := techniquezone.LegContaining(f.Legs, gap.Middle, legDirectionOf(in.Side)); found {
 			atoms = append(atoms, f.legAtom(leg))
 		}
@@ -142,6 +147,8 @@ func (f Frame) derive(in techniquezone.Instance) Fact {
 			parentSide = Sell
 		}
 		atoms = append(atoms, f.gapAtom(gap), fmt.Sprintf("inversion:%d", f.open(in.OriginIndex)))
+		atoms = append(atoms, f.candleAtoms(gap.Older, gap.Newest)...)
+		atoms = append(atoms, f.candleAtoms(in.OriginIndex, in.OriginIndex)...)
 		if leg, ok := techniquezone.LegContaining(f.Legs, gap.Middle, legDirectionOf(parentSide)); ok {
 			atoms = append(atoms, f.legAtom(leg))
 		}
@@ -165,6 +172,20 @@ func (f Frame) derive(in techniquezone.Instance) Fact {
 	fact.Atoms, fact.SourceTimes, fact.Verified = atoms, times, true
 	fact.AvailableAt = f.closeOf(available)
 	return fact
+}
+
+// candleAtoms are the source candles of a structure: two structures built from a
+// common candle are one event whatever they are called (an FVG whose middle
+// candle is the candle that inverts a gap; an FVG cut from the three candles of a
+// supply/demand base; a base that is another zone's displacement).
+func (f Frame) candleAtoms(from, to int) []string {
+	var out []string
+	for i := from; i <= to; i++ {
+		if f.inRange(i) {
+			out = append(out, fmt.Sprintf("candle:%d", f.open(i)))
+		}
+	}
+	return out
 }
 
 func (f Frame) gapAtom(g techniquezone.Gap) string {

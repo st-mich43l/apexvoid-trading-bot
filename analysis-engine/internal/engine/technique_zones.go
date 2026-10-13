@@ -121,24 +121,26 @@ func techniqueInstanceSource(exec *analysiscontext.LegacyFrame, h1 *analysiscont
 	}
 }
 
-// structuralInstanceSource lazily yields the execution frame's zone-chain
-// instances (without CRT) judged only on what they are, not on where price is: the
-// facts Confluence Zone reads. It is the instance collection above with the
-// retest-proximity test off; the frozen publishers never see it.
-func structuralInstanceSource(exec *analysiscontext.LegacyFrame, settings Settings) func() []techniquezone.Instance {
-	var once sync.Once
-	var instances []techniquezone.Instance
-	return func() []techniquezone.Instance {
-		once.Do(func() {
-			bars := exec.Bars
-			if len(bars) < 10 {
-				return
-			}
-			technique := settings.TechniqueZones.Technique
-			technique.IgnoreProximity = true
-			instances = techniquezone.InstancesFromScoredZones(exec.TechniqueZones, bars, techniquezone.ATRScalar(exec.ATR, 1), technique)
-		})
-		return instances
+// structuralInstanceSource yields the execution frame's zone-chain instances
+// (without CRT) judged only on what they are as of a given candle, never on where
+// price is: the facts Confluence Zone reads. It is the instance collection above
+// with the retest-proximity test off and the judgement re-run on the candles before
+// asOf; the frozen publishers never see it. Results are memoised per asOf for the
+// frame's one closed-bar evaluation.
+func structuralInstanceSource(exec *analysiscontext.LegacyFrame, settings Settings) func(int) []techniquezone.Instance {
+	var mu sync.Mutex
+	cache := map[int][]techniquezone.Instance{}
+	return func(asOf int) []techniquezone.Instance {
+		mu.Lock()
+		defer mu.Unlock()
+		if got, ok := cache[asOf]; ok {
+			return got
+		}
+		technique := settings.TechniqueZones.Technique
+		technique.IgnoreProximity = true
+		got := techniquezone.InstancesFromScoredZonesAsOf(exec.TechniqueZones, exec.Bars, exec.ATR, asOf, technique)
+		cache[asOf] = got
+		return got
 	}
 }
 
