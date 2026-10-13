@@ -28,7 +28,7 @@ dated section after deployment.
   chain's structures as facts independent of where price is now and as they stood before the touch candle
   (`LegacyFrame.StructuralInstancesAsOf`: the same instances without the retest-proximity test, judged on the earlier
   candles; the frozen publishers' `Techniques` are unchanged). `Quality.Overall` keeps its scale (stars out of three) and no arbitration, risk, sizing, ladder,
-  exposure or enablement setting changes. Opportunity IDs change with the version. **Not deployed.**
+  exposure or enablement setting changes. Opportunity IDs change with the version, and an opportunity is the side and the confirming candle (one confirmation is one opportunity, whichever touch or supporting set it is seen through). **Not deployed.**
 
 ### Added
 - Confluence Zone v3, part A: the structural confluence engine (`analysis-engine/internal/structuralconfluence`,
