@@ -100,7 +100,12 @@ func Detect(cfg Config, in Input) Analysis {
 			})
 		}
 		for ci := last; ci >= windowStart; ci-- {
-			for ti := ci; ti >= windowStart; ti-- {
+			// The touch is looked for within the reaction window of the CONFIRMING candle,
+			// not of the evaluated one: the set of reactions a confirmation can have must
+			// not shrink as later candles arrive, or one confirmation would change
+			// episode (and opportunity) when its earlier touch aged out of the window.
+			touchCutoff := in.Bars[ci].Time - int64(cfg.ReactionLookback-1)*in.PeriodSeconds
+			for ti := ci; ti >= 0 && in.Bars[ti].Time >= touchCutoff; ti-- {
 				// A region that exists now and that this candle touched, but that no
 				// structure set confirmable before the candle opened supports, was
 				// built from a structure created by the reaction itself or later.
@@ -214,23 +219,28 @@ func newView(sell bool, in Input, opposing []structuralconfluence.Region) *view 
 	return v
 }
 
-// poolMemberTolerance is how many pool bands a member swing may sit from the
-// pool's level (a cluster averages swings within a few bands of one another).
-const poolMemberTolerance = 3.0
+// poolMemberTolerance is how many pool bands a member swing may sit from the pool's
+// level when the pool does not say which swings it is made of (hand-built inputs).
+const poolMemberTolerance = 2.0
 
 // unswept reports whether the pool still holds its liquidity: no candle after its
-// latest member swing has traded beyond it. A pool whose member swings cannot be
-// found among the frame's swings cannot be shown to be unswept and is not a target.
+// latest member swing has traded beyond it. The zone chain records that swing
+// (Pool.LastIndex); a pool that does not is matched to the frame's swings within a
+// narrow tolerance, and a pool no member swing can be found for cannot be shown
+// unswept and is not a target.
 func unswept(p techniquezone.Pool, in Input) bool {
-	kind := "high"
-	if p.Side == "sell" {
-		kind = "low"
-	}
-	latest := -1
-	tolerance := math.Max(poolMemberTolerance*p.Band, epsilon)
-	for _, sw := range in.Swings {
-		if sw.Kind == kind && math.Abs(sw.Price-p.Level) <= tolerance && sw.Index > latest {
-			latest = sw.Index
+	latest := p.LastIndex
+	if latest <= 0 {
+		kind := "high"
+		if p.Side == "sell" {
+			kind = "low"
+		}
+		latest = -1
+		tolerance := math.Max(poolMemberTolerance*p.Band, epsilon)
+		for _, sw := range in.Swings {
+			if sw.Kind == kind && math.Abs(sw.Price-p.Level) <= tolerance && sw.Index > latest {
+				latest = sw.Index
+			}
 		}
 	}
 	if latest < 0 {
@@ -349,7 +359,7 @@ func (v *view) evaluate(cfg Config, direction market.Direction, r structuralconf
 	setup := Setup{
 		Direction: direction, Region: r, Support: support,
 		TouchIndex: ti, ConfirmIndex: ci, TouchTime: in.Bars[ti].Time, ConfirmTime: in.Bars[ci].Time,
-		Reaction: rx.real(v), ATR: atr, RiskPips: geo.risk / pip, RewardRisk: geo.reward / geo.risk, TargetRoomATR: geo.reward / atr,
+		Reaction: rx.real(v), ATR: atr, RiskPips: geo.risk / pip, RewardRisk: geo.reward / geo.effectiveRisk, TechnicalRewardRisk: geo.reward / geo.risk, TargetRoomATR: geo.reward / atr,
 		IndependentFacts: r.MinGroups, DependencyCount: len(support) - len(r.Groups),
 		OverlapWidthATR: (hi - lo) / atr, OverlapWidthPips: (hi - lo) / pip, Freshness: last - ci,
 	}
@@ -371,6 +381,9 @@ type geometry struct {
 	entryLow, entryHigh float64
 	stop, target        float64
 	risk, reward        float64
+	// effectiveRisk is the risk the execution layer will really run: the technical
+	// risk, widened to the instrument's stop floor.
+	effectiveRisk float64
 }
 
 func (v *view) geometry(cfg Config, lo, hi, far, adverse float64, ti, last int, atr, pip float64) (geometry, string) {
@@ -417,6 +430,7 @@ func (v *view) geometry(cfg Config, lo, hi, far, adverse float64, ti, last int, 
 	// The execution layer widens a stop tighter than the instrument's floor, so the
 	// reward:risk the trade really has is measured against that stop.
 	effective := math.Max(g.risk, cfg.ExecutionStopMinPips*pip)
+	g.effectiveRisk = effective
 	if g.reward/effective < cfg.MinimumRewardRisk-1e-12 {
 		return g, ReasonRewardRisk
 	}

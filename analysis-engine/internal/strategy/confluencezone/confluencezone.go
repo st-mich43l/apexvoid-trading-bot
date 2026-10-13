@@ -210,6 +210,7 @@ func (s *Strategy) build(ctx *analysiscontext.MarketContext, base *strategyutil.
 		"reclaim_depth_atr":        setup.Reaction.ReclaimDepthATR,
 		"sweep_depth_atr":          setup.Reaction.SweepDepthATR,
 		"target_room_r":            setup.RewardRisk,
+		"technical_reward_risk":    setup.TechnicalRewardRisk,
 		"target_room_atr":          setup.TargetRoomATR,
 		"technical_risk_pips":      setup.RiskPips,
 		"confluence_stars":         float64(score.SelectedStars),
