@@ -1,10 +1,10 @@
 # Confluence Zone v3: technical specification
 
-Status: **parts A and B implemented** (A: `analysis-engine/internal/structuralconfluence`, the facts, independence,
-regions and causal availability; B: `analysis-engine/internal/strategy/confluencezone`, the reaction, the honest
-stop, the target and the strategy itself). **Part C**, the replay certification, completes this page in its own
-pull request. Nothing here is deployed or enabled by being merged: Confluence Zone's enablement, containment, risk
-and arbitration settings are unchanged.
+Status: **implemented and certified for review, not deployed** (part A: `analysis-engine/internal/structuralconfluence`,
+the facts, independence, regions and causal availability; part B: `analysis-engine/internal/strategy/confluencezone`,
+the reaction, the honest stop, the target and the strategy itself; part C: the replay certification in
+[confluence-zone-v3-certification.md](confluence-zone-v3-certification.md)). Nothing here is deployed or enabled by being
+merged: Confluence Zone's enablement, containment, risk and arbitration settings are unchanged.
 
 The contract this strategy answers:
 
@@ -331,6 +331,16 @@ The shared detector leaves (`maximum_entry_atr`, the confluence floor and star r
 
 Part C adds the replay certification.
 
+- `test/czreplay` (part C): six real production captures replayed through the engine with four models (A legacy
+  intersection, B Python-parity union, C v3 structure with v2 confirmation, D full v3), causal hypothetical fills,
+  chronological development/held-out periods, the frozen v2 re-implementation reproducing every reproducible frozen-regime
+  production trade, the seven XAU trades rebuilt, the other strategies' candidates byte-identical to master's, and the
+  engine-level invariants: appending future candles, randomising them, removing 500 candles of warm-up, and reflecting the
+  whole market do not change (or exactly mirror) the v3 decisions, and one confirmation is never published under two
+  overlapping opportunities. The results are committed as
+  [confluence-zone-v3-replay-results.json](confluence-zone-v3-replay-results.json) and a coefficient sensitivity as
+  [confluence-zone-v3-sensitivity.json](confluence-zone-v3-sensitivity.json).
+
 ## 11. Known limits
 
 - iFVG facts carry no zone-chain score and no touch count (the chain does not score an inverted gap), so those two quality
@@ -342,6 +352,9 @@ Part C adds the replay certification.
   fractal swing, and a supply/demand zone only when its leg is complete.
 - Stars and the zone score come from the chain's multi-factor scoring at the evaluated candle (they are known when the
   decision is made), not as of the touch.
+- The engine's liquidity-pool builder (frozen, shared by every strategy) is not mirror-symmetric: on a reflected XAU capture
+  entries and stops of all 47 v3 decisions are exact mirrors, but 17 targets differ (1 by more than an ATR) because the two
+  markets are handed different pools. The v3 logic itself is an exact mirror on identical inputs (property test).
 - CRT instances embed their own reaction and never count as facts.
 - The candle atoms make the independence rule depend on the zone chain's three-candle base: two legs separated by two or
   fewer pullback candles are one source (the second zone's base contains the first leg), three or more are two. The
@@ -352,3 +365,9 @@ Part C adds the replay certification.
   be at the price at the evaluated candle); `entry_too_far` is its only distance protection.
 - `Setup.RewardRisk` and the `target_room_r` component are reward over the risk the execution layer will run (the stop
   widened to the instrument floor); `technical_reward_risk` is reward over the stop itself.
+
+## 12. What this specification does not claim
+
+It is a technical contract. It makes **no** profitability claim: the replay does not show an edge for v2 or v3 on XAU or
+FX, and a hypothetical outcome is not a broker outcome. The audit's open limits (broker deal P&L, per-leg fills,
+commission and swap) are unchanged.
