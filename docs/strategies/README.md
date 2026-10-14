@@ -2,7 +2,7 @@
 
 The canonical list of automatic technical theses. Each has one Go package in
 `analysis-engine/internal/strategy/`, one versioned entry in
-`config/analysis.yml` and a specification in this directory. All 21 are enabled in
+`config/analysis.yml` and a specification in this directory. All 20 are enabled in
 the live Go opportunity stream; the instrument decides whether an opportunity may
 trade.
 
@@ -50,7 +50,6 @@ Every strategy has exactly one status:
 | `snap_back` | key level or zone, extension, graded grab | Python detector (1c9f323) | `test/detectorparity` golden | all | live | LEGACY_PARITY_PROVEN | 6 / 13 |
 | `momentum_ride` | displacement sequence, opposing liquidity | Python detector (1c9f323) | `test/detectorparity` golden | all | live | LEGACY_PARITY_PROVEN | 8 / 5 |
 | `fade_scalp` | equal-level sweep and reclaim, PD, chop edge | Python detector (1c9f323) | `test/detectorparity` golden | all | live | LEGACY_PARITY_PROVEN | 10 / 20 |
-| `range_sweep` | M5 range, M1 edge excursion and reclaim | Python scalp lane (a1c77584) | `test/scalpparity` real and synthetic M1 captures, 0 mismatches | XAU only | live | LEGACY_PARITY_PROVEN | 3 (Oct 2-6 M1 capture) |
 | `scalp_breakout_retest` | M5 compression, M1 acceptance and retest | Python scalp lane (a1c77584) | `test/scalpparity` real and synthetic M1 captures, 0 mismatches | XAU only | live | LEGACY_PARITY_PROVEN | 8 (Oct 2-6 M1 capture) |
 | `flip_zone` | zones born of an accepted role flip, key-level role, reaction | `flip_demand_zone_reaction` / `flip_supply_zone_reaction` (1c9f323) | `test/legacyparity` golden, 5 symbols: 48 BUY and 43 SELL oracle decisions, identical (presence, direction, entry, stars) and silent elsewhere | all | live | LEGACY_PARITY_PROVEN | 34 / 16 |
 | `session_level` | completed Asia / London / NY and previous-day / previous-week highs and lows, first-touch rejection or sweep and reclaim | none (Go v4; the Python publisher 1c9f323 was v3, see [session_level](session_level.md)) | contract tests in `internal/strategy/sessionlevel`, `test/slreplay` (defect reproduction with an independent audit, the five losing XAU trades, no future dependence, invariants, golden) | all | live (XAU enabled 13 Oct 2026; FX unchanged) | GO_NATIVE_VALIDATED | 6 / 3 (v3: 48 / 38) |
@@ -185,7 +184,6 @@ oracle; never from Go output.
 - [snap_back](snap_back.md)
 - [momentum_ride](momentum_ride.md)
 - [fade_scalp](fade_scalp.md)
-- [range_sweep](range_sweep.md)
 - [scalp_breakout_retest](scalp_breakout_retest.md)
 - [flip_zone](flip_zone.md)
 - [session_level](session_level.md)

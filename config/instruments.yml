@@ -483,17 +483,12 @@ instruments:
         # the same change. Rollback is restoring the two names here: containment is
         # read at match creation and again at plan admission, so it stops NEW plans
         # only; it does not cancel, modify or close anything already published or open.
-        #   range_sweep: step 1 of its retirement (docs/strategies/ae-strategy-retirement-review.md,
-        #     owner-approved 2026-10-14). It accepts a touch within a buffer as a sweep and its
-        #     production exit paths bound the mean at -0.41R to -0.37R over 38 trades.
-        #     Step 3 (enabled: false) follows a two-week soak.
         # scalp_breakout_retest was proven against the frozen scalp lane (real and
         # synthetic M1 captures, 0 mismatches) and executes.
         go_opportunity:
           observe_only_strategies:
             - liquidity_sweep
             - impulse_pullback
-            - range_sweep
           # The M15 supply/demand extension (#742) is not part of the proven Python
           # behavior: M15 zones are still detected and published, never traded, until
           # their execution quality is validated.

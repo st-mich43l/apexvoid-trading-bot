@@ -17,7 +17,6 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/momentumride"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/orderblock"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/rangeedge"
-	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/rangesweep"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/scalpbreakoutretest"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/sessionlevel"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/snapback"
@@ -59,7 +58,6 @@ var strategyFactories = map[strategy.StrategyID]strategy.Factory{
 	snapback.ID:            snapback.New,
 	fadescalp.ID:           fadescalp.New,
 	liquiditysweep.ID:      liquiditysweep.New,
-	rangesweep.ID:          rangesweep.New,
 	impulsepullback.ID:     impulsepullback.New,
 	scalpbreakoutretest.ID: scalpbreakoutretest.New,
 }
