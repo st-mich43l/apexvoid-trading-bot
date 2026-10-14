@@ -1,0 +1,4821 @@
+{
+ "description": "Confluence Zone v3 replay certification over the committed real production captures. Hypothetical, causal fills (a fill needs a later candle that trades to the proximal edge; stop wins a same-candle tie); no spread, slippage, commission, M1 trigger or broker behaviour. Model A is the legacy running-intersection detector (frozen baseline data), B the Python-parity union detector (v2, re-implemented in this package), C the v3 structural engine with v2's confirmation, stop and target, D the full v3 strategy as the engine publishes it.",
+ "method": [
+  "every capture is replayed through the production engine path (replaycapture.Replay) candle by candle; the models are evaluated on the same closed candles",
+  "decisions are thinned to one per symbol, direction and hour (overlapping re-confirmations are not independent trades)",
+  "a decision is executable only if its risk from the proximal edge is within the instrument's execution stop cap (the Algo Bot refuses a plan beyond it); statistics are on executable filled decisions, 'as published' ignores the cap",
+  "single_target_r: the published stop and target; ladder_r: 1R-4R closing 40/20/20/20 with break-even after the first, the stop widened to the instrument's floor when tighter",
+  "intervals are seeded 95 % bootstrap over the thinned decisions, which treats them as independent and is optimistic",
+  "development and held-out periods are chronological and disjoint; no coefficient was chosen on a held-out period",
+  "winners/losers removed are judged by the baseline's own simulated single-target outcome; a v3 decision counterparts a v2 one when direction matches, the confirmation is within two candles and the entries overlap"
+ ],
+ "confluence_zone_v3_xau_parameters": {
+  "confluence_floor": 2,
+  "confluence_mad_score_weight": 2,
+  "confluence_scoring_version": "v1",
+  "confluence_star_three_ratio": 0.585,
+  "confluence_star_two_ratio": 0.39,
+  "confluence_zone_quality_weight": 4,
+  "displacement_body_ratio": 0.6,
+  "displacement_grade_atr": 1,
+  "displacement_range_atr": 0.5,
+  "engulfing_minimum_range_atr": 0.5,
+  "execution_stop_max_pips": 70,
+  "execution_stop_min_pips": 50,
+  "expiry_hours": 12,
+  "fibonacci_confluence_weight": 2.5,
+  "fibonacci_enabled": true,
+  "fibonacci_epsilon_atr": 0.15,
+  "fvg_entry_max_width_price": 5,
+  "invalidation_buffer_atr": 0.5,
+  "maximum_entry_atr": 2,
+  "maximum_zone_width_atr": 1.5,
+  "minimum_facts": 2,
+  "minimum_overlap_atr": 0.05,
+  "minimum_overlap_pips": 1,
+  "minimum_reclaim_atr": 0,
+  "minimum_rejection_range_atr": 0.25,
+  "minimum_reward_risk": 1.15,
+  "minimum_sweep_atr": 0.05,
+  "minimum_sweep_pips": 1,
+  "minimum_target_distance_atr": 1,
+  "pip_size": 0.1,
+  "price_digits": 2,
+  "proximal_band_atr": 0.5,
+  "reaction_lookback_bars": 3,
+  "rejection_close_strength": 0.6,
+  "rejection_wick_ratio": 0.25,
+  "technique_retest_max_touches": 30
+ },
+ "captures_sha256": {
+  "replay-eurusd-production-capture-20261013.json": "2e6cfd5cdc28ce0e18c2869848d68cf77da7b5fa000b9322f35ba7c4365e11d4",
+  "replay-gbpjpy-production-capture-20261013.json": "95cd46fce38a877b97d05a11a0511162f2878912e727392314c3df04f7835169",
+  "replay-gbpusd-production-capture-20261013.json": "1fdcc9858ed1dd61922f4c3b7c8d211a4d2b1c0880c640ebf7ec3fb159fb6a9f",
+  "replay-usdjpy-production-capture-20261013.json": "6a0d540f60f53a0628248bb6c0dff1f5c8789ce24474a5644c95a5ccca21caf0",
+  "replay-xau-production-capture-20260921.json": "a7663f03efe8f564b17cf32b0af678a8f09c93d4a429b661efa672b7c7004f30",
+  "replay-xau-production-capture-20261013.json": "6d929c75563da1d562958ff2882f98ff338adaa7ad68d725435f8f957f8d1da8"
+ },
+ "periods": {
+  "fx_all": {
+   "label": "FX (4 pairs), 2 - 13 Oct pooled",
+   "role": "pooled",
+   "from_utc": "2026-10-02 00:00",
+   "to_utc": "2026-10-14 00:00",
+   "models": {
+    "A": {
+     "model": "A",
+     "decisions": 1023,
+     "thinned_one_per_hour_direction": 499,
+     "executable_within_stop_cap": 499,
+     "filled_executable": 488,
+     "single_target_r": {
+      "n": 488,
+      "mean_r": -0.136,
+      "ci95_lo": -0.284,
+      "ci95_hi": 0.017,
+      "wins": 116
+     },
+     "ladder_r": {
+      "n": 488,
+      "mean_r": -0.036,
+      "ci95_lo": -0.13,
+      "ci95_hi": 0.055,
+      "wins": 233
+     },
+     "single_target_r_as_published": {
+      "n": 488,
+      "mean_r": -0.136,
+      "ci95_lo": -0.284,
+      "ci95_hi": 0.017,
+      "wins": 116
+     },
+     "median_stop_pips": 3.5,
+     "median_stop_atr": 0.9,
+     "median_reward_risk": 2.44,
+     "median_mfe_r": 1.11,
+     "median_mae_r": 1.19,
+     "fixed_reward_risk_targets": 0,
+     "patterns": {
+      "engulfing": 109,
+      "rejection_choch": 18,
+      "strong_reclaim": 735,
+      "wick_rejection": 161
+     }
+    },
+    "B": {
+     "model": "B",
+     "decisions": 745,
+     "thinned_one_per_hour_direction": 406,
+     "executable_within_stop_cap": 406,
+     "filled_executable": 401,
+     "single_target_r": {
+      "n": 401,
+      "mean_r": -0.042,
+      "ci95_lo": -0.198,
+      "ci95_hi": 0.131,
+      "wins": 128
+     },
+     "ladder_r": {
+      "n": 401,
+      "mean_r": -0.066,
+      "ci95_lo": -0.166,
+      "ci95_hi": 0.038,
+      "wins": 178
+     },
+     "single_target_r_as_published": {
+      "n": 401,
+      "mean_r": -0.042,
+      "ci95_lo": -0.198,
+      "ci95_hi": 0.131,
+      "wins": 128
+     },
+     "median_stop_pips": 9.1,
+     "median_stop_atr": 2.33,
+     "median_reward_risk": 1.12,
+     "median_mfe_r": 0.81,
+     "median_mae_r": 1.07,
+     "fixed_reward_risk_targets": 33,
+     "patterns": {
+      "engulfing": 141,
+      "rejection_choch": 11,
+      "strong_reclaim": 125,
+      "sweep_reclaim": 274,
+      "wick_rejection": 194
+     },
+     "stars": {
+      "2": 293,
+      "3": 452
+     },
+     "decisions_with_a_member_not_confirmable_before_the_touch": 243,
+     "decisions_with_fewer_than_two_independent_sources": 295,
+     "sweep_reclaim_confirmations_by_an_opposite_colour_candle": 83,
+     "median_union_width_over_overlap_width": 2.28,
+     "decisions_whose_reaction_had_already_failed_at_publication": 68
+    },
+    "C": {
+     "model": "C",
+     "decisions": 679,
+     "thinned_one_per_hour_direction": 274,
+     "executable_within_stop_cap": 274,
+     "filled_executable": 270,
+     "single_target_r": {
+      "n": 270,
+      "mean_r": -0.093,
+      "ci95_lo": -0.252,
+      "ci95_hi": 0.082,
+      "wins": 102
+     },
+     "ladder_r": {
+      "n": 270,
+      "mean_r": -0.096,
+      "ci95_lo": -0.223,
+      "ci95_hi": 0.028,
+      "wins": 122
+     },
+     "single_target_r_as_published": {
+      "n": 270,
+      "mean_r": -0.093,
+      "ci95_lo": -0.252,
+      "ci95_hi": 0.082,
+      "wins": 102
+     },
+     "median_stop_pips": 10.2,
+     "median_stop_atr": 2.6,
+     "median_reward_risk": 0.9,
+     "median_mfe_r": 0.81,
+     "median_mae_r": 1.06,
+     "fixed_reward_risk_targets": 4,
+     "patterns": {
+      "engulfing": 116,
+      "rejection_choch": 8,
+      "strong_reclaim": 128,
+      "sweep_reclaim": 265,
+      "wick_rejection": 162
+     },
+     "stars": {
+      "2": 679
+     },
+     "decisions_whose_reaction_had_already_failed_at_publication": 41
+    },
+    "D": {
+     "model": "D",
+     "decisions": 170,
+     "thinned_one_per_hour_direction": 87,
+     "executable_within_stop_cap": 87,
+     "filled_executable": 81,
+     "single_target_r": {
+      "n": 81,
+      "mean_r": -0.229,
+      "ci95_lo": -0.489,
+      "ci95_hi": 0.086,
+      "wins": 22
+     },
+     "ladder_r": {
+      "n": 81,
+      "mean_r": -0.146,
+      "ci95_lo": -0.368,
+      "ci95_hi": 0.101,
+      "wins": 32
+     },
+     "single_target_r_as_published": {
+      "n": 81,
+      "mean_r": -0.229,
+      "ci95_lo": -0.489,
+      "ci95_hi": 0.086,
+      "wins": 22
+     },
+     "median_stop_pips": 13.7,
+     "median_stop_atr": 2.63,
+     "median_reward_risk": 2.89,
+     "median_mfe_r": 0.86,
+     "median_mae_r": 1.1,
+     "fixed_reward_risk_targets": 0,
+     "patterns": {
+      "strong_reclaim": 63,
+      "sweep_reclaim": 16,
+      "wick_rejection": 91
+     },
+     "stars": {
+      "2": 170
+     }
+    }
+   },
+   "v3_against_v2": {
+    "baseline": "B",
+    "candidate": "D",
+    "baseline_filled": 401,
+    "baseline_losers_removed": 250,
+    "baseline_losers": 273,
+    "baseline_winners_removed": 121,
+    "baseline_winners": 128,
+    "candidate_decisions_with_no_baseline_counterpart": 51,
+    "candidate_thinned": 87,
+    "retained_baseline_mean_r": -0.278,
+    "removed_baseline_mean_r": -0.023
+   },
+   "structure_only_against_v2": {
+    "baseline": "B",
+    "candidate": "C",
+    "baseline_filled": 401,
+    "baseline_losers_removed": 158,
+    "baseline_losers": 273,
+    "baseline_winners_removed": 81,
+    "baseline_winners": 128,
+    "candidate_decisions_with_no_baseline_counterpart": 102,
+    "candidate_thinned": 274,
+    "retained_baseline_mean_r": -0.086,
+    "removed_baseline_mean_r": -0.013
+   },
+   "v3_rejections_by_reason": {
+    "confluence_floor": 3,
+    "entry_too_far": 38,
+    "insufficient_target_room": 2,
+    "no_directional_confirmation": 3705,
+    "no_opposing_liquidity": 40,
+    "overlap_too_narrow": 343,
+    "price_accepted_through_region": 870,
+    "price_through_entry": 6,
+    "reaction_failed_after_confirmation": 194,
+    "reward_risk_below_minimum": 732,
+    "single_independent_origin": 1433,
+    "stop_exceeds_execution_envelope": 28,
+    "structure_not_yet_available": 1943,
+    "target_blocked_by_opposing_structure": 340
+   }
+  },
+  "fx_dev": {
+   "label": "FX (4 pairs) 2 - 8 Oct",
+   "role": "development",
+   "from_utc": "2026-10-02 00:00",
+   "to_utc": "2026-10-08 00:00",
+   "models": {
+    "A": {
+     "model": "A",
+     "decisions": 536,
+     "thinned_one_per_hour_direction": 254,
+     "executable_within_stop_cap": 254,
+     "filled_executable": 248,
+     "single_target_r": {
+      "n": 248,
+      "mean_r": -0.035,
+      "ci95_lo": -0.262,
+      "ci95_hi": 0.2,
+      "wins": 64
+     },
+     "ladder_r": {
+      "n": 248,
+      "mean_r": -0.016,
+      "ci95_lo": -0.151,
+      "ci95_hi": 0.111,
+      "wins": 122
+     },
+     "single_target_r_as_published": {
+      "n": 248,
+      "mean_r": -0.035,
+      "ci95_lo": -0.262,
+      "ci95_hi": 0.2,
+      "wins": 64
+     },
+     "median_stop_pips": 3.9,
+     "median_stop_atr": 0.92,
+     "median_reward_risk": 2.36,
+     "median_mfe_r": 1.12,
+     "median_mae_r": 1.16,
+     "fixed_reward_risk_targets": 0,
+     "patterns": {
+      "engulfing": 57,
+      "rejection_choch": 9,
+      "strong_reclaim": 382,
+      "wick_rejection": 88
+     }
+    },
+    "B": {
+     "model": "B",
+     "decisions": 415,
+     "thinned_one_per_hour_direction": 223,
+     "executable_within_stop_cap": 223,
+     "filled_executable": 221,
+     "single_target_r": {
+      "n": 221,
+      "mean_r": -0.107,
+      "ci95_lo": -0.302,
+      "ci95_hi": 0.1,
+      "wins": 64
+     },
+     "ladder_r": {
+      "n": 221,
+      "mean_r": -0.153,
+      "ci95_lo": -0.294,
+      "ci95_hi": -0.003,
+      "wins": 87
+     },
+     "single_target_r_as_published": {
+      "n": 221,
+      "mean_r": -0.107,
+      "ci95_lo": -0.302,
+      "ci95_hi": 0.1,
+      "wins": 64
+     },
+     "median_stop_pips": 10.2,
+     "median_stop_atr": 2.37,
+     "median_reward_risk": 1.06,
+     "median_mfe_r": 0.77,
+     "median_mae_r": 1.09,
+     "fixed_reward_risk_targets": 25,
+     "patterns": {
+      "engulfing": 67,
+      "rejection_choch": 7,
+      "strong_reclaim": 78,
+      "sweep_reclaim": 146,
+      "wick_rejection": 117
+     },
+     "stars": {
+      "2": 162,
+      "3": 253
+     },
+     "decisions_with_a_member_not_confirmable_before_the_touch": 131,
+     "decisions_with_fewer_than_two_independent_sources": 164,
+     "sweep_reclaim_confirmations_by_an_opposite_colour_candle": 55,
+     "median_union_width_over_overlap_width": 2.48,
+     "decisions_whose_reaction_had_already_failed_at_publication": 32
+    },
+    "C": {
+     "model": "C",
+     "decisions": 404,
+     "thinned_one_per_hour_direction": 156,
+     "executable_within_stop_cap": 156,
+     "filled_executable": 155,
+     "single_target_r": {
+      "n": 155,
+      "mean_r": -0.015,
+      "ci95_lo": -0.221,
+      "ci95_hi": 0.22,
+      "wins": 65
+     },
+     "ladder_r": {
+      "n": 155,
+      "mean_r": -0.115,
+      "ci95_lo": -0.278,
+      "ci95_hi": 0.043,
+      "wins": 71
+     },
+     "single_target_r_as_published": {
+      "n": 155,
+      "mean_r": -0.015,
+      "ci95_lo": -0.221,
+      "ci95_hi": 0.22,
+      "wins": 65
+     },
+     "median_stop_pips": 11.4,
+     "median_stop_atr": 2.7,
+     "median_reward_risk": 0.82,
+     "median_mfe_r": 0.95,
+     "median_mae_r": 1.04,
+     "fixed_reward_risk_targets": 2,
+     "patterns": {
+      "engulfing": 64,
+      "rejection_choch": 5,
+      "strong_reclaim": 79,
+      "sweep_reclaim": 148,
+      "wick_rejection": 108
+     },
+     "stars": {
+      "2": 404
+     },
+     "decisions_whose_reaction_had_already_failed_at_publication": 23
+    },
+    "D": {
+     "model": "D",
+     "decisions": 103,
+     "thinned_one_per_hour_direction": 54,
+     "executable_within_stop_cap": 54,
+     "filled_executable": 50,
+     "single_target_r": {
+      "n": 50,
+      "mean_r": -0.279,
+      "ci95_lo": -0.597,
+      "ci95_hi": 0.105,
+      "wins": 13
+     },
+     "ladder_r": {
+      "n": 50,
+      "mean_r": -0.222,
+      "ci95_lo": -0.485,
+      "ci95_hi": 0.075,
+      "wins": 18
+     },
+     "single_target_r_as_published": {
+      "n": 50,
+      "mean_r": -0.279,
+      "ci95_lo": -0.597,
+      "ci95_hi": 0.105,
+      "wins": 13
+     },
+     "median_stop_pips": 15.3,
+     "median_stop_atr": 2.58,
+     "median_reward_risk": 2.35,
+     "median_mfe_r": 0.89,
+     "median_mae_r": 1.08,
+     "fixed_reward_risk_targets": 0,
+     "patterns": {
+      "strong_reclaim": 38,
+      "sweep_reclaim": 9,
+      "wick_rejection": 56
+     },
+     "stars": {
+      "2": 103
+     }
+    }
+   },
+   "v3_against_v2": {
+    "baseline": "B",
+    "candidate": "D",
+    "baseline_filled": 221,
+    "baseline_losers_removed": 144,
+    "baseline_losers": 157,
+    "baseline_winners_removed": 61,
+    "baseline_winners": 64,
+    "candidate_decisions_with_no_baseline_counterpart": 37,
+    "candidate_thinned": 54,
+    "retained_baseline_mean_r": -0.464,
+    "removed_baseline_mean_r": -0.079
+   },
+   "structure_only_against_v2": {
+    "baseline": "B",
+    "candidate": "C",
+    "baseline_filled": 221,
+    "baseline_losers_removed": 93,
+    "baseline_losers": 157,
+    "baseline_winners_removed": 37,
+    "baseline_winners": 64,
+    "candidate_decisions_with_no_baseline_counterpart": 59,
+    "candidate_thinned": 156,
+    "retained_baseline_mean_r": 0.019,
+    "removed_baseline_mean_r": -0.195
+   },
+   "v3_rejections_by_reason": {
+    "confluence_floor": 3,
+    "entry_too_far": 24,
+    "insufficient_target_room": 1,
+    "no_directional_confirmation": 2168,
+    "no_opposing_liquidity": 22,
+    "overlap_too_narrow": 184,
+    "price_accepted_through_region": 475,
+    "price_through_entry": 2,
+    "reaction_failed_after_confirmation": 125,
+    "reward_risk_below_minimum": 454,
+    "single_independent_origin": 772,
+    "stop_exceeds_execution_envelope": 24,
+    "structure_not_yet_available": 1107,
+    "target_blocked_by_opposing_structure": 225
+   }
+  },
+  "fx_heldout": {
+   "label": "FX (4 pairs) 8 - 13 Oct",
+   "role": "held-out",
+   "from_utc": "2026-10-08 00:00",
+   "to_utc": "2026-10-14 00:00",
+   "models": {
+    "A": {
+     "model": "A",
+     "decisions": 487,
+     "thinned_one_per_hour_direction": 245,
+     "executable_within_stop_cap": 245,
+     "filled_executable": 240,
+     "single_target_r": {
+      "n": 240,
+      "mean_r": -0.241,
+      "ci95_lo": -0.43,
+      "ci95_hi": -0.031,
+      "wins": 52
+     },
+     "ladder_r": {
+      "n": 240,
+      "mean_r": -0.057,
+      "ci95_lo": -0.19,
+      "ci95_hi": 0.075,
+      "wins": 111
+     },
+     "single_target_r_as_published": {
+      "n": 240,
+      "mean_r": -0.241,
+      "ci95_lo": -0.43,
+      "ci95_hi": -0.031,
+      "wins": 52
+     },
+     "median_stop_pips": 3.2,
+     "median_stop_atr": 0.87,
+     "median_reward_risk": 2.47,
+     "median_mfe_r": 1.11,
+     "median_mae_r": 1.22,
+     "fixed_reward_risk_targets": 0,
+     "patterns": {
+      "engulfing": 52,
+      "rejection_choch": 9,
+      "strong_reclaim": 353,
+      "wick_rejection": 73
+     }
+    },
+    "B": {
+     "model": "B",
+     "decisions": 330,
+     "thinned_one_per_hour_direction": 183,
+     "executable_within_stop_cap": 183,
+     "filled_executable": 180,
+     "single_target_r": {
+      "n": 180,
+      "mean_r": 0.036,
+      "ci95_lo": -0.194,
+      "ci95_hi": 0.302,
+      "wins": 64
+     },
+     "ladder_r": {
+      "n": 180,
+      "mean_r": 0.042,
+      "ci95_lo": -0.11,
+      "ci95_hi": 0.194,
+      "wins": 91
+     },
+     "single_target_r_as_published": {
+      "n": 180,
+      "mean_r": 0.036,
+      "ci95_lo": -0.194,
+      "ci95_hi": 0.302,
+      "wins": 64
+     },
+     "median_stop_pips": 7.6,
+     "median_stop_atr": 2.29,
+     "median_reward_risk": 1.22,
+     "median_mfe_r": 0.86,
+     "median_mae_r": 1.06,
+     "fixed_reward_risk_targets": 8,
+     "patterns": {
+      "engulfing": 74,
+      "rejection_choch": 4,
+      "strong_reclaim": 47,
+      "sweep_reclaim": 128,
+      "wick_rejection": 77
+     },
+     "stars": {
+      "2": 131,
+      "3": 199
+     },
+     "decisions_with_a_member_not_confirmable_before_the_touch": 112,
+     "decisions_with_fewer_than_two_independent_sources": 131,
+     "sweep_reclaim_confirmations_by_an_opposite_colour_candle": 28,
+     "median_union_width_over_overlap_width": 2.17,
+     "decisions_whose_reaction_had_already_failed_at_publication": 36
+    },
+    "C": {
+     "model": "C",
+     "decisions": 275,
+     "thinned_one_per_hour_direction": 118,
+     "executable_within_stop_cap": 118,
+     "filled_executable": 115,
+     "single_target_r": {
+      "n": 115,
+      "mean_r": -0.199,
+      "ci95_lo": -0.445,
+      "ci95_hi": 0.08,
+      "wins": 37
+     },
+     "ladder_r": {
+      "n": 115,
+      "mean_r": -0.07,
+      "ci95_lo": -0.26,
+      "ci95_hi": 0.126,
+      "wins": 51
+     },
+     "single_target_r_as_published": {
+      "n": 115,
+      "mean_r": -0.199,
+      "ci95_lo": -0.445,
+      "ci95_hi": 0.08,
+      "wins": 37
+     },
+     "median_stop_pips": 9.2,
+     "median_stop_atr": 2.42,
+     "median_reward_risk": 1.06,
+     "median_mfe_r": 0.77,
+     "median_mae_r": 1.08,
+     "fixed_reward_risk_targets": 2,
+     "patterns": {
+      "engulfing": 52,
+      "rejection_choch": 3,
+      "strong_reclaim": 49,
+      "sweep_reclaim": 117,
+      "wick_rejection": 54
+     },
+     "stars": {
+      "2": 275
+     },
+     "decisions_whose_reaction_had_already_failed_at_publication": 18
+    },
+    "D": {
+     "model": "D",
+     "decisions": 67,
+     "thinned_one_per_hour_direction": 33,
+     "executable_within_stop_cap": 33,
+     "filled_executable": 31,
+     "single_target_r": {
+      "n": 31,
+      "mean_r": -0.15,
+      "ci95_lo": -0.605,
+      "ci95_hi": 0.375,
+      "wins": 9
+     },
+     "ladder_r": {
+      "n": 31,
+      "mean_r": -0.023,
+      "ci95_lo": -0.41,
+      "ci95_hi": 0.387,
+      "wins": 14
+     },
+     "single_target_r_as_published": {
+      "n": 31,
+      "mean_r": -0.15,
+      "ci95_lo": -0.605,
+      "ci95_hi": 0.375,
+      "wins": 9
+     },
+     "median_stop_pips": 11.6,
+     "median_stop_atr": 2.88,
+     "median_reward_risk": 3.76,
+     "median_mfe_r": 0.77,
+     "median_mae_r": 1.1,
+     "fixed_reward_risk_targets": 0,
+     "patterns": {
+      "strong_reclaim": 25,
+      "sweep_reclaim": 7,
+      "wick_rejection": 35
+     },
+     "stars": {
+      "2": 67
+     }
+    }
+   },
+   "v3_against_v2": {
+    "baseline": "B",
+    "candidate": "D",
+    "baseline_filled": 180,
+    "baseline_losers_removed": 107,
+    "baseline_losers": 116,
+    "baseline_winners_removed": 60,
+    "baseline_winners": 64,
+    "candidate_decisions_with_no_baseline_counterpart": 14,
+    "candidate_thinned": 33,
+    "retained_baseline_mean_r": 0.007,
+    "removed_baseline_mean_r": 0.039
+   },
+   "structure_only_against_v2": {
+    "baseline": "B",
+    "candidate": "C",
+    "baseline_filled": 180,
+    "baseline_losers_removed": 66,
+    "baseline_losers": 116,
+    "baseline_winners_removed": 44,
+    "baseline_winners": 64,
+    "candidate_decisions_with_no_baseline_counterpart": 43,
+    "candidate_thinned": 118,
+    "retained_baseline_mean_r": -0.211,
+    "removed_baseline_mean_r": 0.194
+   },
+   "v3_rejections_by_reason": {
+    "entry_too_far": 14,
+    "insufficient_target_room": 1,
+    "no_directional_confirmation": 1537,
+    "no_opposing_liquidity": 18,
+    "overlap_too_narrow": 159,
+    "price_accepted_through_region": 395,
+    "price_through_entry": 4,
+    "reaction_failed_after_confirmation": 69,
+    "reward_risk_below_minimum": 278,
+    "single_independent_origin": 661,
+    "stop_exceeds_execution_envelope": 4,
+    "structure_not_yet_available": 836,
+    "target_blocked_by_opposing_structure": 115
+   }
+  },
+  "xau_all": {
+   "label": "XAU, every window pooled (14-21 Sep and 1-13 Oct)",
+   "role": "pooled",
+   "from_utc": "2026-09-01 00:00",
+   "to_utc": "2026-10-14 00:00",
+   "models": {
+    "A": {
+     "model": "A",
+     "decisions": 294,
+     "thinned_one_per_hour_direction": 173,
+     "executable_within_stop_cap": 160,
+     "filled_executable": 158,
+     "single_target_r": {
+      "n": 158,
+      "mean_r": 0.167,
+      "ci95_lo": -0.129,
+      "ci95_hi": 0.491,
+      "wins": 47
+     },
+     "ladder_r": {
+      "n": 158,
+      "mean_r": 0.092,
+      "ci95_lo": -0.1,
+      "ci95_hi": 0.28,
+      "wins": 81
+     },
+     "single_target_r_as_published": {
+      "n": 171,
+      "mean_r": 0.161,
+      "ci95_lo": -0.122,
+      "ci95_hi": 0.453,
+      "wins": 51
+     },
+     "median_stop_pips": 36.3,
+     "median_stop_atr": 0.95,
+     "median_reward_risk": 2.15,
+     "median_mfe_r": 0.99,
+     "median_mae_r": 1.19,
+     "fixed_reward_risk_targets": 0,
+     "patterns": {
+      "engulfing": 27,
+      "rejection_choch": 9,
+      "strong_reclaim": 224,
+      "wick_rejection": 34
+     }
+    },
+    "B": {
+     "model": "B",
+     "decisions": 256,
+     "thinned_one_per_hour_direction": 167,
+     "executable_within_stop_cap": 85,
+     "filled_executable": 85,
+     "single_target_r": {
+      "n": 85,
+      "mean_r": -0.259,
+      "ci95_lo": -0.591,
+      "ci95_hi": 0.094,
+      "wins": 20
+     },
+     "ladder_r": {
+      "n": 85,
+      "mean_r": 0.045,
+      "ci95_lo": -0.205,
+      "ci95_hi": 0.315,
+      "wins": 41
+     },
+     "single_target_r_as_published": {
+      "n": 167,
+      "mean_r": -0.002,
+      "ci95_lo": -0.279,
+      "ci95_hi": 0.282,
+      "wins": 49
+     },
+     "median_stop_pips": 63.1,
+     "median_stop_atr": 1.93,
+     "median_reward_risk": 1.25,
+     "median_mfe_r": 0.56,
+     "median_mae_r": 1.22,
+     "fixed_reward_risk_targets": 3,
+     "patterns": {
+      "engulfing": 27,
+      "rejection_choch": 3,
+      "strong_reclaim": 74,
+      "sweep_reclaim": 105,
+      "wick_rejection": 47
+     },
+     "stars": {
+      "2": 101,
+      "3": 155
+     },
+     "decisions_with_a_member_not_confirmable_before_the_touch": 88,
+     "decisions_with_fewer_than_two_independent_sources": 120,
+     "sweep_reclaim_confirmations_by_an_opposite_colour_candle": 27,
+     "median_union_width_over_overlap_width": 2.32,
+     "decisions_whose_reaction_had_already_failed_at_publication": 35
+    },
+    "C": {
+     "model": "C",
+     "decisions": 185,
+     "thinned_one_per_hour_direction": 98,
+     "executable_within_stop_cap": 55,
+     "filled_executable": 55,
+     "single_target_r": {
+      "n": 55,
+      "mean_r": -0.186,
+      "ci95_lo": -0.536,
+      "ci95_hi": 0.193,
+      "wins": 17
+     },
+     "ladder_r": {
+      "n": 55,
+      "mean_r": -0.324,
+      "ci95_lo": -0.571,
+      "ci95_hi": -0.033,
+      "wins": 20
+     },
+     "single_target_r_as_published": {
+      "n": 98,
+      "mean_r": -0.066,
+      "ci95_lo": -0.338,
+      "ci95_hi": 0.24,
+      "wins": 33
+     },
+     "median_stop_pips": 59.6,
+     "median_stop_atr": 1.84,
+     "median_reward_risk": 1.2,
+     "median_mfe_r": 0.46,
+     "median_mae_r": 1.09,
+     "fixed_reward_risk_targets": 0,
+     "patterns": {
+      "engulfing": 12,
+      "rejection_choch": 2,
+      "strong_reclaim": 78,
+      "sweep_reclaim": 80,
+      "wick_rejection": 13
+     },
+     "stars": {
+      "2": 185
+     },
+     "decisions_whose_reaction_had_already_failed_at_publication": 14
+    },
+    "D": {
+     "model": "D",
+     "decisions": 70,
+     "thinned_one_per_hour_direction": 44,
+     "executable_within_stop_cap": 44,
+     "filled_executable": 42,
+     "single_target_r": {
+      "n": 42,
+      "mean_r": -0.529,
+      "ci95_lo": -1,
+      "ci95_hi": 0.062,
+      "wins": 3
+     },
+     "ladder_r": {
+      "n": 42,
+      "mean_r": -0.305,
+      "ci95_lo": -0.581,
+      "ci95_hi": -0.019,
+      "wins": 17
+     },
+     "single_target_r_as_published": {
+      "n": 42,
+      "mean_r": -0.529,
+      "ci95_lo": -1,
+      "ci95_hi": 0.062,
+      "wins": 3
+     },
+     "median_stop_pips": 54.6,
+     "median_stop_atr": 1.44,
+     "median_reward_risk": 2.88,
+     "median_mfe_r": 0.97,
+     "median_mae_r": 1.21,
+     "fixed_reward_risk_targets": 0,
+     "patterns": {
+      "strong_reclaim": 20,
+      "sweep_reclaim": 25,
+      "wick_rejection": 25
+     },
+     "stars": {
+      "2": 69,
+      "3": 1
+     }
+    }
+   },
+   "v3_against_v2": {
+    "baseline": "B",
+    "candidate": "D",
+    "baseline_filled": 167,
+    "baseline_losers_removed": 113,
+    "baseline_losers": 118,
+    "baseline_winners_removed": 45,
+    "baseline_winners": 49,
+    "candidate_decisions_with_no_baseline_counterpart": 34,
+    "candidate_thinned": 44,
+    "retained_baseline_mean_r": 0.102,
+    "removed_baseline_mean_r": -0.007
+   },
+   "structure_only_against_v2": {
+    "baseline": "B",
+    "candidate": "C",
+    "baseline_filled": 167,
+    "baseline_losers_removed": 75,
+    "baseline_losers": 118,
+    "baseline_winners_removed": 38,
+    "baseline_winners": 49,
+    "candidate_decisions_with_no_baseline_counterpart": 36,
+    "candidate_thinned": 98,
+    "retained_baseline_mean_r": -0.415,
+    "removed_baseline_mean_r": 0.196
+   },
+   "v3_rejections_by_reason": {
+    "confluence_floor": 7,
+    "entry_too_far": 16,
+    "no_directional_confirmation": 1506,
+    "no_opposing_liquidity": 3,
+    "overlap_too_narrow": 61,
+    "price_accepted_through_region": 667,
+    "price_through_entry": 5,
+    "reaction_failed_after_confirmation": 88,
+    "reward_risk_below_minimum": 39,
+    "single_independent_origin": 895,
+    "stop_exceeds_execution_envelope": 447,
+    "structure_not_yet_available": 1606,
+    "target_blocked_by_opposing_structure": 48
+   }
+  },
+  "xau_oct_frozen_period": {
+   "label": "XAU 6 Oct 09:33 - 13 Oct (frozen technique publishers in production)",
+   "role": "held-out",
+   "from_utc": "2026-10-06 09:33",
+   "to_utc": "2026-10-14 00:00",
+   "models": {
+    "A": {
+     "model": "A",
+     "decisions": 107,
+     "thinned_one_per_hour_direction": 61,
+     "executable_within_stop_cap": 60,
+     "filled_executable": 58,
+     "single_target_r": {
+      "n": 58,
+      "mean_r": 0.592,
+      "ci95_lo": 0.011,
+      "ci95_hi": 1.178,
+      "wins": 23
+     },
+     "ladder_r": {
+      "n": 58,
+      "mean_r": 0.259,
+      "ci95_lo": -0.059,
+      "ci95_hi": 0.569,
+      "wins": 35
+     },
+     "single_target_r_as_published": {
+      "n": 59,
+      "mean_r": 0.565,
+      "ci95_lo": 0.006,
+      "ci95_hi": 1.191,
+      "wins": 23
+     },
+     "median_stop_pips": 33.9,
+     "median_stop_atr": 0.97,
+     "median_reward_risk": 1.9,
+     "median_mfe_r": 1.27,
+     "median_mae_r": 1.09,
+     "fixed_reward_risk_targets": 0,
+     "patterns": {
+      "engulfing": 7,
+      "rejection_choch": 6,
+      "strong_reclaim": 77,
+      "wick_rejection": 17
+     }
+    },
+    "B": {
+     "model": "B",
+     "decisions": 115,
+     "thinned_one_per_hour_direction": 67,
+     "executable_within_stop_cap": 44,
+     "filled_executable": 44,
+     "single_target_r": {
+      "n": 44,
+      "mean_r": -0.043,
+      "ci95_lo": -0.481,
+      "ci95_hi": 0.46,
+      "wins": 15
+     },
+     "ladder_r": {
+      "n": 44,
+      "mean_r": 0.182,
+      "ci95_lo": -0.155,
+      "ci95_hi": 0.527,
+      "wins": 25
+     },
+     "single_target_r_as_published": {
+      "n": 67,
+      "mean_r": 0.127,
+      "ci95_lo": -0.324,
+      "ci95_hi": 0.628,
+      "wins": 22
+     },
+     "median_stop_pips": 62.6,
+     "median_stop_atr": 2,
+     "median_reward_risk": 1.15,
+     "median_mfe_r": 0.89,
+     "median_mae_r": 1.19,
+     "fixed_reward_risk_targets": 3,
+     "patterns": {
+      "engulfing": 7,
+      "rejection_choch": 2,
+      "strong_reclaim": 24,
+      "sweep_reclaim": 61,
+      "wick_rejection": 21
+     },
+     "stars": {
+      "2": 47,
+      "3": 68
+     },
+     "decisions_with_a_member_not_confirmable_before_the_touch": 39,
+     "decisions_with_fewer_than_two_independent_sources": 45,
+     "sweep_reclaim_confirmations_by_an_opposite_colour_candle": 15,
+     "median_union_width_over_overlap_width": 2.09,
+     "decisions_whose_reaction_had_already_failed_at_publication": 18
+    },
+    "C": {
+     "model": "C",
+     "decisions": 91,
+     "thinned_one_per_hour_direction": 40,
+     "executable_within_stop_cap": 25,
+     "filled_executable": 25,
+     "single_target_r": {
+      "n": 25,
+      "mean_r": -0.204,
+      "ci95_lo": -0.631,
+      "ci95_hi": 0.249,
+      "wins": 9
+     },
+     "ladder_r": {
+      "n": 25,
+      "mean_r": -0.192,
+      "ci95_lo": -0.576,
+      "ci95_hi": 0.232,
+      "wins": 11
+     },
+     "single_target_r_as_published": {
+      "n": 40,
+      "mean_r": 0.038,
+      "ci95_lo": -0.359,
+      "ci95_hi": 0.457,
+      "wins": 17
+     },
+     "median_stop_pips": 59.6,
+     "median_stop_atr": 2.12,
+     "median_reward_risk": 1,
+     "median_mfe_r": 0.5,
+     "median_mae_r": 1.1,
+     "fixed_reward_risk_targets": 0,
+     "patterns": {
+      "engulfing": 3,
+      "rejection_choch": 1,
+      "strong_reclaim": 31,
+      "sweep_reclaim": 52,
+      "wick_rejection": 4
+     },
+     "stars": {
+      "2": 91
+     },
+     "decisions_whose_reaction_had_already_failed_at_publication": 8
+    },
+    "D": {
+     "model": "D",
+     "decisions": 26,
+     "thinned_one_per_hour_direction": 18,
+     "executable_within_stop_cap": 18,
+     "filled_executable": 17,
+     "single_target_r": {
+      "n": 17,
+      "mean_r": -0.616,
+      "ci95_lo": -1,
+      "ci95_hi": 0.151,
+      "wins": 1
+     },
+     "ladder_r": {
+      "n": 17,
+      "mean_r": -0.588,
+      "ci95_lo": -0.918,
+      "ci95_hi": -0.259,
+      "wins": 5
+     },
+     "single_target_r_as_published": {
+      "n": 17,
+      "mean_r": -0.616,
+      "ci95_lo": -1,
+      "ci95_hi": 0.151,
+      "wins": 1
+     },
+     "median_stop_pips": 55.6,
+     "median_stop_atr": 1.55,
+     "median_reward_risk": 2.84,
+     "median_mfe_r": 0.83,
+     "median_mae_r": 1.08,
+     "fixed_reward_risk_targets": 0,
+     "patterns": {
+      "strong_reclaim": 4,
+      "sweep_reclaim": 13,
+      "wick_rejection": 9
+     },
+     "stars": {
+      "2": 26
+     }
+    }
+   },
+   "v3_against_v2": {
+    "baseline": "B",
+    "candidate": "D",
+    "baseline_filled": 67,
+    "baseline_losers_removed": 44,
+    "baseline_losers": 45,
+    "baseline_winners_removed": 19,
+    "baseline_winners": 22,
+    "candidate_decisions_with_no_baseline_counterpart": 13,
+    "candidate_thinned": 18,
+    "retained_baseline_mean_r": 0.794,
+    "removed_baseline_mean_r": 0.084
+   },
+   "structure_only_against_v2": {
+    "baseline": "B",
+    "candidate": "C",
+    "baseline_filled": 67,
+    "baseline_losers_removed": 29,
+    "baseline_losers": 45,
+    "baseline_winners_removed": 17,
+    "baseline_winners": 22,
+    "candidate_decisions_with_no_baseline_counterpart": 15,
+    "candidate_thinned": 40,
+    "retained_baseline_mean_r": -0.365,
+    "removed_baseline_mean_r": 0.351
+   },
+   "v3_rejections_by_reason": {
+    "confluence_floor": 4,
+    "entry_too_far": 3,
+    "no_directional_confirmation": 628,
+    "no_opposing_liquidity": 1,
+    "overlap_too_narrow": 18,
+    "price_accepted_through_region": 228,
+    "price_through_entry": 4,
+    "reaction_failed_after_confirmation": 46,
+    "reward_risk_below_minimum": 37,
+    "single_independent_origin": 299,
+    "stop_exceeds_execution_envelope": 208,
+    "structure_not_yet_available": 589,
+    "target_blocked_by_opposing_structure": 26
+   }
+  },
+  "xau_oct_legacy_period": {
+   "label": "XAU 1 Oct - 6 Oct 09:33 (legacy running-intersection detector in production)",
+   "role": "development",
+   "from_utc": "2026-10-01 00:00",
+   "to_utc": "2026-10-06 09:33",
+   "models": {
+    "A": {
+     "model": "A",
+     "decisions": 75,
+     "thinned_one_per_hour_direction": 48,
+     "executable_within_stop_cap": 43,
+     "filled_executable": 43,
+     "single_target_r": {
+      "n": 43,
+      "mean_r": -0.233,
+      "ci95_lo": -0.701,
+      "ci95_hi": 0.328,
+      "wins": 8
+     },
+     "ladder_r": {
+      "n": 43,
+      "mean_r": 0.051,
+      "ci95_lo": -0.279,
+      "ci95_hi": 0.395,
+      "wins": 23
+     },
+     "single_target_r_as_published": {
+      "n": 48,
+      "mean_r": -0.134,
+      "ci95_lo": -0.584,
+      "ci95_hi": 0.394,
+      "wins": 11
+     },
+     "median_stop_pips": 32.3,
+     "median_stop_atr": 0.77,
+     "median_reward_risk": 2.9,
+     "median_mfe_r": 1.1,
+     "median_mae_r": 1.3,
+     "fixed_reward_risk_targets": 0,
+     "patterns": {
+      "engulfing": 7,
+      "rejection_choch": 1,
+      "strong_reclaim": 61,
+      "wick_rejection": 6
+     }
+    },
+    "B": {
+     "model": "B",
+     "decisions": 58,
+     "thinned_one_per_hour_direction": 41,
+     "executable_within_stop_cap": 18,
+     "filled_executable": 18,
+     "single_target_r": {
+      "n": 18,
+      "mean_r": -0.864,
+      "ci95_lo": -1,
+      "ci95_hi": -0.593,
+      "wins": 1
+     },
+     "ladder_r": {
+      "n": 18,
+      "mean_r": -0.178,
+      "ci95_lo": -0.689,
+      "ci95_hi": 0.356,
+      "wins": 7
+     },
+     "single_target_r_as_published": {
+      "n": 41,
+      "mean_r": -0.285,
+      "ci95_lo": -0.691,
+      "ci95_hi": 0.172,
+      "wins": 9
+     },
+     "median_stop_pips": 63.6,
+     "median_stop_atr": 1.92,
+     "median_reward_risk": 1.47,
+     "median_mfe_r": 0.48,
+     "median_mae_r": 1.33,
+     "fixed_reward_risk_targets": 0,
+     "patterns": {
+      "engulfing": 11,
+      "rejection_choch": 1,
+      "strong_reclaim": 16,
+      "sweep_reclaim": 19,
+      "wick_rejection": 11
+     },
+     "stars": {
+      "2": 27,
+      "3": 31
+     },
+     "decisions_with_a_member_not_confirmable_before_the_touch": 20,
+     "decisions_with_fewer_than_two_independent_sources": 25,
+     "sweep_reclaim_confirmations_by_an_opposite_colour_candle": 7,
+     "median_union_width_over_overlap_width": 3.14,
+     "decisions_whose_reaction_had_already_failed_at_publication": 5
+    },
+    "C": {
+     "model": "C",
+     "decisions": 51,
+     "thinned_one_per_hour_direction": 29,
+     "executable_within_stop_cap": 14,
+     "filled_executable": 14,
+     "single_target_r": {
+      "n": 14,
+      "mean_r": -0.358,
+      "ci95_lo": -1,
+      "ci95_hi": 0.414,
+      "wins": 3
+     },
+     "ladder_r": {
+      "n": 14,
+      "mean_r": -0.143,
+      "ci95_lo": -0.7,
+      "ci95_hi": 0.443,
+      "wins": 6
+     },
+     "single_target_r_as_published": {
+      "n": 29,
+      "mean_r": -0.196,
+      "ci95_lo": -0.726,
+      "ci95_hi": 0.47,
+      "wins": 7
+     },
+     "median_stop_pips": 60.2,
+     "median_stop_atr": 1.71,
+     "median_reward_risk": 1.4,
+     "median_mfe_r": 0.28,
+     "median_mae_r": 1.07,
+     "fixed_reward_risk_targets": 0,
+     "patterns": {
+      "engulfing": 3,
+      "strong_reclaim": 26,
+      "sweep_reclaim": 17,
+      "wick_rejection": 5
+     },
+     "stars": {
+      "2": 51
+     },
+     "decisions_whose_reaction_had_already_failed_at_publication": 4
+    },
+    "D": {
+     "model": "D",
+     "decisions": 21,
+     "thinned_one_per_hour_direction": 12,
+     "executable_within_stop_cap": 12,
+     "filled_executable": 12,
+     "single_target_r": {
+      "n": 12,
+      "mean_r": -1,
+      "ci95_lo": -1,
+      "ci95_hi": -1,
+      "wins": 0
+     },
+     "ladder_r": {
+      "n": 12,
+      "mean_r": 0.233,
+      "ci95_lo": -0.3,
+      "ci95_hi": 0.783,
+      "wins": 8
+     },
+     "single_target_r_as_published": {
+      "n": 12,
+      "mean_r": -1,
+      "ci95_lo": -1,
+      "ci95_hi": -1,
+      "wins": 0
+     },
+     "median_stop_pips": 53.9,
+     "median_stop_atr": 1.39,
+     "median_reward_risk": 3.29,
+     "median_mfe_r": 1.2,
+     "median_mae_r": 1.15,
+     "fixed_reward_risk_targets": 0,
+     "patterns": {
+      "strong_reclaim": 8,
+      "sweep_reclaim": 6,
+      "wick_rejection": 7
+     },
+     "stars": {
+      "2": 21
+     }
+    }
+   },
+   "v3_against_v2": {
+    "baseline": "B",
+    "candidate": "D",
+    "baseline_filled": 41,
+    "baseline_losers_removed": 30,
+    "baseline_losers": 32,
+    "baseline_winners_removed": 9,
+    "baseline_winners": 9,
+    "candidate_decisions_with_no_baseline_counterpart": 11,
+    "candidate_thinned": 12,
+    "retained_baseline_mean_r": -1,
+    "removed_baseline_mean_r": -0.249
+   },
+   "structure_only_against_v2": {
+    "baseline": "B",
+    "candidate": "C",
+    "baseline_filled": 41,
+    "baseline_losers_removed": 17,
+    "baseline_losers": 32,
+    "baseline_winners_removed": 5,
+    "baseline_winners": 9,
+    "candidate_decisions_with_no_baseline_counterpart": 9,
+    "candidate_thinned": 29,
+    "retained_baseline_mean_r": -0.333,
+    "removed_baseline_mean_r": -0.244
+   },
+   "v3_rejections_by_reason": {
+    "confluence_floor": 1,
+    "entry_too_far": 7,
+    "no_directional_confirmation": 446,
+    "no_opposing_liquidity": 2,
+    "overlap_too_narrow": 18,
+    "price_accepted_through_region": 221,
+    "price_through_entry": 1,
+    "reaction_failed_after_confirmation": 16,
+    "reward_risk_below_minimum": 1,
+    "single_independent_origin": 238,
+    "stop_exceeds_execution_envelope": 110,
+    "structure_not_yet_available": 433,
+    "target_blocked_by_opposing_structure": 20
+   }
+  },
+  "xau_sep": {
+   "label": "XAU 14-21 Sep (Python-origin detector era)",
+   "role": "development",
+   "from_utc": "2026-09-01 00:00",
+   "to_utc": "2026-10-01 00:00",
+   "models": {
+    "A": {
+     "model": "A",
+     "decisions": 112,
+     "thinned_one_per_hour_direction": 65,
+     "executable_within_stop_cap": 58,
+     "filled_executable": 58,
+     "single_target_r": {
+      "n": 58,
+      "mean_r": 0.018,
+      "ci95_lo": -0.46,
+      "ci95_hi": 0.54,
+      "wins": 16
+     },
+     "ladder_r": {
+      "n": 58,
+      "mean_r": -0.038,
+      "ci95_lo": -0.348,
+      "ci95_hi": 0.29,
+      "wins": 24
+     },
+     "single_target_r_as_published": {
+      "n": 65,
+      "mean_r": -0.007,
+      "ci95_lo": -0.433,
+      "ci95_hi": 0.488,
+      "wins": 17
+     },
+     "median_stop_pips": 43,
+     "median_stop_atr": 0.99,
+     "median_reward_risk": 1.94,
+     "median_mfe_r": 0.73,
+     "median_mae_r": 1.12,
+     "fixed_reward_risk_targets": 0,
+     "patterns": {
+      "engulfing": 13,
+      "rejection_choch": 2,
+      "strong_reclaim": 86,
+      "wick_rejection": 11
+     }
+    },
+    "B": {
+     "model": "B",
+     "decisions": 83,
+     "thinned_one_per_hour_direction": 59,
+     "executable_within_stop_cap": 23,
+     "filled_executable": 23,
+     "single_target_r": {
+      "n": 23,
+      "mean_r": -0.2,
+      "ci95_lo": -0.91,
+      "ci95_hi": 0.817,
+      "wins": 4
+     },
+     "ladder_r": {
+      "n": 23,
+      "mean_r": -0.043,
+      "ci95_lo": -0.548,
+      "ci95_hi": 0.487,
+      "wins": 9
+     },
+     "single_target_r_as_published": {
+      "n": 59,
+      "mean_r": 0.05,
+      "ci95_lo": -0.426,
+      "ci95_hi": 0.566,
+      "wins": 18
+     },
+     "median_stop_pips": 65.6,
+     "median_stop_atr": 1.85,
+     "median_reward_risk": 1.4,
+     "median_mfe_r": 0.53,
+     "median_mae_r": 1.19,
+     "fixed_reward_risk_targets": 0,
+     "patterns": {
+      "engulfing": 9,
+      "strong_reclaim": 34,
+      "sweep_reclaim": 25,
+      "wick_rejection": 15
+     },
+     "stars": {
+      "2": 27,
+      "3": 56
+     },
+     "decisions_with_a_member_not_confirmable_before_the_touch": 29,
+     "decisions_with_fewer_than_two_independent_sources": 50,
+     "sweep_reclaim_confirmations_by_an_opposite_colour_candle": 5,
+     "median_union_width_over_overlap_width": 2.44,
+     "decisions_whose_reaction_had_already_failed_at_publication": 12
+    },
+    "C": {
+     "model": "C",
+     "decisions": 43,
+     "thinned_one_per_hour_direction": 29,
+     "executable_within_stop_cap": 16,
+     "filled_executable": 16,
+     "single_target_r": {
+      "n": 16,
+      "mean_r": -0.009,
+      "ci95_lo": -0.804,
+      "ci95_hi": 1.024,
+      "wins": 5
+     },
+     "ladder_r": {
+      "n": 16,
+      "mean_r": -0.688,
+      "ci95_lo": -1,
+      "ci95_hi": -0.35,
+      "wins": 3
+     },
+     "single_target_r_as_published": {
+      "n": 29,
+      "mean_r": -0.079,
+      "ci95_lo": -0.59,
+      "ci95_hi": 0.563,
+      "wins": 9
+     },
+     "median_stop_pips": 60.2,
+     "median_stop_atr": 1.76,
+     "median_reward_risk": 1.81,
+     "median_mfe_r": 0.5,
+     "median_mae_r": 1.16,
+     "fixed_reward_risk_targets": 0,
+     "patterns": {
+      "engulfing": 6,
+      "rejection_choch": 1,
+      "strong_reclaim": 21,
+      "sweep_reclaim": 11,
+      "wick_rejection": 4
+     },
+     "stars": {
+      "2": 43
+     },
+     "decisions_whose_reaction_had_already_failed_at_publication": 2
+    },
+    "D": {
+     "model": "D",
+     "decisions": 23,
+     "thinned_one_per_hour_direction": 14,
+     "executable_within_stop_cap": 14,
+     "filled_executable": 13,
+     "single_target_r": {
+      "n": 13,
+      "mean_r": 0.021,
+      "ci95_lo": -1,
+      "ci95_hi": 1.638,
+      "wins": 2
+     },
+     "ladder_r": {
+      "n": 13,
+      "mean_r": -0.431,
+      "ci95_lo": -0.892,
+      "ci95_hi": 0.169,
+      "wins": 4
+     },
+     "single_target_r_as_published": {
+      "n": 13,
+      "mean_r": 0.021,
+      "ci95_lo": -1,
+      "ci95_hi": 1.638,
+      "wins": 2
+     },
+     "median_stop_pips": 54.1,
+     "median_stop_atr": 1.19,
+     "median_reward_risk": 2.57,
+     "median_mfe_r": 0.94,
+     "median_mae_r": 1.38,
+     "fixed_reward_risk_targets": 0,
+     "patterns": {
+      "strong_reclaim": 8,
+      "sweep_reclaim": 6,
+      "wick_rejection": 9
+     },
+     "stars": {
+      "2": 22,
+      "3": 1
+     }
+    }
+   },
+   "v3_against_v2": {
+    "baseline": "B",
+    "candidate": "D",
+    "baseline_filled": 59,
+    "baseline_losers_removed": 39,
+    "baseline_losers": 41,
+    "baseline_winners_removed": 17,
+    "baseline_winners": 18,
+    "candidate_decisions_with_no_baseline_counterpart": 10,
+    "candidate_thinned": 14,
+    "retained_baseline_mean_r": -0.087,
+    "removed_baseline_mean_r": 0.057
+   },
+   "structure_only_against_v2": {
+    "baseline": "B",
+    "candidate": "C",
+    "baseline_filled": 59,
+    "baseline_losers_removed": 29,
+    "baseline_losers": 41,
+    "baseline_winners_removed": 16,
+    "baseline_winners": 18,
+    "candidate_decisions_with_no_baseline_counterpart": 12,
+    "candidate_thinned": 29,
+    "retained_baseline_mean_r": -0.601,
+    "removed_baseline_mean_r": 0.253
+   },
+   "v3_rejections_by_reason": {
+    "confluence_floor": 2,
+    "entry_too_far": 6,
+    "no_directional_confirmation": 432,
+    "overlap_too_narrow": 25,
+    "price_accepted_through_region": 218,
+    "reaction_failed_after_confirmation": 26,
+    "reward_risk_below_minimum": 1,
+    "single_independent_origin": 358,
+    "stop_exceeds_execution_envelope": 129,
+    "structure_not_yet_available": 584,
+    "target_blocked_by_opposing_structure": 2
+   }
+  }
+ },
+ "funnel_by_capture": {
+  "EURUSD": {
+   "evaluated_candles": 2000,
+   "distinct_structures_observed": 960,
+   "structures_with_reproducible_provenance": 960,
+   "distinct_supported_regions_observed": 323,
+   "confirmed_setups_before_the_confluence_floor": 41,
+   "published_confirmed_opportunities": 32,
+   "rejections_by_reason": {
+    "confluence_floor": 2,
+    "entry_too_far": 10,
+    "insufficient_target_room": 1,
+    "no_directional_confirmation": 611,
+    "no_opposing_liquidity": 9,
+    "overlap_too_narrow": 96,
+    "price_accepted_through_region": 179,
+    "reaction_failed_after_confirmation": 31,
+    "reward_risk_below_minimum": 74,
+    "single_independent_origin": 412,
+    "stop_exceeds_execution_envelope": 3,
+    "structure_not_yet_available": 480,
+    "target_blocked_by_opposing_structure": 82
+   },
+   "v2_published_decisions": 160,
+   "structure_only_published_decisions": 89,
+   "structure_only_decisions_rejected_for_a_structure_created_after_the_touch": 87,
+   "other_strategies_candidates": 5007,
+   "other_strategies_candidates_sha256": "c6681f635312af7a6fc54fb4394704c7d184ba916397430a5d68d0baac584717",
+   "strategy_analysis_agrees_with_the_published_candidates": true
+  },
+  "GBPJPY": {
+   "evaluated_candles": 2000,
+   "distinct_structures_observed": 863,
+   "structures_with_reproducible_provenance": 863,
+   "distinct_supported_regions_observed": 341,
+   "confirmed_setups_before_the_confluence_floor": 104,
+   "published_confirmed_opportunities": 82,
+   "rejections_by_reason": {
+    "entry_too_far": 14,
+    "insufficient_target_room": 1,
+    "no_directional_confirmation": 1047,
+    "no_opposing_liquidity": 7,
+    "overlap_too_narrow": 64,
+    "price_accepted_through_region": 261,
+    "price_through_entry": 5,
+    "reaction_failed_after_confirmation": 58,
+    "reward_risk_below_minimum": 158,
+    "single_independent_origin": 345,
+    "stop_exceeds_execution_envelope": 9,
+    "structure_not_yet_available": 482,
+    "target_blocked_by_opposing_structure": 77
+   },
+   "v2_published_decisions": 192,
+   "structure_only_published_decisions": 206,
+   "structure_only_decisions_rejected_for_a_structure_created_after_the_touch": 76,
+   "other_strategies_candidates": 4865,
+   "other_strategies_candidates_sha256": "a9514c2d0f62baae95cd6ba351aaad06e4ee042a0aa7ddf7c0a14d2b3953914b",
+   "strategy_analysis_agrees_with_the_published_candidates": true
+  },
+  "GBPUSD": {
+   "evaluated_candles": 2000,
+   "distinct_structures_observed": 903,
+   "structures_with_reproducible_provenance": 903,
+   "distinct_supported_regions_observed": 383,
+   "confirmed_setups_before_the_confluence_floor": 57,
+   "published_confirmed_opportunities": 39,
+   "rejections_by_reason": {
+    "confluence_floor": 1,
+    "entry_too_far": 10,
+    "no_directional_confirmation": 942,
+    "no_opposing_liquidity": 11,
+    "overlap_too_narrow": 100,
+    "price_accepted_through_region": 184,
+    "reaction_failed_after_confirmation": 48,
+    "reward_risk_below_minimum": 251,
+    "single_independent_origin": 357,
+    "structure_not_yet_available": 458,
+    "target_blocked_by_opposing_structure": 58
+   },
+   "v2_published_decisions": 201,
+   "structure_only_published_decisions": 187,
+   "structure_only_decisions_rejected_for_a_structure_created_after_the_touch": 86,
+   "other_strategies_candidates": 6576,
+   "other_strategies_candidates_sha256": "e7624f80a2d69be418de39f2f2f2b0b6e984e8b917e33d12985d498375543f3c",
+   "strategy_analysis_agrees_with_the_published_candidates": true
+  },
+  "USDJPY": {
+   "evaluated_candles": 2000,
+   "distinct_structures_observed": 873,
+   "structures_with_reproducible_provenance": 873,
+   "distinct_supported_regions_observed": 380,
+   "confirmed_setups_before_the_confluence_floor": 25,
+   "published_confirmed_opportunities": 17,
+   "rejections_by_reason": {
+    "entry_too_far": 4,
+    "no_directional_confirmation": 1105,
+    "no_opposing_liquidity": 13,
+    "overlap_too_narrow": 83,
+    "price_accepted_through_region": 246,
+    "price_through_entry": 1,
+    "reaction_failed_after_confirmation": 57,
+    "reward_risk_below_minimum": 249,
+    "single_independent_origin": 319,
+    "stop_exceeds_execution_envelope": 16,
+    "structure_not_yet_available": 523,
+    "target_blocked_by_opposing_structure": 123
+   },
+   "v2_published_decisions": 192,
+   "structure_only_published_decisions": 197,
+   "structure_only_decisions_rejected_for_a_structure_created_after_the_touch": 93,
+   "other_strategies_candidates": 6678,
+   "other_strategies_candidates_sha256": "12d3382e98e84d3b1fd623bf67a46febea5b3b3a00d03e8980eb39772c891905",
+   "strategy_analysis_agrees_with_the_published_candidates": true
+  },
+  "XAU Oct": {
+   "evaluated_candles": 2223,
+   "distinct_structures_observed": 1351,
+   "structures_with_reproducible_provenance": 1351,
+   "distinct_supported_regions_observed": 529,
+   "confirmed_setups_before_the_confluence_floor": 59,
+   "published_confirmed_opportunities": 47,
+   "rejections_by_reason": {
+    "confluence_floor": 5,
+    "entry_too_far": 10,
+    "no_directional_confirmation": 1074,
+    "no_opposing_liquidity": 3,
+    "overlap_too_narrow": 36,
+    "price_accepted_through_region": 449,
+    "price_through_entry": 5,
+    "reaction_failed_after_confirmation": 62,
+    "reward_risk_below_minimum": 38,
+    "single_independent_origin": 537,
+    "stop_exceeds_execution_envelope": 318,
+    "structure_not_yet_available": 1022,
+    "target_blocked_by_opposing_structure": 46
+   },
+   "v2_published_decisions": 173,
+   "structure_only_published_decisions": 142,
+   "structure_only_decisions_rejected_for_a_structure_created_after_the_touch": 70,
+   "other_strategies_candidates": 4945,
+   "other_strategies_candidates_sha256": "1cdfb443b667aef9777e5aaf5fbc50435edc9d0cfdde4fae569e028ef9351508",
+   "strategy_analysis_agrees_with_the_published_candidates": true
+  },
+  "XAU Sep": {
+   "evaluated_candles": 1500,
+   "distinct_structures_observed": 894,
+   "structures_with_reproducible_provenance": 894,
+   "distinct_supported_regions_observed": 265,
+   "confirmed_setups_before_the_confluence_floor": 29,
+   "published_confirmed_opportunities": 23,
+   "rejections_by_reason": {
+    "confluence_floor": 2,
+    "entry_too_far": 6,
+    "no_directional_confirmation": 432,
+    "overlap_too_narrow": 25,
+    "price_accepted_through_region": 218,
+    "reaction_failed_after_confirmation": 26,
+    "reward_risk_below_minimum": 1,
+    "single_independent_origin": 358,
+    "stop_exceeds_execution_envelope": 129,
+    "structure_not_yet_available": 584,
+    "target_blocked_by_opposing_structure": 2
+   },
+   "v2_published_decisions": 83,
+   "structure_only_published_decisions": 43,
+   "structure_only_decisions_rejected_for_a_structure_created_after_the_touch": 26,
+   "other_strategies_candidates": 2653,
+   "other_strategies_candidates_sha256": "79b1ed317233082feacb31b50f9d816a27b0dd3425a2b1ba1ea1e4bc6d7b6c9d",
+   "strategy_analysis_agrees_with_the_published_candidates": true
+  }
+ },
+ "v2_reproduction_of_production_trades": [
+  {
+   "trade": "10-04 21:30 SELL",
+   "symbol": "USDJPY",
+   "production_regime": "legacy_go_native_intersection",
+   "reproduced": false,
+   "detail": "not applicable: legacy-regime trade (model A)"
+  },
+  {
+   "trade": "10-05 14:31 BUY",
+   "symbol": "XAU",
+   "production_regime": "legacy_go_native_intersection",
+   "reproduced": false,
+   "detail": "not applicable: legacy-regime trade (model A)"
+  },
+  {
+   "trade": "10-05 16:03 BUY",
+   "symbol": "XAU",
+   "production_regime": "legacy_go_native_intersection",
+   "reproduced": false,
+   "detail": "not applicable: legacy-regime trade (model A)"
+  },
+  {
+   "trade": "10-06 03:53 BUY",
+   "symbol": "XAU",
+   "production_regime": "legacy_go_native_intersection",
+   "reproduced": false,
+   "detail": "not applicable: legacy-regime trade (model A)"
+  },
+  {
+   "trade": "10-07 00:00 BUY",
+   "symbol": "USDJPY",
+   "production_regime": "legacy_go_native_intersection",
+   "reproduced": false,
+   "detail": "not applicable: legacy-regime trade (model A)"
+  },
+  {
+   "trade": "10-07 04:27 SELL",
+   "symbol": "GBPUSD",
+   "production_regime": "frozen_python_publisher_union",
+   "reproduced": true,
+   "detail": "band [1.3268, 1.3282] stop 1.3285 target 1.3235"
+  },
+  {
+   "trade": "10-07 12:26 SELL",
+   "symbol": "GBPJPY",
+   "production_regime": "frozen_python_publisher_union",
+   "reproduced": true,
+   "detail": "band [209.3, 209.52] stop 209.57 target 208.94"
+  },
+  {
+   "trade": "10-07 21:00 SELL",
+   "symbol": "GBPJPY",
+   "production_regime": "frozen_python_publisher_union",
+   "reproduced": true,
+   "detail": "band [208.8, 208.98] stop 209.02 target 208.36"
+  },
+  {
+   "trade": "10-08 02:03 SELL",
+   "symbol": "EURUSD",
+   "production_regime": "frozen_python_publisher_union",
+   "reproduced": true,
+   "detail": "band [1.1194, 1.1204] stop 1.1206 target 1.1189"
+  },
+  {
+   "trade": "10-08 14:33 BUY",
+   "symbol": "GBPJPY",
+   "production_regime": "frozen_python_publisher_union",
+   "reproduced": true,
+   "detail": "band [208.77, 208.94] stop 208.73 target 209.03"
+  },
+  {
+   "trade": "10-09 12:11 BUY",
+   "symbol": "GBPJPY",
+   "production_regime": "frozen_python_publisher_union",
+   "reproduced": true,
+   "detail": "band [209.36, 209.46] stop 209.32 target 209.75"
+  },
+  {
+   "trade": "10-09 13:18 SELL",
+   "symbol": "XAU",
+   "production_regime": "frozen_python_publisher_union",
+   "reproduced": true,
+   "detail": "band [4178.8, 4183.2] stop 4185.6 target 4168.6"
+  },
+  {
+   "trade": "10-09 19:52 BUY",
+   "symbol": "XAU",
+   "production_regime": "frozen_python_publisher_union",
+   "reproduced": true,
+   "detail": "band [4187.6, 4192.6] stop 4186 target 4198.6"
+  },
+  {
+   "trade": "10-12 04:17 SELL",
+   "symbol": "USDJPY",
+   "production_regime": "frozen_python_publisher_union",
+   "reproduced": false,
+   "detail": "no frozen v2 decision with the production band and confirmation"
+  },
+  {
+   "trade": "10-12 06:11 SELL",
+   "symbol": "GBPJPY",
+   "production_regime": "frozen_python_publisher_union",
+   "reproduced": true,
+   "detail": "band [209.49, 209.58] stop 209.61 target 209.36"
+  },
+  {
+   "trade": "10-12 22:01 SELL",
+   "symbol": "XAU",
+   "production_regime": "frozen_python_publisher_union",
+   "reproduced": true,
+   "detail": "band [4167.5, 4172.5] stop 4173.8 target 4162.5"
+  },
+  {
+   "trade": "10-13 02:25 SELL",
+   "symbol": "XAU",
+   "production_regime": "frozen_python_publisher_union",
+   "reproduced": true,
+   "detail": "band [4166.9, 4170.5] stop 4172.5 target 4162.5"
+  }
+ ],
+ "seven_xau_trades": [
+  {
+   "trade": "10-05 14:31 BUY",
+   "symbol": "XAU",
+   "direction": "BUY",
+   "production_detector_regime": "legacy_go_native_intersection",
+   "deployed_commit_at_fill": "e274832",
+   "realized_r": -1,
+   "exit_path": "full_stop",
+   "original": {
+    "constituents": [
+     "supply_demand [4133.27, 4140.13] origin 2026-10-05 05:30, 2 touches",
+     "ifvg [4139.39, 4142.13] origin 2026-10-05 14:05, 0 touches"
+    ],
+    "entry_low": 4139.39,
+    "entry_high": 4140.13,
+    "band_width_pips": 7.399999999997817,
+    "invalidation": 4136.5,
+    "target": 4147.26,
+    "confirmation_pattern": "strong_reclaim",
+    "stars": 3,
+    "touch": "2026-10-05 14:05",
+    "confirmation": "2026-10-05 14:05"
+   },
+   "reproduced_by_replay": "Model A (legacy running intersection): same band, stop and target as production",
+   "evaluated_at": "2026-10-05 14:15",
+   "v3_structures_at_evaluation": [
+    {
+     "id": "fvg:buy:1791175200:4129.620000:4131.390000",
+     "source": "fvg",
+     "low": 4129.62,
+     "high": 4131.39,
+     "formed_at": "2026-10-05 04:40",
+     "confirmable_from": "2026-10-05 04:45",
+     "provenance_atoms": [
+      "candle:1791174600",
+      "candle:1791174900",
+      "candle:1791175200",
+      "gap:1791174600",
+      "leg:up:1791174600"
+     ],
+     "verified": true,
+     "touches": 2
+    },
+    {
+     "id": "fvg:sell:1791204600:4159.430000:4160.410000",
+     "source": "fvg",
+     "low": 4159.43,
+     "high": 4160.41,
+     "formed_at": "2026-10-05 12:50",
+     "confirmable_from": "2026-10-05 12:55",
+     "provenance_atoms": [
+      "candle:1791204000",
+      "candle:1791204300",
+      "candle:1791204600",
+      "gap:1791204000"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "fvg:sell:1791205500:4154.050000:4154.710000",
+     "source": "fvg",
+     "low": 4154.05,
+     "high": 4154.71,
+     "formed_at": "2026-10-05 13:05",
+     "confirmable_from": "2026-10-05 13:10",
+     "provenance_atoms": [
+      "candle:1791204900",
+      "candle:1791205200",
+      "candle:1791205500",
+      "gap:1791204900"
+     ],
+     "verified": true,
+     "touches": 1
+    },
+    {
+     "id": "fvg:sell:1791207300:4149.380000:4151.200000",
+     "source": "fvg",
+     "low": 4149.38,
+     "high": 4151.2,
+     "formed_at": "2026-10-05 13:35",
+     "confirmable_from": "2026-10-05 13:40",
+     "provenance_atoms": [
+      "candle:1791206700",
+      "candle:1791207000",
+      "candle:1791207300",
+      "gap:1791206700",
+      "leg:down:1791206700"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "fvg:sell:1791207600:4144.450000:4147.710000",
+     "source": "fvg",
+     "low": 4144.45,
+     "high": 4147.71,
+     "formed_at": "2026-10-05 13:40",
+     "confirmable_from": "2026-10-05 13:45",
+     "provenance_atoms": [
+      "candle:1791207000",
+      "candle:1791207300",
+      "candle:1791207600",
+      "gap:1791207000",
+      "leg:down:1791206700"
+     ],
+     "verified": true,
+     "touches": 2
+    },
+    {
+     "id": "ifvg:buy:1791174900:4129.620000:4130.240000",
+     "source": "ifvg",
+     "low": 4129.62,
+     "high": 4130.24,
+     "formed_at": "2026-10-05 04:35",
+     "confirmable_from": "2026-10-05 04:40",
+     "provenance_atoms": [
+      "candle:1791174000",
+      "candle:1791174300",
+      "candle:1791174600",
+      "candle:1791174900",
+      "gap:1791174000",
+      "inversion:1791174900",
+      "leg:up:1791174600"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "ifvg:buy:1791176700:4132.480000:4133.000000",
+     "source": "ifvg",
+     "low": 4132.48,
+     "high": 4133,
+     "formed_at": "2026-10-05 05:05",
+     "confirmable_from": "2026-10-05 05:10",
+     "provenance_atoms": [
+      "candle:1791175500",
+      "candle:1791175800",
+      "candle:1791176100",
+      "candle:1791176700",
+      "gap:1791175500",
+      "inversion:1791176700",
+      "leg:up:1791176400"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "ifvg:buy:1791180000:4135.300000:4137.670000",
+     "source": "ifvg",
+     "low": 4135.3,
+     "high": 4137.67,
+     "formed_at": "2026-10-05 06:00",
+     "confirmable_from": "2026-10-05 06:05",
+     "provenance_atoms": [
+      "candle:1791179100",
+      "candle:1791179400",
+      "candle:1791179700",
+      "candle:1791180000",
+      "gap:1791179100",
+      "inversion:1791180000",
+      "leg:down:1791179100",
+      "leg:up:1791179700"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "ifvg:buy:1791209100:4139.390000:4142.130000",
+     "source": "ifvg",
+     "low": 4139.39,
+     "high": 4142.13,
+     "formed_at": "2026-10-05 14:05",
+     "confirmable_from": "2026-10-05 14:10",
+     "provenance_atoms": [
+      "candle:1791207300",
+      "candle:1791207600",
+      "candle:1791207900",
+      "candle:1791209100",
+      "gap:1791207300",
+      "inversion:1791209100",
+      "leg:down:1791206700",
+      "leg:up:1791208800"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "ifvg:sell:1791204300:4157.760000:4161.700000",
+     "source": "ifvg",
+     "low": 4157.76,
+     "high": 4161.7,
+     "formed_at": "2026-10-05 12:45",
+     "confirmable_from": "2026-10-05 12:50",
+     "provenance_atoms": [
+      "candle:1791202800",
+      "candle:1791203100",
+      "candle:1791203400",
+      "candle:1791204300",
+      "gap:1791202800",
+      "inversion:1791204300",
+      "leg:up:1791202800"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "ifvg:sell:1791205500:4154.000000:4154.090000",
+     "source": "ifvg",
+     "low": 4154,
+     "high": 4154.09,
+     "formed_at": "2026-10-05 13:05",
+     "confirmable_from": "2026-10-05 13:10",
+     "provenance_atoms": [
+      "candle:1791201000",
+      "candle:1791201300",
+      "candle:1791201600",
+      "candle:1791205500",
+      "gap:1791201000",
+      "inversion:1791205500"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "ifvg:sell:1791207300:4144.810000:4145.580000",
+     "source": "ifvg",
+     "low": 4144.81,
+     "high": 4145.58,
+     "formed_at": "2026-10-05 13:35",
+     "confirmable_from": "2026-10-05 13:40",
+     "provenance_atoms": [
+      "candle:1791180000",
+      "candle:1791180300",
+      "candle:1791180600",
+      "candle:1791207300",
+      "gap:1791180000",
+      "inversion:1791207300",
+      "leg:down:1791206700",
+      "leg:up:1791179700"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "ifvg:sell:1791207300:4147.340000:4151.090000",
+     "source": "ifvg",
+     "low": 4147.34,
+     "high": 4151.09,
+     "formed_at": "2026-10-05 13:35",
+     "confirmable_from": "2026-10-05 13:40",
+     "provenance_atoms": [
+      "candle:1791180300",
+      "candle:1791180600",
+      "candle:1791180900",
+      "candle:1791207300",
+      "gap:1791180300",
+      "inversion:1791207300",
+      "leg:down:1791206700",
+      "leg:up:1791179700"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "order_block:buy:1791178200:4134.380000:4137.100000",
+     "source": "order_block",
+     "low": 4134.38,
+     "high": 4137.1,
+     "formed_at": "2026-10-05 05:30",
+     "confirmable_from": "2026-10-05 05:45",
+     "provenance_atoms": [
+      "break:up:1791178800",
+      "candle:1791178200",
+      "candle:1791178500",
+      "candle:1791178800",
+      "leg:up:1791178500"
+     ],
+     "verified": true,
+     "touches": 3
+    },
+    {
+     "id": "order_block:buy:1791179400:4133.220000:4138.330000",
+     "source": "order_block",
+     "low": 4133.33,
+     "high": 4138.33,
+     "formed_at": "2026-10-05 05:50",
+     "confirmable_from": "2026-10-05 06:15",
+     "provenance_atoms": [
+      "break:up:1791180000",
+      "candle:1791179400",
+      "candle:1791179700",
+      "candle:1791180000",
+      "candle:1791180300",
+      "candle:1791180600",
+      "leg:up:1791179700"
+     ],
+     "verified": true,
+     "touches": 2
+    },
+    {
+     "id": "order_block:sell:1791199500:4161.040000:4167.100000",
+     "source": "order_block",
+     "low": 4161.04,
+     "high": 4166.04,
+     "formed_at": "2026-10-05 11:25",
+     "confirmable_from": "2026-10-05 11:50",
+     "provenance_atoms": [
+      "break:down:1791200400",
+      "candle:1791199500",
+      "candle:1791199800",
+      "candle:1791200100",
+      "candle:1791200400",
+      "candle:1791200700",
+      "leg:down:1791199800"
+     ],
+     "verified": true,
+     "touches": 1
+    },
+    {
+     "id": "supply_demand:buy:1791174300:4124.550000:4135.790000",
+     "source": "supply_demand",
+     "low": 4130.79,
+     "high": 4135.79,
+     "formed_at": "2026-10-05 04:25",
+     "confirmable_from": "2026-10-05 04:50",
+     "provenance_atoms": [
+      "candle:1791173700",
+      "candle:1791174000",
+      "candle:1791174300",
+      "candle:1791174600",
+      "candle:1791174900",
+      "candle:1791175200",
+      "candle:1791175500",
+      "leg:up:1791174600"
+     ],
+     "verified": true,
+     "touches": 6
+    },
+    {
+     "id": "supply_demand:buy:1791176100:4130.060000:4134.670000",
+     "source": "supply_demand",
+     "low": 4130.06,
+     "high": 4134.67,
+     "formed_at": "2026-10-05 04:55",
+     "confirmable_from": "2026-10-05 05:15",
+     "provenance_atoms": [
+      "candle:1791175500",
+      "candle:1791175800",
+      "candle:1791176100",
+      "candle:1791176400",
+      "candle:1791176700",
+      "candle:1791177000",
+      "leg:up:1791176400"
+     ],
+     "verified": true,
+     "touches": 4
+    },
+    {
+     "id": "supply_demand:buy:1791178200:4133.270000:4140.130000",
+     "source": "supply_demand",
+     "low": 4135.13,
+     "high": 4140.13,
+     "formed_at": "2026-10-05 05:30",
+     "confirmable_from": "2026-10-05 05:45",
+     "provenance_atoms": [
+      "candle:1791177600",
+      "candle:1791177900",
+      "candle:1791178200",
+      "candle:1791178500",
+      "candle:1791178800",
+      "leg:up:1791178500"
+     ],
+     "verified": true,
+     "touches": 2
+    },
+    {
+     "id": "supply_demand:buy:1791179400:4132.550000:4140.680000",
+     "source": "supply_demand",
+     "low": 4135.68,
+     "high": 4140.68,
+     "formed_at": "2026-10-05 05:50",
+     "confirmable_from": "2026-10-05 06:15",
+     "provenance_atoms": [
+      "candle:1791178800",
+      "candle:1791179100",
+      "candle:1791179400",
+      "candle:1791179700",
+      "candle:1791180000",
+      "candle:1791180300",
+      "candle:1791180600",
+      "leg:up:1791179700"
+     ],
+     "verified": true,
+     "touches": 1
+    },
+    {
+     "id": "supply_demand:buy:1791208500:4131.430000:4144.500000",
+     "source": "supply_demand",
+     "low": 4139.5,
+     "high": 4144.5,
+     "formed_at": "2026-10-05 13:55",
+     "confirmable_from": "2026-10-05 14:10",
+     "provenance_atoms": [
+      "candle:1791207900",
+      "candle:1791208200",
+      "candle:1791208500",
+      "candle:1791208800",
+      "candle:1791209100",
+      "leg:up:1791208800"
+     ],
+     "verified": true,
+     "touches": 1
+    },
+    {
+     "id": "supply_demand:sell:1791192000:4165.330000:4169.830000",
+     "source": "supply_demand",
+     "low": 4165.33,
+     "high": 4169.83,
+     "formed_at": "2026-10-05 09:20",
+     "confirmable_from": "2026-10-05 09:50",
+     "provenance_atoms": [
+      "candle:1791191400",
+      "candle:1791191700",
+      "candle:1791192000",
+      "candle:1791192300",
+      "candle:1791192600",
+      "candle:1791192900",
+      "candle:1791193200",
+      "candle:1791193500",
+      "leg:down:1791192300"
+     ],
+     "verified": true,
+     "touches": 2
+    },
+    {
+     "id": "supply_demand:sell:1791199500:4159.310000:4167.100000",
+     "source": "supply_demand",
+     "low": 4159.31,
+     "high": 4164.31,
+     "formed_at": "2026-10-05 11:25",
+     "confirmable_from": "2026-10-05 11:50",
+     "provenance_atoms": [
+      "candle:1791198900",
+      "candle:1791199200",
+      "candle:1791199500",
+      "candle:1791199800",
+      "candle:1791200100",
+      "candle:1791200400",
+      "candle:1791200700",
+      "leg:down:1791199800"
+     ],
+     "verified": true,
+     "touches": 1
+    },
+    {
+     "id": "supply_demand:sell:1791206400:4150.100000:4154.280000",
+     "source": "supply_demand",
+     "low": 4150.1,
+     "high": 4154.28,
+     "formed_at": "2026-10-05 13:20",
+     "confirmable_from": "2026-10-05 13:45",
+     "provenance_atoms": [
+      "candle:1791205800",
+      "candle:1791206100",
+      "candle:1791206400",
+      "candle:1791206700",
+      "candle:1791207000",
+      "candle:1791207300",
+      "candle:1791207600",
+      "leg:down:1791206700"
+     ],
+     "verified": true,
+     "touches": 0
+    }
+   ],
+   "v3_independent_sources_among_the_structures": 2,
+   "v3_dependent_groups": [
+    [
+     "ifvg:buy:1791209100:4139.390000:4142.130000",
+     "supply_demand:buy:1791208500:4131.430000:4144.500000"
+    ],
+    [
+     "supply_demand:buy:1791178200:4133.270000:4140.130000",
+     "supply_demand:buy:1791179400:4132.550000:4140.680000"
+    ]
+   ],
+   "v3_supported_regions_on_the_trade_side": [
+    {
+     "low": 4130.06,
+     "high": 4130.79,
+     "width_pips": 7.3,
+     "independent_sources": 2,
+     "min_independent_sources": 2,
+     "support": [
+      "fvg:buy:1791175200:4129.620000:4131.390000",
+      "ifvg:buy:1791174900:4129.620000:4130.240000",
+      "supply_demand:buy:1791176100:4130.060000:4134.670000"
+     ],
+     "episode": "cz3:buy:409ff87a9a17f14a"
+    },
+    {
+     "low": 4133.33,
+     "high": 4135.79,
+     "width_pips": 24.6,
+     "independent_sources": 2,
+     "min_independent_sources": 2,
+     "support": [
+      "ifvg:buy:1791180000:4135.300000:4137.670000",
+      "order_block:buy:1791178200:4134.380000:4137.100000",
+      "order_block:buy:1791179400:4133.220000:4138.330000",
+      "supply_demand:buy:1791174300:4124.550000:4135.790000",
+      "supply_demand:buy:1791176100:4130.060000:4134.670000",
+      "supply_demand:buy:1791178200:4133.270000:4140.130000",
+      "supply_demand:buy:1791179400:4132.550000:4140.680000"
+     ],
+     "episode": "cz3:buy:22125eb5b3dce16f"
+    },
+    {
+     "low": 4139.39,
+     "high": 4140.68,
+     "width_pips": 12.9,
+     "independent_sources": 2,
+     "min_independent_sources": 2,
+     "support": [
+      "ifvg:buy:1791209100:4139.390000:4142.130000",
+      "supply_demand:buy:1791178200:4133.270000:4140.130000",
+      "supply_demand:buy:1791179400:4132.550000:4140.680000",
+      "supply_demand:buy:1791208500:4131.430000:4144.500000"
+     ],
+     "episode": "cz3:buy:fc3e7ba8f105b879"
+    }
+   ],
+   "v3_true_overlap_pips_inside_the_original_band": 7.4,
+   "original_band_over_true_overlap": 1,
+   "v3_decision": "not published",
+   "v3_reasons": [
+    "no_directional_confirmation",
+    "stop_exceeds_execution_envelope",
+    "structure_not_yet_available"
+   ],
+   "summary": ""
+  },
+  {
+   "trade": "10-05 16:03 BUY",
+   "symbol": "XAU",
+   "direction": "BUY",
+   "production_detector_regime": "legacy_go_native_intersection",
+   "deployed_commit_at_fill": "c458ef6",
+   "realized_r": -1,
+   "exit_path": "full_stop",
+   "original": {
+    "constituents": [
+     "supply_demand [4133.27, 4140.13] origin 2026-10-05 05:30, 4 touches",
+     "order_block [4133.22, 4138.33] origin 2026-10-05 05:50, 4 touches",
+     "ifvg [4137.13, 4138.05] origin 2026-10-05 15:25, 0 touches"
+    ],
+    "entry_low": 4137.13,
+    "entry_high": 4138.05,
+    "band_width_pips": 9.200000000000728,
+    "invalidation": 4134.33,
+    "target": 4148.68,
+    "confirmation_pattern": "strong_reclaim",
+    "stars": 3,
+    "touch": "2026-10-05 15:25",
+    "confirmation": "2026-10-05 15:25"
+   },
+   "reproduced_by_replay": "Model A (legacy running intersection): same band, stop and target as production",
+   "evaluated_at": "2026-10-05 15:30",
+   "v3_structures_at_evaluation": [
+    {
+     "id": "fvg:sell:1791204600:4159.430000:4160.410000",
+     "source": "fvg",
+     "low": 4159.43,
+     "high": 4160.41,
+     "formed_at": "2026-10-05 12:50",
+     "confirmable_from": "2026-10-05 12:55",
+     "provenance_atoms": [
+      "candle:1791204000",
+      "candle:1791204300",
+      "candle:1791204600",
+      "gap:1791204000"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "fvg:sell:1791205500:4154.050000:4154.710000",
+     "source": "fvg",
+     "low": 4154.05,
+     "high": 4154.71,
+     "formed_at": "2026-10-05 13:05",
+     "confirmable_from": "2026-10-05 13:10",
+     "provenance_atoms": [
+      "candle:1791204900",
+      "candle:1791205200",
+      "candle:1791205500",
+      "gap:1791204900"
+     ],
+     "verified": true,
+     "touches": 1
+    },
+    {
+     "id": "fvg:sell:1791207300:4149.380000:4151.200000",
+     "source": "fvg",
+     "low": 4149.38,
+     "high": 4151.2,
+     "formed_at": "2026-10-05 13:35",
+     "confirmable_from": "2026-10-05 13:40",
+     "provenance_atoms": [
+      "candle:1791206700",
+      "candle:1791207000",
+      "candle:1791207300",
+      "gap:1791206700",
+      "leg:down:1791206700"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "fvg:sell:1791213000:4141.670000:4142.960000",
+     "source": "fvg",
+     "low": 4141.67,
+     "high": 4142.96,
+     "formed_at": "2026-10-05 15:10",
+     "confirmable_from": "2026-10-05 15:15",
+     "provenance_atoms": [
+      "candle:1791212400",
+      "candle:1791212700",
+      "candle:1791213000",
+      "gap:1791212400",
+      "leg:down:1791212400"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "ifvg:buy:1791174900:4129.620000:4130.240000",
+     "source": "ifvg",
+     "low": 4129.62,
+     "high": 4130.24,
+     "formed_at": "2026-10-05 04:35",
+     "confirmable_from": "2026-10-05 04:40",
+     "provenance_atoms": [
+      "candle:1791174000",
+      "candle:1791174300",
+      "candle:1791174600",
+      "candle:1791174900",
+      "gap:1791174000",
+      "inversion:1791174900",
+      "leg:up:1791174600"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "ifvg:buy:1791176700:4132.480000:4133.000000",
+     "source": "ifvg",
+     "low": 4132.48,
+     "high": 4133,
+     "formed_at": "2026-10-05 05:05",
+     "confirmable_from": "2026-10-05 05:10",
+     "provenance_atoms": [
+      "candle:1791175500",
+      "candle:1791175800",
+      "candle:1791176100",
+      "candle:1791176700",
+      "gap:1791175500",
+      "inversion:1791176700",
+      "leg:up:1791176400"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "ifvg:buy:1791213900:4137.130000:4138.050000",
+     "source": "ifvg",
+     "low": 4137.13,
+     "high": 4138.05,
+     "formed_at": "2026-10-05 15:25",
+     "confirmable_from": "2026-10-05 15:30",
+     "provenance_atoms": [
+      "candle:1791213000",
+      "candle:1791213300",
+      "candle:1791213600",
+      "candle:1791213900",
+      "gap:1791213000",
+      "inversion:1791213900",
+      "leg:down:1791212400"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "ifvg:sell:1791204300:4157.760000:4161.700000",
+     "source": "ifvg",
+     "low": 4157.76,
+     "high": 4161.7,
+     "formed_at": "2026-10-05 12:45",
+     "confirmable_from": "2026-10-05 12:50",
+     "provenance_atoms": [
+      "candle:1791202800",
+      "candle:1791203100",
+      "candle:1791203400",
+      "candle:1791204300",
+      "gap:1791202800",
+      "inversion:1791204300",
+      "leg:up:1791202800"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "ifvg:sell:1791205500:4154.000000:4154.090000",
+     "source": "ifvg",
+     "low": 4154,
+     "high": 4154.09,
+     "formed_at": "2026-10-05 13:05",
+     "confirmable_from": "2026-10-05 13:10",
+     "provenance_atoms": [
+      "candle:1791201000",
+      "candle:1791201300",
+      "candle:1791201600",
+      "candle:1791205500",
+      "gap:1791201000",
+      "inversion:1791205500"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "ifvg:sell:1791207300:4147.340000:4151.090000",
+     "source": "ifvg",
+     "low": 4147.34,
+     "high": 4151.09,
+     "formed_at": "2026-10-05 13:35",
+     "confirmable_from": "2026-10-05 13:40",
+     "provenance_atoms": [
+      "candle:1791180300",
+      "candle:1791180600",
+      "candle:1791180900",
+      "candle:1791207300",
+      "gap:1791180300",
+      "inversion:1791207300",
+      "leg:down:1791206700",
+      "leg:up:1791179700"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "ifvg:sell:1791212700:4142.180000:4143.690000",
+     "source": "ifvg",
+     "low": 4142.18,
+     "high": 4143.69,
+     "formed_at": "2026-10-05 15:05",
+     "confirmable_from": "2026-10-05 15:10",
+     "provenance_atoms": [
+      "candle:1791211500",
+      "candle:1791211800",
+      "candle:1791212100",
+      "candle:1791212700",
+      "gap:1791211500",
+      "inversion:1791212700",
+      "leg:down:1791212400",
+      "leg:up:1791210900"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "order_block:buy:1791178200:4134.380000:4137.100000",
+     "source": "order_block",
+     "low": 4134.38,
+     "high": 4137.1,
+     "formed_at": "2026-10-05 05:30",
+     "confirmable_from": "2026-10-05 05:45",
+     "provenance_atoms": [
+      "break:up:1791178800",
+      "candle:1791178200",
+      "candle:1791178500",
+      "candle:1791178800",
+      "leg:up:1791178500"
+     ],
+     "verified": true,
+     "touches": 5
+    },
+    {
+     "id": "order_block:buy:1791179400:4133.220000:4138.330000",
+     "source": "order_block",
+     "low": 4133.33,
+     "high": 4138.33,
+     "formed_at": "2026-10-05 05:50",
+     "confirmable_from": "2026-10-05 06:15",
+     "provenance_atoms": [
+      "break:up:1791180000",
+      "candle:1791179400",
+      "candle:1791179700",
+      "candle:1791180000",
+      "candle:1791180300",
+      "candle:1791180600",
+      "leg:up:1791179700"
+     ],
+     "verified": true,
+     "touches": 4
+    },
+    {
+     "id": "order_block:buy:1791210600:4134.340000:4137.640000",
+     "source": "order_block",
+     "low": 4134.34,
+     "high": 4137.64,
+     "formed_at": "2026-10-05 14:30",
+     "confirmable_from": "2026-10-05 15:00",
+     "provenance_atoms": [
+      "break:up:1791212100",
+      "candle:1791210600",
+      "candle:1791210900",
+      "candle:1791211200",
+      "candle:1791211500",
+      "candle:1791211800",
+      "candle:1791212100",
+      "leg:up:1791210900"
+     ],
+     "verified": true,
+     "touches": 1
+    },
+    {
+     "id": "order_block:sell:1791199500:4161.040000:4167.100000",
+     "source": "order_block",
+     "low": 4161.04,
+     "high": 4166.04,
+     "formed_at": "2026-10-05 11:25",
+     "confirmable_from": "2026-10-05 11:50",
+     "provenance_atoms": [
+      "break:down:1791200400",
+      "candle:1791199500",
+      "candle:1791199800",
+      "candle:1791200100",
+      "candle:1791200400",
+      "candle:1791200700",
+      "leg:down:1791199800"
+     ],
+     "verified": true,
+     "touches": 1
+    },
+    {
+     "id": "supply_demand:buy:1791174300:4124.550000:4135.790000",
+     "source": "supply_demand",
+     "low": 4130.79,
+     "high": 4135.79,
+     "formed_at": "2026-10-05 04:25",
+     "confirmable_from": "2026-10-05 04:50",
+     "provenance_atoms": [
+      "candle:1791173700",
+      "candle:1791174000",
+      "candle:1791174300",
+      "candle:1791174600",
+      "candle:1791174900",
+      "candle:1791175200",
+      "candle:1791175500",
+      "leg:up:1791174600"
+     ],
+     "verified": true,
+     "touches": 8
+    },
+    {
+     "id": "supply_demand:buy:1791176100:4130.060000:4134.670000",
+     "source": "supply_demand",
+     "low": 4130.06,
+     "high": 4134.67,
+     "formed_at": "2026-10-05 04:55",
+     "confirmable_from": "2026-10-05 05:15",
+     "provenance_atoms": [
+      "candle:1791175500",
+      "candle:1791175800",
+      "candle:1791176100",
+      "candle:1791176400",
+      "candle:1791176700",
+      "candle:1791177000",
+      "leg:up:1791176400"
+     ],
+     "verified": true,
+     "touches": 6
+    },
+    {
+     "id": "supply_demand:buy:1791178200:4133.270000:4140.130000",
+     "source": "supply_demand",
+     "low": 4135.13,
+     "high": 4140.13,
+     "formed_at": "2026-10-05 05:30",
+     "confirmable_from": "2026-10-05 05:45",
+     "provenance_atoms": [
+      "candle:1791177600",
+      "candle:1791177900",
+      "candle:1791178200",
+      "candle:1791178500",
+      "candle:1791178800",
+      "leg:up:1791178500"
+     ],
+     "verified": true,
+     "touches": 4
+    },
+    {
+     "id": "supply_demand:buy:1791179400:4132.550000:4140.680000",
+     "source": "supply_demand",
+     "low": 4135.68,
+     "high": 4140.68,
+     "formed_at": "2026-10-05 05:50",
+     "confirmable_from": "2026-10-05 06:15",
+     "provenance_atoms": [
+      "candle:1791178800",
+      "candle:1791179100",
+      "candle:1791179400",
+      "candle:1791179700",
+      "candle:1791180000",
+      "candle:1791180300",
+      "candle:1791180600",
+      "leg:up:1791179700"
+     ],
+     "verified": true,
+     "touches": 2
+    },
+    {
+     "id": "supply_demand:buy:1791208500:4131.430000:4144.500000",
+     "source": "supply_demand",
+     "low": 4139.5,
+     "high": 4144.5,
+     "formed_at": "2026-10-05 13:55",
+     "confirmable_from": "2026-10-05 14:10",
+     "provenance_atoms": [
+      "candle:1791207900",
+      "candle:1791208200",
+      "candle:1791208500",
+      "candle:1791208800",
+      "candle:1791209100",
+      "leg:up:1791208800"
+     ],
+     "verified": true,
+     "touches": 1
+    },
+    {
+     "id": "supply_demand:buy:1791210600:4132.790000:4142.390000",
+     "source": "supply_demand",
+     "low": 4137.39,
+     "high": 4142.39,
+     "formed_at": "2026-10-05 14:30",
+     "confirmable_from": "2026-10-05 15:00",
+     "provenance_atoms": [
+      "candle:1791210000",
+      "candle:1791210300",
+      "candle:1791210600",
+      "candle:1791210900",
+      "candle:1791211200",
+      "candle:1791211500",
+      "candle:1791211800",
+      "candle:1791212100",
+      "leg:up:1791210900"
+     ],
+     "verified": true,
+     "touches": 1
+    },
+    {
+     "id": "supply_demand:sell:1791192000:4165.330000:4169.830000",
+     "source": "supply_demand",
+     "low": 4165.33,
+     "high": 4169.83,
+     "formed_at": "2026-10-05 09:20",
+     "confirmable_from": "2026-10-05 09:50",
+     "provenance_atoms": [
+      "candle:1791191400",
+      "candle:1791191700",
+      "candle:1791192000",
+      "candle:1791192300",
+      "candle:1791192600",
+      "candle:1791192900",
+      "candle:1791193200",
+      "candle:1791193500",
+      "leg:down:1791192300"
+     ],
+     "verified": true,
+     "touches": 2
+    },
+    {
+     "id": "supply_demand:sell:1791199500:4159.310000:4167.100000",
+     "source": "supply_demand",
+     "low": 4159.31,
+     "high": 4164.31,
+     "formed_at": "2026-10-05 11:25",
+     "confirmable_from": "2026-10-05 11:50",
+     "provenance_atoms": [
+      "candle:1791198900",
+      "candle:1791199200",
+      "candle:1791199500",
+      "candle:1791199800",
+      "candle:1791200100",
+      "candle:1791200400",
+      "candle:1791200700",
+      "leg:down:1791199800"
+     ],
+     "verified": true,
+     "touches": 1
+    },
+    {
+     "id": "supply_demand:sell:1791206400:4150.100000:4154.280000",
+     "source": "supply_demand",
+     "low": 4150.1,
+     "high": 4154.28,
+     "formed_at": "2026-10-05 13:20",
+     "confirmable_from": "2026-10-05 13:45",
+     "provenance_atoms": [
+      "candle:1791205800",
+      "candle:1791206100",
+      "candle:1791206400",
+      "candle:1791206700",
+      "candle:1791207000",
+      "candle:1791207300",
+      "candle:1791207600",
+      "leg:down:1791206700"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "supply_demand:sell:1791212100:4137.250000:4148.400000",
+     "source": "supply_demand",
+     "low": 4137.25,
+     "high": 4142.25,
+     "formed_at": "2026-10-05 14:55",
+     "confirmable_from": "2026-10-05 15:25",
+     "provenance_atoms": [
+      "candle:1791211500",
+      "candle:1791211800",
+      "candle:1791212100",
+      "candle:1791212400",
+      "candle:1791212700",
+      "candle:1791213000",
+      "candle:1791213300",
+      "candle:1791213600",
+      "leg:down:1791212400"
+     ],
+     "verified": true,
+     "touches": 1
+    }
+   ],
+   "v3_independent_sources_among_the_structures": 3,
+   "v3_dependent_groups": [
+    [
+     "order_block:buy:1791179400:4133.220000:4138.330000",
+     "supply_demand:buy:1791178200:4133.270000:4140.130000",
+     "supply_demand:buy:1791179400:4132.550000:4140.680000"
+    ],
+    [
+     "order_block:buy:1791210600:4134.340000:4137.640000",
+     "supply_demand:buy:1791210600:4132.790000:4142.390000"
+    ]
+   ],
+   "v3_supported_regions_on_the_trade_side": [
+    {
+     "low": 4133.33,
+     "high": 4142.39,
+     "width_pips": 90.6,
+     "independent_sources": 5,
+     "min_independent_sources": 2,
+     "support": [
+      "ifvg:buy:1791213900:4137.130000:4138.050000",
+      "order_block:buy:1791178200:4134.380000:4137.100000",
+      "order_block:buy:1791179400:4133.220000:4138.330000",
+      "order_block:buy:1791210600:4134.340000:4137.640000",
+      "supply_demand:buy:1791174300:4124.550000:4135.790000",
+      "supply_demand:buy:1791176100:4130.060000:4134.670000",
+      "supply_demand:buy:1791178200:4133.270000:4140.130000",
+      "supply_demand:buy:1791179400:4132.550000:4140.680000",
+      "supply_demand:buy:1791208500:4131.430000:4144.500000",
+      "supply_demand:buy:1791210600:4132.790000:4142.390000"
+     ],
+     "episode": "cz3:buy:598baa5c78f42ee8"
+    }
+   ],
+   "v3_true_overlap_pips_inside_the_original_band": 9.2,
+   "original_band_over_true_overlap": 1,
+   "v3_decision": "not published",
+   "v3_reasons": [
+    "no_directional_confirmation",
+    "price_accepted_through_region",
+    "stop_exceeds_execution_envelope"
+   ],
+   "summary": ""
+  },
+  {
+   "trade": "10-06 03:53 BUY",
+   "symbol": "XAU",
+   "direction": "BUY",
+   "production_detector_regime": "legacy_go_native_intersection",
+   "deployed_commit_at_fill": "c458ef6",
+   "realized_r": 0.597,
+   "exit_path": "tp1_be",
+   "original": {
+    "constituents": [
+     "supply_demand [4127.32, 4131.15] origin 2026-10-05 17:30, 2 touches",
+     "fvg [4123.26, 4127.80] origin 2026-10-06 02:50, 1 touches"
+    ],
+    "entry_low": 4127.32,
+    "entry_high": 4127.8,
+    "band_width_pips": 4.800000000004729,
+    "invalidation": 4124.36,
+    "target": 4139.06,
+    "confirmation_pattern": "strong_reclaim",
+    "stars": 3,
+    "touch": "2026-10-06 03:15",
+    "confirmation": "2026-10-06 03:15"
+   },
+   "reproduced_by_replay": "Model A (legacy running intersection): same band, stop and target as production",
+   "evaluated_at": "2026-10-06 03:25",
+   "v3_structures_at_evaluation": [
+    {
+     "id": "fvg:buy:1791255000:4123.260000:4127.800000",
+     "source": "fvg",
+     "low": 4123.26,
+     "high": 4127.8,
+     "formed_at": "2026-10-06 02:50",
+     "confirmable_from": "2026-10-06 02:55",
+     "provenance_atoms": [
+      "candle:1791254400",
+      "candle:1791254700",
+      "candle:1791255000",
+      "gap:1791254400",
+      "leg:up:1791254700"
+     ],
+     "verified": true,
+     "touches": 1
+    },
+    {
+     "id": "fvg:sell:1791249600:4142.360000:4148.610000",
+     "source": "fvg",
+     "low": 4142.36,
+     "high": 4147.36,
+     "formed_at": "2026-10-06 01:20",
+     "confirmable_from": "2026-10-06 01:25",
+     "provenance_atoms": [
+      "candle:1791249000",
+      "candle:1791249300",
+      "candle:1791249600",
+      "gap:1791249000",
+      "leg:down:1791249000"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "fvg:sell:1791249900:4139.660000:4141.150000",
+     "source": "fvg",
+     "low": 4139.66,
+     "high": 4141.15,
+     "formed_at": "2026-10-06 01:25",
+     "confirmable_from": "2026-10-06 01:30",
+     "provenance_atoms": [
+      "candle:1791249300",
+      "candle:1791249600",
+      "candle:1791249900",
+      "gap:1791249300",
+      "leg:down:1791249000"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "fvg:sell:1791250200:4138.450000:4138.860000",
+     "source": "fvg",
+     "low": 4138.45,
+     "high": 4138.86,
+     "formed_at": "2026-10-06 01:30",
+     "confirmable_from": "2026-10-06 01:35",
+     "provenance_atoms": [
+      "candle:1791249600",
+      "candle:1791249900",
+      "candle:1791250200",
+      "gap:1791249600",
+      "leg:down:1791249000"
+     ],
+     "verified": true,
+     "touches": 1
+    },
+    {
+     "id": "ifvg:buy:1791254700:4125.830000:4126.450000",
+     "source": "ifvg",
+     "low": 4125.83,
+     "high": 4126.45,
+     "formed_at": "2026-10-06 02:45",
+     "confirmable_from": "2026-10-06 02:50",
+     "provenance_atoms": [
+      "candle:1791253500",
+      "candle:1791253800",
+      "candle:1791254100",
+      "candle:1791254700",
+      "gap:1791253500",
+      "inversion:1791254700",
+      "leg:up:1791254700"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "ifvg:sell:1791249900:4136.440000:4138.480000",
+     "source": "ifvg",
+     "low": 4136.44,
+     "high": 4138.48,
+     "formed_at": "2026-10-06 01:25",
+     "confirmable_from": "2026-10-06 01:30",
+     "provenance_atoms": [
+      "candle:1791245400",
+      "candle:1791245700",
+      "candle:1791246000",
+      "candle:1791249900",
+      "gap:1791245400",
+      "inversion:1791249900",
+      "leg:down:1791249000",
+      "leg:up:1791245400"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "ifvg:sell:1791249900:4138.340000:4144.540000",
+     "source": "ifvg",
+     "low": 4138.34,
+     "high": 4143.34,
+     "formed_at": "2026-10-06 01:25",
+     "confirmable_from": "2026-10-06 01:30",
+     "provenance_atoms": [
+      "candle:1791247200",
+      "candle:1791247500",
+      "candle:1791247800",
+      "candle:1791249900",
+      "gap:1791247200",
+      "inversion:1791249900",
+      "leg:down:1791249000",
+      "leg:up:1791247200"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "order_block:sell:1791248700:4147.650000:4151.080000",
+     "source": "order_block",
+     "low": 4147.65,
+     "high": 4151.08,
+     "formed_at": "2026-10-06 01:05",
+     "confirmable_from": "2026-10-06 01:55",
+     "provenance_atoms": [
+      "break:down:1791250200",
+      "candle:1791248700",
+      "candle:1791249000",
+      "candle:1791249300",
+      "candle:1791249600",
+      "candle:1791249900",
+      "candle:1791250200",
+      "candle:1791250500",
+      "candle:1791250800",
+      "candle:1791251100",
+      "candle:1791251400",
+      "leg:down:1791249000"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "supply_demand:buy:1791221400:4127.320000:4131.150000",
+     "source": "supply_demand",
+     "low": 4127.32,
+     "high": 4131.15,
+     "formed_at": "2026-10-05 17:30",
+     "confirmable_from": "2026-10-05 18:05",
+     "provenance_atoms": [
+      "candle:1791220800",
+      "candle:1791221100",
+      "candle:1791221400",
+      "candle:1791221700",
+      "candle:1791222000",
+      "candle:1791222300",
+      "candle:1791222600",
+      "candle:1791222900",
+      "candle:1791223200",
+      "leg:up:1791221700"
+     ],
+     "verified": true,
+     "touches": 2
+    },
+    {
+     "id": "supply_demand:buy:1791254400:4103.710000:4127.870000",
+     "source": "supply_demand",
+     "low": 4122.87,
+     "high": 4127.87,
+     "formed_at": "2026-10-06 02:40",
+     "confirmable_from": "2026-10-06 02:55",
+     "provenance_atoms": [
+      "candle:1791253800",
+      "candle:1791254100",
+      "candle:1791254400",
+      "candle:1791254700",
+      "candle:1791255000",
+      "leg:up:1791254700"
+     ],
+     "verified": true,
+     "touches": 1
+    },
+    {
+     "id": "supply_demand:sell:1791248700:4144.370000:4152.260000",
+     "source": "supply_demand",
+     "low": 4144.37,
+     "high": 4149.37,
+     "formed_at": "2026-10-06 01:05",
+     "confirmable_from": "2026-10-06 01:55",
+     "provenance_atoms": [
+      "candle:1791248100",
+      "candle:1791248400",
+      "candle:1791248700",
+      "candle:1791249000",
+      "candle:1791249300",
+      "candle:1791249600",
+      "candle:1791249900",
+      "candle:1791250200",
+      "candle:1791250500",
+      "candle:1791250800",
+      "candle:1791251100",
+      "candle:1791251400",
+      "leg:down:1791249000"
+     ],
+     "verified": true,
+     "touches": 0
+    }
+   ],
+   "v3_independent_sources_among_the_structures": 2,
+   "v3_dependent_groups": [
+    [
+     "fvg:buy:1791255000:4123.260000:4127.800000",
+     "supply_demand:buy:1791254400:4103.710000:4127.870000"
+    ]
+   ],
+   "v3_supported_regions_on_the_trade_side": [
+    {
+     "low": 4127.32,
+     "high": 4127.87,
+     "width_pips": 5.5,
+     "independent_sources": 2,
+     "min_independent_sources": 2,
+     "support": [
+      "fvg:buy:1791255000:4123.260000:4127.800000",
+      "supply_demand:buy:1791221400:4127.320000:4131.150000",
+      "supply_demand:buy:1791254400:4103.710000:4127.870000"
+     ],
+     "episode": "cz3:buy:061b3b59566b0c8e"
+    }
+   ],
+   "v3_true_overlap_pips_inside_the_original_band": 4.8,
+   "original_band_over_true_overlap": 1,
+   "v3_decision": "not published",
+   "v3_reasons": [
+    "no_directional_confirmation",
+    "price_accepted_through_region",
+    "single_independent_origin",
+    "stop_exceeds_execution_envelope"
+   ],
+   "summary": ""
+  },
+  {
+   "trade": "10-09 13:18 SELL",
+   "symbol": "XAU",
+   "direction": "SELL",
+   "production_detector_regime": "frozen_python_publisher_union",
+   "deployed_commit_at_fill": "e610c5e",
+   "realized_r": -1,
+   "exit_path": "full_stop",
+   "original": {
+    "constituents": [
+     "supply_demand [4179.75, 4183.24] origin 2026-10-09 10:50, 3 touches",
+     "fvg [4178.77, 4181.32] origin 2026-10-09 12:50, 1 touches",
+     "ifvg [4179.87, 4181.85] origin 2026-10-09 12:45, 0 touches"
+    ],
+    "entry_low": 4178.77,
+    "entry_high": 4183.24,
+    "band_width_pips": 44.69999999999345,
+    "invalidation": 4185.65,
+    "target": 4168.62,
+    "confirmation_pattern": "sweep_reclaim",
+    "stars": 3,
+    "touch": "2026-10-09 13:05",
+    "confirmation": "2026-10-09 13:05"
+   },
+   "reproduced_by_replay": "Model B (frozen v2): same band, stop and target as production",
+   "evaluated_at": "2026-10-09 13:10",
+   "v3_structures_at_evaluation": [
+    {
+     "id": "fvg:buy:1791507900:4146.840000:4147.450000",
+     "source": "fvg",
+     "low": 4146.84,
+     "high": 4147.45,
+     "formed_at": "2026-10-09 01:05",
+     "confirmable_from": "2026-10-09 01:10",
+     "provenance_atoms": [
+      "candle:1791507300",
+      "candle:1791507600",
+      "candle:1791507900",
+      "gap:1791507300",
+      "leg:up:1791507600"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "fvg:buy:1791508500:4151.120000:4155.640000",
+     "source": "fvg",
+     "low": 4151.12,
+     "high": 4155.64,
+     "formed_at": "2026-10-09 01:15",
+     "confirmable_from": "2026-10-09 01:20",
+     "provenance_atoms": [
+      "candle:1791507900",
+      "candle:1791508200",
+      "candle:1791508500",
+      "gap:1791507900",
+      "leg:up:1791507600"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "fvg:buy:1791509100:4157.880000:4160.510000",
+     "source": "fvg",
+     "low": 4157.88,
+     "high": 4160.51,
+     "formed_at": "2026-10-09 01:25",
+     "confirmable_from": "2026-10-09 01:30",
+     "provenance_atoms": [
+      "candle:1791508500",
+      "candle:1791508800",
+      "candle:1791509100",
+      "gap:1791508500",
+      "leg:up:1791507600"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "fvg:buy:1791509700:4163.680000:4167.530000",
+     "source": "fvg",
+     "low": 4163.68,
+     "high": 4167.53,
+     "formed_at": "2026-10-09 01:35",
+     "confirmable_from": "2026-10-09 01:40",
+     "provenance_atoms": [
+      "candle:1791509100",
+      "candle:1791509400",
+      "candle:1791509700",
+      "gap:1791509100",
+      "leg:up:1791507600"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "fvg:sell:1791535200:4192.930000:4194.220000",
+     "source": "fvg",
+     "low": 4192.93,
+     "high": 4194.22,
+     "formed_at": "2026-10-09 08:40",
+     "confirmable_from": "2026-10-09 08:45",
+     "provenance_atoms": [
+      "candle:1791534600",
+      "candle:1791534900",
+      "candle:1791535200",
+      "gap:1791534600"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "fvg:sell:1791535500:4191.610000:4192.920000",
+     "source": "fvg",
+     "low": 4191.61,
+     "high": 4192.92,
+     "formed_at": "2026-10-09 08:45",
+     "confirmable_from": "2026-10-09 08:50",
+     "provenance_atoms": [
+      "candle:1791534900",
+      "candle:1791535200",
+      "candle:1791535500",
+      "gap:1791534900"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "fvg:sell:1791550200:4178.770000:4181.320000",
+     "source": "fvg",
+     "low": 4178.77,
+     "high": 4181.32,
+     "formed_at": "2026-10-09 12:50",
+     "confirmable_from": "2026-10-09 12:55",
+     "provenance_atoms": [
+      "candle:1791549600",
+      "candle:1791549900",
+      "candle:1791550200",
+      "gap:1791549600"
+     ],
+     "verified": true,
+     "touches": 1
+    },
+    {
+     "id": "ifvg:sell:1791534600:4196.560000:4196.910000",
+     "source": "ifvg",
+     "low": 4196.56,
+     "high": 4196.91,
+     "formed_at": "2026-10-09 08:30",
+     "confirmable_from": "2026-10-09 08:35",
+     "provenance_atoms": [
+      "candle:1791533100",
+      "candle:1791533400",
+      "candle:1791533700",
+      "candle:1791534600",
+      "gap:1791533100",
+      "inversion:1791534600"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "ifvg:sell:1791536100:4187.940000:4189.390000",
+     "source": "ifvg",
+     "low": 4187.94,
+     "high": 4189.39,
+     "formed_at": "2026-10-09 08:55",
+     "confirmable_from": "2026-10-09 09:00",
+     "provenance_atoms": [
+      "candle:1791522600",
+      "candle:1791522900",
+      "candle:1791523200",
+      "candle:1791536100",
+      "gap:1791522600",
+      "inversion:1791536100"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "ifvg:sell:1791540300:4185.420000:4185.950000",
+     "source": "ifvg",
+     "low": 4185.42,
+     "high": 4185.95,
+     "formed_at": "2026-10-09 10:05",
+     "confirmable_from": "2026-10-09 10:10",
+     "provenance_atoms": [
+      "candle:1791539100",
+      "candle:1791539400",
+      "candle:1791539700",
+      "candle:1791540300",
+      "gap:1791539100",
+      "inversion:1791540300"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "ifvg:sell:1791549900:4179.870000:4181.850000",
+     "source": "ifvg",
+     "low": 4179.87,
+     "high": 4181.85,
+     "formed_at": "2026-10-09 12:45",
+     "confirmable_from": "2026-10-09 12:50",
+     "provenance_atoms": [
+      "candle:1791544200",
+      "candle:1791544500",
+      "candle:1791544800",
+      "candle:1791549900",
+      "gap:1791544200",
+      "inversion:1791549900"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "supply_demand:buy:1791507300:4142.430000:4149.000000",
+     "source": "supply_demand",
+     "low": 4144,
+     "high": 4149,
+     "formed_at": "2026-10-09 00:55",
+     "confirmable_from": "2026-10-09 01:40",
+     "provenance_atoms": [
+      "candle:1791506700",
+      "candle:1791507000",
+      "candle:1791507300",
+      "candle:1791507600",
+      "candle:1791507900",
+      "candle:1791508200",
+      "candle:1791508500",
+      "candle:1791508800",
+      "candle:1791509100",
+      "candle:1791509400",
+      "candle:1791509700",
+      "leg:up:1791507600"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "supply_demand:buy:1791512700:4169.980000:4173.210000",
+     "source": "supply_demand",
+     "low": 4169.98,
+     "high": 4173.21,
+     "formed_at": "2026-10-09 02:25",
+     "confirmable_from": "2026-10-09 02:40",
+     "provenance_atoms": [
+      "candle:1791512100",
+      "candle:1791512400",
+      "candle:1791512700",
+      "candle:1791513000",
+      "candle:1791513300",
+      "leg:up:1791513000"
+     ],
+     "verified": true,
+     "touches": 1
+    },
+    {
+     "id": "supply_demand:sell:1791537600:4184.620000:4189.750000",
+     "source": "supply_demand",
+     "low": 4184.62,
+     "high": 4189.62,
+     "formed_at": "2026-10-09 09:20",
+     "confirmable_from": "2026-10-09 09:40",
+     "provenance_atoms": [
+      "candle:1791537000",
+      "candle:1791537300",
+      "candle:1791537600",
+      "candle:1791537900",
+      "candle:1791538200",
+      "candle:1791538500",
+      "leg:down:1791537900"
+     ],
+     "verified": true,
+     "touches": 4
+    },
+    {
+     "id": "supply_demand:sell:1791543000:4179.750000:4183.240000",
+     "source": "supply_demand",
+     "low": 4179.75,
+     "high": 4183.24,
+     "formed_at": "2026-10-09 10:50",
+     "confirmable_from": "2026-10-09 11:10",
+     "provenance_atoms": [
+      "candle:1791542400",
+      "candle:1791542700",
+      "candle:1791543000",
+      "candle:1791543300",
+      "candle:1791543600",
+      "candle:1791543900",
+      "leg:down:1791543300"
+     ],
+     "verified": true,
+     "touches": 3
+    }
+   ],
+   "v3_independent_sources_among_the_structures": 2,
+   "v3_dependent_groups": [
+    [
+     "fvg:sell:1791550200:4178.770000:4181.320000",
+     "ifvg:sell:1791549900:4179.870000:4181.850000"
+    ]
+   ],
+   "v3_supported_regions_on_the_trade_side": [
+    {
+     "low": 4179.75,
+     "high": 4181.85,
+     "width_pips": 21,
+     "independent_sources": 2,
+     "min_independent_sources": 2,
+     "support": [
+      "fvg:sell:1791550200:4178.770000:4181.320000",
+      "ifvg:sell:1791549900:4179.870000:4181.850000",
+      "supply_demand:sell:1791543000:4179.750000:4183.240000"
+     ],
+     "episode": "cz3:sell:b143d63066996f69"
+    },
+    {
+     "low": 4185.42,
+     "high": 4185.95,
+     "width_pips": 5.3,
+     "independent_sources": 2,
+     "min_independent_sources": 2,
+     "support": [
+      "ifvg:sell:1791540300:4185.420000:4185.950000",
+      "supply_demand:sell:1791537600:4184.620000:4189.750000"
+     ],
+     "episode": "cz3:sell:863c4624c8279a89"
+    },
+    {
+     "low": 4187.94,
+     "high": 4189.39,
+     "width_pips": 14.5,
+     "independent_sources": 2,
+     "min_independent_sources": 2,
+     "support": [
+      "ifvg:sell:1791536100:4187.940000:4189.390000",
+      "supply_demand:sell:1791537600:4184.620000:4189.750000"
+     ],
+     "episode": "cz3:sell:88401dcb94f2b5dd"
+    }
+   ],
+   "v3_true_overlap_pips_inside_the_original_band": 21,
+   "original_band_over_true_overlap": 2.13,
+   "v3_decision": "not published",
+   "v3_reasons": [
+    "no_directional_confirmation",
+    "price_accepted_through_region",
+    "structure_not_yet_available"
+   ],
+   "summary": ""
+  },
+  {
+   "trade": "10-09 19:52 BUY",
+   "symbol": "XAU",
+   "direction": "BUY",
+   "production_detector_regime": "frozen_python_publisher_union",
+   "deployed_commit_at_fill": "e610c5e",
+   "realized_r": 0.423,
+   "exit_path": "tp1_be",
+   "original": {
+    "constituents": [
+     "supply_demand [4187.60, 4192.60] origin 2026-10-09 17:05, 0 touches",
+     "fvg [4191.59, 4192.43] origin 2026-10-09 17:20, 0 touches"
+    ],
+    "entry_low": 4187.6,
+    "entry_high": 4192.6,
+    "band_width_pips": 50,
+    "invalidation": 4185.99,
+    "target": 4198.59,
+    "confirmation_pattern": "sweep_reclaim",
+    "stars": 3,
+    "touch": "2026-10-09 17:10",
+    "confirmation": "2026-10-09 17:10"
+   },
+   "reproduced_by_replay": "Model B (frozen v2): same band, stop and target as production",
+   "evaluated_at": "2026-10-09 17:20",
+   "v3_structures_at_evaluation": [
+    {
+     "id": "fvg:buy:1791566400:4191.590000:4192.430000",
+     "source": "fvg",
+     "low": 4191.59,
+     "high": 4192.43,
+     "formed_at": "2026-10-09 17:20",
+     "confirmable_from": "2026-10-09 17:25",
+     "provenance_atoms": [
+      "candle:1791565800",
+      "candle:1791566100",
+      "candle:1791566400",
+      "gap:1791565800",
+      "leg:up:1791565800"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "ifvg:buy:1791551700:4178.770000:4181.320000",
+     "source": "ifvg",
+     "low": 4178.77,
+     "high": 4181.32,
+     "formed_at": "2026-10-09 13:15",
+     "confirmable_from": "2026-10-09 13:20",
+     "provenance_atoms": [
+      "candle:1791549600",
+      "candle:1791549900",
+      "candle:1791550200",
+      "candle:1791551700",
+      "gap:1791549600",
+      "inversion:1791551700",
+      "leg:up:1791551100"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "ifvg:buy:1791564000:4187.730000:4188.260000",
+     "source": "ifvg",
+     "low": 4187.73,
+     "high": 4188.26,
+     "formed_at": "2026-10-09 16:40",
+     "confirmable_from": "2026-10-09 16:45",
+     "provenance_atoms": [
+      "candle:1791563100",
+      "candle:1791563400",
+      "candle:1791563700",
+      "candle:1791564000",
+      "gap:1791563100",
+      "inversion:1791564000",
+      "leg:down:1791562500",
+      "leg:up:1791563700"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "ifvg:sell:1791534600:4196.560000:4196.910000",
+     "source": "ifvg",
+     "low": 4196.56,
+     "high": 4196.91,
+     "formed_at": "2026-10-09 08:30",
+     "confirmable_from": "2026-10-09 08:35",
+     "provenance_atoms": [
+      "candle:1791533100",
+      "candle:1791533400",
+      "candle:1791533700",
+      "candle:1791534600",
+      "gap:1791533100",
+      "inversion:1791534600"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "supply_demand:buy:1791550800:4168.620000:4179.160000",
+     "source": "supply_demand",
+     "low": 4174.16,
+     "high": 4179.16,
+     "formed_at": "2026-10-09 13:00",
+     "confirmable_from": "2026-10-09 13:30",
+     "provenance_atoms": [
+      "candle:1791550200",
+      "candle:1791550500",
+      "candle:1791550800",
+      "candle:1791551100",
+      "candle:1791551400",
+      "candle:1791551700",
+      "candle:1791552000",
+      "candle:1791552300",
+      "leg:up:1791551100"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "supply_demand:buy:1791558300:4180.740000:4187.710000",
+     "source": "supply_demand",
+     "low": 4182.71,
+     "high": 4187.71,
+     "formed_at": "2026-10-09 15:05",
+     "confirmable_from": "2026-10-09 15:25",
+     "provenance_atoms": [
+      "candle:1791557700",
+      "candle:1791558000",
+      "candle:1791558300",
+      "candle:1791558600",
+      "candle:1791558900",
+      "candle:1791559200",
+      "leg:up:1791558600"
+     ],
+     "verified": true,
+     "touches": 4
+    },
+    {
+     "id": "supply_demand:buy:1791563400:4185.100000:4191.010000",
+     "source": "supply_demand",
+     "low": 4186.01,
+     "high": 4191.01,
+     "formed_at": "2026-10-09 16:30",
+     "confirmable_from": "2026-10-09 16:50",
+     "provenance_atoms": [
+      "candle:1791562800",
+      "candle:1791563100",
+      "candle:1791563400",
+      "candle:1791563700",
+      "candle:1791564000",
+      "candle:1791564300",
+      "leg:up:1791563700"
+     ],
+     "verified": true,
+     "touches": 1
+    },
+    {
+     "id": "supply_demand:buy:1791565500:4187.280000:4192.600000",
+     "source": "supply_demand",
+     "low": 4187.6,
+     "high": 4192.6,
+     "formed_at": "2026-10-09 17:05",
+     "confirmable_from": "2026-10-09 17:20",
+     "provenance_atoms": [
+      "candle:1791564900",
+      "candle:1791565200",
+      "candle:1791565500",
+      "candle:1791565800",
+      "candle:1791566100",
+      "leg:up:1791565800"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "supply_demand:sell:1791562200:4187.740000:4193.650000",
+     "source": "supply_demand",
+     "low": 4187.74,
+     "high": 4192.74,
+     "formed_at": "2026-10-09 16:10",
+     "confirmable_from": "2026-10-09 16:35",
+     "provenance_atoms": [
+      "candle:1791561600",
+      "candle:1791561900",
+      "candle:1791562200",
+      "candle:1791562500",
+      "candle:1791562800",
+      "candle:1791563100",
+      "candle:1791563400",
+      "leg:down:1791562500"
+     ],
+     "verified": true,
+     "touches": 1
+    }
+   ],
+   "v3_independent_sources_among_the_structures": 3,
+   "v3_dependent_groups": [
+    [
+     "fvg:buy:1791566400:4191.590000:4192.430000",
+     "supply_demand:buy:1791565500:4187.280000:4192.600000"
+    ],
+    [
+     "ifvg:buy:1791564000:4187.730000:4188.260000",
+     "supply_demand:buy:1791563400:4185.100000:4191.010000"
+    ]
+   ],
+   "v3_supported_regions_on_the_trade_side": [
+    {
+     "low": 4186.01,
+     "high": 4191.01,
+     "width_pips": 50,
+     "independent_sources": 3,
+     "min_independent_sources": 2,
+     "support": [
+      "ifvg:buy:1791564000:4187.730000:4188.260000",
+      "supply_demand:buy:1791558300:4180.740000:4187.710000",
+      "supply_demand:buy:1791563400:4185.100000:4191.010000",
+      "supply_demand:buy:1791565500:4187.280000:4192.600000"
+     ],
+     "episode": "cz3:buy:2e0c9e68cf34ed31"
+    }
+   ],
+   "v3_true_overlap_pips_inside_the_original_band": 34.1,
+   "original_band_over_true_overlap": 1.47,
+   "v3_decision": "not published",
+   "v3_reasons": [
+    "no_directional_confirmation",
+    "single_independent_origin",
+    "stop_exceeds_execution_envelope"
+   ],
+   "summary": ""
+  },
+  {
+   "trade": "10-12 22:01 SELL",
+   "symbol": "XAU",
+   "direction": "SELL",
+   "production_detector_regime": "frozen_python_publisher_union",
+   "deployed_commit_at_fill": "90fd0f4",
+   "realized_r": -1,
+   "exit_path": "full_stop",
+   "original": {
+    "constituents": [
+     "supply_demand [4167.51, 4172.51] origin 2026-10-12 12:10, 7 touches",
+     "order_block [4168.58, 4171.87] origin 2026-10-12 12:10, 7 touches"
+    ],
+    "entry_low": 4167.51,
+    "entry_high": 4172.51,
+    "band_width_pips": 50,
+    "invalidation": 4173.76,
+    "target": 4162.51,
+    "confirmation_pattern": "sweep_reclaim",
+    "stars": 3,
+    "touch": "2026-10-12 17:40",
+    "confirmation": "2026-10-12 17:40"
+   },
+   "reproduced_by_replay": "Model B (frozen v2): same band, stop and target as production",
+   "evaluated_at": "2026-10-12 17:40",
+   "v3_structures_at_evaluation": [
+    {
+     "id": "fvg:buy:1791809100:4158.710000:4163.800000",
+     "source": "fvg",
+     "low": 4158.8,
+     "high": 4163.8,
+     "formed_at": "2026-10-12 12:45",
+     "confirmable_from": "2026-10-12 12:50",
+     "provenance_atoms": [
+      "candle:1791808500",
+      "candle:1791808800",
+      "candle:1791809100",
+      "gap:1791808500",
+      "leg:up:1791808500"
+     ],
+     "verified": true,
+     "touches": 5
+    },
+    {
+     "id": "fvg:buy:1791824400:4163.120000:4164.250000",
+     "source": "fvg",
+     "low": 4163.12,
+     "high": 4164.25,
+     "formed_at": "2026-10-12 17:00",
+     "confirmable_from": "2026-10-12 17:05",
+     "provenance_atoms": [
+      "candle:1791823800",
+      "candle:1791824100",
+      "candle:1791824400",
+      "gap:1791823800",
+      "leg:up:1791824100"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "fvg:buy:1791826800:4167.970000:4168.910000",
+     "source": "fvg",
+     "low": 4167.97,
+     "high": 4168.91,
+     "formed_at": "2026-10-12 17:40",
+     "confirmable_from": "2026-10-12 17:45",
+     "provenance_atoms": [
+      "candle:1791826200",
+      "candle:1791826500",
+      "candle:1791826800",
+      "gap:1791826200"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "fvg:sell:1791791100:4184.410000:4185.760000",
+     "source": "fvg",
+     "low": 4184.41,
+     "high": 4185.76,
+     "formed_at": "2026-10-12 07:45",
+     "confirmable_from": "2026-10-12 07:50",
+     "provenance_atoms": [
+      "candle:1791790500",
+      "candle:1791790800",
+      "candle:1791791100",
+      "gap:1791790500",
+      "leg:down:1791790800"
+     ],
+     "verified": true,
+     "touches": 1
+    },
+    {
+     "id": "fvg:sell:1791803100:4174.950000:4177.100000",
+     "source": "fvg",
+     "low": 4174.95,
+     "high": 4177.1,
+     "formed_at": "2026-10-12 11:05",
+     "confirmable_from": "2026-10-12 11:10",
+     "provenance_atoms": [
+      "candle:1791802500",
+      "candle:1791802800",
+      "candle:1791803100",
+      "gap:1791802500",
+      "leg:down:1791802500"
+     ],
+     "verified": true,
+     "touches": 2
+    },
+    {
+     "id": "ifvg:buy:1791808800:4158.710000:4161.980000",
+     "source": "ifvg",
+     "low": 4158.71,
+     "high": 4161.98,
+     "formed_at": "2026-10-12 12:40",
+     "confirmable_from": "2026-10-12 12:45",
+     "provenance_atoms": [
+      "candle:1791807900",
+      "candle:1791808200",
+      "candle:1791808500",
+      "candle:1791808800",
+      "gap:1791807900",
+      "inversion:1791808800",
+      "leg:down:1791807300",
+      "leg:up:1791808500"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "ifvg:buy:1791824100:4163.140000:4163.880000",
+     "source": "ifvg",
+     "low": 4163.14,
+     "high": 4163.88,
+     "formed_at": "2026-10-12 16:55",
+     "confirmable_from": "2026-10-12 17:00",
+     "provenance_atoms": [
+      "candle:1791822900",
+      "candle:1791823200",
+      "candle:1791823500",
+      "candle:1791824100",
+      "gap:1791822900",
+      "inversion:1791824100",
+      "leg:down:1791823200",
+      "leg:up:1791824100"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "ifvg:buy:1791824700:4166.000000:4167.830000",
+     "source": "ifvg",
+     "low": 4166,
+     "high": 4167.83,
+     "formed_at": "2026-10-12 17:05",
+     "confirmable_from": "2026-10-12 17:10",
+     "provenance_atoms": [
+      "candle:1791820200",
+      "candle:1791820500",
+      "candle:1791820800",
+      "candle:1791824700",
+      "gap:1791820200",
+      "inversion:1791824700",
+      "leg:up:1791824100"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "ifvg:buy:1791826200:4167.540000:4167.600000",
+     "source": "ifvg",
+     "low": 4167.54,
+     "high": 4167.6,
+     "formed_at": "2026-10-12 17:30",
+     "confirmable_from": "2026-10-12 17:35",
+     "provenance_atoms": [
+      "candle:1791825000",
+      "candle:1791825300",
+      "candle:1791825600",
+      "candle:1791826200",
+      "gap:1791825000",
+      "inversion:1791826200"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "ifvg:sell:1791784800:4187.980000:4188.850000",
+     "source": "ifvg",
+     "low": 4187.98,
+     "high": 4188.85,
+     "formed_at": "2026-10-12 06:00",
+     "confirmable_from": "2026-10-12 06:05",
+     "provenance_atoms": [
+      "candle:1791783600",
+      "candle:1791783900",
+      "candle:1791784200",
+      "candle:1791784800",
+      "gap:1791783600",
+      "inversion:1791784800",
+      "leg:down:1791784800"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "ifvg:sell:1791790800:4185.540000:4185.760000",
+     "source": "ifvg",
+     "low": 4185.54,
+     "high": 4185.76,
+     "formed_at": "2026-10-12 07:40",
+     "confirmable_from": "2026-10-12 07:45",
+     "provenance_atoms": [
+      "candle:1791789900",
+      "candle:1791790200",
+      "candle:1791790500",
+      "candle:1791790800",
+      "gap:1791789900",
+      "inversion:1791790800",
+      "leg:down:1791790800"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "ifvg:sell:1791801900:4177.750000:4178.670000",
+     "source": "ifvg",
+     "low": 4177.75,
+     "high": 4178.67,
+     "formed_at": "2026-10-12 10:45",
+     "confirmable_from": "2026-10-12 10:50",
+     "provenance_atoms": [
+      "candle:1791800400",
+      "candle:1791800700",
+      "candle:1791801000",
+      "candle:1791801900",
+      "gap:1791800400",
+      "inversion:1791801900",
+      "leg:up:1791798600"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "ifvg:sell:1791802800:4175.090000:4175.150000",
+     "source": "ifvg",
+     "low": 4175.09,
+     "high": 4175.15,
+     "formed_at": "2026-10-12 11:00",
+     "confirmable_from": "2026-10-12 11:05",
+     "provenance_atoms": [
+      "candle:1791799800",
+      "candle:1791800100",
+      "candle:1791800400",
+      "candle:1791802800",
+      "gap:1791799800",
+      "inversion:1791802800",
+      "leg:down:1791802500",
+      "leg:up:1791798600"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "ifvg:sell:1791802800:4175.320000:4177.290000",
+     "source": "ifvg",
+     "low": 4175.32,
+     "high": 4177.29,
+     "formed_at": "2026-10-12 11:00",
+     "confirmable_from": "2026-10-12 11:05",
+     "provenance_atoms": [
+      "candle:1791800100",
+      "candle:1791800400",
+      "candle:1791800700",
+      "candle:1791802800",
+      "gap:1791800100",
+      "inversion:1791802800",
+      "leg:down:1791802500",
+      "leg:up:1791798600"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "order_block:sell:1791807000:4168.580000:4171.870000",
+     "source": "order_block",
+     "low": 4168.58,
+     "high": 4171.87,
+     "formed_at": "2026-10-12 12:10",
+     "confirmable_from": "2026-10-12 12:35",
+     "provenance_atoms": [
+      "break:down:1791807600",
+      "candle:1791807000",
+      "candle:1791807300",
+      "candle:1791807600",
+      "candle:1791807900",
+      "candle:1791808200",
+      "leg:down:1791807300"
+     ],
+     "verified": true,
+     "touches": 7
+    },
+    {
+     "id": "order_block:sell:1791813900:4170.890000:4174.170000",
+     "source": "order_block",
+     "low": 4170.89,
+     "high": 4174.17,
+     "formed_at": "2026-10-12 14:05",
+     "confirmable_from": "2026-10-12 14:20",
+     "provenance_atoms": [
+      "break:down:1791814500",
+      "candle:1791813900",
+      "candle:1791814200",
+      "candle:1791814500",
+      "leg:down:1791814200"
+     ],
+     "verified": true,
+     "touches": 1
+    },
+    {
+     "id": "supply_demand:buy:1791809400:4157.670000:4168.030000",
+     "source": "supply_demand",
+     "low": 4163.03,
+     "high": 4168.03,
+     "formed_at": "2026-10-12 12:50",
+     "confirmable_from": "2026-10-12 13:30",
+     "provenance_atoms": [
+      "candle:1791808800",
+      "candle:1791809100",
+      "candle:1791809400",
+      "candle:1791809700",
+      "candle:1791810000",
+      "candle:1791810300",
+      "candle:1791810600",
+      "candle:1791810900",
+      "candle:1791811200",
+      "candle:1791811500",
+      "leg:up:1791809700"
+     ],
+     "verified": true,
+     "touches": 2
+    },
+    {
+     "id": "supply_demand:buy:1791823800:4160.050000:4166.090000",
+     "source": "supply_demand",
+     "low": 4161.09,
+     "high": 4166.09,
+     "formed_at": "2026-10-12 16:50",
+     "confirmable_from": "2026-10-12 17:15",
+     "provenance_atoms": [
+      "candle:1791823200",
+      "candle:1791823500",
+      "candle:1791823800",
+      "candle:1791824100",
+      "candle:1791824400",
+      "candle:1791824700",
+      "candle:1791825000",
+      "leg:up:1791824100"
+     ],
+     "verified": true,
+     "touches": 1
+    },
+    {
+     "id": "supply_demand:sell:1791784500:4186.350000:4192.170000",
+     "source": "supply_demand",
+     "low": 4186.35,
+     "high": 4191.35,
+     "formed_at": "2026-10-12 05:55",
+     "confirmable_from": "2026-10-12 06:10",
+     "provenance_atoms": [
+      "candle:1791783900",
+      "candle:1791784200",
+      "candle:1791784500",
+      "candle:1791784800",
+      "candle:1791785100",
+      "leg:down:1791784800"
+     ],
+     "verified": true,
+     "touches": 4
+    },
+    {
+     "id": "supply_demand:sell:1791790500:4182.640000:4188.130000",
+     "source": "supply_demand",
+     "low": 4182.64,
+     "high": 4187.64,
+     "formed_at": "2026-10-12 07:35",
+     "confirmable_from": "2026-10-12 07:45",
+     "provenance_atoms": [
+      "candle:1791789900",
+      "candle:1791790200",
+      "candle:1791790500",
+      "candle:1791790800",
+      "leg:down:1791790800"
+     ],
+     "verified": true,
+     "touches": 1
+    },
+    {
+     "id": "supply_demand:sell:1791792000:4179.050000:4184.590000",
+     "source": "supply_demand",
+     "low": 4179.05,
+     "high": 4184.05,
+     "formed_at": "2026-10-12 08:00",
+     "confirmable_from": "2026-10-12 08:20",
+     "provenance_atoms": [
+      "candle:1791791400",
+      "candle:1791791700",
+      "candle:1791792000",
+      "candle:1791792300",
+      "candle:1791792600",
+      "candle:1791792900",
+      "leg:down:1791792300"
+     ],
+     "verified": true,
+     "touches": 2
+    },
+    {
+     "id": "supply_demand:sell:1791802200:4176.290000:4179.250000",
+     "source": "supply_demand",
+     "low": 4176.29,
+     "high": 4179.25,
+     "formed_at": "2026-10-12 10:50",
+     "confirmable_from": "2026-10-12 11:15",
+     "provenance_atoms": [
+      "candle:1791801600",
+      "candle:1791801900",
+      "candle:1791802200",
+      "candle:1791802500",
+      "candle:1791802800",
+      "candle:1791803100",
+      "candle:1791803400",
+      "leg:down:1791802500"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "supply_demand:sell:1791807000:4167.510000:4173.110000",
+     "source": "supply_demand",
+     "low": 4167.51,
+     "high": 4172.51,
+     "formed_at": "2026-10-12 12:10",
+     "confirmable_from": "2026-10-12 12:35",
+     "provenance_atoms": [
+      "candle:1791806400",
+      "candle:1791806700",
+      "candle:1791807000",
+      "candle:1791807300",
+      "candle:1791807600",
+      "candle:1791807900",
+      "candle:1791808200",
+      "leg:down:1791807300"
+     ],
+     "verified": true,
+     "touches": 7
+    },
+    {
+     "id": "supply_demand:sell:1791813900:4169.450000:4175.310000",
+     "source": "supply_demand",
+     "low": 4169.45,
+     "high": 4174.45,
+     "formed_at": "2026-10-12 14:05",
+     "confirmable_from": "2026-10-12 14:20",
+     "provenance_atoms": [
+      "candle:1791813300",
+      "candle:1791813600",
+      "candle:1791813900",
+      "candle:1791814200",
+      "candle:1791814500",
+      "leg:down:1791814200"
+     ],
+     "verified": true,
+     "touches": 4
+    }
+   ],
+   "v3_independent_sources_among_the_structures": 2,
+   "v3_dependent_groups": [
+    [
+     "order_block:sell:1791807000:4168.580000:4171.870000",
+     "supply_demand:sell:1791807000:4167.510000:4173.110000"
+    ],
+    [
+     "order_block:sell:1791813900:4170.890000:4174.170000",
+     "supply_demand:sell:1791813900:4169.450000:4175.310000"
+    ]
+   ],
+   "v3_supported_regions_on_the_trade_side": [
+    {
+     "low": 4169.45,
+     "high": 4172.51,
+     "width_pips": 30.6,
+     "independent_sources": 2,
+     "min_independent_sources": 2,
+     "support": [
+      "order_block:sell:1791807000:4168.580000:4171.870000",
+      "order_block:sell:1791813900:4170.890000:4174.170000",
+      "supply_demand:sell:1791807000:4167.510000:4173.110000",
+      "supply_demand:sell:1791813900:4169.450000:4175.310000"
+     ],
+     "episode": "cz3:sell:8cd63b9cfb3c7ee3"
+    },
+    {
+     "low": 4179.05,
+     "high": 4179.25,
+     "width_pips": 2,
+     "independent_sources": 2,
+     "min_independent_sources": 2,
+     "support": [
+      "supply_demand:sell:1791792000:4179.050000:4184.590000",
+      "supply_demand:sell:1791802200:4176.290000:4179.250000"
+     ],
+     "episode": "cz3:sell:632ea590f5499fc1"
+    },
+    {
+     "low": 4182.64,
+     "high": 4184.05,
+     "width_pips": 14.1,
+     "independent_sources": 2,
+     "min_independent_sources": 2,
+     "support": [
+      "supply_demand:sell:1791790500:4182.640000:4188.130000",
+      "supply_demand:sell:1791792000:4179.050000:4184.590000"
+     ],
+     "episode": "cz3:sell:551ae19463d11c35"
+    },
+    {
+     "low": 4186.35,
+     "high": 4187.64,
+     "width_pips": 12.9,
+     "independent_sources": 2,
+     "min_independent_sources": 2,
+     "support": [
+      "supply_demand:sell:1791784500:4186.350000:4192.170000",
+      "supply_demand:sell:1791790500:4182.640000:4188.130000"
+     ],
+     "episode": "cz3:sell:6be241acf8e165ae"
+    }
+   ],
+   "v3_true_overlap_pips_inside_the_original_band": 30.6,
+   "original_band_over_true_overlap": 1.63,
+   "v3_decision": "not published",
+   "v3_reasons": [
+    "no_directional_confirmation",
+    "single_independent_origin",
+    "stop_exceeds_execution_envelope"
+   ],
+   "summary": ""
+  },
+  {
+   "trade": "10-13 02:25 SELL",
+   "symbol": "XAU",
+   "direction": "SELL",
+   "production_detector_regime": "frozen_python_publisher_union",
+   "deployed_commit_at_fill": "90fd0f4",
+   "realized_r": -1,
+   "exit_path": "full_stop",
+   "original": {
+    "constituents": [
+     "fvg [4166.95, 4170.50] origin 2026-10-13 00:05, 2 touches",
+     "ifvg [4167.02, 4167.95] origin 2026-10-13 00:00, 0 touches"
+    ],
+    "entry_low": 4166.95,
+    "entry_high": 4170.5,
+    "band_width_pips": 35.50000000000182,
+    "invalidation": 4172.52,
+    "target": 4162.51,
+    "confirmation_pattern": "sweep_reclaim",
+    "stars": 2,
+    "touch": "2026-10-13 01:15",
+    "confirmation": "2026-10-13 01:15"
+   },
+   "reproduced_by_replay": "Model B (frozen v2): same band, stop and target as production",
+   "evaluated_at": "2026-10-13 01:15",
+   "v3_structures_at_evaluation": [
+    {
+     "id": "fvg:buy:1791853500:4157.840000:4158.550000",
+     "source": "fvg",
+     "low": 4157.84,
+     "high": 4158.55,
+     "formed_at": "2026-10-13 01:05",
+     "confirmable_from": "2026-10-13 01:10",
+     "provenance_atoms": [
+      "candle:1791852900",
+      "candle:1791853200",
+      "candle:1791853500",
+      "gap:1791852900"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "fvg:buy:1791854100:4164.320000:4166.000000",
+     "source": "fvg",
+     "low": 4164.32,
+     "high": 4166,
+     "formed_at": "2026-10-13 01:15",
+     "confirmable_from": "2026-10-13 01:20",
+     "provenance_atoms": [
+      "candle:1791853500",
+      "candle:1791853800",
+      "candle:1791854100",
+      "gap:1791853500"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "fvg:sell:1791849900:4166.950000:4170.500000",
+     "source": "fvg",
+     "low": 4166.95,
+     "high": 4170.5,
+     "formed_at": "2026-10-13 00:05",
+     "confirmable_from": "2026-10-13 00:10",
+     "provenance_atoms": [
+      "candle:1791849300",
+      "candle:1791849600",
+      "candle:1791849900",
+      "gap:1791849300",
+      "leg:down:1791848400"
+     ],
+     "verified": true,
+     "touches": 2
+    },
+    {
+     "id": "ifvg:buy:1791853200:4157.840000:4160.130000",
+     "source": "ifvg",
+     "low": 4157.84,
+     "high": 4160.13,
+     "formed_at": "2026-10-13 01:00",
+     "confirmable_from": "2026-10-13 01:05",
+     "provenance_atoms": [
+      "candle:1791852300",
+      "candle:1791852600",
+      "candle:1791852900",
+      "candle:1791853200",
+      "gap:1791852300",
+      "inversion:1791853200"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "ifvg:sell:1791849300:4171.440000:4172.290000",
+     "source": "ifvg",
+     "low": 4171.44,
+     "high": 4172.29,
+     "formed_at": "2026-10-12 23:55",
+     "confirmable_from": "2026-10-13 00:00",
+     "provenance_atoms": [
+      "candle:1791846900",
+      "candle:1791847200",
+      "candle:1791847500",
+      "candle:1791849300",
+      "gap:1791846900",
+      "inversion:1791849300",
+      "leg:down:1791848400",
+      "leg:up:1791846600"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "ifvg:sell:1791849600:4167.020000:4167.950000",
+     "source": "ifvg",
+     "low": 4167.02,
+     "high": 4167.95,
+     "formed_at": "2026-10-13 00:00",
+     "confirmable_from": "2026-10-13 00:05",
+     "provenance_atoms": [
+      "candle:1791834000",
+      "candle:1791834300",
+      "candle:1791834600",
+      "candle:1791849600",
+      "gap:1791834000",
+      "inversion:1791849600",
+      "leg:down:1791848400",
+      "leg:up:1791834300"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "ifvg:sell:1791849600:4168.030000:4170.580000",
+     "source": "ifvg",
+     "low": 4168.03,
+     "high": 4170.58,
+     "formed_at": "2026-10-13 00:00",
+     "confirmable_from": "2026-10-13 00:05",
+     "provenance_atoms": [
+      "candle:1791846600",
+      "candle:1791846900",
+      "candle:1791847200",
+      "candle:1791849600",
+      "gap:1791846600",
+      "inversion:1791849600",
+      "leg:down:1791848400",
+      "leg:up:1791846600"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "order_block:sell:1791813900:4170.890000:4174.170000",
+     "source": "order_block",
+     "low": 4170.89,
+     "high": 4174.17,
+     "formed_at": "2026-10-12 14:05",
+     "confirmable_from": "2026-10-12 14:20",
+     "provenance_atoms": [
+      "break:down:1791814500",
+      "candle:1791813900",
+      "candle:1791814200",
+      "candle:1791814500",
+      "leg:down:1791814200"
+     ],
+     "verified": true,
+     "touches": 5
+    },
+    {
+     "id": "order_block:sell:1791829500:4170.340000:4172.190000",
+     "source": "order_block",
+     "low": 4170.34,
+     "high": 4172.19,
+     "formed_at": "2026-10-12 18:25",
+     "confirmable_from": "2026-10-12 18:40",
+     "provenance_atoms": [
+      "break:down:1791830100",
+      "candle:1791829500",
+      "candle:1791829800",
+      "candle:1791830100",
+      "leg:down:1791829800"
+     ],
+     "verified": true,
+     "touches": 6
+    },
+    {
+     "id": "order_block:sell:1791848100:4174.170000:4174.850000",
+     "source": "order_block",
+     "low": 4174.17,
+     "high": 4174.85,
+     "formed_at": "2026-10-12 23:35",
+     "confirmable_from": "2026-10-13 00:15",
+     "provenance_atoms": [
+      "break:down:1791849900",
+      "candle:1791848100",
+      "candle:1791848400",
+      "candle:1791848700",
+      "candle:1791849000",
+      "candle:1791849300",
+      "candle:1791849600",
+      "candle:1791849900",
+      "candle:1791850200",
+      "leg:down:1791848400"
+     ],
+     "verified": true,
+     "touches": 0
+    },
+    {
+     "id": "supply_demand:buy:1791809400:4157.670000:4168.030000",
+     "source": "supply_demand",
+     "low": 4163.03,
+     "high": 4168.03,
+     "formed_at": "2026-10-12 12:50",
+     "confirmable_from": "2026-10-12 13:30",
+     "provenance_atoms": [
+      "candle:1791808800",
+      "candle:1791809100",
+      "candle:1791809400",
+      "candle:1791809700",
+      "candle:1791810000",
+      "candle:1791810300",
+      "candle:1791810600",
+      "candle:1791810900",
+      "candle:1791811200",
+      "candle:1791811500",
+      "leg:up:1791809700"
+     ],
+     "verified": true,
+     "touches": 6
+    },
+    {
+     "id": "supply_demand:buy:1791823800:4160.050000:4166.090000",
+     "source": "supply_demand",
+     "low": 4161.09,
+     "high": 4166.09,
+     "formed_at": "2026-10-12 16:50",
+     "confirmable_from": "2026-10-12 17:15",
+     "provenance_atoms": [
+      "candle:1791823200",
+      "candle:1791823500",
+      "candle:1791823800",
+      "candle:1791824100",
+      "candle:1791824400",
+      "candle:1791824700",
+      "candle:1791825000",
+      "leg:up:1791824100"
+     ],
+     "verified": true,
+     "touches": 5
+    },
+    {
+     "id": "supply_demand:sell:1791813900:4169.450000:4175.310000",
+     "source": "supply_demand",
+     "low": 4169.45,
+     "high": 4174.45,
+     "formed_at": "2026-10-12 14:05",
+     "confirmable_from": "2026-10-12 14:20",
+     "provenance_atoms": [
+      "candle:1791813300",
+      "candle:1791813600",
+      "candle:1791813900",
+      "candle:1791814200",
+      "candle:1791814500",
+      "leg:down:1791814200"
+     ],
+     "verified": true,
+     "touches": 7
+    },
+    {
+     "id": "supply_demand:sell:1791829500:4169.670000:4172.830000",
+     "source": "supply_demand",
+     "low": 4169.67,
+     "high": 4172.83,
+     "formed_at": "2026-10-12 18:25",
+     "confirmable_from": "2026-10-12 18:40",
+     "provenance_atoms": [
+      "candle:1791828900",
+      "candle:1791829200",
+      "candle:1791829500",
+      "candle:1791829800",
+      "candle:1791830100",
+      "leg:down:1791829800"
+     ],
+     "verified": true,
+     "touches": 6
+    },
+    {
+     "id": "supply_demand:sell:1791844500:4171.420000:4173.890000",
+     "source": "supply_demand",
+     "low": 4171.42,
+     "high": 4173.89,
+     "formed_at": "2026-10-12 22:35",
+     "confirmable_from": "2026-10-12 23:10",
+     "provenance_atoms": [
+      "candle:1791843900",
+      "candle:1791844200",
+      "candle:1791844500",
+      "candle:1791844800",
+      "candle:1791845100",
+      "candle:1791845400",
+      "candle:1791845700",
+      "candle:1791846000",
+      "candle:1791846300",
+      "leg:down:1791844800"
+     ],
+     "verified": true,
+     "touches": 2
+    },
+    {
+     "id": "supply_demand:sell:1791848100:4172.290000:4175.960000",
+     "source": "supply_demand",
+     "low": 4172.29,
+     "high": 4175.96,
+     "formed_at": "2026-10-12 23:35",
+     "confirmable_from": "2026-10-13 00:15",
+     "provenance_atoms": [
+      "candle:1791847500",
+      "candle:1791847800",
+      "candle:1791848100",
+      "candle:1791848400",
+      "candle:1791848700",
+      "candle:1791849000",
+      "candle:1791849300",
+      "candle:1791849600",
+      "candle:1791849900",
+      "candle:1791850200",
+      "leg:down:1791848400"
+     ],
+     "verified": true,
+     "touches": 0
+    }
+   ],
+   "v3_independent_sources_among_the_structures": 3,
+   "v3_dependent_groups": [
+    [
+     "fvg:sell:1791849900:4166.950000:4170.500000",
+     "ifvg:sell:1791849600:4167.020000:4167.950000",
+     "ifvg:sell:1791849600:4168.030000:4170.580000"
+    ],
+    [
+     "order_block:sell:1791829500:4170.340000:4172.190000",
+     "supply_demand:sell:1791829500:4169.670000:4172.830000"
+    ]
+   ],
+   "v3_supported_regions_on_the_trade_side": [
+    {
+     "low": 4169.45,
+     "high": 4174.45,
+     "width_pips": 50,
+     "independent_sources": 4,
+     "min_independent_sources": 2,
+     "support": [
+      "fvg:sell:1791849900:4166.950000:4170.500000",
+      "ifvg:sell:1791849300:4171.440000:4172.290000",
+      "ifvg:sell:1791849600:4168.030000:4170.580000",
+      "order_block:sell:1791813900:4170.890000:4174.170000",
+      "order_block:sell:1791829500:4170.340000:4172.190000",
+      "order_block:sell:1791848100:4174.170000:4174.850000",
+      "supply_demand:sell:1791813900:4169.450000:4175.310000",
+      "supply_demand:sell:1791829500:4169.670000:4172.830000",
+      "supply_demand:sell:1791844500:4171.420000:4173.890000",
+      "supply_demand:sell:1791848100:4172.290000:4175.960000"
+     ],
+     "episode": "cz3:sell:3b576d5c9aeab390"
+    }
+   ],
+   "v3_true_overlap_pips_inside_the_original_band": 10.5,
+   "original_band_over_true_overlap": 3.38,
+   "v3_decision": "not published",
+   "v3_reasons": [
+    "no_directional_confirmation",
+    "single_independent_origin",
+    "stop_exceeds_execution_envelope"
+   ],
+   "summary": ""
+  }
+ ],
+ "limits": [
+  "7 XAU trades and 10 FX trades are the only live outcomes; the replay is hypothetical and does not model the executor",
+  "a capture holds 11-12 days of XAU and 11 days of FX; one September XAU window (14-21 Sep) is the only older sample",
+  "Model A is replayed from a frozen data file produced by the legacy engine revision; it is a what-if outside its production period (before 6 Oct 09:33 UTC)",
+  "USDJPY production trades of 4, 7 and 12 Oct could not be reproduced from the captures (the audit found the same)",
+  "correlated, overlapping setups are thinned but the bootstrap still treats the remainder as independent"
+ ]
+}

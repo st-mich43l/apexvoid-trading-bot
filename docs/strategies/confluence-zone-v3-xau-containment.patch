@@ -1,0 +1,22 @@
+--- a/config/instruments.yml
++++ b/config/instruments.yml
+@@ -478,6 +478,11 @@
+         #     twice a week on XAU, too rarely to prove an edge.
+         #   impulse_pullback: not a port of Python's scalp-lane archetype; net negative
+         #     live on every instrument that ran it (-49 pips over 11 trades).
++        #   confluence_zone: OPTIONAL, temporary, owner's decision
++        #     (docs/strategies/confluence-zone-v3-certification.md, section "XAU containment"):
++        #     contained on XAU only until Confluence Zone v3 is deployed. v2 counted labels as
++        #     facts and traded the union of its members; v3 replaces it. Remove the name when
++        #     v3 is deployed (or to roll back); FX is untouched.
+         # ifvg (v3) and session_level (v4) were rebuilt as technically certified Go
+         # contracts (docs/strategies/xau-enablement-2026-10.md) and left this list in
+         # the same change. Rollback is restoring the two names here: containment is
+@@ -489,6 +494,7 @@
+           observe_only_strategies:
+             - liquidity_sweep
+             - impulse_pullback
++            - confluence_zone
+           # The M15 supply/demand extension (#742) is not part of the proven Python
+           # behavior: M15 zones are still detected and published, never traded, until
+           # their execution quality is validated.

@@ -1,0 +1,805 @@
+[
+ {
+  "group_id": "v8:go_opp_093884808a973db36121d02cc77da854c0b13df632d637d9c70eedf440ea855e",
+  "opportunity_id": "opp_093884808a973db36121d02cc77da854c0b13df632d637d9c70eedf440ea855e",
+  "symbol": "USDJPY",
+  "direction": "SELL",
+  "detector_regime": "legacy_go_native_intersection",
+  "config_fingerprint": "e844197afd5f509ac3a550fb7e8136ec",
+  "ae_created_at": "2026-10-02 11:35:00",
+  "ae_touch": "2026-10-02 11:30:00",
+  "ae_confirm": "2026-10-02 11:30:00",
+  "ae_pattern": "strong_reclaim",
+  "ae_entry": [
+   157.785,
+   157.806
+  ],
+  "ae_atr": 0.06378571428571636,
+  "ae_invalidation": 157.838,
+  "ae_target": 157.532,
+  "ae_target_label": "opposing_liquidity",
+  "ae_stars": 3,
+  "plan_entry_type": "single_limit",
+  "plan_stop": "157.965",
+  "fill_time": "2026-10-02 15:07:49",
+  "fill_price": 157.785,
+  "close_time": "2026-10-04 21:30:10",
+  "exit_path": "full_stop",
+  "derived_R": -1.0,
+  "derived_pips": -18.0,
+  "derived_usd": -6.8,
+  "result_pips_col": -18,
+  "deployed_commit_at_fill": "0bf2553"
+ },
+ {
+  "group_id": "v8:go_opp_0c6cdc7053a0ee9bb1488eae0d16a6d34f86393f0a6dda6dfddd747d4324b48c",
+  "opportunity_id": "opp_0c6cdc7053a0ee9bb1488eae0d16a6d34f86393f0a6dda6dfddd747d4324b48c",
+  "symbol": "XAU",
+  "direction": "BUY",
+  "detector_regime": "legacy_go_native_intersection",
+  "config_fingerprint": "fe7d74657a05ec57b13c74ddac3ab1ce",
+  "ae_created_at": "2026-10-05 14:15:00",
+  "ae_touch": "2026-10-05 14:05:00",
+  "ae_confirm": "2026-10-05 14:05:00",
+  "ae_pattern": "strong_reclaim",
+  "ae_entry": [
+   4139.39,
+   4140.13
+  ],
+  "ae_atr": 5.761428571428431,
+  "ae_invalidation": 4136.5,
+  "ae_target": 4147.26,
+  "ae_target_label": "opposing_liquidity",
+  "ae_stars": 3,
+  "plan_entry_type": "market_watch",
+  "plan_stop": "4135.33",
+  "fill_time": "2026-10-05 14:27:09",
+  "fill_price": 4139.97,
+  "close_time": "2026-10-05 14:31:12",
+  "exit_path": "full_stop",
+  "derived_R": -1.0,
+  "derived_pips": -46.4,
+  "derived_usd": -18.6,
+  "result_pips_col": -46,
+  "deployed_commit_at_fill": "e274832",
+  "constituents": [
+   {
+    "technique": "supply_demand",
+    "low": 4133.27,
+    "high": 4140.13,
+    "origin_time": 1791178200,
+    "touches": 2
+   },
+   {
+    "technique": "ifvg",
+    "low": 4139.39,
+    "high": 4142.13,
+    "origin_time": 1791209100,
+    "touches": 0
+   }
+  ]
+ },
+ {
+  "group_id": "v8:go_opp_5055b63e2577049f6924f1a436c570971174e252a4a3e1bb2110f1c97701e759",
+  "opportunity_id": "opp_5055b63e2577049f6924f1a436c570971174e252a4a3e1bb2110f1c97701e759",
+  "symbol": "XAU",
+  "direction": "BUY",
+  "detector_regime": "legacy_go_native_intersection",
+  "config_fingerprint": "fe7d74657a05ec57b13c74ddac3ab1ce",
+  "ae_created_at": "2026-10-05 15:30:00",
+  "ae_touch": "2026-10-05 15:25:00",
+  "ae_confirm": "2026-10-05 15:25:00",
+  "ae_pattern": "strong_reclaim",
+  "ae_entry": [
+   4137.13,
+   4138.05
+  ],
+  "ae_atr": 5.600000000000039,
+  "ae_invalidation": 4134.33,
+  "ae_target": 4148.68,
+  "ae_target_label": "opposing_liquidity",
+  "ae_stars": 3,
+  "plan_entry_type": "market_watch",
+  "plan_stop": "4132.58",
+  "fill_time": "2026-10-05 15:36:04",
+  "fill_price": 4137.36,
+  "close_time": "2026-10-05 16:03:51",
+  "exit_path": "full_stop",
+  "derived_R": -1.0,
+  "derived_pips": -47.8,
+  "derived_usd": -19.1,
+  "result_pips_col": -48,
+  "deployed_commit_at_fill": "c458ef6",
+  "constituents": [
+   {
+    "technique": "supply_demand",
+    "low": 4133.27,
+    "high": 4140.13,
+    "origin_time": 1791178200,
+    "touches": 4
+   },
+   {
+    "technique": "order_block",
+    "low": 4133.22,
+    "high": 4138.33,
+    "origin_time": 1791179400,
+    "touches": 4
+   },
+   {
+    "technique": "ifvg",
+    "low": 4137.13,
+    "high": 4138.05,
+    "origin_time": 1791213900,
+    "touches": 0
+   }
+  ]
+ },
+ {
+  "group_id": "v8:go_opp_d111aa1b285abca833282df42af2e7b420fba807592efd6569db8185809c7d9e",
+  "opportunity_id": "opp_d111aa1b285abca833282df42af2e7b420fba807592efd6569db8185809c7d9e",
+  "symbol": "XAU",
+  "direction": "BUY",
+  "detector_regime": "legacy_go_native_intersection",
+  "config_fingerprint": "fe7d74657a05ec57b13c74ddac3ab1ce",
+  "ae_created_at": "2026-10-06 03:25:00",
+  "ae_touch": "2026-10-06 03:15:00",
+  "ae_confirm": "2026-10-06 03:15:00",
+  "ae_pattern": "strong_reclaim",
+  "ae_entry": [
+   4127.32,
+   4127.8
+  ],
+  "ae_atr": 5.907142857142909,
+  "ae_invalidation": 4124.36,
+  "ae_target": 4139.06,
+  "ae_target_label": "opposing_liquidity",
+  "ae_stars": 3,
+  "plan_entry_type": "market_watch",
+  "plan_stop": "4123.08",
+  "fill_time": "2026-10-06 03:39:04",
+  "fill_price": 4127.13,
+  "close_time": "2026-10-06 03:53:43",
+  "exit_path": "tp1_be",
+  "derived_R": 0.597,
+  "derived_pips": 24.16,
+  "derived_usd": 24.2,
+  "result_pips_col": 60,
+  "deployed_commit_at_fill": "c458ef6",
+  "constituents": [
+   {
+    "technique": "supply_demand",
+    "low": 4127.32,
+    "high": 4131.15,
+    "origin_time": 1791221400,
+    "touches": 2
+   },
+   {
+    "technique": "fvg",
+    "low": 4123.26,
+    "high": 4127.8,
+    "origin_time": 1791255000,
+    "touches": 1
+   }
+  ]
+ },
+ {
+  "group_id": "v8:go_opp_672a373c72c626bd87bbb94a1d493a0de8d845f8f23a1a6639467e1d63981e11",
+  "opportunity_id": "opp_672a373c72c626bd87bbb94a1d493a0de8d845f8f23a1a6639467e1d63981e11",
+  "symbol": "USDJPY",
+  "direction": "BUY",
+  "detector_regime": "legacy_go_native_intersection",
+  "config_fingerprint": "0920ee5d83187d5e9fabca2d8c415c5f",
+  "ae_created_at": "2026-10-06 03:55:00",
+  "ae_touch": "2026-10-06 03:45:00",
+  "ae_confirm": "2026-10-06 03:45:00",
+  "ae_pattern": "strong_reclaim",
+  "ae_entry": [
+   157.916,
+   157.986
+  ],
+  "ae_atr": 0.03492857142857174,
+  "ae_invalidation": 157.897,
+  "ae_target": 158.095,
+  "ae_target_label": "nearest_opposing_liquidity",
+  "ae_stars": 3,
+  "plan_entry_type": "market_watch",
+  "plan_stop": "157.803",
+  "fill_time": "2026-10-06 13:12:04",
+  "fill_price": 157.963,
+  "close_time": "2026-10-07 00:00:53",
+  "exit_path": "tp2_full",
+  "derived_R": 1.813,
+  "derived_pips": 29.0,
+  "derived_usd": 33.0,
+  "result_pips_col": 40,
+  "deployed_commit_at_fill": "4a309b3"
+ },
+ {
+  "group_id": "v8:go_opp_f41ff4040ab7be1906746d54b93054a527ebe2a9c9f05b52bc3f9154a7a71de5",
+  "opportunity_id": "opp_f41ff4040ab7be1906746d54b93054a527ebe2a9c9f05b52bc3f9154a7a71de5",
+  "symbol": "GBPUSD",
+  "direction": "SELL",
+  "detector_regime": "frozen_python_publisher_union",
+  "config_fingerprint": "0920ee5d83187d5e9fabca2d8c415c5f",
+  "ae_created_at": "2026-10-06 14:45:00",
+  "ae_touch": "2026-10-06 14:35:00",
+  "ae_confirm": "2026-10-06 14:35:00",
+  "ae_pattern": "wick_rejection",
+  "ae_entry": [
+   1.32681,
+   1.32825
+  ],
+  "ae_atr": 0.000490714285714265,
+  "ae_invalidation": 1.32852,
+  "ae_target": 1.32353,
+  "ae_target_label": "nearest_opposing_liquidity",
+  "ae_stars": 2,
+  "plan_entry_type": "market_watch",
+  "plan_stop": "1.32922",
+  "fill_time": "2026-10-06 14:54:05",
+  "fill_price": 1.32778,
+  "close_time": "2026-10-07 04:27:24",
+  "exit_path": "tp2_full",
+  "derived_R": 1.604,
+  "derived_pips": 23.1,
+  "derived_usd": 41.6,
+  "result_pips_col": 31,
+  "deployed_commit_at_fill": "4a309b3",
+  "constituents": [
+   {
+    "technique": "supply_demand",
+    "low": 1.32713,
+    "high": 1.32825,
+    "origin_time": 1791291900,
+    "touches": 2
+   },
+   {
+    "technique": "ifvg",
+    "low": 1.32681,
+    "high": 1.3275,
+    "origin_time": 1791293700,
+    "touches": 0
+   }
+  ]
+ },
+ {
+  "group_id": "v8:go_opp_62c13dfd4ec8adb40f4cda7aa9dbdf515bc6cbe54a8921334bc2cdbc5037d83d",
+  "opportunity_id": "opp_62c13dfd4ec8adb40f4cda7aa9dbdf515bc6cbe54a8921334bc2cdbc5037d83d",
+  "symbol": "GBPJPY",
+  "direction": "SELL",
+  "detector_regime": "frozen_python_publisher_union",
+  "config_fingerprint": "ec937aa776a2faed53272e0b7cb618ce",
+  "ae_created_at": "2026-10-07 10:50:00",
+  "ae_touch": "2026-10-07 10:40:00",
+  "ae_confirm": "2026-10-07 10:40:00",
+  "ae_pattern": "engulfing",
+  "ae_entry": [
+   209.302,
+   209.523
+  ],
+  "ae_atr": 0.08692857142856829,
+  "ae_invalidation": 209.569,
+  "ae_target": 208.943,
+  "ae_target_label": "nearest_opposing_liquidity",
+  "ae_stars": 2,
+  "plan_entry_type": "market_watch",
+  "plan_stop": "209.569",
+  "fill_time": "2026-10-07 10:56:05",
+  "fill_price": 209.32,
+  "close_time": "2026-10-07 12:26:27",
+  "exit_path": "tp2_full",
+  "derived_R": 1.44,
+  "derived_pips": 35.85,
+  "derived_usd": 40.8,
+  "result_pips_col": 48,
+  "deployed_commit_at_fill": "943707a",
+  "constituents": [
+   {
+    "technique": "supply_demand",
+    "low": 209.302,
+    "high": 209.447,
+    "origin_time": 1791369300,
+    "touches": 0
+   },
+   {
+    "technique": "supply_demand",
+    "low": 209.354,
+    "high": 209.523,
+    "origin_time": 1791366900,
+    "touches": 1
+   },
+   {
+    "technique": "fvg",
+    "low": 209.35,
+    "high": 209.367,
+    "origin_time": 1791369900,
+    "touches": 0
+   }
+  ]
+ },
+ {
+  "group_id": "v8:go_opp_a468321a2f3fc7513526b2975914585233b3a9f0b091d4e65ab9586ceaf073f1",
+  "opportunity_id": "opp_a468321a2f3fc7513526b2975914585233b3a9f0b091d4e65ab9586ceaf073f1",
+  "symbol": "GBPJPY",
+  "direction": "SELL",
+  "detector_regime": "frozen_python_publisher_union",
+  "config_fingerprint": "65967695a65b19007c9b98588ca2af61",
+  "ae_created_at": "2026-10-07 15:45:00",
+  "ae_touch": "2026-10-07 15:45:00",
+  "ae_confirm": "2026-10-07 15:45:00",
+  "ae_pattern": "engulfing",
+  "ae_entry": [
+   208.803,
+   208.982
+  ],
+  "ae_atr": 0.08171428571428205,
+  "ae_invalidation": 209.024,
+  "ae_target": 208.362,
+  "ae_target_label": "fixed_reward_risk",
+  "ae_stars": 2,
+  "plan_entry_type": "market_watch",
+  "plan_stop": "209.050",
+  "fill_time": "2026-10-07 15:51:07",
+  "fill_price": 208.834,
+  "close_time": "2026-10-07 21:00:05",
+  "exit_path": "full_stop",
+  "derived_R": -1.0,
+  "derived_pips": -21.6,
+  "derived_usd": -24.6,
+  "result_pips_col": -22,
+  "deployed_commit_at_fill": "31b8e57",
+  "constituents": [
+   {
+    "technique": "supply_demand",
+    "low": 208.803,
+    "high": 208.982,
+    "origin_time": 1791381000,
+    "touches": 1
+   },
+   {
+    "technique": "ifvg",
+    "low": 208.824,
+    "high": 208.845,
+    "origin_time": 1791387900,
+    "touches": 0
+   }
+  ]
+ },
+ {
+  "group_id": "v8:go_opp_2ecd2def64ef3bc5fd9a23d2926361911f2e85b785d5b4728bf9f16ed7d13be0",
+  "opportunity_id": "opp_2ecd2def64ef3bc5fd9a23d2926361911f2e85b785d5b4728bf9f16ed7d13be0",
+  "symbol": "EURUSD",
+  "direction": "SELL",
+  "detector_regime": "frozen_python_publisher_union",
+  "config_fingerprint": "65967695a65b19007c9b98588ca2af61",
+  "ae_created_at": "2026-10-07 17:20:00",
+  "ae_touch": "2026-10-07 17:20:00",
+  "ae_confirm": "2026-10-07 17:20:00",
+  "ae_pattern": "engulfing",
+  "ae_entry": [
+   1.11939,
+   1.12038
+  ],
+  "ae_atr": 0.0003721428571428368,
+  "ae_invalidation": 1.12059,
+  "ae_target": 1.11886,
+  "ae_target_label": "nearest_opposing_liquidity",
+  "ae_stars": 3,
+  "plan_entry_type": "market_watch",
+  "plan_stop": "1.12089",
+  "fill_time": "2026-10-07 17:26:05",
+  "fill_price": 1.11972,
+  "close_time": "2026-10-08 02:03:38",
+  "exit_path": "full_stop",
+  "derived_R": -1.0,
+  "derived_pips": -11.7,
+  "derived_usd": -21.1,
+  "result_pips_col": -12,
+  "deployed_commit_at_fill": "31b8e57",
+  "constituents": [
+   {
+    "technique": "supply_demand",
+    "low": 1.11939,
+    "high": 1.12038,
+    "origin_time": 1791363600,
+    "touches": 6
+   },
+   {
+    "technique": "order_block",
+    "low": 1.1198,
+    "high": 1.12022,
+    "origin_time": 1791363600,
+    "touches": 3
+   }
+  ]
+ },
+ {
+  "group_id": "v8:go_opp_95f6e79d90bfcd99810345f7e1adc6ee436452e9ea2462d37bd8473c0b652a71",
+  "opportunity_id": "opp_95f6e79d90bfcd99810345f7e1adc6ee436452e9ea2462d37bd8473c0b652a71",
+  "symbol": "GBPJPY",
+  "direction": "BUY",
+  "detector_regime": "frozen_python_publisher_union",
+  "config_fingerprint": "d2a7fdc86fafb3e6b3421d690ffced69",
+  "ae_created_at": "2026-10-08 12:40:00",
+  "ae_touch": "2026-10-08 12:40:00",
+  "ae_confirm": "2026-10-08 12:40:00",
+  "ae_pattern": "sweep_reclaim",
+  "ae_entry": [
+   208.77,
+   208.936
+  ],
+  "ae_atr": 0.09014285714285718,
+  "ae_invalidation": 208.727,
+  "ae_target": 209.025,
+  "ae_target_label": "nearest_opposing_liquidity",
+  "ae_stars": 3,
+  "plan_entry_type": "market_watch",
+  "plan_stop": "208.666",
+  "fill_time": "2026-10-08 12:46:04",
+  "fill_price": 208.891,
+  "close_time": "2026-10-08 14:33:53",
+  "exit_path": "tp2_full",
+  "derived_R": 1.444,
+  "derived_pips": 32.5,
+  "derived_usd": 37.0,
+  "result_pips_col": 44,
+  "deployed_commit_at_fill": "2f7b012",
+  "constituents": [
+   {
+    "technique": "supply_demand",
+    "low": 208.77,
+    "high": 208.898,
+    "origin_time": 1791460200,
+    "touches": 1
+   },
+   {
+    "technique": "fvg",
+    "low": 208.857,
+    "high": 208.936,
+    "origin_time": 1791461100,
+    "touches": 1
+   }
+  ]
+ },
+ {
+  "group_id": "v8:go_opp_4ea43ca11b9be6b62844636c3845cfd4fe433fa2659f2a3dfb690372632b798c",
+  "opportunity_id": "opp_4ea43ca11b9be6b62844636c3845cfd4fe433fa2659f2a3dfb690372632b798c",
+  "symbol": "GBPJPY",
+  "direction": "BUY",
+  "detector_regime": "frozen_python_publisher_union",
+  "config_fingerprint": "532ef230140fdc9bd601ff91640b7763",
+  "ae_created_at": "2026-10-09 11:05:00",
+  "ae_touch": "2026-10-09 11:05:00",
+  "ae_confirm": "2026-10-09 11:05:00",
+  "ae_pattern": "sweep_reclaim",
+  "ae_entry": [
+   209.357,
+   209.455
+  ],
+  "ae_atr": 0.061714285714283994,
+  "ae_invalidation": 209.322,
+  "ae_target": 209.745,
+  "ae_target_label": "nearest_opposing_liquidity",
+  "ae_stars": 3,
+  "plan_entry_type": "market_watch",
+  "plan_stop": "209.186",
+  "fill_time": "2026-10-09 11:11:06",
+  "fill_price": 209.398,
+  "close_time": "2026-10-09 12:11:27",
+  "exit_path": "full_stop",
+  "derived_R": -1.0,
+  "derived_pips": -21.2,
+  "derived_usd": -36.2,
+  "result_pips_col": -21,
+  "deployed_commit_at_fill": "8792f58",
+  "constituents": [
+   {
+    "technique": "supply_demand",
+    "low": 209.357,
+    "high": 209.455,
+    "origin_time": 1791528900,
+    "touches": 3
+   },
+   {
+    "technique": "order_block",
+    "low": 209.371,
+    "high": 209.45,
+    "origin_time": 1791528900,
+    "touches": 3
+   }
+  ]
+ },
+ {
+  "group_id": "v8:go_opp_ef516b32c778a0883f50efb40c442825790311552dc455031f7643d255e989df",
+  "opportunity_id": "opp_ef516b32c778a0883f50efb40c442825790311552dc455031f7643d255e989df",
+  "symbol": "XAU",
+  "direction": "SELL",
+  "detector_regime": "frozen_python_publisher_union",
+  "config_fingerprint": "8cf7f67fc4714bebb65a24e6a14f027a",
+  "ae_created_at": "2026-10-09 13:10:00",
+  "ae_touch": "2026-10-09 13:05:00",
+  "ae_confirm": "2026-10-09 13:05:00",
+  "ae_pattern": "sweep_reclaim",
+  "ae_entry": [
+   4178.77,
+   4183.24
+  ],
+  "ae_atr": 5.549285714285555,
+  "ae_invalidation": 4185.65,
+  "ae_target": 4168.62,
+  "ae_target_label": "nearest_opposing_liquidity",
+  "ae_stars": 3,
+  "plan_entry_type": "limit_ladder",
+  "plan_stop": "4186.0",
+  "fill_time": "2026-10-09 13:16:07",
+  "fill_price": 4182.0325,
+  "close_time": "2026-10-09 13:18:08",
+  "exit_path": "full_stop",
+  "derived_R": -1.0,
+  "derived_pips": -39.67,
+  "derived_usd": -79.3,
+  "result_pips_col": -49,
+  "deployed_commit_at_fill": "e610c5e",
+  "constituents": [
+   {
+    "technique": "supply_demand",
+    "low": 4179.75,
+    "high": 4183.24,
+    "origin_time": 1791543000,
+    "touches": 3
+   },
+   {
+    "technique": "fvg",
+    "low": 4178.77,
+    "high": 4181.32,
+    "origin_time": 1791550200,
+    "touches": 1
+   },
+   {
+    "technique": "ifvg",
+    "low": 4179.87,
+    "high": 4181.85,
+    "origin_time": 1791549900,
+    "touches": 0
+   }
+  ]
+ },
+ {
+  "group_id": "v8:go_opp_8dd450d84f539a4576d6e5e48d5bbad09501a84fa6f37f15c75539d92d826f96",
+  "opportunity_id": "opp_8dd450d84f539a4576d6e5e48d5bbad09501a84fa6f37f15c75539d92d826f96",
+  "symbol": "XAU",
+  "direction": "BUY",
+  "detector_regime": "frozen_python_publisher_union",
+  "config_fingerprint": "8cf7f67fc4714bebb65a24e6a14f027a",
+  "ae_created_at": "2026-10-09 17:20:00",
+  "ae_touch": "2026-10-09 17:10:00",
+  "ae_confirm": "2026-10-09 17:10:00",
+  "ae_pattern": "sweep_reclaim",
+  "ae_entry": [
+   4187.6,
+   4192.6
+  ],
+  "ae_atr": 2.7535714285714414,
+  "ae_invalidation": 4185.99,
+  "ae_target": 4198.59,
+  "ae_target_label": "nearest_opposing_liquidity",
+  "ae_stars": 3,
+  "plan_entry_type": "limit_ladder",
+  "plan_stop": "4186.0",
+  "fill_time": "2026-10-09 18:36:05",
+  "fill_price": 4192.85,
+  "close_time": "2026-10-09 19:52:18",
+  "exit_path": "tp1_be",
+  "derived_R": 0.423,
+  "derived_pips": 28.96,
+  "derived_usd": 34.8,
+  "result_pips_col": 72,
+  "deployed_commit_at_fill": "e610c5e",
+  "constituents": [
+   {
+    "technique": "supply_demand",
+    "low": 4187.6,
+    "high": 4192.6,
+    "origin_time": 1791565500,
+    "touches": 0
+   },
+   {
+    "technique": "fvg",
+    "low": 4191.59,
+    "high": 4192.43,
+    "origin_time": 1791566400,
+    "touches": 0
+   }
+  ]
+ },
+ {
+  "group_id": "v8:go_opp_a4d69d19da50a4eef73412074f4863a55b514113d557d83fdc49c5fbd213d3ed",
+  "opportunity_id": "opp_a4d69d19da50a4eef73412074f4863a55b514113d557d83fdc49c5fbd213d3ed",
+  "symbol": "USDJPY",
+  "direction": "SELL",
+  "detector_regime": "frozen_python_publisher_union",
+  "config_fingerprint": "8cf7f67fc4714bebb65a24e6a14f027a",
+  "ae_created_at": "2026-10-11 21:25:00",
+  "ae_touch": "2026-10-11 21:20:00",
+  "ae_confirm": "2026-10-11 21:20:00",
+  "ae_pattern": "sweep_reclaim",
+  "ae_entry": [
+   158.271,
+   158.313
+  ],
+  "ae_atr": 0.054785714285716026,
+  "ae_invalidation": 158.338,
+  "ae_target": 158.108,
+  "ae_target_label": "nearest_opposing_liquidity",
+  "ae_stars": 3,
+  "plan_entry_type": "single_limit",
+  "plan_stop": "158.451",
+  "fill_time": "2026-10-11 22:00:02",
+  "fill_price": 158.28,
+  "close_time": "2026-10-12 04:17:10",
+  "exit_path": "tp1_be",
+  "derived_R": 0.57,
+  "derived_pips": 9.75,
+  "derived_usd": 14.8,
+  "result_pips_col": 19,
+  "deployed_commit_at_fill": "e610c5e"
+ },
+ {
+  "group_id": "v8:go_opp_6cbfa9f121f21143b420f5d7603f79c9de10c32ec5440cb70d944b2fefbd1f54",
+  "opportunity_id": "opp_6cbfa9f121f21143b420f5d7603f79c9de10c32ec5440cb70d944b2fefbd1f54",
+  "symbol": "GBPJPY",
+  "direction": "SELL",
+  "detector_regime": "frozen_python_publisher_union",
+  "config_fingerprint": "8cf7f67fc4714bebb65a24e6a14f027a",
+  "ae_created_at": "2026-10-11 22:45:00",
+  "ae_touch": "2026-10-11 22:45:00",
+  "ae_confirm": "2026-10-11 22:45:00",
+  "ae_pattern": "strong_reclaim",
+  "ae_entry": [
+   209.488,
+   209.577
+  ],
+  "ae_atr": 0.0535714285714306,
+  "ae_invalidation": 209.607,
+  "ae_target": 209.363,
+  "ae_target_label": "nearest_opposing_liquidity",
+  "ae_stars": 3,
+  "plan_entry_type": "market_watch",
+  "plan_stop": "209.749",
+  "fill_time": "2026-10-11 22:51:07",
+  "fill_price": 209.53,
+  "close_time": "2026-10-12 06:11:10",
+  "exit_path": "full_stop",
+  "derived_R": -1.0,
+  "derived_pips": -21.9,
+  "derived_usd": -33.2,
+  "result_pips_col": -22,
+  "deployed_commit_at_fill": "e610c5e",
+  "constituents": [
+   {
+    "technique": "supply_demand",
+    "low": 209.488,
+    "high": 209.577,
+    "origin_time": 1791560400,
+    "touches": 2
+   },
+   {
+    "technique": "supply_demand",
+    "low": 209.51,
+    "high": 209.574,
+    "origin_time": 1791542700,
+    "touches": 6
+   },
+   {
+    "technique": "supply_demand",
+    "low": 209.504,
+    "high": 209.548,
+    "origin_time": 1791579000,
+    "touches": 1
+   },
+   {
+    "technique": "order_block",
+    "low": 209.513,
+    "high": 209.541,
+    "origin_time": 1791560400,
+    "touches": 5
+   }
+  ]
+ },
+ {
+  "group_id": "v8:go_opp_86536daa5a5441269ba8a46aa243a0498e99384d5678839a172413cdab8f9e88",
+  "opportunity_id": "opp_86536daa5a5441269ba8a46aa243a0498e99384d5678839a172413cdab8f9e88",
+  "symbol": "XAU",
+  "direction": "SELL",
+  "detector_regime": "frozen_python_publisher_union",
+  "config_fingerprint": "c184c5ee37deb93d7c4593ab558aa88c",
+  "ae_created_at": "2026-10-12 17:40:00",
+  "ae_touch": "2026-10-12 17:40:00",
+  "ae_confirm": "2026-10-12 17:40:00",
+  "ae_pattern": "sweep_reclaim",
+  "ae_entry": [
+   4167.51,
+   4172.51
+  ],
+  "ae_atr": 2.3407142857143817,
+  "ae_invalidation": 4173.76,
+  "ae_target": 4162.51,
+  "ae_target_label": "nearest_opposing_liquidity",
+  "ae_stars": 3,
+  "plan_entry_type": "limit_ladder",
+  "plan_stop": "4174.0",
+  "fill_time": "2026-10-12 17:46:07",
+  "fill_price": 4169.81,
+  "close_time": "2026-10-12 22:01:12",
+  "exit_path": "full_stop",
+  "derived_R": -1.0,
+  "derived_pips": -41.9,
+  "derived_usd": -37.7,
+  "result_pips_col": -42,
+  "deployed_commit_at_fill": "90fd0f4",
+  "constituents": [
+   {
+    "technique": "supply_demand",
+    "low": 4167.51,
+    "high": 4172.51,
+    "origin_time": 1791807000,
+    "touches": 7
+   },
+   {
+    "technique": "order_block",
+    "low": 4168.58,
+    "high": 4171.87,
+    "origin_time": 1791807000,
+    "touches": 7
+   }
+  ]
+ },
+ {
+  "group_id": "v8:go_opp_ffbcbbda7088f3ac8b8842b6bc6cfef337c0ab4e8151d9ed6e6310c92d93dc88",
+  "opportunity_id": "opp_ffbcbbda7088f3ac8b8842b6bc6cfef337c0ab4e8151d9ed6e6310c92d93dc88",
+  "symbol": "XAU",
+  "direction": "SELL",
+  "detector_regime": "frozen_python_publisher_union",
+  "config_fingerprint": "c184c5ee37deb93d7c4593ab558aa88c",
+  "ae_created_at": "2026-10-13 01:15:00",
+  "ae_touch": "2026-10-13 01:15:00",
+  "ae_confirm": "2026-10-13 01:15:00",
+  "ae_pattern": "sweep_reclaim",
+  "ae_entry": [
+   4166.95,
+   4170.5
+  ],
+  "ae_atr": 4.915714285714395,
+  "ae_invalidation": 4172.52,
+  "ae_target": 4162.51,
+  "ae_target_label": "nearest_opposing_liquidity",
+  "ae_stars": 2,
+  "plan_entry_type": "limit_ladder",
+  "plan_stop": "4173.0",
+  "fill_time": "2026-10-13 02:03:05",
+  "fill_price": 4169.065,
+  "close_time": "2026-10-13 02:25:06",
+  "exit_path": "full_stop",
+  "derived_R": -1.0,
+  "derived_pips": -39.35,
+  "derived_usd": -78.7,
+  "result_pips_col": -51,
+  "deployed_commit_at_fill": "90fd0f4",
+  "constituents": [
+   {
+    "technique": "fvg",
+    "low": 4166.95,
+    "high": 4170.5,
+    "origin_time": 1791849900,
+    "touches": 2
+   },
+   {
+    "technique": "ifvg",
+    "low": 4167.02,
+    "high": 4167.95,
+    "origin_time": 1791849600,
+    "touches": 0
+   }
+  ]
+ }
+]

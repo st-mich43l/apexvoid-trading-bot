@@ -43,6 +43,10 @@ type Options struct {
 	// (the configuration is not touched). Independence tests use it to prove a
 	// strategy's candidates do not depend on another strategy being enabled.
 	DisabledStrategies []string
+	// StrategyParameters overrides single parameters of the named strategies for
+	// this replay only (the configuration is not touched). Sensitivity analyses use
+	// it to show how a result moves when a coefficient does.
+	StrategyParameters map[string]map[string]any
 }
 
 // Replay dispatches a capture through the exact engine path a live feed uses
@@ -67,6 +71,26 @@ func Replay(doc *config.Document, capture *Capture, primary market.Timeframe, op
 		}
 		if !found {
 			return nil, fmt.Errorf("disabled strategy %q is not configured", id)
+		}
+	}
+	for id, overrides := range opts.StrategyParameters {
+		found := false
+		for i := range settings.Strategies {
+			if string(settings.Strategies[i].ID) != id {
+				continue
+			}
+			found = true
+			params := make(map[string]any, len(settings.Strategies[i].Parameters)+len(overrides))
+			for k, v := range settings.Strategies[i].Parameters {
+				params[k] = v
+			}
+			for k, v := range overrides {
+				params[k] = v
+			}
+			settings.Strategies[i].Parameters = params
+		}
+		if !found {
+			return nil, fmt.Errorf("strategy %q is not configured", id)
 		}
 	}
 	byTF := make(map[market.Timeframe][]market.Candle)
