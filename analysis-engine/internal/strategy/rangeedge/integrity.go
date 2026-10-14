@@ -189,8 +189,10 @@ func (p Integrity) Assess(in EdgeInput) Assessment {
 		b := first
 		b.BreakIndex = latest
 		if p.reestablished(in, b) {
-			// A genuinely new range, formed after the break: its identity is the break.
-			if out.EpochIndex < b.BreakIndex {
+			// A genuinely new range, formed after the break: its identity is the break. When
+			// the advance broke several clusters in turn the earliest one names the episode:
+			// it stays put as later clusters break, where the latest would change with each.
+			if out.EpochIndex < 0 || b.BreakIndex < out.EpochIndex {
 				out.EpochIndex = b.BreakIndex
 			}
 			continue
