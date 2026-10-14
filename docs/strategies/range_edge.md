@@ -77,11 +77,13 @@ terms, so BUY and SELL are exact mirrors (asserted on mirrored inputs).
 6. **Gaps.** Any missing candle inside the reaction or pressure window fails closed (`data_gap`): a gap is never mistaken
    for a fresh reaction.
 7. **Identity.** The thesis is the range episode: `range:<side>:<first-touch time>` as before, and
-   `range:<side>:break:<time of the earliest break the edge sits beyond>` for a range re-established after a break (the latest event of each broken cluster dates it), so every edge the lookback
-   rebuilds in that range is one opportunity, and the next break is a new episode. A reclaimed break returns the edge to its
-   own episode. **Residual:** the break is known only while its cluster is inside the builder's 48-bar lookback; when it
-   leaves, an edge that was identified by it is identified by its own first touch again (observed: one flip per range,
-   not one per rebuilt edge).
+   `range:<side>:break:<time of the earliest break the edge sits beyond>` for a range re-established after a break (the latest
+   event of each broken cluster dates it). This makes the identity name the advance rather than the barrier the lookback
+   happened to rebuild, but it is **not stable**: the identity changes when the break that names it leaves the 48-bar lookback or
+   another broken cluster starts or stops qualifying, so one range can still be published under more than one id (measured in
+   the certification: the same-range repeats fall only from 30 to 28 on USDJPY). Do not rely on it to deduplicate; the
+   Algo Bot's entry-corridor guard and the same-direction exposure policy (`docs/risk/same-direction-exposure-incident.md`) are
+   the duplicate protection.
 8. **Measured quality components** (no change to `Quality.Overall`): `rejection_close_location`, `reclaim_depth_atr`,
    `break_distance_atr`.
 
