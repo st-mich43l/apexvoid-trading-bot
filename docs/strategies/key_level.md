@@ -1,5 +1,7 @@
 # Key Level
 
+> **Quality review (2026-10-14): RETAIN** (proposal, not applied). Technical PASS, execution PARTIAL, performance CONFLICTING, evidence MODERATE. Scope: all instruments; quality score to be treated as non-discriminating until reconstructed. See [ae-quality-certification.md](ae-quality-certification.md) and [ae-strategy-retirement-review.md](ae-strategy-retirement-review.md). Independent review: pending.
+
 ## Strategy ID / version
 
 `key_level`, `v3`. Implemented in

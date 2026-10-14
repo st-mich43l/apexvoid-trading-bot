@@ -1,5 +1,7 @@
 # CRT Strategy V3
 
+> **Quality review (2026-10-14): RETAIN** (proposal, not applied). Technical PASS, execution COMPATIBLE, performance UNPROVEN, evidence INSUFFICIENT. Scope: all instruments; re-audit when >= 30 setups exist. See [ae-quality-certification.md](ae-quality-certification.md) and [ae-strategy-retirement-review.md](ae-strategy-retirement-review.md). Independent review: pending.
+
 `crt` is Candle Range Theory as an independent Go strategy. A **fully closed H1
 candle** defines a range. A later **M5 candle sweeps** one edge of it, an **M5
 close reclaims** the edge, and a subsequent **M5 market-structure shift**

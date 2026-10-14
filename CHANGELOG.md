@@ -12,6 +12,15 @@ dated section after deployment.
 
 ## Unreleased
 
+### Added
+- AE quality audit of all 21 strategies (`docs/strategies/ae-quality-certification.md`,
+  `ae-strategy-retirement-review.md`, `ae-quality-replay-results.json`, `ae-strategy-matrix.yml`): technical, execution,
+  performance and evidence verdicts, quality-score math, replay and production R. Proposals only: no enablement, containment,
+  stop, target or size changes (two config patches are prepared, not applied). Adds the all-strategy causal replay and
+  invariant test (`analysis-engine/test/aequality`), the aggregation tool (`algo-bot/tools/ae_quality_eval.py`) and five
+  closed-bar captures. Reports that `realized_pips` excludes the stop-out loss of full stops (executor
+  `volume_weighted_pips`), so a full stop is counted as -1R in the audit; not fixed here.
+
 ### Changed
 - Range Edge Scalp v3 (`docs/strategies/range_edge.md`): the edge a fade trades must still be a range edge. The scalp
   structure builder now keeps the barriers it discards because price accepted through them (`ScalpStructure.Broken`;

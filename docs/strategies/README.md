@@ -17,6 +17,14 @@ cycle correlates opportunities on one thesis afterwards and ranks them on qualit
 keeping every strategy's attribution. There is no strategy family: each strategy's
 execution profile is its own row in `algo-bot/app/autotrade/strategy_catalog.py`.
 
+## Quality audit
+
+The 2026-10-14 quality audit of all 21 strategies (technical, execution, performance and
+evidence verdicts, quality-score math, replay and production R) is in
+[ae-quality-certification.md](ae-quality-certification.md); its retirement and restriction
+proposals, none applied, are in [ae-strategy-retirement-review.md](ae-strategy-retirement-review.md);
+the machine-readable matrix is [ae-quality-replay-results.json](ae-quality-replay-results.json).
+
 ## Certification
 
 Every strategy has exactly one status:
