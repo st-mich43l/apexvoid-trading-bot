@@ -38,7 +38,7 @@ Every strategy has exactly one status:
 | `ifvg` | own M5 fair-value gap, its closing-price inversion, a fresh retest and rejection | none (Go v3; the Python publisher 1c9f323 was v2, see [ifvg](ifvg.md)) | contract tests in `internal/strategy/ifvg`, `test/ifvgreplay` (defect reproduction on the real captures, no future dependence, invariants, golden) | all | live (XAU enabled 13 Oct 2026; FX unchanged) | GO_NATIVE_VALIDATED | 7 / 14 (v2 confirmed: 110 / 120) |
 | `crt` | closed H1 range, M5 sweep, reclaim and structure shift | none (v3 departs deliberately from `crt_technique_reaction`, see below) | `internal/strategy/crt` positive and negative fixtures; `test/crtreplay`: no future dependence on 6 captures bar for bar, technical invariants on every setup found, and a v3 golden | all | live (an honest stop beyond the instrument cap is refused) | GO_NATIVE_VALIDATED | 1 / 0 |
 | `break_retest` | own M5 key level or trendline, accepted break, fresh retest and rejection | none (Go v3; the Python detector 1c9f323 was v2) | contract tests in `internal/strategy/breakretest`, `test/brreplay` | all | live | GO_NATIVE_VALIDATED | 1 / 2 (v2: 8 / 12) |
-| `range_edge` | M5 range context, edge rejection | Python detector (1c9f323) | `test/detectorparity` golden | all | live | LEGACY_PARITY_PROVEN | 28 / 50 |
+| `range_edge` | M5 range context, edge rejection (v3: edge integrity) | Python detector (1c9f323), v3 rebuilt | `test/rereplay` replay baseline | all | live | GO_NATIVE_VALIDATED | 28 / 50 |
 | `snap_back` | key level or zone, extension, graded grab | Python detector (1c9f323) | `test/detectorparity` golden | all | live | LEGACY_PARITY_PROVEN | 6 / 13 |
 | `momentum_ride` | displacement sequence, opposing liquidity | Python detector (1c9f323) | `test/detectorparity` golden | all | live | LEGACY_PARITY_PROVEN | 8 / 5 |
 | `fade_scalp` | equal-level sweep and reclaim, PD, chop edge | Python detector (1c9f323) | `test/detectorparity` golden | all | live | LEGACY_PARITY_PROVEN | 10 / 20 |
@@ -154,8 +154,9 @@ the same corridor, same-thesis arbitration lets exactly one trade.
 
 ## Detector-contract strategies
 
-`range_edge`, `snap_back`, `momentum_ride` and `fade_scalp`
-reproduce frozen detector decisions on the detector-contract read
+`snap_back`, `momentum_ride` and `fade_scalp`
+reproduce frozen detector decisions (`range_edge` did until v3, which adds the technical integrity of the edge and
+is certified by replay: [range_edge](range_edge.md)) on the detector-contract read
 (`internal/legacyread`): bounded M5/M15/H1 windows, the detector swing algorithm,
 scored zones, pools and grabs, regime and higher-timeframe bias. Regenerate their
 golden with `test/detectorparity/generate_oracle_golden.py` against the frozen

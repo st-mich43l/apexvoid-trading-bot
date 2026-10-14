@@ -77,7 +77,8 @@ func boxBreakoutParams() map[string]any {
 }
 
 func rangeEdgeParams() map[string]any {
-	return detectorParams(map[string]any{"lookback_bars": 48.0, "minimum_touches": 2.0, "minimum_wick_rejections": 1.0, "break_closes": 2.0, "minimum_room_atr": .75, "invalidation_buffer_atr": .25, "expiry_hours": 4.0})
+	return detectorParams(map[string]any{"lookback_bars": 48.0, "minimum_touches": 2.0, "minimum_wick_rejections": 1.0, "break_closes": 2.0, "minimum_room_atr": .75, "invalidation_buffer_atr": .25, "expiry_hours": 4.0,
+		"reclaim_closes": 2.0, "minimum_inside_closes": 3.0, "pressure_bars": 4.0, "pressure_minimum_rise_atr": 1.0, "minimum_reclaim_atr": 0.0, "rejection_close_strength": 0.6, "maximum_width_atr": 6.0})
 }
 
 func snapBackParams() map[string]any {

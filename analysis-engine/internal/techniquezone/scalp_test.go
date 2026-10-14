@@ -317,3 +317,155 @@ func TestPrimaryBarrierNeedsTwoWickRejectionsNotJustTouches(t *testing.T) {
 		t.Fatal("a one-sided structure without the fallback has no range")
 	}
 }
+
+// mirrorBars reflects a market about an axis: every high becomes a low.
+func mirrorBars(bars []market.Candle, axis float64) []market.Candle {
+	out := make([]market.Candle, len(bars))
+	for i, b := range bars {
+		out[i] = market.Candle{Time: b.Time, Open: axis - b.Open, High: axis - b.Low, Low: axis - b.High, Close: axis - b.Close}
+	}
+	return out
+}
+
+func brokenOn(result ScalpStructure, side string) *BrokenBarrier {
+	for i := range result.Broken {
+		if result.Broken[i].Side == side {
+			return &result.Broken[i]
+		}
+	}
+	return nil
+}
+
+func TestAnEdgePriceAcceptedThroughIsKeptAsBroken(t *testing.T) {
+	bars := twoSidedRange()
+	first := len(bars)
+	// Two consecutive closes below the support less the entry tolerance.
+	bars = append(bars, bar(first, 97.6, 97.7, 97.1, 97.2), bar(first+1, 97.2, 97.3, 96.9, 97.0))
+	result := build(bars, scalpConfig())
+	broken := brokenOn(result, "support")
+	if broken == nil {
+		t.Fatalf("the support price accepted through must be kept: %+v", result.Broken)
+	}
+	if broken.BreakIndex != first+1 {
+		t.Fatalf("the break is the bar on which the accepted run reached BreakCloses (%d), got %d", first+1, broken.BreakIndex)
+	}
+	if math.Abs(broken.Level-97.95) > .2 || broken.Touches < 2 || broken.WickRejections < 2 || broken.Tolerance <= 0 {
+		t.Fatalf("the broken edge carries what the builder knew of it: %+v", broken)
+	}
+	if brokenOn(result, "resistance") != nil {
+		t.Fatalf("the untouched resistance is not broken: %+v", result.Broken)
+	}
+}
+
+func TestAResistanceBreaksAsTheExactMirrorOfASupport(t *testing.T) {
+	bars := twoSidedRange()
+	first := len(bars)
+	bars = append(bars, bar(first, 97.6, 97.7, 97.1, 97.2), bar(first+1, 97.2, 97.3, 96.9, 97.0))
+	down := build(bars, scalpConfig())
+	up := build(mirrorBars(bars, 201), scalpConfig())
+	a, b := brokenOn(down, "support"), brokenOn(up, "resistance")
+	if a == nil || b == nil {
+		t.Fatalf("both sides must keep the broken edge: %+v / %+v", down.Broken, up.Broken)
+	}
+	if a.BreakIndex != b.BreakIndex || a.Touches != b.Touches || a.WickRejections != b.WickRejections ||
+		a.FirstTouchIndex != b.FirstTouchIndex || a.LastTouchIndex != b.LastTouchIndex || math.Abs(a.Level-(201-b.Level)) > 1e-9 {
+		t.Fatalf("a resistance must break as the mirror of a support: %+v vs %+v", a, b)
+	}
+}
+
+func TestOneAcceptedCloseIsNotABreakAndAnUntouchedRangeHasNoneBroken(t *testing.T) {
+	if got := build(twoSidedRange(), scalpConfig()).Broken; len(got) != 0 {
+		t.Fatalf("a clean range has no broken edge: %+v", got)
+	}
+	one := twoSidedRange()
+	one = append(one, bar(len(one), 97.6, 97.7, 97.1, 97.2), flat(len(one)+1, 100))
+	if got := build(one, scalpConfig()).Broken; len(got) != 0 {
+		t.Fatalf("a single accepted close is not a break: %+v", got)
+	}
+}
+
+func TestABreakIsReclaimedOnlyByConsecutiveClosesBackInside(t *testing.T) {
+	bars := twoSidedRange()
+	bars = append(bars, bar(len(bars), 97.6, 97.7, 97.1, 97.2), bar(len(bars)+1, 97.2, 97.3, 96.9, 97.0))
+	broken := brokenOn(build(bars, scalpConfig()), "support")
+	if broken == nil {
+		t.Fatal("no broken support")
+	}
+	if BreakReclaimed(bars, *broken, 2) {
+		t.Fatal("price has not come back: not reclaimed")
+	}
+	one := append(append([]market.Candle(nil), bars...), bar(len(bars), 97.2, 98.9, 97.1, 98.7))
+	if BreakReclaimed(one, *broken, 2) {
+		t.Fatal("one close back inside is not a reclaim of two")
+	}
+	two := append(append([]market.Candle(nil), one...), bar(len(one), 98.7, 99.1, 98.5, 98.9))
+	if !BreakReclaimed(two, *broken, 2) {
+		t.Fatal("two consecutive closes back inside reclaim the edge")
+	}
+	broke := append(append([]market.Candle(nil), one...), bar(len(one), 98.7, 98.8, 96.9, 97.0), bar(len(one)+1, 98.7, 99.1, 98.5, 98.9))
+	if BreakReclaimed(broke, *broken, 2) {
+		t.Fatal("a close that falls back out resets the run")
+	}
+	// The answer at a bar never depends on a later one.
+	if BreakReclaimed(two[:len(one)], *broken, 2) {
+		t.Fatal("the prefix ending before the second close must still say not reclaimed")
+	}
+}
+
+func TestAReclaimedEdgeThatBreaksAgainIsRetiredByTheLatestBreak(t *testing.T) {
+	bars := twoSidedRange()
+	first := len(bars)
+	bars = append(bars, bar(first, 97.6, 97.7, 97.1, 97.2), bar(first+1, 97.2, 97.3, 96.9, 97.0)) // break
+	broken := brokenOn(build(bars, scalpConfig()), "support")
+	if broken == nil || broken.BreakCloses != 2 {
+		t.Fatalf("the builder keeps the break rule it applied: %+v", broken)
+	}
+	back := append(append([]market.Candle(nil), bars...), bar(len(bars), 97.2, 98.9, 97.1, 98.7), bar(len(bars)+1, 98.7, 99.1, 98.5, 98.9))
+	again := append(append([]market.Candle(nil), back...), bar(len(back), 98.9, 99.0, 97.0, 97.2), bar(len(back)+1, 97.2, 97.3, 96.8, 97.0))
+	if reclaimed, latest := BreakStatus(back, *broken, 2); !reclaimed || latest != first+1 {
+		t.Fatalf("after the reclaim the edge is restored: %v %d", reclaimed, latest)
+	}
+	if reclaimed, latest := BreakStatus(again, *broken, 2); reclaimed || latest != len(back)+1 {
+		t.Fatalf("a second accepted run retires it again and the latest break is that one: %v %d (want %d)", reclaimed, latest, len(back)+1)
+	}
+	if BreakReclaimed(again, *broken, 2) {
+		t.Fatal("BreakReclaimed must follow the latest event")
+	}
+}
+
+// Every break the builder reports completed on a candle it was given: the structure at a
+// candle contains nothing from after it, whatever the prefix.
+func TestNoBrokenEdgeIsEverDatedAfterTheCandlesGiven(t *testing.T) {
+	bars := twoSidedRange()
+	bars = append(bars, bar(len(bars), 97.6, 97.7, 97.1, 97.2), bar(len(bars)+1, 97.2, 97.3, 96.9, 97.0), flat(len(bars)+2, 98.5), flat(len(bars)+3, 98.6))
+	for n := 20; n <= len(bars); n++ {
+		for _, b := range build(bars[:n], scalpConfig()).Broken {
+			if b.BreakIndex < 0 || b.BreakIndex >= n || b.LastTouchIndex >= n || b.FirstTouchIndex >= n {
+				t.Fatalf("prefix %d reports a break dated %d (touches %d-%d)", n, b.BreakIndex, b.FirstTouchIndex, b.LastTouchIndex)
+			}
+		}
+	}
+}
+
+func TestARestoredEdgeNeedsConsecutiveAcceptedClosesToBreakAgain(t *testing.T) {
+	bars := twoSidedRange()
+	first := len(bars)
+	bars = append(bars, bar(first, 97.6, 97.7, 97.1, 97.2), bar(first+1, 97.2, 97.3, 96.9, 97.0)) // break
+	broken := brokenOn(build(bars, scalpConfig()), "support")
+	back := append(append([]market.Candle(nil), bars...), bar(len(bars), 97.2, 98.9, 97.1, 98.7), bar(len(bars)+1, 98.7, 99.1, 98.5, 98.9)) // reclaimed
+	// two accepted closes broken up by a close back inside are not a run of two
+	spaced := append(append([]market.Candle(nil), back...), bar(len(back), 98.9, 99.0, 97.1, 97.2), bar(len(back)+1, 97.2, 98.9, 97.1, 98.7), bar(len(back)+2, 98.7, 98.8, 96.9, 97.0))
+	if reclaimed, _ := BreakStatus(spaced, *broken, 2); !reclaimed {
+		t.Fatal("accepted, inside, accepted is not two consecutive accepted closes: the edge stays restored")
+	}
+	// a close in the dead band (between level and level less its tolerance) is neither accepted nor inside
+	level := broken.Level
+	banded := append(append([]market.Candle(nil), bars...), bar(len(bars), level, level+.2, level-.2, level+broken.Tolerance/2), bar(len(bars)+1, level, level+.2, level-.2, level+broken.Tolerance/2))
+	if reclaimed, _ := BreakStatus(banded, *broken, 2); reclaimed {
+		t.Fatal("closes inside the tolerance band do not reclaim")
+	}
+	exact := append(append([]market.Candle(nil), bars...), bar(len(bars), 99, 99.2, 98.9, level+broken.Tolerance), bar(len(bars)+1, 99, 99.2, 98.9, level+broken.Tolerance))
+	if reclaimed, _ := BreakStatus(exact, *broken, 2); !reclaimed {
+		t.Fatal("a close exactly at level plus tolerance is inside (the support mirror of the resistance's at-or-below)")
+	}
+}

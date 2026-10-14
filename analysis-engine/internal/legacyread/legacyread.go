@@ -205,6 +205,7 @@ func Stage(candles []market.Candle, tf market.Timeframe, weekly []session.Level,
 	}
 	structureResult := techniquezone.BuildScalpStructure(bars, atr, frame.Sessions, lines, frame.Regime.RangeHigh, frame.Regime.RangeLow, true, scalp)
 	frame.Barriers, frame.ScalpRange, frame.ScalpState = structureResult.Barriers, structureResult.Range, structureResult.State
+	frame.ScalpBroken = structureResult.Broken
 	frame.OrderBlocks = orderBlockView(frame.Zones)
 	return Staged{stage: out}
 }

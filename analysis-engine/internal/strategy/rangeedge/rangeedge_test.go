@@ -14,12 +14,14 @@ func params(minTouches, minWicks int) map[string]any {
 	return legacyfixture.Params(map[string]any{
 		"lookback_bars": 48.0, "minimum_touches": float64(minTouches), "minimum_wick_rejections": float64(minWicks),
 		"break_closes": 2.0, "minimum_room_atr": .75, "invalidation_buffer_atr": .25, "expiry_hours": 4.0,
+		"reclaim_closes": 2.0, "minimum_inside_closes": 3.0, "pressure_bars": 4.0, "pressure_minimum_rise_atr": 1.0, "minimum_reclaim_atr": 0.0,
+		"rejection_close_strength": 0.6, "maximum_width_atr": 6.0,
 	})
 }
 
 func newStrategy(t *testing.T, minTouches, minWicks int) strategy.Strategy {
 	t.Helper()
-	s, err := New(strategy.Config{ID: ID, Version: "v2", Parameters: params(minTouches, minWicks)})
+	s, err := New(strategy.Config{ID: ID, Version: Version, Parameters: params(minTouches, minWicks)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -236,5 +238,135 @@ func TestRangeEdgeRequiresDetectorSettings(t *testing.T) {
 	delete(p, "pip_size")
 	if _, err := New(strategy.Config{ID: ID, Version: "v2", Parameters: p}); err == nil {
 		t.Fatal("a missing injected detector parameter must fail closed")
+	}
+}
+
+func analyzer(t *testing.T) interface {
+	Analyze(*analysiscontext.MarketContext) Analysis
+} {
+	t.Helper()
+	return newStrategy(t, 2, 1).(interface {
+		Analyze(*analysiscontext.MarketContext) Analysis
+	})
+}
+
+// above holds price beyond a level since an accepted break: bars 4..8 close at price, and
+// the last candle is the rejection of the upper edge.
+func barsAbove(price float64) []market.Candle {
+	out := legacyfixture.Bars(10, 100.5)
+	for i := 4; i < 9; i++ {
+		out[i] = market.Candle{Time: int64(i+1) * 300, Open: price, High: price + .2, Low: price - .2, Close: price}
+	}
+	out[9] = market.Candle{Time: 3000, Open: 102.8, High: 103.4, Low: 102.1, Close: 102.3}
+	return out
+}
+
+// upperEdgeSell is the upper-edge SELL fixture with a hook on the frame.
+func upperEdgeSell(bars []market.Candle, mutate func(*analysiscontext.LegacyFrame)) *analysiscontext.MarketContext {
+	return legacyfixture.Context(bars, 1, func(f *analysiscontext.LegacyFrame, r *analysiscontext.LegacyRead) {
+		r.LocalStructure, r.HTFBias = "down", "down"
+		f.ScalpRange = rangeOf(barrier("support", 98, 4, 3, 10.5), barrier("resistance", 103, 4, 3, 10.5))
+		f.Barriers = []techniquezone.ScalpBarrier{f.ScalpRange.Lower, f.ScalpRange.Upper}
+		if mutate != nil {
+			mutate(f)
+		}
+	})
+}
+
+func TestAnEdgeRetiredByAnAcceptedBreakIsRefusedWithItsReasonOnRecord(t *testing.T) {
+	broken := techniquezone.BrokenBarrier{Side: "resistance", Level: 102.2, Low: 102.0, High: 102.4, Tolerance: .25, Touches: 3, WickRejections: 3,
+		FirstTouchIndex: 0, LastTouchIndex: 2, BreakIndex: 4, BreakCloses: 2}
+	rebuilt := func(f *analysiscontext.LegacyFrame) {
+		f.ScalpBroken = []techniquezone.BrokenBarrier{broken}
+		r := *f.ScalpRange
+		r.Upper.FirstTouchIndex = 6 // the edge the lookback rebuilt after the break
+		f.ScalpRange = &r
+		f.Barriers = []techniquezone.ScalpBarrier{r.Lower, r.Upper}
+	}
+	got := analyzer(t).Analyze(upperEdgeSell(barsAbove(102.6), rebuilt))
+	if len(got.Candidates) != 0 {
+		t.Fatalf("an edge above an accepted break is the same advance, not an edge: %+v", got.Candidates)
+	}
+	if len(got.Rejections) != 1 || got.Rejections[0].Direction != market.Sell || got.Rejections[0].RetiredBreakTime != 1500 {
+		t.Fatalf("the refusal must name the break that retired the edge: %+v", got.Rejections)
+	}
+	if got.Rejections[0].Reason != ReasonRangeNotReestablish {
+		t.Fatalf("reason %q", got.Rejections[0].Reason)
+	}
+	// the very same evidence with the price back inside the broken edge is tradable again
+	back := barsAbove(100.5)
+	if got := analyzer(t).Analyze(upperEdgeSell(back, rebuilt)); len(got.Candidates) != 1 {
+		t.Fatalf("a reclaimed edge is an edge again: %+v", got.Rejections)
+	}
+}
+
+func TestARangeEstablishedAfterTheBreakIsTradableUnderTheBreaksIdentity(t *testing.T) {
+	broken := techniquezone.BrokenBarrier{Side: "resistance", Level: 101.0, Low: 100.8, High: 101.2, Tolerance: .25, Touches: 3, WickRejections: 3,
+		FirstTouchIndex: 0, LastTouchIndex: 1, BreakIndex: 2, BreakCloses: 2}
+	got := analyzer(t).Analyze(upperEdgeSell(barsAbove(102.0), func(f *analysiscontext.LegacyFrame) {
+		f.ScalpBroken = []techniquezone.BrokenBarrier{broken}
+		r := *f.ScalpRange
+		r.Upper.FirstTouchIndex, r.Lower.FirstTouchIndex = 4, 3 // both edges touched after the break
+		f.ScalpRange = &r
+		f.Barriers = []techniquezone.ScalpBarrier{r.Lower, r.Upper}
+	}))
+	if len(got.Candidates) != 1 {
+		t.Fatalf("a range made after the break is genuinely new: %+v", got.Rejections)
+	}
+	c := got.Candidates[0]
+	if c.StructuralID != "range:resistance:break:900" {
+		t.Fatalf("its thesis is the break, whichever barrier the lookback rebuilds: %q", c.StructuralID)
+	}
+	for _, name := range []string{"rejection_close_location", "reclaim_depth_atr", "break_distance_atr"} {
+		if _, ok := c.Quality.Components[name]; !ok {
+			t.Fatalf("the measured component %s is missing: %+v", name, c.Quality.Components)
+		}
+	}
+	if c.Quality.Components["reclaim_depth_atr"] <= 0 {
+		t.Fatalf("the rejection closed back inside the edge: %+v", c.Quality.Components)
+	}
+}
+
+func TestTheSameBreakRetiresALowerEdgeAsTheMirrorOfAnUpperOne(t *testing.T) {
+	out := legacyfixture.Bars(10, 100.5)
+	for i := 4; i < 9; i++ {
+		out[i] = market.Candle{Time: int64(i+1) * 300, Open: 98.4, High: 98.6, Low: 98.2, Close: 98.4}
+	}
+	out[9] = market.Candle{Time: 3000, Open: 98.3, High: 98.9, Low: 97.8, Close: 98.6}
+	broken := techniquezone.BrokenBarrier{Side: "support", Level: 98.8, Low: 98.6, High: 99.0, Tolerance: .25, Touches: 3, WickRejections: 3,
+		FirstTouchIndex: 0, LastTouchIndex: 2, BreakIndex: 4, BreakCloses: 2}
+	ctx := legacyfixture.Context(out, 1, func(f *analysiscontext.LegacyFrame, _ *analysiscontext.LegacyRead) {
+		f.ScalpRange = rangeOf(barrier("support", 98, 4, 3, 10.5), barrier("resistance", 103, 4, 3, 10.5))
+		r := *f.ScalpRange
+		r.Lower.FirstTouchIndex = 6 // the support the lookback rebuilt after the break
+		f.ScalpRange = &r
+		f.Barriers = []techniquezone.ScalpBarrier{r.Lower, r.Upper}
+		f.ScalpBroken = []techniquezone.BrokenBarrier{broken}
+	})
+	got := analyzer(t).Analyze(ctx)
+	if len(got.Candidates) != 0 || len(got.Rejections) != 1 || got.Rejections[0].Direction != market.Buy || got.Rejections[0].RetiredBreakTime != 1500 {
+		t.Fatalf("a support rebuilt below an accepted break is refused: %+v", got)
+	}
+}
+
+func TestWithoutBrokenEdgesTheDetectorDecidesAsBefore(t *testing.T) {
+	bars := legacyfixture.Bars(10, 100.5)
+	bars[9] = market.Candle{Time: 3000, Open: 102.8, High: 103.4, Low: 102.1, Close: 102.3}
+	a := analyzer(t).Analyze(upperEdgeSell(bars, nil))
+	if len(a.Candidates) != 1 || len(a.Rejections) != 0 || a.Candidates[0].StructuralID != "range:resistance:600" {
+		t.Fatalf("%+v", a)
+	}
+}
+
+func TestV3RequiresItsIntegrityParameters(t *testing.T) {
+	p := params(2, 1)
+	delete(p, "pressure_bars")
+	if _, err := New(strategy.Config{ID: ID, Version: Version, Parameters: p}); err == nil {
+		t.Fatal("a missing integrity coefficient must fail construction")
+	}
+	p = params(2, 1)
+	p["pressure_bars"] = 1.0
+	if _, err := New(strategy.Config{ID: ID, Version: Version, Parameters: p}); err == nil {
+		t.Fatal("a pressure window under two candles is meaningless")
 	}
 }

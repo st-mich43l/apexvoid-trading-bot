@@ -316,7 +316,12 @@ func doReplayCapture(t testing.TB, c Capture, capture *replaycapture.Capture, o 
 		fromEngine, fromAnalyze := map[string]bool{}, map[string]bool{}
 		for _, cand := range e.Candidates {
 			if string(cand.Strategy) != "confluence_zone" {
-				others = append(others, canonical(e.BarTime, cand))
+				// Range Edge is rebuilt separately (docs/strategies/range_edge.md, certified in
+				// test/rereplay with its own baseline of every other strategy), so it is not part
+				// of "the other strategies" this certification holds equal to master's.
+				if string(cand.Strategy) != "range_edge" {
+					others = append(others, canonical(e.BarTime, cand))
+				}
 				continue
 			}
 			if cand.Reaction != nil {
