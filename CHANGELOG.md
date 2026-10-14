@@ -31,6 +31,14 @@ dated section after deployment.
   exposure or enablement setting changes. Opportunity IDs change with the version, and an opportunity is the side and the confirming candle (one confirmation is one opportunity, whichever touch or supporting set it is seen through). **Not deployed.**
 
 ### Added
+- Confluence Zone v3, part C: replay certification (`analysis-engine/test/czreplay`, `docs/strategies/confluence-zone-v3-certification.md`,
+  `-replay-results.json`, `-sensitivity.json`). Test harness, committed production captures and generated evidence only: no strategy,
+  config, sizing, arbitration or enablement behaviour changes. It replays XAU and four FX pairs through the engine path with four models (legacy
+  intersection, frozen v2 union, v3 structure with v2 confirmation, full v3) with causal hypothetical fills, asserts that v2 reproduces the
+  production trades, that the other strategies' candidates equal master's, and that one confirmation is one opportunity. Result: no
+  demonstrated positive expectancy for v2 or v3 on XAU (v3 hypothetically negative); an optional, **unapplied** XAU containment patch is
+  `docs/strategies/confluence-zone-v3-xau-containment.patch`. `replaycapture.Options.StrategyParameters` lets a replay override a strategy's
+  parameters. **Not deployed.**
 - Confluence Zone v3, part A: the structural confluence engine (`analysis-engine/internal/structuralconfluence`,
   `docs/strategies/confluence-zone-v3-technical-spec.md`). A pure library, **not yet wired into any strategy, so
   no live behaviour changes**: it derives a provenance-carrying fact (displacement leg, structure break, gap,
