@@ -4204,7 +4204,7 @@ public sealed partial class TradePlanRuntime(
       runtimeState: next,
       volumeWeightedPips: VolumeWeightedPips(
         plan,
-        legs,
+        LegsAsTheyHeldVolumeAtClose(legs, reasons),
         state.BookedPipVolume,
         PipSizeFor(plan.Symbol),
         leg => reasons.Where(item => item.Leg.LegId == leg.LegId).Select(item => item.ExitPrice).FirstOrDefault()
@@ -5301,6 +5301,27 @@ public sealed partial class TradePlanRuntime(
     var risk = Math.Abs(fillPrice - plan.Stop.Price) / pipSize;
     return risk > 0m ? decimal.Round(risk, 1, MidpointRounding.AwayFromZero) : null;
   }
+
+  /// <summary>
+  /// The legs a broker-absent close must value: the legs that vanished, with the volume
+  /// they still held when they vanished. The close handler zeroes a vanished leg's
+  /// RemainingVolume before it finalizes, and VolumeWeightedPips skips legs without
+  /// remaining volume, so valuing the zeroed legs dropped the stop-out loss and every
+  /// full stop was reported as 0.0 pips (auto_trade_results.realized_pips).
+  /// </summary>
+  internal static List<TradePlanLegRuntimeState> LegsAsTheyHeldVolumeAtClose(
+    IReadOnlyList<TradePlanLegRuntimeState> legs,
+    IReadOnlyList<(
+      TradePlanLegRuntimeState Leg,
+      PositionCloseReason Reason,
+      decimal? ExitPrice
+    )> reasons
+  ) => legs
+    .Select(leg => reasons
+      .Where(item => item.Leg.LegId == leg.LegId)
+      .Select(item => item.Leg)
+      .FirstOrDefault() ?? leg)
+    .ToList();
 
   /// <summary>
   /// The group's volume-weighted realized pips: the pips every target close already

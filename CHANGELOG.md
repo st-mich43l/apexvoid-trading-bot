@@ -18,6 +18,13 @@ dated section after deployment.
   nothing already published or open is touched. Rollback is removing the name. Step 3 (`enabled: false`) follows a two-week soak.
   The catalog entry, provenance decoding and all ledger rows stay.
 
+### Fixed
+- Executor `realized_pips` (`volume_weighted_pips`) now includes the stop-out loss. The broker-absent close handler zeroed a
+  vanished leg's `RemainingVolume` before valuing it, and `VolumeWeightedPips` skips legs without volume, so every full stop was
+  recorded as 0.0 pips and a runner stopped after TP1 kept only its booked pips (`LegsAsTheyHeldVolumeAtClose`). Rows already in
+  `auto_trade_results` are not rewritten: until a row's close date is after the deploy, count a `full_stop` as -1R
+  (docs/strategies/ae-quality-certification.md).
+
 ### Added
 - AE quality audit of all 21 strategies (`docs/strategies/ae-quality-certification.md`,
   `ae-strategy-retirement-review.md`, `ae-quality-replay-results.json`, `ae-strategy-matrix.yml`): technical, execution,
