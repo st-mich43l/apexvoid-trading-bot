@@ -691,7 +691,7 @@ def test_go_thesis_identity_is_stable_for_the_zone_not_the_confirmation_bar():
 
 # --- Execution containment, end to end ----------------------------------------
 
-XAU_OBSERVE_ONLY = {"liquidity_sweep", "impulse_pullback"}
+XAU_OBSERVE_ONLY = {"liquidity_sweep", "impulse_pullback", "range_sweep"}
 
 
 def m15_structure_record(now: int, *, typed: bool = True, scope: str = "supply", offset: int = 1):
@@ -752,7 +752,7 @@ async def test_ordinary_m5_supply_demand_still_becomes_a_plan(h, prod):
   assert await worker._publish_trade_plan_v8(prod, "XAU", _spot(4354.1, 4354.3), match, frames={}) is not None
 
 
-@pytest.mark.parametrize("scope", ["liquidity_sweep", "supply"])
+@pytest.mark.parametrize("scope", ["liquidity_sweep", "range_sweep", "supply"])
 @pytest.mark.asyncio
 async def test_a_match_stored_before_containment_cannot_become_a_plan(h, prod, monkeypatch, scope):
   """Defence in depth: containment is re-checked at plan admission, so a match
@@ -776,8 +776,21 @@ def test_the_xau_live_versus_observe_only_matrix():
 
   assert containment.observe_only_strategies("XAU") == XAU_OBSERVE_ONLY
   live = set(pol.REVIEWED_SCOPES) - XAU_OBSERVE_ONLY
-  assert {"key_level", "scalp_breakout_retest", "range_sweep", "supply", "demand", "fvg", "order_block"} <= live
+  assert {"key_level", "scalp_breakout_retest", "supply", "demand", "fvg", "order_block"} <= live
+  assert "range_sweep" not in live, "retirement step 1: observed, never traded"
   for symbol in ("XAU", "EURUSD", "GBPUSD", "GBPJPY", "USDJPY"):
     assert containment.observe_only_structure_timeframes(symbol) == {"M15"}
   for symbol in ("EURUSD", "GBPUSD", "GBPJPY", "USDJPY"):
     assert containment.observe_only_strategies(symbol) == {"impulse_pullback"}
+
+
+@pytest.mark.no_database
+def test_a_retired_strategy_stays_in_the_catalog_so_history_still_decodes():
+  """Retirement contains and later disables publication; it never removes the strategy's identity."""
+  from app.analysis_client.provenance import CATALOG_STRATEGY_IDS
+  from app.autotrade import go_containment as containment
+
+  assert "range_sweep" in CATALOG_STRATEGY_IDS
+  assert "range_sweep" in pol.REVIEWED_SCOPES
+  assert containment.containment_reason("XAU", "range_sweep", None) == containment.CONTAINED_STRATEGY
+  assert containment.containment_reason("XAU", "scalp_breakout_retest", None) is None

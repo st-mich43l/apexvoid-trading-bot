@@ -1,6 +1,6 @@
 # Range Sweep Strategy V2
 
-> **Quality review (2026-10-14): RETIRE** (proposal, not applied). Technical FAIL, execution PARTIAL, performance NEGATIVE, evidence MODERATE. Scope: propose retirement of the strategy; keep historical attribution and journal decoding; do not delete trade data. See [ae-quality-certification.md](ae-quality-certification.md) and [ae-strategy-retirement-review.md](ae-strategy-retirement-review.md). Independent review: pending.
+> **Quality review (2026-10-14): RETIRE** (proposal, not applied). Technical FAIL, execution PARTIAL, performance NEGATIVE, evidence MODERATE. Scope: propose retirement of the strategy; keep historical attribution and journal decoding; do not delete trade data. See [ae-quality-certification.md](ae-quality-certification.md) and [ae-strategy-retirement-review.md](ae-strategy-retirement-review.md). Independent review: pending. **Retirement step 1 (observe-only on XAU) is proposed in a separate, unmerged PR; owner-approved 2026-10-14.**
 
 `range_sweep` requires canonical M5 range state, then an M1 excursion beyond
 one established edge by the configured ATR distance and a close back inside.
