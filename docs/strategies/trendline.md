@@ -1,5 +1,7 @@
 # Trendline Strategy V2
 
+> **Quality review (2026-10-14): RECONSTRUCT** (proposal, not applied). Technical FAIL, execution INCOMPATIBLE, performance UNPROVEN, evidence INSUFFICIENT. Scope: rebuild target and stop from the line itself; propose observe-only until rebuilt (no production trades exist). See [ae-quality-certification.md](ae-quality-certification.md) and [ae-strategy-retirement-review.md](ae-strategy-retirement-review.md). Independent review: pending.
+
 **Contract.** Restored to the frozen V2 `trendline_reaction`: immutable causal anchors, forward validation, health (not tentative, broken, degraded, exhausted or stale), chop-regime quality gates, a reclaimed live interaction and a confirmed reaction inside the interaction band. Proven on 8 oracle decisions (`test/legacyparity`); the gate is narrow, so the golden holds few decisions.
 
 `trendline` consumes immutable causal M5 anchors and the canonical interaction

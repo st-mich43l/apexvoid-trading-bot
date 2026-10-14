@@ -1,5 +1,7 @@
 # Impulse Pullback Strategy V2
 
+> **Quality review (2026-10-14): OBSERVE_ONLY** (proposal, not applied). Technical PASS, execution PARTIAL, performance NEGATIVE, evidence WEAK. Scope: already observe-only on every instrument; keep, and retire at the next audit unless observed outcomes improve. See [ae-quality-certification.md](ae-quality-certification.md) and [ae-strategy-retirement-review.md](ae-strategy-retirement-review.md). Independent review: pending.
+
 **Contract.** Ported from the Python scalp lane's `discover_impulse_pullback`: 4 ATR displacement with 0.5 body dominance, a corrective pullback (below 0.7 of the impulse body, 25-75% retracement, confirmed extreme), an unmitigated M5 zone or nearby key level whose closed-bar role agrees, location in the dealing range, an M1 confirmation at the reference, the structural stop and the corridor target. XAU only. The real XAU capture contains no Python decision, so parity is proven on seeded synthetic captures only; XAU stays observe-only.
 
 `impulse_pullback` qualifies a directional M5 impulse, then requires an M1

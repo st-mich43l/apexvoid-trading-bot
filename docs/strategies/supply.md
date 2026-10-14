@@ -1,5 +1,7 @@
 # Supply
 
+> **Quality review (2026-10-14): RECONSTRUCT** (proposal, not applied). Technical PASS_WITH_DEFECTS, execution PARTIAL, performance NEUTRAL, evidence MODERATE. Scope: geometry only (target honesty / stop placement); no enablement change. See [ae-quality-certification.md](ae-quality-certification.md) and [ae-strategy-retirement-review.md](ae-strategy-retirement-review.md). Independent review: pending.
+
 ## Strategy ID / version
 
 `supply`, `v2`. Implemented in `analysis-engine/internal/strategy/supply`.

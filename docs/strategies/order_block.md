@@ -1,5 +1,7 @@
 # Order Block
 
+> **Quality review (2026-10-14): RETAIN_RESTRICTED** (proposal, not applied). Technical PASS, execution PARTIAL, performance NEGATIVE, evidence MODERATE. Scope: propose observe-only on EURUSD and GBPJPY; XAU and USDJPY unchanged. See [ae-quality-certification.md](ae-quality-certification.md) and [ae-strategy-retirement-review.md](ae-strategy-retirement-review.md). Independent review: pending.
+
 ## Strategy ID / version
 
 `order_block`, `v2`. Implemented in
