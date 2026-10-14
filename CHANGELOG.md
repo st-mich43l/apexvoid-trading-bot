@@ -52,6 +52,12 @@ dated section after deployment.
   direction with release on failure, supersession by the executor runtime and a TTL. **No instrument declares the policy in the
   committed config, so live behaviour is unchanged**; the proposed USDJPY `max_groups: 1` is an unapplied patch for owner
   review (`docs/risk/same-direction-exposure-usdjpy.patch`). Adds `lupa` to the dev requirements (the script tests run on fakeredis).
+- Range Edge v3 replay certification (`analysis-engine/test/rereplay`, `docs/strategies/range-edge-v3-certification.md`,
+  `range-edge-v3-replay-results.json`): test harness, the v2 baseline of what master published on the six committed production
+  captures, and generated evidence only; no behaviour change. Reproduces the 12 Oct USDJPY opportunities id for id, shows v3 refusing
+  the continuation of the accepted break (and one winner), shows no demonstrated change in expectancy, asserts every other
+  strategy's candidates equal master's, and records two adversarial review passes per PR with what was fixed and what is only
+  stated. Includes the deployment and rollback preparation for the same-direction exposure policy and Range Edge v3. **Not deployed.**
 - Confluence Zone v3, part C: replay certification (`analysis-engine/test/czreplay`, `docs/strategies/confluence-zone-v3-certification.md`,
   `-replay-results.json`, `-sensitivity.json`). Test harness, committed production captures and generated evidence only: no strategy,
   config, sizing, arbitration or enablement behaviour changes. It replays XAU and four FX pairs through the engine path with four models (legacy
