@@ -147,9 +147,15 @@ def test_the_evaluator_reads_no_source_text_for_eligibility():
   assert "requires_reaction()" not in source
 
 
-def test_containment_timeframe_and_expiry_come_from_production_not_the_tool():
-  # Contained on the instrument -> the production containment verdict.
-  contained = next(name for name in sorted(pol.REVIEWED_SCOPES) if name in observe_only_strategies("XAU"))
+def test_containment_timeframe_and_expiry_come_from_production_not_the_tool(monkeypatch):
+  # Contained on the instrument -> the production containment verdict. Nothing is contained in the
+  # production config (owner rule: no observe-only), so contain one strategy by override.
+  from tests.support.canonical_fixtures import install_runtime_overrides
+
+  contained = "liquidity_sweep"
+  install_runtime_overrides(monkeypatch, {
+    "instruments.XAU.overrides.execution.go_opportunity.observe_only_strategies": [contained],
+  })
   raw = _envelope(contained, confirmed=True, symbol="XAU")
   event = parse_analysis_event(OpportunityTopic, json.dumps(raw))
   assert ev.admit(raw, now=event.payload.created_at + 60, static=False) == (None, "execution_contained")

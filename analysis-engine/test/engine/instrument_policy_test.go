@@ -116,38 +116,7 @@ func TestApplyInstrument_UsesResolvedPerInstrumentStopEnvelope(t *testing.T) {
 	}
 }
 
-func TestApplyInstrument_ObservesButDoesNotTradeTheContainedStrategies(t *testing.T) {
-	doc, err := config.ResolveDocument(filepath.Join("..", "..", "..", "config", "apexvoid.yml"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	observed := func(symbol string) map[opportunity.StrategyID]bool {
-		settings, err := engine.LoadSettings(doc, "M5", false)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := engine.ApplyInstrument(&settings, doc, symbol); err != nil {
-			t.Fatal(err)
-		}
-		return settings.ObserveOnly
-	}
-	xau := observed("XAU")
-	if len(xau) != 2 || !xau["liquidity_sweep"] || !xau["impulse_pullback"] {
-		t.Fatalf("XAU observe-only = %v, want liquidity_sweep, impulse_pullback", xau)
-	}
-	for _, kept := range []opportunity.StrategyID{"ifvg", "session_level", "key_level", "scalp_breakout_retest", "fvg", "confluence_zone"} {
-		if xau[kept] {
-			t.Errorf("%s must keep executing on XAU", kept)
-		}
-	}
-	for _, symbol := range []string{"EURUSD", "GBPUSD", "GBPJPY", "USDJPY"} {
-		if got := observed(symbol); len(got) != 1 || !got["impulse_pullback"] {
-			t.Errorf("%s observe-only = %v, want only impulse_pullback: the other containment is XAU-only", symbol, got)
-		}
-	}
-}
-
-func TestApplyInstrument_ObservesTheM15StructureTimeframeOnEveryInstrument(t *testing.T) {
+func TestApplyInstrument_NothingIsObserveOnly(t *testing.T) {
 	doc, err := config.ResolveDocument(filepath.Join("..", "..", "..", "config", "apexvoid.yml"))
 	if err != nil {
 		t.Fatal(err)
@@ -160,8 +129,12 @@ func TestApplyInstrument_ObservesTheM15StructureTimeframeOnEveryInstrument(t *te
 		if err := engine.ApplyInstrument(&settings, doc, symbol); err != nil {
 			t.Fatal(err)
 		}
-		if got := settings.ObserveOnlyStructureTimeframes; len(got) != 1 || !got[market.M15] {
-			t.Errorf("%s observe-only structure timeframes = %v, want only M15", symbol, got)
+		// Owner rule 2026-10-14: no observe-only. Every strategy and every structure timeframe trades.
+		if len(settings.ObserveOnly) != 0 {
+			t.Errorf("%s observe-only strategies = %v, want none", symbol, settings.ObserveOnly)
+		}
+		if len(settings.ObserveOnlyStructureTimeframes) != 0 {
+			t.Errorf("%s observe-only structure timeframes = %v, want none", symbol, settings.ObserveOnlyStructureTimeframes)
 		}
 	}
 }

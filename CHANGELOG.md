@@ -13,6 +13,17 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
+- Trendline v4 (`docs/strategies/trendline.md`): the target is the nearest opposing liquidity at least `minimum_target_distance_atr` (1.0, new
+  parameter) from the entry; with none nothing is published. v3 reported twice the distance from the entry to the interaction band
+  edge, unrelated to the published stop (median room cover 0.05, technical RR below 1 in every replayed setup); v4 measures median
+  technical RR 3.4 and room cover 0.84. Opportunity IDs change with the version; `Quality.Overall` is unchanged. `trendline_reaction` is now
+  measured-only in the legacy parity test (7 of the oracle's 8 decisions).
+- No observe-only (owner rule 2026-10-14): `observe_only_strategies` and `observe_only_structure_timeframes` are empty on every instrument.
+  **This turns on live trading** of `impulse_pullback` (every instrument it is configured for: XAU), `liquidity_sweep` (XAU) and the M15
+  supply/demand zones (all instruments), none of which traded before. The containment mechanism stays in code, dormant. The optional Confluence
+  Zone XAU containment patch and its test were removed.
+
+### Changed
 - Range Sweep Scalp removed (owner-approved 2026-10-14; a retired strategy is removed, not disabled). The Go package and
   registry entry, `config/analysis.yml` entry and the scalp-book leaves only it read (`range_buy_maximum_position`,
   `range_sell_minimum_position`, `trigger_maximum_age_bars`), the Python catalog id/scope/name/profile, the executor scalp-name

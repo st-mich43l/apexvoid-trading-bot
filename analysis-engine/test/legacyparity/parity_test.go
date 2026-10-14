@@ -47,7 +47,12 @@ var pairing = map[string]struct {
 // periods, two bounded reaction models, honest geometry; docs/strategies/session_level.md),
 // which deliberately no longer reproduces the frozen detector's decisions. The frozen
 // oracle golden is untouched and the divergence stays visible in the log.
-var measuredOnly = map[string]bool{"session_level_reaction": true}
+//
+// trendline_reaction is measured only too: Trendline v4 publishes only with a real opposing
+// liquidity target at least minimum_target_distance_atr away (the frozen detector reported twice the
+// distance to the band edge, unrelated to its stop), so it deliberately stays silent on a decision the
+// oracle took when no such target exists. The frozen golden is untouched.
+var measuredOnly = map[string]bool{"session_level_reaction": true, "trendline_reaction": true}
 
 type goldenDecision struct {
 	Direction       string  `json:"direction"`

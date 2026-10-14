@@ -49,6 +49,10 @@ figure wherever the R-known sample is small.
 
 ## 2. Verdicts
 
+> **Owner decisions after this audit (2026-10-14):** Range Sweep removed; Trendline reworked (v4); nothing is observe-only, so the
+> RETAIN_RESTRICTED and OBSERVE_ONLY recommendations below were not adopted and every strategy trades live. The table is the
+> audit's own judgement at the time and is kept as the evidence; see [ae-strategy-retirement-review.md](ae-strategy-retirement-review.md).
+
 Four separate verdicts per strategy. Technical: does it detect what it says. Execution: does
 its own technical target pay for the stop the executor can place (`room_cover` = technical
 reward / executable risk; below 1 the fixed 1R TP1 lies beyond the strategy's own objective).

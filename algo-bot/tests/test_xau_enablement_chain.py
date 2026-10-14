@@ -49,23 +49,18 @@ def simulate(monkeypatch, names):
 
 
 @pytest.mark.no_database
-def test_the_proposed_list_removes_exactly_the_two_rebuilt_strategies(monkeypatch):
-  assert set(CURRENT) - set(PROPOSED) == set(REBUILT)
-  assert containment.observe_only_strategies("XAU") == set(PROPOSED)        # the enabled file
+def test_the_config_contains_nothing_and_the_mechanism_still_contains_by_override(monkeypatch):
+  assert containment.observe_only_strategies("XAU") == set()                # owner rule: no observe-only
   simulate(monkeypatch, PROPOSED)
   assert containment.observe_only_strategies("XAU") == {"liquidity_sweep", "impulse_pullback"}
   assert containment.observe_only_strategies("XAUUSD") == containment.observe_only_strategies("XAU")
-  # The M15 structure containment and every FX list are untouched by the change.
-  assert containment.observe_only_structure_timeframes("XAU") == {"M15"}
   for symbol in ("EURUSD", "GBPUSD", "GBPJPY", "USDJPY"):
-    assert containment.observe_only_strategies(symbol) == {"impulse_pullback"}
-    assert containment.observe_only_structure_timeframes(symbol) == {"M15"}
+    assert containment.observe_only_strategies(symbol) == set()
   for scope in ("ifvg", "session_level"):
     assert containment.containment_reason("XAU", scope, None) is None
     assert containment.containment_reason("XAUUSD", scope, None) is None
   for scope in ("liquidity_sweep", "impulse_pullback"):
     assert containment.containment_reason("XAU", scope, None) == "execution_contained"
-  assert containment.containment_reason("XAU", "supply", "M15") == "execution_contained_structure_timeframe"
 
 
 @pytest.mark.parametrize("scope", REBUILT)

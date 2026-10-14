@@ -1328,10 +1328,10 @@
  "other_strategies_candidates": {
   "EURUSD": "4979:cb9a03592f2ba30725c420a4ba4bc29ac7c4da417d1ca8e2e219414c054c75a5",
   "GBPJPY": "5107:0045573d569c830d1b58c4e04ff763df0f745cdb5291ff195d059b395dbe0e97",
-  "GBPUSD": "6550:69553c8091fdf1a8163b642dbae7eadf7650102f41fd89fb2069090f41e97bb8",
-  "USDJPY": "6562:62a1df2dd4bea961e9338a18364a3f5b984cf64ca8c83035d878c532cb11cb4f",
+  "GBPUSD": "6550:137ce4affba6c8c434716e49b4f0294e67f965b4a2977bc10c5c08aab1132438",
+  "USDJPY": "6562:5c6882f0c4718ad8cb84cd72e039d15b7e1ab63127e5ed4712278caf81a198e0",
   "XAU Oct": "5042:a355238f986e625ea5c3d7b7e8dd91167efa134b9a206e1c8e22e86eaa9beada",
-  "XAU Sep": "2680:4d2fb7eed6b1579717ad538ca9d21762e0f56897b5686ae679b9bec06b576f0f"
+  "XAU Sep": "2679:af1d2ae1bdd666869473a27ae929f69b9f291dc4b05f18a2a34a92ec1d514b6b"
  },
  "limits": [
   "Hypothetical, causal fills on closed M5 candles: no spread, slippage, commission, M1 trigger or broker behaviour; a stop and a target in one candle count as the stop.",
