@@ -24,11 +24,11 @@ import (
 )
 
 const ID strategy.StrategyID = "trendline"
-const Version = "v3"
+const Version = "v4"
 
 type Strategy struct {
 	minimumValidationTouches, chopMinimumValidationTouches, maximumBarsSinceLastTouch int
-	invalidationATR, expiryHours                                                      float64
+	invalidationATR, expiryHours, minimumTargetDistanceATR                            float64
 	interactionBandATR, closeViolationATR, approachMinDistanceATR                     float64
 	chopRequireHTFAligned, requireHTFAligned, rejectExhausted                         bool
 	legacy                                                                            strategyutil.LegacyDetectorSettings
@@ -44,7 +44,7 @@ func New(cfg strategy.Config) (strategy.Strategy, error) {
 	for key, dst := range map[string]*float64{
 		"invalidation_buffer_atr": &s.invalidationATR, "expiry_hours": &s.expiryHours,
 		"interaction_band_atr": &s.interactionBandATR, "close_violation_atr": &s.closeViolationATR,
-		"approach_min_distance_atr": &s.approachMinDistanceATR,
+		"approach_min_distance_atr": &s.approachMinDistanceATR, "minimum_target_distance_atr": &s.minimumTargetDistanceATR,
 	} {
 		if *dst, err = strategyutil.Float(cfg.Parameters, key); err != nil {
 			return nil, err
@@ -71,7 +71,7 @@ func New(cfg strategy.Config) (strategy.Strategy, error) {
 		return nil, err
 	}
 	if s.minimumValidationTouches < 0 || s.invalidationATR <= 0 || s.expiryHours <= 0 || s.interactionBandATR <= 0 ||
-		s.closeViolationATR <= 0 || s.approachMinDistanceATR < 0 || s.maximumBarsSinceLastTouch < 1 {
+		s.closeViolationATR <= 0 || s.approachMinDistanceATR < 0 || s.maximumBarsSinceLastTouch < 1 || s.minimumTargetDistanceATR <= 0 {
 		return nil, fmt.Errorf("trendline: invalid parameters")
 	}
 	return s, nil
@@ -139,16 +139,9 @@ func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Ca
 	candidate, ok := strategyutil.TechniqueCandidate(ctx, best, strategyutil.TechniqueSpec{
 		ID: string(ID), Version: Version, ZoneEvidence: "m5_trendline_causal_anchors", ConfirmedEvidence: "m5_trendline_reaction_confirmed",
 		InvalidationLabel: "trendline_close_violation", InvalidationBufferATR: s.invalidationATR, ExpiryHours: s.expiryHours, Fingerprint: s.fingerprint,
-		Target: func(dec *strategyutil.TechniqueDecision) (float64, string) {
-			// Two reward:risk beyond the entry, as the former strategy reported.
-			entry := dec.Result.Level
-			risk := math.Abs(entry - dec.Result.StructuralLow)
-			if dec.Direction == market.Sell {
-				risk = math.Abs(dec.Result.StructuralHigh - entry)
-				return entry - 2*risk, "trendline_projection"
-			}
-			return entry + 2*risk, "trendline_projection"
-		},
+		// The target is the nearest opposing liquidity at least this far from the entry; with none there is
+		// no technical objective and nothing is published (v3 invented twice the distance to the band edge).
+		MinimumTargetDistanceATR: s.minimumTargetDistanceATR, RequireStructuralTarget: true,
 	})
 	if !ok {
 		return nil
