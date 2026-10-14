@@ -528,6 +528,9 @@ analysis:
       pressure_bars: 4
       pressure_minimum_rise_atr: 1.0
       minimum_reclaim_atr: 0.0
+      # a candle closing this far from the edge (1 = at the extreme away from it) is a
+      # rejection whatever the approach, never pressure
+      rejection_close_strength: 0.6
       lookback_bars: 48
       minimum_touches: 2
       minimum_wick_rejections: 1

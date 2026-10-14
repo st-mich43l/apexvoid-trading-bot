@@ -411,3 +411,38 @@ func TestABreakIsReclaimedOnlyByConsecutiveClosesBackInside(t *testing.T) {
 		t.Fatal("the prefix ending before the second close must still say not reclaimed")
 	}
 }
+
+func TestAReclaimedEdgeThatBreaksAgainIsRetiredByTheLatestBreak(t *testing.T) {
+	bars := twoSidedRange()
+	first := len(bars)
+	bars = append(bars, bar(first, 97.6, 97.7, 97.1, 97.2), bar(first+1, 97.2, 97.3, 96.9, 97.0)) // break
+	broken := brokenOn(build(bars, scalpConfig()), "support")
+	if broken == nil || broken.BreakCloses != 2 {
+		t.Fatalf("the builder keeps the break rule it applied: %+v", broken)
+	}
+	back := append(append([]market.Candle(nil), bars...), bar(len(bars), 97.2, 98.9, 97.1, 98.7), bar(len(bars)+1, 98.7, 99.1, 98.5, 98.9))
+	again := append(append([]market.Candle(nil), back...), bar(len(back), 98.9, 99.0, 97.0, 97.2), bar(len(back)+1, 97.2, 97.3, 96.8, 97.0))
+	if reclaimed, latest := BreakStatus(back, *broken, 2); !reclaimed || latest != first+1 {
+		t.Fatalf("after the reclaim the edge is restored: %v %d", reclaimed, latest)
+	}
+	if reclaimed, latest := BreakStatus(again, *broken, 2); reclaimed || latest != len(back)+1 {
+		t.Fatalf("a second accepted run retires it again and the latest break is that one: %v %d (want %d)", reclaimed, latest, len(back)+1)
+	}
+	if BreakReclaimed(again, *broken, 2) {
+		t.Fatal("BreakReclaimed must follow the latest event")
+	}
+}
+
+// Every break the builder reports completed on a candle it was given: the structure at a
+// candle contains nothing from after it, whatever the prefix.
+func TestNoBrokenEdgeIsEverDatedAfterTheCandlesGiven(t *testing.T) {
+	bars := twoSidedRange()
+	bars = append(bars, bar(len(bars), 97.6, 97.7, 97.1, 97.2), bar(len(bars)+1, 97.2, 97.3, 96.9, 97.0), flat(len(bars)+2, 98.5), flat(len(bars)+3, 98.6))
+	for n := 20; n <= len(bars); n++ {
+		for _, b := range build(bars[:n], scalpConfig()).Broken {
+			if b.BreakIndex < 0 || b.BreakIndex >= n || b.LastTouchIndex >= n || b.FirstTouchIndex >= n {
+				t.Fatalf("prefix %d reports a break dated %d (touches %d-%d)", n, b.BreakIndex, b.FirstTouchIndex, b.LastTouchIndex)
+			}
+		}
+	}
+}

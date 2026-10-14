@@ -15,6 +15,7 @@ func params(minTouches, minWicks int) map[string]any {
 		"lookback_bars": 48.0, "minimum_touches": float64(minTouches), "minimum_wick_rejections": float64(minWicks),
 		"break_closes": 2.0, "minimum_room_atr": .75, "invalidation_buffer_atr": .25, "expiry_hours": 4.0,
 		"reclaim_closes": 2.0, "minimum_inside_closes": 3.0, "pressure_bars": 4.0, "pressure_minimum_rise_atr": 1.0, "minimum_reclaim_atr": 0.0,
+		"rejection_close_strength": 0.6, "maximum_width_atr": 6.0,
 	})
 }
 
@@ -274,27 +275,34 @@ func upperEdgeSell(bars []market.Candle, mutate func(*analysiscontext.LegacyFram
 
 func TestAnEdgeRetiredByAnAcceptedBreakIsRefusedWithItsReasonOnRecord(t *testing.T) {
 	broken := techniquezone.BrokenBarrier{Side: "resistance", Level: 102.2, Low: 102.0, High: 102.4, Tolerance: .25, Touches: 3, WickRejections: 3,
-		FirstTouchIndex: 0, LastTouchIndex: 2, BreakIndex: 4}
-	got := analyzer(t).Analyze(upperEdgeSell(barsAbove(102.6), func(f *analysiscontext.LegacyFrame) { f.ScalpBroken = []techniquezone.BrokenBarrier{broken} }))
+		FirstTouchIndex: 0, LastTouchIndex: 2, BreakIndex: 4, BreakCloses: 2}
+	rebuilt := func(f *analysiscontext.LegacyFrame) {
+		f.ScalpBroken = []techniquezone.BrokenBarrier{broken}
+		r := *f.ScalpRange
+		r.Upper.FirstTouchIndex = 6 // the edge the lookback rebuilt after the break
+		f.ScalpRange = &r
+		f.Barriers = []techniquezone.ScalpBarrier{r.Lower, r.Upper}
+	}
+	got := analyzer(t).Analyze(upperEdgeSell(barsAbove(102.6), rebuilt))
 	if len(got.Candidates) != 0 {
 		t.Fatalf("an edge above an accepted break is the same advance, not an edge: %+v", got.Candidates)
 	}
 	if len(got.Rejections) != 1 || got.Rejections[0].Direction != market.Sell || got.Rejections[0].RetiredBreakTime != 1500 {
 		t.Fatalf("the refusal must name the break that retired the edge: %+v", got.Rejections)
 	}
-	if got.Rejections[0].Reason != ReasonEdgeAcceptedBreak {
+	if got.Rejections[0].Reason != ReasonRangeNotReestablish {
 		t.Fatalf("reason %q", got.Rejections[0].Reason)
 	}
 	// the very same evidence with the price back inside the broken edge is tradable again
 	back := barsAbove(100.5)
-	if got := analyzer(t).Analyze(upperEdgeSell(back, func(f *analysiscontext.LegacyFrame) { f.ScalpBroken = []techniquezone.BrokenBarrier{broken} })); len(got.Candidates) != 1 {
+	if got := analyzer(t).Analyze(upperEdgeSell(back, rebuilt)); len(got.Candidates) != 1 {
 		t.Fatalf("a reclaimed edge is an edge again: %+v", got.Rejections)
 	}
 }
 
 func TestARangeEstablishedAfterTheBreakIsTradableUnderTheBreaksIdentity(t *testing.T) {
 	broken := techniquezone.BrokenBarrier{Side: "resistance", Level: 101.0, Low: 100.8, High: 101.2, Tolerance: .25, Touches: 3, WickRejections: 3,
-		FirstTouchIndex: 0, LastTouchIndex: 1, BreakIndex: 2}
+		FirstTouchIndex: 0, LastTouchIndex: 1, BreakIndex: 2, BreakCloses: 2}
 	got := analyzer(t).Analyze(upperEdgeSell(barsAbove(102.0), func(f *analysiscontext.LegacyFrame) {
 		f.ScalpBroken = []techniquezone.BrokenBarrier{broken}
 		r := *f.ScalpRange
@@ -326,10 +334,13 @@ func TestTheSameBreakRetiresALowerEdgeAsTheMirrorOfAnUpperOne(t *testing.T) {
 	}
 	out[9] = market.Candle{Time: 3000, Open: 98.3, High: 98.9, Low: 97.8, Close: 98.6}
 	broken := techniquezone.BrokenBarrier{Side: "support", Level: 98.8, Low: 98.6, High: 99.0, Tolerance: .25, Touches: 3, WickRejections: 3,
-		FirstTouchIndex: 0, LastTouchIndex: 2, BreakIndex: 4}
+		FirstTouchIndex: 0, LastTouchIndex: 2, BreakIndex: 4, BreakCloses: 2}
 	ctx := legacyfixture.Context(out, 1, func(f *analysiscontext.LegacyFrame, _ *analysiscontext.LegacyRead) {
 		f.ScalpRange = rangeOf(barrier("support", 98, 4, 3, 10.5), barrier("resistance", 103, 4, 3, 10.5))
-		f.Barriers = []techniquezone.ScalpBarrier{f.ScalpRange.Lower, f.ScalpRange.Upper}
+		r := *f.ScalpRange
+		r.Lower.FirstTouchIndex = 6 // the support the lookback rebuilt after the break
+		f.ScalpRange = &r
+		f.Barriers = []techniquezone.ScalpBarrier{r.Lower, r.Upper}
 		f.ScalpBroken = []techniquezone.BrokenBarrier{broken}
 	})
 	got := analyzer(t).Analyze(ctx)

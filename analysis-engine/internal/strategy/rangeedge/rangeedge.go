@@ -62,6 +62,7 @@ func New(cfg strategy.Config) (strategy.Strategy, error) {
 	for key, dst := range map[string]*float64{
 		"minimum_room_atr": &s.minimumRoomATR, "invalidation_buffer_atr": &s.invalidationATR, "expiry_hours": &s.expiryHours,
 		"pressure_minimum_rise_atr": &s.integrity.PressureMinimumRiseATR, "minimum_reclaim_atr": &s.integrity.MinimumReclaimATR,
+		"rejection_close_strength": &s.integrity.RejectionCloseStrength, "maximum_width_atr": &s.integrity.MaximumWidthATR,
 	} {
 		v, err := strategyutil.Float(cfg.Parameters, key)
 		if err != nil {
@@ -76,7 +77,7 @@ func New(cfg strategy.Config) (strategy.Strategy, error) {
 	if s.lookback < 5 || s.minimumTouches < 2 || s.minimumWicks < 1 || s.breakCloses < 1 || s.minimumRoomATR <= 0 || s.invalidationATR <= 0 || s.expiryHours <= 0 {
 		return nil, fmt.Errorf("rangeedge: invalid parameters")
 	}
-	if s.integrity.ReclaimCloses < 1 || s.integrity.MinimumInsideCloses < 1 || s.integrity.PressureBars < 2 || s.integrity.PressureMinimumRiseATR <= 0 || s.integrity.MinimumReclaimATR < 0 {
+	if s.integrity.ReclaimCloses < 1 || s.integrity.MinimumInsideCloses < 1 || s.integrity.PressureBars < 2 || s.integrity.PressureMinimumRiseATR <= 0 || s.integrity.MinimumReclaimATR < 0 || s.integrity.RejectionCloseStrength < 0 || s.integrity.RejectionCloseStrength > 1 || s.integrity.MaximumWidthATR <= 0 {
 		return nil, fmt.Errorf("rangeedge: invalid integrity parameters")
 	}
 	return s, nil
@@ -189,7 +190,8 @@ func (s *Strategy) Analyze(ctx *analysiscontext.MarketContext) Analysis {
 		}
 		// The frozen detector returns _finish's answer for the first edge that
 		// passes every gate and reaction, whether or not it qualifies; it does
-		// not fall through to the other edge.
+		// not fall through to the other edge. (An edge the integrity assessment refused
+		// did not pass the gates, so the other edge is still considered.)
 		result := d.Finish(barrier.Level, zone, factors, "", nil, nil)
 		if result == nil {
 			return out

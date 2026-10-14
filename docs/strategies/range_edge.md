@@ -52,34 +52,47 @@ terms, so BUY and SELL are exact mirrors (asserted on mirrored inputs).
    through them (`ScalpStructure.Broken`: level, touches, wick rejections, first and last touch, the bar on which
    `break_closes` accepted closes completed, the tolerance used). Nothing in the barriers or the range changes.
 2. **Retired edge** (`edge_accepted_break`, `range_not_reestablished`). A fade is refused when its edge is at or beyond an
-   *outermost* broken edge of its side (a cluster inside the range that price ran through on the way to the edge is not the
-   range breaking), unless
+   *outermost* broken edge of its side, unless
    - price **reclaimed** it: `reclaim_closes` consecutive closes back on the range side of the broken level less its
-     tolerance (the mirror of `break_closes`); or
-   - a **genuinely new range** has formed: the edge and the nearest floor (the live barrier on the other side nearest price)
-     are both made of contacts *after* the break, and price has closed inside them `minimum_inside_closes` times since. A
-     stale floor, or price that never came back inside, is the old advance continuing.
+     tolerance (the mirror of `break_closes`), **and has not since accepted beyond it again**: the latest event decides
+     (`techniquezone.BreakStatus`), and the bar of the latest accepted run is the break that dates the retirement and the
+     identity; or
+   - a **genuinely new range** has formed: the edge and the nearest floor (the live barrier on the other side nearest price,
+     not the builder's selected one) are both made of contacts *after* the break, and price has closed inside them
+     `minimum_inside_closes` times since. A stale floor, or price that never came back inside, is the old advance continuing.
+
+   "Outermost" means no other cluster of the side, live or broken, that was already forming when the edge broke (its first touch
+   is before the break) lay beyond it by more than the tolerance and within the builder's maximum range width
+   (`maximum_width_atr`): a cluster inside the range that price runs through on its way to the edge is not the range
+   breaking, and a barrier from another range, further away than a range can be wide, is not the same range.
 3. **Break pending** (`break_pending_unreclaimed`). The builder tolerates one close beyond the edge (`break_closes`
    is two). While price is still beyond the edge there is nothing to fade; a sweep that closes back inside is the strategy's own
-   thesis and stays tradable.
+   thesis and stays tradable. A later close beyond the edge after the confirming candle fails the reaction
+   (`reaction_failed_after_confirmation`).
 4. **Fresh rejection** (`rejection_not_back_inside`). The confirming candle must close back on the range side of the edge.
 5. **Pressure** (`pressure_into_edge`). `pressure_bars` candles ending at the confirming one, each with a higher low and a
    higher close (mirrored for a support) and rising at least `pressure_minimum_rise_atr` in total, are price pressing the
-   edge, not rejecting it; a confirming candle that closes lower breaks the run.
-6. **Gaps.** A missing candle inside the reaction or pressure window fails closed (`data_gap`): a gap is never mistaken for a
-   fresh reaction.
+   edge, not rejecting it; a confirming candle that closes lower breaks the run, and one that closes at least
+   `rejection_close_strength` of its range away from the edge (a shooting star) is a rejection whatever the approach.
+6. **Gaps.** Any missing candle inside the reaction or pressure window fails closed (`data_gap`): a gap is never mistaken
+   for a fresh reaction.
 7. **Identity.** The thesis is the range episode: `range:<side>:<first-touch time>` as before, and
-   `range:<side>:break:<time of the break>` for a range re-established after a break, so every edge the lookback rebuilds in
-   that range is one opportunity, and the next break is a new episode. A reclaimed break returns the edge to its own episode.
+   `range:<side>:break:<time of the latest break>` for a range re-established after a break, so every edge the lookback
+   rebuilds in that range is one opportunity, and the next break is a new episode. A reclaimed break returns the edge to its
+   own episode. **Residual:** the break is known only while its cluster is inside the builder's 48-bar lookback; when it
+   leaves, an edge that was identified by it is identified by its own first touch again (observed: one flip per range,
+   not one per rebuilt edge).
 8. **Measured quality components** (no change to `Quality.Overall`): `rejection_close_location`, `reclaim_depth_atr`,
    `break_distance_atr`.
 
 Lifecycle states, as an edge is tested: `range_valid` (intact) -> `break_pending` (closes beyond, not yet accepted) ->
 `range_broken` (accepted, not reclaimed; retired). A reaction on a valid edge is the confirmed reaction. Requalification is
-the reclaim or the re-established range above, never a clock.
+the reclaim or the re-established range above; there is no cooldown timer, but a break is remembered only while its cluster is in
+the builder's lookback (48 bars), after which the market has had four hours to form a range of its own.
 
 Coefficients (`config/analysis.yml` `strategies.range_edge`): `reclaim_closes 2`, `pressure_bars 4`,
-`pressure_minimum_rise_atr 1.0`, `minimum_reclaim_atr 0.0`; `break_closes` and `minimum_inside_closes` are the builder's.
+`pressure_minimum_rise_atr 1.0`, `minimum_reclaim_atr 0.0`, `rejection_close_strength 0.6` (the shared convention); `break_closes`,
+`minimum_inside_closes` and `maximum_width_atr` are the builder's.
 They are shared conventions (the mirror of the existing break rule), none chosen on a trade.
 
 The replay certification (v2 against v3 on six production captures, the 12 October reconstruction, the entry and stop audit,
