@@ -17,6 +17,8 @@ import pytest
 from app.analysis_client.provenance import GO_ORIGIN_TAG
 from app.autotrade import worker
 from app.autotrade.group_exposure import reservation_key
+from app.autotrade.route_outcome import route_outcome_key
+from app.autotrade.setup_lifecycle import CONFIRMED, load_setup
 from app.persistence import redis_state
 from app.runtime.instruments import (
   EffectiveInstrumentError,
@@ -143,7 +145,10 @@ async def test_an_unknown_executor_picture_refuses_instead_of_guessing(monkeypat
   await _confirm_setup(client, match)
 
   assert await _publish(client, match) is None
-  assert [code for code, _ in rejections] == ["exposure_unknown"]
+  # not a verdict on the setup: the intent is kept and looked at again (no terminal rejection)
+  assert rejections == []
+  assert (await load_setup(client, match.match_id)).state == CONFIRMED
+  assert json.loads(await client.get(route_outcome_key("GBPUSD", match.match_id)))["reason_code"] == "exposure_unknown"
 
 
 @pytest.mark.asyncio
@@ -171,3 +176,101 @@ async def test_opposite_exposure_keeps_its_own_independent_policy(monkeypatch, r
 
   assert await _publish(client, match) is None
   assert [code for code, _ in rejections] == ["fx_opposite_position_not_allowed"]
+
+
+@pytest.mark.asyncio
+async def test_a_redis_failure_while_measuring_exposure_leaks_no_claim_and_keeps_the_intent(monkeypatch, rejections):
+  monkeypatch.setattr(worker.instrument_geometry, "same_direction_policy", lambda symbol: _policy(1))
+  client = redis_state.get_client()
+  await _executor_snapshot(client)
+  match = _scalp("redis-down")
+  await _confirm_setup(client, match)
+
+  async def boom(*args, **kwargs):
+    raise ConnectionError("redis went away")
+
+  monkeypatch.setattr(worker, "admit_group", boom)
+  assert await _publish(client, match) is None
+  assert rejections == []
+  assert not [key async for key in client.scan_iter(match="analysis:active_thesis:*")], "the thesis claim leaked"
+  assert not [key async for key in client.scan_iter(match="autotrade:entry_overlap:*") if await client.get(key) not in (None, "[]")], "the corridor claim leaked"
+  assert json.loads(await client.get(route_outcome_key("GBPUSD", match.match_id)))["reason_code"] == "group_exposure_reservation_unavailable"
+
+
+@pytest.mark.asyncio
+async def test_a_plan_already_on_the_stream_keeps_its_slot_when_a_later_step_fails(monkeypatch, rejections):
+  monkeypatch.setattr(worker.instrument_geometry, "same_direction_policy", lambda symbol: _policy(1))
+  monkeypatch.setattr(worker, "reserve_entry_zone", AsyncMock(return_value=None))
+  client = redis_state.get_client()
+  await _executor_snapshot(client)
+  first, second = _scalp("on-stream"), _scalp("after")
+  await _confirm_setup(client, first)
+  await _confirm_setup(client, second)
+
+  real = worker.transition_setup
+
+  async def failing(client_, setup_id, state, **kwargs):
+    if state == "plan_published":
+      raise worker.SetupLifecycleError("lifecycle refused")
+    return await real(client_, setup_id, state, **kwargs)
+
+  monkeypatch.setattr(worker, "transition_setup", failing)
+  assert await _publish(client, first) is None
+  assert await client.xlen("execution:trade_plans") == 1, "the plan reached the stream"
+  assert await client.hlen(reservation_key("GBPUSD", "BUY")) == 1, "so its reservation must stay until the executor shows it"
+  monkeypatch.setattr(worker, "transition_setup", real)
+  assert await _publish(client, second) is None
+  assert [code for code, _ in rejections] == ["same_direction_group_limit"]
+
+
+@pytest.mark.asyncio
+async def test_a_money_limit_is_enforced_from_the_plans_own_stop_and_sizing(monkeypatch, rejections):
+  tight = SameDirectionPolicy(symbol="GBPUSD", limits=SameDirectionLimits(max_cumulative_risk=0.5))
+  monkeypatch.setattr(worker.instrument_geometry, "same_direction_policy", lambda symbol: tight)
+  client = redis_state.get_client()
+  await _executor_snapshot(client)
+  match = _scalp("tight")
+  await _confirm_setup(client, match)
+  assert await _publish(client, match) is None
+  assert [code for code, _ in rejections] == ["same_direction_risk_budget"]
+  assert rejections[0][1]["incoming_risk"] > 0.5, "the plan's planned loss is measured, not zero"
+
+  roomy = SameDirectionPolicy(symbol="GBPUSD", limits=SameDirectionLimits(max_cumulative_risk=500.0))
+  monkeypatch.setattr(worker.instrument_geometry, "same_direction_policy", lambda symbol: roomy)
+  other = _scalp("roomy")
+  await _confirm_setup(client, other)
+  assert await _publish(client, other) is not None
+  held = await client.hgetall(reservation_key("GBPUSD", "BUY"))
+  assert float(next(iter(held.values())).split("|")[2]) > 0
+
+
+@pytest.mark.asyncio
+async def test_a_refusal_releases_the_claims_it_took(monkeypatch, rejections):
+  monkeypatch.setattr(worker.instrument_geometry, "same_direction_policy", lambda symbol: _policy(1))
+  client = redis_state.get_client()
+  await _seed_live_plan(client, symbol="GBPUSD", direction="BUY", entry=1.2400, plan_id="v8:setup-active")
+  await _executor_snapshot(client, groups=["v8:setup-active"])
+  match = _scalp("refused")
+  await _confirm_setup(client, match)
+  assert await _publish(client, match) is None
+  assert [code for code, _ in rejections] == ["same_direction_group_limit"]
+  assert not [key async for key in client.scan_iter(match="analysis:active_thesis:*")]
+  assert not [key async for key in client.scan_iter(match="autotrade:entry_overlap:*") if await client.get(key) not in (None, "[]")]
+
+
+@pytest.mark.asyncio
+async def test_a_setup_that_turned_terminal_before_publication_gives_the_slot_back(monkeypatch):
+  monkeypatch.setattr(worker.instrument_geometry, "same_direction_policy", lambda symbol: _policy(1))
+  client = redis_state.get_client()
+  await _executor_snapshot(client)
+  match = _scalp("terminal")
+  await _confirm_setup(client, match)
+  real = worker.load_setup
+
+  async def terminal(client_, setup_id):
+    record = await real(client_, setup_id)
+    return None if record is None else type(record)(**{**record.__dict__, "state": "invalidated"})
+
+  monkeypatch.setattr(worker, "load_setup", terminal)
+  assert await _publish(client, match) is None
+  assert await client.hlen(reservation_key("GBPUSD", "BUY")) == 0

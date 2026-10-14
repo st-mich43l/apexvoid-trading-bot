@@ -80,9 +80,9 @@ exposure:
     max_cumulative_risk: 30.0      # worst-case remaining loss, this direction, account currency
     max_symbol_risk: 60.0          # same, both directions
     risk_free_groups_count: true   # a group still counts toward max_groups after TP1/BE
-    duplicate_thesis_block: true   # no second group on the same thesis or structure id
-    strategy_overrides: {key_level: {max_groups: 2}}   # only where justified
-    reservation_ttl_seconds: 600
+    duplicate_thesis_block: true   # no second group on the same thesis or structure id (a live group's structure id comes from its published plan)
+    strategy_overrides: {key_level: {max_groups: 2}}   # only where justified; changes only the limits it declares
+    reservation_ttl_seconds: 600   # at least 180 (the dead-plan grace is 90 s)
     snapshot_max_age_seconds: 120
 ```
 
@@ -93,7 +93,7 @@ cancelled, closed and rejected legs contribute nothing; a stop at or beyond brea
 counts); add the incoming group's planned loss (the executor's own sizing rule, equity table x risk multiplier, mirrored from
 `VolumePlanner.cs`); refuse on the first of: unknown exposure, duplicate thesis, group limit, direction budget, symbol budget.
 
-* **Unknown is never zero.** A stale or missing executor snapshot, an unreadable runtime state, a broker group with no runtime
+* **Unknown is never zero**, but it is not a verdict on the setup: an unknown refusal keeps the intent and looks again (a stale snapshot or an executor blip), where a limit refusal ends it. Sticky `recovery_required`/closed groups that the broker snapshot still lists are not live exposure. A stale or missing executor snapshot, an unreadable runtime state, a broker group with no runtime
   state, and (under a money limit) any group or incoming plan whose risk cannot be computed all refuse admission with
   `exposure_unknown`. A count-only policy still counts a group of unknown risk.
 * **No double counting.** Groups are keyed by plan/setup id: a plan listed twice, a reservation and its runtime state, and a
@@ -102,7 +102,7 @@ counts); add the incoming group's planned loss (the executor's own sizing rule, 
   caller measured and writes the reservation: two workers cannot both take the last slot (60 concurrent admissions, 3 slots, 3
   winners, on a real Redis). A repeated admission of the same setup (duplicate Kafka delivery) is idempotent.
 * **Lifecycle.** The reservation is released on every failure before the plan reaches the stream (lifecycle error, publish
-  exception, terminal setup); it is superseded as soon as the plan is visible in the executor runtime; it is dropped when the
+  exception, terminal setup); it stops being counted as soon as the plan is visible in the executor runtime (and is removed once old, if the runtime carries the plan's risk; an unsized plan keeps its planned risk from the reservation); it is dropped when the
   executor acked it `rejected`/`cancelled`/`expired`, or when the plan never reached the plan store within 90 s; and it expires
   at `reservation_ttl_seconds`, so a crashed worker holds a slot for at most ten minutes. If Redis cannot run the script,
   admission is refused (`group_exposure_reservation_unavailable`, intent retained), never allowed.
@@ -114,7 +114,8 @@ is a separate approval (broker executor semantics).
 
 ## 3. Policy comparison on the production groups
 
-Chronological replay of the groups production admitted, using the same decision function the worker uses, with every blocked
+Chronological replay of the groups production admitted, using `evaluate_group_exposure`, the executable specification of the admission
+script (the worker's authority is the Lua script; a randomised test of 120 books, with thesis collisions, asserts the two agree), with every blocked
 group **removed from the book** so later decisions see the exposure that policy would really have produced
 (`algo-bot/tools/exposure_policy_replay.py`; results `same-direction-exposure-policy-results.json`). A: current unlimited
 stacking. B: one group per symbol and direction. C: two groups and a $55 direction budget. D: one group per structure id and an
@@ -148,7 +149,7 @@ $80 symbol ceiling. Planned risk is held for the whole life of a group (no credi
 | C_two_groups_budget | 35 | 3 (3W / 0L) | 2 | $47 | 3 | $-111 | $+271 | $+55 |
 | D_one_per_thesis_symbol_ceiling | 38 | 0 (0W / 0L) | 3 | $64 | 3 | $-111 | $+326 | $+0 |
 
-**USDJPY, 10-14 Oct (held-out half)**
+**USDJPY, 10-14 Oct (later half; contains the incident, so not a clean hold-out)**
 
 | Policy | Allowed | Blocked | Peak groups | Peak planned risk | Correlated stop clusters | Cluster loss | Derived P&L, allowed | Derived P&L, blocked |
 |---|---|---|---|---|---|---|---|---|
@@ -207,8 +208,9 @@ Reading it:
 * **The incident.** B would have admitted the first SELL and refused the next three on 12 Oct, and the second of each 13 Oct
   pair: six USDJPY groups, all losers (derived -$86 avoided of -$115), no correlated clusters, one group at risk at a time.
 * **It is a concentration control, not an expectancy improver.** Over the whole fortnight B on USDJPY is roughly neutral
-  (+$20) because it also removed seven winners: on the earlier half (5-9 Oct) B *cost* $78 (blocked 7W/5L); on the held-out
-  half (10-14 Oct) it saved $98 (blocked 0W/7L). Do not read the incident as proof that stacking loses.
+  (+$20) because it also removed seven winners: on the earlier half (5-9 Oct) B *cost* $78 (blocked 7W/5L); on the later
+  half (10-14 Oct) it saved $98 (blocked 0W/7L), but that half contains the incident that motivated the policy, so it is not a clean
+  hold-out. Do not read the incident as proof that stacking loses.
 * **It must not be applied globally.** On EURUSD one group per direction would have blocked 17 groups (14 winners, 3 losers; +$288 derived); on XAU the
   $55 budget of C is absurd (XAU groups risk up to about $120 each) and removes groups worth a net +$2.4k. Budgets are instrument-sized
   amounts, never a shared number. D's symbol ceiling and thesis block are inert on USDJPY because the thesis ids differ,

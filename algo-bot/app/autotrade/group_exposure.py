@@ -43,7 +43,7 @@ from __future__ import annotations
 import json
 import logging
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, Iterable
 
@@ -373,6 +373,7 @@ async def load_symbol_exposure(
   plan_ids = [item.strip() for item in text.split(",") if item.strip()]
   states = await _mget_or_get(client, [f"execution:plan_runtime:{plan_id}" for plan_id in plan_ids])
   seen: set[str] = set()
+  ignored: set[str] = set()
   for plan_id, raw in zip(plan_ids, states, strict=False):
     if not raw:
       continue
@@ -391,6 +392,9 @@ async def load_symbol_exposure(
     group_stage = str(_payload_get(payload, "group_stage", "GroupStage") or "")
     terminal = str(_payload_get(payload, "terminal_reason", "TerminalReason") or "")
     if _is_non_live_trade_plan(stage=stage, group_stage=group_stage, terminal_reason=terminal):
+      # Sticky recovery_required / closed groups stay in the broker snapshot's list but are
+      # not live exposure: they must not read as a broker group the runtime cannot explain.
+      ignored.add(str(_payload_get(payload, "plan_id", "PlanId") or plan_id))
       continue
     pending = stage in _PENDING_TRADE_PLAN_STAGES or group_stage in _PENDING_TRADE_PLAN_GROUP_STAGES
     opened = stage in _OPEN_TRADE_PLAN_STAGES or group_stage in _OPEN_TRADE_PLAN_GROUP_STAGES
@@ -427,9 +431,10 @@ async def load_symbol_exposure(
       highest_booked_target_index=booked,
       remaining_lots=lots,
     ))
+  await _enrich_from_plans_and_reservations(client, exposure)
   # A broker group the runtime cannot account for is live exposure of unknown
   # size and direction.
-  for group_id in sorted(snapshot_groups - seen):
+  for group_id in sorted(snapshot_groups - seen - ignored):
     exposure.groups.append(GroupExposure(
       plan_id=group_id,
       setup_id=_setup_id(group_id),
@@ -445,6 +450,35 @@ async def load_symbol_exposure(
 # ---------------------------------------------------------------------------
 # Pure decision
 # ---------------------------------------------------------------------------
+
+
+async def _enrich_from_plans_and_reservations(client: Any, exposure: SymbolExposure) -> None:
+  """Fill what the runtime state does not carry.
+
+  The structure id lives only in the published plan; an unsized plan (the executor has
+  accepted it but not yet sized or filled it) has no readable risk in the runtime, so the
+  risk planned at admission, held in the reservation, stands for it.
+  """
+  runtime = [g for g in exposure.groups if g.source == "runtime"]
+  if not runtime:
+    return
+  raws = await _mget_or_get(client, [f"execution:plan:{g.plan_id}" for g in runtime])
+  reservations = await _read_reservations(client, exposure.symbol)
+  enriched: list[GroupExposure] = []
+  for group, raw in zip(runtime, raws, strict=False):
+    structural = group.structural_id
+    if raw:
+      try:
+        plan = json.loads(raw.decode() if isinstance(raw, bytes) else str(raw))
+        structural = str((plan.get("source_structure") or {}).get("structure_id") or "") or structural
+      except (TypeError, ValueError, AttributeError, json.JSONDecodeError):
+        pass
+    risk, basis = group.risk_amount, group.risk_basis
+    held = reservations.get(group.setup_id)
+    if risk is None and held is not None and held[1].risk_amount is not None:
+      risk, basis = held[1].risk_amount, "reservation"
+    enriched.append(replace(group, structural_id=structural, risk_amount=risk, risk_basis=basis))
+  exposure.groups = [g for g in exposure.groups if g.source != "runtime"] + enriched
 
 
 def _counts_toward_groups(policy: SameDirectionPolicy, group: GroupExposure) -> bool:
@@ -603,6 +637,7 @@ local thesis, structural, dup_block = ARGV[14], ARGV[15], ARGV[16] == '1'
 local rt_thesis, rt_struct = ARGV[17], ARGV[18]
 local ttl = tonumber(ARGV[19])
 local record = ARGV[20]
+local prune = ARGV[21]
 local money = (max_cum >= 0) or (max_sym >= 0)
 
 local function parse(value)
@@ -620,8 +655,16 @@ local function scan(key, same)
     local field, value = flat[i], flat[i + 1]
     local f = parse(value)
     local expires = tonumber(f[1]) or 0
-    if expires <= now or string.find(known, ',' .. field .. ',', 1, true) or string.find(dead, ',' .. field .. ',', 1, true) then
+    local created = tonumber(f[2]) or 0
+    local in_runtime = string.find(known, ',' .. field .. ',', 1, true)
+    -- A reservation the caller's runtime read already shows is counted through the
+    -- runtime. It is removed only once it is old and the runtime carries its risk: a
+    -- worker with a stale read must still find it, or two groups could take one slot.
+    if expires <= now or string.find(dead, ',' .. field .. ',', 1, true)
+       or (in_runtime and string.find(prune, ',' .. field .. ',', 1, true) and now - created > 30) then
       redis.call('HDEL', key, field)
+    elseif in_runtime then
+      -- counted through the runtime
     elseif field ~= setup_id then
       local risk = tonumber(f[3]) or -1
       if same then res_groups = res_groups + 1 end
@@ -689,7 +732,7 @@ async def _read_reservations(client: Any, symbol: str) -> dict[str, tuple[str, G
   return out
 
 
-_DEAD_ACK_STATES = frozenset({"rejected", "cancelled", "expired", "failed"})
+_DEAD_ACK_STATES = frozenset({"rejected", "cancelled", "expired", "failed", "completed", "closed"})
 
 
 async def _plan_is_dead(client: Any, plan_id: str, created: int | None, now: int) -> bool:
@@ -734,6 +777,7 @@ async def reserve_group_slot(
   same = [g for g in runtime if _same_side(g, direction)]
   counted = [g for g in same if _counts_toward_groups(policy, g)]
   known = sorted({g.setup_id for g in runtime})
+  prune = sorted({g.setup_id for g in runtime if g.risk_basis == "runtime" or limits.max_cumulative_risk is None and limits.max_symbol_risk is None})
 
   # Reservations whose plan never reached the stream are dead weight: free them
   # before counting (their TTL is the backstop).
@@ -765,6 +809,7 @@ async def reserve_group_slot(
     "," + ",".join(g.structural_id for g in same if g.structural_id) + ",",
     policy.reservation_ttl_seconds,
     _encode(now + policy.reservation_ttl_seconds, now, incoming.risk_amount, incoming),
+    "," + ",".join(prune) + ",",
   ]
   key_same = reservation_key(incoming.symbol, direction)
   key_other = reservation_key(incoming.symbol, _SELL if direction == _BUY else _BUY)

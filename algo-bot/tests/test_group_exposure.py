@@ -2,7 +2,7 @@
 
 Incident: production 2026-10-12 USDJPY, four Range Edge Scalp SELLs admitted
 between 06:51 and 09:01 against one rising resistance. See
-docs/strategies/same-direction-exposure-incident.md.
+docs/risk/same-direction-exposure-incident.md.
 """
 
 from __future__ import annotations
@@ -476,7 +476,11 @@ async def test_a_reservation_is_not_counted_twice_once_the_plan_is_in_the_runtim
   )
   assert second.allowed, second  # one live group + the new one = 2 <= 2, not 3
   assert second.measured["same_direction_groups"] == 1
-  assert await client.hlen(reservation_key("USDJPY", "SELL")) == 1  # the superseded one was pruned
+  # the superseded reservation is not counted, and is removed only once it is old
+  assert await client.hlen(reservation_key("USDJPY", "SELL")) == 2
+  await _seed_snapshot(client, groups=["v8:one"], now=NOW + 90)
+  await admit_group(client, policy=_policy(max_groups=2), incoming=_incoming("three", thesis="t3", structural="s3"), units=USDJPY, now=NOW + 90)
+  assert "one" not in await client.hkeys(reservation_key("USDJPY", "SELL"))
 
 
 @pytest.mark.asyncio
@@ -594,12 +598,12 @@ async def test_the_script_and_the_pure_decision_agree_on_random_books():
     for index in range(rng.randint(0, 4)):
       direction = rng.choice(["BUY", "SELL"])
       risk = rng.choice([None, 0.0, 10.0, 20.0, 35.0])
-      state = _state(f"g{index}", direction=direction, thesis=f"gt{index}", fill=158.40 if direction == "SELL" else 158.20,
+      state = _state(f"g{index}", direction=direction, thesis=f"gt{index % 2}", fill=158.40 if direction == "SELL" else 158.20,
                      stop=158.58 if direction == "SELL" else 158.02, lots=rng.choice([0.05, 0.11, 0.2]))
       if rng.random() < 0.5:
         groups.append(state)
       else:
-        reservations.append((f"r{index}", direction, risk, f"rt{index}"))
+        reservations.append((f"r{index}", direction, risk, f"rt{index % 2}"))
     snapshot_ids = [state["PlanId"] for state in groups]
     await _seed_snapshot(client, groups=snapshot_ids)
     if groups:
@@ -615,7 +619,7 @@ async def test_the_script_and_the_pure_decision_agree_on_random_books():
     if policy.limits.max_groups is None and policy.limits.max_cumulative_risk is None and policy.limits.max_symbol_risk is None:
       continue
     incoming = _incoming("new", direction=rng.choice(["BUY", "SELL"]), risk=rng.choice([None, 10.0, 30.0]),
-                         thesis="tnew", structural="snew")
+                         thesis=rng.choice(["tnew", "gt0", "gt1", "rt0", "rt1"]), structural=rng.choice(["snew", "rs-r0", "rs-r1"]))
 
     exposure = await ge.load_symbol_exposure(client, symbol="USDJPY", units=USDJPY, policy=policy, now=NOW)
     pure_groups = list(exposure.groups) + [
@@ -656,6 +660,7 @@ def test_a_declared_policy_is_parsed_strictly():
 @pytest.mark.parametrize(
   "bad",
   [
+    {"max_groups": 1, "reservation_ttl_seconds": 120},  # shorter than the dead-plan grace plus a margin
     {},
     {"max_groups": 0},
     {"max_groups": True},
@@ -705,3 +710,117 @@ async def test_the_script_is_atomic_on_a_real_redis_under_real_concurrency():
   finally:
     await client.flushdb()
     await client.aclose()
+
+
+# ---------------------------------------------------------------------------
+# Defects found by the independent review (each reproduced before it was fixed)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_worker_with_a_stale_runtime_read_cannot_take_a_slot_another_worker_just_filled():
+  """W1 read the runtime before plan P was visible; W2's admission must not delete P's reservation."""
+  client = _client()
+  await _seed_snapshot(client)
+  assert (await admit_group(client, policy=_policy(), incoming=_incoming("p"), units=USDJPY, now=NOW)).allowed
+  stale = await ge.load_symbol_exposure(client, symbol="USDJPY", units=USDJPY, policy=_policy(), now=NOW)
+  assert stale.groups == []  # W1's picture: P is not in the runtime yet
+  await _seed_snapshot(client, groups=["v8:p"], now=NOW + 2)
+  await _seed_runtime(client, _state("p", thesis="thesis-new"))
+  fresh = await admit_group(client, policy=_policy(), incoming=_incoming("q", thesis="tq", structural="sq"), units=USDJPY, now=NOW + 3)
+  assert not fresh.allowed and fresh.reason_code == SAME_DIRECTION_GROUP_LIMIT
+  late = await ge.reserve_group_slot(
+    client, policy=_policy(), incoming=_incoming("r", thesis="tr", structural="sr"), exposure=stale, now=NOW + 4,
+  )
+  assert not late.allowed, "the stale worker found the slot free: two groups under max_groups=1"
+
+
+@pytest.mark.asyncio
+async def test_a_plan_the_executor_has_accepted_but_not_sized_keeps_its_planned_risk():
+  """A Received plan has no volume in the runtime: the risk planned at admission stands for it."""
+  client = _client()
+  await _seed_snapshot(client, now=NOW)
+  policy = _policy(max_groups=None, cum=60.0)
+  assert (await admit_group(client, policy=policy, incoming=_incoming("p", risk=25.0), units=USDJPY, now=NOW)).allowed
+  unsized = _state("p", stage="Received", group_stage="received", lots=0)
+  for key in ("TotalIntendedVolume", "TotalFilledVolume", "RemainingVolume"):
+    unsized[key] = 0
+  await _seed_snapshot(client, groups=["v8:p"], now=NOW + 40)
+  await _seed_runtime(client, unsized)
+  second = await admit_group(client, policy=policy, incoming=_incoming("q", risk=30.0, thesis="tq", structural="sq"), units=USDJPY, now=NOW + 40)
+  assert second.allowed, second  # 25 + 30 <= 60: not exposure_unknown
+  over = await admit_group(client, policy=policy, incoming=_incoming("r", risk=30.0, thesis="tr", structural="sr"), units=USDJPY, now=NOW + 41)
+  assert not over.allowed and over.reason_code == SAME_DIRECTION_RISK_BUDGET
+  assert "p" in await client.hkeys(reservation_key("USDJPY", "SELL")), "its reservation is the only record of its risk"
+
+
+@pytest.mark.asyncio
+async def test_a_sticky_recovery_required_group_is_not_a_broker_group_the_runtime_cannot_explain():
+  client = _client()
+  await _seed_snapshot(client, groups=["v8:rec"])
+  await _seed_runtime(client, _state("rec", group_stage="recovery_required"))
+  exposure = await _load(client)
+  assert exposure.groups == [] and not exposure.unknown_reasons
+  assert (await admit_group(client, policy=_policy(), incoming=_incoming("a"), units=USDJPY, now=NOW)).allowed
+
+
+@pytest.mark.asyncio
+async def test_the_structure_of_a_live_group_comes_from_its_plan_and_blocks_a_duplicate():
+  client = _client()
+  await _seed_snapshot(client, groups=["v8:a"])
+  await _seed_runtime(client, _state("a", thesis="other"))
+  await client.set("execution:plan:v8:a", json.dumps({"source_structure": {"structure_id": "range:resistance:1791782100"}}))
+  decision = await admit_group(
+    client, policy=_policy(max_groups=5), incoming=_incoming("b", thesis="t2", structural="range:resistance:1791782100"), units=USDJPY, now=NOW,
+  )
+  assert not decision.allowed and decision.reason_code == SAME_THESIS_ACTIVE
+
+
+def test_a_strategy_override_changes_only_the_limits_it_declares():
+  policy = _policy(max_groups=1, cum=40.0, strategy_overrides=(("key_level", SameDirectionLimits(max_groups=2)),))
+  merged = policy.limits_for("Key Level")
+  assert merged == SameDirectionLimits(max_groups=2, max_cumulative_risk=40.0, max_symbol_risk=None)
+  assert policy.limits_for("Range Edge Scalp") == policy.limits
+
+
+@pytest.mark.asyncio
+async def test_a_plan_that_already_closed_frees_its_slot():
+  """It stopped out before any admission scan saw it live: its ack says so."""
+  client = _client()
+  await _seed_snapshot(client, now=NOW)
+  assert (await admit_group(client, policy=_policy(), incoming=_incoming("a"), units=USDJPY, now=NOW)).allowed
+  await client.set("execution:plan:v8:a", "{}")
+  await client.set("execution:plan_ack:v8:a", json.dumps({"state": "completed"}))
+  await _seed_snapshot(client, now=NOW + 300)
+  after = await admit_group(client, policy=_policy(), incoming=_incoming("b", thesis="t2", structural="s2"), units=USDJPY, now=NOW + 300)
+  assert after.allowed
+
+
+def test_a_leg_closed_in_part_counts_its_remaining_volume_not_the_filled_volume():
+  legs = [{"LegId": "L1", "Stage": "managing", "IntendedVolume": 2_000_000, "FilledVolume": 2_000_000,
+           "RemainingVolume": 1_000_000, "FillPrice": 158.40, "IntendedPrice": 158.40}]
+  risk, lots = _risk(_state(stop=158.58, legs=legs))
+  assert lots == pytest.approx(0.10)
+  assert risk == pytest.approx(0.10 * 18 * 6.27)
+
+
+@pytest.mark.asyncio
+async def test_two_admissions_of_one_thesis_are_one_group_even_with_room():
+  client = _client()
+  await _seed_snapshot(client)
+  policy = _policy(max_groups=5)
+  assert (await admit_group(client, policy=policy, incoming=_incoming("a", thesis="same", structural="s1"), units=USDJPY, now=NOW)).allowed
+  second = await admit_group(client, policy=policy, incoming=_incoming("b", thesis="same", structural="s2"), units=USDJPY, now=NOW + 1)
+  assert not second.allowed and second.reason_code == SAME_THESIS_ACTIVE
+  third = await admit_group(client, policy=policy, incoming=_incoming("c", thesis="t3", structural="s1"), units=USDJPY, now=NOW + 2)
+  assert third.reason_code == SAME_THESIS_ACTIVE
+
+
+@pytest.mark.asyncio
+async def test_a_strategy_override_still_carries_the_instruments_money_cap():
+  client = _client()
+  await _seed_snapshot(client)
+  policy = _policy(max_groups=1, cum=30.0, strategy_overrides=(("key_level", SameDirectionLimits(max_groups=3)),))
+  assert (await admit_group(client, policy=policy, incoming=_incoming("a", strategy="Key Level", risk=20.0), units=USDJPY, now=NOW)).allowed
+  over = await admit_group(client, policy=policy, incoming=_incoming("b", strategy="Key Level", risk=20.0, thesis="t2", structural="s2"), units=USDJPY, now=NOW + 1)
+  assert not over.allowed and over.reason_code == SAME_DIRECTION_RISK_BUDGET
