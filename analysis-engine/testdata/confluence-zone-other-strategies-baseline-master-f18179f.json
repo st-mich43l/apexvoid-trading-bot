@@ -1,126 +1,26 @@
 {
  "replay-eurusd-production-capture-20261013.json": {
-  "candidates": 4823,
-  "per_strategy": {
-   "box_breakout": 13,
-   "break_retest": 13,
-   "crt": 3,
-   "demand": 1496,
-   "fade_scalp": 32,
-   "flip_zone": 33,
-   "fvg": 613,
-   "ifvg": 5,
-   "key_level": 813,
-   "liquidity_sweep": 2,
-   "momentum_ride": 7,
-   "order_block": 287,
-   "session_level": 16,
-   "snap_back": 7,
-   "supply": 1483
-  },
-  "sha256": "b139775fdeb050854d5876949b1c4b3c761a5d76e1f84a5c1b24902d9f1d9207"
+  "candidates": 4666,
+  "sha256": "0791d123315b38d0b40eb62f8988702ad75f715be4afa0f514a882da55de4e31"
  },
  "replay-gbpjpy-production-capture-20261013.json": {
-  "candidates": 4661,
-  "per_strategy": {
-   "box_breakout": 10,
-   "break_retest": 16,
-   "crt": 3,
-   "demand": 1863,
-   "fade_scalp": 32,
-   "flip_zone": 11,
-   "fvg": 359,
-   "ifvg": 58,
-   "liquidity_sweep": 8,
-   "momentum_ride": 5,
-   "order_block": 467,
-   "session_level": 9,
-   "supply": 1820
-  },
-  "sha256": "4a8ead46742bbe5bcc86cfcc4ce192cfa383aef48538aa0fe66ff3f3e9f17e05"
+  "candidates": 4378,
+  "sha256": "37c9cb8a3c46acba538e3a7302deb8c702611b0417373388f667f1692a45d086"
  },
  "replay-gbpusd-production-capture-20261013.json": {
-  "candidates": 6380,
-  "per_strategy": {
-   "box_breakout": 10,
-   "break_retest": 10,
-   "demand": 2111,
-   "fade_scalp": 48,
-   "flip_zone": 23,
-   "fvg": 570,
-   "ifvg": 35,
-   "key_level": 1044,
-   "liquidity_sweep": 2,
-   "momentum_ride": 3,
-   "order_block": 425,
-   "session_level": 25,
-   "snap_back": 5,
-   "supply": 2063,
-   "trendline": 6
-  },
-  "sha256": "df8d09bba9f36e6aeb8d40a9eb0b5026bb6220a55db0d170e92edb0b36e8321d"
+  "candidates": 6091,
+  "sha256": "570b81c8ddc0bbb9b2242441de895c86fa7db4cf7ff6d096ff9dc201df30ccc1"
  },
  "replay-usdjpy-production-capture-20261013.json": {
-  "candidates": 6437,
-  "per_strategy": {
-   "box_breakout": 9,
-   "break_retest": 16,
-   "demand": 1891,
-   "fade_scalp": 39,
-   "flip_zone": 21,
-   "fvg": 486,
-   "ifvg": 24,
-   "key_level": 954,
-   "liquidity_sweep": 2,
-   "momentum_ride": 4,
-   "order_block": 456,
-   "session_level": 21,
-   "snap_back": 2,
-   "supply": 2510,
-   "trendline": 2
-  },
-  "sha256": "63f902cef7a3a88c1e2365ffb5b49084d158ce529fcfee656409a4f3e4da89f4"
+  "candidates": 6240,
+  "sha256": "ac8447a966a428d1dd5afbe01af15aac184116751120de5824239cb0f33b7cf9"
  },
  "replay-xau-production-capture-20260921.json": {
-  "candidates": 2599,
-  "per_strategy": {
-   "box_breakout": 10,
-   "break_retest": 3,
-   "crt": 3,
-   "demand": 768,
-   "fade_scalp": 18,
-   "flip_zone": 43,
-   "fvg": 245,
-   "ifvg": 17,
-   "key_level": 679,
-   "liquidity_sweep": 2,
-   "momentum_ride": 10,
-   "order_block": 156,
-   "session_level": 10,
-   "snap_back": 7,
-   "supply": 625,
-   "trendline": 3
-  },
-  "sha256": "8a6b733699f60014daf6fdef50185019bd18e3daf91b3897a61e1490bb8fd475"
+  "candidates": 2508,
+  "sha256": "1058eecd1258fd911f3bf84906db407564ffc66f9255fab305a0793b8f05c716"
  },
  "replay-xau-production-capture-20261013.json": {
-  "candidates": 4821,
-  "per_strategy": {
-   "box_breakout": 9,
-   "break_retest": 2,
-   "demand": 1374,
-   "fade_scalp": 47,
-   "flip_zone": 27,
-   "fvg": 369,
-   "ifvg": 50,
-   "key_level": 1100,
-   "liquidity_sweep": 3,
-   "momentum_ride": 4,
-   "order_block": 224,
-   "session_level": 30,
-   "snap_back": 29,
-   "supply": 1553
-  },
-  "sha256": "c1f486a26c71870f5537e4a0e85bc0b06aa6cb7e64d74637f0c8afbb89fb5b96"
+  "candidates": 4557,
+  "sha256": "115ebbb7ed9474137b9ab4a71ddb2cfb7e99f1c77bc332992a5d83e7cb907f78"
  }
 }

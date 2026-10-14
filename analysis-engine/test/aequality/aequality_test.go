@@ -524,3 +524,27 @@ func TestTrendlineTargetIsAnOpposingLiquidityAtLeastOneATR(t *testing.T) {
 	}
 	t.Logf("trendline v4 setups in the captures: %d", published)
 }
+
+// TestSupplyDemandZonesAreNotSpent pins Supply and Demand v3: a confirmed reaction on a zone already touched
+// more than maximum_zone_touches (2) times does not publish. Zones touched three or more times averaged
+// -0.06R/-0.21R (supply) and -0.31R/-0.39R (demand) in the dev and out-of-sample halves.
+func TestSupplyDemandZonesAreNotSpent(t *testing.T) {
+	confirmed := 0
+	for _, r := range replayAll(t) {
+		if (r.Strategy != "supply" && r.Strategy != "demand") || !r.HasReaction {
+			continue
+		}
+		confirmed++
+		touches, ok := r.Factors["touches"].(int)
+		if !ok {
+			t.Fatalf("%s %s: no touches factor", r.Strategy, r.ID)
+		}
+		if touches > 2 {
+			t.Errorf("%s %s %s: published on a zone touched %d times", r.Symbol, r.Strategy, r.ID, touches)
+		}
+	}
+	if confirmed == 0 {
+		t.Fatal("no confirmed supply or demand setup in the captures")
+	}
+	t.Logf("confirmed supply/demand setups: %d", confirmed)
+}

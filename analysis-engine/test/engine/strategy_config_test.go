@@ -30,9 +30,11 @@ func TestStrategyConfigsFromConfigEnablesTheCompleteCatalogForShadow(t *testing.
 	// reaction models, honest geometry).
 	// Trendline v4: the target is the nearest opposing liquidity, never a projection.
 	v4 := map[string]bool{"session_level": true, "trendline": true}
+	// Supply and Demand v3: a zone touched more than maximum_zone_touches times no longer publishes.
+	v3 := map[string]bool{"supply": true, "demand": true}
 	for _, cfg := range configs {
 		want := "v2"
-		if rebuilt[string(cfg.ID)] {
+		if rebuilt[string(cfg.ID)] || v3[string(cfg.ID)] {
 			want = "v3"
 		}
 		if v4[string(cfg.ID)] {
