@@ -56,6 +56,9 @@ type LegacyFrame struct {
 	Barriers   []techniquezone.ScalpBarrier
 	ScalpRange *techniquezone.ScalpRange
 	ScalpState string
+	// ScalpBroken are the edges price accepted through inside the lookback (see
+	// techniquezone.BrokenBarrier): the structure the range builder discarded.
+	ScalpBroken []techniquezone.BrokenBarrier
 	// Techniques lazily yields the technique instances (supply/demand, order
 	// block, FVG, iFVG and CRT) the frozen detectors publish from. The
 	// execution timeframe's frame yields all of them; every other frame yields

@@ -13,6 +13,17 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
+- Range Edge Scalp v3 (`docs/strategies/range_edge.md`): the edge a fade trades must still be a range edge. The scalp
+  structure builder now keeps the barriers it discards because price accepted through them (`ScalpStructure.Broken`;
+  the barriers and range are unchanged), and Range Edge refuses a fade of an edge at or beyond an outermost broken edge of its
+  side unless price reclaimed it (`reclaim_closes`) or a new range formed after the break, refuses while price is still beyond
+  the edge or pressing it (`pressure_bars`, `pressure_minimum_rise_atr`, `rejection_close_strength`), requires the confirming candle to close back inside,
+  fails closed on a gap in the reaction window, and names a range re-established after a break by that break (`range:<side>:break:<time>`; not stable across
+  window slides, documented). Stops the 12 Oct USDJPY staircase (three of its five admitted SELLs) at the source.
+  New required parameters in `config/analysis.yml`; opportunity IDs change with the version; `Quality.Overall` and the
+  candidate contract are unchanged (three measured quality components added). `range_edge` left the Python parity oracle (its
+  v2 decisions are reproduced by replay in the certification that follows); the Confluence Zone replay certification no
+  longer counts Range Edge among "the other strategies" and its other-strategies baseline excludes it. **Not deployed.**
 - Confluence Zone (`confluence_zone`) is rebuilt as v3 (`docs/strategies/confluence_zone.md`,
   `docs/strategies/confluence-zone-v3-technical-spec.md`), replacing the Python-parity v2 whose forensic audit
   (`docs/strategies/confluence-zone-xau-forensic-audit.md`) found that `minimum_facts = 2` counted labels, the entry
@@ -41,6 +52,12 @@ dated section after deployment.
   direction with release on failure, supersession by the executor runtime and a TTL. **No instrument declares the policy in the
   committed config, so live behaviour is unchanged**; the proposed USDJPY `max_groups: 1` is an unapplied patch for owner
   review (`docs/risk/same-direction-exposure-usdjpy.patch`). Adds `lupa` to the dev requirements (the script tests run on fakeredis).
+- Range Edge v3 replay certification (`analysis-engine/test/rereplay`, `docs/strategies/range-edge-v3-certification.md`,
+  `range-edge-v3-replay-results.json`): test harness, the v2 baseline of what master published on the six committed production
+  captures, and generated evidence only; no behaviour change. Reproduces the 12 Oct USDJPY opportunities id for id, shows v3 refusing
+  the continuation of the accepted break (and one winner), shows no demonstrated change in expectancy, asserts every other
+  strategy's candidates equal master's, and records two adversarial review passes per PR with what was fixed and what is only
+  stated. Includes the deployment and rollback preparation for the same-direction exposure policy and Range Edge v3. **Not deployed.**
 - Confluence Zone v3, part C: replay certification (`analysis-engine/test/czreplay`, `docs/strategies/confluence-zone-v3-certification.md`,
   `-replay-results.json`, `-sensitivity.json`). Test harness, committed production captures and generated evidence only: no strategy,
   config, sizing, arbitration or enablement behaviour changes. It replays XAU and four FX pairs through the engine path with four models (legacy

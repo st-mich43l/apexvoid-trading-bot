@@ -513,8 +513,24 @@ analysis:
       approach_min_distance_atr: 0.10
       maximum_bars_since_last_touch: 30
     range_edge:
-      version: v2
+      # v3: technical integrity of the edge (docs/strategies/range_edge.md). A fade is
+      # refused once the market accepted through the edge it would trade (break_closes
+      # closes beyond it), including any edge the sliding lookback rebuilds beyond
+      # it, until price reclaims it (reclaim_closes closes back inside) or a new range
+      # forms after the break (both edges touched after it, minimum_inside_closes
+      # closes inside); and while price presses the edge (pressure_bars candles with
+      # higher lows and closes, rising at least pressure_minimum_rise_atr). The
+      # coefficients are shared conventions (the mirror of break_closes, the
+      # lookbacks above), not fitted to any trade.
+      version: v3
       enabled: true
+      reclaim_closes: 2
+      pressure_bars: 4
+      pressure_minimum_rise_atr: 1.0
+      minimum_reclaim_atr: 0.0
+      # a candle closing this far from the edge (1 = at the extreme away from it) is a
+      # rejection whatever the approach, never pressure
+      rejection_close_strength: 0.6
       lookback_bars: 48
       minimum_touches: 2
       minimum_wick_rejections: 1
