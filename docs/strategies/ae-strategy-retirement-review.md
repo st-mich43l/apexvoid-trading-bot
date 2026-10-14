@@ -24,48 +24,42 @@ contract.
 
 ## The retirement procedure
 
-Each step is reversible by the one before it, and each needs its own owner approval.
+Owner rule (2026-10-14): **retired means removed, not disabled.** A RETIRE outcome deletes, in
+one PR the owner can review and revert:
 
-1. **Contain (observe-only).** Add the strategy to the instrument's
-   `execution.go_opportunity.observe_only_strategies` in `config/instruments.yml`. The
-   strategy keeps publishing, journalling and being measured; no new TradePlan is built.
-   Containment is read at match creation and again at plan admission, so it stops *new* plans
-   only and does not cancel, modify or close anything already published or open
-   (stated in the comment on that list in `config/instruments.yml`; this audit did not
-   re-test it). Precedent: `impulse_pullback`, `liquidity_sweep`, and the earlier `ifvg` and
-   `session_level` containment. Rollback: remove the name.
-2. **Soak.** At least two weeks of observation with the same replay and production export,
-   comparing the contained strategy's would-be outcomes. If the evidence reverses, stop here.
-3. **Disable publication.** `enabled: false` in `config/analysis.yml`. The registry builds only
-   enabled strategies, so it stops publishing. The catalog entry
-   (`algo-bot/app/autotrade/strategy_catalog.py`), the provenance decoder
-   (`algo-bot/app/analysis_client/provenance.py`) and every ledger row stay, so old trades
-   and journals still decode and attribute to the strategy. Mark the strategy's spec
-   `RETIRED` and keep it listed.
-4. **Delete code (separate PR, later).** Only after the above has soaked and the owner asks.
-   Trade data is never deleted.
+1. the Go package, its registry/factory entry, stop-envelope, instrument-policy and MAD entries;
+2. its `config/analysis.yml` entry and every config leaf only it read;
+3. the Python catalog id, scope, display name, aliases, execution profile and trigger labels;
+4. the executor's name lists;
+5. its specification, tests, fixtures, parity oracles and generators;
+6. every count that said how many strategies there are.
 
-The requirement that an old event cannot create a new plan after step 1 is **not verified by
-this audit**: the config comment says containment is read at match creation and again at plan
-admission, which should cover it, but the first retirement PR must add a test that an
-opportunity published before containment is refused at admission, and that a journal row of
-the retired strategy still decodes.
+Not removed: rows already in the ledger and fixtures that record production history, and dated
+audit documents. Nothing in the code reads the retired name afterwards; an unknown historical
+name resolves to nothing and is treated as unknown. A restriction (observe-only on an instrument)
+is a different outcome and stays reversible by removing a name from
+`execution.go_opportunity.observe_only_strategies`.
+
+Before deploying a removal, close any open plan of that strategy: the executor manages a plan by
+its strategy name, so a plan open at the moment of the deploy would lose its scalp handling.
 
 ## Status
 
-- 2026-10-14: the owner approved retiring Range Sweep (item 1). **Step 1 (contain on XAU) is a
-  separate PR, not yet merged**; patch A no longer lists `range_sweep` once that merges. Step 3
-  (`enabled: false`, patch B) waits for the two-week soak and a second approval to proceed.
-- Items 2 to 9 are not yet approved.
+- 2026-10-14: the owner approved retiring Range Sweep (item 1) and set the rule that **a retired
+  strategy is removed, not disabled**: code, config leaves, tests, fixtures, oracle data and its
+  specification all go. Range Sweep was removed in one PR (#779; replaces the earlier "contain, soak,
+  disable" plan). Production-data fixtures
+  (`tests/fixtures/exposure_groups_*.json`, the dated audit documents and result files) still
+  name it because they record what happened; nothing in the code reads the name.
+- Items 2 to 9 are not yet approved. When one is, a RETIRE outcome means removal under the same rule.
 
 ## Proposals
 
-Every row needs explicit owner approval. Patch A applies step 1 to all restrictions; patch B
-is step 3 for Range Sweep only.
+Every row needs explicit owner approval. Patch A applies the observe-only restrictions in rows 2 to 6.
 
 | # | Strategy | Proposal | Scope | Evidence (hypothetical R unless stated; 95% interval) | Patch | Reversible |
 |---|---|---|---|---|---|---|
-| 1 | range_sweep | RETIRE | XAU (its only instrument) | Technical FAIL (see certification section 5). Production exit paths: 26 of 38 closed trades full stops, mean -0.41R to -0.37R, interval [-0.62, -0.11] | A (step 1), then B (step 3) | yes, until step 4 |
+| 1 | range_sweep | RETIRE (removed in #779) | XAU (its only instrument) | Technical FAIL (see certification section 5). Production exit paths: 26 of 38 closed trades full stops, mean -0.41R to -0.37R, interval [-0.62, -0.11] | n/a (code removal) | by reverting the PR |
 | 2 | range_edge | observe-only | EURUSD, GBPUSD, USDJPY, GBPJPY | Technical reward is 0.27-0.30x the 12-22 pip FX scalp stop in the median setup and shorter than it in 99-100% of setups. All-instrument replay -0.09R [-0.21, +0.02], OOS -0.25R [-0.40, -0.10]; production -0.19R [-0.50, +0.17] on 62 trades | A | yes |
 | 3 | confluence_zone | observe-only | XAU, GBPJPY | XAU -0.51R [-0.69, -0.29] n=52; GBPJPY -0.47R [-0.73, -0.08] n=55; all-instrument OOS -0.51R; the v3 certification already recommended XAU containment | A | yes |
 | 4 | order_block | observe-only | EURUSD, GBPJPY | EURUSD -0.48R [-0.83, -0.03] n=45; GBPJPY -0.38R [-0.74, -0.05] n=56 | A | yes |
@@ -73,11 +67,9 @@ is step 3 for Range Sweep only.
 | 6 | flip_zone | observe-only | XAU | -0.37R [-0.61, -0.08] n=40; FX flat to positive | A | yes |
 
 Patch A: [ae-containment-proposals.patch](ae-containment-proposals.patch) (`config/instruments.yml`
-only; each added name is commented as proposed). Patch B:
-[ae-range-sweep-retirement-step2.patch](ae-range-sweep-retirement-step2.patch) (one line in
-`config/analysis.yml`). Both apply cleanly (`git apply --check`); neither has been run
-against the Go, Python or .NET test suites, because applying an enablement change to the
-working tree was out of bounds for this audit. Run them before merging.
+only; each added name is commented as proposed). It applies cleanly (`git apply --check`) and has
+not been run against the Go, Python or .NET test suites, because applying an enablement change to
+the working tree was out of bounds for this audit. Run them before merging.
 
 Each restriction is a named instrument, never the whole strategy, because the replay
 intervals differ by instrument (for example Flip Zone is +0.32R on EURUSD, Order Block +0.07R
@@ -116,7 +108,7 @@ their evidence is insufficient either way. The next audit should be triggered by
 
 ## Owner approval checklist
 
-- [ ] 1. Retire Range Sweep: patch A rows for XAU, soak, then patch B.
+- [x] 1. Retire Range Sweep: approved and removed in #779.
 - [ ] 2. Range Edge observe-only on the four FX pairs.
 - [ ] 3. Confluence Zone observe-only on XAU and GBPJPY.
 - [ ] 4. Order Block observe-only on EURUSD and GBPJPY.

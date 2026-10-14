@@ -1,6 +1,6 @@
 # Strategy independence audit
 
-Principle: 21 strategies, 21 independent technical decisions. One shared
+Principle: 20 strategies, 20 independent technical decisions. One shared
 market-intelligence layer, one opportunity lifecycle, one execution authority. No
 strategy families.
 
@@ -15,7 +15,7 @@ the code before this change (`39272967`).
 | A technique's candidate removed by a Confluence Zone overlap | yes (`technique_decision.go`) | no |
 | Execution policy resolved through a family | yes (`execution_policy.py`, 9 family policies) | no: one catalog row per strategy |
 | Python behavior flags derived from a family | yes (`strategy_names.py`, `strategy_taxonomy.py`) | no: per-strategy flags |
-| Go stop envelope chosen by group sets | yes (`stop_envelope.go`) | no: declared per strategy, all 21 required |
+| Go stop envelope chosen by group sets | yes (`stop_envelope.go`) | no: declared per strategy, all 20 required |
 | Confirmation contract inferred from a family string | yes (`execution_confirmation.py`) | no: per-strategy field |
 | Trading decision reads the `strategy_family` label | several | none outside serialisation (test-enforced) |
 

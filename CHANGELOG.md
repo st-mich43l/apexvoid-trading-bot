@@ -13,10 +13,11 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
-- Range Sweep Scalp retirement, step 1 (owner-approved 2026-10-14; docs/strategies/ae-strategy-retirement-review.md): `range_sweep`
-  joins XAU's `observe_only_strategies`. It keeps publishing, journalling and being measured, but no TradePlan is built from it;
-  nothing already published or open is touched. Rollback is removing the name. Step 3 (`enabled: false`) follows a two-week soak.
-  The catalog entry, provenance decoding and all ledger rows stay.
+- Range Sweep Scalp removed (owner-approved 2026-10-14; a retired strategy is removed, not disabled). The Go package and
+  registry entry, `config/analysis.yml` entry and the scalp-book leaves only it read (`range_buy_maximum_position`,
+  `range_sell_minimum_position`, `trigger_maximum_age_bars`), the Python catalog id/scope/name/profile, the executor scalp-name
+  list, its spec, parity oracles and tests are gone; the catalog is 20 strategies. Closed XAU trades keep their ledger rows. Close any
+  open Range Sweep plan before deploying: the executor manages a plan by its strategy name. Evidence: docs/strategies/ae-quality-certification.md.
 
 ### Fixed
 - Executor `realized_pips` (`volume_weighted_pips`) now includes the stop-out loss. The broker-absent close handler zeroed a

@@ -421,7 +421,7 @@ def test_reaction_room_stop_missing_tp_falls_back_to_legacy_envelope():
 
 
 def test_scalp_stop_bounds_use_scalp_envelope_not_reaction_40_60():
-  """Dig 2026-08-25: Range Sweep Scalp used reaction 40–60 because
+  """Dig 2026-08-25: an M1 scalp used reaction 40–60 because
   uses_scalp_room_stop excluded M1 scalp strategies."""
   from types import SimpleNamespace
 
@@ -431,9 +431,9 @@ def test_scalp_stop_bounds_use_scalp_envelope_not_reaction_40_60():
     uses_scalp_room_stop,
   )
 
-  assert uses_scalp_room_stop("Range Sweep Scalp") is True
+  assert uses_scalp_room_stop("Impulse Pullback Scalp") is True
   assert uses_scalp_room_stop("Breakout Retest Scalp") is True
-  assert uses_scalp_room_stop("Range Sweep Scalp") is True
+  assert uses_scalp_room_stop("Impulse Pullback Scalp") is True
   assert uses_scalp_room_stop("Breakout Retest Scalp") is True
   assert uses_scalp_room_stop("Key Level") is False
 
@@ -459,10 +459,10 @@ def test_scalp_stop_bounds_use_scalp_envelope_not_reaction_40_60():
     for_instrument=None,
   )
   assert stop_bounds_for_strategy(
-    strategy="Range Sweep Scalp", pip_size=0.1, cfg=cfg,
+    strategy="Impulse Pullback Scalp", pip_size=0.1, cfg=cfg,
   ) == (12, 30)
   minimum, maximum, measured = stop_bounds_for_reaction_room(
-    strategy="Range Sweep Scalp",
+    strategy="Impulse Pullback Scalp",
     primary_tp_pips=20,
     pip_size=0.1,
     cfg=cfg,
@@ -473,7 +473,7 @@ def test_scalp_stop_bounds_use_scalp_envelope_not_reaction_40_60():
   assert maximum == 30
   assert measured["stop_bounds_source"] == "scalp_stop_envelope"
   group_min, group_max, _ = stop_bounds_for_reaction_room(
-    strategy="Range Sweep Scalp",
+    strategy="Impulse Pullback Scalp",
     primary_tp_pips=20,
     pip_size=0.1,
     cfg=cfg,

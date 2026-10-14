@@ -139,7 +139,6 @@ REVIEWED_SCOPES: dict[str, ScopeProfile] = {
   # their Go implementations consume their M5 structure and own the M1
   # confirmation before Candidate creation.  Python must not run a second M1
   # detector after receiving the event.
-  "range_sweep": ScopeProfile("range_sweep", "Range Sweep Scalp", "range_sweep", None, frozenset({"M1"}), "go_m5_m1_range_sweep", evidence_prefixes=("m5_range_context", "m1_edge_sweep", "m1_reclaim")),
   "impulse_pullback": ScopeProfile("impulse_pullback", "Impulse Pullback Scalp", "impulse_pullback", None, frozenset({"M1"}), "go_m5_m1_impulse_pullback", evidence_prefixes=("m5_qualified_impulse", "m1_bounded_pullback", "m1_continuation_trigger")),
   "scalp_breakout_retest": ScopeProfile("scalp_breakout_retest", "Breakout Retest Scalp", "scalp_breakout_retest", None, frozenset({"M1"}), "go_m5_m1_breakout_retest", evidence_prefixes=("m5_prebreakout_box", "m5_breakout_level_", "m5_breakout_accepted", "m5_breakout_retest_confirmed", "m1_execution_confirmed")),
 }
@@ -287,7 +286,7 @@ def build_strategy_match(
     raise AdapterRejection("degenerate_stop")
   scalp_target_r_multiples: tuple[float, ...] = ()
   if profile.catalog_id in {
-    "range_sweep", "impulse_pullback", "scalp_breakout_retest",
+    "impulse_pullback", "scalp_breakout_retest",
   }:
     available_r = targets_pips[-1] / stop_pips
     scalp_target_r_multiples = (

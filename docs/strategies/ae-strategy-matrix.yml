@@ -246,24 +246,6 @@ strategies:
     owner_approval_required: false
     rationale: "21 production trades, 0 with a recorded R; exit-path counts are near break-even; replay n=22."
     prior_certification: "docs/strategies/liquidity_sweep.md"
-  range_sweep:
-    technical_thesis: "Liquidity above/below an M5 range is swept and reclaimed on M1."
-    validation_conditions: "(as implemented) range = high/low of the last 24 M5 bars, >= 25 pips wide; a recent M1 bar within a buffer of the edge closes back at or inside it in the trade direction; dealing-range position agrees. Bar-for-bar port of the frozen Python scalp lane."
-    quality_formula: {class: continuous, note: "reclaim close distance from the edge over M5 ATR (reclaim component is the constant 1); all 39 production values are between 0.01 and 0.38, so it never expresses a strong setup"}
-    confirmed_defects:
-      - "The 'range' is simply the 24-bar high/low: nothing shows price respected those edges (no touch count, prior reaction or swing)."
-      - "A touch within the buffer is accepted as the sweep: price need not trade beyond the level, so no liquidity need have been taken."
-      - "Sweep and reclaim may be one M1 candle, so no later confirmation exists."
-      - "The entry band [edge - buffer, edge + 2 x buffer] surrounds the level, not the reclaim; the stop is measured from the worst fill, widened to the floor or refused above the cap."
-      - "The target is a fixed 2R (else 1R) multiple accepted when it fits the room to the opposite edge, not a technical objective; the earlier revision published the opposite M5 range edge (30 of the 39 production trades), a median 3.7x the executed stop, so published target and executed ladder disagreed."
-      - "The specification (range_sweep.md) describes canonical M5 range state, an excursion beyond the edge by an ATR distance and the opposite edge as target; the code implements none of the three."
-      - "Production: 26 of 38 closed trades were full stops (68%) and 6 reached the final target; the exit paths bound the mean at -0.41R to -0.37R per trade (95% cluster interval of the midpoint -0.62 to -0.11)."
-    verdict: {technical: FAIL, execution: PARTIAL, performance: NEGATIVE, evidence: MODERATE}
-    recommendation: RETIRE
-    scope: "propose retirement of the strategy; keep historical attribution and journal decoding; do not delete trade data"
-    owner_approval_required: true
-    rationale: "It names a liquidity sweep but accepts a touch, its quality score cannot express confidence, and the realised exit paths bound a loss with an interval that excludes zero. The one defensible idea (a genuine sweep of a confirmed range) overlaps Liquidity Sweep and CRT, which the audit retains. Parity with the Python lane proves the port, not the thesis."
-    prior_certification: "docs/strategies/range_sweep.md"
   impulse_pullback:
     technical_thesis: "Pullback after an M1 impulse (scalp)."
     validation_conditions: "Body dominance, displacement."
@@ -287,5 +269,5 @@ strategies:
     recommendation: RECONSTRUCT
     scope: "replace the fixed-R target with a structural one; XAU only, no enablement change"
     owner_approval_required: true
-    rationale: "The thesis is a real one; the target is the defect that produced Range Sweep's problem. Keep trading it while it is repaired because production is positive."
+    rationale: "The thesis is a real one; the fixed-R target is the same class of defect that led to Range Sweep's removal. Keep trading it while it is repaired because production is positive."
     prior_certification: "docs/strategies/scalp_breakout_retest.md"

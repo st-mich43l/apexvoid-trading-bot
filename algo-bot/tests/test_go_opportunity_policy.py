@@ -313,7 +313,7 @@ def test_each_catalog_adapter_preserves_its_own_evidence_and_geometry(scope):
   payload = raw["payload"]
   payload["strategy"] = scope
   payload["direction"] = "BUY" if scope == "demand" else "SELL" if scope == "supply" else "BUY"
-  payload["timeframe"] = "M1" if scope in {"range_sweep", "impulse_pullback", "scalp_breakout_retest"} else "M5"
+  payload["timeframe"] = "M1" if scope in {"impulse_pullback", "scalp_breakout_retest"} else "M5"
   if payload["direction"] == "BUY":
     payload.update({
       "entry": {"low": 4330.0, "high": 4333.5},
@@ -338,28 +338,28 @@ def test_each_catalog_adapter_preserves_its_own_evidence_and_geometry(scope):
 
 
 @pytest.mark.no_database
-def test_range_sweep_adapter_marks_room_as_one_r_two_r_scalp_book():
+def test_impulse_pullback_adapter_marks_room_as_one_r_two_r_scalp_book():
   """The Go opposite-range target is a room ceiling, not a broker TP."""
   raw = golden()
   payload = raw["payload"]
   payload.update({
-    "strategy": "range_sweep",
+    "strategy": "impulse_pullback",
     "direction": "SELL",
     "timeframe": "M1",
     "entry": {"low": 4194.90, "high": 4196.46},
     "invalidation": {"price": 4198.888285714286},
     "targets": [{"price": {"price": 4165.78}}],
     "evidence": [
-      {"code": "m5_range_context"},
-      {"code": "m1_edge_sweep"},
-      {"code": "m1_reclaim"},
+      {"code": "m5_qualified_impulse"},
+      {"code": "m1_bounded_pullback"},
+      {"code": "m1_continuation_trigger"},
     ],
   })
   payload["technical_context"].pop("confirmation", None)
   event_payload = parse_analysis_event(OpportunityTopic, json.dumps(raw))
   match = pol.build_strategy_match(
     event_payload,
-    profile=pol.REVIEWED_SCOPES["range_sweep"],
+    profile=pol.REVIEWED_SCOPES["impulse_pullback"],
     now=payload["created_at"] + 1,
   )
 
@@ -545,7 +545,7 @@ async def test_unconfigured_scope_defaults_to_go_in_global_go_mode(h):
 
 @pytest.mark.no_database
 def test_xau_observes_but_does_not_trade_the_contained_strategies():
-  assert pol.observe_only_strategies("XAU") == {"liquidity_sweep", "impulse_pullback", "range_sweep"}
+  assert pol.observe_only_strategies("XAU") == {"liquidity_sweep", "impulse_pullback"}
   # Containment is instrument-owned: the other instruments and every strategy
   # not named (Key Level, Breakout Retest Scalp, ...) are untouched. FX only
   # contains impulse_pullback; the XAU-specific names keep trading there.

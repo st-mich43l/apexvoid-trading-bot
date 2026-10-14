@@ -104,7 +104,7 @@ public sealed class TradePlanExecutionEngineTests
     ) with
     {
       Analysis = new TradePlanAnalysis(
-        "Range Sweep Scalp", "scalp", "BUY",
+        "Impulse Pullback Scalp", "scalp", "BUY",
         new[] { "M1" }, "M1", "M1", 1, 1, 0.8, 3, "range", "range"
       ),
       Risk = new TradePlanRisk(0.5m, 1.5m, maxVolume, 2.0m),
