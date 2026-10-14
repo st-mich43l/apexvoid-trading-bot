@@ -93,6 +93,141 @@ def _opposite_position_policy(
   return OppositePositionPolicy(instrument_id, False, None, pip_size)
 
 
+@dataclass(frozen=True, slots=True)
+class SameDirectionLimits:
+  """One set of same-direction exposure limits (``None`` = not limited)."""
+
+  max_groups: int | None = None
+  max_cumulative_risk: float | None = None
+  max_symbol_risk: float | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class SameDirectionPolicy:
+  """Instrument-owned bound on same-direction (and symbol) exposure.
+
+  Absent from an instrument's ``exposure`` block the legacy behaviour applies
+  unchanged (scalps stack without a count). When declared, every limit is
+  measured over pending, submitted, partially filled and open groups of the
+  symbol, in account currency for the risk limits.
+
+  ``max_groups``: concurrent groups per symbol and direction.
+  ``max_cumulative_risk``: sum of every group's worst-case remaining loss plus
+  the incoming group's planned loss, per symbol and direction.
+  ``max_symbol_risk``: the same sum over both directions.
+  Unknown exposure (a group whose risk or existence cannot be established)
+  always fails closed.
+  """
+
+  symbol: str
+  limits: SameDirectionLimits
+  strategy_overrides: tuple[tuple[str, SameDirectionLimits], ...] = ()
+  risk_free_groups_count: bool = True
+  duplicate_thesis_block: bool = True
+  reservation_ttl_seconds: int = 600
+  snapshot_max_age_seconds: int = 120
+
+  def limits_for(self, strategy: str | None) -> SameDirectionLimits:
+    key = str(strategy or "").strip().lower().replace(" ", "_")
+    for name, override in self.strategy_overrides:
+      if name == key:
+        # An override changes the limits it declares; the others stay the instrument's.
+        return SameDirectionLimits(
+          max_groups=override.max_groups if override.max_groups is not None else self.limits.max_groups,
+          max_cumulative_risk=(
+            override.max_cumulative_risk if override.max_cumulative_risk is not None else self.limits.max_cumulative_risk
+          ),
+          max_symbol_risk=override.max_symbol_risk if override.max_symbol_risk is not None else self.limits.max_symbol_risk,
+        )
+    return self.limits
+
+
+def _positive_number(value: Any, label: str) -> float | None:
+  if value is None:
+    return None
+  if isinstance(value, bool) or not isinstance(value, (int, float)) or not value > 0:
+    raise EffectiveInstrumentError(f"{label} must be a positive number")
+  return float(value)
+
+
+def _same_direction_limits(node: Any, label: str) -> SameDirectionLimits:
+  if not isinstance(node, Mapping):
+    raise EffectiveInstrumentError(f"{label} must be a mapping")
+  unknown = set(node) - {"max_groups", "max_cumulative_risk", "max_symbol_risk"}
+  if unknown:
+    raise EffectiveInstrumentError(f"{label} has unknown keys {sorted(unknown)}")
+  groups = node.get("max_groups")
+  if groups is not None and (isinstance(groups, bool) or not isinstance(groups, int) or groups < 1):
+    raise EffectiveInstrumentError(f"{label}.max_groups must be an integer >= 1")
+  limits = SameDirectionLimits(
+    max_groups=groups,
+    max_cumulative_risk=_positive_number(node.get("max_cumulative_risk"), f"{label}.max_cumulative_risk"),
+    max_symbol_risk=_positive_number(node.get("max_symbol_risk"), f"{label}.max_symbol_risk"),
+  )
+  if limits.max_groups is None and limits.max_cumulative_risk is None and limits.max_symbol_risk is None:
+    raise EffectiveInstrumentError(f"{label} declares no limit")
+  return limits
+
+
+def _same_direction_policy(
+  instrument_id: str,
+  exposure: Any,
+) -> SameDirectionPolicy | None:
+  """Parse ``exposure.same_direction``; absent = legacy behaviour (``None``)."""
+  node = _plain(exposure) if exposure is not None else None
+  policy = node.get("same_direction") if isinstance(node, Mapping) else None
+  if policy is None:
+    return None
+  label = f"{instrument_id} exposure.same_direction"
+  if not isinstance(policy, Mapping):
+    raise EffectiveInstrumentError(f"{label} must be a mapping")
+  allowed = {
+    "max_groups", "max_cumulative_risk", "max_symbol_risk", "strategy_overrides",
+    "risk_free_groups_count", "duplicate_thesis_block", "reservation_ttl_seconds",
+    "snapshot_max_age_seconds",
+  }
+  unknown = set(policy) - allowed
+  if unknown:
+    raise EffectiveInstrumentError(f"{label} has unknown keys {sorted(unknown)}")
+  limits = _same_direction_limits(
+    {key: policy.get(key) for key in ("max_groups", "max_cumulative_risk", "max_symbol_risk")},
+    label,
+  )
+  overrides: list[tuple[str, SameDirectionLimits]] = []
+  raw_overrides = policy.get("strategy_overrides")
+  if raw_overrides is None:
+    raw_overrides = {}
+  if not isinstance(raw_overrides, Mapping):
+    raise EffectiveInstrumentError(f"{label}.strategy_overrides must be a mapping")
+  for name, value in sorted(raw_overrides.items()):
+    overrides.append((
+      str(name).strip().lower().replace(" ", "_"),
+      _same_direction_limits(value, f"{label}.strategy_overrides.{name}"),
+    ))
+  flags = {}
+  for key, default in (("risk_free_groups_count", True), ("duplicate_thesis_block", True)):
+    value = policy.get(key, default)
+    if not isinstance(value, bool):
+      raise EffectiveInstrumentError(f"{label}.{key} must be a boolean")
+    flags[key] = value
+  seconds = {}
+  for key, default in (("reservation_ttl_seconds", 600), ("snapshot_max_age_seconds", 120)):
+    value = policy.get(key, default)
+    minimum = 180 if key == "reservation_ttl_seconds" else 10
+    if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
+      raise EffectiveInstrumentError(f"{label}.{key} must be an integer >= {minimum}")
+    seconds[key] = value
+  return SameDirectionPolicy(
+    symbol=instrument_id,
+    limits=limits,
+    strategy_overrides=tuple(overrides),
+    risk_free_groups_count=flags["risk_free_groups_count"],
+    duplicate_thesis_block=flags["duplicate_thesis_block"],
+    reservation_ttl_seconds=seconds["reservation_ttl_seconds"],
+    snapshot_max_age_seconds=seconds["snapshot_max_age_seconds"],
+  )
+
+
 def _plain(value: Any) -> Any:
   if isinstance(value, ConfigNode):
     return {key: _plain(item) for key, item in value.items()}
@@ -298,6 +433,11 @@ class EffectiveInstrument:
     )
 
   @property
+  def same_direction_policy(self) -> SameDirectionPolicy | None:
+    """Same-direction exposure bound, or ``None`` when the instrument declares none."""
+    return _same_direction_policy(self.instrument_id, self._exposure)
+
+  @property
   def instrument_id(self) -> str:
     return str(self.identity.instrument_id)
 
@@ -333,6 +473,8 @@ __all__ = [
   "InstrumentEntryMode",
   "InstrumentTargetMode",
   "OppositePositionPolicy",
+  "SameDirectionLimits",
+  "SameDirectionPolicy",
   "enabled_instruments",
   "for_instrument",
   "instrument_for_broker_symbol",
