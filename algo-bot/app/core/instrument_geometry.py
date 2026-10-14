@@ -100,6 +100,11 @@ def opposite_position_policy(symbol: str):
   return _effective(symbol).opposite_position
 
 
+def same_direction_policy(symbol: str):
+  """Instrument-owned same-direction exposure bound, or ``None`` (legacy)."""
+  return _effective(symbol).same_direction_policy
+
+
 def structural_barrier_buffer_atr(symbol: str) -> float:
   """Opposing-structure room buffer, in ATR multiples, for this instrument.
 
