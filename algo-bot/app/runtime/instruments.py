@@ -131,7 +131,14 @@ class SameDirectionPolicy:
     key = str(strategy or "").strip().lower().replace(" ", "_")
     for name, override in self.strategy_overrides:
       if name == key:
-        return override
+        # An override changes the limits it declares; the others stay the instrument's.
+        return SameDirectionLimits(
+          max_groups=override.max_groups if override.max_groups is not None else self.limits.max_groups,
+          max_cumulative_risk=(
+            override.max_cumulative_risk if override.max_cumulative_risk is not None else self.limits.max_cumulative_risk
+          ),
+          max_symbol_risk=override.max_symbol_risk if override.max_symbol_risk is not None else self.limits.max_symbol_risk,
+        )
     return self.limits
 
 
@@ -206,8 +213,9 @@ def _same_direction_policy(
   seconds = {}
   for key, default in (("reservation_ttl_seconds", 600), ("snapshot_max_age_seconds", 120)):
     value = policy.get(key, default)
-    if isinstance(value, bool) or not isinstance(value, int) or value < 10:
-      raise EffectiveInstrumentError(f"{label}.{key} must be an integer >= 10")
+    minimum = 180 if key == "reservation_ttl_seconds" else 10
+    if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
+      raise EffectiveInstrumentError(f"{label}.{key} must be an integer >= {minimum}")
     seconds[key] = value
   return SameDirectionPolicy(
     symbol=instrument_id,
