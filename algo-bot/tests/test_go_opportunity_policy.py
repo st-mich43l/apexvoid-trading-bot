@@ -544,18 +544,19 @@ async def test_unconfigured_scope_defaults_to_go_in_global_go_mode(h):
 
 
 @pytest.mark.no_database
-def test_xau_observes_but_does_not_trade_the_contained_strategies():
-  assert pol.observe_only_strategies("XAU") == {"liquidity_sweep", "impulse_pullback"}
-  # Containment is instrument-owned: the other instruments and every strategy
-  # not named (Key Level, Breakout Retest Scalp, ...) are untouched. FX only
-  # contains impulse_pullback; the XAU-specific names keep trading there.
-  for symbol in ("EURUSD", "GBPUSD", "GBPJPY", "USDJPY"):
-    assert pol.observe_only_strategies(symbol) == {"impulse_pullback"}
-  assert not {"key_level", "scalp_breakout_retest", "fvg"} & pol.observe_only_strategies("XAU")
+def test_no_instrument_observes_without_trading():
+  # Owner rule 2026-10-14: no observe-only anywhere.
+  for symbol in ("XAU", "EURUSD", "GBPUSD", "GBPJPY", "USDJPY"):
+    assert pol.observe_only_strategies(symbol) == frozenset(), symbol
 
 
 @pytest.mark.asyncio
-async def test_a_contained_xau_strategy_is_recorded_but_never_becomes_a_match(h):
+async def test_a_contained_xau_strategy_is_recorded_but_never_becomes_a_match(h, monkeypatch):
+  from tests.support.canonical_fixtures import install_runtime_overrides
+
+  install_runtime_overrides(monkeypatch, {
+    "instruments.XAU.overrides.execution.go_opportunity.observe_only_strategies": ["liquidity_sweep"],
+  })
   await h.activate()
   raw = golden(int(h.clock.now))
   raw["payload"]["strategy"] = "liquidity_sweep"

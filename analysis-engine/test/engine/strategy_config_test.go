@@ -28,7 +28,8 @@ func TestStrategyConfigsFromConfigEnablesTheCompleteCatalogForShadow(t *testing.
 	rebuilt := map[string]bool{"crt": true, "key_level": true, "session_level": true, "flip_zone": true, "box_breakout": true, "trendline": true, "impulse_pullback": true, "scalp_breakout_retest": true, "liquidity_sweep": true, "break_retest": true, "ifvg": true, "confluence_zone": true, "range_edge": true}
 	// Session Level was rebuilt a second time (v4: complete periods, two bounded
 	// reaction models, honest geometry).
-	v4 := map[string]bool{"session_level": true}
+	// Trendline v4: the target is the nearest opposing liquidity, never a projection.
+	v4 := map[string]bool{"session_level": true, "trendline": true}
 	for _, cfg := range configs {
 		want := "v2"
 		if rebuilt[string(cfg.ID)] {

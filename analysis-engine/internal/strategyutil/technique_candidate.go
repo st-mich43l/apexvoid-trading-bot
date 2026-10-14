@@ -30,8 +30,12 @@ type TechniqueSpec struct {
 	// opposite H1 extreme). Without it the target is the nearest opposing
 	// liquidity pool, or a fixed reward:risk beyond the entry when none is far
 	// enough.
-	Target   func(*TechniqueDecision) (price float64, label string)
-	Versions opportunity.AnalysisProvenance
+	Target func(*TechniqueDecision) (price float64, label string)
+	// RequireStructuralTarget refuses a decision with no opposing liquidity far
+	// enough away instead of inventing a fixed reward:risk target: a strategy
+	// that sets it publishes only what has a real technical objective.
+	RequireStructuralTarget bool
+	Versions                opportunity.AnalysisProvenance
 }
 
 // techniqueFallbackTargetR is the nominal reward:risk of an opportunity with no
@@ -62,6 +66,9 @@ func TechniqueCandidate(ctx *analysiscontext.MarketContext, dec *TechniqueDecisi
 	} else {
 		var ok bool
 		if target, targetLabel, ok = nearestOpposingTarget(d, dec.Direction, reference, invalidation, spec.MinimumTargetDistanceATR*atr); !ok {
+			return opportunity.Candidate{}, false
+		}
+		if spec.RequireStructuralTarget && targetLabel != "nearest_opposing_liquidity" {
 			return opportunity.Candidate{}, false
 		}
 	}

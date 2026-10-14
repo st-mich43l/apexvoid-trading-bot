@@ -496,8 +496,12 @@ analysis:
       minimum_reward_risk: 1.15
       expiry_hours: 4.0
     trendline:
-      version: v3
+      version: v4
       enabled: true
+      # The target is the nearest opposing liquidity at least this far from the entry; with none
+      # there is no technical objective and nothing is published. (v3 reported twice the distance
+      # from the entry to the interaction band edge, unrelated to the published stop.)
+      minimum_target_distance_atr: 1.0
       # The frozen trendline_reaction (V2) gates (analysis.trendlines.*,
       # execution.technique.trendline_*): forward validation, health, staleness,
       # chop-regime quality, the live-interaction bands.

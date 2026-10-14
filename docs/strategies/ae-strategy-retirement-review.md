@@ -36,9 +36,8 @@ one PR the owner can review and revert:
 
 Not removed: rows already in the ledger and fixtures that record production history, and dated
 audit documents. Nothing in the code reads the retired name afterwards; an unknown historical
-name resolves to nothing and is treated as unknown. A restriction (observe-only on an instrument)
-is a different outcome and stays reversible by removing a name from
-`execution.go_opportunity.observe_only_strategies`.
+name resolves to nothing and is treated as unknown. There is no observe-only outcome: the owner
+ruled it out (2026-10-14), so a strategy is either live or removed.
 
 Before deploying a removal, close any open plan of that strategy: the executor manages a plan by
 its strategy name, so a plan open at the moment of the deploy would lose its scalp handling.
@@ -51,30 +50,27 @@ its strategy name, so a plan open at the moment of the deploy would lose its sca
   disable" plan). Production-data fixtures
   (`tests/fixtures/exposure_groups_*.json`, the dated audit documents and result files) still
   name it because they record what happened; nothing in the code reads the name.
-- Items 2 to 9 are not yet approved. When one is, a RETIRE outcome means removal under the same rule.
+- A RETIRE outcome always means removal under the same rule.
 
-## Proposals
+## Proposals and owner decisions
 
-Every row needs explicit owner approval. Patch A applies the observe-only restrictions in rows 2 to 6.
+| # | Strategy | Audit proposal | Owner decision (2026-10-14) |
+|---|---|---|---|
+| 1 | range_sweep | RETIRE | Approved; removed in #779/#780. |
+| 2 | range_edge | observe-only on the four FX pairs | **Rejected: nothing is observe-only.** Stays live everywhere. |
+| 3 | confluence_zone | observe-only on XAU, GBPJPY | Rejected, stays live. |
+| 4 | order_block | observe-only on EURUSD, GBPJPY | Rejected, stays live. |
+| 5 | fvg | observe-only on XAU | Rejected, stays live. |
+| 6 | flip_zone | observe-only on XAU | Rejected, stays live. |
+| 7 | trendline | RECONSTRUCT | Approved; reworked in v4 (target is the nearest opposing liquidity). |
 
-| # | Strategy | Proposal | Scope | Evidence (hypothetical R unless stated; 95% interval) | Patch | Reversible |
-|---|---|---|---|---|---|---|
-| 1 | range_sweep | RETIRE (removed in #779) | XAU (its only instrument) | Technical FAIL (see certification section 5). Production exit paths: 26 of 38 closed trades full stops, mean -0.41R to -0.37R, interval [-0.62, -0.11] | n/a (code removal) | by reverting the PR |
-| 2 | range_edge | observe-only | EURUSD, GBPUSD, USDJPY, GBPJPY | Technical reward is 0.27-0.30x the 12-22 pip FX scalp stop in the median setup and shorter than it in 99-100% of setups. All-instrument replay -0.09R [-0.21, +0.02], OOS -0.25R [-0.40, -0.10]; production -0.19R [-0.50, +0.17] on 62 trades | A | yes |
-| 3 | confluence_zone | observe-only | XAU, GBPJPY | XAU -0.51R [-0.69, -0.29] n=52; GBPJPY -0.47R [-0.73, -0.08] n=55; all-instrument OOS -0.51R; the v3 certification already recommended XAU containment | A | yes |
-| 4 | order_block | observe-only | EURUSD, GBPJPY | EURUSD -0.48R [-0.83, -0.03] n=45; GBPJPY -0.38R [-0.74, -0.05] n=56 | A | yes |
-| 5 | fvg | observe-only | XAU | -0.23R [-0.45, -0.01] n=102; FX is flat | A | yes |
-| 6 | flip_zone | observe-only | XAU | -0.37R [-0.61, -0.08] n=40; FX flat to positive | A | yes |
-
-Patch A: [ae-containment-proposals.patch](ae-containment-proposals.patch) (`config/instruments.yml`
-only; each added name is commented as proposed). It applies cleanly (`git apply --check`) and has
-not been run against the Go, Python or .NET test suites, because applying an enablement change to
-the working tree was out of bounds for this audit. Run them before merging.
-
-Each restriction is a named instrument, never the whole strategy, because the replay
-intervals differ by instrument (for example Flip Zone is +0.32R on EURUSD, Order Block +0.07R
-on XAU and USDJPY). Rows 3 to 6 have intervals just below zero on one month of data: they are
-the weakest proposals here, and the owner may reasonably prefer to keep observing first.
+The owner also set every remaining observe-only entry to live: `impulse_pullback` (all instruments), `liquidity_sweep`
+(XAU) and the M15 supply/demand structure timeframe. `config/instruments.yml` now contains no observe-only strategy or
+timeframe, and a test pins that. The audit evidence behind rows 2 to 6 is unchanged and stays in
+[ae-quality-replay-results.json](ae-quality-replay-results.json); with no observe-only mode the only ways to act on it are
+to remove a strategy or leave it live. For the two that were observe-only on negative evidence: `impulse_pullback`'s closed trades
+(11 over its history) bound the mean at -0.68R to -0.59R, 95% interval [-1.0, -0.11], and `liquidity_sweep` has 21 trades with no
+recorded R. Both now trade live by the owner's decision.
 
 ## Reconstruction backlog (no enablement change, separate PRs, each needs approval)
 
@@ -98,22 +94,16 @@ the weakest proposals here, and the owner may reasonably prefer to keep observin
   (replay -0.22R, production +0.99R on 8 trades) and Scalp Breakout Retest are the two where
   replay and production disagree, so the right action is more data, not a decision.
 
-## Recommended future catalog
+## Catalog now
 
-After rows 1 to 6: 20 strategies published, 4 of them under reconstruction (Trendline,
-Supply, Demand, Scalp Breakout Retest). Strategies that fire only a few times a month (CRT,
-Momentum Ride, Snap Back, Liquidity Sweep, Trendline) are kept: rarity is not a defect, and
-their evidence is insufficient either way. The next audit should be triggered by sample size
-(30 R-known production trades per strategy), not by the calendar.
+20 strategies, all live on every instrument they are configured for. Three still await geometry work (Supply, Demand, Scalp
+Breakout Retest). Strategies that fire only a few times a month (CRT, Momentum Ride, Snap Back, Liquidity Sweep, Trendline)
+are kept: rarity is not a defect. The next audit should be triggered by sample size (30 R-known production trades per
+strategy), not by the calendar.
 
-## Owner approval checklist
+## Open items for the owner
 
-- [x] 1. Retire Range Sweep: approved and removed in #779.
-- [ ] 2. Range Edge observe-only on the four FX pairs.
-- [ ] 3. Confluence Zone observe-only on XAU and GBPJPY.
-- [ ] 4. Order Block observe-only on EURUSD and GBPJPY.
-- [ ] 5. FVG observe-only on XAU.
-- [ ] 6. Flip Zone observe-only on XAU.
-- [ ] 7. Authorise the reconstruction PRs above one by one (Trendline first).
-- [ ] 8. Authorise the executor `realized_pips` fix.
-- [ ] 9. Authorise an independent reviewer for this audit's verdicts.
+- [ ] Supply and Demand geometry (technical RR below 1 in 57% / 62% of setups).
+- [ ] Scalp Breakout Retest and Flip Zone fixed-R first targets.
+- [ ] Quality formulas (nine strategies saturate at two values, two are constant): needs an offline arbitration impact report first.
+- [ ] The executor `realized_pips` fix is merged (#778); an independent reviewer for this audit is not yet assigned.

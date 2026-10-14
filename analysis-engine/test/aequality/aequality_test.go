@@ -504,3 +504,23 @@ func TestReplayAllStrategies(t *testing.T) {
 		}
 	}
 }
+
+// TestTrendlineTargetIsAnOpposingLiquidityAtLeastOneATR pins Trendline v4: its first target is the nearest
+// opposing liquidity at least minimum_target_distance_atr (1.0) from the entry, never a projection. v3 targeted
+// twice the distance to the interaction band edge, a median 0.05 of the executable stop.
+func TestTrendlineTargetIsAnOpposingLiquidityAtLeastOneATR(t *testing.T) {
+	published := 0
+	for _, r := range replayAll(t) {
+		if r.Strategy != "trendline" {
+			continue
+		}
+		published++
+		if len(r.TargetLabels) == 0 || r.TargetLabels[0] != "nearest_opposing_liquidity" {
+			t.Errorf("%s %s: target labels %v, want nearest_opposing_liquidity", r.Symbol, r.ID, r.TargetLabels)
+		}
+		if r.TechRewardPips*pipSize[r.Symbol] < r.ATR-1e-9 {
+			t.Errorf("%s %s: technical reward %.1f pips is under one ATR (%.4f)", r.Symbol, r.ID, r.TechRewardPips, r.ATR)
+		}
+	}
+	t.Logf("trendline v4 setups in the captures: %d", published)
+}

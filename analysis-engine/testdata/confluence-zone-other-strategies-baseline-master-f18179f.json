@@ -58,7 +58,7 @@
    "supply": 2063,
    "trendline": 6
   },
-  "sha256": "5d1504296d6774b58246efe7784e260ca0a66aa5832a911eeef6a6fa98a33233"
+  "sha256": "df8d09bba9f36e6aeb8d40a9eb0b5026bb6220a55db0d170e92edb0b36e8321d"
  },
  "replay-usdjpy-production-capture-20261013.json": {
   "candidates": 6437,
@@ -79,10 +79,10 @@
    "supply": 2510,
    "trendline": 2
   },
-  "sha256": "8bd77c8af06931b2efbe39130c9e474574964d5e513d30f594a5a8c6d844ad4e"
+  "sha256": "63f902cef7a3a88c1e2365ffb5b49084d158ce529fcfee656409a4f3e4da89f4"
  },
  "replay-xau-production-capture-20260921.json": {
-  "candidates": 2600,
+  "candidates": 2599,
   "per_strategy": {
    "box_breakout": 10,
    "break_retest": 3,
@@ -99,9 +99,9 @@
    "session_level": 10,
    "snap_back": 7,
    "supply": 625,
-   "trendline": 4
+   "trendline": 3
   },
-  "sha256": "fa9990ee5074142aea275bdf266ceb2375ba1db3660dc2ef5c566b525575f375"
+  "sha256": "8a6b733699f60014daf6fdef50185019bd18e3daf91b3897a61e1490bb8fd475"
  },
  "replay-xau-production-capture-20261013.json": {
   "candidates": 4821,

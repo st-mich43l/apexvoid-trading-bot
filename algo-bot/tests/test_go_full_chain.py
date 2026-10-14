@@ -694,6 +694,16 @@ def test_go_thesis_identity_is_stable_for_the_zone_not_the_confirmation_bar():
 XAU_OBSERVE_ONLY = {"liquidity_sweep", "impulse_pullback"}
 
 
+def contain_xau(monkeypatch, strategies=(), timeframes=()):
+  """The config contains nothing (owner rule: no observe-only); the dormant mechanism is exercised by override."""
+  from tests.support.canonical_fixtures import install_runtime_overrides
+
+  install_runtime_overrides(monkeypatch, {
+    "instruments.XAU.overrides.execution.go_opportunity.observe_only_strategies": list(strategies),
+    "instruments.XAU.overrides.execution.go_opportunity.observe_only_structure_timeframes": list(timeframes),
+  })
+
+
 def m15_structure_record(now: int, *, typed: bool = True, scope: str = "supply", offset: int = 1):
   """A supply/demand reaction on an M15 zone, as Go publishes it after #742."""
   record = catalog_kafka_record(now, scope, offset=offset)
@@ -710,8 +720,9 @@ def m15_structure_record(now: int, *, typed: bool = True, scope: str = "supply",
 
 @pytest.mark.parametrize("scope", sorted(XAU_OBSERVE_ONLY))
 @pytest.mark.asyncio
-async def test_a_contained_xau_strategy_never_reaches_a_plan_through_the_worker(h, prod, scope):
+async def test_a_contained_xau_strategy_never_reaches_a_plan_through_the_worker(h, prod, monkeypatch, scope):
   """Go opportunity -> Kafka consumer -> worker cycles: observed, decided, never planned."""
+  contain_xau(monkeypatch, strategies=XAU_OBSERVE_ONLY)
   await h.activate(scope=scope)
   await h._ensure()
   await consumer_for(h).process_record(catalog_kafka_record(h.clock.now, scope))
@@ -722,7 +733,8 @@ async def test_a_contained_xau_strategy_never_reaches_a_plan_through_the_worker(
 
 
 @pytest.mark.asyncio
-async def test_the_m15_supply_demand_extension_is_observed_never_planned(h, prod):
+async def test_the_m15_supply_demand_extension_is_observed_never_planned(h, prod, monkeypatch):
+  contain_xau(monkeypatch, timeframes=("M15",))
   await h.activate()
   await h._ensure()
   await consumer_for(h).process_record(m15_structure_record(h.clock.now))
@@ -733,7 +745,8 @@ async def test_the_m15_supply_demand_extension_is_observed_never_planned(h, prod
 
 
 @pytest.mark.asyncio
-async def test_an_m15_event_without_the_typed_field_is_still_contained_by_its_evidence(h, prod):
+async def test_an_m15_event_without_the_typed_field_is_still_contained_by_its_evidence(h, prod, monkeypatch):
+  contain_xau(monkeypatch, timeframes=("M15",))
   """A rolling deploy can deliver an event the previous engine published."""
   await h.activate()
   await h._ensure()
@@ -763,6 +776,7 @@ async def test_a_match_stored_before_containment_cannot_become_a_plan(h, prod, m
   with monkeypatch.context() as patch:
     patch.setattr(pol, "containment_reason", lambda *args, **kwargs: None)
     await consumer_for(h).process_record(record)
+  contain_xau(monkeypatch, strategies=XAU_OBSERVE_ONLY, timeframes=("M15",))
   match = deserialize_matches(await prod.get(strategy_matches_key("XAU")))[0]
   assert await worker._publish_trade_plan_v8(prod, "XAU", _spot(4354.1, 4354.3), match, frames={}) is None
   assert (await route(prod, match.match_id))["reason_code"].startswith("execution_contained")
@@ -771,16 +785,15 @@ async def test_a_match_stored_before_containment_cannot_become_a_plan(h, prod, m
 
 
 @pytest.mark.no_database
-def test_the_xau_live_versus_observe_only_matrix():
+def test_nothing_is_observe_only():
+  """Owner rule 2026-10-14: every reviewed strategy and every structure timeframe trades on every instrument."""
   from app.autotrade import go_containment as containment
 
-  assert containment.observe_only_strategies("XAU") == XAU_OBSERVE_ONLY
-  live = set(pol.REVIEWED_SCOPES) - XAU_OBSERVE_ONLY
-  assert {"key_level", "scalp_breakout_retest", "supply", "demand", "fvg", "order_block"} <= live
   for symbol in ("XAU", "EURUSD", "GBPUSD", "GBPJPY", "USDJPY"):
-    assert containment.observe_only_structure_timeframes(symbol) == {"M15"}
-  for symbol in ("EURUSD", "GBPUSD", "GBPJPY", "USDJPY"):
-    assert containment.observe_only_strategies(symbol) == {"impulse_pullback"}
+    assert containment.observe_only_strategies(symbol) == frozenset(), symbol
+    assert containment.observe_only_structure_timeframes(symbol) == frozenset(), symbol
+    for scope in pol.REVIEWED_SCOPES:
+      assert containment.containment_reason(symbol, scope, "M15") is None, (symbol, scope)
 
 
 @pytest.mark.no_database

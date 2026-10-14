@@ -306,7 +306,7 @@ What the review did **not** cover: the replay harness (`test/czreplay`) and the 
 
 **What would change it.** A forward observed XAU record of at least 30 v3 setups (hypothetical, causal fills) with an interval excluding the loss, or the owner's explicit risk-appetite decision to keep running an unproven strategy. Conversely, if the owner prefers to keep XAU live, the fixes in this change (v3) are the safer thing to run than v2, and nothing here argues for deploying v2 further.
 
-**The optional patch** ([confluence-zone-v3-xau-containment.patch](confluence-zone-v3-xau-containment.patch)) adds one name to `instruments.XAU.overrides.execution.go_opportunity.observe_only_strategies` and a comment. It is **not applied**: `config/instruments.yml` is unchanged by this pull request. Apply with `git apply docs/strategies/confluence-zone-v3-xau-containment.patch` after review; roll back by removing the name (containment is read at match creation and at plan admission, so it stops *new* plans only). `liquidity_sweep`, `impulse_pullback`, the M15 structure containment, `ifvg` and `session_level` (both enabled on 13 Oct) and every other instrument override are preserved.
+**The optional patch** was withdrawn on 2026-10-14: the owner rule is that nothing is observe-only, so Confluence Zone stays live on XAU and the patch file and its test were removed.
 
 ## Reproduce
 

@@ -1,10 +1,11 @@
-# Human-authored half of the AE quality matrix (2026-10-14 audit).
+# Human-authored half of the AE quality matrix (2026-10-14 audit, updated by the owner's decisions).
 #
 # algo-bot/tools/ae_quality_eval.py merges this file with the measured replay and production
 # numbers into docs/strategies/ae-quality-replay-results.json -> strategy_matrix. Nothing here
 # is a measurement: the labels are the reviewer's judgement from those measurements and from
-# reading each strategy's code, and every recommendation is a PROPOSAL. No enablement, stop,
-# target or size changes until the owner approves (see ae-strategy-retirement-review.md).
+# reading each strategy's code. Owner decisions (2026-10-14): a retired strategy is removed, not
+# disabled (Range Sweep); nothing is observe-only (every strategy trades live); Trendline was
+# reworked. Rows keep the audit evidence so a later audit can act on it.
 #
 # Vocabulary
 #   technical     PASS | PASS_WITH_DEFECTS | FAIL      does it detect what it says it detects
@@ -12,262 +13,402 @@
 #                                                      the executor can place (median room_cover)
 #   performance   POSITIVE | NEUTRAL | NEGATIVE | UNPROVEN | CONFLICTING   replay vs production
 #   evidence      STRONG | MODERATE | WEAK | INSUFFICIENT
-#   recommendation RETAIN | RETAIN_RESTRICTED | RECONSTRUCT | OBSERVE_ONLY | RETIRE
-#
-# independent_review is always "pending" for this audit's own verdicts: the reviewer is the
-# author of the replay harness. prior_certification names an earlier, separate review.
+#   recommendation RETAIN | RECONSTRUCT | RETIRE (retire = remove)
+# independent_review is "pending": the reviewer is the author of the replay harness.
 
 quality_formula_classes:
-  stars_over_3: "Overall = confluence stars / 3 (published stars are 2 or 3, so Overall is 0.667 or 1.0); measured components are published beside it but do not move Overall"
-  constant: "Overall is a constant"
-  continuous: "Overall is a continuous function of the strategy's own measurements"
-
+  stars_over_3: Overall = confluence stars / 3 (published stars are 2 or 3, so Overall is 0.667 or 1.0); measured components
+    are published beside it but do not move Overall
+  constant: Overall is a constant
+  continuous: Overall is a continuous function of the strategy's own measurements
 strategies:
   key_level:
-    technical_thesis: "Price reacts at a clustered, role-aware key level; structure and a measured reaction candle confirm it."
-    validation_conditions: "Cluster of >=2 touches; reaction candle measured on closed bars; HTF/session context scored by the confluence scorer."
-    quality_formula: {class: stars_over_3, note: "touch_quality is published as a component only"}
+    technical_thesis: Price reacts at a clustered, role-aware key level; structure and a measured reaction candle confirm
+      it.
+    validation_conditions: Cluster of >=2 touches; reaction candle measured on closed bars; HTF/session context scored by
+      the confluence scorer.
+    quality_formula:
+      class: stars_over_3
+      note: touch_quality is published as a component only
     confirmed_defects:
-      - "Overall saturates at two values (0.667 / 1.0): it cannot rank setups."
-      - "Hypothetical R is not monotone in the confluence 'touches' factor (replay, 3 touch buckets)."
-    verdict: {technical: PASS, execution: PARTIAL, performance: CONFLICTING, evidence: MODERATE}
+    - 'Overall saturates at two values (0.667 / 1.0): it cannot rank setups.'
+    - Hypothetical R is not monotone in the confluence 'touches' factor (replay, 3 touch buckets).
+    verdict:
+      technical: PASS
+      execution: PARTIAL
+      performance: CONFLICTING
+      evidence: MODERATE
     recommendation: RETAIN
-    scope: "all instruments; quality score to be treated as non-discriminating until reconstructed"
+    scope: all instruments; quality score to be treated as non-discriminating until reconstructed
     owner_approval_required: false
-    rationale: "Legacy-parity-proven detector; production +0.53R on 41 R-known trades (CI above zero) but replay is slightly negative over 1,708 episodes; the two disagree, so no enablement change either way."
-    prior_certification: "test/keylevelparity golden"
+    rationale: Legacy-parity-proven detector; production +0.53R on 41 R-known trades (CI above zero) but replay is slightly
+      negative over 1,708 episodes; the two disagree, so no enablement change either way.
+    prior_certification: test/keylevelparity golden
   confluence_zone:
-    technical_thesis: "Several independent canonical structures support one price region and a measured reaction confirms it."
-    validation_conditions: ">= minimum_facts independent facts; overlap width in ATR; reaction measured."
-    quality_formula: {class: stars_over_3, note: "independent_fact_count and overlap_width_atr published as components"}
+    technical_thesis: Several independent canonical structures support one price region and a measured reaction confirms it.
+    validation_conditions: '>= minimum_facts independent facts; overlap width in ATR; reaction measured.'
+    quality_formula:
+      class: stars_over_3
+      note: independent_fact_count and overlap_width_atr published as components
     confirmed_defects:
-      - "Overall saturates (0.667 / 1.0 on confirmed setups)."
-      - "XAU and GBPJPY replay intervals are entirely below zero (see results JSON)."
-    verdict: {technical: PASS, execution: COMPATIBLE, performance: NEGATIVE, evidence: MODERATE}
-    recommendation: RETAIN_RESTRICTED
-    scope: "propose observe-only on XAU and GBPJPY; keep EURUSD, GBPUSD, USDJPY live"
-    owner_approval_required: true
-    rationale: "Technically sound geometry (room cover 2.0x) but XAU -0.51R [-0.69, -0.29] n=52 and GBPJPY -0.47R [-0.73, -0.08] n=55 in replay, OOS -0.51R; the v3 certification already recommended XAU containment (patch prepared there)."
-    prior_certification: "docs/strategies/confluence-zone-v3-certification.md"
+    - Overall saturates (0.667 / 1.0 on confirmed setups).
+    - XAU and GBPJPY replay intervals are entirely below zero (see results JSON).
+    verdict:
+      technical: PASS
+      execution: COMPATIBLE
+      performance: NEGATIVE
+      evidence: MODERATE
+    recommendation: RETAIN
+    scope: 'Owner rule 2026-10-14: no observe-only; the strategy trades live on every instrument. The audit evidence is kept
+      here so a later audit can act on it.'
+    owner_approval_required: false
+    rationale: Technically sound geometry (room cover 2.0x) but XAU -0.51R [-0.69, -0.29] n=52 and GBPJPY -0.47R [-0.73, -0.08]
+      n=55 in replay, OOS -0.51R; the v3 certification already recommended XAU containment (patch prepared there).
+    prior_certification: docs/strategies/confluence-zone-v3-certification.md
   supply:
-    technical_thesis: "A canonical supply zone is retested and rejected."
-    validation_conditions: "Zone from displacement + origin candle, unmitigated; reaction measured; M5 and M15 zones."
-    quality_formula: {class: stars_over_3, note: "reaction and confluence components; discriminates on 8 values through the reaction term"}
+    technical_thesis: A canonical supply zone is retested and rejected.
+    validation_conditions: Zone from displacement + origin candle, unmitigated; reaction measured; M5 and M15 zones.
+    quality_formula:
+      class: stars_over_3
+      note: reaction and confluence components; discriminates on 8 values through the reaction term
     confirmed_defects:
-      - "Stop is wider than the strategy's own technical objective in 57% of setups (technical RR < 1)."
-      - "Executable room cover median 0.62: the fixed 1R TP1 usually lies beyond the nearest opposing liquidity the strategy itself found."
-    verdict: {technical: PASS_WITH_DEFECTS, execution: PARTIAL, performance: NEUTRAL, evidence: MODERATE}
+    - Stop is wider than the strategy's own technical objective in 57% of setups (technical RR < 1).
+    - 'Executable room cover median 0.62: the fixed 1R TP1 usually lies beyond the nearest opposing liquidity the strategy
+      itself found.'
+    verdict:
+      technical: PASS_WITH_DEFECTS
+      execution: PARTIAL
+      performance: NEUTRAL
+      evidence: MODERATE
     recommendation: RECONSTRUCT
-    scope: "geometry only (target honesty / stop placement); no enablement change"
+    scope: geometry only (target honesty / stop placement); no enablement change
     owner_approval_required: true
-    rationale: "Detector is legacy-parity-proven and replay is flat (-0.01R); the defect is geometry, not detection."
-    prior_certification: "test/techniqueparity golden"
+    rationale: Detector is legacy-parity-proven and replay is flat (-0.01R); the defect is geometry, not detection.
+    prior_certification: test/techniqueparity golden
   demand:
-    technical_thesis: "A canonical demand zone is retested and rejected."
-    validation_conditions: "As supply."
-    quality_formula: {class: stars_over_3, note: "as supply"}
+    technical_thesis: A canonical demand zone is retested and rejected.
+    validation_conditions: As supply.
+    quality_formula:
+      class: stars_over_3
+      note: as supply
     confirmed_defects:
-      - "Technical RR < 1 in 62% of setups; room cover median 0.52."
-      - "Replay interval is below zero pooled (-0.18R [-0.30, -0.06]) and on EURUSD."
-    verdict: {technical: PASS_WITH_DEFECTS, execution: PARTIAL, performance: NEGATIVE, evidence: MODERATE}
+    - Technical RR < 1 in 62% of setups; room cover median 0.52.
+    - Replay interval is below zero pooled (-0.18R [-0.30, -0.06]) and on EURUSD.
+    verdict:
+      technical: PASS_WITH_DEFECTS
+      execution: PARTIAL
+      performance: NEGATIVE
+      evidence: MODERATE
     recommendation: RECONSTRUCT
-    scope: "geometry; owner may additionally choose observe-only on EURUSD (interval below zero)"
+    scope: geometry; owner may additionally choose observe-only on EURUSD (interval below zero)
     owner_approval_required: true
-    rationale: "Same geometry defect as supply, and a worse hypothetical outcome; production demand is -0.09R on 7 R-known trades and supply -1.0R on 5 (too few to act on alone)."
-    prior_certification: "test/techniqueparity golden"
+    rationale: Same geometry defect as supply, and a worse hypothetical outcome; production demand is -0.09R on 7 R-known
+      trades and supply -1.0R on 5 (too few to act on alone).
+    prior_certification: test/techniqueparity golden
   order_block:
-    technical_thesis: "A canonical order-block zone is retested and rejected."
-    validation_conditions: "Zone strength, freshness and relevance scored; reaction measured."
-    quality_formula: {class: stars_over_3, note: "freshness / relevance / zone-strength qualities are published as components; confirmed setups take only 0.667 or 1.0"}
+    technical_thesis: A canonical order-block zone is retested and rejected.
+    validation_conditions: Zone strength, freshness and relevance scored; reaction measured.
+    quality_formula:
+      class: stars_over_3
+      note: freshness / relevance / zone-strength qualities are published as components; confirmed setups take only 0.667
+        or 1.0
     confirmed_defects:
-      - "Overall saturates at two values on confirmed setups."
-      - "EURUSD and GBPJPY replay intervals are below zero (n=45 / 56)."
-    verdict: {technical: PASS, execution: PARTIAL, performance: NEGATIVE, evidence: MODERATE}
-    recommendation: RETAIN_RESTRICTED
-    scope: "propose observe-only on EURUSD and GBPJPY; XAU and USDJPY unchanged"
-    owner_approval_required: true
-    rationale: "Pooled -0.16R [-0.32, 0.00]; positive only on XAU/USDJPY and not significantly."
-    prior_certification: "test/techniqueparity golden"
+    - Overall saturates at two values on confirmed setups.
+    - EURUSD and GBPJPY replay intervals are below zero (n=45 / 56).
+    verdict:
+      technical: PASS
+      execution: PARTIAL
+      performance: NEGATIVE
+      evidence: MODERATE
+    recommendation: RETAIN
+    scope: 'Owner rule 2026-10-14: no observe-only; the strategy trades live on every instrument. The audit evidence is kept
+      here so a later audit can act on it.'
+    owner_approval_required: false
+    rationale: Pooled -0.16R [-0.32, 0.00]; positive only on XAU/USDJPY and not significantly.
+    prior_certification: test/techniqueparity golden
   fvg:
-    technical_thesis: "A canonical fair-value gap is retested and rejected."
-    validation_conditions: "Gap strength, fill quality, relevance; reaction measured."
-    quality_formula: {class: stars_over_3, note: "fill_quality / gap_strength / relevance are published as components; confirmed setups take only 0.667 or 1.0"}
+    technical_thesis: A canonical fair-value gap is retested and rejected.
+    validation_conditions: Gap strength, fill quality, relevance; reaction measured.
+    quality_formula:
+      class: stars_over_3
+      note: fill_quality / gap_strength / relevance are published as components; confirmed setups take only 0.667 or 1.0
     confirmed_defects:
-      - "Overall saturates at two values on confirmed setups."
-      - "XAU replay interval below zero (-0.23R, n=102); production FVG -0.27R on 7 R-known trades."
-    verdict: {technical: PASS, execution: PARTIAL, performance: NEGATIVE, evidence: MODERATE}
-    recommendation: RETAIN_RESTRICTED
-    scope: "propose observe-only on XAU; FX unchanged"
-    owner_approval_required: true
-    rationale: "Pooled -0.11R [-0.21, -0.01]; FX is flat, XAU is the loss."
-    prior_certification: "test/techniqueparity golden"
+    - Overall saturates at two values on confirmed setups.
+    - XAU replay interval below zero (-0.23R, n=102); production FVG -0.27R on 7 R-known trades.
+    verdict:
+      technical: PASS
+      execution: PARTIAL
+      performance: NEGATIVE
+      evidence: MODERATE
+    recommendation: RETAIN
+    scope: 'Owner rule 2026-10-14: no observe-only; the strategy trades live on every instrument. The audit evidence is kept
+      here so a later audit can act on it.'
+    owner_approval_required: false
+    rationale: Pooled -0.11R [-0.21, -0.01]; FX is flat, XAU is the loss.
+    prior_certification: test/techniqueparity golden
   ifvg:
-    technical_thesis: "A fair-value gap is inverted by a closing price, then retested and rejected."
-    validation_conditions: "Own M5 FVG, close beyond it, fresh retest, rejection candle."
-    quality_formula: {class: stars_over_3, note: "18 measured components published; Overall = stars/3"}
+    technical_thesis: A fair-value gap is inverted by a closing price, then retested and rejected.
+    validation_conditions: Own M5 FVG, close beyond it, fresh retest, rejection candle.
+    quality_formula:
+      class: stars_over_3
+      note: 18 measured components published; Overall = stars/3
     confirmed_defects:
-      - "Overall saturates at two values."
-    verdict: {technical: PASS, execution: PARTIAL, performance: UNPROVEN, evidence: WEAK}
+    - Overall saturates at two values.
+    verdict:
+      technical: PASS
+      execution: PARTIAL
+      performance: UNPROVEN
+      evidence: WEAK
     recommendation: RETAIN
-    scope: "all instruments"
+    scope: all instruments
     owner_approval_required: false
-    rationale: "Replay +0.15R (OOS +0.22R) and GBPJPY interval above zero; production -0.08R on 9 R-known trades. Neither side is conclusive."
-    prior_certification: "docs/strategies/ifvg.md (test/ifvgreplay)"
+    rationale: Replay +0.15R (OOS +0.22R) and GBPJPY interval above zero; production -0.08R on 9 R-known trades. Neither side
+      is conclusive.
+    prior_certification: docs/strategies/ifvg.md (test/ifvgreplay)
   crt:
-    technical_thesis: "Closed H1 range, M5 sweep and reclaim, structure shift; target the opposite H1 range."
-    validation_conditions: "Sweep depth, reclaim depth, MSS displacement measured."
-    quality_formula: {class: stars_over_3, note: "measured components published"}
+    technical_thesis: Closed H1 range, M5 sweep and reclaim, structure shift; target the opposite H1 range.
+    validation_conditions: Sweep depth, reclaim depth, MSS displacement measured.
+    quality_formula:
+      class: stars_over_3
+      note: measured components published
     confirmed_defects:
-      - "Rare: 3 replay setups in the window, 1 production trade."
-    verdict: {technical: PASS, execution: COMPATIBLE, performance: UNPROVEN, evidence: INSUFFICIENT}
+    - 'Rare: 3 replay setups in the window, 1 production trade.'
+    verdict:
+      technical: PASS
+      execution: COMPATIBLE
+      performance: UNPROVEN
+      evidence: INSUFFICIENT
     recommendation: RETAIN
-    scope: "all instruments; re-audit when >= 30 setups exist"
+    scope: all instruments; re-audit when >= 30 setups exist
     owner_approval_required: false
-    rationale: "Sound geometry (room cover 2.5x), no evidence either way; a rare setup is not a reason to retire it."
-    prior_certification: "docs/strategies/crt.md (test/crtreplay)"
+    rationale: Sound geometry (room cover 2.5x), no evidence either way; a rare setup is not a reason to retire it.
+    prior_certification: docs/strategies/crt.md (test/crtreplay)
   flip_zone:
-    technical_thesis: "A broken zone changes role and the retest holds."
-    validation_conditions: "Prior zone broken with acceptance; retest and rejection."
-    quality_formula: {class: stars_over_3, note: "touches factor is 0 for every setup in the replay"}
+    technical_thesis: A broken zone changes role and the retest holds.
+    validation_conditions: Prior zone broken with acceptance; retest and rejection.
+    quality_formula:
+      class: stars_over_3
+      note: touches factor is 0 for every setup in the replay
     confirmed_defects:
-      - "28% of first targets are fixed reward:risk, not a technical objective."
-      - "XAU replay interval below zero (-0.37R [-0.61, -0.08], n=40)."
-    verdict: {technical: PASS_WITH_DEFECTS, execution: PARTIAL, performance: NEGATIVE, evidence: MODERATE}
-    recommendation: RETAIN_RESTRICTED
-    scope: "propose observe-only on XAU; FX unchanged"
-    owner_approval_required: true
-    rationale: "FX is flat to positive (EURUSD +0.32R), XAU is the clear loss."
-    prior_certification: "docs/strategies/flip_zone.md"
-  session_level:
-    technical_thesis: "A completed session/period level is swept or reacted to and reclaimed."
-    validation_conditions: "Level integrity, period completeness, sweep and reclaim depth in ATR, rejection strength."
-    quality_formula: {class: stars_over_3, note: "16 measured components published"}
-    confirmed_defects:
-      - "Overall saturates at two values."
-    verdict: {technical: PASS, execution: PARTIAL, performance: NEUTRAL, evidence: WEAK}
+    - 28% of first targets are fixed reward:risk, not a technical objective.
+    - XAU replay interval below zero (-0.37R [-0.61, -0.08], n=40).
+    verdict:
+      technical: PASS_WITH_DEFECTS
+      execution: PARTIAL
+      performance: NEGATIVE
+      evidence: MODERATE
     recommendation: RETAIN
-    scope: "all instruments"
+    scope: 'Owner rule 2026-10-14: no observe-only; the strategy trades live on every instrument. The audit evidence is kept
+      here so a later audit can act on it.'
     owner_approval_required: false
-    rationale: "Replay -0.02R, production 0.00R: no edge and no harm demonstrated."
-    prior_certification: "docs/strategies/session_level.md"
-  trendline:
-    technical_thesis: "Reaction at a fitted trendline band."
-    validation_conditions: "Line fit, band, reaction candle."
-    quality_formula: {class: constant, note: "Overall was 1.0 on every replay setup"}
+    rationale: FX is flat to positive (EURUSD +0.32R), XAU is the clear loss.
+    prior_certification: docs/strategies/flip_zone.md
+  session_level:
+    technical_thesis: A completed session/period level is swept or reacted to and reclaimed.
+    validation_conditions: Level integrity, period completeness, sweep and reclaim depth in ATR, rejection strength.
+    quality_formula:
+      class: stars_over_3
+      note: 16 measured components published
     confirmed_defects:
-      - "Target is entry +/- 2 x |entry - band edge| (twice the distance to the band edge), not twice the published stop: median room cover 0.05, 100% of setups have technical RR < 1 against the executable stop."
-      - "Quality constant."
-    verdict: {technical: FAIL, execution: INCOMPATIBLE, performance: UNPROVEN, evidence: INSUFFICIENT}
-    recommendation: RECONSTRUCT
-    scope: "rebuild target and stop from the line itself; propose observe-only until rebuilt (no production trades exist)"
-    owner_approval_required: true
-    rationale: "The published target is arithmetically unrelated to the published risk."
+    - Overall saturates at two values.
+    verdict:
+      technical: PASS
+      execution: PARTIAL
+      performance: NEUTRAL
+      evidence: WEAK
+    recommendation: RETAIN
+    scope: all instruments
+    owner_approval_required: false
+    rationale: 'Replay -0.02R, production 0.00R: no edge and no harm demonstrated.'
+    prior_certification: docs/strategies/session_level.md
+  trendline:
+    technical_thesis: Reaction at a fitted trendline band.
+    validation_conditions: Line fit, band, reaction candle.
+    quality_formula:
+      class: constant
+      note: Overall was 1.0 on every replay setup
+    confirmed_defects:
+    - v3 target was entry +/- 2 x |entry - band edge| (median room cover 0.05); fixed in v4.
+    - Quality is stars / 3 and always 1.0 here; unchanged because it is arbitration-facing.
+    verdict:
+      technical: PASS
+      execution: PARTIAL
+      performance: UNPROVEN
+      evidence: INSUFFICIENT
+    recommendation: RETAIN
+    scope: 'reworked in v4 (PR trendline-rework): the target is the nearest opposing liquidity; nothing is published without
+      one'
+    owner_approval_required: false
+    rationale: 'v4 replay: median technical RR 3.4, median room cover 0.84; 16 setups, no production trades.'
     prior_certification: null
   range_edge:
-    technical_thesis: "A confirmed break of an M5 range edge fails and reclaims; target the range equilibrium."
-    validation_conditions: "v3 integrity assessment (break, reclaim depth, rejection, room)."
-    quality_formula: {class: continuous, note: "mean of six measured terms"}
+    technical_thesis: A confirmed break of an M5 range edge fails and reclaims; target the range equilibrium.
+    validation_conditions: v3 integrity assessment (break, reclaim depth, rejection, room).
+    quality_formula:
+      class: continuous
+      note: mean of six measured terms
     confirmed_defects:
-      - "FX: technical target is 0.27-0.30x the executable stop (median room cover); 99-100% of FX setups (XAU: 16%) have the fixed TP1 beyond the strategy's own objective."
-      - "Quality is not monotone in outcome: production Spearman -0.18, middle tercile -0.87R."
-      - "Production -0.19R on 62 R-known trades (CI -0.50 to +0.17); XAU replay -0.22R, interval below zero."
-    verdict: {technical: PASS, execution: INCOMPATIBLE, performance: NEGATIVE, evidence: MODERATE}
-    recommendation: RETAIN_RESTRICTED
-    scope: "propose observe-only on FX (geometry cannot pay for the 12-22 pip FX scalp floors); XAU kept under review, no tuning"
-    owner_approval_required: true
-    rationale: "The v3 detector is technically correct. The residual contradiction is execution: a 2-4 pip technical risk cannot honestly carry the 12-22 pip stop the executor places on FX. That is an owner decision about the FX scalp floor, not a detector bug."
-    prior_certification: "docs/strategies/range-edge-v3-certification.md"
+    - 'FX: technical target is 0.27-0.30x the executable stop (median room cover); 99-100% of FX setups (XAU: 16%) have the
+      fixed TP1 beyond the strategy''s own objective.'
+    - 'Quality is not monotone in outcome: production Spearman -0.18, middle tercile -0.87R.'
+    - Production -0.19R on 62 R-known trades (CI -0.50 to +0.17); XAU replay -0.22R, interval below zero.
+    verdict:
+      technical: PASS
+      execution: INCOMPATIBLE
+      performance: NEGATIVE
+      evidence: MODERATE
+    recommendation: RETAIN
+    scope: 'Owner rule 2026-10-14: no observe-only; the strategy trades live on every instrument. The audit evidence is kept
+      here so a later audit can act on it.'
+    owner_approval_required: false
+    rationale: 'The v3 detector is technically correct. The residual contradiction is execution: a 2-4 pip technical risk
+      cannot honestly carry the 12-22 pip stop the executor places on FX. That is an owner decision about the FX scalp floor,
+      not a detector bug.'
+    prior_certification: docs/strategies/range-edge-v3-certification.md
   box_breakout:
-    technical_thesis: "Breakout of a consolidation box; target the measured move."
-    validation_conditions: "Box integrity, close beyond, reaction."
-    quality_formula: {class: stars_over_3, note: ""}
+    technical_thesis: Breakout of a consolidation box; target the measured move.
+    validation_conditions: Box integrity, close beyond, reaction.
+    quality_formula:
+      class: stars_over_3
+      note: ''
     confirmed_defects:
-      - "Overall saturates; FX room cover 0.35-0.58 (box measured move shorter than the executable stop)."
-    verdict: {technical: PASS, execution: PARTIAL, performance: UNPROVEN, evidence: INSUFFICIENT}
+    - Overall saturates; FX room cover 0.35-0.58 (box measured move shorter than the executable stop).
+    verdict:
+      technical: PASS
+      execution: PARTIAL
+      performance: UNPROVEN
+      evidence: INSUFFICIENT
     recommendation: RETAIN
-    scope: "all instruments; re-audit with more trades (2 production trades)"
+    scope: all instruments; re-audit with more trades (2 production trades)
     owner_approval_required: false
-    rationale: "Replay +0.10R (OOS -0.06R), neither significant."
-    prior_certification: "docs/strategies/box_breakout.md"
+    rationale: Replay +0.10R (OOS -0.06R), neither significant.
+    prior_certification: docs/strategies/box_breakout.md
   break_retest:
-    technical_thesis: "Accepted break of a key level or trendline, then a fresh retest and rejection."
-    validation_conditions: "Acceptance closes, retest depth and age, rejection strength."
-    quality_formula: {class: constant, note: "Overall = 0.75 on every setup; 14 measured components published"}
+    technical_thesis: Accepted break of a key level or trendline, then a fresh retest and rejection.
+    validation_conditions: Acceptance closes, retest depth and age, rejection strength.
+    quality_formula:
+      class: constant
+      note: Overall = 0.75 on every setup; 14 measured components published
     confirmed_defects:
-      - "Quality constant at 0.75: it cannot rank or be calibrated."
-    verdict: {technical: PASS, execution: PARTIAL, performance: NEGATIVE, evidence: WEAK}
+    - 'Quality constant at 0.75: it cannot rank or be calibrated.'
+    verdict:
+      technical: PASS
+      execution: PARTIAL
+      performance: NEGATIVE
+      evidence: WEAK
     recommendation: RETAIN
-    scope: "all instruments; replace the constant with a measured function in the quality reconstruction"
+    scope: all instruments; replace the constant with a measured function in the quality reconstruction
     owner_approval_required: false
-    rationale: "Replay -0.26R (interval spans zero, n=36, OOS -0.32R) is weak, not decisive."
-    prior_certification: "docs/strategies/break_retest.md (test/brreplay)"
+    rationale: Replay -0.26R (interval spans zero, n=36, OOS -0.32R) is weak, not decisive.
+    prior_certification: docs/strategies/break_retest.md (test/brreplay)
   momentum_ride:
-    technical_thesis: "Continuation after displacement with structural break and continuity."
-    validation_conditions: "Displacement, continuity, location, structural break."
-    quality_formula: {class: continuous, note: "four measured terms, 24 distinct values"}
+    technical_thesis: Continuation after displacement with structural break and continuity.
+    validation_conditions: Displacement, continuity, location, structural break.
+    quality_formula:
+      class: continuous
+      note: four measured terms, 24 distinct values
     confirmed_defects: []
-    verdict: {technical: PASS, execution: COMPATIBLE, performance: UNPROVEN, evidence: INSUFFICIENT}
+    verdict:
+      technical: PASS
+      execution: COMPATIBLE
+      performance: UNPROVEN
+      evidence: INSUFFICIENT
     recommendation: RETAIN
-    scope: "all instruments; no production trades exist"
+    scope: all instruments; no production trades exist
     owner_approval_required: false
-    rationale: "Replay +0.22R n=29 with wide interval; room cover median 2.6x."
-    prior_certification: "docs/strategies/momentum_ride.md"
+    rationale: Replay +0.22R n=29 with wide interval; room cover median 2.6x.
+    prior_certification: docs/strategies/momentum_ride.md
   snap_back:
-    technical_thesis: "Over-extension from the mean with a measured reaction; mean-reversion target."
-    validation_conditions: "Extension, liquidity grade, reaction."
-    quality_formula: {class: continuous, note: "three measured terms, 28 distinct values"}
+    technical_thesis: Over-extension from the mean with a measured reaction; mean-reversion target.
+    validation_conditions: Extension, liquidity grade, reaction.
+    quality_formula:
+      class: continuous
+      note: three measured terms, 28 distinct values
     confirmed_defects: []
-    verdict: {technical: PASS, execution: COMPATIBLE, performance: UNPROVEN, evidence: INSUFFICIENT}
+    verdict:
+      technical: PASS
+      execution: COMPATIBLE
+      performance: UNPROVEN
+      evidence: INSUFFICIENT
     recommendation: RETAIN
-    scope: "all instruments"
+    scope: all instruments
     owner_approval_required: false
-    rationale: "Replay +0.03R n=45, one production trade."
-    prior_certification: "docs/strategies/snap_back.md"
+    rationale: Replay +0.03R n=45, one production trade.
+    prior_certification: docs/strategies/snap_back.md
   fade_scalp:
-    technical_thesis: "Fade a liquidity-run extreme with a measured reaction (scalp)."
-    validation_conditions: "Location, liquidity grade, reaction."
-    quality_formula: {class: continuous, note: "three terms, 4 distinct values"}
+    technical_thesis: Fade a liquidity-run extreme with a measured reaction (scalp).
+    validation_conditions: Location, liquidity grade, reaction.
+    quality_formula:
+      class: continuous
+      note: three terms, 4 distinct values
     confirmed_defects:
-      - "Replay and production disagree: replay -0.22R [-0.40, -0.04] (EURUSD -0.66R); production +0.99R on 8 R-known trades and +0.39R from the exit paths of all 18."
-    verdict: {technical: PASS, execution: PARTIAL, performance: CONFLICTING, evidence: WEAK}
+    - 'Replay and production disagree: replay -0.22R [-0.40, -0.04] (EURUSD -0.66R); production +0.99R on 8 R-known trades
+      and +0.39R from the exit paths of all 18.'
+    verdict:
+      technical: PASS
+      execution: PARTIAL
+      performance: CONFLICTING
+      evidence: WEAK
     recommendation: RETAIN
-    scope: "all instruments; EURUSD flagged for the owner (replay interval below zero, 2 production trades)"
+    scope: all instruments; EURUSD flagged for the owner (replay interval below zero, 2 production trades)
     owner_approval_required: false
-    rationale: "Eight trades cannot outvote 117 replay episodes, and 117 hypothetical episodes cannot outvote real fills. Collect more before acting."
-    prior_certification: "docs/strategies/fade_scalp.md"
+    rationale: Eight trades cannot outvote 117 replay episodes, and 117 hypothetical episodes cannot outvote real fills. Collect
+      more before acting.
+    prior_certification: docs/strategies/fade_scalp.md
   liquidity_sweep:
-    technical_thesis: "Liquidity is swept, reclaimed and rejected with displacement."
-    validation_conditions: "Reclaim, rejection displacement."
-    quality_formula: {class: continuous, note: "19 distinct values"}
+    technical_thesis: Liquidity is swept, reclaimed and rejected with displacement.
+    validation_conditions: Reclaim, rejection displacement.
+    quality_formula:
+      class: continuous
+      note: 19 distinct values
     confirmed_defects: []
-    verdict: {technical: PASS, execution: PARTIAL, performance: UNPROVEN, evidence: INSUFFICIENT}
+    verdict:
+      technical: PASS
+      execution: PARTIAL
+      performance: UNPROVEN
+      evidence: INSUFFICIENT
     recommendation: RETAIN
-    scope: "XAU stays observe-only as configured; no change"
+    scope: XAU stays observe-only as configured; no change
     owner_approval_required: false
-    rationale: "21 production trades, 0 with a recorded R; exit-path counts are near break-even; replay n=22."
-    prior_certification: "docs/strategies/liquidity_sweep.md"
+    rationale: 21 production trades, 0 with a recorded R; exit-path counts are near break-even; replay n=22.
+    prior_certification: docs/strategies/liquidity_sweep.md
   impulse_pullback:
-    technical_thesis: "Pullback after an M1 impulse (scalp)."
-    validation_conditions: "Body dominance, displacement."
-    quality_formula: {class: continuous, note: "two terms"}
+    technical_thesis: Pullback after an M1 impulse (scalp).
+    validation_conditions: Body dominance, displacement.
+    quality_formula:
+      class: continuous
+      note: two terms
     confirmed_defects:
-      - "Production: 8 of 12 trades closed as full stops, 3 reached a first target, none the final one; the exit paths bound the mean at -0.68R to -0.59R."
-    verdict: {technical: PASS, execution: PARTIAL, performance: NEGATIVE, evidence: WEAK}
-    recommendation: OBSERVE_ONLY
-    scope: "already observe-only on every instrument; keep, and retire at the next audit unless observed outcomes improve"
+    - 'Production: 8 of 12 trades closed as full stops, 3 reached a first target, none the final one; the exit paths bound
+      the mean at -0.68R to -0.59R.'
+    verdict:
+      technical: PASS
+      execution: PARTIAL
+      performance: NEGATIVE
+      evidence: WEAK
+    recommendation: RETAIN
+    scope: 'Owner rule 2026-10-14: no observe-only; the strategy trades live on every instrument. The audit evidence is kept
+      here so a later audit can act on it.'
     owner_approval_required: false
-    rationale: "Already contained; nothing to enable."
-    prior_certification: "docs/strategies/impulse_pullback.md"
+    rationale: Already contained; nothing to enable.
+    prior_certification: docs/strategies/impulse_pullback.md
   scalp_breakout_retest:
-    technical_thesis: "Break of a level on M1 with acceptance, then a retest."
-    validation_conditions: "Acceptance, confirmation, displacement, retest quality and speed."
-    quality_formula: {class: continuous, note: "five measured terms"}
+    technical_thesis: Break of a level on M1 with acceptance, then a retest.
+    validation_conditions: Acceptance, confirmation, displacement, retest quality and speed.
+    quality_formula:
+      class: continuous
+      note: five measured terms
     confirmed_defects:
-      - "First target is a fixed 1R / 2R label (scalp_1to1 68%, scalp_1to2 32%), not a technical objective."
-      - "Replay -0.41R (n=17, interval spans zero) disagrees with production +0.54R (7 R-known trades)."
-    verdict: {technical: PASS_WITH_DEFECTS, execution: PARTIAL, performance: CONFLICTING, evidence: WEAK}
+    - First target is a fixed 1R / 2R label (scalp_1to1 68%, scalp_1to2 32%), not a technical objective.
+    - Replay -0.41R (n=17, interval spans zero) disagrees with production +0.54R (7 R-known trades).
+    verdict:
+      technical: PASS_WITH_DEFECTS
+      execution: PARTIAL
+      performance: CONFLICTING
+      evidence: WEAK
     recommendation: RECONSTRUCT
-    scope: "replace the fixed-R target with a structural one; XAU only, no enablement change"
+    scope: replace the fixed-R target with a structural one; XAU only, no enablement change
     owner_approval_required: true
-    rationale: "The thesis is a real one; the fixed-R target is the same class of defect that led to Range Sweep's removal. Keep trading it while it is repaired because production is positive."
-    prior_certification: "docs/strategies/scalp_breakout_retest.md"
+    rationale: The thesis is a real one; the fixed-R target is the same class of defect that led to Range Sweep's removal.
+      Keep trading it while it is repaired because production is positive.
+    prior_certification: docs/strategies/scalp_breakout_retest.md

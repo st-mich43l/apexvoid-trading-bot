@@ -19,45 +19,24 @@
  ],
  "containment": {
   "EURUSD": {
-   "observe_only_strategies": [
-    "impulse_pullback"
-   ],
-   "observe_only_structure_timeframes": [
-    "M15"
-   ]
+   "observe_only_strategies": [],
+   "observe_only_structure_timeframes": []
   },
   "GBPJPY": {
-   "observe_only_strategies": [
-    "impulse_pullback"
-   ],
-   "observe_only_structure_timeframes": [
-    "M15"
-   ]
+   "observe_only_strategies": [],
+   "observe_only_structure_timeframes": []
   },
   "GBPUSD": {
-   "observe_only_strategies": [
-    "impulse_pullback"
-   ],
-   "observe_only_structure_timeframes": [
-    "M15"
-   ]
+   "observe_only_strategies": [],
+   "observe_only_structure_timeframes": []
   },
   "USDJPY": {
-   "observe_only_strategies": [
-    "impulse_pullback"
-   ],
-   "observe_only_structure_timeframes": [
-    "M15"
-   ]
+   "observe_only_strategies": [],
+   "observe_only_structure_timeframes": []
   },
   "XAU": {
-   "observe_only_strategies": [
-    "impulse_pullback",
-    "liquidity_sweep"
-   ],
-   "observe_only_structure_timeframes": [
-    "M15"
-   ]
+   "observe_only_strategies": [],
+   "observe_only_structure_timeframes": []
   }
  },
  "oos_starts_utc": "2026-10-07",
@@ -1036,7 +1015,7 @@
   },
   "with_new_contract_realized": 172
  },
- "records": 16517,
+ "records": 16516,
  "replay": {
   "box_breakout": {
    "by_symbol": {
@@ -4005,7 +3984,7 @@
      },
      "median_room_cover": 1.99,
      "median_technical_risk_pips": 34.4,
-     "observe_only_here": true,
+     "observe_only_here": false,
      "thinned": 1
     }
    },
@@ -4588,7 +4567,7 @@
      },
      "median_room_cover": 1.84,
      "median_technical_risk_pips": 53.5,
-     "observe_only_here": true,
+     "observe_only_here": false,
      "thinned": 5
     }
    },
@@ -7140,7 +7119,7 @@
       "win_rate": 1.0,
       "worst_r": 0.5
      },
-     "median_room_cover": 0.08,
+     "median_room_cover": 0.78,
      "median_technical_risk_pips": 5.9,
      "observe_only_here": false,
      "thinned": 2
@@ -7162,7 +7141,7 @@
       "win_rate": 0.667,
       "worst_r": -1.0
      },
-     "median_room_cover": 0.05,
+     "median_room_cover": 1.24,
      "median_technical_risk_pips": 2.7,
      "observe_only_here": false,
      "thinned": 6
@@ -7181,7 +7160,7 @@
       "win_rate": 0.0,
       "worst_r": -1.0
      },
-     "median_room_cover": 0.03,
+     "median_room_cover": 0.34,
      "median_technical_risk_pips": 1.9,
      "observe_only_here": false,
      "thinned": 1
@@ -7200,7 +7179,7 @@
       "win_rate": 1.0,
       "worst_r": 0.8
      },
-     "median_room_cover": 0.16,
+     "median_room_cover": 1.27,
      "median_technical_risk_pips": 27.0,
      "observe_only_here": false,
      "thinned": 2
@@ -7212,15 +7191,15 @@
    ],
    "configured_symbols": null,
    "invariant_violations": {},
-   "median_entry_width_pips": 2.0,
-   "median_repeats": 1,
-   "median_room_cover": 0.05,
-   "median_technical_risk_pips": 3.1,
-   "median_technical_rr": 0.26,
+   "median_entry_width_pips": 1.8,
+   "median_repeats": 1.0,
+   "median_room_cover": 0.84,
+   "median_technical_risk_pips": 2.9,
+   "median_technical_rr": 3.42,
    "quality": {
     "distinct_values_1pct": 1,
     "max": 1,
-    "median": 1,
+    "median": 1.0,
     "min": 1
    },
    "quality_vs_hypothetical_r": {
@@ -7229,8 +7208,8 @@
     "terciles_of_quality": {},
     "terciles_of_v2_raw": {}
    },
-   "share_room_cover_below_1": 1.0,
-   "share_technical_rr_below_1": 1.0,
+   "share_room_cover_below_1": 0.688,
+   "share_technical_rr_below_1": 0.0,
    "simulation": {
     "ladder_cost": {
      "all": {
@@ -7394,9 +7373,9 @@
    },
    "stop_within_cap_share": 1.0,
    "thinned_episodes": 11,
-   "unique_confirmed": 17,
+   "unique_confirmed": 16,
    "unique_resting_observations": 0,
-   "version": "v3"
+   "version": "v4"
   }
  },
  "seed": 20261014,
@@ -7542,10 +7521,10 @@
     "share_room_cover_below_1": 0.0,
     "share_technical_rr_below_1": 0.0
    },
-   "final_recommendation": "RETAIN_RESTRICTED",
+   "final_recommendation": "RETAIN",
    "independent_review_status": "pending",
    "observe_only_instruments": [],
-   "owner_approval_required": true,
+   "owner_approval_required": false,
    "prior_certification": "docs/strategies/confluence-zone-v3-certification.md",
    "quality_formula": {
     "class": "stars_over_3",
@@ -7566,7 +7545,7 @@
     "sum_r": -1.0,
     "win_rate": 0.444
    },
-   "recommendation_scope": "propose observe-only on XAU and GBPJPY; keep EURUSD, GBPUSD, USDJPY live",
+   "recommendation_scope": "Owner rule 2026-10-14: no observe-only; the strategy trades live on every instrument. The audit evidence is kept here so a later audit can act on it.",
    "replay_evidence": {
     "ci95": [
      -0.447,
@@ -7788,10 +7767,10 @@
     "share_room_cover_below_1": 0.556,
     "share_technical_rr_below_1": 0.041
    },
-   "final_recommendation": "RETAIN_RESTRICTED",
+   "final_recommendation": "RETAIN",
    "independent_review_status": "pending",
    "observe_only_instruments": [],
-   "owner_approval_required": true,
+   "owner_approval_required": false,
    "prior_certification": "docs/strategies/flip_zone.md",
    "quality_formula": {
     "class": "stars_over_3",
@@ -7809,7 +7788,7 @@
     "sum_r": -0.5,
     "win_rate": 0.5
    },
-   "recommendation_scope": "propose observe-only on XAU; FX unchanged",
+   "recommendation_scope": "Owner rule 2026-10-14: no observe-only; the strategy trades live on every instrument. The audit evidence is kept here so a later audit can act on it.",
    "replay_evidence": {
     "ci95": [
      -0.22,
@@ -7850,10 +7829,10 @@
     "share_room_cover_below_1": 0.637,
     "share_technical_rr_below_1": 0.17
    },
-   "final_recommendation": "RETAIN_RESTRICTED",
+   "final_recommendation": "RETAIN",
    "independent_review_status": "pending",
    "observe_only_instruments": [],
-   "owner_approval_required": true,
+   "owner_approval_required": false,
    "prior_certification": "test/techniqueparity golden",
    "quality_formula": {
     "class": "stars_over_3",
@@ -7874,7 +7853,7 @@
     "sum_r": -1.9,
     "win_rate": 0.286
    },
-   "recommendation_scope": "propose observe-only on XAU; FX unchanged",
+   "recommendation_scope": "Owner rule 2026-10-14: no observe-only; the strategy trades live on every instrument. The audit evidence is kept here so a later audit can act on it.",
    "replay_evidence": {
     "ci95": [
      -0.207,
@@ -7974,15 +7953,9 @@
     "share_room_cover_below_1": 0.0,
     "share_technical_rr_below_1": 0.0
    },
-   "final_recommendation": "OBSERVE_ONLY",
+   "final_recommendation": "RETAIN",
    "independent_review_status": "pending",
-   "observe_only_instruments": [
-    "EURUSD",
-    "GBPJPY",
-    "GBPUSD",
-    "USDJPY",
-    "XAU"
-   ],
+   "observe_only_instruments": [],
    "owner_approval_required": false,
    "prior_certification": "docs/strategies/impulse_pullback.md",
    "quality_formula": {
@@ -7995,7 +7968,7 @@
     "trades": 12
    },
    "realized_r_evidence": null,
-   "recommendation_scope": "already observe-only on every instrument; keep, and retire at the next audit unless observed outcomes improve",
+   "recommendation_scope": "Owner rule 2026-10-14: no observe-only; the strategy trades live on every instrument. The audit evidence is kept here so a later audit can act on it.",
    "replay_evidence": {
     "ci95": null,
     "filled": 1,
@@ -8097,9 +8070,7 @@
    },
    "final_recommendation": "RETAIN",
    "independent_review_status": "pending",
-   "observe_only_instruments": [
-    "XAU"
-   ],
+   "observe_only_instruments": [],
    "owner_approval_required": false,
    "prior_certification": "docs/strategies/liquidity_sweep.md",
    "quality_formula": {
@@ -8203,10 +8174,10 @@
     "share_room_cover_below_1": 0.627,
     "share_technical_rr_below_1": 0.213
    },
-   "final_recommendation": "RETAIN_RESTRICTED",
+   "final_recommendation": "RETAIN",
    "independent_review_status": "pending",
    "observe_only_instruments": [],
-   "owner_approval_required": true,
+   "owner_approval_required": false,
    "prior_certification": "test/techniqueparity golden",
    "quality_formula": {
     "class": "stars_over_3",
@@ -8224,7 +8195,7 @@
     "sum_r": -0.3,
     "win_rate": 0.5
    },
-   "recommendation_scope": "propose observe-only on EURUSD and GBPJPY; XAU and USDJPY unchanged",
+   "recommendation_scope": "Owner rule 2026-10-14: no observe-only; the strategy trades live on every instrument. The audit evidence is kept here so a later audit can act on it.",
    "replay_evidence": {
     "ci95": [
      -0.317,
@@ -8266,10 +8237,10 @@
     "share_room_cover_below_1": 0.855,
     "share_technical_rr_below_1": 0.173
    },
-   "final_recommendation": "RETAIN_RESTRICTED",
+   "final_recommendation": "RETAIN",
    "independent_review_status": "pending",
    "observe_only_instruments": [],
-   "owner_approval_required": true,
+   "owner_approval_required": false,
    "prior_certification": "docs/strategies/range-edge-v3-certification.md",
    "quality_formula": {
     "class": "continuous",
@@ -8290,7 +8261,7 @@
     "sum_r": -11.8,
     "win_rate": 0.403
    },
-   "recommendation_scope": "propose observe-only on FX (geometry cannot pay for the 12-22 pip FX scalp floors); XAU kept under review, no tuning",
+   "recommendation_scope": "Owner rule 2026-10-14: no observe-only; the strategy trades live on every instrument. The audit evidence is kept here so a later audit can act on it.",
    "replay_evidence": {
     "ci95": [
      -0.207,
@@ -8557,8 +8528,8 @@
   },
   "trendline": {
    "confirmed_defects": [
-    "Target is entry +/- 2 x |entry - band edge| (twice the distance to the band edge), not twice the published stop: median room cover 0.05, 100% of setups have technical RR < 1 against the executable stop.",
-    "Quality constant."
+    "v3 target was entry +/- 2 x |entry - band edge| (median room cover 0.05); fixed in v4.",
+    "Quality is stars / 3 and always 1.0 here; unchanged because it is arbitration-facing."
    ],
    "enabled": true,
    "enabled_instruments": [
@@ -8569,24 +8540,24 @@
     "XAU"
    ],
    "execution_compatibility": {
-    "median_room_cover": 0.05,
-    "median_technical_rr": 0.26,
-    "share_room_cover_below_1": 1.0,
-    "share_technical_rr_below_1": 1.0
+    "median_room_cover": 0.84,
+    "median_technical_rr": 3.42,
+    "share_room_cover_below_1": 0.688,
+    "share_technical_rr_below_1": 0.0
    },
-   "final_recommendation": "RECONSTRUCT",
+   "final_recommendation": "RETAIN",
    "independent_review_status": "pending",
    "observe_only_instruments": [],
-   "owner_approval_required": true,
+   "owner_approval_required": false,
    "prior_certification": null,
    "quality_formula": {
     "class": "constant",
     "note": "Overall was 1.0 on every replay setup"
    },
-   "rationale": "The published target is arithmetically unrelated to the published risk.",
+   "rationale": "v4 replay: median technical RR 3.4, median room cover 0.84; 16 setups, no production trades.",
    "real_trade_sample_size": null,
    "realized_r_evidence": null,
-   "recommendation_scope": "rebuild target and stop from the line itself; propose observe-only until rebuilt (no production trades exist)",
+   "recommendation_scope": "reworked in v4 (PR trendline-rework): the target is the nearest opposing liquidity; nothing is published without one",
    "replay_evidence": {
     "ci95": [
      -0.229,
@@ -8602,11 +8573,11 @@
    "validation_conditions": "Line fit, band, reaction candle.",
    "verdicts": {
     "evidence": "INSUFFICIENT",
-    "execution": "INCOMPATIBLE",
+    "execution": "PARTIAL",
     "performance": "UNPROVEN",
-    "technical": "FAIL"
+    "technical": "PASS"
    },
-   "version": "v3"
+   "version": "v4"
   }
  },
  "window": [

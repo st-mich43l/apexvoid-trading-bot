@@ -67,7 +67,7 @@ func trendlineParams() map[string]any {
 		"minimum_validation_touches": 1.0, "chop_minimum_validation_touches": 2.0, "maximum_bars_since_last_touch": 30.0,
 		"chop_require_htf_aligned": true, "require_htf_aligned": false, "reject_exhausted": true,
 		"interaction_band_atr": 0.2, "close_violation_atr": 0.15, "approach_min_distance_atr": 0.1,
-		"invalidation_buffer_atr": .25, "expiry_hours": 4.0,
+		"invalidation_buffer_atr": .25, "expiry_hours": 4.0, "minimum_target_distance_atr": 1.0,
 	})
 }
 

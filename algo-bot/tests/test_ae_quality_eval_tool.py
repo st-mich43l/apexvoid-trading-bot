@@ -1,10 +1,10 @@
 """The AE quality audit's matrix and tool are evidence, so they are tested.
 
 * The reviewer's matrix covers exactly the strategies the Go engine registers, uses only the
-  documented vocabulary, and never proposes a restriction or retirement without flagging that it
-  needs the owner's approval.
+  documented vocabulary, and never proposes a rebuild or retirement without flagging that it needs the
+  owner's approval.
 * The committed results file was produced from that matrix (it cannot go stale silently).
-* The containment patch only names real strategies and only touches the observe-only lists.
+* Nothing is observe-only (owner rule 2026-10-14): the production config contains no observe-only strategy or timeframe.
 * The R arithmetic: a full stop is -1R whatever ``realized_pips`` says (the executor writes 0.0
   there), and the exit-path bounds follow the 1R/2R 50/50 ladder.
 """
@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import json
 import random
-import re
 from pathlib import Path
 
 import pytest
@@ -25,7 +24,7 @@ pytestmark = pytest.mark.no_database
 
 REPO = Path(ev.REPO)
 MATRIX = yaml.safe_load((REPO / "docs/strategies/ae-strategy-matrix.yml").read_text())["strategies"]
-RECOMMENDATIONS = {"RETAIN", "RETAIN_RESTRICTED", "RECONSTRUCT", "OBSERVE_ONLY", "RETIRE"}
+RECOMMENDATIONS = {"RETAIN", "RECONSTRUCT", "RETIRE"}
 VOCABULARY = {
   "technical": {"PASS", "PASS_WITH_DEFECTS", "FAIL"},
   "execution": {"COMPATIBLE", "PARTIAL", "INCOMPATIBLE"},
@@ -53,8 +52,8 @@ def test_matrix_row_is_well_formed(strategy_id: str) -> None:
   assert row["scope"].strip() and row["rationale"].strip()
   assert row["technical_thesis"].strip() and row["validation_conditions"].strip()
   assert row["quality_formula"]["class"] in {"stars_over_3", "constant", "continuous"}
-  if row["recommendation"] in {"RETAIN_RESTRICTED", "RECONSTRUCT", "RETIRE"}:
-    assert row["owner_approval_required"] is True, "a restriction, rebuild or retirement is the owner's decision"
+  if row["recommendation"] in {"RECONSTRUCT", "RETIRE"}:
+    assert row["owner_approval_required"] is True, "a rebuild or retirement is the owner's decision"
   if row["recommendation"] == "RETIRE":
     assert row["verdict"]["technical"] == "FAIL", "retirement needs a technical failure, not a losing streak"
 
@@ -71,28 +70,10 @@ def test_committed_results_match_the_matrix() -> None:
   assert all(not v["invariant_violations"] for v in results["replay"].values())
 
 
-def _patch_added_names(path: str) -> dict[str, set[str]]:
-  names: dict[str, set[str]] = {}
-  hunk = None
-  for line in (REPO / path).read_text().splitlines():
-    if line.startswith("@@"):
-      hunk = line
-      names[hunk] = set()
-    elif hunk and line.startswith("+") and not line.startswith("+++"):
-      match = re.match(r"^\+\s+- (\w+)\s*$", line)
-      if match:
-        names[hunk].add(match.group(1))
-  return names
-
-
-def test_containment_patch_names_only_registered_strategies() -> None:
-  added = set().union(*_patch_added_names("docs/strategies/ae-containment-proposals.patch").values())
-  assert added and added <= _registered()
-  text = (REPO / "docs/strategies/ae-containment-proposals.patch").read_text()
-  assert [f for f in re.findall(r"^diff --git a/(\S+)", text, flags=re.M)] == ["config/instruments.yml"]
-  # Every proposed containment is a RETAIN_RESTRICTED strategy or the retirement's first step.
-  for name in added:
-    assert MATRIX[name]["recommendation"] in {"RETAIN_RESTRICTED", "RETIRE"}, name
+def test_nothing_is_observe_only_in_the_production_config() -> None:
+  for symbol, contained in ev.containment().items():
+    assert contained["observe_only_strategies"] == [], symbol
+    assert contained["observe_only_structure_timeframes"] == [], symbol
 
 
 def test_a_full_stop_is_minus_one_r_whatever_realized_pips_says() -> None:
