@@ -44,6 +44,10 @@ type LegacyDetectorSettings struct {
 	// RetestMaxTouches is technique_retest_max_touches: how many touches a
 	// technique zone may have taken and still publish (optional, default 30).
 	RetestMaxTouches int
+	// MaximumZoneTouches is the optional "maximum_zone_touches": a technique zone that has already been
+	// touched more times than this is spent and does not publish. 0 (the default, and what the frozen
+	// Python publishers did) means no limit. Opt-in per strategy: Supply and Demand set it.
+	MaximumZoneTouches int
 	// HigherTimeframes lists the higher timeframes whose supply/demand zones a
 	// technique publisher also evaluates against the execution frame's closed
 	// bars (optional "higher_timeframes", default none). The frozen Python
@@ -90,6 +94,14 @@ func ParseLegacyDetectorSettings(params map[string]any) (LegacyDetectorSettings,
 	if _, present := params["technique_retest_max_touches"]; present {
 		if s.RetestMaxTouches, err = Int(params, "technique_retest_max_touches"); err != nil {
 			return s, err
+		}
+	}
+	if _, present := params["maximum_zone_touches"]; present {
+		if s.MaximumZoneTouches, err = Int(params, "maximum_zone_touches"); err != nil {
+			return s, err
+		}
+		if s.MaximumZoneTouches < 0 {
+			return s, fmt.Errorf("maximum_zone_touches must be >= 0")
 		}
 	}
 	if raw, present := params["higher_timeframes"]; present {

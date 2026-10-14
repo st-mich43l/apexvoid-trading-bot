@@ -75,14 +75,16 @@ strategies:
     - Stop is wider than the strategy's own technical objective in 57% of setups (technical RR < 1).
     - 'Executable room cover median 0.62: the fixed 1R TP1 usually lies beyond the nearest opposing liquidity the strategy
       itself found.'
+    - 'Fixed in v3: zones touched 3+ times were the worst slice in both halves and both sides.'
     verdict:
       technical: PASS_WITH_DEFECTS
       execution: PARTIAL
       performance: NEUTRAL
       evidence: MODERATE
-    recommendation: RECONSTRUCT
-    scope: geometry only (target honesty / stop placement); no enablement change
-    owner_approval_required: true
+    recommendation: RETAIN
+    scope: 'v3: zones touched more than twice no longer publish (owner asked for an adjustment 2026-10-14); target geometry
+      left unchanged'
+    owner_approval_required: false
     rationale: Detector is legacy-parity-proven and replay is flat (-0.01R); the defect is geometry, not detection.
     prior_certification: test/techniqueparity golden
   demand:
@@ -94,14 +96,16 @@ strategies:
     confirmed_defects:
     - Technical RR < 1 in 62% of setups; room cover median 0.52.
     - Replay interval is below zero pooled (-0.18R [-0.30, -0.06]) and on EURUSD.
+    - 'Fixed in v3: zones touched 3+ times were the worst slice in both halves and both sides.'
     verdict:
       technical: PASS_WITH_DEFECTS
       execution: PARTIAL
       performance: NEGATIVE
       evidence: MODERATE
-    recommendation: RECONSTRUCT
-    scope: geometry; owner may additionally choose observe-only on EURUSD (interval below zero)
-    owner_approval_required: true
+    recommendation: RETAIN
+    scope: 'v3: zones touched more than twice no longer publish (owner asked for an adjustment 2026-10-14); target geometry
+      left unchanged'
+    owner_approval_required: false
     rationale: Same geometry defect as supply, and a worse hypothetical outcome; production demand is -0.09R on 7 R-known
       trades and supply -1.0R on 5 (too few to act on alone).
     prior_certification: test/techniqueparity golden

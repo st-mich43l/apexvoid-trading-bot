@@ -111,8 +111,8 @@ only observes it.
 |---|---|---|---|---|---|
 | `key_level` | Reaction at a clustered key level, with its role and structure | M5 | `strategies.key_level` (v3) | `LEGACY_PARITY_PROVEN` (profitable-week scalp lane, a1c77584) | live |
 | `confluence_zone` | Two or more distinct canonical zone techniques overlapping on one side, then a reaction; its own opportunity beside theirs | M5 | `strategies.confluence_zone` (v2) | `LEGACY_PARITY_PROVEN` | live |
-| `supply` | Reaction at a canonical supply zone | M5; M15 zones analysis-only | `strategies.supply` (v2) | `LEGACY_PARITY_PROVEN` (M5 zones; M15 has no oracle) | live |
-| `demand` | Reaction at a canonical demand zone | M5; M15 zones analysis-only | `strategies.demand` (v2) | `LEGACY_PARITY_PROVEN` (M5 zones; M15 has no oracle) | live |
+| `supply` | Reaction at a canonical supply zone | M5; M15 zones analysis-only | `strategies.supply` (v3) | `LEGACY_PARITY_PROVEN` (M5 zones; M15 has no oracle) | live |
+| `demand` | Reaction at a canonical demand zone | M5; M15 zones analysis-only | `strategies.demand` (v3) | `LEGACY_PARITY_PROVEN` (M5 zones; M15 has no oracle) | live |
 | `order_block` | Reaction at a canonical order-block zone | M5 | `strategies.order_block` (v2) | `LEGACY_PARITY_PROVEN` | live |
 | `fvg` | Reaction at a canonical fair value gap | M5 | `strategies.fvg` (v2) | `LEGACY_PARITY_PROVEN` | live |
 | `ifvg` | Reaction at an inverted fair value gap | M5 | `strategies.ifvg` (v2) | `LEGACY_PARITY_PROVEN` | XAU observe-only; live on FX |
