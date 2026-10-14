@@ -42,6 +42,12 @@ dated section after deployment.
   exposure or enablement setting changes. Opportunity IDs change with the version, and an opportunity is the side and the confirming candle (one confirmation is one opportunity, whichever touch or supporting set it is seen through). **Not deployed.**
 
 ### Added
+- Range Edge v3 replay certification (`analysis-engine/test/rereplay`, `docs/strategies/range-edge-v3-certification.md`,
+  `range-edge-v3-replay-results.json`): test harness, the v2 baseline of what master published on the six committed production
+  captures, and generated evidence only; no behaviour change. Reproduces the 12 Oct USDJPY opportunities id for id, shows v3 refusing
+  the continuation of the accepted break (and one winner), shows no demonstrated change in expectancy, asserts every other
+  strategy's candidates equal master's, and records two adversarial review passes per PR with what was fixed and what is only
+  stated. Includes the deployment and rollback preparation for the same-direction exposure policy and Range Edge v3. **Not deployed.**
 - Confluence Zone v3, part C: replay certification (`analysis-engine/test/czreplay`, `docs/strategies/confluence-zone-v3-certification.md`,
   `-replay-results.json`, `-sensitivity.json`). Test harness, committed production captures and generated evidence only: no strategy,
   config, sizing, arbitration or enablement behaviour changes. It replays XAU and four FX pairs through the engine path with four models (legacy
