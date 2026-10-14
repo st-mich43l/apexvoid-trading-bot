@@ -390,3 +390,18 @@ func TestTheFloorIsTheLiveBarrierNearestPriceNotTheBuildersSelectedOne(t *testin
 		t.Fatalf("a newer support under price re-establishes the range: %+v", got)
 	}
 }
+
+func TestAnAdvanceThatBrokeSeveralClustersIsOneEpochNamedByTheEarliestBreak(t *testing.T) {
+	bars, first := staircase()
+	second := first
+	second.Level, second.Low, second.High, second.FirstTouchIndex, second.LastTouchIndex, second.BreakIndex = 104, 103.8, 104.2, 32, 32, 33
+	in := input(bars, resistanceEdge(105.4, 40, 46, 0), supportEdge(104.3, 34, 44, 0))
+	in.Broken = []techniquezone.BrokenBarrier{second, first}
+	if got := integrity().Assess(in); got.Reject != "" || got.EpochIndex != 31 {
+		t.Fatalf("the episode is named by the earliest break, so a later break does not rename it: %+v", got)
+	}
+	in.Broken = []techniquezone.BrokenBarrier{second}
+	if got := integrity().Assess(in); got.EpochIndex != 33 {
+		t.Fatalf("with only the later break in view it names the episode: %+v", got)
+	}
+}

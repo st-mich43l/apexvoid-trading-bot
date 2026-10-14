@@ -77,7 +77,7 @@ terms, so BUY and SELL are exact mirrors (asserted on mirrored inputs).
 6. **Gaps.** Any missing candle inside the reaction or pressure window fails closed (`data_gap`): a gap is never mistaken
    for a fresh reaction.
 7. **Identity.** The thesis is the range episode: `range:<side>:<first-touch time>` as before, and
-   `range:<side>:break:<time of the latest break>` for a range re-established after a break, so every edge the lookback
+   `range:<side>:break:<time of the earliest break the edge sits beyond>` for a range re-established after a break (the latest event of each broken cluster dates it), so every edge the lookback
    rebuilds in that range is one opportunity, and the next break is a new episode. A reclaimed break returns the edge to its
    own episode. **Residual:** the break is known only while its cluster is inside the builder's 48-bar lookback; when it
    leaves, an edge that was identified by it is identified by its own first touch again (observed: one flip per range,
