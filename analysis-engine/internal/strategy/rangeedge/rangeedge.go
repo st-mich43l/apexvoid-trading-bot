@@ -1,10 +1,15 @@
-// Package rangeedge restores the frozen Python Range Edge Scalp thesis: price
-// at the edge of a confirmed (or provisional / post-impulse) local range, with
-// the barrier's own touch and wick-rejection history and a structural reaction
-// off the edge. The range itself is the engine's detector-contract scalp
-// structure (micro barriers, controlled fallback barrier and explicit range
-// states), so the decision, its gates and its confluence qualification are the
-// frozen detector's.
+// Package rangeedge is the Range Edge Scalp: price at the edge of a confirmed (or
+// provisional / post-impulse) local range, with the barrier's own touch and
+// wick-rejection history and a structural reaction off the edge. The range itself
+// is the engine's detector-contract scalp structure (micro barriers, controlled
+// fallback barrier and explicit range states), so the decision, its gates and its
+// confluence qualification are the frozen detector's.
+//
+// v3 adds the technical integrity the frozen detector lacked (integrity.go): a
+// mean-reversion fade is refused once the market has accepted through the edge it
+// would fade, however the sliding lookback rebuilds a barrier above (below) it, and
+// while price is pressing the edge rather than rejecting it. A genuinely new range
+// formed after a break, or an edge price has reclaimed, stays tradable.
 package rangeedge
 
 import (
@@ -22,7 +27,7 @@ import (
 )
 
 const ID strategy.StrategyID = "range_edge"
-const Version = "v2"
+const Version = "v3"
 
 // rangeEdgeDivisor guards the room ratio against a zero ATR.
 const rangeEdgeDivisor = 1e-9
@@ -30,23 +35,34 @@ const rangeEdgeDivisor = 1e-9
 type Strategy struct {
 	lookback, minimumTouches, minimumWicks, breakCloses int
 	minimumRoomATR, invalidationATR, expiryHours        float64
+	integrity                                           Integrity
 	detector                                            strategyutil.LegacyDetectorSettings
 	fingerprint                                         string
 }
+
+// periodSeconds is the candle period: the strategy reads M5.
+const periodSeconds = 300
 
 func New(cfg strategy.Config) (strategy.Strategy, error) {
 	if cfg.ID != ID {
 		return nil, fmt.Errorf("rangeedge: wrong strategy ID")
 	}
 	s := &Strategy{fingerprint: strategyutil.Fingerprint(string(cfg.ID), cfg.Version, cfg.Parameters)}
-	for key, dst := range map[string]*int{"lookback_bars": &s.lookback, "minimum_touches": &s.minimumTouches, "minimum_wick_rejections": &s.minimumWicks, "break_closes": &s.breakCloses} {
+	s.integrity.PeriodSeconds = periodSeconds
+	for key, dst := range map[string]*int{
+		"lookback_bars": &s.lookback, "minimum_touches": &s.minimumTouches, "minimum_wick_rejections": &s.minimumWicks, "break_closes": &s.breakCloses,
+		"reclaim_closes": &s.integrity.ReclaimCloses, "minimum_inside_closes": &s.integrity.MinimumInsideCloses, "pressure_bars": &s.integrity.PressureBars,
+	} {
 		v, err := strategyutil.Int(cfg.Parameters, key)
 		if err != nil {
 			return nil, err
 		}
 		*dst = v
 	}
-	for key, dst := range map[string]*float64{"minimum_room_atr": &s.minimumRoomATR, "invalidation_buffer_atr": &s.invalidationATR, "expiry_hours": &s.expiryHours} {
+	for key, dst := range map[string]*float64{
+		"minimum_room_atr": &s.minimumRoomATR, "invalidation_buffer_atr": &s.invalidationATR, "expiry_hours": &s.expiryHours,
+		"pressure_minimum_rise_atr": &s.integrity.PressureMinimumRiseATR, "minimum_reclaim_atr": &s.integrity.MinimumReclaimATR,
+	} {
 		v, err := strategyutil.Float(cfg.Parameters, key)
 		if err != nil {
 			return nil, err
@@ -60,6 +76,9 @@ func New(cfg strategy.Config) (strategy.Strategy, error) {
 	if s.lookback < 5 || s.minimumTouches < 2 || s.minimumWicks < 1 || s.breakCloses < 1 || s.minimumRoomATR <= 0 || s.invalidationATR <= 0 || s.expiryHours <= 0 {
 		return nil, fmt.Errorf("rangeedge: invalid parameters")
 	}
+	if s.integrity.ReclaimCloses < 1 || s.integrity.MinimumInsideCloses < 1 || s.integrity.PressureBars < 2 || s.integrity.PressureMinimumRiseATR <= 0 || s.integrity.MinimumReclaimATR < 0 {
+		return nil, fmt.Errorf("rangeedge: invalid integrity parameters")
+	}
 	return s, nil
 }
 
@@ -70,23 +89,48 @@ type edgeCandidate struct {
 	direction market.Direction
 	barrier   techniquezone.ScalpBarrier
 	opposing  float64
+	opposite  techniquezone.ScalpBarrier
+}
+
+// Rejection records an edge the strategy considered and refused, with the reason.
+type Rejection struct {
+	Direction market.Direction
+	Reason    string
+	Level     float64
+	// RetiredBreakTime is the open time of the candle on which the accepted break that
+	// retired the edge completed, 0 if the edge was not retired by one.
+	RetiredBreakTime int64
+	BreakDistanceATR float64
+}
+
+// Analysis is what one evaluation considered.
+type Analysis struct {
+	Candidates []opportunity.Candidate
+	Rejections []Rejection
 }
 
 func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Candidate {
+	return s.Analyze(ctx).Candidates
+}
+
+// Analyze evaluates the range edges and reports both the candidate and every edge
+// the integrity assessment refused.
+func (s *Strategy) Analyze(ctx *analysiscontext.MarketContext) Analysis {
+	var out Analysis
 	base, ok := strategyutil.NewLegacyDetectorForFrame(ctx, market.M5, s.detector)
 	if !ok {
-		return nil
+		return out
 	}
 	scalp := base.Frame.ScalpRange
 	if scalp == nil {
-		return nil
+		return out
 	}
 	bars := base.Frame.Bars
 	last := len(bars) - 1
 	baseLookback := maxInt(1, s.detector.ReactionLookbackBars)
 	candidates := []edgeCandidate{
-		{market.Buy, scalp.Lower, scalp.Upper.Level},
-		{market.Sell, scalp.Upper, scalp.Lower.Level},
+		{market.Buy, scalp.Lower, scalp.Upper.Level, scalp.Upper},
+		{market.Sell, scalp.Upper, scalp.Lower.Level, scalp.Lower},
 	}
 	sort.SliceStable(candidates, func(i, j int) bool {
 		a, b := candidates[i], candidates[j]
@@ -125,6 +169,20 @@ func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Ca
 		if confirmation == nil {
 			continue
 		}
+		// The technical integrity of the edge: is it still a range edge, and is
+		// this a rejection of it rather than pressure into it.
+		assessment := s.integrity.Assess(EdgeInput{
+			Bars: bars, ATR: d.ATR, Sell: c.direction == market.Sell, Edge: barrier, Opposite: c.opposite,
+			Barriers: base.Frame.Barriers, Broken: base.Frame.ScalpBroken, ConfirmIndex: barIndexAt(bars, confirmation.ConfirmationTime), GapBars: maxInt(baseLookback, s.integrity.PressureBars) + 1,
+		})
+		if assessment.Reject != "" {
+			rejection := Rejection{Direction: c.direction, Reason: assessment.Reject, Level: barrier.Level, BreakDistanceATR: assessment.BreakDistanceATR}
+			if assessment.RetiredBreakIndex >= 0 && assessment.RetiredBreakIndex < len(bars) {
+				rejection.RetiredBreakTime = bars[assessment.RetiredBreakIndex].Time
+			}
+			out.Rejections = append(out.Rejections, rejection)
+			continue
+		}
 		factors := confluence.Factors{
 			HTFAligned: d.Read.HTFBias == "range" || d.HTFAligned(), Touches: barrier.Touches,
 			WickRejection: barrier.WickRejections > 0, DisplacementGrade: gradeA, StructuralAgreement: true,
@@ -134,14 +192,29 @@ func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Ca
 		// not fall through to the other edge.
 		result := d.Finish(barrier.Level, zone, factors, "", nil, nil)
 		if result == nil {
-			return nil
+			return out
 		}
-		return s.candidate(ctx, d, scalp, c, result, confirmation, grab)
+		out.Candidates = s.candidate(ctx, d, scalp, c, result, confirmation, grab, assessment)
+		return out
 	}
-	return nil
+	return out
 }
 
-func (s *Strategy) candidate(ctx *analysiscontext.MarketContext, d *strategyutil.LegacyDetector, scalp *techniquezone.ScalpRange, c edgeCandidate, result *strategyutil.LegacyResult, confirmation *strategyutil.LegacyConfirmation, grab *techniquezone.Grab) []opportunity.Candidate {
+// barIndexAt is the index of the candle opened at the given time, or the last
+// candle when none matches.
+func barIndexAt(bars []market.Candle, at int64) int {
+	for i := len(bars) - 1; i >= 0; i-- {
+		if bars[i].Time == at {
+			return i
+		}
+		if bars[i].Time < at {
+			break
+		}
+	}
+	return len(bars) - 1
+}
+
+func (s *Strategy) candidate(ctx *analysiscontext.MarketContext, d *strategyutil.LegacyDetector, scalp *techniquezone.ScalpRange, c edgeCandidate, result *strategyutil.LegacyResult, confirmation *strategyutil.LegacyConfirmation, grab *techniquezone.Grab, assessment Assessment) []opportunity.Candidate {
 	barrier := c.barrier
 	bars := d.Frame.Bars
 	low, high := result.Zone.Low(), result.Zone.High()
@@ -161,7 +234,12 @@ func (s *Strategy) candidate(ctx *analysiscontext.MarketContext, d *strategyutil
 	if formedAt > confirmation.ConfirmationTime {
 		formedAt = confirmation.TouchTime
 	}
+	// The thesis is the range edge's episode. An edge established after an accepted
+	// break is one episode per break, however the lookback rebuilds the barrier.
 	setupKey := fmt.Sprintf("range:%s:%d", barrier.Side, bars[barrier.FirstTouchIndex].Time)
+	if assessment.EpochIndex >= 0 {
+		setupKey = fmt.Sprintf("range:%s:break:%d", barrier.Side, bars[assessment.EpochIndex].Time)
+	}
 	candidate, err := strategyutil.Candidate(strategyutil.CandidateSpec{
 		ID: string(ID), Version: Version, SetupKey: setupKey, Symbol: ctx.Symbol, Direction: c.direction,
 		EntryLow: low, EntryHigh: high, Invalidation: invalid, InvalidationLabel: "range_edge_accepted_break",
@@ -169,6 +247,12 @@ func (s *Strategy) candidate(ctx *analysiscontext.MarketContext, d *strategyutil
 		Quality: opportunity.StrategyQuality{Overall: quality, Components: map[string]float64{
 			"touch_history": strategyutil.Clamp01(float64(barrier.Touches) / 4), "wick_history": strategyutil.Clamp01(float64(barrier.WickRejections) / 3),
 			"room": strategyutil.Clamp01(math.Abs(barrier.Level-scalp.Equilibrium) / (s.minimumRoomATR * d.ATR)),
+			// Measured at the confirming candle and at the latest close: where the rejection
+			// closed (1 = at the extreme away from the edge), how far back inside the edge
+			// it closed in ATR, and how far the latest close sits beyond the edge (<= 0 is inside).
+			"rejection_close_location": strategyutil.Clamp01(assessment.RejectionCloseLocation),
+			"reclaim_depth_atr":        math.Max(0, assessment.ReclaimDepthATR),
+			"break_distance_atr":       assessment.BreakDistanceATR,
 		}},
 		FormedAt: formedAt, ConfirmedAt: confirmation.ConfirmationTime, ExpiryHours: s.expiryHours, Fingerprint: s.fingerprint,
 	})

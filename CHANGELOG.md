@@ -13,6 +13,17 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
+- Range Edge Scalp v3 (`docs/strategies/range_edge.md`): the edge a fade trades must still be a range edge. The scalp
+  structure builder now keeps the barriers it discards because price accepted through them (`ScalpStructure.Broken`;
+  the barriers and range are unchanged), and Range Edge refuses a fade of an edge at or beyond an outermost broken edge of its
+  side unless price reclaimed it (`reclaim_closes`) or a new range formed after the break, refuses while price is still beyond
+  the edge or pressing it (`pressure_bars`, `pressure_minimum_rise_atr`), requires the confirming candle to close back inside,
+  fails closed on a gap in the reaction window, and gives every edge rebuilt in one range episode one identity
+  (`range:<side>:break:<time>`). Reproduces the 12 Oct USDJPY staircase (six SELL opportunities for one advance) as one.
+  New required parameters in `config/analysis.yml`; opportunity IDs change with the version; `Quality.Overall` and the
+  candidate contract are unchanged (three measured quality components added). `range_edge` left the Python parity oracle (its
+  v2 decisions are reproduced by replay in the certification that follows); the Confluence Zone replay certification no
+  longer counts Range Edge among "the other strategies" and its other-strategies baseline excludes it. **Not deployed.**
 - Confluence Zone (`confluence_zone`) is rebuilt as v3 (`docs/strategies/confluence_zone.md`,
   `docs/strategies/confluence-zone-v3-technical-spec.md`), replacing the Python-parity v2 whose forensic audit
   (`docs/strategies/confluence-zone-xau-forensic-audit.md`) found that `minimum_facts = 2` counted labels, the entry

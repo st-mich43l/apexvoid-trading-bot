@@ -1,6 +1,6 @@
 {
  "replay-eurusd-production-capture-20261013.json": {
-  "candidates": 5007,
+  "candidates": 4823,
   "per_strategy": {
    "box_breakout": 13,
    "break_retest": 13,
@@ -14,15 +14,14 @@
    "liquidity_sweep": 2,
    "momentum_ride": 7,
    "order_block": 287,
-   "range_edge": 184,
    "session_level": 16,
    "snap_back": 7,
    "supply": 1483
   },
-  "sha256": "c6681f635312af7a6fc54fb4394704c7d184ba916397430a5d68d0baac584717"
+  "sha256": "b139775fdeb050854d5876949b1c4b3c761a5d76e1f84a5c1b24902d9f1d9207"
  },
  "replay-gbpjpy-production-capture-20261013.json": {
-  "candidates": 4865,
+  "candidates": 4661,
   "per_strategy": {
    "box_breakout": 10,
    "break_retest": 16,
@@ -35,14 +34,13 @@
    "liquidity_sweep": 8,
    "momentum_ride": 5,
    "order_block": 467,
-   "range_edge": 204,
    "session_level": 9,
    "supply": 1820
   },
-  "sha256": "a9514c2d0f62baae95cd6ba351aaad06e4ee042a0aa7ddf7c0a14d2b3953914b"
+  "sha256": "4a8ead46742bbe5bcc86cfcc4ce192cfa383aef48538aa0fe66ff3f3e9f17e05"
  },
  "replay-gbpusd-production-capture-20261013.json": {
-  "candidates": 6576,
+  "candidates": 6380,
   "per_strategy": {
    "box_breakout": 10,
    "break_retest": 10,
@@ -55,16 +53,15 @@
    "liquidity_sweep": 2,
    "momentum_ride": 3,
    "order_block": 425,
-   "range_edge": 196,
    "session_level": 25,
    "snap_back": 5,
    "supply": 2063,
    "trendline": 6
   },
-  "sha256": "e7624f80a2d69be418de39f2f2f2b0b6e984e8b917e33d12985d498375543f3c"
+  "sha256": "5d1504296d6774b58246efe7784e260ca0a66aa5832a911eeef6a6fa98a33233"
  },
  "replay-usdjpy-production-capture-20261013.json": {
-  "candidates": 6678,
+  "candidates": 6437,
   "per_strategy": {
    "box_breakout": 9,
    "break_retest": 16,
@@ -77,16 +74,15 @@
    "liquidity_sweep": 2,
    "momentum_ride": 4,
    "order_block": 456,
-   "range_edge": 241,
    "session_level": 21,
    "snap_back": 2,
    "supply": 2510,
    "trendline": 2
   },
-  "sha256": "12d3382e98e84d3b1fd623bf67a46febea5b3b3a00d03e8980eb39772c891905"
+  "sha256": "8bd77c8af06931b2efbe39130c9e474574964d5e513d30f594a5a8c6d844ad4e"
  },
  "replay-xau-production-capture-20260921.json": {
-  "candidates": 2653,
+  "candidates": 2600,
   "per_strategy": {
    "box_breakout": 10,
    "break_retest": 3,
@@ -100,16 +96,15 @@
    "liquidity_sweep": 2,
    "momentum_ride": 10,
    "order_block": 156,
-   "range_edge": 53,
    "session_level": 10,
    "snap_back": 7,
    "supply": 625,
    "trendline": 4
   },
-  "sha256": "79b1ed317233082feacb31b50f9d816a27b0dd3425a2b1ba1ea1e4bc6d7b6c9d"
+  "sha256": "fa9990ee5074142aea275bdf266ceb2375ba1db3660dc2ef5c566b525575f375"
  },
  "replay-xau-production-capture-20261013.json": {
-  "candidates": 4945,
+  "candidates": 4821,
   "per_strategy": {
    "box_breakout": 9,
    "break_retest": 2,
@@ -122,11 +117,10 @@
    "liquidity_sweep": 3,
    "momentum_ride": 4,
    "order_block": 224,
-   "range_edge": 124,
    "session_level": 30,
    "snap_back": 29,
    "supply": 1553
   },
-  "sha256": "1cdfb443b667aef9777e5aaf5fbc50435edc9d0cfdde4fae569e028ef9351508"
+  "sha256": "c1f486a26c71870f5537e4a0e85bc0b06aa6cb7e64d74637f0c8afbb89fb5b96"
  }
 }

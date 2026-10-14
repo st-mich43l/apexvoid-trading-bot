@@ -86,6 +86,9 @@ type ScalpBarrier struct {
 	Fallback         bool
 	Invalidated      bool
 	Tested           bool
+	// Tolerance is the builder's entry tolerance the barrier's accepted closes were
+	// counted with (a close counts as accepted past Level +/- Tolerance).
+	Tolerance float64
 }
 
 // ScalpRange mirrors scalp_ranges.ScalpRange.
@@ -109,11 +112,29 @@ type ScalpLine struct {
 	Value float64
 }
 
+// BrokenBarrier is a barrier cluster the builder discarded because price accepted
+// beyond it: BreakCloses consecutive closes past its level (plus Tolerance, the
+// builder's own entry tolerance). The cluster is what the market had established as
+// an edge before it broke; keeping it is what lets a consumer tell a new edge made
+// by a rebuilt lookback from one made by a genuinely new range. Side is "support"
+// or "resistance"; BreakIndex is the closed bar on which the accepted run first
+// reached BreakCloses (indexes are of the bars the structure was built from).
+type BrokenBarrier struct {
+	Side                            string
+	Level, Low, High, Tolerance     float64
+	Touches, WickRejections         int
+	FirstTouchIndex, LastTouchIndex int
+	BreakIndex                      int
+}
+
 // ScalpStructure is the builder's result.
 type ScalpStructure struct {
 	Barriers []ScalpBarrier
-	Range    *ScalpRange
-	State    string
+	// Broken are the edges price has accepted through inside the lookback, oldest
+	// break first. Nothing in Barriers or Range is derived from them.
+	Broken []BrokenBarrier
+	Range  *ScalpRange
+	State  string
 }
 
 type scalpContact struct {
@@ -153,6 +174,7 @@ func BuildScalpStructure(bars []market.Candle, atr []float64, sessions []Session
 	}
 	contacts := scalpContacts(frame, offset, atrTail, minimumWick)
 	var barriers []ScalpBarrier
+	var broken []BrokenBarrier
 	for _, side := range []string{"support", "resistance"} {
 		for _, cluster := range clusterContacts(contacts[side], clusterTolerance) {
 			episodes := touchEpisodes(cluster)
@@ -177,6 +199,13 @@ func BuildScalpStructure(bars []market.Candle, atr []float64, sessions []Session
 			}
 			accepted := maxAcceptedCloseRun(bars, level, entryTolerance, side, episodes[0].index)
 			if accepted >= breakCloses {
+				halfWidth := math.Min(entryTolerance, maxEdgeWidth/2)
+				broken = append(broken, BrokenBarrier{
+					Side: side, Level: level, Low: level - halfWidth, High: level + halfWidth, Tolerance: entryTolerance,
+					Touches: len(episodes), WickRejections: wicks,
+					FirstTouchIndex: episodes[0].index, LastTouchIndex: episodes[len(episodes)-1].index,
+					BreakIndex: acceptedRunBreakIndex(bars, level, entryTolerance, side, episodes[0].index, breakCloses),
+				})
 				continue
 			}
 			halfWidth := math.Min(entryTolerance, maxEdgeWidth/2)
@@ -190,14 +219,25 @@ func BuildScalpStructure(bars []market.Candle, atr []float64, sessions []Session
 				LastTouchIndex: episodes[len(episodes)-1].index, FirstTouchIndex: episodes[0].index, BodyHolds: holds,
 				Age: maxInt(0, len(bars)-1-episodes[len(episodes)-1].index), Tags: tags, Score: score,
 				Grade: grade, ConfidenceGrade: grade, Sources: sources, ClassName: barrierClass(grade, tags), Tested: true,
+				Tolerance: entryTolerance,
 			})
 		}
 	}
 
 	barriers = dedupBarriers(barriers, clusterTolerance)
+	sort.SliceStable(broken, func(i, j int) bool {
+		a, b := broken[i], broken[j]
+		if a.BreakIndex != b.BreakIndex {
+			return a.BreakIndex < b.BreakIndex
+		}
+		if a.Side != b.Side {
+			return a.Side < b.Side
+		}
+		return a.Level < b.Level
+	})
 	current := bars[len(bars)-1].Close
 	if recentBreakoutDisplacement(bars, atrValue, cfg) {
-		return ScalpStructure{Barriers: barriers, State: RangeStateBroken}
+		return ScalpStructure{Barriers: barriers, Broken: broken, State: RangeStateBroken}
 	}
 	var supports, resistances []ScalpBarrier
 	for _, barrier := range barriers {
@@ -221,7 +261,7 @@ func BuildScalpStructure(bars []market.Candle, atr []float64, sessions []Session
 	}
 	barriers = dedupBarriers(barriers, clusterTolerance)
 	best, state := bestRangeWithState(barriers, current, atrValue, cfg, bars)
-	return ScalpStructure{Barriers: barriers, Range: best, State: state}
+	return ScalpStructure{Barriers: barriers, Broken: broken, Range: best, State: state}
 }
 
 func lastPositive(series []float64) float64 {
@@ -426,6 +466,55 @@ func maxAcceptedCloseRun(bars []market.Candle, level, tolerance float64, side st
 		}
 	}
 	return longest
+}
+
+// acceptedRunBreakIndex is the first bar on which a run of accepted closes past the
+// level reaches closes, scanning from start; -1 when it never does.
+func acceptedRunBreakIndex(bars []market.Candle, level, tolerance float64, side string, start, closes int) int {
+	run := 0
+	for i := maxInt(0, start); i < len(bars); i++ {
+		accepted := bars[i].Close > level+tolerance
+		if side == "support" {
+			accepted = bars[i].Close < level-tolerance
+		}
+		if !accepted {
+			run = 0
+			continue
+		}
+		run++
+		if run >= closes {
+			return i
+		}
+	}
+	return -1
+}
+
+// BreakReclaimed reports whether price took the market back inside a broken edge:
+// after the break, `closes` consecutive closes back on the range side of the level
+// (at or below it less its tolerance for a resistance, at or above it plus its
+// tolerance for a support). A reclaimed break restores the edge's range; an
+// unreclaimed one retires it. The closes are those of the bars given, so the answer
+// at a bar never depends on a later one.
+func BreakReclaimed(bars []market.Candle, b BrokenBarrier, closes int) bool {
+	if b.BreakIndex < 0 || closes < 1 {
+		return false
+	}
+	run := 0
+	for i := b.BreakIndex + 1; i < len(bars); i++ {
+		inside := bars[i].Close <= b.Level-b.Tolerance
+		if b.Side == "support" {
+			inside = bars[i].Close >= b.Level+b.Tolerance
+		}
+		if !inside {
+			run = 0
+			continue
+		}
+		run++
+		if run >= closes {
+			return true
+		}
+	}
+	return false
 }
 
 func barrierTags(side string, level float64, touches, wicks int, tolerance float64, barIndex int, sessions []SessionRef, lines []ScalpLine, regimeHigh, regimeLow float64, hasRegime bool, roundStep float64) []string {
@@ -729,7 +818,7 @@ func fallbackBarrier(side string, frame []market.Candle, offset int, bars []mark
 		Side: side, Level: level, Low: level - halfWidth, High: level + halfWidth, Touches: maxInt(1, touches),
 		WickRejections: wicks, LastTouchIndex: absIndex, FirstTouchIndex: absIndex, Age: maxInt(0, len(bars)-1-absIndex),
 		Tags: tags, Score: score, Grade: grade, ConfidenceGrade: grade, Sources: []string{"fallback_local_extreme"},
-		ClassName: "micro", Fallback: true, Tested: touches >= 2,
+		ClassName: "micro", Fallback: true, Tested: touches >= 2, Tolerance: entryTolerance,
 	}, true
 }
 

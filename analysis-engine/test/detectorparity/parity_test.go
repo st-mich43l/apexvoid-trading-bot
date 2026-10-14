@@ -28,7 +28,12 @@ import (
 // frozen Python detector, so the oracle golden for it stays untouched and is
 // simply no longer a parity target. Its v2 decisions remain reproducible as the
 // frozen baseline in test/brreplay.
-var covered = []string{"range_edge", "snap_back", "momentum_ride", "fade_scalp"}
+//
+// range_edge left it too, when rebuilt as v3 (docs/strategies/range_edge.md): it
+// refuses a fade of an edge the market accepted through, which the frozen Python
+// detector does not. Its v2 decisions remain reproducible as the frozen baseline
+// in test/rereplay (testdata/range-edge-v2-baseline.json).
+var covered = []string{"snap_back", "momentum_ride", "fade_scalp"}
 
 type goldenDetector struct {
 	Direction       string  `json:"direction"`
