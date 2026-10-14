@@ -86,9 +86,6 @@ type ScalpBarrier struct {
 	Fallback         bool
 	Invalidated      bool
 	Tested           bool
-	// Tolerance is the builder's entry tolerance the barrier's accepted closes were
-	// counted with (a close counts as accepted past Level +/- Tolerance).
-	Tolerance float64
 }
 
 // ScalpRange mirrors scalp_ranges.ScalpRange.
@@ -118,13 +115,16 @@ type ScalpLine struct {
 // an edge before it broke; keeping it is what lets a consumer tell a new edge made
 // by a rebuilt lookback from one made by a genuinely new range. Side is "support"
 // or "resistance"; BreakIndex is the closed bar on which the accepted run first
-// reached BreakCloses (indexes are of the bars the structure was built from).
+// reached BreakCloses (indexes are of the bars the structure was built from). Later
+// events (a reclaim, a second break) are read from the bars by BreakStatus.
 type BrokenBarrier struct {
 	Side                            string
 	Level, Low, High, Tolerance     float64
 	Touches, WickRejections         int
 	FirstTouchIndex, LastTouchIndex int
 	BreakIndex                      int
+	// BreakCloses is the accepted run that breaks the edge (the builder's break_closes).
+	BreakCloses int
 }
 
 // ScalpStructure is the builder's result.
@@ -204,7 +204,7 @@ func BuildScalpStructure(bars []market.Candle, atr []float64, sessions []Session
 					Side: side, Level: level, Low: level - halfWidth, High: level + halfWidth, Tolerance: entryTolerance,
 					Touches: len(episodes), WickRejections: wicks,
 					FirstTouchIndex: episodes[0].index, LastTouchIndex: episodes[len(episodes)-1].index,
-					BreakIndex: acceptedRunBreakIndex(bars, level, entryTolerance, side, episodes[0].index, breakCloses),
+					BreakIndex: acceptedRunBreakIndex(bars, level, entryTolerance, side, episodes[0].index, breakCloses), BreakCloses: breakCloses,
 				})
 				continue
 			}
@@ -219,7 +219,6 @@ func BuildScalpStructure(bars []market.Candle, atr []float64, sessions []Session
 				LastTouchIndex: episodes[len(episodes)-1].index, FirstTouchIndex: episodes[0].index, BodyHolds: holds,
 				Age: maxInt(0, len(bars)-1-episodes[len(episodes)-1].index), Tags: tags, Score: score,
 				Grade: grade, ConfidenceGrade: grade, Sources: sources, ClassName: barrierClass(grade, tags), Tested: true,
-				Tolerance: entryTolerance,
 			})
 		}
 	}
@@ -489,32 +488,52 @@ func acceptedRunBreakIndex(bars []market.Candle, level, tolerance float64, side 
 	return -1
 }
 
-// BreakReclaimed reports whether price took the market back inside a broken edge:
-// after the break, `closes` consecutive closes back on the range side of the level
-// (at or below it less its tolerance for a resistance, at or above it plus its
-// tolerance for a support). A reclaimed break restores the edge's range; an
-// unreclaimed one retires it. The closes are those of the bars given, so the answer
-// at a bar never depends on a later one.
-func BreakReclaimed(bars []market.Candle, b BrokenBarrier, closes int) bool {
-	if b.BreakIndex < 0 || closes < 1 {
-		return false
+// BreakStatus reads what the market did to a broken edge after it broke, from the bars
+// given (so the answer at a bar never depends on a later one). Events alternate: the edge
+// is retired when an accepted run (BreakCloses closes past the level less its tolerance)
+// completes, restored when `reclaimCloses` consecutive closes come back on the range side
+// of the level (at or below it less its tolerance for a resistance, at or above it plus its
+// tolerance for a support), and retired again by the next accepted run. It returns whether
+// the edge is restored now and the bar on which the current retirement completed (the
+// first break, or the latest re-break).
+func BreakStatus(bars []market.Candle, b BrokenBarrier, reclaimCloses int) (reclaimed bool, latestBreak int) {
+	if b.BreakIndex < 0 || reclaimCloses < 1 {
+		return false, b.BreakIndex
 	}
-	run := 0
+	need := maxInt(1, b.BreakCloses)
+	latest, out, in := b.BreakIndex, 0, 0
 	for i := b.BreakIndex + 1; i < len(bars); i++ {
+		accepted := bars[i].Close > b.Level+b.Tolerance
 		inside := bars[i].Close <= b.Level-b.Tolerance
 		if b.Side == "support" {
+			accepted = bars[i].Close < b.Level-b.Tolerance
 			inside = bars[i].Close >= b.Level+b.Tolerance
 		}
-		if !inside {
-			run = 0
-			continue
+		if accepted {
+			out++
+		} else {
+			out = 0
 		}
-		run++
-		if run >= closes {
-			return true
+		if inside {
+			in++
+		} else {
+			in = 0
+		}
+		switch {
+		case !reclaimed && in >= reclaimCloses:
+			reclaimed = true
+		case reclaimed && out >= need:
+			reclaimed, latest = false, i
 		}
 	}
-	return false
+	return reclaimed, latest
+}
+
+// BreakReclaimed reports whether price has taken the market back inside a broken edge
+// and not accepted beyond it since (see BreakStatus).
+func BreakReclaimed(bars []market.Candle, b BrokenBarrier, closes int) bool {
+	reclaimed, _ := BreakStatus(bars, b, closes)
+	return reclaimed
 }
 
 func barrierTags(side string, level float64, touches, wicks int, tolerance float64, barIndex int, sessions []SessionRef, lines []ScalpLine, regimeHigh, regimeLow float64, hasRegime bool, roundStep float64) []string {
@@ -818,7 +837,7 @@ func fallbackBarrier(side string, frame []market.Candle, offset int, bars []mark
 		Side: side, Level: level, Low: level - halfWidth, High: level + halfWidth, Touches: maxInt(1, touches),
 		WickRejections: wicks, LastTouchIndex: absIndex, FirstTouchIndex: absIndex, Age: maxInt(0, len(bars)-1-absIndex),
 		Tags: tags, Score: score, Grade: grade, ConfidenceGrade: grade, Sources: []string{"fallback_local_extreme"},
-		ClassName: "micro", Fallback: true, Tested: touches >= 2, Tolerance: entryTolerance,
+		ClassName: "micro", Fallback: true, Tested: touches >= 2,
 	}, true
 }
 

@@ -17,7 +17,7 @@ dated section after deployment.
   structure builder now keeps the barriers it discards because price accepted through them (`ScalpStructure.Broken`;
   the barriers and range are unchanged), and Range Edge refuses a fade of an edge at or beyond an outermost broken edge of its
   side unless price reclaimed it (`reclaim_closes`) or a new range formed after the break, refuses while price is still beyond
-  the edge or pressing it (`pressure_bars`, `pressure_minimum_rise_atr`), requires the confirming candle to close back inside,
+  the edge or pressing it (`pressure_bars`, `pressure_minimum_rise_atr`, `rejection_close_strength`), requires the confirming candle to close back inside,
   fails closed on a gap in the reaction window, and gives every edge rebuilt in one range episode one identity
   (`range:<side>:break:<time>`). Reproduces the 12 Oct USDJPY staircase (six SELL opportunities for one advance) as one.
   New required parameters in `config/analysis.yml`; opportunity IDs change with the version; `Quality.Overall` and the

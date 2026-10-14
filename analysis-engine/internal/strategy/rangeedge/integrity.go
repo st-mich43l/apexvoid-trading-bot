@@ -38,6 +38,7 @@ const (
 	ReasonBreakPending        = "break_pending_unreclaimed"
 	ReasonPressureIntoEdge    = "pressure_into_edge"
 	ReasonRejectionNotInside  = "rejection_not_back_inside"
+	ReasonReactionFailed      = "reaction_failed_after_confirmation"
 	ReasonDataGap             = "data_gap"
 	ReasonATRUnavailable      = "atr_unavailable"
 )
@@ -54,6 +55,13 @@ type Integrity struct {
 	// in total, are pressure into the edge, not a rejection of it.
 	PressureBars           int
 	PressureMinimumRiseATR float64
+	// RejectionCloseStrength is where a candle must close in its range (1 = at the
+	// extreme away from the edge) to be a rejection whatever the approach: a candle that
+	// closes that decisively away from the edge is not pressure into it.
+	RejectionCloseStrength float64
+	// MaximumWidthATR bounds how far beyond a broken edge another cluster can lie and
+	// still be part of the same range (the builder's maximum range width).
+	MaximumWidthATR float64
 	// MinimumReclaimATR is how far back inside the edge the confirming candle must
 	// close, in ATR, once price has closed beyond the edge.
 	MinimumReclaimATR float64
@@ -131,7 +139,7 @@ func (p Integrity) Assess(in EdgeInput) Assessment {
 	// market history: no acceptance run or pressure sequence is trusted across it.
 	if p.PeriodSeconds > 0 && in.GapBars > 0 {
 		for i := maxInt(1, last-in.GapBars+1); i <= last; i++ {
-			if bars[i].Time-bars[i-1].Time > 2*p.PeriodSeconds {
+			if bars[i].Time-bars[i-1].Time > p.PeriodSeconds {
 				out.Reject = ReasonDataGap
 				return out
 			}
@@ -159,22 +167,27 @@ func (p Integrity) Assess(in EdgeInput) Assessment {
 	if in.Sell {
 		side = "resistance"
 	}
-	for _, b := range in.Broken {
-		if b.Side != side || b.BreakIndex < 0 || b.BreakIndex > last {
+	for _, first := range in.Broken {
+		if first.Side != side || first.BreakIndex < 0 || first.BreakIndex > last {
 			continue
 		}
 		// Only the outermost established edge on its side counts: a cluster inside the
 		// range that price runs through on its way to the edge is not an edge breaking.
-		if !outermost(in, b) {
+		if !p.outermost(in, first) {
 			continue
 		}
 		// The rebuilt edge is at or beyond the broken one.
-		if beyond(in.Sell, edge.Level, b.Level) < -b.Tolerance {
+		if beyond(in.Sell, edge.Level, first.Level) < -first.Tolerance {
 			continue
 		}
-		if techniquezone.BreakReclaimed(bars[:last+1], b, p.ReclaimCloses) {
+		// What the market did to it since: restored by a reclaim, retired again by a
+		// later accepted run. The latest event decides, and its bar is the break.
+		reclaimed, latest := techniquezone.BreakStatus(bars[:last+1], first, p.ReclaimCloses)
+		if reclaimed {
 			continue
 		}
+		b := first
+		b.BreakIndex = latest
 		if p.reestablished(in, b) {
 			// A genuinely new range, formed after the break: its identity is the break.
 			if out.EpochIndex < b.BreakIndex {
@@ -207,6 +220,14 @@ func (p Integrity) Assess(in EdgeInput) Assessment {
 		out.State = StateValid
 	}
 
+	// 2b. A later close beyond the edge fails the reaction: the rejection did not hold.
+	for i := ci + 1; i <= last; i++ {
+		if beyond(in.Sell, bars[i].Close, edge.Level) > 0 {
+			out.Reject = ReasonReactionFailed
+			return out
+		}
+	}
+
 	// 3. The rejection must close back inside the edge.
 	if beyond(in.Sell, c.Close, edge.Level) > 0 {
 		out.Reject = ReasonRejectionNotInside
@@ -228,7 +249,7 @@ func (p Integrity) Assess(in EdgeInput) Assessment {
 			}
 		}
 		out.PressureRiseATR = adverse(in.Sell) * (bars[ci].Close - bars[start].Close) / in.ATR
-		if pressed && out.PressureRiseATR >= p.PressureMinimumRiseATR {
+		if pressed && out.PressureRiseATR >= p.PressureMinimumRiseATR && out.RejectionCloseLocation < p.RejectionCloseStrength {
 			out.Reject = ReasonPressureIntoEdge
 			return out
 		}
@@ -236,16 +257,23 @@ func (p Integrity) Assess(in EdgeInput) Assessment {
 	return out
 }
 
-// outermost reports whether no other cluster of the same side, live or broken, that
-// had already formed when b broke lay beyond it (above a resistance, below a support).
-func outermost(in EdgeInput, b techniquezone.BrokenBarrier) bool {
+// outermost reports whether no other cluster of the same side, live or broken, that was
+// already forming when b broke (its first touch is before the break) lay beyond it, above
+// a resistance or below a support, by more than the tolerance and no further than the
+// builder's maximum range width (a far cluster belongs to another range).
+func (p Integrity) outermost(in EdgeInput, b techniquezone.BrokenBarrier) bool {
+	reach := p.MaximumWidthATR * in.ATR
+	beyondB := func(level float64) bool {
+		d := beyondLevel(b.Side, level, b.Level)
+		return d > b.Tolerance && (reach <= 0 || d <= reach)
+	}
 	for _, o := range in.Broken {
-		if o.Side == b.Side && o.LastTouchIndex <= b.BreakIndex && beyondLevel(b.Side, o.Level, b.Level) > b.Tolerance {
+		if o.Side == b.Side && o.FirstTouchIndex < b.BreakIndex && beyondB(o.Level) {
 			return false
 		}
 	}
 	for _, o := range in.Barriers {
-		if o.Side == b.Side && o.LastTouchIndex <= b.BreakIndex && beyondLevel(b.Side, o.Level, b.Level) > b.Tolerance {
+		if o.Side == b.Side && o.FirstTouchIndex < b.BreakIndex && beyondB(o.Level) {
 			return false
 		}
 	}
