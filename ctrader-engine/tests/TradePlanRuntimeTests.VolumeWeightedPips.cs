@@ -78,6 +78,62 @@ public sealed partial class TradePlanRuntimeTests
     ));
   }
 
+  private static (TradePlanLegRuntimeState Leg, PositionCloseReason Reason, decimal? ExitPrice) Vanished(
+    TradePlanLegRuntimeState leg, decimal exit
+  ) => (leg, PositionCloseReason.StopLossOrTakeProfit, exit);
+
+  private static TradePlanLegRuntimeState ClosedByBroker(TradePlanLegRuntimeState leg) => leg with
+  {
+    RemainingVolume = 0,
+    Stage = TradePlanLegStages.Closed,
+  };
+
+  // The close handler zeroes a vanished leg's remaining volume before it finalizes. Valuing
+  // those zeroed legs reported every full stop as 0.0 pips (the stop-out loss was dropped).
+  [Fact]
+  public void AFullStopIsItsLossNotZeroPips()
+  {
+    var l1 = PipsLeg("L1", 4090.0m, 100, 100);
+    var l2 = PipsLeg("L2", 4090.0m, 100, 100);
+    var reasons = new[] { Vanished(l1, 4084.0m), Vanished(l2, 4084.0m) };
+    var zeroed = new[] { ClosedByBroker(l1), ClosedByBroker(l2) };
+
+    // The defect: the zeroed legs hold no volume, so the whole stop-out is skipped.
+    Assert.Equal(0m, TradePlanRuntime.VolumeWeightedPips(
+      PipsPlan("BUY"), zeroed, 0m, 0.1m, _ => 4084.0m
+    ));
+
+    var held = TradePlanRuntime.LegsAsTheyHeldVolumeAtClose(zeroed, reasons);
+    Assert.Equal(-60m, TradePlanRuntime.VolumeWeightedPips(
+      PipsPlan("BUY"), held, 0m, 0.1m, _ => 4084.0m
+    ));
+  }
+
+  [Fact]
+  public void ARunnerStoppedAfterTheFirstTargetKeepsTheBookedPipsAndTheStopOutLoss()
+  {
+    var l1 = PipsLeg("L1", 4090.0m, 100, 0);          // TP1 already booked +60 pips x 100
+    var l2 = PipsLeg("L2", 4090.0m, 100, 100);        // runner then stopped 10 pips under its fill
+    var reasons = new[] { Vanished(l2, 4089.0m) };
+    var held = TradePlanRuntime.LegsAsTheyHeldVolumeAtClose(new[] { l1, ClosedByBroker(l2) }, reasons);
+
+    Assert.Equal(25m, TradePlanRuntime.VolumeWeightedPips(
+      PipsPlan("BUY"), held, 6000m, 0.1m, _ => 4089.0m
+    ));
+  }
+
+  [Fact]
+  public void LegsThatDidNotVanishAreReturnedUnchanged()
+  {
+    var closedEarlier = PipsLeg("L1", 4090.0m, 100, 0);
+    var vanished = PipsLeg("L2", 4090.0m, 100, 100);
+    var held = TradePlanRuntime.LegsAsTheyHeldVolumeAtClose(
+      new[] { closedEarlier, ClosedByBroker(vanished) }, new[] { Vanished(vanished, 4089.0m) }
+    );
+    Assert.Equal(0, held[0].RemainingVolume);
+    Assert.Equal(100, held[1].RemainingVolume);
+  }
+
   private static TradePlanRuntimeState RiskState(params TradePlanLegRuntimeState[] legs) => new(
     "p", "t", "s", "XAU", "SELL", "limit_ladder", TradePlanRuntimeStage.FullyOpen,
     CurrentStop: 4142.0m, Legs: legs
