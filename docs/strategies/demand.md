@@ -1,5 +1,7 @@
 # Demand
 
+> **Quality review (2026-10-14): RECONSTRUCT** (proposal, not applied). Technical PASS_WITH_DEFECTS, execution PARTIAL, performance NEGATIVE, evidence MODERATE. Scope: geometry; owner may additionally choose observe-only on EURUSD (interval below zero). See [ae-quality-certification.md](ae-quality-certification.md) and [ae-strategy-retirement-review.md](ae-strategy-retirement-review.md). Independent review: pending.
+
 ## Strategy ID / version
 
 `demand`, `v2`. Implemented in `analysis-engine/internal/strategy/demand`.

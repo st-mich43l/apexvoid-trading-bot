@@ -1,5 +1,7 @@
 # Range Edge Strategy V3
 
+> **Quality review (2026-10-14): RETAIN_RESTRICTED** (proposal, not applied). Technical PASS, execution INCOMPATIBLE, performance NEGATIVE, evidence MODERATE. Scope: propose observe-only on FX (geometry cannot pay for the 12-22 pip FX scalp floors); XAU kept under review, no tuning. See [ae-quality-certification.md](ae-quality-certification.md) and [ae-strategy-retirement-review.md](ae-strategy-retirement-review.md). Independent review: pending.
+
 `range_edge` trades the edge of the engine's local scalp range, built on the
 detector-contract frame by a faithful port of the frozen scalp structure:
 

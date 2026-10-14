@@ -1,5 +1,7 @@
 # Box Breakout Strategy V2
 
+> **Quality review (2026-10-14): RETAIN** (proposal, not applied). Technical PASS, execution PARTIAL, performance UNPROVEN, evidence INSUFFICIENT. Scope: all instruments; re-audit with more trades (2 production trades). See [ae-quality-certification.md](ae-quality-certification.md) and [ae-strategy-retirement-review.md](ae-strategy-retirement-review.md). Independent review: pending.
+
 **Contract.** Restored to the frozen `box_breakout`: an accepted break of the regime box in the confirmation direction, within `breakout_max_age_bars` of the acceptance, entered on the accepting displacement bar or on a rejecting retest of the broken edge. It remains a separate M5 detector from `scalp_breakout_retest`. Proven on 36 oracle decisions (`test/legacyparity`). Python's code default is off; the deployed configuration enables it, and this change does not alter that.
 
 `box_breakout` is the M5 compression thesis, separate from the M1 scalp. A

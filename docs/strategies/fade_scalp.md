@@ -1,5 +1,7 @@
 # Fade Scalp Strategy V2
 
+> **Quality review (2026-10-14): RETAIN** (proposal, not applied). Technical PASS, execution PARTIAL, performance CONFLICTING, evidence WEAK. Scope: all instruments; EURUSD flagged for the owner (replay interval below zero, 2 production trades). See [ae-quality-certification.md](ae-quality-certification.md) and [ae-strategy-retirement-review.md](ae-strategy-retirement-review.md). Independent review: pending.
+
 `fade_scalp` is the independent equal-level sweep reversal thesis. It runs on
 the engine's detector-contract frame. BUY requires an equal-low pool (a
 sell-side pool with at least two touches); SELL an equal-high pool. The pool

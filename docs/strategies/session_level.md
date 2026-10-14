@@ -1,5 +1,7 @@
 # Session Level (v4)
 
+> **Quality review (2026-10-14): RETAIN** (proposal, not applied). Technical PASS, execution PARTIAL, performance NEUTRAL, evidence WEAK. Scope: all instruments. See [ae-quality-certification.md](ae-quality-certification.md) and [ae-strategy-retirement-review.md](ae-strategy-retirement-review.md). Independent review: pending.
+
 `session_level` trades a reaction off a **completed** reference level: the Asia, London
 or New York high or low, the previous trading day's high or low, or the previous
 trading week's. v4 replaces the frozen-Python-parity v3 with a Go contract that builds

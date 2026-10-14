@@ -1,5 +1,7 @@
 # Breakout Retest Scalp
 
+> **Quality review (2026-10-14): RECONSTRUCT** (proposal, not applied). Technical PASS_WITH_DEFECTS, execution PARTIAL, performance CONFLICTING, evidence WEAK. Scope: replace the fixed-R target with a structural one; XAU only, no enablement change. See [ae-quality-certification.md](ae-quality-certification.md) and [ae-strategy-retirement-review.md](ae-strategy-retirement-review.md). Independent review: pending.
+
 `scalp_breakout_retest`, `v3`, `analysis-engine/internal/strategy/scalpbreakoutretest`.
 XAU only (`symbols: [XAU]`; the profitable Python scalp lane hosted gold only).
 Evaluated on every closed M1 bar; the setup is M5 and the execution
