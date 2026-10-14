@@ -12,6 +12,12 @@ dated section after deployment.
 
 ## Unreleased
 
+### Changed
+- Range Sweep Scalp retirement, step 1 (owner-approved 2026-10-14; docs/strategies/ae-strategy-retirement-review.md): `range_sweep`
+  joins XAU's `observe_only_strategies`. It keeps publishing, journalling and being measured, but no TradePlan is built from it;
+  nothing already published or open is touched. Rollback is removing the name. Step 3 (`enabled: false`) follows a two-week soak.
+  The catalog entry, provenance decoding and all ledger rows stay.
+
 ### Fixed
 - Executor `realized_pips` (`volume_weighted_pips`) now includes the stop-out loss. The broker-absent close handler zeroed a
   vanished leg's `RemainingVolume` before valuing it, and `VolumeWeightedPips` skips legs without volume, so every full stop was
