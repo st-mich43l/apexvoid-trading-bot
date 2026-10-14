@@ -506,7 +506,7 @@ func measuredPointer(snapshot mad.Snapshot, key string) *float64 {
 // arbitrate re-evaluates cross-strategy direction conflict for this
 // symbol's full live set on every Apply, not only when a candidate is
 // newly created - strategies evaluate on different bar-close cadences
-// (most M5, three M1: range_sweep/impulse_pullback/scalp_breakout_retest),
+// (most M5, two M1: impulse_pullback/scalp_breakout_retest),
 // so a new candidate on one timeframe can change an already-decided
 // candidate's status on another without that other candidate itself
 // re-evaluating. Only a changed decision is enqueued for publication;

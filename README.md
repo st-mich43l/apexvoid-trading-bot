@@ -26,7 +26,7 @@ Closed bars in, one best-ranked TradePlan out, with every decision owned by exac
 | | |
 |---|---|
 | **Instruments** | XAU (gold), EURUSD, GBPUSD, GBPJPY, USDJPY |
-| **Strategies** | 21 independent technical strategies, each a Go package |
+| **Strategies** | 20 independent technical strategies, each a Go package |
 | **Analysis** | Go engine over closed M1/M5/M15/H1 bars: structure, liquidity, zones, sessions, regime |
 | **Execution contract** | TradePlan V8: absolute entry, stop and targets, declared once, executed without recomputation |
 | **Broker** | cTrader Open API, through a single broker-facing service |
@@ -97,7 +97,7 @@ Details, reason codes and the Redis keys involved are in [docs/execution.md](doc
 
 ## Strategies
 
-Twenty-one independent strategies. Each has its own ID, version, thresholds,
+Twenty independent strategies. Each has its own ID, version, thresholds,
 confirmation, quality, entry zone, invalidation, targets and lifecycle; none imports,
 calls, waits for or is suppressed by another, and there is no strategy family. They
 read one shared market-intelligence layer (structure, liquidity, zones, indicators);
@@ -127,7 +127,6 @@ only observes it.
 | `snap_back` | Extension from a key level or zone, graded liquidity grab | M5 | `strategies.snap_back` (v2) | `LEGACY_PARITY_PROVEN` | live |
 | `fade_scalp` | Equal-level sweep and reclaim, premium/discount, chop edge | M5 | `strategies.fade_scalp` (v2) | `LEGACY_PARITY_PROVEN` | live |
 | `liquidity_sweep` | Lone-extreme pool sweep and reclaim, graded grab | M5 | `strategies.liquidity_sweep` (v3) | `GO_NATIVE_VALIDATED` (no Python predecessor) | XAU observe-only; live on FX |
-| `range_sweep` | M5 range, M1 edge excursion and reclaim (XAU only) | M1 (M5 range) | `strategies.range_sweep` (v3) | `LEGACY_PARITY_PROVEN` | live (XAU) |
 | `impulse_pullback` | M5 impulse, corrective pullback, structural reference, M1 confirmation (XAU only) | M1 (M5 impulse) | `strategies.impulse_pullback` (v3) | `LEGACY_PARITY_PROVEN` on synthetic data only | observe-only on every instrument |
 | `scalp_breakout_retest` | M5 compression, M1 acceptance and retest (XAU only) | M1 (M5 compression) | `strategies.scalp_breakout_retest` (v3) | `LEGACY_PARITY_PROVEN` | live (XAU) |
 

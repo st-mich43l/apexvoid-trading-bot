@@ -65,7 +65,6 @@ CHOP_ZONE_REACTION = "Chop Zone Reaction"
 LIQUIDITY_SWEEP = "Liquidity Sweep"
 BREAKOUT_CONTINUATION = "Breakout Continuation"
 MAPPED_ZONE_REACTION = "Mapped Zone Reaction"
-RANGE_SWEEP_SCALP = "Range Sweep Scalp"
 IMPULSE_PULLBACK_SCALP = "Impulse Pullback Scalp"
 BREAKOUT_RETEST_SCALP = "Breakout Retest Scalp"
 MOMENTUM_CHASE_SCALP = "Momentum Chase Scalp"
@@ -112,7 +111,6 @@ STRATEGY_NAMES: tuple[StrategyName, ...] = (
   _name(LIQUIDITY_SWEEP, "go:liquidity_sweep"),
   _name(BREAKOUT_CONTINUATION, retired=True),
   _name(MAPPED_ZONE_REACTION, retired=True),
-  _name(RANGE_SWEEP_SCALP, aliases=("range sweep", "hfs range sweep")),
   _name(IMPULSE_PULLBACK_SCALP, aliases=("impulse pullback", "hfs impulse pullback")),
   _name(BREAKOUT_RETEST_SCALP, aliases=("breakout retest", "breakout-retest")),
   _name(MOMENTUM_CHASE_SCALP, aliases=("momentum", "hfs momentum chase"), retired=True),

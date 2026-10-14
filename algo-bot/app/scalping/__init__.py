@@ -3,7 +3,6 @@
 from app.scalping.models import (
   ARCHETYPE_BREAKOUT_RETEST,
   ARCHETYPE_IMPULSE_PULLBACK,
-  ARCHETYPE_RANGE_SWEEP,
   ScalpContextSnapshot,
   ScalpDecision,
   ScalpOpportunity,
@@ -13,7 +12,6 @@ from app.scalping.models import (
 __all__ = [
   "ARCHETYPE_BREAKOUT_RETEST",
   "ARCHETYPE_IMPULSE_PULLBACK",
-  "ARCHETYPE_RANGE_SWEEP",
   "ScalpContextSnapshot",
   "ScalpDecision",
   "ScalpOpportunity",

@@ -18,14 +18,14 @@ func TestStrategyConfigsFromConfigEnablesTheCompleteCatalogForShadow(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(configs) != 21 {
-		t.Fatalf("got %d strategy configs, want 21 approved V2 strategies", len(configs))
+	if len(configs) != 20 {
+		t.Fatalf("got %d strategy configs, want 20 approved V2 strategies", len(configs))
 	}
-	// Key Level, the Breakout Retest Scalp and Range Sweep were rebuilt as the
+	// Key Level and the Breakout Retest Scalp were rebuilt as the
 	// profitable-week Python detectors and Liquidity Sweep on the frozen detector
 	// contract's evidence (Phase 1), and CRT was rebuilt as a causal H1 sweep, M5
 	// reclaim and structure shift (v3); every other strategy is still v2.
-	rebuilt := map[string]bool{"crt": true, "key_level": true, "session_level": true, "flip_zone": true, "box_breakout": true, "trendline": true, "impulse_pullback": true, "scalp_breakout_retest": true, "range_sweep": true, "liquidity_sweep": true, "break_retest": true, "ifvg": true, "confluence_zone": true, "range_edge": true}
+	rebuilt := map[string]bool{"crt": true, "key_level": true, "session_level": true, "flip_zone": true, "box_breakout": true, "trendline": true, "impulse_pullback": true, "scalp_breakout_retest": true, "liquidity_sweep": true, "break_retest": true, "ifvg": true, "confluence_zone": true, "range_edge": true}
 	// Session Level was rebuilt a second time (v4: complete periods, two bounded
 	// reaction models, honest geometry).
 	v4 := map[string]bool{"session_level": true}
@@ -46,7 +46,7 @@ func TestStrategyConfigsFromConfigEnablesTheCompleteCatalogForShadow(t *testing.
 	}
 }
 
-func TestAll21StrategiesHaveConcreteFactoriesAndValidProductionConfig(t *testing.T) {
+func TestAll20StrategiesHaveConcreteFactoriesAndValidProductionConfig(t *testing.T) {
 	repoRoot := filepath.Join("..", "..", "..")
 	doc, err := config.ResolveDocument(filepath.Join(repoRoot, "config", "apexvoid.yml"))
 	if err != nil {

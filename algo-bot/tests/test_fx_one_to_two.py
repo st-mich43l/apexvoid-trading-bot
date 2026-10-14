@@ -280,7 +280,7 @@ def test_fx_auto_reaction_books_pack_volume_multiplier():
 
   scalp_match = replace(
     fx_match,
-    strategy="Range Sweep Scalp",
+    strategy="Impulse Pullback Scalp",
     family="scalp",
     strategy_mode="scalp",
     tier="A",

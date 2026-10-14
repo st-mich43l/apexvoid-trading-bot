@@ -82,7 +82,7 @@ type AffinityScore struct {
 // explicit: substring guesses were a source of silent detector drift.
 func StrategyKey(strategy string) string {
 	switch normalize(strategy) {
-	case "range_edge", "range_sweep":
+	case "range_edge":
 		return "range_edge_mean_reversion"
 	case "liquidity_sweep":
 		return "liquidity_sweep_reversal"
@@ -113,7 +113,7 @@ func Affinity(snapshot Snapshot, direction, strategy string) AffinityScore {
 		if want == "BUY" || want == "SELL" {
 			score.DirectionScore = 1
 		}
-		if key == "range_edge_mean_reversion" || key == "range_sweep" {
+		if key == "range_edge_mean_reversion" {
 			score.StrategyScore = 1
 		}
 	case PhaseManip:

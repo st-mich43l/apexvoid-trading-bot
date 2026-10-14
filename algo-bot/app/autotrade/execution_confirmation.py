@@ -47,7 +47,6 @@ _M1_SCALP_TRIGGERS = frozenset({
   "sweep_reclaim",
   "impulse_pullback",
   "breakout_retest",
-  "range_sweep",
 })
 
 # Provenance written into TradePlan V8 when the closed-bar confirmation was

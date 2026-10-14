@@ -73,7 +73,7 @@ func TestEveryScalpKeepsAScalpEnvelopeOnEveryInstrument(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	scalps := []opportunity.StrategyID{"range_edge", "fade_scalp", "range_sweep", "impulse_pullback", "scalp_breakout_retest"}
+	scalps := []opportunity.StrategyID{"range_edge", "fade_scalp", "impulse_pullback", "scalp_breakout_retest"}
 	for _, symbol := range []string{"XAU", "EURUSD", "GBPUSD", "GBPJPY", "USDJPY"} {
 		settings, err := LoadSettings(doc, "M5", false)
 		if err != nil {

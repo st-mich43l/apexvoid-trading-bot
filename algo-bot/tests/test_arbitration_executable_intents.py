@@ -233,13 +233,13 @@ def test_same_thesis_publishes_one_winner_whatever_the_arrival_order():
   candidates = [
     _intent("order_block", strategy="order_block", quality_overall=0.71, **band),
     _intent("key_level", strategy="key_level", quality_overall=0.84, **band),
-    _intent("range_sweep_1", strategy="range_sweep", quality_overall=0.62, **band),
-    _intent("range_sweep_2", strategy="range_sweep", quality_overall=0.66, **band),
+    _intent("impulse_pullback_1", strategy="impulse_pullback", quality_overall=0.62, **band),
+    _intent("impulse_pullback_2", strategy="impulse_pullback", quality_overall=0.66, **band),
   ]
   for arrival in (candidates, list(reversed(candidates)), candidates[2:] + candidates[:2]):
     result = arbitrate_execution_intents(arrival)
     assert _ids(result.ordered) == ["key_level"]
-    assert set(result.thesis_losers) == {"order_block", "range_sweep_1", "range_sweep_2"}
+    assert set(result.thesis_losers) == {"order_block", "impulse_pullback_1", "impulse_pullback_2"}
     assert set(_ids(result.suppressed)) == set(result.thesis_losers)
 
 

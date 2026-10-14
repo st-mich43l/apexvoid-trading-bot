@@ -11,7 +11,7 @@ import (
 
 const strategyPackages = "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/"
 
-// TestNoConcreteStrategyImportsAnotherStrategy: 21 strategies, 21 independent
+// TestNoConcreteStrategyImportsAnotherStrategy: 20 strategies, 20 independent
 // technical decisions. A strategy may use the shared market intelligence layer
 // (context, market, techniquezone, strategyutil and the like) but never another
 // strategy's package, so none can call, wrap or depend on another's decision.
@@ -40,7 +40,7 @@ func TestNoConcreteStrategyImportsAnotherStrategy(t *testing.T) {
 		}
 		checked++
 	}
-	if checked != 21 {
-		t.Fatalf("checked %d strategy packages, want 21", checked)
+	if checked != 20 {
+		t.Fatalf("checked %d strategy packages, want 20", checked)
 	}
 }

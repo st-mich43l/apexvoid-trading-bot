@@ -134,8 +134,8 @@
    },
    "Confluence Zone": {
     "ci95": [
-     -0.694,
-     0.628
+     -0.728,
+     0.634
     ],
     "exit_paths": {
      "full_stop": 14,
@@ -161,7 +161,7 @@
    "FVG": {
     "ci95": [
      -0.857,
-     0.454
+     0.536
     ],
     "exit_paths": {
      "full_stop": 8,
@@ -186,7 +186,7 @@
    },
    "Fade Scalp": {
     "ci95": [
-     0.242,
+     0.247,
      1.849
     ],
     "exit_paths": {
@@ -245,8 +245,8 @@
    },
    "Key Level": {
     "ci95": [
-     0.109,
-     0.968
+     0.126,
+     0.974
     ],
     "exit_paths": {
      "full_stop": 47,
@@ -306,8 +306,8 @@
    },
    "Range Edge Scalp": {
     "ci95": [
-     -0.498,
-     0.167
+     -0.496,
+     0.153
     ],
     "exit_paths": {
      "full_stop": 53,
@@ -397,7 +397,7 @@
    "Supply Demand": {
     "ci95": [
      -1.0,
-     0.424
+     0.381
     ],
     "exit_paths": {
      "full_stop": 21,
@@ -422,8 +422,8 @@
    },
    "iFVG": {
     "ci95": [
-     -0.624,
-     0.574
+     -0.566,
+     0.587
     ],
     "exit_paths": {
      "full_stop": 9,
@@ -484,7 +484,7 @@
    "confluence_zone": {
     "ci95": [
      -0.728,
-     0.604
+     0.628
     ],
     "exit_paths": {
      "full_stop": 14,
@@ -521,7 +521,7 @@
    "demand": {
     "ci95": [
      -1.0,
-     1.035
+     1.159
     ],
     "exit_paths": {
      "full_stop": 11,
@@ -546,8 +546,8 @@
    },
    "fade_scalp": {
     "ci95": [
-     0.247,
-     1.863
+     0.245,
+     1.849
     ],
     "exit_paths": {
      "full_stop": 6,
@@ -590,7 +590,7 @@
    "fvg": {
     "ci95": [
      -0.857,
-     0.463
+     0.472
     ],
     "exit_paths": {
      "full_stop": 8,
@@ -615,7 +615,7 @@
    },
    "ifvg": {
     "ci95": [
-     -0.72,
+     -0.624,
      0.574
     ],
     "exit_paths": {
@@ -655,8 +655,8 @@
    },
    "key_level": {
     "ci95": [
-     0.11,
-     0.966
+     0.132,
+     0.986
     ],
     "exit_paths": {
      "full_stop": 47,
@@ -716,8 +716,8 @@
    },
    "range_edge": {
     "ci95": [
-     -0.483,
-     0.178
+     -0.495,
+     0.171
     ],
     "exit_paths": {
      "full_stop": 53,
@@ -855,40 +855,40 @@
   "by_symbol": {
    "EURUSD": {
     "ci95": [
-     -0.325,
-     0.929
+     -0.326,
+     0.905
     ],
     "mean_r": 0.292,
     "r_trades": 31
    },
    "GBPJPY": {
     "ci95": [
-     -0.437,
-     0.394
+     -0.436,
+     0.339
     ],
     "mean_r": -0.142,
     "r_trades": 22
    },
    "GBPUSD": {
     "ci95": [
-     -0.4,
-     0.381
+     -0.388,
+     0.358
     ],
     "mean_r": -0.061,
     "r_trades": 21
    },
    "USDJPY": {
     "ci95": [
-     -0.789,
-     -0.158
+     -0.81,
+     -0.168
     ],
     "mean_r": -0.49,
     "r_trades": 26
    },
    "XAU": {
     "ci95": [
-     -0.019,
-     0.666
+     -0.026,
+     0.604
     ],
     "mean_r": 0.245,
     "r_trades": 72
@@ -897,8 +897,8 @@
   "first_close": 1790713932,
   "pooled": {
    "ci95": [
-    -0.164,
-    0.272
+    -0.155,
+    0.287
    ],
    "mean_r": 0.056,
    "r_trades": 172
@@ -964,67 +964,6 @@
      }
     }
    }
-  },
-  "range_sweep_forensics": {
-   "by_target_label": {
-    "opposite_m5_range_edge": {
-     "entry_band_pips_median": 2.1,
-     "exit_paths": {
-      "full_stop": 20,
-      "manual_close": 1,
-      "tp1_be": 2,
-      "tp1_stop": 3,
-      "tp2_full": 4
-     },
-     "first_close": 1790761811,
-     "last_close": 1791267343,
-     "published_target_over_executed_stop_median": 3.68,
-     "symbols": {
-      "EURUSD": 5,
-      "GBPJPY": 7,
-      "GBPUSD": 3,
-      "USDJPY": 3,
-      "XAU": 12
-     },
-     "trades": 30
-    },
-    "scalp_1to2": {
-     "entry_band_pips_median": 35.9,
-     "exit_paths": {
-      "full_stop": 6,
-      "tp1_be": 1,
-      "tp2_full": 2
-     },
-     "first_close": 1791310697,
-     "last_close": 1791974738,
-     "published_target_over_executed_stop_median": 4.64,
-     "symbols": {
-      "XAU": 9
-     },
-     "trades": 9
-    }
-   },
-   "exit_path_bounds": {
-    "full_stop_rate": 0.684,
-    "mean_r_high": -0.368,
-    "mean_r_low": -0.408,
-    "mean_r_midpoint_ci95": [
-     -0.621,
-     -0.11
-    ],
-    "paths": {
-     "full_stop": 26,
-     "tp1_be": 3,
-     "tp1_stop": 3,
-     "tp2_full": 6
-    },
-    "trades": 38
-   },
-   "quality_range": [
-    0.01,
-    0.379
-   ],
-   "trades": 39
   },
   "realized_pips_defect": {
    "full_stop_rows": 221,
@@ -1093,27 +1032,11 @@
      "tp2_full": 20
     },
     "trades": 94
-   },
-   "Range Sweep Scalp": {
-    "full_stop_rate": 0.684,
-    "mean_r_high": -0.368,
-    "mean_r_low": -0.408,
-    "mean_r_midpoint_ci95": [
-     -0.621,
-     -0.11
-    ],
-    "paths": {
-     "full_stop": 26,
-     "tp1_be": 3,
-     "tp1_stop": 3,
-     "tp2_full": 6
-    },
-    "trades": 38
    }
   },
   "with_new_contract_realized": 172
  },
- "records": 16527,
+ "records": 16517,
  "replay": {
   "box_breakout": {
    "by_symbol": {
@@ -5893,216 +5816,6 @@
    "unique_resting_observations": 0,
    "version": "v3"
   },
-  "range_sweep": {
-   "by_symbol": {
-    "XAU": {
-     "ladder_cost": {
-      "censored": 0,
-      "ci95": [
-       -0.5,
-       0.5
-      ],
-      "mean_r": -0.111,
-      "n_filled": 9,
-      "n_opportunities": 9,
-      "not_executable": 0,
-      "profit_factor": 0.8,
-      "sum_r": -1.0,
-      "unfilled": 0,
-      "win_rate": 0.444,
-      "worst_r": -1
-     },
-     "median_room_cover": 1.99,
-     "median_technical_risk_pips": 38.1,
-     "observe_only_here": false,
-     "thinned": 9
-    }
-   },
-   "components": [
-    "reclaim",
-    "sweep_depth"
-   ],
-   "configured_symbols": [
-    "XAU"
-   ],
-   "invariant_violations": {},
-   "median_entry_width_pips": 37.0,
-   "median_repeats": 1.0,
-   "median_room_cover": 1.99,
-   "median_technical_risk_pips": 40.6,
-   "median_technical_rr": 1.99,
-   "quality": {
-    "distinct_values_1pct": 9,
-    "max": 0.55,
-    "median": 0.196,
-    "min": 0.049
-   },
-   "quality_vs_hypothetical_r": {
-    "spearman": 0.544,
-    "spearman_v2_raw": -0.287,
-    "terciles_of_quality": {},
-    "terciles_of_v2_raw": {}
-   },
-   "share_room_cover_below_1": 0.1,
-   "share_technical_rr_below_1": 0.1,
-   "simulation": {
-    "ladder_cost": {
-     "all": {
-      "censored": 0,
-      "ci95": [
-       -0.5,
-       0.5
-      ],
-      "mean_r": -0.111,
-      "n_filled": 9,
-      "n_opportunities": 9,
-      "not_executable": 0,
-      "profit_factor": 0.8,
-      "sum_r": -1.0,
-      "unfilled": 0,
-      "win_rate": 0.444,
-      "worst_r": -1
-     },
-     "dev": {
-      "censored": 0,
-      "ci95": null,
-      "mean_r": 0.333,
-      "n_filled": 3,
-      "n_opportunities": 3,
-      "not_executable": 0,
-      "profit_factor": 2.0,
-      "sum_r": 1.0,
-      "unfilled": 0,
-      "win_rate": 0.667,
-      "worst_r": -1
-     },
-     "oos": {
-      "censored": 0,
-      "ci95": null,
-      "mean_r": -0.333,
-      "n_filled": 6,
-      "n_opportunities": 6,
-      "not_executable": 0,
-      "profit_factor": 0.5,
-      "sum_r": -2.0,
-      "unfilled": 0,
-      "win_rate": 0.333,
-      "worst_r": -1
-     }
-    },
-    "ladder_no_cost": {
-     "all": {
-      "censored": 0,
-      "ci95": [
-       -0.5,
-       0.5
-      ],
-      "mean_r": -0.111,
-      "n_filled": 9,
-      "n_opportunities": 9,
-      "not_executable": 0,
-      "profit_factor": 0.8,
-      "sum_r": -1.0,
-      "unfilled": 0,
-      "win_rate": 0.444,
-      "worst_r": -1
-     }
-    },
-    "oneR_cost": {
-     "all": {
-      "censored": 0,
-      "ci95": [
-       -0.6,
-       1.0
-      ],
-      "mean_r": -0.111,
-      "n_filled": 9,
-      "n_opportunities": 9,
-      "not_executable": 0,
-      "profit_factor": 0.8,
-      "sum_r": -1,
-      "unfilled": 0,
-      "win_rate": 0.444,
-      "worst_r": -1
-     },
-     "dev": {
-      "censored": 0,
-      "ci95": null,
-      "mean_r": 0.333,
-      "n_filled": 3,
-      "n_opportunities": 3,
-      "not_executable": 0,
-      "profit_factor": 2.0,
-      "sum_r": 1,
-      "unfilled": 0,
-      "win_rate": 0.667,
-      "worst_r": -1
-     },
-     "oos": {
-      "censored": 0,
-      "ci95": null,
-      "mean_r": -0.333,
-      "n_filled": 6,
-      "n_opportunities": 6,
-      "not_executable": 0,
-      "profit_factor": 0.5,
-      "sum_r": -2,
-      "unfilled": 0,
-      "win_rate": 0.333,
-      "worst_r": -1
-     }
-    },
-    "twoR_cost": {
-     "all": {
-      "censored": 0,
-      "ci95": [
-       -1.0,
-       0.0
-      ],
-      "mean_r": -0.333,
-      "n_filled": 9,
-      "n_opportunities": 9,
-      "not_executable": 0,
-      "profit_factor": 0.57,
-      "sum_r": -3,
-      "unfilled": 0,
-      "win_rate": 0.222,
-      "worst_r": -1
-     },
-     "dev": {
-      "censored": 0,
-      "ci95": null,
-      "mean_r": 0.0,
-      "n_filled": 3,
-      "n_opportunities": 3,
-      "not_executable": 0,
-      "profit_factor": 1.0,
-      "sum_r": 0,
-      "unfilled": 0,
-      "win_rate": 0.333,
-      "worst_r": -1
-     },
-     "oos": {
-      "censored": 0,
-      "ci95": null,
-      "mean_r": -0.5,
-      "n_filled": 6,
-      "n_opportunities": 6,
-      "not_executable": 0,
-      "profit_factor": 0.4,
-      "sum_r": -3,
-      "unfilled": 0,
-      "win_rate": 0.167,
-      "worst_r": -1
-     }
-    }
-   },
-   "stop_within_cap_share": 1.0,
-   "thinned_episodes": 9,
-   "unique_confirmed": 10,
-   "unique_resting_observations": 0,
-   "version": "v3"
-  },
   "scalp_breakout_retest": {
    "by_symbol": {
     "XAU": {
@@ -6110,7 +5823,7 @@
       "censored": 0,
       "ci95": [
        -0.864,
-       0.026
+       0.083
       ],
       "mean_r": -0.412,
       "n_filled": 17,
@@ -6164,7 +5877,7 @@
       "censored": 0,
       "ci95": [
        -0.864,
-       0.1
+       0.031
       ],
       "mean_r": -0.412,
       "n_filled": 17,
@@ -6210,8 +5923,8 @@
      "all": {
       "censored": 0,
       "ci95": [
-       -0.727,
-       0.286
+       -0.75,
+       0.227
       ],
       "mean_r": -0.222,
       "n_filled": 18,
@@ -6228,8 +5941,8 @@
      "all": {
       "censored": 0,
       "ci95": [
-       -0.8,
-       0.158
+       -0.818,
+       0.182
       ],
       "mean_r": -0.294,
       "n_filled": 17,
@@ -6276,7 +5989,7 @@
       "censored": 0,
       "ci95": [
        -1.0,
-       0.143
+       0.167
       ],
       "mean_r": -0.471,
       "n_filled": 17,
@@ -6353,8 +6066,8 @@
      "ladder_cost": {
       "censored": 0,
       "ci95": [
-       -0.15,
-       1.071
+       -0.125,
+       1.056
       ],
       "mean_r": 0.45,
       "n_filled": 10,
@@ -6375,8 +6088,8 @@
      "ladder_cost": {
       "censored": 0,
       "ci95": [
-       -0.6,
-       0.5
+       -0.591,
+       0.423
       ],
       "mean_r": -0.083,
       "n_filled": 12,
@@ -6398,7 +6111,7 @@
       "censored": 0,
       "ci95": [
        -0.115,
-       0.781
+       0.786
       ],
       "mean_r": 0.357,
       "n_filled": 14,
@@ -6419,8 +6132,8 @@
      "ladder_cost": {
       "censored": 0,
       "ci95": [
-       -0.835,
-       0.371
+       -0.8,
+       0.347
       ],
       "mean_r": -0.295,
       "n_filled": 19,
@@ -6508,8 +6221,8 @@
      "all": {
       "censored": 0,
       "ci95": [
-       -0.309,
-       0.291
+       -0.315,
+       0.273
       ],
       "mean_r": -0.017,
       "n_filled": 64,
@@ -6524,8 +6237,8 @@
      "dev": {
       "censored": 0,
       "ci95": [
-       -0.35,
-       0.364
+       -0.371,
+       0.334
       ],
       "mean_r": -0.029,
       "n_filled": 35,
@@ -6540,8 +6253,8 @@
      "oos": {
       "censored": 0,
       "ci95": [
-       -0.467,
-       0.496
+       -0.471,
+       0.493
       ],
       "mean_r": -0.003,
       "n_filled": 29,
@@ -6558,8 +6271,8 @@
      "all": {
       "censored": 1,
       "ci95": [
-       -0.267,
-       0.289
+       -0.284,
+       0.29
       ],
       "mean_r": 0.006,
       "n_filled": 63,
@@ -6576,8 +6289,8 @@
      "all": {
       "censored": 0,
       "ci95": [
-       -0.303,
-       0.206
+       -0.29,
+       0.194
       ],
       "mean_r": -0.063,
       "n_filled": 64,
@@ -6592,8 +6305,8 @@
      "dev": {
       "censored": 0,
       "ci95": [
-       -0.333,
-       0.312
+       -0.35,
+       0.294
       ],
       "mean_r": -0.029,
       "n_filled": 35,
@@ -6608,8 +6321,8 @@
      "oos": {
       "censored": 0,
       "ci95": [
-       -0.471,
-       0.31
+       -0.515,
+       0.28
       ],
       "mean_r": -0.103,
       "n_filled": 29,
@@ -6626,8 +6339,8 @@
      "all": {
       "censored": 2,
       "ci95": [
-       -0.386,
-       0.282
+       -0.379,
+       0.285
       ],
       "mean_r": -0.05,
       "n_filled": 62,
@@ -6643,7 +6356,7 @@
       "censored": 0,
       "ci95": [
        -0.455,
-       0.393
+       0.4
       ],
       "mean_r": -0.057,
       "n_filled": 35,
@@ -6659,7 +6372,7 @@
       "censored": 2,
       "ci95": [
        -0.581,
-       0.533
+       0.531
       ],
       "mean_r": -0.041,
       "n_filled": 27,
@@ -6773,8 +6486,8 @@
      "ladder_cost": {
       "censored": 0,
       "ci95": [
-       -0.621,
-       0.348
+       -0.622,
+       0.367
       ],
       "mean_r": -0.157,
       "n_filled": 23,
@@ -6873,8 +6586,8 @@
      "all": {
       "censored": 1,
       "ci95": [
-       -0.272,
-       0.384
+       -0.293,
+       0.377
       ],
       "mean_r": 0.031,
       "n_filled": 45,
@@ -6889,8 +6602,8 @@
      "dev": {
       "censored": 0,
       "ci95": [
-       -0.383,
-       0.361
+       -0.377,
+       0.389
       ],
       "mean_r": -0.0,
       "n_filled": 30,
@@ -6905,8 +6618,8 @@
      "oos": {
       "censored": 1,
       "ci95": [
-       -0.458,
-       1.0
+       -0.443,
+       0.838
       ],
       "mean_r": 0.093,
       "n_filled": 15,
@@ -6923,8 +6636,8 @@
      "all": {
       "censored": 1,
       "ci95": [
-       -0.239,
-       0.403
+       -0.224,
+       0.407
       ],
       "mean_r": 0.072,
       "n_filled": 46,
@@ -6941,7 +6654,7 @@
      "all": {
       "censored": 0,
       "ci95": [
-       -0.286,
+       -0.3,
        0.3
       ],
       "mean_r": -0.0,
@@ -6957,8 +6670,8 @@
      "dev": {
       "censored": 0,
       "ci95": [
-       -0.4,
-       0.36
+       -0.429,
+       0.379
       ],
       "mean_r": -0.0,
       "n_filled": 30,
@@ -6973,8 +6686,8 @@
      "oos": {
       "censored": 0,
       "ci95": [
-       -0.429,
-       0.636
+       -0.412,
+       0.667
       ],
       "mean_r": -0.0,
       "n_filled": 16,
@@ -6991,8 +6704,8 @@
      "all": {
       "censored": 1,
       "ci95": [
-       -0.267,
-       0.636
+       -0.278,
+       0.625
       ],
       "mean_r": 0.133,
       "n_filled": 45,
@@ -7007,8 +6720,8 @@
      "dev": {
       "censored": 0,
       "ci95": [
-       -0.4,
-       0.687
+       -0.375,
+       0.655
       ],
       "mean_r": 0.1,
       "n_filled": 30,
@@ -7023,8 +6736,8 @@
      "oos": {
       "censored": 1,
       "ci95": [
-       -0.538,
-       1.308
+       -0.55,
+       1.25
       ],
       "mean_r": 0.2,
       "n_filled": 15,
@@ -7050,8 +6763,8 @@
      "ladder_cost": {
       "censored": 14,
       "ci95": [
-       -0.296,
-       0.307
+       -0.294,
+       0.312
       ],
       "mean_r": -0.006,
       "n_filled": 154,
@@ -7072,8 +6785,8 @@
      "ladder_cost": {
       "censored": 10,
       "ci95": [
-       -0.353,
-       0.208
+       -0.355,
+       0.216
       ],
       "mean_r": -0.086,
       "n_filled": 162,
@@ -7094,8 +6807,8 @@
      "ladder_cost": {
       "censored": 10,
       "ci95": [
-       -0.339,
-       0.269
+       -0.331,
+       0.254
       ],
       "mean_r": -0.02,
       "n_filled": 196,
@@ -7116,8 +6829,8 @@
      "ladder_cost": {
       "censored": 7,
       "ci95": [
-       -0.209,
-       0.419
+       -0.187,
+       0.422
       ],
       "mean_r": 0.082,
       "n_filled": 190,
@@ -7138,8 +6851,8 @@
      "ladder_cost": {
       "censored": 3,
       "ci95": [
-       -0.29,
-       0.15
+       -0.291,
+       0.176
       ],
       "mean_r": -0.068,
       "n_filled": 121,
@@ -7240,8 +6953,8 @@
      "all": {
       "censored": 44,
       "ci95": [
-       -0.147,
-       0.127
+       -0.144,
+       0.126
       ],
       "mean_r": -0.014,
       "n_filled": 823,
@@ -7256,8 +6969,8 @@
      "dev": {
       "censored": 5,
       "ci95": [
-       -0.146,
-       0.13
+       -0.141,
+       0.135
       ],
       "mean_r": -0.007,
       "n_filled": 458,
@@ -7272,8 +6985,8 @@
      "oos": {
       "censored": 39,
       "ci95": [
-       -0.242,
-       0.219
+       -0.265,
+       0.212
       ],
       "mean_r": -0.023,
       "n_filled": 365,
@@ -7291,7 +7004,7 @@
       "censored": 45,
       "ci95": [
        -0.079,
-       0.191
+       0.186
       ],
       "mean_r": 0.053,
       "n_filled": 822,
@@ -7308,8 +7021,8 @@
      "all": {
       "censored": 27,
       "ci95": [
-       -0.127,
-       0.097
+       -0.13,
+       0.09
       ],
       "mean_r": -0.014,
       "n_filled": 840,
@@ -7324,8 +7037,8 @@
      "dev": {
       "censored": 4,
       "ci95": [
-       -0.127,
-       0.122
+       -0.123,
+       0.13
       ],
       "mean_r": -0.007,
       "n_filled": 459,
@@ -7340,8 +7053,8 @@
      "oos": {
       "censored": 23,
       "ci95": [
-       -0.22,
-       0.179
+       -0.214,
+       0.168
       ],
       "mean_r": -0.024,
       "n_filled": 381,
@@ -7358,8 +7071,8 @@
      "all": {
       "censored": 52,
       "ci95": [
-       -0.168,
-       0.229
+       -0.175,
+       0.212
       ],
       "mean_r": 0.013,
       "n_filled": 815,
@@ -7374,8 +7087,8 @@
      "dev": {
       "censored": 5,
       "ci95": [
-       -0.166,
-       0.279
+       -0.168,
+       0.292
       ],
       "mean_r": 0.056,
       "n_filled": 458,
@@ -7390,8 +7103,8 @@
      "oos": {
       "censored": 47,
       "ci95": [
-       -0.365,
-       0.319
+       -0.377,
+       0.308
       ],
       "mean_r": -0.041,
       "n_filled": 357,
@@ -7539,8 +7252,8 @@
      "dev": {
       "censored": 0,
       "ci95": [
-       -0.45,
-       1.183
+       -0.5,
+       1.133
       ],
       "mean_r": 0.367,
       "n_filled": 6,
@@ -7570,8 +7283,8 @@
      "all": {
       "censored": 1,
       "ci95": [
-       -0.3,
-       1.137
+       -0.188,
+       1.1
       ],
       "mean_r": 0.525,
       "n_filled": 8,
@@ -7588,7 +7301,7 @@
      "all": {
       "censored": 0,
       "ci95": [
-       -0.0,
+       -0.25,
        1.0
       ],
       "mean_r": 0.5,
@@ -7635,7 +7348,7 @@
      "all": {
       "censored": 1,
       "ci95": [
-       -0.143,
+       -0.571,
        1.571
       ],
       "mean_r": 0.714,
@@ -7846,7 +7559,7 @@
    "realized_r_evidence": {
     "ci95": [
      -0.728,
-     0.604
+     0.628
     ],
     "mean_r": -0.107,
     "stop_rate": 0.483,
@@ -7963,7 +7676,7 @@
    "realized_r_evidence": {
     "ci95": [
      -1.0,
-     1.035
+     1.159
     ],
     "mean_r": -0.086,
     "stop_rate": 0.458,
@@ -8026,8 +7739,8 @@
    },
    "realized_r_evidence": {
     "ci95": [
-     0.247,
-     1.863
+     0.245,
+     1.849
     ],
     "mean_r": 0.99,
     "stop_rate": 0.333,
@@ -8154,7 +7867,7 @@
    "realized_r_evidence": {
     "ci95": [
      -0.857,
-     0.463
+     0.472
     ],
     "mean_r": -0.273,
     "stop_rate": 0.471,
@@ -8217,7 +7930,7 @@
    },
    "realized_r_evidence": {
     "ci95": [
-     -0.72,
+     -0.624,
      0.574
     ],
     "mean_r": -0.081,
@@ -8336,8 +8049,8 @@
    },
    "realized_r_evidence": {
     "ci95": [
-     0.11,
-     0.966
+     0.132,
+     0.986
     ],
     "mean_r": 0.53,
     "stop_rate": 0.495,
@@ -8569,8 +8282,8 @@
    },
    "realized_r_evidence": {
     "ci95": [
-     -0.483,
-     0.178
+     -0.495,
+     0.171
     ],
     "mean_r": -0.19,
     "stop_rate": 0.558,
@@ -8599,72 +8312,6 @@
    },
    "version": "v3"
   },
-  "range_sweep": {
-   "confirmed_defects": [
-    "The 'range' is simply the 24-bar high/low: nothing shows price respected those edges (no touch count, prior reaction or swing).",
-    "A touch within the buffer is accepted as the sweep: price need not trade beyond the level, so no liquidity need have been taken.",
-    "Sweep and reclaim may be one M1 candle, so no later confirmation exists.",
-    "The entry band [edge - buffer, edge + 2 x buffer] surrounds the level, not the reclaim; the stop is measured from the worst fill, widened to the floor or refused above the cap.",
-    "The target is a fixed 2R (else 1R) multiple accepted when it fits the room to the opposite edge, not a technical objective; the earlier revision published the opposite M5 range edge (30 of the 39 production trades), a median 3.7x the executed stop, so published target and executed ladder disagreed.",
-    "The specification (range_sweep.md) describes canonical M5 range state, an excursion beyond the edge by an ATR distance and the opposite edge as target; the code implements none of the three.",
-    "Production: 26 of 38 closed trades were full stops (68%) and 6 reached the final target; the exit paths bound the mean at -0.41R to -0.37R per trade (95% cluster interval of the midpoint -0.62 to -0.11)."
-   ],
-   "enabled": true,
-   "enabled_instruments": [
-    "XAU"
-   ],
-   "execution_compatibility": {
-    "median_room_cover": 1.99,
-    "median_technical_rr": 1.99,
-    "share_room_cover_below_1": 0.1,
-    "share_technical_rr_below_1": 0.1
-   },
-   "final_recommendation": "RETIRE",
-   "independent_review_status": "pending",
-   "observe_only_instruments": [],
-   "owner_approval_required": true,
-   "prior_certification": "docs/strategies/range_sweep.md",
-   "quality_formula": {
-    "class": "continuous",
-    "note": "reclaim close distance from the edge over M5 ATR (reclaim component is the constant 1); all 39 production values are between 0.01 and 0.38, so it never expresses a strong setup"
-   },
-   "rationale": "It names a liquidity sweep but accepts a touch, its quality score cannot express confidence, and the realised exit paths bound a loss with an interval that excludes zero. The one defensible idea (a genuine sweep of a confirmed range) overlaps Liquidity Sweep and CRT, which the audit retains. Parity with the Python lane proves the port, not the thesis.",
-   "real_trade_sample_size": {
-    "r_known": 6,
-    "trades": 39
-   },
-   "realized_r_evidence": {
-    "ci95": [
-     -1.0,
-     1.637
-    ],
-    "mean_r": -0.075,
-    "stop_rate": 0.667,
-    "sum_r": -0.5,
-    "win_rate": 0.333
-   },
-   "recommendation_scope": "propose retirement of the strategy; keep historical attribution and journal decoding; do not delete trade data",
-   "replay_evidence": {
-    "ci95": [
-     -0.5,
-     0.5
-    ],
-    "filled": 9,
-    "mean_r": -0.111,
-    "oos_mean_r": -0.333,
-    "opportunities": 9
-   },
-   "strategy_id": "range_sweep",
-   "technical_thesis": "Liquidity above/below an M5 range is swept and reclaimed on M1.",
-   "validation_conditions": "(as implemented) range = high/low of the last 24 M5 bars, >= 25 pips wide; a recent M1 bar within a buffer of the edge closes back at or inside it in the trade direction; dealing-range position agrees. Bar-for-bar port of the frozen Python scalp lane.",
-   "verdicts": {
-    "evidence": "MODERATE",
-    "execution": "PARTIAL",
-    "performance": "NEGATIVE",
-    "technical": "FAIL"
-   },
-   "version": "v3"
-  },
   "scalp_breakout_retest": {
    "confirmed_defects": [
     "First target is a fixed 1R / 2R label (scalp_1to1 68%, scalp_1to2 32%), not a technical objective.",
@@ -8689,7 +8336,7 @@
     "class": "continuous",
     "note": "five measured terms"
    },
-   "rationale": "The thesis is a real one; the target is the defect that produced Range Sweep's problem. Keep trading it while it is repaired because production is positive.",
+   "rationale": "The thesis is a real one; the fixed-R target is the same class of defect that led to Range Sweep's removal. Keep trading it while it is repaired because production is positive.",
    "real_trade_sample_size": {
     "r_known": 7,
     "trades": 10
@@ -8708,7 +8355,7 @@
    "replay_evidence": {
     "ci95": [
      -0.864,
-     0.1
+     0.031
     ],
     "filled": 17,
     "mean_r": -0.412,
@@ -8771,8 +8418,8 @@
    "recommendation_scope": "all instruments",
    "replay_evidence": {
     "ci95": [
-     -0.309,
-     0.291
+     -0.315,
+     0.273
     ],
     "filled": 64,
     "mean_r": -0.017,
@@ -8824,8 +8471,8 @@
    "recommendation_scope": "all instruments",
    "replay_evidence": {
     "ci95": [
-     -0.272,
-     0.384
+     -0.293,
+     0.377
     ],
     "filled": 45,
     "mean_r": 0.031,
@@ -8889,8 +8536,8 @@
    "recommendation_scope": "geometry only (target honesty / stop placement); no enablement change",
    "replay_evidence": {
     "ci95": [
-     -0.147,
-     0.127
+     -0.144,
+     0.126
     ],
     "filled": 823,
     "mean_r": -0.014,

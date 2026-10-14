@@ -2,12 +2,12 @@
 testdata/synthetic-scalp-oracle-<seed>.json.
 
 The real XAU capture with M1 bars covers 33 hours and yields only a handful of
-Range Sweep opportunities, so it cannot exercise every gate. This tool builds a
+scalp opportunities, so it cannot exercise every gate. This tool builds a
 SYNTHETIC XAU-like M1/M5/M15/H1 series (an Ornstein-Uhlenbeck price whose centre
 drifts and whose mean-reversion strength switches between range and trend
 regimes — it is labelled synthetic everywhere and is never presented as market
 data) and runs the same Python scalp lane over it as generate_oracle_golden.py:
-Breakout Retest Scalp V2 and Range Sweep at commit a1c77584. The Go test replays
+Breakout Retest Scalp V2 and Impulse Pullback at commit a1c77584. The Go test replays
 the synthetic capture through the Go engine and requires the same opportunities
 on the same bars.
 
@@ -79,13 +79,13 @@ def main():
   name = f"synthetic-xau-m1-capture-{SEED}.json"
   with open(os.path.join(ENGINE, "testdata", name), "w") as handle:
     json.dump(build(), handle, separators=(",", ":"))
-  cycles, breakouts, sweeps, impulses = lane.run(name)
+  cycles, breakouts, impulses = lane.run(name)
   with open(os.path.join(ENGINE, "testdata", f"synthetic-scalp-oracle-{SEED}.json"), "w") as handle:
     json.dump({
       "oracle_commit": "a1c77584", "capture": name, "synthetic": True,
-      "cycles": cycles, "breakouts": breakouts, "range_sweeps": sweeps, "impulse_pullbacks": impulses,
+      "cycles": cycles, "breakouts": breakouts, "impulse_pullbacks": impulses,
     }, handle, separators=(",", ":"))
-  print(SEED, len(cycles), "cycles,", len(breakouts), "breakout,", len(sweeps), "range sweep,", len(impulses), "impulse pullback")
+  print(SEED, len(cycles), "cycles,", len(breakouts), "breakout,", len(impulses), "impulse pullback")
 
 
 if __name__ == "__main__":

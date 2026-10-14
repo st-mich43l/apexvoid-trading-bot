@@ -1,4 +1,4 @@
-"""Strategy independence: 21 strategies, no strategy family.
+"""Strategy independence: 20 strategies, no strategy family.
 
 Each strategy owns its execution profile in ``strategy_catalog``. The legacy
 ``strategy_family`` string survives only as a label on TradePlan V8 and
@@ -177,7 +177,7 @@ def test_enable_switches_are_per_strategy_except_the_documented_scalp_mode():
   shared = {setting: sorted(group) for setting, group in live.items() if len(group) > 1}
   assert shared == {
     "auto_algo.strategies.scalping.mode": [
-      "Breakout Retest Scalp", "Impulse Pullback Scalp", "Range Sweep Scalp",
+      "Breakout Retest Scalp", "Impulse Pullback Scalp",
     ],
   }, "a new shared enable switch couples strategies; give each strategy its own"
 

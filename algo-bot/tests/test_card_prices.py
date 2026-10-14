@@ -85,7 +85,7 @@ def test_sell_mirrors_buy():
 
 @pytest.mark.parametrize("symbol,strategy", [
   ("EURUSD", "Key Level"),          # not gold
-  ("XAU", "Range Sweep Scalp"),     # M1 scalp: its 15-20 pip stop cannot absorb a whole-number round
+  ("XAU", "Impulse Pullback Scalp"), # M1 scalp: its 15-20 pip stop cannot absorb a whole-number round
   ("XAU", "Range Edge Scalp"),      # range scalp
 ])
 def test_only_gold_zone_plans_are_snapped(symbol, strategy):

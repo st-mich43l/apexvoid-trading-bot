@@ -26,7 +26,7 @@ T0 = 1_790_760_000
 
 def _res(setup_id="a", direction="BUY", low=100.0, high=101.0, at=T0):
   return EntryReservation(
-    setup_id=setup_id, strategy="range_sweep", direction=direction,
+    setup_id=setup_id, strategy="impulse_pullback", direction=direction,
     low=low, high=high, reserved_at=at,
   )
 
@@ -167,11 +167,11 @@ _PRODUCTION_XAU = (
   (1790758268, "fvg", "BUY", 4195.90, 4197.44, 4.23, -31),
   (1790758627, "impulse_pullback", "BUY", 4191.83, 4193.71, 2.40, -42),
   (1790761626, "impulse_pullback", "BUY", 4187.74, 4188.20, 1.01, 14),
-  (1790763616, "range_sweep", "BUY", 4184.82, 4185.01, 1.35, 21),
+  (1790763616, "impulse_pullback", "BUY", 4184.82, 4185.01, 1.35, 21),
   (1790764534, "key_level", "BUY", 4183.2556, 4186.7277, 3.47, -49),
-  (1790765410, "range_sweep", "BUY", 4183.76, 4183.94, 1.39, -26),
+  (1790765410, "impulse_pullback", "BUY", 4183.76, 4183.94, 1.39, -26),
   (1790765588, "order_block", "BUY", 4179.59, 4183.34, 3.58, -39),
-  (1790766427, "range_sweep", "BUY", 4181.52, 4182.71, 1.52, -24),
+  (1790766427, "impulse_pullback", "BUY", 4181.52, 4182.71, 1.52, -24),
   (1790767267, "fvg", "BUY", 4176.51, 4177.63, 3.17, 118),
 )
 

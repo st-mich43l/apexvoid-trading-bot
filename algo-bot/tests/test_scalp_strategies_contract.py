@@ -22,22 +22,21 @@ from tests.test_zone_scale_execution import _cfg, _policy_match
 
 pytestmark = pytest.mark.no_database
 
-# The five scalps in the 21-strategy catalog, by Go id.
+# The four scalps in the 20-strategy catalog, by Go id.
 SCALPS = {
   "range_edge": "Range Edge Scalp",
   "fade_scalp": "Fade Scalp",
-  "range_sweep": "Range Sweep Scalp",
   "impulse_pullback": "Impulse Pullback Scalp",
   "scalp_breakout_retest": "Breakout Retest Scalp",
 }
 # The Go stop envelope each of them gets on gold (analysis-engine computeStopEnvelope).
 GOLD_ENVELOPE = {
   "range_edge": (15, 45), "fade_scalp": (15, 45),
-  "range_sweep": (12, 45), "impulse_pullback": (12, 45), "scalp_breakout_retest": (12, 45),
+  "impulse_pullback": (12, 45), "scalp_breakout_retest": (12, 45),
 }
 
 
-def test_the_scalp_family_is_exactly_these_five():
+def test_the_scalp_family_is_exactly_these_four():
   scalps = {
     scope.catalog_id for scope in pol.REVIEWED_SCOPES.values()
     if is_scalp_strategy(scope.legacy_strategy, strategy_mode=scope.strategy_mode)
@@ -84,7 +83,7 @@ def test_every_scalp_is_recognised_by_every_scalp_gate(name):
 
 def test_only_the_m1_scalps_are_m1():
   assert {n for n in SCALPS.values() if is_m1_scalp_strategy(n)} == {
-    "Range Sweep Scalp", "Impulse Pullback Scalp", "Breakout Retest Scalp",
+    "Impulse Pullback Scalp", "Breakout Retest Scalp",
   }
 
 
@@ -121,13 +120,12 @@ def test_a_scalp_plan_carries_no_swing_risk_leg_but_a_structural_one_does():
 @pytest.mark.parametrize("name,family", [
   ("Range Edge Scalp", "range_reversion"),
   ("Fade Scalp", "range_reversion"),
-  ("Range Sweep Scalp", "range_reversion"),
   ("Impulse Pullback Scalp", "range_reversion"),
   ("Breakout Retest Scalp", "range_reversion"),
 ])
 def test_every_go_scalp_is_a_scalp_plan_for_sizing(name, family):
   # Go scalps carry family "range_reversion" and a go_m5_* mode; the plan builder
-  # used to key on family == "scalp" and so sized all five as non-scalps.
+  # used to key on family == "scalp" and so sized all of them as non-scalps.
   plan = _two_leg_plan(name, family)
   assert plan.risk.risk_percent == Decimal("0.5"), plan.risk.risk_percent
 
@@ -151,6 +149,6 @@ def test_the_only_shared_enable_switches_are_the_known_ones():
     by_switch[profile.enable_setting].add(scope.catalog_id)
   shared = {switch: ids for switch, ids in by_switch.items() if len(ids) > 1}
   assert shared == {
-    "auto_algo.strategies.scalping.mode": {"impulse_pullback", "range_sweep", "scalp_breakout_retest"},
+    "auto_algo.strategies.scalping.mode": {"impulse_pullback", "scalp_breakout_retest"},
     "auto_algo.strategies.technique.sd.enabled": {"supply", "demand"},
   }

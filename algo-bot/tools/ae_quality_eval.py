@@ -293,7 +293,7 @@ def trades_section(path: str, rng: random.Random) -> dict:
       out["by_symbol"][symbol] = {"r_trades": len(sub), "mean_r": round(statistics.fmean(v for _, v in sub), 3), "ci95": cluster_ci(sub, rng)}
   # Quality score against realized R inside the strategies that have enough trades.
   out["quality_vs_realized_r"] = {}
-  for name in ("Range Edge Scalp", "Key Level", "Range Sweep Scalp"):
+  for name in ("Range Edge Scalp", "Key Level"):
     pairs = [(float(r["q"]), corrected_r(r)) for r in by.get(name, []) if r["q"] and corrected_r(r) is not None]
     if len(pairs) >= 8:
       ordered = sorted(pairs)
@@ -305,7 +305,7 @@ def trades_section(path: str, rng: random.Random) -> dict:
   return out
 
 
-SCALPS = {"Range Edge Scalp", "Fade Scalp", "Range Sweep Scalp", "Impulse Pullback Scalp", "Breakout Retest Scalp"}
+SCALPS = {"Range Edge Scalp", "Fade Scalp", "Impulse Pullback Scalp", "Breakout Retest Scalp"}
 
 
 def exit_path_bounds(rows: list[dict]) -> dict:
@@ -327,34 +327,6 @@ def exit_path_bounds(rows: list[dict]) -> dict:
   high = low + 0.5 * paths["tp1_stop"]
   return {"trades": n, "paths": dict(paths), "mean_r_low": round(low / n, 3), "mean_r_high": round(high / n, 3),
           "mean_r_midpoint_ci95": cluster_ci(items, random.Random(SEED)), "full_stop_rate": round(paths["full_stop"] / n, 3)}
-
-
-def range_sweep_forensics(rows: list[dict]) -> dict:
-  """The Range Sweep production trades split by the revision that published them (target label)."""
-  def width(r):
-    pip = PIP.get(r["symbol"], 0.0001)
-    return (float(r["ehigh"]) - float(r["elow"])) / pip if r["elow"] and r["ehigh"] else None
-  out: dict = {"trades": len(rows), "quality_range": None, "by_target_label": {}}
-  q = sorted(float(r["q"]) for r in rows if r["q"])
-  if q:
-    out["quality_range"] = [round(q[0], 3), round(q[-1], 3)]
-  for label in sorted({r["t1label"] for r in rows}):
-    group = [r for r in rows if r["t1label"] == label]
-    ratios = []
-    for r in group:
-      try:
-        ratios.append(abs(float(r["t1"]) - float(r["avg_entry"])) / PIP.get(r["symbol"], 0.0001) / float(r["stop_pips"]))
-      except (ValueError, ZeroDivisionError):
-        pass
-    widths = [w for w in (width(r) for r in group) if w is not None]
-    out["by_target_label"][label] = {
-      "trades": len(group), "symbols": dict(Counter(r["symbol"] for r in group)),
-      "exit_paths": dict(Counter(r["exit_path"] for r in group)),
-      "published_target_over_executed_stop_median": round(statistics.median(ratios), 2) if ratios else None,
-      "entry_band_pips_median": round(statistics.median(widths), 1) if widths else None,
-      "first_close": min(int(r["closed_at"]) for r in group), "last_close": max(int(r["closed_at"]) for r in group)}
-  out["exit_path_bounds"] = exit_path_bounds(rows)
-  return out
 
 
 def strategy_matrix(report: dict) -> dict:
@@ -414,8 +386,6 @@ def main() -> None:
     all_rows = [r for r in csv.DictReader(open(args.trades)) if r["trade_stream"] == "algo_auto"]
     report["production_trades"]["scalp_exit_path_bounds"] = {
       name: exit_path_bounds([r for r in all_rows if r["setup_type"] == name]) for name in sorted(SCALPS)}
-    report["production_trades"]["range_sweep_forensics"] = range_sweep_forensics(
-      [r for r in all_rows if r["setup_type"] == "Range Sweep Scalp"])
     report["strategy_matrix"] = strategy_matrix(report)
   text = json.dumps(report, indent=1, sort_keys=True)
   if args.out:
