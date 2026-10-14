@@ -13,6 +13,13 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
+- Supply and Demand v3: a confirmed reaction on a zone already touched more than `maximum_zone_touches` (new optional parameter, 2 in
+  `config/analysis.yml`; default 0 = unlimited, the frozen publishers' behavior) no longer publishes. Zones touched 3+ times were the worst slice on both
+  sides in both replay halves (Supply -0.06R / -0.21R, Demand -0.31R / -0.39R). Hypothetical mean: Supply -0.01R to +0.03R, Demand -0.18R to -0.17R, so Demand
+  remains negative and is not fixed by this. About 5% fewer candidates; opportunity IDs change with the version. Target geometry and `Quality.Overall` unchanged.
+  Frozen replay baselines regenerated.
+
+### Changed
 - Trendline v4 (`docs/strategies/trendline.md`): the target is the nearest opposing liquidity at least `minimum_target_distance_atr` (1.0, new
   parameter) from the entry; with none nothing is published. v3 reported twice the distance from the entry to the interaction band
   edge, unrelated to the published stop (median room cover 0.05, technical RR below 1 in every replayed setup); v4 measures median
