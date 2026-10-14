@@ -94,7 +94,7 @@ counts); add the incoming group's planned loss (the executor's own sizing rule, 
 `VolumePlanner.cs`); refuse on the first of: unknown exposure, duplicate thesis, group limit, direction budget, symbol budget.
 
 * **Unknown is never zero**, but it is not a verdict on the setup: an unknown refusal keeps the intent and looks again (a stale snapshot or an executor blip), where a limit refusal ends it. Sticky `recovery_required`/closed groups that the broker snapshot still lists are not live exposure. A stale or missing executor snapshot, an unreadable runtime state, a broker group with no runtime
-  state, and (under a money limit) any group or incoming plan whose risk cannot be computed all refuse admission with
+  state, a `recovery_required` group that still has remaining volume or pending broker orders, and (under a money limit) any group or incoming plan whose risk cannot be computed all refuse admission with
   `exposure_unknown`. A count-only policy still counts a group of unknown risk.
 * **No double counting.** Groups are keyed by plan/setup id: a plan listed twice, a reservation and its runtime state, and a
   Redis plan that is also in the broker snapshot are one group. Instrument aliases (`XAUUSD`/`XAU`) are normalised.
@@ -108,6 +108,13 @@ counts); add the incoming group's planned loss (the executor's own sizing rule, 
   admission is refused (`group_exposure_reservation_unavailable`, intent retained), never allowed.
 * Manual Algo groups count as exposure but the autonomous policy never refuses a manual plan. Opposite-direction exposure
   keeps its own policy (`exposure.opposite_position`) untouched. Global arbitration and every strategy are untouched.
+
+Residuals, stated (found by the reviewer, not closed): a reservation is removed only once it is more than two minutes old and
+the runtime carries its risk, so an executor that takes longer than that to show a plan can still let one stale reader through;
+a connection that drops after the script ran but before its reply is parsed leaves a reservation for up to the dead-plan grace
+(90 s) and, symmetrically, one that drops after the XADD but before its reply releases a slot for a plan that is on the stream; a
+live group's structure id is read from its published plan, which expires with the plan's own validity (the thesis id, in the
+runtime state, still blocks); and an override can narrow but not remove an instrument limit.
 
 Out of scope, stated: the executor (`ctrader-engine`) is unchanged; a fence there would be a second, deeper line of defence but
 is a separate approval (broker executor semantics).

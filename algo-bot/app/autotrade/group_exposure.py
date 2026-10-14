@@ -394,6 +394,12 @@ async def load_symbol_exposure(
     if _is_non_live_trade_plan(stage=stage, group_stage=group_stage, terminal_reason=terminal):
       # Sticky recovery_required / closed groups stay in the broker snapshot's list but are
       # not live exposure: they must not read as a broker group the runtime cannot explain.
+      open_orders = (_as_float(_payload_get(payload, "remaining_volume", "RemainingVolume")) or 0.0) > 0 or bool(
+        _payload_get(payload, "pending_order_ids", "PendingOrderIds")
+      )
+      if group_stage.strip().lower() == "recovery_required" and open_orders:
+        # The executor could not map broker orders to legs: they are live and of unknown size.
+        exposure.unknown_reasons.append(f"recovery_required_with_open_orders:{plan_id[:16]}")
       ignored.add(str(_payload_get(payload, "plan_id", "PlanId") or plan_id))
       continue
     pending = stage in _PENDING_TRADE_PLAN_STAGES or group_stage in _PENDING_TRADE_PLAN_GROUP_STAGES
@@ -431,7 +437,7 @@ async def load_symbol_exposure(
       highest_booked_target_index=booked,
       remaining_lots=lots,
     ))
-  await _enrich_from_plans_and_reservations(client, exposure)
+  await _enrich_from_plans_and_reservations(client, exposure, policy=policy, now=now)
   # A broker group the runtime cannot account for is live exposure of unknown
   # size and direction.
   for group_id in sorted(snapshot_groups - seen - ignored):
@@ -452,7 +458,7 @@ async def load_symbol_exposure(
 # ---------------------------------------------------------------------------
 
 
-async def _enrich_from_plans_and_reservations(client: Any, exposure: SymbolExposure) -> None:
+async def _enrich_from_plans_and_reservations(client: Any, exposure: SymbolExposure, *, policy: SameDirectionPolicy, now: float) -> None:
   """Fill what the runtime state does not carry.
 
   The structure id lives only in the published plan; an unsized plan (the executor has
@@ -477,6 +483,12 @@ async def _enrich_from_plans_and_reservations(client: Any, exposure: SymbolExpos
     held = reservations.get(group.setup_id)
     if risk is None and held is not None and held[1].risk_amount is not None:
       risk, basis = held[1].risk_amount, "reservation"
+      # It is the only record of this plan's risk while the executor has not sized it:
+      # keep it alive for as long as the plan stays unsized.
+      fields = held[0].split("|")
+      if len(fields) >= 7:
+        fields[0] = str(int(now) + policy.reservation_ttl_seconds)
+        await client.hset(reservation_key(exposure.symbol, group.direction), group.setup_id, "|".join(fields))
     enriched.append(replace(group, structural_id=structural, risk_amount=risk, risk_basis=basis))
   exposure.groups = [g for g in exposure.groups if g.source != "runtime"] + enriched
 
@@ -661,7 +673,7 @@ local function scan(key, same)
     -- runtime. It is removed only once it is old and the runtime carries its risk: a
     -- worker with a stale read must still find it, or two groups could take one slot.
     if expires <= now or string.find(dead, ',' .. field .. ',', 1, true)
-       or (in_runtime and string.find(prune, ',' .. field .. ',', 1, true) and now - created > 30) then
+       or (in_runtime and string.find(prune, ',' .. field .. ',', 1, true) and now - created > 120) then
       redis.call('HDEL', key, field)
     elseif in_runtime then
       -- counted through the runtime

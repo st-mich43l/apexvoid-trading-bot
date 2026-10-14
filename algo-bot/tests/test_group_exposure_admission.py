@@ -274,3 +274,23 @@ async def test_a_setup_that_turned_terminal_before_publication_gives_the_slot_ba
   monkeypatch.setattr(worker, "load_setup", terminal)
   assert await _publish(client, match) is None
   assert await client.hlen(reservation_key("GBPUSD", "BUY")) == 0
+
+
+@pytest.mark.asyncio
+async def test_a_lifecycle_refusal_before_the_stream_gives_the_slot_back(monkeypatch):
+  monkeypatch.setattr(worker.instrument_geometry, "same_direction_policy", lambda symbol: _policy(1))
+  client = redis_state.get_client()
+  await _executor_snapshot(client)
+  match = _scalp("lifecycle")
+  await _confirm_setup(client, match)
+  real = worker.transition_setup
+
+  async def failing(client_, setup_id, state, **kwargs):
+    if state == "plan_built":
+      raise worker.SetupLifecycleError("lifecycle refused")
+    return await real(client_, setup_id, state, **kwargs)
+
+  monkeypatch.setattr(worker, "transition_setup", failing)
+  assert await _publish(client, match) is None
+  assert await client.xlen("execution:trade_plans") == 0
+  assert await client.hlen(reservation_key("GBPUSD", "BUY")) == 0, "nothing reached the stream: the slot must be free"

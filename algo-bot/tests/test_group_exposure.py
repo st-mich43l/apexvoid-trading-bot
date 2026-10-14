@@ -478,8 +478,8 @@ async def test_a_reservation_is_not_counted_twice_once_the_plan_is_in_the_runtim
   assert second.measured["same_direction_groups"] == 1
   # the superseded reservation is not counted, and is removed only once it is old
   assert await client.hlen(reservation_key("USDJPY", "SELL")) == 2
-  await _seed_snapshot(client, groups=["v8:one"], now=NOW + 90)
-  await admit_group(client, policy=_policy(max_groups=2), incoming=_incoming("three", thesis="t3", structural="s3"), units=USDJPY, now=NOW + 90)
+  await _seed_snapshot(client, groups=["v8:one"], now=NOW + 130)
+  await admit_group(client, policy=_policy(max_groups=2), incoming=_incoming("three", thesis="t3", structural="s3"), units=USDJPY, now=NOW + 130)
   assert "one" not in await client.hkeys(reservation_key("USDJPY", "SELL"))
 
 
@@ -758,7 +758,7 @@ async def test_a_plan_the_executor_has_accepted_but_not_sized_keeps_its_planned_
 async def test_a_sticky_recovery_required_group_is_not_a_broker_group_the_runtime_cannot_explain():
   client = _client()
   await _seed_snapshot(client, groups=["v8:rec"])
-  await _seed_runtime(client, _state("rec", group_stage="recovery_required"))
+  await _seed_runtime(client, _state("rec", group_stage="recovery_required", remaining=0))  # the positions are gone
   exposure = await _load(client)
   assert exposure.groups == [] and not exposure.unknown_reasons
   assert (await admit_group(client, policy=_policy(), incoming=_incoming("a"), units=USDJPY, now=NOW)).allowed
@@ -824,3 +824,31 @@ async def test_a_strategy_override_still_carries_the_instruments_money_cap():
   assert (await admit_group(client, policy=policy, incoming=_incoming("a", strategy="Key Level", risk=20.0), units=USDJPY, now=NOW)).allowed
   over = await admit_group(client, policy=policy, incoming=_incoming("b", strategy="Key Level", risk=20.0, thesis="t2", structural="s2"), units=USDJPY, now=NOW + 1)
   assert not over.allowed and over.reason_code == SAME_DIRECTION_RISK_BUDGET
+
+
+@pytest.mark.asyncio
+async def test_a_plan_that_stays_unsized_past_the_ttl_keeps_its_planned_risk():
+  client = _client()
+  await _seed_snapshot(client, now=NOW)
+  policy = _policy(max_groups=None, cum=60.0, reservation_ttl_seconds=600)
+  assert (await admit_group(client, policy=policy, incoming=_incoming("p", risk=25.0), units=USDJPY, now=NOW)).allowed
+  unsized = _state("p", stage="Received", group_stage="received", lots=0)
+  for key in ("TotalIntendedVolume", "TotalFilledVolume", "RemainingVolume"):
+    unsized[key] = 0
+  await _seed_runtime(client, unsized)
+  for at in (NOW + 300, NOW + 800, NOW + 1500, NOW + 2300):  # every scan inside the (refreshed) ttl
+    await _seed_snapshot(client, groups=["v8:p"], now=at)
+    decision = await admit_group(client, policy=policy, incoming=_incoming(f"q{at}", risk=20.0, thesis=f"t{at}", structural=f"s{at}"), units=USDJPY, now=at)
+    assert decision.reason_code != EXPOSURE_UNKNOWN, (at, decision)
+    await release_group_slot(client, symbol="USDJPY", direction="SELL", setup_id=f"q{at}")
+
+
+@pytest.mark.asyncio
+async def test_a_recovery_required_group_with_open_orders_is_live_exposure_of_unknown_size():
+  client = _client()
+  await _seed_snapshot(client, groups=["v8:rec"])
+  state = _state("rec", group_stage="recovery_required")
+  state["PendingOrderIds"] = [51329162]
+  await _seed_runtime(client, state)
+  exposure = await _load(client)
+  assert any(reason.startswith("recovery_required_with_open_orders") for reason in exposure.unknown_reasons)
