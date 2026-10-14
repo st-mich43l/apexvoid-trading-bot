@@ -12,6 +12,12 @@ dated section after deployment.
 
 ## Unreleased
 
+### Changed
+- Range Sweep Scalp retirement, step 1 (owner-approved 2026-10-14; docs/strategies/ae-strategy-retirement-review.md): `range_sweep`
+  joins XAU's `observe_only_strategies`. It keeps publishing, journalling and being measured, but no TradePlan is built from it;
+  nothing already published or open is touched. Rollback is removing the name. Step 3 (`enabled: false`) follows a two-week soak.
+  The catalog entry, provenance decoding and all ledger rows stay.
+
 ### Added
 - AE quality audit of all 21 strategies (`docs/strategies/ae-quality-certification.md`,
   `ae-strategy-retirement-review.md`, `ae-quality-replay-results.json`, `ae-strategy-matrix.yml`): technical, execution,

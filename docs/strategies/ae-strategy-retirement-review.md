@@ -51,6 +51,13 @@ admission, which should cover it, but the first retirement PR must add a test th
 opportunity published before containment is refused at admission, and that a journal row of
 the retired strategy still decodes.
 
+## Status
+
+- 2026-10-14: the owner approved retiring Range Sweep (item 1). **Step 1 (contain on XAU) is a
+  separate PR, not yet merged**; patch A no longer lists `range_sweep` once that merges. Step 3
+  (`enabled: false`, patch B) waits for the two-week soak and a second approval to proceed.
+- Items 2 to 9 are not yet approved.
+
 ## Proposals
 
 Every row needs explicit owner approval. Patch A applies step 1 to all restrictions; patch B
