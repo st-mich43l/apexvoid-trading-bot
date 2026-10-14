@@ -133,12 +133,12 @@ otherwise the leg is written off as already gone.
   stop, targets, risk leg) is what the plan holds and the executor places. Range
   Edge and Breakout Retest therefore enter only with the quote inside the card's
   zone (plus the contract tolerance); past the edge they wait for a retest and
-  never chase at the quote. Range Sweep and Impulse Pullback keep their bounded
+  never chase at the quote. Impulse Pullback keeps its bounded
   momentum chase.
 - **FX** takes one precise entry per plan with 1R/2R targets closing 50/50 and
   break-even after 1R; the stop envelope is per pair (EURUSD 12-20 pips,
   GBPJPY 22-35, USDJPY 18-28).
-- **Scalps** (`range_sweep`, `scalp_breakout_retest`) keep their own M1 stop
+- **Scalps** (`impulse_pullback`, `scalp_breakout_retest`) keep their own M1 stop
   book and ladder; they are XAU-only.
 
 ## Operator controls
