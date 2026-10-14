@@ -393,15 +393,10 @@ var scalpLaneExtras = map[string]map[string]string{
 		"buy_maximum_position":  "auto_algo.strategies.scalping.location.pullback_buy_maximum_position",
 		"sell_minimum_position": "auto_algo.strategies.scalping.location.pullback_sell_minimum_position",
 	},
-	"range_sweep": {
-		"buy_maximum_position":     "auto_algo.strategies.scalping.location.range_buy_maximum_position",
-		"sell_minimum_position":    "auto_algo.strategies.scalping.location.range_sell_minimum_position",
-		"trigger_maximum_age_bars": "auto_algo.strategies.scalping.activation.trigger_maximum_age_bars",
-	},
 }
 
 // applyScalpBreakoutRetest gives the M5-setup / M1-confirmation scalps (Breakout
-// Retest Scalp, Range Sweep) their instrument scale and the shared M1-scalp
+// Retest Scalp, Impulse Pullback) their instrument scale and the shared M1-scalp
 // stop/target book (auto_algo.strategies.scalping.*), the same leaves the stop
 // envelope and the execution policy read, so a setup is sized from one source.
 // It is idempotent.

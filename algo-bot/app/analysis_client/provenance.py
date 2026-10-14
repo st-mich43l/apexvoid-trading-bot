@@ -25,7 +25,6 @@ CATALOG_STRATEGY_IDS = frozenset({
   "snap_back",
   "fade_scalp",
   "liquidity_sweep",
-  "range_sweep",
   "impulse_pullback",
   "scalp_breakout_retest",
 })

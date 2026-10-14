@@ -155,7 +155,7 @@ analysis:
   #   expiry_hours — this strategy's own technical SETUP_EXPIRED window,
   #     distinct from Algo Bot's own execution-age policy; 24h is one
   #     trading day.
-  # All 21 registry entries have concrete Go factories. Every
+  # All 20 registry entries have concrete Go factories. Every
   # strategy is enabled for the live Kafka opportunity stream; Algo Bot
   # consumes those events and applies execution policy before publishing V8.
   strategies:
@@ -675,26 +675,6 @@ analysis:
       invalidation_buffer_atr: 0.25
       target_r: 2.0
       expiry_hours: 8.0
-    # Range Sweep Scalp — the Python discover_range_sweep of the profitable XAU
-    # week: the last 24 closed M5 bars form the range (at least 25 pips wide), a
-    # closed M1 bar touches or pierces an edge within the scalp buffer and closes
-    # back inside in the trade direction, and the dealing-range position agrees
-    # with the edge. Stop/target/spread and the location and trigger-age leaves
-    # are the shared auto_algo.strategies.scalping.* book, injected per
-    # instrument. XAU only: the frozen scalp lane hosted gold only.
-    range_sweep:
-      version: v3
-      enabled: true
-      symbols: [XAU]
-      setup_window_bars: 120
-      dealing_window_bars: 120
-      confirmation_window_bars: 60
-      context_max_age_seconds: 420
-      context_atr_bars: 14
-      active_range_bars: 24
-      expiry_minutes: 15
-      minimum_range_width_pips: 25
-      reward_risk_ladder: [2.0, 1.0]
     # Impulse Pullback Scalp — the Python scalp lane's discover_impulse_pullback of the
     # profitable XAU week: an M5 impulse (displacement of at least 4 ATR, body
     # dominance 0.5) with a corrective pullback (< 0.7 of the impulse body), anchored

@@ -94,11 +94,11 @@ jobs:
         run: |
           go build ./...
           go vet ./...
-          # Startup and contract checks only: the production config resolves, all 21
+          # Startup and contract checks only: the production config resolves, all 20
           # strategies have factories, the engine bootstraps, logging initialises and the
           # Kafka event schemas hold.
           go test -timeout 10m ./test/contracts/ ./internal/logging/
-          go test -timeout 10m ./test/engine/ -run 'TestAll21StrategiesHaveConcreteFactoriesAndValidProductionConfig|TestStrategyConfigsFromConfig|TestZoneConfigFromConfig|TestEngine_BootstrapBuildsStateWithoutRepublishingHistory'
+          go test -timeout 10m ./test/engine/ -run 'TestAll20StrategiesHaveConcreteFactoriesAndValidProductionConfig|TestStrategyConfigsFromConfig|TestZoneConfigFromConfig|TestEngine_BootstrapBuildsStateWithoutRepublishingHistory'
 
   csharp:
     name: C# autotrade suite
