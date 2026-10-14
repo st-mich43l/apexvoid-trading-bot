@@ -153,7 +153,7 @@ restart algo-bot; the previous behaviour returns exactly. Leftover reservations 
 **B, Range Edge v3.** Deploy `analysis-engine` with `config/analysis.yml` together (new required keys: `reclaim_closes`,
 `pressure_bars`, `pressure_minimum_rise_atr`, `minimum_reclaim_atr`, `rejection_close_strength`; without them the strategy fails to
 construct). Opportunity ids change with the version, so range_edge opportunities published under v2 are not continued: deploy
-outside an active range if a pending v2 plan matters. Expect about 17-26% fewer Range Edge opportunities (replay: USDJPY 17%, XAU 18%, FX 26%). **Rollback:** redeploy the
+outside an active range if a pending v2 plan matters. Expect about 18-26% fewer Range Edge opportunities (replay: USDJPY 20%, XAU 18%, FX 26%). **Rollback:** redeploy the
 previous analysis-engine image and config (the v2 code ignores the extra keys); no data migration. Nothing in Redis, Kafka or
 Postgres has a schema change.
 
