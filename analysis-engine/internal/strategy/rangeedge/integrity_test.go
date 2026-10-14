@@ -405,3 +405,46 @@ func TestAnAdvanceThatBrokeSeveralClustersIsOneEpochNamedByTheEarliestBreak(t *t
 		t.Fatalf("with only the later break in view it names the episode: %+v", got)
 	}
 }
+
+// An edge first touched by the wick of the first accepted close is made by the break, not
+// before it: it cannot exempt the break that retires it.
+func TestAnEdgeBornOnTheFirstAcceptedCloseDoesNotExemptItsOwnBreak(t *testing.T) {
+	bars, broken := staircase() // accepted run: bars 30-31, completed at 31 (BreakCloses 2)
+	born := input(bars, resistanceEdge(105.4, 30, 46, 0), supportEdge(98, 4, 30, 0))
+	born.Broken = []techniquezone.BrokenBarrier{broken}
+	if got := integrity().Assess(born); got.Reject == "" {
+		t.Fatalf("an edge whose first contact is the first accepted close was made by the break: %+v", got)
+	}
+	// one bar earlier it was already forming, and the broken cluster was not the outermost edge
+	before := input(bars, resistanceEdge(105.4, 29, 46, 0), supportEdge(98, 4, 30, 0))
+	before.Broken = []techniquezone.BrokenBarrier{broken}
+	if got := integrity().Assess(before); got.Reject != "" {
+		t.Fatalf("a cluster already forming before price began accepting is the outermost edge: %+v", got)
+	}
+}
+
+func TestARangeNeedsItsInsideClosesAfterTheBreakNotBefore(t *testing.T) {
+	bars, broken := staircase()
+	in := func(floorFirst, edgeFirst int) EdgeInput {
+		e := input(bars, resistanceEdge(105.4, edgeFirst, 46, 0), supportEdge(104.3, floorFirst, 44, 0))
+		e.Broken = []techniquezone.BrokenBarrier{broken}
+		return e
+	}
+	if got := integrity().Assess(in(34, 40)); got.Reject != "" {
+		t.Fatalf("control: %+v", got)
+	}
+	// a touch on the break bar itself is not after it (the run completed there)
+	if got := integrity().Assess(in(31, 40)); got.Reject == "" {
+		t.Fatalf("a floor first touched on the break bar is the break's own: %+v", got)
+	}
+	if got := integrity().Assess(in(34, 31)); got.Reject == "" {
+		t.Fatalf("an edge first touched on the break bar is the break's own: %+v", got)
+	}
+	// inside closes: only those after the break count, and exactly minimum_inside_closes are enough
+	few := input(append([]market.Candle(nil), bars[:34]...), resistanceEdge(105.4, 33, 33, 0), supportEdge(104.3, 33, 33, 0))
+	few.Broken = []techniquezone.BrokenBarrier{broken}
+	few.Bars[32], few.Bars[33] = candle(32, 104.4, 104.6, 104.3, 104.5), candle(33, 104.5, 104.7, 104.4, 104.6)
+	if got := integrity().Assess(few); got.Reject == "" {
+		t.Fatalf("two closes inside since the break are fewer than minimum_inside_closes (3): %+v", got)
+	}
+}

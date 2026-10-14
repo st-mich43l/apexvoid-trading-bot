@@ -260,22 +260,25 @@ func (p Integrity) Assess(in EdgeInput) Assessment {
 }
 
 // outermost reports whether no other cluster of the same side, live or broken, that was
-// already forming when b broke (its first touch is before the break) lay beyond it, above
+// already forming before price started accepting beyond b (its first touch is before the
+// accepted run that broke b began; a cluster whose first contact is the wick of the first
+// accepted close is made by the break, not before it) lay beyond it, above
 // a resistance or below a support, by more than the tolerance and no further than the
 // builder's maximum range width (a far cluster belongs to another range).
 func (p Integrity) outermost(in EdgeInput, b techniquezone.BrokenBarrier) bool {
 	reach := p.MaximumWidthATR * in.ATR
+	began := b.BreakIndex - maxInt(1, b.BreakCloses) + 1 // the first accepted close of the run that broke b
 	beyondB := func(level float64) bool {
 		d := beyondLevel(b.Side, level, b.Level)
 		return d > b.Tolerance && (reach <= 0 || d <= reach)
 	}
 	for _, o := range in.Broken {
-		if o.Side == b.Side && o.FirstTouchIndex < b.BreakIndex && beyondB(o.Level) {
+		if o.Side == b.Side && o.FirstTouchIndex < began && beyondB(o.Level) {
 			return false
 		}
 	}
 	for _, o := range in.Barriers {
-		if o.Side == b.Side && o.FirstTouchIndex < b.BreakIndex && beyondB(o.Level) {
+		if o.Side == b.Side && o.FirstTouchIndex < began && beyondB(o.Level) {
 			return false
 		}
 	}

@@ -61,8 +61,9 @@ terms, so BUY and SELL are exact mirrors (asserted on mirrored inputs).
      not the builder's selected one) are both made of contacts *after* the break, and price has closed inside them
      `minimum_inside_closes` times since. A stale floor, or price that never came back inside, is the old advance continuing.
 
-   "Outermost" means no other cluster of the side, live or broken, that was already forming when the edge broke (its first touch
-   is before the break) lay beyond it by more than the tolerance and within the builder's maximum range width
+   "Outermost" means no other cluster of the side, live or broken, that was already forming before price began accepting beyond
+   the edge (its first touch is before the first close of the accepted run that broke it; a cluster whose first contact is that
+   close was made by the break) lay beyond it by more than the tolerance and within the builder's maximum range width
    (`maximum_width_atr`): a cluster inside the range that price runs through on its way to the edge is not the range
    breaking, and a barrier from another range, further away than a range can be wide, is not the same range.
 3. **Break pending** (`break_pending_unreclaimed`). The builder tolerates one close beyond the edge (`break_closes`
@@ -79,7 +80,8 @@ terms, so BUY and SELL are exact mirrors (asserted on mirrored inputs).
 7. **Identity.** The thesis is the range episode: `range:<side>:<first-touch time>` as before, and
    `range:<side>:break:<time of the earliest break the edge sits beyond>` for a range re-established after a break (the latest
    event of each broken cluster dates it). This makes the identity name the advance rather than the barrier the lookback
-   happened to rebuild, but it is **not stable**: the identity changes when the break that names it leaves the 48-bar lookback or
+   happened to rebuild (one advance, one episode: a second, higher range after a second break shares the first break's identity
+   while that break stays in the lookback, so a thesis-keyed guard can treat it as the same thesis), but it is **not stable**: the identity changes when the break that names it leaves the 48-bar lookback or
    another broken cluster starts or stops qualifying, so one range can still be published under more than one id (measured in
    the certification: the same-range repeats fall only from 30 to 28 on USDJPY). Do not rely on it to deduplicate; the
    Algo Bot's entry-corridor guard and the same-direction exposure policy (`docs/risk/same-direction-exposure-incident.md`) are
