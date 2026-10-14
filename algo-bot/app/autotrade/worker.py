@@ -59,6 +59,14 @@ from app.autotrade.active_exposure import (
   evaluate_opposite_exposure,
   load_active_exposures,
 )
+from app.autotrade.group_exposure import (
+  EXPOSURE_UNKNOWN,
+  IncomingGroup,
+  RESERVATION_UNAVAILABLE,
+  admit_group,
+  planned_plan_risk,
+  release_group_slot,
+)
 from app.autotrade.entry_overlap import (
   ReservationUnavailable,
   release_entry_zone,
@@ -2338,9 +2346,100 @@ async def _publish_trade_plan_v8(
     )
     return None
 
+  # Instrument-owned same-direction exposure bound (config/instruments.yml
+  # exposure.same_direction). Absent: the legacy behaviour is unchanged. Present:
+  # the group is admitted only if the symbol's pending, submitted and open groups
+  # plus this one fit the group and risk limits; the slot is reserved atomically
+  # here and held until the plan is visible in the executor runtime.
+  group_slot_held = False
+  try:
+    group_policy = instrument_geometry.same_direction_policy(symbol)
+  except EffectiveInstrumentError as exc:
+    await _release_claims()
+    await _record_v8_build_rejected(
+      client, symbol, match, "same_direction_policy_invalid", str(exc), {"symbol": symbol},
+    )
+    return None
+  if group_policy is not None:
+    group_units = instrument_geometry.instrument_runtime(symbol).units
+    try:
+      incoming_group = IncomingGroup(
+        setup_id=setup_id,
+        plan_id=plan.plan_id,
+        symbol=symbol,
+        direction=str(match_for_plan.direction).upper(),
+        strategy=str(match_for_plan.strategy),
+        thesis_id=match.thesis_id,
+        structural_id=(
+          None if plan.source_structure is None else plan.source_structure.structure_id
+        ),
+        risk_amount=planned_plan_risk(
+          plan,
+          equity=await load_account_equity(client, symbol),
+          units=group_units,
+        ),
+      )
+      group_decision = await admit_group(
+        client, policy=group_policy, incoming=incoming_group, units=group_units,
+      )
+    except Exception:
+      # Redis (or the reservation script) failed: the exposure cannot be established, so
+      # nothing is admitted, and the claims taken above must not be orphaned.
+      log.exception("v8 group exposure unavailable symbol=%s setup_id=%s", symbol, setup_id)
+      await _release_claims()
+      await record_route_outcome(
+        client,
+        match,
+        stage="candidate_claim",
+        status="waiting",
+        reason_code=RESERVATION_UNAVAILABLE,
+        message="group exposure could not be established; intent retained",
+        retained=True,
+        publish_status=False,
+      )
+      return None
+    if not group_decision.allowed:
+      await _release_claims()
+      log.info(
+        "v8 group exposure refused symbol=%s match_id=%s reason=%s %s",
+        symbol, match.match_id[:12], group_decision.reason_code, group_decision.message,
+      )
+      if group_decision.reason_code == EXPOSURE_UNKNOWN:
+        # A stale snapshot or an executor blip is not a verdict on this setup: keep the
+        # intent and look again, as a Redis outage does.
+        await record_route_outcome(
+          client,
+          match,
+          stage="candidate_claim",
+          status="waiting",
+          reason_code=EXPOSURE_UNKNOWN,
+          message=group_decision.message,
+          measured=dict(group_decision.measured),
+          retained=True,
+          publish_status=False,
+        )
+        return None
+      await _record_v8_build_rejected(
+        client, symbol, match, str(group_decision.reason_code),
+        group_decision.message, dict(group_decision.measured),
+      )
+      return None
+    group_slot_held = True
+
+  plan_on_stream = False
+
+  async def _release_group_slot() -> None:
+    # Once the plan is on the stream the reservation is what counts it until the
+    # executor shows it: it is released only for a plan that never got there.
+    if group_slot_held and not plan_on_stream:
+      await release_group_slot(
+        client, symbol=symbol, direction=str(match_for_plan.direction), setup_id=setup_id,
+      )
+
   try:
     setup_live = await load_setup(client, setup_id)
     if setup_live is None or setup_live.state in TERMINAL_STATES:
+      await _release_group_slot()
       await _release_claims()
       log.info(
         "v8 publish aborted: setup is terminal symbol=%s setup_id=%s "
@@ -2366,6 +2465,7 @@ async def _publish_trade_plan_v8(
         reason_code="v8_builder",
       )
     await publish_trade_plan(client, plan)
+    plan_on_stream = True
     await transition_setup(
       client, setup_id, PLAN_PUBLISHED, reason_code="v8_stream_publish",
     )
@@ -2375,9 +2475,11 @@ async def _publish_trade_plan_v8(
       "setup_id=%s plan_id=%s",
       symbol, setup_id, plan.plan_id,
     )
+    await _release_group_slot()
     await _release_claims()
     return None
   except Exception as exc:
+    await _release_group_slot()
     await _release_claims()
     log.exception(
       "v8 plan stream publish failed after thesis claim symbol=%s "

@@ -42,6 +42,16 @@ dated section after deployment.
   exposure or enablement setting changes. Opportunity IDs change with the version, and an opportunity is the side and the confirming candle (one confirmation is one opportunity, whichever touch or supporting set it is seen through). **Not deployed.**
 
 ### Added
+- Same-direction group and cumulative-risk exposure policy, instrument-owned and atomic (`algo-bot/app/autotrade/group_exposure.py`,
+  `exposure.same_direction` in `config/instruments.yml`, `docs/risk/same-direction-exposure-incident.md`). Reproduces the
+  2026-10-12 USDJPY incident (four Range Edge Scalp SELLs admitted between 06:05 and 09:01 UTC against one rising resistance:
+  the 45-minute entry-corridor clock lapsed by 57 s and 2 s while the earlier plans were still open, and scalps may stack with no
+  count). With the policy declared, a group is admitted only if the symbol's pending, submitted and open groups plus the new
+  one fit `max_groups`, the direction and symbol money budgets (lots x distance to the current stop x pip value, shrinking with
+  bookings and stop moves) and the same-thesis rule; unknown exposure fails closed; admission is one Lua script per symbol and
+  direction with release on failure, supersession by the executor runtime and a TTL. **No instrument declares the policy in the
+  committed config, so live behaviour is unchanged**; the proposed USDJPY `max_groups: 1` is an unapplied patch for owner
+  review (`docs/risk/same-direction-exposure-usdjpy.patch`). Adds `lupa` to the dev requirements (the script tests run on fakeredis).
 - Confluence Zone v3, part C: replay certification (`analysis-engine/test/czreplay`, `docs/strategies/confluence-zone-v3-certification.md`,
   `-replay-results.json`, `-sensitivity.json`). Test harness, committed production captures and generated evidence only: no strategy,
   config, sizing, arbitration or enablement behaviour changes. It replays XAU and four FX pairs through the engine path with four models (legacy

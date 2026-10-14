@@ -1,0 +1,1241 @@
+{
+ "groups": 332,
+ "manual_groups_counted_as_exposure_only": 7,
+ "by_policy": {
+  "A_unlimited": {
+   "all_symbols": {
+    "groups_allowed": 332,
+    "groups_blocked": 0,
+    "blocked_by_reason": {},
+    "peak_concurrent_groups_per_symbol_direction": 5,
+    "peak_cumulative_planned_risk": 120.75,
+    "correlated_stop_clusters": 29,
+    "correlated_cluster_loss": -1891.87,
+    "derived_pnl_allowed": 3867.45,
+    "derived_pnl_blocked": 0,
+    "blocked_winners": 0,
+    "blocked_losers": 0,
+    "mean_r_allowed": 0.34,
+    "worst_group_loss": -130.0,
+    "worst_cluster": {
+     "symbol": "XAU",
+     "direction": "BUY",
+     "closed_at": 1791780536,
+     "groups": 2,
+     "loss": -199.0,
+     "strategies": [
+      "Key Level",
+      "Range Sweep Scalp"
+     ]
+    }
+   },
+   "EURUSD": {
+    "groups_allowed": 52,
+    "groups_blocked": 0,
+    "blocked_by_reason": {},
+    "peak_concurrent_groups_per_symbol_direction": 5,
+    "peak_cumulative_planned_risk": 88.82,
+    "correlated_stop_clusters": 1,
+    "correlated_cluster_loss": -49.2,
+    "derived_pnl_allowed": 636.0,
+    "derived_pnl_blocked": 0,
+    "blocked_winners": 0,
+    "blocked_losers": 0,
+    "mean_r_allowed": 0.747,
+    "worst_group_loss": -32.4,
+    "worst_cluster": {
+     "symbol": "EURUSD",
+     "direction": "SELL",
+     "closed_at": 1791763812,
+     "groups": 2,
+     "loss": -49.2,
+     "strategies": [
+      "Range Edge Scalp",
+      "iFVG"
+     ]
+    }
+   },
+   "GBPJPY": {
+    "groups_allowed": 56,
+    "groups_blocked": 0,
+    "blocked_by_reason": {},
+    "peak_concurrent_groups_per_symbol_direction": 3,
+    "peak_cumulative_planned_risk": 60.68,
+    "correlated_stop_clusters": 5,
+    "correlated_cluster_loss": -182.98,
+    "derived_pnl_allowed": 190.47,
+    "derived_pnl_blocked": 0,
+    "blocked_winners": 0,
+    "blocked_losers": 0,
+    "mean_r_allowed": 0.135,
+    "worst_group_loss": -39.69,
+    "worst_cluster": {
+     "symbol": "GBPJPY",
+     "direction": "BUY",
+     "closed_at": 1791417769,
+     "groups": 3,
+     "loss": -60.34,
+     "strategies": [
+      "Range Edge Scalp",
+      "Supply Demand"
+     ]
+    }
+   },
+   "GBPUSD": {
+    "groups_allowed": 44,
+    "groups_blocked": 0,
+    "blocked_by_reason": {},
+    "peak_concurrent_groups_per_symbol_direction": 4,
+    "peak_cumulative_planned_risk": 79.5,
+    "correlated_stop_clusters": 5,
+    "correlated_cluster_loss": -214.5,
+    "derived_pnl_allowed": 253.9,
+    "derived_pnl_blocked": 0,
+    "blocked_winners": 0,
+    "blocked_losers": 0,
+    "mean_r_allowed": 0.334,
+    "worst_group_loss": -37.8,
+    "worst_cluster": {
+     "symbol": "GBPUSD",
+     "direction": "SELL",
+     "closed_at": 1791870605,
+     "groups": 2,
+     "loss": -57.0,
+     "strategies": [
+      "FVG",
+      "Range Edge Scalp"
+     ]
+    }
+   },
+   "USDJPY": {
+    "groups_allowed": 53,
+    "groups_blocked": 0,
+    "blocked_by_reason": {},
+    "peak_concurrent_groups_per_symbol_direction": 4,
+    "peak_cumulative_planned_risk": 64.23,
+    "correlated_stop_clusters": 8,
+    "correlated_cluster_loss": -289.09,
+    "derived_pnl_allowed": 198.08,
+    "derived_pnl_blocked": 0,
+    "blocked_winners": 0,
+    "blocked_losers": 0,
+    "mean_r_allowed": 0.316,
+    "worst_group_loss": -30.47,
+    "worst_cluster": {
+     "symbol": "USDJPY",
+     "direction": "BUY",
+     "closed_at": 1791752433,
+     "groups": 2,
+     "loss": -47.4,
+     "strategies": [
+      "Range Edge Scalp",
+      "iFVG"
+     ]
+    }
+   },
+   "XAU": {
+    "groups_allowed": 127,
+    "groups_blocked": 0,
+    "blocked_by_reason": {},
+    "peak_concurrent_groups_per_symbol_direction": 2,
+    "peak_cumulative_planned_risk": 120.75,
+    "correlated_stop_clusters": 10,
+    "correlated_cluster_loss": -1156.1,
+    "derived_pnl_allowed": 2589.0,
+    "derived_pnl_blocked": 0,
+    "blocked_winners": 0,
+    "blocked_losers": 0,
+    "mean_r_allowed": 0.277,
+    "worst_group_loss": -130.0,
+    "worst_cluster": {
+     "symbol": "XAU",
+     "direction": "BUY",
+     "closed_at": 1791780536,
+     "groups": 2,
+     "loss": -199.0,
+     "strategies": [
+      "Key Level",
+      "Range Sweep Scalp"
+     ]
+    }
+   },
+   "USDJPY_2026-10-12_to_14": {
+    "groups_allowed": 14,
+    "groups_blocked": 0,
+    "blocked_by_reason": {},
+    "peak_concurrent_groups_per_symbol_direction": 4,
+    "peak_cumulative_planned_risk": 53.11,
+    "correlated_stop_clusters": 4,
+    "correlated_cluster_loss": -139.93,
+    "derived_pnl_allowed": -115.48,
+    "derived_pnl_blocked": 0,
+    "blocked_winners": 0,
+    "blocked_losers": 0,
+    "mean_r_allowed": -0.476,
+    "worst_group_loss": -29.34,
+    "worst_cluster": {
+     "symbol": "USDJPY",
+     "direction": "BUY",
+     "closed_at": 1791880262,
+     "groups": 2,
+     "loss": -45.14,
+     "strategies": [
+      "Key Level",
+      "Range Edge Scalp"
+     ]
+    }
+   },
+   "USDJPY_before_2026-10-10": {
+    "groups_allowed": 38,
+    "groups_blocked": 0,
+    "blocked_by_reason": {},
+    "peak_concurrent_groups_per_symbol_direction": 3,
+    "peak_cumulative_planned_risk": 64.23,
+    "correlated_stop_clusters": 3,
+    "correlated_cluster_loss": -111.17,
+    "derived_pnl_allowed": 325.97,
+    "derived_pnl_blocked": 0,
+    "blocked_winners": 0,
+    "blocked_losers": 0,
+    "mean_r_allowed": 0.642,
+    "worst_group_loss": -30.47,
+    "worst_cluster": {
+     "symbol": "USDJPY",
+     "direction": "BUY",
+     "closed_at": 1791752433,
+     "groups": 2,
+     "loss": -47.4,
+     "strategies": [
+      "Range Edge Scalp",
+      "iFVG"
+     ]
+    }
+   },
+   "USDJPY_from_2026-10-10": {
+    "groups_allowed": 15,
+    "groups_blocked": 0,
+    "blocked_by_reason": {},
+    "peak_concurrent_groups_per_symbol_direction": 4,
+    "peak_cumulative_planned_risk": 53.11,
+    "correlated_stop_clusters": 5,
+    "correlated_cluster_loss": -177.92,
+    "derived_pnl_allowed": -127.89,
+    "derived_pnl_blocked": 0,
+    "blocked_winners": 0,
+    "blocked_losers": 0,
+    "mean_r_allowed": -0.511,
+    "worst_group_loss": -29.34,
+    "worst_cluster": {
+     "symbol": "USDJPY",
+     "direction": "BUY",
+     "closed_at": 1791880262,
+     "groups": 2,
+     "loss": -45.14,
+     "strategies": [
+      "Key Level",
+      "Range Edge Scalp"
+     ]
+    }
+   }
+  },
+  "B_one_group": {
+   "all_symbols": {
+    "groups_allowed": 247,
+    "groups_blocked": 85,
+    "blocked_by_reason": {
+     "same_direction_group_limit": 85
+    },
+    "peak_concurrent_groups_per_symbol_direction": 1,
+    "peak_cumulative_planned_risk": 116.61,
+    "correlated_stop_clusters": 7,
+    "correlated_cluster_loss": -760.4,
+    "derived_pnl_allowed": 3641.72,
+    "derived_pnl_blocked": 225.73,
+    "blocked_winners": 41,
+    "blocked_losers": 44,
+    "mean_r_allowed": 0.367,
+    "worst_group_loss": -130.0,
+    "worst_cluster": {
+     "symbol": "XAU",
+     "direction": "BUY",
+     "closed_at": 1791780536,
+     "groups": 2,
+     "loss": -199.0,
+     "strategies": [
+      "Key Level",
+      "Range Sweep Scalp"
+     ]
+    }
+   },
+   "EURUSD": {
+    "groups_allowed": 35,
+    "groups_blocked": 17,
+    "blocked_by_reason": {
+     "same_direction_group_limit": 17
+    },
+    "peak_concurrent_groups_per_symbol_direction": 1,
+    "peak_cumulative_planned_risk": 32.4,
+    "correlated_stop_clusters": 0,
+    "correlated_cluster_loss": 0,
+    "derived_pnl_allowed": 348.4,
+    "derived_pnl_blocked": 287.6,
+    "blocked_winners": 14,
+    "blocked_losers": 3,
+    "mean_r_allowed": 0.519,
+    "worst_group_loss": -32.4,
+    "worst_cluster": null
+   },
+   "GBPJPY": {
+    "groups_allowed": 41,
+    "groups_blocked": 15,
+    "blocked_by_reason": {
+     "same_direction_group_limit": 15
+    },
+    "peak_concurrent_groups_per_symbol_direction": 1,
+    "peak_cumulative_planned_risk": 41.39,
+    "correlated_stop_clusters": 1,
+    "correlated_cluster_loss": -10.5,
+    "derived_pnl_allowed": 153.86,
+    "derived_pnl_blocked": 36.61,
+    "blocked_winners": 7,
+    "blocked_losers": 8,
+    "mean_r_allowed": 0.121,
+    "worst_group_loss": -39.69,
+    "worst_cluster": {
+     "symbol": "GBPJPY",
+     "direction": "BUY",
+     "closed_at": 1791207381,
+     "groups": 2,
+     "loss": -10.5,
+     "strategies": [
+      "Range Sweep Scalp"
+     ]
+    }
+   },
+   "GBPUSD": {
+    "groups_allowed": 27,
+    "groups_blocked": 17,
+    "blocked_by_reason": {
+     "same_direction_group_limit": 17
+    },
+    "peak_concurrent_groups_per_symbol_direction": 1,
+    "peak_cumulative_planned_risk": 39.42,
+    "correlated_stop_clusters": 0,
+    "correlated_cluster_loss": 0,
+    "derived_pnl_allowed": 240.2,
+    "derived_pnl_blocked": 13.7,
+    "blocked_winners": 8,
+    "blocked_losers": 9,
+    "mean_r_allowed": 0.503,
+    "worst_group_loss": -37.8,
+    "worst_cluster": null
+   },
+   "USDJPY": {
+    "groups_allowed": 34,
+    "groups_blocked": 19,
+    "blocked_by_reason": {
+     "same_direction_group_limit": 19
+    },
+    "peak_concurrent_groups_per_symbol_direction": 1,
+    "peak_cumulative_planned_risk": 30.64,
+    "correlated_stop_clusters": 0,
+    "correlated_cluster_loss": 0,
+    "derived_pnl_allowed": 217.76,
+    "derived_pnl_blocked": -19.68,
+    "blocked_winners": 7,
+    "blocked_losers": 12,
+    "mean_r_allowed": 0.472,
+    "worst_group_loss": -30.47,
+    "worst_cluster": null
+   },
+   "XAU": {
+    "groups_allowed": 110,
+    "groups_blocked": 17,
+    "blocked_by_reason": {
+     "same_direction_group_limit": 17
+    },
+    "peak_concurrent_groups_per_symbol_direction": 1,
+    "peak_cumulative_planned_risk": 116.61,
+    "correlated_stop_clusters": 6,
+    "correlated_cluster_loss": -749.9,
+    "derived_pnl_allowed": 2681.5,
+    "derived_pnl_blocked": -92.5,
+    "blocked_winners": 5,
+    "blocked_losers": 12,
+    "mean_r_allowed": 0.344,
+    "worst_group_loss": -130.0,
+    "worst_cluster": {
+     "symbol": "XAU",
+     "direction": "BUY",
+     "closed_at": 1791780536,
+     "groups": 2,
+     "loss": -199.0,
+     "strategies": [
+      "Key Level",
+      "Range Sweep Scalp"
+     ]
+    }
+   },
+   "USDJPY_2026-10-12_to_14": {
+    "groups_allowed": 8,
+    "groups_blocked": 6,
+    "blocked_by_reason": {
+     "same_direction_group_limit": 6
+    },
+    "peak_concurrent_groups_per_symbol_direction": 1,
+    "peak_cumulative_planned_risk": 28.85,
+    "correlated_stop_clusters": 0,
+    "correlated_cluster_loss": 0,
+    "derived_pnl_allowed": -29.72,
+    "derived_pnl_blocked": -85.76,
+    "blocked_winners": 0,
+    "blocked_losers": 6,
+    "mean_r_allowed": -0.08,
+    "worst_group_loss": -29.34,
+    "worst_cluster": null
+   },
+   "USDJPY_before_2026-10-10": {
+    "groups_allowed": 26,
+    "groups_blocked": 12,
+    "blocked_by_reason": {
+     "same_direction_group_limit": 12
+    },
+    "peak_concurrent_groups_per_symbol_direction": 1,
+    "peak_cumulative_planned_risk": 30.64,
+    "correlated_stop_clusters": 0,
+    "correlated_cluster_loss": 0,
+    "derived_pnl_allowed": 247.48,
+    "derived_pnl_blocked": 78.49,
+    "blocked_winners": 7,
+    "blocked_losers": 5,
+    "mean_r_allowed": 0.642,
+    "worst_group_loss": -30.47,
+    "worst_cluster": null
+   },
+   "USDJPY_from_2026-10-10": {
+    "groups_allowed": 8,
+    "groups_blocked": 7,
+    "blocked_by_reason": {
+     "same_direction_group_limit": 7
+    },
+    "peak_concurrent_groups_per_symbol_direction": 1,
+    "peak_cumulative_planned_risk": 28.85,
+    "correlated_stop_clusters": 0,
+    "correlated_cluster_loss": 0,
+    "derived_pnl_allowed": -29.72,
+    "derived_pnl_blocked": -98.17,
+    "blocked_winners": 0,
+    "blocked_losers": 7,
+    "mean_r_allowed": -0.08,
+    "worst_group_loss": -29.34,
+    "worst_cluster": null
+   }
+  },
+  "C_two_groups_budget": {
+   "all_symbols": {
+    "groups_allowed": 250,
+    "groups_blocked": 82,
+    "blocked_by_reason": {
+     "same_direction_risk_budget": 68,
+     "same_direction_group_limit": 14
+    },
+    "peak_concurrent_groups_per_symbol_direction": 2,
+    "peak_cumulative_planned_risk": 54.89,
+    "correlated_stop_clusters": 19,
+    "correlated_cluster_loss": -795.23,
+    "derived_pnl_allowed": 1383.52,
+    "derived_pnl_blocked": 2483.93,
+    "blocked_winners": 35,
+    "blocked_losers": 47,
+    "mean_r_allowed": 0.294,
+    "worst_group_loss": -64.6,
+    "worst_cluster": {
+     "symbol": "XAU",
+     "direction": "SELL",
+     "closed_at": 1791180200,
+     "groups": 2,
+     "loss": -86.6,
+     "strategies": [
+      "Key Level",
+      "Liquidity Sweep"
+     ]
+    }
+   },
+   "EURUSD": {
+    "groups_allowed": 48,
+    "groups_blocked": 4,
+    "blocked_by_reason": {
+     "same_direction_group_limit": 4
+    },
+    "peak_concurrent_groups_per_symbol_direction": 2,
+    "peak_cumulative_planned_risk": 51.44,
+    "correlated_stop_clusters": 1,
+    "correlated_cluster_loss": -49.2,
+    "derived_pnl_allowed": 515.8,
+    "derived_pnl_blocked": 120.2,
+    "blocked_winners": 4,
+    "blocked_losers": 0,
+    "mean_r_allowed": 0.66,
+    "worst_group_loss": -32.4,
+    "worst_cluster": {
+     "symbol": "EURUSD",
+     "direction": "SELL",
+     "closed_at": 1791763812,
+     "groups": 2,
+     "loss": -49.2,
+     "strategies": [
+      "Range Edge Scalp",
+      "iFVG"
+     ]
+    }
+   },
+   "GBPJPY": {
+    "groups_allowed": 53,
+    "groups_blocked": 3,
+    "blocked_by_reason": {
+     "same_direction_group_limit": 2,
+     "same_direction_risk_budget": 1
+    },
+    "peak_concurrent_groups_per_symbol_direction": 2,
+    "peak_cumulative_planned_risk": 48.84,
+    "correlated_stop_clusters": 4,
+    "correlated_cluster_loss": -111.16,
+    "derived_pnl_allowed": 210.07,
+    "derived_pnl_blocked": -19.6,
+    "blocked_winners": 1,
+    "blocked_losers": 2,
+    "mean_r_allowed": 0.16,
+    "worst_group_loss": -39.69,
+    "worst_cluster": {
+     "symbol": "GBPJPY",
+     "direction": "BUY",
+     "closed_at": 1791478230,
+     "groups": 2,
+     "loss": -44.66,
+     "strategies": [
+      "Range Edge Scalp",
+      "Supply Demand"
+     ]
+    }
+   },
+   "GBPUSD": {
+    "groups_allowed": 36,
+    "groups_blocked": 8,
+    "blocked_by_reason": {
+     "same_direction_group_limit": 3,
+     "same_direction_risk_budget": 5
+    },
+    "peak_concurrent_groups_per_symbol_direction": 2,
+    "peak_cumulative_planned_risk": 48.0,
+    "correlated_stop_clusters": 3,
+    "correlated_cluster_loss": -109.1,
+    "derived_pnl_allowed": 277.6,
+    "derived_pnl_blocked": -23.7,
+    "blocked_winners": 3,
+    "blocked_losers": 5,
+    "mean_r_allowed": 0.46,
+    "worst_group_loss": -37.8,
+    "worst_cluster": {
+     "symbol": "GBPUSD",
+     "direction": "BUY",
+     "closed_at": 1791166355,
+     "groups": 2,
+     "loss": -43.2,
+     "strategies": [
+      "Range Sweep Scalp"
+     ]
+    }
+   },
+   "USDJPY": {
+    "groups_allowed": 48,
+    "groups_blocked": 5,
+    "blocked_by_reason": {
+     "same_direction_group_limit": 5
+    },
+    "peak_concurrent_groups_per_symbol_direction": 2,
+    "peak_cumulative_planned_risk": 47.29,
+    "correlated_stop_clusters": 7,
+    "correlated_cluster_loss": -264.27,
+    "derived_pnl_allowed": 168.35,
+    "derived_pnl_blocked": 29.73,
+    "blocked_winners": 3,
+    "blocked_losers": 2,
+    "mean_r_allowed": 0.277,
+    "worst_group_loss": -30.47,
+    "worst_cluster": {
+     "symbol": "USDJPY",
+     "direction": "BUY",
+     "closed_at": 1791752433,
+     "groups": 2,
+     "loss": -47.4,
+     "strategies": [
+      "Range Edge Scalp",
+      "iFVG"
+     ]
+    }
+   },
+   "XAU": {
+    "groups_allowed": 65,
+    "groups_blocked": 62,
+    "blocked_by_reason": {
+     "same_direction_risk_budget": 62
+    },
+    "peak_concurrent_groups_per_symbol_direction": 2,
+    "peak_cumulative_planned_risk": 54.89,
+    "correlated_stop_clusters": 4,
+    "correlated_cluster_loss": -261.5,
+    "derived_pnl_allowed": 211.7,
+    "derived_pnl_blocked": 2377.3,
+    "blocked_winners": 24,
+    "blocked_losers": 38,
+    "mean_r_allowed": 0.054,
+    "worst_group_loss": -64.6,
+    "worst_cluster": {
+     "symbol": "XAU",
+     "direction": "SELL",
+     "closed_at": 1791180200,
+     "groups": 2,
+     "loss": -86.6,
+     "strategies": [
+      "Key Level",
+      "Liquidity Sweep"
+     ]
+    }
+   },
+   "USDJPY_2026-10-12_to_14": {
+    "groups_allowed": 12,
+    "groups_blocked": 2,
+    "blocked_by_reason": {
+     "same_direction_group_limit": 2
+    },
+    "peak_concurrent_groups_per_symbol_direction": 2,
+    "peak_cumulative_planned_risk": 44.65,
+    "correlated_stop_clusters": 3,
+    "correlated_cluster_loss": -115.11,
+    "derived_pnl_allowed": -90.66,
+    "derived_pnl_blocked": -24.82,
+    "blocked_winners": 0,
+    "blocked_losers": 2,
+    "mean_r_allowed": -0.387,
+    "worst_group_loss": -29.34,
+    "worst_cluster": {
+     "symbol": "USDJPY",
+     "direction": "BUY",
+     "closed_at": 1791880262,
+     "groups": 2,
+     "loss": -45.14,
+     "strategies": [
+      "Key Level",
+      "Range Edge Scalp"
+     ]
+    }
+   },
+   "USDJPY_before_2026-10-10": {
+    "groups_allowed": 35,
+    "groups_blocked": 3,
+    "blocked_by_reason": {
+     "same_direction_group_limit": 3
+    },
+    "peak_concurrent_groups_per_symbol_direction": 2,
+    "peak_cumulative_planned_risk": 47.29,
+    "correlated_stop_clusters": 3,
+    "correlated_cluster_loss": -111.17,
+    "derived_pnl_allowed": 271.42,
+    "derived_pnl_blocked": 54.55,
+    "blocked_winners": 3,
+    "blocked_losers": 0,
+    "mean_r_allowed": 0.542,
+    "worst_group_loss": -30.47,
+    "worst_cluster": {
+     "symbol": "USDJPY",
+     "direction": "BUY",
+     "closed_at": 1791752433,
+     "groups": 2,
+     "loss": -47.4,
+     "strategies": [
+      "Range Edge Scalp",
+      "iFVG"
+     ]
+    }
+   },
+   "USDJPY_from_2026-10-10": {
+    "groups_allowed": 13,
+    "groups_blocked": 2,
+    "blocked_by_reason": {
+     "same_direction_group_limit": 2
+    },
+    "peak_concurrent_groups_per_symbol_direction": 2,
+    "peak_cumulative_planned_risk": 44.65,
+    "correlated_stop_clusters": 4,
+    "correlated_cluster_loss": -153.1,
+    "derived_pnl_allowed": -103.07,
+    "derived_pnl_blocked": -24.82,
+    "blocked_winners": 0,
+    "blocked_losers": 2,
+    "mean_r_allowed": -0.435,
+    "worst_group_loss": -29.34,
+    "worst_cluster": {
+     "symbol": "USDJPY",
+     "direction": "BUY",
+     "closed_at": 1791880262,
+     "groups": 2,
+     "loss": -45.14,
+     "strategies": [
+      "Key Level",
+      "Range Edge Scalp"
+     ]
+    }
+   }
+  },
+  "D_one_per_thesis_symbol_ceiling": {
+   "all_symbols": {
+    "groups_allowed": 301,
+    "groups_blocked": 31,
+    "blocked_by_reason": {
+     "symbol_risk_budget": 31
+    },
+    "peak_concurrent_groups_per_symbol_direction": 4,
+    "peak_cumulative_planned_risk": 79.5,
+    "correlated_stop_clusters": 24,
+    "correlated_cluster_loss": -1126.67,
+    "derived_pnl_allowed": 2165.05,
+    "derived_pnl_blocked": 1702.4,
+    "blocked_winners": 14,
+    "blocked_losers": 17,
+    "mean_r_allowed": 0.302,
+    "worst_group_loss": -102.0,
+    "worst_cluster": {
+     "symbol": "XAU",
+     "direction": "SELL",
+     "closed_at": 1791946517,
+     "groups": 2,
+     "loss": -129.4,
+     "strategies": [
+      "Range Edge Scalp",
+      "Supply Demand"
+     ]
+    }
+   },
+   "EURUSD": {
+    "groups_allowed": 51,
+    "groups_blocked": 1,
+    "blocked_by_reason": {
+     "symbol_risk_budget": 1
+    },
+    "peak_concurrent_groups_per_symbol_direction": 4,
+    "peak_cumulative_planned_risk": 72.58,
+    "correlated_stop_clusters": 1,
+    "correlated_cluster_loss": -49.2,
+    "derived_pnl_allowed": 601.0,
+    "derived_pnl_blocked": 35.0,
+    "blocked_winners": 1,
+    "blocked_losers": 0,
+    "mean_r_allowed": 0.719,
+    "worst_group_loss": -32.4,
+    "worst_cluster": {
+     "symbol": "EURUSD",
+     "direction": "SELL",
+     "closed_at": 1791763812,
+     "groups": 2,
+     "loss": -49.2,
+     "strategies": [
+      "Range Edge Scalp",
+      "iFVG"
+     ]
+    }
+   },
+   "GBPJPY": {
+    "groups_allowed": 56,
+    "groups_blocked": 0,
+    "blocked_by_reason": {},
+    "peak_concurrent_groups_per_symbol_direction": 3,
+    "peak_cumulative_planned_risk": 60.68,
+    "correlated_stop_clusters": 5,
+    "correlated_cluster_loss": -182.98,
+    "derived_pnl_allowed": 190.47,
+    "derived_pnl_blocked": 0,
+    "blocked_winners": 0,
+    "blocked_losers": 0,
+    "mean_r_allowed": 0.135,
+    "worst_group_loss": -39.69,
+    "worst_cluster": {
+     "symbol": "GBPJPY",
+     "direction": "BUY",
+     "closed_at": 1791417769,
+     "groups": 3,
+     "loss": -60.34,
+     "strategies": [
+      "Range Edge Scalp",
+      "Supply Demand"
+     ]
+    }
+   },
+   "GBPUSD": {
+    "groups_allowed": 44,
+    "groups_blocked": 0,
+    "blocked_by_reason": {},
+    "peak_concurrent_groups_per_symbol_direction": 4,
+    "peak_cumulative_planned_risk": 79.5,
+    "correlated_stop_clusters": 5,
+    "correlated_cluster_loss": -214.5,
+    "derived_pnl_allowed": 253.9,
+    "derived_pnl_blocked": 0,
+    "blocked_winners": 0,
+    "blocked_losers": 0,
+    "mean_r_allowed": 0.334,
+    "worst_group_loss": -37.8,
+    "worst_cluster": {
+     "symbol": "GBPUSD",
+     "direction": "SELL",
+     "closed_at": 1791870605,
+     "groups": 2,
+     "loss": -57.0,
+     "strategies": [
+      "FVG",
+      "Range Edge Scalp"
+     ]
+    }
+   },
+   "USDJPY": {
+    "groups_allowed": 53,
+    "groups_blocked": 0,
+    "blocked_by_reason": {},
+    "peak_concurrent_groups_per_symbol_direction": 4,
+    "peak_cumulative_planned_risk": 64.23,
+    "correlated_stop_clusters": 8,
+    "correlated_cluster_loss": -289.09,
+    "derived_pnl_allowed": 198.08,
+    "derived_pnl_blocked": 0,
+    "blocked_winners": 0,
+    "blocked_losers": 0,
+    "mean_r_allowed": 0.316,
+    "worst_group_loss": -30.47,
+    "worst_cluster": {
+     "symbol": "USDJPY",
+     "direction": "BUY",
+     "closed_at": 1791752433,
+     "groups": 2,
+     "loss": -47.4,
+     "strategies": [
+      "Range Edge Scalp",
+      "iFVG"
+     ]
+    }
+   },
+   "XAU": {
+    "groups_allowed": 97,
+    "groups_blocked": 30,
+    "blocked_by_reason": {
+     "symbol_risk_budget": 30
+    },
+    "peak_concurrent_groups_per_symbol_direction": 2,
+    "peak_cumulative_planned_risk": 79.35,
+    "correlated_stop_clusters": 5,
+    "correlated_cluster_loss": -390.9,
+    "derived_pnl_allowed": 921.6,
+    "derived_pnl_blocked": 1667.4,
+    "blocked_winners": 13,
+    "blocked_losers": 17,
+    "mean_r_allowed": 0.157,
+    "worst_group_loss": -102.0,
+    "worst_cluster": {
+     "symbol": "XAU",
+     "direction": "SELL",
+     "closed_at": 1791946517,
+     "groups": 2,
+     "loss": -129.4,
+     "strategies": [
+      "Range Edge Scalp",
+      "Supply Demand"
+     ]
+    }
+   },
+   "USDJPY_2026-10-12_to_14": {
+    "groups_allowed": 14,
+    "groups_blocked": 0,
+    "blocked_by_reason": {},
+    "peak_concurrent_groups_per_symbol_direction": 4,
+    "peak_cumulative_planned_risk": 53.11,
+    "correlated_stop_clusters": 4,
+    "correlated_cluster_loss": -139.93,
+    "derived_pnl_allowed": -115.48,
+    "derived_pnl_blocked": 0,
+    "blocked_winners": 0,
+    "blocked_losers": 0,
+    "mean_r_allowed": -0.476,
+    "worst_group_loss": -29.34,
+    "worst_cluster": {
+     "symbol": "USDJPY",
+     "direction": "BUY",
+     "closed_at": 1791880262,
+     "groups": 2,
+     "loss": -45.14,
+     "strategies": [
+      "Key Level",
+      "Range Edge Scalp"
+     ]
+    }
+   },
+   "USDJPY_before_2026-10-10": {
+    "groups_allowed": 38,
+    "groups_blocked": 0,
+    "blocked_by_reason": {},
+    "peak_concurrent_groups_per_symbol_direction": 3,
+    "peak_cumulative_planned_risk": 64.23,
+    "correlated_stop_clusters": 3,
+    "correlated_cluster_loss": -111.17,
+    "derived_pnl_allowed": 325.97,
+    "derived_pnl_blocked": 0,
+    "blocked_winners": 0,
+    "blocked_losers": 0,
+    "mean_r_allowed": 0.642,
+    "worst_group_loss": -30.47,
+    "worst_cluster": {
+     "symbol": "USDJPY",
+     "direction": "BUY",
+     "closed_at": 1791752433,
+     "groups": 2,
+     "loss": -47.4,
+     "strategies": [
+      "Range Edge Scalp",
+      "iFVG"
+     ]
+    }
+   },
+   "USDJPY_from_2026-10-10": {
+    "groups_allowed": 15,
+    "groups_blocked": 0,
+    "blocked_by_reason": {},
+    "peak_concurrent_groups_per_symbol_direction": 4,
+    "peak_cumulative_planned_risk": 53.11,
+    "correlated_stop_clusters": 5,
+    "correlated_cluster_loss": -177.92,
+    "derived_pnl_allowed": -127.89,
+    "derived_pnl_blocked": 0,
+    "blocked_winners": 0,
+    "blocked_losers": 0,
+    "mean_r_allowed": -0.511,
+    "worst_group_loss": -29.34,
+    "worst_cluster": {
+     "symbol": "USDJPY",
+     "direction": "BUY",
+     "closed_at": 1791880262,
+     "groups": 2,
+     "loss": -45.14,
+     "strategies": [
+      "Key Level",
+      "Range Edge Scalp"
+     ]
+    }
+   }
+  }
+ },
+ "usdjpy_group_limit_sweep": {
+  "1": {
+   "all": {
+    "groups_allowed": 34,
+    "groups_blocked": 19,
+    "blocked_by_reason": {
+     "same_direction_group_limit": 19
+    },
+    "peak_concurrent_groups_per_symbol_direction": 1,
+    "peak_cumulative_planned_risk": 30.64,
+    "correlated_stop_clusters": 0,
+    "correlated_cluster_loss": 0,
+    "derived_pnl_allowed": 217.76,
+    "derived_pnl_blocked": -19.68,
+    "blocked_winners": 7,
+    "blocked_losers": 12,
+    "mean_r_allowed": 0.472,
+    "worst_group_loss": -30.47,
+    "worst_cluster": null
+   },
+   "before_2026-10-10": {
+    "groups_allowed": 26,
+    "groups_blocked": 12,
+    "blocked_by_reason": {
+     "same_direction_group_limit": 12
+    },
+    "peak_concurrent_groups_per_symbol_direction": 1,
+    "peak_cumulative_planned_risk": 30.64,
+    "correlated_stop_clusters": 0,
+    "correlated_cluster_loss": 0,
+    "derived_pnl_allowed": 247.48,
+    "derived_pnl_blocked": 78.49,
+    "blocked_winners": 7,
+    "blocked_losers": 5,
+    "mean_r_allowed": 0.642,
+    "worst_group_loss": -30.47,
+    "worst_cluster": null
+   },
+   "from_2026-10-10": {
+    "groups_allowed": 8,
+    "groups_blocked": 7,
+    "blocked_by_reason": {
+     "same_direction_group_limit": 7
+    },
+    "peak_concurrent_groups_per_symbol_direction": 1,
+    "peak_cumulative_planned_risk": 28.85,
+    "correlated_stop_clusters": 0,
+    "correlated_cluster_loss": 0,
+    "derived_pnl_allowed": -29.72,
+    "derived_pnl_blocked": -98.17,
+    "blocked_winners": 0,
+    "blocked_losers": 7,
+    "mean_r_allowed": -0.08,
+    "worst_group_loss": -29.34,
+    "worst_cluster": null
+   }
+  },
+  "2": {
+   "all": {
+    "groups_allowed": 48,
+    "groups_blocked": 5,
+    "blocked_by_reason": {
+     "same_direction_group_limit": 5
+    },
+    "peak_concurrent_groups_per_symbol_direction": 2,
+    "peak_cumulative_planned_risk": 47.29,
+    "correlated_stop_clusters": 7,
+    "correlated_cluster_loss": -264.27,
+    "derived_pnl_allowed": 168.35,
+    "derived_pnl_blocked": 29.73,
+    "blocked_winners": 3,
+    "blocked_losers": 2,
+    "mean_r_allowed": 0.277,
+    "worst_group_loss": -30.47,
+    "worst_cluster": {
+     "symbol": "USDJPY",
+     "direction": "BUY",
+     "closed_at": 1791752433,
+     "groups": 2,
+     "loss": -47.4,
+     "strategies": [
+      "Range Edge Scalp",
+      "iFVG"
+     ]
+    }
+   },
+   "before_2026-10-10": {
+    "groups_allowed": 35,
+    "groups_blocked": 3,
+    "blocked_by_reason": {
+     "same_direction_group_limit": 3
+    },
+    "peak_concurrent_groups_per_symbol_direction": 2,
+    "peak_cumulative_planned_risk": 47.29,
+    "correlated_stop_clusters": 3,
+    "correlated_cluster_loss": -111.17,
+    "derived_pnl_allowed": 271.42,
+    "derived_pnl_blocked": 54.55,
+    "blocked_winners": 3,
+    "blocked_losers": 0,
+    "mean_r_allowed": 0.542,
+    "worst_group_loss": -30.47,
+    "worst_cluster": {
+     "symbol": "USDJPY",
+     "direction": "BUY",
+     "closed_at": 1791752433,
+     "groups": 2,
+     "loss": -47.4,
+     "strategies": [
+      "Range Edge Scalp",
+      "iFVG"
+     ]
+    }
+   },
+   "from_2026-10-10": {
+    "groups_allowed": 13,
+    "groups_blocked": 2,
+    "blocked_by_reason": {
+     "same_direction_group_limit": 2
+    },
+    "peak_concurrent_groups_per_symbol_direction": 2,
+    "peak_cumulative_planned_risk": 44.65,
+    "correlated_stop_clusters": 4,
+    "correlated_cluster_loss": -153.1,
+    "derived_pnl_allowed": -103.07,
+    "derived_pnl_blocked": -24.82,
+    "blocked_winners": 0,
+    "blocked_losers": 2,
+    "mean_r_allowed": -0.435,
+    "worst_group_loss": -29.34,
+    "worst_cluster": {
+     "symbol": "USDJPY",
+     "direction": "BUY",
+     "closed_at": 1791880262,
+     "groups": 2,
+     "loss": -45.14,
+     "strategies": [
+      "Key Level",
+      "Range Edge Scalp"
+     ]
+    }
+   }
+  },
+  "3": {
+   "all": {
+    "groups_allowed": 52,
+    "groups_blocked": 1,
+    "blocked_by_reason": {
+     "same_direction_group_limit": 1
+    },
+    "peak_concurrent_groups_per_symbol_direction": 3,
+    "peak_cumulative_planned_risk": 64.23,
+    "correlated_stop_clusters": 7,
+    "correlated_cluster_loss": -264.27,
+    "derived_pnl_allowed": 210.49,
+    "derived_pnl_blocked": -12.41,
+    "blocked_winners": 0,
+    "blocked_losers": 1,
+    "mean_r_allowed": 0.341,
+    "worst_group_loss": -30.47,
+    "worst_cluster": {
+     "symbol": "USDJPY",
+     "direction": "BUY",
+     "closed_at": 1791752433,
+     "groups": 2,
+     "loss": -47.4,
+     "strategies": [
+      "Range Edge Scalp",
+      "iFVG"
+     ]
+    }
+   },
+   "before_2026-10-10": {
+    "groups_allowed": 38,
+    "groups_blocked": 0,
+    "blocked_by_reason": {},
+    "peak_concurrent_groups_per_symbol_direction": 3,
+    "peak_cumulative_planned_risk": 64.23,
+    "correlated_stop_clusters": 3,
+    "correlated_cluster_loss": -111.17,
+    "derived_pnl_allowed": 325.97,
+    "derived_pnl_blocked": 0,
+    "blocked_winners": 0,
+    "blocked_losers": 0,
+    "mean_r_allowed": 0.642,
+    "worst_group_loss": -30.47,
+    "worst_cluster": {
+     "symbol": "USDJPY",
+     "direction": "BUY",
+     "closed_at": 1791752433,
+     "groups": 2,
+     "loss": -47.4,
+     "strategies": [
+      "Range Edge Scalp",
+      "iFVG"
+     ]
+    }
+   },
+   "from_2026-10-10": {
+    "groups_allowed": 14,
+    "groups_blocked": 1,
+    "blocked_by_reason": {
+     "same_direction_group_limit": 1
+    },
+    "peak_concurrent_groups_per_symbol_direction": 3,
+    "peak_cumulative_planned_risk": 44.65,
+    "correlated_stop_clusters": 4,
+    "correlated_cluster_loss": -153.1,
+    "derived_pnl_allowed": -115.48,
+    "derived_pnl_blocked": -12.41,
+    "blocked_winners": 0,
+    "blocked_losers": 1,
+    "mean_r_allowed": -0.475,
+    "worst_group_loss": -29.34,
+    "worst_cluster": {
+     "symbol": "USDJPY",
+     "direction": "BUY",
+     "closed_at": 1791880262,
+     "groups": 2,
+     "loss": -45.14,
+     "strategies": [
+      "Key Level",
+      "Range Edge Scalp"
+     ]
+    }
+   }
+  },
+  "4": {
+   "all": {
+    "groups_allowed": 53,
+    "groups_blocked": 0,
+    "blocked_by_reason": {},
+    "peak_concurrent_groups_per_symbol_direction": 4,
+    "peak_cumulative_planned_risk": 64.23,
+    "correlated_stop_clusters": 8,
+    "correlated_cluster_loss": -289.09,
+    "derived_pnl_allowed": 198.08,
+    "derived_pnl_blocked": 0,
+    "blocked_winners": 0,
+    "blocked_losers": 0,
+    "mean_r_allowed": 0.316,
+    "worst_group_loss": -30.47,
+    "worst_cluster": {
+     "symbol": "USDJPY",
+     "direction": "BUY",
+     "closed_at": 1791752433,
+     "groups": 2,
+     "loss": -47.4,
+     "strategies": [
+      "Range Edge Scalp",
+      "iFVG"
+     ]
+    }
+   },
+   "before_2026-10-10": {
+    "groups_allowed": 38,
+    "groups_blocked": 0,
+    "blocked_by_reason": {},
+    "peak_concurrent_groups_per_symbol_direction": 3,
+    "peak_cumulative_planned_risk": 64.23,
+    "correlated_stop_clusters": 3,
+    "correlated_cluster_loss": -111.17,
+    "derived_pnl_allowed": 325.97,
+    "derived_pnl_blocked": 0,
+    "blocked_winners": 0,
+    "blocked_losers": 0,
+    "mean_r_allowed": 0.642,
+    "worst_group_loss": -30.47,
+    "worst_cluster": {
+     "symbol": "USDJPY",
+     "direction": "BUY",
+     "closed_at": 1791752433,
+     "groups": 2,
+     "loss": -47.4,
+     "strategies": [
+      "Range Edge Scalp",
+      "iFVG"
+     ]
+    }
+   },
+   "from_2026-10-10": {
+    "groups_allowed": 15,
+    "groups_blocked": 0,
+    "blocked_by_reason": {},
+    "peak_concurrent_groups_per_symbol_direction": 4,
+    "peak_cumulative_planned_risk": 53.11,
+    "correlated_stop_clusters": 5,
+    "correlated_cluster_loss": -177.92,
+    "derived_pnl_allowed": -127.89,
+    "derived_pnl_blocked": 0,
+    "blocked_winners": 0,
+    "blocked_losers": 0,
+    "mean_r_allowed": -0.511,
+    "worst_group_loss": -29.34,
+    "worst_cluster": {
+     "symbol": "USDJPY",
+     "direction": "BUY",
+     "closed_at": 1791880262,
+     "groups": 2,
+     "loss": -45.14,
+     "strategies": [
+      "Key Level",
+      "Range Edge Scalp"
+     ]
+    }
+   }
+  }
+ }
+}
