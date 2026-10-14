@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from app.scalping.models import ARCHETYPE_RANGE_SWEEP, STRATEGY_DISPLAY
+from app.scalping.models import STRATEGY_DISPLAY
 
 
 pytestmark = pytest.mark.no_database
@@ -27,5 +27,5 @@ def _trending_ohlc(*, bars: int, direction: str, start: float = 2000.0) -> pd.Da
   return pd.DataFrame(rows, index=index)
 
 
-def test_strategy_display_maps_range_sweep_archetype():
-  assert STRATEGY_DISPLAY[ARCHETYPE_RANGE_SWEEP] == "Range Sweep Scalp"
+def test_strategy_display_maps_the_remaining_archetypes():
+  assert set(STRATEGY_DISPLAY.values()) == {"Impulse Pullback Scalp", "Breakout Retest Scalp"}

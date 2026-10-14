@@ -41,7 +41,7 @@ STRATEGY_NAME = {
   "session_level": "Session Level", "trendline": "Trendline", "box_breakout": "Box Breakout",
   "break_retest": "Break & Retest", "momentum_ride": "Momentum Ride", "snap_back": "Snap-Back",
   "liquidity_sweep": "Liquidity Sweep", "range_edge": "Range Edge Scalp",
-  "fade_scalp": "Fade Scalp", "range_sweep": "Range Sweep Scalp",
+  "fade_scalp": "Fade Scalp",
   "impulse_pullback": "Impulse Pullback Scalp", "scalp_breakout_retest": "Breakout Retest Scalp",
 }
 _TS = re.compile(r"^(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d),(\d{3})")

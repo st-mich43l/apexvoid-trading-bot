@@ -328,7 +328,7 @@ async def test_plan_runtime_reconcile_recovers_unknown_leg_close_orphan():
     "group_id": gid,
     "candidate_id": gid,
     "direction": "BUY",
-    "setup": "HFS Range Sweep",
+    "setup": "Impulse Pullback Scalp",
     "symbol": "XAU",
     "price": 4642.018,
     "stop_loss": 4640.67,

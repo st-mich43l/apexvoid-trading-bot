@@ -30,7 +30,7 @@ STRATEGIES = {
     "Snap-Back", "Momentum Ride", "Box Breakout",
   ],
   "scalp": ["Range Edge Scalp", "Fade Scalp"],
-  "m1": ["Range Sweep Scalp", "Impulse Pullback Scalp", "Breakout Retest Scalp"],
+  "m1": ["Impulse Pullback Scalp", "Breakout Retest Scalp"],
 }
 CASES = [(kind, name) for kind, names in STRATEGIES.items() for name in names]
 PRICE_KEYS = (

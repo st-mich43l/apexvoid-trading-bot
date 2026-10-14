@@ -15,7 +15,6 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/liquiditysweep"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/momentumride"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/rangeedge"
-	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/rangesweep"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/scalpbreakoutretest"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/snapback"
 	strategytrendline "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/trendline"
@@ -222,7 +221,7 @@ func TestStrategiesRejectMissingConfiguration(t *testing.T) {
 		id      strategy.StrategyID
 		factory strategy.Factory
 	}{
-		{"ifvg", ifvg.ID, ifvg.New}, {"trendline", strategytrendline.ID, strategytrendline.New}, {"range_edge", rangeedge.ID, rangeedge.New}, {"liquidity_sweep", liquiditysweep.ID, liquiditysweep.New}, {"snap_back", snapback.ID, snapback.New}, {"crt", crt.ID, crt.New}, {"confluence_zone", confluencezone.ID, confluencezone.New}, {"momentum_ride", momentumride.ID, momentumride.New}, {"box_breakout", boxbreakout.ID, boxbreakout.New}, {"range_sweep", rangesweep.ID, rangesweep.New}, {"impulse_pullback", impulsepullback.ID, impulsepullback.New}, {"scalp_breakout_retest", scalpbreakoutretest.ID, scalpbreakoutretest.New},
+		{"ifvg", ifvg.ID, ifvg.New}, {"trendline", strategytrendline.ID, strategytrendline.New}, {"range_edge", rangeedge.ID, rangeedge.New}, {"liquidity_sweep", liquiditysweep.ID, liquiditysweep.New}, {"snap_back", snapback.ID, snapback.New}, {"crt", crt.ID, crt.New}, {"confluence_zone", confluencezone.ID, confluencezone.New}, {"momentum_ride", momentumride.ID, momentumride.New}, {"box_breakout", boxbreakout.ID, boxbreakout.New}, {"impulse_pullback", impulsepullback.ID, impulsepullback.New}, {"scalp_breakout_retest", scalpbreakoutretest.ID, scalpbreakoutretest.New},
 	}
 	for _, tc := range factories {
 		t.Run(tc.name, func(t *testing.T) {

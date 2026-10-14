@@ -25,7 +25,7 @@ def test_scalp_route_is_single_leg_market_not_micro_grid():
     zone_high=4005.0,
     atr=4.0,
     zone_fill_enabled=True,
-    strategy="Range Sweep Scalp",
+    strategy="Impulse Pullback Scalp",
   )
   assert plan.valid is True
   assert plan.route == ROUTE_MARKET
@@ -62,7 +62,7 @@ def test_xau_scalp_auto_route_is_single_leg_market(
     zone_high=4005.0,
     atr=4.0,
     zone_fill_enabled=True,
-    strategy="Range Sweep Scalp",
+    strategy="Impulse Pullback Scalp",
     entry_clips=xau.targeting.entry_clips,
   )
 
@@ -83,7 +83,7 @@ def test_scalp_chase_sell_books_full_market_not_five_legs_into_abandoned_zone():
     zone_high=4567.86625,
     atr=4.0,
     zone_fill_enabled=True,
-    strategy="Range Sweep Scalp",
+    strategy="Impulse Pullback Scalp",
   )
   assert plan.valid is True
   assert plan.route == ROUTE_MARKET

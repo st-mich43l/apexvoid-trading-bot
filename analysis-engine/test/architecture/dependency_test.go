@@ -123,7 +123,6 @@ var rank = map[string]int{
 	"strategy/momentumride":        7,
 	"strategy/snapback":            7,
 	"strategy/liquiditysweep":      7,
-	"strategy/rangesweep":          7,
 	"strategy/impulsepullback":     7,
 	"strategy/scalpbreakoutretest": 7,
 	"engine":                       8,

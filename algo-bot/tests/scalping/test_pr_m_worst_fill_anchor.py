@@ -14,7 +14,6 @@ from app.autotrade.execution_confirmation import (
 from app.scalping.models import (
   ARCHETYPE_BREAKOUT_RETEST,
   ARCHETYPE_IMPULSE_PULLBACK,
-  ARCHETYPE_RANGE_SWEEP,
   CONTEXT_VERSION,
   LIVE_OUTCOME_VERSION,
   ScalpContextSnapshot,
@@ -36,7 +35,6 @@ def _cfg(**overrides):
   scalp_cfg = SimpleNamespace(
     mode="shadow",
     archetypes=SimpleNamespace(
-      range_sweep_enabled=True,
       impulse_pullback_enabled=True,
       breakout_retest_enabled=True,
       impulse_pullback_allowed_sessions="london",
@@ -53,13 +51,10 @@ def _cfg(**overrides):
     ),
     context=SimpleNamespace(maximum_m5_age_seconds=420, m1_lookback_bars=60),
     location=SimpleNamespace(
-      range_buy_maximum_position=0.35,
-      range_sell_minimum_position=0.65,
       pullback_buy_maximum_position=0.75,
       pullback_sell_minimum_position=0.25,
     ),
     activation=SimpleNamespace(
-      trigger_maximum_age_bars=2,
       maximum_chase_pips=40.0,
       maximum_chase_stop_fraction=0.15,
       rearm_distance_atr=0.25,

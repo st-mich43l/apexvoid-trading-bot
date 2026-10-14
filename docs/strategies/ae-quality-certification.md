@@ -137,7 +137,10 @@ No universal minimum `quality.overall` is proposed, and the P1 global arbitratio
 untouched. A quality reconstruction changes an arbitration-facing number, so it needs its own
 offline impact report before any PR.
 
-## 5. Range Sweep
+## 5. Range Sweep (removed in #779)
+
+Historical record: the strategy, its tests and its config no longer exist, so the figures below are the
+ones measured at audit time and cannot be reproduced from the repository.
 
 **Code (v3, `internal/strategy/rangesweep` and `internal/strategyutil/scalpcontext.go`).** The Go
 detector is a bar-for-bar port of the frozen Python scalp lane (parity proven earlier); the

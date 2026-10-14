@@ -10,10 +10,10 @@ import (
 // stopEnvelopeKind is which of the four configured stop-distance policies a
 // strategy is admitted under. Every strategy names its own kind below — there
 // is no strategy group that supplies it — and TestEveryStrategyDeclaresItsOwnStopEnvelope
-// fails if one of the 21 catalog IDs is missing. The values mirror algo-bot's
+// fails if one of the 20 catalog IDs is missing. The values mirror algo-bot's
 // protective_stop.stop_bounds_for_strategy exactly, keyed on Go's catalog IDs
 // (opportunity.Candidate.Strategy): Key Level, Session Level and Trendline use
-// the reaction-room envelope; Range Sweep, Impulse Pullback and Scalp Breakout
+// the reaction-room envelope; Impulse Pullback and Scalp Breakout
 // Retest use strategies.scalping.stop.* directly (fixed min_rr 1.0); Range Edge
 // and Fade Scalp use execution.range.*; every other strategy (Momentum Ride
 // included, despite the name) takes the plain trend envelope, as the Python
@@ -46,7 +46,6 @@ var strategyStopEnvelope = map[opportunity.StrategyID]stopEnvelopeKind{
 	"snap_back":             stopEnvelopeTrend,
 	"fade_scalp":            stopEnvelopeRangeRoom,
 	"liquidity_sweep":       stopEnvelopeTrend,
-	"range_sweep":           stopEnvelopeM1Scalp,
 	"impulse_pullback":      stopEnvelopeM1Scalp,
 	"scalp_breakout_retest": stopEnvelopeM1Scalp,
 }

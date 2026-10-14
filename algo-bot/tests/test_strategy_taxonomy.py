@@ -101,7 +101,7 @@ def test_m1_scalp_strategies_bypass_opposing_when_room_fits():
     assert bypasses_opposing_structure_gates(name, full_take_profit_pips=20)
   assert not is_m1_scalp_strategy("Scalp Custom Archetype")
   assert bypasses_opposing_structure_gates(
-    "Range Sweep Scalp",
+    "Impulse Pullback Scalp",
     full_take_profit_pips=15,
     strategy_mode="scalp_m1",
   )

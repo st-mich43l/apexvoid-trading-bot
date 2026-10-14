@@ -506,7 +506,7 @@ public sealed partial class TradePlanRuntimeTests
       "created_at": 1719999600,
       "expires_at": 2000000000,
       "analysis": {
-        "strategy": "Range Sweep Scalp",
+        "strategy": "Impulse Pullback Scalp",
         "strategy_family": "scalp",
         "direction": "BUY",
         "context_timeframes": ["M1"],
@@ -1136,7 +1136,7 @@ public sealed partial class TradePlanRuntimeTests
       planId: "v8:scalp-stack",
       thesisId: "thesis-scalp",
       setupId: "setup-scalp",
-      strategy: "Range Sweep Scalp",
+      strategy: "Impulse Pullback Scalp",
       strategyFamily: "scalp"
     ));
     await runtime.PollAsync(
@@ -1397,7 +1397,7 @@ public sealed partial class TradePlanRuntimeTests
       zoneLow: 4629.134892857143m,
       zoneHigh: 4630.110214285714m,
       stopPrice: 4628.89m,
-      strategy: "Range Sweep Scalp",
+      strategy: "Impulse Pullback Scalp",
       strategyFamily: "scalp",
       targetsJson: """
         [
@@ -1455,7 +1455,7 @@ public sealed partial class TradePlanRuntimeTests
       zoneLow: 4669.177214285714m,
       zoneHigh: 4670.411392857143m,
       stopPrice: 4671.29m,
-      strategy: "Range Sweep Scalp",
+      strategy: "Impulse Pullback Scalp",
       strategyFamily: "scalp",
       targetsJson: """
         [
@@ -1514,7 +1514,7 @@ public sealed partial class TradePlanRuntimeTests
       zoneLow: 4669.18m,
       zoneHigh: 4670.41m,
       stopPrice: 4671.29m,
-      strategy: "Range Sweep Scalp",
+      strategy: "Impulse Pullback Scalp",
       strategyFamily: "scalp",
       targetsJson: """
         [

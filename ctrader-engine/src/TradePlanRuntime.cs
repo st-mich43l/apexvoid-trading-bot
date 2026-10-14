@@ -647,7 +647,6 @@ public sealed partial class TradePlanRuntime(
     StringComparer.OrdinalIgnoreCase
   )
   {
-    "Range Sweep Scalp",
     "Impulse Pullback Scalp",
     "Breakout Retest Scalp",
     "Momentum Chase Scalp",
