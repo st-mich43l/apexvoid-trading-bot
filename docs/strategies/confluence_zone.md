@@ -1,5 +1,7 @@
 # Confluence Zone Strategy V3
 
+> **Quality review (2026-10-14): RETAIN_RESTRICTED** (proposal, not applied). Technical PASS, execution COMPATIBLE, performance NEGATIVE, evidence MODERATE. Scope: propose observe-only on XAU and GBPJPY; keep EURUSD, GBPUSD, USDJPY live. See [ae-quality-certification.md](ae-quality-certification.md) and [ae-strategy-retirement-review.md](ae-strategy-retirement-review.md). Independent review: pending.
+
 `confluence_zone` is the one approved compositional exception: it trades a price
 region that at least `minimum_facts` (two) **genuinely independent**, already-canonical
 structures support at the same time, after a measured directional rejection of that

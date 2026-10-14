@@ -1,0 +1,12 @@
+diff --git a/config/analysis.yml b/config/analysis.yml
+--- a/config/analysis.yml
++++ b/config/analysis.yml
+@@ -684,7 +684,7 @@
+     # instrument. XAU only: the frozen scalp lane hosted gold only.
+     range_sweep:
+       version: v3
+-      enabled: true
++      enabled: false
+       symbols: [XAU]
+       setup_window_bars: 120
+       dealing_window_bars: 120

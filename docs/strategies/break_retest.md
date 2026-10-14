@@ -1,5 +1,7 @@
 # Break & Retest (v3)
 
+> **Quality review (2026-10-14): RETAIN** (proposal, not applied). Technical PASS, execution PARTIAL, performance NEGATIVE, evidence WEAK. Scope: all instruments; replace the constant with a measured function in the quality reconstruction. See [ae-quality-certification.md](ae-quality-certification.md) and [ae-strategy-retirement-review.md](ae-strategy-retirement-review.md). Independent review: pending.
+
 `break_retest` trades the retest of a structure price has just broken. v3 replaces
 the frozen-Python-parity v2 with a Go contract that owns its structures, accepts a
 break only on measured evidence, requires a fresh retest strictly after the

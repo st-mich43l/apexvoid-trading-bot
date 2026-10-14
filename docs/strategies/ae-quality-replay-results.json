@@ -1,0 +1,8969 @@
+{
+ "captures": [
+  "EURUSD",
+  "EURUSD Oct 14",
+  "EURUSD early",
+  "GBPJPY",
+  "GBPJPY Oct 14",
+  "GBPJPY early",
+  "GBPUSD",
+  "GBPUSD Oct 14",
+  "GBPUSD early",
+  "USDJPY",
+  "USDJPY Oct 14",
+  "USDJPY early",
+  "XAU M1 Oct 2-6",
+  "XAU Oct 14 (M1)",
+  "XAU Oct M5",
+  "XAU Sep"
+ ],
+ "containment": {
+  "EURUSD": {
+   "observe_only_strategies": [
+    "impulse_pullback"
+   ],
+   "observe_only_structure_timeframes": [
+    "M15"
+   ]
+  },
+  "GBPJPY": {
+   "observe_only_strategies": [
+    "impulse_pullback"
+   ],
+   "observe_only_structure_timeframes": [
+    "M15"
+   ]
+  },
+  "GBPUSD": {
+   "observe_only_strategies": [
+    "impulse_pullback"
+   ],
+   "observe_only_structure_timeframes": [
+    "M15"
+   ]
+  },
+  "USDJPY": {
+   "observe_only_strategies": [
+    "impulse_pullback"
+   ],
+   "observe_only_structure_timeframes": [
+    "M15"
+   ]
+  },
+  "XAU": {
+   "observe_only_strategies": [
+    "impulse_pullback",
+    "liquidity_sweep"
+   ],
+   "observe_only_structure_timeframes": [
+    "M15"
+   ]
+  }
+ },
+ "oos_starts_utc": "2026-10-07",
+ "production_trades": {
+  "algo_auto_trades": 421,
+  "by_strategy": {
+   "Box Breakout": {
+    "ci95": null,
+    "exit_paths": {
+     "full_stop": 1,
+     "tp2_full": 1
+    },
+    "mean_r": -1.0,
+    "profit_factor": 0.0,
+    "r_trades": 1,
+    "stop_rate": 0.5,
+    "sum_r": -1.0,
+    "symbols": {
+     "XAU": 2
+    },
+    "trades": 2,
+    "win_rate": 0.0
+   },
+   "Break & Retest": {
+    "ci95": null,
+    "exit_paths": {
+     "full_stop": 1,
+     "tp1_be": 2
+    },
+    "mean_r": -0.33,
+    "profit_factor": 0.34,
+    "r_trades": 2,
+    "stop_rate": 0.333,
+    "sum_r": -0.7,
+    "symbols": {
+     "EURUSD": 1,
+     "XAU": 2
+    },
+    "trades": 3,
+    "win_rate": 0.5
+   },
+   "Breakout Retest Scalp": {
+    "ci95": [
+     0.287,
+     1.023
+    ],
+    "exit_paths": {
+     "full_stop": 2,
+     "tp1_be": 2,
+     "tp1_stop": 5,
+     "tp2_full": 1
+    },
+    "mean_r": 0.542,
+    "profit_factor": 2.9,
+    "r_trades": 7,
+    "stop_rate": 0.2,
+    "sum_r": 3.8,
+    "symbols": {
+     "XAU": 10
+    },
+    "trades": 10,
+    "win_rate": 0.714
+   },
+   "CRT": {
+    "exit_paths": {
+     "full_stop": 1
+    },
+    "r_trades": 0,
+    "stop_rate": 1.0,
+    "symbols": {
+     "XAU": 1
+    },
+    "trades": 1
+   },
+   "Confluence Zone": {
+    "ci95": [
+     -0.694,
+     0.628
+    ],
+    "exit_paths": {
+     "full_stop": 14,
+     "manual_close": 1,
+     "tp1_be": 4,
+     "tp2_full": 10
+    },
+    "mean_r": -0.107,
+    "profit_factor": 0.81,
+    "r_trades": 9,
+    "stop_rate": 0.483,
+    "sum_r": -1.0,
+    "symbols": {
+     "EURUSD": 1,
+     "GBPJPY": 7,
+     "GBPUSD": 2,
+     "USDJPY": 5,
+     "XAU": 14
+    },
+    "trades": 29,
+    "win_rate": 0.444
+   },
+   "FVG": {
+    "ci95": [
+     -0.857,
+     0.454
+    ],
+    "exit_paths": {
+     "full_stop": 8,
+     "manual_close": 1,
+     "tp1_be": 2,
+     "tp2_full": 6
+    },
+    "mean_r": -0.273,
+    "profit_factor": 0.52,
+    "r_trades": 7,
+    "stop_rate": 0.471,
+    "sum_r": -1.9,
+    "symbols": {
+     "EURUSD": 4,
+     "GBPJPY": 1,
+     "GBPUSD": 2,
+     "USDJPY": 5,
+     "XAU": 5
+    },
+    "trades": 17,
+    "win_rate": 0.286
+   },
+   "Fade Scalp": {
+    "ci95": [
+     0.242,
+     1.849
+    ],
+    "exit_paths": {
+     "full_stop": 6,
+     "tp1_be": 5,
+     "tp2_full": 7
+    },
+    "mean_r": 0.99,
+    "profit_factor": 8.92,
+    "r_trades": 8,
+    "stop_rate": 0.333,
+    "sum_r": 7.9,
+    "symbols": {
+     "EURUSD": 2,
+     "GBPJPY": 7,
+     "GBPUSD": 1,
+     "USDJPY": 2,
+     "XAU": 6
+    },
+    "trades": 18,
+    "win_rate": 0.875
+   },
+   "Flip Zone": {
+    "ci95": null,
+    "exit_paths": {
+     "full_stop": 2,
+     "tp1_be": 1
+    },
+    "mean_r": -0.248,
+    "profit_factor": 0.5,
+    "r_trades": 2,
+    "stop_rate": 0.667,
+    "sum_r": -0.5,
+    "symbols": {
+     "EURUSD": 1,
+     "XAU": 2
+    },
+    "trades": 3,
+    "win_rate": 0.5
+   },
+   "Impulse Pullback Scalp": {
+    "exit_paths": {
+     "full_stop": 8,
+     "manual_close": 1,
+     "tp1_be": 1,
+     "tp1_stop": 2
+    },
+    "r_trades": 0,
+    "stop_rate": 0.667,
+    "symbols": {
+     "GBPJPY": 3,
+     "USDJPY": 1,
+     "XAU": 8
+    },
+    "trades": 12
+   },
+   "Key Level": {
+    "ci95": [
+     0.109,
+     0.968
+    ],
+    "exit_paths": {
+     "full_stop": 47,
+     "manual_close": 3,
+     "tp1_be": 17,
+     "tp2_full": 28
+    },
+    "mean_r": 0.53,
+    "profit_factor": 2.28,
+    "r_trades": 41,
+    "stop_rate": 0.495,
+    "sum_r": 21.7,
+    "symbols": {
+     "EURUSD": 12,
+     "GBPUSD": 13,
+     "USDJPY": 8,
+     "XAU": 62
+    },
+    "trades": 95,
+    "win_rate": 0.585
+   },
+   "Liquidity Sweep": {
+    "exit_paths": {
+     "full_stop": 11,
+     "manual_close": 1,
+     "tp1_be": 3,
+     "tp2_full": 6
+    },
+    "r_trades": 0,
+    "stop_rate": 0.524,
+    "symbols": {
+     "EURUSD": 4,
+     "GBPJPY": 7,
+     "GBPUSD": 3,
+     "USDJPY": 2,
+     "XAU": 5
+    },
+    "trades": 21
+   },
+   "Order Block": {
+    "ci95": null,
+    "exit_paths": {
+     "full_stop": 2,
+     "tp1_be": 1
+    },
+    "mean_r": -0.164,
+    "profit_factor": 0.67,
+    "r_trades": 2,
+    "stop_rate": 0.667,
+    "sum_r": -0.3,
+    "symbols": {
+     "GBPJPY": 1,
+     "XAU": 2
+    },
+    "trades": 3,
+    "win_rate": 0.5
+   },
+   "Range Edge Scalp": {
+    "ci95": [
+     -0.498,
+     0.167
+    ],
+    "exit_paths": {
+     "full_stop": 53,
+     "manual_close": 1,
+     "tp1_be": 21,
+     "tp2_full": 20
+    },
+    "mean_r": -0.19,
+    "profit_factor": 0.68,
+    "r_trades": 62,
+    "stop_rate": 0.558,
+    "sum_r": -11.8,
+    "symbols": {
+     "EURUSD": 21,
+     "GBPJPY": 16,
+     "GBPUSD": 20,
+     "USDJPY": 23,
+     "XAU": 15
+    },
+    "trades": 95,
+    "win_rate": 0.403
+   },
+   "Range Sweep Scalp": {
+    "ci95": [
+     -1.0,
+     1.637
+    ],
+    "exit_paths": {
+     "full_stop": 26,
+     "manual_close": 1,
+     "tp1_be": 3,
+     "tp1_stop": 3,
+     "tp2_full": 6
+    },
+    "mean_r": -0.075,
+    "profit_factor": 0.89,
+    "r_trades": 6,
+    "stop_rate": 0.667,
+    "sum_r": -0.5,
+    "symbols": {
+     "EURUSD": 5,
+     "GBPJPY": 7,
+     "GBPUSD": 3,
+     "USDJPY": 3,
+     "XAU": 21
+    },
+    "trades": 39,
+    "win_rate": 0.333
+   },
+   "Session Level": {
+    "ci95": [
+     -1.0,
+     1.491
+    ],
+    "exit_paths": {
+     "full_stop": 8,
+     "manual_close": 2,
+     "tp1_be": 3,
+     "tp2_full": 5
+    },
+    "mean_r": -0.0,
+    "profit_factor": 1.0,
+    "r_trades": 4,
+    "stop_rate": 0.444,
+    "sum_r": -0.0,
+    "symbols": {
+     "EURUSD": 4,
+     "GBPJPY": 4,
+     "GBPUSD": 2,
+     "USDJPY": 2,
+     "XAU": 6
+    },
+    "trades": 18,
+    "win_rate": 0.5
+   },
+   "Snap-Back": {
+    "exit_paths": {
+     "full_stop": 1
+    },
+    "r_trades": 0,
+    "stop_rate": 1.0,
+    "symbols": {
+     "EURUSD": 1
+    },
+    "trades": 1
+   },
+   "Supply Demand": {
+    "ci95": [
+     -1.0,
+     0.424
+    ],
+    "exit_paths": {
+     "full_stop": 21,
+     "tp1_be": 9,
+     "tp1_stop": 1,
+     "tp2_full": 8
+    },
+    "mean_r": -0.467,
+    "profit_factor": 0.44,
+    "r_trades": 12,
+    "stop_rate": 0.538,
+    "sum_r": -5.6,
+    "symbols": {
+     "EURUSD": 7,
+     "GBPJPY": 13,
+     "GBPUSD": 6,
+     "USDJPY": 7,
+     "XAU": 6
+    },
+    "trades": 39,
+    "win_rate": 0.167
+   },
+   "iFVG": {
+    "ci95": [
+     -0.624,
+     0.574
+    ],
+    "exit_paths": {
+     "full_stop": 9,
+     "tp1_be": 3,
+     "tp2_full": 3
+    },
+    "mean_r": -0.081,
+    "profit_factor": 0.85,
+    "r_trades": 9,
+    "stop_rate": 0.6,
+    "sum_r": -0.7,
+    "symbols": {
+     "EURUSD": 3,
+     "GBPJPY": 3,
+     "USDJPY": 6,
+     "XAU": 3
+    },
+    "trades": 15,
+    "win_rate": 0.444
+   }
+  },
+  "by_strategy_id": {
+   "box_breakout": {
+    "ci95": null,
+    "exit_paths": {
+     "full_stop": 1,
+     "tp2_full": 1
+    },
+    "mean_r": -1.0,
+    "profit_factor": 0.0,
+    "r_trades": 1,
+    "stop_rate": 0.5,
+    "sum_r": -1.0,
+    "symbols": {
+     "XAU": 2
+    },
+    "trades": 2,
+    "win_rate": 0.0
+   },
+   "break_retest": {
+    "ci95": null,
+    "exit_paths": {
+     "full_stop": 1,
+     "tp1_be": 2
+    },
+    "mean_r": -0.33,
+    "profit_factor": 0.34,
+    "r_trades": 2,
+    "stop_rate": 0.333,
+    "sum_r": -0.7,
+    "symbols": {
+     "EURUSD": 1,
+     "XAU": 2
+    },
+    "trades": 3,
+    "win_rate": 0.5
+   },
+   "confluence_zone": {
+    "ci95": [
+     -0.728,
+     0.604
+    ],
+    "exit_paths": {
+     "full_stop": 14,
+     "manual_close": 1,
+     "tp1_be": 4,
+     "tp2_full": 10
+    },
+    "mean_r": -0.107,
+    "profit_factor": 0.81,
+    "r_trades": 9,
+    "stop_rate": 0.483,
+    "sum_r": -1.0,
+    "symbols": {
+     "EURUSD": 1,
+     "GBPJPY": 7,
+     "GBPUSD": 2,
+     "USDJPY": 5,
+     "XAU": 14
+    },
+    "trades": 29,
+    "win_rate": 0.444
+   },
+   "crt": {
+    "exit_paths": {
+     "full_stop": 1
+    },
+    "r_trades": 0,
+    "stop_rate": 1.0,
+    "symbols": {
+     "XAU": 1
+    },
+    "trades": 1
+   },
+   "demand": {
+    "ci95": [
+     -1.0,
+     1.035
+    ],
+    "exit_paths": {
+     "full_stop": 11,
+     "tp1_be": 6,
+     "tp1_stop": 1,
+     "tp2_full": 6
+    },
+    "mean_r": -0.086,
+    "profit_factor": 0.88,
+    "r_trades": 7,
+    "stop_rate": 0.458,
+    "sum_r": -0.6,
+    "symbols": {
+     "EURUSD": 3,
+     "GBPJPY": 9,
+     "GBPUSD": 5,
+     "USDJPY": 3,
+     "XAU": 4
+    },
+    "trades": 24,
+    "win_rate": 0.286
+   },
+   "fade_scalp": {
+    "ci95": [
+     0.247,
+     1.863
+    ],
+    "exit_paths": {
+     "full_stop": 6,
+     "tp1_be": 5,
+     "tp2_full": 7
+    },
+    "mean_r": 0.99,
+    "profit_factor": 8.92,
+    "r_trades": 8,
+    "stop_rate": 0.333,
+    "sum_r": 7.9,
+    "symbols": {
+     "EURUSD": 2,
+     "GBPJPY": 7,
+     "GBPUSD": 1,
+     "USDJPY": 2,
+     "XAU": 6
+    },
+    "trades": 18,
+    "win_rate": 0.875
+   },
+   "flip_zone": {
+    "ci95": null,
+    "exit_paths": {
+     "full_stop": 2,
+     "tp1_be": 1
+    },
+    "mean_r": -0.248,
+    "profit_factor": 0.5,
+    "r_trades": 2,
+    "stop_rate": 0.667,
+    "sum_r": -0.5,
+    "symbols": {
+     "EURUSD": 1,
+     "XAU": 2
+    },
+    "trades": 3,
+    "win_rate": 0.5
+   },
+   "fvg": {
+    "ci95": [
+     -0.857,
+     0.463
+    ],
+    "exit_paths": {
+     "full_stop": 8,
+     "manual_close": 1,
+     "tp1_be": 2,
+     "tp2_full": 6
+    },
+    "mean_r": -0.273,
+    "profit_factor": 0.52,
+    "r_trades": 7,
+    "stop_rate": 0.471,
+    "sum_r": -1.9,
+    "symbols": {
+     "EURUSD": 4,
+     "GBPJPY": 1,
+     "GBPUSD": 2,
+     "USDJPY": 5,
+     "XAU": 5
+    },
+    "trades": 17,
+    "win_rate": 0.286
+   },
+   "ifvg": {
+    "ci95": [
+     -0.72,
+     0.574
+    ],
+    "exit_paths": {
+     "full_stop": 9,
+     "tp1_be": 3,
+     "tp2_full": 3
+    },
+    "mean_r": -0.081,
+    "profit_factor": 0.85,
+    "r_trades": 9,
+    "stop_rate": 0.6,
+    "sum_r": -0.7,
+    "symbols": {
+     "EURUSD": 3,
+     "GBPJPY": 3,
+     "USDJPY": 6,
+     "XAU": 3
+    },
+    "trades": 15,
+    "win_rate": 0.444
+   },
+   "impulse_pullback": {
+    "exit_paths": {
+     "full_stop": 8,
+     "manual_close": 1,
+     "tp1_be": 1,
+     "tp1_stop": 2
+    },
+    "r_trades": 0,
+    "stop_rate": 0.667,
+    "symbols": {
+     "GBPJPY": 3,
+     "USDJPY": 1,
+     "XAU": 8
+    },
+    "trades": 12
+   },
+   "key_level": {
+    "ci95": [
+     0.11,
+     0.966
+    ],
+    "exit_paths": {
+     "full_stop": 47,
+     "manual_close": 3,
+     "tp1_be": 17,
+     "tp2_full": 28
+    },
+    "mean_r": 0.53,
+    "profit_factor": 2.28,
+    "r_trades": 41,
+    "stop_rate": 0.495,
+    "sum_r": 21.7,
+    "symbols": {
+     "EURUSD": 12,
+     "GBPUSD": 13,
+     "USDJPY": 8,
+     "XAU": 62
+    },
+    "trades": 95,
+    "win_rate": 0.585
+   },
+   "liquidity_sweep": {
+    "exit_paths": {
+     "full_stop": 11,
+     "manual_close": 1,
+     "tp1_be": 3,
+     "tp2_full": 6
+    },
+    "r_trades": 0,
+    "stop_rate": 0.524,
+    "symbols": {
+     "EURUSD": 4,
+     "GBPJPY": 7,
+     "GBPUSD": 3,
+     "USDJPY": 2,
+     "XAU": 5
+    },
+    "trades": 21
+   },
+   "order_block": {
+    "ci95": null,
+    "exit_paths": {
+     "full_stop": 2,
+     "tp1_be": 1
+    },
+    "mean_r": -0.164,
+    "profit_factor": 0.67,
+    "r_trades": 2,
+    "stop_rate": 0.667,
+    "sum_r": -0.3,
+    "symbols": {
+     "GBPJPY": 1,
+     "XAU": 2
+    },
+    "trades": 3,
+    "win_rate": 0.5
+   },
+   "range_edge": {
+    "ci95": [
+     -0.483,
+     0.178
+    ],
+    "exit_paths": {
+     "full_stop": 53,
+     "manual_close": 1,
+     "tp1_be": 21,
+     "tp2_full": 20
+    },
+    "mean_r": -0.19,
+    "profit_factor": 0.68,
+    "r_trades": 62,
+    "stop_rate": 0.558,
+    "sum_r": -11.8,
+    "symbols": {
+     "EURUSD": 21,
+     "GBPJPY": 16,
+     "GBPUSD": 20,
+     "USDJPY": 23,
+     "XAU": 15
+    },
+    "trades": 95,
+    "win_rate": 0.403
+   },
+   "range_sweep": {
+    "ci95": [
+     -1.0,
+     1.637
+    ],
+    "exit_paths": {
+     "full_stop": 26,
+     "manual_close": 1,
+     "tp1_be": 3,
+     "tp1_stop": 3,
+     "tp2_full": 6
+    },
+    "mean_r": -0.075,
+    "profit_factor": 0.89,
+    "r_trades": 6,
+    "stop_rate": 0.667,
+    "sum_r": -0.5,
+    "symbols": {
+     "EURUSD": 5,
+     "GBPJPY": 7,
+     "GBPUSD": 3,
+     "USDJPY": 3,
+     "XAU": 21
+    },
+    "trades": 39,
+    "win_rate": 0.333
+   },
+   "scalp_breakout_retest": {
+    "ci95": [
+     0.287,
+     1.023
+    ],
+    "exit_paths": {
+     "full_stop": 2,
+     "tp1_be": 2,
+     "tp1_stop": 5,
+     "tp2_full": 1
+    },
+    "mean_r": 0.542,
+    "profit_factor": 2.9,
+    "r_trades": 7,
+    "stop_rate": 0.2,
+    "sum_r": 3.8,
+    "symbols": {
+     "XAU": 10
+    },
+    "trades": 10,
+    "win_rate": 0.714
+   },
+   "session_level": {
+    "ci95": [
+     -1.0,
+     1.491
+    ],
+    "exit_paths": {
+     "full_stop": 8,
+     "manual_close": 2,
+     "tp1_be": 3,
+     "tp2_full": 5
+    },
+    "mean_r": -0.0,
+    "profit_factor": 1.0,
+    "r_trades": 4,
+    "stop_rate": 0.444,
+    "sum_r": -0.0,
+    "symbols": {
+     "EURUSD": 4,
+     "GBPJPY": 4,
+     "GBPUSD": 2,
+     "USDJPY": 2,
+     "XAU": 6
+    },
+    "trades": 18,
+    "win_rate": 0.5
+   },
+   "snap_back": {
+    "exit_paths": {
+     "full_stop": 1
+    },
+    "r_trades": 0,
+    "stop_rate": 1.0,
+    "symbols": {
+     "EURUSD": 1
+    },
+    "trades": 1
+   },
+   "supply": {
+    "ci95": [
+     -1.0,
+     -1.0
+    ],
+    "exit_paths": {
+     "full_stop": 10,
+     "tp1_be": 3,
+     "tp2_full": 2
+    },
+    "mean_r": -1.0,
+    "profit_factor": 0.0,
+    "r_trades": 5,
+    "stop_rate": 0.667,
+    "sum_r": -5.0,
+    "symbols": {
+     "EURUSD": 4,
+     "GBPJPY": 4,
+     "GBPUSD": 1,
+     "USDJPY": 4,
+     "XAU": 2
+    },
+    "trades": 15,
+    "win_rate": 0.0
+   }
+  },
+  "by_symbol": {
+   "EURUSD": {
+    "ci95": [
+     -0.325,
+     0.929
+    ],
+    "mean_r": 0.292,
+    "r_trades": 31
+   },
+   "GBPJPY": {
+    "ci95": [
+     -0.437,
+     0.394
+    ],
+    "mean_r": -0.142,
+    "r_trades": 22
+   },
+   "GBPUSD": {
+    "ci95": [
+     -0.4,
+     0.381
+    ],
+    "mean_r": -0.061,
+    "r_trades": 21
+   },
+   "USDJPY": {
+    "ci95": [
+     -0.789,
+     -0.158
+    ],
+    "mean_r": -0.49,
+    "r_trades": 26
+   },
+   "XAU": {
+    "ci95": [
+     -0.019,
+     0.666
+    ],
+    "mean_r": 0.245,
+    "r_trades": 72
+   }
+  },
+  "first_close": 1790713932,
+  "pooled": {
+   "ci95": [
+    -0.164,
+    0.272
+   ],
+   "mean_r": 0.056,
+   "r_trades": 172
+  },
+  "quality_vs_realized_r": {
+   "Key Level": {
+    "n": 41,
+    "spearman": 0.107,
+    "terciles": {
+     "high": {
+      "mean_r": 1.506,
+      "n": 15,
+      "quality_range": [
+       1.0,
+       1.0
+      ]
+     },
+     "low": {
+      "mean_r": -0.44,
+      "n": 13,
+      "quality_range": [
+       0.667,
+       0.667
+      ]
+     },
+     "mid": {
+      "mean_r": 0.376,
+      "n": 13,
+      "quality_range": [
+       0.667,
+       1.0
+      ]
+     }
+    }
+   },
+   "Range Edge Scalp": {
+    "n": 62,
+    "spearman": -0.181,
+    "terciles": {
+     "high": {
+      "mean_r": 0.2,
+      "n": 22,
+      "quality_range": [
+       0.85,
+       1.0
+      ]
+     },
+     "low": {
+      "mean_r": 0.063,
+      "n": 20,
+      "quality_range": [
+       0.679,
+       0.841
+      ]
+     },
+     "mid": {
+      "mean_r": -0.87,
+      "n": 20,
+      "quality_range": [
+       0.841,
+       0.85
+      ]
+     }
+    }
+   }
+  },
+  "range_sweep_forensics": {
+   "by_target_label": {
+    "opposite_m5_range_edge": {
+     "entry_band_pips_median": 2.1,
+     "exit_paths": {
+      "full_stop": 20,
+      "manual_close": 1,
+      "tp1_be": 2,
+      "tp1_stop": 3,
+      "tp2_full": 4
+     },
+     "first_close": 1790761811,
+     "last_close": 1791267343,
+     "published_target_over_executed_stop_median": 3.68,
+     "symbols": {
+      "EURUSD": 5,
+      "GBPJPY": 7,
+      "GBPUSD": 3,
+      "USDJPY": 3,
+      "XAU": 12
+     },
+     "trades": 30
+    },
+    "scalp_1to2": {
+     "entry_band_pips_median": 35.9,
+     "exit_paths": {
+      "full_stop": 6,
+      "tp1_be": 1,
+      "tp2_full": 2
+     },
+     "first_close": 1791310697,
+     "last_close": 1791974738,
+     "published_target_over_executed_stop_median": 4.64,
+     "symbols": {
+      "XAU": 9
+     },
+     "trades": 9
+    }
+   },
+   "exit_path_bounds": {
+    "full_stop_rate": 0.684,
+    "mean_r_high": -0.368,
+    "mean_r_low": -0.408,
+    "mean_r_midpoint_ci95": [
+     -0.621,
+     -0.11
+    ],
+    "paths": {
+     "full_stop": 26,
+     "tp1_be": 3,
+     "tp1_stop": 3,
+     "tp2_full": 6
+    },
+    "trades": 38
+   },
+   "quality_range": [
+    0.01,
+    0.379
+   ],
+   "trades": 39
+  },
+  "realized_pips_defect": {
+   "full_stop_rows": 221,
+   "full_stop_rows_with_realized_pips": 91,
+   "full_stop_rows_with_realized_pips_exactly_0": 91,
+   "legacy_result_over_stop_mean": -1.027
+  },
+  "scalp_exit_path_bounds": {
+   "Breakout Retest Scalp": {
+    "full_stop_rate": 0.2,
+    "mean_r_high": 0.3,
+    "mean_r_low": 0.05,
+    "mean_r_midpoint_ci95": [
+     -0.062,
+     0.438
+    ],
+    "paths": {
+     "full_stop": 2,
+     "tp1_be": 2,
+     "tp1_stop": 5,
+     "tp2_full": 1
+    },
+    "trades": 10
+   },
+   "Fade Scalp": {
+    "full_stop_rate": 0.333,
+    "mean_r_high": 0.389,
+    "mean_r_low": 0.389,
+    "mean_r_midpoint_ci95": [
+     -0.111,
+     0.909
+    ],
+    "paths": {
+     "full_stop": 6,
+     "tp1_be": 5,
+     "tp2_full": 7
+    },
+    "trades": 18
+   },
+   "Impulse Pullback Scalp": {
+    "full_stop_rate": 0.727,
+    "mean_r_high": -0.591,
+    "mean_r_low": -0.682,
+    "mean_r_midpoint_ci95": [
+     -1.0,
+     -0.111
+    ],
+    "paths": {
+     "full_stop": 8,
+     "tp1_be": 1,
+     "tp1_stop": 2
+    },
+    "trades": 11
+   },
+   "Range Edge Scalp": {
+    "full_stop_rate": 0.564,
+    "mean_r_high": -0.133,
+    "mean_r_low": -0.133,
+    "mean_r_midpoint_ci95": [
+     -0.369,
+     0.13
+    ],
+    "paths": {
+     "full_stop": 53,
+     "tp1_be": 21,
+     "tp2_full": 20
+    },
+    "trades": 94
+   },
+   "Range Sweep Scalp": {
+    "full_stop_rate": 0.684,
+    "mean_r_high": -0.368,
+    "mean_r_low": -0.408,
+    "mean_r_midpoint_ci95": [
+     -0.621,
+     -0.11
+    ],
+    "paths": {
+     "full_stop": 26,
+     "tp1_be": 3,
+     "tp1_stop": 3,
+     "tp2_full": 6
+    },
+    "trades": 38
+   }
+  },
+  "with_new_contract_realized": 172
+ },
+ "records": 16527,
+ "replay": {
+  "box_breakout": {
+   "by_symbol": {
+    "EURUSD": {
+     "ladder_cost": {
+      "censored": 2,
+      "ci95": [
+       -0.458,
+       0.389
+      ],
+      "mean_r": -0.095,
+      "n_filled": 21,
+      "n_opportunities": 24,
+      "not_executable": 0,
+      "profit_factor": 0.82,
+      "sum_r": -2.0,
+      "unfilled": 1,
+      "win_rate": 0.476,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 0.35,
+     "median_technical_risk_pips": 3.3,
+     "observe_only_here": false,
+     "thinned": 24
+    },
+    "GBPJPY": {
+     "ladder_cost": {
+      "censored": 0,
+      "ci95": [
+       -1.0,
+       0.923
+      ],
+      "mean_r": 0.111,
+      "n_filled": 9,
+      "n_opportunities": 10,
+      "not_executable": 0,
+      "profit_factor": 1.2,
+      "sum_r": 1.0,
+      "unfilled": 1,
+      "win_rate": 0.444,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 1.07,
+     "median_technical_risk_pips": 10.2,
+     "observe_only_here": false,
+     "thinned": 10
+    },
+    "GBPUSD": {
+     "ladder_cost": {
+      "censored": 1,
+      "ci95": [
+       -0.333,
+       0.925
+      ],
+      "mean_r": 0.361,
+      "n_filled": 18,
+      "n_opportunities": 20,
+      "not_executable": 0,
+      "profit_factor": 1.93,
+      "sum_r": 6.5,
+      "unfilled": 1,
+      "win_rate": 0.611,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 0.36,
+     "median_technical_risk_pips": 3.8,
+     "observe_only_here": false,
+     "thinned": 20
+    },
+    "USDJPY": {
+     "ladder_cost": {
+      "censored": 1,
+      "ci95": [
+       -0.727,
+       0.405
+      ],
+      "mean_r": -0.1,
+      "n_filled": 15,
+      "n_opportunities": 16,
+      "not_executable": 0,
+      "profit_factor": 0.81,
+      "sum_r": -1.5,
+      "unfilled": 0,
+      "win_rate": 0.467,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 0.58,
+     "median_technical_risk_pips": 6.7,
+     "observe_only_here": false,
+     "thinned": 16
+    },
+    "XAU": {
+     "ladder_cost": {
+      "censored": 0,
+      "ci95": [
+       -0.35,
+       0.808
+      ],
+      "mean_r": 0.192,
+      "n_filled": 24,
+      "n_opportunities": 26,
+      "not_executable": 2,
+      "profit_factor": 1.42,
+      "sum_r": 4.6,
+      "unfilled": 0,
+      "win_rate": 0.542,
+      "worst_r": -1
+     },
+     "median_room_cover": 1.45,
+     "median_technical_risk_pips": 53.4,
+     "observe_only_here": false,
+     "thinned": 26
+    }
+   },
+   "components": [
+    "confluence",
+    "reaction"
+   ],
+   "configured_symbols": null,
+   "invariant_violations": {},
+   "median_entry_width_pips": 5.4,
+   "median_repeats": 1,
+   "median_room_cover": 0.59,
+   "median_technical_risk_pips": 6.7,
+   "median_technical_rr": 1.38,
+   "quality": {
+    "distinct_values_1pct": 2,
+    "max": 1,
+    "median": 1,
+    "min": 0.667
+   },
+   "quality_vs_hypothetical_r": {
+    "spearman": -0.151,
+    "spearman_v2_raw": -0.151,
+    "terciles_of_quality": {},
+    "terciles_of_v2_raw": {}
+   },
+   "share_room_cover_below_1": 0.72,
+   "share_technical_rr_below_1": 0.303,
+   "simulation": {
+    "ladder_cost": {
+     "all": {
+      "censored": 4,
+      "ci95": [
+       -0.185,
+       0.378
+      ],
+      "mean_r": 0.099,
+      "n_filled": 87,
+      "n_opportunities": 96,
+      "not_executable": 2,
+      "profit_factor": 1.2,
+      "sum_r": 8.6,
+      "unfilled": 3,
+      "win_rate": 0.517,
+      "worst_r": -1.0
+     },
+     "dev": {
+      "censored": 0,
+      "ci95": [
+       -0.118,
+       0.549
+      ],
+      "mean_r": 0.198,
+      "n_filled": 54,
+      "n_opportunities": 57,
+      "not_executable": 2,
+      "profit_factor": 1.45,
+      "sum_r": 10.7,
+      "unfilled": 1,
+      "win_rate": 0.556,
+      "worst_r": -1.0
+     },
+     "oos": {
+      "censored": 4,
+      "ci95": [
+       -0.561,
+       0.435
+      ],
+      "mean_r": -0.064,
+      "n_filled": 33,
+      "n_opportunities": 39,
+      "not_executable": 0,
+      "profit_factor": 0.88,
+      "sum_r": -2.1,
+      "unfilled": 2,
+      "win_rate": 0.455,
+      "worst_r": -1.0
+     }
+    },
+    "ladder_no_cost": {
+     "all": {
+      "censored": 4,
+      "ci95": [
+       -0.074,
+       0.503
+      ],
+      "mean_r": 0.202,
+      "n_filled": 87,
+      "n_opportunities": 96,
+      "not_executable": 2,
+      "profit_factor": 1.46,
+      "sum_r": 17.6,
+      "unfilled": 3,
+      "win_rate": 0.563,
+      "worst_r": -1.0
+     }
+    },
+    "oneR_cost": {
+     "all": {
+      "censored": 4,
+      "ci95": [
+       -0.191,
+       0.277
+      ],
+      "mean_r": 0.034,
+      "n_filled": 87,
+      "n_opportunities": 96,
+      "not_executable": 2,
+      "profit_factor": 1.07,
+      "sum_r": 3.0,
+      "unfilled": 3,
+      "win_rate": 0.517,
+      "worst_r": -1.0
+     },
+     "dev": {
+      "censored": 0,
+      "ci95": [
+       -0.17,
+       0.385
+      ],
+      "mean_r": 0.111,
+      "n_filled": 54,
+      "n_opportunities": 57,
+      "not_executable": 2,
+      "profit_factor": 1.25,
+      "sum_r": 6.0,
+      "unfilled": 1,
+      "win_rate": 0.556,
+      "worst_r": -1.0
+     },
+     "oos": {
+      "censored": 4,
+      "ci95": [
+       -0.5,
+       0.333
+      ],
+      "mean_r": -0.091,
+      "n_filled": 33,
+      "n_opportunities": 39,
+      "not_executable": 0,
+      "profit_factor": 0.83,
+      "sum_r": -3.0,
+      "unfilled": 2,
+      "win_rate": 0.455,
+      "worst_r": -1.0
+     }
+    },
+    "twoR_cost": {
+     "all": {
+      "censored": 5,
+      "ci95": [
+       -0.115,
+       0.63
+      ],
+      "mean_r": 0.256,
+      "n_filled": 86,
+      "n_opportunities": 96,
+      "not_executable": 2,
+      "profit_factor": 1.44,
+      "sum_r": 22.0,
+      "unfilled": 3,
+      "win_rate": 0.419,
+      "worst_r": -1.0
+     },
+     "dev": {
+      "censored": 0,
+      "ci95": [
+       -0.059,
+       0.833
+      ],
+      "mean_r": 0.389,
+      "n_filled": 54,
+      "n_opportunities": 57,
+      "not_executable": 2,
+      "profit_factor": 1.72,
+      "sum_r": 21.0,
+      "unfilled": 1,
+      "win_rate": 0.463,
+      "worst_r": -1.0
+     },
+     "oos": {
+      "censored": 5,
+      "ci95": [
+       -0.667,
+       0.714
+      ],
+      "mean_r": 0.031,
+      "n_filled": 32,
+      "n_opportunities": 39,
+      "not_executable": 0,
+      "profit_factor": 1.05,
+      "sum_r": 1.0,
+      "unfilled": 2,
+      "win_rate": 0.344,
+      "worst_r": -1.0
+     }
+    }
+   },
+   "stop_within_cap_share": 0.982,
+   "thinned_episodes": 96,
+   "unique_confirmed": 109,
+   "unique_resting_observations": 0,
+   "version": "v3"
+  },
+  "break_retest": {
+   "by_symbol": {
+    "EURUSD": {
+     "ladder_cost": {
+      "censored": 0,
+      "ci95": [
+       -1.0,
+       -1.0
+      ],
+      "mean_r": -1.0,
+      "n_filled": 5,
+      "n_opportunities": 5,
+      "not_executable": 0,
+      "profit_factor": 0.0,
+      "sum_r": -5.0,
+      "unfilled": 0,
+      "win_rate": 0.0,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 1.02,
+     "median_technical_risk_pips": 6.1,
+     "observe_only_here": false,
+     "thinned": 5
+    },
+    "GBPJPY": {
+     "ladder_cost": {
+      "censored": 0,
+      "ci95": [
+       -0.643,
+       0.786
+      ],
+      "mean_r": 0.071,
+      "n_filled": 7,
+      "n_opportunities": 11,
+      "not_executable": 0,
+      "profit_factor": 1.13,
+      "sum_r": 0.5,
+      "unfilled": 4,
+      "win_rate": 0.429,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 0.76,
+     "median_technical_risk_pips": 13.1,
+     "observe_only_here": false,
+     "thinned": 11
+    },
+    "GBPUSD": {
+     "ladder_cost": {
+      "censored": 2,
+      "ci95": [
+       -0.813,
+       0.5
+      ],
+      "mean_r": -0.188,
+      "n_filled": 8,
+      "n_opportunities": 10,
+      "not_executable": 0,
+      "profit_factor": 0.7,
+      "sum_r": -1.5,
+      "unfilled": 0,
+      "win_rate": 0.375,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 0.6,
+     "median_technical_risk_pips": 6.4,
+     "observe_only_here": false,
+     "thinned": 10
+    },
+    "USDJPY": {
+     "ladder_cost": {
+      "censored": 0,
+      "ci95": [
+       -0.844,
+       0.318
+      ],
+      "mean_r": -0.333,
+      "n_filled": 12,
+      "n_opportunities": 15,
+      "not_executable": 0,
+      "profit_factor": 0.5,
+      "sum_r": -4.0,
+      "unfilled": 3,
+      "win_rate": 0.333,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 0.94,
+     "median_technical_risk_pips": 9.7,
+     "observe_only_here": false,
+     "thinned": 15
+    },
+    "XAU": {
+     "ladder_cost": {
+      "censored": 0,
+      "ci95": [
+       -1.0,
+       1.4
+      ],
+      "mean_r": 0.15,
+      "n_filled": 4,
+      "n_opportunities": 4,
+      "not_executable": 0,
+      "profit_factor": 1.3,
+      "sum_r": 0.6,
+      "unfilled": 0,
+      "win_rate": 0.5,
+      "worst_r": -1
+     },
+     "median_room_cover": 1.85,
+     "median_technical_risk_pips": 56.6,
+     "observe_only_here": false,
+     "thinned": 4
+    }
+   },
+   "components": [
+    "break_accept_closes",
+    "break_body_ratio",
+    "break_close_strength",
+    "break_displacement_atr",
+    "break_distance_atr",
+    "confluence_stars",
+    "reference_touches",
+    "rejection_close_strength",
+    "rejection_wick_ratio",
+    "retest_bars_after_accept",
+    "retest_depth_atr",
+    "target_room_atr",
+    "technical_risk_pips",
+    "technical_rr"
+   ],
+   "configured_symbols": null,
+   "invariant_violations": {},
+   "median_entry_width_pips": 2.1,
+   "median_repeats": 3.0,
+   "median_room_cover": 0.97,
+   "median_technical_risk_pips": 8.5,
+   "median_technical_rr": 1.57,
+   "quality": {
+    "distinct_values_1pct": 1,
+    "max": 0.75,
+    "median": 0.75,
+    "min": 0.75
+   },
+   "quality_vs_hypothetical_r": {
+    "spearman": null,
+    "spearman_v2_raw": -0.189,
+    "terciles_of_quality": {},
+    "terciles_of_v2_raw": {
+     "high": {
+      "mean_r": -0.258,
+      "n": 12,
+      "score_range": [
+       12,
+       16
+      ]
+     },
+     "low": {
+      "mean_r": -0.067,
+      "n": 12,
+      "score_range": [
+       8,
+       9
+      ]
+     },
+     "mid": {
+      "mean_r": -0.458,
+      "n": 12,
+      "score_range": [
+       9,
+       12
+      ]
+     }
+    }
+   },
+   "share_room_cover_below_1": 0.522,
+   "share_technical_rr_below_1": 0.0,
+   "simulation": {
+    "ladder_cost": {
+     "all": {
+      "censored": 2,
+      "ci95": [
+       -0.592,
+       0.114
+      ],
+      "mean_r": -0.261,
+      "n_filled": 36,
+      "n_opportunities": 45,
+      "not_executable": 0,
+      "profit_factor": 0.61,
+      "sum_r": -9.4,
+      "unfilled": 7,
+      "win_rate": 0.333,
+      "worst_r": -1.0
+     },
+     "dev": {
+      "censored": 0,
+      "ci95": [
+       -0.652,
+       0.217
+      ],
+      "mean_r": -0.23,
+      "n_filled": 23,
+      "n_opportunities": 27,
+      "not_executable": 0,
+      "profit_factor": 0.65,
+      "sum_r": -5.3,
+      "unfilled": 4,
+      "win_rate": 0.348,
+      "worst_r": -1.0
+     },
+     "oos": {
+      "censored": 2,
+      "ci95": [
+       -0.844,
+       0.367
+      ],
+      "mean_r": -0.315,
+      "n_filled": 13,
+      "n_opportunities": 18,
+      "not_executable": 0,
+      "profit_factor": 0.54,
+      "sum_r": -4.1,
+      "unfilled": 3,
+      "win_rate": 0.308,
+      "worst_r": -1.0
+     }
+    },
+    "ladder_no_cost": {
+     "all": {
+      "censored": 3,
+      "ci95": [
+       -0.435,
+       0.325
+      ],
+      "mean_r": -0.078,
+      "n_filled": 37,
+      "n_opportunities": 45,
+      "not_executable": 0,
+      "profit_factor": 0.87,
+      "sum_r": -2.9,
+      "unfilled": 5,
+      "win_rate": 0.405,
+      "worst_r": -1.0
+     }
+    },
+    "oneR_cost": {
+     "all": {
+      "censored": 2,
+      "ci95": [
+       -0.622,
+       -0.0
+      ],
+      "mean_r": -0.333,
+      "n_filled": 36,
+      "n_opportunities": 45,
+      "not_executable": 0,
+      "profit_factor": 0.5,
+      "sum_r": -12.0,
+      "unfilled": 7,
+      "win_rate": 0.333,
+      "worst_r": -1.0
+     },
+     "dev": {
+      "censored": 0,
+      "ci95": [
+       -0.68,
+       0.091
+      ],
+      "mean_r": -0.304,
+      "n_filled": 23,
+      "n_opportunities": 27,
+      "not_executable": 0,
+      "profit_factor": 0.53,
+      "sum_r": -7.0,
+      "unfilled": 4,
+      "win_rate": 0.348,
+      "worst_r": -1.0
+     },
+     "oos": {
+      "censored": 2,
+      "ci95": [
+       -0.857,
+       0.273
+      ],
+      "mean_r": -0.385,
+      "n_filled": 13,
+      "n_opportunities": 18,
+      "not_executable": 0,
+      "profit_factor": 0.44,
+      "sum_r": -5.0,
+      "unfilled": 3,
+      "win_rate": 0.308,
+      "worst_r": -1.0
+     }
+    },
+    "twoR_cost": {
+     "all": {
+      "censored": 2,
+      "ci95": [
+       -0.595,
+       0.286
+      ],
+      "mean_r": -0.167,
+      "n_filled": 36,
+      "n_opportunities": 45,
+      "not_executable": 0,
+      "profit_factor": 0.77,
+      "sum_r": -6.0,
+      "unfilled": 7,
+      "win_rate": 0.278,
+      "worst_r": -1.0
+     },
+     "dev": {
+      "censored": 0,
+      "ci95": [
+       -0.727,
+       0.364
+      ],
+      "mean_r": -0.217,
+      "n_filled": 23,
+      "n_opportunities": 27,
+      "not_executable": 0,
+      "profit_factor": 0.71,
+      "sum_r": -5.0,
+      "unfilled": 4,
+      "win_rate": 0.261,
+      "worst_r": -1.0
+     },
+     "oos": {
+      "censored": 2,
+      "ci95": [
+       -0.769,
+       0.909
+      ],
+      "mean_r": -0.077,
+      "n_filled": 13,
+      "n_opportunities": 18,
+      "not_executable": 0,
+      "profit_factor": 0.89,
+      "sum_r": -1.0,
+      "unfilled": 3,
+      "win_rate": 0.308,
+      "worst_r": -1.0
+     }
+    }
+   },
+   "stop_within_cap_share": 1.0,
+   "thinned_episodes": 45,
+   "unique_confirmed": 46,
+   "unique_resting_observations": 0,
+   "version": "v3"
+  },
+  "confluence_zone": {
+   "by_symbol": {
+    "EURUSD": {
+     "ladder_cost": {
+      "censored": 1,
+      "ci95": [
+       -0.881,
+       0.458
+      ],
+      "mean_r": -0.25,
+      "n_filled": 20,
+      "n_opportunities": 27,
+      "not_executable": 0,
+      "profit_factor": 0.64,
+      "sum_r": -5.0,
+      "unfilled": 6,
+      "win_rate": 0.3,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 1.73,
+     "median_technical_risk_pips": 7.9,
+     "observe_only_here": false,
+     "thinned": 27
+    },
+    "GBPJPY": {
+     "ladder_cost": {
+      "censored": 0,
+      "ci95": [
+       -0.726,
+       -0.076
+      ],
+      "mean_r": -0.473,
+      "n_filled": 55,
+      "n_opportunities": 60,
+      "not_executable": 0,
+      "profit_factor": 0.33,
+      "sum_r": -26.0,
+      "unfilled": 5,
+      "win_rate": 0.291,
+      "worst_r": -1
+     },
+     "median_room_cover": 2.03,
+     "median_technical_risk_pips": 19.3,
+     "observe_only_here": false,
+     "thinned": 60
+    },
+    "GBPUSD": {
+     "ladder_cost": {
+      "censored": 7,
+      "ci95": [
+       -0.853,
+       0.312
+      ],
+      "mean_r": -0.25,
+      "n_filled": 18,
+      "n_opportunities": 28,
+      "not_executable": 0,
+      "profit_factor": 0.59,
+      "sum_r": -4.5,
+      "unfilled": 3,
+      "win_rate": 0.389,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 1.79,
+     "median_technical_risk_pips": 9.7,
+     "observe_only_here": false,
+     "thinned": 28
+    },
+    "USDJPY": {
+     "ladder_cost": {
+      "censored": 0,
+      "ci95": [
+       -0.128,
+       0.728
+      ],
+      "mean_r": 0.378,
+      "n_filled": 45,
+      "n_opportunities": 45,
+      "not_executable": 0,
+      "profit_factor": 2.0,
+      "sum_r": 17.0,
+      "unfilled": 0,
+      "win_rate": 0.622,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 2.41,
+     "median_technical_risk_pips": 13.9,
+     "observe_only_here": false,
+     "thinned": 45
+    },
+    "XAU": {
+     "ladder_cost": {
+      "censored": 0,
+      "ci95": [
+       -0.694,
+       -0.288
+      ],
+      "mean_r": -0.508,
+      "n_filled": 52,
+      "n_opportunities": 54,
+      "not_executable": 0,
+      "profit_factor": 0.27,
+      "sum_r": -26.4,
+      "unfilled": 2,
+      "win_rate": 0.308,
+      "worst_r": -1
+     },
+     "median_room_cover": 2.75,
+     "median_technical_risk_pips": 55.5,
+     "observe_only_here": false,
+     "thinned": 54
+    }
+   },
+   "components": [
+    "confluence_stars",
+    "displacement_strength",
+    "htf_alignment",
+    "independent_fact_count",
+    "independent_source_count",
+    "overlap_integrity",
+    "overlap_width_atr",
+    "overlap_width_pips",
+    "reaction_freshness_bars",
+    "reclaim_depth_atr",
+    "rejection_close_strength",
+    "rejection_wick_ratio",
+    "source_age_bars",
+    "source_dependency_count",
+    "source_integrity",
+    "structural_alignment",
+    "sweep_depth_atr",
+    "target_room_atr",
+    "target_room_r",
+    "technical_reward_risk",
+    "technical_risk_pips"
+   ],
+   "configured_symbols": null,
+   "invariant_violations": {},
+   "median_entry_width_pips": 6.6,
+   "median_repeats": 2.0,
+   "median_room_cover": 2.11,
+   "median_technical_risk_pips": 17.7,
+   "median_technical_rr": 2.8,
+   "quality": {
+    "distinct_values_1pct": 2,
+    "max": 1,
+    "median": 0.667,
+    "min": 0.667
+   },
+   "quality_vs_hypothetical_r": {
+    "spearman": -0.018,
+    "spearman_v2_raw": -0.049,
+    "terciles_of_quality": {},
+    "terciles_of_v2_raw": {
+     "high": {
+      "mean_r": -0.38,
+      "n": 64,
+      "score_range": [
+       12.622,
+       19.337
+      ]
+     },
+     "low": {
+      "mean_r": -0.137,
+      "n": 63,
+      "score_range": [
+       4.122,
+       10.122
+      ]
+     },
+     "mid": {
+      "mean_r": -0.19,
+      "n": 63,
+      "score_range": [
+       10.122,
+       12.622
+      ]
+     }
+    }
+   },
+   "share_room_cover_below_1": 0.0,
+   "share_technical_rr_below_1": 0.0,
+   "simulation": {
+    "ladder_cost": {
+     "all": {
+      "censored": 8,
+      "ci95": [
+       -0.447,
+       -0.005
+      ],
+      "mean_r": -0.236,
+      "n_filled": 190,
+      "n_opportunities": 214,
+      "not_executable": 0,
+      "profit_factor": 0.62,
+      "sum_r": -44.9,
+      "unfilled": 16,
+      "win_rate": 0.384,
+      "worst_r": -1.0
+     },
+     "dev": {
+      "censored": 2,
+      "ci95": [
+       -0.368,
+       0.191
+      ],
+      "mean_r": -0.098,
+      "n_filled": 127,
+      "n_opportunities": 137,
+      "not_executable": 0,
+      "profit_factor": 0.82,
+      "sum_r": -12.5,
+      "unfilled": 8,
+      "win_rate": 0.465,
+      "worst_r": -1.0
+     },
+     "oos": {
+      "censored": 6,
+      "ci95": [
+       -0.82,
+       -0.162
+      ],
+      "mean_r": -0.514,
+      "n_filled": 63,
+      "n_opportunities": 77,
+      "not_executable": 0,
+      "profit_factor": 0.34,
+      "sum_r": -32.4,
+      "unfilled": 8,
+      "win_rate": 0.222,
+      "worst_r": -1.0
+     }
+    },
+    "ladder_no_cost": {
+     "all": {
+      "censored": 8,
+      "ci95": [
+       -0.379,
+       0.09
+      ],
+      "mean_r": -0.136,
+      "n_filled": 194,
+      "n_opportunities": 214,
+      "not_executable": 0,
+      "profit_factor": 0.76,
+      "sum_r": -26.3,
+      "unfilled": 12,
+      "win_rate": 0.438,
+      "worst_r": -1.0
+     }
+    },
+    "oneR_cost": {
+     "all": {
+      "censored": 7,
+      "ci95": [
+       -0.433,
+       -0.012
+      ],
+      "mean_r": -0.225,
+      "n_filled": 191,
+      "n_opportunities": 214,
+      "not_executable": 0,
+      "profit_factor": 0.63,
+      "sum_r": -43.0,
+      "unfilled": 16,
+      "win_rate": 0.387,
+      "worst_r": -1.0
+     },
+     "dev": {
+      "censored": 2,
+      "ci95": [
+       -0.315,
+       0.17
+      ],
+      "mean_r": -0.071,
+      "n_filled": 127,
+      "n_opportunities": 137,
+      "not_executable": 0,
+      "profit_factor": 0.87,
+      "sum_r": -9.0,
+      "unfilled": 8,
+      "win_rate": 0.465,
+      "worst_r": -1.0
+     },
+     "oos": {
+      "censored": 5,
+      "ci95": [
+       -0.778,
+       -0.226
+      ],
+      "mean_r": -0.531,
+      "n_filled": 64,
+      "n_opportunities": 77,
+      "not_executable": 0,
+      "profit_factor": 0.31,
+      "sum_r": -34.0,
+      "unfilled": 8,
+      "win_rate": 0.234,
+      "worst_r": -1.0
+     }
+    },
+    "twoR_cost": {
+     "all": {
+      "censored": 8,
+      "ci95": [
+       -0.403,
+       0.27
+      ],
+      "mean_r": -0.068,
+      "n_filled": 190,
+      "n_opportunities": 214,
+      "not_executable": 0,
+      "profit_factor": 0.9,
+      "sum_r": -13.0,
+      "unfilled": 16,
+      "win_rate": 0.311,
+      "worst_r": -1.0
+     },
+     "dev": {
+      "censored": 2,
+      "ci95": [
+       -0.328,
+       0.513
+      ],
+      "mean_r": 0.087,
+      "n_filled": 127,
+      "n_opportunities": 137,
+      "not_executable": 0,
+      "profit_factor": 1.14,
+      "sum_r": 11.0,
+      "unfilled": 8,
+      "win_rate": 0.362,
+      "worst_r": -1.0
+     },
+     "oos": {
+      "censored": 6,
+      "ci95": [
+       -0.769,
+       0.071
+      ],
+      "mean_r": -0.381,
+      "n_filled": 63,
+      "n_opportunities": 77,
+      "not_executable": 0,
+      "profit_factor": 0.52,
+      "sum_r": -24.0,
+      "unfilled": 8,
+      "win_rate": 0.206,
+      "worst_r": -1.0
+     }
+    }
+   },
+   "stop_within_cap_share": 1.0,
+   "thinned_episodes": 214,
+   "unique_confirmed": 382,
+   "unique_resting_observations": 432,
+   "version": "v3"
+  },
+  "crt": {
+   "by_symbol": {
+    "EURUSD": {
+     "ladder_cost": {
+      "censored": 0,
+      "n_filled": 0,
+      "n_opportunities": 1,
+      "not_executable": 0,
+      "unfilled": 1
+     },
+     "median_room_cover": 2.47,
+     "median_technical_risk_pips": 7.5,
+     "observe_only_here": false,
+     "thinned": 1
+    },
+    "GBPJPY": {
+     "ladder_cost": {
+      "censored": 0,
+      "n_filled": 0,
+      "n_opportunities": 1,
+      "not_executable": 0,
+      "unfilled": 1
+     },
+     "median_room_cover": 2.3,
+     "median_technical_risk_pips": 12.0,
+     "observe_only_here": false,
+     "thinned": 1
+    },
+    "XAU": {
+     "ladder_cost": {
+      "censored": 1,
+      "n_filled": 0,
+      "n_opportunities": 1,
+      "not_executable": 0,
+      "unfilled": 0
+     },
+     "median_room_cover": 5.18,
+     "median_technical_risk_pips": 55.2,
+     "observe_only_here": false,
+     "thinned": 1
+    }
+   },
+   "components": [
+    "confluence",
+    "h1_range_atr",
+    "mss_body_ratio",
+    "mss_close_strength",
+    "mss_displacement_atr",
+    "reaction",
+    "reclaim_depth_atr",
+    "sweep_depth_atr",
+    "technical_risk_pips",
+    "technical_rr"
+   ],
+   "configured_symbols": null,
+   "invariant_violations": {},
+   "median_entry_width_pips": 2.0,
+   "median_repeats": 3,
+   "median_room_cover": 2.47,
+   "median_technical_risk_pips": 12.0,
+   "median_technical_rr": 4.21,
+   "quality": {
+    "distinct_values_1pct": 2,
+    "max": 1,
+    "median": 0.667,
+    "min": 0.667
+   },
+   "quality_vs_hypothetical_r": {
+    "spearman": null,
+    "spearman_v2_raw": null,
+    "terciles_of_quality": {},
+    "terciles_of_v2_raw": {}
+   },
+   "share_room_cover_below_1": 0.0,
+   "share_technical_rr_below_1": 0.0,
+   "simulation": {
+    "ladder_cost": {
+     "all": {
+      "censored": 1,
+      "n_filled": 0,
+      "n_opportunities": 3,
+      "not_executable": 0,
+      "unfilled": 2
+     },
+     "dev": {
+      "censored": 1,
+      "n_filled": 0,
+      "n_opportunities": 2,
+      "not_executable": 0,
+      "unfilled": 1
+     },
+     "oos": {
+      "censored": 0,
+      "n_filled": 0,
+      "n_opportunities": 1,
+      "not_executable": 0,
+      "unfilled": 1
+     }
+    },
+    "ladder_no_cost": {
+     "all": {
+      "censored": 1,
+      "n_filled": 0,
+      "n_opportunities": 3,
+      "not_executable": 0,
+      "unfilled": 2
+     }
+    },
+    "oneR_cost": {
+     "all": {
+      "censored": 1,
+      "n_filled": 0,
+      "n_opportunities": 3,
+      "not_executable": 0,
+      "unfilled": 2
+     },
+     "dev": {
+      "censored": 1,
+      "n_filled": 0,
+      "n_opportunities": 2,
+      "not_executable": 0,
+      "unfilled": 1
+     },
+     "oos": {
+      "censored": 0,
+      "n_filled": 0,
+      "n_opportunities": 1,
+      "not_executable": 0,
+      "unfilled": 1
+     }
+    },
+    "twoR_cost": {
+     "all": {
+      "censored": 1,
+      "n_filled": 0,
+      "n_opportunities": 3,
+      "not_executable": 0,
+      "unfilled": 2
+     },
+     "dev": {
+      "censored": 1,
+      "n_filled": 0,
+      "n_opportunities": 2,
+      "not_executable": 0,
+      "unfilled": 1
+     },
+     "oos": {
+      "censored": 0,
+      "n_filled": 0,
+      "n_opportunities": 1,
+      "not_executable": 0,
+      "unfilled": 1
+     }
+    }
+   },
+   "stop_within_cap_share": 1.0,
+   "thinned_episodes": 3,
+   "unique_confirmed": 3,
+   "unique_resting_observations": 0,
+   "version": "v3"
+  },
+  "demand": {
+   "by_symbol": {
+    "EURUSD": {
+     "ladder_cost": {
+      "censored": 16,
+      "ci95": [
+       -0.551,
+       -0.005
+      ],
+      "mean_r": -0.269,
+      "n_filled": 158,
+      "n_opportunities": 179,
+      "not_executable": 2,
+      "profit_factor": 0.59,
+      "sum_r": -42.5,
+      "unfilled": 3,
+      "win_rate": 0.348,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 0.44,
+     "median_technical_risk_pips": 6.5,
+     "observe_only_here": false,
+     "thinned": 179
+    },
+    "GBPJPY": {
+     "ladder_cost": {
+      "censored": 15,
+      "ci95": [
+       -0.567,
+       0.089
+      ],
+      "mean_r": -0.277,
+      "n_filled": 148,
+      "n_opportunities": 184,
+      "not_executable": 15,
+      "profit_factor": 0.54,
+      "sum_r": -41.0,
+      "unfilled": 6,
+      "win_rate": 0.392,
+      "worst_r": -1
+     },
+     "median_room_cover": 0.51,
+     "median_technical_risk_pips": 16.3,
+     "observe_only_here": false,
+     "thinned": 184
+    },
+    "GBPUSD": {
+     "ladder_cost": {
+      "censored": 22,
+      "ci95": [
+       -0.399,
+       0.094
+      ],
+      "mean_r": -0.151,
+      "n_filled": 176,
+      "n_opportunities": 210,
+      "not_executable": 5,
+      "profit_factor": 0.74,
+      "sum_r": -26.5,
+      "unfilled": 7,
+      "win_rate": 0.415,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 0.42,
+     "median_technical_risk_pips": 8.1,
+     "observe_only_here": false,
+     "thinned": 210
+    },
+    "USDJPY": {
+     "ladder_cost": {
+      "censored": 8,
+      "ci95": [
+       -0.409,
+       0.147
+      ],
+      "mean_r": -0.13,
+      "n_filled": 173,
+      "n_opportunities": 202,
+      "not_executable": 17,
+      "profit_factor": 0.76,
+      "sum_r": -22.5,
+      "unfilled": 4,
+      "win_rate": 0.451,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 0.43,
+     "median_technical_risk_pips": 12.0,
+     "observe_only_here": false,
+     "thinned": 202
+    },
+    "XAU": {
+     "ladder_cost": {
+      "censored": 0,
+      "ci95": [
+       -0.27,
+       0.295
+      ],
+      "mean_r": -0.03,
+      "n_filled": 105,
+      "n_opportunities": 244,
+      "not_executable": 139,
+      "profit_factor": 0.95,
+      "sum_r": -3.2,
+      "unfilled": 0,
+      "win_rate": 0.438,
+      "worst_r": -1
+     },
+     "median_room_cover": 0.74,
+     "median_technical_risk_pips": 95.7,
+     "observe_only_here": false,
+     "thinned": 244
+    }
+   },
+   "components": [
+    "confluence",
+    "freshness_quality",
+    "reaction",
+    "relevance_quality",
+    "zone_strength_quality"
+   ],
+   "configured_symbols": null,
+   "invariant_violations": {},
+   "median_entry_width_pips": 10.7,
+   "median_repeats": 2.0,
+   "median_room_cover": 0.52,
+   "median_technical_risk_pips": 13.3,
+   "median_technical_rr": 0.77,
+   "quality": {
+    "distinct_values_1pct": 8,
+    "max": 1,
+    "median": 0.667,
+    "min": 0.667
+   },
+   "quality_vs_hypothetical_r": {
+    "spearman": -0.074,
+    "spearman_v2_raw": 0.05,
+    "terciles_of_quality": {
+     "high": {
+      "mean_r": -0.286,
+      "n": 254,
+      "score_range": [
+       0.95,
+       1
+      ]
+     },
+     "low": {
+      "mean_r": -0.165,
+      "n": 253,
+      "score_range": [
+       0.667,
+       0.667
+      ]
+     },
+     "mid": {
+      "mean_r": -0.085,
+      "n": 253,
+      "score_range": [
+       0.667,
+       0.95
+      ]
+     }
+    },
+    "terciles_of_v2_raw": {
+     "high": {
+      "mean_r": -0.194,
+      "n": 254,
+      "score_range": [
+       15.439,
+       21.888
+      ]
+     },
+     "low": {
+      "mean_r": -0.249,
+      "n": 253,
+      "score_range": [
+       4.041,
+       11.194
+      ]
+     },
+     "mid": {
+      "mean_r": -0.092,
+      "n": 253,
+      "score_range": [
+       11.194,
+       15.378
+      ]
+     }
+    }
+   },
+   "share_room_cover_below_1": 0.78,
+   "share_technical_rr_below_1": 0.622,
+   "simulation": {
+    "ladder_cost": {
+     "all": {
+      "censored": 61,
+      "ci95": [
+       -0.299,
+       -0.055
+      ],
+      "mean_r": -0.179,
+      "n_filled": 760,
+      "n_opportunities": 1019,
+      "not_executable": 178,
+      "profit_factor": 0.7,
+      "sum_r": -135.7,
+      "unfilled": 20,
+      "win_rate": 0.408,
+      "worst_r": -1.0
+     },
+     "dev": {
+      "censored": 9,
+      "ci95": [
+       -0.245,
+       0.03
+      ],
+      "mean_r": -0.111,
+      "n_filled": 434,
+      "n_opportunities": 576,
+      "not_executable": 124,
+      "profit_factor": 0.8,
+      "sum_r": -48.0,
+      "unfilled": 9,
+      "win_rate": 0.44,
+      "worst_r": -1.0
+     },
+     "oos": {
+      "censored": 52,
+      "ci95": [
+       -0.492,
+       -0.056
+      ],
+      "mean_r": -0.269,
+      "n_filled": 326,
+      "n_opportunities": 443,
+      "not_executable": 54,
+      "profit_factor": 0.58,
+      "sum_r": -87.7,
+      "unfilled": 11,
+      "win_rate": 0.365,
+      "worst_r": -1.0
+     }
+    },
+    "ladder_no_cost": {
+     "all": {
+      "censored": 60,
+      "ci95": [
+       -0.231,
+       0.021
+      ],
+      "mean_r": -0.107,
+      "n_filled": 772,
+      "n_opportunities": 1019,
+      "not_executable": 173,
+      "profit_factor": 0.81,
+      "sum_r": -82.5,
+      "unfilled": 14,
+      "win_rate": 0.444,
+      "worst_r": -1.0
+     }
+    },
+    "oneR_cost": {
+     "all": {
+      "censored": 31,
+      "ci95": [
+       -0.259,
+       -0.012
+      ],
+      "mean_r": -0.139,
+      "n_filled": 790,
+      "n_opportunities": 1019,
+      "not_executable": 178,
+      "profit_factor": 0.76,
+      "sum_r": -110.0,
+      "unfilled": 20,
+      "win_rate": 0.43,
+      "worst_r": -1.0
+     },
+     "dev": {
+      "censored": 7,
+      "ci95": [
+       -0.246,
+       0.031
+      ],
+      "mean_r": -0.115,
+      "n_filled": 436,
+      "n_opportunities": 576,
+      "not_executable": 124,
+      "profit_factor": 0.79,
+      "sum_r": -50.0,
+      "unfilled": 9,
+      "win_rate": 0.443,
+      "worst_r": -1.0
+     },
+     "oos": {
+      "censored": 24,
+      "ci95": [
+       -0.365,
+       0.022
+      ],
+      "mean_r": -0.169,
+      "n_filled": 354,
+      "n_opportunities": 443,
+      "not_executable": 54,
+      "profit_factor": 0.71,
+      "sum_r": -60.0,
+      "unfilled": 11,
+      "win_rate": 0.415,
+      "worst_r": -1.0
+     }
+    },
+    "twoR_cost": {
+     "all": {
+      "censored": 70,
+      "ci95": [
+       -0.383,
+       -0.05
+      ],
+      "mean_r": -0.214,
+      "n_filled": 751,
+      "n_opportunities": 1019,
+      "not_executable": 178,
+      "profit_factor": 0.71,
+      "sum_r": -161.0,
+      "unfilled": 20,
+      "win_rate": 0.265,
+      "worst_r": -1.0
+     },
+     "dev": {
+      "censored": 9,
+      "ci95": [
+       -0.346,
+       0.028
+      ],
+      "mean_r": -0.16,
+      "n_filled": 434,
+      "n_opportunities": 576,
+      "not_executable": 124,
+      "profit_factor": 0.78,
+      "sum_r": -69.4,
+      "unfilled": 9,
+      "win_rate": 0.281,
+      "worst_r": -1.0
+     },
+     "oos": {
+      "censored": 61,
+      "ci95": [
+       -0.567,
+       0.011
+      ],
+      "mean_r": -0.289,
+      "n_filled": 317,
+      "n_opportunities": 443,
+      "not_executable": 54,
+      "profit_factor": 0.62,
+      "sum_r": -91.6,
+      "unfilled": 11,
+      "win_rate": 0.243,
+      "worst_r": -1.0
+     }
+    }
+   },
+   "stop_within_cap_share": 0.757,
+   "thinned_episodes": 1019,
+   "unique_confirmed": 3226,
+   "unique_resting_observations": 0,
+   "version": "v2"
+  },
+  "fade_scalp": {
+   "by_symbol": {
+    "EURUSD": {
+     "ladder_cost": {
+      "censored": 2,
+      "ci95": [
+       -0.875,
+       -0.423
+      ],
+      "mean_r": -0.656,
+      "n_filled": 16,
+      "n_opportunities": 22,
+      "not_executable": 3,
+      "profit_factor": 0.19,
+      "sum_r": -10.5,
+      "unfilled": 1,
+      "win_rate": 0.188,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 0.61,
+     "median_technical_risk_pips": 3.4,
+     "observe_only_here": false,
+     "thinned": 22
+    },
+    "GBPJPY": {
+     "ladder_cost": {
+      "censored": 3,
+      "ci95": [
+       -0.455,
+       0.289
+      ],
+      "mean_r": -0.114,
+      "n_filled": 22,
+      "n_opportunities": 26,
+      "not_executable": 0,
+      "profit_factor": 0.81,
+      "sum_r": -2.5,
+      "unfilled": 1,
+      "win_rate": 0.409,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 1.48,
+     "median_technical_risk_pips": 8.8,
+     "observe_only_here": false,
+     "thinned": 26
+    },
+    "GBPUSD": {
+     "ladder_cost": {
+      "censored": 1,
+      "ci95": [
+       -0.864,
+       0.02
+      ],
+      "mean_r": -0.333,
+      "n_filled": 18,
+      "n_opportunities": 29,
+      "not_executable": 6,
+      "profit_factor": 0.5,
+      "sum_r": -6.0,
+      "unfilled": 4,
+      "win_rate": 0.333,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 0.56,
+     "median_technical_risk_pips": 3.5,
+     "observe_only_here": false,
+     "thinned": 29
+    },
+    "USDJPY": {
+     "ladder_cost": {
+      "censored": 1,
+      "ci95": [
+       -0.339,
+       0.462
+      ],
+      "mean_r": 0.103,
+      "n_filled": 29,
+      "n_opportunities": 34,
+      "not_executable": 0,
+      "profit_factor": 1.23,
+      "sum_r": 3.0,
+      "unfilled": 4,
+      "win_rate": 0.552,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 1.11,
+     "median_technical_risk_pips": 7.1,
+     "observe_only_here": false,
+     "thinned": 34
+    },
+    "XAU": {
+     "ladder_cost": {
+      "censored": 0,
+      "ci95": [
+       -0.629,
+       0.018
+      ],
+      "mean_r": -0.312,
+      "n_filled": 32,
+      "n_opportunities": 40,
+      "not_executable": 7,
+      "profit_factor": 0.55,
+      "sum_r": -10.0,
+      "unfilled": 1,
+      "win_rate": 0.312,
+      "worst_r": -1
+     },
+     "median_room_cover": 2.46,
+     "median_technical_risk_pips": 28.4,
+     "observe_only_here": false,
+     "thinned": 40
+    }
+   },
+   "components": [
+    "liquidity_grade",
+    "location",
+    "reaction"
+   ],
+   "configured_symbols": null,
+   "invariant_violations": {},
+   "median_entry_width_pips": 6.9,
+   "median_repeats": 1.0,
+   "median_room_cover": 1.18,
+   "median_technical_risk_pips": 11.4,
+   "median_technical_rr": 2.0,
+   "quality": {
+    "distinct_values_1pct": 4,
+    "max": 0.85,
+    "median": 0.7,
+    "min": 0.65
+   },
+   "quality_vs_hypothetical_r": {
+    "spearman": -0.106,
+    "spearman_v2_raw": -0.147,
+    "terciles_of_quality": {
+     "high": {
+      "mean_r": -0.436,
+      "n": 39,
+      "score_range": [
+       0.8,
+       0.85
+      ]
+     },
+     "low": {
+      "mean_r": -0.026,
+      "n": 39,
+      "score_range": [
+       0.65,
+       0.65
+      ]
+     },
+     "mid": {
+      "mean_r": -0.205,
+      "n": 39,
+      "score_range": [
+       0.65,
+       0.8
+      ]
+     }
+    },
+    "terciles_of_v2_raw": {
+     "high": {
+      "mean_r": -0.603,
+      "n": 39,
+      "score_range": [
+       10,
+       13
+      ]
+     },
+     "low": {
+      "mean_r": -0.09,
+      "n": 39,
+      "score_range": [
+       8,
+       9
+      ]
+     },
+     "mid": {
+      "mean_r": 0.026,
+      "n": 39,
+      "score_range": [
+       9,
+       9
+      ]
+     }
+    }
+   },
+   "share_room_cover_below_1": 0.428,
+   "share_technical_rr_below_1": 0.005,
+   "simulation": {
+    "ladder_cost": {
+     "all": {
+      "censored": 7,
+      "ci95": [
+       -0.402,
+       -0.042
+      ],
+      "mean_r": -0.222,
+      "n_filled": 117,
+      "n_opportunities": 151,
+      "not_executable": 16,
+      "profit_factor": 0.64,
+      "sum_r": -26.0,
+      "unfilled": 11,
+      "win_rate": 0.376,
+      "worst_r": -1.0
+     },
+     "dev": {
+      "censored": 2,
+      "ci95": [
+       -0.4,
+       0.047
+      ],
+      "mean_r": -0.176,
+      "n_filled": 68,
+      "n_opportunities": 85,
+      "not_executable": 10,
+      "profit_factor": 0.7,
+      "sum_r": -12.0,
+      "unfilled": 5,
+      "win_rate": 0.412,
+      "worst_r": -1.0
+     },
+     "oos": {
+      "censored": 5,
+      "ci95": [
+       -0.579,
+       0.011
+      ],
+      "mean_r": -0.286,
+      "n_filled": 49,
+      "n_opportunities": 66,
+      "not_executable": 6,
+      "profit_factor": 0.58,
+      "sum_r": -14.0,
+      "unfilled": 6,
+      "win_rate": 0.327,
+      "worst_r": -1.0
+     }
+    },
+    "ladder_no_cost": {
+     "all": {
+      "censored": 7,
+      "ci95": [
+       -0.347,
+       0.004
+      ],
+      "mean_r": -0.172,
+      "n_filled": 119,
+      "n_opportunities": 151,
+      "not_executable": 15,
+      "profit_factor": 0.72,
+      "sum_r": -20.5,
+      "unfilled": 10,
+      "win_rate": 0.395,
+      "worst_r": -1.0
+     }
+    },
+    "oneR_cost": {
+     "all": {
+      "censored": 4,
+      "ci95": [
+       -0.387,
+       -0.048
+      ],
+      "mean_r": -0.217,
+      "n_filled": 120,
+      "n_opportunities": 151,
+      "not_executable": 16,
+      "profit_factor": 0.64,
+      "sum_r": -26.0,
+      "unfilled": 11,
+      "win_rate": 0.392,
+      "worst_r": -1.0
+     },
+     "dev": {
+      "censored": 2,
+      "ci95": [
+       -0.41,
+       0.049
+      ],
+      "mean_r": -0.176,
+      "n_filled": 68,
+      "n_opportunities": 85,
+      "not_executable": 10,
+      "profit_factor": 0.7,
+      "sum_r": -12.0,
+      "unfilled": 5,
+      "win_rate": 0.412,
+      "worst_r": -1.0
+     },
+     "oos": {
+      "censored": 2,
+      "ci95": [
+       -0.522,
+       0.021
+      ],
+      "mean_r": -0.269,
+      "n_filled": 52,
+      "n_opportunities": 66,
+      "not_executable": 6,
+      "profit_factor": 0.58,
+      "sum_r": -14.0,
+      "unfilled": 6,
+      "win_rate": 0.365,
+      "worst_r": -1.0
+     }
+    },
+    "twoR_cost": {
+     "all": {
+      "censored": 7,
+      "ci95": [
+       -0.478,
+       -0.019
+      ],
+      "mean_r": -0.256,
+      "n_filled": 117,
+      "n_opportunities": 151,
+      "not_executable": 16,
+      "profit_factor": 0.66,
+      "sum_r": -30.0,
+      "unfilled": 11,
+      "win_rate": 0.248,
+      "worst_r": -1.0
+     },
+     "dev": {
+      "censored": 2,
+      "ci95": [
+       -0.55,
+       0.048
+      ],
+      "mean_r": -0.25,
+      "n_filled": 68,
+      "n_opportunities": 85,
+      "not_executable": 10,
+      "profit_factor": 0.67,
+      "sum_r": -17.0,
+      "unfilled": 5,
+      "win_rate": 0.25,
+      "worst_r": -1.0
+     },
+     "oos": {
+      "censored": 5,
+      "ci95": [
+       -0.647,
+       0.085
+      ],
+      "mean_r": -0.265,
+      "n_filled": 49,
+      "n_opportunities": 66,
+      "not_executable": 6,
+      "profit_factor": 0.65,
+      "sum_r": -13.0,
+      "unfilled": 6,
+      "win_rate": 0.245,
+      "worst_r": -1.0
+     }
+    }
+   },
+   "stop_within_cap_share": 0.874,
+   "thinned_episodes": 151,
+   "unique_confirmed": 182,
+   "unique_resting_observations": 0,
+   "version": "v2"
+  },
+  "flip_zone": {
+   "by_symbol": {
+    "EURUSD": {
+     "ladder_cost": {
+      "censored": 8,
+      "ci95": [
+       -0.0,
+       0.622
+      ],
+      "mean_r": 0.318,
+      "n_filled": 33,
+      "n_opportunities": 42,
+      "not_executable": 0,
+      "profit_factor": 1.87,
+      "sum_r": 10.5,
+      "unfilled": 1,
+      "win_rate": 0.636,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 0.55,
+     "median_technical_risk_pips": 3.4,
+     "observe_only_here": false,
+     "thinned": 42
+    },
+    "GBPJPY": {
+     "ladder_cost": {
+      "censored": 1,
+      "ci95": [
+       -0.75,
+       0.176
+      ],
+      "mean_r": -0.344,
+      "n_filled": 16,
+      "n_opportunities": 18,
+      "not_executable": 0,
+      "profit_factor": 0.5,
+      "sum_r": -5.5,
+      "unfilled": 1,
+      "win_rate": 0.312,
+      "worst_r": -1
+     },
+     "median_room_cover": 0.71,
+     "median_technical_risk_pips": 8.1,
+     "observe_only_here": false,
+     "thinned": 18
+    },
+    "GBPUSD": {
+     "ladder_cost": {
+      "censored": 4,
+      "ci95": [
+       -0.348,
+       0.379
+      ],
+      "mean_r": 0.018,
+      "n_filled": 28,
+      "n_opportunities": 33,
+      "not_executable": 0,
+      "profit_factor": 1.03,
+      "sum_r": 0.5,
+      "unfilled": 1,
+      "win_rate": 0.464,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 0.87,
+     "median_technical_risk_pips": 4.3,
+     "observe_only_here": false,
+     "thinned": 33
+    },
+    "USDJPY": {
+     "ladder_cost": {
+      "censored": 0,
+      "ci95": [
+       -0.361,
+       0.323
+      ],
+      "mean_r": -0.0,
+      "n_filled": 34,
+      "n_opportunities": 37,
+      "not_executable": 0,
+      "profit_factor": 1.0,
+      "sum_r": -0.0,
+      "unfilled": 3,
+      "win_rate": 0.529,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 0.87,
+     "median_technical_risk_pips": 5.0,
+     "observe_only_here": false,
+     "thinned": 37
+    },
+    "XAU": {
+     "ladder_cost": {
+      "censored": 0,
+      "ci95": [
+       -0.606,
+       -0.081
+      ],
+      "mean_r": -0.365,
+      "n_filled": 40,
+      "n_opportunities": 67,
+      "not_executable": 23,
+      "profit_factor": 0.44,
+      "sum_r": -14.6,
+      "unfilled": 4,
+      "win_rate": 0.35,
+      "worst_r": -1
+     },
+     "median_room_cover": 1.33,
+     "median_technical_risk_pips": 68.9,
+     "observe_only_here": false,
+     "thinned": 67
+    }
+   },
+   "components": [
+    "confluence",
+    "reaction"
+   ],
+   "configured_symbols": null,
+   "invariant_violations": {},
+   "median_entry_width_pips": 4.8,
+   "median_repeats": 1.0,
+   "median_room_cover": 0.87,
+   "median_technical_risk_pips": 7.7,
+   "median_technical_rr": 1.99,
+   "quality": {
+    "distinct_values_1pct": 2,
+    "max": 1,
+    "median": 1.0,
+    "min": 0.667
+   },
+   "quality_vs_hypothetical_r": {
+    "spearman": 0.045,
+    "spearman_v2_raw": -0.126,
+    "terciles_of_quality": {},
+    "terciles_of_v2_raw": {
+     "high": {
+      "mean_r": -0.361,
+      "n": 51,
+      "score_range": [
+       11.857,
+       16.684
+      ]
+     },
+     "low": {
+      "mean_r": 0.054,
+      "n": 50,
+      "score_range": [
+       6.633,
+       9.786
+      ]
+     },
+     "mid": {
+      "mean_r": 0.132,
+      "n": 50,
+      "score_range": [
+       9.786,
+       11.776
+      ]
+     }
+    }
+   },
+   "share_room_cover_below_1": 0.556,
+   "share_technical_rr_below_1": 0.041,
+   "simulation": {
+    "ladder_cost": {
+     "all": {
+      "censored": 13,
+      "ci95": [
+       -0.22,
+       0.1
+      ],
+      "mean_r": -0.06,
+      "n_filled": 151,
+      "n_opportunities": 197,
+      "not_executable": 23,
+      "profit_factor": 0.89,
+      "sum_r": -9.1,
+      "unfilled": 10,
+      "win_rate": 0.47,
+      "worst_r": -1.0
+     },
+     "dev": {
+      "censored": 1,
+      "ci95": [
+       -0.378,
+       0.052
+      ],
+      "mean_r": -0.159,
+      "n_filled": 87,
+      "n_opportunities": 112,
+      "not_executable": 21,
+      "profit_factor": 0.72,
+      "sum_r": -13.8,
+      "unfilled": 3,
+      "win_rate": 0.437,
+      "worst_r": -1.0
+     },
+     "oos": {
+      "censored": 12,
+      "ci95": [
+       -0.176,
+       0.32
+      ],
+      "mean_r": 0.073,
+      "n_filled": 64,
+      "n_opportunities": 85,
+      "not_executable": 2,
+      "profit_factor": 1.15,
+      "sum_r": 4.7,
+      "unfilled": 7,
+      "win_rate": 0.516,
+      "worst_r": -1.0
+     }
+    },
+    "ladder_no_cost": {
+     "all": {
+      "censored": 12,
+      "ci95": [
+       -0.142,
+       0.231
+      ],
+      "mean_r": 0.041,
+      "n_filled": 155,
+      "n_opportunities": 197,
+      "not_executable": 23,
+      "profit_factor": 1.08,
+      "sum_r": 6.3,
+      "unfilled": 7,
+      "win_rate": 0.51,
+      "worst_r": -1.0
+     }
+    },
+    "oneR_cost": {
+     "all": {
+      "censored": 6,
+      "ci95": [
+       -0.171,
+       0.139
+      ],
+      "mean_r": -0.013,
+      "n_filled": 158,
+      "n_opportunities": 197,
+      "not_executable": 23,
+      "profit_factor": 0.97,
+      "sum_r": -2.0,
+      "unfilled": 10,
+      "win_rate": 0.494,
+      "worst_r": -1.0
+     },
+     "dev": {
+      "censored": 1,
+      "ci95": [
+       -0.333,
+       0.063
+      ],
+      "mean_r": -0.126,
+      "n_filled": 87,
+      "n_opportunities": 112,
+      "not_executable": 21,
+      "profit_factor": 0.78,
+      "sum_r": -11.0,
+      "unfilled": 3,
+      "win_rate": 0.437,
+      "worst_r": -1.0
+     },
+     "oos": {
+      "censored": 5,
+      "ci95": [
+       -0.088,
+       0.32
+      ],
+      "mean_r": 0.127,
+      "n_filled": 71,
+      "n_opportunities": 85,
+      "not_executable": 2,
+      "profit_factor": 1.29,
+      "sum_r": 9.0,
+      "unfilled": 7,
+      "win_rate": 0.563,
+      "worst_r": -1.0
+     }
+    },
+    "twoR_cost": {
+     "all": {
+      "censored": 16,
+      "ci95": [
+       -0.248,
+       0.18
+      ],
+      "mean_r": -0.02,
+      "n_filled": 148,
+      "n_opportunities": 197,
+      "not_executable": 23,
+      "profit_factor": 0.97,
+      "sum_r": -3.0,
+      "unfilled": 10,
+      "win_rate": 0.331,
+      "worst_r": -1.0
+     },
+     "dev": {
+      "censored": 1,
+      "ci95": [
+       -0.422,
+       0.167
+      ],
+      "mean_r": -0.126,
+      "n_filled": 87,
+      "n_opportunities": 112,
+      "not_executable": 21,
+      "profit_factor": 0.82,
+      "sum_r": -11.0,
+      "unfilled": 3,
+      "win_rate": 0.299,
+      "worst_r": -1.0
+     },
+     "oos": {
+      "censored": 15,
+      "ci95": [
+       -0.167,
+       0.431
+      ],
+      "mean_r": 0.131,
+      "n_filled": 61,
+      "n_opportunities": 85,
+      "not_executable": 2,
+      "profit_factor": 1.21,
+      "sum_r": 8.0,
+      "unfilled": 7,
+      "win_rate": 0.377,
+      "worst_r": -1.0
+     }
+    }
+   },
+   "stop_within_cap_share": 0.842,
+   "thinned_episodes": 197,
+   "unique_confirmed": 222,
+   "unique_resting_observations": 0,
+   "version": "v3"
+  },
+  "fvg": {
+   "by_symbol": {
+    "EURUSD": {
+     "ladder_cost": {
+      "censored": 8,
+      "ci95": [
+       -0.106,
+       0.268
+      ],
+      "mean_r": 0.099,
+      "n_filled": 86,
+      "n_opportunities": 98,
+      "not_executable": 0,
+      "profit_factor": 1.2,
+      "sum_r": 8.5,
+      "unfilled": 4,
+      "win_rate": 0.5,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 0.7,
+     "median_technical_risk_pips": 3.9,
+     "observe_only_here": false,
+     "thinned": 98
+    },
+    "GBPJPY": {
+     "ladder_cost": {
+      "censored": 5,
+      "ci95": [
+       -0.305,
+       0.292
+      ],
+      "mean_r": 0.0,
+      "n_filled": 82,
+      "n_opportunities": 93,
+      "not_executable": 0,
+      "profit_factor": 1.0,
+      "sum_r": 0.0,
+      "unfilled": 6,
+      "win_rate": 0.488,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 0.6,
+     "median_technical_risk_pips": 7.1,
+     "observe_only_here": false,
+     "thinned": 93
+    },
+    "GBPUSD": {
+     "ladder_cost": {
+      "censored": 13,
+      "ci95": [
+       -0.304,
+       0.004
+      ],
+      "mean_r": -0.136,
+      "n_filled": 110,
+      "n_opportunities": 128,
+      "not_executable": 0,
+      "profit_factor": 0.77,
+      "sum_r": -15.0,
+      "unfilled": 5,
+      "win_rate": 0.418,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 0.5,
+     "median_technical_risk_pips": 3.6,
+     "observe_only_here": false,
+     "thinned": 128
+    },
+    "USDJPY": {
+     "ladder_cost": {
+      "censored": 2,
+      "ci95": [
+       -0.381,
+       0.019
+      ],
+      "mean_r": -0.183,
+      "n_filled": 123,
+      "n_opportunities": 127,
+      "not_executable": 0,
+      "profit_factor": 0.7,
+      "sum_r": -22.5,
+      "unfilled": 2,
+      "win_rate": 0.398,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 0.69,
+     "median_technical_risk_pips": 5.0,
+     "observe_only_here": false,
+     "thinned": 127
+    },
+    "XAU": {
+     "ladder_cost": {
+      "censored": 0,
+      "ci95": [
+       -0.45,
+       -0.009
+      ],
+      "mean_r": -0.233,
+      "n_filled": 102,
+      "n_opportunities": 117,
+      "not_executable": 12,
+      "profit_factor": 0.62,
+      "sum_r": -23.8,
+      "unfilled": 3,
+      "win_rate": 0.382,
+      "worst_r": -1
+     },
+     "median_room_cover": 1.9,
+     "median_technical_risk_pips": 39.7,
+     "observe_only_here": false,
+     "thinned": 117
+    }
+   },
+   "components": [
+    "confluence",
+    "reaction"
+   ],
+   "configured_symbols": null,
+   "invariant_violations": {},
+   "median_entry_width_pips": 3.1,
+   "median_repeats": 1,
+   "median_room_cover": 0.72,
+   "median_technical_risk_pips": 5.5,
+   "median_technical_rr": 1.98,
+   "quality": {
+    "distinct_values_1pct": 2,
+    "max": 1,
+    "median": 0.667,
+    "min": 0.667
+   },
+   "quality_vs_hypothetical_r": {
+    "spearman": -0.13,
+    "spearman_v2_raw": -0.012,
+    "terciles_of_quality": {},
+    "terciles_of_v2_raw": {
+     "high": {
+      "mean_r": -0.108,
+      "n": 169,
+      "score_range": [
+       16.806,
+       21.051
+      ]
+     },
+     "low": {
+      "mean_r": -0.028,
+      "n": 167,
+      "score_range": [
+       10.633,
+       13.214
+      ]
+     },
+     "mid": {
+      "mean_r": -0.179,
+      "n": 167,
+      "score_range": [
+       13.214,
+       16.806
+      ]
+     }
+    }
+   },
+   "share_room_cover_below_1": 0.637,
+   "share_technical_rr_below_1": 0.17,
+   "simulation": {
+    "ladder_cost": {
+     "all": {
+      "censored": 28,
+      "ci95": [
+       -0.207,
+       -0.011
+      ],
+      "mean_r": -0.105,
+      "n_filled": 503,
+      "n_opportunities": 563,
+      "not_executable": 12,
+      "profit_factor": 0.82,
+      "sum_r": -52.8,
+      "unfilled": 20,
+      "win_rate": 0.431,
+      "worst_r": -1.0
+     },
+     "dev": {
+      "censored": 8,
+      "ci95": [
+       -0.257,
+       0.015
+      ],
+      "mean_r": -0.126,
+      "n_filled": 278,
+      "n_opportunities": 308,
+      "not_executable": 11,
+      "profit_factor": 0.78,
+      "sum_r": -35.0,
+      "unfilled": 11,
+      "win_rate": 0.424,
+      "worst_r": -1.0
+     },
+     "oos": {
+      "censored": 20,
+      "ci95": [
+       -0.231,
+       0.06
+      ],
+      "mean_r": -0.079,
+      "n_filled": 225,
+      "n_opportunities": 255,
+      "not_executable": 1,
+      "profit_factor": 0.86,
+      "sum_r": -17.8,
+      "unfilled": 9,
+      "win_rate": 0.44,
+      "worst_r": -1.0
+     }
+    },
+    "ladder_no_cost": {
+     "all": {
+      "censored": 30,
+      "ci95": [
+       -0.125,
+       0.059
+      ],
+      "mean_r": -0.034,
+      "n_filled": 511,
+      "n_opportunities": 563,
+      "not_executable": 11,
+      "profit_factor": 0.94,
+      "sum_r": -17.5,
+      "unfilled": 11,
+      "win_rate": 0.472,
+      "worst_r": -1.0
+     }
+    },
+    "oneR_cost": {
+     "all": {
+      "censored": 18,
+      "ci95": [
+       -0.199,
+       -0.032
+      ],
+      "mean_r": -0.115,
+      "n_filled": 513,
+      "n_opportunities": 563,
+      "not_executable": 12,
+      "profit_factor": 0.79,
+      "sum_r": -59.0,
+      "unfilled": 20,
+      "win_rate": 0.442,
+      "worst_r": -1.0
+     },
+     "dev": {
+      "censored": 8,
+      "ci95": [
+       -0.267,
+       -0.025
+      ],
+      "mean_r": -0.151,
+      "n_filled": 278,
+      "n_opportunities": 308,
+      "not_executable": 11,
+      "profit_factor": 0.74,
+      "sum_r": -42.0,
+      "unfilled": 11,
+      "win_rate": 0.424,
+      "worst_r": -1.0
+     },
+     "oos": {
+      "censored": 10,
+      "ci95": [
+       -0.188,
+       0.04
+      ],
+      "mean_r": -0.072,
+      "n_filled": 235,
+      "n_opportunities": 255,
+      "not_executable": 1,
+      "profit_factor": 0.87,
+      "sum_r": -17.0,
+      "unfilled": 9,
+      "win_rate": 0.464,
+      "worst_r": -1.0
+     }
+    },
+    "twoR_cost": {
+     "all": {
+      "censored": 31,
+      "ci95": [
+       -0.17,
+       0.086
+      ],
+      "mean_r": -0.037,
+      "n_filled": 500,
+      "n_opportunities": 563,
+      "not_executable": 12,
+      "profit_factor": 0.95,
+      "sum_r": -18.6,
+      "unfilled": 20,
+      "win_rate": 0.322,
+      "worst_r": -1.0
+     },
+     "dev": {
+      "censored": 9,
+      "ci95": [
+       -0.139,
+       0.196
+      ],
+      "mean_r": 0.029,
+      "n_filled": 277,
+      "n_opportunities": 308,
+      "not_executable": 11,
+      "profit_factor": 1.04,
+      "sum_r": 8.0,
+      "unfilled": 11,
+      "win_rate": 0.343,
+      "worst_r": -1.0
+     },
+     "oos": {
+      "censored": 22,
+      "ci95": [
+       -0.302,
+       0.056
+      ],
+      "mean_r": -0.119,
+      "n_filled": 223,
+      "n_opportunities": 255,
+      "not_executable": 1,
+      "profit_factor": 0.83,
+      "sum_r": -26.6,
+      "unfilled": 9,
+      "win_rate": 0.296,
+      "worst_r": -1.0
+     }
+    }
+   },
+   "stop_within_cap_share": 0.968,
+   "thinned_episodes": 563,
+   "unique_confirmed": 695,
+   "unique_resting_observations": 993,
+   "version": "v2"
+  },
+  "ifvg": {
+   "by_symbol": {
+    "EURUSD": {
+     "ladder_cost": {
+      "censored": 0,
+      "ci95": [
+       -0.2,
+       1.214
+      ],
+      "mean_r": 0.444,
+      "n_filled": 9,
+      "n_opportunities": 11,
+      "not_executable": 0,
+      "profit_factor": 2.33,
+      "sum_r": 4.0,
+      "unfilled": 2,
+      "win_rate": 0.667,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 0.86,
+     "median_technical_risk_pips": 5.2,
+     "observe_only_here": false,
+     "thinned": 11
+    },
+    "GBPJPY": {
+     "ladder_cost": {
+      "censored": 2,
+      "ci95": [
+       0.146,
+       0.618
+      ],
+      "mean_r": 0.333,
+      "n_filled": 21,
+      "n_opportunities": 26,
+      "not_executable": 0,
+      "profit_factor": 2.0,
+      "sum_r": 7.0,
+      "unfilled": 3,
+      "win_rate": 0.667,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 0.8,
+     "median_technical_risk_pips": 9.5,
+     "observe_only_here": false,
+     "thinned": 26
+    },
+    "GBPUSD": {
+     "ladder_cost": {
+      "censored": 0,
+      "ci95": [
+       -0.357,
+       0.767
+      ],
+      "mean_r": 0.25,
+      "n_filled": 16,
+      "n_opportunities": 17,
+      "not_executable": 0,
+      "profit_factor": 1.67,
+      "sum_r": 4.0,
+      "unfilled": 1,
+      "win_rate": 0.625,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 0.68,
+     "median_technical_risk_pips": 5.7,
+     "observe_only_here": false,
+     "thinned": 17
+    },
+    "USDJPY": {
+     "ladder_cost": {
+      "censored": 1,
+      "ci95": [
+       -0.536,
+       0.275
+      ],
+      "mean_r": -0.152,
+      "n_filled": 23,
+      "n_opportunities": 27,
+      "not_executable": 0,
+      "profit_factor": 0.75,
+      "sum_r": -3.5,
+      "unfilled": 3,
+      "win_rate": 0.391,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 0.96,
+     "median_technical_risk_pips": 7.1,
+     "observe_only_here": false,
+     "thinned": 27
+    },
+    "XAU": {
+     "ladder_cost": {
+      "censored": 0,
+      "ci95": [
+       -0.376,
+       0.652
+      ],
+      "mean_r": 0.124,
+      "n_filled": 29,
+      "n_opportunities": 32,
+      "not_executable": 0,
+      "profit_factor": 1.24,
+      "sum_r": 3.6,
+      "unfilled": 3,
+      "win_rate": 0.483,
+      "worst_r": -1
+     },
+     "median_room_cover": 1.8,
+     "median_technical_risk_pips": 46.4,
+     "observe_only_here": false,
+     "thinned": 32
+    }
+   },
+   "components": [
+    "bars_gap_to_inversion",
+    "confluence_stars",
+    "gap_width_atr",
+    "inversion_body_ratio",
+    "inversion_close_beyond_atr",
+    "inversion_close_strength",
+    "inversion_displacement_atr",
+    "origin_displacement_atr",
+    "rejection_strength",
+    "rejection_wick_ratio",
+    "retest_age_bars",
+    "retest_penetration_atr",
+    "retest_touches",
+    "structure_alignment",
+    "target_room_atr",
+    "target_room_r",
+    "technical_risk_pips",
+    "zone_integrity"
+   ],
+   "configured_symbols": null,
+   "invariant_violations": {},
+   "median_entry_width_pips": 7.3,
+   "median_repeats": 3,
+   "median_room_cover": 1.18,
+   "median_technical_risk_pips": 9.8,
+   "median_technical_rr": 2.0,
+   "quality": {
+    "distinct_values_1pct": 2,
+    "max": 1,
+    "median": 0.667,
+    "min": 0.667
+   },
+   "quality_vs_hypothetical_r": {
+    "spearman": -0.054,
+    "spearman_v2_raw": -0.069,
+    "terciles_of_quality": {},
+    "terciles_of_v2_raw": {
+     "high": {
+      "mean_r": 0.153,
+      "n": 34,
+      "score_range": [
+       13,
+       18
+      ]
+     },
+     "low": {
+      "mean_r": 0.159,
+      "n": 32,
+      "score_range": [
+       8,
+       10
+      ]
+     },
+     "mid": {
+      "mean_r": 0.15,
+      "n": 32,
+      "score_range": [
+       10,
+       13
+      ]
+     }
+    }
+   },
+   "share_room_cover_below_1": 0.449,
+   "share_technical_rr_below_1": 0.0,
+   "simulation": {
+    "ladder_cost": {
+     "all": {
+      "censored": 3,
+      "ci95": [
+       -0.058,
+       0.393
+      ],
+      "mean_r": 0.154,
+      "n_filled": 98,
+      "n_opportunities": 113,
+      "not_executable": 0,
+      "profit_factor": 1.34,
+      "sum_r": 15.1,
+      "unfilled": 12,
+      "win_rate": 0.541,
+      "worst_r": -1.0
+     },
+     "dev": {
+      "censored": 1,
+      "ci95": [
+       -0.185,
+       0.44
+      ],
+      "mean_r": 0.11,
+      "n_filled": 58,
+      "n_opportunities": 67,
+      "not_executable": 0,
+      "profit_factor": 1.22,
+      "sum_r": 6.4,
+      "unfilled": 8,
+      "win_rate": 0.5,
+      "worst_r": -1.0
+     },
+     "oos": {
+      "censored": 2,
+      "ci95": [
+       -0.128,
+       0.523
+      ],
+      "mean_r": 0.217,
+      "n_filled": 40,
+      "n_opportunities": 46,
+      "not_executable": 0,
+      "profit_factor": 1.54,
+      "sum_r": 8.7,
+      "unfilled": 4,
+      "win_rate": 0.6,
+      "worst_r": -1.0
+     }
+    },
+    "ladder_no_cost": {
+     "all": {
+      "censored": 2,
+      "ci95": [
+       -0.04,
+       0.42
+      ],
+      "mean_r": 0.185,
+      "n_filled": 100,
+      "n_opportunities": 113,
+      "not_executable": 0,
+      "profit_factor": 1.42,
+      "sum_r": 18.5,
+      "unfilled": 11,
+      "win_rate": 0.56,
+      "worst_r": -1.0
+     }
+    },
+    "oneR_cost": {
+     "all": {
+      "censored": 1,
+      "ci95": [
+       -0.091,
+       0.326
+      ],
+      "mean_r": 0.1,
+      "n_filled": 100,
+      "n_opportunities": 113,
+      "not_executable": 0,
+      "profit_factor": 1.22,
+      "sum_r": 10.0,
+      "unfilled": 12,
+      "win_rate": 0.55,
+      "worst_r": -1.0
+     },
+     "dev": {
+      "censored": 1,
+      "ci95": [
+       -0.24,
+       0.259
+      ],
+      "mean_r": -0.0,
+      "n_filled": 58,
+      "n_opportunities": 67,
+      "not_executable": 0,
+      "profit_factor": 1.0,
+      "sum_r": -0.0,
+      "unfilled": 8,
+      "win_rate": 0.5,
+      "worst_r": -1.0
+     },
+     "oos": {
+      "censored": 0,
+      "ci95": [
+       -0.077,
+       0.55
+      ],
+      "mean_r": 0.238,
+      "n_filled": 42,
+      "n_opportunities": 46,
+      "not_executable": 0,
+      "profit_factor": 1.62,
+      "sum_r": 10.0,
+      "unfilled": 4,
+      "win_rate": 0.619,
+      "worst_r": -1.0
+     }
+    },
+    "twoR_cost": {
+     "all": {
+      "censored": 5,
+      "ci95": [
+       -0.065,
+       0.5
+      ],
+      "mean_r": 0.219,
+      "n_filled": 96,
+      "n_opportunities": 113,
+      "not_executable": 0,
+      "profit_factor": 1.37,
+      "sum_r": 21.0,
+      "unfilled": 12,
+      "win_rate": 0.406,
+      "worst_r": -1.0
+     },
+     "dev": {
+      "censored": 1,
+      "ci95": [
+       -0.222,
+       0.574
+      ],
+      "mean_r": 0.19,
+      "n_filled": 58,
+      "n_opportunities": 67,
+      "not_executable": 0,
+      "profit_factor": 1.31,
+      "sum_r": 11.0,
+      "unfilled": 8,
+      "win_rate": 0.397,
+      "worst_r": -1.0
+     },
+     "oos": {
+      "censored": 4,
+      "ci95": [
+       -0.195,
+       0.75
+      ],
+      "mean_r": 0.263,
+      "n_filled": 38,
+      "n_opportunities": 46,
+      "not_executable": 0,
+      "profit_factor": 1.45,
+      "sum_r": 10.0,
+      "unfilled": 4,
+      "win_rate": 0.421,
+      "worst_r": -1.0
+     }
+    }
+   },
+   "stop_within_cap_share": 1.0,
+   "thinned_episodes": 113,
+   "unique_confirmed": 127,
+   "unique_resting_observations": 0,
+   "version": "v3"
+  },
+  "impulse_pullback": {
+   "by_symbol": {
+    "XAU": {
+     "ladder_cost": {
+      "censored": 0,
+      "ci95": null,
+      "mean_r": -1.0,
+      "n_filled": 1,
+      "n_opportunities": 1,
+      "not_executable": 0,
+      "profit_factor": 0.0,
+      "sum_r": -1,
+      "unfilled": 0,
+      "win_rate": 0.0,
+      "worst_r": -1
+     },
+     "median_room_cover": 1.99,
+     "median_technical_risk_pips": 34.4,
+     "observe_only_here": true,
+     "thinned": 1
+    }
+   },
+   "components": [
+    "body_dominance",
+    "displacement"
+   ],
+   "configured_symbols": [
+    "XAU"
+   ],
+   "invariant_violations": {},
+   "median_entry_width_pips": 17.2,
+   "median_repeats": 2,
+   "median_room_cover": 1.99,
+   "median_technical_risk_pips": 34.4,
+   "median_technical_rr": 1.99,
+   "quality": {
+    "distinct_values_1pct": 1,
+    "max": 0.525,
+    "median": 0.525,
+    "min": 0.525
+   },
+   "quality_vs_hypothetical_r": {
+    "spearman": null,
+    "spearman_v2_raw": null,
+    "terciles_of_quality": {},
+    "terciles_of_v2_raw": {}
+   },
+   "share_room_cover_below_1": 0.0,
+   "share_technical_rr_below_1": 0.0,
+   "simulation": {
+    "ladder_cost": {
+     "all": {
+      "censored": 0,
+      "ci95": null,
+      "mean_r": -1.0,
+      "n_filled": 1,
+      "n_opportunities": 1,
+      "not_executable": 0,
+      "profit_factor": 0.0,
+      "sum_r": -1,
+      "unfilled": 0,
+      "win_rate": 0.0,
+      "worst_r": -1
+     },
+     "dev": {
+      "censored": 0,
+      "n_filled": 0,
+      "n_opportunities": 0,
+      "not_executable": 0,
+      "unfilled": 0
+     },
+     "oos": {
+      "censored": 0,
+      "ci95": null,
+      "mean_r": -1.0,
+      "n_filled": 1,
+      "n_opportunities": 1,
+      "not_executable": 0,
+      "profit_factor": 0.0,
+      "sum_r": -1,
+      "unfilled": 0,
+      "win_rate": 0.0,
+      "worst_r": -1
+     }
+    },
+    "ladder_no_cost": {
+     "all": {
+      "censored": 0,
+      "ci95": null,
+      "mean_r": -1.0,
+      "n_filled": 1,
+      "n_opportunities": 1,
+      "not_executable": 0,
+      "profit_factor": 0.0,
+      "sum_r": -1,
+      "unfilled": 0,
+      "win_rate": 0.0,
+      "worst_r": -1
+     }
+    },
+    "oneR_cost": {
+     "all": {
+      "censored": 0,
+      "ci95": null,
+      "mean_r": -1.0,
+      "n_filled": 1,
+      "n_opportunities": 1,
+      "not_executable": 0,
+      "profit_factor": 0.0,
+      "sum_r": -1,
+      "unfilled": 0,
+      "win_rate": 0.0,
+      "worst_r": -1
+     },
+     "dev": {
+      "censored": 0,
+      "n_filled": 0,
+      "n_opportunities": 0,
+      "not_executable": 0,
+      "unfilled": 0
+     },
+     "oos": {
+      "censored": 0,
+      "ci95": null,
+      "mean_r": -1.0,
+      "n_filled": 1,
+      "n_opportunities": 1,
+      "not_executable": 0,
+      "profit_factor": 0.0,
+      "sum_r": -1,
+      "unfilled": 0,
+      "win_rate": 0.0,
+      "worst_r": -1
+     }
+    },
+    "twoR_cost": {
+     "all": {
+      "censored": 0,
+      "ci95": null,
+      "mean_r": -1.0,
+      "n_filled": 1,
+      "n_opportunities": 1,
+      "not_executable": 0,
+      "profit_factor": 0.0,
+      "sum_r": -1,
+      "unfilled": 0,
+      "win_rate": 0.0,
+      "worst_r": -1
+     },
+     "dev": {
+      "censored": 0,
+      "n_filled": 0,
+      "n_opportunities": 0,
+      "not_executable": 0,
+      "unfilled": 0
+     },
+     "oos": {
+      "censored": 0,
+      "ci95": null,
+      "mean_r": -1.0,
+      "n_filled": 1,
+      "n_opportunities": 1,
+      "not_executable": 0,
+      "profit_factor": 0.0,
+      "sum_r": -1,
+      "unfilled": 0,
+      "win_rate": 0.0,
+      "worst_r": -1
+     }
+    }
+   },
+   "stop_within_cap_share": 1.0,
+   "thinned_episodes": 1,
+   "unique_confirmed": 1,
+   "unique_resting_observations": 0,
+   "version": "v3"
+  },
+  "key_level": {
+   "by_symbol": {
+    "EURUSD": {
+     "ladder_cost": {
+      "censored": 33,
+      "ci95": [
+       -0.145,
+       0.039
+      ],
+      "mean_r": -0.046,
+      "n_filled": 356,
+      "n_opportunities": 394,
+      "not_executable": 0,
+      "profit_factor": 0.92,
+      "sum_r": -16.5,
+      "unfilled": 5,
+      "win_rate": 0.452,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 0.66,
+     "median_technical_risk_pips": 4.9,
+     "observe_only_here": false,
+     "thinned": 394
+    },
+    "GBPUSD": {
+     "ladder_cost": {
+      "censored": 44,
+      "ci95": [
+       -0.177,
+       -0.036
+      ],
+      "mean_r": -0.099,
+      "n_filled": 408,
+      "n_opportunities": 458,
+      "not_executable": 0,
+      "profit_factor": 0.82,
+      "sum_r": -40.5,
+      "unfilled": 6,
+      "win_rate": 0.439,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 0.59,
+     "median_technical_risk_pips": 6.0,
+     "observe_only_here": false,
+     "thinned": 458
+    },
+    "USDJPY": {
+     "ladder_cost": {
+      "censored": 17,
+      "ci95": [
+       -0.18,
+       0.055
+      ],
+      "mean_r": -0.055,
+      "n_filled": 427,
+      "n_opportunities": 450,
+      "not_executable": 0,
+      "profit_factor": 0.89,
+      "sum_r": -23.4,
+      "unfilled": 6,
+      "win_rate": 0.478,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 0.69,
+     "median_technical_risk_pips": 7.8,
+     "observe_only_here": false,
+     "thinned": 450
+    },
+    "XAU": {
+     "ladder_cost": {
+      "censored": 4,
+      "ci95": [
+       -0.206,
+       -0.047
+      ],
+      "mean_r": -0.131,
+      "n_filled": 517,
+      "n_opportunities": 621,
+      "not_executable": 91,
+      "profit_factor": 0.77,
+      "sum_r": -67.6,
+      "unfilled": 9,
+      "win_rate": 0.437,
+      "worst_r": -1
+     },
+     "median_room_cover": 1.71,
+     "median_technical_risk_pips": 60.1,
+     "observe_only_here": false,
+     "thinned": 621
+    }
+   },
+   "components": [
+    "confluence",
+    "reaction",
+    "touch_quality"
+   ],
+   "configured_symbols": null,
+   "invariant_violations": {},
+   "median_entry_width_pips": 5.6,
+   "median_repeats": 1.0,
+   "median_room_cover": 0.78,
+   "median_technical_risk_pips": 8.1,
+   "median_technical_rr": 1.5,
+   "quality": {
+    "distinct_values_1pct": 2,
+    "max": 1,
+    "median": 0.667,
+    "min": 0.667
+   },
+   "quality_vs_hypothetical_r": {
+    "spearman": -0.063,
+    "spearman_v2_raw": -0.07,
+    "terciles_of_quality": {},
+    "terciles_of_v2_raw": {
+     "high": {
+      "mean_r": -0.171,
+      "n": 570,
+      "score_range": [
+       12,
+       16.5
+      ]
+     },
+     "low": {
+      "mean_r": -0.009,
+      "n": 569,
+      "score_range": [
+       8,
+       10.5
+      ]
+     },
+     "mid": {
+      "mean_r": -0.079,
+      "n": 569,
+      "score_range": [
+       10.5,
+       12
+      ]
+     }
+    }
+   },
+   "share_room_cover_below_1": 0.614,
+   "share_technical_rr_below_1": 0.291,
+   "simulation": {
+    "ladder_cost": {
+     "all": {
+      "censored": 98,
+      "ci95": [
+       -0.135,
+       -0.04
+      ],
+      "mean_r": -0.087,
+      "n_filled": 1708,
+      "n_opportunities": 1923,
+      "not_executable": 91,
+      "profit_factor": 0.84,
+      "sum_r": -148.0,
+      "unfilled": 26,
+      "win_rate": 0.451,
+      "worst_r": -1.0
+     },
+     "dev": {
+      "censored": 20,
+      "ci95": [
+       -0.116,
+       -0.017
+      ],
+      "mean_r": -0.067,
+      "n_filled": 1019,
+      "n_opportunities": 1131,
+      "not_executable": 77,
+      "profit_factor": 0.88,
+      "sum_r": -68.5,
+      "unfilled": 15,
+      "win_rate": 0.455,
+      "worst_r": -1.0
+     },
+     "oos": {
+      "censored": 78,
+      "ci95": [
+       -0.21,
+       -0.03
+      ],
+      "mean_r": -0.115,
+      "n_filled": 689,
+      "n_opportunities": 792,
+      "not_executable": 14,
+      "profit_factor": 0.79,
+      "sum_r": -79.5,
+      "unfilled": 11,
+      "win_rate": 0.444,
+      "worst_r": -1.0
+     }
+    },
+    "ladder_no_cost": {
+     "all": {
+      "censored": 103,
+      "ci95": [
+       -0.056,
+       0.034
+      ],
+      "mean_r": -0.011,
+      "n_filled": 1715,
+      "n_opportunities": 1923,
+      "not_executable": 89,
+      "profit_factor": 0.98,
+      "sum_r": -18.5,
+      "unfilled": 16,
+      "win_rate": 0.489,
+      "worst_r": -1.0
+     }
+    },
+    "oneR_cost": {
+     "all": {
+      "censored": 65,
+      "ci95": [
+       -0.115,
+       -0.041
+      ],
+      "mean_r": -0.078,
+      "n_filled": 1741,
+      "n_opportunities": 1923,
+      "not_executable": 91,
+      "profit_factor": 0.86,
+      "sum_r": -135.0,
+      "unfilled": 26,
+      "win_rate": 0.461,
+      "worst_r": -1.0
+     },
+     "dev": {
+      "censored": 17,
+      "ci95": [
+       -0.139,
+       -0.031
+      ],
+      "mean_r": -0.086,
+      "n_filled": 1022,
+      "n_opportunities": 1131,
+      "not_executable": 77,
+      "profit_factor": 0.84,
+      "sum_r": -88.0,
+      "unfilled": 15,
+      "win_rate": 0.457,
+      "worst_r": -1.0
+     },
+     "oos": {
+      "censored": 48,
+      "ci95": [
+       -0.114,
+       -0.017
+      ],
+      "mean_r": -0.065,
+      "n_filled": 719,
+      "n_opportunities": 792,
+      "not_executable": 14,
+      "profit_factor": 0.88,
+      "sum_r": -47.0,
+      "unfilled": 11,
+      "win_rate": 0.467,
+      "worst_r": -1.0
+     }
+    },
+    "twoR_cost": {
+     "all": {
+      "censored": 117,
+      "ci95": [
+       -0.171,
+       -0.025
+      ],
+      "mean_r": -0.097,
+      "n_filled": 1689,
+      "n_opportunities": 1923,
+      "not_executable": 91,
+      "profit_factor": 0.86,
+      "sum_r": -164.7,
+      "unfilled": 26,
+      "win_rate": 0.301,
+      "worst_r": -1.0
+     },
+     "dev": {
+      "censored": 22,
+      "ci95": [
+       -0.168,
+       0.027
+      ],
+      "mean_r": -0.068,
+      "n_filled": 1017,
+      "n_opportunities": 1131,
+      "not_executable": 77,
+      "profit_factor": 0.9,
+      "sum_r": -69.5,
+      "unfilled": 15,
+      "win_rate": 0.311,
+      "worst_r": -1.0
+     },
+     "oos": {
+      "censored": 95,
+      "ci95": [
+       -0.256,
+       -0.029
+      ],
+      "mean_r": -0.142,
+      "n_filled": 672,
+      "n_opportunities": 792,
+      "not_executable": 14,
+      "profit_factor": 0.8,
+      "sum_r": -95.2,
+      "unfilled": 11,
+      "win_rate": 0.287,
+      "worst_r": -1.0
+     }
+    }
+   },
+   "stop_within_cap_share": 0.913,
+   "thinned_episodes": 1923,
+   "unique_confirmed": 5444,
+   "unique_resting_observations": 0,
+   "version": "v3"
+  },
+  "liquidity_sweep": {
+   "by_symbol": {
+    "EURUSD": {
+     "ladder_cost": {
+      "censored": 0,
+      "ci95": [
+       -1.0,
+       0.5
+      ],
+      "mean_r": -0.5,
+      "n_filled": 5,
+      "n_opportunities": 5,
+      "not_executable": 0,
+      "profit_factor": 0.37,
+      "sum_r": -2.5,
+      "unfilled": 0,
+      "win_rate": 0.2,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 0.54,
+     "median_technical_risk_pips": 3.3,
+     "observe_only_here": false,
+     "thinned": 5
+    },
+    "GBPJPY": {
+     "ladder_cost": {
+      "censored": 0,
+      "ci95": [
+       -0.375,
+       1.5
+      ],
+      "mean_r": 0.667,
+      "n_filled": 6,
+      "n_opportunities": 6,
+      "not_executable": 0,
+      "profit_factor": 3.0,
+      "sum_r": 4.0,
+      "unfilled": 0,
+      "win_rate": 0.667,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 1.07,
+     "median_technical_risk_pips": 11.8,
+     "observe_only_here": false,
+     "thinned": 6
+    },
+    "GBPUSD": {
+     "ladder_cost": {
+      "censored": 0,
+      "ci95": [
+       -1.0,
+       0.875
+      ],
+      "mean_r": -0.2,
+      "n_filled": 5,
+      "n_opportunities": 5,
+      "not_executable": 0,
+      "profit_factor": 0.67,
+      "sum_r": -1.0,
+      "unfilled": 0,
+      "win_rate": 0.4,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 0.59,
+     "median_technical_risk_pips": 4.5,
+     "observe_only_here": false,
+     "thinned": 5
+    },
+    "USDJPY": {
+     "ladder_cost": {
+      "censored": 0,
+      "ci95": null,
+      "mean_r": -1.0,
+      "n_filled": 2,
+      "n_opportunities": 2,
+      "not_executable": 0,
+      "profit_factor": 0.0,
+      "sum_r": -2.0,
+      "unfilled": 0,
+      "win_rate": 0.0,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 0.59,
+     "median_technical_risk_pips": 5.5,
+     "observe_only_here": false,
+     "thinned": 2
+    },
+    "XAU": {
+     "ladder_cost": {
+      "censored": 0,
+      "ci95": [
+       -1.0,
+       -1.0
+      ],
+      "mean_r": -1.0,
+      "n_filled": 4,
+      "n_opportunities": 5,
+      "not_executable": 1,
+      "profit_factor": 0.0,
+      "sum_r": -4,
+      "unfilled": 0,
+      "win_rate": 0.0,
+      "worst_r": -1
+     },
+     "median_room_cover": 1.84,
+     "median_technical_risk_pips": 53.5,
+     "observe_only_here": true,
+     "thinned": 5
+    }
+   },
+   "components": [
+    "reclaim",
+    "rejection_displacement"
+   ],
+   "configured_symbols": null,
+   "invariant_violations": {},
+   "median_entry_width_pips": 5.1,
+   "median_repeats": 1,
+   "median_room_cover": 0.96,
+   "median_technical_risk_pips": 8.3,
+   "median_technical_rr": 1.98,
+   "quality": {
+    "distinct_values_1pct": 19,
+    "max": 1,
+    "median": 0.541,
+    "min": 0.308
+   },
+   "quality_vs_hypothetical_r": {
+    "spearman": 0.149,
+    "spearman_v2_raw": 0.408,
+    "terciles_of_quality": {},
+    "terciles_of_v2_raw": {}
+   },
+   "share_room_cover_below_1": 0.5,
+   "share_technical_rr_below_1": 0.0,
+   "simulation": {
+    "ladder_cost": {
+     "all": {
+      "censored": 0,
+      "ci95": [
+       -0.737,
+       0.25
+      ],
+      "mean_r": -0.25,
+      "n_filled": 22,
+      "n_opportunities": 23,
+      "not_executable": 1,
+      "profit_factor": 0.63,
+      "sum_r": -5.5,
+      "unfilled": 0,
+      "win_rate": 0.318,
+      "worst_r": -1.0
+     },
+     "dev": {
+      "censored": 0,
+      "ci95": [
+       -0.808,
+       0.133
+      ],
+      "mean_r": -0.357,
+      "n_filled": 14,
+      "n_opportunities": 15,
+      "not_executable": 1,
+      "profit_factor": 0.5,
+      "sum_r": -5.0,
+      "unfilled": 0,
+      "win_rate": 0.286,
+      "worst_r": -1.0
+     },
+     "oos": {
+      "censored": 0,
+      "ci95": [
+       -1.0,
+       0.944
+      ],
+      "mean_r": -0.063,
+      "n_filled": 8,
+      "n_opportunities": 8,
+      "not_executable": 0,
+      "profit_factor": 0.9,
+      "sum_r": -0.5,
+      "unfilled": 0,
+      "win_rate": 0.375,
+      "worst_r": -1.0
+     }
+    },
+    "ladder_no_cost": {
+     "all": {
+      "censored": 0,
+      "ci95": [
+       -0.55,
+       0.437
+      ],
+      "mean_r": -0.068,
+      "n_filled": 22,
+      "n_opportunities": 23,
+      "not_executable": 1,
+      "profit_factor": 0.88,
+      "sum_r": -1.5,
+      "unfilled": 0,
+      "win_rate": 0.409,
+      "worst_r": -1.0
+     }
+    },
+    "oneR_cost": {
+     "all": {
+      "censored": 0,
+      "ci95": [
+       -0.739,
+       0.043
+      ],
+      "mean_r": -0.364,
+      "n_filled": 22,
+      "n_opportunities": 23,
+      "not_executable": 1,
+      "profit_factor": 0.47,
+      "sum_r": -8.0,
+      "unfilled": 0,
+      "win_rate": 0.318,
+      "worst_r": -1.0
+     },
+     "dev": {
+      "censored": 0,
+      "ci95": [
+       -0.833,
+       -0.059
+      ],
+      "mean_r": -0.429,
+      "n_filled": 14,
+      "n_opportunities": 15,
+      "not_executable": 1,
+      "profit_factor": 0.4,
+      "sum_r": -6.0,
+      "unfilled": 0,
+      "win_rate": 0.286,
+      "worst_r": -1.0
+     },
+     "oos": {
+      "censored": 0,
+      "ci95": [
+       -1.0,
+       0.6
+      ],
+      "mean_r": -0.25,
+      "n_filled": 8,
+      "n_opportunities": 8,
+      "not_executable": 0,
+      "profit_factor": 0.6,
+      "sum_r": -2.0,
+      "unfilled": 0,
+      "win_rate": 0.375,
+      "worst_r": -1.0
+     }
+    },
+    "twoR_cost": {
+     "all": {
+      "censored": 0,
+      "ci95": [
+       -0.75,
+       0.435
+      ],
+      "mean_r": -0.182,
+      "n_filled": 22,
+      "n_opportunities": 23,
+      "not_executable": 1,
+      "profit_factor": 0.75,
+      "sum_r": -4.0,
+      "unfilled": 0,
+      "win_rate": 0.273,
+      "worst_r": -1.0
+     },
+     "dev": {
+      "censored": 0,
+      "ci95": [
+       -1.0,
+       0.312
+      ],
+      "mean_r": -0.357,
+      "n_filled": 14,
+      "n_opportunities": 15,
+      "not_executable": 1,
+      "profit_factor": 0.55,
+      "sum_r": -5.0,
+      "unfilled": 0,
+      "win_rate": 0.214,
+      "worst_r": -1.0
+     },
+     "oos": {
+      "censored": 0,
+      "ci95": [
+       -1.0,
+       1.333
+      ],
+      "mean_r": 0.125,
+      "n_filled": 8,
+      "n_opportunities": 8,
+      "not_executable": 0,
+      "profit_factor": 1.2,
+      "sum_r": 1.0,
+      "unfilled": 0,
+      "win_rate": 0.375,
+      "worst_r": -1.0
+     }
+    }
+   },
+   "stop_within_cap_share": 0.96,
+   "thinned_episodes": 23,
+   "unique_confirmed": 25,
+   "unique_resting_observations": 0,
+   "version": "v3"
+  },
+  "momentum_ride": {
+   "by_symbol": {
+    "EURUSD": {
+     "ladder_cost": {
+      "censored": 1,
+      "ci95": [
+       -1.0,
+       -0.357
+      ],
+      "mean_r": -0.7,
+      "n_filled": 5,
+      "n_opportunities": 7,
+      "not_executable": 0,
+      "profit_factor": 0.12,
+      "sum_r": -3.5,
+      "unfilled": 1,
+      "win_rate": 0.2,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 3.38,
+     "median_technical_risk_pips": 2.5,
+     "observe_only_here": false,
+     "thinned": 7
+    },
+    "GBPJPY": {
+     "ladder_cost": {
+      "censored": 0,
+      "ci95": [
+       -0.375,
+       1.5
+      ],
+      "mean_r": 0.875,
+      "n_filled": 4,
+      "n_opportunities": 10,
+      "not_executable": 0,
+      "profit_factor": 4.5,
+      "sum_r": 3.5,
+      "unfilled": 6,
+      "win_rate": 0.75,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 1.42,
+     "median_technical_risk_pips": 8.9,
+     "observe_only_here": false,
+     "thinned": 10
+    },
+    "GBPUSD": {
+     "ladder_cost": {
+      "censored": 0,
+      "ci95": [
+       -1.0,
+       1.5
+      ],
+      "mean_r": -0.167,
+      "n_filled": 3,
+      "n_opportunities": 5,
+      "not_executable": 0,
+      "profit_factor": 0.75,
+      "sum_r": -0.5,
+      "unfilled": 2,
+      "win_rate": 0.333,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 1.33,
+     "median_technical_risk_pips": 4.2,
+     "observe_only_here": false,
+     "thinned": 5
+    },
+    "USDJPY": {
+     "ladder_cost": {
+      "censored": 0,
+      "ci95": [
+       -1.0,
+       0.571
+      ],
+      "mean_r": -0.214,
+      "n_filled": 7,
+      "n_opportunities": 7,
+      "not_executable": 0,
+      "profit_factor": 0.62,
+      "sum_r": -1.5,
+      "unfilled": 0,
+      "win_rate": 0.429,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 1.38,
+     "median_technical_risk_pips": 3.2,
+     "observe_only_here": false,
+     "thinned": 7
+    },
+    "XAU": {
+     "ladder_cost": {
+      "censored": 0,
+      "ci95": [
+       0.2,
+       1.686
+      ],
+      "mean_r": 0.84,
+      "n_filled": 10,
+      "n_opportunities": 12,
+      "not_executable": 0,
+      "profit_factor": 3.8,
+      "sum_r": 8.4,
+      "unfilled": 2,
+      "win_rate": 0.7,
+      "worst_r": -1
+     },
+     "median_room_cover": 7.03,
+     "median_technical_risk_pips": 59.1,
+     "observe_only_here": false,
+     "thinned": 12
+    }
+   },
+   "components": [
+    "continuity",
+    "displacement",
+    "location",
+    "structural_break"
+   ],
+   "configured_symbols": null,
+   "invariant_violations": {},
+   "median_entry_width_pips": 6.4,
+   "median_repeats": 1.0,
+   "median_room_cover": 2.58,
+   "median_technical_risk_pips": 8.3,
+   "median_technical_rr": 6.59,
+   "quality": {
+    "distinct_values_1pct": 24,
+    "max": 0.926,
+    "median": 0.7,
+    "min": 0.485
+   },
+   "quality_vs_hypothetical_r": {
+    "spearman": -0.042,
+    "spearman_v2_raw": 0.03,
+    "terciles_of_quality": {},
+    "terciles_of_v2_raw": {}
+   },
+   "share_room_cover_below_1": 0.136,
+   "share_technical_rr_below_1": 0.0,
+   "simulation": {
+    "ladder_cost": {
+     "all": {
+      "censored": 1,
+      "ci95": [
+       -0.197,
+       0.7
+      ],
+      "mean_r": 0.221,
+      "n_filled": 29,
+      "n_opportunities": 41,
+      "not_executable": 0,
+      "profit_factor": 1.46,
+      "sum_r": 6.4,
+      "unfilled": 11,
+      "win_rate": 0.517,
+      "worst_r": -1.0
+     },
+     "dev": {
+      "censored": 0,
+      "ci95": [
+       -0.194,
+       0.868
+      ],
+      "mean_r": 0.32,
+      "n_filled": 20,
+      "n_opportunities": 27,
+      "not_executable": 0,
+      "profit_factor": 1.71,
+      "sum_r": 6.4,
+      "unfilled": 7,
+      "win_rate": 0.55,
+      "worst_r": -1.0
+     },
+     "oos": {
+      "censored": 1,
+      "ci95": [
+       -0.75,
+       0.773
+      ],
+      "mean_r": -0.0,
+      "n_filled": 9,
+      "n_opportunities": 14,
+      "not_executable": 0,
+      "profit_factor": 1.0,
+      "sum_r": -0.0,
+      "unfilled": 4,
+      "win_rate": 0.444,
+      "worst_r": -1.0
+     }
+    },
+    "ladder_no_cost": {
+     "all": {
+      "censored": 1,
+      "ci95": [
+       -0.012,
+       0.812
+      ],
+      "mean_r": 0.377,
+      "n_filled": 31,
+      "n_opportunities": 41,
+      "not_executable": 0,
+      "profit_factor": 1.9,
+      "sum_r": 11.7,
+      "unfilled": 9,
+      "win_rate": 0.581,
+      "worst_r": -1.0
+     }
+    },
+    "oneR_cost": {
+     "all": {
+      "censored": 0,
+      "ci95": [
+       -0.313,
+       0.448
+      ],
+      "mean_r": 0.067,
+      "n_filled": 30,
+      "n_opportunities": 41,
+      "not_executable": 0,
+      "profit_factor": 1.14,
+      "sum_r": 2.0,
+      "unfilled": 11,
+      "win_rate": 0.533,
+      "worst_r": -1.0
+     },
+     "dev": {
+      "censored": 0,
+      "ci95": [
+       -0.333,
+       0.529
+      ],
+      "mean_r": 0.1,
+      "n_filled": 20,
+      "n_opportunities": 27,
+      "not_executable": 0,
+      "profit_factor": 1.22,
+      "sum_r": 2.0,
+      "unfilled": 7,
+      "win_rate": 0.55,
+      "worst_r": -1.0
+     },
+     "oos": {
+      "censored": 0,
+      "ci95": [
+       -0.75,
+       0.667
+      ],
+      "mean_r": -0.0,
+      "n_filled": 10,
+      "n_opportunities": 14,
+      "not_executable": 0,
+      "profit_factor": 1.0,
+      "sum_r": -0.0,
+      "unfilled": 4,
+      "win_rate": 0.5,
+      "worst_r": -1.0
+     }
+    },
+    "twoR_cost": {
+     "all": {
+      "censored": 1,
+      "ci95": [
+       -0.276,
+       0.781
+      ],
+      "mean_r": 0.241,
+      "n_filled": 29,
+      "n_opportunities": 41,
+      "not_executable": 0,
+      "profit_factor": 1.41,
+      "sum_r": 7.0,
+      "unfilled": 11,
+      "win_rate": 0.414,
+      "worst_r": -1.0
+     },
+     "dev": {
+      "censored": 0,
+      "ci95": [
+       -0.348,
+       0.857
+      ],
+      "mean_r": 0.2,
+      "n_filled": 20,
+      "n_opportunities": 27,
+      "not_executable": 0,
+      "profit_factor": 1.33,
+      "sum_r": 4.0,
+      "unfilled": 7,
+      "win_rate": 0.4,
+      "worst_r": -1.0
+     },
+     "oos": {
+      "censored": 1,
+      "ci95": [
+       -0.727,
+       1.455
+      ],
+      "mean_r": 0.333,
+      "n_filled": 9,
+      "n_opportunities": 14,
+      "not_executable": 0,
+      "profit_factor": 1.6,
+      "sum_r": 3.0,
+      "unfilled": 4,
+      "win_rate": 0.444,
+      "worst_r": -1.0
+     }
+    }
+   },
+   "stop_within_cap_share": 1.0,
+   "thinned_episodes": 41,
+   "unique_confirmed": 44,
+   "unique_resting_observations": 0,
+   "version": "v2"
+  },
+  "order_block": {
+   "by_symbol": {
+    "EURUSD": {
+     "ladder_cost": {
+      "censored": 2,
+      "ci95": [
+       -0.833,
+       -0.03
+      ],
+      "mean_r": -0.478,
+      "n_filled": 45,
+      "n_opportunities": 49,
+      "not_executable": 0,
+      "profit_factor": 0.33,
+      "sum_r": -21.5,
+      "unfilled": 2,
+      "win_rate": 0.289,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 0.71,
+     "median_technical_risk_pips": 4.0,
+     "observe_only_here": false,
+     "thinned": 49
+    },
+    "GBPJPY": {
+     "ladder_cost": {
+      "censored": 1,
+      "ci95": [
+       -0.737,
+       -0.054
+      ],
+      "mean_r": -0.375,
+      "n_filled": 56,
+      "n_opportunities": 57,
+      "not_executable": 0,
+      "profit_factor": 0.42,
+      "sum_r": -21.0,
+      "unfilled": 0,
+      "win_rate": 0.357,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 0.91,
+     "median_technical_risk_pips": 9.2,
+     "observe_only_here": false,
+     "thinned": 57
+    },
+    "GBPUSD": {
+     "ladder_cost": {
+      "censored": 1,
+      "ci95": [
+       -0.597,
+       0.243
+      ],
+      "mean_r": -0.16,
+      "n_filled": 53,
+      "n_opportunities": 55,
+      "not_executable": 0,
+      "profit_factor": 0.73,
+      "sum_r": -8.5,
+      "unfilled": 1,
+      "win_rate": 0.396,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 0.64,
+     "median_technical_risk_pips": 6.0,
+     "observe_only_here": false,
+     "thinned": 55
+    },
+    "USDJPY": {
+     "ladder_cost": {
+      "censored": 1,
+      "ci95": [
+       -0.237,
+       0.415
+      ],
+      "mean_r": 0.071,
+      "n_filled": 56,
+      "n_opportunities": 57,
+      "not_executable": 0,
+      "profit_factor": 1.15,
+      "sum_r": 4.0,
+      "unfilled": 0,
+      "win_rate": 0.536,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 0.5,
+     "median_technical_risk_pips": 6.7,
+     "observe_only_here": false,
+     "thinned": 57
+    },
+    "XAU": {
+     "ladder_cost": {
+      "censored": 0,
+      "ci95": [
+       -0.137,
+       0.271
+      ],
+      "mean_r": 0.069,
+      "n_filled": 58,
+      "n_opportunities": 60,
+      "not_executable": 2,
+      "profit_factor": 1.14,
+      "sum_r": 4.0,
+      "unfilled": 0,
+      "win_rate": 0.5,
+      "worst_r": -1
+     },
+     "median_room_cover": 1.89,
+     "median_technical_risk_pips": 52.6,
+     "observe_only_here": false,
+     "thinned": 60
+    }
+   },
+   "components": [
+    "confluence",
+    "reaction"
+   ],
+   "configured_symbols": null,
+   "invariant_violations": {},
+   "median_entry_width_pips": 4.5,
+   "median_repeats": 1,
+   "median_room_cover": 0.73,
+   "median_technical_risk_pips": 6.9,
+   "median_technical_rr": 1.71,
+   "quality": {
+    "distinct_values_1pct": 2,
+    "max": 1,
+    "median": 0.667,
+    "min": 0.667
+   },
+   "quality_vs_hypothetical_r": {
+    "spearman": -0.002,
+    "spearman_v2_raw": -0.206,
+    "terciles_of_quality": {},
+    "terciles_of_v2_raw": {
+     "high": {
+      "mean_r": -0.327,
+      "n": 90,
+      "score_range": [
+       17.122,
+       21.194
+      ]
+     },
+     "low": {
+      "mean_r": 0.002,
+      "n": 89,
+      "score_range": [
+       10.796,
+       14.367
+      ]
+     },
+     "mid": {
+      "mean_r": -0.155,
+      "n": 89,
+      "score_range": [
+       14.449,
+       17.041
+      ]
+     }
+    }
+   },
+   "share_room_cover_below_1": 0.627,
+   "share_technical_rr_below_1": 0.213,
+   "simulation": {
+    "ladder_cost": {
+     "all": {
+      "censored": 5,
+      "ci95": [
+       -0.317,
+       -0.0
+      ],
+      "mean_r": -0.16,
+      "n_filled": 268,
+      "n_opportunities": 278,
+      "not_executable": 2,
+      "profit_factor": 0.72,
+      "sum_r": -43.0,
+      "unfilled": 3,
+      "win_rate": 0.422,
+      "worst_r": -1.0
+     },
+     "dev": {
+      "censored": 0,
+      "ci95": [
+       -0.284,
+       0.13
+      ],
+      "mean_r": -0.087,
+      "n_filled": 151,
+      "n_opportunities": 155,
+      "not_executable": 2,
+      "profit_factor": 0.84,
+      "sum_r": -13.1,
+      "unfilled": 2,
+      "win_rate": 0.457,
+      "worst_r": -1.0
+     },
+     "oos": {
+      "censored": 5,
+      "ci95": [
+       -0.503,
+       -0.008
+      ],
+      "mean_r": -0.256,
+      "n_filled": 117,
+      "n_opportunities": 123,
+      "not_executable": 0,
+      "profit_factor": 0.59,
+      "sum_r": -29.9,
+      "unfilled": 1,
+      "win_rate": 0.376,
+      "worst_r": -1.0
+     }
+    },
+    "ladder_no_cost": {
+     "all": {
+      "censored": 6,
+      "ci95": [
+       -0.228,
+       0.087
+      ],
+      "mean_r": -0.069,
+      "n_filled": 267,
+      "n_opportunities": 278,
+      "not_executable": 2,
+      "profit_factor": 0.87,
+      "sum_r": -18.5,
+      "unfilled": 3,
+      "win_rate": 0.472,
+      "worst_r": -1.0
+     }
+    },
+    "oneR_cost": {
+     "all": {
+      "censored": 2,
+      "ci95": [
+       -0.298,
+       0.031
+      ],
+      "mean_r": -0.144,
+      "n_filled": 271,
+      "n_opportunities": 278,
+      "not_executable": 2,
+      "profit_factor": 0.75,
+      "sum_r": -39.0,
+      "unfilled": 3,
+      "win_rate": 0.428,
+      "worst_r": -1.0
+     },
+     "dev": {
+      "censored": 0,
+      "ci95": [
+       -0.277,
+       0.133
+      ],
+      "mean_r": -0.086,
+      "n_filled": 151,
+      "n_opportunities": 155,
+      "not_executable": 2,
+      "profit_factor": 0.84,
+      "sum_r": -13.0,
+      "unfilled": 2,
+      "win_rate": 0.457,
+      "worst_r": -1.0
+     },
+     "oos": {
+      "censored": 2,
+      "ci95": [
+       -0.486,
+       0.034
+      ],
+      "mean_r": -0.217,
+      "n_filled": 120,
+      "n_opportunities": 123,
+      "not_executable": 0,
+      "profit_factor": 0.64,
+      "sum_r": -26.0,
+      "unfilled": 1,
+      "win_rate": 0.392,
+      "worst_r": -1.0
+     }
+    },
+    "twoR_cost": {
+     "all": {
+      "censored": 12,
+      "ci95": [
+       -0.385,
+       0.078
+      ],
+      "mean_r": -0.161,
+      "n_filled": 261,
+      "n_opportunities": 278,
+      "not_executable": 2,
+      "profit_factor": 0.78,
+      "sum_r": -42.0,
+      "unfilled": 3,
+      "win_rate": 0.28,
+      "worst_r": -1.0
+     },
+     "dev": {
+      "censored": 0,
+      "ci95": [
+       -0.387,
+       0.286
+      ],
+      "mean_r": -0.066,
+      "n_filled": 151,
+      "n_opportunities": 155,
+      "not_executable": 2,
+      "profit_factor": 0.9,
+      "sum_r": -10.0,
+      "unfilled": 2,
+      "win_rate": 0.311,
+      "worst_r": -1.0
+     },
+     "oos": {
+      "censored": 12,
+      "ci95": [
+       -0.655,
+       0.024
+      ],
+      "mean_r": -0.291,
+      "n_filled": 110,
+      "n_opportunities": 123,
+      "not_executable": 0,
+      "profit_factor": 0.62,
+      "sum_r": -32.0,
+      "unfilled": 1,
+      "win_rate": 0.236,
+      "worst_r": -1.0
+     }
+    }
+   },
+   "stop_within_cap_share": 0.971,
+   "thinned_episodes": 278,
+   "unique_confirmed": 549,
+   "unique_resting_observations": 188,
+   "version": "v2"
+  },
+  "range_edge": {
+   "by_symbol": {
+    "EURUSD": {
+     "ladder_cost": {
+      "censored": 10,
+      "ci95": [
+       -0.344,
+       0.129
+      ],
+      "mean_r": -0.094,
+      "n_filled": 53,
+      "n_opportunities": 77,
+      "not_executable": 0,
+      "profit_factor": 0.83,
+      "sum_r": -5.0,
+      "unfilled": 14,
+      "win_rate": 0.453,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 0.27,
+     "median_technical_risk_pips": 2.4,
+     "observe_only_here": false,
+     "thinned": 77
+    },
+    "GBPJPY": {
+     "ladder_cost": {
+      "censored": 9,
+      "ci95": [
+       -0.436,
+       0.125
+      ],
+      "mean_r": -0.185,
+      "n_filled": 65,
+      "n_opportunities": 83,
+      "not_executable": 0,
+      "profit_factor": 0.66,
+      "sum_r": -12.0,
+      "unfilled": 9,
+      "win_rate": 0.462,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 0.28,
+     "median_technical_risk_pips": 4.3,
+     "observe_only_here": false,
+     "thinned": 83
+    },
+    "GBPUSD": {
+     "ladder_cost": {
+      "censored": 2,
+      "ci95": [
+       -0.119,
+       0.388
+      ],
+      "mean_r": 0.152,
+      "n_filled": 79,
+      "n_opportunities": 97,
+      "not_executable": 0,
+      "profit_factor": 1.34,
+      "sum_r": 12.0,
+      "unfilled": 16,
+      "win_rate": 0.557,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 0.27,
+     "median_technical_risk_pips": 2.8,
+     "observe_only_here": false,
+     "thinned": 97
+    },
+    "USDJPY": {
+     "ladder_cost": {
+      "censored": 3,
+      "ci95": [
+       -0.372,
+       0.119
+      ],
+      "mean_r": -0.135,
+      "n_filled": 85,
+      "n_opportunities": 96,
+      "not_executable": 0,
+      "profit_factor": 0.76,
+      "sum_r": -11.5,
+      "unfilled": 8,
+      "win_rate": 0.435,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 0.3,
+     "median_technical_risk_pips": 3.3,
+     "observe_only_here": false,
+     "thinned": 96
+    },
+    "XAU": {
+     "ladder_cost": {
+      "censored": 1,
+      "ci95": [
+       -0.447,
+       -0.007
+      ],
+      "mean_r": -0.224,
+      "n_filled": 67,
+      "n_opportunities": 80,
+      "not_executable": 6,
+      "profit_factor": 0.63,
+      "sum_r": -15.0,
+      "unfilled": 6,
+      "win_rate": 0.388,
+      "worst_r": -1
+     },
+     "median_room_cover": 1.52,
+     "median_technical_risk_pips": 28.6,
+     "observe_only_here": false,
+     "thinned": 80
+    }
+   },
+   "components": [
+    "break_distance_atr",
+    "reclaim_depth_atr",
+    "rejection_close_location",
+    "room",
+    "touch_history",
+    "wick_history"
+   ],
+   "configured_symbols": null,
+   "invariant_violations": {},
+   "median_entry_width_pips": 2.3,
+   "median_repeats": 2.0,
+   "median_room_cover": 0.32,
+   "median_technical_risk_pips": 3.4,
+   "median_technical_rr": 1.57,
+   "quality": {
+    "distinct_values_1pct": 24,
+    "max": 1,
+    "median": 0.85,
+    "min": 0.676
+   },
+   "quality_vs_hypothetical_r": {
+    "spearman": -0.041,
+    "spearman_v2_raw": -0.069,
+    "terciles_of_quality": {
+     "high": {
+      "mean_r": -0.239,
+      "n": 117,
+      "score_range": [
+       0.85,
+       1
+      ]
+     },
+     "low": {
+      "mean_r": -0.017,
+      "n": 116,
+      "score_range": [
+       0.676,
+       0.835
+      ]
+     },
+     "mid": {
+      "mean_r": -0.013,
+      "n": 116,
+      "score_range": [
+       0.835,
+       0.85
+      ]
+     }
+    },
+    "terciles_of_v2_raw": {
+     "high": {
+      "mean_r": -0.197,
+      "n": 117,
+      "score_range": [
+       14.918,
+       20.541
+      ]
+     },
+     "low": {
+      "mean_r": 0.034,
+      "n": 116,
+      "score_range": [
+       10.592,
+       13.173
+      ]
+     },
+     "mid": {
+      "mean_r": -0.108,
+      "n": 116,
+      "score_range": [
+       13.173,
+       14.918
+      ]
+     }
+    }
+   },
+   "share_room_cover_below_1": 0.855,
+   "share_technical_rr_below_1": 0.173,
+   "simulation": {
+    "ladder_cost": {
+     "all": {
+      "censored": 25,
+      "ci95": [
+       -0.207,
+       0.021
+      ],
+      "mean_r": -0.09,
+      "n_filled": 349,
+      "n_opportunities": 433,
+      "not_executable": 6,
+      "profit_factor": 0.83,
+      "sum_r": -31.5,
+      "unfilled": 53,
+      "win_rate": 0.461,
+      "worst_r": -1.0
+     },
+     "dev": {
+      "censored": 7,
+      "ci95": [
+       -0.133,
+       0.198
+      ],
+      "mean_r": 0.034,
+      "n_filled": 194,
+      "n_opportunities": 233,
+      "not_executable": 4,
+      "profit_factor": 1.07,
+      "sum_r": 6.5,
+      "unfilled": 28,
+      "win_rate": 0.521,
+      "worst_r": -1.0
+     },
+     "oos": {
+      "censored": 18,
+      "ci95": [
+       -0.397,
+       -0.098
+      ],
+      "mean_r": -0.245,
+      "n_filled": 155,
+      "n_opportunities": 200,
+      "not_executable": 2,
+      "profit_factor": 0.6,
+      "sum_r": -38.0,
+      "unfilled": 25,
+      "win_rate": 0.387,
+      "worst_r": -1.0
+     }
+    },
+    "ladder_no_cost": {
+     "all": {
+      "censored": 25,
+      "ci95": [
+       -0.107,
+       0.12
+      ],
+      "mean_r": 0.003,
+      "n_filled": 357,
+      "n_opportunities": 433,
+      "not_executable": 6,
+      "profit_factor": 1.01,
+      "sum_r": 1.0,
+      "unfilled": 45,
+      "win_rate": 0.51,
+      "worst_r": -1.0
+     }
+    },
+    "oneR_cost": {
+     "all": {
+      "censored": 15,
+      "ci95": [
+       -0.169,
+       0.073
+      ],
+      "mean_r": -0.047,
+      "n_filled": 359,
+      "n_opportunities": 433,
+      "not_executable": 6,
+      "profit_factor": 0.91,
+      "sum_r": -17.0,
+      "unfilled": 53,
+      "win_rate": 0.476,
+      "worst_r": -1.0
+     },
+     "dev": {
+      "censored": 7,
+      "ci95": [
+       -0.128,
+       0.208
+      ],
+      "mean_r": 0.041,
+      "n_filled": 194,
+      "n_opportunities": 233,
+      "not_executable": 4,
+      "profit_factor": 1.09,
+      "sum_r": 8.0,
+      "unfilled": 28,
+      "win_rate": 0.521,
+      "worst_r": -1.0
+     },
+     "oos": {
+      "censored": 8,
+      "ci95": [
+       -0.315,
+       0.006
+      ],
+      "mean_r": -0.152,
+      "n_filled": 165,
+      "n_opportunities": 200,
+      "not_executable": 2,
+      "profit_factor": 0.74,
+      "sum_r": -25.0,
+      "unfilled": 25,
+      "win_rate": 0.424,
+      "worst_r": -1.0
+     }
+    },
+    "twoR_cost": {
+     "all": {
+      "censored": 30,
+      "ci95": [
+       -0.3,
+       0.041
+      ],
+      "mean_r": -0.128,
+      "n_filled": 344,
+      "n_opportunities": 433,
+      "not_executable": 6,
+      "profit_factor": 0.82,
+      "sum_r": -44.0,
+      "unfilled": 53,
+      "win_rate": 0.291,
+      "worst_r": -1.0
+     },
+     "dev": {
+      "censored": 9,
+      "ci95": [
+       -0.204,
+       0.294
+      ],
+      "mean_r": 0.047,
+      "n_filled": 192,
+      "n_opportunities": 233,
+      "not_executable": 4,
+      "profit_factor": 1.07,
+      "sum_r": 9.0,
+      "unfilled": 28,
+      "win_rate": 0.349,
+      "worst_r": -1.0
+     },
+     "oos": {
+      "censored": 21,
+      "ci95": [
+       -0.559,
+       -0.146
+      ],
+      "mean_r": -0.349,
+      "n_filled": 152,
+      "n_opportunities": 200,
+      "not_executable": 2,
+      "profit_factor": 0.55,
+      "sum_r": -53.0,
+      "unfilled": 25,
+      "win_rate": 0.217,
+      "worst_r": -1.0
+     }
+    }
+   },
+   "stop_within_cap_share": 0.98,
+   "thinned_episodes": 433,
+   "unique_confirmed": 508,
+   "unique_resting_observations": 0,
+   "version": "v3"
+  },
+  "range_sweep": {
+   "by_symbol": {
+    "XAU": {
+     "ladder_cost": {
+      "censored": 0,
+      "ci95": [
+       -0.5,
+       0.5
+      ],
+      "mean_r": -0.111,
+      "n_filled": 9,
+      "n_opportunities": 9,
+      "not_executable": 0,
+      "profit_factor": 0.8,
+      "sum_r": -1.0,
+      "unfilled": 0,
+      "win_rate": 0.444,
+      "worst_r": -1
+     },
+     "median_room_cover": 1.99,
+     "median_technical_risk_pips": 38.1,
+     "observe_only_here": false,
+     "thinned": 9
+    }
+   },
+   "components": [
+    "reclaim",
+    "sweep_depth"
+   ],
+   "configured_symbols": [
+    "XAU"
+   ],
+   "invariant_violations": {},
+   "median_entry_width_pips": 37.0,
+   "median_repeats": 1.0,
+   "median_room_cover": 1.99,
+   "median_technical_risk_pips": 40.6,
+   "median_technical_rr": 1.99,
+   "quality": {
+    "distinct_values_1pct": 9,
+    "max": 0.55,
+    "median": 0.196,
+    "min": 0.049
+   },
+   "quality_vs_hypothetical_r": {
+    "spearman": 0.544,
+    "spearman_v2_raw": -0.287,
+    "terciles_of_quality": {},
+    "terciles_of_v2_raw": {}
+   },
+   "share_room_cover_below_1": 0.1,
+   "share_technical_rr_below_1": 0.1,
+   "simulation": {
+    "ladder_cost": {
+     "all": {
+      "censored": 0,
+      "ci95": [
+       -0.5,
+       0.5
+      ],
+      "mean_r": -0.111,
+      "n_filled": 9,
+      "n_opportunities": 9,
+      "not_executable": 0,
+      "profit_factor": 0.8,
+      "sum_r": -1.0,
+      "unfilled": 0,
+      "win_rate": 0.444,
+      "worst_r": -1
+     },
+     "dev": {
+      "censored": 0,
+      "ci95": null,
+      "mean_r": 0.333,
+      "n_filled": 3,
+      "n_opportunities": 3,
+      "not_executable": 0,
+      "profit_factor": 2.0,
+      "sum_r": 1.0,
+      "unfilled": 0,
+      "win_rate": 0.667,
+      "worst_r": -1
+     },
+     "oos": {
+      "censored": 0,
+      "ci95": null,
+      "mean_r": -0.333,
+      "n_filled": 6,
+      "n_opportunities": 6,
+      "not_executable": 0,
+      "profit_factor": 0.5,
+      "sum_r": -2.0,
+      "unfilled": 0,
+      "win_rate": 0.333,
+      "worst_r": -1
+     }
+    },
+    "ladder_no_cost": {
+     "all": {
+      "censored": 0,
+      "ci95": [
+       -0.5,
+       0.5
+      ],
+      "mean_r": -0.111,
+      "n_filled": 9,
+      "n_opportunities": 9,
+      "not_executable": 0,
+      "profit_factor": 0.8,
+      "sum_r": -1.0,
+      "unfilled": 0,
+      "win_rate": 0.444,
+      "worst_r": -1
+     }
+    },
+    "oneR_cost": {
+     "all": {
+      "censored": 0,
+      "ci95": [
+       -0.6,
+       1.0
+      ],
+      "mean_r": -0.111,
+      "n_filled": 9,
+      "n_opportunities": 9,
+      "not_executable": 0,
+      "profit_factor": 0.8,
+      "sum_r": -1,
+      "unfilled": 0,
+      "win_rate": 0.444,
+      "worst_r": -1
+     },
+     "dev": {
+      "censored": 0,
+      "ci95": null,
+      "mean_r": 0.333,
+      "n_filled": 3,
+      "n_opportunities": 3,
+      "not_executable": 0,
+      "profit_factor": 2.0,
+      "sum_r": 1,
+      "unfilled": 0,
+      "win_rate": 0.667,
+      "worst_r": -1
+     },
+     "oos": {
+      "censored": 0,
+      "ci95": null,
+      "mean_r": -0.333,
+      "n_filled": 6,
+      "n_opportunities": 6,
+      "not_executable": 0,
+      "profit_factor": 0.5,
+      "sum_r": -2,
+      "unfilled": 0,
+      "win_rate": 0.333,
+      "worst_r": -1
+     }
+    },
+    "twoR_cost": {
+     "all": {
+      "censored": 0,
+      "ci95": [
+       -1.0,
+       0.0
+      ],
+      "mean_r": -0.333,
+      "n_filled": 9,
+      "n_opportunities": 9,
+      "not_executable": 0,
+      "profit_factor": 0.57,
+      "sum_r": -3,
+      "unfilled": 0,
+      "win_rate": 0.222,
+      "worst_r": -1
+     },
+     "dev": {
+      "censored": 0,
+      "ci95": null,
+      "mean_r": 0.0,
+      "n_filled": 3,
+      "n_opportunities": 3,
+      "not_executable": 0,
+      "profit_factor": 1.0,
+      "sum_r": 0,
+      "unfilled": 0,
+      "win_rate": 0.333,
+      "worst_r": -1
+     },
+     "oos": {
+      "censored": 0,
+      "ci95": null,
+      "mean_r": -0.5,
+      "n_filled": 6,
+      "n_opportunities": 6,
+      "not_executable": 0,
+      "profit_factor": 0.4,
+      "sum_r": -3,
+      "unfilled": 0,
+      "win_rate": 0.167,
+      "worst_r": -1
+     }
+    }
+   },
+   "stop_within_cap_share": 1.0,
+   "thinned_episodes": 9,
+   "unique_confirmed": 10,
+   "unique_resting_observations": 0,
+   "version": "v3"
+  },
+  "scalp_breakout_retest": {
+   "by_symbol": {
+    "XAU": {
+     "ladder_cost": {
+      "censored": 0,
+      "ci95": [
+       -0.864,
+       0.026
+      ],
+      "mean_r": -0.412,
+      "n_filled": 17,
+      "n_opportunities": 18,
+      "not_executable": 0,
+      "profit_factor": 0.36,
+      "sum_r": -7.0,
+      "unfilled": 1,
+      "win_rate": 0.353,
+      "worst_r": -1
+     },
+     "median_room_cover": 1.0,
+     "median_technical_risk_pips": 34.7,
+     "observe_only_here": false,
+     "thinned": 18
+    }
+   },
+   "components": [
+    "acceptance",
+    "confirmation",
+    "displacement",
+    "retest_quality",
+    "retest_speed"
+   ],
+   "configured_symbols": [
+    "XAU"
+   ],
+   "invariant_violations": {},
+   "median_entry_width_pips": 28.4,
+   "median_repeats": 2,
+   "median_room_cover": 1.0,
+   "median_technical_risk_pips": 34.0,
+   "median_technical_rr": 1.0,
+   "quality": {
+    "distinct_values_1pct": 13,
+    "max": 0.846,
+    "median": 0.732,
+    "min": 0.636
+   },
+   "quality_vs_hypothetical_r": {
+    "spearman": 0.173,
+    "spearman_v2_raw": -0.318,
+    "terciles_of_quality": {},
+    "terciles_of_v2_raw": {}
+   },
+   "share_room_cover_below_1": 0.632,
+   "share_technical_rr_below_1": 0.632,
+   "simulation": {
+    "ladder_cost": {
+     "all": {
+      "censored": 0,
+      "ci95": [
+       -0.864,
+       0.1
+      ],
+      "mean_r": -0.412,
+      "n_filled": 17,
+      "n_opportunities": 18,
+      "not_executable": 0,
+      "profit_factor": 0.36,
+      "sum_r": -7.0,
+      "unfilled": 1,
+      "win_rate": 0.353,
+      "worst_r": -1
+     },
+     "dev": {
+      "censored": 0,
+      "ci95": [
+       -1.0,
+       -0.7
+      ],
+      "mean_r": -0.812,
+      "n_filled": 8,
+      "n_opportunities": 8,
+      "not_executable": 0,
+      "profit_factor": 0.07,
+      "sum_r": -6.5,
+      "unfilled": 0,
+      "win_rate": 0.125,
+      "worst_r": -1
+     },
+     "oos": {
+      "censored": 0,
+      "ci95": null,
+      "mean_r": -0.056,
+      "n_filled": 9,
+      "n_opportunities": 10,
+      "not_executable": 0,
+      "profit_factor": 0.88,
+      "sum_r": -0.5,
+      "unfilled": 1,
+      "win_rate": 0.556,
+      "worst_r": -1
+     }
+    },
+    "ladder_no_cost": {
+     "all": {
+      "censored": 0,
+      "ci95": [
+       -0.727,
+       0.286
+      ],
+      "mean_r": -0.222,
+      "n_filled": 18,
+      "n_opportunities": 18,
+      "not_executable": 0,
+      "profit_factor": 0.6,
+      "sum_r": -4.0,
+      "unfilled": 0,
+      "win_rate": 0.444,
+      "worst_r": -1
+     }
+    },
+    "oneR_cost": {
+     "all": {
+      "censored": 0,
+      "ci95": [
+       -0.8,
+       0.158
+      ],
+      "mean_r": -0.294,
+      "n_filled": 17,
+      "n_opportunities": 18,
+      "not_executable": 0,
+      "profit_factor": 0.55,
+      "sum_r": -5.0,
+      "unfilled": 1,
+      "win_rate": 0.353,
+      "worst_r": -1
+     },
+     "dev": {
+      "censored": 0,
+      "ci95": [
+       -1.0,
+       -0.6
+      ],
+      "mean_r": -0.75,
+      "n_filled": 8,
+      "n_opportunities": 8,
+      "not_executable": 0,
+      "profit_factor": 0.14,
+      "sum_r": -6.0,
+      "unfilled": 0,
+      "win_rate": 0.125,
+      "worst_r": -1
+     },
+     "oos": {
+      "censored": 0,
+      "ci95": null,
+      "mean_r": 0.111,
+      "n_filled": 9,
+      "n_opportunities": 10,
+      "not_executable": 0,
+      "profit_factor": 1.25,
+      "sum_r": 1,
+      "unfilled": 1,
+      "win_rate": 0.556,
+      "worst_r": -1
+     }
+    },
+    "twoR_cost": {
+     "all": {
+      "censored": 0,
+      "ci95": [
+       -1.0,
+       0.143
+      ],
+      "mean_r": -0.471,
+      "n_filled": 17,
+      "n_opportunities": 18,
+      "not_executable": 0,
+      "profit_factor": 0.43,
+      "sum_r": -8.0,
+      "unfilled": 1,
+      "win_rate": 0.176,
+      "worst_r": -1
+     },
+     "dev": {
+      "censored": 0,
+      "ci95": [
+       -1.0,
+       -1.0
+      ],
+      "mean_r": -1.0,
+      "n_filled": 8,
+      "n_opportunities": 8,
+      "not_executable": 0,
+      "profit_factor": 0.0,
+      "sum_r": -8.0,
+      "unfilled": 0,
+      "win_rate": 0.0,
+      "worst_r": -1
+     },
+     "oos": {
+      "censored": 0,
+      "ci95": null,
+      "mean_r": 0.0,
+      "n_filled": 9,
+      "n_opportunities": 10,
+      "not_executable": 0,
+      "profit_factor": 1.0,
+      "sum_r": 0,
+      "unfilled": 1,
+      "win_rate": 0.333,
+      "worst_r": -1
+     }
+    }
+   },
+   "stop_within_cap_share": 1.0,
+   "thinned_episodes": 18,
+   "unique_confirmed": 19,
+   "unique_resting_observations": 0,
+   "version": "v3"
+  },
+  "session_level": {
+   "by_symbol": {
+    "EURUSD": {
+     "ladder_cost": {
+      "censored": 0,
+      "ci95": [
+       -1.0,
+       0.429
+      ],
+      "mean_r": -0.444,
+      "n_filled": 9,
+      "n_opportunities": 9,
+      "not_executable": 0,
+      "profit_factor": 0.43,
+      "sum_r": -4.0,
+      "unfilled": 0,
+      "win_rate": 0.222,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 0.74,
+     "median_technical_risk_pips": 2.5,
+     "observe_only_here": false,
+     "thinned": 9
+    },
+    "GBPJPY": {
+     "ladder_cost": {
+      "censored": 0,
+      "ci95": [
+       -0.15,
+       1.071
+      ],
+      "mean_r": 0.45,
+      "n_filled": 10,
+      "n_opportunities": 11,
+      "not_executable": 0,
+      "profit_factor": 2.5,
+      "sum_r": 4.5,
+      "unfilled": 1,
+      "win_rate": 0.7,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 0.9,
+     "median_technical_risk_pips": 11.9,
+     "observe_only_here": false,
+     "thinned": 11
+    },
+    "GBPUSD": {
+     "ladder_cost": {
+      "censored": 0,
+      "ci95": [
+       -0.6,
+       0.5
+      ],
+      "mean_r": -0.083,
+      "n_filled": 12,
+      "n_opportunities": 12,
+      "not_executable": 0,
+      "profit_factor": 0.83,
+      "sum_r": -1.0,
+      "unfilled": 0,
+      "win_rate": 0.5,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 0.52,
+     "median_technical_risk_pips": 4.0,
+     "observe_only_here": false,
+     "thinned": 12
+    },
+    "USDJPY": {
+     "ladder_cost": {
+      "censored": 0,
+      "ci95": [
+       -0.115,
+       0.781
+      ],
+      "mean_r": 0.357,
+      "n_filled": 14,
+      "n_opportunities": 17,
+      "not_executable": 0,
+      "profit_factor": 2.25,
+      "sum_r": 5.0,
+      "unfilled": 3,
+      "win_rate": 0.714,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 0.7,
+     "median_technical_risk_pips": 5.7,
+     "observe_only_here": false,
+     "thinned": 17
+    },
+    "XAU": {
+     "ladder_cost": {
+      "censored": 0,
+      "ci95": [
+       -0.835,
+       0.371
+      ],
+      "mean_r": -0.295,
+      "n_filled": 19,
+      "n_opportunities": 24,
+      "not_executable": 0,
+      "profit_factor": 0.6,
+      "sum_r": -5.6,
+      "unfilled": 5,
+      "win_rate": 0.263,
+      "worst_r": -1
+     },
+     "median_room_cover": 1.44,
+     "median_technical_risk_pips": 48.3,
+     "observe_only_here": false,
+     "thinned": 24
+    }
+   },
+   "components": [
+    "actual_level_touches",
+    "bars_to_confirm",
+    "confluence_stars",
+    "level_age_bars",
+    "level_integrity",
+    "level_type",
+    "period_completeness",
+    "reaction_freshness",
+    "reclaim_depth_atr",
+    "rejection_strength",
+    "rejection_wick_ratio",
+    "structure_alignment",
+    "sweep_depth_atr",
+    "target_room_atr",
+    "target_room_r",
+    "technical_risk_pips",
+    "touch_penetration_atr"
+   ],
+   "configured_symbols": null,
+   "invariant_violations": {},
+   "median_entry_width_pips": 3.7,
+   "median_repeats": 2,
+   "median_room_cover": 0.85,
+   "median_technical_risk_pips": 7.6,
+   "median_technical_rr": 1.95,
+   "quality": {
+    "distinct_values_1pct": 2,
+    "max": 1,
+    "median": 0.667,
+    "min": 0.667
+   },
+   "quality_vs_hypothetical_r": {
+    "spearman": 0.014,
+    "spearman_v2_raw": 0.083,
+    "terciles_of_quality": {},
+    "terciles_of_v2_raw": {
+     "high": {
+      "mean_r": 0.018,
+      "n": 22,
+      "score_range": [
+       10,
+       14
+      ]
+     },
+     "low": {
+      "mean_r": -0.1,
+      "n": 21,
+      "score_range": [
+       8,
+       9
+      ]
+     },
+     "mid": {
+      "mean_r": 0.029,
+      "n": 21,
+      "score_range": [
+       9,
+       10
+      ]
+     }
+    }
+   },
+   "share_room_cover_below_1": 0.554,
+   "share_technical_rr_below_1": 0.0,
+   "simulation": {
+    "ladder_cost": {
+     "all": {
+      "censored": 0,
+      "ci95": [
+       -0.309,
+       0.291
+      ],
+      "mean_r": -0.017,
+      "n_filled": 64,
+      "n_opportunities": 73,
+      "not_executable": 0,
+      "profit_factor": 0.97,
+      "sum_r": -1.1,
+      "unfilled": 9,
+      "win_rate": 0.469,
+      "worst_r": -1.0
+     },
+     "dev": {
+      "censored": 0,
+      "ci95": [
+       -0.35,
+       0.364
+      ],
+      "mean_r": -0.029,
+      "n_filled": 35,
+      "n_opportunities": 41,
+      "not_executable": 0,
+      "profit_factor": 0.94,
+      "sum_r": -1.0,
+      "unfilled": 6,
+      "win_rate": 0.486,
+      "worst_r": -1.0
+     },
+     "oos": {
+      "censored": 0,
+      "ci95": [
+       -0.467,
+       0.496
+      ],
+      "mean_r": -0.003,
+      "n_filled": 29,
+      "n_opportunities": 32,
+      "not_executable": 0,
+      "profit_factor": 0.99,
+      "sum_r": -0.1,
+      "unfilled": 3,
+      "win_rate": 0.448,
+      "worst_r": -1.0
+     }
+    },
+    "ladder_no_cost": {
+     "all": {
+      "censored": 1,
+      "ci95": [
+       -0.267,
+       0.289
+      ],
+      "mean_r": 0.006,
+      "n_filled": 63,
+      "n_opportunities": 73,
+      "not_executable": 0,
+      "profit_factor": 1.01,
+      "sum_r": 0.4,
+      "unfilled": 9,
+      "win_rate": 0.492,
+      "worst_r": -1.0
+     }
+    },
+    "oneR_cost": {
+     "all": {
+      "censored": 0,
+      "ci95": [
+       -0.303,
+       0.206
+      ],
+      "mean_r": -0.063,
+      "n_filled": 64,
+      "n_opportunities": 73,
+      "not_executable": 0,
+      "profit_factor": 0.88,
+      "sum_r": -4.0,
+      "unfilled": 9,
+      "win_rate": 0.469,
+      "worst_r": -1.0
+     },
+     "dev": {
+      "censored": 0,
+      "ci95": [
+       -0.333,
+       0.312
+      ],
+      "mean_r": -0.029,
+      "n_filled": 35,
+      "n_opportunities": 41,
+      "not_executable": 0,
+      "profit_factor": 0.94,
+      "sum_r": -1.0,
+      "unfilled": 6,
+      "win_rate": 0.486,
+      "worst_r": -1.0
+     },
+     "oos": {
+      "censored": 0,
+      "ci95": [
+       -0.471,
+       0.31
+      ],
+      "mean_r": -0.103,
+      "n_filled": 29,
+      "n_opportunities": 32,
+      "not_executable": 0,
+      "profit_factor": 0.81,
+      "sum_r": -3.0,
+      "unfilled": 3,
+      "win_rate": 0.448,
+      "worst_r": -1.0
+     }
+    },
+    "twoR_cost": {
+     "all": {
+      "censored": 2,
+      "ci95": [
+       -0.386,
+       0.282
+      ],
+      "mean_r": -0.05,
+      "n_filled": 62,
+      "n_opportunities": 73,
+      "not_executable": 0,
+      "profit_factor": 0.93,
+      "sum_r": -3.1,
+      "unfilled": 9,
+      "win_rate": 0.323,
+      "worst_r": -1.0
+     },
+     "dev": {
+      "censored": 0,
+      "ci95": [
+       -0.455,
+       0.393
+      ],
+      "mean_r": -0.057,
+      "n_filled": 35,
+      "n_opportunities": 41,
+      "not_executable": 0,
+      "profit_factor": 0.92,
+      "sum_r": -2.0,
+      "unfilled": 6,
+      "win_rate": 0.314,
+      "worst_r": -1.0
+     },
+     "oos": {
+      "censored": 2,
+      "ci95": [
+       -0.581,
+       0.533
+      ],
+      "mean_r": -0.041,
+      "n_filled": 27,
+      "n_opportunities": 32,
+      "not_executable": 0,
+      "profit_factor": 0.94,
+      "sum_r": -1.1,
+      "unfilled": 3,
+      "win_rate": 0.333,
+      "worst_r": -1.0
+     }
+    }
+   },
+   "stop_within_cap_share": 1.0,
+   "thinned_episodes": 73,
+   "unique_confirmed": 83,
+   "unique_resting_observations": 0,
+   "version": "v4"
+  },
+  "snap_back": {
+   "by_symbol": {
+    "EURUSD": {
+     "ladder_cost": {
+      "censored": 1,
+      "ci95": [
+       -1.0,
+       0.25
+      ],
+      "mean_r": -0.167,
+      "n_filled": 6,
+      "n_opportunities": 7,
+      "not_executable": 0,
+      "profit_factor": 0.75,
+      "sum_r": -1.0,
+      "unfilled": 0,
+      "win_rate": 0.333,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 0.75,
+     "median_technical_risk_pips": 4.6,
+     "observe_only_here": false,
+     "thinned": 7
+    },
+    "GBPJPY": {
+     "ladder_cost": {
+      "censored": 0,
+      "ci95": [
+       -1.0,
+       1.5
+      ],
+      "mean_r": 0.25,
+      "n_filled": 4,
+      "n_opportunities": 4,
+      "not_executable": 0,
+      "profit_factor": 1.5,
+      "sum_r": 1.0,
+      "unfilled": 0,
+      "win_rate": 0.5,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 1.42,
+     "median_technical_risk_pips": 15.6,
+     "observe_only_here": false,
+     "thinned": 4
+    },
+    "GBPUSD": {
+     "ladder_cost": {
+      "censored": 0,
+      "ci95": [
+       -0.0,
+       1.5
+      ],
+      "mean_r": 1.0,
+      "n_filled": 5,
+      "n_opportunities": 8,
+      "not_executable": 0,
+      "profit_factor": 6.0,
+      "sum_r": 5.0,
+      "unfilled": 3,
+      "win_rate": 0.8,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 0.59,
+     "median_technical_risk_pips": 4.4,
+     "observe_only_here": false,
+     "thinned": 8
+    },
+    "USDJPY": {
+     "ladder_cost": {
+      "censored": 0,
+      "ci95": [
+       -1.0,
+       1.5
+      ],
+      "mean_r": -0.0,
+      "n_filled": 7,
+      "n_opportunities": 8,
+      "not_executable": 0,
+      "profit_factor": 1.0,
+      "sum_r": -0.0,
+      "unfilled": 1,
+      "win_rate": 0.571,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 0.48,
+     "median_technical_risk_pips": 4.4,
+     "observe_only_here": false,
+     "thinned": 8
+    },
+    "XAU": {
+     "ladder_cost": {
+      "censored": 0,
+      "ci95": [
+       -0.621,
+       0.348
+      ],
+      "mean_r": -0.157,
+      "n_filled": 23,
+      "n_opportunities": 25,
+      "not_executable": 1,
+      "profit_factor": 0.72,
+      "sum_r": -3.6,
+      "unfilled": 1,
+      "win_rate": 0.435,
+      "worst_r": -1
+     },
+     "median_room_cover": 2.0,
+     "median_technical_risk_pips": 59.9,
+     "observe_only_here": false,
+     "thinned": 25
+    }
+   },
+   "components": [
+    "extension",
+    "liquidity_grade",
+    "reaction"
+   ],
+   "configured_symbols": null,
+   "invariant_violations": {},
+   "median_entry_width_pips": 11.5,
+   "median_repeats": 1,
+   "median_room_cover": 1.07,
+   "median_technical_risk_pips": 15.9,
+   "median_technical_rr": 1.99,
+   "quality": {
+    "distinct_values_1pct": 28,
+    "max": 0.956,
+    "median": 0.754,
+    "min": 0.458
+   },
+   "quality_vs_hypothetical_r": {
+    "spearman": -0.118,
+    "spearman_v2_raw": -0.194,
+    "terciles_of_quality": {
+     "high": {
+      "mean_r": 0.167,
+      "n": 15,
+      "score_range": [
+       0.781,
+       0.956
+      ]
+     },
+     "low": {
+      "mean_r": 0.26,
+      "n": 15,
+      "score_range": [
+       0.486,
+       0.7
+      ]
+     },
+     "mid": {
+      "mean_r": -0.333,
+      "n": 15,
+      "score_range": [
+       0.7,
+       0.78
+      ]
+     }
+    },
+    "terciles_of_v2_raw": {
+     "high": {
+      "mean_r": -0.313,
+      "n": 15,
+      "score_range": [
+       14.694,
+       21.847
+      ]
+     },
+     "low": {
+      "mean_r": -0.073,
+      "n": 15,
+      "score_range": [
+       8.857,
+       11.776
+      ]
+     },
+     "mid": {
+      "mean_r": 0.48,
+      "n": 15,
+      "score_range": [
+       11.939,
+       14.52
+      ]
+     }
+    }
+   },
+   "share_room_cover_below_1": 0.481,
+   "share_technical_rr_below_1": 0.0,
+   "simulation": {
+    "ladder_cost": {
+     "all": {
+      "censored": 1,
+      "ci95": [
+       -0.272,
+       0.384
+      ],
+      "mean_r": 0.031,
+      "n_filled": 45,
+      "n_opportunities": 52,
+      "not_executable": 1,
+      "profit_factor": 1.06,
+      "sum_r": 1.4,
+      "unfilled": 5,
+      "win_rate": 0.489,
+      "worst_r": -1.0
+     },
+     "dev": {
+      "censored": 0,
+      "ci95": [
+       -0.383,
+       0.361
+      ],
+      "mean_r": -0.0,
+      "n_filled": 30,
+      "n_opportunities": 33,
+      "not_executable": 1,
+      "profit_factor": 1.0,
+      "sum_r": -0.0,
+      "unfilled": 2,
+      "win_rate": 0.5,
+      "worst_r": -1.0
+     },
+     "oos": {
+      "censored": 1,
+      "ci95": [
+       -0.458,
+       1.0
+      ],
+      "mean_r": 0.093,
+      "n_filled": 15,
+      "n_opportunities": 19,
+      "not_executable": 0,
+      "profit_factor": 1.17,
+      "sum_r": 1.4,
+      "unfilled": 3,
+      "win_rate": 0.467,
+      "worst_r": -1.0
+     }
+    },
+    "ladder_no_cost": {
+     "all": {
+      "censored": 1,
+      "ci95": [
+       -0.239,
+       0.403
+      ],
+      "mean_r": 0.072,
+      "n_filled": 46,
+      "n_opportunities": 52,
+      "not_executable": 1,
+      "profit_factor": 1.15,
+      "sum_r": 3.3,
+      "unfilled": 4,
+      "win_rate": 0.522,
+      "worst_r": -1.0
+     }
+    },
+    "oneR_cost": {
+     "all": {
+      "censored": 0,
+      "ci95": [
+       -0.286,
+       0.3
+      ],
+      "mean_r": -0.0,
+      "n_filled": 46,
+      "n_opportunities": 52,
+      "not_executable": 1,
+      "profit_factor": 1.0,
+      "sum_r": -0.0,
+      "unfilled": 5,
+      "win_rate": 0.5,
+      "worst_r": -1.0
+     },
+     "dev": {
+      "censored": 0,
+      "ci95": [
+       -0.4,
+       0.36
+      ],
+      "mean_r": -0.0,
+      "n_filled": 30,
+      "n_opportunities": 33,
+      "not_executable": 1,
+      "profit_factor": 1.0,
+      "sum_r": -0.0,
+      "unfilled": 2,
+      "win_rate": 0.5,
+      "worst_r": -1.0
+     },
+     "oos": {
+      "censored": 0,
+      "ci95": [
+       -0.429,
+       0.636
+      ],
+      "mean_r": -0.0,
+      "n_filled": 16,
+      "n_opportunities": 19,
+      "not_executable": 0,
+      "profit_factor": 1.0,
+      "sum_r": -0.0,
+      "unfilled": 3,
+      "win_rate": 0.5,
+      "worst_r": -1.0
+     }
+    },
+    "twoR_cost": {
+     "all": {
+      "censored": 1,
+      "ci95": [
+       -0.267,
+       0.636
+      ],
+      "mean_r": 0.133,
+      "n_filled": 45,
+      "n_opportunities": 52,
+      "not_executable": 1,
+      "profit_factor": 1.21,
+      "sum_r": 6.0,
+      "unfilled": 5,
+      "win_rate": 0.378,
+      "worst_r": -1.0
+     },
+     "dev": {
+      "censored": 0,
+      "ci95": [
+       -0.4,
+       0.687
+      ],
+      "mean_r": 0.1,
+      "n_filled": 30,
+      "n_opportunities": 33,
+      "not_executable": 1,
+      "profit_factor": 1.16,
+      "sum_r": 3.0,
+      "unfilled": 2,
+      "win_rate": 0.367,
+      "worst_r": -1.0
+     },
+     "oos": {
+      "censored": 1,
+      "ci95": [
+       -0.538,
+       1.308
+      ],
+      "mean_r": 0.2,
+      "n_filled": 15,
+      "n_opportunities": 19,
+      "not_executable": 0,
+      "profit_factor": 1.33,
+      "sum_r": 3.0,
+      "unfilled": 3,
+      "win_rate": 0.4,
+      "worst_r": -1.0
+     }
+    }
+   },
+   "stop_within_cap_share": 0.982,
+   "thinned_episodes": 52,
+   "unique_confirmed": 55,
+   "unique_resting_observations": 0,
+   "version": "v2"
+  },
+  "supply": {
+   "by_symbol": {
+    "EURUSD": {
+     "ladder_cost": {
+      "censored": 14,
+      "ci95": [
+       -0.296,
+       0.307
+      ],
+      "mean_r": -0.006,
+      "n_filled": 154,
+      "n_opportunities": 176,
+      "not_executable": 2,
+      "profit_factor": 0.99,
+      "sum_r": -1.0,
+      "unfilled": 6,
+      "win_rate": 0.442,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 0.47,
+     "median_technical_risk_pips": 7.2,
+     "observe_only_here": false,
+     "thinned": 176
+    },
+    "GBPJPY": {
+     "ladder_cost": {
+      "censored": 10,
+      "ci95": [
+       -0.353,
+       0.208
+      ],
+      "mean_r": -0.086,
+      "n_filled": 162,
+      "n_opportunities": 181,
+      "not_executable": 8,
+      "profit_factor": 0.84,
+      "sum_r": -14.0,
+      "unfilled": 1,
+      "win_rate": 0.457,
+      "worst_r": -1
+     },
+     "median_room_cover": 0.55,
+     "median_technical_risk_pips": 16.7,
+     "observe_only_here": false,
+     "thinned": 181
+    },
+    "GBPUSD": {
+     "ladder_cost": {
+      "censored": 10,
+      "ci95": [
+       -0.339,
+       0.269
+      ],
+      "mean_r": -0.02,
+      "n_filled": 196,
+      "n_opportunities": 209,
+      "not_executable": 2,
+      "profit_factor": 0.96,
+      "sum_r": -4.0,
+      "unfilled": 1,
+      "win_rate": 0.48,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 0.47,
+     "median_technical_risk_pips": 9.0,
+     "observe_only_here": false,
+     "thinned": 209
+    },
+    "USDJPY": {
+     "ladder_cost": {
+      "censored": 7,
+      "ci95": [
+       -0.209,
+       0.419
+      ],
+      "mean_r": 0.082,
+      "n_filled": 190,
+      "n_opportunities": 200,
+      "not_executable": 2,
+      "profit_factor": 1.18,
+      "sum_r": 15.5,
+      "unfilled": 1,
+      "win_rate": 0.553,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 0.6,
+     "median_technical_risk_pips": 11.5,
+     "observe_only_here": false,
+     "thinned": 200
+    },
+    "XAU": {
+     "ladder_cost": {
+      "censored": 3,
+      "ci95": [
+       -0.29,
+       0.15
+      ],
+      "mean_r": -0.068,
+      "n_filled": 121,
+      "n_opportunities": 248,
+      "not_executable": 121,
+      "profit_factor": 0.87,
+      "sum_r": -8.2,
+      "unfilled": 3,
+      "win_rate": 0.463,
+      "worst_r": -1
+     },
+     "median_room_cover": 0.84,
+     "median_technical_risk_pips": 89.2,
+     "observe_only_here": false,
+     "thinned": 248
+    }
+   },
+   "components": [
+    "confluence",
+    "freshness_quality",
+    "reaction",
+    "relevance_quality",
+    "zone_strength_quality"
+   ],
+   "configured_symbols": null,
+   "invariant_violations": {},
+   "median_entry_width_pips": 11.2,
+   "median_repeats": 2,
+   "median_room_cover": 0.62,
+   "median_technical_risk_pips": 13.9,
+   "median_technical_rr": 0.89,
+   "quality": {
+    "distinct_values_1pct": 8,
+    "max": 1,
+    "median": 0.667,
+    "min": 0.667
+   },
+   "quality_vs_hypothetical_r": {
+    "spearman": -0.008,
+    "spearman_v2_raw": -0.024,
+    "terciles_of_quality": {
+     "high": {
+      "mean_r": -0.013,
+      "n": 275,
+      "score_range": [
+       0.95,
+       1
+      ]
+     },
+     "low": {
+      "mean_r": 0.086,
+      "n": 274,
+      "score_range": [
+       0.667,
+       0.667
+      ]
+     },
+     "mid": {
+      "mean_r": -0.115,
+      "n": 274,
+      "score_range": [
+       0.667,
+       0.95
+      ]
+     }
+    },
+    "terciles_of_v2_raw": {
+     "high": {
+      "mean_r": -0.055,
+      "n": 275,
+      "score_range": [
+       14.449,
+       22.051
+      ]
+     },
+     "low": {
+      "mean_r": -0.028,
+      "n": 274,
+      "score_range": [
+       4.204,
+       11.122
+      ]
+     },
+     "mid": {
+      "mean_r": 0.041,
+      "n": 274,
+      "score_range": [
+       11.133,
+       14.449
+      ]
+     }
+    }
+   },
+   "share_room_cover_below_1": 0.683,
+   "share_technical_rr_below_1": 0.566,
+   "simulation": {
+    "ladder_cost": {
+     "all": {
+      "censored": 44,
+      "ci95": [
+       -0.147,
+       0.127
+      ],
+      "mean_r": -0.014,
+      "n_filled": 823,
+      "n_opportunities": 1014,
+      "not_executable": 135,
+      "profit_factor": 0.97,
+      "sum_r": -11.7,
+      "unfilled": 12,
+      "win_rate": 0.482,
+      "worst_r": -1.0
+     },
+     "dev": {
+      "censored": 5,
+      "ci95": [
+       -0.146,
+       0.13
+      ],
+      "mean_r": -0.007,
+      "n_filled": 458,
+      "n_opportunities": 574,
+      "not_executable": 102,
+      "profit_factor": 0.99,
+      "sum_r": -3.3,
+      "unfilled": 9,
+      "win_rate": 0.496,
+      "worst_r": -1.0
+     },
+     "oos": {
+      "censored": 39,
+      "ci95": [
+       -0.242,
+       0.219
+      ],
+      "mean_r": -0.023,
+      "n_filled": 365,
+      "n_opportunities": 440,
+      "not_executable": 33,
+      "profit_factor": 0.96,
+      "sum_r": -8.4,
+      "unfilled": 3,
+      "win_rate": 0.466,
+      "worst_r": -1.0
+     }
+    },
+    "ladder_no_cost": {
+     "all": {
+      "censored": 45,
+      "ci95": [
+       -0.079,
+       0.191
+      ],
+      "mean_r": 0.053,
+      "n_filled": 822,
+      "n_opportunities": 1014,
+      "not_executable": 135,
+      "profit_factor": 1.11,
+      "sum_r": 43.7,
+      "unfilled": 12,
+      "win_rate": 0.517,
+      "worst_r": -1.0
+     }
+    },
+    "oneR_cost": {
+     "all": {
+      "censored": 27,
+      "ci95": [
+       -0.127,
+       0.097
+      ],
+      "mean_r": -0.014,
+      "n_filled": 840,
+      "n_opportunities": 1014,
+      "not_executable": 135,
+      "profit_factor": 0.97,
+      "sum_r": -12.0,
+      "unfilled": 12,
+      "win_rate": 0.493,
+      "worst_r": -1.0
+     },
+     "dev": {
+      "censored": 4,
+      "ci95": [
+       -0.127,
+       0.122
+      ],
+      "mean_r": -0.007,
+      "n_filled": 459,
+      "n_opportunities": 574,
+      "not_executable": 102,
+      "profit_factor": 0.99,
+      "sum_r": -3.0,
+      "unfilled": 9,
+      "win_rate": 0.497,
+      "worst_r": -1.0
+     },
+     "oos": {
+      "censored": 23,
+      "ci95": [
+       -0.22,
+       0.179
+      ],
+      "mean_r": -0.024,
+      "n_filled": 381,
+      "n_opportunities": 440,
+      "not_executable": 33,
+      "profit_factor": 0.95,
+      "sum_r": -9.0,
+      "unfilled": 3,
+      "win_rate": 0.488,
+      "worst_r": -1.0
+     }
+    },
+    "twoR_cost": {
+     "all": {
+      "censored": 52,
+      "ci95": [
+       -0.168,
+       0.229
+      ],
+      "mean_r": 0.013,
+      "n_filled": 815,
+      "n_opportunities": 1014,
+      "not_executable": 135,
+      "profit_factor": 1.02,
+      "sum_r": 11.0,
+      "unfilled": 12,
+      "win_rate": 0.337,
+      "worst_r": -1.0
+     },
+     "dev": {
+      "censored": 5,
+      "ci95": [
+       -0.166,
+       0.279
+      ],
+      "mean_r": 0.056,
+      "n_filled": 458,
+      "n_opportunities": 574,
+      "not_executable": 102,
+      "profit_factor": 1.09,
+      "sum_r": 25.6,
+      "unfilled": 9,
+      "win_rate": 0.352,
+      "worst_r": -1.0
+     },
+     "oos": {
+      "censored": 47,
+      "ci95": [
+       -0.365,
+       0.319
+      ],
+      "mean_r": -0.041,
+      "n_filled": 357,
+      "n_opportunities": 440,
+      "not_executable": 33,
+      "profit_factor": 0.94,
+      "sum_r": -14.6,
+      "unfilled": 3,
+      "win_rate": 0.319,
+      "worst_r": -1.0
+     }
+    }
+   },
+   "stop_within_cap_share": 0.814,
+   "thinned_episodes": 1014,
+   "unique_confirmed": 3167,
+   "unique_resting_observations": 0,
+   "version": "v2"
+  },
+  "trendline": {
+   "by_symbol": {
+    "GBPJPY": {
+     "ladder_cost": {
+      "censored": 0,
+      "ci95": null,
+      "mean_r": 0.5,
+      "n_filled": 1,
+      "n_opportunities": 2,
+      "not_executable": 0,
+      "profit_factor": null,
+      "sum_r": 0.5,
+      "unfilled": 1,
+      "win_rate": 1.0,
+      "worst_r": 0.5
+     },
+     "median_room_cover": 0.08,
+     "median_technical_risk_pips": 5.9,
+     "observe_only_here": false,
+     "thinned": 2
+    },
+    "GBPUSD": {
+     "ladder_cost": {
+      "censored": 1,
+      "ci95": [
+       -1.0,
+       1.5
+      ],
+      "mean_r": 0.667,
+      "n_filled": 3,
+      "n_opportunities": 6,
+      "not_executable": 0,
+      "profit_factor": 3.0,
+      "sum_r": 2.0,
+      "unfilled": 2,
+      "win_rate": 0.667,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 0.05,
+     "median_technical_risk_pips": 2.7,
+     "observe_only_here": false,
+     "thinned": 6
+    },
+    "USDJPY": {
+     "ladder_cost": {
+      "censored": 0,
+      "ci95": null,
+      "mean_r": -1.0,
+      "n_filled": 1,
+      "n_opportunities": 1,
+      "not_executable": 0,
+      "profit_factor": 0.0,
+      "sum_r": -1.0,
+      "unfilled": 0,
+      "win_rate": 0.0,
+      "worst_r": -1.0
+     },
+     "median_room_cover": 0.03,
+     "median_technical_risk_pips": 1.9,
+     "observe_only_here": false,
+     "thinned": 1
+    },
+    "XAU": {
+     "ladder_cost": {
+      "censored": 0,
+      "ci95": null,
+      "mean_r": 1.1,
+      "n_filled": 2,
+      "n_opportunities": 2,
+      "not_executable": 0,
+      "profit_factor": null,
+      "sum_r": 2.2,
+      "unfilled": 0,
+      "win_rate": 1.0,
+      "worst_r": 0.8
+     },
+     "median_room_cover": 0.16,
+     "median_technical_risk_pips": 27.0,
+     "observe_only_here": false,
+     "thinned": 2
+    }
+   },
+   "components": [
+    "confluence",
+    "reaction"
+   ],
+   "configured_symbols": null,
+   "invariant_violations": {},
+   "median_entry_width_pips": 2.0,
+   "median_repeats": 1,
+   "median_room_cover": 0.05,
+   "median_technical_risk_pips": 3.1,
+   "median_technical_rr": 0.26,
+   "quality": {
+    "distinct_values_1pct": 1,
+    "max": 1,
+    "median": 1,
+    "min": 1
+   },
+   "quality_vs_hypothetical_r": {
+    "spearman": null,
+    "spearman_v2_raw": -0.367,
+    "terciles_of_quality": {},
+    "terciles_of_v2_raw": {}
+   },
+   "share_room_cover_below_1": 1.0,
+   "share_technical_rr_below_1": 1.0,
+   "simulation": {
+    "ladder_cost": {
+     "all": {
+      "censored": 1,
+      "ci95": [
+       -0.229,
+       1.243
+      ],
+      "mean_r": 0.529,
+      "n_filled": 7,
+      "n_opportunities": 11,
+      "not_executable": 0,
+      "profit_factor": 2.85,
+      "sum_r": 3.7,
+      "unfilled": 3,
+      "win_rate": 0.714,
+      "worst_r": -1.0
+     },
+     "dev": {
+      "censored": 0,
+      "ci95": [
+       -0.45,
+       1.183
+      ],
+      "mean_r": 0.367,
+      "n_filled": 6,
+      "n_opportunities": 7,
+      "not_executable": 0,
+      "profit_factor": 2.1,
+      "sum_r": 2.2,
+      "unfilled": 1,
+      "win_rate": 0.667,
+      "worst_r": -1.0
+     },
+     "oos": {
+      "censored": 1,
+      "ci95": null,
+      "mean_r": 1.5,
+      "n_filled": 1,
+      "n_opportunities": 4,
+      "not_executable": 0,
+      "profit_factor": null,
+      "sum_r": 1.5,
+      "unfilled": 2,
+      "win_rate": 1.0,
+      "worst_r": 1.5
+     }
+    },
+    "ladder_no_cost": {
+     "all": {
+      "censored": 1,
+      "ci95": [
+       -0.3,
+       1.137
+      ],
+      "mean_r": 0.525,
+      "n_filled": 8,
+      "n_opportunities": 11,
+      "not_executable": 0,
+      "profit_factor": 3.1,
+      "sum_r": 4.2,
+      "unfilled": 2,
+      "win_rate": 0.75,
+      "worst_r": -1.0
+     }
+    },
+    "oneR_cost": {
+     "all": {
+      "censored": 0,
+      "ci95": [
+       -0.0,
+       1.0
+      ],
+      "mean_r": 0.5,
+      "n_filled": 8,
+      "n_opportunities": 11,
+      "not_executable": 0,
+      "profit_factor": 3.0,
+      "sum_r": 4.0,
+      "unfilled": 3,
+      "win_rate": 0.75,
+      "worst_r": -1.0
+     },
+     "dev": {
+      "censored": 0,
+      "ci95": [
+       -0.333,
+       1.0
+      ],
+      "mean_r": 0.333,
+      "n_filled": 6,
+      "n_opportunities": 7,
+      "not_executable": 0,
+      "profit_factor": 2.0,
+      "sum_r": 2.0,
+      "unfilled": 1,
+      "win_rate": 0.667,
+      "worst_r": -1.0
+     },
+     "oos": {
+      "censored": 0,
+      "ci95": null,
+      "mean_r": 1.0,
+      "n_filled": 2,
+      "n_opportunities": 4,
+      "not_executable": 0,
+      "profit_factor": null,
+      "sum_r": 2,
+      "unfilled": 2,
+      "win_rate": 1.0,
+      "worst_r": 1
+     }
+    },
+    "twoR_cost": {
+     "all": {
+      "censored": 1,
+      "ci95": [
+       -0.143,
+       1.571
+      ],
+      "mean_r": 0.714,
+      "n_filled": 7,
+      "n_opportunities": 11,
+      "not_executable": 0,
+      "profit_factor": 2.67,
+      "sum_r": 5.0,
+      "unfilled": 3,
+      "win_rate": 0.571,
+      "worst_r": -1.0
+     },
+     "dev": {
+      "censored": 0,
+      "ci95": [
+       -0.5,
+       1.5
+      ],
+      "mean_r": 0.5,
+      "n_filled": 6,
+      "n_opportunities": 7,
+      "not_executable": 0,
+      "profit_factor": 2.0,
+      "sum_r": 3.0,
+      "unfilled": 1,
+      "win_rate": 0.5,
+      "worst_r": -1.0
+     },
+     "oos": {
+      "censored": 1,
+      "ci95": null,
+      "mean_r": 2.0,
+      "n_filled": 1,
+      "n_opportunities": 4,
+      "not_executable": 0,
+      "profit_factor": null,
+      "sum_r": 2,
+      "unfilled": 2,
+      "win_rate": 1.0,
+      "worst_r": 2
+     }
+    }
+   },
+   "stop_within_cap_share": 1.0,
+   "thinned_episodes": 11,
+   "unique_confirmed": 17,
+   "unique_resting_observations": 0,
+   "version": "v3"
+  }
+ },
+ "seed": 20261014,
+ "strategy_matrix": {
+  "box_breakout": {
+   "confirmed_defects": [
+    "Overall saturates; FX room cover 0.35-0.58 (box measured move shorter than the executable stop)."
+   ],
+   "enabled": true,
+   "enabled_instruments": [
+    "EURUSD",
+    "GBPJPY",
+    "GBPUSD",
+    "USDJPY",
+    "XAU"
+   ],
+   "execution_compatibility": {
+    "median_room_cover": 0.59,
+    "median_technical_rr": 1.38,
+    "share_room_cover_below_1": 0.72,
+    "share_technical_rr_below_1": 0.303
+   },
+   "final_recommendation": "RETAIN",
+   "independent_review_status": "pending",
+   "observe_only_instruments": [],
+   "owner_approval_required": false,
+   "prior_certification": "docs/strategies/box_breakout.md",
+   "quality_formula": {
+    "class": "stars_over_3",
+    "note": ""
+   },
+   "rationale": "Replay +0.10R (OOS -0.06R), neither significant.",
+   "real_trade_sample_size": {
+    "r_known": 1,
+    "trades": 2
+   },
+   "realized_r_evidence": {
+    "ci95": null,
+    "mean_r": -1.0,
+    "stop_rate": 0.5,
+    "sum_r": -1.0,
+    "win_rate": 0.0
+   },
+   "recommendation_scope": "all instruments; re-audit with more trades (2 production trades)",
+   "replay_evidence": {
+    "ci95": [
+     -0.185,
+     0.378
+    ],
+    "filled": 87,
+    "mean_r": 0.099,
+    "oos_mean_r": -0.064,
+    "opportunities": 96
+   },
+   "strategy_id": "box_breakout",
+   "technical_thesis": "Breakout of a consolidation box; target the measured move.",
+   "validation_conditions": "Box integrity, close beyond, reaction.",
+   "verdicts": {
+    "evidence": "INSUFFICIENT",
+    "execution": "PARTIAL",
+    "performance": "UNPROVEN",
+    "technical": "PASS"
+   },
+   "version": "v3"
+  },
+  "break_retest": {
+   "confirmed_defects": [
+    "Quality constant at 0.75: it cannot rank or be calibrated."
+   ],
+   "enabled": true,
+   "enabled_instruments": [
+    "EURUSD",
+    "GBPJPY",
+    "GBPUSD",
+    "USDJPY",
+    "XAU"
+   ],
+   "execution_compatibility": {
+    "median_room_cover": 0.97,
+    "median_technical_rr": 1.57,
+    "share_room_cover_below_1": 0.522,
+    "share_technical_rr_below_1": 0.0
+   },
+   "final_recommendation": "RETAIN",
+   "independent_review_status": "pending",
+   "observe_only_instruments": [],
+   "owner_approval_required": false,
+   "prior_certification": "docs/strategies/break_retest.md (test/brreplay)",
+   "quality_formula": {
+    "class": "constant",
+    "note": "Overall = 0.75 on every setup; 14 measured components published"
+   },
+   "rationale": "Replay -0.26R (interval spans zero, n=36, OOS -0.32R) is weak, not decisive.",
+   "real_trade_sample_size": {
+    "r_known": 2,
+    "trades": 3
+   },
+   "realized_r_evidence": {
+    "ci95": null,
+    "mean_r": -0.33,
+    "stop_rate": 0.333,
+    "sum_r": -0.7,
+    "win_rate": 0.5
+   },
+   "recommendation_scope": "all instruments; replace the constant with a measured function in the quality reconstruction",
+   "replay_evidence": {
+    "ci95": [
+     -0.592,
+     0.114
+    ],
+    "filled": 36,
+    "mean_r": -0.261,
+    "oos_mean_r": -0.315,
+    "opportunities": 45
+   },
+   "strategy_id": "break_retest",
+   "technical_thesis": "Accepted break of a key level or trendline, then a fresh retest and rejection.",
+   "validation_conditions": "Acceptance closes, retest depth and age, rejection strength.",
+   "verdicts": {
+    "evidence": "WEAK",
+    "execution": "PARTIAL",
+    "performance": "NEGATIVE",
+    "technical": "PASS"
+   },
+   "version": "v3"
+  },
+  "confluence_zone": {
+   "confirmed_defects": [
+    "Overall saturates (0.667 / 1.0 on confirmed setups).",
+    "XAU and GBPJPY replay intervals are entirely below zero (see results JSON)."
+   ],
+   "enabled": true,
+   "enabled_instruments": [
+    "EURUSD",
+    "GBPJPY",
+    "GBPUSD",
+    "USDJPY",
+    "XAU"
+   ],
+   "execution_compatibility": {
+    "median_room_cover": 2.11,
+    "median_technical_rr": 2.8,
+    "share_room_cover_below_1": 0.0,
+    "share_technical_rr_below_1": 0.0
+   },
+   "final_recommendation": "RETAIN_RESTRICTED",
+   "independent_review_status": "pending",
+   "observe_only_instruments": [],
+   "owner_approval_required": true,
+   "prior_certification": "docs/strategies/confluence-zone-v3-certification.md",
+   "quality_formula": {
+    "class": "stars_over_3",
+    "note": "independent_fact_count and overlap_width_atr published as components"
+   },
+   "rationale": "Technically sound geometry (room cover 2.0x) but XAU -0.51R [-0.69, -0.29] n=52 and GBPJPY -0.47R [-0.73, -0.08] n=55 in replay, OOS -0.51R; the v3 certification already recommended XAU containment (patch prepared there).",
+   "real_trade_sample_size": {
+    "r_known": 9,
+    "trades": 29
+   },
+   "realized_r_evidence": {
+    "ci95": [
+     -0.728,
+     0.604
+    ],
+    "mean_r": -0.107,
+    "stop_rate": 0.483,
+    "sum_r": -1.0,
+    "win_rate": 0.444
+   },
+   "recommendation_scope": "propose observe-only on XAU and GBPJPY; keep EURUSD, GBPUSD, USDJPY live",
+   "replay_evidence": {
+    "ci95": [
+     -0.447,
+     -0.005
+    ],
+    "filled": 190,
+    "mean_r": -0.236,
+    "oos_mean_r": -0.514,
+    "opportunities": 214
+   },
+   "strategy_id": "confluence_zone",
+   "technical_thesis": "Several independent canonical structures support one price region and a measured reaction confirms it.",
+   "validation_conditions": ">= minimum_facts independent facts; overlap width in ATR; reaction measured.",
+   "verdicts": {
+    "evidence": "MODERATE",
+    "execution": "COMPATIBLE",
+    "performance": "NEGATIVE",
+    "technical": "PASS"
+   },
+   "version": "v3"
+  },
+  "crt": {
+   "confirmed_defects": [
+    "Rare: 3 replay setups in the window, 1 production trade."
+   ],
+   "enabled": true,
+   "enabled_instruments": [
+    "EURUSD",
+    "GBPJPY",
+    "GBPUSD",
+    "USDJPY",
+    "XAU"
+   ],
+   "execution_compatibility": {
+    "median_room_cover": 2.47,
+    "median_technical_rr": 4.21,
+    "share_room_cover_below_1": 0.0,
+    "share_technical_rr_below_1": 0.0
+   },
+   "final_recommendation": "RETAIN",
+   "independent_review_status": "pending",
+   "observe_only_instruments": [],
+   "owner_approval_required": false,
+   "prior_certification": "docs/strategies/crt.md (test/crtreplay)",
+   "quality_formula": {
+    "class": "stars_over_3",
+    "note": "measured components published"
+   },
+   "rationale": "Sound geometry (room cover 2.5x), no evidence either way; a rare setup is not a reason to retire it.",
+   "real_trade_sample_size": {
+    "r_known": 0,
+    "trades": 1
+   },
+   "realized_r_evidence": null,
+   "recommendation_scope": "all instruments; re-audit when >= 30 setups exist",
+   "replay_evidence": {
+    "ci95": null,
+    "filled": 0,
+    "mean_r": null,
+    "oos_mean_r": null,
+    "opportunities": 3
+   },
+   "strategy_id": "crt",
+   "technical_thesis": "Closed H1 range, M5 sweep and reclaim, structure shift; target the opposite H1 range.",
+   "validation_conditions": "Sweep depth, reclaim depth, MSS displacement measured.",
+   "verdicts": {
+    "evidence": "INSUFFICIENT",
+    "execution": "COMPATIBLE",
+    "performance": "UNPROVEN",
+    "technical": "PASS"
+   },
+   "version": "v3"
+  },
+  "demand": {
+   "confirmed_defects": [
+    "Technical RR < 1 in 62% of setups; room cover median 0.52.",
+    "Replay interval is below zero pooled (-0.18R [-0.30, -0.06]) and on EURUSD."
+   ],
+   "enabled": true,
+   "enabled_instruments": [
+    "EURUSD",
+    "GBPJPY",
+    "GBPUSD",
+    "USDJPY",
+    "XAU"
+   ],
+   "execution_compatibility": {
+    "median_room_cover": 0.52,
+    "median_technical_rr": 0.77,
+    "share_room_cover_below_1": 0.78,
+    "share_technical_rr_below_1": 0.622
+   },
+   "final_recommendation": "RECONSTRUCT",
+   "independent_review_status": "pending",
+   "observe_only_instruments": [],
+   "owner_approval_required": true,
+   "prior_certification": "test/techniqueparity golden",
+   "quality_formula": {
+    "class": "stars_over_3",
+    "note": "as supply"
+   },
+   "rationale": "Same geometry defect as supply, and a worse hypothetical outcome; production demand is -0.09R on 7 R-known trades and supply -1.0R on 5 (too few to act on alone).",
+   "real_trade_sample_size": {
+    "r_known": 7,
+    "trades": 24
+   },
+   "realized_r_evidence": {
+    "ci95": [
+     -1.0,
+     1.035
+    ],
+    "mean_r": -0.086,
+    "stop_rate": 0.458,
+    "sum_r": -0.6,
+    "win_rate": 0.286
+   },
+   "recommendation_scope": "geometry; owner may additionally choose observe-only on EURUSD (interval below zero)",
+   "replay_evidence": {
+    "ci95": [
+     -0.299,
+     -0.055
+    ],
+    "filled": 760,
+    "mean_r": -0.179,
+    "oos_mean_r": -0.269,
+    "opportunities": 1019
+   },
+   "strategy_id": "demand",
+   "technical_thesis": "A canonical demand zone is retested and rejected.",
+   "validation_conditions": "As supply.",
+   "verdicts": {
+    "evidence": "MODERATE",
+    "execution": "PARTIAL",
+    "performance": "NEGATIVE",
+    "technical": "PASS_WITH_DEFECTS"
+   },
+   "version": "v2"
+  },
+  "fade_scalp": {
+   "confirmed_defects": [
+    "Replay and production disagree: replay -0.22R [-0.40, -0.04] (EURUSD -0.66R); production +0.99R on 8 R-known trades and +0.39R from the exit paths of all 18."
+   ],
+   "enabled": true,
+   "enabled_instruments": [
+    "EURUSD",
+    "GBPJPY",
+    "GBPUSD",
+    "USDJPY",
+    "XAU"
+   ],
+   "execution_compatibility": {
+    "median_room_cover": 1.18,
+    "median_technical_rr": 2.0,
+    "share_room_cover_below_1": 0.428,
+    "share_technical_rr_below_1": 0.005
+   },
+   "final_recommendation": "RETAIN",
+   "independent_review_status": "pending",
+   "observe_only_instruments": [],
+   "owner_approval_required": false,
+   "prior_certification": "docs/strategies/fade_scalp.md",
+   "quality_formula": {
+    "class": "continuous",
+    "note": "three terms, 4 distinct values"
+   },
+   "rationale": "Eight trades cannot outvote 117 replay episodes, and 117 hypothetical episodes cannot outvote real fills. Collect more before acting.",
+   "real_trade_sample_size": {
+    "r_known": 8,
+    "trades": 18
+   },
+   "realized_r_evidence": {
+    "ci95": [
+     0.247,
+     1.863
+    ],
+    "mean_r": 0.99,
+    "stop_rate": 0.333,
+    "sum_r": 7.9,
+    "win_rate": 0.875
+   },
+   "recommendation_scope": "all instruments; EURUSD flagged for the owner (replay interval below zero, 2 production trades)",
+   "replay_evidence": {
+    "ci95": [
+     -0.402,
+     -0.042
+    ],
+    "filled": 117,
+    "mean_r": -0.222,
+    "oos_mean_r": -0.286,
+    "opportunities": 151
+   },
+   "strategy_id": "fade_scalp",
+   "technical_thesis": "Fade a liquidity-run extreme with a measured reaction (scalp).",
+   "validation_conditions": "Location, liquidity grade, reaction.",
+   "verdicts": {
+    "evidence": "WEAK",
+    "execution": "PARTIAL",
+    "performance": "CONFLICTING",
+    "technical": "PASS"
+   },
+   "version": "v2"
+  },
+  "flip_zone": {
+   "confirmed_defects": [
+    "28% of first targets are fixed reward:risk, not a technical objective.",
+    "XAU replay interval below zero (-0.37R [-0.61, -0.08], n=40)."
+   ],
+   "enabled": true,
+   "enabled_instruments": [
+    "EURUSD",
+    "GBPJPY",
+    "GBPUSD",
+    "USDJPY",
+    "XAU"
+   ],
+   "execution_compatibility": {
+    "median_room_cover": 0.87,
+    "median_technical_rr": 1.99,
+    "share_room_cover_below_1": 0.556,
+    "share_technical_rr_below_1": 0.041
+   },
+   "final_recommendation": "RETAIN_RESTRICTED",
+   "independent_review_status": "pending",
+   "observe_only_instruments": [],
+   "owner_approval_required": true,
+   "prior_certification": "docs/strategies/flip_zone.md",
+   "quality_formula": {
+    "class": "stars_over_3",
+    "note": "touches factor is 0 for every setup in the replay"
+   },
+   "rationale": "FX is flat to positive (EURUSD +0.32R), XAU is the clear loss.",
+   "real_trade_sample_size": {
+    "r_known": 2,
+    "trades": 3
+   },
+   "realized_r_evidence": {
+    "ci95": null,
+    "mean_r": -0.248,
+    "stop_rate": 0.667,
+    "sum_r": -0.5,
+    "win_rate": 0.5
+   },
+   "recommendation_scope": "propose observe-only on XAU; FX unchanged",
+   "replay_evidence": {
+    "ci95": [
+     -0.22,
+     0.1
+    ],
+    "filled": 151,
+    "mean_r": -0.06,
+    "oos_mean_r": 0.073,
+    "opportunities": 197
+   },
+   "strategy_id": "flip_zone",
+   "technical_thesis": "A broken zone changes role and the retest holds.",
+   "validation_conditions": "Prior zone broken with acceptance; retest and rejection.",
+   "verdicts": {
+    "evidence": "MODERATE",
+    "execution": "PARTIAL",
+    "performance": "NEGATIVE",
+    "technical": "PASS_WITH_DEFECTS"
+   },
+   "version": "v3"
+  },
+  "fvg": {
+   "confirmed_defects": [
+    "Overall saturates at two values on confirmed setups.",
+    "XAU replay interval below zero (-0.23R, n=102); production FVG -0.27R on 7 R-known trades."
+   ],
+   "enabled": true,
+   "enabled_instruments": [
+    "EURUSD",
+    "GBPJPY",
+    "GBPUSD",
+    "USDJPY",
+    "XAU"
+   ],
+   "execution_compatibility": {
+    "median_room_cover": 0.72,
+    "median_technical_rr": 1.98,
+    "share_room_cover_below_1": 0.637,
+    "share_technical_rr_below_1": 0.17
+   },
+   "final_recommendation": "RETAIN_RESTRICTED",
+   "independent_review_status": "pending",
+   "observe_only_instruments": [],
+   "owner_approval_required": true,
+   "prior_certification": "test/techniqueparity golden",
+   "quality_formula": {
+    "class": "stars_over_3",
+    "note": "fill_quality / gap_strength / relevance are published as components; confirmed setups take only 0.667 or 1.0"
+   },
+   "rationale": "Pooled -0.11R [-0.21, -0.01]; FX is flat, XAU is the loss.",
+   "real_trade_sample_size": {
+    "r_known": 7,
+    "trades": 17
+   },
+   "realized_r_evidence": {
+    "ci95": [
+     -0.857,
+     0.463
+    ],
+    "mean_r": -0.273,
+    "stop_rate": 0.471,
+    "sum_r": -1.9,
+    "win_rate": 0.286
+   },
+   "recommendation_scope": "propose observe-only on XAU; FX unchanged",
+   "replay_evidence": {
+    "ci95": [
+     -0.207,
+     -0.011
+    ],
+    "filled": 503,
+    "mean_r": -0.105,
+    "oos_mean_r": -0.079,
+    "opportunities": 563
+   },
+   "strategy_id": "fvg",
+   "technical_thesis": "A canonical fair-value gap is retested and rejected.",
+   "validation_conditions": "Gap strength, fill quality, relevance; reaction measured.",
+   "verdicts": {
+    "evidence": "MODERATE",
+    "execution": "PARTIAL",
+    "performance": "NEGATIVE",
+    "technical": "PASS"
+   },
+   "version": "v2"
+  },
+  "ifvg": {
+   "confirmed_defects": [
+    "Overall saturates at two values."
+   ],
+   "enabled": true,
+   "enabled_instruments": [
+    "EURUSD",
+    "GBPJPY",
+    "GBPUSD",
+    "USDJPY",
+    "XAU"
+   ],
+   "execution_compatibility": {
+    "median_room_cover": 1.18,
+    "median_technical_rr": 2.0,
+    "share_room_cover_below_1": 0.449,
+    "share_technical_rr_below_1": 0.0
+   },
+   "final_recommendation": "RETAIN",
+   "independent_review_status": "pending",
+   "observe_only_instruments": [],
+   "owner_approval_required": false,
+   "prior_certification": "docs/strategies/ifvg.md (test/ifvgreplay)",
+   "quality_formula": {
+    "class": "stars_over_3",
+    "note": "18 measured components published; Overall = stars/3"
+   },
+   "rationale": "Replay +0.15R (OOS +0.22R) and GBPJPY interval above zero; production -0.08R on 9 R-known trades. Neither side is conclusive.",
+   "real_trade_sample_size": {
+    "r_known": 9,
+    "trades": 15
+   },
+   "realized_r_evidence": {
+    "ci95": [
+     -0.72,
+     0.574
+    ],
+    "mean_r": -0.081,
+    "stop_rate": 0.6,
+    "sum_r": -0.7,
+    "win_rate": 0.444
+   },
+   "recommendation_scope": "all instruments",
+   "replay_evidence": {
+    "ci95": [
+     -0.058,
+     0.393
+    ],
+    "filled": 98,
+    "mean_r": 0.154,
+    "oos_mean_r": 0.217,
+    "opportunities": 113
+   },
+   "strategy_id": "ifvg",
+   "technical_thesis": "A fair-value gap is inverted by a closing price, then retested and rejected.",
+   "validation_conditions": "Own M5 FVG, close beyond it, fresh retest, rejection candle.",
+   "verdicts": {
+    "evidence": "WEAK",
+    "execution": "PARTIAL",
+    "performance": "UNPROVEN",
+    "technical": "PASS"
+   },
+   "version": "v3"
+  },
+  "impulse_pullback": {
+   "confirmed_defects": [
+    "Production: 8 of 12 trades closed as full stops, 3 reached a first target, none the final one; the exit paths bound the mean at -0.68R to -0.59R."
+   ],
+   "enabled": true,
+   "enabled_instruments": [
+    "XAU"
+   ],
+   "execution_compatibility": {
+    "median_room_cover": 1.99,
+    "median_technical_rr": 1.99,
+    "share_room_cover_below_1": 0.0,
+    "share_technical_rr_below_1": 0.0
+   },
+   "final_recommendation": "OBSERVE_ONLY",
+   "independent_review_status": "pending",
+   "observe_only_instruments": [
+    "EURUSD",
+    "GBPJPY",
+    "GBPUSD",
+    "USDJPY",
+    "XAU"
+   ],
+   "owner_approval_required": false,
+   "prior_certification": "docs/strategies/impulse_pullback.md",
+   "quality_formula": {
+    "class": "continuous",
+    "note": "two terms"
+   },
+   "rationale": "Already contained; nothing to enable.",
+   "real_trade_sample_size": {
+    "r_known": 0,
+    "trades": 12
+   },
+   "realized_r_evidence": null,
+   "recommendation_scope": "already observe-only on every instrument; keep, and retire at the next audit unless observed outcomes improve",
+   "replay_evidence": {
+    "ci95": null,
+    "filled": 1,
+    "mean_r": -1.0,
+    "oos_mean_r": -1.0,
+    "opportunities": 1
+   },
+   "strategy_id": "impulse_pullback",
+   "technical_thesis": "Pullback after an M1 impulse (scalp).",
+   "validation_conditions": "Body dominance, displacement.",
+   "verdicts": {
+    "evidence": "WEAK",
+    "execution": "PARTIAL",
+    "performance": "NEGATIVE",
+    "technical": "PASS"
+   },
+   "version": "v3"
+  },
+  "key_level": {
+   "confirmed_defects": [
+    "Overall saturates at two values (0.667 / 1.0): it cannot rank setups.",
+    "Hypothetical R is not monotone in the confluence 'touches' factor (replay, 3 touch buckets)."
+   ],
+   "enabled": true,
+   "enabled_instruments": [
+    "EURUSD",
+    "GBPJPY",
+    "GBPUSD",
+    "USDJPY",
+    "XAU"
+   ],
+   "execution_compatibility": {
+    "median_room_cover": 0.78,
+    "median_technical_rr": 1.5,
+    "share_room_cover_below_1": 0.614,
+    "share_technical_rr_below_1": 0.291
+   },
+   "final_recommendation": "RETAIN",
+   "independent_review_status": "pending",
+   "observe_only_instruments": [],
+   "owner_approval_required": false,
+   "prior_certification": "test/keylevelparity golden",
+   "quality_formula": {
+    "class": "stars_over_3",
+    "note": "touch_quality is published as a component only"
+   },
+   "rationale": "Legacy-parity-proven detector; production +0.53R on 41 R-known trades (CI above zero) but replay is slightly negative over 1,708 episodes; the two disagree, so no enablement change either way.",
+   "real_trade_sample_size": {
+    "r_known": 41,
+    "trades": 95
+   },
+   "realized_r_evidence": {
+    "ci95": [
+     0.11,
+     0.966
+    ],
+    "mean_r": 0.53,
+    "stop_rate": 0.495,
+    "sum_r": 21.7,
+    "win_rate": 0.585
+   },
+   "recommendation_scope": "all instruments; quality score to be treated as non-discriminating until reconstructed",
+   "replay_evidence": {
+    "ci95": [
+     -0.135,
+     -0.04
+    ],
+    "filled": 1708,
+    "mean_r": -0.087,
+    "oos_mean_r": -0.115,
+    "opportunities": 1923
+   },
+   "strategy_id": "key_level",
+   "technical_thesis": "Price reacts at a clustered, role-aware key level; structure and a measured reaction candle confirm it.",
+   "validation_conditions": "Cluster of >=2 touches; reaction candle measured on closed bars; HTF/session context scored by the confluence scorer.",
+   "verdicts": {
+    "evidence": "MODERATE",
+    "execution": "PARTIAL",
+    "performance": "CONFLICTING",
+    "technical": "PASS"
+   },
+   "version": "v3"
+  },
+  "liquidity_sweep": {
+   "confirmed_defects": [],
+   "enabled": true,
+   "enabled_instruments": [
+    "EURUSD",
+    "GBPJPY",
+    "GBPUSD",
+    "USDJPY",
+    "XAU"
+   ],
+   "execution_compatibility": {
+    "median_room_cover": 0.96,
+    "median_technical_rr": 1.98,
+    "share_room_cover_below_1": 0.5,
+    "share_technical_rr_below_1": 0.0
+   },
+   "final_recommendation": "RETAIN",
+   "independent_review_status": "pending",
+   "observe_only_instruments": [
+    "XAU"
+   ],
+   "owner_approval_required": false,
+   "prior_certification": "docs/strategies/liquidity_sweep.md",
+   "quality_formula": {
+    "class": "continuous",
+    "note": "19 distinct values"
+   },
+   "rationale": "21 production trades, 0 with a recorded R; exit-path counts are near break-even; replay n=22.",
+   "real_trade_sample_size": {
+    "r_known": 0,
+    "trades": 21
+   },
+   "realized_r_evidence": null,
+   "recommendation_scope": "XAU stays observe-only as configured; no change",
+   "replay_evidence": {
+    "ci95": [
+     -0.737,
+     0.25
+    ],
+    "filled": 22,
+    "mean_r": -0.25,
+    "oos_mean_r": -0.063,
+    "opportunities": 23
+   },
+   "strategy_id": "liquidity_sweep",
+   "technical_thesis": "Liquidity is swept, reclaimed and rejected with displacement.",
+   "validation_conditions": "Reclaim, rejection displacement.",
+   "verdicts": {
+    "evidence": "INSUFFICIENT",
+    "execution": "PARTIAL",
+    "performance": "UNPROVEN",
+    "technical": "PASS"
+   },
+   "version": "v3"
+  },
+  "momentum_ride": {
+   "confirmed_defects": [],
+   "enabled": true,
+   "enabled_instruments": [
+    "EURUSD",
+    "GBPJPY",
+    "GBPUSD",
+    "USDJPY",
+    "XAU"
+   ],
+   "execution_compatibility": {
+    "median_room_cover": 2.58,
+    "median_technical_rr": 6.59,
+    "share_room_cover_below_1": 0.136,
+    "share_technical_rr_below_1": 0.0
+   },
+   "final_recommendation": "RETAIN",
+   "independent_review_status": "pending",
+   "observe_only_instruments": [],
+   "owner_approval_required": false,
+   "prior_certification": "docs/strategies/momentum_ride.md",
+   "quality_formula": {
+    "class": "continuous",
+    "note": "four measured terms, 24 distinct values"
+   },
+   "rationale": "Replay +0.22R n=29 with wide interval; room cover median 2.6x.",
+   "real_trade_sample_size": null,
+   "realized_r_evidence": null,
+   "recommendation_scope": "all instruments; no production trades exist",
+   "replay_evidence": {
+    "ci95": [
+     -0.197,
+     0.7
+    ],
+    "filled": 29,
+    "mean_r": 0.221,
+    "oos_mean_r": -0.0,
+    "opportunities": 41
+   },
+   "strategy_id": "momentum_ride",
+   "technical_thesis": "Continuation after displacement with structural break and continuity.",
+   "validation_conditions": "Displacement, continuity, location, structural break.",
+   "verdicts": {
+    "evidence": "INSUFFICIENT",
+    "execution": "COMPATIBLE",
+    "performance": "UNPROVEN",
+    "technical": "PASS"
+   },
+   "version": "v2"
+  },
+  "order_block": {
+   "confirmed_defects": [
+    "Overall saturates at two values on confirmed setups.",
+    "EURUSD and GBPJPY replay intervals are below zero (n=45 / 56)."
+   ],
+   "enabled": true,
+   "enabled_instruments": [
+    "EURUSD",
+    "GBPJPY",
+    "GBPUSD",
+    "USDJPY",
+    "XAU"
+   ],
+   "execution_compatibility": {
+    "median_room_cover": 0.73,
+    "median_technical_rr": 1.71,
+    "share_room_cover_below_1": 0.627,
+    "share_technical_rr_below_1": 0.213
+   },
+   "final_recommendation": "RETAIN_RESTRICTED",
+   "independent_review_status": "pending",
+   "observe_only_instruments": [],
+   "owner_approval_required": true,
+   "prior_certification": "test/techniqueparity golden",
+   "quality_formula": {
+    "class": "stars_over_3",
+    "note": "freshness / relevance / zone-strength qualities are published as components; confirmed setups take only 0.667 or 1.0"
+   },
+   "rationale": "Pooled -0.16R [-0.32, 0.00]; positive only on XAU/USDJPY and not significantly.",
+   "real_trade_sample_size": {
+    "r_known": 2,
+    "trades": 3
+   },
+   "realized_r_evidence": {
+    "ci95": null,
+    "mean_r": -0.164,
+    "stop_rate": 0.667,
+    "sum_r": -0.3,
+    "win_rate": 0.5
+   },
+   "recommendation_scope": "propose observe-only on EURUSD and GBPJPY; XAU and USDJPY unchanged",
+   "replay_evidence": {
+    "ci95": [
+     -0.317,
+     -0.0
+    ],
+    "filled": 268,
+    "mean_r": -0.16,
+    "oos_mean_r": -0.256,
+    "opportunities": 278
+   },
+   "strategy_id": "order_block",
+   "technical_thesis": "A canonical order-block zone is retested and rejected.",
+   "validation_conditions": "Zone strength, freshness and relevance scored; reaction measured.",
+   "verdicts": {
+    "evidence": "MODERATE",
+    "execution": "PARTIAL",
+    "performance": "NEGATIVE",
+    "technical": "PASS"
+   },
+   "version": "v2"
+  },
+  "range_edge": {
+   "confirmed_defects": [
+    "FX: technical target is 0.27-0.30x the executable stop (median room cover); 99-100% of FX setups (XAU: 16%) have the fixed TP1 beyond the strategy's own objective.",
+    "Quality is not monotone in outcome: production Spearman -0.18, middle tercile -0.87R.",
+    "Production -0.19R on 62 R-known trades (CI -0.50 to +0.17); XAU replay -0.22R, interval below zero."
+   ],
+   "enabled": true,
+   "enabled_instruments": [
+    "EURUSD",
+    "GBPJPY",
+    "GBPUSD",
+    "USDJPY",
+    "XAU"
+   ],
+   "execution_compatibility": {
+    "median_room_cover": 0.32,
+    "median_technical_rr": 1.57,
+    "share_room_cover_below_1": 0.855,
+    "share_technical_rr_below_1": 0.173
+   },
+   "final_recommendation": "RETAIN_RESTRICTED",
+   "independent_review_status": "pending",
+   "observe_only_instruments": [],
+   "owner_approval_required": true,
+   "prior_certification": "docs/strategies/range-edge-v3-certification.md",
+   "quality_formula": {
+    "class": "continuous",
+    "note": "mean of six measured terms"
+   },
+   "rationale": "The v3 detector is technically correct. The residual contradiction is execution: a 2-4 pip technical risk cannot honestly carry the 12-22 pip stop the executor places on FX. That is an owner decision about the FX scalp floor, not a detector bug.",
+   "real_trade_sample_size": {
+    "r_known": 62,
+    "trades": 95
+   },
+   "realized_r_evidence": {
+    "ci95": [
+     -0.483,
+     0.178
+    ],
+    "mean_r": -0.19,
+    "stop_rate": 0.558,
+    "sum_r": -11.8,
+    "win_rate": 0.403
+   },
+   "recommendation_scope": "propose observe-only on FX (geometry cannot pay for the 12-22 pip FX scalp floors); XAU kept under review, no tuning",
+   "replay_evidence": {
+    "ci95": [
+     -0.207,
+     0.021
+    ],
+    "filled": 349,
+    "mean_r": -0.09,
+    "oos_mean_r": -0.245,
+    "opportunities": 433
+   },
+   "strategy_id": "range_edge",
+   "technical_thesis": "A confirmed break of an M5 range edge fails and reclaims; target the range equilibrium.",
+   "validation_conditions": "v3 integrity assessment (break, reclaim depth, rejection, room).",
+   "verdicts": {
+    "evidence": "MODERATE",
+    "execution": "INCOMPATIBLE",
+    "performance": "NEGATIVE",
+    "technical": "PASS"
+   },
+   "version": "v3"
+  },
+  "range_sweep": {
+   "confirmed_defects": [
+    "The 'range' is simply the 24-bar high/low: nothing shows price respected those edges (no touch count, prior reaction or swing).",
+    "A touch within the buffer is accepted as the sweep: price need not trade beyond the level, so no liquidity need have been taken.",
+    "Sweep and reclaim may be one M1 candle, so no later confirmation exists.",
+    "The entry band [edge - buffer, edge + 2 x buffer] surrounds the level, not the reclaim; the stop is measured from the worst fill, widened to the floor or refused above the cap.",
+    "The target is a fixed 2R (else 1R) multiple accepted when it fits the room to the opposite edge, not a technical objective; the earlier revision published the opposite M5 range edge (30 of the 39 production trades), a median 3.7x the executed stop, so published target and executed ladder disagreed.",
+    "The specification (range_sweep.md) describes canonical M5 range state, an excursion beyond the edge by an ATR distance and the opposite edge as target; the code implements none of the three.",
+    "Production: 26 of 38 closed trades were full stops (68%) and 6 reached the final target; the exit paths bound the mean at -0.41R to -0.37R per trade (95% cluster interval of the midpoint -0.62 to -0.11)."
+   ],
+   "enabled": true,
+   "enabled_instruments": [
+    "XAU"
+   ],
+   "execution_compatibility": {
+    "median_room_cover": 1.99,
+    "median_technical_rr": 1.99,
+    "share_room_cover_below_1": 0.1,
+    "share_technical_rr_below_1": 0.1
+   },
+   "final_recommendation": "RETIRE",
+   "independent_review_status": "pending",
+   "observe_only_instruments": [],
+   "owner_approval_required": true,
+   "prior_certification": "docs/strategies/range_sweep.md",
+   "quality_formula": {
+    "class": "continuous",
+    "note": "reclaim close distance from the edge over M5 ATR (reclaim component is the constant 1); all 39 production values are between 0.01 and 0.38, so it never expresses a strong setup"
+   },
+   "rationale": "It names a liquidity sweep but accepts a touch, its quality score cannot express confidence, and the realised exit paths bound a loss with an interval that excludes zero. The one defensible idea (a genuine sweep of a confirmed range) overlaps Liquidity Sweep and CRT, which the audit retains. Parity with the Python lane proves the port, not the thesis.",
+   "real_trade_sample_size": {
+    "r_known": 6,
+    "trades": 39
+   },
+   "realized_r_evidence": {
+    "ci95": [
+     -1.0,
+     1.637
+    ],
+    "mean_r": -0.075,
+    "stop_rate": 0.667,
+    "sum_r": -0.5,
+    "win_rate": 0.333
+   },
+   "recommendation_scope": "propose retirement of the strategy; keep historical attribution and journal decoding; do not delete trade data",
+   "replay_evidence": {
+    "ci95": [
+     -0.5,
+     0.5
+    ],
+    "filled": 9,
+    "mean_r": -0.111,
+    "oos_mean_r": -0.333,
+    "opportunities": 9
+   },
+   "strategy_id": "range_sweep",
+   "technical_thesis": "Liquidity above/below an M5 range is swept and reclaimed on M1.",
+   "validation_conditions": "(as implemented) range = high/low of the last 24 M5 bars, >= 25 pips wide; a recent M1 bar within a buffer of the edge closes back at or inside it in the trade direction; dealing-range position agrees. Bar-for-bar port of the frozen Python scalp lane.",
+   "verdicts": {
+    "evidence": "MODERATE",
+    "execution": "PARTIAL",
+    "performance": "NEGATIVE",
+    "technical": "FAIL"
+   },
+   "version": "v3"
+  },
+  "scalp_breakout_retest": {
+   "confirmed_defects": [
+    "First target is a fixed 1R / 2R label (scalp_1to1 68%, scalp_1to2 32%), not a technical objective.",
+    "Replay -0.41R (n=17, interval spans zero) disagrees with production +0.54R (7 R-known trades)."
+   ],
+   "enabled": true,
+   "enabled_instruments": [
+    "XAU"
+   ],
+   "execution_compatibility": {
+    "median_room_cover": 1.0,
+    "median_technical_rr": 1.0,
+    "share_room_cover_below_1": 0.632,
+    "share_technical_rr_below_1": 0.632
+   },
+   "final_recommendation": "RECONSTRUCT",
+   "independent_review_status": "pending",
+   "observe_only_instruments": [],
+   "owner_approval_required": true,
+   "prior_certification": "docs/strategies/scalp_breakout_retest.md",
+   "quality_formula": {
+    "class": "continuous",
+    "note": "five measured terms"
+   },
+   "rationale": "The thesis is a real one; the target is the defect that produced Range Sweep's problem. Keep trading it while it is repaired because production is positive.",
+   "real_trade_sample_size": {
+    "r_known": 7,
+    "trades": 10
+   },
+   "realized_r_evidence": {
+    "ci95": [
+     0.287,
+     1.023
+    ],
+    "mean_r": 0.542,
+    "stop_rate": 0.2,
+    "sum_r": 3.8,
+    "win_rate": 0.714
+   },
+   "recommendation_scope": "replace the fixed-R target with a structural one; XAU only, no enablement change",
+   "replay_evidence": {
+    "ci95": [
+     -0.864,
+     0.1
+    ],
+    "filled": 17,
+    "mean_r": -0.412,
+    "oos_mean_r": -0.056,
+    "opportunities": 18
+   },
+   "strategy_id": "scalp_breakout_retest",
+   "technical_thesis": "Break of a level on M1 with acceptance, then a retest.",
+   "validation_conditions": "Acceptance, confirmation, displacement, retest quality and speed.",
+   "verdicts": {
+    "evidence": "WEAK",
+    "execution": "PARTIAL",
+    "performance": "CONFLICTING",
+    "technical": "PASS_WITH_DEFECTS"
+   },
+   "version": "v3"
+  },
+  "session_level": {
+   "confirmed_defects": [
+    "Overall saturates at two values."
+   ],
+   "enabled": true,
+   "enabled_instruments": [
+    "EURUSD",
+    "GBPJPY",
+    "GBPUSD",
+    "USDJPY",
+    "XAU"
+   ],
+   "execution_compatibility": {
+    "median_room_cover": 0.85,
+    "median_technical_rr": 1.95,
+    "share_room_cover_below_1": 0.554,
+    "share_technical_rr_below_1": 0.0
+   },
+   "final_recommendation": "RETAIN",
+   "independent_review_status": "pending",
+   "observe_only_instruments": [],
+   "owner_approval_required": false,
+   "prior_certification": "docs/strategies/session_level.md",
+   "quality_formula": {
+    "class": "stars_over_3",
+    "note": "16 measured components published"
+   },
+   "rationale": "Replay -0.02R, production 0.00R: no edge and no harm demonstrated.",
+   "real_trade_sample_size": {
+    "r_known": 4,
+    "trades": 18
+   },
+   "realized_r_evidence": {
+    "ci95": [
+     -1.0,
+     1.491
+    ],
+    "mean_r": -0.0,
+    "stop_rate": 0.444,
+    "sum_r": -0.0,
+    "win_rate": 0.5
+   },
+   "recommendation_scope": "all instruments",
+   "replay_evidence": {
+    "ci95": [
+     -0.309,
+     0.291
+    ],
+    "filled": 64,
+    "mean_r": -0.017,
+    "oos_mean_r": -0.003,
+    "opportunities": 73
+   },
+   "strategy_id": "session_level",
+   "technical_thesis": "A completed session/period level is swept or reacted to and reclaimed.",
+   "validation_conditions": "Level integrity, period completeness, sweep and reclaim depth in ATR, rejection strength.",
+   "verdicts": {
+    "evidence": "WEAK",
+    "execution": "PARTIAL",
+    "performance": "NEUTRAL",
+    "technical": "PASS"
+   },
+   "version": "v4"
+  },
+  "snap_back": {
+   "confirmed_defects": [],
+   "enabled": true,
+   "enabled_instruments": [
+    "EURUSD",
+    "GBPJPY",
+    "GBPUSD",
+    "USDJPY",
+    "XAU"
+   ],
+   "execution_compatibility": {
+    "median_room_cover": 1.07,
+    "median_technical_rr": 1.99,
+    "share_room_cover_below_1": 0.481,
+    "share_technical_rr_below_1": 0.0
+   },
+   "final_recommendation": "RETAIN",
+   "independent_review_status": "pending",
+   "observe_only_instruments": [],
+   "owner_approval_required": false,
+   "prior_certification": "docs/strategies/snap_back.md",
+   "quality_formula": {
+    "class": "continuous",
+    "note": "three measured terms, 28 distinct values"
+   },
+   "rationale": "Replay +0.03R n=45, one production trade.",
+   "real_trade_sample_size": {
+    "r_known": 0,
+    "trades": 1
+   },
+   "realized_r_evidence": null,
+   "recommendation_scope": "all instruments",
+   "replay_evidence": {
+    "ci95": [
+     -0.272,
+     0.384
+    ],
+    "filled": 45,
+    "mean_r": 0.031,
+    "oos_mean_r": 0.093,
+    "opportunities": 52
+   },
+   "strategy_id": "snap_back",
+   "technical_thesis": "Over-extension from the mean with a measured reaction; mean-reversion target.",
+   "validation_conditions": "Extension, liquidity grade, reaction.",
+   "verdicts": {
+    "evidence": "INSUFFICIENT",
+    "execution": "COMPATIBLE",
+    "performance": "UNPROVEN",
+    "technical": "PASS"
+   },
+   "version": "v2"
+  },
+  "supply": {
+   "confirmed_defects": [
+    "Stop is wider than the strategy's own technical objective in 57% of setups (technical RR < 1).",
+    "Executable room cover median 0.62: the fixed 1R TP1 usually lies beyond the nearest opposing liquidity the strategy itself found."
+   ],
+   "enabled": true,
+   "enabled_instruments": [
+    "EURUSD",
+    "GBPJPY",
+    "GBPUSD",
+    "USDJPY",
+    "XAU"
+   ],
+   "execution_compatibility": {
+    "median_room_cover": 0.62,
+    "median_technical_rr": 0.89,
+    "share_room_cover_below_1": 0.683,
+    "share_technical_rr_below_1": 0.566
+   },
+   "final_recommendation": "RECONSTRUCT",
+   "independent_review_status": "pending",
+   "observe_only_instruments": [],
+   "owner_approval_required": true,
+   "prior_certification": "test/techniqueparity golden",
+   "quality_formula": {
+    "class": "stars_over_3",
+    "note": "reaction and confluence components; discriminates on 8 values through the reaction term"
+   },
+   "rationale": "Detector is legacy-parity-proven and replay is flat (-0.01R); the defect is geometry, not detection.",
+   "real_trade_sample_size": {
+    "r_known": 5,
+    "trades": 15
+   },
+   "realized_r_evidence": {
+    "ci95": [
+     -1.0,
+     -1.0
+    ],
+    "mean_r": -1.0,
+    "stop_rate": 0.667,
+    "sum_r": -5.0,
+    "win_rate": 0.0
+   },
+   "recommendation_scope": "geometry only (target honesty / stop placement); no enablement change",
+   "replay_evidence": {
+    "ci95": [
+     -0.147,
+     0.127
+    ],
+    "filled": 823,
+    "mean_r": -0.014,
+    "oos_mean_r": -0.023,
+    "opportunities": 1014
+   },
+   "strategy_id": "supply",
+   "technical_thesis": "A canonical supply zone is retested and rejected.",
+   "validation_conditions": "Zone from displacement + origin candle, unmitigated; reaction measured; M5 and M15 zones.",
+   "verdicts": {
+    "evidence": "MODERATE",
+    "execution": "PARTIAL",
+    "performance": "NEUTRAL",
+    "technical": "PASS_WITH_DEFECTS"
+   },
+   "version": "v2"
+  },
+  "trendline": {
+   "confirmed_defects": [
+    "Target is entry +/- 2 x |entry - band edge| (twice the distance to the band edge), not twice the published stop: median room cover 0.05, 100% of setups have technical RR < 1 against the executable stop.",
+    "Quality constant."
+   ],
+   "enabled": true,
+   "enabled_instruments": [
+    "EURUSD",
+    "GBPJPY",
+    "GBPUSD",
+    "USDJPY",
+    "XAU"
+   ],
+   "execution_compatibility": {
+    "median_room_cover": 0.05,
+    "median_technical_rr": 0.26,
+    "share_room_cover_below_1": 1.0,
+    "share_technical_rr_below_1": 1.0
+   },
+   "final_recommendation": "RECONSTRUCT",
+   "independent_review_status": "pending",
+   "observe_only_instruments": [],
+   "owner_approval_required": true,
+   "prior_certification": null,
+   "quality_formula": {
+    "class": "constant",
+    "note": "Overall was 1.0 on every replay setup"
+   },
+   "rationale": "The published target is arithmetically unrelated to the published risk.",
+   "real_trade_sample_size": null,
+   "realized_r_evidence": null,
+   "recommendation_scope": "rebuild target and stop from the line itself; propose observe-only until rebuilt (no production trades exist)",
+   "replay_evidence": {
+    "ci95": [
+     -0.229,
+     1.243
+    ],
+    "filled": 7,
+    "mean_r": 0.529,
+    "oos_mean_r": 1.5,
+    "opportunities": 11
+   },
+   "strategy_id": "trendline",
+   "technical_thesis": "Reaction at a fitted trendline band.",
+   "validation_conditions": "Line fit, band, reaction candle.",
+   "verdicts": {
+    "evidence": "INSUFFICIENT",
+    "execution": "INCOMPATIBLE",
+    "performance": "UNPROVEN",
+    "technical": "FAIL"
+   },
+   "version": "v3"
+  }
+ },
+ "window": [
+  1789363500,
+  1791979500
+ ]
+}

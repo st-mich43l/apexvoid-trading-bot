@@ -1,5 +1,7 @@
 # Flip Zone
 
+> **Quality review (2026-10-14): RETAIN_RESTRICTED** (proposal, not applied). Technical PASS_WITH_DEFECTS, execution PARTIAL, performance NEGATIVE, evidence MODERATE. Scope: propose observe-only on XAU; FX unchanged. See [ae-quality-certification.md](ae-quality-certification.md) and [ae-strategy-retirement-review.md](ae-strategy-retirement-review.md). Independent review: pending.
+
 **Contract.** Restored to the frozen `flip_demand_zone_reaction` / `flip_supply_zone_reaction`: a zone carrying the flip source, unmitigated and entry-valid, anchored to a key level whose closed-bar role is broken resistance (BUY) or broken support (SELL), with a confirmed structural reaction. An ordinary zone touch is not a flip. Proven on 91 oracle decisions (`test/legacyparity`).
 
 ## Strategy ID / version

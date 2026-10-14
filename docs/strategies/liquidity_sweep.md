@@ -1,5 +1,7 @@
 # Liquidity Sweep Strategy V2
 
+> **Quality review (2026-10-14): RETAIN** (proposal, not applied). Technical PASS, execution PARTIAL, performance UNPROVEN, evidence INSUFFICIENT. Scope: XAU stays observe-only as configured; no change. See [ae-quality-certification.md](ae-quality-certification.md) and [ae-strategy-retirement-review.md](ae-strategy-retirement-review.md). Independent review: pending.
+
 `liquidity_sweep` consumes a canonical liquidity pool swept and reclaimed on
 the current M5 close. The rejection body must clear its own ATR threshold.
 Entry is the reclaimed pool band, invalidation is beyond the sweep extreme and

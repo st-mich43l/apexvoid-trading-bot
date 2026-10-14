@@ -1,5 +1,7 @@
 # Snap-Back Strategy V2
 
+> **Quality review (2026-10-14): RETAIN** (proposal, not applied). Technical PASS, execution COMPATIBLE, performance UNPROVEN, evidence INSUFFICIENT. Scope: all instruments. See [ae-quality-certification.md](ae-quality-certification.md) and [ae-strategy-retirement-review.md](ae-strategy-retirement-review.md). Independent review: pending.
+
 `snap_back` is a structural reversal after M5 price extends by
 `extension_atr` x ATR (the frozen production value is 1.5) from the latest
 impulse swing, or from the zone when `extension_source` is `zone`. It runs on

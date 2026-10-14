@@ -1,5 +1,7 @@
 # Momentum Ride Strategy V2
 
+> **Quality review (2026-10-14): RETAIN** (proposal, not applied). Technical PASS, execution COMPATIBLE, performance UNPROVEN, evidence INSUFFICIENT. Scope: all instruments; no production trades exist. See [ae-quality-certification.md](ae-quality-certification.md) and [ae-strategy-retirement-review.md](ae-strategy-retirement-review.md). Independent review: pending.
+
 `momentum_ride` runs on the engine's detector-contract frame. It requires a
 non-chop regime, an allowing premium/discount location and a directional
 strong-body close (`minimum_body_fraction`) through the latest opposite swing

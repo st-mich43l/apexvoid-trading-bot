@@ -1,0 +1,55 @@
+diff --git a/config/instruments.yml b/config/instruments.yml
+index 3290a792..ff107c3f 100644
+--- a/config/instruments.yml
++++ b/config/instruments.yml
+@@ -291,6 +291,9 @@ instruments:
+         go_opportunity:
+           observe_only_strategies:
+             - impulse_pullback
++            # PROPOSED by docs/strategies/ae-strategy-retirement-review.md (owner approval required):
++            - order_block
++            - range_edge
+           # The M15 supply/demand extension (#742) is not part of the proven Python
+           # behavior: M15 zones are still detected and published, never traded, until
+           # their execution quality is validated.
+@@ -312,6 +315,8 @@ instruments:
+         go_opportunity:
+           observe_only_strategies:
+             - impulse_pullback
++            # PROPOSED by docs/strategies/ae-strategy-retirement-review.md (owner approval required):
++            - range_edge
+           # The M15 supply/demand extension (#742) is not part of the proven Python
+           # behavior: M15 zones are still detected and published, never traded, until
+           # their execution quality is validated.
+@@ -379,6 +384,10 @@ instruments:
+         go_opportunity:
+           observe_only_strategies:
+             - impulse_pullback
++            # PROPOSED by docs/strategies/ae-strategy-retirement-review.md (owner approval required):
++            - confluence_zone
++            - order_block
++            - range_edge
+           # The M15 supply/demand extension (#742) is not part of the proven Python
+           # behavior: M15 zones are still detected and published, never traded, until
+           # their execution quality is validated.
+@@ -423,6 +432,8 @@ instruments:
+         go_opportunity:
+           observe_only_strategies:
+             - impulse_pullback
++            # PROPOSED by docs/strategies/ae-strategy-retirement-review.md (owner approval required):
++            - range_edge
+           # The M15 supply/demand extension (#742) is not part of the proven Python
+           # behavior: M15 zones are still detected and published, never traded, until
+           # their execution quality is validated.
+@@ -489,6 +500,11 @@ instruments:
+           observe_only_strategies:
+             - liquidity_sweep
+             - impulse_pullback
++            # PROPOSED by docs/strategies/ae-strategy-retirement-review.md (owner approval required):
++            - confluence_zone
++            - flip_zone
++            - fvg
++            - range_sweep
+           # The M15 supply/demand extension (#742) is not part of the proven Python
+           # behavior: M15 zones are still detected and published, never traded, until
+           # their execution quality is validated.
