@@ -119,7 +119,7 @@ only observes it.
 | `crt` | Closed H1 range, M5 sweep and reclaim | M5 (H1 range) | `strategies.crt` (v2) | `LEGACY_PARITY_PROVEN` | live |
 | `flip_zone` | Zone born of an accepted role flip, then a reaction | M5 | `strategies.flip_zone` (v3) | `LEGACY_PARITY_PROVEN` | live |
 | `session_level` | Session, previous-day and previous-week highs and lows, then a reaction | M5 | `strategies.session_level` (v3) | `LEGACY_PARITY_PROVEN` | XAU observe-only; live on FX |
-| `trendline` | Causal trendline with health and live interaction, then a reaction | M5 | `strategies.trendline` (v3) | `LEGACY_PARITY_PROVEN` (few decisions: the gate is narrow) | live |
+| `trendline` | Causal trendline with health and live interaction, then a reaction | M5 | `strategies.trendline` (v4) | `GO_NATIVE_VALIDATED` (target reworked; 7 of 8 oracle decisions) | live |
 | `range_edge` | M5 range context, edge rejection | M5 | `strategies.range_edge` (v2) | `LEGACY_PARITY_PROVEN` | live |
 | `box_breakout` | Accepted break of the regime box, accepting-bar or retest entry | M5 | `strategies.box_breakout` (v3) | `LEGACY_PARITY_PROVEN` | live |
 | `break_retest` | Broken trendline or key level, same-side retest and hold | M5 | `strategies.break_retest` (v2) | `LEGACY_PARITY_PROVEN` | live |
