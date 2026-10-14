@@ -1,10 +1,16 @@
 # Supply
 
-> **Quality review (2026-10-14): RECONSTRUCT** (proposal, not applied). Technical PASS_WITH_DEFECTS, execution PARTIAL, performance NEUTRAL, evidence MODERATE. Scope: geometry only (target honesty / stop placement); no enablement change. See [ae-quality-certification.md](ae-quality-certification.md) and [ae-strategy-retirement-review.md](ae-strategy-retirement-review.md). Independent review: pending.
+> **Quality review (2026-10-14): adjusted in v3.** The audit found technical RR below 1 in most setups and a weak hypothetical result; v3 removes spent zones (below). The geometry finding is unchanged and deliberately not "fixed": it does not separate outcomes in the replay (see below). See [ae-quality-certification.md](ae-quality-certification.md). Independent review: pending.
+
+## Spent zones (v3)
+
+A confirmed reaction on a zone already touched more than `maximum_zone_touches` (2) times no longer publishes; the frozen Python publishers had no such limit (the parameter is opt-in, default 0 = unlimited, and the parity golden still proves the frozen contract with it off). Replay of the 2026-09-14 to 10-14 captures, hypothetical causal fills, per side and half (dev before 2026-10-07 / out of sample after): zones touched 3 or more times -0.06 / -0.21R; touched at most once +0.04 / +0.12R. Hypothetical mean over all filled setups moved from -0.01R to +0.03R, 95% interval [-0.10, +0.17]. The rule was chosen after looking at both halves, so the out-of-sample figure is a consistency check, not an independent test.
+
+What this does not fix: Demand stays negative in the replay in every slice (fresh zones, either timeframe, either half); Supply is flat. A one-month, one-regime sample cannot say whether that is the detector or the month, so no further tuning was made. The technical-RR-below-1 geometry finding was left alone: technical RR does not separate outcomes in the replay (setups with RR below 1 averaged -0.07R, 2 or more -0.12R), so a filter on it would be a logic change without evidence.
 
 ## Strategy ID / version
 
-`supply`, `v2`. Implemented in `analysis-engine/internal/strategy/supply`.
+`supply`, `v3`. Implemented in `analysis-engine/internal/strategy/supply`.
 Algorithm versions this thesis was validated against: `structure=v2`,
 `liquidity=v1`, `zone=v1`, `config=3` (source task §13 — bumps
 independently of those primitives' own versions).

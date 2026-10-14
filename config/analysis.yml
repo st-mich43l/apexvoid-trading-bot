@@ -221,8 +221,13 @@ analysis:
       minimum_reward_risk: 1.15
       expiry_hours: 12.0
     supply:
-      version: v2
+      version: v3
       enabled: true
+      # A zone already touched more than this many times is spent and does not publish
+      # (0 = no limit, the frozen Python publishers' behavior). 2026-10 replay, dev and
+      # out-of-sample halves: supply setups on zones touched 3+ times averaged -0.06R / -0.21R,
+      # fresher zones +0.04R / +0.12R (hypothetical; docs/strategies/supply.md).
+      maximum_zone_touches: 2
       minimum_strength: 0.4
       invalidation_buffer_atr: 0.5
       minimum_target_distance_atr: 1.0
@@ -240,8 +245,11 @@ analysis:
       # reaction confirmation, entry validity and stop rules are unchanged.
       higher_timeframes: [M15]
     demand:
-      version: v2
+      version: v3
       enabled: true
+      # See supply. Demand setups on zones touched 3+ times averaged -0.31R / -0.39R (dev / out of
+      # sample) against -0.08R / -0.22R on zones touched at most once.
+      maximum_zone_touches: 2
       minimum_strength: 0.4
       invalidation_buffer_atr: 0.5
       minimum_target_distance_atr: 1.0

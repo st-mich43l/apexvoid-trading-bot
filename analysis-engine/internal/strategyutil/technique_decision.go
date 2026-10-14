@@ -189,6 +189,8 @@ type TechniqueSource struct {
 	HigherInstances []techniquezone.Instance
 	// RetestMaxTouches is technique_retest_max_touches.
 	RetestMaxTouches int
+	// MaximumZoneTouches is maximum_zone_touches (0: no limit).
+	MaximumZoneTouches int
 }
 
 // NewTechniqueSource binds the execution frame's detector and instances. It
@@ -203,7 +205,7 @@ func NewTechniqueSource(ctx *analysiscontext.MarketContext, tf market.Timeframe,
 	if len(instances) == 0 && len(higher) == 0 {
 		return nil, false
 	}
-	return &TechniqueSource{Detector: base, Instances: instances, HigherInstances: higher, RetestMaxTouches: settings.RetestMaxTouches}, true
+	return &TechniqueSource{Detector: base, Instances: instances, HigherInstances: higher, RetestMaxTouches: settings.RetestMaxTouches, MaximumZoneTouches: settings.MaximumZoneTouches}, true
 }
 
 // higherInstances binds each configured higher timeframe's supply/demand
@@ -261,6 +263,9 @@ func instanceDirection(in techniquezone.Instance) market.Direction {
 func (s *TechniqueSource) publish(in techniquezone.Instance) *TechniqueDecision {
 	if in.Mitigated && (s.RetestMaxTouches <= 0 || in.Touches > s.RetestMaxTouches) {
 		return nil
+	}
+	if s.MaximumZoneTouches > 0 && in.Touches > s.MaximumZoneTouches {
+		return nil // a zone touched this often is spent
 	}
 	direction := instanceDirection(in)
 	d := s.Detector.WithDirection(direction)
