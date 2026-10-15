@@ -749,7 +749,7 @@ public sealed partial class TradePlanRuntime(
     return Math.Abs(exitEstimate - stop) <= tolerance;
   }
 
-  // Live dig 2026-08-26 HFS Range Sweep (v8:a80bf164…): L1 SL filled, deal
+  // Live dig 2026-08-26 HFS range scalp (v8:a80bf164…): L1 SL filled, deal
   // list timed out as Unknown, and the live bid kept printing the sweep past
   // SL 4640.67. Abs-near-stop alone missed it; abs-beyond with still-open L2
   // then raised GROUP RECOVERY REQUIRED and stranded L2. A quote strictly
