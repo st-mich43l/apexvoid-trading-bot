@@ -13,6 +13,11 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
+- AE analysis ground-truth check (`docs/strategies/ae-ground-truth.md`, tool `algo-bot/tools/ae_ground_truth.py`, Go dump test
+  `analysis-engine/test/groundtruth`; no runtime change): the engine's swings, breaks, FVG and supply/demand zones scored against an
+  independent definition-based labelling of 192 checkpoints of the five newest captures, plus 3 hand-marked windows (same author as the
+  tool, not an independent human check). Swings, breaks and FVG are correct by the definitions; micro swings (32-48% reverse 3 ATR) and sub-0.2 ATR
+  FVG zones (29-39% of live) are noise; supply/demand zones react 2.1x an arbitrary candle, recall by origin time 67% (H1).
 - FX never stacks: every FX pair (EURUSD, GBPUSD, GBPJPY, USDJPY) is bounded to one same-direction group at a time
   (`exposure.same_direction.max_groups: 1` in both FX packs of `config/instruments.yml`, using the exposure policy merged in #774):
   a new autonomous group is admitted only if no group of that pair is pending, submitted, partially open or open in its direction,

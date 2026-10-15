@@ -1,0 +1,429 @@
+{
+ "breaks": {
+  "H1": {
+   "close_breaks_n": 42,
+   "examples": [],
+   "no_prior_close_beyond_rate": 0.0,
+   "note": "the engine keeps only the latest break per layer, so only precision is scorable",
+   "stamp_lag_bars": {
+    "median": 0.0,
+    "p90": 2,
+    "share_within_3_bars": 0.929
+   }
+  },
+  "M15": {
+   "close_breaks_n": 50,
+   "examples": [],
+   "no_prior_close_beyond_rate": 0.0,
+   "note": "the engine keeps only the latest break per layer, so only precision is scorable",
+   "stamp_lag_bars": {
+    "median": 0.0,
+    "p90": 2,
+    "share_within_3_bars": 0.9
+   }
+  },
+  "M5": {
+   "close_breaks_n": 41,
+   "examples": [],
+   "no_prior_close_beyond_rate": 0.0,
+   "note": "the engine keeps only the latest break per layer, so only precision is scorable",
+   "stamp_lag_bars": {
+    "median": 1,
+    "p90": 2,
+    "share_within_3_bars": 0.951
+   }
+  }
+ },
+ "captures": [
+  "replay-eurusd-production-capture-20261014.json",
+  "replay-gbpjpy-production-capture-20261014.json",
+  "replay-gbpusd-production-capture-20261014.json",
+  "replay-usdjpy-production-capture-20261014.json",
+  "replay-xau-production-capture-20261014.json"
+ ],
+ "checkpoints_frames_scored": 192,
+ "definitions": {
+  "fvg": "three-candle gap >= 0.2 ATR; recall counts live gaps >= 0.5 ATR in the last 150 bars; edges within 0.1 ATR",
+  "impulse_origin": "last opposite-colour candle before a <= 6-candle same-colour run of >= 2.0 ATR; last 200 bars",
+  "reaction": ">= 1.5 ATR away from a supply/demand zone within 8 bars of its origin",
+  "swing": "strict +-5-bar extreme reversing >= 1.5 ATR within 20 bars (tiers (1.5, 3.0))"
+ },
+ "fvg": {
+  "H1": {
+   "engine_live_n": 1365,
+   "engine_zones_any_state": 4595,
+   "examples": {},
+   "live_by_size_atr": {
+    "0.2-0.5": 431,
+    "<0.2": 402,
+    ">=0.5": 532
+   },
+   "live_zones_price_has_left_unreclaimed": {
+    "beyond_0.0_atr": 0.04,
+    "beyond_0.5_atr": 0.0,
+    "beyond_1.0_atr": 0.0,
+    "beyond_2.0_atr": 0.0
+   },
+   "oracle_live_gaps_n": 106,
+   "recall_of_live_gaps_ge_0.5_atr": 1.0,
+   "share_that_are_real_three_candle_gaps": 1.0
+  },
+  "M15": {
+   "engine_live_n": 1848,
+   "engine_zones_any_state": 9994,
+   "examples": {},
+   "live_by_size_atr": {
+    "0.2-0.5": 534,
+    "<0.2": 729,
+    ">=0.5": 585
+   },
+   "live_zones_price_has_left_unreclaimed": {
+    "beyond_0.0_atr": 0.031,
+    "beyond_0.5_atr": 0.004,
+    "beyond_1.0_atr": 0.0,
+    "beyond_2.0_atr": 0.0
+   },
+   "oracle_live_gaps_n": 147,
+   "recall_of_live_gaps_ge_0.5_atr": 1.0,
+   "share_that_are_real_three_candle_gaps": 1.0
+  }
+ },
+ "hand_marked": {
+  "details": [
+   {
+    "checkpoint": 1791548400,
+    "swings_missed": [],
+    "window": "xau-m15-08Oct-09Oct",
+    "zones_missed": []
+   },
+   {
+    "checkpoint": 1791558900,
+    "swings_missed": [],
+    "window": "eurusd-m15-08Oct-09Oct",
+    "zones_missed": [
+     {
+      "high": 1.12135,
+      "low": 1.121,
+      "note": "base before the 19 breakout",
+      "side": "demand"
+     }
+    ]
+   },
+   {
+    "checkpoint": 1791559200,
+    "swings_missed": [
+     {
+      "kind": "high",
+      "time": 1791370800
+     },
+     {
+      "kind": "low",
+      "time": 1791284400
+     }
+    ],
+    "window": "usdjpy-h1-06Oct-09Oct",
+    "zones_missed": []
+   }
+  ],
+  "engine_swings_in_window": 8,
+  "engine_swings_marked": 7,
+  "swing_found": 18,
+  "swing_marks": 20,
+  "swing_precision_of_intermediate_major_in_window": 0.875,
+  "swing_recall": 0.9,
+  "windows": 3,
+  "zone_found": 8,
+  "zone_marks": 9,
+  "zone_recall": 0.889
+ },
+ "supply_demand": {
+  "H1": {
+   "baseline_arbitrary_candle_has_same_reaction": 0.29,
+   "engine_zones_scored": 2329,
+   "examples": {
+    "missed_live_impulse_origin": [
+     {
+      "high": 1.13652,
+      "low": 1.13458,
+      "overlapped_by_some_zone": true,
+      "side": "supply",
+      "time": 1790776800,
+      "travel_atr": 2.42
+     },
+     {
+      "high": 1.13652,
+      "low": 1.13458,
+      "overlapped_by_some_zone": true,
+      "side": "supply",
+      "time": 1790776800,
+      "travel_atr": 2.42
+     },
+     {
+      "high": 1.13652,
+      "low": 1.13458,
+      "overlapped_by_some_zone": true,
+      "side": "supply",
+      "time": 1790776800,
+      "travel_atr": 2.42
+     },
+     {
+      "high": 1.13652,
+      "low": 1.13458,
+      "overlapped_by_some_zone": true,
+      "side": "supply",
+      "time": 1790776800,
+      "travel_atr": 2.42
+     }
+    ],
+    "zone_without_reaction": [
+     {
+      "kind": "supply",
+      "move_atr": 0.44,
+      "origin_time": 1790071200
+     },
+     {
+      "kind": "supply",
+      "move_atr": 1.4,
+      "origin_time": 1790229600
+     },
+     {
+      "kind": "supply",
+      "move_atr": 1.22,
+      "origin_time": 1790348400
+     },
+     {
+      "kind": "supply",
+      "move_atr": 1.33,
+      "origin_time": 1790762400
+     }
+    ]
+   },
+   "live_zones_price_has_left_by_1_atr_unreclaimed": 0.0,
+   "oracle_origins_live": 265,
+   "origin_overlapped_by_any_live_zone_of_that_side": 0.996,
+   "precision_zone_has_reaction": 0.587,
+   "recall_origin_zone_with_matching_origin_time": 0.672
+  },
+  "M15": {
+   "baseline_arbitrary_candle_has_same_reaction": 0.282,
+   "engine_zones_scored": 5429,
+   "examples": {
+    "missed_live_impulse_origin": [
+     {
+      "high": 1.11813,
+      "low": 1.1177,
+      "overlapped_by_some_zone": true,
+      "side": "demand",
+      "time": 1791459900,
+      "travel_atr": 3.03
+     },
+     {
+      "high": 1.11813,
+      "low": 1.1177,
+      "overlapped_by_some_zone": true,
+      "side": "demand",
+      "time": 1791459900,
+      "travel_atr": 3.03
+     },
+     {
+      "high": 1.11813,
+      "low": 1.1177,
+      "overlapped_by_some_zone": true,
+      "side": "demand",
+      "time": 1791459900,
+      "travel_atr": 3.03
+     },
+     {
+      "high": 1.12323,
+      "low": 1.12266,
+      "overlapped_by_some_zone": true,
+      "side": "supply",
+      "time": 1791533700,
+      "travel_atr": 2.23
+     }
+    ],
+    "zone_without_reaction": [
+     {
+      "kind": "supply",
+      "move_atr": -0.1,
+      "origin_time": 1790855100
+     },
+     {
+      "kind": "supply",
+      "move_atr": 1.21,
+      "origin_time": 1790868600
+     },
+     {
+      "kind": "supply",
+      "move_atr": 1.44,
+      "origin_time": 1790924400
+     },
+     {
+      "kind": "supply",
+      "move_atr": 0.9,
+      "origin_time": 1790939700
+     }
+    ]
+   },
+   "live_zones_price_has_left_by_1_atr_unreclaimed": 0.0,
+   "oracle_origins_live": 279,
+   "origin_overlapped_by_any_live_zone_of_that_side": 0.986,
+   "precision_zone_has_reaction": 0.624,
+   "recall_origin_zone_with_matching_origin_time": 0.846
+  }
+ },
+ "swings": {
+  "H1": {
+   "engine_by_layer": {
+    "intermediate": {
+     "local_extreme_rate": 1.0,
+     "n": 1001,
+     "price_matches_candle_rate": 1.0,
+     "reverses_1_atr_within_20_bars": 1.0,
+     "reverses_3_atr_within_20_bars": 0.743
+    },
+    "internal": {
+     "local_extreme_rate": 1.0,
+     "n": 3251,
+     "price_matches_candle_rate": 1.0,
+     "reverses_1_atr_within_20_bars": 0.997,
+     "reverses_3_atr_within_20_bars": 0.57
+    },
+    "major": {
+     "local_extreme_rate": 1.0,
+     "n": 40,
+     "price_matches_candle_rate": 1.0,
+     "reverses_1_atr_within_20_bars": 1.0,
+     "reverses_3_atr_within_20_bars": 1.0
+    },
+    "micro": {
+     "local_extreme_rate": 1.0,
+     "n": 1613,
+     "price_matches_candle_rate": 1.0,
+     "reverses_1_atr_within_20_bars": 0.914,
+     "reverses_3_atr_within_20_bars": 0.483
+    }
+   },
+   "examples": {},
+   "recall": {
+    "1.5": {
+     "oracle_n": 2549,
+     "recall": 1.0
+    },
+    "3.0": {
+     "oracle_n": 1706,
+     "recall": 1.0
+    }
+   }
+  },
+  "M15": {
+   "engine_by_layer": {
+    "intermediate": {
+     "local_extreme_rate": 1.0,
+     "n": 1719,
+     "price_matches_candle_rate": 1.0,
+     "reverses_1_atr_within_20_bars": 1.0,
+     "reverses_3_atr_within_20_bars": 0.782
+    },
+    "internal": {
+     "local_extreme_rate": 1.0,
+     "n": 7041,
+     "price_matches_candle_rate": 1.0,
+     "reverses_1_atr_within_20_bars": 0.995,
+     "reverses_3_atr_within_20_bars": 0.525
+    },
+    "major": {
+     "local_extreme_rate": 1.0,
+     "n": 93,
+     "price_matches_candle_rate": 1.0,
+     "reverses_1_atr_within_20_bars": 1.0,
+     "reverses_3_atr_within_20_bars": 1.0
+    },
+    "micro": {
+     "local_extreme_rate": 1.0,
+     "n": 2613,
+     "price_matches_candle_rate": 1.0,
+     "reverses_1_atr_within_20_bars": 0.902,
+     "reverses_3_atr_within_20_bars": 0.317
+    }
+   },
+   "examples": {},
+   "recall": {
+    "1.5": {
+     "oracle_n": 4747,
+     "recall": 0.998
+    },
+    "3.0": {
+     "oracle_n": 3034,
+     "recall": 1.0
+    }
+   }
+  },
+  "M5": {
+   "engine_by_layer": {
+    "intermediate": {
+     "local_extreme_rate": 1.0,
+     "n": 1796,
+     "price_matches_candle_rate": 1.0,
+     "reverses_1_atr_within_20_bars": 1.0,
+     "reverses_3_atr_within_20_bars": 0.801
+    },
+    "internal": {
+     "local_extreme_rate": 1.0,
+     "n": 10383,
+     "price_matches_candle_rate": 1.0,
+     "reverses_1_atr_within_20_bars": 0.996,
+     "reverses_3_atr_within_20_bars": 0.518
+    },
+    "major": {
+     "local_extreme_rate": 1.0,
+     "n": 39,
+     "price_matches_candle_rate": 1.0,
+     "reverses_1_atr_within_20_bars": 1.0,
+     "reverses_3_atr_within_20_bars": 1.0
+    },
+    "micro": {
+     "local_extreme_rate": 1.0,
+     "n": 2828,
+     "price_matches_candle_rate": 1.0,
+     "reverses_1_atr_within_20_bars": 0.909,
+     "reverses_3_atr_within_20_bars": 0.345
+    }
+   },
+   "examples": {
+    "missed_swing_3atr": [
+     {
+      "kind": "low",
+      "reversal_atr": 3.68,
+      "time": 1791235800
+     },
+     {
+      "kind": "low",
+      "reversal_atr": 3.68,
+      "time": 1791235800
+     },
+     {
+      "kind": "low",
+      "reversal_atr": 3.68,
+      "time": 1791235800
+     },
+     {
+      "kind": "low",
+      "reversal_atr": 3.68,
+      "time": 1791235800
+     }
+    ]
+   },
+   "recall": {
+    "1.5": {
+     "oracle_n": 6753,
+     "recall": 0.998
+    },
+    "3.0": {
+     "oracle_n": 4530,
+     "recall": 0.998
+    }
+   }
+  }
+ }
+}

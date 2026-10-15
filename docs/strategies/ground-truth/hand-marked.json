@@ -1,0 +1,176 @@
+{
+ "description": "Marked by eye on charts rendered by `python -m tools.ae_ground_truth --render` (80 candles up to the engine checkpoint, no engine output drawn). Only the structures that were unambiguous to the marker are listed, so the engine's extra swings are NOT counted against it as false positives except at the intermediate/major layers (swing_precision_of_intermediate_major_in_window is a lower bound). Zones are body-and-wick ranges read off the price axis (about +-0.2% of price).",
+ "marker": "Claude (one pass, charts viewed once; not independent of the author of the scoring tool). Replace or extend with a human's marks: same schema.",
+ "windows": [
+  {
+   "id": "xau-m15-08Oct-09Oct",
+   "capture": "replay-xau-production-capture-20261014.json",
+   "tf": "M15",
+   "as_of": 1791548400,
+   "from": 1791472500,
+   "to": 1791547200,
+   "swings": [
+    {
+     "kind": "high",
+     "time": 1791479700
+    },
+    {
+     "kind": "low",
+     "time": 1791476100
+    },
+    {
+     "kind": "low",
+     "time": 1791484200
+    },
+    {
+     "kind": "high",
+     "time": 1791504000
+    },
+    {
+     "kind": "high",
+     "time": 1791523800
+    },
+    {
+     "kind": "high",
+     "time": 1791533700
+    },
+    {
+     "kind": "low",
+     "time": 1791543600
+    }
+   ],
+   "zones": [
+    {
+     "side": "demand",
+     "low": 4141.0,
+     "high": 4149.0,
+     "note": "base before the 35-37 impulse"
+    },
+    {
+     "side": "supply",
+     "low": 4192.0,
+     "high": 4202.0,
+     "note": "base of the drop after the 53 peak"
+    }
+   ]
+  },
+  {
+   "id": "eurusd-m15-08Oct-09Oct",
+   "capture": "replay-eurusd-production-capture-20261014.json",
+   "tf": "M15",
+   "as_of": 1791558900,
+   "from": 1791486900,
+   "to": 1791558000,
+   "swings": [
+    {
+     "kind": "high",
+     "time": 1791523800
+    },
+    {
+     "kind": "high",
+     "time": 1791530100
+    },
+    {
+     "kind": "low",
+     "time": 1791493200
+    },
+    {
+     "kind": "low",
+     "time": 1791532800
+    },
+    {
+     "kind": "low",
+     "time": 1791554400
+    }
+   ],
+   "zones": [
+    {
+     "side": "supply",
+     "low": 1.1231,
+     "high": 1.1241,
+     "note": "top of the 41-42 peak"
+    },
+    {
+     "side": "supply",
+     "low": 1.1222,
+     "high": 1.123,
+     "note": "base of the 54 drop"
+    },
+    {
+     "side": "demand",
+     "low": 1.121,
+     "high": 1.12135,
+     "note": "base before the 19 breakout"
+    }
+   ]
+  },
+  {
+   "id": "usdjpy-h1-06Oct-09Oct",
+   "capture": "replay-usdjpy-production-capture-20261014.json",
+   "tf": "H1",
+   "as_of": 1791559200,
+   "from": 1791270000,
+   "to": 1791554400,
+   "swings": [
+    {
+     "kind": "high",
+     "time": 1791334800
+    },
+    {
+     "kind": "high",
+     "time": 1791370800
+    },
+    {
+     "kind": "high",
+     "time": 1791471600
+    },
+    {
+     "kind": "high",
+     "time": 1791532800
+    },
+    {
+     "kind": "low",
+     "time": 1791284400
+    },
+    {
+     "kind": "low",
+     "time": 1791360000
+    },
+    {
+     "kind": "low",
+     "time": 1791417600
+    },
+    {
+     "kind": "low",
+     "time": 1791478800
+    }
+   ],
+   "zones": [
+    {
+     "side": "demand",
+     "low": 157.8,
+     "high": 157.9,
+     "note": "base before the 43 rally"
+    },
+    {
+     "side": "supply",
+     "low": 158.2,
+     "high": 158.37,
+     "note": "last up candle before the 57 drop"
+    },
+    {
+     "side": "supply",
+     "low": 158.3,
+     "high": 158.45,
+     "note": "top before the 23-24 drop"
+    },
+    {
+     "side": "demand",
+     "low": 157.52,
+     "high": 157.75,
+     "note": "the 58 low, rally after"
+    }
+   ]
+  }
+ ]
+}
