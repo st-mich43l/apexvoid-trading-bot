@@ -79,8 +79,9 @@ async def _publish(client, match):
 
 
 @pytest.mark.asyncio
-async def test_without_a_policy_a_scalp_still_stacks_on_an_open_same_direction_group(rejections):
-  """The incident: nothing bounds the number of same-direction scalp groups."""
+async def test_without_a_policy_a_scalp_still_stacks_on_an_open_same_direction_group(monkeypatch, rejections):
+  """The incident: nothing bounds the number of same-direction scalp groups where no policy is declared."""
+  monkeypatch.setattr(worker.instrument_geometry, "same_direction_policy", lambda symbol: None)
   client = redis_state.get_client()
   await _seed_live_plan(client, symbol="GBPUSD", direction="BUY", entry=1.2400)
   match = _scalp("stack-legacy")
@@ -294,3 +295,17 @@ async def test_a_lifecycle_refusal_before_the_stream_gives_the_slot_back(monkeyp
   assert await _publish(client, match) is None
   assert await client.xlen("execution:trade_plans") == 0
   assert await client.hlen(reservation_key("GBPUSD", "BUY")) == 0, "nothing reached the stream: the slot must be free"
+
+
+@pytest.mark.asyncio
+async def test_the_committed_fx_config_never_stacks_a_scalp(rejections):
+  """No monkeypatch: GBPUSD's own configuration refuses a scalp on top of an open same-direction group."""
+  client = redis_state.get_client()
+  await _seed_live_plan(client, symbol="GBPUSD", direction="BUY", entry=1.2400, plan_id="v8:setup-active")
+  await _executor_snapshot(client, groups=["v8:setup-active"])
+  match = _scalp("fx-stack")
+  await _confirm_setup(client, match)
+
+  assert await _publish(client, match) is None
+  assert [code for code, _ in rejections] == ["same_direction_group_limit"]
+  assert await client.xlen("execution:trade_plans") == 0

@@ -99,31 +99,13 @@ def test_the_dataset_builder_reads_the_log_lines_it_documents(tmp_path):
   assert row["planned_risk"] == pytest.approx(0.11 * 17.9 * 6.27, abs=0.01)
 
 
-def test_no_instrument_declares_a_same_direction_policy_in_the_committed_config():
-  """This change activates no live limit: the owner applies the proposed patch separately."""
-  import yaml
+def test_every_fx_pair_is_bounded_to_one_same_direction_group_and_xau_is_left_alone():
+  """The committed configuration, read through the runtime loader (packs merged)."""
+  from app.core import instrument_geometry
 
-  config = Path(__file__).resolve().parents[2] / "config" / "instruments.yml"
-  registry = yaml.safe_load(config.read_text())["instruments"]
-  for name, declaration in registry.items():
-    if isinstance(declaration, dict):
-      assert "same_direction" not in (declaration.get("exposure") or {}), name
-  for name, pack in (registry.get("instrument_packs") or {}).items():
-    assert "same_direction" not in ((pack or {}).get("exposure") or {}), name
-
-
-def test_the_proposed_usdjpy_patch_applies_to_the_committed_config_and_parses():
-  import subprocess
-
-  import yaml
-
-  from app.runtime.instruments import _same_direction_policy
-
-  root = Path(__file__).resolve().parents[2]
-  patch = root / "docs" / "risk" / "same-direction-exposure-usdjpy.patch"
-  check = subprocess.run(["git", "apply", "--check", str(patch)], cwd=root, capture_output=True, text=True)
-  assert check.returncode == 0, check.stderr
-  added = [line[1:] for line in patch.read_text().splitlines() if line.startswith("+") and not line.startswith("+++")]
-  block = yaml.safe_load("\n".join(line.strip() and line[4:] for line in added if not line.strip().startswith("#")))
-  policy = _same_direction_policy("USDJPY", block["exposure"])
-  assert policy.limits.max_groups == 1 and policy.limits.max_cumulative_risk is None
+  for symbol in ("EURUSD", "GBPUSD", "GBPJPY", "USDJPY"):
+    policy = instrument_geometry.same_direction_policy(symbol)
+    assert policy is not None, symbol
+    assert policy.limits.max_groups == 1 and policy.risk_free_groups_count and policy.duplicate_thesis_block, symbol
+    assert policy.strategy_overrides == (), "no strategy may stack on FX"
+  assert instrument_geometry.same_direction_policy("XAU") is None
