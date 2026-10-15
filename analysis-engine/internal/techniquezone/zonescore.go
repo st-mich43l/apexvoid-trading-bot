@@ -162,8 +162,6 @@ func sourceReason(source string) string {
 		return "S/D"
 	case strings.HasSuffix(source, "_fvg"):
 		return "FVG"
-	case source == "box_breakout":
-		return "box breakout"
 	default:
 		return source
 	}

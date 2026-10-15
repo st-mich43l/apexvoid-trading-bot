@@ -182,7 +182,7 @@ def test_m1_scalp_confirmation_allows_same_cycle_publish():
   legacyish = confirmation_policy_for(
     replace(
       _match(),
-      strategy="Box Breakout",
+      strategy="Break & Retest",
       reaction_type=None,
       touch_bar_ts=None,
       confirmation_bar_ts=None,

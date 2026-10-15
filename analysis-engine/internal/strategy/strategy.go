@@ -11,7 +11,7 @@
 // empty .go files") and this task's own restraint principle, the
 // per-strategy subpackages named in the source task's §20
 // (breakoutretest, liquiditysweep, orderblock, fvg, keylevel, supply,
-// demand, trendline, sessionlevel, rangeedge, boxbreakout,
+// demand, trendline, sessionlevel, rangeedge,
 // impulsepullback) are architectural slots, not
 // directories created by this task — see
 // docs/architecture/analysis-engine.md's "Independent strategy

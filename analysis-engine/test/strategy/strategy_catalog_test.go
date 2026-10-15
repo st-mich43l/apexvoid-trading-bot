@@ -7,7 +7,6 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy"
-	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/boxbreakout"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/confluencezone"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/crt"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/ifvg"
@@ -66,10 +65,6 @@ func trendlineParams() map[string]any {
 		"interaction_band_atr": 0.2, "close_violation_atr": 0.15, "approach_min_distance_atr": 0.1,
 		"invalidation_buffer_atr": .25, "expiry_hours": 4.0, "minimum_target_distance_atr": 1.0,
 	})
-}
-
-func boxBreakoutParams() map[string]any {
-	return detectorParams(map[string]any{"breakout_max_age_bars": 6.0, "invalidation_buffer_atr": .25, "expiry_hours": 4.0})
 }
 
 func rangeEdgeParams() map[string]any {
@@ -149,17 +144,6 @@ func TestStrategiesKnownQualifyingFixtures(t *testing.T) {
 			t.Fatalf("CRT must reject insufficient history, got %+v", got)
 		}
 	})
-	t.Run("box_breakout", func(t *testing.T) {
-		s, e := boxbreakout.New(cfg(boxbreakout.ID, boxBreakoutParams()))
-		if e != nil {
-			t.Fatal(e)
-		}
-		// Proven bar by bar against the frozen box_breakout in test/legacyparity.
-		bars := []market.Candle{bar(1, 100, 101, 100, 100.5), bar(2, 100.5, 101, 100, 100.4), bar(3, 100.4, 101, 100, 100.5), bar(4, 100.5, 101, 100, 100.4), bar(5, 100.4, 101, 100, 100.5), bar(6, 100.8, 102, 100.8, 101.5), bar(7, 101.4, 101.6, 100.9, 101.2)}
-		if got := s.Evaluate(ctx(map[market.Timeframe]*analysiscontext.TimeframeContext{market.M5: {Timeframe: market.M5, Candles: bars}})); len(got) != 0 {
-			t.Fatalf("box breakout published without a detector frame: %+v", got)
-		}
-	})
 	t.Run("impulse_pullback", func(t *testing.T) {
 		s, e := impulsepullback.New(cfg(impulsepullback.ID, impulsePullbackParams()))
 		if e != nil {
@@ -192,7 +176,7 @@ func TestStrategiesRejectMissingConfiguration(t *testing.T) {
 		id      strategy.StrategyID
 		factory strategy.Factory
 	}{
-		{"ifvg", ifvg.ID, ifvg.New}, {"trendline", strategytrendline.ID, strategytrendline.New}, {"range_edge", rangeedge.ID, rangeedge.New}, {"liquidity_sweep", liquiditysweep.ID, liquiditysweep.New}, {"crt", crt.ID, crt.New}, {"confluence_zone", confluencezone.ID, confluencezone.New}, {"box_breakout", boxbreakout.ID, boxbreakout.New}, {"impulse_pullback", impulsepullback.ID, impulsepullback.New},
+		{"ifvg", ifvg.ID, ifvg.New}, {"trendline", strategytrendline.ID, strategytrendline.New}, {"range_edge", rangeedge.ID, rangeedge.New}, {"liquidity_sweep", liquiditysweep.ID, liquiditysweep.New}, {"crt", crt.ID, crt.New}, {"confluence_zone", confluencezone.ID, confluencezone.New}, {"impulse_pullback", impulsepullback.ID, impulsepullback.New},
 	}
 	for _, tc := range factories {
 		t.Run(tc.name, func(t *testing.T) {

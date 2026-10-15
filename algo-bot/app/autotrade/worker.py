@@ -2611,12 +2611,10 @@ async def _publish_trade_plan_v8(
 _TREND_SETUP_LABELS = {
   "pullback": "Trend Pullback",
   "breakout_continuation": "Breakout Continuation",
-  "box_breakout": "Box Breakout",
 }
 _TREND_MODE_LABELS = {
   "pullback": "auto_trend_pullback",
   "breakout_continuation": "auto_trend_breakout",
-  "box_breakout": "auto_box_breakout",
 }
 
 

@@ -958,7 +958,7 @@ func MergeZones(zones []Zone, minOverlap, maxWidth float64) []Zone {
 }
 
 var sourceScores = map[string]float64{
-	"order_block": 3, "breaker": 2, "flip_zone": 2, "supply_demand": 1.5, "bullish_fvg": 1, "bearish_fvg": 1, "box_breakout": 5,
+	"order_block": 3, "breaker": 2, "flip_zone": 2, "supply_demand": 1.5, "bullish_fvg": 1, "bearish_fvg": 1,
 }
 
 const sourceScoreCap = 5.0

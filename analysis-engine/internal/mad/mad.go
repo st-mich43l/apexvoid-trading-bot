@@ -88,8 +88,6 @@ func StrategyKey(strategy string) string {
 		return "liquidity_sweep_reversal"
 	case "impulse_pullback":
 		return "impulse_pullback_continuation"
-	case "box_breakout":
-		return "breakout_retest"
 	case "":
 		return ""
 	default:
@@ -129,7 +127,7 @@ func Affinity(snapshot Snapshot, direction, strategy string) AffinityScore {
 		if snapshot.ExpansionDirection != "" && normalize(snapshot.ExpansionDirection) == want {
 			score.DirectionScore = 1
 		}
-		if key == "impulse_pullback_continuation" || key == "breakout_retest" {
+		if key == "impulse_pullback_continuation" {
 			score.StrategyScore = 1
 		}
 	}

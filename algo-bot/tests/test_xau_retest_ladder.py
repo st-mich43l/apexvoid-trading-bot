@@ -98,7 +98,7 @@ def test_the_width_gate_judges_go_band_not_the_widened_band():
 def test_other_market_strategies_and_fx_keep_their_single_entry():
   momentum = evaluate_execution_policy(
     _policy_match(
-      strategy="Box Breakout", direction="BUY", entry_low=4114.91, entry_high=4115.14,
+      strategy="Break & Retest", direction="BUY", entry_low=4114.91, entry_high=4115.14,
       current_price=4115.0, atr=2.0, structure_swing=4113.76, targets_pips=(50,),
     ),
     spot_price=4115.0, executable_quote=4115.0, regime="trend", pip_size=0.1, cfg=_cfg(),

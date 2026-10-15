@@ -23,7 +23,7 @@ def _opened_event() -> dict:
     ),
     "position_id": 39000344,
     "group_id": "group-39000344",
-    "setup": "Box Breakout",
+    "setup": "Key Level",
     "regime": "breakout",
     "confluence": 3,
     "stop_pips": 65,
@@ -615,7 +615,7 @@ def test_internal_profile_hides_broker_position_id():
     "\n"
     "📍 Entry: <b>4,111.26</b>\n"
     "🛡 SL: <b>4,117.76</b> · 65 pips\n"
-    "🧭 Box Breakout · breakout · ★★★"
+    "🧭 Key Level · breakout · ★★★"
   )
 
 

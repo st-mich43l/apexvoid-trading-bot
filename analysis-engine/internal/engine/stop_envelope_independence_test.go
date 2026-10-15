@@ -22,8 +22,8 @@ func TestEveryStrategyDeclaresItsOwnStopEnvelope(t *testing.T) {
 			t.Errorf("stop envelope table lists %q, which is not a catalog strategy", id)
 		}
 	}
-	if len(known) != 17 {
-		t.Fatalf("the catalog has %d strategies, want 17", len(known))
+	if len(known) != 16 {
+		t.Fatalf("the catalog has %d strategies, want 16", len(known))
 	}
 }
 

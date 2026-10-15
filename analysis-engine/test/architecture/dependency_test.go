@@ -118,7 +118,6 @@ var rank = map[string]int{
 	"strategy/confluencezone":  7,
 	"strategy/rangeedge":       7,
 	"strategy/fadescalp":       7,
-	"strategy/boxbreakout":     7,
 	"strategy/breakretest":     7,
 	"strategy/liquiditysweep":  7,
 	"strategy/impulsepullback": 7,

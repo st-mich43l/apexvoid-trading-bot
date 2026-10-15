@@ -117,7 +117,7 @@ def test_supply_and_demand_require_confirmation():
 def test_every_registered_go_strategy_is_accounted_for_exactly_once():
   table = ev.registry_table()
   assert [row["strategy"] for row in table] == sorted(CATALOG_STRATEGY_IDS)
-  assert len(table) == len(CATALOG_STRATEGY_IDS) == 17
+  assert len(table) == len(CATALOG_STRATEGY_IDS) == 16
   assert {row["strategy"]: row["requires_reaction"] for row in table} == {
     name: profile.requires_reaction for name, profile in pol.REVIEWED_SCOPES.items()
   }
