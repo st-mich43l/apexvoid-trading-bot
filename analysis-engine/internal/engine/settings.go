@@ -233,9 +233,9 @@ func LoadSettings(doc *config.Document, primary market.Timeframe, allowReplaceFo
 	applyLegacyDetector(&settings)
 	// Seed Session Level with the canonical session grid the same way.
 	applySessionLevelGeometry(&settings)
-	// Seed the Breakout Retest Scalp the same way so construction is fail-closed
+	// Seed the M1 scalp lane the same way so construction is fail-closed
 	// before a symbol is attached; ApplyInstrument sets the instrument scale.
-	if err := applyScalpBreakoutRetest(&settings, doc); err != nil {
+	if err := applyScalpLane(&settings, doc); err != nil {
 		return Settings{}, err
 	}
 	return settings, nil

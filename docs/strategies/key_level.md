@@ -13,7 +13,7 @@
 Key Level reacts at a clustered key level, in the direction its role implies.
 `v3` reproduces the Python detector behind the profitable XAU week of 14-18 Sep
 2026 (+567 pips, 6W/3L), `key_level_reaction` at commit `a1c77584`, on the same
-detector-contract frame as Snap Back, Fade Scalp, Momentum Ride, Range Edge and
+detector-contract frame as Fade Scalp, Range Edge and
 Break & Retest, so the same bars give the same level, role, direction, reaction
 and entry.
 

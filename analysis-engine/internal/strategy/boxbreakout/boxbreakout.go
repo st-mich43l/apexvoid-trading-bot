@@ -4,8 +4,8 @@
 // when it is a displacement bar still close to the edge, or on a retest of the
 // broken edge that closes back as a rejection.
 //
-// It does not duplicate the M1 Breakout Retest Scalp: this is the M5 detector,
-// judged on the frame's regime box, and independently rollout-controlled.
+// It is the M5 detector, judged on the frame's regime box, and independently
+// rollout-controlled.
 package boxbreakout
 
 import (
