@@ -37,6 +37,13 @@ type Config struct {
 	// direction thesis to be decisive. Below this margin, arbitration
 	// holds rather than picking a side on a near-tie.
 	ConflictMarginQuality float64
+	// IgnoreQuality removes Quality.Overall from the decision: candidates are
+	// ordered by CandidateID alone and every opposite-direction thesis is a
+	// conflict that only the structural bias can settle, whatever the margin.
+	// Quality.Overall is a per-strategy score on its own scale that did not
+	// predict outcomes (docs/strategies/arbitration-impact-report.md); the zero
+	// value keeps the quality order.
+	IgnoreQuality bool
 	// InPlayATR is how far (in the candidate's own ATR) price may sit from
 	// its entry zone for the candidate to count as in play. Zero disables
 	// the filter (every live candidate contends).
@@ -172,7 +179,7 @@ func Arbitrate(live []opportunity.Candidate, cfg Config) []Decision {
 	groups := groupByThesis(live)
 	representatives := make([]opportunity.Candidate, 0, len(groups))
 	for _, group := range groups {
-		representatives = append(representatives, representativeOf(group))
+		representatives = append(representatives, representativeOf(group, cfg))
 	}
 
 	repDecisions := arbitrateRepresentatives(representatives, cfg)
@@ -183,7 +190,7 @@ func Arbitrate(live []opportunity.Candidate, cfg Config) []Decision {
 
 	result := make([]Decision, 0, len(live))
 	for _, group := range groups {
-		rep := representativeOf(group)
+		rep := representativeOf(group, cfg)
 		repDecision := repDecisionByID[rep.ID]
 		memberIDs := make([]string, len(group))
 		for i, c := range group {
@@ -235,10 +242,10 @@ func groupByThesis(live []opportunity.Candidate) map[string][]opportunity.Candid
 // ranking `less` uses everywhere else, so "which observation speaks for
 // this thesis" and "which thesis wins arbitration" apply one consistent
 // rule.
-func representativeOf(group []opportunity.Candidate) opportunity.Candidate {
+func representativeOf(group []opportunity.Candidate, cfg Config) opportunity.Candidate {
 	best := group[0]
 	for _, c := range group[1:] {
-		if less(c, best) {
+		if less(c, best, cfg) {
 			best = c
 		}
 	}
@@ -255,7 +262,7 @@ func arbitrateRepresentatives(representatives []opportunity.Candidate, cfg Confi
 
 	ordered := make([]opportunity.Candidate, len(representatives))
 	copy(ordered, representatives)
-	sort.Slice(ordered, func(i, j int) bool { return less(ordered[i], ordered[j]) })
+	sort.Slice(ordered, func(i, j int) bool { return less(ordered[i], ordered[j], cfg) })
 
 	top := ordered[0]
 	opposingIndex := -1
@@ -271,7 +278,7 @@ func arbitrateRepresentatives(representatives []opportunity.Candidate, cfg Confi
 	}
 
 	strongestOpposing := ordered[opposingIndex]
-	decisive := top.Quality.Overall-strongestOpposing.Quality.Overall >= cfg.ConflictMarginQuality
+	decisive := !cfg.IgnoreQuality && top.Quality.Overall-strongestOpposing.Quality.Overall >= cfg.ConflictMarginQuality
 	if decisive {
 		return decideAll(ordered, top.ID, ReasonRankedSingleDirection, nil)
 	}
@@ -313,9 +320,10 @@ func biasTiebreak(ordered []opportunity.Candidate) (opportunity.Candidate, bool)
 }
 
 // less orders by Quality.Overall descending (higher quality ranks first),
-// then CandidateID ascending as the deterministic tie-break.
-func less(a, b opportunity.Candidate) bool {
-	if a.Quality.Overall != b.Quality.Overall {
+// then CandidateID ascending as the deterministic tie-break. With
+// cfg.IgnoreQuality only the CandidateID orders.
+func less(a, b opportunity.Candidate, cfg Config) bool {
+	if !cfg.IgnoreQuality && a.Quality.Overall != b.Quality.Overall {
 		return a.Quality.Overall > b.Quality.Overall
 	}
 	return a.ID < b.ID

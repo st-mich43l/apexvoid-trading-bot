@@ -3180,6 +3180,7 @@ async def _handle_event(
     arbitration = arbitrate_execution_intents(
       arbitrable,
       conflict_margin_quality=float(gates.conflict_margin_quality),
+      quality_ranking=bool(gates.quality_ranking),
     )
 
     published_match: StrategyMatch | None = None

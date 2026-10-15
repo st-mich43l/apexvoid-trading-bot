@@ -293,6 +293,25 @@ def model_c() -> Model:
   return Model("C_shared_confluence_first", key, lambda i: i.confluence / 3.0)
 
 
+def model_n() -> Model:
+  """No quality anywhere: the executable intents are ordered by freshness then id, and every
+  executable opposite pair is a conflict that only the higher-timeframe bias can settle."""
+  def key(i: ExecutionIntent) -> tuple:
+    return (0 if i.executable_now else 1, 0.0, 0, 0.0, -i.freshness, i.intent_id)
+  return Model("N_no_quality", key, lambda i: 0.0)
+
+
+def model_nb() -> Model:
+  """As N, with an intent that trades with the higher-timeframe bias ranked first. The bias
+  is the only non-quality fact the production conflict rule already uses."""
+  def aligned(i: ExecutionIntent) -> float:
+    return 1.0 if str(i.bias_relationship or "").casefold() == "with_bias" else 0.0
+
+  def key(i: ExecutionIntent) -> tuple:
+    return (0 if i.executable_now else 1, -aligned(i), 0, 0.0, -i.freshness, i.intent_id)
+  return Model("NB_no_quality_bias_first", key, aligned)
+
+
 # ---------------------------------------------------------------- cycles
 
 def build_cycles(rows: list[dict], *, spread_scale: float = 1.0) -> tuple[list[dict], dict]:
@@ -1046,7 +1065,7 @@ def level_c(rows: list[dict], cycles: list[dict], production_export: str, produc
   return out
 
 
-def run(dump_dir: str, *, production_export: str = "", production_plans: str = "", production_results: str = "", code_since: int = 0) -> dict:
+def run(dump_dir: str, *, production_export: str = "", production_plans: str = "", production_results: str = "", code_since: int = 0, extra_models: tuple = ()) -> dict:
   rng = random.Random(SEED)
   rows = load_rows(dump_dir)
   cycles, accounting = build_cycles(rows)
@@ -1058,7 +1077,7 @@ def run(dump_dir: str, *, production_export: str = "", production_plans: str = "
     for intent in cycle["intents"]
   ]
   table = _percentile_table(dev_rows)
-  models = [model_a(), model_b(table), model_c()]
+  models = [model_a(), model_b(table), model_c(), *extra_models]
   bars_cache: dict[str, tuple[list[tuple], str]] = {}
 
   def bars_for(capture: str):

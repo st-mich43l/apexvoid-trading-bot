@@ -36,6 +36,11 @@ auto_algo:
       barrier_buffer_atr: 0.5
       minimum_capped_target_pips: 15.0
     scanner_gates:
+      # false: no quality score orders intents or settles a direction conflict (the order is
+      # executable, freshest confirmation, id; opposite executable intents are held unless exactly
+      # one agrees with the higher-timeframe bias). The scores did not predict outcomes
+      # (docs/strategies/arbitration-impact-report.md). true restores the quality order and the margin.
+      quality_ranking: false
       conflict_margin_quality: 0.15
 
   lifecycle:

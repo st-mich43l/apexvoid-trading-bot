@@ -43,6 +43,13 @@ func TestDumpCandidatesForOfflineArbitrationEvaluation(t *testing.T) {
 		"replay-gbpusd-production-capture-20261005.json",
 		"replay-gbpjpy-production-capture-20261006.json",
 		"replay-usdjpy-production-capture-20261005.json",
+		// The 14 October captures extend each symbol to the end of the window; the offline
+		// tool keeps one row per (symbol, bar) and prefers the capture with the deeper history.
+		"replay-xau-production-capture-20261014.json",
+		"replay-eurusd-production-capture-20261014.json",
+		"replay-gbpusd-production-capture-20261014.json",
+		"replay-gbpjpy-production-capture-20261014.json",
+		"replay-usdjpy-production-capture-20261014.json",
 	}
 	var wg sync.WaitGroup
 	for _, name := range captures {
