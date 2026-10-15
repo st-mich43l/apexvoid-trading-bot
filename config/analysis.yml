@@ -890,6 +890,11 @@ analysis:
   # candidates are arbitrated; nearby resting zones are suppressed and cannot
   # create a false BUY-vs-SELL conflict.
   arbitration:
+    # false: Quality.Overall orders nothing and settles no conflict here (candidate id order;
+    # every opposite thesis is a conflict unless the structural bias settles it). Algo Bot's own
+    # auto-algo.yml actionability.scanner_gates.quality_ranking is kept equal so the telemetry
+    # describes what executes. docs/strategies/arbitration-impact-report.md.
+    quality_ranking: false
     conflict_margin_quality: 0.15
     in_play_atr: 1.0
 
