@@ -1,0 +1,4272 @@
+{
+ "by_strategy": {
+  "box_breakout": {
+   "n": 87,
+   "skipped": "fewer than the minimum filled observations in a window"
+  },
+  "break_retest": {
+   "n": 36,
+   "skipped": "fewer than the minimum filled observations in a window"
+  },
+  "confluence_zone": {
+   "features_tried": 41,
+   "n": 294,
+   "strongest": [
+    {
+     "bonferroni_abs_rho": 0.525,
+     "dev": {
+      "ci95": [
+       0.022,
+       0.576
+      ],
+      "n": 50,
+      "spearman": 0.351
+     },
+     "feature": "component_target_room_atr",
+     "oos": {
+      "n": 25,
+      "spearman": 0.493
+     },
+     "supported": false
+    },
+    {
+     "bonferroni_abs_rho": 0.525,
+     "dev": {
+      "ci95": [
+       0.058,
+       0.592
+      ],
+      "n": 50,
+      "spearman": 0.316
+     },
+     "feature": "component_source_age_bars",
+     "oos": {
+      "n": 25,
+      "spearman": 0.244
+     },
+     "supported": false
+    },
+    {
+     "bonferroni_abs_rho": 0.525,
+     "dev": {
+      "ci95": [
+       -0.551,
+       -0.021
+      ],
+      "n": 50,
+      "spearman": -0.298
+     },
+     "feature": "component_source_dependency_count",
+     "oos": {
+      "n": 25,
+      "spearman": 0.292
+     },
+     "supported": false
+    },
+    {
+     "bonferroni_abs_rho": 0.525,
+     "dev": {
+      "ci95": [
+       -0.49,
+       0.118
+      ],
+      "n": 50,
+      "spearman": -0.206
+     },
+     "feature": "component_independent_source_count",
+     "oos": {
+      "n": 25,
+      "spearman": 0.451
+     },
+     "supported": false
+    },
+    {
+     "bonferroni_abs_rho": 0.525,
+     "dev": {
+      "ci95": [
+       -0.467,
+       0.087
+      ],
+      "n": 50,
+      "spearman": -0.197
+     },
+     "feature": "component_overlap_integrity",
+     "oos": {
+      "n": 25,
+      "spearman": -0.116
+     },
+     "supported": false
+    }
+   ],
+   "supported": []
+  },
+  "demand": {
+   "features_tried": 23,
+   "n": 713,
+   "strongest": [
+    {
+     "bonferroni_abs_rho": 0.189,
+     "dev": {
+      "ci95": [
+       -0.306,
+       -0.025
+      ],
+      "n": 408,
+      "spearman": -0.16
+     },
+     "feature": "executable_risk_atr",
+     "oos": {
+      "n": 305,
+      "spearman": -0.207
+     },
+     "supported": false
+    },
+    {
+     "bonferroni_abs_rho": 0.189,
+     "dev": {
+      "ci95": [
+       -0.209,
+       -0.038
+      ],
+      "n": 408,
+      "spearman": -0.124
+     },
+     "feature": "entry_width_over_risk",
+     "oos": {
+      "n": 305,
+      "spearman": 0.055
+     },
+     "supported": false
+    },
+    {
+     "bonferroni_abs_rho": 0.273,
+     "dev": {
+      "ci95": [
+       -0.237,
+       0.044
+      ],
+      "n": 193,
+      "spearman": -0.095
+     },
+     "feature": "component_freshness_quality",
+     "oos": {
+      "n": 135,
+      "spearman": -0.164
+     },
+     "supported": false
+    },
+    {
+     "bonferroni_abs_rho": 0.189,
+     "dev": {
+      "ci95": [
+       -0.186,
+       0.003
+      ],
+      "n": 408,
+      "spearman": -0.089
+     },
+     "feature": "entry_width_atr",
+     "oos": {
+      "n": 305,
+      "spearman": 0.199
+     },
+     "supported": false
+    },
+    {
+     "bonferroni_abs_rho": 0.189,
+     "dev": {
+      "ci95": [
+       -0.178,
+       0.027
+      ],
+      "n": 408,
+      "spearman": -0.068
+     },
+     "feature": "technical_risk_atr",
+     "oos": {
+      "n": 305,
+      "spearman": 0.204
+     },
+     "supported": false
+    }
+   ],
+   "supported": []
+  },
+  "fade_scalp": {
+   "features_tried": 17,
+   "n": 117,
+   "strongest": [
+    {
+     "bonferroni_abs_rho": 0.438,
+     "dev": {
+      "ci95": [
+       -0.379,
+       0.082
+      ],
+      "n": 68,
+      "spearman": -0.137
+     },
+     "feature": "component_liquidity_grade",
+     "oos": {
+      "n": 49,
+      "spearman": -0.172
+     },
+     "supported": false
+    },
+    {
+     "bonferroni_abs_rho": 0.438,
+     "dev": {
+      "ci95": [
+       -0.358,
+       0.079
+      ],
+      "n": 68,
+      "spearman": -0.137
+     },
+     "feature": "factor_displacement",
+     "oos": {
+      "n": 49,
+      "spearman": -0.172
+     },
+     "supported": false
+    },
+    {
+     "bonferroni_abs_rho": 0.438,
+     "dev": {
+      "ci95": [
+       -0.354,
+       0.124
+      ],
+      "n": 68,
+      "spearman": -0.118
+     },
+     "feature": "quality",
+     "oos": {
+      "n": 49,
+      "spearman": -0.082
+     },
+     "supported": false
+    },
+    {
+     "bonferroni_abs_rho": 0.438,
+     "dev": {
+      "ci95": [
+       -0.336,
+       0.129
+      ],
+      "n": 68,
+      "spearman": -0.103
+     },
+     "feature": "entry_width_atr",
+     "oos": {
+      "n": 49,
+      "spearman": 0.247
+     },
+     "supported": false
+    },
+    {
+     "bonferroni_abs_rho": 0.438,
+     "dev": {
+      "ci95": [
+       -0.346,
+       0.156
+      ],
+      "n": 68,
+      "spearman": -0.102
+     },
+     "feature": "technical_risk_atr",
+     "oos": {
+      "n": 49,
+      "spearman": 0.244
+     },
+     "supported": false
+    }
+   ],
+   "supported": []
+  },
+  "flip_zone": {
+   "features_tried": 20,
+   "n": 151,
+   "strongest": [
+    {
+     "bonferroni_abs_rho": 0.395,
+     "dev": {
+      "ci95": [
+       -0.583,
+       -0.204
+      ],
+      "n": 87,
+      "spearman": -0.385
+     },
+     "feature": "log_technical_rr",
+     "oos": {
+      "n": 64,
+      "spearman": -0.207
+     },
+     "supported": false
+    },
+    {
+     "bonferroni_abs_rho": 0.395,
+     "dev": {
+      "ci95": [
+       -0.45,
+       0.025
+      ],
+      "n": 87,
+      "spearman": -0.22
+     },
+     "feature": "log_room_cover",
+     "oos": {
+      "n": 64,
+      "spearman": -0.049
+     },
+     "supported": false
+    },
+    {
+     "bonferroni_abs_rho": 0.395,
+     "dev": {
+      "ci95": [
+       -0.194,
+       0.044
+      ],
+      "n": 87,
+      "spearman": -0.075
+     },
+     "feature": "factor_displacement",
+     "oos": {
+      "n": 64,
+      "spearman": -0.148
+     },
+     "supported": false
+    },
+    {
+     "bonferroni_abs_rho": 0.395,
+     "dev": {
+      "ci95": [
+       -0.12,
+       0.224
+      ],
+      "n": 87,
+      "spearman": 0.057
+     },
+     "feature": "repeats",
+     "oos": {
+      "n": 64,
+      "spearman": -0.211
+     },
+     "supported": false
+    },
+    {
+     "bonferroni_abs_rho": 0.395,
+     "dev": {
+      "ci95": [
+       -0.177,
+       0.264
+      ],
+      "n": 87,
+      "spearman": 0.043
+     },
+     "feature": "entry_width_over_risk",
+     "oos": {
+      "n": 64,
+      "spearman": 0.13
+     },
+     "supported": false
+    }
+   ],
+   "supported": []
+  },
+  "fvg": {
+   "features_tried": 25,
+   "n": 967,
+   "strongest": [
+    {
+     "bonferroni_abs_rho": 0.162,
+     "dev": {
+      "ci95": [
+       -0.186,
+       -0.044
+      ],
+      "n": 568,
+      "spearman": -0.115
+     },
+     "feature": "executable_risk_atr",
+     "oos": {
+      "n": 399,
+      "spearman": -0.156
+     },
+     "supported": false
+    },
+    {
+     "bonferroni_abs_rho": 0.278,
+     "dev": {
+      "ci95": [
+       -0.229,
+       0.064
+      ],
+      "n": 188,
+      "spearman": -0.1
+     },
+     "feature": "component_confluence",
+     "oos": {
+      "n": 144,
+      "spearman": -0.141
+     },
+     "supported": false
+    },
+    {
+     "bonferroni_abs_rho": 0.162,
+     "dev": {
+      "ci95": [
+       -0.177,
+       0.024
+      ],
+      "n": 568,
+      "spearman": -0.083
+     },
+     "feature": "log_technical_rr",
+     "oos": {
+      "n": 399,
+      "spearman": 0.001
+     },
+     "supported": false
+    },
+    {
+     "bonferroni_abs_rho": 0.162,
+     "dev": {
+      "ci95": [
+       0.008,
+       0.115
+      ],
+      "n": 568,
+      "spearman": 0.064
+     },
+     "feature": "age_hours",
+     "oos": {
+      "n": 399,
+      "spearman": -0.015
+     },
+     "supported": false
+    },
+    {
+     "bonferroni_abs_rho": 0.197,
+     "dev": {
+      "ci95": [
+       -0.008,
+       0.132
+      ],
+      "n": 380,
+      "spearman": 0.056
+     },
+     "feature": "component_gap_strength_quality",
+     "oos": {
+      "n": 255,
+      "spearman": null
+     },
+     "supported": false
+    }
+   ],
+   "supported": []
+  },
+  "ifvg": {
+   "n": 98,
+   "skipped": "fewer than the minimum filled observations in a window"
+  },
+  "impulse_pullback": {
+   "n": 1,
+   "skipped": "fewer than the minimum filled observations in a window"
+  },
+  "key_level": {
+   "features_tried": 21,
+   "n": 1708,
+   "strongest": [
+    {
+     "bonferroni_abs_rho": 0.12,
+     "dev": {
+      "ci95": [
+       -0.218,
+       -0.115
+      ],
+      "n": 1019,
+      "spearman": -0.168
+     },
+     "feature": "executable_risk_atr",
+     "oos": {
+      "n": 689,
+      "spearman": -0.152
+     },
+     "supported": true
+    },
+    {
+     "bonferroni_abs_rho": 0.12,
+     "dev": {
+      "ci95": [
+       -0.2,
+       -0.021
+      ],
+      "n": 1019,
+      "spearman": -0.108
+     },
+     "feature": "factor_raw_factor",
+     "oos": {
+      "n": 689,
+      "spearman": -0.014
+     },
+     "supported": false
+    },
+    {
+     "bonferroni_abs_rho": 0.12,
+     "dev": {
+      "ci95": [
+       -0.197,
+       -0.02
+      ],
+      "n": 1019,
+      "spearman": -0.108
+     },
+     "feature": "v2_raw",
+     "oos": {
+      "n": 689,
+      "spearman": -0.014
+     },
+     "supported": false
+    },
+    {
+     "bonferroni_abs_rho": 0.12,
+     "dev": {
+      "ci95": [
+       -0.199,
+       0.01
+      ],
+      "n": 1019,
+      "spearman": -0.099
+     },
+     "feature": "factor_htf_aligned",
+     "oos": {
+      "n": 689,
+      "spearman": -0.022
+     },
+     "supported": false
+    },
+    {
+     "bonferroni_abs_rho": 0.12,
+     "dev": {
+      "ci95": [
+       0.012,
+       0.175
+      ],
+      "n": 1019,
+      "spearman": 0.095
+     },
+     "feature": "log_room_cover",
+     "oos": {
+      "n": 689,
+      "spearman": 0.09
+     },
+     "supported": false
+    }
+   ],
+   "supported": [
+    "executable_risk_atr"
+   ]
+  },
+  "liquidity_sweep": {
+   "n": 22,
+   "skipped": "fewer than the minimum filled observations in a window"
+  },
+  "momentum_ride": {
+   "n": 29,
+   "skipped": "fewer than the minimum filled observations in a window"
+  },
+  "order_block": {
+   "features_tried": 23,
+   "n": 359,
+   "strongest": [
+    {
+     "bonferroni_abs_rho": 0.264,
+     "dev": {
+      "ci95": [
+       -0.337,
+       -0.069
+      ],
+      "n": 207,
+      "spearman": -0.215
+     },
+     "feature": "factor_htf_aligned",
+     "oos": {
+      "n": 152,
+      "spearman": -0.081
+     },
+     "supported": false
+    },
+    {
+     "bonferroni_abs_rho": 0.264,
+     "dev": {
+      "ci95": [
+       -0.37,
+       0.032
+      ],
+      "n": 207,
+      "spearman": -0.181
+     },
+     "feature": "executable_risk_atr",
+     "oos": {
+      "n": 152,
+      "spearman": -0.382
+     },
+     "supported": false
+    },
+    {
+     "bonferroni_abs_rho": 0.349,
+     "dev": {
+      "ci95": [
+       0.041,
+       0.248
+      ],
+      "n": 115,
+      "spearman": 0.127
+     },
+     "feature": "component_confluence",
+     "oos": {
+      "n": 97,
+      "spearman": -0.116
+     },
+     "supported": false
+    },
+    {
+     "bonferroni_abs_rho": 0.264,
+     "dev": {
+      "ci95": [
+       -0.269,
+       0.07
+      ],
+      "n": 207,
+      "spearman": -0.109
+     },
+     "feature": "technical_risk_atr",
+     "oos": {
+      "n": 152,
+      "spearman": -0.039
+     },
+     "supported": false
+    },
+    {
+     "bonferroni_abs_rho": 0.264,
+     "dev": {
+      "ci95": [
+       -0.277,
+       0.087
+      ],
+      "n": 207,
+      "spearman": -0.102
+     },
+     "feature": "entry_width_atr",
+     "oos": {
+      "n": 152,
+      "spearman": -0.01
+     },
+     "supported": false
+    }
+   ],
+   "supported": []
+  },
+  "range_edge": {
+   "features_tried": 22,
+   "n": 349,
+   "strongest": [
+    {
+     "bonferroni_abs_rho": 0.271,
+     "dev": {
+      "ci95": [
+       0.035,
+       0.279
+      ],
+      "n": 194,
+      "spearman": 0.16
+     },
+     "feature": "repeats",
+     "oos": {
+      "n": 155,
+      "spearman": 0.066
+     },
+     "supported": false
+    },
+    {
+     "bonferroni_abs_rho": 0.271,
+     "dev": {
+      "ci95": [
+       0.088,
+       0.226
+      ],
+      "n": 194,
+      "spearman": 0.135
+     },
+     "feature": "stars",
+     "oos": {
+      "n": 155,
+      "spearman": null
+     },
+     "supported": false
+    },
+    {
+     "bonferroni_abs_rho": 0.271,
+     "dev": {
+      "ci95": [
+       -0.25,
+       0.075
+      ],
+      "n": 194,
+      "spearman": -0.099
+     },
+     "feature": "factor_fib",
+     "oos": {
+      "n": 155,
+      "spearman": 0.059
+     },
+     "supported": false
+    },
+    {
+     "bonferroni_abs_rho": 0.271,
+     "dev": {
+      "ci95": [
+       0.008,
+       0.209
+      ],
+      "n": 194,
+      "spearman": 0.098
+     },
+     "feature": "component_touch_history",
+     "oos": {
+      "n": 155,
+      "spearman": 0.051
+     },
+     "supported": false
+    },
+    {
+     "bonferroni_abs_rho": 0.271,
+     "dev": {
+      "ci95": [
+       -0.21,
+       0.032
+      ],
+      "n": 194,
+      "spearman": -0.089
+     },
+     "feature": "factor_raw_factor",
+     "oos": {
+      "n": 155,
+      "spearman": -0.045
+     },
+     "supported": false
+    }
+   ],
+   "supported": []
+  },
+  "scalp_breakout_retest": {
+   "n": 17,
+   "skipped": "fewer than the minimum filled observations in a window"
+  },
+  "session_level": {
+   "n": 64,
+   "skipped": "fewer than the minimum filled observations in a window"
+  },
+  "snap_back": {
+   "n": 45,
+   "skipped": "fewer than the minimum filled observations in a window"
+  },
+  "supply": {
+   "features_tried": 23,
+   "n": 739,
+   "strongest": [
+    {
+     "bonferroni_abs_rho": 0.188,
+     "dev": {
+      "ci95": [
+       -0.247,
+       0.016
+      ],
+      "n": 412,
+      "spearman": -0.118
+     },
+     "feature": "factor_htf_aligned",
+     "oos": {
+      "n": 327,
+      "spearman": -0.05
+     },
+     "supported": false
+    },
+    {
+     "bonferroni_abs_rho": 0.188,
+     "dev": {
+      "ci95": [
+       -0.166,
+       -0.038
+      ],
+      "n": 412,
+      "spearman": -0.099
+     },
+     "feature": "quality",
+     "oos": {
+      "n": 327,
+      "spearman": -0.067
+     },
+     "supported": false
+    },
+    {
+     "bonferroni_abs_rho": 0.188,
+     "dev": {
+      "ci95": [
+       -0.183,
+       -0.001
+      ],
+      "n": 412,
+      "spearman": -0.096
+     },
+     "feature": "factor_fib",
+     "oos": {
+      "n": 327,
+      "spearman": 0.018
+     },
+     "supported": false
+    },
+    {
+     "bonferroni_abs_rho": 0.188,
+     "dev": {
+      "ci95": [
+       0.014,
+       0.159
+      ],
+      "n": 412,
+      "spearman": 0.087
+     },
+     "feature": "factor_touches",
+     "oos": {
+      "n": 327,
+      "spearman": 0.029
+     },
+     "supported": false
+    },
+    {
+     "bonferroni_abs_rho": 0.188,
+     "dev": {
+      "ci95": [
+       -0.166,
+       0.004
+      ],
+      "n": 412,
+      "spearman": -0.084
+     },
+     "feature": "factor_session",
+     "oos": {
+      "n": 327,
+      "spearman": -0.068
+     },
+     "supported": false
+    }
+   ],
+   "supported": []
+  },
+  "trendline": {
+   "n": 7,
+   "skipped": "fewer than the minimum filled observations in a window"
+  }
+ },
+ "composite": {
+  "definition": "equal-weight mean of the signed within-strategy percentiles of the supported features",
+  "dev": {
+   "high": {
+    "ci95": [
+     -0.118,
+     0.031
+    ],
+    "mean_r": -0.047,
+    "n": 1137
+   },
+   "low": {
+    "ci95": [
+     -0.134,
+     -0.005
+    ],
+    "mean_r": -0.066,
+    "n": 1135
+   },
+   "middle": {
+    "ci95": [
+     -0.104,
+     0.02
+    ],
+    "mean_r": -0.043,
+    "n": 1135
+   },
+   "n": 3407,
+   "spearman": 0.119
+  },
+  "oos": {
+   "high": {
+    "ci95": [
+     -0.173,
+     0.012
+    ],
+    "mean_r": -0.086,
+    "n": 799
+   },
+   "low": {
+    "ci95": [
+     -0.343,
+     -0.077
+    ],
+    "mean_r": -0.202,
+    "n": 798
+   },
+   "middle": {
+    "ci95": [
+     -0.207,
+     -0.013
+    ],
+    "mean_r": -0.107,
+    "n": 798
+   },
+   "n": 2395,
+   "spearman": 0.143
+  }
+ },
+ "dev": 3407,
+ "existing_quality": {
+  "dev": {
+   "high": {
+    "ci95": [
+     -0.2,
+     -0.046
+    ],
+    "mean_r": -0.124,
+    "n": 1126
+   },
+   "low": {
+    "ci95": [
+     -0.069,
+     0.073
+    ],
+    "mean_r": 0.004,
+    "n": 1126
+   },
+   "middle": {
+    "ci95": [
+     -0.105,
+     0.036
+    ],
+    "mean_r": -0.035,
+    "n": 1126
+   },
+   "n": 3378,
+   "spearman": -0.049
+  },
+  "oos": {
+   "high": {
+    "ci95": [
+     -0.279,
+     -0.102
+    ],
+    "mean_r": -0.188,
+    "n": 795
+   },
+   "low": {
+    "ci95": [
+     -0.197,
+     0.045
+    ],
+    "mean_r": -0.069,
+    "n": 793
+   },
+   "middle": {
+    "ci95": [
+     -0.228,
+     -0.055
+    ],
+    "mean_r": -0.137,
+    "n": 793
+   },
+   "n": 2381,
+   "spearman": -0.073
+  }
+ },
+ "features_tried": 97,
+ "oos": 2396,
+ "oos_starts_utc": "2026-10-07",
+ "pooled": [
+  {
+   "bonferroni_abs_rho": 0.651,
+   "dev": {
+    "ci95": [
+     -0.715,
+     -0.115
+    ],
+    "n": 23,
+    "spearman": -0.467
+   },
+   "feature": "component_reference_touches",
+   "oos": {
+    "n": 13,
+    "spearman": -0.07
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.651,
+   "dev": {
+    "ci95": [
+     -0.784,
+     0.142
+    ],
+    "n": 23,
+    "spearman": -0.356
+   },
+   "feature": "component_retest_bars_after_accept",
+   "oos": {
+    "n": 13,
+    "spearman": 0.166
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.687,
+   "dev": {
+    "ci95": [
+     -0.694,
+     0.099
+    ],
+    "n": 20,
+    "spearman": -0.343
+   },
+   "feature": "component_continuity",
+   "oos": {
+    "n": 9,
+    "spearman": 0.14
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.467,
+   "dev": {
+    "ci95": [
+     0.035,
+     0.582
+    ],
+    "n": 50,
+    "spearman": 0.316
+   },
+   "feature": "component_source_age_bars",
+   "oos": {
+    "n": 25,
+    "spearman": 0.244
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.467,
+   "dev": {
+    "ci95": [
+     -0.516,
+     -0.027
+    ],
+    "n": 50,
+    "spearman": -0.298
+   },
+   "feature": "component_source_dependency_count",
+   "oos": {
+    "n": 25,
+    "spearman": 0.292
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.437,
+   "dev": {
+    "ci95": [
+     -0.457,
+     -0.037
+    ],
+    "n": 58,
+    "spearman": -0.284
+   },
+   "feature": "component_bars_gap_to_inversion",
+   "oos": {
+    "n": 40,
+    "spearman": -0.05
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.781,
+   "dev": {
+    "ci95": [
+     -0.844,
+     0.457
+    ],
+    "n": 14,
+    "spearman": -0.244
+   },
+   "feature": "component_rejection_displacement",
+   "oos": {
+    "n": 8,
+    "spearman": 0.821
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.437,
+   "dev": {
+    "ci95": [
+     -0.516,
+     0.048
+    ],
+    "n": 58,
+    "spearman": -0.24
+   },
+   "feature": "component_inversion_body_ratio",
+   "oos": {
+    "n": 40,
+    "spearman": -0.094
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.651,
+   "dev": {
+    "ci95": [
+     -0.647,
+     0.22
+    ],
+    "n": 23,
+    "spearman": -0.233
+   },
+   "feature": "component_technical_rr",
+   "oos": {
+    "n": 13,
+    "spearman": -0.134
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.7,
+   "dev": {
+    "ci95": [
+     -0.596,
+     0.242
+    ],
+    "n": 19,
+    "spearman": -0.215
+   },
+   "feature": "component_touch_penetration_atr",
+   "oos": {
+    "n": 17,
+    "spearman": 0.039
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.467,
+   "dev": {
+    "ci95": [
+     -0.488,
+     0.092
+    ],
+    "n": 50,
+    "spearman": -0.206
+   },
+   "feature": "component_independent_source_count",
+   "oos": {
+    "n": 25,
+    "spearman": 0.451
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.467,
+   "dev": {
+    "ci95": [
+     -0.46,
+     0.092
+    ],
+    "n": 50,
+    "spearman": -0.197
+   },
+   "feature": "component_overlap_integrity",
+   "oos": {
+    "n": 25,
+    "spearman": -0.116
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.437,
+   "dev": {
+    "ci95": [
+     -0.463,
+     0.172
+    ],
+    "n": 58,
+    "spearman": -0.192
+   },
+   "feature": "component_inversion_close_strength",
+   "oos": {
+    "n": 40,
+    "spearman": -0.226
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.651,
+   "dev": {
+    "ci95": [
+     -0.518,
+     0.162
+    ],
+    "n": 23,
+    "spearman": -0.188
+   },
+   "feature": "component_break_displacement_atr",
+   "oos": {
+    "n": 13,
+    "spearman": -0.211
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 1.0,
+   "dev": {
+    "ci95": null,
+    "n": 8,
+    "spearman": -0.187
+   },
+   "feature": "component_retest_quality",
+   "oos": {
+    "n": 9,
+    "spearman": -0.201
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.48,
+   "dev": {
+    "ci95": [
+     -0.083,
+     0.414
+    ],
+    "n": 47,
+    "spearman": 0.186
+   },
+   "feature": "component_structural_alignment",
+   "oos": {
+    "n": 24,
+    "spearman": -0.106
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.467,
+   "dev": {
+    "ci95": [
+     -0.484,
+     0.148
+    ],
+    "n": 50,
+    "spearman": -0.184
+   },
+   "feature": "component_reaction_freshness_bars",
+   "oos": {
+    "n": 25,
+    "spearman": 0.054
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.547,
+   "dev": {
+    "ci95": [
+     -0.263,
+     0.555
+    ],
+    "n": 35,
+    "spearman": 0.183
+   },
+   "feature": "component_level_type",
+   "oos": {
+    "n": 29,
+    "spearman": -0.033
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.467,
+   "dev": {
+    "ci95": [
+     -0.471,
+     0.122
+    ],
+    "n": 50,
+    "spearman": -0.181
+   },
+   "feature": "component_overlap_width_pips",
+   "oos": {
+    "n": 25,
+    "spearman": 0.413
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.547,
+   "dev": {
+    "ci95": [
+     -0.379,
+     -0.105
+    ],
+    "n": 35,
+    "spearman": -0.172
+   },
+   "feature": "component_period_completeness",
+   "oos": {
+    "n": 29,
+    "spearman": -0.282
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.547,
+   "dev": {
+    "ci95": [
+     -0.491,
+     0.208
+    ],
+    "n": 35,
+    "spearman": -0.157
+   },
+   "feature": "component_level_integrity",
+   "oos": {
+    "n": 29,
+    "spearman": 0.021
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.437,
+   "dev": {
+    "ci95": [
+     -0.375,
+     0.091
+    ],
+    "n": 58,
+    "spearman": -0.154
+   },
+   "feature": "component_inversion_close_beyond_atr",
+   "oos": {
+    "n": 40,
+    "spearman": -0.075
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.467,
+   "dev": {
+    "ci95": [
+     -0.135,
+     0.431
+    ],
+    "n": 50,
+    "spearman": 0.154
+   },
+   "feature": "component_source_integrity",
+   "oos": {
+    "n": 25,
+    "spearman": -0.031
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.437,
+   "dev": {
+    "ci95": [
+     -0.124,
+     0.436
+    ],
+    "n": 58,
+    "spearman": 0.143
+   },
+   "feature": "component_retest_age_bars",
+   "oos": {
+    "n": 40,
+    "spearman": -0.112
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.351,
+   "dev": {
+    "ci95": [
+     -0.063,
+     0.329
+    ],
+    "n": 93,
+    "spearman": 0.137
+   },
+   "feature": "component_rejection_strength",
+   "oos": {
+    "n": 69,
+    "spearman": 0.192
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.265,
+   "dev": {
+    "ci95": [
+     -0.283,
+     0.035
+    ],
+    "n": 166,
+    "spearman": -0.121
+   },
+   "feature": "component_confluence_stars",
+   "oos": {
+    "n": 107,
+    "spearman": 0.097
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.059,
+   "dev": {
+    "ci95": [
+     -0.159,
+     -0.067
+    ],
+    "n": 3407,
+    "spearman": -0.119
+   },
+   "feature": "executable_risk_atr",
+   "oos": {
+    "n": 2395,
+    "spearman": -0.143
+   },
+   "supported": true
+  },
+  {
+   "bonferroni_abs_rho": 0.547,
+   "dev": {
+    "ci95": [
+     -0.452,
+     0.198
+    ],
+    "n": 35,
+    "spearman": -0.11
+   },
+   "feature": "component_bars_to_confirm",
+   "oos": {
+    "n": 29,
+    "spearman": -0.164
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.467,
+   "dev": {
+    "ci95": [
+     -0.222,
+     0.428
+    ],
+    "n": 50,
+    "spearman": 0.109
+   },
+   "feature": "component_technical_reward_risk",
+   "oos": {
+    "n": 25,
+    "spearman": 0.002
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.437,
+   "dev": {
+    "ci95": [
+     -0.383,
+     0.146
+    ],
+    "n": 58,
+    "spearman": -0.105
+   },
+   "feature": "component_zone_integrity",
+   "oos": {
+    "n": 40,
+    "spearman": 0.196
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.437,
+   "dev": {
+    "ci95": [
+     -0.122,
+     0.365
+    ],
+    "n": 58,
+    "spearman": 0.101
+   },
+   "feature": "component_origin_displacement_atr",
+   "oos": {
+    "n": 40,
+    "spearman": -0.154
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.651,
+   "dev": {
+    "ci95": [
+     -0.431,
+     0.501
+    ],
+    "n": 23,
+    "spearman": 0.099
+   },
+   "feature": "component_break_close_strength",
+   "oos": {
+    "n": 13,
+    "spearman": 0.105
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.265,
+   "dev": {
+    "ci95": [
+     -0.095,
+     0.296
+    ],
+    "n": 166,
+    "spearman": 0.099
+   },
+   "feature": "component_technical_risk_pips",
+   "oos": {
+    "n": 107,
+    "spearman": -0.101
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.246,
+   "dev": {
+    "ci95": [
+     0.004,
+     0.204
+    ],
+    "n": 194,
+    "spearman": 0.098
+   },
+   "feature": "component_touch_history",
+   "oos": {
+    "n": 155,
+    "spearman": 0.051
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.246,
+   "dev": {
+    "ci95": [
+     -0.058,
+     0.238
+    ],
+    "n": 194,
+    "spearman": 0.087
+   },
+   "feature": "component_rejection_close_location",
+   "oos": {
+    "n": 155,
+    "spearman": 0.11
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.06,
+   "dev": {
+    "ci95": [
+     -0.165,
+     -0.008
+    ],
+    "n": 3387,
+    "spearman": -0.084
+   },
+   "feature": "factor_htf_aligned",
+   "oos": {
+    "n": 2386,
+    "spearman": -0.036
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.547,
+   "dev": {
+    "ci95": [
+     -0.262,
+     0.385
+    ],
+    "n": 35,
+    "spearman": 0.079
+   },
+   "feature": "component_level_age_bars",
+   "oos": {
+    "n": 29,
+    "spearman": -0.229
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.651,
+   "dev": {
+    "ci95": [
+     -0.535,
+     0.421
+    ],
+    "n": 23,
+    "spearman": -0.073
+   },
+   "feature": "component_retest_depth_atr",
+   "oos": {
+    "n": 13,
+    "spearman": -0.381
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.246,
+   "dev": {
+    "ci95": [
+     -0.205,
+     0.074
+    ],
+    "n": 194,
+    "spearman": -0.073
+   },
+   "feature": "component_wick_history",
+   "oos": {
+    "n": 155,
+    "spearman": -0.182
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.437,
+   "dev": {
+    "ci95": [
+     -0.28,
+     0.193
+    ],
+    "n": 58,
+    "spearman": -0.065
+   },
+   "feature": "component_gap_width_atr",
+   "oos": {
+    "n": 40,
+    "spearman": -0.064
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.547,
+   "dev": {
+    "ci95": [
+     -0.32,
+     0.371
+    ],
+    "n": 35,
+    "spearman": 0.06
+   },
+   "feature": "component_actual_level_touches",
+   "oos": {
+    "n": 29,
+    "spearman": -0.058
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.265,
+   "dev": {
+    "ci95": [
+     -0.241,
+     0.147
+    ],
+    "n": 166,
+    "spearman": -0.06
+   },
+   "feature": "component_target_room_atr",
+   "oos": {
+    "n": 107,
+    "spearman": -0.069
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.08,
+   "dev": {
+    "ci95": [
+     -0.117,
+     0.006
+    ],
+    "n": 1878,
+    "spearman": -0.057
+   },
+   "feature": "component_confluence",
+   "oos": {
+    "n": 1386,
+    "spearman": -0.02
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.342,
+   "dev": {
+    "ci95": [
+     -0.247,
+     0.124
+    ],
+    "n": 98,
+    "spearman": -0.057
+   },
+   "feature": "component_liquidity_grade",
+   "oos": {
+    "n": 64,
+    "spearman": -0.131
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.177,
+   "dev": {
+    "ci95": [
+     -0.009,
+     0.134
+    ],
+    "n": 380,
+    "spearman": 0.056
+   },
+   "feature": "component_gap_strength_quality",
+   "oos": {
+    "n": 255,
+    "spearman": null
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 1.0,
+   "dev": {
+    "ci95": null,
+    "n": 8,
+    "spearman": -0.054
+   },
+   "feature": "component_retest_speed",
+   "oos": {
+    "n": 9,
+    "spearman": -0.112
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.059,
+   "dev": {
+    "ci95": [
+     -0.116,
+     0.006
+    ],
+    "n": 3407,
+    "spearman": -0.053
+   },
+   "feature": "factor_raw_factor",
+   "oos": {
+    "n": 2395,
+    "spearman": 0.016
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.601,
+   "dev": {
+    "ci95": [
+     -0.298,
+     0.347
+    ],
+    "n": 28,
+    "spearman": 0.052
+   },
+   "feature": "component_displacement",
+   "oos": {
+    "n": 18,
+    "spearman": 0.053
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.059,
+   "dev": {
+    "ci95": [
+     -0.108,
+     0.007
+    ],
+    "n": 3407,
+    "spearman": -0.052
+   },
+   "feature": "v2_raw",
+   "oos": {
+    "n": 2395,
+    "spearman": 0.021
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.155,
+   "dev": {
+    "ci95": [
+     -0.152,
+     0.051
+    ],
+    "n": 497,
+    "spearman": -0.05
+   },
+   "feature": "component_freshness_quality",
+   "oos": {
+    "n": 328,
+    "spearman": -0.185
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.059,
+   "dev": {
+    "ci95": [
+     -0.01,
+     0.107
+    ],
+    "n": 3407,
+    "spearman": 0.05
+   },
+   "feature": "log_room_cover",
+   "oos": {
+    "n": 2395,
+    "spearman": 0.09
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.352,
+   "dev": {
+    "ci95": [
+     -0.156,
+     0.253
+    ],
+    "n": 92,
+    "spearman": 0.049
+   },
+   "feature": "component_structure_alignment",
+   "oos": {
+    "n": 68,
+    "spearman": -0.081
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.064,
+   "dev": {
+    "ci95": [
+     -0.085,
+     -0.01
+    ],
+    "n": 2905,
+    "spearman": -0.049
+   },
+   "feature": "factor_choch",
+   "oos": {
+    "n": 2043,
+    "spearman": -0.013
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.06,
+   "dev": {
+    "ci95": [
+     -0.081,
+     -0.015
+    ],
+    "n": 3378,
+    "spearman": -0.049
+   },
+   "feature": "quality",
+   "oos": {
+    "n": 2381,
+    "spearman": -0.073
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.06,
+   "dev": {
+    "ci95": [
+     -0.08,
+     -0.014
+    ],
+    "n": 3387,
+    "spearman": -0.046
+   },
+   "feature": "stars",
+   "oos": {
+    "n": 2386,
+    "spearman": -0.055
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.245,
+   "dev": {
+    "ci95": [
+     -0.132,
+     0.194
+    ],
+    "n": 196,
+    "spearman": 0.045
+   },
+   "feature": "component_overlap_width_atr",
+   "oos": {
+    "n": 98,
+    "spearman": 0.084
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.059,
+   "dev": {
+    "ci95": [
+     -0.073,
+     -0.007
+    ],
+    "n": 3407,
+    "spearman": -0.041
+   },
+   "feature": "entry_width_over_risk",
+   "oos": {
+    "n": 2395,
+    "spearman": -0.024
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.412,
+   "dev": {
+    "ci95": [
+     -0.325,
+     0.205
+    ],
+    "n": 66,
+    "spearman": -0.04
+   },
+   "feature": "component_sweep_depth_atr",
+   "oos": {
+    "n": 37,
+    "spearman": -0.092
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.059,
+   "dev": {
+    "ci95": [
+     -0.065,
+     -0.008
+    ],
+    "n": 3407,
+    "spearman": -0.038
+   },
+   "feature": "entry_width_atr",
+   "oos": {
+    "n": 2395,
+    "spearman": -0.012
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.082,
+   "dev": {
+    "ci95": [
+     -0.08,
+     0.01
+    ],
+    "n": 1791,
+    "spearman": -0.037
+   },
+   "feature": "factor_session",
+   "oos": {
+    "n": 1281,
+    "spearman": -0.084
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.063,
+   "dev": {
+    "ci95": [
+     0.001,
+     0.074
+    ],
+    "n": 3019,
+    "spearman": 0.035
+   },
+   "feature": "factor_structural",
+   "oos": {
+    "n": 2117,
+    "spearman": 0.058
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.393,
+   "dev": {
+    "ci95": [
+     -0.221,
+     0.181
+    ],
+    "n": 73,
+    "spearman": -0.032
+   },
+   "feature": "component_rejection_close_strength",
+   "oos": {
+    "n": 38,
+    "spearman": 0.02
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.059,
+   "dev": {
+    "ci95": [
+     -0.077,
+     0.024
+    ],
+    "n": 3407,
+    "spearman": -0.031
+   },
+   "feature": "log_technical_rr",
+   "oos": {
+    "n": 2395,
+    "spearman": -0.035
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.233,
+   "dev": {
+    "ci95": [
+     -0.112,
+     0.164
+    ],
+    "n": 217,
+    "spearman": 0.03
+   },
+   "feature": "component_break_distance_atr",
+   "oos": {
+    "n": 168,
+    "spearman": 0.045
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.059,
+   "dev": {
+    "ci95": [
+     -0.054,
+     0.001
+    ],
+    "n": 3407,
+    "spearman": -0.026
+   },
+   "feature": "technical_risk_atr",
+   "oos": {
+    "n": 2395,
+    "spearman": -0.003
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.437,
+   "dev": {
+    "ci95": [
+     -0.198,
+     0.274
+    ],
+    "n": 58,
+    "spearman": 0.025
+   },
+   "feature": "component_retest_penetration_atr",
+   "oos": {
+    "n": 40,
+    "spearman": -0.303
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.06,
+   "dev": {
+    "ci95": [
+     -0.004,
+     0.056
+    ],
+    "n": 3325,
+    "spearman": 0.024
+   },
+   "feature": "factor_displacement",
+   "oos": {
+    "n": 2344,
+    "spearman": 0.039
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.061,
+   "dev": {
+    "ci95": [
+     -0.008,
+     0.05
+    ],
+    "n": 3244,
+    "spearman": 0.022
+   },
+   "feature": "factor_touches",
+   "oos": {
+    "n": 2281,
+    "spearman": 0.037
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.467,
+   "dev": {
+    "ci95": [
+     -0.282,
+     0.332
+    ],
+    "n": 50,
+    "spearman": 0.02
+   },
+   "feature": "component_htf_alignment",
+   "oos": {
+    "n": 25,
+    "spearman": 0.03
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.177,
+   "dev": {
+    "ci95": [
+     -0.102,
+     0.058
+    ],
+    "n": 380,
+    "spearman": -0.016
+   },
+   "feature": "component_fill_quality",
+   "oos": {
+    "n": 255,
+    "spearman": 0.004
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.437,
+   "dev": {
+    "ci95": [
+     -0.295,
+     0.231
+    ],
+    "n": 58,
+    "spearman": -0.016
+   },
+   "feature": "component_inversion_displacement_atr",
+   "oos": {
+    "n": 40,
+    "spearman": -0.058
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.651,
+   "dev": {
+    "ci95": [
+     -0.463,
+     0.451
+    ],
+    "n": 23,
+    "spearman": 0.013
+   },
+   "feature": "component_break_body_ratio",
+   "oos": {
+    "n": 13,
+    "spearman": -0.177
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.437,
+   "dev": {
+    "ci95": [
+     -0.245,
+     0.257
+    ],
+    "n": 58,
+    "spearman": -0.012
+   },
+   "feature": "component_retest_touches",
+   "oos": {
+    "n": 40,
+    "spearman": -0.131
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.06,
+   "dev": {
+    "ci95": [
+     -0.018,
+     0.039
+    ],
+    "n": 3347,
+    "spearman": 0.01
+   },
+   "feature": "repeats",
+   "oos": {
+    "n": 2361,
+    "spearman": -0.023
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.06,
+   "dev": {
+    "ci95": [
+     -0.042,
+     0.023
+    ],
+    "n": 3339,
+    "spearman": -0.008
+   },
+   "feature": "age_hours",
+   "oos": {
+    "n": 2354,
+    "spearman": -0.049
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.467,
+   "dev": {
+    "ci95": [
+     -0.276,
+     0.24
+    ],
+    "n": 50,
+    "spearman": 0.007
+   },
+   "feature": "component_displacement_strength",
+   "oos": {
+    "n": 25,
+    "spearman": -0.051
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.177,
+   "dev": {
+    "ci95": [
+     -0.102,
+     0.113
+    ],
+    "n": 380,
+    "spearman": 0.007
+   },
+   "feature": "component_relevance_quality",
+   "oos": {
+    "n": 255,
+    "spearman": null
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.109,
+   "dev": {
+    "ci95": [
+     -0.041,
+     0.056
+    ],
+    "n": 1019,
+    "spearman": 0.007
+   },
+   "feature": "component_touch_quality",
+   "oos": {
+    "n": 689,
+    "spearman": 0.02
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.265,
+   "dev": {
+    "ci95": [
+     -0.149,
+     0.149
+    ],
+    "n": 166,
+    "spearman": 0.004
+   },
+   "feature": "component_rejection_wick_ratio",
+   "oos": {
+    "n": 107,
+    "spearman": -0.013
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.063,
+   "dev": {
+    "ci95": [
+     -0.03,
+     0.038
+    ],
+    "n": 3019,
+    "spearman": 0.003
+   },
+   "feature": "factor_wick",
+   "oos": {
+    "n": 2117,
+    "spearman": 0.042
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.285,
+   "dev": {
+    "ci95": [
+     -0.2,
+     0.222
+    ],
+    "n": 143,
+    "spearman": -0.002
+   },
+   "feature": "component_target_room_r",
+   "oos": {
+    "n": 94,
+    "spearman": 0.009
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.075,
+   "dev": {
+    "ci95": [
+     -0.054,
+     0.045
+    ],
+    "n": 2122,
+    "spearman": -0.002
+   },
+   "feature": "factor_zone_quality",
+   "oos": {
+    "n": 1524,
+    "spearman": -0.005
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.206,
+   "dev": {
+    "ci95": [
+     -0.1,
+     0.103
+    ],
+    "n": 279,
+    "spearman": 0.001
+   },
+   "feature": "component_reclaim_depth_atr",
+   "oos": {
+    "n": 209,
+    "spearman": -0.062
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.061,
+   "dev": {
+    "ci95": [
+     -0.039,
+     0.036
+    ],
+    "n": 3223,
+    "spearman": -0.001
+   },
+   "feature": "factor_fib",
+   "oos": {
+    "n": 2272,
+    "spearman": 0.03
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 1.0,
+   "dev": {
+    "ci95": null,
+    "n": 8,
+    "spearman": null
+   },
+   "feature": "component_acceptance",
+   "oos": {
+    "n": 9,
+    "spearman": -0.225
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 1.0,
+   "dev": {
+    "ci95": null,
+    "n": 0,
+    "spearman": null
+   },
+   "feature": "component_body_dominance",
+   "oos": {
+    "n": 0,
+    "spearman": null
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 1.0,
+   "dev": {
+    "ci95": null,
+    "n": 0,
+    "spearman": null
+   },
+   "feature": "component_break_accept_closes",
+   "oos": {
+    "n": 0,
+    "spearman": null
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 1.0,
+   "dev": {
+    "ci95": null,
+    "n": 8,
+    "spearman": null
+   },
+   "feature": "component_confirmation",
+   "oos": {
+    "n": 9,
+    "spearman": -0.225
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 1.0,
+   "dev": {
+    "ci95": null,
+    "n": 0,
+    "spearman": null
+   },
+   "feature": "component_extension",
+   "oos": {
+    "n": 0,
+    "spearman": null
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 1.0,
+   "dev": {
+    "ci95": null,
+    "n": 0,
+    "spearman": null
+   },
+   "feature": "component_independent_fact_count",
+   "oos": {
+    "n": 0,
+    "spearman": null
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 1.0,
+   "dev": {
+    "ci95": null,
+    "n": 0,
+    "spearman": null
+   },
+   "feature": "component_location",
+   "oos": {
+    "n": 0,
+    "spearman": null
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 1.0,
+   "dev": {
+    "ci95": null,
+    "n": 0,
+    "spearman": null
+   },
+   "feature": "component_reaction",
+   "oos": {
+    "n": 0,
+    "spearman": null
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.547,
+   "dev": {
+    "ci95": null,
+    "n": 35,
+    "spearman": null
+   },
+   "feature": "component_reaction_freshness",
+   "oos": {
+    "n": 29,
+    "spearman": 0.218
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 1.0,
+   "dev": {
+    "ci95": null,
+    "n": 0,
+    "spearman": null
+   },
+   "feature": "component_reclaim",
+   "oos": {
+    "n": 0,
+    "spearman": null
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 1.0,
+   "dev": {
+    "ci95": null,
+    "n": 0,
+    "spearman": null
+   },
+   "feature": "component_room",
+   "oos": {
+    "n": 0,
+    "spearman": null
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 1.0,
+   "dev": {
+    "ci95": null,
+    "n": 0,
+    "spearman": null
+   },
+   "feature": "component_structural_break",
+   "oos": {
+    "n": 0,
+    "spearman": null
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 1.0,
+   "dev": {
+    "ci95": null,
+    "n": 0,
+    "spearman": null
+   },
+   "feature": "component_zone_strength_quality",
+   "oos": {
+    "n": 0,
+    "spearman": null
+   },
+   "supported": false
+  }
+ ],
+ "pooled_within_strategy_and_symbol": [
+  {
+   "bonferroni_abs_rho": 0.865,
+   "dev": {
+    "ci95": [
+     -1.0,
+     -0.153
+    ],
+    "n": 10,
+    "spearman": -0.5
+   },
+   "feature": "component_period_completeness",
+   "oos": {
+    "n": 9,
+    "spearman": -0.802
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.651,
+   "dev": {
+    "ci95": [
+     -0.662,
+     -0.067
+    ],
+    "n": 23,
+    "spearman": -0.415
+   },
+   "feature": "component_reference_touches",
+   "oos": {
+    "n": 13,
+    "spearman": -0.024
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.687,
+   "dev": {
+    "ci95": [
+     -0.714,
+     -0.002
+    ],
+    "n": 20,
+    "spearman": -0.406
+   },
+   "feature": "component_continuity",
+   "oos": {
+    "n": 9,
+    "spearman": 0.72
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.561,
+   "dev": {
+    "ci95": [
+     -0.707,
+     -0.014
+    ],
+    "n": 33,
+    "spearman": -0.355
+   },
+   "feature": "component_independent_source_count",
+   "oos": {
+    "n": 18,
+    "spearman": 0.313
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.48,
+   "dev": {
+    "ci95": [
+     0.052,
+     0.563
+    ],
+    "n": 47,
+    "spearman": 0.354
+   },
+   "feature": "component_structural_alignment",
+   "oos": {
+    "n": 24,
+    "spearman": -0.008
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.7,
+   "dev": {
+    "ci95": [
+     -0.664,
+     0.132
+    ],
+    "n": 19,
+    "spearman": -0.324
+   },
+   "feature": "component_touch_penetration_atr",
+   "oos": {
+    "n": 17,
+    "spearman": -0.229
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.467,
+   "dev": {
+    "ci95": [
+     -0.544,
+     -0.085
+    ],
+    "n": 50,
+    "spearman": -0.321
+   },
+   "feature": "component_source_dependency_count",
+   "oos": {
+    "n": 25,
+    "spearman": 0.372
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.467,
+   "dev": {
+    "ci95": [
+     -0.053,
+     0.51
+    ],
+    "n": 50,
+    "spearman": 0.254
+   },
+   "feature": "component_source_age_bars",
+   "oos": {
+    "n": 25,
+    "spearman": 0.19
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.437,
+   "dev": {
+    "ci95": [
+     -0.458,
+     -0.008
+    ],
+    "n": 58,
+    "spearman": -0.25
+   },
+   "feature": "component_bars_gap_to_inversion",
+   "oos": {
+    "n": 40,
+    "spearman": 0.035
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.3,
+   "dev": {
+    "ci95": [
+     0.07,
+     0.414
+    ],
+    "n": 129,
+    "spearman": 0.25
+   },
+   "feature": "component_gap_strength_quality",
+   "oos": {
+    "n": 98,
+    "spearman": 0.314
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.547,
+   "dev": {
+    "ci95": [
+     -0.199,
+     0.574
+    ],
+    "n": 35,
+    "spearman": 0.24
+   },
+   "feature": "component_level_type",
+   "oos": {
+    "n": 29,
+    "spearman": -0.09
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.437,
+   "dev": {
+    "ci95": [
+     -0.479,
+     0.055
+    ],
+    "n": 58,
+    "spearman": -0.226
+   },
+   "feature": "component_inversion_body_ratio",
+   "oos": {
+    "n": 40,
+    "spearman": -0.114
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.3,
+   "dev": {
+    "ci95": [
+     -0.371,
+     -0.062
+    ],
+    "n": 129,
+    "spearman": -0.223
+   },
+   "feature": "component_relevance_quality",
+   "oos": {
+    "n": 98,
+    "spearman": -0.314
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.651,
+   "dev": {
+    "ci95": [
+     -0.617,
+     0.26
+    ],
+    "n": 23,
+    "spearman": -0.212
+   },
+   "feature": "component_technical_rr",
+   "oos": {
+    "n": 13,
+    "spearman": -0.139
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.437,
+   "dev": {
+    "ci95": [
+     -0.486,
+     0.118
+    ],
+    "n": 58,
+    "spearman": -0.207
+   },
+   "feature": "component_inversion_close_strength",
+   "oos": {
+    "n": 40,
+    "spearman": -0.187
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.467,
+   "dev": {
+    "ci95": [
+     -0.47,
+     0.077
+    ],
+    "n": 50,
+    "spearman": -0.207
+   },
+   "feature": "component_overlap_width_pips",
+   "oos": {
+    "n": 25,
+    "spearman": 0.489
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.651,
+   "dev": {
+    "ci95": [
+     -0.624,
+     0.311
+    ],
+    "n": 23,
+    "spearman": -0.193
+   },
+   "feature": "component_retest_bars_after_accept",
+   "oos": {
+    "n": 13,
+    "spearman": 0.264
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 1.0,
+   "dev": {
+    "ci95": null,
+    "n": 8,
+    "spearman": -0.187
+   },
+   "feature": "component_retest_quality",
+   "oos": {
+    "n": 9,
+    "spearman": -0.201
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.781,
+   "dev": {
+    "ci95": [
+     -0.761,
+     0.552
+    ],
+    "n": 14,
+    "spearman": -0.181
+   },
+   "feature": "component_rejection_displacement",
+   "oos": {
+    "n": 8,
+    "spearman": 0.806
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.467,
+   "dev": {
+    "ci95": [
+     -0.135,
+     0.438
+    ],
+    "n": 50,
+    "spearman": 0.168
+   },
+   "feature": "component_source_integrity",
+   "oos": {
+    "n": 25,
+    "spearman": -0.029
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.467,
+   "dev": {
+    "ci95": [
+     -0.424,
+     0.153
+    ],
+    "n": 50,
+    "spearman": -0.16
+   },
+   "feature": "component_htf_alignment",
+   "oos": {
+    "n": 25,
+    "spearman": -0.203
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.48,
+   "dev": {
+    "ci95": [
+     -0.501,
+     0.2
+    ],
+    "n": 47,
+    "spearman": -0.158
+   },
+   "feature": "component_reaction_freshness_bars",
+   "oos": {
+    "n": 22,
+    "spearman": 0.073
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.437,
+   "dev": {
+    "ci95": [
+     -0.115,
+     0.447
+    ],
+    "n": 58,
+    "spearman": 0.158
+   },
+   "feature": "component_retest_age_bars",
+   "oos": {
+    "n": 40,
+    "spearman": -0.073
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.437,
+   "dev": {
+    "ci95": [
+     -0.379,
+     0.094
+    ],
+    "n": 58,
+    "spearman": -0.155
+   },
+   "feature": "component_inversion_close_beyond_atr",
+   "oos": {
+    "n": 40,
+    "spearman": -0.0
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.547,
+   "dev": {
+    "ci95": [
+     -0.208,
+     0.453
+    ],
+    "n": 35,
+    "spearman": 0.134
+   },
+   "feature": "component_level_age_bars",
+   "oos": {
+    "n": 29,
+    "spearman": -0.27
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.351,
+   "dev": {
+    "ci95": [
+     -0.057,
+     0.284
+    ],
+    "n": 93,
+    "spearman": 0.124
+   },
+   "feature": "component_rejection_strength",
+   "oos": {
+    "n": 69,
+    "spearman": 0.21
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.547,
+   "dev": {
+    "ci95": [
+     -0.48,
+     0.24
+    ],
+    "n": 35,
+    "spearman": -0.123
+   },
+   "feature": "component_bars_to_confirm",
+   "oos": {
+    "n": 29,
+    "spearman": -0.121
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.301,
+   "dev": {
+    "ci95": [
+     -0.339,
+     0.081
+    ],
+    "n": 128,
+    "spearman": -0.12
+   },
+   "feature": "component_confluence_stars",
+   "oos": {
+    "n": 85,
+    "spearman": 0.082
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.467,
+   "dev": {
+    "ci95": [
+     -0.4,
+     0.12
+    ],
+    "n": 50,
+    "spearman": -0.115
+   },
+   "feature": "component_displacement_strength",
+   "oos": {
+    "n": 25,
+    "spearman": -0.238
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.651,
+   "dev": {
+    "ci95": [
+     -0.351,
+     0.54
+    ],
+    "n": 23,
+    "spearman": 0.11
+   },
+   "feature": "component_retest_depth_atr",
+   "oos": {
+    "n": 13,
+    "spearman": -0.321
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.44,
+   "dev": {
+    "ci95": [
+     -0.206,
+     0.383
+    ],
+    "n": 57,
+    "spearman": 0.109
+   },
+   "feature": "component_sweep_depth_atr",
+   "oos": {
+    "n": 36,
+    "spearman": -0.134
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.467,
+   "dev": {
+    "ci95": [
+     -0.275,
+     0.435
+    ],
+    "n": 50,
+    "spearman": 0.109
+   },
+   "feature": "component_technical_reward_risk",
+   "oos": {
+    "n": 25,
+    "spearman": 0.029
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.601,
+   "dev": {
+    "ci95": [
+     -0.234,
+     0.413
+    ],
+    "n": 28,
+    "spearman": 0.106
+   },
+   "feature": "component_displacement",
+   "oos": {
+    "n": 18,
+    "spearman": -0.078
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.437,
+   "dev": {
+    "ci95": [
+     -0.124,
+     0.347
+    ],
+    "n": 58,
+    "spearman": 0.106
+   },
+   "feature": "component_origin_displacement_atr",
+   "oos": {
+    "n": 40,
+    "spearman": -0.131
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.651,
+   "dev": {
+    "ci95": [
+     -0.43,
+     0.537
+    ],
+    "n": 23,
+    "spearman": 0.101
+   },
+   "feature": "component_break_body_ratio",
+   "oos": {
+    "n": 13,
+    "spearman": -0.25
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.177,
+   "dev": {
+    "ci95": [
+     0.008,
+     0.184
+    ],
+    "n": 380,
+    "spearman": 0.101
+   },
+   "feature": "component_fill_quality",
+   "oos": {
+    "n": 255,
+    "spearman": 0.176
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.246,
+   "dev": {
+    "ci95": [
+     -0.042,
+     0.228
+    ],
+    "n": 194,
+    "spearman": 0.09
+   },
+   "feature": "component_rejection_close_location",
+   "oos": {
+    "n": 155,
+    "spearman": 0.112
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.651,
+   "dev": {
+    "ci95": [
+     -0.459,
+     0.282
+    ],
+    "n": 23,
+    "spearman": -0.088
+   },
+   "feature": "component_break_displacement_atr",
+   "oos": {
+    "n": 13,
+    "spearman": -0.074
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.354,
+   "dev": {
+    "ci95": [
+     -0.286,
+     0.139
+    ],
+    "n": 91,
+    "spearman": -0.077
+   },
+   "feature": "component_liquidity_grade",
+   "oos": {
+    "n": 61,
+    "spearman": -0.039
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.081,
+   "dev": {
+    "ci95": [
+     -0.134,
+     -0.004
+    ],
+    "n": 1829,
+    "spearman": -0.073
+   },
+   "feature": "component_confluence",
+   "oos": {
+    "n": 1358,
+    "spearman": -0.033
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.437,
+   "dev": {
+    "ci95": [
+     -0.273,
+     0.187
+    ],
+    "n": 58,
+    "spearman": -0.069
+   },
+   "feature": "component_gap_width_atr",
+   "oos": {
+    "n": 40,
+    "spearman": -0.046
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.233,
+   "dev": {
+    "ci95": [
+     -0.087,
+     0.205
+    ],
+    "n": 217,
+    "spearman": 0.068
+   },
+   "feature": "component_break_distance_atr",
+   "oos": {
+    "n": 168,
+    "spearman": 0.052
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.06,
+   "dev": {
+    "ci95": [
+     -0.145,
+     0.015
+    ],
+    "n": 3384,
+    "spearman": -0.065
+   },
+   "feature": "factor_htf_aligned",
+   "oos": {
+    "n": 2385,
+    "spearman": -0.015
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.437,
+   "dev": {
+    "ci95": [
+     -0.329,
+     0.215
+    ],
+    "n": 58,
+    "spearman": -0.061
+   },
+   "feature": "component_zone_integrity",
+   "oos": {
+    "n": 40,
+    "spearman": 0.26
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.06,
+   "dev": {
+    "ci95": [
+     -0.113,
+     0.001
+    ],
+    "n": 3399,
+    "spearman": -0.055
+   },
+   "feature": "factor_raw_factor",
+   "oos": {
+    "n": 2389,
+    "spearman": 0.012
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.06,
+   "dev": {
+    "ci95": [
+     -0.114,
+     -0.001
+    ],
+    "n": 3399,
+    "spearman": -0.055
+   },
+   "feature": "v2_raw",
+   "oos": {
+    "n": 2389,
+    "spearman": 0.018
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 1.0,
+   "dev": {
+    "ci95": null,
+    "n": 8,
+    "spearman": -0.054
+   },
+   "feature": "component_retest_speed",
+   "oos": {
+    "n": 9,
+    "spearman": -0.112
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.246,
+   "dev": {
+    "ci95": [
+     -0.076,
+     0.169
+    ],
+    "n": 194,
+    "spearman": 0.05
+   },
+   "feature": "component_touch_history",
+   "oos": {
+    "n": 155,
+    "spearman": 0.089
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.06,
+   "dev": {
+    "ci95": [
+     -0.084,
+     -0.012
+    ],
+    "n": 3373,
+    "spearman": -0.047
+   },
+   "feature": "quality",
+   "oos": {
+    "n": 2377,
+    "spearman": -0.065
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.061,
+   "dev": {
+    "ci95": [
+     -0.077,
+     -0.007
+    ],
+    "n": 3258,
+    "spearman": -0.042
+   },
+   "feature": "stars",
+   "oos": {
+    "n": 2274,
+    "spearman": -0.038
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.109,
+   "dev": {
+    "ci95": [
+     -0.092,
+     0.013
+    ],
+    "n": 1019,
+    "spearman": -0.04
+   },
+   "feature": "component_touch_quality",
+   "oos": {
+    "n": 689,
+    "spearman": -0.016
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.061,
+   "dev": {
+    "ci95": [
+     0.004,
+     0.069
+    ],
+    "n": 3216,
+    "spearman": 0.039
+   },
+   "feature": "factor_displacement",
+   "oos": {
+    "n": 2265,
+    "spearman": 0.048
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.547,
+   "dev": {
+    "ci95": [
+     -0.346,
+     0.285
+    ],
+    "n": 35,
+    "spearman": -0.032
+   },
+   "feature": "component_actual_level_touches",
+   "oos": {
+    "n": 29,
+    "spearman": -0.187
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.265,
+   "dev": {
+    "ci95": [
+     -0.167,
+     0.24
+    ],
+    "n": 166,
+    "spearman": 0.03
+   },
+   "feature": "component_technical_risk_pips",
+   "oos": {
+    "n": 107,
+    "spearman": -0.215
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.082,
+   "dev": {
+    "ci95": [
+     -0.077,
+     0.017
+    ],
+    "n": 1791,
+    "spearman": -0.03
+   },
+   "feature": "factor_session",
+   "oos": {
+    "n": 1281,
+    "spearman": -0.053
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.059,
+   "dev": {
+    "ci95": [
+     -0.06,
+     0.002
+    ],
+    "n": 3405,
+    "spearman": -0.028
+   },
+   "feature": "entry_width_atr",
+   "oos": {
+    "n": 2395,
+    "spearman": 0.013
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.059,
+   "dev": {
+    "ci95": [
+     -0.059,
+     0.002
+    ],
+    "n": 3405,
+    "spearman": -0.028
+   },
+   "feature": "entry_width_over_risk",
+   "oos": {
+    "n": 2395,
+    "spearman": -0.003
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.059,
+   "dev": {
+    "ci95": [
+     -0.077,
+     0.026
+    ],
+    "n": 3405,
+    "spearman": -0.027
+   },
+   "feature": "log_technical_rr",
+   "oos": {
+    "n": 2395,
+    "spearman": -0.028
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.059,
+   "dev": {
+    "ci95": [
+     -0.058,
+     0.006
+    ],
+    "n": 3405,
+    "spearman": -0.026
+   },
+   "feature": "executable_risk_atr",
+   "oos": {
+    "n": 2395,
+    "spearman": -0.061
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.467,
+   "dev": {
+    "ci95": [
+     -0.333,
+     0.238
+    ],
+    "n": 50,
+    "spearman": -0.021
+   },
+   "feature": "component_overlap_integrity",
+   "oos": {
+    "n": 25,
+    "spearman": -0.012
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.063,
+   "dev": {
+    "ci95": [
+     -0.014,
+     0.056
+    ],
+    "n": 3011,
+    "spearman": 0.021
+   },
+   "feature": "factor_structural",
+   "oos": {
+    "n": 2114,
+    "spearman": 0.033
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.06,
+   "dev": {
+    "ci95": [
+     -0.006,
+     0.048
+    ],
+    "n": 3337,
+    "spearman": 0.021
+   },
+   "feature": "repeats",
+   "oos": {
+    "n": 2351,
+    "spearman": -0.001
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.651,
+   "dev": {
+    "ci95": [
+     -0.437,
+     0.46
+    ],
+    "n": 23,
+    "spearman": 0.019
+   },
+   "feature": "component_break_close_strength",
+   "oos": {
+    "n": 13,
+    "spearman": 0.071
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.059,
+   "dev": {
+    "ci95": [
+     -0.069,
+     0.03
+    ],
+    "n": 3405,
+    "spearman": -0.019
+   },
+   "feature": "log_room_cover",
+   "oos": {
+    "n": 2395,
+    "spearman": 0.031
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.364,
+   "dev": {
+    "ci95": [
+     -0.194,
+     0.258
+    ],
+    "n": 86,
+    "spearman": 0.018
+   },
+   "feature": "component_structure_alignment",
+   "oos": {
+    "n": 65,
+    "spearman": -0.178
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.245,
+   "dev": {
+    "ci95": [
+     -0.154,
+     0.174
+    ],
+    "n": 196,
+    "spearman": 0.017
+   },
+   "feature": "component_overlap_width_atr",
+   "oos": {
+    "n": 98,
+    "spearman": 0.1
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.059,
+   "dev": {
+    "ci95": [
+     -0.048,
+     0.015
+    ],
+    "n": 3405,
+    "spearman": -0.017
+   },
+   "feature": "technical_risk_atr",
+   "oos": {
+    "n": 2395,
+    "spearman": 0.016
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.547,
+   "dev": {
+    "ci95": [
+     -0.306,
+     0.32
+    ],
+    "n": 35,
+    "spearman": 0.016
+   },
+   "feature": "component_level_integrity",
+   "oos": {
+    "n": 29,
+    "spearman": 0.269
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.061,
+   "dev": {
+    "ci95": [
+     -0.056,
+     0.024
+    ],
+    "n": 3212,
+    "spearman": -0.016
+   },
+   "feature": "factor_fib",
+   "oos": {
+    "n": 2266,
+    "spearman": 0.015
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.393,
+   "dev": {
+    "ci95": [
+     -0.159,
+     0.171
+    ],
+    "n": 73,
+    "spearman": -0.013
+   },
+   "feature": "component_rejection_close_strength",
+   "oos": {
+    "n": 38,
+    "spearman": 0.095
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.265,
+   "dev": {
+    "ci95": [
+     -0.202,
+     0.161
+    ],
+    "n": 166,
+    "spearman": -0.013
+   },
+   "feature": "component_target_room_atr",
+   "oos": {
+    "n": 107,
+    "spearman": -0.088
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.075,
+   "dev": {
+    "ci95": [
+     -0.065,
+     0.042
+    ],
+    "n": 2122,
+    "spearman": -0.013
+   },
+   "feature": "factor_zone_quality",
+   "oos": {
+    "n": 1524,
+    "spearman": -0.018
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.06,
+   "dev": {
+    "ci95": [
+     -0.045,
+     0.025
+    ],
+    "n": 3332,
+    "spearman": -0.011
+   },
+   "feature": "age_hours",
+   "oos": {
+    "n": 2354,
+    "spearman": -0.04
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.265,
+   "dev": {
+    "ci95": [
+     -0.161,
+     0.124
+    ],
+    "n": 166,
+    "spearman": -0.011
+   },
+   "feature": "component_rejection_wick_ratio",
+   "oos": {
+    "n": 107,
+    "spearman": 0.022
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.246,
+   "dev": {
+    "ci95": [
+     -0.183,
+     0.149
+    ],
+    "n": 194,
+    "spearman": -0.011
+   },
+   "feature": "component_wick_history",
+   "oos": {
+    "n": 155,
+    "spearman": -0.036
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.155,
+   "dev": {
+    "ci95": [
+     -0.091,
+     0.115
+    ],
+    "n": 497,
+    "spearman": 0.01
+   },
+   "feature": "component_freshness_quality",
+   "oos": {
+    "n": 328,
+    "spearman": 0.004
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.064,
+   "dev": {
+    "ci95": [
+     -0.05,
+     0.029
+    ],
+    "n": 2905,
+    "spearman": -0.01
+   },
+   "feature": "factor_choch",
+   "oos": {
+    "n": 2043,
+    "spearman": 0.04
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.206,
+   "dev": {
+    "ci95": [
+     -0.091,
+     0.098
+    ],
+    "n": 279,
+    "spearman": -0.008
+   },
+   "feature": "component_reclaim_depth_atr",
+   "oos": {
+    "n": 209,
+    "spearman": -0.053
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.437,
+   "dev": {
+    "ci95": [
+     -0.252,
+     0.293
+    ],
+    "n": 58,
+    "spearman": -0.008
+   },
+   "feature": "component_retest_penetration_atr",
+   "oos": {
+    "n": 40,
+    "spearman": -0.272
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.437,
+   "dev": {
+    "ci95": [
+     -0.28,
+     0.258
+    ],
+    "n": 58,
+    "spearman": -0.006
+   },
+   "feature": "component_inversion_displacement_atr",
+   "oos": {
+    "n": 40,
+    "spearman": 0.007
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.437,
+   "dev": {
+    "ci95": [
+     -0.326,
+     0.352
+    ],
+    "n": 58,
+    "spearman": -0.006
+   },
+   "feature": "component_retest_touches",
+   "oos": {
+    "n": 40,
+    "spearman": -0.06
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.063,
+   "dev": {
+    "ci95": [
+     -0.028,
+     0.041
+    ],
+    "n": 3014,
+    "spearman": 0.006
+   },
+   "feature": "factor_wick",
+   "oos": {
+    "n": 2116,
+    "spearman": 0.039
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.061,
+   "dev": {
+    "ci95": [
+     -0.034,
+     0.024
+    ],
+    "n": 3242,
+    "spearman": -0.003
+   },
+   "feature": "factor_touches",
+   "oos": {
+    "n": 2281,
+    "spearman": 0.008
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 0.285,
+   "dev": {
+    "ci95": [
+     -0.207,
+     0.221
+    ],
+    "n": 143,
+    "spearman": 0.002
+   },
+   "feature": "component_target_room_r",
+   "oos": {
+    "n": 94,
+    "spearman": 0.032
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 1.0,
+   "dev": {
+    "ci95": null,
+    "n": 8,
+    "spearman": null
+   },
+   "feature": "component_acceptance",
+   "oos": {
+    "n": 9,
+    "spearman": -0.225
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 1.0,
+   "dev": {
+    "ci95": null,
+    "n": 0,
+    "spearman": null
+   },
+   "feature": "component_body_dominance",
+   "oos": {
+    "n": 0,
+    "spearman": null
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 1.0,
+   "dev": {
+    "ci95": null,
+    "n": 0,
+    "spearman": null
+   },
+   "feature": "component_break_accept_closes",
+   "oos": {
+    "n": 0,
+    "spearman": null
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 1.0,
+   "dev": {
+    "ci95": null,
+    "n": 8,
+    "spearman": null
+   },
+   "feature": "component_confirmation",
+   "oos": {
+    "n": 9,
+    "spearman": -0.225
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 1.0,
+   "dev": {
+    "ci95": null,
+    "n": 0,
+    "spearman": null
+   },
+   "feature": "component_extension",
+   "oos": {
+    "n": 0,
+    "spearman": null
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 1.0,
+   "dev": {
+    "ci95": null,
+    "n": 0,
+    "spearman": null
+   },
+   "feature": "component_independent_fact_count",
+   "oos": {
+    "n": 0,
+    "spearman": null
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 1.0,
+   "dev": {
+    "ci95": null,
+    "n": 0,
+    "spearman": null
+   },
+   "feature": "component_location",
+   "oos": {
+    "n": 0,
+    "spearman": null
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 1.0,
+   "dev": {
+    "ci95": null,
+    "n": 0,
+    "spearman": null
+   },
+   "feature": "component_reaction",
+   "oos": {
+    "n": 0,
+    "spearman": null
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 1.0,
+   "dev": {
+    "ci95": null,
+    "n": 6,
+    "spearman": null
+   },
+   "feature": "component_reaction_freshness",
+   "oos": {
+    "n": 4,
+    "spearman": null
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 1.0,
+   "dev": {
+    "ci95": null,
+    "n": 0,
+    "spearman": null
+   },
+   "feature": "component_reclaim",
+   "oos": {
+    "n": 0,
+    "spearman": null
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 1.0,
+   "dev": {
+    "ci95": null,
+    "n": 0,
+    "spearman": null
+   },
+   "feature": "component_room",
+   "oos": {
+    "n": 0,
+    "spearman": null
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 1.0,
+   "dev": {
+    "ci95": null,
+    "n": 0,
+    "spearman": null
+   },
+   "feature": "component_structural_break",
+   "oos": {
+    "n": 0,
+    "spearman": null
+   },
+   "supported": false
+  },
+  {
+   "bonferroni_abs_rho": 1.0,
+   "dev": {
+    "ci95": null,
+    "n": 0,
+    "spearman": null
+   },
+   "feature": "component_zone_strength_quality",
+   "oos": {
+    "n": 0,
+    "spearman": null
+   },
+   "supported": false
+  }
+ ],
+ "reading": "A feature is supported only with a development interval that excludes zero, a Bonferroni-level development correlation and the same sign out of sample. Absence of support is not evidence of absence: the window is two weeks and neighbouring days share a regime.",
+ "seed": 20261015,
+ "supported_by_symbol": {
+  "executable_risk_atr": {
+   "EURUSD": {
+    "dev": {
+     "n": 571,
+     "spearman": 0.037
+    },
+    "oos": {
+     "n": 507,
+     "spearman": -0.083
+    }
+   },
+   "GBPJPY": {
+    "dev": {
+     "n": 396,
+     "spearman": -0.053
+    },
+    "oos": {
+     "n": 352,
+     "spearman": -0.12
+    }
+   },
+   "GBPUSD": {
+    "dev": {
+     "n": 751,
+     "spearman": -0.069
+    },
+    "oos": {
+     "n": 501,
+     "spearman": -0.127
+    }
+   },
+   "USDJPY": {
+    "dev": {
+     "n": 793,
+     "spearman": -0.05
+    },
+    "oos": {
+     "n": 557,
+     "spearman": -0.046
+    }
+   },
+   "XAU": {
+    "dev": {
+     "n": 896,
+     "spearman": -0.038
+    },
+    "oos": {
+     "n": 478,
+     "spearman": 0.019
+    }
+   }
+  }
+ },
+ "supported_pooled_features": [
+  {
+   "feature": "executable_risk_atr",
+   "sign": -1
+  }
+ ],
+ "supported_within_strategy_and_symbol": [],
+ "target": "ladder_cost",
+ "thinned_filled": 5803
+}
