@@ -25,11 +25,15 @@ async def test_capture_tool_reads_redis_writes_nothing_and_produces_a_valid_capt
   client = redis_state.get_client()
   rows = [[1_789_900_200 + 300 * i, 4300 + i, 4301 + i, 4299 + i, 4300.5 + i, 100 + i] for i in range(12)]
   await _seed_bars(client, rows)
-  before = {k: await client.zrange(k, 0, -1, withscores=True) async for k in client.scan_iter("*")}
+  async def _bars_state():
+    # the autouse executor snapshot is a string key; the capture reads sorted sets only
+    return {k: await client.zrange(k, 0, -1, withscores=True) async for k in client.scan_iter("*") if await client.type(k) == "zset"}
+
+  before = await _bars_state()
 
   document = await capture_bars.capture("XAU", {"M5": 10, "M15": 0}, client, now=datetime(2026, 9, 26, 12, 0, tzinfo=timezone.utc))
 
-  assert {k: await client.zrange(k, 0, -1, withscores=True) async for k in client.scan_iter("*")} == before   # read-only
+  assert await _bars_state() == before                                      # read-only
   assert document["provenance"]["captured_at_utc"] == "2026-09-26T12:00:00Z" and document["provenance"]["derived"] == "none"
   assert list(document["timeframes"]) == ["M5"] and len(document["timeframes"]["M5"]) == 10
   assert document["timeframes"]["M5"] == rows[-10:]                          # exactly the newest ten, untouched

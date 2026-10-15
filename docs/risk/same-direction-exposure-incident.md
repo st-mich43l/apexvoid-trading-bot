@@ -1,11 +1,13 @@
 # Same-direction exposure: the 12-13 October USDJPY incident and the instrument-owned group policy
 
-Status: **since 2026-10-15 every FX pair is bounded to one same-direction group (`max_groups: 1`, in the two FX packs of
-`config/instruments.yml`); XAU is not.** The policy machinery was merged inert on 14 Oct (#774); the owner then asked for FX
-stacking to be stopped completely, because stacking continued after the Range Edge changes (13 of 44 trades entered while
-another same-direction group was open, 12 of them Range Edge Scalp, ten of the thirteen full stops). The USDJPY-only patch this
-document first proposed is superseded and removed. XAU keeps the legacy rule (non-scalps stack only after TP2, Tier A; scalps
-freely): no XAU stack was opened after 13 Oct 11:54, and the replay does not support a cap there.
+Status: **since 2026-10-15 every instrument, FX and XAU, is bounded to one same-direction group (`max_groups: 1`, in the FX packs and
+the XAU pack of `config/instruments.yml`).** The policy machinery was merged inert on 14 Oct (#774); the owner then asked for FX
+stacking to be stopped completely (#784), because stacking continued after the Range Edge changes (13 of 44 trades entered while
+another same-direction group was open, 12 of them Range Edge Scalp, ten of the thirteen full stops), and then for XAU too, which
+had kept the legacy rule (non-scalps stack only after TP2, Tier A; scalps freely). XAU evidence, 29 Sep-14 Oct, `algo_auto`, Range
+Sweep excluded: 13 of 156 filled groups entered on top of an open same-direction group (up to four at once on 12 Oct, SELL), and
+those averaged -0.39R against -0.09R for groups that entered alone (reference R per exit path; small sample). The USDJPY-only patch
+this document first proposed is superseded and removed.
 
 Principle: **one failing structural thesis must not silently become several correlated account losses.**
 
@@ -238,11 +240,12 @@ counted risk ignores TP1/BE credit. One fortnight, one regime, USDJPY n=53.
 
 ## 4. Live setting
 
-FX (EURUSD, GBPUSD, GBPJPY, USDJPY): `exposure.same_direction.max_groups: 1` in both FX packs, so a new group on a pair is admitted
-only if no group of that pair is pending, submitted, partially open or open in its direction, whichever strategy proposes it and
+FX (EURUSD, GBPUSD, GBPJPY, USDJPY) and XAU: `exposure.same_direction.max_groups: 1` in the FX packs and the XAU pack, so a new group
+on a symbol is admitted only if no group of that symbol is pending, submitted, partially open or open in its direction, whichever strategy proposes it and
 scalp or not (a group stays counted after TP1 or breakeven). The earlier replay on EURUSD (a cap would have blocked winners) used the
 unweighted `result_pips`, which overstates winners; it is not the basis of this change, which is the owner's rule that FX does not
-open the same direction repeatedly. XAU is unchanged.
+open the same direction repeatedly, extended to XAU on the same rule. A XAU scale-in ladder is one group, so scaling in is unchanged;
+what stops is a second thesis opened on top of a live one.
 
 Rollout: deploy algo-bot (config is read at start), watch `v8 group exposure refused` log lines and the
 `same_direction_group_limit` rejection counts. Rollback: remove the `same_direction` block (restores the previous behaviour

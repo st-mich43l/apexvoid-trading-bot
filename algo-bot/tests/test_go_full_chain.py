@@ -39,6 +39,7 @@ from app.autotrade.strategy_identity import structural_thesis_id
 from app.autotrade.trade_plan import TradePlan
 from app.persistence import redis_state
 from tests.support.canonical_fixtures import install_runtime_overrides
+from tests.support.executor_snapshot import seed_idle_executor
 from tests.test_go_opportunity_policy import Harness, golden
 from tests.test_publish_trade_plan_v8 import (  # noqa: F401 - autouse fixtures
   _m1_trigger_bar,
@@ -77,6 +78,7 @@ def prod(monkeypatch, event_loop):
   client = Redis.from_url(url, decode_responses=True)
   event_loop.run_until_complete(client.ping())
   event_loop.run_until_complete(client.flushdb())
+  event_loop.run_until_complete(seed_idle_executor(client))
   monkeypatch.setattr(redis_state, "_client", client)
   try:
     yield client
