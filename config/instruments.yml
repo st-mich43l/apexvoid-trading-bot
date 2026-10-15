@@ -21,6 +21,12 @@ instrument_packs:
     exposure:
       opposite_position:
         allowed: false
+      # Autonomous same-direction exposure on the same symbol is bounded for FX the same
+      # way: one group at a time per direction (pending, submitted, partially or fully open;
+      # a group stays counted after TP1/breakeven), whatever the strategy or scalp status. FX
+      # never stacks. Unknown exposure fails closed (docs/risk/same-direction-exposure-incident.md).
+      same_direction:
+        max_groups: 1
     # FX is one precise entry, never XAU's shallow/deep scale-in ladder.
     auto_entry:
       mode: single_best
@@ -89,6 +95,12 @@ instrument_packs:
     exposure:
       opposite_position:
         allowed: false
+      # Autonomous same-direction exposure on the same symbol is bounded for FX the same
+      # way: one group at a time per direction (pending, submitted, partially or fully open;
+      # a group stays counted after TP1/breakeven), whatever the strategy or scalp status. FX
+      # never stacks. Unknown exposure fails closed (docs/risk/same-direction-exposure-incident.md).
+      same_direction:
+        max_groups: 1
     # FX is one precise entry, never XAU's shallow/deep scale-in ladder.
     auto_entry:
       mode: single_best
