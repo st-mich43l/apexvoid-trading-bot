@@ -13,6 +13,13 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
+- FX never stacks: every FX pair (EURUSD, GBPUSD, GBPJPY, USDJPY) is bounded to one same-direction group at a time
+  (`exposure.same_direction.max_groups: 1` in both FX packs of `config/instruments.yml`, using the exposure policy merged in #774):
+  a new autonomous group is admitted only if no group of that pair is pending, submitted, partially open or open in its direction,
+  whatever the strategy and whether or not it is a scalp, and a group still counts after TP1 or breakeven. Stacking had continued
+  after the Range Edge v3 change (13 of 44 trades from 13 Oct 11:54 entered on top of an open same-direction group, 12 of them Range
+  Edge Scalp). Unknown exposure (a stale executor snapshot) retains the setup instead of trading. XAU is unchanged; manual /algo plans
+  are never refused. The unapplied USDJPY patch is removed. Needs an algo-bot deploy; no executor, sizing or risk change.
 - Supply and Demand v3: a confirmed reaction on a zone already touched more than `maximum_zone_touches` (new optional parameter, 2 in
   `config/analysis.yml`; default 0 = unlimited, the frozen publishers' behavior) no longer publishes. Zones touched 3+ times were the worst slice on both
   sides in both replay halves (Supply -0.06R / -0.21R, Demand -0.31R / -0.39R). Hypothetical mean: Supply -0.01R to +0.03R, Demand -0.18R to -0.17R, so Demand

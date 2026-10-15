@@ -17,6 +17,7 @@ from app.core.config import runtime_config
 from tests.support.canonical_fixtures import install_runtime_overrides, leaf
 
 from dataclasses import replace
+import json
 import time
 from unittest.mock import AsyncMock
 
@@ -1208,6 +1209,10 @@ async def test_fx_opposite_never_publishes_regardless_of_distance_or_strategy(
 async def test_fx_control_same_setups_publish_without_active_exposure(direction, rejections):
   """Control: the FX opposite-block tests fail for the policy, not the fixture."""
   client = redis_state.get_client()
+  # FX declares a same-direction bound, which needs the executor's own picture of the symbol.
+  await client.set("auto_trade:executor_snapshot:GBPUSD", json.dumps({
+    "symbol": "GBPUSD", "ready": True, "group_ids": [], "updated_at": int(time.time()), "account_equity": 2005.63,
+  }))
   match = _gbpusd_match(match_id=f"match-gbp-control-{direction}", direction=direction)
   await _confirm_setup(client, match)
 
