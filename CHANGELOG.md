@@ -18,6 +18,10 @@ dated section after deployment.
   independent definition-based labelling of 192 checkpoints of the five newest captures, plus 3 hand-marked windows (same author as the
   tool, not an independent human check). Swings, breaks and FVG are correct by the definitions; micro swings (32-48% reverse 3 ATR) and sub-0.2 ATR
   FVG zones (29-39% of live) are noise; supply/demand zones react 2.1x an arbitrary candle, recall by origin time 67% (H1).
+- AE quality calibration (`docs/strategies/ae-quality-calibration.md`, tool `algo-bot/tools/ae_quality_calibration.py`; no runtime change):
+  97 measured features of 5,803 filled replay observations tested chronologically (development before 7 Oct, out of sample after) with a
+  Bonferroni rule. None is supported once the instrument is controlled; the existing quality is inverted (high tercile -0.124R / -0.188R
+  dev / OOS vs low +0.004R / -0.069R). No rebuilt formula is shipped because there is no component to calibrate it on.
 - Arbitration no longer reads any quality score: `actionability.scanner_gates.quality_ranking: false` (`config/auto-algo.yml`) orders
   executable intents by freshest confirmation then id, and a BUY/SELL conflict is held unless exactly one side agrees with the
   higher-timeframe bias (the 0.15 quality margin is not consulted). `analysis.arbitration.quality_ranking: false` does the same for
