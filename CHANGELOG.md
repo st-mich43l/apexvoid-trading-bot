@@ -13,6 +13,15 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
+- Arbitration no longer reads any quality score: `actionability.scanner_gates.quality_ranking: false` (`config/auto-algo.yml`) orders
+  executable intents by freshest confirmation then id, and a BUY/SELL conflict is held unless exactly one side agrees with the
+  higher-timeframe bias (the 0.15 quality margin is not consulted). `analysis.arbitration.quality_ranking: false` does the same for
+  the Go arbitration telemetry. The offline impact report (`docs/strategies/arbitration-impact-report.md`, 15,064 cycles over every committed
+  production capture) finds no relation between `quality.overall`, stars or `v2_raw` and hypothetical outcome (Spearman -0.03 to -0.05;
+  the 3-star / quality 1.0 bin averages -0.09R against +0.01R) and no measurable difference in outcome between the two orders
+  (+0.001R, 95% CI -0.04..+0.04). Cost: 109 more held conflict cycles (176 vs 67 of 1,435); the 325 conflicts a quality gap used to settle
+  against the bias or without one are now held or follow the bias. Rollback: set `quality_ranking: true`. Needs an algo-bot and an
+  analysis-engine deploy (the Go change only relabels `go_thesis_id` and the telemetry).
 - FX never stacks: every FX pair (EURUSD, GBPUSD, GBPJPY, USDJPY) is bounded to one same-direction group at a time
   (`exposure.same_direction.max_groups: 1` in both FX packs of `config/instruments.yml`, using the exposure policy merged in #774):
   a new autonomous group is admitted only if no group of that pair is pending, submitted, partially open or open in its direction,
