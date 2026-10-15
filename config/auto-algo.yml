@@ -156,7 +156,5 @@ auto_algo:
         # minimum_grade:
     scalp:
       fade_scalp_enabled: true
-    selection:
-      box_breakout_enabled: true
     trend:
       enabled: true

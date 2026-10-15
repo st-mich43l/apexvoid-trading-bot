@@ -58,7 +58,7 @@ order. [Execution](execution.md) describes each stage and its guarantees.
 ```text
 Redis bars → marketdata/history
   → indicator + structure + liquidity + zones + context
-  → strategy registry (20 independent strategies)
+  → strategy registry (16 independent strategies)
   → opportunity book + thesis grouping
   → Kafka lifecycle publisher
 ```

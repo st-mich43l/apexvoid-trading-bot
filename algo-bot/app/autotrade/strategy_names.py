@@ -49,7 +49,6 @@ FLIP_ZONE = "Flip Zone"
 SESSION_LEVEL = "Session Level"
 TRENDLINE = "Trendline"
 RANGE_EDGE_SCALP = "Range Edge Scalp"
-BOX_BREAKOUT = "Box Breakout"
 BREAK_AND_RETEST = "Break & Retest"
 TREND_PULLBACK = "Trend Pullback"
 FADE_SCALP = "Fade Scalp"
@@ -82,7 +81,6 @@ STRATEGY_NAMES: tuple[StrategyName, ...] = (
   _name(SESSION_LEVEL, "session_level_reaction", aliases=("session-level", "session level reaction")),
   _name(TRENDLINE, "trendline_reaction", aliases=("trendline reaction",)),
   _name(RANGE_EDGE_SCALP, "range_edge_scalp"),
-  _name(BOX_BREAKOUT, "box_breakout"),
   # Independent M5 structural thesis restored by the Go analysis engine.
   _name(BREAK_AND_RETEST),
   _name(TREND_PULLBACK, retired=True),

@@ -13,6 +13,15 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
+- Box Breakout (`box_breakout`) is removed from the system, as Snap-Back, Momentum Ride, the Breakout Retest Scalp and Range Sweep were: deleted, not
+  disabled. Gone: the Go package and its registry, stop-envelope, MAD (`breakout_retest` affinity), legacy-detector and technique-zone-source entries,
+  the `analysis.yml` block and the `selection.box_breakout_enabled` switch (the `selection` block is empty and removed), the Python catalog row, name,
+  scope profile and provenance entry, the legacy-parity pairing and generator, its 36 decisions in `legacy-strategies-oracle.json`, the spec page and
+  fixtures. The catalog is now 16 strategies; Break & Retest is the only breakout strategy. Kept: ledger rows, dated audits and results (rows deleted only
+  from `ae-quality-replay-results.json` and `ae-strategy-matrix.yml`), the production exposure fixture, the shared `analysis.breakout.*` regime thresholds
+  (still read by the detector-contract frame) and the retired `Breakout Continuation` profile, which now reads the Break & Retest switch. Tests that used
+  Box Breakout as a generic strategy now use Break & Retest (same market-route profile). Needs analysis-engine and algo-bot deploys; no open plan names
+  the strategy as a scalp, so the executor is unchanged.
 - Snap-Back, Momentum Ride and the Breakout Retest Scalp (`scalp_breakout_retest`) are removed from the system, as Range Sweep was: a removed
   strategy is deleted, not disabled. Gone: the three Go packages, their registry, stop-envelope, MAD, instrument-policy and scalp-book entries,
   their `config/analysis.yml` blocks and the `selection.momentum_ride_enabled` / `snap_back_enabled` switches and `scalping.breakout.*`
