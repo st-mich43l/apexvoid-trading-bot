@@ -13,6 +13,11 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
+- Performance investigation (`docs/strategies/performance-investigation-2026-10.md`, tools `algo-bot/tools/performance_investigation/`; no runtime
+  change): AE signals do not beat random entries with the same stops (P(+1R first) 46.0% vs 49.5%, negative in every symbol and session; at their own
+  technical geometry with market entries -0.028R vs random, CI -0.10..+0.05); stops are not hunted (70% of stopped trades reach 1R later vs 67% for
+  random); the replay agrees with production on 88.5% of the same opportunities; and a zero-edge system is unstable because lots depend on equity only
+  (XAU about 5% of the account per trade), 4.85 groups are open on average (up to 11) and same-USD-direction FX trades correlate at +0.35.
 - Box Breakout (`box_breakout`) is removed from the system, as Snap-Back, Momentum Ride, the Breakout Retest Scalp and Range Sweep were: deleted, not
   disabled. Gone: the Go package and its registry, stop-envelope, MAD (`breakout_retest` affinity), legacy-detector and technique-zone-source entries,
   the `analysis.yml` block and the `selection.box_breakout_enabled` switch (the `selection` block is empty and removed), the Python catalog row, name,
