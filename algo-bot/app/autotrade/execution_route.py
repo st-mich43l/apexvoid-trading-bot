@@ -465,7 +465,7 @@ def resolve_execution_route_plan(
       )
     # Trade-direction chase: quote already past the proximal edge. A micro-
     # grid into the abandoned zone rests L2–Ln on the wrong side of a
-    # continuation (live 2026-08-21 HFS Range Sweep SELL: L1 0.04 filled,
+    # continuation (live 2026-08-21 HFS range scalp SELL: L1 0.04 filled,
     # L2–L5 cancelled before_tp). Book full market so size rides the move.
     chase_away = (
       (side == "SELL" and geometry == "below")

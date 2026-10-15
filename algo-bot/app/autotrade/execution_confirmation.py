@@ -533,7 +533,7 @@ def scalp_zone_access(
   """Allow scalp activation inside the zone or chasing momentum past it.
 
   ``momentum_chase`` (default): inside the zone, or past the far edge within
-  the chase budget (Range Sweep / Range Edge / Impulse continuation).
+  the chase budget (Range Edge / Impulse continuation).
 
   ``retest_only`` (Breakout Retest): executable only while quote sits inside
   the retest band — approach from either side waits; no break-without-retest

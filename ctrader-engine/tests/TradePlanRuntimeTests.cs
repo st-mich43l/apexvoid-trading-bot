@@ -492,7 +492,7 @@ public sealed partial class TradePlanRuntimeTests
   [Fact]
   public async Task PartialUnknownClosePastStopPromotesSlAndKeepsManagingRemainingLeg()
   {
-    // Production 2026-08-26 HFS Range Sweep v8:a80bf164…: L1 SL'd, deal
+    // Production 2026-08-26 HFS range scalp v8:a80bf164…: L1 SL'd, deal
     // lookup returned Unknown, L2 still open → GROUP RECOVERY REQUIRED
     // stranded the scale-in leg. Live quote past the stop must classify L1
     // as SL and keep managing L2.
