@@ -33,6 +33,21 @@ def _fake_redis(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _idle_xau_executor(event_loop, _fake_redis):
+  """XAU declares a same-direction bound, so admission needs the executor's picture of the symbol.
+
+  Seeds the snapshot of an idle executor (no live group); a test about live or unknown XAU exposure
+  overwrites or deletes it. FX tests seed their own, so FX stays absent here.
+  """
+  from tests.support.executor_snapshot import seed_idle_executor
+
+  async def _seed():
+    await seed_idle_executor(redis_state.get_client())
+
+  event_loop.run_until_complete(_seed())
+
+
+@pytest.fixture(autouse=True)
 def _reset_db(event_loop, request):
   if request.node.get_closest_marker("no_database"):
     yield
