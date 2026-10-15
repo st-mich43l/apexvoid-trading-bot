@@ -27,10 +27,10 @@ STRATEGIES = {
   "structural": [
     "Key Level", "Supply Demand", "Order Block", "FVG", "iFVG", "CRT", "Confluence Zone",
     "Flip Zone", "Session Level", "Trendline", "Break & Retest", "Liquidity Sweep",
-    "Snap-Back", "Momentum Ride", "Box Breakout",
+    "Box Breakout",
   ],
   "scalp": ["Range Edge Scalp", "Fade Scalp"],
-  "m1": ["Impulse Pullback Scalp", "Breakout Retest Scalp"],
+  "m1": ["Impulse Pullback Scalp"],
 }
 CASES = [(kind, name) for kind, names in STRATEGIES.items() for name in names]
 PRICE_KEYS = (

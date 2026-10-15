@@ -305,40 +305,6 @@ strategies:
     owner_approval_required: false
     rationale: Replay -0.26R (interval spans zero, n=36, OOS -0.32R) is weak, not decisive.
     prior_certification: docs/strategies/break_retest.md (test/brreplay)
-  momentum_ride:
-    technical_thesis: Continuation after displacement with structural break and continuity.
-    validation_conditions: Displacement, continuity, location, structural break.
-    quality_formula:
-      class: continuous
-      note: four measured terms, 24 distinct values
-    confirmed_defects: []
-    verdict:
-      technical: PASS
-      execution: COMPATIBLE
-      performance: UNPROVEN
-      evidence: INSUFFICIENT
-    recommendation: RETAIN
-    scope: all instruments; no production trades exist
-    owner_approval_required: false
-    rationale: Replay +0.22R n=29 with wide interval; room cover median 2.6x.
-    prior_certification: docs/strategies/momentum_ride.md
-  snap_back:
-    technical_thesis: Over-extension from the mean with a measured reaction; mean-reversion target.
-    validation_conditions: Extension, liquidity grade, reaction.
-    quality_formula:
-      class: continuous
-      note: three measured terms, 28 distinct values
-    confirmed_defects: []
-    verdict:
-      technical: PASS
-      execution: COMPATIBLE
-      performance: UNPROVEN
-      evidence: INSUFFICIENT
-    recommendation: RETAIN
-    scope: all instruments
-    owner_approval_required: false
-    rationale: Replay +0.03R n=45, one production trade.
-    prior_certification: docs/strategies/snap_back.md
   fade_scalp:
     technical_thesis: Fade a liquidity-run extreme with a measured reaction (scalp).
     validation_conditions: Location, liquidity grade, reaction.
@@ -396,23 +362,3 @@ strategies:
     owner_approval_required: false
     rationale: Already contained; nothing to enable.
     prior_certification: docs/strategies/impulse_pullback.md
-  scalp_breakout_retest:
-    technical_thesis: Break of a level on M1 with acceptance, then a retest.
-    validation_conditions: Acceptance, confirmation, displacement, retest quality and speed.
-    quality_formula:
-      class: continuous
-      note: five measured terms
-    confirmed_defects:
-    - First target is a fixed 1R / 2R label (scalp_1to1 68%, scalp_1to2 32%), not a technical objective.
-    - Replay -0.41R (n=17, interval spans zero) disagrees with production +0.54R (7 R-known trades).
-    verdict:
-      technical: PASS_WITH_DEFECTS
-      execution: PARTIAL
-      performance: CONFLICTING
-      evidence: WEAK
-    recommendation: RECONSTRUCT
-    scope: replace the fixed-R target with a structural one; XAU only, no enablement change
-    owner_approval_required: true
-    rationale: The thesis is a real one; the fixed-R target is the same class of defect that led to Range Sweep's removal.
-      Keep trading it while it is repaired because production is positive.
-    prior_certification: docs/strategies/scalp_breakout_retest.md

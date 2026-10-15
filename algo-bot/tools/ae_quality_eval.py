@@ -305,7 +305,7 @@ def trades_section(path: str, rng: random.Random) -> dict:
   return out
 
 
-SCALPS = {"Range Edge Scalp", "Fade Scalp", "Impulse Pullback Scalp", "Breakout Retest Scalp"}
+SCALPS = {"Range Edge Scalp", "Fade Scalp", "Impulse Pullback Scalp"}
 
 
 def exit_path_bounds(rows: list[dict]) -> dict:

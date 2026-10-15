@@ -114,7 +114,7 @@ def _match(**overrides) -> StrategyMatch:
     event_ts="1719999600",
     issued_at=1719999600,
     expires_at=int(time.time()) + 3600,
-    strategy="Momentum Ride",
+    strategy="Box Breakout",
     strategy_mode="with_trend",
     direction="BUY",
     key_level=4089.0,
@@ -1065,7 +1065,7 @@ def _xau_spot() -> "worker.AutoTradeSpot":
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
   "strategy",
-  ["Momentum Ride", "Range Edge Scalp", "Fade Scalp", "Snap Back", "Breakout"],
+  ["Box Breakout", "Range Edge Scalp", "Fade Scalp", "Breakout"],
 )
 async def test_xau_opposite_too_close_blocks_for_every_strategy(strategy, rejections):
   client = redis_state.get_client()
@@ -1173,7 +1173,7 @@ def _gbpusd_spot() -> "worker.AutoTradeSpot":
   [
     ("SELL", "BUY", "Range Edge Scalp"),   # scenario A
     ("BUY", "SELL", "Fade Scalp"),         # scenario B
-    ("SELL", "BUY", "Momentum Ride"),
+    ("SELL", "BUY", "Box Breakout"),
     ("BUY", "SELL", "Breakout"),
   ],
 )

@@ -37,7 +37,6 @@ def _no_news_by_default(monkeypatch):
 
 def test_only_the_zone_owning_scalps_are_retest_only():
   assert is_retest_only_scalp_strategy("Range Edge Scalp")
-  assert is_retest_only_scalp_strategy("Breakout Retest Scalp")
   assert not is_retest_only_scalp_strategy("Impulse Pullback Scalp")
   assert not is_retest_only_scalp_strategy("Impulse Pullback Scalp")
   assert not is_retest_only_scalp_strategy("Key Level")

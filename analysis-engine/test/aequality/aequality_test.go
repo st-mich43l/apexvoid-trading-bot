@@ -58,7 +58,7 @@ var pipSize = map[string]float64{"XAU": 0.1, "EURUSD": 0.0001, "GBPUSD": 0.0001,
 var spread = map[string]float64{"XAU": 0.25, "EURUSD": 0.00008, "GBPUSD": 0.0001, "USDJPY": 0.008, "GBPJPY": 0.02}
 
 // Scalp strategies trade a 1R / 2R ladder on every instrument; the XAU zone book uses 1R-4R.
-var scalps = map[string]bool{"range_edge": true, "fade_scalp": true, "impulse_pullback": true, "scalp_breakout_retest": true}
+var scalps = map[string]bool{"range_edge": true, "fade_scalp": true, "impulse_pullback": true}
 
 type outcome struct {
 	Result string  `json:"result"` // target | stop | stop_be | timeout | unfilled | not_executable | censored

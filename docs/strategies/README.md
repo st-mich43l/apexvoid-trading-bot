@@ -19,7 +19,7 @@ execution profile is its own row in `algo-bot/app/autotrade/strategy_catalog.py`
 
 ## Quality audit
 
-The 2026-10-14 quality audit of all 21 strategies (technical, execution, performance and
+The 2026-10-14 quality audit of all 21 strategies (since then Range Sweep, Snap-Back, Momentum Ride and the Breakout Retest Scalp were removed; 17 remain) (technical, execution, performance and
 evidence verdicts, quality-score math, replay and production R) is in
 [ae-quality-certification.md](ae-quality-certification.md); its retirement and restriction
 proposals, none applied, are in [ae-strategy-retirement-review.md](ae-strategy-retirement-review.md);
@@ -47,10 +47,7 @@ Every strategy has exactly one status:
 | `crt` | closed H1 range, M5 sweep, reclaim and structure shift | none (v3 departs deliberately from `crt_technique_reaction`, see below) | `internal/strategy/crt` positive and negative fixtures; `test/crtreplay`: no future dependence on 6 captures bar for bar, technical invariants on every setup found, and a v3 golden | all | live (an honest stop beyond the instrument cap is refused) | GO_NATIVE_VALIDATED | 1 / 0 |
 | `break_retest` | own M5 key level or trendline, accepted break, fresh retest and rejection | none (Go v3; the Python detector 1c9f323 was v2) | contract tests in `internal/strategy/breakretest`, `test/brreplay` | all | live | GO_NATIVE_VALIDATED | 1 / 2 (v2: 8 / 12) |
 | `range_edge` | M5 range context, edge rejection (v3: edge integrity) | Python detector (1c9f323), v3 rebuilt | `test/rereplay` replay baseline | all | live | GO_NATIVE_VALIDATED | 28 / 50 |
-| `snap_back` | key level or zone, extension, graded grab | Python detector (1c9f323) | `test/detectorparity` golden | all | live | LEGACY_PARITY_PROVEN | 6 / 13 |
-| `momentum_ride` | displacement sequence, opposing liquidity | Python detector (1c9f323) | `test/detectorparity` golden | all | live | LEGACY_PARITY_PROVEN | 8 / 5 |
 | `fade_scalp` | equal-level sweep and reclaim, PD, chop edge | Python detector (1c9f323) | `test/detectorparity` golden | all | live | LEGACY_PARITY_PROVEN | 10 / 20 |
-| `scalp_breakout_retest` | M5 compression, M1 acceptance and retest | Python scalp lane (a1c77584) | `test/scalpparity` real and synthetic M1 captures, 0 mismatches | XAU only | live | LEGACY_PARITY_PROVEN | 8 (Oct 2-6 M1 capture) |
 | `flip_zone` | zones born of an accepted role flip, key-level role, reaction | `flip_demand_zone_reaction` / `flip_supply_zone_reaction` (1c9f323) | `test/legacyparity` golden, 5 symbols: 48 BUY and 43 SELL oracle decisions, identical (presence, direction, entry, stars) and silent elsewhere | all | live | LEGACY_PARITY_PROVEN | 34 / 16 |
 | `session_level` | completed Asia / London / NY and previous-day / previous-week highs and lows, first-touch rejection or sweep and reclaim | none (Go v4; the Python publisher 1c9f323 was v3, see [session_level](session_level.md)) | contract tests in `internal/strategy/sessionlevel`, `test/slreplay` (defect reproduction with an independent audit, the five losing XAU trades, no future dependence, invariants, golden) | all | live (XAU enabled 13 Oct 2026; FX unchanged) | GO_NATIVE_VALIDATED | 6 / 3 (v3: 48 / 38) |
 | `trendline` | causal trendline anchors, health and live interaction, reaction | `trendline_reaction` V2 (1c9f323) | `test/legacyparity` golden, 5 symbols: 8 oracle decisions, identical and silent elsewhere (few decisions: the gate is narrow) | all | live | LEGACY_PARITY_PROVEN | 4 / 0 |
@@ -155,14 +152,13 @@ The lifecycle is `CREATED → ACTIVE → DUPLICATE` for a still-valid thesis, en
 
 `break_retest` owns its own M5 key level or trendline, an accepted break of it and
 the fresh retest and rejection that follows. `box_breakout` owns M5 compression,
-accepted box break and retest. `scalp_breakout_retest` owns the distinct
-M5-context/M1-confirmation thesis. They are separate IDs; when two of them retest
+accepted box break and retest. They are separate IDs; when two of them retest
 the same corridor, same-thesis arbitration lets exactly one trade.
 
 ## Detector-contract strategies
 
-`snap_back`, `momentum_ride` and `fade_scalp`
-reproduce frozen detector decisions (`range_edge` did until v3, which adds the technical integrity of the edge and
+`fade_scalp`
+reproduces frozen detector decisions (`range_edge` did until v3, which adds the technical integrity of the edge and
 is certified by replay: [range_edge](range_edge.md)) on the detector-contract read
 (`internal/legacyread`): bounded M5/M15/H1 windows, the detector swing algorithm,
 scored zones, pools and grabs, regime and higher-timeframe bias. Regenerate their
@@ -181,10 +177,7 @@ oracle; never from Go output.
 - [crt](crt.md)
 - [break_retest](break_retest.md)
 - [range_edge](range_edge.md)
-- [snap_back](snap_back.md)
-- [momentum_ride](momentum_ride.md)
 - [fade_scalp](fade_scalp.md)
-- [scalp_breakout_retest](scalp_breakout_retest.md)
 - [flip_zone](flip_zone.md)
 - [session_level](session_level.md)
 - [trendline](trendline.md)

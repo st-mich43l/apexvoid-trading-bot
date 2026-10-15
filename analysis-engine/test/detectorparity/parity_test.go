@@ -33,7 +33,7 @@ import (
 // refuses a fade of an edge the market accepted through, which the frozen Python
 // detector does not. Its v2 decisions remain reproducible as the frozen baseline
 // in test/rereplay (testdata/range-edge-v2-baseline.json).
-var covered = []string{"snap_back", "momentum_ride", "fade_scalp"}
+var covered = []string{"fade_scalp"}
 
 type goldenDetector struct {
 	Direction       string  `json:"direction"`

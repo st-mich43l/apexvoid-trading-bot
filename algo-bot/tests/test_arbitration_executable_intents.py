@@ -285,17 +285,3 @@ def test_a_missing_entry_band_is_not_treated_as_overlap():
   ])
 
   assert _ids(result.ordered) == ["a", "b"]
-
-
-def test_box_breakout_and_breakout_retest_scalp_on_one_breakout_execute_once():
-  # Both archetypes retest the same broken box edge, one from M5 and one from
-  # M1. They are independent strategies, but on one thesis only one trades.
-  edge = {"direction": "BUY", "entry_low": 4311.4, "entry_high": 4313.2, "atr": 2.4}
-  box = _intent("box", strategy="Box Breakout", quality_overall=0.74, **edge)
-  scalp = _intent("scalp", strategy="Breakout Retest Scalp", quality_overall=0.69,
-                  freshness=200.0, **edge)
-
-  for arrival in ([box, scalp], [scalp, box]):
-    result = arbitrate_execution_intents(arrival)
-    assert _ids(result.ordered) == ["box"]
-    assert result.thesis_losers == {"scalp": "box"}

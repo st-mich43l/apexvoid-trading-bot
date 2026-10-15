@@ -86,9 +86,9 @@ func StrategyKey(strategy string) string {
 		return "range_edge_mean_reversion"
 	case "liquidity_sweep":
 		return "liquidity_sweep_reversal"
-	case "impulse_pullback", "momentum_ride":
+	case "impulse_pullback":
 		return "impulse_pullback_continuation"
-	case "box_breakout", "scalp_breakout_retest":
+	case "box_breakout":
 		return "breakout_retest"
 	case "":
 		return ""

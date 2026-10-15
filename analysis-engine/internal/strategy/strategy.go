@@ -12,7 +12,7 @@
 // per-strategy subpackages named in the source task's §20
 // (breakoutretest, liquiditysweep, orderblock, fvg, keylevel, supply,
 // demand, trendline, sessionlevel, rangeedge, boxbreakout,
-// impulsepullback, snapback) are architectural slots, not
+// impulsepullback) are architectural slots, not
 // directories created by this task — see
 // docs/architecture/analysis-engine.md's "Independent strategy
 // architecture" section. They are created once the market-structure

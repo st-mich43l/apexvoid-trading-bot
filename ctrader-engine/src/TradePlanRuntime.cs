@@ -648,7 +648,6 @@ public sealed partial class TradePlanRuntime(
   )
   {
     "Impulse Pullback Scalp",
-    "Breakout Retest Scalp",
     "Momentum Chase Scalp",
     "Range Box Scalp",
     "Range Edge Scalp",
