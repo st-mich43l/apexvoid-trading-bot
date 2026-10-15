@@ -52,7 +52,6 @@ Every strategy has exactly one status:
 | `session_level` | completed Asia / London / NY and previous-day / previous-week highs and lows, first-touch rejection or sweep and reclaim | none (Go v4; the Python publisher 1c9f323 was v3, see [session_level](session_level.md)) | contract tests in `internal/strategy/sessionlevel`, `test/slreplay` (defect reproduction with an independent audit, the five losing XAU trades, no future dependence, invariants, golden) | all | live (XAU enabled 13 Oct 2026; FX unchanged) | GO_NATIVE_VALIDATED | 6 / 3 (v3: 48 / 38) |
 | `trendline` | causal trendline anchors, health and live interaction, reaction | `trendline_reaction` V2 (1c9f323) | `test/legacyparity` golden, 5 symbols: 8 oracle decisions, identical and silent elsewhere (few decisions: the gate is narrow) | all | live | LEGACY_PARITY_PROVEN | 4 / 0 |
 | `liquidity_sweep` | lone-extreme pool sweep and reclaim, graded grab | none (Go-native) | contract tests in `internal/strategy/liquiditysweep` | all | **contained** (analysis only) | GO_NATIVE_VALIDATED | 2 / 2 |
-| `box_breakout` | accepted break of the regime box, accepting-bar or retest entry | `box_breakout` (1c9f323; `box_breakout_enabled` is False in Python code, True in the deployed config) | `test/legacyparity` golden, 5 symbols: 36 oracle decisions, identical and silent elsewhere | all | live | LEGACY_PARITY_PROVEN | 10 / 6 |
 | `impulse_pullback` | M5 impulse, corrective pullback, structural reference and role, M1 confirmation | `discover_impulse_pullback` (scalp lane, a1c77584) | `test/scalpparity`: the real 33 h XAU capture holds **no** Python decision (0 of 1,939 cycles); 18 identical decisions and silence elsewhere on nine seeded synthetic M1 captures (labelled synthetic) | XAU | **contained** (analysis only; also contained on FX) | LEGACY_PARITY_PROVEN on synthetic data only | 2 + 11 on M1 (Oct 2-6 M1 capture, pre-port) |
 
 Proof is scoped to the committed captures (XAU, EURUSD, GBPUSD, GBPJPY, USDJPY for
@@ -151,9 +150,7 @@ The lifecycle is `CREATED → ACTIVE → DUPLICATE` for a still-valid thesis, en
 ## Breakout boundaries
 
 `break_retest` owns its own M5 key level or trendline, an accepted break of it and
-the fresh retest and rejection that follows. `box_breakout` owns M5 compression,
-accepted box break and retest. They are separate IDs; when two of them retest
-the same corridor, same-thesis arbitration lets exactly one trade.
+the fresh retest and rejection that follows. It is the only breakout strategy.
 
 ## Detector-contract strategies
 
@@ -182,7 +179,6 @@ oracle; never from Go output.
 - [session_level](session_level.md)
 - [trendline](trendline.md)
 - [liquidity_sweep](liquidity_sweep.md)
-- [box_breakout](box_breakout.md)
 - [impulse_pullback](impulse_pullback.md)
 
 Audits: [independence](independence-audit.md), [arbitration and quality (P1)](arbitration-quality-audit.md).

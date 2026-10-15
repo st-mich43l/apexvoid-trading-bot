@@ -72,7 +72,7 @@ func TechniqueCandidate(ctx *analysiscontext.MarketContext, dec *TechniqueDecisi
 			return opportunity.Candidate{}, false
 		}
 	}
-	// A reaction-less decision (a box breakout's accepted break) is identified
+	// A reaction-less decision (an accepted break with no touch and confirmation) is identified
 	// and timed by the bar that produced it.
 	conf := dec.Confirmation
 	formedAt, confirmedAt := dec.FormedAt, dec.ConfirmedAt

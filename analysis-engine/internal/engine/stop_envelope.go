@@ -39,7 +39,6 @@ var strategyStopEnvelope = map[opportunity.StrategyID]stopEnvelopeKind{
 	"session_level":    stopEnvelopeReactionRoom,
 	"trendline":        stopEnvelopeReactionRoom,
 	"range_edge":       stopEnvelopeRangeRoom,
-	"box_breakout":     stopEnvelopeTrend,
 	"break_retest":     stopEnvelopeTrend,
 	"fade_scalp":       stopEnvelopeRangeRoom,
 	"liquidity_sweep":  stopEnvelopeTrend,

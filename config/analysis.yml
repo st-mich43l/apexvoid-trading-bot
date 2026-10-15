@@ -575,15 +575,6 @@ analysis:
       recent_breakout_buffer_atr: 0.15
       recent_breakout_min_span_atr: 0.8
       expiry_hours: 4.0
-    box_breakout:
-      version: v3
-      enabled: true
-      # The frozen box_breakout: an accepted break of the regime box, entered on the
-      # accepting displacement bar or on a rejecting retest of the broken edge,
-      # within this many bars of the acceptance (analysis.breakout.max_age_bars).
-      breakout_max_age_bars: 6
-      invalidation_buffer_atr: 0.25
-      expiry_hours: 8.0
     break_retest:
       version: v3
       enabled: true

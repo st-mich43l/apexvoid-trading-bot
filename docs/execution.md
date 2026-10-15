@@ -91,8 +91,9 @@ With XAU `pip_size` 0.1, a BUY at 4300.0 blocks a SELL at 4314.9 and allows one 
 Algo Bot (`evaluate_opposite_exposure`) and the executor (`OppositeExposureFence`,
 run before the first broker mutation of a plan, against tracked plan state plus
 real broker positions and pending orders) enforce the same rule independently.
-Same-direction stacking is a separate rule: a non-scalp plan waits until every
-live same-direction plan has booked TP2.
+Same-direction stacking is a separate rule: every instrument admits one group per
+direction at a time (`exposure.same_direction.max_groups: 1`, atomic reservation;
+unknown exposure fails closed).
 
 ## Expiry and cancellation
 
