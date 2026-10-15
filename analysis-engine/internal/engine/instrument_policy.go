@@ -76,7 +76,7 @@ func ApplyInstrument(settings *Settings, doc *config.Document, symbol string) er
 	applyIFVGGeometry(settings)
 	applyConfluenceZoneGeometry(settings)
 	applySessionLevelGeometry(settings)
-	if err := applyScalpBreakoutRetest(settings, doc); err != nil {
+	if err := applyScalpLane(settings, doc); err != nil {
 		return err
 	}
 	if err := applyObserveOnly(settings, doc, symbol); err != nil {
@@ -340,7 +340,7 @@ func (s Settings) BlockedByDefendedLevel(c opportunity.Candidate) (float64, bool
 // legacyDetectorStrategies are the strategies whose decision is the frozen
 // detector contract's and which therefore share its thresholds.
 var legacyDetectorStrategies = map[string]bool{
-	"snap_back": true, "fade_scalp": true, "momentum_ride": true, "break_retest": true, "range_edge": true, "key_level": true, "liquidity_sweep": true,
+	"fade_scalp": true, "break_retest": true, "range_edge": true, "key_level": true, "liquidity_sweep": true,
 	// The technique publishers (technique_detectors.py) qualify through the same contract.
 	"supply": true, "demand": true, "order_block": true, "fvg": true, "ifvg": true, "crt": true, "confluence_zone": true, "session_level": true, "flip_zone": true, "box_breakout": true, "trendline": true,
 }
@@ -388,19 +388,17 @@ var scalpBook = map[string]string{
 
 // scalpLaneExtras are the leaves only one strategy of the lane reads.
 var scalpLaneExtras = map[string]map[string]string{
-	"scalp_breakout_retest": {},
 	"impulse_pullback": {
 		"buy_maximum_position":  "auto_algo.strategies.scalping.location.pullback_buy_maximum_position",
 		"sell_minimum_position": "auto_algo.strategies.scalping.location.pullback_sell_minimum_position",
 	},
 }
 
-// applyScalpBreakoutRetest gives the M5-setup / M1-confirmation scalps (Breakout
-// Retest Scalp, Impulse Pullback) their instrument scale and the shared M1-scalp
+// applyScalpLane gives the M5-setup / M1-confirmation scalp (Impulse Pullback) its instrument scale and the shared M1-scalp
 // stop/target book (auto_algo.strategies.scalping.*), the same leaves the stop
 // envelope and the execution policy read, so a setup is sized from one source.
 // It is idempotent.
-func applyScalpBreakoutRetest(settings *Settings, doc *config.Document) error {
+func applyScalpLane(settings *Settings, doc *config.Document) error {
 	for i := range settings.Strategies {
 		extras, isScalp := scalpLaneExtras[string(settings.Strategies[i].ID)]
 		if !isScalp {

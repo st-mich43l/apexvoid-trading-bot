@@ -46,7 +46,6 @@ M1_RETEST = "m1_retest"
 _M1_SCALP_TRIGGERS = frozenset({
   "sweep_reclaim",
   "impulse_pullback",
-  "breakout_retest",
 })
 
 # Provenance written into TradePlan V8 when the closed-bar confirmation was
@@ -535,9 +534,8 @@ def scalp_zone_access(
   ``momentum_chase`` (default): inside the zone, or past the far edge within
   the chase budget (Range Edge / Impulse continuation).
 
-  ``retest_only`` (Breakout Retest): executable only while quote sits inside
-  the retest band — approach from either side waits; no break-without-retest
-  chase (see docs/strategies/scalp_breakout_retest.md).
+  ``retest_only`` (Range Edge): executable only while quote sits inside the
+  retest band — approach from either side waits; no break-without-retest chase.
   """
   evidence = executable_quote_in_zone(
     direction, bid, ask, zone_low, zone_high, tolerance, pip_size=pip_size,

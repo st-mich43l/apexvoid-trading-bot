@@ -12,7 +12,6 @@ from app.autotrade.execution_confirmation import (
   scalp_zone_access,
 )
 from app.scalping.models import (
-  ARCHETYPE_BREAKOUT_RETEST,
   ARCHETYPE_IMPULSE_PULLBACK,
   CONTEXT_VERSION,
   LIVE_OUTCOME_VERSION,
@@ -36,18 +35,7 @@ def _cfg(**overrides):
     mode="shadow",
     archetypes=SimpleNamespace(
       impulse_pullback_enabled=True,
-      breakout_retest_enabled=True,
       impulse_pullback_allowed_sessions="london",
-    ),
-    breakout=SimpleNamespace(
-      box_max_atr=1.5,
-      min_break_atr=0.25,
-      min_box_bars=8,
-      max_box_bars=20,
-      retest_lookback_bars=5,
-      require_retest_rejection=True,
-      min_touches_per_side=2,
-      touch_tol_atr=0.20,
     ),
     context=SimpleNamespace(maximum_m5_age_seconds=420, m1_lookback_bars=60),
     location=SimpleNamespace(
@@ -97,7 +85,7 @@ def test_chase_cap_is_stop_fraction():
   assert missed.status == "chase_missed"
 
 
-def test_breakout_retest_not_chase_eligible():
+def test_retest_only_zone_access_waits_on_approach_and_never_chases():
   access = scalp_zone_access(
     "BUY", 100.0, 102.0, 100.0, 101.0, 0.0,
     pip_size=0.1,
@@ -146,7 +134,7 @@ def test_finalize_stamps_schema_version_and_source():
     opportunity_id="oid",
     episode_id="ep",
     symbol="XAU",
-    archetype=ARCHETYPE_BREAKOUT_RETEST,
+    archetype=ARCHETYPE_IMPULSE_PULLBACK,
     direction="BUY",
     session="london",
     htf_bias="range",

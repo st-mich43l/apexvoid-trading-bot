@@ -39,10 +39,10 @@ STRATEGY_NAME = {
   "order_block": "Order Block", "fvg": "FVG", "ifvg": "iFVG", "crt": "CRT",
   "confluence_zone": "Confluence Zone", "flip_zone": "Flip Zone",
   "session_level": "Session Level", "trendline": "Trendline", "box_breakout": "Box Breakout",
-  "break_retest": "Break & Retest", "momentum_ride": "Momentum Ride", "snap_back": "Snap-Back",
+  "break_retest": "Break & Retest",
   "liquidity_sweep": "Liquidity Sweep", "range_edge": "Range Edge Scalp",
   "fade_scalp": "Fade Scalp",
-  "impulse_pullback": "Impulse Pullback Scalp", "scalp_breakout_retest": "Breakout Retest Scalp",
+  "impulse_pullback": "Impulse Pullback Scalp",
 }
 _TS = re.compile(r"^(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d),(\d{3})")
 _KV = re.compile(r"(\w+)=([^\s]+)")

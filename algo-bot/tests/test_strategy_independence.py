@@ -72,7 +72,6 @@ def snapshot() -> dict:
       "range": tx.is_range_strategy(name),
       "m1": tx.is_m1_scalp_strategy(name),
       "technique_or_confluence": tx.is_technique_or_confluence(name),
-      "breakout_retest_scalp": tx.is_breakout_retest_scalp_strategy(name),
       "scalp": tx.is_scalp_strategy(name),
       "bypass_with_tp": tx.bypasses_opposing_structure_gates(name, full_take_profit_pips=10),
       "bypass": tx.bypasses_opposing_structure_gates(name),
@@ -166,7 +165,7 @@ def test_no_trading_decision_reads_the_legacy_family_label():
   assert scanned <= _LABEL_CARRIERS, sorted(scanned - _LABEL_CARRIERS)
 
 
-def test_enable_switches_are_per_strategy_except_the_documented_scalp_mode():
+def test_every_strategy_has_its_own_enable_switch():
   """A switch shared by several strategies would disable one by changing another."""
   live = defaultdict(list)
   for profile in catalog.STRATEGY_PROFILES:
@@ -175,11 +174,7 @@ def test_enable_switches_are_per_strategy_except_the_documented_scalp_mode():
       continue
     live[profile.enable_setting].append(profile.name)
   shared = {setting: sorted(group) for setting, group in live.items() if len(group) > 1}
-  assert shared == {
-    "auto_algo.strategies.scalping.mode": [
-      "Breakout Retest Scalp", "Impulse Pullback Scalp",
-    ],
-  }, "a new shared enable switch couples strategies; give each strategy its own"
+  assert shared == {}, "a shared enable switch couples strategies; give each strategy its own"
 
 
 def _intent(intent_id, strategy, quality, *, structural_id="zone-1"):

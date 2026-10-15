@@ -56,7 +56,7 @@ func TestTheScalpBandNeverReachesTheStructuralStrategies(t *testing.T) {
 	geometry := market.Geometry{Symbol: "XAU", PipSize: 0.1, PriceDigits: 2}
 	for _, id := range []opportunity.StrategyID{
 		"key_level", "supply", "demand", "order_block", "fvg", "ifvg", "crt", "flip_zone",
-		"confluence_zone", "break_retest", "session_level", "trendline", "momentum_ride",
+		"confluence_zone", "break_retest", "session_level", "trendline",
 	} {
 		got := computeStopEnvelope(goldCandidate(id), geometry, goldEnvelopeConfig(true))
 		if got == nil || got.FloorPips != 50 || got.CapPips != 70 {
@@ -73,7 +73,7 @@ func TestEveryScalpKeepsAScalpEnvelopeOnEveryInstrument(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	scalps := []opportunity.StrategyID{"range_edge", "fade_scalp", "impulse_pullback", "scalp_breakout_retest"}
+	scalps := []opportunity.StrategyID{"range_edge", "fade_scalp", "impulse_pullback"}
 	for _, symbol := range []string{"XAU", "EURUSD", "GBPUSD", "GBPJPY", "USDJPY"} {
 		settings, err := LoadSettings(doc, "M5", false)
 		if err != nil {

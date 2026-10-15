@@ -131,8 +131,6 @@ REVIEWED_SCOPES: dict[str, ScopeProfile] = {
   "range_edge": ScopeProfile("range_edge", "Range Edge Scalp", "range_edge", None, frozenset({"M5"}), "go_m5_range_edge", requires_reaction=True, evidence_prefixes=("legacy_range_barrier", "barrier_touch_episode")),
   "box_breakout": ScopeProfile("box_breakout", "Box Breakout", "box_breakout", None, frozenset({"M5"}), "go_m5_box_breakout", evidence_prefixes=("m5_box_compression", "m5_breakout_accepted", "m5_box_retest")),
   "break_retest": ScopeProfile("break_retest", "Break & Retest", "break_retest", None, frozenset({"M5"}), "go_m5_break_retest", evidence_prefixes=("m5_trendline_break", "m5_key_level_break", "m5_trendline_retest", "m5_key_level_retest", "m5_retest_holds", "m5_retest_rejection")),
-  "momentum_ride": ScopeProfile("momentum_ride", "Momentum Ride", "momentum_ride", None, frozenset({"M5"}), "go_m5_momentum", evidence_prefixes=("legacy_structural_impulse_break", "broken_swing_")),
-  "snap_back": ScopeProfile("snap_back", "Snap-Back", "snap_back", None, frozenset({"M5"}), "go_m5_snap_back", requires_reaction=True, evidence_prefixes=("legacy_snap_extension_", "liquidity_grab_grade_")),
   "fade_scalp": ScopeProfile("fade_scalp", "Fade Scalp", "fade_scalp", None, frozenset({"M5"}), "go_m5_equal_level_fade", requires_reaction=True, evidence_prefixes=("equal_level_", "liquidity_grab_grade_")),
   "liquidity_sweep": ScopeProfile("liquidity_sweep", "Liquidity Sweep", "liquidity_sweep", None, frozenset({"M5"}), "go_m5_liquidity_sweep", evidence_prefixes=("m5_liquidity_pool_swept", "m5_sweep_reclaimed", "m5_opposite_displacement")),
   # These strategies intentionally publish on the M1 observation boundary:
@@ -140,7 +138,6 @@ REVIEWED_SCOPES: dict[str, ScopeProfile] = {
   # confirmation before Candidate creation.  Python must not run a second M1
   # detector after receiving the event.
   "impulse_pullback": ScopeProfile("impulse_pullback", "Impulse Pullback Scalp", "impulse_pullback", None, frozenset({"M1"}), "go_m5_m1_impulse_pullback", evidence_prefixes=("m5_qualified_impulse", "m1_bounded_pullback", "m1_continuation_trigger")),
-  "scalp_breakout_retest": ScopeProfile("scalp_breakout_retest", "Breakout Retest Scalp", "scalp_breakout_retest", None, frozenset({"M1"}), "go_m5_m1_breakout_retest", evidence_prefixes=("m5_prebreakout_box", "m5_breakout_level_", "m5_breakout_accepted", "m5_breakout_retest_confirmed", "m1_execution_confirmed")),
 }
 
 if frozenset(REVIEWED_SCOPES) != CATALOG_STRATEGY_IDS:
@@ -285,9 +282,7 @@ def build_strategy_match(
   if stop_pips <= 0:
     raise AdapterRejection("degenerate_stop")
   scalp_target_r_multiples: tuple[float, ...] = ()
-  if profile.catalog_id in {
-    "impulse_pullback", "scalp_breakout_retest",
-  }:
+  if profile.catalog_id == "impulse_pullback":
     available_r = targets_pips[-1] / stop_pips
     scalp_target_r_multiples = (
       (1.0, 2.0) if available_r + 1e-9 >= 2.0

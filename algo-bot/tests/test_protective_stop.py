@@ -432,9 +432,6 @@ def test_scalp_stop_bounds_use_scalp_envelope_not_reaction_40_60():
   )
 
   assert uses_scalp_room_stop("Impulse Pullback Scalp") is True
-  assert uses_scalp_room_stop("Breakout Retest Scalp") is True
-  assert uses_scalp_room_stop("Impulse Pullback Scalp") is True
-  assert uses_scalp_room_stop("Breakout Retest Scalp") is True
   assert uses_scalp_room_stop("Key Level") is False
 
   cfg = SimpleNamespace(

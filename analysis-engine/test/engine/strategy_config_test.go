@@ -18,14 +18,14 @@ func TestStrategyConfigsFromConfigEnablesTheCompleteCatalogForShadow(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(configs) != 20 {
-		t.Fatalf("got %d strategy configs, want 20 approved V2 strategies", len(configs))
+	if len(configs) != 17 {
+		t.Fatalf("got %d strategy configs, want 17 approved V2 strategies", len(configs))
 	}
-	// Key Level and the Breakout Retest Scalp were rebuilt as the
-	// profitable-week Python detectors and Liquidity Sweep on the frozen detector
+	// Key Level was rebuilt as the
+	// profitable-week Python detector and Liquidity Sweep on the frozen detector
 	// contract's evidence (Phase 1), and CRT was rebuilt as a causal H1 sweep, M5
 	// reclaim and structure shift (v3); every other strategy is still v2.
-	rebuilt := map[string]bool{"crt": true, "key_level": true, "session_level": true, "flip_zone": true, "box_breakout": true, "trendline": true, "impulse_pullback": true, "scalp_breakout_retest": true, "liquidity_sweep": true, "break_retest": true, "ifvg": true, "confluence_zone": true, "range_edge": true}
+	rebuilt := map[string]bool{"crt": true, "key_level": true, "session_level": true, "flip_zone": true, "box_breakout": true, "trendline": true, "impulse_pullback": true, "liquidity_sweep": true, "break_retest": true, "ifvg": true, "confluence_zone": true, "range_edge": true}
 	// Session Level was rebuilt a second time (v4: complete periods, two bounded
 	// reaction models, honest geometry).
 	// Trendline v4: the target is the nearest opposing liquidity, never a projection.

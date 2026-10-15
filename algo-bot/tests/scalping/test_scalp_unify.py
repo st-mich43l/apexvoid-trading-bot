@@ -28,4 +28,4 @@ def _trending_ohlc(*, bars: int, direction: str, start: float = 2000.0) -> pd.Da
 
 
 def test_strategy_display_maps_the_remaining_archetypes():
-  assert set(STRATEGY_DISPLAY.values()) == {"Impulse Pullback Scalp", "Breakout Retest Scalp"}
+  assert set(STRATEGY_DISPLAY.values()) == {"Impulse Pullback Scalp"}

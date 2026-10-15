@@ -153,7 +153,7 @@ def test_key_level_reaction_is_not_forced_onto_scalp_grid():
   assert plan.planned_leg_entry_prices == ()
 
 
-def test_breakout_retest_outside_zone_uses_market_watch_not_immediate():
+def test_range_edge_outside_zone_uses_market_watch_not_immediate():
   plan = resolve_execution_route_plan(
     direction="SELL",
     order_type_preference="market",
@@ -163,7 +163,7 @@ def test_breakout_retest_outside_zone_uses_market_watch_not_immediate():
     zone_high=4433.36,
     atr=4.0,
     zone_fill_enabled=True,
-    strategy="Breakout Retest Scalp",
+    strategy="Range Edge Scalp",
   )
   assert plan.valid is True
   assert plan.route == ROUTE_MARKET

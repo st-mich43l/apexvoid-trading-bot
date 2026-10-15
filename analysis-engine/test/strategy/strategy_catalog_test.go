@@ -13,10 +13,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/ifvg"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/impulsepullback"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/liquiditysweep"
-	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/momentumride"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/rangeedge"
-	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/scalpbreakoutretest"
-	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/snapback"
 	strategytrendline "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/trendline"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/techniquezone"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/test/legacyfixture"
@@ -78,14 +75,6 @@ func boxBreakoutParams() map[string]any {
 func rangeEdgeParams() map[string]any {
 	return detectorParams(map[string]any{"lookback_bars": 48.0, "minimum_touches": 2.0, "minimum_wick_rejections": 1.0, "break_closes": 2.0, "minimum_room_atr": .75, "invalidation_buffer_atr": .25, "expiry_hours": 4.0,
 		"reclaim_closes": 2.0, "minimum_inside_closes": 3.0, "pressure_bars": 4.0, "pressure_minimum_rise_atr": 1.0, "minimum_reclaim_atr": 0.0, "rejection_close_strength": 0.6, "maximum_width_atr": 6.0})
-}
-
-func snapBackParams() map[string]any {
-	return detectorParams(map[string]any{"extension_atr": 1.5, "invalidation_buffer_atr": .25, "target_r": 2.0, "expiry_hours": 4.0, "extension_source": "impulse", "strict_premium_discount": true})
-}
-
-func momentumRideParams() map[string]any {
-	return detectorParams(map[string]any{"minimum_body_fraction": .6, "maximum_overlap_fraction": .35, "invalidation_buffer_atr": .25, "minimum_target_distance_atr": 1.0, "expiry_hours": 4.0, "require_momentum_va": false, "momentum_opposition_tolerance": .15})
 }
 
 // rangeEdgeContext is a lower-edge rejection inside a confirmed range, built on
@@ -151,15 +140,6 @@ func TestStrategiesKnownQualifyingFixtures(t *testing.T) {
 		}
 		assertOne(t, s, rangeEdgeContext(market.Candle{Time: 3000, Open: 98.3, High: 98.9, Low: 97.8, Close: 98.6}))
 	})
-	t.Run("snap_back", func(t *testing.T) {
-		s, e := snapback.New(cfg(snapback.ID, snapBackParams()))
-		if e != nil {
-			t.Fatal(e)
-		}
-		if got := s.Evaluate(ctx(map[market.Timeframe]*analysiscontext.TimeframeContext{})); len(got) != 0 {
-			t.Fatalf("missing context must reject: %+v", got)
-		}
-	})
 	t.Run("crt", func(t *testing.T) {
 		s, e := crt.New(cfg(crt.ID, crtParams()))
 		if e != nil {
@@ -167,15 +147,6 @@ func TestStrategiesKnownQualifyingFixtures(t *testing.T) {
 		}
 		if got := s.Evaluate(ctx(map[market.Timeframe]*analysiscontext.TimeframeContext{market.H1: {Timeframe: market.H1, Candles: []market.Candle{bar(base-3600, 100, 103, 99, 102), bar(base, 102, 103, 101, 102)}}, market.M5: {Timeframe: market.M5, Candles: []market.Candle{bar(base-300, 100, 101, 99.5, 100), bar(base, 100, 101, 98.5, 100)}}})); len(got) != 0 {
 			t.Fatalf("CRT must reject insufficient history, got %+v", got)
-		}
-	})
-	t.Run("momentum_ride", func(t *testing.T) {
-		s, e := momentumride.New(cfg(momentumride.ID, momentumRideParams()))
-		if e != nil {
-			t.Fatal(e)
-		}
-		if got := s.Evaluate(ctx(map[market.Timeframe]*analysiscontext.TimeframeContext{})); len(got) != 0 {
-			t.Fatalf("missing context must reject: %+v", got)
 		}
 	})
 	t.Run("box_breakout", func(t *testing.T) {
@@ -194,8 +165,8 @@ func TestStrategiesKnownQualifyingFixtures(t *testing.T) {
 		if e != nil {
 			t.Fatal(e)
 		}
-		// Proven against the Python lane's discover_impulse_pullback in
-		// test/scalpparity (synthetic M1 captures; the real 33 h capture holds none).
+		// The Python lane's discover_impulse_pullback parity proof was removed with the
+		// scalp parity harness; only construction and rejection are asserted here.
 		if got := s.Evaluate(ctx(map[market.Timeframe]*analysiscontext.TimeframeContext{market.M5: {Timeframe: market.M5, Candles: []market.Candle{bar(1, 99, 100, 98.8, 99.5)}}, market.M1: {Timeframe: market.M1, Candles: []market.Candle{bar(4, 101.8, 102, 101.2, 101.4)}}})); len(got) != 0 {
 			t.Fatalf("impulse pullback published without a setup window: %+v", got)
 		}
@@ -221,7 +192,7 @@ func TestStrategiesRejectMissingConfiguration(t *testing.T) {
 		id      strategy.StrategyID
 		factory strategy.Factory
 	}{
-		{"ifvg", ifvg.ID, ifvg.New}, {"trendline", strategytrendline.ID, strategytrendline.New}, {"range_edge", rangeedge.ID, rangeedge.New}, {"liquidity_sweep", liquiditysweep.ID, liquiditysweep.New}, {"snap_back", snapback.ID, snapback.New}, {"crt", crt.ID, crt.New}, {"confluence_zone", confluencezone.ID, confluencezone.New}, {"momentum_ride", momentumride.ID, momentumride.New}, {"box_breakout", boxbreakout.ID, boxbreakout.New}, {"impulse_pullback", impulsepullback.ID, impulsepullback.New}, {"scalp_breakout_retest", scalpbreakoutretest.ID, scalpbreakoutretest.New},
+		{"ifvg", ifvg.ID, ifvg.New}, {"trendline", strategytrendline.ID, strategytrendline.New}, {"range_edge", rangeedge.ID, rangeedge.New}, {"liquidity_sweep", liquiditysweep.ID, liquiditysweep.New}, {"crt", crt.ID, crt.New}, {"confluence_zone", confluencezone.ID, confluencezone.New}, {"box_breakout", boxbreakout.ID, boxbreakout.New}, {"impulse_pullback", impulsepullback.ID, impulsepullback.New},
 	}
 	for _, tc := range factories {
 		t.Run(tc.name, func(t *testing.T) {

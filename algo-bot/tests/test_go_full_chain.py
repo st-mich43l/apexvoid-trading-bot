@@ -148,7 +148,7 @@ def catalog_kafka_record(now: int, scope: str, *, offset: int = 1):
   payload.update({
     "strategy": scope,
     "direction": direction,
-    "timeframe": "M1" if scope in {"impulse_pullback", "scalp_breakout_retest"} else "M5",
+    "timeframe": "M1" if scope == "impulse_pullback" else "M5",
   })
   if direction == "BUY":
     payload.update({

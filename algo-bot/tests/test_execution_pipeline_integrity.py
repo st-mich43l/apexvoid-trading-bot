@@ -308,7 +308,7 @@ def test_zone_split_route_publishes_proximal_and_midpoint_legs():
 def test_market_route_publishes_the_quote_as_planned_entry():
   evaluation = evaluate_execution_policy(
     _policy_match(
-      strategy="Momentum Ride",
+      strategy="Box Breakout",
       entry_low=4100.0,
       entry_high=4101.0,
       current_price=4100.5,
