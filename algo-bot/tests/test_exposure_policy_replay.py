@@ -99,13 +99,12 @@ def test_the_dataset_builder_reads_the_log_lines_it_documents(tmp_path):
   assert row["planned_risk"] == pytest.approx(0.11 * 17.9 * 6.27, abs=0.01)
 
 
-def test_every_fx_pair_is_bounded_to_one_same_direction_group_and_xau_is_left_alone():
+def test_every_instrument_is_bounded_to_one_same_direction_group():
   """The committed configuration, read through the runtime loader (packs merged)."""
   from app.core import instrument_geometry
 
-  for symbol in ("EURUSD", "GBPUSD", "GBPJPY", "USDJPY"):
+  for symbol in ("EURUSD", "GBPUSD", "GBPJPY", "USDJPY", "XAU"):
     policy = instrument_geometry.same_direction_policy(symbol)
     assert policy is not None, symbol
     assert policy.limits.max_groups == 1 and policy.risk_free_groups_count and policy.duplicate_thesis_block, symbol
-    assert policy.strategy_overrides == (), "no strategy may stack on FX"
-  assert instrument_geometry.same_direction_policy("XAU") is None
+    assert policy.strategy_overrides == (), f"no strategy may stack on {symbol}"
