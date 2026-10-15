@@ -129,7 +129,6 @@ REVIEWED_SCOPES: dict[str, ScopeProfile] = {
   "session_level": ScopeProfile("session_level", "Session Level", "session_level", None, frozenset({"M5"}), "go_m5_session_level", requires_reaction=True, evidence_prefixes=("session_level_",)),
   "trendline": ScopeProfile("trendline", "Trendline", "trendline", None, frozenset({"M5"}), "go_m5_trendline", requires_reaction=True, evidence_prefixes=("m5_trendline_",)),
   "range_edge": ScopeProfile("range_edge", "Range Edge Scalp", "range_edge", None, frozenset({"M5"}), "go_m5_range_edge", requires_reaction=True, evidence_prefixes=("legacy_range_barrier", "barrier_touch_episode")),
-  "box_breakout": ScopeProfile("box_breakout", "Box Breakout", "box_breakout", None, frozenset({"M5"}), "go_m5_box_breakout", evidence_prefixes=("m5_box_compression", "m5_breakout_accepted", "m5_box_retest")),
   "break_retest": ScopeProfile("break_retest", "Break & Retest", "break_retest", None, frozenset({"M5"}), "go_m5_break_retest", evidence_prefixes=("m5_trendline_break", "m5_key_level_break", "m5_trendline_retest", "m5_key_level_retest", "m5_retest_holds", "m5_retest_rejection")),
   "fade_scalp": ScopeProfile("fade_scalp", "Fade Scalp", "fade_scalp", None, frozenset({"M5"}), "go_m5_equal_level_fade", requires_reaction=True, evidence_prefixes=("equal_level_", "liquidity_grab_grade_")),
   "liquidity_sweep": ScopeProfile("liquidity_sweep", "Liquidity Sweep", "liquidity_sweep", None, frozenset({"M5"}), "go_m5_liquidity_sweep", evidence_prefixes=("m5_liquidity_pool_swept", "m5_sweep_reclaimed", "m5_opposite_displacement")),

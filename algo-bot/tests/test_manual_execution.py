@@ -431,7 +431,7 @@ async def test_handle_event_skips_opened_event_without_manual_algo_setup(monkeyp
     "type": "order_filled",
     "position_id": 888,
     "candidate_id": "manual:1:0",
-    "setup": "Box Breakout",
+    "setup": "Key Level",
   }
   await manual_execution._handle_event(client, event, positions)
 

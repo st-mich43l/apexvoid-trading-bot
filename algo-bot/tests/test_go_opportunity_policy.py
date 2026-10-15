@@ -368,7 +368,7 @@ def test_impulse_pullback_adapter_marks_room_as_one_r_two_r_scalp_book():
   assert match.scalp_target_r_multiples == (1.0, 2.0)
 
 
-def _no_reaction_match(*, entry_low, entry_high, opportunity_id, scope="box_breakout"):
+def _no_reaction_match(*, entry_low, entry_high, opportunity_id, scope="break_retest"):
   profile = pol.REVIEWED_SCOPES[scope]
   raw = golden()
   raw["payload"]["id"] = opportunity_id
@@ -388,7 +388,7 @@ def _no_reaction_match(*, entry_low, entry_high, opportunity_id, scope="box_brea
 
 @pytest.mark.no_database
 def test_repeated_sliding_window_opportunities_share_one_thesis():
-  """Incident 2026-09-29: box_breakout (no persistent Go-side zone object,
+  """Incident 2026-09-29: a sliding-window strategy (no persistent Go-side zone object,
   unlike supply/demand's reaction.zone_id) re-fired on the same real GBPJPY
   breakout across several M5 closes, each with a distinct deterministic
   opportunity ID because its SetupKey includes the current sliding window's

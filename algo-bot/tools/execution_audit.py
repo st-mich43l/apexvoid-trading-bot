@@ -38,7 +38,7 @@ STRATEGY_NAME = {
   "key_level": "Key Level", "supply": "Supply Demand", "demand": "Supply Demand",
   "order_block": "Order Block", "fvg": "FVG", "ifvg": "iFVG", "crt": "CRT",
   "confluence_zone": "Confluence Zone", "flip_zone": "Flip Zone",
-  "session_level": "Session Level", "trendline": "Trendline", "box_breakout": "Box Breakout",
+  "session_level": "Session Level", "trendline": "Trendline",
   "break_retest": "Break & Retest",
   "liquidity_sweep": "Liquidity Sweep", "range_edge": "Range Edge Scalp",
   "fade_scalp": "Fade Scalp",

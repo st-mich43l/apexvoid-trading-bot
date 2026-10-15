@@ -17,7 +17,7 @@ import (
 )
 
 // The golden is the decision of the frozen Python detectors that the Go
-// session_level, flip_zone, trendline and box_breakout strategies replaced, over
+// session_level, flip_zone and trendline strategies replaced, over
 // the committed closed-bar captures (generate_oracle_golden.py). The Go
 // strategies must agree bar by bar on presence, direction, entry band and
 // confluence stars: none may fire where the oracle did not, none may stay
@@ -37,7 +37,6 @@ var pairing = map[string]struct {
 	"flip_demand_zone_reaction": {"flip_zone", market.Buy},
 	"flip_supply_zone_reaction": {"flip_zone", market.Sell},
 	"trendline_reaction":        {"trendline", ""},
-	"box_breakout":              {"box_breakout", ""},
 }
 
 // measuredOnly lists the detectors whose parity is reported but not asserted; it is
@@ -169,7 +168,7 @@ func TestLegacyStrategiesMatchTheFrozenPythonOracleBarByBar(t *testing.T) {
 				pair := pairing[name]
 				var emitted []opportunity.Candidate
 				for _, c := range got[bar][pair.strategy] {
-					if c.Reaction == nil && name != "box_breakout" {
+					if c.Reaction == nil {
 						continue
 					}
 					if pair.direction == "" || c.Direction == pair.direction {

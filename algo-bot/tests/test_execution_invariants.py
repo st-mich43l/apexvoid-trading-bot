@@ -27,7 +27,6 @@ STRATEGIES = {
   "structural": [
     "Key Level", "Supply Demand", "Order Block", "FVG", "iFVG", "CRT", "Confluence Zone",
     "Flip Zone", "Session Level", "Trendline", "Break & Retest", "Liquidity Sweep",
-    "Box Breakout",
   ],
   "scalp": ["Range Edge Scalp", "Fade Scalp"],
   "m1": ["Impulse Pullback Scalp"],

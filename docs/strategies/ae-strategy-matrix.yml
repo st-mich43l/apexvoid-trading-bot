@@ -269,24 +269,6 @@ strategies:
       cannot honestly carry the 12-22 pip stop the executor places on FX. That is an owner decision about the FX scalp floor,
       not a detector bug.'
     prior_certification: docs/strategies/range-edge-v3-certification.md
-  box_breakout:
-    technical_thesis: Breakout of a consolidation box; target the measured move.
-    validation_conditions: Box integrity, close beyond, reaction.
-    quality_formula:
-      class: stars_over_3
-      note: ''
-    confirmed_defects:
-    - Overall saturates; FX room cover 0.35-0.58 (box measured move shorter than the executable stop).
-    verdict:
-      technical: PASS
-      execution: PARTIAL
-      performance: UNPROVEN
-      evidence: INSUFFICIENT
-    recommendation: RETAIN
-    scope: all instruments; re-audit with more trades (2 production trades)
-    owner_approval_required: false
-    rationale: Replay +0.10R (OOS -0.06R), neither significant.
-    prior_certification: docs/strategies/box_breakout.md
   break_retest:
     technical_thesis: Accepted break of a key level or trendline, then a fresh retest and rejection.
     validation_conditions: Acceptance closes, retest depth and age, rejection strength.

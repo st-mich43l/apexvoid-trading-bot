@@ -37,7 +37,7 @@ func TestDumpPayloads(t *testing.T) {
 			return
 		}
 		for _, cand := range e.Candidates {
-			if cand.Reaction == nil && string(cand.Strategy) != "box_breakout" && tf == market.M5 || seen[string(cand.Strategy)] {
+			if cand.Reaction == nil && tf == market.M5 || seen[string(cand.Strategy)] {
 				continue
 			}
 			seen[string(cand.Strategy)] = true

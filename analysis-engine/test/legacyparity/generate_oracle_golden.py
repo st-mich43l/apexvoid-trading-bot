@@ -1,9 +1,9 @@
 """Regenerate testdata/legacy-strategies-oracle.json from the frozen Python oracle.
 
 The golden is the behaviour of the frozen Python detectors that the Go
-session_level, flip_zone, trendline and box_breakout strategies replaced
+session_level, flip_zone and trendline strategies replaced
 (detectors.py: session_level_reaction, flip_demand_zone_reaction,
-flip_supply_zone_reaction, trendline_reaction, box_breakout), at the commit
+flip_supply_zone_reaction, trendline_reaction), at the commit
 below, over the committed real closed-bar captures. The Go test in this directory
 replays the same captures through the Go engine and compares bar by bar; the
 golden is only ever an input, never produced by Go.
@@ -36,7 +36,6 @@ DETECTORS = (
   "flip_demand_zone_reaction",
   "flip_supply_zone_reaction",
   "trendline_reaction",
-  "box_breakout",
 )
 ENGINE = os.environ.get("ENGINE_DIR", "/engine")
 OUT = os.path.join(ENGINE, "testdata/legacy-strategies-oracle.json")
