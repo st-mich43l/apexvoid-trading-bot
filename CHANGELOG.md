@@ -13,6 +13,11 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
+- AE analysis ground-truth check (`docs/strategies/ae-ground-truth.md`, tool `algo-bot/tools/ae_ground_truth.py`, Go dump test
+  `analysis-engine/test/groundtruth`; no runtime change): the engine's swings, breaks, FVG and supply/demand zones scored against an
+  independent definition-based labelling of 192 checkpoints of the five newest captures, plus 3 hand-marked windows (same author as the
+  tool, not an independent human check). Swings, breaks and FVG are correct by the definitions; micro swings (32-48% reverse 3 ATR) and sub-0.2 ATR
+  FVG zones (29-39% of live) are noise; supply/demand zones react 2.1x an arbitrary candle, recall by origin time 67% (H1).
 - AE quality calibration (`docs/strategies/ae-quality-calibration.md`, tool `algo-bot/tools/ae_quality_calibration.py`; no runtime change):
   97 measured features of 5,803 filled replay observations tested chronologically (development before 7 Oct, out of sample after) with a
   Bonferroni rule. None is supported once the instrument is controlled; the existing quality is inverted (high tercile -0.124R / -0.188R
