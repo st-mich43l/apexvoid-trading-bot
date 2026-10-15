@@ -33,16 +33,17 @@ rest are suppressed with `same_thesis_suppressed`.
 The winner is chosen by a fixed hierarchy, with no strategy favouritism:
 
 1. execution eligibility (the quote can enter the entry contract now);
-2. strategy quality (Go `quality.overall`);
-3. confluence;
-4. structural/source quality (detector confluence raw score);
-5. freshness of the confirmation;
-6. intent id, as the deterministic tie-break.
+2. freshness of the confirmation;
+3. intent id, as the deterministic tie-break.
+
+With `actionability.scanner_gates.quality_ranking: false` (the committed setting) no quality score is part of the order. Setting it
+to `true` restores the earlier order: strategy quality (Go `quality.overall`), confluence, structural/source quality, then
+freshness and id. See `docs/strategies/arbitration-impact-report.md`.
 
 Opposite directions never share a thesis. When BUY and SELL intents are both
-executable, the direction whose best intent leads by `conflict_margin_quality`
-wins; a closer call is held (`opposite_direction_conflict`) unless exactly one
-direction agrees with the higher-timeframe bias.
+executable, the pair is held (`opposite_direction_conflict`) unless exactly one
+direction agrees with the higher-timeframe bias. (With `quality_ranking: true` the direction
+whose best intent leads by `conflict_margin_quality` wins before the bias is consulted.)
 
 ### Atomic corridor reservation
 
