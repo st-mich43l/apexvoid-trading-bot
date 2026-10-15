@@ -26,6 +26,12 @@ dated section after deployment.
   (+0.001R, 95% CI -0.04..+0.04). Cost: 109 more held conflict cycles (176 vs 67 of 1,435); the 325 conflicts a quality gap used to settle
   against the bias or without one are now held or follow the bias. Rollback: set `quality_ranking: true`. Needs an algo-bot and an
   analysis-engine deploy (the Go change only relabels `go_thesis_id` and the telemetry).
+- XAU never stacks either: the XAU pack gets `exposure.same_direction.max_groups: 1` (`config/instruments.yml`), the rule FX got in #784.
+  A new autonomous XAU group is admitted only if no XAU group is pending, submitted, partially open or open in its direction,
+  whatever the strategy and whether or not it is a scalp; a scale-in ladder is one group and still scales in. The legacy XAU rule
+  (stack after TP2, scalps freely) no longer applies. Evidence: 13 of 156 filled XAU groups (29 Sep-14 Oct) entered on an open
+  same-direction group, up to four at once on 12 Oct, and averaged -0.39R against -0.09R alone (small sample). Opposite-direction
+  rule (150 pips) unchanged. Needs an algo-bot deploy; no executor, sizing or risk change.
 - FX never stacks: every FX pair (EURUSD, GBPUSD, GBPJPY, USDJPY) is bounded to one same-direction group at a time
   (`exposure.same_direction.max_groups: 1` in both FX packs of `config/instruments.yml`, using the exposure policy merged in #774):
   a new autonomous group is admitted only if no group of that pair is pending, submitted, partially open or open in its direction,
