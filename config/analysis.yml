@@ -646,26 +646,6 @@ analysis:
       # Quality.Overall exactly as live arbitration has always seen it; the
       # measured quality is published in Quality.Components only.
       published_overall_quality: 0.75
-    momentum_ride:
-      version: v2
-      enabled: true
-      minimum_body_fraction: 0.6
-      maximum_overlap_fraction: 0.35
-      invalidation_buffer_atr: 0.25
-      minimum_target_distance_atr: 1.0
-      expiry_hours: 4.0
-      require_momentum_va: false
-      momentum_opposition_tolerance: 0.15
-    snap_back:
-      version: v2
-      enabled: true
-      # Frozen production snap_atr_mult.
-      extension_atr: 1.5
-      invalidation_buffer_atr: 0.25
-      target_r: 2.0
-      expiry_hours: 4.0
-      extension_source: impulse
-      strict_premium_discount: true
     fade_scalp:
       version: v2
       enabled: true
@@ -718,66 +698,6 @@ analysis:
       level_max_cluster_span: 2.0
       displacement_atr_multiple: 1.5
       displacement_body_fraction: 0.6
-      reward_risk_ladder: [2.0, 1.0]
-    # Breakout Retest Scalp — the profitable-week (14–18 Sep 2026) Python
-    # "Breakout Retest V2" engine (app/scalping): M5 setup, M1 execution
-    # confirmation. Level sources are the setup window's swings, its M5 key
-    # levels, equal highs/lows and a compression box; every source runs through
-    # break → acceptance → retest → role flip, and the best-quality armed
-    # episode per direction wins. Values are the production values of that
-    # period (strategies.scalping.*), not retuned. XAU only: the frozen scalp
-    # lane hosted gold only.
-    scalp_breakout_retest:
-      version: v3
-      enabled: true
-      symbols: [XAU]
-      setup_window_bars: 120
-      confirmation_window_bars: 60
-      confirmation_lookback_bars: 2
-      context_max_age_seconds: 420
-      context_atr_bars: 14
-      active_range_bars: 24
-      expiry_minutes: 15
-      # Compression-box path (strategies.scalping.breakout.*).
-      box_max_atr: 1.5
-      min_break_atr: 0.25
-      touch_tol_atr: 0.20
-      min_box_bars: 8
-      max_box_bars: 20
-      min_touches_per_side: 2
-      retest_lookback_bars: 5
-      require_retest_rejection: true
-      # Breakout Retest V2 state machine.
-      v2_enabled: true
-      breakout_cross_tolerance_atr: 0.0
-      breakout_margin_atr: 0.0
-      acceptance_bars: 1
-      acceptance_required_closes: 1
-      min_retest_delay_bars: 0
-      max_retest_delay_bars: 20
-      retest_front_run_atr: 0.0
-      max_retest_penetration_atr: 0.30
-      confirmation_mode: reclaim_close
-      min_quality_score: 0.0
-      enable_structure_flip: true
-      enable_m5_key_levels: true
-      enable_liquidity_level: true
-      swing_min_age_bars: 3
-      swing_max_age_bars: 240
-      swing_min_spacing_atr: 0.3
-      m5_structure_min_touches: 2
-      # Setup-window structure (AnalysisSettings defaults of the scalp lane).
-      micro_swing_lookback: 3
-      equal_tolerance_pip_fraction: 0.5
-      swing_fractal_n: 2
-      level_cluster_atr: 0.5
-      level_round_step: 5.0
-      level_minimum_touches: 2
-      level_max_cluster_span_multiple: 2.0
-      # The stop and target book (buffer multiples, stop min/max pips, minimum net
-      # target, maximum spread for the buffer floor) is the shared
-      # auto_algo.strategies.scalping.* book and is injected from there, so it has
-      # one source. Instrument pip size and price digits are injected per symbol.
       reward_risk_ladder: [2.0, 1.0]
 
   # Analysis Engine owns these market-state inputs. Depth and thresholds are

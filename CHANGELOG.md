@@ -13,6 +13,16 @@ dated section after deployment.
 ## Unreleased
 
 ### Changed
+- Snap-Back, Momentum Ride and the Breakout Retest Scalp (`scalp_breakout_retest`) are removed from the system, as Range Sweep was: a removed
+  strategy is deleted, not disabled. Gone: the three Go packages, their registry, stop-envelope, MAD, instrument-policy and scalp-book entries,
+  their `config/analysis.yml` blocks and the `selection.momentum_ride_enabled` / `snap_back_enabled` switches and `scalping.breakout.*`
+  leaves; the Python catalog rows, display names, scope profiles, taxonomy flag and Breakout Retest V2 constants; the executor's scalp-name entry;
+  their specs, parity oracle decisions (`detector-parity-oracle.json` keeps break_retest, range_edge and fade_scalp), `test/scalpparity`, the
+  scalp and impulse oracle JSON and generators. The catalog is now 17 strategies and the only M1 scalp is Impulse Pullback. Reason: no measurable edge over random entries (production, 29 Sep-15 Oct: Breakout Retest Scalp 10 trades, Snap-Back 1, Momentum Ride 0; replay 17 / 45 / 29 setups). Kept on purpose: ledger rows, the
+  dated audit documents and results JSON (their rows for these strategies are deleted only from `ae-quality-replay-results.json` and
+  `ae-strategy-matrix.yml`), the production exposure-group fixture, and the `Breakout Continuation` legacy profile (retired name; it now reads
+  the Box Breakout switch because its old switch is gone). Needs an analysis-engine, algo-bot and executor deploy. The executor no longer
+  names "Breakout Retest Scalp" as a scalp, so deploy it when no plan of that strategy is open.
 - AE analysis ground-truth check (`docs/strategies/ae-ground-truth.md`, tool `algo-bot/tools/ae_ground_truth.py`, Go dump test
   `analysis-engine/test/groundtruth`; no runtime change): the engine's swings, breaks, FVG and supply/demand zones scored against an
   independent definition-based labelling of 192 checkpoints of the five newest captures, plus 3 hand-marked windows (same author as the

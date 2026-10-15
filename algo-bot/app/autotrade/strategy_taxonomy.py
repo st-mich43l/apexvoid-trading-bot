@@ -21,7 +21,6 @@ TECHNIQUE_STRATEGIES = frozenset(
 CONFLUENCE_STRATEGIES = names_with("confluence")
 RANGE_STRATEGIES = names_with("range_lane")
 M1_SCALP_STRATEGIES = names_with("m1_scalp")
-BREAKOUT_RETEST_SCALP_STRATEGIES = frozenset({"Breakout Retest Scalp"})
 # Scalps that enter only while the quote is inside the zone printed on the card.
 # Range Edge owns a confirmed zone, so a quote past its edge is a missed entry,
 # never a market chase at a price the card does not show (production 2026-10-08:
@@ -32,9 +31,7 @@ BREAKOUT_RETEST_SCALP_STRATEGIES = frozenset({"Breakout Retest Scalp"})
 # Production 2026-10-08: a Break & Retest zone of 0.23 (4114.91-4115.14) was
 # entered as one market order and the card printed "Entry Zone 4,115 - 4,115".
 XAU_RETEST_LADDER_STRATEGIES = frozenset({"Break & Retest"})
-RETEST_ONLY_SCALP_STRATEGIES = BREAKOUT_RETEST_SCALP_STRATEGIES | frozenset(
-  {"Range Edge Scalp"},
-)
+RETEST_ONLY_SCALP_STRATEGIES = frozenset({"Range Edge Scalp"})
 
 _SCALP_MODES = frozenset({"scalp_m1", "range_scalp", "auto_box_scalp"})
 _M1_SCALP_MODES = frozenset({"scalp_m1"})
@@ -60,11 +57,6 @@ def is_range_strategy(name: str) -> bool:
 def is_m1_scalp_strategy(name: str) -> bool:
   """True for canonical M1 scalping display names."""
   return str(name or "") in M1_SCALP_STRATEGIES
-
-
-def is_breakout_retest_scalp_strategy(name: str) -> bool:
-  """M1 breakout-retest scalps — enter inside the retest band only."""
-  return str(name or "") in BREAKOUT_RETEST_SCALP_STRATEGIES
 
 
 def is_xau_retest_ladder_strategy(name: str) -> bool:

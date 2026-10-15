@@ -1,8 +1,8 @@
 // Package liquiditysweep implements the sweep of a lone-extreme liquidity pool:
 // price trades through the highest swing high (or lowest swing low) of the
 // window by the frozen equal-level band and a displacement candle closes back
-// through it. It is distinct from extension-based Snap Back and from Fade Scalp,
-// which owns the equal-level pools (two or more touches).
+// through it. It is distinct from Fade Scalp, which owns the equal-level pools (two or more
+// touches).
 //
 // It is founded on the frozen detector contract so that it separates a liquidity
 // event from the ordinary XAU wick the way the profitable detectors did:

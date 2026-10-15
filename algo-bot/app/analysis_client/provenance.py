@@ -21,10 +21,7 @@ CATALOG_STRATEGY_IDS = frozenset({
   "range_edge",
   "box_breakout",
   "break_retest",
-  "momentum_ride",
-  "snap_back",
   "fade_scalp",
   "liquidity_sweep",
   "impulse_pullback",
-  "scalp_breakout_retest",
 })

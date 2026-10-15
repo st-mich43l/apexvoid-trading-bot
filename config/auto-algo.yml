@@ -117,18 +117,6 @@ auto_algo:
       risk:
         risk_percent_per_trade: 0.5
         sizing_mode: equity_table
-      # ApexVoid Breakout Retest — M5 compression/structure setup with M1
-      # confirmation. Each archetype owns its own detector and quality score.
-      # See docs/scalping/OWN_BREAKOUT_TECHNIQUE.md
-      breakout:
-        box_max_atr: 1.5
-        min_break_atr: 0.25
-        min_box_bars: 8
-        max_box_bars: 20
-        retest_lookback_bars: 5
-        require_retest_rejection: true
-        min_touches_per_side: 2
-        touch_tol_atr: 0.20
     breakout:
       break_retest_enabled: true
     mapped_zone:
@@ -170,7 +158,5 @@ auto_algo:
       fade_scalp_enabled: true
     selection:
       box_breakout_enabled: true
-      momentum_ride_enabled: true
-      snap_back_enabled: true
     trend:
       enabled: true

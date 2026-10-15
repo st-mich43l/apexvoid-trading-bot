@@ -52,8 +52,6 @@ RANGE_EDGE_SCALP = "Range Edge Scalp"
 BOX_BREAKOUT = "Box Breakout"
 BREAK_AND_RETEST = "Break & Retest"
 TREND_PULLBACK = "Trend Pullback"
-MOMENTUM_RIDE = "Momentum Ride"
-SNAP_BACK = "Snap-Back"
 FADE_SCALP = "Fade Scalp"
 
 ZONE_REACTION = "Zone Reaction"
@@ -66,7 +64,6 @@ LIQUIDITY_SWEEP = "Liquidity Sweep"
 BREAKOUT_CONTINUATION = "Breakout Continuation"
 MAPPED_ZONE_REACTION = "Mapped Zone Reaction"
 IMPULSE_PULLBACK_SCALP = "Impulse Pullback Scalp"
-BREAKOUT_RETEST_SCALP = "Breakout Retest Scalp"
 MOMENTUM_CHASE_SCALP = "Momentum Chase Scalp"
 GOLDEN_FIBO = "Golden Fibo"
 
@@ -87,13 +84,10 @@ STRATEGY_NAMES: tuple[StrategyName, ...] = (
   _name(RANGE_EDGE_SCALP, "range_edge_scalp"),
   _name(BOX_BREAKOUT, "box_breakout"),
   # Independent M5 structural thesis restored by the Go analysis engine.
-  # Box Breakout and Breakout Retest Scalp remain separate strategies.
   _name(BREAK_AND_RETEST),
   _name(TREND_PULLBACK, retired=True),
-  _name(MOMENTUM_RIDE, "momentum_ride"),
-  _name(SNAP_BACK, "snap_back"),
-  # Retired automatic thesis: Range Edge and Snap-Back own its former range
-  # reversion roles without a second detector competing for the same move.
+  # Retired automatic thesis: Range Edge owns its former range reversion role
+  # without a second detector competing for the same move.
   _name(FADE_SCALP, retired=True),
   # Legacy plan/report names.  They remain resolvable but are emitted by no
   # current detector, so they must not be mistaken for live sources.
@@ -112,7 +106,6 @@ STRATEGY_NAMES: tuple[StrategyName, ...] = (
   _name(BREAKOUT_CONTINUATION, retired=True),
   _name(MAPPED_ZONE_REACTION, retired=True),
   _name(IMPULSE_PULLBACK_SCALP, aliases=("impulse pullback", "hfs impulse pullback")),
-  _name(BREAKOUT_RETEST_SCALP, aliases=("breakout retest", "breakout-retest")),
   _name(MOMENTUM_CHASE_SCALP, aliases=("momentum", "hfs momentum chase"), retired=True),
   _name(GOLDEN_FIBO, aliases=("golden-fibo",), retired=True),
 )
