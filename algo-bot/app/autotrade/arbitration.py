@@ -148,6 +148,21 @@ def _rank(intent: ExecutionIntent) -> tuple:
   )
 
 
+def _neutral_rank(intent: ExecutionIntent) -> tuple:
+  """Order without any quality score: executable first, then the freshest confirmation, then id.
+
+  ``quality_overall``, confluence stars and ``structural_quality`` are per-strategy scores on
+  different scales that did not predict outcomes (docs/strategies/arbitration-impact-report.md),
+  so none of them orders intents here. Freshness and the id make the order total and
+  reproducible; they claim no quality.
+  """
+  return (
+    0 if intent.executable_now else 1,
+    -_score(intent.freshness),
+    intent.intent_id,
+  )
+
+
 def same_thesis(left: ExecutionIntent, right: ExecutionIntent) -> bool:
   """True when two intents argue for the same trade.
 
@@ -192,6 +207,7 @@ def arbitrate_execution_intents(
   intents: list[ExecutionIntent],
   *,
   conflict_margin_quality: float = 0.15,
+  quality_ranking: bool = True,
 ) -> ArbitrationResult:
   """Return the best-first publication order for one confirmation cycle.
 
@@ -200,10 +216,14 @@ def arbitrate_execution_intents(
   its own execution checks. Directions that cannot be separated by
   ``conflict_margin_quality`` (the quality gap) are held back unless exactly
   one of them agrees with the higher-timeframe bias.
+
+  ``quality_ranking=False`` removes every quality score from the decision: the order is
+  ``_neutral_rank`` and any executable opposite-direction intent is a conflict that only the
+  higher-timeframe bias can settle (the quality margin is never consulted).
   """
   if not intents:
     return ArbitrationResult((), (), "no_intent")
-  ranked = sorted(intents, key=_rank)
+  ranked = sorted(intents, key=_rank if quality_ranking else _neutral_rank)
   # The direction decision is made among intents that can execute right now;
   # only when none can does it fall back to the whole set. Waiting intents of
   # the chosen direction still stay in ``ordered`` so their retest state keeps
@@ -213,7 +233,7 @@ def arbitrate_execution_intents(
   opposing = [item for item in decision_pool if item.direction != top.direction]
   if opposing:
     gap = _score(top.quality_overall) - _score(opposing[0].quality_overall)
-    if gap < float(conflict_margin_quality):
+    if not quality_ranking or gap < float(conflict_margin_quality):
       aligned_directions = {
         item.direction
         for item in decision_pool

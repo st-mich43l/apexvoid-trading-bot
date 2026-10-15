@@ -18,6 +18,15 @@ dated section after deployment.
   independent definition-based labelling of 192 checkpoints of the five newest captures, plus 3 hand-marked windows (same author as the
   tool, not an independent human check). Swings, breaks and FVG are correct by the definitions; micro swings (32-48% reverse 3 ATR) and sub-0.2 ATR
   FVG zones (29-39% of live) are noise; supply/demand zones react 2.1x an arbitrary candle, recall by origin time 67% (H1).
+- Arbitration no longer reads any quality score: `actionability.scanner_gates.quality_ranking: false` (`config/auto-algo.yml`) orders
+  executable intents by freshest confirmation then id, and a BUY/SELL conflict is held unless exactly one side agrees with the
+  higher-timeframe bias (the 0.15 quality margin is not consulted). `analysis.arbitration.quality_ranking: false` does the same for
+  the Go arbitration telemetry. The offline impact report (`docs/strategies/arbitration-impact-report.md`, 15,064 cycles over every committed
+  production capture) finds no relation between `quality.overall`, stars or `v2_raw` and hypothetical outcome (Spearman -0.03 to -0.05;
+  the 3-star / quality 1.0 bin averages -0.09R against +0.01R) and no measurable difference in outcome between the two orders
+  (+0.001R, 95% CI -0.04..+0.04). Cost: 109 more held conflict cycles (176 vs 67 of 1,435); the 325 conflicts a quality gap used to settle
+  against the bias or without one are now held or follow the bias. Rollback: set `quality_ranking: true`. Needs an algo-bot and an
+  analysis-engine deploy (the Go change only relabels `go_thesis_id` and the telemetry).
 - XAU never stacks either: the XAU pack gets `exposure.same_direction.max_groups: 1` (`config/instruments.yml`), the rule FX got in #784.
   A new autonomous XAU group is admitted only if no XAU group is pending, submitted, partially open or open in its direction,
   whatever the strategy and whether or not it is a scalp; a scale-in ladder is one group and still scales in. The legacy XAU rule
