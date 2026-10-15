@@ -2,7 +2,7 @@
 
 Every Go strategy owns its own thesis identity, so a per-thesis claim can never
 stop two different strategies from opening a plan on the same price band.
-Production 2026-09-30 (XAU): Order Block, Key Level and two Range Sweep scalps
+Production 2026-09-30 (XAU): Order Block, Key Level and two range scalps
 all bought the same ~7 pip band inside 35 minutes, four of them at a full stop.
 
 Two opportunities compete for one executable thesis when they share symbol and
