@@ -25,6 +25,11 @@ dated section after deployment.
   new plans wait instead of publishing.
 
 ### Changed
+- F-7 opposing-barrier ground-truth investigation (`docs/architecture/f7-opposing-barrier-ground-truth.md`, tools `analysis-engine/test/f7barrier/`; no runtime
+  change): the real Algo Bot admission rules replayed against the frozen scanner book (A), the frozen TradePlan-time book (B) and the Go book (C) on 2,956
+  production events. The block-rate gap is the touch rule (frozen: first touch spends a zone, 12.9% of 2,852 rejections blocked; Go: held until 30
+  retests, 96.6%; Go zones under the first-touch rule, 17.0%), the books still disagree on which events they block, neither matches independent structural
+  labels better than chance, and only thin-room blocks are informative in a hypothetical outcome race (-0.22R, CI -0.36..-0.07). No barrier-source change is proposed.
 - Performance investigation (`docs/strategies/performance-investigation-2026-10.md`, tools `algo-bot/tools/performance_investigation/`; no runtime
   change): AE signals do not beat random entries with the same stops (P(+1R first) 46.0% vs 49.5%, negative in every symbol and session; at their own
   technical geometry with market entries -0.028R vs random, CI -0.10..+0.05); stops are not hunted (70% of stopped trades reach 1R later vs 67% for
