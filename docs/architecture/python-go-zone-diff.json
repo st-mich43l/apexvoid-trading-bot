@@ -1,0 +1,3012 @@
+{
+ "captures": [
+  "replay-eurusd-production-capture-20261006.json",
+  "replay-eurusd-production-capture-20261014.json",
+  "replay-gbpjpy-production-capture-20261006.json",
+  "replay-gbpjpy-production-capture-20261014.json",
+  "replay-gbpusd-production-capture-20261005.json",
+  "replay-gbpusd-production-capture-20261014.json",
+  "replay-usdjpy-production-capture-20261005.json",
+  "replay-usdjpy-production-capture-20261014.json",
+  "replay-xau-m1-production-capture-20261006.json",
+  "replay-xau-production-capture-20260921.json",
+  "replay-xau-production-capture-20261014.json"
+ ],
+ "description": "Zone-level diff of the production Go zone populations against the frozen Python technique instances (1c9f323). M5 production_zones = techniqueZoneState (400-bar window, hard-coded Strength 1 / Relevance Immediate / state Fresh|Touched); M15/H1 production_zones = the V2 canonical population (a different design: not a parity statement). The faithful 150-bar frame is exact against Python (see python-go-parity-matrix.json layer_evidence) and is used here only to attribute differences (python_only_absent:present_in_faithful_frame_port). Match key: (technique, side, low, high, origin candle time).",
+ "oracle": "1c9f323",
+ "per_tf": {
+  "H1": {
+   "counts": {
+    "geometry_differs:entry_clipped_go_publishes_structural": 458,
+    "geometry_differs:entry_clipped_other": 2,
+    "go_mitigated_python_not": 142,
+    "go_native_other_kind:breaker": 154,
+    "go_native_other_kind:flip": 618,
+    "go_only": 146821,
+    "go_only_origin:before_python_window": 40357,
+    "go_only_origin:inside_python_window": 106464,
+    "go_only_state:fresh": 18740,
+    "go_only_state:invalidated": 78823,
+    "go_only_state:partially_mitigated": 32639,
+    "go_only_state:touched": 16619,
+    "matched": 407,
+    "python_mitigated_go_not_mitigated": 22,
+    "python_only": 1080,
+    "python_only_absent:LIVE": 39,
+    "python_only_absent:absent_in_faithful_frame_port": 77,
+    "python_only_absent:mitigated": 581,
+    "python_only_absent:present_in_faithful_frame_port": 543,
+    "python_only_absent_in_go": 620,
+    "python_only_mitigated:False": 262,
+    "python_only_mitigated:True": 818,
+    "python_only_same_origin_geometry_differs": 460,
+    "state:fresh": 45,
+    "state:invalidated": 1,
+    "state:partially_mitigated": 206,
+    "state:touched": 155,
+    "touch_count_disagrees": 54
+   },
+   "examples": {
+    "geometry_differs": [
+     {
+      "bar": 1790679600,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.13324,
+       1.13628
+      ],
+      "kind": "supply_demand",
+      "measured": {
+       "entry_clipped": true,
+       "entry_max_width_price": 0.0015,
+       "mitigated": false,
+       "score": 11.0,
+       "structural_high": 1.13628,
+       "structural_low": 1.13324,
+       "touches": 0
+      },
+      "origin": 1790672400,
+      "python": [
+       1.13478,
+       1.13628
+      ],
+      "side": "buy"
+     },
+     {
+      "bar": 1790683200,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.13324,
+       1.13628
+      ],
+      "kind": "supply_demand",
+      "measured": {
+       "entry_clipped": true,
+       "entry_max_width_price": 0.0015,
+       "mitigated": false,
+       "score": 9.5,
+       "structural_high": 1.13628,
+       "structural_low": 1.13324,
+       "touches": 0
+      },
+      "origin": 1790672400,
+      "python": [
+       1.13478,
+       1.13628
+      ],
+      "side": "buy"
+     },
+     {
+      "bar": 1790708400,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.13119,
+       1.13462
+      ],
+      "kind": "supply_demand",
+      "measured": {
+       "entry_clipped": true,
+       "entry_max_width_price": 0.0015,
+       "mitigated": false,
+       "score": 9.0,
+       "structural_high": 1.13462,
+       "structural_low": 1.13119,
+       "touches": 0
+      },
+      "origin": 1790697600,
+      "python": [
+       1.13312,
+       1.13462
+      ],
+      "side": "buy"
+     },
+     {
+      "bar": 1790712000,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.13119,
+       1.13462
+      ],
+      "kind": "supply_demand",
+      "measured": {
+       "entry_clipped": true,
+       "entry_max_width_price": 0.0015,
+       "mitigated": false,
+       "score": 9.0,
+       "structural_high": 1.13462,
+       "structural_low": 1.13119,
+       "touches": 0
+      },
+      "origin": 1790697600,
+      "python": [
+       1.13312,
+       1.13462
+      ],
+      "side": "buy"
+     },
+     {
+      "bar": 1790715600,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.13119,
+       1.13462
+      ],
+      "kind": "supply_demand",
+      "measured": {
+       "entry_clipped": true,
+       "entry_max_width_price": 0.0015,
+       "mitigated": true,
+       "score": 5.5,
+       "structural_high": 1.13462,
+       "structural_low": 1.13119,
+       "touches": 1
+      },
+      "origin": 1790697600,
+      "python": [
+       1.13312,
+       1.13462
+      ],
+      "side": "buy"
+     },
+     {
+      "bar": 1790719200,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.13119,
+       1.13462
+      ],
+      "kind": "supply_demand",
+      "measured": {
+       "entry_clipped": true,
+       "entry_max_width_price": 0.0015,
+       "mitigated": true,
+       "score": 7.5,
+       "structural_high": 1.13462,
+       "structural_low": 1.13119,
+       "touches": 1
+      },
+      "origin": 1790697600,
+      "python": [
+       1.13312,
+       1.13462
+      ],
+      "side": "buy"
+     },
+     {
+      "bar": 1790722800,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.13119,
+       1.13462
+      ],
+      "kind": "supply_demand",
+      "measured": {
+       "entry_clipped": true,
+       "entry_max_width_price": 0.0015,
+       "mitigated": true,
+       "score": 9.5,
+       "structural_high": 1.13462,
+       "structural_low": 1.13119,
+       "touches": 1
+      },
+      "origin": 1790697600,
+      "python": [
+       1.13312,
+       1.13462
+      ],
+      "side": "buy"
+     },
+     {
+      "bar": 1790726400,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.13119,
+       1.13462
+      ],
+      "kind": "supply_demand",
+      "measured": {
+       "entry_clipped": true,
+       "entry_max_width_price": 0.0015,
+       "mitigated": true,
+       "score": 9.5,
+       "structural_high": 1.13462,
+       "structural_low": 1.13119,
+       "touches": 1
+      },
+      "origin": 1790697600,
+      "python": [
+       1.13312,
+       1.13462
+      ],
+      "side": "buy"
+     },
+     {
+      "bar": 1790730000,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.13119,
+       1.13462
+      ],
+      "kind": "supply_demand",
+      "measured": {
+       "entry_clipped": true,
+       "entry_max_width_price": 0.0015,
+       "mitigated": true,
+       "score": 11.0,
+       "structural_high": 1.13462,
+       "structural_low": 1.13119,
+       "touches": 1
+      },
+      "origin": 1790697600,
+      "python": [
+       1.13312,
+       1.13462
+      ],
+      "side": "buy"
+     },
+     {
+      "bar": 1790733600,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.13194,
+       1.13357
+      ],
+      "kind": "fvg",
+      "measured": {
+       "entry_clipped": true,
+       "entry_max_width_price": 0.0015,
+       "mitigated": true,
+       "score": 9.0,
+       "structural_high": 1.13357,
+       "structural_low": 1.13194,
+       "touches": 1
+      },
+      "origin": 1790708400,
+      "python": [
+       1.13207,
+       1.13357
+      ],
+      "side": "buy"
+     },
+     {
+      "bar": 1790733600,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.13119,
+       1.13462
+      ],
+      "kind": "supply_demand",
+      "measured": {
+       "entry_clipped": true,
+       "entry_max_width_price": 0.0015,
+       "mitigated": true,
+       "score": 11.0,
+       "structural_high": 1.13462,
+       "structural_low": 1.13119,
+       "touches": 1
+      },
+      "origin": 1790697600,
+      "python": [
+       1.13312,
+       1.13462
+      ],
+      "side": "buy"
+     },
+     {
+      "bar": 1790737200,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.13119,
+       1.13462
+      ],
+      "kind": "supply_demand",
+      "measured": {
+       "entry_clipped": true,
+       "entry_max_width_price": 0.0015,
+       "mitigated": true,
+       "score": 9.5,
+       "structural_high": 1.13462,
+       "structural_low": 1.13119,
+       "touches": 1
+      },
+      "origin": 1790697600,
+      "python": [
+       1.13312,
+       1.13462
+      ],
+      "side": "buy"
+     }
+    ],
+    "go_only": [
+     {
+      "bar": 1790679600,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.14632,
+       1.1478
+      ],
+      "kind": "supply_demand",
+      "origin": 1790049600,
+      "side": "sell",
+      "state": "touched"
+     },
+     {
+      "bar": 1790679600,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.13861,
+       1.14073
+      ],
+      "kind": "supply_demand",
+      "origin": 1790348400,
+      "side": "sell",
+      "state": "partially_mitigated"
+     },
+     {
+      "bar": 1790679600,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.13429,
+       1.13665
+      ],
+      "kind": "supply_demand",
+      "origin": 1790665200,
+      "side": "sell",
+      "state": "touched"
+     },
+     {
+      "bar": 1790679600,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.14767,
+       1.14908
+      ],
+      "kind": "supply_demand",
+      "origin": 1789988400,
+      "side": "sell",
+      "state": "touched"
+     },
+     {
+      "bar": 1790679600,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.14765,
+       1.14889
+      ],
+      "kind": "supply_demand",
+      "origin": 1789700400,
+      "side": "sell",
+      "state": "partially_mitigated"
+     },
+     {
+      "bar": 1790679600,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.14256,
+       1.14392
+      ],
+      "kind": "supply_demand",
+      "origin": 1790136000,
+      "side": "sell",
+      "state": "fresh"
+     },
+     {
+      "bar": 1790679600,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.143,
+       1.14328
+      ],
+      "kind": "fvg",
+      "origin": 1790136000,
+      "side": "sell",
+      "state": "fresh"
+     },
+     {
+      "bar": 1790679600,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.14713,
+       1.14722
+      ],
+      "kind": "ifvg",
+      "origin": 1790056800,
+      "side": "sell",
+      "state": "fresh"
+     },
+     {
+      "bar": 1790679600,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.1477,
+       1.14811
+      ],
+      "kind": "fvg",
+      "origin": 1789729200,
+      "side": "sell",
+      "state": "partially_mitigated"
+     },
+     {
+      "bar": 1790679600,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.13324,
+       1.13628
+      ],
+      "kind": "supply_demand",
+      "origin": 1790672400,
+      "side": "buy",
+      "state": "fresh"
+     },
+     {
+      "bar": 1790679600,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.14647,
+       1.14703
+      ],
+      "kind": "fvg",
+      "origin": 1790060400,
+      "side": "sell",
+      "state": "touched"
+     },
+     {
+      "bar": 1790679600,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.13941,
+       1.13952
+      ],
+      "kind": "ifvg",
+      "origin": 1790366400,
+      "side": "sell",
+      "state": "fresh"
+     }
+    ],
+    "python_only": [
+     {
+      "bar": 1790679600,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "kind": "supply_demand",
+      "measured": {
+       "entry_clipped": true,
+       "entry_max_width_price": 0.0015,
+       "mitigated": false,
+       "score": 11.0,
+       "structural_high": 1.13628,
+       "structural_low": 1.13324,
+       "touches": 0
+      },
+      "origin": 1790672400,
+      "python": [
+       1.13478,
+       1.13628
+      ],
+      "side": "buy"
+     },
+     {
+      "bar": 1790683200,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "kind": "supply_demand",
+      "measured": {
+       "entry_clipped": true,
+       "entry_max_width_price": 0.0015,
+       "mitigated": false,
+       "score": 9.5,
+       "structural_high": 1.13628,
+       "structural_low": 1.13324,
+       "touches": 0
+      },
+      "origin": 1790672400,
+      "python": [
+       1.13478,
+       1.13628
+      ],
+      "side": "buy"
+     },
+     {
+      "bar": 1790708400,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "kind": "supply_demand",
+      "measured": {
+       "entry_clipped": true,
+       "entry_max_width_price": 0.0015,
+       "mitigated": false,
+       "score": 9.0,
+       "structural_high": 1.13462,
+       "structural_low": 1.13119,
+       "touches": 0
+      },
+      "origin": 1790697600,
+      "python": [
+       1.13312,
+       1.13462
+      ],
+      "side": "buy"
+     },
+     {
+      "bar": 1790712000,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "kind": "supply_demand",
+      "measured": {
+       "entry_clipped": true,
+       "entry_max_width_price": 0.0015,
+       "mitigated": false,
+       "score": 9.0,
+       "structural_high": 1.13462,
+       "structural_low": 1.13119,
+       "touches": 0
+      },
+      "origin": 1790697600,
+      "python": [
+       1.13312,
+       1.13462
+      ],
+      "side": "buy"
+     },
+     {
+      "bar": 1790715600,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "kind": "supply_demand",
+      "measured": {
+       "entry_clipped": true,
+       "entry_max_width_price": 0.0015,
+       "mitigated": true,
+       "score": 5.5,
+       "structural_high": 1.13462,
+       "structural_low": 1.13119,
+       "touches": 1
+      },
+      "origin": 1790697600,
+      "python": [
+       1.13312,
+       1.13462
+      ],
+      "side": "buy"
+     },
+     {
+      "bar": 1790719200,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "kind": "supply_demand",
+      "measured": {
+       "entry_clipped": true,
+       "entry_max_width_price": 0.0015,
+       "mitigated": true,
+       "score": 7.5,
+       "structural_high": 1.13462,
+       "structural_low": 1.13119,
+       "touches": 1
+      },
+      "origin": 1790697600,
+      "python": [
+       1.13312,
+       1.13462
+      ],
+      "side": "buy"
+     },
+     {
+      "bar": 1790722800,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "kind": "supply_demand",
+      "measured": {
+       "entry_clipped": true,
+       "entry_max_width_price": 0.0015,
+       "mitigated": true,
+       "score": 9.5,
+       "structural_high": 1.13462,
+       "structural_low": 1.13119,
+       "touches": 1
+      },
+      "origin": 1790697600,
+      "python": [
+       1.13312,
+       1.13462
+      ],
+      "side": "buy"
+     },
+     {
+      "bar": 1790726400,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "kind": "supply_demand",
+      "measured": {
+       "entry_clipped": true,
+       "entry_max_width_price": 0.0015,
+       "mitigated": true,
+       "score": 9.5,
+       "structural_high": 1.13462,
+       "structural_low": 1.13119,
+       "touches": 1
+      },
+      "origin": 1790697600,
+      "python": [
+       1.13312,
+       1.13462
+      ],
+      "side": "buy"
+     },
+     {
+      "bar": 1790730000,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "kind": "supply_demand",
+      "measured": {
+       "entry_clipped": true,
+       "entry_max_width_price": 0.0015,
+       "mitigated": true,
+       "score": 11.0,
+       "structural_high": 1.13462,
+       "structural_low": 1.13119,
+       "touches": 1
+      },
+      "origin": 1790697600,
+      "python": [
+       1.13312,
+       1.13462
+      ],
+      "side": "buy"
+     },
+     {
+      "bar": 1790733600,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "kind": "fvg",
+      "measured": {
+       "entry_clipped": true,
+       "entry_max_width_price": 0.0015,
+       "mitigated": true,
+       "score": 9.0,
+       "structural_high": 1.13357,
+       "structural_low": 1.13194,
+       "touches": 1
+      },
+      "origin": 1790708400,
+      "python": [
+       1.13207,
+       1.13357
+      ],
+      "side": "buy"
+     },
+     {
+      "bar": 1790733600,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "kind": "supply_demand",
+      "measured": {
+       "entry_clipped": true,
+       "entry_max_width_price": 0.0015,
+       "mitigated": true,
+       "score": 11.0,
+       "structural_high": 1.13462,
+       "structural_low": 1.13119,
+       "touches": 1
+      },
+      "origin": 1790697600,
+      "python": [
+       1.13312,
+       1.13462
+      ],
+      "side": "buy"
+     },
+     {
+      "bar": 1790737200,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "kind": "supply_demand",
+      "measured": {
+       "entry_clipped": true,
+       "entry_max_width_price": 0.0015,
+       "mitigated": true,
+       "score": 9.5,
+       "structural_high": 1.13462,
+       "structural_low": 1.13119,
+       "touches": 1
+      },
+      "origin": 1790697600,
+      "python": [
+       1.13312,
+       1.13462
+      ],
+      "side": "buy"
+     }
+    ]
+   },
+   "matched_sample": [
+    {
+     "bar": 1790683200,
+     "capture": "replay-eurusd-production-capture-20261006.json",
+     "go": {
+      "high": 1.13565,
+      "low": 1.13523,
+      "relevance": 0,
+      "state": "touched",
+      "strength": 0.44028314028312915,
+      "touch_count": 1
+     },
+     "origin_candle_time": 1790668800,
+     "python": {
+      "high": 1.13565,
+      "low": 1.13523,
+      "mitigated": false,
+      "score": 6.0,
+      "touches": 0
+     },
+     "root_cause": "geometry matched; Go strength is a hard-coded 1 (M5 technique population) / a V2 0-1 scale (M15, H1), Python score is the 0-25 confluence score: not comparable scales",
+     "side": "sell",
+     "strength_delta_vs_python_score": -5.559717,
+     "technique": "fvg",
+     "tf": "H1"
+    },
+    {
+     "bar": 1790712000,
+     "capture": "replay-eurusd-production-capture-20261006.json",
+     "go": {
+      "high": 1.13382,
+      "low": 1.1336,
+      "relevance": 0,
+      "state": "touched",
+      "strength": 0.22013786460373938,
+      "touch_count": 1
+     },
+     "origin_candle_time": 1790704800,
+     "python": {
+      "high": 1.13382,
+      "low": 1.1336,
+      "mitigated": null,
+      "score": null,
+      "touches": null
+     },
+     "root_cause": "geometry matched; Go strength is a hard-coded 1 (M5 technique population) / a V2 0-1 scale (M15, H1), Python score is the 0-25 confluence score: not comparable scales",
+     "side": "buy",
+     "strength_delta_vs_python_score": null,
+     "technique": "ifvg",
+     "tf": "H1"
+    },
+    {
+     "bar": 1790722800,
+     "capture": "replay-eurusd-production-capture-20261006.json",
+     "go": {
+      "high": 1.13382,
+      "low": 1.1336,
+      "relevance": 0,
+      "state": "touched",
+      "strength": 0.2266170810530152,
+      "touch_count": 1
+     },
+     "origin_candle_time": 1790704800,
+     "python": {
+      "high": 1.13382,
+      "low": 1.1336,
+      "mitigated": null,
+      "score": null,
+      "touches": null
+     },
+     "root_cause": "geometry matched; Go strength is a hard-coded 1 (M5 technique population) / a V2 0-1 scale (M15, H1), Python score is the 0-25 confluence score: not comparable scales",
+     "side": "buy",
+     "strength_delta_vs_python_score": null,
+     "technique": "ifvg",
+     "tf": "H1"
+    },
+    {
+     "bar": 1790730000,
+     "capture": "replay-eurusd-production-capture-20261006.json",
+     "go": {
+      "high": 1.13382,
+      "low": 1.1336,
+      "relevance": 0,
+      "state": "touched",
+      "strength": 0.23981561832248843,
+      "touch_count": 1
+     },
+     "origin_candle_time": 1790704800,
+     "python": {
+      "high": 1.13382,
+      "low": 1.1336,
+      "mitigated": null,
+      "score": null,
+      "touches": null
+     },
+     "root_cause": "geometry matched; Go strength is a hard-coded 1 (M5 technique population) / a V2 0-1 scale (M15, H1), Python score is the 0-25 confluence score: not comparable scales",
+     "side": "buy",
+     "strength_delta_vs_python_score": null,
+     "technique": "ifvg",
+     "tf": "H1"
+    },
+    {
+     "bar": 1790784000,
+     "capture": "replay-eurusd-production-capture-20261006.json",
+     "go": {
+      "high": 1.13436,
+      "low": 1.1334,
+      "relevance": 0,
+      "state": "partially_mitigated",
+      "strength": 0.7370215727209685,
+      "touch_count": 2
+     },
+     "origin_candle_time": 1790748000,
+     "python": {
+      "high": 1.13436,
+      "low": 1.1334,
+      "mitigated": true,
+      "score": 11.0,
+      "touches": 1
+     },
+     "root_cause": "geometry matched; Go strength is a hard-coded 1 (M5 technique population) / a V2 0-1 scale (M15, H1), Python score is the 0-25 confluence score: not comparable scales",
+     "side": "buy",
+     "strength_delta_vs_python_score": -10.262978,
+     "technique": "fvg",
+     "tf": "H1"
+    },
+    {
+     "bar": 1790791200,
+     "capture": "replay-eurusd-production-capture-20261006.json",
+     "go": {
+      "high": 1.13346,
+      "low": 1.1334,
+      "relevance": 0,
+      "state": "touched",
+      "strength": 0.26107165604005034,
+      "touch_count": 1
+     },
+     "origin_candle_time": 1790744400,
+     "python": {
+      "high": 1.13346,
+      "low": 1.1334,
+      "mitigated": null,
+      "score": null,
+      "touches": null
+     },
+     "root_cause": "geometry matched; Go strength is a hard-coded 1 (M5 technique population) / a V2 0-1 scale (M15, H1), Python score is the 0-25 confluence score: not comparable scales",
+     "side": "buy",
+     "strength_delta_vs_python_score": null,
+     "technique": "ifvg",
+     "tf": "H1"
+    },
+    {
+     "bar": 1790798400,
+     "capture": "replay-eurusd-production-capture-20261006.json",
+     "go": {
+      "high": 1.13273,
+      "low": 1.13194,
+      "relevance": 0,
+      "state": "touched",
+      "strength": 0.5874522785430597,
+      "touch_count": 1
+     },
+     "origin_candle_time": 1790704800,
+     "python": {
+      "high": 1.13273,
+      "low": 1.13194,
+      "mitigated": null,
+      "score": null,
+      "touches": null
+     },
+     "root_cause": "geometry matched; Go strength is a hard-coded 1 (M5 technique population) / a V2 0-1 scale (M15, H1), Python score is the 0-25 confluence score: not comparable scales",
+     "side": "buy",
+     "strength_delta_vs_python_score": null,
+     "technique": "ifvg",
+     "tf": "H1"
+    },
+    {
+     "bar": 1790812800,
+     "capture": "replay-eurusd-production-capture-20261006.json",
+     "go": {
+      "high": 1.13273,
+      "low": 1.13194,
+      "relevance": 0,
+      "state": "partially_mitigated",
+      "strength": 0.6087070156752845,
+      "touch_count": 2
+     },
+     "origin_candle_time": 1790704800,
+     "python": {
+      "high": 1.13273,
+      "low": 1.13194,
+      "mitigated": null,
+      "score": null,
+      "touches": null
+     },
+     "root_cause": "geometry matched; Go strength is a hard-coded 1 (M5 technique population) / a V2 0-1 scale (M15, H1), Python score is the 0-25 confluence score: not comparable scales",
+     "side": "buy",
+     "strength_delta_vs_python_score": null,
+     "technique": "ifvg",
+     "tf": "H1"
+    },
+    {
+     "bar": 1790816400,
+     "capture": "replay-eurusd-production-capture-20261006.json",
+     "go": {
+      "high": 1.13436,
+      "low": 1.1334,
+      "relevance": 0,
+      "state": "touched",
+      "strength": 0.595323518870069,
+      "touch_count": 1
+     },
+     "origin_candle_time": 1790791200,
+     "python": {
+      "high": 1.13436,
+      "low": 1.1334,
+      "mitigated": null,
+      "score": null,
+      "touches": null
+     },
+     "root_cause": "geometry matched; Go strength is a hard-coded 1 (M5 technique population) / a V2 0-1 scale (M15, H1), Python score is the 0-25 confluence score: not comparable scales",
+     "side": "sell",
+     "strength_delta_vs_python_score": null,
+     "technique": "ifvg",
+     "tf": "H1"
+    },
+    {
+     "bar": 1790820000,
+     "capture": "replay-eurusd-production-capture-20261006.json",
+     "go": {
+      "high": 1.13273,
+      "low": 1.13194,
+      "relevance": 0,
+      "state": "partially_mitigated",
+      "strength": 0.6106766794580037,
+      "touch_count": 2
+     },
+     "origin_candle_time": 1790704800,
+     "python": {
+      "high": 1.13273,
+      "low": 1.13194,
+      "mitigated": null,
+      "score": null,
+      "touches": null
+     },
+     "root_cause": "geometry matched; Go strength is a hard-coded 1 (M5 technique population) / a V2 0-1 scale (M15, H1), Python score is the 0-25 confluence score: not comparable scales",
+     "side": "buy",
+     "strength_delta_vs_python_score": null,
+     "technique": "ifvg",
+     "tf": "H1"
+    },
+    {
+     "bar": 1790823600,
+     "capture": "replay-eurusd-production-capture-20261006.json",
+     "go": {
+      "high": 1.13273,
+      "low": 1.13194,
+      "relevance": 0,
+      "state": "partially_mitigated",
+      "strength": 0.6133531422474864,
+      "touch_count": 3
+     },
+     "origin_candle_time": 1790704800,
+     "python": {
+      "high": 1.13273,
+      "low": 1.13194,
+      "mitigated": null,
+      "score": null,
+      "touches": null
+     },
+     "root_cause": "geometry matched; Go strength is a hard-coded 1 (M5 technique population) / a V2 0-1 scale (M15, H1), Python score is the 0-25 confluence score: not comparable scales",
+     "side": "buy",
+     "strength_delta_vs_python_score": null,
+     "technique": "ifvg",
+     "tf": "H1"
+    },
+    {
+     "bar": 1790906400,
+     "capture": "replay-eurusd-production-capture-20261006.json",
+     "go": {
+      "high": 1.12431,
+      "low": 1.1237,
+      "relevance": 0,
+      "state": "fresh",
+      "strength": 0.5052054794520559,
+      "touch_count": 0
+     },
+     "origin_candle_time": 1790902800,
+     "python": {
+      "high": 1.12431,
+      "low": 1.1237,
+      "mitigated": false,
+      "score": 7.0,
+      "touches": 0
+     },
+     "root_cause": "geometry matched; Go strength is a hard-coded 1 (M5 technique population) / a V2 0-1 scale (M15, H1), Python score is the 0-25 confluence score: not comparable scales",
+     "side": "sell",
+     "strength_delta_vs_python_score": -6.494795,
+     "technique": "fvg",
+     "tf": "H1"
+    }
+   ],
+   "strength_python_score_vs_go_strength": {
+    "go_strength_distinct": [
+     0.0,
+     0.16125341983909602,
+     0.16137763673702013,
+     0.16322596691958569,
+     0.20766096169527923,
+     0.21169985268262204,
+     0.2434466649364238,
+     0.26253922845367356
+    ],
+    "n": 129,
+    "python_score_max": 18.5,
+    "python_score_min": 2.0
+   }
+  },
+  "M15": {
+   "counts": {
+    "geometry_differs:entry_clipped_go_publishes_structural": 373,
+    "go_mitigated_python_not": 222,
+    "go_native_other_kind:breaker": 98,
+    "go_native_other_kind:flip": 672,
+    "go_only": 261751,
+    "go_only_origin:before_python_window": 156669,
+    "go_only_origin:inside_python_window": 105082,
+    "go_only_state:fresh": 16403,
+    "go_only_state:invalidated": 179887,
+    "go_only_state:partially_mitigated": 44123,
+    "go_only_state:touched": 21338,
+    "matched": 1003,
+    "python_mitigated_go_not_mitigated": 134,
+    "python_only": 1610,
+    "python_only_absent:LIVE": 65,
+    "python_only_absent:absent_in_faithful_frame_port": 160,
+    "python_only_absent:mitigated": 1172,
+    "python_only_absent:present_in_faithful_frame_port": 1077,
+    "python_only_absent_in_go": 1237,
+    "python_only_mitigated:False": 177,
+    "python_only_mitigated:True": 1433,
+    "python_only_same_origin_geometry_differs": 373,
+    "state:fresh": 113,
+    "state:invalidated": 9,
+    "state:partially_mitigated": 459,
+    "state:touched": 422,
+    "touch_count_disagrees": 148
+   },
+   "examples": {
+    "geometry_differs": [
+     {
+      "bar": 1790859600,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.12811,
+       1.13119
+      ],
+      "kind": "supply_demand",
+      "measured": {
+       "entry_clipped": true,
+       "entry_max_width_price": 0.0015,
+       "mitigated": false,
+       "score": 13.0,
+       "structural_high": 1.13119,
+       "structural_low": 1.12811,
+       "touches": 0
+      },
+      "origin": 1790855100,
+      "python": [
+       1.12811,
+       1.12961
+      ],
+      "side": "sell"
+     },
+     {
+      "bar": 1790859600,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.12811,
+       1.12976
+      ],
+      "kind": "supply_demand",
+      "measured": {
+       "entry_clipped": true,
+       "entry_max_width_price": 0.0015,
+       "mitigated": true,
+       "score": 12.0,
+       "structural_high": 1.12976,
+       "structural_low": 1.12811,
+       "touches": 1
+      },
+      "origin": 1790853300,
+      "python": [
+       1.12826,
+       1.12976
+      ],
+      "side": "buy"
+     },
+     {
+      "bar": 1790863200,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.12811,
+       1.13119
+      ],
+      "kind": "supply_demand",
+      "measured": {
+       "entry_clipped": true,
+       "entry_max_width_price": 0.0015,
+       "mitigated": true,
+       "score": 13.0,
+       "structural_high": 1.13119,
+       "structural_low": 1.12811,
+       "touches": 1
+      },
+      "origin": 1790855100,
+      "python": [
+       1.12811,
+       1.12961
+      ],
+      "side": "sell"
+     },
+     {
+      "bar": 1790863200,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.12811,
+       1.12976
+      ],
+      "kind": "supply_demand",
+      "measured": {
+       "entry_clipped": true,
+       "entry_max_width_price": 0.0015,
+       "mitigated": true,
+       "score": 12.5,
+       "structural_high": 1.12976,
+       "structural_low": 1.12811,
+       "touches": 1
+      },
+      "origin": 1790853300,
+      "python": [
+       1.12826,
+       1.12976
+      ],
+      "side": "buy"
+     },
+     {
+      "bar": 1790960400,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.12562,
+       1.12723
+      ],
+      "kind": "ifvg",
+      "measured": {
+       "entry_clipped": true,
+       "entry_max_width_price": 0.0015,
+       "invert_index": 246,
+       "inverted_from": "bullish_fvg",
+       "structural_high": 1.12723,
+       "structural_low": 1.12562
+      },
+      "origin": 1790956800,
+      "python": [
+       1.12562,
+       1.1271200000000001
+      ],
+      "side": "sell"
+     },
+     {
+      "bar": 1790964000,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.12562,
+       1.12723
+      ],
+      "kind": "ifvg",
+      "measured": {
+       "entry_clipped": true,
+       "entry_max_width_price": 0.0015,
+       "invert_index": 242,
+       "inverted_from": "bullish_fvg",
+       "structural_high": 1.12723,
+       "structural_low": 1.12562
+      },
+      "origin": 1790956800,
+      "python": [
+       1.12562,
+       1.1271200000000001
+      ],
+      "side": "sell"
+     },
+     {
+      "bar": 1790971200,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.12562,
+       1.12723
+      ],
+      "kind": "ifvg",
+      "measured": {
+       "entry_clipped": true,
+       "entry_max_width_price": 0.0015,
+       "invert_index": 234,
+       "inverted_from": "bullish_fvg",
+       "structural_high": 1.12723,
+       "structural_low": 1.12562
+      },
+      "origin": 1790956800,
+      "python": [
+       1.12562,
+       1.1271200000000001
+      ],
+      "side": "sell"
+     },
+     {
+      "bar": 1791154800,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.12562,
+       1.12723
+      ],
+      "kind": "ifvg",
+      "measured": {
+       "entry_clipped": true,
+       "entry_max_width_price": 0.0015,
+       "invert_index": 222,
+       "inverted_from": "bullish_fvg",
+       "structural_high": 1.12723,
+       "structural_low": 1.12562
+      },
+      "origin": 1790956800,
+      "python": [
+       1.12562,
+       1.1271200000000001
+      ],
+      "side": "sell"
+     },
+     {
+      "bar": 1791162000,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.1223,
+       1.12431
+      ],
+      "kind": "supply_demand",
+      "measured": {
+       "entry_clipped": true,
+       "entry_max_width_price": 0.0015,
+       "mitigated": true,
+       "score": 13.5,
+       "structural_high": 1.12431,
+       "structural_low": 1.1223,
+       "touches": 1
+      },
+      "origin": 1790942400,
+      "python": [
+       1.1228099999999999,
+       1.12431
+      ],
+      "side": "buy"
+     },
+     {
+      "bar": 1791165600,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.1223,
+       1.12431
+      ],
+      "kind": "supply_demand",
+      "measured": {
+       "entry_clipped": true,
+       "entry_max_width_price": 0.0015,
+       "mitigated": true,
+       "score": 12.5,
+       "structural_high": 1.12431,
+       "structural_low": 1.1223,
+       "touches": 2
+      },
+      "origin": 1790942400,
+      "python": [
+       1.1228099999999999,
+       1.12431
+      ],
+      "side": "buy"
+     },
+     {
+      "bar": 1791172800,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.11613,
+       1.12067
+      ],
+      "kind": "supply_demand",
+      "measured": {
+       "entry_clipped": true,
+       "entry_max_width_price": 0.0015,
+       "mitigated": false,
+       "score": 9.0,
+       "structural_high": 1.12067,
+       "structural_low": 1.11613,
+       "touches": 0
+      },
+      "origin": 1791170100,
+      "python": [
+       1.11613,
+       1.1176300000000001
+      ],
+      "side": "sell"
+     },
+     {
+      "bar": 1791187200,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.11834,
+       1.12033
+      ],
+      "kind": "ifvg",
+      "measured": {
+       "entry_clipped": true,
+       "entry_max_width_price": 0.0015,
+       "invert_index": 248,
+       "inverted_from": "bearish_fvg",
+       "structural_high": 1.12033,
+       "structural_low": 1.11834
+      },
+      "origin": 1791185400,
+      "python": [
+       1.11883,
+       1.12033
+      ],
+      "side": "buy"
+     }
+    ],
+    "go_only": [
+     {
+      "bar": 1790679600,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.13589,
+       1.13597
+      ],
+      "kind": "fvg",
+      "origin": 1790666100,
+      "side": "sell",
+      "state": "fresh"
+     },
+     {
+      "bar": 1790679600,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.13705,
+       1.13737
+      ],
+      "kind": "fvg",
+      "origin": 1790599500,
+      "side": "sell",
+      "state": "partially_mitigated"
+     },
+     {
+      "bar": 1790679600,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.13689,
+       1.1384
+      ],
+      "kind": "supply_demand",
+      "origin": 1790614800,
+      "side": "sell",
+      "state": "partially_mitigated"
+     },
+     {
+      "bar": 1790679600,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.13663,
+       1.13699
+      ],
+      "kind": "fvg",
+      "origin": 1790640900,
+      "side": "sell",
+      "state": "partially_mitigated"
+     },
+     {
+      "bar": 1790679600,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.13753,
+       1.13829
+      ],
+      "kind": "supply_demand",
+      "origin": 1790577000,
+      "side": "sell",
+      "state": "partially_mitigated"
+     },
+     {
+      "bar": 1790679600,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.13875,
+       1.13882
+      ],
+      "kind": "fvg",
+      "origin": 1790567100,
+      "side": "sell",
+      "state": "partially_mitigated"
+     },
+     {
+      "bar": 1790679600,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.13855,
+       1.13893
+      ],
+      "kind": "supply_demand",
+      "origin": 1790568900,
+      "side": "sell",
+      "state": "partially_mitigated"
+     },
+     {
+      "bar": 1790679600,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.13601,
+       1.13629
+      ],
+      "kind": "supply_demand",
+      "origin": 1790655300,
+      "side": "sell",
+      "state": "touched"
+     },
+     {
+      "bar": 1790679600,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.13577,
+       1.13593
+      ],
+      "kind": "fvg",
+      "origin": 1790660700,
+      "side": "sell",
+      "state": "partially_mitigated"
+     },
+     {
+      "bar": 1790679600,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.13557,
+       1.13578
+      ],
+      "kind": "fvg",
+      "origin": 1790667000,
+      "side": "sell",
+      "state": "fresh"
+     },
+     {
+      "bar": 1790679600,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.13416,
+       1.13425
+      ],
+      "kind": "fvg",
+      "origin": 1790678700,
+      "side": "buy",
+      "state": "fresh"
+     },
+     {
+      "bar": 1790679600,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.13549,
+       1.13665
+      ],
+      "kind": "supply_demand",
+      "origin": 1790661600,
+      "side": "sell",
+      "state": "touched"
+     }
+    ],
+    "python_only": [
+     {
+      "bar": 1790679600,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "kind": "supply_demand",
+      "measured": {
+       "mitigated": false,
+       "score": 9.5,
+       "touches": 0
+      },
+      "origin": 1790671500,
+      "python": [
+       1.13433,
+       1.13523
+      ],
+      "side": "sell"
+     },
+     {
+      "bar": 1790683200,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "kind": "supply_demand",
+      "measured": {
+       "mitigated": true,
+       "score": 5.5,
+       "touches": 1
+      },
+      "origin": 1790671500,
+      "python": [
+       1.13433,
+       1.13523
+      ],
+      "side": "sell"
+     },
+     {
+      "bar": 1790686800,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "kind": "supply_demand",
+      "measured": {
+       "mitigated": true,
+       "score": 5.5,
+       "touches": 1
+      },
+      "origin": 1790671500,
+      "python": [
+       1.13433,
+       1.13523
+      ],
+      "side": "sell"
+     },
+     {
+      "bar": 1790690400,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "kind": "supply_demand",
+      "measured": {
+       "mitigated": true,
+       "score": 11.5,
+       "touches": 1
+      },
+      "origin": 1790675100,
+      "python": [
+       1.13324,
+       1.134
+      ],
+      "side": "buy"
+     },
+     {
+      "bar": 1790694000,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "kind": "supply_demand",
+      "measured": {
+       "mitigated": true,
+       "score": 13.0,
+       "touches": 1
+      },
+      "origin": 1790675100,
+      "python": [
+       1.13324,
+       1.134
+      ],
+      "side": "buy"
+     },
+     {
+      "bar": 1790697600,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "kind": "supply_demand",
+      "measured": {
+       "mitigated": true,
+       "score": 6.5,
+       "touches": 2
+      },
+      "origin": 1790675100,
+      "python": [
+       1.13324,
+       1.134
+      ],
+      "side": "buy"
+     },
+     {
+      "bar": 1790733600,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "kind": "order_block",
+      "measured": {
+       "body_frac": 0.8983050847458265,
+       "has_bos": true,
+       "mitigated": false,
+       "score": 15.5,
+       "touches": 0
+      },
+      "origin": 1790730900,
+      "python": [
+       1.13359,
+       1.13412
+      ],
+      "side": "sell"
+     },
+     {
+      "bar": 1790733600,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "kind": "order_block",
+      "measured": {
+       "body_frac": 0.7499999999998739,
+       "has_bos": true,
+       "mitigated": true,
+       "score": 10.5,
+       "touches": 1
+      },
+      "origin": 1790730000,
+      "python": [
+       1.13358,
+       1.13391
+      ],
+      "side": "buy"
+     },
+     {
+      "bar": 1790737200,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "kind": "order_block",
+      "measured": {
+       "body_frac": 0.8983050847458265,
+       "has_bos": true,
+       "mitigated": true,
+       "score": 14.0,
+       "touches": 1
+      },
+      "origin": 1790730900,
+      "python": [
+       1.13359,
+       1.13412
+      ],
+      "side": "sell"
+     },
+     {
+      "bar": 1790748000,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "kind": "supply_demand",
+      "measured": {
+       "mitigated": true,
+       "score": 11.5,
+       "touches": 3
+      },
+      "origin": 1790671500,
+      "python": [
+       1.13433,
+       1.13523
+      ],
+      "side": "sell"
+     },
+     {
+      "bar": 1790751600,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "kind": "supply_demand",
+      "measured": {
+       "mitigated": true,
+       "score": 9.5,
+       "touches": 4
+      },
+      "origin": 1790671500,
+      "python": [
+       1.13433,
+       1.13523
+      ],
+      "side": "sell"
+     },
+     {
+      "bar": 1790755200,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "kind": "supply_demand",
+      "measured": {
+       "mitigated": true,
+       "score": 11.5,
+       "touches": 4
+      },
+      "origin": 1790671500,
+      "python": [
+       1.13433,
+       1.13523
+      ],
+      "side": "sell"
+     }
+    ]
+   },
+   "matched_sample": [
+    {
+     "bar": 1790686800,
+     "capture": "replay-eurusd-production-capture-20261006.json",
+     "go": {
+      "high": 1.13437,
+      "low": 1.134,
+      "relevance": 0,
+      "state": "fresh",
+      "strength": 0.8759340659342559,
+      "touch_count": 0
+     },
+     "origin_candle_time": 1790678700,
+     "python": {
+      "high": 1.13437,
+      "low": 1.134,
+      "mitigated": null,
+      "score": null,
+      "touches": null
+     },
+     "root_cause": "geometry matched; Go strength is a hard-coded 1 (M5 technique population) / a V2 0-1 scale (M15, H1), Python score is the 0-25 confluence score: not comparable scales",
+     "side": "buy",
+     "strength_delta_vs_python_score": null,
+     "technique": "ifvg",
+     "tf": "M15"
+    },
+    {
+     "bar": 1790686800,
+     "capture": "replay-eurusd-production-capture-20261006.json",
+     "go": {
+      "high": 1.13443,
+      "low": 1.1343,
+      "relevance": 0,
+      "state": "touched",
+      "strength": 0.47769230769231136,
+      "touch_count": 1
+     },
+     "origin_candle_time": 1790679600,
+     "python": {
+      "high": 1.13443,
+      "low": 1.1343,
+      "mitigated": false,
+      "score": 9.0,
+      "touches": 0
+     },
+     "root_cause": "geometry matched; Go strength is a hard-coded 1 (M5 technique population) / a V2 0-1 scale (M15, H1), Python score is the 0-25 confluence score: not comparable scales",
+     "side": "buy",
+     "strength_delta_vs_python_score": -8.522308,
+     "technique": "fvg",
+     "tf": "M15"
+    },
+    {
+     "bar": 1790690400,
+     "capture": "replay-eurusd-production-capture-20261006.json",
+     "go": {
+      "high": 1.13437,
+      "low": 1.134,
+      "relevance": 0,
+      "state": "touched",
+      "strength": 0.44129819333219256,
+      "touch_count": 1
+     },
+     "origin_candle_time": 1790678700,
+     "python": {
+      "high": 1.13437,
+      "low": 1.134,
+      "mitigated": null,
+      "score": null,
+      "touches": null
+     },
+     "root_cause": "geometry matched; Go strength is a hard-coded 1 (M5 technique population) / a V2 0-1 scale (M15, H1), Python score is the 0-25 confluence score: not comparable scales",
+     "side": "buy",
+     "strength_delta_vs_python_score": null,
+     "technique": "ifvg",
+     "tf": "M15"
+    },
+    {
+     "bar": 1790694000,
+     "capture": "replay-eurusd-production-capture-20261006.json",
+     "go": {
+      "high": 1.13437,
+      "low": 1.134,
+      "relevance": 0,
+      "state": "touched",
+      "strength": 0.43401651112715917,
+      "touch_count": 1
+     },
+     "origin_candle_time": 1790678700,
+     "python": {
+      "high": 1.13437,
+      "low": 1.134,
+      "mitigated": null,
+      "score": null,
+      "touches": null
+     },
+     "root_cause": "geometry matched; Go strength is a hard-coded 1 (M5 technique population) / a V2 0-1 scale (M15, H1), Python score is the 0-25 confluence score: not comparable scales",
+     "side": "buy",
+     "strength_delta_vs_python_score": null,
+     "technique": "ifvg",
+     "tf": "M15"
+    },
+    {
+     "bar": 1790712000,
+     "capture": "replay-eurusd-production-capture-20261006.json",
+     "go": {
+      "high": 1.13385,
+      "low": 1.13373,
+      "relevance": 0,
+      "state": "partially_mitigated",
+      "strength": 0.1908452023988262,
+      "touch_count": 3
+     },
+     "origin_candle_time": 1790706600,
+     "python": {
+      "high": 1.13385,
+      "low": 1.13373,
+      "mitigated": null,
+      "score": null,
+      "touches": null
+     },
+     "root_cause": "geometry matched; Go strength is a hard-coded 1 (M5 technique population) / a V2 0-1 scale (M15, H1), Python score is the 0-25 confluence score: not comparable scales",
+     "side": "buy",
+     "strength_delta_vs_python_score": null,
+     "technique": "ifvg",
+     "tf": "M15"
+    },
+    {
+     "bar": 1790715600,
+     "capture": "replay-eurusd-production-capture-20261006.json",
+     "go": {
+      "high": 1.13418,
+      "low": 1.13406,
+      "relevance": 0,
+      "state": "fresh",
+      "strength": 0.3793859649123108,
+      "touch_count": 0
+     },
+     "origin_candle_time": 1790714700,
+     "python": {
+      "high": 1.13418,
+      "low": 1.13406,
+      "mitigated": null,
+      "score": null,
+      "touches": null
+     },
+     "root_cause": "geometry matched; Go strength is a hard-coded 1 (M5 technique population) / a V2 0-1 scale (M15, H1), Python score is the 0-25 confluence score: not comparable scales",
+     "side": "buy",
+     "strength_delta_vs_python_score": null,
+     "technique": "ifvg",
+     "tf": "M15"
+    },
+    {
+     "bar": 1790726400,
+     "capture": "replay-eurusd-production-capture-20261006.json",
+     "go": {
+      "high": 1.134,
+      "low": 1.13391,
+      "relevance": 0,
+      "state": "touched",
+      "strength": 0.19753357438013422,
+      "touch_count": 1
+     },
+     "origin_candle_time": 1790722800,
+     "python": {
+      "high": 1.134,
+      "low": 1.13391,
+      "mitigated": null,
+      "score": null,
+      "touches": null
+     },
+     "root_cause": "geometry matched; Go strength is a hard-coded 1 (M5 technique population) / a V2 0-1 scale (M15, H1), Python score is the 0-25 confluence score: not comparable scales",
+     "side": "buy",
+     "strength_delta_vs_python_score": null,
+     "technique": "ifvg",
+     "tf": "M15"
+    },
+    {
+     "bar": 1790730000,
+     "capture": "replay-eurusd-production-capture-20261006.json",
+     "go": {
+      "high": 1.13395,
+      "low": 1.13391,
+      "relevance": 0,
+      "state": "touched",
+      "strength": 0.22482953438536873,
+      "touch_count": 1
+     },
+     "origin_candle_time": 1790726400,
+     "python": {
+      "high": 1.13395,
+      "low": 1.13391,
+      "mitigated": null,
+      "score": null,
+      "touches": null
+     },
+     "root_cause": "geometry matched; Go strength is a hard-coded 1 (M5 technique population) / a V2 0-1 scale (M15, H1), Python score is the 0-25 confluence score: not comparable scales",
+     "side": "sell",
+     "strength_delta_vs_python_score": null,
+     "technique": "ifvg",
+     "tf": "M15"
+    },
+    {
+     "bar": 1790733600,
+     "capture": "replay-eurusd-production-capture-20261006.json",
+     "go": {
+      "high": 1.13408,
+      "low": 1.13354,
+      "relevance": 0,
+      "state": "touched",
+      "strength": 0.85,
+      "touch_count": 1
+     },
+     "origin_candle_time": 1790730000,
+     "python": {
+      "high": 1.13408,
+      "low": 1.13354,
+      "mitigated": true,
+      "score": 12.0,
+      "touches": 1
+     },
+     "root_cause": "geometry matched; Go strength is a hard-coded 1 (M5 technique population) / a V2 0-1 scale (M15, H1), Python score is the 0-25 confluence score: not comparable scales",
+     "side": "buy",
+     "strength_delta_vs_python_score": -11.15,
+     "technique": "supply_demand",
+     "tf": "M15"
+    },
+    {
+     "bar": 1790733600,
+     "capture": "replay-eurusd-production-capture-20261006.json",
+     "go": {
+      "high": 1.13414,
+      "low": 1.13354,
+      "relevance": 0,
+      "state": "fresh",
+      "strength": 1,
+      "touch_count": 0
+     },
+     "origin_candle_time": 1790730900,
+     "python": {
+      "high": 1.13414,
+      "low": 1.13354,
+      "mitigated": false,
+      "score": 14.0,
+      "touches": 0
+     },
+     "root_cause": "geometry matched; Go strength is a hard-coded 1 (M5 technique population) / a V2 0-1 scale (M15, H1), Python score is the 0-25 confluence score: not comparable scales",
+     "side": "sell",
+     "strength_delta_vs_python_score": -13.0,
+     "technique": "supply_demand",
+     "tf": "M15"
+    },
+    {
+     "bar": 1790737200,
+     "capture": "replay-eurusd-production-capture-20261006.json",
+     "go": {
+      "high": 1.13408,
+      "low": 1.13354,
+      "relevance": 0,
+      "state": "touched",
+      "strength": 0.85,
+      "touch_count": 1
+     },
+     "origin_candle_time": 1790730000,
+     "python": {
+      "high": 1.13408,
+      "low": 1.13354,
+      "mitigated": true,
+      "score": 10.5,
+      "touches": 1
+     },
+     "root_cause": "geometry matched; Go strength is a hard-coded 1 (M5 technique population) / a V2 0-1 scale (M15, H1), Python score is the 0-25 confluence score: not comparable scales",
+     "side": "buy",
+     "strength_delta_vs_python_score": -9.65,
+     "technique": "supply_demand",
+     "tf": "M15"
+    },
+    {
+     "bar": 1790737200,
+     "capture": "replay-eurusd-production-capture-20261006.json",
+     "go": {
+      "high": 1.13414,
+      "low": 1.13354,
+      "relevance": 0,
+      "state": "touched",
+      "strength": 0.85,
+      "touch_count": 1
+     },
+     "origin_candle_time": 1790730900,
+     "python": {
+      "high": 1.13414,
+      "low": 1.13354,
+      "mitigated": true,
+      "score": 12.5,
+      "touches": 1
+     },
+     "root_cause": "geometry matched; Go strength is a hard-coded 1 (M5 technique population) / a V2 0-1 scale (M15, H1), Python score is the 0-25 confluence score: not comparable scales",
+     "side": "sell",
+     "strength_delta_vs_python_score": -11.65,
+     "technique": "supply_demand",
+     "tf": "M15"
+    }
+   ],
+   "strength_python_score_vs_go_strength": {
+    "go_strength_distinct": [
+     0.0,
+     0.16140603651712507,
+     0.16982498982512095,
+     0.2085277554303563,
+     0.2408053265694536,
+     0.24232727272713322,
+     0.24842224423377943,
+     0.2637389380530972
+    ],
+    "n": 483,
+    "python_score_max": 22.5,
+    "python_score_min": 3.0
+   }
+  },
+  "M5": {
+   "counts": {
+    "geometry_differs:entry_clipped_go_publishes_structural": 243,
+    "geometry_differs:entry_clipped_other": 1,
+    "geometry_differs:unclipped_window_effect": 2,
+    "go_native_other_kind:breaker": 149,
+    "go_native_other_kind:flip": 711,
+    "go_only": 856,
+    "go_only_origin:before_python_window": 471,
+    "go_only_origin:inside_python_window": 385,
+    "go_only_state:fresh": 183,
+    "go_only_state:touched": 673,
+    "matched": 2205,
+    "python_mitigated_go_not_mitigated": 1342,
+    "python_only": 331,
+    "python_only_absent:LIVE": 4,
+    "python_only_absent:mitigated": 81,
+    "python_only_absent:present_in_faithful_frame_port": 85,
+    "python_only_absent_in_go": 85,
+    "python_only_mitigated:False": 42,
+    "python_only_mitigated:True": 289,
+    "python_only_same_origin_geometry_differs": 246,
+    "state:fresh": 863,
+    "state:touched": 1342
+   },
+   "examples": {
+    "geometry_differs": [
+     {
+      "bar": 1790791200,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.13344,
+       1.13379
+      ],
+      "kind": "supply_demand",
+      "measured": {
+       "mitigated": true,
+       "score": 10.0,
+       "touches": 3
+      },
+      "origin": 1790746500,
+      "python": [
+       1.13358,
+       1.13378
+      ],
+      "side": "buy"
+     },
+     {
+      "bar": 1790870400,
+      "capture": "replay-gbpjpy-production-capture-20261006.json",
+      "go": [
+       208.063,
+       208.422
+      ],
+      "kind": "supply_demand",
+      "measured": {
+       "entry_clipped": true,
+       "entry_max_width_price": 0.25,
+       "mitigated": false,
+       "score": 10.5,
+       "structural_high": 208.422,
+       "structural_low": 208.063,
+       "touches": 0
+      },
+      "origin": 1790868000,
+      "python": [
+       208.063,
+       208.313
+      ],
+      "side": "sell"
+     },
+     {
+      "bar": 1791154800,
+      "capture": "replay-gbpjpy-production-capture-20261006.json",
+      "go": [
+       208.637,
+       208.988
+      ],
+      "kind": "supply_demand",
+      "measured": {
+       "entry_clipped": true,
+       "entry_max_width_price": 0.25,
+       "mitigated": true,
+       "score": 13.0,
+       "structural_high": 208.988,
+       "structural_low": 208.637,
+       "touches": 2
+      },
+      "origin": 1791147900,
+      "python": [
+       208.738,
+       208.988
+      ],
+      "side": "buy"
+     },
+     {
+      "bar": 1790611200,
+      "capture": "replay-usdjpy-production-capture-20261005.json",
+      "go": [
+       157.229,
+       157.498
+      ],
+      "kind": "ifvg",
+      "measured": {
+       "entry_clipped": true,
+       "entry_max_width_price": 0.15,
+       "invert_index": 136,
+       "inverted_from": "bearish_fvg",
+       "structural_high": 157.498,
+       "structural_low": 157.229
+      },
+      "origin": 1790607300,
+      "python": [
+       157.34799999999998,
+       157.498
+      ],
+      "side": "buy"
+     },
+     {
+      "bar": 1790614800,
+      "capture": "replay-usdjpy-production-capture-20261005.json",
+      "go": [
+       156.993,
+       157.379
+      ],
+      "kind": "supply_demand",
+      "measured": {
+       "entry_clipped": true,
+       "entry_max_width_price": 0.15,
+       "mitigated": true,
+       "score": 12.0,
+       "structural_high": 157.379,
+       "structural_low": 156.993,
+       "touches": 1
+      },
+      "origin": 1790612700,
+      "python": [
+       157.22899999999998,
+       157.379
+      ],
+      "side": "buy"
+     },
+     {
+      "bar": 1790618400,
+      "capture": "replay-usdjpy-production-capture-20261005.json",
+      "go": [
+       156.993,
+       157.379
+      ],
+      "kind": "supply_demand",
+      "measured": {
+       "entry_clipped": true,
+       "entry_max_width_price": 0.15,
+       "mitigated": true,
+       "score": 12.0,
+       "structural_high": 157.379,
+       "structural_low": 156.993,
+       "touches": 1
+      },
+      "origin": 1790612700,
+      "python": [
+       157.22899999999998,
+       157.379
+      ],
+      "side": "buy"
+     },
+     {
+      "bar": 1790622000,
+      "capture": "replay-usdjpy-production-capture-20261005.json",
+      "go": [
+       157.067,
+       157.4
+      ],
+      "kind": "supply_demand",
+      "measured": {
+       "entry_clipped": true,
+       "entry_max_width_price": 0.15,
+       "mitigated": true,
+       "score": 11.0,
+       "structural_high": 157.4,
+       "structural_low": 157.067,
+       "touches": 2
+      },
+      "origin": 1790615400,
+      "python": [
+       157.25,
+       157.4
+      ],
+      "side": "buy"
+     },
+     {
+      "bar": 1790625600,
+      "capture": "replay-usdjpy-production-capture-20261005.json",
+      "go": [
+       157.067,
+       157.4
+      ],
+      "kind": "supply_demand",
+      "measured": {
+       "entry_clipped": true,
+       "entry_max_width_price": 0.15,
+       "mitigated": true,
+       "score": 13.0,
+       "structural_high": 157.4,
+       "structural_low": 157.067,
+       "touches": 3
+      },
+      "origin": 1790615400,
+      "python": [
+       157.25,
+       157.4
+      ],
+      "side": "buy"
+     },
+     {
+      "bar": 1790629200,
+      "capture": "replay-usdjpy-production-capture-20261005.json",
+      "go": [
+       157.067,
+       157.4
+      ],
+      "kind": "supply_demand",
+      "measured": {
+       "entry_clipped": true,
+       "entry_max_width_price": 0.15,
+       "mitigated": true,
+       "score": 9.5,
+       "structural_high": 157.4,
+       "structural_low": 157.067,
+       "touches": 6
+      },
+      "origin": 1790615400,
+      "python": [
+       157.25,
+       157.4
+      ],
+      "side": "buy"
+     },
+     {
+      "bar": 1790629200,
+      "capture": "replay-usdjpy-production-capture-20261005.json",
+      "go": [
+       156.993,
+       157.379
+      ],
+      "kind": "supply_demand",
+      "measured": {
+       "entry_clipped": true,
+       "entry_max_width_price": 0.15,
+       "mitigated": true,
+       "score": 15.5,
+       "structural_high": 157.379,
+       "structural_low": 156.993,
+       "touches": 6
+      },
+      "origin": 1790612700,
+      "python": [
+       157.22899999999998,
+       157.379
+      ],
+      "side": "buy"
+     },
+     {
+      "bar": 1790632800,
+      "capture": "replay-usdjpy-production-capture-20261005.json",
+      "go": [
+       157.067,
+       157.4
+      ],
+      "kind": "supply_demand",
+      "measured": {
+       "entry_clipped": true,
+       "entry_max_width_price": 0.15,
+       "mitigated": true,
+       "score": 17.5,
+       "structural_high": 157.4,
+       "structural_low": 157.067,
+       "touches": 6
+      },
+      "origin": 1790615400,
+      "python": [
+       157.25,
+       157.4
+      ],
+      "side": "buy"
+     },
+     {
+      "bar": 1790632800,
+      "capture": "replay-usdjpy-production-capture-20261005.json",
+      "go": [
+       156.993,
+       157.379
+      ],
+      "kind": "supply_demand",
+      "measured": {
+       "entry_clipped": true,
+       "entry_max_width_price": 0.15,
+       "mitigated": true,
+       "score": 17.5,
+       "structural_high": 157.379,
+       "structural_low": 156.993,
+       "touches": 6
+      },
+      "origin": 1790612700,
+      "python": [
+       157.22899999999998,
+       157.379
+      ],
+      "side": "buy"
+     }
+    ],
+    "go_only": [
+     {
+      "bar": 1790748000,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.13496,
+       1.1356
+      ],
+      "kind": "supply_demand",
+      "origin": 1790684700,
+      "side": "sell",
+      "state": "touched"
+     },
+     {
+      "bar": 1790748000,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.13455,
+       1.13523
+      ],
+      "kind": "supply_demand",
+      "origin": 1790670000,
+      "side": "sell",
+      "state": "touched"
+     },
+     {
+      "bar": 1790751600,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.13496,
+       1.1356
+      ],
+      "kind": "supply_demand",
+      "origin": 1790684700,
+      "side": "sell",
+      "state": "touched"
+     },
+     {
+      "bar": 1790751600,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.13529,
+       1.13551
+      ],
+      "kind": "ifvg",
+      "origin": 1790684400,
+      "side": "sell",
+      "state": "fresh"
+     },
+     {
+      "bar": 1790755200,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.13496,
+       1.1356
+      ],
+      "kind": "supply_demand",
+      "origin": 1790684700,
+      "side": "sell",
+      "state": "touched"
+     },
+     {
+      "bar": 1790755200,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.13496,
+       1.13573
+      ],
+      "kind": "supply_demand",
+      "origin": 1790749500,
+      "side": "sell",
+      "state": "touched"
+     },
+     {
+      "bar": 1790758800,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.13571,
+       1.13613
+      ],
+      "kind": "ifvg",
+      "origin": 1790666400,
+      "side": "sell",
+      "state": "fresh"
+     },
+     {
+      "bar": 1790758800,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.13549,
+       1.13589
+      ],
+      "kind": "supply_demand",
+      "origin": 1790666700,
+      "side": "sell",
+      "state": "touched"
+     },
+     {
+      "bar": 1790758800,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.13597,
+       1.13628
+      ],
+      "kind": "supply_demand",
+      "origin": 1790665500,
+      "side": "sell",
+      "state": "touched"
+     },
+     {
+      "bar": 1790762400,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.13621,
+       1.13632
+      ],
+      "kind": "fvg",
+      "origin": 1790664900,
+      "side": "sell",
+      "state": "touched"
+     },
+     {
+      "bar": 1790762400,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.13625,
+       1.13638
+      ],
+      "kind": "ifvg",
+      "origin": 1790664600,
+      "side": "sell",
+      "state": "fresh"
+     },
+     {
+      "bar": 1790762400,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "go": [
+       1.13597,
+       1.13628
+      ],
+      "kind": "supply_demand",
+      "origin": 1790665500,
+      "side": "sell",
+      "state": "touched"
+     }
+    ],
+    "python_only": [
+     {
+      "bar": 1790791200,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "kind": "supply_demand",
+      "measured": {
+       "mitigated": true,
+       "score": 10.0,
+       "touches": 3
+      },
+      "origin": 1790746500,
+      "python": [
+       1.13358,
+       1.13378
+      ],
+      "side": "buy"
+     },
+     {
+      "bar": 1790863200,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "kind": "supply_demand",
+      "measured": {
+       "mitigated": false,
+       "score": 14.0,
+       "touches": 0
+      },
+      "origin": 1790862900,
+      "python": [
+       1.12869,
+       1.12969
+      ],
+      "side": "sell"
+     },
+     {
+      "bar": 1790870400,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "kind": "supply_demand",
+      "measured": {
+       "entry_clipped": true,
+       "entry_max_width_price": 0.0015,
+       "mitigated": true,
+       "score": 7.0,
+       "structural_high": 1.12593,
+       "structural_low": 1.12286,
+       "touches": 1
+      },
+      "origin": 1790868900,
+      "python": [
+       1.12286,
+       1.12436
+      ],
+      "side": "sell"
+     },
+     {
+      "bar": 1790877600,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "kind": "supply_demand",
+      "measured": {
+       "mitigated": true,
+       "score": 8.5,
+       "touches": 2
+      },
+      "origin": 1790874900,
+      "python": [
+       1.12152,
+       1.12266
+      ],
+      "side": "buy"
+     },
+     {
+      "bar": 1790881200,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "kind": "supply_demand",
+      "measured": {
+       "mitigated": true,
+       "score": 10.0,
+       "touches": 1
+      },
+      "origin": 1790876100,
+      "python": [
+       1.12262,
+       1.1241
+      ],
+      "side": "sell"
+     },
+     {
+      "bar": 1790881200,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "kind": "supply_demand",
+      "measured": {
+       "entry_clipped": true,
+       "entry_max_width_price": 0.0015,
+       "mitigated": true,
+       "score": 8.0,
+       "structural_high": 1.12593,
+       "structural_low": 1.12286,
+       "touches": 3
+      },
+      "origin": 1790868900,
+      "python": [
+       1.12286,
+       1.12436
+      ],
+      "side": "sell"
+     },
+     {
+      "bar": 1790884800,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "kind": "supply_demand",
+      "measured": {
+       "entry_clipped": true,
+       "entry_max_width_price": 0.0015,
+       "mitigated": true,
+       "score": 8.0,
+       "structural_high": 1.12593,
+       "structural_low": 1.12286,
+       "touches": 3
+      },
+      "origin": 1790868900,
+      "python": [
+       1.12286,
+       1.12436
+      ],
+      "side": "sell"
+     },
+     {
+      "bar": 1790888400,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "kind": "supply_demand",
+      "measured": {
+       "entry_clipped": true,
+       "entry_max_width_price": 0.0015,
+       "mitigated": true,
+       "score": 6.5,
+       "structural_high": 1.12593,
+       "structural_low": 1.12286,
+       "touches": 3
+      },
+      "origin": 1790868900,
+      "python": [
+       1.12286,
+       1.12436
+      ],
+      "side": "sell"
+     },
+     {
+      "bar": 1790892000,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "kind": "supply_demand",
+      "measured": {
+       "entry_clipped": true,
+       "entry_max_width_price": 0.0015,
+       "mitigated": true,
+       "score": 8.0,
+       "structural_high": 1.12593,
+       "structural_low": 1.12286,
+       "touches": 3
+      },
+      "origin": 1790868900,
+      "python": [
+       1.12286,
+       1.12436
+      ],
+      "side": "sell"
+     },
+     {
+      "bar": 1790902800,
+      "capture": "replay-eurusd-production-capture-20261006.json",
+      "kind": "supply_demand",
+      "measured": {
+       "mitigated": true,
+       "score": 7.5,
+       "touches": 2
+      },
+      "origin": 1790891400,
+      "python": [
+       1.12364,
+       1.12438
+      ],
+      "side": "buy"
+     },
+     {
+      "bar": 1791403200,
+      "capture": "replay-eurusd-production-capture-20261014.json",
+      "kind": "supply_demand",
+      "measured": {
+       "mitigated": true,
+       "score": 13.0,
+       "touches": 6
+      },
+      "origin": 1791363600,
+      "python": [
+       1.11939,
+       1.12038
+      ],
+      "side": "sell"
+     },
+     {
+      "bar": 1791406800,
+      "capture": "replay-eurusd-production-capture-20261014.json",
+      "kind": "supply_demand",
+      "measured": {
+       "mitigated": true,
+       "score": 13.0,
+       "touches": 6
+      },
+      "origin": 1791363600,
+      "python": [
+       1.11939,
+       1.12038
+      ],
+      "side": "sell"
+     }
+    ]
+   },
+   "matched_sample": [
+    {
+     "bar": 1790679600,
+     "capture": "replay-eurusd-production-capture-20261006.json",
+     "go": {
+      "high": 1.13464,
+      "low": 1.13451,
+      "relevance": 0,
+      "state": "fresh",
+      "strength": 1,
+      "touch_count": 0
+     },
+     "origin_candle_time": 1790679300,
+     "python": {
+      "high": 1.13464,
+      "low": 1.13451,
+      "mitigated": false,
+      "score": 9.0,
+      "touches": 0
+     },
+     "root_cause": "geometry matched; Go strength is a hard-coded 1 (M5 technique population) / a V2 0-1 scale (M15, H1), Python score is the 0-25 confluence score: not comparable scales",
+     "side": "buy",
+     "strength_delta_vs_python_score": -8.0,
+     "technique": "fvg",
+     "tf": "M5"
+    },
+    {
+     "bar": 1790679600,
+     "capture": "replay-eurusd-production-capture-20261006.json",
+     "go": {
+      "high": 1.13483,
+      "low": 1.13449,
+      "relevance": 0,
+      "state": "touched",
+      "strength": 1,
+      "touch_count": 1
+     },
+     "origin_candle_time": 1790672400,
+     "python": {
+      "high": 1.13483,
+      "low": 1.13449,
+      "mitigated": true,
+      "score": 5.5,
+      "touches": 1
+     },
+     "root_cause": "geometry matched; Go strength is a hard-coded 1 (M5 technique population) / a V2 0-1 scale (M15, H1), Python score is the 0-25 confluence score: not comparable scales",
+     "side": "sell",
+     "strength_delta_vs_python_score": -4.5,
+     "technique": "supply_demand",
+     "tf": "M5"
+    },
+    {
+     "bar": 1790679600,
+     "capture": "replay-eurusd-production-capture-20261006.json",
+     "go": {
+      "high": 1.13465,
+      "low": 1.13437,
+      "relevance": 0,
+      "state": "fresh",
+      "strength": 1,
+      "touch_count": 0
+     },
+     "origin_candle_time": 1790679300,
+     "python": {
+      "high": 1.13465,
+      "low": 1.13437,
+      "mitigated": null,
+      "score": null,
+      "touches": null
+     },
+     "root_cause": "geometry matched; Go strength is a hard-coded 1 (M5 technique population) / a V2 0-1 scale (M15, H1), Python score is the 0-25 confluence score: not comparable scales",
+     "side": "buy",
+     "strength_delta_vs_python_score": null,
+     "technique": "ifvg",
+     "tf": "M5"
+    },
+    {
+     "bar": 1790683200,
+     "capture": "replay-eurusd-production-capture-20261006.json",
+     "go": {
+      "high": 1.13603,
+      "low": 1.13589,
+      "relevance": 0,
+      "state": "fresh",
+      "strength": 1,
+      "touch_count": 0
+     },
+     "origin_candle_time": 1790666100,
+     "python": {
+      "high": 1.13603,
+      "low": 1.13589,
+      "mitigated": false,
+      "score": 12.0,
+      "touches": 0
+     },
+     "root_cause": "geometry matched; Go strength is a hard-coded 1 (M5 technique population) / a V2 0-1 scale (M15, H1), Python score is the 0-25 confluence score: not comparable scales",
+     "side": "sell",
+     "strength_delta_vs_python_score": -11.0,
+     "technique": "fvg",
+     "tf": "M5"
+    },
+    {
+     "bar": 1790683200,
+     "capture": "replay-eurusd-production-capture-20261006.json",
+     "go": {
+      "high": 1.13589,
+      "low": 1.13549,
+      "relevance": 0,
+      "state": "touched",
+      "strength": 1,
+      "touch_count": 1
+     },
+     "origin_candle_time": 1790666700,
+     "python": {
+      "high": 1.13589,
+      "low": 1.13549,
+      "mitigated": true,
+      "score": 7.5,
+      "touches": 1
+     },
+     "root_cause": "geometry matched; Go strength is a hard-coded 1 (M5 technique population) / a V2 0-1 scale (M15, H1), Python score is the 0-25 confluence score: not comparable scales",
+     "side": "sell",
+     "strength_delta_vs_python_score": -6.5,
+     "technique": "supply_demand",
+     "tf": "M5"
+    },
+    {
+     "bar": 1790683200,
+     "capture": "replay-eurusd-production-capture-20261006.json",
+     "go": {
+      "high": 1.13613,
+      "low": 1.13571,
+      "relevance": 0,
+      "state": "fresh",
+      "strength": 1,
+      "touch_count": 0
+     },
+     "origin_candle_time": 1790666400,
+     "python": {
+      "high": 1.13613,
+      "low": 1.13571,
+      "mitigated": null,
+      "score": null,
+      "touches": null
+     },
+     "root_cause": "geometry matched; Go strength is a hard-coded 1 (M5 technique population) / a V2 0-1 scale (M15, H1), Python score is the 0-25 confluence score: not comparable scales",
+     "side": "sell",
+     "strength_delta_vs_python_score": null,
+     "technique": "ifvg",
+     "tf": "M5"
+    },
+    {
+     "bar": 1790686800,
+     "capture": "replay-eurusd-production-capture-20261006.json",
+     "go": {
+      "high": 1.13442,
+      "low": 1.13426,
+      "relevance": 0,
+      "state": "touched",
+      "strength": 1,
+      "touch_count": 1
+     },
+     "origin_candle_time": 1790679000,
+     "python": {
+      "high": 1.13442,
+      "low": 1.13426,
+      "mitigated": true,
+      "score": 9.0,
+      "touches": 1
+     },
+     "root_cause": "geometry matched; Go strength is a hard-coded 1 (M5 technique population) / a V2 0-1 scale (M15, H1), Python score is the 0-25 confluence score: not comparable scales",
+     "side": "buy",
+     "strength_delta_vs_python_score": -8.0,
+     "technique": "fvg",
+     "tf": "M5"
+    },
+    {
+     "bar": 1790686800,
+     "capture": "replay-eurusd-production-capture-20261006.json",
+     "go": {
+      "high": 1.13464,
+      "low": 1.13451,
+      "relevance": 0,
+      "state": "fresh",
+      "strength": 1,
+      "touch_count": 0
+     },
+     "origin_candle_time": 1790686500,
+     "python": {
+      "high": 1.13464,
+      "low": 1.13451,
+      "mitigated": null,
+      "score": null,
+      "touches": null
+     },
+     "root_cause": "geometry matched; Go strength is a hard-coded 1 (M5 technique population) / a V2 0-1 scale (M15, H1), Python score is the 0-25 confluence score: not comparable scales",
+     "side": "sell",
+     "strength_delta_vs_python_score": null,
+     "technique": "ifvg",
+     "tf": "M5"
+    },
+    {
+     "bar": 1790686800,
+     "capture": "replay-eurusd-production-capture-20261006.json",
+     "go": {
+      "high": 1.13465,
+      "low": 1.13437,
+      "relevance": 0,
+      "state": "fresh",
+      "strength": 1,
+      "touch_count": 0
+     },
+     "origin_candle_time": 1790679300,
+     "python": {
+      "high": 1.13465,
+      "low": 1.13437,
+      "mitigated": null,
+      "score": null,
+      "touches": null
+     },
+     "root_cause": "geometry matched; Go strength is a hard-coded 1 (M5 technique population) / a V2 0-1 scale (M15, H1), Python score is the 0-25 confluence score: not comparable scales",
+     "side": "buy",
+     "strength_delta_vs_python_score": null,
+     "technique": "ifvg",
+     "tf": "M5"
+    },
+    {
+     "bar": 1790690400,
+     "capture": "replay-eurusd-production-capture-20261006.json",
+     "go": {
+      "high": 1.13464,
+      "low": 1.13451,
+      "relevance": 0,
+      "state": "fresh",
+      "strength": 1,
+      "touch_count": 0
+     },
+     "origin_candle_time": 1790686500,
+     "python": {
+      "high": 1.13464,
+      "low": 1.13451,
+      "mitigated": null,
+      "score": null,
+      "touches": null
+     },
+     "root_cause": "geometry matched; Go strength is a hard-coded 1 (M5 technique population) / a V2 0-1 scale (M15, H1), Python score is the 0-25 confluence score: not comparable scales",
+     "side": "sell",
+     "strength_delta_vs_python_score": null,
+     "technique": "ifvg",
+     "tf": "M5"
+    },
+    {
+     "bar": 1790694000,
+     "capture": "replay-eurusd-production-capture-20261006.json",
+     "go": {
+      "high": 1.1343,
+      "low": 1.13372,
+      "relevance": 0,
+      "state": "touched",
+      "strength": 1,
+      "touch_count": 4
+     },
+     "origin_candle_time": 1790677800,
+     "python": {
+      "high": 1.1343,
+      "low": 1.13372,
+      "mitigated": true,
+      "score": 13.0,
+      "touches": 4
+     },
+     "root_cause": "geometry matched; Go strength is a hard-coded 1 (M5 technique population) / a V2 0-1 scale (M15, H1), Python score is the 0-25 confluence score: not comparable scales",
+     "side": "buy",
+     "strength_delta_vs_python_score": -12.0,
+     "technique": "supply_demand",
+     "tf": "M5"
+    },
+    {
+     "bar": 1790697600,
+     "capture": "replay-eurusd-production-capture-20261006.json",
+     "go": {
+      "high": 1.13336,
+      "low": 1.13312,
+      "relevance": 0,
+      "state": "fresh",
+      "strength": 1,
+      "touch_count": 0
+     },
+     "origin_candle_time": 1790695800,
+     "python": {
+      "high": 1.13336,
+      "low": 1.13312,
+      "mitigated": null,
+      "score": null,
+      "touches": null
+     },
+     "root_cause": "geometry matched; Go strength is a hard-coded 1 (M5 technique population) / a V2 0-1 scale (M15, H1), Python score is the 0-25 confluence score: not comparable scales",
+     "side": "buy",
+     "strength_delta_vs_python_score": null,
+     "technique": "ifvg",
+     "tf": "M5"
+    }
+   ],
+   "strength_python_score_vs_go_strength": {
+    "go_strength_distinct": [
+     1.0
+    ],
+    "n": 1573,
+    "python_score_max": 20.0,
+    "python_score_min": 2.0
+   }
+  }
+ }
+}
