@@ -12,6 +12,18 @@ dated section after deployment.
 
 ## Unreleased
 
+### Fixed
+- Opposing-barrier zone book: a missing, expired, stale (older than 600 s), malformed, unsupported-schema or otherwise untrustworthy
+  Go zone book no longer reads as "no opposing structure". `worker._publish_trade_plan_v8` used to continue with `()` when
+  `go_zone_book` returned `None`, so a Redis outage, an expired key or a restarting engine let new autonomous plans bypass the
+  opposing-barrier and target-room gate entirely. The reader now classifies every read as `AVAILABLE_WITH_BARRIERS`,
+  `AVAILABLE_EMPTY` (an explicit `barriers: []`) or `UNAVAILABLE`, validates strictly (one bad barrier makes the whole book
+  unavailable instead of being dropped), checks `generated_at` freshness, and a new initial plan on an unavailable book is
+  **held** (route outcome `opposing_barrier`/`waiting`/`zone_book_unavailable`, intent retained, nothing claimed, retried each cycle
+  until the match expires; metric `zone_book_unavailable`). Existing positions are not touched. The Go zone book also publishes
+  `schema_version: 1` (additive). **Behaviour change on deploy:** while the engine is restarting or its book is older than 600 s,
+  new plans wait instead of publishing.
+
 ### Changed
 - Performance investigation (`docs/strategies/performance-investigation-2026-10.md`, tools `algo-bot/tools/performance_investigation/`; no runtime
   change): AE signals do not beat random entries with the same stops (P(+1R first) 46.0% vs 49.5%, negative in every symbol and session; at their own

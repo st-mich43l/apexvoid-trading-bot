@@ -167,6 +167,21 @@ func TestBuildZoneBook_BarriersAreNullWhenNoPolicyAndEmptyArrayWhenComputedEmpty
 	}
 }
 
+// The published document names its layout and when it was generated: the two facts a reader needs to refuse a book it does not
+// understand or one an engine stopped refreshing.
+func TestBuildZoneBook_PublishesSchemaVersionAndGeneratedAt(t *testing.T) {
+	doc := redistransport.BuildZoneBook("XAU", map[market.Timeframe]zone.ZoneState{}, 1700000100, &barrier.Config{PipSize: 0.1, MaxWidthATR: 2, MaxWidthPips: 100})
+	raw, _ := json.Marshal(doc)
+	for _, want := range []string{`"schema_version":1`, `"generated_at":1700000100`, `"symbol":"XAU"`} {
+		if !strings.Contains(string(raw), want) {
+			t.Fatalf("zone book is missing %s: %s", want, raw)
+		}
+	}
+	if redistransport.ZoneBookSchemaVersion != 1 {
+		t.Fatalf("schema version changed to %d: the Python reader's SUPPORTED_SCHEMA_VERSIONS must change in the same release", redistransport.ZoneBookSchemaVersion)
+	}
+}
+
 func TestBuildZoneBook_PublishesNormalizedBarriers(t *testing.T) {
 	zones := map[market.Timeframe]zone.ZoneState{
 		market.M1: {ATR: 1.0, Zones: []zone.Zone{

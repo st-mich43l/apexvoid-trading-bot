@@ -48,6 +48,18 @@ def _idle_xau_executor(event_loop, _fake_redis):
 
 
 @pytest.fixture(autouse=True)
+def _fresh_zone_books(event_loop, _fake_redis):
+  """Go has published a fresh book listing no opposing barriers for every symbol.
+
+  The worker holds a new autonomous plan when the book is missing, stale or untrustworthy, so a test that is not about the zone
+  book starts from a published, empty one. A test about the book overwrites or deletes the key.
+  """
+  from tests.support.zone_book import seed_fresh_zone_books
+
+  event_loop.run_until_complete(seed_fresh_zone_books(redis_state.get_client()))
+
+
+@pytest.fixture(autouse=True)
 def _reset_db(event_loop, request):
   if request.node.get_closest_marker("no_database"):
     yield
