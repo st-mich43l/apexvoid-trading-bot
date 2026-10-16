@@ -21,6 +21,9 @@ import (
 // see algo-bot/app/autotrade/go_zone_book.py's own doc comment.
 const zoneBookTTL = 20 * time.Minute
 
+// ZoneBookSchemaVersion is the layout version published in every document (additive; see ZoneBookDTO.SchemaVersion).
+const ZoneBookSchemaVersion = 1
+
 // ZoneBookEntry is one zone, from one tracked timeframe, in the published
 // book — the minimal shape Algo Bot's worker needs for its execution-time
 // opposing-barrier/target-room recheck (side, price band, and enough of the
@@ -46,10 +49,12 @@ type ZoneBookEntry struct {
 // key from an older publisher) means "not computed", which a consumer must
 // treat differently from an empty array ("computed: no opposing structure").
 type ZoneBookDTO struct {
-	Symbol      string            `json:"symbol"`
-	GeneratedAt int64             `json:"generated_at"`
-	Entries     []ZoneBookEntry   `json:"entries"`
-	Barriers    []barrier.Barrier `json:"barriers"`
+	// SchemaVersion lets a consumer refuse a layout it does not understand. A document without it is version 1 (the original layout).
+	SchemaVersion int               `json:"schema_version"`
+	Symbol        string            `json:"symbol"`
+	GeneratedAt   int64             `json:"generated_at"`
+	Entries       []ZoneBookEntry   `json:"entries"`
+	Barriers      []barrier.Barrier `json:"barriers"`
 }
 
 // ZoneBookKey is the Redis key one symbol's zone book is published under.
@@ -104,7 +109,7 @@ func BuildZoneBook(symbol market.Symbol, zonesByTimeframe map[market.Timeframe]z
 			})
 		}
 	}
-	doc := ZoneBookDTO{Symbol: string(symbol), GeneratedAt: generatedAt, Entries: entries}
+	doc := ZoneBookDTO{SchemaVersion: ZoneBookSchemaVersion, Symbol: string(symbol), GeneratedAt: generatedAt, Entries: entries}
 	if barrierCfg != nil {
 		doc.Barriers = barrier.Build(barrierZones, *barrierCfg)
 		if doc.Barriers == nil {

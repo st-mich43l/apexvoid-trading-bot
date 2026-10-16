@@ -282,6 +282,7 @@ connection used for bar ingestion.
 
 ```json
 {
+  "schema_version": 1,
   "symbol": "XAU",
   "generated_at": 1700000100,
   "entries": [
@@ -322,12 +323,25 @@ normalization and parity-tested against it). It is built from `entries` by:
 and `null` (or absent) when Go did not compute it; the two must never be
 confused.
 
+`schema_version` names the layout (a document without it is version 1; a consumer refuses a version it does
+not know) and `generated_at` is the engine's clock at publication, in seconds.
+
 Consumer: `algo-bot/app/autotrade/go_zone_book.py`. The worker's
 execution-time opposing-barrier/target-room recheck
 (`structural_target_room.py`) reads `barriers` for a Go-origin `StrategyMatch`
-(`GO_ORIGIN_TAG in match.tags`); a Python-origin match never reads it. Algo Bot
-adapts the published list and does not re-derive, filter or normalize structure:
-there is no Python fallback. A missing key, unparseable payload, or a book
-without a `barriers` list is reported as unavailable (`None`), distinct from
-Go's genuinely empty list; the worker then continues with no barriers rather
-than substituting a Python-derived book.
+(`GO_ORIGIN_TAG in match.tags`) that does not bypass opposing structure; a Python-origin
+match never reads it. Algo Bot adapts the published list and does not re-derive, filter or
+normalize structure: there is no Python fallback.
+
+The reader classifies every read into exactly one of three states:
+
+| State | Meaning | Worker |
+|---|---|---|
+| `AVAILABLE_WITH_BARRIERS` | a valid, fresh book listing one or more barriers | evaluates target room against them |
+| `AVAILABLE_EMPTY` | a valid, fresh book that explicitly publishes `barriers: []` | evaluates target room against no barriers (Go found none) |
+| `UNAVAILABLE` | the key is missing or expired, Redis failed, the payload is malformed, not an object, for another symbol, from an unsupported `schema_version`, has no `generated_at`, is older than 600 s (`ZONE_BOOK_MAX_AGE_SECONDS`) or more than 60 s in the future, has `barriers` absent or `null` (not computed), or contains any barrier that fails validation (side not `buy`/`sell`, non-finite, non-positive or inverted band, tier not `level`/`zone`/`major`, non-numeric score, negative or non-integer touches) | **holds** the new autonomous plan: route outcome `opposing_barrier` / `waiting` / `zone_book_unavailable` with the reason in `measured`, intent retained, nothing claimed, retried on the next cycle until the match expires; metric `zone_book_unavailable{reason}` |
+
+One invalid barrier makes the whole book unavailable rather than being dropped: dropping it would silently
+widen the room in front of an entry. "Go has not told us" never reads as "nothing is in the way". The hold
+applies only to building a NEW autonomous initial plan; positions that already exist are managed by the
+executor and are not touched.

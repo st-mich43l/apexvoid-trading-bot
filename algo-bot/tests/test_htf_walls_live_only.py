@@ -8,13 +8,11 @@ so this test protects the replacement boundary instead.
 from __future__ import annotations
 
 import json
+import time
 
 import pytest
 
-from app.autotrade.go_zone_book import (
-  go_zone_opposing_entries,
-  opposing_entries_for_go_match,
-)
+from app.autotrade.go_zone_book import ZoneBookState, read_go_zone_book
 from app.autotrade.structural_target_room import ZoneOpposingEntry
 
 pytestmark = pytest.mark.no_database
@@ -23,7 +21,7 @@ pytestmark = pytest.mark.no_database
 def _book(*barriers: dict[str, object]) -> str:
   return json.dumps({
     "symbol": "XAU",
-    "generated_at": 1790000000,
+    "generated_at": int(time.time()),
     "entries": [{"low": 4000.0, "high": 4002.0, "side": "supply"}],
     "barriers": list(barriers),
   })
@@ -39,11 +37,9 @@ class _Client:
 
 @pytest.mark.asyncio
 async def test_go_barrier_book_is_the_only_htf_wall_source():
-  result = await opposing_entries_for_go_match(
-    _Client(_book({"side": "sell", "low": 4131.0, "high": 4133.0})),
-    "XAU",
-  )
-  assert result == (
+  read = await read_go_zone_book(_Client(_book({"side": "sell", "low": 4131.0, "high": 4133.0})), "XAU")
+  assert read.state is ZoneBookState.AVAILABLE_WITH_BARRIERS
+  assert read.entries == (
     ZoneOpposingEntry(
       side="sell",
       lo=4131.0,
@@ -57,12 +53,14 @@ async def test_go_barrier_book_is_the_only_htf_wall_source():
 
 
 @pytest.mark.asyncio
-async def test_missing_go_barrier_book_does_not_trigger_python_reconstruction():
-  assert await go_zone_opposing_entries(_Client(None), "XAU") is None
-  assert await opposing_entries_for_go_match(_Client(None), "XAU") == ()
+async def test_missing_go_barrier_book_does_not_trigger_python_reconstruction_and_is_not_an_empty_book():
+  read = await read_go_zone_book(_Client(None), "XAU")
+  assert read.state is ZoneBookState.UNAVAILABLE and read.reason == "missing"
+  assert read.entries == ()
 
 
 @pytest.mark.asyncio
 async def test_go_empty_barrier_book_is_distinct_from_missing_book():
-  empty = json.dumps({"symbol": "XAU", "generated_at": 1, "barriers": []})
-  assert await go_zone_opposing_entries(_Client(empty), "XAU") == ()
+  empty = json.dumps({"symbol": "XAU", "generated_at": int(time.time()), "barriers": []})
+  read = await read_go_zone_book(_Client(empty), "XAU")
+  assert read.state is ZoneBookState.AVAILABLE_EMPTY and read.available

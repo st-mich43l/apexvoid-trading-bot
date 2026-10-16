@@ -34,7 +34,7 @@ from app.autotrade.go_opportunity_policy import (
   go_arbitration_key,
   opportunity_id_for_match_id,
 )
-from app.autotrade.go_zone_book import opposing_entries_for_go_match
+from app.autotrade.go_zone_book import ZoneBookState, read_go_zone_book
 from app.autotrade import units
 from app.autotrade.execution_intent import execution_intent_for_match
 from app.core import instrument_geometry
@@ -1802,7 +1802,33 @@ async def _publish_trade_plan_v8(
     # Go owns technical structure. Read only the barrier book the
     # analysis-engine publishes (already width-gated, merged and reconciled
     # there); never reconstruct a competing Python zone book.
-    room_entries = await opposing_entries_for_go_match(client, symbol)
+    zone_book = await read_go_zone_book(client, symbol, now=now_ts)
+    if zone_book.state is ZoneBookState.UNAVAILABLE:
+      # "Go has not told us" is not "nothing is in the way": a missing, stale,
+      # malformed or untrustworthy book holds this NEW autonomous admission
+      # (non-terminal, retained: the next cycle reads the book again until the
+      # match itself expires). Nothing is claimed yet, and no existing position
+      # is touched - this function only builds initial plans.
+      await increment_metric(
+        client, "zone_book_unavailable", symbol=symbol,
+        dimensions={"reason": str(zone_book.reason or "unknown").split(":")[0]},
+      )
+      await record_route_outcome(
+        client,
+        match,
+        stage="opposing_barrier",
+        status="waiting",
+        reason_code="zone_book_unavailable",
+        message=(
+          f"Go opposing-barrier book unavailable ({zone_book.reason}); "
+          "new plan held, intent retained"
+        ),
+        measured=zone_book.telemetry(),
+        retained=True,
+        publish_status=False,
+      )
+      return None
+    room_entries = zone_book.entries
   pip_size = units.pip_size(symbol)
   room_planned, room_reference_source = zone_proximal_room_reference(
     direction=execution_match.direction,

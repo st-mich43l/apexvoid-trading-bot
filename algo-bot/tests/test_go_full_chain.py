@@ -34,11 +34,12 @@ from app.autotrade import worker
 from app.autotrade.go_plan_cancel import request_plan_cancel
 from app.autotrade.multi_match import deserialize_matches, serialize_matches, strategy_matches_key
 from app.autotrade.route_outcome import route_outcome_key
-from app.autotrade.setup_lifecycle import CONFIRMED, PLAN_PUBLISHED, load_setup
+from app.autotrade.setup_lifecycle import CONFIRMED, EXPIRED, INVALIDATED, PLAN_PUBLISHED, load_setup
 from app.autotrade.strategy_identity import structural_thesis_id
 from app.autotrade.trade_plan import TradePlan
 from app.persistence import redis_state
 from tests.support.canonical_fixtures import install_runtime_overrides
+from tests.support.zone_book import seed_fresh_zone_books
 from tests.support.executor_snapshot import seed_idle_executor
 from tests.test_go_opportunity_policy import Harness, golden
 from tests.test_publish_trade_plan_v8 import (  # noqa: F401 - autouse fixtures
@@ -79,6 +80,7 @@ def prod(monkeypatch, event_loop):
   event_loop.run_until_complete(client.ping())
   event_loop.run_until_complete(client.flushdb())
   event_loop.run_until_complete(seed_idle_executor(client))
+  event_loop.run_until_complete(seed_fresh_zone_books(client))
   monkeypatch.setattr(redis_state, "_client", client)
   try:
     yield client
@@ -298,7 +300,7 @@ async def test_go_zone_book_hard_blocks_a_go_origin_plan_inside_a_published_oppo
   match = deserialize_matches(await prod.get(strategy_matches_key("XAU")))[0]
 
   await prod.set(go_zone_book_key("XAU"), json.dumps({
-    "symbol": "XAU", "generated_at": int(h.clock.now),
+    "symbol": "XAU", "generated_at": int(time.time()),
     "entries": [],
     # The normalized barrier list Go publishes (analysis-engine/internal/barrier).
     "barriers": [{
@@ -314,22 +316,70 @@ async def test_go_zone_book_hard_blocks_a_go_origin_plan_inside_a_published_oppo
   assert await plans(prod) == []
 
 
-@pytest.mark.asyncio
-async def test_go_zone_book_unavailable_continues_without_python_fallback(h, prod):
-  """No zone book published (Go has not written one, or it expired): the
-  plan still publishes using Go's opportunity geometry, without inventing a
-  competing Python zone book or silently blocking the opportunity."""
+async def _go_origin_key_level_match(h, prod):
   await h.activate(scope="key_level")
   await h._ensure()
-  record = catalog_kafka_record(h.clock.now, "key_level")
-  await consumer_for(h).process_record(record)
-  match = deserialize_matches(await prod.get(strategy_matches_key("XAU")))[0]
+  await consumer_for(h).process_record(catalog_kafka_record(h.clock.now, "key_level"))
+  return deserialize_matches(await prod.get(strategy_matches_key("XAU")))[0]
 
-  plan_id = await worker._publish_trade_plan_v8(
-    prod, "XAU", _spot(4354.1, 4354.3), match, frames={},
-  )
-  assert plan_id is not None
-  assert len(await plans(prod)) == 1
+
+@pytest.mark.parametrize("published", [
+  None,                                                                                  # never published / expired
+  "{not json",                                                                           # malformed
+  json.dumps({"symbol": "XAU", "generated_at": 1, "barriers": []}),                      # stale
+  json.dumps({"symbol": "XAU", "generated_at": 4_000_000_000, "barriers": []}),          # from the future
+  json.dumps({"symbol": "XAU", "generated_at": "now", "barriers": []}),                  # no usable timestamp
+  json.dumps({"symbol": "XAU", "generated_at": "FRESH", "entries": []}),                 # no barrier list (not computed)
+  json.dumps({"symbol": "XAU", "generated_at": "FRESH", "barriers": None}),              # explicitly not computed
+  json.dumps({"symbol": "XAU", "generated_at": "FRESH", "barriers": [{"side": "sell", "low": "x", "high": 1}]}),
+  json.dumps({"symbol": "XAU", "generated_at": "FRESH", "schema_version": 9, "barriers": []}),
+  json.dumps({"symbol": "EURUSD", "generated_at": "FRESH", "barriers": []}),
+])
+@pytest.mark.asyncio
+async def test_an_unavailable_go_zone_book_holds_the_new_plan_instead_of_reading_as_no_opposing_structure(h, prod, published):
+  """Fail closed: a missing, stale, malformed or untrustworthy zone book must not become 'nothing is in the way'. The new
+  autonomous plan is held (waiting, intent retained, nothing claimed) with its own reason; no Python zone book is invented."""
+  from app.autotrade.go_zone_book import go_zone_book_key
+
+  match = await _go_origin_key_level_match(h, prod)
+  await prod.delete(go_zone_book_key("XAU"))   # the fixture seeded a fresh empty book: this test is about the others
+  if published is not None:
+    await prod.set(go_zone_book_key("XAU"), published.replace('"FRESH"', str(int(time.time()))) if '"FRESH"' in published else published)
+
+  plan_id = await worker._publish_trade_plan_v8(prod, "XAU", _spot(4354.1, 4354.3), match, frames={})
+
+  assert plan_id is None
+  assert await plans(prod) == []
+  outcome = await route(prod, match.match_id)
+  assert outcome["status"] == "waiting" and outcome["reason_code"] == "zone_book_unavailable"
+  assert outcome["stage"] == "opposing_barrier" and outcome.get("retained") is True
+  assert outcome["measured"]["zone_book_state"] == "unavailable" and outcome["measured"]["zone_book_reason"]
+  assert (await load_setup(prod, match.match_id)).state not in {INVALIDATED, EXPIRED}, "a held plan is not a terminal rejection"
+
+
+@pytest.mark.asyncio
+async def test_a_held_plan_is_retried_and_publishes_once_a_fresh_book_exists(h, prod):
+  from app.autotrade.go_zone_book import go_zone_book_key
+
+  match = await _go_origin_key_level_match(h, prod)
+  await prod.delete(go_zone_book_key("XAU"))
+  assert await worker._publish_trade_plan_v8(prod, "XAU", _spot(4354.1, 4354.3), match, frames={}) is None
+  assert (await route(prod, match.match_id))["reason_code"] == "zone_book_unavailable"
+
+  await prod.set(go_zone_book_key("XAU"), json.dumps({"symbol": "XAU", "generated_at": int(time.time()), "barriers": []}))
+  plan_id = await worker._publish_trade_plan_v8(prod, "XAU", _spot(4354.1, 4354.3), match, frames={})
+  assert plan_id is not None and len(await plans(prod)) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_genuinely_empty_fresh_go_zone_book_admits_the_plan(h, prod):
+  """The other half of the contract: 'Go computed the set and found no opposing structure' is a real answer."""
+  from app.autotrade.go_zone_book import go_zone_book_key
+
+  match = await _go_origin_key_level_match(h, prod)
+  await prod.set(go_zone_book_key("XAU"), json.dumps({"symbol": "XAU", "generated_at": int(time.time()), "barriers": []}))
+  plan_id = await worker._publish_trade_plan_v8(prod, "XAU", _spot(4354.1, 4354.3), match, frames={})
+  assert plan_id is not None and len(await plans(prod)) == 1
 
 
 @pytest.mark.parametrize("scope", sorted(pol.REVIEWED_SCOPES))

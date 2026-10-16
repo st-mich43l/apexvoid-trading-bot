@@ -31,6 +31,7 @@ from app.autotrade.setup_lifecycle import EXPIRED, INVALIDATED, PLAN_PUBLISHED, 
 from app.autotrade.trade_plan_stream import read_plan_state
 from app.persistence import redis_state
 from tests.support.executor_snapshot import seed_idle_executor
+from tests.support.zone_book import seed_fresh_zone_books
 from tests.support.canonical_fixtures import install_runtime_overrides
 from tests.test_analysis_client_models import _invalidated
 from tests.test_go_opportunity_policy import Harness, _outcome, _spot, golden
@@ -52,6 +53,7 @@ def real_redis_client(monkeypatch, event_loop):
   event_loop.run_until_complete(client.ping())
   event_loop.run_until_complete(client.flushdb())
   event_loop.run_until_complete(seed_idle_executor(client))
+  event_loop.run_until_complete(seed_fresh_zone_books(client))
   monkeypatch.setattr(redis_state, "_client", client)
   try:
     yield client
