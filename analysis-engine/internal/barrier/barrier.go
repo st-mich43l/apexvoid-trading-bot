@@ -61,6 +61,29 @@ type Zone struct {
 	// Live reports whether the zone still counts as a standing barrier
 	// (fresh, touched or partially mitigated).
 	Live bool
+
+	// Provenance. Carried to Member unchanged and never read by Build's decisions: ID, State and the timestamps
+	// describe the zone, they do not select, order or merge it. A zero value means "not known" and is not published.
+	ID            string
+	State         string
+	OriginTime    int64
+	CreatedAt     int64
+	LastTouchedAt *int64
+}
+
+// Member is one original zone behind a Barrier, as the engine tracked it when the book was built.
+// Low and High are the zone's own band, not the barrier's union.
+type Member struct {
+	ID            string  `json:"id,omitempty"`
+	Timeframe     string  `json:"timeframe"`
+	Low           float64 `json:"low"`
+	High          float64 `json:"high"`
+	State         string  `json:"state,omitempty"`
+	Touches       int     `json:"touches"`
+	Strength      float64 `json:"strength"`
+	OriginTime    int64   `json:"origin_time,omitempty"`
+	CreatedAt     int64   `json:"created_at,omitempty"`
+	LastTouchedAt *int64  `json:"last_touched_at,omitempty"`
 }
 
 // Barrier is one merged opposing-structure wall.
@@ -72,6 +95,9 @@ type Barrier struct {
 	Score            float64  `json:"score"`
 	Touches          int      `json:"touches"`
 	SourceTimeframes []string `json:"source_timeframes"`
+	// Members are the original zones the band is the union of, in the order the merge visited them (ascending low, then
+	// high). Additive provenance: nothing in Build or in a consumer's decision reads it.
+	Members []Member `json:"members,omitempty"`
 }
 
 // Config carries the execution-width policy and timeframe scope.
@@ -120,6 +146,10 @@ func Build(zones []Zone, cfg Config) []Barrier {
 		raw = append(raw, Barrier{
 			Side: z.Side, Low: z.Low, High: z.High, Tier: TierZone,
 			Score: z.Score, Touches: z.Touches, SourceTimeframes: []string{tf},
+			Members: []Member{{
+				ID: z.ID, Timeframe: tf, Low: z.Low, High: z.High, State: z.State, Touches: z.Touches, Strength: z.Score,
+				OriginTime: z.OriginTime, CreatedAt: z.CreatedAt, LastTouchedAt: z.LastTouchedAt,
+			}},
 		})
 	}
 	return resolveCrossSide(mergeSameSide(raw))
@@ -198,6 +228,7 @@ func mergeSameSide(barriers []Barrier) []Barrier {
 				Side: side, Low: math.Min(prev.Low, b.Low), High: math.Max(prev.High, b.High),
 				Tier: tier, Score: math.Max(prev.Score, b.Score), Touches: touches,
 				SourceTimeframes: unionTimeframes(prev.SourceTimeframes, b.SourceTimeframes),
+				Members:          append(append([]Member(nil), prev.Members...), b.Members...),
 			}
 		}
 		resolved = append(resolved, merged...)

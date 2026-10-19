@@ -326,6 +326,35 @@ confused.
 `schema_version` names the layout (a document without it is version 1; a consumer refuses a version it does
 not know) and `generated_at` is the engine's clock at publication, in seconds.
 
+#### What a barrier is, and which zones form it
+
+A barrier is a **price band that opposes an entry**: the union of the live same-side V2 zones (supply for a BUY, demand for a
+SELL) that survive steps 1-3 and touch or overlap each other. It is not a zone: a chain of touching zones is one barrier whose
+`low`/`high` are the lowest member low and the highest member high, `score` is the strongest member's strength, `touches` the
+*least* touched member's, and `tier` is always `zone` today. Nothing about the band, tier, score, merge order or sort order is
+changed by the provenance below.
+
+`members` (additive, optional) lists the original zones the band is the union of, in the order the merge visited them
+(ascending `low`, then `high`): `id`, `timeframe`, the zone's own `low`/`high`, `state` (`fresh`, `touched`,
+`partially_mitigated`), `touches`, `strength`, `origin_time`, `created_at` and `last_touched_at`. A field the engine did not know is
+absent (never `null` or `0`). A barrier from an older engine has no `members`. The reader keeps a valid member as published and
+drops an unusable one on its own; **a defect in `members` never makes the book unavailable and never changes a barrier or a
+decision**, because nothing decides on it.
+
+When the target-room gate rejects a candidate, the route outcome and the existing `v8 build rejected` log line carry
+`measured.opposing_barrier` (built from the decision already taken, `describe_blocking_barrier`): the barrier's side, band, tier,
+score and touches, `member_count`, `member_ids`, the room in pips, and the **decisive member**, the zone whose own band the rule
+looked at (the member that holds the planned entry, or overlaps the candidate band most, for `opposing_entry_contained` /
+`_overlap`; the member that owns the nearest edge for `opposing_barrier_no_target`, `_room_below_cost` and `opposing_major_no_room`).
+`members_published: false` and no decisive member mean the book had no provenance; nothing is inferred. An admitted plan carries none
+of this: TradePlan V8 is unchanged.
+
+Open F-7 decisions (no change here; see `docs/architecture/f7-opposing-barrier-ground-truth.md` section 12): whether a touched zone
+should still be a barrier and after how many touches (Go: 30; the frozen Python: the first); whether a union wider than the
+per-zone width gate should be one wall; whether a strategy whose thesis is a rotation through a range (Range Edge) may be blocked
+by that range's own interior. Range Edge is **not** exempt from the shared barrier book in the Go-origin flow (the legacy bypass
+needs `full_take_profit_pips`, which no Go opportunity carries); only the M1 scalp (Impulse Pullback) bypasses it.
+
 Consumer: `algo-bot/app/autotrade/go_zone_book.py`. The worker's
 execution-time opposing-barrier/target-room recheck
 (`structural_target_room.py`) reads `barriers` for a Go-origin `StrategyMatch`
