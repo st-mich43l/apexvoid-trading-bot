@@ -12,6 +12,14 @@ dated section after deployment.
 
 ## Unreleased
 
+### Added
+- F-7 opposing-barrier provenance (diagnostic only, no trading decision changes): each published barrier now lists the original V2 zones it
+  is the union of (`members`: id, timeframe, own band, state, touches, strength, origin/created/last-touch time; unknown fields absent),
+  and a target-room rejection records `measured.opposing_barrier` (barrier, member count and ids, room, the decisive member) in the
+  route outcome and the existing `v8 build rejected` log line. Barrier bands, tiers, scores, touches, order, admission decisions and
+  TradePlan V8 are unchanged (verified bar by bar against master on every production capture, `analysis-engine/test/f7barrier/compare_decisions.py`).
+  A malformed `members` entry is dropped on its own and never makes the book unavailable.
+
 ### Fixed
 - Opposing-barrier zone book: a missing, expired, stale (older than 600 s), malformed, unsupported-schema or otherwise untrustworthy
   Go zone book no longer reads as "no opposing structure". `worker._publish_trade_plan_v8` used to continue with `()` when

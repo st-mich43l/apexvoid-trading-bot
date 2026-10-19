@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import logging
 import math
 from typing import Any, Iterable
@@ -47,6 +47,9 @@ class ZoneOpposingEntry:
   score: float = 0.0
   touches: int = 0
   mitigated: bool = False
+  # Original zones behind a merged Go barrier (``go_zone_book``). Diagnostic provenance only: it takes no part in equality,
+  # hashing or any decision in this module.
+  members: tuple[dict[str, Any], ...] = field(default=(), compare=False, repr=False)
 
 
 @dataclass(frozen=True)
@@ -978,3 +981,101 @@ def evaluate_structural_target_room(
     fitted_targets_pips=targets,
     effective_target_pips=effective,
   ))
+
+
+_OVERLAP_REASONS = frozenset({"opposing_entry_contained", "opposing_entry_overlap"})
+_MEMBER_FIELDS = ("id", "timeframe", "low", "high", "state", "touches", "strength", "origin_time", "created_at", "last_touched_at")
+
+
+def _member_view(member: dict[str, Any]) -> dict[str, Any]:
+  return {key: member[key] for key in _MEMBER_FIELDS if member.get(key) is not None}
+
+
+def describe_blocking_barrier(
+  barrier: Any,
+  *,
+  direction: str,
+  planned_entry: float,
+  candidate_entry_low: float,
+  candidate_entry_high: float,
+  reason_code: str,
+  measured: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+  """Why a barrier blocked: the barrier, the original zones behind it and the one the gate effectively tested.
+
+  Diagnostic only. It reads the decision that was already taken and changes nothing about it. The "decisive" member is the
+  one whose own band the rule looked at:
+
+  * ``opposing_entry_contained`` / ``opposing_entry_overlap``: the member that holds the planned entry, else the member
+    that overlaps the candidate band the most (ties: the stronger, then the first in merge order);
+  * every other reason (no room, room below cost): the member that owns the nearest edge, the one the room is measured
+    from (a BUY measures to the lowest member low of a supply wall, a SELL to the highest member high of a demand wall).
+
+  A book published without members (an older engine) yields ``members_published: false`` and no decisive member: nothing
+  is inferred.
+  """
+  side = str(direction).upper()
+  band_low, band_high = float(getattr(barrier, "lo")), float(getattr(barrier, "hi"))
+  members = [dict(member) for member in (getattr(barrier, "members", ()) or ())]
+  out: dict[str, Any] = {
+    "reason_code": str(reason_code),
+    "barrier_side": str(getattr(barrier, "side", "")),
+    "barrier_type": "supply" if str(getattr(barrier, "side", "")).casefold() == "sell" else "demand",
+    "barrier_low": band_low,
+    "barrier_high": band_high,
+    "barrier_tier": str(getattr(barrier, "tier", "") or ""),
+    "barrier_score": float(getattr(barrier, "score", 0.0) or 0.0),
+    "barrier_touches": int(getattr(barrier, "touches", 0) or 0),
+    "member_count": len(members),
+    "members_published": bool(members),
+    "member_ids": [str(member.get("id")) for member in members if member.get("id")],
+    "decisive_member": None,
+  }
+  for key in ("room_pips", "raw_room_pips", "room_atr", "entry_overlap_ratio"):
+    if measured and measured.get(key) is not None:
+      out[key] = measured[key]
+  if not members:
+    return out
+  candidate_low = min(float(candidate_entry_low), float(candidate_entry_high))
+  candidate_high = max(float(candidate_entry_low), float(candidate_entry_high))
+  planned = float(planned_entry)
+  indexed = list(enumerate(members))
+  chosen: tuple[int, dict[str, Any]] | None = None
+  if reason_code in _OVERLAP_REASONS:
+    holding = [(i, m) for i, m in indexed if m.get("low") is not None and m.get("high") is not None and m["low"] <= planned <= m["high"]]
+    pool = holding or indexed
+    chosen = max(
+      pool,
+      key=lambda item: (
+        _overlap(candidate_low, candidate_high, float(item[1].get("low", 0.0)), float(item[1].get("high", 0.0)))[0],
+        float(item[1].get("strength", 0.0) or 0.0),
+        -item[0],
+      ),
+    )
+  else:
+    if side == "BUY":
+      chosen = min(indexed, key=lambda item: (float(item[1].get("low", math.inf)), item[0]))
+    else:
+      chosen = max(indexed, key=lambda item: (float(item[1].get("high", -math.inf)), -item[0]))
+  out["decisive_member"] = _member_view(chosen[1])
+  out["decisive_member_index"] = chosen[0]
+  return out
+
+
+def barrier_log_summary(description: dict[str, Any]) -> str:
+  """One log-line rendering of ``describe_blocking_barrier`` (for the existing rejection log)."""
+  decisive = description.get("decisive_member") or {}
+  parts = [
+    f"barrier={description.get('barrier_type')}:{description.get('barrier_low')}-{description.get('barrier_high')}",
+    f"members={description.get('member_count')}",
+  ]
+  if decisive:
+    parts.append(
+      f"decisive={decisive.get('id')} tf={decisive.get('timeframe')} state={decisive.get('state')} "
+      f"touches={decisive.get('touches')} strength={decisive.get('strength')}"
+    )
+  elif not description.get("members_published"):
+    parts.append("members=unpublished")
+  if description.get("room_pips") is not None:
+    parts.append(f"room_pips={description.get('room_pips')}")
+  return " ".join(parts)

@@ -85,6 +85,8 @@ from app.autotrade.strategy_taxonomy import (
   match_bypasses_opposing_structure,
 )
 from app.autotrade.structural_target_room import (
+  barrier_log_summary,
+  describe_blocking_barrier,
   evaluate_structural_target_room,
   filter_shared_boundary_opposing_entries,
   zone_proximal_room_reference,
@@ -707,9 +709,11 @@ async def _record_v8_build_rejected(
   measured: dict[str, Any],
 ) -> None:
   """Hard TradePlan reject: metric + terminalize setup so it does not keep watching."""
+  barrier_detail = (measured or {}).get("opposing_barrier")
   log.info(
-    "v8 build rejected symbol=%s setup_id=%s reason=%s message=%s",
+    "v8 build rejected symbol=%s setup_id=%s reason=%s message=%s%s",
     symbol, match.match_id, reason_code, message,
+    f" {barrier_log_summary(barrier_detail)}" if isinstance(barrier_detail, dict) else "",
   )
   await _record_gate_reject(client, symbol, f"v8_{reason_code}")
   terminal_state = (
@@ -1923,6 +1927,18 @@ async def _publish_trade_plan_v8(
       # Hard reject structural conflicts (e.g. SELL entry inside demand /
       # opposing_entry_contained). Preference-only demotion previously let
       # those plans publish and hedge the correct side.
+      if target_room.opposing_entry is not None:
+        # Diagnostic only: which zones make the barrier that blocked this candidate. Read from the decision already
+        # taken; it changes neither the rejection nor its reason.
+        room_measured["opposing_barrier"] = describe_blocking_barrier(
+          target_room.opposing_entry,
+          direction=execution_match.direction,
+          planned_entry=room_planned,
+          candidate_entry_low=execution_match.entry_low,
+          candidate_entry_high=execution_match.entry_high,
+          reason_code=str(target_room.reason_code or ""),
+          measured=room_measured,
+        )
       await _record_v8_build_rejected(
         client,
         symbol,
