@@ -253,3 +253,30 @@ func TestFlipZonesKeepDistinctIdentityForMultipleBreaksOnOneCandle(t *testing.T)
 		t.Fatalf("Flip zone IDs must be deterministic across the same replay: got %v want [%s %s]", replayIDs, flips[0].ID, flips[1].ID)
 	}
 }
+
+// Price can jump over a zone without trading inside it: a gap, or one displacement candle that opens above a supply zone and closes
+// further above. TouchCount stays zero, but price has accepted beyond the far edge, so the zone is broken and must not read as
+// a fresh, standing wall.
+func TestLifecycleInvalidatesAZoneThatPriceJumpedOverWithoutTouchingIt(t *testing.T) {
+	cfg := zoneTestConfig().Lifecycle
+	supply := zone.Zone{Side: zone.Supply, Low: 100, High: 102}
+	jumped := []market.Candle{c(1, 103.5, 106, 103.4, 105.5), c(2, 105.5, 107, 105, 106.5)} // never overlaps [100,102], closes far above
+	if got := zone.DeriveState(jumped, 0, supply, 0, 1, cfg); got != zone.StateInvalidated {
+		t.Fatalf("a supply zone price gapped above and accepted beyond must be invalidated, got %s", got)
+	}
+	demand := zone.Zone{Side: zone.Demand, Low: 100, High: 102}
+	dropped := []market.Candle{c(1, 98.5, 98.6, 96, 96.5), c(2, 96.5, 97, 95, 95.5)}
+	if got := zone.DeriveState(dropped, 0, demand, 0, 1, cfg); got != zone.StateInvalidated {
+		t.Fatalf("a demand zone price gapped below and accepted beyond must be invalidated, got %s", got)
+	}
+	// A zone price has not reached, or only reached back on its own side, is still fresh.
+	untouched := []market.Candle{c(1, 98, 99, 97, 98.5), c(2, 98.5, 99.5, 98, 99)}
+	if got := zone.DeriveState(untouched, 0, supply, 0, 1, cfg); got != zone.StateFresh {
+		t.Fatalf("a supply zone price has not reached must stay fresh, got %s", got)
+	}
+	// A beyond-edge close inside the tolerance (0.5 ATR) is not a break.
+	inside := []market.Candle{c(1, 102.3, 102.4, 102.2, 102.3)}
+	if got := zone.DeriveState(inside, 0, supply, 0, 1, cfg); got != zone.StateFresh {
+		t.Fatalf("a close within the tolerance of the far edge is not a break, got %s", got)
+	}
+}

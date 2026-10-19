@@ -349,6 +349,36 @@ async def test_a_barrier_rejection_names_the_zones_behind_the_barrier_without_ch
     assert detail["members_published"] is False and detail["decisive_member"] is None
 
 
+@pytest.mark.asyncio
+async def test_a_wall_behind_the_entry_no_longer_blocks(h, prod):
+  """A supply zone inside the candidate's own band that lies wholly behind both the band's proximal edge and the executable price
+  cannot restrict a BUY's reward. It used to win the nearest-barrier ranking (a band overlap is distance zero), report no positive
+  raw room and hard-block as ``opposing_barrier_no_target``."""
+  from app.autotrade.go_zone_book import go_zone_book_key
+
+  match = await _go_origin_key_level_match(h, prod)
+  low, high = float(match.entry_low), float(match.entry_high)           # 4352.5 - 4356.0
+  behind = {"side": "sell", "low": low + 0.1, "high": low + 1.0, "tier": "zone", "score": 0.7, "touches": 3, "source_timeframes": ["M5"]}
+  await prod.set(go_zone_book_key("XAU"), json.dumps({"symbol": "XAU", "generated_at": int(time.time()), "entries": [], "barriers": [behind]}))
+  plan_id = await worker._publish_trade_plan_v8(prod, "XAU", _spot(4354.1, 4354.3), match, frames={})   # price inside the band, above the wall
+  assert plan_id is not None and len(await plans(prod)) == 1, "a wall behind the entry must not block"
+
+
+@pytest.mark.asyncio
+async def test_a_wall_between_the_price_and_the_proximal_edge_keeps_blocking(h, prod):
+  """The same wall, but the price is still below it: it is ahead of the fill although behind the proximal reference."""
+  from app.autotrade.go_zone_book import go_zone_book_key
+
+  match = await _go_origin_key_level_match(h, prod)
+  low, high = float(match.entry_low), float(match.entry_high)
+  wall = {"side": "sell", "low": low + 1.5, "high": high - 0.5, "tier": "zone", "score": 0.7, "touches": 1, "source_timeframes": ["M5"]}
+  await prod.set(go_zone_book_key("XAU"), json.dumps({"symbol": "XAU", "generated_at": int(time.time()), "entries": [], "barriers": [wall]}))
+  assert await worker._publish_trade_plan_v8(prod, "XAU", _spot(low + 0.3, low + 0.5), match, frames={}) is None
+  outcome = await route(prod, match.match_id)
+  assert outcome["status"] == "blocked" and outcome["reason_code"] == "opposing_barrier_no_target"
+  assert outcome["measured"]["opposing_barrier"]["reason_code"] == "opposing_barrier_no_target"
+
+
 async def _go_origin_key_level_match(h, prod):
   await h.activate(scope="key_level")
   await h._ensure()

@@ -12,6 +12,16 @@ dated section after deployment.
 
 ## Unreleased
 
+### Fixed
+- F-7 opposing-zone correctness. (1) The target-room gate no longer hard-blocks on a barrier that lies wholly behind both the zone's proximal
+  edge and the executable price: such a barrier (it overlaps the candidate's own band, so it ranked nearest at distance zero) had negative
+  raw room, was reported as `opposing_barrier_no_target` ("no positive raw target room") although it is not in the way, and hid any real
+  barrier ahead. It is set aside (`shared_boundary_state.behind_entry_excluded`) and the nearest barrier ahead decides; walls the price still
+  has to pass, walls that hold the entry and the execution-cost floor are unchanged. On the 17 production captures (76,059 replayed
+  opportunities, 28,615 admissible) 369 decisions change, all `opposing_barrier_no_target` -> admitted (349) or -> `room_below_cost` (20, a real
+  barrier ahead). (2) `zone.DeriveState` checks structural validity for an untouched zone as well, so a zone price jumped over without trading
+  inside it is `invalidated`, not `fresh` (2 of about 343,000 live zone observations; no decision changes).
+
 ### Added
 - F-7 opposing-barrier provenance (diagnostic only, no trading decision changes): each published barrier now lists the original V2 zones it
   is the union of (`members`: id, timeframe, own band, state, touches, strength, origin/created/last-touch time; unknown fields absent),
