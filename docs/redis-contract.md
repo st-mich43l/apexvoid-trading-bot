@@ -349,6 +349,16 @@ looked at (the member that holds the planned entry, or overlaps the candidate ba
 `members_published: false` and no decisive member mean the book had no provenance; nothing is inferred. An admitted plan carries none
 of this: TradePlan V8 is unchanged.
 
+Which barrier restricts the reward (`structural_target_room.py`): for a BUY only supply **ahead** of the entry restricts upside, for a SELL
+only demand below it. A barrier wholly behind both references the gate knows, the zone's proximal edge (the structural reference) and
+the executable price, is set aside before the nearest barrier is chosen (`measured.shared_boundary_state.behind_entry_excluded` /
+`behind_entry_bounds`); it used to be picked first because a band overlap ranks at distance zero, report negative raw room and block as
+`opposing_barrier_no_target`, and hide any real barrier ahead. A barrier that holds either reference, or lies between the executable price
+and the proximal edge, is not behind the entry and still blocks. Without an executable price nothing is set aside. The execution-cost floor
+(`opposing_barrier_room_below_cost`) and the containment blocks are unchanged. Separately, `zone.DeriveState` now checks structural validity
+for an untouched zone too: price can close beyond a zone without ever trading inside it (a gap, one displacement candle), and such a zone is
+`invalidated`, not `fresh`.
+
 Open F-7 decisions (no change here; see `docs/architecture/f7-opposing-barrier-ground-truth.md` section 12): whether a touched zone
 should still be a barrier and after how many touches (Go: 30; the frozen Python: the first); whether a union wider than the
 per-zone width gate should be one wall; whether a strategy whose thesis is a rotation through a range (Range Edge) may be blocked
