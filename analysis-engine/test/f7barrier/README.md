@@ -40,5 +40,21 @@ python3 analysis-engine/test/f7barrier/analyze.py --replay replay.jsonl --events
     --sim sim.jsonl --anatomy anatomy.json --labels /tmp/f7/credibility.jsonl --out results.json --csv disagreement.csv
 ```
 
+## Proving a change moved no decision
+
+`decisions_test.go` (`TestDumpDecisionInputs`) records, for every M5 bar of the committed captures that produced an opportunity, the
+opportunities (full-struct sha256 and geometry) and the barriers the publisher would write. Run it on two revisions and compare
+(`compare_decisions.py`, from `algo-bot`): identical opportunities, identical barriers apart from the additive `members`, and
+identical decisions from the real `filter_shared_boundary_opposing_entries` + `evaluate_structural_target_room` on both books
+read through the real `parse_zone_book`. It also checks that members tile their barrier and that the decisive member named for a
+block belongs to the barrier that blocked.
+
+```
+git worktree add /tmp/before origin/master && cp analysis-engine/test/f7barrier/decisions_test.go /tmp/before/analysis-engine/test/f7barrier/
+(cd /tmp/before/analysis-engine && F7_DECISIONS_DIR=/tmp/dec-before F7_CAPTURES=<list> go test ./test/f7barrier -run TestDumpDecisionInputs)
+(cd analysis-engine && F7_DECISIONS_DIR=/tmp/dec-after F7_CAPTURES=<list> go test ./test/f7barrier -run TestDumpDecisionInputs)
+(cd algo-bot && python ../analysis-engine/test/f7barrier/compare_decisions.py --before /tmp/dec-before --after /tmp/dec-after --out compare.json)
+```
+
 The tools' own logic (race, bar mapping, union length, divergence classification, clustered statistics) is covered by
 `algo-bot/tests/test_f7_barrier_tools.py`.

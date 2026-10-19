@@ -108,3 +108,64 @@ def test_entry_directly_inside_real_opposing_structure_still_rejects():
   )
   assert decision.hard_block is True
   assert decision.reason_code in {"opposing_entry_contained", "opposing_entry_overlap"}
+
+
+# --- why a barrier blocked: the zones behind it --------------------------------
+
+from app.autotrade.structural_target_room import (  # noqa: E402
+  ZoneOpposingEntry as _Entry,
+  barrier_log_summary,
+  describe_blocking_barrier,
+  evaluate_structural_target_room as _evaluate,
+)
+
+
+def _wall():
+  return _Entry(side="sell", lo=100.0, hi=112.0, tier="zone", score=0.9, touches=1, members=(
+    {"id": "z-low", "timeframe": "M15", "low": 100.0, "high": 104.0, "state": "partially_mitigated", "touches": 3, "strength": 0.5},
+    {"id": "z-mid", "timeframe": "M5", "low": 103.0, "high": 108.0, "state": "touched", "touches": 1, "strength": 0.7},
+    {"id": "z-top", "timeframe": "H1", "low": 108.0, "high": 112.0, "state": "fresh", "touches": 0, "strength": 0.9},
+  ))
+
+
+def test_an_entry_inside_a_merged_wall_names_the_member_that_holds_it():
+  described = describe_blocking_barrier(
+    _wall(), direction="BUY", planned_entry=109.0, candidate_entry_low=108.5, candidate_entry_high=110.0,
+    reason_code="opposing_entry_contained", measured={"room_pips": -3.0},
+  )
+  assert described["member_count"] == 3 and described["member_ids"] == ["z-low", "z-mid", "z-top"]
+  assert described["barrier_type"] == "supply" and described["barrier_low"] == 100.0 and described["barrier_high"] == 112.0
+  assert described["decisive_member"]["id"] == "z-top" and described["decisive_member"]["state"] == "fresh"
+  assert described["room_pips"] == -3.0
+  assert "decisive=z-top" in barrier_log_summary(described)
+
+
+def test_a_room_block_names_the_member_that_owns_the_nearest_edge():
+  buy = describe_blocking_barrier(_wall(), direction="BUY", planned_entry=95.0, candidate_entry_low=94.0, candidate_entry_high=96.0, reason_code="opposing_barrier_room_below_cost")
+  assert buy["decisive_member"]["id"] == "z-low"
+  demand = _Entry(side="buy", lo=80.0, hi=90.0, members=(
+    {"id": "d1", "low": 80.0, "high": 85.0}, {"id": "d2", "low": 84.0, "high": 90.0},
+  ))
+  sell = describe_blocking_barrier(demand, direction="SELL", planned_entry=92.0, candidate_entry_low=91.0, candidate_entry_high=93.0, reason_code="opposing_barrier_no_target")
+  assert sell["decisive_member"]["id"] == "d2"
+
+
+def test_a_barrier_published_without_members_gets_no_invented_decisive_member():
+  described = describe_blocking_barrier(
+    _Entry(side="sell", lo=100.0, hi=112.0), direction="BUY", planned_entry=109.0, candidate_entry_low=108.0, candidate_entry_high=110.0,
+    reason_code="opposing_entry_overlap",
+  )
+  assert described["members_published"] is False and described["member_count"] == 0 and described["decisive_member"] is None
+  assert "members=unpublished" in barrier_log_summary(described)
+
+
+def test_provenance_does_not_change_the_target_room_decision():
+  common = dict(
+    direction="BUY", planned_entry_price=109.0, candidate_entry_low=108.5, candidate_entry_high=110.0,
+    configured_target_pips=[20, 40], atr=2.0, pip_size=0.1, barrier_buffer_atr=0.5, min_capped_target_pips=15.0,
+    execution_cost_pips=1.0,
+  )
+  with_members = _evaluate(actionable_entries=[_wall()], **common)
+  without = _evaluate(actionable_entries=[_Entry(side="sell", lo=100.0, hi=112.0, tier="zone", score=0.9, touches=1)], **common)
+  assert (with_members.allowed, with_members.reason_code, with_members.hard_block, with_members.measured) == (
+    without.allowed, without.reason_code, without.hard_block, without.measured)

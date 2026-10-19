@@ -106,6 +106,7 @@ func BuildZoneBook(symbol market.Symbol, zonesByTimeframe map[market.Timeframe]z
 			barrierZones = append(barrierZones, barrier.Zone{
 				Timeframe: string(tf), Side: side, Low: float64(z.Low), High: float64(z.High),
 				ATR: state.ATR, Score: z.Strength, Touches: z.TouchCount, Live: liveZoneState(z.State),
+				ID: z.ID, State: z.State.String(), OriginTime: z.OriginTime, CreatedAt: z.CreatedAt, LastTouchedAt: z.LastTouchedAt,
 			})
 		}
 	}
