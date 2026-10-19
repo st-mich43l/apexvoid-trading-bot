@@ -147,13 +147,17 @@ func NotInvalidated(candles []market.Candle, fromIndex int, z Zone, atr float64,
 //     the sanity-cap case, not a structural failure.
 //   - PartiallyMitigated: touched more than once, still holding, under
 //     the retest cap — "still holding," per PR #574.
-//   - Touched / Fresh: 1 touch / 0 touches, still holding.
+//   - Touched / Fresh: 1 touch / 0 touches, still holding. (A zone with no touch is checked too: price can close beyond it without
+//     ever trading inside it.)
 func DeriveState(candles []market.Candle, fromIndex int, z Zone, touches int, atr float64, cfg LifecycleConfig) State {
-	if touches <= 0 {
-		return StateFresh
-	}
+	// Structural validity does not depend on a touch. A close beyond the far edge by more than the tolerance, never reclaimed,
+	// breaks the zone even when price jumped over it without trading inside it (a gap or a single displacement candle), which
+	// leaves TouchCount at zero.
 	if !NotInvalidated(candles, fromIndex, z, atr, cfg) {
 		return StateInvalidated
+	}
+	if touches <= 0 {
+		return StateFresh
 	}
 	if cfg.RetestMaxTouches > 0 && touches > cfg.RetestMaxTouches {
 		return StateMitigated

@@ -56,5 +56,13 @@ git worktree add /tmp/before origin/master && cp analysis-engine/test/f7barrier/
 (cd algo-bot && python ../analysis-engine/test/f7barrier/compare_decisions.py --before /tmp/dec-before --after /tmp/dec-after --out compare.json)
 ```
 
+### Comparing two rule revisions
+
+`decide_dump.py` (from `algo-bot`, once per code revision and book dump) writes the worker's own admission decision, the deciding
+barrier and its decisive member for every replayed opportunity; `compare_corrections.py` joins the four combinations (old/new rule x
+old/new books) and reports every changed decision with its cause, the changes by strategy and symbol, and the hypothetical stop / +1R /
++2R race of newly admitted, newly blocked, unchanged-admitted and still-blocked groups. `validity_test.go` (`F7_VALIDITY_OUT`) counts live
+zones whose own `zone.NotInvalidated` rule says they are broken.
+
 The tools' own logic (race, bar mapping, union length, divergence classification, clustered statistics) is covered by
 `algo-bot/tests/test_f7_barrier_tools.py`.

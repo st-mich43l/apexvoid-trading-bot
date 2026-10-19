@@ -310,6 +310,53 @@ def zone_proximal_room_reference(
   return spot, "executable_spot"
 
 
+def exclude_entries_behind_the_entry(
+  entries: Iterable[Any],
+  *,
+  direction: str,
+  planned_entry: float,
+  executable_entry: float | None,
+) -> tuple[list[Any], dict[str, Any]]:
+  """Drop opposing structure that lies wholly BEHIND the entry: it cannot restrict reward.
+
+  A BUY is restricted only by supply ahead of it (above), a SELL only by demand below. A barrier whose far edge is behind both
+  references the gate knows, the structural reference (``planned_entry``, the zone's proximal edge when price is in the zone) and
+  the executable price, has nothing between the entry and the target, whatever the candidate's own band overlaps. Without this,
+  such a barrier is picked first by ``_nearest_opposing`` (a band overlap ranks at distance zero), its ``raw_room`` is negative and
+  the gate reports ``opposing_barrier_no_target`` ("no positive raw target room") for a wall that is not in the way, and any real
+  barrier ahead is never looked at. A barrier that still lies between the executable price and the structural reference, or
+  that contains either, is NOT behind the entry and is kept. Without an executable price nothing is excluded.
+  """
+  items = list(entries)
+  if executable_entry is None or not math.isfinite(float(executable_entry)):
+    return items, {}
+  side = str(direction).upper()
+  planned = float(planned_entry)
+  executable = float(executable_entry)
+  opposing_side = "sell" if side == "BUY" else "buy"
+  kept: list[Any] = []
+  dropped: list[tuple[float, float]] = []
+  for entry in items:
+    if str(getattr(entry, "side", "")).casefold() != opposing_side:
+      kept.append(entry)
+      continue
+    low, high = float(getattr(entry, "lo")), float(getattr(entry, "hi"))
+    behind = (
+      (high < planned and high < executable) if side == "BUY"
+      else (low > planned and low > executable)
+    )
+    if behind:
+      dropped.append((low, high))
+    else:
+      kept.append(entry)
+  if not dropped:
+    return kept, {}
+  return kept, {
+    "behind_entry_excluded": len(dropped),
+    "behind_entry_bounds": [(round(lo, 6), round(hi, 6)) for lo, hi in dropped],
+  }
+
+
 def _nearest_opposing(
   direction: str,
   planned_entry: float,
@@ -681,6 +728,15 @@ def evaluate_structural_target_room(
       "overlap_excluded": int(internal_overlap.get("overlap_excluded") or 0),
       "dropped_bounds": list(prior.get("dropped_bounds") or []) + extra_dropped,
     }
+
+  room_entries, behind_state = exclude_entries_behind_the_entry(
+    room_entries,
+    direction=side,
+    planned_entry=planned,
+    executable_entry=executable_entry_price,
+  )
+  if behind_state:
+    shared_boundary_state = {**dict(shared_boundary_state or {}), **behind_state}
 
   barrier = _nearest_opposing(
     side,
