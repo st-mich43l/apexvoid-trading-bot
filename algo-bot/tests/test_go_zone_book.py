@@ -243,3 +243,46 @@ def test_telemetry_names_the_state_and_the_reason():
   assert telemetry["zone_book_state"] == "unavailable" and telemetry["zone_book_reason"] == "stale"
   assert telemetry["zone_book_age_seconds"] == 3600.0 and telemetry["zone_book_barriers"] == 0
   assert _read(_doc(_barrier())).telemetry()["zone_book_barriers"] == 1
+
+
+# --- provenance: the zones behind a barrier ------------------------------------
+
+def _member(zone_id="zone:M15:supply:1", timeframe="M15", low=2020.0, high=2025.0, state="touched", touches=2, strength=0.8, **extra):
+  member = {"id": zone_id, "timeframe": timeframe, "low": low, "high": high, "state": state, "touches": touches, "strength": strength,
+            "origin_time": NOW - 3600, "created_at": NOW - 3000}
+  member.update(extra)
+  return member
+
+
+def test_published_members_are_kept_as_published_and_never_invented():
+  barrier = _barrier()
+  barrier["members"] = [_member(last_touched_at=NOW - 600), _member("zone:H1:supply:2", "H1", 2025.0, 2030.0, "fresh", 0, 0.95)]
+  read = _read(_doc(barrier))
+  members = read.entries[0].members
+  assert [m["id"] for m in members] == ["zone:M15:supply:1", "zone:H1:supply:2"]
+  assert members[0]["last_touched_at"] == NOW - 600 and "last_touched_at" not in members[1]
+  assert members[1]["state"] == "fresh" and members[1]["strength"] == 0.95
+
+
+def test_a_book_without_members_is_read_exactly_as_before():
+  read = _read(_doc(_barrier()))
+  assert read.state is ZoneBookState.AVAILABLE_WITH_BARRIERS and read.entries[0].members == ()
+
+
+@pytest.mark.parametrize("members", [
+  "garbage", {"id": "x"}, [None, 7, "x"], [{"id": "no-band"}], [{"low": 2030.0, "high": 2020.0}], [{"low": "a", "high": "b"}],
+  [{"low": float("nan"), "high": 1.0}],
+])
+def test_unusable_provenance_never_makes_the_book_unavailable_or_changes_a_barrier(members):
+  """Provenance describes the zones; no decision reads it, so a defect in it must not hold a plan or move a band."""
+  barrier = _barrier()
+  plain = _read(_doc(barrier))
+  barrier["members"] = members
+  read = _read(_doc(barrier))
+  assert read.state is ZoneBookState.AVAILABLE_WITH_BARRIERS and read.reason is None
+  assert read.entries == plain.entries, "the barrier itself (band, tier, score, touches) is unchanged"
+  assert read.entries[0].members == ()
+
+
+def test_entry_equality_ignores_provenance():
+  assert ZoneOpposingEntry(side="sell", lo=1.0, hi=2.0, members=({"low": 1.0, "high": 2.0},)) == ZoneOpposingEntry(side="sell", lo=1.0, hi=2.0)

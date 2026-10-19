@@ -104,6 +104,41 @@ def _finite_number(value: Any) -> float | None:
   return number if math.isfinite(number) else None
 
 
+_MEMBER_NUMBERS = ("low", "high", "strength")
+_MEMBER_INTEGERS = ("touches", "origin_time", "created_at", "last_touched_at")
+_MEMBER_TEXT = ("id", "timeframe", "state")
+
+
+def _parse_members(raw: Any) -> tuple[dict[str, Any], ...]:
+  """The original zones behind a barrier, kept as published.
+
+  Provenance is diagnostic: a member that cannot be validated is dropped on its own and NEVER makes the book unavailable or
+  alters the barrier, because no decision reads it. Nothing is invented for a field the engine did not publish.
+  """
+  if not isinstance(raw, list):
+    return ()
+  members: list[dict[str, Any]] = []
+  for item in raw:
+    if not isinstance(item, dict):
+      continue
+    member: dict[str, Any] = {}
+    for key in _MEMBER_TEXT:
+      value = item.get(key)
+      if isinstance(value, str) and value:
+        member[key] = value
+    for key in _MEMBER_NUMBERS:
+      number = _finite_number(item.get(key))
+      if number is not None:
+        member[key] = number
+    for key in _MEMBER_INTEGERS:
+      value = item.get(key)
+      if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+        member[key] = value
+    if "low" in member and "high" in member and member["high"] >= member["low"]:
+      members.append(member)
+  return tuple(members)
+
+
 def parse_zone_book(raw: str | bytes, *, symbol: str, now: float | None = None) -> ZoneBookRead:
   """Pure, strict parse of one published document. Never raises: every defect
   is an UNAVAILABLE read with a reason."""
@@ -161,6 +196,7 @@ def parse_zone_book(raw: str | bytes, *, symbol: str, now: float | None = None) 
     entries.append(ZoneOpposingEntry(
       side=side, lo=low, hi=high, tier=tier, score=score, touches=touches,
       mitigated=False,  # Go only publishes live standing barriers
+      members=_parse_members(item.get("members")),
     ))
   state = ZoneBookState.AVAILABLE_WITH_BARRIERS if entries else ZoneBookState.AVAILABLE_EMPTY
   return ZoneBookRead(state, tuple(entries), None, generated, age)

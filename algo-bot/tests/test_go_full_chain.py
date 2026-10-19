@@ -316,6 +316,39 @@ async def test_go_zone_book_hard_blocks_a_go_origin_plan_inside_a_published_oppo
   assert await plans(prod) == []
 
 
+@pytest.mark.parametrize("with_members", [True, False])
+@pytest.mark.asyncio
+async def test_a_barrier_rejection_names_the_zones_behind_the_barrier_without_changing_the_decision(h, prod, with_members):
+  """The route outcome of a blocked candidate carries the barrier's original zones and the one the gate tested. The block,
+  its reason and the band are the same with and without provenance; an older book without members just has no detail."""
+  from app.autotrade.go_zone_book import go_zone_book_key
+
+  match = await _go_origin_key_level_match(h, prod)
+  barrier = {"side": "sell", "low": 4349.0, "high": 4355.0, "tier": "zone", "score": 0.9, "touches": 2, "source_timeframes": ["M15", "H1"]}
+  if with_members:
+    barrier["members"] = [
+      {"id": "zone:M15:supply:a", "timeframe": "M15", "low": 4349.0, "high": 4352.0, "state": "touched", "touches": 2, "strength": 0.7, "origin_time": 1790000000},
+      {"id": "zone:H1:supply:b", "timeframe": "H1", "low": 4351.0, "high": 4355.0, "state": "fresh", "touches": 0, "strength": 0.9, "origin_time": 1789990000},
+    ]
+  await prod.set(go_zone_book_key("XAU"), json.dumps({
+    "symbol": "XAU", "generated_at": int(time.time()), "entries": [], "barriers": [barrier],
+  }))
+  assert await worker._publish_trade_plan_v8(prod, "XAU", _spot(4354.1, 4354.3), match, frames={}) is None
+  assert await plans(prod) == []
+  outcome = await route(prod, match.match_id)
+  assert outcome["status"] == "blocked" and outcome["reason_code"].startswith("opposing_")
+  detail = outcome["measured"]["opposing_barrier"]
+  assert detail["reason_code"] == outcome["reason_code"]
+  assert (detail["barrier_low"], detail["barrier_high"], detail["barrier_type"], detail["barrier_tier"]) == (4349.0, 4355.0, "supply", "zone")
+  if with_members:
+    assert detail["member_count"] == 2 and detail["member_ids"] == ["zone:M15:supply:a", "zone:H1:supply:b"]
+    # no raw room in front of a BUY: the room is measured to the lowest member low of the supply wall
+    assert outcome["reason_code"] == "opposing_barrier_no_target" and detail["decisive_member"]["id"] == "zone:M15:supply:a"
+    assert detail["decisive_member"]["state"] == "touched" and detail["decisive_member"]["touches"] == 2
+  else:
+    assert detail["members_published"] is False and detail["decisive_member"] is None
+
+
 async def _go_origin_key_level_match(h, prod):
   await h.activate(scope="key_level")
   await h._ensure()
@@ -380,6 +413,26 @@ async def test_a_genuinely_empty_fresh_go_zone_book_admits_the_plan(h, prod):
   await prod.set(go_zone_book_key("XAU"), json.dumps({"symbol": "XAU", "generated_at": int(time.time()), "barriers": []}))
   plan_id = await worker._publish_trade_plan_v8(prod, "XAU", _spot(4354.1, 4354.3), match, frames={})
   assert plan_id is not None and len(await plans(prod)) == 1
+
+
+@pytest.mark.parametrize("scope", sorted(pol.REVIEWED_SCOPES))
+@pytest.mark.asyncio
+async def test_only_the_m1_scalp_bypasses_the_shared_barrier_book(h, prod, scope):
+  """Which Go-origin matches skip the shared opposing-barrier book is a fact to pin, not to assume.
+
+  The legacy range-scalp bypass also needs ``full_take_profit_pips``, which the Python range-target selector used to set and no Go
+  opportunity carries. Range Edge therefore goes through the same barrier gate as every zone strategy; its own protection is the
+  strategy's room-to-equilibrium rule in Go. Impulse Pullback (an M1 scalp) bypasses the book and is judged by its native
+  scalp room instead (``scalp_room_below_1r``)."""
+  from app.autotrade.strategy_taxonomy import match_bypasses_opposing_structure
+
+  await h.activate(scope=scope)
+  await h._ensure()
+  await consumer_for(h).process_record(catalog_kafka_record(h.clock.now, scope))
+  matches = deserialize_matches(await prod.get(strategy_matches_key("XAU")))
+  if not matches:
+    pytest.skip("contained by the fixture, no match to inspect")
+  assert match_bypasses_opposing_structure(matches[0]) is (scope == "impulse_pullback")
 
 
 @pytest.mark.parametrize("scope", sorted(pol.REVIEWED_SCOPES))

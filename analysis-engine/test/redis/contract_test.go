@@ -408,3 +408,34 @@ func TestRuntime_BootstrapCompletionHookRunsOnceAfterAllReplayedBars(t *testing.
 }
 
 func strconvItoa(v int64) string { return strconv.FormatInt(v, 10) }
+
+// The published barrier names the zones it is the union of, from the engine's own zone facts.
+func TestBuildZoneBook_BarriersCarryTheirMemberZones(t *testing.T) {
+	touched := int64(1700000500)
+	zones := map[market.Timeframe]zone.ZoneState{
+		market.M15: {ATR: 4.0, Zones: []zone.Zone{
+			{ID: "zone:M15:supply:1", Kind: zone.KindSupply, Low: 2020, High: 2025, Strength: 0.8, TouchCount: 2, State: zone.StatePartiallyMitigated, OriginTime: 1699980000, CreatedAt: 1699980900, LastTouchedAt: &touched},
+		}},
+		market.H1: {ATR: 8.0, Zones: []zone.Zone{
+			{ID: "zone:H1:supply:2", Kind: zone.KindSupply, Low: 2025, High: 2030, Strength: 0.95, TouchCount: 1, State: zone.StateTouched, OriginTime: 1699990000, CreatedAt: 1699990600},
+		}},
+	}
+	cfg := &barrier.Config{PipSize: 0.1, MaxWidthATR: 2, MaxWidthPips: 500}
+	doc := redistransport.BuildZoneBook("XAU", zones, 1700000100, cfg)
+	if len(doc.Barriers) != 1 || len(doc.Barriers[0].Members) != 2 {
+		t.Fatalf("one barrier of two members expected: %+v", doc.Barriers)
+	}
+	first, second := doc.Barriers[0].Members[0], doc.Barriers[0].Members[1]
+	if first.ID != "zone:M15:supply:1" || first.State != "partially_mitigated" || first.Touches != 2 || first.Strength != 0.8 ||
+		first.OriginTime != 1699980000 || first.LastTouchedAt == nil || *first.LastTouchedAt != 1700000500 {
+		t.Fatalf("first member: %+v", first)
+	}
+	if second.ID != "zone:H1:supply:2" || second.State != "touched" || second.LastTouchedAt != nil {
+		t.Fatalf("second member: %+v", second)
+	}
+	// The barrier fields every consumer decides on are exactly the ones published before provenance existed.
+	b := doc.Barriers[0]
+	if b.Low != 2020 || b.High != 2030 || b.Score != 0.95 || b.Touches != 1 || b.Tier != barrier.TierZone {
+		t.Fatalf("barrier geometry changed: %+v", b)
+	}
+}
