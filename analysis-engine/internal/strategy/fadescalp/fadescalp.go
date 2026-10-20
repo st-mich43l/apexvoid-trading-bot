@@ -112,8 +112,9 @@ func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Ca
 		if direction == market.Sell {
 			target = reference - s.targetR*risk
 		}
+		targetLabel := "fixed_reward_risk"
 		if liqTarget, found := opposingPool(d, direction, reference, risk); found {
-			target = liqTarget
+			target, targetLabel = liqTarget, "fade_opposing_liquidity"
 		}
 		quality := strategyutil.Clamp01(.55 + .15*gradeScore(grab.Grade) + .05*math.Min(float64(pool.Touches), 3))
 		evidence := []string{"equal_level_" + wantKind, "liquidity_grab_grade_" + grab.Grade, "legacy_pd_location", "structural_reaction_" + confirmation.Type}
@@ -129,7 +130,7 @@ func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Ca
 		candidate, err := strategyutil.Candidate(strategyutil.CandidateSpec{
 			ID: string(ID), Version: Version, SetupKey: setupKey, Symbol: ctx.Symbol, Direction: direction,
 			EntryLow: low, EntryHigh: high, Invalidation: invalid, InvalidationLabel: "equal_level_reclaim_failed",
-			Target: target, TargetLabel: "fade_opposing_liquidity", Evidence: evidence,
+			Target: target, TargetLabel: targetLabel, Evidence: evidence,
 			Quality: opportunity.StrategyQuality{Overall: quality, Components: map[string]float64{
 				"liquidity_grade": .75 + .25*gradeScore(grab.Grade), "reaction": 1, "location": 1,
 			}},

@@ -136,7 +136,7 @@ func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Ca
 		c, e := strategyutil.Candidate(strategyutil.CandidateSpec{
 			ID: string(ID), Version: Version, SetupKey: setupKey, Symbol: ctx.Symbol, Direction: direction,
 			EntryLow: math.Min(bar.Open, bar.Close), EntryHigh: math.Max(bar.Open, bar.Close),
-			Invalidation: invalid, InvalidationLabel: "sweep_extreme_failed", Target: target, TargetLabel: "sweep_reversion_objective",
+			Invalidation: invalid, InvalidationLabel: "sweep_extreme_failed", Target: target, TargetLabel: "fixed_reward_risk",
 			Evidence: []string{"m5_liquidity_pool_swept", "m5_sweep_reclaimed", "m5_opposite_displacement"},
 			Quality:  opportunity.StrategyQuality{Overall: q, Components: map[string]float64{"rejection_displacement": q, "reclaim": 1}},
 			FormedAt: bar.Time, ConfirmedAt: bar.Time, ExpiryHours: s.expiryHours, Fingerprint: s.fingerprint,
