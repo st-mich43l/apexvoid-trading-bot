@@ -134,11 +134,13 @@ func (s *Strategy) decide(d *strategyutil.LegacyDetector) *strategyutil.Techniqu
 	if d.Direction == market.Buy && role != keylevel.RoleBrokenResistance || d.Direction == market.Sell && role != keylevel.RoleBrokenSupport {
 		return nil
 	}
-	conf := d.Reaction(zone.Low(), zone.High(), d.ZoneGrab(zone))
+	// The zone is a flip only once price has broken through the old structure:
+	// the break bar built it and is no reaction to it.
+	conf := d.ZoneReaction(zone)
 	if conf == nil {
 		return nil
 	}
-	factors := strategyutil.FactorsForConfirmation(strategyutil.ReactionFactors(conf.Type, d.HTFAligned(), zone.Touches), conf.Type)
+	factors := strategyutil.FactorsForConfirmation(strategyutil.ReactionFactors(conf.Type, d.HTFAligned(), zone.Touches, d.SessionSweepContext(conf)), conf.Type)
 	low, high := zone.Low(), zone.High()
 	result := d.Finish(d.ZoneKey(zone), zone, factors, zone.Side, &low, &high)
 	if result == nil {

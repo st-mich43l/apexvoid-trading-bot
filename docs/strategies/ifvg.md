@@ -20,6 +20,16 @@ and every intentional difference from the Python detector.
   always seen (confluence stars out of three); the measured quality is in
   `Quality.Components` ([Quality](#quality-and-arbitration)).
 
+## Q2: measured session context and the causal inversion proof
+
+* **The inversion is never a formation candle.** The gap is the three completed candles A, B, C (`low(C) > high(A)` bullish, `high(C) < low(A)` bearish, interval `[high(A), low(C)]` / `[high(C), low(A)]`);
+  candidate inversions start at the candle after C (`for j > c`), and the first close beyond the far bound by the ATR-normalised buffer (known from the candle BEFORE the inverting one) is the inversion.
+  `TestTheFormationCandlesNeverInvertTheirOwnGap` pins it, `TestPrefixInvarianceAndNoFutureLeak` proves no later candle changes a decision.
+* **`session_context` is evidence, not a constant.** It was set on every iFVG decision (+2 raw points). It is now true only when a finalized session, previous-day or previous-week level that supports the
+  trade was swept and reclaimed between the gap's first candle and the rejection (`LegacyDetector.SessionSweepBetween`; see [shared-structure-evidence.md](shared-structure-evidence.md)). The level must have been
+  final before the sweep, its first breach must have been reclaimed, and one event counts once. The candidate then carries the evidence code `session_liquidity_swept`.
+* Effect on the 17-capture replay: 127 -> 104 opportunities (stars 2/3: 68/59 -> 74/30). The 23 removed had only their own candle evidence (touches, wick, inversion force) and no higher-timeframe agreement.
+
 ## Status and execution
 
 - **Certification**: `GO_NATIVE_VALIDATED` ([matrix](README.md#certification)): the

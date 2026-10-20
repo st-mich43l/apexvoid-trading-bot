@@ -64,7 +64,7 @@ class StrategyProfile:
   is_scalp: bool
   is_technique: bool
   # Behaviors this strategy opts into, each its own flag.
-  reaction: bool  # Key Level / Session Level / Trendline: market-with-limit-scale routing
+  reaction: bool  # Key Level / Trendline: market-with-limit-scale routing
   zone: bool
   range_lane: bool
   m1_scalp: bool  # own native room: HTF opposing structure does not gate it
@@ -308,29 +308,6 @@ STRATEGY_PROFILES: tuple[StrategyProfile, ...] = (
     ),
   ),
   StrategyProfile(
-    name='Session Level',
-    legacy_family_label='session_level',
-    detector_key='session_level_reaction',
-    enable_setting='auto_algo.strategies.reaction.session_level.enabled',
-    enable_requires_live_mode=False,
-    m5_authoritative=True,
-    is_scalp=False,
-    is_technique=False,
-    reaction=True,
-    zone=False,
-    range_lane=False,
-    m1_scalp=False,
-    confluence=False,
-    confirmation='level_reaction',
-    execution=ExecutionProfile(
-      min_confluence=2, max_entry_drift_atr=0.5, max_entry_drift_pips=12.0,
-      max_zone_width_atr=1.5, min_target_room_atr=0.55, min_reward_risk=1.15,
-      risk_multiplier=1.0, order_type_preference='limit', permitted_regimes=('chop', 'range', 'trend', 'breakout', 'unknown'),
-      entry_distribution='zone_scale', drift_section='mapped_zone', hard_drift_default_pips=20.0,
-      min_rr_from_range_config=False, range_risk_ceiling=False,
-    ),
-  ),
-  StrategyProfile(
     name='Trendline',
     legacy_family_label='trendline',
     detector_key='trendline_reaction',
@@ -351,29 +328,6 @@ STRATEGY_PROFILES: tuple[StrategyProfile, ...] = (
       risk_multiplier=1.0, order_type_preference='limit', permitted_regimes=('chop', 'range', 'trend', 'breakout', 'unknown'),
       entry_distribution='zone_scale', drift_section='trend', hard_drift_default_pips=30.0,
       min_rr_from_range_config=False, range_risk_ceiling=False,
-    ),
-  ),
-  StrategyProfile(
-    name='Range Edge Scalp',
-    legacy_family_label='range_reversion',
-    detector_key='range_edge_scalp',
-    enable_setting='auto_algo.strategies.range_reversion.range_edge.enabled',
-    enable_requires_live_mode=False,
-    m5_authoritative=False,
-    is_scalp=True,
-    is_technique=False,
-    reaction=False,
-    zone=False,
-    range_lane=True,
-    m1_scalp=False,
-    confluence=False,
-    confirmation=None,
-    execution=ExecutionProfile(
-      min_confluence=2, max_entry_drift_atr=0.35, max_entry_drift_pips=8.0,
-      max_zone_width_atr=1.0, min_target_room_atr=0.5, min_reward_risk=1.1,
-      risk_multiplier=1.0, order_type_preference='market', permitted_regimes=('chop', 'range', 'unknown'),
-      entry_distribution='either', drift_section='range', hard_drift_default_pips=20.0,
-      min_rr_from_range_config=True, range_risk_ceiling=True,
     ),
   ),
   StrategyProfile(
@@ -581,29 +535,6 @@ STRATEGY_PROFILES: tuple[StrategyProfile, ...] = (
       risk_multiplier=1.0, order_type_preference='market', permitted_regimes=('chop', 'range', 'unknown'),
       entry_distribution='either', drift_section='range', hard_drift_default_pips=20.0,
       min_rr_from_range_config=True, range_risk_ceiling=True,
-    ),
-  ),
-  StrategyProfile(
-    name='Liquidity Sweep',
-    legacy_family_label='liquidity_reversal',
-    detector_key=None,
-    enable_setting='auto_algo.strategies.reaction.liquidity_reversal.enabled',
-    enable_requires_live_mode=False,
-    m5_authoritative=False,
-    is_scalp=False,
-    is_technique=False,
-    reaction=False,
-    zone=False,
-    range_lane=False,
-    m1_scalp=False,
-    confluence=False,
-    confirmation='level_reaction',
-    execution=ExecutionProfile(
-      min_confluence=2, max_entry_drift_atr=0.45, max_entry_drift_pips=10.0,
-      max_zone_width_atr=1.5, min_target_room_atr=0.55, min_reward_risk=1.15,
-      risk_multiplier=1.0, order_type_preference='market', permitted_regimes=('chop', 'range', 'trend', 'unknown'),
-      entry_distribution='either', drift_section=None, hard_drift_default_pips=None,
-      min_rr_from_range_config=False, range_risk_ceiling=False,
     ),
   ),
   StrategyProfile(

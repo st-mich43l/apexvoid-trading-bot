@@ -12,6 +12,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/liquidity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/regime"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/techniquezone"
 )
 
 type LiquidityGrab struct {
@@ -90,4 +91,29 @@ func ChopEdgeAllows(tf *analysiscontext.TimeframeContext, direction market.Direc
 		return mid >= state.RangeHigh-edge-legacyEpsilon
 	}
 	return mid <= state.RangeLow+edge+legacyEpsilon
+}
+
+// Mean reference sources.
+const (
+	MeanRangeEquilibrium   = "range_equilibrium"
+	MeanDealingEquilibrium = "dealing_equilibrium"
+)
+
+// MeanReference is the price a short-term reversion is measured against and aimed at: the
+// equilibrium of the established local range when the frame has one that has not been
+// broken (the range builder's own state), otherwise the equilibrium of the dealing range.
+// ok is false when the frame has neither.
+func MeanReference(tf *analysiscontext.TimeframeContext) (price float64, source string, ok bool) {
+	if tf != nil && tf.Legacy != nil && tf.Legacy.ScalpRange != nil {
+		switch r := tf.Legacy.ScalpRange; r.State {
+		case techniquezone.RangeStateConfirmed, techniquezone.RangeStatePostImpulse, techniquezone.RangeStateProvisional:
+			if r.Equilibrium > 0 {
+				return r.Equilibrium, MeanRangeEquilibrium, true
+			}
+		}
+	}
+	if dealing := dealingRange(tf); dealing != nil && float64(dealing.Equilibrium) > 0 {
+		return float64(dealing.Equilibrium), MeanDealingEquilibrium, true
+	}
+	return 0, "", false
 }

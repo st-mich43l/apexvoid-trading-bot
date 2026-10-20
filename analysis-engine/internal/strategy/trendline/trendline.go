@@ -113,7 +113,9 @@ func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Ca
 		if interaction.State != technical.InteractionReclaimedSupport && interaction.State != technical.InteractionReclaimedResistance {
 			continue
 		}
-		conf := d.Reaction(float64(interaction.BandLow), float64(interaction.BandHigh), nil)
+		// The line is knowable from the close that confirmed its second anchor; the bars that
+		// formed and confirmed the anchor are the line's formation, not a reaction to it.
+		conf := d.ReactionFrom(float64(interaction.BandLow), float64(interaction.BandHigh), nil, line.AnchorBConfirmedIndex+1)
 		if conf == nil {
 			continue
 		}
@@ -123,7 +125,7 @@ func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Ca
 			continue
 		}
 		touches := 2 + len(line.ValidationTouches)
-		factors := strategyutil.FactorsForConfirmation(strategyutil.ReactionFactors(conf.Type, d.HTFAligned(), touches), conf.Type)
+		factors := strategyutil.FactorsForConfirmation(strategyutil.ReactionFactors(conf.Type, d.HTFAligned(), touches, d.SessionSweepContext(conf)), conf.Type)
 		low, high := float64(interaction.BandLow), float64(interaction.BandHigh)
 		result := d.Finish(linePrice, zone, factors, line.Kind.String(), &low, &high)
 		if result == nil {

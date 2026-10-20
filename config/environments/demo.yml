@@ -47,10 +47,6 @@ auto_algo:
       enabled: true
       key_level:
         enabled: true
-      liquidity_reversal:
-        enabled: true
-      session_level:
-        enabled: true
       supply:
         enabled: true
       trendline:

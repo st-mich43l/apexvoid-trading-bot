@@ -2,7 +2,7 @@
 
 > **Quality review (2026-10-14): RETAIN_RESTRICTED** (proposal, not applied). Technical PASS_WITH_DEFECTS, execution PARTIAL, performance NEGATIVE, evidence MODERATE. Scope: propose observe-only on XAU; FX unchanged. See [ae-quality-certification.md](ae-quality-certification.md) and [ae-strategy-retirement-review.md](ae-strategy-retirement-review.md). Independent review: pending.
 
-**Contract.** Restored to the frozen `flip_demand_zone_reaction` / `flip_supply_zone_reaction`: a zone carrying the flip source, unmitigated and entry-valid, anchored to a key level whose closed-bar role is broken resistance (BUY) or broken support (SELL), with a confirmed structural reaction. An ordinary zone touch is not a flip. Proven on 91 oracle decisions (`test/legacyparity`).
+**Contract.** Restored to the frozen `flip_demand_zone_reaction` / `flip_supply_zone_reaction`: a zone carrying the flip source, unmitigated and entry-valid, anchored to a key level whose closed-bar role is broken resistance (BUY) or broken support (SELL), with a confirmed structural reaction **after** the structure break that made the zone: the break bar built it and is no reaction to it (Q2). An ordinary zone touch is not a flip. Of the 91 oracle decisions (`test/legacyparity`) 80 were the break bar itself "rejecting" the band it closed through; Go publishes the other 11, each identical to the oracle's decision (a strict subset, asserted bar for bar).
 
 ## Strategy ID / version
 

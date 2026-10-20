@@ -142,6 +142,11 @@ func bandTouched(c market.Candle, low, high float64) bool {
 	return c.Low <= high+epsilon && c.High >= low-epsilon
 }
 
+// WickRejection reports whether the candle rejects in the direction ("BUY" or
+// "SELL"): the rejecting wick is at least the body and the bar closes in its
+// reaction-side third, in the reaction direction.
+func WickRejection(c market.Candle, direction string) bool { return wickRejection(c, direction) }
+
 // wickRejection: the rejecting wick is at least the body and the bar closes
 // in its reaction-side third, in the reaction direction.
 func wickRejection(c market.Candle, direction string) bool {

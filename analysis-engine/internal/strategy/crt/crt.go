@@ -12,6 +12,7 @@ package crt
 
 import (
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/confluence"
@@ -98,15 +99,17 @@ func (s *Strategy) Analyze(ctx *analysiscontext.MarketContext) (Analysis, []oppo
 	return analysis, candidates
 }
 
-// factors scores the shared confluence rubric from MEASURED CRT facts: the
-// wick rejection and displacement actually observed, the structure shift that
-// actually confirmed, and the higher-timeframe alignment the engine read.
+// factors scores the shared confluence rubric from MEASURED CRT facts: the wick
+// rejection actually observed on the sweep, the structure shift that actually
+// confirmed, and the higher-timeframe alignment the engine read. The shift's
+// displacement is not a second fact: it is a quality of the same candle that made the
+// shift (and is already required of it, MinimumMSSDisplacement), so it earns no extra
+// displacement credit; it is published as a component instead.
 func (s *Strategy) factors(ctx *analysiscontext.MarketContext, setup Setup) confluence.Factors {
 	return confluence.Factors{
 		HTFAligned:          ctx.Legacy != nil && ctx.Legacy.AlignedWithHTF(setup.Direction),
 		WickRejection:       setup.WickRejection,
 		StructuralAgreement: setup.Shift != nil,
-		DisplacementGrade:   setup.Shift != nil && setup.Shift.DisplacementATR >= s.cfg.DisplacementGradeATR,
 	}
 }
 
@@ -127,13 +130,13 @@ func (s *Strategy) candidate(ctx *analysiscontext.MarketContext, setup Setup) (o
 	}
 	stars := float64(score.SelectedStars)
 	components := map[string]float64{
-		"confluence":          strategyutil.Clamp01(stars / 3),
-		"reaction":            1,
-		"h1_range_atr":        setup.Anchor.RangeATR,
-		"sweep_depth_atr":     setup.Sweep.DepthATR,
-		"reclaim_depth_atr":   setup.Reclaim.DepthATR,
-		"technical_rr":        setup.TechnicalRR,
-		"technical_risk_pips": setup.RiskPips,
+		"confluence":           strategyutil.Clamp01(stars / 3),
+		"h1_range_atr":         setup.Anchor.RangeATR,
+		"entry_range_position": (setup.EntryHigh - setup.Anchor.Low) / math.Max(setup.Anchor.Width(), 1e-12),
+		"sweep_depth_atr":      setup.Sweep.DepthATR,
+		"reclaim_depth_atr":    setup.Reclaim.DepthATR,
+		"technical_rr":         setup.TechnicalRR,
+		"technical_risk_pips":  setup.RiskPips,
 	}
 	if setup.Shift != nil {
 		components["mss_displacement_atr"] = setup.Shift.DisplacementATR
@@ -146,7 +149,7 @@ func (s *Strategy) candidate(ctx *analysiscontext.MarketContext, setup Setup) (o
 		Symbol:   ctx.Symbol, Direction: setup.Direction,
 		EntryLow: setup.EntryLow, EntryHigh: setup.EntryHigh,
 		Invalidation: setup.Stop, InvalidationLabel: "crt_sweep_extreme_lost",
-		Target: setup.Target, TargetLabel: "opposite_h1_range",
+		Target: setup.Target, TargetLabel: setup.TargetKind,
 		Evidence: evidence,
 		Quality:  opportunity.StrategyQuality{Overall: strategyutil.Clamp01(stars / 3), Components: components},
 		FormedAt: setup.Sweep.BarTime, ConfirmedAt: setup.ConfirmedAt,

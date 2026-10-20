@@ -138,10 +138,10 @@ func Stage(candles []market.Candle, tf market.Timeframe, weekly []session.Level,
 		if level.Name == "PWH" || level.Name == "PWL" {
 			continue
 		}
-		frame.Sessions = append(frame.Sessions, techniquezone.SessionRef{Name: level.Name, Price: float64(level.Price), Swept: level.Swept})
+		frame.Sessions = append(frame.Sessions, techniquezone.SessionRef{Name: level.Name, Price: float64(level.Price), Swept: level.Swept, AvailableAt: level.AvailableAt})
 	}
 	for _, level := range weekly {
-		frame.Sessions = append(frame.Sessions, techniquezone.SessionRef{Name: level.Name, Price: float64(level.Price), Swept: level.Swept})
+		frame.Sessions = append(frame.Sessions, techniquezone.SessionRef{Name: level.Name, Price: float64(level.Price), Swept: level.Swept, AvailableAt: level.AvailableAt})
 	}
 
 	price := bars[len(bars)-1].Close

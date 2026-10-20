@@ -36,12 +36,9 @@ var strategyStopEnvelope = map[opportunity.StrategyID]stopEnvelopeKind{
 	"ifvg":             stopEnvelopeTrend,
 	"crt":              stopEnvelopeTrend,
 	"flip_zone":        stopEnvelopeTrend,
-	"session_level":    stopEnvelopeReactionRoom,
 	"trendline":        stopEnvelopeReactionRoom,
-	"range_edge":       stopEnvelopeRangeRoom,
 	"break_retest":     stopEnvelopeTrend,
 	"fade_scalp":       stopEnvelopeRangeRoom,
-	"liquidity_sweep":  stopEnvelopeTrend,
 	"impulse_pullback": stopEnvelopeM1Scalp,
 }
 
@@ -51,7 +48,7 @@ var strategyStopEnvelope = map[opportunity.StrategyID]stopEnvelopeKind{
 //   - reaction-room kind: floor = max(reaction_min_pips, reaction_room_floor),
 //     cap = max(floor, min(reaction_max_pips, trend_max_pips)), min_rr = reaction_min_rr.
 //   - M1 scalp kind: floor = scalp_min_pips, cap = max(floor, scalp_max_pips), min_rr = 1.0.
-//   - range-room kind (range_edge, fade_scalp): floor = range_room_floor_pips,
+//   - range-room kind (fade_scalp): floor = range_room_floor_pips,
 //     cap = max(floor, trend_max_pips), min_rr = range_min_rr.
 //   - everything else: floor = trend_min_pips, cap = trend_max_pips, no
 //     per-instance pinning (algo-bot's own "strategy_default" fallback
@@ -104,8 +101,6 @@ func computeStopEnvelope(c opportunity.Candidate, geometry market.Geometry, cfg 
 	// A range scalp on an instrument whose structural envelope is a
 	// swing-sized 50-70 pips (gold) is still a scalp: it takes the band the
 	// instrument declares for scalps, not the zone strategies' envelope.
-	// Production 2026-10-09: a Range Edge Scalp on XAU, Go invalidation 7.6
-	// pips beyond the zone, was widened to a 50 pip stop.
 	if kind == stopEnvelopeRangeRoom && cfg.InstrumentScalpConfigured {
 		floorPips = cfg.InstrumentScalpMinPips
 		capPips = cfg.InstrumentScalpMaxPips
