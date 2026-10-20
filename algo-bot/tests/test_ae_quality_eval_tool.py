@@ -40,7 +40,7 @@ def _registered() -> set[str]:
 
 def test_matrix_covers_exactly_the_registered_strategies() -> None:
   assert set(MATRIX) == _registered()
-  assert len(MATRIX) == 16
+  assert len(MATRIX) == 13
 
 
 @pytest.mark.parametrize("strategy_id", sorted(MATRIX))
@@ -66,7 +66,6 @@ def test_committed_results_match_the_matrix() -> None:
     assert merged[strategy_id]["final_recommendation"] == row["recommendation"], strategy_id
     assert merged[strategy_id]["confirmed_defects"] == row["confirmed_defects"], strategy_id
     assert merged[strategy_id]["independent_review_status"] == "pending"
-  assert results["replay"]["range_edge"]["invariant_violations"] == {}
   assert all(not v["invariant_violations"] for v in results["replay"].values())
 
 

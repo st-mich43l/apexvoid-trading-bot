@@ -68,8 +68,12 @@ func ifvgBars(gapTop float64) []market.Candle {
 	return bars
 }
 
+// ifvgContext is a BUY with the higher timeframe behind it: the session context is measured now, and a setup whose only
+// evidence is its own candles (touches, rejection wick, inversion force) sits below the confluence floor.
 func ifvgContext(bars []market.Candle) *analysiscontext.MarketContext {
-	return ctx(map[market.Timeframe]*analysiscontext.TimeframeContext{market.M5: {Timeframe: market.M5, Candles: bars}})
+	c := ctx(map[market.Timeframe]*analysiscontext.TimeframeContext{market.M5: {Timeframe: market.M5, Candles: bars, Legacy: &analysiscontext.LegacyFrame{Bars: bars, DetectorATR: 2}}})
+	c.Legacy = &analysiscontext.LegacyRead{LocalStructure: "up", HTFBias: "up", AllowCounterTrend: true}
+	return c
 }
 
 func TestIFVGV3KnownQualifyingFixture(t *testing.T) {

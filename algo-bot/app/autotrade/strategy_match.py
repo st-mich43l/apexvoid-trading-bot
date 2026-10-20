@@ -222,22 +222,6 @@ class StrategyMatch:
   go_stop_envelope_desired_minimum_pips: float | None = None
   go_stop_envelope_source: str | None = None
 
-  @property
-  def is_range_edge(self) -> bool:
-    # full_take_profit_pips is selected upstream (see
-    # app.autotrade.range_targets.select_range_target) against the
-    # configured AUTO_TRADE_RANGE_TARGETS_PIPS ladder, not a fixed {50,70}
-    # pair - this contract only needs to know a target was actually chosen.
-    return (
-      self.strategy in {"Range Edge Scalp", "One-Sided Range Reaction"}
-      and self.strategy_mode in {"range_scalp", "one_sided_range"}
-      and self.range_id is not None
-      and self.range_low is not None
-      and self.range_high is not None
-      and self.full_take_profit_pips is not None
-      and self.full_take_profit_pips > 0
-    )
-
   def to_json(self) -> str:
     return json.dumps(asdict(self), separators=(",", ":"), sort_keys=True)
 

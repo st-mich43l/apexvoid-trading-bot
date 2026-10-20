@@ -13,6 +13,25 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Q2 rework: strategy consolidation and mathematical validation. **Range Edge, Session Level and the standalone Liquidity Sweep are purged** (code, registry, configuration, Algo Bot
+  adapters, catalog profiles, execution paths specific to them, tests, fixtures and documentation); their display names stay resolvable and retired so persisted trades and events still decode, and a
+  configuration that names one fails startup. Session structure, range geometry and liquidity sweeps remain as shared evidence: `session` places the Asia/London/New York opens and the FX trading-day rollover on
+  real market clocks (`analysis.sessions.calendar`, daylight saving), separates finalized levels (`Final`, `AvailableAt`) from developing ones (`State.Developing`), and `strategyutil.SweepsSupporting` reports confirmed sweeps of
+  finalized liquidity (one event counted once). `session_context` is now that measured sweep for Key Level, Flip Zone, Trendline and iFVG instead of a constant set on every decision (`frozen_session_context` reproduces the oracle goldens).
+  iFVG: the measured session context, an explicit proof that a formation candle never inverts its own gap. CRT: the target is the nearest standing confirmed swing before the opposite range edge, the structure shift's displacement is no longer
+  credited twice. Fade Scalp v3: failed continuation, stop beyond the sweep's own extreme, the nearest structural objective (local mean or opposing liquidity) with at least `minimum_reward_risk`, no invented 2R target, measured factors and components.
+  Trendline: a reaction must come after the candle that confirmed the line's second anchor. The engine's fallback confluence no longer infers factors from the wording of evidence codes or asserts a session. One shared Wilder ATR window, series validity check and
+  mirror replace three copies; the candle ratios live on `market.Candle`. Replay (17 captures): 13,892 -> 11,835 opportunities. No stop, ladder, sizing, enablement or Kafka field changed.
+- Q2 opportunity quality. A structure was allowed to be "confirmed" by the bars it was built on: the frozen technique publishers searched the
+  last three bars for a touch and a confirmation without asking whether the structure existed yet, so a fair value gap was "rejected" by its own impulse
+  candle (69% of the replayed confirmed FVG opportunities, 480 of 695), a supply/demand zone or order block by its own displacement leg (222 of 1,742
+  Supply, 252 of 1,894 Demand, 20 of 549 Order Block) and a flip zone by the break bar that made it (194 of 222). Technique instances now carry
+  `TouchableFrom` (the bar after the one that completed the structure, the boundary `MarkMitigation` already counts touches from) and Flip Zone uses the
+  zone's break index; the frozen behaviour stays reproducible for the oracle golden (`TechniqueSource.FrozenFormationReaction`, `ConfirmedFrozenTechnique`,
+  and `test/legacyparity` asserts Flip Zone as a strict subset of the oracle). The confluence factors published for supply/demand/order block/FVG named a wick
+  rejection and a structural agreement on every decision and a displacement whenever the zone score was 8; they now name the evidence the confirmation
+  showed (stars are unchanged: a scored zone is rated by its zone score). Replay: 14,970 -> 13,892 opportunities (1,168 removed, 90 later reactions appear),
+  stars of every kept opportunity unchanged. No stop, ladder, sizing, enablement or Kafka field changed.
 - Q1 opportunity quality. Fade Scalp's entry zone took the frozen compat helper's default pip size of 0.1 (gold's) on every instrument, so on EURUSD/GBPUSD
   its band was level +- 0.1 (2,000 pips) and on the JPY pairs 20 pips instead of 2. The helper now uses the instrument's pip size
   (`analysis.legacy_read.compat.pip_size: 0` = the instrument's; the oracle test sets the frozen 0.1). On the 17 production captures 21 of 182 Fade Scalp

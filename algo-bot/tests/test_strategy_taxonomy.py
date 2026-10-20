@@ -18,21 +18,16 @@ from app.autotrade.strategy_taxonomy import (
 pytestmark = pytest.mark.no_database
 
 
-def test_reaction_flag_is_set_on_exactly_three_strategies():
+def test_reaction_flag_is_set_on_exactly_two_strategies():
   assert REACTION_STRATEGIES == frozenset({
     "Key Level",
-    "Session Level",
     "Trendline",
   })
-  assert len(REACTION_STRATEGIES) == 3
+  assert len(REACTION_STRATEGIES) == 2
 
 
 def test_key_level_reaction_is_reaction():
   assert is_reaction_strategy("Key Level")
-
-
-def test_session_level_reaction_is_reaction():
-  assert is_reaction_strategy("Session Level")
 
 
 def test_trendline_reaction_is_reaction():
@@ -82,9 +77,6 @@ def test_range_strategies_bypass_opposing_structure_gates():
   assert not bypasses_opposing_structure_gates(
     "Zone Reaction", full_take_profit_pips=15,
   )
-  assert not bypasses_opposing_structure_gates(
-    "Liquidity Sweep", full_take_profit_pips=15,
-  )
 
 
 def test_m1_scalp_strategies_bypass_opposing_when_room_fits():
@@ -113,10 +105,10 @@ def test_m1_scalp_strategies_bypass_opposing_when_room_fits():
     "Unknown", strategy_mode="range_scalp",
   )
   assert not bypasses_opposing_structure_gates(
-    "Range Edge Scalp", strategy_mode="range_scalp",
+    "Fade Scalp", strategy_mode="range_scalp",
   )
   assert bypasses_opposing_structure_gates(
-    "Range Edge Scalp",
+    "Fade Scalp",
     full_take_profit_pips=20,
     strategy_mode="range_scalp",
   )

@@ -32,7 +32,7 @@ Every strategy has exactly one status:
 - `LEGACY_PARITY_PROVEN`: its decisions reproduce the frozen Python publisher on
   committed real captures (a golden generated from the oracle, never from Go).
 - `GO_NATIVE_VALIDATED`: pinned by tests of its own contract. It does **not** claim
-  parity: `liquidity_sweep` has no live Python predecessor.
+  parity: a strategy with no live Python predecessor (`ifvg`, `confluence_zone`, `break_retest`) is validated by tests of its own contract.
 - `OBSERVE_ONLY`: analysed and published, never traded.
 
 | ID | Inputs | Legacy equivalent | Proof | Symbols | XAU execution | Status | XAU opportunities, Sep 14-21 / Sep 28-Oct 7 |
@@ -46,12 +46,9 @@ Every strategy has exactly one status:
 | `ifvg` | own M5 fair-value gap, its closing-price inversion, a fresh retest and rejection | none (Go v3; the Python publisher 1c9f323 was v2, see [ifvg](ifvg.md)) | contract tests in `internal/strategy/ifvg`, `test/ifvgreplay` (defect reproduction on the real captures, no future dependence, invariants, golden) | all | live (XAU enabled 13 Oct 2026; FX unchanged) | GO_NATIVE_VALIDATED | 7 / 14 (v2 confirmed: 110 / 120) |
 | `crt` | closed H1 range, M5 sweep, reclaim and structure shift | none (v3 departs deliberately from `crt_technique_reaction`, see below) | `internal/strategy/crt` positive and negative fixtures; `test/crtreplay`: no future dependence on 6 captures bar for bar, technical invariants on every setup found, and a v3 golden | all | live (an honest stop beyond the instrument cap is refused) | GO_NATIVE_VALIDATED | 1 / 0 |
 | `break_retest` | own M5 key level or trendline, accepted break, fresh retest and rejection | none (Go v3; the Python detector 1c9f323 was v2) | contract tests in `internal/strategy/breakretest`, `test/brreplay` | all | live | GO_NATIVE_VALIDATED | 1 / 2 (v2: 8 / 12) |
-| `range_edge` | M5 range context, edge rejection (v3: edge integrity) | Python detector (1c9f323), v3 rebuilt | `test/rereplay` replay baseline | all | live | GO_NATIVE_VALIDATED | 28 / 50 |
-| `fade_scalp` | equal-level sweep and reclaim, PD, chop edge | Python detector (1c9f323) | `test/detectorparity` golden | all | live | LEGACY_PARITY_PROVEN | 10 / 20 |
+| `fade_scalp` | equal-level sweep, failed continuation, reversion to the local mean (v3) | none (Go v3; the Python detector 1c9f323 was v2) | contract tests in `internal/strategy/fadescalp` | all | live | GO_NATIVE_VALIDATED | 10 / 20 |
 | `flip_zone` | zones born of an accepted role flip, key-level role, reaction | `flip_demand_zone_reaction` / `flip_supply_zone_reaction` (1c9f323) | `test/legacyparity` golden, 5 symbols: 48 BUY and 43 SELL oracle decisions, identical (presence, direction, entry, stars) and silent elsewhere | all | live | LEGACY_PARITY_PROVEN | 34 / 16 |
-| `session_level` | completed Asia / London / NY and previous-day / previous-week highs and lows, first-touch rejection or sweep and reclaim | none (Go v4; the Python publisher 1c9f323 was v3, see [session_level](session_level.md)) | contract tests in `internal/strategy/sessionlevel`, `test/slreplay` (defect reproduction with an independent audit, the five losing XAU trades, no future dependence, invariants, golden) | all | live (XAU enabled 13 Oct 2026; FX unchanged) | GO_NATIVE_VALIDATED | 6 / 3 (v3: 48 / 38) |
 | `trendline` | causal trendline anchors, health and live interaction, reaction | `trendline_reaction` V2 (1c9f323) | `test/legacyparity` golden, 5 symbols: 8 oracle decisions, identical and silent elsewhere (few decisions: the gate is narrow) | all | live | LEGACY_PARITY_PROVEN | 4 / 0 |
-| `liquidity_sweep` | lone-extreme pool sweep and reclaim, graded grab | none (Go-native) | contract tests in `internal/strategy/liquiditysweep` | all | **contained** (analysis only) | GO_NATIVE_VALIDATED | 2 / 2 |
 | `impulse_pullback` | M5 impulse, corrective pullback, structural reference and role, M1 confirmation | `discover_impulse_pullback` (scalp lane, a1c77584) | `test/scalpparity`: the real 33 h XAU capture holds **no** Python decision (0 of 1,939 cycles); 18 identical decisions and silence elsewhere on nine seeded synthetic M1 captures (labelled synthetic) | XAU | **contained** (analysis only; also contained on FX) | LEGACY_PARITY_PROVEN on synthetic data only | 2 + 11 on M1 (Oct 2-6 M1 capture, pre-port) |
 
 Proof is scoped to the committed captures (XAU, EURUSD, GBPUSD, GBPJPY, USDJPY for
@@ -127,13 +124,12 @@ each with the evidence behind it:
 
 | Instrument | Observe-only | Evidence |
 |---|---|---|
-| XAU | `liquidity_sweep` | 4 of 5 live XAU trades stopped out (-165 pips); fires about twice a week |
 | every instrument | `impulse_pullback` | net -49 pips over 11 live trades of the earlier simplified thesis; the port (XAU only) is proven on synthetic data only, not on the real capture, so it stays contained |
 | every instrument | any setup whose structure timeframe is `M15` (`observe_only_structure_timeframes`) | the M15 supply/demand extension has no Python predecessor and no execution record; detected and published, not traded |
 
 Containment is reversible by removing the name. Nothing re-enables itself.
 
-**Enabled on XAU (13 Oct 2026, owner's decision).** `ifvg` (v3) and `session_level` (v4) were taken off XAU's list after technical certification; the hypothetical XAU replay is not evidence of an edge (iFVG about zero, Session Level negative), see [xau-enablement-2026-10](xau-enablement-2026-10.md). Rollback: restore the two names.
+**Enabled on XAU (13 Oct 2026, owner's decision).** `ifvg` (v3) was taken off XAU's list after technical certification; the hypothetical XAU replay is not evidence of an edge, see [xau-enablement-2026-10.md](xau-enablement-2026-10.md).
 
 ## Common candidate contract
 
@@ -154,9 +150,9 @@ the fresh retest and rejection that follows. It is the only breakout strategy.
 
 ## Detector-contract strategies
 
-`fade_scalp`
-reproduces frozen detector decisions (`range_edge` did until v3, which adds the technical integrity of the edge and
-is certified by replay: [range_edge](range_edge.md)) on the detector-contract read
+`key_level`, `flip_zone`, `trendline` and the technique strategies read the detector-contract
+frame; `fade_scalp` was rebuilt as v3 and no longer reproduces the frozen detector. The frame is
+the detector-contract read
 (`internal/legacyread`): bounded M5/M15/H1 windows, the detector swing algorithm,
 scored zones, pools and grabs, regime and higher-timeframe bias. Regenerate their
 golden with `test/detectorparity/generate_oracle_golden.py` against the frozen
@@ -173,12 +169,9 @@ oracle; never from Go output.
 - [ifvg](ifvg.md)
 - [crt](crt.md)
 - [break_retest](break_retest.md)
-- [range_edge](range_edge.md)
 - [fade_scalp](fade_scalp.md)
 - [flip_zone](flip_zone.md)
-- [session_level](session_level.md)
 - [trendline](trendline.md)
-- [liquidity_sweep](liquidity_sweep.md)
 - [impulse_pullback](impulse_pullback.md)
 
 Audits: [independence](independence-audit.md), [arbitration and quality (P1)](arbitration-quality-audit.md).

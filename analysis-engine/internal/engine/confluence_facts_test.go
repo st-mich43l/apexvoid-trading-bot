@@ -50,3 +50,19 @@ func TestGradeAGrabRequiresReclaimedMatchingPool(t *testing.T) {
 		t.Fatalf("sweep without displacement cannot receive Grade-A bonus: %+v", got)
 	}
 }
+
+// A factor is set from a structured fact, never from the wording of an evidence code and never asserted: a code that
+// says "rejection" is not a wick rejection, and the three sessions cover every hour so "a session is active" says nothing.
+func TestFallbackFactorsComeFromStructuredFactsOnly(t *testing.T) {
+	reaction := &opportunity.ReactionConfirmation{Pattern: "strong_reclaim", ReactionType: "rejection"}
+	got := factsFromReaction(true, 2, false, reaction, false)
+	if got.WickRejection || got.DisplacementGrade || got.SessionContext || !got.StructuralAgreement || !got.HTFAligned || got.Touches != 2 {
+		t.Fatalf("a strong reclaim is structural evidence only: %+v", got)
+	}
+	if got := factsFromReaction(false, 0, true, nil, true); got.WickRejection || got.StructuralAgreement || got.SessionContext || !got.FibTouch || !got.CHoCH {
+		t.Fatalf("without a reaction only the canonical facts remain: %+v", got)
+	}
+	if got := factsFromReaction(false, 0, false, &opportunity.ReactionConfirmation{Pattern: "rejection_choch"}, false); !got.CHoCH || !got.StructuralAgreement || got.WickRejection {
+		t.Fatalf("a CHoCH confirmation carries the structure shift: %+v", got)
+	}
+}

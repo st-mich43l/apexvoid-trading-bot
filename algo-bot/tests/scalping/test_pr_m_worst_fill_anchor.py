@@ -7,7 +7,6 @@ from types import SimpleNamespace
 import pytest
 
 from app.autotrade.execution_confirmation import (
-  ZONE_ACCESS_RETEST_ONLY,
   scalp_effective_chase_pips,
   scalp_zone_access,
 )
@@ -83,17 +82,6 @@ def test_chase_cap_is_stop_fraction():
     maximum_chase_pips=1.8,
   )
   assert missed.status == "chase_missed"
-
-
-def test_retest_only_zone_access_waits_on_approach_and_never_chases():
-  access = scalp_zone_access(
-    "BUY", 100.0, 102.0, 100.0, 101.0, 0.0,
-    pip_size=0.1,
-    maximum_chase_pips=40.0,
-    zone_access_mode=ZONE_ACCESS_RETEST_ONLY,
-  )
-  assert access.status == "approach_wait"
-  assert not access.executable
 
 
 def test_realized_r_denominator_and_ratio():

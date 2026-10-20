@@ -126,24 +126,13 @@ auto_algo:
       # Python schema default, unchanged value True) — same
       # only-reachable-via-demo-override gap as risk.exposure above.
       enabled: true
-      range_edge:
-        break_closes: 2
-        cluster_atr: 0.25
-        enabled: true
-        lookback: 48
-        max_width_atr: 6.0
-        min_touches: 2
     reaction:
       demand:
         enabled: true
       enabled: true
       key_level:
         enabled: true
-      liquidity_reversal:
-        enabled: true
       scale_enabled: true
-      session_level:
-        enabled: true
       supply:
         enabled: true
       trendline:

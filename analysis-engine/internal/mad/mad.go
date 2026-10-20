@@ -82,16 +82,12 @@ type AffinityScore struct {
 // explicit: substring guesses were a source of silent detector drift.
 func StrategyKey(strategy string) string {
 	switch normalize(strategy) {
-	case "range_edge":
-		return "range_edge_mean_reversion"
-	case "liquidity_sweep":
-		return "liquidity_sweep_reversal"
 	case "impulse_pullback":
 		return "impulse_pullback_continuation"
 	case "":
 		return ""
 	default:
-		// Zone, key-level, CRT, flip, session and trendline candidates are
+		// Zone, key-level, CRT, flip, fade and trendline candidates are
 		// structural reactions in the Python taxonomy.
 		return "structural_reaction"
 	}
@@ -111,15 +107,12 @@ func Affinity(snapshot Snapshot, direction, strategy string) AffinityScore {
 		if want == "BUY" || want == "SELL" {
 			score.DirectionScore = 1
 		}
-		if key == "range_edge_mean_reversion" {
-			score.StrategyScore = 1
-		}
 	case PhaseManip:
 		score.PhaseScore = features.Manip
 		if snapshot.ManipulationDirection != "" && normalize(snapshot.ManipulationDirection) == want {
 			score.DirectionScore = 1
 		}
-		if key == "structural_reaction" || key == "liquidity_sweep_reversal" {
+		if key == "structural_reaction" {
 			score.StrategyScore = 1
 		}
 	case PhaseExpand:

@@ -232,6 +232,16 @@ changed; the measured facts (range, sweep depth, reclaim depth, shift
 displacement/body/close strength, technical RR and risk pips) are published as
 `Quality.Components`, which no arbitration reads.
 
+## Q2: the nearest structure, and no double-counted shift
+
+* **Reference range.** `CRT_High/CRT_Low` are the closed H1 candle's high/low, `CRT_Range = High - Low`, `CRT_Mid = (High + Low) / 2` (`Anchor.Mid`); the range must be at least `minimum_h1_range_atr` of the H1 ATR and only candles
+  closed by the evaluated M5 close are read. `entry_range_position = (entry top - CRT_Low) / CRT_Range` is published as a component.
+* **The target is the nearest standing structure, not automatically the opposite edge.** `detector.target`: the nearest confirmed swing high (swing low for a SELL), inside the range and beyond the entry, that no later candle has traded
+  through; with none, the opposite edge. The room and reward:risk gates apply to that target. The label is `nearest_structure` or `opposite_h1_range`.
+* **One fact, one credit.** The structure shift's displacement is a quality of the same candle that made the shift (and `minimum_mss_displacement_atr` already requires it), so it earns no `displacement_grade`; the
+  factors are higher-timeframe alignment, the sweep's wick rejection and the shift. A CRT now needs the higher-timeframe bias behind it to reach two stars. `displacement_grade_atr` and the constant `reaction` component were removed.
+* Replay: 3 -> 1 setups (the two without higher-timeframe agreement). Too few to say anything about expectancy.
+
 ## Valid and invalid setups
 
 | Case | Result |

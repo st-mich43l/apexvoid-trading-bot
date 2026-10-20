@@ -14,6 +14,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/replaycapture"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategyutil"
 )
 
 // The golden is the decision of every frozen Python detector over the same
@@ -29,11 +30,16 @@ import (
 // simply no longer a parity target. Its v2 decisions remain reproducible as the
 // frozen baseline in test/brreplay.
 //
-// range_edge left it too, when rebuilt as v3 (docs/strategies/range_edge.md): it
-// refuses a fade of an edge the market accepted through, which the frozen Python
-// detector does not. Its v2 decisions remain reproducible as the frozen baseline
-// in test/rereplay (testdata/range-edge-v2-baseline.json).
-var covered = []string{"fade_scalp"}
+// fade_scalp left it too, when rebuilt as v3 (docs/strategies/fade_scalp.md): it
+// publishes only a sweep that was not followed by continuation, whose reaction
+// confirmed, with the stop beyond the sweep's own extreme, the confluence factors
+// measured rather than asserted and a structural objective with the configured
+// reward:risk; the frozen detector invented a 2R target, set the rejection factor on
+// every decision and put the stop inside the wick. The oracle golden stays untouched.
+// What this test still proves is the analysis layer the detectors read: the
+// higher-timeframe bias, the local structure bias, the regime and the
+// premium/discount zone, bar by bar.
+var covered []string
 
 type goldenDetector struct {
 	Direction       string  `json:"direction"`
@@ -247,9 +253,10 @@ func freezeCompatPip(t *testing.T, doc *config.Document) {
 	legacy["compat"].(map[string]any)["pip_size"] = 0.1
 }
 
-// The frozen flip-zone retest took a default pip size of 0.1, so on EURUSD and GBPUSD the band of a Fade Scalp entry zone that came
-// from it was level +- 0.1: two thousand pips. With the instrument's own pip size no band is wider than a few ATR.
-func TestFadeScalpEntryBandIsInTheInstrumentsOwnUnits(t *testing.T) {
+// The frozen flip-zone retest took a default pip size of 0.1, so on EURUSD and GBPUSD the entry zone it produced for an equal
+// level was level +- 0.1: two thousand pips. With the instrument's own pip size no band is wider than a few ATR. The zones are read
+// straight from the detector at every pool of every bar, independent of any strategy's own gates.
+func TestEntryZoneBandIsInTheInstrumentsOwnUnits(t *testing.T) {
 	g := loadGolden(t)
 	data, ok := g.Symbols["GBPUSD"]
 	if !ok {
@@ -263,17 +270,43 @@ func TestFadeScalpEntryBandIsInTheInstrumentsOwnUnits(t *testing.T) {
 		if freeze {
 			freezeCompatPip(t, doc)
 		}
-		_, observed := replay(t, doc, data.Capture)
-		worst := 0.0
-		for _, bar := range observed {
-			for _, c := range bar.candidates["fade_scalp"] {
-				if c.Technical == nil || c.Technical.ATR <= 0 {
-					continue
+		settings, err := engine.LoadSettings(doc, market.M5, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := engine.ApplyInstrument(&settings, doc, "GBPUSD"); err != nil {
+			t.Fatal(err)
+		}
+		var legacy strategyutil.LegacyDetectorSettings
+		for _, cfg := range settings.Strategies {
+			if cfg.ID == "fade_scalp" {
+				if legacy, err = strategyutil.ParseLegacyDetectorSettings(cfg.Parameters); err != nil {
+					t.Fatal(err)
 				}
-				if width := float64(c.Entry.High-c.Entry.Low) / c.Technical.ATR; width > worst {
+			}
+		}
+		capture, err := replaycapture.Load(filepath.Join("..", "..", "testdata", data.Capture))
+		if err != nil {
+			t.Fatal(err)
+		}
+		worst := 0.0
+		_, err = replaycapture.Replay(doc, capture, market.M5, replaycapture.Options{OnEvaluation: func(e engine.Evaluation) {
+			if e.Timeframe != market.M5 || e.Context == nil {
+				return
+			}
+			d, found := strategyutil.NewLegacyDetector(e.Context, market.M5, market.Buy, legacy)
+			if !found || d.ATR <= 0 {
+				return
+			}
+			for _, pool := range d.Frame.Pools {
+				zone := d.EntryZone(pool.Level)
+				if width := (zone.High() - zone.Low()) / d.ATR; width > worst {
 					worst = width
 				}
 			}
+		}})
+		if err != nil {
+			t.Fatal(err)
 		}
 		return worst
 	}
@@ -281,8 +314,8 @@ func TestFadeScalpEntryBandIsInTheInstrumentsOwnUnits(t *testing.T) {
 	if frozen < 100 {
 		t.Fatalf("expected the frozen pip size to reproduce the defect (a band over 100 ATR), widest was %.1f ATR", frozen)
 	}
-	if corrected > 5 {
-		t.Fatalf("with the instrument's pip size no Fade Scalp band should span %.1f ATR", corrected)
+	if corrected > 10 {
+		t.Fatalf("with the instrument's pip size no entry band should span %.1f ATR", corrected)
 	}
-	t.Logf("widest Fade Scalp entry band on GBPUSD: frozen %.0f ATR, corrected %.1f ATR", frozen, corrected)
+	t.Logf("widest entry band on GBPUSD: frozen %.0f ATR, corrected %.1f ATR", frozen, corrected)
 }

@@ -49,7 +49,6 @@ type Config struct {
 	MinimumMSSBodyRatio     float64
 	MinimumMSSDisplacement  float64
 	MinimumMSSCloseStrength float64
-	DisplacementGradeATR    float64
 	ConfirmationMaxAgeBars  int
 	ConfirmationBufferPips  float64
 	EntryModel              string
@@ -75,7 +74,6 @@ func parseConfig(params map[string]any) (Config, error) {
 		"minimum_mss_body_ratio":       &c.MinimumMSSBodyRatio,
 		"minimum_mss_displacement_atr": &c.MinimumMSSDisplacement,
 		"minimum_mss_close_strength":   &c.MinimumMSSCloseStrength,
-		"displacement_grade_atr":       &c.DisplacementGradeATR,
 		"confirmation_buffer_pips":     &c.ConfirmationBufferPips,
 		"entry_depth_atr":              &c.EntryDepthATR,
 		"entry_tolerance_atr":          &c.EntryToleranceATR,
@@ -159,8 +157,8 @@ func (c Config) validate() error {
 		return fmt.Errorf("crt: mss_max_bars must be in [0, 48]")
 	case c.MinimumMSSBodyRatio < 0 || c.MinimumMSSBodyRatio > 1 || c.MinimumMSSCloseStrength < 0 || c.MinimumMSSCloseStrength > 1:
 		return fmt.Errorf("crt: MSS body ratio and close strength must be in [0, 1]")
-	case c.MinimumMSSDisplacement < 0 || c.DisplacementGradeATR <= 0 || c.ConfirmationBufferPips < 0:
-		return fmt.Errorf("crt: MSS displacement, grade and buffer must be non-negative (grade > 0)")
+	case c.MinimumMSSDisplacement < 0 || c.ConfirmationBufferPips < 0:
+		return fmt.Errorf("crt: MSS displacement and buffer must be non-negative")
 	case c.ConfirmationMaxAgeBars < 0 || c.ConfirmationMaxAgeBars > 12:
 		return fmt.Errorf("crt: confirmation_max_age_bars must be in [0, 12]")
 	case c.EntryModel != EntryMSSRetest && c.EntryModel != EntryReclaimRetest:

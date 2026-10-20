@@ -193,7 +193,7 @@ instrument_packs:
       min_pips: 50
       max_pips: 70
       # The 50-70 band above is for the structural zone strategies. A range
-      # scalp (Range Edge, Fade Scalp) is a scalp on gold too: it takes a stop
+      # scalp (Fade Scalp) is a scalp on gold too: it takes a stop
       # sized to its own range - Go's invalidation, floored at the range-room
       # floor (15, execution.range.room_stop_floor_pips) and capped at the
       # scalping book's 45 (auto_algo scalping.stop.maximum_pips). 2026-10-09
@@ -470,8 +470,8 @@ instruments:
     overrides:
       execution:
         # Owner rule 2026-10-14: no observe-only. Every strategy and structure
-        # timeframe trades on XAU, including liquidity_sweep and impulse_pullback
-        # (both were observe-only until now) and the M15 supply/demand zones.
+        # timeframe trades on XAU, including impulse_pullback (it was observe-only until
+        # then) and the M15 supply/demand zones.
         go_opportunity:
           observe_only_strategies: []
           observe_only_structure_timeframes: []

@@ -52,7 +52,7 @@ func newFrozenV2(cfg strategy.Config) (*frozenV2, error) {
 // the confirmed reaction the frozen iFVG publisher decides on the frame's technique
 // instances.
 func (s *frozenV2) Evaluate(ctx *analysiscontext.MarketContext) (resting, confirmed []opportunity.Candidate) {
-	confirmed = strategyutil.ConfirmedTechnique(ctx, s.legacy, strategyutil.TechniqueIFVG, "", strategyutil.TechniqueSpec{
+	confirmed = strategyutil.ConfirmedFrozenTechnique(ctx, s.legacy, strategyutil.TechniqueIFVG, "", strategyutil.TechniqueSpec{
 		ID: string(frozenID), Version: frozenVersion, ZoneEvidence: "m5_ifvg_inversion_confirmed", ConfirmedEvidence: "m5_ifvg_rejection_confirmed",
 		InvalidationLabel: "ifvg_inversion_failed", InvalidationBufferATR: s.invalidationATR,
 		MinimumTargetDistanceATR: s.targetATR, ExpiryHours: s.expiryHours, Fingerprint: s.fingerprint,

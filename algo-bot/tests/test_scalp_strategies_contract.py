@@ -1,6 +1,6 @@
 """Every scalp on gold is sized and targeted as a scalp.
 
-Production 2026-10-09: a Range Edge Scalp on XAU was handed treatments written for the
+Production 2026-10-09: a range scalp on XAU was handed treatments written for the
 structural gold strategies - the 50-70 pip stop envelope, the 1R-4R ladder (and, with its
 two-leg entry, the 15-pips-inside-the-stop risk leg). This file walks the whole scalp
 family so a scalp cannot silently inherit a swing treatment again.
@@ -22,20 +22,19 @@ from tests.test_zone_scale_execution import _cfg, _policy_match
 
 pytestmark = pytest.mark.no_database
 
-# The three scalps in the 17-strategy catalog, by Go id.
+# The two scalps in the 13-strategy catalog, by Go id.
 SCALPS = {
-  "range_edge": "Range Edge Scalp",
   "fade_scalp": "Fade Scalp",
   "impulse_pullback": "Impulse Pullback Scalp",
 }
 # The Go stop envelope each of them gets on gold (analysis-engine computeStopEnvelope).
 GOLD_ENVELOPE = {
-  "range_edge": (15, 45), "fade_scalp": (15, 45),
+  "fade_scalp": (15, 45),
   "impulse_pullback": (12, 45),
 }
 
 
-def test_the_scalp_family_is_exactly_these_three():
+def test_the_scalp_family_is_exactly_these_two():
   scalps = {
     scope.catalog_id for scope in pol.REVIEWED_SCOPES.values()
     if is_scalp_strategy(scope.legacy_strategy, strategy_mode=scope.strategy_mode)
@@ -110,14 +109,13 @@ def _two_leg_plan(strategy: str, family: str):
 
 def test_a_scalp_plan_carries_no_swing_risk_leg_but_a_structural_one_does():
   assert _two_leg_plan("Key Level", "key_level").entry.risk_leg is not None
-  for name in ("Range Edge Scalp", "Fade Scalp"):
+  for name in ("Fade Scalp",):
     plan = _two_leg_plan(name, "range_reversion")
     assert len(plan.entry.legs) == 2
     assert plan.entry.risk_leg is None, name
 
 
 @pytest.mark.parametrize("name,family", [
-  ("Range Edge Scalp", "range_reversion"),
   ("Fade Scalp", "range_reversion"),
   ("Impulse Pullback Scalp", "range_reversion"),
 ])

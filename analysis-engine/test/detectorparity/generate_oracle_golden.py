@@ -34,7 +34,7 @@ CAPTURES = {
   "GBPUSD": "replay-gbpusd-production-capture-20261005.json",
   "USDJPY": "replay-usdjpy-production-capture-20261005.json",
 }
-DETECTORS = ("break_retest", "range_edge", "fade_scalp")
+DETECTORS = ("break_retest", "fade_scalp")
 ENGINE = os.environ.get("ENGINE_DIR", "/engine")
 OUT = os.path.join(ENGINE, "testdata/detector-parity-oracle.json")
 MINUTES = {"M1": 1, "M5": 5, "M15": 15, "H1": 60}
@@ -77,7 +77,6 @@ def run(symbol):
   look = {tf: window_for_timeframe(tf) for tf in ("M5", *[t.upper() for t in htf])}
   functions = {
     "break_retest": D.break_retest,
-    "range_edge": D.range_edge_scalp,
     "fade_scalp": D.fade_scalp,
   }
 
@@ -139,7 +138,7 @@ def main():
     "description": (
       "Detector decisions of the frozen Python oracle over the committed real captures. "
       "Per closed M5 bar: higher-timeframe bias, local structure bias, regime and "
-      "premium/discount zone, plus every decision of break_retest, range_edge "
+      "premium/discount zone, plus every decision of break_retest "
       "and fade_scalp. Regenerate with generate_oracle_golden.py."
     ),
     "symbols": results,

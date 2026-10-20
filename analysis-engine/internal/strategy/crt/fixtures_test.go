@@ -20,7 +20,7 @@ func testConfig() Config {
 		MinimumH1RangeATR: 1.5, ATRLength: 14, ATRWindowBars: 140, SweepWindowH1Periods: 1,
 		MinimumSweepPips: 2, MinimumSweepATR: 0.10, MinimumReclaimPips: 1, MinimumReclaimATR: 0.05, ReclaimMaxBars: 6,
 		ConfirmationMode: ConfirmationMSS, StructurePivotBars: 2, StructureLookbackBars: 24, MSSMaxBars: 12,
-		MinimumMSSBodyRatio: 0.5, MinimumMSSDisplacement: 0.5, MinimumMSSCloseStrength: 0.6, DisplacementGradeATR: 1.0,
+		MinimumMSSBodyRatio: 0.5, MinimumMSSDisplacement: 0.5, MinimumMSSCloseStrength: 0.6,
 		ConfirmationMaxAgeBars: 2, ConfirmationBufferPips: 0,
 		EntryModel: EntryMSSRetest, EntryDepthATR: 0.5, EntryToleranceATR: 0.1, EntryMaxWidthPrice: 5.0,
 		InvalidationBufferATR: 0.25, MinimumTargetRoomATR: 0.55, MinimumRewardRisk: 1.15, ExecutionStopMaxPips: 120,

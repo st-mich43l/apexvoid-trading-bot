@@ -207,24 +207,6 @@ strategies:
     owner_approval_required: false
     rationale: FX is flat to positive (EURUSD +0.32R), XAU is the clear loss.
     prior_certification: docs/strategies/flip_zone.md
-  session_level:
-    technical_thesis: A completed session/period level is swept or reacted to and reclaimed.
-    validation_conditions: Level integrity, period completeness, sweep and reclaim depth in ATR, rejection strength.
-    quality_formula:
-      class: stars_over_3
-      note: 16 measured components published
-    confirmed_defects:
-    - Overall saturates at two values.
-    verdict:
-      technical: PASS
-      execution: PARTIAL
-      performance: NEUTRAL
-      evidence: WEAK
-    recommendation: RETAIN
-    scope: all instruments
-    owner_approval_required: false
-    rationale: 'Replay -0.02R, production 0.00R: no edge and no harm demonstrated.'
-    prior_certification: docs/strategies/session_level.md
   trendline:
     technical_thesis: Reaction at a fitted trendline band.
     validation_conditions: Line fit, band, reaction candle.
@@ -245,30 +227,6 @@ strategies:
     owner_approval_required: false
     rationale: 'v4 replay: median technical RR 3.4, median room cover 0.84; 16 setups, no production trades.'
     prior_certification: null
-  range_edge:
-    technical_thesis: A confirmed break of an M5 range edge fails and reclaims; target the range equilibrium.
-    validation_conditions: v3 integrity assessment (break, reclaim depth, rejection, room).
-    quality_formula:
-      class: continuous
-      note: mean of six measured terms
-    confirmed_defects:
-    - 'FX: technical target is 0.27-0.30x the executable stop (median room cover); 99-100% of FX setups (XAU: 16%) have the
-      fixed TP1 beyond the strategy''s own objective.'
-    - 'Quality is not monotone in outcome: production Spearman -0.18, middle tercile -0.87R.'
-    - Production -0.19R on 62 R-known trades (CI -0.50 to +0.17); XAU replay -0.22R, interval below zero.
-    verdict:
-      technical: PASS
-      execution: INCOMPATIBLE
-      performance: NEGATIVE
-      evidence: MODERATE
-    recommendation: RETAIN
-    scope: 'Owner rule 2026-10-14: no observe-only; the strategy trades live on every instrument. The audit evidence is kept
-      here so a later audit can act on it.'
-    owner_approval_required: false
-    rationale: 'The v3 detector is technically correct. The residual contradiction is execution: a 2-4 pip technical risk
-      cannot honestly carry the 12-22 pip stop the executor places on FX. That is an owner decision about the FX scalp floor,
-      not a detector bug.'
-    prior_certification: docs/strategies/range-edge-v3-certification.md
   break_retest:
     technical_thesis: Accepted break of a key level or trendline, then a fresh retest and rejection.
     validation_conditions: Acceptance closes, retest depth and age, rejection strength.
@@ -307,23 +265,6 @@ strategies:
     rationale: Eight trades cannot outvote 117 replay episodes, and 117 hypothetical episodes cannot outvote real fills. Collect
       more before acting.
     prior_certification: docs/strategies/fade_scalp.md
-  liquidity_sweep:
-    technical_thesis: Liquidity is swept, reclaimed and rejected with displacement.
-    validation_conditions: Reclaim, rejection displacement.
-    quality_formula:
-      class: continuous
-      note: 19 distinct values
-    confirmed_defects: []
-    verdict:
-      technical: PASS
-      execution: PARTIAL
-      performance: UNPROVEN
-      evidence: INSUFFICIENT
-    recommendation: RETAIN
-    scope: XAU stays observe-only as configured; no change
-    owner_approval_required: false
-    rationale: 21 production trades, 0 with a recorded R; exit-path counts are near break-even; replay n=22.
-    prior_certification: docs/strategies/liquidity_sweep.md
   impulse_pullback:
     technical_thesis: Pullback after an M1 impulse (scalp).
     validation_conditions: Body dominance, displacement.

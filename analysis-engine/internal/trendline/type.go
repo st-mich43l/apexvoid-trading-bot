@@ -99,6 +99,9 @@ type Trendline struct {
 	AnchorB      string
 	AnchorAIndex int // candle index (within the window Build was given) of AnchorA
 	AnchorBIndex int
+	// AnchorBConfirmedIndex is the candle whose close confirmed AnchorB as a swing: the first moment the
+	// line is knowable. Nothing at or before it can be a touch of, or a reaction to, this line.
+	AnchorBConfirmedIndex int
 
 	Slope          float64
 	Intercept      float64

@@ -11,10 +11,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/crt"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/ifvg"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/impulsepullback"
-	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/liquiditysweep"
-	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/rangeedge"
 	strategytrendline "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/trendline"
-	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/techniquezone"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/test/legacyfixture"
 )
 
@@ -38,7 +35,7 @@ func crtParams() map[string]any {
 		"minimum_h1_range_atr": 1.5, "atr_length": 14.0, "atr_window_bars": 140.0, "sweep_window_h1_periods": 1.0,
 		"minimum_sweep_pips": 2.0, "minimum_sweep_atr": 0.10, "minimum_reclaim_pips": 1.0, "minimum_reclaim_atr": 0.05, "reclaim_max_bars": 6.0,
 		"confirmation_mode": "mss", "structure_pivot_bars": 2.0, "structure_lookback_bars": 24.0, "mss_max_bars": 12.0,
-		"minimum_mss_body_ratio": 0.5, "minimum_mss_displacement_atr": 0.5, "minimum_mss_close_strength": 0.6, "displacement_grade_atr": 1.0,
+		"minimum_mss_body_ratio": 0.5, "minimum_mss_displacement_atr": 0.5, "minimum_mss_close_strength": 0.6,
 		"confirmation_max_age_bars": 2.0, "confirmation_buffer_pips": 0.0, "entry_model": "mss_retest", "entry_depth_atr": 0.5,
 		"entry_tolerance_atr": 0.1, "entry_max_width_price": 5.0, "invalidation_buffer_atr": 0.25, "minimum_target_room_atr": 0.55,
 		"minimum_reward_risk": 1.15, "expiry_hours": 4.0,
@@ -64,24 +61,6 @@ func trendlineParams() map[string]any {
 		"chop_require_htf_aligned": true, "require_htf_aligned": false, "reject_exhausted": true,
 		"interaction_band_atr": 0.2, "close_violation_atr": 0.15, "approach_min_distance_atr": 0.1,
 		"invalidation_buffer_atr": .25, "expiry_hours": 4.0, "minimum_target_distance_atr": 1.0,
-	})
-}
-
-func rangeEdgeParams() map[string]any {
-	return detectorParams(map[string]any{"lookback_bars": 48.0, "minimum_touches": 2.0, "minimum_wick_rejections": 1.0, "break_closes": 2.0, "minimum_room_atr": .75, "invalidation_buffer_atr": .25, "expiry_hours": 4.0,
-		"reclaim_closes": 2.0, "minimum_inside_closes": 3.0, "pressure_bars": 4.0, "pressure_minimum_rise_atr": 1.0, "minimum_reclaim_atr": 0.0, "rejection_close_strength": 0.6, "maximum_width_atr": 6.0})
-}
-
-// rangeEdgeContext is a lower-edge rejection inside a confirmed range, built on
-// the detector-contract frame the range-edge detector reads.
-func rangeEdgeContext(last market.Candle) *analysiscontext.MarketContext {
-	bars := legacyfixture.Bars(10, 100.5)
-	bars[9] = last
-	edge := func(side string, level float64) techniquezone.ScalpBarrier {
-		return techniquezone.ScalpBarrier{Side: side, Level: level, Low: level - .3, High: level + .3, Touches: 4, WickRejections: 3, LastTouchIndex: 9, FirstTouchIndex: 1, Score: 10.5, Grade: "A", ConfidenceGrade: "A"}
-	}
-	return legacyfixture.Context(bars, 1, func(f *analysiscontext.LegacyFrame, _ *analysiscontext.LegacyRead) {
-		f.ScalpRange = &techniquezone.ScalpRange{Lower: edge("support", 98), Upper: edge("resistance", 103), Equilibrium: 100.5, State: techniquezone.RangeStateConfirmed}
 	})
 }
 
@@ -128,13 +107,6 @@ func TestStrategiesKnownQualifyingFixtures(t *testing.T) {
 			t.Fatalf("trendline published without a detector frame: %+v", got)
 		}
 	})
-	t.Run("range_edge", func(t *testing.T) {
-		s, e := rangeedge.New(cfg(rangeedge.ID, rangeEdgeParams()))
-		if e != nil {
-			t.Fatal(e)
-		}
-		assertOne(t, s, rangeEdgeContext(market.Candle{Time: 3000, Open: 98.3, High: 98.9, Low: 97.8, Close: 98.6}))
-	})
 	t.Run("crt", func(t *testing.T) {
 		s, e := crt.New(cfg(crt.ID, crtParams()))
 		if e != nil {
@@ -157,26 +129,13 @@ func TestStrategiesKnownQualifyingFixtures(t *testing.T) {
 	})
 }
 
-func TestRangeEdgeTriggerCannotDefineItsOwnRange(t *testing.T) {
-	s, err := rangeedge.New(cfg(rangeedge.ID, rangeEdgeParams()))
-	if err != nil {
-		t.Fatal(err)
-	}
-	// The established range is 98-103. A trigger bar that crashes through the
-	// lower edge to 95.5 is a break of the range, not an entry at its edge.
-	broke := rangeEdgeContext(market.Candle{Time: 3000, Open: 100, High: 100.5, Low: 95, Close: 95.5})
-	if got := s.Evaluate(broke); len(got) != 0 {
-		t.Fatalf("trigger candle was allowed to redefine the established range: %+v", got)
-	}
-}
-
 func TestStrategiesRejectMissingConfiguration(t *testing.T) {
 	factories := []struct {
 		name    string
 		id      strategy.StrategyID
 		factory strategy.Factory
 	}{
-		{"ifvg", ifvg.ID, ifvg.New}, {"trendline", strategytrendline.ID, strategytrendline.New}, {"range_edge", rangeedge.ID, rangeedge.New}, {"liquidity_sweep", liquiditysweep.ID, liquiditysweep.New}, {"crt", crt.ID, crt.New}, {"confluence_zone", confluencezone.ID, confluencezone.New}, {"impulse_pullback", impulsepullback.ID, impulsepullback.New},
+		{"ifvg", ifvg.ID, ifvg.New}, {"trendline", strategytrendline.ID, strategytrendline.New}, {"crt", crt.ID, crt.New}, {"confluence_zone", confluencezone.ID, confluencezone.New}, {"impulse_pullback", impulsepullback.ID, impulsepullback.New},
 	}
 	for _, tc := range factories {
 		t.Run(tc.name, func(t *testing.T) {

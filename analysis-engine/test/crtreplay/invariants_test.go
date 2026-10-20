@@ -225,7 +225,8 @@ func TestCRTSetupsOnRealCapturesSatisfyEveryTechnicalInvariant(t *testing.T) {
 			if !ok || level != s.Shift.Level || s.Shift.LevelTime >= episodeExtremeTime || !(sign*(shiftBar.Close-level) > 0) {
 				t.Errorf("%s: shift level %v / time %d is not a prior swing broken by the shift close %v", label, s.Shift.Level, s.Shift.LevelTime, shiftBar.Close)
 			}
-			// Objective is the opposite H1 edge and lies beyond the entry.
+			// The objective lies beyond the entry and is either the opposite H1 edge or, when one stands between,
+			// the nearest confirmed swing the market had not yet taken.
 			wantTarget := s.Anchor.High
 			if sign < 0 {
 				wantTarget = s.Anchor.Low
@@ -234,7 +235,19 @@ func TestCRTSetupsOnRealCapturesSatisfyEveryTechnicalInvariant(t *testing.T) {
 			if sign < 0 {
 				proximal = s.EntryLow
 			}
-			if s.Target != wantTarget || !(sign*(s.Target-proximal) > 0) || !(sign*(proximal-s.Stop) > 0) {
+			switch s.TargetKind {
+			case crt.TargetOppositeRange:
+				if s.Target != wantTarget {
+					t.Errorf("%s: an opposite-range target must be the edge %v, got %v", label, wantTarget, s.Target)
+				}
+			case crt.TargetNearestSwingHigh:
+				if !(sign*(s.Target-proximal) > 0) || !(sign*(wantTarget-s.Target) > 0) || !standingSwing(data.m5, s.Target, sign, data.cfg.StructurePivotBars, s.ConfirmedAt) {
+					t.Errorf("%s: %v is not a standing confirmed swing between the entry %v and the edge %v", label, s.Target, proximal, wantTarget)
+				}
+			default:
+				t.Errorf("%s: unknown target kind %q", label, s.TargetKind)
+			}
+			if !(sign*(s.Target-proximal) > 0) || !(sign*(proximal-s.Stop) > 0) {
 				t.Errorf("%s: geometry stop %v entry [%v,%v] target %v", label, s.Stop, s.EntryLow, s.EntryHigh, s.Target)
 			}
 			if s.TechnicalRR < data.cfg.MinimumRewardRisk || (data.cfg.ExecutionStopMaxPips > 0 && s.RiskPips > data.cfg.ExecutionStopMaxPips) {
@@ -341,4 +354,37 @@ func TestCRTV3DetectGoldenOnRealCaptures(t *testing.T) {
 		gotRaw, _ := json.MarshalIndent(got, "", " ")
 		t.Fatalf("CRT v3 decisions drifted from the committed golden; if intended, regenerate with UPDATE_GOLDEN=1.\n got: %s", gotRaw)
 	}
+}
+
+// standingSwing reports whether some candle with n strictly lower (higher, for sign < 0) candles on each side
+// has its extreme at level, and no candle from it through `through` (open time) traded beyond it.
+func standingSwing(m5 []market.Candle, level, sign float64, n int, through int64) bool {
+	for p := n; p+n < len(m5); p++ {
+		extreme := m5[p].High
+		if sign < 0 {
+			extreme = m5[p].Low
+		}
+		if extreme != level {
+			continue
+		}
+		fractal := true
+		for k := 1; k <= n && fractal; k++ {
+			if sign > 0 && (m5[p-k].High >= level || m5[p+k].High >= level) || sign < 0 && (m5[p-k].Low <= level || m5[p+k].Low <= level) {
+				fractal = false
+			}
+		}
+		if !fractal {
+			continue
+		}
+		taken := false
+		for k := p + 1; k < len(m5) && m5[k].Time <= through; k++ {
+			if sign > 0 && m5[k].High > level || sign < 0 && m5[k].Low < level {
+				taken = true
+			}
+		}
+		if !taken {
+			return true
+		}
+	}
+	return false
 }

@@ -84,6 +84,9 @@ type Setup struct {
 	EntryLow, EntryHigh float64
 	Stop                float64
 	Target              float64
+	// TargetKind says what the target is: the opposite edge of the reference range, or a
+	// nearer confirmed swing the market would have to take first.
+	TargetKind string
 	// M5ATR is the Wilder ATR(14) of the confirming candle.
 	M5ATR float64
 
@@ -92,6 +95,12 @@ type Setup struct {
 	// Measured facts the confluence factors are scored from.
 	WickRejection bool
 }
+
+// Target kinds.
+const (
+	TargetOppositeRange    = "opposite_h1_range"
+	TargetNearestSwingHigh = "nearest_structure"
+)
 
 // Rejection records why a real sweep episode did not become a setup. A
 // rejection is a technical or execution-envelope fact, never an error.

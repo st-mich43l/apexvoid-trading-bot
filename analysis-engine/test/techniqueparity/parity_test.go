@@ -128,6 +128,8 @@ func observe(t *testing.T, doc *config.Document, symbol, capture string) (map[in
 		if !ok {
 			return
 		}
+		// The oracle lets a structure's own formation bars touch and confirm it.
+		source.FrozenFormationReaction = true
 		if debugBars[e.BarTime] {
 			t.Logf("BAR %d price %.5f atr %.5f n %d", e.BarTime, source.Detector.Price, source.Detector.ATR, len(source.Detector.Frame.Bars))
 			for _, in := range source.Instances {

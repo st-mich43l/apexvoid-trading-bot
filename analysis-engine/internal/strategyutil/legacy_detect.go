@@ -54,6 +54,11 @@ type LegacyDetectorSettings struct {
 	// publishers read the execution frame only, so this is the one deliberate
 	// extension of the contract and is opt-in per strategy.
 	HigherTimeframes []market.Timeframe
+	// FrozenSessionContext reproduces the frozen detectors, which set the session
+	// context factor on every decision (the three sessions cover all 24 hours, so it
+	// was true by construction). Optional "frozen_session_context", default false:
+	// only the replays that prove an oracle golden set it.
+	FrozenSessionContext bool
 }
 
 // LegacyDetectorParameterKeys documents the parameters ParseLegacyDetectorSettings
@@ -108,6 +113,13 @@ func ParseLegacyDetectorSettings(params map[string]any) (LegacyDetectorSettings,
 		if s.HigherTimeframes, err = parseHigherTimeframes(raw); err != nil {
 			return s, err
 		}
+	}
+	if raw, present := params["frozen_session_context"]; present {
+		frozen, isBool := raw.(bool)
+		if !isBool {
+			return s, fmt.Errorf("parameter %q must be boolean", "frozen_session_context")
+		}
+		s.FrozenSessionContext = frozen
 	}
 	version, ok := params["confluence_scoring_version"].(string)
 	if !ok || version == "" {
@@ -468,7 +480,26 @@ func (d *LegacyDetector) Reaction(low, high float64, grab *techniquezone.Grab) *
 // ReactionWithLookbacks is Reaction with separate touch and confirmation
 // windows; the CHoCH flag always uses the confirmation window.
 func (d *LegacyDetector) ReactionWithLookbacks(low, high float64, grab *techniquezone.Grab, touchLookback, confirmationLookback int) *LegacyConfirmation {
+	return d.reactionFrom(low, high, grab, touchLookback, confirmationLookback, 0)
+}
+
+// ReactionFrom is Reaction for a structure that did not exist before bar
+// minIndex: no earlier bar can be its touch or its confirmation.
+func (d *LegacyDetector) ReactionFrom(low, high float64, grab *techniquezone.Grab, minIndex int) *LegacyConfirmation {
+	lookback := maxInt(1, d.Settings.ReactionLookbackBars)
+	return d.reactionFrom(low, high, grab, lookback, lookback, minIndex)
+}
+
+// ZoneReaction is Reaction for a zone that exists only once its last formation
+// bar (the later of its origin and the structure break that made it) has
+// closed: that bar built the zone and is no reaction to it.
+func (d *LegacyDetector) ZoneReaction(zone techniquezone.Zone) *LegacyConfirmation {
+	return d.ReactionFrom(zone.Low(), zone.High(), d.ZoneGrab(zone), maxInt(zone.OriginIndex, zone.BreakIndex)+1)
+}
+
+func (d *LegacyDetector) reactionFrom(low, high float64, grab *techniquezone.Grab, touchLookback, confirmationLookback, minIndex int) *LegacyConfirmation {
 	params := reaction.Params{
+		MinIndex:  minIndex,
 		Direction: string(d.Direction), Low: low, High: high, TouchLookback: maxInt(1, touchLookback), ConfirmLookback: maxInt(1, confirmationLookback),
 		HasCHoCH: d.RecentCHoCH(confirmationLookback), ATR: d.ATR, EngulfingMinimumRangeATR: d.Settings.EngulfingMinimumRangeATR,
 	}
@@ -660,15 +691,6 @@ func (d *LegacyDetector) ZoneID(zone techniquezone.Zone) string {
 // LevelID is the stable identity of a key level: its kind and price.
 func LevelID(level techniquezone.Level) string {
 	return fmt.Sprintf("level:%s:%.8f", level.Kind, level.Price)
-}
-
-// OriginTime is the open time of the zone's origin bar, or fallback when the
-// zone has no origin inside the frame's window.
-func (d *LegacyDetector) OriginTime(zone techniquezone.Zone, fallback int64) int64 {
-	if zone.OriginIndex >= 0 && zone.OriginIndex < len(d.Frame.Bars) {
-		return d.Frame.Bars[zone.OriginIndex].Time
-	}
-	return fallback
 }
 
 // WithDirection returns a copy of the detector evaluated for another direction.

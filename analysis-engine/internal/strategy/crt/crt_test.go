@@ -93,12 +93,13 @@ func TestCandidateCarriesTheTechnicalContractAndPassesValidation(t *testing.T) {
 	if !codes["h1_impulse_range"] || !codes["m5_range_sweep_reclaim"] || !codes["m5_crt_structure_shift"] {
 		t.Fatalf("evidence = %v", codes)
 	}
-	// Confluence: HTF aligned (4) + wick (3) + structure (3) + displacement (3).
-	if c.DetectorConfluence == nil || c.DetectorConfluence.SelectedStars != 3 || c.Quality.Overall != 1 {
+	// Confluence: HTF aligned (4) + wick (3) + structure (3); the shift's displacement is part of the
+	// same candle as the structure fact and earns no credit of its own.
+	if c.DetectorConfluence == nil || c.DetectorConfluence.SelectedStars != 2 || c.Quality.Overall < 2.0/3-1e-9 || c.Quality.Overall > 2.0/3+1e-9 {
 		t.Fatalf("confluence = %+v quality = %+v", c.DetectorConfluence, c.Quality)
 	}
 	f := c.DetectorConfluence.Factors
-	if !f.HTFAligned || !f.WickRejection || !f.StructuralAgreement || !f.DisplacementGrade || f.CHoCH || f.FibTouch {
+	if !f.HTFAligned || !f.WickRejection || !f.StructuralAgreement || f.DisplacementGrade || f.CHoCH || f.FibTouch {
 		t.Fatalf("factors = %+v", f)
 	}
 	for _, key := range []string{"h1_range_atr", "sweep_depth_atr", "reclaim_depth_atr", "mss_displacement_atr", "mss_body_ratio", "mss_close_strength", "technical_rr", "technical_risk_pips"} {
@@ -110,19 +111,16 @@ func TestCandidateCarriesTheTechnicalContractAndPassesValidation(t *testing.T) {
 
 func TestMeasuredFactorsDecideTheStars(t *testing.T) {
 	m5, h1, _ := bullishCRT()
-	// Without HTF alignment: wick 3 + structure 3 + displacement 3 = 9 -> 2 stars.
-	two := newStrategy(t, nil).Evaluate(marketContext(h1, m5, "down"))
-	if len(two) != 1 || two[0].DetectorConfluence.SelectedStars != 2 || two[0].DetectorConfluence.Factors.HTFAligned {
-		t.Fatalf("unaligned: %+v", two)
-	}
-	if want := 2.0 / 3.0; two[0].Quality.Overall < want-1e-9 || two[0].Quality.Overall > want+1e-9 {
-		t.Fatalf("overall = %v, want 2/3", two[0].Quality.Overall)
-	}
-	// A confluence floor of 3 refuses the unaligned setup, with its reason.
-	strict := newStrategy(t, map[string]any{"confluence_floor": 3.0}).(*Strategy)
-	analysis, candidates := strict.Analyze(marketContext(h1, m5, "down"))
+	// Against the higher-timeframe bias the setup has wick 3 + structure 3 = 6, one star: below the floor of two.
+	strategy := newStrategy(t, nil).(*Strategy)
+	analysis, candidates := strategy.Analyze(marketContext(h1, m5, "down"))
 	if len(candidates) != 0 || len(analysis.Setups) != 0 || !hasRejection(analysis, ReasonConfluenceBelowFloor) {
-		t.Fatalf("floor 3: candidates %d analysis %+v", len(candidates), analysis)
+		t.Fatalf("unaligned: candidates %d analysis %+v", len(candidates), analysis)
+	}
+	// With the bias it agrees with, HTF 4 + wick 3 + structure 3 = 10 is two stars, never three: the shift is one fact.
+	aligned := newStrategy(t, nil).Evaluate(marketContext(h1, m5, "up"))
+	if len(aligned) != 1 || aligned[0].DetectorConfluence.SelectedStars != 2 {
+		t.Fatalf("aligned: %+v", aligned)
 	}
 }
 

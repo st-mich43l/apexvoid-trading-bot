@@ -162,15 +162,16 @@ func techniqueEvidence(dec *TechniqueDecision, spec TechniqueSpec) []string {
 }
 
 // ReactionFactors mirrors _reaction_factors: the evidence a confirmation
-// actually showed, mapped onto the common confluence rubric. The session
-// context is always on, as the frozen scanner never narrowed it.
-func ReactionFactors(confirmationType string, htfAligned bool, touches int) confluence.Factors {
+// actually showed, mapped onto the common confluence rubric. sessionSweep is the
+// measured session context (LegacyDetector.SessionSweepContext): the frozen scanner
+// set it on every decision.
+func ReactionFactors(confirmationType string, htfAligned bool, touches int, sessionSweep bool) confluence.Factors {
 	return confluence.Factors{
 		HTFAligned:          htfAligned,
 		Touches:             touches,
 		WickRejection:       confirmationType == reaction.TypeWickRejection,
 		DisplacementGrade:   confirmationType == reaction.TypeEngulfing,
 		StructuralAgreement: confirmationType == reaction.TypeSweepReclaim || confirmationType == reaction.TypeStrongReclaim,
-		SessionContext:      true,
+		SessionContext:      sessionSweep,
 	}
 }

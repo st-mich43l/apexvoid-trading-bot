@@ -496,12 +496,12 @@ async def test_a_contained_xau_strategy_is_recorded_but_never_becomes_a_match(h,
   from tests.support.canonical_fixtures import install_runtime_overrides
 
   install_runtime_overrides(monkeypatch, {
-    "instruments.XAU.overrides.execution.go_opportunity.observe_only_strategies": ["liquidity_sweep"],
+    "instruments.XAU.overrides.execution.go_opportunity.observe_only_strategies": ["impulse_pullback"],
   })
   await h.activate()
   raw = golden(int(h.clock.now))
-  raw["payload"]["strategy"] = "liquidity_sweep"
-  raw["payload"]["evidence"] = [{"code": "m5_liquidity_pool_swept"}]
+  raw["payload"]["strategy"] = "impulse_pullback"
+  raw["payload"]["evidence"] = [{"code": "m5_qualified_impulse"}]
   ev = parse_analysis_event(OpportunityTopic, json.dumps(raw))
   assert await h.deliver(ev) == "not_adapted"
   assert await redis_state.get_client().get(strategy_matches_key("XAU")) is None

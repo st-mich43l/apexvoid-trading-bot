@@ -420,3 +420,143 @@ Classification: **proven**: the signals do not beat random entries in developmen
 Production (`trade_stream = 'algo_auto'`, 503 trades with a known stop, Range Sweep excluded, a full stop counted as -1R): all -0.017R (+-0.109), FX +0.043R (n=307, +-0.131), XAU -0.111R (n=196, +-0.189); FX development +0.214R
 (n=92, +-0.240) then OOS -0.030R (n=215, +-0.155). By strategy and FX pair every cell has n < 30; EURUSD Supply/Demand (n=13: 1 win, mean -0.886R, interval -1.12 to -0.66) is the only cell whose interval excludes zero and
 is too small to act on. A high `quality.overall` has still not been shown to mean a profitable trade.
+
+## 12. Q2 update (2026-10-20): a structure cannot confirm itself
+
+Tool: `algo-bot/tools/q2_before_after.py` over two replays of `analysis-engine/test/aequality` (master `60115600` vs this change; same 17 captures,
+14,970 vs 13,892 unique opportunities). Hypothetical outcomes only (closed candles, constant spreads, the real 1R/2R ladder, 24 h), never broker P&L.
+
+### 12.1 What was inspected
+
+The whole path from the closed bar to the published candidate: the zone chain (`techniquezone`), the reaction routine (`reaction`), the shared qualification
+(`strategyutil/legacy_detect.go`: `Reaction`, `Finish`), the technique publishers (`technique_decision.go`, `technique_candidate.go`), the confluence scorer (`confluence/score.go`),
+Flip Zone, Key Level, Fade Scalp, Range Edge, iFVG, CRT, Session Level, Trendline and Confluence Zone v3 (`structuralconfluence`), and the opposing-zone/target geometry (F-7, unchanged).
+
+| Strategy | Result |
+|---|---|
+| Fair Value Gap (`fvg`) | **corrected**: the gap's own impulse candle confirmed it (480 of 695 confirmed opportunities) |
+| Supply, Demand | **corrected**: the displacement leg's own bars confirmed the zone (222 of 1,742, 252 of 1,894) |
+| Order Block | **corrected**: bars up to the qualifying break of structure confirmed it (20 of 549) |
+| Flip Zone | **corrected**: the break bar that made the flip confirmed it (194 of 222) |
+| iFVG, CRT, Session Level, Fade Scalp, Trendline, Range Edge | checked: every replayed touch and confirmation is after the structure's formation (iFVG v3 had already fixed this for itself, `test/ifvgreplay` reproduces the frozen v2 defect) |
+| Confluence Zone v3 | unchanged: the entry is the true intersection of facts (`structuralconfluence.Find` cuts elementary segments and keeps those covered by >= `minimum_facts` *independent* groups, every fact timestamped by availability). The union geometry (`BuildConfluenceBands`) is the frozen oracle's and feeds no production strategy |
+| Key Level, Break Retest, Liquidity Sweep, Impulse Pullback | unchanged (levels and pools have no formation bar; see 12.4) |
+
+### 12.2 The defect
+
+`reaction.Evaluate` has a `MinIndex` ("a structure cannot react before it exists") that `strategyutil.ConfirmReaction` passes for the strategies that use it, but the technique
+publishers and Flip Zone called the detector without it. They searched the last three bars for a touch and a confirmation, so the bars a structure was *built on* could be its reaction:
+
+* a fair value gap is anchored on its third candle; the middle (impulse) candle spans the gap by construction, and as a bearish gap's impulse it closes back below the gap's top with a wick above it, which is
+  the `strong_reclaim` pattern. 431 of the 480 removed FVG opportunities have the touch and the confirmation on the bar before the gap's anchor;
+* a supply/demand zone is complete when its displacement leg ends (`Zone.BreakIndex`), an order block at its break of structure; a touch on the leg is the leg;
+* a flip zone is made by the structure break (its `Origin` and `BreakIndex` are the break bar); the break candle closes through the band it creates and "reclaims" it. Of the 91 oracle flip decisions 80 were the break bar itself.
+
+`MarkMitigation` already counts a zone's touches only from the bar after `max(origin, break)`; the reaction check now uses the same boundary (`Instance.TouchableFrom`, `Zone` via `LegacyDetector.ZoneReaction`).
+Higher-timeframe supply/demand instances are bound at the close of the higher bar that completed them. CRT instances are not narrowed (H1-anchored; its sweep/reclaim is checked separately).
+
+**Also corrected, with no change of decisions.** The factors published for the four technique strategies asserted a wick rejection and a structural agreement on every decision and a displacement whenever the zone score was 8 (a zone-quality threshold named as a candle fact). They now follow the confirmation:
+
+| factor published true | before (supply / demand / FVG / OB) | after |
+|---|---|---|
+| wick rejection | 100% / 100% / 100% / 100% | 26% / 26% / 48% / 14% |
+| structural agreement | 100% / 100% / 100% / 100% | 54% / 57% / 24% / 76% |
+| displacement | 98% / 98% / 99% / 100% | 20% / 17% / 28% / 10% |
+
+Stars and `quality.overall` of every kept opportunity are identical (a scored zone is rated by its zone score; the factors only matter when the zone score is 0, where the constants lifted the decision to the star floor by themselves).
+
+### 12.3 Before and after
+
+| | before | after | removed | later reaction appears |
+|---|---|---|---|---|
+| fvg | 1,688 | 1,209 | 480 | 1 |
+| demand | 2,627 | 2,430 | 252 | 55 |
+| supply | 2,454 | 2,266 | 222 | 34 |
+| order_block | 737 | 717 | 20 | 0 |
+| flip_zone | 222 | 28 | 194 | 0 |
+| all other strategies | 7,242 | 7,242 | 0 | 0 |
+
+Confirmed-opportunity stars (2 / 3): FVG 626 / 69 -> 210 / 6, Demand 1,706 / 188 -> 1,613 / 84, Supply 1,574 / 168 -> 1,495 / 59, Order Block 532 / 17 -> 520 / 9, Flip Zone 61 / 161 -> 10 / 18. Flip Zone's stars were highest where the formation bar was the reaction.
+
+Were the removed opportunities good? Against matched random entries (same instrument, direction, technical risk, cost, ladder and horizon; 40 draws; cluster bootstrap by symbol-day):
+
+| set | n | mean R | random | difference [95%] |
+|---|---|---|---|---|
+| removed (all) | 828 | -0.065 | -0.045 | -0.021 [-0.107, +0.068] |
+| removed, development / out of sample | 457 / 371 | -0.095 / -0.030 | -0.052 / -0.035 | -0.042 [-0.153, +0.074] / +0.006 [-0.125, +0.151] |
+| kept (all) | 5,181 | -0.098 | -0.055 | -0.044 [-0.092, +0.002] |
+| kept, development / out of sample | 2,997 / 2,184 | -0.057 / -0.155 | -0.053 / -0.057 | -0.004 [-0.056, +0.042] / **-0.098 [-0.160, -0.016]** |
+
+Per removed strategy the difference to random is within noise (FVG -0.05, Demand +0.04, Supply -0.05, Order Block +0.10 on n=16, Flip Zone +0.02). The removal is a **validity** correction: it does not improve or worsen
+the hypothetical expectancy in any way these samples can resolve, and nothing here says the remaining opportunities have an edge (11.3 still applies). Replay cases: an invalid FVG
+(`XAU Sep` SELL 1789410600, touch and confirmation 1789410000, the bar before the gap's anchor 1789410300: published, then a +2.2R target hit that the structure had not earned), the same outcome class
+for a valid one (`GBPUSD early` SELL 1790639700, touch 1790638800 four bars after the anchor 1790634900: +1.5R) and a valid loss (`XAU Sep` SELL 1789640700, anchor 1789636800, touch 1789639800: -1R).
+
+### 12.4 Not changed, and what cannot be proven
+
+* `quality.overall` stays stars / 3 for the technique strategies and its `reaction` component stays 1: a candidate exists only with a confirmed reaction, so the component is informationless but not false; no consumer ranks by it (`quality_ranking: false`).
+* The reaction routine does not require the confirming bar itself to sit at the band (a touch within three bars, then any rejection pattern on a later bar). That is the frozen contract; whether a stricter rule would help cannot be settled from these samples and was not changed.
+* `SessionContext` constant, Key Level GBPJPY disabled by an unsatisfiable `require_explicit_role` and the star cap for touched zones are as reported in section 11.
+* Production closed trades (`trade_stream = 'algo_auto'`) carry no reaction timestamps, so the trades that came from a formation-bar reaction cannot be separated; FX auto-trades come from Key Level, Range Edge, Supply/Demand (44), Fade and Confluence Zone only, so FVG and Flip Zone have no production sample at all.
+* No claim of better profitability is made: the corrected rules remove opportunities that were not a reaction to the structure they claimed, nothing more.
+
+## 13. Q2 rework (2026-10-20): strategy consolidation and mathematical validation
+
+Baseline = this PR's earlier state (section 12 applied; 13,892 opportunities); revised = the state after the rework (11,835). The same 17 captures through `test/aequality` (closed candles, constant spreads, the real 1R/2R ladder, 24 h;
+hypothetical, never broker P&L); development before 2026-10-07 UTC, out of sample after; matched random entries as in 11.3. Nothing below was tuned on these captures: every rule is derived from geometry (ATR-normalised distances, causal order,
+one fact one credit), and where a threshold appears it is a configuration value that already existed or a ratio of the trade's own risk.
+
+### 13.1 What was removed
+
+`range_edge`, `session_level` and the standalone `liquidity_sweep` (508, 83 and 25 replayed opportunities) have no code path left: no strategy package, factory, catalog entry, `analysis.yml`/`auto-algo.yml` key, Algo Bot adapter, catalog profile,
+retest-only execution branch, stop-envelope or MAD mapping, fixture or replay package (`test/rereplay`, `test/slreplay`); a configuration naming one fails startup (`TestAConfigurationThatStillNamesAPurgedStrategyFailsClosed`). The Python names stay as retired,
+profile-less aliases (`tests/test_purged_strategies.py`). The reusable evidence they computed remains once: [shared-structure-evidence.md](shared-structure-evidence.md). The matched-random record of the three purged strategies is in 11.3 (Range Edge +0.12 development, -0.16 out of sample).
+
+### 13.2 What changed, strategy by strategy
+
+| Strategy | Corrected | Replay opportunities | Stars (2 / 3) |
+|---|---|---|---|
+| iFVG | session context measured (finalized-level sweep during the move), not asserted; formation-candle proof | 127 -> 104 | 68 / 59 -> 74 / 30 |
+| CRT | nearest standing swing as target; shift displacement no longer a second credit; constant `reaction` removed | 3 -> 1 | 2 / 1 -> 1 / 0 |
+| Fade Scalp | v3: failed continuation, stop beyond the sweep extreme, nearest structural objective with `minimum_reward_risk`, measured factors | 175 -> 29 | 145 / 30 -> 27 / 2 |
+| Trendline | reaction only after the candle that confirmed the line; measured session context | 16 -> 16 | 0 / 16 -> 7 / 9 |
+| Key Level (shares the factor) | measured session context | 5,444 -> 4,174 | 2,890 / 2,554 -> 3,122 / 1,052 |
+| Flip Zone (shares the factor) | measured session context | 28 -> 28 | unchanged |
+| every other strategy | unchanged | unchanged | unchanged |
+
+Total 13,892 -> 11,835 (-616 from the purged strategies, -1,441 from the rules above). Stars of an unchanged-geometry opportunity move only through the factor it relied on; geometry (entry, invalidation) is unchanged except Fade Scalp's stop (beyond the sweep wick) and CRT's nearer target.
+
+Fade Scalp, gate by gate (bar evaluations of an equal pool with a confirmed reaction, 1,636): 576 continued past the sweep's extreme (35%), 833 fell below the confluence floor once the rejection factor was measured and the grade was no longer read as a displacement, 160 had a nearest
+objective offering less than 1R, 67 passed. No evaluation was refused for lack of a structural objective.
+
+### 13.3 Against matched random entries (thinned episodes, filled)
+
+| Strategy | Window | Baseline n, difference [95%] | Revised n, difference [95%] |
+|---|---|---|---|
+| Key Level | development | 982, -0.021 [-0.074, +0.033] | 828, -0.056 [-0.131, +0.022] |
+| Key Level | out of sample | 680, -0.071 [-0.178, +0.016] | 548, -0.045 [-0.156, +0.042] |
+| iFVG | development | 58, +0.202 [-0.105, +0.572] | 50, +0.111 [-0.222, +0.476] |
+| iFVG | out of sample | 40, +0.326 [-0.068, +0.722] | 35, **+0.401 [+0.106, +0.781]** |
+| Fade Scalp | development | 64, -0.110 [-0.331, +0.124] | 12, **-0.510 [-1.007, -0.049]** |
+| Fade Scalp | out of sample | 45, **-0.307 [-0.530, -0.053]** | 8, **-0.561 [-0.875, -0.115]** |
+| Trendline | development / out of sample | 6, +0.439 / 1, +1.872 | unchanged |
+| CRT | any | no filled thinned sample | no filled thinned sample |
+
+Reading: none of the corrections shows a measurable gain, and none is claimed. Key Level's removed 1,527 opportunities were not worse than the ones kept (+0.004R against -0.102R), i.e. the constant session point was inflating stars without selecting better
+trades, and removing it neither helps nor costs anything we can resolve. iFVG stays the one strategy above random in both windows (out of sample's interval excludes zero) on 35-50 observations: plausible, unproven. Fade Scalp was below random before and is below random on the 20 that remain:
+the rules removed what they could prove invalid (continuation, invented targets, an asserted rejection), not what loses; with 20 observations it is "insufficient", and whether it deserves to stay enabled is the owner's decision (see the retirement review). CRT and Trendline have too few observations to say anything.
+
+### 13.4 Replayed cases
+
+Valid: iFVG `TestMeasuredFactorsDecideTheStarsAndTheFloor` (HTF-aligned BUY, two stars) and `TestSessionContextIsAMeasuredSweepOfFinalizedLiquidity` (a finalized Asia low swept and reclaimed lifts an unaligned setup to the floor); CRT `bullishCRT`
+(target 4118 with no standing swing in between) and the target tests (a swing at 4109 stands between entry and edge); Fade `TestFadeAimsAtTheNearestStructuralObjectiveAndNeverInventsOne`.
+Invalid: a formation candle inverting its own gap, a developing or not-yet-final session level, a level the market accepted beyond (consumed), a sweep not yet reclaimed at the deciding candle (no look-ahead), the same event counted twice,
+a swing the market already took as an obstacle, an unconfirmed swing, a sweep that kept running, an objective that leaves less than 1R, a fade with no objective, a trendline reaction on the candle that confirmed its anchor, a configuration naming a purged strategy.
+
+### 13.5 Not proven, and not changed
+
+* Session boundaries follow daylight saving in the code and are proven on synthetic clock changes (`test/session/calendar_test.go`); the captures are all northern summer, where the calendar equals the old fixed hours, so the replay cannot show a difference.
+  The MAD Asia phase window and the previous-WEEK boundary (Monday 00:00 UTC) still use fixed UTC; a finalized session whose candles are only partly present (data starting mid-session) is not rejected for incompleteness.
+* Slopes of a trendline are per candle position, which is exact on a continuous feed and treats a feed hole as no time.
+* A real production comparison is impossible for the new logic: closed trades carry no reaction timestamps and none exist for the corrected Fade Scalp or the measured session context.
+* Key Level now needs a real eighth point of evidence for two stars; if the owner wants the old volume, that is a floor decision (`confluence_floor`), not a restoration of the constant.

@@ -16,11 +16,8 @@ CATALOG_STRATEGY_IDS = frozenset({
   "ifvg",
   "crt",
   "flip_zone",
-  "session_level",
   "trendline",
-  "range_edge",
   "break_retest",
   "fade_scalp",
-  "liquidity_sweep",
   "impulse_pullback",
 })

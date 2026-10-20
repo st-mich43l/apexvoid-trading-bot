@@ -18,18 +18,15 @@ func TestStrategyConfigsFromConfigEnablesTheCompleteCatalogForShadow(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(configs) != 16 {
-		t.Fatalf("got %d strategy configs, want 16 approved V2 strategies", len(configs))
+	if len(configs) != 13 {
+		t.Fatalf("got %d strategy configs, want 13 approved strategies", len(configs))
 	}
 	// Key Level was rebuilt as the
-	// profitable-week Python detector and Liquidity Sweep on the frozen detector
-	// contract's evidence (Phase 1), and CRT was rebuilt as a causal H1 sweep, M5
+	// profitable-week Python detector and CRT was rebuilt as a causal H1 sweep, M5
 	// reclaim and structure shift (v3); every other strategy is still v2.
-	rebuilt := map[string]bool{"crt": true, "key_level": true, "session_level": true, "flip_zone": true, "trendline": true, "impulse_pullback": true, "liquidity_sweep": true, "break_retest": true, "ifvg": true, "confluence_zone": true, "range_edge": true}
-	// Session Level was rebuilt a second time (v4: complete periods, two bounded
-	// reaction models, honest geometry).
+	rebuilt := map[string]bool{"crt": true, "key_level": true, "flip_zone": true, "trendline": true, "impulse_pullback": true, "break_retest": true, "ifvg": true, "confluence_zone": true, "fade_scalp": true}
 	// Trendline v4: the target is the nearest opposing liquidity, never a projection.
-	v4 := map[string]bool{"session_level": true, "trendline": true}
+	v4 := map[string]bool{"trendline": true}
 	// Supply and Demand v3: a zone touched more than maximum_zone_touches times no longer publishes.
 	v3 := map[string]bool{"supply": true, "demand": true}
 	for _, cfg := range configs {

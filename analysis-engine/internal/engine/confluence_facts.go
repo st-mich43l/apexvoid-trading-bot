@@ -19,7 +19,13 @@ import (
 )
 
 // confluenceContext translates the canonical Go state already attached to a
-// candidate into the versioned technical score. It deliberately reads no raw
+// candidate into the versioned technical score, for a candidate whose strategy did
+// not score it itself (a resting zone, an M1 scalp). A factor is set only from a
+// structured fact: the confirmed reaction's pattern, the canonical structure breaks,
+// the fibonacci ladder, the zone's own touches. It never reads the wording of an
+// evidence code (a code containing "rejection" is not a wick rejection), and the
+// session context is not asserted: the three sessions cover every hour, so
+// "a session is active" is true of every candle and says nothing. It deliberately reads no raw
 // OHLC outside the worker's closed-bar state and performs no eligibility or
 // execution action.
 func (w *SymbolWorker) confluenceContext(event marketdata.BarEvent, candidate opportunity.Candidate, technical *opportunity.TechnicalContext) *opportunity.ConfluenceContext {
@@ -33,43 +39,10 @@ func (w *SymbolWorker) confluenceContext(event marketdata.BarEvent, candidate op
 
 	quality, touches, gradeAGrab := w.canonicalZoneQuality(candidate, technical, tf, event.Timeframe)
 	fibLevel := fibTouch(tf.Fib, candidate, technical.ATR, w.settings.Fib.EpsilonATR)
-	factors := confluencescore.Factors{
-		HTFAligned:     higherTimeframeAligned(technical.HigherTimeframes, candidate.Direction),
-		Touches:        touches,
-		SessionContext: tf.Session.Active != "",
-		FibTouch:       fibLevel != nil,
-	}
-	if candidate.Reaction != nil {
-		switch candidate.Reaction.Pattern {
-		case "wick_rejection":
-			factors.WickRejection = true
-		case "engulfing":
-			factors.DisplacementGrade = true
-		case "strong_reclaim", "sweep_reclaim":
-			factors.StructuralAgreement = true
-		case "rejection_choch":
-			factors.StructuralAgreement = true
-			factors.CHoCH = true
-		}
-	}
-	// Non-zone strategies carry their own machine-readable evidence. These
-	// keyword mappings are only additive factor facts; strategy quality and
-	// the selected Go strategy remain authoritative for the candidate itself.
-	for _, evidence := range candidate.Evidence {
-		code := strings.ToLower(evidence.Code)
-		if strings.Contains(code, "wick") || strings.Contains(code, "rejection") {
-			factors.WickRejection = true
-		}
-		if strings.Contains(code, "displacement") || strings.Contains(code, "engulf") {
-			factors.DisplacementGrade = true
-		}
-		if strings.Contains(code, "reclaim") || strings.Contains(code, "structure") || strings.Contains(code, "break") {
-			factors.StructuralAgreement = true
-		}
-	}
-	if recentCHoCH(tf.Structure.Breaks, candidate.Direction, candidate.CreatedAt) {
-		factors.CHoCH = true
-	}
+	factors := factsFromReaction(
+		higherTimeframeAligned(technical.HigherTimeframes, candidate.Direction), touches, fibLevel != nil,
+		candidate.Reaction, recentCHoCH(tf.Structure.Breaks, candidate.Direction, candidate.CreatedAt),
+	)
 
 	score := confluencescore.Evaluate(quality, factors, w.settings.Confluence, madBonus(technical))
 	return &opportunity.ConfluenceContext{
@@ -85,6 +58,27 @@ func (w *SymbolWorker) confluenceContext(event marketdata.BarEvent, candidate op
 		},
 		FibLevel: fibLevel, GradeAGrab: gradeAGrab,
 	}
+}
+
+// factsFromReaction are the structured facts only: the confirmed reaction's own pattern and the
+// canonical structure. The session context is not asserted (see confluenceContext).
+func factsFromReaction(htfAligned bool, touches int, fibTouched bool, reaction *opportunity.ReactionConfirmation, choch bool) confluencescore.Factors {
+	factors := confluencescore.Factors{HTFAligned: htfAligned, Touches: touches, FibTouch: fibTouched, CHoCH: choch}
+	if reaction == nil {
+		return factors
+	}
+	switch reaction.Pattern {
+	case "wick_rejection":
+		factors.WickRejection = true
+	case "engulfing":
+		factors.DisplacementGrade = true
+	case "strong_reclaim", "sweep_reclaim":
+		factors.StructuralAgreement = true
+	case "rejection_choch":
+		factors.StructuralAgreement = true
+		factors.CHoCH = true
+	}
+	return factors
 }
 
 // madBonus returns the already-computed engine affinity. The scorer remains

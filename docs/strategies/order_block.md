@@ -8,6 +8,8 @@
 `analysis-engine/internal/strategy/orderblock`. Algorithm versions:
 `structure=v2`, `liquidity=v1`, `zone=v1`, `config=3`.
 
+**Reaction after formation (Q2).** An order block exists once the break of structure that qualifies it has closed (`Zone.BreakIndex`); a touch or confirmation on bars up to that break is its formation, not a reaction to it (20 of 549 replayed confirmed Order Block opportunities).
+
 ## Purpose / thesis
 
 A still-valid, currently-relevant Order Block zone is a standing reaction

@@ -1,7 +1,7 @@
-"""XAU enablement certification for ``ifvg`` (v3) and ``session_level`` (v4).
+"""XAU enablement certification for ``ifvg`` (v3).
 
 ``config/instruments.yml`` now carries the enabled list (XAU observes only
-``liquidity_sweep`` and ``impulse_pullback``). The tests pin that list, and use a
+``impulse_pullback``). The tests pin that list, and use a
 runtime override to exercise the rollback (restoring the two names) on real
 PostgreSQL and a real Redis.
 
@@ -38,10 +38,10 @@ from tests.test_go_full_chain import (  # noqa: F401 - fixtures and helpers
 
 pytestmark = pytest.mark.real_redis
 
-REBUILT = ("ifvg", "session_level")
+REBUILT = ("ifvg",)
 KEY = "instruments.XAU.overrides.execution.go_opportunity.observe_only_strategies"
-PROPOSED = ["liquidity_sweep", "impulse_pullback"]
-CURRENT = ["ifvg", "liquidity_sweep", "session_level", "impulse_pullback"]
+PROPOSED = ["impulse_pullback"]
+CURRENT = ["ifvg", "impulse_pullback"]
 
 
 def simulate(monkeypatch, names):
@@ -52,14 +52,14 @@ def simulate(monkeypatch, names):
 def test_the_config_contains_nothing_and_the_mechanism_still_contains_by_override(monkeypatch):
   assert containment.observe_only_strategies("XAU") == set()                # owner rule: no observe-only
   simulate(monkeypatch, PROPOSED)
-  assert containment.observe_only_strategies("XAU") == {"liquidity_sweep", "impulse_pullback"}
+  assert containment.observe_only_strategies("XAU") == {"impulse_pullback"}
   assert containment.observe_only_strategies("XAUUSD") == containment.observe_only_strategies("XAU")
   for symbol in ("EURUSD", "GBPUSD", "GBPJPY", "USDJPY"):
     assert containment.observe_only_strategies(symbol) == set()
-  for scope in ("ifvg", "session_level"):
+  for scope in ("ifvg",):
     assert containment.containment_reason("XAU", scope, None) is None
     assert containment.containment_reason("XAUUSD", scope, None) is None
-  for scope in ("liquidity_sweep", "impulse_pullback"):
+  for scope in ("impulse_pullback",):
     assert containment.containment_reason("XAU", scope, None) == "execution_contained"
 
 
@@ -120,7 +120,7 @@ async def test_evidence_without_the_strategy_prefix_is_not_accepted(h, prod, mon
   assert await plans(prod) == []
 
 
-@pytest.mark.parametrize("scope", ["liquidity_sweep", "impulse_pullback"])
+@pytest.mark.parametrize("scope", ["impulse_pullback"])
 @pytest.mark.asyncio
 async def test_the_other_contained_strategies_stay_contained(h, prod, monkeypatch, scope):
   simulate(monkeypatch, PROPOSED)

@@ -26,9 +26,9 @@ ENVELOPE = {"structural": (50, 70), "scalp": (15, 45), "m1": (12, 45)}
 STRATEGIES = {
   "structural": [
     "Key Level", "Supply Demand", "Order Block", "FVG", "iFVG", "CRT", "Confluence Zone",
-    "Flip Zone", "Session Level", "Trendline", "Break & Retest", "Liquidity Sweep",
+    "Flip Zone", "Trendline", "Break & Retest",
   ],
-  "scalp": ["Range Edge Scalp", "Fade Scalp"],
+  "scalp": ["Fade Scalp"],
   "m1": ["Impulse Pullback Scalp"],
 }
 CASES = [(kind, name) for kind, names in STRATEGIES.items() for name in names]

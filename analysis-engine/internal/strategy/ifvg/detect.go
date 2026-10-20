@@ -5,6 +5,7 @@ import (
 	"math"
 	"sort"
 
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/indicator"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 )
 
@@ -148,7 +149,7 @@ func toOriginal(ep Episode, side market.Direction) Episode {
 type detector struct {
 	cfg  Config
 	bars []market.Candle
-	atr  *atrWindow
+	atr  *indicator.WilderWindow
 	ph   []pivot // pivot highs: the opposing structure a buy aims at
 	e    int
 	pip  float64
@@ -207,7 +208,7 @@ func (d *detector) gapAt(c int) (gap, bool) {
 	if !(a.Low > third.High) {
 		return gap{}, false
 	}
-	atr, ok := d.atr.at(c)
+	atr, ok := d.atr.At(c)
 	if !ok {
 		return gap{}, false
 	}
@@ -255,11 +256,11 @@ func (d *detector) inversion(g gap, j int) []Episode {
 		ep.State, ep.Reason, ep.EndedAt = state, reason, bars[i].Time
 		return []Episode{ep}
 	}
-	atrJ, okJ := d.atr.at(j)
+	atrJ, okJ := d.atr.At(j)
 	// The inversion buffer is built from what was knowable BEFORE the inverting
 	// candle: ATR as of the candle before it, so the candle's own range can never
 	// decide whether its close was far enough.
-	atrPre, okPre := d.atr.at(j - 1)
+	atrPre, okPre := d.atr.At(j - 1)
 	if !okJ || !okPre {
 		return nil
 	}
@@ -360,7 +361,7 @@ func (d *detector) finish(ep Episode, g gap, inv Inversion, j, touch, confirm, t
 		ep.State, ep.Reason = StateRejectionConfirmed, reason
 		return ep
 	}
-	atrC, ok := d.atr.at(confirm)
+	atrC, ok := d.atr.At(confirm)
 	if !ok {
 		return reject(ReasonATRUnavailable)
 	}

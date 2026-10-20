@@ -20,7 +20,7 @@ def test_funnel_bucket_splits_scalp_and_reaction():
   assert funnel_bucket("Trendline") == BUCKET_REACTION
   assert funnel_bucket("Impulse Pullback Scalp") == BUCKET_SCALP
   assert funnel_bucket("Impulse Pullback Scalp") == BUCKET_SCALP
-  assert funnel_bucket("Range Edge Scalp") == BUCKET_SCALP
+  assert funnel_bucket("Fade Scalp") == BUCKET_SCALP
 
 
 def test_normalize_setup_type_aliases():

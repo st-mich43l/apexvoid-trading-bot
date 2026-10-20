@@ -17,7 +17,6 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/replaycapture"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
-	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/techniquezone"
 	redistransport "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/transport/redis"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/zone"
 )
@@ -107,19 +106,6 @@ func TestDumpDecisionInputs(t *testing.T) {
 					if c.Technical != nil {
 						rec["atr"], rec["reference_price"] = c.Technical.ATR, c.Technical.ReferencePrice
 						rec["confirmed_reaction"] = c.Technical.Confirmation != nil
-					}
-					if c.Strategy == "range_edge" {
-						if frame := m5.Legacy; frame != nil && frame.ScalpRange != nil {
-							sr := frame.ScalpRange
-							edge := func(b techniquezone.ScalpBarrier) m {
-								first := int64(0)
-								if b.FirstTouchIndex >= 0 && b.FirstTouchIndex < len(frame.Bars) {
-									first = frame.Bars[b.FirstTouchIndex].Time
-								}
-								return m{"level": b.Level, "low": b.Low, "high": b.High, "touches": b.Touches, "first_touch_time": first}
-							}
-							rec["range"] = m{"lower": edge(sr.Lower), "upper": edge(sr.Upper), "equilibrium": sr.Equilibrium, "state": sr.State}
-						}
 					}
 					if c.StopEnvelope != nil {
 						rec["stop_envelope"] = c.StopEnvelope

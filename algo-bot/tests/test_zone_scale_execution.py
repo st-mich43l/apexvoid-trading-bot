@@ -71,7 +71,6 @@ def _policy_match(**overrides):
   "strategy",
   [
     "Key Level",
-    "Session Level",
     "Trendline",
   ],
 )
@@ -89,47 +88,6 @@ def test_key_session_trendline_use_market_with_limit_scale(strategy):
   assert evaluation.allowed
   assert evaluation.measured["planned_execution_route"] == "market_with_limit_scale"
   assert evaluation.measured["planned_leg_volume_ratios"] == pytest.approx([0.80, 0.20])
-
-
-def _range_edge_xau(quote: float):
-  return evaluate_execution_policy(
-    _policy_match(
-      strategy="Range Edge Scalp",
-      symbol="XAU",
-      direction="BUY",
-      entry_low=4150.57,
-      entry_high=4151.91,
-      current_price=quote,
-      atr=1.0,
-    ),
-    spot_price=quote,
-    executable_quote=quote,
-    regime="range",
-    pip_size=0.1,
-    cfg=_cfg(),
-  )
-
-
-def test_range_edge_xau_scalp_emits_manual_shallow_deep_ladder():
-  # Range Edge is a range scalp, but unlike the M1 chase scalps it owns a
-  # confirmed XAU zone. With the quote inside the card zone it publishes the
-  # same market-L1/deeper-limit-L2 contract as Manual Algo; the old scalp
-  # short-circuit discarded both entry legs and emitted a single market plan.
-  evaluation = _range_edge_xau(4151.70)
-  assert evaluation.allowed
-  measured = evaluation.measured
-  assert measured["planned_execution_route"] == "market_with_limit_scale"
-  assert measured["planned_leg_entry_prices"] == pytest.approx([4151.70, 4151.14])
-  assert measured["planned_leg_volume_ratios"] == pytest.approx([0.80, 0.20])
-
-
-def test_range_edge_xau_scalp_never_chases_a_quote_outside_its_card_zone():
-  # Production 2026-10-08: a quote past the zone was booked as a market chase. Range Edge is a
-  # retest-only scalp (PR #755): outside the card zone it waits, with no ladder legs.
-  measured = _range_edge_xau(4152.21).measured
-  assert measured["planned_execution_route"] == "market"
-  assert measured["planned_leg_entry_prices"] == []
-  assert "retest-only" in measured["routing_reason"]
 
 
 @pytest.mark.parametrize(
@@ -156,7 +114,7 @@ def test_demand_supply_keep_zone_scale_limit_ladder(strategy):
 
 def test_all_reaction_families_use_the_zone_scale_ladder():
   # Backward-compat name: Demand/Supply still use zone_scale → zone_split;
-  # Key/Session/Trendline use market_with_limit_scale instead.
+  # Key/Trendline use market_with_limit_scale instead.
   for strategy in (
     "Demand Zone Reaction",
     "Supply Zone Reaction",
@@ -164,7 +122,6 @@ def test_all_reaction_families_use_the_zone_scale_ladder():
     test_demand_supply_keep_zone_scale_limit_ladder(strategy)
   for strategy in (
     "Key Level",
-    "Session Level",
     "Trendline",
   ):
     test_key_session_trendline_use_market_with_limit_scale(strategy)
@@ -432,7 +389,7 @@ def test_market_preference_still_cannot_use_zone_scale():
 def test_second_leg_is_never_marketable_when_price_is_inside_the_zone(
   side, quote, zone_low, zone_high,
 ):
-  """Owner-reported live 2026-09-21: XAU Session Level BUY, zone
+  """Owner-reported live 2026-09-21: XAU reaction BUY (then a Session Level), zone
   4344.11-4348.65, quote 4346.68. Leg 2 anchored off the zone's near edge
   (4348.65) landed at 4347.29 - ABOVE the quote, a marketable BUY limit that
   filled instantly at the same price as leg 1. Leg 2 must be strictly deeper
@@ -451,7 +408,7 @@ def test_second_leg_is_never_marketable_when_price_is_inside_the_zone(
     zone_fill_min_atr=0.5,
     reaction_scale_enabled=True,
     reaction_scale_step_atr=0.3,
-    strategy="Session Level",
+    strategy="Key Level",
   )
 
   first, second = plan.planned_leg_entry_prices
