@@ -8,6 +8,8 @@ A confirmed reaction on a zone already touched more than `maximum_zone_touches` 
 
 What this does not fix: Demand stays negative in the replay in every slice (fresh zones, either timeframe, either half); Supply is flat. A one-month, one-regime sample cannot say whether that is the detector or the month, so no further tuning was made. The technical-RR-below-1 geometry finding was left alone: technical RR does not separate outcomes in the replay (setups with RR below 1 averaged -0.07R, 2 or more -0.12R), so a filter on it would be a logic change without evidence.
 
+**Reaction after formation (Q2).** The zone exists once its displacement leg has ended (`Zone.BreakIndex`); a touch or confirmation on the leg's own bars is its formation, not a reaction to it (252 of 1,894 replayed confirmed Demand opportunities were of that kind; a later valid reaction replaced 55).
+
 ## Strategy ID / version
 
 `demand`, `v3`. Implemented in `analysis-engine/internal/strategy/demand`.

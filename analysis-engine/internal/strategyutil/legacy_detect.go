@@ -468,7 +468,26 @@ func (d *LegacyDetector) Reaction(low, high float64, grab *techniquezone.Grab) *
 // ReactionWithLookbacks is Reaction with separate touch and confirmation
 // windows; the CHoCH flag always uses the confirmation window.
 func (d *LegacyDetector) ReactionWithLookbacks(low, high float64, grab *techniquezone.Grab, touchLookback, confirmationLookback int) *LegacyConfirmation {
+	return d.reactionFrom(low, high, grab, touchLookback, confirmationLookback, 0)
+}
+
+// ReactionFrom is Reaction for a structure that did not exist before bar
+// minIndex: no earlier bar can be its touch or its confirmation.
+func (d *LegacyDetector) ReactionFrom(low, high float64, grab *techniquezone.Grab, minIndex int) *LegacyConfirmation {
+	lookback := maxInt(1, d.Settings.ReactionLookbackBars)
+	return d.reactionFrom(low, high, grab, lookback, lookback, minIndex)
+}
+
+// ZoneReaction is Reaction for a zone that exists only once its last formation
+// bar (the later of its origin and the structure break that made it) has
+// closed: that bar built the zone and is no reaction to it.
+func (d *LegacyDetector) ZoneReaction(zone techniquezone.Zone) *LegacyConfirmation {
+	return d.ReactionFrom(zone.Low(), zone.High(), d.ZoneGrab(zone), maxInt(zone.OriginIndex, zone.BreakIndex)+1)
+}
+
+func (d *LegacyDetector) reactionFrom(low, high float64, grab *techniquezone.Grab, touchLookback, confirmationLookback, minIndex int) *LegacyConfirmation {
 	params := reaction.Params{
+		MinIndex:  minIndex,
 		Direction: string(d.Direction), Low: low, High: high, TouchLookback: maxInt(1, touchLookback), ConfirmLookback: maxInt(1, confirmationLookback),
 		HasCHoCH: d.RecentCHoCH(confirmationLookback), ATR: d.ATR, EngulfingMinimumRangeATR: d.Settings.EngulfingMinimumRangeATR,
 	}

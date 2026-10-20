@@ -1326,12 +1326,12 @@
   }
  ],
  "other_strategies_candidates": {
-  "EURUSD": "4793:8f3c58f08ba4f914f6f1890eb275aa997e92c08683e3115dff5cf68268e68bce",
-  "GBPJPY": "4806:22a2fb8510b1a3f2392aa31ebf26094e380a619d68f14c4a42232c883390025f",
-  "GBPUSD": "6226:1a729fe1962fb4eac89272299724c8caf1232f224f5bec6aa3671639d7c56cc4",
-  "USDJPY": "6340:23a4420d9a0f8a039e3d0ca0020343e2e55c40e7d075432139c28e10c40eacfc",
-  "XAU Oct": "4736:4e1b0eeb321ed78019c946df2fa4b49d039bfc11792a3e9577beacfd46cbe60e",
-  "XAU Sep": "2561:2e2a5c63842c551502e125fe30c78530e15c019d135f8fcaa79e56c35ad9546e"
+  "EURUSD": "4629:c3227158d0bfabde53952503a97bbd6d4ec77b6f741a5570c2c465a6fb8c9807",
+  "GBPJPY": "4698:4b29a557a63bd17cdd8fd611d083503e75857b59980219a0918d7860ef818608",
+  "GBPUSD": "6081:b32a1c02b8b9da75a74e5b86ca773e06666ea2489583ef39c9ad71ca69104e44",
+  "USDJPY": "6186:2e737dd753eb0be1ddef0894cdc2b5f0efe5480b101fbc459553a95bcde0c61d",
+  "XAU Oct": "4578:719a70e29d02df7d5b2955ca42afedc333ea2b5916519688d16f792da144fce6",
+  "XAU Sep": "2457:e22f8eb12031839380eaafc85688b7fb0904d2006f3b0007bbf720f8a98c81d6"
  },
  "limits": [
   "Hypothetical, causal fills on closed M5 candles: no spread, slippage, commission, M1 trigger or broker behaviour; a stop and a target in one candle count as the stop.",

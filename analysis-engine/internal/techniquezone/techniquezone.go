@@ -1076,6 +1076,13 @@ type Instance struct {
 	Sources   []string
 	// OriginIndex is the bar the structure is anchored to (frame-relative).
 	OriginIndex int
+	// TouchableFrom is the first frame bar that can touch the structure or confirm
+	// a reaction off it: the bar after the one whose close completed it (the
+	// third candle of a fair value gap, the end of the displacement leg of a
+	// supply/demand or order block, the inverting close of an iFVG), the same
+	// boundary MarkMitigation counts touches from. A bar the structure was still
+	// being built on is its formation, not a reaction to it. 0 = unrestricted.
+	TouchableFrom int
 	// Measured facts (instance.measured).
 	Touches        int
 	Mitigated      bool
@@ -1242,6 +1249,7 @@ func instanceFromZone(z Zone, technique string, entryMax float64) Instance {
 		Technique: technique, Side: zoneSideToTradeSide(z.Side), Low: z.Low(), High: z.High(),
 		Sources: append([]string(nil), sources...), OriginIndex: z.OriginIndex, Touches: z.Touches, Mitigated: z.Mitigated,
 		Score: sourceQuality(z), ZoneScore: z.Score,
+		TouchableFrom: maxInt(z.OriginIndex, z.BreakIndex) + 1,
 	}
 	if (technique == "supply_demand" || technique == "order_block" || technique == "fvg") && entryMax > 0 {
 		if clipped, ok := optimizeTechniqueEntry(z, entryMax); ok {
@@ -1293,7 +1301,7 @@ func discoverIFVG(fvgZones []Zone, bars []market.Candle, entryMax float64) []Ins
 		if invertedSide == "" {
 			continue
 		}
-		inst := Instance{Technique: "ifvg", Side: tradeSide, Low: zLo, High: zHi, Sources: []string{"ifvg"}, OriginIndex: invertIndex}
+		inst := Instance{Technique: "ifvg", Side: tradeSide, Low: zLo, High: zHi, Sources: []string{"ifvg"}, OriginIndex: invertIndex, TouchableFrom: invertIndex + 1}
 		if entryMax > 0 && !math.IsNaN(entryMax) && !math.IsInf(entryMax, 0) && zHi-zLo > entryMax+1e-12 {
 			if tradeSide == "sell" {
 				inst.Low, inst.High = zLo, zLo+entryMax

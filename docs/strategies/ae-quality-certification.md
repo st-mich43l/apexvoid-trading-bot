@@ -420,3 +420,82 @@ Classification: **proven**: the signals do not beat random entries in developmen
 Production (`trade_stream = 'algo_auto'`, 503 trades with a known stop, Range Sweep excluded, a full stop counted as -1R): all -0.017R (+-0.109), FX +0.043R (n=307, +-0.131), XAU -0.111R (n=196, +-0.189); FX development +0.214R
 (n=92, +-0.240) then OOS -0.030R (n=215, +-0.155). By strategy and FX pair every cell has n < 30; EURUSD Supply/Demand (n=13: 1 win, mean -0.886R, interval -1.12 to -0.66) is the only cell whose interval excludes zero and
 is too small to act on. A high `quality.overall` has still not been shown to mean a profitable trade.
+
+## 12. Q2 update (2026-10-20): a structure cannot confirm itself
+
+Tool: `algo-bot/tools/q2_before_after.py` over two replays of `analysis-engine/test/aequality` (master `60115600` vs this change; same 17 captures,
+14,970 vs 13,892 unique opportunities). Hypothetical outcomes only (closed candles, constant spreads, the real 1R/2R ladder, 24 h), never broker P&L.
+
+### 12.1 What was inspected
+
+The whole path from the closed bar to the published candidate: the zone chain (`techniquezone`), the reaction routine (`reaction`), the shared qualification
+(`strategyutil/legacy_detect.go`: `Reaction`, `Finish`), the technique publishers (`technique_decision.go`, `technique_candidate.go`), the confluence scorer (`confluence/score.go`),
+Flip Zone, Key Level, Fade Scalp, Range Edge, iFVG, CRT, Session Level, Trendline and Confluence Zone v3 (`structuralconfluence`), and the opposing-zone/target geometry (F-7, unchanged).
+
+| Strategy | Result |
+|---|---|
+| Fair Value Gap (`fvg`) | **corrected**: the gap's own impulse candle confirmed it (480 of 695 confirmed opportunities) |
+| Supply, Demand | **corrected**: the displacement leg's own bars confirmed the zone (222 of 1,742, 252 of 1,894) |
+| Order Block | **corrected**: bars up to the qualifying break of structure confirmed it (20 of 549) |
+| Flip Zone | **corrected**: the break bar that made the flip confirmed it (194 of 222) |
+| iFVG, CRT, Session Level, Fade Scalp, Trendline, Range Edge | checked: every replayed touch and confirmation is after the structure's formation (iFVG v3 had already fixed this for itself, `test/ifvgreplay` reproduces the frozen v2 defect) |
+| Confluence Zone v3 | unchanged: the entry is the true intersection of facts (`structuralconfluence.Find` cuts elementary segments and keeps those covered by >= `minimum_facts` *independent* groups, every fact timestamped by availability). The union geometry (`BuildConfluenceBands`) is the frozen oracle's and feeds no production strategy |
+| Key Level, Break Retest, Liquidity Sweep, Impulse Pullback | unchanged (levels and pools have no formation bar; see 12.4) |
+
+### 12.2 The defect
+
+`reaction.Evaluate` has a `MinIndex` ("a structure cannot react before it exists") that `strategyutil.ConfirmReaction` passes for the strategies that use it, but the technique
+publishers and Flip Zone called the detector without it. They searched the last three bars for a touch and a confirmation, so the bars a structure was *built on* could be its reaction:
+
+* a fair value gap is anchored on its third candle; the middle (impulse) candle spans the gap by construction, and as a bearish gap's impulse it closes back below the gap's top with a wick above it, which is
+  the `strong_reclaim` pattern. 431 of the 480 removed FVG opportunities have the touch and the confirmation on the bar before the gap's anchor;
+* a supply/demand zone is complete when its displacement leg ends (`Zone.BreakIndex`), an order block at its break of structure; a touch on the leg is the leg;
+* a flip zone is made by the structure break (its `Origin` and `BreakIndex` are the break bar); the break candle closes through the band it creates and "reclaims" it. Of the 91 oracle flip decisions 80 were the break bar itself.
+
+`MarkMitigation` already counts a zone's touches only from the bar after `max(origin, break)`; the reaction check now uses the same boundary (`Instance.TouchableFrom`, `Zone` via `LegacyDetector.ZoneReaction`).
+Higher-timeframe supply/demand instances are bound at the close of the higher bar that completed them. CRT instances are not narrowed (H1-anchored; its sweep/reclaim is checked separately).
+
+**Also corrected, with no change of decisions.** The factors published for the four technique strategies asserted a wick rejection and a structural agreement on every decision and a displacement whenever the zone score was 8 (a zone-quality threshold named as a candle fact). They now follow the confirmation:
+
+| factor published true | before (supply / demand / FVG / OB) | after |
+|---|---|---|
+| wick rejection | 100% / 100% / 100% / 100% | 26% / 26% / 48% / 14% |
+| structural agreement | 100% / 100% / 100% / 100% | 54% / 57% / 24% / 76% |
+| displacement | 98% / 98% / 99% / 100% | 20% / 17% / 28% / 10% |
+
+Stars and `quality.overall` of every kept opportunity are identical (a scored zone is rated by its zone score; the factors only matter when the zone score is 0, where the constants lifted the decision to the star floor by themselves).
+
+### 12.3 Before and after
+
+| | before | after | removed | later reaction appears |
+|---|---|---|---|---|
+| fvg | 1,688 | 1,209 | 480 | 1 |
+| demand | 2,627 | 2,430 | 252 | 55 |
+| supply | 2,454 | 2,266 | 222 | 34 |
+| order_block | 737 | 717 | 20 | 0 |
+| flip_zone | 222 | 28 | 194 | 0 |
+| all other strategies | 7,242 | 7,242 | 0 | 0 |
+
+Confirmed-opportunity stars (2 / 3): FVG 626 / 69 -> 210 / 6, Demand 1,706 / 188 -> 1,613 / 84, Supply 1,574 / 168 -> 1,495 / 59, Order Block 532 / 17 -> 520 / 9, Flip Zone 61 / 161 -> 10 / 18. Flip Zone's stars were highest where the formation bar was the reaction.
+
+Were the removed opportunities good? Against matched random entries (same instrument, direction, technical risk, cost, ladder and horizon; 40 draws; cluster bootstrap by symbol-day):
+
+| set | n | mean R | random | difference [95%] |
+|---|---|---|---|---|
+| removed (all) | 828 | -0.065 | -0.045 | -0.021 [-0.107, +0.068] |
+| removed, development / out of sample | 457 / 371 | -0.095 / -0.030 | -0.052 / -0.035 | -0.042 [-0.153, +0.074] / +0.006 [-0.125, +0.151] |
+| kept (all) | 5,181 | -0.098 | -0.055 | -0.044 [-0.092, +0.002] |
+| kept, development / out of sample | 2,997 / 2,184 | -0.057 / -0.155 | -0.053 / -0.057 | -0.004 [-0.056, +0.042] / **-0.098 [-0.160, -0.016]** |
+
+Per removed strategy the difference to random is within noise (FVG -0.05, Demand +0.04, Supply -0.05, Order Block +0.10 on n=16, Flip Zone +0.02). The removal is a **validity** correction: it does not improve or worsen
+the hypothetical expectancy in any way these samples can resolve, and nothing here says the remaining opportunities have an edge (11.3 still applies). Replay cases: an invalid FVG
+(`XAU Sep` SELL 1789410600, touch and confirmation 1789410000, the bar before the gap's anchor 1789410300: published, then a +2.2R target hit that the structure had not earned), the same outcome class
+for a valid one (`GBPUSD early` SELL 1790639700, touch 1790638800 four bars after the anchor 1790634900: +1.5R) and a valid loss (`XAU Sep` SELL 1789640700, anchor 1789636800, touch 1789639800: -1R).
+
+### 12.4 Not changed, and what cannot be proven
+
+* `quality.overall` stays stars / 3 for the technique strategies and its `reaction` component stays 1: a candidate exists only with a confirmed reaction, so the component is informationless but not false; no consumer ranks by it (`quality_ranking: false`).
+* The reaction routine does not require the confirming bar itself to sit at the band (a touch within three bars, then any rejection pattern on a later bar). That is the frozen contract; whether a stricter rule would help cannot be settled from these samples and was not changed.
+* `SessionContext` constant, Key Level GBPJPY disabled by an unsatisfiable `require_explicit_role` and the star cap for touched zones are as reported in section 11.
+* Production closed trades (`trade_stream = 'algo_auto'`) carry no reaction timestamps, so the trades that came from a formation-bar reaction cannot be separated; FX auto-trades come from Key Level, Range Edge, Supply/Demand (44), Fade and Confluence Zone only, so FVG and Flip Zone have no production sample at all.
+* No claim of better profitability is made: the corrected rules remove opportunities that were not a reaction to the structure they claimed, nothing more.
