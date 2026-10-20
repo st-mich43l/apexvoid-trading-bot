@@ -14,8 +14,11 @@ import (
 
 // CompatConfig carries the default arguments the frozen detectors' compat
 // helpers ran with. They are deliberately the helpers' own defaults, not the
-// instrument's: the oracle observed them, including the 0.1 pip size and the
-// 5.0 round step the compat flip zones use on every instrument.
+// instrument's: the oracle observed them, including the 5.0 round step the
+// compat flip zones use on every instrument. PipSize is the corrected exception:
+// the frozen 0.1 was gold's pip size applied to every instrument, a unit error;
+// 0 means the instrument's own pip size (the production value), a positive value
+// reproduces the oracle.
 type CompatConfig struct {
 	PipSize                    float64
 	DisplacementBodyFraction   float64
@@ -99,7 +102,7 @@ func FindRetest(bars []market.Candle, price float64, minConsecutiveCloses int, p
 func EntryZone(bars []market.Candle, price float64, direction string, pipSize float64, compat CompatConfig) Zone {
 	tolerance := compatTolerance(bars, pipSize)
 	zones := compatOrderBlocks(bars, compat)
-	zones = append(zones, compatFlipZones(bars, compat)...)
+	zones = append(zones, compatFlipZones(bars, compat, pipSize)...)
 	zones = append(zones, FVG(bars)...)
 	for i := len(zones) - 1; i >= 0; i-- {
 		zone := zones[i]
@@ -153,13 +156,19 @@ func legacyOrderBlocks(bars []market.Candle) []Zone {
 
 // compatFlipZones mirrors structure.flip_zones(df): a default find_retest of
 // every compat key level.
-func compatFlipZones(bars []market.Candle, compat CompatConfig) []Zone {
+func compatFlipZones(bars []market.Candle, compat CompatConfig, pipSize float64) []Zone {
+	// The frozen retest ran with a default pip size of 0.1 (gold's) on every instrument, so on a 0.0001 or 0.01 pair its
+	// band was level +- 0.1: 2,000 pips on EURUSD. Zero uses the instrument's own pip size; only the oracle-parity
+	// test sets the frozen value.
+	if compat.PipSize > 0 {
+		pipSize = compat.PipSize
+	}
 	atr := ATRSeries(bars, compat.ATRLength)
 	swings := FindSwings(bars, compat.FractalN, 0, 0, atr, -1)
 	levels := KeyLevels(swings, atr, compat.LevelClusterATR, compat.RoundStep, 1, compat.MaximumClusterSpanMultiple, nil)
 	var zones []Zone
 	for _, level := range levels {
-		if zone, ok := FindRetest(bars, level.Price, 1, compat.PipSize); ok {
+		if zone, ok := FindRetest(bars, level.Price, 1, pipSize); ok {
 			zones = append(zones, zone)
 		}
 	}

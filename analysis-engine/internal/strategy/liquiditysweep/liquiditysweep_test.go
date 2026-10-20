@@ -102,3 +102,19 @@ func TestACounterBiasGradeALoneExtremeSweepStillMissesTheConfluenceFloor(t *test
 		t.Fatalf("a counter-bias lone-extreme sweep must not reach the confluence floor: %+v", got)
 	}
 }
+
+// The sweep's target is target_r times its own risk, not a market level: the label says so.
+func TestSweepTargetIsLabelledAsTheFixedRewardRiskItIs(t *testing.T) {
+	got := newStrategy(t, nil).Evaluate(sweepContext(nil))
+	if len(got) != 1 {
+		t.Fatalf("want one BUY, got %+v", got)
+	}
+	c := got[0]
+	if c.Targets[0].Price.Label != "fixed_reward_risk" {
+		t.Fatalf("label %q", c.Targets[0].Price.Label)
+	}
+	risk := float64(c.Targets[0].Price.Price) - 100.2
+	if want := 2.0 * (100.2 - float64(c.Invalidation.Price)); risk < want-1e-9 || risk > want+1e-9 {
+		t.Fatalf("target is %v above the entry, want 2R = %v", risk, want)
+	}
+}

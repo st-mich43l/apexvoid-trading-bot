@@ -144,3 +144,21 @@ func TestFadeSellMirrorsBuy(t *testing.T) {
 		t.Fatalf("equal-high SELL fade missing: %+v", got)
 	}
 }
+
+// A target is labelled by what it is: the nearest opposing pool when there is one far enough, else the strategy's own fixed
+// reward:risk. The label used to say "fade_opposing_liquidity" for both.
+func TestFadeLabelsItsTargetByWhatItIs(t *testing.T) {
+	got := newStrategy(t).Evaluate(qualifying(nil))
+	if len(got) != 1 || got[0].Targets[0].Price.Label != "fade_opposing_liquidity" {
+		t.Fatalf("a pool target is an opposing-liquidity target: %+v", got)
+	}
+	noPool := newStrategy(t).Evaluate(qualifying(func(f *analysiscontext.LegacyFrame, _ *analysiscontext.LegacyRead) {
+		f.Pools = []techniquezone.Pool{equalLow(3)}
+	}))
+	if len(noPool) != 1 {
+		t.Fatalf("the fade is still valid without an opposing pool: %+v", noPool)
+	}
+	if label := noPool[0].Targets[0].Price.Label; label != "fixed_reward_risk" {
+		t.Fatalf("a target that is a multiple of the risk is not opposing liquidity, label %q", label)
+	}
+}

@@ -99,6 +99,10 @@ type Record struct {
 	FormedAt     int64              `json:"formed_at"`
 	StructuralID string             `json:"structural_id"`
 	Repeats      int                `json:"repeats"`
+	// Reaction is the causal confirmation the strategy attached (nil for a strategy that publishes none).
+	ReactionTouch   int64  `json:"reaction_touch,omitempty"`
+	ReactionConfirm int64  `json:"reaction_confirm,omitempty"`
+	ReactionPattern string `json:"reaction_pattern,omitempty"`
 	// Geometry, in pips of the instrument.
 	EntryWidthPips float64 `json:"entry_width_pips"`
 	TechRiskPips   float64 `json:"tech_risk_pips"`   // proximal edge to the technical invalidation
@@ -195,6 +199,9 @@ func record(c capture, e engine.Evaluation, cand opportunity.Candidate) *Record 
 	}
 	if cand.StopEnvelope != nil {
 		rec.FloorPips, rec.CapPips = cand.StopEnvelope.FloorPips, cand.StopEnvelope.CapPips
+	}
+	if cand.Reaction != nil {
+		rec.ReactionTouch, rec.ReactionConfirm, rec.ReactionPattern = cand.Reaction.TouchBarTime, cand.Reaction.ConfirmationBarTime, cand.Reaction.Pattern
 	}
 	if tech := cand.Technical; tech != nil {
 		rec.ATR, rec.RefPrice = tech.ATR, tech.ReferencePrice
@@ -394,6 +401,15 @@ func simulate(r *Record, bars []market.Candle, index map[int64]int, barSeconds i
 	return outcome{Result: "timeout", R: total + rem*dir*(bars[end].Close-fill)/risk}
 }
 
+// recBars keeps, per opportunity, the candle series that simulated it (for the matched-random baseline).
+type recSeries struct {
+	bars    []market.Candle
+	index   map[int64]int
+	seconds int64
+}
+
+var recBars = map[string]recSeries{}
+
 var replayOnce sync.Once
 var allRecords []*Record
 var replayErr error
@@ -442,6 +458,7 @@ func replayAll(t *testing.T) []*Record {
 				rec.Sim["oneR_cost"] = simulate(rec, bars, index, barSeconds, "oneR", spread[rec.Symbol])
 				rec.Sim["twoR_cost"] = simulate(rec, bars, index, barSeconds, "twoR", spread[rec.Symbol])
 				rec.Capture = captures[i].name
+				recBars[rec.ID] = recSeries{bars: bars, index: index, seconds: barSeconds}
 				allRecords = append(allRecords, rec)
 			}
 		}

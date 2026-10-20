@@ -1252,7 +1252,7 @@ func compatConfigFromConfig(doc *config.Document) (techniquezone.CompatConfig, e
 			return cfg, err
 		}
 	}
-	if cfg.PipSize <= 0 || cfg.DisplacementBodyFraction < 0 || cfg.DisplacementBodyFraction > 1 || cfg.DisplacementATRMult <= 0 ||
+	if cfg.PipSize < 0 || cfg.DisplacementBodyFraction < 0 || cfg.DisplacementBodyFraction > 1 || cfg.DisplacementATRMult <= 0 ||
 		cfg.LevelClusterATR <= 0 || cfg.RoundStep <= 0 || cfg.MaximumClusterSpanMultiple < 0 || cfg.FractalN < 1 || cfg.ATRLength < 1 {
 		return cfg, fmt.Errorf("engine: analysis.legacy_read.compat has an invalid value")
 	}
