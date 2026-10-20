@@ -1065,7 +1065,7 @@ def _xau_spot() -> "worker.AutoTradeSpot":
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
   "strategy",
-  ["Break & Retest", "Range Edge Scalp", "Fade Scalp", "Breakout"],
+  ["Break & Retest", "Fade Scalp", "Breakout"],
 )
 async def test_xau_opposite_too_close_blocks_for_every_strategy(strategy, rejections):
   client = redis_state.get_client()
@@ -1171,7 +1171,7 @@ def _gbpusd_spot() -> "worker.AutoTradeSpot":
 @pytest.mark.parametrize(
   ("active_direction", "incoming_direction", "strategy"),
   [
-    ("SELL", "BUY", "Range Edge Scalp"),   # scenario A
+    ("SELL", "BUY", "Fade Scalp"),   # scenario A
     ("BUY", "SELL", "Fade Scalp"),         # scenario B
     ("SELL", "BUY", "Break & Retest"),
     ("BUY", "SELL", "Breakout"),

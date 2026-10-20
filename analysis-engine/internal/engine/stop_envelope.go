@@ -12,9 +12,9 @@ import (
 // is no strategy group that supplies it — and TestEveryStrategyDeclaresItsOwnStopEnvelope
 // fails if one of the 20 catalog IDs is missing. The values mirror algo-bot's
 // protective_stop.stop_bounds_for_strategy exactly, keyed on Go's catalog IDs
-// (opportunity.Candidate.Strategy): Key Level, Session Level and Trendline use
+// (opportunity.Candidate.Strategy): Key Level and Trendline use
 // the reaction-room envelope; Impulse Pullback uses
-// strategies.scalping.stop.* directly (fixed min_rr 1.0); Range Edge and Fade
+// strategies.scalping.stop.* directly (fixed min_rr 1.0); Fade
 // Scalp use execution.range.*; every other strategy takes the plain trend
 // envelope, as the Python fallback does.
 type stopEnvelopeKind int

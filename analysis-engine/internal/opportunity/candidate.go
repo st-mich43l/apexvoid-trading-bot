@@ -58,7 +58,7 @@ type Target struct {
 // StrategyQuality is strategy-specific, not universal (§26): Overall is a
 // single comparable score, Components is that strategy's own named
 // dimensions (e.g. Breakout Retest: "breakout_quality", "retest_quality",
-// "structure_quality", "location_quality" — a Liquidity Sweep strategy
+// "structure_quality", "location_quality" — an iFVG strategy
 // would use an entirely different set). No shared scoring formula is
 // imposed here.
 type StrategyQuality struct {

@@ -81,15 +81,15 @@ def test_the_policy_set_is_the_four_documented_alternatives():
 
 
 def test_the_dataset_builder_reads_the_log_lines_it_documents(tmp_path):
-  published = "2026-10-12 06:51:01,975 [INFO] app.autotrade.worker: v8 plan published id=v8:go_opp_ab2e1a3a574f symbol=USDJPY strategy=Range Edge Scalp direction=SELL entry_type=single_limit"
+  published = "2026-10-12 06:51:01,975 [INFO] app.autotrade.worker: v8 plan published id=v8:go_opp_ab2e1a3a574f symbol=USDJPY strategy=Fade Scalp direction=SELL entry_type=single_limit"
   stack = "2026-10-12 06:51:00,815 [INFO] app.autotrade.worker: v8 same-direction stack symbol=USDJPY match_id=go_opp_ab2e1 same-direction stack on active SELL @ 158.39: size 60% on a single leg"
   assert _PUBLISHED.match(published) and _STACK.match(stack)
   log = tmp_path / "log"
   log.write_text(published + "\n" + stack + "\n")
   groups_psv = tmp_path / "groups.psv"
-  groups_psv.write_text("v8:go_opp_ab2e1a3a574f|algo_auto|USDJPY|Range Edge Scalp|SELL|london|full_stop|-18|17.9||2|1791797947|1791787865|1791787865|1100000|1|158.353\n")
+  groups_psv.write_text("v8:go_opp_ab2e1a3a574f|algo_auto|USDJPY|Fade Scalp|SELL|london|full_stop|-18|17.9||2|1791797947|1791787865|1791787865|1100000|1|158.353\n")
   opps = tmp_path / "opps.psv"
-  opps.write_text("v8:go_opp_ab2e1a3a574f|1791787500|range:resistance:1791782100|1791782100|range_edge|158.364|158.38|158.388\n")
+  opps.write_text("v8:go_opp_ab2e1a3a574f|1791787500|range:resistance:1791782100|1791782100|fade_scalp|158.364|158.38|158.388\n")
   rows = build(groups_psv, opps, log)
   assert len(rows) == 1
   row = rows[0]

@@ -16,7 +16,6 @@ STRUCTURAL_SETUPS = frozenset({
   "Flip Zone",
   "Demand Zone Reaction",
   "Supply Zone Reaction",
-  "Session Level",
   "Trendline",
   "Supply Demand",
   "Order Block",

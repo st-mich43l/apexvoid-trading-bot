@@ -361,8 +361,8 @@ for an untouched zone too: price can close beyond a zone without ever trading in
 
 Open F-7 decisions (no change here; see `docs/architecture/f7-opposing-barrier-ground-truth.md` section 12): whether a touched zone
 should still be a barrier and after how many touches (Go: 30; the frozen Python: the first); whether a union wider than the
-per-zone width gate should be one wall; whether a strategy whose thesis is a rotation through a range (Range Edge) may be blocked
-by that range's own interior. Range Edge is **not** exempt from the shared barrier book in the Go-origin flow (the legacy bypass
+per-zone width gate should be one wall; whether a strategy whose thesis is a rotation through a range may be blocked
+by that range's own interior. A range scalp is **not** exempt from the shared barrier book in the Go-origin flow (the legacy bypass
 needs `full_take_profit_pips`, which no Go opportunity carries); only the M1 scalp (Impulse Pullback) bypasses it.
 
 Consumer: `algo-bot/app/autotrade/go_zone_book.py`. The worker's

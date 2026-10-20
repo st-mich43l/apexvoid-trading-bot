@@ -819,7 +819,7 @@ def evaluate_execution_policy(
       else getattr(match, "opposing_zone_id", None)
       or getattr(match, "zone_id", None)
     )
-    # Scalp (Range Edge) with fitted target room ignores HTF opposing stop
+    # Range scalp with fitted target room ignores HTF opposing stop
     # push/reject; native room is the gate. Envelope still applies.
     if match_bypasses_opposing_structure(match):
       zone_low = zone_high = zone_id = None
@@ -1197,7 +1197,7 @@ def evaluate_execution_policy(
       float(value) for value in fixed_targeting.close_ratios
     )
     # A scalp books 1R and 2R, never the swing ladder gold's structural
-    # strategies run (1R-4R). Production 2026-10-09: a Range Edge Scalp carried
+    # strategies run (1R-4R). Production 2026-10-09: a range scalp carried
     # XAU's four targets on a scalp. FX's single 2R target is already within the
     # cap and is left alone.
     scalp_ladder_trimmed = False

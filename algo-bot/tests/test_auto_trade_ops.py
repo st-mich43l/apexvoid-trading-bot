@@ -67,7 +67,7 @@ def test_execution_lifecycle_cards_suppress_noise_keep_essentials():
   ):
     assert delivery.render_auto_trade_event({
       "type": silent,
-      "strategy": "Range Edge Scalp",
+      "strategy": "Fade Scalp",
       "direction": "BUY",
       "message": "noise",
     }) is None
@@ -2987,7 +2987,7 @@ async def test_status_surfaces_match_build_ready(monkeypatch):
     "auto_trade:last_match_build:XAU",
     json.dumps({
       "stage": "match_ready",
-      "strategy": "Range Edge Scalp",
+      "strategy": "Fade Scalp",
       "direction": "BUY",
       "full_take_profit_pips": 40,
     }),
@@ -2995,7 +2995,7 @@ async def test_status_surfaces_match_build_ready(monkeypatch):
 
   text = await delivery.auto_trade_status_text()
 
-  assert "Why: ready · Range Edge Scalp BUY" in text
+  assert "Why: ready · Fade Scalp BUY" in text
 
 
 @pytest.mark.asyncio

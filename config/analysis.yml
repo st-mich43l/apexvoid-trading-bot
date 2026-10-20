@@ -166,7 +166,7 @@ analysis:
   # Registry contract for every strategy approved by the semantic catalog.
   # An enabled entry without a compiled factory fails analysis-engine startup;
   # it cannot silently become a no-op, and a strategy that is not in the
-  # catalog (Range Edge, Session Level and Liquidity Sweep were purged) fails
+  # catalog (three standalone strategies were purged) fails
   # startup too, so a stale configuration cannot revive one.
   #
   # `confluence_zone` is the one compositional exception, so this has 13
