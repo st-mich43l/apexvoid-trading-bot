@@ -462,12 +462,10 @@ class ScalpZoneAccess:
     return self.status in {"inside", "chase"}
 
 
-ZONE_ACCESS_MOMENTUM_CHASE = "momentum_chase"
-ZONE_ACCESS_RETEST_ONLY = "retest_only"
 
 
 def scalp_maximum_chase_pips(cfg: Any | None = None) -> float:
-  """Shared scalp chase budget (Range Edge / M1 scalping). Default 100."""
+  """Shared scalp chase budget (M1 scalping). Default 100."""
   if cfg is None:
     try:
       from app.core.config import runtime_config
@@ -527,15 +525,9 @@ def scalp_zone_access(
   *,
   pip_size: float,
   maximum_chase_pips: float | None = None,
-  zone_access_mode: str = ZONE_ACCESS_MOMENTUM_CHASE,
 ) -> ScalpZoneAccess:
-  """Allow scalp activation inside the zone or chasing momentum past it.
-
-  ``momentum_chase`` (default): inside the zone, or past the far edge within
-  the chase budget (Range Edge / Impulse continuation).
-
-  ``retest_only`` (Range Edge): executable only while quote sits inside the
-  retest band — approach from either side waits; no break-without-retest chase.
+  """Allow scalp activation inside the zone or chasing momentum past it: inside
+  the zone, or past the far edge within the chase budget (Impulse continuation).
   """
   evidence = executable_quote_in_zone(
     direction, bid, ask, zone_low, zone_high, tolerance, pip_size=pip_size,
@@ -552,17 +544,6 @@ def scalp_zone_access(
   if quote is None or pip <= 0 or not math.isfinite(pip):
     return ScalpZoneAccess(evidence, "invalid", None, chase_cap)
   side = str(direction).upper()
-  if zone_access_mode == ZONE_ACCESS_RETEST_ONLY:
-    low = float(min(zone_low, zone_high))
-    high = float(max(zone_low, zone_high))
-    offset_pips = (
-      (low - quote) / pip
-      if quote < low
-      else (quote - high) / pip
-      if quote > high
-      else 0.0
-    )
-    return ScalpZoneAccess(evidence, "approach_wait", offset_pips, chase_cap)
   # Trade-direction past edge: BUY above high, SELL below low.
   if side == "BUY":
     past = quote - float(zone_high)

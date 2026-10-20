@@ -79,8 +79,6 @@ def main():
             row["barrier"] = [desc["barrier_low"], desc["barrier_high"]]
             row["member_count"] = desc["member_count"]
             row["decisive_member"] = desc["decisive_member"]
-          if c["strategy"] == "range_edge":
-            row["range"] = c.get("range")
           out.write(json.dumps(row, separators=(",", ":")) + "\n")
 
 

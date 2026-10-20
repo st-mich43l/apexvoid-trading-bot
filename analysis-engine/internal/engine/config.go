@@ -576,11 +576,11 @@ func KeyLevelConfigFromConfig(doc *config.Document) (keylevel.Config, error) {
 	}, nil
 }
 
-// SessionConfigFromConfig reads analysis.sessions.* into session.Config —
-// Session configuration. asia/london/ny_start are the same leaves
-// StructureConfigFromConfig's siblings already read for scanner/session
-// display purposes; daily_rollover_utc_hour is the one leaf this phase
-// adds (see config/analysis.yml).
+// SessionConfigFromConfig reads analysis.sessions.* into session.Config.
+// asia/london/ny_start and daily_rollover_utc_hour are the fixed UTC hours the
+// scanner and Algo Bot still read; analysis.sessions.calendar places the same
+// boundaries on real market clocks (a zone and a wall-clock hour each) so the
+// engine's session windows and trading-day rollover follow daylight saving.
 func SessionConfigFromConfig(doc *config.Document) (session.Config, error) {
 	asiaStart, err := getInt(doc, "analysis.sessions.asia_start")
 	if err != nil {
@@ -598,11 +598,31 @@ func SessionConfigFromConfig(doc *config.Document) (session.Config, error) {
 	if err != nil {
 		return session.Config{}, err
 	}
+	anchor := func(name string) (string, int, error) {
+		zone, err := getString(doc, "analysis.sessions.calendar."+name+".zone")
+		if err != nil {
+			return "", 0, err
+		}
+		hour, err := getInt(doc, "analysis.sessions.calendar."+name+".local_hour")
+		return zone, hour, err
+	}
+	var zones [4]string
+	var hours [4]int
+	for i, name := range []string{"asia", "london", "ny", "rollover"} {
+		if zones[i], hours[i], err = anchor(name); err != nil {
+			return session.Config{}, err
+		}
+	}
+	calendar, err := session.NewCalendar(zones[0], hours[0], zones[1], hours[1], zones[2], hours[2], zones[3], hours[3])
+	if err != nil {
+		return session.Config{}, err
+	}
 	return session.Config{
 		AsiaStartHour:        asiaStart,
 		LondonStartHour:      londonStart,
 		NYStartHour:          nyStart,
 		DailyRolloverUTCHour: rolloverHour,
+		Calendar:             calendar,
 	}, nil
 }
 
@@ -676,7 +696,7 @@ type StopEnvelopeConfig struct {
 	InstrumentMaxPips    float64
 	InstrumentConfigured bool
 	// InstrumentScalp* is the instrument's own band for the range-room
-	// scalps (Range Edge, Fade Scalp), when it declares one.
+	// scalps (Fade Scalp), when it declares one.
 	InstrumentScalpMinPips    float64
 	InstrumentScalpMaxPips    float64
 	InstrumentScalpConfigured bool
@@ -1187,13 +1207,12 @@ func LegacyDetectorParametersFromConfig(doc *config.Document) (map[string]any, e
 	return params, nil
 }
 
-// ScalpConfigFromConfig reads the range-edge structure leaves from
-// analysis.strategies.range_edge, the one source of truth shared by the
-// structure builder and the strategy. Instrument-scale values are applied per
+// ScalpConfigFromConfig reads the range-structure builder's leaves from
+// analysis.legacy_read.range_structure. Instrument-scale values are applied per
 // instrument.
 func ScalpConfigFromConfig(doc *config.Document) (techniquezone.ScalpConfig, error) {
 	var cfg techniquezone.ScalpConfig
-	base := "analysis.strategies.range_edge."
+	base := "analysis.legacy_read.range_structure."
 	floats := map[string]*float64{
 		"cluster_atr": &cfg.ClusterATR, "cluster_min_abs": &cfg.ClusterMinAbs, "cluster_pip_mult": &cfg.ClusterPipMult,
 		"minimum_wick_fraction": &cfg.MinimumWickFraction, "entry_tolerance_atr": &cfg.EntryToleranceATR,

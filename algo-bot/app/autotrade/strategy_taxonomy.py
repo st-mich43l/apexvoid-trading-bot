@@ -21,17 +21,12 @@ TECHNIQUE_STRATEGIES = frozenset(
 CONFLUENCE_STRATEGIES = names_with("confluence")
 RANGE_STRATEGIES = names_with("range_lane")
 M1_SCALP_STRATEGIES = names_with("m1_scalp")
-# Scalps that enter only while the quote is inside the zone printed on the card.
-# Range Edge owns a confirmed zone, so a quote past its edge is a missed entry,
-# never a market chase at a price the card does not show (production 2026-10-08:
-# card 4,125-4,127, order at 4124.19, stopped out in 8 minutes).
 # XAU strategies that retest a level and so scale in like the zone strategies
 # (shallow at the near edge, deeper inside) instead of one market order. The
 # catalog keeps them market/single for FX, whose entry is one precise price.
 # Production 2026-10-08: a Break & Retest zone of 0.23 (4114.91-4115.14) was
 # entered as one market order and the card printed "Entry Zone 4,115 - 4,115".
 XAU_RETEST_LADDER_STRATEGIES = frozenset({"Break & Retest"})
-RETEST_ONLY_SCALP_STRATEGIES = frozenset({"Range Edge Scalp"})
 
 _SCALP_MODES = frozenset({"scalp_m1", "range_scalp", "auto_box_scalp"})
 _M1_SCALP_MODES = frozenset({"scalp_m1"})
@@ -64,11 +59,6 @@ def is_xau_retest_ladder_strategy(name: str) -> bool:
   return str(name or "") in XAU_RETEST_LADDER_STRATEGIES
 
 
-def is_retest_only_scalp_strategy(name: str) -> bool:
-  """Scalps that never chase: executable only with the quote inside the card zone."""
-  return str(name or "") in RETEST_ONLY_SCALP_STRATEGIES
-
-
 def is_m1_scalp_match(match: Any) -> bool:
   """True when a StrategyMatch belongs to the M1 scalping lane."""
   strategy = str(getattr(match, "strategy", "") or "")
@@ -86,7 +76,7 @@ def is_scalp_strategy(
   *,
   strategy_mode: str | None = None,
 ) -> bool:
-  """Range Box / Range Edge / M1 scalp — own native room, not HTF opposing."""
+  """Range Box / M1 scalp — own native room, not HTF opposing."""
   if is_range_strategy(name) or is_m1_scalp_strategy(name):
     return True
   if str(strategy_mode or "").casefold() in _SCALP_MODES:

@@ -181,12 +181,6 @@ def main():
             attribution["decisive_state:" + str(dm.get("state"))] += 1
             touches = dm.get("touches", 0)
             attribution["decisive_touches:" + ("0" if touches == 0 else "1" if touches == 1 else "2" if touches == 2 else "3+")] += 1
-            if c["strategy"] == "range_edge":
-              attribution["range_edge_blocks"] += 1
-              tgt = max(c["targets"]) if c["direction"].upper() == "BUY" else min(c["targets"])
-              lo_p, hi_p = min(planned, tgt), max(planned, tgt)
-              on_path = dm and dm["high"] >= lo_p and dm["low"] <= hi_p
-              attribution["range_edge_decisive_member_on_the_path_to_its_target" if on_path else "range_edge_decisive_member_beyond_its_target"] += 1
             if sample_count[symbol] < 60 and len(members_all) > 1:
               sample_count[symbol] += 1
               examples_attr.append({"capture": name, "bar": a["bar"], "symbol": symbol, "strategy": c["strategy"], "direction": c["direction"],

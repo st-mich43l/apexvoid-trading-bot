@@ -56,7 +56,7 @@ def _intent(
   return ExecutionIntent(
     intent_id=intent_id,
     source="scanner_strategy_match",
-    strategy="Liquidity Sweep",
+    strategy="Key Level",
     direction=direction,
     confluence=confluence,
     freshness=freshness,
@@ -148,7 +148,7 @@ def test_execution_policy_keeps_fill_relative_room_from_planned_entry():
 def test_execution_policy_ignores_stale_non_scalp_risk_stamp():
   evaluation = evaluate_execution_policy(
     _policy_match(
-      strategy="Liquidity Sweep",
+      strategy="Key Level",
       entry_high=4101.0,
       structure_swing=4099.5,
       risk_multiplier=0.5,
@@ -639,7 +639,7 @@ async def test_route_funnel_is_unique_and_history_tracks_material_change():
   match = SimpleNamespace(
     symbol="XAU",
     match_id="route-match-1",
-    strategy="Liquidity Sweep",
+    strategy="Key Level",
     family="liquidity_reversal",
     direction="BUY",
     structural_source="liquidity",
@@ -728,7 +728,7 @@ async def test_route_recovery_clears_stale_terminal_reason_and_keeps_history():
   match = SimpleNamespace(
     symbol="XAU",
     match_id="route-recovery-1",
-    strategy="Liquidity Sweep",
+    strategy="Key Level",
     family="liquidity_reversal",
     direction="BUY",
     structural_source="liquidity",

@@ -90,6 +90,41 @@ analysis:
       level_cluster_atr: 0.5
       round_step: 5.0
       max_cluster_span_multiple: 2.0
+    # Range geometry: the established-range structure builder (techniquezone.BuildScalpStructure)
+    # that Fade Scalp reads for its mean-reversion reference and that the opposing-barrier
+    # book reads for native room. It is shared market structure, not a strategy: no
+    # opportunity is generated from it. Distances are ATR multiples; the clusters scale
+    # with the instrument.
+    range_structure:
+      cluster_atr: 0.25
+      cluster_min_abs: 0.0
+      cluster_pip_mult: 2.0
+      minimum_wick_fraction: 0.25
+      entry_tolerance_atr: 0.25
+      maximum_edge_width_atr: 0.75
+      minimum_width_atr: 1.0
+      maximum_width_atr: 6.0
+      minimum_room_atr: 0.75
+      recent_breakout_buffer_atr: 0.15
+      recent_breakout_min_span_atr: 0.8
+      fallback_min_width_atr: 0.8
+      fallback_max_width_atr: 8.0
+      fallback_wick_fraction: 0.25
+      post_impulse_min_displacement_atr: 3.0
+      post_impulse_max_contraction_atr: 2.2
+      lookback_bars: 48
+      minimum_touches: 2
+      break_closes: 2
+      minimum_inside_closes: 3
+      inside_lookback_bars: 24
+      recent_breakout_lookback_bars: 12
+      fallback_minimum_confirmations: 1
+      post_impulse_min_inside_closes: 4
+      post_impulse_lookback_bars: 36
+      post_impulse_recent_bars: 6
+      fallback_enabled: true
+      provisional_enabled: true
+      post_impulse_enabled: true
     # Shared decision thresholds of the frozen detectors (DetectorSettings).
     detector:
       maximum_entry_atr: 2.0
@@ -129,38 +164,26 @@ analysis:
     v2_mad_score_weight: 2.0
 
   # Registry contract for every strategy approved by the semantic catalog.
-  # An enabled entry without a compiled factory
-  # fails analysis-engine startup; it cannot silently become a no-op.
+  # An enabled entry without a compiled factory fails analysis-engine startup;
+  # it cannot silently become a no-op, and a strategy that is not in the
+  # catalog (Range Edge, Session Level and Liquidity Sweep were purged) fails
+  # startup too, so a stale configuration cannot revive one.
   #
-  # `confluence_zone` is the one compositional exception, so this has 20
-  # entries: 19 independent strategies plus Confluence Zone.
-  #
-  # Enabled strategies include key_level, session_level,
-  # supply, demand, order_block, fvg, flip_zone. Each strategy owns its own
-  # threshold parsing (internal/strategy/<name>'s own parseConfig) — the
-  # registry itself treats these as opaque raw parameters.
-  # None
-  # These parameter names have no old-Python-detector precedent — the
-  # Earlier detector implementations did not parametrize per-setup invalidation/
-  # target/expiry this way — so every value below is a genuine initial
-  # calibration, not an empirically-tuned or ported constant. They are
-  # Treat these values as explicit strategy configuration:
-  #   minimum_strength/minimum_touches — floors zone.Zone.Strength (or, for
-  #     session_level, the level's touches/strength) below which a setup is
-  #     not tradeable at all. (key_level carries only minimum_touches: the
-  #     profitable Python detector had no strength or proximity gate.)
-  #   invalidation_buffer_atr — matches this file's own existing
-  #     invalidation_tolerance_atr/invalidation_penetration_atr convention
-  #     (0.5) for "how far beyond the setup's edge before a confirmed close
-  #     invalidates it."
-  #   minimum_target_distance_atr — the floor below which a candidate
+  # `confluence_zone` is the one compositional exception, so this has 13
+  # entries: 12 independent strategies plus Confluence Zone. Each strategy owns
+  # its own threshold parsing (internal/strategy/<name>'s own parseConfig) -
+  # the registry itself treats these as opaque raw parameters.
+  #   minimum_strength/minimum_touches - floors zone.Zone.Strength below which
+  #     a setup is not tradeable at all. (key_level carries only
+  #     minimum_touches.)
+  #   invalidation_buffer_atr - how far beyond the setup's edge before a
+  #     confirmed close invalidates it, in ATR (0.5 elsewhere in this file).
+  #   minimum_target_distance_atr - the floor below which a candidate
   #     liquidity pool is too close to entry to be a meaningful technical
   #     objective.
-  #   expiry_hours — this strategy's own technical SETUP_EXPIRED window,
-  #     distinct from Algo Bot's own execution-age policy; 24h is one
-  #     trading day.
-  # All 20 registry entries have concrete Go factories. Every
-  # strategy is enabled for the live Kafka opportunity stream; Algo Bot
+  #   expiry_hours - this strategy's own technical SETUP_EXPIRED window,
+  #     distinct from Algo Bot's own execution-age policy.
+  # Every strategy is enabled for the live Kafka opportunity stream; Algo Bot
   # consumes those events and applies execution policy before publishing V8.
   strategies:
     key_level:
@@ -402,7 +425,6 @@ analysis:
       minimum_mss_body_ratio: 0.5
       minimum_mss_displacement_atr: 0.5
       minimum_mss_close_strength: 0.6
-      displacement_grade_atr: 1.0
       confirmation_buffer_pips: 0.0
       # A confirmation older than this many M5 candles is stale (the Algo Bot treats
       # a reaction older than structural_reaction_lookback_bars - 1 as not current).
@@ -434,79 +456,6 @@ analysis:
       # key_level_role.classify_key_level_role: consecutive closes beyond the
       # level's band that make a break accepted (the flip's required role).
       breakout_accept_bars: 2
-    session_level:
-      version: v4
-      enabled: true
-      # Session Level v4 technical contract (docs/strategies/session_level.md). Every
-      # value is a tunable default validated against captures, not a claimed
-      # constant. Distances are max(pips x pip size, ATR multiple); ATR is the Wilder
-      # ATR(14) over a fixed trailing window of M5 candles. The session hours and the
-      # daily rollover are injected from analysis.sessions.
-      atr_length: 14
-      atr_window_bars: 140
-      pivot_bars: 2
-      # Touches and sweeps older than this many M5 periods are not evaluated.
-      episode_lookback_bars: 48
-      # Period completeness: a level exists only when the candles of its defining
-      # period really cover it. The tolerances absorb the daily 21:00-22:00 UTC
-      # break and the weekend open; a hole or a short period refuses the level.
-      session_start_tolerance_minutes: 90
-      session_end_tolerance_minutes: 90
-      session_max_gap_minutes: 60
-      session_minimum_coverage: 0.8
-      period_start_tolerance_minutes: 120
-      period_end_tolerance_minutes: 120
-      period_max_gap_minutes: 150
-      period_minimum_coverage: 0.85
-      # How long after its period completes a level stays current. A later period
-      # supersedes it; an older one is never a fallback for an incomplete newer one.
-      session_max_age_hours: 30
-      day_max_age_hours: 72
-      week_max_age_hours: 168
-      # First touch: a fresh approach (a close this far above the level within the
-      # lookback), a touch within tolerance, and at most this many earlier touches.
-      touch_tolerance_pips: 2
-      touch_tolerance_atr: 0.10
-      approach_lookback_bars: 24
-      approach_min_distance_atr: 0.5
-      touch_separation_bars: 3
-      maximum_prior_touches: 1
-      hold_buffer_pips: 1
-      hold_buffer_atr: 0.05
-      fail_buffer_pips: 3
-      fail_buffer_atr: 0.25
-      # Sweep and reclaim: trading beyond the level by the threshold is a sweep; a
-      # rejection candle closing back above the reclaim buffer within the window is
-      # the reclaim; this many closes beyond the breakout buffer is an accepted break.
-      sweep_threshold_pips: 3
-      sweep_threshold_atr: 0.10
-      reclaim_buffer_pips: 1
-      reclaim_buffer_atr: 0.05
-      reclaim_max_bars: 6
-      breakout_accept_closes: 2
-      breakout_buffer_pips: 2
-      breakout_buffer_atr: 0.15
-      # The rejection candle.
-      rejection_close_strength: 0.6
-      rejection_wick_ratio: 0.25
-      rejection_body_ratio: 0.6
-      displacement_grade_atr: 1.0
-      confirmation_window_bars: 3
-      confirmation_max_age_bars: 2
-      max_episodes_per_level: 3
-      # Geometry: the stop sits beyond the level and the reaction's whole adverse
-      # extreme (a sweep wick included) and is never tightened inside it.
-      entry_band_atr: 0.5
-      entry_tolerance_pips: 1
-      entry_tolerance_atr: 0.15
-      maximum_entry_distance_atr: 1.5
-      invalidation_buffer_atr: 0.25
-      target_lookback_bars: 96
-      target_swing_bars: 12
-      target_swing_atr: 1.0
-      minimum_target_room_atr: 0.55
-      minimum_reward_risk: 1.15
-      expiry_hours: 4.0
     trendline:
       version: v4
       enabled: true
@@ -528,57 +477,6 @@ analysis:
       close_violation_atr: 0.15
       approach_min_distance_atr: 0.10
       maximum_bars_since_last_touch: 30
-    range_edge:
-      # v3: technical integrity of the edge (docs/strategies/range_edge.md). A fade is
-      # refused once the market accepted through the edge it would trade (break_closes
-      # closes beyond it), including any edge the sliding lookback rebuilds beyond
-      # it, until price reclaims it (reclaim_closes closes back inside) or a new range
-      # forms after the break (both edges touched after it, minimum_inside_closes
-      # closes inside); and while price presses the edge (pressure_bars candles with
-      # higher lows and closes, rising at least pressure_minimum_rise_atr). The
-      # coefficients are shared conventions (the mirror of break_closes, the
-      # lookbacks above), not fitted to any trade.
-      version: v3
-      enabled: true
-      reclaim_closes: 2
-      pressure_bars: 4
-      pressure_minimum_rise_atr: 1.0
-      minimum_reclaim_atr: 0.0
-      # a candle closing this far from the edge (1 = at the extreme away from it) is a
-      # rejection whatever the approach, never pressure
-      rejection_close_strength: 0.6
-      lookback_bars: 48
-      minimum_touches: 2
-      minimum_wick_rejections: 1
-      minimum_inside_closes: 3
-      inside_lookback_bars: 24
-      recent_breakout_lookback_bars: 12
-      fallback_enabled: true
-      fallback_minimum_confirmations: 1
-      provisional_enabled: true
-      post_impulse_enabled: true
-      fallback_min_width_atr: 0.8
-      fallback_max_width_atr: 8.0
-      fallback_wick_fraction: 0.25
-      post_impulse_min_displacement_atr: 3.0
-      post_impulse_max_contraction_atr: 2.2
-      post_impulse_min_inside_closes: 4
-      post_impulse_lookback_bars: 36
-      post_impulse_recent_bars: 6
-      break_closes: 2
-      cluster_atr: 0.25
-      cluster_min_abs: 0.0
-      cluster_pip_mult: 2.0
-      entry_tolerance_atr: 0.25
-      maximum_edge_width_atr: 0.75
-      minimum_wick_fraction: 0.25
-      minimum_width_atr: 1.0
-      maximum_width_atr: 6.0
-      minimum_room_atr: 0.75
-      invalidation_buffer_atr: 0.25
-      recent_breakout_buffer_atr: 0.15
-      recent_breakout_min_span_atr: 0.8
-      expiry_hours: 4.0
     break_retest:
       version: v3
       enabled: true
@@ -642,26 +540,15 @@ analysis:
       # measured quality is published in Quality.Components only.
       published_overall_quality: 0.75
     fade_scalp:
-      version: v2
+      version: v3
       enabled: true
       invalidation_buffer_atr: 0.25
-      target_r: 2.0
+      # The nearest structural objective (local mean or opposing liquidity) must offer at
+      # least this reward:risk; a fade with no structural objective is not published.
+      minimum_reward_risk: 1.0
       expiry_hours: 4.0
       chop_edge_fraction: 0.25
       strict_premium_discount: true
-    liquidity_sweep:
-      version: v3
-      enabled: true
-      # A sweep counts only as the frozen detector contract defined a liquidity
-      # event: a lone-extreme pool of the frozen window (equal levels are Fade
-      # Scalp's) cleared by the frozen equal-level band, closed back through with
-      # frozen grab grade A or B, the reversal's premium/discount location and the
-      # shared confluence floor.
-      strict_premium_discount: true
-      minimum_rejection_body_atr: 0.3
-      invalidation_buffer_atr: 0.25
-      target_r: 2.0
-      expiry_hours: 8.0
     # Impulse Pullback Scalp — the Python scalp lane's discover_impulse_pullback of the
     # profitable XAU week: an M5 impulse (displacement of at least 4 ATR, body
     # dominance 0.5) with a corrective pullback (< 0.7 of the impulse body), anchored
@@ -906,6 +793,18 @@ analysis:
     ny_start: 13
     # Trading-day boundary for PDH/PDL.
     daily_rollover_utc_hour: 21
+    # The hours above are the northern-summer UTC values, kept for the scanner and
+    # Algo Bot. The Analysis Engine places the same boundaries on real market
+    # clocks, so its session windows and trading-day rollover follow daylight
+    # saving: Asia opens at 07:00 Tokyo (22:00 UTC, no DST), London at 08:00 London
+    # (07:00 UTC in BST, 08:00 in GMT), New York at 09:00 New York (13:00 UTC in EDT,
+    # 14:00 in EST) and the FX trading day rolls over at 17:00 New York (21:00 UTC
+    # in EDT, 22:00 in EST). In northern summer these equal the integers above.
+    calendar:
+      asia: {zone: Asia/Tokyo, local_hour: 7}
+      london: {zone: Europe/London, local_hour: 8}
+      ny: {zone: America/New_York, local_hour: 9}
+      rollover: {zone: America/New_York, local_hour: 17}
 
   spot:
     maximum_age_seconds: 5

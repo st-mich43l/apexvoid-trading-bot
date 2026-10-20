@@ -100,7 +100,8 @@ func (s *Strategy) Analyze(ctx *analysiscontext.MarketContext) (Analysis, []oppo
 
 // factors scores the shared confluence rubric from MEASURED facts: the touches the
 // inverted gap really received, the rejection wick and inversion force actually
-// observed, the engine's structural direction and its higher-timeframe read.
+// observed, the engine's structural direction, its higher-timeframe read and the
+// session liquidity the move swept.
 func (s *Strategy) factors(ctx *analysiscontext.MarketContext, m5 *analysiscontext.TimeframeContext, setup Setup) confluence.Factors {
 	structural := false
 	if m5.Legacy != nil {
@@ -112,9 +113,21 @@ func (s *Strategy) factors(ctx *analysiscontext.MarketContext, m5 *analysisconte
 		WickRejection:       setup.WickRejection,
 		DisplacementGrade:   setup.Inversion.DisplacementATR >= s.cfg.DisplacementGradeATR,
 		StructuralAgreement: structural,
-		// A session always applies: the three windows partition the UTC day.
-		SessionContext: true,
+		SessionContext:      s.sessionSweep(ctx, setup),
 	}
+}
+
+// sessionSweep is the measured session context: a finalized session, previous-day or
+// previous-week level that supports the trade was swept and reclaimed during the move that
+// built the setup, from the gap's first candle to the rejection. A sweep before the gap
+// existed, or one that was not reclaimed, is not evidence for this inversion. The frozen
+// detectors set the factor on every decision.
+func (s *Strategy) sessionSweep(ctx *analysiscontext.MarketContext, setup Setup) bool {
+	d, ok := strategyutil.NewLegacyDetector(ctx, market.M5, setup.Direction, s.detector)
+	if !ok {
+		return false
+	}
+	return d.SessionSweepBetween(setup.Gap.FormedAt-2*m5Seconds, setup.ConfirmedAt)
 }
 
 func (s *Strategy) candidate(ctx *analysiscontext.MarketContext, m5 *analysiscontext.TimeframeContext, setup Setup) (opportunity.Candidate, bool) {
@@ -135,6 +148,9 @@ func (s *Strategy) candidate(ctx *analysiscontext.MarketContext, m5 *analysiscon
 	}
 	if factors.StructuralAgreement {
 		evidence = append(evidence, "structural_agreement")
+	}
+	if factors.SessionContext {
+		evidence = append(evidence, "session_liquidity_swept")
 	}
 
 	components := map[string]float64{

@@ -1,8 +1,8 @@
 """Regenerate testdata/legacy-strategies-oracle.json from the frozen Python oracle.
 
 The golden is the behaviour of the frozen Python detectors that the Go
-session_level, flip_zone and trendline strategies replaced
-(detectors.py: session_level_reaction, flip_demand_zone_reaction,
+flip_zone and trendline strategies replaced
+(detectors.py: flip_demand_zone_reaction,
 flip_supply_zone_reaction, trendline_reaction), at the commit
 below, over the committed real closed-bar captures. The Go test in this directory
 replays the same captures through the Go engine and compares bar by bar; the
@@ -32,7 +32,6 @@ CAPTURES = {
   "GBPJPY": "replay-gbpjpy-production-capture-20261006.json",
 }
 DETECTORS = (
-  "session_level_reaction",
   "flip_demand_zone_reaction",
   "flip_supply_zone_reaction",
   "trendline_reaction",

@@ -4,6 +4,7 @@ import (
 	"math"
 	"sort"
 
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/indicator"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 )
 
@@ -50,11 +51,11 @@ func detectAsOf(cfg Config, in Input, asOf int) Analysis {
 		return out
 	}
 	h1ATR, m5ATR := newATRWindow(h1, cfg.ATRLength, cfg.ATRWindowBars), newATRWindow(m5, cfg.ATRLength, cfg.ATRWindowBars)
-	if !h1ATR.enough() {
+	if !h1ATR.Enough() {
 		out.Rejections = append(out.Rejections, Rejection{Reason: ReasonInsufficientH1History})
 		return out
 	}
-	if !m5ATR.enough() {
+	if !m5ATR.Enough() {
 		out.Rejections = append(out.Rejections, Rejection{Reason: ReasonInsufficientM5History})
 		return out
 	}
@@ -89,8 +90,8 @@ type detector struct {
 	dir       market.Direction
 	sign      float64
 	h1, m5    []market.Candle // oriented
-	h1ATR     *atrWindow
-	m5ATR     *atrWindow
+	h1ATR     *indicator.WilderWindow
+	m5ATR     *indicator.WilderWindow
 	pivots    []int // oriented M5 pivot-high indices
 	asOf      int
 	evalClose int64
@@ -120,7 +121,7 @@ func (d *detector) scan() {
 // no ATR yet; a range below the configured ratio is reported (as a rejection)
 // only if the market actually swept it, so quiet hours stay silent.
 func (d *detector) anchorAt(a int) (Anchor, bool) {
-	atr, ok := d.h1ATR.at(a)
+	atr, ok := d.h1ATR.At(a)
 	if !ok {
 		return Anchor{}, false
 	}
@@ -140,7 +141,7 @@ func (d *detector) anchorAt(a int) (Anchor, bool) {
 }
 
 func (d *detector) sweepThreshold(i int) (float64, bool) {
-	atr, ok := d.m5ATR.at(i)
+	atr, ok := d.m5ATR.At(i)
 	if !ok {
 		return 0, false
 	}
@@ -148,7 +149,7 @@ func (d *detector) sweepThreshold(i int) (float64, bool) {
 }
 
 func (d *detector) reclaimBuffer(i int) (float64, bool) {
-	atr, ok := d.m5ATR.at(i)
+	atr, ok := d.m5ATR.At(i)
 	if !ok {
 		return 0, false
 	}
@@ -299,7 +300,7 @@ func (d *detector) runEpisode(anchor Anchor, i0, s0 int) episode {
 		if !(c.Close > level+cfg.ConfirmationBufferPips*pip) {
 			continue
 		}
-		atr, ok := d.m5ATR.at(j)
+		atr, ok := d.m5ATR.At(j)
 		if !ok {
 			continue
 		}
@@ -357,7 +358,7 @@ func (d *detector) structureLevel(anchor Anchor, extreme, j int) (float64, int, 
 func (d *detector) finalize(anchor Anchor, i0 int, ep episode) (*Setup, string) {
 	cfg := d.cfg
 	m, s0 := ep.m, ep.s0
-	atr, ok := d.m5ATR.at(m)
+	atr, ok := d.m5ATR.At(m)
 	if !ok {
 		return nil, ReasonM5ATRUnavailable
 	}
@@ -447,7 +448,7 @@ func (d *detector) finalize(anchor Anchor, i0 int, ep episode) (*Setup, string) 
 	if !(stop < extreme) || !(stop < lower) {
 		return nil, ReasonInvalidStopGeometry
 	}
-	target := anchor.High
+	target, targetKind := d.target(anchor, upper)
 	reward, risk := target-upper, upper-stop
 	if !(reward > 0) || reward < cfg.MinimumTargetRoomATR*atr {
 		return nil, ReasonInsufficientTargetRoom
@@ -480,17 +481,51 @@ func (d *detector) finalize(anchor Anchor, i0 int, ep episode) (*Setup, string) 
 			DepthATR: (reclaimBar.Close - anchor.Low) / atr, BarsAfterSweep: ep.r - s0,
 		},
 		Shift: ep.shift, ConfirmedAt: d.m5[m].Time, ConfirmationAge: d.barsBetween(m, d.asOf), DoubleRaidResolved: resolved,
-		EntryLow: lower, EntryHigh: upper, Stop: stop, Target: target, M5ATR: atr,
+		EntryLow: lower, EntryHigh: upper, Stop: stop, Target: target, TargetKind: targetKind, M5ATR: atr,
 		RiskPips: riskPips, RewardPips: rewardPips, TechnicalRR: rr, WickRejection: wick,
 	}
 	if thr, ok := d.sweepThreshold(s0); ok {
 		setup.Sweep.Threshold = thr
 	}
-	if atrSweep, ok := d.m5ATR.at(s0); ok {
+	if atrSweep, ok := d.m5ATR.At(s0); ok {
 		setup.Sweep.DepthATR = (anchor.Low - extreme) / atrSweep
 		setup.Reclaim.DepthATR = (reclaimBar.Close - anchor.Low) / atrSweep
 	}
 	return setup, ""
+}
+
+// target is the nearest structural obstacle between the entry and the opposite range
+// boundary: a confirmed swing high inside the range, above the entry, that no later candle
+// has traded through (a swing that was taken is no longer in the way). The boundary itself is
+// the objective only when nothing nearer stands between: the opposite CRT edge is where the
+// thesis ends, not where price is guaranteed to get to. All of it is read as of the evaluated
+// candle: a swing counts once its right-hand candles have closed.
+func (d *detector) target(anchor Anchor, entryTop float64) (float64, string) {
+	n := d.cfg.StructurePivotBars
+	best, found := anchor.High, false
+	for _, p := range d.pivots {
+		if p+n > d.asOf {
+			continue // not yet confirmable
+		}
+		level := d.m5[p].High
+		if !(level > entryTop && level < anchor.High) || (found && level >= best) {
+			continue
+		}
+		swept := false
+		for k := p + 1; k <= d.asOf; k++ {
+			if d.m5[k].High > level {
+				swept = true
+				break
+			}
+		}
+		if !swept {
+			best, found = level, true
+		}
+	}
+	if found {
+		return best, TargetNearestSwingHigh
+	}
+	return anchor.High, TargetOppositeRange
 }
 
 // toOriginal reflects a setup built in the bullish orientation back to the

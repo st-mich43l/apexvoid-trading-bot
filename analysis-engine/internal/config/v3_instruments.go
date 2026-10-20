@@ -243,7 +243,7 @@ func (d *Document) StopEnvelopeFor(symbol string) (minPips, maxPips float64, err
 }
 
 // ScalpStopEnvelopeFor is the optional scalp-sized stop band an instrument
-// declares for its range scalps (Range Edge, Fade Scalp) as
+// declares for its range scalps (Fade Scalp) as
 // stop_envelope.scalp_min_pips / scalp_max_pips. ok is false when the
 // instrument declares none, and the strategy then uses the instrument's
 // stop_envelope like every other non-M1 strategy. Both leaves or neither.

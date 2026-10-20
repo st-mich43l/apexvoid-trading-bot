@@ -15,6 +15,8 @@ func newStrategy(t *testing.T, own map[string]any) strategy.Strategy {
 	params := map[string]any{
 		"minimum_touches": 2.0, "invalidation_buffer_atr": .5, "minimum_target_distance_atr": 1.0, "fallback_target_r": 2.0,
 		"expiry_hours": 24.0, "breakout_accept_bars": 2.0, "price_digits": 2.0, "detector_contract": "profit_week",
+		// These tests pin the frozen detector's other behaviour; the measured session context has its own tests.
+		"frozen_session_context": true,
 	}
 	for key, value := range own {
 		params[key] = value
@@ -272,5 +274,29 @@ func TestTheCurrentContractReadsTheWickCountedLevels(t *testing.T) {
 func TestRequiredTimeframeIsM5(t *testing.T) {
 	if tf := newStrategy(t, nil).RequiredTimeframes(); len(tf) != 1 || tf[0] != market.M5 {
 		t.Fatalf("got %v", tf)
+	}
+}
+
+// The session context is the sweep of a finalized session level in the reaction's window, not a constant.
+func TestSessionContextIsAMeasuredSweepNotAConstant(t *testing.T) {
+	measured := newStrategy(t, map[string]any{"frozen_session_context": false})
+	levels := []techniquezone.Level{level(99, "reaction", 3)}
+	withSweep := func(sessions []techniquezone.SessionRef) *analysiscontext.MarketContext {
+		return contextWith(buyRejection, levels, func(f *analysiscontext.LegacyFrame, _ *analysiscontext.LegacyRead) { f.Sessions = sessions })
+	}
+	// The buy rejection runs to 98.0 and closes back at 100.2: it swept a finalized low resting at 98.5.
+	got := measured.Evaluate(withSweep([]techniquezone.SessionRef{{Name: "ASIA_L", Price: 98.5, AvailableAt: 300}}))
+	if len(got) != 1 || !got[0].DetectorConfluence.Factors.SessionContext {
+		t.Fatalf("a swept and reclaimed finalized session low is session context: %+v", got)
+	}
+	// Nothing swept: the factor is false, and the same setup is a star lower (htf 4 + touches 3 + structural 3 = 10 of 20.5 is two stars).
+	none := measured.Evaluate(withSweep(nil))
+	if len(none) != 1 || none[0].DetectorConfluence.Factors.SessionContext || none[0].DetectorConfluence.SelectedStars != 2 {
+		t.Fatalf("without a sweep there is no session context: %+v", none)
+	}
+	// A level that only closed after the reaction cannot have been swept by it.
+	late := measured.Evaluate(withSweep([]techniquezone.SessionRef{{Name: "ASIA_L", Price: 98.5, AvailableAt: 9999}}))
+	if len(late) != 1 || late[0].DetectorConfluence.Factors.SessionContext {
+		t.Fatalf("a level that was not yet final was not swept: %+v", late)
 	}
 }

@@ -28,6 +28,10 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/replaycapture"
 )
 
+// frozenSessionContext reproduces the frozen detector, which set the session-context confluence
+// factor on every decision: the golden is that detector's, and the factor is now measured.
+var frozenSessionContext = map[string]map[string]any{"key_level": {"frozen_session_context": true}}
+
 type decision struct {
 	Direction       string  `json:"direction"`
 	EntryLow        float64 `json:"entry_low"`
@@ -84,7 +88,7 @@ func TestKeyLevelMatchesTheProfitableWeekPython(t *testing.T) {
 		}
 		tick := math.Pow10(-digits)
 		got := map[int64][]opportunity.Candidate{}
-		_, err = replaycapture.Replay(doc, capture, market.M5, replaycapture.Options{OnEvaluation: func(e engine.Evaluation) {
+		_, err = replaycapture.Replay(doc, capture, market.M5, replaycapture.Options{StrategyParameters: frozenSessionContext, OnEvaluation: func(e engine.Evaluation) {
 			if e.Timeframe != market.M5 {
 				return
 			}

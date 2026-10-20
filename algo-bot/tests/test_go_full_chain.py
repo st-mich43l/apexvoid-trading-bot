@@ -451,8 +451,7 @@ async def test_only_the_m1_scalp_bypasses_the_shared_barrier_book(h, prod, scope
   """Which Go-origin matches skip the shared opposing-barrier book is a fact to pin, not to assume.
 
   The legacy range-scalp bypass also needs ``full_take_profit_pips``, which the Python range-target selector used to set and no Go
-  opportunity carries. Range Edge therefore goes through the same barrier gate as every zone strategy; its own protection is the
-  strategy's room-to-equilibrium rule in Go. Impulse Pullback (an M1 scalp) bypasses the book and is judged by its native
+  opportunity carries. Fade Scalp therefore goes through the same barrier gate as every zone strategy. Impulse Pullback (an M1 scalp) bypasses the book and is judged by its native
   scalp room instead (``scalp_room_below_1r``)."""
   from app.autotrade.strategy_taxonomy import match_bypasses_opposing_structure
 
@@ -826,7 +825,7 @@ def test_go_thesis_identity_is_stable_for_the_zone_not_the_confirmation_bar():
 
 # --- Execution containment, end to end ----------------------------------------
 
-XAU_OBSERVE_ONLY = {"liquidity_sweep", "impulse_pullback"}
+XAU_OBSERVE_ONLY = {"impulse_pullback"}
 
 
 def contain_xau(monkeypatch, strategies=(), timeframes=()):
@@ -900,7 +899,7 @@ async def test_ordinary_m5_supply_demand_still_becomes_a_plan(h, prod):
   assert await worker._publish_trade_plan_v8(prod, "XAU", _spot(4354.1, 4354.3), match, frames={}) is not None
 
 
-@pytest.mark.parametrize("scope", ["liquidity_sweep", "supply"])
+@pytest.mark.parametrize("scope", ["impulse_pullback", "supply"])
 @pytest.mark.asyncio
 async def test_a_match_stored_before_containment_cannot_become_a_plan(h, prod, monkeypatch, scope):
   """Defence in depth: containment is re-checked at plan admission, so a match

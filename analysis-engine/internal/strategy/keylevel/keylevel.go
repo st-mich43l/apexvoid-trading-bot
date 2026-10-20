@@ -42,7 +42,6 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/keylevel"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
-	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/reaction"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategyutil"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/techniquezone"
@@ -272,7 +271,7 @@ func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate 
 				zoneSide = "supply"
 			}
 			zone := techniquezone.Zone{Bottom: reactLow, Top: reactHigh, Side: zoneSide, Source: "level", BreakIndex: -1}
-			factors := strategyutil.FactorsForConfirmation(reactionFactors(conf.Type, d.HTFAligned(), level.Touches), conf.Type)
+			factors := strategyutil.FactorsForConfirmation(reactionFactors(conf.Type, d.HTFAligned(), level.Touches, d.SessionSweepContext(conf)), conf.Type)
 			result := d.Finish(levelPrice, zone, factors, level.Kind, &reactLow, &reactHigh)
 			if result == nil {
 				continue
@@ -303,17 +302,11 @@ func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate 
 }
 
 // reactionFactors mirrors _reaction_factors: the evidence the confirmation
-// actually showed, mapped onto the common rubric. The session context is
-// always on, as the frozen scanner never narrowed it.
-func reactionFactors(confirmationType string, htfAligned bool, touches int) confluence.Factors {
-	return confluence.Factors{
-		HTFAligned:          htfAligned,
-		Touches:             touches,
-		WickRejection:       confirmationType == reaction.TypeWickRejection,
-		DisplacementGrade:   confirmationType == reaction.TypeEngulfing,
-		StructuralAgreement: confirmationType == reaction.TypeSweepReclaim || confirmationType == reaction.TypeStrongReclaim,
-		SessionContext:      true,
-	}
+// actually showed, mapped onto the common rubric. The session context is the
+// measured one (a finalized session level swept and reclaimed in the reaction's
+// window); the frozen scanner set it on every decision.
+func reactionFactors(confirmationType string, htfAligned bool, touches int, sessionSweep bool) confluence.Factors {
+	return strategyutil.ReactionFactors(confirmationType, htfAligned, touches, sessionSweep)
 }
 
 func (s *Strategy) candidate(ctx *context.MarketContext, d *strategyutil.LegacyDetector, a *attempt) (opportunity.Candidate, bool) {

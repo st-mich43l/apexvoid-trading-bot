@@ -5,6 +5,7 @@ import (
 	"math"
 	"sort"
 
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/indicator"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 )
 
@@ -153,7 +154,7 @@ type ref struct {
 type detector struct {
 	cfg  Config
 	bars []market.Candle
-	atr  *atrWindow
+	atr  *indicator.WilderWindow
 	ph   []pivot // pivot highs (resistance touches and opposing structure)
 	pl   []pivot // pivot lows (protected structure)
 	e    int
@@ -183,11 +184,11 @@ func (d *detector) run() []Episode {
 		first--
 	}
 	for b := first; b <= d.e; b++ {
-		atrB, okB := d.atr.at(b)
+		atrB, okB := d.atr.At(b)
 		// The reference and the break buffer are built from what was knowable
 		// BEFORE the break candle: ATR as of the candle before it, so the break
 		// candle's own range can never decide whether a reference exists.
-		atrPre, okPre := d.atr.at(b - 1)
+		atrPre, okPre := d.atr.At(b - 1)
 		if !okB || !okPre {
 			continue
 		}
@@ -468,7 +469,7 @@ func (d *detector) finish(ep Episode, r ref, brk Break, protected float64, b, a,
 		ep.State, ep.Reason = StateRetestConfirmed, reason
 		return ep
 	}
-	atrC, ok := d.atr.at(confirm)
+	atrC, ok := d.atr.At(confirm)
 	if !ok {
 		return reject(ReasonATRUnavailable)
 	}

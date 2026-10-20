@@ -8,6 +8,7 @@ import (
 	analysiscontext "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/context"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/techniquezone"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/test/legacyfixture"
 )
 
@@ -45,11 +46,16 @@ func newStrategy(t *testing.T, override map[string]any) strategy.Strategy {
 // marketContext carries the closed M5 candles, the engine's structural read of the
 // M5 frame and an HTF bias, the way the engine hands them to a strategy.
 func marketContext(m5 []market.Candle, structure, htf string) *analysiscontext.MarketContext {
+	return marketContextWith(m5, structure, htf, nil)
+}
+
+// marketContextWith also hands the strategy the finalized session levels the engine keeps in the frame.
+func marketContextWith(m5 []market.Candle, structure, htf string, sessions []techniquezone.SessionRef) *analysiscontext.MarketContext {
 	return &analysiscontext.MarketContext{
 		Symbol: "XAU",
 		Legacy: &analysiscontext.LegacyRead{LocalStructure: structure, HTFBias: htf, AllowCounterTrend: true},
 		Timeframes: map[market.Timeframe]*analysiscontext.TimeframeContext{
-			market.M5: {Timeframe: market.M5, Candles: m5, Legacy: &analysiscontext.LegacyFrame{Structure: structure}},
+			market.M5: {Timeframe: market.M5, Candles: m5, Legacy: &analysiscontext.LegacyFrame{Structure: structure, Bars: m5, DetectorATR: 2, Sessions: sessions}},
 		},
 	}
 }
@@ -153,24 +159,58 @@ func TestBearishTwinIsASellWithABullishOriginalGap(t *testing.T) {
 // the measured facts decide it.
 func TestMeasuredFactorsDecideTheStarsAndTheFloor(t *testing.T) {
 	bars, _ := bullishIFVG(defaultOpts())
-	// No HTF, structure against: touches 1 + wick 3 + displacement 3 + session 2 = 9 -> 2 stars.
-	two := newStrategy(t, nil).Evaluate(marketContext(bars, "down", "down"))
-	if len(two) != 1 || two[0].DetectorConfluence.SelectedStars != 2 || two[0].Quality.Overall != 2.0/3 {
-		t.Fatalf("unaligned: %+v", two)
-	}
-	// A stricter wick and body bar removes the wick credit: 1+3+2 = 6 -> 1 star, below the floor.
-	strict := newStrategy(t, nil)
-	if _, ok := strict.(*Strategy); !ok {
-		t.Fatal("unexpected strategy type")
-	}
-	s := strict.(*Strategy)
-	s.cfg.RejectionWickRatio = 0.9
-	s.cfg.RejectionBodyRatio = 0.99
-	analysis, candidates := s.Analyze(marketContext(bars, "down", "down"))
+	// No HTF, structure against, no session liquidity swept: touches 1 + wick 3 + displacement 3 = 7 -> 1 star,
+	// below the floor. The session context is no longer a constant two points.
+	analysis, candidates := newStrategy(t, nil).(*Strategy).Analyze(marketContext(bars, "down", "down"))
 	if len(candidates) != 0 {
-		t.Fatalf("a below-floor setup published: %+v", candidates[0].DetectorConfluence)
+		t.Fatalf("a setup with only its own candle evidence published: %+v", candidates[0].DetectorConfluence)
 	}
 	_ = analysis
+	// With the higher timeframe behind it: 4 + 1 + 3 + 3 = 11 -> 2 stars.
+	two := newStrategy(t, nil).Evaluate(marketContext(bars, "down", "up"))
+	if len(two) != 1 || two[0].DetectorConfluence.SelectedStars != 2 || two[0].Quality.Overall != 2.0/3 || two[0].DetectorConfluence.Factors.SessionContext {
+		t.Fatalf("aligned: %+v", two)
+	}
+	// A stricter wick and body bar removes the wick credit: 4+1+3 = 8 is still two stars, but without the
+	// alignment it is 1+3 = 4 -> 1 star, below the floor.
+	s := newStrategy(t, nil).(*Strategy)
+	s.cfg.RejectionWickRatio = 0.9
+	s.cfg.RejectionBodyRatio = 0.99
+	if _, candidates := s.Analyze(marketContext(bars, "down", "down")); len(candidates) != 0 {
+		t.Fatalf("a below-floor setup published: %+v", candidates[0].DetectorConfluence)
+	}
+}
+
+// The session context is the sweep of a FINALIZED session level during the move that built the setup.
+func TestSessionContextIsAMeasuredSweepOfFinalizedLiquidity(t *testing.T) {
+	bars, m := bullishIFVG(defaultOpts())
+	touch := bars[m.touch]
+	level := touch.Low + 0.3 // the retest runs 0.3 below it and the rejection closes back above
+	available := bars[m.invert].Time
+	swept := []techniquezone.SessionRef{{Name: "ASIA_L", Price: level, AvailableAt: available}}
+	// Unaligned (7 points) the sell-side sweep of a finalized Asia low is the 2 that lifts it to the floor.
+	got := newStrategy(t, nil).Evaluate(marketContextWith(bars, "down", "down", swept))
+	if len(got) != 1 || !got[0].DetectorConfluence.Factors.SessionContext || got[0].DetectorConfluence.SelectedStars != 2 {
+		t.Fatalf("a swept and reclaimed finalized session low is evidence for the BUY: %+v", got)
+	}
+	found := false
+	for _, e := range got[0].Evidence {
+		found = found || e.Code == "session_liquidity_swept"
+	}
+	if !found {
+		t.Fatal("the sweep must be recorded as evidence")
+	}
+	// A developing extreme (no AvailableAt), a level that closed after the setup, or a high (buy-side liquidity) is not.
+	for name, refs := range map[string][]techniquezone.SessionRef{
+		"developing":  {{Name: "ASIA_L", Price: level}},
+		"too late":    {{Name: "ASIA_L", Price: level, AvailableAt: bars[m.confirm].Time + 600}},
+		"wrong side":  {{Name: "ASIA_H", Price: level, AvailableAt: available}},
+		"not reached": {{Name: "ASIA_L", Price: 4000, AvailableAt: available}},
+	} {
+		if got := newStrategy(t, nil).Evaluate(marketContextWith(bars, "down", "down", refs)); len(got) != 0 {
+			t.Errorf("%s: not session liquidity swept for this trade, must not lift the setup: %+v", name, got[0].DetectorConfluence.Factors)
+		}
+	}
 }
 
 func TestAnalyzeAndEvaluateAgreeAndEvaluationIsRepeatable(t *testing.T) {

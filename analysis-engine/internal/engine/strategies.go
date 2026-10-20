@@ -12,10 +12,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/ifvg"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/impulsepullback"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/keylevel"
-	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/liquiditysweep"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/orderblock"
-	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/rangeedge"
-	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/sessionlevel"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/supply"
 	strategytrendline "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/trendline"
 )
@@ -42,14 +39,11 @@ var strategyFactories = map[strategy.StrategyID]strategy.Factory{
 	fvg.ID:               fvg.New,
 	flipzone.ID:          flipzone.New,
 	keylevel.ID:          keylevel.New,
-	sessionlevel.ID:      sessionlevel.New,
 	strategytrendline.ID: strategytrendline.New,
 	ifvg.ID:              ifvg.New,
 	crt.ID:               crt.New,
 	confluencezone.ID:    confluencezone.New,
-	rangeedge.ID:         rangeedge.New,
 	breakretest.ID:       breakretest.New,
 	fadescalp.ID:         fadescalp.New,
-	liquiditysweep.ID:    liquiditysweep.New,
 	impulsepullback.ID:   impulsepullback.New,
 }

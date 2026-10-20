@@ -499,3 +499,64 @@ for a valid one (`GBPUSD early` SELL 1790639700, touch 1790638800 four bars afte
 * `SessionContext` constant, Key Level GBPJPY disabled by an unsatisfiable `require_explicit_role` and the star cap for touched zones are as reported in section 11.
 * Production closed trades (`trade_stream = 'algo_auto'`) carry no reaction timestamps, so the trades that came from a formation-bar reaction cannot be separated; FX auto-trades come from Key Level, Range Edge, Supply/Demand (44), Fade and Confluence Zone only, so FVG and Flip Zone have no production sample at all.
 * No claim of better profitability is made: the corrected rules remove opportunities that were not a reaction to the structure they claimed, nothing more.
+
+## 13. Q2 rework (2026-10-20): strategy consolidation and mathematical validation
+
+Baseline = this PR's earlier state (section 12 applied; 13,892 opportunities); revised = the state after the rework (11,835). The same 17 captures through `test/aequality` (closed candles, constant spreads, the real 1R/2R ladder, 24 h;
+hypothetical, never broker P&L); development before 2026-10-07 UTC, out of sample after; matched random entries as in 11.3. Nothing below was tuned on these captures: every rule is derived from geometry (ATR-normalised distances, causal order,
+one fact one credit), and where a threshold appears it is a configuration value that already existed or a ratio of the trade's own risk.
+
+### 13.1 What was removed
+
+`range_edge`, `session_level` and the standalone `liquidity_sweep` (508, 83 and 25 replayed opportunities) have no code path left: no strategy package, factory, catalog entry, `analysis.yml`/`auto-algo.yml` key, Algo Bot adapter, catalog profile,
+retest-only execution branch, stop-envelope or MAD mapping, fixture or replay package (`test/rereplay`, `test/slreplay`); a configuration naming one fails startup (`TestAConfigurationThatStillNamesAPurgedStrategyFailsClosed`). The Python names stay as retired,
+profile-less aliases (`tests/test_purged_strategies.py`). The reusable evidence they computed remains once: [shared-structure-evidence.md](shared-structure-evidence.md). The matched-random record of the three purged strategies is in 11.3 (Range Edge +0.12 development, -0.16 out of sample).
+
+### 13.2 What changed, strategy by strategy
+
+| Strategy | Corrected | Replay opportunities | Stars (2 / 3) |
+|---|---|---|---|
+| iFVG | session context measured (finalized-level sweep during the move), not asserted; formation-candle proof | 127 -> 104 | 68 / 59 -> 74 / 30 |
+| CRT | nearest standing swing as target; shift displacement no longer a second credit; constant `reaction` removed | 3 -> 1 | 2 / 1 -> 1 / 0 |
+| Fade Scalp | v3: failed continuation, stop beyond the sweep extreme, nearest structural objective with `minimum_reward_risk`, measured factors | 175 -> 29 | 145 / 30 -> 27 / 2 |
+| Trendline | reaction only after the candle that confirmed the line; measured session context | 16 -> 16 | 0 / 16 -> 7 / 9 |
+| Key Level (shares the factor) | measured session context | 5,444 -> 4,174 | 2,890 / 2,554 -> 3,122 / 1,052 |
+| Flip Zone (shares the factor) | measured session context | 28 -> 28 | unchanged |
+| every other strategy | unchanged | unchanged | unchanged |
+
+Total 13,892 -> 11,835 (-616 from the purged strategies, -1,441 from the rules above). Stars of an unchanged-geometry opportunity move only through the factor it relied on; geometry (entry, invalidation) is unchanged except Fade Scalp's stop (beyond the sweep wick) and CRT's nearer target.
+
+Fade Scalp, gate by gate (bar evaluations of an equal pool with a confirmed reaction, 1,636): 576 continued past the sweep's extreme (35%), 833 fell below the confluence floor once the rejection factor was measured and the grade was no longer read as a displacement, 160 had a nearest
+objective offering less than 1R, 67 passed. No evaluation was refused for lack of a structural objective.
+
+### 13.3 Against matched random entries (thinned episodes, filled)
+
+| Strategy | Window | Baseline n, difference [95%] | Revised n, difference [95%] |
+|---|---|---|---|
+| Key Level | development | 982, -0.021 [-0.074, +0.033] | 828, -0.056 [-0.131, +0.022] |
+| Key Level | out of sample | 680, -0.071 [-0.178, +0.016] | 548, -0.045 [-0.156, +0.042] |
+| iFVG | development | 58, +0.202 [-0.105, +0.572] | 50, +0.111 [-0.222, +0.476] |
+| iFVG | out of sample | 40, +0.326 [-0.068, +0.722] | 35, **+0.401 [+0.106, +0.781]** |
+| Fade Scalp | development | 64, -0.110 [-0.331, +0.124] | 12, **-0.510 [-1.007, -0.049]** |
+| Fade Scalp | out of sample | 45, **-0.307 [-0.530, -0.053]** | 8, **-0.561 [-0.875, -0.115]** |
+| Trendline | development / out of sample | 6, +0.439 / 1, +1.872 | unchanged |
+| CRT | any | no filled thinned sample | no filled thinned sample |
+
+Reading: none of the corrections shows a measurable gain, and none is claimed. Key Level's removed 1,527 opportunities were not worse than the ones kept (+0.004R against -0.102R), i.e. the constant session point was inflating stars without selecting better
+trades, and removing it neither helps nor costs anything we can resolve. iFVG stays the one strategy above random in both windows (out of sample's interval excludes zero) on 35-50 observations: plausible, unproven. Fade Scalp was below random before and is below random on the 20 that remain:
+the rules removed what they could prove invalid (continuation, invented targets, an asserted rejection), not what loses; with 20 observations it is "insufficient", and whether it deserves to stay enabled is the owner's decision (see the retirement review). CRT and Trendline have too few observations to say anything.
+
+### 13.4 Replayed cases
+
+Valid: iFVG `TestMeasuredFactorsDecideTheStarsAndTheFloor` (HTF-aligned BUY, two stars) and `TestSessionContextIsAMeasuredSweepOfFinalizedLiquidity` (a finalized Asia low swept and reclaimed lifts an unaligned setup to the floor); CRT `bullishCRT`
+(target 4118 with no standing swing in between) and the target tests (a swing at 4109 stands between entry and edge); Fade `TestFadeAimsAtTheNearestStructuralObjectiveAndNeverInventsOne`.
+Invalid: a formation candle inverting its own gap, a developing or not-yet-final session level, a level the market accepted beyond (consumed), a sweep not yet reclaimed at the deciding candle (no look-ahead), the same event counted twice,
+a swing the market already took as an obstacle, an unconfirmed swing, a sweep that kept running, an objective that leaves less than 1R, a fade with no objective, a trendline reaction on the candle that confirmed its anchor, a configuration naming a purged strategy.
+
+### 13.5 Not proven, and not changed
+
+* Session boundaries follow daylight saving in the code and are proven on synthetic clock changes (`test/session/calendar_test.go`); the captures are all northern summer, where the calendar equals the old fixed hours, so the replay cannot show a difference.
+  The MAD Asia phase window and the previous-WEEK boundary (Monday 00:00 UTC) still use fixed UTC; a finalized session whose candles are only partly present (data starting mid-session) is not rejected for incompleteness.
+* Slopes of a trendline are per candle position, which is exact on a continuous feed and treats a feed hole as no time.
+* A real production comparison is impossible for the new logic: closed trades carry no reaction timestamps and none exist for the corrected Fade Scalp or the measured session context.
+* Key Level now needs a real eighth point of evidence for two stars; if the owner wants the old volume, that is a floor decision (`confluence_floor`), not a restoration of the constant.

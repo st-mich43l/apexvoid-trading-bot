@@ -331,8 +331,8 @@ def test_market_watch_caps_adverse_fill_at_planned_entry_but_keeps_better_prices
     direction=direction,
     entry_low=zone_low,
     entry_high=zone_high,
-    strategy="Liquidity Sweep",
-    family="liquidity_sweep",
+    strategy="Key Level",
+    family="key_level",
   )
 
   entry = _build_entry(

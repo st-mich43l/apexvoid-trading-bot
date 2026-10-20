@@ -91,6 +91,13 @@ machine-readable factors (`htf_aligned`, `touches`, `wick_rejection`,
   nearest on a tie), counter-bias, entry too far, confluence floor, minimum
   touches, explicit-role requirement, target selection, contract selection.
 
+## Q2: the session context is measured
+
+`session_context` was set on every Key Level decision, which made a reaction with no higher-timeframe agreement reach two stars on candle evidence alone (touches 3 + pattern 3 + a constant 2). It is now true only when a finalized
+session, previous-day or previous-week level supporting the trade was swept and reclaimed in the reaction's window (see [shared-structure-evidence.md](shared-structure-evidence.md)). `test/keylevelparity` keeps proving the
+frozen detector with `frozen_session_context` set. On the 17-capture replay: 5,444 -> 4,174 opportunities (2/3 stars: 2,890/2,554 -> 3,122/1,052; 257 new ones where the better of two attempts changed). The 1,527 removed were not worse than the rest
+(hypothetical +0.004R against -0.102R), so the change removes an unconditional constant, it is not a performance rule.
+
 ## Status and execution
 
 - **Certification**: `LEGACY_PARITY_PROVEN` ([matrix](README.md#certification)).

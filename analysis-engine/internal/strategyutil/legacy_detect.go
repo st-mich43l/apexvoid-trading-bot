@@ -54,6 +54,11 @@ type LegacyDetectorSettings struct {
 	// publishers read the execution frame only, so this is the one deliberate
 	// extension of the contract and is opt-in per strategy.
 	HigherTimeframes []market.Timeframe
+	// FrozenSessionContext reproduces the frozen detectors, which set the session
+	// context factor on every decision (the three sessions cover all 24 hours, so it
+	// was true by construction). Optional "frozen_session_context", default false:
+	// only the replays that prove an oracle golden set it.
+	FrozenSessionContext bool
 }
 
 // LegacyDetectorParameterKeys documents the parameters ParseLegacyDetectorSettings
@@ -108,6 +113,13 @@ func ParseLegacyDetectorSettings(params map[string]any) (LegacyDetectorSettings,
 		if s.HigherTimeframes, err = parseHigherTimeframes(raw); err != nil {
 			return s, err
 		}
+	}
+	if raw, present := params["frozen_session_context"]; present {
+		frozen, isBool := raw.(bool)
+		if !isBool {
+			return s, fmt.Errorf("parameter %q must be boolean", "frozen_session_context")
+		}
+		s.FrozenSessionContext = frozen
 	}
 	version, ok := params["confluence_scoring_version"].(string)
 	if !ok || version == "" {
@@ -679,15 +691,6 @@ func (d *LegacyDetector) ZoneID(zone techniquezone.Zone) string {
 // LevelID is the stable identity of a key level: its kind and price.
 func LevelID(level techniquezone.Level) string {
 	return fmt.Sprintf("level:%s:%.8f", level.Kind, level.Price)
-}
-
-// OriginTime is the open time of the zone's origin bar, or fallback when the
-// zone has no origin inside the frame's window.
-func (d *LegacyDetector) OriginTime(zone techniquezone.Zone, fallback int64) int64 {
-	if zone.OriginIndex >= 0 && zone.OriginIndex < len(d.Frame.Bars) {
-		return d.Frame.Bars[zone.OriginIndex].Time
-	}
-	return fallback
 }
 
 // WithDirection returns a copy of the detector evaluated for another direction.

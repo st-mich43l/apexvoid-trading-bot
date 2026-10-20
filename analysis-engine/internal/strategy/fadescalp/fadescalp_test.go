@@ -8,14 +8,15 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/regime"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategyutil"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/techniquezone"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/test/legacyfixture"
 )
 
 func newStrategy(t *testing.T) strategy.Strategy {
 	t.Helper()
-	s, err := New(strategy.Config{ID: ID, Version: "v2", Parameters: legacyfixture.Params(map[string]any{
-		"invalidation_buffer_atr": .25, "target_r": 2.0, "expiry_hours": 4.0, "chop_edge_fraction": .25, "strict_premium_discount": true,
+	s, err := New(strategy.Config{ID: ID, Version: "v3", Parameters: legacyfixture.Params(map[string]any{
+		"invalidation_buffer_atr": .25, "minimum_reward_risk": 1.0, "expiry_hours": 4.0, "chop_edge_fraction": .25, "strict_premium_discount": true,
 	})})
 	if err != nil {
 		t.Fatal(err)
@@ -34,7 +35,7 @@ func equalLow(touches int) techniquezone.Pool {
 }
 
 func grab(grade string) techniquezone.Grab {
-	return techniquezone.Grab{Index: 9, Direction: "bull", Grade: grade, Pool: equalLow(3)}
+	return techniquezone.Grab{Index: 9, Direction: "bull", Grade: grade, Pool: equalLow(3), ReactionDisplacement: true}
 }
 
 func qualifying(mutate func(*analysiscontext.LegacyFrame, *analysiscontext.LegacyRead)) *analysiscontext.MarketContext {
@@ -137,7 +138,7 @@ func TestFadeSellMirrorsBuy(t *testing.T) {
 		r.LocalStructure, r.HTFBias = "down", "down"
 		pool := techniquezone.Pool{Side: "buy", Level: 100.85, Band: .1, Touches: 3}
 		f.Pools = []techniquezone.Pool{pool, {Side: "sell", Level: 97, Band: .1, Touches: 1}}
-		f.Grabs = []techniquezone.Grab{{Index: 9, Direction: "bear", Grade: "B", Pool: pool}}
+		f.Grabs = []techniquezone.Grab{{Index: 9, Direction: "bear", Grade: "B", Pool: pool, ReactionDisplacement: true}}
 	})
 	got := newStrategy(t).Evaluate(ctx)
 	if len(got) != 1 || got[0].Direction != market.Sell {
@@ -145,20 +146,105 @@ func TestFadeSellMirrorsBuy(t *testing.T) {
 	}
 }
 
-// A target is labelled by what it is: the nearest opposing pool when there is one far enough, else the strategy's own fixed
-// reward:risk. The label used to say "fade_opposing_liquidity" for both.
-func TestFadeLabelsItsTargetByWhatItIs(t *testing.T) {
+// The thesis is a reversion to a structural objective: the nearest of the local mean and the opposing liquidity, and
+// with neither there is no opportunity (v2 invented a 2R target).
+func TestFadeAimsAtTheNearestStructuralObjectiveAndNeverInventsOne(t *testing.T) {
+	// The opposing pool at 103 is the only objective.
 	got := newStrategy(t).Evaluate(qualifying(nil))
-	if len(got) != 1 || got[0].Targets[0].Price.Label != "fade_opposing_liquidity" {
-		t.Fatalf("a pool target is an opposing-liquidity target: %+v", got)
+	if len(got) != 1 || got[0].Targets[0].Price.Label != "opposing_liquidity" {
+		t.Fatalf("a pool target is opposing liquidity: %+v", got)
 	}
-	noPool := newStrategy(t).Evaluate(qualifying(func(f *analysiscontext.LegacyFrame, _ *analysiscontext.LegacyRead) {
+	// The dealing range's equilibrium at 101.8 is nearer than the pool: it decides.
+	mean := newStrategy(t).Evaluate(qualifying(func(f *analysiscontext.LegacyFrame, _ *analysiscontext.LegacyRead) {
+		f.Range = &fib.DealingRange{Zone: "discount", Equilibrium: 101.8}
+	}))
+	if len(mean) != 1 || mean[0].Targets[0].Price.Label != strategyutil.MeanDealingEquilibrium || float64(mean[0].Targets[0].Price.Price) != 101.8 {
+		t.Fatalf("the nearer local mean is the objective: %+v", mean)
+	}
+	// The established range's own equilibrium is preferred to the dealing range's.
+	ranged := newStrategy(t).Evaluate(qualifying(func(f *analysiscontext.LegacyFrame, _ *analysiscontext.LegacyRead) {
+		f.Range = &fib.DealingRange{Zone: "discount", Equilibrium: 102.5}
+		f.ScalpRange = &techniquezone.ScalpRange{Equilibrium: 101.9, State: techniquezone.RangeStateConfirmed}
+	}))
+	if len(ranged) != 1 || ranged[0].Targets[0].Price.Label != strategyutil.MeanRangeEquilibrium {
+		t.Fatalf("an unbroken range's equilibrium is the mean: %+v", ranged)
+	}
+	// No pool, no mean: a fixed multiple of the risk is not a structural objective.
+	none := newStrategy(t).Evaluate(qualifying(func(f *analysiscontext.LegacyFrame, _ *analysiscontext.LegacyRead) {
 		f.Pools = []techniquezone.Pool{equalLow(3)}
 	}))
-	if len(noPool) != 1 {
-		t.Fatalf("the fade is still valid without an opposing pool: %+v", noPool)
+	if len(none) != 0 {
+		t.Fatalf("a fade with no structural objective must not be published: %+v", none)
 	}
-	if label := noPool[0].Targets[0].Price.Label; label != "fixed_reward_risk" {
-		t.Fatalf("a target that is a multiple of the risk is not opposing liquidity, label %q", label)
+}
+
+func TestFadeNeedsTheRoomItsRiskDemands(t *testing.T) {
+	// An objective 0.65 above the entry leaves less than the 1.0 risk.
+	near := newStrategy(t).Evaluate(qualifying(func(f *analysiscontext.LegacyFrame, _ *analysiscontext.LegacyRead) {
+		f.Pools = []techniquezone.Pool{equalLow(3), {Side: "buy", Level: 99.9, Band: .1, Touches: 1}}
+	}))
+	if len(near) != 0 {
+		t.Fatalf("an objective that leaves less than the minimum reward:risk must reject: %+v", near)
+	}
+	// The nearest objective decides: a far pool behind a too-near mean is not a way out.
+	blocked := newStrategy(t).Evaluate(qualifying(func(f *analysiscontext.LegacyFrame, _ *analysiscontext.LegacyRead) {
+		f.Range = &fib.DealingRange{Zone: "discount", Equilibrium: 99.9}
+	}))
+	if len(blocked) != 0 {
+		t.Fatalf("a near mean must not be skipped in favour of a farther pool: %+v", blocked)
+	}
+}
+
+func TestFadeStopSitsBeyondTheSweepExtreme(t *testing.T) {
+	got := newStrategy(t).Evaluate(qualifying(nil))
+	if len(got) != 1 {
+		t.Fatal("fixture must qualify")
+	}
+	// The sweep candle ran to 98.5; the thesis fails when that is exceeded.
+	if invalid := float64(got[0].Invalidation.Price); !(invalid < 98.5) {
+		t.Fatalf("the stop %v is inside the sweep's wick (low 98.5)", invalid)
+	}
+}
+
+func TestFadeRefusesASweepThatKeptRunning(t *testing.T) {
+	out := bars()
+	// The grabbed candle is bar 8; bar 9 trades below its low and is not reclaimed as a sweep: the move continued.
+	out[8] = market.Candle{Time: 2700, Open: 99.4, High: 100.2, Low: 98.8, Close: 100}
+	out[9] = market.Candle{Time: 3000, Open: 99.6, High: 100.8, Low: 98.4, Close: 100.5}
+	got := newStrategy(t).Evaluate(legacyfixture.Context(out, 1, func(f *analysiscontext.LegacyFrame, _ *analysiscontext.LegacyRead) {
+		f.Pools = []techniquezone.Pool{equalLow(3), {Side: "buy", Level: 103, Band: .1, Touches: 1}}
+		f.Grabs = []techniquezone.Grab{{Index: 8, Direction: "bull", Grade: "B", Pool: equalLow(3), ReactionDisplacement: true}}
+	}))
+	if len(got) != 0 {
+		t.Fatalf("a candle after the sweep traded beyond its extreme: not exhausted, must reject: %+v", got)
+	}
+}
+
+// The confluence factors are what the candles showed: the frozen detector set the rejection factor on every decision.
+func TestFadeFactorsAreMeasuredNotAsserted(t *testing.T) {
+	plain := newStrategy(t).Evaluate(qualifying(nil))
+	if len(plain) != 1 {
+		t.Fatal("fixture must qualify")
+	}
+	// The fixture's sweep candle (open 99.4, close 100.5, low 98.5) has a lower wick shorter than its body.
+	if f := plain[0].DetectorConfluence.Factors; f.WickRejection || !f.DisplacementGrade || f.SessionContext {
+		t.Fatalf("factors must follow the candles: %+v", f)
+	}
+	hammer := bars()
+	hammer[9] = market.Candle{Time: 3000, Open: 100.3, High: 100.8, Low: 98.5, Close: 100.6}
+	got := newStrategy(t).Evaluate(legacyfixture.Context(hammer, 1, func(f *analysiscontext.LegacyFrame, _ *analysiscontext.LegacyRead) {
+		f.Pools = []techniquezone.Pool{equalLow(3), {Side: "buy", Level: 103, Band: .1, Touches: 1}}
+		f.Grabs = []techniquezone.Grab{grab("B")}
+	}))
+	if len(got) != 1 || !got[0].DetectorConfluence.Factors.WickRejection {
+		t.Fatalf("a hammer sweep candle is a wick rejection: %+v", got)
+	}
+	for _, key := range []string{"extension_atr", "sweep_body_ratio", "sweep_lower_wick", "reward_risk", "target_room_atr"} {
+		if _, ok := got[0].Quality.Components[key]; !ok {
+			t.Errorf("component %q is missing", key)
+		}
+	}
+	if _, constant := got[0].Quality.Components["reaction"]; constant {
+		t.Error("a constant reaction component carries no information")
 	}
 }

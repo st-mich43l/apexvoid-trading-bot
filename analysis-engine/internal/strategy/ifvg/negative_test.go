@@ -357,3 +357,35 @@ func TestAThirdRetestOfTheSameInversionIsNotEvaluated(t *testing.T) {
 		t.Fatalf("max_retests_per_inversion (2) was exceeded: %s", describe(a))
 	}
 }
+
+// A gap exists once its third candle has closed, and only a LATER candle can invert it. The candles that formed the gap
+// (A, B and C) never invert it, whatever they closed at: the formation of the gap is not the failure of the gap.
+func TestTheFormationCandlesNeverInvertTheirOwnGap(t *testing.T) {
+	bars, m := bullishIFVG(defaultOpts())
+	atC := DetectAsOf(testConfig(), bars, m.c)
+	for _, ep := range atC.Episodes {
+		if ep.InvertedAt != 0 || ep.Gap.FormedAt == bars[m.c].Time && ep.State != StateFVGCreated && ep.State != StateInversionFailed {
+			t.Fatalf("evaluated at the gap's third candle, an episode already moved past its formation: %+v", ep)
+		}
+	}
+	full := Detect(testConfig(), bars)
+	if len(full.Episodes) == 0 {
+		t.Fatal("the fixture must invert its gap")
+	}
+	inverted := 0
+	for _, ep := range full.Episodes {
+		if ep.InvertedAt == 0 {
+			continue
+		}
+		inverted++
+		if ep.InvertedAt <= ep.Gap.FormedAt {
+			t.Fatalf("the inversion (%d) must come after the gap formed (%d): %+v", ep.InvertedAt, ep.Gap.FormedAt, ep)
+		}
+		if ep.InvertedAt == bars[m.a].Time || ep.InvertedAt == bars[m.b].Time || ep.InvertedAt == bars[m.c].Time {
+			t.Fatalf("a formation candle inverted its own gap: %+v", ep)
+		}
+	}
+	if inverted == 0 {
+		t.Fatal("no inversion recorded")
+	}
+}

@@ -140,7 +140,7 @@ func (s *Strategy) decide(d *strategyutil.LegacyDetector) *strategyutil.Techniqu
 	if conf == nil {
 		return nil
 	}
-	factors := strategyutil.FactorsForConfirmation(strategyutil.ReactionFactors(conf.Type, d.HTFAligned(), zone.Touches), conf.Type)
+	factors := strategyutil.FactorsForConfirmation(strategyutil.ReactionFactors(conf.Type, d.HTFAligned(), zone.Touches, d.SessionSweepContext(conf)), conf.Type)
 	low, high := zone.Low(), zone.High()
 	result := d.Finish(d.ZoneKey(zone), zone, factors, zone.Side, &low, &high)
 	if result == nil {

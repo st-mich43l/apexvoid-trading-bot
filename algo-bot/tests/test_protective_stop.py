@@ -331,7 +331,7 @@ def test_reaction_family_room_synced_stop_tracks_primary_tp():
   )
   mid = evaluate_execution_policy(
     _policy_subject(
-      strategy="Session Level",
+      strategy="Key Level",
       targets_pips=(50,),
       structure_swing=4099.9,
     ),

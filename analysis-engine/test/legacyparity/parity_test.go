@@ -17,7 +17,7 @@ import (
 )
 
 // The golden is the decision of the frozen Python detectors that the Go
-// session_level, flip_zone and trendline strategies replaced, over
+// flip_zone and trendline strategies replaced, over
 // the committed closed-bar captures (generate_oracle_golden.py). The Go
 // strategies must agree bar by bar on presence, direction, entry band and
 // confluence stars: none may fire where the oracle did not, none may stay
@@ -33,7 +33,6 @@ var pairing = map[string]struct {
 	strategy  opportunity.StrategyID
 	direction market.Direction
 }{
-	"session_level_reaction":    {"session_level", ""},
 	"flip_demand_zone_reaction": {"flip_zone", market.Buy},
 	"flip_supply_zone_reaction": {"flip_zone", market.Sell},
 	"trendline_reaction":        {"trendline", ""},
@@ -42,16 +41,11 @@ var pairing = map[string]struct {
 // measuredOnly lists the detectors whose parity is reported but not asserted; it is
 // empty when every replaced detector is proven.
 //
-// session_level_reaction is measured only: Session Level was rebuilt as v4 (complete
-// periods, two bounded reaction models, honest geometry; docs/strategies/session_level.md),
-// which deliberately no longer reproduces the frozen detector's decisions. The frozen
-// oracle golden is untouched and the divergence stays visible in the log.
-//
-// trendline_reaction is measured only too: Trendline v4 publishes only with a real opposing
+// trendline_reaction is measured only: Trendline v4 publishes only with a real opposing
 // liquidity target at least minimum_target_distance_atr away (the frozen detector reported twice the
 // distance to the band edge, unrelated to its stop), so it deliberately stays silent on a decision the
 // oracle took when no such target exists. The frozen golden is untouched.
-var measuredOnly = map[string]bool{"session_level_reaction": true, "trendline_reaction": true}
+var measuredOnly = map[string]bool{"trendline_reaction": true}
 
 // narrowed lists the detectors where Go is deliberately a strict subset of the oracle: it may stay
 // silent on a decision the oracle took, but whatever it publishes must be the oracle's decision
@@ -62,6 +56,10 @@ var measuredOnly = map[string]bool{"session_level_reaction": true, "trendline_re
 // 91 oracle decisions were the formation itself, not a retest. Go requires the touch and the
 // confirmation to come after the break bar (docs/strategies/ae-quality-certification.md, section 12).
 var narrowed = map[string]bool{"flip_demand_zone_reaction": true, "flip_supply_zone_reaction": true}
+
+// frozenSessionContext reproduces the frozen detectors, which set the session-context confluence
+// factor on every decision: the golden is theirs, and the factor is now measured.
+var frozenSessionContext = map[string]map[string]any{"flip_zone": {"frozen_session_context": true}, "trendline": {"frozen_session_context": true}}
 
 type goldenDecision struct {
 	Direction       string  `json:"direction"`
@@ -101,7 +99,7 @@ func observe(t *testing.T, doc *config.Document, capture string) map[int64]map[o
 		t.Fatal(err)
 	}
 	got := map[int64]map[opportunity.StrategyID][]opportunity.Candidate{}
-	_, err = replaycapture.Replay(doc, loaded, market.M5, replaycapture.Options{OnEvaluation: func(e engine.Evaluation) {
+	_, err = replaycapture.Replay(doc, loaded, market.M5, replaycapture.Options{StrategyParameters: frozenSessionContext, OnEvaluation: func(e engine.Evaluation) {
 		if e.Timeframe != market.M5 {
 			return
 		}

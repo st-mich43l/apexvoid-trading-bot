@@ -105,3 +105,31 @@ func TestBuild_AnchorPairSurvivesIdenticallyAsMoreDataArrives(t *testing.T) {
 		}
 	}
 }
+
+// A line is knowable only once its second anchor's swing is confirmed. A swing whose confirmation lies beyond the candles
+// given does not exist yet, so it cannot anchor a line, and an anchor that is confirmed reports the candle that confirmed it.
+func TestBuild_AnchorNeedsItsConfirmationAndReportsIt(t *testing.T) {
+	candles, swings := zigzagFixture(300)
+	cfg := trendlineTestConfig()
+	for i := range swings {
+		swings[i].ConfirmedAt = swings[i].Time + 2 // a right-hand fractal of two candles
+	}
+	atr := flatATR(300, 5)
+	lines := trendline.Build(candles, atr, swings, cfg)
+	if len(lines) == 0 {
+		t.Fatal("the fixture must yield lines")
+	}
+	for _, l := range lines {
+		if l.AnchorBConfirmedIndex != l.AnchorBIndex+2 {
+			t.Errorf("anchor B at %d confirmed at %d, want %d", l.AnchorBIndex, l.AnchorBConfirmedIndex, l.AnchorBIndex+2)
+		}
+	}
+	// Cut the series one candle before the confirmation of the last anchor B: that swing is unconfirmed and no line may use it.
+	last := lines[len(lines)-1]
+	prefix := candles[:last.AnchorBConfirmedIndex]
+	for _, l := range trendline.Build(prefix, atr[:len(prefix)], swings, cfg) {
+		if l.AnchorB == last.AnchorB && l.AnchorBIndex == last.AnchorBIndex && l.AnchorAIndex == last.AnchorAIndex {
+			t.Fatalf("a line was drawn through a swing whose confirmation had not closed: %+v", l)
+		}
+	}
+}

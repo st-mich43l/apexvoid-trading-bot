@@ -26,6 +26,9 @@ type SessionRef struct {
 	Name  string
 	Price float64
 	Swept bool
+	// AvailableAt is the close of the period that defined the level (Unix seconds), the
+	// first instant it is knowable; 0 when the reference carries no finalization time.
+	AvailableAt int64
 }
 
 // ScoreInputs are the confluence facts zones are scored against.

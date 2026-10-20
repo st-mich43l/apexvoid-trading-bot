@@ -242,7 +242,7 @@ func TestProtectedStructureTradedBeforeTheBreakIsLost(t *testing.T) {
 func TestBreakCandleRangeDoesNotDecideWhetherAReferenceExists(t *testing.T) {
 	bars, m := bullishLevel(defaultLevel())
 	cfg := testConfig()
-	pre, ok := newATRWindow(bars, cfg.ATRLength, cfg.ATRWindowBars).at(m.brk - 1)
+	pre, ok := newATRWindow(bars, cfg.ATRLength, cfg.ATRWindowBars).At(m.brk - 1)
 	if !ok {
 		t.Fatal("no ATR")
 	}

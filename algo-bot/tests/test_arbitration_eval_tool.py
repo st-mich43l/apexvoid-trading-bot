@@ -32,7 +32,7 @@ def _random_intents(rng: random.Random) -> list[ExecutionIntent]:
   for index in range(rng.randint(1, 7)):
     low = 4000 + rng.choice([0, 0, 3, 8, 40])
     intents.append(ExecutionIntent(
-      intent_id=f"i{index}", source="go", strategy=rng.choice(["supply", "key_level", "range_edge", "fvg"]),
+      intent_id=f"i{index}", source="go", strategy=rng.choice(["supply", "key_level", "fade_scalp", "fvg"]),
       direction=rng.choice(["BUY", "SELL"]), confluence=rng.choice([1, 2, 3]), freshness=1000.0 + rng.randint(0, 5),
       distance_pips=0.0, entry_low=low, entry_high=low + rng.choice([1, 2, 4]), structural_id=f"z{rng.randint(0, 4)}",
       quality_overall=rng.choice([0.5, 0.67, 0.85, 1.0, None]), structural_quality=rng.choice([None, 8.0, 12.5]),
@@ -117,7 +117,7 @@ def test_supply_and_demand_require_confirmation():
 def test_every_registered_go_strategy_is_accounted_for_exactly_once():
   table = ev.registry_table()
   assert [row["strategy"] for row in table] == sorted(CATALOG_STRATEGY_IDS)
-  assert len(table) == len(CATALOG_STRATEGY_IDS) == 16
+  assert len(table) == len(CATALOG_STRATEGY_IDS) == 13
   assert {row["strategy"]: row["requires_reaction"] for row in table} == {
     name: profile.requires_reaction for name, profile in pol.REVIEWED_SCOPES.items()
   }
@@ -152,7 +152,7 @@ def test_containment_timeframe_and_expiry_come_from_production_not_the_tool(monk
   # production config (owner rule: no observe-only), so contain one strategy by override.
   from tests.support.canonical_fixtures import install_runtime_overrides
 
-  contained = "liquidity_sweep"
+  contained = "impulse_pullback"
   install_runtime_overrides(monkeypatch, {
     "instruments.XAU.overrides.execution.go_opportunity.observe_only_strategies": [contained],
   })
