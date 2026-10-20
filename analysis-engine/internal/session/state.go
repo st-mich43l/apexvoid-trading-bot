@@ -24,7 +24,7 @@ func Update(candles []market.Candle, cfg Config) State {
 	// PWH/PWL unsorted after that — preserved exactly here rather than
 	// folding all three into one sort, which would silently reorder
 	// weekly levels relative to production's real output shape.
-	levels := append(sessionExtremes(candles, cfg), previousDayLevels(candles, cfg.DailyRolloverUTCHour)...)
+	levels := append(sessionExtremes(candles, cfg), previousDayLevels(candles, cfg)...)
 	sort.SliceStable(levels, func(i, j int) bool {
 		if levels[i].Time != levels[j].Time {
 			return levels[i].Time < levels[j].Time
@@ -36,63 +36,100 @@ func Update(candles []market.Candle, cfg Config) State {
 	})
 	levels = append(levels, previousWeekLevels(candles)...)
 
-	return State{Levels: levels, Active: activeSession(candles, cfg)}
+	return State{Levels: levels, Developing: developingLevels(candles, cfg), Active: activeSession(candles, cfg)}
 }
 
 // sessionExtremes ports session_liquidity.py::_session_extremes: for each
-// of Asia/London/NY, walk backward through that window's calendar dates
+// of Asia/London/NY, walk backward through that window's occurrences
 // and emit the high/low levels for the two most recently CLOSED
 // occurrences (an occurrence whose close time is still after the latest
-// candle is still forming — never reported).
+// candle is still forming - never reported here, see developingLevels).
+// Occurrences follow the configured calendar, so a daylight-saving change moves
+// their UTC boundaries.
 func sessionExtremes(candles []market.Candle, cfg Config) []Level {
 	lastTS := candles[len(candles)-1].Time
+	windows := cfg.occurrences(candles[0].Time, lastTS)
 	var levels []Level
-	for _, w := range cfg.windows() {
-		groups := map[time.Time][]int{}
-		for i, c := range candles {
-			hour := hourUTC(c.Time)
-			if !inWindow(hour, w.startHour, w.endHour) {
-				continue
-			}
-			d := sessionDate(c.Time, w)
-			groups[d] = append(groups[d], i)
-		}
-		if len(groups) == 0 {
-			continue
-		}
-		days := make([]time.Time, 0, len(groups))
-		for d := range groups {
-			days = append(days, d)
-		}
-		sort.Slice(days, func(i, j int) bool { return days[i].After(days[j]) })
-
+	for _, name := range []string{Asia, London, NY} {
 		closed := 0
-		for _, d := range days {
-			closeTS := sessionCloseTS(d, w)
-			if closeTS > lastTS {
+		for k := len(windows) - 1; k >= 0 && closed < 2; k-- {
+			w := windows[k]
+			if w.name != name || w.end > lastTS {
 				continue
 			}
-			run := groups[d]
-			levels = append(levels, levelFromExtreme(candles, run, w.name+"_H", true, closeTS))
-			levels = append(levels, levelFromExtreme(candles, run, w.name+"_L", false, closeTS))
-			closed++
-			if closed >= 2 {
-				break
+			run := indicesIn(candles, w.start, w.end)
+			if len(run) == 0 {
+				continue
 			}
+			levels = append(levels, finalLevel(levelFromExtreme(candles, run, name+"_H", true, w.end), w.end))
+			levels = append(levels, finalLevel(levelFromExtreme(candles, run, name+"_L", false, w.end), w.end))
+			closed++
 		}
 	}
 	return levels
 }
 
+func finalLevel(l Level, availableAt int64) Level {
+	l.Final, l.AvailableAt = true, availableAt
+	return l
+}
+
+// indicesIn are the positions of the candles opening in [start, end).
+func indicesIn(candles []market.Candle, start, end int64) []int {
+	var run []int
+	for i, c := range candles {
+		if c.Time >= start && c.Time < end {
+			run = append(run, i)
+		}
+	}
+	return run
+}
+
+// developingLevels are the running extremes of the session occurrences and the
+// trading day that have not closed as of the latest candle. They are not
+// finalized: the next candle can move them, and a sweep of one is not a sweep
+// of a level.
+func developingLevels(candles []market.Candle, cfg Config) []Level {
+	lastTS := candles[len(candles)-1].Time
+	var out []Level
+	for _, w := range cfg.occurrences(lastTS, lastTS) {
+		if !(w.start <= lastTS && lastTS < w.end) {
+			continue
+		}
+		if run := indicesIn(candles, w.start, w.end); len(run) > 0 {
+			out = append(out, developingExtreme(candles, run, w.name+"_H", true), developingExtreme(candles, run, w.name+"_L", false))
+		}
+	}
+	_, _, _, rollover := cfg.anchors()
+	today := tradingDay(lastTS, rollover)
+	var day []int
+	for i, c := range candles {
+		if tradingDay(c.Time, rollover).Equal(today) {
+			day = append(day, i)
+		}
+	}
+	if len(day) > 0 {
+		out = append(out, developingExtreme(candles, day, "DAY_H", true), developingExtreme(candles, day, "DAY_L", false))
+	}
+	return out
+}
+
+func developingExtreme(candles []market.Candle, indices []int, name string, isHigh bool) Level {
+	l := levelFromExtreme(candles, indices, name, isHigh, candles[len(candles)-1].Time)
+	l.Swept, l.SweptAt, l.Final, l.AvailableAt = false, nil, false, 0
+	return l
+}
+
 // previousDayLevels ports _previous_day_levels: groups candles by
-// trading day (rolled over at rolloverHour), and — only once at least
-// two distinct trading days exist — emits PDH/PDL for the
+// trading day (rolled over at the configured rollover), and - only once at least
+// two distinct trading days exist - emits PDH/PDL for the
 // second-to-last one (the last is still the current, possibly still
 // forming, trading day).
-func previousDayLevels(candles []market.Candle, rolloverHour int) []Level {
+func previousDayLevels(candles []market.Candle, cfg Config) []Level {
+	_, _, _, rollover := cfg.anchors()
 	groups := map[time.Time][]int{}
 	for i, c := range candles {
-		d := tradingDay(c.Time, rolloverHour)
+		d := tradingDay(c.Time, rollover)
 		groups[d] = append(groups[d], i)
 	}
 	if len(groups) < 2 {
@@ -104,11 +141,11 @@ func previousDayLevels(candles []market.Candle, rolloverHour int) []Level {
 	}
 	sort.Slice(days, func(i, j int) bool { return days[i].Before(days[j]) })
 	previousDay := days[len(days)-2]
-	closeTS := dailyCloseTS(previousDay, rolloverHour)
+	closeTS := dailyCloseTS(previousDay, rollover)
 	run := groups[previousDay]
 	return []Level{
-		levelFromExtreme(candles, run, "PDH", true, closeTS),
-		levelFromExtreme(candles, run, "PDL", false, closeTS),
+		finalLevel(levelFromExtreme(candles, run, "PDH", true, closeTS), closeTS),
+		finalLevel(levelFromExtreme(candles, run, "PDL", false, closeTS), closeTS),
 	}
 }
 
@@ -134,8 +171,8 @@ func previousWeekLevels(candles []market.Candle) []Level {
 	}
 	closedAt := candles[week[len(week)-1]].Time
 	return []Level{
-		levelFromExtreme(candles, week, "PWH", true, closedAt),
-		levelFromExtreme(candles, week, "PWL", false, closedAt),
+		finalLevel(levelFromExtreme(candles, week, "PWH", true, closedAt), closedAt),
+		finalLevel(levelFromExtreme(candles, week, "PWL", false, closedAt), closedAt),
 	}
 }
 
@@ -191,72 +228,42 @@ func sweptAfter(candles []market.Candle, isHigh bool, price float64, closedAt in
 	return nil
 }
 
-// activeSession classifies the latest closed candle into Asia/London/NY
-// — new logic (see doc.go), not a port. windows() always partitions the
-// full 24h UTC day, so exactly one window matches.
+// activeSession classifies the latest closed candle into Asia/London/NY -
+// new logic (see doc.go), not a port. The occurrences always partition time, so
+// exactly one window matches.
 func activeSession(candles []market.Candle, cfg Config) string {
-	hour := hourUTC(candles[len(candles)-1].Time)
-	for _, w := range cfg.windows() {
-		if inWindow(hour, w.startHour, w.endHour) {
+	last := candles[len(candles)-1].Time
+	for _, w := range cfg.occurrences(last, last) {
+		if w.start <= last && last < w.end {
 			return w.name
 		}
 	}
 	return ""
 }
 
-func hourUTC(t int64) int {
-	return time.Unix(t, 0).UTC().Hour()
-}
-
-// dayUTC truncates t to its own UTC calendar day at 00:00 — safe via
+// dayUTC truncates t to its own UTC calendar day at 00:00 - safe via
 // plain Truncate since the Unix epoch itself falls on a UTC midnight
 // boundary.
 func dayUTC(t int64) time.Time {
 	return time.Unix(t, 0).UTC().Truncate(24 * time.Hour)
 }
 
-// inWindow ports _in_window: a window may wrap past midnight (start >
-// end, e.g. NY 13->22 wrapping is not the case, but ASIA/others can
-// depending on config), same-hour comparison either way.
-func inWindow(hour, start, end int) bool {
-	if start < end {
-		return start <= hour && hour < end
+// tradingDay ports _trading_day: a candle at or after the rollover hour
+// (wall clock in the rollover anchor's zone) belongs to the FOLLOWING calendar
+// date's trading day. The label is a UTC-midnight stand-in for that local date.
+func tradingDay(t int64, rollover Anchor) time.Time {
+	local := time.Unix(t, 0).In(rollover.Zone)
+	label := time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, time.UTC)
+	if local.Hour() >= rollover.Hour {
+		label = label.AddDate(0, 0, 1)
 	}
-	return hour >= start || hour < end
+	return label
 }
 
-// sessionDate ports _session_date: a wrapping window's pre-midnight
-// hours belong to the PRECEDING calendar date's occurrence of that
-// window.
-func sessionDate(t int64, w window) time.Time {
-	d := dayUTC(t)
-	if w.startHour > w.endHour && hourUTC(t) < w.endHour {
-		return d.AddDate(0, 0, -1)
-	}
-	return d
-}
-
-// sessionCloseTS ports _session_close_ts.
-func sessionCloseTS(d time.Time, w window) int64 {
-	closeDate := d
-	if w.startHour > w.endHour {
-		closeDate = d.AddDate(0, 0, 1)
-	}
-	return time.Date(closeDate.Year(), closeDate.Month(), closeDate.Day(), w.endHour, 0, 0, 0, time.UTC).Unix()
-}
-
-// tradingDay ports _trading_day: a candle at or after rolloverHour
-// belongs to the FOLLOWING calendar date's trading day.
-func tradingDay(t int64, rolloverHour int) time.Time {
-	if hourUTC(t) >= rolloverHour {
-		return dayUTC(t).AddDate(0, 0, 1)
-	}
-	return dayUTC(t)
-}
-
-// dailyCloseTS ports _daily_close_ts.
-func dailyCloseTS(day time.Time, rolloverHour int) int64 {
-	return time.Date(day.Year(), day.Month(), day.Day(), rolloverHour, 0, 0, 0, time.UTC).Unix()
+// dailyCloseTS ports _daily_close_ts: the instant trading day `day` ends, the
+// rollover wall clock on that local date.
+func dailyCloseTS(day time.Time, rollover Anchor) int64 {
+	return rollover.at(day.Year(), day.Month(), day.Day()).Unix()
 }
 
 // weekStart ports _week_start: Monday 00:00 UTC of t's own calendar

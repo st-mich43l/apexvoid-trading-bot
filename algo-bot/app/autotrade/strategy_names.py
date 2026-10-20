@@ -78,14 +78,15 @@ STRATEGY_NAMES: tuple[StrategyName, ...] = (
   _name(DEMAND_ZONE_REACTION, retired=True),
   _name(SUPPLY_ZONE_REACTION, retired=True),
   _name(FLIP_ZONE, "flip_demand_zone_reaction", aliases=("flip-zone",)),
-  _name(SESSION_LEVEL, "session_level_reaction", aliases=("session-level", "session level reaction")),
+  # Purged standalone strategies (Q2): the names stay resolvable so persisted trades, events and
+  # reports still decode, but no detector or adapter can publish them any more.
+  _name(SESSION_LEVEL, aliases=("session-level", "session level reaction"), retired=True),
   _name(TRENDLINE, "trendline_reaction", aliases=("trendline reaction",)),
-  _name(RANGE_EDGE_SCALP, "range_edge_scalp"),
+  _name(RANGE_EDGE_SCALP, aliases=("range edge", "range_edge_scalp"), retired=True),
   # Independent M5 structural thesis restored by the Go analysis engine.
   _name(BREAK_AND_RETEST),
   _name(TREND_PULLBACK, retired=True),
-  # Retired automatic thesis: Range Edge owns its former range reversion role
-  # without a second detector competing for the same move.
+  # Retired automatic thesis (Python lane).
   _name(FADE_SCALP, retired=True),
   # Legacy plan/report names.  They remain resolvable but are emitted by no
   # current detector, so they must not be mistaken for live sources.
@@ -95,12 +96,7 @@ STRATEGY_NAMES: tuple[StrategyName, ...] = (
   _name(RANGE_BOX_SCALP, retired=True),
   _name(ONE_SIDED_RANGE_REACTION, retired=True),
   _name(CHOP_ZONE_REACTION, retired=True),
-  # No longer retired: the reviewed Go liquidity_sweep adapter
-  # (go_opportunity_policy.REVIEWED_SCOPES) now publishes live matches under
-  # exactly this display name, distinct from the still-live Python "Fade
-  # Scalp" M1 technique below (a separate strategy with its own execution
-  # profile).
-  _name(LIQUIDITY_SWEEP, "go:liquidity_sweep"),
+  _name(LIQUIDITY_SWEEP, aliases=("go:liquidity_sweep",), retired=True),
   _name(BREAKOUT_CONTINUATION, retired=True),
   _name(MAPPED_ZONE_REACTION, retired=True),
   _name(IMPULSE_PULLBACK_SCALP, aliases=("impulse pullback", "hfs impulse pullback")),

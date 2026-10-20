@@ -2,9 +2,6 @@ package strategyutil
 
 import (
 	"fmt"
-	"math"
-
-	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 )
 
 // TechniqueGeometry is the legacy Python technique validation
@@ -64,31 +61,4 @@ func ParseTechniqueGeometry(params map[string]any) (TechniqueGeometry, error) {
 		g.PipSize = pip
 	}
 	return g, nil
-}
-
-func (g TechniqueGeometry) epsilon(atr float64) float64 {
-	return math.Max(g.PipSize, g.EpsilonATRFraction*math.Max(0, atr))
-}
-
-// ProximalRetest mirrors proximal_retest: price is at the near edge (within
-// epsilon) or inside the zone.
-func (g TechniqueGeometry) ProximalRetest(direction market.Direction, low, high, price, atr float64) bool {
-	e := g.epsilon(atr)
-	proximal := low
-	if direction == market.Buy {
-		proximal = high
-	}
-	return math.Abs(price-proximal) <= e || (low-e <= price && price <= high+e)
-}
-
-// ClipEntry mirrors optimize_technique_entry_zone: a wide zone keeps only its
-// proximal slice (supply keeps the lower edge, demand the upper edge).
-func (g TechniqueGeometry) ClipEntry(direction market.Direction, low, high float64) (float64, float64, bool) {
-	if !(high > low) || !(g.EntryMaxWidthPrice > 0) || high-low <= g.EntryMaxWidthPrice+1e-12 {
-		return low, high, false
-	}
-	if direction == market.Sell {
-		return low, low + g.EntryMaxWidthPrice, true
-	}
-	return high - g.EntryMaxWidthPrice, high, true
 }

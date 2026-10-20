@@ -77,7 +77,6 @@ from app.autotrade.strategy_match import (
   StrategyMatch,
 )
 from app.autotrade.strategy_taxonomy import (
-  is_retest_only_scalp_strategy,
   is_m1_scalp_strategy,
   is_reaction_strategy,
   is_scalp_strategy,
@@ -114,8 +113,6 @@ from app.autotrade.execution_confirmation import (
   save_execution_confirmation,
   scalp_effective_chase_pips,
   scalp_zone_access,
-  ZONE_ACCESS_MOMENTUM_CHASE,
-  ZONE_ACCESS_RETEST_ONLY,
 )
 from app.autotrade.multi_match import (
   deserialize_matches,
@@ -985,11 +982,6 @@ def _execution_quote_access(
     strategy_mode=str(getattr(match, "strategy_mode", "") or "") or None,
   )
   if candidate_allows_chase:
-    zone_access_mode = (
-      ZONE_ACCESS_RETEST_ONLY
-      if is_retest_only_scalp_strategy(str(match.strategy))
-      else ZONE_ACCESS_MOMENTUM_CHASE
-    )
     try:
       side = str(match.direction).upper()
       worst = float(match.entry_high if side == "BUY" else match.entry_low)
@@ -1009,7 +1001,6 @@ def _execution_quote_access(
       ),
       pip_size=pip_size,
       maximum_chase_pips=chase_cap,
-      zone_access_mode=zone_access_mode,
     )
     evidence = scalp_access.evidence
     execution_eligible = scalp_access.executable

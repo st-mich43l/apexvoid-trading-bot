@@ -10,9 +10,8 @@
 // per the source architecture task's own §58 ("do not create hundreds of
 // empty .go files") and this task's own restraint principle, the
 // per-strategy subpackages named in the source task's §20
-// (breakoutretest, liquiditysweep, orderblock, fvg, keylevel, supply,
-// demand, trendline, sessionlevel, rangeedge,
-// impulsepullback) are architectural slots, not
+// (breakoutretest, orderblock, fvg, keylevel, supply,
+// demand, trendline, impulsepullback) are architectural slots, not
 // directories created by this task — see
 // docs/architecture/analysis-engine.md's "Independent strategy
 // architecture" section. They are created once the market-structure

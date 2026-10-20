@@ -26,6 +26,13 @@ was unrelated to the published invalidation. Measured on the replay captures (16
 Parity: the frozen oracle took 8 decisions; v4 matches 7 and stays silent on the one with no opposing liquidity, so
 `trendline_reaction` is measured only in `test/legacyparity` (as `session_level_reaction` is).
 
+## Q2: the line must be knowable before it can be reacted to
+
+A line is built from the two latest adjacent confirmed pivots of the same kind; its second anchor is knowable only from the candle whose close confirmed it (`Trendline.AnchorBConfirmedIndex`). The reaction's touch and confirmation must come
+AFTER that candle (`LegacyDetector.ReactionFrom`): the bars that formed and confirmed an anchor are the line's formation. The line is `price(t) = p1 + slope * (t - t1)` with `slope = (p2 - p1) / (t2 - t1)` over candle positions (the series is a
+continuous M5 feed), the slope bounded in ATR per bar, the touch band `interaction_band_atr` x ATR, a support line only ever BUY and a resistance line only ever SELL, so one line cannot produce both directions. The session context is the measured sweep, not a constant
+(see [shared-structure-evidence.md](shared-structure-evidence.md)): the 16 replayed setups go from 3 stars to 9 x 3 and 7 x 2. A trendline break-and-retest is `break_retest`'s thesis; this strategy publishes rejections only.
+
 ## Status and execution
 
 - **Certification**: `GO_NATIVE_VALIDATED` ([matrix](README.md#certification)).

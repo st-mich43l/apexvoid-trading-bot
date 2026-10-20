@@ -36,3 +36,52 @@ func (c Candle) Body() float64 {
 	}
 	return d
 }
+
+// The ratios below are fractions of the candle's range. A zero-range (or
+// malformed) candle has no geometry, so each returns 0 instead of dividing by it.
+
+// BodyRatio is |close-open| / (high-low).
+func (c Candle) BodyRatio() float64 {
+	if r := c.Range(); r > 0 {
+		return c.Body() / r
+	}
+	return 0
+}
+
+// CloseLocation is where the close sits in the range: 1 at the high, 0 at the low.
+func (c Candle) CloseLocation() float64 {
+	if r := c.Range(); r > 0 {
+		return (c.Close - c.Low) / r
+	}
+	return 0
+}
+
+// UpperWickRatio is (high - max(open, close)) / (high - low).
+func (c Candle) UpperWickRatio() float64 {
+	if r := c.Range(); r > 0 {
+		return (c.High - maxPrice(c.Open, c.Close)) / r
+	}
+	return 0
+}
+
+// LowerWickRatio is (min(open, close) - low) / (high - low).
+func (c Candle) LowerWickRatio() float64 {
+	if r := c.Range(); r > 0 {
+		return (minPrice(c.Open, c.Close) - c.Low) / r
+	}
+	return 0
+}
+
+func maxPrice(a, b float64) float64 {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func minPrice(a, b float64) float64 {
+	if a < b {
+		return a
+	}
+	return b
+}
