@@ -180,6 +180,7 @@ func TestGoDetectorsMatchTheFrozenPythonOracleBarByBar(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	freezeCompatPip(t, doc)
 	var symbols []string
 	for symbol := range g.Symbols {
 		symbols = append(symbols, symbol)
@@ -235,4 +236,53 @@ func TestGoDetectorsMatchTheFrozenPythonOracleBarByBar(t *testing.T) {
 			t.Errorf("the golden holds no %s decision to compare", name)
 		}
 	}
+}
+
+// freezeCompatPip sets the pip size the frozen compat helpers ran with (gold's 0.1 on every instrument). Production uses the
+// instrument's own pip size, because the frozen value made the Fade Scalp entry band level +- 0.1 on every other instrument; this
+// test keeps proving the oracle's decisions, which were taken with it.
+func freezeCompatPip(t *testing.T, doc *config.Document) {
+	t.Helper()
+	legacy := doc.Raw()["analysis"].(map[string]any)["legacy_read"].(map[string]any)
+	legacy["compat"].(map[string]any)["pip_size"] = 0.1
+}
+
+// The frozen flip-zone retest took a default pip size of 0.1, so on EURUSD and GBPUSD the band of a Fade Scalp entry zone that came
+// from it was level +- 0.1: two thousand pips. With the instrument's own pip size no band is wider than a few ATR.
+func TestFadeScalpEntryBandIsInTheInstrumentsOwnUnits(t *testing.T) {
+	g := loadGolden(t)
+	data, ok := g.Symbols["GBPUSD"]
+	if !ok {
+		t.Fatal("the golden holds no GBPUSD capture")
+	}
+	widest := func(freeze bool) float64 {
+		doc, err := config.ResolveDocument(filepath.Join("..", "..", "..", "config", "apexvoid.yml"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if freeze {
+			freezeCompatPip(t, doc)
+		}
+		_, observed := replay(t, doc, data.Capture)
+		worst := 0.0
+		for _, bar := range observed {
+			for _, c := range bar.candidates["fade_scalp"] {
+				if c.Technical == nil || c.Technical.ATR <= 0 {
+					continue
+				}
+				if width := float64(c.Entry.High-c.Entry.Low) / c.Technical.ATR; width > worst {
+					worst = width
+				}
+			}
+		}
+		return worst
+	}
+	frozen, corrected := widest(true), widest(false)
+	if frozen < 100 {
+		t.Fatalf("expected the frozen pip size to reproduce the defect (a band over 100 ATR), widest was %.1f ATR", frozen)
+	}
+	if corrected > 5 {
+		t.Fatalf("with the instrument's pip size no Fade Scalp band should span %.1f ATR", corrected)
+	}
+	t.Logf("widest Fade Scalp entry band on GBPUSD: frozen %.0f ATR, corrected %.1f ATR", frozen, corrected)
 }

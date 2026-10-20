@@ -335,3 +335,88 @@ contains account data. The committed captures are closed bars only.
 - Rebuilt strategies' internal claims (CRT, iFVG, Session Level, Break & Retest, Confluence
   Zone v3, Range Edge v3) were checked here for geometry, quality and replay behaviour, not
   re-derived line by line.
+
+## 11. Q1 update (2026-10-20): technical validity, FX stop context and matched random entries
+
+Master at `4c13eafe` (F-7 provenance and opposing-zone fixes in). Tool: `algo-bot/tools/q1_opportunity_quality.py` over the
+replay of `analysis-engine/test/aequality` (now with the reaction timestamps and a matched-random baseline,
+`TestMatchedRandomBaseline`). 16 active strategies, 14,970 unique opportunities, 6,631 thinned episodes (one per symbol, strategy, direction
+and UTC hour), 17 production captures; development is before 2026-10-07 UTC, out of sample (OOS) after. Hypothetical outcomes only
+(closed candles, constant spreads, the real 1R/2R ladder, 24 h), never broker P&L.
+
+### 11.1 Technical validity of what is published
+
+Every strategy passes the geometry invariants (stop beyond the band, target beyond the band, finite, ordered). New checks:
+
+| Check | Result |
+|---|---|
+| Confirmation causal (touch <= confirmation <= the closed bar) | 0 violations in 11,840 reaction-bearing opportunities |
+| Confirmation not stale | confirmation age <= 2 bars (lookback 3) for all but 9 (key_level 3, fvg 3, demand 1, plus 2 FVG that bridge the weekend gap: the bar lookback counts Friday's last bars as "current" on Sunday's open); Algo Bot's wall-clock `reaction_not_current_observation` rejects them |
+| Price already beyond the invalidation on the publishing bar | 0 |
+| Price already at/through the first technical target | range_edge 85 of 508 (17%, mostly XAU), fade 6, flip 8, key_level 5, demand 4, supply 3; their hypothetical R is not different (-0.03 vs -0.11 for range_edge) and the executed ladder does not use that target, so left as is |
+| Technical stop beyond the instrument cap (cannot be executed) | demand 25%, supply 18%, flip_zone 16%, key_level 9%, fade 7%, fvg 4%, order_block 4%, others 0-1%: wide zones, filtered by `stop_exceeds_go_invalidation_envelope` |
+| Target made of | `nearest_opposing_liquidity` or the strategy's own structure; fixed reward:risk only for key_level (8%), flip_zone (28%), demand (4%), supply (3%), fvg (2%), order_block (1%), liquidity_sweep (100%) and fade_scalp when no pool is far enough |
+| Constant components (carry no information) | `reaction`=1 in key_level, flip, crt, trendline, supply, demand, OB, FVG, fade; `room`=1 in range_edge (saturated by its gate); `reclaim`=1 liquidity_sweep; `zone_strength_quality`=`relevance_quality`=1 on the resting zone candidates (F-6) |
+| Evidence that is the same on every opportunity | key_level `role_ambiguous` (5,444 of 5,444), range_edge's five codes, fade `legacy_pd_location` |
+
+**Confirmed defects (all fixed in this change):**
+1. *Fade Scalp entry zone unit error.* The frozen compat flip-zone retest took a default pip size of 0.1 (gold's), so the band was level +- 0.1
+   on every other instrument: 10 EURUSD/GBPUSD fade opportunities were published with a 2,000-pip entry band (up to 1,065 ATR), and the
+   JPY pairs carried 20-pip instead of 2-pip bands (p90 of band/ATR 4.28 -> 1.16). Now the instrument's pip size
+   (`analysis.legacy_read.compat.pip_size: 0`); the oracle golden is still proven with the frozen 0.1 (`freezeCompatPip`). Effect on the replay: 21 of 182
+   fade opportunities change geometry (14 disappear, 7 appear); no other strategy moves.
+2. *Target labels.* `fade_scalp` labelled a fixed reward:risk target `fade_opposing_liquidity`; `liquidity_sweep` labelled its fixed 2R target
+   `sweep_reversion_objective`. Both now say `fixed_reward_risk` (key_level and the technique strategies already did).
+
+**Verified but not changed (decision-neutral or owner decisions):**
+* *Key Level never has an explicit role.* All 3,310 frozen-oracle decisions and all 5,444 replayed Key Level opportunities have role `ambiguous`
+  (the role is read from the level kind, and the kinds are `reaction`/`round`). GBPJPY's `require_explicit_role: true`
+  therefore rejects every GBPJPY level: **Key Level on GBPJPY is silently disabled** (0 opportunities in three captures, 0 production trades), although the
+  override's own comment says it was meant to raise quality, not to disable. Owner decision: keep it disabled on purpose, or drop the unsatisfiable requirement.
+* *Technique publishers assert `WickRejection` and `StructuralAgreement` true* whatever the reaction type. For supply/demand/OB/FVG/flip/CZ the stars come from the zone
+  score (factors are bypassed), so only the published factor flags and `v2_raw` are untrue; for zero-score instances (the iFVG/CRT helper path) the constants lift the stars and
+  measuring them removes 73-84% of those decisions (iFVG 641 -> 175, CRT 94 -> 15), so the oracle parity would break. Left as the frozen contract.
+* `SessionContext` is `true` in key_level/ifvg/session_level: the configured sessions (Asia 22-07, London 07-13, NY 13-22) cover all 24 hours, so it is true by construction: an
+  information-free +2 raw points (a candidate effectively needs 6, not 8, of the other factors for two stars).
+* A frame with fewer than 14 bars gets the detector-ATR fallback 1.0 (price units): one GBPUSD Key Level was published with a 10,000-pip band at the start of a capture. Only a cold start
+  with an empty history can do this; admission refuses it.
+
+### 11.2 FX stop context (research only: no stop was changed)
+
+Thinned FX opportunities (n = 4,876). The executed stop is the technical invalidation widened to the instrument floor; compared with ordinary volatility,
+spread, protected structure and reachable reward (the nearer of the strategy's own target and the nearest valid opposing barrier of the F-7 book):
+
+| | n | tech stop (pips, median) | executed stop | M5 ATR | executed / ATR | spread / executed stop | widened to the floor | stop beyond nearest M5 / M15 / H1 pivot | technical target < 1R of the executed stop | reachable reward < 1R |
+|---|---|---|---|---|---|---|---|---|---|---|
+| EURUSD | 1,203 | 4.8 | 12 | 2.75 | 4.4 | 7% | 96% | 95% / 87% / 64% | 74% | 80% |
+| GBPUSD | 1,400 | 5.7 | 15 | 3.36 | 4.5 | 7% | 97% | 99% / 98% / 88% | 78% | 81% |
+| USDJPY | 1,429 | 8.0 | 18 | 4.48 | 4.2 | 4% | 91% | 97% / 95% / 85% | 71% | 80% |
+| GBPJPY | 844 | 11.3 | 22 | 6.59 | 3.6 | 9% | 84% | 97% / 95% / 92% | 73% | 79% |
+
+Reading: the existing executed stops sit **3.6-4.5 M5 ATR** away, **beyond the nearest confirmed M5 pivot in 95-99% and beyond the nearest M15 pivot in 87-98%** of
+opportunities (inside the nearest M15 pivot in 2-12%), with spread 4-9% of the stop. They protect the thesis against ordinary noise and structure; the 4-9-pip
+micro-invalidation is a different concept (where the pattern fails, not where the position is wrong). The economics are the problem, not the stop: for ~72-78% of FX opportunities the strategy's own
+objective is nearer than the 1R rung of the ladder, and for ~80% the reachable reward (own target or first valid opposing wall) is smaller than the executed risk, so
+the fixed 1R/2R ladder usually sits beyond what the market structure offers. Splitting by reachable reward / executed stop (< 0.5R, 0.5-1R, >= 1R, buckets fixed in advance) does **not** separate
+outcomes stably: difference to matched random entries is +0.06 / -0.14, -0.01 / -0.08 and -0.13 / +0.18 in development / OOS, signs flip in every bucket, so "only take opportunities with reachable
+reward >= 1R" is a hypothesis without support, not a rule. Suitable and unsuitable examples are in the PR description. No stop floor, cap or ladder is proposed.
+
+### 11.3 Against matched random entries (chronological)
+
+Each opportunity is compared with the mean of 40 random entries of the same instrument and direction, same technical risk (so the same executable risk after the floor), cost, ladder and 24 h horizon. Cluster bootstrap by symbol-day.
+
+| Window | n | mean R (opportunity) | mean R (random) | difference [95%] |
+|---|---|---|---|---|
+| development | 3,162 | -0.060 | -0.053 | -0.007 [-0.052, +0.037] |
+| out of sample | 2,282 | -0.147 | -0.055 | **-0.092 [-0.152, -0.011]** |
+
+By strategy (development / OOS difference to random; only strategies with >= 50 observations in both windows): key_level (982/680) -0.02 / -0.07 [-0.18, +0.02]; demand (364/288) -0.00 / -0.13 [-0.36, +0.12];
+supply (382/315) +0.00 / -0.04; fvg (559/395) -0.01 / -0.11 [-0.23, -0.01]; order_block (201/152) -0.04 / -0.15; confluence_zone (196/98) -0.02 / -0.28 [-0.54, +0.02]; range_edge (194/154) **+0.12 / -0.16 [-0.31, -0.02]**
+(the development advantage does not survive); flip_zone (84/63) -0.08 / +0.10. By instrument OOS: EURUSD -0.05, GBPUSD -0.09, USDJPY -0.04, GBPJPY **-0.18 [-0.32, -0.05]**, XAU **-0.13 [-0.23, -0.04]** (GBPJPY was +0.12 in development). Fewer than 50 per window (insufficient): the other strategies.
+
+Classification: **proven**: the signals do not beat random entries in development and are worse in the pooled OOS window; no strategy shows a stable positive edge in both windows. **Plausible, unproven**: ifvg (+0.20 / +0.33,
+58/40 observations, intervals include 0); flip_zone EURUSD; fvg and order_block weaker out of sample. **Insufficient**: break_retest, crt, impulse_pullback, liquidity_sweep, session_level, trendline.
+
+Production (`trade_stream = 'algo_auto'`, 503 trades with a known stop, Range Sweep excluded, a full stop counted as -1R): all -0.017R (+-0.109), FX +0.043R (n=307, +-0.131), XAU -0.111R (n=196, +-0.189); FX development +0.214R
+(n=92, +-0.240) then OOS -0.030R (n=215, +-0.155). By strategy and FX pair every cell has n < 30; EURUSD Supply/Demand (n=13: 1 win, mean -0.886R, interval -1.12 to -0.66) is the only cell whose interval excludes zero and
+is too small to act on. A high `quality.overall` has still not been shown to mean a profitable trade.

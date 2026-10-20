@@ -75,10 +75,14 @@ analysis:
       sweep_react_bars: 3
     # Default arguments of the frozen compat helpers (structure.entry_zone and
     # its compat order-block/flip zones). The oracle ran them with these
-    # defaults on every instrument (pip 0.1 and round step 5.0 included), so
-    # they are not the instrument's own scale.
+    # defaults on every instrument (round step 5.0 included), so they are not the
+    # instrument's own scale. pip_size is the exception: the frozen flip-zone
+    # retest took a default pip size of 0.1 (gold's), which made its band
+    # level +- 0.1 on every other instrument (2,000 pips on EURUSD and GBPUSD, 20 on
+    # the JPY pairs). 0 = use the instrument's own pip size; the frozen 0.1 is
+    # only ever set by test/detectorparity, to keep proving the oracle golden.
     compat:
-      pip_size: 0.1
+      pip_size: 0
       displacement_body_fraction: 0.55
       displacement_atr_mult: 1.5
       fractal_n: 2

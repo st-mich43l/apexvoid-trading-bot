@@ -14,6 +14,11 @@ confluence wins, then the nearest. The candidate carries the pool identity, grab
 grade, reaction pattern, touch/confirmation timestamps and the nearest opposing
 pool as its target.
 
+**Entry-zone units (2026-10-20).** The frozen compat entry zone took a default pip size of 0.1 (gold's) for its flip-zone retest, so on every other
+instrument its band was level +- 0.1 (2,000 pips on EURUSD/GBPUSD, 20 on the JPY pairs). The compat helper now uses the instrument's own pip size
+(`analysis.legacy_read.compat.pip_size: 0`); `test/detectorparity` sets the frozen 0.1 to keep proving the oracle's decisions and a second test pins the corrected
+band. The target is labelled `fade_opposing_liquidity` only when it is a pool, otherwise `fixed_reward_risk`.
+
 ## Status and execution
 
 - **Certification**: `LEGACY_PARITY_PROVEN` ([matrix](README.md#certification)).

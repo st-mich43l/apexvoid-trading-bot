@@ -13,6 +13,14 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Q1 opportunity quality. Fade Scalp's entry zone took the frozen compat helper's default pip size of 0.1 (gold's) on every instrument, so on EURUSD/GBPUSD
+  its band was level +- 0.1 (2,000 pips) and on the JPY pairs 20 pips instead of 2. The helper now uses the instrument's pip size
+  (`analysis.legacy_read.compat.pip_size: 0` = the instrument's; the oracle test sets the frozen 0.1). On the 17 production captures 21 of 182 Fade Scalp
+  opportunities change (14 disappear, 7 appear); no other strategy moves. `fade_scalp` and `liquidity_sweep` label a fixed reward:risk target
+  `fixed_reward_risk` instead of an opposing-liquidity/reversion objective (label only). Findings, FX stop context and matched-random results:
+  `docs/strategies/ae-quality-certification.md` section 11. No stop, ladder, sizing, confluence or arbitration change.
+
+### Fixed
 - F-7 opposing-zone correctness. (1) The target-room gate no longer hard-blocks on a barrier that lies wholly behind both the zone's proximal
   edge and the executable price: such a barrier (it overlaps the candidate's own band, so it ranked nearest at distance zero) had negative
   raw room, was reported as `opposing_barrier_no_target` ("no positive raw target room") although it is not in the way, and hid any real
