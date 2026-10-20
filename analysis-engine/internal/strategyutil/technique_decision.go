@@ -10,6 +10,7 @@ import (
 	analysiscontext "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/context"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/reaction"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/techniquezone"
 )
 
@@ -191,6 +192,12 @@ type TechniqueSource struct {
 	RetestMaxTouches int
 	// MaximumZoneTouches is maximum_zone_touches (0: no limit).
 	MaximumZoneTouches int
+	// FrozenFormationReaction reproduces the frozen publishers, which let the
+	// bars a structure was still being built on touch and confirm it (a fair
+	// value gap "rejected" by its own impulse candle). It exists only so
+	// test/techniqueparity can keep proving the historical golden; production
+	// strategies leave it false.
+	FrozenFormationReaction bool
 }
 
 // NewTechniqueSource binds the execution frame's detector and instances. It
@@ -234,10 +241,24 @@ func higherInstances(ctx *analysiscontext.MarketContext, execBars []market.Candl
 			bound := in
 			bound.OriginIndex = index
 			bound.Timeframe = string(tf)
+			bound.TouchableFrom = boundTouchableFrom(in, bars, execBars, tf)
 			out = append(out, bound)
 		}
 	}
 	return out
+}
+
+// boundTouchableFrom maps a higher-timeframe structure's TouchableFrom onto the
+// execution frame: the first execution bar that opens at or after the close of
+// the higher-timeframe bar that completed the structure.
+func boundTouchableFrom(in techniquezone.Instance, higherBars, execBars []market.Candle, tf market.Timeframe) int {
+	formed := in.TouchableFrom - 1
+	minutes, ok := tf.Minutes()
+	if in.TouchableFrom <= 0 || formed >= len(higherBars) || !ok {
+		return 0
+	}
+	closed := higherBars[formed].Time + int64(minutes)*60
+	return sort.Search(len(execBars), func(i int) bool { return execBars[i].Time >= closed })
 }
 
 func instanceZone(in techniquezone.Instance) techniquezone.Zone {
@@ -277,20 +298,42 @@ func (s *TechniqueSource) publish(in techniquezone.Instance) *TechniqueDecision 
 	if !d.EntryValid(zone) {
 		return nil
 	}
-	conf := d.Reaction(structLow, structHigh, d.ZoneGrab(zone))
+	minIndex := in.TouchableFrom
+	if s.FrozenFormationReaction {
+		minIndex = 0
+	}
+	conf := d.ReactionFrom(structLow, structHigh, d.ZoneGrab(zone), minIndex)
 	if conf == nil {
 		return nil
 	}
-	factors := FactorsForConfirmation(confluence.Factors{
-		HTFAligned: d.HTFAligned(), Touches: zone.Touches, WickRejection: true, StructuralAgreement: true,
-		DisplacementGrade: zone.Score >= techniqueStarTwoScore,
-	}, conf.Type)
+	factors := s.confirmationFactors(d, zone, conf.Type)
 	result := d.Finish(d.ZoneKey(zone), zone, factors, in.Technique, &structLow, &structHigh)
 	if result == nil {
 		return nil
 	}
 	instance := in
 	return &TechniqueDecision{Technique: in.Technique, Direction: direction, Instance: &instance, Detector: d, Confirmation: conf, Result: result, ID: instanceID(in, d)}
+}
+
+// confirmationFactors are the evidence the decision actually showed. The frozen
+// publishers asserted a wick rejection and a structural agreement on every
+// decision, whatever the confirmation was, and read a zone score of 8 as a
+// displacement; the stars of a scored zone come from the zone score, so those
+// flags only misreported what confirmed the zone (and, for an unscored zone,
+// lifted it to the star floor by themselves). They are kept for the oracle.
+func (s *TechniqueSource) confirmationFactors(d *LegacyDetector, zone techniquezone.Zone, confirmationType string) confluence.Factors {
+	if s.FrozenFormationReaction {
+		return FactorsForConfirmation(confluence.Factors{
+			HTFAligned: d.HTFAligned(), Touches: zone.Touches, WickRejection: true, StructuralAgreement: true,
+			DisplacementGrade: zone.Score >= techniqueStarTwoScore,
+		}, confirmationType)
+	}
+	return FactorsForConfirmation(confluence.Factors{
+		HTFAligned: d.HTFAligned(), Touches: zone.Touches,
+		WickRejection:       confirmationType == reaction.TypeWickRejection,
+		DisplacementGrade:   confirmationType == reaction.TypeEngulfing,
+		StructuralAgreement: confirmationType == reaction.TypeSweepReclaim || confirmationType == reaction.TypeStrongReclaim,
+	}, confirmationType)
 }
 
 func instanceID(in techniquezone.Instance, d *LegacyDetector) string {
@@ -430,10 +473,22 @@ func (s *TechniqueSource) ConfluenceZone() *TechniqueDecision {
 // returns its confirmed opportunity, if any. direction, when set, restricts the
 // result to one side (supply and demand split one publisher between them).
 func ConfirmedTechnique(ctx *analysiscontext.MarketContext, legacy LegacyDetectorSettings, technique string, direction market.Direction, spec TechniqueSpec) []opportunity.Candidate {
+	return confirmedTechnique(ctx, legacy, technique, direction, spec, false)
+}
+
+// ConfirmedFrozenTechnique is ConfirmedTechnique with the frozen publishers' formation-bar reactions
+// (TechniqueSource.FrozenFormationReaction). Only the replays that reproduce a retired model's
+// defects use it.
+func ConfirmedFrozenTechnique(ctx *analysiscontext.MarketContext, legacy LegacyDetectorSettings, technique string, direction market.Direction, spec TechniqueSpec) []opportunity.Candidate {
+	return confirmedTechnique(ctx, legacy, technique, direction, spec, true)
+}
+
+func confirmedTechnique(ctx *analysiscontext.MarketContext, legacy LegacyDetectorSettings, technique string, direction market.Direction, spec TechniqueSpec, frozen bool) []opportunity.Candidate {
 	source, ok := NewTechniqueSource(ctx, market.M5, legacy)
 	if !ok {
 		return nil
 	}
+	source.FrozenFormationReaction = frozen
 	var decisions []*TechniqueDecision
 	if technique == "confluence_zone" {
 		decisions = append(decisions, source.ConfluenceZone())

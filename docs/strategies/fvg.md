@@ -7,6 +7,8 @@
 `fvg`, `v2`. Implemented in `analysis-engine/internal/strategy/fvg`.
 Algorithm versions: `structure=v2`, `liquidity=v1`, `zone=v1`, `config=3`.
 
+**Reaction after formation (Q2).** A fair value gap is anchored on its third candle, so it exists only once that candle has closed. A touch or confirmation on that candle or earlier (the gap's own impulse candle, which spans the gap by construction) is its formation, not a reaction: the frozen publisher accepted it for 69% of the replayed confirmed FVG opportunities (480 of 695). The reaction must come on a later bar (`Instance.TouchableFrom`, the boundary `MarkMitigation` already counts touches from).
+
 ## Purpose / thesis
 
 A still-valid, currently-relevant fair value gap is a standing

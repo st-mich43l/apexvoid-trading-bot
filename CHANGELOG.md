@@ -13,6 +13,16 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Q2 opportunity quality. A structure was allowed to be "confirmed" by the bars it was built on: the frozen technique publishers searched the
+  last three bars for a touch and a confirmation without asking whether the structure existed yet, so a fair value gap was "rejected" by its own impulse
+  candle (69% of the replayed confirmed FVG opportunities, 480 of 695), a supply/demand zone or order block by its own displacement leg (222 of 1,742
+  Supply, 252 of 1,894 Demand, 20 of 549 Order Block) and a flip zone by the break bar that made it (194 of 222). Technique instances now carry
+  `TouchableFrom` (the bar after the one that completed the structure, the boundary `MarkMitigation` already counts touches from) and Flip Zone uses the
+  zone's break index; the frozen behaviour stays reproducible for the oracle golden (`TechniqueSource.FrozenFormationReaction`, `ConfirmedFrozenTechnique`,
+  and `test/legacyparity` asserts Flip Zone as a strict subset of the oracle). The confluence factors published for supply/demand/order block/FVG named a wick
+  rejection and a structural agreement on every decision and a displacement whenever the zone score was 8; they now name the evidence the confirmation
+  showed (stars are unchanged: a scored zone is rated by its zone score). Replay: 14,970 -> 13,892 opportunities (1,168 removed, 90 later reactions appear),
+  stars of every kept opportunity unchanged. No stop, ladder, sizing, enablement or Kafka field changed.
 - Q1 opportunity quality. Fade Scalp's entry zone took the frozen compat helper's default pip size of 0.1 (gold's) on every instrument, so on EURUSD/GBPUSD
   its band was level +- 0.1 (2,000 pips) and on the JPY pairs 20 pips instead of 2. The helper now uses the instrument's pip size
   (`analysis.legacy_read.compat.pip_size: 0` = the instrument's; the oracle test sets the frozen 0.1). On the 17 production captures 21 of 182 Fade Scalp
