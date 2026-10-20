@@ -26,7 +26,7 @@ ROUTE_MARKET_WITH_LIMIT_SCALE = "market_with_limit_scale"
 ROUTE_EITHER = "either"
 
 def reaction_market_scale_eligible(*, strategy: str | None = None) -> bool:
-  """Key Level / Session Level / Trendline opt into market-with-limit-scale.
+  """Key Level / Trendline opt into market-with-limit-scale.
 
   Demand/Supply keep zone_scale -> limit_ladder; each strategy's catalog row
   decides, not a group it belongs to.
@@ -201,7 +201,7 @@ def _deeper_second_leg(
   zone that structural edge can sit on the wrong side of the market - a BUY
   zone whose near edge is above the current quote gives a "deeper" leg
   ABOVE the quote, i.e. a marketable limit that fills instantly at the same
-  price as leg 1 (owner-reported live 2026-09-21: XAU Session Level BUY,
+  price as leg 1 (owner-reported live 2026-09-21: XAU reaction BUY,
   L1 and L2 both filled at 4346.83). Taking the deeper of the two ladders
   guarantees leg 2 is never closer to the market than the quote-anchored
   ladder would have put it.
@@ -463,7 +463,7 @@ def resolve_execution_route_plan(
     # execute the shallow/current leg and leave a deeper limit working over
     # the untraded part of the zone.  The old scalp short-circuit returned a
     # single market leg before ``manual_xau_ladder`` could be used, which is
-    # why production Range Edge plans carried ``leg_ratios`` metadata but an
+    # why production range-scalp plans carried ``leg_ratios`` metadata but an
     # empty ``entry.legs`` array.  M1 chase scalps deliberately remain
     # single-market and are excluded by ``manual_xau_ladder``.
     if manual_xau_ladder and split_ok:

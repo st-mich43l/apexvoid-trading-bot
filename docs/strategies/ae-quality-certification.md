@@ -509,8 +509,7 @@ one fact one credit), and where a threshold appears it is a configuration value 
 ### 13.1 What was removed
 
 `range_edge`, `session_level` and the standalone `liquidity_sweep` (508, 83 and 25 replayed opportunities) have no code path left: no strategy package, factory, catalog entry, `analysis.yml`/`auto-algo.yml` key, Algo Bot adapter, catalog profile,
-retest-only execution branch, stop-envelope or MAD mapping, fixture or replay package (`test/rereplay`, `test/slreplay`); a configuration naming one fails startup (`TestAConfigurationThatStillNamesAPurgedStrategyFailsClosed`). The Python names stay as retired,
-profile-less aliases (`tests/test_purged_strategies.py`). The reusable evidence they computed remains once: [shared-structure-evidence.md](shared-structure-evidence.md). The matched-random record of the three purged strategies is in 11.3 (Range Edge +0.12 development, -0.16 out of sample).
+retest-only execution branch, stop-envelope or MAD mapping, fixture or replay package (`test/rereplay`, `test/slreplay`); a configuration naming one fails startup (`TestAConfigurationThatStillNamesAPurgedStrategyFailsClosed`). The Python name registry, the structural-setup list and the C# scalp list no longer name them (a stored match or plan keeps its strategy string: readers pass an unknown name through, `tests/test_purged_strategies.py`). The reusable evidence they computed remains once: [shared-structure-evidence.md](shared-structure-evidence.md). The matched-random record of the three purged strategies is in 11.3 (Range Edge +0.12 development, -0.16 out of sample).
 
 ### 13.2 What changed, strategy by strategy
 

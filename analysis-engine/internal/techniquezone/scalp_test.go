@@ -7,7 +7,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 )
 
-// scalpConfig is the frozen production range-edge configuration (XAU scale).
+// scalpConfig is the frozen production range-structure configuration (XAU scale).
 func scalpConfig() ScalpConfig {
 	return ScalpConfig{
 		Lookback: 48, ClusterATR: .25, ClusterMinAbs: 0, ClusterPipMult: 2, MinimumTouches: 2, MinimumWickFraction: .25,

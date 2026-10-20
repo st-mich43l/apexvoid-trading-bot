@@ -31,7 +31,7 @@ pytestmark = pytest.mark.no_database
 
 FX_PAIRS = ("EURUSD", "GBPUSD", "GBPJPY", "USDJPY")
 STRATEGIES = (
-  "Range Edge", "Fade Scalp",
+  "Fade Scalp",
   "Supply", "Demand", "FVG", "Breakout",
 )
 

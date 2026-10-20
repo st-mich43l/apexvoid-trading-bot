@@ -26,7 +26,6 @@ pytestmark = pytest.mark.no_database
 
 APP = Path(__file__).resolve().parents[1] / "app"
 FIXTURE = Path(__file__).parent / "fixtures" / "execution_profiles_family_era.json"
-PURGED = frozenset({"Session Level", "Range Edge Scalp", "Liquidity Sweep"})
 
 
 def snapshot() -> dict:
@@ -38,11 +37,6 @@ def snapshot() -> dict:
   every.update({"", "bogus"})
   out: dict[str, dict] = {}
   for name in sorted(every):
-    # The purged standalone strategies keep their names resolvable for persisted records
-    # but own no execution profile any more.
-    resolved = names.resolve_strategy(name)
-    if resolved is not None and resolved.canonical in PURGED:
-      continue
     row: dict = {}
     try:
       policy = dataclasses.asdict(ep.policy_for(name))

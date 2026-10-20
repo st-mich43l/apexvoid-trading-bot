@@ -701,7 +701,7 @@ func (d *LegacyDetector) WithDirection(direction market.Direction) *LegacyDetect
 }
 
 // NewLegacyDetectorForFrame binds the frame without a direction, for detectors
-// (range edge) that evaluate both sides of one structure.
+// (range scalps) that evaluate both sides of one structure.
 func NewLegacyDetectorForFrame(ctx *analysiscontext.MarketContext, tf market.Timeframe, settings LegacyDetectorSettings) (*LegacyDetector, bool) {
 	return NewLegacyDetector(ctx, tf, "", settings)
 }
