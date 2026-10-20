@@ -14,7 +14,7 @@ dated section after deployment.
 
 ### Fixed
 - Q2 rework: strategy consolidation and mathematical validation. **Range Edge, Session Level and the standalone Liquidity Sweep are purged** (code, registry, configuration, Algo Bot
-  adapters, catalog profiles, execution paths specific to them, tests, fixtures and documentation); their display names stay resolvable and retired so persisted trades and events still decode, and a
+  adapters, catalog profiles, execution paths specific to them, tests, fixtures and documentation); not even their display names or the C# scalp list remain (persisted records keep their strategy string untouched: every reader passes an unknown name through), and a
   configuration that names one fails startup. Session structure, range geometry and liquidity sweeps remain as shared evidence: `session` places the Asia/London/New York opens and the FX trading-day rollover on
   real market clocks (`analysis.sessions.calendar`, daylight saving), separates finalized levels (`Final`, `AvailableAt`) from developing ones (`State.Developing`), and `strategyutil.SweepsSupporting` reports confirmed sweeps of
   finalized liquidity (one event counted once). `session_context` is now that measured sweep for Key Level, Flip Zone, Trendline and iFVG instead of a constant set on every decision (`frozen_session_context` reproduces the oracle goldens).

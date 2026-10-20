@@ -179,7 +179,7 @@ def _build_entry(
     # A market watch is an execution-policy entry, not permission to fill at
     # any price in a broad technical zone. Cap only the adverse side at the
     # planned price while retaining better-price fills deeper in the zone.
-    # Production 2026-10-02 Liquidity Sweep BUY planned 4184.04 inside
+    # Production 2026-10-02 a BUY planned 4184.04 inside
     # 4180.76-4187.76; publishing the full zone advertised/allowed ~87 pips
     # even though the policy intended a 50-pip entry.
     if direction == "BUY":

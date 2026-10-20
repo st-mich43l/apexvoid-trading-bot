@@ -1,6 +1,6 @@
 """Same-direction group and cumulative-risk exposure, measured and atomic.
 
-Production 2026-10-12 (USDJPY): four Range Edge Scalp SELLs were admitted
+Production 2026-10-12 (USDJPY): four range-scalp SELLs were admitted
 between 06:51 and 09:01 against the same rising resistance. Each was a
 different opportunity, so the thesis claim passed; the entry-corridor guard
 covers only 45 minutes after admission and the plan that first claimed the

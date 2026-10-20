@@ -46,9 +46,7 @@ CRT = "CRT"
 DEMAND_ZONE_REACTION = "Demand Zone Reaction"
 SUPPLY_ZONE_REACTION = "Supply Zone Reaction"
 FLIP_ZONE = "Flip Zone"
-SESSION_LEVEL = "Session Level"
 TRENDLINE = "Trendline"
-RANGE_EDGE_SCALP = "Range Edge Scalp"
 BREAK_AND_RETEST = "Break & Retest"
 TREND_PULLBACK = "Trend Pullback"
 FADE_SCALP = "Fade Scalp"
@@ -59,7 +57,6 @@ SUPPLY_ZONE = "Supply Zone"
 RANGE_BOX_SCALP = "Range Box Scalp"
 ONE_SIDED_RANGE_REACTION = "One-Sided Range Reaction"
 CHOP_ZONE_REACTION = "Chop Zone Reaction"
-LIQUIDITY_SWEEP = "Liquidity Sweep"
 BREAKOUT_CONTINUATION = "Breakout Continuation"
 MAPPED_ZONE_REACTION = "Mapped Zone Reaction"
 IMPULSE_PULLBACK_SCALP = "Impulse Pullback Scalp"
@@ -78,11 +75,7 @@ STRATEGY_NAMES: tuple[StrategyName, ...] = (
   _name(DEMAND_ZONE_REACTION, retired=True),
   _name(SUPPLY_ZONE_REACTION, retired=True),
   _name(FLIP_ZONE, "flip_demand_zone_reaction", aliases=("flip-zone",)),
-  # Purged standalone strategies (Q2): the names stay resolvable so persisted trades, events and
-  # reports still decode, but no detector or adapter can publish them any more.
-  _name(SESSION_LEVEL, aliases=("session-level", "session level reaction"), retired=True),
   _name(TRENDLINE, "trendline_reaction", aliases=("trendline reaction",)),
-  _name(RANGE_EDGE_SCALP, aliases=("range edge", "range_edge_scalp"), retired=True),
   # Independent M5 structural thesis restored by the Go analysis engine.
   _name(BREAK_AND_RETEST),
   _name(TREND_PULLBACK, retired=True),
@@ -96,7 +89,6 @@ STRATEGY_NAMES: tuple[StrategyName, ...] = (
   _name(RANGE_BOX_SCALP, retired=True),
   _name(ONE_SIDED_RANGE_REACTION, retired=True),
   _name(CHOP_ZONE_REACTION, retired=True),
-  _name(LIQUIDITY_SWEEP, aliases=("go:liquidity_sweep",), retired=True),
   _name(BREAKOUT_CONTINUATION, retired=True),
   _name(MAPPED_ZONE_REACTION, retired=True),
   _name(IMPULSE_PULLBACK_SCALP, aliases=("impulse pullback", "hfs impulse pullback")),
