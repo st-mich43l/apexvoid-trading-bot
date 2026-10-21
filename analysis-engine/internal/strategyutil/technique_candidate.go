@@ -88,7 +88,7 @@ func TechniqueCandidate(ctx *analysiscontext.MarketContext, dec *TechniqueDecisi
 		Target: target, TargetLabel: targetLabel, Evidence: techniqueEvidence(dec, spec),
 		Quality: opportunity.StrategyQuality{
 			Overall:    Clamp01(stars / 3),
-			Components: map[string]float64{"confluence": Clamp01(stars / 3), "reaction": 1},
+			Components: map[string]float64{"confluence": Clamp01(stars / 3)},
 		},
 		FormedAt: formedAt, ConfirmedAt: confirmedAt, ExpiryHours: spec.ExpiryHours, Fingerprint: spec.Fingerprint,
 	})

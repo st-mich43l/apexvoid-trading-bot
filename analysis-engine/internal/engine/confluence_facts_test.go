@@ -62,7 +62,7 @@ func TestFallbackFactorsComeFromStructuredFactsOnly(t *testing.T) {
 	if got := factsFromReaction(false, 0, true, nil, true); got.WickRejection || got.StructuralAgreement || got.SessionContext || !got.FibTouch || !got.CHoCH {
 		t.Fatalf("without a reaction only the canonical facts remain: %+v", got)
 	}
-	if got := factsFromReaction(false, 0, false, &opportunity.ReactionConfirmation{Pattern: "rejection_choch"}, false); !got.CHoCH || !got.StructuralAgreement || got.WickRejection {
-		t.Fatalf("a CHoCH confirmation carries the structure shift: %+v", got)
+	if got := factsFromReaction(false, 0, false, &opportunity.ReactionConfirmation{Pattern: "rejection_choch"}, false); !got.CHoCH || got.StructuralAgreement || !got.WickRejection {
+		t.Fatalf("a CHoCH confirmation is a wick rejection and a change of character: %+v", got)
 	}
 }

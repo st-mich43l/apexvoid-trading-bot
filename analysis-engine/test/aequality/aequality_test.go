@@ -63,6 +63,10 @@ var scalps = map[string]bool{"fade_scalp": true, "impulse_pullback": true}
 type outcome struct {
 	Result string  `json:"result"` // target | stop | stop_be | timeout | unfilled | not_executable | censored
 	R      float64 `json:"r"`
+	// MFE and MAE are the best and worst the trade reached from the fill until it closed, in units of its executable
+	// risk (MAE is reported as a positive adverse excursion): how far it went for it and against it, whatever the ladder paid.
+	MFE float64 `json:"mfe,omitempty"`
+	MAE float64 `json:"mae,omitempty"`
 }
 
 // Record is one unique opportunity (the first closed bar that published it).
@@ -99,6 +103,10 @@ type Record struct {
 	FormedAt     int64              `json:"formed_at"`
 	StructuralID string             `json:"structural_id"`
 	Repeats      int                `json:"repeats"`
+	// Shadow is set only on a Fade Scalp consideration (AEQ_FADE_OUT): "" published, otherwise the gate that refused it.
+	Shadow  string             `json:"shadow,omitempty"`
+	Facts   map[string]float64 `json:"facts,omitempty"`
+	Pattern string             `json:"pattern,omitempty"`
 	// Reaction is the causal confirmation the strategy attached (nil for a strategy that publishes none).
 	ReactionTouch   int64  `json:"reaction_touch,omitempty"`
 	ReactionConfirm int64  `json:"reaction_confirm,omitempty"`
@@ -123,6 +131,7 @@ func repo(parts ...string) string {
 
 type run struct {
 	records  []*Record
+	shadows  []*Record
 	bars     map[string][]market.Candle // per capture and timeframe
 	barsBy   map[string]map[int64]int
 	evals    int
@@ -161,8 +170,10 @@ func replayCapture(t *testing.T, doc *config.Document, c capture) *run {
 		}
 	}
 	byID := map[string]*Record{}
+	fade := newFadeWatch(t, doc, c)
 	_, err = replaycapture.Replay(doc, loaded, market.M5, replaycapture.Options{OnEvaluation: func(e engine.Evaluation) {
 		r.evals++
+		fade.observe(e, r)
 		for _, cand := range e.Candidates {
 			if rec, ok := byID[cand.ID]; ok {
 				rec.Repeats++
@@ -367,21 +378,34 @@ func simulate(r *Record, bars []market.Candle, index map[int64]int, barSeconds i
 		return b.High >= price
 	}
 	if stopHit(bars[fillIdx], stop) {
-		return outcome{Result: "stop", R: -1}
+		return outcome{Result: "stop", R: -1, MAE: 1}
 	}
 	end := fillIdx + 24*3600/int(barSeconds)
 	if end > len(bars)-1 {
 		end = len(bars) - 1
 	}
 	rem, total, cur, next, be := 1.0, 0.0, stop, 0, false
+	mfe, mae := 0.0, 0.0
+	excursion := func(b market.Candle) {
+		favorable, adverse := b.High-fill, fill-(b.Low+cost)
+		if sell {
+			favorable, adverse = fill-(b.Low+cost), b.High+cost-fill
+		}
+		mfe, mae = math.Max(mfe, favorable/risk), math.Max(mae, adverse/risk)
+	}
+	closed := func(o outcome) outcome {
+		o.MFE, o.MAE = math.Round(mfe*1e4)/1e4, math.Round(math.Min(mae, 1)*1e4)/1e4
+		return o
+	}
 	for k := fillIdx + 1; k <= end; k++ {
 		b := bars[k]
+		excursion(b)
 		if stopHit(b, cur) {
 			total += rem * (dir * (cur - fill) / risk)
 			if be {
-				return outcome{Result: "stop_be", R: total}
+				return closed(outcome{Result: "stop_be", R: total})
 			}
-			return outcome{Result: "stop", R: total}
+			return closed(outcome{Result: "stop", R: total})
 		}
 		for next < len(mult) && reached(b, fill+dir*mult[next]*risk) {
 			total += ratio[next] * mult[next]
@@ -392,13 +416,13 @@ func simulate(r *Record, bars []market.Candle, index map[int64]int, barSeconds i
 			next++
 		}
 		if next == len(mult) {
-			return outcome{Result: "target", R: total}
+			return closed(outcome{Result: "target", R: total})
 		}
 	}
 	if end == len(bars)-1 && bars[end].Time < bars[fillIdx].Time+24*3600-barSeconds {
 		return outcome{Result: "censored"} // the data ended while the trade was still open
 	}
-	return outcome{Result: "timeout", R: total + rem*dir*(bars[end].Close-fill)/risk}
+	return closed(outcome{Result: "timeout", R: total + rem*dir*(bars[end].Close-fill)/risk})
 }
 
 // recBars keeps, per opportunity, the candle series that simulated it (for the matched-random baseline).
@@ -412,6 +436,7 @@ var recBars = map[string]recSeries{}
 
 var replayOnce sync.Once
 var allRecords []*Record
+var allShadows []*Record
 var replayErr error
 
 func replayAll(t *testing.T) []*Record {
@@ -440,6 +465,16 @@ func replayAll(t *testing.T) []*Record {
 		for i, r := range runs {
 			if r == nil {
 				continue
+			}
+			for _, rec := range r.shadows {
+				tf, seconds := "M5", int64(300)
+				bars, index := r.bars[tf], r.barsBy[tf]
+				rec.Sim["ladder_cost"] = simulate(rec, bars, index, seconds, "ladder", spread[rec.Symbol])
+				rec.Sim["oneR_cost"] = simulate(rec, bars, index, seconds, "oneR", spread[rec.Symbol])
+				rec.Sim["twoR_cost"] = simulate(rec, bars, index, seconds, "twoR", spread[rec.Symbol])
+				rec.Capture = captures[i].name
+				recBars[rec.ID] = recSeries{bars: bars, index: index, seconds: seconds}
+				allShadows = append(allShadows, rec)
 			}
 			for _, rec := range r.records {
 				if seen[rec.ID] {
@@ -564,4 +599,41 @@ func TestSupplyDemandZonesAreNotSpent(t *testing.T) {
 		t.Fatal("no confirmed supply or demand setup in the captures")
 	}
 	t.Logf("confirmed supply/demand setups: %d", confirmed)
+}
+
+// constantByDesign are the few components that are one value on every record of their strategy for a stated reason, not because the strategy
+// asserts a quality: a configured threshold published with the fact it gates (the break needs N accepting closes; a confluence zone needs the
+// minimum number of independent facts) and a flag that exists only when it is true.
+var constantByDesign = map[string]bool{
+	"break_retest/break_accept_closes": true, "confluence_zone/independent_fact_count": true, "fade_scalp/reaction_displacement": true,
+}
+
+// TestNoStrategyAssertsAConstantAsAMeasurement fails when a component carries the same value on every opportunity of a strategy (twenty or
+// more): a constant is not a measurement, it cannot rank anything, and publishing it beside real measurements reads as evidence. Q3 removed the
+// unconditional reaction=1 and the fabricated strength/relevance of the resting zones.
+func TestNoStrategyAssertsAConstantAsAMeasurement(t *testing.T) {
+	values := map[string]map[string]map[float64]bool{}
+	counts := map[string]int{}
+	for _, r := range replayAll(t) {
+		counts[r.Strategy]++
+		for name, v := range r.Components {
+			if values[r.Strategy] == nil {
+				values[r.Strategy] = map[string]map[float64]bool{}
+			}
+			if values[r.Strategy][name] == nil {
+				values[r.Strategy][name] = map[float64]bool{}
+			}
+			values[r.Strategy][name][math.Round(v*1e9)/1e9] = true
+		}
+	}
+	for strategyID, byName := range values {
+		if counts[strategyID] < 20 {
+			continue
+		}
+		for name, distinct := range byName {
+			if len(distinct) == 1 && !constantByDesign[strategyID+"/"+name] {
+				t.Errorf("%s publishes %q as the same value on all %d of its opportunities", strategyID, name, counts[strategyID])
+			}
+		}
+	}
 }

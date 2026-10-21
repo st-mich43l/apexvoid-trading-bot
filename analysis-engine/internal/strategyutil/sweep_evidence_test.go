@@ -1,6 +1,8 @@
 package strategyutil
 
 import (
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/confluence"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/reaction"
 	"testing"
 
 	analysiscontext "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/context"
@@ -132,5 +134,43 @@ func TestTheFrozenDetectorsSetTheSessionContextOnEveryDecision(t *testing.T) {
 	}
 	if d := sweepDetector(t, market.Buy, quiet(), nil, nil, false); d.SessionSweepBetween(0, 3000) {
 		t.Fatal("without a sweep there is no session context")
+	}
+}
+
+// The sweep of the reaction's own candle is the reaction, which its pattern already credits: it is not a second, independent fact.
+func TestASweepOnTheReactionCandleIsTheReactionNotSessionContext(t *testing.T) {
+	bars := quiet()
+	bars[5] = market.Candle{Time: 1800, Open: 99.6, High: 99.8, Low: 98.4, Close: 99.5}
+	d := sweepDetector(t, market.Buy, bars, asiaLow(900), nil, false)
+	same := &LegacyConfirmation{TouchIndex: 5, ConfirmationIndex: 5, TouchTime: 1800, ConfirmationTime: 1800}
+	if d.SessionSweepContext(same) {
+		t.Fatal("the candle that swept the level is the reaction's touch: one event")
+	}
+	// The reaction touches the zone one candle after the sweep completed: the sweep led to it, an independent earlier fact.
+	later := &LegacyConfirmation{TouchIndex: 6, ConfirmationIndex: 6, TouchTime: 2100, ConfirmationTime: 2100}
+	if !d.SessionSweepContext(later) {
+		t.Fatal("a sweep that completed before the touch is session context")
+	}
+	// Three candles earlier is outside the reaction lookback.
+	far := &LegacyConfirmation{TouchIndex: 9, ConfirmationIndex: 9, TouchTime: 3000, ConfirmationTime: 3000}
+	if d.SessionSweepContext(far) {
+		t.Fatal("a sweep older than the reaction lookback is not part of this move")
+	}
+}
+
+// A rejection_choch is a wick rejection candle plus a change of character: two events, credited as a wick and a choch. The structural
+// agreement is not set from the same break (the frozen mapping named the break twice and the wick not at all).
+func TestARejectionWithACHoCHIsAWickAndAChoCHNotAStructuralAgreement(t *testing.T) {
+	got := FactorsForConfirmation(confluence.Factors{HTFAligned: true}, reaction.TypeRejectionCHoCH)
+	if !got.WickRejection || !got.CHoCH || got.StructuralAgreement || !got.HTFAligned {
+		t.Fatalf("%+v", got)
+	}
+	if plain := FactorsForConfirmation(confluence.Factors{}, reaction.TypeWickRejection); plain.CHoCH || plain.WickRejection {
+		t.Fatalf("a plain confirmation adds nothing: %+v", plain)
+	}
+	// The total is what the frozen mapping paid (3 + 2): the stars of every oracle decision are unchanged.
+	score := confluence.Evaluate(confluence.ZoneQuality{}, got, confluence.DefaultConfig(), 0)
+	if score.RawFactorScore != 4+3+2 {
+		t.Fatalf("raw %v", score.RawFactorScore)
 	}
 }

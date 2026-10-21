@@ -59,10 +59,7 @@ no opposing liquidity, zero ATR — all reject outright.
 
 ## Quality components / evidence codes
 
-`zone_strength_quality`, `relevance_quality`, `freshness_quality` — own
-independently-computed values (source task §40), same dimension shape as
-Supply/Demand's for the same underlying reason (both read `Strength`,
-`Relevance`, `TouchCount` off a `zone.Zone`).
+`freshness_quality` only (`Overall` is that value). Q3: `zone_strength_quality` (it republished `Strength = 1`) and `relevance_quality` (a constant for `Immediate`) are no longer published: they described the detector's admission rule, not how good this zone is, and made `Overall` look like a measurement. See [q3-quality-validation.md](q3-quality-validation.md).
 
 Evidence codes: `m5_order_block_<state>`, `m5_order_block_relevance_<relevance>`,
 `m5_order_block_side_<side>`.
