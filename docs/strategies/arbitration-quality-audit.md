@@ -7,9 +7,7 @@ reproducible tool `algo-bot/tools/arbitration_eval.py`.
 
 **Verdict.** Keep the production ranking (Model A). The first evaluation was wrong in two ways
 that mattered (it dropped the wrong candidates, and its simulator read the future), so its
-numbers are superseded: [arbitration-eval-results.p1-initial.json](arbitration-eval-results.p1-initial.json)
-is kept as the previous baseline, [arbitration-eval-results.p1-logic-on-current-data.json](arbitration-eval-results.p1-logic-on-current-data.json)
-is the old logic on today's dump, and [arbitration-eval-results.json](arbitration-eval-results.json)
+numbers are superseded (the two intermediate result files were removed); [arbitration-eval-results.json](arbitration-eval-results.json)
 is the corrected result. After the correction no alternative is supported by independent
 evidence. Model B shows a paired signal that is a **hypothesis**, not a finding (section 4).
 
