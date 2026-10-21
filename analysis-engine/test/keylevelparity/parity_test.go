@@ -82,7 +82,22 @@ func TestKeyLevelMatchesTheProfitableWeekPythonOnTheLaterCaptures(t *testing.T) 
 	proveAgainst(t, "key-level-oracle-later-captures.json")
 }
 
+// TestKeyLevelCurrentContractMatchesThePythonOf22To27Sep proves the Go "current" structure contract (wick-touch episodes in the touch
+// count, CHoCH-caused order blocks) against the Python detector that ran on 22-27 Sep 2026, over the XAU captures and the 13 Oct FX
+// captures. It is what Key Level would read if production ran detector_contract: current instead of profit_week.
+func TestKeyLevelCurrentContractMatchesThePythonOf22To27Sep(t *testing.T) {
+	proveAgainstWith(t, "key-level-oracle-sep22-27.json", currentContract)
+}
+
 func proveAgainst(t *testing.T, goldenFile string) {
+	proveAgainstWith(t, goldenFile, frozenSessionContext)
+}
+
+// currentContract is the structure the Python read on 22-27 Sep 2026: levels counted with wick-touch episodes and CHoCH-caused order
+// blocks (the two 21 Sep changes), which the profit_week contract deliberately leaves out.
+var currentContract = map[string]map[string]any{"key_level": {"frozen_session_context": true, "detector_contract": "current"}}
+
+func proveAgainstWith(t *testing.T, goldenFile string, parameters map[string]map[string]any) {
 	g := load(t, goldenFile)
 	doc, err := config.ResolveDocument(filepath.Join("..", "..", "..", "config", "apexvoid.yml"))
 	if err != nil {
@@ -96,7 +111,7 @@ func proveAgainst(t *testing.T, goldenFile string) {
 			symbol, want := symbol, want
 			t.Run(symbol, func(t *testing.T) {
 				t.Parallel()
-				decisions, matched := proveCapture(t, doc, symbol, want)
+				decisions, matched := proveCapture(t, doc, symbol, want, parameters)
 				mu.Lock()
 				totalDecisions += decisions
 				totalMatched += matched
@@ -111,7 +126,7 @@ func proveAgainst(t *testing.T, goldenFile string) {
 }
 
 // proveCapture replays one capture and compares every closed M5 bar with the Python decision; it returns the decisions compared and matched.
-func proveCapture(t *testing.T, doc *config.Document, symbol string, want symbolGolden) (totalDecisions, totalMatched int) {
+func proveCapture(t *testing.T, doc *config.Document, symbol string, want symbolGolden, parameters map[string]map[string]any) (totalDecisions, totalMatched int) {
 	capture, err := replaycapture.Load(filepath.Join("..", "..", "testdata", want.Capture))
 	if err != nil {
 		t.Fatal(err)
@@ -122,7 +137,7 @@ func proveCapture(t *testing.T, doc *config.Document, symbol string, want symbol
 	}
 	tick := math.Pow10(-digits)
 	got := map[int64][]opportunity.Candidate{}
-	_, err = replaycapture.Replay(doc, capture, market.M5, replaycapture.Options{StrategyParameters: frozenSessionContext, OnEvaluation: func(e engine.Evaluation) {
+	_, err = replaycapture.Replay(doc, capture, market.M5, replaycapture.Options{StrategyParameters: parameters, OnEvaluation: func(e engine.Evaluation) {
 		if e.Timeframe != market.M5 {
 			return
 		}

@@ -171,9 +171,11 @@ def build(golden_paths, frozen_records, frozen_random, current_records, current_
       "outcome": outcome(frozen, frozen_random),
     })
   # Python decisions with no reference opportunity at their bar: legitimate when a standing thesis (same direction and band, within a day) already covers them.
+  # A standing thesis may have been first published while an earlier capture owned that bar, so it is searched among every reference opportunity of the symbol.
   standing = collections.defaultdict(list)
-  for r in reference:
-    standing[(r["symbol"], r["direction"])].append(r)
+  for r in frozen_records:
+    if r["strategy"] == "key_level":
+      standing[(r["symbol"], r["direction"])].append(r)
   python_only = []
   for (sym, closes), row in sorted(by_bar.items()):
     if (sym, closes) in explained:
