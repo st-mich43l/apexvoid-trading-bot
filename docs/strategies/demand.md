@@ -59,11 +59,7 @@ zero ATR — all reject rather than fabricate a degraded candidate.
 
 ## Quality components / evidence codes
 
-`zone_strength_quality`, `relevance_quality`, `freshness_quality` — the
-same three dimension *names* as Supply recur here, but each strategy
-computes its own values independently (source task §40); this is not
-shared strategy code, just a coincidence of two theses reasoning about
-comparable zone facts.
+`freshness_quality` only (`Overall` is that value). Q3: `zone_strength_quality` (it republished `Strength = 1`) and `relevance_quality` (a constant for `Immediate`) are no longer published: they described the detector's admission rule, not how good this zone is, and made `Overall` look like a measurement. See [q3-quality-validation.md](q3-quality-validation.md).
 
 Evidence codes: `m5_demand_zone_<state>`, `m5_demand_zone_relevance_<relevance>`,
 `m5_demand_zone_layer_<layer>`.

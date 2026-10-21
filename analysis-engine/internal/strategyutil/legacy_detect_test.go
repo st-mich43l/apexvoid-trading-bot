@@ -381,3 +381,27 @@ func TestStructuralDirectionAndGatesUseTheDetectorContractRead(t *testing.T) {
 		t.Fatal("a context without the frame falls back to the canonical bias")
 	}
 }
+
+// Technical validity is mandatory, not a term in the score: a level above a BUY's price, or an entry beyond the maximum distance, fails
+// with every confluence factor set and the maximum zone score, and the confluence floor only ever REFUSES a valid setup, never admits one.
+func TestMaximalEvidenceCannotRescueAnInvalidSetup(t *testing.T) {
+	d := detector(t, market.Buy, nil)
+	everything := confluence.Factors{
+		HTFAligned: true, Touches: 3, WickRejection: true, DisplacementGrade: true, SessionContext: true, StructuralAgreement: true, FibTouch: true, CHoCH: true,
+	}
+	best := scoredZone("demand", 99, 100, 24.5, "x")
+	if r := d.Finish(100, best, everything, "", nil, nil); r == nil || r.Stars != 3 {
+		t.Fatalf("the fixture must be a valid three-star setup: %+v", r)
+	}
+	if r := d.Finish(101, best, everything, "", nil, nil); r != nil {
+		t.Fatalf("a level above a BUY's price is invalid whatever the evidence: %+v", r)
+	}
+	far := scoredZone("demand", 90, 91, 24.5, "x")
+	if r := d.Finish(100, far, everything, "", nil, nil); r != nil {
+		t.Fatalf("an entry beyond the maximum distance is invalid whatever the evidence: %+v", r)
+	}
+	// The other direction of the same rule: weak evidence refuses a valid setup, which is the one quality gate.
+	if r := d.Finish(100, scoredZone("demand", 99, 100, 0, "x"), confluence.Factors{}, "", nil, nil); r != nil {
+		t.Fatalf("a valid setup with no evidence is refused by the floor: %+v", r)
+	}
+}

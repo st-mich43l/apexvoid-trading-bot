@@ -185,7 +185,7 @@ func TestMeasuredFactorsDecideTheStarsAndTheFloor(t *testing.T) {
 func TestSessionContextIsAMeasuredSweepOfFinalizedLiquidity(t *testing.T) {
 	bars, m := bullishIFVG(defaultOpts())
 	touch := bars[m.touch]
-	level := touch.Low + 0.3 // the retest runs 0.3 below it and the rejection closes back above
+	level := touch.Low + 0.3 // the retest runs 0.3 below it and the rejection closes back above; the inversion move took it first
 	available := bars[m.invert].Time
 	swept := []techniquezone.SessionRef{{Name: "ASIA_L", Price: level, AvailableAt: available}}
 	// Unaligned (7 points) the sell-side sweep of a finalized Asia low is the 2 that lifts it to the floor.
@@ -199,6 +199,11 @@ func TestSessionContextIsAMeasuredSweepOfFinalizedLiquidity(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("the sweep must be recorded as evidence")
+	}
+	// A sweep on the retest candle itself is the rejection wick, already credited as such: one event, not a second fact.
+	retest := []techniquezone.SessionRef{{Name: "ASIA_L", Price: level, AvailableAt: bars[m.invert].Time + 300}}
+	if got := newStrategy(t, nil).Evaluate(marketContextWith(bars, "down", "down", retest)); len(got) != 0 {
+		t.Fatalf("the retest's own wick is not session context: %+v", got[0].DetectorConfluence.Factors)
 	}
 	// A developing extreme (no AvailableAt), a level that closed after the setup, or a high (buy-side liquidity) is not.
 	for name, refs := range map[string][]techniquezone.SessionRef{

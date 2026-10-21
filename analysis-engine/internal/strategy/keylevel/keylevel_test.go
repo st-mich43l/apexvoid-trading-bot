@@ -277,25 +277,36 @@ func TestRequiredTimeframeIsM5(t *testing.T) {
 	}
 }
 
-// The session context is the sweep of a finalized session level in the reaction's window, not a constant.
+// The session context is the sweep of a finalized session level in the reaction's window, not a constant, and it is a DIFFERENT event
+// from the reaction: a sweep on the touch candle is the reaction's own pierce, which its rejection pattern already credits.
 func TestSessionContextIsAMeasuredSweepNotAConstant(t *testing.T) {
 	measured := newStrategy(t, map[string]any{"frozen_session_context": false})
 	levels := []techniquezone.Level{level(99, "reaction", 3)}
-	withSweep := func(sessions []techniquezone.SessionRef) *analysiscontext.MarketContext {
-		return contextWith(buyRejection, levels, func(f *analysiscontext.LegacyFrame, _ *analysiscontext.LegacyRead) { f.Sessions = sessions })
+	withSweep := func(sessions []techniquezone.SessionRef, earlier bool) *analysiscontext.MarketContext {
+		c := contextWith(buyRejection, levels, func(f *analysiscontext.LegacyFrame, _ *analysiscontext.LegacyRead) { f.Sessions = sessions })
+		if earlier {
+			// The candle before the reaction pierces 98.5 and closes back on the level: a sweep that completed before the touch.
+			c.Timeframes[market.M5].Legacy.Bars[8] = market.Candle{Time: c.Timeframes[market.M5].Legacy.Bars[8].Time, Open: 99, High: 99.3, Low: 98.3, Close: 99}
+		}
+		return c
 	}
-	// The buy rejection runs to 98.0 and closes back at 100.2: it swept a finalized low resting at 98.5.
-	got := measured.Evaluate(withSweep([]techniquezone.SessionRef{{Name: "ASIA_L", Price: 98.5, AvailableAt: 300}}))
+	low := []techniquezone.SessionRef{{Name: "ASIA_L", Price: 98.5, AvailableAt: 300}}
+	got := measured.Evaluate(withSweep(low, true))
 	if len(got) != 1 || !got[0].DetectorConfluence.Factors.SessionContext {
-		t.Fatalf("a swept and reclaimed finalized session low is session context: %+v", got)
+		t.Fatalf("a finalized session low swept and reclaimed before the touch is session context: %+v", got)
+	}
+	// The reaction's own candle pierces 98.5 (low 98.0) and reclaims: that is one event, the reaction, not a second fact.
+	same := measured.Evaluate(withSweep(low, false))
+	if len(same) != 1 || same[0].DetectorConfluence.Factors.SessionContext || same[0].DetectorConfluence.Factors.StructuralAgreement != true {
+		t.Fatalf("the pierce of the reaction candle is credited once, as the reclaim: %+v", same)
 	}
 	// Nothing swept: the factor is false, and the same setup is a star lower (htf 4 + touches 3 + structural 3 = 10 of 20.5 is two stars).
-	none := measured.Evaluate(withSweep(nil))
+	none := measured.Evaluate(withSweep(nil, true))
 	if len(none) != 1 || none[0].DetectorConfluence.Factors.SessionContext || none[0].DetectorConfluence.SelectedStars != 2 {
 		t.Fatalf("without a sweep there is no session context: %+v", none)
 	}
 	// A level that only closed after the reaction cannot have been swept by it.
-	late := measured.Evaluate(withSweep([]techniquezone.SessionRef{{Name: "ASIA_L", Price: 98.5, AvailableAt: 9999}}))
+	late := measured.Evaluate(withSweep([]techniquezone.SessionRef{{Name: "ASIA_L", Price: 98.5, AvailableAt: 9999}}, true))
 	if len(late) != 1 || late[0].DetectorConfluence.Factors.SessionContext {
 		t.Fatalf("a level that was not yet final was not swept: %+v", late)
 	}

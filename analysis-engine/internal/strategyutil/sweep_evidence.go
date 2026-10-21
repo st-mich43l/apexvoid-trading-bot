@@ -178,19 +178,20 @@ func (d *LegacyDetector) poolSweeps(to int64) []LiquiditySweep {
 	return out
 }
 
-// SessionSweepContext is the session-context confluence factor, measured, for a
-// confirmed reaction: a finalized session, previous-day or previous-week level that
-// supports the direction was swept and reclaimed within the reaction's own window (the
-// reaction lookback before its touch, up to its confirmation).
+// SessionSweepContext is the session-context confluence factor, measured, for a confirmed reaction: a finalized
+// session, previous-day or previous-week level that supports the direction was swept and reclaimed in the reaction
+// lookback BEFORE the reaction's touch candle. A sweep on the touch or confirmation candles is the reaction itself:
+// the rejection pattern (sweep-reclaim, strong reclaim, wick) already credits that candle, and crediting the same
+// price movement a second time as session context would count one event twice.
 func (d *LegacyDetector) SessionSweepContext(conf *LegacyConfirmation) bool {
 	if d.Settings.FrozenSessionContext {
 		return true
 	}
-	if conf == nil || conf.TouchIndex < 0 || conf.ConfirmationIndex >= len(d.Frame.Bars) {
+	if conf == nil || conf.TouchIndex < 1 || conf.ConfirmationIndex >= len(d.Frame.Bars) {
 		return false
 	}
 	first := maxInt(0, conf.TouchIndex-maxInt(1, d.Settings.ReactionLookbackBars))
-	return d.SessionSweepBetween(d.Frame.Bars[first].Time, conf.ConfirmationTime)
+	return d.SessionSweepBetween(d.Frame.Bars[first].Time, d.Frame.Bars[conf.TouchIndex-1].Time)
 }
 
 // SessionSweepBetween reports whether a finalized session, previous-day or previous-week

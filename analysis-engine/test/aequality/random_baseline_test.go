@@ -22,12 +22,18 @@ func TestMatchedRandomBaseline(t *testing.T) {
 	if dir == "" {
 		t.Skip("AEQ_RANDOM_OUT not set")
 	}
-	const draws = 40
 	records := replayAll(t)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	out, err := os.Create(filepath.Join(dir, "random.jsonl"))
+	writeRandom(t, records, filepath.Join(dir, "random.jsonl"))
+}
+
+// writeRandom gives each record its matched random counterparts (see TestMatchedRandomBaseline).
+func writeRandom(t *testing.T, records []*Record, path string) {
+	t.Helper()
+	const draws = 40
+	out, err := os.Create(path)
 	if err != nil {
 		t.Fatal(err)
 	}

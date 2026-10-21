@@ -248,3 +248,46 @@ func TestFadeFactorsAreMeasuredNotAsserted(t *testing.T) {
 		t.Error("a constant reaction component carries no information")
 	}
 }
+
+// Every confirmed sweep reaction that is refused is accounted for with the reason, and the account never changes a decision.
+func TestAnalyzeNamesTheReasonEachConfirmedReactionWasRefused(t *testing.T) {
+	s := newStrategy(t).(*Strategy)
+	reasonOf := func(ctx *analysiscontext.MarketContext) string {
+		t.Helper()
+		analysis, candidates := s.Analyze(ctx)
+		if len(candidates) != 0 || len(analysis.Refused()) != 1 {
+			t.Fatalf("want one refusal and no candidate, got %+v / %d", analysis.Refused(), len(candidates))
+		}
+		return analysis.Refused()[0].Reason
+	}
+	// Only the confluence is short: the displacement the sweep showed is not credited.
+	if got := reasonOf(qualifying(func(f *analysiscontext.LegacyFrame, _ *analysiscontext.LegacyRead) {
+		g := grab("B")
+		g.ReactionDisplacement = false
+		f.Grabs = []techniquezone.Grab{g}
+	})); got != ReasonConfluenceFloor {
+		t.Fatalf("reason %q", got)
+	}
+	if got := reasonOf(qualifying(func(f *analysiscontext.LegacyFrame, _ *analysiscontext.LegacyRead) {
+		f.Pools = []techniquezone.Pool{equalLow(3)}
+	})); got != ReasonNoObjective {
+		t.Fatalf("reason %q", got)
+	}
+	if got := reasonOf(qualifying(func(f *analysiscontext.LegacyFrame, _ *analysiscontext.LegacyRead) {
+		f.Pools = []techniquezone.Pool{equalLow(3), {Side: "buy", Level: 99.9, Band: .1, Touches: 1}}
+	})); got != ReasonRewardRisk {
+		t.Fatalf("reason %q", got)
+	}
+	// The refusal carries the geometry it would have had, which is what a replay needs to measure the gate.
+	analysis, _ := s.Analyze(qualifying(func(f *analysiscontext.LegacyFrame, _ *analysiscontext.LegacyRead) {
+		f.Pools = []techniquezone.Pool{equalLow(3), {Side: "buy", Level: 99.9, Band: .1, Touches: 1}}
+	}))
+	r := analysis.Refused()[0]
+	if r.Direction != market.Buy || !(r.Invalidation < 98.5) || r.RewardRisk <= 0 || r.RewardRisk >= 1 || r.ObjectiveLabel != "opposing_liquidity" {
+		t.Fatalf("rejection geometry %+v", r)
+	}
+	// A qualifying setup is published and refused nothing.
+	if analysis, candidates := s.Analyze(qualifying(nil)); len(candidates) != 1 || len(analysis.Refused()) != 0 {
+		t.Fatalf("qualifying setup: %d candidates, rejections %+v", len(candidates), analysis.Refused())
+	}
+}

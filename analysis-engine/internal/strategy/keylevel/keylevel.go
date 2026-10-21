@@ -340,7 +340,6 @@ func (s *Strategy) candidate(ctx *context.MarketContext, d *strategyutil.LegacyD
 		Components: map[string]float64{
 			"confluence":    strategyutil.Clamp01(stars / 3),
 			"touch_quality": strategyutil.Clamp01(float64(a.level.Touches) / 5),
-			"reaction":      1,
 		},
 	}
 	candidate, err := strategyutil.Candidate(strategyutil.CandidateSpec{

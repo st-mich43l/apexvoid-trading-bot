@@ -74,3 +74,7 @@ cd analysis-engine && AEQ_DUMP=/tmp/aeq go test ./test/aequality -run TestReplay
 cd ../algo-bot && PYTHONPATH=. python -m tools.ae_quality_calibration /tmp/aeq/records.jsonl \
     --out ../docs/strategies/ae-quality-calibration-results.json
 ```
+
+## Q3 follow-up
+
+Whether any decision-time fact, the stars or the quality score separates better opportunities from worse ones within a strategy and instrument group, with chronological out-of-sample checks and matched random controls: [q3-quality-validation.md](q3-quality-validation.md) (0 of 143 splits supported; no ranking formula shipped).

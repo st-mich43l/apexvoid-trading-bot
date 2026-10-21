@@ -13,6 +13,11 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Q3: technical opportunity quality and acceptance validation. Evidence is no longer counted twice or asserted: a sweep of a session level on the reaction's own touch/confirmation candle is the reaction (already credited) and no longer also earns Key Level and iFVG `session_context`
+  (only sweeps completed before the touch count); `rejection_choch` confirmations publish wick + CHoCH instead of structural + CHoCH; the constant `reaction` component and the zone candidates' `zone_strength_quality`/`relevance_quality`/`gap_strength_quality` (copies of `Strength = 1` and
+  `Relevance = Immediate`) are no longer published, and `Overall` of the resting zones is their freshness/fill quality. `aequality` fails if a strategy asserts a constant as a measurement (documented exceptions only). Fade Scalp exports every considered sweep with the gate that refused it
+  (`fadescalp.Analyze`). Replay (17 captures): 11,835 -> 11,826 opportunities (11 Key Level opportunities lose a duplicated session credit). Validation against matched random entries, chronological out of sample: 0 of 143 decision-time splits supported, 3-star slightly worse than 2-star,
+  Fade Scalp FX not better than random (disabling it is proposed, not applied), no quantitative ranking shipped; `docs/strategies/q3-quality-validation.md`, `tools/q3_quality_validation.py`. No stop, ladder, sizing, enablement or Kafka field changed.
 - Q2 rework: strategy consolidation and mathematical validation. **Range Edge, Session Level and the standalone Liquidity Sweep are purged** (code, registry, configuration, Algo Bot
   adapters, catalog profiles, execution paths specific to them, tests, fixtures and documentation); not even their display names or the C# scalp list remain (persisted records keep their strategy string untouched: every reader passes an unknown name through), and a
   configuration that names one fails startup. Session structure, range geometry and liquidity sweeps remain as shared evidence: `session` places the Asia/London/New York opens and the FX trading-day rollover on

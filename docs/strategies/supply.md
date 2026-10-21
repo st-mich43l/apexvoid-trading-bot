@@ -81,10 +81,9 @@ execution-age policy.
 
 ## Quality components / evidence codes
 
-`Quality.Components`: `zone_strength_quality` (`Strength` itself),
-`relevance_quality` (1.0 Immediate / 0.6 Nearby), `freshness_quality`
+`Quality.Components`: `freshness_quality`
 (`1.0 - 0.15*TouchCount`, floored at 0.2 — a fresh zone is the cleanest
-read, each touch erodes confidence). `Overall` is the unweighted mean.
+read, each touch erodes confidence). `Overall` is that value. Q3: `zone_strength_quality` (it republished `Strength = 1`) and `relevance_quality` (a constant for `Immediate`) are no longer published: they described the detector's admission rule, not how good this zone is, and made `Overall` look like a measurement. See [q3-quality-validation.md](q3-quality-validation.md).
 
 Evidence codes: `m5_supply_zone_<state>`, `m5_supply_zone_relevance_<relevance>`,
 `m5_supply_zone_layer_<layer>`.

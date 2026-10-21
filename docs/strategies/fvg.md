@@ -55,9 +55,11 @@ no opposing liquidity, zero ATR.
 
 ## Quality components / evidence codes
 
-`gap_strength_quality`, `relevance_quality`, and — this strategy's own
+`fill_quality` only (`Overall` is that value; Q3 removed `gap_strength_quality` and
+`relevance_quality`, constants of the admission rule — see
+[q3-quality-validation.md](q3-quality-validation.md)): this strategy's own
 independent reasoning, the opposite polarity from Supply/Demand/
-OrderBlock's freshness dimension — `fill_quality`
+OrderBlock's freshness dimension
 (`1.0 - 0.25*TouchCount`, floored at 0.1): for an FVG, `TouchCount` is a
 **fill** signal, not a validation signal — more touches mean the
 imbalance is more consumed, not more confirmed
