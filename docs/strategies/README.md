@@ -129,7 +129,7 @@ each with the evidence behind it:
 
 Containment is reversible by removing the name. Nothing re-enables itself.
 
-**Enabled on XAU (13 Oct 2026, owner's decision).** `ifvg` (v3) was taken off XAU's list after technical certification; the hypothetical XAU replay is not evidence of an edge, see [xau-enablement-2026-10.md](xau-enablement-2026-10.md).
+**Enabled on XAU (13 Oct 2026, owner's decision).** `ifvg` (v3) was taken off XAU's list after technical certification; the hypothetical XAU replay is not evidence of an edge.
 
 ## Common candidate contract
 
