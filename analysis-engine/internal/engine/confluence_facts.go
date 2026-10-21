@@ -75,7 +75,8 @@ func factsFromReaction(htfAligned bool, touches int, fibTouched bool, reaction *
 	case "strong_reclaim", "sweep_reclaim":
 		factors.StructuralAgreement = true
 	case "rejection_choch":
-		factors.StructuralAgreement = true
+		// a wick rejection candle plus a change of character: two events, not the break named twice
+		factors.WickRejection = true
 		factors.CHoCH = true
 	}
 	return factors

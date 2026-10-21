@@ -376,3 +376,7 @@ techniques still use, is unchanged, and iFVG is the only consumer that moved.
   session liquidity is read (that belongs to a later iteration, not a hidden filter).
 - The resting-zone observation is no longer published; anything that consumed it as an
   informational card would no longer see it (nothing in the Algo Bot executes it).
+
+## Q3 validation
+
+`session_context` counts only sweeps completed before the retest candle (the retest's own wick is the reaction, already credited). The 35 out-of-sample FX observations are a hypothesis, not proof, and within-strategy quality cannot be tested at this sample size ([q3-quality-validation.md](q3-quality-validation.md)).

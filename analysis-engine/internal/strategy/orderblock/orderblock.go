@@ -296,26 +296,16 @@ func zoneReferenceTime(z zone.Zone) int64 {
 // across the zone-anchored strategies in this catalog slice (source task
 // §40: recurring dimension names are not shared strategy behavior).
 func computeQuality(z zone.Zone) opportunity.StrategyQuality {
-	strengthQuality := clamp01(z.Strength)
-	relevanceQuality := 0.5
-	switch z.Relevance {
-	case zone.Immediate:
-		relevanceQuality = 1.0
-	case zone.Nearby:
-		relevanceQuality = 0.6
-	}
+	// Freshness is the one measured dimension: every touch erodes the confidence the zone still holds. The engine's
+	// technique-zone adapter sets every zone's Strength to 1 and its Relevance to Immediate (it has neither), so a strength or a
+	// relevance component would be a constant asserted as a measurement; neither is published.
 	touchQuality := 1.0 - 0.15*float64(z.TouchCount)
 	if touchQuality < 0.2 {
 		touchQuality = 0.2
 	}
-	overall := (strengthQuality + relevanceQuality + touchQuality) / 3
 	return opportunity.StrategyQuality{
-		Overall: overall,
-		Components: map[string]float64{
-			"zone_strength_quality": strengthQuality,
-			"relevance_quality":     relevanceQuality,
-			"freshness_quality":     touchQuality,
-		},
+		Overall:    touchQuality,
+		Components: map[string]float64{"freshness_quality": touchQuality},
 	}
 }
 

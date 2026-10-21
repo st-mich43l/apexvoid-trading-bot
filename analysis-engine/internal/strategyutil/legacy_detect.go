@@ -528,13 +528,16 @@ type LegacyResult struct {
 	FibTouch       bool
 }
 
-// FactorsForConfirmation mirrors _factors_for_confirmation: a CHoCH
-// confirmation adds the structural-agreement and choch factors.
+// FactorsForConfirmation completes the factors a confirmation shows. A rejection_choch is a wick rejection candle with a change
+// of character in the reaction direction: two events, a candle (the wick factor) and a structure break (the choch factor). The
+// frozen detector credited it as a structural agreement plus a choch, naming the break twice and the wick not at all; the total
+// is the same (3 + 2) but the evidence it published was false. The structural-agreement factor is left to what shows it
+// independently (a sweep-reclaim or strong reclaim, the engine's structure).
 func FactorsForConfirmation(factors confluence.Factors, confirmationType string) confluence.Factors {
 	if confirmationType != reaction.TypeRejectionCHoCH {
 		return factors
 	}
-	factors.StructuralAgreement, factors.CHoCH = true, true
+	factors.WickRejection, factors.CHoCH = true, true
 	return factors
 }
 

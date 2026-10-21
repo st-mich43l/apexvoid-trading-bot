@@ -26,6 +26,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/reaction"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategyutil"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/techniquezone"
 )
 
 const ID strategy.StrategyID = "fade_scalp"
@@ -81,15 +82,68 @@ type Objective struct {
 	Label string
 }
 
+// Reasons a confirmed sweep reaction is not published. A candidate that fails a mandatory fact is rejected whatever its stars; the
+// confluence floor is the one quality gate and only applies to a setup that already satisfied every fact above it.
+const (
+	ReasonContinued       = "continued_past_the_sweep"
+	ReasonConfluenceFloor = "confluence_below_floor"
+	ReasonNoObjective     = "no_structural_objective"
+	ReasonRewardRisk      = "reward_risk_below_minimum"
+	ReasonSuperseded      = "superseded_by_better_pool"
+)
+
+// Consideration records a sweep reaction that was confirmed, whether it was published (Reason is empty) or refused (Reason names the
+// gate), with the geometry it has or would have had where that is known, and the facts it was judged on. It is a diagnostic account
+// (replay and calibration read it); it never changes a decision.
+type Consideration struct {
+	Reason                          string
+	Direction                       market.Direction
+	PoolLevel                       float64
+	SweepTime, TouchTime, ConfirmAt int64
+	EntryLow, EntryHigh             float64
+	Invalidation                    float64 // 0 until the gate that needs it
+	Objective                       float64 // 0 when none
+	ObjectiveLabel                  string
+	RewardRisk                      float64
+	Stars                           int // 0 when the confluence was not scored
+	Pattern                         string
+	// Facts are the measurements known at the deciding candle: the sweep candle's body and wick ratios, the sweep's penetration, the
+	// move that ran into it, the pool's touches, the higher-timeframe agreement. None of them gates; they are what a calibration reads.
+	Facts map[string]float64
+}
+
+// Analysis is everything one evaluation decided: every confirmed sweep reaction, published or refused.
+type Analysis struct {
+	Considered []Consideration
+}
+
+// Refused are the considerations that were not published.
+func (a Analysis) Refused() []Consideration {
+	var out []Consideration
+	for _, c := range a.Considered {
+		if c.Reason != "" {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
 func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Candidate {
+	_, candidates := s.Analyze(ctx)
+	return candidates
+}
+
+// Analyze is Evaluate plus the account of every confirmed sweep reaction it refused and why.
+func (s *Strategy) Analyze(ctx *analysiscontext.MarketContext) (Analysis, []opportunity.Candidate) {
+	var analysis Analysis
 	tf := ctx.Timeframes[market.M5]
 	direction := strategyutil.StructuralDirection(ctx)
 	if tf == nil || !direction.IsValid() || !strategyutil.PremiumDiscountAllows(tf, direction, s.strictPD) {
-		return nil
+		return analysis, nil
 	}
 	d, ok := strategyutil.NewLegacyDetector(ctx, market.M5, direction, s.detector)
 	if !ok {
-		return nil
+		return analysis, nil
 	}
 	wantSide, wantKind := "sell", "equal_low"
 	if direction == market.Sell {
@@ -97,6 +151,7 @@ func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Ca
 	}
 
 	var best *opportunity.Candidate
+	var bestRejection Consideration
 	var bestResult *strategyutil.LegacyResult
 	bestDistance := math.Inf(1)
 	for _, pool := range d.Frame.Pools {
@@ -117,9 +172,25 @@ func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Ca
 			continue
 		}
 		sweep := d.Frame.Bars[grab.Index]
+		rejected := Consideration{
+			Direction: direction, PoolLevel: pool.Level, SweepTime: sweep.Time, TouchTime: confirmation.TouchTime, ConfirmAt: confirmation.ConfirmationTime,
+			EntryLow: zone.Low(), EntryHigh: zone.High(),
+		}
+		// The thesis fails when the sweep's own extreme is exceeded, so the stop sits beyond it (and beyond the entry band,
+		// whichever reaches further).
+		stopFor := func(low, high float64) (invalid, reference float64) {
+			if direction == market.Sell {
+				return math.Max(high, sweep.High) + s.invalidationATR*d.ATR, low
+			}
+			return math.Min(low, sweep.Low) - s.invalidationATR*d.ATR, high
+		}
+		rejected.Invalidation, _ = stopFor(zone.Low(), zone.High())
+		rejected.Pattern, rejected.Facts = confirmation.Type, sweepFacts(d, direction, grab, pool, sweep)
 		// The sweep failed to continue: nothing after it has traded beyond its extreme. A
 		// market that keeps running through the swept level is accepting it, not reverting.
 		if continued(d, direction, grab.Index) {
+			rejected.Reason = ReasonContinued
+			analysis.Considered = append(analysis.Considered, rejected)
 			continue
 		}
 		factors := strategyutil.FactorsForConfirmation(confluence.Factors{
@@ -130,23 +201,34 @@ func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Ca
 		structuralLow, structuralHigh := zone.Low(), zone.High()
 		result := d.Finish(pool.Level, zone, factors, wantKind, &structuralLow, &structuralHigh)
 		if result == nil {
+			rejected.Reason = ReasonConfluenceFloor
+			// The account also says whether the setup would have had the room its risk demands, so a replay can tell what the
+			// floor alone refused from what it refused in company. It decides nothing.
+			if invalid, reference := stopFor(zone.Low(), zone.High()); math.Abs(reference-invalid) > 0 {
+				if objective, found := s.objective(d, tf, direction, reference); found {
+					rejected.Objective, rejected.ObjectiveLabel = objective.Price, objective.Label
+					rejected.RewardRisk = math.Abs(objective.Price-reference) / math.Abs(reference-invalid)
+				}
+			}
+			analysis.Considered = append(analysis.Considered, rejected)
 			continue
 		}
 
 		low, high := result.Zone.Low(), result.Zone.High()
-		// The thesis fails when the sweep's own extreme is exceeded, so the stop sits beyond it
-		// (and beyond the entry band, whichever reaches further).
-		invalid, reference := math.Min(low, sweep.Low)-s.invalidationATR*d.ATR, high
-		if direction == market.Sell {
-			invalid, reference = math.Max(high, sweep.High)+s.invalidationATR*d.ATR, low
-		}
+		invalid, reference := stopFor(low, high)
+		rejected.EntryLow, rejected.EntryHigh, rejected.Invalidation, rejected.Stars = low, high, invalid, result.Stars
 		risk := math.Abs(reference - invalid)
 		objective, found := s.objective(d, tf, direction, reference)
 		if !found || risk <= 0 {
+			rejected.Reason = ReasonNoObjective
+			analysis.Considered = append(analysis.Considered, rejected)
 			continue
 		}
 		reward := math.Abs(objective.Price - reference)
+		rejected.Objective, rejected.ObjectiveLabel, rejected.RewardRisk = objective.Price, objective.Label, reward/risk
 		if reward/risk < s.minimumRewardRisk {
+			rejected.Reason = ReasonRewardRisk
+			analysis.Considered = append(analysis.Considered, rejected)
 			continue
 		}
 		mean, _, hasMean := strategyutil.MeanReference(tf)
@@ -196,14 +278,73 @@ func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Ca
 		candidate.DetectorConfluence = result.ConfluenceContext()
 		distance := d.ZoneDistance(result.Zone)
 		if best == nil || result.Stars > bestResult.Stars || result.Stars == bestResult.Stars && distance < bestDistance {
+			if best != nil {
+				analysis.Considered = append(analysis.Considered, supersededBy(bestRejection))
+			}
 			copy := candidate
-			best, bestResult, bestDistance = &copy, result, distance
+			best, bestResult, bestDistance, bestRejection = &copy, result, distance, rejected
+		} else {
+			rejected.Reason = ReasonSuperseded
+			analysis.Considered = append(analysis.Considered, rejected)
 		}
 	}
 	if best == nil {
-		return nil
+		return analysis, nil
 	}
-	return []opportunity.Candidate{*best}
+	analysis.Considered = append(analysis.Considered, bestRejection) // published: no Reason
+	return analysis, []opportunity.Candidate{*best}
+}
+
+func supersededBy(r Consideration) Consideration {
+	r.Reason = ReasonSuperseded
+	return r
+}
+
+// sweepFacts are the measurements of one sweep known at the deciding candle. The run into the sweep is the move over the ten candles
+// before it, against the trade, in ATR: how hard the market was travelling when it took the liquidity.
+func sweepFacts(d *strategyutil.LegacyDetector, direction market.Direction, grab *techniquezone.Grab, pool techniquezone.Pool, sweep market.Candle) map[string]float64 {
+	flag := func(v bool) float64 {
+		if v {
+			return 1
+		}
+		return 0
+	}
+	facts := map[string]float64{
+		"sweep_body_ratio": sweep.BodyRatio(), "sweep_upper_wick": sweep.UpperWickRatio(), "sweep_lower_wick": sweep.LowerWickRatio(),
+		"penetration_atr": penetrationATR(sweep, pool.Level, direction, d.ATR), "pool_touches": float64(pool.Touches),
+		"bars_since_sweep": float64(len(d.Frame.Bars) - 1 - grab.Index),
+		"htf_aligned":      flag(d.HTFAligned()), "grade_a": flag(grab.Grade == "A"), "reaction_displacement": flag(grab.ReactionDisplacement),
+	}
+	bars := d.Frame.Bars
+	if from := grab.Index - 10; from >= 0 && d.ATR > 0 {
+		run := bars[grab.Index-1].Close - bars[from].Close
+		if direction == market.Buy {
+			run = -run
+		}
+		facts["run_into_sweep_atr"] = run / d.ATR
+	}
+	// How the market was travelling before the sweep: the average range of the five candles before it against the ATR (a spike of
+	// volatility is what an exhaustion looks like), and how many closes in a row ran against the trade.
+	if from := grab.Index - 5; from >= 0 && d.ATR > 0 {
+		var total float64
+		for _, bar := range bars[from:grab.Index] {
+			total += bar.Range()
+		}
+		facts["range_expansion"] = total / 5 / d.ATR
+	}
+	run := 0
+	for i := grab.Index - 1; i > 0; i-- {
+		against := bars[i].Close < bars[i-1].Close
+		if direction == market.Sell {
+			against = bars[i].Close > bars[i-1].Close
+		}
+		if !against {
+			break
+		}
+		run++
+	}
+	facts["closes_against_before_sweep"] = float64(run)
+	return facts
 }
 
 // sweepExtreme is the price the sweep ran to: the low of a sell-side sweep (a BUY fade) or

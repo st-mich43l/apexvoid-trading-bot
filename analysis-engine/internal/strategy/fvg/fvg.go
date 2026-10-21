@@ -291,14 +291,6 @@ func zoneReferenceTime(z zone.Zone) int64 {
 }
 
 func computeQuality(z zone.Zone) opportunity.StrategyQuality {
-	strengthQuality := clamp01(z.Strength)
-	relevanceQuality := 0.5
-	switch z.Relevance {
-	case zone.Immediate:
-		relevanceQuality = 1.0
-	case zone.Nearby:
-		relevanceQuality = 0.6
-	}
 	// Unlike the other zone-anchored strategies in this slice, an FVG's
 	// own touch count is a FILL signal, not a validation signal — more
 	// touches means the imbalance is more consumed, not more confirmed.
@@ -309,14 +301,9 @@ func computeQuality(z zone.Zone) opportunity.StrategyQuality {
 	if fillQuality < 0.1 {
 		fillQuality = 0.1
 	}
-	overall := (strengthQuality + relevanceQuality + fillQuality) / 3
 	return opportunity.StrategyQuality{
-		Overall: overall,
-		Components: map[string]float64{
-			"gap_strength_quality": strengthQuality,
-			"relevance_quality":    relevanceQuality,
-			"fill_quality":         fillQuality,
-		},
+		Overall:    fillQuality,
+		Components: map[string]float64{"fill_quality": fillQuality},
 	}
 }
 
