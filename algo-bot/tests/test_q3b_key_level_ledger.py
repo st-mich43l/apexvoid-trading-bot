@@ -73,7 +73,10 @@ def test_only_the_capture_that_owns_a_bar_is_compared_with_its_python_decisions(
   golden = _golden(tmp_path, {BAR: _decision()})
   other_capture = _record(1, BAR, 3, capture="XAU Oct M5")
   rows, python_only, *_ = ledger.build([golden], [other_capture], {}, [], {})
-  assert rows == [] and len(python_only) == 1
+  assert rows == [], "another capture's replay is not compared bar by bar"
+  assert python_only == [], "but it is a standing thesis that explains the Python decision"
+  rows, python_only, *_ = ledger.build([golden], [_record(1, BAR + 7 * 86400, 3, capture="XAU Oct M5")], {}, [], {})
+  assert rows == [] and len(python_only) == 1, "a week later it explains nothing"
 
 
 def test_bars_evaluated_by_two_captures_must_agree_or_the_disagreement_is_reported(tmp_path):

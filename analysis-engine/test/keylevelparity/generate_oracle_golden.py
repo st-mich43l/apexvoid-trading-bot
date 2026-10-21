@@ -52,10 +52,24 @@ LATER_CAPTURES = {
   "GBPJPY_1013": "replay-gbpjpy-production-capture-20261013.json",
   "GBPJPY_1014": "replay-gbpjpy-production-capture-20261014.json",
 }
+# The Python of 22-27 Sep 2026 (commit a75b6559: a1c77584 plus the five 21 Sep analysis changes; settings of that commit's config/trading-bot.yml) over the
+# XAU captures and the 13 Oct FX captures: CAPTURE_SET=sep22_27 with ORACLE_ROOT set to that worktree and APEXVOID_CONFIG_FILE to its trading-bot.yml.
+SEP22_27_CAPTURES = {
+  "XAU": "replay-xau-production-capture-20260921.json",
+  "XAU_LATER": "replay-xau-m1-production-capture-20261006.json",
+  "XAU_1012": "replay-xau-production-capture-20261012.json",
+  "XAU_1013": "replay-xau-production-capture-20261013.json",
+  "XAU_1014": "replay-xau-production-capture-20261014.json",
+  "EURUSD_1013": "replay-eurusd-production-capture-20261013.json",
+  "GBPUSD_1013": "replay-gbpusd-production-capture-20261013.json",
+  "USDJPY_1013": "replay-usdjpy-production-capture-20261013.json",
+}
 if os.environ.get("CAPTURE_SET") == "later":
   CAPTURES = LATER_CAPTURES
+elif os.environ.get("CAPTURE_SET") == "sep22_27":
+  CAPTURES = SEP22_27_CAPTURES
 ENGINE = os.environ.get("ENGINE_DIR", "/engine")
-OUT = os.path.join(ENGINE, "testdata/key-level-oracle-later-captures.json" if CAPTURES is LATER_CAPTURES else "testdata/key-level-oracle.json")
+OUT = os.path.join(ENGINE, {id(LATER_CAPTURES): "testdata/key-level-oracle-later-captures.json", id(SEP22_27_CAPTURES): "testdata/key-level-oracle-sep22-27.json"}.get(id(CAPTURES), "testdata/key-level-oracle.json"))
 MINUTES = {"M5": 5, "M15": 15, "H1": 60}
 
 
@@ -72,7 +86,7 @@ def run(symbol):
     "POSTGRES_PASSWORD": "x",
   }.items():
     os.environ.setdefault(key, value)
-  sys.path.insert(0, "/oracle/algo-bot")
+  sys.path.insert(0, os.environ.get("ORACLE_ROOT", "/oracle") + "/algo-bot")
   import pandas as pd
   from app.analysis import detectors as D
   from app.analysis.detectors import build_context
