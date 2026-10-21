@@ -119,15 +119,16 @@ func (s *Strategy) factors(ctx *analysiscontext.MarketContext, m5 *analysisconte
 
 // sessionSweep is the measured session context: a finalized session, previous-day or
 // previous-week level that supports the trade was swept and reclaimed during the move that
-// built the setup, from the gap's first candle to the rejection. A sweep before the gap
-// existed, or one that was not reclaimed, is not evidence for this inversion. The frozen
-// detectors set the factor on every decision.
+// built the setup, from the gap's first candle up to the candle BEFORE the retest touch. A
+// sweep before the gap existed, one that was not reclaimed, and one on the retest itself (that
+// wick IS the rejection, already credited as such) are not session evidence for this inversion.
+// The frozen detectors set the factor on every decision.
 func (s *Strategy) sessionSweep(ctx *analysiscontext.MarketContext, setup Setup) bool {
 	d, ok := strategyutil.NewLegacyDetector(ctx, market.M5, setup.Direction, s.detector)
 	if !ok {
 		return false
 	}
-	return d.SessionSweepBetween(setup.Gap.FormedAt-2*m5Seconds, setup.ConfirmedAt)
+	return d.SessionSweepBetween(setup.Gap.FormedAt-2*m5Seconds, setup.Retest.TouchTime-m5Seconds)
 }
 
 func (s *Strategy) candidate(ctx *analysiscontext.MarketContext, m5 *analysiscontext.TimeframeContext, setup Setup) (opportunity.Candidate, bool) {

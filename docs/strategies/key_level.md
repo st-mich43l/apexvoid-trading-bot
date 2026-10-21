@@ -107,3 +107,7 @@ frozen detector with `frozen_session_context` set. On the 17-capture replay: 5,4
   thesis group, a structure or an entry corridor compete; the best by quality,
   confluence, structural quality and freshness trades and the rest are
   suppressed ([execution](../execution.md#same-thesis-arbitration)).
+
+## Q3 validation
+
+The 5,444 -> 4,174 drop of Q2 removed an unconditional credit, not measurably worse opportunities: the removed set is not worse than the retained one against matched random entries, in either window, with intervals that include zero (FX flips sign), and HTF alignment, now the practical admission criterion, has never shown a positive relation to outcomes. Nothing restores the artificial confluence. Q3 only stops a session-level sweep on the reaction's own candle from earning the session point a second time (4,174 -> 4,165). Details: [q3-quality-validation.md](q3-quality-validation.md).
