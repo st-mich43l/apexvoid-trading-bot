@@ -1,0 +1,404 @@
+{
+ "commits": {
+  "python_profitable_week": "a1c77584cae70abab09f2ee8d152e3c445b293a1",
+  "python_last_analysis": "1c9f32303b7e9f15fc8e3767b5045ac1e8a37adc",
+  "go_engine_under_test": "4b3917e9fae5d5a41138f74ad1e5001b3e566544"
+ },
+ "python_effective_settings": "config/trading-bot.yml at a1c77584 (sha256_16 6c0639ea8242487e); the oracle runs algo-bot/app/analysis of that commit with APEXVOID_CONFIG_FILE pointing at it, M5/M15/H1 windows exactly as the scanner loaded them, at every closed M5 bar after the M5 lookback is filled",
+ "go_config_sha256_16": {
+  "analysis.yml": "5dc2c75013e36d17",
+  "apexvoid.demo.yml": "b14e9ca02cbf21be",
+  "apexvoid.yml": "b45f98034bfc4a38",
+  "auto-algo.yml": "b0dd7ce23c3a0292",
+  "execution.yml": "422e6fce09dd28c3",
+  "instruments.yml": "2625b0c10d96ac65",
+  "runtime.yml": "d9ae3974f170bcc8",
+  "telegram.yml": "23915d9e359ada4b"
+ },
+ "go_replay_variants": {
+  "reference": "AEQ_PARAMS={\"key_level\":{\"frozen_session_context\":true}} (the parity test proves it reproduces every Python decision)",
+  "current": "no override",
+  "fx_old_envelope": "AEQ_CONFIG = copy of config/ with GBPUSD 12-22/0.0022, GBPJPY 15-30/0.3, USDJPY 10-18/0.18 (a1c77584 values)",
+  "old_execution": "AEQ_CONFIG = copy of config/ with XAU stop_envelope.max_pips 60 (pack leaf), USD-major pack 10-18/0.0018, GBPUSD 12-22/0.0022, GBPJPY 15-30/0.3, USDJPY 10-18/0.18: the a1c77584 values. The 30-50 pip XAU entry band of 86f68323 is a multi-leg rule the single-leg harness cannot represent (the 50-pip envelope floor already dominates the risk), so it is not replayed."
+ },
+ "captures": {
+  "replay-eurusd-production-capture-20261006.json": {
+   "sha256_16": "9758caab40159492",
+   "symbol": "EURUSD",
+   "timeframes": {
+    "M5": [
+     1500,
+     1790634000,
+     1791256800
+    ],
+    "M15": [
+     600,
+     1790543700,
+     1791255600
+    ],
+    "H1": [
+     300,
+     1789657200,
+     1791252000
+    ]
+   }
+  },
+  "replay-eurusd-production-capture-20261013.json": {
+   "sha256_16": "2e6cfd5cdc28ce0e",
+   "symbol": "EURUSD",
+   "timeframes": {
+    "M5": [
+     2000,
+     1790915400,
+     1791860700
+    ],
+    "M15": [
+     800,
+     1790794800,
+     1791859500
+    ],
+    "H1": [
+     600,
+     1788836400,
+     1791856800
+    ]
+   }
+  },
+  "replay-eurusd-production-capture-20261014.json": {
+   "sha256_16": "8f01d145a440ad81",
+   "symbol": "EURUSD",
+   "timeframes": {
+    "M5": [
+     2000,
+     1791206400,
+     1791979200
+    ],
+    "M15": [
+     900,
+     1790823600,
+     1791978300
+    ],
+    "H1": [
+     400,
+     1790020800,
+     1791975600
+    ]
+   }
+  },
+  "replay-gbpjpy-production-capture-20261006.json": {
+   "sha256_16": "14f354b64f82ab86",
+   "symbol": "GBPJPY",
+   "timeframes": {
+    "M5": [
+     1500,
+     1790634300,
+     1791256800
+    ],
+    "M15": [
+     600,
+     1790543700,
+     1791255600
+    ],
+    "H1": [
+     300,
+     1789657200,
+     1791252000
+    ]
+   }
+  },
+  "replay-gbpjpy-production-capture-20261013.json": {
+   "sha256_16": "95cd46fce38a877b",
+   "symbol": "GBPJPY",
+   "timeframes": {
+    "M5": [
+     2000,
+     1790915100,
+     1791860700
+    ],
+    "M15": [
+     800,
+     1790794800,
+     1791859500
+    ],
+    "H1": [
+     600,
+     1788836400,
+     1791856800
+    ]
+   }
+  },
+  "replay-gbpjpy-production-capture-20261014.json": {
+   "sha256_16": "bbf1e9de0ad9c9d2",
+   "symbol": "GBPJPY",
+   "timeframes": {
+    "M5": [
+     2000,
+     1791206100,
+     1791979200
+    ],
+    "M15": [
+     900,
+     1790823600,
+     1791978300
+    ],
+    "H1": [
+     400,
+     1790020800,
+     1791975600
+    ]
+   }
+  },
+  "replay-gbpusd-production-capture-20261005.json": {
+   "sha256_16": "9d6f58a82b54b9fa",
+   "symbol": "GBPUSD",
+   "timeframes": {
+    "M5": [
+     1500,
+     1790566200,
+     1791188700
+    ],
+    "M15": [
+     600,
+     1790303400,
+     1791188100
+    ],
+    "H1": [
+     300,
+     1789588800,
+     1791183600
+    ]
+   }
+  },
+  "replay-gbpusd-production-capture-20261013.json": {
+   "sha256_16": "1fdcc9858ed1dd61",
+   "symbol": "GBPUSD",
+   "timeframes": {
+    "M5": [
+     2000,
+     1790915100,
+     1791860700
+    ],
+    "M15": [
+     800,
+     1790794800,
+     1791859500
+    ],
+    "H1": [
+     600,
+     1788836400,
+     1791856800
+    ]
+   }
+  },
+  "replay-gbpusd-production-capture-20261014.json": {
+   "sha256_16": "a01a9d10239b96c4",
+   "symbol": "GBPUSD",
+   "timeframes": {
+    "M5": [
+     2000,
+     1791206100,
+     1791979200
+    ],
+    "M15": [
+     900,
+     1790823600,
+     1791978300
+    ],
+    "H1": [
+     400,
+     1790020800,
+     1791975600
+    ]
+   }
+  },
+  "replay-usdjpy-production-capture-20261005.json": {
+   "sha256_16": "b438c60f037cd32c",
+   "symbol": "USDJPY",
+   "timeframes": {
+    "M5": [
+     1500,
+     1790566200,
+     1791188700
+    ],
+    "M15": [
+     600,
+     1790303400,
+     1791188100
+    ],
+    "H1": [
+     300,
+     1789588800,
+     1791183600
+    ]
+   }
+  },
+  "replay-usdjpy-production-capture-20261013.json": {
+   "sha256_16": "6a0d540f60f53a06",
+   "symbol": "USDJPY",
+   "timeframes": {
+    "M5": [
+     2000,
+     1790915400,
+     1791860700
+    ],
+    "M15": [
+     800,
+     1790794800,
+     1791859500
+    ],
+    "H1": [
+     600,
+     1788836400,
+     1791856800
+    ]
+   }
+  },
+  "replay-usdjpy-production-capture-20261014.json": {
+   "sha256_16": "30bd3ca7cea394cf",
+   "symbol": "USDJPY",
+   "timeframes": {
+    "M5": [
+     2000,
+     1791206700,
+     1791979200
+    ],
+    "M15": [
+     900,
+     1790823600,
+     1791978300
+    ],
+    "H1": [
+     400,
+     1790020800,
+     1791975600
+    ]
+   }
+  },
+  "replay-xau-m1-production-capture-20261006.json": {
+   "sha256_16": "c9dbd7727744dfed",
+   "symbol": "XAU",
+   "timeframes": {
+    "M1": [
+     2000,
+     1790954580,
+     1791254820
+    ],
+    "M5": [
+     1500,
+     1790610300,
+     1791254400
+    ],
+    "M15": [
+     600,
+     1790343900,
+     1791253800
+    ],
+    "H1": [
+     300,
+     1789606800,
+     1791248400
+    ]
+   }
+  },
+  "replay-xau-production-capture-20260921.json": {
+   "sha256_16": "a7663f03efe8f564",
+   "symbol": "XAU",
+   "timeframes": {
+    "M5": [
+     1500,
+     1789360500,
+     1790001000
+    ],
+    "M15": [
+     600,
+     1789093800,
+     1790000100
+    ],
+    "H1": [
+     300,
+     1788346800,
+     1789995600
+    ]
+   }
+  },
+  "replay-xau-production-capture-20261012.json": {
+   "sha256_16": "b48dc384767bd045",
+   "symbol": "XAU",
+   "timeframes": {
+    "M5": [
+     2000,
+     1790819700,
+     1791790200
+    ],
+    "M15": [
+     600,
+     1790879400,
+     1791789300
+    ],
+    "H1": [
+     500,
+     1789045200,
+     1791784800
+    ]
+   }
+  },
+  "replay-xau-production-capture-20261013.json": {
+   "sha256_16": "6d929c75563da1d5",
+   "symbol": "XAU",
+   "timeframes": {
+    "M5": [
+     2223,
+     1790819700,
+     1791860700
+    ],
+    "M15": [
+     800,
+     1790762400,
+     1791859500
+    ],
+    "H1": [
+     600,
+     1788735600,
+     1791856800
+    ]
+   }
+  },
+  "replay-xau-production-capture-20261014.json": {
+   "sha256_16": "7b5512da67a73517",
+   "symbol": "XAU",
+   "timeframes": {
+    "M1": [
+     2000,
+     1791855960,
+     1791979620
+    ],
+    "M5": [
+     2000,
+     1791181500,
+     1791979200
+    ],
+    "M15": [
+     900,
+     1790787600,
+     1791978300
+    ],
+    "H1": [
+     400,
+     1789959600,
+     1791975600
+    ]
+   }
+  }
+ },
+ "simulation": "test/aequality simulate(): limit order at the proximal edge placed when the evaluated M5 bar closes, filled only on a later bar that trades to it (bid-only captures; constant assumed spreads XAU 0.25, EURUSD 0.8 pip, GBPUSD 1.0 pip, USDJPY 0.8 pip, GBPJPY 2.0 pip); fill bar can only stop the trade; risk = fill minus technical invalidation widened to the instrument envelope floor, not executable beyond the cap; ladder XAU 1R-4R 40/20/20/20, FX 1R-2R 50/50, stop to break-even after the first target; held 24 h; matched random control: 40 draws with the same instrument, direction, risk, cost and ladder",
+ "windows": {
+  "september": "bars closing before 2026-09-28 UTC (XAU capture 20260921: M5 from 2026-09-14 04:35 UTC; valid evaluation bars start when the Python M5 lookback is filled)",
+  "october": "bars closing on or after 2026-09-28 UTC"
+ },
+ "missing": [
+  "no FX M5 data before 2026-09-28 (so no September FX replay)",
+  "no September production trades (auto_trade_results starts 2026-09-29 20:32 UTC)",
+  "no Python-era executor logs, plans or fills",
+  "no currency P&L anywhere"
+ ]
+}

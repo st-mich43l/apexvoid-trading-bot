@@ -1,0 +1,987 @@
+{
+ "description": "September-baseline recovery (Q3b): Python a1c77584 Key Level against the current Go engine on identical candles; common execution; FX stop-envelope counterfactual; production funnel.",
+ "key_level_ledger_summary": {
+  "bars_evaluated": 17652,
+  "go_reference_opportunities": 5111,
+  "python_decisions_unexplained": 9,
+  "python_unexplained_examples": [
+   {
+    "symbol": "EURUSD",
+    "market_time": 1790705100,
+    "python": {
+     "confirmation_bar": 1790704800,
+     "confirmation_type": "sweep_reclaim",
+     "confluence": 2,
+     "direction": "BUY",
+     "entry_high": 1.13295260984009,
+     "entry_low": 1.13255739015991,
+     "key_level": 1.132755,
+     "role": "ambiguous",
+     "source_touches": 2,
+     "structural_kind": "reaction",
+     "touch_bar": 1790704800
+    }
+   },
+   {
+    "symbol": "EURUSD",
+    "market_time": 1791806400,
+    "python": {
+     "confirmation_bar": 1791806100,
+     "confirmation_type": "engulfing",
+     "confluence": 2,
+     "direction": "SELL",
+     "entry_high": 1.11801,
+     "entry_low": 1.1175787477010397,
+     "key_level": 1.11801,
+     "role": "ambiguous",
+     "source_touches": 2,
+     "structural_kind": "reaction",
+     "touch_bar": 1791806100
+    }
+   },
+   {
+    "symbol": "GBPUSD",
+    "market_time": 1790705100,
+    "python": {
+     "confirmation_bar": 1790704800,
+     "confirmation_type": "strong_reclaim",
+     "confluence": 2,
+     "direction": "BUY",
+     "entry_high": 1.3219068087979011,
+     "entry_low": 1.3214531912020993,
+     "key_level": 1.3216800000000002,
+     "role": "ambiguous",
+     "source_touches": 2,
+     "structural_kind": "reaction",
+     "touch_bar": 1790704800
+    }
+   },
+   {
+    "symbol": "GBPUSD",
+    "market_time": 1790705400,
+    "python": {
+     "confirmation_bar": 1790704800,
+     "confirmation_type": "strong_reclaim",
+     "confluence": 2,
+     "direction": "BUY",
+     "entry_high": 1.321926679550948,
+     "entry_low": 1.3214333204490525,
+     "key_level": 1.3216800000000002,
+     "role": "ambiguous",
+     "source_touches": 2,
+     "structural_kind": "reaction",
+     "touch_bar": 1790704800
+    }
+   },
+   {
+    "symbol": "GBPUSD",
+    "market_time": 1791752400,
+    "python": {
+     "confirmation_bar": 1791579300,
+     "confirmation_type": "sweep_reclaim",
+     "confluence": 2,
+     "direction": "SELL",
+     "entry_high": 1.3233809523809525,
+     "entry_low": 1.323012380952381,
+     "key_level": 1.3231966666666668,
+     "role": "ambiguous",
+     "source_touches": 3,
+     "structural_kind": "reaction",
+     "touch_bar": 1791579300
+    }
+   },
+   {
+    "symbol": "XAU",
+    "market_time": 1789533900,
+    "python": {
+     "confirmation_bar": 1789533600,
+     "confirmation_type": "strong_reclaim",
+     "confluence": 2,
+     "direction": "SELL",
+     "entry_high": 4325.001989767369,
+     "entry_low": 4316.93,
+     "key_level": 4323.13,
+     "role": "ambiguous",
+     "source_touches": 2,
+     "structural_kind": "reaction",
+     "touch_bar": 1789533600
+    }
+   },
+   {
+    "symbol": "XAU",
+    "market_time": 1789941600,
+    "python": {
+     "confirmation_bar": 1789764900,
+     "confirmation_type": "wick_rejection",
+     "confluence": 2,
+     "direction": "SELL",
+     "entry_high": 4381.676964285714,
+     "entry_low": 4377.638035714286,
+     "key_level": 4379.6575,
+     "role": "ambiguous",
+     "source_touches": 3,
+     "structural_kind": "round",
+     "touch_bar": 1789764900
+    }
+   },
+   {
+    "symbol": "XAU",
+    "market_time": 1790684700,
+    "python": {
+     "confirmation_bar": 1790684400,
+     "confirmation_type": "sweep_reclaim",
+     "confluence": 2,
+     "direction": "SELL",
+     "entry_high": 4160.7,
+     "entry_low": 4148.250789720958,
+     "key_level": 4160.7,
+     "role": "ambiguous",
+     "source_touches": 4,
+     "structural_kind": "round",
+     "touch_bar": 1790684400
+    }
+   },
+   {
+    "symbol": "XAU",
+    "market_time": 1791314700,
+    "python": {
+     "confirmation_bar": 1791314400,
+     "confirmation_type": "wick_rejection",
+     "confluence": 2,
+     "direction": "SELL",
+     "entry_high": 4176.357380952381,
+     "entry_low": 4165.098333333333,
+     "key_level": 4174.431666666667,
+     "role": "ambiguous",
+     "source_touches": 3,
+     "structural_kind": "reaction",
+     "touch_bar": 1791314400
+    }
+   }
+  ],
+  "current_go_opportunities_unexplained": 117,
+  "capture_window_disagreements": [
+   {
+    "symbol": "EURUSD",
+    "bar": 1791235200,
+    "first_capture": "EURUSD early",
+    "later_capture": "EURUSD_1013"
+   },
+   {
+    "symbol": "EURUSD",
+    "bar": 1791236400,
+    "first_capture": null,
+    "later_capture": "EURUSD_1013"
+   },
+   {
+    "symbol": "EURUSD",
+    "bar": 1791236700,
+    "first_capture": null,
+    "later_capture": "EURUSD_1013"
+   },
+   {
+    "symbol": "EURUSD",
+    "bar": 1791240300,
+    "first_capture": "EURUSD early",
+    "later_capture": "EURUSD_1013"
+   }
+  ],
+  "capture_window_disagreement_count": 4,
+  "by_period_group": {
+   "september|XAU": {
+    "python_theses": 472,
+    "published_by_current_go": 350,
+    "stages": {
+     "quality": 125,
+     "none": 225,
+     "acceptance": 122
+    },
+    "all": {
+     "n": 307,
+     "mean_r": -0.003,
+     "mean_random_r": -0.061,
+     "mean_difference_r": 0.058,
+     "ci95": [
+      -0.077,
+      0.213
+     ],
+     "win_rate": 0.492,
+     "avg_win_r": 1.026,
+     "avg_loss_r": -1.0,
+     "profit_factor": 0.994,
+     "cost_drag_r": 0.0,
+     "mean_mfe_r": 1.737,
+     "mean_mae_r": 0.778
+    },
+    "retained": {
+     "n": 233,
+     "mean_r": -0.037,
+     "mean_random_r": -0.056,
+     "mean_difference_r": 0.019,
+     "ci95": [
+      -0.201,
+      0.186
+     ],
+     "win_rate": 0.494,
+     "avg_win_r": 0.951,
+     "avg_loss_r": -1.0,
+     "profit_factor": 0.927,
+     "cost_drag_r": 0.0,
+     "mean_mfe_r": 1.703,
+     "mean_mae_r": 0.766
+    },
+    "removed": {
+     "n": 74,
+     "mean_r": 0.103,
+     "mean_random_r": -0.076,
+     "mean_difference_r": 0.179,
+     "ci95": [
+      -0.215,
+      0.454
+     ],
+     "win_rate": 0.486,
+     "avg_win_r": 1.267,
+     "avg_loss_r": -1.0,
+     "profit_factor": 1.2,
+     "cost_drag_r": 0.0,
+     "mean_mfe_r": 1.839,
+     "mean_mae_r": 0.816
+    }
+   },
+   "october|XAU": {
+    "python_theses": 1164,
+    "published_by_current_go": 909,
+    "stages": {
+     "acceptance": 255,
+     "none": 622,
+     "quality": 287
+    },
+    "all": {
+     "n": 945,
+     "mean_r": -0.067,
+     "mean_random_r": -0.037,
+     "mean_difference_r": -0.03,
+     "ci95": [
+      -0.131,
+      0.081
+     ],
+     "win_rate": 0.465,
+     "avg_win_r": 1.008,
+     "avg_loss_r": -1.0,
+     "profit_factor": 0.875,
+     "cost_drag_r": 0.0,
+     "mean_mfe_r": 1.691,
+     "mean_mae_r": 0.764
+    },
+    "retained": {
+     "n": 737,
+     "mean_r": -0.081,
+     "mean_random_r": -0.036,
+     "mean_difference_r": -0.045,
+     "ci95": [
+      -0.139,
+      0.07
+     ],
+     "win_rate": 0.463,
+     "avg_win_r": 0.987,
+     "avg_loss_r": -1.0,
+     "profit_factor": 0.849,
+     "cost_drag_r": 0.0,
+     "mean_mfe_r": 1.692,
+     "mean_mae_r": 0.763
+    },
+    "removed": {
+     "n": 208,
+     "mean_r": -0.018,
+     "mean_random_r": -0.039,
+     "mean_difference_r": 0.021,
+     "ci95": [
+      -0.176,
+      0.233
+     ],
+     "win_rate": 0.471,
+     "avg_win_r": 1.084,
+     "avg_loss_r": -1.0,
+     "profit_factor": 0.965,
+     "cost_drag_r": 0.0,
+     "mean_mfe_r": 1.687,
+     "mean_mae_r": 0.767
+    }
+   },
+   "october|FX": {
+    "python_theses": 3475,
+    "published_by_current_go": 2566,
+    "stages": {
+     "none": 1588,
+     "acceptance": 909,
+     "quality": 978
+    },
+    "all": {
+     "n": 3190,
+     "mean_r": -0.082,
+     "mean_random_r": -0.042,
+     "mean_difference_r": -0.04,
+     "ci95": [
+      -0.1,
+      0.042
+     ],
+     "win_rate": 0.452,
+     "avg_win_r": 1.033,
+     "avg_loss_r": -1.0,
+     "profit_factor": 0.851,
+     "cost_drag_r": 0.0,
+     "mean_mfe_r": 1.142,
+     "mean_mae_r": 0.757
+    },
+    "retained": {
+     "n": 2368,
+     "mean_r": -0.118,
+     "mean_random_r": -0.05,
+     "mean_difference_r": -0.068,
+     "ci95": [
+      -0.148,
+      0.024
+     ],
+     "win_rate": 0.441,
+     "avg_win_r": 1.001,
+     "avg_loss_r": -1.0,
+     "profit_factor": 0.789,
+     "cost_drag_r": 0.0,
+     "mean_mfe_r": 1.108,
+     "mean_mae_r": 0.761
+    },
+    "removed": {
+     "n": 822,
+     "mean_r": 0.023,
+     "mean_random_r": -0.021,
+     "mean_difference_r": 0.043,
+     "ci95": [
+      -0.145,
+      0.217
+     ],
+     "win_rate": 0.483,
+     "avg_win_r": 1.117,
+     "avg_loss_r": -1.0,
+     "profit_factor": 1.044,
+     "cost_drag_r": 0.0,
+     "mean_mfe_r": 1.241,
+     "mean_mae_r": 0.746
+    }
+   }
+  },
+  "comparisons": {
+   "reference_xau_september_minus_october": {
+    "n_high": 307,
+    "n_low": 945,
+    "difference": 0.088,
+    "ci95": [
+     -0.092,
+     0.262
+    ]
+   },
+   "current_retained_minus_removed|XAU|september": {
+    "n_high": 233,
+    "n_low": 74,
+    "difference": -0.16,
+    "ci95": [
+     -0.566,
+     0.24
+    ]
+   },
+   "current_retained_minus_reference_all|XAU|september": {
+    "n_high": 233,
+    "n_low": 307,
+    "difference": -0.039,
+    "ci95": [
+     -0.144,
+     0.051
+    ]
+   },
+   "current_retained_minus_removed|XAU|october": {
+    "n_high": 737,
+    "n_low": 208,
+    "difference": -0.066,
+    "ci95": [
+     -0.258,
+     0.098
+    ]
+   },
+   "current_retained_minus_reference_all|XAU|october": {
+    "n_high": 737,
+    "n_low": 945,
+    "difference": -0.015,
+    "ci95": [
+     -0.056,
+     0.021
+    ]
+   },
+   "current_retained_minus_removed|XAU|all": {
+    "n_high": 970,
+    "n_low": 282,
+    "difference": -0.092,
+    "ci95": [
+     -0.263,
+     0.073
+    ]
+   },
+   "current_retained_minus_reference_all|XAU|all": {
+    "n_high": 970,
+    "n_low": 1252,
+    "difference": -0.021,
+    "ci95": [
+     -0.06,
+     0.016
+    ]
+   },
+   "current_retained_minus_removed|FX|october": {
+    "n_high": 2368,
+    "n_low": 822,
+    "difference": -0.112,
+    "ci95": [
+     -0.333,
+     0.112
+    ]
+   },
+   "current_retained_minus_reference_all|FX|october": {
+    "n_high": 2368,
+    "n_low": 3190,
+    "difference": -0.029,
+    "ci95": [
+     -0.087,
+     0.03
+    ]
+   },
+   "current_retained_minus_removed|FX|all": {
+    "n_high": 2368,
+    "n_low": 822,
+    "difference": -0.112,
+    "ci95": [
+     -0.333,
+     0.112
+    ]
+   },
+   "current_retained_minus_reference_all|FX|all": {
+    "n_high": 2368,
+    "n_low": 3190,
+    "difference": -0.029,
+    "ci95": [
+     -0.087,
+     0.03
+    ]
+   }
+  }
+ },
+ "fx_stop_envelope_counterfactual": {
+  "strategy": "key_level",
+  "identical_signals": true,
+  "a": {
+   "EURUSD": {
+    "envelope_floor_cap_pips": [
+     [
+      12,
+      20
+     ]
+    ],
+    "theses": 1030,
+    "not_executable": 0,
+    "outcome": {
+     "n": 932,
+     "mean_r": -0.029,
+     "mean_random_r": 0.004,
+     "mean_difference_r": -0.033,
+     "ci95": [
+      -0.147,
+      0.122
+     ],
+     "win_rate": 0.461,
+     "avg_win_r": 1.105,
+     "avg_loss_r": -1.0,
+     "profit_factor": 0.946,
+     "cost_drag_r": 0.071,
+     "mean_mfe_r": 1.178,
+     "mean_mae_r": 0.749
+    }
+   },
+   "GBPUSD": {
+    "envelope_floor_cap_pips": [
+     [
+      15,
+      25
+     ]
+    ],
+    "theses": 1367,
+    "not_executable": 1,
+    "outcome": {
+     "n": 1238,
+     "mean_r": -0.137,
+     "mean_random_r": -0.05,
+     "mean_difference_r": -0.087,
+     "ci95": [
+      -0.155,
+      -0.021
+     ],
+     "win_rate": 0.421,
+     "avg_win_r": 1.051,
+     "avg_loss_r": -1.0,
+     "profit_factor": 0.764,
+     "cost_drag_r": 0.07,
+     "mean_mfe_r": 1.089,
+     "mean_mae_r": 0.778
+    }
+   },
+   "USDJPY": {
+    "envelope_floor_cap_pips": [
+     [
+      18,
+      28
+     ]
+    ],
+    "theses": 1301,
+    "not_executable": 1,
+    "outcome": {
+     "n": 1239,
+     "mean_r": -0.077,
+     "mean_random_r": -0.069,
+     "mean_difference_r": -0.008,
+     "ci95": [
+      -0.141,
+      0.104
+     ],
+     "win_rate": 0.472,
+     "avg_win_r": 0.954,
+     "avg_loss_r": -1.0,
+     "profit_factor": 0.853,
+     "cost_drag_r": 0.056,
+     "mean_mfe_r": 1.169,
+     "mean_mae_r": 0.744
+    }
+   },
+   "XAU": {
+    "envelope_floor_cap_pips": [
+     [
+      50,
+      70
+     ]
+    ],
+    "theses": 1746,
+    "not_executable": 274,
+    "outcome": {
+     "n": 1320,
+     "mean_r": -0.054,
+     "mean_random_r": -0.044,
+     "mean_difference_r": -0.009,
+     "ci95": [
+      -0.093,
+      0.088
+     ],
+     "win_rate": 0.47,
+     "avg_win_r": 1.012,
+     "avg_loss_r": -1.0,
+     "profit_factor": 0.899,
+     "cost_drag_r": 0.052,
+     "mean_mfe_r": 1.699,
+     "mean_mae_r": 0.766
+    }
+   }
+  },
+  "b": {
+   "EURUSD": {
+    "envelope_floor_cap_pips": [
+     [
+      10,
+      18
+     ]
+    ],
+    "theses": 1030,
+    "not_executable": 0,
+    "outcome": {
+     "n": 948,
+     "mean_r": -0.078,
+     "mean_random_r": -0.031,
+     "mean_difference_r": -0.047,
+     "ci95": [
+      -0.165,
+      0.098
+     ],
+     "win_rate": 0.453,
+     "avg_win_r": 1.038,
+     "avg_loss_r": -1.0,
+     "profit_factor": 0.858,
+     "cost_drag_r": 0.101,
+     "mean_mfe_r": 1.175,
+     "mean_mae_r": 0.757
+    }
+   },
+   "GBPUSD": {
+    "envelope_floor_cap_pips": [
+     [
+      12,
+      22
+     ]
+    ],
+    "theses": 1367,
+    "not_executable": 1,
+    "outcome": {
+     "n": 1270,
+     "mean_r": -0.18,
+     "mean_random_r": -0.093,
+     "mean_difference_r": -0.087,
+     "ci95": [
+      -0.165,
+      0.003
+     ],
+     "win_rate": 0.401,
+     "avg_win_r": 1.046,
+     "avg_loss_r": -1.0,
+     "profit_factor": 0.7,
+     "cost_drag_r": 0.096,
+     "mean_mfe_r": 1.066,
+     "mean_mae_r": 0.785
+    }
+   },
+   "USDJPY": {
+    "envelope_floor_cap_pips": [
+     [
+      10,
+      18
+     ]
+    ],
+    "theses": 1301,
+    "not_executable": 3,
+    "outcome": {
+     "n": 1250,
+     "mean_r": -0.098,
+     "mean_random_r": -0.095,
+     "mean_difference_r": -0.003,
+     "ci95": [
+      -0.088,
+      0.066
+     ],
+     "win_rate": 0.448,
+     "avg_win_r": 1.012,
+     "avg_loss_r": -1.0,
+     "profit_factor": 0.822,
+     "cost_drag_r": 0.084,
+     "mean_mfe_r": 1.239,
+     "mean_mae_r": 0.765
+    }
+   },
+   "XAU": {
+    "envelope_floor_cap_pips": [
+     [
+      50,
+      60
+     ]
+    ],
+    "theses": 1746,
+    "not_executable": 564,
+    "outcome": {
+     "n": 941,
+     "mean_r": -0.017,
+     "mean_random_r": -0.052,
+     "mean_difference_r": 0.035,
+     "ci95": [
+      -0.073,
+      0.173
+     ],
+     "win_rate": 0.495,
+     "avg_win_r": 0.985,
+     "avg_loss_r": -1.0,
+     "profit_factor": 0.967,
+     "cost_drag_r": 0.044,
+     "mean_mfe_r": 1.721,
+     "mean_mae_r": 0.753
+    }
+   }
+  }
+ },
+ "production_funnel_key_level_xau": {
+  "published_per_week": {
+   "09-28": 587,
+   "10-05": 637,
+   "10-12": 542,
+   "10-19(partial)": 293
+  },
+  "trades_closed_per_week": {
+   "09-28": 11,
+   "10-05": 33,
+   "10-12": 40,
+   "10-19(partial)": 18
+  },
+  "profitable_week_reference": {
+   "key_level_xau_trades": 9,
+   "wins": 6,
+   "losses": 3,
+   "wilson95_win_rate": [
+    0.354,
+    0.879
+   ],
+   "all_xau_trades": 42,
+   "wins_all": 17,
+   "wilson95_win_rate_all": [
+    0.27,
+    0.555
+   ]
+  },
+  "source": "production analysis_opportunities / auto_trade_results (algo_auto), read-only, 2026-10-21"
+ },
+ "production_r_bases_since_2026_10_08": {
+  "n": 324,
+  "result_pips_over_stop_pips": {
+   "all": 0.234,
+   "xau": 0.526,
+   "fx": 0.045
+  },
+  "corrected": {
+   "all": -0.062,
+   "xau": 0.098,
+   "fx": -0.164
+  },
+  "ladder_reconstructed": {
+   "all": -0.165,
+   "xau": -0.129,
+   "fx": -0.188
+  }
+ },
+ "xau_cap_60_vs_70": {
+  "replay_ledger_ids": {
+   "september": {
+    "extra_60_to_70_pips": {
+     "n": 90,
+     "mean_r": -0.191,
+     "mean_random_r": -0.106,
+     "mean_difference_r": -0.085,
+     "ci95": [
+      -0.172,
+      0.066
+     ],
+     "win_rate": 0.422,
+     "avg_win_r": 0.916,
+     "avg_loss_r": -1.0,
+     "profit_factor": 0.669,
+     "cost_drag_r": 0.058,
+     "mean_mfe_r": 1.426,
+     "mean_mae_r": 0.789
+    },
+    "within_60_pips": {
+     "n": 217,
+     "mean_r": 0.075,
+     "mean_random_r": -0.042,
+     "mean_difference_r": 0.117,
+     "ci95": [
+      -0.105,
+      0.314
+     ],
+     "win_rate": 0.521,
+     "avg_win_r": 1.064,
+     "avg_loss_r": -1.0,
+     "profit_factor": 1.156,
+     "cost_drag_r": 0.042,
+     "mean_mfe_r": 1.868,
+     "mean_mae_r": 0.773
+    },
+    "extra_minus_within": {
+     "difference": -0.202,
+     "ci95": [
+      -0.436,
+      0.131
+     ]
+    }
+   },
+   "october": {
+    "extra_60_to_70_pips": {
+     "n": 106,
+     "mean_r": -0.217,
+     "mean_random_r": 0.036,
+     "mean_difference_r": -0.253,
+     "ci95": [
+      -0.485,
+      -0.106
+     ],
+     "win_rate": 0.377,
+     "avg_win_r": 1.075,
+     "avg_loss_r": -1.0,
+     "profit_factor": 0.652,
+     "cost_drag_r": 0.068,
+     "mean_mfe_r": 1.502,
+     "mean_mae_r": 0.824
+    },
+    "within_60_pips": {
+     "n": 839,
+     "mean_r": -0.048,
+     "mean_random_r": -0.046,
+     "mean_difference_r": -0.002,
+     "ci95": [
+      -0.105,
+      0.115
+     ],
+     "win_rate": 0.476,
+     "avg_win_r": 1.002,
+     "avg_loss_r": -1.0,
+     "profit_factor": 0.908,
+     "cost_drag_r": 0.049,
+     "mean_mfe_r": 1.716,
+     "mean_mae_r": 0.756
+    },
+    "extra_minus_within": {
+     "difference": -0.251,
+     "ci95": [
+      -0.456,
+      -0.1
+     ]
+    }
+   },
+   "pooled": {
+    "n_extra": 196,
+    "n_within": 1056,
+    "extra_minus_within": {
+     "difference": -0.198,
+     "ci95": [
+      -0.346,
+      -0.059
+     ]
+    }
+   }
+  },
+  "variants": {
+   "old (cap 60, zone as published)|september": {
+    "theses": 472,
+    "not_executable": 231,
+    "outcome": {
+     "n": 159,
+     "mean_r": 0.158,
+     "mean_random_r": -0.112,
+     "mean_difference_r": 0.271,
+     "ci95": [
+      -0.022,
+      0.467
+     ],
+     "win_rate": 0.579,
+     "avg_win_r": 1.002,
+     "avg_loss_r": -1.0,
+     "profit_factor": 1.376,
+     "cost_drag_r": 0.038,
+     "mean_mfe_r": 1.844,
+     "mean_mae_r": 0.749
+    }
+   },
+   "old (cap 60, zone as published)|october": {
+    "theses": 1164,
+    "not_executable": 282,
+    "outcome": {
+     "n": 737,
+     "mean_r": -0.048,
+     "mean_random_r": -0.038,
+     "mean_difference_r": -0.01,
+     "ci95": [
+      -0.121,
+      0.113
+     ],
+     "win_rate": 0.478,
+     "avg_win_r": 0.993,
+     "avg_loss_r": -1.0,
+     "profit_factor": 0.908,
+     "cost_drag_r": 0.043,
+     "mean_mfe_r": 1.706,
+     "mean_mae_r": 0.757
+    }
+   },
+   "mid (cap 70, zone as published)|september": {
+    "theses": 472,
+    "not_executable": 108,
+    "outcome": {
+     "n": 307,
+     "mean_r": -0.003,
+     "mean_random_r": -0.061,
+     "mean_difference_r": 0.058,
+     "ci95": [
+      -0.08,
+      0.218
+     ],
+     "win_rate": 0.492,
+     "avg_win_r": 1.026,
+     "avg_loss_r": -1.0,
+     "profit_factor": 0.994,
+     "cost_drag_r": 0.047,
+     "mean_mfe_r": 1.737,
+     "mean_mae_r": 0.778
+    }
+   },
+   "mid (cap 70, zone as published)|october": {
+    "theses": 1164,
+    "not_executable": 133,
+    "outcome": {
+     "n": 945,
+     "mean_r": -0.067,
+     "mean_random_r": -0.037,
+     "mean_difference_r": -0.03,
+     "ci95": [
+      -0.127,
+      0.082
+     ],
+     "win_rate": 0.465,
+     "avg_win_r": 1.008,
+     "avg_loss_r": -1.0,
+     "profit_factor": 0.875,
+     "cost_drag_r": 0.051,
+     "mean_mfe_r": 1.691,
+     "mean_mae_r": 0.764
+    }
+   },
+   "new (cap 70, 30-50 band)|september": {
+    "theses": 472,
+    "not_executable": 108,
+    "outcome": {
+     "n": 307,
+     "mean_r": -0.003,
+     "mean_random_r": -0.061,
+     "mean_difference_r": 0.058,
+     "ci95": [
+      -0.08,
+      0.218
+     ],
+     "win_rate": 0.492,
+     "avg_win_r": 1.026,
+     "avg_loss_r": -1.0,
+     "profit_factor": 0.994,
+     "cost_drag_r": 0.047,
+     "mean_mfe_r": 1.737,
+     "mean_mae_r": 0.778
+    }
+   },
+   "new (cap 70, 30-50 band)|october": {
+    "theses": 1164,
+    "not_executable": 133,
+    "outcome": {
+     "n": 945,
+     "mean_r": -0.067,
+     "mean_random_r": -0.037,
+     "mean_difference_r": -0.03,
+     "ci95": [
+      -0.127,
+      0.082
+     ],
+     "win_rate": 0.465,
+     "avg_win_r": 1.008,
+     "avg_loss_r": -1.0,
+     "profit_factor": 0.875,
+     "cost_drag_r": 0.051,
+     "mean_mfe_r": 1.691,
+     "mean_mae_r": 0.764
+    }
+   }
+  },
+  "production_check_since_2026_10_09": {
+   "xau_groups": 114,
+   "stop_60_70_pips": {
+    "n": 9,
+    "corrected_mean_r": 1.033,
+    "ladder_reconstructed_mean_r": 0.756
+   },
+   "stop_up_to_60_pips": {
+    "n": 105,
+    "note": "corrected mean R -0.090 (<=50 pips, n=81) and +0.148 (50-60, n=24)"
+   }
+  }
+ }
+}

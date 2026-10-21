@@ -37,8 +37,25 @@ CAPTURES = {
   "GBPJPY": "replay-gbpjpy-production-capture-20261006.json",
   "XAU_LATER": "replay-xau-m1-production-capture-20261006.json",
 }
+# The October captures that the profitable-week golden does not cover, so the same Python decisions exist for every capture the replay harness uses
+# (run with CAPTURE_SET=later; the output is testdata/key-level-oracle-later-captures.json). Each takes about twenty minutes of single-core Python.
+LATER_CAPTURES = {
+  "XAU_1012": "replay-xau-production-capture-20261012.json",
+  "XAU_1013": "replay-xau-production-capture-20261013.json",
+  "XAU_1014": "replay-xau-production-capture-20261014.json",
+  "EURUSD_1013": "replay-eurusd-production-capture-20261013.json",
+  "EURUSD_1014": "replay-eurusd-production-capture-20261014.json",
+  "GBPUSD_1013": "replay-gbpusd-production-capture-20261013.json",
+  "GBPUSD_1014": "replay-gbpusd-production-capture-20261014.json",
+  "USDJPY_1013": "replay-usdjpy-production-capture-20261013.json",
+  "USDJPY_1014": "replay-usdjpy-production-capture-20261014.json",
+  "GBPJPY_1013": "replay-gbpjpy-production-capture-20261013.json",
+  "GBPJPY_1014": "replay-gbpjpy-production-capture-20261014.json",
+}
+if os.environ.get("CAPTURE_SET") == "later":
+  CAPTURES = LATER_CAPTURES
 ENGINE = os.environ.get("ENGINE_DIR", "/engine")
-OUT = os.path.join(ENGINE, "testdata/key-level-oracle.json")
+OUT = os.path.join(ENGINE, "testdata/key-level-oracle-later-captures.json" if CAPTURES is LATER_CAPTURES else "testdata/key-level-oracle.json")
 MINUTES = {"M5": 5, "M15": 15, "H1": 60}
 
 
@@ -111,11 +128,11 @@ def run(symbol):
 
 
 def main():
-  with ProcessPoolExecutor(max_workers=len(CAPTURES)) as pool:
+  with ProcessPoolExecutor(max_workers=min(len(CAPTURES), int(os.environ.get("WORKERS", "6")))) as pool:
     results = dict(pool.map(run, CAPTURES))
   golden = {
     "oracle_commit": ORACLE_COMMIT,
-    "description": (
+    "description": ("The same decisions over the October captures the profitable-week golden does not cover. " if CAPTURES is LATER_CAPTURES else "") + (
       "Key Level decisions of the Python detector at the end of the profitable XAU week "
       "(14-18 Sep 2026) over the committed real captures: per closed M5 bar, whether "
       "key_level_reaction fired and, if so, its direction, entry band, confluence, level, "

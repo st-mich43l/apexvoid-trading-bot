@@ -171,7 +171,7 @@ func replayCapture(t *testing.T, doc *config.Document, c capture) *run {
 	}
 	byID := map[string]*Record{}
 	fade := newFadeWatch(t, doc, c)
-	_, err = replaycapture.Replay(doc, loaded, market.M5, replaycapture.Options{OnEvaluation: func(e engine.Evaluation) {
+	_, err = replaycapture.Replay(doc, loaded, market.M5, replaycapture.Options{StrategyParameters: strategyParameters(t), OnEvaluation: func(e engine.Evaluation) {
 		r.evals++
 		fade.observe(e, r)
 		for _, cand := range e.Candidates {
@@ -188,6 +188,30 @@ func replayCapture(t *testing.T, doc *config.Document, c capture) *run {
 		t.Fatal(err)
 	}
 	return r
+}
+
+// configPath is the engine configuration the replay runs under: the repository's, or the one AEQ_CONFIG names (a copy with one
+// historical setting changed, to measure that setting alone on the same candles).
+func configPath() string {
+	if path := os.Getenv("AEQ_CONFIG"); path != "" {
+		return path
+	}
+	return filepath.Join("..", "..", "..", "config", "apexvoid.yml")
+}
+
+// strategyParameters reads AEQ_PARAMS, a JSON object {strategy: {parameter: value}}, so the same replay can run a strategy under
+// a frozen reference behaviour (for example {"key_level":{"frozen_session_context":true}} reproduces the September detector's
+// confluence) without a second harness. Unset, the replay is the engine's own configuration.
+func strategyParameters(t *testing.T) map[string]map[string]any {
+	raw := os.Getenv("AEQ_PARAMS")
+	if raw == "" {
+		return nil
+	}
+	var out map[string]map[string]any
+	if err := json.Unmarshal([]byte(raw), &out); err != nil {
+		t.Fatalf("AEQ_PARAMS: %v", err)
+	}
+	return out
 }
 
 func record(c capture, e engine.Evaluation, cand opportunity.Candidate) *Record {
@@ -441,7 +465,7 @@ var replayErr error
 
 func replayAll(t *testing.T) []*Record {
 	replayOnce.Do(func() {
-		doc, err := config.ResolveDocument(filepath.Join("..", "..", "..", "config", "apexvoid.yml"))
+		doc, err := config.ResolveDocument(configPath())
 		if err != nil {
 			replayErr = err
 			return

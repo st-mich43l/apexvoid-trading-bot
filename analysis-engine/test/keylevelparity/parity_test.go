@@ -19,6 +19,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/config"
@@ -57,9 +58,9 @@ type golden struct {
 	Symbols      map[string]symbolGolden `json:"symbols"`
 }
 
-func load(t *testing.T) golden {
+func load(t *testing.T, file string) golden {
 	t.Helper()
-	data, err := os.ReadFile(filepath.Join("..", "..", "testdata", "key-level-oracle.json"))
+	data, err := os.ReadFile(filepath.Join("..", "..", "testdata", file))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,93 +72,122 @@ func load(t *testing.T) golden {
 }
 
 func TestKeyLevelMatchesTheProfitableWeekPython(t *testing.T) {
-	g := load(t)
+	proveAgainst(t, "key-level-oracle.json")
+}
+
+// TestKeyLevelMatchesTheProfitableWeekPythonOnTheLaterCaptures extends the same proof to the October captures the first golden
+// does not cover, so the signal comparison of the September baseline investigation rests on a proven identity on every
+// capture it uses, not on the five it was first built from.
+func TestKeyLevelMatchesTheProfitableWeekPythonOnTheLaterCaptures(t *testing.T) {
+	proveAgainst(t, "key-level-oracle-later-captures.json")
+}
+
+func proveAgainst(t *testing.T, goldenFile string) {
+	g := load(t, goldenFile)
 	doc, err := config.ResolveDocument(filepath.Join("..", "..", "..", "config", "apexvoid.yml"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	totalDecisions, totalMatched := 0, 0
-	for symbol, want := range g.Symbols {
-		capture, err := replaycapture.Load(filepath.Join("..", "..", "testdata", want.Capture))
-		if err != nil {
-			t.Fatal(err)
+	var mu sync.Mutex
+	// Each capture replays independently, so they run side by side: the later-capture proof is eleven twenty-second replays.
+	t.Run("captures", func(t *testing.T) {
+		for symbol, want := range g.Symbols {
+			symbol, want := symbol, want
+			t.Run(symbol, func(t *testing.T) {
+				t.Parallel()
+				decisions, matched := proveCapture(t, doc, symbol, want)
+				mu.Lock()
+				totalDecisions += decisions
+				totalMatched += matched
+				mu.Unlock()
+			})
 		}
-		digits := map[market.Symbol]int{"XAU": 2, "USDJPY": 3, "GBPJPY": 3}[capture.Symbol]
-		if digits == 0 {
-			digits = 5
-		}
-		tick := math.Pow10(-digits)
-		got := map[int64][]opportunity.Candidate{}
-		_, err = replaycapture.Replay(doc, capture, market.M5, replaycapture.Options{StrategyParameters: frozenSessionContext, OnEvaluation: func(e engine.Evaluation) {
-			if e.Timeframe != market.M5 {
-				return
-			}
-			for _, c := range e.Candidates {
-				if c.Strategy == "key_level" {
-					got[e.BarTime] = append(got[e.BarTime], c)
-				}
-			}
-		}})
-		if err != nil {
-			t.Fatal(err)
-		}
-		var failures []string
-		for _, bar := range want.Bars {
-			expected, hasExpected := want.Decisions[fmt.Sprint(bar)]
-			actual := got[bar]
-			switch {
-			case !hasExpected && len(actual) == 0:
-			case !hasExpected:
-				failures = append(failures, fmt.Sprintf("%s bar %d: Go emitted %s, Python was silent", symbol, bar, describe(actual[0])))
-			case len(actual) != 1:
-				failures = append(failures, fmt.Sprintf("%s bar %d: Python %s %.5f-%.5f level %.5f %s; Go emitted %d candidates", symbol, bar, expected.Direction, expected.EntryLow, expected.EntryHigh, expected.KeyLevel, expected.Role, len(actual)))
-			default:
-				totalDecisions++
-				c := actual[0]
-				touch, confirm := int64(0), int64(0)
-				if c.Reaction != nil {
-					touch, confirm = c.Reaction.TouchBarTime, c.Reaction.ConfirmationBarTime
-				}
-				stars := 0
-				if c.DetectorConfluence != nil {
-					stars = c.DetectorConfluence.SelectedStars
-				}
-				switch {
-				case string(c.Direction) != expected.Direction:
-					failures = append(failures, fmt.Sprintf("%s bar %d: direction Go %s, Python %s", symbol, bar, c.Direction, expected.Direction))
-				case math.Abs(c.Entry.Low-expected.EntryLow) > tick+1e-9 || math.Abs(c.Entry.High-expected.EntryHigh) > tick+1e-9:
-					failures = append(failures, fmt.Sprintf("%s bar %d: entry Go %.5f-%.5f, Python %.5f-%.5f", symbol, bar, c.Entry.Low, c.Entry.High, expected.EntryLow, expected.EntryHigh))
-				case stars != expected.Confluence:
-					failures = append(failures, fmt.Sprintf("%s bar %d: confluence Go %d, Python %d", symbol, bar, stars, expected.Confluence))
-				case expected.TouchBar != nil && touch != *expected.TouchBar || expected.ConfirmationBar != nil && confirm != *expected.ConfirmationBar:
-					failures = append(failures, fmt.Sprintf("%s bar %d: reaction bars Go %d/%d, Python %v/%v", symbol, bar, touch, confirm, expected.TouchBar, expected.ConfirmationBar))
-				case c.Reaction == nil || c.Reaction.Pattern != expected.ConfirmationTyp:
-					failures = append(failures, fmt.Sprintf("%s bar %d: reaction type differs from Python %s", symbol, bar, expected.ConfirmationTyp))
-				case !hasEvidence(c, "m5_key_level_role_"+expected.Role) || !hasEvidence(c, "m5_key_level_"+expected.StructuralKind):
-					failures = append(failures, fmt.Sprintf("%s bar %d: role/kind Go %v, Python %s/%s", symbol, bar, evidenceCodes(c), expected.Role, expected.StructuralKind))
-				case c.DetectorConfluence == nil || c.DetectorConfluence.Factors.Touches != expected.SourceTouches:
-					failures = append(failures, fmt.Sprintf("%s bar %d: level touches differ from Python %d", symbol, bar, expected.SourceTouches))
-				case !levelMatches(c, expected.KeyLevel, tick):
-					failures = append(failures, fmt.Sprintf("%s bar %d: level %s, Python %.5f", symbol, bar, c.StructuralID, expected.KeyLevel))
-				default:
-					totalMatched++
-				}
-			}
-		}
-		sort.Strings(failures)
-		for i, f := range failures {
-			if i >= 25 {
-				t.Errorf("%s: ... and %d more", symbol, len(failures)-25)
-				break
-			}
-			t.Error(f)
-		}
-		t.Logf("%s: %d bars, %d Python decisions, %d mismatches", symbol, len(want.Bars), len(want.Decisions), len(failures))
-	}
+	})
 	if totalDecisions < 100 {
 		t.Fatalf("the golden exercises only %d decisions", totalDecisions)
 	}
 	_ = totalMatched
+}
+
+// proveCapture replays one capture and compares every closed M5 bar with the Python decision; it returns the decisions compared and matched.
+func proveCapture(t *testing.T, doc *config.Document, symbol string, want symbolGolden) (totalDecisions, totalMatched int) {
+	capture, err := replaycapture.Load(filepath.Join("..", "..", "testdata", want.Capture))
+	if err != nil {
+		t.Fatal(err)
+	}
+	digits := map[market.Symbol]int{"XAU": 2, "USDJPY": 3, "GBPJPY": 3}[capture.Symbol]
+	if digits == 0 {
+		digits = 5
+	}
+	tick := math.Pow10(-digits)
+	got := map[int64][]opportunity.Candidate{}
+	_, err = replaycapture.Replay(doc, capture, market.M5, replaycapture.Options{StrategyParameters: frozenSessionContext, OnEvaluation: func(e engine.Evaluation) {
+		if e.Timeframe != market.M5 {
+			return
+		}
+		for _, c := range e.Candidates {
+			if c.Strategy == "key_level" {
+				got[e.BarTime] = append(got[e.BarTime], c)
+			}
+		}
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var failures []string
+	for _, bar := range want.Bars {
+		expected, hasExpected := want.Decisions[fmt.Sprint(bar)]
+		actual := got[bar]
+		switch {
+		case !hasExpected && len(actual) == 0:
+		case !hasExpected:
+			failures = append(failures, fmt.Sprintf("%s bar %d: Go emitted %s, Python was silent", symbol, bar, describe(actual[0])))
+		case len(actual) != 1:
+			failures = append(failures, fmt.Sprintf("%s bar %d: Python %s %.5f-%.5f level %.5f %s; Go emitted %d candidates", symbol, bar, expected.Direction, expected.EntryLow, expected.EntryHigh, expected.KeyLevel, expected.Role, len(actual)))
+		default:
+			totalDecisions++
+			c := actual[0]
+			touch, confirm := int64(0), int64(0)
+			if c.Reaction != nil {
+				touch, confirm = c.Reaction.TouchBarTime, c.Reaction.ConfirmationBarTime
+			}
+			stars := 0
+			if c.DetectorConfluence != nil {
+				stars = c.DetectorConfluence.SelectedStars
+			}
+			switch {
+			case string(c.Direction) != expected.Direction:
+				failures = append(failures, fmt.Sprintf("%s bar %d: direction Go %s, Python %s", symbol, bar, c.Direction, expected.Direction))
+			case math.Abs(c.Entry.Low-expected.EntryLow) > tick+1e-9 || math.Abs(c.Entry.High-expected.EntryHigh) > tick+1e-9:
+				failures = append(failures, fmt.Sprintf("%s bar %d: entry Go %.5f-%.5f, Python %.5f-%.5f", symbol, bar, c.Entry.Low, c.Entry.High, expected.EntryLow, expected.EntryHigh))
+			case stars != expected.Confluence:
+				failures = append(failures, fmt.Sprintf("%s bar %d: confluence Go %d, Python %d", symbol, bar, stars, expected.Confluence))
+			case expected.TouchBar != nil && touch != *expected.TouchBar || expected.ConfirmationBar != nil && confirm != *expected.ConfirmationBar:
+				failures = append(failures, fmt.Sprintf("%s bar %d: reaction bars Go %d/%d, Python %v/%v", symbol, bar, touch, confirm, expected.TouchBar, expected.ConfirmationBar))
+			case c.Reaction == nil || c.Reaction.Pattern != expected.ConfirmationTyp:
+				failures = append(failures, fmt.Sprintf("%s bar %d: reaction type differs from Python %s", symbol, bar, expected.ConfirmationTyp))
+			case !hasEvidence(c, "m5_key_level_role_"+expected.Role) || !hasEvidence(c, "m5_key_level_"+expected.StructuralKind):
+				failures = append(failures, fmt.Sprintf("%s bar %d: role/kind Go %v, Python %s/%s", symbol, bar, evidenceCodes(c), expected.Role, expected.StructuralKind))
+			case c.DetectorConfluence == nil || c.DetectorConfluence.Factors.Touches != expected.SourceTouches:
+				failures = append(failures, fmt.Sprintf("%s bar %d: level touches differ from Python %d", symbol, bar, expected.SourceTouches))
+			case !levelMatches(c, expected.KeyLevel, tick):
+				failures = append(failures, fmt.Sprintf("%s bar %d: level %s, Python %.5f", symbol, bar, c.StructuralID, expected.KeyLevel))
+			default:
+				totalMatched++
+			}
+		}
+	}
+	sort.Strings(failures)
+	for i, f := range failures {
+		if i >= 25 {
+			t.Errorf("%s: ... and %d more", symbol, len(failures)-25)
+			break
+		}
+		t.Error(f)
+	}
+	t.Logf("%s: %d bars, %d Python decisions, %d mismatches", symbol, len(want.Bars), len(want.Decisions), len(failures))
+	return totalDecisions, totalMatched
 }
 
 func describe(c opportunity.Candidate) string {
