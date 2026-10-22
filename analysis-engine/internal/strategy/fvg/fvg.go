@@ -21,6 +21,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/liquidity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/quality"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategyutil"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/zone"
@@ -291,20 +292,14 @@ func zoneReferenceTime(z zone.Zone) int64 {
 }
 
 func computeQuality(z zone.Zone) opportunity.StrategyQuality {
-	// Unlike the other zone-anchored strategies in this slice, an FVG's
-	// own touch count is a FILL signal, not a validation signal — more
-	// touches means the imbalance is more consumed, not more confirmed.
-	// This is FVG's own independent reasoning for this dimension, not
-	// copied from Supply/Demand/OrderBlock's freshness_quality (source
-	// task §40).
-	fillQuality := 1.0 - 0.25*float64(z.TouchCount)
-	if fillQuality < 0.1 {
-		fillQuality = 0.1
-	}
-	return opportunity.StrategyQuality{
-		Overall:    fillQuality,
-		Components: map[string]float64{"fill_quality": fillQuality},
-	}
+	// A resting zone has had no reaction, so its one measurable dimension is how much of it is left: every touch spends resting
+	// interest (a gap's touches are fill, not validation). The engine's technique-zone adapter gives every zone a Strength of 1 and
+	// a Relevance of Immediate (it has neither), so neither is scored. Resting zones are not executable and are not comparable with
+	// confirmed ones, which are scored by the full model of strategyutil.ZoneFamilyQuality.
+	m := quality.New("fvg.resting.quality.v1")
+	m.Score("gap_fill", quality.Fall(float64(z.TouchCount), 0, 4))
+	m.Measure("zone_touches", float64(z.TouchCount))
+	return opportunity.StrategyQuality{Overall: m.Overall(), Components: m.Components()}
 }
 
 func clamp01(v float64) float64 {

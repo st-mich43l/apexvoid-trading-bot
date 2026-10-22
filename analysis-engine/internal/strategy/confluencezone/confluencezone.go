@@ -31,6 +31,7 @@ import (
 	analysiscontext "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/context"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/quality"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategyutil"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structuralconfluence"
@@ -194,7 +195,7 @@ func (s *Strategy) build(ctx *analysiscontext.MarketContext, base *strategyutil.
 	}
 	score := result.Confluence
 
-	components := map[string]float64{
+	measurements := map[string]float64{
 		"independent_fact_count":   float64(setup.IndependentFacts),
 		"independent_source_count": float64(len(setup.Region.Groups)),
 		"source_dependency_count":  float64(setup.DependencyCount),
@@ -217,11 +218,17 @@ func (s *Strategy) build(ctx *analysiscontext.MarketContext, base *strategyutil.
 	}
 	// A fact the engine cannot read is left out, never filled with a neutral value.
 	if d.Frame.Structure == "up" || d.Frame.Structure == "down" {
-		components["structural_alignment"] = boolValue(factors.StructuralAgreement)
+		measurements["structural_alignment"] = boolValue(factors.StructuralAgreement)
 	}
 	if d.Read.HTFBias == "up" || d.Read.HTFBias == "down" {
-		components["htf_alignment"] = boolValue(factors.HTFAligned)
+		measurements["htf_alignment"] = boolValue(factors.HTFAligned)
 	}
+
+	model := quality.New(QualityModel)
+	for name, value := range measurements {
+		model.Measure(name, value)
+	}
+	scoreQuality(model, setup, d, d.RecentCHoCH(s.cfg.ReactionLookback), factors.HTFAligned, s.cfg.ReactionLookback)
 
 	direction := strings.ToLower(string(setup.Direction))
 	candidate, err := strategyutil.Candidate(strategyutil.CandidateSpec{
@@ -232,10 +239,8 @@ func (s *Strategy) build(ctx *analysiscontext.MarketContext, base *strategyutil.
 		Invalidation: setup.Stop, InvalidationLabel: "confluence_overlap_failed",
 		Target: setup.Target, TargetLabel: "nearest_opposing_liquidity",
 		Evidence: []string{"m5_distinct_zone_overlap", "m5_confluence_independent_facts", "m5_confluence_reaction"},
-		// Overall keeps the scale live arbitration has always seen for this
-		// strategy: the confluence stars out of three. The measured quality is in
-		// Components.
-		Quality:  opportunity.StrategyQuality{Overall: strategyutil.Clamp01(float64(score.SelectedStars) / 3), Components: components},
+		// Overall is the mean of the score_* dimensions (QualityModel); the confluence stars stay in DetectorConfluence as a diagnostic.
+		Quality:  opportunity.StrategyQuality{Overall: model.Overall(), Components: model.Components()},
 		FormedAt: setup.TouchTime, ConfirmedAt: setup.ConfirmTime,
 		ExpiryHours: s.cfg.ExpiryHours, Fingerprint: s.fingerprint,
 	})
@@ -283,7 +288,11 @@ func (s *Strategy) restingCandidate(ctx *analysiscontext.MarketContext, d *strat
 	if formed == 0 || formed > bar.Time {
 		formed = bar.Time
 	}
-	q := strategyutil.Clamp01(float64(r.Region.MinGroups) / 4)
+	rest := quality.New(QualityModel)
+	rest.Score("source_breadth", quality.Ramp(float64(r.Region.MinGroups), 1, 4))
+	rest.Score("overlap_precision", quality.Peak(r.Region.Width()/r.ATR, 0.1, 0.3, 1.2, 3))
+	rest.Measure("independent_fact_count", float64(r.Region.MinGroups))
+	rest.Measure("overlap_width_atr", r.Region.Width()/r.ATR)
 	candidate, err := strategyutil.Candidate(strategyutil.CandidateSpec{
 		ID: string(ID), Version: Version, SetupKey: "confluence:overlap:" + r.Region.EpisodeID,
 		Symbol: ctx.Symbol, Direction: r.Direction, EntryLow: r.EntryLow, EntryHigh: r.EntryHigh,
@@ -291,9 +300,7 @@ func (s *Strategy) restingCandidate(ctx *analysiscontext.MarketContext, d *strat
 		// A resting observation claims no reaction: its evidence is the overlap of
 		// independent structures only.
 		Evidence: []string{"m5_distinct_zone_overlap", "m5_confluence_independent_facts"},
-		Quality: opportunity.StrategyQuality{Overall: q, Components: map[string]float64{
-			"independent_fact_count": float64(r.Region.MinGroups), "overlap_width_atr": r.Region.Width() / r.ATR,
-		}},
+		Quality:  opportunity.StrategyQuality{Overall: rest.Overall(), Components: rest.Components()},
 		FormedAt: formed, ConfirmedAt: bar.Time, ExpiryHours: s.cfg.ExpiryHours, Fingerprint: s.fingerprint,
 	})
 	if err != nil {

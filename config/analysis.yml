@@ -536,9 +536,6 @@ analysis:
       minimum_target_room_atr: 0.55
       minimum_reward_risk: 1.15
       expiry_hours: 4.0
-      # Quality.Overall exactly as live arbitration has always seen it; the
-      # measured quality is published in Quality.Components only.
-      published_overall_quality: 0.75
     fade_scalp:
       version: v3
       enabled: true

@@ -190,10 +190,9 @@ With `ATR_c` at the confirmation candle `c`:
 
 ## Quality and arbitration
 
-`Quality.Overall` is `published_overall_quality` = **0.75, exactly the value live
-arbitration has always seen** for this strategy. The old value was a constant that
-carried no information; v3 keeps it so that adopting v3 does not silently move any
-arbitration ranking, and publishes the **measured** quality in `Quality.Components`:
+`Quality.Overall` is the mean of seven measured `score_*` dimensions (`break_retest.quality.v1`,
+[quality-scoring.md](quality-scoring.md)); the former constant 0.75 and its configuration key
+`published_overall_quality` are gone. The raw measurements are still published in `Quality.Components`:
 `break_distance_atr`, `break_body_ratio`, `break_close_strength`,
 `break_displacement_atr`, `break_accept_closes`, `retest_depth_atr`,
 `retest_bars_after_accept`, `rejection_wick_ratio`, `rejection_close_strength`,
@@ -458,8 +457,6 @@ statement about profitability.
 - **Defaults are uncalibrated judgements** (every threshold is a parameter); the
   protected-structure model and the target lookback were chosen for their structural
   meaning, not their outcomes.
-- **`published_overall_quality`** is a configurable constant (default 0.75); changing it
-  is an arbitration change.
 - **A missing `execution_stop_max_pips` disables the cap pre-check** (the engine
   injects the resolved instrument cap; the Algo Bot still rejects an over-envelope stop).
 - **A duplicate timestamp anywhere in the loaded window fails the evaluation closed.**

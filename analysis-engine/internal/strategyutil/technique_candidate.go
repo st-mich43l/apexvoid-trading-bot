@@ -81,15 +81,18 @@ func TechniqueCandidate(ctx *analysiscontext.MarketContext, dec *TechniqueDecisi
 		formedAt, confirmedAt = conf.TouchTime, conf.ConfirmationTime
 		setupKey = fmt.Sprintf("zone:%s:rejection:%d:%d", dec.ID, conf.TouchTime, conf.ConfirmationTime)
 	}
-	stars := float64(dec.Result.Stars)
+	geometry := QualityGeometry{Reference: reference, Invalidation: invalidation, Target: target, Structural: targetLabel != "fixed_reward_risk", ATR: atr}
+	var scored opportunity.StrategyQuality
+	if dec.Score != nil {
+		scored = dec.Score(dec, geometry)
+	} else {
+		scored = ZoneFamilyQuality(spec.ID, dec, geometry)
+	}
 	candidate, err := Candidate(CandidateSpec{
 		ID: spec.ID, Version: spec.Version, SetupKey: setupKey, Symbol: ctx.Symbol, Direction: dec.Direction,
 		EntryLow: low, EntryHigh: high, Invalidation: invalidation, InvalidationLabel: spec.InvalidationLabel,
 		Target: target, TargetLabel: targetLabel, Evidence: techniqueEvidence(dec, spec),
-		Quality: opportunity.StrategyQuality{
-			Overall:    Clamp01(stars / 3),
-			Components: map[string]float64{"confluence": Clamp01(stars / 3)},
-		},
+		Quality:  scored,
 		FormedAt: formedAt, ConfirmedAt: confirmedAt, ExpiryHours: spec.ExpiryHours, Fingerprint: spec.Fingerprint,
 	})
 	if err != nil {

@@ -37,8 +37,7 @@ page is the summary.
 - **Arbitration**: opportunities on the same symbol and direction that share a thesis
   group, a structure or an entry corridor compete; the best by quality, confluence,
   structural quality and freshness trades and the rest are suppressed
-  ([execution](../execution.md#same-thesis-arbitration)). `Quality.Overall` keeps the
-  scale arbitration has always seen (the confluence stars out of three).
+  ([execution](../execution.md#same-thesis-arbitration)). `Quality.Overall` is the mean of this strategy's `score_*` dimensions ([quality-scoring.md](quality-scoring.md)); the confluence stars remain a compatibility diagnostic and the only quality-based gate (`min_confluence`).
 
 ## The contract in one page
 
