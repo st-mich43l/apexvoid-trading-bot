@@ -84,6 +84,7 @@ from app.autotrade.strategy_taxonomy import (
   match_bypasses_opposing_structure,
 )
 from app.autotrade.structural_target_room import (
+  assess_executable_room,
   barrier_log_summary,
   describe_blocking_barrier,
   evaluate_structural_target_room,
@@ -1873,79 +1874,40 @@ async def _publish_trade_plan_v8(
     ),
   )
   if not target_room.allowed:
-    # Counter-bias vs HTF intentionally presses into opposing structure.
-    # Keep the setup when native usable room still clears the floor —
-    # prod was dying on v8_opposing_entry_overlap while Bias:counter_bias
-    # cards never published (live 2026-08-06). Zero/negative room still fails.
-    bias = str(
-      getattr(execution_match, "bias_relationship", None)
-      or execution_match.strategy_mode
-      or ""
-    ).casefold()
-    tags = {
-      str(tag).casefold() for tag in (execution_match.tags or ())
-    }
-    is_counter_bias = "counter_bias" in tags or bias == "counter_bias"
+    # A structural rejection is final whatever the setup's relation to the bias. A counter-bias label does not make an
+    # entry inside an opposing zone, a zone-overlapped entry or a major wall with no room valid: those are geometry, and a
+    # counter-trend technique that is valid has no opposing zone in the way (an invalidated zone is not in the book). An
+    # exception that once kept counter-bias setups past those codes when "usable room" cleared the floor was unreachable
+    # (every one of those codes has negative room by construction) and is removed rather than left looking like a bypass.
     room_measured = dict(target_room.measured or {})
-    try:
-      room_pips = float(
-        room_measured.get("usable_room_pips")
-        or room_measured.get("room_pips")
-        or 0.0
+    if target_room.opposing_entry is not None:
+      # Diagnostic only: which zones make the barrier that blocked this candidate. Read from the decision already
+      # taken; it changes neither the rejection nor its reason.
+      room_measured["opposing_barrier"] = describe_blocking_barrier(
+        target_room.opposing_entry,
+        direction=execution_match.direction,
+        planned_entry=room_planned,
+        candidate_entry_low=execution_match.entry_low,
+        candidate_entry_high=execution_match.entry_high,
+        reason_code=str(target_room.reason_code or ""),
+        measured=room_measured,
       )
-    except (TypeError, ValueError):
-      room_pips = 0.0
-    min_room = float(
-      runtime_config.auto_algo.actionability.target_room.minimum_capped_target_pips or 15
+    await _record_v8_build_rejected(
+      client,
+      symbol,
+      match,
+      str(target_room.reason_code or "opposing_structure_blocked"),
+      target_room.message
+      or "planned entry conflicts with opposing actionable structure",
+      room_measured,
     )
-    soft_codes = {
-      "opposing_entry_overlap",
-      "opposing_entry_contained",
-      "opposing_major_no_room",
-    }
-    if (
-      is_counter_bias
-      and str(target_room.reason_code or "") in soft_codes
-      and room_pips + 1e-9 >= min_room
-    ):
-      log.info(
-        "v8 counter_bias keeping setup past %s room_pips=%.1f match=%s",
-        target_room.reason_code,
-        room_pips,
-        match.match_id[:12],
-      )
-    else:
-      # Hard reject structural conflicts (e.g. SELL entry inside demand /
-      # opposing_entry_contained). Preference-only demotion previously let
-      # those plans publish and hedge the correct side.
-      if target_room.opposing_entry is not None:
-        # Diagnostic only: which zones make the barrier that blocked this candidate. Read from the decision already
-        # taken; it changes neither the rejection nor its reason.
-        room_measured["opposing_barrier"] = describe_blocking_barrier(
-          target_room.opposing_entry,
-          direction=execution_match.direction,
-          planned_entry=room_planned,
-          candidate_entry_low=execution_match.entry_low,
-          candidate_entry_high=execution_match.entry_high,
-          reason_code=str(target_room.reason_code or ""),
-          measured=room_measured,
-        )
-      await _record_v8_build_rejected(
-        client,
-        symbol,
-        match,
-        str(target_room.reason_code or "opposing_structure_blocked"),
-        target_room.message
-        or "planned entry conflicts with opposing actionable structure",
-        room_measured,
-      )
-      await increment_metric(
-        client,
-        "target_room_rejected",
-        symbol=symbol,
-        dimensions={"reason": str(target_room.reason_code or "unknown")},
-      )
-      return None
+    await increment_metric(
+      client,
+      "target_room_rejected",
+      symbol=symbol,
+      dimensions={"reason": str(target_room.reason_code or "unknown")},
+    )
+    return None
   match_for_plan = execution_match
   if (
     target_room.opposing_entry is not None
@@ -2572,6 +2534,22 @@ async def _publish_trade_plan_v8(
       ),
       symbol=symbol,
     )
+  # Diagnostic only, changes no decision: the room the barrier leaves, in R of the stop the executor will really use and
+  # against the ladder it will really place (the plan's own targets measured from the plan's reference entry), not Go's
+  # technical targets.
+  executable_room = None
+  try:
+    _pip = float(units.pip_size(symbol))
+    _entry_ref = float(gate_measured["planned_stop_entry_price"])
+    _stop = float(plan.stop.price)
+    executable_room = assess_executable_room(
+      target_room,
+      executable_stop_pips=abs(_entry_ref - _stop) / _pip,
+      technical_stop_pips=gate_measured.get("planned_base_stop_pips"),
+      target_pips=[abs(float(target.price) - _entry_ref) / _pip for target in plan.targets],
+    )
+  except (KeyError, TypeError, ValueError, ZeroDivisionError):
+    executable_room = None
   await emit_lifecycle(
     client,
     "candidate_published",
@@ -2589,6 +2567,7 @@ async def _publish_trade_plan_v8(
       "confirmation_source": confirmation.source,
       "confirmation_bar_ts": confirmation.bar_ts,
       "zone_episode_id": confirmation.zone_episode_id,
+      "executable_room": executable_room,
     },
   )
   try:

@@ -1047,6 +1047,81 @@ def _member_view(member: dict[str, Any]) -> dict[str, Any]:
   return {key: member[key] for key in _MEMBER_FIELDS if member.get(key) is not None}
 
 
+EXECUTABLE_ROOM_VERSION = 1
+
+
+def assess_executable_room(
+  decision: StructuralTargetRoomDecision,
+  *,
+  executable_stop_pips: Any,
+  technical_stop_pips: Any = None,
+  target_pips: Iterable[Any] = (),
+) -> dict[str, Any]:
+  """What the room in front of an ADMITTED plan means for the ladder the executor will actually run.
+
+  ``evaluate_structural_target_room`` measures the room against Go's technical targets and a cost floor, and it already rejects
+  what is mathematically invalid (the entry inside an opposing zone, no positive raw room, room below the execution cost). What
+  it leaves open, by the owner's directive that a barrier never shrinks the ladder, is whether the targets the executor will
+  place (the fixed-R multiples of the EXECUTABLE stop, which is never tighter than Go's invalidation and is widened to the
+  instrument floor) lie beyond the barrier. This measures exactly that, from the same barrier and the same buffered room, in
+  units of the executable stop (R). It is a diagnostic: it changes no decision, and ``classification`` is never an admission
+  verdict.
+
+  ``no_opposing_barrier`` nothing is in the way; ``ladder_within_room`` every executed target is nearer than the barrier;
+  ``first_target_beyond_room`` even TP1 lies beyond it (advisory only, the ladder is published unchanged);
+  ``ladder_exceeds_room`` TP1 fits and a later target does not.
+  """
+  measured = dict(decision.measured or {})
+  out: dict[str, Any] = {"version": EXECUTABLE_ROOM_VERSION, "enforcement": "advisory", "decision_reason": decision.reason_code}
+  stop = _finite_or_none(executable_stop_pips)
+  technical = _finite_or_none(technical_stop_pips)
+  out["executable_stop_pips"] = stop
+  out["technical_stop_pips"] = technical
+  out["stop_widening_ratio"] = (
+    round(stop / technical, 3) if stop is not None and technical is not None and technical > 0 else None
+  )
+  targets = [value for value in (_finite_or_none(t) for t in target_pips) if value is not None and value > 0]
+  out["target_pips"] = targets
+  if decision.opposing_entry is None:
+    out.update({"barrier_present": False, "classification": "no_opposing_barrier", "room_r": None, "raw_room_r": None,
+                "usable_room_pips": None, "raw_room_pips": None, "targets_within_room": len(targets), "first_target_within_room": True})
+    return out
+  raw = _finite_or_none(measured.get("raw_room_pips"))
+  usable = _finite_or_none(measured.get("usable_room_pips"))
+  if usable is None:
+    buffered = _finite_or_none(measured.get("room_pips"))
+    usable = None if buffered is None else max(0.0, buffered)
+  within = [target for target in targets if usable is not None and target <= usable + 1e-9]
+  first_fits = bool(targets) and usable is not None and targets[0] <= usable + 1e-9
+  if not targets or usable is None:
+    classification = "unmeasured"
+  elif len(within) == len(targets):
+    classification = "ladder_within_room"
+  elif first_fits:
+    classification = "ladder_exceeds_room"
+  else:
+    classification = "first_target_beyond_room"
+  out.update({
+    "barrier_present": True,
+    "raw_room_pips": raw,
+    "usable_room_pips": usable,
+    "room_r": round(usable / stop, 4) if usable is not None and stop else None,
+    "raw_room_r": round(raw / stop, 4) if raw is not None and stop else None,
+    "targets_within_room": len(within),
+    "first_target_within_room": first_fits,
+    "classification": classification,
+  })
+  return out
+
+
+def _finite_or_none(value: Any) -> float | None:
+  try:
+    number = float(value)
+  except (TypeError, ValueError):
+    return None
+  return number if math.isfinite(number) else None
+
+
 def describe_blocking_barrier(
   barrier: Any,
   *,
