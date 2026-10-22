@@ -1,8 +1,11 @@
 package engine_test
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -149,6 +152,51 @@ func TestOpportunityPublisher_PublishesACreatedTransition(t *testing.T) {
 	opps, _, _ := client.snapshot()
 	if opps[0].ID != "opp-created" {
 		t.Errorf("expected the published candidate to be opp-created, got %q", opps[0].ID)
+	}
+}
+
+type lockedBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *lockedBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *lockedBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+// The publish record is the engine's per-opportunity audit line: it must carry the quality score, its components and the
+// configuration that produced it, so a score can be explained from the log alone.
+func TestOpportunityPublisher_PublishLogCarriesQualityAndConfigProvenance(t *testing.T) {
+	logs := &lockedBuffer{}
+	engine.SetLogger(slog.New(slog.NewTextHandler(logs, nil)))
+	defer engine.SetLogger(slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	client := &fakeKafkaClient{}
+	pub := engine.NewOpportunityPublisher(client, nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go pub.Run(ctx)
+
+	candidate := fakeCandidate("opp-logged")
+	candidate.Quality = opportunity.StrategyQuality{Overall: 0.5, Components: map[string]float64{"score_a": 0.25, "score_b": 0.75}}
+	pub.Enqueue("XAU", kafka.AlgorithmVersion{Structure: "v2", Liquidity: "v1"}, opportunity.Transition{
+		Kind: opportunity.TransitionCreated, Record: opportunity.Record{Candidate: candidate, State: opportunity.StateCreated},
+	})
+
+	waitFor(t, 2*time.Second, func() bool { return strings.Contains(logs.String(), "opportunity published") })
+	line := logs.String()
+	for _, want := range []string{"opportunity_id=opp-logged", "quality_overall=0.5", "score_a:0.25", "score_b:0.75", "config_version=3", "config_fingerprint=fixture"} {
+		if !strings.Contains(line, want) {
+			t.Errorf("publish log is missing %q:\n%s", want, line)
+		}
 	}
 }
 

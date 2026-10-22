@@ -423,7 +423,7 @@ is too small to act on. A high `quality.overall` has still not been shown to mea
 
 ## 12. Q2 update (2026-10-20): a structure cannot confirm itself
 
-Tool: `algo-bot/tools/q2_before_after.py` over two replays of `analysis-engine/test/aequality` (master `60115600` vs this change; same 17 captures,
+Tool (removed in Q5; recover from git history): `algo-bot/tools/q2_before_after.py` over two replays of `analysis-engine/test/aequality` (master `60115600` vs this change; same 17 captures,
 14,970 vs 13,892 unique opportunities). Hypothetical outcomes only (closed candles, constant spreads, the real 1R/2R ladder, 24 h), never broker P&L.
 
 ### 12.1 What was inspected
