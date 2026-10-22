@@ -13,6 +13,11 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Q5.3 quality expectancy validation (`docs/strategies/q53-quality-expectancy.md`, tools `algo-bot/tools/q53_quality_forward.py` and `q53_lineage.py`): the frozen model-v1
+  score on a window it had never seen (2026-10-19 to 22, five new captures) separates outcomes by -0.133 R [-0.285, +0.047] (-0.087 [-0.157, -0.017] over all 4,597
+  opportunities), the traded groups carry 13 model-v1 scores (7 with a fill-derived R) and cannot validate it, technical reward:risk overstates the executable one on FX
+  by 1.5 to 3.5x, and no mathematical or causality defect exists, so no formula changed and ranking stays off. The only code change is `quality_model_version`,
+  published in the quality components so an opportunity carries the rule that scored it; the prefix-invariance test now covers the score and every component.
 - Q5.2 technical-validity audit (`docs/architecture/q52-technical-validity-audit.md`): the counter-bias exception in `worker.py` that looked like a bypass of
   `opposing_entry_overlap/contained/major_no_room` could never fire (those codes have non-positive room by construction; largest raw room across 7,268 replayed
   rejections -1.0 pip) and is removed, so a structural rejection is final whatever the setup's bias relation; the `candidate_published` lifecycle entry gains
