@@ -20,8 +20,8 @@ The target is the nearest unswept opposing liquidity pool at least `minimum_targ
 the entry's proximal edge. With none there is no technical objective, so nothing is published; there is no fixed
 reward:risk fallback and no projection. v3 reported twice the distance from the entry to the interaction band edge, which
 was unrelated to the published invalidation. Measured on the replay captures (16 setups): median technical RR 3.4 (v3: below
-1 in every setup), median room cover against the executable stop 0.84 (v3: 0.05). `Quality.Overall` is unchanged
-(`stars / 3`, always 1.0 here) and is a known weakness: changing it is arbitration-facing and needs its own impact report.
+1 in every setup), median room cover against the executable stop 0.84 (v3: 0.05). `Quality.Overall` is the mean of eight
+`score_*` dimensions (`trendline.quality.v1`, [quality-scoring.md](quality-scoring.md)), informational only.
 
 Parity: the frozen oracle took 8 decisions; v4 matches 7 and stays silent on the one with no opposing liquidity, so
 `trendline_reaction` is measured only in `test/legacyparity` (as `session_level_reaction` is).

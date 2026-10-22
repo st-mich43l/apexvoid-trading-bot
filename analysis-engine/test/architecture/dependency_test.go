@@ -82,6 +82,7 @@ var rank = map[string]int{
 	"fib":           3,
 	"barrier":       3,
 	"momentum":      3,
+	"quality":       3, // pure scoring primitives over market candles; strategies compose them
 	"reaction":      3,
 	"regime":        3,
 	"techniquezone": 4,

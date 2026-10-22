@@ -245,27 +245,25 @@ func (s *Strategy) Analyze(ctx *analysiscontext.MarketContext) (Analysis, []oppo
 		if formedAt > confirmation.ConfirmationTime {
 			formedAt = confirmation.TouchTime
 		}
-		stars := float64(result.Stars)
-		components := map[string]float64{
-			"confluence_stars":      stars,
-			"extension_atr":         extension,
-			"sweep_body_ratio":      sweep.BodyRatio(),
-			"sweep_upper_wick":      sweep.UpperWickRatio(),
-			"sweep_lower_wick":      sweep.LowerWickRatio(),
-			"sweep_penetration_atr": penetrationATR(sweep, pool.Level, direction, d.ATR),
-			"equal_level_touches":   float64(pool.Touches),
-			"reward_risk":           reward / risk,
-			"target_room_atr":       reward / math.Max(d.ATR, 1e-12),
-		}
+		model := scoreQuality(qualityInputs{
+			bars: d.Frame.Bars, direction: direction, pool: pool, grab: grab, confirmation: confirmation, facts: rejected.Facts, atr: d.ATR,
+			price: d.Price, reference: reference, invalidation: invalid, objective: objective.Price,
+		})
+		model.Measure("confluence_stars", float64(result.Stars))
+		model.Measure("extension_atr", extension)
+		model.Measure("target_room_atr", reward/math.Max(d.ATR, 1e-12))
+		model.Measure("sweep_body_ratio", sweep.BodyRatio())
+		model.Measure("sweep_upper_wick", sweep.UpperWickRatio())
+		model.Measure("sweep_lower_wick", sweep.LowerWickRatio())
 		if grab.ReactionDisplacement {
-			components["reaction_displacement"] = 1
+			model.Measure("reaction_displacement", 1)
 		}
 		setupKey := fmt.Sprintf("fade:%s:%.8f", wantKind, pool.Level)
 		candidate, err := strategyutil.Candidate(strategyutil.CandidateSpec{
 			ID: string(ID), Version: Version, SetupKey: setupKey, Symbol: ctx.Symbol, Direction: direction,
 			EntryLow: low, EntryHigh: high, Invalidation: invalid, InvalidationLabel: "sweep_extreme_exceeded",
 			Target: objective.Price, TargetLabel: objective.Label, Evidence: evidence,
-			Quality:  opportunity.StrategyQuality{Overall: strategyutil.Clamp01(stars / 3), Components: components},
+			Quality:  opportunity.StrategyQuality{Overall: model.Overall(), Components: model.Components()},
 			FormedAt: formedAt, ConfirmedAt: confirmation.ConfirmationTime, ExpiryHours: s.expiryHours, Fingerprint: s.fingerprint,
 		})
 		if err != nil {

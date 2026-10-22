@@ -196,8 +196,8 @@ v2 hard-coded `wick_rejection` and `structural_agreement` to true on every decis
 in the audit) and its `reaction` component to 1. A measurement that is unavailable is **omitted** (an unknown
 structure publishes no `structural_alignment`), never replaced by a neutral number.
 
-`Quality.Overall` keeps the scale live arbitration has always seen: the confluence stars out of three, from the
-unchanged `confluence.Evaluate`. The region's zone score is the best supporting structure's score plus the frozen
+`Quality.Overall` (2026-10-22) is the mean of the seven `score_*` dimensions of `confluence_zone.quality.v1` ([quality-scoring.md](quality-scoring.md));
+the confluence stars, from the unchanged `confluence.Evaluate`, remain the diagnostic and the floor. The region's zone score is the best supporting structure's score plus the frozen
 contract's +2.5 for **every additional independent source** (v2 paid it per label, so a supply zone and an order
 block of one leg earned it twice). No new live scoring formula was introduced and no arbitration input changed;
 the measured components are in `Quality.Components` for the journal and the replay:

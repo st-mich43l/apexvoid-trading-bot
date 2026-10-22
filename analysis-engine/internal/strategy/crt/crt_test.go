@@ -7,6 +7,7 @@ import (
 	analysiscontext "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/context"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/quality"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/test/legacyfixture"
 )
@@ -95,8 +96,11 @@ func TestCandidateCarriesTheTechnicalContractAndPassesValidation(t *testing.T) {
 	}
 	// Confluence: HTF aligned (4) + wick (3) + structure (3); the shift's displacement is part of the
 	// same candle as the structure fact and earns no credit of its own.
-	if c.DetectorConfluence == nil || c.DetectorConfluence.SelectedStars != 2 || c.Quality.Overall < 2.0/3-1e-9 || c.Quality.Overall > 2.0/3+1e-9 {
+	if c.DetectorConfluence == nil || c.DetectorConfluence.SelectedStars != 2 {
 		t.Fatalf("confluence = %+v quality = %+v", c.DetectorConfluence, c.Quality)
+	}
+	if err := quality.Verify(c.Quality.Overall, c.Quality.Components); err != nil {
+		t.Fatal(err)
 	}
 	f := c.DetectorConfluence.Factors
 	if !f.HTFAligned || !f.WickRejection || !f.StructuralAgreement || f.DisplacementGrade || f.CHoCH || f.FibTouch {

@@ -1,6 +1,7 @@
 package strategy_test
 
 import (
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/quality"
 	"testing"
 
 	analysiscontext "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/context"
@@ -110,9 +111,9 @@ func TestConfluenceZoneV3KnownQualifyingFixture(t *testing.T) {
 			t.Fatalf("missing evidence %s in %+v", want, c.Evidence)
 		}
 	}
-	// Arbitration-facing quality keeps its scale: the confluence stars out of three.
-	if c.Quality.Overall != 2.0/3 {
-		t.Fatalf("quality %v", c.Quality.Overall)
+	// Quality.Overall is the mean of the model's score_* dimensions, not the stars out of three.
+	if err := quality.Verify(c.Quality.Overall, c.Quality.Components); err != nil {
+		t.Fatal(err)
 	}
 	comp := c.Quality.Components
 	if comp["independent_fact_count"] != 2 || comp["source_dependency_count"] != 0 || comp["target_room_r"] < 2.6 || comp["rejection_wick_ratio"] != 0.625 {
