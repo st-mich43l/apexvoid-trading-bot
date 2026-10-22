@@ -35,6 +35,7 @@ from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 from app.core.config import runtime_config
 from app.core.symbols import pip_for
+from app.autotrade import result_accounting
 from app.autotrade.event_integrity import contradictory_archived_tp
 from app.signals.pips_format import legs_achieved_pips
 
@@ -486,6 +487,12 @@ async def init_db() -> None:
       # R denominator, the same fill result_pips is measured from.
       "ALTER TABLE auto_trade_results "
       "ADD COLUMN IF NOT EXISTS risk_pips DOUBLE PRECISION",
+      # Fill-derived net R (app.autotrade.result_accounting): weighted realized pips over the weighted INITIAL risk of the same
+      # filled legs, and the method that produced it. NULL on every row closed before they existed; history is never backfilled.
+      "ALTER TABLE auto_trade_results "
+      "ADD COLUMN IF NOT EXISTS weighted_risk_pips DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_results ADD COLUMN IF NOT EXISTS net_r DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_results ADD COLUMN IF NOT EXISTS result_method TEXT",
     ):
       await db.execute(stmt)
 
@@ -1976,6 +1983,7 @@ async def _record_auto_trade_result(event: dict) -> None:
     risk_pips = _coerce_optional_float(event.get("risk_pips"))
     if risk_pips is not None and risk_pips <= 0:
       risk_pips = None
+    weighted_risk_pips, net_r, result_method = result_accounting.from_close_event(event)
     await db.execute(
       """
       INSERT INTO auto_trade_results (
@@ -1983,10 +1991,10 @@ async def _record_auto_trade_result(event: dict) -> None:
         setup_type, direction, session, killzone_name, stop_pips,
         booked_tp_count, utc_hour, symbol,
         planned_reward_risk, target_room_fallback_used, exit_path,
-        realized_pips, risk_pips
+        realized_pips, risk_pips, weighted_risk_pips, net_r, result_method
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
-        $17, $18
+        $17, $18, $19, $20, $21
       )
       ON CONFLICT (group_id) DO UPDATE SET
         trade_key = excluded.trade_key,
@@ -2014,7 +2022,15 @@ async def _record_auto_trade_result(event: dict) -> None:
         ),
         risk_pips = COALESCE(
           excluded.risk_pips, auto_trade_results.risk_pips
-        )
+        ),
+        -- The three move together: a net R is only ever stored with the weighted risk and the method that produced it, and a later
+        -- event that carries none of them (a re-delivery, a legacy path) leaves the fill-derived figure alone.
+        weighted_risk_pips = CASE WHEN excluded.net_r IS NOT NULL
+          THEN excluded.weighted_risk_pips ELSE auto_trade_results.weighted_risk_pips END,
+        net_r = CASE WHEN excluded.net_r IS NOT NULL
+          THEN excluded.net_r ELSE auto_trade_results.net_r END,
+        result_method = CASE WHEN excluded.net_r IS NOT NULL
+          THEN excluded.result_method ELSE auto_trade_results.result_method END
       WHERE auto_trade_results.correction_source IS NULL
       """,
       group_id, fill["trade_key"], fill["trade_stream"],
@@ -2023,7 +2039,7 @@ async def _record_auto_trade_result(event: dict) -> None:
       fill["stop_pips"], booked_tp_count, utc_hour,
       fill["symbol"] or "XAU",
       planned_reward_risk, target_room_fallback_used, exit_path,
-      realized_pips, risk_pips,
+      realized_pips, risk_pips, weighted_risk_pips, net_r, result_method,
     )
 
 
