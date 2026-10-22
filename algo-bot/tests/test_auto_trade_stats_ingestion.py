@@ -661,3 +661,54 @@ async def test_journal_r_divides_by_the_deepest_non_risk_fills_risk():
   old = [r for r in await store.get_pips_records(0, 10**12) if r["trade_key"] == f"algo:{gid2}"]
   # An event from before the executor sent risk_pips keeps the previous denominator.
   assert old[0]["r_multiple"] == pytest.approx(50.0 / 50.0)
+
+
+async def _fill_for_net_r(gid):
+  await store.record_auto_trade_event({
+    "type": "order_filled", "timestamp": 10, "position_id": 91000, "group_id": gid, "candidate_id": gid, "direction": "BUY",
+    "setup": "Key Level", "symbol": "XAU", "price": 4100.0, "stop_loss": 4090.0, "volume": 800,
+  })
+
+
+def _stop_out(gid, **over):
+  event = {
+    "type": "position_closed", "timestamp": 50, "position_id": 91000, "group_id": gid, "candidate_id": gid, "price": 4090.0,
+    "target_pips": 0, "group_realized_pips": -94, "message": "PLAN CLOSED · no TP archived · @ 4090.00",
+    "reason_code": "stop_loss_or_take_profit", "volume_weighted_pips": -94.7, "risk_pips": 100.0, "volume_weighted_risk_pips": 94.7,
+  }
+  event.update(over)
+  return event
+
+
+@pytest.mark.asyncio
+async def test_a_terminal_event_stores_net_r_with_its_weighted_risk_and_method(sql):
+  await store.init_db()
+  gid = "v8:net-r-full-stop"
+  await _fill_for_net_r(gid)
+  await store.record_auto_trade_event(_stop_out(gid))
+  row = await sql.row("SELECT result_pips, realized_pips, risk_pips, weighted_risk_pips, net_r, result_method FROM auto_trade_results WHERE group_id = $1", gid)
+  assert row["net_r"] == pytest.approx(-1.0) and row["weighted_risk_pips"] == pytest.approx(94.7) and row["result_method"] == "fills_v1"
+  assert row["realized_pips"] == pytest.approx(-94.7) and row["risk_pips"] == pytest.approx(100.0), "the legacy figures keep their meaning"
+
+
+@pytest.mark.asyncio
+async def test_redelivering_the_close_does_not_double_count_and_a_later_event_without_the_fields_keeps_them(sql):
+  await store.init_db()
+  gid = "v8:net-r-redelivery"
+  await _fill_for_net_r(gid)
+  await store.record_auto_trade_event(_stop_out(gid))
+  await store.record_auto_trade_event(_stop_out(gid))
+  await store.record_auto_trade_event(_stop_out(gid, volume_weighted_pips=None, volume_weighted_risk_pips=None))
+  rows = await sql.fetch("SELECT net_r, weighted_risk_pips, result_method, realized_pips FROM auto_trade_results WHERE group_id = $1", gid)
+  assert len(rows) == 1
+  assert rows[0]["net_r"] == pytest.approx(-1.0) and rows[0]["result_method"] == "fills_v1" and rows[0]["realized_pips"] == pytest.approx(-94.7)
+
+
+@pytest.mark.asyncio
+async def test_a_legacy_close_without_the_weighted_risk_leaves_net_r_null_rather_than_inventing_it(sql):
+  await store.init_db()
+  gid = "v8:net-r-legacy-close"
+  await _fill_for_net_r(gid)
+  await store.record_auto_trade_event(_stop_out(gid, volume_weighted_risk_pips=None))
+  row = await sql.row("SELECT realized_pips, risk_pips, weighted_risk_pips, net_r, result_method FROM auto_trade_results WHERE group_id = $1", gid)
+  assert row["realized_pips"] == pytest.approx(-94.7) and row["net_r"] is None and row["result_method"] is None and row["weighted_risk_pips"] is None

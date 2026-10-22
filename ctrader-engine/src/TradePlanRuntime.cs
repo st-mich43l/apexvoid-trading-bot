@@ -1713,7 +1713,8 @@ public sealed partial class TradePlanRuntime(
     string? reasonCode = null,
     TradePlanRuntimeState? runtimeState = null,
     int? highestBookedTargetIndex = null,
-    decimal? volumeWeightedPips = null
+    decimal? volumeWeightedPips = null,
+    decimal? volumeWeightedRiskPips = null
   ) => PublishEventCoreAsync(
     type,
     message,
@@ -1731,7 +1732,8 @@ public sealed partial class TradePlanRuntime(
     reasonCode,
     runtimeState,
     highestBookedTargetIndex,
-    volumeWeightedPips
+    volumeWeightedPips,
+    volumeWeightedRiskPips
   );
 
   private async Task PublishEventCoreAsync(
@@ -1751,7 +1753,8 @@ public sealed partial class TradePlanRuntime(
     string? reasonCode = null,
     TradePlanRuntimeState? runtimeState = null,
     int? highestBookedTargetIndex = null,
-    decimal? volumeWeightedPips = null
+    decimal? volumeWeightedPips = null,
+    decimal? volumeWeightedRiskPips = null
   )
   {
     if (!string.IsNullOrWhiteSpace(eventKey))
@@ -1826,6 +1829,7 @@ public sealed partial class TradePlanRuntime(
         HighestBookedTargetIndex: bookedIndex,
         VolumeWeightedPips: volumeWeightedPips,
         RiskPips: riskPips,
+        VolumeWeightedRiskPips: volumeWeightedRiskPips,
         TargetsTotal: plan.Targets.Count,
         PlannedRewardRisk: plannedRewardRisk,
         TargetRoomFallbackUsed: targetRoomFallbackUsed,
@@ -3455,6 +3459,9 @@ public sealed partial class TradePlanRuntime(
                 plan, legs, state.BookedPipVolume + bookedPipVolumeAdded,
                 PipSizeFor(plan.Symbol), _ => null
               )
+            : null,
+          volumeWeightedRiskPips: remainingAfter <= 0
+            ? VolumeWeightedRiskPips(plan, legs, PipSizeFor(plan.Symbol))
             : null
         );
         state = AggregateState(
@@ -4206,6 +4213,9 @@ public sealed partial class TradePlanRuntime(
         PipSizeFor(plan.Symbol),
         leg => reasons.Where(item => item.Leg.LegId == leg.LegId).Select(item => item.ExitPrice).FirstOrDefault()
           ?? exitHint
+      ),
+      volumeWeightedRiskPips: VolumeWeightedRiskPips(
+        plan, LegsAsTheyHeldVolumeAtClose(legs, reasons), PipSizeFor(plan.Symbol)
       )
     );
     await PersistPlanExecutionStateAsync(
@@ -5356,6 +5366,48 @@ public sealed partial class TradePlanRuntime(
       pipVolume += (buy ? exit - fill : fill - exit) / pipSize * leg.RemainingVolume;
     }
     return decimal.Round(pipVolume / filled, 2, MidpointRounding.AwayFromZero);
+  }
+
+  /// <summary>
+  /// The initial risk of the whole filled group in pips, weighted like <see cref="VolumeWeightedPips"/>:
+  /// every leg's filled volume times the distance from ITS OWN fill to the ORIGINAL plan stop, over the
+  /// filled volume. Legs that entered at different prices (a zone ladder, the reaction risk leg that rests
+  /// near the stop) carry different risk, and a net result measured over the whole filled volume has to be
+  /// normalised by the same weighting, or a small leg with a small stop distance makes a full stop read as
+  /// less than one R. Net R = VolumeWeightedPips / VolumeWeightedRiskPips. Null without a filled leg, a fill
+  /// price or a stop beyond the fill.
+  /// </summary>
+  internal static decimal? VolumeWeightedRiskPips(
+    TradePlan plan,
+    IReadOnlyList<TradePlanLegRuntimeState> legs,
+    decimal pipSize
+  )
+  {
+    var filled = legs.Sum(leg => leg.FilledVolume);
+    if (filled <= 0 || pipSize <= 0m || plan.Stop.Price <= 0m)
+    {
+      return null;
+    }
+    var buy = string.Equals(plan.Analysis.Direction, "BUY", StringComparison.OrdinalIgnoreCase);
+    var riskVolume = 0m;
+    foreach (var leg in legs)
+    {
+      if (leg.FilledVolume <= 0)
+      {
+        continue;
+      }
+      if (leg.FillPrice is not decimal fill || fill <= 0m)
+      {
+        return null;
+      }
+      var distance = buy ? fill - plan.Stop.Price : plan.Stop.Price - fill;
+      if (distance <= 0m)
+      {
+        return null; // the original stop is not beyond this fill: there was no initial risk to measure against
+      }
+      riskVolume += distance / pipSize * leg.FilledVolume;
+    }
+    return decimal.Round(riskVolume / filled, 2, MidpointRounding.AwayFromZero);
   }
 
   private int? ArchivedTargetPips(
