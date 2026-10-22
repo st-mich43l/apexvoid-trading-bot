@@ -20,6 +20,7 @@ def main():
   ap = argparse.ArgumentParser()
   ap.add_argument("--books", required=True)
   ap.add_argument("--out", required=True)
+  ap.add_argument("--no-same-wall", action="store_true", help="what-if: never set aside an opposing barrier because it overlaps the candidate band")
   a = ap.parse_args()
   for k, v in {"TELEGRAM_BOT_TOKEN": "123456:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghi", "TELEGRAM_CHAT_ID": "-100123456789",
                "DATABASE_URL": "postgresql://apexvoid:apexvoid@localhost:5/signals", "POSTGRES_PASSWORD": "x"}.items():
@@ -66,7 +67,7 @@ def main():
             direction=c["direction"], planned_entry_price=planned, candidate_entry_low=low, candidate_entry_high=high, configured_target_pips=targets,
             actionable_entries=entries, atr=atr, pip_size=pip, barrier_buffer_atr=instrument_geometry.structural_barrier_buffer_atr(symbol),
             min_capped_target_pips=min_capped, execution_cost_pips=cost, room_reference_source=source, executable_entry_price=price,
-            shared_boundary_state=shared, allow_same_wall_overlap=is_technique_or_confluence(profile.legacy_strategy))
+            shared_boundary_state=shared, allow_same_wall_overlap=False if a.no_same_wall else is_technique_or_confluence(profile.legacy_strategy))
           row = {"capture": capture, "bar": rec["bar"], "symbol": symbol, "id": c["id"], "strategy": c["strategy"], "direction": c["direction"],
                  "admissible": (not profile.requires_reaction) or bool(c.get("confirmed_reaction")), "allowed": bool(d.allowed), "reason": d.reason_code,
                  "planned": planned, "price": price, "entry_low": low, "entry_high": high, "targets_pips": targets, "invalidation": c["invalidation"],

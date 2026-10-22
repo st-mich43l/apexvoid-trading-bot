@@ -64,5 +64,9 @@ old/new books) and reports every changed decision with its cause, the changes by
 +2R race of newly admitted, newly blocked, unchanged-admitted and still-blocked groups. `validity_test.go` (`F7_VALIDITY_OUT`) counts live
 zones whose own `zone.NotInvalidated` rule says they are broken.
 
+### Set-aside rules
+
+`setaside_sensitivity.py` (from `algo-bot`, on a `decisions_test.go` dump) varies the same-wall exemption, the shared-boundary glue and member-level same-wall one at a time through the real `evaluate_structural_target_room`; `crossside_sensitivity.py` does the same for the engine's cross-side reconciliation from the raw zones `dump_test.go` records. `decide_dump.py --no-same-wall` is the single-rule what-if. `TestOpposingBarrierBookUsesNoFutureBars` (`test/replaycapture`) proves the barrier book is prefix-invariant.
+
 The tools' own logic (race, bar mapping, union length, divergence classification, clustered statistics) is covered by
 `algo-bot/tests/test_f7_barrier_tools.py`.

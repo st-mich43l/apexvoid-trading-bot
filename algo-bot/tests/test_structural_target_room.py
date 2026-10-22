@@ -7,6 +7,7 @@ import pytest
 
 from app.autotrade.structural_target_room import (
   ZoneOpposingEntry,
+  assess_executable_room,
   evaluate_structural_target_room,
 )
 
@@ -230,3 +231,131 @@ def test_a_barrier_that_holds_the_planned_entry_is_never_set_aside():
   holding = _Entry(side="sell", lo=105.0, hi=115.0)
   decision = _buy([holding], executable=112.0)
   assert not decision.allowed and decision.reason_code in {"opposing_entry_contained", "opposing_entry_overlap"}
+
+
+# ---- Q5.2: no counter-bias label can buy back a structural impossibility ------------------------------------------------
+
+_SOFT_CODES = {"opposing_entry_overlap", "opposing_entry_contained", "opposing_major_no_room"}
+
+
+@pytest.mark.parametrize("symbol,pip,atr,buffer_atr", [
+  ("EURUSD", 0.0001, 0.0010, 0.5),
+  ("USDJPY", 0.01, 0.10, 0.5),
+  ("XAU", 0.1, 4.0, 0.15),
+])
+def test_the_codes_a_counter_bias_exception_once_waived_never_have_usable_room(symbol, pip, atr, buffer_atr):
+  """The worker used to keep a counter-bias setup past these three codes when ``usable_room_pips or room_pips`` was at least the
+  15-pip preference floor. Over every geometry the gate can produce (direction, tier, barrier offset and width, candidate band,
+  executable price present or not) each of those codes has non-positive room, so the exception could never fire; it is removed.
+  This pins why: a rejection for one of them is geometry (the entry inside, or on, the opposing zone) and no room is ever
+  measured in front of it."""
+  entry = 1000.0 * pip
+  seen = set()
+  for direction in ("BUY", "SELL"):
+    for tier in ("zone", "major"):
+      for offset in range(-60, 61, 3):
+        for width in (1, 6, 30, 90):
+          for band in (0, 4, 25):
+            for executable in (None, entry):
+              if direction == "BUY":
+                low = entry + offset * pip
+                zone = ZoneOpposingEntry("sell", low, low + width * pip, tier=tier)
+              else:
+                high = entry + offset * pip
+                zone = ZoneOpposingEntry("buy", high - width * pip, high, tier=tier)
+              decision = evaluate_structural_target_room(
+                direction=direction, planned_entry_price=entry,
+                candidate_entry_low=entry - band * pip, candidate_entry_high=entry + band * pip,
+                configured_target_pips=(10, 20), actionable_entries=[zone], atr=atr, pip_size=pip,
+                barrier_buffer_atr=buffer_atr, min_capped_target_pips=15.0, execution_cost_pips=1.0,
+                executable_entry_price=executable, allow_same_wall_overlap=False,
+              )
+              if decision.reason_code in _SOFT_CODES:
+                seen.add(decision.reason_code)
+                measured = decision.measured
+                room = float(measured.get("usable_room_pips") or measured.get("room_pips") or 0.0)
+                assert decision.hard_block and not decision.allowed
+                assert room <= 0.0, (symbol, direction, tier, offset, width, band, executable, decision.reason_code, room)
+  assert {"opposing_entry_overlap"} <= seen
+
+
+@pytest.mark.parametrize("direction", ["BUY", "SELL"])
+def test_an_entry_inside_the_opposing_zone_blocks_with_or_without_a_higher_timeframe_agreeing(direction):
+  """Supply opposes a BUY and demand opposes a SELL, and the entry inside it is a hard rejection that does not depend on bias."""
+  entry = 1.1000
+  zone = ZoneOpposingEntry("sell" if direction == "BUY" else "buy", entry - 0.0010, entry + 0.0010, tier="zone", score=0.8, touches=1)
+  decision = evaluate_structural_target_room(
+    direction=direction, planned_entry_price=entry, candidate_entry_low=entry - 0.0002, candidate_entry_high=entry + 0.0002,
+    configured_target_pips=(20, 40), actionable_entries=[zone], atr=0.0010, pip_size=0.0001, barrier_buffer_atr=0.5,
+    execution_cost_pips=1.0, executable_entry_price=entry, allow_same_wall_overlap=False,
+  )
+  assert decision.hard_block and decision.reason_code in {"opposing_entry_overlap", "opposing_entry_contained"}
+
+
+def test_a_zone_on_the_wrong_side_never_opposes():
+  """A demand zone ahead of a BUY (or supply ahead of a SELL) is not an opposing barrier whatever its width or score."""
+  entry = 1.1000
+  for direction, same_side in (("BUY", "buy"), ("SELL", "sell")):
+    zone = ZoneOpposingEntry(same_side, entry - 0.0010, entry + 0.0010, tier="major", score=1.0)
+    decision = evaluate_structural_target_room(
+      direction=direction, planned_entry_price=entry, candidate_entry_low=entry, candidate_entry_high=entry,
+      configured_target_pips=(20,), actionable_entries=[zone], atr=0.0010, pip_size=0.0001, barrier_buffer_atr=0.5,
+      execution_cost_pips=1.0, executable_entry_price=entry,
+    )
+    assert decision.allowed and decision.reason_code == "no_opposing_barrier"
+
+
+# ---- Q5.2: the room in R of the stop the executor will use ---------------------------------------------------------------
+
+def _admitted(room_pips, *, pip=0.0001, atr=0.0010, buffer_atr=0.0, targets=(40,)):
+  entry = 1.1000
+  barrier = ZoneOpposingEntry("sell", entry + room_pips * pip, entry + (room_pips + 10) * pip, tier="zone", score=0.8, touches=1)
+  decision = evaluate_structural_target_room(
+    direction="BUY", planned_entry_price=entry, candidate_entry_low=entry, candidate_entry_high=entry,
+    configured_target_pips=targets, actionable_entries=[barrier], atr=atr, pip_size=pip, barrier_buffer_atr=buffer_atr,
+    execution_cost_pips=1.0, executable_entry_price=entry,
+  )
+  assert decision.allowed and decision.opposing_entry is not None
+  return decision
+
+
+def test_no_barrier_means_the_whole_ladder_is_in_the_clear():
+  decision = evaluate_structural_target_room(
+    direction="BUY", planned_entry_price=1.1, candidate_entry_low=1.1, candidate_entry_high=1.1, configured_target_pips=(20,),
+    actionable_entries=[], atr=0.001, pip_size=0.0001, barrier_buffer_atr=0.5, execution_cost_pips=1.0, executable_entry_price=1.1)
+  out = assess_executable_room(decision, executable_stop_pips=15, technical_stop_pips=5, target_pips=["15", "30"])
+  assert out["classification"] == "no_opposing_barrier" and out["barrier_present"] is False
+  assert out["targets_within_room"] == 2 and out["stop_widening_ratio"] == 3.0 and out["enforcement"] == "advisory"
+
+
+def test_room_is_measured_in_r_of_the_executable_stop_not_the_technical_one():
+  out = assess_executable_room(_admitted(40), executable_stop_pips="15", technical_stop_pips="5", target_pips=["15", "30"])
+  assert out["usable_room_pips"] == pytest.approx(40.0)
+  assert out["room_r"] == pytest.approx(40 / 15, abs=1e-3) and out["classification"] == "ladder_within_room"
+  # against the technical stop the same room would read three times larger and mislead the reader
+  assert out["room_r"] < 40 / 5
+
+
+@pytest.mark.parametrize("room,targets,expected,fits", [
+  (40, ["15", "30"], "ladder_within_room", 2),
+  (20, ["15", "30"], "ladder_exceeds_room", 1),
+  (8, ["15", "30"], "first_target_beyond_room", 0),
+])
+def test_the_ladder_is_classified_against_the_barrier_without_shrinking_it(room, targets, expected, fits):
+  decision = _admitted(room)
+  out = assess_executable_room(decision, executable_stop_pips=15, technical_stop_pips=15, target_pips=targets)
+  assert out["classification"] == expected and out["targets_within_room"] == fits
+  # a classification is never an admission verdict: the decision that was taken is untouched
+  assert decision.allowed and tuple(decision.fitted_targets_pips) == (40,)
+
+
+def test_the_buffer_comes_off_the_room_before_it_is_read_in_r():
+  out = assess_executable_room(_admitted(40, buffer_atr=0.5), executable_stop_pips=15, technical_stop_pips=15, target_pips=["15", "30"])
+  # 40 pips raw, 0.5 ATR (5 pips) buffer
+  assert out["raw_room_pips"] == pytest.approx(40.0) and out["usable_room_pips"] == pytest.approx(35.0)
+  assert out["raw_room_r"] > out["room_r"]
+
+
+def test_a_missing_or_non_finite_stop_or_target_is_unmeasured_not_invented():
+  out = assess_executable_room(_admitted(40), executable_stop_pips=None, technical_stop_pips="nan", target_pips=["x", "30"])
+  assert out["room_r"] is None and out["stop_widening_ratio"] is None and out["target_pips"] == [30.0]
