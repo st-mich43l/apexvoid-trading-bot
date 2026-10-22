@@ -379,6 +379,78 @@ async def test_a_wall_between_the_price_and_the_proximal_edge_keeps_blocking(h, 
   assert outcome["measured"]["opposing_barrier"]["reason_code"] == "opposing_barrier_no_target"
 
 
+async def _published_executable_room(prod) -> dict:
+  """The ``executable_room`` block of the ``candidate_published`` lifecycle record (the plan itself does not carry ``measured``)."""
+  for key in await prod.keys("auto_trade:lifecycle:*"):
+    if key.endswith(("_state", ":events")) or ":lifecycle_state:" in key:
+      continue
+    try:
+      entries = await prod.lrange(key, 0, -1)
+    except Exception:  # a non-list key
+      continue
+    for raw in entries:
+      entry = json.loads(raw)
+      if entry.get("state") == "candidate_published":
+        return entry["measured"]["executable_room"]
+  raise AssertionError("no candidate_published lifecycle record")
+
+
+@pytest.mark.parametrize("relation", ["with_bias", "counter_bias"])
+@pytest.mark.parametrize("barrier", [
+  # the planned entry (the band's proximal edge, 4356.0) inside the opposing supply
+  {"low": 4349.0, "high": 4358.0, "tier": "zone"},
+  # a major wall that holds the entry
+  {"low": 4353.0, "high": 4360.0, "tier": "major"},
+  # the band overlapped by a wall that starts inside it
+  {"low": 4354.0, "high": 4372.0, "tier": "zone"},
+], ids=["inside_zone", "inside_major", "overlap"])
+@pytest.mark.asyncio
+async def test_a_counter_bias_label_never_buys_back_a_structural_rejection(h, prod, relation, barrier):
+  """Counter-trend is a thesis, not a waiver: a BUY inside opposing supply is rejected the same whether the setup agrees with the
+  bias or not. (A counter-bias exception that once kept such setups was unreachable and is gone; this pins the behaviour.)"""
+  from app.autotrade.go_zone_book import go_zone_book_key
+
+  match = await _go_origin_key_level_match(h, prod)
+  match = replace(match, bias_relationship=relation, tags=(*match.tags, f"bias:{relation}"))
+  await prod.set(go_zone_book_key("XAU"), json.dumps({
+    "symbol": "XAU", "generated_at": int(time.time()), "entries": [],
+    "barriers": [{"side": "sell", "score": 0.9, "touches": 1, "source_timeframes": ["M5"], **barrier}],
+  }))
+  assert await worker._publish_trade_plan_v8(prod, "XAU", _spot(4354.1, 4354.3), match, frames={}) is None
+  assert await plans(prod) == []
+  outcome = await route(prod, match.match_id)
+  assert outcome["status"] == "blocked" and outcome["reason_code"] in {"opposing_entry_overlap", "opposing_entry_contained", "opposing_major_no_room"}
+
+
+@pytest.mark.asyncio
+async def test_an_admitted_plan_records_the_room_in_r_of_the_executable_stop(h, prod):
+  """A wall ahead that leaves positive room does not block (the ladder is never shrunk), and the plan says how much room there
+  is in R of the stop it really uses and how the executed ladder sits against the wall."""
+  from app.autotrade.go_zone_book import go_zone_book_key
+
+  match = await _go_origin_key_level_match(h, prod)
+  wall = {"side": "sell", "low": 4372.0, "high": 4380.0, "tier": "zone", "score": 0.8, "touches": 1, "source_timeframes": ["M15"]}
+  await prod.set(go_zone_book_key("XAU"), json.dumps({"symbol": "XAU", "generated_at": int(time.time()), "entries": [], "barriers": [wall]}))
+  plan_id = await worker._publish_trade_plan_v8(prod, "XAU", _spot(4354.1, 4354.3), match, frames={})
+  assert plan_id is not None
+  room = await _published_executable_room(prod)
+  assert room["barrier_present"] is True and room["enforcement"] == "advisory"
+  assert room["executable_stop_pips"] > 0 and room["room_r"] == pytest.approx(room["usable_room_pips"] / room["executable_stop_pips"], abs=1e-3)
+  assert room["classification"] in {"ladder_within_room", "ladder_exceeds_room", "first_target_beyond_room"}
+  assert room["target_pips"] and room["technical_stop_pips"] is not None
+
+
+@pytest.mark.asyncio
+async def test_a_plan_with_nothing_in_the_way_records_that(h, prod):
+  from app.autotrade.go_zone_book import go_zone_book_key
+
+  match = await _go_origin_key_level_match(h, prod)
+  await prod.set(go_zone_book_key("XAU"), json.dumps({"symbol": "XAU", "generated_at": int(time.time()), "entries": [], "barriers": []}))
+  plan_id = await worker._publish_trade_plan_v8(prod, "XAU", _spot(4354.1, 4354.3), match, frames={})
+  assert plan_id is not None
+  assert (await _published_executable_room(prod))["classification"] == "no_opposing_barrier"
+
+
 async def _go_origin_key_level_match(h, prod):
   await h.activate(scope="key_level")
   await h._ensure()
