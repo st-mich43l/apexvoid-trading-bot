@@ -19,6 +19,7 @@ import (
 	analysiscontext "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/context"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/quality"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategyutil"
 )
@@ -128,9 +129,7 @@ func (s *Strategy) candidate(ctx *analysiscontext.MarketContext, setup Setup) (o
 	if setup.DoubleRaidResolved {
 		evidence = append(evidence, "m5_crt_double_raid_resolved")
 	}
-	stars := float64(score.SelectedStars)
-	components := map[string]float64{
-		"confluence":           strategyutil.Clamp01(stars / 3),
+	measurements := map[string]float64{
 		"h1_range_atr":         setup.Anchor.RangeATR,
 		"entry_range_position": (setup.EntryHigh - setup.Anchor.Low) / math.Max(setup.Anchor.Width(), 1e-12),
 		"sweep_depth_atr":      setup.Sweep.DepthATR,
@@ -139,10 +138,22 @@ func (s *Strategy) candidate(ctx *analysiscontext.MarketContext, setup Setup) (o
 		"technical_risk_pips":  setup.RiskPips,
 	}
 	if setup.Shift != nil {
-		components["mss_displacement_atr"] = setup.Shift.DisplacementATR
-		components["mss_body_ratio"] = setup.Shift.BodyRatio
-		components["mss_close_strength"] = setup.Shift.CloseStrength
+		measurements["mss_displacement_atr"] = setup.Shift.DisplacementATR
+		measurements["mss_body_ratio"] = setup.Shift.BodyRatio
+		measurements["mss_close_strength"] = setup.Shift.CloseStrength
 	}
+	model := quality.New(QualityModel)
+	for name, value := range measurements {
+		model.Measure(name, value)
+	}
+	qc := qualityContext{htfAligned: factors.HTFAligned}
+	if m5 := ctx.Timeframes[market.M5]; m5 != nil && m5.Legacy != nil {
+		qc.localTrend = m5.Legacy.Structure
+	}
+	if d, ok := strategyutil.NewLegacyDetector(ctx, market.M5, setup.Direction, s.detector); ok {
+		qc.choch, qc.price = d.RecentCHoCH(maxInt(1, s.detector.ReactionLookbackBars)), d.Price
+	}
+	s.score(model, setup, qc)
 	candidate, err := strategyutil.Candidate(strategyutil.CandidateSpec{
 		ID: string(ID), Version: Version,
 		SetupKey: fmt.Sprintf("crt:%s:%d:%d:%d", side, setup.Anchor.OpenTime, setup.Sweep.BarTime, setup.ConfirmedAt),
@@ -151,7 +162,7 @@ func (s *Strategy) candidate(ctx *analysiscontext.MarketContext, setup Setup) (o
 		Invalidation: setup.Stop, InvalidationLabel: "crt_sweep_extreme_lost",
 		Target: setup.Target, TargetLabel: setup.TargetKind,
 		Evidence: evidence,
-		Quality:  opportunity.StrategyQuality{Overall: strategyutil.Clamp01(stars / 3), Components: components},
+		Quality:  opportunity.StrategyQuality{Overall: model.Overall(), Components: model.Components()},
 		FormedAt: setup.Sweep.BarTime, ConfirmedAt: setup.ConfirmedAt,
 		ExpiryHours: s.cfg.ExpiryHours, Fingerprint: s.fingerprint,
 	})
@@ -179,4 +190,11 @@ func confluenceContext(score confluence.Score) *opportunity.ConfluenceContext {
 			StructuralAgreement: score.Factors.StructuralAgreement, FibTouch: score.Factors.FibTouch, CHoCH: score.Factors.CHoCH,
 		},
 	}
+}
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }

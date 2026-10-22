@@ -20,6 +20,7 @@ import (
 	analysiscontext "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/context"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/quality"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategyutil"
 )
@@ -139,7 +140,7 @@ func (s *Strategy) candidate(ctx *analysiscontext.MarketContext, m5 *analysiscon
 		evidence = append(evidence, "structural_agreement")
 	}
 
-	components := map[string]float64{
+	measurements := map[string]float64{
 		"break_distance_atr":       setup.Break.DistanceATR,
 		"break_body_ratio":         setup.Break.BodyRatio,
 		"break_close_strength":     setup.Break.CloseStrength,
@@ -155,6 +156,18 @@ func (s *Strategy) candidate(ctx *analysiscontext.MarketContext, m5 *analysiscon
 		"technical_risk_pips":      setup.RiskPips,
 		"confluence_stars":         float64(score.SelectedStars),
 	}
+	model := quality.New(QualityModel)
+	for name, value := range measurements {
+		model.Measure(name, value)
+	}
+	qc := qualityContext{htfAligned: factors.HTFAligned}
+	if m5.Legacy != nil {
+		qc.localTrend = m5.Legacy.Structure
+	}
+	if d, ok := strategyutil.NewLegacyDetector(ctx, market.M5, setup.Direction, s.detector); ok {
+		qc.choch, qc.price = d.RecentCHoCH(maxInt(1, s.detector.ReactionLookbackBars)), d.Price
+	}
+	s.score(model, setup, qc)
 	candidate, err := strategyutil.Candidate(strategyutil.CandidateSpec{
 		ID: string(ID), Version: Version,
 		SetupKey: fmt.Sprintf("break_retest:%s:%s:%d:%d:%d", side, setup.Reference.ID, setup.Break.StartTime, setup.Break.AcceptedAt, setup.ConfirmedAt),
@@ -163,9 +176,8 @@ func (s *Strategy) candidate(ctx *analysiscontext.MarketContext, m5 *analysiscon
 		Invalidation: setup.Stop, InvalidationLabel: "break_retest_structure_lost",
 		Target: setup.Target, TargetLabel: "opposing_structure",
 		Evidence: evidence,
-		// Overall is the value live arbitration has always seen for this
-		// strategy. The measured quality is in Components only.
-		Quality:  opportunity.StrategyQuality{Overall: s.cfg.PublishedOverallQuality, Components: components},
+		// Overall is the mean of the score_* dimensions (QualityModel); the confluence stars stay in DetectorConfluence as a diagnostic.
+		Quality:  opportunity.StrategyQuality{Overall: model.Overall(), Components: model.Components()},
 		FormedAt: setup.Break.AcceptedAt, ConfirmedAt: setup.ConfirmedAt,
 		ExpiryHours: s.cfg.ExpiryHours, Fingerprint: s.fingerprint,
 	})
@@ -189,4 +201,11 @@ func confluenceContext(score confluence.Score) *opportunity.ConfluenceContext {
 			StructuralAgreement: score.Factors.StructuralAgreement, FibTouch: score.Factors.FibTouch, CHoCH: score.Factors.CHoCH,
 		},
 	}
+}
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }

@@ -227,8 +227,8 @@ Confluence uses the shared rubric (floor 2) with **measured** factors: HTF
 alignment from the engine, `WickRejection` only if a rejection wick was observed
 on the sweep/reclaim candles, `StructuralAgreement` because the shift happened,
 `DisplacementGrade` only if the shift displaced at least `displacement_grade_atr`
-ATR. `Quality.Overall` stays `stars / 3`, as in v2, so arbitration is not
-changed; the measured facts (range, sweep depth, reclaim depth, shift
+ATR. `Quality.Overall` is the mean of eight measured `score_*` dimensions (`crt.quality.v1`, [quality-scoring.md](quality-scoring.md));
+the stars stay a diagnostic. The measured facts (range, sweep depth, reclaim depth, shift
 displacement/body/close strength, technical RR and risk pips) are published as
 `Quality.Components`, which no arbitration reads.
 

@@ -27,6 +27,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/engine"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/quality"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/replaycapture"
 )
 
@@ -291,6 +292,10 @@ func invariants(r *Record) []string {
 	}
 	if !(finite(r.Quality) && r.Quality >= 0 && r.Quality <= 1) {
 		v = append(v, "quality_range")
+	}
+	// Quality.Overall must be the mean of the strategy's documented score_* dimensions (internal/quality), every one in [0, 1].
+	if err := quality.Verify(r.Quality, r.Components); err != nil {
+		v = append(v, "quality_model")
 	}
 	// Rebuilt strategies publish measurements (ATR multiples, counts) as components, so a component
 	// only has to be finite; the score the ranking reads (Overall) must be in [0, 1].

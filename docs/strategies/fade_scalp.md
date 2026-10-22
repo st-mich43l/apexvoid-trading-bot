@@ -25,7 +25,7 @@ For a BUY (the SELL is the exact mirror), in this order, every fact read from cl
 
 `Quality.Components`: `extension_atr = |mean - sweep extreme| / ATR`, the sweep candle's `body_ratio`, `upper_wick`, `lower_wick` (each `0` for a zero-range candle),
 `sweep_penetration_atr`, `equal_level_touches`, `reward_risk`, `target_room_atr`, `reaction_displacement` (when the reaction showed a displacement leg) and `confluence_stars`.
-`Quality.Overall` is `stars / 3`, the scale arbitration has always read.
+`Quality.Overall` is the mean of seven `score_*` dimensions (`fade_scalp.quality.v1`, [quality-scoring.md](quality-scoring.md)): pool credibility, sweep, extension, failed continuation, rejection, entry location and room, with no trend-alignment dimension. The stars are a diagnostic and the confluence floor is unchanged.
 
 ## Confluence factors (measured)
 

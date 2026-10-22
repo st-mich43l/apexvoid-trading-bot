@@ -28,6 +28,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/liquidity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/quality"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategyutil"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/zone"
@@ -312,17 +313,14 @@ func zoneReferenceTime(z zone.Zone) int64 {
 // plus an overall score" recurs — each strategy computes its own values
 // independently (source task §40).
 func computeQuality(z zone.Zone) opportunity.StrategyQuality {
-	// Freshness is the one measured dimension: every touch erodes the confidence the zone still holds. The engine's
-	// technique-zone adapter sets every zone's Strength to 1 and its Relevance to Immediate (it has neither), so a strength or a
-	// relevance component would be a constant asserted as a measurement; neither is published.
-	touchQuality := 1.0 - 0.15*float64(z.TouchCount)
-	if touchQuality < 0.2 {
-		touchQuality = 0.2
-	}
-	return opportunity.StrategyQuality{
-		Overall:    touchQuality,
-		Components: map[string]float64{"freshness_quality": touchQuality},
-	}
+	// A resting zone has had no reaction, so its one measurable dimension is how much of it is left: every touch spends resting
+	// interest (Fall(touches; 0, 5)). The engine's technique-zone adapter gives every zone a Strength of 1 and
+	// a Relevance of Immediate (it has neither), so neither is scored. Resting zones are not executable and are not comparable with
+	// confirmed ones, which are scored by the full model of strategyutil.ZoneFamilyQuality.
+	m := quality.New("supply.resting.quality.v1")
+	m.Score("zone_freshness", quality.Fall(float64(z.TouchCount), 0, 5))
+	m.Measure("zone_touches", float64(z.TouchCount))
+	return opportunity.StrategyQuality{Overall: m.Overall(), Components: m.Components()}
 }
 
 func clamp01(v float64) float64 {

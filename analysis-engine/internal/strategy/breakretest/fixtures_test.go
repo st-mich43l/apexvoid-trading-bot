@@ -25,7 +25,6 @@ func testConfig() Config {
 		ProtectedStructure: ProtectedLastPivot, EntryTolerancePips: 1, EntryToleranceATR: 0.15, MaximumEntryDistanceATR: 1.5,
 		InvalidationBufferATR: 0.25, TargetLookbackBars: 96, TargetSwingBars: 12, TargetSwingATR: 1.0,
 		MinimumTargetRoomATR: 0.55, MinimumRewardRisk: 1.15, ExecutionStopMaxPips: 120, ExpiryHours: 4, PipSize: 0.1,
-		PublishedOverallQuality: 0.75,
 	}
 }
 

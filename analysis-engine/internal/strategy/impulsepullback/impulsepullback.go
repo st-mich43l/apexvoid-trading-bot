@@ -281,12 +281,16 @@ func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Ca
 		if !ok || targetPips > room*0.9 {
 			continue
 		}
-		quality := strategyutil.Clamp01(displacement / (2 * cfg.ImpulseDisplacementATR))
+		model := scoreQuality(qualityInputs{
+			displacementATR: displacement, minDisplacementATR: cfg.ImpulseDisplacementATR, bodyDominance: ev.BodyDominance, minBodyDominance: cfg.ImpulseBodyDominance,
+			pullbackRatio: ev.MeanPullbackBody / ev.MeanImpulseBody, maxPullbackRatio: cfg.PullbackCorrectiveRatio, referenceTouches: ref.Touches,
+			price: c.Price, reference: worst, atr: structureATR, rewardPips: targetPips, stop: stop,
+		})
 		candidate, err := strategyutil.Candidate(strategyutil.CandidateSpec{
 			ID: string(ID), Version: Version, SetupKey: fmt.Sprintf("impulse:%s:%.2f:%.2f:%.2f", direction, ev.Origin, ev.Extreme, ref.Level), Symbol: ctx.Symbol, Direction: direction,
 			EntryLow: zoneLow, EntryHigh: zoneHigh, Invalidation: invalidation, InvalidationLabel: "impulse_reference_lost",
 			Target: targetPrice, TargetLabel: "scalp_corridor", Evidence: []string{"m5_qualified_impulse", "m1_bounded_pullback", "m1_continuation_trigger"},
-			Quality:  opportunity.StrategyQuality{Overall: quality, Components: map[string]float64{"displacement": quality, "body_dominance": strategyutil.Clamp01(ev.BodyDominance)}},
+			Quality:  opportunity.StrategyQuality{Overall: model.Overall(), Components: model.Components()},
 			FormedAt: ev.BarTime, ConfirmedAt: confirm.Time, ExpiryHours: cfg.ExpiryMinutes / 60, Fingerprint: s.fingerprint,
 		})
 		if err != nil {

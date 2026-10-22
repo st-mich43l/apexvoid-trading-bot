@@ -2,6 +2,7 @@ package breakretest
 
 import (
 	"fmt"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/quality"
 	"testing"
 
 	analysiscontext "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/context"
@@ -24,7 +25,7 @@ func brParams(override map[string]any) map[string]any {
 		"rejection_body_ratio": 0.6, "protected_structure": "last_pivot", "entry_tolerance_pips": 1.0, "entry_tolerance_atr": 0.15,
 		"maximum_entry_distance_atr": 1.5, "invalidation_buffer_atr": 0.25, "target_lookback_bars": 96.0, "target_swing_bars": 12.0,
 		"target_swing_atr": 1.0, "minimum_target_room_atr": 0.55, "minimum_reward_risk": 1.15, "execution_stop_max_pips": 120.0,
-		"expiry_hours": 4.0, "published_overall_quality": 0.75,
+		"expiry_hours": 4.0,
 	}
 	for k, v := range override {
 		own[k] = v
@@ -95,10 +96,9 @@ func TestCandidateCarriesTheTechnicalContractAndPassesValidation(t *testing.T) {
 	if c.Reaction != nil {
 		t.Errorf("break_retest carries no separate reaction: %+v", c.Reaction)
 	}
-	// Quality.Overall is exactly what live arbitration has always seen; the
-	// measured quality is published in the components.
-	if c.Quality.Overall != 0.75 {
-		t.Errorf("Quality.Overall = %v, want the unchanged 0.75", c.Quality.Overall)
+	// Quality.Overall is the mean of the published score_* dimensions, not a constant.
+	if err := quality.Verify(c.Quality.Overall, c.Quality.Components); err != nil {
+		t.Errorf("%v", err)
 	}
 	for _, key := range []string{"break_distance_atr", "break_body_ratio", "break_close_strength", "break_displacement_atr", "break_accept_closes",
 		"retest_depth_atr", "retest_bars_after_accept", "rejection_wick_ratio", "rejection_close_strength", "reference_touches", "target_room_atr",

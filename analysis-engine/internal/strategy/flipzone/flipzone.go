@@ -148,6 +148,9 @@ func (s *Strategy) decide(d *strategyutil.LegacyDetector) *strategyutil.Techniqu
 	}
 	return &strategyutil.TechniqueDecision{
 		Technique: "flip_zone", Direction: d.Direction, Detector: d, Confirmation: conf, Result: result, ID: d.ZoneID(zone),
+		Score: func(dec *strategyutil.TechniqueDecision, g strategyutil.QualityGeometry) opportunity.StrategyQuality {
+			return scoreQuality(zone, level, dec, g)
+		},
 	}
 }
 

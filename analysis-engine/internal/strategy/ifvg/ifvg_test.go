@@ -2,6 +2,7 @@ package ifvg
 
 import (
 	"fmt"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/quality"
 	"strings"
 	"testing"
 
@@ -105,10 +106,12 @@ func TestCandidateCarriesTheTechnicalContractAndPassesValidation(t *testing.T) {
 	if c.Reaction.Pattern != "wick_rejection" {
 		t.Fatalf("pattern %q: the Algo Bot contract only knows the legacy pattern names", c.Reaction.Pattern)
 	}
-	// Quality.Overall keeps the stars/3 scale arbitration has always seen; the
-	// measured quality is in the components, and nothing is fabricated.
-	if c.DetectorConfluence == nil || c.Quality.Overall != float64(c.DetectorConfluence.SelectedStars)/3 {
-		t.Errorf("Quality.Overall = %v with %+v", c.Quality.Overall, c.DetectorConfluence)
+	// Quality.Overall is the mean of the score_* dimensions; the stars are a separate diagnostic.
+	if c.DetectorConfluence == nil {
+		t.Errorf("no confluence diagnostic")
+	}
+	if err := quality.Verify(c.Quality.Overall, c.Quality.Components); err != nil {
+		t.Errorf("%v", err)
 	}
 	for _, key := range []string{"gap_width_atr", "origin_displacement_atr", "inversion_body_ratio", "inversion_displacement_atr", "retest_age_bars",
 		"retest_penetration_atr", "rejection_strength", "structure_alignment", "target_room_r", "zone_integrity", "retest_touches", "technical_risk_pips"} {
@@ -168,7 +171,7 @@ func TestMeasuredFactorsDecideTheStarsAndTheFloor(t *testing.T) {
 	_ = analysis
 	// With the higher timeframe behind it: 4 + 1 + 3 + 3 = 11 -> 2 stars.
 	two := newStrategy(t, nil).Evaluate(marketContext(bars, "down", "up"))
-	if len(two) != 1 || two[0].DetectorConfluence.SelectedStars != 2 || two[0].Quality.Overall != 2.0/3 || two[0].DetectorConfluence.Factors.SessionContext {
+	if len(two) != 1 || two[0].DetectorConfluence.SelectedStars != 2 || two[0].DetectorConfluence.Factors.SessionContext {
 		t.Fatalf("aligned: %+v", two)
 	}
 	// A stricter wick and body bar removes the wick credit: 4+1+3 = 8 is still two stars, but without the
