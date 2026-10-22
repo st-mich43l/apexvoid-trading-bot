@@ -135,6 +135,9 @@ func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Ca
 			best = &strategyutil.TechniqueDecision{
 				Technique: "trendline", Direction: direction, Detector: d, Confirmation: conf, Result: result,
 				ID: fmt.Sprintf("trendline:%s:%s", line.AnchorA, line.AnchorB),
+				Score: func(dec *strategyutil.TechniqueDecision, g strategyutil.QualityGeometry) opportunity.StrategyQuality {
+					return scoreQuality(line, interaction, dec, g)
+				},
 			}
 		}
 	}

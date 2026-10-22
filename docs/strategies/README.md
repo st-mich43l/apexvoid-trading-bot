@@ -131,6 +131,10 @@ Containment is reversible by removing the name. Nothing re-enables itself.
 
 **Enabled on XAU (13 Oct 2026, owner's decision).** `ifvg` (v3) was taken off XAU's list after technical certification; the hypothetical XAU replay is not evidence of an edge.
 
+## Quality
+
+`Quality.Overall` is a strategy-specific technical score (mean of documented `score_*` dimensions, in [0, 1]), informational only: see [quality-scoring.md](quality-scoring.md). It is not a probability, it is not used for ranking (`quality_ranking: false`) and the confluence stars (`min_confluence`) remain the only quality-based gate.
+
 ## Common candidate contract
 
 Every strategy emits a deterministic identity, direction, entry zone, technical

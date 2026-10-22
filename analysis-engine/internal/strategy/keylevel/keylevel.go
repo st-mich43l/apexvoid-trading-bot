@@ -334,14 +334,16 @@ func (s *Strategy) candidate(ctx *context.MarketContext, d *strategyutil.LegacyD
 	if a.widened {
 		evidence = append(evidence, "m5_key_level_opposing_zone_widened")
 	}
-	stars := float64(a.result.Stars)
-	quality := opportunity.StrategyQuality{
-		Overall: strategyutil.Clamp01(stars / 3),
-		Components: map[string]float64{
-			"confluence":    strategyutil.Clamp01(stars / 3),
-			"touch_quality": strategyutil.Clamp01(float64(a.level.Touches) / 5),
-		},
-	}
+	// The band the reaction was read in: the level's own, but never thinner than the detector's proximal floor (a round number has none).
+	effectiveBand := math.Max(a.level.Band, math.Max(1e-9, s.cfg.Detector.ProximalBandATR*math.Max(0, atr)))
+	htfTouches, htfWeight := higherTimeframeLevel(ctx, a.level.Price, s.cfg.Contract, s.cfg.Detector)
+	quality := scoreQuality(qualityInputs{
+		bars: d.Frame.Bars, touchIndex: conf.TouchIndex, confirmIndex: conf.ConfirmationIndex,
+		level: a.level.Price, band: effectiveBand, atr: atr, buy: direction == market.Buy, price: d.Price, reference: reference,
+		invalidation: invalidation, target: target, structural: targetLabel == "nearest_opposing_liquidity",
+		localTrend: d.Frame.Structure, choch: a.detector.RecentCHoCH(maxInt(1, d.Settings.ReactionLookbackBars)), htfAligned: a.detector.HTFAligned(),
+		htfTouches: htfTouches, htfWeight: htfWeight,
+	})
 	candidate, err := strategyutil.Candidate(strategyutil.CandidateSpec{
 		ID: string(ID), Version: Version, SetupKey: setupKey, Symbol: ctx.Symbol, Direction: direction,
 		EntryLow: low, EntryHigh: high, Invalidation: invalidation, InvalidationLabel: "key_level_invalidated",

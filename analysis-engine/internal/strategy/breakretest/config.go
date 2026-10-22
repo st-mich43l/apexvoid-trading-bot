@@ -74,12 +74,6 @@ type Config struct {
 	ExecutionStopMaxPips    float64 // 0 disables the pre-check
 	ExpiryHours             float64
 	PipSize                 float64
-
-	// PublishedOverallQuality is Quality.Overall exactly as live arbitration has
-	// always seen it for this strategy (0.75). The measured quality of each
-	// setup is published in Quality.Components only; moving Overall onto a
-	// measured score is an arbitration decision this strategy does not take.
-	PublishedOverallQuality float64
 }
 
 func parseConfig(params map[string]any) (Config, error) {
@@ -97,7 +91,7 @@ func parseConfig(params map[string]any) (Config, error) {
 		"entry_tolerance_pips": &c.EntryTolerancePips, "entry_tolerance_atr": &c.EntryToleranceATR,
 		"maximum_entry_distance_atr": &c.MaximumEntryDistanceATR, "invalidation_buffer_atr": &c.InvalidationBufferATR,
 		"target_swing_atr": &c.TargetSwingATR, "minimum_target_room_atr": &c.MinimumTargetRoomATR, "minimum_reward_risk": &c.MinimumRewardRisk,
-		"expiry_hours": &c.ExpiryHours, "pip_size": &c.PipSize, "published_overall_quality": &c.PublishedOverallQuality,
+		"expiry_hours": &c.ExpiryHours, "pip_size": &c.PipSize,
 	}
 	for key, dst := range floats {
 		value, err := strategyutil.Float(params, key)
@@ -178,7 +172,7 @@ func (c Config) validate() error {
 	for name, v := range map[string]float64{
 		"minimum_break_body_ratio": c.MinBreakBodyRatio, "minimum_break_close_strength": c.MinBreakCloseStrength,
 		"rejection_close_strength": c.RejectionCloseStrength, "rejection_wick_ratio": c.RejectionWickRatio,
-		"rejection_body_ratio": c.RejectionBodyRatio, "published_overall_quality": c.PublishedOverallQuality,
+		"rejection_body_ratio": c.RejectionBodyRatio,
 	} {
 		if v < 0 || v > 1 {
 			return fmt.Errorf("break_retest: %s must be within [0,1]", name)

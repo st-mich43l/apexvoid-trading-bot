@@ -49,6 +49,8 @@ type TechniqueDecision struct {
 	ID string
 	// FormedAt/ConfirmedAt time a decision with no reaction (Confirmation nil).
 	FormedAt, ConfirmedAt int64
+	// Score, when set, is the strategy's own quality model (a trendline, a flip); the zone family leaves it nil.
+	Score QualityFunc
 }
 
 // EntryLow/EntryHigh are the published entry band: the proximal clip.

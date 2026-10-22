@@ -20,6 +20,7 @@ import (
 	analysiscontext "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/context"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/quality"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategyutil"
 )
@@ -154,7 +155,7 @@ func (s *Strategy) candidate(ctx *analysiscontext.MarketContext, m5 *analysiscon
 		evidence = append(evidence, "session_liquidity_swept")
 	}
 
-	components := map[string]float64{
+	measurements := map[string]float64{
 		"gap_width_atr":              setup.Gap.WidthATR,
 		"origin_displacement_atr":    setup.Gap.OriginBodyATR,
 		"inversion_body_ratio":       setup.Inversion.BodyRatio,
@@ -176,11 +177,24 @@ func (s *Strategy) candidate(ctx *analysiscontext.MarketContext, m5 *analysiscon
 	// structure_alignment is published only when the engine has a structural read:
 	// an unavailable fact is left out, never filled with a neutral value.
 	if m5.Legacy != nil && (m5.Legacy.Structure == "up" || m5.Legacy.Structure == "down") {
-		components["structure_alignment"] = 0
+		measurements["structure_alignment"] = 0
 		if factors.StructuralAgreement {
-			components["structure_alignment"] = 1
+			measurements["structure_alignment"] = 1
 		}
 	}
+	model := quality.New(QualityModel)
+	for name, value := range measurements {
+		model.Measure(name, value)
+	}
+	qc := qualityContext{htfAligned: factors.HTFAligned}
+	if m5.Legacy != nil {
+		qc.bars, qc.localTrend = m5.Legacy.Bars, m5.Legacy.Structure
+	}
+	if d, ok := strategyutil.NewLegacyDetector(ctx, market.M5, setup.Direction, s.detector); ok {
+		qc.choch = d.RecentCHoCH(maxInt(1, s.detector.ReactionLookbackBars))
+		qc.price = d.Price
+	}
+	s.score(model, setup, qc)
 	pattern := "strong_reclaim"
 	if setup.WickRejection {
 		pattern = "wick_rejection"
@@ -193,10 +207,8 @@ func (s *Strategy) candidate(ctx *analysiscontext.MarketContext, m5 *analysiscon
 		Invalidation: setup.Stop, InvalidationLabel: "ifvg_inversion_failed",
 		Target: setup.Target, TargetLabel: "opposing_structure",
 		Evidence: evidence,
-		// Overall keeps the scale live arbitration has always seen for this
-		// strategy: the confluence stars out of three. The measured quality is in
-		// Components.
-		Quality:  opportunity.StrategyQuality{Overall: strategyutil.Clamp01(float64(score.SelectedStars) / 3), Components: components},
+		// Overall is the mean of the score_* dimensions (QualityModel); the confluence stars stay in DetectorConfluence as a diagnostic.
+		Quality:  opportunity.StrategyQuality{Overall: model.Overall(), Components: model.Components()},
 		FormedAt: setup.Inversion.Time, ConfirmedAt: setup.ConfirmedAt,
 		ExpiryHours: s.cfg.ExpiryHours, Fingerprint: s.fingerprint,
 	})
@@ -224,4 +236,11 @@ func confluenceContext(score confluence.Score) *opportunity.ConfluenceContext {
 			StructuralAgreement: score.Factors.StructuralAgreement, FibTouch: score.Factors.FibTouch, CHoCH: score.Factors.CHoCH,
 		},
 	}
+}
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }

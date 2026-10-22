@@ -16,9 +16,9 @@ and every intentional difference from the Python detector.
   Order Block or the canonical zone chain. It reads only closed M5 candles plus the
   engine's HTF alignment, M5 structure bias and confluence rubric as *measured
   evidence*.
-- **Contract version**: `v3`. `Quality.Overall` keeps the scale live arbitration has
-  always seen (confluence stars out of three); the measured quality is in
-  `Quality.Components` ([Quality](#quality-and-arbitration)).
+- **Contract version**: `v3`. `Quality.Overall` is the mean of nine
+  `score_*` dimensions (`ifvg.quality.v1`, [quality-scoring.md](quality-scoring.md)); the stars are a diagnostic
+  ([Quality](#quality-and-arbitration)).
 
 ## Q2: measured session context and the causal inversion proof
 
@@ -197,8 +197,8 @@ risk           = entry_high - stop
 
 ## Quality and arbitration
 
-`Quality.Overall = stars / 3`, exactly the scale v2 published; only the *inputs* of the
-stars are now measured:
+`Quality.Overall` is no longer `stars / 3`: it is the mean of the `score_*` dimensions of `ifvg.quality.v1`
+([quality-scoring.md](quality-scoring.md)). The *inputs* of the confluence stars (a diagnostic and the floor) are measured:
 
 | Factor | Measured as |
 |---|---|
