@@ -492,6 +492,8 @@ func (p *OpportunityPublisher) Run(ctx context.Context) {
 				"reaction_pattern", reactionPattern, "touch_at", touchAt, "confirmation_at", confirmationAt,
 				"htf_relationship", htfRelationship, "session_context", sessionContext, "confluence_stars", confluence,
 				"invalidation_price", candidate.Invalidation.Price, "invalidation_reason", candidate.Invalidation.Label,
+				"quality_overall", candidate.Quality.Overall, "quality_components", candidate.Quality.Components,
+				"config_version", candidate.Provenance.ConfigVersion, "config_fingerprint", candidate.Provenance.ConfigFingerprint,
 			)
 		}
 		p.ackFront(job)

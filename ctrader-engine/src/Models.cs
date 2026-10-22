@@ -306,6 +306,11 @@ public sealed record AutoTradeEvent(
   // result, and the two differ whenever runners exit below the archived target.
   decimal? VolumeWeightedPips = null,
   decimal? RiskPips = null,
+  // The initial risk the group's pips are measured against, volume-weighted over the same filled
+  // legs as VolumeWeightedPips: sum(filled volume x |fill - original stop|) / filled volume, in pips.
+  // VolumeWeightedPips / VolumeWeightedRiskPips is the group's net R; RiskPips is one reference
+  // fill (the card's convention) and does not weight a small risk leg like the pips do.
+  decimal? VolumeWeightedRiskPips = null,
   int? ConfluenceV1 = null,
   int? ConfluenceV2 = null,
   double? ConfluenceV2Raw = null,
