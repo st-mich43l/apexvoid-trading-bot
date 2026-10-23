@@ -1,0 +1,230 @@
+[
+{
+"record": {
+"symbol": "XAU",
+"strategy": "supply",
+"direction": "SELL",
+"eval_time": 1789575300,
+"expires_at": 1789661400,
+"entry_low": 4350.07,
+"entry_high": 4355.07,
+"invalidation": 4360.66,
+"floor_pips": 50,
+"cap_pips": 70,
+"id": "opp_5a5e1aef5aab8f43f4390e32b170ab09d557a7761dc9eddc7f6f97c98c41e73a"
+},
+"go": {
+"result": "not_executable",
+"r": 0
+}
+},
+{
+"record": {
+"symbol": "GBPJPY",
+"strategy": "supply",
+"direction": "SELL",
+"eval_time": 1792033800,
+"expires_at": 1792119900,
+"entry_low": 208.827,
+"entry_high": 209.012,
+"invalidation": 209.056,
+"floor_pips": 22,
+"cap_pips": 35,
+"id": "opp_d2e9f860efc0746fcb8db5a9880d3497e354cd116235663ef6112dcfc063da29"
+},
+"go": {
+"result": "stop",
+"r": -0.9999999999999948
+}
+},
+{
+"record": {
+"symbol": "EURUSD",
+"strategy": "order_block",
+"direction": "BUY",
+"eval_time": 1792108200,
+"expires_at": 1792194300,
+"entry_low": 1.12136,
+"entry_high": 1.12143,
+"invalidation": 1.12128,
+"floor_pips": 12,
+"cap_pips": 20,
+"id": "opp_31be0b1e21a8c03fb962481008e93c44127c32e3ddfafcd3871fdd63e6103148"
+},
+"go": {
+"result": "target",
+"r": 1.5
+}
+},
+{
+"record": {
+"symbol": "EURUSD",
+"strategy": "demand",
+"direction": "BUY",
+"eval_time": 1791430500,
+"expires_at": 1791516600,
+"entry_low": 1.11973,
+"entry_high": 1.12022,
+"invalidation": 1.11962,
+"floor_pips": 12,
+"cap_pips": 20,
+"id": "opp_9d17e7f8ad1dc71c17094a530c54b2100ae8afc65dee44455a4d79beb5d8fe8f"
+},
+"go": {
+"result": "stop",
+"r": -1.0000000000000748
+}
+},
+{
+"record": {
+"symbol": "USDJPY",
+"strategy": "supply",
+"direction": "SELL",
+"eval_time": 1792497000,
+"expires_at": 1792583100,
+"entry_low": 158.107,
+"entry_high": 158.195,
+"invalidation": 158.213,
+"floor_pips": 18,
+"cap_pips": 28,
+"id": "opp_edaac5b0cad66a185e872cce7908e15a47cf4f549b79facf7d271859af4e6587"
+},
+"go": {
+"result": "stop_be",
+"r": 0.5
+}
+},
+{
+"record": {
+"symbol": "XAU",
+"strategy": "key_level",
+"direction": "BUY",
+"eval_time": 1792047000,
+"expires_at": 1792133100,
+"entry_low": 4133.19,
+"entry_high": 4136.81,
+"invalidation": 4131.43,
+"floor_pips": 50,
+"cap_pips": 70,
+"id": "opp_594a90a89f70e030d2b98d73d28bfb8f71f1797c9a2cb2ffcb701f8bb75821c5"
+},
+"go": {
+"result": "target",
+"r": 2.2
+}
+},
+{
+"record": {
+"symbol": "GBPJPY",
+"strategy": "supply",
+"direction": "SELL",
+"eval_time": 1791405300,
+"expires_at": 1791491400,
+"entry_low": 208.797,
+"entry_high": 208.86,
+"invalidation": 208.879,
+"floor_pips": 22,
+"cap_pips": 35,
+"id": "opp_e9a46d2f9bb018b5d4dc05a8d4db51e5163a0ccbb3fcd4da2af220a243c121d9"
+},
+"go": {
+"result": "target",
+"r": 1.5
+}
+},
+{
+"record": {
+"symbol": "EURUSD",
+"strategy": "demand",
+"direction": "BUY",
+"eval_time": 1792414500,
+"expires_at": 1792500600,
+"entry_low": 1.12033,
+"entry_high": 1.12183,
+"invalidation": 1.11844,
+"floor_pips": 12,
+"cap_pips": 20,
+"id": "opp_9be107dda8ef02c09827bea89c9cba32bdf1e7380e61924b54e9b00b2e5089cd"
+},
+"go": {
+"result": "not_executable",
+"r": 0
+}
+},
+{
+"record": {
+"symbol": "XAU",
+"strategy": "fvg",
+"direction": "BUY",
+"eval_time": 1792665600,
+"expires_at": 1792751700,
+"entry_low": 4088.26,
+"entry_high": 4090.53,
+"invalidation": 4086.52,
+"floor_pips": 50,
+"cap_pips": 70,
+"id": "opp_092e88c7bd4defe3e9b7a333db2920707355d228db82c80a3f2da1efd044bba2"
+},
+"go": {
+"result": "stop",
+"r": -1
+}
+},
+{
+"record": {
+"symbol": "XAU",
+"strategy": "key_level",
+"direction": "SELL",
+"eval_time": 1792369200,
+"expires_at": 1792455300,
+"entry_low": 4177.54,
+"entry_high": 4180.95,
+"invalidation": 4182.53,
+"floor_pips": 50,
+"cap_pips": 70,
+"id": "opp_f7bf14b36d217e53ad3ab187d4da3c290f9340719c60abde7eb3062eb9ea60f3"
+},
+"go": {
+"result": "stop_be",
+"r": 0.8
+}
+},
+{
+"record": {
+"symbol": "GBPJPY",
+"strategy": "fvg",
+"direction": "BUY",
+"eval_time": 1792517400,
+"expires_at": 1792603500,
+"entry_low": 211.582,
+"entry_high": 211.606,
+"invalidation": 211.56,
+"floor_pips": 22,
+"cap_pips": 35,
+"id": "opp_bc764a3a15915f8c4e6d786168565fe818ba385f1896104c4800ea8b98648a42"
+},
+"go": {
+"result": "stop_be",
+"r": 0.5
+}
+},
+{
+"record": {
+"symbol": "GBPUSD",
+"strategy": "confluence_zone",
+"direction": "SELL",
+"eval_time": 1790866500,
+"expires_at": 1790909400,
+"entry_low": 1.32242,
+"entry_high": 1.32304,
+"invalidation": 1.32395,
+"floor_pips": 15,
+"cap_pips": 25,
+"id": "opp_b09d63b52b9aff7785811b579fdbf8154e5e43915ad77e6b395070ba55fe99e4"
+},
+"go": {
+"result": "unfilled",
+"r": 0
+}
+}
+]

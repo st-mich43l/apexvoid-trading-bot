@@ -451,6 +451,55 @@ async def test_a_plan_with_nothing_in_the_way_records_that(h, prod):
   assert (await _published_executable_room(prod))["classification"] == "no_opposing_barrier"
 
 
+@pytest.mark.asyncio
+async def test_a_published_plan_leaves_a_durable_snapshot_that_outlives_the_redis_lifecycle(h, prod, sql):
+  """The plan-time evidence is in PostgreSQL, keyed by the plan id the fills and the result carry, and does not depend on the lifecycle list."""
+  from app.autotrade.go_zone_book import go_zone_book_key
+
+  match = await _go_origin_key_level_match(h, prod)
+  wall = {"side": "sell", "low": 4372.0, "high": 4380.0, "tier": "zone", "score": 0.8, "touches": 1, "source_timeframes": ["M15"]}
+  await prod.set(go_zone_book_key("XAU"), json.dumps({"symbol": "XAU", "generated_at": int(time.time()), "entries": [], "barriers": [wall]}))
+  plan_id = await worker._publish_trade_plan_v8(prod, "XAU", _spot(4354.1, 4354.3), match, frames={})
+  assert plan_id is not None
+  room = await _published_executable_room(prod)
+
+  row = await sql.row("SELECT * FROM auto_trade_plan_snapshots WHERE plan_id = $1", plan_id)
+  assert row["opportunity_id"] == match.match_id.removeprefix("go_") and row["symbol"] == "XAU" and row["strategy"] == match.strategy
+  assert row["direction"] == match.direction and row["entry_route"] and row["planned_entry_price"] > 0
+  assert row["final_stop_pips"] >= row["technical_stop_pips"] > 0 and row["stop_widening_ratio"] >= 1.0
+  assert row["barrier_present"] is True and (row["barrier_low"], row["barrier_high"], row["barrier_side"]) == (4372.0, 4380.0, "sell")
+  assert row["room_r"] == pytest.approx(room["room_r"], abs=1e-3) and row["room_classification"] == room["classification"]
+  assert len(json.loads(row["targets"])) >= 2 and json.loads(row["plan"])["plan_id"] == plan_id
+  assert row["admitted_at"] > 0 and row["execution_cost_pips"] is not None and row["spot_bid"] == 4354.1 and row["spot_ask"] == 4354.3
+
+  # the Redis lifecycle expires (about six days in production): the evidence does not
+  for key in await prod.keys("auto_trade:lifecycle:*"):
+    await prod.delete(key)
+  assert await sql.val("SELECT count(*) FROM auto_trade_plan_snapshots WHERE plan_id = $1", plan_id) == 1
+  assert (await sql.val("SELECT room_classification FROM auto_trade_plan_snapshots WHERE plan_id = $1", plan_id)) == room["classification"]
+
+
+@pytest.mark.asyncio
+async def test_publishing_the_same_plan_again_does_not_write_a_second_snapshot(h, prod, sql):
+  match = await _go_origin_key_level_match(h, prod)
+  first = await worker._publish_trade_plan_v8(prod, "XAU", _spot(4354.1, 4354.3), match, frames={})
+  again = await worker._publish_trade_plan_v8(prod, "XAU", _spot(4354.1, 4354.3), match, frames={})
+  assert first is not None and again == first
+  assert await sql.val("SELECT count(*) FROM auto_trade_plan_snapshots") == 1
+
+
+@pytest.mark.asyncio
+async def test_a_snapshot_that_cannot_be_written_never_blocks_the_plan(h, prod, sql, monkeypatch):
+  async def _down(_snapshot):
+    raise ConnectionError("postgres unavailable")
+
+  monkeypatch.setattr(worker, "record_plan_snapshot", _down)
+  match = await _go_origin_key_level_match(h, prod)
+  plan_id = await worker._publish_trade_plan_v8(prod, "XAU", _spot(4354.1, 4354.3), match, frames={})
+  assert plan_id is not None and len(await plans(prod)) == 1
+  assert await sql.val("SELECT count(*) FROM auto_trade_plan_snapshots") == 0
+
+
 async def _go_origin_key_level_match(h, prod):
   await h.activate(scope="key_level")
   await h._ensure()
