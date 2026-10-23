@@ -496,6 +496,66 @@ async def init_db() -> None:
     ):
       await db.execute(stmt)
 
+    # Immutable plan-time evidence (app.autotrade.plan_snapshot): one row per published TradePlan, written once and never updated. plan_id equals the
+    # group_id of auto_trade_fills / auto_trade_results; opportunity_id joins to analysis_opportunity_events. Additive: nothing reads it back to decide.
+    await db.execute(
+      """
+      CREATE TABLE IF NOT EXISTS auto_trade_plan_snapshots (
+        plan_id TEXT PRIMARY KEY,
+        opportunity_id TEXT NOT NULL,
+        match_id TEXT,
+        thesis_id TEXT,
+        symbol TEXT NOT NULL,
+        strategy TEXT,
+        direction TEXT,
+        opportunity_created_at BIGINT,
+        admitted_at BIGINT NOT NULL,
+        snapshot_version SMALLINT NOT NULL,
+        quality_model_version INTEGER,
+        quality_overall DOUBLE PRECISION,
+        config_fingerprint TEXT,
+        analysis_engine_version TEXT,
+        technical_entry_low DOUBLE PRECISION,
+        technical_entry_high DOUBLE PRECISION,
+        technical_invalidation DOUBLE PRECISION,
+        technical_stop_pips DOUBLE PRECISION,
+        technical_targets_pips JSONB,
+        entry_route TEXT,
+        planned_entry_price DOUBLE PRECISION,
+        final_stop_price DOUBLE PRECISION,
+        final_stop_pips DOUBLE PRECISION,
+        stop_widening_ratio DOUBLE PRECISION,
+        stop_adjustment TEXT,
+        executable_quote DOUBLE PRECISION,
+        spot_bid DOUBLE PRECISION,
+        spot_ask DOUBLE PRECISION,
+        spot_spread_pips DOUBLE PRECISION,
+        spot_ts BIGINT,
+        execution_cost_pips DOUBLE PRECISION,
+        max_spread_ticks INTEGER,
+        max_slippage_ticks INTEGER,
+        targets JSONB,
+        barrier_present BOOLEAN,
+        barrier_side TEXT,
+        barrier_low DOUBLE PRECISION,
+        barrier_high DOUBLE PRECISION,
+        barrier_tier TEXT,
+        barrier_members JSONB,
+        raw_room_pips DOUBLE PRECISION,
+        usable_room_pips DOUBLE PRECISION,
+        room_r DOUBLE PRECISION,
+        room_classification TEXT,
+        quality_components JSONB,
+        admission JSONB NOT NULL,
+        plan JSONB NOT NULL
+      )
+      """
+    )
+    await db.execute(
+      "CREATE INDEX IF NOT EXISTS idx_auto_trade_plan_snapshots_opportunity "
+      "ON auto_trade_plan_snapshots(opportunity_id)"
+    )
+
     await db.execute(
       """
       CREATE TABLE IF NOT EXISTS signal_posts (
@@ -2041,6 +2101,45 @@ async def _record_auto_trade_result(event: dict) -> None:
       planned_reward_risk, target_room_fallback_used, exit_path,
       realized_pips, risk_pips, weighted_risk_pips, net_r, result_method,
     )
+
+
+_PLAN_SNAPSHOT_JSON = frozenset({
+  "technical_targets_pips", "targets", "barrier_members", "quality_components", "admission", "plan",
+})
+_PLAN_SNAPSHOT_COLUMNS = (
+  "plan_id", "opportunity_id", "match_id", "thesis_id", "symbol", "strategy", "direction", "opportunity_created_at", "admitted_at",
+  "snapshot_version", "quality_model_version", "quality_overall", "config_fingerprint", "analysis_engine_version", "technical_entry_low",
+  "technical_entry_high", "technical_invalidation", "technical_stop_pips", "technical_targets_pips", "entry_route", "planned_entry_price",
+  "final_stop_price", "final_stop_pips", "stop_widening_ratio", "stop_adjustment", "executable_quote", "spot_bid", "spot_ask",
+  "spot_spread_pips", "spot_ts", "execution_cost_pips", "max_spread_ticks", "max_slippage_ticks", "targets", "barrier_present", "barrier_side",
+  "barrier_low", "barrier_high", "barrier_tier", "barrier_members", "raw_room_pips", "usable_room_pips", "room_r", "room_classification",
+  "quality_components", "admission", "plan",
+)
+
+
+async def record_plan_snapshot(snapshot: dict) -> bool:
+  """Persist the plan-time evidence once. Idempotent and immutable: a re-delivery, a restart or a second publish of the same plan leaves the
+  first row untouched (``ON CONFLICT DO NOTHING``). Returns True when a row was written."""
+  values = []
+  for name in _PLAN_SNAPSHOT_COLUMNS:
+    value = snapshot.get(name)
+    if name in _PLAN_SNAPSHOT_JSON:
+      # admission and plan are NOT NULL; every other JSON column stays SQL NULL when the measurement was unavailable.
+      if value is None and name in {"admission", "plan"}:
+        value = {}
+      value = None if value is None else json.dumps(value, sort_keys=True)
+    values.append(value)
+  placeholders = ", ".join(
+    f"${i}::jsonb" if name in _PLAN_SNAPSHOT_JSON else f"${i}"
+    for i, name in enumerate(_PLAN_SNAPSHOT_COLUMNS, start=1)
+  )
+  async with _connect() as db:
+    status = await db.execute(
+      f"INSERT INTO auto_trade_plan_snapshots ({', '.join(_PLAN_SNAPSHOT_COLUMNS)}) VALUES ({placeholders}) "
+      "ON CONFLICT (plan_id) DO NOTHING",
+      *values,
+    )
+  return _rowcount(status) == 1
 
 
 # ---------------------------------------------------------------------------

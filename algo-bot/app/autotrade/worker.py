@@ -162,7 +162,8 @@ from app.autotrade.reaction_identity import (
 from app.autotrade.range_context import WORKER_SNAPSHOT_TTL_SECONDS
 from app.core.config import runtime_config
 from app.runtime.price_identity import price_token
-from app.persistence.store import event_in_window, nearest_currency_event
+from app.persistence.store import event_in_window, nearest_currency_event, record_plan_snapshot
+from app.autotrade.plan_snapshot import build_plan_snapshot
 from app.marketdata.ohlc import RedisOHLCSource, window_for_timeframe
 
 
@@ -2550,6 +2551,27 @@ async def _publish_trade_plan_v8(
     )
   except (KeyError, TypeError, ValueError, ZeroDivisionError):
     executable_room = None
+  # Durable plan-time evidence (the lifecycle list below expires). Written once, never read back by admission or execution: a failure here
+  # is counted and logged, it never blocks or undoes the plan that is already on the stream.
+  try:
+    await record_plan_snapshot(
+      build_plan_snapshot(
+        plan=plan,
+        match=match,
+        opportunity_id=opportunity_id_for_match_id(match.match_id),
+        admitted_at=now_ts,
+        gate_measured=gate_measured,
+        target_room=target_room,
+        executable_room=executable_room,
+        spot=spot,
+        executable_quote=entry_reference,
+        execution_cost_pips=float(runtime_config.execution.policy.execution_cost_pips),
+        pip_size=float(units.pip_size(symbol)),
+      )
+    )
+  except Exception:
+    log.exception("v8 plan snapshot not persisted plan_id=%s", plan.plan_id)
+    await increment_metric(client, "plan_snapshot_failed", symbol=symbol)
   await emit_lifecycle(
     client,
     "candidate_published",
