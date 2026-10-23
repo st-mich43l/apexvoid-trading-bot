@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
@@ -29,6 +30,11 @@ import (
 
 // Prefix marks a component as a scored dimension.
 const Prefix = "score_"
+
+// ModelVersionKey is the component that names the scoring rule's version on the wire. It is provenance, not a measurement and not a
+// dimension: it never enters Overall, and a consumer that joins an opportunity to its outcome reads it to know which rule produced the
+// score ("<strategy>.quality.v1" is published as 1). A rule whose name carries no ".v<N>" suffix publishes none.
+const ModelVersionKey = "quality_model_version"
 
 // Model accumulates the dimensions and measurements of one opportunity.
 type Model struct {
@@ -60,6 +66,9 @@ func (m *Model) Score(name string, value float64) {
 // Measure records a raw measurement (not scored, never part of Overall). Non-finite values are dropped, not zeroed: an
 // unavailable measurement is left out rather than published as a number.
 func (m *Model) Measure(name string, value float64) {
+	if name == ModelVersionKey {
+		panic(fmt.Sprintf("quality: %q is published by the model itself", name))
+	}
 	if strings.HasPrefix(name, Prefix) {
 		panic(fmt.Sprintf("quality: measurement %q uses the dimension prefix", name))
 	}
@@ -80,11 +89,27 @@ func (m *Model) Overall() float64 {
 	return sum / float64(len(m.order))
 }
 
-// Components is the published map: every dimension (score_*) and every measurement.
+// Version is the number in the model name's ".v<N>" suffix, and whether the name has one.
+func (m *Model) Version() (int, bool) {
+	i := strings.LastIndex(m.name, ".v")
+	if i < 0 {
+		return 0, false
+	}
+	n, err := strconv.Atoi(m.name[i+2:])
+	if err != nil || n < 1 {
+		return 0, false
+	}
+	return n, true
+}
+
+// Components is the published map: every dimension (score_*), every measurement and the model version (provenance).
 func (m *Model) Components() map[string]float64 {
-	out := make(map[string]float64, len(m.dimensions)+len(m.measurements))
+	out := make(map[string]float64, len(m.dimensions)+len(m.measurements)+1)
 	for k, v := range m.measurements {
 		out[k] = v
+	}
+	if version, ok := m.Version(); ok {
+		out[ModelVersionKey] = float64(version)
 	}
 	for k, v := range m.dimensions {
 		out[k] = v
