@@ -133,7 +133,7 @@ Containment is reversible by removing the name. Nothing re-enables itself.
 
 ## Quality
 
-`Quality.Overall` is a strategy-specific technical score (mean of documented `score_*` dimensions, in [0, 1]), informational only: see [quality-scoring.md](quality-scoring.md) and its outcome validation [q53-quality-expectancy.md](q53-quality-expectancy.md) (no positive separation). It is not a probability, it is not used for ranking (`quality_ranking: false`) and the confluence stars (`min_confluence`) remain the only quality-based gate.
+`Quality.Overall` is a strategy-specific technical score (mean of documented `score_*` dimensions, in [0, 1]), informational only: see [quality-scoring.md](quality-scoring.md) and its outcome validation [q53-quality-expectancy.md](q53-quality-expectancy.md) (no positive separation). It is not a probability, it is not used for ranking (`quality_ranking: false`) and the confluence stars (`min_confluence`) remain the only quality-based gate. Whether the room in front of an admitted plan, read in R of the executable stop, should gate admission was evaluated and is not supported: [q54-executable-room.md](q54-executable-room.md).
 
 ## Common candidate contract
 

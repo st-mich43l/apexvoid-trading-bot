@@ -13,6 +13,7 @@ dated section after deployment.
 ## Unreleased
 
 ### Fixed
+- Q5.4 executable opportunity quality (investigation, **no runtime change**): technical against executable geometry from the Go invalidation to the room in front of the widened-stop ladder. Of 2,694 replayed FX opportunities the worker would admit, the stop floor binds on 90%, Go's first target lies inside 1R of the executable stop on 65% and the nearest buffered barrier inside 1R on 37%; but the trades each candidate rule would remove did no worse than the ones it keeps (removed minus kept +0.04 R [-0.10, +0.17] for barrier room < 1R, +0.08 R [-0.09, +0.25] for first target < 1R, resolvable about 0.2 R), so no executable-feasibility gate is proposed and `executable_room` stays advisory. No confirmed defect; `fixed_rr_room_insufficient` remains an unreachable branch (fallback unused since 2026-10-14). Adds the offline evaluation `algo-bot/tools/q54_executable_room.py`, fixtures for the stop floor and room geometry, and `docs/strategies/q54-executable-room.md` with the forward-evidence plan.
 - Q5.3 quality expectancy validation (`docs/strategies/q53-quality-expectancy.md`, tools `algo-bot/tools/q53_quality_forward.py` and `q53_lineage.py`): the frozen model-v1
   score on a window it had never seen (2026-10-19 to 22, five new captures) separates outcomes by -0.133 R [-0.285, +0.047] (-0.087 [-0.157, -0.017] over all 4,597
   opportunities), the traded groups carry 13 model-v1 scores (7 with a fill-derived R) and cannot validate it, technical reward:risk overstates the executable one on FX
