@@ -212,3 +212,42 @@ func TestFirstVisitIsWhereALevelsLifeBegins(t *testing.T) {
 		t.Fatalf("closes before the first visit must not count, got %d", got)
 	}
 }
+
+func TestTheModelVersionIsPublishedAsProvenanceAndNeverScored(t *testing.T) {
+	m := New("key_level.quality.v1")
+	m.Score("a", 0.2)
+	m.Score("b", 0.6)
+	m.Measure("raw_distance_atr", 1.5)
+	c := m.Components()
+	if c[ModelVersionKey] != 1 {
+		t.Fatalf("the model version must be published: %v", c)
+	}
+	if math.Abs(m.Overall()-0.4) > 1e-12 {
+		t.Fatalf("the version must not enter Overall: %v", m.Overall())
+	}
+	if err := Verify(m.Overall(), c); err != nil {
+		t.Fatalf("a published map with its version must still verify: %v", err)
+	}
+	for name, want := range map[string]int{"supply.resting.quality.v1": 1, "crt.quality.v12": 12} {
+		if got, ok := New(name).Version(); !ok || got != want {
+			t.Errorf("%s: version %d %v, want %d", name, got, ok, want)
+		}
+	}
+	for _, name := range []string{"crt.quality", "crt.quality.vx", "crt.quality.v0", ""} {
+		if v, ok := New(name).Version(); ok {
+			t.Errorf("%q has no version suffix but reported %d", name, v)
+		}
+		if _, published := New(name).Components()[ModelVersionKey]; published {
+			t.Errorf("%q must not publish a version it does not have", name)
+		}
+	}
+}
+
+func TestAMeasurementCannotImpersonateTheModelVersion(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatalf("a measurement named like the version must be refused")
+		}
+	}()
+	New("x.quality.v1").Measure(ModelVersionKey, 7)
+}
