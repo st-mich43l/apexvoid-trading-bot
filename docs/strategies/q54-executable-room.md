@@ -1,7 +1,7 @@
 # Q5.4: executable opportunity quality and target-room validation
 
 Baseline: `master` at `5e555c1e` (#806). Production runs image `5e555c1` (all three services started 2026-10-22 14:35 UTC, checked 2026-10-23). The replay uses the 22 committed
-production captures that #807 (Q5.3, open, CI green, mergeable) extends to 2026-10-22; this change adds new files only and touches nothing #807 touches.
+production captures, which Q5.3 (#807, merged) extends to 2026-10-22; this change adds new files only.
 **Nothing about admission, scores, stops, ladders, thresholds, enablement or sizing changed.**
 
 ## 0. Answer
@@ -138,7 +138,7 @@ Replay, removed minus kept, mean hypothetical R. mde80 is the smallest effect th
 ## 7. Reproduce
 
 ```
-# replay records, worker room decisions, matched random baseline (checkout of #807 for the Oct 22 captures, or master for 17 captures)
+# replay records, worker room decisions, matched random baseline (master now includes the Oct 22 captures)
 cd analysis-engine && AEQ_DUMP=/tmp/aeq go test ./test/aequality -run TestReplayAllStrategies
                       AEQ_RANDOM_OUT=/tmp/aeq go test ./test/aequality -run TestMatchedRandomBaseline
                       F7_DECISIONS_DIR=/tmp/dec F7_CAPTURES=<capture names> go test ./test/f7barrier -run TestDumpDecisionInputs
@@ -153,7 +153,7 @@ Results: [q54-executable-room-results.json](q54-executable-room-results.json). T
 ## 8. Before and after, tests, next
 
 * **Admission before and after: identical by construction** (no admission code changed). The replay dataset: 17,632 records, 17,003 with a room decision, 8,512 admitted, 3,312 filled and thinned observations (2,694 FX, 618 XAU). The 629 records without a room decision are scalps that own their room (`bypasses_opposing_structure_gates`) and are outside this evaluation.
-* **Tests run:** `go build`, `go vet` and `go test ./...` are unaffected (no Go file changed; the replay was run on #807's tree); full Python suite 2,035 passed; C# unchanged.
+* **Tests run:** `go build`, `go vet` and `go test ./...` are unaffected (no Go file changed; the replay was run on #807's tree, now master); full Python suite 2,035 passed; C# unchanged.
 * **Purge.** Reviewed for tools and documents that only supported a finished PR: none is eligible (the arbitration, calibration, ground-truth and F-7 tools and documents are cited from live code comments or other documents).
 * **Q5.5.** (1) Run the forward evaluation of section 6 once `executable_room` has accumulated; (2) decide whether the plan-time room should be persisted with the closed group (a nullable column fed from the plan,
   an additive change) so the realized evaluation does not depend on a six-day Redis list; (3) investigate why the admitted FX book is below random entries (-0.07 R), starting with the strategies sitting on the floor, and whether the replay's
