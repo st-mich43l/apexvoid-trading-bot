@@ -95,7 +95,7 @@ What was corrected before the outcomes were read, from input distributions only 
 * Most strategies have too few setups for a quality ordering to be resolvable (CRT 1, Impulse Pullback 1, Trendline 7, Fade Scalp 20, Flip Zone 26). Key Level (1,371 thinned) is the only strategy with a usable sample, and it shows nothing.
 * Dimension ranges are documented judgements about the setups' natural scales (the strategy's own thresholds and the 5-minute 12-hour window), not fitted values. They are frozen in model v1.
 * The score is not a probability and has not been calibrated to one.
-* The model name is not on the wire; consumers cannot yet distinguish v1 from the earlier `stars / 3`.
+* The model version is on the wire from Q5.3 as `quality_model_version` in the components (a provenance number, not a dimension); envelopes before it are told apart by the presence of `score_*`. The outcome evidence for the score is in [q53-quality-expectancy.md](q53-quality-expectancy.md): a frozen forward window and the traded groups, again no positive separation.
 
 ## 8. Live behaviour
 

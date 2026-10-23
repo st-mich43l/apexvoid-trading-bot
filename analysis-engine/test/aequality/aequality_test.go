@@ -51,6 +51,12 @@ var captures = []capture{
 	{"GBPJPY early", "GBPJPY", "replay-gbpjpy-production-capture-20261006.json"},
 	{"GBPJPY", "GBPJPY", "replay-gbpjpy-production-capture-20261013.json"},
 	{"GBPJPY Oct 14", "GBPJPY", "replay-gbpjpy-production-capture-20261014.json"},
+	// 2026-10-22: the closed bars of the following week, captured after the Q4 scoring rule was frozen and evaluated.
+	{"XAU Oct 22", "XAU", "replay-xau-production-capture-20261022.json"},
+	{"EURUSD Oct 22", "EURUSD", "replay-eurusd-production-capture-20261022.json"},
+	{"GBPUSD Oct 22", "GBPUSD", "replay-gbpusd-production-capture-20261022.json"},
+	{"USDJPY Oct 22", "USDJPY", "replay-usdjpy-production-capture-20261022.json"},
+	{"GBPJPY Oct 22", "GBPJPY", "replay-gbpjpy-production-capture-20261022.json"},
 }
 
 var pipSize = map[string]float64{"XAU": 0.1, "EURUSD": 0.0001, "GBPUSD": 0.0001, "USDJPY": 0.01, "GBPJPY": 0.01}
@@ -646,6 +652,9 @@ func TestNoStrategyAssertsAConstantAsAMeasurement(t *testing.T) {
 	for _, r := range replayAll(t) {
 		counts[r.Strategy]++
 		for name, v := range r.Components {
+			if name == quality.ModelVersionKey {
+				continue // provenance: the rule's version is constant by design
+			}
 			if values[r.Strategy] == nil {
 				values[r.Strategy] = map[string]map[float64]bool{}
 			}

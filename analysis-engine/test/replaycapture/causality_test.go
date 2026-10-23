@@ -2,6 +2,7 @@ package replaycapture_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"path/filepath"
 	"sort"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/engine"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/indicator"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/replaycapture"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
 	redistransport "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/transport/redis"
@@ -39,7 +41,7 @@ func TestNoStrategyUsesFutureBars(t *testing.T) {
 				return
 			}
 			for _, c := range e.Candidates {
-				key := string(c.Strategy) + "|" + c.ID + "|" + string(e.Timeframe) + "|" + itoa(e.BarTime)
+				key := string(c.Strategy) + "|" + c.ID + "|" + string(e.Timeframe) + "|" + itoa(e.BarTime) + "|" + qualitySignature(c)
 				if c.StructureTimeframe == market.M15 {
 					key += "|m15"
 				}
@@ -192,6 +194,21 @@ func TestOpposingBarrierBookUsesNoFutureBars(t *testing.T) {
 		}
 	}
 	t.Logf("%d barrier books up to the cut compared; %d differ", len(want), differ)
+}
+
+// qualitySignature is the candidate's published score and every component, to nine decimals. A score read from a bar after the cut
+// changes it, so the prefix-invariance check covers what the quality model reads and not only whether the opportunity exists.
+func qualitySignature(c opportunity.Candidate) string {
+	names := make([]string, 0, len(c.Quality.Components))
+	for name := range c.Quality.Components {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	out := fmt.Sprintf("q=%.9f", c.Quality.Overall)
+	for _, name := range names {
+		out += fmt.Sprintf(",%s=%.9f", name, c.Quality.Components[name])
+	}
+	return out
 }
 
 func itoa(v int64) string {
