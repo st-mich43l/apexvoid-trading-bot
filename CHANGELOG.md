@@ -14,6 +14,11 @@ dated section after deployment.
 
 ### Fixed
 - Q5.4 executable opportunity quality (investigation, **no runtime change**): technical against executable geometry from the Go invalidation to the room in front of the widened-stop ladder. Of 2,694 replayed FX opportunities the worker would admit, the stop floor binds on 90%, Go's first target lies inside 1R of the executable stop on 65% and the nearest buffered barrier inside 1R on 37%; but the trades each candidate rule would remove did no worse than the ones it keeps (removed minus kept +0.04 R [-0.10, +0.17] for barrier room < 1R, +0.08 R [-0.09, +0.25] for first target < 1R, resolvable about 0.2 R), so no executable-feasibility gate is proposed and `executable_room` stays advisory. No confirmed defect; `fixed_rr_room_insufficient` remains an unreachable branch (fallback unused since 2026-10-14). Adds the offline evaluation `algo-bot/tools/q54_executable_room.py`, fixtures for the stop floor and room geometry, and `docs/strategies/q54-executable-room.md` with the forward-evidence plan.
+- Q5.3 quality expectancy validation (`docs/strategies/q53-quality-expectancy.md`, tools `algo-bot/tools/q53_quality_forward.py` and `q53_lineage.py`): the frozen model-v1
+  score on a window it had never seen (2026-10-19 to 22, five new captures) separates outcomes by -0.133 R [-0.285, +0.047] (-0.087 [-0.157, -0.017] over all 4,597
+  opportunities), the traded groups carry 13 model-v1 scores (7 with a fill-derived R) and cannot validate it, technical reward:risk overstates the executable one on FX
+  by 1.5 to 3.5x, and no mathematical or causality defect exists, so no formula changed and ranking stays off. The only code change is `quality_model_version`,
+  published in the quality components so an opportunity carries the rule that scored it; the prefix-invariance test now covers the score and every component.
 - Q5.2 technical-validity audit (`docs/architecture/q52-technical-validity-audit.md`): the counter-bias exception in `worker.py` that looked like a bypass of
   `opposing_entry_overlap/contained/major_no_room` could never fire (those codes have non-positive room by construction; largest raw room across 7,268 replayed
   rejections -1.0 pip) and is removed, so a structural rejection is final whatever the setup's bias relation; the `candidate_published` lifecycle entry gains
