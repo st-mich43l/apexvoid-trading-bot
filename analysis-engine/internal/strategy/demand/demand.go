@@ -34,7 +34,7 @@ import (
 const ID strategy.StrategyID = "demand"
 
 // Version is this strategy's own technical-thesis version.
-const Version = "v5"
+const Version = "v6"
 
 const (
 	structureVersion = "v2"

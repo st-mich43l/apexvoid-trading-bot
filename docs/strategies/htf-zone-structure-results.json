@@ -1,0 +1,4355 @@
+{
+ "after": {
+  "all|H1|EURUSD": {
+   "floor_below_min": 16,
+   "n": 117,
+   "overlap_share": 0.48,
+   "overlaps_m5_candidate_within_1h": 56,
+   "patterns": {
+    "engulfing": 27,
+    "rejection_choch": 3,
+    "strong_reclaim": 8,
+    "sweep_reclaim": 51,
+    "wick_rejection": 28
+   },
+   "per_symbol_day": 5.32,
+   "refused_over_cap": 69,
+   "stop_pips_median": 24,
+   "stop_pips_p75": 27.9,
+   "structural_in_budget": 32,
+   "symbol_days": 22
+  },
+  "all|H1|FX": {
+   "floor_below_min": 167,
+   "n": 693,
+   "overlap_share": 0.39,
+   "overlaps_m5_candidate_within_1h": 267,
+   "patterns": {
+    "engulfing": 169,
+    "rejection_choch": 11,
+    "strong_reclaim": 58,
+    "sweep_reclaim": 231,
+    "wick_rejection": 224
+   },
+   "per_symbol_day": 7.88,
+   "refused_over_cap": 354,
+   "stop_pips_median": 26.5,
+   "stop_pips_p75": 35.5,
+   "structural_in_budget": 172,
+   "symbol_days": 88
+  },
+  "all|H1|GBPJPY": {
+   "floor_below_min": 33,
+   "n": 164,
+   "overlap_share": 0.38,
+   "overlaps_m5_candidate_within_1h": 62,
+   "patterns": {
+    "engulfing": 34,
+    "rejection_choch": 3,
+    "strong_reclaim": 12,
+    "sweep_reclaim": 74,
+    "wick_rejection": 41
+   },
+   "per_symbol_day": 7.45,
+   "refused_over_cap": 86,
+   "stop_pips_median": 36.4,
+   "stop_pips_p75": 48,
+   "structural_in_budget": 45,
+   "symbol_days": 22
+  },
+  "all|H1|GBPUSD": {
+   "floor_below_min": 38,
+   "n": 157,
+   "overlap_share": 0.36,
+   "overlaps_m5_candidate_within_1h": 57,
+   "patterns": {
+    "engulfing": 51,
+    "rejection_choch": 3,
+    "strong_reclaim": 8,
+    "sweep_reclaim": 26,
+    "wick_rejection": 69
+   },
+   "per_symbol_day": 7.14,
+   "refused_over_cap": 57,
+   "stop_pips_median": 23.9,
+   "stop_pips_p75": 26.4,
+   "structural_in_budget": 62,
+   "symbol_days": 22
+  },
+  "all|H1|USDJPY": {
+   "floor_below_min": 80,
+   "n": 255,
+   "overlap_share": 0.36,
+   "overlaps_m5_candidate_within_1h": 92,
+   "patterns": {
+    "engulfing": 57,
+    "rejection_choch": 2,
+    "strong_reclaim": 30,
+    "sweep_reclaim": 80,
+    "wick_rejection": 86
+   },
+   "per_symbol_day": 11.59,
+   "refused_over_cap": 142,
+   "stop_pips_median": 29.8,
+   "stop_pips_p75": 36.6,
+   "structural_in_budget": 33,
+   "symbol_days": 22
+  },
+  "all|H1|XAU": {
+   "floor_below_min": 6,
+   "n": 112,
+   "overlap_share": 0.25,
+   "overlaps_m5_candidate_within_1h": 28,
+   "patterns": {
+    "engulfing": 23,
+    "rejection_choch": 5,
+    "strong_reclaim": 16,
+    "sweep_reclaim": 26,
+    "wick_rejection": 42
+   },
+   "per_symbol_day": 4.31,
+   "refused_over_cap": 97,
+   "stop_pips_median": 261.6,
+   "stop_pips_p75": 339.2,
+   "structural_in_budget": 9,
+   "symbol_days": 26
+  },
+  "all|H1|all": {
+   "floor_below_min": 173,
+   "n": 805,
+   "overlap_share": 0.37,
+   "overlaps_m5_candidate_within_1h": 295,
+   "patterns": {
+    "engulfing": 192,
+    "rejection_choch": 16,
+    "strong_reclaim": 74,
+    "sweep_reclaim": 257,
+    "wick_rejection": 266
+   },
+   "per_symbol_day": 7.06,
+   "refused_over_cap": 451,
+   "stop_pips_median": 29.2,
+   "stop_pips_p75": 47.6,
+   "structural_in_budget": 181,
+   "symbol_days": 114
+  },
+  "all|M15|EURUSD": {
+   "floor_below_min": 483,
+   "n": 718,
+   "overlap_share": 0.55,
+   "overlaps_m5_candidate_within_1h": 392,
+   "patterns": {
+    "engulfing": 166,
+    "rejection_choch": 12,
+    "strong_reclaim": 62,
+    "sweep_reclaim": 256,
+    "wick_rejection": 222
+   },
+   "per_symbol_day": 32.64,
+   "refused_over_cap": 65,
+   "stop_pips_median": 9.4,
+   "stop_pips_p75": 13.2,
+   "structural_in_budget": 170,
+   "symbol_days": 22
+  },
+  "all|M15|FX": {
+   "floor_below_min": 2028,
+   "n": 3208,
+   "overlap_share": 0.47,
+   "overlaps_m5_candidate_within_1h": 1498,
+   "patterns": {
+    "engulfing": 712,
+    "rejection_choch": 74,
+    "strong_reclaim": 358,
+    "sweep_reclaim": 1057,
+    "wick_rejection": 1007
+   },
+   "per_symbol_day": 36.45,
+   "refused_over_cap": 401,
+   "stop_pips_median": 13.4,
+   "stop_pips_p75": 21.1,
+   "structural_in_budget": 779,
+   "symbol_days": 88
+  },
+  "all|M15|GBPJPY": {
+   "floor_below_min": 353,
+   "n": 777,
+   "overlap_share": 0.38,
+   "overlaps_m5_candidate_within_1h": 294,
+   "patterns": {
+    "engulfing": 154,
+    "rejection_choch": 18,
+    "strong_reclaim": 98,
+    "sweep_reclaim": 252,
+    "wick_rejection": 255
+   },
+   "per_symbol_day": 35.32,
+   "refused_over_cap": 137,
+   "stop_pips_median": 23.4,
+   "stop_pips_p75": 30.2,
+   "structural_in_budget": 287,
+   "symbol_days": 22
+  },
+  "all|M15|GBPUSD": {
+   "floor_below_min": 617,
+   "n": 786,
+   "overlap_share": 0.47,
+   "overlaps_m5_candidate_within_1h": 371,
+   "patterns": {
+    "engulfing": 183,
+    "rejection_choch": 14,
+    "strong_reclaim": 111,
+    "sweep_reclaim": 239,
+    "wick_rejection": 239
+   },
+   "per_symbol_day": 35.73,
+   "refused_over_cap": 27,
+   "stop_pips_median": 10.5,
+   "stop_pips_p75": 14.4,
+   "structural_in_budget": 142,
+   "symbol_days": 22
+  },
+  "all|M15|USDJPY": {
+   "floor_below_min": 575,
+   "n": 927,
+   "overlap_share": 0.48,
+   "overlaps_m5_candidate_within_1h": 441,
+   "patterns": {
+    "engulfing": 209,
+    "rejection_choch": 30,
+    "strong_reclaim": 87,
+    "sweep_reclaim": 310,
+    "wick_rejection": 291
+   },
+   "per_symbol_day": 42.14,
+   "refused_over_cap": 172,
+   "stop_pips_median": 15.2,
+   "stop_pips_p75": 21.8,
+   "structural_in_budget": 180,
+   "symbol_days": 22
+  },
+  "all|M15|XAU": {
+   "floor_below_min": 79,
+   "n": 796,
+   "overlap_share": 0.34,
+   "overlaps_m5_candidate_within_1h": 269,
+   "patterns": {
+    "engulfing": 170,
+    "rejection_choch": 14,
+    "strong_reclaim": 73,
+    "sweep_reclaim": 274,
+    "wick_rejection": 265
+   },
+   "per_symbol_day": 30.62,
+   "refused_over_cap": 622,
+   "stop_pips_median": 111.4,
+   "stop_pips_p75": 148.9,
+   "structural_in_budget": 95,
+   "symbol_days": 26
+  },
+  "all|M15|all": {
+   "floor_below_min": 2107,
+   "n": 4004,
+   "overlap_share": 0.44,
+   "overlaps_m5_candidate_within_1h": 1767,
+   "patterns": {
+    "engulfing": 882,
+    "rejection_choch": 88,
+    "strong_reclaim": 431,
+    "sweep_reclaim": 1331,
+    "wick_rejection": 1272
+   },
+   "per_symbol_day": 35.12,
+   "refused_over_cap": 1023,
+   "stop_pips_median": 15.8,
+   "stop_pips_p75": 33.9,
+   "structural_in_budget": 874,
+   "symbol_days": 114
+  },
+  "all|M5|EURUSD": {
+   "floor_below_min": 772,
+   "n": 818,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 126,
+    "rejection_choch": 9,
+    "strong_reclaim": 215,
+    "sweep_reclaim": 269,
+    "wick_rejection": 199
+   },
+   "per_symbol_day": 37.18,
+   "refused_over_cap": 1,
+   "stop_pips_median": 5.8,
+   "stop_pips_p75": 8.4,
+   "structural_in_budget": 45,
+   "symbol_days": 22
+  },
+  "all|M5|FX": {
+   "floor_below_min": 2915,
+   "n": 3192,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 536,
+    "rejection_choch": 33,
+    "strong_reclaim": 780,
+    "sweep_reclaim": 1090,
+    "wick_rejection": 753
+   },
+   "per_symbol_day": 36.27,
+   "refused_over_cap": 28,
+   "stop_pips_median": 8.4,
+   "stop_pips_p75": 12.6,
+   "structural_in_budget": 249,
+   "symbol_days": 88
+  },
+  "all|M5|GBPJPY": {
+   "floor_below_min": 605,
+   "n": 687,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 116,
+    "rejection_choch": 8,
+    "strong_reclaim": 181,
+    "sweep_reclaim": 238,
+    "wick_rejection": 144
+   },
+   "per_symbol_day": 31.23,
+   "refused_over_cap": 8,
+   "stop_pips_median": 12.9,
+   "stop_pips_p75": 17.6,
+   "structural_in_budget": 74,
+   "symbol_days": 22
+  },
+  "all|M5|GBPUSD": {
+   "floor_below_min": 816,
+   "n": 849,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 153,
+    "rejection_choch": 7,
+    "strong_reclaim": 201,
+    "sweep_reclaim": 301,
+    "wick_rejection": 187
+   },
+   "per_symbol_day": 38.59,
+   "refused_over_cap": 0,
+   "stop_pips_median": 7.2,
+   "stop_pips_p75": 9.7,
+   "structural_in_budget": 33,
+   "symbol_days": 22
+  },
+  "all|M5|USDJPY": {
+   "floor_below_min": 722,
+   "n": 838,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 141,
+    "rejection_choch": 9,
+    "strong_reclaim": 183,
+    "sweep_reclaim": 282,
+    "wick_rejection": 223
+   },
+   "per_symbol_day": 38.09,
+   "refused_over_cap": 19,
+   "stop_pips_median": 10.7,
+   "stop_pips_p75": 15.3,
+   "structural_in_budget": 97,
+   "symbol_days": 22
+  },
+  "all|M5|XAU": {
+   "floor_below_min": 74,
+   "n": 684,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 71,
+    "rejection_choch": 8,
+    "strong_reclaim": 149,
+    "sweep_reclaim": 276,
+    "wick_rejection": 180
+   },
+   "per_symbol_day": 26.31,
+   "refused_over_cap": 471,
+   "stop_pips_median": 83.7,
+   "stop_pips_p75": 110.2,
+   "structural_in_budget": 139,
+   "symbol_days": 26
+  },
+  "all|M5|all": {
+   "floor_below_min": 2989,
+   "n": 3876,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 607,
+    "rejection_choch": 41,
+    "strong_reclaim": 929,
+    "sweep_reclaim": 1366,
+    "wick_rejection": 933
+   },
+   "per_symbol_day": 34,
+   "refused_over_cap": 499,
+   "stop_pips_median": 9.9,
+   "stop_pips_p75": 18,
+   "structural_in_budget": 388,
+   "symbol_days": 114
+  },
+  "demand|H1|EURUSD": {
+   "floor_below_min": 6,
+   "n": 78,
+   "overlap_share": 0.56,
+   "overlaps_m5_candidate_within_1h": 44,
+   "patterns": {
+    "engulfing": 19,
+    "rejection_choch": 2,
+    "sweep_reclaim": 41,
+    "wick_rejection": 16
+   },
+   "per_symbol_day": 3.55,
+   "refused_over_cap": 61,
+   "stop_pips_median": 24.8,
+   "stop_pips_p75": 30.9,
+   "structural_in_budget": 11,
+   "symbol_days": 22
+  },
+  "demand|H1|FX": {
+   "floor_below_min": 10,
+   "n": 252,
+   "overlap_share": 0.56,
+   "overlaps_m5_candidate_within_1h": 142,
+   "patterns": {
+    "engulfing": 63,
+    "rejection_choch": 5,
+    "sweep_reclaim": 102,
+    "wick_rejection": 82
+   },
+   "per_symbol_day": 2.86,
+   "refused_over_cap": 177,
+   "stop_pips_median": 31.2,
+   "stop_pips_p75": 43.8,
+   "structural_in_budget": 65,
+   "symbol_days": 88
+  },
+  "demand|H1|GBPJPY": {
+   "floor_below_min": 0,
+   "n": 66,
+   "overlap_share": 0.41,
+   "overlaps_m5_candidate_within_1h": 27,
+   "patterns": {
+    "engulfing": 11,
+    "rejection_choch": 2,
+    "sweep_reclaim": 28,
+    "wick_rejection": 25
+   },
+   "per_symbol_day": 3,
+   "refused_over_cap": 36,
+   "stop_pips_median": 40,
+   "stop_pips_p75": 75.3,
+   "structural_in_budget": 30,
+   "symbol_days": 22
+  },
+  "demand|H1|GBPUSD": {
+   "floor_below_min": 1,
+   "n": 32,
+   "overlap_share": 0.63,
+   "overlaps_m5_candidate_within_1h": 20,
+   "patterns": {
+    "engulfing": 13,
+    "sweep_reclaim": 8,
+    "wick_rejection": 11
+   },
+   "per_symbol_day": 1.45,
+   "refused_over_cap": 11,
+   "stop_pips_median": 23.5,
+   "stop_pips_p75": 28.1,
+   "structural_in_budget": 20,
+   "symbol_days": 22
+  },
+  "demand|H1|USDJPY": {
+   "floor_below_min": 3,
+   "n": 76,
+   "overlap_share": 0.67,
+   "overlaps_m5_candidate_within_1h": 51,
+   "patterns": {
+    "engulfing": 20,
+    "rejection_choch": 1,
+    "sweep_reclaim": 25,
+    "wick_rejection": 30
+   },
+   "per_symbol_day": 3.45,
+   "refused_over_cap": 69,
+   "stop_pips_median": 36.2,
+   "stop_pips_p75": 56.4,
+   "structural_in_budget": 4,
+   "symbol_days": 22
+  },
+  "demand|H1|XAU": {
+   "floor_below_min": 0,
+   "n": 29,
+   "overlap_share": 0.48,
+   "overlaps_m5_candidate_within_1h": 14,
+   "patterns": {
+    "engulfing": 6,
+    "rejection_choch": 1,
+    "sweep_reclaim": 8,
+    "wick_rejection": 14
+   },
+   "per_symbol_day": 1.12,
+   "refused_over_cap": 29,
+   "stop_pips_median": 518.2,
+   "stop_pips_p75": 519.7,
+   "structural_in_budget": 0,
+   "symbol_days": 26
+  },
+  "demand|H1|all": {
+   "floor_below_min": 10,
+   "n": 281,
+   "overlap_share": 0.56,
+   "overlaps_m5_candidate_within_1h": 156,
+   "patterns": {
+    "engulfing": 69,
+    "rejection_choch": 6,
+    "sweep_reclaim": 110,
+    "wick_rejection": 96
+   },
+   "per_symbol_day": 2.46,
+   "refused_over_cap": 206,
+   "stop_pips_median": 32.7,
+   "stop_pips_p75": 57,
+   "structural_in_budget": 65,
+   "symbol_days": 114
+  },
+  "demand|M15|EURUSD": {
+   "floor_below_min": 152,
+   "n": 282,
+   "overlap_share": 0.68,
+   "overlaps_m5_candidate_within_1h": 192,
+   "patterns": {
+    "engulfing": 53,
+    "rejection_choch": 7,
+    "strong_reclaim": 24,
+    "sweep_reclaim": 122,
+    "wick_rejection": 76
+   },
+   "per_symbol_day": 12.82,
+   "refused_over_cap": 34,
+   "stop_pips_median": 11.1,
+   "stop_pips_p75": 14,
+   "structural_in_budget": 96,
+   "symbol_days": 22
+  },
+  "demand|M15|FX": {
+   "floor_below_min": 564,
+   "n": 1162,
+   "overlap_share": 0.53,
+   "overlaps_m5_candidate_within_1h": 617,
+   "patterns": {
+    "engulfing": 222,
+    "rejection_choch": 27,
+    "strong_reclaim": 125,
+    "sweep_reclaim": 435,
+    "wick_rejection": 353
+   },
+   "per_symbol_day": 13.2,
+   "refused_over_cap": 270,
+   "stop_pips_median": 15.5,
+   "stop_pips_p75": 28.5,
+   "structural_in_budget": 328,
+   "symbol_days": 88
+  },
+  "demand|M15|GBPJPY": {
+   "floor_below_min": 84,
+   "n": 297,
+   "overlap_share": 0.38,
+   "overlaps_m5_candidate_within_1h": 113,
+   "patterns": {
+    "engulfing": 55,
+    "rejection_choch": 8,
+    "strong_reclaim": 20,
+    "sweep_reclaim": 109,
+    "wick_rejection": 105
+   },
+   "per_symbol_day": 13.5,
+   "refused_over_cap": 90,
+   "stop_pips_median": 26.7,
+   "stop_pips_p75": 38.2,
+   "structural_in_budget": 123,
+   "symbol_days": 22
+  },
+  "demand|M15|GBPUSD": {
+   "floor_below_min": 226,
+   "n": 300,
+   "overlap_share": 0.56,
+   "overlaps_m5_candidate_within_1h": 169,
+   "patterns": {
+    "engulfing": 61,
+    "rejection_choch": 2,
+    "strong_reclaim": 54,
+    "sweep_reclaim": 103,
+    "wick_rejection": 80
+   },
+   "per_symbol_day": 13.64,
+   "refused_over_cap": 19,
+   "stop_pips_median": 12.9,
+   "stop_pips_p75": 14.9,
+   "structural_in_budget": 55,
+   "symbol_days": 22
+  },
+  "demand|M15|USDJPY": {
+   "floor_below_min": 102,
+   "n": 283,
+   "overlap_share": 0.51,
+   "overlaps_m5_candidate_within_1h": 143,
+   "patterns": {
+    "engulfing": 53,
+    "rejection_choch": 10,
+    "strong_reclaim": 27,
+    "sweep_reclaim": 101,
+    "wick_rejection": 92
+   },
+   "per_symbol_day": 12.86,
+   "refused_over_cap": 127,
+   "stop_pips_median": 23.4,
+   "stop_pips_p75": 30.7,
+   "structural_in_budget": 54,
+   "symbol_days": 22
+  },
+  "demand|M15|XAU": {
+   "floor_below_min": 3,
+   "n": 254,
+   "overlap_share": 0.46,
+   "overlaps_m5_candidate_within_1h": 118,
+   "patterns": {
+    "engulfing": 44,
+    "rejection_choch": 5,
+    "strong_reclaim": 10,
+    "sweep_reclaim": 115,
+    "wick_rejection": 80
+   },
+   "per_symbol_day": 9.77,
+   "refused_over_cap": 240,
+   "stop_pips_median": 142.9,
+   "stop_pips_p75": 177.2,
+   "structural_in_budget": 11,
+   "symbol_days": 26
+  },
+  "demand|M15|all": {
+   "floor_below_min": 567,
+   "n": 1416,
+   "overlap_share": 0.52,
+   "overlaps_m5_candidate_within_1h": 735,
+   "patterns": {
+    "engulfing": 266,
+    "rejection_choch": 32,
+    "strong_reclaim": 135,
+    "sweep_reclaim": 550,
+    "wick_rejection": 433
+   },
+   "per_symbol_day": 12.42,
+   "refused_over_cap": 510,
+   "stop_pips_median": 19.5,
+   "stop_pips_p75": 40,
+   "structural_in_budget": 339,
+   "symbol_days": 114
+  },
+  "demand|M5|EURUSD": {
+   "floor_below_min": 279,
+   "n": 297,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 44,
+    "rejection_choch": 3,
+    "strong_reclaim": 75,
+    "sweep_reclaim": 99,
+    "wick_rejection": 76
+   },
+   "per_symbol_day": 13.5,
+   "refused_over_cap": 0,
+   "stop_pips_median": 6.6,
+   "stop_pips_p75": 9.1,
+   "structural_in_budget": 18,
+   "symbol_days": 22
+  },
+  "demand|M5|FX": {
+   "floor_below_min": 985,
+   "n": 1107,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 192,
+    "rejection_choch": 9,
+    "strong_reclaim": 259,
+    "sweep_reclaim": 374,
+    "wick_rejection": 273
+   },
+   "per_symbol_day": 12.58,
+   "refused_over_cap": 16,
+   "stop_pips_median": 9.1,
+   "stop_pips_p75": 13.3,
+   "structural_in_budget": 106,
+   "symbol_days": 88
+  },
+  "demand|M5|GBPJPY": {
+   "floor_below_min": 175,
+   "n": 202,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 34,
+    "rejection_choch": 2,
+    "strong_reclaim": 51,
+    "sweep_reclaim": 69,
+    "wick_rejection": 46
+   },
+   "per_symbol_day": 9.18,
+   "refused_over_cap": 2,
+   "stop_pips_median": 14.2,
+   "stop_pips_p75": 18.4,
+   "structural_in_budget": 25,
+   "symbol_days": 22
+  },
+  "demand|M5|GBPUSD": {
+   "floor_below_min": 287,
+   "n": 308,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 55,
+    "rejection_choch": 2,
+    "strong_reclaim": 81,
+    "sweep_reclaim": 102,
+    "wick_rejection": 68
+   },
+   "per_symbol_day": 14,
+   "refused_over_cap": 0,
+   "stop_pips_median": 7.9,
+   "stop_pips_p75": 10.8,
+   "structural_in_budget": 21,
+   "symbol_days": 22
+  },
+  "demand|M5|USDJPY": {
+   "floor_below_min": 244,
+   "n": 300,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 59,
+    "rejection_choch": 2,
+    "strong_reclaim": 52,
+    "sweep_reclaim": 104,
+    "wick_rejection": 83
+   },
+   "per_symbol_day": 13.64,
+   "refused_over_cap": 14,
+   "stop_pips_median": 12,
+   "stop_pips_p75": 17,
+   "structural_in_budget": 42,
+   "symbol_days": 22
+  },
+  "demand|M5|XAU": {
+   "floor_below_min": 9,
+   "n": 243,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 31,
+    "rejection_choch": 4,
+    "strong_reclaim": 45,
+    "sweep_reclaim": 93,
+    "wick_rejection": 70
+   },
+   "per_symbol_day": 9.35,
+   "refused_over_cap": 203,
+   "stop_pips_median": 97.5,
+   "stop_pips_p75": 121.7,
+   "structural_in_budget": 31,
+   "symbol_days": 26
+  },
+  "demand|M5|all": {
+   "floor_below_min": 994,
+   "n": 1350,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 223,
+    "rejection_choch": 13,
+    "strong_reclaim": 304,
+    "sweep_reclaim": 467,
+    "wick_rejection": 343
+   },
+   "per_symbol_day": 11.84,
+   "refused_over_cap": 219,
+   "stop_pips_median": 10.7,
+   "stop_pips_p75": 20.1,
+   "structural_in_budget": 137,
+   "symbol_days": 114
+  },
+  "fvg|H1|EURUSD": {
+   "floor_below_min": 9,
+   "n": 22,
+   "overlap_share": 0.09,
+   "overlaps_m5_candidate_within_1h": 2,
+   "patterns": {
+    "engulfing": 4,
+    "rejection_choch": 1,
+    "strong_reclaim": 4,
+    "sweep_reclaim": 3,
+    "wick_rejection": 10
+   },
+   "per_symbol_day": 1,
+   "refused_over_cap": 6,
+   "stop_pips_median": 13.7,
+   "stop_pips_p75": 21.2,
+   "structural_in_budget": 7,
+   "symbol_days": 22
+  },
+  "fvg|H1|FX": {
+   "floor_below_min": 104,
+   "n": 172,
+   "overlap_share": 0.06,
+   "overlaps_m5_candidate_within_1h": 10,
+   "patterns": {
+    "engulfing": 39,
+    "rejection_choch": 3,
+    "strong_reclaim": 29,
+    "sweep_reclaim": 42,
+    "wick_rejection": 59
+   },
+   "per_symbol_day": 1.95,
+   "refused_over_cap": 20,
+   "stop_pips_median": 16.8,
+   "stop_pips_p75": 22.7,
+   "structural_in_budget": 48,
+   "symbol_days": 88
+  },
+  "fvg|H1|GBPJPY": {
+   "floor_below_min": 20,
+   "n": 32,
+   "overlap_share": 0.09,
+   "overlaps_m5_candidate_within_1h": 3,
+   "patterns": {
+    "engulfing": 9,
+    "rejection_choch": 1,
+    "strong_reclaim": 8,
+    "sweep_reclaim": 12,
+    "wick_rejection": 2
+   },
+   "per_symbol_day": 1.45,
+   "refused_over_cap": 2,
+   "stop_pips_median": 17.3,
+   "stop_pips_p75": 24.2,
+   "structural_in_budget": 10,
+   "symbol_days": 22
+  },
+  "fvg|H1|GBPUSD": {
+   "floor_below_min": 29,
+   "n": 55,
+   "overlap_share": 0.02,
+   "overlaps_m5_candidate_within_1h": 1,
+   "patterns": {
+    "engulfing": 17,
+    "rejection_choch": 1,
+    "strong_reclaim": 6,
+    "sweep_reclaim": 6,
+    "wick_rejection": 25
+   },
+   "per_symbol_day": 2.5,
+   "refused_over_cap": 11,
+   "stop_pips_median": 12.6,
+   "stop_pips_p75": 24.7,
+   "structural_in_budget": 15,
+   "symbol_days": 22
+  },
+  "fvg|H1|USDJPY": {
+   "floor_below_min": 46,
+   "n": 63,
+   "overlap_share": 0.06,
+   "overlaps_m5_candidate_within_1h": 4,
+   "patterns": {
+    "engulfing": 9,
+    "strong_reclaim": 11,
+    "sweep_reclaim": 21,
+    "wick_rejection": 22
+   },
+   "per_symbol_day": 2.86,
+   "refused_over_cap": 1,
+   "stop_pips_median": 16.8,
+   "stop_pips_p75": 21.7,
+   "structural_in_budget": 16,
+   "symbol_days": 22
+  },
+  "fvg|H1|XAU": {
+   "floor_below_min": 6,
+   "n": 37,
+   "overlap_share": 0.08,
+   "overlaps_m5_candidate_within_1h": 3,
+   "patterns": {
+    "engulfing": 6,
+    "rejection_choch": 1,
+    "strong_reclaim": 14,
+    "sweep_reclaim": 4,
+    "wick_rejection": 12
+   },
+   "per_symbol_day": 1.42,
+   "refused_over_cap": 26,
+   "stop_pips_median": 96.5,
+   "stop_pips_p75": 134.6,
+   "structural_in_budget": 5,
+   "symbol_days": 26
+  },
+  "fvg|H1|all": {
+   "floor_below_min": 110,
+   "n": 209,
+   "overlap_share": 0.06,
+   "overlaps_m5_candidate_within_1h": 13,
+   "patterns": {
+    "engulfing": 45,
+    "rejection_choch": 4,
+    "strong_reclaim": 43,
+    "sweep_reclaim": 46,
+    "wick_rejection": 71
+   },
+   "per_symbol_day": 1.83,
+   "refused_over_cap": 46,
+   "stop_pips_median": 17.3,
+   "stop_pips_p75": 26.4,
+   "structural_in_budget": 53,
+   "symbol_days": 114
+  },
+  "fvg|M15|EURUSD": {
+   "floor_below_min": 144,
+   "n": 155,
+   "overlap_share": 0.19,
+   "overlaps_m5_candidate_within_1h": 30,
+   "patterns": {
+    "engulfing": 42,
+    "rejection_choch": 2,
+    "strong_reclaim": 14,
+    "sweep_reclaim": 33,
+    "wick_rejection": 64
+   },
+   "per_symbol_day": 7.05,
+   "refused_over_cap": 1,
+   "stop_pips_median": 5.3,
+   "stop_pips_p75": 8.4,
+   "structural_in_budget": 10,
+   "symbol_days": 22
+  },
+  "fvg|M15|FX": {
+   "floor_below_min": 627,
+   "n": 684,
+   "overlap_share": 0.2,
+   "overlaps_m5_candidate_within_1h": 138,
+   "patterns": {
+    "engulfing": 197,
+    "rejection_choch": 7,
+    "strong_reclaim": 58,
+    "sweep_reclaim": 143,
+    "wick_rejection": 279
+   },
+   "per_symbol_day": 7.77,
+   "refused_over_cap": 4,
+   "stop_pips_median": 8.4,
+   "stop_pips_p75": 12.6,
+   "structural_in_budget": 53,
+   "symbol_days": 88
+  },
+  "fvg|M15|GBPJPY": {
+   "floor_below_min": 155,
+   "n": 180,
+   "overlap_share": 0.16,
+   "overlaps_m5_candidate_within_1h": 28,
+   "patterns": {
+    "engulfing": 50,
+    "strong_reclaim": 19,
+    "sweep_reclaim": 46,
+    "wick_rejection": 65
+   },
+   "per_symbol_day": 8.18,
+   "refused_over_cap": 1,
+   "stop_pips_median": 12.3,
+   "stop_pips_p75": 17.9,
+   "structural_in_budget": 24,
+   "symbol_days": 22
+  },
+  "fvg|M15|GBPUSD": {
+   "floor_below_min": 155,
+   "n": 158,
+   "overlap_share": 0.22,
+   "overlaps_m5_candidate_within_1h": 34,
+   "patterns": {
+    "engulfing": 50,
+    "rejection_choch": 1,
+    "strong_reclaim": 13,
+    "sweep_reclaim": 29,
+    "wick_rejection": 65
+   },
+   "per_symbol_day": 7.18,
+   "refused_over_cap": 0,
+   "stop_pips_median": 7.2,
+   "stop_pips_p75": 9.3,
+   "structural_in_budget": 3,
+   "symbol_days": 22
+  },
+  "fvg|M15|USDJPY": {
+   "floor_below_min": 173,
+   "n": 191,
+   "overlap_share": 0.24,
+   "overlaps_m5_candidate_within_1h": 46,
+   "patterns": {
+    "engulfing": 55,
+    "rejection_choch": 4,
+    "strong_reclaim": 12,
+    "sweep_reclaim": 35,
+    "wick_rejection": 85
+   },
+   "per_symbol_day": 8.68,
+   "refused_over_cap": 2,
+   "stop_pips_median": 9.2,
+   "stop_pips_p75": 14.3,
+   "structural_in_budget": 16,
+   "symbol_days": 22
+  },
+  "fvg|M15|XAU": {
+   "floor_below_min": 74,
+   "n": 204,
+   "overlap_share": 0.08,
+   "overlaps_m5_candidate_within_1h": 17,
+   "patterns": {
+    "engulfing": 51,
+    "strong_reclaim": 24,
+    "sweep_reclaim": 50,
+    "wick_rejection": 79
+   },
+   "per_symbol_day": 7.85,
+   "refused_over_cap": 85,
+   "stop_pips_median": 64,
+   "stop_pips_p75": 88.1,
+   "structural_in_budget": 45,
+   "symbol_days": 26
+  },
+  "fvg|M15|all": {
+   "floor_below_min": 701,
+   "n": 888,
+   "overlap_share": 0.17,
+   "overlaps_m5_candidate_within_1h": 155,
+   "patterns": {
+    "engulfing": 248,
+    "rejection_choch": 7,
+    "strong_reclaim": 82,
+    "sweep_reclaim": 193,
+    "wick_rejection": 358
+   },
+   "per_symbol_day": 7.79,
+   "refused_over_cap": 89,
+   "stop_pips_median": 10.9,
+   "stop_pips_p75": 22.1,
+   "structural_in_budget": 98,
+   "symbol_days": 114
+  },
+  "fvg|M5|EURUSD": {
+   "floor_below_min": 69,
+   "n": 69,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 24,
+    "rejection_choch": 1,
+    "sweep_reclaim": 11,
+    "wick_rejection": 33
+   },
+   "per_symbol_day": 3.14,
+   "refused_over_cap": 0,
+   "stop_pips_median": 4.1,
+   "stop_pips_p75": 5.4,
+   "structural_in_budget": 0,
+   "symbol_days": 22
+  },
+  "fvg|M5|FX": {
+   "floor_below_min": 266,
+   "n": 267,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 73,
+    "rejection_choch": 7,
+    "sweep_reclaim": 49,
+    "wick_rejection": 138
+   },
+   "per_symbol_day": 3.03,
+   "refused_over_cap": 1,
+   "stop_pips_median": 5.6,
+   "stop_pips_p75": 7.9,
+   "structural_in_budget": 0,
+   "symbol_days": 88
+  },
+  "fvg|M5|GBPJPY": {
+   "floor_below_min": 52,
+   "n": 52,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 12,
+    "rejection_choch": 2,
+    "sweep_reclaim": 12,
+    "wick_rejection": 26
+   },
+   "per_symbol_day": 2.36,
+   "refused_over_cap": 0,
+   "stop_pips_median": 10.9,
+   "stop_pips_p75": 13.3,
+   "structural_in_budget": 0,
+   "symbol_days": 22
+  },
+  "fvg|M5|GBPUSD": {
+   "floor_below_min": 86,
+   "n": 86,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 21,
+    "rejection_choch": 3,
+    "sweep_reclaim": 16,
+    "wick_rejection": 46
+   },
+   "per_symbol_day": 3.91,
+   "refused_over_cap": 0,
+   "stop_pips_median": 4.7,
+   "stop_pips_p75": 6.8,
+   "structural_in_budget": 0,
+   "symbol_days": 22
+  },
+  "fvg|M5|USDJPY": {
+   "floor_below_min": 59,
+   "n": 60,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 16,
+    "rejection_choch": 1,
+    "sweep_reclaim": 10,
+    "wick_rejection": 33
+   },
+   "per_symbol_day": 2.73,
+   "refused_over_cap": 1,
+   "stop_pips_median": 7.2,
+   "stop_pips_p75": 10.4,
+   "structural_in_budget": 0,
+   "symbol_days": 22
+  },
+  "fvg|M5|XAU": {
+   "floor_below_min": 14,
+   "n": 52,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 8,
+    "sweep_reclaim": 24,
+    "wick_rejection": 20
+   },
+   "per_symbol_day": 2,
+   "refused_over_cap": 15,
+   "stop_pips_median": 59.1,
+   "stop_pips_p75": 72.2,
+   "structural_in_budget": 23,
+   "symbol_days": 26
+  },
+  "fvg|M5|all": {
+   "floor_below_min": 280,
+   "n": 319,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 81,
+    "rejection_choch": 7,
+    "sweep_reclaim": 73,
+    "wick_rejection": 158
+   },
+   "per_symbol_day": 2.8,
+   "refused_over_cap": 16,
+   "stop_pips_median": 6.3,
+   "stop_pips_p75": 12.2,
+   "structural_in_budget": 23,
+   "symbol_days": 114
+  },
+  "order_block|H1|FX": {
+   "floor_below_min": 29,
+   "n": 77,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 7,
+    "rejection_choch": 1,
+    "strong_reclaim": 14,
+    "sweep_reclaim": 37,
+    "wick_rejection": 18
+   },
+   "per_symbol_day": 0.88,
+   "refused_over_cap": 39,
+   "stop_pips_median": 29,
+   "stop_pips_p75": 30.4,
+   "structural_in_budget": 9,
+   "symbol_days": 88
+  },
+  "order_block|H1|GBPJPY": {
+   "floor_below_min": 13,
+   "n": 18,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 1,
+    "strong_reclaim": 3,
+    "sweep_reclaim": 13,
+    "wick_rejection": 1
+   },
+   "per_symbol_day": 0.82,
+   "refused_over_cap": 4,
+   "stop_pips_median": 19,
+   "stop_pips_p75": 24.3,
+   "structural_in_budget": 1,
+   "symbol_days": 22
+  },
+  "order_block|H1|GBPUSD": {
+   "floor_below_min": 1,
+   "n": 5,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 1,
+    "sweep_reclaim": 1,
+    "wick_rejection": 3
+   },
+   "per_symbol_day": 0.23,
+   "refused_over_cap": 4,
+   "stop_pips_median": 29,
+   "stop_pips_p75": 29,
+   "structural_in_budget": 0,
+   "symbol_days": 22
+  },
+  "order_block|H1|USDJPY": {
+   "floor_below_min": 15,
+   "n": 54,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 5,
+    "rejection_choch": 1,
+    "strong_reclaim": 11,
+    "sweep_reclaim": 23,
+    "wick_rejection": 14
+   },
+   "per_symbol_day": 2.45,
+   "refused_over_cap": 31,
+   "stop_pips_median": 29.8,
+   "stop_pips_p75": 30.5,
+   "structural_in_budget": 8,
+   "symbol_days": 22
+  },
+  "order_block|H1|XAU": {
+   "floor_below_min": 0,
+   "n": 9,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "rejection_choch": 1,
+    "strong_reclaim": 2,
+    "sweep_reclaim": 4,
+    "wick_rejection": 2
+   },
+   "per_symbol_day": 0.35,
+   "refused_over_cap": 5,
+   "stop_pips_median": 70.9,
+   "stop_pips_p75": 77.5,
+   "structural_in_budget": 4,
+   "symbol_days": 26
+  },
+  "order_block|H1|all": {
+   "floor_below_min": 29,
+   "n": 86,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 7,
+    "rejection_choch": 2,
+    "strong_reclaim": 16,
+    "sweep_reclaim": 41,
+    "wick_rejection": 20
+   },
+   "per_symbol_day": 0.75,
+   "refused_over_cap": 44,
+   "stop_pips_median": 29.3,
+   "stop_pips_p75": 36.6,
+   "structural_in_budget": 13,
+   "symbol_days": 114
+  },
+  "order_block|M15|EURUSD": {
+   "floor_below_min": 97,
+   "n": 97,
+   "overlap_share": 0.51,
+   "overlaps_m5_candidate_within_1h": 49,
+   "patterns": {
+    "engulfing": 23,
+    "rejection_choch": 1,
+    "strong_reclaim": 12,
+    "sweep_reclaim": 41,
+    "wick_rejection": 20
+   },
+   "per_symbol_day": 4.41,
+   "refused_over_cap": 0,
+   "stop_pips_median": 7.6,
+   "stop_pips_p75": 8.5,
+   "structural_in_budget": 0,
+   "symbol_days": 22
+  },
+  "order_block|M15|FX": {
+   "floor_below_min": 379,
+   "n": 415,
+   "overlap_share": 0.32,
+   "overlaps_m5_candidate_within_1h": 131,
+   "patterns": {
+    "engulfing": 63,
+    "rejection_choch": 8,
+    "strong_reclaim": 87,
+    "sweep_reclaim": 153,
+    "wick_rejection": 104
+   },
+   "per_symbol_day": 4.72,
+   "refused_over_cap": 14,
+   "stop_pips_median": 8.8,
+   "stop_pips_p75": 12.3,
+   "structural_in_budget": 22,
+   "symbol_days": 88
+  },
+  "order_block|M15|GBPJPY": {
+   "floor_below_min": 58,
+   "n": 63,
+   "overlap_share": 0.16,
+   "overlaps_m5_candidate_within_1h": 10,
+   "patterns": {
+    "engulfing": 5,
+    "rejection_choch": 1,
+    "strong_reclaim": 19,
+    "sweep_reclaim": 22,
+    "wick_rejection": 16
+   },
+   "per_symbol_day": 2.86,
+   "refused_over_cap": 0,
+   "stop_pips_median": 15.3,
+   "stop_pips_p75": 17,
+   "structural_in_budget": 5,
+   "symbol_days": 22
+  },
+  "order_block|M15|GBPUSD": {
+   "floor_below_min": 125,
+   "n": 133,
+   "overlap_share": 0.33,
+   "overlaps_m5_candidate_within_1h": 44,
+   "patterns": {
+    "engulfing": 17,
+    "rejection_choch": 4,
+    "strong_reclaim": 28,
+    "sweep_reclaim": 45,
+    "wick_rejection": 39
+   },
+   "per_symbol_day": 6.05,
+   "refused_over_cap": 0,
+   "stop_pips_median": 7.5,
+   "stop_pips_p75": 8.7,
+   "structural_in_budget": 8,
+   "symbol_days": 22
+  },
+  "order_block|M15|USDJPY": {
+   "floor_below_min": 99,
+   "n": 122,
+   "overlap_share": 0.23,
+   "overlaps_m5_candidate_within_1h": 28,
+   "patterns": {
+    "engulfing": 18,
+    "rejection_choch": 2,
+    "strong_reclaim": 28,
+    "sweep_reclaim": 45,
+    "wick_rejection": 29
+   },
+   "per_symbol_day": 5.55,
+   "refused_over_cap": 14,
+   "stop_pips_median": 10.9,
+   "stop_pips_p75": 14.5,
+   "structural_in_budget": 9,
+   "symbol_days": 22
+  },
+  "order_block|M15|XAU": {
+   "floor_below_min": 2,
+   "n": 82,
+   "overlap_share": 0.26,
+   "overlaps_m5_candidate_within_1h": 21,
+   "patterns": {
+    "engulfing": 14,
+    "strong_reclaim": 23,
+    "sweep_reclaim": 28,
+    "wick_rejection": 17
+   },
+   "per_symbol_day": 3.15,
+   "refused_over_cap": 50,
+   "stop_pips_median": 80.5,
+   "stop_pips_p75": 100.2,
+   "structural_in_budget": 30,
+   "symbol_days": 26
+  },
+  "order_block|M15|all": {
+   "floor_below_min": 381,
+   "n": 497,
+   "overlap_share": 0.31,
+   "overlaps_m5_candidate_within_1h": 152,
+   "patterns": {
+    "engulfing": 77,
+    "rejection_choch": 8,
+    "strong_reclaim": 110,
+    "sweep_reclaim": 181,
+    "wick_rejection": 121
+   },
+   "per_symbol_day": 4.36,
+   "refused_over_cap": 64,
+   "stop_pips_median": 10,
+   "stop_pips_p75": 17.8,
+   "structural_in_budget": 52,
+   "symbol_days": 114
+  },
+  "order_block|M5|EURUSD": {
+   "floor_below_min": 204,
+   "n": 206,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 20,
+    "strong_reclaim": 80,
+    "sweep_reclaim": 75,
+    "wick_rejection": 31
+   },
+   "per_symbol_day": 9.36,
+   "refused_over_cap": 0,
+   "stop_pips_median": 4.7,
+   "stop_pips_p75": 7.2,
+   "structural_in_budget": 2,
+   "symbol_days": 22
+  },
+  "order_block|M5|FX": {
+   "floor_below_min": 679,
+   "n": 694,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 85,
+    "rejection_choch": 4,
+    "strong_reclaim": 259,
+    "sweep_reclaim": 242,
+    "wick_rejection": 104
+   },
+   "per_symbol_day": 7.89,
+   "refused_over_cap": 0,
+   "stop_pips_median": 6.9,
+   "stop_pips_p75": 10.2,
+   "structural_in_budget": 15,
+   "symbol_days": 88
+  },
+  "order_block|M5|GBPJPY": {
+   "floor_below_min": 182,
+   "n": 186,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 22,
+    "rejection_choch": 2,
+    "strong_reclaim": 68,
+    "sweep_reclaim": 68,
+    "wick_rejection": 26
+   },
+   "per_symbol_day": 8.45,
+   "refused_over_cap": 0,
+   "stop_pips_median": 10.9,
+   "stop_pips_p75": 14.9,
+   "structural_in_budget": 4,
+   "symbol_days": 22
+  },
+  "order_block|M5|GBPUSD": {
+   "floor_below_min": 163,
+   "n": 166,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 25,
+    "strong_reclaim": 58,
+    "sweep_reclaim": 64,
+    "wick_rejection": 19
+   },
+   "per_symbol_day": 7.55,
+   "refused_over_cap": 0,
+   "stop_pips_median": 6.3,
+   "stop_pips_p75": 7.8,
+   "structural_in_budget": 3,
+   "symbol_days": 22
+  },
+  "order_block|M5|USDJPY": {
+   "floor_below_min": 130,
+   "n": 136,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 18,
+    "rejection_choch": 2,
+    "strong_reclaim": 53,
+    "sweep_reclaim": 35,
+    "wick_rejection": 28
+   },
+   "per_symbol_day": 6.18,
+   "refused_over_cap": 0,
+   "stop_pips_median": 7.1,
+   "stop_pips_p75": 11.9,
+   "structural_in_budget": 6,
+   "symbol_days": 22
+  },
+  "order_block|M5|XAU": {
+   "floor_below_min": 36,
+   "n": 146,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 5,
+    "strong_reclaim": 52,
+    "sweep_reclaim": 72,
+    "wick_rejection": 17
+   },
+   "per_symbol_day": 5.62,
+   "refused_over_cap": 63,
+   "stop_pips_median": 65.4,
+   "stop_pips_p75": 83.8,
+   "structural_in_budget": 47,
+   "symbol_days": 26
+  },
+  "order_block|M5|all": {
+   "floor_below_min": 715,
+   "n": 840,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 90,
+    "rejection_choch": 4,
+    "strong_reclaim": 311,
+    "sweep_reclaim": 314,
+    "wick_rejection": 121
+   },
+   "per_symbol_day": 7.37,
+   "refused_over_cap": 63,
+   "stop_pips_median": 7.9,
+   "stop_pips_p75": 15.2,
+   "structural_in_budget": 62,
+   "symbol_days": 114
+  },
+  "supply|H1|EURUSD": {
+   "floor_below_min": 1,
+   "n": 17,
+   "overlap_share": 0.59,
+   "overlaps_m5_candidate_within_1h": 10,
+   "patterns": {
+    "engulfing": 4,
+    "strong_reclaim": 4,
+    "sweep_reclaim": 7,
+    "wick_rejection": 2
+   },
+   "per_symbol_day": 0.77,
+   "refused_over_cap": 2,
+   "stop_pips_median": 13.8,
+   "stop_pips_p75": 17.8,
+   "structural_in_budget": 14,
+   "symbol_days": 22
+  },
+  "supply|H1|FX": {
+   "floor_below_min": 24,
+   "n": 192,
+   "overlap_share": 0.6,
+   "overlaps_m5_candidate_within_1h": 115,
+   "patterns": {
+    "engulfing": 60,
+    "rejection_choch": 2,
+    "strong_reclaim": 15,
+    "sweep_reclaim": 50,
+    "wick_rejection": 65
+   },
+   "per_symbol_day": 2.18,
+   "refused_over_cap": 118,
+   "stop_pips_median": 28.3,
+   "stop_pips_p75": 38.1,
+   "structural_in_budget": 50,
+   "symbol_days": 88
+  },
+  "supply|H1|GBPJPY": {
+   "floor_below_min": 0,
+   "n": 48,
+   "overlap_share": 0.67,
+   "overlaps_m5_candidate_within_1h": 32,
+   "patterns": {
+    "engulfing": 13,
+    "strong_reclaim": 1,
+    "sweep_reclaim": 21,
+    "wick_rejection": 13
+   },
+   "per_symbol_day": 2.18,
+   "refused_over_cap": 44,
+   "stop_pips_median": 47.8,
+   "stop_pips_p75": 59.7,
+   "structural_in_budget": 4,
+   "symbol_days": 22
+  },
+  "supply|H1|GBPUSD": {
+   "floor_below_min": 7,
+   "n": 65,
+   "overlap_share": 0.55,
+   "overlaps_m5_candidate_within_1h": 36,
+   "patterns": {
+    "engulfing": 20,
+    "rejection_choch": 2,
+    "strong_reclaim": 2,
+    "sweep_reclaim": 11,
+    "wick_rejection": 30
+   },
+   "per_symbol_day": 2.95,
+   "refused_over_cap": 31,
+   "stop_pips_median": 24.8,
+   "stop_pips_p75": 27.3,
+   "structural_in_budget": 27,
+   "symbol_days": 22
+  },
+  "supply|H1|USDJPY": {
+   "floor_below_min": 16,
+   "n": 62,
+   "overlap_share": 0.6,
+   "overlaps_m5_candidate_within_1h": 37,
+   "patterns": {
+    "engulfing": 23,
+    "strong_reclaim": 8,
+    "sweep_reclaim": 11,
+    "wick_rejection": 20
+   },
+   "per_symbol_day": 2.82,
+   "refused_over_cap": 41,
+   "stop_pips_median": 30.5,
+   "stop_pips_p75": 48.9,
+   "structural_in_budget": 5,
+   "symbol_days": 22
+  },
+  "supply|H1|XAU": {
+   "floor_below_min": 0,
+   "n": 37,
+   "overlap_share": 0.3,
+   "overlaps_m5_candidate_within_1h": 11,
+   "patterns": {
+    "engulfing": 11,
+    "rejection_choch": 2,
+    "sweep_reclaim": 10,
+    "wick_rejection": 14
+   },
+   "per_symbol_day": 1.42,
+   "refused_over_cap": 37,
+   "stop_pips_median": 268.6,
+   "stop_pips_p75": 339.6,
+   "structural_in_budget": 0,
+   "symbol_days": 26
+  },
+  "supply|H1|all": {
+   "floor_below_min": 24,
+   "n": 229,
+   "overlap_share": 0.55,
+   "overlaps_m5_candidate_within_1h": 126,
+   "patterns": {
+    "engulfing": 71,
+    "rejection_choch": 4,
+    "strong_reclaim": 15,
+    "sweep_reclaim": 60,
+    "wick_rejection": 79
+   },
+   "per_symbol_day": 2.01,
+   "refused_over_cap": 155,
+   "stop_pips_median": 30.6,
+   "stop_pips_p75": 50.6,
+   "structural_in_budget": 50,
+   "symbol_days": 114
+  },
+  "supply|M15|EURUSD": {
+   "floor_below_min": 90,
+   "n": 184,
+   "overlap_share": 0.66,
+   "overlaps_m5_candidate_within_1h": 121,
+   "patterns": {
+    "engulfing": 48,
+    "rejection_choch": 2,
+    "strong_reclaim": 12,
+    "sweep_reclaim": 60,
+    "wick_rejection": 62
+   },
+   "per_symbol_day": 8.36,
+   "refused_over_cap": 30,
+   "stop_pips_median": 12.1,
+   "stop_pips_p75": 14.4,
+   "structural_in_budget": 64,
+   "symbol_days": 22
+  },
+  "supply|M15|FX": {
+   "floor_below_min": 458,
+   "n": 947,
+   "overlap_share": 0.65,
+   "overlaps_m5_candidate_within_1h": 612,
+   "patterns": {
+    "engulfing": 230,
+    "rejection_choch": 32,
+    "strong_reclaim": 88,
+    "sweep_reclaim": 326,
+    "wick_rejection": 271
+   },
+   "per_symbol_day": 10.76,
+   "refused_over_cap": 113,
+   "stop_pips_median": 16,
+   "stop_pips_p75": 23.8,
+   "structural_in_budget": 376,
+   "symbol_days": 88
+  },
+  "supply|M15|GBPJPY": {
+   "floor_below_min": 56,
+   "n": 237,
+   "overlap_share": 0.6,
+   "overlaps_m5_candidate_within_1h": 143,
+   "patterns": {
+    "engulfing": 44,
+    "rejection_choch": 9,
+    "strong_reclaim": 40,
+    "sweep_reclaim": 75,
+    "wick_rejection": 69
+   },
+   "per_symbol_day": 10.77,
+   "refused_over_cap": 46,
+   "stop_pips_median": 26.8,
+   "stop_pips_p75": 30.2,
+   "structural_in_budget": 135,
+   "symbol_days": 22
+  },
+  "supply|M15|GBPUSD": {
+   "floor_below_min": 111,
+   "n": 195,
+   "overlap_share": 0.64,
+   "overlaps_m5_candidate_within_1h": 124,
+   "patterns": {
+    "engulfing": 55,
+    "rejection_choch": 7,
+    "strong_reclaim": 16,
+    "sweep_reclaim": 62,
+    "wick_rejection": 55
+   },
+   "per_symbol_day": 8.86,
+   "refused_over_cap": 8,
+   "stop_pips_median": 13.6,
+   "stop_pips_p75": 17.7,
+   "structural_in_budget": 76,
+   "symbol_days": 22
+  },
+  "supply|M15|USDJPY": {
+   "floor_below_min": 201,
+   "n": 331,
+   "overlap_share": 0.68,
+   "overlaps_m5_candidate_within_1h": 224,
+   "patterns": {
+    "engulfing": 83,
+    "rejection_choch": 14,
+    "strong_reclaim": 20,
+    "sweep_reclaim": 129,
+    "wick_rejection": 85
+   },
+   "per_symbol_day": 15.05,
+   "refused_over_cap": 29,
+   "stop_pips_median": 15.7,
+   "stop_pips_p75": 20.1,
+   "structural_in_budget": 101,
+   "symbol_days": 22
+  },
+  "supply|M15|XAU": {
+   "floor_below_min": 0,
+   "n": 256,
+   "overlap_share": 0.44,
+   "overlaps_m5_candidate_within_1h": 113,
+   "patterns": {
+    "engulfing": 61,
+    "rejection_choch": 9,
+    "strong_reclaim": 16,
+    "sweep_reclaim": 81,
+    "wick_rejection": 89
+   },
+   "per_symbol_day": 9.85,
+   "refused_over_cap": 247,
+   "stop_pips_median": 123.3,
+   "stop_pips_p75": 153.7,
+   "structural_in_budget": 9,
+   "symbol_days": 26
+  },
+  "supply|M15|all": {
+   "floor_below_min": 458,
+   "n": 1203,
+   "overlap_share": 0.6,
+   "overlaps_m5_candidate_within_1h": 725,
+   "patterns": {
+    "engulfing": 291,
+    "rejection_choch": 41,
+    "strong_reclaim": 104,
+    "sweep_reclaim": 407,
+    "wick_rejection": 360
+   },
+   "per_symbol_day": 10.55,
+   "refused_over_cap": 360,
+   "stop_pips_median": 20,
+   "stop_pips_p75": 36.5,
+   "structural_in_budget": 385,
+   "symbol_days": 114
+  },
+  "supply|M5|EURUSD": {
+   "floor_below_min": 220,
+   "n": 246,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 38,
+    "rejection_choch": 5,
+    "strong_reclaim": 60,
+    "sweep_reclaim": 84,
+    "wick_rejection": 59
+   },
+   "per_symbol_day": 11.18,
+   "refused_over_cap": 1,
+   "stop_pips_median": 6.9,
+   "stop_pips_p75": 9.4,
+   "structural_in_budget": 25,
+   "symbol_days": 22
+  },
+  "supply|M5|FX": {
+   "floor_below_min": 985,
+   "n": 1124,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 186,
+    "rejection_choch": 13,
+    "strong_reclaim": 262,
+    "sweep_reclaim": 425,
+    "wick_rejection": 238
+   },
+   "per_symbol_day": 12.77,
+   "refused_over_cap": 11,
+   "stop_pips_median": 9.6,
+   "stop_pips_p75": 13.7,
+   "structural_in_budget": 128,
+   "symbol_days": 88
+  },
+  "supply|M5|GBPJPY": {
+   "floor_below_min": 196,
+   "n": 247,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 48,
+    "rejection_choch": 2,
+    "strong_reclaim": 62,
+    "sweep_reclaim": 89,
+    "wick_rejection": 46
+   },
+   "per_symbol_day": 11.23,
+   "refused_over_cap": 6,
+   "stop_pips_median": 14.7,
+   "stop_pips_p75": 20.7,
+   "structural_in_budget": 45,
+   "symbol_days": 22
+  },
+  "supply|M5|GBPUSD": {
+   "floor_below_min": 280,
+   "n": 289,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 52,
+    "rejection_choch": 2,
+    "strong_reclaim": 62,
+    "sweep_reclaim": 119,
+    "wick_rejection": 54
+   },
+   "per_symbol_day": 13.14,
+   "refused_over_cap": 0,
+   "stop_pips_median": 8.2,
+   "stop_pips_p75": 10.6,
+   "structural_in_budget": 9,
+   "symbol_days": 22
+  },
+  "supply|M5|USDJPY": {
+   "floor_below_min": 289,
+   "n": 342,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 48,
+    "rejection_choch": 4,
+    "strong_reclaim": 78,
+    "sweep_reclaim": 133,
+    "wick_rejection": 79
+   },
+   "per_symbol_day": 15.55,
+   "refused_over_cap": 4,
+   "stop_pips_median": 11.5,
+   "stop_pips_p75": 15.5,
+   "structural_in_budget": 49,
+   "symbol_days": 22
+  },
+  "supply|M5|XAU": {
+   "floor_below_min": 15,
+   "n": 243,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 27,
+    "rejection_choch": 4,
+    "strong_reclaim": 52,
+    "sweep_reclaim": 87,
+    "wick_rejection": 73
+   },
+   "per_symbol_day": 9.35,
+   "refused_over_cap": 190,
+   "stop_pips_median": 94.6,
+   "stop_pips_p75": 125,
+   "structural_in_budget": 38,
+   "symbol_days": 26
+  },
+  "supply|M5|all": {
+   "floor_below_min": 1000,
+   "n": 1367,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 213,
+    "rejection_choch": 17,
+    "strong_reclaim": 314,
+    "sweep_reclaim": 512,
+    "wick_rejection": 311
+   },
+   "per_symbol_day": 11.99,
+   "refused_over_cap": 201,
+   "stop_pips_median": 11.1,
+   "stop_pips_p75": 20.5,
+   "structural_in_budget": 166,
+   "symbol_days": 114
+  }
+ },
+ "before": {
+  "all|M15|EURUSD": {
+   "floor_below_min": 214,
+   "n": 416,
+   "overlap_share": 0.69,
+   "overlaps_m5_candidate_within_1h": 285,
+   "patterns": {
+    "engulfing": 90,
+    "rejection_choch": 8,
+    "strong_reclaim": 32,
+    "sweep_reclaim": 178,
+    "wick_rejection": 108
+   },
+   "per_symbol_day": 18.91,
+   "refused_over_cap": 62,
+   "stop_pips_median": 11.8,
+   "stop_pips_p75": 14.1,
+   "structural_in_budget": 140,
+   "symbol_days": 22
+  },
+  "all|M15|FX": {
+   "floor_below_min": 873,
+   "n": 1819,
+   "overlap_share": 0.6,
+   "overlaps_m5_candidate_within_1h": 1094,
+   "patterns": {
+    "engulfing": 372,
+    "rejection_choch": 49,
+    "strong_reclaim": 196,
+    "sweep_reclaim": 721,
+    "wick_rejection": 481
+   },
+   "per_symbol_day": 20.67,
+   "refused_over_cap": 338,
+   "stop_pips_median": 15.7,
+   "stop_pips_p75": 26.4,
+   "structural_in_budget": 608,
+   "symbol_days": 88
+  },
+  "all|M15|GBPJPY": {
+   "floor_below_min": 107,
+   "n": 444,
+   "overlap_share": 0.47,
+   "overlaps_m5_candidate_within_1h": 208,
+   "patterns": {
+    "engulfing": 78,
+    "rejection_choch": 13,
+    "strong_reclaim": 53,
+    "sweep_reclaim": 176,
+    "wick_rejection": 124
+   },
+   "per_symbol_day": 20.18,
+   "refused_over_cap": 111,
+   "stop_pips_median": 26.9,
+   "stop_pips_p75": 34.9,
+   "structural_in_budget": 226,
+   "symbol_days": 22
+  },
+  "all|M15|GBPUSD": {
+   "floor_below_min": 300,
+   "n": 442,
+   "overlap_share": 0.63,
+   "overlaps_m5_candidate_within_1h": 279,
+   "patterns": {
+    "engulfing": 91,
+    "rejection_choch": 9,
+    "strong_reclaim": 67,
+    "sweep_reclaim": 162,
+    "wick_rejection": 113
+   },
+   "per_symbol_day": 20.09,
+   "refused_over_cap": 23,
+   "stop_pips_median": 13.4,
+   "stop_pips_p75": 15.8,
+   "structural_in_budget": 119,
+   "symbol_days": 22
+  },
+  "all|M15|USDJPY": {
+   "floor_below_min": 252,
+   "n": 517,
+   "overlap_share": 0.62,
+   "overlaps_m5_candidate_within_1h": 322,
+   "patterns": {
+    "engulfing": 113,
+    "rejection_choch": 19,
+    "strong_reclaim": 44,
+    "sweep_reclaim": 205,
+    "wick_rejection": 136
+   },
+   "per_symbol_day": 23.5,
+   "refused_over_cap": 142,
+   "stop_pips_median": 18.4,
+   "stop_pips_p75": 28.7,
+   "structural_in_budget": 123,
+   "symbol_days": 22
+  },
+  "all|M15|XAU": {
+   "floor_below_min": 3,
+   "n": 339,
+   "overlap_share": 0.48,
+   "overlaps_m5_candidate_within_1h": 163,
+   "patterns": {
+    "engulfing": 63,
+    "rejection_choch": 8,
+    "strong_reclaim": 17,
+    "sweep_reclaim": 145,
+    "wick_rejection": 106
+   },
+   "per_symbol_day": 13.04,
+   "refused_over_cap": 324,
+   "stop_pips_median": 133.4,
+   "stop_pips_p75": 173.3,
+   "structural_in_budget": 12,
+   "symbol_days": 26
+  },
+  "all|M15|all": {
+   "floor_below_min": 876,
+   "n": 2158,
+   "overlap_share": 0.58,
+   "overlaps_m5_candidate_within_1h": 1257,
+   "patterns": {
+    "engulfing": 435,
+    "rejection_choch": 57,
+    "strong_reclaim": 213,
+    "sweep_reclaim": 866,
+    "wick_rejection": 587
+   },
+   "per_symbol_day": 18.93,
+   "refused_over_cap": 662,
+   "stop_pips_median": 18.6,
+   "stop_pips_p75": 34.1,
+   "structural_in_budget": 620,
+   "symbol_days": 114
+  },
+  "all|M5|EURUSD": {
+   "floor_below_min": 772,
+   "n": 818,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 126,
+    "rejection_choch": 9,
+    "strong_reclaim": 215,
+    "sweep_reclaim": 269,
+    "wick_rejection": 199
+   },
+   "per_symbol_day": 37.18,
+   "refused_over_cap": 1,
+   "stop_pips_median": 5.8,
+   "stop_pips_p75": 8.4,
+   "structural_in_budget": 45,
+   "symbol_days": 22
+  },
+  "all|M5|FX": {
+   "floor_below_min": 2915,
+   "n": 3192,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 536,
+    "rejection_choch": 33,
+    "strong_reclaim": 780,
+    "sweep_reclaim": 1090,
+    "wick_rejection": 753
+   },
+   "per_symbol_day": 36.27,
+   "refused_over_cap": 28,
+   "stop_pips_median": 8.4,
+   "stop_pips_p75": 12.6,
+   "structural_in_budget": 249,
+   "symbol_days": 88
+  },
+  "all|M5|GBPJPY": {
+   "floor_below_min": 605,
+   "n": 687,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 116,
+    "rejection_choch": 8,
+    "strong_reclaim": 181,
+    "sweep_reclaim": 238,
+    "wick_rejection": 144
+   },
+   "per_symbol_day": 31.23,
+   "refused_over_cap": 8,
+   "stop_pips_median": 12.9,
+   "stop_pips_p75": 17.6,
+   "structural_in_budget": 74,
+   "symbol_days": 22
+  },
+  "all|M5|GBPUSD": {
+   "floor_below_min": 816,
+   "n": 849,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 153,
+    "rejection_choch": 7,
+    "strong_reclaim": 201,
+    "sweep_reclaim": 301,
+    "wick_rejection": 187
+   },
+   "per_symbol_day": 38.59,
+   "refused_over_cap": 0,
+   "stop_pips_median": 7.2,
+   "stop_pips_p75": 9.7,
+   "structural_in_budget": 33,
+   "symbol_days": 22
+  },
+  "all|M5|USDJPY": {
+   "floor_below_min": 722,
+   "n": 838,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 141,
+    "rejection_choch": 9,
+    "strong_reclaim": 183,
+    "sweep_reclaim": 282,
+    "wick_rejection": 223
+   },
+   "per_symbol_day": 38.09,
+   "refused_over_cap": 19,
+   "stop_pips_median": 10.7,
+   "stop_pips_p75": 15.3,
+   "structural_in_budget": 97,
+   "symbol_days": 22
+  },
+  "all|M5|XAU": {
+   "floor_below_min": 74,
+   "n": 684,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 71,
+    "rejection_choch": 8,
+    "strong_reclaim": 149,
+    "sweep_reclaim": 276,
+    "wick_rejection": 180
+   },
+   "per_symbol_day": 26.31,
+   "refused_over_cap": 471,
+   "stop_pips_median": 83.7,
+   "stop_pips_p75": 110.2,
+   "structural_in_budget": 139,
+   "symbol_days": 26
+  },
+  "all|M5|all": {
+   "floor_below_min": 2989,
+   "n": 3876,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 607,
+    "rejection_choch": 41,
+    "strong_reclaim": 929,
+    "sweep_reclaim": 1366,
+    "wick_rejection": 933
+   },
+   "per_symbol_day": 34,
+   "refused_over_cap": 499,
+   "stop_pips_median": 9.9,
+   "stop_pips_p75": 18,
+   "structural_in_budget": 388,
+   "symbol_days": 114
+  },
+  "demand|M15|EURUSD": {
+   "floor_below_min": 135,
+   "n": 254,
+   "overlap_share": 0.68,
+   "overlaps_m5_candidate_within_1h": 172,
+   "patterns": {
+    "engulfing": 48,
+    "rejection_choch": 7,
+    "strong_reclaim": 21,
+    "sweep_reclaim": 116,
+    "wick_rejection": 62
+   },
+   "per_symbol_day": 11.55,
+   "refused_over_cap": 34,
+   "stop_pips_median": 11.2,
+   "stop_pips_p75": 14.2,
+   "structural_in_budget": 85,
+   "symbol_days": 22
+  },
+  "demand|M15|FX": {
+   "floor_below_min": 484,
+   "n": 1006,
+   "overlap_share": 0.54,
+   "overlaps_m5_candidate_within_1h": 548,
+   "patterns": {
+    "engulfing": 183,
+    "rejection_choch": 26,
+    "strong_reclaim": 116,
+    "sweep_reclaim": 415,
+    "wick_rejection": 266
+   },
+   "per_symbol_day": 11.43,
+   "refused_over_cap": 244,
+   "stop_pips_median": 15.4,
+   "stop_pips_p75": 28.7,
+   "structural_in_budget": 278,
+   "symbol_days": 88
+  },
+  "demand|M15|GBPJPY": {
+   "floor_below_min": 64,
+   "n": 246,
+   "overlap_share": 0.35,
+   "overlaps_m5_candidate_within_1h": 85,
+   "patterns": {
+    "engulfing": 44,
+    "rejection_choch": 8,
+    "strong_reclaim": 19,
+    "sweep_reclaim": 105,
+    "wick_rejection": 70
+   },
+   "per_symbol_day": 11.18,
+   "refused_over_cap": 80,
+   "stop_pips_median": 27.3,
+   "stop_pips_p75": 43.5,
+   "structural_in_budget": 102,
+   "symbol_days": 22
+  },
+  "demand|M15|GBPUSD": {
+   "floor_below_min": 203,
+   "n": 265,
+   "overlap_share": 0.63,
+   "overlaps_m5_candidate_within_1h": 166,
+   "patterns": {
+    "engulfing": 45,
+    "rejection_choch": 2,
+    "strong_reclaim": 52,
+    "sweep_reclaim": 104,
+    "wick_rejection": 62
+   },
+   "per_symbol_day": 12.05,
+   "refused_over_cap": 15,
+   "stop_pips_median": 12.5,
+   "stop_pips_p75": 14.7,
+   "structural_in_budget": 47,
+   "symbol_days": 22
+  },
+  "demand|M15|USDJPY": {
+   "floor_below_min": 82,
+   "n": 241,
+   "overlap_share": 0.52,
+   "overlaps_m5_candidate_within_1h": 125,
+   "patterns": {
+    "engulfing": 46,
+    "rejection_choch": 9,
+    "strong_reclaim": 24,
+    "sweep_reclaim": 90,
+    "wick_rejection": 72
+   },
+   "per_symbol_day": 10.95,
+   "refused_over_cap": 115,
+   "stop_pips_median": 24.7,
+   "stop_pips_p75": 30.9,
+   "structural_in_budget": 44,
+   "symbol_days": 22
+  },
+  "demand|M15|XAU": {
+   "floor_below_min": 3,
+   "n": 182,
+   "overlap_share": 0.48,
+   "overlaps_m5_candidate_within_1h": 88,
+   "patterns": {
+    "engulfing": 25,
+    "rejection_choch": 2,
+    "strong_reclaim": 6,
+    "sweep_reclaim": 92,
+    "wick_rejection": 57
+   },
+   "per_symbol_day": 7,
+   "refused_over_cap": 171,
+   "stop_pips_median": 144.9,
+   "stop_pips_p75": 176.9,
+   "structural_in_budget": 8,
+   "symbol_days": 26
+  },
+  "demand|M15|all": {
+   "floor_below_min": 487,
+   "n": 1188,
+   "overlap_share": 0.54,
+   "overlaps_m5_candidate_within_1h": 636,
+   "patterns": {
+    "engulfing": 208,
+    "rejection_choch": 28,
+    "strong_reclaim": 122,
+    "sweep_reclaim": 507,
+    "wick_rejection": 323
+   },
+   "per_symbol_day": 10.42,
+   "refused_over_cap": 415,
+   "stop_pips_median": 18.4,
+   "stop_pips_p75": 37.1,
+   "structural_in_budget": 286,
+   "symbol_days": 114
+  },
+  "demand|M5|EURUSD": {
+   "floor_below_min": 279,
+   "n": 297,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 44,
+    "rejection_choch": 3,
+    "strong_reclaim": 75,
+    "sweep_reclaim": 99,
+    "wick_rejection": 76
+   },
+   "per_symbol_day": 13.5,
+   "refused_over_cap": 0,
+   "stop_pips_median": 6.6,
+   "stop_pips_p75": 9.1,
+   "structural_in_budget": 18,
+   "symbol_days": 22
+  },
+  "demand|M5|FX": {
+   "floor_below_min": 985,
+   "n": 1107,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 192,
+    "rejection_choch": 9,
+    "strong_reclaim": 259,
+    "sweep_reclaim": 374,
+    "wick_rejection": 273
+   },
+   "per_symbol_day": 12.58,
+   "refused_over_cap": 16,
+   "stop_pips_median": 9.1,
+   "stop_pips_p75": 13.3,
+   "structural_in_budget": 106,
+   "symbol_days": 88
+  },
+  "demand|M5|GBPJPY": {
+   "floor_below_min": 175,
+   "n": 202,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 34,
+    "rejection_choch": 2,
+    "strong_reclaim": 51,
+    "sweep_reclaim": 69,
+    "wick_rejection": 46
+   },
+   "per_symbol_day": 9.18,
+   "refused_over_cap": 2,
+   "stop_pips_median": 14.2,
+   "stop_pips_p75": 18.4,
+   "structural_in_budget": 25,
+   "symbol_days": 22
+  },
+  "demand|M5|GBPUSD": {
+   "floor_below_min": 287,
+   "n": 308,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 55,
+    "rejection_choch": 2,
+    "strong_reclaim": 81,
+    "sweep_reclaim": 102,
+    "wick_rejection": 68
+   },
+   "per_symbol_day": 14,
+   "refused_over_cap": 0,
+   "stop_pips_median": 7.9,
+   "stop_pips_p75": 10.8,
+   "structural_in_budget": 21,
+   "symbol_days": 22
+  },
+  "demand|M5|USDJPY": {
+   "floor_below_min": 244,
+   "n": 300,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 59,
+    "rejection_choch": 2,
+    "strong_reclaim": 52,
+    "sweep_reclaim": 104,
+    "wick_rejection": 83
+   },
+   "per_symbol_day": 13.64,
+   "refused_over_cap": 14,
+   "stop_pips_median": 12,
+   "stop_pips_p75": 17,
+   "structural_in_budget": 42,
+   "symbol_days": 22
+  },
+  "demand|M5|XAU": {
+   "floor_below_min": 9,
+   "n": 243,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 31,
+    "rejection_choch": 4,
+    "strong_reclaim": 45,
+    "sweep_reclaim": 93,
+    "wick_rejection": 70
+   },
+   "per_symbol_day": 9.35,
+   "refused_over_cap": 203,
+   "stop_pips_median": 97.5,
+   "stop_pips_p75": 121.7,
+   "structural_in_budget": 31,
+   "symbol_days": 26
+  },
+  "demand|M5|all": {
+   "floor_below_min": 994,
+   "n": 1350,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 223,
+    "rejection_choch": 13,
+    "strong_reclaim": 304,
+    "sweep_reclaim": 467,
+    "wick_rejection": 343
+   },
+   "per_symbol_day": 11.84,
+   "refused_over_cap": 219,
+   "stop_pips_median": 10.7,
+   "stop_pips_p75": 20.1,
+   "structural_in_budget": 137,
+   "symbol_days": 114
+  },
+  "fvg|M5|EURUSD": {
+   "floor_below_min": 69,
+   "n": 69,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 24,
+    "rejection_choch": 1,
+    "sweep_reclaim": 11,
+    "wick_rejection": 33
+   },
+   "per_symbol_day": 3.14,
+   "refused_over_cap": 0,
+   "stop_pips_median": 4.1,
+   "stop_pips_p75": 5.4,
+   "structural_in_budget": 0,
+   "symbol_days": 22
+  },
+  "fvg|M5|FX": {
+   "floor_below_min": 266,
+   "n": 267,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 73,
+    "rejection_choch": 7,
+    "sweep_reclaim": 49,
+    "wick_rejection": 138
+   },
+   "per_symbol_day": 3.03,
+   "refused_over_cap": 1,
+   "stop_pips_median": 5.6,
+   "stop_pips_p75": 7.9,
+   "structural_in_budget": 0,
+   "symbol_days": 88
+  },
+  "fvg|M5|GBPJPY": {
+   "floor_below_min": 52,
+   "n": 52,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 12,
+    "rejection_choch": 2,
+    "sweep_reclaim": 12,
+    "wick_rejection": 26
+   },
+   "per_symbol_day": 2.36,
+   "refused_over_cap": 0,
+   "stop_pips_median": 10.9,
+   "stop_pips_p75": 13.3,
+   "structural_in_budget": 0,
+   "symbol_days": 22
+  },
+  "fvg|M5|GBPUSD": {
+   "floor_below_min": 86,
+   "n": 86,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 21,
+    "rejection_choch": 3,
+    "sweep_reclaim": 16,
+    "wick_rejection": 46
+   },
+   "per_symbol_day": 3.91,
+   "refused_over_cap": 0,
+   "stop_pips_median": 4.7,
+   "stop_pips_p75": 6.8,
+   "structural_in_budget": 0,
+   "symbol_days": 22
+  },
+  "fvg|M5|USDJPY": {
+   "floor_below_min": 59,
+   "n": 60,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 16,
+    "rejection_choch": 1,
+    "sweep_reclaim": 10,
+    "wick_rejection": 33
+   },
+   "per_symbol_day": 2.73,
+   "refused_over_cap": 1,
+   "stop_pips_median": 7.2,
+   "stop_pips_p75": 10.4,
+   "structural_in_budget": 0,
+   "symbol_days": 22
+  },
+  "fvg|M5|XAU": {
+   "floor_below_min": 14,
+   "n": 52,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 8,
+    "sweep_reclaim": 24,
+    "wick_rejection": 20
+   },
+   "per_symbol_day": 2,
+   "refused_over_cap": 15,
+   "stop_pips_median": 59.1,
+   "stop_pips_p75": 72.2,
+   "structural_in_budget": 23,
+   "symbol_days": 26
+  },
+  "fvg|M5|all": {
+   "floor_below_min": 280,
+   "n": 319,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 81,
+    "rejection_choch": 7,
+    "sweep_reclaim": 73,
+    "wick_rejection": 158
+   },
+   "per_symbol_day": 2.8,
+   "refused_over_cap": 16,
+   "stop_pips_median": 6.3,
+   "stop_pips_p75": 12.2,
+   "structural_in_budget": 23,
+   "symbol_days": 114
+  },
+  "order_block|M5|EURUSD": {
+   "floor_below_min": 204,
+   "n": 206,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 20,
+    "strong_reclaim": 80,
+    "sweep_reclaim": 75,
+    "wick_rejection": 31
+   },
+   "per_symbol_day": 9.36,
+   "refused_over_cap": 0,
+   "stop_pips_median": 4.7,
+   "stop_pips_p75": 7.2,
+   "structural_in_budget": 2,
+   "symbol_days": 22
+  },
+  "order_block|M5|FX": {
+   "floor_below_min": 679,
+   "n": 694,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 85,
+    "rejection_choch": 4,
+    "strong_reclaim": 259,
+    "sweep_reclaim": 242,
+    "wick_rejection": 104
+   },
+   "per_symbol_day": 7.89,
+   "refused_over_cap": 0,
+   "stop_pips_median": 6.9,
+   "stop_pips_p75": 10.2,
+   "structural_in_budget": 15,
+   "symbol_days": 88
+  },
+  "order_block|M5|GBPJPY": {
+   "floor_below_min": 182,
+   "n": 186,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 22,
+    "rejection_choch": 2,
+    "strong_reclaim": 68,
+    "sweep_reclaim": 68,
+    "wick_rejection": 26
+   },
+   "per_symbol_day": 8.45,
+   "refused_over_cap": 0,
+   "stop_pips_median": 10.9,
+   "stop_pips_p75": 14.9,
+   "structural_in_budget": 4,
+   "symbol_days": 22
+  },
+  "order_block|M5|GBPUSD": {
+   "floor_below_min": 163,
+   "n": 166,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 25,
+    "strong_reclaim": 58,
+    "sweep_reclaim": 64,
+    "wick_rejection": 19
+   },
+   "per_symbol_day": 7.55,
+   "refused_over_cap": 0,
+   "stop_pips_median": 6.3,
+   "stop_pips_p75": 7.8,
+   "structural_in_budget": 3,
+   "symbol_days": 22
+  },
+  "order_block|M5|USDJPY": {
+   "floor_below_min": 130,
+   "n": 136,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 18,
+    "rejection_choch": 2,
+    "strong_reclaim": 53,
+    "sweep_reclaim": 35,
+    "wick_rejection": 28
+   },
+   "per_symbol_day": 6.18,
+   "refused_over_cap": 0,
+   "stop_pips_median": 7.1,
+   "stop_pips_p75": 11.9,
+   "structural_in_budget": 6,
+   "symbol_days": 22
+  },
+  "order_block|M5|XAU": {
+   "floor_below_min": 36,
+   "n": 146,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 5,
+    "strong_reclaim": 52,
+    "sweep_reclaim": 72,
+    "wick_rejection": 17
+   },
+   "per_symbol_day": 5.62,
+   "refused_over_cap": 63,
+   "stop_pips_median": 65.4,
+   "stop_pips_p75": 83.8,
+   "structural_in_budget": 47,
+   "symbol_days": 26
+  },
+  "order_block|M5|all": {
+   "floor_below_min": 715,
+   "n": 840,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 90,
+    "rejection_choch": 4,
+    "strong_reclaim": 311,
+    "sweep_reclaim": 314,
+    "wick_rejection": 121
+   },
+   "per_symbol_day": 7.37,
+   "refused_over_cap": 63,
+   "stop_pips_median": 7.9,
+   "stop_pips_p75": 15.2,
+   "structural_in_budget": 62,
+   "symbol_days": 114
+  },
+  "supply|M15|EURUSD": {
+   "floor_below_min": 79,
+   "n": 162,
+   "overlap_share": 0.7,
+   "overlaps_m5_candidate_within_1h": 113,
+   "patterns": {
+    "engulfing": 42,
+    "rejection_choch": 1,
+    "strong_reclaim": 11,
+    "sweep_reclaim": 62,
+    "wick_rejection": 46
+   },
+   "per_symbol_day": 7.36,
+   "refused_over_cap": 28,
+   "stop_pips_median": 12.1,
+   "stop_pips_p75": 14,
+   "structural_in_budget": 55,
+   "symbol_days": 22
+  },
+  "supply|M15|FX": {
+   "floor_below_min": 389,
+   "n": 813,
+   "overlap_share": 0.67,
+   "overlaps_m5_candidate_within_1h": 546,
+   "patterns": {
+    "engulfing": 189,
+    "rejection_choch": 23,
+    "strong_reclaim": 80,
+    "sweep_reclaim": 306,
+    "wick_rejection": 215
+   },
+   "per_symbol_day": 9.24,
+   "refused_over_cap": 94,
+   "stop_pips_median": 16.1,
+   "stop_pips_p75": 23.9,
+   "structural_in_budget": 330,
+   "symbol_days": 88
+  },
+  "supply|M15|GBPJPY": {
+   "floor_below_min": 43,
+   "n": 198,
+   "overlap_share": 0.62,
+   "overlaps_m5_candidate_within_1h": 123,
+   "patterns": {
+    "engulfing": 34,
+    "rejection_choch": 5,
+    "strong_reclaim": 34,
+    "sweep_reclaim": 71,
+    "wick_rejection": 54
+   },
+   "per_symbol_day": 9,
+   "refused_over_cap": 31,
+   "stop_pips_median": 26.7,
+   "stop_pips_p75": 29.7,
+   "structural_in_budget": 124,
+   "symbol_days": 22
+  },
+  "supply|M15|GBPUSD": {
+   "floor_below_min": 97,
+   "n": 177,
+   "overlap_share": 0.64,
+   "overlaps_m5_candidate_within_1h": 113,
+   "patterns": {
+    "engulfing": 46,
+    "rejection_choch": 7,
+    "strong_reclaim": 15,
+    "sweep_reclaim": 58,
+    "wick_rejection": 51
+   },
+   "per_symbol_day": 8.05,
+   "refused_over_cap": 8,
+   "stop_pips_median": 14.6,
+   "stop_pips_p75": 18.2,
+   "structural_in_budget": 72,
+   "symbol_days": 22
+  },
+  "supply|M15|USDJPY": {
+   "floor_below_min": 170,
+   "n": 276,
+   "overlap_share": 0.71,
+   "overlaps_m5_candidate_within_1h": 197,
+   "patterns": {
+    "engulfing": 67,
+    "rejection_choch": 10,
+    "strong_reclaim": 20,
+    "sweep_reclaim": 115,
+    "wick_rejection": 64
+   },
+   "per_symbol_day": 12.55,
+   "refused_over_cap": 27,
+   "stop_pips_median": 15.7,
+   "stop_pips_p75": 19.9,
+   "structural_in_budget": 79,
+   "symbol_days": 22
+  },
+  "supply|M15|XAU": {
+   "floor_below_min": 0,
+   "n": 157,
+   "overlap_share": 0.48,
+   "overlaps_m5_candidate_within_1h": 75,
+   "patterns": {
+    "engulfing": 38,
+    "rejection_choch": 6,
+    "strong_reclaim": 11,
+    "sweep_reclaim": 53,
+    "wick_rejection": 49
+   },
+   "per_symbol_day": 6.04,
+   "refused_over_cap": 153,
+   "stop_pips_median": 124.8,
+   "stop_pips_p75": 157.6,
+   "structural_in_budget": 4,
+   "symbol_days": 26
+  },
+  "supply|M15|all": {
+   "floor_below_min": 389,
+   "n": 970,
+   "overlap_share": 0.64,
+   "overlaps_m5_candidate_within_1h": 621,
+   "patterns": {
+    "engulfing": 227,
+    "rejection_choch": 29,
+    "strong_reclaim": 91,
+    "sweep_reclaim": 359,
+    "wick_rejection": 264
+   },
+   "per_symbol_day": 8.51,
+   "refused_over_cap": 247,
+   "stop_pips_median": 18.9,
+   "stop_pips_p75": 30.7,
+   "structural_in_budget": 334,
+   "symbol_days": 114
+  },
+  "supply|M5|EURUSD": {
+   "floor_below_min": 220,
+   "n": 246,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 38,
+    "rejection_choch": 5,
+    "strong_reclaim": 60,
+    "sweep_reclaim": 84,
+    "wick_rejection": 59
+   },
+   "per_symbol_day": 11.18,
+   "refused_over_cap": 1,
+   "stop_pips_median": 6.9,
+   "stop_pips_p75": 9.4,
+   "structural_in_budget": 25,
+   "symbol_days": 22
+  },
+  "supply|M5|FX": {
+   "floor_below_min": 985,
+   "n": 1124,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 186,
+    "rejection_choch": 13,
+    "strong_reclaim": 262,
+    "sweep_reclaim": 425,
+    "wick_rejection": 238
+   },
+   "per_symbol_day": 12.77,
+   "refused_over_cap": 11,
+   "stop_pips_median": 9.6,
+   "stop_pips_p75": 13.7,
+   "structural_in_budget": 128,
+   "symbol_days": 88
+  },
+  "supply|M5|GBPJPY": {
+   "floor_below_min": 196,
+   "n": 247,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 48,
+    "rejection_choch": 2,
+    "strong_reclaim": 62,
+    "sweep_reclaim": 89,
+    "wick_rejection": 46
+   },
+   "per_symbol_day": 11.23,
+   "refused_over_cap": 6,
+   "stop_pips_median": 14.7,
+   "stop_pips_p75": 20.7,
+   "structural_in_budget": 45,
+   "symbol_days": 22
+  },
+  "supply|M5|GBPUSD": {
+   "floor_below_min": 280,
+   "n": 289,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 52,
+    "rejection_choch": 2,
+    "strong_reclaim": 62,
+    "sweep_reclaim": 119,
+    "wick_rejection": 54
+   },
+   "per_symbol_day": 13.14,
+   "refused_over_cap": 0,
+   "stop_pips_median": 8.2,
+   "stop_pips_p75": 10.6,
+   "structural_in_budget": 9,
+   "symbol_days": 22
+  },
+  "supply|M5|USDJPY": {
+   "floor_below_min": 289,
+   "n": 342,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 48,
+    "rejection_choch": 4,
+    "strong_reclaim": 78,
+    "sweep_reclaim": 133,
+    "wick_rejection": 79
+   },
+   "per_symbol_day": 15.55,
+   "refused_over_cap": 4,
+   "stop_pips_median": 11.5,
+   "stop_pips_p75": 15.5,
+   "structural_in_budget": 49,
+   "symbol_days": 22
+  },
+  "supply|M5|XAU": {
+   "floor_below_min": 15,
+   "n": 243,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 27,
+    "rejection_choch": 4,
+    "strong_reclaim": 52,
+    "sweep_reclaim": 87,
+    "wick_rejection": 73
+   },
+   "per_symbol_day": 9.35,
+   "refused_over_cap": 190,
+   "stop_pips_median": 94.6,
+   "stop_pips_p75": 125,
+   "structural_in_budget": 38,
+   "symbol_days": 26
+  },
+  "supply|M5|all": {
+   "floor_below_min": 1000,
+   "n": 1367,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 213,
+    "rejection_choch": 17,
+    "strong_reclaim": 314,
+    "sweep_reclaim": 512,
+    "wick_rejection": 311
+   },
+   "per_symbol_day": 11.99,
+   "refused_over_cap": 201,
+   "stop_pips_median": 11.1,
+   "stop_pips_p75": 20.5,
+   "structural_in_budget": 166,
+   "symbol_days": 114
+  }
+ },
+ "description": "Zone strategies on M15/H1 structure, M5 confirmation and execution. before = merge-base tree (S/D on M15 only, higher-frame last-close proximity); after = this change; m15_only_after = this change with higher_timeframes=[M15] (isolates the proximity fix); stop budget off in every run. Generated by analysis-engine/test/htfzones/measure_test.go.",
+ "h1_masking": {
+  "m15_candidates_proximity_fix_only": 4104,
+  "m15_candidates_with_h1_added": 4004
+ },
+ "m15_candidates_with_1000_bar_window": 4351,
+ "m15_only_after": {
+  "all|M15|EURUSD": {
+   "floor_below_min": 497,
+   "n": 742,
+   "overlap_share": 0.54,
+   "overlaps_m5_candidate_within_1h": 404,
+   "patterns": {
+    "engulfing": 172,
+    "rejection_choch": 12,
+    "strong_reclaim": 62,
+    "sweep_reclaim": 266,
+    "wick_rejection": 230
+   },
+   "per_symbol_day": 33.73,
+   "refused_over_cap": 68,
+   "stop_pips_median": 9.4,
+   "stop_pips_p75": 13.2,
+   "structural_in_budget": 177,
+   "symbol_days": 22
+  },
+  "all|M15|FX": {
+   "floor_below_min": 2070,
+   "n": 3284,
+   "overlap_share": 0.47,
+   "overlaps_m5_candidate_within_1h": 1541,
+   "patterns": {
+    "engulfing": 733,
+    "rejection_choch": 75,
+    "strong_reclaim": 360,
+    "sweep_reclaim": 1082,
+    "wick_rejection": 1034
+   },
+   "per_symbol_day": 37.32,
+   "refused_over_cap": 414,
+   "stop_pips_median": 13.4,
+   "stop_pips_p75": 21.1,
+   "structural_in_budget": 800,
+   "symbol_days": 88
+  },
+  "all|M15|GBPJPY": {
+   "floor_below_min": 360,
+   "n": 789,
+   "overlap_share": 0.38,
+   "overlaps_m5_candidate_within_1h": 297,
+   "patterns": {
+    "engulfing": 157,
+    "rejection_choch": 19,
+    "strong_reclaim": 99,
+    "sweep_reclaim": 254,
+    "wick_rejection": 260
+   },
+   "per_symbol_day": 35.86,
+   "refused_over_cap": 138,
+   "stop_pips_median": 23.3,
+   "stop_pips_p75": 30.1,
+   "structural_in_budget": 291,
+   "symbol_days": 22
+  },
+  "all|M15|GBPUSD": {
+   "floor_below_min": 633,
+   "n": 807,
+   "overlap_share": 0.48,
+   "overlaps_m5_candidate_within_1h": 389,
+   "patterns": {
+    "engulfing": 189,
+    "rejection_choch": 14,
+    "strong_reclaim": 112,
+    "sweep_reclaim": 245,
+    "wick_rejection": 247
+   },
+   "per_symbol_day": 36.68,
+   "refused_over_cap": 27,
+   "stop_pips_median": 10.6,
+   "stop_pips_p75": 14.4,
+   "structural_in_budget": 147,
+   "symbol_days": 22
+  },
+  "all|M15|USDJPY": {
+   "floor_below_min": 580,
+   "n": 946,
+   "overlap_share": 0.48,
+   "overlaps_m5_candidate_within_1h": 451,
+   "patterns": {
+    "engulfing": 215,
+    "rejection_choch": 30,
+    "strong_reclaim": 87,
+    "sweep_reclaim": 317,
+    "wick_rejection": 297
+   },
+   "per_symbol_day": 43,
+   "refused_over_cap": 181,
+   "stop_pips_median": 15.4,
+   "stop_pips_p75": 22.2,
+   "structural_in_budget": 185,
+   "symbol_days": 22
+  },
+  "all|M15|XAU": {
+   "floor_below_min": 81,
+   "n": 820,
+   "overlap_share": 0.34,
+   "overlaps_m5_candidate_within_1h": 280,
+   "patterns": {
+    "engulfing": 178,
+    "rejection_choch": 15,
+    "strong_reclaim": 73,
+    "sweep_reclaim": 277,
+    "wick_rejection": 277
+   },
+   "per_symbol_day": 31.54,
+   "refused_over_cap": 643,
+   "stop_pips_median": 111.9,
+   "stop_pips_p75": 149.9,
+   "structural_in_budget": 96,
+   "symbol_days": 26
+  },
+  "all|M15|all": {
+   "floor_below_min": 2151,
+   "n": 4104,
+   "overlap_share": 0.44,
+   "overlaps_m5_candidate_within_1h": 1821,
+   "patterns": {
+    "engulfing": 911,
+    "rejection_choch": 90,
+    "strong_reclaim": 433,
+    "sweep_reclaim": 1359,
+    "wick_rejection": 1311
+   },
+   "per_symbol_day": 36,
+   "refused_over_cap": 1057,
+   "stop_pips_median": 15.9,
+   "stop_pips_p75": 34.4,
+   "structural_in_budget": 896,
+   "symbol_days": 114
+  },
+  "all|M5|EURUSD": {
+   "floor_below_min": 772,
+   "n": 818,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 126,
+    "rejection_choch": 9,
+    "strong_reclaim": 215,
+    "sweep_reclaim": 269,
+    "wick_rejection": 199
+   },
+   "per_symbol_day": 37.18,
+   "refused_over_cap": 1,
+   "stop_pips_median": 5.8,
+   "stop_pips_p75": 8.4,
+   "structural_in_budget": 45,
+   "symbol_days": 22
+  },
+  "all|M5|FX": {
+   "floor_below_min": 2915,
+   "n": 3192,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 536,
+    "rejection_choch": 33,
+    "strong_reclaim": 780,
+    "sweep_reclaim": 1090,
+    "wick_rejection": 753
+   },
+   "per_symbol_day": 36.27,
+   "refused_over_cap": 28,
+   "stop_pips_median": 8.4,
+   "stop_pips_p75": 12.6,
+   "structural_in_budget": 249,
+   "symbol_days": 88
+  },
+  "all|M5|GBPJPY": {
+   "floor_below_min": 605,
+   "n": 687,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 116,
+    "rejection_choch": 8,
+    "strong_reclaim": 181,
+    "sweep_reclaim": 238,
+    "wick_rejection": 144
+   },
+   "per_symbol_day": 31.23,
+   "refused_over_cap": 8,
+   "stop_pips_median": 12.9,
+   "stop_pips_p75": 17.6,
+   "structural_in_budget": 74,
+   "symbol_days": 22
+  },
+  "all|M5|GBPUSD": {
+   "floor_below_min": 816,
+   "n": 849,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 153,
+    "rejection_choch": 7,
+    "strong_reclaim": 201,
+    "sweep_reclaim": 301,
+    "wick_rejection": 187
+   },
+   "per_symbol_day": 38.59,
+   "refused_over_cap": 0,
+   "stop_pips_median": 7.2,
+   "stop_pips_p75": 9.7,
+   "structural_in_budget": 33,
+   "symbol_days": 22
+  },
+  "all|M5|USDJPY": {
+   "floor_below_min": 722,
+   "n": 838,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 141,
+    "rejection_choch": 9,
+    "strong_reclaim": 183,
+    "sweep_reclaim": 282,
+    "wick_rejection": 223
+   },
+   "per_symbol_day": 38.09,
+   "refused_over_cap": 19,
+   "stop_pips_median": 10.7,
+   "stop_pips_p75": 15.3,
+   "structural_in_budget": 97,
+   "symbol_days": 22
+  },
+  "all|M5|XAU": {
+   "floor_below_min": 74,
+   "n": 684,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 71,
+    "rejection_choch": 8,
+    "strong_reclaim": 149,
+    "sweep_reclaim": 276,
+    "wick_rejection": 180
+   },
+   "per_symbol_day": 26.31,
+   "refused_over_cap": 471,
+   "stop_pips_median": 83.7,
+   "stop_pips_p75": 110.2,
+   "structural_in_budget": 139,
+   "symbol_days": 26
+  },
+  "all|M5|all": {
+   "floor_below_min": 2989,
+   "n": 3876,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 607,
+    "rejection_choch": 41,
+    "strong_reclaim": 929,
+    "sweep_reclaim": 1366,
+    "wick_rejection": 933
+   },
+   "per_symbol_day": 34,
+   "refused_over_cap": 499,
+   "stop_pips_median": 9.9,
+   "stop_pips_p75": 18,
+   "structural_in_budget": 388,
+   "symbol_days": 114
+  },
+  "demand|M15|EURUSD": {
+   "floor_below_min": 160,
+   "n": 293,
+   "overlap_share": 0.68,
+   "overlaps_m5_candidate_within_1h": 198,
+   "patterns": {
+    "engulfing": 58,
+    "rejection_choch": 7,
+    "strong_reclaim": 24,
+    "sweep_reclaim": 124,
+    "wick_rejection": 80
+   },
+   "per_symbol_day": 13.32,
+   "refused_over_cap": 37,
+   "stop_pips_median": 10.3,
+   "stop_pips_p75": 14,
+   "structural_in_budget": 96,
+   "symbol_days": 22
+  },
+  "demand|M15|FX": {
+   "floor_below_min": 590,
+   "n": 1199,
+   "overlap_share": 0.54,
+   "overlaps_m5_candidate_within_1h": 643,
+   "patterns": {
+    "engulfing": 231,
+    "rejection_choch": 28,
+    "strong_reclaim": 126,
+    "sweep_reclaim": 445,
+    "wick_rejection": 369
+   },
+   "per_symbol_day": 13.63,
+   "refused_over_cap": 276,
+   "stop_pips_median": 15.5,
+   "stop_pips_p75": 28.4,
+   "structural_in_budget": 333,
+   "symbol_days": 88
+  },
+  "demand|M15|GBPJPY": {
+   "floor_below_min": 88,
+   "n": 303,
+   "overlap_share": 0.38,
+   "overlaps_m5_candidate_within_1h": 115,
+   "patterns": {
+    "engulfing": 56,
+    "rejection_choch": 9,
+    "strong_reclaim": 20,
+    "sweep_reclaim": 109,
+    "wick_rejection": 109
+   },
+   "per_symbol_day": 13.77,
+   "refused_over_cap": 91,
+   "stop_pips_median": 26.6,
+   "stop_pips_p75": 38.2,
+   "structural_in_budget": 124,
+   "symbol_days": 22
+  },
+  "demand|M15|GBPUSD": {
+   "floor_below_min": 238,
+   "n": 314,
+   "overlap_share": 0.58,
+   "overlaps_m5_candidate_within_1h": 182,
+   "patterns": {
+    "engulfing": 64,
+    "rejection_choch": 2,
+    "strong_reclaim": 55,
+    "sweep_reclaim": 109,
+    "wick_rejection": 84
+   },
+   "per_symbol_day": 14.27,
+   "refused_over_cap": 19,
+   "stop_pips_median": 12.8,
+   "stop_pips_p75": 14.9,
+   "structural_in_budget": 57,
+   "symbol_days": 22
+  },
+  "demand|M15|USDJPY": {
+   "floor_below_min": 104,
+   "n": 289,
+   "overlap_share": 0.51,
+   "overlaps_m5_candidate_within_1h": 148,
+   "patterns": {
+    "engulfing": 53,
+    "rejection_choch": 10,
+    "strong_reclaim": 27,
+    "sweep_reclaim": 103,
+    "wick_rejection": 96
+   },
+   "per_symbol_day": 13.14,
+   "refused_over_cap": 129,
+   "stop_pips_median": 23,
+   "stop_pips_p75": 30.7,
+   "structural_in_budget": 56,
+   "symbol_days": 22
+  },
+  "demand|M15|XAU": {
+   "floor_below_min": 3,
+   "n": 268,
+   "overlap_share": 0.47,
+   "overlaps_m5_candidate_within_1h": 125,
+   "patterns": {
+    "engulfing": 49,
+    "rejection_choch": 5,
+    "strong_reclaim": 10,
+    "sweep_reclaim": 117,
+    "wick_rejection": 87
+   },
+   "per_symbol_day": 10.31,
+   "refused_over_cap": 254,
+   "stop_pips_median": 142.9,
+   "stop_pips_p75": 177.2,
+   "structural_in_budget": 11,
+   "symbol_days": 26
+  },
+  "demand|M15|all": {
+   "floor_below_min": 593,
+   "n": 1467,
+   "overlap_share": 0.52,
+   "overlaps_m5_candidate_within_1h": 768,
+   "patterns": {
+    "engulfing": 280,
+    "rejection_choch": 33,
+    "strong_reclaim": 136,
+    "sweep_reclaim": 562,
+    "wick_rejection": 456
+   },
+   "per_symbol_day": 12.87,
+   "refused_over_cap": 530,
+   "stop_pips_median": 19.3,
+   "stop_pips_p75": 42.5,
+   "structural_in_budget": 344,
+   "symbol_days": 114
+  },
+  "demand|M5|EURUSD": {
+   "floor_below_min": 279,
+   "n": 297,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 44,
+    "rejection_choch": 3,
+    "strong_reclaim": 75,
+    "sweep_reclaim": 99,
+    "wick_rejection": 76
+   },
+   "per_symbol_day": 13.5,
+   "refused_over_cap": 0,
+   "stop_pips_median": 6.6,
+   "stop_pips_p75": 9.1,
+   "structural_in_budget": 18,
+   "symbol_days": 22
+  },
+  "demand|M5|FX": {
+   "floor_below_min": 985,
+   "n": 1107,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 192,
+    "rejection_choch": 9,
+    "strong_reclaim": 259,
+    "sweep_reclaim": 374,
+    "wick_rejection": 273
+   },
+   "per_symbol_day": 12.58,
+   "refused_over_cap": 16,
+   "stop_pips_median": 9.1,
+   "stop_pips_p75": 13.3,
+   "structural_in_budget": 106,
+   "symbol_days": 88
+  },
+  "demand|M5|GBPJPY": {
+   "floor_below_min": 175,
+   "n": 202,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 34,
+    "rejection_choch": 2,
+    "strong_reclaim": 51,
+    "sweep_reclaim": 69,
+    "wick_rejection": 46
+   },
+   "per_symbol_day": 9.18,
+   "refused_over_cap": 2,
+   "stop_pips_median": 14.2,
+   "stop_pips_p75": 18.4,
+   "structural_in_budget": 25,
+   "symbol_days": 22
+  },
+  "demand|M5|GBPUSD": {
+   "floor_below_min": 287,
+   "n": 308,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 55,
+    "rejection_choch": 2,
+    "strong_reclaim": 81,
+    "sweep_reclaim": 102,
+    "wick_rejection": 68
+   },
+   "per_symbol_day": 14,
+   "refused_over_cap": 0,
+   "stop_pips_median": 7.9,
+   "stop_pips_p75": 10.8,
+   "structural_in_budget": 21,
+   "symbol_days": 22
+  },
+  "demand|M5|USDJPY": {
+   "floor_below_min": 244,
+   "n": 300,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 59,
+    "rejection_choch": 2,
+    "strong_reclaim": 52,
+    "sweep_reclaim": 104,
+    "wick_rejection": 83
+   },
+   "per_symbol_day": 13.64,
+   "refused_over_cap": 14,
+   "stop_pips_median": 12,
+   "stop_pips_p75": 17,
+   "structural_in_budget": 42,
+   "symbol_days": 22
+  },
+  "demand|M5|XAU": {
+   "floor_below_min": 9,
+   "n": 243,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 31,
+    "rejection_choch": 4,
+    "strong_reclaim": 45,
+    "sweep_reclaim": 93,
+    "wick_rejection": 70
+   },
+   "per_symbol_day": 9.35,
+   "refused_over_cap": 203,
+   "stop_pips_median": 97.5,
+   "stop_pips_p75": 121.7,
+   "structural_in_budget": 31,
+   "symbol_days": 26
+  },
+  "demand|M5|all": {
+   "floor_below_min": 994,
+   "n": 1350,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 223,
+    "rejection_choch": 13,
+    "strong_reclaim": 304,
+    "sweep_reclaim": 467,
+    "wick_rejection": 343
+   },
+   "per_symbol_day": 11.84,
+   "refused_over_cap": 219,
+   "stop_pips_median": 10.7,
+   "stop_pips_p75": 20.1,
+   "structural_in_budget": 137,
+   "symbol_days": 114
+  },
+  "fvg|M15|EURUSD": {
+   "floor_below_min": 145,
+   "n": 157,
+   "overlap_share": 0.19,
+   "overlaps_m5_candidate_within_1h": 30,
+   "patterns": {
+    "engulfing": 42,
+    "rejection_choch": 2,
+    "strong_reclaim": 14,
+    "sweep_reclaim": 33,
+    "wick_rejection": 66
+   },
+   "per_symbol_day": 7.14,
+   "refused_over_cap": 1,
+   "stop_pips_median": 5.3,
+   "stop_pips_p75": 8.4,
+   "structural_in_budget": 11,
+   "symbol_days": 22
+  },
+  "fvg|M15|FX": {
+   "floor_below_min": 634,
+   "n": 693,
+   "overlap_share": 0.2,
+   "overlaps_m5_candidate_within_1h": 139,
+   "patterns": {
+    "engulfing": 200,
+    "rejection_choch": 7,
+    "strong_reclaim": 59,
+    "sweep_reclaim": 143,
+    "wick_rejection": 284
+   },
+   "per_symbol_day": 7.88,
+   "refused_over_cap": 4,
+   "stop_pips_median": 8.4,
+   "stop_pips_p75": 12.7,
+   "structural_in_budget": 55,
+   "symbol_days": 88
+  },
+  "fvg|M15|GBPJPY": {
+   "floor_below_min": 157,
+   "n": 183,
+   "overlap_share": 0.15,
+   "overlaps_m5_candidate_within_1h": 28,
+   "patterns": {
+    "engulfing": 52,
+    "strong_reclaim": 20,
+    "sweep_reclaim": 46,
+    "wick_rejection": 65
+   },
+   "per_symbol_day": 8.32,
+   "refused_over_cap": 1,
+   "stop_pips_median": 12.3,
+   "stop_pips_p75": 17.9,
+   "structural_in_budget": 25,
+   "symbol_days": 22
+  },
+  "fvg|M15|GBPUSD": {
+   "floor_below_min": 158,
+   "n": 161,
+   "overlap_share": 0.22,
+   "overlaps_m5_candidate_within_1h": 35,
+   "patterns": {
+    "engulfing": 51,
+    "rejection_choch": 1,
+    "strong_reclaim": 13,
+    "sweep_reclaim": 29,
+    "wick_rejection": 67
+   },
+   "per_symbol_day": 7.32,
+   "refused_over_cap": 0,
+   "stop_pips_median": 7.1,
+   "stop_pips_p75": 9.3,
+   "structural_in_budget": 3,
+   "symbol_days": 22
+  },
+  "fvg|M15|USDJPY": {
+   "floor_below_min": 174,
+   "n": 192,
+   "overlap_share": 0.24,
+   "overlaps_m5_candidate_within_1h": 46,
+   "patterns": {
+    "engulfing": 55,
+    "rejection_choch": 4,
+    "strong_reclaim": 12,
+    "sweep_reclaim": 35,
+    "wick_rejection": 86
+   },
+   "per_symbol_day": 8.73,
+   "refused_over_cap": 2,
+   "stop_pips_median": 9.2,
+   "stop_pips_p75": 14.3,
+   "structural_in_budget": 16,
+   "symbol_days": 22
+  },
+  "fvg|M15|XAU": {
+   "floor_below_min": 76,
+   "n": 208,
+   "overlap_share": 0.08,
+   "overlaps_m5_candidate_within_1h": 17,
+   "patterns": {
+    "engulfing": 51,
+    "strong_reclaim": 24,
+    "sweep_reclaim": 50,
+    "wick_rejection": 83
+   },
+   "per_symbol_day": 8,
+   "refused_over_cap": 86,
+   "stop_pips_median": 63.8,
+   "stop_pips_p75": 88.1,
+   "structural_in_budget": 46,
+   "symbol_days": 26
+  },
+  "fvg|M15|all": {
+   "floor_below_min": 710,
+   "n": 901,
+   "overlap_share": 0.17,
+   "overlaps_m5_candidate_within_1h": 156,
+   "patterns": {
+    "engulfing": 251,
+    "rejection_choch": 7,
+    "strong_reclaim": 83,
+    "sweep_reclaim": 193,
+    "wick_rejection": 367
+   },
+   "per_symbol_day": 7.9,
+   "refused_over_cap": 90,
+   "stop_pips_median": 10.9,
+   "stop_pips_p75": 22.3,
+   "structural_in_budget": 101,
+   "symbol_days": 114
+  },
+  "fvg|M5|EURUSD": {
+   "floor_below_min": 69,
+   "n": 69,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 24,
+    "rejection_choch": 1,
+    "sweep_reclaim": 11,
+    "wick_rejection": 33
+   },
+   "per_symbol_day": 3.14,
+   "refused_over_cap": 0,
+   "stop_pips_median": 4.1,
+   "stop_pips_p75": 5.4,
+   "structural_in_budget": 0,
+   "symbol_days": 22
+  },
+  "fvg|M5|FX": {
+   "floor_below_min": 266,
+   "n": 267,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 73,
+    "rejection_choch": 7,
+    "sweep_reclaim": 49,
+    "wick_rejection": 138
+   },
+   "per_symbol_day": 3.03,
+   "refused_over_cap": 1,
+   "stop_pips_median": 5.6,
+   "stop_pips_p75": 7.9,
+   "structural_in_budget": 0,
+   "symbol_days": 88
+  },
+  "fvg|M5|GBPJPY": {
+   "floor_below_min": 52,
+   "n": 52,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 12,
+    "rejection_choch": 2,
+    "sweep_reclaim": 12,
+    "wick_rejection": 26
+   },
+   "per_symbol_day": 2.36,
+   "refused_over_cap": 0,
+   "stop_pips_median": 10.9,
+   "stop_pips_p75": 13.3,
+   "structural_in_budget": 0,
+   "symbol_days": 22
+  },
+  "fvg|M5|GBPUSD": {
+   "floor_below_min": 86,
+   "n": 86,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 21,
+    "rejection_choch": 3,
+    "sweep_reclaim": 16,
+    "wick_rejection": 46
+   },
+   "per_symbol_day": 3.91,
+   "refused_over_cap": 0,
+   "stop_pips_median": 4.7,
+   "stop_pips_p75": 6.8,
+   "structural_in_budget": 0,
+   "symbol_days": 22
+  },
+  "fvg|M5|USDJPY": {
+   "floor_below_min": 59,
+   "n": 60,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 16,
+    "rejection_choch": 1,
+    "sweep_reclaim": 10,
+    "wick_rejection": 33
+   },
+   "per_symbol_day": 2.73,
+   "refused_over_cap": 1,
+   "stop_pips_median": 7.2,
+   "stop_pips_p75": 10.4,
+   "structural_in_budget": 0,
+   "symbol_days": 22
+  },
+  "fvg|M5|XAU": {
+   "floor_below_min": 14,
+   "n": 52,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 8,
+    "sweep_reclaim": 24,
+    "wick_rejection": 20
+   },
+   "per_symbol_day": 2,
+   "refused_over_cap": 15,
+   "stop_pips_median": 59.1,
+   "stop_pips_p75": 72.2,
+   "structural_in_budget": 23,
+   "symbol_days": 26
+  },
+  "fvg|M5|all": {
+   "floor_below_min": 280,
+   "n": 319,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 81,
+    "rejection_choch": 7,
+    "sweep_reclaim": 73,
+    "wick_rejection": 158
+   },
+   "per_symbol_day": 2.8,
+   "refused_over_cap": 16,
+   "stop_pips_median": 6.3,
+   "stop_pips_p75": 12.2,
+   "structural_in_budget": 23,
+   "symbol_days": 114
+  },
+  "order_block|M15|EURUSD": {
+   "floor_below_min": 97,
+   "n": 97,
+   "overlap_share": 0.51,
+   "overlaps_m5_candidate_within_1h": 49,
+   "patterns": {
+    "engulfing": 23,
+    "rejection_choch": 1,
+    "strong_reclaim": 12,
+    "sweep_reclaim": 41,
+    "wick_rejection": 20
+   },
+   "per_symbol_day": 4.41,
+   "refused_over_cap": 0,
+   "stop_pips_median": 7.6,
+   "stop_pips_p75": 8.5,
+   "structural_in_budget": 0,
+   "symbol_days": 22
+  },
+  "order_block|M15|FX": {
+   "floor_below_min": 379,
+   "n": 420,
+   "overlap_share": 0.31,
+   "overlaps_m5_candidate_within_1h": 131,
+   "patterns": {
+    "engulfing": 65,
+    "rejection_choch": 8,
+    "strong_reclaim": 87,
+    "sweep_reclaim": 156,
+    "wick_rejection": 104
+   },
+   "per_symbol_day": 4.77,
+   "refused_over_cap": 19,
+   "stop_pips_median": 8.9,
+   "stop_pips_p75": 13,
+   "structural_in_budget": 22,
+   "symbol_days": 88
+  },
+  "order_block|M15|GBPJPY": {
+   "floor_below_min": 58,
+   "n": 63,
+   "overlap_share": 0.16,
+   "overlaps_m5_candidate_within_1h": 10,
+   "patterns": {
+    "engulfing": 5,
+    "rejection_choch": 1,
+    "strong_reclaim": 19,
+    "sweep_reclaim": 22,
+    "wick_rejection": 16
+   },
+   "per_symbol_day": 2.86,
+   "refused_over_cap": 0,
+   "stop_pips_median": 15.3,
+   "stop_pips_p75": 17,
+   "structural_in_budget": 5,
+   "symbol_days": 22
+  },
+  "order_block|M15|GBPUSD": {
+   "floor_below_min": 125,
+   "n": 133,
+   "overlap_share": 0.33,
+   "overlaps_m5_candidate_within_1h": 44,
+   "patterns": {
+    "engulfing": 17,
+    "rejection_choch": 4,
+    "strong_reclaim": 28,
+    "sweep_reclaim": 45,
+    "wick_rejection": 39
+   },
+   "per_symbol_day": 6.05,
+   "refused_over_cap": 0,
+   "stop_pips_median": 7.5,
+   "stop_pips_p75": 8.7,
+   "structural_in_budget": 8,
+   "symbol_days": 22
+  },
+  "order_block|M15|USDJPY": {
+   "floor_below_min": 99,
+   "n": 127,
+   "overlap_share": 0.22,
+   "overlaps_m5_candidate_within_1h": 28,
+   "patterns": {
+    "engulfing": 20,
+    "rejection_choch": 2,
+    "strong_reclaim": 28,
+    "sweep_reclaim": 48,
+    "wick_rejection": 29
+   },
+   "per_symbol_day": 5.77,
+   "refused_over_cap": 19,
+   "stop_pips_median": 10.9,
+   "stop_pips_p75": 16.2,
+   "structural_in_budget": 9,
+   "symbol_days": 22
+  },
+  "order_block|M15|XAU": {
+   "floor_below_min": 2,
+   "n": 82,
+   "overlap_share": 0.26,
+   "overlaps_m5_candidate_within_1h": 21,
+   "patterns": {
+    "engulfing": 14,
+    "strong_reclaim": 23,
+    "sweep_reclaim": 28,
+    "wick_rejection": 17
+   },
+   "per_symbol_day": 3.15,
+   "refused_over_cap": 50,
+   "stop_pips_median": 80.5,
+   "stop_pips_p75": 100.2,
+   "structural_in_budget": 30,
+   "symbol_days": 26
+  },
+  "order_block|M15|all": {
+   "floor_below_min": 381,
+   "n": 502,
+   "overlap_share": 0.3,
+   "overlaps_m5_candidate_within_1h": 152,
+   "patterns": {
+    "engulfing": 79,
+    "rejection_choch": 8,
+    "strong_reclaim": 110,
+    "sweep_reclaim": 184,
+    "wick_rejection": 121
+   },
+   "per_symbol_day": 4.4,
+   "refused_over_cap": 69,
+   "stop_pips_median": 10.1,
+   "stop_pips_p75": 19,
+   "structural_in_budget": 52,
+   "symbol_days": 114
+  },
+  "order_block|M5|EURUSD": {
+   "floor_below_min": 204,
+   "n": 206,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 20,
+    "strong_reclaim": 80,
+    "sweep_reclaim": 75,
+    "wick_rejection": 31
+   },
+   "per_symbol_day": 9.36,
+   "refused_over_cap": 0,
+   "stop_pips_median": 4.7,
+   "stop_pips_p75": 7.2,
+   "structural_in_budget": 2,
+   "symbol_days": 22
+  },
+  "order_block|M5|FX": {
+   "floor_below_min": 679,
+   "n": 694,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 85,
+    "rejection_choch": 4,
+    "strong_reclaim": 259,
+    "sweep_reclaim": 242,
+    "wick_rejection": 104
+   },
+   "per_symbol_day": 7.89,
+   "refused_over_cap": 0,
+   "stop_pips_median": 6.9,
+   "stop_pips_p75": 10.2,
+   "structural_in_budget": 15,
+   "symbol_days": 88
+  },
+  "order_block|M5|GBPJPY": {
+   "floor_below_min": 182,
+   "n": 186,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 22,
+    "rejection_choch": 2,
+    "strong_reclaim": 68,
+    "sweep_reclaim": 68,
+    "wick_rejection": 26
+   },
+   "per_symbol_day": 8.45,
+   "refused_over_cap": 0,
+   "stop_pips_median": 10.9,
+   "stop_pips_p75": 14.9,
+   "structural_in_budget": 4,
+   "symbol_days": 22
+  },
+  "order_block|M5|GBPUSD": {
+   "floor_below_min": 163,
+   "n": 166,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 25,
+    "strong_reclaim": 58,
+    "sweep_reclaim": 64,
+    "wick_rejection": 19
+   },
+   "per_symbol_day": 7.55,
+   "refused_over_cap": 0,
+   "stop_pips_median": 6.3,
+   "stop_pips_p75": 7.8,
+   "structural_in_budget": 3,
+   "symbol_days": 22
+  },
+  "order_block|M5|USDJPY": {
+   "floor_below_min": 130,
+   "n": 136,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 18,
+    "rejection_choch": 2,
+    "strong_reclaim": 53,
+    "sweep_reclaim": 35,
+    "wick_rejection": 28
+   },
+   "per_symbol_day": 6.18,
+   "refused_over_cap": 0,
+   "stop_pips_median": 7.1,
+   "stop_pips_p75": 11.9,
+   "structural_in_budget": 6,
+   "symbol_days": 22
+  },
+  "order_block|M5|XAU": {
+   "floor_below_min": 36,
+   "n": 146,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 5,
+    "strong_reclaim": 52,
+    "sweep_reclaim": 72,
+    "wick_rejection": 17
+   },
+   "per_symbol_day": 5.62,
+   "refused_over_cap": 63,
+   "stop_pips_median": 65.4,
+   "stop_pips_p75": 83.8,
+   "structural_in_budget": 47,
+   "symbol_days": 26
+  },
+  "order_block|M5|all": {
+   "floor_below_min": 715,
+   "n": 840,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 90,
+    "rejection_choch": 4,
+    "strong_reclaim": 311,
+    "sweep_reclaim": 314,
+    "wick_rejection": 121
+   },
+   "per_symbol_day": 7.37,
+   "refused_over_cap": 63,
+   "stop_pips_median": 7.9,
+   "stop_pips_p75": 15.2,
+   "structural_in_budget": 62,
+   "symbol_days": 114
+  },
+  "supply|M15|EURUSD": {
+   "floor_below_min": 95,
+   "n": 195,
+   "overlap_share": 0.65,
+   "overlaps_m5_candidate_within_1h": 127,
+   "patterns": {
+    "engulfing": 49,
+    "rejection_choch": 2,
+    "strong_reclaim": 12,
+    "sweep_reclaim": 68,
+    "wick_rejection": 64
+   },
+   "per_symbol_day": 8.86,
+   "refused_over_cap": 30,
+   "stop_pips_median": 12,
+   "stop_pips_p75": 14.4,
+   "structural_in_budget": 70,
+   "symbol_days": 22
+  },
+  "supply|M15|FX": {
+   "floor_below_min": 467,
+   "n": 972,
+   "overlap_share": 0.65,
+   "overlaps_m5_candidate_within_1h": 628,
+   "patterns": {
+    "engulfing": 237,
+    "rejection_choch": 32,
+    "strong_reclaim": 88,
+    "sweep_reclaim": 338,
+    "wick_rejection": 277
+   },
+   "per_symbol_day": 11.05,
+   "refused_over_cap": 115,
+   "stop_pips_median": 16,
+   "stop_pips_p75": 23.8,
+   "structural_in_budget": 390,
+   "symbol_days": 88
+  },
+  "supply|M15|GBPJPY": {
+   "floor_below_min": 57,
+   "n": 240,
+   "overlap_share": 0.6,
+   "overlaps_m5_candidate_within_1h": 144,
+   "patterns": {
+    "engulfing": 44,
+    "rejection_choch": 9,
+    "strong_reclaim": 40,
+    "sweep_reclaim": 77,
+    "wick_rejection": 70
+   },
+   "per_symbol_day": 10.91,
+   "refused_over_cap": 46,
+   "stop_pips_median": 26.8,
+   "stop_pips_p75": 30.2,
+   "structural_in_budget": 137,
+   "symbol_days": 22
+  },
+  "supply|M15|GBPUSD": {
+   "floor_below_min": 112,
+   "n": 199,
+   "overlap_share": 0.64,
+   "overlaps_m5_candidate_within_1h": 128,
+   "patterns": {
+    "engulfing": 57,
+    "rejection_choch": 7,
+    "strong_reclaim": 16,
+    "sweep_reclaim": 62,
+    "wick_rejection": 57
+   },
+   "per_symbol_day": 9.05,
+   "refused_over_cap": 8,
+   "stop_pips_median": 13.6,
+   "stop_pips_p75": 18,
+   "structural_in_budget": 79,
+   "symbol_days": 22
+  },
+  "supply|M15|USDJPY": {
+   "floor_below_min": 203,
+   "n": 338,
+   "overlap_share": 0.68,
+   "overlaps_m5_candidate_within_1h": 229,
+   "patterns": {
+    "engulfing": 87,
+    "rejection_choch": 14,
+    "strong_reclaim": 20,
+    "sweep_reclaim": 131,
+    "wick_rejection": 86
+   },
+   "per_symbol_day": 15.36,
+   "refused_over_cap": 31,
+   "stop_pips_median": 15.8,
+   "stop_pips_p75": 20.1,
+   "structural_in_budget": 104,
+   "symbol_days": 22
+  },
+  "supply|M15|XAU": {
+   "floor_below_min": 0,
+   "n": 262,
+   "overlap_share": 0.45,
+   "overlaps_m5_candidate_within_1h": 117,
+   "patterns": {
+    "engulfing": 64,
+    "rejection_choch": 10,
+    "strong_reclaim": 16,
+    "sweep_reclaim": 82,
+    "wick_rejection": 90
+   },
+   "per_symbol_day": 10.08,
+   "refused_over_cap": 253,
+   "stop_pips_median": 123,
+   "stop_pips_p75": 153.7,
+   "structural_in_budget": 9,
+   "symbol_days": 26
+  },
+  "supply|M15|all": {
+   "floor_below_min": 467,
+   "n": 1234,
+   "overlap_share": 0.6,
+   "overlaps_m5_candidate_within_1h": 745,
+   "patterns": {
+    "engulfing": 301,
+    "rejection_choch": 42,
+    "strong_reclaim": 104,
+    "sweep_reclaim": 420,
+    "wick_rejection": 367
+   },
+   "per_symbol_day": 10.82,
+   "refused_over_cap": 368,
+   "stop_pips_median": 19.9,
+   "stop_pips_p75": 36.4,
+   "structural_in_budget": 399,
+   "symbol_days": 114
+  },
+  "supply|M5|EURUSD": {
+   "floor_below_min": 220,
+   "n": 246,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 38,
+    "rejection_choch": 5,
+    "strong_reclaim": 60,
+    "sweep_reclaim": 84,
+    "wick_rejection": 59
+   },
+   "per_symbol_day": 11.18,
+   "refused_over_cap": 1,
+   "stop_pips_median": 6.9,
+   "stop_pips_p75": 9.4,
+   "structural_in_budget": 25,
+   "symbol_days": 22
+  },
+  "supply|M5|FX": {
+   "floor_below_min": 985,
+   "n": 1124,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 186,
+    "rejection_choch": 13,
+    "strong_reclaim": 262,
+    "sweep_reclaim": 425,
+    "wick_rejection": 238
+   },
+   "per_symbol_day": 12.77,
+   "refused_over_cap": 11,
+   "stop_pips_median": 9.6,
+   "stop_pips_p75": 13.7,
+   "structural_in_budget": 128,
+   "symbol_days": 88
+  },
+  "supply|M5|GBPJPY": {
+   "floor_below_min": 196,
+   "n": 247,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 48,
+    "rejection_choch": 2,
+    "strong_reclaim": 62,
+    "sweep_reclaim": 89,
+    "wick_rejection": 46
+   },
+   "per_symbol_day": 11.23,
+   "refused_over_cap": 6,
+   "stop_pips_median": 14.7,
+   "stop_pips_p75": 20.7,
+   "structural_in_budget": 45,
+   "symbol_days": 22
+  },
+  "supply|M5|GBPUSD": {
+   "floor_below_min": 280,
+   "n": 289,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 52,
+    "rejection_choch": 2,
+    "strong_reclaim": 62,
+    "sweep_reclaim": 119,
+    "wick_rejection": 54
+   },
+   "per_symbol_day": 13.14,
+   "refused_over_cap": 0,
+   "stop_pips_median": 8.2,
+   "stop_pips_p75": 10.6,
+   "structural_in_budget": 9,
+   "symbol_days": 22
+  },
+  "supply|M5|USDJPY": {
+   "floor_below_min": 289,
+   "n": 342,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 48,
+    "rejection_choch": 4,
+    "strong_reclaim": 78,
+    "sweep_reclaim": 133,
+    "wick_rejection": 79
+   },
+   "per_symbol_day": 15.55,
+   "refused_over_cap": 4,
+   "stop_pips_median": 11.5,
+   "stop_pips_p75": 15.5,
+   "structural_in_budget": 49,
+   "symbol_days": 22
+  },
+  "supply|M5|XAU": {
+   "floor_below_min": 15,
+   "n": 243,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 27,
+    "rejection_choch": 4,
+    "strong_reclaim": 52,
+    "sweep_reclaim": 87,
+    "wick_rejection": 73
+   },
+   "per_symbol_day": 9.35,
+   "refused_over_cap": 190,
+   "stop_pips_median": 94.6,
+   "stop_pips_p75": 125,
+   "structural_in_budget": 38,
+   "symbol_days": 26
+  },
+  "supply|M5|all": {
+   "floor_below_min": 1000,
+   "n": 1367,
+   "overlap_share": 0,
+   "overlaps_m5_candidate_within_1h": 0,
+   "patterns": {
+    "engulfing": 213,
+    "rejection_choch": 17,
+    "strong_reclaim": 314,
+    "sweep_reclaim": 512,
+    "wick_rejection": 311
+   },
+   "per_symbol_day": 11.99,
+   "refused_over_cap": 201,
+   "stop_pips_median": 11.1,
+   "stop_pips_p75": 20.5,
+   "structural_in_budget": 166,
+   "symbol_days": 114
+  }
+ },
+ "m15_window_ageing": {
+  "H1": {
+   "instances_with_1000_bar_window": 571,
+   "instances_with_production_window": 571,
+   "live_only_in_wide_window": 0,
+   "only_in_production_window": 0,
+   "wide_only_by_technique": {}
+  },
+  "M15": {
+   "instances_with_1000_bar_window": 1855,
+   "instances_with_production_window": 1893,
+   "live_only_in_wide_window": 1,
+   "only_in_production_window": 39,
+   "wide_only_by_technique": {
+    "supply_demand": 1
+   }
+  }
+ },
+ "proximity_fix": {
+  "higher_timeframe_candidates_not_offered_by_the_old_test_full_change": 1618,
+  "m15_supply_demand_candidates_after_full_change": 2619,
+  "m15_supply_demand_candidates_after_proximity_fix_only": 2701,
+  "m15_supply_demand_candidates_before": 2158,
+  "m15_supply_demand_not_offered_by_the_old_last_close_test_proximity_only_run": 707,
+  "m5_candidates_after": 3876,
+  "m5_candidates_before": 3876
+ }
+}

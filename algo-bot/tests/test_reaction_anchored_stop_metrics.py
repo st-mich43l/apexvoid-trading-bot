@@ -55,7 +55,7 @@ def test_an_anchored_plan_inside_the_envelope_is_counted_once_per_strategy():
   events, sink = _collector()
   out = _evaluate(4143.16, 4147.06, 4141.0, reasons=("m5_key_level_reaction", REACTION_EXTREME_EVIDENCE), sink=sink)
   assert out.allowed, out.reason_code
-  assert [e for e in events if e[0] in (ANCHORED, TOO_WIDE)] == [(ANCHORED, "XAU", {"strategy": "key_level"})]
+  assert [e for e in events if e[0] in (ANCHORED, TOO_WIDE)] == [(ANCHORED, "XAU", {"strategy": "key_level", "timeframe": "M5"})]
 
 
 def test_a_plan_without_the_evidence_code_is_not_counted():
@@ -71,7 +71,7 @@ def test_an_anchored_stop_beyond_the_envelope_maximum_is_rejected_and_counted_as
   assert not out.allowed
   assert out.reason_code == "stop_exceeds_go_invalidation_envelope"
   counted = [e for e in events if e[0] in (ANCHORED, TOO_WIDE)]
-  assert counted == [(ANCHORED, "XAU", {"strategy": "demand"}), (TOO_WIDE, "XAU", {"strategy": "demand"})]
+  assert counted == [(ANCHORED, "XAU", {"strategy": "demand", "timeframe": "M5"}), (TOO_WIDE, "XAU", {"strategy": "demand", "timeframe": "M5"})]
 
 
 def test_a_wide_stop_without_the_evidence_code_is_rejected_but_not_counted_as_anchored():
@@ -102,4 +102,4 @@ async def test_both_counters_land_in_the_metrics_hash_with_the_strategy_dimensio
     await increment_metric(client, name, symbol=symbol, dimensions=dims)
   for name in (ANCHORED, TOO_WIDE):
     assert int(await client.hget("auto_trade:metrics:XAU", name)) == 1
-    assert int(await client.hget(f"auto_trade:metrics:XAU:{name}", "strategy=demand")) == 1
+    assert int(await client.hget(f"auto_trade:metrics:XAU:{name}", "strategy=demand:timeframe=M5")) == 1

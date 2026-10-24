@@ -50,6 +50,9 @@ type Options struct {
 	// WithoutStopBudget replays the legacy-family strategies without the instrument stop budget (engine.WithoutLegacyStopBudget). Parity proofs against
 	// the frozen Python publisher, which had no budget, set it.
 	WithoutStopBudget bool
+	// LegacyWindowBars overrides the detector frames' window per timeframe for this replay only (the configuration is not touched). The ageing study of
+	// docs/strategies/htf-zone-structure.md uses it to see which higher-timeframe zones the production window drops while they are still live.
+	LegacyWindowBars map[market.Timeframe]int
 }
 
 // Replay dispatches a capture through the exact engine path a live feed uses
@@ -62,6 +65,16 @@ func Replay(doc *config.Document, capture *Capture, primary market.Timeframe, op
 	}
 	if err := engine.ApplyInstrument(&settings, doc, string(capture.Symbol)); err != nil {
 		return nil, err
+	}
+	if len(opts.LegacyWindowBars) > 0 {
+		windows := make(map[market.Timeframe]int, len(settings.LegacyRead.WindowBars))
+		for tf, n := range settings.LegacyRead.WindowBars {
+			windows[tf] = n
+		}
+		for tf, n := range opts.LegacyWindowBars {
+			windows[tf] = n
+		}
+		settings.LegacyRead.WindowBars = windows
 	}
 	if opts.WithoutStopBudget {
 		engine.WithoutLegacyStopBudget(&settings)

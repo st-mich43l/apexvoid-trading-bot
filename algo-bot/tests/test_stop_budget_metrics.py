@@ -65,14 +65,14 @@ def test_a_structural_stop_inside_the_budget_is_counted_per_strategy():
   events, sink = _collector()
   out = _evaluate(4143.16, 4147.06, 4141.0, reasons=("m5_key_level_reaction", STOP_BUDGET_STRUCTURAL_EVIDENCE), sink=sink, strategy_id="supply")
   assert out.allowed, out.reason_code
-  assert _budget_events(events) == [(STRUCTURAL, "XAU", {"strategy": "supply"})]
+  assert _budget_events(events) == [(STRUCTURAL, "XAU", {"strategy": "supply", "timeframe": "M5"})]
 
 
 def test_a_stop_below_the_floor_is_counted_as_floor():
   events, sink = _collector()
   out = _evaluate(4143.16, 4147.06, 4141.0, reasons=(STOP_BUDGET_FLOOR_EVIDENCE,), sink=sink, strategy_id="demand")
   assert out.allowed, out.reason_code
-  assert _budget_events(events) == [(FLOOR, "XAU", {"strategy": "demand"})]
+  assert _budget_events(events) == [(FLOOR, "XAU", {"strategy": "demand", "timeframe": "M5"})]
 
 
 def test_a_candidate_without_a_budget_code_is_not_counted():
@@ -102,4 +102,4 @@ async def test_both_counters_land_in_the_metrics_hash_with_the_strategy_dimensio
     await increment_metric(client, name, symbol=symbol, dimensions=dims)
   for name in (STRUCTURAL, FLOOR):
     assert int(await client.hget("auto_trade:metrics:XAU", name)) == 1
-    assert int(await client.hget(f"auto_trade:metrics:XAU:{name}", "strategy=key_level")) == 1
+    assert int(await client.hget(f"auto_trade:metrics:XAU:{name}", "strategy=key_level:timeframe=M5")) == 1
