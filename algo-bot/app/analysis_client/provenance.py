@@ -21,3 +21,7 @@ CATALOG_STRATEGY_IDS = frozenset({
   "fade_scalp",
   "impulse_pullback",
 })
+
+# Evidence code the Go engine appends when a legacy-family invalidation was set by the extreme of the reaction's own bars and not by the structure
+# (analysis-engine/internal/strategyutil/reaction_stop.go). The adapter requires only the strategy's own prefix, so the extra code is accepted.
+REACTION_EXTREME_EVIDENCE = "invalidation_beyond_reaction_extreme"

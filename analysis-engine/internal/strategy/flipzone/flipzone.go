@@ -24,7 +24,7 @@ import (
 )
 
 const ID strategy.StrategyID = "flip_zone"
-const Version = "v3"
+const Version = "v4"
 
 const (
 	structureVersion = "v2"
@@ -98,7 +98,7 @@ func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate 
 
 func (s *Strategy) spec() strategyutil.TechniqueSpec {
 	return strategyutil.TechniqueSpec{
-		ID: string(ID), Version: Version, ZoneEvidence: "m5_flip_zone_role_confirmed", ConfirmedEvidence: "m5_flip_zone_rejection_confirmed",
+		ID: string(ID), Version: Version, AnchorToReaction: true, ZoneEvidence: "m5_flip_zone_role_confirmed", ConfirmedEvidence: "m5_flip_zone_rejection_confirmed",
 		InvalidationLabel: "flip_zone_invalidated", InvalidationBufferATR: s.cfg.InvalidationBufferATR,
 		MinimumTargetDistanceATR: s.cfg.MinimumTargetDistanceATR, ExpiryHours: s.cfg.ExpiryHours, Fingerprint: s.fingerprint,
 		Versions: opportunity.AnalysisProvenance{

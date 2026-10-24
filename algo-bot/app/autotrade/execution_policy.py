@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 from decimal import Decimal, ROUND_HALF_UP
+import logging
 import math
 from types import SimpleNamespace
 from typing import Any, Callable
 
-from app.analysis_client.provenance import GO_ORIGIN_TAG
+from app.analysis_client.provenance import CATALOG_TAG, GO_ORIGIN_TAG, REACTION_EXTREME_EVIDENCE
 from app.autotrade.execution_route import SCALP_MICRO_CLIPS, resolve_execution_route_plan
 from app.autotrade.xau_ladder import XAU_DIGITS, round_price as round_xau_price
 from app.autotrade.protective_stop import (
@@ -33,6 +34,8 @@ from app.autotrade.strategy_taxonomy import (
   is_zone_strategy,
   match_bypasses_opposing_structure,
 )
+
+log = logging.getLogger(__name__)
 
 # A scalp never targets past this many R (M1 scalps: scalp_rr; range scalps: the
 # fixed_rr ladder trimmed to it).
@@ -473,6 +476,24 @@ def policy_for(strategy: str, cfg: Any | None = None) -> ExecutionPolicy:
   )
 
 
+def _catalog_id(match: Any) -> str:
+  """The Go catalog id of the strategy (``key_level``), read from the adapter's ``catalog:`` tag; the display name when absent."""
+  for tag in tuple(getattr(match, "tags", ()) or ()):
+    if isinstance(tag, str) and tag.startswith(CATALOG_TAG):
+      return tag[len(CATALOG_TAG):]
+  return str(getattr(match, "strategy", "") or "unknown")
+
+
+def _emit_metric(sink: Callable[[str, str, dict[str, str]], None] | None, name: str, symbol: str, dimensions: dict[str, str]) -> None:
+  """Counters are telemetry: a failing sink is never a reason to refuse or alter a plan."""
+  if sink is None:
+    return
+  try:
+    sink(name, symbol, dict(dimensions))
+  except Exception:  # noqa: BLE001 - telemetry must not block admission
+    log.exception("execution policy metric failed name=%s symbol=%s", name, symbol)
+
+
 def evaluate_execution_policy(
   match: Any,
   *,
@@ -521,6 +542,8 @@ def evaluate_execution_policy(
   atr = float(getattr(match, "atr", 0.0) or 0.0)
   direction = str(getattr(match, "direction", "")).upper()
   go_origin = GO_ORIGIN_TAG in tuple(getattr(match, "tags", ()) or ())
+  reaction_anchored = go_origin and REACTION_EXTREME_EVIDENCE in tuple(getattr(match, "reasons", ()) or ())
+  reaction_anchored_dims = {"strategy": _catalog_id(match)}
   pip = pip_size if pip_size > 0 else 0.1
   low, high, execution_zone_expanded = _execution_entry_zone(
     match,
@@ -838,6 +861,8 @@ def evaluate_execution_policy(
     structure_buffer_atr = float(execution.scaling.add.stop_buffer_atr)
     wick_buffer_atr = float(execution.stops.wick_stop_buffer_atr)
     if go_origin and getattr(match, "go_invalidation_price", None) is not None:
+      if reaction_anchored:
+        _emit_metric(metric_sink, "go_invalidation_reaction_anchored", symbol, reaction_anchored_dims)
       stop_plan = plan_go_invalidation_stop(
         direction=direction,
         entry_zone_low=low,
@@ -913,6 +938,8 @@ def evaluate_execution_policy(
   except ProtectiveStopError as exc:
     stop_plan_error = str(exc)
     stop_plan_error_measured = dict(getattr(exc, "measured", None) or {})
+    if reaction_anchored and stop_plan_error == "stop_exceeds_go_invalidation_envelope":
+      _emit_metric(metric_sink, "go_invalidation_reaction_anchored_too_wide", symbol, reaction_anchored_dims)
   if (
     stop_plan is not None
     and (

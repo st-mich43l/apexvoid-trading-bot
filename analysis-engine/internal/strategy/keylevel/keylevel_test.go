@@ -252,9 +252,10 @@ func TestTheTargetIsTheNearestOpposingLiquidityElseAFixedRewardRisk(t *testing.T
 	if len(without) != 1 {
 		t.Fatalf("a missing liquidity target is not a reason to drop the setup: %+v", without)
 	}
-	// Entry high 99.5, invalidation 98.5-0.5=98.0: risk 1.5, 2R above 99.5.
-	if got := float64(without[0].Targets[0].Price.Price); got != 102.5 {
-		t.Fatalf("fixed 2R target beyond the entry is 102.5, got %v", got)
+	// Entry high 99.5. The reaction's own wick traded down to 98.0, so the invalidation is anchored beyond it: 98.0-0.5 = 97.5 (the
+	// structural-only price, 98.5-0.5 = 98.0, sat inside the confirming bar). Risk 2.0, 2R above 99.5: the fixed target follows the stop.
+	if got := float64(without[0].Targets[0].Price.Price); got != 103.5 {
+		t.Fatalf("fixed 2R target beyond the entry is 103.5, got %v", got)
 	}
 }
 
