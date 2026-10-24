@@ -24,7 +24,7 @@ import (
 )
 
 const ID strategy.StrategyID = "flip_zone"
-const Version = "v4"
+const Version = "v5"
 
 const (
 	structureVersion = "v2"
@@ -42,10 +42,13 @@ type Config struct {
 	BreakoutAcceptBars int
 	// Legacy qualifies the reaction through the frozen detector contract.
 	Legacy strategyutil.LegacyDetectorSettings
+	// StopBudget is the instrument's stop envelope (strategyutil.StopBudget); the zero value is no budget.
+	StopBudget strategyutil.StopBudget
 }
 
 // Strategy is FlipZoneStrategy.
 type Strategy struct {
+	strategyutil.RefusalCounter
 	cfg         Config
 	fingerprint string
 }
@@ -71,10 +74,15 @@ func New(cfg strategy.Config) (strategy.Strategy, error) {
 	if out.Legacy, err = strategyutil.ParseLegacyDetectorSettings(cfg.Parameters); err != nil {
 		return nil, fmt.Errorf("flipzone: %w", err)
 	}
+	if out.StopBudget, err = strategyutil.ParseStopBudget(cfg.Parameters); err != nil {
+		return nil, fmt.Errorf("flipzone: %w", err)
+	}
 	if out.InvalidationBufferATR <= 0 || out.ExpiryHours <= 0 || out.BreakoutAcceptBars < 1 {
 		return nil, fmt.Errorf("flipzone: invalidation_buffer_atr, expiry_hours and breakout_accept_bars must be positive")
 	}
-	return &Strategy{cfg: out, fingerprint: strategyutil.Fingerprint(string(cfg.ID), cfg.Version, cfg.Parameters)}, nil
+	s := &Strategy{cfg: out, fingerprint: strategyutil.Fingerprint(string(cfg.ID), cfg.Version, cfg.Parameters)}
+	s.cfg.StopBudget.Refusals = &s.RefusalCounter
+	return s, nil
 }
 
 func (s *Strategy) ID() strategy.StrategyID { return ID }
@@ -98,7 +106,7 @@ func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate 
 
 func (s *Strategy) spec() strategyutil.TechniqueSpec {
 	return strategyutil.TechniqueSpec{
-		ID: string(ID), Version: Version, AnchorToReaction: true, ZoneEvidence: "m5_flip_zone_role_confirmed", ConfirmedEvidence: "m5_flip_zone_rejection_confirmed",
+		ID: string(ID), Version: Version, AnchorToReaction: true, StopBudget: s.cfg.StopBudget, ZoneEvidence: "m5_flip_zone_role_confirmed", ConfirmedEvidence: "m5_flip_zone_rejection_confirmed",
 		InvalidationLabel: "flip_zone_invalidated", InvalidationBufferATR: s.cfg.InvalidationBufferATR,
 		MinimumTargetDistanceATR: s.cfg.MinimumTargetDistanceATR, ExpiryHours: s.cfg.ExpiryHours, Fingerprint: s.fingerprint,
 		Versions: opportunity.AnalysisProvenance{

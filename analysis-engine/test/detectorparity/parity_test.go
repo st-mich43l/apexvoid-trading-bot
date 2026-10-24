@@ -96,7 +96,7 @@ func replay(t *testing.T, doc *config.Document, file string) (market.Symbol, map
 		t.Fatal(err)
 	}
 	observed := map[int64]*observedBar{}
-	_, err = replaycapture.Replay(doc, capture, market.M5, replaycapture.Options{OnEvaluation: func(e engine.Evaluation) {
+	_, err = replaycapture.Replay(doc, capture, market.M5, replaycapture.Options{WithoutStopBudget: true, OnEvaluation: func(e engine.Evaluation) {
 		if e.Timeframe != market.M5 || e.Context == nil || e.Context.Legacy == nil {
 			return
 		}

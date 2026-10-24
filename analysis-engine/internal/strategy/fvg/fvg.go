@@ -28,7 +28,7 @@ import (
 )
 
 const ID strategy.StrategyID = "fvg"
-const Version = "v3"
+const Version = "v4"
 
 const (
 	structureVersion = "v2"
@@ -50,10 +50,13 @@ type Config struct {
 	Technique strategyutil.TechniqueGeometry
 	// Legacy qualifies the confirmed reaction through the frozen detector contract.
 	Legacy strategyutil.LegacyDetectorSettings
+	// StopBudget is the instrument's stop envelope (strategyutil.StopBudget); the zero value is no budget.
+	StopBudget strategyutil.StopBudget
 }
 
 // Strategy is FVGStrategy.
 type Strategy struct {
+	strategyutil.RefusalCounter
 	cfg         Config
 	timeframe   market.Timeframe
 	fingerprint string
@@ -67,7 +70,9 @@ func New(cfg strategy.Config) (strategy.Strategy, error) {
 	if err != nil {
 		return nil, fmt.Errorf("fvg: %w", err)
 	}
-	return &Strategy{cfg: parsed, timeframe: market.M5, fingerprint: configFingerprint(cfg)}, nil
+	s := &Strategy{cfg: parsed, timeframe: market.M5, fingerprint: configFingerprint(cfg)}
+	s.cfg.StopBudget.Refusals = &s.RefusalCounter
+	return s, nil
 }
 
 func parseConfig(params map[string]any) (Config, error) {
@@ -112,7 +117,12 @@ func parseConfig(params map[string]any) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	stopBudget, err := strategyutil.ParseStopBudget(params)
+	if err != nil {
+		return Config{}, err
+	}
 	return Config{
+		StopBudget:      stopBudget,
 		Legacy:          legacyConfig,
 		MinimumStrength: minimumStrength, MinimumGapATR: minimumGap, InvalidationBufferATR: invalidationBuffer,
 		MinimumTargetDistanceATR: minimumTargetDistance, ExpiryHours: expiryHours, Reaction: reactionConfig, Technique: techniqueConfig,
@@ -145,7 +155,7 @@ func (s *Strategy) RequiredTimeframes() []market.Timeframe {
 // decides on the frame's technique instances.
 func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate {
 	return append(s.resting(ctx), strategyutil.ConfirmedTechnique(ctx, s.cfg.Legacy, strategyutil.TechniqueFVG, "", strategyutil.TechniqueSpec{
-		ID: string(ID), Version: Version, AnchorToReaction: true, ZoneEvidence: "m5_fvg_zone_confirmed", ConfirmedEvidence: "m5_fvg_rejection_confirmed",
+		ID: string(ID), Version: Version, AnchorToReaction: true, StopBudget: s.cfg.StopBudget, ZoneEvidence: "m5_fvg_zone_confirmed", ConfirmedEvidence: "m5_fvg_rejection_confirmed",
 		InvalidationLabel: "fvg_invalidated", InvalidationBufferATR: s.cfg.InvalidationBufferATR,
 		MinimumTargetDistanceATR: s.cfg.MinimumTargetDistanceATR, ExpiryHours: s.cfg.ExpiryHours, Fingerprint: s.fingerprint,
 		Versions: opportunity.AnalysisProvenance{

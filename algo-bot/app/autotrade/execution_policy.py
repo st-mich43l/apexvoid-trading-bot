@@ -9,7 +9,13 @@ import math
 from types import SimpleNamespace
 from typing import Any, Callable
 
-from app.analysis_client.provenance import CATALOG_TAG, GO_ORIGIN_TAG, REACTION_EXTREME_EVIDENCE
+from app.analysis_client.provenance import (
+  CATALOG_TAG,
+  GO_ORIGIN_TAG,
+  REACTION_EXTREME_EVIDENCE,
+  STOP_BUDGET_FLOOR_EVIDENCE,
+  STOP_BUDGET_STRUCTURAL_EVIDENCE,
+)
 from app.autotrade.execution_route import SCALP_MICRO_CLIPS, resolve_execution_route_plan
 from app.autotrade.xau_ladder import XAU_DIGITS, round_price as round_xau_price
 from app.autotrade.protective_stop import (
@@ -544,6 +550,12 @@ def evaluate_execution_policy(
   go_origin = GO_ORIGIN_TAG in tuple(getattr(match, "tags", ()) or ())
   reaction_anchored = go_origin and REACTION_EXTREME_EVIDENCE in tuple(getattr(match, "reasons", ()) or ())
   reaction_anchored_dims = {"strategy": _catalog_id(match)}
+  go_reasons = tuple(getattr(match, "reasons", ()) or ()) if go_origin else ()
+  stop_budget_metric = (
+    "go_stop_budget_structural" if STOP_BUDGET_STRUCTURAL_EVIDENCE in go_reasons
+    else "go_stop_budget_floor" if STOP_BUDGET_FLOOR_EVIDENCE in go_reasons
+    else None
+  )
   pip = pip_size if pip_size > 0 else 0.1
   low, high, execution_zone_expanded = _execution_entry_zone(
     match,
@@ -863,6 +875,8 @@ def evaluate_execution_policy(
     if go_origin and getattr(match, "go_invalidation_price", None) is not None:
       if reaction_anchored:
         _emit_metric(metric_sink, "go_invalidation_reaction_anchored", symbol, reaction_anchored_dims)
+      if stop_budget_metric is not None:
+        _emit_metric(metric_sink, stop_budget_metric, symbol, reaction_anchored_dims)
       stop_plan = plan_go_invalidation_stop(
         direction=direction,
         entry_zone_low=low,
