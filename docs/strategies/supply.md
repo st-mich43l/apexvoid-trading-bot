@@ -12,7 +12,7 @@ What this does not fix: Demand stays negative in the replay in every slice (fres
 
 ## Strategy ID / version
 
-`supply`, `v3`. Implemented in `analysis-engine/internal/strategy/supply`.
+`supply`, `v4`. Implemented in `analysis-engine/internal/strategy/supply`.
 Algorithm versions this thesis was validated against: `structure=v2`,
 `liquidity=v1`, `zone=v1`, `config=3` (source task §13 — bumps
 independently of those primitives' own versions).
@@ -60,6 +60,8 @@ thesis, not a "price just touched it this bar" reaction.
 - **Invalidation**: `zone.High + invalidation_buffer_atr * ATR` — a
   confirmed close beyond the zone's own far edge plus a buffer (a bare
   touch of the edge is not itself invalidation).
+
+**Reaction-anchored invalidation (v4).** A candidate with a confirmed reaction publishes the far edge of the structure or, if the bars from the touch to the confirmation traded beyond it, that extreme, in both cases one `invalidation_buffer_atr*ATR` further out (Buy: `min(structure low, lowest low touch..confirm) - buffer`; Sell: `max(structure high, highest high touch..confirm) + buffer`). A sweep or strong reclaim is confirmed by a wick that pierces the band, and a stop inside that wick has already been traded. The buffer is unchanged and has no pip floor; when the reaction's extreme set the price the candidate carries the evidence code `invalidation_beyond_reaction_extreme`. A resting candidate (no confirmation) keeps the structural price, and the fixed-reward:risk fallback target, the quality geometry and the published invalidation follow the new price. Measured on the committed captures in [reaction-anchored-stop.md](reaction-anchored-stop.md). Decisions and entry are unchanged (`LEGACY_PARITY_PROVEN`); the invalidation differs from the frozen publisher by design.
 - **Target**: the nearest `LiquiditySellSide` pool's low, at least
   `minimum_target_distance_atr * ATR` from entry.
 
