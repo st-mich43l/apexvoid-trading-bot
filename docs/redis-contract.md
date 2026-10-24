@@ -209,8 +209,8 @@ bars; Go marks it with the evidence code `invalidation_beyond_reaction_extreme`)
 
 | Counter | Dimension | Incremented when |
 |---|---|---|
-| `go_invalidation_reaction_anchored` | `strategy` (catalog id) | a Go-origin plan whose envelope carries the evidence code reaches stop planning |
-| `go_invalidation_reaction_anchored_too_wide` | `strategy` (catalog id) | `plan_go_invalidation_stop` rejects such a plan with `stop_exceeds_go_invalidation_envelope` (the anchored stop is wider than the instrument envelope maximum) |
+| `go_invalidation_reaction_anchored` | `strategy` (catalog id), `timeframe` | a Go-origin plan whose envelope carries the evidence code reaches stop planning |
+| `go_invalidation_reaction_anchored_too_wide` | `strategy` (catalog id), `timeframe` | `plan_go_invalidation_stop` rejects such a plan with `stop_exceeds_go_invalidation_envelope` (the anchored stop is wider than the instrument envelope maximum) |
 
 The legacy-family strategies (`key_level`, `supply`, `demand`, `order_block`,
 `fvg`, `flip_zone`, `trendline`) publish only a structural stop inside the
@@ -222,8 +222,19 @@ evaluation, failures logged and ignored):
 
 | Counter | Dimension | Incremented when |
 |---|---|---|
-| `go_stop_budget_structural` | `strategy` (catalog id) | a Go-origin plan whose envelope carries `stop_budget_structural` reaches stop planning |
-| `go_stop_budget_floor` | `strategy` (catalog id) | the same, for `stop_budget_floor` |
+| `go_stop_budget_structural` | `strategy` (catalog id), `timeframe` | a Go-origin plan whose envelope carries `stop_budget_structural` reaches stop planning |
+| `go_stop_budget_floor` | `strategy` (catalog id), `timeframe` | the same, for `stop_budget_floor` |
+
+The zone strategies (`supply`, `demand`, `order_block`, `fvg`) find their setup on
+M15/H1 structure and confirm and execute it on M5. Every Go evaluation counter
+above therefore carries a `timeframe` dimension next to `strategy`: the timeframe
+the setup's structure was found on (`M15` or `H1` from the typed
+`structure_timeframe` / tag `go_structure_tf:<TF>`, `M5` when the opportunity
+carries none), and one counter records the mix directly:
+
+| Counter | Dimension | Incremented when |
+|---|---|---|
+| `go_structure_timeframe` | `strategy` (catalog id), `timeframe` | every Go-origin plan reaches stop planning (once per admission evaluation, like the counters above) |
 
 The dedicated signal bot sends full operational cards only to the configured
 owner DM. `SIGNAL_PUBLIC_CHANNEL_ID` remains exclusively for manual broadcasts

@@ -144,10 +144,31 @@ func structuralInstanceSource(exec *analysiscontext.LegacyFrame, settings Settin
 	}
 }
 
-// higherTimeframeInstanceSource lazily yields the supply/demand instances of a
-// higher timeframe's own scored zones (same collection the execution frame
-// uses, on that frame's bars and ATR). OriginIndex is relative to that frame;
-// the strategy that binds them to the execution frame maps it by bar time.
+// higherTimeframeTechniques are the techniques exported from a higher timeframe's own scored zones: the ones the zone strategies (supply, demand,
+// order_block, fvg) read. Every other instance (CRT, iFVG, ...) stays on the execution frame.
+var higherTimeframeTechniques = map[string]bool{"supply_demand": true, "order_block": true, "fvg": true}
+
+// exportHigherTimeframe keeps the instances of the techniques the zone strategies read and stamps each with the timeframe it was found on.
+func exportHigherTimeframe(all []techniquezone.Instance, tf market.Timeframe) []techniquezone.Instance {
+	var out []techniquezone.Instance
+	for _, in := range all {
+		if !higherTimeframeTechniques[in.Technique] {
+			continue
+		}
+		in.Timeframe = string(tf)
+		out = append(out, in)
+	}
+	return out
+}
+
+// higherTimeframeInstanceSource lazily yields the supply/demand, order block and fair value gap instances of a higher timeframe's own scored zones
+// (same collection the execution frame uses, on that frame's bars and ATR). OriginIndex is relative to that frame; the strategy that binds them to
+// the execution frame maps it by bar time.
+//
+// The structure is judged as a fact (spent, invalidated, width, FVG fill and minimum, order block body and BOS), not by where the higher frame's
+// own last close sits: IgnoreProximity is on. With it off, an H1 zone was offered only if the last CLOSED H1 bar closed in it or at its proximal
+// edge, so an M5 wick into the zone in the middle of an hour (after an H1 bar that closed away from it) found no instance. Proximity is decided
+// where the trade is executed, by the M5 EntryValid check in TechniqueSource.publish.
 func higherTimeframeInstanceSource(frame *analysiscontext.LegacyFrame, tf market.Timeframe, settings Settings) func() []techniquezone.Instance {
 	var once sync.Once
 	var instances []techniquezone.Instance
@@ -157,13 +178,9 @@ func higherTimeframeInstanceSource(frame *analysiscontext.LegacyFrame, tf market
 				return
 			}
 			atr := techniquezone.ATRScalar(frame.ATR, 1)
-			for _, in := range techniquezone.InstancesFromScoredZones(frame.TechniqueZones, frame.Bars, atr, settings.TechniqueZones.Technique) {
-				if in.Technique != "supply_demand" {
-					continue
-				}
-				in.Timeframe = string(tf)
-				instances = append(instances, in)
-			}
+			technique := settings.TechniqueZones.Technique
+			technique.IgnoreProximity = true
+			instances = exportHigherTimeframe(techniquezone.InstancesFromScoredZones(frame.TechniqueZones, frame.Bars, atr, technique), tf)
 		})
 		return instances
 	}

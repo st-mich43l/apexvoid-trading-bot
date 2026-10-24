@@ -4,7 +4,7 @@
 
 ## Strategy ID / version
 
-`order_block`, `v4`. Implemented in
+`order_block`, `v5`. Implemented in
 `analysis-engine/internal/strategy/orderblock`. Algorithm versions:
 `structure=v2`, `liquidity=v1`, `zone=v1`, `config=3`.
 
@@ -51,6 +51,8 @@ never re-derived.
   `minimum_target_distance_atr*ATR` from the block's own near edge.
 
 **Instrument stop budget (v4).** A candidate whose structural stop (distance from the proximal entry edge to the invalidation above) exceeds the instrument stop cap (XAU 70, EURUSD 20, GBPUSD 25, GBPJPY 35, USDJPY 28 pips) is **not published**: refused, never tightened, and neither the entry nor the invalidation is moved to fit. One inside [floor, cap] carries `stop_budget_structural`; one below the floor carries `stop_budget_floor` and execution widens it. Measured, with the Python side, in [legacy-stop-budget.md](legacy-stop-budget.md).
+
+**Higher-timeframe structure (v5).** The setup is found on M15/H1 structure and confirmed and executed on M5 (`higher_timeframes: [M15, H1]`). The higher frame's zones are judged as facts (spent, invalidated, width, fill and minimum, body and BOS), not by its last close; the M5 price decides whether the entry is valid. The M5 reaction confirms, the entry band is the proximal slice, and the stop is beyond the whole higher-timeframe zone and the M5 reaction extreme, plus `invalidation_buffer_atr` x the M5 detector ATR. The candidate carries `StructureTimeframe` and the evidence `htf_zone_<tf>`. Measured in [htf-zone-structure.md](htf-zone-structure.md).
 
 ## Expiry
 
