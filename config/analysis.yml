@@ -248,7 +248,7 @@ analysis:
       minimum_reward_risk: 1.15
       expiry_hours: 12.0
     supply:
-      version: v5
+      version: v6
       enabled: true
       # A zone already touched more than this many times is spent and does not publish
       # (0 = no limit, the frozen Python publishers' behavior). 2026-10 replay, dev and
@@ -267,12 +267,14 @@ analysis:
       epsilon_atr_fraction: 0.05
       maximum_zone_atr: 3.0
       entry_max_width_price: 5.0
-      # Also evaluate this timeframe's own supply/demand zones against the M5 bars
-      # (the frozen Python publishers read the M5 zone population only). The M5
-      # reaction confirmation, entry validity and stop rules are unchanged.
-      higher_timeframes: [M15]
+      # Also evaluate these timeframes' own supply/demand zones against the M5 bars
+      # (the frozen Python publishers read the M5 zone population only). The setup is
+      # found on the higher-timeframe structure, the M5 reaction confirms it and the M5
+      # price executes it (owner direction 2026-10-24); the M5 reaction confirmation,
+      # entry validity and stop rules are unchanged.
+      higher_timeframes: [M15, H1]
     demand:
-      version: v5
+      version: v6
       enabled: true
       # See supply. Demand setups on zones touched 3+ times averaged -0.31R / -0.39R (dev / out of
       # sample) against -0.08R / -0.22R on zones touched at most once.
@@ -289,12 +291,14 @@ analysis:
       epsilon_atr_fraction: 0.05
       maximum_zone_atr: 3.0
       entry_max_width_price: 5.0
-      # Also evaluate this timeframe's own supply/demand zones against the M5 bars
-      # (the frozen Python publishers read the M5 zone population only). The M5
-      # reaction confirmation, entry validity and stop rules are unchanged.
-      higher_timeframes: [M15]
+      # Also evaluate these timeframes' own supply/demand zones against the M5 bars
+      # (the frozen Python publishers read the M5 zone population only). The setup is
+      # found on the higher-timeframe structure, the M5 reaction confirms it and the M5
+      # price executes it (owner direction 2026-10-24); the M5 reaction confirmation,
+      # entry validity and stop rules are unchanged.
+      higher_timeframes: [M15, H1]
     order_block:
-      version: v4
+      version: v5
       enabled: true
       minimum_strength: 0.4
       # 2026-09-30: production saw order blocks as small as 0.03 ATR (half
@@ -312,8 +316,10 @@ analysis:
       maximum_zone_atr: 3.0
       entry_max_width_price: 5.0
       momentum_body_fraction: 0.6
+      # Also evaluate these timeframes' own order blocks against the M5 bars (see supply).
+      higher_timeframes: [M15, H1]
     fvg:
-      version: v4
+      version: v5
       enabled: true
       minimum_strength: 0.4
       # 2026-09-30: XAU traded 13-pip gaps (0.36 ATR) because a big middle
@@ -330,6 +336,11 @@ analysis:
       epsilon_atr_fraction: 0.05
       maximum_zone_atr: 2.0
       entry_max_width_price: 5.0
+      # Also evaluate these timeframes' own fair value gaps against the M5 bars: the setup is
+      # found on the higher-timeframe structure, the M5 reaction confirms it and the M5 price
+      # executes it (owner direction 2026-10-24). Confirmation, entry validity and stop rules
+      # are the M5 ones; the stop is beyond the whole higher-timeframe gap.
+      higher_timeframes: [M15, H1]
     ifvg:
       version: v3
       enabled: true
