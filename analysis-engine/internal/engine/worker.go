@@ -194,6 +194,9 @@ func (w *SymbolWorker) ApplyWithResult(event marketdata.BarEvent) (AnalysisSnaps
 	if evalErr != nil {
 		return AnalysisSnapshot{}, result, evalErr
 	}
+	for _, refused := range evaluation.StopBudgetRefused {
+		w.telemetry.Count(telemetry.CounterStrategyStopBudgetRefused, symbolLabel, tfLabel, int64(refused))
+	}
 
 	doneOpp := w.telemetry.Time(telemetry.PhaseOpportunity, symbolLabel, tfLabel)
 	// Invalidation is evaluated before this bar's strategy observations so a

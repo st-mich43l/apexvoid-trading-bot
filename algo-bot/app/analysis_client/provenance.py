@@ -25,3 +25,9 @@ CATALOG_STRATEGY_IDS = frozenset({
 # Evidence code the Go engine appends when a legacy-family invalidation was set by the extreme of the reaction's own bars and not by the structure
 # (analysis-engine/internal/strategyutil/reaction_stop.go). The adapter requires only the strategy's own prefix, so the extra code is accepted.
 REACTION_EXTREME_EVIDENCE = "invalidation_beyond_reaction_extreme"
+
+# Evidence codes the Go engine appends to a legacy-family candidate when the instrument stop budget was applied (analysis-engine/internal/strategyutil/stop_budget.go):
+# the structural stop lies inside the instrument's [floor, cap] ("structural") or is tighter than the floor and widened by execution ("floor"). A stop wider than the
+# cap is never published. Both are plain evidence codes the adapter accepts.
+STOP_BUDGET_STRUCTURAL_EVIDENCE = "stop_budget_structural"
+STOP_BUDGET_FLOOR_EVIDENCE = "stop_budget_floor"

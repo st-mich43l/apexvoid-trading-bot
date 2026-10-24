@@ -33,6 +33,15 @@ type Evaluation struct {
 	Candidates []opportunity.Candidate
 	Evaluated  []StrategyID
 	Deferred   []StrategyID
+	// StopBudgetRefused counts, per strategy, the candidates refused in this evaluation because the structural stop exceeded the instrument cap
+	// (nil when none). Strategies that apply the stop budget report it through StopBudgetReporter.
+	StopBudgetRefused map[StrategyID]int
+}
+
+// StopBudgetReporter is implemented by a strategy that refuses a structural stop wider than the instrument cap. The registry drains the count after
+// each evaluation so the engine can record it; a strategy that does not implement it reports nothing.
+type StopBudgetReporter interface {
+	TakeStopBudgetRefusals() int64
 }
 
 type registeredStrategy struct {
@@ -183,6 +192,14 @@ func (r *Registry) Evaluate(ctx *analysiscontext.MarketContext, closed market.Ti
 		}
 		candidates := registered.strategy.Evaluate(ctx)
 		result.Evaluated = append(result.Evaluated, registered.config.ID)
+		if reporter, ok := registered.strategy.(StopBudgetReporter); ok {
+			if n := reporter.TakeStopBudgetRefusals(); n > 0 {
+				if result.StopBudgetRefused == nil {
+					result.StopBudgetRefused = make(map[StrategyID]int)
+				}
+				result.StopBudgetRefused[registered.config.ID] += int(n)
+			}
+		}
 		for _, candidate := range candidates {
 			if err := validateCandidate(candidate, registered, ctx.Symbol); err != nil {
 				return Evaluation{}, err

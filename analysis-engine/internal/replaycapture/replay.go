@@ -47,6 +47,9 @@ type Options struct {
 	// this replay only (the configuration is not touched). Sensitivity analyses use
 	// it to show how a result moves when a coefficient does.
 	StrategyParameters map[string]map[string]any
+	// WithoutStopBudget replays the legacy-family strategies without the instrument stop budget (engine.WithoutLegacyStopBudget). Parity proofs against
+	// the frozen Python publisher, which had no budget, set it.
+	WithoutStopBudget bool
 }
 
 // Replay dispatches a capture through the exact engine path a live feed uses
@@ -59,6 +62,9 @@ func Replay(doc *config.Document, capture *Capture, primary market.Timeframe, op
 	}
 	if err := engine.ApplyInstrument(&settings, doc, string(capture.Symbol)); err != nil {
 		return nil, err
+	}
+	if opts.WithoutStopBudget {
+		engine.WithoutLegacyStopBudget(&settings)
 	}
 	settings.OnEvaluation = opts.OnEvaluation
 	for _, id := range opts.DisabledStrategies {

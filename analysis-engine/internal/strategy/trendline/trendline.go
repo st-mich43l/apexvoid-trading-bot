@@ -24,14 +24,16 @@ import (
 )
 
 const ID strategy.StrategyID = "trendline"
-const Version = "v5"
+const Version = "v6"
 
 type Strategy struct {
+	strategyutil.RefusalCounter
 	minimumValidationTouches, chopMinimumValidationTouches, maximumBarsSinceLastTouch int
 	invalidationATR, expiryHours, minimumTargetDistanceATR                            float64
 	interactionBandATR, closeViolationATR, approachMinDistanceATR                     float64
 	chopRequireHTFAligned, requireHTFAligned, rejectExhausted                         bool
 	legacy                                                                            strategyutil.LegacyDetectorSettings
+	stopBudget                                                                        strategyutil.StopBudget
 	fingerprint                                                                       string
 }
 
@@ -70,6 +72,10 @@ func New(cfg strategy.Config) (strategy.Strategy, error) {
 	if s.legacy, err = strategyutil.ParseLegacyDetectorSettings(cfg.Parameters); err != nil {
 		return nil, err
 	}
+	if s.stopBudget, err = strategyutil.ParseStopBudget(cfg.Parameters); err != nil {
+		return nil, err
+	}
+	s.stopBudget.Refusals = &s.RefusalCounter
 	if s.minimumValidationTouches < 0 || s.invalidationATR <= 0 || s.expiryHours <= 0 || s.interactionBandATR <= 0 ||
 		s.closeViolationATR <= 0 || s.approachMinDistanceATR < 0 || s.maximumBarsSinceLastTouch < 1 || s.minimumTargetDistanceATR <= 0 {
 		return nil, fmt.Errorf("trendline: invalid parameters")
@@ -142,7 +148,7 @@ func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Ca
 		}
 	}
 	candidate, ok := strategyutil.TechniqueCandidate(ctx, best, strategyutil.TechniqueSpec{
-		ID: string(ID), Version: Version, AnchorToReaction: true, ZoneEvidence: "m5_trendline_causal_anchors", ConfirmedEvidence: "m5_trendline_reaction_confirmed",
+		ID: string(ID), Version: Version, AnchorToReaction: true, StopBudget: s.stopBudget, ZoneEvidence: "m5_trendline_causal_anchors", ConfirmedEvidence: "m5_trendline_reaction_confirmed",
 		InvalidationLabel: "trendline_close_violation", InvalidationBufferATR: s.invalidationATR, ExpiryHours: s.expiryHours, Fingerprint: s.fingerprint,
 		// The target is the nearest opposing liquidity at least this far from the entry; with none there is
 		// no technical objective and nothing is published (v3 invented twice the distance to the band edge).

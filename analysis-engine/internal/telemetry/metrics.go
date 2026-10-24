@@ -70,6 +70,12 @@ const (
 	// never silently folded into the ordinary/benign duplicate count.
 	CounterConflictEvents Counter = "conflict_events"
 
+	// CounterStrategyStopBudgetRefused counts candidates a legacy-family
+	// strategy refused because its honest structural stop exceeded the
+	// instrument's stop cap (refused, never tightened). Labels stay
+	// symbol+timeframe; the per-strategy split is on strategy.Evaluation.
+	CounterStrategyStopBudgetRefused Counter = "strategy_stop_budget_refused"
+
 	// Opportunity lifecycle transition counters,
 	// one counter per internal/opportunity.TransitionKind an operator can
 	// observe (TransitionNoop is deliberately not counted: it carries no

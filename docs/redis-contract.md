@@ -212,6 +212,19 @@ bars; Go marks it with the evidence code `invalidation_beyond_reaction_extreme`)
 | `go_invalidation_reaction_anchored` | `strategy` (catalog id) | a Go-origin plan whose envelope carries the evidence code reaches stop planning |
 | `go_invalidation_reaction_anchored_too_wide` | `strategy` (catalog id) | `plan_go_invalidation_stop` rejects such a plan with `stop_exceeds_go_invalidation_envelope` (the anchored stop is wider than the instrument envelope maximum) |
 
+The legacy-family strategies (`key_level`, `supply`, `demand`, `order_block`,
+`fvg`, `flip_zone`, `trendline`) publish only a structural stop inside the
+instrument stop cap (a wider one is refused by Go, never tightened). Go marks
+each published candidate with the evidence code `stop_budget_structural`
+(stop inside the instrument floor and cap) or `stop_budget_floor` (tighter than
+the floor; execution widens it), counted the same way (once per admission
+evaluation, failures logged and ignored):
+
+| Counter | Dimension | Incremented when |
+|---|---|---|
+| `go_stop_budget_structural` | `strategy` (catalog id) | a Go-origin plan whose envelope carries `stop_budget_structural` reaches stop planning |
+| `go_stop_budget_floor` | `strategy` (catalog id) | the same, for `stop_budget_floor` |
+
 The dedicated signal bot sends full operational cards only to the configured
 owner DM. `SIGNAL_PUBLIC_CHANNEL_ID` remains exclusively for manual broadcasts
 from the general bot. Order message IDs are cached for seven days under
