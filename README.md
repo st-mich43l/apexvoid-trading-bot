@@ -109,16 +109,16 @@ only observes it.
 
 | Strategy ID | Technical thesis | Timeframes | Configuration | Parity / validation | Execution |
 |---|---|---|---|---|---|
-| `key_level` | Reaction at a clustered key level, with its role and structure | M5 | `strategies.key_level` (v3) | `LEGACY_PARITY_PROVEN` (profitable-week scalp lane, a1c77584) | live |
+| `key_level` | Reaction at a clustered key level, with its role and structure | M5 | `strategies.key_level` (v4) | `LEGACY_PARITY_PROVEN` (profitable-week scalp lane, a1c77584; decisions and entry; invalidation anchored beyond the reaction extreme since v4; differs from the frozen publisher by design) | live |
 | `confluence_zone` | Two or more distinct canonical zone techniques overlapping on one side, then a reaction; its own opportunity beside theirs | M5 | `strategies.confluence_zone` (v2) | `LEGACY_PARITY_PROVEN` | live |
-| `supply` | Reaction at a canonical supply zone | M5; M15 zones analysis-only | `strategies.supply` (v3) | `LEGACY_PARITY_PROVEN` (M5 zones; M15 has no oracle) | live |
-| `demand` | Reaction at a canonical demand zone | M5; M15 zones analysis-only | `strategies.demand` (v3) | `LEGACY_PARITY_PROVEN` (M5 zones; M15 has no oracle) | live |
-| `order_block` | Reaction at a canonical order-block zone | M5 | `strategies.order_block` (v2) | `LEGACY_PARITY_PROVEN` | live |
-| `fvg` | Reaction at a canonical fair value gap | M5 | `strategies.fvg` (v2) | `LEGACY_PARITY_PROVEN` | live |
+| `supply` | Reaction at a canonical supply zone | M5; M15 zones analysis-only | `strategies.supply` (v4) | `LEGACY_PARITY_PROVEN` (decisions and entry; M5 zones, M15 has no oracle; invalidation anchored beyond the reaction extreme since v4; differs from the frozen publisher by design) | live |
+| `demand` | Reaction at a canonical demand zone | M5; M15 zones analysis-only | `strategies.demand` (v4) | `LEGACY_PARITY_PROVEN` (decisions and entry; M5 zones, M15 has no oracle; invalidation anchored beyond the reaction extreme since v4; differs from the frozen publisher by design) | live |
+| `order_block` | Reaction at a canonical order-block zone | M5 | `strategies.order_block` (v3) | `LEGACY_PARITY_PROVEN` (decisions and entry; invalidation anchored beyond the reaction extreme since v3; differs from the frozen publisher by design) | live |
+| `fvg` | Reaction at a canonical fair value gap | M5 | `strategies.fvg` (v3) | `LEGACY_PARITY_PROVEN` (decisions and entry; invalidation anchored beyond the reaction extreme since v3; differs from the frozen publisher by design) | live |
 | `ifvg` | Reaction at an inverted fair value gap | M5 | `strategies.ifvg` (v3) | `GO_NATIVE_VALIDATED` | live |
 | `crt` | Closed H1 range, M5 sweep and reclaim | M5 (H1 range) | `strategies.crt` (v2) | `LEGACY_PARITY_PROVEN` | live |
-| `flip_zone` | Zone born of an accepted role flip, then a reaction | M5 | `strategies.flip_zone` (v3) | `LEGACY_PARITY_PROVEN` | live |
-| `trendline` | Causal trendline with health and live interaction, then a reaction | M5 | `strategies.trendline` (v4) | `GO_NATIVE_VALIDATED` (target reworked; 7 of 8 oracle decisions) | live |
+| `flip_zone` | Zone born of an accepted role flip, then a reaction | M5 | `strategies.flip_zone` (v4) | `LEGACY_PARITY_PROVEN` (decisions and entry; invalidation anchored beyond the reaction extreme since v4; differs from the frozen publisher by design) | live |
+| `trendline` | Causal trendline with health and live interaction, then a reaction | M5 | `strategies.trendline` (v5) | `GO_NATIVE_VALIDATED` (target reworked; 7 of 8 oracle decisions; invalidation anchored beyond the reaction extreme since v5) | live |
 | `break_retest` | Broken trendline or key level, same-side retest and hold | M5 | `strategies.break_retest` (v2) | `LEGACY_PARITY_PROVEN` | live |
 | `fade_scalp` | Equal-level sweep, failed continuation, reversion to the local mean | M5 | `strategies.fade_scalp` (v3) | `GO_NATIVE_VALIDATED` | live |
 | `impulse_pullback` | M5 impulse, corrective pullback, structural reference, M1 confirmation (XAU only) | M1 (M5 impulse) | `strategies.impulse_pullback` (v3) | `LEGACY_PARITY_PROVEN` on synthetic data only | observe-only on every instrument |

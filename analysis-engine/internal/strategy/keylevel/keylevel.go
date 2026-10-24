@@ -48,7 +48,7 @@ import (
 )
 
 const ID strategy.StrategyID = "key_level"
-const Version = "v3"
+const Version = "v4"
 
 const (
 	contractProfitWeek = "profit_week"
@@ -314,10 +314,12 @@ func (s *Strategy) candidate(ctx *context.MarketContext, d *strategyutil.LegacyD
 	direction := a.direction
 	buffer := s.cfg.InvalidationBufferATR * atr
 	low, high := a.reactLow, a.reactHigh
-	invalidation, reference := low-buffer, high
+	reference := high
 	if direction == market.Sell {
-		invalidation, reference = high+buffer, low
+		reference = low
 	}
+	// Beyond the reaction band and beyond the bars the reaction itself traded (a sweep's wick pierces the band).
+	invalidation, anchored := strategyutil.ReactionAnchoredInvalidation(d.Frame.Bars, a.confirmation, direction, low, high, buffer)
 	target, targetLabel, ok := s.target(d, direction, reference, invalidation, atr)
 	if !ok {
 		return opportunity.Candidate{}, false
@@ -333,6 +335,9 @@ func (s *Strategy) candidate(ctx *context.MarketContext, d *strategyutil.LegacyD
 	}
 	if a.widened {
 		evidence = append(evidence, "m5_key_level_opposing_zone_widened")
+	}
+	if anchored {
+		evidence = append(evidence, strategyutil.ReactionExtremeEvidence)
 	}
 	// The band the reaction was read in: the level's own, but never thinner than the detector's proximal floor (a round number has none).
 	effectiveBand := math.Max(a.level.Band, math.Max(1e-9, s.cfg.Detector.ProximalBandATR*math.Max(0, atr)))

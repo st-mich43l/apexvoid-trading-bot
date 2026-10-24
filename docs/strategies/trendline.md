@@ -1,4 +1,4 @@
-# Trendline Strategy V4
+# Trendline Strategy V5
 
 > **Quality review (2026-10-14): reworked in v4.** The audit found the v3 target was `entry +/- 2 x |entry - band edge|`,
 > unrelated to the published stop (median room cover 0.05; technical RR below 1 in every setup). v4 publishes only with a real
@@ -10,6 +10,9 @@
 classifier. A line needs the configured validation touches, a valid approach,
 and a reclaimed support/resistance close. Entry is the interaction band,
 invalidation is a close-violation buffer, and the target is the nearest opposing liquidity (see below).
+
+**Reaction-anchored invalidation (v5).** Entry is the interaction band and invalidation is the close-violation buffer beyond the band's far edge, or, if the bars from the touch to the confirmation traded beyond it, beyond that extreme (Buy: `min(structure low, lowest low touch..confirm) - invalidation_buffer_atr*ATR`; Sell mirrored). The buffer is unchanged and has no pip floor; when the reaction's extreme set the price the candidate carries `invalidation_beyond_reaction_extreme`, and the target, quality geometry and published invalidation follow the new price. Measured in [reaction-anchored-stop.md](reaction-anchored-stop.md). Decisions and entry are unchanged; the invalidation differs from the frozen publisher by design.
+
 Identity is the anchor pair, never evaluation time. Broken/exhausted lines and
 testing without reclaim reject. It is enabled in the live Go opportunity
 stream; Algo Bot applies execution policy before any TradePlan is published.

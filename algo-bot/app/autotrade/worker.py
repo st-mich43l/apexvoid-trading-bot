@@ -2139,12 +2139,16 @@ async def _publish_trade_plan_v8(
     metric_sink=_collect_fixed_rr_metric_sink(fixed_rr_metrics),
   )
   for metric_name, metric_symbol, metric_dims in fixed_rr_metrics:
-    await increment_metric(
-      client,
-      metric_name,
-      symbol=metric_symbol,
-      dimensions=metric_dims,
-    )
+    # Counters are telemetry: a Redis failure here must never block a plan.
+    try:
+      await increment_metric(
+        client,
+        metric_name,
+        symbol=metric_symbol,
+        dimensions=metric_dims,
+      )
+    except Exception:
+      log.exception("policy metric failed name=%s symbol=%s", metric_name, metric_symbol)
   gate_measured = dict(gate_policy.measured)
   if fixed_rr_target and not gate_policy.allowed:
     await _release_claims()

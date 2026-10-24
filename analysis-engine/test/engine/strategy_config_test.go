@@ -21,22 +21,14 @@ func TestStrategyConfigsFromConfigEnablesTheCompleteCatalogForShadow(t *testing.
 	if len(configs) != 13 {
 		t.Fatalf("got %d strategy configs, want 13 approved strategies", len(configs))
 	}
-	// Key Level was rebuilt as the
-	// profitable-week Python detector and CRT was rebuilt as a causal H1 sweep, M5
-	// reclaim and structure shift (v3); every other strategy is still v2.
-	rebuilt := map[string]bool{"crt": true, "key_level": true, "flip_zone": true, "trendline": true, "impulse_pullback": true, "break_retest": true, "ifvg": true, "confluence_zone": true, "fade_scalp": true}
-	// Trendline v4: the target is the nearest opposing liquidity, never a projection.
-	v4 := map[string]bool{"trendline": true}
-	// Supply and Demand v3: a zone touched more than maximum_zone_touches times no longer publishes.
-	v3 := map[string]bool{"supply": true, "demand": true}
+	// Versions are published geometry: a strategy whose invalidation, target or entry changes gets a new version, because the version is part of the
+	// opportunity id. The seven legacy-family strategies moved on 2026-10-24 when their invalidation was anchored beyond the reaction's own extreme.
+	versions := map[string]string{
+		"key_level": "v4", "supply": "v4", "demand": "v4", "order_block": "v3", "fvg": "v3", "flip_zone": "v4", "trendline": "v5",
+		"crt": "v3", "impulse_pullback": "v3", "break_retest": "v3", "ifvg": "v3", "confluence_zone": "v3", "fade_scalp": "v3",
+	}
 	for _, cfg := range configs {
-		want := "v2"
-		if rebuilt[string(cfg.ID)] || v3[string(cfg.ID)] {
-			want = "v3"
-		}
-		if v4[string(cfg.ID)] {
-			want = "v4"
-		}
+		want := versions[string(cfg.ID)]
 		if cfg.Version != want {
 			t.Errorf("%s: version=%q, want %s", cfg.ID, cfg.Version, want)
 		}
