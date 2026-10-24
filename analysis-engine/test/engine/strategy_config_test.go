@@ -22,9 +22,9 @@ func TestStrategyConfigsFromConfigEnablesTheCompleteCatalogForShadow(t *testing.
 		t.Fatalf("got %d strategy configs, want 13 approved strategies", len(configs))
 	}
 	// Versions are published geometry: a strategy whose invalidation, target or entry changes gets a new version, because the version is part of the
-	// opportunity id. The seven legacy-family strategies moved on 2026-10-24 when their invalidation was anchored beyond the reaction's own extreme.
+	// opportunity id. The seven legacy-family strategies moved on 2026-10-24 when their invalidation was anchored beyond the reaction's own extreme and again when the instrument stop budget was applied.
 	versions := map[string]string{
-		"key_level": "v4", "supply": "v4", "demand": "v4", "order_block": "v3", "fvg": "v3", "flip_zone": "v4", "trendline": "v5",
+		"key_level": "v5", "supply": "v5", "demand": "v5", "order_block": "v4", "fvg": "v4", "flip_zone": "v5", "trendline": "v6",
 		"crt": "v3", "impulse_pullback": "v3", "break_retest": "v3", "ifvg": "v3", "confluence_zone": "v3", "fade_scalp": "v3",
 	}
 	for _, cfg := range configs {

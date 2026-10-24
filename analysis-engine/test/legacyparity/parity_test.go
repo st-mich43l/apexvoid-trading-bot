@@ -99,7 +99,7 @@ func observe(t *testing.T, doc *config.Document, capture string) map[int64]map[o
 		t.Fatal(err)
 	}
 	got := map[int64]map[opportunity.StrategyID][]opportunity.Candidate{}
-	_, err = replaycapture.Replay(doc, loaded, market.M5, replaycapture.Options{StrategyParameters: frozenSessionContext, OnEvaluation: func(e engine.Evaluation) {
+	_, err = replaycapture.Replay(doc, loaded, market.M5, replaycapture.Options{StrategyParameters: frozenSessionContext, WithoutStopBudget: true, OnEvaluation: func(e engine.Evaluation) {
 		if e.Timeframe != market.M5 {
 			return
 		}

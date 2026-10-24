@@ -145,3 +145,43 @@ func TestRegistryRejectsCandidateThatBreaksTheStrategyContract(t *testing.T) {
 		t.Fatal("expected mismatched candidate strategy to fail")
 	}
 }
+
+type budgetStrategy struct {
+	fakeStrategy
+	refused int64
+}
+
+func (s *budgetStrategy) TakeStopBudgetRefusals() int64 {
+	n := s.refused
+	s.refused = 0
+	return n
+}
+
+// TestRegistryReportsTheStopBudgetRefusalsOfEachStrategyAndResetsThem: a strategy that refuses a stop above the instrument cap reports the count; the
+// registry hands it to the engine once per evaluation, per strategy, and a strategy that reports nothing leaves the map nil.
+func TestRegistryReportsTheStopBudgetRefusalsOfEachStrategyAndResetsThem(t *testing.T) {
+	configs := fullConfig(map[strategy.StrategyID]bool{"key_level": true, "supply": true})
+	keyLevel := &budgetStrategy{fakeStrategy: fakeStrategy{id: "key_level", required: []market.Timeframe{market.M5}}, refused: 3}
+	supply := &fakeStrategy{id: "supply", required: []market.Timeframe{market.M5}}
+	registry, err := strategy.NewRegistry(configs, map[strategy.StrategyID]strategy.Factory{
+		"key_level": func(strategy.Config) (strategy.Strategy, error) { return keyLevel, nil },
+		"supply":    func(strategy.Config) (strategy.Strategy, error) { return supply, nil },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := registry.Evaluate(testContext(market.M5), market.M5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.StopBudgetRefused) != 1 || result.StopBudgetRefused["key_level"] != 3 {
+		t.Fatalf("StopBudgetRefused = %v, want key_level:3 only", result.StopBudgetRefused)
+	}
+	result, err = registry.Evaluate(testContext(market.M5), market.M5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.StopBudgetRefused != nil {
+		t.Fatalf("the count must reset after it is read, got %v", result.StopBudgetRefused)
+	}
+}

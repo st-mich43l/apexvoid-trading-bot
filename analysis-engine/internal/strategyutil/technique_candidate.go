@@ -39,6 +39,9 @@ type TechniqueSpec struct {
 	// AnchorToReaction puts the invalidation beyond the extreme of the bars the confirmed reaction itself traded (ReactionAnchoredInvalidation).
 	// The live legacy-family strategies set it; the replays that reproduce a retired or frozen publisher leave it off and keep the structural stop.
 	AnchorToReaction bool
+	// StopBudget is the instrument's stop envelope (see StopBudget): a structural stop wider than its cap is refused, never tightened; the zero value
+	// leaves the candidate as it was.
+	StopBudget StopBudget
 }
 
 // structLowOrHigh is the structural invalidation: the far edge of the structure, one buffer beyond.
@@ -76,6 +79,11 @@ func TechniqueCandidate(ctx *analysiscontext.MarketContext, dec *TechniqueDecisi
 	if spec.AnchorToReaction {
 		invalidation, anchored = ReactionAnchoredInvalidation(d.Frame.Bars, dec.Confirmation, dec.Direction, structLow, structHigh, buffer)
 	}
+	// The instrument stop budget refuses a stop wider than the cap and never moves the entry or the invalidation to make a setup fit.
+	budgetCode, publish := spec.StopBudget.Apply(reference, invalidation)
+	if !publish {
+		return opportunity.Candidate{}, false
+	}
 	var target float64
 	var targetLabel string
 	if spec.Target != nil {
@@ -101,6 +109,9 @@ func TechniqueCandidate(ctx *analysiscontext.MarketContext, dec *TechniqueDecisi
 	evidence := techniqueEvidence(dec, spec)
 	if anchored {
 		evidence = append(evidence, ReactionExtremeEvidence)
+	}
+	if budgetCode != "" {
+		evidence = append(evidence, budgetCode)
 	}
 	geometry := QualityGeometry{Reference: reference, Invalidation: invalidation, Target: target, Structural: targetLabel != "fixed_reward_risk", ATR: atr}
 	var scored opportunity.StrategyQuality

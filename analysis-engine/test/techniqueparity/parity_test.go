@@ -120,7 +120,7 @@ func observe(t *testing.T, doc *config.Document, symbol, capture string) (map[in
 		t.Fatal(err)
 	}
 	got := map[int64]map[string]decision{}
-	_, err = replaycapture.Replay(doc, loaded, market.M5, replaycapture.Options{OnEvaluation: func(e engine.Evaluation) {
+	_, err = replaycapture.Replay(doc, loaded, market.M5, replaycapture.Options{WithoutStopBudget: true, OnEvaluation: func(e engine.Evaluation) {
 		if e.Timeframe != market.M5 {
 			return
 		}

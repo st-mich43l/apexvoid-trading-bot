@@ -40,7 +40,7 @@ const ID strategy.StrategyID = "supply"
 // Version is this strategy's own technical-thesis version — increments
 // only on a behavior-breaking redesign (source task §13), independent of
 // structure/liquidity/zone's own algorithm versions below.
-const Version = "v4"
+const Version = "v5"
 
 // Algorithm versions this strategy's logic was validated against — a
 // real, version-pinned contract fact each strategy owns (matches
@@ -79,10 +79,13 @@ type Config struct {
 	Technique strategyutil.TechniqueGeometry
 	// Legacy qualifies the confirmed reaction through the frozen detector contract.
 	Legacy strategyutil.LegacyDetectorSettings
+	// StopBudget is the instrument's stop envelope (strategyutil.StopBudget); the zero value is no budget.
+	StopBudget strategyutil.StopBudget
 }
 
 // Strategy is SupplyStrategy — see package doc comment for its thesis.
 type Strategy struct {
+	strategyutil.RefusalCounter
 	cfg         Config
 	rawConfig   strategy.Config
 	timeframe   market.Timeframe
@@ -101,10 +104,12 @@ func New(cfg strategy.Config) (strategy.Strategy, error) {
 	if err != nil {
 		return nil, fmt.Errorf("supply: %w", err)
 	}
-	return &Strategy{
+	s := &Strategy{
 		cfg: parsed, rawConfig: cfg, timeframe: market.M5,
 		fingerprint: configFingerprint(cfg),
-	}, nil
+	}
+	s.cfg.StopBudget.Refusals = &s.RefusalCounter
+	return s, nil
 }
 
 func parseConfig(params map[string]any) (Config, error) {
@@ -142,7 +147,12 @@ func parseConfig(params map[string]any) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	stopBudget, err := strategyutil.ParseStopBudget(params)
+	if err != nil {
+		return Config{}, err
+	}
 	return Config{
+		StopBudget:      stopBudget,
 		MinimumStrength: minimumStrength, InvalidationBufferATR: invalidationBuffer,
 		MinimumTargetDistanceATR: minimumTargetDistance, ExpiryHours: expiryHours, Reaction: reactionConfig, Technique: techniqueConfig, Legacy: legacyConfig,
 	}, nil
@@ -174,7 +184,7 @@ func (s *Strategy) RequiredTimeframes() []market.Timeframe {
 // technique instances.
 func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate {
 	return append(s.resting(ctx), strategyutil.ConfirmedTechnique(ctx, s.cfg.Legacy, strategyutil.TechniqueSupplyDemand, market.Sell, strategyutil.TechniqueSpec{
-		ID: string(ID), Version: Version, AnchorToReaction: true, ZoneEvidence: "m5_supply_zone_confirmed", ConfirmedEvidence: "m5_supply_zone_rejection_confirmed",
+		ID: string(ID), Version: Version, AnchorToReaction: true, StopBudget: s.cfg.StopBudget, ZoneEvidence: "m5_supply_zone_confirmed", ConfirmedEvidence: "m5_supply_zone_rejection_confirmed",
 		InvalidationLabel: "supply_zone_invalidated", InvalidationBufferATR: s.cfg.InvalidationBufferATR,
 		MinimumTargetDistanceATR: s.cfg.MinimumTargetDistanceATR, ExpiryHours: s.cfg.ExpiryHours, Fingerprint: s.fingerprint,
 		Versions: opportunity.AnalysisProvenance{

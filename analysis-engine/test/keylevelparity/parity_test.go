@@ -137,7 +137,7 @@ func proveCapture(t *testing.T, doc *config.Document, symbol string, want symbol
 	}
 	tick := math.Pow10(-digits)
 	got := map[int64][]opportunity.Candidate{}
-	_, err = replaycapture.Replay(doc, capture, market.M5, replaycapture.Options{StrategyParameters: parameters, OnEvaluation: func(e engine.Evaluation) {
+	_, err = replaycapture.Replay(doc, capture, market.M5, replaycapture.Options{StrategyParameters: parameters, WithoutStopBudget: true, OnEvaluation: func(e engine.Evaluation) {
 		if e.Timeframe != market.M5 {
 			return
 		}

@@ -48,7 +48,7 @@ import (
 )
 
 const ID strategy.StrategyID = "key_level"
-const Version = "v4"
+const Version = "v5"
 
 const (
 	contractProfitWeek = "profit_week"
@@ -84,10 +84,13 @@ type Config struct {
 	// blocks caused by a BOS), "current" the one the other detectors read.
 	Contract string
 	Detector strategyutil.LegacyDetectorSettings
+	// StopBudget is the instrument's stop envelope (strategyutil.StopBudget); the zero value is no budget.
+	StopBudget strategyutil.StopBudget
 }
 
 // Strategy is KeyLevelStrategy.
 type Strategy struct {
+	strategyutil.RefusalCounter
 	cfg         Config
 	timeframe   market.Timeframe
 	fingerprint string
@@ -101,7 +104,9 @@ func New(cfg strategy.Config) (strategy.Strategy, error) {
 	if err != nil {
 		return nil, fmt.Errorf("keylevel: %w", err)
 	}
-	return &Strategy{cfg: parsed, timeframe: market.M5, fingerprint: strategyutil.Fingerprint(string(cfg.ID), cfg.Version, cfg.Parameters)}, nil
+	s := &Strategy{cfg: parsed, timeframe: market.M5, fingerprint: strategyutil.Fingerprint(string(cfg.ID), cfg.Version, cfg.Parameters)}
+	s.cfg.StopBudget.Refusals = &s.RefusalCounter
+	return s, nil
 }
 
 func parseConfig(params map[string]any) (Config, error) {
@@ -148,6 +153,9 @@ func parseConfig(params map[string]any) (Config, error) {
 		cfg.RequireExplicitRole = b
 	}
 	if cfg.Detector, err = strategyutil.ParseLegacyDetectorSettings(params); err != nil {
+		return Config{}, err
+	}
+	if cfg.StopBudget, err = strategyutil.ParseStopBudget(params); err != nil {
 		return Config{}, err
 	}
 	switch {
@@ -320,6 +328,11 @@ func (s *Strategy) candidate(ctx *context.MarketContext, d *strategyutil.LegacyD
 	}
 	// Beyond the reaction band and beyond the bars the reaction itself traded (a sweep's wick pierces the band).
 	invalidation, anchored := strategyutil.ReactionAnchoredInvalidation(d.Frame.Bars, a.confirmation, direction, low, high, buffer)
+	// The instrument stop budget refuses a stop wider than the cap and never moves the entry or the invalidation to make a setup fit.
+	budgetCode, publish := s.cfg.StopBudget.Apply(reference, invalidation)
+	if !publish {
+		return opportunity.Candidate{}, false
+	}
 	target, targetLabel, ok := s.target(d, direction, reference, invalidation, atr)
 	if !ok {
 		return opportunity.Candidate{}, false
@@ -338,6 +351,9 @@ func (s *Strategy) candidate(ctx *context.MarketContext, d *strategyutil.LegacyD
 	}
 	if anchored {
 		evidence = append(evidence, strategyutil.ReactionExtremeEvidence)
+	}
+	if budgetCode != "" {
+		evidence = append(evidence, budgetCode)
 	}
 	// The band the reaction was read in: the level's own, but never thinner than the detector's proximal floor (a round number has none).
 	effectiveBand := math.Max(a.level.Band, math.Max(1e-9, s.cfg.Detector.ProximalBandATR*math.Max(0, atr)))
