@@ -31,7 +31,7 @@ import (
 )
 
 const ID strategy.StrategyID = "order_block"
-const Version = "v3"
+const Version = "v4"
 
 const (
 	structureVersion = "v2"
@@ -53,10 +53,13 @@ type Config struct {
 	Technique strategyutil.TechniqueGeometry
 	// Legacy qualifies the confirmed reaction through the frozen detector contract.
 	Legacy strategyutil.LegacyDetectorSettings
+	// StopBudget is the instrument's stop envelope (strategyutil.StopBudget); the zero value is no budget.
+	StopBudget strategyutil.StopBudget
 }
 
 // Strategy is OrderBlockStrategy.
 type Strategy struct {
+	strategyutil.RefusalCounter
 	cfg         Config
 	timeframe   market.Timeframe
 	fingerprint string
@@ -70,7 +73,9 @@ func New(cfg strategy.Config) (strategy.Strategy, error) {
 	if err != nil {
 		return nil, fmt.Errorf("orderblock: %w", err)
 	}
-	return &Strategy{cfg: parsed, timeframe: market.M5, fingerprint: configFingerprint(cfg)}, nil
+	s := &Strategy{cfg: parsed, timeframe: market.M5, fingerprint: configFingerprint(cfg)}
+	s.cfg.StopBudget.Refusals = &s.RefusalCounter
+	return s, nil
 }
 
 func parseConfig(params map[string]any) (Config, error) {
@@ -115,7 +120,12 @@ func parseConfig(params map[string]any) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	stopBudget, err := strategyutil.ParseStopBudget(params)
+	if err != nil {
+		return Config{}, err
+	}
 	return Config{
+		StopBudget:      stopBudget,
 		MinimumStrength: minimumStrength, MinimumZoneATR: minimumZone, InvalidationBufferATR: invalidationBuffer,
 		MinimumTargetDistanceATR: minimumTargetDistance, ExpiryHours: expiryHours, Reaction: reactionConfig, Technique: techniqueConfig, Legacy: legacyConfig,
 	}, nil
@@ -147,7 +157,7 @@ func (s *Strategy) RequiredTimeframes() []market.Timeframe {
 // technique instances.
 func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate {
 	return append(s.resting(ctx), strategyutil.ConfirmedTechnique(ctx, s.cfg.Legacy, strategyutil.TechniqueOrderBlock, "", strategyutil.TechniqueSpec{
-		ID: string(ID), Version: Version, AnchorToReaction: true, ZoneEvidence: "m5_order_block_confirmed", ConfirmedEvidence: "m5_order_block_rejection_confirmed",
+		ID: string(ID), Version: Version, AnchorToReaction: true, StopBudget: s.cfg.StopBudget, ZoneEvidence: "m5_order_block_confirmed", ConfirmedEvidence: "m5_order_block_rejection_confirmed",
 		InvalidationLabel: "order_block_invalidated", InvalidationBufferATR: s.cfg.InvalidationBufferATR,
 		MinimumTargetDistanceATR: s.cfg.MinimumTargetDistanceATR, ExpiryHours: s.cfg.ExpiryHours, Fingerprint: s.fingerprint,
 		Versions: opportunity.AnalysisProvenance{

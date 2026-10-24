@@ -75,6 +75,7 @@ func ApplyInstrument(settings *Settings, doc *config.Document, symbol string) er
 	applyBreakRetestGeometry(settings)
 	applyIFVGGeometry(settings)
 	applyConfluenceZoneGeometry(settings)
+	applyLegacyStopBudget(settings)
 	if err := applyScalpLane(settings, doc); err != nil {
 		return err
 	}
@@ -179,6 +180,58 @@ func applyConfluenceZoneGeometry(settings *Settings) {
 		params["execution_stop_max_pips"] = settings.InstrumentStopMaxPips
 		if settings.InstrumentStopMinPips > 0 {
 			params["execution_stop_min_pips"] = settings.InstrumentStopMinPips
+		}
+		settings.Strategies[i].Parameters = params
+	}
+}
+
+// legacyStopBudgetStrategies are the legacy-family strategies that publish a structural stop. Each refuses a stop wider than the instrument cap
+// (never tightened) and marks the others as inside the budget or below the floor.
+var legacyStopBudgetStrategies = map[strategy.StrategyID]bool{
+	"key_level": true, "supply": true, "demand": true, "order_block": true, "fvg": true, "flip_zone": true, "trendline": true,
+}
+
+// applyLegacyStopBudget gives the legacy-family strategies the resolved instrument stop envelope and the pip size to measure it in, the same mechanism
+// CRT, Break & Retest, iFVG and Confluence Zone use, so an honest structural stop above the cap is refused by the detector instead of being rescued at
+// execution by a deeper entry. It is idempotent. Only a RESOLVED envelope is injected: before an instrument is applied the cap is zero, and zero must not
+// read as "a cap of zero pips". The pip size travels under its own key (execution_pip_size): pip_size feeds the technique geometry, and a budget must not
+// change which zones a strategy decides on.
+func applyLegacyStopBudget(settings *Settings) {
+	if settings.InstrumentStopMaxPips <= 0 || !(settings.Geometry.PipSize > 0) {
+		return
+	}
+	for i := range settings.Strategies {
+		if !legacyStopBudgetStrategies[settings.Strategies[i].ID] {
+			continue
+		}
+		params := make(map[string]any, len(settings.Strategies[i].Parameters)+3)
+		for k, v := range settings.Strategies[i].Parameters {
+			params[k] = v
+		}
+		params["execution_stop_max_pips"] = settings.InstrumentStopMaxPips
+		if settings.InstrumentStopMinPips > 0 {
+			params["execution_stop_min_pips"] = settings.InstrumentStopMinPips
+		}
+		params["execution_pip_size"] = settings.Geometry.PipSize
+		settings.Strategies[i].Parameters = params
+	}
+}
+
+// WithoutLegacyStopBudget removes the stop budget applyLegacyStopBudget injected, leaving the legacy-family strategies exactly as an engine with no
+// resolved instrument envelope would run them. The parity replays use it: they prove decisions against a frozen Python publisher that had no stop
+// budget, and a refused candidate there would be a difference of policy, not of detection.
+func WithoutLegacyStopBudget(settings *Settings) {
+	for i := range settings.Strategies {
+		if !legacyStopBudgetStrategies[settings.Strategies[i].ID] {
+			continue
+		}
+		params := make(map[string]any, len(settings.Strategies[i].Parameters))
+		for k, v := range settings.Strategies[i].Parameters {
+			switch k {
+			case "execution_stop_max_pips", "execution_stop_min_pips", "execution_pip_size":
+			default:
+				params[k] = v
+			}
 		}
 		settings.Strategies[i].Parameters = params
 	}

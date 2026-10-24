@@ -4,7 +4,7 @@
 
 ## Strategy ID / version
 
-`key_level`, `v4`. Implemented in
+`key_level`, `v5`. Implemented in
 `analysis-engine/internal/strategy/keylevel`. Algorithm versions:
 `structure=v2`, `liquidity=v1`, `zone=v1`, `config=3`.
 
@@ -74,6 +74,8 @@ same level is the same thesis.
 machine-readable factors (`htf_aligned`, `touches`, `wick_rejection`,
 `displacement_grade`, `structural_agreement`, `session_context`, `fib_touch`,
 `choch`).
+
+**Instrument stop budget (v5).** A candidate whose structural stop (distance from the proximal entry edge to the invalidation above) exceeds the instrument stop cap (XAU 70, EURUSD 20, GBPUSD 25, GBPJPY 35, USDJPY 28 pips) is **not published**: refused, never tightened, and neither the entry nor the invalidation is moved to fit. One inside [floor, cap] carries `stop_budget_structural`; one below the floor carries `stop_budget_floor` and execution widens it. Measured, with the Python side, in [legacy-stop-budget.md](legacy-stop-budget.md).
 
 ## Evidence
 

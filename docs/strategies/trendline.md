@@ -1,4 +1,4 @@
-# Trendline Strategy V5
+# Trendline Strategy V6
 
 > **Quality review (2026-10-14): reworked in v4.** The audit found the v3 target was `entry +/- 2 x |entry - band edge|`,
 > unrelated to the published stop (median room cover 0.05; technical RR below 1 in every setup). v4 publishes only with a real
@@ -12,6 +12,8 @@ and a reclaimed support/resistance close. Entry is the interaction band,
 invalidation is a close-violation buffer, and the target is the nearest opposing liquidity (see below).
 
 **Reaction-anchored invalidation (v5).** Entry is the interaction band and invalidation is the close-violation buffer beyond the band's far edge, or, if the bars from the touch to the confirmation traded beyond it, beyond that extreme (Buy: `min(structure low, lowest low touch..confirm) - invalidation_buffer_atr*ATR`; Sell mirrored). The buffer is unchanged and has no pip floor; when the reaction's extreme set the price the candidate carries `invalidation_beyond_reaction_extreme`, and the target, quality geometry and published invalidation follow the new price. Measured in [reaction-anchored-stop.md](reaction-anchored-stop.md). Decisions and entry are unchanged; the invalidation differs from the frozen publisher by design.
+
+**Instrument stop budget (v6).** A candidate whose structural stop (distance from the proximal entry edge to the invalidation above) exceeds the instrument stop cap (XAU 70, EURUSD 20, GBPUSD 25, GBPJPY 35, USDJPY 28 pips) is **not published**: refused, never tightened, and neither the entry nor the invalidation is moved to fit. One inside [floor, cap] carries `stop_budget_structural`; one below the floor carries `stop_budget_floor` and execution widens it. Measured, with the Python side, in [legacy-stop-budget.md](legacy-stop-budget.md).
 
 Identity is the anchor pair, never evaluation time. Broken/exhausted lines and
 testing without reclaim reject. It is enabled in the live Go opportunity
