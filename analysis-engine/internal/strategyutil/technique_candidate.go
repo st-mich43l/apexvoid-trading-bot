@@ -36,6 +36,17 @@ type TechniqueSpec struct {
 	// that sets it publishes only what has a real technical objective.
 	RequireStructuralTarget bool
 	Versions                opportunity.AnalysisProvenance
+	// AnchorToReaction puts the invalidation beyond the extreme of the bars the confirmed reaction itself traded (ReactionAnchoredInvalidation).
+	// The live legacy-family strategies set it; the replays that reproduce a retired or frozen publisher leave it off and keep the structural stop.
+	AnchorToReaction bool
+}
+
+// structLowOrHigh is the structural invalidation: the far edge of the structure, one buffer beyond.
+func structLowOrHigh(direction market.Direction, structLow, structHigh, buffer float64) float64 {
+	if direction == market.Sell {
+		return structHigh + buffer
+	}
+	return structLow - buffer
 }
 
 // techniqueFallbackTargetR is the nominal reward:risk of an opportunity with no
@@ -44,7 +55,7 @@ const techniqueFallbackTargetR = 2.0
 
 // TechniqueCandidate builds the confirmed opportunity for a frozen publisher
 // decision: the published (proximal) entry band, the structural stop beyond the
-// whole structure, the nearest opposing liquidity as the nominal target, and the
+// whole structure and beyond the reaction's own extreme, the nearest opposing liquidity as the nominal target, and the
 // decision's own reaction and confluence as evidence.
 func TechniqueCandidate(ctx *analysiscontext.MarketContext, dec *TechniqueDecision, spec TechniqueSpec) (opportunity.Candidate, bool) {
 	if dec == nil {
@@ -55,9 +66,15 @@ func TechniqueCandidate(ctx *analysiscontext.MarketContext, dec *TechniqueDecisi
 	low, high := dec.EntryLow(), dec.EntryHigh()
 	structLow, structHigh := dec.Result.StructuralLow, dec.Result.StructuralHigh
 	buffer := spec.InvalidationBufferATR * atr
-	invalidation, reference := structLow-buffer, high
+	reference := high
 	if dec.Direction == market.Sell {
-		invalidation, reference = structHigh+buffer, low
+		reference = low
+	}
+	// The invalidation lies beyond the structure and beyond the bars the reaction itself traded (ReactionAnchoredInvalidation); a decision with
+	// no confirmation keeps the structural price.
+	invalidation, anchored := structLowOrHigh(dec.Direction, structLow, structHigh, buffer), false
+	if spec.AnchorToReaction {
+		invalidation, anchored = ReactionAnchoredInvalidation(d.Frame.Bars, dec.Confirmation, dec.Direction, structLow, structHigh, buffer)
 	}
 	var target float64
 	var targetLabel string
@@ -81,6 +98,10 @@ func TechniqueCandidate(ctx *analysiscontext.MarketContext, dec *TechniqueDecisi
 		formedAt, confirmedAt = conf.TouchTime, conf.ConfirmationTime
 		setupKey = fmt.Sprintf("zone:%s:rejection:%d:%d", dec.ID, conf.TouchTime, conf.ConfirmationTime)
 	}
+	evidence := techniqueEvidence(dec, spec)
+	if anchored {
+		evidence = append(evidence, ReactionExtremeEvidence)
+	}
 	geometry := QualityGeometry{Reference: reference, Invalidation: invalidation, Target: target, Structural: targetLabel != "fixed_reward_risk", ATR: atr}
 	var scored opportunity.StrategyQuality
 	if dec.Score != nil {
@@ -91,7 +112,7 @@ func TechniqueCandidate(ctx *analysiscontext.MarketContext, dec *TechniqueDecisi
 	candidate, err := Candidate(CandidateSpec{
 		ID: spec.ID, Version: spec.Version, SetupKey: setupKey, Symbol: ctx.Symbol, Direction: dec.Direction,
 		EntryLow: low, EntryHigh: high, Invalidation: invalidation, InvalidationLabel: spec.InvalidationLabel,
-		Target: target, TargetLabel: targetLabel, Evidence: techniqueEvidence(dec, spec),
+		Target: target, TargetLabel: targetLabel, Evidence: evidence,
 		Quality:  scored,
 		FormedAt: formedAt, ConfirmedAt: confirmedAt, ExpiryHours: spec.ExpiryHours, Fingerprint: spec.Fingerprint,
 	})

@@ -24,7 +24,7 @@ import (
 )
 
 const ID strategy.StrategyID = "trendline"
-const Version = "v4"
+const Version = "v5"
 
 type Strategy struct {
 	minimumValidationTouches, chopMinimumValidationTouches, maximumBarsSinceLastTouch int
@@ -142,7 +142,7 @@ func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Ca
 		}
 	}
 	candidate, ok := strategyutil.TechniqueCandidate(ctx, best, strategyutil.TechniqueSpec{
-		ID: string(ID), Version: Version, ZoneEvidence: "m5_trendline_causal_anchors", ConfirmedEvidence: "m5_trendline_reaction_confirmed",
+		ID: string(ID), Version: Version, AnchorToReaction: true, ZoneEvidence: "m5_trendline_causal_anchors", ConfirmedEvidence: "m5_trendline_reaction_confirmed",
 		InvalidationLabel: "trendline_close_violation", InvalidationBufferATR: s.invalidationATR, ExpiryHours: s.expiryHours, Fingerprint: s.fingerprint,
 		// The target is the nearest opposing liquidity at least this far from the entry; with none there is
 		// no technical objective and nothing is published (v3 invented twice the distance to the band edge).

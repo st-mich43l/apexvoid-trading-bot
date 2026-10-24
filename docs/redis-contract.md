@@ -198,6 +198,20 @@ uses executable ask and SELL membership uses executable bid; midpoint is never
 execution evidence. This key is Python-owned restart state and is not consumed
 by Telegram or used by C# for price-action analysis.
 
+Decision counters are Redis hashes written by `lifecycle.increment_metric`:
+`auto_trade:metrics:{SYMBOL}` (field = counter name) and, for a counter with
+dimensions, `auto_trade:metrics:{SYMBOL}:{name}` (field = `dimension=value`).
+Counters are telemetry only (counted once per admission evaluation of a plan,
+so a plan retried on a later scan cycle counts again); a failed increment is
+logged and never blocks a plan. Two counters measure the reaction-anchored Go invalidation (the stop of
+the seven legacy-family strategies sits beyond the extreme of the reaction's own
+bars; Go marks it with the evidence code `invalidation_beyond_reaction_extreme`):
+
+| Counter | Dimension | Incremented when |
+|---|---|---|
+| `go_invalidation_reaction_anchored` | `strategy` (catalog id) | a Go-origin plan whose envelope carries the evidence code reaches stop planning |
+| `go_invalidation_reaction_anchored_too_wide` | `strategy` (catalog id) | `plan_go_invalidation_stop` rejects such a plan with `stop_exceeds_go_invalidation_envelope` (the anchored stop is wider than the instrument envelope maximum) |
+
 The dedicated signal bot sends full operational cards only to the configured
 owner DM. `SIGNAL_PUBLIC_CHANNEL_ID` remains exclusively for manual broadcasts
 from the general bot. Order message IDs are cached for seven days under

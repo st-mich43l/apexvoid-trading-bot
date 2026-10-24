@@ -187,7 +187,7 @@ analysis:
   # consumes those events and applies execution policy before publishing V8.
   strategies:
     key_level:
-      version: v3
+      version: v4
       enabled: true
       minimum_touches: 2
       # The structure Key Level reads: profit_week is the detector contract of
@@ -248,7 +248,7 @@ analysis:
       minimum_reward_risk: 1.15
       expiry_hours: 12.0
     supply:
-      version: v3
+      version: v4
       enabled: true
       # A zone already touched more than this many times is spent and does not publish
       # (0 = no limit, the frozen Python publishers' behavior). 2026-10 replay, dev and
@@ -272,7 +272,7 @@ analysis:
       # reaction confirmation, entry validity and stop rules are unchanged.
       higher_timeframes: [M15]
     demand:
-      version: v3
+      version: v4
       enabled: true
       # See supply. Demand setups on zones touched 3+ times averaged -0.31R / -0.39R (dev / out of
       # sample) against -0.08R / -0.22R on zones touched at most once.
@@ -294,7 +294,7 @@ analysis:
       # reaction confirmation, entry validity and stop rules are unchanged.
       higher_timeframes: [M15]
     order_block:
-      version: v2
+      version: v3
       enabled: true
       minimum_strength: 0.4
       # 2026-09-30: production saw order blocks as small as 0.03 ATR (half
@@ -313,7 +313,7 @@ analysis:
       entry_max_width_price: 5.0
       momentum_body_fraction: 0.6
     fvg:
-      version: v2
+      version: v3
       enabled: true
       minimum_strength: 0.4
       # 2026-09-30: XAU traded 13-pip gaps (0.36 ATR) because a big middle
@@ -448,7 +448,7 @@ analysis:
       minimum_reward_risk: 1.15
       expiry_hours: 4.0
     flip_zone:
-      version: v3
+      version: v4
       enabled: true
       invalidation_buffer_atr: 0.5
       minimum_target_distance_atr: 1.0
@@ -457,7 +457,7 @@ analysis:
       # level's band that make a break accepted (the flip's required role).
       breakout_accept_bars: 2
     trendline:
-      version: v4
+      version: v5
       enabled: true
       # The target is the nearest opposing liquidity at least this far from the entry; with none
       # there is no technical objective and nothing is published. (v3 reported twice the distance
