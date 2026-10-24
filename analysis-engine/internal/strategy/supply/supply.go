@@ -40,7 +40,7 @@ const ID strategy.StrategyID = "supply"
 // Version is this strategy's own technical-thesis version — increments
 // only on a behavior-breaking redesign (source task §13), independent of
 // structure/liquidity/zone's own algorithm versions below.
-const Version = "v5"
+const Version = "v6"
 
 // Algorithm versions this strategy's logic was validated against — a
 // real, version-pinned contract fact each strategy owns (matches

@@ -16,6 +16,7 @@ from app.analysis_client.provenance import (
   STOP_BUDGET_FLOOR_EVIDENCE,
   STOP_BUDGET_STRUCTURAL_EVIDENCE,
 )
+from app.autotrade.go_containment import STRUCTURE_TIMEFRAME_TAG
 from app.autotrade.execution_route import SCALP_MICRO_CLIPS, resolve_execution_route_plan
 from app.autotrade.xau_ladder import XAU_DIGITS, round_price as round_xau_price
 from app.autotrade.protective_stop import (
@@ -490,6 +491,14 @@ def _catalog_id(match: Any) -> str:
   return str(getattr(match, "strategy", "") or "unknown")
 
 
+def _structure_timeframe(match: Any) -> str:
+  """The timeframe the setup's structure was found on (``M15``/``H1`` for a higher-timeframe zone), ``M5`` when the opportunity carries none."""
+  for tag in tuple(getattr(match, "tags", ()) or ()):
+    if isinstance(tag, str) and tag.startswith(STRUCTURE_TIMEFRAME_TAG):
+      return tag[len(STRUCTURE_TIMEFRAME_TAG):].upper() or "M5"
+  return "M5"
+
+
 def _emit_metric(sink: Callable[[str, str, dict[str, str]], None] | None, name: str, symbol: str, dimensions: dict[str, str]) -> None:
   """Counters are telemetry: a failing sink is never a reason to refuse or alter a plan."""
   if sink is None:
@@ -549,7 +558,8 @@ def evaluate_execution_policy(
   direction = str(getattr(match, "direction", "")).upper()
   go_origin = GO_ORIGIN_TAG in tuple(getattr(match, "tags", ()) or ())
   reaction_anchored = go_origin and REACTION_EXTREME_EVIDENCE in tuple(getattr(match, "reasons", ()) or ())
-  reaction_anchored_dims = {"strategy": _catalog_id(match)}
+  # Every Go evaluation counter carries the strategy and the timeframe its structure was found on (M5 unless a higher-timeframe zone).
+  reaction_anchored_dims = {"strategy": _catalog_id(match), "timeframe": _structure_timeframe(match)}
   go_reasons = tuple(getattr(match, "reasons", ()) or ()) if go_origin else ()
   stop_budget_metric = (
     "go_stop_budget_structural" if STOP_BUDGET_STRUCTURAL_EVIDENCE in go_reasons
@@ -877,6 +887,7 @@ def evaluate_execution_policy(
         _emit_metric(metric_sink, "go_invalidation_reaction_anchored", symbol, reaction_anchored_dims)
       if stop_budget_metric is not None:
         _emit_metric(metric_sink, stop_budget_metric, symbol, reaction_anchored_dims)
+      _emit_metric(metric_sink, "go_structure_timeframe", symbol, reaction_anchored_dims)
       stop_plan = plan_go_invalidation_stop(
         direction=direction,
         entry_zone_low=low,
