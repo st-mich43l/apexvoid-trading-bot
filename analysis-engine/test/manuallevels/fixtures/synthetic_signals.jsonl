@@ -1,0 +1,3 @@
+{"id": 9001, "ts": 1791554520, "symbol": "XAU", "action": "BUY", "entry": 4146.09, "entry_end": null, "sl": 4141.09, "original_sl": 4141.09, "setup_type": "fixture-pdh", "trade_stream": "manual", "status": "pending", "fill_state": "pending"}
+{"id": 9002, "ts": 1791554520, "symbol": "XAU", "action": "SELL", "entry": 4198.01, "entry_end": 4198.45, "sl": 4203.45, "original_sl": 4203.45, "setup_type": "fixture-order-block", "trade_stream": "manual", "status": "pending", "fill_state": "pending"}
+{"id": 9003, "ts": 1790949720, "symbol": "EURUSD", "action": "BUY", "entry": 1.1311, "entry_end": 1.1313, "sl": 1.1303, "original_sl": 1.1303, "setup_type": "fixture-h1-swing", "trade_stream": "manual", "status": "pending", "fill_state": "pending"}
