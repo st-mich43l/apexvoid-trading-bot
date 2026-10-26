@@ -32,6 +32,7 @@ from aiogram.exceptions import TelegramBadRequest
 from app.autotrade.setup_execution_aggregate import STATUS_LINE_BY_PROJECTION_STATE
 from app.autotrade.setup_lifecycle import TERMINAL_STATES, load_setup
 from app.autotrade.strategy_match import StrategyMatch
+from app.autotrade.strategy_names import SUPPLY_DEMAND
 from app.autotrade.trade_card import (
   conservative_entry_reference,
   format_entry_line,
@@ -617,6 +618,21 @@ _ACTIVATED_HEADER_RE = re.compile(
 )
 _LIVE_PRICE_MARKER_RE = re.compile(r"\s*<i>\(live\)</i>", re.IGNORECASE)
 
+def card_setup_label(strategy: str | None, direction: str | None) -> str:
+  """The setup name the root card shows. Display only: the strategy identity ("Supply Demand") is unchanged everywhere else.
+
+  The zone strategy is one identity for both sides, but a card reads better as the zone it trades: a SELL is a Supply zone, a BUY a Demand zone.
+  """
+  name = str(strategy or "").strip()
+  if name == SUPPLY_DEMAND:
+    side = str(direction or "").upper()
+    if side == "SELL":
+      return "Supply"
+    if side == "BUY":
+      return "Demand"
+  return name
+
+
 # The direction/strategy body line format.py always writes right after the
 # status slot (see format_plan_published_root_card) - "🔴 <b>SELL · ...</b>"
 # or "🟢 <b>BUY · ...</b>". Used post-activation to tell "no status line is
@@ -670,7 +686,9 @@ def forming_card_matches_strategy(text: str, match: StrategyMatch) -> bool:
       continue
     if body.group(1) != direction:
       return False
-    if strategy and strategy not in line:
+    # a card published before the display label changed still reads "Supply Demand": it is the same setup
+    shown = card_setup_label(strategy, direction)
+    if strategy and strategy not in line and f"· {escape(shown)}</b>" not in line:
       return False
     return True
   return False
@@ -2033,7 +2051,7 @@ def format_plan_published_root_card(
   # which card is looking at it.
   direction_icon = "📈" if direction == "BUY" else "📉"
   stars = "⭐" * max(1, min(3, int(match.confluence or 1)))
-  setup_label = str(match.strategy or "").strip() or "Setup"
+  setup_label = card_setup_label(match.strategy, direction) or "Setup"
   in_zone = quote_inside_entry_zone(
     match.current_price, match.entry_low, match.entry_high,
   )
@@ -2500,7 +2518,7 @@ def format_event_recovery_root_card(event: dict) -> str:
     elif "BUY" in upper:
       direction = "BUY"
   strategy = escape(
-    str(event.get("strategy") or event.get("setup") or "Algo").strip() or "Algo"
+    card_setup_label(str(event.get("strategy") or event.get("setup") or "Algo"), direction) or "Algo"
   )
   # Never paint TERMINAL on a recovered root — close lives on reply cards.
   head = f"✅ <b>ORDER ACTIVATED · {symbol} {tf}</b>"
