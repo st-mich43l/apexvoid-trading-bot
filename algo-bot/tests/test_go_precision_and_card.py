@@ -145,7 +145,7 @@ async def test_card_carries_every_presentation_element_from_the_canonical_helper
   card = format_plan_published_root_card(match, stop_price=float(plan["stop"]["price"]), target_prices=tuple(float(t["price"]) for t in plan["targets"]))
   assert "XAU" in card and "M5" in card                                                    # instrument + timeframe
   assert "📉" in card and "SELL" in card                                                    # direction
-  assert "Supply Demand" in card and "⭐" in card                                           # setup identity
+  assert "SELL · Supply</b>" in card and "Supply Demand" not in card and "⭐" in card      # setup identity: the zone it trades
   assert "Entry Zone" in card and "SL:" in card and "risk" in card                         # entry, stop and its risk
   assert "TP1" in card                                                                     # TP ladder
   assert "SETUP FORMING" in card or "IN ZONE" in card or "PLAN PUBLISHED" in card          # status slot (edited in place afterwards)
