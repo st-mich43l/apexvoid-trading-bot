@@ -100,3 +100,15 @@ class _Sql:
 @pytest.fixture
 def sql():
   return _Sql()
+
+
+@pytest.fixture(autouse=True)
+def _premium_emoji_off_unless_a_test_asks(monkeypatch):
+  """Premium emoji are on in the shipped configuration; a test sees plain cards unless it sets ``configured_ids`` itself."""
+  try:
+    from app.bot import client as bot_client
+  except Exception:  # no bot token in this environment: nothing here sends
+    yield
+    return
+  monkeypatch.setattr(bot_client, "configured_ids", lambda _cfg: {})
+  yield

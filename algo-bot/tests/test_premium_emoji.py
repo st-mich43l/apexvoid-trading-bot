@@ -102,10 +102,12 @@ def test_it_is_off_unless_switched_on():
   assert configured_ids(_telegram({"enabled": True, "ids": IDS})) == {k: v for k, v in IDS.items()}
 
 
-def test_the_shipped_configuration_is_off():
+def test_the_shipped_configuration_is_on_with_the_chosen_ids():
   from app.core.config import runtime_config
 
-  assert configured_ids(runtime_config.telegram) == {}
+  ids = configured_ids(runtime_config.telegram)
+  assert {"brand", "forming", "buy", "sell", "entry", "stop", "target", "star", "trophy", "loss", "chest", "setup"} <= set(ids)
+  assert ids["buy"] == "5429651785352501917" and ids["chest"] == "5278467510604160626"
 
 
 # ---- the Telegram boundary ----------------------------------------------------------------------------------------------------------
