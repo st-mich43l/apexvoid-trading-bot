@@ -1100,8 +1100,29 @@ async def test_handle_event_group_result_keeps_peak_tp_not_shallow_blend(
   assert row["status"] == "closed"
   assert row["result_pips"] == 160
   text = send.call_args.args[0]
-  assert "+160" in text
-  assert "achieved +160" in text
+  assert "Achieved 160 pips" in text
+
+
+@pytest.mark.asyncio
+async def test_the_final_manual_close_reply_goes_out_with_premium_emoji_when_configured(monkeypatch, sql):
+  from app.bot import client as bot_client
+
+  ids = {"trophy": "5188344996356448758", "chest": "5278467510604160626"}
+  monkeypatch.setattr(bot_client, "configured_ids", lambda _cfg: ids)
+  send = _mock_send(monkeypatch)
+  sid = await _algo_signal()
+  tp_legs = [{"frac": 0.2, "pips": 60, "ts": 1}, {"frac": 0.2, "pips": 90, "ts": 2}, {"frac": 0.2, "pips": 130, "ts": 3}, {"frac": 0.2, "pips": 160, "ts": 4}]
+  await sql.exec("UPDATE manual_signals SET legs = $1 WHERE id = $2", json.dumps(tp_legs), sid)
+  client = redis_state.get_client()
+  await redis_state.set_runner_pips(sid, 160)
+  await manual_execution._handle_event(
+    client, {"type": "position_closed", "remaining_volume": 0, "candidate_id": f"manual:{sid}:0", "group_realized_pips": 130}, {},
+  )
+  text = send.call_args.args[0]
+  assert f'emoji-id="{ids["trophy"]}">🏆</tg-emoji>' in text and f'emoji-id="{ids["chest"]}">💸</tg-emoji>' in text
+  import re
+
+  assert "Achieved 160 pips" in re.sub(r"</?tg-emoji[^>]*>", "", text)
 
 
 @pytest.mark.asyncio
@@ -1207,7 +1228,7 @@ async def test_realized_rr_uses_the_booking_legs_own_entry_price(monkeypatch):
   # different, wrong number.
   send.assert_awaited_once()
   text = send.await_args.args[0]
-  assert "+50 pips" in text
+  assert "Achieved 50 pips" in text
   assert "+0.4R" in text
 
 

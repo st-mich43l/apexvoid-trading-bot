@@ -370,19 +370,19 @@ def test_public_close_pips_toggle_never_reveals_id(monkeypatch):
 
   install_runtime_overrides(monkeypatch, legacy_overrides={"public_show_pips": True})
   assert trade_ops.render_result(result, "XAU", "public") == (
-    "✅ closed — +70 pips win 💸"
+    "🏆 closed • Achieved 70 pips 💸"
   )
   assert trade_ops.render_result(result, "XAU", "vip") == (
-    "✅ #7 closed — achieved +70 pips 💸"
+    "🏆 #7 closed • Achieved 70 pips 💸"
   )
 
   install_runtime_overrides(monkeypatch, legacy_overrides={"public_show_pips": False})
   public = trade_ops.render_result(result, "XAU", "public")
-  assert public == "✅ closed — win"
+  assert public == "🏆 closed • win 💸"
   assert "#7" not in public
   assert "70" not in public
   assert trade_ops.render_result(result, "XAU", "vip") == (
-    "✅ #7 closed — achieved +70 pips 💸"
+    "🏆 #7 closed • Achieved 70 pips 💸"
   )
 
 
@@ -399,10 +399,10 @@ def test_vip_close_reports_losing_when_net_negative():
   }
 
   assert trade_ops.render_result(result, "XAU", "vip") == (
-    "🛑 #5 closed — losing 47 pips"
+    "❌ #5 closed • losing 47 pips"
   )
   assert trade_ops.render_result(result, "XAU", "public") == (
-    "🛑 closed — -47 pips loss"
+    "❌ closed • losing 47 pips"
   )
 
 
@@ -650,10 +650,10 @@ def test_final_close_with_tp_number_labels_which_target_closed_it(monkeypatch):
   }
 
   assert trade_ops.render_result(result, "XAU", "vip") == (
-    "✅ #7 TP4 closed — achieved +570 pips 💸💸💸"
+    "🏆 #7 TP4 closed • Achieved 570 pips 💸"
   )
   assert trade_ops.render_result(result, "XAU", "public") == (
-    "✅ TP4 closed — +570 pips win 💸💸💸"
+    "🏆 TP4 closed • Achieved 570 pips 💸"
   )
 
 
@@ -1075,3 +1075,80 @@ async def test_a_refused_premium_entry_card_is_resent_plain_to_the_same_channel(
 
   assert len(sent) == 2 and "tg-emoji" in sent[0][0] and "tg-emoji" not in sent[1][0] and sent[0][1] == sent[1][1] == VIP_ID
   assert [p["channel_id"] for p in await store.get_signal_posts(signal["id"])] == [VIP_ID]
+
+
+# ---- Premium emoji on the manual signal's final close reply -------------------------------------------------------------------------
+
+CLOSE_IDS = {"trophy": "5188344996356448758", "loss": "5210952531676504517", "chest": "5278467510604160626"}
+
+
+def _close_result(net, seq=7):
+  return {"action": "close", "ok": True, "row": {"id": 1, "daily_seq": seq, "closed": True, "net": net}, "pips": net}
+
+
+def test_the_manual_close_line_carries_the_r_before_its_chest_and_none_without_it():
+  win = _close_result(70)
+  assert trade_ops.render_result(win, "XAU", "vip", rr="+1.4R") == "🏆 #7 closed • Achieved 70 pips • +1.4R 💸"
+  assert trade_ops.render_result(win, "XAU", "vip") == "🏆 #7 closed • Achieved 70 pips 💸"
+  assert trade_ops.render_result(_close_result(-47, 5), "XAU", "vip", rr="-1.0R") == "❌ #5 closed • losing 47 pips • -1.0R"
+  assert trade_ops.render_result(_close_result(0), "XAU", "vip") == "➖ #7 closed • breakeven"
+
+
+def test_every_manual_win_has_exactly_one_chest():
+  for net in (5, 70, 150, 320, 570):
+    assert trade_ops.render_result(_close_result(net), "XAU", "vip").count("💸") == 1
+    assert trade_ops.render_result(_close_result(net), "XAU", "public").count("💸") == 1
+
+
+@pytest.mark.asyncio
+async def test_only_the_final_close_reply_is_dressed_in_premium_emoji(tmp_path, monkeypatch, dual_channels):
+  from app.bot import client as bot_client
+
+  monkeypatch.setattr(bot_client, "configured_ids", lambda _cfg: CLOSE_IDS)
+  signal = await _signal(tmp_path, monkeypatch, "vip")
+  send = AsyncMock(return_value=SimpleNamespace(message_id=101))
+  monkeypatch.setattr(broadcast, "_send_message", send)
+  await broadcast.broadcast_entry(signal)
+  send.reset_mock()
+
+  line = "🏆 #7 closed • Achieved 70 pips • +1.4R 💸"
+  await broadcast.fanout_update(signal, lambda tier: line, premium=True)
+  rich = send.await_args.args[0]
+  assert f'emoji-id="{CLOSE_IDS["trophy"]}">🏆</tg-emoji>' in rich and f'emoji-id="{CLOSE_IDS["chest"]}">💸</tg-emoji>' in rich
+  import re
+
+  assert re.sub(r"</?tg-emoji[^>]*>", "", rich) == line
+  send.reset_mock()
+
+  await broadcast.fanout_update(signal, lambda tier: line)  # an interim update: plain
+  assert send.await_args.args[0] == line
+
+
+@pytest.mark.asyncio
+async def test_without_premium_ids_the_final_close_reply_is_the_plain_line(tmp_path, monkeypatch, dual_channels):
+  signal = await _signal(tmp_path, monkeypatch, "vip")
+  send = AsyncMock(return_value=SimpleNamespace(message_id=101))
+  monkeypatch.setattr(broadcast, "_send_message", send)
+  await broadcast.broadcast_entry(signal)
+  send.reset_mock()
+
+  await broadcast.fanout_update(signal, lambda tier: "🏆 #7 closed • Achieved 70 pips 💸", premium=True)
+
+  assert send.await_args.args[0] == "🏆 #7 closed • Achieved 70 pips 💸"
+
+
+@pytest.mark.asyncio
+async def test_the_manual_entry_cards_setup_line_uses_the_setup_icon_when_configured(tmp_path, monkeypatch, dual_channels):
+  from app.bot import client as bot_client
+
+  key = "5307843983102204243"
+  monkeypatch.setattr(bot_client, "configured_ids", lambda _cfg: {"setup": key})
+  record = await store.store_manual_signal(1, "BUY", 2000.0, 2002.0, 1990.0, [2010.0], symbol="XAU", visibility="vip", setup_type="Key Level", confluence=2)
+  signal = await store.get_manual_signal(record["id"])
+  send = AsyncMock(return_value=SimpleNamespace(message_id=101))
+  monkeypatch.setattr(broadcast, "_send_message", send)
+
+  await broadcast.broadcast_entry(signal)
+
+  card = send.await_args.args[0]
+  assert f'<tg-emoji emoji-id="{key}">🏷</tg-emoji> Setup:  <b>Key Level</b>' in card
