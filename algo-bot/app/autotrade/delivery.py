@@ -30,6 +30,7 @@ from app.runtime.instruments import for_instrument, live_instruments
 from app.bot.client import (
   delete_scanner_message,
   edit_scanner_message_text,
+  premium_then_plain,
   send_scanner_with_retry,
 )
 from app.autotrade.setup_card import (
@@ -1700,31 +1701,36 @@ def _archived_pips_from_close_message(cleaned: str) -> float | None:
     return None
 
 
-_MANAGE_CLOSE_MARKER = "closed —"
+_MANAGE_CLOSE_MARKER = "closed •"
 
 
-def _achieved_rr_suffix(event: dict, pips: float) -> str:
-  """" · +1.1R" / " · -1.2R" - same convention as Manual Algo's own close
-  line (trade_ops._achieved_rr): the pips divided by the risk measured from the
-  group's DEEPEST fill (RISK leg included) to the ORIGINAL stop - the same fill the
-  pips themselves are measured from. The executor publishes that as
-  ``risk_pips``; ``stop_pips`` (the plan's entry-to-stop distance) is only the
-  fallback for an event that predates it.
+def _achieved_rr(event: dict, pips: float) -> float | None:
+  """The R of a close: the pips divided by the risk measured from the group's DEEPEST fill (RISK leg included) to the ORIGINAL stop - the same
+  fill the pips themselves are measured from, and the same convention as Manual Algo's own close line (trade_ops._achieved_rr). The executor
+  publishes that as ``risk_pips``; ``stop_pips`` (the plan's entry-to-stop distance) is only the fallback for an event that predates it.
   """
   risk_pips = _event_float(event, "risk_pips")
   if risk_pips is None or risk_pips <= 0:
     risk_pips = _event_float(event, "stop_pips")
   if risk_pips is None or risk_pips <= 0:
-    return ""
-  return f" · {pips / risk_pips:+.1f}R"
+    return None
+  return pips / risk_pips
+
+
+def _achieved_rr_suffix(event: dict, pips: float) -> str:
+  """" • +1.1R" / " • -1.2R", or "" when the close carries no risk to measure against."""
+  rr = _achieved_rr(event, pips)
+  return "" if rr is None else f" • {rr:+.1f}R"
+
+
+def _closed_win_line(event: dict, rounded: int) -> str:
+  """"🏆 closed • Achieved 105 pips • +2.7R 💸": every win carries one chest, whatever its R."""
+  return f"🏆 {_MANAGE_CLOSE_MARKER} Achieved {rounded} pips{_achieved_rr_suffix(event, rounded)} 💸"
 
 
 def _format_position_closed_compact_line(event: dict, message: str) -> str:
-  """Close trailer for the manage reply - matches Manual Algo's own close
-  wording (trade_ops.render_result's "close" action: "closed — achieved
-  +N pips · +1.1R" / "closed — losing N pips · -1.2R" / "closed —
-  breakeven") instead of the previous Auto-only "POSITION CLOSED · @
-  price"/reason-label style. _MANAGE_CLOSE_MARKER ("closed —") is just
+  """Close trailer for the manage reply: "🏆 closed • Achieved N pips • +1.1R 💸" (one chest for every win),
+  "❌ closed • losing N pips • -1.2R" or "➖ closed • breakeven". _MANAGE_CLOSE_MARKER ("closed •") is just
   the shared wording prefix every return path here contains;
   _deliver_compact_position_closed's own idempotency guard lives in
   _manage_closed_key instead.
@@ -1744,9 +1750,7 @@ def _format_position_closed_compact_line(event: dict, message: str) -> str:
     if archived is None:
       archived = _resolve_close_pips(event, cleaned, allow_stop_fallback=False)
     if archived is not None:
-      rounded = round(abs(archived))
-      rr = _achieved_rr_suffix(event, rounded)
-      return f"✅ {_MANAGE_CLOSE_MARKER} achieved +{rounded} pips{_wings(rounded)}{rr}"
+      return _closed_win_line(event, round(abs(archived)))
     return f"✅ {_MANAGE_CLOSE_MARKER} confirmed"
   reason = str(event.get("reason_code") or "")
   # A confirmed stop-loss/take-profit close (or a confirmed loss at the
@@ -1763,9 +1767,9 @@ def _format_position_closed_compact_line(event: dict, message: str) -> str:
   rounded = round(pips)
   rr = _achieved_rr_suffix(event, rounded)
   if rounded > 0:
-    return f"✅ {_MANAGE_CLOSE_MARKER} achieved +{rounded} pips{_wings(rounded)}{rr}"
+    return _closed_win_line(event, rounded)
   if rounded < 0:
-    return f"🛑 {_MANAGE_CLOSE_MARKER} losing {abs(rounded)} pips{rr}"
+    return f"❌ {_MANAGE_CLOSE_MARKER} losing {abs(rounded)} pips{rr}"
   return f"➖ {_MANAGE_CLOSE_MARKER} breakeven{rr}"
 
 
@@ -2007,12 +2011,16 @@ async def _deliver_compact_position_closed(
     retain_root=True,
   )
 
+  async def premium_send(text, *args, **kwargs):
+    # Premium emoji (off unless configured) on the closed-trade reply only; every other manage reply stays as it was.
+    return await premium_then_plain(lambda card: send(card, *args, **kwargs), text)
+
   await _post_manage_reply(
     client,
     event,
     match_id=match_id,
     chat_id=chat_id,
-    send=send,
+    send=premium_send,
     text=final_text,
     standalone_on_bad_reply=True,
   )
