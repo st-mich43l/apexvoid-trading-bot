@@ -1152,3 +1152,12 @@ async def test_the_manual_entry_cards_setup_line_uses_the_setup_icon_when_config
 
   card = send.await_args.args[0]
   assert f'<tg-emoji emoji-id="{key}">🏷</tg-emoji> Setup:  <b>Key Level</b>' in card
+
+
+def test_the_manual_entry_card_header_has_no_pin_and_starts_with_the_direction_icon():
+  signal = {"id": 1, "symbol": "XAU", "action": "SELL", "entry": 2000.0, "entry_end": 2002.0, "sl": 2012.0, "tps": [1990.0], "daily_seq": 3}
+  card = broadcast.render_entry(signal, "vip")
+  header = card.splitlines()[0]
+  assert header == "📉 <b>XAU SELL  #3</b>  🔔"
+  assert "📍" not in card
+  assert broadcast.render_entry(dict(signal, action="BUY"), "public").splitlines()[0] == "📈 <b>XAU BUY</b>  🔔"
