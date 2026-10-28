@@ -27,6 +27,8 @@ SLOT_EMOJI: dict[str, str] = {
   "trophy": "🏆",
   "loss": "❌",
   "chest": "💸",
+  # the manual signal card's "Setup:" line
+  "setup": "🏷",
 }
 _VARIATION_SELECTOR = "️"
 _ID = re.compile(r"[0-9]{5,32}")
