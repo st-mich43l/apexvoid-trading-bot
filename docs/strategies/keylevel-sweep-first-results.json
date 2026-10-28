@@ -1,0 +1,67 @@
+{
+ "by_period": {
+  "2026-10-01_to_10-11": {
+   "total": 342,
+   "swept": 143,
+   "unswept": 199,
+   "refused": 199,
+   "published_with_rule": 143,
+   "recovered_by_per_attempt_selection": 1
+  },
+  "before_2026-09-30": {
+   "total": 174,
+   "swept": 59,
+   "unswept": 115,
+   "refused": 115,
+   "published_with_rule": 59,
+   "recovered_by_per_attempt_selection": 0
+  },
+  "from_2026-10-12": {
+   "total": 558,
+   "swept": 233,
+   "unswept": 325,
+   "refused": 324,
+   "published_with_rule": 234,
+   "recovered_by_per_attempt_selection": 9
+  }
+ },
+ "captures": [
+  "replay-eurusd-production-capture-20261006.json",
+  "replay-eurusd-production-capture-20261013.json",
+  "replay-eurusd-production-capture-20261014.json",
+  "replay-eurusd-production-capture-20261022.json",
+  "replay-gbpjpy-production-capture-20261006.json",
+  "replay-gbpjpy-production-capture-20261013.json",
+  "replay-gbpjpy-production-capture-20261014.json",
+  "replay-gbpjpy-production-capture-20261022.json",
+  "replay-gbpusd-production-capture-20261005.json",
+  "replay-gbpusd-production-capture-20261013.json",
+  "replay-gbpusd-production-capture-20261014.json",
+  "replay-gbpusd-production-capture-20261022.json",
+  "replay-usdjpy-production-capture-20261005.json",
+  "replay-usdjpy-production-capture-20261013.json",
+  "replay-usdjpy-production-capture-20261014.json",
+  "replay-usdjpy-production-capture-20261022.json",
+  "replay-xau-production-capture-20260921.json",
+  "replay-xau-production-capture-20261012.json",
+  "replay-xau-production-capture-20261013.json",
+  "replay-xau-production-capture-20261014.json",
+  "replay-xau-production-capture-20261022.json"
+ ],
+ "non_xau_candidates": 7813,
+ "non_xau_identical": true,
+ "note": "refused = an opportunity v5 published (first sight by id) that the rule does not publish; recovered = an opportunity published only with the rule (another level's swept attempt that an unswept higher-stars attempt had displaced), counted separately and not in total/swept/unswept/refused; recovered_sightings counts it once per evaluated bar and capture",
+ "published_with_rule_including_recovered": 446,
+ "recovered_opportunities": 10,
+ "recovered_sightings": 34,
+ "rule": "XAU Key Level publishes a confirmed reaction only when it swept the level (require_reaction_sweep)",
+ "total": {
+  "total": 1074,
+  "swept": 435,
+  "unswept": 639,
+  "refused": 638,
+  "published_with_rule": 436,
+  "recovered_by_per_attempt_selection": 10
+ },
+ "unit": "one XAU Key Level confirmed candidate per opportunity id (first sight across overlapping captures), engine as configured (stop budget on)"
+}

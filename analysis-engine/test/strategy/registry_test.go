@@ -185,3 +185,46 @@ func TestRegistryReportsTheStopBudgetRefusalsOfEachStrategyAndResetsThem(t *test
 		t.Fatalf("the count must reset after it is read, got %v", result.StopBudgetRefused)
 	}
 }
+
+type sweepStrategy struct {
+	fakeStrategy
+	unswept int64
+}
+
+func (s *sweepStrategy) TakeUnsweptRefusals() int64 {
+	n := s.unswept
+	s.unswept = 0
+	return n
+}
+
+// TestRegistryReportsTheUnsweptRefusalsApartFromTheStopBudgetOnes: Key Level's "the reaction did not sweep the level" refusals travel on their own map, so an
+// unswept refusal never reads as a stop-budget refusal, and the count resets once it is read.
+func TestRegistryReportsTheUnsweptRefusalsApartFromTheStopBudgetOnes(t *testing.T) {
+	configs := fullConfig(map[strategy.StrategyID]bool{"key_level": true, "supply": true})
+	keyLevel := &sweepStrategy{fakeStrategy: fakeStrategy{id: "key_level", required: []market.Timeframe{market.M5}}, unswept: 4}
+	supply := &fakeStrategy{id: "supply", required: []market.Timeframe{market.M5}}
+	registry, err := strategy.NewRegistry(configs, map[strategy.StrategyID]strategy.Factory{
+		"key_level": func(strategy.Config) (strategy.Strategy, error) { return keyLevel, nil },
+		"supply":    func(strategy.Config) (strategy.Strategy, error) { return supply, nil },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := registry.Evaluate(testContext(market.M5), market.M5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.UnsweptRefused) != 1 || result.UnsweptRefused["key_level"] != 4 {
+		t.Fatalf("UnsweptRefused = %v, want key_level:4 only", result.UnsweptRefused)
+	}
+	if result.StopBudgetRefused != nil {
+		t.Fatalf("an unswept refusal is not a stop-budget refusal: %v", result.StopBudgetRefused)
+	}
+	result, err = registry.Evaluate(testContext(market.M5), market.M5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.UnsweptRefused != nil {
+		t.Fatalf("the count must reset after it is read, got %v", result.UnsweptRefused)
+	}
+}

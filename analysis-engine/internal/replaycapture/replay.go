@@ -50,6 +50,10 @@ type Options struct {
 	// WithoutStopBudget replays the legacy-family strategies without the instrument stop budget (engine.WithoutLegacyStopBudget). Parity proofs against
 	// the frozen Python publisher, which had no budget, set it.
 	WithoutStopBudget bool
+	// WithoutKeyLevelSweep replays Key Level without the instrument's require_reaction_sweep rule (engine.WithoutKeyLevelSweepRequirement). Every
+	// WithoutStopBudget replay implies it: the frozen Python publisher had neither the stop budget nor the sweep rule. The measurement test sets it on
+	// its own to see the budgeted engine with and without the rule.
+	WithoutKeyLevelSweep bool
 	// LegacyWindowBars overrides the detector frames' window per timeframe for this replay only (the configuration is not touched). The ageing study of
 	// docs/strategies/htf-zone-structure.md uses it to see which higher-timeframe zones the production window drops while they are still live.
 	LegacyWindowBars map[market.Timeframe]int
@@ -78,6 +82,9 @@ func Replay(doc *config.Document, capture *Capture, primary market.Timeframe, op
 	}
 	if opts.WithoutStopBudget {
 		engine.WithoutLegacyStopBudget(&settings)
+	}
+	if opts.WithoutStopBudget || opts.WithoutKeyLevelSweep {
+		engine.WithoutKeyLevelSweepRequirement(&settings)
 	}
 	settings.OnEvaluation = opts.OnEvaluation
 	for _, id := range opts.DisabledStrategies {

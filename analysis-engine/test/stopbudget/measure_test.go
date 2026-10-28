@@ -76,6 +76,8 @@ func classify(risk, min, max float64) string {
 	}
 }
 
+// replayOne replays one capture with or without the stop budget. The XAU Key Level sweep rule (docs/strategies/keylevel-sweep-first.md) is always removed
+// here: this measurement isolates the budget, and the rule refuses setups before the budget could classify them.
 func replayOne(t *testing.T, doc *config.Document, name string, withBudget bool) []record {
 	capture, err := replaycapture.Load(filepath.Join("..", "..", "testdata", name))
 	if err != nil {
@@ -92,7 +94,7 @@ func replayOne(t *testing.T, doc *config.Document, name string, withBudget bool)
 		return nil
 	}
 	var out []record
-	_, err = replaycapture.Replay(doc, capture, market.M5, replaycapture.Options{WithoutStopBudget: !withBudget, OnEvaluation: func(e engine.Evaluation) {
+	_, err = replaycapture.Replay(doc, capture, market.M5, replaycapture.Options{WithoutStopBudget: !withBudget, WithoutKeyLevelSweep: true, OnEvaluation: func(e engine.Evaluation) {
 		for _, c := range e.Candidates {
 			strategy := string(c.Strategy)
 			if !legacyFamily[strategy] || c.Reaction == nil {

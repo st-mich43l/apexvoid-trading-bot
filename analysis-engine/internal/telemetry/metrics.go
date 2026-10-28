@@ -76,6 +76,13 @@ const (
 	// symbol+timeframe; the per-strategy split is on strategy.Evaluation.
 	CounterStrategyStopBudgetRefused Counter = "strategy_stop_budget_refused"
 
+	// CounterStrategyKeyLevelUnsweptRefused counts confirmed Key Level
+	// reactions refused because they did not sweep the level (instrument
+	// override require_reaction_sweep): the reaction's lowest low (BUY) or
+	// highest high (SELL) between the touch and the confirmation was not
+	// strictly beyond the reaction band's far edge. Labels are symbol+timeframe.
+	CounterStrategyKeyLevelUnsweptRefused Counter = "strategy_key_level_unswept_refused"
+
 	// Opportunity lifecycle transition counters,
 	// one counter per internal/opportunity.TransitionKind an operator can
 	// observe (TransitionNoop is deliberately not counted: it carries no
