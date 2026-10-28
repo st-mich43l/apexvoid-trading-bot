@@ -998,3 +998,80 @@ async def test_replace_entry_posts_deletes_personal_trade_via_scanner_bot(
 
   scanner_delete.assert_awaited_once_with(OWNER_ID, 555)
   main_delete.assert_not_awaited()
+
+
+# ---- Premium emoji on the manual algo signal entry card -------------------------------------------------------------------------
+
+PREMIUM_IDS = {"buy": "5429651785352501917", "entry": "5397782960512444700", "stop": "5197288647275071607", "target": "5417924076503062111"}
+
+
+@pytest.mark.asyncio
+async def test_the_manual_entry_card_carries_premium_emoji_in_each_channel_when_configured(tmp_path, monkeypatch, dual_channels):
+  from app.bot import client as bot_client
+
+  monkeypatch.setattr(bot_client, "configured_ids", lambda _cfg: PREMIUM_IDS)
+  signal = await _signal(tmp_path, monkeypatch, "both")
+  send = AsyncMock(side_effect=[SimpleNamespace(message_id=101), SimpleNamespace(message_id=102)])
+  monkeypatch.setattr(broadcast, "_send_message", send)
+
+  await broadcast.broadcast_entry(signal)
+
+  assert send.await_count == 2
+  for call in send.await_args_list:
+    card = call.args[0]
+    assert f'emoji-id="{PREMIUM_IDS["buy"]}"' in card and f'emoji-id="{PREMIUM_IDS["entry"]}"' in card
+    assert f'emoji-id="{PREMIUM_IDS["stop"]}"' in card and f'emoji-id="{PREMIUM_IDS["target"]}"' in card
+  # the fallback a viewer without Premium sees is the card exactly as it was
+  import re
+
+  plain = broadcast.render_entry(signal, "vip")
+  assert re.sub(r"</?tg-emoji[^>]*>", "", send.await_args_list[0].args[0]) == plain
+
+
+@pytest.mark.asyncio
+async def test_the_manual_entry_card_is_plain_unless_configured(tmp_path, monkeypatch, dual_channels):
+  signal = await _signal(tmp_path, monkeypatch, "both")
+  send = AsyncMock(side_effect=[SimpleNamespace(message_id=101), SimpleNamespace(message_id=102)])
+  monkeypatch.setattr(broadcast, "_send_message", send)
+
+  await broadcast.broadcast_entry(signal)
+
+  assert all("tg-emoji" not in call.args[0] for call in send.await_args_list)
+
+
+@pytest.mark.asyncio
+async def test_replies_to_a_manual_entry_stay_plain_even_with_premium_emoji_on(tmp_path, monkeypatch, dual_channels):
+  from app.bot import client as bot_client
+
+  monkeypatch.setattr(bot_client, "configured_ids", lambda _cfg: PREMIUM_IDS)
+  signal = await _signal(tmp_path, monkeypatch, "vip")
+  send = AsyncMock(return_value=SimpleNamespace(message_id=101))
+  monkeypatch.setattr(broadcast, "_send_message", send)
+  await broadcast.broadcast_entry(signal)
+  send.reset_mock()
+
+  await broadcast.fanout_update(signal, lambda tier: "📈 TP1 hit 💰")
+
+  assert send.await_args.args[0] == "📈 TP1 hit 💰"
+
+
+@pytest.mark.asyncio
+async def test_a_refused_premium_entry_card_is_resent_plain_to_the_same_channel(tmp_path, monkeypatch, dual_channels):
+  from aiogram.exceptions import TelegramBadRequest
+  from app.bot import client as bot_client
+
+  monkeypatch.setattr(bot_client, "configured_ids", lambda _cfg: PREMIUM_IDS)
+  signal = await _signal(tmp_path, monkeypatch, "vip")
+  sent = []
+
+  async def send(text, channel_id, *args, **kwargs):
+    sent.append((text, channel_id))
+    if "tg-emoji" in text:
+      raise TelegramBadRequest(method=SimpleNamespace(), message="Bad Request: can't parse entities")
+    return SimpleNamespace(message_id=101)
+
+  monkeypatch.setattr(broadcast, "_send_message", send)
+  await broadcast.broadcast_entry(signal)
+
+  assert len(sent) == 2 and "tg-emoji" in sent[0][0] and "tg-emoji" not in sent[1][0] and sent[0][1] == sent[1][1] == VIP_ID
+  assert [p["channel_id"] for p in await store.get_signal_posts(signal["id"])] == [VIP_ID]

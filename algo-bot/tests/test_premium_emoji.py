@@ -125,7 +125,7 @@ async def test_with_premium_emoji_on_the_rich_card_is_sent(monkeypatch):
     sent.append(text)
     return "ok"
 
-  assert await bot_client._premium_then_plain(send, "📈 BUY") == "ok"
+  assert await bot_client.premium_then_plain(send, "📈 BUY") == "ok"
   assert sent == [f'<tg-emoji emoji-id="{IDS["buy"]}">📈</tg-emoji> BUY']
 
 
@@ -137,7 +137,7 @@ async def test_with_it_off_the_plain_card_is_sent_once(monkeypatch):
   async def send(text):
     sent.append(text)
 
-  await bot_client._premium_then_plain(send, "📈 BUY")
+  await bot_client.premium_then_plain(send, "📈 BUY")
   assert sent == ["📈 BUY"]
 
 
@@ -152,7 +152,7 @@ async def test_if_telegram_refuses_the_rich_card_the_plain_card_goes_out(monkeyp
       raise _bad_request("Bad Request: can't parse entities: unsupported custom emoji")
     return "plain"
 
-  assert await bot_client._premium_then_plain(send, "📈 BUY") == "plain"
+  assert await bot_client.premium_then_plain(send, "📈 BUY") == "plain"
   assert len(sent) == 2 and "tg-emoji" in sent[0] and sent[1] == "📈 BUY"
 
 
@@ -166,5 +166,15 @@ async def test_message_is_not_modified_is_raised_not_retried(monkeypatch):
     raise _bad_request("Bad Request: message is not modified")
 
   with pytest.raises(Exception, match="not modified"):
-    await bot_client._premium_then_plain(send, "📈 BUY")
+    await bot_client.premium_then_plain(send, "📈 BUY")
   assert len(calls) == 1
+
+
+def test_the_shipped_ids_give_the_forming_headline_its_magnet_and_keep_each_slot_distinct():
+  from app.core.config import runtime_config
+
+  ids = clean_ids(runtime_config.telegram.presentation.premium_emoji.ids)
+  assert ids["forming"] == "5202106638508512484"
+  assert {"brand", "forming", "buy", "sell", "entry", "stop", "target", "star"} <= set(ids)
+  out = apply_premium_emoji("🔎 <b>XAU M5 · SETUP FORMING</b>", ids)
+  assert out.startswith('<tg-emoji emoji-id="5202106638508512484">🔎</tg-emoji>')
