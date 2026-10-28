@@ -1300,7 +1300,7 @@ async def test_position_closed_sweeps_open_messages_and_posts_single_status(monk
   assert calls[0][1]["reply_to"] == 7001
   assert "✅ <b>ORDER FILLED</b>" not in final
   assert "TP1" not in final
-  assert "🎯 TP2 +90 pips 💸" in final
+  assert "🎯" not in final and "TP2" not in final  # the closed reply is the one closed line, no TP line above it
   assert "🏆 closed • Achieved 90 pips" in final
   assert "Highest TP archived" not in final
   assert all(e[1] != 7001 for e in edited)
@@ -1327,10 +1327,9 @@ async def test_position_closed_sweeps_open_messages_and_posts_single_status(monk
 
 @pytest.mark.asyncio
 @pytest.mark.no_database
-async def test_position_closed_appends_missing_final_tp_line(monkeypatch):
-  """Engine skips tp_booked on final target — close must still show that
-  TP, but the final status stays lean: an already-notified level (TP1,
-  deleted as its own message) isn't recapped."""
+async def test_position_closed_does_not_recap_the_final_tp(monkeypatch):
+  """Engine skips tp_booked on final target. The closed reply is still just the closed line (its pips and R are the final target's): no
+  "🎯 TPn" line above it, and an already-notified level (TP1, deleted as its own message) isn't recapped either."""
   client = redis_state.get_client()
   setup_id = "manage-close-final-tp"
   await client.set(
@@ -1384,7 +1383,7 @@ async def test_position_closed_appends_missing_final_tp_line(monkeypatch):
   assert len(calls) == 1
   final = calls[0][0]
   assert "TP1" not in final
-  assert "🎯 TP3 +81 pips 💸" in final
+  assert "🎯" not in final and "TP3" not in final  # the closed reply is the one closed line, no TP line above it
   assert "🏆 closed • Achieved 81 pips" in final
   assert "Highest TP archived" not in final
   # Root card stays intact (no TERMINAL rewrite); close lives on the reply.
@@ -1444,7 +1443,7 @@ async def test_position_closed_fallback_creates_manage_reply(monkeypatch):
   assert all(e[1] != 7001 or "TERMINAL" not in e[2] for e in edited)
   assert deleted == []
   assert "🏆 closed • Achieved 90 pips" in calls[0][0]
-  assert "🎯 TP2 +90 pips 💸" in calls[0][0]
+  assert "🎯" not in calls[0][0] and "TP2" not in calls[0][0]
   assert await client.get(delivery._manage_closed_key(setup_id)) == "1"
 
 
@@ -1556,7 +1555,7 @@ async def test_full_lifecycle_notifies_each_tp_then_collapses_to_single_close(
   assert len(calls) == 5
   final = calls[4][0]
   assert calls[4][1]["reply_to"] == 7001
-  assert "🎯 TP4 +172 pips 💸" in final
+  assert "🎯" not in final and "TP4" not in final  # the closed reply is the one closed line, no TP line above it
   assert "🏆 closed • Achieved 172 pips" in final
   assert "TP1" not in final
   assert "TP2" not in final

@@ -103,7 +103,7 @@ async def test_events_reach_telegram_as_replies_under_the_one_root_card(sql, mon
 
   texts = [t for t, _ in sent]
   assert texts[0].startswith("🟢 active") and "order filled" in texts[0]
-  assert any("TP1" in t and "+86 pips" in t for t in texts)                          # the target and its result reach the owner
+  assert any("closed •" in t and "Achieved 86 pips" in t for t in texts) and not any("🎯" in t for t in texts)  # the result reaches the owner as the one closed line
   card = await setup_card.load_forming_card(client, MATCH_ID)
   assert card is not None and int(card["message_id"]) == 4001                          # still the single root card: no second thread
   assert not any(t.strip().startswith("SETUP") for t in texts)                         # no duplicate "forming" presentation
