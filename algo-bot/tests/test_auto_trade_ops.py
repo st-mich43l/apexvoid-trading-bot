@@ -159,7 +159,7 @@ def test_position_closed_near_stop_not_labeled_manual():
   compact = delivery._format_position_closed_compact_line(
     event, str(event["message"]),
   )
-  assert compact == "🛑 closed — losing 34 pips"
+  assert compact == "❌ closed • losing 34 pips"
 
 
 def test_position_closed_break_even_message_uses_be_label():
@@ -177,7 +177,7 @@ def test_position_closed_break_even_message_uses_be_label():
   compact = delivery._format_position_closed_compact_line(
     event, str(event["message"]),
   )
-  assert compact == "➖ closed — breakeven"
+  assert compact == "➖ closed • breakeven"
 
 
 def test_position_closed_manual_close_reports_winning_pips():
@@ -218,7 +218,7 @@ def test_algo_auto_manual_close_does_not_invent_stop_loss():
     },
     "position closed at broker: manual or external order · winning 18.0 pips",
   )
-  assert compact == "✅ closed — achieved +18 pips 💸 · +0.7R"
+  assert compact == "🏆 closed • Achieved 18 pips • +0.7R 💸"
   assert "SL" not in compact
 
 
@@ -1190,6 +1190,49 @@ async def test_sl_moved_trail_updates_manage_reply_not_head(monkeypatch):
   assert head_edits == []
 
 
+WIN_MESSAGE = "PLAN CLOSED · highest TP archived TP2 · @ 4106.00"
+
+
+@pytest.mark.asyncio
+@pytest.mark.no_database
+async def test_the_closed_trade_reply_carries_premium_emoji_when_configured_and_nothing_else_does(monkeypatch):
+  """Trophy and chests on the close reply only; with the ids unset the reply is the plain line, and its fallback text is unchanged."""
+  from app.bot import client as bot_client
+
+  ids = {"trophy": "5188344996356448758", "chest": "5278467510604160626", "loss": "5210952531676504517"}
+  client = redis_state.get_client()
+  results = {}
+  for configured in (ids, {}):
+    monkeypatch.setattr(bot_client, "configured_ids", lambda _cfg, _ids=configured: _ids)
+    setup_id = f"premium-close-{'on' if configured else 'off'}"
+    await client.set(delivery._forming_message_key(setup_id), json.dumps({"chat_id": 123, "message_id": 7001, "text": "🔎 <b>XAU M5 · SETUP FORMING</b>"}), ex=60)
+    calls = []
+
+    async def sent(text, **kwargs):
+      calls.append(text)
+      return SimpleNamespace(message_id=9001)
+
+    async def noop(*_a, **_k):
+      return None
+
+    monkeypatch.setattr(delivery, "edit_scanner_message_text", noop)
+    monkeypatch.setattr(delivery, "delete_scanner_message", noop)
+    await delivery._deliver_auto_trade_event(
+      client,
+      {"type": "position_closed", "match_id": setup_id, "message": WIN_MESSAGE, "price": 4106.0, "target_pips": 90, "stop_pips": 30, "position_id": 1},
+      profile="internal", chat_id=123, send=sent,
+    )
+    results[bool(configured)] = calls[-1]
+
+  rich, plain = results[True], results[False]
+  assert 'emoji-id="5188344996356448758">🏆</tg-emoji> closed • Achieved 90 pips • +3.0R' in rich
+  assert rich.count('emoji-id="5278467510604160626"') >= 1  # the chest after the R
+  assert "tg-emoji" not in plain and "🏆 closed • Achieved 90 pips • +3.0R 💸" in plain
+  import re
+
+  assert re.sub(r"</?tg-emoji[^>]*>", "", rich) == plain
+
+
 @pytest.mark.asyncio
 @pytest.mark.no_database
 async def test_position_closed_sweeps_open_messages_and_posts_single_status(monkeypatch):
@@ -1258,7 +1301,7 @@ async def test_position_closed_sweeps_open_messages_and_posts_single_status(monk
   assert "✅ <b>ORDER FILLED</b>" not in final
   assert "TP1" not in final
   assert "🎯 TP2 +90 pips 💸" in final
-  assert "✅ closed — achieved +90 pips 💸" in final
+  assert "🏆 closed • Achieved 90 pips" in final
   assert "Highest TP archived" not in final
   assert all(e[1] != 7001 for e in edited)
   assert all(d[1] != 7001 for d in deleted)
@@ -1342,7 +1385,7 @@ async def test_position_closed_appends_missing_final_tp_line(monkeypatch):
   final = calls[0][0]
   assert "TP1" not in final
   assert "🎯 TP3 +81 pips 💸" in final
-  assert "✅ closed — achieved +81 pips 💸" in final
+  assert "🏆 closed • Achieved 81 pips" in final
   assert "Highest TP archived" not in final
   # Root card stays intact (no TERMINAL rewrite); close lives on the reply.
   assert all(e[1] != 7001 or "TERMINAL" not in e[2] for e in edited)
@@ -1400,7 +1443,7 @@ async def test_position_closed_fallback_creates_manage_reply(monkeypatch):
   assert calls[0][1]["reply_to"] == 7001
   assert all(e[1] != 7001 or "TERMINAL" not in e[2] for e in edited)
   assert deleted == []
-  assert "✅ closed — achieved +90 pips 💸" in calls[0][0]
+  assert "🏆 closed • Achieved 90 pips" in calls[0][0]
   assert "🎯 TP2 +90 pips 💸" in calls[0][0]
   assert await client.get(delivery._manage_closed_key(setup_id)) == "1"
 
@@ -1514,7 +1557,7 @@ async def test_full_lifecycle_notifies_each_tp_then_collapses_to_single_close(
   final = calls[4][0]
   assert calls[4][1]["reply_to"] == 7001
   assert "🎯 TP4 +172 pips 💸" in final
-  assert "✅ closed — achieved +172 pips 💸" in final
+  assert "🏆 closed • Achieved 172 pips" in final
   assert "TP1" not in final
   assert "TP2" not in final
 
@@ -1581,7 +1624,7 @@ async def test_position_closed_never_deletes_root_and_posts_standalone_if_root_g
 
   assert deleted == []
   assert [c[1]["reply_to"] for c in calls] == [7001, None]
-  assert "closed — achieved +30 pips" in calls[1][0]
+  assert "closed • Achieved 30 pips" in calls[1][0]
 
 
 @pytest.mark.asyncio
@@ -1963,7 +2006,7 @@ async def test_stop_moved_and_position_closed_also_thread_to_forming_card(
   assert "🛡 move SL to 4,100" in calls[0][0]
   assert deleted == [(123, 8124)]
   assert calls[1][1]["reply_to"] == 7001
-  assert "closed —" in calls[1][0]
+  assert "closed •" in calls[1][0]
   # Root forming card itself is never deleted here.
   assert all(d[1] != 7001 for d in deleted)
 

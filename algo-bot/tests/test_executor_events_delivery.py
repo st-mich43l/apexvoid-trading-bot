@@ -119,7 +119,7 @@ def test_close_line_r_uses_the_deepest_fill_risk_when_the_executor_sends_it():
   line = delivery._format_position_closed_compact_line(
     event, "PLAN CLOSED · highest TP archived TP1",
   )
-  assert "+85 pips" in line and "+2.4R" in line
+  assert "Achieved 85 pips" in line and "+2.4R" in line
   # Without risk_pips the plan's stop distance is the fallback, as before.
   del event["risk_pips"]
   fallback = delivery._format_position_closed_compact_line(

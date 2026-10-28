@@ -1424,7 +1424,7 @@ async def test_ensure_plan_published_root_card_threads_tp_sl_close_replies(monke
   assert all(c[1]["reply_to"] == 6060 for c in calls)
   assert "🎯" in calls[0][0] and "TP1" in calls[0][0]
   assert any("move SL" in text for text, _ in calls)
-  assert "closed —" in calls[-1][0]
+  assert "closed •" in calls[-1][0]
   assert "TP3" in calls[-1][0] or "+81.0" in calls[-1][0]
   # position_closed sweeps every still-open manage message (the TP1 and
   # BE/trail messages) from a Redis set, which has no defined order.

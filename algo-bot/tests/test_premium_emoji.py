@@ -178,3 +178,17 @@ def test_the_shipped_ids_give_the_forming_headline_its_magnet_and_keep_each_slot
   assert {"brand", "forming", "buy", "sell", "entry", "stop", "target", "star"} <= set(ids)
   out = apply_premium_emoji("🔎 <b>XAU M5 · SETUP FORMING</b>", ids)
   assert out.startswith('<tg-emoji emoji-id="5202106638508512484">🔎</tg-emoji>')
+
+
+@pytest.mark.asyncio
+async def test_only_a_refusal_of_the_emoji_is_retried_plain_not_other_bad_requests(monkeypatch):
+  monkeypatch.setattr(bot_client, "configured_ids", lambda _cfg: IDS)
+  calls = []
+
+  async def send(text):
+    calls.append(text)
+    raise _bad_request("Bad Request: message to be replied not found")
+
+  with pytest.raises(Exception, match="replied not found"):
+    await bot_client.premium_then_plain(send, "📈 BUY")
+  assert len(calls) == 1  # a bad reply target is not about the emoji: raised, so the caller's own fallback (a standalone post) still runs

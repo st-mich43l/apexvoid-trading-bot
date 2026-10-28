@@ -192,7 +192,7 @@ async def wait_out_scanner_flood(
 async def premium_then_plain(send, text: str):
   """Run ``send(text)`` with the configured Premium emoji in place; if Telegram refuses the rich text, send the plain card instead.
 
-  A card must never be lost for want of an emoji. "Message is not modified" is not a refusal of the emoji and is raised as before.
+  A card must never be lost for want of an emoji; an error that is not about the emoji is raised as before.
   """
   rich = apply_premium_emoji(text, configured_ids(runtime_config.telegram))
   if rich == text:
@@ -200,7 +200,10 @@ async def premium_then_plain(send, text: str):
   try:
     return await send(rich)
   except TelegramBadRequest as exc:
-    if "not modified" in str(exc).lower():
+    # Only a refusal of the emoji itself is retried plain. "Message is not modified", a bad reply target and every other BadRequest are
+    # not about the emoji and are raised as they always were.
+    reason = str(exc).lower()
+    if not any(word in reason for word in ("entit", "emoji", "can't parse")):
       raise
     log.warning("Telegram refused the Premium emoji card, sending it plain: %s", exc)
     return await send(text)
