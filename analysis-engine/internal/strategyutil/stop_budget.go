@@ -34,6 +34,17 @@ type RefusalCounter struct{ n atomic.Int64 }
 // TakeStopBudgetRefusals returns the refusals since the last call and resets the count.
 func (c *RefusalCounter) TakeStopBudgetRefusals() int64 { return c.n.Swap(0) }
 
+// SweepRefusalCounter counts the candidates a strategy refused because the confirming reaction did not sweep the level (Key Level with
+// require_reaction_sweep). It is kept apart from RefusalCounter: a stop-budget refusal and an unswept refusal are different decisions and must
+// not read as one. The engine drains it after each evaluation through TakeUnsweptRefusals (strategy.UnsweptReporter).
+type SweepRefusalCounter struct{ n atomic.Int64 }
+
+// CountUnswept records one candidate refused for want of a sweep.
+func (c *SweepRefusalCounter) CountUnswept() { c.n.Add(1) }
+
+// TakeUnsweptRefusals returns the refusals since the last call and resets the count.
+func (c *SweepRefusalCounter) TakeUnsweptRefusals() int64 { return c.n.Swap(0) }
+
 // ParseStopBudget reads the optional per-instrument keys execution_stop_max_pips, execution_stop_min_pips and execution_pip_size. The pip key is separate
 // from pip_size on purpose: pip_size feeds the technique geometry, and a budget must not change which zones a strategy decides on.
 func ParseStopBudget(params map[string]any) (StopBudget, error) {
