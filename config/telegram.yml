@@ -26,21 +26,22 @@ telegram:
     auto_book_bare_pips: false
     # Telegram Premium (custom) emoji on the root card (app/bot/premium_emoji.py). Off by default and harmless when left off. Telegram shows a
     # custom emoji only when the BOT has an additional username bought on Fragment, and only to viewers with Premium; everyone else sees the plain
-    # emoji. A slot with no id stays plain. Ids are the numeric custom_emoji_id of a sticker in the emoji pack. The ids below are from the
-    # "Finance Emoji" pack (t.me/addemoji/FinanceEmoji); it has no match for brand, forming, in_zone, activated or entry. Verified 2026-10-28: the
-    # production scanner bot's test message came back with all custom_emoji entities accepted.
+    # emoji. A slot with no id stays plain. Ids are the numeric custom_emoji_id of a sticker in an emoji pack. Packs used (t.me/addemoji/<name>):
+    # RoboEmoji (brand: the $$$ robot), FinanceEmoji (buy: green bars, sell: red bars, stop, star), NewsEmoji (entry: the red pin), TONEmoji (target: the
+    # money bag). No pack match yet for forming, in_zone and activated. Verified 2026-10-28 against the production scanner bot: every custom_emoji
+    # entity of the test messages was accepted.
     premium_emoji:
       enabled: false
       ids:
-        brand: ""      # 🤖  ApexVoid Algo line
+        brand: "5436386989857320953"      # 🤖  ApexVoid Algo line
         forming: ""    # 🔎  SETUP FORMING headline
         in_zone: ""    # ⏳  IN ZONE status
         activated: ""  # ✅  ORDER ACTIVATED headline
-        buy: "5197503331215361533"        # 📈  BUY line
+        buy: "5429651785352501917"        # 📈  BUY line
         sell: "5429518319243775957"       # 📉  SELL line
-        entry: ""      # ⚡  Entry Zone / Entry Price row
+        entry: "5397782960512444700"      # ⚡  Entry Zone / Entry Price row
         stop: "5197288647275071607"       # 🛡  SL row
-        target: "5287231198098117669"     # 💰  TP rows
+        target: "5417924076503062111"     # 💰  TP rows
         star: "5267500801240092311"       # ⭐  confluence stars
 
   reports:
