@@ -1161,3 +1161,102 @@ def test_the_manual_entry_card_header_has_no_pin_and_starts_with_the_direction_i
   assert header == "📉 <b>XAU SELL  #3</b>  🔔"
   assert "📍" not in card
   assert broadcast.render_entry(dict(signal, action="BUY"), "public").splitlines()[0] == "📈 <b>XAU BUY</b>  🔔"
+
+
+# ---- channel entry cards forwarded from the owner's DM (Premium emoji) --------------------------------------------------------------
+
+def _forwarder(monkeypatch, ids, *, fail=False):
+  """Replace forward_premium_card: record (text, channel, owner) and return the 'forwarded' message, or None to force the plain post."""
+  calls, counter = [], iter(ids)
+
+  async def forward(text, channel_id, owner_id):
+    calls.append((text, channel_id, owner_id))
+    if fail:
+      return None
+    return SimpleNamespace(message_id=next(counter))
+
+  monkeypatch.setattr(broadcast, "forward_premium_card", forward)
+  return calls
+
+
+@pytest.mark.asyncio
+async def test_a_forwarded_entry_card_is_the_channel_post_that_is_stored(tmp_path, monkeypatch, dual_channels):
+  install_runtime_overrides(monkeypatch, legacy_overrides={"telegram_owner_id": OWNER_ID})
+  signal = await _signal(tmp_path, monkeypatch, "both")
+  calls = _forwarder(monkeypatch, [7001, 7002])
+  send = AsyncMock()
+  monkeypatch.setattr(broadcast, "_send_message", send)
+
+  posts = await broadcast.broadcast_entry(signal)
+
+  send.assert_not_awaited()  # nothing is posted directly: the forward is the post
+  assert [(c[1], c[2]) for c in calls] == [(VIP_ID, OWNER_ID), (PUBLIC_ID, OWNER_ID)]
+  assert "#" in calls[0][0] and "#" not in calls[1][0]  # each tier is its own source card: the VIP card carries the daily number, the public one does not
+  assert [(p["channel_id"], p["message_id"], p["tier"]) for p in posts] == [(VIP_ID, 7001, "vip"), (PUBLIC_ID, 7002, "public")]
+  stored = await store.get_signal_posts(signal["id"])
+  assert [(p["channel_id"], p["message_id"]) for p in stored] == [(VIP_ID, 7001), (PUBLIC_ID, 7002)]
+
+
+@pytest.mark.asyncio
+async def test_when_the_forward_does_not_happen_the_plain_card_is_posted_as_before(tmp_path, monkeypatch, dual_channels):
+  install_runtime_overrides(monkeypatch, legacy_overrides={"telegram_owner_id": OWNER_ID})
+  signal = await _signal(tmp_path, monkeypatch, "both")
+  _forwarder(monkeypatch, [], fail=True)
+  send = AsyncMock(side_effect=[SimpleNamespace(message_id=101), SimpleNamespace(message_id=102)])
+  monkeypatch.setattr(broadcast, "_send_message", send)
+
+  posts = await broadcast.broadcast_entry(signal)
+
+  assert send.await_count == 2 and [p["message_id"] for p in posts] == [101, 102]  # no signal is ever lost to the forward
+
+
+@pytest.mark.asyncio
+async def test_a_modify_deletes_the_forwarded_cards_and_forwards_fresh_ones(tmp_path, monkeypatch, dual_channels):
+  install_runtime_overrides(monkeypatch, legacy_overrides={"telegram_owner_id": OWNER_ID})
+  signal = await _signal(tmp_path, monkeypatch, "both")
+  calls = _forwarder(monkeypatch, [7001, 7002, 7101, 7102])
+  monkeypatch.setattr(broadcast, "_send_message", AsyncMock())
+  await broadcast.broadcast_entry(signal)
+  deleted = []
+
+  async def delete(chat_id, message_id):
+    deleted.append((chat_id, message_id))
+
+  monkeypatch.setattr(broadcast, "delete_message", delete)
+
+  posts = await broadcast.replace_entry_posts(signal)
+
+  assert sorted(deleted) == sorted([(VIP_ID, 7001), (PUBLIC_ID, 7002)])  # the old forwarded cards go (the bot is admin and has their ids)
+  assert len(calls) == 4 and [p["message_id"] for p in posts] == [7101, 7102]
+  assert [p["message_id"] for p in await store.get_signal_posts(signal["id"])] == [7101, 7102]
+
+
+@pytest.mark.asyncio
+async def test_a_delete_removes_the_forwarded_cards(tmp_path, monkeypatch, dual_channels):
+  install_runtime_overrides(monkeypatch, legacy_overrides={"telegram_owner_id": OWNER_ID})
+  signal = await _signal(tmp_path, monkeypatch, "both")
+  _forwarder(monkeypatch, [7001, 7002])
+  monkeypatch.setattr(broadcast, "_send_message", AsyncMock())
+  await broadcast.broadcast_entry(signal)
+  deleted = []
+
+  async def delete(chat_id, message_id):
+    deleted.append((chat_id, message_id))
+
+  monkeypatch.setattr(broadcast, "delete_message", delete)
+  await broadcast.delete_posts(await store.get_signal_posts(signal["id"]))
+
+  assert sorted(deleted) == sorted([(VIP_ID, 7001), (PUBLIC_ID, 7002)])
+
+
+@pytest.mark.asyncio
+async def test_an_owner_personal_trade_is_not_forwarded_it_already_goes_to_the_dm(tmp_path, monkeypatch, dual_channels):
+  install_runtime_overrides(monkeypatch, legacy_overrides={"telegram_owner_id": OWNER_ID})
+  signal = await _personal_signal(tmp_path, monkeypatch)
+  calls = _forwarder(monkeypatch, [7001])
+  send = AsyncMock(return_value=SimpleNamespace(message_id=555))
+  monkeypatch.setattr(broadcast, "_send_message", send)
+
+  await broadcast.broadcast_entry(signal)
+
+  assert calls == [] and send.await_count == 1

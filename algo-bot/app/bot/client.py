@@ -22,7 +22,7 @@ from app.bot.telegram_actor import (
   PRIORITY_LIFECYCLE,
   submit as submit_telegram,
 )
-from app.bot.premium_emoji import apply_premium_emoji, configured_ids
+from app.bot.premium_emoji import apply_premium_emoji, channel_forward_enabled, configured_ids
 from app.core.config import runtime_config
 
 log = logging.getLogger(__name__)
@@ -208,6 +208,47 @@ async def premium_then_plain(send, text: str):
     log.warning("Telegram refused the Premium emoji card, sending it plain: %s", exc)
     return await send(text)
 
+
+
+async def forward_premium_card(text: str, channel_id: int | str, owner_id: int | str | None) -> Message | None:
+  """Post a card into a channel with its Premium emoji, or return None so the caller posts the plain card.
+
+  Telegram removes a bot's custom emoji from a channel post (and from an edit of one) but keeps them in a message FORWARDED into the channel, and a
+  forward survives the deletion of its source. So the card is sent to the owner's DM, where the emoji are kept, forwarded to the channel and the DM
+  copy deleted. The forwarded message is the channel post: its id is the one the caller stores, deletes and threads replies under. A forwarded message
+  cannot be edited, which the manual flow never does (it deletes and re-sends). Anything that goes wrong returns None and leaves nothing behind; a forward
+  that did not keep the emoji is deleted rather than left with a "Forwarded from" header and no icons.
+  """
+  rich = apply_premium_emoji(text, configured_ids(runtime_config.telegram))
+  if rich == text or not owner_id or not channel_forward_enabled(runtime_config.telegram):
+    return None
+  source = None
+  forwarded = None
+  try:
+    source = await send_with_retry(rich, chat_id=owner_id)
+    for attempt in range(1, _MAX_SEND_ATTEMPTS + 1):
+      try:
+        forwarded = await bot.forward_message(chat_id=channel_id, from_chat_id=owner_id, message_id=source.message_id)
+        break
+      except TelegramRetryAfter as e:
+        # A flood wait means the forward did not happen, so waiting and retrying cannot duplicate the post.
+        if e.retry_after > _MAX_RETRY_AFTER_SLEEP_SECONDS or attempt == _MAX_SEND_ATTEMPTS:
+          raise
+        await asyncio.sleep(e.retry_after)
+    if not any(e.type == "custom_emoji" for e in (forwarded.entities or [])):
+      log.warning("forwarded card lost its Premium emoji; posting the plain card instead")
+      await bot.delete_message(channel_id, forwarded.message_id)
+      return None
+    return forwarded
+  except Exception:
+    log.warning("Premium card forward to %s failed; posting the plain card instead", channel_id, exc_info=True)
+    return None
+  finally:
+    if source is not None:
+      try:
+        await bot.delete_message(owner_id, source.message_id)
+      except Exception:
+        log.warning("could not delete the DM source card %s", source.message_id)
 
 async def send_scanner_with_retry(
   text: str,
