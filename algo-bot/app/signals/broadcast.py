@@ -80,7 +80,7 @@ def render_entry(sig: dict, tier: str) -> str:
     entry_end = sig["entry"]
   lines = [
     (
-      f"📍 {action_icon} <b>{escape(symbol)} "
+      f"{action_icon} <b>{escape(symbol)} "
       f"{escape(action)}{seq}</b>  🔔"
     ),
     "",
