@@ -71,3 +71,16 @@ def configured_ids(telegram_config: Any) -> dict[str, str]:
   if node is None or not bool(node.get("enabled", False)):
     return {}
   return clean_ids(node.get("ids"))
+
+
+def channel_forward_enabled(telegram_config: Any) -> bool:
+  """Whether channel entry cards go out as a forward of a Premium card sent to the owner's DM (``premium_emoji.channel_forward``).
+
+  Telegram strips a bot's custom emoji from channel posts but keeps them in a forwarded message, so the card is sent where they work and forwarded.
+  Absent means off.
+  """
+  try:
+    node = telegram_config.presentation.get("premium_emoji")
+  except AttributeError:
+    return False
+  return bool(node is not None and node.get("enabled", False) and node.get("channel_forward", False))

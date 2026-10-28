@@ -32,6 +32,9 @@ telegram:
     # entity of the test messages was accepted.
     premium_emoji:
       enabled: true
+      # Channel posts lose a bot's custom emoji but a forwarded message keeps them: the manual signal entry card is sent to the owner's DM and forwarded
+      # into the VIP and public channels (the post then shows "Forwarded from" the bot; replies stay plain). false posts the plain card as before.
+      channel_forward: true
       ids:
         brand: "5436386989857320953"      # 🤖  ApexVoid Algo line
         forming: "5202106638508512484"    # 🔎  SETUP FORMING headline (TONEmoji magnet)

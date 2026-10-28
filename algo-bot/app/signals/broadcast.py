@@ -21,6 +21,7 @@ from app.core.symbols import channels_for
 from app.bot.client import (
   delete_message,
   delete_scanner_message,
+  forward_premium_card,
   premium_then_plain,
   send_scanner_root_card_with_retry,
   send_scanner_with_retry,
@@ -221,8 +222,12 @@ async def broadcast_entry(
       if render_fn
       else render_entry(sig, target["tier"])
     )
-    # Premium emoji (off unless configured): the entry card only. Replies, results and every other message of this bot stay plain.
-    sent = await premium_then_plain(lambda card: _send_message(card, channel_id), text)
+    # Premium emoji (off unless configured): the entry card only. Telegram keeps a bot's custom emoji in a forwarded message but not in a channel
+    # post, so the card is sent to the owner's DM and forwarded (forward_premium_card); anything else, or any failure, posts the card as before.
+    # Replies, results and every other message of this bot stay plain.
+    sent = await forward_premium_card(text, channel_id, runtime_config.telegram.telegram_owner_id)
+    if sent is None:
+      sent = await premium_then_plain(lambda card: _send_message(card, channel_id), text)
     await insert_signal_post(
       sig["id"],
       channel_id,
