@@ -189,7 +189,7 @@ async def wait_out_scanner_flood(
 
 
 
-async def _premium_then_plain(send, text: str):
+async def premium_then_plain(send, text: str):
   """Run ``send(text)`` with the configured Premium emoji in place; if Telegram refuses the rich text, send the plain card instead.
 
   A card must never be lost for want of an emoji. "Message is not modified" is not a refusal of the emoji and is raised as before.
@@ -237,7 +237,7 @@ async def send_scanner_root_card_with_retry(
   """Send the PLAN PUBLISHED / forming root card with a longer flood budget."""
   await wait_out_scanner_flood()
   result = await submit_telegram(
-    lambda: _premium_then_plain(
+    lambda: premium_then_plain(
       lambda card: _send_message_with_retry(
         scanner_bot,
         card,
@@ -339,7 +339,7 @@ async def edit_scanner_message_text(
 ) -> Message | None:
   """Edit a message the scanner bot itself sent (forming cards)."""
   return await submit_telegram(
-    lambda: _premium_then_plain(
+    lambda: premium_then_plain(
       lambda card: scanner_bot.edit_message_text(
         chat_id=chat_id,
         message_id=int(message_id),
