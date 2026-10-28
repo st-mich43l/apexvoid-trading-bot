@@ -194,3 +194,113 @@ async def test_only_a_refusal_of_the_emoji_is_retried_plain_not_other_bad_reques
   with pytest.raises(Exception, match="replied not found"):
     await bot_client.premium_then_plain(send, "📈 BUY")
   assert len(calls) == 1  # a bad reply target is not about the emoji: raised, so the caller's own fallback (a standalone post) still runs
+
+
+# ---- channel entry cards: sent to the owner's DM and forwarded ---------------------------------------------------------------------
+
+class _Chat:
+  """A recording stand-in for the main bot: send_with_retry (the DM source), forward_message and delete_message."""
+
+  def __init__(self, *, forward_entities=("custom_emoji",), forward_errors=()):
+    self.calls = []
+    self.forward_entities = forward_entities
+    self.forward_errors = list(forward_errors)
+
+  async def send_with_retry(self, text, reply_to=None, chat_id=None, reply_markup=None):
+    self.calls.append(("dm_send", chat_id, text))
+    return SimpleNamespace(message_id=500)
+
+  async def forward_message(self, chat_id, from_chat_id, message_id):
+    self.calls.append(("forward", chat_id, from_chat_id, message_id))
+    if self.forward_errors:
+      raise self.forward_errors.pop(0)
+    return SimpleNamespace(message_id=900, entities=[SimpleNamespace(type=t) for t in self.forward_entities])
+
+  async def delete_message(self, chat_id, message_id):
+    self.calls.append(("delete", chat_id, message_id))
+
+
+def _wire(monkeypatch, chat, ids=IDS, flag=True):
+  monkeypatch.setattr(bot_client, "bot", chat)
+  monkeypatch.setattr(bot_client, "send_with_retry", chat.send_with_retry)
+  monkeypatch.setattr(bot_client, "configured_ids", lambda _cfg: ids)
+  monkeypatch.setattr(bot_client, "channel_forward_enabled", lambda _cfg: flag)
+
+
+@pytest.mark.asyncio
+async def test_the_card_is_sent_to_the_dm_forwarded_to_the_channel_and_the_dm_copy_deleted(monkeypatch):
+  chat = _Chat()
+  _wire(monkeypatch, chat)
+  posted = await bot_client.forward_premium_card("📈 BUY", -100123, 42)
+  assert posted.message_id == 900  # the forward is the channel post: its id is the one to store
+  kinds = [call[0] for call in chat.calls]
+  assert kinds == ["dm_send", "forward", "delete"]
+  assert chat.calls[0][1] == 42 and "tg-emoji" in chat.calls[0][2]
+  assert chat.calls[1] == ("forward", -100123, 42, 500)
+  assert chat.calls[2] == ("delete", 42, 500)  # the source: a forward survives the deletion of its source
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("ids,flag,owner", [({}, True, 42), (IDS, False, 42), (IDS, True, None), (IDS, True, 0)])
+async def test_with_nothing_to_preserve_or_the_switch_off_or_no_owner_nothing_is_sent(monkeypatch, ids, flag, owner):
+  chat = _Chat()
+  _wire(monkeypatch, chat, ids=ids, flag=flag)
+  assert await bot_client.forward_premium_card("📈 BUY", -100123, owner) is None
+  assert chat.calls == []
+
+
+@pytest.mark.asyncio
+async def test_a_card_with_no_emoji_to_convert_is_not_forwarded(monkeypatch):
+  chat = _Chat()
+  _wire(monkeypatch, chat)
+  assert await bot_client.forward_premium_card("no icons here", -100123, 42) is None
+  assert chat.calls == []
+
+
+@pytest.mark.asyncio
+async def test_a_failed_forward_returns_none_and_leaves_no_dm_copy(monkeypatch):
+  chat = _Chat(forward_errors=[ConnectionError("network")])
+  _wire(monkeypatch, chat)
+  assert await bot_client.forward_premium_card("📈 BUY", -100123, 42) is None
+  assert [c[0] for c in chat.calls] == ["dm_send", "forward", "delete"] and chat.calls[-1] == ("delete", 42, 500)
+
+
+@pytest.mark.asyncio
+async def test_a_forward_that_lost_the_emoji_is_deleted_not_left_with_a_header_and_no_icons(monkeypatch):
+  chat = _Chat(forward_entities=("bold",))
+  _wire(monkeypatch, chat)
+  assert await bot_client.forward_premium_card("📈 BUY", -100123, 42) is None
+  assert ("delete", -100123, 900) in chat.calls and ("delete", 42, 500) in chat.calls
+
+
+@pytest.mark.asyncio
+async def test_a_flood_wait_is_waited_out_and_the_forward_retried_without_duplicating(monkeypatch):
+  from aiogram.exceptions import TelegramRetryAfter
+
+  slept = []
+
+  async def fake_sleep(seconds):
+    slept.append(seconds)
+
+  monkeypatch.setattr(bot_client.asyncio, "sleep", fake_sleep)
+  chat = _Chat(forward_errors=[TelegramRetryAfter(method=SimpleNamespace(), message="flood", retry_after=2)])
+  _wire(monkeypatch, chat)
+  posted = await bot_client.forward_premium_card("📈 BUY", -100123, 42)
+  assert posted.message_id == 900 and slept == [2]
+  assert [c[0] for c in chat.calls].count("forward") == 2 and chat.calls[-1] == ("delete", 42, 500)
+
+
+def test_the_channel_forward_switch_is_off_unless_the_feature_and_the_switch_are_both_on():
+  from app.bot.premium_emoji import channel_forward_enabled
+
+  assert channel_forward_enabled(_telegram({"enabled": True, "channel_forward": True, "ids": IDS})) is True
+  assert channel_forward_enabled(_telegram({"enabled": True, "ids": IDS})) is False
+  assert channel_forward_enabled(_telegram({"enabled": False, "channel_forward": True})) is False
+  assert channel_forward_enabled(_telegram(None)) is False
+
+
+def test_the_shipped_configuration_forwards_channel_cards():
+  from app.bot.premium_emoji import channel_forward_enabled
+  from app.core.config import runtime_config
+
+  assert channel_forward_enabled(runtime_config.telegram) is True
