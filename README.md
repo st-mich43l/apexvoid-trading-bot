@@ -109,7 +109,7 @@ only observes it.
 
 | Strategy ID | Technical thesis | Timeframes | Configuration | Parity / validation | Execution |
 |---|---|---|---|---|---|
-| `key_level` | Reaction at a clustered key level, with its role and structure | M5 | `strategies.key_level` (v5) | `LEGACY_PARITY_PROVEN` (profitable-week scalp lane, a1c77584; decisions and entry; invalidation anchored beyond the reaction extreme since v4; differs from the frozen publisher by design) | live |
+| `key_level` | Reaction at a clustered key level, with its role and structure | M5 | `strategies.key_level` (v6) | `LEGACY_PARITY_PROVEN` (profitable-week scalp lane, a1c77584; decisions and entry; invalidation anchored beyond the reaction extreme since v4; differs from the frozen publisher by design) | live |
 | `confluence_zone` | Two or more distinct canonical zone techniques overlapping on one side, then a reaction; its own opportunity beside theirs | M5 | `strategies.confluence_zone` (v2) | `LEGACY_PARITY_PROVEN` | live |
 | `supply` | Reaction at a canonical supply zone | M5; M15 zones analysis-only | `strategies.supply` (v6) | `LEGACY_PARITY_PROVEN` (decisions and entry; M5 zones, M15 has no oracle; invalidation anchored beyond the reaction extreme since v4; differs from the frozen publisher by design) | live |
 | `demand` | Reaction at a canonical demand zone | M5; M15 zones analysis-only | `strategies.demand` (v6) | `LEGACY_PARITY_PROVEN` (decisions and entry; M5 zones, M15 has no oracle; invalidation anchored beyond the reaction extreme since v4; differs from the frozen publisher by design) | live |

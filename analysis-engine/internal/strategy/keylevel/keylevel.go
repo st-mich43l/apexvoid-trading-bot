@@ -21,8 +21,12 @@
 //     price, entry no further than max_entry_atr, confluence at or above the
 //     floor).
 //  5. Of all levels that qualify, ONE candidate is kept: the highest
-//     confluence, nearest level winning ties. The strategy owns that
-//     selection; nothing downstream has to choose between its levels.
+//     confluence among the candidates that are PUBLISHED (a refused one, for the
+//     stop budget or for want of a sweep, never suppresses another), nearest
+//     level winning ties. The strategy owns that selection; nothing downstream
+//     has to choose between its levels.
+//  6. With require_reaction_sweep (XAU, docs/strategies/keylevel-sweep-first.md)
+//     a reaction is published only if it swept the level.
 //
 // Key Level carries no strength, proximity or target-room filter of its own:
 // the frozen detector had none (its quality gates were confluence and the
@@ -48,7 +52,10 @@ import (
 )
 
 const ID strategy.StrategyID = "key_level"
-const Version = "v5"
+const Version = "v6"
+
+// ReactionSweptEvidence marks a candidate published under require_reaction_sweep: the reaction traded beyond the level band's far edge.
+const ReactionSweptEvidence = "key_level_reaction_swept"
 
 const (
 	contractProfitWeek = "profit_week"
@@ -77,6 +84,10 @@ type Config struct {
 	// RequireExplicitRole skips levels whose support/resistance role is still
 	// ambiguous (legacy per-instrument Key Level quality rule).
 	RequireExplicitRole bool
+	// RequireReactionSweep publishes a confirmed reaction only when it swept the level: the lowest low (BUY) or highest high (SELL) of the bars from the
+	// touch to the confirmation lies strictly beyond the reaction band's far edge (the same reactLow/reactHigh ReactionAnchoredInvalidation reads, so it is
+	// exactly when the invalidation is anchored to the reaction's own extreme). Override-only; docs/strategies/keylevel-sweep-first.md.
+	RequireReactionSweep bool
 	// BreakoutAcceptBars is key_level_role.py's breakout_accept_bars.
 	BreakoutAcceptBars int
 	// Contract selects the structure Key Level reads: "profit_week" is the
@@ -91,6 +102,7 @@ type Config struct {
 // Strategy is KeyLevelStrategy.
 type Strategy struct {
 	strategyutil.RefusalCounter
+	strategyutil.SweepRefusalCounter
 	cfg         Config
 	timeframe   market.Timeframe
 	fingerprint string
@@ -152,6 +164,14 @@ func parseConfig(params map[string]any) (Config, error) {
 		}
 		cfg.RequireExplicitRole = b
 	}
+	// Override-only as well: set from an instrument's overrides, absent means false.
+	if raw, present := params["require_reaction_sweep"]; present {
+		b, ok := raw.(bool)
+		if !ok {
+			return Config{}, fmt.Errorf("parameter \"require_reaction_sweep\" is not a boolean (got %T)", raw)
+		}
+		cfg.RequireReactionSweep = b
+	}
 	if cfg.Detector, err = strategyutil.ParseLegacyDetectorSettings(params); err != nil {
 		return Config{}, err
 	}
@@ -208,7 +228,11 @@ func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate 
 	zoneBandFloor := math.Max(1e-9, s.cfg.Detector.ProximalBandATR*math.Max(0, atr))
 	levels, zones := s.structure(base)
 
-	var best *attempt
+	// Each level's confirmed attempt becomes a full candidate (reaction-anchored invalidation, the sweep requirement, the stop budget, the target) BEFORE
+	// the highest-stars one is kept, so an attempt the strategy then refuses can no longer suppress a valid one on another level. (v5 chose the best
+	// attempt by stars first and refused it afterwards, dropping the rest.)
+	var best *opportunity.Candidate
+	bestStars := 0
 	for _, level := range levels {
 		if level.Touches < maxInt(1, s.cfg.MinimumTouches) {
 			continue
@@ -294,19 +318,20 @@ func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate 
 		if len(confirmed) != 1 {
 			continue
 		}
-		if best == nil || confirmed[0].result.Stars > best.result.Stars {
-			chosen := confirmed[0]
-			best = &chosen
+		chosen := confirmed[0]
+		candidate, ok := s.candidate(ctx, base, &chosen)
+		if !ok {
+			continue
+		}
+		// The highest stars among the PUBLISHED candidates; the first one wins at equal stars.
+		if best == nil || chosen.result.Stars > bestStars {
+			best, bestStars = &candidate, chosen.result.Stars
 		}
 	}
 	if best == nil {
 		return nil
 	}
-	candidate, ok := s.candidate(ctx, base, best)
-	if !ok {
-		return nil
-	}
-	return []opportunity.Candidate{candidate}
+	return []opportunity.Candidate{*best}
 }
 
 // reactionFactors mirrors _reaction_factors: the evidence the confirmation
@@ -328,6 +353,12 @@ func (s *Strategy) candidate(ctx *context.MarketContext, d *strategyutil.LegacyD
 	}
 	// Beyond the reaction band and beyond the bars the reaction itself traded (a sweep's wick pierces the band).
 	invalidation, anchored := strategyutil.ReactionAnchoredInvalidation(d.Frame.Bars, a.confirmation, direction, low, high, buffer)
+	// The reaction swept the level exactly when its own extreme lies strictly beyond the band's far edge, which is when the invalidation is anchored to it.
+	// Without a sweep the candidate is refused (counted apart from the stop budget); the edge of Key Level belongs to the reaction that took the liquidity.
+	if s.cfg.RequireReactionSweep && !anchored {
+		s.SweepRefusalCounter.CountUnswept()
+		return opportunity.Candidate{}, false
+	}
 	// The instrument stop budget refuses a stop wider than the cap and never moves the entry or the invalidation to make a setup fit.
 	budgetCode, publish := s.cfg.StopBudget.Apply(reference, invalidation)
 	if !publish {
@@ -351,6 +382,9 @@ func (s *Strategy) candidate(ctx *context.MarketContext, d *strategyutil.LegacyD
 	}
 	if anchored {
 		evidence = append(evidence, strategyutil.ReactionExtremeEvidence)
+	}
+	if s.cfg.RequireReactionSweep {
+		evidence = append(evidence, ReactionSweptEvidence)
 	}
 	if budgetCode != "" {
 		evidence = append(evidence, budgetCode)

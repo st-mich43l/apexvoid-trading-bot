@@ -36,12 +36,21 @@ type Evaluation struct {
 	// StopBudgetRefused counts, per strategy, the candidates refused in this evaluation because the structural stop exceeded the instrument cap
 	// (nil when none). Strategies that apply the stop budget report it through StopBudgetReporter.
 	StopBudgetRefused map[StrategyID]int
+	// UnsweptRefused counts, per strategy, the candidates refused in this evaluation because the confirming reaction did not sweep the level
+	// (nil when none). Strategies that require a sweep report it through UnsweptReporter.
+	UnsweptRefused map[StrategyID]int
 }
 
 // StopBudgetReporter is implemented by a strategy that refuses a structural stop wider than the instrument cap. The registry drains the count after
 // each evaluation so the engine can record it; a strategy that does not implement it reports nothing.
 type StopBudgetReporter interface {
 	TakeStopBudgetRefusals() int64
+}
+
+// UnsweptReporter is implemented by a strategy that refuses a confirmed reaction that did not sweep its level (Key Level, require_reaction_sweep). The
+// registry drains the count after each evaluation, apart from the stop-budget count, so the engine can record it.
+type UnsweptReporter interface {
+	TakeUnsweptRefusals() int64
 }
 
 type registeredStrategy struct {
@@ -198,6 +207,14 @@ func (r *Registry) Evaluate(ctx *analysiscontext.MarketContext, closed market.Ti
 					result.StopBudgetRefused = make(map[StrategyID]int)
 				}
 				result.StopBudgetRefused[registered.config.ID] += int(n)
+			}
+		}
+		if reporter, ok := registered.strategy.(UnsweptReporter); ok {
+			if n := reporter.TakeUnsweptRefusals(); n > 0 {
+				if result.UnsweptRefused == nil {
+					result.UnsweptRefused = make(map[StrategyID]int)
+				}
+				result.UnsweptRefused[registered.config.ID] += int(n)
 			}
 		}
 		for _, candidate := range candidates {

@@ -468,6 +468,14 @@ instruments:
     aliases:
       - XAUUSD
     overrides:
+      auto_algo:
+        strategies:
+          reaction:
+            key_level:
+              # Owner report 2026-10-28 (docs/strategies/keylevel-sweep-first.md): Key Level publishes a confirmed XAU reaction only when it swept the
+              # level (traded strictly beyond the band's far edge). Swept setups held their edge in every period (+0.39, +0.49, +0.32 R above random);
+              # unswept ones lost it (+0.27, +0.18, +0.00) with nearly half stopped out in the manipulative weeks. FX was not measured and is unchanged.
+              require_reaction_sweep: true
       execution:
         # Owner rule 2026-10-14: no observe-only. Every strategy and structure
         # timeframe trades on XAU, including impulse_pullback (it was observe-only until

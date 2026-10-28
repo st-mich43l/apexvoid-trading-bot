@@ -187,7 +187,7 @@ analysis:
   # consumes those events and applies execution policy before publishing V8.
   strategies:
     key_level:
-      version: v5
+      version: v6
       enabled: true
       minimum_touches: 2
       # The structure Key Level reads: profit_week is the detector contract of
