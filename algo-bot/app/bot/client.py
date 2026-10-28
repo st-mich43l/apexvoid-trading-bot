@@ -7,7 +7,7 @@ import time
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.exceptions import TelegramNetworkError, TelegramRetryAfter
+from aiogram.exceptions import TelegramBadRequest, TelegramNetworkError, TelegramRetryAfter
 from aiogram.types import (
   BotCommand,
   BotCommandScopeChat,
@@ -22,6 +22,7 @@ from app.bot.telegram_actor import (
   PRIORITY_LIFECYCLE,
   submit as submit_telegram,
 )
+from app.bot.premium_emoji import apply_premium_emoji, configured_ids
 from app.core.config import runtime_config
 
 log = logging.getLogger(__name__)
@@ -187,6 +188,24 @@ async def wait_out_scanner_flood(
   return wait
 
 
+
+async def _premium_then_plain(send, text: str):
+  """Run ``send(text)`` with the configured Premium emoji in place; if Telegram refuses the rich text, send the plain card instead.
+
+  A card must never be lost for want of an emoji. "Message is not modified" is not a refusal of the emoji and is raised as before.
+  """
+  rich = apply_premium_emoji(text, configured_ids(runtime_config.telegram))
+  if rich == text:
+    return await send(text)
+  try:
+    return await send(rich)
+  except TelegramBadRequest as exc:
+    if "not modified" in str(exc).lower():
+      raise
+    log.warning("Telegram refused the Premium emoji card, sending it plain: %s", exc)
+    return await send(text)
+
+
 async def send_scanner_with_retry(
   text: str,
   reply_to: int | None = None,
@@ -218,13 +237,16 @@ async def send_scanner_root_card_with_retry(
   """Send the PLAN PUBLISHED / forming root card with a longer flood budget."""
   await wait_out_scanner_flood()
   result = await submit_telegram(
-    lambda: _send_message_with_retry(
-      scanner_bot,
+    lambda: _premium_then_plain(
+      lambda card: _send_message_with_retry(
+        scanner_bot,
+        card,
+        reply_to,
+        chat_id,
+        reply_markup,
+        max_retry_after_sleep=_MAX_ROOT_CARD_RETRY_AFTER_SLEEP_SECONDS,
+      ),
       text,
-      reply_to,
-      chat_id,
-      reply_markup,
-      max_retry_after_sleep=_MAX_ROOT_CARD_RETRY_AFTER_SLEEP_SECONDS,
     ),
     priority=PRIORITY_LIFECYCLE,
   )
@@ -317,11 +339,14 @@ async def edit_scanner_message_text(
 ) -> Message | None:
   """Edit a message the scanner bot itself sent (forming cards)."""
   return await submit_telegram(
-    lambda: scanner_bot.edit_message_text(
-      chat_id=chat_id,
-      message_id=int(message_id),
-      text=text,
-      reply_markup=reply_markup,
+    lambda: _premium_then_plain(
+      lambda card: scanner_bot.edit_message_text(
+        chat_id=chat_id,
+        message_id=int(message_id),
+        text=card,
+        reply_markup=reply_markup,
+      ),
+      text,
     ),
     priority=priority,
     droppable=droppable,
