@@ -43,6 +43,9 @@ telegram:
         stop: "5197288647275071607"       # 🛡  SL row
         target: "5417924076503062111"     # 💰  TP rows
         star: "5267500801240092311"       # ⭐  confluence stars
+        trophy: "5188344996356448758"     # 🏆  closed trade, win (TONEmoji)
+        loss: "5210952531676504517"       # ❌  closed trade, loss (NewsEmoji)
+        chest: "5278467510604160626"       # 💸  chest(s) after the R of a win: 1 from 1R, 2 from 2R, 3 from 3R (FinanceEmoji treasure chest)
 
   reports:
     weekly:
