@@ -194,3 +194,64 @@ func TestApplyInstrument_GivesConfluenceZoneTheInstrumentsStopCapAndAValidConfig
 		}
 	}
 }
+
+// Owner report 2026-10-28 (docs/strategies/keylevel-sweep-first.md): XAU Key Level publishes a confirmed reaction only when it swept the level. FX was not
+// measured, so no other instrument carries the override.
+func TestApplyInstrument_OnlyXAUKeyLevelRequiresTheReactionSweep(t *testing.T) {
+	doc, err := config.ResolveDocument(filepath.Join("..", "..", "..", "config", "apexvoid.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, symbol := range []string{"XAU", "EURUSD", "GBPUSD", "USDJPY", "GBPJPY"} {
+		settings, err := engine.LoadSettings(doc, "M5", false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := engine.ApplyInstrument(&settings, doc, symbol); err != nil {
+			t.Fatal(err)
+		}
+		var got any
+		for _, s := range settings.Strategies {
+			if s.ID == "key_level" {
+				got = s.Parameters["require_reaction_sweep"]
+			}
+		}
+		if symbol == "XAU" && got != true {
+			t.Fatalf("XAU key_level must require the reaction sweep, got %v", got)
+		}
+		if symbol != "XAU" && got != nil {
+			t.Fatalf("%s key_level must not carry the sweep rule (it was not measured), got %v", symbol, got)
+		}
+		// Only Key Level, never another strategy.
+		for _, s := range settings.Strategies {
+			if s.ID != "key_level" {
+				if _, present := s.Parameters["require_reaction_sweep"]; present {
+					t.Fatalf("%s: %s must not carry require_reaction_sweep", symbol, s.ID)
+				}
+			}
+		}
+		// The parity switch removes it and leaves everything else.
+		keep := map[string]any{}
+		for _, s := range settings.Strategies {
+			if s.ID == "key_level" {
+				for k, v := range s.Parameters {
+					if k != "require_reaction_sweep" {
+						keep[k] = v
+					}
+				}
+			}
+		}
+		engine.WithoutKeyLevelSweepRequirement(&settings)
+		for _, s := range settings.Strategies {
+			if s.ID != "key_level" {
+				continue
+			}
+			if _, present := s.Parameters["require_reaction_sweep"]; present {
+				t.Fatalf("%s: WithoutKeyLevelSweepRequirement left the rule in place", symbol)
+			}
+			if fmt.Sprint(s.Parameters) != fmt.Sprint(keep) {
+				t.Fatalf("%s: WithoutKeyLevelSweepRequirement changed other parameters:\n%v\n%v", symbol, s.Parameters, keep)
+			}
+		}
+	}
+}

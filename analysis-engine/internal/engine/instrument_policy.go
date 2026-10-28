@@ -237,6 +237,27 @@ func WithoutLegacyStopBudget(settings *Settings) {
 	}
 }
 
+// WithoutKeyLevelSweepRequirement removes the Key Level require_reaction_sweep override, leaving Key Level exactly as the frozen Python publisher ran
+// it, which had no such rule. The parity replays use it (replaycapture.Options.WithoutStopBudget): a refused unswept reaction there would be a
+// difference of policy, not of detection.
+func WithoutKeyLevelSweepRequirement(settings *Settings) {
+	for i := range settings.Strategies {
+		if settings.Strategies[i].ID != "key_level" {
+			continue
+		}
+		if _, present := settings.Strategies[i].Parameters["require_reaction_sweep"]; !present {
+			continue
+		}
+		params := make(map[string]any, len(settings.Strategies[i].Parameters))
+		for k, v := range settings.Strategies[i].Parameters {
+			if k != "require_reaction_sweep" {
+				params[k] = v
+			}
+		}
+		settings.Strategies[i].Parameters = params
+	}
+}
+
 // techniqueStrategies are the zone strategies whose confirmed reactions pass
 // the legacy technique validation.
 var techniqueStrategies = map[strategy.StrategyID]bool{
@@ -281,6 +302,7 @@ func applyTechniqueGeometry(settings *Settings, doc *config.Document, symbol str
 // (overrides.analysis.levels.minimum_key_touches) and an explicit role, i.e.
 // skip levels whose support/resistance role is still ambiguous
 // (overrides.auto_algo.strategies.reaction.key_level.require_explicit_role).
+// require_reaction_sweep (XAU, docs/strategies/keylevel-sweep-first.md) publishes a confirmed reaction only when it swept the level.
 // The override tree's key_level.min_grade is not carried: nothing in the
 // Python runtime ever read it.
 func applyKeyLevelOverrides(settings *Settings, doc *config.Document, symbol string) error {
@@ -292,7 +314,11 @@ func applyKeyLevelOverrides(settings *Settings, doc *config.Document, symbol str
 	if err != nil {
 		return err
 	}
-	if !hasTouches && !hasExplicit {
+	sweep, hasSweep, err := doc.InstrumentOverride(symbol, "auto_algo", "strategies", "reaction", "key_level", "require_reaction_sweep")
+	if err != nil {
+		return err
+	}
+	if !hasTouches && !hasExplicit && !hasSweep {
 		return nil
 	}
 	if hasTouches {
@@ -327,6 +353,13 @@ func applyKeyLevelOverrides(settings *Settings, doc *config.Document, symbol str
 				return fmt.Errorf("instrument %s: require_explicit_role must be a boolean, got %T", symbol, explicit)
 			}
 			params["require_explicit_role"] = b
+		}
+		if hasSweep {
+			b, ok := sweep.(bool)
+			if !ok {
+				return fmt.Errorf("instrument %s: require_reaction_sweep must be a boolean, got %T", symbol, sweep)
+			}
+			params["require_reaction_sweep"] = b
 		}
 		settings.Strategies[i].Parameters = params
 	}
