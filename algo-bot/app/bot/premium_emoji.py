@@ -23,6 +23,12 @@ SLOT_EMOJI: dict[str, str] = {
   "stop": "🛡",
   "target": "💰",
   "star": "⭐",
+  # the closed-trade line: a win (🏆), a loss (❌) and the chest(s) after the R of a win (💸, the icon that line has always carried)
+  "trophy": "🏆",
+  "loss": "❌",
+  "chest": "💸",
+  # the manual signal card's "Setup:" line
+  "setup": "🏷",
 }
 _VARIATION_SELECTOR = "️"
 _ID = re.compile(r"[0-9]{5,32}")

@@ -699,6 +699,8 @@ def render_result(
   result: dict,
   symbol: str,
   tier: str = "vip",
+  *,
+  rr: str | None = None,
 ) -> str:
   action = result["action"]
   if not result.get("ok"):
@@ -798,31 +800,30 @@ def render_result(
     tp_number = result.get("tp_number")
     tp_label = f"TP{tp_number} " if tp_number else ""
     if row["closed"]:
+      # "🏆 #7 closed • Achieved 70 pips • +1.4R 💸": pips without a plus sign, one chest for every win, the R only when the caller has it.
       net = row["net"]
+      rr_part = f" • {rr}" if rr else ""
       if tier == "public":
         if net > 0:
           detail = (
-            f"+{net} pips win{_win_wings(net)}"
+            f"Achieved {net} pips"
             if runtime_config.telegram.public_show_pips
             else "win"
           )
-          return f"✅ {tp_label}closed — {detail}"
+          return f"🏆 {tp_label}closed • {detail}{rr_part} 💸"
         if net < 0:
           detail = (
-            f"{net} pips loss"
+            f"losing {abs(net)} pips"
             if runtime_config.telegram.public_show_pips
             else "loss"
           )
-          return f"🛑 {tp_label}closed — {detail}"
-        return f"➖ {tp_label}closed — breakeven"
-      icon = "✅" if net >= 0 else "🛑"
-      sign = "+" if net >= 0 else ""
-      suffix = _win_wings(net) if net > 0 else ""
+          return f"❌ {tp_label}closed • {detail}{rr_part}"
+        return f"➖ {tp_label}closed • breakeven"
       if net < 0:
-        return f"{icon} {seq}{tp_label}closed — losing {abs(net)} pips"
-      return (
-        f"{icon} {seq}{tp_label}closed — achieved {sign}{net} pips{suffix}"
-      )
+        return f"❌ {seq}{tp_label}closed • losing {abs(net)} pips{rr_part}"
+      if net == 0:
+        return f"➖ {seq}{tp_label}closed • breakeven{rr_part}"
+      return f"🏆 {seq}{tp_label}closed • Achieved {net} pips{rr_part} 💸"
     if (
       tier == "public"
       and not runtime_config.telegram.public_show_pips
@@ -1008,18 +1009,16 @@ async def post_result(result: dict, symbol: str) -> str:
     )
 
   def _render(tier: str) -> str:
-    base = render_result(result, symbol, tier)
     if not is_final_close:
-      return base
+      return render_result(result, symbol, tier)
     show_pips = (
       tier == "vip" or runtime_config.telegram.public_show_pips
     )
-    if not show_pips:
-      return base
-    rr = _achieved_rr(sig, result["row"]["net"])
-    return f"{base} · {rr}" if rr else base
+    rr = _achieved_rr(sig, result["row"]["net"]) if show_pips else None
+    return render_result(result, symbol, tier, rr=rr)
 
-  sent = await fanout_update(sig, _render, markup_fn=markup_fn)
+  # Premium emoji (off unless configured) on the final close reply only.
+  sent = await fanout_update(sig, _render, markup_fn=markup_fn, premium=is_final_close)
   if not is_final_close and result["action"] in _TRACKED_UPDATE_KINDS:
     payload = _update_payload(result)
     for post in sent:

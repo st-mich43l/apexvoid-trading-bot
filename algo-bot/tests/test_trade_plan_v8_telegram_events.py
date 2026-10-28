@@ -266,19 +266,18 @@ def test_be_trail_head_status_formats():
 
 
 def test_position_closed_compact_line_format():
-  # Matches Manual Algo's own close wording (trade_ops.render_result's
-  # "close" action: "closed — achieved +N pips" / "closed — losing N pips").
+  # Matches Manual Algo's own close wording 
   line = delivery._format_position_closed_compact_line(
     {"target_pips": 90},
     "PLAN CLOSED · highest TP archived TP2 · @ 4106.00",
   )
-  assert line == "✅ closed — achieved +90 pips 💸"
+  assert line == "🏆 closed • Achieved 90 pips 💸"
 
   losing = delivery._format_position_closed_compact_line(
     {"group_realized_pips": -47},
     "PLAN CLOSED · no TP archived · losing -47 pips · @ 4090.50",
   )
-  assert losing == "🛑 closed — losing 47 pips"
+  assert losing == "❌ closed • losing 47 pips"
   assert "\n" not in losing
   assert "Highest TP archived" not in losing
 
@@ -294,13 +293,13 @@ def test_position_closed_compact_line_includes_r_multiple_like_manual():
     {"target_pips": 90, "stop_pips": 30},
     "PLAN CLOSED · highest TP archived TP2 · @ 4106.00",
   )
-  assert win == "✅ closed — achieved +90 pips 💸 · +3.0R"
+  assert win == "🏆 closed • Achieved 90 pips • +3.0R 💸"
 
   loss = delivery._format_position_closed_compact_line(
     {"group_realized_pips": -41, "stop_pips": 34},
     "PLAN CLOSED · no TP archived · losing -41 pips · @ 4090.50",
   )
-  assert loss == "🛑 closed — losing 41 pips · -1.2R"
+  assert loss == "❌ closed • losing 41 pips • -1.2R"
 
   # No stop_pips on the event (older executor, or genuinely unknown risk) -
   # omit the suffix entirely rather than inventing a distance.
@@ -308,7 +307,7 @@ def test_position_closed_compact_line_includes_r_multiple_like_manual():
     {"group_realized_pips": -47},
     "PLAN CLOSED · no TP archived · losing -47 pips · @ 4090.50",
   )
-  assert no_risk == "🛑 closed — losing 47 pips"
+  assert no_risk == "❌ closed • losing 47 pips"
   assert "R" not in no_risk
 
 
@@ -344,7 +343,7 @@ def test_deferred_tp_stopout_cannot_render_as_achieved_tp():
   # contradictory_archived_tp catches the "highest TP archived" text
   # despite the actual result being a loss, falling through to the
   # generic (Manual-style) losing wording instead of a false "achieved".
-  assert close == "🛑 closed — losing 60 pips"
+  assert close == "❌ closed • losing 60 pips"
   rendered = delivery.render_auto_trade_event(event)
   assert "Highest TP archived" not in rendered
   assert "Achieved" not in rendered
@@ -403,7 +402,7 @@ def test_position_closed_compact_sl_shows_net_loss():
     {"group_realized_pips": -39.1, "reason_code": "stop_loss_or_take_profit"},
     "PLAN CLOSED · no TP archived",
   )
-  assert line == "🛑 closed — losing 39 pips"
+  assert line == "❌ closed • losing 39 pips"
 
 
 def test_position_closed_one_shot_sl_reports_losing():

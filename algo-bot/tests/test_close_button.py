@@ -189,7 +189,7 @@ async def test_manual_tp_attaches_close_button(monkeypatch):
   from app.signals import trade_ops
   captured = {}
 
-  async def _fanout(sig, render_fn, sticker=None, markup_fn=None):
+  async def _fanout(sig, render_fn, sticker=None, markup_fn=None, *, premium=False):
     captured["markup_fn"] = markup_fn
     return []
 

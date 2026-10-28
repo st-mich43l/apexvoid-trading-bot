@@ -80,7 +80,7 @@ def render_entry(sig: dict, tier: str) -> str:
     entry_end = sig["entry"]
   lines = [
     (
-      f"📍 {action_icon} <b>{escape(symbol)} "
+      f"{action_icon} <b>{escape(symbol)} "
       f"{escape(action)}{seq}</b>  🔔"
     ),
     "",
@@ -245,6 +245,8 @@ async def fanout_update(
   render_fn: Callable[[str], str | None],
   sticker: str | None = None,
   markup_fn: Callable[[str], object] | None = None,
+  *,
+  premium: bool = False,
 ) -> list[dict]:
   """Reply only to persisted entry posts; never recompute visibility.
 
@@ -265,13 +267,17 @@ async def fanout_update(
     text = render_fn(post["tier"])
     if text is None:
       continue
-    sent = await _send_message(
-      text,
-      int(post["channel_id"]),
-      int(post["message_id"]),
-      reply_markup=markup_fn(post["tier"]) if markup_fn else None,
-      sender=sender,
-    )
+    async def send_card(card, _post=post):
+      return await _send_message(
+        card,
+        int(_post["channel_id"]),
+        int(_post["message_id"]),
+        reply_markup=markup_fn(_post["tier"]) if markup_fn else None,
+        sender=sender,
+      )
+
+    # ``premium``: Premium emoji (off unless configured) for the caller's final close reply; every other update stays plain.
+    sent = await (premium_then_plain(send_card, text) if premium else send_card(text))
     sent_posts.append({
       "signal_id": sig["id"],
       "channel_id": int(post["channel_id"]),
