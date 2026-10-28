@@ -1966,9 +1966,8 @@ async def _deliver_compact_position_closed(
   position is closed, the running play-by-play has served its purpose and
   only the result matters.
 
-  Final target hits emit position_closed without a separate tp_booked, so
-  this path also adds the compact TP line when that level wasn't already
-  notified. The root card is also resolved here: a fill can race the card
+  Final target hits emit position_closed without a separate tp_booked; the
+  reply still shows only the closed line. The root card is also resolved here: a fill can race the card
   create, so close must not leave IN ZONE · WAITING FILL on a dead trade.
 
   Claims _manage_closed_key atomically before doing any of that (not just
@@ -1985,15 +1984,9 @@ async def _deliver_compact_position_closed(
     return True
 
   message = str(event.get("message") or "")
-  close_line = _format_position_closed_compact_line(event, message)
-  target, _cleaned = _extract_tp_target(event, message)
-  tp_line = _format_tp_compact_line(event, message)
-
-  lines = []
-  if tp_line and target and not await _tp_already_notified(client, match_id, target):
-    lines.append(tp_line)
-  lines.append(close_line)
-  final_text = "\n".join(lines)
+  # The closed reply is the one closed line (🏆 closed • Achieved N pips • +xR 💸 / ❌ closed • losing N pips • -xR): no TP line above it. The final
+  # target's pips and R are already in that line, and an earlier target was announced when it was hit.
+  final_text = _format_position_closed_compact_line(event, message)
 
   root = await load_forming_card(client, match_id)
   cleanup_chat_id = int(root["chat_id"]) if root else chat_id
