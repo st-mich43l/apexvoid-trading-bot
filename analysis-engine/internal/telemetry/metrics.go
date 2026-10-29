@@ -83,6 +83,15 @@ const (
 	// strictly beyond the reaction band's far edge. Labels are symbol+timeframe.
 	CounterStrategyKeyLevelUnsweptRefused Counter = "strategy_key_level_unswept_refused"
 
+	// CounterFVGDefinitionRefused counts fair value gaps the confirmed path
+	// refused because they fail the gap definition (a gap thinner than the
+	// configured share of its own frame's ATR, a weak or wrong-way middle
+	// candle: docs/strategies/fvg-definition.md). Labels: symbol, the structure
+	// timeframe the gap was found on, and the reason (gap_small,
+	// displacement_weak, displacement_direction), recorded with CountReason.
+	// An instance is counted once per evaluation.
+	CounterFVGDefinitionRefused Counter = "fvg_definition_refused"
+
 	// Opportunity lifecycle transition counters,
 	// one counter per internal/opportunity.TransitionKind an operator can
 	// observe (TransitionNoop is deliberately not counted: it carries no
@@ -127,6 +136,7 @@ type key struct {
 	label     string // Phase or Counter, as a string
 	symbol    string
 	timeframe string
+	reason    string // set only by CountReason: a bounded, fixed set per counter
 }
 
 // Recorder is a concurrency-safe in-process metrics store — deliberately
@@ -177,6 +187,14 @@ func (r *Recorder) Count(counter Counter, symbol, timeframe string, n int64) {
 	r.counts[k] += n
 }
 
+// CountReason is Count with one more label, a bounded reason code (the refusal reasons of one counter), for a counter that must say why.
+func (r *Recorder) CountReason(counter Counter, symbol, timeframe, reason string, n int64) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	k := key{label: string(counter), symbol: symbol, timeframe: timeframe, reason: reason}
+	r.counts[k] += n
+}
+
 // DurationSample is one Snapshot row for a duration metric.
 type DurationSample struct {
 	Phase          string
@@ -191,6 +209,7 @@ type CountSample struct {
 	Counter   string
 	Symbol    string
 	Timeframe string
+	Reason    string // empty unless the counter is recorded with CountReason
 	Count     int64
 }
 
@@ -215,7 +234,7 @@ func (r *Recorder) Snapshot() ([]DurationSample, []CountSample) {
 	counts := make([]CountSample, 0, len(r.counts))
 	for k, c := range r.counts {
 		counts = append(counts, CountSample{
-			Counter: k.label, Symbol: k.symbol, Timeframe: k.timeframe, Count: c,
+			Counter: k.label, Symbol: k.symbol, Timeframe: k.timeframe, Reason: k.reason, Count: c,
 		})
 	}
 	return durations, counts

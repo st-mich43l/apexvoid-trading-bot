@@ -1047,17 +1047,25 @@ func compositeZone(group []Zone) Zone {
 // TechniqueSettings mirrors technique_geometry.TechniqueGeometrySettings (the
 // fields the instance validation uses).
 type TechniqueSettings struct {
-	PipSize                  float64
-	EpsilonATRFrac           float64
-	MaxZoneATR               float64
-	FVGMaxATR                float64
-	FVGMinPips               float64
-	FVGEntryMaxWidthPrice    float64
-	MomentumBodyFrac         float64
-	RetestMaxTouches         int
-	InvalidationToleranceATR float64
-	SweepReclaimBars         int
-	MaxBreakEpisodes         int
+	PipSize        float64
+	EpsilonATRFrac float64
+	MaxZoneATR     float64
+	FVGMaxATR      float64
+	FVGMinPips     float64
+	// FVGMinGapATR, FVGMinDisplacementBodyATR and FVGMinDisplacementBodyRatio define a fair value gap for the CONFIRMED path on every timeframe
+	// (docs/strategies/fvg-definition.md): the structural gap is at least FVGMinGapATR of the ATR of the frame it was found on as of the gap's third
+	// candle, the middle candle's body is at least FVGMinDisplacementBodyATR of that ATR and at least FVGMinDisplacementBodyRatio of its own range, and
+	// the middle candle closed in the gap's direction. Each is skipped when it is 0; ProductionTechniqueSettings leaves all three at 0, so the frozen
+	// Python parity collections are unchanged.
+	FVGMinGapATR                float64
+	FVGMinDisplacementBodyATR   float64
+	FVGMinDisplacementBodyRatio float64
+	FVGEntryMaxWidthPrice       float64
+	MomentumBodyFrac            float64
+	RetestMaxTouches            int
+	InvalidationToleranceATR    float64
+	SweepReclaimBars            int
+	MaxBreakEpisodes            int
 	// IgnoreProximity drops the retest-proximity test (price must be at the zone
 	// now) from the instance validation: a structure is then judged only on what it
 	// is (not spent, not invalidated, sized, unfilled), never on where price is at
@@ -1103,6 +1111,9 @@ type Instance struct {
 	// empty for an execution-frame instance. OriginIndex is always relative
 	// to the execution frame once a higher-timeframe instance is bound to it.
 	Timeframe string
+	// OriginTime is the open time of the bar the structure is anchored to on its own timeframe. Only a higher-timeframe instance bound to the execution
+	// frame carries it (its OriginIndex is then an execution-frame index, which cannot tell a weekend-open bar apart); zero everywhere else.
+	OriginTime int64
 }
 
 func tEpsilon(s TechniqueSettings, atr float64) float64 {
@@ -1315,35 +1326,95 @@ func discoverIFVG(fvgZones []Zone, bars []market.Candle, entryMax float64) []Ins
 	return out
 }
 
+// The reasons a fair value gap is refused by the definition above, in the order they are judged.
+const (
+	FVGRefusedGapSmall              = "gap_small"
+	FVGRefusedDisplacementWeak      = "displacement_weak"
+	FVGRefusedDisplacementDirection = "displacement_direction"
+)
+
+// fvgDefinitionRefusal judges a fair value gap on its own three candles and on the ATR of the frame it comes from AS OF its third candle, so it reads
+// nothing after the gap formed. It returns "" when the gap passes (or when no definition setting is on) and otherwise the first reason it fails. atrSeries
+// is that frame's ATR series aligned with bars; without it (or without a value at the third candle) the scalar ATR the caller judged the frame with is used.
+func fvgDefinitionRefusal(in Instance, bars []market.Candle, atr float64, atrSeries []float64, s TechniqueSettings) string {
+	displacement := s.FVGMinDisplacementBodyATR > 0 || s.FVGMinDisplacementBodyRatio > 0
+	if s.FVGMinGapATR <= 0 && !displacement {
+		return ""
+	}
+	o := in.OriginIndex
+	if o < 2 || o >= len(bars) {
+		return ""
+	}
+	frameATR := atr
+	if len(atrSeries) == len(bars) && !math.IsNaN(atrSeries[o]) && atrSeries[o] > 0 {
+		frameATR = atrSeries[o]
+	}
+	low, high := in.Low, in.High
+	if in.EntryClipped {
+		low, high = in.StructuralLow, in.StructuralHigh
+	}
+	if s.FVGMinGapATR > 0 && high-low+1e-9 < s.FVGMinGapATR*frameATR {
+		return FVGRefusedGapSmall
+	}
+	if !displacement {
+		return ""
+	}
+	middle := bars[o-1]
+	body, span := math.Abs(middle.Close-middle.Open), middle.High-middle.Low
+	if s.FVGMinDisplacementBodyATR > 0 && body+1e-9 < s.FVGMinDisplacementBodyATR*frameATR {
+		return FVGRefusedDisplacementWeak
+	}
+	if s.FVGMinDisplacementBodyRatio > 0 && (span <= 0 || body/span+1e-9 < s.FVGMinDisplacementBodyRatio) {
+		return FVGRefusedDisplacementWeak
+	}
+	if (in.Side == "buy" && !(middle.Close > middle.Open)) || (in.Side == "sell" && !(middle.Close < middle.Open)) {
+		return FVGRefusedDisplacementDirection
+	}
+	return ""
+}
+
 func validateInstance(in Instance, bars []market.Candle, price, atr float64, s TechniqueSettings) bool {
+	ok, _ := validateInstanceWithATR(in, bars, price, atr, nil, s)
+	return ok
+}
+
+// validateInstanceWithATR is validateInstance with the frame's ATR series, which the fair value gap definition needs; the second result is the reason a
+// gap that passed every other test was refused by that definition (never set for any other refusal).
+func validateInstanceWithATR(in Instance, bars []market.Candle, price, atr float64, atrSeries []float64, s TechniqueSettings) (bool, string) {
 	if zoneIsSpent(in.Mitigated, in.Touches, in.Side, in.Low, in.High, bars, in.OriginIndex, atr, s) {
-		return false
+		return false, ""
 	}
 	if !notInvalidated(in.Side, in.Low, in.High, bars, in.OriginIndex, atr, s) {
-		return false
+		return false, ""
 	}
 	if !s.IgnoreProximity && !proximalRetest(in.Side, in.Low, in.High, price, atr, s) {
-		return false
+		return false, ""
 	}
 	maxATR := s.MaxZoneATR
 	if in.Technique == "fvg" {
 		if in.High-in.Low < s.FVGMinPips*s.PipSize {
-			return false
+			return false, ""
 		}
 		maxATR = s.FVGMaxATR
 		if !fvgNotFullyFilled(in.Side, in.Low, in.High, bars, in.OriginIndex) {
-			return false
+			return false, ""
 		}
 	}
 	if !widthWithinATR(in.Low, in.High, atr, maxATR) {
-		return false
+		return false, ""
 	}
 	if in.Technique == "order_block" {
 		if in.BodyFrac < s.MomentumBodyFrac || !in.HasBOS {
-			return false
+			return false, ""
 		}
 	}
-	return true
+	if in.Technique == "fvg" {
+		// Judged last, so a refusal here is a gap every other test would have offered to the strategy.
+		if reason := fvgDefinitionRefusal(in, bars, atr, atrSeries, s); reason != "" {
+			return false, reason
+		}
+	}
+	return true, ""
 }
 
 // SourceViews mirrors engine._zone_views for the technique zones: the order
@@ -1386,6 +1457,12 @@ func SourceViews(zones []Zone) (ob, sd, fvg []Zone) {
 // reaction requirement): every spent, invalidated, off-price, mis-sized or
 // weak-body structure is dropped; what is left is a zone price is at now.
 func CollectInstances(sdZones, obZones, fvgZones []Zone, bars []market.Candle, price, atr float64, s TechniqueSettings) []Instance {
+	return CollectInstancesWithATR(sdZones, obZones, fvgZones, bars, price, atr, nil, s, nil)
+}
+
+// CollectInstancesWithATR is CollectInstances with the frame's ATR series (aligned with bars) for the fair value gap definition, and an optional callback
+// told about every gap that definition refused (and why). With the series nil and no definition setting on it is CollectInstances.
+func CollectInstancesWithATR(sdZones, obZones, fvgZones []Zone, bars []market.Candle, price, atr float64, atrSeries []float64, s TechniqueSettings, refused func(Instance, string)) []Instance {
 	spent := func(z Zone) bool {
 		return zoneIsSpent(z.Mitigated, z.Touches, zoneSideToTradeSide(z.Side), z.Low(), z.High(), bars, z.OriginIndex, atr, s)
 	}
@@ -1413,8 +1490,11 @@ func CollectInstances(sdZones, obZones, fvgZones []Zone, bars []market.Candle, p
 	pending = append(pending, discoverIFVG(fvgZones, bars, s.FVGEntryMaxWidthPrice)...)
 	var out []Instance
 	for _, in := range pending {
-		if validateInstance(in, bars, price, atr, s) {
+		ok, reason := validateInstanceWithATR(in, bars, price, atr, atrSeries, s)
+		if ok {
 			out = append(out, in)
+		} else if reason != "" && refused != nil {
+			refused(in, reason)
 		}
 	}
 	return out
@@ -1429,6 +1509,17 @@ func InstancesFromScoredZones(scored []Zone, bars []market.Candle, atr float64, 
 	}
 	obV, sdV, fvgV := SourceViews(scored)
 	return CollectInstances(sdV, obV, fvgV, bars, bars[len(bars)-1].Close, atr, s)
+}
+
+// InstancesFromScoredZonesWithATR is InstancesFromScoredZones with the frame's ATR series, the scalar being its median as before. It exists for the fair
+// value gap definition (TechniqueSettings.FVGMin*), which judges a gap on the ATR as of its own third candle; refused, when set, is told about every gap
+// the definition refused. With no definition setting on it returns exactly what InstancesFromScoredZones does.
+func InstancesFromScoredZonesWithATR(scored []Zone, bars []market.Candle, atrSeries []float64, s TechniqueSettings, refused func(Instance, string)) []Instance {
+	if len(bars) == 0 {
+		return nil
+	}
+	obV, sdV, fvgV := SourceViews(scored)
+	return CollectInstancesWithATR(sdV, obV, fvgV, bars, bars[len(bars)-1].Close, ATRScalar(atrSeries, 1), atrSeries, s, refused)
 }
 
 // InstancesFromScoredZonesAsOf collects the instances as the zone chain would have

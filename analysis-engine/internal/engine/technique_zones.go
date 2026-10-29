@@ -26,6 +26,87 @@ func productionTechniqueZoneSettings() TechniqueZoneSettings {
 
 var techniqueChain = techniquezone.ProductionChainSettings()
 
+// fvgDefinitionTechnique is the technique settings the two instance sources the zone strategies read (the execution frame's and the higher frames') judge a
+// fair value gap with: the shared settings plus the fvg strategy's confirmed-path gap definition (strategies.fvg.confirmed_minimum_gap_atr,
+// confirmed_minimum_displacement_body_atr, confirmed_minimum_displacement_body_ratio; docs/strategies/fvg-definition.md). The shared settings themselves
+// are left alone on purpose: they also feed the Confluence Zone facts (structuralInstanceSource) and the zone book, which must not change. Absent keys
+// leave the definition off.
+func fvgDefinitionTechnique(settings Settings) techniquezone.TechniqueSettings {
+	technique := settings.TechniqueZones.Technique
+	for _, cfg := range settings.Strategies {
+		if cfg.ID != "fvg" {
+			continue
+		}
+		if v, ok := cfg.Parameters["confirmed_minimum_gap_atr"].(float64); ok && v > 0 {
+			technique.FVGMinGapATR = v
+		}
+		if v, ok := cfg.Parameters["confirmed_minimum_displacement_body_atr"].(float64); ok && v > 0 {
+			technique.FVGMinDisplacementBodyATR = v
+		}
+		if v, ok := cfg.Parameters["confirmed_minimum_displacement_body_ratio"].(float64); ok && v > 0 {
+			technique.FVGMinDisplacementBodyRatio = v
+		}
+	}
+	return technique
+}
+
+// WithoutFVGDefinition removes the fair value gap definition parameters from the fvg strategy, leaving the confirmed path exactly as the frozen Python
+// publisher ran it (a gap of one pip, no displacement candle). The parity replays use it (replaycapture.Options.WithoutStopBudget implies it).
+func WithoutFVGDefinition(settings *Settings) {
+	for i := range settings.Strategies {
+		if settings.Strategies[i].ID != "fvg" {
+			continue
+		}
+		params := make(map[string]any, len(settings.Strategies[i].Parameters))
+		for k, v := range settings.Strategies[i].Parameters {
+			switch k {
+			case "confirmed_minimum_gap_atr", "confirmed_minimum_displacement_body_atr", "confirmed_minimum_displacement_body_ratio":
+			default:
+				params[k] = v
+			}
+		}
+		settings.Strategies[i].Parameters = params
+	}
+}
+
+// fvgRefusalLedger collects, for one closed-bar evaluation, the fair value gaps the confirmed path refused, by structure timeframe and reason. The
+// instance sources fill it when a strategy first reads them (once per frame per evaluation, so a gap is counted once) and the worker drains it after the
+// strategies have run. A nil ledger records nothing.
+type fvgRefusalLedger struct {
+	mu     sync.Mutex
+	counts map[fvgRefusalKey]int64
+}
+
+type fvgRefusalKey struct {
+	timeframe market.Timeframe
+	reason    string
+}
+
+func (l *fvgRefusalLedger) recorder(tf market.Timeframe) func(techniquezone.Instance, string) {
+	if l == nil {
+		return nil
+	}
+	return func(_ techniquezone.Instance, reason string) {
+		l.mu.Lock()
+		defer l.mu.Unlock()
+		if l.counts == nil {
+			l.counts = make(map[fvgRefusalKey]int64)
+		}
+		l.counts[fvgRefusalKey{tf, reason}]++
+	}
+}
+
+func (l *fvgRefusalLedger) drain() map[fvgRefusalKey]int64 {
+	if l == nil {
+		return nil
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	out := l.counts
+	l.counts = nil
+	return out
+}
+
 // techniqueZoneState replaces the trade-qualification population for the
 // technique families whose geometry has exact frozen-Python parity. The V2
 // zone book still owns every other kind and the resulting ZoneState is the
@@ -97,7 +178,7 @@ func techniqueInstanceZone(in techniquezone.Instance, bars []market.Candle) zone
 // zone-chain techniques collected from the execution frame's scored unmerged
 // zones, plus the CRT instances the H1 frame and the execution window produce.
 // The result is memoised for the frame's one closed-bar evaluation.
-func techniqueInstanceSource(exec *analysiscontext.LegacyFrame, h1 *analysiscontext.LegacyFrame, settings Settings) func() []techniquezone.Instance {
+func techniqueInstanceSource(exec *analysiscontext.LegacyFrame, h1 *analysiscontext.LegacyFrame, settings Settings, refusals *fvgRefusalLedger) func() []techniquezone.Instance {
 	var once sync.Once
 	var instances []techniquezone.Instance
 	return func() []techniquezone.Instance {
@@ -107,7 +188,7 @@ func techniqueInstanceSource(exec *analysiscontext.LegacyFrame, h1 *analysiscont
 				return
 			}
 			execATR := techniquezone.ATRScalar(exec.ATR, 1)
-			instances = techniquezone.InstancesFromScoredZones(exec.TechniqueZones, bars, execATR, settings.TechniqueZones.Technique)
+			instances = techniquezone.InstancesFromScoredZonesWithATR(exec.TechniqueZones, bars, exec.ATR, fvgDefinitionTechnique(settings), refusals.recorder(settings.PrimaryTimeframe))
 			if h1 == nil || len(h1.Bars) == 0 {
 				return
 			}
@@ -169,7 +250,7 @@ func exportHigherTimeframe(all []techniquezone.Instance, tf market.Timeframe) []
 // own last close sits: IgnoreProximity is on. With it off, an H1 zone was offered only if the last CLOSED H1 bar closed in it or at its proximal
 // edge, so an M5 wick into the zone in the middle of an hour (after an H1 bar that closed away from it) found no instance. Proximity is decided
 // where the trade is executed, by the M5 EntryValid check in TechniqueSource.publish.
-func higherTimeframeInstanceSource(frame *analysiscontext.LegacyFrame, tf market.Timeframe, settings Settings) func() []techniquezone.Instance {
+func higherTimeframeInstanceSource(frame *analysiscontext.LegacyFrame, tf market.Timeframe, settings Settings, refusals *fvgRefusalLedger) func() []techniquezone.Instance {
 	var once sync.Once
 	var instances []techniquezone.Instance
 	return func() []techniquezone.Instance {
@@ -177,10 +258,9 @@ func higherTimeframeInstanceSource(frame *analysiscontext.LegacyFrame, tf market
 			if len(frame.Bars) < 10 {
 				return
 			}
-			atr := techniquezone.ATRScalar(frame.ATR, 1)
-			technique := settings.TechniqueZones.Technique
+			technique := fvgDefinitionTechnique(settings)
 			technique.IgnoreProximity = true
-			instances = exportHigherTimeframe(techniquezone.InstancesFromScoredZones(frame.TechniqueZones, frame.Bars, atr, technique), tf)
+			instances = exportHigherTimeframe(techniquezone.InstancesFromScoredZonesWithATR(frame.TechniqueZones, frame.Bars, frame.ATR, technique, refusals.recorder(tf)), tf)
 		})
 		return instances
 	}

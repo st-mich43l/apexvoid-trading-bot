@@ -319,9 +319,17 @@ analysis:
       # Also evaluate these timeframes' own order blocks against the M5 bars (see supply).
       higher_timeframes: [M15, H1]
     fvg:
-      version: v5
+      version: v6
       enabled: true
       minimum_strength: 0.4
+      # A real fair value gap on every timeframe (docs/strategies/fvg-definition.md; owner report 2026-10-28). The confirmed path used to accept any gap of
+      # one pip on M5, M15 and H1; these three keys are the gap contract iFVG v3 already uses, judged on the bars and the ATR of the frame the gap was found
+      # on, as of its third candle: the structural gap is at least confirmed_minimum_gap_atr of that ATR, the middle candle's body is at least
+      # confirmed_minimum_displacement_body_atr of it and at least confirmed_minimum_displacement_body_ratio of its own range, and that candle closed in the
+      # gap's direction. 0 switches a condition off. Same values for every instrument.
+      confirmed_minimum_gap_atr: 0.5
+      confirmed_minimum_displacement_body_atr: 0.5
+      confirmed_minimum_displacement_body_ratio: 0.5
       # 2026-09-30: XAU traded 13-pip gaps (0.36 ATR) because a big middle
       # candle lifted their strength past minimum_strength.
       minimum_gap_atr: 0.5

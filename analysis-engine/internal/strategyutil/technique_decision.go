@@ -242,6 +242,7 @@ func higherInstances(ctx *analysiscontext.MarketContext, execBars []market.Candl
 			}
 			bound := in
 			bound.OriginIndex = index
+			bound.OriginTime = originTime
 			bound.Timeframe = string(tf)
 			bound.TouchableFrom = boundTouchableFrom(in, bars, execBars, tf)
 			out = append(out, bound)
