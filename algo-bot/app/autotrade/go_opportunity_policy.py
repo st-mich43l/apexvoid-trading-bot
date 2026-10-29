@@ -128,7 +128,6 @@ REVIEWED_SCOPES: dict[str, ScopeProfile] = {
   "flip_zone": ScopeProfile("flip_zone", "Flip Zone", "flip_zone", None, frozenset({"M5"}), "go_m5_flip_zone", requires_reaction=True, evidence_prefixes=("m5_flip_",)),
   "trendline": ScopeProfile("trendline", "Trendline", "trendline", None, frozenset({"M5"}), "go_m5_trendline", requires_reaction=True, evidence_prefixes=("m5_trendline_",)),
   "break_retest": ScopeProfile("break_retest", "Break & Retest", "break_retest", None, frozenset({"M5"}), "go_m5_break_retest", evidence_prefixes=("m5_trendline_break", "m5_key_level_break", "m5_trendline_retest", "m5_key_level_retest", "m5_retest_holds", "m5_retest_rejection")),
-  "fade_scalp": ScopeProfile("fade_scalp", "Fade Scalp", "fade_scalp", None, frozenset({"M5"}), "go_m5_equal_level_fade", requires_reaction=True, evidence_prefixes=("equal_level_", "liquidity_grab_grade_")),
   # These strategies intentionally publish on the M1 observation boundary:
   # their Go implementations consume their M5 structure and own the M1
   # confirmation before Candidate creation.  Python must not run a second M1

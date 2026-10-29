@@ -5,9 +5,8 @@ Reuses the replay records and the matched random counterparts of ``q1_opportunit
     cd analysis-engine
     AEQ_DUMP=/tmp/aeq        go test ./test/aequality -run TestReplayAllStrategies
     AEQ_RANDOM_OUT=/tmp/aeq  go test ./test/aequality -run TestMatchedRandomBaseline
-    AEQ_FADE_OUT=/tmp/fade   go test ./test/aequality -run TestFadeConsiderations      # every confirmed Fade sweep, published or refused
     cd ../algo-bot && python tools/q3_quality_validation.py --records /tmp/aeq/records.jsonl --random /tmp/aeq/random.jsonl \
-        --fade /tmp/fade/fade.jsonl --fade-random /tmp/fade/fade_random.jsonl --out q3.json
+        --out q3.json
 
 Outcome measure. For each thinned, filled opportunity: its hypothetical R (the real ladder, with costs) minus the mean R of the matched random entries
 (same instrument, direction, technical risk, cost, ladder and 24 h horizon). The difference removes the instrument, the stop size and the drift of the
@@ -256,22 +255,6 @@ def run(records, randoms):
   return out
 
 
-def fade_gates(considered, randoms):
-  """What each Fade Scalp gate refused: the same outcome measure for the setups that passed and for the ones each gate refused."""
-  rows = observations(considered, randoms, thin=False)
-  by_id = {c["id"]: c for c in considered}
-  for x in rows:
-    x["gate"] = by_id[x["id"]].get("shadow") or "published"
-  out = {}
-  for gate in sorted({x["gate"] for x in rows}):
-    sub = [x for x in rows if x["gate"] == gate]
-    out[gate] = {"all": summary(sub), **{w: summary(s) for w, s in windows(sub).items()}}
-  # Instrument groups for the passed and the refused-by-quality-gate sets.
-  out["_by_group"] = {f"{g}|{('published' if gate == 'published' else 'refused')}": summary([x for x in rows if x["group"] == g and (x["gate"] == "published") == (gate == "published")])
-                      for g in ("XAU", "FX") for gate in ("published", "refused")}
-  return out, rows
-
-
 def retained_vs_removed(before, after, randoms, strategy):
   """Q2 changed what a strategy admits. Were the opportunities it stopped publishing technically inferior (worse than random entries) and the retained ones stronger?
   ``before`` is a replay under the old admission rule, ``after`` under the current one; an opportunity is retained when its id is still published."""
@@ -305,8 +288,6 @@ def main():
   ap.add_argument("--records", required=True)
   ap.add_argument("--random", required=True)
   ap.add_argument("--extra-random", default="", help="a second random.jsonl for records the first does not cover")
-  ap.add_argument("--fade", default="")
-  ap.add_argument("--fade-random", default="")
   ap.add_argument("--before", default="", help="records of the replay under the previous admission rule (Key Level retained/removed)")
   ap.add_argument("--out", required=True)
   a = ap.parse_args()
@@ -316,16 +297,6 @@ def main():
     for r in q1.load_jsonl(a.extra_random):
       randoms.setdefault(r["id"], r)
   result = run(records, randoms)
-  if a.fade:
-    considered = q1.load_jsonl(a.fade)
-    fade_random = {r["id"]: r for r in q1.load_jsonl(a.fade_random)}
-    gates, rows = fade_gates(considered, fade_random)
-    result["fade_gates"] = gates
-    # Facts known at the sweep, over every filled confirmed sweep (published or not): is the setup an exhaustion or a pullback in a run?
-    by_group = collections.defaultdict(list)
-    for x in rows:
-      by_group[x["group"]].append(x)
-    result["fade_splits"] = {g: evaluate_splits(v, max(1, sum(len(split_candidates(w)) for w in by_group.values()))) for g, v in by_group.items()}
   if a.before:
     before = q1.load_jsonl(a.before)
     result["retained_vs_removed"] = {name: retained_vs_removed(before, records, randoms, name) for name in ("key_level", "ifvg", "crt", "trendline")}

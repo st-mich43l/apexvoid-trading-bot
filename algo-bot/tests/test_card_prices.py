@@ -86,7 +86,6 @@ def test_sell_mirrors_buy():
 @pytest.mark.parametrize("symbol,strategy", [
   ("EURUSD", "Key Level"),          # not gold
   ("XAU", "Impulse Pullback Scalp"), # M1 scalp: its 15-20 pip stop cannot absorb a whole-number round
-  ("XAU", "Fade Scalp"),      # range scalp
 ])
 def test_only_gold_zone_plans_are_snapped(symbol, strategy):
   assert _snap(symbol=symbol, strategy=strategy) == INCIDENT

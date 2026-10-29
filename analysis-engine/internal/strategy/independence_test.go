@@ -40,7 +40,7 @@ func TestNoConcreteStrategyImportsAnotherStrategy(t *testing.T) {
 		}
 		checked++
 	}
-	if checked != 13 {
-		t.Fatalf("checked %d strategy packages, want 13", checked)
+	if checked != 12 {
+		t.Fatalf("checked %d strategy packages, want 12", checked)
 	}
 }

@@ -372,9 +372,6 @@ func TestStructuralDirectionAndGatesUseTheDetectorContractRead(t *testing.T) {
 	if !InChop(tf) {
 		t.Fatal("the detector-contract regime is chop")
 	}
-	if !ChopEdgeAllows(tf, market.Sell, 108, 109, .25) || ChopEdgeAllows(tf, market.Sell, 100, 101, .25) {
-		t.Fatal("a SELL must sit in the upper quarter of the chop range")
-	}
 	// Without a frame the canonical read is used.
 	canonical := &analysiscontext.MarketContext{Bias: analysiscontext.BiasContext{Direction: market.Buy}}
 	if StructuralDirection(canonical) != market.Buy {

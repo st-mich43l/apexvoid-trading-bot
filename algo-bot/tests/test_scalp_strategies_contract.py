@@ -22,19 +22,17 @@ from tests.test_zone_scale_execution import _cfg, _policy_match
 
 pytestmark = pytest.mark.no_database
 
-# The two scalps in the 13-strategy catalog, by Go id.
+# The one scalp in the 12-strategy catalog (Impulse Pullback, XAU only; Fade Scalp was purged), by Go id.
 SCALPS = {
-  "fade_scalp": "Fade Scalp",
   "impulse_pullback": "Impulse Pullback Scalp",
 }
 # The Go stop envelope each of them gets on gold (analysis-engine computeStopEnvelope).
 GOLD_ENVELOPE = {
-  "fade_scalp": (15, 45),
   "impulse_pullback": (12, 45),
 }
 
 
-def test_the_scalp_family_is_exactly_these_two():
+def test_the_scalp_family_is_exactly_impulse_pullback():
   scalps = {
     scope.catalog_id for scope in pol.REVIEWED_SCOPES.values()
     if is_scalp_strategy(scope.legacy_strategy, strategy_mode=scope.strategy_mode)
@@ -53,7 +51,7 @@ def _gold_match(catalog_id: str):
     structure_swing=4178.84, tags=(GO_ORIGIN_TAG,), go_invalidation_price=4178.84,
     go_stop_envelope_floor_pips=float(floor), go_stop_envelope_cap_pips=float(cap),
     go_stop_envelope_desired_minimum_pips=float(floor),
-    go_stop_envelope_source="scalp_room",
+    go_stop_envelope_source="scalp_stop_envelope",
     targets_pips=(23, 46, 69, 92),
   )
 
@@ -109,14 +107,13 @@ def _two_leg_plan(strategy: str, family: str):
 
 def test_a_scalp_plan_carries_no_swing_risk_leg_but_a_structural_one_does():
   assert _two_leg_plan("Key Level", "key_level").entry.risk_leg is not None
-  for name in ("Fade Scalp",):
+  for name in ("Impulse Pullback Scalp",):
     plan = _two_leg_plan(name, "range_reversion")
     assert len(plan.entry.legs) == 2
     assert plan.entry.risk_leg is None, name
 
 
 @pytest.mark.parametrize("name,family", [
-  ("Fade Scalp", "range_reversion"),
   ("Impulse Pullback Scalp", "range_reversion"),
 ])
 def test_every_go_scalp_is_a_scalp_plan_for_sizing(name, family):

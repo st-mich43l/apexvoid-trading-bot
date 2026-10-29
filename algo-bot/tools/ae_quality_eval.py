@@ -293,7 +293,7 @@ def trades_section(path: str, rng: random.Random) -> dict:
       out["by_symbol"][symbol] = {"r_trades": len(sub), "mean_r": round(statistics.fmean(v for _, v in sub), 3), "ci95": cluster_ci(sub, rng)}
   # Quality score against realized R inside the strategies that have enough trades.
   out["quality_vs_realized_r"] = {}
-  for name in ("Fade Scalp", "Key Level"):
+  for name in ("Key Level",):
     pairs = [(float(r["q"]), corrected_r(r)) for r in by.get(name, []) if r["q"] and corrected_r(r) is not None]
     if len(pairs) >= 8:
       ordered = sorted(pairs)
@@ -305,7 +305,7 @@ def trades_section(path: str, rng: random.Random) -> dict:
   return out
 
 
-SCALPS = {"Fade Scalp", "Impulse Pullback Scalp"}
+SCALPS = {"Impulse Pullback Scalp"}
 
 
 def exit_path_bounds(rows: list[dict]) -> dict:

@@ -28,7 +28,7 @@ the audited tree (master `3597c13f`).
 `algo-bot/app/autotrade/go_opportunity_policy.py`. "Pure translation. Raises AdapterRejection rather than approximating."
 
 1. **Allowlist.** `REVIEWED_SCOPES` must equal the Go catalog (16 ids); one row per strategy fixes `allowed_timeframes` (M5; `impulse_pullback` M1), `requires_reaction` and the required evidence-code prefixes.
-2. **`requires_reaction`.** True for confluence_zone, supply, demand, order_block, fvg, ifvg, crt, flip_zone, session_level, trendline, range_edge, fade_scalp. A *resting* zone opportunity (no `technical_context.confirmation`) is rejected `reaction_confirmation_unavailable`. `key_level` is not in this list because it only ever emits confirmed reactions.
+2. **`requires_reaction`.** True for confluence_zone, supply, demand, order_block, fvg, ifvg, crt, flip_zone, session_level, trendline, range_edge. A *resting* zone opportunity (no `technical_context.confirmation`) is rejected `reaction_confirmation_unavailable`. `key_level` is not in this list because it only ever emits confirmed reactions.
 3. **Recency.** The confirming bar may be at most `structural_reaction_lookback_bars - 1` bars before the observation bar.
 4. **Evidence prefixes.** A match whose evidence codes carry none of its strategy's prefixes is rejected `strategy_evidence_mismatch`.
 5. **Targets.** Each Go target becomes whole pips from the proximal edge (`round(distance / pip)`); a target under 1 pip rejects the match (`target_not_beyond_entry`). The farthest becomes `absolute_target_price`.
@@ -58,7 +58,7 @@ Measured against the frozen technique instances on 11 captures (1,451 checkpoint
 
 ## 4. Where the confluence stars come from (stage 3)
 
-* A strategy that supplies `DetectorConfluence` (keylevel, fadescalp, rangeedge, confluencezone, sessionlevel, breakretest, ifvg, liquiditysweep, crt, and the technique helper) overrides the engine value (`worker.go:237`). The formula behind it is exact against both Python references on 62,208 factor combinations.
+* A strategy that supplies `DetectorConfluence` (keylevel, rangeedge, confluencezone, sessionlevel, breakretest, ifvg, liquiditysweep, crt, and the technique helper) overrides the engine value (`worker.go:237`). The formula behind it is exact against both Python references on 62,208 factor combinations.
 * Everything else (impulse_pullback, resting zone candidates) gets the engine's `confluenceContext` (`confluence_facts.go:25`): HTF alignment from the Go higher-timeframe biases, touches from the **V2** canonical zone, `SessionContext = (session active)`, fib touch, CHoCH recency, and **keyword inference** over evidence codes (`wick|rejection`, `displacement|engulf`, `reclaim|structure|break`). The inference is negation-blind (`m5_no_break_of_structure` would set `StructuralAgreement`), but none of the static evidence codes currently emitted by impulse_pullback matches a keyword, so it is inert there today.
 * The engine value is computed for every candidate and then replaced; it has no side effect.
 
@@ -78,7 +78,7 @@ Consequence, measured in the performance investigation (PR #791, 424 trades): 71
 | Link | Evidence | Status |
 |---|---|---|
 | bars → legacy frame | 1,451 checkpoints × 3 timeframes × 11 captures vs frozen Python (`oracle_compare.py`) | exact (see audit §5) |
-| legacy frame → candidate (executable strategies) | strategy goldens (audit §9) | exact for key_level, flip_zone, fade_scalp (3 symbols), technique helper path; reconstructions elsewhere |
+| legacy frame → candidate (executable strategies) | strategy goldens (audit §9) | exact for key_level, flip_zone, technique helper path; reconstructions elsewhere |
 | candidate → Kafka envelope → `StrategyMatch` | `test/legacyparity/payload_dump_test.go` feeds real Go payloads through the Python adapter | exercised, not measured in this audit |
 | adapter bias / htf_bias | this audit | **different source from the frozen Python; 61-63% agreement; UNVERIFIED which is correct** |
 | execution policy → plan | performance investigation: replay predicts production on 88.5% of decided cases | consistent; not a parity proof |

@@ -69,7 +69,7 @@ async def _executor_snapshot(client, groups=()):
 
 def _scalp(match_id, **overrides):
   return _gbpusd_match(
-    match_id=match_id, direction="BUY", strategy="Fade Scalp", tags=(GO_ORIGIN_TAG,),
+    match_id=match_id, direction="BUY", strategy="Range Box Scalp", tags=(GO_ORIGIN_TAG,),
     thesis_id=f"thesis-{match_id}", structural_zone_id=f"zone-{match_id}", **overrides,
   )
 

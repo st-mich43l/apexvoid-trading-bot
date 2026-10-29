@@ -7,23 +7,21 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
 )
 
-// stopEnvelopeKind is which of the four configured stop-distance policies a
+// stopEnvelopeKind is which of the three configured stop-distance policies a
 // strategy is admitted under. Every strategy names its own kind below — there
 // is no strategy group that supplies it — and TestEveryStrategyDeclaresItsOwnStopEnvelope
 // fails if one of the 20 catalog IDs is missing. The values mirror algo-bot's
 // protective_stop.stop_bounds_for_strategy exactly, keyed on Go's catalog IDs
 // (opportunity.Candidate.Strategy): Key Level and Trendline use
 // the reaction-room envelope; Impulse Pullback uses
-// strategies.scalping.stop.* directly (fixed min_rr 1.0); Fade
-// Scalp use execution.range.*; every other strategy takes the plain trend
-// envelope, as the Python fallback does.
+// strategies.scalping.stop.* directly (fixed min_rr 1.0); every other
+// strategy takes the plain trend envelope, as the Python fallback does.
 type stopEnvelopeKind int
 
 const (
 	stopEnvelopeTrend stopEnvelopeKind = iota
 	stopEnvelopeReactionRoom
 	stopEnvelopeM1Scalp
-	stopEnvelopeRangeRoom
 )
 
 var strategyStopEnvelope = map[opportunity.StrategyID]stopEnvelopeKind{
@@ -38,7 +36,6 @@ var strategyStopEnvelope = map[opportunity.StrategyID]stopEnvelopeKind{
 	"flip_zone":        stopEnvelopeTrend,
 	"trendline":        stopEnvelopeReactionRoom,
 	"break_retest":     stopEnvelopeTrend,
-	"fade_scalp":       stopEnvelopeRangeRoom,
 	"impulse_pullback": stopEnvelopeM1Scalp,
 }
 
@@ -48,8 +45,6 @@ var strategyStopEnvelope = map[opportunity.StrategyID]stopEnvelopeKind{
 //   - reaction-room kind: floor = max(reaction_min_pips, reaction_room_floor),
 //     cap = max(floor, min(reaction_max_pips, trend_max_pips)), min_rr = reaction_min_rr.
 //   - M1 scalp kind: floor = scalp_min_pips, cap = max(floor, scalp_max_pips), min_rr = 1.0.
-//   - range-room kind (fade_scalp): floor = range_room_floor_pips,
-//     cap = max(floor, trend_max_pips), min_rr = range_min_rr.
 //   - everything else: floor = trend_min_pips, cap = trend_max_pips, no
 //     per-instance pinning (algo-bot's own "strategy_default" fallback
 //     never computes desired/primary_tp_pips either) — DesiredMinimumPips
@@ -75,11 +70,6 @@ func computeStopEnvelope(c opportunity.Candidate, geometry market.Geometry, cfg 
 		capPips = math.Max(floorPips, cfg.ScalpMaxPips)
 		minRR = 1.0
 		source = "scalp_stop_envelope"
-	case stopEnvelopeRangeRoom:
-		floorPips = cfg.RangeRoomFloorPips
-		capPips = math.Max(floorPips, cfg.TrendMaxPips)
-		minRR = cfg.RangeMinRR
-		source = "scalp_room"
 	default:
 		floorPips = cfg.TrendMinPips
 		capPips = cfg.TrendMaxPips
@@ -97,13 +87,6 @@ func computeStopEnvelope(c opportunity.Candidate, geometry market.Geometry, cfg 
 	if cfg.InstrumentConfigured && kind != stopEnvelopeM1Scalp {
 		floorPips = cfg.InstrumentMinPips
 		capPips = cfg.InstrumentMaxPips
-	}
-	// A range scalp on an instrument whose structural envelope is a
-	// swing-sized 50-70 pips (gold) is still a scalp: it takes the band the
-	// instrument declares for scalps, not the zone strategies' envelope.
-	if kind == stopEnvelopeRangeRoom && cfg.InstrumentScalpConfigured {
-		floorPips = cfg.InstrumentScalpMinPips
-		capPips = cfg.InstrumentScalpMaxPips
 	}
 	if floorPips <= 0 {
 		return nil

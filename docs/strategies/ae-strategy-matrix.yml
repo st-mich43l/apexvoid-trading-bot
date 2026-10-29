@@ -245,26 +245,6 @@ strategies:
     owner_approval_required: false
     rationale: Replay -0.26R (interval spans zero, n=36, OOS -0.32R) is weak, not decisive.
     prior_certification: docs/strategies/break_retest.md (test/brreplay)
-  fade_scalp:
-    technical_thesis: Fade a liquidity-run extreme with a measured reaction (scalp).
-    validation_conditions: Location, liquidity grade, reaction.
-    quality_formula:
-      class: continuous
-      note: three terms, 4 distinct values
-    confirmed_defects:
-    - 'Replay and production disagree: replay -0.22R [-0.40, -0.04] (EURUSD -0.66R); production +0.99R on 8 R-known trades
-      and +0.39R from the exit paths of all 18.'
-    verdict:
-      technical: PASS
-      execution: PARTIAL
-      performance: CONFLICTING
-      evidence: WEAK
-    recommendation: RETAIN
-    scope: all instruments; EURUSD flagged for the owner (replay interval below zero, 2 production trades)
-    owner_approval_required: false
-    rationale: Eight trades cannot outvote 117 replay episodes, and 117 hypothetical episodes cannot outvote real fills. Collect
-      more before acting.
-    prior_certification: docs/strategies/fade_scalp.md
   impulse_pullback:
     technical_thesis: Pullback after an M1 impulse (scalp).
     validation_conditions: Body dominance, displacement.

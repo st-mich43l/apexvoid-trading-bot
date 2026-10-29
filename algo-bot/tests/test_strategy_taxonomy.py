@@ -105,10 +105,10 @@ def test_m1_scalp_strategies_bypass_opposing_when_room_fits():
     "Unknown", strategy_mode="range_scalp",
   )
   assert not bypasses_opposing_structure_gates(
-    "Fade Scalp", strategy_mode="range_scalp",
+    "Range Box Scalp", strategy_mode="range_scalp",
   )
   assert bypasses_opposing_structure_gates(
-    "Fade Scalp",
+    "Range Box Scalp",
     full_take_profit_pips=20,
     strategy_mode="range_scalp",
   )

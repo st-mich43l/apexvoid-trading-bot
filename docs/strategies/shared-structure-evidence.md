@@ -6,8 +6,8 @@ were purged (Q2): no code path generates an opportunity from them. What they wer
 | Capability | Where | Used by |
 |---|---|---|
 | Session, previous-day and previous-week highs and lows, finalized and developing | `internal/session` | the frame's session references, zone scoring, the measured session context |
-| Equal highs/lows, swing liquidity, graded sweeps (grabs) | `internal/liquidity`, `internal/techniquezone/liquidity.go` | Fade Scalp, the sweep evidence |
-| Established-range geometry (barriers, equilibrium, state) | `internal/techniquezone/scalp.go`, `analysis.legacy_read.range_structure` | Fade Scalp's mean reference |
+| Equal highs/lows, swing liquidity, graded sweeps (grabs) | `internal/liquidity`, `internal/techniquezone/liquidity.go` | the sweep evidence |
+| Established-range geometry (barriers, equilibrium, state) | `internal/techniquezone/scalp.go`, `analysis.legacy_read.range_structure` | the opposing-barrier book's native room |
 | Confirmed sweeps of finalized liquidity | `strategyutil.LegacyDetector.SweepsSupporting` | Key Level, Flip Zone, Trendline, iFVG (the session-context factor) |
 
 ## Session calendar (daylight saving)
@@ -39,4 +39,4 @@ it never opens an opportunity by itself, and a strategy cites it only where its 
 `session_context` used to be set on every decision (the three sessions cover all 24 hours, so it was true by construction and added two points to every raw score). It is now
 `LegacyDetector.SessionSweepContext` / `SessionSweepBetween`: a finalized session, previous-day or previous-week level supporting the trade was swept and reclaimed in the setup's own window
 (the reaction window for Key Level, Flip Zone and Trendline; the move from the gap's first candle to the rejection for iFVG). The frozen detectors' behaviour stays reproducible for the oracle goldens through the optional strategy parameter
-`frozen_session_context` (only the parity tests set it); technique, Fade Scalp and CRT never carried it.
+`frozen_session_context` (only the parity tests set it); technique and CRT never carried it.

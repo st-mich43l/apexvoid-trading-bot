@@ -1,6 +1,6 @@
 """Same-direction group and cumulative-risk exposure (instrument-owned, atomic).
 
-Incident: production 2026-10-12 USDJPY, four same-direction range-scalp SELLs admitted (replayed here as Fade Scalp, the surviving range scalp)
+Incident: production 2026-10-12 USDJPY, four same-direction range-scalp SELLs admitted (replayed here as Range Box Scalp, the surviving range scalp)
 between 06:51 and 09:01 against one rising resistance. See
 docs/risk/same-direction-exposure-incident.md.
 """
@@ -62,7 +62,7 @@ def _client():
 
 
 def _incoming(setup="go_opp_new", direction="SELL", risk=25.0, thesis="thesis-new",
-              structural="range:resistance:1", strategy="Fade Scalp", symbol="USDJPY"):
+              structural="range:resistance:1", strategy="Range Box Scalp", symbol="USDJPY"):
   return IncomingGroup(
     setup_id=setup, plan_id=f"v8:{setup}", symbol=symbol, direction=direction, strategy=strategy,
     thesis_id=thesis, structural_id=structural, risk_amount=risk,
@@ -287,7 +287,7 @@ def test_a_booked_tp_does_not_reopen_the_slot_unless_the_policy_says_so():
 def test_strategy_overrides_apply_to_that_strategy_only():
   policy = _policy(max_groups=1, strategy_overrides=(("key_level", SameDirectionLimits(max_groups=2)),))
   existing = [_group("a")]
-  assert not evaluate_group_exposure(policy, _incoming(strategy="Fade Scalp"), existing).allowed
+  assert not evaluate_group_exposure(policy, _incoming(strategy="Range Box Scalp"), existing).allowed
   assert evaluate_group_exposure(policy, _incoming(strategy="Key Level"), existing).allowed
 
 
@@ -653,7 +653,7 @@ def test_a_declared_policy_is_parsed_strictly():
   }})
   assert policy.limits == SameDirectionLimits(max_groups=1, max_cumulative_risk=45.0, max_symbol_risk=None)
   assert policy.limits_for("Key Level").max_groups == 2
-  assert policy.limits_for("Fade Scalp").max_groups == 1
+  assert policy.limits_for("Range Box Scalp").max_groups == 1
   assert policy.risk_free_groups_count and policy.duplicate_thesis_block
 
 
@@ -780,7 +780,7 @@ def test_a_strategy_override_changes_only_the_limits_it_declares():
   policy = _policy(max_groups=1, cum=40.0, strategy_overrides=(("key_level", SameDirectionLimits(max_groups=2)),))
   merged = policy.limits_for("Key Level")
   assert merged == SameDirectionLimits(max_groups=2, max_cumulative_risk=40.0, max_symbol_risk=None)
-  assert policy.limits_for("Fade Scalp") == policy.limits
+  assert policy.limits_for("Range Box Scalp") == policy.limits
 
 
 @pytest.mark.asyncio

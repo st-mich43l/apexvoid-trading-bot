@@ -91,8 +91,7 @@ analysis:
       round_step: 5.0
       max_cluster_span_multiple: 2.0
     # Range geometry: the established-range structure builder (techniquezone.BuildScalpStructure)
-    # that Fade Scalp reads for its mean-reversion reference and that the opposing-barrier
-    # book reads for native room. It is shared market structure, not a strategy: no
+    # that the opposing-barrier book reads for native room. It is shared market structure, not a strategy: no
     # opportunity is generated from it. Distances are ATR multiples; the clusters scale
     # with the instrument.
     range_structure:
@@ -555,16 +554,6 @@ analysis:
       minimum_target_room_atr: 0.55
       minimum_reward_risk: 1.15
       expiry_hours: 4.0
-    fade_scalp:
-      version: v3
-      enabled: true
-      invalidation_buffer_atr: 0.25
-      # The nearest structural objective (local mean or opposing liquidity) must offer at
-      # least this reward:risk; a fade with no structural objective is not published.
-      minimum_reward_risk: 1.0
-      expiry_hours: 4.0
-      chop_edge_fraction: 0.25
-      strict_premium_discount: true
     # Impulse Pullback Scalp — the Python scalp lane's discover_impulse_pullback of the
     # profitable XAU week: an M5 impulse (displacement of at least 4 ATR, body
     # dominance 0.5) with a corrective pullback (< 0.7 of the impulse body), anchored
